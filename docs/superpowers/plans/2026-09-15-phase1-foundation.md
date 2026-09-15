@@ -273,7 +273,7 @@ services:
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: biometrics_test
     ports:
-      - '5433:5432'
+      - '5434:5432'
 ```
 
 - [ ] **Step 3: Write `backend/prisma/schema.prisma`**
@@ -407,7 +407,7 @@ Run:
 ```bash
 cd backend
 docker compose -f docker-compose.test.yml up -d
-export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5433/biometrics_test
+export TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5434/biometrics_test
 DATABASE_URL=$TEST_DATABASE_URL npx prisma migrate dev --name init
 ```
 Expected: migration succeeds, creates tables matching the schema above.
@@ -3240,7 +3240,7 @@ Follow `Lakr233/vphone-cli`'s setup instructions to provision an iOS simulator i
 cd backend
 docker compose -f docker-compose.test.yml up -d
 docker run -d -p 6379:6379 redis:7
-DATABASE_URL=postgresql://postgres:postgres@localhost:5433/biometrics_test npx prisma migrate deploy
+DATABASE_URL=postgresql://postgres:postgres@localhost:5434/biometrics_test npx prisma migrate deploy
 npm run build && node dist/server.js
 ```
 
@@ -3322,7 +3322,7 @@ CMD ["node", "dist/server.js"]
 cd backend
 docker build -t biometrics-backend:local .
 docker run --rm -p 3000:3000 \
-  -e DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5433/biometrics_test \
+  -e DATABASE_URL=postgresql://postgres:postgres@host.docker.internal:5434/biometrics_test \
   -e REDIS_URL=redis://host.docker.internal:6379 \
   -e JWT_ACCESS_SECRET=smoke-test \
   -e JWT_REFRESH_SECRET=smoke-test \
