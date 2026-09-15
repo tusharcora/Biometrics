@@ -13,6 +13,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@prisma/client": "^6.19.3",
     "express": "^5.2.1"
   },
   "devDependencies": {
@@ -21,6 +22,7 @@
     "@types/node": "^22.20.3",
     "@types/supertest": "^7.2.1",
     "jest": "^30.5.1",
+    "prisma": "^6.19.3",
     "supertest": "^7.2.2",
     "ts-jest": "^29.4.12",
     "ts-node": "^10.9.2",

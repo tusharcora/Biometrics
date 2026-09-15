@@ -42,5 +42,5 @@
 
     "esModuleInterop": true
   },
-  "exclude": ["node_modules", "dist", "tests"]
+  "exclude": ["node_modules", "dist", "tests", "prisma.config.ts"]
 }
