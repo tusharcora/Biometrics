@@ -19,13 +19,15 @@ afterAll(async () => {
 
 describe('session jwt lifecycle', () => {
   it('issues an access token that verifies to the same userId', async () => {
-    const user = await prisma.user.create({ data: { email: 'a@example.com', authProvider: 'GOOGLE' } });
+    const email = `a-${Date.now()}-1@example.com`;
+    const user = await prisma.user.create({ data: { email, authProvider: 'GOOGLE' } });
     const { accessToken } = await issueSessionTokens(user.id);
     expect(verifyAccessToken(accessToken).userId).toBe(user.id);
   });
 
   it('refreshes using the refresh token and rotates it', async () => {
-    const user = await prisma.user.create({ data: { email: 'b@example.com', authProvider: 'GOOGLE' } });
+    const email = `b-${Date.now()}-2@example.com`;
+    const user = await prisma.user.create({ data: { email, authProvider: 'GOOGLE' } });
     const { refreshToken } = await issueSessionTokens(user.id);
     const rotated = await refreshSession(refreshToken);
     expect(verifyAccessToken(rotated.accessToken).userId).toBe(user.id);
@@ -34,7 +36,8 @@ describe('session jwt lifecycle', () => {
   });
 
   it('rejects a refresh token after it has been revoked', async () => {
-    const user = await prisma.user.create({ data: { email: 'c@example.com', authProvider: 'GOOGLE' } });
+    const email = `c-${Date.now()}-3@example.com`;
+    const user = await prisma.user.create({ data: { email, authProvider: 'GOOGLE' } });
     const { refreshToken } = await issueSessionTokens(user.id);
     await revokeRefreshToken(refreshToken);
     await expect(refreshSession(refreshToken)).rejects.toThrow();

@@ -11,10 +11,11 @@ afterAll(async () => {
 
 describe('prisma client', () => {
   it('can create and read back a user', async () => {
+    const email = `test-${Date.now()}@example.com`;
     const user = await prisma.user.create({
-      data: { email: 'test@example.com', authProvider: 'GOOGLE' },
+      data: { email, authProvider: 'GOOGLE' },
     });
     const found = await prisma.user.findUnique({ where: { id: user.id } });
-    expect(found?.email).toBe('test@example.com');
+    expect(found?.email).toBe(email);
   });
 });
