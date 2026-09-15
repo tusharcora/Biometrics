@@ -48,6 +48,16 @@ pipe, for multiple users, as the foundation the later phases build on.
   cold-start latency or execution-time limits).
 - **Database** — AWS RDS Postgres, in the same AWS account/VPC as the
   ECS service for simple networking and IAM-based access control.
+- **Sync worker queue** — an in-process job queue (e.g. BullMQ on
+  Redis) inside the ECS service, with a capped number of concurrent
+  workers per Fitbit-API rate-limit budget. Webhook notifications and
+  backfill jobs both enqueue fetch jobs here rather than calling
+  Fitbit's API inline, so a burst of webhooks (e.g. many users' Fitbit
+  devices syncing overnight around the same time) is smoothed into a
+  bounded number of concurrent outbound requests instead of fanning
+  out one API call per webhook. This resolves the rate-limit fan-out
+  concern directly in the architecture rather than leaving it as an
+  open question.
 
 **Why these choices:**
 
@@ -74,19 +84,44 @@ pipe, for multiple users, as the foundation the later phases build on.
 Tokens are encrypted at rest (not just relying on DB access control),
 since they grant access to a third party's health data API.
 
+**Disconnect/reconnect behavior:** disconnecting Fitbit (whether
+user-initiated or due to a revoked token) sets `FitbitConnection.status`
+to `disconnected` and stops new writes — existing `BiometricRecord`
+rows are never deleted, so historical data survives a disconnect.
+Reconnecting re-authorizes the same `FitbitConnection` row and triggers
+a backfill (see Data Flow) scoped to the gap between the last
+`synced_at` and now, so no manual "catch-up" step is needed.
+
 ## Data Flow
 
 1. **Sign-in:** user authenticates via Sign in with Apple or Google →
-   backend verifies the provider token and issues a session JWT.
+   backend verifies the provider token and issues a short-lived
+   session JWT (15 min access token + longer-lived refresh token,
+   consistent with the pattern already used for Fitbit tokens). The
+   app silently refreshes the access token using the refresh token;
+   signing out revokes the refresh token server-side so it can't be
+   replayed.
 2. **Connect Fitbit:** user taps "Connect Fitbit" in the app → app
    opens Fitbit's OAuth consent screen → Fitbit redirects back with an
-   auth code → backend exchanges it for access/refresh tokens, stores
-   them encrypted, and registers a Fitbit webhook subscription for
-   that user's account.
+   auth code → backend exchanges it for access/refresh tokens and
+   stores them encrypted → backend registers a Fitbit webhook
+   subscription for that user's account. Fitbit's subscription API
+   requires responding to a one-time GET verification challenge (echoing
+   back a verify code) before it will start delivering POST
+   notifications — the backend's webhook endpoint must handle both the
+   GET challenge and POST notifications. Immediately after
+   registering the subscription, the backend enqueues a **backfill
+   job** that pulls a fixed historical window (e.g. the last 30 days)
+   via Fitbit's API, since webhooks only notify of data going forward
+   and the dashboard would otherwise be empty until the next natural
+   sync event.
 3. **Ongoing sync:** Fitbit pushes a webhook notification when new
-   data is available → backend verifies the webhook signature →
-   backend fetches the new data via Fitbit's API → backend writes it
-   to `BiometricRecord`.
+   data is available. The notification payload only identifies *what
+   changed* (collection type + date, e.g. "sleep data for 2026-09-14
+   is ready") — it does not contain the metric values themselves.
+   Backend verifies the webhook signature → enqueues a fetch job on
+   the sync worker queue → the worker calls Fitbit's API for that
+   specific collection/date → writes the result to `BiometricRecord`.
 4. **Token refresh:** a scheduled job checks for tokens nearing
    expiry (Fitbit access tokens last ~8 hours) and refreshes them
    proactively, before they're needed by an incoming webhook.
@@ -113,9 +148,11 @@ since they grant access to a third party's health data API.
 
 ## Testing
 
-- **Backend:** unit tests for OAuth token exchange/refresh and webhook
-  signature verification; integration tests against a mocked Fitbit
-  API (auth, data fetch, webhook payloads).
+- **Backend:** unit tests for OAuth token exchange/refresh, webhook
+  signature verification, and the webhook GET verification-challenge
+  handshake; integration tests against a mocked Fitbit API covering
+  auth, initial backfill, ongoing webhook-triggered fetches, and the
+  reconnect backfill-gap path.
 - **Mobile:** component tests for the sign-in, connect-Fitbit, and
   dashboard screens.
 - **Manual/device testing:** iOS-specific behavior verified via
@@ -127,8 +164,3 @@ since they grant access to a third party's health data API.
 - No polling fallback means sync reliability depends entirely on
   Fitbit's webhook delivery guarantees — worth monitoring in practice
   and revisiting if data gaps become a problem.
-- Fitbit API rate limits are per-user (150 requests/hour/user), which
-  is generous for individual sync but worth confirming doesn't become
-  a bottleneck as the backend fetches data across many users
-  concurrently after a mass webhook burst (e.g. many users' devices
-  syncing around the same time of day).
