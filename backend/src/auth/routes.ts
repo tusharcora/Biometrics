@@ -7,22 +7,34 @@ import { findOrCreateUserByProvider } from '../users/repository';
 export const authRouter = Router();
 
 authRouter.post('/auth/apple', async (req, res) => {
+  let identity;
   try {
-    const { email, providerUserId } = await verifyAppleIdentityToken(req.body.identityToken);
-    const user = await findOrCreateUserByProvider(email, 'APPLE', providerUserId);
-    res.json(await issueSessionTokens(user.id));
+    identity = await verifyAppleIdentityToken(req.body.identityToken);
   } catch {
     res.status(401).json({ error: 'Invalid Apple identity token' });
+    return;
+  }
+  try {
+    const user = await findOrCreateUserByProvider(identity.email, 'APPLE', identity.providerUserId);
+    res.json(await issueSessionTokens(user.id));
+  } catch {
+    res.status(500).json({ error: 'Failed to complete sign-in' });
   }
 });
 
 authRouter.post('/auth/google', async (req, res) => {
+  let identity;
   try {
-    const { email, providerUserId } = await verifyGoogleIdToken(req.body.idToken);
-    const user = await findOrCreateUserByProvider(email, 'GOOGLE', providerUserId);
-    res.json(await issueSessionTokens(user.id));
+    identity = await verifyGoogleIdToken(req.body.idToken);
   } catch {
     res.status(401).json({ error: 'Invalid Google ID token' });
+    return;
+  }
+  try {
+    const user = await findOrCreateUserByProvider(identity.email, 'GOOGLE', identity.providerUserId);
+    res.json(await issueSessionTokens(user.id));
+  } catch {
+    res.status(500).json({ error: 'Failed to complete sign-in' });
   }
 });
 

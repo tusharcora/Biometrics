@@ -61,4 +61,25 @@ describe('auth routes', () => {
 
     expect(res.status).toBe(401);
   });
+
+  it('returns 401 when the Google ID token is invalid', async () => {
+    (googleAuth.verifyGoogleIdToken as jest.Mock).mockRejectedValue(new Error('bad token'));
+
+    const res = await request(createApp()).post('/auth/google').send({ idToken: 'forged' });
+
+    expect(res.status).toBe(401);
+  });
+
+  it('returns 500 (not 401) when sign-in fails after a valid Google token', async () => {
+    (googleAuth.verifyGoogleIdToken as jest.Mock).mockResolvedValue({
+      email: 'google-user-2@example.com',
+      providerUserId: 'g-2',
+    });
+    const upsertSpy = jest.spyOn(prisma.user, 'upsert').mockRejectedValueOnce(new Error('db down'));
+
+    const res = await request(createApp()).post('/auth/google').send({ idToken: 'fake' });
+
+    expect(res.status).toBe(500);
+    upsertSpy.mockRestore();
+  });
 });
