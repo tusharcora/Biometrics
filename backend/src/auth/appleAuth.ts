@@ -1,0 +1,23 @@
+import * as jose from 'jose';
+
+const APPLE_JWKS_URL = 'https://appleid.apple.com/auth/keys';
+
+export async function verifyAppleIdentityToken(
+  identityToken: string,
+): Promise<{ email: string; providerUserId: string }> {
+  const bundleId = process.env.APPLE_BUNDLE_ID;
+  if (!bundleId) throw new Error('APPLE_BUNDLE_ID is not set');
+
+  const jwks = jose.createRemoteJWKSet(new URL(APPLE_JWKS_URL));
+  const { payload } = await jose.jwtVerify(identityToken, jwks, {
+    issuer: 'https://appleid.apple.com',
+  });
+
+  if (payload.aud !== bundleId) {
+    throw new Error('Apple identity token audience mismatch');
+  }
+  if (typeof payload.sub !== 'string' || typeof payload.email !== 'string') {
+    throw new Error('Apple identity token missing required claims');
+  }
+  return { email: payload.email, providerUserId: payload.sub };
+}
