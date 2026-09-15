@@ -30,6 +30,7 @@ describe('session jwt lifecycle', () => {
     const rotated = await refreshSession(refreshToken);
     expect(verifyAccessToken(rotated.accessToken).userId).toBe(user.id);
     expect(rotated.refreshToken).not.toBe(refreshToken);
+    await expect(refreshSession(refreshToken)).rejects.toThrow();
   });
 
   it('rejects a refresh token after it has been revoked', async () => {
