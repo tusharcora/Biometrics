@@ -16,4 +16,12 @@ describe('tokenCipher', () => {
     const b = encryptToken('same-value');
     expect(a).not.toBe(b);
   });
+
+  it('throws when the ciphertext has been tampered with', () => {
+    const ciphertext = encryptToken('my-fitbit-access-token');
+    const raw = Buffer.from(ciphertext, 'base64');
+    raw[raw.length - 1] ^= 0xff; // flip the last byte of the actual ciphertext
+    const tampered = raw.toString('base64');
+    expect(() => decryptToken(tampered)).toThrow();
+  });
 });
