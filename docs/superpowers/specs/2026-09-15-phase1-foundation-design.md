@@ -68,9 +68,13 @@ pipe, for multiple users, as the foundation the later phases build on.
   stack that isn't needed until Phase 4, or a managed BaaS that would
   fight the custom OAuth/webhook logic this phase requires.
 - Managed Postgres over self-hosted for backup/scaling without ops
-  overhead, while staying relational (users, devices, biometric
-  records are naturally relational, with time-series extensions
-  available later if biometric volume demands it).
+  overhead, while staying relational (users, devices, and biometric
+  records are naturally relational at this stage). If `BiometricRecord`
+  volume becomes a real scaling problem later, the standard move is
+  Postgres + the TimescaleDB extension (or a dedicated time-series
+  store like InfluxDB) for that table specifically — not a wholesale
+  database migration, since `User` and `FitbitConnection` have no
+  time-series access pattern.
 
 ## Data Model (high level)
 
