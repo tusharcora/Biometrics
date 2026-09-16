@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { Job } from 'bullmq';
 import { processSyncJob } from '../../src/sync/worker';
 import { connection } from '../../src/sync/queue';
@@ -19,11 +20,11 @@ afterAll(async () => {
 });
 
 async function createConnectedUser() {
-  const user = await prisma.user.create({ data: { email: `w-${Date.now()}@example.com`, authProvider: 'GOOGLE' } });
+  const user = await prisma.user.create({ data: { email: `w-${Date.now()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() } });
   await prisma.fitbitConnection.create({
     data: {
       userId: user.id,
-      fitbitUserId: 'fb-1',
+      fitbitUserId: `fb-1-${randomUUID()}`,
       encryptedAccessToken: encryptToken('access-token'),
       encryptedRefreshToken: encryptToken('refresh-token'),
       tokenExpiresAt: new Date(Date.now() + 3600_000),

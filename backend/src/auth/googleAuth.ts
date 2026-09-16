@@ -12,5 +12,10 @@ export async function verifyGoogleIdToken(
   if (!payload?.sub || !payload.email) {
     throw new Error('Google ID token missing required claims');
   }
+  // Workspace custom domains can issue tokens for unverified addresses; trusting
+  // one would let an attacker sign into an account that already owns the email.
+  if (payload.email_verified !== true) {
+    throw new Error('Google ID token email is not verified');
+  }
   return { email: payload.email, providerUserId: payload.sub };
 }

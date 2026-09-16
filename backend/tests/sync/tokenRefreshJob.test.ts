@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { runTokenRefreshSweep } from '../../src/sync/tokenRefreshJob';
 import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
@@ -17,11 +18,11 @@ afterAll(async () => {
 
 describe('runTokenRefreshSweep', () => {
   it('refreshes connections expiring within the next hour', async () => {
-    const user = await prisma.user.create({ data: { email: `t-${Date.now()}@example.com`, authProvider: 'GOOGLE' } });
+    const user = await prisma.user.create({ data: { email: `t-${Date.now()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() } });
     await prisma.fitbitConnection.create({
       data: {
         userId: user.id,
-        fitbitUserId: 'fb-1',
+        fitbitUserId: `fb-1-${randomUUID()}`,
         encryptedAccessToken: encryptToken('old-access'),
         encryptedRefreshToken: encryptToken('old-refresh'),
         tokenExpiresAt: new Date(Date.now() + 30 * 60 * 1000), // 30 min from now
@@ -41,11 +42,11 @@ describe('runTokenRefreshSweep', () => {
   });
 
   it('marks a connection disconnected when the refresh token has been revoked', async () => {
-    const user = await prisma.user.create({ data: { email: `t2-${Date.now()}@example.com`, authProvider: 'GOOGLE' } });
+    const user = await prisma.user.create({ data: { email: `t2-${Date.now()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() } });
     await prisma.fitbitConnection.create({
       data: {
         userId: user.id,
-        fitbitUserId: 'fb-2',
+        fitbitUserId: `fb-2-${randomUUID()}`,
         encryptedAccessToken: encryptToken('old-access'),
         encryptedRefreshToken: encryptToken('old-refresh'),
         tokenExpiresAt: new Date(Date.now() + 30 * 60 * 1000),
@@ -61,15 +62,15 @@ describe('runTokenRefreshSweep', () => {
 
   it('isolates a failing connection so other connections in the same sweep still refresh', async () => {
     const failingUser = await prisma.user.create({
-      data: { email: `t3-fail-${Date.now()}@example.com`, authProvider: 'GOOGLE' },
+      data: { email: `t3-fail-${Date.now()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
     });
     const succeedingUser = await prisma.user.create({
-      data: { email: `t3-ok-${Date.now()}@example.com`, authProvider: 'GOOGLE' },
+      data: { email: `t3-ok-${Date.now()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
     });
     await prisma.fitbitConnection.create({
       data: {
         userId: failingUser.id,
-        fitbitUserId: 'fb-3-fail',
+        fitbitUserId: `fb-3-fail-${randomUUID()}`,
         encryptedAccessToken: encryptToken('old-access-fail'),
         encryptedRefreshToken: encryptToken('old-refresh-fail'),
         tokenExpiresAt: new Date(Date.now() + 30 * 60 * 1000),
@@ -78,7 +79,7 @@ describe('runTokenRefreshSweep', () => {
     await prisma.fitbitConnection.create({
       data: {
         userId: succeedingUser.id,
-        fitbitUserId: 'fb-3-ok',
+        fitbitUserId: `fb-3-ok-${randomUUID()}`,
         encryptedAccessToken: encryptToken('old-access-ok'),
         encryptedRefreshToken: encryptToken('old-refresh-ok'),
         tokenExpiresAt: new Date(Date.now() + 30 * 60 * 1000),

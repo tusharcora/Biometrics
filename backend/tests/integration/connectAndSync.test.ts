@@ -1,4 +1,5 @@
 import request from 'supertest';
+import { randomUUID } from 'crypto';
 import nock from 'nock';
 import { createApp } from '../../src/app';
 import { prisma } from '../../src/db/client';
@@ -23,14 +24,14 @@ afterAll(async () => {
 
 describe('connect Fitbit and sync end to end (mocked Fitbit API)', () => {
   it('connects, backfills, and serves data via /me/biometrics', async () => {
-    const user = await prisma.user.create({ data: { email: `e2e-${Date.now()}@example.com`, authProvider: 'GOOGLE' } });
+    const user = await prisma.user.create({ data: { email: `e2e-${Date.now()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() } });
     const { accessToken } = await issueSessionTokens(user.id);
 
     nock('https://api.fitbit.com').post('/oauth2/token').reply(200, {
       access_token: 'fitbit-access',
       refresh_token: 'fitbit-refresh',
       expires_in: 28800,
-      user_id: 'fitbit-user-e2e',
+      user_id: `fitbit-user-e2e-${randomUUID()}`,
     });
     nock('https://api.fitbit.com').post(/apiSubscriptions/).reply(201, {});
 

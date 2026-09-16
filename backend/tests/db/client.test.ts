@@ -1,3 +1,4 @@
+import { randomUUID } from 'crypto';
 import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
 
@@ -13,7 +14,7 @@ describe('prisma client', () => {
   it('can create and read back a user', async () => {
     const email = `test-${Date.now()}@example.com`;
     const user = await prisma.user.create({
-      data: { email, authProvider: 'GOOGLE' },
+      data: { email, authProvider: 'GOOGLE', providerUserId: randomUUID() },
     });
     const found = await prisma.user.findUnique({ where: { id: user.id } });
     expect(found?.email).toBe(email);

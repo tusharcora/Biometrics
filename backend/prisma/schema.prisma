@@ -26,12 +26,18 @@ enum BiometricMetricType {
 
 model User {
   id               String            @id @default(uuid())
-  email            String            @unique
+  email            String
   authProvider     AuthProvider
+  providerUserId   String
   createdAt        DateTime          @default(now())
   fitbitConnection FitbitConnection?
   biometricRecords BiometricRecord[]
   refreshTokens    RefreshToken[]
+
+  // Identity is keyed on the provider subject, not the email address: the same
+  // person may hold both an Apple and a Google account sharing one email, and
+  // those are deliberately two separate accounts (no cross-provider linking).
+  @@unique([authProvider, providerUserId])
 }
 
 model RefreshToken {
@@ -48,7 +54,7 @@ model FitbitConnection {
   id                    String                  @id @default(uuid())
   userId                String                  @unique
   user                  User                    @relation(fields: [userId], references: [id])
-  fitbitUserId          String
+  fitbitUserId          String                  @unique
   encryptedAccessToken  String
   encryptedRefreshToken String
   tokenExpiresAt        DateTime

@@ -1,4 +1,5 @@
 import request from 'supertest';
+import { randomUUID } from 'crypto';
 import { createApp } from '../../src/app';
 import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
@@ -15,7 +16,7 @@ afterAll(async () => {
 
 describe('GET /me/biometrics', () => {
   it('returns the current user\'s biometric records', async () => {
-    const user = await prisma.user.create({ data: { email: `b-${Date.now()}@example.com`, authProvider: 'GOOGLE' } });
+    const user = await prisma.user.create({ data: { email: `b-${Date.now()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() } });
     await prisma.biometricRecord.create({
       data: { userId: user.id, metricType: 'STEPS', value: 9000, recordedAt: new Date('2026-09-01') },
     });
@@ -34,8 +35,8 @@ describe('GET /me/biometrics', () => {
   });
 
   it('does not return another user\'s biometric records', async () => {
-    const userA = await prisma.user.create({ data: { email: `a-${Date.now()}@example.com`, authProvider: 'GOOGLE' } });
-    const userB = await prisma.user.create({ data: { email: `c-${Date.now()}@example.com`, authProvider: 'GOOGLE' } });
+    const userA = await prisma.user.create({ data: { email: `a-${Date.now()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() } });
+    const userB = await prisma.user.create({ data: { email: `c-${Date.now()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() } });
     await prisma.biometricRecord.create({
       data: { userId: userA.id, metricType: 'STEPS', value: 1234, recordedAt: new Date('2026-09-02') },
     });
