@@ -31,6 +31,17 @@ describe('exchangeCodeForTokens', () => {
     const tokens = await exchangeCodeForTokens('auth-code-1');
     expect(tokens).toEqual({ accessToken: 'access-1', refreshToken: 'refresh-1', expiresIn: 3599 });
   });
+
+  it('includes response body in error when token endpoint returns non-200 status', async () => {
+    const errorBody = JSON.stringify({ error: 'invalid_grant', error_description: 'The authorization code is invalid or expired.' });
+    nock('https://oauth2.googleapis.com')
+      .post('/token')
+      .reply(400, errorBody);
+
+    await expect(exchangeCodeForTokens('bad-code')).rejects.toThrow(
+      /Google token endpoint returned 400.*invalid_grant.*authorization code is invalid/
+    );
+  });
 });
 
 describe('refreshHealthTokens', () => {

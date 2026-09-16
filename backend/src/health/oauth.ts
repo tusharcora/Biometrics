@@ -56,7 +56,8 @@ async function requestToken(body: URLSearchParams): Promise<HealthTokenResponse>
   });
 
   if (!res.ok) {
-    throw new Error(`Google token endpoint returned ${res.status}`);
+    const errorBody = await res.text();
+    throw new Error(`Google token endpoint returned ${res.status}: ${errorBody}`);
   }
 
   const json = (await res.json()) as GoogleTokenApiResponse;
