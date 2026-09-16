@@ -74,15 +74,19 @@ architectural change is internal to the connect/sync layer:
   come from a Google Cloud Console project instead of a Fitbit developer
   app.
 - **Identity**: Google Health API identifies a user via a `healthUserId`
-  string (via a `GET .../identity` call), replacing Fitbit's 6-character
-  user ID. `HealthConnection.healthUserId` replaces
-  `FitbitConnection.fitbitUserId`.
-- **Data fetch**: one unified endpoint pattern,
-  `GET /v4/users/{healthUserId}/dataTypes/{dataType}/dataPoints`,
-  replaces Fitbit's four differently-shaped per-metric endpoints. This
-  likely *simplifies* the metric-fetching client relative to Phase 1's
-  `fitbit/client.ts`, which needed a per-metric-type switch statement to
-  handle four different response shapes.
+  string (via `GET /v4/users/me/identity`), replacing Fitbit's
+  6-character user ID. `HealthConnection.healthUserId` replaces
+  `FitbitConnection.fitbitUserId` — but note this ID is for our own
+  dedup/bookkeeping only, not for constructing data-fetch paths (see
+  Confirmed API Facts below — all data calls use the literal path
+  segment `me`, authenticated by the bearer token, not the resolved ID).
+- **Data fetch**: two endpoint patterns depending on the metric — a
+  daily-rollup aggregation call for STEPS and RESTING_HR, and a raw
+  dataPoints list call for SLEEP and HRV (see Confirmed API Facts) —
+  replacing Fitbit's four differently-shaped per-metric endpoints with
+  two shapes instead of four. Still simpler than Phase 1's
+  `fitbit/client.ts`, which needed a per-metric-type switch over four
+  distinct shapes.
 - **Webhooks**: a two-level subscription model —
   a project-level "subscriber" (the webhook receiver URL, registered
   once, analogous to Fitbit's single app-wide webhook config) plus
@@ -125,11 +129,12 @@ change — those tables are untouched):
    ordering fix from Phase 1's final review, still required here since
    the same failure mode applies.
 3. **Backfill**: unchanged shape (30-day window on first connect,
-   gap-scoped on reconnect) — only the underlying fetch calls change to
-   hit the new unified data-points endpoint per metric type.
+   gap-scoped on reconnect) — the underlying fetch calls now split by
+   metric: `dailyRollUp` for STEPS/RESTING_HR, raw `dataPoints.list` for
+   SLEEP/HRV (see Confirmed API Facts).
 4. **Ongoing sync**: webhook notification → sync worker fetches the
-   specific data type/date via the new unified endpoint → same
-   `upsertBiometricRecords` write path (unchanged).
+   specific data type/date via the appropriate call for that metric →
+   same `upsertBiometricRecords` write path (unchanged).
 5. **Token refresh**: same distributed-safe BullMQ repeatable job from
    Phase 1's final review, now calling Google's token-refresh endpoint
    instead of Fitbit's.
@@ -138,43 +143,102 @@ change — those tables are untouched):
    narrowed catch behavior from the final review (only an actual token
    refresh failure disconnects, not an unrelated DB-write failure).
 
-## Verification Needed Before Detailed Task Planning
+## Confirmed API Facts (verified live against the real API, not guessed)
 
-The following facts are **not confirmed** from documentation alone and
-must be resolved via hands-on exploration against a real Google Cloud
-Console project before the implementation plan can specify exact code:
+Verified via a real Google Cloud Console project, a real OAuth
+consent/token exchange, and live calls against `health.googleapis.com`
+using the actual account's data (device: a real Fitbit synced into
+Google Health, platform reported as `FITBIT`):
 
-- Exact OAuth scope string(s) required for read access to heart rate,
-  resting heart rate, sleep, and HRV data types (only one example scope,
-  for exercise, was found in Google's codelab).
-- Exact `dataType` identifier strings for HRV, resting heart rate, sleep,
-  and steps (the reference confirms these data types exist as a category
-  but not their literal string identifiers).
-- Query parameter names and date/time format for the `dataPoints` list
-  endpoint (Fitbit used `YYYY-MM-DD` path segments; Google's API likely
-  uses RFC3339 timestamps as query parameters, given the endpoint shape,
-  but this is unconfirmed).
-- The `healthUserId` resolution pattern — whether there's a "me"-style
-  shorthand (Fitbit used `-` as a wildcard for "the authenticated user")
-  or whether the identity endpoint must always be called explicitly.
-- The webhook payload schema (what a notification actually contains) and
-  its verification/authentication mechanism (Fitbit used an HMAC-SHA1
-  signature header; Google Cloud push subscriptions commonly use a
-  bearer JWT or OIDC token instead — this is a materially different
-  verification mechanism and needs confirming before webhookVerify-
-  equivalent code can be written correctly).
-- Confirmation that Google Cloud Console access to this API is actually
-  available for the user's project (the user has confirmed they can get
-  access, but the concrete setup steps — enabling the API, configuring
-  the OAuth consent screen, generating credentials — haven't been walked
-  through yet).
+- **OAuth**: standard Google OAuth2. Authorize at
+  `https://accounts.google.com/o/oauth2/v2/auth`, exchange/refresh at
+  `https://oauth2.googleapis.com/token`, standard
+  `grant_type=authorization_code` / `grant_type=refresh_token` bodies —
+  no Google-Health-specific deviation from typical Google OAuth.
+- **Scopes** (exact strings, confirmed via the consent screen and a
+  successful grant):
+  - `https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly`
+    (steps)
+  - `https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly`
+    (heart rate, HRV)
+  - `https://www.googleapis.com/auth/googlehealth.sleep.readonly`
+    (sleep)
+- **Token lifetimes**: access token ~1 hour (`expires_in: 3599`);
+  **refresh token expires after 7 days** (`refresh_token_expires_in:
+  604799`) — shorter than Fitbit's. A user inactive for more than a
+  week needs a full reconnect, not just a silent refresh. The proactive
+  refresh sweep (carried over from Phase 1) becomes more important here,
+  and the "disconnect on refresh failure" path will trigger more often
+  in practice than it did for Fitbit.
+- **User identity**: `GET /v4/users/me/identity` (or `users/-/identity`
+  — both resolve identically) returns `{name, legacyUserId,
+  healthUserId}`. `legacyUserId` confirmed to match the underlying
+  Fitbit account's old-style ID.
+- **Data-fetch path convention**: all data calls use the literal path
+  segment `me` (`users/me/dataTypes/...`), not the resolved
+  `healthUserId` — the numeric ID is not usable in the request path
+  itself (confirmed: using it directly returns 400s). `healthUserId` is
+  stored only for our own per-account dedup bookkeeping.
+- **Raw data fetch**: `GET /v4/users/me/dataTypes/{dataType}/dataPoints`
+  with a required `filter` query param using
+  [AIP-160](https://google.aip.dev/160) syntax:
+  `{dataType}.interval.start_time >= "<RFC3339>" AND
+  {dataType}.interval.start_time < "<RFC3339>"` for interval-based types,
+  or `{dataType}.sample_time.physical_time >= "..." AND ... <  "..."`
+  for sample-based types (confirmed both patterns exist; `sleep` and
+  `steps` are interval-based, `heartRateVariability` is sample-based).
+  Confirmed live: raw `steps` dataPoints are **minute-by-minute**, not
+  daily totals.
+- **Daily aggregation**: `POST /v4/users/me/dataTypes/{dataType}/dataPoints:dailyRollUp`
+  (body: `{range: {...CivilTimeInterval...}, windowSizeDays: 1}`)
+  aggregates to daily buckets server-side — this is the right endpoint
+  for STEPS and RESTING_HR, not manual summation of raw points.
+- **Confirmed per-metric mapping**:
+  - **STEPS**: `dailyRollUp` on data type `steps` →
+    `StepsRollupValue.countSum` — clean 1:1 match to Phase 1's `STEPS`.
+  - **RESTING_HR**: `dailyRollUp` on the heart-rate rollup type →
+    `HeartRateRollupValue.beatsPerMinuteMin`. Google Health API has **no
+    direct daily "resting heart rate" value** the way Fitbit's classic
+    API did — confirmed via the discovery document's full schema, not
+    an oversight in searching. Decided with the user: use
+    `beatsPerMinuteMin` (lowest heart rate observed each day) as an
+    honestly-labeled proxy, not an exact equivalent.
+  - **SLEEP**: raw `dataPoints.list` on data type `sleep` →
+    `Sleep.summary.minutesAsleep` (per sleep session) — an exact
+    naming and semantic match to Phase 1's Fitbit-based `SLEEP` value.
+  - **HRV**: raw `dataPoints.list` on data type `heartRateVariability`
+    (sample-based, not interval-based) →
+    `HeartRateVariability.rootMeanSquareOfSuccessiveDifferencesMilliseconds`
+    — the same RMSSD metric Fitbit's `dailyRmssd` used. Since this is
+    sample-based (possibly multiple readings per day, unlike Fitbit's
+    pre-aggregated one-per-day value), the implementation needs to pick
+    one value per day (e.g. the last sample of the day) to match our
+    one-row-per-day `BiometricRecord` schema — a small, well-scoped
+    decision for the implementation task, not a design-level blocker.
 
-**This spec deliberately does not guess at these facts.** The
-implementation plan's first task will be a hands-on exploration step
-(Cloud Console setup + a handful of real API calls) to pin down every
-item above with evidence, before any other task is written in detail —
-the same lesson Phase 1's final review surfaced when a guessed webhook
-collection-type mapping needed a late fix.
+## Verification Still Needed (first implementation task, not guessed here)
+
+One fact remains genuinely unconfirmed, because confirming it requires
+running infrastructure (a real webhook receiver + a registered
+subscription), not a one-off API call:
+
+- **Webhook payload schema and verification mechanism.** The
+  `v4.projects.subscribers` / `v4.projects.subscribers.subscriptions`
+  endpoints are confirmed to exist (from the REST reference), but their
+  exact payload shape and how a receiver verifies an incoming push
+  (Fitbit used an HMAC-SHA1 signature header; Google Cloud push
+  subscriptions commonly use a bearer JWT/OIDC token instead — a
+  materially different verification mechanism) needs a real receiver
+  and a real registered subscription to observe.
+
+**This spec deliberately does not guess at this fact.** The
+implementation plan's first task builds a minimal webhook receiver and
+registers a real subscription against it, observes a real notification,
+and only then writes the verification logic against evidence — the same
+lesson Phase 1's final review surfaced when a guessed webhook
+collection-type mapping needed a late fix. Every other technical
+decision in this spec is now confirmed against the live API, not
+guessed.
 
 ## Error Handling
 
