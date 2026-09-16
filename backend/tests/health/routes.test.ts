@@ -160,6 +160,134 @@ describe('GET /health/callback', () => {
     // was never actually created at Google.
     expect(await prisma.healthConnection.findUnique({ where: { userId: user.id } })).toBeNull();
   });
+
+  it('fails clearly, without touching Google or the DB, when the code exchange returns no refresh token', async () => {
+    (subscriber.registerUserSubscription as jest.Mock).mockClear();
+    const user = await prisma.user.create({
+      data: { email: `h-${randomUUID()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+    });
+    const state = await getHealthOAuthState(user.id);
+
+    // No refreshToken at all on the initial exchange: the connection would be
+    // unrecoverable after the first hour, so it must not be stored.
+    (oauth.exchangeCodeForTokens as jest.Mock).mockResolvedValue({ accessToken: 'health-access-norefresh', expiresIn: 3599 });
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    const res = await request(createApp()).get('/health/callback').query({ code: 'code', state });
+
+    expect(res.status).toBe(500);
+    expect(consoleError).toHaveBeenCalledWith(
+      'Google Health callback failed',
+      expect.objectContaining({ message: 'Google did not return a refresh token during the initial OAuth exchange' }),
+    );
+    consoleError.mockRestore();
+    expect(subscriber.registerUserSubscription).not.toHaveBeenCalled();
+    expect(await prisma.healthConnection.findUnique({ where: { userId: user.id } })).toBeNull();
+  });
+
+  describe('reconnecting while already connected', () => {
+    async function createConnectedUser(subscriptionId: string) {
+      const user = await prisma.user.create({
+        data: { email: `h-${randomUUID()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+      });
+      const healthUserId = `health-user-reconnect-${randomUUID()}`;
+      await prisma.healthConnection.create({
+        data: {
+          userId: user.id,
+          healthUserId,
+          encryptedAccessToken: 'x',
+          encryptedRefreshToken: 'x',
+          tokenExpiresAt: new Date(Date.now() + 3600_000),
+          webhookSubscriptionId: subscriptionId,
+          lastSyncedAt: new Date(Date.now() - 24 * 3600_000),
+        },
+      });
+      return { user, healthUserId };
+    }
+
+    it('deletes the previous Google subscription so it is not leaked', async () => {
+      (subscriber.deleteUserSubscription as jest.Mock).mockReset().mockResolvedValue(undefined);
+      const { user, healthUserId } = await createConnectedUser('sub-old');
+      const state = await getHealthOAuthState(user.id);
+
+      (oauth.exchangeCodeForTokens as jest.Mock).mockResolvedValue({
+        accessToken: 'health-access-2', refreshToken: 'health-refresh-2', expiresIn: 7200,
+      });
+      (subscriber.getIdentity as jest.Mock).mockResolvedValue({ healthUserId });
+      (subscriber.registerUserSubscription as jest.Mock).mockResolvedValue('sub-new');
+
+      const res = await request(createApp()).get('/health/callback').query({ code: 'code', state });
+
+      expect(res.status).toBe(302);
+      expect(subscriber.deleteUserSubscription).toHaveBeenCalledTimes(1);
+      expect(subscriber.deleteUserSubscription).toHaveBeenCalledWith('sub-old');
+      const conn = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
+      expect(conn?.status).toBe('CONNECTED');
+      expect(conn?.webhookSubscriptionId).toBe('sub-new');
+    });
+
+    it('still completes the connect when deleting the previous subscription fails', async () => {
+      (subscriber.deleteUserSubscription as jest.Mock).mockReset().mockRejectedValue(new Error('network error'));
+      const { user, healthUserId } = await createConnectedUser('sub-old-undeletable');
+      const state = await getHealthOAuthState(user.id);
+
+      (oauth.exchangeCodeForTokens as jest.Mock).mockResolvedValue({
+        accessToken: 'health-access-3', refreshToken: 'health-refresh-3', expiresIn: 7200,
+      });
+      (subscriber.getIdentity as jest.Mock).mockResolvedValue({ healthUserId });
+      (subscriber.registerUserSubscription as jest.Mock).mockResolvedValue('sub-new-2');
+
+      const res = await request(createApp()).get('/health/callback').query({ code: 'code', state });
+
+      expect(res.status).toBe(302);
+      expect(subscriber.deleteUserSubscription).toHaveBeenCalledWith('sub-old-undeletable');
+      const conn = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
+      expect(conn?.webhookSubscriptionId).toBe('sub-new-2');
+      expect(conn?.status).toBe('CONNECTED');
+    });
+  });
+
+  it('rolls back the just-created Google subscription when the connection write fails after it', async () => {
+    (subscriber.deleteUserSubscription as jest.Mock).mockReset().mockResolvedValue(undefined);
+    // A real P2002: user A already owns this healthUserId (it is @unique), so
+    // user B's upsert rejects AFTER the subscription was created at Google.
+    const sharedHealthUserId = `health-user-shared-${randomUUID()}`;
+    const userA = await prisma.user.create({
+      data: { email: `h-${randomUUID()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+    });
+    await prisma.healthConnection.create({
+      data: {
+        userId: userA.id,
+        healthUserId: sharedHealthUserId,
+        encryptedAccessToken: 'x',
+        encryptedRefreshToken: 'x',
+        tokenExpiresAt: new Date(Date.now() + 3600_000),
+        webhookSubscriptionId: 'sub-a',
+      },
+    });
+    const userB = await prisma.user.create({
+      data: { email: `h-${randomUUID()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+    });
+    const state = await getHealthOAuthState(userB.id);
+
+    (oauth.exchangeCodeForTokens as jest.Mock).mockResolvedValue({
+      accessToken: 'health-access-b', refreshToken: 'health-refresh-b', expiresIn: 3599,
+    });
+    (subscriber.getIdentity as jest.Mock).mockResolvedValue({ healthUserId: sharedHealthUserId });
+    (subscriber.registerUserSubscription as jest.Mock).mockResolvedValue('sub-orphan');
+    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+
+    const res = await request(createApp()).get('/health/callback').query({ code: 'code', state });
+    consoleError.mockRestore();
+
+    expect(res.status).toBe(500);
+    expect(subscriber.deleteUserSubscription).toHaveBeenCalledTimes(1);
+    expect(subscriber.deleteUserSubscription).toHaveBeenCalledWith('sub-orphan');
+    expect(await prisma.healthConnection.findUnique({ where: { userId: userB.id } })).toBeNull();
+    // User A's own subscription is untouched.
+    const connA = await prisma.healthConnection.findUnique({ where: { userId: userA.id } });
+    expect(connA?.webhookSubscriptionId).toBe('sub-a');
+  });
 });
 
 describe('GET /webhooks/health', () => {
@@ -258,5 +386,180 @@ describe('POST /webhooks/health', () => {
     // error, per the spec's note that DELETE was never observed live.
     expect(res.status).toBe(204);
     expect(queue.enqueueFetchJob).not.toHaveBeenCalled();
+  });
+
+  async function createWebhookUser() {
+    const user = await prisma.user.create({
+      data: { email: `h-${randomUUID()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+    });
+    const healthUserId = `health-user-wh-${randomUUID()}`;
+    await prisma.healthConnection.create({
+      data: {
+        userId: user.id,
+        healthUserId,
+        encryptedAccessToken: 'x',
+        encryptedRefreshToken: 'x',
+        tokenExpiresAt: new Date(Date.now() + 3600_000),
+      },
+    });
+    return { user, healthUserId };
+  }
+
+  function postWebhook(body: unknown) {
+    return request(createApp())
+      .post('/webhooks/health')
+      .set('Content-Type', 'application/json')
+      .set('Authorization', 'Bearer webhook-secret')
+      .send(JSON.stringify(body));
+  }
+
+  describe('day bucketing', () => {
+    // dailyRollUp buckets by the user's civil date, so the day to re-fetch must
+    // come from the civil fields when present. A user west of UTC generating
+    // data at 20:30 local on the 16th is already 03:30 UTC on the 17th.
+    it('prefers the structured civilDateTimeInterval date over the UTC date of the physical instant', async () => {
+      (queue.enqueueFetchJob as jest.Mock).mockClear();
+      const { user, healthUserId } = await createWebhookUser();
+
+      const res = await postWebhook([{
+        data: {
+          healthUserId,
+          dataType: 'steps',
+          operation: 'UPSERT',
+          intervals: [{
+            physicalTimeInterval: { startTime: '2026-09-17T03:30:00Z', endTime: '2026-09-17T03:35:00Z' },
+            civilDateTimeInterval: {
+              startTime: { date: { year: 2026, month: 9, day: 16 }, time: { hours: 20, minutes: 30 } },
+              endTime: { date: { year: 2026, month: 9, day: 16 }, time: { hours: 20, minutes: 35 } },
+            },
+            civilIso8601TimeInterval: { startTime: '2026-09-16T20:30:00', endTime: '2026-09-16T20:35:00' },
+          }],
+        },
+      }]);
+
+      expect(res.status).toBe(204);
+      expect(queue.enqueueFetchJob).toHaveBeenCalledTimes(1);
+      expect(queue.enqueueFetchJob).toHaveBeenCalledWith({ userId: user.id, metricType: 'STEPS', date: '2026-09-16' });
+    });
+
+    it('falls back to civilIso8601TimeInterval when the structured civil field is absent', async () => {
+      (queue.enqueueFetchJob as jest.Mock).mockClear();
+      const { user, healthUserId } = await createWebhookUser();
+
+      const res = await postWebhook([{
+        data: {
+          healthUserId,
+          dataType: 'heart-rate',
+          operation: 'UPSERT',
+          intervals: [{
+            physicalTimeInterval: { startTime: '2026-09-17T03:30:00Z', endTime: '2026-09-17T03:35:00Z' },
+            civilIso8601TimeInterval: { startTime: '2026-09-16T20:30:00', endTime: '2026-09-16T20:35:00' },
+          }],
+        },
+      }]);
+
+      expect(res.status).toBe(204);
+      expect(queue.enqueueFetchJob).toHaveBeenCalledWith({ userId: user.id, metricType: 'RESTING_HR', date: '2026-09-16' });
+    });
+
+    it('falls back to the UTC date of the physical instant when no civil field is present', async () => {
+      (queue.enqueueFetchJob as jest.Mock).mockClear();
+      const { user, healthUserId } = await createWebhookUser();
+
+      const res = await postWebhook([{
+        data: {
+          healthUserId,
+          dataType: 'sleep',
+          operation: 'UPSERT',
+          intervals: [{ physicalTimeInterval: { startTime: '2026-09-17T03:30:00Z', endTime: '2026-09-17T03:35:00Z' } }],
+        },
+      }]);
+
+      expect(res.status).toBe(204);
+      expect(queue.enqueueFetchJob).toHaveBeenCalledWith({ userId: user.id, metricType: 'SLEEP', date: '2026-09-17' });
+    });
+  });
+
+  describe('malformed batches', () => {
+    it('still enqueues the valid notification and returns 204 when another item in the batch is malformed', async () => {
+      (queue.enqueueFetchJob as jest.Mock).mockClear();
+      const { user, healthUserId } = await createWebhookUser();
+      const consoleWarn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+
+      const res = await postWebhook([
+        // Malformed: no intervals at all.
+        { data: { healthUserId, dataType: 'steps', operation: 'UPSERT' } },
+        // Malformed: no data object.
+        { data: null },
+        // Malformed: intervals is not an array.
+        { data: { healthUserId, dataType: 'steps', operation: 'UPSERT', intervals: 'nope' } },
+        // Malformed: an interval with no usable time fields.
+        { data: { healthUserId, dataType: 'steps', operation: 'UPSERT', intervals: [{}, null] } },
+        // Valid, deliberately last so an earlier abort would lose it.
+        {
+          data: {
+            healthUserId,
+            dataType: 'steps',
+            operation: 'UPSERT',
+            intervals: [{ physicalTimeInterval: { startTime: '2026-09-16T00:00:00Z', endTime: '2026-09-16T00:05:00Z' } }],
+          },
+        },
+      ]);
+      consoleWarn.mockRestore();
+
+      expect(res.status).toBe(204);
+      expect(queue.enqueueFetchJob).toHaveBeenCalledTimes(1);
+      expect(queue.enqueueFetchJob).toHaveBeenCalledWith({ userId: user.id, metricType: 'STEPS', date: '2026-09-16' });
+    });
+
+    it('does not lose already-enqueued work when a LATER item throws mid-batch', async () => {
+      (queue.enqueueFetchJob as jest.Mock).mockClear();
+      const { user, healthUserId } = await createWebhookUser();
+      const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+      // Make the second item's DB lookup blow up to simulate an unexpected
+      // per-item failure rather than a shape problem.
+      const realFindUnique = prisma.healthConnection.findUnique.bind(prisma.healthConnection);
+      const spy = jest.spyOn(prisma.healthConnection, 'findUnique').mockImplementation((args: any) =>
+        args?.where?.healthUserId === 'boom'
+          ? (Promise.reject(new Error('simulated lookup failure')) as any)
+          : realFindUnique(args),
+      );
+
+      const res = await postWebhook([
+        {
+          data: {
+            healthUserId,
+            dataType: 'sleep',
+            operation: 'UPSERT',
+            intervals: [{ physicalTimeInterval: { startTime: '2026-09-15T00:00:00Z', endTime: '2026-09-15T00:05:00Z' } }],
+          },
+        },
+        { data: { healthUserId: 'boom', dataType: 'steps', operation: 'UPSERT', intervals: [] } },
+        {
+          data: {
+            healthUserId,
+            dataType: 'heartRateVariability',
+            operation: 'UPSERT',
+            intervals: [{ physicalTimeInterval: { startTime: '2026-09-15T00:00:00Z', endTime: '2026-09-15T00:05:00Z' } }],
+          },
+        },
+      ]);
+      spy.mockRestore();
+      consoleError.mockRestore();
+
+      expect(res.status).toBe(204);
+      expect(queue.enqueueFetchJob).toHaveBeenCalledTimes(2);
+      expect(queue.enqueueFetchJob).toHaveBeenCalledWith({ userId: user.id, metricType: 'SLEEP', date: '2026-09-15' });
+      expect(queue.enqueueFetchJob).toHaveBeenCalledWith({ userId: user.id, metricType: 'HRV', date: '2026-09-15' });
+    });
+
+    it('treats a non-array body as an empty batch (204, nothing enqueued) instead of crashing', async () => {
+      (queue.enqueueFetchJob as jest.Mock).mockClear();
+
+      const res = await postWebhook({ data: { healthUserId: 'x', dataType: 'steps', operation: 'UPSERT', intervals: [] } });
+
+      expect(res.status).toBe(204);
+      expect(queue.enqueueFetchJob).not.toHaveBeenCalled();
+    });
   });
 });
