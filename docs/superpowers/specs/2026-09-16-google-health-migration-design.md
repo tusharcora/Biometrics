@@ -48,14 +48,18 @@ Concretely, this means:
   in a way nothing else in this spec does, and is not something
   engineering effort alone can shorten.
 
-**This needs to be explicitly weighed against the "full replacement, not
-dual-provider" decision below before implementation starts.** If this
-verification is not budgeted for (time, cost, and the real possibility
-of a failed or delayed assessment), the practical effect of this
-migration is that the app becomes unusable beyond a small test-user
-allowlist for however long verification takes — which may be
-unacceptable if there's a target public launch date this was not
-already accounted against.
+**Reaffirmed with the user after surfacing this risk: proceed with full
+replacement anyway.** Reasoning: Fitbit's own Web API is itself being
+deprecated in favor of Google Health API (confirmed earlier in this
+spec via the official migration guide's reference to "the official
+Fitbit Web API deprecation deadlines") — so keeping Fitbit's classic API
+as a fallback is only a temporary reprieve, not a durable long-term
+alternative. The CASA verification burden isn't avoidable by staying on
+Fitbit; it's a cost this project incurs eventually either way. The
+accepted consequence: this app is limited to ~100 allowlisted test
+users until verification completes, with no guaranteed timeline or
+outcome — budget for that explicitly as a real launch dependency, not
+an engineering task with a knowable duration.
 
 ## Decisions Made (confirmed directly with the user — not open for
 reconsideration in this spec)
