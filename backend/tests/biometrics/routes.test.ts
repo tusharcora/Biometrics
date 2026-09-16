@@ -81,7 +81,7 @@ describe('GET /me/biometrics', () => {
 });
 
 describe('GET /me/connection', () => {
-  it('reports NOT_CONNECTED when the user has never connected a Fitbit', async () => {
+  it('reports NOT_CONNECTED when the user has never connected a health account', async () => {
     const user = await createUser('nc');
     const { accessToken } = await issueSessionTokens(user.id);
 
@@ -95,10 +95,10 @@ describe('GET /me/connection', () => {
 
   it('reports CONNECTED with the last sync time', async () => {
     const user = await createUser('conn');
-    await prisma.fitbitConnection.create({
+    await prisma.healthConnection.create({
       data: {
         userId: user.id,
-        fitbitUserId: `fb-conn-${randomUUID()}`,
+        healthUserId: `health-conn-${randomUUID()}`,
         encryptedAccessToken: 'placeholder',
         encryptedRefreshToken: 'placeholder',
         tokenExpiresAt: new Date(Date.now() + 3600_000),
@@ -121,10 +121,10 @@ describe('GET /me/connection', () => {
 
   it('reports DISCONNECTED so the client can prompt a reconnect', async () => {
     const user = await createUser('disc');
-    await prisma.fitbitConnection.create({
+    await prisma.healthConnection.create({
       data: {
         userId: user.id,
-        fitbitUserId: `fb-disc-${randomUUID()}`,
+        healthUserId: `health-disc-${randomUUID()}`,
         encryptedAccessToken: 'placeholder',
         encryptedRefreshToken: 'placeholder',
         tokenExpiresAt: new Date(Date.now() + 3600_000),
@@ -150,10 +150,10 @@ describe('GET /me/connection', () => {
   it("does not leak another user's connection", async () => {
     const userA = await createUser('leakA');
     const userB = await createUser('leakB');
-    await prisma.fitbitConnection.create({
+    await prisma.healthConnection.create({
       data: {
         userId: userB.id,
-        fitbitUserId: `fb-leak-${randomUUID()}`,
+        healthUserId: `health-leak-${randomUUID()}`,
         encryptedAccessToken: 'placeholder',
         encryptedRefreshToken: 'placeholder',
         tokenExpiresAt: new Date(Date.now() + 3600_000),

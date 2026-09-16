@@ -1,12 +1,7 @@
 import fetch from 'node-fetch';
-import { BiometricMetricType } from '../types';
+import { BiometricMetricType, HealthMetricPoint } from '../types';
 
 const BASE_URL = 'https://health.googleapis.com/v4';
-
-export interface HealthMetricPoint {
-  recordedAt: Date;
-  value: number;
-}
 
 function parseDate(dateStr: string): { year: number; month: number; day: number } {
   const [year, month, day] = dateStr.split('-').map(Number);
