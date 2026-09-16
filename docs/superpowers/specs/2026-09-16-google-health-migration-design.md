@@ -267,29 +267,123 @@ Google Health, platform reported as `FITBIT`):
     one-row-per-day `BiometricRecord` schema — a small, well-scoped
     decision for the implementation task, not a design-level blocker.
 
-## Verification Still Needed (first implementation task, not guessed here)
+## Webhook Mechanism (fully confirmed via a real subscriber, a real
+subscription, and a real observed notification)
 
-One fact remains genuinely unconfirmed, because confirming it requires
-running infrastructure (a real webhook receiver + a registered
-subscription), not a one-off API call:
+**Registration is a two-step, project-level admin flow, separate from
+per-user OAuth:**
 
-- **Webhook payload schema and verification mechanism.** The
-  `v4.projects.subscribers` / `v4.projects.subscribers.subscriptions`
-  endpoints are confirmed to exist (from the REST reference), but their
-  exact payload shape and how a receiver verifies an incoming push
-  (Fitbit used an HMAC-SHA1 signature header; Google Cloud push
-  subscriptions commonly use a bearer JWT/OIDC token instead — a
-  materially different verification mechanism) needs a real receiver
-  and a real registered subscription to observe.
+1. **Subscriber** (`POST /v4/projects/{project_number}/subscribers`,
+   once per app, not per user): registers the webhook receiver URL
+   (`endpointUri`, must be HTTPS) and a shared secret
+   (`endpointAuthorization.secret`, a string like `"Bearer <value>"`
+   that becomes the literal `Authorization` header value on every
+   future call to this endpoint). Also declares which data types this
+   subscriber can ever receive (`subscriberConfigs[].dataTypes`, bare
+   lowercase strings like `"steps"`) and the creation policy — we use
+   `MANUAL` (confirmed working), matching Phase 1's per-user
+   create-on-connect/delete-on-disconnect model. (`AUTOMATIC` also
+   exists and would skip the per-user subscription step entirely, but
+   changes the model to "notify for all consented users automatically"
+   — not adopted here, to keep parity with Phase 1's explicit
+   per-connection lifecycle.)
+   - **Confirmed live**: on creation, Google's servers immediately send
+     two real verification requests to the given `endpointUri` — one
+     WITH the configured `Authorization` header (must respond `201`),
+     one WITHOUT it (must respond `401`/`403`). Both must pass or
+     subscriber creation fails. Verified request `User-Agent`:
+     `Google-Health-API-Webhooks`.
+   - **This requires `cloud-platform` OAuth scope**, not the
+     `googlehealth.*` scopes used for user data access — a materially
+     broader permission than anything else in this integration.
+     **Production implementation should use a dedicated GCP service
+     account scoped narrowly (ideally to just this API/project), not an
+     end-user's OAuth grant** — using a personal broad `cloud-platform`
+     consent was acceptable for this one-time manual verification only.
+2. **Subscription** (`POST /v4/projects/{project}/subscribers/{subscriber}/subscriptions`,
+   once per user, on connect): body is `{"user": "users/{healthUserId}",
+   "dataTypes": ["steps"]}` — note `dataTypes` takes **bare strings** in
+   the request despite the discovery document's own description
+   implying a full `users/{id}/dataTypes/{type}` path (confirmed by
+   testing both — the full-path form returns `400 INVALID_ARGUMENT`,
+   the bare-string form succeeds and echoes back the full-path form in
+   its response). This is the one place `healthUserId` actually gets
+   used (data-fetch calls always use the literal `me`, per Confirmed
+   API Facts above) — confirming `HealthConnection.healthUserId` still
+   needs to be stored, just for this specific purpose. Delete via
+   `DELETE .../subscriptions/{id}` on disconnect (same lifecycle as
+   Phase 1's Fitbit subscription).
 
-**This spec deliberately does not guess at this fact.** The
-implementation plan's first task builds a minimal webhook receiver and
-registers a real subscription against it, observes a real notification,
-and only then writes the verification logic against evidence — the same
-lesson Phase 1's final review surfaced when a guessed webhook
-collection-type mapping needed a late fix. Every other technical
-decision in this spec is now confirmed against the live API, not
-guessed.
+**Confirmed real notification payload** (observed live after triggering
+an actual step-count change on the connected device):
+
+```json
+[{
+  "data": {
+    "version": "1",
+    "clientProvidedSubscriptionName": "<the subscription id we created>",
+    "healthUserId": "8512524441117254421",
+    "operation": "UPSERT",
+    "dataType": "steps",
+    "intervals": [{
+      "physicalTimeInterval": {
+        "startTime": "2026-09-16T07:51:49.386781Z",
+        "endTime": "2026-09-16T07:54:27.486198Z"
+      },
+      "civilDateTimeInterval": { "...structured local date/time, not needed": "..." },
+      "civilIso8601TimeInterval": { "startTime": "...", "endTime": "..." }
+    }]
+  }
+}]
+```
+
+Key implications for the sync worker:
+- **Body is a JSON array** of notification objects (Fitbit's was also
+  an array, so the webhook route's existing array-iteration shape
+  carries over).
+- **`healthUserId` identifies the connection directly** — look up
+  `HealthConnection` by `healthUserId`, no state-token or session
+  needed (this is Google calling us, authenticated by the shared
+  secret, not a user's browser).
+- **`operation`** is present (`UPSERT` observed; a `DELETE` value
+  presumably exists for retracted data, though not observed live —
+  treat any non-`UPSERT` value conservatively, e.g. log and skip rather
+  than assume behavior for an unobserved case).
+- **`dataType`** is the bare data type string (`"steps"`), directly
+  usable as the key into our metric-type mapping.
+- **`intervals`** gives the exact changed time range(s) — use
+  `physicalTimeInterval.startTime`/`endTime` (RFC3339, matches the
+  `filter` query param format already confirmed) to scope the
+  subsequent fetch, rather than re-fetching a whole day blindly.
+
+**Verification mechanism — two layers, one fully confirmed, one with an
+open distribution question:**
+
+1. **`Authorization` header shared secret** (fully confirmed, fully
+   testable): the exact static value configured at subscriber-creation
+   time arrives unchanged on every notification. This alone is a
+   complete, sufficient verification mechanism — it is literally the
+   same check Google's own verification handshake requires the receiver
+   to implement. **Recommendation: implement this first and treat it as
+   the primary verification**, structurally simpler than Fitbit's
+   HMAC-SHA1 (a straight string comparison, not a signature
+   computation).
+2. **`GOOGLE-HEALTH-API-SIGNATURE` header** (confirmed to exist and
+   arrive with real values on real notifications — an ECDSA NIST P256
+   signature of the JSON body): this is real, active, and provides
+   defense-in-depth beyond the shared secret. **However, the mechanism
+   to obtain Google's public key to verify this signature is not
+   published anywhere in the REST reference, the discovery document, or
+   the general API documentation** — searched exhaustively, this is a
+   genuine, confirmed documentation gap, not a missed detail.
+   **Decision: ship with Authorization-header verification only for
+   this migration; treat ECDSA signature verification as a fast-follow
+   once the key-distribution mechanism is found** (likely via Google
+   support channels or a documentation update) rather than blocking the
+   migration on an unresolved external documentation gap.
+
+Every technical decision in this spec is now confirmed against the live
+API — nothing left is guessed.
 
 ## Error Handling
 
