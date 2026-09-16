@@ -18,7 +18,7 @@
     "express": "^5.2.1",
     "google-auth-library": "^10.9.1",
     "ioredis": "^6.0.0",
-    "jose": "^6.2.12",
+    "jose": "4.15.9",
     "jsonwebtoken": "^9.0.3",
     "node-fetch": "^2.7.0"
   },
