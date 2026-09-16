@@ -1,0 +1,79 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum AuthProvider {
+  APPLE
+  GOOGLE
+}
+
+enum FitbitConnectionStatus {
+  CONNECTED
+  DISCONNECTED
+}
+
+enum BiometricMetricType {
+  HRV
+  RESTING_HR
+  SLEEP
+  STEPS
+}
+
+model User {
+  id               String            @id @default(uuid())
+  email            String
+  authProvider     AuthProvider
+  providerUserId   String
+  createdAt        DateTime          @default(now())
+  fitbitConnection FitbitConnection?
+  biometricRecords BiometricRecord[]
+  refreshTokens    RefreshToken[]
+
+  // Identity is keyed on the provider subject, not the email address: the same
+  // person may hold both an Apple and a Google account sharing one email, and
+  // those are deliberately two separate accounts (no cross-provider linking).
+  @@unique([authProvider, providerUserId])
+}
+
+model RefreshToken {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id])
+  tokenHash String    @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime  @default(now())
+}
+
+model FitbitConnection {
+  id                    String                  @id @default(uuid())
+  userId                String                  @unique
+  user                  User                    @relation(fields: [userId], references: [id])
+  fitbitUserId          String                  @unique
+  encryptedAccessToken  String
+  encryptedRefreshToken String
+  tokenExpiresAt        DateTime
+  webhookSubscriptionId String?
+  status                FitbitConnectionStatus  @default(CONNECTED)
+  lastSyncedAt          DateTime?
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
+}
+
+model BiometricRecord {
+  id         String              @id @default(uuid())
+  userId     String
+  user       User                @relation(fields: [userId], references: [id])
+  metricType BiometricMetricType
+  value      Float
+  recordedAt DateTime
+  syncedAt   DateTime            @default(now())
+
+  @@unique([userId, metricType, recordedAt])
+  @@index([userId, recordedAt])
+}
