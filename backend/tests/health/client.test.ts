@@ -6,7 +6,18 @@ afterEach(() => nock.cleanAll());
 describe('fetchMetricRange', () => {
   it('fetches STEPS via dailyRollUp on parent "steps"', async () => {
     nock('https://health.googleapis.com')
-      .post('/v4/users/me/dataTypes/steps/dataPoints:dailyRollUp')
+      .post('/v4/users/me/dataTypes/steps/dataPoints:dailyRollUp', (body) => {
+        return (
+          body.range?.start?.date?.year === 2026 &&
+          body.range?.start?.date?.month === 9 &&
+          body.range?.start?.date?.day === 1 &&
+          body.range?.end?.date?.year === 2026 &&
+          body.range?.end?.date?.month === 9 &&
+          body.range?.end?.date?.day === 2 &&
+          !('civilStartTime' in body) &&
+          !('civilEndTime' in body)
+        );
+      })
       .reply(200, {
         rollupDataPoints: [
           {
@@ -23,7 +34,18 @@ describe('fetchMetricRange', () => {
 
   it('fetches RESTING_HR via dailyRollUp on parent "heart-rate" (kebab-case)', async () => {
     nock('https://health.googleapis.com')
-      .post('/v4/users/me/dataTypes/heart-rate/dataPoints:dailyRollUp')
+      .post('/v4/users/me/dataTypes/heart-rate/dataPoints:dailyRollUp', (body) => {
+        return (
+          body.range?.start?.date?.year === 2026 &&
+          body.range?.start?.date?.month === 9 &&
+          body.range?.start?.date?.day === 1 &&
+          body.range?.end?.date?.year === 2026 &&
+          body.range?.end?.date?.month === 9 &&
+          body.range?.end?.date?.day === 2 &&
+          !('civilStartTime' in body) &&
+          !('civilEndTime' in body)
+        );
+      })
       .reply(200, {
         rollupDataPoints: [
           {
@@ -80,5 +102,22 @@ describe('fetchMetricRange', () => {
 
     const points = await fetchMetricRange('token-1', 'HRV', '2026-09-01', '2026-09-02');
     expect(points).toEqual([{ recordedAt: new Date('2026-09-01T23:00:00Z'), value: 41.7 }]);
+  });
+
+  it('throws when dailyRollUp returns a non-200 status', async () => {
+    nock('https://health.googleapis.com')
+      .post('/v4/users/me/dataTypes/steps/dataPoints:dailyRollUp')
+      .reply(500, {});
+
+    await expect(fetchMetricRange('token-1', 'STEPS', '2026-09-01', '2026-09-02')).rejects.toThrow();
+  });
+
+  it('throws when dataPoints.list returns a non-200 status', async () => {
+    nock('https://health.googleapis.com')
+      .get('/v4/users/me/dataTypes/sleep/dataPoints')
+      .query(true)
+      .reply(500, {});
+
+    await expect(fetchMetricRange('token-1', 'SLEEP', '2026-09-01', '2026-09-02')).rejects.toThrow();
   });
 });
