@@ -51,12 +51,14 @@ fitbitRouter.get('/fitbit/callback', async (req, res) => {
     return;
   }
 
-  const userId = await connection.get(oauthStateKey(state));
+  // GETDEL reads and deletes the key in a single atomic server-side operation,
+  // so two concurrent requests presenting the same state token cannot both
+  // observe a non-null userId before either delete completes.
+  const userId = await connection.getdel(oauthStateKey(state));
   if (!userId) {
     res.status(401).json({ error: 'Invalid or expired OAuth state' });
     return;
   }
-  await connection.del(oauthStateKey(state));
 
   try {
     const code = req.query.code as string;

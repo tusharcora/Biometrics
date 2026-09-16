@@ -32,6 +32,11 @@ jest.mock('../../src/sync/queue', () => {
       },
       get: async (key: string) => store.get(key) ?? null,
       del: async (key: string) => (store.delete(key) ? 1 : 0),
+      getdel: async (key: string) => {
+        const value = store.get(key) ?? null;
+        store.delete(key);
+        return value;
+      },
     },
   };
 });
