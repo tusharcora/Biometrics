@@ -10,6 +10,9 @@ export function ConnectHealthScreen() {
   const navigation = useNavigation<any>();
 
   async function handleConnect() {
+    // /health/authorize is authenticated and returns the Google Health URL as JSON
+    // (apiFetch attaches the token). We cannot point the system browser at it
+    // directly, because a browser navigation carries no Authorization header.
     const { url } = await apiFetch<{ url: string }>('/health/authorize');
     const result = await WebBrowser.openAuthSessionAsync(url, REDIRECT_URI);
     if (result.type === 'success' && result.url.includes('status=connected')) {
