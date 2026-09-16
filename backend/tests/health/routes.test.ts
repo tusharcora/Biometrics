@@ -14,7 +14,7 @@ jest.mock('../../src/health/subscriber');
 // `jest.requireActual`) still loads the real module once to build the mock's
 // shape, which runs its top-level `new IORedis(...)` as a side effect and
 // leaves a real socket open that keeps Jest from exiting (same root cause
-// flagged in Task 10's report and avoided in tests/fitbit/routes.test.ts).
+// flagged in Task 10's report and avoided in this file).
 // Supplying a factory with an in-memory stand-in for `connection` avoids ever
 // loading the real module.
 jest.mock('../../src/sync/queue', () => {
@@ -166,7 +166,7 @@ describe('GET /webhooks/health', () => {
   it('returns 204 (no verification-challenge handshake needed for this provider)', async () => {
     // Google's subscriber verification is handled entirely by the automated
     // handshake during subscriber creation (see scripts/registerHealthSubscriber.ts),
-    // not a per-request GET challenge like Fitbit's — this route exists only
+    // not a per-request GET challenge like some other providers use — this route exists only
     // in case Google ever sends a GET here, and returns a harmless 204.
     const res = await request(createApp()).get('/webhooks/health');
     expect(res.status).toBe(204);

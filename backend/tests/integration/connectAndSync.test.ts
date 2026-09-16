@@ -37,7 +37,7 @@ describe('connect Google Health and sync end to end (mocked Google API)', () => 
     nock('https://oauth2.googleapis.com').post('/token').reply(200, {
       access_token: 'health-access', refresh_token: 'health-refresh', expires_in: 3599,
     });
-    // Suffixed with a fresh UUID, like the ported Fitbit test's analogous
+    // Suffixed with a fresh UUID, like the prior version of this test's analogous
     // user id, so repeat runs against a persistent test DB don't collide on
     // HealthConnection.healthUserId's unique constraint.
     const healthUserId = `health-user-e2e-${randomUUID()}`;

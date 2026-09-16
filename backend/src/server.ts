@@ -12,7 +12,7 @@ startSyncWorker();
 
 // The sweep runs as a repeatable queue job, not a per-process setInterval, so
 // that running more than one backend instance does not have several of them
-// racing to refresh the same single-use Fitbit refresh token.
+// racing to refresh the same single-use Google Health refresh token.
 scheduleTokenRefreshSweep().catch((err) =>
   console.error('Failed to schedule the token refresh sweep', err),
 );

@@ -65,8 +65,8 @@ describe('RootNavigator', () => {
     expect(getByText('SIGN_IN_SCREEN')).toBeTruthy();
   });
 
-  // The old navigator hardcoded ConnectFitbit, so an already-connected user had
-  // no route back to their dashboard.
+  // The old navigator hardcoded the connect screen, so an already-connected
+  // user had no route back to their dashboard.
   it('lands a connected user on the Dashboard', async () => {
     signedIn(true);
     (apiFetch as jest.Mock).mockResolvedValue({ status: 'CONNECTED', lastSyncedAt: null });

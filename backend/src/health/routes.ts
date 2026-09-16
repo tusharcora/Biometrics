@@ -116,9 +116,9 @@ healthRouter.get('/health/callback', async (req, res) => {
 healthRouter.get('/webhooks/health', (_req, res) => {
   // Google's subscriber endpoint verification happens automatically during
   // subscriber creation (see scripts/registerHealthSubscriber.ts) via a
-  // POST-based handshake, not a per-request GET challenge like Fitbit's. This
-  // route exists only as a harmless fallback in case Google ever sends a GET
-  // here.
+  // POST-based handshake, not a per-request GET challenge like some other
+  // providers use. This route exists only as a harmless fallback in case
+  // Google ever sends a GET here.
   res.status(204).send();
 });
 

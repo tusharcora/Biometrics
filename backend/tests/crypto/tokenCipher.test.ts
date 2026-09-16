@@ -6,9 +6,9 @@ describe('tokenCipher', () => {
   });
 
   it('round-trips a plaintext token', () => {
-    const ciphertext = encryptToken('my-fitbit-access-token');
-    expect(ciphertext).not.toContain('my-fitbit-access-token');
-    expect(decryptToken(ciphertext)).toBe('my-fitbit-access-token');
+    const ciphertext = encryptToken('my-secret-access-token');
+    expect(ciphertext).not.toContain('my-secret-access-token');
+    expect(decryptToken(ciphertext)).toBe('my-secret-access-token');
   });
 
   it('produces different ciphertext for the same plaintext (random IV)', () => {
@@ -18,7 +18,7 @@ describe('tokenCipher', () => {
   });
 
   it('throws when the ciphertext has been tampered with', () => {
-    const ciphertext = encryptToken('my-fitbit-access-token');
+    const ciphertext = encryptToken('my-secret-access-token');
     const raw = Buffer.from(ciphertext, 'base64');
     raw[raw.length - 1] ^= 0xff; // flip the last byte of the actual ciphertext
     const tampered = raw.toString('base64');
