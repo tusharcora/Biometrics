@@ -16,8 +16,13 @@ const OAUTH_STATE_TTL_SECONDS = 10 * 60;
 function oauthStateKey(state: string): string {
   return `oauth-state:${state}`;
 }
+// Fitbit's HRV data is sleep-derived, so the notification for it may arrive
+// under `sleep` rather than `activities`. Rather than guess wrong and have HRV
+// silently never sync via webhook, both collections trigger an HRV fetch. The
+// occasional redundant re-fetch is harmless: the repository upsert is
+// idempotent.
 const FITBIT_WEBHOOK_COLLECTIONS: Record<string, ('HRV' | 'RESTING_HR' | 'SLEEP' | 'STEPS')[]> = {
-  sleep: ['SLEEP'],
+  sleep: ['SLEEP', 'HRV'],
   activities: ['RESTING_HR', 'STEPS', 'HRV'],
 };
 
@@ -129,16 +134,20 @@ fitbitRouter.post('/webhooks/fitbit', async (req, res) => {
   try {
     const notifications = JSON.parse(rawBody.toString()) as FitbitNotification[];
     for (const notification of notifications) {
+      // A Fitbit account maps to at most one app user (fitbitUserId is unique),
+      // so both branches below look the connection up singularly.
+      const conn = await prisma.fitbitConnection.findUnique({
+        where: { fitbitUserId: notification.ownerId },
+      });
+      if (!conn) continue;
+
       if (notification.collectionType === 'userRevokedAccess') {
-        await prisma.fitbitConnection.updateMany({
+        await prisma.fitbitConnection.update({
           where: { fitbitUserId: notification.ownerId },
           data: { status: 'DISCONNECTED' },
         });
         continue;
       }
-
-      const conn = await prisma.fitbitConnection.findFirst({ where: { fitbitUserId: notification.ownerId } });
-      if (!conn) continue;
 
       const metricTypes = FITBIT_WEBHOOK_COLLECTIONS[notification.collectionType] ?? [];
       for (const metricType of metricTypes) {

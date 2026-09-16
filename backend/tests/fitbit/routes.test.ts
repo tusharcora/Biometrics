@@ -352,4 +352,73 @@ describe('POST /webhooks/fitbit', () => {
       date: '2026-09-02',
     });
   });
+
+  // HRV is sleep-derived at Fitbit, so a sleep notification must also trigger
+  // an HRV fetch; otherwise HRV only ever arrives via the 30-day backfill.
+  it('fetches HRV on a sleep notification as well as on an activities one', async () => {
+    const { user, fitbitUserId } = await createConnectedUser();
+    const body = JSON.stringify([{ collectionType: 'sleep', date: '2026-09-03', ownerId: fitbitUserId }]);
+
+    const res = await request(createApp())
+      .post('/webhooks/fitbit')
+      .set('Content-Type', 'application/json')
+      .set('x-fitbit-signature', signBody(body))
+      .send(body);
+
+    expect(res.status).toBe(204);
+    expect(queue.enqueueFetchJob).toHaveBeenCalledWith({
+      userId: user.id,
+      metricType: 'HRV',
+      date: '2026-09-03',
+    });
+  });
+
+  it('fetches resting HR, steps and HRV on an activities notification', async () => {
+    const { user, fitbitUserId } = await createConnectedUser();
+    const body = JSON.stringify([{ collectionType: 'activities', date: '2026-09-04', ownerId: fitbitUserId }]);
+
+    const res = await request(createApp())
+      .post('/webhooks/fitbit')
+      .set('Content-Type', 'application/json')
+      .set('x-fitbit-signature', signBody(body))
+      .send(body);
+
+    expect(res.status).toBe(204);
+    for (const metricType of ['RESTING_HR', 'STEPS', 'HRV']) {
+      expect(queue.enqueueFetchJob).toHaveBeenCalledWith({
+        userId: user.id,
+        metricType,
+        date: '2026-09-04',
+      });
+    }
+  });
+
+  it('ignores a notification for a Fitbit account with no connection', async () => {
+    const body = JSON.stringify([
+      { collectionType: 'sleep', date: '2026-09-05', ownerId: `unknown-${randomUUID()}` },
+    ]);
+
+    const res = await request(createApp())
+      .post('/webhooks/fitbit')
+      .set('Content-Type', 'application/json')
+      .set('x-fitbit-signature', signBody(body))
+      .send(body);
+
+    expect(res.status).toBe(204);
+    expect(queue.enqueueFetchJob).not.toHaveBeenCalled();
+  });
+
+  it('ignores a userRevokedAccess notification for an unknown Fitbit account', async () => {
+    const body = JSON.stringify([
+      { collectionType: 'userRevokedAccess', date: '2026-09-05', ownerId: `unknown-${randomUUID()}` },
+    ]);
+
+    const res = await request(createApp())
+      .post('/webhooks/fitbit')
+      .set('Content-Type', 'application/json')
+      .set('x-fitbit-signature', signBody(body))
+      .send(body);
+
+    expect(res.status).toBe(204);
+  });
 });
