@@ -30,6 +30,8 @@ fitbitRouter.get('/fitbit/callback', requireAuth, async (req: AuthedRequest, res
     const tokens = await exchangeCodeForTokens(code);
     const subscriptionId = randomUUID();
 
+    const existing = await prisma.fitbitConnection.findUnique({ where: { userId: req.userId! } });
+
     await prisma.fitbitConnection.upsert({
       where: { userId: req.userId! },
       update: {
@@ -53,7 +55,9 @@ fitbitRouter.get('/fitbit/callback', requireAuth, async (req: AuthedRequest, res
     await registerWebhookSubscription(tokens.fitbitUserId, tokens.accessToken, subscriptionId);
 
     const endDate = new Date();
-    const startDate = new Date(endDate.getTime() - BACKFILL_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    const startDate = existing?.lastSyncedAt
+      ? existing.lastSyncedAt
+      : new Date(endDate.getTime() - BACKFILL_WINDOW_DAYS * 24 * 60 * 60 * 1000);
     await enqueueBackfillJob({
       userId: req.userId!,
       startDate: isoDate(startDate),

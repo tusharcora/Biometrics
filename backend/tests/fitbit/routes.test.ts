@@ -90,6 +90,40 @@ describe('GET /fitbit/callback', () => {
       expect.objectContaining({ userId: user.id }),
     );
   });
+
+  it('scopes the backfill to the gap since last sync on reconnect', async () => {
+    const user = await prisma.user.create({ data: { email: `r-${randomUUID()}@example.com`, authProvider: 'GOOGLE' } });
+    const { accessToken } = await issueSessionTokens(user.id);
+    const lastSyncedAt = new Date('2026-08-15T00:00:00.000Z');
+
+    await prisma.fitbitConnection.create({
+      data: {
+        userId: user.id,
+        fitbitUserId: 'fitbit-user-2',
+        encryptedAccessToken: 'placeholder',
+        encryptedRefreshToken: 'placeholder',
+        tokenExpiresAt: new Date(Date.now() + 3600_000),
+        status: 'DISCONNECTED',
+        lastSyncedAt,
+      },
+    });
+
+    (oauth.exchangeCodeForTokens as jest.Mock).mockResolvedValue({
+      accessToken: 'fitbit-access-2',
+      refreshToken: 'fitbit-refresh-2',
+      expiresIn: 28800,
+      fitbitUserId: 'fitbit-user-2',
+    });
+
+    await request(createApp())
+      .get('/fitbit/callback')
+      .query({ code: 'auth-code-2', state: user.id })
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    expect(queue.enqueueBackfillJob).toHaveBeenCalledWith(
+      expect.objectContaining({ userId: user.id, startDate: '2026-08-15' }),
+    );
+  });
 });
 
 describe('POST /webhooks/fitbit', () => {
