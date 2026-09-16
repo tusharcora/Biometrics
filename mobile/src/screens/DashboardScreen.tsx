@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, StyleSheet } from 'react-native';
+import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
+import { useNavigation } from '@react-navigation/native';
 import { apiFetch } from '../api/client';
 
 interface BiometricRecord {
@@ -9,15 +10,45 @@ interface BiometricRecord {
   recordedAt: string;
 }
 
+type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';
+
 export function DashboardScreen() {
+  const navigation = useNavigation<any>();
   const [records, setRecords] = useState<BiometricRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus | null>(null);
 
   useEffect(() => {
     apiFetch<BiometricRecord[]>('/me/biometrics')
       .then(setRecords)
       .catch(() => setError('Something went wrong loading your data.'));
   }, []);
+
+  useEffect(() => {
+    // A disconnected Fitbit is why the data stops updating, so say so rather
+    // than leaving the user staring at silently stale numbers.
+    apiFetch<{ status: ConnectionStatus }>('/me/connection')
+      .then((res) => setConnectionStatus(res?.status ?? null))
+      .catch(() => setConnectionStatus(null));
+  }, []);
+
+  if (connectionStatus === 'DISCONNECTED') {
+    return (
+      <View style={styles.container}>
+        <Text style={styles.title}>Reconnect your Fitbit</Text>
+        <Text style={styles.body}>
+          Your Fitbit is disconnected, so your data has stopped updating.
+        </Text>
+        <Pressable
+          testID="reconnect-fitbit-button"
+          style={styles.button}
+          onPress={() => navigation.navigate('ConnectFitbit')}
+        >
+          <Text style={styles.buttonText}>Reconnect Fitbit</Text>
+        </Pressable>
+      </View>
+    );
+  }
 
   if (error !== null) {
     return (
@@ -60,7 +91,11 @@ export function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24 },
+  container: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 12 },
+  title: { fontSize: 20, fontWeight: '600' },
+  body: { textAlign: 'center', color: '#555' },
+  button: { backgroundColor: '#00b0b9', paddingVertical: 12, paddingHorizontal: 24, borderRadius: 8 },
+  buttonText: { color: '#fff', fontSize: 16 },
   list: { padding: 16, gap: 8 },
   row: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#eee' },
   metric: { fontWeight: '600' },

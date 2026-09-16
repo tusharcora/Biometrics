@@ -13,9 +13,23 @@ export async function runTokenRefreshSweep(): Promise<void> {
   });
 
   for (const conn of expiringSoon) {
+    // Only a failure of the refresh itself means the connection is genuinely
+    // dead. A failure of the DB write afterwards is a transient infrastructure
+    // problem and must not disconnect a perfectly healthy connection.
+    let tokens;
     try {
       const refreshToken = decryptToken(conn.encryptedRefreshToken);
-      const tokens = await refreshFitbitTokens(refreshToken);
+      tokens = await refreshFitbitTokens(refreshToken);
+    } catch (err) {
+      console.error(`Fitbit token refresh failed for connection ${conn.id}`, err);
+      await prisma.fitbitConnection.update({
+        where: { id: conn.id },
+        data: { status: 'DISCONNECTED' },
+      });
+      continue;
+    }
+
+    try {
       await prisma.fitbitConnection.update({
         where: { id: conn.id },
         data: {
@@ -24,8 +38,11 @@ export async function runTokenRefreshSweep(): Promise<void> {
           tokenExpiresAt: new Date(Date.now() + tokens.expiresIn * 1000),
         },
       });
-    } catch {
-      await prisma.fitbitConnection.update({ where: { id: conn.id }, data: { status: 'DISCONNECTED' } });
+    } catch (err) {
+      // The refresh succeeded, so the connection is fine; surface the write
+      // failure instead of silently marking the user disconnected.
+      console.error(`Failed to persist refreshed Fitbit tokens for connection ${conn.id}`, err);
+      throw err;
     }
   }
 }

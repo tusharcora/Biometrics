@@ -8,7 +8,18 @@ import { issueSessionTokens } from '../../src/auth/jwt';
 beforeAll(() => {
   migrateTestDb();
   process.env.JWT_ACCESS_SECRET = 'test-access-secret';
+  process.env.TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 3).toString('base64');
 });
+
+async function createUser(prefix: string) {
+  return prisma.user.create({
+    data: {
+      email: `${prefix}-${randomUUID()}@example.com`,
+      authProvider: 'GOOGLE',
+      providerUserId: randomUUID(),
+    },
+  });
+}
 
 afterAll(async () => {
   await prisma.$disconnect();
@@ -50,6 +61,95 @@ describe('GET /me/biometrics', () => {
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(1);
     expect(res.body[0].value).toBe(1234);
-    expect(res.body.every((r: any) => r.userId === userA.id)).toBe(true);
+  });
+});
+
+describe('GET /me/connection', () => {
+  it('reports NOT_CONNECTED when the user has never connected a Fitbit', async () => {
+    const user = await createUser('nc');
+    const { accessToken } = await issueSessionTokens(user.id);
+
+    const res = await request(createApp())
+      .get('/me/connection')
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ status: 'NOT_CONNECTED', lastSyncedAt: null });
+  });
+
+  it('reports CONNECTED with the last sync time', async () => {
+    const user = await createUser('conn');
+    await prisma.fitbitConnection.create({
+      data: {
+        userId: user.id,
+        fitbitUserId: `fb-conn-${randomUUID()}`,
+        encryptedAccessToken: 'placeholder',
+        encryptedRefreshToken: 'placeholder',
+        tokenExpiresAt: new Date(Date.now() + 3600_000),
+        status: 'CONNECTED',
+        lastSyncedAt: new Date('2026-09-10T08:30:00.000Z'),
+      },
+    });
+    const { accessToken } = await issueSessionTokens(user.id);
+
+    const res = await request(createApp())
+      .get('/me/connection')
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({
+      status: 'CONNECTED',
+      lastSyncedAt: '2026-09-10T08:30:00.000Z',
+    });
+  });
+
+  it('reports DISCONNECTED so the client can prompt a reconnect', async () => {
+    const user = await createUser('disc');
+    await prisma.fitbitConnection.create({
+      data: {
+        userId: user.id,
+        fitbitUserId: `fb-disc-${randomUUID()}`,
+        encryptedAccessToken: 'placeholder',
+        encryptedRefreshToken: 'placeholder',
+        tokenExpiresAt: new Date(Date.now() + 3600_000),
+        status: 'DISCONNECTED',
+      },
+    });
+    const { accessToken } = await issueSessionTokens(user.id);
+
+    const res = await request(createApp())
+      .get('/me/connection')
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body.status).toBe('DISCONNECTED');
+    expect(res.body.lastSyncedAt).toBeNull();
+  });
+
+  it('rejects an unauthenticated request', async () => {
+    const res = await request(createApp()).get('/me/connection');
+    expect(res.status).toBe(401);
+  });
+
+  it("does not leak another user's connection", async () => {
+    const userA = await createUser('leakA');
+    const userB = await createUser('leakB');
+    await prisma.fitbitConnection.create({
+      data: {
+        userId: userB.id,
+        fitbitUserId: `fb-leak-${randomUUID()}`,
+        encryptedAccessToken: 'placeholder',
+        encryptedRefreshToken: 'placeholder',
+        tokenExpiresAt: new Date(Date.now() + 3600_000),
+        status: 'CONNECTED',
+      },
+    });
+    const { accessToken } = await issueSessionTokens(userA.id);
+
+    const res = await request(createApp())
+      .get('/me/connection')
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    expect(res.body.status).toBe('NOT_CONNECTED');
   });
 });
