@@ -241,19 +241,35 @@ Google Health, platform reported as `FITBIT`):
   Confirmed live: raw `steps` dataPoints are **minute-by-minute**, not
   daily totals.
 - **Daily aggregation**: `POST /v4/users/me/dataTypes/{dataType}/dataPoints:dailyRollUp`
-  (body: `{range: {...CivilTimeInterval...}, windowSizeDays: 1}`)
-  aggregates to daily buckets server-side — this is the right endpoint
-  for STEPS and RESTING_HR, not manual summation of raw points.
-- **Confirmed per-metric mapping**:
-  - **STEPS**: `dailyRollUp` on data type `steps` →
-    `StepsRollupValue.countSum` — clean 1:1 match to Phase 1's `STEPS`.
-  - **RESTING_HR**: `dailyRollUp` on the heart-rate rollup type →
-    `HeartRateRollupValue.beatsPerMinuteMin`. Google Health API has **no
-    direct daily "resting heart rate" value** the way Fitbit's classic
-    API did — confirmed via the discovery document's full schema, not
-    an oversight in searching. Decided with the user: use
-    `beatsPerMinuteMin` (lowest heart rate observed each day) as an
-    honestly-labeled proxy, not an exact equivalent.
+  aggregates to daily buckets server-side — confirmed live, exact
+  working request body:
+  `{"range": {"start": {"date": {"year", "month", "day"}}, "end": {"date": {...}}}, "windowSizeDays": 1}`
+  (the discovery doc's field names `civilStartTime`/`civilEndTime` are
+  wrong for the request — the real fields are `range.start`/`range.end`,
+  each a `date: {year, month, day}` object; confirmed by trial against
+  the live API's own error messages). **Must be called with a token that
+  has ONLY the `googlehealth.*` scopes — a token that also carries
+  `cloud-platform` is rejected with `403 DISALLOWED_OAUTH_SCOPES`**, a
+  real, confirmed API behavior, not a hypothetical concern: the
+  cloud-platform-scoped token used for subscriber/subscription
+  management must never be the same token used for per-user data
+  fetching, even though both are technically valid OAuth tokens for the
+  same Google account.
+- **Confirmed per-metric mapping (live-tested, real values returned)**:
+  - **STEPS**: `dailyRollUp` on parent data type `steps` →
+    `rollupDataPoints[].steps.countSum` (e.g. real observed value:
+    `"2504"` steps for one day) — clean 1:1 match to Phase 1's `STEPS`.
+  - **RESTING_HR**: `dailyRollUp` on parent data type `heart-rate`
+    (**kebab-case**, confirmed — this differs from the camelCase
+    `heartRate` used elsewhere, e.g. the raw `DataPoint` union field
+    name) → `rollupDataPoints[].heartRate.beatsPerMinuteMin` (real
+    observed values: 39-51 bpm across different days — plausible
+    resting-adjacent numbers). Google Health API has **no direct daily
+    "resting heart rate" value** the way Fitbit's classic API did —
+    confirmed via the discovery document's full schema, not an
+    oversight in searching. Decided with the user: use
+    `beatsPerMinuteMin` as an honestly-labeled proxy, not an exact
+    equivalent.
   - **SLEEP**: raw `dataPoints.list` on data type `sleep` →
     `Sleep.summary.minutesAsleep` (per sleep session) — an exact
     naming and semantic match to Phase 1's Fitbit-based `SLEEP` value.
