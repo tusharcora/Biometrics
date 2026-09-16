@@ -76,32 +76,95 @@ describe('fetchMetricRange', () => {
       });
 
     const points = await fetchMetricRange('token-1', 'SLEEP', '2026-09-01', '2026-09-02');
-    expect(points).toEqual([{ recordedAt: new Date('2026-09-01T22:00:00Z'), value: 415 }]);
+    // recordedAt is keyed on UTC-midnight of the session's start date, the
+    // same day-keying convention STEPS/RESTING_HR use, not the raw instant.
+    expect(points).toEqual([{ recordedAt: new Date('2026-09-01T00:00:00Z'), value: 415 }]);
   });
 
-  it('fetches HRV via dataPoints.list on "heartRateVariability", taking the last sample of the range', async () => {
+  it('keys each SLEEP session on the UTC calendar date of its start, one point per session', async () => {
+    nock('https://health.googleapis.com')
+      .get('/v4/users/me/dataTypes/sleep/dataPoints')
+      .query(true)
+      .reply(200, {
+        dataPoints: [
+          { sleep: { interval: { startTime: '2026-09-01T22:15:00Z' }, summary: { minutesAsleep: 415 } } },
+          { sleep: { interval: { startTime: '2026-09-02T23:40:00Z' }, summary: { minutesAsleep: 390 } } },
+        ],
+      });
+
+    const points = await fetchMetricRange('token-1', 'SLEEP', '2026-09-01', '2026-09-03');
+    expect(points).toEqual([
+      { recordedAt: new Date('2026-09-01T00:00:00Z'), value: 415 },
+      { recordedAt: new Date('2026-09-02T00:00:00Z'), value: 390 },
+    ]);
+  });
+
+  it('fetches HRV via dataPoints.list on "heartRateVariability", returning the last sample of EACH day', async () => {
     nock('https://health.googleapis.com')
       .get('/v4/users/me/dataTypes/heartRateVariability/dataPoints')
       .query((q) => typeof q.filter === 'string' && q.filter.includes('heartRateVariability.sample_time.physical_time'))
       .reply(200, {
+        // Deliberately out of chronological order, spanning three days with
+        // multiple samples on two of them, to prove grouping is per-day and
+        // "last" is chronological rather than positional.
         dataPoints: [
-          {
-            heartRateVariability: {
-              sampleTime: { physicalTime: '2026-09-01T06:00:00Z' },
-              rootMeanSquareOfSuccessiveDifferencesMilliseconds: 38.2,
-            },
-          },
-          {
-            heartRateVariability: {
-              sampleTime: { physicalTime: '2026-09-01T23:00:00Z' },
-              rootMeanSquareOfSuccessiveDifferencesMilliseconds: 41.7,
-            },
-          },
+          { heartRateVariability: { sampleTime: { physicalTime: '2026-09-02T23:30:00Z' }, rootMeanSquareOfSuccessiveDifferencesMilliseconds: 45.1 } },
+          { heartRateVariability: { sampleTime: { physicalTime: '2026-09-01T06:00:00Z' }, rootMeanSquareOfSuccessiveDifferencesMilliseconds: 38.2 } },
+          { heartRateVariability: { sampleTime: { physicalTime: '2026-09-03T04:10:00Z' }, rootMeanSquareOfSuccessiveDifferencesMilliseconds: 50.0 } },
+          { heartRateVariability: { sampleTime: { physicalTime: '2026-09-01T23:00:00Z' }, rootMeanSquareOfSuccessiveDifferencesMilliseconds: 41.7 } },
+          { heartRateVariability: { sampleTime: { physicalTime: '2026-09-02T07:45:00Z' }, rootMeanSquareOfSuccessiveDifferencesMilliseconds: 43.9 } },
         ],
       });
 
-    const points = await fetchMetricRange('token-1', 'HRV', '2026-09-01', '2026-09-02');
-    expect(points).toEqual([{ recordedAt: new Date('2026-09-01T23:00:00Z'), value: 41.7 }]);
+    const points = await fetchMetricRange('token-1', 'HRV', '2026-09-01', '2026-09-04');
+
+    // One point per day that had a sample (3 days -> 3 points, NOT 1), each the
+    // chronologically last sample of that day, keyed on UTC midnight.
+    expect(points).toHaveLength(3);
+    expect(points).toEqual([
+      { recordedAt: new Date('2026-09-01T00:00:00Z'), value: 41.7 },
+      { recordedAt: new Date('2026-09-02T00:00:00Z'), value: 45.1 },
+      { recordedAt: new Date('2026-09-03T00:00:00Z'), value: 50.0 },
+    ]);
+  });
+
+  it('returns no HRV points when the range has no samples', async () => {
+    nock('https://health.googleapis.com')
+      .get('/v4/users/me/dataTypes/heartRateVariability/dataPoints')
+      .query(true)
+      .reply(200, { dataPoints: [] });
+
+    expect(await fetchMetricRange('token-1', 'HRV', '2026-09-01', '2026-09-02')).toEqual([]);
+  });
+
+  // Documents the range semantics callers must honour: dataPoints.list is
+  // filtered half-open (`>= start AND < end`), so start === end is an
+  // unsatisfiable filter and can never return anything. A caller wanting a
+  // single day must pass [day, day + 1) -- see handleFetchJob in sync/worker.ts.
+  it('builds a half-open dataPoints.list filter, so startDate === endDate is an empty range', async () => {
+    let capturedFilter: string | undefined;
+    nock('https://health.googleapis.com')
+      .get('/v4/users/me/dataTypes/sleep/dataPoints')
+      .query((q) => {
+        capturedFilter = q.filter as string;
+        return true;
+      })
+      .reply(200, { dataPoints: [] });
+
+    await fetchMetricRange('token-1', 'SLEEP', '2026-09-01', '2026-09-01');
+
+    expect(capturedFilter).toBe(
+      'sleep.interval.start_time >= "2026-09-01T00:00:00Z" AND sleep.interval.start_time < "2026-09-01T00:00:00Z"',
+    );
+  });
+
+  it('rejects a malformed date string instead of sending Google NaN date parts', async () => {
+    await expect(fetchMetricRange('token-1', 'STEPS', '2026-9', '2026-09-02')).rejects.toThrow(
+      'Invalid date string "2026-9": expected YYYY-MM-DD',
+    );
+    await expect(fetchMetricRange('token-1', 'STEPS', '2026-09-01', 'not-a-date')).rejects.toThrow(
+      /Invalid date string/,
+    );
   });
 
   it('throws when dailyRollUp returns a non-200 status', async () => {

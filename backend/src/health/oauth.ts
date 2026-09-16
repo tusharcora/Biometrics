@@ -10,7 +10,12 @@ const SCOPES = [
 
 export interface HealthTokenResponse {
   accessToken: string;
-  refreshToken?: string;
+  // Google returns a refresh_token on the initial authorization_code exchange
+  // but not on an ordinary refresh_token grant, so this is genuinely absent
+  // most of the time. Declared as `string | undefined` explicitly because
+  // exactOptionalPropertyTypes distinguishes "absent" from "present but
+  // undefined", and requestToken assigns the raw (possibly undefined) value.
+  refreshToken?: string | undefined;
   expiresIn: number;
 }
 
