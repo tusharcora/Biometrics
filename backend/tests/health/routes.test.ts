@@ -49,6 +49,25 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
+// The oauth module is automocked, so give the URL builder a real shape. Set in
+// beforeEach so a jest.clearAllMocks() in any suite cannot strand it.
+beforeEach(() => {
+  (oauth.buildAuthorizeUrl as jest.Mock).mockImplementation(
+    (state: string) => `https://accounts.google.com/o/oauth2/v2/auth?state=${state}`,
+  );
+});
+
+async function getHealthOAuthState(userId: string): Promise<string> {
+  const { accessToken } = await issueSessionTokens(userId);
+  const res = await request(createApp())
+    .get('/health/authorize')
+    .set('Authorization', `Bearer ${accessToken}`);
+  expect(res.status).toBe(200);
+  const state = new URL(res.body.url).searchParams.get('state');
+  expect(state).toBeTruthy();
+  return state!;
+}
+
 describe('GET /health/authorize', () => {
   it('requires auth and returns the Google authorize URL as JSON', async () => {
     const user = await prisma.user.create({
@@ -99,6 +118,47 @@ describe('GET /health/callback', () => {
   it('rejects a missing or unknown state token', async () => {
     const res = await request(createApp()).get('/health/callback').query({ code: 'auth-code', state: 'unknown-state' });
     expect(res.status).toBe(401);
+  });
+
+  it('rejects a replayed state token, because state is single-use', async () => {
+    const user = await prisma.user.create({
+      data: { email: `h-${randomUUID()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+    });
+    const state = await getHealthOAuthState(user.id);
+
+    (oauth.exchangeCodeForTokens as jest.Mock).mockResolvedValue({
+      accessToken: 'health-access-replay', refreshToken: 'health-refresh-replay', expiresIn: 3599,
+    });
+    (subscriber.getIdentity as jest.Mock).mockResolvedValue({ healthUserId: `health-user-replay-${randomUUID()}` });
+    (subscriber.registerUserSubscription as jest.Mock).mockResolvedValue('sub-replay');
+
+    const first = await request(createApp()).get('/health/callback').query({ code: 'c1', state });
+    expect(first.status).toBe(302);
+
+    const replay = await request(createApp()).get('/health/callback').query({ code: 'c2', state });
+    expect(replay.status).toBe(401);
+  });
+
+  it('does not leave the connection CONNECTED when subscription registration fails', async () => {
+    const user = await prisma.user.create({
+      data: { email: `h-${randomUUID()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+    });
+    const state = await getHealthOAuthState(user.id);
+
+    (oauth.exchangeCodeForTokens as jest.Mock).mockResolvedValue({
+      accessToken: 'health-access-subfail', refreshToken: 'health-refresh-subfail', expiresIn: 3599,
+    });
+    (subscriber.getIdentity as jest.Mock).mockResolvedValue({ healthUserId: `health-user-subfail-${randomUUID()}` });
+    (subscriber.registerUserSubscription as jest.Mock).mockRejectedValueOnce(
+      new Error('Google Health subscription registration failed'),
+    );
+
+    const res = await request(createApp()).get('/health/callback').query({ code: 'code', state });
+
+    expect(res.status).toBe(500);
+    // The row must never exist claiming to be healthy with a subscription that
+    // was never actually created at Google.
+    expect(await prisma.healthConnection.findUnique({ where: { userId: user.id } })).toBeNull();
   });
 });
 
@@ -158,5 +218,45 @@ describe('POST /webhooks/health', () => {
     expect(queue.enqueueFetchJob).toHaveBeenCalledWith(
       expect.objectContaining({ userId: user.id, metricType: 'STEPS', date: '2026-09-16' }),
     );
+  });
+
+  it('skips a non-UPSERT operation without enqueuing or erroring', async () => {
+    (queue.enqueueFetchJob as jest.Mock).mockClear();
+
+    const user = await prisma.user.create({
+      data: { email: `h-${randomUUID()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+    });
+    const healthUserId = `health-user-delete-${randomUUID()}`;
+    await prisma.healthConnection.create({
+      data: {
+        userId: user.id,
+        healthUserId,
+        encryptedAccessToken: 'x',
+        encryptedRefreshToken: 'x',
+        tokenExpiresAt: new Date(Date.now() + 3600_000),
+      },
+    });
+
+    const body = JSON.stringify([
+      {
+        data: {
+          healthUserId,
+          dataType: 'steps',
+          operation: 'DELETE',
+          intervals: [{ physicalTimeInterval: { startTime: '2026-09-16T00:00:00Z', endTime: '2026-09-16T00:05:00Z' } }],
+        },
+      },
+    ]);
+
+    const res = await request(createApp())
+      .post('/webhooks/health')
+      .set('Content-Type', 'application/json')
+      .set('Authorization', 'Bearer webhook-secret')
+      .send(body);
+
+    // Conservative: skip any non-UPSERT operation rather than treat it as an
+    // error, per the spec's note that DELETE was never observed live.
+    expect(res.status).toBe(204);
+    expect(queue.enqueueFetchJob).not.toHaveBeenCalled();
   });
 });
