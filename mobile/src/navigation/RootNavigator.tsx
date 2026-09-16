@@ -5,11 +5,11 @@ import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../auth/AuthContext';
 import { apiFetch } from '../api/client';
 import { SignInScreen } from '../screens/SignInScreen';
-import { ConnectFitbitScreen } from '../screens/ConnectFitbitScreen';
+import { ConnectHealthScreen } from '../screens/ConnectHealthScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
 
 export type RootStackParamList = {
-  ConnectFitbit: undefined;
+  ConnectHealth: undefined;
   Dashboard: undefined;
 };
 
@@ -34,13 +34,13 @@ export function RootNavigator() {
         if (!cancelled) {
           // An already-connected user should not be stranded on the connect
           // screen every time they open the app.
-          setInitialRoute(res.status === 'CONNECTED' ? 'Dashboard' : 'ConnectFitbit');
+          setInitialRoute(res.status === 'CONNECTED' ? 'Dashboard' : 'ConnectHealth');
         }
       })
       .catch(() => {
         // If we cannot tell, the connect screen is the safe landing spot: it is
         // reachable from a connected state, whereas a frozen dashboard is not.
-        if (!cancelled) setInitialRoute('ConnectFitbit');
+        if (!cancelled) setInitialRoute('ConnectHealth');
       });
 
     return () => {
@@ -64,7 +64,7 @@ export function RootNavigator() {
   return (
     <NavigationContainer>
       <Stack.Navigator initialRouteName={initialRoute}>
-        <Stack.Screen name="ConnectFitbit" component={ConnectFitbitScreen} options={{ title: 'Connect Fitbit' }} />
+        <Stack.Screen name="ConnectHealth" component={ConnectHealthScreen} options={{ title: 'Connect Health' }} />
         <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ title: 'Dashboard' }} />
       </Stack.Navigator>
     </NavigationContainer>

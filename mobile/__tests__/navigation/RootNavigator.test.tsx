@@ -32,10 +32,10 @@ jest.mock('../../src/screens/SignInScreen', () => {
   const ReactLib = require('react');
   return { SignInScreen: () => ReactLib.createElement(Text, null, 'SIGN_IN_SCREEN') };
 });
-jest.mock('../../src/screens/ConnectFitbitScreen', () => {
+jest.mock('../../src/screens/ConnectHealthScreen', () => {
   const { Text } = require('react-native');
   const ReactLib = require('react');
-  return { ConnectFitbitScreen: () => ReactLib.createElement(Text, null, 'CONNECT_SCREEN') };
+  return { ConnectHealthScreen: () => ReactLib.createElement(Text, null, 'CONNECT_SCREEN') };
 });
 jest.mock('../../src/screens/DashboardScreen', () => {
   const { Text } = require('react-native');
