@@ -35,7 +35,7 @@ async function main() {
         endpointUri: webhookUrl,
         endpointAuthorization: { secret: webhookSecret },
         subscriberConfigs: [
-          { dataTypes: ['steps', 'sleep', 'heart-rate', 'heartRateVariability'], subscriptionCreatePolicy: 'MANUAL' },
+          { dataTypes: ['steps', 'sleep', 'heart-rate', 'heart-rate-variability'], subscriptionCreatePolicy: 'MANUAL' },
         ],
       }),
     },
