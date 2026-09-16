@@ -25,41 +25,46 @@ fitbitRouter.get('/fitbit/authorize', requireAuth, (req: AuthedRequest, res) => 
 });
 
 fitbitRouter.get('/fitbit/callback', requireAuth, async (req: AuthedRequest, res) => {
-  const code = req.query.code as string;
-  const tokens = await exchangeCodeForTokens(code);
-  const subscriptionId = randomUUID();
+  try {
+    const code = req.query.code as string;
+    const tokens = await exchangeCodeForTokens(code);
+    const subscriptionId = randomUUID();
 
-  await prisma.fitbitConnection.upsert({
-    where: { userId: req.userId! },
-    update: {
-      fitbitUserId: tokens.fitbitUserId,
-      encryptedAccessToken: encryptToken(tokens.accessToken),
-      encryptedRefreshToken: encryptToken(tokens.refreshToken),
-      tokenExpiresAt: new Date(Date.now() + tokens.expiresIn * 1000),
-      webhookSubscriptionId: subscriptionId,
-      status: 'CONNECTED',
-    },
-    create: {
+    await prisma.fitbitConnection.upsert({
+      where: { userId: req.userId! },
+      update: {
+        fitbitUserId: tokens.fitbitUserId,
+        encryptedAccessToken: encryptToken(tokens.accessToken),
+        encryptedRefreshToken: encryptToken(tokens.refreshToken),
+        tokenExpiresAt: new Date(Date.now() + tokens.expiresIn * 1000),
+        webhookSubscriptionId: subscriptionId,
+        status: 'CONNECTED',
+      },
+      create: {
+        userId: req.userId!,
+        fitbitUserId: tokens.fitbitUserId,
+        encryptedAccessToken: encryptToken(tokens.accessToken),
+        encryptedRefreshToken: encryptToken(tokens.refreshToken),
+        tokenExpiresAt: new Date(Date.now() + tokens.expiresIn * 1000),
+        webhookSubscriptionId: subscriptionId,
+      },
+    });
+
+    await registerWebhookSubscription(tokens.fitbitUserId, tokens.accessToken, subscriptionId);
+
+    const endDate = new Date();
+    const startDate = new Date(endDate.getTime() - BACKFILL_WINDOW_DAYS * 24 * 60 * 60 * 1000);
+    await enqueueBackfillJob({
       userId: req.userId!,
-      fitbitUserId: tokens.fitbitUserId,
-      encryptedAccessToken: encryptToken(tokens.accessToken),
-      encryptedRefreshToken: encryptToken(tokens.refreshToken),
-      tokenExpiresAt: new Date(Date.now() + tokens.expiresIn * 1000),
-      webhookSubscriptionId: subscriptionId,
-    },
-  });
+      startDate: isoDate(startDate),
+      endDate: isoDate(endDate),
+    });
 
-  await registerWebhookSubscription(tokens.fitbitUserId, tokens.accessToken, subscriptionId);
-
-  const endDate = new Date();
-  const startDate = new Date(endDate.getTime() - BACKFILL_WINDOW_DAYS * 24 * 60 * 60 * 1000);
-  await enqueueBackfillJob({
-    userId: req.userId!,
-    startDate: isoDate(startDate),
-    endDate: isoDate(endDate),
-  });
-
-  res.json({ status: 'connected' });
+    res.json({ status: 'connected' });
+  } catch (err) {
+    console.error('Fitbit callback failed', err);
+    res.status(500).json({ error: 'Failed to complete Fitbit connection' });
+  }
 });
 
 fitbitRouter.get('/webhooks/fitbit', (req, res) => {
@@ -85,24 +90,29 @@ fitbitRouter.post('/webhooks/fitbit', async (req, res) => {
     return;
   }
 
-  const notifications = JSON.parse(rawBody.toString()) as FitbitNotification[];
-  for (const notification of notifications) {
-    if (notification.collectionType === 'userRevokedAccess') {
-      await prisma.fitbitConnection.updateMany({
-        where: { fitbitUserId: notification.ownerId },
-        data: { status: 'DISCONNECTED' },
-      });
-      continue;
+  try {
+    const notifications = JSON.parse(rawBody.toString()) as FitbitNotification[];
+    for (const notification of notifications) {
+      if (notification.collectionType === 'userRevokedAccess') {
+        await prisma.fitbitConnection.updateMany({
+          where: { fitbitUserId: notification.ownerId },
+          data: { status: 'DISCONNECTED' },
+        });
+        continue;
+      }
+
+      const conn = await prisma.fitbitConnection.findFirst({ where: { fitbitUserId: notification.ownerId } });
+      if (!conn) continue;
+
+      const metricTypes = FITBIT_WEBHOOK_COLLECTIONS[notification.collectionType] ?? [];
+      for (const metricType of metricTypes) {
+        await enqueueFetchJob({ userId: conn.userId, metricType, date: notification.date });
+      }
     }
 
-    const conn = await prisma.fitbitConnection.findFirst({ where: { fitbitUserId: notification.ownerId } });
-    if (!conn) continue;
-
-    const metricTypes = FITBIT_WEBHOOK_COLLECTIONS[notification.collectionType] ?? [];
-    for (const metricType of metricTypes) {
-      await enqueueFetchJob({ userId: conn.userId, metricType, date: notification.date });
-    }
+    res.status(204).send();
+  } catch (err) {
+    console.error('Fitbit webhook notification processing failed', err);
+    res.status(500).send();
   }
-
-  res.status(204).send();
 });

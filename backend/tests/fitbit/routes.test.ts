@@ -1,9 +1,10 @@
 import request from 'supertest';
-import { randomUUID } from 'crypto';
+import { randomUUID, createHmac } from 'crypto';
 import { createApp } from '../../src/app';
 import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
 import { issueSessionTokens } from '../../src/auth/jwt';
+import { encryptToken } from '../../src/crypto/tokenCipher';
 import * as oauth from '../../src/fitbit/oauth';
 import * as subscription from '../../src/fitbit/subscription';
 import * as queue from '../../src/sync/queue';
@@ -32,6 +33,25 @@ beforeAll(() => {
 afterAll(async () => {
   await prisma.$disconnect();
 });
+
+function signBody(body: string): string {
+  return createHmac('sha1', process.env.FITBIT_CLIENT_SECRET!).update(body).digest('base64');
+}
+
+async function createConnectedUser() {
+  const user = await prisma.user.create({ data: { email: `wh-${randomUUID()}@example.com`, authProvider: 'GOOGLE' } });
+  const fitbitUserId = `fitbit-${randomUUID()}`;
+  await prisma.fitbitConnection.create({
+    data: {
+      userId: user.id,
+      fitbitUserId,
+      encryptedAccessToken: encryptToken('access-token'),
+      encryptedRefreshToken: encryptToken('refresh-token'),
+      tokenExpiresAt: new Date(Date.now() + 3600_000),
+    },
+  });
+  return { user, fitbitUserId };
+}
 
 describe('GET /webhooks/fitbit', () => {
   it('echoes back the verify code when it matches', async () => {
@@ -69,5 +89,58 @@ describe('GET /fitbit/callback', () => {
     expect(queue.enqueueBackfillJob).toHaveBeenCalledWith(
       expect.objectContaining({ userId: user.id }),
     );
+  });
+});
+
+describe('POST /webhooks/fitbit', () => {
+  afterEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('returns 401 for a bad or missing signature and enqueues nothing', async () => {
+    const body = JSON.stringify([{ collectionType: 'sleep', date: '2026-09-01', ownerId: 'fitbit-user-x' }]);
+
+    const res = await request(createApp())
+      .post('/webhooks/fitbit')
+      .set('Content-Type', 'application/json')
+      .send(body);
+
+    expect(res.status).toBe(401);
+    expect(queue.enqueueFetchJob).not.toHaveBeenCalled();
+  });
+
+  it('marks the connection disconnected on a userRevokedAccess notification', async () => {
+    const { user, fitbitUserId } = await createConnectedUser();
+    const body = JSON.stringify([{ collectionType: 'userRevokedAccess', date: '2026-09-01', ownerId: fitbitUserId }]);
+    const signature = signBody(body);
+
+    const res = await request(createApp())
+      .post('/webhooks/fitbit')
+      .set('Content-Type', 'application/json')
+      .set('x-fitbit-signature', signature)
+      .send(body);
+
+    expect(res.status).toBe(204);
+    const conn = await prisma.fitbitConnection.findUnique({ where: { userId: user.id } });
+    expect(conn?.status).toBe('DISCONNECTED');
+  });
+
+  it('enqueues a fetch job for a real notification against a seeded connection', async () => {
+    const { user, fitbitUserId } = await createConnectedUser();
+    const body = JSON.stringify([{ collectionType: 'sleep', date: '2026-09-02', ownerId: fitbitUserId }]);
+    const signature = signBody(body);
+
+    const res = await request(createApp())
+      .post('/webhooks/fitbit')
+      .set('Content-Type', 'application/json')
+      .set('x-fitbit-signature', signature)
+      .send(body);
+
+    expect(res.status).toBe(204);
+    expect(queue.enqueueFetchJob).toHaveBeenCalledWith({
+      userId: user.id,
+      metricType: 'SLEEP',
+      date: '2026-09-02',
+    });
   });
 });
