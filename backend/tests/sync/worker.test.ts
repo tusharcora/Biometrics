@@ -6,8 +6,11 @@ import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
 import * as fitbitClient from '../../src/fitbit/client';
 import { encryptToken } from '../../src/crypto/tokenCipher';
+import * as tokenRefreshJob from '../../src/sync/tokenRefreshJob';
+import { TOKEN_REFRESH_SWEEP_JOB } from '../../src/sync/queue';
 
 jest.mock('../../src/fitbit/client');
+jest.mock('../../src/sync/tokenRefreshJob');
 
 beforeAll(() => {
   migrateTestDb();
@@ -115,5 +118,23 @@ describe('processSyncJob', () => {
 
     const connection = await prisma.fitbitConnection.findUnique({ where: { userId: user.id } });
     expect(connection?.status).toBe('DISCONNECTED');
+  });
+
+  // The sweep runs through the queue so that only one instance performs each
+  // scheduled execution, rather than every process running its own setInterval.
+  it('runs the token refresh sweep for a tokenRefreshSweep job', async () => {
+    (tokenRefreshJob.runTokenRefreshSweep as jest.Mock).mockResolvedValue(undefined);
+
+    await processSyncJob({ name: TOKEN_REFRESH_SWEEP_JOB, data: {} } as Job);
+
+    expect(tokenRefreshJob.runTokenRefreshSweep).toHaveBeenCalledTimes(1);
+  });
+
+  it('ignores an unknown job name', async () => {
+    (tokenRefreshJob.runTokenRefreshSweep as jest.Mock).mockClear();
+
+    await expect(processSyncJob({ name: 'somethingElse', data: {} } as Job)).resolves.toBeUndefined();
+
+    expect(tokenRefreshJob.runTokenRefreshSweep).not.toHaveBeenCalled();
   });
 });

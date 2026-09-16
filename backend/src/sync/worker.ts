@@ -1,6 +1,7 @@
 import { Job, Worker } from 'bullmq';
 import { prisma } from '../db/client';
-import { connection } from './queue';
+import { connection, TOKEN_REFRESH_SWEEP_JOB } from './queue';
+import { runTokenRefreshSweep } from './tokenRefreshJob';
 import { fetchMetricRange } from '../fitbit/client';
 import { decryptToken } from '../crypto/tokenCipher';
 import { upsertBiometricRecords } from '../biometrics/repository';
@@ -62,6 +63,9 @@ export async function processSyncJob(job: Job): Promise<void> {
     await handleFetchJob(job.data as FetchJobData);
   } else if (job.name === 'backfill') {
     await handleBackfillJob(job.data as BackfillJobData);
+  } else if (job.name === TOKEN_REFRESH_SWEEP_JOB) {
+    // Scheduled through the queue so exactly one instance sweeps per tick.
+    await runTokenRefreshSweep();
   }
 }
 

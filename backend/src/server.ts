@@ -1,15 +1,21 @@
 import { createApp } from './app';
 import { startSyncWorker } from './sync/worker';
-import { runTokenRefreshSweep } from './sync/tokenRefreshJob';
+import { enqueueImmediateTokenRefreshSweep, scheduleTokenRefreshSweep } from './sync/queue';
 
 const port = Number(process.env.PORT ?? 3000);
-const TOKEN_REFRESH_INTERVAL_MS = 10 * 60 * 1000; // every 10 minutes
 
 createApp().listen(port, () => {
   console.log(`Backend listening on port ${port}`);
 });
 
 startSyncWorker();
-setInterval(() => {
-  runTokenRefreshSweep().catch((err) => console.error('Token refresh sweep failed', err));
-}, TOKEN_REFRESH_INTERVAL_MS);
+
+// The sweep runs as a repeatable queue job, not a per-process setInterval, so
+// that running more than one backend instance does not have several of them
+// racing to refresh the same single-use Fitbit refresh token.
+scheduleTokenRefreshSweep().catch((err) =>
+  console.error('Failed to schedule the token refresh sweep', err),
+);
+enqueueImmediateTokenRefreshSweep().catch((err) =>
+  console.error('Failed to enqueue the startup token refresh sweep', err),
+);

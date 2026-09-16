@@ -1,6 +1,15 @@
-import { syncQueue, connection, enqueueFetchJob, enqueueBackfillJob } from '../../src/sync/queue';
+import {
+  syncQueue,
+  connection,
+  enqueueFetchJob,
+  enqueueBackfillJob,
+  scheduleTokenRefreshSweep,
+  TOKEN_REFRESH_SWEEP_JOB,
+  TOKEN_REFRESH_SWEEP_INTERVAL_MS,
+} from '../../src/sync/queue';
 
 afterAll(async () => {
+  await syncQueue.removeJobScheduler(TOKEN_REFRESH_SWEEP_JOB).catch(() => undefined);
   await syncQueue.close();
   await connection.quit();
 });
@@ -16,5 +25,28 @@ describe('sync queue', () => {
     const job = await enqueueBackfillJob({ userId: 'u1', startDate: '2026-08-01', endDate: '2026-09-01' });
     expect(job.name).toBe('backfill');
     expect(job.data).toEqual({ userId: 'u1', startDate: '2026-08-01', endDate: '2026-09-01' });
+  });
+
+  // Scheduling the sweep on the queue (rather than a per-process setInterval)
+  // is what keeps several backend instances from racing to refresh the same
+  // single-use Fitbit refresh token.
+  it('registers the token refresh sweep as a repeatable scheduler', async () => {
+    await scheduleTokenRefreshSweep();
+
+    const schedulers = await syncQueue.getJobSchedulers();
+    const sweep = schedulers.find((s) => s.key === TOKEN_REFRESH_SWEEP_JOB);
+
+    expect(sweep).toBeDefined();
+    expect(Number(sweep?.every)).toBe(TOKEN_REFRESH_SWEEP_INTERVAL_MS);
+  });
+
+  it('is idempotent, so restarting an instance does not stack up schedulers', async () => {
+    await scheduleTokenRefreshSweep();
+    await scheduleTokenRefreshSweep();
+
+    const schedulers = await syncQueue.getJobSchedulers();
+    const sweeps = schedulers.filter((s) => s.key === TOKEN_REFRESH_SWEEP_JOB);
+
+    expect(sweeps).toHaveLength(1);
   });
 });
