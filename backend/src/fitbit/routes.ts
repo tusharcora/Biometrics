@@ -64,7 +64,7 @@ fitbitRouter.get('/fitbit/callback', requireAuth, async (req: AuthedRequest, res
       endDate: isoDate(endDate),
     });
 
-    res.json({ status: 'connected' });
+    res.redirect(`biometrics://fitbit/callback?status=connected`);
   } catch (err) {
     console.error('Fitbit callback failed', err);
     res.status(500).json({ error: 'Failed to complete Fitbit connection' });

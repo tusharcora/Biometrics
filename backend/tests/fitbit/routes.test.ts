@@ -82,7 +82,8 @@ describe('GET /fitbit/callback', () => {
       .query({ code: 'auth-code', state: user.id })
       .set('Authorization', `Bearer ${accessToken}`);
 
-    expect(res.status).toBe(200);
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe('biometrics://fitbit/callback?status=connected');
     const conn = await prisma.fitbitConnection.findUnique({ where: { userId: user.id } });
     expect(conn?.status).toBe('CONNECTED');
     expect(subscription.registerWebhookSubscription).toHaveBeenCalled();
@@ -115,11 +116,13 @@ describe('GET /fitbit/callback', () => {
       fitbitUserId: 'fitbit-user-2',
     });
 
-    await request(createApp())
+    const res = await request(createApp())
       .get('/fitbit/callback')
       .query({ code: 'auth-code-2', state: user.id })
       .set('Authorization', `Bearer ${accessToken}`);
 
+    expect(res.status).toBe(302);
+    expect(res.headers.location).toBe('biometrics://fitbit/callback?status=connected');
     expect(queue.enqueueBackfillJob).toHaveBeenCalledWith(
       expect.objectContaining({ userId: user.id, startDate: '2026-08-15' }),
     );

@@ -44,7 +44,7 @@ describe('connect Fitbit and sync end to end (mocked Fitbit API)', () => {
       .get('/fitbit/callback')
       .query({ code: 'auth-code', state: user.id })
       .set('Authorization', `Bearer ${accessToken}`);
-    expect(connectRes.status).toBe(200);
+    expect(connectRes.status).toBe(302);
 
     nock('https://api.fitbit.com')
       .get(/activities\/heart\/date/)
