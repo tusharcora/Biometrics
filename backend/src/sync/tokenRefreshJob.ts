@@ -1,5 +1,6 @@
 import { prisma } from '../db/client';
 import { refreshHealthTokens } from '../health/oauth';
+import { deleteUserSubscription } from '../health/subscriber';
 import { encryptToken, decryptToken } from '../crypto/tokenCipher';
 
 const REFRESH_LOOKAHEAD_MS = 60 * 60 * 1000; // refresh anything expiring within the next hour
@@ -26,6 +27,13 @@ export async function runTokenRefreshSweep(): Promise<void> {
         where: { id: conn.id },
         data: { status: 'DISCONNECTED' },
       });
+      if (conn.webhookSubscriptionId) {
+        try {
+          await deleteUserSubscription(conn.webhookSubscriptionId);
+        } catch (deleteErr) {
+          console.error(`Failed to delete Google Health subscription ${conn.webhookSubscriptionId}`, deleteErr);
+        }
+      }
       continue;
     }
 

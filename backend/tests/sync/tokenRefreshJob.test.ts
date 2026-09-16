@@ -4,8 +4,10 @@ import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
 import { encryptToken, decryptToken } from '../../src/crypto/tokenCipher';
 import * as oauth from '../../src/health/oauth';
+import * as subscriber from '../../src/health/subscriber';
 
 jest.mock('../../src/health/oauth');
+jest.mock('../../src/health/subscriber');
 
 beforeAll(() => {
   migrateTestDb();
@@ -164,5 +166,52 @@ describe('runTokenRefreshSweep', () => {
     const updated = await prisma.healthConnection.findUnique({ where: { id: conn.id } });
     expect(decryptToken(updated!.encryptedRefreshToken)).toBe('original-refresh-token');
     expect(decryptToken(updated!.encryptedAccessToken)).toBe('new-access');
+  });
+
+  it('deletes the Google Health subscription when a refresh fails and a subscription exists', async () => {
+    const user = await prisma.user.create({
+      data: { email: `t-${Date.now()}-refresh401@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+    });
+    const conn = await prisma.healthConnection.create({
+      data: {
+        userId: user.id,
+        healthUserId: `health-user-refresh401-${randomUUID()}`,
+        encryptedAccessToken: encryptToken('old-access'),
+        encryptedRefreshToken: encryptToken('old-refresh'),
+        tokenExpiresAt: new Date(Date.now() + 30 * 60 * 1000),
+        webhookSubscriptionId: 'sub-to-delete-on-refresh-fail',
+      },
+    });
+    (oauth.refreshHealthTokens as jest.Mock).mockRejectedValue(new Error('invalid_grant'));
+    (subscriber.deleteUserSubscription as jest.Mock).mockResolvedValue(undefined);
+
+    await runTokenRefreshSweep();
+
+    expect(subscriber.deleteUserSubscription).toHaveBeenCalledWith('sub-to-delete-on-refresh-fail');
+    const updated = await prisma.healthConnection.findUnique({ where: { id: conn.id } });
+    expect(updated?.status).toBe('DISCONNECTED');
+  });
+
+  it('still marks the connection DISCONNECTED on refresh failure even if deleting the subscription fails', async () => {
+    const user = await prisma.user.create({
+      data: { email: `t-${Date.now()}-refresh402@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+    });
+    const conn = await prisma.healthConnection.create({
+      data: {
+        userId: user.id,
+        healthUserId: `health-user-refresh402-${randomUUID()}`,
+        encryptedAccessToken: encryptToken('old-access'),
+        encryptedRefreshToken: encryptToken('old-refresh'),
+        tokenExpiresAt: new Date(Date.now() + 30 * 60 * 1000),
+        webhookSubscriptionId: 'sub-that-fails-on-refresh',
+      },
+    });
+    (oauth.refreshHealthTokens as jest.Mock).mockRejectedValue(new Error('invalid_grant'));
+    (subscriber.deleteUserSubscription as jest.Mock).mockRejectedValue(new Error('network error'));
+
+    await runTokenRefreshSweep();
+
+    const updated = await prisma.healthConnection.findUnique({ where: { id: conn.id } });
+    expect(updated?.status).toBe('DISCONNECTED');
   });
 });
