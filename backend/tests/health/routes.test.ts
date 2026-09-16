@@ -342,7 +342,7 @@ describe('POST /webhooks/health', () => {
       .set('Authorization', 'Bearer webhook-secret')
       .send(body);
 
-    expect(res.status).toBe(204);
+    expect(res.status).toBe(201);
     expect(queue.enqueueFetchJob).toHaveBeenCalledWith(
       expect.objectContaining({ userId: user.id, metricType: 'STEPS', date: '2026-09-16' }),
     );
@@ -384,7 +384,7 @@ describe('POST /webhooks/health', () => {
 
     // Conservative: skip any non-UPSERT operation rather than treat it as an
     // error, per the spec's note that DELETE was never observed live.
-    expect(res.status).toBe(204);
+    expect(res.status).toBe(201);
     expect(queue.enqueueFetchJob).not.toHaveBeenCalled();
   });
 
@@ -437,7 +437,7 @@ describe('POST /webhooks/health', () => {
         },
       }]);
 
-      expect(res.status).toBe(204);
+      expect(res.status).toBe(201);
       expect(queue.enqueueFetchJob).toHaveBeenCalledTimes(1);
       expect(queue.enqueueFetchJob).toHaveBeenCalledWith({ userId: user.id, metricType: 'STEPS', date: '2026-09-16' });
     });
@@ -458,7 +458,7 @@ describe('POST /webhooks/health', () => {
         },
       }]);
 
-      expect(res.status).toBe(204);
+      expect(res.status).toBe(201);
       expect(queue.enqueueFetchJob).toHaveBeenCalledWith({ userId: user.id, metricType: 'RESTING_HR', date: '2026-09-16' });
     });
 
@@ -475,7 +475,7 @@ describe('POST /webhooks/health', () => {
         },
       }]);
 
-      expect(res.status).toBe(204);
+      expect(res.status).toBe(201);
       expect(queue.enqueueFetchJob).toHaveBeenCalledWith({ userId: user.id, metricType: 'SLEEP', date: '2026-09-17' });
     });
 
@@ -503,7 +503,7 @@ describe('POST /webhooks/health', () => {
           data: { healthUserId, dataType: 'sleep', operation: 'UPSERT', intervals: [westOfUtcInterval] },
         }]);
 
-        expect(res.status).toBe(204);
+        expect(res.status).toBe(201);
         expect(queue.enqueueFetchJob).toHaveBeenCalledTimes(1);
         expect(queue.enqueueFetchJob).toHaveBeenCalledWith({ userId: user.id, metricType: 'SLEEP', date: '2026-09-17' });
       });
@@ -516,7 +516,7 @@ describe('POST /webhooks/health', () => {
           data: { healthUserId, dataType: 'heartRateVariability', operation: 'UPSERT', intervals: [westOfUtcInterval] },
         }]);
 
-        expect(res.status).toBe(204);
+        expect(res.status).toBe(201);
         expect(queue.enqueueFetchJob).toHaveBeenCalledTimes(1);
         expect(queue.enqueueFetchJob).toHaveBeenCalledWith({ userId: user.id, metricType: 'HRV', date: '2026-09-17' });
       });
@@ -534,7 +534,7 @@ describe('POST /webhooks/health', () => {
           },
         }]);
 
-        expect(res.status).toBe(204);
+        expect(res.status).toBe(201);
         expect(queue.enqueueFetchJob).toHaveBeenCalledWith({ userId: user.id, metricType: 'HRV', date: '2026-09-17' });
       });
 
@@ -551,7 +551,7 @@ describe('POST /webhooks/health', () => {
           },
         }]);
 
-        expect(res.status).toBe(204);
+        expect(res.status).toBe(201);
         expect(queue.enqueueFetchJob).not.toHaveBeenCalled();
       });
     });
@@ -584,7 +584,7 @@ describe('POST /webhooks/health', () => {
       ]);
       consoleWarn.mockRestore();
 
-      expect(res.status).toBe(204);
+      expect(res.status).toBe(201);
       expect(queue.enqueueFetchJob).toHaveBeenCalledTimes(1);
       expect(queue.enqueueFetchJob).toHaveBeenCalledWith({ userId: user.id, metricType: 'STEPS', date: '2026-09-16' });
     });
@@ -624,7 +624,7 @@ describe('POST /webhooks/health', () => {
       spy.mockRestore();
       consoleError.mockRestore();
 
-      expect(res.status).toBe(204);
+      expect(res.status).toBe(201);
       expect(queue.enqueueFetchJob).toHaveBeenCalledTimes(2);
       expect(queue.enqueueFetchJob).toHaveBeenCalledWith({ userId: user.id, metricType: 'SLEEP', date: '2026-09-15' });
       expect(queue.enqueueFetchJob).toHaveBeenCalledWith({ userId: user.id, metricType: 'HRV', date: '2026-09-15' });
@@ -635,7 +635,7 @@ describe('POST /webhooks/health', () => {
 
       const res = await postWebhook({ data: { healthUserId: 'x', dataType: 'steps', operation: 'UPSERT', intervals: [] } });
 
-      expect(res.status).toBe(204);
+      expect(res.status).toBe(201);
       expect(queue.enqueueFetchJob).not.toHaveBeenCalled();
     });
   });
