@@ -100,4 +100,19 @@ describe('processSyncJob', () => {
       '2026-08-01',
     );
   });
+
+  it('marks the connection disconnected on a 401 from Fitbit during backfill', async () => {
+    const user = await createConnectedUser();
+    const err = new Error('unauthorized');
+    (err as any).status = 401;
+    (fitbitClient.fetchMetricRange as jest.Mock).mockRejectedValue(err);
+
+    await processSyncJob({
+      name: 'backfill',
+      data: { userId: user.id, startDate: '2026-08-01', endDate: '2026-08-01' },
+    } as Job);
+
+    const connection = await prisma.fitbitConnection.findUnique({ where: { userId: user.id } });
+    expect(connection?.status).toBe('DISCONNECTED');
+  });
 });

@@ -38,12 +38,23 @@ async function handleBackfillJob(data: BackfillJobData): Promise<void> {
   const conn = await prisma.fitbitConnection.findUnique({ where: { userId: data.userId } });
   if (!conn || conn.status === 'DISCONNECTED') return;
 
-  const accessToken = decryptToken(conn.encryptedAccessToken);
-  for (const metricType of ALL_METRIC_TYPES) {
-    const points = await fetchMetricRange(accessToken, metricType, data.startDate, data.endDate);
-    await upsertBiometricRecords(data.userId, metricType, points);
+  try {
+    const accessToken = decryptToken(conn.encryptedAccessToken);
+    for (const metricType of ALL_METRIC_TYPES) {
+      const points = await fetchMetricRange(accessToken, metricType, data.startDate, data.endDate);
+      await upsertBiometricRecords(data.userId, metricType, points);
+    }
+    await prisma.fitbitConnection.update({ where: { userId: data.userId }, data: { lastSyncedAt: new Date() } });
+  } catch (err) {
+    if ((err as any).status === 401) {
+      await prisma.fitbitConnection.update({
+        where: { userId: data.userId },
+        data: { status: 'DISCONNECTED' },
+      });
+      return;
+    }
+    throw err; // other errors (e.g. 429) are retried by BullMQ's job retry policy
   }
-  await prisma.fitbitConnection.update({ where: { userId: data.userId }, data: { lastSyncedAt: new Date() } });
 }
 
 export async function processSyncJob(job: Job): Promise<void> {
