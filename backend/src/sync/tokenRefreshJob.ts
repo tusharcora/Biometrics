@@ -1,7 +1,8 @@
 import { prisma } from '../db/client';
 import { refreshHealthTokens } from '../health/oauth';
 import { deleteUserSubscription } from '../health/subscriber';
-import { encryptToken, decryptToken } from '../crypto/tokenCipher';
+import { decryptToken } from '../crypto/tokenCipher';
+import { refreshedTokenUpdateData } from './tokenUpdate';
 
 const REFRESH_LOOKAHEAD_MS = 60 * 60 * 1000; // refresh anything expiring within the next hour
 
@@ -38,21 +39,11 @@ export async function runTokenRefreshSweep(): Promise<void> {
     }
 
     try {
-      // Google does not return a new refresh_token on an ordinary refresh
-      // call — only exchangeCodeForTokens does. Overwriting a present
-      // encryptedRefreshToken with an absent one would destroy the only
-      // credential capable of any future refresh, so only touch it when
-      // Google actually sent one.
-      const updateData: { encryptedAccessToken: string; tokenExpiresAt: Date; encryptedRefreshToken?: string } = {
-        encryptedAccessToken: encryptToken(tokens.accessToken),
-        tokenExpiresAt: new Date(Date.now() + tokens.expiresIn * 1000),
-      };
-      if (tokens.refreshToken) {
-        updateData.encryptedRefreshToken = encryptToken(tokens.refreshToken);
-      }
+      // refreshedTokenUpdateData only touches encryptedRefreshToken when Google
+      // actually returned a new refresh token (see its doc comment).
       await prisma.healthConnection.update({
         where: { id: conn.id },
-        data: updateData,
+        data: refreshedTokenUpdateData(tokens),
       });
     } catch (err) {
       // The refresh succeeded, so the connection is fine; surface the write
