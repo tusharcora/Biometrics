@@ -25,7 +25,26 @@ function utcMidnightOf(instant: Date): Date {
   return new Date(Date.UTC(instant.getUTCFullYear(), instant.getUTCMonth(), instant.getUTCDate()));
 }
 
-async function dailyRollUp(
+// Confirmed live on heart-rate: "The duration covered by window_size_days *
+// page_size must not exceed 14 days for heart-rate" (INVALID_ROLLUP_QUERY_DURATION).
+// Applied uniformly to every dailyRollUp-backed metric rather than only
+// heart-rate, since steps' own undiscovered cap (if any) is unconfirmed and
+// chunking is harmless when a metric's real limit is higher.
+const MAX_DAILY_ROLLUP_WINDOW_DAYS = 14;
+
+function addDays(isoDate: string, days: number): string {
+  const d = new Date(`${isoDate}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function daysBetween(startDate: string, endDate: string): number {
+  const start = new Date(`${startDate}T00:00:00Z`).getTime();
+  const end = new Date(`${endDate}T00:00:00Z`).getTime();
+  return Math.round((end - start) / (24 * 60 * 60 * 1000));
+}
+
+async function dailyRollUpChunk(
   accessToken: string,
   parentDataType: string,
   startDate: string,
@@ -48,10 +67,33 @@ async function dailyRollUp(
   return json.rollupDataPoints ?? [];
 }
 
+async function dailyRollUp(
+  accessToken: string,
+  parentDataType: string,
+  startDate: string,
+  endDate: string,
+): Promise<any[]> {
+  // Validate eagerly, before the chunking loop's date arithmetic (which
+  // tolerates malformed strings as NaN and would otherwise silently return
+  // an empty result instead of throwing).
+  parseDate(startDate);
+  parseDate(endDate);
+  const results: any[] = [];
+  let chunkStart = startDate;
+  while (daysBetween(chunkStart, endDate) > 0) {
+    const remaining = daysBetween(chunkStart, endDate);
+    const chunkEnd = remaining > MAX_DAILY_ROLLUP_WINDOW_DAYS ? addDays(chunkStart, MAX_DAILY_ROLLUP_WINDOW_DAYS) : endDate;
+    const rows = await dailyRollUpChunk(accessToken, parentDataType, chunkStart, chunkEnd);
+    results.push(...rows);
+    chunkStart = chunkEnd;
+  }
+  return results;
+}
+
 async function listDataPoints(
   accessToken: string,
   dataType: string,
-  filterField: 'interval.start_time',
+  filterField: 'interval.end_time',
   startDate: string,
   endDate: string,
 ): Promise<any[]> {
@@ -119,19 +161,23 @@ export async function fetchMetricRange(
         .map((r) => ({ recordedAt: civilDateToDate(r.civilStartTime), value: r.heartRate.beatsPerMinuteMin }));
     }
     case 'SLEEP': {
-      const rows = await listDataPoints(accessToken, 'sleep', 'interval.start_time', startDate, endDate);
+      // Confirmed live: `sleep.interval.start_time` is explicitly rejected
+      // ("Member 'sleep.interval.start_time' is not supported for
+      // filtering") -- sleep is one of the types the API documents as
+      // excluded from the generic interval-start-time filter pattern, and
+      // must use `sleep.interval.end_time` instead. `summary.minutesAsleep`
+      // is also confirmed live to be a numeric string ("468"), the same
+      // string-encoded-int64 pattern already handled for steps' countSum.
+      const rows = await listDataPoints(accessToken, 'sleep', 'interval.end_time', startDate, endDate);
       // Key each session on the UTC calendar date of its start instant, the
       // same convention STEPS/RESTING_HR use (civil date at UTC midnight),
       // rather than the raw start instant. Keeping the raw instant made a
       // 22:00 session land on a timestamp no other metric would ever use.
-      // TODO(device-verification): re-verify against a live sleep dataPoint
-      // that a session's civil date is the intended "night of" date for the
-      // user; this could not be checked against live data in this pass.
       return rows
         .filter((r) => r.sleep?.summary?.minutesAsleep !== undefined)
         .map((r) => ({
           recordedAt: utcMidnightOf(new Date(r.sleep.interval.startTime)),
-          value: r.sleep.summary.minutesAsleep,
+          value: Number(r.sleep.summary.minutesAsleep),
         }));
     }
     case 'HRV': {

@@ -63,13 +63,15 @@ describe('fetchMetricRange', () => {
   it('fetches SLEEP via dataPoints.list on "sleep" using minutesAsleep from the summary', async () => {
     nock('https://health.googleapis.com')
       .get('/v4/users/me/dataTypes/sleep/dataPoints')
-      .query((q) => typeof q.filter === 'string' && q.filter.includes('sleep.interval.start_time'))
+      .query((q) => typeof q.filter === 'string' && q.filter.includes('sleep.interval.end_time'))
       .reply(200, {
         dataPoints: [
           {
             sleep: {
               interval: { startTime: '2026-09-01T22:00:00Z' },
-              summary: { minutesAsleep: 415 },
+              // Confirmed live: minutesAsleep is a numeric string, the same
+              // string-encoded-int64 pattern as steps' countSum.
+              summary: { minutesAsleep: '415' },
             },
           },
         ],
@@ -87,8 +89,8 @@ describe('fetchMetricRange', () => {
       .query(true)
       .reply(200, {
         dataPoints: [
-          { sleep: { interval: { startTime: '2026-09-01T22:15:00Z' }, summary: { minutesAsleep: 415 } } },
-          { sleep: { interval: { startTime: '2026-09-02T23:40:00Z' }, summary: { minutesAsleep: 390 } } },
+          { sleep: { interval: { startTime: '2026-09-01T22:15:00Z' }, summary: { minutesAsleep: '415' } } },
+          { sleep: { interval: { startTime: '2026-09-02T23:40:00Z' }, summary: { minutesAsleep: '390' } } },
         ],
       });
 
@@ -172,7 +174,7 @@ describe('fetchMetricRange', () => {
     await fetchMetricRange('token-1', 'SLEEP', '2026-09-01', '2026-09-01');
 
     expect(capturedFilter).toBe(
-      'sleep.interval.start_time >= "2026-09-01T00:00:00Z" AND sleep.interval.start_time < "2026-09-01T00:00:00Z"',
+      'sleep.interval.end_time >= "2026-09-01T00:00:00Z" AND sleep.interval.end_time < "2026-09-01T00:00:00Z"',
     );
   });
 
@@ -200,5 +202,42 @@ describe('fetchMetricRange', () => {
       .reply(500, {});
 
     await expect(fetchMetricRange('token-1', 'SLEEP', '2026-09-01', '2026-09-02')).rejects.toThrow();
+  });
+
+  it('chunks a dailyRollUp request over 14 days into multiple <=14-day calls', async () => {
+    // Confirmed live: heart-rate's dailyRollUp rejects any single request
+    // spanning more than 14 days (INVALID_ROLLUP_QUERY_DURATION). A 20-day
+    // range must become two calls: [09-01, 09-15) and [09-15, 09-21).
+    const capturedRanges: unknown[] = [];
+    nock('https://health.googleapis.com')
+      .post('/v4/users/me/dataTypes/heart-rate/dataPoints:dailyRollUp', (body) => {
+        capturedRanges.push(body.range);
+        return true;
+      })
+      .reply(200, {
+        rollupDataPoints: [
+          { civilStartTime: { date: { year: 2026, month: 9, day: 1 } }, heartRate: { beatsPerMinuteMin: 50 } },
+        ],
+      })
+      .post('/v4/users/me/dataTypes/heart-rate/dataPoints:dailyRollUp', (body) => {
+        capturedRanges.push(body.range);
+        return true;
+      })
+      .reply(200, {
+        rollupDataPoints: [
+          { civilStartTime: { date: { year: 2026, month: 9, day: 15 } }, heartRate: { beatsPerMinuteMin: 55 } },
+        ],
+      });
+
+    const points = await fetchMetricRange('token-1', 'RESTING_HR', '2026-09-01', '2026-09-21');
+
+    expect(capturedRanges).toEqual([
+      { start: { date: { year: 2026, month: 9, day: 1 } }, end: { date: { year: 2026, month: 9, day: 15 } } },
+      { start: { date: { year: 2026, month: 9, day: 15 } }, end: { date: { year: 2026, month: 9, day: 21 } } },
+    ]);
+    expect(points).toEqual([
+      { recordedAt: new Date('2026-09-01T00:00:00Z'), value: 50 },
+      { recordedAt: new Date('2026-09-15T00:00:00Z'), value: 55 },
+    ]);
   });
 });
