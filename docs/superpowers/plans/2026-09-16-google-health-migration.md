@@ -1274,46 +1274,306 @@ git commit -m "Add Google Health connect and webhook routes, rename health-check
 **Files:**
 - Modify: `backend/src/sync/worker.ts`
 - Modify: `backend/src/sync/tokenRefreshJob.ts`
+- Modify: `backend/src/sync/queue.ts`
 - Modify: `backend/tests/sync/worker.test.ts`
 - Modify: `backend/tests/sync/tokenRefreshJob.test.ts`
+- Modify: `backend/tests/sync/queue.test.ts`
 
 **Interfaces:**
-- Consumes: `fetchMetricRange` (Task 5, replaces the Fitbit client import), `refreshHealthTokens` (Task 2, replaces `refreshFitbitTokens`).
+- Consumes: `fetchMetricRange` (Task 5, replaces the Fitbit client import), `refreshHealthTokens` (Task 2, replaces `refreshFitbitTokens`), `deleteUserSubscription` (Task 4 — not called by any task before this one; this task is where it gets its only caller).
 - Produces: same exports as before (`processSyncJob`, `startSyncWorker`, `runTokenRefreshSweep`) — this task changes imports and the Prisma model referenced (`healthConnection` instead of `fitbitConnection`), not the public interface.
 
-- [ ] **Step 1: Read the current `backend/src/sync/worker.ts` and `backend/src/sync/tokenRefreshJob.ts` in full**
+**Two behavioral changes beyond a mechanical rename** (both found by re-reading the current files against the new provider's actual behavior, not assumed from the old ones):
 
-Both files' control flow (401-detection, disconnect-on-failure, per-connection isolation in the refresh sweep, the narrowed catch from Phase 1's final review) stays identical — only the import source and the Prisma model name change.
+1. **Refresh tokens are not rotated by Google on an ordinary refresh call.** `HealthTokenResponse.refreshToken` (Task 2) is optional and will be `undefined` on every response from `refreshHealthTokens` in normal operation — unlike Fitbit, which issued a new refresh token on every refresh and required overwriting the stored one each time. The current `tokenRefreshJob.ts` unconditionally does `encryptedRefreshToken: encryptToken(tokens.refreshToken)` on every sweep; ported as-is, this calls `encryptToken(undefined)` and corrupts the stored refresh token on the very first sweep after this migration ships, silently breaking re-authentication for every connected user. The update must only touch `encryptedRefreshToken` when `tokens.refreshToken` is actually present.
+2. **A disconnected connection's Google Health subscription must be deleted**, not just marked `DISCONNECTED` locally. Unlike Fitbit (where Phase 1 never needed to call out to Fitbit on disconnect), a Google Health subscription keeps sending webhook notifications for a `healthUserId` indefinitely until explicitly deleted via `deleteUserSubscription` (Task 4) — otherwise it's an orphaned resource that outlives the local connection record. Call `deleteUserSubscription` at each of the three places the code marks a connection `DISCONNECTED`, guarded by the presence of `webhookSubscriptionId`, and wrapped so a failure to delete the remote subscription never blocks the (more important) local status update.
+
+- [ ] **Step 1: Read the current `backend/src/sync/worker.ts`, `backend/src/sync/tokenRefreshJob.ts`, and `backend/src/sync/queue.ts` in full**
+
+Their control flow (401-detection, disconnect-on-failure, per-connection isolation in the refresh sweep, the narrowed catch from Phase 1's final review) stays the same shape — only the import source, the Prisma model name, the queue name, and the two behavioral changes above apply.
 
 - [ ] **Step 2: Update `backend/tests/sync/worker.test.ts`**
 
-Replace every `jest.mock('../../src/fitbit/client')` with `jest.mock('../../src/health/client')`, every `fitbitClient.fetchMetricRange` reference with `healthClient.fetchMetricRange`, and every `prisma.fitbitConnection` with `prisma.healthConnection` (including the field name `fitbitUserId` → `healthUserId` in test fixtures). Run to confirm RED (module/field not found) before proceeding.
+Replace every `jest.mock('../../src/fitbit/client')` with `jest.mock('../../src/health/client')`, every `fitbitClient.fetchMetricRange` reference with `healthClient.fetchMetricRange`, and every `prisma.fitbitConnection` with `prisma.healthConnection` (including the field name `fitbitUserId` → `healthUserId` in test fixtures). Also mock `../../src/health/subscriber` and add a case asserting `deleteUserSubscription` is called with the connection's `webhookSubscriptionId` when a fetch or backfill job hits a 401:
+
+```typescript
+import * as subscriber from '../../src/health/subscriber';
+jest.mock('../../src/health/subscriber');
+
+it('deletes the Google Health subscription when a fetch job hits a 401', async () => {
+  const user = await prisma.user.create({ data: { email: `w-${Date.now()}-401@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() } });
+  const conn = await prisma.healthConnection.create({
+    data: {
+      userId: user.id,
+      healthUserId: 'health-user-401',
+      encryptedAccessToken: 'x',
+      encryptedRefreshToken: 'x',
+      tokenExpiresAt: new Date(Date.now() + 3600_000),
+      webhookSubscriptionId: 'sub-to-delete',
+    },
+  });
+  (healthClient.fetchMetricRange as jest.Mock).mockRejectedValue(Object.assign(new Error('unauthorized'), { status: 401 }));
+  (subscriber.deleteUserSubscription as jest.Mock).mockResolvedValue(undefined);
+
+  await processSyncJob({ name: 'fetch', data: { userId: user.id, metricType: 'STEPS', date: '2026-09-01' } } as any);
+
+  expect(subscriber.deleteUserSubscription).toHaveBeenCalledWith('sub-to-delete');
+  const updated = await prisma.healthConnection.findUnique({ where: { id: conn.id } });
+  expect(updated?.status).toBe('DISCONNECTED');
+});
+
+it('still marks the connection DISCONNECTED even if deleting the subscription fails', async () => {
+  const user = await prisma.user.create({ data: { email: `w-${Date.now()}-402@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() } });
+  const conn = await prisma.healthConnection.create({
+    data: {
+      userId: user.id,
+      healthUserId: 'health-user-402',
+      encryptedAccessToken: 'x',
+      encryptedRefreshToken: 'x',
+      tokenExpiresAt: new Date(Date.now() + 3600_000),
+      webhookSubscriptionId: 'sub-that-fails',
+    },
+  });
+  (healthClient.fetchMetricRange as jest.Mock).mockRejectedValue(Object.assign(new Error('unauthorized'), { status: 401 }));
+  (subscriber.deleteUserSubscription as jest.Mock).mockRejectedValue(new Error('network error'));
+
+  await processSyncJob({ name: 'fetch', data: { userId: user.id, metricType: 'STEPS', date: '2026-09-01' } } as any);
+
+  const updated = await prisma.healthConnection.findUnique({ where: { id: conn.id } });
+  expect(updated?.status).toBe('DISCONNECTED');
+});
+```
+
+Run to confirm RED (module/field not found) before proceeding.
 
 - [ ] **Step 3: Update `backend/src/sync/worker.ts`**
 
-Change the import:
 ```typescript
+import { Job, Worker } from 'bullmq';
+import { prisma } from '../db/client';
+import { connection, TOKEN_REFRESH_SWEEP_JOB } from './queue';
+import { runTokenRefreshSweep } from './tokenRefreshJob';
 import { fetchMetricRange } from '../health/client';
+import { deleteUserSubscription } from '../health/subscriber';
+import { decryptToken } from '../crypto/tokenCipher';
+import { upsertBiometricRecords } from '../biometrics/repository';
+import { BiometricMetricType } from '../types';
+import { FetchJobData, BackfillJobData } from './queue';
+
+const ALL_METRIC_TYPES: BiometricMetricType[] = ['HRV', 'RESTING_HR', 'SLEEP', 'STEPS'];
+const SYNC_WORKER_CONCURRENCY = 5;
+
+async function disconnect(userId: string, webhookSubscriptionId: string | null): Promise<void> {
+  await prisma.healthConnection.update({
+    where: { userId },
+    data: { status: 'DISCONNECTED' },
+  });
+  if (webhookSubscriptionId) {
+    try {
+      await deleteUserSubscription(webhookSubscriptionId);
+    } catch (err) {
+      console.error(`Failed to delete Google Health subscription ${webhookSubscriptionId}`, err);
+    }
+  }
+}
+
+async function handleFetchJob(data: FetchJobData): Promise<void> {
+  const conn = await prisma.healthConnection.findUnique({ where: { userId: data.userId } });
+  if (!conn || conn.status === 'DISCONNECTED') return;
+
+  try {
+    const accessToken = decryptToken(conn.encryptedAccessToken);
+    const points = await fetchMetricRange(accessToken, data.metricType, data.date, data.date);
+    await upsertBiometricRecords(data.userId, data.metricType, points);
+    await prisma.healthConnection.update({
+      where: { userId: data.userId },
+      data: { lastSyncedAt: new Date() },
+    });
+  } catch (err) {
+    if ((err as any).status === 401) {
+      await disconnect(data.userId, conn.webhookSubscriptionId);
+      return;
+    }
+    throw err; // other errors (e.g. 429) are retried by BullMQ's job retry policy
+  }
+}
+
+async function handleBackfillJob(data: BackfillJobData): Promise<void> {
+  const conn = await prisma.healthConnection.findUnique({ where: { userId: data.userId } });
+  if (!conn || conn.status === 'DISCONNECTED') return;
+
+  try {
+    const accessToken = decryptToken(conn.encryptedAccessToken);
+    for (const metricType of ALL_METRIC_TYPES) {
+      const points = await fetchMetricRange(accessToken, metricType, data.startDate, data.endDate);
+      await upsertBiometricRecords(data.userId, metricType, points);
+    }
+    await prisma.healthConnection.update({ where: { userId: data.userId }, data: { lastSyncedAt: new Date() } });
+  } catch (err) {
+    if ((err as any).status === 401) {
+      await disconnect(data.userId, conn.webhookSubscriptionId);
+      return;
+    }
+    throw err; // other errors (e.g. 429) are retried by BullMQ's job retry policy
+  }
+}
+
+export async function processSyncJob(job: Job): Promise<void> {
+  if (job.name === 'fetch') {
+    await handleFetchJob(job.data as FetchJobData);
+  } else if (job.name === 'backfill') {
+    await handleBackfillJob(job.data as BackfillJobData);
+  } else if (job.name === TOKEN_REFRESH_SWEEP_JOB) {
+    // Scheduled through the queue so exactly one instance sweeps per tick.
+    await runTokenRefreshSweep();
+  }
+}
+
+export function startSyncWorker(): Worker {
+  return new Worker('health-sync', processSyncJob, {
+    connection,
+    concurrency: SYNC_WORKER_CONCURRENCY,
+  });
+}
 ```
-And every `prisma.fitbitConnection` reference to `prisma.healthConnection`.
 
 - [ ] **Step 4: Run worker tests to verify GREEN**
 
 Run: `cd backend && DATABASE_URL=postgresql://postgres:postgres@localhost:5434/biometrics_test TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5434/biometrics_test npx jest tests/sync/worker.test.ts`
 Expected: PASS
 
-- [ ] **Step 5: Repeat Steps 2-4 for `tokenRefreshJob.ts`**
+- [ ] **Step 5: Update `backend/tests/sync/tokenRefreshJob.test.ts`**
 
-Same pattern: `jest.mock('../../src/fitbit/oauth')` → `jest.mock('../../src/health/oauth')`, `refreshFitbitTokens` → `refreshHealthTokens`, `prisma.fitbitConnection` → `prisma.healthConnection` in both the test file and `backend/src/sync/tokenRefreshJob.ts`.
+Same rename pattern as Step 2 (`jest.mock('../../src/fitbit/oauth')` → `jest.mock('../../src/health/oauth')`, `refreshFitbitTokens` → `refreshHealthTokens`, `prisma.fitbitConnection` → `prisma.healthConnection`), plus a case for the no-rotation behavior:
+
+```typescript
+it('does not overwrite the stored refresh token when Google does not return a new one', async () => {
+  const user = await prisma.user.create({ data: { email: `t-${Date.now()}-norefresh@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() } });
+  const conn = await prisma.healthConnection.create({
+    data: {
+      userId: user.id,
+      healthUserId: 'health-user-norefresh',
+      encryptedAccessToken: 'old-access',
+      encryptedRefreshToken: encryptToken('original-refresh-token'),
+      tokenExpiresAt: new Date(Date.now() - 1000),
+    },
+  });
+  (oauth.refreshHealthTokens as jest.Mock).mockResolvedValue({ accessToken: 'new-access', expiresIn: 3599 });
+
+  await runTokenRefreshSweep();
+
+  const updated = await prisma.healthConnection.findUnique({ where: { id: conn.id } });
+  expect(decryptToken(updated!.encryptedRefreshToken)).toBe('original-refresh-token');
+  expect(decryptToken(updated!.encryptedAccessToken)).toBe('new-access');
+});
+```
+
+Run to confirm RED before proceeding.
+
+- [ ] **Step 6: Update `backend/src/sync/tokenRefreshJob.ts`**
+
+```typescript
+import { prisma } from '../db/client';
+import { refreshHealthTokens } from '../health/oauth';
+import { encryptToken, decryptToken } from '../crypto/tokenCipher';
+
+const REFRESH_LOOKAHEAD_MS = 60 * 60 * 1000; // refresh anything expiring within the next hour
+
+export async function runTokenRefreshSweep(): Promise<void> {
+  const expiringSoon = await prisma.healthConnection.findMany({
+    where: {
+      status: 'CONNECTED',
+      tokenExpiresAt: { lt: new Date(Date.now() + REFRESH_LOOKAHEAD_MS) },
+    },
+  });
+
+  for (const conn of expiringSoon) {
+    // Only a failure of the refresh itself means the connection is genuinely
+    // dead. A failure of the DB write afterwards is a transient infrastructure
+    // problem and must not disconnect a perfectly healthy connection.
+    let tokens;
+    try {
+      const refreshToken = decryptToken(conn.encryptedRefreshToken);
+      tokens = await refreshHealthTokens(refreshToken);
+    } catch (err) {
+      console.error(`Google Health token refresh failed for connection ${conn.id}`, err);
+      await prisma.healthConnection.update({
+        where: { id: conn.id },
+        data: { status: 'DISCONNECTED' },
+      });
+      continue;
+    }
+
+    try {
+      // Google does not return a new refresh_token on an ordinary refresh
+      // call — only exchangeCodeForTokens does. Overwriting a present
+      // encryptedRefreshToken with an absent one would destroy the only
+      // credential capable of any future refresh, so only touch it when
+      // Google actually sent one.
+      const updateData: { encryptedAccessToken: string; tokenExpiresAt: Date; encryptedRefreshToken?: string } = {
+        encryptedAccessToken: encryptToken(tokens.accessToken),
+        tokenExpiresAt: new Date(Date.now() + tokens.expiresIn * 1000),
+      };
+      if (tokens.refreshToken) {
+        updateData.encryptedRefreshToken = encryptToken(tokens.refreshToken);
+      }
+      await prisma.healthConnection.update({
+        where: { id: conn.id },
+        data: updateData,
+      });
+    } catch (err) {
+      // The refresh succeeded, so the connection is fine; surface the write
+      // failure instead of silently marking the user disconnected.
+      console.error(`Failed to persist refreshed Google Health tokens for connection ${conn.id}`, err);
+      throw err;
+    }
+  }
+}
+```
+
+- [ ] **Step 7: Run token refresh job tests to verify GREEN**
 
 Run: `cd backend && DATABASE_URL=postgresql://postgres:postgres@localhost:5434/biometrics_test TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5434/biometrics_test npx jest tests/sync/tokenRefreshJob.test.ts`
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 8: Update `backend/src/sync/queue.ts` and `backend/tests/sync/queue.test.ts`**
+
+In `queue.ts`, rename the BullMQ queue and correct the doc comment (Google Health refresh tokens are not single-use the way Fitbit's were — the real reason to schedule the sweep through the queue rather than a per-process `setInterval` is to avoid every backend instance redundantly refreshing the same connection and fanning out rate-limited calls to Google, not to avoid racing a rotating token):
+
+```typescript
+export const syncQueue = new Queue('health-sync', { connection });
+```
+
+```typescript
+/**
+ * Schedules the token refresh sweep as a repeatable queue job rather than a
+ * per-process setInterval. Without this, every backend instance would sweep
+ * independently, sending redundant refresh calls to Google for the same
+ * connections and fanning out avoidable rate-limited requests. BullMQ hands
+ * each scheduled execution to exactly one worker across all processes.
+ * Registration is idempotent: re-registering the same job id just updates
+ * the existing schedule.
+ */
+```
+
+In `queue.test.ts`, update the comment above the scheduler test (currently referencing "single-use Fitbit refresh token") to match:
+
+```typescript
+  // Scheduling the sweep on the queue (rather than a per-process setInterval)
+  // is what keeps several backend instances from redundantly refreshing the
+  // same connection and fanning out avoidable rate-limited calls to Google.
+```
+
+- [ ] **Step 9: Run the full sync test suite to verify GREEN**
+
+Run: `cd backend && DATABASE_URL=postgresql://postgres:postgres@localhost:5434/biometrics_test TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5434/biometrics_test npx jest tests/sync/`
+Expected: PASS
+
+- [ ] **Step 10: Commit**
 
 ```bash
-git add src/sync/worker.ts src/sync/tokenRefreshJob.ts tests/sync/worker.test.ts tests/sync/tokenRefreshJob.test.ts
-git commit -m "Point sync worker and token refresh job at Google Health API client"
+git add src/sync/worker.ts src/sync/tokenRefreshJob.ts src/sync/queue.ts tests/sync/worker.test.ts tests/sync/tokenRefreshJob.test.ts tests/sync/queue.test.ts
+git commit -m "Point sync worker and token refresh job at Google Health API, fix refresh-token rotation assumption, clean up subscriptions on disconnect"
 ```
 
 ---
