@@ -2,18 +2,19 @@ import React from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { useNavigation } from '@react-navigation/native';
+import { apiFetch } from '../api/client';
 
-const API_BASE_URL = process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:3000';
 const REDIRECT_URI = 'biometrics://fitbit/callback';
 
 export function ConnectFitbitScreen() {
   const navigation = useNavigation<any>();
 
   async function handleConnect() {
-    const result = await WebBrowser.openAuthSessionAsync(
-      `${API_BASE_URL}/fitbit/authorize`,
-      REDIRECT_URI,
-    );
+    // /fitbit/authorize is authenticated and returns the Fitbit URL as JSON
+    // (apiFetch attaches the token). We cannot point the system browser at it
+    // directly, because a browser navigation carries no Authorization header.
+    const { url } = await apiFetch<{ url: string }>('/fitbit/authorize');
+    const result = await WebBrowser.openAuthSessionAsync(url, REDIRECT_URI);
     if (result.type === 'success' && result.url.includes('status=connected')) {
       navigation.navigate('Dashboard');
     }

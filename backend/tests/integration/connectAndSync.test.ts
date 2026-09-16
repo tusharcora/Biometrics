@@ -41,10 +41,18 @@ describe('connect Fitbit and sync end to end (mocked Fitbit API)', () => {
       return {} as any;
     });
 
+    // Real flow: fetch the authorize URL over the authenticated API to mint a
+    // state token, then hit the callback the way Fitbit does — unauthenticated.
+    const authorizeRes = await request(createApp())
+      .get('/fitbit/authorize')
+      .set('Authorization', `Bearer ${accessToken}`);
+    expect(authorizeRes.status).toBe(200);
+    const state = new URL(authorizeRes.body.url).searchParams.get('state');
+    expect(state).toBeTruthy();
+
     const connectRes = await request(createApp())
       .get('/fitbit/callback')
-      .query({ code: 'auth-code', state: user.id })
-      .set('Authorization', `Bearer ${accessToken}`);
+      .query({ code: 'auth-code', state });
     expect(connectRes.status).toBe(302);
 
     nock('https://api.fitbit.com')
