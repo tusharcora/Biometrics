@@ -30,10 +30,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   async function signInWithApple(identityToken: string) {
+    // skipAuth: there is no session yet, and a 401 here means "bad identity
+    // token", not "expired session" — retrying it through the refresh path
+    // would turn a normal failed sign-in into a bogus "session expired".
     const tokens = await apiFetch<{ accessToken: string; refreshToken: string }>('/auth/apple', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ identityToken }),
+      skipAuth: true,
     });
     await storeSession(tokens);
     setSession({ accessToken: tokens.accessToken });
@@ -44,6 +48,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ idToken }),
+      skipAuth: true,
     });
     await storeSession(tokens);
     setSession({ accessToken: tokens.accessToken });
@@ -55,6 +60,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ refreshToken }),
+      skipAuth: true,
     }).catch(() => undefined);
     await SecureStore.deleteItemAsync('accessToken');
     await SecureStore.deleteItemAsync('refreshToken');
