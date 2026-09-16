@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { apiFetch } from '../api/client';
+import { useAuth } from '../auth/AuthContext';
 
 interface BiometricRecord {
   id: string;
@@ -14,6 +15,7 @@ type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';
 
 export function DashboardScreen() {
   const navigation = useNavigation<any>();
+  const { signOut } = useAuth();
   const [records, setRecords] = useState<BiometricRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus | null>(null);
@@ -32,6 +34,13 @@ export function DashboardScreen() {
       .catch(() => setConnectionStatus(null));
   }, []);
 
+  // Rendered on every branch so signing out is always reachable.
+  const signOutButton = (
+    <Pressable testID="sign-out-button" style={styles.signOut} onPress={() => signOut()}>
+      <Text style={styles.signOutText}>Sign Out</Text>
+    </Pressable>
+  );
+
   if (connectionStatus === 'DISCONNECTED') {
     return (
       <View style={styles.container}>
@@ -46,6 +55,7 @@ export function DashboardScreen() {
         >
           <Text style={styles.buttonText}>Reconnect Fitbit</Text>
         </Pressable>
+        {signOutButton}
       </View>
     );
   }
@@ -54,6 +64,7 @@ export function DashboardScreen() {
     return (
       <View style={styles.container}>
         <Text>{error}</Text>
+        {signOutButton}
       </View>
     );
   }
@@ -70,27 +81,35 @@ export function DashboardScreen() {
     return (
       <View style={styles.container}>
         <Text>No data yet — check back after your Fitbit syncs.</Text>
+        {signOutButton}
       </View>
     );
   }
 
   return (
-    <FlatList
-      contentContainerStyle={styles.list}
-      data={records}
-      keyExtractor={(item) => item.id}
-      renderItem={({ item }) => (
-        <View style={styles.row}>
-          <Text style={styles.metric}>{item.metricType}</Text>
-          <Text>{item.value}</Text>
-          <Text style={styles.date}>{new Date(item.recordedAt).toDateString()}</Text>
-        </View>
-      )}
-    />
+    <View style={styles.screen}>
+      <FlatList
+        contentContainerStyle={styles.list}
+        data={records}
+        keyExtractor={(item) => item.id}
+        renderItem={({ item }) => (
+          <View style={styles.row}>
+            <Text style={styles.metric}>{item.metricType}</Text>
+            <Text>{item.value}</Text>
+            <Text style={styles.date}>{new Date(item.recordedAt).toDateString()}</Text>
+          </View>
+        )}
+      />
+      <View style={styles.footer}>{signOutButton}</View>
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
+  screen: { flex: 1 },
+  footer: { padding: 16, alignItems: 'center' },
+  signOut: { paddingVertical: 10, paddingHorizontal: 20 },
+  signOutText: { color: '#c0392b', fontSize: 16 },
   container: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 12 },
   title: { fontSize: 20, fontWeight: '600' },
   body: { textAlign: 'center', color: '#555' },

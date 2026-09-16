@@ -18,6 +18,9 @@ export async function upsertBiometricRecords(
 export async function getBiometricsForUser(userId: string) {
   return prisma.biometricRecord.findMany({
     where: { userId },
+    // Only what the dashboard actually renders; userId and syncedAt are
+    // internal and need not be exposed to the client.
+    select: { id: true, metricType: true, value: true, recordedAt: true },
     orderBy: { recordedAt: 'desc' },
   });
 }

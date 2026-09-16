@@ -40,6 +40,22 @@ describe('GET /me/biometrics', () => {
     expect(res.body[0].value).toBe(9000);
   });
 
+  it('returns only the fields the dashboard consumes', async () => {
+    const user = await createUser('fields');
+    await prisma.biometricRecord.create({
+      data: { userId: user.id, metricType: 'HRV', value: 42, recordedAt: new Date('2026-09-03') },
+    });
+    const { accessToken } = await issueSessionTokens(user.id);
+
+    const res = await request(createApp())
+      .get('/me/biometrics')
+      .set('Authorization', `Bearer ${accessToken}`);
+
+    expect(res.status).toBe(200);
+    // Internal columns must not leak to the client.
+    expect(Object.keys(res.body[0]).sort()).toEqual(['id', 'metricType', 'recordedAt', 'value']);
+  });
+
   it('rejects an unauthenticated request', async () => {
     const res = await request(createApp()).get('/me/biometrics');
     expect(res.status).toBe(401);
