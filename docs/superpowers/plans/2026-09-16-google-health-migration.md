@@ -1578,54 +1578,100 @@ git commit -m "Point sync worker and token refresh job at Google Health API, fix
 
 ---
 
-### Task 9: Update biometrics connection endpoint, delete old Fitbit files
+### Task 9: Update biometrics connection endpoint, rename shared type, delete old Fitbit files
 
 **Files:**
 - Modify: `backend/src/biometrics/routes.ts`
+- Modify: `backend/src/biometrics/repository.ts`
+- Modify: `backend/src/types.ts`
+- Modify: `backend/src/health/client.ts` (Task 5, already committed — switch from a local duplicate interface to importing the renamed shared type)
 - Modify: `backend/tests/biometrics/routes.test.ts`
 - Delete: `backend/src/fitbit/` (entire directory)
 - Delete: `backend/tests/fitbit/` (entire directory)
 
 **Interfaces:**
-- Produces: `GET /me/connection` returns the same `{status, lastSyncedAt}` shape as Phase 1, now reading `HealthConnection` instead of `FitbitConnection`.
+- Produces: `GET /me/connection` returns the same `{status, lastSyncedAt}` shape as Phase 1, now reading `HealthConnection` instead of `FitbitConnection`. `types.ts` exports `HealthMetricPoint` (renamed from `FitbitMetricPoint`) — the single shared `{recordedAt: Date; value: number}` shape, replacing the local duplicate `HealthMetricPoint` interface Task 5 defined in `client.ts` when it correctly avoided touching this out-of-scope file.
+
+**Note on this task's added scope:** Task 5 built `backend/src/health/client.ts` and, per its own brief, correctly left `types.ts`'s `FitbitMetricPoint` untouched as out-of-scope (still consumed by `biometrics/repository.ts` and the soon-to-be-deleted `fitbit/client.ts`). That created a temporary duplicate: `client.ts`'s local `HealthMetricPoint` interface and `types.ts`'s `FitbitMetricPoint` are structurally identical and both compile fine today, but `FitbitMetricPoint` is leftover Fitbit-specific naming that Step 5's grep below would otherwise catch. This task is the right place to resolve it, since it already touches `repository.ts`'s only other consumer and deletes `fitbit/client.ts`.
 
 - [ ] **Step 1: Update `backend/src/biometrics/routes.ts`**
 
 Replace `prisma.fitbitConnection` with `prisma.healthConnection` in the `/me/connection` handler. No other logic changes.
 
-- [ ] **Step 2: Update `backend/tests/biometrics/routes.test.ts`**
+- [ ] **Step 2: Rename `FitbitMetricPoint` to `HealthMetricPoint` in `backend/src/types.ts`**
+
+```typescript
+export interface HealthMetricPoint {
+  recordedAt: Date;
+  value: number;
+}
+```
+
+- [ ] **Step 3: Update `backend/src/biometrics/repository.ts`**
+
+```typescript
+import { prisma } from '../db/client';
+import { BiometricMetricType, HealthMetricPoint } from '../types';
+
+export async function upsertBiometricRecords(
+  userId: string,
+  metricType: BiometricMetricType,
+  points: HealthMetricPoint[],
+): Promise<void> {
+```
+
+(The rest of the function body is unchanged.)
+
+- [ ] **Step 4: Update `backend/src/health/client.ts` to import the shared type instead of declaring its own**
+
+Remove the local interface:
+```typescript
+export interface HealthMetricPoint {
+  recordedAt: Date;
+  value: number;
+}
+```
+
+Replace the `import { BiometricMetricType } from '../types';` line with:
+```typescript
+import { BiometricMetricType, HealthMetricPoint } from '../types';
+```
+
+Every other reference to `HealthMetricPoint` in `client.ts` (the function return type, the internal `.map()` calls) stays exactly as it is — only the type's origin changes, from a local declaration to an import. Re-run `cd backend && DATABASE_URL=postgresql://postgres:postgres@localhost:5434/biometrics_test TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5434/biometrics_test npx jest tests/health/client.test.ts` and confirm it still passes unchanged — this step is a pure type-source change with no behavioral difference.
+
+- [ ] **Step 5: Update `backend/tests/biometrics/routes.test.ts`**
 
 Replace `prisma.fitbitConnection.create(...)` fixtures with `prisma.healthConnection.create(...)`, using `healthUserId` instead of `fitbitUserId` in the seed data.
 
-- [ ] **Step 3: Run tests to verify GREEN**
+- [ ] **Step 6: Run tests to verify GREEN**
 
-Run: `cd backend && DATABASE_URL=postgresql://postgres:postgres@localhost:5434/biometrics_test TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5434/biometrics_test npx jest tests/biometrics/routes.test.ts`
+Run: `cd backend && DATABASE_URL=postgresql://postgres:postgres@localhost:5434/biometrics_test TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5434/biometrics_test npx jest tests/biometrics/ tests/health/client.test.ts`
 Expected: PASS
 
-- [ ] **Step 4: Delete the old Fitbit source and test directories**
+- [ ] **Step 7: Delete the old Fitbit source and test directories**
 
 ```bash
 rm -rf src/fitbit tests/fitbit
 ```
 
-- [ ] **Step 5: Grep for any remaining references to confirm nothing else imports the deleted files**
+- [ ] **Step 8: Grep for any remaining references to confirm nothing else imports the deleted files or the old type name**
 
 ```bash
-grep -rn "fitbit" src/ tests/ --include="*.ts" -i
+grep -rn "fitbit\|FitbitMetricPoint" src/ tests/ --include="*.ts" -i
 ```
 
 Expected: no output (or only comments/strings that are intentionally historical, e.g. in this plan's own commit messages — not in source code). Fix any remaining import that breaks.
 
-- [ ] **Step 6: Run the full backend suite**
+- [ ] **Step 9: Run the full backend suite**
 
-Run: `cd backend && DATABASE_URL=postgresql://postgres:postgres@localhost:5434/biometrics_test TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5434/biometrics_test npx jest`
-Expected: all passing, no leftover references.
+Run: `cd backend && DATABASE_URL=postgresql://postgres:postgres@localhost:5434/biometrics_test TEST_DATABASE_URL=postgresql://postgres:postgres@localhost:5434/biometrics_test npx jest -- --forceExit`
+Expected: all passing, no leftover references. (`--forceExit` needed for a full-suite run per the pre-existing open-handle issue noted in this project's SDD ledger — targeted runs in earlier steps don't need it.)
 
-- [ ] **Step 7: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
-git add -A src/fitbit src/biometrics/routes.ts tests/fitbit tests/biometrics/routes.test.ts
-git commit -m "Remove Fitbit source and tests, update biometrics connection endpoint for Google Health"
+git add -A src/fitbit src/biometrics/routes.ts src/biometrics/repository.ts src/types.ts src/health/client.ts tests/fitbit tests/biometrics/routes.test.ts
+git commit -m "Remove Fitbit source and tests, rename shared metric-point type, update biometrics connection endpoint"
 ```
 
 ---
