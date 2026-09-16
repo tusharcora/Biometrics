@@ -1,13 +1,12 @@
 {
   "name": "backend",
   "version": "1.0.0",
-  "main": "index.js",
   "directories": {
     "test": "tests"
   },
   "scripts": {
     "build": "tsc",
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "jest"
   },
   "keywords": [],
   "author": "",
@@ -30,7 +29,6 @@
     "@types/node": "^22.20.3",
     "@types/node-fetch": "^2.6.13",
     "@types/supertest": "^7.2.1",
-    "ioredis-mock": "^8.13.1",
     "jest": "^30.5.1",
     "nock": "^14.0.17",
     "prisma": "^6.19.3",

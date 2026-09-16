@@ -3,6 +3,7 @@ import {
   connection,
   enqueueFetchJob,
   enqueueBackfillJob,
+  enqueueImmediateTokenRefreshSweep,
   scheduleTokenRefreshSweep,
   TOKEN_REFRESH_SWEEP_JOB,
   TOKEN_REFRESH_SWEEP_INTERVAL_MS,
@@ -48,5 +49,17 @@ describe('sync queue', () => {
     const sweeps = schedulers.filter((s) => s.key === TOKEN_REFRESH_SWEEP_JOB);
 
     expect(sweeps).toHaveLength(1);
+  });
+
+  // The repeatable schedule's first tick is a full interval out, so startup
+  // also enqueues one sweep directly. BullMQ rejects a custom job id containing
+  // ':', which is only caught by actually enqueueing it.
+  it('enqueues a startup sweep with an acceptable job id', async () => {
+    const job = await enqueueImmediateTokenRefreshSweep();
+
+    expect(job.name).toBe(TOKEN_REFRESH_SWEEP_JOB);
+    expect(job.id).toBe(`${TOKEN_REFRESH_SWEEP_JOB}-startup`);
+
+    await job.remove().catch(() => undefined);
   });
 });

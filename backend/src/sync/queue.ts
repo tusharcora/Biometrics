@@ -57,6 +57,7 @@ export function enqueueImmediateTokenRefreshSweep() {
   return syncQueue.add(
     TOKEN_REFRESH_SWEEP_JOB,
     {},
-    { jobId: `${TOKEN_REFRESH_SWEEP_JOB}:startup`, removeOnComplete: true },
+    // BullMQ rejects a custom job id containing ':'.
+    { jobId: `${TOKEN_REFRESH_SWEEP_JOB}-startup`, removeOnComplete: true },
   );
 }
