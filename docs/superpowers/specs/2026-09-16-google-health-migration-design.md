@@ -18,6 +18,45 @@ carry over. What changes is which third-party API the connect/sync layer
 talks to, and the naming that currently says "Fitbit" throughout that
 layer.
 
+## Launch-Critical Risk: Restricted-Scope Verification
+
+**This is the single biggest risk in this migration and belongs at the
+top of this document, not buried in Open Questions.** Confirmed against
+Google's own developer documentation: most Google Health API scopes —
+including all three this app needs
+(`activity_and_fitness.readonly`, `health_metrics_and_measurements.readonly`,
+`sleep.readonly`) — are classified as **Restricted** scopes.
+
+Concretely, this means:
+
+- **Without completing Google's verification process, this app can only
+  ever be used by up to ~100 test users** explicitly allowlisted in
+  Google Cloud Console. It cannot serve the public.
+- **Verification for Restricted scopes requires an annual third-party
+  security assessment** under Google's CASA (Cloud Application Security
+  Assessment) framework — a real audit with real cost and no guaranteed
+  outcome, not a form to fill out.
+- **Timeline**: 2-3 weeks for a Tier 2 assessment, 4-6 weeks for Tier 3,
+  with **no published SLA from Google beyond that** for the review
+  itself.
+- **Cost**: assessor fees ranging roughly $500-$4,500 USD depending on
+  app complexity, payable to a third-party assessor (not Google), and
+  this assessment must be **repeated annually** to keep access.
+- This is a hard dependency on the project's own stated goal of building
+  "a public product, not a single-user tool" (established during Phase
+  1's original brainstorming) — it gates the actual public launch date
+  in a way nothing else in this spec does, and is not something
+  engineering effort alone can shorten.
+
+**This needs to be explicitly weighed against the "full replacement, not
+dual-provider" decision below before implementation starts.** If this
+verification is not budgeted for (time, cost, and the real possibility
+of a failed or delayed assessment), the practical effect of this
+migration is that the app becomes unusable beyond a small test-user
+allowlist for however long verification takes — which may be
+unacceptable if there's a target public launch date this was not
+already accounted against.
+
 ## Decisions Made (confirmed directly with the user — not open for
 reconsideration in this spec)
 
@@ -163,13 +202,21 @@ Google Health, platform reported as `FITBIT`):
     (heart rate, HRV)
   - `https://www.googleapis.com/auth/googlehealth.sleep.readonly`
     (sleep)
-- **Token lifetimes**: access token ~1 hour (`expires_in: 3599`);
-  **refresh token expires after 7 days** (`refresh_token_expires_in:
-  604799`) — shorter than Fitbit's. A user inactive for more than a
-  week needs a full reconnect, not just a silent refresh. The proactive
-  refresh sweep (carried over from Phase 1) becomes more important here,
-  and the "disconnect on refresh failure" path will trigger more often
-  in practice than it did for Fitbit.
+- **Token lifetimes**: access token ~1 hour (`expires_in: 3599`).
+  Live testing observed `refresh_token_expires_in: 604799` (7 days), but
+  **this is a Testing-publishing-status artifact of unverified OAuth
+  apps, not an inherent property of the Google Health API** — Google
+  automatically caps refresh token life at 7 days for apps that haven't
+  passed verification, regardless of which API they call. Once (if) this
+  app completes the verification/CASA process (see the Restricted-Scope
+  Verification risk below), refresh tokens become long-lived under
+  Google's normal policy (expiring only after ~6 months of inactivity,
+  explicit revocation, or a few other edge cases) — this needs
+  re-verifying against a verified app before any UX/reconnect-frequency
+  decisions are made on the assumption of a 7-day window. No
+  architectural conclusion in this spec depends on the exact number; the
+  proactive refresh sweep and disconnect-on-failure path (both carried
+  over from Phase 1) handle either lifetime correctly as-is.
 - **User identity**: `GET /v4/users/me/identity` (or `users/-/identity`
   — both resolve identically) returns `{name, legacyUserId,
   healthUserId}`. `legacyUserId` confirmed to match the underlying
