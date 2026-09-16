@@ -88,10 +88,10 @@ describe('connect Google Health and sync end to end (mocked Google API)', () => 
         dataPoints: [{ sleep: { interval: { startTime: '2026-09-01T22:00:00Z' }, summary: { minutesAsleep: 400 } } }],
       });
     nock('https://health.googleapis.com')
-      .get('/v4/users/me/dataTypes/heartRateVariability/dataPoints')
+      .get('/v4/users/me/dataTypes/daily-heart-rate-variability/dataPoints')
       .query(true)
       .reply(200, {
-        dataPoints: [{ heartRateVariability: { sampleTime: { physicalTime: '2026-09-01T23:00:00Z' }, rootMeanSquareOfSuccessiveDifferencesMilliseconds: 40 } }],
+        dataPoints: [{ dailyHeartRateVariability: { date: { year: 2026, month: 9, day: 1 }, averageHeartRateVariabilityMilliseconds: 40 } }],
       });
 
     await processSyncJob({ name: 'backfill', data: enqueuedBackfill } as any);

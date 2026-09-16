@@ -32,10 +32,11 @@ export async function registerUserSubscription(healthUserId: string): Promise<st
   const res = await fetch(url, {
     method: 'POST',
     headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-    // Note: only `steps` has been live-verified as a valid subscribable data type.
-    // `sleep`, `heart-rate`, and `heartRateVariability` are requested per spec but
-    // unconfirmed; if the API rejects one of these with an invalid-data-type error,
-    // adjust this array rather than the overall approach.
+    // Confirmed live: all four subscribe successfully with this exact
+    // casing. `heart-rate-variability` (kebab-case) was the fix for a real
+    // 400 -- the API rejects the camelCase `heartRateVariability` value
+    // here even though that same string is the correct `dataType` on the
+    // *webhook notification payload* (a different field entirely).
     body: JSON.stringify({
       user: `users/${healthUserId}`,
       dataTypes: ['steps', 'sleep', 'heart-rate', 'heart-rate-variability'],

@@ -51,7 +51,7 @@ async function dailyRollUp(
 async function listDataPoints(
   accessToken: string,
   dataType: string,
-  filterField: 'interval.start_time' | 'sample_time.physical_time',
+  filterField: 'interval.start_time',
   startDate: string,
   endDate: string,
 ): Promise<any[]> {
@@ -70,6 +70,33 @@ async function listDataPoints(
 function civilDateToDate(civil: { date: { year: number; month: number; day: number } }): Date {
   const { year, month, day } = civil.date;
   return new Date(Date.UTC(year, month - 1, day));
+}
+
+// HRV is a daily pre-aggregated data type in the live API, not sample-based:
+// confirmed live that `dailyRollUp` explicitly rejects it ("DailyRollup is
+// not supported for data type heart-rate-variability, only list/reconcile
+// supported"), and that its data lives under a *separate* collection,
+// `daily-heart-rate-variability` (hyphenated in the URL), filtered by a
+// `daily_heart_rate_variability.date` (underscored) civil-date literal --
+// not `heart-rate-variability` with a sample-time filter. Both the URL
+// segment and the filter's data-type token were confirmed against real
+// responses from a live Fitbit-linked account, including the response
+// field name `dailyHeartRateVariability.averageHeartRateVariabilityMilliseconds`.
+async function listDailyHeartRateVariability(
+  accessToken: string,
+  startDate: string,
+  endDate: string,
+): Promise<any[]> {
+  const filter = `daily_heart_rate_variability.date >= "${startDate}" AND daily_heart_rate_variability.date < "${endDate}"`;
+  const url = `${BASE_URL}/users/me/dataTypes/daily-heart-rate-variability/dataPoints?${new URLSearchParams({ filter }).toString()}`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!res.ok) {
+    const err = new Error(`Google Health dataPoints.list returned ${res.status} for daily-heart-rate-variability`);
+    (err as any).status = res.status;
+    throw err;
+  }
+  const json = (await res.json()) as { dataPoints?: any[] };
+  return json.dataPoints ?? [];
 }
 
 export async function fetchMetricRange(
@@ -108,26 +135,16 @@ export async function fetchMetricRange(
         }));
     }
     case 'HRV': {
-      const rows = await listDataPoints(accessToken, 'heartRateVariability', 'sample_time.physical_time', startDate, endDate);
-      const samples = rows
-        .filter((r) => r.heartRateVariability?.rootMeanSquareOfSuccessiveDifferencesMilliseconds !== undefined)
+      const rows = await listDailyHeartRateVariability(accessToken, startDate, endDate);
+      // Already one data point per day (a daily pre-aggregated type, not
+      // sample-based -- see listDailyHeartRateVariability's comment), so no
+      // day-grouping is needed: each row maps directly to one HealthMetricPoint.
+      return rows
+        .filter((r) => r.dailyHeartRateVariability?.averageHeartRateVariabilityMilliseconds !== undefined)
         .map((r) => ({
-          sampledAt: new Date(r.heartRateVariability.sampleTime.physicalTime),
-          value: r.heartRateVariability.rootMeanSquareOfSuccessiveDifferencesMilliseconds as number,
-        }))
-        .sort((a, b) => a.sampledAt.getTime() - b.sampledAt.getTime());
-      // HRV is sample-based, possibly multiple readings per day. Group by UTC
-      // calendar day and take the last sample of each day as that day's
-      // representative value, so an N-day range yields up to N points (one per
-      // day that had a sample) instead of collapsing to a single point.
-      // Samples are sorted ascending, so a later sample for the same day
-      // simply overwrites the earlier entry.
-      const lastPerDay = new Map<number, HealthMetricPoint>();
-      for (const sample of samples) {
-        const day = utcMidnightOf(sample.sampledAt);
-        lastPerDay.set(day.getTime(), { recordedAt: day, value: sample.value });
-      }
-      return [...lastPerDay.values()];
+          recordedAt: civilDateToDate(r.dailyHeartRateVariability),
+          value: r.dailyHeartRateVariability.averageHeartRateVariabilityMilliseconds as number,
+        }));
     }
   }
 }
