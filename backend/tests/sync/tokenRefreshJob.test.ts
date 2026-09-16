@@ -3,9 +3,9 @@ import { runTokenRefreshSweep } from '../../src/sync/tokenRefreshJob';
 import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
 import { encryptToken, decryptToken } from '../../src/crypto/tokenCipher';
-import * as oauth from '../../src/fitbit/oauth';
+import * as oauth from '../../src/health/oauth';
 
-jest.mock('../../src/fitbit/oauth');
+jest.mock('../../src/health/oauth');
 
 beforeAll(() => {
   migrateTestDb();
@@ -19,44 +19,43 @@ afterAll(async () => {
 describe('runTokenRefreshSweep', () => {
   it('refreshes connections expiring within the next hour', async () => {
     const user = await prisma.user.create({ data: { email: `t-${Date.now()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() } });
-    await prisma.fitbitConnection.create({
+    await prisma.healthConnection.create({
       data: {
         userId: user.id,
-        fitbitUserId: `fb-1-${randomUUID()}`,
+        healthUserId: `fb-1-${randomUUID()}`,
         encryptedAccessToken: encryptToken('old-access'),
         encryptedRefreshToken: encryptToken('old-refresh'),
         tokenExpiresAt: new Date(Date.now() + 30 * 60 * 1000), // 30 min from now
       },
     });
-    (oauth.refreshFitbitTokens as jest.Mock).mockResolvedValue({
+    (oauth.refreshHealthTokens as jest.Mock).mockResolvedValue({
       accessToken: 'new-access',
       refreshToken: 'new-refresh',
       expiresIn: 28800,
-      fitbitUserId: 'fb-1',
     });
 
     await runTokenRefreshSweep();
 
-    const conn = await prisma.fitbitConnection.findUnique({ where: { userId: user.id } });
+    const conn = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
     expect(decryptToken(conn!.encryptedAccessToken)).toBe('new-access');
   });
 
   it('marks a connection disconnected when the refresh token has been revoked', async () => {
     const user = await prisma.user.create({ data: { email: `t2-${Date.now()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() } });
-    await prisma.fitbitConnection.create({
+    await prisma.healthConnection.create({
       data: {
         userId: user.id,
-        fitbitUserId: `fb-2-${randomUUID()}`,
+        healthUserId: `fb-2-${randomUUID()}`,
         encryptedAccessToken: encryptToken('old-access'),
         encryptedRefreshToken: encryptToken('old-refresh'),
         tokenExpiresAt: new Date(Date.now() + 30 * 60 * 1000),
       },
     });
-    (oauth.refreshFitbitTokens as jest.Mock).mockRejectedValue(new Error('invalid_grant'));
+    (oauth.refreshHealthTokens as jest.Mock).mockRejectedValue(new Error('invalid_grant'));
 
     await runTokenRefreshSweep();
 
-    const conn = await prisma.fitbitConnection.findUnique({ where: { userId: user.id } });
+    const conn = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
     expect(conn?.status).toBe('DISCONNECTED');
   });
 
@@ -66,27 +65,26 @@ describe('runTokenRefreshSweep', () => {
     const user = await prisma.user.create({
       data: { email: `t4-${Date.now()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
     });
-    const created = await prisma.fitbitConnection.create({
+    const created = await prisma.healthConnection.create({
       data: {
         userId: user.id,
-        fitbitUserId: `fb-4-${randomUUID()}`,
+        healthUserId: `fb-4-${randomUUID()}`,
         encryptedAccessToken: encryptToken('old-access'),
         encryptedRefreshToken: encryptToken('old-refresh'),
         tokenExpiresAt: new Date(Date.now() + 30 * 60 * 1000),
       },
     });
-    (oauth.refreshFitbitTokens as jest.Mock).mockResolvedValue({
+    (oauth.refreshHealthTokens as jest.Mock).mockResolvedValue({
       accessToken: 'new-access',
       refreshToken: 'new-refresh',
       expiresIn: 28800,
-      fitbitUserId: 'fb-4',
     });
 
     // Fail only this connection's write, so the assertion does not depend on
     // how many other connections the sweep happens to pick up.
-    const realUpdate = prisma.fitbitConnection.update.bind(prisma.fitbitConnection);
+    const realUpdate = prisma.healthConnection.update.bind(prisma.healthConnection);
     const updateSpy = jest
-      .spyOn(prisma.fitbitConnection, 'update')
+      .spyOn(prisma.healthConnection, 'update')
       .mockImplementation((args: any) =>
         args?.where?.id === created.id
           ? (Promise.reject(new Error('transient db failure')) as any)
@@ -97,7 +95,7 @@ describe('runTokenRefreshSweep', () => {
     await expect(runTokenRefreshSweep()).rejects.toThrow('transient db failure');
     updateSpy.mockRestore();
 
-    const conn = await prisma.fitbitConnection.findUnique({ where: { userId: user.id } });
+    const conn = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
     expect(conn?.status).toBe('CONNECTED');
   });
 
@@ -108,26 +106,26 @@ describe('runTokenRefreshSweep', () => {
     const succeedingUser = await prisma.user.create({
       data: { email: `t3-ok-${Date.now()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
     });
-    await prisma.fitbitConnection.create({
+    await prisma.healthConnection.create({
       data: {
         userId: failingUser.id,
-        fitbitUserId: `fb-3-fail-${randomUUID()}`,
+        healthUserId: `fb-3-fail-${randomUUID()}`,
         encryptedAccessToken: encryptToken('old-access-fail'),
         encryptedRefreshToken: encryptToken('old-refresh-fail'),
         tokenExpiresAt: new Date(Date.now() + 30 * 60 * 1000),
       },
     });
-    await prisma.fitbitConnection.create({
+    await prisma.healthConnection.create({
       data: {
         userId: succeedingUser.id,
-        fitbitUserId: `fb-3-ok-${randomUUID()}`,
+        healthUserId: `fb-3-ok-${randomUUID()}`,
         encryptedAccessToken: encryptToken('old-access-ok'),
         encryptedRefreshToken: encryptToken('old-refresh-ok'),
         tokenExpiresAt: new Date(Date.now() + 30 * 60 * 1000),
       },
     });
 
-    (oauth.refreshFitbitTokens as jest.Mock).mockImplementation((refreshToken: string) => {
+    (oauth.refreshHealthTokens as jest.Mock).mockImplementation((refreshToken: string) => {
       if (refreshToken === 'old-refresh-fail') {
         return Promise.reject(new Error('invalid_grant'));
       }
@@ -135,17 +133,36 @@ describe('runTokenRefreshSweep', () => {
         accessToken: 'new-access-ok',
         refreshToken: 'new-refresh-ok',
         expiresIn: 28800,
-        fitbitUserId: 'fb-3-ok',
       });
     });
 
     await runTokenRefreshSweep();
 
-    const failingConn = await prisma.fitbitConnection.findUnique({ where: { userId: failingUser.id } });
-    const succeedingConn = await prisma.fitbitConnection.findUnique({ where: { userId: succeedingUser.id } });
+    const failingConn = await prisma.healthConnection.findUnique({ where: { userId: failingUser.id } });
+    const succeedingConn = await prisma.healthConnection.findUnique({ where: { userId: succeedingUser.id } });
 
     expect(failingConn?.status).toBe('DISCONNECTED');
     expect(succeedingConn?.status).toBe('CONNECTED');
     expect(decryptToken(succeedingConn!.encryptedAccessToken)).toBe('new-access-ok');
+  });
+
+  it('does not overwrite the stored refresh token when Google does not return a new one', async () => {
+    const user = await prisma.user.create({ data: { email: `t-${Date.now()}-norefresh@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() } });
+    const conn = await prisma.healthConnection.create({
+      data: {
+        userId: user.id,
+        healthUserId: `health-user-norefresh-${randomUUID()}`,
+        encryptedAccessToken: 'old-access',
+        encryptedRefreshToken: encryptToken('original-refresh-token'),
+        tokenExpiresAt: new Date(Date.now() - 1000),
+      },
+    });
+    (oauth.refreshHealthTokens as jest.Mock).mockResolvedValue({ accessToken: 'new-access', expiresIn: 3599 });
+
+    await runTokenRefreshSweep();
+
+    const updated = await prisma.healthConnection.findUnique({ where: { id: conn.id } });
+    expect(decryptToken(updated!.encryptedRefreshToken)).toBe('original-refresh-token');
+    expect(decryptToken(updated!.encryptedAccessToken)).toBe('new-access');
   });
 });

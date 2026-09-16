@@ -4,12 +4,14 @@ import { processSyncJob } from '../../src/sync/worker';
 import { connection } from '../../src/sync/queue';
 import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
-import * as fitbitClient from '../../src/fitbit/client';
+import * as healthClient from '../../src/health/client';
+import * as subscriber from '../../src/health/subscriber';
 import { encryptToken } from '../../src/crypto/tokenCipher';
 import * as tokenRefreshJob from '../../src/sync/tokenRefreshJob';
 import { TOKEN_REFRESH_SWEEP_JOB } from '../../src/sync/queue';
 
-jest.mock('../../src/fitbit/client');
+jest.mock('../../src/health/client');
+jest.mock('../../src/health/subscriber');
 jest.mock('../../src/sync/tokenRefreshJob');
 
 beforeAll(() => {
@@ -24,10 +26,10 @@ afterAll(async () => {
 
 async function createConnectedUser() {
   const user = await prisma.user.create({ data: { email: `w-${Date.now()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() } });
-  await prisma.fitbitConnection.create({
+  await prisma.healthConnection.create({
     data: {
       userId: user.id,
-      fitbitUserId: `fb-1-${randomUUID()}`,
+      healthUserId: `fb-1-${randomUUID()}`,
       encryptedAccessToken: encryptToken('access-token'),
       encryptedRefreshToken: encryptToken('refresh-token'),
       tokenExpiresAt: new Date(Date.now() + 3600_000),
@@ -39,7 +41,7 @@ async function createConnectedUser() {
 describe('processSyncJob', () => {
   it('writes fetched metric points for a fetch job', async () => {
     const user = await createConnectedUser();
-    (fitbitClient.fetchMetricRange as jest.Mock).mockResolvedValue([
+    (healthClient.fetchMetricRange as jest.Mock).mockResolvedValue([
       { recordedAt: new Date('2026-09-01'), value: 8000 },
     ]);
 
@@ -53,24 +55,24 @@ describe('processSyncJob', () => {
     expect(records[0].value).toBe(8000);
   });
 
-  it('marks the connection disconnected on a 401 from Fitbit', async () => {
+  it('marks the connection disconnected on a 401 from Google Health', async () => {
     const user = await createConnectedUser();
     const err = new Error('unauthorized');
     (err as any).status = 401;
-    (fitbitClient.fetchMetricRange as jest.Mock).mockRejectedValue(err);
+    (healthClient.fetchMetricRange as jest.Mock).mockRejectedValue(err);
 
     await processSyncJob({
       name: 'fetch',
       data: { userId: user.id, metricType: 'STEPS', date: '2026-09-01' },
     } as Job);
 
-    const connection = await prisma.fitbitConnection.findUnique({ where: { userId: user.id } });
+    const connection = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
     expect(connection?.status).toBe('DISCONNECTED');
   });
 
   it('processes a backfill job by fetching each metric type for the date range', async () => {
     const user = await createConnectedUser();
-    (fitbitClient.fetchMetricRange as jest.Mock).mockResolvedValue([
+    (healthClient.fetchMetricRange as jest.Mock).mockResolvedValue([
       { recordedAt: new Date('2026-08-01'), value: 42 },
     ]);
 
@@ -79,25 +81,25 @@ describe('processSyncJob', () => {
       data: { userId: user.id, startDate: '2026-08-01', endDate: '2026-08-01' },
     } as Job);
 
-    expect(fitbitClient.fetchMetricRange).toHaveBeenCalledWith(
+    expect(healthClient.fetchMetricRange).toHaveBeenCalledWith(
       'access-token',
       'HRV',
       '2026-08-01',
       '2026-08-01',
     );
-    expect(fitbitClient.fetchMetricRange).toHaveBeenCalledWith(
+    expect(healthClient.fetchMetricRange).toHaveBeenCalledWith(
       'access-token',
       'RESTING_HR',
       '2026-08-01',
       '2026-08-01',
     );
-    expect(fitbitClient.fetchMetricRange).toHaveBeenCalledWith(
+    expect(healthClient.fetchMetricRange).toHaveBeenCalledWith(
       'access-token',
       'SLEEP',
       '2026-08-01',
       '2026-08-01',
     );
-    expect(fitbitClient.fetchMetricRange).toHaveBeenCalledWith(
+    expect(healthClient.fetchMetricRange).toHaveBeenCalledWith(
       'access-token',
       'STEPS',
       '2026-08-01',
@@ -105,19 +107,62 @@ describe('processSyncJob', () => {
     );
   });
 
-  it('marks the connection disconnected on a 401 from Fitbit during backfill', async () => {
+  it('marks the connection disconnected on a 401 from Google Health during backfill', async () => {
     const user = await createConnectedUser();
     const err = new Error('unauthorized');
     (err as any).status = 401;
-    (fitbitClient.fetchMetricRange as jest.Mock).mockRejectedValue(err);
+    (healthClient.fetchMetricRange as jest.Mock).mockRejectedValue(err);
 
     await processSyncJob({
       name: 'backfill',
       data: { userId: user.id, startDate: '2026-08-01', endDate: '2026-08-01' },
     } as Job);
 
-    const connection = await prisma.fitbitConnection.findUnique({ where: { userId: user.id } });
+    const connection = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
     expect(connection?.status).toBe('DISCONNECTED');
+  });
+
+  it('deletes the Google Health subscription when a fetch job hits a 401', async () => {
+    const user = await prisma.user.create({ data: { email: `w-${Date.now()}-401@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() } });
+    const conn = await prisma.healthConnection.create({
+      data: {
+        userId: user.id,
+        healthUserId: `health-user-401-${randomUUID()}`,
+        encryptedAccessToken: encryptToken('access-token-401'),
+        encryptedRefreshToken: encryptToken('refresh-token-401'),
+        tokenExpiresAt: new Date(Date.now() + 3600_000),
+        webhookSubscriptionId: 'sub-to-delete',
+      },
+    });
+    (healthClient.fetchMetricRange as jest.Mock).mockRejectedValue(Object.assign(new Error('unauthorized'), { status: 401 }));
+    (subscriber.deleteUserSubscription as jest.Mock).mockResolvedValue(undefined);
+
+    await processSyncJob({ name: 'fetch', data: { userId: user.id, metricType: 'STEPS', date: '2026-09-01' } } as any);
+
+    expect(subscriber.deleteUserSubscription).toHaveBeenCalledWith('sub-to-delete');
+    const updated = await prisma.healthConnection.findUnique({ where: { id: conn.id } });
+    expect(updated?.status).toBe('DISCONNECTED');
+  });
+
+  it('still marks the connection DISCONNECTED even if deleting the subscription fails', async () => {
+    const user = await prisma.user.create({ data: { email: `w-${Date.now()}-402@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() } });
+    const conn = await prisma.healthConnection.create({
+      data: {
+        userId: user.id,
+        healthUserId: `health-user-402-${randomUUID()}`,
+        encryptedAccessToken: encryptToken('access-token-402'),
+        encryptedRefreshToken: encryptToken('refresh-token-402'),
+        tokenExpiresAt: new Date(Date.now() + 3600_000),
+        webhookSubscriptionId: 'sub-that-fails',
+      },
+    });
+    (healthClient.fetchMetricRange as jest.Mock).mockRejectedValue(Object.assign(new Error('unauthorized'), { status: 401 }));
+    (subscriber.deleteUserSubscription as jest.Mock).mockRejectedValue(new Error('network error'));
+
+    await processSyncJob({ name: 'fetch', data: { userId: user.id, metricType: 'STEPS', date: '2026-09-01' } } as any);
+
+    const updated = await prisma.healthConnection.findUnique({ where: { id: conn.id } });
+    expect(updated?.status).toBe('DISCONNECTED');
   });
 
   // The sweep runs through the queue so that only one instance performs each

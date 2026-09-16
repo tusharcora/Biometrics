@@ -1,11 +1,11 @@
 import { prisma } from '../db/client';
-import { refreshFitbitTokens } from '../fitbit/oauth';
+import { refreshHealthTokens } from '../health/oauth';
 import { encryptToken, decryptToken } from '../crypto/tokenCipher';
 
 const REFRESH_LOOKAHEAD_MS = 60 * 60 * 1000; // refresh anything expiring within the next hour
 
 export async function runTokenRefreshSweep(): Promise<void> {
-  const expiringSoon = await prisma.fitbitConnection.findMany({
+  const expiringSoon = await prisma.healthConnection.findMany({
     where: {
       status: 'CONNECTED',
       tokenExpiresAt: { lt: new Date(Date.now() + REFRESH_LOOKAHEAD_MS) },
@@ -19,10 +19,10 @@ export async function runTokenRefreshSweep(): Promise<void> {
     let tokens;
     try {
       const refreshToken = decryptToken(conn.encryptedRefreshToken);
-      tokens = await refreshFitbitTokens(refreshToken);
+      tokens = await refreshHealthTokens(refreshToken);
     } catch (err) {
-      console.error(`Fitbit token refresh failed for connection ${conn.id}`, err);
-      await prisma.fitbitConnection.update({
+      console.error(`Google Health token refresh failed for connection ${conn.id}`, err);
+      await prisma.healthConnection.update({
         where: { id: conn.id },
         data: { status: 'DISCONNECTED' },
       });
@@ -30,18 +30,26 @@ export async function runTokenRefreshSweep(): Promise<void> {
     }
 
     try {
-      await prisma.fitbitConnection.update({
+      // Google does not return a new refresh_token on an ordinary refresh
+      // call — only exchangeCodeForTokens does. Overwriting a present
+      // encryptedRefreshToken with an absent one would destroy the only
+      // credential capable of any future refresh, so only touch it when
+      // Google actually sent one.
+      const updateData: { encryptedAccessToken: string; tokenExpiresAt: Date; encryptedRefreshToken?: string } = {
+        encryptedAccessToken: encryptToken(tokens.accessToken),
+        tokenExpiresAt: new Date(Date.now() + tokens.expiresIn * 1000),
+      };
+      if (tokens.refreshToken) {
+        updateData.encryptedRefreshToken = encryptToken(tokens.refreshToken);
+      }
+      await prisma.healthConnection.update({
         where: { id: conn.id },
-        data: {
-          encryptedAccessToken: encryptToken(tokens.accessToken),
-          encryptedRefreshToken: encryptToken(tokens.refreshToken),
-          tokenExpiresAt: new Date(Date.now() + tokens.expiresIn * 1000),
-        },
+        data: updateData,
       });
     } catch (err) {
       // The refresh succeeded, so the connection is fine; surface the write
       // failure instead of silently marking the user disconnected.
-      console.error(`Failed to persist refreshed Fitbit tokens for connection ${conn.id}`, err);
+      console.error(`Failed to persist refreshed Google Health tokens for connection ${conn.id}`, err);
       throw err;
     }
   }
