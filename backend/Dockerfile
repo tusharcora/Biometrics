@@ -1,4 +1,9 @@
 FROM node:20-slim AS build
+# Required at runtime: DATABASE_URL, REDIS_URL, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET,
+# TOKEN_ENCRYPTION_KEY, GOOGLE_HEALTH_CLIENT_ID, GOOGLE_HEALTH_CLIENT_SECRET,
+# GOOGLE_HEALTH_REDIRECT_URI, GOOGLE_HEALTH_WEBHOOK_SECRET, GOOGLE_CLOUD_PROJECT_NUMBER,
+# GOOGLE_APPLICATION_CREDENTIALS (path to a mounted service account key file),
+# GOOGLE_CLIENT_ID, APPLE_BUNDLE_ID.
 WORKDIR /app
 RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 COPY package*.json ./
