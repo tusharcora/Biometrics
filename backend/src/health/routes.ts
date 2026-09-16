@@ -191,16 +191,29 @@ function pad2(n: number): string {
   return String(n).padStart(2, '0');
 }
 
+// Metrics fetched via dailyRollUp, which buckets by the user's civil (local)
+// calendar date. The other two (SLEEP, HRV) go through dataPoints.list, whose
+// filter is on raw UTC instants -- see fetchDateOfInterval.
+const CIVIL_DATE_METRICS: ReadonlySet<BiometricMetricType> = new Set(['STEPS', 'RESTING_HR']);
+
 /**
- * Resolves the civil (local) calendar date a changed interval belongs to, as
- * YYYY-MM-DD, or null if the interval carries nothing usable.
+ * Resolves the calendar day (YYYY-MM-DD) the sync worker should re-fetch for
+ * a changed interval, or null if the interval carries nothing usable. Which
+ * calendar the day is on depends on how the metric is fetched:
  *
- * dailyRollUp (STEPS / RESTING_HR) buckets by the user's civil date, so the
- * day we re-fetch must be the civil date too. Deriving it from the UTC date
- * of `physicalTimeInterval.startTime` is wrong for users west of UTC in the
- * evening (the instant is already "tomorrow" in UTC) -- hence the civil
- * fields are preferred and the UTC computation is only a last-resort
- * fallback.
+ * - STEPS / RESTING_HR use dailyRollUp, which buckets by the user's civil
+ *   date, so the day must be the civil date too. Deriving it from the UTC
+ *   date of `physicalTimeInterval.startTime` is wrong for users west of UTC
+ *   in the evening (the instant is already "tomorrow" in UTC), so the civil
+ *   fields are preferred and the UTC computation is only a last-resort
+ *   fallback.
+ *
+ * - SLEEP / HRV use dataPoints.list, whose filter is on raw UTC instants
+ *   ([date, date + 1) in UTC). The civil date is NOT used for these even when
+ *   Google sends it: for the same west-of-UTC user the civil window would end
+ *   before the physical instant the notification is about, and the fetch
+ *   would silently return nothing (the original C3 bug). Only the UTC date of
+ *   the physical instant is correct here.
  *
  * TODO(device-verification): the exact nesting of civilDateTimeInterval and
  * the precise format of civilIso8601TimeInterval.startTime were not
@@ -209,6 +222,14 @@ function pad2(n: number): string {
  * the pending device-verification pass and tighten this resolver
  * accordingly.
  */
+function fetchDateOfInterval(interval: HealthWebhookInterval, metricType: BiometricMetricType): string | null {
+  if (CIVIL_DATE_METRICS.has(metricType)) {
+    const civil = civilDateOfInterval(interval);
+    if (civil) return civil;
+  }
+  return utcDateOfPhysicalStart(interval);
+}
+
 function civilDateOfInterval(interval: HealthWebhookInterval): string | null {
   const structured = interval.civilDateTimeInterval?.startTime?.date;
   if (
@@ -226,12 +247,15 @@ function civilDateOfInterval(interval: HealthWebhookInterval): string | null {
     if (m) return `${m[1]}-${m[2]}-${m[3]}`;
   }
 
+  return null;
+}
+
+function utcDateOfPhysicalStart(interval: HealthWebhookInterval): string | null {
   const physical = interval.physicalTimeInterval?.startTime;
   if (typeof physical === 'string') {
     const d = new Date(physical);
     if (!Number.isNaN(d.getTime())) return isoDate(d);
   }
-
   return null;
 }
 
@@ -273,7 +297,7 @@ healthRouter.post('/webhooks/health', async (req, res) => {
 
         const intervals = Array.isArray(data.intervals) ? data.intervals : [];
         for (const interval of intervals) {
-          const date = interval && typeof interval === 'object' ? civilDateOfInterval(interval) : null;
+          const date = interval && typeof interval === 'object' ? fetchDateOfInterval(interval, metricType) : null;
           if (!date) {
             console.warn(`Skipping Google Health webhook interval with no resolvable date for ${data.dataType}`);
             continue;

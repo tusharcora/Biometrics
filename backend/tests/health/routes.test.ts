@@ -478,6 +478,83 @@ describe('POST /webhooks/health', () => {
       expect(res.status).toBe(204);
       expect(queue.enqueueFetchJob).toHaveBeenCalledWith({ userId: user.id, metricType: 'SLEEP', date: '2026-09-17' });
     });
+
+    // SLEEP and HRV are fetched via dataPoints.list, whose filter is on raw
+    // UTC instants -- NOT civil dates. If the civil date were used for the
+    // fetch window here, a user west of UTC would get a [civil, civil + 1)
+    // window that ends before the physical instant the notification is
+    // about, and the fetch would silently return nothing (regression of C3).
+    describe('dataPoints.list metrics (SLEEP / HRV) ignore civil-date fields', () => {
+      const westOfUtcInterval = {
+        // 05:00Z on the 17th is 22:00 on the 16th for a user at UTC-7.
+        physicalTimeInterval: { startTime: '2026-09-17T05:00:00Z', endTime: '2026-09-17T05:30:00Z' },
+        civilDateTimeInterval: {
+          startTime: { date: { year: 2026, month: 9, day: 16 }, time: { hours: 22, minutes: 0 } },
+          endTime: { date: { year: 2026, month: 9, day: 16 }, time: { hours: 22, minutes: 30 } },
+        },
+        civilIso8601TimeInterval: { startTime: '2026-09-16T22:00:00', endTime: '2026-09-16T22:30:00' },
+      };
+
+      it('uses the UTC date of the physical instant for a sleep notification even when civil-date fields are present', async () => {
+        (queue.enqueueFetchJob as jest.Mock).mockClear();
+        const { user, healthUserId } = await createWebhookUser();
+
+        const res = await postWebhook([{
+          data: { healthUserId, dataType: 'sleep', operation: 'UPSERT', intervals: [westOfUtcInterval] },
+        }]);
+
+        expect(res.status).toBe(204);
+        expect(queue.enqueueFetchJob).toHaveBeenCalledTimes(1);
+        expect(queue.enqueueFetchJob).toHaveBeenCalledWith({ userId: user.id, metricType: 'SLEEP', date: '2026-09-17' });
+      });
+
+      it('uses the UTC date of the physical instant for a heartRateVariability notification even when civil-date fields are present', async () => {
+        (queue.enqueueFetchJob as jest.Mock).mockClear();
+        const { user, healthUserId } = await createWebhookUser();
+
+        const res = await postWebhook([{
+          data: { healthUserId, dataType: 'heartRateVariability', operation: 'UPSERT', intervals: [westOfUtcInterval] },
+        }]);
+
+        expect(res.status).toBe(204);
+        expect(queue.enqueueFetchJob).toHaveBeenCalledTimes(1);
+        expect(queue.enqueueFetchJob).toHaveBeenCalledWith({ userId: user.id, metricType: 'HRV', date: '2026-09-17' });
+      });
+
+      it('still resolves the UTC date of the physical instant for a heartRateVariability notification with no civil fields', async () => {
+        (queue.enqueueFetchJob as jest.Mock).mockClear();
+        const { user, healthUserId } = await createWebhookUser();
+
+        const res = await postWebhook([{
+          data: {
+            healthUserId,
+            dataType: 'heartRateVariability',
+            operation: 'UPSERT',
+            intervals: [{ physicalTimeInterval: { startTime: '2026-09-17T05:00:00Z', endTime: '2026-09-17T05:30:00Z' } }],
+          },
+        }]);
+
+        expect(res.status).toBe(204);
+        expect(queue.enqueueFetchJob).toHaveBeenCalledWith({ userId: user.id, metricType: 'HRV', date: '2026-09-17' });
+      });
+
+      it('skips a sleep interval whose only usable field is a civil date (no physical instant to filter on)', async () => {
+        (queue.enqueueFetchJob as jest.Mock).mockClear();
+        const { healthUserId } = await createWebhookUser();
+
+        const res = await postWebhook([{
+          data: {
+            healthUserId,
+            dataType: 'sleep',
+            operation: 'UPSERT',
+            intervals: [{ civilIso8601TimeInterval: { startTime: '2026-09-16T22:00:00', endTime: '2026-09-16T22:30:00' } }],
+          },
+        }]);
+
+        expect(res.status).toBe(204);
+        expect(queue.enqueueFetchJob).not.toHaveBeenCalled();
+      });
+    });
   });
 
   describe('malformed batches', () => {
