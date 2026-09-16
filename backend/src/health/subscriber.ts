@@ -38,7 +38,7 @@ export async function registerUserSubscription(healthUserId: string): Promise<st
     // adjust this array rather than the overall approach.
     body: JSON.stringify({
       user: `users/${healthUserId}`,
-      dataTypes: ['steps', 'sleep', 'heart-rate', 'heartRateVariability'],
+      dataTypes: ['steps', 'sleep', 'heart-rate', 'heart-rate-variability'],
     }),
   });
   if (!res.ok) {
