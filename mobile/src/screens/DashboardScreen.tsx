@@ -11,10 +11,21 @@ interface BiometricRecord {
 
 export function DashboardScreen() {
   const [records, setRecords] = useState<BiometricRecord[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    apiFetch<BiometricRecord[]>('/me/biometrics').then(setRecords);
+    apiFetch<BiometricRecord[]>('/me/biometrics')
+      .then(setRecords)
+      .catch(() => setError('Something went wrong loading your data.'));
   }, []);
+
+  if (error !== null) {
+    return (
+      <View style={styles.container}>
+        <Text>{error}</Text>
+      </View>
+    );
+  }
 
   if (records === null) {
     return (

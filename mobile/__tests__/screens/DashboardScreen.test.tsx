@@ -27,4 +27,12 @@ describe('DashboardScreen', () => {
 
     await waitFor(() => expect(getByText(/No data yet/i)).toBeTruthy());
   });
+
+  it('shows an error state when the fetch fails', async () => {
+    (apiFetch as jest.Mock).mockRejectedValue(new Error('network error'));
+
+    const { getByText } = render(<DashboardScreen />);
+
+    await waitFor(() => expect(getByText(/Something went wrong/i)).toBeTruthy());
+  });
 });
