@@ -1,11 +1,13 @@
 import { prisma } from '../db/client';
-import { refreshFitbitTokens } from '../fitbit/oauth';
-import { encryptToken, decryptToken } from '../crypto/tokenCipher';
+import { refreshHealthTokens } from '../health/oauth';
+import { deleteUserSubscription } from '../health/subscriber';
+import { decryptToken } from '../crypto/tokenCipher';
+import { refreshedTokenUpdateData } from './tokenUpdate';
 
 const REFRESH_LOOKAHEAD_MS = 60 * 60 * 1000; // refresh anything expiring within the next hour
 
 export async function runTokenRefreshSweep(): Promise<void> {
-  const expiringSoon = await prisma.fitbitConnection.findMany({
+  const expiringSoon = await prisma.healthConnection.findMany({
     where: {
       status: 'CONNECTED',
       tokenExpiresAt: { lt: new Date(Date.now() + REFRESH_LOOKAHEAD_MS) },
@@ -19,29 +21,34 @@ export async function runTokenRefreshSweep(): Promise<void> {
     let tokens;
     try {
       const refreshToken = decryptToken(conn.encryptedRefreshToken);
-      tokens = await refreshFitbitTokens(refreshToken);
+      tokens = await refreshHealthTokens(refreshToken);
     } catch (err) {
-      console.error(`Fitbit token refresh failed for connection ${conn.id}`, err);
-      await prisma.fitbitConnection.update({
+      console.error(`Google Health token refresh failed for connection ${conn.id}`, err);
+      await prisma.healthConnection.update({
         where: { id: conn.id },
         data: { status: 'DISCONNECTED' },
       });
+      if (conn.webhookSubscriptionId) {
+        try {
+          await deleteUserSubscription(conn.webhookSubscriptionId);
+        } catch (deleteErr) {
+          console.error(`Failed to delete Google Health subscription ${conn.webhookSubscriptionId}`, deleteErr);
+        }
+      }
       continue;
     }
 
     try {
-      await prisma.fitbitConnection.update({
+      // refreshedTokenUpdateData only touches encryptedRefreshToken when Google
+      // actually returned a new refresh token (see its doc comment).
+      await prisma.healthConnection.update({
         where: { id: conn.id },
-        data: {
-          encryptedAccessToken: encryptToken(tokens.accessToken),
-          encryptedRefreshToken: encryptToken(tokens.refreshToken),
-          tokenExpiresAt: new Date(Date.now() + tokens.expiresIn * 1000),
-        },
+        data: refreshedTokenUpdateData(tokens),
       });
     } catch (err) {
       // The refresh succeeded, so the connection is fine; surface the write
       // failure instead of silently marking the user disconnected.
-      console.error(`Failed to persist refreshed Fitbit tokens for connection ${conn.id}`, err);
+      console.error(`Failed to persist refreshed Google Health tokens for connection ${conn.id}`, err);
       throw err;
     }
   }

@@ -12,7 +12,7 @@ enum AuthProvider {
   GOOGLE
 }
 
-enum FitbitConnectionStatus {
+enum HealthConnectionStatus {
   CONNECTED
   DISCONNECTED
 }
@@ -30,7 +30,7 @@ model User {
   authProvider     AuthProvider
   providerUserId   String
   createdAt        DateTime          @default(now())
-  fitbitConnection FitbitConnection?
+  healthConnection HealthConnection?
   biometricRecords BiometricRecord[]
   refreshTokens    RefreshToken[]
 
@@ -50,16 +50,16 @@ model RefreshToken {
   createdAt DateTime  @default(now())
 }
 
-model FitbitConnection {
+model HealthConnection {
   id                    String                  @id @default(uuid())
   userId                String                  @unique
   user                  User                    @relation(fields: [userId], references: [id])
-  fitbitUserId          String                  @unique
+  healthUserId          String                  @unique
   encryptedAccessToken  String
   encryptedRefreshToken String
   tokenExpiresAt        DateTime
   webhookSubscriptionId String?
-  status                FitbitConnectionStatus  @default(CONNECTED)
+  status                HealthConnectionStatus  @default(CONNECTED)
   lastSyncedAt          DateTime?
   createdAt             DateTime                @default(now())
   updatedAt             DateTime                @updatedAt

@@ -29,8 +29,8 @@ describe('sync queue', () => {
   });
 
   // Scheduling the sweep on the queue (rather than a per-process setInterval)
-  // is what keeps several backend instances from racing to refresh the same
-  // single-use Fitbit refresh token.
+  // is what keeps several backend instances from redundantly refreshing the
+  // same connection and fanning out avoidable rate-limited calls to Google.
   it('registers the token refresh sweep as a repeatable scheduler', async () => {
     await scheduleTokenRefreshSweep();
 

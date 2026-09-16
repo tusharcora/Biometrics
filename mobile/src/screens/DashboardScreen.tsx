@@ -27,8 +27,8 @@ export function DashboardScreen() {
   }, []);
 
   useEffect(() => {
-    // A disconnected Fitbit is why the data stops updating, so say so rather
-    // than leaving the user staring at silently stale numbers.
+    // A disconnected Google Health is why the data stops updating, so say so
+    // rather than leaving the user staring at silently stale numbers.
     apiFetch<{ status: ConnectionStatus }>('/me/connection')
       .then((res) => setConnectionStatus(res?.status ?? null))
       .catch(() => setConnectionStatus(null));
@@ -44,16 +44,16 @@ export function DashboardScreen() {
   if (connectionStatus === 'DISCONNECTED') {
     return (
       <View style={styles.container}>
-        <Text style={styles.title}>Reconnect your Fitbit</Text>
+        <Text style={styles.title}>Reconnect your Google Health</Text>
         <Text style={styles.body}>
-          Your Fitbit is disconnected, so your data has stopped updating.
+          Your Google Health is disconnected, so your data has stopped updating.
         </Text>
         <Pressable
-          testID="reconnect-fitbit-button"
+          testID="reconnect-health-button"
           style={styles.button}
-          onPress={() => navigation.navigate('ConnectFitbit')}
+          onPress={() => navigation.navigate('ConnectHealth')}
         >
-          <Text style={styles.buttonText}>Reconnect Fitbit</Text>
+          <Text style={styles.buttonText}>Reconnect Google Health</Text>
         </Pressable>
         {signOutButton}
       </View>
@@ -80,7 +80,7 @@ export function DashboardScreen() {
   if (records.length === 0) {
     return (
       <View style={styles.container}>
-        <Text>No data yet — check back after your Fitbit syncs.</Text>
+        <Text>No data yet — check back after your Google Health syncs.</Text>
         {signOutButton}
       </View>
     );

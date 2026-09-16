@@ -1,10 +1,10 @@
 import { prisma } from '../db/client';
-import { BiometricMetricType, FitbitMetricPoint } from '../types';
+import { BiometricMetricType, HealthMetricPoint } from '../types';
 
 export async function upsertBiometricRecords(
   userId: string,
   metricType: BiometricMetricType,
-  points: FitbitMetricPoint[],
+  points: HealthMetricPoint[],
 ): Promise<void> {
   for (const point of points) {
     await prisma.biometricRecord.upsert({

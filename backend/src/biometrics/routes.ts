@@ -16,7 +16,7 @@ biometricsRouter.get('/me/biometrics', requireAuth, async (req: AuthedRequest, r
  * connect screen.
  */
 biometricsRouter.get('/me/connection', requireAuth, async (req: AuthedRequest, res) => {
-  const conn = await prisma.fitbitConnection.findUnique({
+  const conn = await prisma.healthConnection.findUnique({
     where: { userId: req.userId! },
     select: { status: true, lastSyncedAt: true },
   });

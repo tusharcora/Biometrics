@@ -4,16 +4,16 @@ import * as WebBrowser from 'expo-web-browser';
 import { useNavigation } from '@react-navigation/native';
 import { apiFetch } from '../api/client';
 
-const REDIRECT_URI = 'biometrics://fitbit/callback';
+const REDIRECT_URI = 'biometrics://health/callback';
 
-export function ConnectFitbitScreen() {
+export function ConnectHealthScreen() {
   const navigation = useNavigation<any>();
 
   async function handleConnect() {
-    // /fitbit/authorize is authenticated and returns the Fitbit URL as JSON
+    // /health/authorize is authenticated and returns the Google Health URL as JSON
     // (apiFetch attaches the token). We cannot point the system browser at it
     // directly, because a browser navigation carries no Authorization header.
-    const { url } = await apiFetch<{ url: string }>('/fitbit/authorize');
+    const { url } = await apiFetch<{ url: string }>('/health/authorize');
     const result = await WebBrowser.openAuthSessionAsync(url, REDIRECT_URI);
     if (result.type === 'success' && result.url.includes('status=connected')) {
       navigation.navigate('Dashboard');
@@ -22,9 +22,9 @@ export function ConnectFitbitScreen() {
 
   return (
     <View style={styles.container}>
-      <Text style={styles.title}>Connect your Fitbit</Text>
-      <Pressable testID="connect-fitbit-button" style={styles.button} onPress={handleConnect}>
-        <Text style={styles.buttonText}>Connect Fitbit</Text>
+      <Text style={styles.title}>Connect your Google Health</Text>
+      <Pressable testID="connect-health-button" style={styles.button} onPress={handleConnect}>
+        <Text style={styles.buttonText}>Connect Google Health</Text>
       </Pressable>
     </View>
   );

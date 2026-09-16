@@ -32,10 +32,10 @@ jest.mock('../../src/screens/SignInScreen', () => {
   const ReactLib = require('react');
   return { SignInScreen: () => ReactLib.createElement(Text, null, 'SIGN_IN_SCREEN') };
 });
-jest.mock('../../src/screens/ConnectFitbitScreen', () => {
+jest.mock('../../src/screens/ConnectHealthScreen', () => {
   const { Text } = require('react-native');
   const ReactLib = require('react');
-  return { ConnectFitbitScreen: () => ReactLib.createElement(Text, null, 'CONNECT_SCREEN') };
+  return { ConnectHealthScreen: () => ReactLib.createElement(Text, null, 'CONNECT_SCREEN') };
 });
 jest.mock('../../src/screens/DashboardScreen', () => {
   const { Text } = require('react-native');
@@ -65,8 +65,8 @@ describe('RootNavigator', () => {
     expect(getByText('SIGN_IN_SCREEN')).toBeTruthy();
   });
 
-  // The old navigator hardcoded ConnectFitbit, so an already-connected user had
-  // no route back to their dashboard.
+  // The old navigator hardcoded the connect screen, so an already-connected
+  // user had no route back to their dashboard.
   it('lands a connected user on the Dashboard', async () => {
     signedIn(true);
     (apiFetch as jest.Mock).mockResolvedValue({ status: 'CONNECTED', lastSyncedAt: null });

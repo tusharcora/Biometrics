@@ -78,20 +78,20 @@ describe('DashboardScreen', () => {
 
     const { getByText, queryByText } = render(<DashboardScreen />);
 
-    await waitFor(() => expect(getByText(/Reconnect your Fitbit/i)).toBeTruthy());
+    await waitFor(() => expect(getByText(/Reconnect your Google Health/i)).toBeTruthy());
     // The stale numbers must not be presented as if they were current.
     expect(queryByText(/9000/)).toBeNull();
   });
 
-  it('navigates to ConnectFitbit from the reconnect prompt', async () => {
+  it('navigates to ConnectHealth from the reconnect prompt', async () => {
     mockApi({ connection: { status: 'DISCONNECTED' }, records: [] });
 
     const { getByTestId } = render(<DashboardScreen />);
 
-    await waitFor(() => expect(getByTestId('reconnect-fitbit-button')).toBeTruthy());
-    fireEvent.press(getByTestId('reconnect-fitbit-button'));
+    await waitFor(() => expect(getByTestId('reconnect-health-button')).toBeTruthy());
+    fireEvent.press(getByTestId('reconnect-health-button'));
 
-    expect(mockNavigate).toHaveBeenCalledWith('ConnectFitbit');
+    expect(mockNavigate).toHaveBeenCalledWith('ConnectHealth');
   });
 
   it('does not prompt a reconnect while the connection is healthy', async () => {
@@ -103,7 +103,7 @@ describe('DashboardScreen', () => {
     const { getByText, queryByText } = render(<DashboardScreen />);
 
     await waitFor(() => expect(getByText(/9000/)).toBeTruthy());
-    expect(queryByText(/Reconnect your Fitbit/i)).toBeNull();
+    expect(queryByText(/Reconnect your Google Health/i)).toBeNull();
   });
 
   it('offers a sign-out affordance that calls signOut', async () => {

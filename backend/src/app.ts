@@ -1,6 +1,6 @@
 import express, { Express } from 'express';
 import { authRouter } from './auth/routes';
-import { fitbitRouter } from './fitbit/routes';
+import { healthRouter } from './health/routes';
 import { biometricsRouter } from './biometrics/routes';
 
 export function createApp(): Express {
@@ -12,9 +12,9 @@ export function createApp(): Express {
       },
     }),
   );
-  app.get('/health', (_req, res) => res.json({ status: 'ok' }));
+  app.get('/health-check', (_req, res) => res.json({ status: 'ok' })); // renamed from /health to avoid clashing with the new /health/* route prefix
   app.use(authRouter);
-  app.use(fitbitRouter);
+  app.use(healthRouter);
   app.use(biometricsRouter);
   return app;
 }
