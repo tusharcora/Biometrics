@@ -95,6 +95,26 @@ healthRouter.get('/health/callback', async (req, res) => {
       }
     }
 
+    // healthUserId is @unique on HealthConnection, and Google's own
+    // subscription conflict is keyed on the real Google account
+    // (healthUserId), not on our local userId. So a stale subscription can
+    // block this request even when `existing` above is null -- e.g. a
+    // *different* local user row (orphaned test data, or an account that
+    // reconnects under a new local identity) still references the same real
+    // healthUserId. Clean that row up too, before it can cause either a 409
+    // at Google or a P2002 on the upsert's healthUserId unique constraint.
+    const staleForAccount = await prisma.healthConnection.findUnique({ where: { healthUserId: identity.healthUserId } });
+    if (staleForAccount && staleForAccount.userId !== userId) {
+      if (staleForAccount.webhookSubscriptionId && staleForAccount.webhookSubscriptionId !== existing?.webhookSubscriptionId) {
+        try {
+          await deleteUserSubscription(staleForAccount.webhookSubscriptionId);
+        } catch (deleteErr) {
+          console.error(`Failed to delete cross-user stale Google Health subscription ${staleForAccount.webhookSubscriptionId} before reconnecting`, deleteErr);
+        }
+      }
+      await prisma.healthConnection.delete({ where: { userId: staleForAccount.userId } });
+    }
+
     let subscriptionId: string | undefined;
     let connectionPersisted = false;
     try {

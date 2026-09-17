@@ -301,10 +301,13 @@ describe('GET /health/callback', () => {
     });
   });
 
-  it('rolls back the just-created Google subscription when the connection write fails after it', async () => {
+  it('cleans up a different user\'s stale row for the same healthUserId before connecting', async () => {
     (subscriber.deleteUserSubscription as jest.Mock).mockReset().mockResolvedValue(undefined);
-    // A real P2002: user A already owns this healthUserId (it is @unique), so
-    // user B's upsert rejects AFTER the subscription was created at Google.
+    // healthUserId is @unique on HealthConnection, and Google's own subscription
+    // conflict is keyed on the real Google account, not our local userId. User A's
+    // row here is exactly the shape of stale/orphaned data (e.g. from a prior
+    // reconnect under a different local identity) that used to 409 or P2002 user
+    // B's own, legitimate connection attempt for the same real account.
     const sharedHealthUserId = `health-user-shared-${randomUUID()}`;
     const userA = await prisma.user.create({
       data: { email: `h-${randomUUID()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
@@ -328,19 +331,18 @@ describe('GET /health/callback', () => {
       accessToken: 'health-access-b', refreshToken: 'health-refresh-b', expiresIn: 3599,
     });
     (subscriber.getIdentity as jest.Mock).mockResolvedValue({ healthUserId: sharedHealthUserId });
-    (subscriber.registerUserSubscription as jest.Mock).mockResolvedValue('sub-orphan');
-    const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
+    (subscriber.registerUserSubscription as jest.Mock).mockResolvedValue('sub-b');
 
     const res = await request(createApp()).get('/health/callback').query({ code: 'code', state });
-    consoleError.mockRestore();
 
-    expect(res.status).toBe(500);
-    expect(subscriber.deleteUserSubscription).toHaveBeenCalledTimes(1);
-    expect(subscriber.deleteUserSubscription).toHaveBeenCalledWith('sub-orphan');
-    expect(await prisma.healthConnection.findUnique({ where: { userId: userB.id } })).toBeNull();
-    // User A's own subscription is untouched.
-    const connA = await prisma.healthConnection.findUnique({ where: { userId: userA.id } });
-    expect(connA?.webhookSubscriptionId).toBe('sub-a');
+    expect(res.status).toBe(302);
+    expect(subscriber.deleteUserSubscription).toHaveBeenCalledWith('sub-a');
+    // User A's stale row is gone -- it was orphaned data blocking the real account.
+    expect(await prisma.healthConnection.findUnique({ where: { userId: userA.id } })).toBeNull();
+    const connB = await prisma.healthConnection.findUnique({ where: { userId: userB.id } });
+    expect(connB?.status).toBe('CONNECTED');
+    expect(connB?.webhookSubscriptionId).toBe('sub-b');
+    expect(connB?.healthUserId).toBe(sharedHealthUserId);
   });
 });
 
