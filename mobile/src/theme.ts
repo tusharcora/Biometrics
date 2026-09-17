@@ -32,3 +32,22 @@ export const METRIC_CONFIG: Record<MetricType, MetricConfig> = {
 };
 
 export const METRIC_ORDER: MetricType[] = ['STEPS', 'RESTING_HR', 'SLEEP', 'HRV'];
+
+// Mirrors the CSS custom properties in global.css. React Navigation's native
+// header isn't part of the NativeWind-styled tree, so it needs real color
+// values rather than className tokens -- these must be kept numerically in
+// sync with global.css by hand.
+export const COLORS = {
+  light: {
+    background: 'rgb(250, 250, 249)',
+    foreground: 'rgb(28, 25, 23)',
+    border: 'rgb(231, 229, 228)',
+    accent: 'rgb(0, 176, 185)',
+  },
+  dark: {
+    background: 'rgb(12, 12, 13)',
+    foreground: 'rgb(245, 245, 244)',
+    border: 'rgb(39, 39, 42)',
+    accent: 'rgb(45, 197, 200)',
+  },
+};
