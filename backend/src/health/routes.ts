@@ -77,6 +77,44 @@ healthRouter.get('/health/callback', async (req, res) => {
 
     const existing = await prisma.healthConnection.findUnique({ where: { userId } });
 
+    // Google allows at most one live subscription per (subscriber, user):
+    // registerUserSubscription 409s outright if one already exists, whether
+    // our local row for it is still CONNECTED or was marked DISCONNECTED
+    // without Google's side ever being successfully cleaned up (a swallowed
+    // delete failure, or a row disconnected by a path that doesn't call
+    // disconnect() at all). So any stale subscription this user's row already
+    // references has to be cleared BEFORE attempting to create a new one, not
+    // after -- cleaning up only on success never runs when success is exactly
+    // what a leftover subscription blocks. Best effort: a failure here (e.g.
+    // it was already deleted) must never block the reconnect attempt.
+    if (existing?.webhookSubscriptionId) {
+      try {
+        await deleteUserSubscription(existing.webhookSubscriptionId);
+      } catch (deleteErr) {
+        console.error(`Failed to delete existing Google Health subscription ${existing.webhookSubscriptionId} before reconnecting`, deleteErr);
+      }
+    }
+
+    // healthUserId is @unique on HealthConnection, and Google's own
+    // subscription conflict is keyed on the real Google account
+    // (healthUserId), not on our local userId. So a stale subscription can
+    // block this request even when `existing` above is null -- e.g. a
+    // *different* local user row (orphaned test data, or an account that
+    // reconnects under a new local identity) still references the same real
+    // healthUserId. Clean that row up too, before it can cause either a 409
+    // at Google or a P2002 on the upsert's healthUserId unique constraint.
+    const staleForAccount = await prisma.healthConnection.findUnique({ where: { healthUserId: identity.healthUserId } });
+    if (staleForAccount && staleForAccount.userId !== userId) {
+      if (staleForAccount.webhookSubscriptionId && staleForAccount.webhookSubscriptionId !== existing?.webhookSubscriptionId) {
+        try {
+          await deleteUserSubscription(staleForAccount.webhookSubscriptionId);
+        } catch (deleteErr) {
+          console.error(`Failed to delete cross-user stale Google Health subscription ${staleForAccount.webhookSubscriptionId} before reconnecting`, deleteErr);
+        }
+      }
+      await prisma.healthConnection.delete({ where: { userId: staleForAccount.userId } });
+    }
+
     let subscriptionId: string | undefined;
     let connectionPersisted = false;
     try {
@@ -106,21 +144,6 @@ healthRouter.get('/health/callback', async (req, res) => {
         },
       });
       connectionPersisted = true;
-
-      // Re-running the connect flow while already connected (re-consent, a
-      // second tap on Connect, a scope change) creates a brand-new Google
-      // subscription. The upsert above has just overwritten the old ID, so
-      // delete the old subscription at Google or it keeps delivering
-      // notifications forever with nothing referencing it. Best effort: a
-      // failure here must never fail an otherwise-successful connect.
-      const previousSubscriptionId = existing?.webhookSubscriptionId;
-      if (previousSubscriptionId && previousSubscriptionId !== subscriptionId) {
-        try {
-          await deleteUserSubscription(previousSubscriptionId);
-        } catch (deleteErr) {
-          console.error(`Failed to delete superseded Google Health subscription ${previousSubscriptionId}`, deleteErr);
-        }
-      }
 
       const endDate = new Date();
       const startDate = existing?.lastSyncedAt
