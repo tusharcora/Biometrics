@@ -25,7 +25,26 @@ function utcMidnightOf(instant: Date): Date {
   return new Date(Date.UTC(instant.getUTCFullYear(), instant.getUTCMonth(), instant.getUTCDate()));
 }
 
-async function dailyRollUp(
+// Confirmed live on heart-rate: "The duration covered by window_size_days *
+// page_size must not exceed 14 days for heart-rate" (INVALID_ROLLUP_QUERY_DURATION).
+// Applied uniformly to every dailyRollUp-backed metric rather than only
+// heart-rate, since steps' own undiscovered cap (if any) is unconfirmed and
+// chunking is harmless when a metric's real limit is higher.
+const MAX_DAILY_ROLLUP_WINDOW_DAYS = 14;
+
+function addDays(isoDate: string, days: number): string {
+  const d = new Date(`${isoDate}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+function daysBetween(startDate: string, endDate: string): number {
+  const start = new Date(`${startDate}T00:00:00Z`).getTime();
+  const end = new Date(`${endDate}T00:00:00Z`).getTime();
+  return Math.round((end - start) / (24 * 60 * 60 * 1000));
+}
+
+async function dailyRollUpChunk(
   accessToken: string,
   parentDataType: string,
   startDate: string,
@@ -48,10 +67,33 @@ async function dailyRollUp(
   return json.rollupDataPoints ?? [];
 }
 
+async function dailyRollUp(
+  accessToken: string,
+  parentDataType: string,
+  startDate: string,
+  endDate: string,
+): Promise<any[]> {
+  // Validate eagerly, before the chunking loop's date arithmetic (which
+  // tolerates malformed strings as NaN and would otherwise silently return
+  // an empty result instead of throwing).
+  parseDate(startDate);
+  parseDate(endDate);
+  const results: any[] = [];
+  let chunkStart = startDate;
+  while (daysBetween(chunkStart, endDate) > 0) {
+    const remaining = daysBetween(chunkStart, endDate);
+    const chunkEnd = remaining > MAX_DAILY_ROLLUP_WINDOW_DAYS ? addDays(chunkStart, MAX_DAILY_ROLLUP_WINDOW_DAYS) : endDate;
+    const rows = await dailyRollUpChunk(accessToken, parentDataType, chunkStart, chunkEnd);
+    results.push(...rows);
+    chunkStart = chunkEnd;
+  }
+  return results;
+}
+
 async function listDataPoints(
   accessToken: string,
   dataType: string,
-  filterField: 'interval.start_time' | 'sample_time.physical_time',
+  filterField: 'interval.end_time',
   startDate: string,
   endDate: string,
 ): Promise<any[]> {
@@ -70,6 +112,33 @@ async function listDataPoints(
 function civilDateToDate(civil: { date: { year: number; month: number; day: number } }): Date {
   const { year, month, day } = civil.date;
   return new Date(Date.UTC(year, month - 1, day));
+}
+
+// HRV is a daily pre-aggregated data type in the live API, not sample-based:
+// confirmed live that `dailyRollUp` explicitly rejects it ("DailyRollup is
+// not supported for data type heart-rate-variability, only list/reconcile
+// supported"), and that its data lives under a *separate* collection,
+// `daily-heart-rate-variability` (hyphenated in the URL), filtered by a
+// `daily_heart_rate_variability.date` (underscored) civil-date literal --
+// not `heart-rate-variability` with a sample-time filter. Both the URL
+// segment and the filter's data-type token were confirmed against real
+// responses from a live Fitbit-linked account, including the response
+// field name `dailyHeartRateVariability.averageHeartRateVariabilityMilliseconds`.
+async function listDailyHeartRateVariability(
+  accessToken: string,
+  startDate: string,
+  endDate: string,
+): Promise<any[]> {
+  const filter = `daily_heart_rate_variability.date >= "${startDate}" AND daily_heart_rate_variability.date < "${endDate}"`;
+  const url = `${BASE_URL}/users/me/dataTypes/daily-heart-rate-variability/dataPoints?${new URLSearchParams({ filter }).toString()}`;
+  const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
+  if (!res.ok) {
+    const err = new Error(`Google Health dataPoints.list returned ${res.status} for daily-heart-rate-variability`);
+    (err as any).status = res.status;
+    throw err;
+  }
+  const json = (await res.json()) as { dataPoints?: any[] };
+  return json.dataPoints ?? [];
 }
 
 export async function fetchMetricRange(
@@ -92,42 +161,36 @@ export async function fetchMetricRange(
         .map((r) => ({ recordedAt: civilDateToDate(r.civilStartTime), value: r.heartRate.beatsPerMinuteMin }));
     }
     case 'SLEEP': {
-      const rows = await listDataPoints(accessToken, 'sleep', 'interval.start_time', startDate, endDate);
+      // Confirmed live: `sleep.interval.start_time` is explicitly rejected
+      // ("Member 'sleep.interval.start_time' is not supported for
+      // filtering") -- sleep is one of the types the API documents as
+      // excluded from the generic interval-start-time filter pattern, and
+      // must use `sleep.interval.end_time` instead. `summary.minutesAsleep`
+      // is also confirmed live to be a numeric string ("468"), the same
+      // string-encoded-int64 pattern already handled for steps' countSum.
+      const rows = await listDataPoints(accessToken, 'sleep', 'interval.end_time', startDate, endDate);
       // Key each session on the UTC calendar date of its start instant, the
       // same convention STEPS/RESTING_HR use (civil date at UTC midnight),
       // rather than the raw start instant. Keeping the raw instant made a
       // 22:00 session land on a timestamp no other metric would ever use.
-      // TODO(device-verification): re-verify against a live sleep dataPoint
-      // that a session's civil date is the intended "night of" date for the
-      // user; this could not be checked against live data in this pass.
       return rows
         .filter((r) => r.sleep?.summary?.minutesAsleep !== undefined)
         .map((r) => ({
           recordedAt: utcMidnightOf(new Date(r.sleep.interval.startTime)),
-          value: r.sleep.summary.minutesAsleep,
+          value: Number(r.sleep.summary.minutesAsleep),
         }));
     }
     case 'HRV': {
-      const rows = await listDataPoints(accessToken, 'heartRateVariability', 'sample_time.physical_time', startDate, endDate);
-      const samples = rows
-        .filter((r) => r.heartRateVariability?.rootMeanSquareOfSuccessiveDifferencesMilliseconds !== undefined)
+      const rows = await listDailyHeartRateVariability(accessToken, startDate, endDate);
+      // Already one data point per day (a daily pre-aggregated type, not
+      // sample-based -- see listDailyHeartRateVariability's comment), so no
+      // day-grouping is needed: each row maps directly to one HealthMetricPoint.
+      return rows
+        .filter((r) => r.dailyHeartRateVariability?.averageHeartRateVariabilityMilliseconds !== undefined)
         .map((r) => ({
-          sampledAt: new Date(r.heartRateVariability.sampleTime.physicalTime),
-          value: r.heartRateVariability.rootMeanSquareOfSuccessiveDifferencesMilliseconds as number,
-        }))
-        .sort((a, b) => a.sampledAt.getTime() - b.sampledAt.getTime());
-      // HRV is sample-based, possibly multiple readings per day. Group by UTC
-      // calendar day and take the last sample of each day as that day's
-      // representative value, so an N-day range yields up to N points (one per
-      // day that had a sample) instead of collapsing to a single point.
-      // Samples are sorted ascending, so a later sample for the same day
-      // simply overwrites the earlier entry.
-      const lastPerDay = new Map<number, HealthMetricPoint>();
-      for (const sample of samples) {
-        const day = utcMidnightOf(sample.sampledAt);
-        lastPerDay.set(day.getTime(), { recordedAt: day, value: sample.value });
-      }
-      return [...lastPerDay.values()];
+          recordedAt: civilDateToDate(r.dailyHeartRateVariability),
+          value: r.dailyHeartRateVariability.averageHeartRateVariabilityMilliseconds as number,
+        }));
     }
   }
 }

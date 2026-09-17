@@ -269,8 +269,9 @@ healthRouter.post('/webhooks/health', async (req, res) => {
   // The body is a JSON array of notifications (confirmed live). Anything else
   // is treated as an empty batch rather than an error: Google's subscriber
   // verification handshake POSTs to this endpoint with the shared secret and
-  // expects a 2xx, and a non-array (or absent) body must not turn that into
-  // a failure. Nothing is enqueued for it either way.
+  // requires exactly 201 (not just any 2xx -- confirmed live, see the spec's
+  // Webhook Mechanism section), and a non-array (or absent) body must not
+  // turn that into a failure. Nothing is enqueued for it either way.
   const notifications: unknown[] = Array.isArray(req.body) ? req.body : [];
 
   try {
@@ -308,7 +309,11 @@ healthRouter.post('/webhooks/health', async (req, res) => {
         console.error('Skipping malformed Google Health webhook notification', itemErr);
       }
     }
-    res.status(204).send();
+    // Google's subscriber-verification handshake requires exactly 201 for an
+    // authenticated request (confirmed live). Ordinary notification delivery
+    // only needs a 2xx, so returning 201 here for both is correct and simpler
+    // than distinguishing the two cases.
+    res.status(201).send();
   } catch (err) {
     console.error('Google Health webhook notification processing failed', err);
     res.status(500).send();

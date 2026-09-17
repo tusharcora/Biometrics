@@ -71,13 +71,19 @@ describe('connect Google Health and sync end to end (mocked Google API)', () => 
     const connectRes = await request(createApp()).get('/health/callback').query({ code: 'auth-code', state });
     expect(connectRes.status).toBe(302);
 
+    // The default 30-day backfill window is chunked into <=14-day dailyRollUp
+    // calls (confirmed live: heart-rate rejects a single request spanning
+    // more than 14 days), so a fresh connect's backfill makes 3 calls per
+    // dailyRollUp-backed metric (30 / 14 -> 3 windows), not 1.
     nock('https://health.googleapis.com')
       .post('/v4/users/me/dataTypes/steps/dataPoints:dailyRollUp')
+      .times(3)
       .reply(200, {
         rollupDataPoints: [{ civilStartTime: { date: { year: 2026, month: 9, day: 1 } }, steps: { countSum: '7000' } }],
       });
     nock('https://health.googleapis.com')
       .post('/v4/users/me/dataTypes/heart-rate/dataPoints:dailyRollUp')
+      .times(3)
       .reply(200, {
         rollupDataPoints: [{ civilStartTime: { date: { year: 2026, month: 9, day: 1 } }, heartRate: { beatsPerMinuteMin: 55 } }],
       });
@@ -85,13 +91,13 @@ describe('connect Google Health and sync end to end (mocked Google API)', () => 
       .get('/v4/users/me/dataTypes/sleep/dataPoints')
       .query(true)
       .reply(200, {
-        dataPoints: [{ sleep: { interval: { startTime: '2026-09-01T22:00:00Z' }, summary: { minutesAsleep: 400 } } }],
+        dataPoints: [{ sleep: { interval: { startTime: '2026-09-01T22:00:00Z' }, summary: { minutesAsleep: '400' } } }],
       });
     nock('https://health.googleapis.com')
-      .get('/v4/users/me/dataTypes/heartRateVariability/dataPoints')
+      .get('/v4/users/me/dataTypes/daily-heart-rate-variability/dataPoints')
       .query(true)
       .reply(200, {
-        dataPoints: [{ heartRateVariability: { sampleTime: { physicalTime: '2026-09-01T23:00:00Z' }, rootMeanSquareOfSuccessiveDifferencesMilliseconds: 40 } }],
+        dataPoints: [{ dailyHeartRateVariability: { date: { year: 2026, month: 9, day: 1 }, averageHeartRateVariabilityMilliseconds: 40 } }],
       });
 
     await processSyncJob({ name: 'backfill', data: enqueuedBackfill } as any);

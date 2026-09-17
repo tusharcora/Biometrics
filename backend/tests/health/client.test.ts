@@ -63,13 +63,15 @@ describe('fetchMetricRange', () => {
   it('fetches SLEEP via dataPoints.list on "sleep" using minutesAsleep from the summary', async () => {
     nock('https://health.googleapis.com')
       .get('/v4/users/me/dataTypes/sleep/dataPoints')
-      .query((q) => typeof q.filter === 'string' && q.filter.includes('sleep.interval.start_time'))
+      .query((q) => typeof q.filter === 'string' && q.filter.includes('sleep.interval.end_time'))
       .reply(200, {
         dataPoints: [
           {
             sleep: {
               interval: { startTime: '2026-09-01T22:00:00Z' },
-              summary: { minutesAsleep: 415 },
+              // Confirmed live: minutesAsleep is a numeric string, the same
+              // string-encoded-int64 pattern as steps' countSum.
+              summary: { minutesAsleep: '415' },
             },
           },
         ],
@@ -87,8 +89,8 @@ describe('fetchMetricRange', () => {
       .query(true)
       .reply(200, {
         dataPoints: [
-          { sleep: { interval: { startTime: '2026-09-01T22:15:00Z' }, summary: { minutesAsleep: 415 } } },
-          { sleep: { interval: { startTime: '2026-09-02T23:40:00Z' }, summary: { minutesAsleep: 390 } } },
+          { sleep: { interval: { startTime: '2026-09-01T22:15:00Z' }, summary: { minutesAsleep: '415' } } },
+          { sleep: { interval: { startTime: '2026-09-02T23:40:00Z' }, summary: { minutesAsleep: '390' } } },
         ],
       });
 
@@ -99,38 +101,56 @@ describe('fetchMetricRange', () => {
     ]);
   });
 
-  it('fetches HRV via dataPoints.list on "heartRateVariability", returning the last sample of EACH day', async () => {
+  it('fetches HRV via dataPoints.list on the separate "daily-heart-rate-variability" collection, one point per day', async () => {
+    // Confirmed live against a real Fitbit-linked account: HRV is a daily
+    // pre-aggregated type, not sample-based. dailyRollUp explicitly rejects
+    // it ("DailyRollup is not supported for data type
+    // heart-rate-variability, only list/reconcile supported"), and its data
+    // lives under a *separate* URL collection (hyphenated:
+    // daily-heart-rate-variability) from the raw heart-rate-variability
+    // collection, filtered by an underscored `daily_heart_rate_variability.date`
+    // civil-date literal (no time component, unlike the other filter types).
     nock('https://health.googleapis.com')
-      .get('/v4/users/me/dataTypes/heartRateVariability/dataPoints')
-      .query((q) => typeof q.filter === 'string' && q.filter.includes('heartRateVariability.sample_time.physical_time'))
+      .get('/v4/users/me/dataTypes/daily-heart-rate-variability/dataPoints')
+      .query((q) => typeof q.filter === 'string' && q.filter.includes('daily_heart_rate_variability.date'))
       .reply(200, {
-        // Deliberately out of chronological order, spanning three days with
-        // multiple samples on two of them, to prove grouping is per-day and
-        // "last" is chronological rather than positional.
         dataPoints: [
-          { heartRateVariability: { sampleTime: { physicalTime: '2026-09-02T23:30:00Z' }, rootMeanSquareOfSuccessiveDifferencesMilliseconds: 45.1 } },
-          { heartRateVariability: { sampleTime: { physicalTime: '2026-09-01T06:00:00Z' }, rootMeanSquareOfSuccessiveDifferencesMilliseconds: 38.2 } },
-          { heartRateVariability: { sampleTime: { physicalTime: '2026-09-03T04:10:00Z' }, rootMeanSquareOfSuccessiveDifferencesMilliseconds: 50.0 } },
-          { heartRateVariability: { sampleTime: { physicalTime: '2026-09-01T23:00:00Z' }, rootMeanSquareOfSuccessiveDifferencesMilliseconds: 41.7 } },
-          { heartRateVariability: { sampleTime: { physicalTime: '2026-09-02T07:45:00Z' }, rootMeanSquareOfSuccessiveDifferencesMilliseconds: 43.9 } },
+          {
+            dataSource: { recordingMethod: 'DERIVED', device: { displayName: 'Google Fitbit Air' }, platform: 'FITBIT' },
+            dailyHeartRateVariability: {
+              date: { year: 2026, month: 9, day: 14 },
+              averageHeartRateVariabilityMilliseconds: 69.6,
+              nonRemHeartRateBeatsPerMinute: '44',
+              entropy: 3.758,
+              deepSleepRootMeanSquareOfSuccessiveDifferencesMilliseconds: 81.1,
+            },
+          },
+          {
+            dataSource: { recordingMethod: 'DERIVED', device: { displayName: 'Google Fitbit Air' }, platform: 'FITBIT' },
+            dailyHeartRateVariability: {
+              date: { year: 2026, month: 9, day: 13 },
+              averageHeartRateVariabilityMilliseconds: 91.8,
+              nonRemHeartRateBeatsPerMinute: '41',
+              entropy: 3.827,
+              deepSleepRootMeanSquareOfSuccessiveDifferencesMilliseconds: 118.1,
+            },
+          },
         ],
       });
 
-    const points = await fetchMetricRange('token-1', 'HRV', '2026-09-01', '2026-09-04');
+    const points = await fetchMetricRange('token-1', 'HRV', '2026-09-13', '2026-09-15');
 
-    // One point per day that had a sample (3 days -> 3 points, NOT 1), each the
-    // chronologically last sample of that day, keyed on UTC midnight.
-    expect(points).toHaveLength(3);
+    // Already one row per day from Google -- no day-grouping needed. Order
+    // follows the response (Google returns most-recent-first).
     expect(points).toEqual([
-      { recordedAt: new Date('2026-09-01T00:00:00Z'), value: 41.7 },
-      { recordedAt: new Date('2026-09-02T00:00:00Z'), value: 45.1 },
-      { recordedAt: new Date('2026-09-03T00:00:00Z'), value: 50.0 },
+      { recordedAt: new Date('2026-09-14T00:00:00Z'), value: 69.6 },
+      { recordedAt: new Date('2026-09-13T00:00:00Z'), value: 91.8 },
     ]);
   });
 
-  it('returns no HRV points when the range has no samples', async () => {
+  it('returns no HRV points when the range has no data', async () => {
     nock('https://health.googleapis.com')
-      .get('/v4/users/me/dataTypes/heartRateVariability/dataPoints')
+      .get('/v4/users/me/dataTypes/daily-heart-rate-variability/dataPoints')
       .query(true)
       .reply(200, { dataPoints: [] });
 
@@ -154,7 +174,7 @@ describe('fetchMetricRange', () => {
     await fetchMetricRange('token-1', 'SLEEP', '2026-09-01', '2026-09-01');
 
     expect(capturedFilter).toBe(
-      'sleep.interval.start_time >= "2026-09-01T00:00:00Z" AND sleep.interval.start_time < "2026-09-01T00:00:00Z"',
+      'sleep.interval.end_time >= "2026-09-01T00:00:00Z" AND sleep.interval.end_time < "2026-09-01T00:00:00Z"',
     );
   });
 
@@ -182,5 +202,42 @@ describe('fetchMetricRange', () => {
       .reply(500, {});
 
     await expect(fetchMetricRange('token-1', 'SLEEP', '2026-09-01', '2026-09-02')).rejects.toThrow();
+  });
+
+  it('chunks a dailyRollUp request over 14 days into multiple <=14-day calls', async () => {
+    // Confirmed live: heart-rate's dailyRollUp rejects any single request
+    // spanning more than 14 days (INVALID_ROLLUP_QUERY_DURATION). A 20-day
+    // range must become two calls: [09-01, 09-15) and [09-15, 09-21).
+    const capturedRanges: unknown[] = [];
+    nock('https://health.googleapis.com')
+      .post('/v4/users/me/dataTypes/heart-rate/dataPoints:dailyRollUp', (body) => {
+        capturedRanges.push(body.range);
+        return true;
+      })
+      .reply(200, {
+        rollupDataPoints: [
+          { civilStartTime: { date: { year: 2026, month: 9, day: 1 } }, heartRate: { beatsPerMinuteMin: 50 } },
+        ],
+      })
+      .post('/v4/users/me/dataTypes/heart-rate/dataPoints:dailyRollUp', (body) => {
+        capturedRanges.push(body.range);
+        return true;
+      })
+      .reply(200, {
+        rollupDataPoints: [
+          { civilStartTime: { date: { year: 2026, month: 9, day: 15 } }, heartRate: { beatsPerMinuteMin: 55 } },
+        ],
+      });
+
+    const points = await fetchMetricRange('token-1', 'RESTING_HR', '2026-09-01', '2026-09-21');
+
+    expect(capturedRanges).toEqual([
+      { start: { date: { year: 2026, month: 9, day: 1 } }, end: { date: { year: 2026, month: 9, day: 15 } } },
+      { start: { date: { year: 2026, month: 9, day: 15 } }, end: { date: { year: 2026, month: 9, day: 21 } } },
+    ]);
+    expect(points).toEqual([
+      { recordedAt: new Date('2026-09-01T00:00:00Z'), value: 50 },
+      { recordedAt: new Date('2026-09-15T00:00:00Z'), value: 55 },
+    ]);
   });
 });
