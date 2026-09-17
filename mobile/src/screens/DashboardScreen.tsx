@@ -1,17 +1,34 @@
-import React, { useEffect, useState } from 'react';
-import { View, Text, FlatList, Pressable, StyleSheet } from 'react-native';
+import React, { useEffect, useMemo, useState } from 'react';
+import { View, FlatList, StyleSheet } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { apiFetch } from '../api/client';
 import { useAuth } from '../auth/AuthContext';
+import { Text } from '../components/ui/text';
+import { Card, CardHeader, CardContent } from '../components/ui/card';
+import { Button } from '../components/ui/button';
+import { Skeleton } from '../components/ui/skeleton';
+import { METRIC_CONFIG, METRIC_ORDER, type MetricType } from '../theme';
 
 interface BiometricRecord {
   id: string;
-  metricType: string;
+  metricType: MetricType;
   value: number;
   recordedAt: string;
 }
 
 type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';
+
+function latestByMetric(records: BiometricRecord[]): Partial<Record<MetricType, BiometricRecord>> {
+  const latest: Partial<Record<MetricType, BiometricRecord>> = {};
+  for (const record of records) {
+    const current = latest[record.metricType];
+    if (!current || new Date(record.recordedAt) > new Date(current.recordedAt)) {
+      latest[record.metricType] = record;
+    }
+  }
+  return latest;
+}
 
 export function DashboardScreen() {
   const navigation = useNavigation<any>();
@@ -34,89 +51,118 @@ export function DashboardScreen() {
       .catch(() => setConnectionStatus(null));
   }, []);
 
+  const latest = useMemo(() => latestByMetric(records ?? []), [records]);
+
   // Rendered on every branch so signing out is always reachable.
   const signOutButton = (
-    <Pressable testID="sign-out-button" style={styles.signOut} onPress={() => signOut()}>
-      <Text style={styles.signOutText}>Sign Out</Text>
-    </Pressable>
+    <Button testID="sign-out-button" variant="ghost" size="sm" onPress={() => signOut()}>
+      Sign Out
+    </Button>
   );
 
   if (connectionStatus === 'DISCONNECTED') {
     return (
-      <View style={styles.container}>
-        <Text style={styles.title}>Reconnect your Google Health</Text>
-        <Text style={styles.body}>
-          Your Google Health is disconnected, so your data has stopped updating.
-        </Text>
-        <Pressable
-          testID="reconnect-health-button"
-          style={styles.button}
-          onPress={() => navigation.navigate('ConnectHealth')}
-        >
-          <Text style={styles.buttonText}>Reconnect Google Health</Text>
-        </Pressable>
-        {signOutButton}
-      </View>
+      <SafeAreaView className="flex-1 bg-background">
+        <View className="flex-1 items-center justify-center gap-3 p-6">
+          <Text className="text-xl font-semibold">Reconnect your Google Health</Text>
+          <Text className="text-center text-muted-foreground">
+            Your Google Health is disconnected, so your data has stopped updating.
+          </Text>
+          <Button testID="reconnect-health-button" onPress={() => navigation.navigate('ConnectHealth')}>
+            Reconnect Google Health
+          </Button>
+          {signOutButton}
+        </View>
+      </SafeAreaView>
     );
   }
 
   if (error !== null) {
     return (
-      <View style={styles.container}>
-        <Text>{error}</Text>
-        {signOutButton}
-      </View>
+      <SafeAreaView className="flex-1 bg-background">
+        <View className="flex-1 items-center justify-center gap-3 p-6">
+          <Text className="text-center text-muted-foreground">{error}</Text>
+          {signOutButton}
+        </View>
+      </SafeAreaView>
     );
   }
 
   if (records === null) {
     return (
-      <View style={styles.container}>
-        <Text>Loading…</Text>
-      </View>
+      <SafeAreaView className="flex-1 bg-background">
+        <View className="gap-3 p-4">
+          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-24 w-full" />
+        </View>
+      </SafeAreaView>
     );
   }
 
   if (records.length === 0) {
     return (
-      <View style={styles.container}>
-        <Text>No data yet — check back after your Google Health syncs.</Text>
-        {signOutButton}
-      </View>
+      <SafeAreaView className="flex-1 bg-background">
+        <View className="flex-1 items-center justify-center gap-3 p-6">
+          <Text className="text-center text-muted-foreground">
+            No data yet — check back after your Google Health syncs.
+          </Text>
+          {signOutButton}
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.screen}>
+    <SafeAreaView className="flex-1 bg-background">
       <FlatList
-        contentContainerStyle={styles.list}
         data={records}
         keyExtractor={(item) => item.id}
-        renderItem={({ item }) => (
-          <View style={styles.row}>
-            <Text style={styles.metric}>{item.metricType}</Text>
-            <Text>{item.value}</Text>
-            <Text style={styles.date}>{new Date(item.recordedAt).toDateString()}</Text>
+        contentContainerStyle={styles.list}
+        ListHeaderComponent={
+          <View className="gap-4">
+            <View className="flex-row items-center justify-between">
+              <Text className="text-2xl font-bold">Today</Text>
+              {signOutButton}
+            </View>
+            <View className="flex-row flex-wrap gap-3">
+              {METRIC_ORDER.map((type) => {
+                const record = latest[type];
+                if (!record) return null;
+                const config = METRIC_CONFIG[type];
+                return (
+                  <Card key={type} className="w-[47%] grow">
+                    <CardHeader>
+                      <Text className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+                        {config.label}
+                      </Text>
+                    </CardHeader>
+                    <CardContent>
+                      <Text className="text-2xl font-bold" style={{ fontVariant: ['tabular-nums'] }}>
+                        {config.format(record.value)}
+                      </Text>
+                    </CardContent>
+                  </Card>
+                );
+              })}
+            </View>
+            <Text className="text-sm font-semibold text-muted-foreground">History</Text>
           </View>
-        )}
+        }
+        renderItem={({ item }) => {
+          const config = METRIC_CONFIG[item.metricType];
+          return (
+            <View className="flex-row items-center justify-between border-b border-border py-3">
+              <Text className="font-medium">{config?.label ?? item.metricType}</Text>
+              <Text style={{ fontVariant: ['tabular-nums'] }}>{config ? config.format(item.value) : item.value}</Text>
+              <Text className="text-muted-foreground">{new Date(item.recordedAt).toDateString()}</Text>
+            </View>
+          );
+        }}
       />
-      <View style={styles.footer}>{signOutButton}</View>
-    </View>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  screen: { flex: 1 },
-  footer: { padding: 16, alignItems: 'center' },
-  signOut: { paddingVertical: 10, paddingHorizontal: 20 },
-  signOutText: { color: '#c0392b', fontSize: 16 },
-  container: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 24, gap: 12 },
-  title: { fontSize: 20, fontWeight: '600' },
-  body: { textAlign: 'center', color: '#555' },
-  button: { backgroundColor: '#00b0b9', paddingVertical: 12, paddingHorizontal: 24, borderRadius: 8 },
-  buttonText: { color: '#fff', fontSize: 16 },
-  list: { padding: 16, gap: 8 },
-  row: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#eee' },
-  metric: { fontWeight: '600' },
-  date: { color: '#888' },
+  list: { padding: 16, gap: 16 },
 });

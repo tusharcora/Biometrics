@@ -46,11 +46,11 @@ describe('DashboardScreen', () => {
       ],
     });
 
-    const { getByText } = render(<DashboardScreen />);
+    const { getAllByText } = render(<DashboardScreen />);
 
     await waitFor(() => {
-      expect(getByText(/STEPS/)).toBeTruthy();
-      expect(getByText(/9000/)).toBeTruthy();
+      expect(getAllByText(/Steps/).length).toBeGreaterThan(0);
+      expect(getAllByText(/9,000/).length).toBeGreaterThan(0);
     });
   });
 
@@ -80,7 +80,7 @@ describe('DashboardScreen', () => {
 
     await waitFor(() => expect(getByText(/Reconnect your Google Health/i)).toBeTruthy());
     // The stale numbers must not be presented as if they were current.
-    expect(queryByText(/9000/)).toBeNull();
+    expect(queryByText(/9,000/)).toBeNull();
   });
 
   it('navigates to ConnectHealth from the reconnect prompt', async () => {
@@ -100,9 +100,9 @@ describe('DashboardScreen', () => {
       records: [{ id: '1', metricType: 'STEPS', value: 9000, recordedAt: '2026-09-01T00:00:00.000Z' }],
     });
 
-    const { getByText, queryByText } = render(<DashboardScreen />);
+    const { getAllByText, queryByText } = render(<DashboardScreen />);
 
-    await waitFor(() => expect(getByText(/9000/)).toBeTruthy());
+    await waitFor(() => expect(getAllByText(/9,000/).length).toBeGreaterThan(0));
     expect(queryByText(/Reconnect your Google Health/i)).toBeNull();
   });
 
