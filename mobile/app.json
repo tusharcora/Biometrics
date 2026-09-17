@@ -9,12 +9,7 @@
     "userInterfaceStyle": "light",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.tusharcora.biometrics",
-      "infoPlist": {
-        "UIApplicationSceneManifest": {
-          "UIApplicationSupportsMultipleScenes": false
-        }
-      }
+      "bundleIdentifier": "com.tusharcora.biometrics"
     },
     "android": {
       "adaptiveIcon": {
@@ -27,6 +22,9 @@
     },
     "web": {
       "favicon": "./assets/favicon.png"
-    }
+    },
+    "plugins": [
+      "./plugins/with-ios-scene-delegate.js"
+    ]
   }
 }
