@@ -245,6 +245,60 @@ describe('GET /health/callback', () => {
       expect(conn?.webhookSubscriptionId).toBe('sub-new-2');
       expect(conn?.status).toBe('CONNECTED');
     });
+
+    it('deletes the existing subscription BEFORE attempting to register a new one', async () => {
+      // Confirmed live: Google allows at most one subscription per
+      // (subscriber, user) and 409s outright if a stale one still exists --
+      // cleaning up only AFTER a successful registerUserSubscription call
+      // never runs, because that success is exactly what the stale
+      // subscription blocks. This asserts the actual call order, not just
+      // that both eventually happen.
+      const callOrder: string[] = [];
+      (subscriber.deleteUserSubscription as jest.Mock).mockReset().mockImplementation(async () => {
+        callOrder.push('delete');
+      });
+      (subscriber.registerUserSubscription as jest.Mock).mockReset().mockImplementation(async () => {
+        callOrder.push('register');
+        return 'sub-new-3';
+      });
+      const { user, healthUserId } = await createConnectedUser('sub-old-3');
+      const state = await getHealthOAuthState(user.id);
+
+      (oauth.exchangeCodeForTokens as jest.Mock).mockResolvedValue({
+        accessToken: 'health-access-4', refreshToken: 'health-refresh-4', expiresIn: 7200,
+      });
+      (subscriber.getIdentity as jest.Mock).mockResolvedValue({ healthUserId });
+
+      const res = await request(createApp()).get('/health/callback').query({ code: 'code', state });
+
+      expect(res.status).toBe(302);
+      expect(callOrder).toEqual(['delete', 'register']);
+    });
+
+    it('reconnecting a DISCONNECTED row with a stale subscription deletes it before registering a new one', async () => {
+      // The real scenario this task's fix was built for: a row that was
+      // marked DISCONNECTED (e.g. by the sweep, or a swallowed delete
+      // failure) without its Google subscription ever actually being
+      // removed. A plain CONNECTED-only check would miss this exact case.
+      (subscriber.deleteUserSubscription as jest.Mock).mockReset().mockResolvedValue(undefined);
+      const { user, healthUserId } = await createConnectedUser('sub-stale-disconnected');
+      await prisma.healthConnection.update({ where: { userId: user.id }, data: { status: 'DISCONNECTED' } });
+      const state = await getHealthOAuthState(user.id);
+
+      (oauth.exchangeCodeForTokens as jest.Mock).mockResolvedValue({
+        accessToken: 'health-access-5', refreshToken: 'health-refresh-5', expiresIn: 7200,
+      });
+      (subscriber.getIdentity as jest.Mock).mockResolvedValue({ healthUserId });
+      (subscriber.registerUserSubscription as jest.Mock).mockResolvedValue('sub-new-4');
+
+      const res = await request(createApp()).get('/health/callback').query({ code: 'code', state });
+
+      expect(res.status).toBe(302);
+      expect(subscriber.deleteUserSubscription).toHaveBeenCalledWith('sub-stale-disconnected');
+      const conn = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
+      expect(conn?.status).toBe('CONNECTED');
+      expect(conn?.webhookSubscriptionId).toBe('sub-new-4');
+    });
   });
 
   it('rolls back the just-created Google subscription when the connection write fails after it', async () => {
