@@ -54,6 +54,41 @@ describe('DashboardScreen', () => {
     });
   });
 
+  it('renders rings, an insight, and trend charts for every real metric', async () => {
+    mockApi({
+      records: [
+        { id: '1', metricType: 'STEPS', value: 8000, recordedAt: '2026-09-01T00:00:00.000Z' },
+        { id: '2', metricType: 'STEPS', value: 12000, recordedAt: '2026-09-02T00:00:00.000Z' },
+        { id: '3', metricType: 'RESTING_HR', value: 60, recordedAt: '2026-09-01T00:00:00.000Z' },
+        { id: '4', metricType: 'RESTING_HR', value: 58, recordedAt: '2026-09-02T00:00:00.000Z' },
+        { id: '5', metricType: 'SLEEP', value: 420, recordedAt: '2026-09-01T00:00:00.000Z' },
+        { id: '6', metricType: 'SLEEP', value: 400, recordedAt: '2026-09-02T00:00:00.000Z' },
+        { id: '7', metricType: 'HRV', value: 50, recordedAt: '2026-09-01T00:00:00.000Z' },
+        { id: '8', metricType: 'HRV', value: 65.9, recordedAt: '2026-09-02T00:00:00.000Z' },
+      ],
+    });
+
+    const { getAllByText, getByText } = render(<DashboardScreen />);
+
+    await waitFor(() => {
+      expect(getAllByText('Steps').length).toBeGreaterThan(0);
+      expect(getAllByText('Resting Heart Rate').length).toBeGreaterThan(0);
+      expect(getAllByText('Sleep').length).toBeGreaterThan(0);
+      expect(getAllByText('HRV').length).toBeGreaterThan(0);
+    });
+
+    // Latest value per metric renders in both the ring and the trend card.
+    expect(getAllByText(/12,000/).length).toBeGreaterThan(0);
+    expect(getAllByText(/58 bpm/).length).toBeGreaterThan(0);
+    expect(getAllByText(/6h 40m/).length).toBeGreaterThan(0);
+    expect(getAllByText(/65\.9 ms/).length).toBeGreaterThan(0);
+
+    // The insight picks whichever metric deviates most from its own trailing
+    // average -- Steps at +50% here beats HRV's +31.8%, Sleep's -4.8%, and
+    // Resting Heart Rate's -3.3%.
+    expect(getByText('Steps is 50% above your recent average.')).toBeTruthy();
+  });
+
   it('shows an empty state when there are no records yet', async () => {
     mockApi({ records: [] });
 

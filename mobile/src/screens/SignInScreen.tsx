@@ -1,6 +1,7 @@
 import React, { useEffect } from 'react';
 import { View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import * as Google from 'expo-auth-session/providers/google';
 import { useAuth } from '../auth/AuthContext';
@@ -32,11 +33,11 @@ export function SignInScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background">
       <View className="flex-1 justify-center gap-12 p-8">
-        <View className="gap-2">
+        <Animated.View entering={FadeInDown.duration(450)} className="gap-2">
           <Text className="text-4xl font-bold tracking-tight">Biometrics</Text>
           <Text className="text-base text-muted-foreground">Your health data, unified.</Text>
-        </View>
-        <View className="gap-3">
+        </Animated.View>
+        <Animated.View entering={FadeInDown.delay(120).duration(450)} className="gap-3">
           <Button testID="apple-sign-in-button" className="w-full bg-foreground" onPress={handleAppleSignIn}>
             <Text className="text-base font-semibold text-background">Sign in with Apple</Text>
           </Button>
@@ -47,7 +48,7 @@ export function SignInScreen() {
           >
             <Text className="text-base font-semibold">Sign in with Google</Text>
           </Button>
-        </View>
+        </Animated.View>
       </View>
     </SafeAreaView>
   );
