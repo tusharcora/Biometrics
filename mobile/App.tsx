@@ -1,3 +1,4 @@
+import './global.css';
 import React from 'react';
 import { AuthProvider } from './src/auth/AuthContext';
 import { RootNavigator } from './src/navigation/RootNavigator';

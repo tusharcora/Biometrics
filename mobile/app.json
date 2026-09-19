@@ -24,7 +24,8 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "./plugins/with-ios-scene-delegate.js"
+      "./plugins/with-ios-scene-delegate.js",
+      "expo-asset"
     ]
   }
 }

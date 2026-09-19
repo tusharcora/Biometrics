@@ -1,8 +1,11 @@
 import React from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import * as WebBrowser from 'expo-web-browser';
 import { useNavigation } from '@react-navigation/native';
 import { apiFetch } from '../api/client';
+import { Text } from '../components/ui/text';
+import { Button } from '../components/ui/button';
 
 const REDIRECT_URI = 'biometrics://health/callback';
 
@@ -21,18 +24,16 @@ export function ConnectHealthScreen() {
   }
 
   return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Connect your Google Health</Text>
-      <Pressable testID="connect-health-button" style={styles.button} onPress={handleConnect}>
-        <Text style={styles.buttonText}>Connect Google Health</Text>
-      </Pressable>
-    </View>
+    <SafeAreaView className="flex-1 bg-background">
+      <View className="flex-1 items-center justify-center gap-3 p-8">
+        <Text className="text-center text-2xl font-bold">Connect your Google Health</Text>
+        <Text className="text-center text-muted-foreground">
+          We'll sync your steps, sleep, resting heart rate, and HRV automatically.
+        </Text>
+        <Button testID="connect-health-button" className="mt-4" onPress={handleConnect}>
+          Connect Google Health
+        </Button>
+      </View>
+    </SafeAreaView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: { flex: 1, justifyContent: 'center', alignItems: 'center', gap: 16 },
-  title: { fontSize: 20, fontWeight: '600' },
-  button: { backgroundColor: '#00b0b9', paddingVertical: 12, paddingHorizontal: 24, borderRadius: 8 },
-  buttonText: { color: '#fff', fontSize: 16 },
-});

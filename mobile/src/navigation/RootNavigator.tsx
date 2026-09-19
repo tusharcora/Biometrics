@@ -1,12 +1,23 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
-import { NavigationContainer } from '@react-navigation/native';
+import { View, Text, ActivityIndicator, StyleSheet, useColorScheme } from 'react-native';
+import { NavigationContainer, DefaultTheme, DarkTheme, type Theme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../auth/AuthContext';
 import { apiFetch } from '../api/client';
 import { SignInScreen } from '../screens/SignInScreen';
 import { ConnectHealthScreen } from '../screens/ConnectHealthScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
+import { COLORS } from '../theme';
+
+const LIGHT_NAV_THEME: Theme = {
+  ...DefaultTheme,
+  colors: { ...DefaultTheme.colors, background: COLORS.light.background, card: COLORS.light.background, text: COLORS.light.foreground, border: COLORS.light.border, primary: COLORS.light.accent },
+};
+
+const DARK_NAV_THEME: Theme = {
+  ...DarkTheme,
+  colors: { ...DarkTheme.colors, background: COLORS.dark.background, card: COLORS.dark.background, text: COLORS.dark.foreground, border: COLORS.dark.border, primary: COLORS.dark.accent },
+};
 
 export type RootStackParamList = {
   ConnectHealth: undefined;
@@ -19,6 +30,9 @@ const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export function RootNavigator() {
   const { session } = useAuth();
+  const scheme = useColorScheme();
+  const navTheme = scheme === 'dark' ? DARK_NAV_THEME : LIGHT_NAV_THEME;
+  const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
   // null while we are still asking the backend which screen to land on.
   const [initialRoute, setInitialRoute] = useState<keyof RootStackParamList | null>(null);
 
@@ -62,8 +76,16 @@ export function RootNavigator() {
   }
 
   return (
-    <NavigationContainer>
-      <Stack.Navigator initialRouteName={initialRoute}>
+    <NavigationContainer theme={navTheme}>
+      <Stack.Navigator
+        initialRouteName={initialRoute}
+        screenOptions={{
+          headerShadowVisible: false,
+          headerStyle: { backgroundColor: colors.background },
+          headerTitleStyle: { color: colors.foreground, fontWeight: '600' },
+          headerTintColor: colors.foreground,
+        }}
+      >
         <Stack.Screen name="ConnectHealth" component={ConnectHealthScreen} options={{ title: 'Connect Health' }} />
         <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ title: 'Dashboard' }} />
       </Stack.Navigator>

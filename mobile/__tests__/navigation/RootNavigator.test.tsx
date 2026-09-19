@@ -12,6 +12,8 @@ jest.mock('../../src/auth/AuthContext');
 // initialRouteName points at" — which is precisely what these tests assert.
 jest.mock('@react-navigation/native', () => ({
   NavigationContainer: ({ children }: any) => children,
+  DefaultTheme: { dark: false, colors: {}, fonts: {} },
+  DarkTheme: { dark: true, colors: {}, fonts: {} },
 }));
 jest.mock('@react-navigation/native-stack', () => {
   const ReactLib = require('react');
