@@ -9,7 +9,7 @@ of a single combined document that had grown too large to review or
 build against as one unit:
 
 - `2026-09-20-stat-engine-design.md` — the Recovery/Sleep Score pipeline
-  (Slices 1, 1.5). This document's tool registry (§2.2) is a read-only
+  (Slices 1, 1.5). This document's tool registry (§2) is a read-only
   wrapper over its `DailyScore`/`UserDailyFeatures` tables.
 - `2026-09-20-habits-correlation-design.md` — habit logging and
   correlation (Slice 2). This document's `getHabitCorrelations` tool
@@ -29,14 +29,14 @@ number.
   false-positive problem, and added the data-handling/consent section.
   This split fixes every issue that review round raised against this
   section specifically and that hadn't yet been addressed:
-  - The **digit-only guardrail scan** (§2.4) is reworked to exempt
+  - The **digit-only guardrail scan** (§4) is reworked to exempt
     numbered-list markers, times, and dates, rather than rejecting any
     reply containing them — the prior design would have regenerated on
     nearly every piece of concrete advice a coach gives.
   - The guardrail is now explicit that it **grounds numeric values, not
     comparative claims** — a reply can state a grounded number while
-    getting its direction wrong relative to that number, and §2.4 now
-    says plainly that this is covered by the eval harness (§2.7), not
+    getting its direction wrong relative to that number, and §4 now
+    says plainly that this is covered by the eval harness (§7), not
     by the guardrail itself, with a `direction` field added to
     `getDailyScore()`'s return shape so the model isn't computing
     "higher or lower than yesterday" itself in the first place.
@@ -68,6 +68,19 @@ number.
     saves a model round-trip on the most common question.
   - Fixed a reference to a nonexistent §2.8 (observability is the
     unnumbered "Cross-cutting" section at the end).
+- **v3**: closed the remaining review items.
+  - **Coach memory is an allowlist, not a free-text store.** v2's
+    health-fact filter was a denylist, which fails open on every
+    classifier miss. Memory is now written only through a structured
+    `proposeMemory` call with a closed category enum; the classifier
+    remains as a second layer.
+  - **Push notification text is generic**: fixed server-side strings,
+    never model-generated and never containing health data, because push
+    text appears on the lock screen and passes through the OS push
+    provider.
+  - Sections renumbered 1–8 so numbering starts at 1 as the Context
+    states; cross-references in all three documents were updated.
+  - Removed edit-history narration from the body.
 
 ## Goals
 
@@ -88,16 +101,16 @@ number.
 
 ## Build Order Dependency
 
-**Slice 3 depends on Slices 1, 1.5 and 2** — its tool registry (§2.2) is
+**Slice 3 depends on Slices 1, 1.5 and 2** — its tool registry (§2) is
 literally `getDailyScore`/`getHabitCorrelations` from the prior slices.
 Building the coach before there's a score or a correlation to ground it
-in would leave it nothing grounded to say. It also depends on §2.5's
+in would leave it nothing grounded to say. It also depends on §5's
 data-handling/consent work being resolved before it ships to anyone, not
 as a Slice-3-internal task but as a precondition of it.
 
 ---
 
-## 2.1 What the coach is and isn't
+## 1. What the coach is and isn't
 
 The coach is a **grounded explainer and Q&A layer**, not a second scoring
 system. It never computes a number — it calls tools that read
@@ -110,12 +123,12 @@ model call, no fabricated score") — the coach doesn't relax that
 principle, it adds a conversational surface *on top of* numbers that
 principle still governs.
 
-## 2.2 Architecture
+## 2. Architecture
 
 ```
 Mobile chat UI
    │  (single request/response — no incremental
-   │   streaming; §2.4 buffers the full reply
+   │   streaming; §4 buffers the full reply
    │   server-side before anything is sent back)
    ▼
 POST /coach/message  ──▶  Orchestrator
@@ -157,7 +170,7 @@ exposes raw SQL:
   `today - yesterday` (or eyeballing which way a number moved) in its
   head and hoping it's right. `direction` is an enum
   (`'higher' | 'lower' | 'unchanged'`) so a comparative claim in a reply
-  can itself be grounded, not just the raw numbers around it (see §2.4).
+  can itself be grounded, not just the raw numbers around it (see §4).
 - `getScoreHistory(metric, days)` → array, for "how has my recovery
   trended this month," from `2026-09-20-stat-engine-design.md`.
 - `getHabitCorrelations()` → the significant, pre-vetted correlations
@@ -165,17 +178,17 @@ exposes raw SQL:
   as **structured fields** — `{habitType, factor, lagDays,
   effectSizePercent, sampleSize, direction}` — not a pre-composed
   sentence, so the coach references them via `{{field}}` templates the
-  same as any score value (§2.4) rather than paraphrasing numbers into
+  same as any score value (§4) rather than paraphrasing numbers into
   free prose. The model is never handed raw habit logs to
   eyeball-correlate itself, because that would bypass the significance
   gate entirely and reintroduce exactly the false-pattern risk that
   document's correlation engine was built to prevent.
 - `getUserGoals()` → user-set goals (steps target, sleep target, if
   customized from `METRIC_CONFIG` defaults) — the same values
-  `sleepDebtRolling14d` (`2026-09-20-stat-engine-design.md` §1.2 Stage 2)
+  `sleepDebtRolling14d` (`2026-09-20-stat-engine-design.md` §2 Stage 2)
   is computed against, sourced from one place.
 
-System prompt instructs (and the guardrail layer, §2.4, enforces
+System prompt instructs (and the guardrail layer, §4, enforces
 independently of instruction-following) that **any specific quantity in a
 response must be a value returned by a tool call in that turn** — the
 model doesn't recite a number from its own context/memory of an earlier
@@ -194,7 +207,7 @@ Two tiers, chosen per request by the orchestrator, not by the user:
 - **Synthesis tier**: weekly/monthly recap generation, multi-turn
   conversations referencing several weeks of history, anything invoking
   `getHabitCorrelations` across a long window — larger context budget,
-  higher latency tolerated, run as a background job (§2.6) rather than
+  higher latency tolerated, run as a background job (§6) rather than
   inline chat for the weekly recap case specifically.
 
 Provider-agnostic router interface (`CoachModelProvider`) with a primary
@@ -235,7 +248,7 @@ moment.").
 #### Latency budget
 
 A worst-case coach turn can chain: one or more tool-call round-trips →
-whole-reply buffering (§2.4, no partial output can be shown early) → a
+whole-reply buffering (§4, no partial output can be shown early) → a
 guardrail rejection → one full regenerate → potentially a provider
 fallback on top of that. Left unbounded, this can run to several
 sequential model calls with no user-visible feedback in between, which
@@ -258,7 +271,7 @@ fallback is what the user sees, not a network error. The synthesis tier
 budget — it isn't blocking a chat response, so a slower, more thorough
 generation is an acceptable trade there.
 
-## 2.3 Persona configuration
+## 3. Persona configuration
 
 A `CoachPersona` config (versioned, same pattern as `ScoreAlgorithmVersion`
 in `2026-09-20-stat-engine-design.md`) rather than a single hardcoded
@@ -284,7 +297,7 @@ interpolated into a fixed template with their own escaping, to keep this
 a config surface, not a prompt-injection surface for the user's own
 account, minor as that particular risk is here).
 
-## 2.4 Guardrails (independent of prompt instructions)
+## 4. Guardrails (independent of prompt instructions)
 
 Prompt instructions are advisory; the guardrail layer is enforced in
 code, on both directions:
@@ -304,7 +317,7 @@ code, on both directions:
   in an unwanted safety flow.
 - **Post-response — numeric grounding.** A plain regex number scan
   against raw model output (`\d+%`/`\d+\s*(bpm|ms|hours?)` string-matched
-  against tool results) was tried and rejected — it breaks on rounding/
+  against tool results) is rejected — it breaks on rounding/
   reformatting (452 minutes rendered as "7h 32m" fails to match, a wrong
   number in the same shape as a real one slips through undetected).
   **Adopted instead**: the model states quantities only via `{{field}}`
@@ -357,7 +370,7 @@ code, on both directions:
   Any non-exempt digit outside a template span means the response is
   discarded and regenerated once with an explicit corrective system
   message; a second failure falls back to a fixed, server-composed
-  sentence built from the turn preamble's pre-fetched score (§2.2 — no
+  sentence built from the turn preamble's pre-fetched score (§2 — no
   model involved at all for that turn), logged as a guardrail event. This is strictly a
   **reject-and-regenerate** design, not a strip-and-patch one — no
   partial, edited model output is ever shown.
@@ -371,11 +384,11 @@ code, on both directions:
   negative, because "higher than yesterday" is prose the scan has no way
   to check against the number it's describing. This spec does not claim
   the guardrail catches this class of error — instead, two things
-  narrow it: (a) `getDailyScore()`'s `direction` field (§2.2) gives the
+  narrow it: (a) `getDailyScore()`'s `direction` field (§2) gives the
   model a grounded value to reference *for direction itself* (the system
   prompt instructs directional language to come from `{{delta.direction}}`
   or equivalent, the same way a raw number must come from a field, not
-  be composed freely), and (b) the eval harness (§2.7) is the actual
+  be composed freely), and (b) the eval harness (§7) is the actual
   correctness backstop for whether the model *uses* that field correctly
   rather than composing its own "higher"/"lower" judgment — a dedicated
   eval fixture category checks exactly this failure mode (a reply whose
@@ -385,7 +398,7 @@ code, on both directions:
   model of its own.
 
   **Two mechanical points:**
-  - *Streaming, corrected to actually match reject-and-regenerate.*
+  - *Streaming.*
     Sentence-level buffering was considered and dropped — if individual
     sentences stream to the client as they each pass validation, then by
     the time a later sentence in the same reply fails, earlier sentences
@@ -397,7 +410,7 @@ code, on both directions:
     client at all for coach replies. This is acceptable specifically
     because coach replies are short (a few sentences, per the persona's
     `verbosity` setting) — the perceived-latency cost of full buffering
-    is small and bounded by §2.2's latency budget, and it's the only
+    is small and bounded by §2's latency budget, and it's the only
     design where "discarded and regenerated" is actually true rather
     than aspirational.
   - *Bad field path.* A `{{field}}` reference to a path that isn't in
@@ -414,13 +427,13 @@ code, on both directions:
   from Phase 1's `metricInsights.ts` sentences — not a medical assessment
   — templated in, not left to the model to remember to add.
 
-## 2.5 Data handling, consent & retention
+## 5. Data handling, consent & retention
 
 Slices 1, 1.5 and 2 (the other two documents) keep all health data inside
 this app's own database. **The coach changes that materially**: score
 values, per-factor z-scores, habit-correlation sentences, and user-goal
 data all get sent to a third-party LLM provider as tool results on every
-coach turn, and the model-routing fallback (§2.2) means a second provider
+coach turn, and the model-routing fallback (§2) means a second provider
 may see the same data on a primary-provider outage. A provider-agnostic
 router and a fallback are an engineering pattern, not a privacy answer on
 their own — the actual consequence of routing real health data through
@@ -454,18 +467,23 @@ shipping to anyone, not an implementation detail inside it:
   checkbox inside a larger flow. A user who declines still gets the
   other two documents' features in full — the coach is additive, never a
   gate on the rest of the app.
-- **`CoachMemory` (§2.6) is restricted from storing health/medical facts
-  specifically**, even though a user might casually mention one in
-  conversation ("I'm on medication X," "dealing with a knee injury"). A
-  pre-persistence filter — the same lightweight classifier pattern as
-  the crisis classifier in §2.4, reused rather than reinvented — blocks
-  any proposed `CoachMemory` entry matching a medical/health-fact pattern
-  from being written at all, regardless of the auto-confirm behavior
-  §2.6 otherwise describes; the coach can still discuss what the user
-  said *in that conversation* (it's already in the chat transcript,
-  which follows the retention terms above), it just never becomes a
-  persisted, resurfaced-in-future-prompts fact the way a training
-  schedule or a logging preference would.
+- **`CoachMemory` is an allowlist, not a free-text store.** The model
+  can propose a memory only through a structured `proposeMemory({category,
+  value})` call, where `category` is one of a closed enum —
+  `TRAINING_GOAL`, `SCHEDULE`, `PREFERENCE` — and `value` is a short
+  string (at most 140 characters). Anything that does not fit a category
+  is not stored, so a health or medical fact ("I'm on medication X",
+  "dealing with a knee injury") has no category to land in and is never
+  persisted, however the user phrases it. As a second layer, the same
+  lightweight classifier as the crisis check in §4 runs over `value` and
+  blocks any entry matching a medical/health-fact pattern, in case a
+  health fact is disguised as a goal or preference. The allowlist is the
+  primary control because a denylist fails open — every classifier miss
+  would persist a sensitive fact into future prompts — whereas an
+  allowlist fails closed. The coach can still discuss what the user said
+  *in that conversation* (it is in the chat transcript, which follows the
+  retention terms below); it just never becomes a persisted,
+  resurfaced-in-future-prompts fact.
 - **Google's own data-use terms need their own check, separate from the
   LLM vendor's.** Everything above covers what the LLM provider may do
   with data sent to it — it says nothing about whether Google Health
@@ -497,36 +515,45 @@ shipping to anyone, not an implementation detail inside it:
   monitoring need) and then hard-deleted on a scheduled job, not kept
   indefinitely by default.
 
-## 2.6 Memory
+## 6. Memory
 
 - **Short-term**: the current conversation's turns, windowed.
 - **Long-term**: a `CoachMemory` table — not a vector store scraping raw
-  chat transcripts, but structured facts the model is explicitly told to
-  propose ("user mentioned they're training for a half-marathon in
-  March"), written to the table as `status: PENDING` and surfaced inline
-  in the same reply ("I'll remember that — let me know if that's not
-  right"), **subject to the health-fact exclusion in §2.5 above — that
-  filter runs before anything below applies**. The entry flips to
-  `status: CONFIRMED` automatically if the user's next message doesn't
-  correct or dismiss it — no separate confirm button required — but it's
-  fully visible and editable at any time in Settings → Coach Memory,
-  where a `PENDING` entry is marked as such and any entry can be edited
-  or deleted outright. This is deliberately closer to "assume yes unless
-  corrected, but always show your work" than to a friction-heavy
-  explicit-consent flow for *this* category of fact, because the
-  §2.5 filter already handles the category where the stakes are actually
-  high. Surfaced back into future system prompts as a bulleted "what I
-  know about you" block (confirmed entries only), capped at N
-  most-recent to bound prompt size.
+  chat transcripts. Columns: `id`, `userId`, `category` (the closed enum
+  in §5), `value` (≤ 140 characters), `status`, `createdAt`,
+  `confirmedAt`. The model proposes entries via `proposeMemory` (§5);
+  an entry is written as `status: PENDING` and surfaced inline in the
+  same reply ("I'll remember that — let me know if that's not right").
+  The §5 allowlist and classifier run before anything below applies.
+  The entry flips to `status: CONFIRMED` automatically if the user's next
+  message doesn't correct or dismiss it — no separate confirm button
+  required — and it is fully visible and editable at any time in
+  Settings → Coach Memory, where a `PENDING` entry is marked as such and
+  any entry can be edited or deleted outright. This is deliberately
+  closer to "assume yes unless corrected, but always show your work" than
+  to a friction-heavy explicit-consent flow, because the allowlist
+  already restricts memory to the low-stakes categories. Surfaced back
+  into future system prompts as a bulleted "what I know about you" block
+  (confirmed entries only), capped at N most-recent to bound prompt
+  size.
 - **Weekly synthesis**: this is the Synthesis tier's one scheduled use
-  (§2.2 names the tier; this is that job's spec, not a separate
+  (§2 names the tier; this is that job's spec, not a separate
   mechanism) — run as a scheduled background job, not live chat: once a
   week, generate a recap referencing `getScoreHistory` +
   `getHabitCorrelations` over the trailing 7 days, written to a
-  `CoachDigest` row, pushed as a notification — the coach initiating
-  contact, gated entirely by the persona's `proactivity` setting.
+  `CoachDigest` row, gated entirely by the persona's `proactivity`
+  setting, and announced with a push notification.
+- **Push notification content is generic.** The push title and body are
+  fixed strings chosen from a small server-side set ("Your weekly recap
+  is ready", "You have a new insight") — never model-generated, and never
+  containing a score, factor, habit name or any number — because push
+  text is visible on the lock screen and passes through the OS push
+  provider (APNs/FCM), a further third party this spec does not want
+  holding health data. The digest itself is fetched in-app after the user
+  opens it. Any proactive (`threshold-triggered` or `daily-checkin`) nudge
+  follows the same rule.
 
-## 2.7 Eval harness
+## 7. Eval harness
 
 Because "does the coach ever hallucinate a number, or get a direction
 wrong" is exactly the kind of regression that's invisible until a user
@@ -536,7 +563,7 @@ against every persona/prompt change before it ships — not a full RL
 pipeline, but a real CI-gated eval suite, versioned alongside
 `ScoreAlgorithmVersion` and `CoachPersona` configs so a prompt change and
 its eval results are one reviewable unit. **Two fixture categories added
-here**, both new: (a) fixtures for the digit-scan exemptions in §2.4 in both
+here**, both new: (a) fixtures for the digit-scan exemptions in §4 in both
 directions — replies containing list markers, am/pm times, month-name
 dates and ordinals that must pass, and replies containing ratios
 ("7/10"), bare `h:mm` durations ("7:32") and bare counts that must be
@@ -544,35 +571,28 @@ rejected — to guard against regressing either way; (b) a fixture whose grounde
 `direction` field is deliberately set opposite to what a naive reading
 of the raw numbers would suggest, to catch the model asserting a
 directional claim that contradicts the grounded field rather than
-quoting it (§2.4's claim-grounding scope boundary).
+quoting it (§4's claim-grounding scope boundary).
 
-## 3. Component: `ChatBubble` + `StreamingText`
+## 8. Component: `ChatBubble` + `StreamingText`
 
-Coach message rendering. Per §2.4, the client never receives a coach
+Coach message rendering. Per §4, the client never receives a coach
 reply incrementally — the whole, already-validated response arrives in
 one payload, not over SSE.
 
-**`StreamingText`'s reveal behavior is a simple fade-in, not a
-word-by-word reveal animation.** An earlier design had this component
-play a capped-duration word-by-word reveal to "preserve the feel of the
-coach typing," while a separate section of that same design insisted the
-component was "explicitly not styled to imply live generation" — those
-two statements describe the same animation and contradict each other: a
-word-by-word reveal of text that has already fully arrived *is* an
-implication of live generation, cosmetic latency and nothing else. There
-is no honest version of "looks like typing but isn't claiming to be
-typing." **Adopted instead**: the full text renders behind a single
-fixed-duration opacity fade (pulled from the `MOTION` object,
-`2026-09-20-stat-engine-design.md` §3.2 — the same token object the Stat
-Engine's score-transition animation uses, no separate motion system for
-this component) — it signals "a new message arrived" without implying
-anything about *how* it arrived. This is a strictly simpler component
-than the version it replaces (no per-word timing, no `CountUp`-style
-animation-frame loop to reuse) and has nothing left to contradict.
+**`StreamingText` is a simple fade-in, not a word-by-word reveal.** The
+reply has already fully arrived, so a typing-style animation would only
+add cosmetic latency and imply live generation that isn't happening;
+there is no honest version of "looks like typing but isn't claiming to be
+typing." The full text renders behind a single fixed-duration opacity
+fade (from the `MOTION` object, `2026-09-20-stat-engine-design.md` §4 —
+the same token object the Stat Engine's score-transition animation uses,
+no separate motion system for this component). It signals "a new message
+arrived" without implying anything about *how* it arrived, and needs no
+per-word timing or animation-frame loop.
 
 ## Testing
 
-- The eval harness (§2.7) as the primary correctness gate, including the
+- The eval harness (§7) as the primary correctness gate, including the
   two fixture categories above.
 - Integration tests mocking the model provider entirely, against the
   guardrail layer's reject-and-regenerate path. Each is its own
@@ -599,39 +619,47 @@ animation-frame loop to reuse) and has nothing left to contradict.
   - a missing `DailyScore` for today uses the most recent score with its
     date stated; a failed pre-fetch or a user with no score returns the
     static no-numbers message, and that message contains no digits.
-- Component snapshot test for `StreamingText`'s fade-in, replacing the
-  prior word-reveal-timing test it no longer needs.
+- **Memory allowlist**: a `proposeMemory` call with a category outside
+  the enum is rejected; a `value` over 140 characters is rejected; a
+  health-shaped `value` inside an allowed category is blocked by the
+  classifier; a health fact stated in chat produces no `CoachMemory`
+  row; a proposed entry is `PENDING`, becomes `CONFIRMED` on an
+  uncorrected next message, and stays editable and deletable.
+- **Push content**: the digest push payload is always one of the fixed
+  strings, contains no digits, and no code path interpolates model output
+  or health values into it.
+- Component snapshot test for `StreamingText`'s fade-in.
 
 ## Open Questions / Risks
 
-- The AI coach's model-routing/fallback (§2.2) adds a second LLM provider
+- The AI coach's model-routing/fallback (§2) adds a second LLM provider
   dependency the rest of this codebase doesn't otherwise have — worth
   confirming actual need (vs. a single provider with a clear outage
   message) once real usage/cost data exists. **This is also gated on
-  §2.5**: a fallback provider only ships if it clears the same
+  §5**: a fallback provider only ships if it clears the same
   data-retention bar as the primary, which may mean no acceptable
   fallback exists at all — a real possible outcome, not just an
   implementation detail to sort out later.
-- **No LLM provider has actually been confirmed against §2.5's retention/
+- **No LLM provider has actually been confirmed against §5's retention/
   no-training/tool-result-coverage requirements yet** — this spec
   describes the gate, not a cleared vendor. This feature cannot ship
   until this is resolved concretely (a named provider, a signed/
   confirmed data processing agreement), not just designed around
   abstractly.
-- The `{{field}}` guardrail (§2.4) requires structured/tool-based output
+- The `{{field}}` guardrail (§4) requires structured/tool-based output
   from the model provider to resolve template references — worth
-  confirming this capability against whichever provider clears §2.5's
+  confirming this capability against whichever provider clears §5's
   bar before that provider choice is finalized, since the two
   requirements (data terms, structured-output support) narrow the
   provider field independently and the intersection may be small.
-- The digit-scan exemptions (§2.4) are now deliberately narrow, but they
+- The digit-scan exemptions (§4) are deliberately narrow, but they
   still trade some recall for precision — worth measuring in practice,
   once this feature has real usage, whether an ungrounded quantity is
   ever written in an exempt shape (an invented "March 14", or a wrong
   time with a meridiem attached), since that determines whether the
   exemption list needs narrowing further or the eval harness needs a
   dedicated fixture category for it.
-- The claim-grounding scope boundary (§2.4) relies on the eval harness
+- The claim-grounding scope boundary (§4) relies on the eval harness
   as the only backstop for directional-claim correctness — worth
   revisiting whether a stricter runtime check (e.g. requiring
   directional language to originate from a `{{delta.direction}}`
@@ -639,20 +667,20 @@ animation-frame loop to reuse) and has nothing left to contradict.
   grounding) is worth the added false-positive risk once real usage data
   exists.
 - Google Health API's own terms on downstream-sharing derived data with
-  a third-party LLM (§2.5) haven't been read yet as part of this spec —
+  a third-party LLM (§5) haven't been read yet as part of this spec —
   this is a required precondition for this feature, not a nice-to-have,
   and sits alongside the migration spec's existing CASA/Restricted-Scope
   review as a second, separate compliance question this app now has to
   answer.
 - Account deletion isn't designed anywhere in this codebase yet, for any
-  phase — this spec's §2.5 retention answer for coach data (deleted with
+  phase — this spec's §5 retention answer for coach data (deleted with
   the account) assumes an account-deletion flow that doesn't currently
   exist. Worth scoping as its own small spec once this feature
   approaches, rather than letting the coach be the feature that quietly
   requires it first.
-- The 12-second latency budget (§2.2) is a starting number, not measured
+- The 12-second latency budget (§2) is a starting number, not measured
   against real provider latency for this app's actual tool-call pattern
-  — worth revisiting once a provider is chosen (§2.5) and real latency
+  — worth revisiting once a provider is chosen (§5) and real latency
   data exists.
 
 ---
@@ -672,14 +700,14 @@ just being a database.
 
 **Where it earns its place is here**, and specifically because a
 tool-calling LLM orchestrator with a reject-and-regenerate guardrail
-(§2.4) *can* silently produce a wrong answer without throwing an error in
+(§4) *can* silently produce a wrong answer without throwing an error in
 a way the other two documents' slices structurally can't (there's no LLM
 in the loop before this feature). From this feature on: each coach turn
 emits a span (`coach.tool_call`, `coach.guardrail_reject`) tagged with
 `userId`, `personaId`, and, on a guardrail event, which failure it was
-(`unwrapped_number` vs. `invalid_field_path`, per §2.4) and whether the
+(`unwrapped_number` vs. `invalid_field_path`, per §4) and whether the
 regenerate-once retry succeeded or fell back to the canned response, plus
-`coach.latency_budget_exceeded` (§2.2) as a distinct event from a
+`coach.latency_budget_exceeded` (§2) as a distinct event from a
 guardrail-triggered fallback. Not for performance monitoring primarily —
 for **correctness monitoring**: a spike in `coach.guardrail_reject`
 events, split by reason, is the signal that a prompt or persona change

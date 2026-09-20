@@ -53,7 +53,7 @@ piece has a stated reason.
   independently-buildable Stat Engine spec, and fixed every outstanding
   Stat Engine issue from that document's fourth review round in the
   process, rather than carrying them forward as open items:
-  - The day-alignment fix in §1.2 is **reworked**: the previous design
+  - The day-alignment fix in §2 is **reworked**: the previous design
     proposed re-bucketing STEPS/RESTING_HR/HRV to match SLEEP's date,
     which is infeasible — those three arrive from Google as
     pre-aggregated per-civil-day values with no raw samples to
@@ -113,6 +113,20 @@ piece has a stated reason.
   - The circadian-consistency cold-start problem from v1's backfill note
     largely disappears: the Slice 0 re-sync captures `startTime` for
     historical sessions, so the 14-day window need not restart.
+- **v3**: closed the remaining review items.
+  - Added per-day **correlation series** columns (`hrvZ`, `rhrZ`,
+    `sleepDurationZ`) with `imputed` flags to `UserDailyFeatures`, and an
+    `imputed` flag on every entry of `DailyScore`'s factor vector, so the
+    habit engine can exclude imputed days and can test lags against a
+    per-night sleep series instead of the smoothed rolling debt.
+  - Renumbered the sections 1–6 so numbering starts at 1 as the Context
+    states (they were 1.1–1.3 then 3.2, 3.3, 3.5); cross-references in all
+    three documents were updated.
+  - Removed edit-history narration from the document body; it lives in
+    this section only.
+  - The combined predecessor spec is archived at
+    `archive/2026-09-20-ai-coach-ui-scoring-design.md` with a SUPERSEDED
+    banner and is not maintained.
 
 ## Goals
 
@@ -140,7 +154,7 @@ piece has a stated reason.
 ## Build Order
 
 0. **Slice 0 — Input correctness.** No scoring code. Repairs the sync
-   layer so the four metrics can legitimately be combined (§1.2):
+   layer so the four metrics can legitimately be combined (§2):
    - add `User.timezone` (client-supplied) and a Settings override;
    - run the three live-API checks (civil-date timezone basis, sleep
      interval semantics, how multi-session nights are represented);
@@ -149,7 +163,7 @@ piece has a stated reason.
    - re-key SLEEP to the local civil date of the session's **end**;
    - wipe and re-sync existing SLEEP data under the new key;
    - check whether Google exposes a dedicated resting-heart-rate data
-     type; until it does, the daily-minimum-HR labelling in §1.2 stands.
+     type; until it does, the daily-minimum-HR labelling in §2 stands.
 
    **Exit criteria**, all verified against a real connected account and
    kept as regression tests: (a) for any civil day D, HRV, RHR and the
@@ -159,7 +173,7 @@ piece has a stated reason.
    total.
 1. **Slice 1 — Recovery Score only.** No Sleep Score, no habit
    correlation, no coach. Depends on Slice 0. Ships value alone: the
-   segmented `ScoreRing` + factor breakdown (§3.3, §3.5) is a real
+   segmented `ScoreRing` + factor breakdown (§5, §6) is a real
    upgrade over today's single headline sentence with nothing else built
    yet.
 2. **Slice 1.5 — Sleep Score.** Depends on Slice 0 (which already
@@ -170,7 +184,7 @@ piece has a stated reason.
 
 ---
 
-## 1.1 Why this is the hard part
+## 1. Why this is the hard part
 
 A single `trendPercent` field (today's Phase 1 approach) is honest and
 cheap but can't produce a meaningful composite score, because the four
@@ -184,7 +198,7 @@ then combine z-scores with **domain-motivated weights**, and treat the
 whole pipeline as a versioned, backtestable model rather than a formula
 buried in a component.
 
-## 1.2 Architecture: five pure stages, persisted — not a five-job flow
+## 2. Architecture: five pure stages, persisted — not a five-job flow
 
 ### Blocking prerequisite: metrics don't share one definition of "day"
 
@@ -202,8 +216,9 @@ different convention (confirmed by direct read):
   spec, and hasn't been checked live.
 - **HRV** (lines 183–194): keyed by `dailyHeartRateVariability`'s own
   `.date` field — also a Google-provided civil date, from a *separate*
-  collection (`daily-heart-rate-variability`) than what the migration
-  spec originally described for this metric. Both STEPS/RESTING_HR and
+  collection (`daily-heart-rate-variability`; the migration spec
+  describes a raw, sample-based fetch instead, and the shipped code has
+  moved past it). Both STEPS/RESTING_HR and
   HRV arrive from Google **already aggregated to one value per civil
   day** — there are no raw per-sample timestamps in this app's
   possession to re-derive a different day boundary from.
@@ -311,7 +326,7 @@ ranges for every metric, BullMQ retries a failed job from the top, and
 repeat webhooks for one date are normal. Under "existing + new", each of
 those would add the session again and inflate the day's total. It also
 fails on window shape: the fetch filter is on UTC instants while the day
-key is now a local civil date, so a single-day job can see only part of a
+key is a local civil date, so a single-day job can see only part of a
 local day's sessions, and a batch-level sum would overwrite the total
 with a partial one.
 
@@ -378,8 +393,8 @@ persisted as real rows: `BaselineSnapshot` (Stage 3's output) and
 did my score drop 12 points today, and is that reproducible six months
 from now" answerable — the replayability that matters comes from
 persisting the right intermediate state, not from the job orchestration
-shape. The diagram below still describes the five conceptual stages; it
-now describes function calls, not queue jobs.
+shape. The diagram below describes the five conceptual stages as
+function calls, not queue jobs.
 
 ```
 BiometricRecord (raw)
@@ -439,7 +454,7 @@ daily metric values:
 - `sleepEfficiency` (`minutesAsleep / timeInBedMinutes`, where
   `timeInBedMinutes = (interval.endTime − interval.startTime)`, derived
   from a `SleepSession`'s start/end instants, not from
-  `Sleep.summary.timeInBed` — see the softened claim below. Reads from
+  `Sleep.summary.timeInBed` — see the note on this derivation below. Reads from
   the `SleepSession` table that Slice 0 provides. Computed and used from
   Slice 1.5; not needed for Slice 1's Recovery Score),
 - `sleepDebtRolling14d` (sum of `(sleepGoalMinutes − minutesAsleep)` over
@@ -471,13 +486,26 @@ daily metric values:
   derivable from `Sleep.summary.minutesAsleep`; it comes from a
   `SleepSession`'s `startTime`, the same table as `sleepEfficiency`
   above. Computed and used from Slice 1.5.
+- **Correlation series columns** — `hrvZ`, `rhrZ` and `sleepDurationZ`
+  (the day's `dailyMinutesAsleep` z-scored against the SLEEP metric's
+  Stage-3 baseline). Each carries an `imputed` flag, true when that day's
+  underlying value was imputed in Stage 1 rather than observed, and is
+  null while the metric is cold-starting. These are the series the habit
+  correlation engine tests against (`2026-09-20-habits-correlation-design.md`
+  §2). `sleepDurationZ` exists alongside `sleepDebtRolling14d` on
+  purpose: the rolling 14-day sum is smoothed by construction, so it
+  cannot resolve which of lags 1–3 a habit acts at; a per-night value is
+  the right series for lag testing, while the rolling debt remains the
+  right factor for the *score*. Once Slice 1.5 ships,
+  `sleepEfficiencyZ` and `circadianConsistencyZ` join with the same
+  flags.
 
-**Data model gap, stated plainly:** `BiometricRecord` is `(userId,
+**Data model gap:** `BiometricRecord` is `(userId,
 metricType, value: Float, recordedAt)` — one number per metric per
 timestamp. `sleepEfficiency` and `circadianConsistencyScore` both need
 sleep *structure* (onset time, time-in-bed), which needs a real schema
 addition, not a bigger `value`. Concretely: the `SleepSession` table
-specified under "Sleep storage" in §1.2 above (Slice 0; `userId`,
+specified under "Sleep storage" in §2 above (Slice 0; `userId`,
 `startTime`, `endTime`, `minutesAsleep`) fed from the same
 payload `backend/src/health/client.ts` already fetches for the `SLEEP`
 metric — confirmed live and already reading `sleep.interval.startTime`
@@ -494,7 +522,7 @@ unverified `summary.timeInBed` field. `minutesAwake` is dropped from the
 schema entirely; nothing in this spec needs it once time-in-bed is
 derived this way.
 
-**On that derivation itself — softened, not asserted as fact.** Only
+**On that derivation — an assumption, not a confirmed fact.** Only
 `sleep.interval.end_time` being a valid, filterable field name is
 confirmed against the live API (it's the literal filter this app's own
 query already uses). That `endTime − startTime` for a given session
@@ -531,23 +559,21 @@ the baseline doesn't chase the last data point:
   catch), not stddev — **scaled by the consistency constant `1.4826`**
   (`σ̂ = 1.4826 × MAD`) so the resulting spread estimate is on the same
   scale as a standard deviation would be for normally-distributed data.
-  This wasn't applied in earlier drafts of this spec; without it, `k`'s
-  "two standard deviations of favorable deviation lands near 90"
-  calibration (Stage 4) was silently off by that factor, since a raw MAD
-  under-reports spread relative to σ by roughly this constant for
-  normal-ish data. `k` is calibrated against the scaled `σ̂`, not raw
-  MAD.
+  The constant matters because `k`'s calibration in Stage 4 is
+  expressed in standard deviations: a raw MAD under-reports spread
+  relative to σ by roughly this factor for normal-ish data, so `k` is
+  calibrated against the scaled `σ̂`, never raw MAD.
 - **Cold-start handling**: fewer than 14 days of history for a metric →
   the metric is excluded from the composite score entirely for that user
   (not defaulted to a population average — a population baseline would
   be a fabricated per-user number, which the existing codebase's own
   house style explicitly avoids). The score UI shows "Building your
   baseline (9/14 days)" during this window via `BaselineProgressRing`
-  — see §3.3.
+  — see §5.
 - Baseline recomputation is itself versioned (`BaselineSnapshot` table,
   one row per user per metric per day) so a score computed today can be
   reproduced exactly later even as the rolling window moves — required
-  for backtesting (§1.3) and for explainability (Stage 5 below) to ever
+  for backtesting (§3) and for explainability (Stage 5 below) to ever
   be auditable.
 
 #### Stage 4 — Composite Score(s)
@@ -604,14 +630,14 @@ be. Whether Google exposes a dedicated resting-heart-rate data type
 (distinct from the daily-minimum rollup) is an open question for a
 future live-API check, not resolved here (see Open Questions) — until
 then, this factor's honest label is "daily minimum heart rate," and the
-UI (`FactorBar`, §3.3) should reflect that framing rather than implying
+UI (`FactorBar`, §5) should reflect that framing rather than implying
 a clinical resting-HR measurement.
 
 **These weights are stated honestly as illustrative, not derived** — and
 that has a real consequence, not glossed over: there is no ground-truth
 label for "recovery" to fit these against (no injury/illness outcome
 data, no validated survey), so this spec cannot claim the weights are
-*correct*, only a documented starting point. The backtest tool (§1.3)
+*correct*, only a documented starting point. The backtest tool (§3)
 can show the *effect* of changing them across historical data, not their
 *correctness* — that distinction matters and is called out again there.
 
@@ -629,15 +655,17 @@ Recovery.
 `DailyScore` (Recovery Score in Slice 1; Sleep Score added in Slice 1.5)
 is stored with `algorithmVersion`, `confidenceLevel` (`HIGH`/`MEDIUM`/
 `LOW`, derived from how many inputs were imputed/cold-started/
-renormalized-around that day), and the full per-factor z-score vector as
-JSON — the raw material for Stage 5.
+renormalized-around that day), and the full per-factor vector as JSON — one entry per factor:
+`{factor, z, weight, contribution, imputed, excluded}` — the raw
+material for Stage 5. `imputed` marks a factor whose input was imputed
+that day; `excluded` marks one dropped for cold-start.
 
 **Backfill note**: `SleepSession.startTime` is captured for every
 session the Slice 0 wipe-and-re-sync retrieves, so
 `circadianConsistencyScore` does not restart from zero at Slice 1.5's
 ship date: its 14-day window is computable immediately for any user
 whose backfill covered at least 14 nights. `BaselineProgressRing`'s
-cold-start state (§3.3) therefore appears for this factor only for users
+cold-start state (§5) therefore appears for this factor only for users
 with fewer than 14 nights of retrievable history. How far back the
 existing backfill job actually reaches is the practical limit, and is
 confirmed as part of Slice 0 (see Open Questions).
@@ -650,10 +678,10 @@ using that day's renormalized weights), sorted by magnitude, rendered as
 horizontal bars ("HRV: +8.2 pts · RHR: −3.1 pts · Sleep debt: −1.4 pts").
 This is not a black box — it is literally the addends of Stage 4's sum,
 so "explainability" here costs nothing extra to *compute* (it's already
-inside the formula) but a meaningful amount to *design well* (§3.5) and
+inside the formula) but a meaningful amount to *design well* (§6) and
 to keep in sync as the weight table evolves across algorithm versions.
 
-## 1.3 Backtesting & versioning
+## 3. Backtesting & versioning
 
 `ScoreAlgorithmVersion` is a config object (weights, `k`, thresholds),
 checked into the repo as versioned JSON/TS (`scoreConfigs/v1.ts`,
@@ -686,7 +714,7 @@ one's to prebuild.
 
 ---
 
-## 3.2 Token layer (Stat Engine's share of it)
+## 4. Token layer (Stat Engine's share of it)
 
 Rejected: a three-tier primitive/semantic/component token system plus a
 codegen build step (`scripts/generate-theme.ts`) generating both the
@@ -713,11 +741,11 @@ need (`MOTION.duration.fast/normal/slow`, `MOTION.easing.standard/
 decelerate`). The AI Coach doc reuses this same object for its own
 message-arrival animation rather than defining a second one.
 
-## 3.3 Component library additions (score rendering)
+## 5. Component library additions (score rendering)
 
 - **`ScoreRing`** — proposed as a `Ring` variant with a **segmented arc**
   (one arc segment per Slice-1 weighted factor — three, per the weight
-  table in §1.2 — proportional to `|contribution_i|`, colored by whether
+  table in §2 — proportional to `|contribution_i|`, colored by whether
   that factor helped or hurt), not just a single-color fill.
   **Gated behind a design spike before full build**: three thin arc
   segments (or four, if a factor is later reinstated) on an 84px ring is
@@ -733,13 +761,13 @@ message-arrival animation rather than defining a second one.
   (extends left for negative contributions, right for positive), with a
   shared 0-centered scale across all factors so magnitudes are visually
   comparable. For RESTING_HR specifically, the label reads "daily
-  minimum HR" rather than "resting HR," per the proxy note in §1.2 Stage
+  minimum HR" rather than "resting HR," per the proxy note in §2 Stage
   4.
 - **`ConfidenceBadge`** — small `Badge` variant surfacing
-  `DailyScore.confidenceLevel` (§1.2 Stage 4) — a score computed from
+  `DailyScore.confidenceLevel` (§2 Stage 4) — a score computed from
   partially imputed or renormalized-around data says so, visually, every
   time it's shown, not just in a tooltip someone has to find.
-- **`BaselineProgressRing`** — the cold-start state (§1.2 Stage 3) — a
+- **`BaselineProgressRing`** — the cold-start state (§2 Stage 3) — a
   ring counting up "9/14 days" distinct from a `ScoreRing`, so "building
   your baseline" is never visually confusable with a real low score.
 
@@ -747,10 +775,10 @@ Motion for score transitions: **score transitions** animate the
 `ScoreRing`'s segments independently, staggered by `|Δcontribution_i|`
 descending — the factor that moved the most animates first, so the eye
 is drawn to *why* the score changed, not just *that* it changed. All
-durations/easings pulled from the `MOTION` object (§3.2) — never inlined
+durations/easings pulled from the `MOTION` object (§4) — never inlined
 per-component.
 
-## 3.5 Explainability rendering (tying the pipeline together)
+## 6. Explainability rendering (tying the pipeline together)
 
 The single UI artifact that most directly embodies "over-engineered but
 for a real reason": the score detail screen renders, top to bottom —
@@ -763,7 +791,7 @@ requires an LLM call to be useful) → `FactorBar` list (every weighted
 factor, signed, sorted) → the `BaselineSnapshot` this score was computed
 against, inspectable ("your HRV baseline: 42ms ± 6ms, based on your last
 30 days"). Nothing on this screen is a black box; the entire
-Stage-1-through-5 pipeline in §1.2 is designed so this screen can be
+Stage-1-through-5 pipeline in §2 is designed so this screen can be
 built by rendering its intermediate outputs directly, in order.
 
 ## Testing
@@ -819,7 +847,7 @@ built by rendering its intermediate outputs directly, in order.
   how sessions map to nights and whether `sleepEfficiency` is
   meaningful.
 - **Google's civil-date timezone basis is unconfirmed** — the day-
-  alignment fix in §1.2 depends on knowing what timezone basis Google's
+  alignment fix in §2 depends on knowing what timezone basis Google's
   own rollups use; this needs a live check against a real account before
   `User.timezone`-based re-keying can be verified correct, not just
   internally consistent.

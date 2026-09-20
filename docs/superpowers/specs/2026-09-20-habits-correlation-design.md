@@ -59,6 +59,18 @@ number.
     nothing in the test produced; `effectSizePercent` is now defined too.
   - The test count drops from 4 lags to 3, so the multiple-comparison
     burden is lighter.
+- **v3**: closed the remaining review items.
+  - **Imputed days are excluded** from the correlation series. An
+    imputed value equals the baseline by construction (z ≈ 0), so
+    including it pulls every correlation toward zero.
+  - The sleep series is now the per-night `sleepDurationZ`, not the
+    14-day rolling sleep debt, whose smoothing makes lags 1–3
+    indistinguishable.
+  - Added a **persistence rule** (CANDIDATE → CONFIRMED after two
+    consecutive weekly passes, RETIRED after two consecutive misses) so
+    patterns do not flicker in and out between weekly runs.
+  - Removed edit-history narration from the body; cross-references to the
+    Stat Engine and Coach documents follow their renumbering.
 
 ## Goals
 
@@ -119,7 +131,7 @@ using the timezone then in effect, so a later change to `User.timezone`
 never rewrites history.
 
 Score days are the Stat Engine's canonical day
-(`2026-09-20-stat-engine-design.md` §1.2, this document does not
+(`2026-09-20-stat-engine-design.md` §2, this document does not
 re-decide it): a `DailyScore` for civil date D describes the night that
 **ended on D's morning**. So the first score a habit on habit day H can
 possibly influence is civil date H+1 — the night that follows it.
@@ -166,30 +178,34 @@ habit happens; the only relationship it can detect is the reverse one (a
 bad night leading to more coffee that day), and a surfaced pattern would
 read as a habit effect when it is not. Tested lags start at 1.
 
-**Correlated against per-factor z-scores, not the composite score** —
-`hrvBaselineDeviationPct`'s z-score, `rhrBaselineDeviationPct`'s
-z-score, `sleepDebtRolling14d`'s z-score (and, once Slice 1.5 ships, the
-Sleep Score's own factors), each tested against each habit independently,
-not the single blended Recovery Score number. This matters for two
-reasons: it's what the worked example in step 7 below actually claims
-("your HRV averaged 14% below baseline" is a per-factor claim, not a
-composite-score claim), and a habit that moves one factor strongly but
-gets diluted into a multi-factor weighted sum would be invisible to a
-composite-level test even when it's a real, specific, useful pattern to
-surface.
+**Correlated against per-factor z-score series, not the composite
+score.** The series are the `hrvZ`, `rhrZ` and `sleepDurationZ` columns
+of `UserDailyFeatures` (`2026-09-20-stat-engine-design.md` §2 Stage 2)
+and, once Slice 1.5 ships, its sleep-efficiency and circadian-consistency
+series — each tested against each habit independently.
+**`sleepDebtRolling14d` is deliberately not one of them**: it is a
+14-day rolling sum, smoothed by construction, so a single night's habit
+effect is spread across two weeks of values and no lag from 1 to 3 can be
+distinguished from another. The per-night `sleepDurationZ` is the right
+series for lag testing; the rolling debt remains the right factor for the
+score. Per-factor series also match what the worked example in step 7
+claims ("your HRV averaged 14% below baseline" is a per-factor claim, not
+a composite-score claim), and a habit that moves one factor strongly but
+is diluted into a multi-factor weighted sum would be invisible to a
+composite-level test even when it is a real, specific, useful pattern.
 
-**Rejected: circular-shift permutation testing** — an earlier version of
-this design, on the reasoning that habits and the z-score series are
-both autocorrelated and shouldn't be independently reshuffled. That
-reasoning was right, but the fix was wrong in a way that breaks the
-feature outright: a circular shift of an *n*-day series has at most
-*n*−1 distinct rotations, so at 3 months of data (~90 days) the smallest
-achievable empirical p-value is ~1/90 ≈ 0.011 — no matter how strong the
-real correlation is. Benjamini–Hochberg at `q < 0.10` across 25–45 tests
+**Rejected alternative: circular-shift permutation testing.** Habits
+and the z-score series are both autocorrelated, so independent
+reshuffling of habit labels is invalid, and rotating the habit series by
+a random offset is the natural fix. It breaks the feature outright,
+though: a circular shift of an *n*-day series has at most *n*−1 distinct
+rotations, so at 3 months of data (~90 days) the smallest achievable
+empirical p-value is ~1/90 ≈ 0.011 — no matter how strong the real
+correlation is. Benjamini–Hochberg at `q < 0.10` across 25–45 tests
 needs the smallest p-value to clear roughly `q/m ≈ 0.002–0.004` to reject
-anything. **0.011 can never clear 0.004** — this design is mathematically
+anything. **0.011 can never clear 0.004** — the method is mathematically
 inert, not just underpowered: it would surface nothing until well past a
-year of accumulated data, real pattern or not, and that's a hard floor of
+year of accumulated data, real pattern or not, and that is a hard floor of
 the permutation method itself, not a tuning parameter to adjust.
 
 **Adopted instead: an autocorrelation-corrected parametric test
@@ -207,7 +223,10 @@ t-distribution, not from counting discrete permutations — computed per
 2. For lag `L` in `{1, 2, 3}` (§1.2), pair each observed habit day H's
    exposure indicator with the de-seasonalized factor z-score on civil
    date H + L, keeping only pairs where the habit day is observed (§1.3)
-   and the factor value exists. Compute Pearson `r` over those pairs.
+   and the factor value is a real observation: days the Stat Engine
+   flags `imputed` are treated as missing, since an imputed value equals
+   the baseline by construction (z ≈ 0) and would pull every correlation
+   toward zero. Compute Pearson `r` over those pairs.
    `n` in the steps below is the number of paired observations.
 3. **Effective sample size.** Estimate each de-seasonalized series' own
    lag-1 autocorrelation (`ρ_habit`, `ρ_factor`) via the standard sample
@@ -249,11 +268,27 @@ t-distribution, not from counting discrete permutations — computed per
    free prose around a correlation), so there's no guardrail concern in
    this document; if the coach discusses a correlation in chat, it does
    so via the structured fields below (see `2026-09-20-ai-coach-design.md`
-   §2.4), not by re-deriving or paraphrasing the numbers itself.
-8. Stored in a `HabitCorrelation` table, recomputed weekly (these need
-   enough new data between runs to be worth recomputing; nightly would
-   just be noise chasing noise), surfaced in a dedicated "Patterns" tab,
-   never silently injected into the daily score.
+   §4), not by re-deriving or paraphrasing the numbers itself.
+8. **Persistence rule (no flickering).** One weekly run passing is a
+   candidate, not a finding. Each `(userId, habitType, factor, lagDays)`
+   row in `HabitCorrelation` carries `status` ∈ {`CANDIDATE`,
+   `CONFIRMED`, `RETIRED`}, `consecutivePasses`, `consecutiveMisses`,
+   `lastEvaluatedAt`, and the latest `r`, `pValue`, `qValue`,
+   `effectSizePercent`, `comparisonPercent`, `sampleSize`. A hypothesis
+   that survives step 6 for the first time is `CANDIDATE`; it becomes
+   `CONFIRMED` after **two consecutive** weekly runs pass; a `CONFIRMED`
+   row becomes `RETIRED` (hidden) only after **two consecutive** misses,
+   so one weak week does not erase a pattern; a `RETIRED` row that passes
+   twice in a row again is re-confirmed. Only `CONFIRMED` rows appear in
+   the Patterns tab or are returned by `getHabitCorrelations()`;
+   `CANDIDATE` rows are never shown, because surfacing possible patterns
+   invites exactly the false-pattern risk this engine exists to
+   prevent. The cost is deliberate: a real pattern takes at least two
+   weekly runs to appear.
+9. Recomputed weekly (these need enough new data between runs to be
+   worth recomputing; nightly would just be noise chasing noise),
+   surfaced in a dedicated "Patterns" tab, never silently injected into
+   the daily score.
 
 **Structured output for `getHabitCorrelations()`**: each surfaced row
 returns `{habitType, exposureThreshold, exposureUnit, factor, lagDays,
@@ -277,7 +312,7 @@ Renders one `HabitCorrelation` row: the natural-language sentence (step 7
 above) plus a small sparkline of the two series aligned at the tested
 lag, plus the sample-size caveat rendered as a persistent visible line,
 not a footnote. Uses the same `COLORS`/`MOTION` tokens
-`2026-09-20-stat-engine-design.md` §3.2 defines — no separate token set
+`2026-09-20-stat-engine-design.md` §4 defines — no separate token set
 for this component.
 
 ## Testing
@@ -306,8 +341,19 @@ for this component.
   data yet" and never tested.
 - An integration test confirming `HabitLog` day-bucketing uses the same
   canonical day/timezone convention `2026-09-20-stat-engine-design.md`
-  §1.2 resolves, so this document can't silently drift from that
+  §2 resolves, so this document can't silently drift from that
   resolution as either document changes independently.
+- **Imputed-day exclusion**: a pair whose factor value is flagged
+  `imputed` is dropped; a synthetic series with a true effect plus
+  injected imputed (z = 0) days recovers the effect, and does not when
+  the flag is ignored.
+- **Series choice**: the sleep series tested is `sleepDurationZ`;
+  `sleepDebtRolling14d` is never used as a correlation series.
+- **Persistence lifecycle**: one passing run yields `CANDIDATE` (not
+  returned by `getHabitCorrelations()`); a second consecutive pass yields
+  `CONFIRMED`; one miss on a `CONFIRMED` row leaves it `CONFIRMED`; a
+  second consecutive miss makes it `RETIRED`; two consecutive passes
+  re-confirm a `RETIRED` row.
 - Component snapshot tests for `CorrelationCard`.
 
 ## Open Questions / Risks
@@ -327,5 +373,5 @@ for this component.
   reply about a correlation) is intentionally **not** this document's
   concern — `getHabitCorrelations()`'s structured-field output already
   avoids letting an LLM paraphrase these numbers into free prose. See
-  `2026-09-20-ai-coach-design.md` §2.4 for that guardrail's own open
+  `2026-09-20-ai-coach-design.md` §4 for that guardrail's own open
   questions.
