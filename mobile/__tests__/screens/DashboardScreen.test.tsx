@@ -89,6 +89,36 @@ describe('DashboardScreen', () => {
     expect(getByText('Steps is 50% above your recent average.')).toBeTruthy();
   });
 
+  it('opens a metric detail page with that metric\'s own series when a ring card is pressed', async () => {
+    const stepsRecords = [
+      { id: '1', metricType: 'STEPS', value: 8000, recordedAt: '2026-09-01T00:00:00.000Z' },
+      { id: '2', metricType: 'STEPS', value: 12000, recordedAt: '2026-09-02T00:00:00.000Z' },
+    ];
+    mockApi({ records: stepsRecords });
+
+    const { getByTestId } = render(<DashboardScreen />);
+
+    await waitFor(() => expect(getByTestId('metric-card-STEPS')).toBeTruthy());
+    fireEvent.press(getByTestId('metric-card-STEPS'));
+
+    expect(mockNavigate).toHaveBeenCalledWith('MetricDetail', { metricType: 'STEPS', records: stepsRecords });
+  });
+
+  it('opens a metric detail page when its trend card is pressed', async () => {
+    const stepsRecords = [
+      { id: '1', metricType: 'STEPS', value: 8000, recordedAt: '2026-09-01T00:00:00.000Z' },
+      { id: '2', metricType: 'STEPS', value: 12000, recordedAt: '2026-09-02T00:00:00.000Z' },
+    ];
+    mockApi({ records: stepsRecords });
+
+    const { getByTestId } = render(<DashboardScreen />);
+
+    await waitFor(() => expect(getByTestId('trend-card-STEPS')).toBeTruthy());
+    fireEvent.press(getByTestId('trend-card-STEPS'));
+
+    expect(mockNavigate).toHaveBeenCalledWith('MetricDetail', { metricType: 'STEPS', records: stepsRecords });
+  });
+
   it('shows an empty state when there are no records yet', async () => {
     mockApi({ records: [] });
 
