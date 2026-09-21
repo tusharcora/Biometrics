@@ -226,6 +226,52 @@ describe('GET /health/callback', () => {
       expect(conn?.webhookSubscriptionId).toBe('sub-new');
     });
 
+    // Regression: reconnecting on the same UTC day as the last sync built the
+    // window [today, today), which is empty. The worker sent it to Google, got a
+    // 400, and the backfill job failed.
+    it('does not enqueue a backfill when there is nothing before today to fetch', async () => {
+      (subscriber.deleteUserSubscription as jest.Mock).mockReset().mockResolvedValue(undefined);
+      const { user, healthUserId } = await createConnectedUser('sub-same-day');
+      await prisma.healthConnection.update({ where: { userId: user.id }, data: { lastSyncedAt: new Date() } });
+      const state = await getHealthOAuthState(user.id);
+      (queue.enqueueBackfillJob as jest.Mock).mockClear();
+
+      (oauth.exchangeCodeForTokens as jest.Mock).mockResolvedValue({
+        accessToken: 'health-access-3', refreshToken: 'health-refresh-3', expiresIn: 7200,
+      });
+      (subscriber.getIdentity as jest.Mock).mockResolvedValue({ healthUserId });
+      (subscriber.registerUserSubscription as jest.Mock).mockResolvedValue('sub-same-day-new');
+
+      const res = await request(createApp()).get('/health/callback').query({ code: 'code', state });
+
+      expect(res.status).toBe(302);
+      expect(res.headers.location).toContain('status=connected');
+      expect(queue.enqueueBackfillJob).not.toHaveBeenCalled();
+      const conn = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
+      expect(conn?.status).toBe('CONNECTED');
+      expect(conn?.webhookSubscriptionId).toBe('sub-same-day-new');
+    });
+
+    it('still enqueues a backfill from the last sync day when it was on an earlier day', async () => {
+      (subscriber.deleteUserSubscription as jest.Mock).mockReset().mockResolvedValue(undefined);
+      const { user, healthUserId } = await createConnectedUser('sub-earlier');
+      const state = await getHealthOAuthState(user.id);
+      (queue.enqueueBackfillJob as jest.Mock).mockClear();
+
+      (oauth.exchangeCodeForTokens as jest.Mock).mockResolvedValue({
+        accessToken: 'health-access-4', refreshToken: 'health-refresh-4', expiresIn: 7200,
+      });
+      (subscriber.getIdentity as jest.Mock).mockResolvedValue({ healthUserId });
+      (subscriber.registerUserSubscription as jest.Mock).mockResolvedValue('sub-earlier-new');
+
+      await request(createApp()).get('/health/callback').query({ code: 'code', state });
+
+      expect(queue.enqueueBackfillJob).toHaveBeenCalledTimes(1);
+      const arg = (queue.enqueueBackfillJob as jest.Mock).mock.calls[0][0];
+      expect(arg.userId).toBe(user.id);
+      expect(arg.startDate < arg.endDate).toBe(true);
+    });
+
     it('still completes the connect when deleting the previous subscription fails', async () => {
       (subscriber.deleteUserSubscription as jest.Mock).mockReset().mockRejectedValue(new Error('network error'));
       const { user, healthUserId } = await createConnectedUser('sub-old-undeletable');

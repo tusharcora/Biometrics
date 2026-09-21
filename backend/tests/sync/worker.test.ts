@@ -148,30 +148,30 @@ describe('processSyncJob', () => {
 
     await processSyncJob({
       name: 'backfill',
-      data: { userId: user.id, startDate: '2026-08-01', endDate: '2026-08-01' },
+      data: { userId: user.id, startDate: '2026-08-01', endDate: '2026-08-02' },
     } as Job);
 
     expect(healthClient.fetchMetricRange).toHaveBeenCalledWith(
       'access-token',
       'HRV',
       '2026-08-01',
-      '2026-08-01',
+      '2026-08-02',
     );
     expect(healthClient.fetchMetricRange).toHaveBeenCalledWith(
       'access-token',
       'RESTING_HR',
       '2026-08-01',
-      '2026-08-01',
+      '2026-08-02',
     );
     // SLEEP goes through the session path with a window widened by one day
     // each side, and never through fetchMetricRange.
-    expect(healthClient.fetchSleepSessions).toHaveBeenCalledWith('access-token', '2026-07-31', '2026-08-02');
+    expect(healthClient.fetchSleepSessions).toHaveBeenCalledWith('access-token', '2026-07-31', '2026-08-03');
     expect(healthClient.fetchMetricRange).not.toHaveBeenCalledWith('access-token', 'SLEEP', expect.anything(), expect.anything());
     expect(healthClient.fetchMetricRange).toHaveBeenCalledWith(
       'access-token',
       'STEPS',
       '2026-08-01',
-      '2026-08-01',
+      '2026-08-02',
     );
   });
 
@@ -183,7 +183,7 @@ describe('processSyncJob', () => {
 
     await processSyncJob({
       name: 'backfill',
-      data: { userId: user.id, startDate: '2026-08-01', endDate: '2026-08-01' },
+      data: { userId: user.id, startDate: '2026-08-01', endDate: '2026-08-02' },
     } as Job);
 
     const connection = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
@@ -621,5 +621,56 @@ describe('processSyncJob', () => {
 
       expect(scoreSweep.runScoreSweep).toHaveBeenCalledTimes(1);
     });
+  });
+});
+
+describe('backfill with an empty window', () => {
+  // A reconnect on the same day as the last sync used to enqueue a window whose
+  // start equals its end. Google answers an empty daily-HRV filter with a 400,
+  // which failed the whole job even though there was nothing to fetch.
+  beforeEach(() => {
+    (healthClient.fetchMetricRange as jest.Mock).mockReset();
+    (healthClient.fetchSleepSessions as jest.Mock).mockReset();
+  });
+
+  it.each([
+    ['start equals end', '2026-09-21', '2026-09-21'],
+    ['start is after end', '2026-09-22', '2026-09-21'],
+  ])('does not call Google when %s', async (_label, startDate, endDate) => {
+    const user = await createConnectedUser();
+
+    await expect(
+      processSyncJob({ name: 'backfill', data: { userId: user.id, startDate, endDate } } as Job),
+    ).resolves.toBeUndefined();
+
+    expect(healthClient.fetchMetricRange).not.toHaveBeenCalled();
+    expect(healthClient.fetchSleepSessions).not.toHaveBeenCalled();
+  });
+
+  it('leaves lastSyncedAt and the connection status untouched', async () => {
+    const user = await createConnectedUser();
+    const before = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
+
+    await processSyncJob({
+      name: 'backfill',
+      data: { userId: user.id, startDate: '2026-09-21', endDate: '2026-09-21' },
+    } as Job);
+
+    const after = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
+    expect(after?.lastSyncedAt).toEqual(before?.lastSyncedAt);
+    expect(after?.status).toBe('CONNECTED');
+  });
+
+  it('still fetches a one-day window (start one day before end)', async () => {
+    const user = await createConnectedUser();
+    (healthClient.fetchMetricRange as jest.Mock).mockResolvedValue([]);
+    (healthClient.fetchSleepSessions as jest.Mock).mockResolvedValue([]);
+
+    await processSyncJob({
+      name: 'backfill',
+      data: { userId: user.id, startDate: '2026-09-20', endDate: '2026-09-21' },
+    } as Job);
+
+    expect(healthClient.fetchMetricRange).toHaveBeenCalledWith('access-token', 'HRV', '2026-09-20', '2026-09-21');
   });
 });

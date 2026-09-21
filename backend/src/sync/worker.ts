@@ -10,6 +10,7 @@ import { decryptToken } from '../crypto/tokenCipher';
 import { upsertBiometricRecords, storeSleepSessions } from '../biometrics/repository';
 import { BiometricMetricType, HealthMetricPoint, SleepSessionPoint } from '../types';
 import { FetchJobData, BackfillJobData } from './queue';
+import { isEmptyWindow } from './window';
 import { refreshedTokenUpdateData } from './tokenUpdate';
 import { computeDailyScore } from '../scoring/compute';
 import { runScoreSweep } from '../scoring/sweep';
@@ -202,6 +203,11 @@ async function handleFetchJob(data: FetchJobData): Promise<void> {
 }
 
 async function handleBackfillJob(data: BackfillJobData): Promise<void> {
+  // Nothing to fetch, and Google answers an empty window with a 400 that would
+  // fail the job (e.g. a reconnect on the same day as the last sync). Not a
+  // sync, so lastSyncedAt is deliberately left alone.
+  if (isEmptyWindow(data.startDate, data.endDate)) return;
+
   const conn = await prisma.healthConnection.findUnique({ where: { userId: data.userId } });
   if (!conn || conn.status === 'DISCONNECTED') return;
 
