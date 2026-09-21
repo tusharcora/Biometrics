@@ -216,95 +216,97 @@ export function CoachScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background">
-      <KeyboardAvoidingView
-        className="flex-1"
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        keyboardVerticalOffset={90}
-        style={{ paddingBottom: keyboardVisible ? 0 : clearance }}
-      >
-        <ScrollView
-          ref={scrollRef}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ gap: 12, padding: 16, flexGrow: 1 }}
-          onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+      {/* KeyboardAvoidingView owns its paddingBottom on iOS, so the bar clearance sits on this wrapper. */}
+      <View testID="coach-clearance" style={{ flex: 1, paddingBottom: keyboardVisible ? 0 : clearance }}>
+        <KeyboardAvoidingView
+          className="flex-1"
+          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+          keyboardVerticalOffset={90}
         >
-          {messages.length === 0 && !sending ? (
-            <View testID="coach-empty" className="flex-1 items-center justify-center gap-2 py-16">
-              <Ionicons name="chatbubbles-outline" size={28} color={colors.muted} />
-              <Text className="text-center text-muted-foreground">
-                Ask about your scores, what moved them, or your habit patterns.
-              </Text>
-            </View>
-          ) : null}
+          <ScrollView
+            ref={scrollRef}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ gap: 12, padding: 16, flexGrow: 1 }}
+            onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+          >
+            {messages.length === 0 && !sending ? (
+              <View testID="coach-empty" className="flex-1 items-center justify-center gap-2 py-16">
+                <Ionicons name="chatbubbles-outline" size={28} color={colors.muted} />
+                <Text className="text-center text-muted-foreground">
+                  Ask about your scores, what moved them, or your habit patterns.
+                </Text>
+              </View>
+            ) : null}
 
-          {messages.map((message) => (
-            <View key={message.id} className="gap-1">
-              <ChatBubble role={message.role} text={message.text} source={message.source as CoachMessageSource} animate={message.fresh === true}>
-                {message.safety ? (
-                  <View className="gap-3">
-                    <Card testID="coach-safety-resources" className="gap-1 border-accent bg-muted">
-                      <Text className="text-sm font-semibold">Support is available</Text>
-                      {message.safety.resources.map((resource) => (
-                        <Text key={resource} className="text-sm">
-                          {resource}
-                        </Text>
-                      ))}
-                    </Card>
-                    {!message.safety.overridden ? (
-                      <Button
-                        testID="coach-safety-override"
-                        variant="ghost"
-                        size="sm"
-                        disabled={sending}
-                        onPress={() => overrideSafety(message.safety!.originalMessage)}
-                      >
-                        {"That's not why I'm asking"}
-                      </Button>
-                    ) : null}
-                  </View>
-                ) : null}
-              </ChatBubble>
-              {message.memoryProposals ? <MemoryProposalChips proposals={message.memoryProposals} /> : null}
-            </View>
-          ))}
+            {messages.map((message) => (
+              <View key={message.id} className="gap-1">
+                <ChatBubble role={message.role} text={message.text} source={message.source as CoachMessageSource} animate={message.fresh === true}>
+                  {message.safety ? (
+                    <View className="gap-3">
+                      <Card testID="coach-safety-resources" className="gap-1 border-accent bg-muted">
+                        <Text className="text-sm font-semibold">Support is available</Text>
+                        {message.safety.resources.map((resource) => (
+                          <Text key={resource} className="text-sm">
+                            {resource}
+                          </Text>
+                        ))}
+                      </Card>
+                      {!message.safety.overridden ? (
+                        <Button
+                          testID="coach-safety-override"
+                          variant="ghost"
+                          size="sm"
+                          disabled={sending}
+                          onPress={() => overrideSafety(message.safety!.originalMessage)}
+                        >
+                          {"That's not why I'm asking"}
+                        </Button>
+                      ) : null}
+                    </View>
+                  ) : null}
+                </ChatBubble>
+                {message.memoryProposals ? <MemoryProposalChips proposals={message.memoryProposals} /> : null}
+              </View>
+            ))}
 
-          {sending ? (
-            <View className="items-start">
-              <Text testID="coach-thinking" className="px-1 text-sm text-muted-foreground">
-                Thinking…
-              </Text>
-            </View>
-          ) : null}
+            {sending ? (
+              <View className="items-start">
+                <Text testID="coach-thinking" className="px-1 text-sm text-muted-foreground">
+                  Thinking…
+                </Text>
+              </View>
+            ) : null}
 
-          {error ? (
-            <Card className="gap-2">
-              <Text testID="coach-error" className="text-sm text-destructive">
-                {error.text}
-              </Text>
-              <Button testID="coach-retry-button" variant="ghost" size="sm" onPress={retry}>
-                Try again
-              </Button>
-            </Card>
-          ) : null}
-        </ScrollView>
+            {error ? (
+              <Card className="gap-2">
+                <Text testID="coach-error" className="text-sm text-destructive">
+                  {error.text}
+                </Text>
+                <Button testID="coach-retry-button" variant="ghost" size="sm" onPress={retry}>
+                  Try again
+                </Button>
+              </Card>
+            ) : null}
+          </ScrollView>
 
-        <View className="flex-row items-end gap-2 border-t border-border p-3">
-          <TextInput
-            testID="coach-input"
-            value={input}
-            onChangeText={setInput}
-            placeholder="Ask the coach"
-            placeholderTextColor={colors.muted}
-            multiline
-            editable={!sending}
-            style={{ color: colors.foreground, maxHeight: 120 }}
-            className="flex-1 rounded-xl border border-border bg-card px-4 py-3"
-          />
-          <Button testID="coach-send-button" accessibilityLabel="Send" disabled={!canSend} onPress={send} className={canSend ? '' : 'opacity-50'}>
-            <Ionicons name="arrow-up" size={20} color="rgb(255,255,255)" />
-          </Button>
-        </View>
-      </KeyboardAvoidingView>
+          <View className="flex-row items-end gap-2 border-t border-border p-3">
+            <TextInput
+              testID="coach-input"
+              value={input}
+              onChangeText={setInput}
+              placeholder="Ask the coach"
+              placeholderTextColor={colors.muted}
+              multiline
+              editable={!sending}
+              style={{ color: colors.foreground, maxHeight: 120 }}
+              className="flex-1 rounded-xl border border-border bg-card px-4 py-3"
+            />
+            <Button testID="coach-send-button" accessibilityLabel="Send" disabled={!canSend} onPress={send} className={canSend ? '' : 'opacity-50'}>
+              <Ionicons name="arrow-up" size={20} color="rgb(255,255,255)" />
+            </Button>
+          </View>
+        </KeyboardAvoidingView>
+      </View>
     </SafeAreaView>
   );
 }

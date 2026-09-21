@@ -1,6 +1,8 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { SettingsScreen } from '../../src/screens/SettingsScreen';
+import { FLOATING_BAR_HEIGHT, FLOATING_BAR_MARGIN } from '../../src/navigation/tabBarLayout';
 import {
   getTimezoneState,
   setTimezoneOverride,
@@ -54,5 +56,16 @@ describe('SettingsScreen time zone', () => {
     await waitFor(() => expect(clearTimezoneOverride).toHaveBeenCalledTimes(1));
     await waitFor(() => expect(getByTestId('timezone-value')).toHaveTextContent('America/Los_Angeles'));
     expect(queryByTestId('use-device-timezone-button')).toBeNull();
+  });
+
+  it('keeps the time zone picker clear of the floating bar', async () => {
+    const { getByTestId } = render(<SettingsScreen />);
+    await waitFor(() => expect(getByTestId('timezone-value')).toBeTruthy());
+
+    fireEvent.press(getByTestId('timezone-row'));
+
+    // No SafeAreaProvider here, so the bottom inset falls back to the bar margin.
+    const clearance = FLOATING_BAR_HEIGHT + FLOATING_BAR_MARGIN + 16;
+    expect(StyleSheet.flatten(getByTestId('timezone-picker').props.style).paddingBottom).toBe(clearance);
   });
 });

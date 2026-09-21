@@ -1,6 +1,9 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { CoachScreen } from '../../src/screens/CoachScreen';
+import { useKeyboardVisible } from '../../src/lib/useKeyboardVisible';
+import { FLOATING_BAR_HEIGHT, FLOATING_BAR_MARGIN } from '../../src/navigation/tabBarLayout';
 import {
   CoachConsentRequiredError,
   CoachDisabledError,
@@ -18,6 +21,8 @@ jest.mock('../../src/api/coach', () => ({
   fetchLatestConversation: jest.fn(),
   sendCoachMessage: jest.fn(),
 }));
+
+jest.mock('../../src/lib/useKeyboardVisible', () => ({ useKeyboardVisible: jest.fn(() => false) }));
 
 const mockReplace = jest.fn();
 let mockParams: unknown;
@@ -66,6 +71,7 @@ function type(utils: ReturnType<typeof render>, text: string) {
 beforeEach(() => {
   jest.clearAllMocks();
   mockParams = undefined;
+  (useKeyboardVisible as jest.Mock).mockReturnValue(false);
   (fetchCoachStatus as jest.Mock).mockResolvedValue(status);
   (fetchLatestConversation as jest.Mock).mockResolvedValue({ conversationId: null, messages: [] });
 });
@@ -304,5 +310,23 @@ describe('CoachScreen: safety reply', () => {
 
     expect(await utils.findByText('Here you go.')).toBeTruthy();
     expect(sendCoachMessage).toHaveBeenLastCalledWith(expect.objectContaining({ safetyOverride: true }));
+  });
+});
+
+describe('CoachScreen: tab bar clearance', () => {
+  // No SafeAreaProvider here, so the bottom inset falls back to the bar margin.
+  const clearance = FLOATING_BAR_HEIGHT + FLOATING_BAR_MARGIN + 16;
+
+  it('clears the floating bar with a wrapper the keyboard-avoiding view cannot override', async () => {
+    const { getByTestId } = await openChat();
+
+    expect(StyleSheet.flatten(getByTestId('coach-clearance').props.style).paddingBottom).toBe(clearance);
+  });
+
+  it('drops the clearance while the keyboard is open, because the bar hides', async () => {
+    (useKeyboardVisible as jest.Mock).mockReturnValue(true);
+    const { getByTestId } = await openChat();
+
+    expect(StyleSheet.flatten(getByTestId('coach-clearance').props.style).paddingBottom).toBe(0);
   });
 });
