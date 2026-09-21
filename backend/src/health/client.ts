@@ -82,6 +82,34 @@ async function dailyRollUp(
   return results;
 }
 
+// dataPoints.list returns ONE page per call and signals more with
+// `nextPageToken`. Confirmed live (2026-09-21): a 30-day sleep window holds 25
+// sessions but the first page carries only 12, so a caller that ignores the
+// token silently loses the rest. Follow the token until it is absent or empty
+// (`pageToken` is the confirmed query parameter). The cap turns a token that
+// never ends into an error instead of an endless loop; 50 pages is far beyond
+// any real backfill window.
+const MAX_LIST_PAGES = 50;
+
+async function listAllPages(url: string, accessToken: string, dataType: string): Promise<any[]> {
+  const items: any[] = [];
+  let pageToken: string | undefined;
+  for (let page = 0; page < MAX_LIST_PAGES; page++) {
+    const pageUrl = pageToken ? `${url}&${new URLSearchParams({ pageToken }).toString()}` : url;
+    const res = await fetch(pageUrl, { headers: { Authorization: `Bearer ${accessToken}` } });
+    if (!res.ok) {
+      const err = new Error(`Google Health dataPoints.list returned ${res.status} for ${dataType}`);
+      (err as any).status = res.status;
+      throw err;
+    }
+    const json = (await res.json()) as { dataPoints?: any[]; nextPageToken?: string };
+    items.push(...(json.dataPoints ?? []));
+    if (!json.nextPageToken) return items;
+    pageToken = json.nextPageToken;
+  }
+  throw new Error(`Google Health dataPoints.list for ${dataType} still had more pages after ${MAX_LIST_PAGES}`);
+}
+
 async function listDataPoints(
   accessToken: string,
   dataType: string,
@@ -91,14 +119,7 @@ async function listDataPoints(
 ): Promise<any[]> {
   const filter = `${dataType}.${filterField} >= "${startDate}T00:00:00Z" AND ${dataType}.${filterField} < "${endDate}T00:00:00Z"`;
   const url = `${BASE_URL}/users/me/dataTypes/${dataType}/dataPoints?${new URLSearchParams({ filter }).toString()}`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
-  if (!res.ok) {
-    const err = new Error(`Google Health dataPoints.list returned ${res.status} for ${dataType}`);
-    (err as any).status = res.status;
-    throw err;
-  }
-  const json = (await res.json()) as { dataPoints?: any[] };
-  return json.dataPoints ?? [];
+  return listAllPages(url, accessToken, dataType);
 }
 
 function civilDateToDate(civil: { date: { year: number; month: number; day: number } }): Date {
@@ -123,14 +144,7 @@ async function listDailyHeartRateVariability(
 ): Promise<any[]> {
   const filter = `daily_heart_rate_variability.date >= "${startDate}" AND daily_heart_rate_variability.date < "${endDate}"`;
   const url = `${BASE_URL}/users/me/dataTypes/daily-heart-rate-variability/dataPoints?${new URLSearchParams({ filter }).toString()}`;
-  const res = await fetch(url, { headers: { Authorization: `Bearer ${accessToken}` } });
-  if (!res.ok) {
-    const err = new Error(`Google Health dataPoints.list returned ${res.status} for daily-heart-rate-variability`);
-    (err as any).status = res.status;
-    throw err;
-  }
-  const json = (await res.json()) as { dataPoints?: any[] };
-  return json.dataPoints ?? [];
+  return listAllPages(url, accessToken, 'daily-heart-rate-variability');
 }
 
 // Metrics Google delivers as one pre-aggregated value per civil day. SLEEP is

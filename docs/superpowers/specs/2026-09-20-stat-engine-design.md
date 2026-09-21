@@ -887,13 +887,25 @@ below were made during implementation where this spec was silent or where
 it turned out to be wrong; where they contradict the text above, **this
 section wins**.
 
-**Not verified against a real Google account** (none was available):
-the three Slice 0 live checks — Google's civil-date timezone basis, whether
-`endTime − startTime` is a meaningful time-in-bed, and how multi-session
-nights are represented. `backend/scripts/probeSleepShape.ts` and
-`docs/superpowers/notes/slice0-live-checks.md` exist to run them. Until
-they are run, the day-alignment fix is internally consistent but not
-confirmed correct, and `sleepEfficiency` rests on an assumption.
+**Live checks, run 2026-09-21 against one real account** (full results in
+`docs/superpowers/notes/slice0-live-checks.md`):
+- Google's civil dates follow the record's own local UTC offset, so keying
+  SLEEP by the local end date agrees with the other three metrics. This
+  account's sleep never straddles a UTC/local date boundary, so the
+  sleep-based probe alone could not separate the two bases; steps samples
+  did. Every record also carries `startUtcOffset`/`endUtcOffset`, which would
+  be a more robust key than `User.timezone` when the user travels (not done).
+- `endTime − startTime` **is** time in bed: it equals
+  `summary.minutesInSleepPeriod` on every session, and
+  `summary.minutesAwake` exists. `sleepEfficiency` is sound.
+- Multi-session nights were **not observed** (one main sleep per day, all
+  `metadata.mainSleep: true`), so nap and split-night handling is still
+  untested against real data.
+- **Pagination bug found and fixed:** list endpoints are paginated and the
+  client used to read only the first page, dropping 13 of 25 nights.
+- **A dedicated `daily-resting-heart-rate` type exists** and differs from the
+  daily-minimum proxy used today (median +12 bpm, steadier day to day).
+  Switching the RHR factor to it is an open scoring decision.
 
 Slice 0
 - `PUT /me/timezone` recomputes rollups on every call, not only on a

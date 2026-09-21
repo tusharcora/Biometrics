@@ -251,3 +251,95 @@ describe('fetchMetricRange', () => {
     ]);
   });
 });
+
+// Confirmed live against a real account (2026-09-21): a 30-day sleep window
+// holds 25 sessions, but the first dataPoints.list response returns only 12
+// and carries a nextPageToken. The client used to ignore the token and so
+// silently stored 12 of 25 nights.
+describe('list pagination', () => {
+  const sleepPoint = (day: number) => ({
+    sleep: {
+      interval: { startTime: `2026-09-${String(day).padStart(2, '0')}T05:00:00Z`, endTime: `2026-09-${String(day).padStart(2, '0')}T13:00:00Z` },
+      summary: { minutesAsleep: String(400 + day) },
+    },
+  });
+  const hrvPoint = (day: number) => ({
+    dailyHeartRateVariability: { date: { year: 2026, month: 9, day }, averageHeartRateVariabilityMilliseconds: 60 + day },
+  });
+
+  it('follows nextPageToken across pages and returns every sleep session, with the same filter on each page', async () => {
+    const scope = nock('https://health.googleapis.com')
+      .get('/v4/users/me/dataTypes/sleep/dataPoints')
+      .query((q) => !q.pageToken && String(q.filter).includes('sleep.interval.end_time'))
+      .reply(200, { dataPoints: [sleepPoint(20), sleepPoint(19)], nextPageToken: 'page-2' })
+      .get('/v4/users/me/dataTypes/sleep/dataPoints')
+      .query((q) => q.pageToken === 'page-2' && String(q.filter).includes('sleep.interval.end_time'))
+      .reply(200, { dataPoints: [sleepPoint(18)], nextPageToken: 'page-3' })
+      .get('/v4/users/me/dataTypes/sleep/dataPoints')
+      .query((q) => q.pageToken === 'page-3' && String(q.filter).includes('sleep.interval.end_time'))
+      .reply(200, { dataPoints: [sleepPoint(17), sleepPoint(16)] });
+
+    const sessions = await fetchSleepSessions('token-1', '2026-09-01', '2026-09-22');
+
+    expect(sessions.map((s) => s.minutesAsleep)).toEqual([420, 419, 418, 417, 416]);
+    expect(scope.isDone()).toBe(true);
+  });
+
+  it('follows nextPageToken for daily HRV as well', async () => {
+    const scope = nock('https://health.googleapis.com')
+      .get('/v4/users/me/dataTypes/daily-heart-rate-variability/dataPoints')
+      .query((q) => !q.pageToken)
+      .reply(200, { dataPoints: [hrvPoint(20), hrvPoint(19)], nextPageToken: 'hrv-2' })
+      .get('/v4/users/me/dataTypes/daily-heart-rate-variability/dataPoints')
+      .query((q) => q.pageToken === 'hrv-2')
+      .reply(200, { dataPoints: [hrvPoint(18)] });
+
+    const points = await fetchMetricRange('token-1', 'HRV', '2026-09-01', '2026-09-22');
+
+    expect(points.map((p) => p.value)).toEqual([80, 79, 78]);
+    expect(scope.isDone()).toBe(true);
+  });
+
+  it('makes a single request when there is no nextPageToken', async () => {
+    const scope = nock('https://health.googleapis.com')
+      .get('/v4/users/me/dataTypes/sleep/dataPoints')
+      .query(true)
+      .reply(200, { dataPoints: [sleepPoint(20)] });
+
+    const sessions = await fetchSleepSessions('token-1', '2026-09-01', '2026-09-22');
+
+    expect(sessions).toHaveLength(1);
+    expect(scope.isDone()).toBe(true);
+  });
+
+  it('treats an empty nextPageToken as the last page', async () => {
+    nock('https://health.googleapis.com')
+      .get('/v4/users/me/dataTypes/sleep/dataPoints')
+      .query(true)
+      .reply(200, { dataPoints: [sleepPoint(20)], nextPageToken: '' });
+
+    await expect(fetchSleepSessions('token-1', '2026-09-01', '2026-09-22')).resolves.toHaveLength(1);
+  });
+
+  it('gives up with a clear error instead of looping forever if the token never ends', async () => {
+    nock('https://health.googleapis.com')
+      .persist()
+      .get('/v4/users/me/dataTypes/sleep/dataPoints')
+      .query(true)
+      .reply(200, { dataPoints: [sleepPoint(20)], nextPageToken: 'again' });
+
+    await expect(fetchSleepSessions('token-1', '2026-09-01', '2026-09-22')).rejects.toThrow(/more pages/i);
+  });
+
+  it('still surfaces the HTTP status when a later page fails', async () => {
+    nock('https://health.googleapis.com')
+      .get('/v4/users/me/dataTypes/sleep/dataPoints')
+      .query((q) => !q.pageToken)
+      .reply(200, { dataPoints: [sleepPoint(20)], nextPageToken: 'page-2' })
+      .get('/v4/users/me/dataTypes/sleep/dataPoints')
+      .query((q) => q.pageToken === 'page-2')
+      .reply(401, {});
+
+    await expect(fetchSleepSessions('token-1', '2026-09-01', '2026-09-22')).rejects.toMatchObject({ status: 401 });
+  });
+});
