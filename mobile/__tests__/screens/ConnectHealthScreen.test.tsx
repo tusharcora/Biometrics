@@ -19,7 +19,7 @@ describe('ConnectHealthScreen', () => {
     jest.clearAllMocks();
   });
 
-  it('fetches the authorize URL and navigates to Dashboard on success', async () => {
+  it('fetches the authorize URL and navigates to the tabs on success', async () => {
     (apiFetch as jest.Mock).mockResolvedValue({ url: 'https://accounts.google.com/o/oauth2/v2/auth?state=abc' });
     (WebBrowser.openAuthSessionAsync as jest.Mock).mockResolvedValue({
       type: 'success',
@@ -29,7 +29,7 @@ describe('ConnectHealthScreen', () => {
     const { getByTestId } = render(<ConnectHealthScreen />);
     fireEvent.press(getByTestId('connect-health-button'));
 
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('Dashboard'));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('Tabs'));
     expect(apiFetch).toHaveBeenCalledWith('/health/authorize');
     expect(WebBrowser.openAuthSessionAsync).toHaveBeenCalledWith(
       'https://accounts.google.com/o/oauth2/v2/auth?state=abc',
@@ -59,7 +59,7 @@ describe('ConnectHealthScreen', () => {
     const { getByTestId } = render(<ConnectHealthScreen />);
     fireEvent.press(getByTestId('connect-health-button'));
 
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('Dashboard'));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('Tabs'));
     expect(syncTimezone).toHaveBeenCalledTimes(1);
   });
 
@@ -97,7 +97,7 @@ describe('ConnectHealthScreen', () => {
     });
     fireEvent.press(getByTestId('connect-health-button'));
 
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('Dashboard'));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('Tabs'));
     expect(queryByTestId('connect-health-error')).toBeNull();
   });
 

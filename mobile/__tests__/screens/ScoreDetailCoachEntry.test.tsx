@@ -50,13 +50,14 @@ describe('ScoreDetailScreen: Ask about this', () => {
     fireEvent.press(await findByTestId('ask-coach-button'));
 
     expect(mockNavigate).toHaveBeenCalledTimes(1);
-    const [route, params] = mockNavigate.mock.calls[0];
-    expect(route).toBe('Coach');
-    expect(params.prefill).toMatch(/why did my score change today/i);
-    expect(params.prefill).not.toMatch(/\d/);
+    const [route, args] = mockNavigate.mock.calls[0];
+    expect(route).toBe('Tabs');
+    expect(args.screen).toBe('Coach');
+    expect(args.params.prefill).toMatch(/why did my score change today/i);
+    expect(args.params.prefill).not.toMatch(/\d/);
     // Neither the score (78) nor the date leaks into the prompt.
-    expect(params.prefill).not.toContain('78');
-    expect(params.prefill).not.toContain('2026');
+    expect(args.params.prefill).not.toContain('78');
+    expect(args.params.prefill).not.toContain('2026');
   });
 
   it('asks about sleep on the Sleep Score, still without numbers', async () => {
@@ -66,9 +67,9 @@ describe('ScoreDetailScreen: Ask about this', () => {
 
     fireEvent.press(await findByTestId('ask-coach-button'));
 
-    const [, params] = mockNavigate.mock.calls[0];
-    expect(params.prefill).toMatch(/sleep/i);
-    expect(params.prefill).not.toMatch(/\d/);
+    const [, args] = mockNavigate.mock.calls[0];
+    expect(args.params.prefill).toMatch(/sleep/i);
+    expect(args.params.prefill).not.toMatch(/\d/);
   });
 
   it('goes through the consent flow when the coach is enabled but not consented', async () => {

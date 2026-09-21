@@ -24,10 +24,20 @@ jest.mock('../../src/api/coach', () => ({
 
 jest.mock('../../src/lib/useKeyboardVisible', () => ({ useKeyboardVisible: jest.fn(() => false) }));
 
-const mockReplace = jest.fn();
+const mockNavigate = jest.fn();
+let mockFocusListener: (() => void) | undefined;
 let mockParams: unknown;
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ replace: mockReplace, navigate: jest.fn(), goBack: jest.fn() }),
+  useNavigation: () => ({
+    navigate: mockNavigate,
+    goBack: jest.fn(),
+    addListener: (_event: string, cb: () => void) => {
+      mockFocusListener = cb;
+      return () => {
+        mockFocusListener = undefined;
+      };
+    },
+  }),
   useRoute: () => ({ params: mockParams }),
 }));
 
@@ -71,6 +81,7 @@ function type(utils: ReturnType<typeof render>, text: string) {
 beforeEach(() => {
   jest.clearAllMocks();
   mockParams = undefined;
+  mockFocusListener = undefined;
   (useKeyboardVisible as jest.Mock).mockReturnValue(false);
   (fetchCoachStatus as jest.Mock).mockResolvedValue(status);
   (fetchLatestConversation as jest.Mock).mockResolvedValue({ conversationId: null, messages: [] });
@@ -82,8 +93,49 @@ describe('CoachScreen: gating', () => {
     mockParams = { prefill: 'Why did my score change today?' };
     render(<CoachScreen />);
 
-    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('CoachConsent', { prefill: 'Why did my score change today?' }));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('CoachConsent', { prefill: 'Why did my score change today?' }));
     expect(fetchLatestConversation).not.toHaveBeenCalled();
+  });
+
+  it('shows a review card, instead of bouncing back to consent, when the user returns without agreeing', async () => {
+    (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, consented: false });
+    const { findByTestId, queryByTestId } = render(<CoachScreen />);
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      mockFocusListener?.();
+    });
+
+    expect(await findByTestId('coach-needs-consent')).toBeTruthy();
+    expect(queryByTestId('coach-input')).toBeNull();
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+
+    fireEvent.press(await findByTestId('coach-review-consent-button'));
+    expect(mockNavigate).toHaveBeenCalledTimes(2);
+    expect(mockNavigate).toHaveBeenLastCalledWith('CoachConsent', { prefill: undefined });
+  });
+
+  it('reloads when the tab regains focus after the user agreed', async () => {
+    (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, consented: false });
+    const { findByTestId } = render(<CoachScreen />);
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledTimes(1));
+
+    (fetchCoachStatus as jest.Mock).mockResolvedValue(status);
+    await act(async () => {
+      mockFocusListener?.();
+    });
+
+    expect(await findByTestId('coach-input')).toBeTruthy();
+  });
+
+  it('puts a prefill that arrives after mount into the input', async () => {
+    const utils = await openChat();
+    expect(utils.getByTestId('coach-input').props.value).toBe('');
+
+    mockParams = { prefill: 'Why did my score change today?' };
+    utils.rerender(<CoachScreen />);
+
+    expect(utils.getByTestId('coach-input').props.value).toBe('Why did my score change today?');
   });
 
   it('shows no chat UI at all when the coach is disabled', async () => {
@@ -242,7 +294,7 @@ describe('CoachScreen: errors and retry', () => {
     type(utils, 'Hello');
     fireEvent.press(utils.getByTestId('coach-send-button'));
 
-    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('CoachConsent', { prefill: undefined }));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('CoachConsent', { prefill: undefined }));
   });
 
   it('shows the coach as unavailable when the server says it is disabled (404)', async () => {

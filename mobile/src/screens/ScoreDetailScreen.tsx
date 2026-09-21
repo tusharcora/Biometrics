@@ -14,6 +14,7 @@ import { ConfidenceBadge } from '../components/ui/confidence-badge';
 import { FactorBar, factorBarScale } from '../components/ui/factor-bar';
 import { COLORS } from '../theme';
 import { coachEntryRoute, useCoachStatus } from '../lib/useCoachStatus';
+import { navigateToCoachEntry } from '../navigation/coachNavigation';
 import { scoreQuestion } from '../lib/coachPrompts';
 import {
   buildBaselineSentence,
@@ -129,7 +130,7 @@ export function ScoreDetailScreen() {
           <Pressable
             testID="ask-coach-button"
             accessibilityRole="button"
-            onPress={() => navigation.navigate(coachRoute, { prefill: scoreQuestion(score.type) })}
+            onPress={() => navigateToCoachEntry(navigation, coachRoute, scoreQuestion(score.type))}
             className="active:opacity-80"
           >
             <Card className="flex-row items-center gap-3">

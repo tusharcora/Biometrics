@@ -38,7 +38,7 @@ export function ConnectHealthScreen() {
           // Capture the zone the backend will use for day-bucketing. Not awaited:
           // it swallows its own failures and must not delay landing on the dashboard.
           void syncTimezone();
-          navigation.navigate('Dashboard');
+          navigation.navigate('Tabs');
         } else {
           // The browser came back to the app, but not with a success status.
           setError("Google Health didn't finish connecting. Please try again.");

@@ -8,12 +8,9 @@ import { apiFetch } from '../api/client';
 import type { ScoreType } from '../api/scores';
 import { SignInScreen } from '../screens/SignInScreen';
 import { ConnectHealthScreen } from '../screens/ConnectHealthScreen';
-import { DashboardScreen } from '../screens/DashboardScreen';
 import { MetricDetailScreen } from '../screens/MetricDetailScreen';
 import { ScoreDetailScreen } from '../screens/ScoreDetailScreen';
 import { PatternsScreen } from '../screens/PatternsScreen';
-import { SettingsScreen } from '../screens/SettingsScreen';
-import { CoachScreen } from '../screens/CoachScreen';
 import { CoachConsentScreen } from '../screens/CoachConsentScreen';
 import { CoachMemoryScreen } from '../screens/CoachMemoryScreen';
 import { TabsNavigator, type TabParamList } from './TabsNavigator';
@@ -35,15 +32,10 @@ export type RootStackParamList = {
   // The five-tab shell (Home, Activity, Coach, Metrics, Profile).
   Tabs: NavigatorScreenParams<TabParamList> | undefined;
   ConnectHealth: undefined;
-  Dashboard: undefined;
   MetricDetail: { metricType: MetricRecord['metricType']; records: MetricRecord[] };
   ScoreDetail: { date: string; type?: ScoreType }; // type defaults to RECOVERY
   Patterns: undefined;
-  Settings: undefined;
-  // Only ever navigated to from an entry point that is drawn when the server
-  // reports the coach enabled. `prefill` seeds the chat input (never sent
-  // automatically) and is carried through the consent screen.
-  Coach: { prefill?: string } | undefined;
+  // Pushed over the tabs. `prefill` is carried through the consent screen.
   CoachConsent: { prefill?: string } | undefined;
   // Reached from Settings -> Coach Memory, which only draws when consented.
   CoachMemory: undefined;
@@ -120,12 +112,9 @@ export function RootNavigator() {
       >
         <Stack.Screen name="Tabs" component={TabsNavigator} options={{ headerShown: false }} />
         <Stack.Screen name="ConnectHealth" component={ConnectHealthScreen} options={{ title: 'Connect Health' }} />
-        <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ title: 'Dashboard' }} />
         <Stack.Screen name="MetricDetail" component={MetricDetailScreen} options={{ title: '' }} />
         <Stack.Screen name="ScoreDetail" component={ScoreDetailScreen} options={{ title: 'Score' }} />
         <Stack.Screen name="Patterns" component={PatternsScreen} options={{ title: 'Patterns' }} />
-        <Stack.Screen name="Settings"component={SettingsScreen} options={{ title: 'Settings' }} />
-        <Stack.Screen name="Coach" component={CoachScreen} options={{ title: 'AI Coach' }} />
         <Stack.Screen name="CoachConsent" component={CoachConsentScreen} options={{ title: 'AI Coach' }} />
         <Stack.Screen name="CoachMemory" component={CoachMemoryScreen} options={{ title: 'Coach Memory' }} />
       </Stack.Navigator>

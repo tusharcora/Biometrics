@@ -48,6 +48,7 @@ describe('RootNavigator: AI Coach routes', () => {
     const { getByText } = render(<RootNavigator />);
 
     await waitFor(() => expect(getByText('TABS_SCREEN')).toBeTruthy());
-    expect(mockRegisteredScreens).toEqual(expect.arrayContaining(['Coach', 'CoachConsent']));
+    expect(mockRegisteredScreens).toEqual(expect.arrayContaining(['Tabs', 'CoachConsent']));
+    expect(mockRegisteredScreens).not.toContain('Coach');
   });
 });

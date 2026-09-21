@@ -22,11 +22,11 @@ import { Skeleton } from '../components/ui/skeleton';
 import { ChatBubble } from '../components/ui/chat-bubble';
 import { MemoryProposalChips } from '../components/memory-proposal-chips';
 import { COLORS } from '../theme';
-import type { RootStackParamList } from '../navigation/RootNavigator';
+import type { TabParamList } from '../navigation/TabsNavigator';
 import { useTabBarClearance } from '../navigation/tabBarLayout';
 import { useKeyboardVisible } from '../lib/useKeyboardVisible';
 
-type CoachRoute = RouteProp<RootStackParamList, 'Coach'>;
+type CoachRoute = RouteProp<TabParamList, 'Coach'>;
 
 interface ChatMessage {
   id: string;
@@ -46,7 +46,7 @@ interface ChatMessage {
   };
 }
 
-type Phase = 'loading' | 'unavailable' | 'ready';
+type Phase = 'loading' | 'unavailable' | 'needs-consent' | 'ready';
 
 const ERROR_TEXT = {
   timeout: 'The coach took too long to answer. Nothing was lost; you can try again.',
@@ -74,6 +74,8 @@ export function CoachScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const mounted = useRef(true);
   const localId = useRef(0);
+  const redirectedToConsent = useRef(false);
+  const loadInFlight = useRef(false);
   // Read inside async handlers so a stale closure never resends the wrong id.
   const conversationIdRef = useRef<string | null>(null);
   conversationIdRef.current = conversationId;
@@ -85,45 +87,73 @@ export function CoachScreen() {
     };
   }, []);
 
+  // A prefill can arrive after this tab is already mounted (the tab is reused
+  // by every entry point), so a changed param must reach the input.
   useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const status = await fetchCoachStatus();
-        if (cancelled) return;
-        if (!status.enabled) {
-          setPhase('unavailable');
-          return;
-        }
-        if (!status.consented) {
-          // The server decides: a changed consent version lands here too.
-          navigation.replace('CoachConsent', { prefill });
-          return;
-        }
-        const conversation = await fetchLatestConversation();
-        if (cancelled) return;
-        setConversationId(conversation.conversationId);
-        setMessages(
-          conversation.messages.map((m) => ({
-            id: m.id,
-            role: m.role === 'USER' ? 'user' : 'assistant',
-            text: m.text,
-            source: m.source,
-          })),
-        );
-        setPhase('ready');
-      } catch {
-        // History is a convenience: a failure to load it must not lock the user
-        // out of asking a question. Status failures already fail closed above
-        // only when the server says so.
-        if (!cancelled) setPhase('ready');
+    if (prefill) setInput(prefill);
+  }, [prefill]);
+
+  const load = useCallback(async () => {
+    // Mount and tab focus can both trigger a load; one at a time is enough.
+    if (loadInFlight.current) return;
+    loadInFlight.current = true;
+    try {
+      const status = await fetchCoachStatus();
+      if (!mounted.current) return;
+      if (!status.enabled) {
+        setPhase('unavailable');
+        return;
       }
-    })();
-    return () => {
-      cancelled = true;
-    };
+      if (!status.consented) {
+        // The server decides: a changed consent version lands here too. Send
+        // the user to consent once; if they come back without agreeing, stay on
+        // a card rather than bouncing them straight back there.
+        if (redirectedToConsent.current) {
+          setPhase('needs-consent');
+          return;
+        }
+        redirectedToConsent.current = true;
+        navigation.navigate('CoachConsent', { prefill });
+        return;
+      }
+      redirectedToConsent.current = false;
+      const conversation = await fetchLatestConversation();
+      if (!mounted.current) return;
+      setConversationId(conversation.conversationId);
+      setMessages(
+        conversation.messages.map((m) => ({
+          id: m.id,
+          role: m.role === 'USER' ? 'user' : 'assistant',
+          text: m.text,
+          source: m.source,
+        })),
+      );
+      setPhase('ready');
+    } catch {
+      // History is a convenience: a failure to load it must not lock the user
+      // out of asking a question. Status failures already fail closed above
+      // only when the server says so.
+      if (mounted.current) setPhase('ready');
+    } finally {
+      loadInFlight.current = false;
+    }
+  }, [navigation, prefill]);
+
+  useEffect(() => {
+    void load();
+    // Load once on mount; later loads come from tab focus below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // The Coach tab stays mounted while the user visits consent and comes back,
+  // so re-read status whenever it regains focus. Optional so a screen rendered
+  // without a real navigator (as in tests) still works.
+  useEffect(() => {
+    const unsubscribe = navigation.addListener?.('focus', () => {
+      void load();
+    });
+    return unsubscribe;
+  }, [navigation, load]);
 
   const deliver = useCallback(
     async (request: SendCoachMessageInput) => {
@@ -158,7 +188,7 @@ export function CoachScreen() {
       } catch (e) {
         if (!mounted.current) return;
         if (e instanceof CoachConsentRequiredError) {
-          navigation.replace('CoachConsent', { prefill: undefined });
+          navigation.navigate('CoachConsent', { prefill: undefined });
         } else if (e instanceof CoachDisabledError) {
           setPhase('unavailable');
         } else {
@@ -197,6 +227,19 @@ export function CoachScreen() {
           <Skeleton className="h-12 w-2/3" />
           <Skeleton className="ml-auto h-10 w-1/2" />
           <Skeleton className="h-16 w-3/4" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (phase === 'needs-consent') {
+    return (
+      <SafeAreaView className="flex-1 bg-background">
+        <View testID="coach-needs-consent" className="flex-1 items-center justify-center gap-3 p-6">
+          <Text className="text-center text-muted-foreground">The coach needs your OK before it can look at your scores.</Text>
+          <Button testID="coach-review-consent-button" onPress={() => navigation.navigate('CoachConsent', { prefill })}>
+            Review what is shared
+          </Button>
         </View>
       </SafeAreaView>
     );

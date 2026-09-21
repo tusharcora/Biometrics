@@ -25,6 +25,7 @@ import { COLORS, METRIC_CONFIG, METRIC_ORDER, type MetricType } from '../theme';
 import { computeStats, buildHeadline, type MetricRecord } from '../lib/metricInsights';
 import { pickColdStartProgress, scoreTypeLabel } from '../lib/scoreInsights';
 import { coachEntryRoute, useCoachStatus } from '../lib/useCoachStatus';
+import { navigateToCoachEntry } from '../navigation/coachNavigation';
 import { useTabBarClearance } from '../navigation/tabBarLayout';
 
 type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';
@@ -202,7 +203,7 @@ export function DashboardScreen() {
   const headerActions = (
     <View className="flex-row items-center gap-4">
       <ThemeToggle color={colors.muted} />
-      <Pressable testID="settings-button" onPress={() => navigation.navigate('Settings')} hitSlop={8} className="active:opacity-70">
+      <Pressable testID="settings-button" onPress={() => navigation.navigate('Tabs', { screen: 'Profile' })} hitSlop={8} className="active:opacity-70">
         <Ionicons name="settings-outline" size={20} color={colors.muted} />
       </Pressable>
       <Button testID="sign-out-button" variant="ghost" size="sm" onPress={() => signOut()}>
@@ -305,7 +306,7 @@ export function DashboardScreen() {
         </Pressable>
 
         {coachRoute ? (
-          <Pressable testID="coach-entry-button" onPress={() => navigation.navigate(coachRoute)} className="active:opacity-80">
+          <Pressable testID="coach-entry-button" onPress={() => navigateToCoachEntry(navigation, coachRoute)} className="active:opacity-80">
             <Card className="flex-row items-center gap-3">
               <Ionicons name="chatbubbles-outline" size={18} color={colors.accent} />
               <View className="flex-1 gap-0.5">
