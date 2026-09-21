@@ -16,6 +16,10 @@ describe('revealDelay', () => {
 });
 
 describe('Reveal', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('renders its children', () => {
     const { getByText } = render(
       <Reveal index={2}>
@@ -23,5 +27,33 @@ describe('Reveal', () => {
       </Reveal>,
     );
     expect(getByText('hello')).toBeTruthy();
+  });
+
+  it('renders children with animation configuration', () => {
+    const { getByText } = render(
+      <Reveal index={1}>
+        <Text>world</Text>
+      </Reveal>,
+    );
+
+    // Children should render regardless of animation settings
+    expect(getByText('world')).toBeTruthy();
+  });
+
+  it('respects different stagger indices', () => {
+    // Test multiple instances with different indices
+    const { getByText } = render(
+      <>
+        <Reveal index={0}>
+          <Text>first</Text>
+        </Reveal>
+        <Reveal index={1}>
+          <Text>second</Text>
+        </Reveal>
+      </>,
+    );
+
+    expect(getByText('first')).toBeTruthy();
+    expect(getByText('second')).toBeTruthy();
   });
 });

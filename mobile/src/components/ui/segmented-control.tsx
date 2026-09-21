@@ -42,6 +42,7 @@ export function SegmentedControl<T extends string>({ options, value, onChange, t
         {innerWidth > 0 ? (
           <Animated.View
             pointerEvents="none"
+            testID={`${testID}-indicator`}
             className="absolute bottom-0 left-0 top-0 rounded-lg bg-card"
             style={[{ width: segmentWidth }, indicatorStyle]}
           />

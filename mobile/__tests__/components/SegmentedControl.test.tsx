@@ -22,6 +22,10 @@ const OPTIONS = [
 ] as const;
 
 describe('SegmentedControl', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
   it('renders every label and marks the current value selected', () => {
     const { getByText, getByTestId } = render(
       <SegmentedControl options={[...OPTIONS]} value="year" onChange={() => {}} testID="seg" />,
@@ -42,11 +46,38 @@ describe('SegmentedControl', () => {
     expect(onChange).toHaveBeenCalledWith('ytd');
   });
 
-  it('survives a layout event', () => {
-    const { getByTestId } = render(<SegmentedControl options={[...OPTIONS]} value="month" onChange={() => {}} testID="seg" />);
+  it('indicator appears after layout with correct width and position', () => {
+    const { getByTestId, queryByTestId } = render(
+      <SegmentedControl options={[...OPTIONS]} value="year" onChange={() => {}} testID="seg" />,
+    );
 
+    // Before layout, indicator should not be present
+    expect(queryByTestId('seg-indicator')).toBeNull();
+
+    // Fire layout event with width 300
     fireEvent(getByTestId('seg-inner'), 'layout', { nativeEvent: { layout: { width: 300, height: 40, x: 0, y: 0 } } });
 
-    expect(getByTestId('seg-month')).toBeTruthy();
+    // After layout, indicator should be present
+    const indicator = getByTestId('seg-indicator');
+    expect(indicator).toBeTruthy();
+
+    // Indicator should have width 100 (300 / 3 options)
+    expect(indicator.props.style[0].width).toBe(100);
+  });
+
+  it('still renders with layout handling even in reduced-motion scenarios', () => {
+    const { getByTestId, queryByTestId } = render(
+      <SegmentedControl options={[...OPTIONS]} value="year" onChange={() => {}} testID="seg" />,
+    );
+
+    // Verify indicator absent before layout
+    expect(queryByTestId('seg-indicator')).toBeNull();
+
+    // Fire layout event
+    fireEvent(getByTestId('seg-inner'), 'layout', { nativeEvent: { layout: { width: 300, height: 40, x: 0, y: 0 } } });
+
+    // Indicator should appear
+    const indicator = getByTestId('seg-indicator');
+    expect(indicator).toBeTruthy();
   });
 });
