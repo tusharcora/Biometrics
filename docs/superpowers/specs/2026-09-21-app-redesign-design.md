@@ -327,6 +327,51 @@ unsuitable for a year of history, so:
   built to render whatever arrives (§4.2) and to show a "History is still
   syncing / only N days available" note keyed on `earliestDate`.
 
+### 4.5 Reference component: the visx heatmap (user directive)
+
+After the design was approved the user asked that the heat map follow a
+supplied integration brief for a `heatmaps.tsx` / `heatmap-chart-demo.tsx`
+pair built on `@visx/group`, `@visx/scale`, `@visx/heatmap` and
+`@visx/mock-data`, to be placed in `components/ui`. Its visual vocabulary
+is a **circle-cell variant** (`HeatmapCircle`, hot palette `#77312f → #f33d15`)
+and a **rect-cell variant** (`HeatmapRect`, cool palette `#122549 → #b4fbde`),
+colour and opacity driven by linear scales, a rounded dark panel
+(`#28272c`), 2 px gaps between cells, an `events` prop that makes cells
+tappable, and `width`/`height`/`margin`/`separation` props.
+
+That brief assumes a web shadcn + Tailwind project. This app is Expo /
+React Native, so it is adapted rather than copied verbatim. Rulings:
+
+- **Location.** `mobile/src/components/ui/` is already this repo's
+  equivalent of shadcn's `components/ui`; the component lives there
+  (`heatmap-chart.tsx`, plus a dev-gallery demo). No `components.json` /
+  shadcn CLI setup is added — it does not apply to React Native.
+- **Dependencies.** `@visx/scale` (pure math, works in React Native) is
+  installed. `@visx/heatmap` and `@visx/group` render DOM `<g>` elements
+  and cannot draw in React Native, so their **cell geometry is
+  reimplemented** on `react-native-svg` (`Svg`, `G`, `Circle`, `Rect`) using
+  the same scales and the same bin maths (x/y scale over the grid, bin
+  width/height, radius = half the smaller bin dimension, `gap`). Only if a
+  later spike shows `@visx/heatmap` can be aliased onto `react-native-svg`
+  cheaply is it used directly. `@visx/mock-data` is a **devDependency**, used
+  only by the gallery demo (its random `genBins` grid); real screens never
+  use mock data.
+- **Two components, one vocabulary.** `HeatmapChart` keeps the brief's API
+  (`width`, `height`, `margin`, `separation`, `events`) and renders both
+  variants side by side over generic binned data — it is the reusable
+  primitive and the demo. `ActivityHeatmap` (§4.1–§4.3) is the product
+  component: it feeds **real daily-steps cells** (the calendar layouts in
+  §4.1, the goal-relative levels in §4.2) through the same colour/opacity
+  scales and the same circle/rect cell drawing, with the `heat0..heat4`
+  tokens as the colour ramp instead of the hot/cool demo colours. A cell
+  shape option (`circle | rect`) lets the user's two variants both be
+  available; Month uses circles, Year/YTD use rects.
+- **Tap handling.** The brief's `alert(JSON.stringify(...))` on click is
+  replaced by an `onCellPress` callback (the product opens the day
+  `Sheet`).
+- **Not applicable** from the brief: Unsplash stock images and `lucide-react`
+  icons (no images/icons in this component; the app uses Ionicons).
+
 ## 5. Device card (sub-projects B and D)
 
 `DeviceCard` at the top of Home: an animated tracker illustration with the
