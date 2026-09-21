@@ -83,6 +83,10 @@ export function CoachScreen() {
   const loadRef = useRef<() => Promise<void>>(async () => {});
   // The phase, readable from inside load() without making it re-create.
   const phaseRef = useRef<Phase>('loading');
+  // True only once the conversation history was actually fetched and applied.
+  // A failed history load still opens the chat (fail-open), but leaves this
+  // false so the next focus retries it.
+  const historyLoaded = useRef(false);
   // The last non-empty prefill. The route param is consumed once applied (below),
   // but the consent round-trip must still carry it.
   const lastPrefill = useRef<string | undefined>(prefill);
@@ -141,8 +145,10 @@ export function CoachScreen() {
       redirectedToConsent.current = false;
       // Once the chat is showing, a focus reload only re-checks status. History
       // rows carry no safety card, memory chips or unsent bubbles, so re-reading
-      // them would wipe what the live conversation is showing.
-      if (phaseRef.current === 'ready') return;
+      // them would wipe what the live conversation is showing. A chat that
+      // opened without its history (the fetch failed) is retried, unless the
+      // user has meanwhile started a conversation, which the retry would wipe.
+      if (phaseRef.current === 'ready' && (historyLoaded.current || conversationIdRef.current)) return;
       const conversation = await fetchLatestConversation();
       if (!mounted.current || reloadPending.current) return;
       setConversationId(conversation.conversationId);
@@ -154,6 +160,7 @@ export function CoachScreen() {
           source: m.source,
         })),
       );
+      historyLoaded.current = true;
       setPhase('ready');
     } catch {
       // History is a convenience: a failure to load it must not lock the user

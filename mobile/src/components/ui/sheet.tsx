@@ -22,7 +22,9 @@ interface SheetProps {
 // `onClose` exactly once. `onClose` MUST hide the sheet by setting `visible`
 // to false; a parent that leaves it visible gets a stuck overlay. (A parent
 // that flips `visible` off directly just makes it disappear, without the exit
-// animation, and cancels any pending `onClose`.)
+// animation. If that happens mid-exit, the pending `onClose` still fires once
+// when the exit timer ends; the timer is cleared only when the sheet is shown
+// again or unmounts.)
 export function Sheet({ visible, onClose, children, testID = 'sheet' }: SheetProps) {
   const { height } = useWindowDimensions();
   const reduced = useReducedMotion();

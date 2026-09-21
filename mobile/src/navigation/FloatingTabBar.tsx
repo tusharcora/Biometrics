@@ -79,6 +79,8 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
     <Animated.View
       testID="floating-tab-bar"
       pointerEvents={keyboardVisible ? 'none' : 'box-none'}
+      accessibilityElementsHidden={keyboardVisible}
+      importantForAccessibility={keyboardVisible ? 'no-hide-descendants' : 'auto'}
       style={[{ position: 'absolute', left: 16, right: 16, bottom: Math.max(insets?.bottom ?? 0, FLOATING_BAR_MARGIN) }, barStyle]}
     >
       <View

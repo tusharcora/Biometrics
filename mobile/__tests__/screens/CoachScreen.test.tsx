@@ -173,6 +173,45 @@ describe('CoachScreen: gating', () => {
     expect(utils.getByText('I feel awful')).toBeTruthy();
   });
 
+  it('opens the chat when the first history load fails, then retries the history on the next focus and continues that conversation', async () => {
+    (fetchLatestConversation as jest.Mock).mockRejectedValueOnce(new Error('offline')).mockResolvedValue({
+      conversationId: 'conv-9',
+      messages: [{ id: 'h1', role: 'ASSISTANT', text: 'Earlier answer', source: 'model', createdAt: '2026-09-19T10:00:00.000Z' }],
+    });
+    (sendCoachMessage as jest.Mock).mockResolvedValue(reply('Next answer', {}));
+    const utils = await openChat();
+    expect(utils.queryByText('Earlier answer')).toBeNull();
+    expect(fetchLatestConversation).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      mockFocusListener?.();
+    });
+
+    expect(await utils.findByText('Earlier answer')).toBeTruthy();
+    expect(fetchLatestConversation).toHaveBeenCalledTimes(2);
+    type(utils, 'And now?');
+    fireEvent.press(utils.getByTestId('coach-send-button'));
+    await waitFor(() => expect(sendCoachMessage).toHaveBeenCalledTimes(1));
+    expect(sendCoachMessage).toHaveBeenCalledWith({ message: 'And now?', conversationId: 'conv-9' });
+  });
+
+  it('does not retry the history after a failed load once the user has started a conversation', async () => {
+    (fetchLatestConversation as jest.Mock).mockRejectedValueOnce(new Error('offline'));
+    (sendCoachMessage as jest.Mock).mockResolvedValue(reply('Fresh answer'));
+    const utils = await openChat();
+    type(utils, 'Hello');
+    fireEvent.press(utils.getByTestId('coach-send-button'));
+    await utils.findByText('Fresh answer');
+
+    await act(async () => {
+      mockFocusListener?.();
+    });
+
+    expect(fetchLatestConversation).toHaveBeenCalledTimes(1);
+    expect(utils.getByText('Fresh answer')).toBeTruthy();
+    expect(utils.getByText('Hello')).toBeTruthy();
+  });
+
   it('consumes a prefill param once applied, and fills the input again when the same text re-arrives', async () => {
     mockParams = { prefill: 'Why did my score change today?' };
     const utils = await openChat();

@@ -13,6 +13,9 @@ jest.mock('../../src/lib/useCoachStatus', () => ({ useCoachStatus: jest.fn() }))
 jest.mock('../../src/lib/useKeyboardVisible', () => ({ useKeyboardVisible: jest.fn() }));
 
 const METRICS = { frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 47, left: 0, right: 0, bottom: 34 } };
+// The bar is hidden from the accessibility tree while the keyboard is open, so
+// queries for it must opt in to hidden elements.
+const HIDDEN_OK = { includeHiddenElements: true };
 const enabledStatus = { enabled: true, consented: true, consent: { version: 'v1', summary: 's', dataItems: [] }, personaId: 'p', personas: [] };
 const refresh = jest.fn();
 
@@ -145,6 +148,21 @@ describe('FloatingTabBar', () => {
     (useKeyboardVisible as jest.Mock).mockReturnValue(true);
     const { getByTestId } = render(bar(makeProps(0)));
 
-    expect(getByTestId('floating-tab-bar').props.pointerEvents).toBe('none');
+    expect(getByTestId('floating-tab-bar', HIDDEN_OK).props.pointerEvents).toBe('none');
+  });
+
+  it('hides the bar from screen readers while the keyboard is open', () => {
+    (useKeyboardVisible as jest.Mock).mockReturnValue(true);
+    const { getByTestId } = render(bar(makeProps(0)));
+
+    expect(getByTestId('floating-tab-bar', HIDDEN_OK).props.accessibilityElementsHidden).toBe(true);
+    expect(getByTestId('floating-tab-bar', HIDDEN_OK).props.importantForAccessibility).toBe('no-hide-descendants');
+  });
+
+  it('keeps the bar in the accessibility tree while the keyboard is closed', () => {
+    const { getByTestId } = render(bar(makeProps(0)));
+
+    expect(getByTestId('floating-tab-bar').props.accessibilityElementsHidden).toBe(false);
+    expect(getByTestId('floating-tab-bar').props.importantForAccessibility).toBe('auto');
   });
 });
