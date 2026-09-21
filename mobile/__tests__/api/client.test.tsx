@@ -1,5 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
-import { apiFetch, setBaseUrl, updateTimezone } from '../../src/api/client';
+import { apiFetch, onSessionExpired, setBaseUrl, updateTimezone } from '../../src/api/client';
 
 jest.mock('expo-secure-store');
 
@@ -156,5 +156,77 @@ describe('updateTimezone', () => {
     fetchMock.mockResolvedValueOnce({ ok: false, status: 400 });
 
     await expect(updateTimezone('Nope/Zone')).rejects.toThrow(/failed with 400/);
+  });
+});
+
+describe('session expiry', () => {
+  beforeEach(() => {
+    (SecureStore.deleteItemAsync as jest.Mock).mockReset().mockResolvedValue(undefined);
+  });
+
+  // The case that actually happens: the app is pointed at a different backend
+  // (or the refresh token was revoked/expired), so /auth/refresh answers 4xx.
+  it('clears the stored tokens and notifies listeners when the refresh token is rejected', async () => {
+    const listener = jest.fn();
+    const off = onSessionExpired(listener);
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 401 }).mockResolvedValueOnce({ ok: false, status: 401 });
+
+    await expect(apiFetch('/me/biometrics')).rejects.toThrow(/Session expired/);
+
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith('accessToken');
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith('refreshToken');
+    expect(listener).toHaveBeenCalledTimes(1);
+    off();
+  });
+
+  it('notifies once when several requests fail their shared refresh together', async () => {
+    const listener = jest.fn();
+    const off = onSessionExpired(listener);
+    fetchMock
+      .mockResolvedValueOnce({ ok: false, status: 401 })
+      .mockResolvedValueOnce({ ok: false, status: 401 })
+      .mockResolvedValueOnce({ ok: false, status: 401 })
+      .mockResolvedValueOnce({ ok: false, status: 401 });
+
+    await Promise.allSettled([apiFetch('/me/scores'), apiFetch('/me/habits/status')]);
+
+    expect(listener).toHaveBeenCalledTimes(1);
+    off();
+  });
+
+  // A backend hiccup is not a reason to throw the user out of the app.
+  it('keeps the session when the refresh fails with a server error', async () => {
+    const listener = jest.fn();
+    const off = onSessionExpired(listener);
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 401 }).mockResolvedValueOnce({ ok: false, status: 503 });
+
+    await expect(apiFetch('/me/biometrics')).rejects.toThrow(/Could not refresh your session/);
+
+    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
+    expect(listener).not.toHaveBeenCalled();
+    off();
+  });
+
+  it('keeps the session when the refresh request cannot reach the server', async () => {
+    const listener = jest.fn();
+    const off = onSessionExpired(listener);
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 401 }).mockRejectedValueOnce(new Error('Network request failed'));
+
+    await expect(apiFetch('/me/biometrics')).rejects.toThrow('Network request failed');
+
+    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
+    expect(listener).not.toHaveBeenCalled();
+    off();
+  });
+
+  it('stops notifying a listener once it has unsubscribed', async () => {
+    const listener = jest.fn();
+    const off = onSessionExpired(listener);
+    off();
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 401 }).mockResolvedValueOnce({ ok: false, status: 401 });
+
+    await expect(apiFetch('/me/biometrics')).rejects.toThrow(/Session expired/);
+
+    expect(listener).not.toHaveBeenCalled();
   });
 });
