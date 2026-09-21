@@ -113,7 +113,7 @@ export function ScoreDetailScreen() {
           {score.score === null && cold ? (
             <BaselineProgressRing daysCollected={cold.daysCollected} daysRequired={cold.daysRequired} size={120} strokeWidth={10} />
           ) : (
-            <ScoreRing score={score.score} factors={score.factors} size={120} strokeWidth={10} />
+            <ScoreRing score={score.score} factors={score.factors} size={120} strokeWidth={10} bands={detail.bands} />
           )}
           <ConfidenceBadge level={score.confidenceLevel} />
         </View>

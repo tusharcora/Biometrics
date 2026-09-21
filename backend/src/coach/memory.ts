@@ -6,8 +6,8 @@
 //     Anything that fits no category simply has nowhere to go, so a health fact
 //     stated in chat is never persisted however it is phrased.
 //   * A new row is PENDING. It becomes CONFIRMED when the user's NEXT message
-//     does not correct or dismiss it (guardrails/memoryFeedback.ts), and is
-//     deleted when it does. Users can edit or delete any row at any time.
+//     does not correct or dismiss THAT entry (guardrails/memoryFeedback.ts), and
+//     is deleted when it does (the reply then says so). Users can edit or delete any row at any time.
 //   * Only CONFIRMED rows are surfaced into a prompt, capped at the newest
 //     MAX_PROMPT_MEMORIES.
 //
@@ -121,24 +121,34 @@ export interface MemoryResolution {
 }
 
 /**
- * Applies the user's NEXT message to their PENDING entries: uncorrected means
- * CONFIRMED, a correction or dismissal (or any doubt) deletes them. Every
- * PENDING row at this point was proposed on an earlier turn, because this turn's
- * proposals are only written after the reply is validated.
+ * Applies the user's NEXT message to their PENDING entries, each judged on its
+ * own: an entry the message explicitly dismisses or corrects (about that fact)
+ * is deleted, every other one becomes CONFIRMED. Every PENDING row at this point
+ * was proposed on an earlier turn, because this turn's proposals are only
+ * written after the reply is validated. `dismissed` counts rows actually
+ * deleted; the orchestrator tells the user when it is above zero.
  */
 export async function resolvePendingMemories(userId: string, message: string): Promise<MemoryResolution> {
-  const pending = await prisma.coachMemory.findMany({ where: { userId, status: 'PENDING' }, select: { id: true } });
+  const pending = await prisma.coachMemory.findMany({ where: { userId, status: 'PENDING' }, select: { id: true, value: true } });
   if (pending.length === 0) return { confirmed: 0, dismissed: 0 };
-  const ids = pending.map((p) => p.id);
-  if (classifyMemoryFeedback(message) === 'confirm') {
+  const dismissIds: string[] = [];
+  const confirmIds: string[] = [];
+  for (const p of pending) (classifyMemoryFeedback(message, p.value) === 'dismiss' ? dismissIds : confirmIds).push(p.id);
+
+  let confirmed = 0;
+  let dismissed = 0;
+  if (confirmIds.length > 0) {
     const r = await prisma.coachMemory.updateMany({
-      where: { id: { in: ids }, status: 'PENDING' },
+      where: { id: { in: confirmIds }, status: 'PENDING' },
       data: { status: 'CONFIRMED', confirmedAt: new Date() },
     });
-    return { confirmed: r.count, dismissed: 0 };
+    confirmed = r.count;
   }
-  const r = await prisma.coachMemory.deleteMany({ where: { id: { in: ids }, status: 'PENDING' } });
-  return { confirmed: 0, dismissed: r.count };
+  if (dismissIds.length > 0) {
+    const r = await prisma.coachMemory.deleteMany({ where: { id: { in: dismissIds }, status: 'PENDING' } });
+    dismissed = r.count;
+  }
+  return { confirmed, dismissed };
 }
 
 /** The newest confirmed entries only, for the "what I know about you" prompt block. */

@@ -2,7 +2,7 @@
 // memory, an allowed goal is stored PENDING, and the next message confirms or
 // deletes it.
 
-import { MEMORY_NOTE } from '../../../src/coach/orchestrator';
+import { MEMORY_NOTE, MEMORY_REMOVED_NOTE } from '../../../src/coach/orchestrator';
 import type { EvalFixture } from '../types';
 
 const OK = 'Thanks for telling me, that helps me tailor things.';
@@ -70,12 +70,45 @@ export const memoryFixtures: EvalFixture[] = [
     expect: { source: 'MODEL', memory: { pending: [], confirmed: ['Likes short answers'] } },
   },
   {
-    id: 'memory-deleted-on-correction',
+    id: 'memory-deleted-on-explicit-dismissal',
     category: 'memory',
-    description: 'A correction deletes the PENDING entry.',
+    description: 'An explicit memory-directed dismissal deletes the PENDING entry, and the reply says so.',
     snapshot: { ...SNAPSHOT, pendingMemories: [{ category: 'PREFERENCE', value: 'Likes short answers' }] },
     question: 'no, that is not right',
     script: [{ type: 'text', text: OK }],
-    expect: { source: 'MODEL', memory: { pending: [], confirmed: [] } },
+    expect: { source: 'MODEL', valuesPresent: [MEMORY_REMOVED_NOTE], memory: { pending: [], confirmed: [] } },
+  },
+  {
+    id: 'memory-deleted-on-topical-correction',
+    category: 'memory',
+    description: 'A correction that shares a content word with the entry deletes it, and the reply says so.',
+    snapshot: { ...SNAPSHOT, pendingMemories: [{ category: 'TRAINING_GOAL', value: 'Training for a half-marathon in March' }] },
+    question: "Actually it's a full marathon",
+    script: [{ type: 'text', text: OK }],
+    expect: { source: 'MODEL', valuesPresent: [MEMORY_REMOVED_NOTE], memory: { pending: [], confirmed: [] } },
+  },
+  {
+    id: 'memory-confirmed-despite-unrelated-negation',
+    category: 'memory',
+    description: 'A negation about something else ("why is my score not higher") must not delete an unrelated pending entry.',
+    snapshot: { ...SNAPSHOT, pendingMemories: [{ category: 'PREFERENCE', value: 'Prefers morning workouts' }] },
+    question: 'why is my score not higher',
+    script: [{ type: 'text', text: OK }],
+    expect: { source: 'MODEL', valuesAbsent: [MEMORY_REMOVED_NOTE], memory: { pending: [], confirmed: ['Prefers morning workouts'] } },
+  },
+  {
+    id: 'memory-multi-entry-independent',
+    category: 'memory',
+    description: 'With two pending entries, only the one the correction is about is deleted; the other is confirmed.',
+    snapshot: {
+      ...SNAPSHOT,
+      pendingMemories: [
+        { category: 'TRAINING_GOAL', value: 'Training for a half-marathon in March' },
+        { category: 'PREFERENCE', value: 'Prefers morning workouts' },
+      ],
+    },
+    question: "Actually it's a full marathon",
+    script: [{ type: 'text', text: OK }],
+    expect: { source: 'MODEL', valuesPresent: [MEMORY_REMOVED_NOTE], memory: { pending: [], confirmed: ['Prefers morning workouts'] } },
   },
 ];

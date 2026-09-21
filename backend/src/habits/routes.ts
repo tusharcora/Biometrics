@@ -5,7 +5,7 @@ import { civilDateToUtcMidnight } from '../biometrics/civilDate';
 import { prisma } from '../db/client';
 import { isCivilDate, shiftDate } from '../scoring/dates';
 import { FACTOR_LABELS } from '../scoring/dto';
-import { analyzeUser } from './analysis';
+import { computeNotEnoughData } from './analysis';
 import { CHECK_IN_BACKFILL_DAYS, HabitTypeConfig } from './config';
 import { listConfirmedWithSeries } from './correlations';
 import { CORRELATION_FACTORS, FactorKey } from './engine';
@@ -263,7 +263,9 @@ habitsRouter.get('/me/habits/status', requireAuth, async (req: AuthedRequest, re
 
 habitsRouter.get('/me/habits/patterns', requireAuth, async (req: AuthedRequest, res) => {
   const userId = req.userId!;
-  const [confirmed, analysis] = await Promise.all([listConfirmedWithSeries(userId), analyzeUser(userId, new Date())]);
+  // Patterns are the stored CONFIRMED rows (weekly lifecycle); the "N of 8 needed" counts are the one
+  // live part, computed by the pair-counting gate alone: no statistical test runs on a read.
+  const [confirmed, notEnoughData] = await Promise.all([listConfirmedWithSeries(userId), computeNotEnoughData(userId, new Date())]);
 
   res.json({
     // CONFIRMED only: candidates are never shown.
@@ -282,6 +284,6 @@ habitsRouter.get('/me/habits/patterns', requireAuth, async (req: AuthedRequest, 
         direction: c.direction,
         series: c.series,
       })),
-    notEnoughData: analysis.notEnoughData,
+    notEnoughData,
   });
 });

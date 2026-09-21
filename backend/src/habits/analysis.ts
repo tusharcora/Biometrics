@@ -6,7 +6,15 @@ import { civilDateToUtcMidnight } from '../biometrics/civilDate';
 import { prisma } from '../db/client';
 import { shiftDate } from '../scoring/dates';
 import { ANALYSIS_WINDOW_DAYS, HabitTypeConfig } from './config';
-import { analyzeHabits, EngineInput, EngineOutput, FactorDay, FactorKey } from './engine';
+import {
+  analyzeHabits,
+  computeNotEnoughData as computeEngineNotEnoughData,
+  EngineInput,
+  EngineOutput,
+  FactorDay,
+  FactorKey,
+  NotEnoughData,
+} from './engine';
 import { habitDayFor } from './habitDay';
 import { listHabitTypes } from './habitTypes';
 import { buildObservedDays } from './observed';
@@ -28,8 +36,11 @@ export async function loadFactorSeries(
   userId: string,
   from: string,
   through: string,
+  /** Only z and imputed are needed (pair counting): skips the queries that exist solely to derive `pct`. */
+  opts: { countsOnly?: boolean } = {},
 ): Promise<Partial<Record<FactorKey, Map<string, FactorDay>>>> {
   const range = { gte: civilDateToUtcMidnight(from), lte: civilDateToUtcMidnight(through) };
+  const withPct = !opts.countsOnly;
   const [features, snapshots, sleep] = await Promise.all([
     prisma.userDailyFeatures.findMany({
       where: { userId, date: range },
@@ -51,14 +62,18 @@ export async function loadFactorSeries(
         circadianConsistencyScore: true,
       },
     }),
-    prisma.baselineSnapshot.findMany({
-      where: { userId, date: range, metric: { in: ['SLEEP', 'SLEEP_EFFICIENCY', 'CIRCADIAN_CONSISTENCY'] } },
-      select: { date: true, metric: true, ewma: true },
-    }),
-    prisma.biometricRecord.findMany({
-      where: { userId, metricType: 'SLEEP', recordedAt: range },
-      select: { recordedAt: true, value: true },
-    }),
+    withPct
+      ? prisma.baselineSnapshot.findMany({
+          where: { userId, date: range, metric: { in: ['SLEEP', 'SLEEP_EFFICIENCY', 'CIRCADIAN_CONSISTENCY'] } },
+          select: { date: true, metric: true, ewma: true },
+        })
+      : Promise.resolve([]),
+    withPct
+      ? prisma.biometricRecord.findMany({
+          where: { userId, metricType: 'SLEEP', recordedAt: range },
+          select: { recordedAt: true, value: true },
+        })
+      : Promise.resolve([]),
   ]);
 
   const ewma = new Map(snapshots.map((s) => [`${s.metric}|${isoDay(s.date)}`, s.ewma]));
@@ -103,7 +118,11 @@ export interface UserAnalysisInput {
 }
 
 /** Everything the engine needs for one user, over the trailing ANALYSIS_WINDOW_DAYS habit days. */
-export async function loadAnalysisInput(userId: string, now: Date): Promise<UserAnalysisInput> {
+export async function loadAnalysisInput(
+  userId: string,
+  now: Date,
+  opts: { countsOnly?: boolean } = {},
+): Promise<UserAnalysisInput> {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { timezone: true } });
   const today = habitDayFor(now, user?.timezone ?? 'UTC');
   const from = shiftDate(today, -ANALYSIS_WINDOW_DAYS);
@@ -128,8 +147,20 @@ export async function loadAnalysisInput(userId: string, now: Date): Promise<User
     .filter((h) => h.observations.length > 0);
 
   // A habit on day H reaches at most H + 3, so the series must extend that far past today.
-  const factors = await loadFactorSeries(userId, shiftDate(from, 1), shiftDate(today, 3));
+  const factors = await loadFactorSeries(userId, shiftDate(from, 1), shiftDate(today, 3), opts);
   return { input: { habits, factors }, types, today };
+}
+
+/**
+ * The live "N of 8 needed" counts, WITHOUT running the statistics: no
+ * correlation, p-value or BH step, and none of the queries that only feed effect
+ * sizes. Identical to analyzeUser(...).notEnoughData by construction (both go
+ * through the engine's pair-counting gate). Deliberately live, not read from a
+ * stored weekly run, so the count moves as soon as the user logs "nothing today".
+ */
+export async function computeNotEnoughData(userId: string, now: Date): Promise<NotEnoughData[]> {
+  const { input } = await loadAnalysisInput(userId, now, { countsOnly: true });
+  return computeEngineNotEnoughData(input);
 }
 
 export async function analyzeUser(userId: string, now: Date): Promise<EngineOutput & { types: HabitTypeConfig[] }> {

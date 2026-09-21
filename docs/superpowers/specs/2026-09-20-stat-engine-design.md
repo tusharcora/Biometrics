@@ -652,6 +652,20 @@ the backfill note below for its cold-start behavior). Its own
 weight-renormalization rule follows the same pattern stated above for
 Recovery.
 
+**Sleep Score weights: OPEN DECISION.** This spec fixes no weights for the
+Sleep Score, and there is no outcome label to derive them from. The
+shipped v1 config carries a **placeholder** — duration 0.45, efficiency
+0.35, circadian consistency 0.20 — that was copied from the Recovery
+Score's weight magnitudes (HRV 0.45 / RHR 0.35 / sleep debt 0.20) with no
+sleep-specific rationale. Treat it as unreviewed, not as a tuned or agreed
+value. One consequence worth deciding with eyes open: circadian
+consistency is excluded for about 27 nights, so early Sleep Scores are
+renormalized to roughly 56% duration / 44% efficiency regardless of what
+this table says. Candidate tables: keep the placeholder; equal thirds; or
+0.50 / 0.30 / 0.20 (duration dominant, consistency smallest and noisiest).
+A decision is a config version bump (`configs/v2.ts`) and should go through
+the backtest diff (§3) before it replaces v1.
+
 `DailyScore` (Recovery Score in Slice 1; Sleep Score added in Slice 1.5)
 is stored with `algorithmVersion`, `confidenceLevel` (`HIGH`/`MEDIUM`/
 `LOW`, derived from how many inputs were imputed/cold-started/
@@ -907,15 +921,21 @@ Slice 1
   computed from HRV and RHR alone with renormalized weights.
 - A day with no observed HRV, RHR or SLEEP input gets no score row (any
   leftover row is deleted).
-- Score bands on mobile (75 / 55 / 40 for Excellent / Good / Fair) are an
-  implementation choice and need a product decision.
+- **Score bands** (lower bounds 75 / 55 / 40 for Excellent / Good / Fair,
+  else Poor) are a product starting point, not derived from data. They live
+  in the scoring config (`scoreBands` in `configs/v1.ts`, versioned with the
+  algorithm) and are returned as `bands` on both score endpoints; the mobile
+  app reads them from the response and only falls back to built-in defaults
+  for an older server or a malformed value. Changing a band is a config
+  change, not a mobile release.
 - The segmented `ScoreRing` is built and tested but `segmented` defaults to
   `false`; it needs the visual design spike (§5) on a device before the
   default is flipped.
 
 Slice 1.5
-- Weights 0.45 / 0.35 / 0.20 (duration / efficiency / consistency) are
-  illustrative and marked as such in `configs/v1.ts`.
+- Weights 0.45 / 0.35 / 0.20 (duration / efficiency / consistency) are a
+  **placeholder copied from the Recovery Score's magnitudes**, not a
+  decision; see "Sleep Score weights: OPEN DECISION" in Stage 4.
 - Duration is scored against the user's sleep goal:
   `z = clamp((minutesAsleep − goal) / σ̂, −3, +1)`, so sleeping past goal
   earns no extra credit. Efficiency is stored as a 0–1 fraction capped at 1.

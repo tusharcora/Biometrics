@@ -1,5 +1,5 @@
 import { apiFetch, ApiError } from '../../src/api/client';
-import { fetchScores, fetchScoreDetail } from '../../src/api/scores';
+import { fetchScores, fetchScoresWithBands, fetchScoreDetail } from '../../src/api/scores';
 
 jest.mock('../../src/api/client', () => ({
   ...jest.requireActual('../../src/api/client'),
@@ -83,5 +83,53 @@ describe('fetchScoreDetail', () => {
     (apiFetch as jest.Mock).mockRejectedValue(new ApiError(500, 'Request failed with 500'));
 
     await expect(fetchScoreDetail('2026-09-19')).rejects.toThrow('500');
+  });
+});
+
+describe('score bands from the server', () => {
+  const bands = { excellent: 90, good: 70, fair: 50 };
+
+  it('fetchScoresWithBands returns the scores alongside the bands', async () => {
+    (apiFetch as jest.Mock).mockResolvedValue({ scores: [score], bands });
+
+    await expect(fetchScoresWithBands(7)).resolves.toEqual({ scores: [score], bands });
+    expect(apiFetch).toHaveBeenCalledWith('/me/scores?days=7');
+  });
+
+  it('fetchScoresWithBands passes the type filter through', async () => {
+    (apiFetch as jest.Mock).mockResolvedValue({ scores: [], bands });
+
+    await fetchScoresWithBands(7, 'SLEEP');
+
+    expect(apiFetch).toHaveBeenCalledWith('/me/scores?days=7&type=SLEEP');
+  });
+
+  it('fetchScoresWithBands leaves bands undefined for an older server', async () => {
+    (apiFetch as jest.Mock).mockResolvedValue({ scores: [score] });
+
+    const result = await fetchScoresWithBands(7);
+
+    expect(result.scores).toEqual([score]);
+    expect(result.bands).toBeUndefined();
+  });
+
+  it('fetchScoresWithBands returns no scores for an empty response', async () => {
+    (apiFetch as jest.Mock).mockResolvedValue({});
+
+    await expect(fetchScoresWithBands(7)).resolves.toEqual({ scores: [], bands: undefined });
+  });
+
+  it('fetchScores still returns just the array when the server sends bands', async () => {
+    (apiFetch as jest.Mock).mockResolvedValue({ scores: [score], bands });
+
+    await expect(fetchScores(7)).resolves.toEqual([score]);
+  });
+
+  it('fetchScoreDetail surfaces the bands on the detail', async () => {
+    (apiFetch as jest.Mock).mockResolvedValue({ score, baselines: [], previous: null, bands });
+
+    const detail = await fetchScoreDetail('2026-09-19');
+
+    expect(detail?.bands).toEqual(bands);
   });
 });

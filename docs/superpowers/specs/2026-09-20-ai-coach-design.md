@@ -526,8 +526,10 @@ shipping to anyone, not an implementation detail inside it:
   same reply ("I'll remember that — let me know if that's not right").
   The §5 allowlist and classifier run before anything below applies.
   The entry flips to `status: CONFIRMED` automatically if the user's next
-  message doesn't correct or dismiss it — no separate confirm button
-  required — and it is fully visible and editable at any time in
+  message doesn't correct or dismiss **that entry** — an unrelated negative
+  word elsewhere in the message is not a correction — with no separate
+  confirm button required. A deletion by this rule is never silent: the
+  reply says so (see Implementation Status). It is fully visible and editable at any time in
   Settings → Coach Memory, where a `PENDING` entry is marked as such and
   any entry can be edited or deleted outright. This is deliberately
   closer to "assume yes unless corrected, but always show your work" than
@@ -756,11 +758,27 @@ Decisions made in implementation:
   reply passes the grounding guardrail, so a discarded, timed-out or failed
   turn leaves no row. The server appends the fixed "I'll remember that…"
   line only when a row was actually created.
-- **Dismissal detector is deliberately over-eager**: any negation or
-  correction word in the next message, including a bare "not", deletes a
-  pending entry (so "why is my score not higher" also deletes it). It errs
-  toward not remembering; see `guardrails/memoryFeedback.ts`. A crisis turn
-  leaves entries PENDING.
+- **Memory feedback is judged per entry, and errs toward confirming.**
+  `classifyMemoryFeedback(message, entryValue)` dismisses (deletes) a
+  pending entry only for (1) an explicit memory-directed request ("forget
+  that", "remove it", "don't remember that", "that's not right / wrong /
+  a mistake", "never mind that") or (2) a correction cue ("no", "not",
+  "actually", "instead", "meant", "wrong", "change"…) in a message that
+  also shares a content word with that entry's own value (stop-words
+  removed, light stemming). Everything else confirms. So "why is my score
+  not higher" or "no problem, thanks" leaves an unrelated entry alone, and
+  with several pending entries each is judged independently. The bias is
+  deliberately toward confirming: a wrongly-kept memory is visible in
+  Settings and editable, whereas a wrongly-deleted one would be silent. The
+  known cost is a missed correction that shares no word with the entry
+  ("wrong goal, it is a 10k" does not delete "training for a half-marathon");
+  the user can still edit or delete it in Settings. An empty message
+  confirms. A crisis turn leaves entries PENDING.
+- **Deletion by the detector is announced.** When it removes an entry the
+  server appends a fixed line ("Okay — I've removed that from what I
+  remember.") after validation, before the "I'll remember that…" line and
+  the disclaimer, only when a row was actually deleted, and also on
+  fallback and expired turns.
 - Memory, digest and push-token routes need the flag but not consent,
   because nothing is sent to a model; a user can always see and delete
   their data. Retention runs even when the flag is off, so transcripts keep
@@ -769,8 +787,15 @@ Decisions made in implementation:
   `sleepHistory` and `getHabitCorrelations`. A user with no data gets no
   digest. The push payload is always a fixed string from a small set and
   contains no digits; only `NoopPushSender` exists.
-- Mobile does not register push tokens: no notification library is
-  installed and none was added. The backend token routes are ready for it.
+- **The weekly digest push cannot reach anyone yet.** Mobile registers no
+  push tokens (no notification library is installed and none was added),
+  and the backend only has `NoopPushSender`; the token routes are ready.
+  This is a known follow-up, not part of this round. Reaching a device
+  needs a notification library (a native dependency), a permission flow,
+  token registration, and a real sender (Expo push or APNs/FCM — one more
+  third party, which will only ever see the fixed generic strings). It is
+  also moot until the provider gate in §5 is resolved, because no digest is
+  generated for a user unless the coach is enabled and consented.
 - The eval harness (`backend/evals/coach/`, `npm run eval:coach`, also run
-  under jest) has 32 fixtures plus 4 deliberately wrong directional replies
+  under jest) has 35 fixtures plus 4 deliberately wrong directional replies
   that it must catch.

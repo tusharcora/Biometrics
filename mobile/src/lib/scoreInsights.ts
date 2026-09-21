@@ -1,4 +1,4 @@
-import type { BaselineDTO, ColdStartDTO, DailyScoreDTO, FactorDTO } from '../api/scores';
+import type { BaselineDTO, ColdStartDTO, DailyScoreDTO, FactorDTO, ScoreBandsDTO } from '../api/scores';
 
 export const SCORE_FRAMING = 'This is a comparison against your own recent readings, not a medical assessment.';
 // Sleep duration is scored against the user's sleep goal rather than their own
@@ -15,12 +15,38 @@ const NEGLIGIBLE_POINTS = 0.5;
 
 export type ScoreBand = 'scoreExcellent' | 'scoreGood' | 'scoreFair' | 'scorePoor';
 
+// The server config is authoritative for the band thresholds (every score
+// response carries `bands`). These only cover an older server that doesn't
+// send them, and the moment before the first response has loaded.
+export const DEFAULT_SCORE_BANDS: ScoreBandsDTO = { excellent: 75, good: 55, fair: 40 };
+
+function isValidBands(bands: unknown): bands is ScoreBandsDTO {
+  if (typeof bands !== 'object' || bands === null) return false;
+  const { excellent, good, fair } = bands as Record<string, unknown>;
+  return (
+    typeof excellent === 'number' &&
+    typeof good === 'number' &&
+    typeof fair === 'number' &&
+    Number.isFinite(excellent) &&
+    Number.isFinite(good) &&
+    Number.isFinite(fair) &&
+    excellent <= 100 &&
+    fair >= 0 &&
+    excellent > good &&
+    good > fair
+  );
+}
+
 // Bands are relative to the model's calibration (an all-normal day lands at
-// 50, two favourable standard deviations near 90), not an absolute clinical scale.
-export function scoreBand(score: number): ScoreBand {
-  if (score >= 75) return 'scoreExcellent';
-  if (score >= 55) return 'scoreGood';
-  if (score >= 40) return 'scoreFair';
+// 50, two favourable standard deviations near 90), not an absolute clinical
+// scale. Each threshold is the inclusive lower bound of its band. Malformed
+// `bands` (missing, non-numeric, not strictly descending within 0-100) are
+// ignored in favour of the defaults.
+export function scoreBand(score: number, bands?: ScoreBandsDTO | null): ScoreBand {
+  const { excellent, good, fair } = isValidBands(bands) ? bands : DEFAULT_SCORE_BANDS;
+  if (score >= excellent) return 'scoreExcellent';
+  if (score >= good) return 'scoreGood';
+  if (score >= fair) return 'scoreFair';
   return 'scorePoor';
 }
 

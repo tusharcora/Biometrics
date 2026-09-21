@@ -6,7 +6,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
 import { Ionicons } from '@expo/vector-icons';
 import { apiFetch } from '../api/client';
-import { fetchScores, type DailyScoreDTO, type ScoreType } from '../api/scores';
+import { fetchScoresWithBands, type DailyScoreDTO, type ScoreBandsDTO, type ScoreType } from '../api/scores';
 import { useAuth } from '../auth/AuthContext';
 import { Text } from '../components/ui/text';
 import { Card } from '../components/ui/card';
@@ -74,7 +74,19 @@ const SCORE_CARD_COPY: Record<ScoreType, { slug: string; empty: string }> = {
 // One card per score type. A Sleep Score with fewer factors than usual (e.g.
 // Bedtime consistency still building) is normal, so a present score always
 // shows the ring and confidence badge; the cold-start ring is only for a null score.
-function ScoreCard({ type, score, failed, onPress }: { type: ScoreType; score: ScoreState; failed: boolean; onPress: (score: DailyScoreDTO) => void }) {
+function ScoreCard({
+  type,
+  score,
+  bands,
+  failed,
+  onPress,
+}: {
+  type: ScoreType;
+  score: ScoreState;
+  bands?: ScoreBandsDTO;
+  failed: boolean;
+  onPress: (score: DailyScoreDTO) => void;
+}) {
   const { slug, empty } = SCORE_CARD_COPY[type];
   const label = scoreTypeLabel(type);
 
@@ -106,7 +118,7 @@ function ScoreCard({ type, score, failed, onPress }: { type: ScoreType; score: S
         {score.score === null && cold ? (
           <BaselineProgressRing daysCollected={cold.daysCollected} daysRequired={cold.daysRequired} />
         ) : (
-          <ScoreRing score={score.score} factors={score.factors} />
+          <ScoreRing score={score.score} factors={score.factors} bands={bands} />
         )}
         <View className="flex-1 gap-1.5">
           <Text className="text-base font-semibold">{label}</Text>
@@ -134,6 +146,8 @@ export function DashboardScreen() {
   const [recovery, setRecovery] = useState<ScoreState>(undefined);
   const [sleep, setSleep] = useState<ScoreState>(undefined);
   const [scoresFailed, setScoresFailed] = useState(false);
+  // Undefined until loaded (and on an older server): scoreBand uses its defaults.
+  const [bands, setBands] = useState<ScoreBandsDTO | undefined>(undefined);
   // Null until known, and null on failure: the coach entry simply isn't drawn.
   const { status: coachStatus } = useCoachStatus(navigation);
   const coachRoute = coachEntryRoute(coachStatus);
@@ -158,10 +172,11 @@ export function DashboardScreen() {
     let cancelled = false;
     (async () => {
       try {
-        const scores = await fetchScores(7);
+        const { scores, bands: serverBands } = await fetchScoresWithBands(7);
         // One request returns both types, newest first; each card is the most
         // recent score of its type. No Sleep Score means no recorded sleep.
         if (!cancelled) {
+          setBands(serverBands);
           setRecovery(scores?.find((s) => s.type === 'RECOVERY') ?? null);
           setSleep(scores?.find((s) => s.type === 'SLEEP') ?? null);
         }
@@ -259,6 +274,7 @@ export function DashboardScreen() {
         <ScoreCard
           type="RECOVERY"
           score={recovery}
+          bands={bands}
           failed={scoresFailed}
           onPress={(score) => navigation.navigate('ScoreDetail', { date: score.date, type: 'RECOVERY' })}
         />
@@ -266,6 +282,7 @@ export function DashboardScreen() {
         <ScoreCard
           type="SLEEP"
           score={sleep}
+          bands={bands}
           failed={scoresFailed}
           onPress={(score) => navigation.navigate('ScoreDetail', { date: score.date, type: 'SLEEP' })}
         />

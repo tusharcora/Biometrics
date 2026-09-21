@@ -1,6 +1,6 @@
 import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
-import { createCoachOrchestrator, MEMORY_NOTE } from '../../src/coach/orchestrator';
+import { createCoachOrchestrator, MEMORY_NOTE, MEMORY_REMOVED_NOTE } from '../../src/coach/orchestrator';
 import { ScriptedProvider, ScriptStep } from '../../src/coach/model/provider';
 import { COACH_DISCLAIMER } from '../../src/coach/guardrails/disclaimer';
 import { createPendingMemories, MAX_MEMORY_ENTRIES_PER_USER, MAX_PROMPT_MEMORIES, loadConfirmedMemories } from '../../src/coach/memory';
@@ -246,21 +246,111 @@ describe('PENDING -> CONFIRMED / dismissed on the NEXT message', () => {
     expect((await rows(user.id)).map((r) => r.status)).toEqual(['PENDING']);
   });
 
+  // Edited: 'Actually I changed my mind' used to delete (any cue word did); it is not about the fact
+  // itself any more, so it is replaced by a topical correction that shares "marathon" with the entry.
   it.each([
     'no, that is not right',
     'forget that please',
-    'Actually I changed my mind',
+    "Actually it's a full marathon",
     "don't remember that",
     'that was wrong',
-  ])('deletes the PENDING entry on a correction or dismissal: %j', async (message) => {
+  ])('deletes the PENDING entry on a correction or dismissal about it, and says so: %j', async (message) => {
     const user = await createUser();
     const entry = await pendingFor(user.id);
     const { orchestrator, telemetry } = setup([{ type: 'text', text: OK_REPLY }]);
 
-    await orchestrator.handleTurn(turn(user.id, message));
+    const result = await orchestrator.handleTurn(turn(user.id, message));
 
     expect(await prisma.coachMemory.findUnique({ where: { id: entry.id } })).toBeNull();
     expect(telemetry.named('coach.memory_resolved')[0]!.attributes).toEqual({ confirmed: 0, dismissed: 1 });
+    expect(result.text).toBe(`${OK_REPLY}\n\n${MEMORY_REMOVED_NOTE}\n\n${COACH_DISCLAIMER}`);
+  });
+
+  it.each([
+    'why is my score not higher',
+    "I can't believe how well I slept",
+    'no problem, thanks',
+    'actually, how did I sleep last night',
+  ])('a cue about something else confirms the entry and adds no removal line: %j', async (message) => {
+    const user = await createUser();
+    const entry = await pendingFor(user.id);
+    const { orchestrator, telemetry } = setup([{ type: 'text', text: OK_REPLY }]);
+
+    const result = await orchestrator.handleTurn(turn(user.id, message));
+
+    expect((await prisma.coachMemory.findUnique({ where: { id: entry.id } }))?.status).toBe('CONFIRMED');
+    expect(telemetry.named('coach.memory_resolved')[0]!.attributes).toEqual({ confirmed: 1, dismissed: 0 });
+    expect(result.text).toBe(`${OK_REPLY}\n\n${COACH_DISCLAIMER}`);
+    expect(result.text).not.toContain(MEMORY_REMOVED_NOTE);
+  });
+
+  it('judges several pending entries independently: only the one the message is about is deleted', async () => {
+    const user = await createUser();
+    const [goal, pref] = await createPendingMemories(user.id, [
+      { category: 'TRAINING_GOAL', value: 'Training for a half-marathon in March' },
+      { category: 'PREFERENCE', value: 'Prefers morning workouts' },
+    ]);
+    const { orchestrator, telemetry } = setup([{ type: 'text', text: OK_REPLY }]);
+
+    const result = await orchestrator.handleTurn(turn(user.id, "Actually it's a full marathon"));
+
+    expect(await prisma.coachMemory.findUnique({ where: { id: goal!.id } })).toBeNull();
+    expect((await prisma.coachMemory.findUnique({ where: { id: pref!.id } }))?.status).toBe('CONFIRMED');
+    expect(telemetry.named('coach.memory_resolved')[0]!.attributes).toEqual({ confirmed: 1, dismissed: 1 });
+    expect(result.text).toContain(MEMORY_REMOVED_NOTE);
+  });
+
+  it('an explicit dismissal deletes every pending entry, with a single removal line', async () => {
+    const user = await createUser();
+    await createPendingMemories(user.id, [
+      { category: 'TRAINING_GOAL', value: 'Training for a half-marathon in March' },
+      { category: 'PREFERENCE', value: 'Prefers morning workouts' },
+    ]);
+    const { orchestrator } = setup([{ type: 'text', text: OK_REPLY }]);
+
+    const result = await orchestrator.handleTurn(turn(user.id, 'forget that'));
+
+    expect(await rows(user.id)).toHaveLength(0);
+    expect(result.text.split(MEMORY_REMOVED_NOTE)).toHaveLength(2);
+  });
+
+  it('the removal line comes before the "I\'ll remember that" line and the disclaimer when both apply', async () => {
+    const user = await createUser();
+    await pendingFor(user.id);
+    const { orchestrator } = setup([propose('c1', 'PREFERENCE', 'Likes short answers'), { type: 'text', text: OK_REPLY }]);
+
+    const result = await orchestrator.handleTurn(turn(user.id, 'forget that, and I like short answers'));
+
+    expect(result.text).toBe(`${OK_REPLY}\n\n${MEMORY_REMOVED_NOTE}\n\n${MEMORY_NOTE}\n\n${COACH_DISCLAIMER}`);
+  });
+
+  it('the removal line is also shown when the turn falls back (the deletion must never be silent)', async () => {
+    const user = await createUser();
+    const entry = await pendingFor(user.id);
+    const { orchestrator } = setup([]); // provider fails -> fallback
+
+    const result = await orchestrator.handleTurn(turn(user.id, 'forget that'));
+
+    expect(result.source).toBe('FALLBACK');
+    expect(await prisma.coachMemory.findUnique({ where: { id: entry.id } })).toBeNull();
+    expect(result.text).toContain(MEMORY_REMOVED_NOTE);
+    expect(result.text.endsWith(COACH_DISCLAIMER)).toBe(true);
+  });
+
+  it('no removal line when there was nothing pending to delete', async () => {
+    const user = await createUser();
+    const { orchestrator } = setup([{ type: 'text', text: OK_REPLY }]);
+    const result = await orchestrator.handleTurn(turn(user.id, 'forget that'));
+    expect(result.text).toBe(`${OK_REPLY}\n\n${COACH_DISCLAIMER}`);
+  });
+
+  it('the removal line is fixed text with no digits, and is not model output (a model that says it is unchanged)', async () => {
+    expect(MEMORY_REMOVED_NOTE).not.toMatch(/\d/);
+    const user = await createUser();
+    await pendingFor(user.id);
+    const { orchestrator, provider } = setup([{ type: 'text', text: OK_REPLY }]);
+    await orchestrator.handleTurn(turn(user.id, 'forget that'));
+    expect(JSON.stringify(provider.requests)).not.toContain(MEMORY_REMOVED_NOTE);
   });
 
   it('never touches an already CONFIRMED entry on a later correction', async () => {
@@ -308,11 +398,12 @@ describe('"what I know about you" prompt block', () => {
         { userId: user.id, category: 'SCHEDULE', value: 'Pending thing', status: 'PENDING' },
       ],
     });
-    // The next message is a correction, so the pending row is deleted before the prompt is built:
-    // the assertion below therefore holds for either reason, and the loader test right after
-    // checks the status filter directly.
+    // The next message is an explicit dismissal, so the pending row is deleted before the prompt is
+    // built: the assertion below therefore holds for either reason, and the loader test right after
+    // checks the status filter directly. (Edited: 'no wait, how is my sleep' used to delete it; it now
+    // would CONFIRM an unrelated pending entry.)
     const { orchestrator, provider } = setup([{ type: 'text', text: OK_REPLY }]);
-    await orchestrator.handleTurn(turn(user.id, 'no wait, how is my sleep'));
+    await orchestrator.handleTurn(turn(user.id, 'forget that, how is my sleep'));
 
     const system = provider.requests[0]!.system;
     expect(system).toContain('What I know about you');

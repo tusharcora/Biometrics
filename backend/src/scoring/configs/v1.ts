@@ -10,8 +10,23 @@ import type { RecoveryFactorKey, SleepFactorKey } from '../types';
  * data (there is no ground-truth "recovery" label to fit them to). The
  * backtest shows what a change DOES, not whether it is CORRECT.
  */
+export interface ScoreBands {
+  excellent: number;
+  good: number;
+  fair: number;
+}
+
 export interface ScoreConfig {
   version: string;
+  /**
+   * Lower bounds of the display bands shared by the Recovery and Sleep scores:
+   * score >= excellent is "Excellent", >= good "Good", >= fair "Fair", else
+   * "Poor". Strictly descending, within 0-100. A product starting point, not
+   * derived from outcome data. The backend is the single source of truth (the
+   * clients read these from the score endpoints), versioned with the algorithm
+   * so a re-weighting and its band cut-offs ship together.
+   */
+  scoreBands: ScoreBands;
   /** Base weights; they sum to 1 and are renormalized per day around excluded factors. */
   weights: Record<RecoveryFactorKey, number>;
   /** +1: higher z helps recovery (HRV). -1: higher z hurts it (RHR, sleep debt). */
@@ -87,6 +102,8 @@ export interface ScoreConfig {
 
 export const v1Config: ScoreConfig = {
   version: 'v1',
+  // A product starting point, not derived from data (see ScoreConfig.scoreBands).
+  scoreBands: { excellent: 75, good: 55, fair: 40 },
   weights: { HRV: 0.45, RHR: 0.35, SLEEP_DEBT: 0.2 },
   direction: { HRV: 1, RHR: -1, SLEEP_DEBT: -1 },
   k: Math.log(9) / 2,

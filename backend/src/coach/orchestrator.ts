@@ -43,6 +43,13 @@ export const MAX_MODEL_CALLS = 8;
 export const HISTORY_WINDOW = 10;
 /** Fixed, server-appended (never model-generated) when a memory proposal was stored this turn. No digits. */
 export const MEMORY_NOTE = "I'll remember that — let me know if that's not right.";
+/** Fixed, server-appended (never model-generated) when the user's message deleted a pending memory. No digits. */
+export const MEMORY_REMOVED_NOTE = "Okay — I've removed that from what I remember.";
+
+/** Appends fixed server-composed notes after validation, so they are never model text and never digit-scanned. */
+function withNotes(text: string, notes: string[]): string {
+  return notes.length === 0 ? text : `${text.trimEnd()}\n\n${notes.join('\n\n')}`;
+}
 
 export interface CoachTurnInput {
   userId: string;
@@ -138,11 +145,14 @@ export function createCoachOrchestrator(deps: OrchestratorDeps) {
     }
 
     // 1b. Feedback on memory proposed earlier: this message either leaves the PENDING entries
-    //     uncorrected (they become CONFIRMED) or corrects/dismisses them (they are deleted).
+    //     uncorrected (they become CONFIRMED) or corrects/dismisses them (they are deleted, and
+    //     the reply says so: a silent deletion would be invisible to the user).
     //     Skipped on a crisis turn, which leaves them PENDING (the conservative choice).
     //     A failure here must not fail the turn.
+    let memoryRemoved = false;
     try {
       const resolution = await resolvePendingMemories(userId, input.message);
+      memoryRemoved = resolution.dismissed > 0;
       if (resolution.confirmed + resolution.dismissed > 0) {
         emit('coach.memory_resolved', { confirmed: resolution.confirmed, dismissed: resolution.dismissed });
       }
@@ -165,7 +175,7 @@ export function createCoachOrchestrator(deps: OrchestratorDeps) {
     const fallbackResult = (reason: string): CoachTurnResult => {
       emit('coach.turn_fallback', { reason, tier });
       return {
-        text: withDisclaimer(composeFallback(preamble, today)),
+        text: withDisclaimer(withNotes(composeFallback(preamble, today), memoryRemoved ? [MEMORY_REMOVED_NOTE] : [])),
         source: 'FALLBACK',
         events,
         tier,
@@ -323,7 +333,10 @@ export function createCoachOrchestrator(deps: OrchestratorDeps) {
       }
       if (memoryProposals.length > 0) emit('coach.memory_proposed', { count: memoryProposals.length });
     }
-    const body = memoryProposals.length > 0 ? `${outcome.text.trimEnd()}\n\n${MEMORY_NOTE}` : outcome.text;
+    const body = withNotes(outcome.text, [
+      ...(memoryRemoved ? [MEMORY_REMOVED_NOTE] : []),
+      ...(memoryProposals.length > 0 ? [MEMORY_NOTE] : []),
+    ]);
     return {
       text: withDisclaimer(body),
       source: 'MODEL',

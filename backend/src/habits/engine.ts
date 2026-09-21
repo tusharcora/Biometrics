@@ -160,6 +160,50 @@ function testPairs(pairs: Pair[]): { r: number; pValue: number; nEff: number } {
   return { r, pValue: correlationPValue(r, nEff), nEff };
 }
 
+interface PairCounts {
+  exposed: number;
+  unexposed: number;
+}
+
+/** Keeps the (factor, lag) with the largest min(exposed, unexposed), ties broken by total pairs. */
+function keepBest(best: PairCounts, exposed: number, unexposed: number): void {
+  const fewer = Math.min(exposed, unexposed);
+  const bestFewer = Math.min(best.exposed, best.unexposed);
+  if (fewer > bestFewer || (fewer === bestFewer && exposed + unexposed > best.exposed + best.unexposed)) {
+    best.exposed = exposed;
+    best.unexposed = unexposed;
+  }
+}
+
+const passesObservationGate = (exposed: number, unexposed: number) => exposed >= MIN_PAIRS_EACH && unexposed >= MIN_PAIRS_EACH;
+
+/**
+ * The min-observation gate on its own: for each habit, the observed exposed /
+ * unexposed pair counts at the best (factor, lag), and whether ANY (factor, lag)
+ * clears the gate. Runs no correlation, p-value or BH step. analyzeHabits'
+ * notEnoughData is exactly this, so the two can never disagree.
+ */
+export function computeNotEnoughData(input: EngineInput): NotEnoughData[] {
+  const out: NotEnoughData[] = [];
+  for (const { habitType, observations } of input.habits) {
+    const best: PairCounts = { exposed: 0, unexposed: 0 };
+    let testable = false;
+    for (const factor of CORRELATION_FACTORS) {
+      const series = input.factors[factor];
+      if (!series) continue;
+      for (const lag of CORRELATION_LAGS) {
+        let exposed = 0;
+        let unexposed = 0;
+        for (const p of pairUp(observations, series, lag)) p.exposed ? exposed++ : unexposed++;
+        keepBest(best, exposed, unexposed);
+        if (passesObservationGate(exposed, unexposed)) testable = true;
+      }
+    }
+    if (!testable) out.push({ habitType, exposedDays: best.exposed, unexposedDays: best.unexposed, requiredEach: MIN_PAIRS_EACH });
+  }
+  return out;
+}
+
 export function analyzeHabits(input: EngineInput): EngineOutput {
   interface Pending extends Omit<HypothesisResult, 'qValue' | 'passes'> {}
   const tested: Pending[] = [];
@@ -177,19 +221,12 @@ export function analyzeHabits(input: EngineInput): EngineOutput {
         const exposedPairs = pairs.filter((p) => p.exposed);
         const unexposedPairs = pairs.filter((p) => !p.exposed);
 
-        const best = bestCounts.get(habitType)!;
-        const fewer = Math.min(exposedPairs.length, unexposedPairs.length);
-        const bestFewer = Math.min(best.exposed, best.unexposed);
-        const more = exposedPairs.length + unexposedPairs.length > best.exposed + best.unexposed;
-        if (fewer > bestFewer || (fewer === bestFewer && more)) {
-          best.exposed = exposedPairs.length;
-          best.unexposed = unexposedPairs.length;
-        }
+        keepBest(bestCounts.get(habitType)!, exposedPairs.length, unexposedPairs.length);
 
         // Minimum-observation gate: the autocorrelation estimate and the t
         // approximation are both unreliable on tiny samples, and a comparison
         // with almost no unexposed days is not a comparison.
-        if (exposedPairs.length < MIN_PAIRS_EACH || unexposedPairs.length < MIN_PAIRS_EACH) continue;
+        if (!passesObservationGate(exposedPairs.length, unexposedPairs.length)) continue;
 
         const { r, pValue, nEff } = testPairs(pairs);
         const effect = round1(meanPct(exposedPairs));

@@ -74,42 +74,109 @@ describe('memory input validation (allowlist)', () => {
 });
 
 describe('next-message feedback detector', () => {
+  const HALF = 'Training for a half-marathon in March';
+  const MORNING = 'Prefers morning workouts';
+
   it.each([
     'thanks, what about my HRV',
     'ok how is my sleep score this week',
     'sounds good. can you compare last night to yesterday',
     'yes that is right',
+    'that is right, thanks',
   ])('confirms on an uncorrected message: %j', (m) => {
-    expect(classifyMemoryFeedback(m)).toBe('confirm');
+    expect(classifyMemoryFeedback(m, HALF)).toBe('confirm');
   });
 
+  // Rule 1: explicit memory-directed dismissal, whatever the entry says.
   it.each([
-    'no, that is not right',
-    'Actually I changed my mind',
-    'forget that please',
-    "don't remember that",
-    'that was wrong',
-    'wrong goal, it is a 10k',
-    'nope',
-    'delete that',
-    "that isn't what I said",
-    'I meant something else',
-    'please stop remembering things',
-    'why is my score not higher', // doubt: a bare negation is treated as a correction
-    'undo that',
+    'forget that',
+    'forget it, how is my sleep',
+    'Forget this please',
+    'remove that',
+    'delete it',
+    'erase this',
+    'scratch that',
     'ignore that',
-  ])('dismisses on a correction or dismissal cue: %j', (m) => {
-    expect(classifyMemoryFeedback(m)).toBe('dismiss');
+    'disregard it',
+    'discard this',
+    'undo that',
+    'cancel that',
+    "don't remember that",
+    "don't save it",
+    "don't store this",
+    "don't keep that",
+    "that's not right",
+    'no, that is not right',
+    "that's not correct",
+    "that's not true",
+    "that's not accurate",
+    "that's wrong",
+    'that is wrong',
+    'that was wrong',
+    "that's incorrect",
+    "that's a mistake",
+    'you got that wrong',
+    'you got it wrong',
+    'never mind that',
+    'nevermind it',
+    'THAT’S NOT RIGHT', // curly apostrophe, upper case
+    'DON’T SAVE THAT',
+  ])('dismisses on an explicit memory-directed dismissal: %j', (m) => {
+    expect(classifyMemoryFeedback(m, HALF)).toBe('dismiss');
+    expect(classifyMemoryFeedback(m, MORNING)).toBe('dismiss');
+    expect(classifyMemoryFeedback(m)).toBe('dismiss'); // needs no entry value
   });
 
-  it('treats an empty or unusable message as doubt', () => {
-    expect(classifyMemoryFeedback('')).toBe('dismiss');
-    expect(classifyMemoryFeedback('   ')).toBe('dismiss');
+  // Rule 2: a correction cue AND a shared content word with THAT entry.
+  it.each([
+    ["Actually it's a full marathon", HALF],
+    ['no, the marathon is in April', HALF],
+    ['I meant a 10k instead of the half', HALF],
+    ['not mornings, I switched to evening workouts', MORNING],
+    ['I changed the race, it is not in March any more', HALF],
+    ['wrong, I prefer workouts in the morning', MORNING],
+  ])('dismisses on a topical correction: %j against %j', (m, value) => {
+    expect(classifyMemoryFeedback(m, value)).toBe('dismiss');
   });
 
-  it('is case-insensitive and normalises curly apostrophes', () => {
-    expect(classifyMemoryFeedback('THAT’S NOT RIGHT')).toBe('dismiss');
-    expect(classifyMemoryFeedback('DON’T SAVE THAT')).toBe('dismiss');
+  it('matches content words through light stemming', () => {
+    expect(classifyMemoryFeedback('not marathons, actually', HALF)).toBe('dismiss');
+    expect(classifyMemoryFeedback('no I am not training for that', 'Trains for a half marathon')).toBe('dismiss'); // trains / training -> train
+    expect(classifyMemoryFeedback('actually I moved my workout', 'Likes morning workouts')).toBe('dismiss');
+  });
+
+  // The false positives that motivated the rewrite: a cue about something else must not delete.
+  it.each([
+    ['why is my score not higher', MORNING],
+    ['I can’t believe how well I slept', MORNING],
+    ["I can't believe how well I slept", HALF],
+    ['no problem, thanks', MORNING],
+    ['no problem, thanks', HALF],
+    ['actually, how did I sleep last night', HALF],
+    ['not sure what my HRV means', MORNING],
+    ['wait, what does recovery mean', HALF],
+    ['please stop the notifications', MORNING],
+  ])('confirms a cue that is about something else: %j against %j', (m, value) => {
+    expect(classifyMemoryFeedback(m, value)).toBe('confirm');
+  });
+
+  it('shared stop-words or words shorter than 3 letters never count', () => {
+    expect(classifyMemoryFeedback('no, that is not for you and not with them', 'This is for you with them')).toBe('confirm');
+    expect(classifyMemoryFeedback('no, go to it', 'Wants to go')).toBe('confirm');
+  });
+
+  it('a shared content word without any correction cue confirms', () => {
+    expect(classifyMemoryFeedback('how is my marathon training going', HALF)).toBe('confirm');
+  });
+
+  it('an empty message is not a dismissal (deleting silently on no evidence is the wrong bias)', () => {
+    expect(classifyMemoryFeedback('', HALF)).toBe('confirm');
+    expect(classifyMemoryFeedback('   ', HALF)).toBe('confirm');
+  });
+
+  it('without an entry value only the explicit rule can dismiss', () => {
+    expect(classifyMemoryFeedback('nope')).toBe('confirm');
+    expect(classifyMemoryFeedback('I meant something else')).toBe('confirm');
   });
 });
 

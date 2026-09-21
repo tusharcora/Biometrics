@@ -59,18 +59,39 @@ export interface BaselineDTO {
   unit: string;
 }
 
+// Lower bounds of the Excellent / Good / Fair score bands (anything below
+// `fair` is Poor). The server config is the single source of truth; see
+// DEFAULT_SCORE_BANDS in lib/scoreInsights for the older-server fallback.
+export interface ScoreBandsDTO {
+  excellent: number;
+  good: number;
+  fair: number;
+}
+
 export interface ScoreDetailDTO {
   score: DailyScoreDTO;
   baselines: BaselineDTO[];
   previous: { date: string; score: number } | null;
+  // Absent from an older server; scoreBand() then falls back to the defaults.
+  bands?: ScoreBandsDTO;
+}
+
+export interface ScoresResult {
+  scores: DailyScoreDTO[];
+  bands?: ScoreBandsDTO;
 }
 
 // Newest first. Without `type` the server returns BOTH score types
 // (RECOVERY first within a day).
-export async function fetchScores(days: number, type?: ScoreType): Promise<DailyScoreDTO[]> {
+export async function fetchScoresWithBands(days: number, type?: ScoreType): Promise<ScoresResult> {
   const query = type ? `days=${days}&type=${type}` : `days=${days}`;
-  const res = await apiFetch<{ scores?: DailyScoreDTO[] }>(`/me/scores?${query}`);
-  return res?.scores ?? [];
+  const res = await apiFetch<{ scores?: DailyScoreDTO[]; bands?: ScoreBandsDTO }>(`/me/scores?${query}`);
+  return { scores: res?.scores ?? [], bands: res?.bands };
+}
+
+// Scores only, for callers that don't colour by band.
+export async function fetchScores(days: number, type?: ScoreType): Promise<DailyScoreDTO[]> {
+  return (await fetchScoresWithBands(days, type)).scores;
 }
 
 // null when the server has no score for that day (404); any other failure throws.

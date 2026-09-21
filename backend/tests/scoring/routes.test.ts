@@ -6,6 +6,7 @@ import { issueSessionTokens } from '../../src/auth/jwt';
 import { computeDailyScore } from '../../src/scoring/compute';
 import { localCivilDate } from '../../src/biometrics/civilDate';
 import { shiftDate } from '../../src/scoring/dates';
+import { getLiveConfig } from '../../src/scoring/configs';
 import { createUser, seedHistory, day } from './dbHelpers';
 
 beforeAll(() => {
@@ -61,7 +62,10 @@ describe('GET /me/scores', () => {
     const res = await request(createApp()).get('/me/scores').set(await authed(user.id));
 
     expect(res.status).toBe(200);
-    expect(Object.keys(res.body)).toEqual(['scores']);
+    // Edited: `bands` (from the live scoring config) is now a top-level field.
+    expect(Object.keys(res.body)).toEqual(['scores', 'bands']);
+    expect(res.body.bands).toEqual(getLiveConfig().scoreBands);
+    expect(res.body.bands).toEqual({ excellent: 75, good: 55, fair: 40 });
     expect(res.body.scores.map((s: any) => s.date)).toEqual([today, shiftDate(today, -1), shiftDate(today, -2)]);
 
     const first = res.body.scores[0];
@@ -168,7 +172,10 @@ describe('GET /me/scores/:date', () => {
     const res = await request(createApp()).get('/me/scores/2026-09-03').set(await authed(user.id));
 
     expect(res.status).toBe(200);
-    expect(Object.keys(res.body).sort()).toEqual(['baselines', 'previous', 'score']);
+    // Edited: `bands` (from the live scoring config) is now a top-level field.
+    expect(Object.keys(res.body).sort()).toEqual(['bands', 'baselines', 'previous', 'score']);
+    expect(res.body.bands).toEqual(getLiveConfig().scoreBands);
+    expect(res.body.bands).toEqual({ excellent: 75, good: 55, fair: 40 });
     expect(res.body.score).toMatchObject({ date: '2026-09-03', type: 'RECOVERY', score: 71 });
     // Skips the cold-start day (no score) to the last day that has one.
     expect(res.body.previous).toEqual({ date: '2026-09-01', score: 58.3 });

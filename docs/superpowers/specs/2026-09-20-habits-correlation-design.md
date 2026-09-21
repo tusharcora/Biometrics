@@ -406,7 +406,12 @@ implementation, which win over the text above where they differ:
   rejected; a log for another user's type id returns 400; deleting another
   user's log returns 404.
 
-**Known performance caveat:** `GET /me/habits/patterns` re-runs the full
-analysis on every request in order to compute `notEnoughData`. That is
-acceptable at one user; it should read a persisted result before this has
-many users.
+**The patterns endpoint reads stored results.** `GET /me/habits/patterns`
+returns the stored `CONFIRMED` rows (the weekly lifecycle is what the user
+sees) and never runs the statistical analysis or touches unconfirmed
+candidates. Only the `notEnoughData` progress counts ("3 of 8 needed") are
+computed on request, by a lightweight `computeNotEnoughData` that shares the
+engine's pair-counting and gate helpers (so the counts cannot drift from
+what `analyzeHabits` reports) but runs no correlation, p-value or
+Benjamini–Hochberg step. They are live on purpose: the number must move as
+soon as the user logs "nothing today", not a week later.

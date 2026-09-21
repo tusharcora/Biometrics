@@ -3,6 +3,7 @@ import {
   buildBaselineSentence,
   formatPoints,
   scoreBand,
+  DEFAULT_SCORE_BANDS,
   sortFactorsByImpact,
   pickColdStartProgress,
   SCORE_FRAMING,
@@ -411,6 +412,56 @@ describe('scoreBand', () => {
     [0, 'scorePoor'],
   ])('maps %s to %s', (value, band) => {
     expect(scoreBand(value)).toBe(band);
+  });
+});
+
+describe('scoreBand with server-provided bands', () => {
+  const custom = { excellent: 90, good: 70, fair: 50 };
+
+  it('exports the fallback thresholds', () => {
+    expect(DEFAULT_SCORE_BANDS).toEqual({ excellent: 75, good: 55, fair: 40 });
+  });
+
+  it.each([
+    [100, 'scoreExcellent'],
+    [90, 'scoreExcellent'],
+    [89.9, 'scoreGood'],
+    [70, 'scoreGood'],
+    [69.9, 'scoreFair'],
+    [50, 'scoreFair'],
+    [49.9, 'scorePoor'],
+    [0, 'scorePoor'],
+  ])('uses the given bands (lower bound inclusive): %s -> %s', (value, band) => {
+    expect(scoreBand(value, custom)).toBe(band);
+  });
+
+  it('classifies a score differently from the defaults when the server says so', () => {
+    expect(scoreBand(78)).toBe('scoreExcellent');
+    expect(scoreBand(78, custom)).toBe('scoreGood');
+  });
+
+  it('accepts bounds at the edges of 0-100', () => {
+    expect(scoreBand(0, { excellent: 100, good: 50, fair: 0 })).toBe('scoreFair');
+  });
+
+  it.each([
+    ['undefined', undefined],
+    ['null', null],
+    ['empty object', {}],
+    ['missing field', { excellent: 90, good: 70 }],
+    ['non-numeric', { excellent: '90', good: 70, fair: 50 }],
+    ['NaN', { excellent: NaN, good: 70, fair: 50 }],
+    ['Infinity', { excellent: Infinity, good: 70, fair: 50 }],
+    ['equal thresholds (not strictly descending)', { excellent: 70, good: 70, fair: 50 }],
+    ['ascending', { excellent: 40, good: 55, fair: 75 }],
+    ['above 100', { excellent: 120, good: 70, fair: 50 }],
+    ['below 0', { excellent: 90, good: 70, fair: -5 }],
+    ['a string', 'nope'],
+  ])('falls back to the defaults for %s', (_label, bands) => {
+    for (const value of [100, 78, 75, 74.9, 55, 54, 40, 39, 0]) {
+      expect(scoreBand(value, bands as never)).toBe(scoreBand(value));
+    }
+    expect(scoreBand(78, bands as never)).toBe('scoreExcellent');
   });
 });
 

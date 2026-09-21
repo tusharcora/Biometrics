@@ -9,7 +9,7 @@ import { Text } from './text';
 import { COLORS, MOTION } from '../../theme';
 import { scoreBand } from '../../lib/scoreInsights';
 import { pointsByFactor, staggerDelays } from '../../lib/scoreMotion';
-import type { FactorDTO } from '../../api/scores';
+import type { FactorDTO, ScoreBandsDTO } from '../../api/scores';
 
 // See count-up.tsx: Jest has no real frame clock, so skip straight to the
 // final geometry there. Production keeps the animation.
@@ -131,9 +131,11 @@ interface ScoreRingProps {
   segmented?: boolean;
   size?: number;
   strokeWidth?: number;
+  // Server-provided band thresholds; the defaults apply when absent.
+  bands?: ScoreBandsDTO;
 }
 
-export function ScoreRing({ score, factors = [], segmented = false, size = 84, strokeWidth = 8 }: ScoreRingProps) {
+export function ScoreRing({ score, factors = [], segmented = false, size = 84, strokeWidth = 8, bands }: ScoreRingProps) {
   const { colorScheme: scheme } = useColorScheme();
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
   const fill = score === null ? 0 : Math.max(0, Math.min(score / 100, 1));
@@ -148,7 +150,7 @@ export function ScoreRing({ score, factors = [], segmented = false, size = 84, s
   const accessibilityLabel = score === null ? 'Score not available yet' : `Score ${Math.round(score)} out of 100`;
 
   if (!segmented) {
-    const color = score === null ? colors.muted : colors[scoreBand(score)];
+    const color = score === null ? colors.muted : colors[scoreBand(score, bands)];
     return (
       <View testID="score-ring" accessible accessibilityLabel={accessibilityLabel}>
         <View testID="score-ring-plain">

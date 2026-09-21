@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireAuth, AuthedRequest } from '../auth/middleware';
 import { localCivilDate, civilDateToUtcMidnight } from '../biometrics/civilDate';
 import { prisma } from '../db/client';
+import { getLiveConfig } from './configs';
 import { isCivilDate, shiftDate } from './dates';
 import { BASELINE_METRICS, ScoreType, toBaselineDTOs, toDailyScoreDTO } from './dto';
 
@@ -54,6 +55,7 @@ scoresRouter.get('/me/scores', requireAuth, async (req: AuthedRequest, res) => {
         snapshots.filter((s) => s.date.getTime() === row.date.getTime()),
       ),
     ),
+    bands: getLiveConfig().scoreBands,
   });
 });
 
@@ -91,5 +93,6 @@ scoresRouter.get('/me/scores/:date', requireAuth, async (req: AuthedRequest, res
     score: toDailyScoreDTO(row, snapshots),
     baselines: toBaselineDTOs(snapshots, type),
     previous: prev && prev.score !== null ? { date: prev.date.toISOString().slice(0, 10), score: Math.round(prev.score * 10) / 10 } : null,
+    bands: getLiveConfig().scoreBands,
   });
 });
