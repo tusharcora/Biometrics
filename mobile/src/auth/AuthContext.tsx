@@ -1,6 +1,7 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { apiFetch, onSessionExpired } from '../api/client';
+import { disablePush } from '../lib/pushRegistration';
 
 interface Session {
   accessToken: string;
@@ -20,6 +21,24 @@ const AuthContext = createContext<AuthContextValue | undefined>(undefined);
 async function storeSession(tokens: { accessToken: string; refreshToken: string }): Promise<void> {
   await SecureStore.setItemAsync('accessToken', tokens.accessToken);
   await SecureStore.setItemAsync('refreshToken', tokens.refreshToken);
+}
+
+const PUSH_UNREGISTER_TIMEOUT_MS = 2000;
+
+async function unregisterPushBestEffort(): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    await Promise.race([
+      disablePush(),
+      new Promise<void>((resolve) => {
+        timer = setTimeout(resolve, PUSH_UNREGISTER_TIMEOUT_MS);
+      }),
+    ]);
+  } catch {
+    // Signing out matters more than tidying up the push token.
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -61,6 +80,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   async function signOut() {
+    // Best effort, and before the tokens go: the unregister call needs the
+    // session. It is capped so a slow network can never hold up signing out.
+    await unregisterPushBestEffort();
     const refreshToken = await SecureStore.getItemAsync('refreshToken');
     await apiFetch('/auth/signout', {
       method: 'POST',

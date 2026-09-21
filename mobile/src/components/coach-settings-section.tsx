@@ -9,6 +9,7 @@ import { COLORS } from '../theme';
 import { Text } from './ui/text';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
+import { PushNotificationsRow } from './push-notifications-row';
 
 // The AI Coach block on the Settings screen: persona picker and consent
 // revocation. It renders nothing at all unless the server says the coach is
@@ -122,6 +123,8 @@ export function CoachSettingsSection() {
         </View>
         <Ionicons name="chevron-forward" size={18} color={colors.muted} />
       </Pressable>
+
+      <PushNotificationsRow />
 
       <Button testID="coach-revoke-button" variant="destructive" disabled={busy} onPress={() => void revoke()}>
         Turn off AI Coach
