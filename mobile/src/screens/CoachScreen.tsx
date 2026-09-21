@@ -12,6 +12,7 @@ import {
   fetchLatestConversation,
   sendCoachMessage,
   type CoachMessageSource,
+  type MemoryDTO,
   type SendCoachMessageInput,
 } from '../api/coach';
 import { Text } from '../components/ui/text';
@@ -19,6 +20,7 @@ import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { ChatBubble } from '../components/ui/chat-bubble';
+import { MemoryProposalChips } from '../components/memory-proposal-chips';
 import { COLORS } from '../theme';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
@@ -31,6 +33,8 @@ interface ChatMessage {
   source?: CoachMessageSource | string;
   // True only for a reply that just arrived, so it fades in; history does not.
   fresh?: boolean;
+  // Memories the coach proposed to keep on this turn (shown under the bubble).
+  memoryProposals?: MemoryDTO[];
   // Present on a crisis-safety reply.
   safety?: {
     resources: string[];
@@ -139,6 +143,7 @@ export function CoachScreen() {
             text: res.message.text,
             source: res.message.source,
             fresh: true,
+            memoryProposals: res.memoryProposals?.length ? res.memoryProposals : undefined,
             safety:
               res.message.source === 'safety' && res.safety
                 ? { resources: res.safety.resources, originalMessage: request.message, overridden: false }
@@ -224,31 +229,34 @@ export function CoachScreen() {
           ) : null}
 
           {messages.map((message) => (
-            <ChatBubble key={message.id} role={message.role} text={message.text} source={message.source as CoachMessageSource} animate={message.fresh === true}>
-              {message.safety ? (
-                <View className="gap-3">
-                  <Card testID="coach-safety-resources" className="gap-1 border-accent bg-muted">
-                    <Text className="text-sm font-semibold">Support is available</Text>
-                    {message.safety.resources.map((resource) => (
-                      <Text key={resource} className="text-sm">
-                        {resource}
-                      </Text>
-                    ))}
-                  </Card>
-                  {!message.safety.overridden ? (
-                    <Button
-                      testID="coach-safety-override"
-                      variant="ghost"
-                      size="sm"
-                      disabled={sending}
-                      onPress={() => overrideSafety(message.safety!.originalMessage)}
-                    >
-                      {"That's not why I'm asking"}
-                    </Button>
-                  ) : null}
-                </View>
-              ) : null}
-            </ChatBubble>
+            <View key={message.id} className="gap-1">
+              <ChatBubble role={message.role} text={message.text} source={message.source as CoachMessageSource} animate={message.fresh === true}>
+                {message.safety ? (
+                  <View className="gap-3">
+                    <Card testID="coach-safety-resources" className="gap-1 border-accent bg-muted">
+                      <Text className="text-sm font-semibold">Support is available</Text>
+                      {message.safety.resources.map((resource) => (
+                        <Text key={resource} className="text-sm">
+                          {resource}
+                        </Text>
+                      ))}
+                    </Card>
+                    {!message.safety.overridden ? (
+                      <Button
+                        testID="coach-safety-override"
+                        variant="ghost"
+                        size="sm"
+                        disabled={sending}
+                        onPress={() => overrideSafety(message.safety!.originalMessage)}
+                      >
+                        {"That's not why I'm asking"}
+                      </Button>
+                    ) : null}
+                  </View>
+                ) : null}
+              </ChatBubble>
+              {message.memoryProposals ? <MemoryProposalChips proposals={message.memoryProposals} /> : null}
+            </View>
           ))}
 
           {sending ? (

@@ -43,10 +43,31 @@ export interface CoachSafetyDTO {
   canContinue: true;
 }
 
+// The closed allowlist of things the coach may remember (spec 5). Health and
+// medical details are deliberately not a category.
+export type MemoryCategory = 'TRAINING_GOAL' | 'SCHEDULE' | 'PREFERENCE';
+
+export interface MemoryDTO {
+  id: string;
+  category: MemoryCategory;
+  value: string;
+  // PENDING: proposed this turn and kept unless the user corrects it.
+  status: 'PENDING' | 'CONFIRMED';
+  createdAt: string;
+}
+
+export interface CoachDigestDTO {
+  id: string;
+  text: string;
+  createdAt: string;
+}
+
 export interface CoachReplyDTO {
   conversationId: string;
   message: CoachMessageDTO;
   safety?: CoachSafetyDTO;
+  // Entries the coach proposed to remember on this turn.
+  memoryProposals?: MemoryDTO[];
 }
 
 export interface CoachHistoryMessageDTO {
@@ -101,6 +122,24 @@ export class CoachTimeoutError extends Error {
     super('The coach took too long to answer');
     this.name = 'CoachTimeoutError';
     Object.setPrototypeOf(this, CoachTimeoutError.prototype);
+  }
+}
+
+// 400 on PATCH /me/coach/memory/:id: the new text failed server validation.
+export class CoachMemoryValidationError extends Error {
+  constructor() {
+    super('That memory could not be saved');
+    this.name = 'CoachMemoryValidationError';
+    Object.setPrototypeOf(this, CoachMemoryValidationError.prototype);
+  }
+}
+
+// 404 on PATCH/DELETE /me/coach/memory/:id: the entry no longer exists.
+export class CoachMemoryNotFoundError extends Error {
+  constructor() {
+    super('That memory no longer exists');
+    this.name = 'CoachMemoryNotFoundError';
+    Object.setPrototypeOf(this, CoachMemoryNotFoundError.prototype);
   }
 }
 
@@ -190,4 +229,36 @@ export async function sendCoachMessage(input: SendCoachMessageInput): Promise<Co
 export async function fetchLatestConversation(): Promise<CoachConversationDTO> {
   const res = await coachFetch<Partial<CoachConversationDTO> | undefined>('/me/coach/conversations/latest');
   return { conversationId: res?.conversationId ?? null, messages: res?.messages ?? [] };
+}
+
+export async function listCoachMemory(): Promise<MemoryDTO[]> {
+  const res = await coachFetch<Partial<{ entries: MemoryDTO[] }> | undefined>('/me/coach/memory');
+  return res?.entries ?? [];
+}
+
+// On an entry-level path a 404 means "that entry", not "coach disabled".
+async function memoryEntryFetch<T>(path: string, options: Parameters<typeof apiFetch>[1]): Promise<T> {
+  try {
+    return await apiFetch<T>(path, options);
+  } catch (error) {
+    if (error instanceof ApiError) {
+      if (error.status === 400) throw new CoachMemoryValidationError();
+      if (error.status === 404) throw new CoachMemoryNotFoundError();
+    }
+    throw mapCoachError(error);
+  }
+}
+
+export async function updateCoachMemory(id: string, value: string): Promise<MemoryDTO> {
+  const res = await memoryEntryFetch<{ entry: MemoryDTO }>(`/me/coach/memory/${encodeURIComponent(id)}`, json('PATCH', { value }));
+  return res.entry;
+}
+
+export async function deleteCoachMemory(id: string): Promise<void> {
+  await memoryEntryFetch<void>(`/me/coach/memory/${encodeURIComponent(id)}`, { method: 'DELETE' });
+}
+
+export async function fetchLatestDigest(): Promise<CoachDigestDTO | null> {
+  const res = await coachFetch<Partial<{ digest: CoachDigestDTO | null }> | undefined>('/me/coach/digests/latest');
+  return res?.digest ?? null;
 }

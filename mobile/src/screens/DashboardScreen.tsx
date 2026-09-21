@@ -20,6 +20,7 @@ import { TrendLine } from '../components/ui/trend-line';
 import { CountUp } from '../components/ui/count-up';
 import { ThemeToggle } from '../components/ui/theme-toggle';
 import { HabitLogCard } from '../components/habit-log-card';
+import { CoachDigestCard } from '../components/coach-digest-card';
 import { COLORS, METRIC_CONFIG, METRIC_ORDER, type MetricType } from '../theme';
 import { computeStats, buildHeadline, type MetricRecord } from '../lib/metricInsights';
 import { pickColdStartProgress, scoreTypeLabel } from '../lib/scoreInsights';
@@ -270,6 +271,8 @@ export function DashboardScreen() {
         />
 
         <HabitLogCard />
+
+        {coachRoute === 'Coach' ? <CoachDigestCard /> : null}
 
         <Pressable testID="patterns-button" onPress={() => navigation.navigate('Patterns')} className="active:opacity-80">
           <Card className="flex-row items-center gap-3">

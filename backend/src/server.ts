@@ -3,6 +3,7 @@ import { startSyncWorker } from './sync/worker';
 import { enqueueImmediateTokenRefreshSweep, scheduleTokenRefreshSweep } from './sync/queue';
 import { scheduleNightlyScoreSweep } from './scoring/queue';
 import { scheduleWeeklyHabitCorrelationSweep } from './habits/queue';
+import { scheduleDailyCoachRetention, scheduleWeeklyCoachDigest } from './coach/queue';
 
 const port = Number(process.env.PORT ?? 3000);
 
@@ -32,4 +33,13 @@ scheduleNightlyScoreSweep().catch((err) =>
 // new data between runs to be worth re-testing.
 scheduleWeeklyHabitCorrelationSweep().catch((err) =>
   console.error('Failed to schedule the weekly habit correlation sweep', err),
+);
+
+// Coach weekly digest (a no-op at run time unless COACH_ENABLED) and the daily
+// 90-day transcript retention job (runs regardless of the flag).
+scheduleWeeklyCoachDigest().catch((err) =>
+  console.error('Failed to schedule the weekly coach digest', err),
+);
+scheduleDailyCoachRetention().catch((err) =>
+  console.error('Failed to schedule the daily coach retention job', err),
 );

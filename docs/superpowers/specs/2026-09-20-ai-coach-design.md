@@ -713,3 +713,64 @@ for **correctness monitoring**: a spike in `coach.guardrail_reject`
 events, split by reason, is the signal that a prompt or persona change
 started producing unwrapped numbers or bad field references again, well
 before a user complaint would surface it.
+
+## Implementation Status
+
+The coach is implemented (backend and mobile) but **must not ship to
+anyone**: it is dark by default and the gates in §5 are unresolved.
+
+- `COACH_ENABLED` defaults to false. When false, `GET /me/coach/status`
+  returns `enabled:false` and every other `/me/coach/*` route (and the
+  memory/digest/push-token routes) returns 404 `coach_disabled`; the mobile
+  UI renders nothing coach-related.
+- Consent is enforced server-side and versioned; a stale version returns
+  409. `CoachConsent` has an extra `revokedAt` column: revoke stamps it
+  instead of deleting the row, for an audit trail.
+- **No LLM provider exists.** There is no LLM SDK dependency and no network
+  call anywhere in the coach. `CoachModelProvider` has two implementations:
+  `UnconfiguredProvider` (always throws, so a turn falls back to the
+  server-composed fallback) and a `ScriptedProvider` used only by tests and
+  the eval harness. No fallback provider is built (§5). With the shipped
+  provider, weekly digests are the deterministic server-composed fallback.
+- **Still unresolved, and blocking any release:** a named provider with
+  written no-training / bounded-retention / tool-result-coverage terms; the
+  Google Health API downstream-sharing terms review; account deletion (only
+  the exported `deleteUserCoachData` exists); and confirming the chosen
+  provider supports structured/tool output for `{{field}}` references.
+
+Decisions made in implementation:
+- Telemetry goes through a pluggable `CoachTelemetry` with a logger sink
+  that never includes text; OpenTelemetry is not a dependency. Two events
+  were added beyond the spec: `coach.turn_fallback` and
+  `coach.safety_classifier`.
+- The synthesis tier has a 60-second safety cap for inline requests (the
+  spec gave it no budget). The turn preamble runs on both tiers. A failed
+  preamble still tries the model; the fallback is then the static message.
+- `getDailyScore` compares against the literal previous day, so
+  `deltaFromYesterday` and `direction` are null when yesterday has no
+  score. Extra tool fields: `sleepDeltaFromYesterday`, `sleepDirection`,
+  `habitLabel`. A `{{ref}}` reads the most recent call of that tool within
+  the turn.
+- The disclaimer is appended to every reply, including the safety reply.
+- `proposeMemory` only validates; the row is written `PENDING` after the
+  reply passes the grounding guardrail, so a discarded, timed-out or failed
+  turn leaves no row. The server appends the fixed "I'll remember that…"
+  line only when a row was actually created.
+- **Dismissal detector is deliberately over-eager**: any negation or
+  correction word in the next message, including a bare "not", deletes a
+  pending entry (so "why is my score not higher" also deletes it). It errs
+  toward not remembering; see `guardrails/memoryFeedback.ts`. A crisis turn
+  leaves entries PENDING.
+- Memory, digest and push-token routes need the flag but not consent,
+  because nothing is sent to a model; a user can always see and delete
+  their data. Retention runs even when the flag is off, so transcripts keep
+  expiring.
+- Digest data is pre-fetched under the names `recoveryHistory`,
+  `sleepHistory` and `getHabitCorrelations`. A user with no data gets no
+  digest. The push payload is always a fixed string from a small set and
+  contains no digits; only `NoopPushSender` exists.
+- Mobile does not register push tokens: no notification library is
+  installed and none was added. The backend token routes are ready for it.
+- The eval harness (`backend/evals/coach/`, `npm run eval:coach`, also run
+  under jest) has 32 fixtures plus 4 deliberately wrong directional replies
+  that it must catch.

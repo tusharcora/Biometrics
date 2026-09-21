@@ -865,3 +865,65 @@ built by rendering its intermediate outputs directly, in order.
   cold-start window. It should be confirmed in Slice 0. If it covers
   fewer than 14 nights for a given user, that user sees the cold-start
   state for the circadian factor until enough new nights accumulate.
+
+## Implementation Status
+
+Slices 0, 1 and 1.5 are implemented (backend and mobile). The decisions
+below were made during implementation where this spec was silent or where
+it turned out to be wrong; where they contradict the text above, **this
+section wins**.
+
+**Not verified against a real Google account** (none was available):
+the three Slice 0 live checks — Google's civil-date timezone basis, whether
+`endTime − startTime` is a meaningful time-in-bed, and how multi-session
+nights are represented. `backend/scripts/probeSleepShape.ts` and
+`docs/superpowers/notes/slice0-live-checks.md` exist to run them. Until
+they are run, the day-alignment fix is internally consistent but not
+confirmed correct, and `sleepEfficiency` rests on an assumption.
+
+Slice 0
+- `PUT /me/timezone` recomputes rollups on every call, not only on a
+  change, so a retry after a half-finished request cannot leave rollups
+  keyed under the old zone. It rejects offset strings such as `+05:00`.
+- `scripts/resyncSleep.ts` is dry-run by default and only wipes users with
+  a CONNECTED health connection; deleting rows for disconnected users would
+  lose history a backfill cannot restore.
+- `listDataPoints` still does not paginate (existing behaviour), which can
+  matter for long backfills.
+
+Slice 1
+- The stage functions are pure; `pipeline.ts` composes them and is shared
+  by the job and the backtest. The single `computeDailyScore` job runs on
+  the existing `health-sync` queue with job id `score-<user>-<date>` and a
+  5-minute delay; the nightly sweep runs at 03:30 server time.
+- Outlier rejection uses the spec's literal raw MAD (stricter than
+  1.4826×MAD) and applies to HRV and RHR only, not SLEEP: a short night is
+  the signal sleep debt exists to capture.
+- **The sleep-debt factor is excluded for about 27 nights, not 14 days.**
+  Its z-score is taken against its own 30-day series of debt values built
+  only from full 14-night windows; without that the baseline is biased low
+  and later days look high. Missing nights count 0 toward the debt sum and
+  mark the factor imputed. During those first weeks the Recovery Score is
+  computed from HRV and RHR alone with renormalized weights.
+- A day with no observed HRV, RHR or SLEEP input gets no score row (any
+  leftover row is deleted).
+- Score bands on mobile (75 / 55 / 40 for Excellent / Good / Fair) are an
+  implementation choice and need a product decision.
+- The segmented `ScoreRing` is built and tested but `segmented` defaults to
+  `false`; it needs the visual design spike (§5) on a device before the
+  default is flipped.
+
+Slice 1.5
+- Weights 0.45 / 0.35 / 0.20 (duration / efficiency / consistency) are
+  illustrative and marked as such in `configs/v1.ts`.
+- Duration is scored against the user's sleep goal:
+  `z = clamp((minutesAsleep − goal) / σ̂, −3, +1)`, so sleeping past goal
+  earns no extra credit. Efficiency is stored as a 0–1 fraction capped at 1.
+- The main session for onset is the longest by `minutesAsleep` (a field
+  confirmed live), not by interval. Consistency = `100·max(0, 1 −
+  stddev/120 min)` over noon-anchored onsets; it needs at least 14 nights of
+  history and at least 7 nights in the trailing 14-day window, then 14 more
+  such days for its baseline — so it is excluded for about 27 nights, like
+  sleep debt.
+- No Sleep Score is produced for a day without recorded sleep (a stale row
+  is deleted) rather than a score made of imputed values.

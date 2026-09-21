@@ -15,6 +15,7 @@ import { PatternsScreen } from '../screens/PatternsScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { CoachScreen } from '../screens/CoachScreen';
 import { CoachConsentScreen } from '../screens/CoachConsentScreen';
+import { CoachMemoryScreen } from '../screens/CoachMemoryScreen';
 import { syncTimezone } from '../lib/timezone';
 import { COLORS } from '../theme';
 import type { MetricRecord } from '../lib/metricInsights';
@@ -41,6 +42,8 @@ export type RootStackParamList = {
   // automatically) and is carried through the consent screen.
   Coach: { prefill?: string } | undefined;
   CoachConsent: { prefill?: string } | undefined;
+  // Reached from Settings -> Coach Memory, which only draws when consented.
+  CoachMemory: undefined;
 };
 
 export type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';
@@ -120,6 +123,7 @@ export function RootNavigator() {
         <Stack.Screen name="Settings"component={SettingsScreen} options={{ title: 'Settings' }} />
         <Stack.Screen name="Coach" component={CoachScreen} options={{ title: 'AI Coach' }} />
         <Stack.Screen name="CoachConsent" component={CoachConsentScreen} options={{ title: 'AI Coach' }} />
+        <Stack.Screen name="CoachMemory" component={CoachMemoryScreen} options={{ title: 'Coach Memory' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

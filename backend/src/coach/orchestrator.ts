@@ -17,12 +17,20 @@ import { composeFallback, loadPreamble, Preamble } from './fallback';
 import { stripDisclaimer, withDisclaimer } from './guardrails/disclaimer';
 import { classifyCrisis, CRISIS_RESOURCES, SAFETY_REPLY } from './guardrails/crisis';
 import { GuardrailReason, TurnToolResult, validateReply } from './guardrails/grounding';
+import {
+  createPendingMemories,
+  loadConfirmedMemories,
+  MAX_PROPOSALS_PER_TURN,
+  MemoryDTO,
+  MemoryProposal,
+  resolvePendingMemories,
+} from './memory';
 import type { CoachModelMessage, CoachModelProvider, CoachTier, ToolCallRequest } from './model/provider';
 import { resolvePersona } from './personas';
 import { buildCorrectiveMessage, buildSystemPrompt } from './prompt';
 import { routeTier } from './router';
 import type { CoachTelemetry, CoachEventAttributes, CoachEventName } from './telemetry';
-import { CoachTools, coachTools } from './tools';
+import { CoachTools, coachTools, ProposeMemoryResult } from './tools';
 
 export const FAST_TIER_BUDGET_MS = 12_000;
 /**
@@ -33,6 +41,8 @@ export const FAST_TIER_BUDGET_MS = 12_000;
 export const SYNTHESIS_TIER_BUDGET_MS = 60_000;
 export const MAX_MODEL_CALLS = 8;
 export const HISTORY_WINDOW = 10;
+/** Fixed, server-appended (never model-generated) when a memory proposal was stored this turn. No digits. */
+export const MEMORY_NOTE = "I'll remember that — let me know if that's not right.";
 
 export interface CoachTurnInput {
   userId: string;
@@ -55,6 +65,8 @@ export interface CoachTurnResult {
   safety?: { resources: string[]; canContinue: true };
   tier: CoachTier;
   personaId: string;
+  /** Memory entries written (PENDING) this turn, only when the reply itself was a validated model reply. */
+  memoryProposals?: MemoryDTO[];
 }
 
 export interface OrchestratorDeps {
@@ -80,7 +92,7 @@ function safeCivilDate(now: number, timezone: string): string {
 }
 
 type RunOutcome =
-  | { kind: 'reply'; text: string }
+  | { kind: 'reply'; text: string; proposals: MemoryProposal[] }
   | { kind: 'fallback'; reason: string }
   | { kind: 'expired' };
 
@@ -125,6 +137,25 @@ export function createCoachOrchestrator(deps: OrchestratorDeps) {
       };
     }
 
+    // 1b. Feedback on memory proposed earlier: this message either leaves the PENDING entries
+    //     uncorrected (they become CONFIRMED) or corrects/dismisses them (they are deleted).
+    //     Skipped on a crisis turn, which leaves them PENDING (the conservative choice).
+    //     A failure here must not fail the turn.
+    try {
+      const resolution = await resolvePendingMemories(userId, input.message);
+      if (resolution.confirmed + resolution.dismissed > 0) {
+        emit('coach.memory_resolved', { confirmed: resolution.confirmed, dismissed: resolution.dismissed });
+      }
+    } catch {
+      /* memory is best-effort context */
+    }
+    let memories: MemoryProposal[] = [];
+    try {
+      memories = await loadConfirmedMemories(userId);
+    } catch {
+      /* a turn without the memory block is still a correct turn */
+    }
+
     // 2. Turn preamble: fresh every turn, before the first model call.
     const today = safeCivilDate(clock.now(), user.timezone);
     const preamble: Preamble = await loadPreamble(tools, userId, today);
@@ -158,7 +189,7 @@ export function createCoachOrchestrator(deps: OrchestratorDeps) {
     };
     if (remaining <= 0) return expire();
 
-    const system = buildSystemPrompt(persona, { today });
+    const system = buildSystemPrompt(persona, { today, memories });
     const convo: CoachModelMessage[] = [
       ...input.history
         .slice(-HISTORY_WINDOW)
@@ -172,6 +203,10 @@ export function createCoachOrchestrator(deps: OrchestratorDeps) {
       );
     }
 
+    // Validated proposeMemory calls of the CURRENT attempt. Persisted only after the reply is validated.
+    let proposals: MemoryProposal[] = [];
+    let proposalCalls = 0;
+
     async function executeToolCalls(calls: ToolCallRequest[], round: number): Promise<void> {
       convo.push({ role: 'assistant_tool_calls', calls });
       for (const call of calls) {
@@ -180,13 +215,29 @@ export function createCoachOrchestrator(deps: OrchestratorDeps) {
         let payload: unknown;
         let ok = false;
         try {
-          const outcome = await tools.run(userId, call.name, call.args, { today });
-          if (outcome.ok) {
-            ok = true;
-            payload = outcome.result;
-            results.push({ name: call.name, result: outcome.result });
+          if (call.name === 'proposeMemory' && proposalCalls >= MAX_PROPOSALS_PER_TURN) {
+            payload = { error: 'too_many_proposals' };
+            emit('coach.memory_rejected', { reason: 'too_many_proposals' });
           } else {
-            payload = { error: outcome.error };
+            if (call.name === 'proposeMemory') proposalCalls++;
+            const outcome = await tools.run(userId, call.name, call.args, { today });
+            if (call.name === 'proposeMemory') {
+              // Never a grounding source and never echoed back: the model only learns stored or not.
+              if (outcome.ok) {
+                ok = true;
+                proposals.push((outcome.result as ProposeMemoryResult).proposal);
+                payload = { stored: true, status: 'pending_user_confirmation' };
+              } else {
+                payload = { error: outcome.error };
+                emit('coach.memory_rejected', { reason: outcome.error });
+              }
+            } else if (outcome.ok) {
+              ok = true;
+              payload = outcome.result;
+              results.push({ name: call.name, result: outcome.result });
+            } else {
+              payload = { error: outcome.error };
+            }
           }
         } catch {
           payload = { error: 'tool_failed' };
@@ -219,6 +270,8 @@ export function createCoachOrchestrator(deps: OrchestratorDeps) {
     async function run(): Promise<RunOutcome> {
       let corrective: string | null = null;
       for (let attempt = 1; attempt <= 2; attempt++) {
+        proposals = []; // only the accepted attempt's proposals count
+        proposalCalls = 0;
         let text: string | 'expired';
         try {
           text = await generateText(corrective);
@@ -231,7 +284,7 @@ export function createCoachOrchestrator(deps: OrchestratorDeps) {
         if (text === 'expired') return { kind: 'expired' };
 
         const verdict = validateReply(text, results);
-        if (verdict.ok) return { kind: 'reply', text: verdict.text };
+        if (verdict.ok) return { kind: 'reply', text: verdict.text, proposals };
 
         const outcome = attempt === 1 ? 'regenerate' : 'fallback';
         for (const reason of verdict.reasons) {
@@ -260,7 +313,25 @@ export function createCoachOrchestrator(deps: OrchestratorDeps) {
 
     if (outcome === 'deadline' || outcome.kind === 'expired') return expire();
     if (outcome.kind === 'fallback') return fallbackResult(outcome.reason);
-    return { text: withDisclaimer(outcome.text), source: 'MODEL', events, tier, personaId: persona.id };
+
+    let memoryProposals: MemoryDTO[] = [];
+    if (outcome.proposals.length > 0) {
+      try {
+        memoryProposals = await createPendingMemories(userId, outcome.proposals);
+      } catch {
+        /* the reply is still valid; the memory simply is not stored */
+      }
+      if (memoryProposals.length > 0) emit('coach.memory_proposed', { count: memoryProposals.length });
+    }
+    const body = memoryProposals.length > 0 ? `${outcome.text.trimEnd()}\n\n${MEMORY_NOTE}` : outcome.text;
+    return {
+      text: withDisclaimer(body),
+      source: 'MODEL',
+      events,
+      tier,
+      personaId: persona.id,
+      ...(memoryProposals.length > 0 ? { memoryProposals } : {}),
+    };
   }
 
   return { handleTurn };

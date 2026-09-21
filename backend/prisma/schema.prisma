@@ -45,6 +45,9 @@ model User {
   coachConsents      CoachConsent[]
   coachConversations CoachConversation[]
   coachMessages      CoachMessage[]
+  coachMemories      CoachMemory[]
+  coachDigests       CoachDigest[]
+  pushTokens         PushToken[]
 
   // The coach persona the user picked in Settings (an id from
   // src/coach/personas). Null means the default persona.
@@ -378,4 +381,66 @@ model CoachMessage {
   createdAt       DateTime            @default(now())
 
   @@index([conversationId, createdAt])
+}
+
+// Coach memory (spec section 5/6): an ALLOWLIST, not a free-text store. The only
+// way a row is written is a validated proposeMemory call (closed category enum,
+// value <= 140 chars, health-fact classifier as a second layer). PENDING until
+// the user's next message fails to correct or dismiss it, then CONFIRMED; only
+// CONFIRMED rows are ever surfaced into a prompt.
+enum CoachMemoryCategory {
+  TRAINING_GOAL
+  SCHEDULE
+  PREFERENCE
+}
+
+enum CoachMemoryStatus {
+  PENDING
+  CONFIRMED
+}
+
+model CoachMemory {
+  id          String              @id @default(uuid())
+  userId      String
+  user        User                @relation(fields: [userId], references: [id])
+  category    CoachMemoryCategory
+  value       String              @db.VarChar(140)
+  status      CoachMemoryStatus   @default(PENDING)
+  createdAt   DateTime            @default(now())
+  confirmedAt DateTime?
+
+  @@index([userId, status, createdAt])
+}
+
+// The weekly synthesis recap. One per user per local week (weekStart is the
+// Monday of that week), which is what makes the weekly job idempotent.
+model CoachDigest {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  text      String
+  personaId String
+  weekStart DateTime @db.Date
+  createdAt DateTime @default(now())
+
+  @@unique([userId, weekStart])
+  @@index([userId, createdAt])
+}
+
+enum PushPlatform {
+  ios
+  android
+}
+
+// A device push token. The token is unique across users: a device that signs in
+// as someone else moves the row rather than duplicating it.
+model PushToken {
+  id        String       @id @default(uuid())
+  userId    String
+  user      User         @relation(fields: [userId], references: [id])
+  token     String       @unique
+  platform  PushPlatform
+  createdAt DateTime     @default(now())
+
+  @@index([userId])
 }

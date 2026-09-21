@@ -1,5 +1,6 @@
 import type { CoachModelProvider } from './model/provider';
 import { UnconfiguredProvider } from './model/provider';
+import { NoopPushSender, PushSender } from './push';
 
 /**
  * The whole coach is behind COACH_ENABLED, default OFF. No LLM provider has been
@@ -23,4 +24,17 @@ export function getCoachProvider(): CoachModelProvider {
 /** Wiring point for the provider that eventually clears the section 5 gate. Also used by tests. */
 export function setCoachProvider(provider: CoachModelProvider): void {
   activeProvider = provider;
+}
+
+// The single push slot. Only the no-op sender ships: no real push provider
+// (APNs/FCM) is wired, and push content is generic by construction (push.ts).
+let activePushSender: PushSender = new NoopPushSender();
+
+export function getPushSender(): PushSender {
+  return activePushSender;
+}
+
+/** Wiring point for a real APNs/FCM sender later. Also used by tests. */
+export function setPushSender(sender: PushSender): void {
+  activePushSender = sender;
 }

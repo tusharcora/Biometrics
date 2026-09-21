@@ -22,6 +22,12 @@ import {
   RunHabitCorrelationsJobData,
 } from '../habits/queue';
 
+import { getCoachProvider, getPushSender } from '../coach/config';
+import { runWeeklyDigest } from '../coach/digest';
+import { COACH_RETENTION_JOB, COACH_WEEKLY_DIGEST_JOB } from '../coach/queue';
+import { runCoachRetention } from '../coach/retention';
+import { LoggerCoachTelemetry } from '../coach/telemetry';
+
 const ALL_METRIC_TYPES: BiometricMetricType[] = ['HRV', 'RESTING_HR', 'SLEEP', 'STEPS'];
 const SYNC_WORKER_CONCURRENCY = 5;
 
@@ -240,6 +246,16 @@ export async function processSyncJob(job: Job): Promise<void> {
   } else if (job.name === RUN_HABIT_CORRELATIONS_JOB) {
     const { userId, runKey } = job.data as RunHabitCorrelationsJobData;
     await runHabitCorrelations(userId, { runKey });
+  } else if (job.name === COACH_WEEKLY_DIGEST_JOB) {
+    // A no-op unless COACH_ENABLED; the provider and push sender are the configured slots.
+    await runWeeklyDigest({
+      provider: getCoachProvider(),
+      pushSender: getPushSender(),
+      telemetry: new LoggerCoachTelemetry(),
+    });
+  } else if (job.name === COACH_RETENTION_JOB) {
+    // Not gated on COACH_ENABLED: expiry must keep running if the coach is switched off.
+    await runCoachRetention({ telemetry: new LoggerCoachTelemetry() });
   }
 }
 

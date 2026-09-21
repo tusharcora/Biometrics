@@ -375,3 +375,38 @@ for this component.
   avoids letting an LLM paraphrase these numbers into free prose. See
   `2026-09-20-ai-coach-design.md` §4 for that guardrail's own open
   questions.
+
+## Implementation Status
+
+Slice 2 is implemented (backend and mobile). Decisions made during
+implementation, which win over the text above where they differ:
+
+- Built-in habit types (Alcohol ≥2 drinks, Caffeine ≥3 cups, Workout ≥20
+  minutes) live in code (`habits/config.ts`); `HabitType` rows are custom
+  types only. Custom type ids look like `CUSTOM_<SLUG>_<hex>`; duplicate
+  labels (case-insensitive, including built-in labels) return 409.
+- `HabitCorrelation.lastRunKey` stamps the ISO week a row was last evaluated
+  in, so a repeat run in the same week (including a BullMQ retry) is skipped;
+  a run's writes are one transaction.
+- `n_eff` is floored at 3 and also capped at `n`, so a negative
+  autocorrelation product never inflates it. The lag-1 autocorrelation only
+  pairs calendar-adjacent days, so gaps from unobserved days do not count as
+  consecutive. Weekday means for de-seasonalizing are taken over the paired
+  set. The analysis looks back 120 days.
+- `notEnoughData` counts come from the best `(factor, lag)` combination for
+  that habit.
+- The weekly sweep runs Mondays 05:00 and fans out one deduplicated job per
+  user, including users who have stopped logging, so their patterns age
+  toward RETIRED.
+- `series` in a pattern is already aligned at the tested lag: `days[i]` is
+  the habit day and `factor[i]` is the reading on that day plus the lag. The
+  mobile client must not shift it again (an earlier mobile version did; that
+  was a bug).
+- Validation beyond this spec: `loggedAt` more than 24 hours in the future is
+  rejected; a log for another user's type id returns 400; deleting another
+  user's log returns 404.
+
+**Known performance caveat:** `GET /me/habits/patterns` re-runs the full
+analysis on every request in order to compute `notEnoughData`. That is
+acceptable at one user; it should read a persisted result before this has
+many users.

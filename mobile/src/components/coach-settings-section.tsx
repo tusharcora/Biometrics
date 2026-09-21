@@ -109,6 +109,20 @@ export function CoachSettingsSection() {
         </Text>
       ) : null}
 
+      <Pressable
+        testID="coach-memory-row"
+        accessibilityRole="button"
+        onPress={() => navigation?.navigate('CoachMemory' as never)}
+        className="flex-row items-center gap-3 py-2 active:opacity-70"
+      >
+        <Ionicons name="bookmarks-outline" size={20} color={colors.muted} />
+        <View className="flex-1">
+          <Text className="font-medium">Coach Memory</Text>
+          <Text className="text-xs text-muted-foreground">See, edit or delete what the coach remembers</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+      </Pressable>
+
       <Button testID="coach-revoke-button" variant="destructive" disabled={busy} onPress={() => void revoke()}>
         Turn off AI Coach
       </Button>

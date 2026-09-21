@@ -9,6 +9,7 @@ import { getConfirmedCorrelations } from '../../habits/correlations';
 import { listHabitTypes } from '../../habits/habitTypes';
 import { isCivilDate, shiftDate } from '../../scoring/dates';
 import { getSleepGoalMinutes } from '../../users/goals';
+import { MAX_MEMORY_VALUE_CHARS, MEMORY_CATEGORIES, MemoryProposal, validateMemoryInput } from '../memory';
 import { DailyScoreToolResult, findMostRecentScoreDate, getDailyScore } from './dailyScore';
 
 export type { DailyScoreToolResult } from './dailyScore';
@@ -20,7 +21,9 @@ export interface CoachToolSchema {
   parameters: Record<string, unknown>;
 }
 
-export type ToolOutcome = { ok: true; result: unknown } | { ok: false; error: 'unknown_tool' | 'invalid_arguments' };
+export type ToolOutcome =
+  | { ok: true; result: unknown }
+  | { ok: false; error: 'unknown_tool' | 'invalid_arguments' | 'memory_rejected' };
 
 export interface ToolContext {
   /** The user's local civil date. */
@@ -81,6 +84,36 @@ export const COACH_TOOL_SCHEMAS: CoachToolSchema[] = [
   },
 ];
 
+/**
+ * The one tool that is not read-only, and it is still not a writer: proposeMemory
+ * only VALIDATES the proposal (closed category enum, <= 140 chars, health-fact
+ * classifier) and hands it back. The orchestrator persists it as PENDING only
+ * after the whole reply has passed the grounding guardrail, so a discarded or
+ * timed-out turn never leaves a row behind. Kept out of COACH_TOOL_SCHEMAS
+ * (the read-only registry the spec lists) and added to what the model sees below.
+ */
+export const PROPOSE_MEMORY_SCHEMA: CoachToolSchema = {
+  name: 'proposeMemory',
+  description:
+    'Propose remembering ONE stable training goal, schedule or preference the user stated about themselves. ' +
+    'Never health, medical, medication, injury or body facts: those are rejected and never stored. ' +
+    'The user is told and can correct it.',
+  parameters: {
+    type: 'object',
+    properties: {
+      category: { type: 'string', enum: [...MEMORY_CATEGORIES] },
+      value: { type: 'string', maxLength: MAX_MEMORY_VALUE_CHARS },
+    },
+    required: ['category', 'value'],
+    additionalProperties: false,
+  },
+};
+
+/** What a successful proposeMemory outcome carries back to the orchestrator. */
+export interface ProposeMemoryResult {
+  proposal: MemoryProposal;
+}
+
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
 function asRecord(args: unknown): Record<string, unknown> | null {
@@ -135,12 +168,21 @@ export async function getUserGoals(userId: string) {
 }
 
 export const coachTools: CoachTools = {
-  schemas: COACH_TOOL_SCHEMAS,
+  schemas: [...COACH_TOOL_SCHEMAS, PROPOSE_MEMORY_SCHEMA],
 
   async run(userId, name, args, ctx) {
     const a = asRecord(args);
     if (a === null) return { ok: false, error: 'invalid_arguments' };
     switch (name) {
+      case 'proposeMemory': {
+        const checked = validateMemoryInput(a);
+        if (checked.ok) {
+          const result: ProposeMemoryResult = { proposal: { category: checked.category, value: checked.value } };
+          return { ok: true, result };
+        }
+        // A health-shaped value is reported as rejected; a malformed call as invalid arguments.
+        return { ok: false, error: checked.reason === 'health_content' ? 'memory_rejected' : 'invalid_arguments' };
+      }
       case 'getDailyScore': {
         const date = a.date === undefined ? ctx.today : a.date;
         if (!isCivilDate(date)) return { ok: false, error: 'invalid_arguments' };

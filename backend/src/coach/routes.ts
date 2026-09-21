@@ -5,12 +5,14 @@ import { CoachClock, systemClock } from './clock';
 import { COACH_CONSENT, COACH_CONSENT_VERSION, grantConsent, hasCurrentConsent, revokeConsent } from './consent';
 import { getCoachProvider, isCoachEnabled } from './config';
 import type { CoachModelProvider } from './model/provider';
+import { toMemoryDTO, validateMemoryValue } from './memory';
 import { createCoachOrchestrator, HISTORY_WINDOW, OrchestratorDeps } from './orchestrator';
 import { findPersona, listPersonas, resolvePersona } from './personas';
 import { CoachTelemetry, LoggerCoachTelemetry } from './telemetry';
 import type { CoachTools } from './tools';
 
 export const MAX_MESSAGE_CHARS = 2000;
+export const MAX_PUSH_TOKEN_CHARS = 512;
 const MAX_TRANSCRIPT_MESSAGES = 200;
 
 export interface CoachRouterDeps {
@@ -218,6 +220,7 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
           createdAt: repliedAt.toISOString(),
         },
         ...(turn.safety ? { safety: turn.safety } : {}),
+        ...(turn.memoryProposals && turn.memoryProposals.length > 0 ? { memoryProposals: turn.memoryProposals } : {}),
       });
     } catch (err) {
       logFailure('message', err);
@@ -261,6 +264,121 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
       await sendConversation(userId, conversation.id, res);
     } catch (err) {
       logFailure('conversation', err);
+      res.status(500).json({ error: 'coach_unavailable' });
+    }
+  });
+
+  // ---- coach memory (spec sections 5 and 6) ----------------------------------
+  // Viewing, editing and deleting memory never sends anything to the model
+  // provider, so these routes need the flag but not consent: a user can always
+  // see and remove what is stored about them.
+
+  router.get('/me/coach/memory', requireAuth, requireEnabled, async (req: AuthedRequest, res) => {
+    try {
+      const rows = await prisma.coachMemory.findMany({
+        where: { userId: req.userId! },
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      });
+      res.json({ entries: rows.map(toMemoryDTO) });
+    } catch (err) {
+      logFailure('memory_list', err);
+      res.status(500).json({ error: 'coach_unavailable' });
+    }
+  });
+
+  router.patch('/me/coach/memory/:id', requireAuth, requireEnabled, async (req: AuthedRequest, res) => {
+    try {
+      const id = req.params.id as string;
+      const existing = await prisma.coachMemory.findFirst({ where: { id, userId: req.userId! }, select: { id: true } });
+      if (!existing) {
+        res.status(404).json({ error: 'memory_not_found' });
+        return;
+      }
+      // Same value rules as a model proposal: length and the health-fact classifier.
+      const checked = validateMemoryValue(req.body?.value);
+      if (!checked.ok) {
+        res.status(400).json({ error: 'invalid_memory_value', reason: checked.reason });
+        return;
+      }
+      const entry = await prisma.coachMemory.update({ where: { id }, data: { value: checked.value } });
+      res.json({ entry: toMemoryDTO(entry) });
+    } catch (err) {
+      logFailure('memory_edit', err);
+      res.status(500).json({ error: 'coach_unavailable' });
+    }
+  });
+
+  router.delete('/me/coach/memory/:id', requireAuth, requireEnabled, async (req: AuthedRequest, res) => {
+    try {
+      const result = await prisma.coachMemory.deleteMany({ where: { id: req.params.id as string, userId: req.userId! } });
+      if (result.count === 0) {
+        res.status(404).json({ error: 'memory_not_found' });
+        return;
+      }
+      res.status(204).end();
+    } catch (err) {
+      logFailure('memory_delete', err);
+      res.status(500).json({ error: 'coach_unavailable' });
+    }
+  });
+
+  // ---- weekly digest ----------------------------------------------------------
+
+  router.get('/me/coach/digests/latest', requireAuth, requireEnabled, async (req: AuthedRequest, res) => {
+    try {
+      const digest = await prisma.coachDigest.findFirst({
+        where: { userId: req.userId! },
+        orderBy: [{ weekStart: 'desc' }, { createdAt: 'desc' }],
+      });
+      res.json({
+        digest: digest ? { id: digest.id, text: digest.text, createdAt: digest.createdAt.toISOString() } : null,
+      });
+    } catch (err) {
+      logFailure('digest_latest', err);
+      res.status(500).json({ error: 'coach_unavailable' });
+    }
+  });
+
+  // ---- push tokens ------------------------------------------------------------
+
+  const isToken = (v: unknown): v is string =>
+    typeof v === 'string' && v.length > 0 && v.length <= MAX_PUSH_TOKEN_CHARS && !/\s/.test(v);
+
+  router.post('/me/push-token', requireAuth, requireEnabled, async (req: AuthedRequest, res) => {
+    const { token, platform } = (req.body ?? {}) as Record<string, unknown>;
+    if (!isToken(token)) {
+      res.status(400).json({ error: 'token must be a non-empty string without whitespace' });
+      return;
+    }
+    if (platform !== 'ios' && platform !== 'android') {
+      res.status(400).json({ error: "platform must be 'ios' or 'android'" });
+      return;
+    }
+    try {
+      // Idempotent; a token seen under another account moves to this one (a shared device).
+      await prisma.pushToken.upsert({
+        where: { token },
+        create: { userId: req.userId!, token, platform },
+        update: { userId: req.userId!, platform },
+      });
+      res.status(204).end();
+    } catch (err) {
+      logFailure('push_token_register', err);
+      res.status(500).json({ error: 'coach_unavailable' });
+    }
+  });
+
+  router.delete('/me/push-token', requireAuth, requireEnabled, async (req: AuthedRequest, res) => {
+    const token = (req.body ?? {}).token;
+    if (!isToken(token)) {
+      res.status(400).json({ error: 'token must be a non-empty string without whitespace' });
+      return;
+    }
+    try {
+      await prisma.pushToken.deleteMany({ where: { token, userId: req.userId! } });
+      res.status(204).end();
+    } catch (err) {
+      logFailure('push_token_delete', err);
       res.status(500).json({ error: 'coach_unavailable' });
     }
   });
