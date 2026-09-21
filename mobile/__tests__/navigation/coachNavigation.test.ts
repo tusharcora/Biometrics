@@ -4,13 +4,13 @@ describe('navigateToCoachEntry', () => {
   it('opens the Coach tab', () => {
     const navigation = { navigate: jest.fn() };
     navigateToCoachEntry(navigation, 'Coach');
-    expect(navigation.navigate).toHaveBeenCalledWith('Tabs', { screen: 'Coach' });
+    expect(navigation.navigate).toHaveBeenCalledWith('Tabs', { screen: 'Coach' }, { pop: true });
   });
 
   it('opens the Coach tab with a prefill', () => {
     const navigation = { navigate: jest.fn() };
     navigateToCoachEntry(navigation, 'Coach', 'Why did my score change today?');
-    expect(navigation.navigate).toHaveBeenCalledWith('Tabs', { screen: 'Coach', params: { prefill: 'Why did my score change today?' } });
+    expect(navigation.navigate).toHaveBeenCalledWith('Tabs', { screen: 'Coach', params: { prefill: 'Why did my score change today?' } }, { pop: true });
   });
 
   it('opens the consent screen, which is pushed over the tabs', () => {

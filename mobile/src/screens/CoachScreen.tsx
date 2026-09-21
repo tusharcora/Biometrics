@@ -76,9 +76,20 @@ export function CoachScreen() {
   const localId = useRef(0);
   const redirectedToConsent = useRef(false);
   const loadInFlight = useRef(false);
+  // A load requested while another is in flight (e.g. tab focus during the first
+  // load). The in-flight result may be stale by then, so it is discarded and
+  // one fresh load runs instead.
+  const reloadPending = useRef(false);
+  const loadRef = useRef<() => Promise<void>>(async () => {});
+  // The phase, readable from inside load() without making it re-create.
+  const phaseRef = useRef<Phase>('loading');
+  // The last non-empty prefill. The route param is consumed once applied (below),
+  // but the consent round-trip must still carry it.
+  const lastPrefill = useRef<string | undefined>(prefill);
   // Read inside async handlers so a stale closure never resends the wrong id.
   const conversationIdRef = useRef<string | null>(null);
   conversationIdRef.current = conversationId;
+  phaseRef.current = phase;
 
   useEffect(() => {
     mounted.current = true;
@@ -89,17 +100,28 @@ export function CoachScreen() {
 
   // A prefill can arrive after this tab is already mounted (the tab is reused
   // by every entry point), so a changed param must reach the input.
+  // The param is consumed after it is applied, so the same text arriving again
+  // (a second "Ask about this" on the same score type) is a change again.
   useEffect(() => {
-    if (prefill) setInput(prefill);
+    if (!prefill) return;
+    lastPrefill.current = prefill;
+    setInput(prefill);
+    navigation.setParams?.({ prefill: undefined });
+    // Only a changed prefill should re-apply; `navigation` identity must not.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill]);
 
   const load = useCallback(async () => {
-    // Mount and tab focus can both trigger a load; one at a time is enough.
-    if (loadInFlight.current) return;
+    // Mount and tab focus can both trigger a load. Run one at a time, but never
+    // drop a request: the finally below re-runs once if one arrived meanwhile.
+    if (loadInFlight.current) {
+      reloadPending.current = true;
+      return;
+    }
     loadInFlight.current = true;
     try {
       const status = await fetchCoachStatus();
-      if (!mounted.current) return;
+      if (!mounted.current || reloadPending.current) return;
       if (!status.enabled) {
         setPhase('unavailable');
         return;
@@ -113,12 +135,16 @@ export function CoachScreen() {
           return;
         }
         redirectedToConsent.current = true;
-        navigation.navigate('CoachConsent', { prefill });
+        navigation.navigate('CoachConsent', { prefill: lastPrefill.current });
         return;
       }
       redirectedToConsent.current = false;
+      // Once the chat is showing, a focus reload only re-checks status. History
+      // rows carry no safety card, memory chips or unsent bubbles, so re-reading
+      // them would wipe what the live conversation is showing.
+      if (phaseRef.current === 'ready') return;
       const conversation = await fetchLatestConversation();
-      if (!mounted.current) return;
+      if (!mounted.current || reloadPending.current) return;
       setConversationId(conversation.conversationId);
       setMessages(
         conversation.messages.map((m) => ({
@@ -136,8 +162,13 @@ export function CoachScreen() {
       if (mounted.current) setPhase('ready');
     } finally {
       loadInFlight.current = false;
+      if (reloadPending.current) {
+        reloadPending.current = false;
+        if (mounted.current) void loadRef.current();
+      }
     }
-  }, [navigation, prefill]);
+  }, [navigation]);
+  loadRef.current = load;
 
   useEffect(() => {
     void load();
@@ -205,6 +236,8 @@ export function CoachScreen() {
     const text = input.trim();
     if (!text || sending) return;
     localId.current += 1;
+    // The prefill has been used; a later consent round-trip must not resurrect it.
+    lastPrefill.current = undefined;
     setMessages((prev) => [...prev, { id: `local-${localId.current}`, role: 'user', text }]);
     setInput('');
     void deliver({ message: text });
@@ -237,7 +270,7 @@ export function CoachScreen() {
       <SafeAreaView className="flex-1 bg-background">
         <View testID="coach-needs-consent" className="flex-1 items-center justify-center gap-3 p-6">
           <Text className="text-center text-muted-foreground">The coach needs your OK before it can look at your scores.</Text>
-          <Button testID="coach-review-consent-button" onPress={() => navigation.navigate('CoachConsent', { prefill })}>
+          <Button testID="coach-review-consent-button" onPress={() => navigation.navigate('CoachConsent', { prefill: lastPrefill.current })}>
             Review what is shared
           </Button>
         </View>

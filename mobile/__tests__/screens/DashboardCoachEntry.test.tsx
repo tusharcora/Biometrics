@@ -42,7 +42,7 @@ describe('DashboardScreen: AI Coach entry', () => {
 
     fireEvent.press(await findByTestId('coach-entry-button'));
 
-    expect(mockNavigate).toHaveBeenCalledWith('Tabs', { screen: 'Coach' });
+    expect(mockNavigate).toHaveBeenCalledWith('Tabs', { screen: 'Coach' }, { pop: true });
   });
 
   it('opens the consent flow when enabled but not yet consented', async () => {

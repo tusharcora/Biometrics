@@ -25,11 +25,13 @@ jest.mock('../../src/api/coach', () => ({
 jest.mock('../../src/lib/useKeyboardVisible', () => ({ useKeyboardVisible: jest.fn(() => false) }));
 
 const mockNavigate = jest.fn();
+const mockSetParams = jest.fn();
 let mockFocusListener: (() => void) | undefined;
 let mockParams: unknown;
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({
     navigate: mockNavigate,
+    setParams: mockSetParams,
     goBack: jest.fn(),
     addListener: (_event: string, cb: () => void) => {
       mockFocusListener = cb;
@@ -126,6 +128,84 @@ describe('CoachScreen: gating', () => {
     });
 
     expect(await findByTestId('coach-input')).toBeTruthy();
+  });
+
+  it('does not lose a focus that fires during the first load: the stale result is discarded and one fresh load runs', async () => {
+    const first = deferred<CoachStatusDTO>();
+    (fetchCoachStatus as jest.Mock).mockReturnValueOnce(first.promise).mockResolvedValue(status);
+    const { findByTestId } = render(<CoachScreen />);
+
+    // Focus while the first status request is still pending.
+    await act(async () => {
+      mockFocusListener?.();
+    });
+    expect(fetchCoachStatus).toHaveBeenCalledTimes(1);
+
+    // The first response is stale: the user has since consented.
+    await act(async () => {
+      first.resolve({ ...status, consented: false });
+    });
+
+    expect(await findByTestId('coach-input')).toBeTruthy();
+    expect(fetchCoachStatus).toHaveBeenCalledTimes(2);
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('keeps a safety card, and does not re-read history, when the tab regains focus on a ready chat', async () => {
+    const safetyReply = reply(
+      "I'm really sorry you're feeling this way.",
+      { source: 'safety' },
+      { resources: ['Call or text 988 (US)'], canContinue: true },
+    );
+    (sendCoachMessage as jest.Mock).mockResolvedValueOnce(safetyReply);
+    const utils = await openChat();
+    type(utils, 'I feel awful');
+    fireEvent.press(utils.getByTestId('coach-send-button'));
+    await utils.findByTestId('coach-safety-resources');
+
+    await act(async () => {
+      mockFocusListener?.();
+    });
+
+    expect(fetchCoachStatus).toHaveBeenCalledTimes(2);
+    expect(fetchLatestConversation).toHaveBeenCalledTimes(1);
+    expect(utils.getByTestId('coach-safety-resources')).toBeTruthy();
+    expect(utils.getByText('I feel awful')).toBeTruthy();
+  });
+
+  it('consumes a prefill param once applied, and fills the input again when the same text re-arrives', async () => {
+    mockParams = { prefill: 'Why did my score change today?' };
+    const utils = await openChat();
+    expect(utils.getByTestId('coach-input').props.value).toBe('Why did my score change today?');
+    expect(mockSetParams).toHaveBeenCalledWith({ prefill: undefined });
+
+    // The user clears the input; the param has been consumed.
+    fireEvent.changeText(utils.getByTestId('coach-input'), '');
+    mockParams = undefined;
+    utils.rerender(<CoachScreen />);
+    expect(utils.getByTestId('coach-input').props.value).toBe('');
+
+    // The identical text arrives again.
+    mockParams = { prefill: 'Why did my score change today?' };
+    utils.rerender(<CoachScreen />);
+    expect(utils.getByTestId('coach-input').props.value).toBe('Why did my score change today?');
+  });
+
+  it('still carries the prefill to the consent screen from the review card after the param was consumed', async () => {
+    (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, consented: false });
+    mockParams = { prefill: 'Why did my score change today?' };
+    const utils = render(<CoachScreen />);
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledTimes(1));
+    // The param is consumed by the app, so the route no longer has it.
+    mockParams = undefined;
+    utils.rerender(<CoachScreen />);
+
+    await act(async () => {
+      mockFocusListener?.();
+    });
+    fireEvent.press(await utils.findByTestId('coach-review-consent-button'));
+
+    expect(mockNavigate).toHaveBeenLastCalledWith('CoachConsent', { prefill: 'Why did my score change today?' });
   });
 
   it('puts a prefill that arrives after mount into the input', async () => {

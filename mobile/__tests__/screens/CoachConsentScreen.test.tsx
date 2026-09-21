@@ -69,7 +69,7 @@ describe('CoachConsentScreen', () => {
     fireEvent.press(await findByTestId('coach-consent-agree'));
 
     await waitFor(() => expect(acceptCoachConsent).toHaveBeenCalledWith('v1'));
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('Tabs', { screen: 'Coach', params: { prefill: 'Why did my score change today?' } }));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('Tabs', { screen: 'Coach', params: { prefill: 'Why did my score change today?' } }, { pop: true }));
   });
 
   it('"Not now" leaves the coach off: goes back and never calls the consent API', async () => {
@@ -98,7 +98,7 @@ describe('CoachConsentScreen', () => {
 
     fireEvent.press(await findByTestId('coach-consent-agree'));
     await waitFor(() => expect(acceptCoachConsent).toHaveBeenLastCalledWith('v2'));
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('Tabs', { screen: 'Coach' }));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('Tabs', { screen: 'Coach' }, { pop: true }));
   });
 
   it('shows an error and stays put when accepting fails', async () => {
@@ -116,7 +116,7 @@ describe('CoachConsentScreen', () => {
     mockParams = { prefill: 'Hi' };
     render(<CoachConsentScreen />);
 
-    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('Tabs', { screen: 'Coach', params: { prefill: 'Hi' } }));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('Tabs', { screen: 'Coach', params: { prefill: 'Hi' } }, { pop: true }));
   });
 
   it('renders no consent controls when the coach is disabled', async () => {

@@ -50,8 +50,10 @@ describe('ScoreDetailScreen: Ask about this', () => {
     fireEvent.press(await findByTestId('ask-coach-button'));
 
     expect(mockNavigate).toHaveBeenCalledTimes(1);
-    const [route, args] = mockNavigate.mock.calls[0];
+    const [route, args, options] = mockNavigate.mock.calls[0];
     expect(route).toBe('Tabs');
+    // pop: reuse the existing Tabs route rather than pushing a second one over this screen.
+    expect(options).toEqual({ pop: true });
     expect(args.screen).toBe('Coach');
     expect(args.params.prefill).toMatch(/why did my score change today/i);
     expect(args.params.prefill).not.toMatch(/\d/);
