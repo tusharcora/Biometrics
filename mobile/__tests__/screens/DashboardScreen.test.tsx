@@ -194,4 +194,17 @@ describe('DashboardScreen', () => {
 
     expect(mockSignOut).toHaveBeenCalled();
   });
+
+  it('opens Settings from the header', async () => {
+    mockApi({
+      records: [{ id: '1', metricType: 'STEPS', value: 9000, recordedAt: '2026-09-01T00:00:00.000Z' }],
+    });
+
+    const { getByTestId } = render(<DashboardScreen />);
+
+    await waitFor(() => expect(getByTestId('settings-button')).toBeTruthy());
+    fireEvent.press(getByTestId('settings-button'));
+
+    expect(mockNavigate).toHaveBeenCalledWith('Settings');
+  });
 });

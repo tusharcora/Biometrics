@@ -6,6 +6,7 @@ import { useNavigation } from '@react-navigation/native';
 import { apiFetch } from '../api/client';
 import { Text } from '../components/ui/text';
 import { Button } from '../components/ui/button';
+import { syncTimezone } from '../lib/timezone';
 
 const REDIRECT_URI = 'biometrics://health/callback';
 
@@ -19,6 +20,9 @@ export function ConnectHealthScreen() {
     const { url } = await apiFetch<{ url: string }>('/health/authorize');
     const result = await WebBrowser.openAuthSessionAsync(url, REDIRECT_URI);
     if (result.type === 'success' && result.url.includes('status=connected')) {
+      // Capture the zone the backend will use for day-bucketing. Not awaited:
+      // it swallows its own failures and must not delay landing on the dashboard.
+      void syncTimezone();
       navigation.navigate('Dashboard');
     }
   }

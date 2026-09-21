@@ -3,9 +3,11 @@ import { render, waitFor } from '@testing-library/react-native';
 import { RootNavigator } from '../../src/navigation/RootNavigator';
 import { apiFetch } from '../../src/api/client';
 import { useAuth } from '../../src/auth/AuthContext';
+import { syncTimezone } from '../../src/lib/timezone';
 
 jest.mock('../../src/api/client');
 jest.mock('../../src/auth/AuthContext');
+jest.mock('../../src/lib/timezone');
 
 // The real native stack pulls in react-native-safe-area-context, which this
 // project does not install. Stub the navigator down to "render whichever screen
@@ -65,6 +67,17 @@ describe('RootNavigator', () => {
     const { getByText } = render(<RootNavigator />);
 
     expect(getByText('SIGN_IN_SCREEN')).toBeTruthy();
+    expect(syncTimezone).not.toHaveBeenCalled();
+  });
+
+  it('syncs the time zone once on launch when authenticated', async () => {
+    signedIn(true);
+    (apiFetch as jest.Mock).mockResolvedValue({ status: 'CONNECTED', lastSyncedAt: null });
+
+    const { getByText } = render(<RootNavigator />);
+
+    await waitFor(() => expect(getByText('DASHBOARD_SCREEN')).toBeTruthy());
+    expect(syncTimezone).toHaveBeenCalledTimes(1);
   });
 
   // The old navigator hardcoded the connect screen, so an already-connected

@@ -67,3 +67,13 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
   if (!res.ok) throw new Error(`Request to ${path} failed with ${res.status}`);
   return res.json() as Promise<T>;
 }
+
+// Tells the backend which IANA zone to use for civil-date bucketing (sleep
+// rollups, habit days). A 400 from the server means the zone name was invalid.
+export function updateTimezone(timezone: string): Promise<{ timezone: string }> {
+  return apiFetch<{ timezone: string }>('/me/timezone', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ timezone }),
+  });
+}

@@ -32,7 +32,14 @@ model User {
   createdAt        DateTime          @default(now())
   healthConnection HealthConnection?
   biometricRecords BiometricRecord[]
+  sleepSessions    SleepSession[]
   refreshTokens    RefreshToken[]
+
+  // IANA zone name (e.g. "America/Los_Angeles"), client-supplied. It defines
+  // which local civil date a sleep session's end instant belongs to, so the
+  // derived SLEEP daily rollup lines up with the civil dates Google reports
+  // for STEPS/RESTING_HR/HRV. "UTC" is the fallback until the client reports.
+  timezone         String            @default("UTC")
 
   // Identity is keyed on the provider subject, not the email address: the same
   // person may hold both an Apple and a Google account sharing one email, and
@@ -76,4 +83,22 @@ model BiometricRecord {
 
   @@unique([userId, metricType, recordedAt])
   @@index([userId, recordedAt])
+}
+
+// One row per Sleep object returned by Google, keyed by its start instant so a
+// re-fetch of the same session overwrites in place (idempotent). The
+// BiometricRecord SLEEP row for a day is a rollup *derived* from these rows
+// (sum of minutesAsleep for sessions ending on that local civil date), never
+// accumulated across syncs.
+model SleepSession {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  startTime     DateTime
+  endTime       DateTime
+  minutesAsleep Float
+  syncedAt      DateTime @default(now())
+
+  @@unique([userId, startTime])
+  @@index([userId, endTime])
 }

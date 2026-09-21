@@ -1,5 +1,5 @@
 import fetch from 'node-fetch';
-import { BiometricMetricType, HealthMetricPoint } from '../types';
+import { BiometricMetricType, HealthMetricPoint, SleepSessionPoint } from '../types';
 
 const BASE_URL = 'https://health.googleapis.com/v4';
 
@@ -15,14 +15,6 @@ function parseDate(dateStr: string): { year: number; month: number; day: number 
     throw new Error(`Invalid date string "${dateStr}": expected YYYY-MM-DD`);
   }
   return { year, month, day };
-}
-
-// UTC-midnight of the calendar date an instant falls on. Used to key every
-// metric's recordedAt on a whole day so all four metrics share one convention
-// (dailyRollUp already returns civil dates; the dataPoints.list metrics carry
-// raw instants that need truncating).
-function utcMidnightOf(instant: Date): Date {
-  return new Date(Date.UTC(instant.getUTCFullYear(), instant.getUTCMonth(), instant.getUTCDate()));
 }
 
 // Confirmed live on heart-rate: "The duration covered by window_size_days *
@@ -141,9 +133,14 @@ async function listDailyHeartRateVariability(
   return json.dataPoints ?? [];
 }
 
+// Metrics Google delivers as one pre-aggregated value per civil day. SLEEP is
+// deliberately excluded: it is fetched as whole sessions by fetchSleepSessions
+// and its daily value is derived by us (see biometrics/repository.ts).
+export type DailyMetricType = Exclude<BiometricMetricType, 'SLEEP'>;
+
 export async function fetchMetricRange(
   accessToken: string,
-  metricType: BiometricMetricType,
+  metricType: DailyMetricType,
   startDate: string,
   endDate: string,
 ): Promise<HealthMetricPoint[]> {
@@ -160,26 +157,6 @@ export async function fetchMetricRange(
         .filter((r) => r.heartRate?.beatsPerMinuteMin !== undefined)
         .map((r) => ({ recordedAt: civilDateToDate(r.civilStartTime), value: r.heartRate.beatsPerMinuteMin }));
     }
-    case 'SLEEP': {
-      // Confirmed live: `sleep.interval.start_time` is explicitly rejected
-      // ("Member 'sleep.interval.start_time' is not supported for
-      // filtering") -- sleep is one of the types the API documents as
-      // excluded from the generic interval-start-time filter pattern, and
-      // must use `sleep.interval.end_time` instead. `summary.minutesAsleep`
-      // is also confirmed live to be a numeric string ("468"), the same
-      // string-encoded-int64 pattern already handled for steps' countSum.
-      const rows = await listDataPoints(accessToken, 'sleep', 'interval.end_time', startDate, endDate);
-      // Key each session on the UTC calendar date of its start instant, the
-      // same convention STEPS/RESTING_HR use (civil date at UTC midnight),
-      // rather than the raw start instant. Keeping the raw instant made a
-      // 22:00 session land on a timestamp no other metric would ever use.
-      return rows
-        .filter((r) => r.sleep?.summary?.minutesAsleep !== undefined)
-        .map((r) => ({
-          recordedAt: utcMidnightOf(new Date(r.sleep.interval.startTime)),
-          value: Number(r.sleep.summary.minutesAsleep),
-        }));
-    }
     case 'HRV': {
       const rows = await listDailyHeartRateVariability(accessToken, startDate, endDate);
       // Already one data point per day (a daily pre-aggregated type, not
@@ -193,4 +170,40 @@ export async function fetchMetricRange(
         }));
     }
   }
+}
+
+/**
+ * Fetches raw sleep sessions in [startDate, endDate) (same half-open
+ * convention as fetchMetricRange), one entry per Google `Sleep` object.
+ *
+ * Confirmed live: `sleep.interval.start_time` is explicitly rejected ("Member
+ * 'sleep.interval.start_time' is not supported for filtering") -- sleep is one
+ * of the types the API documents as excluded from the generic
+ * interval-start-time filter pattern, so the window filters on
+ * `sleep.interval.end_time` instead. `summary.minutesAsleep` is a numeric
+ * string ("468"), the same string-encoded-int64 pattern as steps' countSum.
+ *
+ * Sessions are returned as-is rather than keyed to a day here: which civil day
+ * a session belongs to depends on the user's timezone, which this layer does
+ * not know. Rows missing either interval bound or minutesAsleep are skipped
+ * (they cannot be keyed or summed) rather than defaulted.
+ */
+export async function fetchSleepSessions(
+  accessToken: string,
+  startDate: string,
+  endDate: string,
+): Promise<SleepSessionPoint[]> {
+  const rows = await listDataPoints(accessToken, 'sleep', 'interval.end_time', startDate, endDate);
+  const sessions: SleepSessionPoint[] = [];
+  for (const r of rows) {
+    const interval = r.sleep?.interval;
+    const minutes = r.sleep?.summary?.minutesAsleep;
+    if (!interval?.startTime || !interval?.endTime || minutes === undefined) continue;
+    const startTime = new Date(interval.startTime);
+    const endTime = new Date(interval.endTime);
+    const minutesAsleep = Number(minutes);
+    if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime()) || !Number.isFinite(minutesAsleep)) continue;
+    sessions.push({ startTime, endTime, minutesAsleep });
+  }
+  return sessions;
 }

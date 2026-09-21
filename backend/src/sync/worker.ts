@@ -3,12 +3,12 @@ import type { HealthConnection } from '@prisma/client';
 import { prisma } from '../db/client';
 import { connection, TOKEN_REFRESH_SWEEP_JOB } from './queue';
 import { runTokenRefreshSweep } from './tokenRefreshJob';
-import { fetchMetricRange } from '../health/client';
+import { fetchMetricRange, fetchSleepSessions, DailyMetricType } from '../health/client';
 import { refreshHealthTokens } from '../health/oauth';
 import { deleteUserSubscription } from '../health/subscriber';
 import { decryptToken } from '../crypto/tokenCipher';
-import { upsertBiometricRecords } from '../biometrics/repository';
-import { BiometricMetricType, HealthMetricPoint } from '../types';
+import { upsertBiometricRecords, storeSleepSessions } from '../biometrics/repository';
+import { BiometricMetricType, HealthMetricPoint, SleepSessionPoint } from '../types';
 import { FetchJobData, BackfillJobData } from './queue';
 import { refreshedTokenUpdateData } from './tokenUpdate';
 
@@ -28,6 +28,25 @@ function nextDay(isoDate: string): string {
   }
   d.setUTCDate(d.getUTCDate() + 1);
   return d.toISOString().slice(0, 10);
+}
+
+function shiftDay(isoDate: string, days: number): string {
+  const d = new Date(`${isoDate}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) {
+    throw new Error(`Invalid job date "${isoDate}": expected YYYY-MM-DD`);
+  }
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+// SLEEP's day key is a local civil date but the fetch filter is on UTC
+// instants, so a window covering exactly [start, end) can miss sessions that
+// belong to its edge days. Widen by one day each side: for a single-day job
+// [D, D+1) this is the spec's [D-1, D+2). Sessions are idempotent, so the
+// overlap costs nothing; a session that is still missed is simply absent
+// until a later window includes it, and the rollup converges then.
+function sleepWindow(startDate: string, endDate: string): [string, string] {
+  return [shiftDay(startDate, -1), shiftDay(endDate, 1)];
 }
 
 async function disconnect(userId: string, webhookSubscriptionId: string | null): Promise<void> {
@@ -61,9 +80,17 @@ class JobTokenSession {
     this.accessToken = decryptToken(conn.encryptedAccessToken);
   }
 
-  async fetch(metricType: BiometricMetricType, startDate: string, endDate: string): Promise<HealthMetricPoint[]> {
+  async fetch(metricType: DailyMetricType, startDate: string, endDate: string): Promise<HealthMetricPoint[]> {
+    return this.withRefresh((token) => fetchMetricRange(token, metricType, startDate, endDate));
+  }
+
+  async fetchSleep(startDate: string, endDate: string): Promise<SleepSessionPoint[]> {
+    return this.withRefresh((token) => fetchSleepSessions(token, startDate, endDate));
+  }
+
+  private async withRefresh<T>(call: (accessToken: string) => Promise<T>): Promise<T> {
     try {
-      return await fetchMetricRange(this.accessToken, metricType, startDate, endDate);
+      return await call(this.accessToken);
     } catch (err) {
       if (!isUnauthorized(err) || this.refreshed) throw err;
 
@@ -90,9 +117,17 @@ class JobTokenSession {
 
       // A second 401 with a freshly minted token means access really is gone;
       // let it propagate to the disconnect path.
-      return await fetchMetricRange(this.accessToken, metricType, startDate, endDate);
+      return await call(this.accessToken);
     }
   }
+}
+
+// SLEEP is stored as whole sessions (idempotent upsert) and the BiometricRecord
+// row is a rollup re-derived for every touched local date -- see
+// biometrics/repository.ts for why summing per-day rows was rejected.
+async function syncSleep(session: JobTokenSession, userId: string, startDate: string, endDate: string): Promise<void> {
+  const [from, to] = sleepWindow(startDate, endDate);
+  await storeSleepSessions(userId, await session.fetchSleep(from, to));
 }
 
 async function handleFetchJob(data: FetchJobData): Promise<void> {
@@ -106,8 +141,13 @@ async function handleFetchJob(data: FetchJobData): Promise<void> {
     // confirmed-live usage retrieves the `start` bucket with end = start + 1.
     // Passing the same date for both bounds is an empty range, so a
     // single-day job must ask for [date, date + 1).
-    const points = await session.fetch(data.metricType, data.date, nextDay(data.date));
-    await upsertBiometricRecords(data.userId, data.metricType, points);
+    const end = nextDay(data.date);
+    if (data.metricType === 'SLEEP') {
+      await syncSleep(session, data.userId, data.date, end);
+    } else {
+      const points = await session.fetch(data.metricType, data.date, end);
+      await upsertBiometricRecords(data.userId, data.metricType, points);
+    }
     await prisma.healthConnection.update({
       where: { userId: data.userId },
       data: { lastSyncedAt: new Date() },
@@ -128,6 +168,10 @@ async function handleBackfillJob(data: BackfillJobData): Promise<void> {
   try {
     const session = new JobTokenSession(conn);
     for (const metricType of ALL_METRIC_TYPES) {
+      if (metricType === 'SLEEP') {
+        await syncSleep(session, data.userId, data.startDate, data.endDate);
+        continue;
+      }
       const points = await session.fetch(metricType, data.startDate, data.endDate);
       await upsertBiometricRecords(data.userId, metricType, points);
     }

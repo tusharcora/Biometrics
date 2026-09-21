@@ -28,6 +28,7 @@ beforeEach(() => {
   // override this per test.
   (oauth.refreshHealthTokens as jest.Mock).mockReset().mockRejectedValue(new Error('invalid_grant'));
   (healthClient.fetchMetricRange as jest.Mock).mockReset();
+  (healthClient.fetchSleepSessions as jest.Mock).mockReset().mockResolvedValue([]);
   (subscriber.deleteUserSubscription as jest.Mock).mockReset().mockResolvedValue(undefined);
 });
 
@@ -76,11 +77,28 @@ describe('processSyncJob', () => {
 
     await processSyncJob({
       name: 'fetch',
-      data: { userId: user.id, metricType: 'SLEEP', date: '2026-09-01' },
+      data: { userId: user.id, metricType: 'STEPS', date: '2026-09-01' },
     } as Job);
 
     expect(healthClient.fetchMetricRange).toHaveBeenCalledTimes(1);
-    expect(healthClient.fetchMetricRange).toHaveBeenCalledWith('access-token', 'SLEEP', '2026-09-01', '2026-09-02');
+    expect(healthClient.fetchMetricRange).toHaveBeenCalledWith('access-token', 'STEPS', '2026-09-01', '2026-09-02');
+  });
+
+  // The day key for SLEEP is a local civil date while the fetch filter is on
+  // UTC instants, so a single-day job can only see part of a local day's
+  // sessions. It asks for [D-1, D+2); sessions are idempotent so the overlap
+  // is free.
+  it('requests the widened window [date - 1, date + 2) of sleep sessions for a single-day SLEEP fetch job', async () => {
+    const user = await createConnectedUser();
+
+    await processSyncJob({
+      name: 'fetch',
+      data: { userId: user.id, metricType: 'SLEEP', date: '2026-09-01' },
+    } as Job);
+
+    expect(healthClient.fetchSleepSessions).toHaveBeenCalledTimes(1);
+    expect(healthClient.fetchSleepSessions).toHaveBeenCalledWith('access-token', '2026-08-31', '2026-09-03');
+    expect(healthClient.fetchMetricRange).not.toHaveBeenCalled();
   });
 
   it('rolls the exclusive end date over month and year boundaries', async () => {
@@ -132,12 +150,10 @@ describe('processSyncJob', () => {
       '2026-08-01',
       '2026-08-01',
     );
-    expect(healthClient.fetchMetricRange).toHaveBeenCalledWith(
-      'access-token',
-      'SLEEP',
-      '2026-08-01',
-      '2026-08-01',
-    );
+    // SLEEP goes through the session path with a window widened by one day
+    // each side, and never through fetchMetricRange.
+    expect(healthClient.fetchSleepSessions).toHaveBeenCalledWith('access-token', '2026-07-31', '2026-08-02');
+    expect(healthClient.fetchMetricRange).not.toHaveBeenCalledWith('access-token', 'SLEEP', expect.anything(), expect.anything());
     expect(healthClient.fetchMetricRange).toHaveBeenCalledWith(
       'access-token',
       'STEPS',
@@ -316,7 +332,7 @@ describe('processSyncJob', () => {
       const user = await createConnectedUserWithSubscription('sub-backfill');
       (healthClient.fetchMetricRange as jest.Mock)
         .mockRejectedValueOnce(unauthorized()) // HRV with the stale token
-        .mockResolvedValue([]); // HRV retry + RESTING_HR + SLEEP + STEPS
+        .mockResolvedValue([]); // HRV retry + RESTING_HR + STEPS
       (oauth.refreshHealthTokens as jest.Mock).mockResolvedValue({ accessToken: 'refreshed-access', expiresIn: 7200 });
 
       await processSyncJob({
@@ -326,12 +342,15 @@ describe('processSyncJob', () => {
 
       expect(oauth.refreshHealthTokens).toHaveBeenCalledTimes(1);
       const calls = (healthClient.fetchMetricRange as jest.Mock).mock.calls;
-      expect(calls).toHaveLength(5);
+      expect(calls).toHaveLength(4);
       expect(calls[0]).toEqual(['stale-access', 'HRV', '2026-08-01', '2026-08-31']);
       for (const call of calls.slice(1)) {
         expect(call[0]).toBe('refreshed-access');
       }
-      expect(calls.slice(1).map((c) => c[1])).toEqual(['HRV', 'RESTING_HR', 'SLEEP', 'STEPS']);
+      expect(calls.slice(1).map((c) => c[1])).toEqual(['HRV', 'RESTING_HR', 'STEPS']);
+      // SLEEP runs after the refresh, so its session fetch uses the new token too.
+      expect(healthClient.fetchSleepSessions).toHaveBeenCalledTimes(1);
+      expect((healthClient.fetchSleepSessions as jest.Mock).mock.calls[0][0]).toBe('refreshed-access');
 
       const conn = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
       expect(conn?.status).toBe('CONNECTED');
@@ -368,5 +387,132 @@ describe('processSyncJob', () => {
     await expect(processSyncJob({ name: 'somethingElse', data: {} } as Job)).resolves.toBeUndefined();
 
     expect(tokenRefreshJob.runTokenRefreshSweep).not.toHaveBeenCalled();
+  });
+
+  // Slice 0: SLEEP is stored as whole sessions with a derived daily rollup, so
+  // every re-run of any job shape must leave both unchanged.
+  describe('SLEEP session storage', () => {
+    const mainSleep = { startTime: new Date('2026-09-01T22:00:00Z'), endTime: new Date('2026-09-02T06:00:00Z'), minutesAsleep: 420 };
+    const nap = { startTime: new Date('2026-09-02T13:00:00Z'), endTime: new Date('2026-09-02T14:00:00Z'), minutesAsleep: 50 };
+
+    async function sleepState(userId: string) {
+      const sessions = await prisma.sleepSession.findMany({ where: { userId }, orderBy: { startTime: 'asc' } });
+      const rollups = await prisma.biometricRecord.findMany({ where: { userId, metricType: 'SLEEP' }, orderBy: { recordedAt: 'asc' } });
+      return {
+        sessions: sessions.map((x) => [x.startTime.toISOString(), x.endTime.toISOString(), x.minutesAsleep]),
+        rollups: rollups.map((x) => [x.recordedAt.toISOString().slice(0, 10), x.value]),
+      };
+    }
+
+    const fetchJob = (userId: string) =>
+      ({ name: 'fetch', data: { userId, metricType: 'SLEEP', date: '2026-09-02' } }) as Job;
+    const backfillJob = (userId: string) =>
+      ({ name: 'backfill', data: { userId, startDate: '2026-08-25', endDate: '2026-09-05' } }) as Job;
+
+    it('stores sessions and a rollup equal to their sum for a nap plus a main sleep, not a per-session overwrite', async () => {
+      const user = await createConnectedUser();
+      (healthClient.fetchSleepSessions as jest.Mock).mockResolvedValue([mainSleep, nap]);
+
+      await processSyncJob(fetchJob(user.id));
+
+      expect(await sleepState(user.id)).toEqual({
+        sessions: [
+          ['2026-09-01T22:00:00.000Z', '2026-09-02T06:00:00.000Z', 420],
+          ['2026-09-02T13:00:00.000Z', '2026-09-02T14:00:00.000Z', 50],
+        ],
+        rollups: [['2026-09-02', 470]],
+      });
+    });
+
+    it('leaves sessions and totals unchanged when the single-day fetch, a range backfill and a retried job re-run over the same data', async () => {
+      const user = await createConnectedUser();
+      (healthClient.fetchSleepSessions as jest.Mock).mockResolvedValue([mainSleep, nap]);
+      (healthClient.fetchMetricRange as jest.Mock).mockResolvedValue([]);
+
+      await processSyncJob(fetchJob(user.id));
+      const first = await sleepState(user.id);
+
+      await processSyncJob(fetchJob(user.id)); // repeat webhook for the same date
+      await processSyncJob(backfillJob(user.id)); // range backfill over it
+      await processSyncJob(backfillJob(user.id)); // ...and again
+      expect(await sleepState(user.id)).toEqual(first);
+    });
+
+    it('a retried job (fails after fetching, then succeeds) does not double-count', async () => {
+      const user = await createConnectedUser();
+      (healthClient.fetchSleepSessions as jest.Mock)
+        .mockResolvedValueOnce([mainSleep, nap])
+        .mockResolvedValue([mainSleep, nap]);
+      await processSyncJob(fetchJob(user.id));
+      const first = await sleepState(user.id);
+
+      // BullMQ retries from the top after a later step failed: same fetch again.
+      (healthClient.fetchSleepSessions as jest.Mock).mockRejectedValueOnce(Object.assign(new Error('rate limited'), { status: 429 }));
+      await expect(processSyncJob(fetchJob(user.id))).rejects.toThrow('rate limited');
+      await processSyncJob(fetchJob(user.id));
+      expect(await sleepState(user.id)).toEqual(first);
+    });
+
+    it('a partial window never lowers the stored total, and a later window that includes the missing session raises it', async () => {
+      const user = await createConnectedUser();
+      (healthClient.fetchSleepSessions as jest.Mock).mockResolvedValueOnce([mainSleep, nap]);
+      await processSyncJob(fetchJob(user.id));
+
+      // A window that only returns the nap.
+      (healthClient.fetchSleepSessions as jest.Mock).mockResolvedValueOnce([nap]);
+      await processSyncJob(fetchJob(user.id));
+      expect((await sleepState(user.id)).rollups).toEqual([['2026-09-02', 470]]);
+
+      // A user whose first sync only saw the nap gets corrected by a wider one.
+      const user2 = await createConnectedUser();
+      (healthClient.fetchSleepSessions as jest.Mock).mockResolvedValueOnce([nap]);
+      await processSyncJob(fetchJob(user2.id));
+      expect((await sleepState(user2.id)).rollups).toEqual([['2026-09-02', 50]]);
+      (healthClient.fetchSleepSessions as jest.Mock).mockResolvedValueOnce([mainSleep, nap]);
+      await processSyncJob(fetchJob(user2.id));
+      expect((await sleepState(user2.id)).rollups).toEqual([['2026-09-02', 470]]);
+    });
+
+    it("buckets by the user's timezone when the worker writes the rollup", async () => {
+      const user = await createConnectedUser();
+      await prisma.user.update({ where: { id: user.id }, data: { timezone: 'America/Los_Angeles' } });
+      // Ends 05:30Z Sep 3 == 22:30 Sep 2 in Los Angeles.
+      (healthClient.fetchSleepSessions as jest.Mock).mockResolvedValue([
+        { startTime: new Date('2026-09-02T20:00:00Z'), endTime: new Date('2026-09-03T05:30:00Z'), minutesAsleep: 500 },
+      ]);
+      await processSyncJob(fetchJob(user.id));
+      expect((await sleepState(user.id)).rollups).toEqual([['2026-09-02', 500]]);
+    });
+
+    it('does not create SleepSession rows for other metrics, which keep overwrite-on-conflict', async () => {
+      const user = await createConnectedUser();
+      const day = new Date('2026-09-01T00:00:00Z');
+      (healthClient.fetchMetricRange as jest.Mock)
+        .mockResolvedValueOnce([{ recordedAt: day, value: 1000 }])
+        .mockResolvedValueOnce([{ recordedAt: day, value: 2500 }]);
+      const stepsJob = { name: 'fetch', data: { userId: user.id, metricType: 'STEPS', date: '2026-09-01' } } as Job;
+
+      await processSyncJob(stepsJob);
+      await processSyncJob(stepsJob);
+
+      const rows = await prisma.biometricRecord.findMany({ where: { userId: user.id, metricType: 'STEPS' } });
+      expect(rows).toHaveLength(1);
+      expect(rows[0]!.value).toBe(2500);
+      expect(await prisma.sleepSession.count({ where: { userId: user.id } })).toBe(0);
+    });
+
+    it('refreshes the token once and retries when the sleep fetch returns 401', async () => {
+      const user = await createConnectedUser();
+      (healthClient.fetchSleepSessions as jest.Mock)
+        .mockRejectedValueOnce(Object.assign(new Error('unauthorized'), { status: 401 }))
+        .mockResolvedValue([mainSleep]);
+      (oauth.refreshHealthTokens as jest.Mock).mockResolvedValue({ accessToken: 'refreshed-access', expiresIn: 7200 });
+
+      await processSyncJob(fetchJob(user.id));
+
+      expect(oauth.refreshHealthTokens).toHaveBeenCalledTimes(1);
+      expect((healthClient.fetchSleepSessions as jest.Mock).mock.calls[1][0]).toBe('refreshed-access');
+      expect((await sleepState(user.id)).rollups).toEqual([['2026-09-02', 420]]);
+    });
   });
 });

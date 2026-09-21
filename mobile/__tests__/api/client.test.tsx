@@ -1,5 +1,5 @@
 import * as SecureStore from 'expo-secure-store';
-import { apiFetch, setBaseUrl } from '../../src/api/client';
+import { apiFetch, setBaseUrl, updateTimezone } from '../../src/api/client';
 
 jest.mock('expo-secure-store');
 
@@ -125,5 +125,28 @@ describe('apiFetch with skipAuth', () => {
     expect(
       fetchMock.mock.calls.some(([url]: [string]) => url.endsWith('/auth/refresh')),
     ).toBe(false);
+  });
+});
+
+describe('updateTimezone', () => {
+  it('PUTs the zone as JSON to /me/timezone with the auth token', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ timezone: 'Asia/Tokyo' }) });
+
+    const result = await updateTimezone('Asia/Tokyo');
+
+    expect(result).toEqual({ timezone: 'Asia/Tokyo' });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('https://api.example.com/me/timezone');
+    expect(init.method).toBe('PUT');
+    expect(init.body).toBe(JSON.stringify({ timezone: 'Asia/Tokyo' }));
+    expect(init.headers).toEqual(
+      expect.objectContaining({ Authorization: 'Bearer old-access', 'Content-Type': 'application/json' }),
+    );
+  });
+
+  it('rejects when the server returns 400 for an invalid zone', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 400 });
+
+    await expect(updateTimezone('Nope/Zone')).rejects.toThrow(/failed with 400/);
   });
 });

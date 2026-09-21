@@ -88,6 +88,9 @@ export function DashboardScreen() {
   const headerActions = (
     <View className="flex-row items-center gap-4">
       <ThemeToggle color={colors.muted} />
+      <Pressable testID="settings-button" onPress={() => navigation.navigate('Settings')} hitSlop={8} className="active:opacity-70">
+        <Ionicons name="settings-outline" size={20} color={colors.muted} />
+      </Pressable>
       <Button testID="sign-out-button" variant="ghost" size="sm" onPress={() => signOut()}>
         Sign Out
       </Button>

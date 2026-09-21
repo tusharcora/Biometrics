@@ -13,7 +13,8 @@ import { BiometricMetricType } from '../types';
 export const healthRouter = Router();
 
 const OAUTH_STATE_TTL_SECONDS = 600;
-const BACKFILL_WINDOW_DAYS = 30;
+// Exported so the SLEEP wipe-and-resync script repopulates over exactly this window.
+export const BACKFILL_WINDOW_DAYS = 30;
 
 // Bare data type strings as they arrive in webhook notifications map to our metric types.
 const WEBHOOK_DATA_TYPE_TO_METRIC: Record<string, BiometricMetricType> = {

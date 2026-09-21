@@ -9,6 +9,8 @@ import { SignInScreen } from '../screens/SignInScreen';
 import { ConnectHealthScreen } from '../screens/ConnectHealthScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { MetricDetailScreen } from '../screens/MetricDetailScreen';
+import { SettingsScreen } from '../screens/SettingsScreen';
+import { syncTimezone } from '../lib/timezone';
 import { COLORS } from '../theme';
 import type { MetricRecord } from '../lib/metricInsights';
 
@@ -26,6 +28,7 @@ export type RootStackParamList = {
   ConnectHealth: undefined;
   Dashboard: undefined;
   MetricDetail: { metricType: MetricRecord['metricType']; records: MetricRecord[] };
+  Settings: undefined;
 };
 
 export type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';
@@ -39,6 +42,13 @@ export function RootNavigator() {
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
   // null while we are still asking the backend which screen to land on.
   const [initialRoute, setInitialRoute] = useState<keyof RootStackParamList | null>(null);
+
+  useEffect(() => {
+    if (!session) return;
+    // Fire-and-forget: syncTimezone swallows its own failures and must never
+    // hold up the first screen. Runs once per authenticated launch/sign-in.
+    void syncTimezone();
+  }, [session]);
 
   useEffect(() => {
     if (!session) {
@@ -93,6 +103,7 @@ export function RootNavigator() {
         <Stack.Screen name="ConnectHealth" component={ConnectHealthScreen} options={{ title: 'Connect Health' }} />
         <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ title: 'Dashboard' }} />
         <Stack.Screen name="MetricDetail" component={MetricDetailScreen} options={{ title: '' }} />
+        <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

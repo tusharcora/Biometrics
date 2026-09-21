@@ -1,5 +1,5 @@
 import nock from 'nock';
-import { fetchMetricRange } from '../../src/health/client';
+import { fetchMetricRange, fetchSleepSessions } from '../../src/health/client';
 
 afterEach(() => nock.cleanAll());
 
@@ -60,7 +60,7 @@ describe('fetchMetricRange', () => {
     expect(points).toEqual([{ recordedAt: new Date('2026-09-01'), value: 52 }]);
   });
 
-  it('fetches SLEEP via dataPoints.list on "sleep" using minutesAsleep from the summary', async () => {
+  it('fetches sleep sessions via dataPoints.list on "sleep", one per API object, with start/end/minutesAsleep', async () => {
     nock('https://health.googleapis.com')
       .get('/v4/users/me/dataTypes/sleep/dataPoints')
       .query((q) => typeof q.filter === 'string' && q.filter.includes('sleep.interval.end_time'))
@@ -68,36 +68,46 @@ describe('fetchMetricRange', () => {
         dataPoints: [
           {
             sleep: {
-              interval: { startTime: '2026-09-01T22:00:00Z' },
+              interval: { startTime: '2026-09-01T22:00:00Z', endTime: '2026-09-02T06:10:00Z' },
               // Confirmed live: minutesAsleep is a numeric string, the same
               // string-encoded-int64 pattern as steps' countSum.
               summary: { minutesAsleep: '415' },
             },
           },
+          {
+            sleep: {
+              interval: { startTime: '2026-09-02T13:00:00Z', endTime: '2026-09-02T13:50:00Z' },
+              summary: { minutesAsleep: '45' },
+            },
+          },
         ],
       });
 
-    const points = await fetchMetricRange('token-1', 'SLEEP', '2026-09-01', '2026-09-02');
-    // recordedAt is keyed on UTC-midnight of the session's start date, the
-    // same day-keying convention STEPS/RESTING_HR use, not the raw instant.
-    expect(points).toEqual([{ recordedAt: new Date('2026-09-01T00:00:00Z'), value: 415 }]);
+    const sessions = await fetchSleepSessions('token-1', '2026-09-01', '2026-09-03');
+    // Whole sessions, NOT collapsed to one value per day: two sessions on one
+    // day stay two objects so the caller can store and sum them idempotently.
+    expect(sessions).toEqual([
+      { startTime: new Date('2026-09-01T22:00:00Z'), endTime: new Date('2026-09-02T06:10:00Z'), minutesAsleep: 415 },
+      { startTime: new Date('2026-09-02T13:00:00Z'), endTime: new Date('2026-09-02T13:50:00Z'), minutesAsleep: 45 },
+    ]);
   });
 
-  it('keys each SLEEP session on the UTC calendar date of its start, one point per session', async () => {
+  it('skips sleep objects missing an interval bound or minutesAsleep instead of guessing', async () => {
     nock('https://health.googleapis.com')
       .get('/v4/users/me/dataTypes/sleep/dataPoints')
       .query(true)
       .reply(200, {
         dataPoints: [
-          { sleep: { interval: { startTime: '2026-09-01T22:15:00Z' }, summary: { minutesAsleep: '415' } } },
-          { sleep: { interval: { startTime: '2026-09-02T23:40:00Z' }, summary: { minutesAsleep: '390' } } },
+          { sleep: { interval: { startTime: '2026-09-01T22:00:00Z' }, summary: { minutesAsleep: '415' } } },
+          { sleep: { interval: { startTime: '2026-09-01T22:00:00Z', endTime: '2026-09-02T06:00:00Z' }, summary: {} } },
+          { sleep: { interval: { startTime: 'garbage', endTime: '2026-09-02T06:00:00Z' }, summary: { minutesAsleep: '1' } } },
+          { sleep: { interval: { startTime: '2026-09-03T22:00:00Z', endTime: '2026-09-04T06:00:00Z' }, summary: { minutesAsleep: '400' } } },
         ],
       });
 
-    const points = await fetchMetricRange('token-1', 'SLEEP', '2026-09-01', '2026-09-03');
-    expect(points).toEqual([
-      { recordedAt: new Date('2026-09-01T00:00:00Z'), value: 415 },
-      { recordedAt: new Date('2026-09-02T00:00:00Z'), value: 390 },
+    const sessions = await fetchSleepSessions('token-1', '2026-09-01', '2026-09-05');
+    expect(sessions).toEqual([
+      { startTime: new Date('2026-09-03T22:00:00Z'), endTime: new Date('2026-09-04T06:00:00Z'), minutesAsleep: 400 },
     ]);
   });
 
@@ -171,7 +181,7 @@ describe('fetchMetricRange', () => {
       })
       .reply(200, { dataPoints: [] });
 
-    await fetchMetricRange('token-1', 'SLEEP', '2026-09-01', '2026-09-01');
+    await fetchSleepSessions('token-1', '2026-09-01', '2026-09-01');
 
     expect(capturedFilter).toBe(
       'sleep.interval.end_time >= "2026-09-01T00:00:00Z" AND sleep.interval.end_time < "2026-09-01T00:00:00Z"',
@@ -201,7 +211,7 @@ describe('fetchMetricRange', () => {
       .query(true)
       .reply(500, {});
 
-    await expect(fetchMetricRange('token-1', 'SLEEP', '2026-09-01', '2026-09-02')).rejects.toThrow();
+    await expect(fetchSleepSessions('token-1', '2026-09-01', '2026-09-02')).rejects.toThrow();
   });
 
   it('chunks a dailyRollUp request over 14 days into multiple <=14-day calls', async () => {
