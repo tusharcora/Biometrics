@@ -3,9 +3,15 @@ import {
   buildSleepDebtSeries,
   baselineDeviationPct,
   acuteChronicLoadRatio,
+  sleepEfficiency,
+  groupSessionsByNight,
+  mainSessionOnsets,
+  circadianConsistencyOn,
+  buildSleepEfficiencySeries,
+  buildCircadianSeries,
 } from '../../src/scoring/features';
 import { v1Config } from '../../src/scoring/configs/v1';
-import { series } from './helpers';
+import { series, sleepSession, noonAnchoredNights } from './helpers';
 
 const cfg = v1Config;
 
@@ -72,5 +78,136 @@ describe('Stage 2: acuteChronicLoadRatio', () => {
 
   it('is null without enough chronic history', () => {
     expect(acuteChronicLoadRatio(series('2026-07-20', Array(9).fill(8000)), '2026-07-28', cfg)).toBeNull();
+  });
+});
+
+describe('Slice 1.5 Stage 2: sleepEfficiency', () => {
+  it('is sum(minutesAsleep) / sum(end - start) over the sessions ending on the local day', () => {
+    // A nap ending 14:00 on 08-01 and a main sleep 22:00 -> 06:00, ending on 08-02.
+    const sessions = [sleepSession('2026-08-01T13:00:00Z', 60, 50), sleepSession('2026-08-01T22:00:00Z', 480, 420)];
+    const byNight = groupSessionsByNight(sessions, 'UTC');
+    expect(sleepEfficiency(byNight.get('2026-08-02')!)).toBeCloseTo(420 / 480, 12);
+    expect(sleepEfficiency(byNight.get('2026-08-01')!)).toBeCloseTo(50 / 60, 12);
+  });
+
+  it('pools several sessions ending the same day as a ratio of sums, not a mean of ratios', () => {
+    const sessions = [sleepSession('2026-08-01T04:00:00Z', 60, 60), sleepSession('2026-08-01T05:00:00Z', 300, 150)];
+    const day = groupSessionsByNight(sessions, 'UTC').get('2026-08-01')!;
+    expect(day).toHaveLength(2);
+    expect(sleepEfficiency(day)).toBeCloseTo(210 / 360, 12);
+  });
+
+  it("buckets by the local end date in the user's timezone", () => {
+    // Ends 03:00Z on 08-02 = 23:00 on 08-01 in New York.
+    const s = [sleepSession('2026-08-01T20:00:00Z', 420, 380)];
+    expect(groupSessionsByNight(s, 'America/New_York').has('2026-08-01')).toBe(true);
+    expect(groupSessionsByNight(s, 'UTC').has('2026-08-02')).toBe(true);
+  });
+
+  it('guards a zero-duration session: it is ignored, and an all-zero day has no efficiency', () => {
+    const zero = sleepSession('2026-08-01T05:00:00Z', 0, 0);
+    expect(sleepEfficiency([zero])).toBeNull();
+    const good = sleepSession('2026-08-01T04:00:00Z', 400, 360);
+    expect(sleepEfficiency([zero, good])).toBeCloseTo(0.9, 12);
+  });
+
+  it('guards a negative duration (end before start) the same way', () => {
+    const negative = { startTime: new Date('2026-08-01T06:00:00Z'), endTime: new Date('2026-08-01T05:00:00Z'), minutesAsleep: 30 };
+    expect(sleepEfficiency([negative])).toBeNull();
+  });
+
+  it('never exceeds 1 when the derived interval is shorter than minutesAsleep', () => {
+    expect(sleepEfficiency([sleepSession('2026-08-01T04:00:00Z', 300, 330)])).toBe(1);
+  });
+
+  it('builds a per-night series keyed by local end date, dropping nights with no valid interval', () => {
+    const sessions = [
+      sleepSession('2026-08-01T22:00:00Z', 480, 432), // ends 08-02
+      sleepSession('2026-08-02T22:00:00Z', 0, 0), // ends 08-02, zero duration: ignored
+      sleepSession('2026-08-03T22:00:00Z', 400, 300), // ends 08-04
+      sleepSession('2026-08-05T22:00:00Z', 0, 0), // ends 08-05, nothing valid: no point at all
+    ];
+    const built = buildSleepEfficiencySeries(sessions, 'UTC', '2026-08-06');
+    expect(built.map((p) => p.date)).toEqual(['2026-08-02', '2026-08-04']);
+    expect(built[0]!.value).toBeCloseTo(0.9, 12);
+    expect(built[1]!.value).toBeCloseTo(0.75, 12);
+  });
+
+  it('leaves out nights after the through date', () => {
+    const sessions = [sleepSession('2026-08-01T22:00:00Z', 480, 432), sleepSession('2026-08-03T22:00:00Z', 480, 432)];
+    expect(buildSleepEfficiencySeries(sessions, 'UTC', '2026-08-02').map((p) => p.date)).toEqual(['2026-08-02']);
+  });
+});
+
+describe('Slice 1.5 Stage 2: circadian consistency', () => {
+  it('measures onset in minutes since 12:00 local so bedtimes either side of midnight do not wrap', () => {
+    const sessions = [
+      sleepSession('2026-08-01T23:30:00Z', 480, 440), // 23:30 -> 690
+      sleepSession('2026-08-03T00:30:00Z', 480, 440), // 00:30 -> 750: 60 later, not 23h earlier
+    ];
+    expect(mainSessionOnsets(sessions, 'UTC').map((o) => o.value)).toEqual([690, 750]);
+  });
+
+  it("uses the user's timezone for the wall clock (23:30 in New York is 03:30Z)", () => {
+    const sessions = [sleepSession('2026-08-02T03:30:00Z', 480, 440)];
+    expect(mainSessionOnsets(sessions, 'America/New_York')[0]!.value).toBe(690);
+    expect(mainSessionOnsets(sessions, 'UTC')[0]!.value).toBe(930); // 03:30 UTC
+  });
+
+  it('takes the main (longest by minutesAsleep) session of a night, ignoring a nap', () => {
+    const sessions = [
+      sleepSession('2026-08-01T13:00:00Z', 60, 55), // a lone nap, ends 14:00 on 08-01
+      sleepSession('2026-08-01T22:00:00Z', 480, 420), // main sleep, ends 06:00 on 08-02
+      sleepSession('2026-08-02T01:00:00Z', 30, 20), // a brief split, ends 01:30 on 08-02: same night as the main
+    ];
+    expect(mainSessionOnsets(sessions, 'UTC')).toEqual([
+      { date: '2026-08-01', value: 60 }, // the lone nap is that day's only session (13:00 -> 60)
+      { date: '2026-08-02', value: 600 }, // 22:00 -> 600, beating the 20-minute session
+    ]);
+  });
+
+  it('is 100 for a perfectly regular bedtime', () => {
+    const onsets = mainSessionOnsets(noonAnchoredNights('2026-07-01', 14, [630]), 'UTC');
+    expect(circadianConsistencyOn(onsets, '2026-07-15', cfg)).toBeCloseTo(100, 9);
+  });
+
+  it('inverts and normalizes the stddev: 30 min of spread against a 120 min ceiling is 75', () => {
+    // 23:30 / 00:30 alternate: population stddev is exactly 30 minutes. Wrapped at midnight it would be ~690.
+    const onsets = mainSessionOnsets(noonAnchoredNights('2026-07-01', 14, [690, 750]), 'UTC');
+    expect(circadianConsistencyOn(onsets, '2026-07-15', cfg)).toBeCloseTo(75, 9);
+  });
+
+  it('floors at 0 once the spread reaches the ceiling', () => {
+    const onsets = mainSessionOnsets(noonAnchoredNights('2026-07-01', 14, [540, 780]), 'UTC'); // 21:00 / 01:00: stddev 120
+    expect(circadianConsistencyOn(onsets, '2026-07-15', cfg)).toBe(0);
+  });
+
+  it('is null (cold start) until 14 nights of history exist', () => {
+    const thirteen = mainSessionOnsets(noonAnchoredNights('2026-07-01', 13, [630]), 'UTC');
+    expect(circadianConsistencyOn(thirteen, '2026-07-14', cfg)).toBeNull();
+    const fourteen = mainSessionOnsets(noonAnchoredNights('2026-07-01', 14, [630]), 'UTC');
+    expect(circadianConsistencyOn(fourteen, '2026-07-15', cfg)).not.toBeNull();
+  });
+
+  it('is null when the trailing window holds too few nights for a meaningful spread', () => {
+    // Plenty of old history, then only 3 nights inside the last 14 days.
+    const sessions = [...noonAnchoredNights('2026-05-01', 30, [630]), ...noonAnchoredNights('2026-07-12', 3, [630])];
+    expect(circadianConsistencyOn(mainSessionOnsets(sessions, 'UTC'), '2026-07-15', cfg)).toBeNull();
+  });
+
+  it('only looks at the trailing window ending on the date', () => {
+    const wild = noonAnchoredNights('2026-06-01', 10, [540, 780]); // long before the window
+    const steady = noonAnchoredNights('2026-06-20', 26, [630]);
+    const onsets = mainSessionOnsets([...wild, ...steady], 'UTC');
+    expect(circadianConsistencyOn(onsets, '2026-07-15', cfg)).toBeCloseTo(100, 9);
+  });
+
+  it('builds a daily series that starts on the first day the feature is computable', () => {
+    const onsets = mainSessionOnsets(noonAnchoredNights('2026-07-01', 20, [630]), 'UTC');
+    const built = buildCircadianSeries(onsets, '2026-07-25', cfg);
+    // Night 14 ends on 07-15: the first day with 14 nights of history.
+    expect(built[0]!.date).toBe('2026-07-15');
+    expect(built[built.length - 1]!.date).toBe('2026-07-25');
+    expect(built.every((p) => Math.abs(p.value - 100) < 1e-9)).toBe(true);
   });
 });

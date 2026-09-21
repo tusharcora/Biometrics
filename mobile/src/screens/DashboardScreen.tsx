@@ -19,6 +19,7 @@ import { ConfidenceBadge } from '../components/ui/confidence-badge';
 import { TrendLine } from '../components/ui/trend-line';
 import { CountUp } from '../components/ui/count-up';
 import { ThemeToggle } from '../components/ui/theme-toggle';
+import { HabitLogCard } from '../components/habit-log-card';
 import { COLORS, METRIC_CONFIG, METRIC_ORDER, type MetricType } from '../theme';
 import { computeStats, buildHeadline, type MetricRecord } from '../lib/metricInsights';
 import { pickColdStartProgress } from '../lib/scoreInsights';
@@ -238,6 +239,19 @@ export function DashboardScreen() {
           failed={recoveryFailed}
           onPress={(score) => navigation.navigate('ScoreDetail', { date: score.date, type: 'RECOVERY' })}
         />
+
+        <HabitLogCard />
+
+        <Pressable testID="patterns-button" onPress={() => navigation.navigate('Patterns')} className="active:opacity-80">
+          <Card className="flex-row items-center gap-3">
+            <Ionicons name="git-compare-outline" size={18} color={colors.accent} />
+            <View className="flex-1 gap-0.5">
+              <Text className="text-base font-semibold">Patterns</Text>
+              <Text className="text-xs text-muted-foreground">How your habits line up with your recovery</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+          </Card>
+        </Pressable>
 
         <View className="flex-row flex-wrap gap-3">
           {METRIC_ORDER.map((type, index) => {

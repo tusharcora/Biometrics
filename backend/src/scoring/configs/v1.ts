@@ -1,4 +1,4 @@
-import type { FactorKey } from '../types';
+import type { RecoveryFactorKey, SleepFactorKey } from '../types';
 
 /**
  * Scoring algorithm v1. Versioned configs are NEVER mutated in place: a change
@@ -13,9 +13,9 @@ import type { FactorKey } from '../types';
 export interface ScoreConfig {
   version: string;
   /** Base weights; they sum to 1 and are renormalized per day around excluded factors. */
-  weights: Record<FactorKey, number>;
+  weights: Record<RecoveryFactorKey, number>;
   /** +1: higher z helps recovery (HRV). -1: higher z hurts it (RHR, sleep debt). */
-  direction: Record<FactorKey, 1 | -1>;
+  direction: Record<RecoveryFactorKey, 1 | -1>;
   /**
    * Logistic steepness in score = 100 / (1 + e^(-k * sum(w*z))). ln(9)/2 puts
    * all-z-zero at 50 and a favorable +2 sigma at exactly 90, since
@@ -46,6 +46,41 @@ export interface ScoreConfig {
     minHistory: number;
   };
   sleepDebtWindowDays: number;
+  /**
+   * Sleep Score model (Slice 1.5). Same k, squashing, renormalization and
+   * confidence rules as Recovery; only the factors differ.
+   */
+  sleepScore: {
+    /**
+     * ILLUSTRATIVE weights, not derived from outcome data: the spec fixes none
+     * for the Sleep Score and there is no ground-truth "sleep quality" label to
+     * fit them to. Like the Recovery weights, the backtest can show what
+     * changing them does, not whether they are right.
+     */
+    weights: Record<SleepFactorKey, number>;
+    /** Every Sleep Score factor is "higher is better". */
+    direction: Record<SleepFactorKey, 1 | -1>;
+    /**
+     * Duration is scored against the user's sleep GOAL, not just their own
+     * baseline: z = clamp((minutesAsleep - goal) / sigma-hat, min, max), with
+     * sigma-hat from the SLEEP metric's Stage-3 baseline. The upper clamp is
+     * +1 on purpose: sleeping past goal earns little extra credit (the z
+     * saturates once you are one sigma over), while a short night is
+     * penalized down to -3 sigma.
+     */
+    durationZClamp: { min: number; max: number };
+  };
+  /** Bedtime-consistency feature (Stage 2): stddev of the main session's noon-anchored onset. */
+  circadian: {
+    /** Trailing window (days, inclusive of the scored day) the stddev is taken over. */
+    windowDays: number;
+    /** The window needs at least this many nights or the stddev is not meaningful. */
+    minWindowNights: number;
+    /** No value until this many nights of history exist (the spec's 14-night cold start). */
+    minHistoryNights: number;
+    /** Onset stddev, in minutes, at which the 0-100 consistency score bottoms out at 0. */
+    maxStdMinutes: number;
+  };
   /** Steps-derived ACWR windows. Computed and stored, never part of the composite. */
   acwr: { acuteDays: number; chronicDays: number; minChronicObservations: number };
 }
@@ -63,5 +98,12 @@ export const v1Config: ScoreConfig = {
   spreadFloorFraction: 0.02,
   outlier: { madMultiplier: 5, windowDays: 90, minHistory: 14 },
   sleepDebtWindowDays: 14,
+  sleepScore: {
+    // Illustrative, not derived (see ScoreConfig.sleepScore.weights).
+    weights: { SLEEP_DURATION: 0.45, SLEEP_EFFICIENCY: 0.35, CIRCADIAN_CONSISTENCY: 0.2 },
+    direction: { SLEEP_DURATION: 1, SLEEP_EFFICIENCY: 1, CIRCADIAN_CONSISTENCY: 1 },
+    durationZClamp: { min: -3, max: 1 },
+  },
+  circadian: { windowDays: 14, minWindowNights: 7, minHistoryNights: 14, maxStdMinutes: 120 },
   acwr: { acuteDays: 7, chronicDays: 28, minChronicObservations: 14 },
 };

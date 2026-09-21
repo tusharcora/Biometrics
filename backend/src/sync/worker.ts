@@ -133,8 +133,8 @@ async function syncSleep(session: JobTokenSession, userId: string, startDate: st
   return storeSleepSessions(userId, await session.fetchSleep(from, to));
 }
 
-// HRV, RHR and SLEEP feed the Recovery Score; STEPS does not (its only derived
-// feature, ACWR, is stored but excluded from the composite).
+// HRV, RHR and SLEEP feed the Recovery Score (SLEEP also feeds the Sleep Score);
+// STEPS does not (its only derived feature, ACWR, is stored but excluded from the composite).
 const SCORE_INPUT_METRICS = new Set<BiometricMetricType>(['HRV', 'RESTING_HR', 'SLEEP']);
 
 /**

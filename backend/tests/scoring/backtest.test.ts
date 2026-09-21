@@ -1,9 +1,10 @@
-import { runBacktest, parseArgs } from '../../scripts/backtest';
+import { runBacktest, runBacktestAll, parseArgs } from '../../scripts/backtest';
 import { backtest, formatReport, BACKTEST_DISCLAIMER, CHANGE_THRESHOLD_POINTS, BacktestUserData } from '../../src/scoring/backtest';
 import { v1Config } from '../../src/scoring/configs/v1';
 import { getScoreConfig } from '../../src/scoring/configs';
 import { shiftDate } from '../../src/scoring/dates';
 import type { DailyPoint } from '../../src/scoring/types';
+import { noonAnchoredNights } from './helpers';
 import { prisma } from '../../src/db/client';
 
 afterAll(async () => {
@@ -86,7 +87,9 @@ describe('backtest', () => {
 
 describe('backtest CLI', () => {
   it('parses arguments and requires --candidate', () => {
-    expect(parseArgs(['--candidate', 'v2', '--days', '30', '--user', 'u1'])).toEqual({ candidate: 'v2', live: undefined, days: 30, userId: 'u1' });
+    expect(parseArgs(['--candidate', 'v2', '--days', '30', '--user', 'u1'])).toEqual({ candidate: 'v2', live: undefined, days: 30, userId: 'u1', type: 'ALL' });
+    expect(parseArgs(['--candidate', 'v2', '--type', 'SLEEP']).type).toBe('SLEEP');
+    expect(() => parseArgs(['--candidate', 'v2', '--type', 'STRAIN'])).toThrow('--type');
     expect(() => parseArgs([])).toThrow('--candidate');
     expect(() => parseArgs(['--candidate', 'v2', '--bogus'])).toThrow('Unknown argument');
     expect(() => parseArgs(['--candidate', 'v2', '--days', '0'])).toThrow('--days');
@@ -94,5 +97,57 @@ describe('backtest CLI', () => {
 
   it('rejects an unknown config version instead of silently scoring with the wrong one', () => {
     expect(() => getScoreConfig('v99')).toThrow('Unknown score algorithm version');
+  });
+});
+
+describe('backtest: Sleep Score (Slice 1.5)', () => {
+  // Sessions ending on START + i (UTC), with a wobbling bedtime and efficiency so every factor has spread.
+  function userWithSessions(): BacktestUserData {
+    const base = syntheticUser();
+    const sessions = noonAnchoredNights(shiftDate(START, -1), 80, [630, 655, 610, 640, 600, 660], 380).map((s, i) => ({
+      ...s,
+      minutesAsleep: 380 + 15 * Math.sin(i * 0.9),
+    }));
+    return { ...base, sessions, timezone: 'UTC' };
+  }
+
+  it('replays the SLEEP type and shows no change when the candidate is the live config', async () => {
+    const report = await runBacktest({ candidate: v1Config, days: 30, now: NOW, type: 'SLEEP', loadUsers: async () => [userWithSessions()] });
+    expect(report.type).toBe('SLEEP');
+    expect(report.days.length).toBe(30);
+    expect(report.comparedDays).toBeGreaterThan(0);
+    expect(report.maxAbsDelta).toBe(0);
+  });
+
+  it('diffs a reweighted Sleep Score, and leaves the Recovery replay untouched by that change', async () => {
+    const candidate = {
+      ...v1Config,
+      version: 'v2-test',
+      sleepScore: { ...v1Config.sleepScore, weights: { SLEEP_DURATION: 0.1, SLEEP_EFFICIENCY: 0.1, CIRCADIAN_CONSISTENCY: 0.8 } },
+    };
+    const both = await runBacktestAll({ candidate, days: 30, now: NOW, loadUsers: async () => [userWithSessions()] });
+
+    expect(both.RECOVERY.type).toBe('RECOVERY');
+    expect(both.SLEEP.type).toBe('SLEEP');
+    expect(both.RECOVERY.maxAbsDelta).toBe(0); // only sleepScore weights changed
+    expect(both.SLEEP.maxAbsDelta).toBeGreaterThan(0);
+    const scored = both.SLEEP.days.filter((d) => d.delta !== null);
+    for (const d of scored) expect(d.delta).toBeCloseTo(d.candidate! - d.live!, 9);
+  });
+
+  it('skips days with no observed sleep in the SLEEP replay (no Sleep Score exists for them)', async () => {
+    const user = userWithSessions();
+    const gapDate = shiftDate(START, 75);
+    const noSleepThatDay = { ...user, sleep: user.sleep.filter((p) => p.date !== gapDate) };
+    const withGap = await runBacktest({ candidate: v1Config, days: 10, now: NOW, type: 'SLEEP', loadUsers: async () => [noSleepThatDay] });
+    expect(withGap.days.map((d) => d.date)).not.toContain(gapDate);
+    const recovery = await runBacktest({ candidate: v1Config, days: 10, now: NOW, type: 'RECOVERY', loadUsers: async () => [noSleepThatDay] });
+    expect(recovery.days.map((d) => d.date)).toContain(gapDate);
+  });
+
+  it('labels each report with its score type in the printed output', async () => {
+    const report = await runBacktest({ candidate: v1Config, days: 5, now: NOW, type: 'SLEEP', loadUsers: async () => [userWithSessions()] });
+    expect(formatReport(report)).toContain('SLEEP score: live v1');
+    expect(formatReport(report)).toContain(BACKTEST_DISCLAIMER);
   });
 });

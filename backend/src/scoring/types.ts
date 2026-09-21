@@ -9,12 +9,31 @@ export interface DailyPoint {
 }
 
 /** The Recovery Score's weighted factors. */
-export type FactorKey = 'HRV' | 'RHR' | 'SLEEP_DEBT';
+export type RecoveryFactorKey = 'HRV' | 'RHR' | 'SLEEP_DEBT';
+
+/** The Sleep Score's weighted factors (Slice 1.5). */
+export type SleepFactorKey = 'SLEEP_DURATION' | 'SLEEP_EFFICIENCY' | 'CIRCADIAN_CONSISTENCY';
+
+/** Every factor a DailyScore's vector can hold, across both score types. */
+export type FactorKey = RecoveryFactorKey | SleepFactorKey;
+
+/** A stored sleep session: the SleepSession columns the Sleep Score features read. */
+export interface SleepSessionInput {
+  startTime: Date;
+  endTime: Date;
+  minutesAsleep: number;
+}
 
 export type ConfidenceLevel = 'HIGH' | 'MEDIUM' | 'LOW';
 
-/** Series names a baseline can be built for. Strings in the DB so Slice 1.5 can add more. */
-export type BaselineMetric = 'HRV' | 'RESTING_HR' | 'SLEEP' | 'SLEEP_DEBT';
+/** Series names a baseline can be built for. Strings in the DB, so adding one needs no migration. */
+export type BaselineMetric =
+  | 'HRV'
+  | 'RESTING_HR'
+  | 'SLEEP'
+  | 'SLEEP_DEBT'
+  | 'SLEEP_EFFICIENCY'
+  | 'CIRCADIAN_CONSISTENCY';
 
 /** Stage 1: a value rejected as an outlier. The raw record is never altered; it is only skipped. */
 export interface OutlierFlag {

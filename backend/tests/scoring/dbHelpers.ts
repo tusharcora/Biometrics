@@ -39,3 +39,24 @@ export async function seedHistory(userId: string, start: string, days: number): 
 }
 
 export const day = (date: string) => civilDateToUtcMidnight(date);
+
+/**
+ * Seeds `days` SleepSession rows, one per night, so that night i ends on
+ * start + i (UTC zone) -- the same civil dates seedHistory's SLEEP rollup uses.
+ * Bedtime and time-asleep wobble deterministically so efficiency and circadian
+ * consistency have a real spread.
+ */
+export async function seedSessions(userId: string, start: string, days: number): Promise<void> {
+  const data = [];
+  for (let i = 0; i < days; i++) {
+    const noon = civilDateToUtcMidnight(shiftDate(start, i - 1)).getTime() + 12 * 3_600_000;
+    const startTime = new Date(noon + (630 + 25 * Math.sin(i * 1.3)) * 60_000);
+    data.push({
+      userId,
+      startTime,
+      endTime: new Date(startTime.getTime() + 420 * 60_000),
+      minutesAsleep: 385 + 15 * Math.sin(i * 0.9 + 1),
+    });
+  }
+  await prisma.sleepSession.createMany({ data, skipDuplicates: true });
+}

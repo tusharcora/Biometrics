@@ -49,6 +49,9 @@ export const FACTOR_LABELS: Record<FactorKey, string> = {
   HRV: 'HRV',
   RHR: 'Daily minimum HR',
   SLEEP_DEBT: 'Sleep debt',
+  SLEEP_DURATION: 'Sleep duration',
+  SLEEP_EFFICIENCY: 'Sleep efficiency',
+  CIRCADIAN_CONSISTENCY: 'Bedtime consistency',
 };
 
 /** Which baseline series backs each factor; also the `metric` id used in cold-start and baseline DTOs. */
@@ -56,15 +59,32 @@ export const FACTOR_METRIC: Record<FactorKey, string> = {
   HRV: 'HRV',
   RHR: 'RESTING_HR',
   SLEEP_DEBT: 'SLEEP_DEBT',
+  // Duration is scored against the goal but its sigma-hat comes from the SLEEP series baseline.
+  SLEEP_DURATION: 'SLEEP',
+  SLEEP_EFFICIENCY: 'SLEEP_EFFICIENCY',
+  CIRCADIAN_CONSISTENCY: 'CIRCADIAN_CONSISTENCY',
 };
 
 const METRIC_UNITS: Record<string, string> = {
   HRV: 'ms',
   RESTING_HR: 'bpm',
   SLEEP_DEBT: 'min',
+  SLEEP: 'min',
+  SLEEP_EFFICIENCY: '%',
+  CIRCADIAN_CONSISTENCY: 'pts',
 };
 
-const FACTOR_ORDER: FactorKey[] = ['HRV', 'RHR', 'SLEEP_DEBT'];
+/**
+ * Stored efficiency baselines are 0..1 fractions (the feature's own scale);
+ * they are shown as percentages, so the wire value and its '%' unit agree.
+ */
+const METRIC_DISPLAY_SCALE: Record<string, number> = { SLEEP_EFFICIENCY: 100 };
+
+/** Factors of each score type, in the order cold-start progress and baselines are listed. */
+const FACTOR_ORDER: Record<ScoreType, FactorKey[]> = {
+  RECOVERY: ['HRV', 'RHR', 'SLEEP_DEBT'],
+  SLEEP: ['SLEEP_DURATION', 'SLEEP_EFFICIENCY', 'CIRCADIAN_CONSISTENCY'],
+};
 
 const round = (n: number, places: number) => {
   const p = 10 ** places;
@@ -102,7 +122,7 @@ export function toDailyScoreDTO(row: DailyScore, snapshotsForDate: BaselineSnaps
     excluded: f.excluded,
   }));
 
-  const coldStart: ColdStartDTO[] = FACTOR_ORDER.filter((k) => stored.find((f) => f.factor === k)?.excluded).map(
+  const coldStart: ColdStartDTO[] = FACTOR_ORDER[row.type].filter((k) => stored.find((f) => f.factor === k)?.excluded).map(
     (k) => ({
       metric: FACTOR_METRIC[k],
       daysCollected: snapshotsForDate.find((s) => s.metric === FACTOR_METRIC[k])?.daysOfHistory ?? 0,
@@ -121,16 +141,17 @@ export function toDailyScoreDTO(row: DailyScore, snapshotsForDate: BaselineSnaps
   };
 }
 
-/** Baselines a score was computed against: only factor series that are past cold-start. */
-export function toBaselineDTOs(snapshots: BaselineSnapshot[]): BaselineDTO[] {
+/** Baselines a score of `type` was computed against: only factor series that are past cold-start. */
+export function toBaselineDTOs(snapshots: BaselineSnapshot[], type: ScoreType = 'RECOVERY'): BaselineDTO[] {
   const out: BaselineDTO[] = [];
-  for (const key of FACTOR_ORDER) {
+  for (const key of FACTOR_ORDER[type]) {
     const snap = snapshots.find((s) => s.metric === FACTOR_METRIC[key]);
     if (!snap || snap.ewma === null || snap.spread === null) continue;
+    const scale = METRIC_DISPLAY_SCALE[snap.metric] ?? 1;
     out.push({
       metric: snap.metric,
-      ewma: round(snap.ewma, 2),
-      spread: round(snap.spread, 2),
+      ewma: round(snap.ewma * scale, 2),
+      spread: round(snap.spread * scale, 2),
       daysOfHistory: snap.daysOfHistory,
       windowDays: configFor(snap.algorithmVersion).ewmaN,
       unit: METRIC_UNITS[snap.metric] ?? '',

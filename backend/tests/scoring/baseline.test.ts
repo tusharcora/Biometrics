@@ -1,4 +1,5 @@
-import { computeBaseline, ewma, median, mad, zScore } from '../../src/scoring/baseline';
+import { computeBaseline, ewma, median, mad, zScore, sleepDurationZVsGoal } from '../../src/scoring/baseline';
+import type { Baseline } from '../../src/scoring/types';
 import { v1Config } from '../../src/scoring/configs/v1';
 import { series } from './helpers';
 
@@ -89,5 +90,40 @@ describe('Stage 3: zScore', () => {
 
   it('is null while cold-starting', () => {
     expect(zScore(50, { coldStart: true, daysOfHistory: 3 }, cfg)).toBeNull();
+  });
+});
+
+describe('Slice 1.5: sleepDurationZVsGoal (duration scored against the goal, not the baseline)', () => {
+  const ready = (ewma: number, spread: number): Baseline => ({ coldStart: false, daysOfHistory: 30, ewma, spread, mad: spread / 1.4826 });
+
+  it('is (minutesAsleep - goal) / sigma-hat: exactly on goal is 0 whatever the baseline centre is', () => {
+    expect(sleepDurationZVsGoal(480, 480, ready(400, 30), v1Config)).toBe(0);
+  });
+
+  it("scores a short night against the goal even when it equals the user's own baseline", () => {
+    // Baseline centre 420 (a habitually short sleeper): 420 vs a 480 goal is still 2 sigma under.
+    expect(sleepDurationZVsGoal(420, 480, ready(420, 30), v1Config)).toBeCloseTo(-2, 12);
+  });
+
+  it('clamps the deficit at -3 sigma', () => {
+    expect(sleepDurationZVsGoal(390, 480, ready(450, 30), v1Config)).toBeCloseTo(-3, 12); // exactly -3
+    expect(sleepDurationZVsGoal(300, 480, ready(450, 30), v1Config)).toBe(-3); // -6 sigma raw
+    expect(sleepDurationZVsGoal(0, 480, ready(450, 30), v1Config)).toBe(-3);
+  });
+
+  it('clamps the surplus at +1 sigma: sleeping past goal earns no extra credit', () => {
+    expect(sleepDurationZVsGoal(510, 480, ready(450, 30), v1Config)).toBeCloseTo(1, 12);
+    expect(sleepDurationZVsGoal(660, 480, ready(450, 30), v1Config)).toBe(1);
+    expect(sleepDurationZVsGoal(900, 480, ready(450, 30), v1Config)).toBe(1);
+  });
+
+  it('is null while the SLEEP baseline is cold-starting (no sigma-hat to scale by)', () => {
+    expect(sleepDurationZVsGoal(400, 480, { coldStart: true, daysOfHistory: 5 }, v1Config)).toBeNull();
+  });
+
+  it('floors sigma-hat the same way zScore does, so a flat history cannot make the z infinite', () => {
+    const z = sleepDurationZVsGoal(400, 480, ready(450, 0), v1Config)!;
+    expect(Number.isFinite(z)).toBe(true);
+    expect(z).toBe(-3);
   });
 });

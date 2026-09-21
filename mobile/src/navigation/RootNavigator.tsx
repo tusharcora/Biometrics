@@ -11,6 +11,7 @@ import { ConnectHealthScreen } from '../screens/ConnectHealthScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { MetricDetailScreen } from '../screens/MetricDetailScreen';
 import { ScoreDetailScreen } from '../screens/ScoreDetailScreen';
+import { PatternsScreen } from '../screens/PatternsScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { syncTimezone } from '../lib/timezone';
 import { COLORS } from '../theme';
@@ -31,6 +32,7 @@ export type RootStackParamList = {
   Dashboard: undefined;
   MetricDetail: { metricType: MetricRecord['metricType']; records: MetricRecord[] };
   ScoreDetail: { date: string; type: ScoreType };
+  Patterns: undefined;
   Settings: undefined;
 };
 
@@ -107,7 +109,8 @@ export function RootNavigator() {
         <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ title: 'Dashboard' }} />
         <Stack.Screen name="MetricDetail" component={MetricDetailScreen} options={{ title: '' }} />
         <Stack.Screen name="ScoreDetail" component={ScoreDetailScreen} options={{ title: 'Score' }} />
-        <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
+        <Stack.Screen name="Patterns" component={PatternsScreen} options={{ title: 'Patterns' }} />
+        <Stack.Screen name="Settings"component={SettingsScreen} options={{ title: 'Settings' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

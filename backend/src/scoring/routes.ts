@@ -11,7 +11,6 @@ export const DEFAULT_SCORE_DAYS = 30;
 export const MAX_SCORE_DAYS = 120;
 
 function parseType(raw: unknown): ScoreType | null {
-  if (raw === undefined) return 'RECOVERY';
   return raw === 'RECOVERY' || raw === 'SLEEP' ? raw : null;
 }
 
@@ -26,8 +25,9 @@ scoresRouter.get('/me/scores', requireAuth, async (req: AuthedRequest, res) => {
     }
     days = Math.min(days, MAX_SCORE_DAYS);
   }
-  const type = parseType(req.query.type);
-  if (!type) {
+  // Optional filter: absent means both score types.
+  const type = req.query.type === undefined ? undefined : parseType(req.query.type);
+  if (type === null) {
     res.status(400).json({ error: 'type must be RECOVERY or SLEEP' });
     return;
   }
@@ -39,8 +39,9 @@ scoresRouter.get('/me/scores', requireAuth, async (req: AuthedRequest, res) => {
   const since = civilDateToUtcMidnight(shiftDate(today, -(days - 1)));
 
   const rows = await prisma.dailyScore.findMany({
-    where: { userId: req.userId!, type, date: { gte: since } },
-    orderBy: { date: 'desc' },
+    where: { userId: req.userId!, ...(type ? { type } : {}), date: { gte: since } },
+    // Same-day rows: RECOVERY before SLEEP (enum declaration order).
+    orderBy: [{ date: 'desc' }, { type: 'asc' }],
   });
   const snapshots = await prisma.baselineSnapshot.findMany({
     where: { userId: req.userId!, date: { gte: since }, metric: { in: BASELINE_METRICS } },
@@ -62,7 +63,7 @@ scoresRouter.get('/me/scores/:date', requireAuth, async (req: AuthedRequest, res
     res.status(400).json({ error: 'date must be a valid YYYY-MM-DD' });
     return;
   }
-  const type = parseType(req.query.type);
+  const type = req.query.type === undefined ? 'RECOVERY' : parseType(req.query.type);
   if (!type) {
     res.status(400).json({ error: 'type must be RECOVERY or SLEEP' });
     return;
@@ -88,7 +89,7 @@ scoresRouter.get('/me/scores/:date', requireAuth, async (req: AuthedRequest, res
 
   res.json({
     score: toDailyScoreDTO(row, snapshots),
-    baselines: toBaselineDTOs(snapshots),
+    baselines: toBaselineDTOs(snapshots, type),
     previous: prev && prev.score !== null ? { date: prev.date.toISOString().slice(0, 10), score: Math.round(prev.score * 10) / 10 } : null,
   });
 });

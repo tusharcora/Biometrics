@@ -130,4 +130,14 @@ describe('RootNavigator', () => {
     await waitFor(() => expect(getByText('DASHBOARD_SCREEN')).toBeTruthy());
     expect(mockRegisteredScreens).toContain('ScoreDetail');
   });
+
+  it('registers the Patterns route', async () => {
+    signedIn(true);
+    (apiFetch as jest.Mock).mockResolvedValue({ status: 'CONNECTED', lastSyncedAt: null });
+
+    const { getByText } = render(<RootNavigator />);
+
+    await waitFor(() => expect(getByText('DASHBOARD_SCREEN')).toBeTruthy());
+    expect(mockRegisteredScreens).toContain('Patterns');
+  });
 });

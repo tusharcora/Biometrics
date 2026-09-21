@@ -4,8 +4,8 @@ import { civilDateToUtcMidnight } from '../biometrics/civilDate';
 import { getLiveConfig } from './configs';
 import type { ScoreConfig } from './configs/v1';
 import { isCivilDate, shiftDate } from './dates';
-import { scoreDay, PipelineResult } from './pipeline';
-import type { DailyPoint } from './types';
+import { scoreDay, PipelineResult, ScoreOutcome } from './pipeline';
+import type { DailyPoint, SleepSessionInput } from './types';
 
 export type ComputeOutcome = 'scored' | 'no-input' | 'no-user';
 
@@ -37,8 +37,29 @@ async function loadSeries(userId: string, date: string, cfg: ScoreConfig) {
 }
 
 /**
+ * Stored sessions ending in the score window, for the Sleep Score's structural
+ * features. The range is padded a day either side of the civil-date window
+ * because a session's local end date (in the user's zone) can differ from its
+ * UTC end date by up to a day; the exact bucketing is done per-session in the
+ * pipeline.
+ */
+async function loadSessions(userId: string, date: string, cfg: ScoreConfig): Promise<SleepSessionInput[]> {
+  return prisma.sleepSession.findMany({
+    where: {
+      userId,
+      endTime: {
+        gte: civilDateToUtcMidnight(shiftDate(date, -lookbackDays(cfg) - 1)),
+        lt: civilDateToUtcMidnight(shiftDate(date, 2)),
+      },
+    },
+    select: { startTime: true, endTime: true, minutesAsleep: true },
+  });
+}
+
+/**
  * The single scoring job: runs the five pure stages for one user-day and
- * persists BaselineSnapshot, UserDailyFeatures and DailyScore. Everything is an
+ * persists BaselineSnapshot, UserDailyFeatures and both DailyScore rows
+ * (RECOVERY, and SLEEP when the night was observed). Everything is an
  * upsert keyed on (user, date[, metric|type]), so recomputing is always safe
  * to repeat (BullMQ retries, a debounced webhook and the nightly sweep can all
  * land on the same day). It is one job, not a flow: there is no network call
@@ -55,11 +76,15 @@ export async function computeDailyScore(
   if (!isCivilDate(date)) throw new Error(`Invalid score date "${date}": expected YYYY-MM-DD`);
   const cfg = opts.config ?? getLiveConfig();
 
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true, timezone: true } });
   if (!user) return 'no-user';
 
   const series = await loadSeries(userId, date, cfg);
-  const result = scoreDay({ date, ...series, sleepGoalMinutes: await getSleepGoalMinutes(userId) }, cfg);
+  const sessions = await loadSessions(userId, date, cfg);
+  const result = scoreDay(
+    { date, ...series, sessions, timezone: user.timezone, sleepGoalMinutes: await getSleepGoalMinutes(userId) },
+    cfg,
+  );
 
   await persist(userId, result);
   return result.hasObservedInput ? 'scored' : 'no-input';
@@ -67,6 +92,24 @@ export async function computeDailyScore(
 
 const r2 = (n: number) => Math.round(n * 100) / 100;
 const r2n = (n: number | null) => (n === null ? null : r2(n));
+
+/** The DailyScore columns for one composite outcome (Recovery is the pipeline result itself, which has the same shape). */
+function scoreRowData(algorithmVersion: string, outcome: ScoreOutcome) {
+  return {
+    algorithmVersion,
+    score: r2n(outcome.score),
+    confidenceLevel: outcome.confidenceLevel,
+    factors: outcome.factors.map((x) => ({
+      factor: x.factor,
+      z: x.z,
+      weight: x.weight,
+      contribution: x.contribution,
+      points: x.points,
+      imputed: x.imputed,
+      excluded: x.excluded,
+    })),
+  };
+}
 
 async function persist(userId: string, result: PipelineResult): Promise<void> {
   const day = civilDateToUtcMidnight(result.date);
@@ -98,7 +141,7 @@ async function persist(userId: string, result: PipelineResult): Promise<void> {
     // Remove any score left over from data that has since disappeared.
     await prisma.$transaction([
       ...flagWrites,
-      prisma.dailyScore.deleteMany({ where: { userId, date: day, type: 'RECOVERY' } }),
+      prisma.dailyScore.deleteMany({ where: { userId, date: day } }),
       prisma.userDailyFeatures.deleteMany({ where: { userId, date: day } }),
       prisma.baselineSnapshot.deleteMany({ where: { userId, date: day } }),
     ]);
@@ -118,23 +161,16 @@ async function persist(userId: string, result: PipelineResult): Promise<void> {
     rhrZImputed: f.rhrZImputed,
     sleepDurationZ: f.sleepDurationZ,
     sleepDurationZImputed: f.sleepDurationZImputed,
+    sleepEfficiency: f.sleepEfficiency,
+    sleepEfficiencyZ: f.sleepEfficiencyZ,
+    sleepEfficiencyZImputed: f.sleepEfficiencyZImputed,
+    circadianConsistencyScore: r2n(f.circadianConsistencyScore),
+    circadianConsistencyZ: f.circadianConsistencyZ,
+    circadianConsistencyZImputed: f.circadianConsistencyZImputed,
   };
 
-  const factors = result.factors.map((x) => ({
-    factor: x.factor,
-    z: x.z,
-    weight: x.weight,
-    contribution: x.contribution,
-    points: x.points,
-    imputed: x.imputed,
-    excluded: x.excluded,
-  }));
-  const scoreData = {
-    algorithmVersion: result.algorithmVersion,
-    score: r2n(result.score),
-    confidenceLevel: result.confidenceLevel,
-    factors,
-  };
+  const scoreData = scoreRowData(result.algorithmVersion, result);
+  const sleepData = result.sleepScore ? scoreRowData(result.algorithmVersion, result.sleepScore) : null;
 
   await prisma.$transaction([
     ...flagWrites,
@@ -162,5 +198,16 @@ async function persist(userId: string, result: PipelineResult): Promise<void> {
       update: scoreData,
       create: { userId, date: day, type: 'RECOVERY', ...scoreData },
     }),
+    // The Sleep Score exists only for a night that was actually recorded; a
+    // stale one (its sleep data since removed) is dropped rather than left behind.
+    ...(sleepData
+      ? [
+          prisma.dailyScore.upsert({
+            where: { userId_date_type: { userId, date: day, type: 'SLEEP' } },
+            update: sleepData,
+            create: { userId, date: day, type: 'SLEEP', ...sleepData },
+          }),
+        ]
+      : [prisma.dailyScore.deleteMany({ where: { userId, date: day, type: 'SLEEP' } })]),
   ]);
 }

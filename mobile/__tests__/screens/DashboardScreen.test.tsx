@@ -17,10 +17,24 @@ jest.mock('@react-navigation/native', () => ({
  * The screen calls /me/biometrics, /me/connection and /me/scores independently, so route
  * each path to its own canned response rather than one blanket resolution.
  */
-function mockApi(options: { records?: unknown; connection?: unknown; recordsError?: Error; scores?: unknown[]; scoresError?: Error }) {
+function mockApi(options: {
+  records?: unknown;
+  connection?: unknown;
+  recordsError?: Error;
+  scores?: unknown[];
+  scoresError?: Error;
+  habitsError?: Error;
+}) {
   (apiFetch as jest.Mock).mockImplementation((path: string) => {
     if (path === '/me/connection') {
       return Promise.resolve(options.connection ?? { status: 'CONNECTED' });
+    }
+    if (path.startsWith('/me/habits')) {
+      if (options.habitsError) return Promise.reject(options.habitsError);
+      if (path === '/me/habits/config') {
+        return Promise.resolve({ habitTypes: [{ type: 'ALCOHOL', label: 'Alcohol', unit: 'drinks', exposureThreshold: 2, builtIn: true }] });
+      }
+      return Promise.resolve({ today: '2026-09-20', days: [{ habitDay: '2026-09-20', checkedIn: false, observed: { ALCOHOL: false } }] });
     }
     if (path.startsWith('/me/scores')) {
       if (options.scoresError) return Promise.reject(options.scoresError);
@@ -211,6 +225,48 @@ describe('DashboardScreen', () => {
 
     expect(mockNavigate).toHaveBeenCalledWith('Settings');
   });
+
+  describe('habit logging and patterns', () => {
+    const steps = [{ id: '1', metricType: 'STEPS', value: 9000, recordedAt: '2026-09-01T00:00:00.000Z' }];
+
+    it('shows the "Anything to log today?" card below the Recovery card', async () => {
+      mockApi({ records: steps, scores: [] });
+
+      const { getByText, getByTestId, toJSON } = render(<DashboardScreen />);
+
+      await waitFor(() => expect(getByText('Anything to log today?')).toBeTruthy());
+      expect(getByTestId('nothing-today-button')).toBeTruthy();
+      expect(apiFetch).toHaveBeenCalledWith('/me/habits/config');
+      expect(apiFetch).toHaveBeenCalledWith('/me/habits/status?days=14');
+
+      const tree = JSON.stringify(toJSON());
+      expect(tree.indexOf('Recovery Score will appear')).toBeGreaterThanOrEqual(0);
+      expect(tree.indexOf('Recovery Score will appear')).toBeLessThan(tree.indexOf('Anything to log today?'));
+      expect(tree.indexOf('Anything to log today?')).toBeLessThan(tree.indexOf('metric-card-STEPS'));
+    });
+
+    it('keeps the rest of the dashboard when the habit endpoints fail, with a retry', async () => {
+      mockApi({ records: steps, habitsError: new Error('boom') });
+
+      const { getByText, getByTestId } = render(<DashboardScreen />);
+
+      await waitFor(() => expect(getByText(/Habits are unavailable/i)).toBeTruthy());
+      expect(getByTestId('habit-log-retry')).toBeTruthy();
+      expect(getByTestId('metric-card-STEPS')).toBeTruthy();
+    });
+
+    it('opens the Patterns screen from the dashboard', async () => {
+      mockApi({ records: steps });
+
+      const { getByTestId } = render(<DashboardScreen />);
+
+      await waitFor(() => expect(getByTestId('patterns-button')).toBeTruthy());
+      fireEvent.press(getByTestId('patterns-button'));
+
+      expect(mockNavigate).toHaveBeenCalledWith('Patterns');
+    });
+  });
+
   describe('Recovery score card', () => {
     const steps = [{ id: '1', metricType: 'STEPS', value: 9000, recordedAt: '2026-09-01T00:00:00.000Z' }];
     const recovery = {

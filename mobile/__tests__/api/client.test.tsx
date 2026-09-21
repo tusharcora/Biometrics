@@ -28,6 +28,14 @@ describe('apiFetch', () => {
     expect(result).toEqual({ data: 'ok' });
   });
 
+  it('resolves to undefined for a 204 No Content response instead of parsing an empty body', async () => {
+    const json = jest.fn().mockRejectedValue(new SyntaxError('Unexpected end of JSON input'));
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 204, json });
+
+    await expect(apiFetch('/me/habits/logs/log-1', { method: 'DELETE' })).resolves.toBeUndefined();
+    expect(json).not.toHaveBeenCalled();
+  });
+
   it('refreshes the token once and retries after a 401', async () => {
     fetchMock
       .mockResolvedValueOnce({ ok: false, status: 401 })

@@ -118,3 +118,78 @@ describe('Stage 4: confidence', () => {
     expect(computeComposite(inputs({ HRV: null, RHR: null, SLEEP_DEBT: 0.1 }), cfg).confidenceLevel).toBe('LOW');
   });
 });
+
+describe('Slice 1.5 Stage 4: Sleep Score composite', () => {
+  type SleepZs = { SLEEP_DURATION: number | null; SLEEP_EFFICIENCY: number | null; CIRCADIAN_CONSISTENCY: number | null };
+
+  function sleepInputs(z: SleepZs, over: Partial<Record<keyof SleepZs, Partial<FactorInput>>> = {}): FactorInput[] {
+    return (['SLEEP_DURATION', 'SLEEP_EFFICIENCY', 'CIRCADIAN_CONSISTENCY'] as const).map((factor) => ({
+      factor,
+      z: z[factor],
+      imputed: false,
+      excluded: z[factor] === null,
+      ...over[factor],
+    }));
+  }
+  const score = (z: SleepZs, over = {}) => computeComposite(sleepInputs(z, over), cfg, cfg.sleepScore);
+
+  it('keeps the illustrative weights 0.45 / 0.35 / 0.20 in the versioned config, summing to 1', () => {
+    expect(cfg.sleepScore.weights).toEqual({ SLEEP_DURATION: 0.45, SLEEP_EFFICIENCY: 0.35, CIRCADIAN_CONSISTENCY: 0.2 });
+    const sum = Object.values(cfg.sleepScore.weights).reduce((a, b) => a + b, 0);
+    expect(sum).toBeCloseTo(1, 12);
+  });
+
+  it('anchors: all-zero z is 50, and a favorable +2 sigma on every factor is 90', () => {
+    expect(score({ SLEEP_DURATION: 0, SLEEP_EFFICIENCY: 0, CIRCADIAN_CONSISTENCY: 0 }).score).toBe(50);
+    expect(score({ SLEEP_DURATION: 2, SLEEP_EFFICIENCY: 2, CIRCADIAN_CONSISTENCY: 2 }).score).toBeCloseTo(90, 9);
+    expect(score({ SLEEP_DURATION: -2, SLEEP_EFFICIENCY: -2, CIRCADIAN_CONSISTENCY: -2 }).score).toBeCloseTo(10, 9);
+  });
+
+  it('counts every factor as higher-is-better', () => {
+    for (const factor of ['SLEEP_DURATION', 'SLEEP_EFFICIENCY', 'CIRCADIAN_CONSISTENCY'] as const) {
+      const z = { SLEEP_DURATION: 0, SLEEP_EFFICIENCY: 0, CIRCADIAN_CONSISTENCY: 0, [factor]: 1 };
+      expect(score(z).score!).toBeGreaterThan(50);
+    }
+  });
+
+  it('applies the base weights when nothing is excluded', () => {
+    const r = score({ SLEEP_DURATION: 1, SLEEP_EFFICIENCY: 1, CIRCADIAN_CONSISTENCY: 1 });
+    const by = Object.fromEntries(r.factors.map((f) => [f.factor, f]));
+    expect(by.SLEEP_DURATION!.weight).toBeCloseTo(0.45, 12);
+    expect(by.SLEEP_EFFICIENCY!.weight).toBeCloseTo(0.35, 12);
+    expect(by.CIRCADIAN_CONSISTENCY!.weight).toBeCloseTo(0.2, 12);
+    expect(r.score).toBeCloseTo(logistic(1, cfg.k), 9);
+    expect(r.confidenceLevel).toBe('HIGH');
+  });
+
+  it('renormalizes to 0.45/0.80 and 0.35/0.80 when circadian consistency is cold-starting', () => {
+    const r = score({ SLEEP_DURATION: 1, SLEEP_EFFICIENCY: -1, CIRCADIAN_CONSISTENCY: null });
+    const by = Object.fromEntries(r.factors.map((f) => [f.factor, f]));
+    expect(by.CIRCADIAN_CONSISTENCY!.excluded).toBe(true);
+    expect(by.CIRCADIAN_CONSISTENCY!.weight).toBe(0);
+    expect(by.SLEEP_DURATION!.weight).toBeCloseTo(0.45 / 0.8, 12);
+    expect(by.SLEEP_EFFICIENCY!.weight).toBeCloseTo(0.35 / 0.8, 12);
+    expect(r.factors.reduce((s, f) => s + f.weight, 0)).toBeCloseTo(1, 12);
+    expect(r.score).toBeCloseTo(logistic((0.45 * 1 + 0.35 * -1) / 0.8, cfg.k), 9);
+    expect(r.confidenceLevel).toBe('MEDIUM'); // one factor renormalized around
+  });
+
+  it('is LOW with two factors excluded and null when all three are', () => {
+    const one = score({ SLEEP_DURATION: 0.5, SLEEP_EFFICIENCY: null, CIRCADIAN_CONSISTENCY: null });
+    expect(one.confidenceLevel).toBe('LOW');
+    expect(one.factors.find((f) => f.factor === 'SLEEP_DURATION')!.weight).toBeCloseTo(1, 12);
+    const none = score({ SLEEP_DURATION: null, SLEEP_EFFICIENCY: null, CIRCADIAN_CONSISTENCY: null });
+    expect(none.score).toBeNull();
+    expect(none.confidenceLevel).toBe('LOW');
+  });
+
+  it('drops confidence one level for an imputed input', () => {
+    const r = score({ SLEEP_DURATION: 0, SLEEP_EFFICIENCY: 0.2, CIRCADIAN_CONSISTENCY: 0.1 }, { SLEEP_EFFICIENCY: { imputed: true } });
+    expect(r.confidenceLevel).toBe('MEDIUM');
+  });
+
+  it('does not change the Recovery composite: the default model is still the Recovery weights', () => {
+    const recovery = computeComposite(inputs({ HRV: 1, RHR: 1, SLEEP_DEBT: 1 }), cfg);
+    expect(recovery.score).toBeCloseTo(logistic(0.45 - 0.35 - 0.2, cfg.k), 9);
+  });
+});

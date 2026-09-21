@@ -1,0 +1,375 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`CorrelationCard matches its snapshot for a negative lag-1 pattern 1`] = `
+<View
+  className="rounded-2xl border border-border bg-card p-4 shadow-sm shadow-black/5 gap-3"
+  testID="correlation-card-ALCOHOL-HRV-1"
+>
+  <View
+    className="flex-row items-center justify-between gap-2"
+  >
+    <Text
+      className="text-foreground flex-1 text-base font-semibold"
+    >
+      Alcohol
+    </Text>
+    <View
+      className="self-start rounded-full px-2.5 py-1 bg-muted"
+      testID="pattern-direction"
+    >
+      <Text
+        className="text-xs font-medium text-muted-foreground"
+      >
+        Lower than on other days
+      </Text>
+    </View>
+  </View>
+  <Text
+    className="text-foreground text-sm"
+    testID="pattern-sentence"
+  >
+    The morning after you log 2+ drinks, your HRV has averaged 14% below baseline (across 11 observations) — this is a pattern in your own data, not a general medical claim.
+  </Text>
+  <View
+    testID="pattern-sparkline"
+  >
+    <RNSVGSvgView
+      align="none"
+      bbHeight={58}
+      bbWidth="100%"
+      focusable={false}
+      height={58}
+      meetOrSlice={0}
+      minX={0}
+      minY={0}
+      style={
+        [
+          {
+            "backgroundColor": "transparent",
+            "borderWidth": 0,
+          },
+          {
+            "flex": 0,
+            "height": 58,
+            "width": "100%",
+          },
+        ]
+      }
+      vbHeight={58}
+      vbWidth={300}
+      width="100%"
+    >
+      <RNSVGGroup
+        fill={
+          {
+            "payload": 4278190080,
+            "type": 0,
+          }
+        }
+      >
+        <RNSVGPath
+          d="M 0.00 44.00 L 75.00 0.00 L 150.00 36.24 M 300.00 5.18 L 300.00 5.18"
+          fill={null}
+          propList={
+            [
+              "fill",
+              "stroke",
+              "strokeWidth",
+              "strokeLinecap",
+              "strokeLinejoin",
+            ]
+          }
+          stroke={
+            {
+              "payload": 4278235321,
+              "type": 0,
+            }
+          }
+          strokeLinecap={1}
+          strokeLinejoin={1}
+          strokeWidth={2.5}
+        />
+        <RNSVGRect
+          fill={
+            {
+              "payload": 4278235321,
+              "type": 0,
+            }
+          }
+          height={8}
+          propList={
+            [
+              "fill",
+            ]
+          }
+          width={3}
+          x={0}
+          y={50}
+        />
+        <RNSVGRect
+          fill={
+            {
+              "payload": 4293387748,
+              "type": 0,
+            }
+          }
+          height={3}
+          propList={
+            [
+              "fill",
+            ]
+          }
+          width={3}
+          x={73.5}
+          y={55}
+        />
+        <RNSVGRect
+          fill={
+            {
+              "payload": 4278235321,
+              "type": 0,
+            }
+          }
+          height={8}
+          propList={
+            [
+              "fill",
+            ]
+          }
+          width={3}
+          x={148.5}
+          y={50}
+        />
+        <RNSVGRect
+          fill={
+            {
+              "payload": 4293387748,
+              "type": 0,
+            }
+          }
+          height={3}
+          propList={
+            [
+              "fill",
+            ]
+          }
+          width={3}
+          x={223.5}
+          y={55}
+        />
+        <RNSVGRect
+          fill={
+            {
+              "payload": 4293387748,
+              "type": 0,
+            }
+          }
+          height={3}
+          propList={
+            [
+              "fill",
+            ]
+          }
+          width={3}
+          x={297}
+          y={55}
+        />
+      </RNSVGGroup>
+    </RNSVGSvgView>
+  </View>
+  <Text
+    className="text-[11px] text-muted-foreground"
+    testID="pattern-sparkline-caption"
+  >
+    Line: your HRV the morning after each day. Tall ticks: days you logged 2+ drinks.
+  </Text>
+  <Text
+    className="text-xs text-muted-foreground"
+  >
+    On days you log under 2 drinks, your HRV has averaged 1.5% above baseline.
+  </Text>
+  <View
+    className="gap-1"
+  >
+    <Text
+      className="text-xs text-muted-foreground"
+      testID="pattern-caveat"
+    >
+      Based on 11 observations. The more days you log, the more reliable a pattern is.
+    </Text>
+  </View>
+</View>
+`;
+
+exports[`CorrelationCard matches its snapshot for a positive lag-3 small-sample pattern 1`] = `
+<View
+  className="rounded-2xl border border-border bg-card p-4 shadow-sm shadow-black/5 gap-3"
+  testID="correlation-card-ALCOHOL-SLEEP_EFFICIENCY-3"
+>
+  <View
+    className="flex-row items-center justify-between gap-2"
+  >
+    <Text
+      className="text-foreground flex-1 text-base font-semibold"
+    >
+      Workout
+    </Text>
+    <View
+      className="self-start rounded-full px-2.5 py-1 bg-muted"
+      testID="pattern-direction"
+    >
+      <Text
+        className="text-xs font-medium text-muted-foreground"
+      >
+        Higher than on other days
+      </Text>
+    </View>
+  </View>
+  <Text
+    className="text-foreground text-sm"
+    testID="pattern-sentence"
+  >
+    3 days after you log 2+ drinks, your sleep efficiency has averaged 5.5% above baseline (across 8 observations) — this is a pattern in your own data, not a general medical claim.
+  </Text>
+  <View
+    testID="pattern-sparkline"
+  >
+    <RNSVGSvgView
+      align="none"
+      bbHeight={58}
+      bbWidth="100%"
+      focusable={false}
+      height={58}
+      meetOrSlice={0}
+      minX={0}
+      minY={0}
+      style={
+        [
+          {
+            "backgroundColor": "transparent",
+            "borderWidth": 0,
+          },
+          {
+            "flex": 0,
+            "height": 58,
+            "width": "100%",
+          },
+        ]
+      }
+      vbHeight={58}
+      vbWidth={300}
+      width="100%"
+    >
+      <RNSVGGroup
+        fill={
+          {
+            "payload": 4278190080,
+            "type": 0,
+          }
+        }
+      >
+        <RNSVGPath
+          d="M 0.00 44.00 L 0.00 44.00 M 300.00 0.00 L 300.00 0.00"
+          fill={null}
+          propList={
+            [
+              "fill",
+              "stroke",
+              "strokeWidth",
+              "strokeLinecap",
+              "strokeLinejoin",
+            ]
+          }
+          stroke={
+            {
+              "payload": 4278235321,
+              "type": 0,
+            }
+          }
+          strokeLinecap={1}
+          strokeLinejoin={1}
+          strokeWidth={2.5}
+        />
+        <RNSVGRect
+          fill={
+            {
+              "payload": 4278235321,
+              "type": 0,
+            }
+          }
+          height={8}
+          propList={
+            [
+              "fill",
+            ]
+          }
+          width={3}
+          x={0}
+          y={50}
+        />
+        <RNSVGRect
+          fill={
+            {
+              "payload": 4293387748,
+              "type": 0,
+            }
+          }
+          height={3}
+          propList={
+            [
+              "fill",
+            ]
+          }
+          width={3}
+          x={148.5}
+          y={55}
+        />
+        <RNSVGRect
+          fill={
+            {
+              "payload": 4278235321,
+              "type": 0,
+            }
+          }
+          height={8}
+          propList={
+            [
+              "fill",
+            ]
+          }
+          width={3}
+          x={297}
+          y={50}
+        />
+      </RNSVGGroup>
+    </RNSVGSvgView>
+  </View>
+  <Text
+    className="text-[11px] text-muted-foreground"
+    testID="pattern-sparkline-caption"
+  >
+    Line: your sleep efficiency 3 days after each day. Tall ticks: days you logged 2+ drinks.
+  </Text>
+  <Text
+    className="text-xs text-muted-foreground"
+  >
+    On days you log under 2 drinks, your sleep efficiency has averaged 0.5% below baseline.
+  </Text>
+  <View
+    className="gap-1"
+  >
+    <Text
+      className="text-xs text-muted-foreground"
+      testID="pattern-caveat"
+    >
+      Based on 8 observations. The more days you log, the more reliable a pattern is.
+    </Text>
+    <Text
+      className="text-xs font-medium text-muted-foreground"
+      testID="pattern-small-sample"
+    >
+      Small sample: treat this as tentative until more days are logged.
+    </Text>
+  </View>
+</View>
+`;

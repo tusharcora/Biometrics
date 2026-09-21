@@ -6,7 +6,13 @@
 // around any factor that is excluded.
 
 import type { ScoreConfig } from './configs/v1';
-import type { CompositeResult, ConfidenceLevel, FactorContribution, FactorInput } from './types';
+import type { CompositeResult, ConfidenceLevel, FactorContribution, FactorInput, FactorKey } from './types';
+
+/** The per-factor weights and directions of one score type. The config itself is the Recovery model. */
+export interface CompositeModel {
+  weights: Partial<Record<FactorKey, number>>;
+  direction: Partial<Record<FactorKey, 1 | -1>>;
+}
 
 /** Logistic squashing into (0, 100): a zero weighted sum is 50, and k sets how fast it saturates. */
 export function logistic(weightedSum: number, k: number): number {
@@ -28,23 +34,32 @@ function confidenceFor(inputs: FactorInput[]): ConfidenceLevel {
   return LEVELS[Math.min(drops, LEVELS.length - 1)]!;
 }
 
-export function computeComposite(inputs: FactorInput[], cfg: ScoreConfig): CompositeResult {
+/**
+ * `model` picks which score is being computed: it defaults to the Recovery
+ * weights on `cfg`, and the Sleep Score passes `cfg.sleepScore`. Everything else
+ * (k, the logistic, renormalization, confidence) is shared.
+ */
+export function computeComposite(
+  inputs: FactorInput[],
+  cfg: ScoreConfig,
+  model: CompositeModel = cfg,
+): CompositeResult {
   const active = inputs.filter((f) => !f.excluded && f.z !== null);
   // Weights are renormalized over the factors actually present, so a day with a
   // cold-starting factor is not scored against a sub-1 weight sum (which would
   // understate the composite for reasons unrelated to recovery).
-  const totalWeight = active.reduce((sum, f) => sum + cfg.weights[f.factor], 0);
+  const totalWeight = active.reduce((sum, f) => sum + model.weights[f.factor]!, 0);
 
   const factors: FactorContribution[] = inputs.map((f) => {
     if (f.excluded || f.z === null) {
       return { factor: f.factor, z: null, weight: 0, contribution: 0, imputed: false, excluded: true };
     }
-    const weight = cfg.weights[f.factor] / totalWeight;
+    const weight = model.weights[f.factor]! / totalWeight;
     return {
       factor: f.factor,
       z: f.z,
       weight,
-      contribution: weight * cfg.direction[f.factor] * f.z,
+      contribution: weight * model.direction[f.factor]! * f.z,
       imputed: f.imputed,
       excluded: false,
     };

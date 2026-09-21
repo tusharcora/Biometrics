@@ -5,7 +5,10 @@
 
 import type { ScoreConfig } from './configs/v1';
 import { scoreDay } from './pipeline';
-import type { DailyPoint } from './types';
+import type { DailyPoint, SleepSessionInput } from './types';
+
+/** Which composite a backtest replays. */
+export type BacktestScoreType = 'RECOVERY' | 'SLEEP';
 
 /** A day whose score moves by more than this is called out (spec §3: "flip more than 10 points"). */
 export const CHANGE_THRESHOLD_POINTS = 10;
@@ -22,6 +25,10 @@ export interface BacktestUserData {
   sleep: DailyPoint[];
   steps: DailyPoint[];
   sleepGoalMinutes: number;
+  /** Stored sessions (Sleep Score efficiency / bedtime consistency). Omitted means those factors cold-start. */
+  sessions?: SleepSessionInput[];
+  /** IANA zone the sessions are read in. Defaults to UTC. */
+  timezone?: string;
 }
 
 export interface DayDiff {
@@ -34,6 +41,7 @@ export interface DayDiff {
 }
 
 export interface BacktestReport {
+  type: BacktestScoreType;
   liveVersion: string;
   candidateVersion: string;
   days: DayDiff[];
@@ -56,26 +64,49 @@ function replayDates(user: BacktestUserData, from: string, to: string): string[]
   return [...dates].sort();
 }
 
+/**
+ * Replays one score type. Uses the SAME scoreDay for both, so the Recovery and
+ * Sleep diffs come from the one pipeline the live job runs. A day contributes
+ * to the SLEEP report only when a Sleep Score exists for it under the live
+ * config (no observed sleep, no Sleep Score, as in the live job).
+ */
 export function backtest(
   users: BacktestUserData[],
   live: ScoreConfig,
   candidate: ScoreConfig,
   range: { from: string; to: string },
+  type: BacktestScoreType = 'RECOVERY',
 ): BacktestReport {
   const days: DayDiff[] = [];
 
   for (const user of users) {
     for (const date of replayDates(user, range.from, range.to)) {
-      const input = { date, hrv: user.hrv, rhr: user.rhr, sleep: user.sleep, steps: user.steps, sleepGoalMinutes: user.sleepGoalMinutes };
+      const input = {
+        date,
+        hrv: user.hrv,
+        rhr: user.rhr,
+        sleep: user.sleep,
+        steps: user.steps,
+        sleepGoalMinutes: user.sleepGoalMinutes,
+        sessions: user.sessions ?? [],
+        timezone: user.timezone ?? 'UTC',
+      };
       const l = scoreDay(input, live);
       if (!l.hasObservedInput) continue;
       const c = scoreDay(input, candidate);
+      // The Sleep Score exists only for a night with recorded sleep; when the
+      // live config has none for the day, there is nothing to diff.
+      const liveScore = type === 'SLEEP' ? l.sleepScore : l;
+      const candidateScore = type === 'SLEEP' ? c.sleepScore : c;
+      if (liveScore === null) continue;
+      const liveValue = liveScore.score;
+      const candidateValue = candidateScore === null ? null : candidateScore.score;
       days.push({
         userId: user.userId,
         date,
-        live: l.score,
-        candidate: c.score,
-        delta: l.score !== null && c.score !== null ? c.score - l.score : null,
+        live: liveValue,
+        candidate: candidateValue,
+        delta: liveValue !== null && candidateValue !== null ? candidateValue - liveValue : null,
       });
     }
   }
@@ -83,6 +114,7 @@ export function backtest(
   const deltas = days.map((d) => d.delta).filter((d): d is number => d !== null);
   const abs = deltas.map(Math.abs);
   return {
+    type,
     liveVersion: live.version,
     candidateVersion: candidate.version,
     days,
@@ -104,7 +136,7 @@ export function formatReport(report: BacktestReport, { maxRows = 60 }: { maxRows
   const lines = [
     BACKTEST_DISCLAIMER,
     '',
-    `live ${report.liveVersion}  vs  candidate ${report.candidateVersion}`,
+    `${report.type} score: live ${report.liveVersion}  vs  candidate ${report.candidateVersion}`,
     `  days replayed:                       ${report.days.length}`,
     `  days scored under both versions:     ${report.comparedDays}`,
     `  days changed by more than ${CHANGE_THRESHOLD_POINTS} points:    ${report.changedOverThreshold}`,

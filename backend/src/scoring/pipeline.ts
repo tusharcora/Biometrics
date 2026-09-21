@@ -3,7 +3,7 @@
 // backtest tool replays the same function under a different config, so the
 // live job and the backtest can never drift apart.
 
-import { computeBaseline, zScore } from './baseline';
+import { computeBaseline, sleepDurationZVsGoal, zScore } from './baseline';
 import { imputeFromBaseline, rejectOutliers } from './clean';
 import { computeComposite } from './composite';
 import { shiftDate } from './dates';
@@ -11,7 +11,10 @@ import { explainFactors } from './explain';
 import {
   acuteChronicLoadRatio,
   baselineDeviationPct,
+  buildCircadianSeries,
   buildSleepDebtSeries,
+  buildSleepEfficiencySeries,
+  mainSessionOnsets,
   sleepDebtRolling,
 } from './features';
 import type { ScoreConfig } from './configs/v1';
@@ -23,6 +26,7 @@ import type {
   ExplainedFactor,
   FactorInput,
   OutlierFlag,
+  SleepSessionInput,
 } from './types';
 
 export interface PipelineInput {
@@ -34,6 +38,14 @@ export interface PipelineInput {
   sleep: DailyPoint[];
   steps: DailyPoint[];
   sleepGoalMinutes: number;
+  /**
+   * Stored SleepSession rows, for the Sleep Score's structural features
+   * (efficiency, bedtime consistency). Omitted/empty means those two factors
+   * are simply cold-starting; nothing in the Recovery Score reads them.
+   */
+  sessions?: SleepSessionInput[];
+  /** IANA zone the sessions' wall-clock onset and end date are read in (User.timezone). Defaults to UTC. */
+  timezone?: string;
 }
 
 export interface FeatureValues {
@@ -47,6 +59,21 @@ export interface FeatureValues {
   rhrZImputed: boolean;
   sleepDurationZ: number | null;
   sleepDurationZImputed: boolean;
+  // Slice 1.5
+  sleepEfficiency: number | null;
+  sleepEfficiencyZ: number | null;
+  sleepEfficiencyZImputed: boolean;
+  circadianConsistencyScore: number | null;
+  circadianConsistencyZ: number | null;
+  circadianConsistencyZImputed: boolean;
+}
+
+/** One composite's outcome: score, confidence and the explained factor vector. */
+export interface ScoreOutcome {
+  /** null when every factor is excluded (cold start). */
+  score: number | null;
+  confidenceLevel: ConfidenceLevel;
+  factors: ExplainedFactor[];
 }
 
 export interface PipelineResult {
@@ -57,9 +84,16 @@ export interface PipelineResult {
   outlierFlags: { metric: 'HRV' | 'RESTING_HR'; flag: OutlierFlag }[];
   baselines: { metric: BaselineMetric; baseline: Baseline }[];
   features: FeatureValues;
+  /** The Recovery Score. */
   score: number | null;
   confidenceLevel: ConfidenceLevel;
   factors: ExplainedFactor[];
+  /**
+   * The Sleep Score. null when SLEEP(D) was not observed: a Sleep Score for a
+   * day with no recorded sleep would be all imputed values, i.e. an invented
+   * number, so none is produced (and a stale one is removed by the caller).
+   */
+  sleepScore: ScoreOutcome | null;
 }
 
 function upTo(points: DailyPoint[], date: string): DailyPoint[] {
@@ -112,6 +146,24 @@ function scoreTrendMetric(points: DailyPoint[], date: string, cfg: ScoreConfig):
   };
 }
 
+interface OwnBaselineMetric {
+  baseline: Baseline;
+  z: number | null;
+  imputed: boolean;
+}
+
+/**
+ * Sleep efficiency and bedtime consistency: scored against their own EWMA /
+ * sigma-hat. Like SLEEP they are not outlier-screened. A day with no value is
+ * imputed from the baseline centre (z = 0, flagged) once the baseline exists.
+ */
+function scoreOwnBaseline(series: DailyPoint[], date: string, cfg: ScoreConfig): OwnBaselineMetric {
+  const today = series.find((p) => p.date === date);
+  const baseline = computeBaseline(trailing(series, date, cfg.historyDays), cfg);
+  if (baseline.coldStart) return { baseline, z: null, imputed: false };
+  return { baseline, z: zScore(today ? today.value : baseline.ewma, baseline, cfg), imputed: !today };
+}
+
 export function scoreDay(input: PipelineInput, cfg: ScoreConfig): PipelineResult {
   const { date } = input;
 
@@ -144,6 +196,31 @@ export function scoreDay(input: PipelineInput, cfg: ScoreConfig): PipelineResult
   ];
   const composite = computeComposite(factorInputs, cfg);
 
+  // Slice 1.5 features and the Sleep Score. Reads SleepSession structure; the
+  // Recovery computation above never sees any of this.
+  const timeZone = input.timezone ?? 'UTC';
+  const sessions = input.sessions ?? [];
+  const efficiencySeries = buildSleepEfficiencySeries(sessions, timeZone, date);
+  const circadianSeries = buildCircadianSeries(mainSessionOnsets(sessions, timeZone), date, cfg);
+  const efficiency = scoreOwnBaseline(efficiencySeries, date, cfg);
+  const circadian = scoreOwnBaseline(circadianSeries, date, cfg);
+
+  let sleepScore: ScoreOutcome | null = null;
+  if (sleepTonight) {
+    const durationZ = sleepDurationZVsGoal(sleepTonight.value, input.sleepGoalMinutes, sleepBaseline, cfg);
+    const sleepInputs: FactorInput[] = [
+      { factor: 'SLEEP_DURATION', z: durationZ, imputed: false, excluded: durationZ === null },
+      { factor: 'SLEEP_EFFICIENCY', z: efficiency.z, imputed: efficiency.imputed, excluded: efficiency.z === null },
+      { factor: 'CIRCADIAN_CONSISTENCY', z: circadian.z, imputed: circadian.imputed, excluded: circadian.z === null },
+    ];
+    const sleepComposite = computeComposite(sleepInputs, cfg, cfg.sleepScore);
+    sleepScore = {
+      score: sleepComposite.score,
+      confidenceLevel: sleepComposite.confidenceLevel,
+      factors: explainFactors(sleepComposite),
+    };
+  }
+
   const outlierFlags: PipelineResult['outlierFlags'] = [];
   if (hrv.outlier) outlierFlags.push({ metric: 'HRV', flag: hrv.outlier });
   if (rhr.outlier) outlierFlags.push({ metric: 'RESTING_HR', flag: rhr.outlier });
@@ -158,6 +235,8 @@ export function scoreDay(input: PipelineInput, cfg: ScoreConfig): PipelineResult
       { metric: 'RESTING_HR', baseline: rhr.baseline },
       { metric: 'SLEEP', baseline: sleepBaseline },
       { metric: 'SLEEP_DEBT', baseline: debtBaseline },
+      { metric: 'SLEEP_EFFICIENCY', baseline: efficiency.baseline },
+      { metric: 'CIRCADIAN_CONSISTENCY', baseline: circadian.baseline },
     ],
     features: {
       sleepDebtRolling14d: sleep.length > 0 ? debtToday : null,
@@ -170,9 +249,16 @@ export function scoreDay(input: PipelineInput, cfg: ScoreConfig): PipelineResult
       rhrZImputed: rhr.imputed,
       sleepDurationZ,
       sleepDurationZImputed,
+      sleepEfficiency: efficiencySeries.find((p) => p.date === date)?.value ?? null,
+      sleepEfficiencyZ: efficiency.z,
+      sleepEfficiencyZImputed: efficiency.imputed,
+      circadianConsistencyScore: circadianSeries.find((p) => p.date === date)?.value ?? null,
+      circadianConsistencyZ: circadian.z,
+      circadianConsistencyZImputed: circadian.imputed,
     },
     score: composite.score,
     confidenceLevel: composite.confidenceLevel,
     factors: explainFactors(composite),
+    sleepScore,
   };
 }

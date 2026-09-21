@@ -1,7 +1,7 @@
 import { computeDailyScore } from '../../src/scoring/compute';
 import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
-import { createUser, seedHistory, day } from './dbHelpers';
+import { createUser, seedHistory, seedSessions, day } from './dbHelpers';
 
 beforeAll(() => {
   migrateTestDb();
@@ -35,7 +35,14 @@ describe('computeDailyScore', () => {
     );
 
     const snapshots = await prisma.baselineSnapshot.findMany({ where: { userId: user.id, date: day(last) } });
-    expect(snapshots.map((s) => s.metric).sort()).toEqual(['HRV', 'RESTING_HR', 'SLEEP', 'SLEEP_DEBT']);
+    expect(snapshots.map((s) => s.metric).sort()).toEqual([
+      'CIRCADIAN_CONSISTENCY',
+      'HRV',
+      'RESTING_HR',
+      'SLEEP',
+      'SLEEP_DEBT',
+      'SLEEP_EFFICIENCY',
+    ]);
     const hrv = snapshots.find((s) => s.metric === 'HRV')!;
     // sigma-hat = 1.4826 x MAD is what is stored as the spread.
     expect(hrv.spread).toBeCloseTo(1.4826 * hrv.mad!, 9);
@@ -56,14 +63,15 @@ describe('computeDailyScore', () => {
     const last = await seedHistory(user.id, START, 40);
 
     await computeDailyScore(user.id, last);
-    const first = await prisma.dailyScore.findFirst({ where: { userId: user.id } });
+    const first = await prisma.dailyScore.findFirst({ where: { userId: user.id, type: 'RECOVERY' } });
     await computeDailyScore(user.id, last);
     await computeDailyScore(user.id, last);
 
-    expect(await prisma.dailyScore.count({ where: { userId: user.id } })).toBe(1);
+    // One RECOVERY and one SLEEP row (the night is recorded), never duplicated by a rerun.
+    expect(await prisma.dailyScore.count({ where: { userId: user.id } })).toBe(2);
     expect(await prisma.userDailyFeatures.count({ where: { userId: user.id } })).toBe(1);
-    expect(await prisma.baselineSnapshot.count({ where: { userId: user.id } })).toBe(4);
-    const again = await prisma.dailyScore.findFirst({ where: { userId: user.id } });
+    expect(await prisma.baselineSnapshot.count({ where: { userId: user.id } })).toBe(6);
+    const again = await prisma.dailyScore.findFirst({ where: { userId: user.id, type: first!.type } });
     expect(again!.score).toBe(first!.score);
     expect(again!.factors).toEqual(first!.factors);
   });
@@ -72,7 +80,7 @@ describe('computeDailyScore', () => {
     const user = await createUser();
     const last = await seedHistory(user.id, START, 40);
     await computeDailyScore(user.id, last);
-    const before = (await prisma.dailyScore.findFirst({ where: { userId: user.id } }))!.score!;
+    const before = (await prisma.dailyScore.findFirst({ where: { userId: user.id, type: 'RECOVERY' } }))!.score!;
 
     await prisma.biometricRecord.update({
       where: { userId_metricType_recordedAt: { userId: user.id, metricType: 'HRV', recordedAt: day(last) } },
@@ -80,7 +88,7 @@ describe('computeDailyScore', () => {
     });
     await computeDailyScore(user.id, last);
 
-    const after = (await prisma.dailyScore.findFirst({ where: { userId: user.id } }))!.score!;
+    const after = (await prisma.dailyScore.findFirst({ where: { userId: user.id, type: 'RECOVERY' } }))!.score!;
     expect(after).toBeLessThan(before);
   });
 
@@ -90,7 +98,7 @@ describe('computeDailyScore', () => {
 
     expect(await computeDailyScore(user.id, last)).toBe('scored');
 
-    const score = await prisma.dailyScore.findFirst({ where: { userId: user.id } });
+    const score = await prisma.dailyScore.findFirst({ where: { userId: user.id, type: 'RECOVERY' } });
     expect(score!.score).toBeNull();
     expect(score!.confidenceLevel).toBe('LOW');
     const hrv = await prisma.baselineSnapshot.findFirst({ where: { userId: user.id, metric: 'HRV' } });
@@ -117,7 +125,7 @@ describe('computeDailyScore', () => {
     expect(raw!.value).toBe(400);
 
     // The score treats the day as a gap: imputed, lower confidence.
-    const score = await prisma.dailyScore.findFirst({ where: { userId: user.id } });
+    const score = await prisma.dailyScore.findFirst({ where: { userId: user.id, type: 'RECOVERY' } });
     expect(score!.confidenceLevel).toBe('MEDIUM');
     expect((score!.factors as any[]).find((f) => f.factor === 'HRV').imputed).toBe(true);
   });

@@ -49,3 +49,32 @@ export function localCivilDate(instant: Date, timeZone: string): string {
 export function civilDateToUtcMidnight(civilDate: string): Date {
   return new Date(`${civilDate}T00:00:00Z`);
 }
+
+const clockFormatters = new Map<string, Intl.DateTimeFormat>();
+
+function clockFormatterFor(timeZone: string): Intl.DateTimeFormat {
+  let f = clockFormatters.get(timeZone);
+  if (!f) {
+    // hourCycle h23 so midnight is 00, never the "24" some locales emit with hour12: false.
+    f = new Intl.DateTimeFormat('en-US', { timeZone, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+    clockFormatters.set(timeZone, f);
+  }
+  return f;
+}
+
+/**
+ * Minutes elapsed since 12:00 (noon) local wall-clock time, in [0, 1440).
+ * Noon-anchored so a night's bedtimes (say 22:00 .. 02:00) form one contiguous
+ * run (600 .. 840) instead of wrapping around midnight, which would make
+ * 23:30 and 00:30 look 23 hours apart. Anchoring at noon is safe because
+ * nobody's main sleep starts near noon.
+ */
+export function minutesSinceLocalNoon(instant: Date, timeZone: string): number {
+  const parts = clockFormatterFor(timeZone).formatToParts(instant);
+  const hour = Number(parts.find((p) => p.type === 'hour')?.value);
+  const minute = Number(parts.find((p) => p.type === 'minute')?.value);
+  if (!Number.isFinite(hour) || !Number.isFinite(minute)) {
+    throw new Error(`Could not derive local clock time for ${instant.toISOString()} in ${timeZone}`);
+  }
+  return (hour * 60 + minute - 12 * 60 + 24 * 60) % (24 * 60);
+}

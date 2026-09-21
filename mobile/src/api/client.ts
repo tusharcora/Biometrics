@@ -78,6 +78,8 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
     res = await doFetch(accessToken);
   }
   if (!res.ok) throw new ApiError(res.status, `Request to ${path} failed with ${res.status}`);
+  // 204 No Content (e.g. DELETE) has no body to parse.
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
 }
 

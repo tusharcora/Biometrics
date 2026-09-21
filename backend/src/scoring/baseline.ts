@@ -56,9 +56,39 @@ export function computeBaseline(history: DailyPoint[], cfg: ScoreConfig): Baseli
   };
 }
 
+/** sigma-hat with the floor applied (see ScoreConfig.spreadFloorFraction). */
+function flooredSpread(baseline: Extract<Baseline, { coldStart: false }>, cfg: ScoreConfig): number {
+  return Math.max(baseline.spread, cfg.spreadFloorFraction * Math.abs(baseline.ewma), Number.EPSILON);
+}
+
 /** (value - ewma) / sigma-hat, with the spread floored (see ScoreConfig.spreadFloorFraction). Null while cold-starting. */
 export function zScore(value: number, baseline: Baseline, cfg: ScoreConfig): number | null {
   if (baseline.coldStart) return null;
-  const spread = Math.max(baseline.spread, cfg.spreadFloorFraction * Math.abs(baseline.ewma), Number.EPSILON);
-  return (value - baseline.ewma) / spread;
+  return (value - baseline.ewma) / flooredSpread(baseline, cfg);
+}
+
+/**
+ * The Sleep Score's duration z: how far a night sits from the user's sleep GOAL
+ * (not from their own baseline), in units of their own sigma-hat.
+ *
+ *   z = clamp((minutesAsleep - goal) / sigma-hat, cfg.sleepScore.durationZClamp)
+ *
+ * sigma-hat comes from the SLEEP metric's Stage-3 baseline, so a variable
+ * sleeper is judged more leniently per minute of shortfall than a regular one.
+ * The clamp is asymmetric on purpose ([-3, +1]): sleeping past goal earns no
+ * extra credit beyond +1 sigma, while a very short night is penalized down to
+ * -3. Judging against the goal rather than the baseline also means a habitually
+ * short sleeper is not rewarded for matching their own (short) norm.
+ * Null while the SLEEP baseline is cold-starting: there is no sigma-hat yet.
+ */
+export function sleepDurationZVsGoal(
+  minutesAsleep: number,
+  goalMinutes: number,
+  baseline: Baseline,
+  cfg: ScoreConfig,
+): number | null {
+  if (baseline.coldStart) return null;
+  const { min, max } = cfg.sleepScore.durationZClamp;
+  const z = (minutesAsleep - goalMinutes) / flooredSpread(baseline, cfg);
+  return Math.min(max, Math.max(min, z));
 }

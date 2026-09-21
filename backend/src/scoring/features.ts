@@ -1,9 +1,10 @@
 // Stage 2 -- Feature derivation. Pure functions over daily series; persistence
 // into UserDailyFeatures happens in the orchestrator.
 
+import { localCivilDate, minutesSinceLocalNoon } from '../biometrics/civilDate';
 import { shiftDate } from './dates';
 import type { ScoreConfig } from './configs/v1';
-import type { DailyPoint } from './types';
+import type { DailyPoint, SleepSessionInput } from './types';
 
 /**
  * sleepDebtRolling14d = sum of max(0, sleepGoalMinutes - minutesAsleep) over
@@ -74,4 +75,151 @@ export function acuteChronicLoadRatio(steps: DailyPoint[], date: string, cfg: Sc
   const chronic = meanOver(steps, shiftDate(date, -(cfg.acwr.chronicDays - 1)), date);
   if (acute.count === 0 || chronic.count < cfg.acwr.minChronicObservations || chronic.mean === 0) return null;
   return acute.mean / chronic.mean;
+}
+
+// ---------------------------------------------------------------------------
+// Slice 1.5: Sleep Score features. Both read SleepSession rows (Slice 0) rather
+// than the daily BiometricRecord rollup, because they need sleep STRUCTURE
+// (onset time, interval), not just a per-day total.
+// ---------------------------------------------------------------------------
+
+const MS_PER_MINUTE = 60_000;
+
+/** Minutes between a session's start and end instants; <= 0 (or NaN) means the interval is unusable. */
+function intervalMinutes(s: SleepSessionInput): number {
+  return (s.endTime.getTime() - s.startTime.getTime()) / MS_PER_MINUTE;
+}
+
+/**
+ * Sessions grouped by the local civil date of their END instant in `timeZone`:
+ * the same key the SLEEP rollup (Slice 0) uses, so "night D" is the night that
+ * produced day D's HRV and RHR.
+ */
+export function groupSessionsByNight(
+  sessions: SleepSessionInput[],
+  timeZone: string,
+): Map<string, SleepSessionInput[]> {
+  const byNight = new Map<string, SleepSessionInput[]>();
+  for (const s of sessions) {
+    const date = localCivilDate(s.endTime, timeZone);
+    const list = byNight.get(date);
+    if (list) list.push(s);
+    else byNight.set(date, [s]);
+  }
+  return byNight;
+}
+
+/**
+ * sleepEfficiency = sum(minutesAsleep) / sum(time in bed) over one night's
+ * sessions, as a 0..1 fraction.
+ *
+ * ASSUMPTION, not a confirmed fact: time in bed is DERIVED as
+ * (endTime - startTime) of each session, not read from Sleep.summary.timeInBed
+ * (unverified against the live API). Whether that interval really equals time
+ * in bed for every session shape (a segment of a longer night, a device-split
+ * night) is a pending Slice 0 live check; see
+ * docs/superpowers/notes/slice0-live-checks.md. Until it is settled this value
+ * is only as good as that assumption.
+ *
+ * Sessions with a zero or negative interval carry no time-in-bed information
+ * and are ignored (in both sums); a night with none left has no efficiency
+ * (null), never a division by zero. The ratio is capped at 1: an interval
+ * shorter than minutesAsleep is a data inconsistency, not efficiency above 100%.
+ */
+export function sleepEfficiency(nightSessions: SleepSessionInput[]): number | null {
+  let asleep = 0;
+  let inBed = 0;
+  for (const s of nightSessions) {
+    const minutes = intervalMinutes(s);
+    if (!(minutes > 0)) continue;
+    asleep += s.minutesAsleep;
+    inBed += minutes;
+  }
+  if (inBed <= 0) return null;
+  return Math.min(1, asleep / inBed);
+}
+
+/** Daily sleepEfficiency through `throughDate`, one point per night that has a usable interval. */
+export function buildSleepEfficiencySeries(
+  sessions: SleepSessionInput[],
+  timeZone: string,
+  throughDate: string,
+): DailyPoint[] {
+  const out: DailyPoint[] = [];
+  for (const [date, night] of groupSessionsByNight(sessions, timeZone)) {
+    if (date > throughDate) continue;
+    const value = sleepEfficiency(night);
+    if (value !== null) out.push({ date, value });
+  }
+  return out.sort((a, b) => (a.date < b.date ? -1 : 1));
+}
+
+/**
+ * One point per night: the onset (start instant) of that night's MAIN session,
+ * in minutes since 12:00 local. Main = the longest by minutesAsleep (a
+ * confirmed field, unlike the derived interval), earliest start on a tie, so a
+ * nap or a brief split session never stands in for the night's bedtime.
+ * Noon-anchored so bedtimes either side of midnight are one contiguous run.
+ */
+export function mainSessionOnsets(sessions: SleepSessionInput[], timeZone: string): DailyPoint[] {
+  const out: DailyPoint[] = [];
+  for (const [date, night] of groupSessionsByNight(sessions, timeZone)) {
+    let main: SleepSessionInput | undefined;
+    for (const s of night) {
+      if (!(intervalMinutes(s) > 0)) continue;
+      if (
+        !main ||
+        s.minutesAsleep > main.minutesAsleep ||
+        (s.minutesAsleep === main.minutesAsleep && s.startTime < main.startTime)
+      ) {
+        main = s;
+      }
+    }
+    if (main) out.push({ date, value: minutesSinceLocalNoon(main.startTime, timeZone) });
+  }
+  return out.sort((a, b) => (a.date < b.date ? -1 : 1));
+}
+
+/**
+ * Bedtime consistency for the trailing window ending on `date`: the population
+ * stddev of the nightly onsets, inverted and normalized to 0..100 as
+ * 100 * max(0, 1 - stddev / cfg.circadian.maxStdMinutes). 100 is a metronome
+ * bedtime, 0 is a spread of maxStdMinutes or more; higher is better.
+ *
+ * Null (cold start) until cfg.circadian.minHistoryNights nights of history
+ * exist up to `date`, and null when the window itself holds fewer than
+ * cfg.circadian.minWindowNights nights (a stddev of two points is noise).
+ * Both need only stored SleepSession history, which the Slice 0 re-sync
+ * provides, so a user with >= 14 retrievable nights is not held back by
+ * "starting from today".
+ */
+export function circadianConsistencyOn(onsets: DailyPoint[], date: string, cfg: ScoreConfig): number | null {
+  const { windowDays, minWindowNights, minHistoryNights, maxStdMinutes } = cfg.circadian;
+  if (onsets.filter((o) => o.date <= date).length < minHistoryNights) return null;
+
+  const from = shiftDate(date, -(windowDays - 1));
+  const window = onsets.filter((o) => o.date >= from && o.date <= date).map((o) => o.value);
+  if (window.length < minWindowNights) return null;
+
+  const mean = window.reduce((sum, v) => sum + v, 0) / window.length;
+  const variance = window.reduce((sum, v) => sum + (v - mean) ** 2, 0) / window.length;
+  return 100 * Math.max(0, 1 - Math.sqrt(variance) / maxStdMinutes);
+}
+
+/**
+ * The daily circadian-consistency series through `throughDate`: the baseline
+ * history for that factor. Starts on the night the history first reaches
+ * cfg.circadian.minHistoryNights, so the baseline itself (which needs
+ * cfg.minHistoryDays of these points) is excluded for ~27 nights, as with the
+ * sleep-debt series.
+ */
+export function buildCircadianSeries(onsets: DailyPoint[], throughDate: string, cfg: ScoreConfig): DailyPoint[] {
+  const sorted = [...onsets].sort((a, b) => (a.date < b.date ? -1 : 1));
+  if (sorted.length < cfg.circadian.minHistoryNights) return [];
+  const out: DailyPoint[] = [];
+  for (let d = sorted[cfg.circadian.minHistoryNights - 1]!.date; d <= throughDate; d = shiftDate(d, 1)) {
+    const value = circadianConsistencyOn(sorted, d, cfg);
+    if (value !== null) out.push({ date: d, value });
+  }
+  return out;
 }
