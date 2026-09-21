@@ -23,6 +23,7 @@ import { HabitLogCard } from '../components/habit-log-card';
 import { COLORS, METRIC_CONFIG, METRIC_ORDER, type MetricType } from '../theme';
 import { computeStats, buildHeadline, type MetricRecord } from '../lib/metricInsights';
 import { pickColdStartProgress, scoreTypeLabel } from '../lib/scoreInsights';
+import { coachEntryRoute, useCoachStatus } from '../lib/useCoachStatus';
 
 type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';
 
@@ -132,6 +133,9 @@ export function DashboardScreen() {
   const [recovery, setRecovery] = useState<ScoreState>(undefined);
   const [sleep, setSleep] = useState<ScoreState>(undefined);
   const [scoresFailed, setScoresFailed] = useState(false);
+  // Null until known, and null on failure: the coach entry simply isn't drawn.
+  const { status: coachStatus } = useCoachStatus(navigation);
+  const coachRoute = coachEntryRoute(coachStatus);
 
   useEffect(() => {
     apiFetch<MetricRecord[]>('/me/biometrics')
@@ -277,6 +281,21 @@ export function DashboardScreen() {
             <Ionicons name="chevron-forward" size={18} color={colors.muted} />
           </Card>
         </Pressable>
+
+        {coachRoute ? (
+          <Pressable testID="coach-entry-button" onPress={() => navigation.navigate(coachRoute)} className="active:opacity-80">
+            <Card className="flex-row items-center gap-3">
+              <Ionicons name="chatbubbles-outline" size={18} color={colors.accent} />
+              <View className="flex-1 gap-0.5">
+                <Text className="text-base font-semibold">AI Coach</Text>
+                <Text className="text-xs text-muted-foreground">
+                  {coachRoute === 'CoachConsent' ? 'Review what is shared, then ask about your scores' : 'Ask about your scores and patterns'}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+            </Card>
+          </Pressable>
+        ) : null}
 
         <View className="flex-row flex-wrap gap-3">
           {METRIC_ORDER.map((type, index) => {

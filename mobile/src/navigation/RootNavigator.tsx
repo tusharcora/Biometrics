@@ -13,6 +13,8 @@ import { MetricDetailScreen } from '../screens/MetricDetailScreen';
 import { ScoreDetailScreen } from '../screens/ScoreDetailScreen';
 import { PatternsScreen } from '../screens/PatternsScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
+import { CoachScreen } from '../screens/CoachScreen';
+import { CoachConsentScreen } from '../screens/CoachConsentScreen';
 import { syncTimezone } from '../lib/timezone';
 import { COLORS } from '../theme';
 import type { MetricRecord } from '../lib/metricInsights';
@@ -34,6 +36,11 @@ export type RootStackParamList = {
   ScoreDetail: { date: string; type?: ScoreType }; // type defaults to RECOVERY
   Patterns: undefined;
   Settings: undefined;
+  // Only ever navigated to from an entry point that is drawn when the server
+  // reports the coach enabled. `prefill` seeds the chat input (never sent
+  // automatically) and is carried through the consent screen.
+  Coach: { prefill?: string } | undefined;
+  CoachConsent: { prefill?: string } | undefined;
 };
 
 export type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';
@@ -111,6 +118,8 @@ export function RootNavigator() {
         <Stack.Screen name="ScoreDetail" component={ScoreDetailScreen} options={{ title: 'Score' }} />
         <Stack.Screen name="Patterns" component={PatternsScreen} options={{ title: 'Patterns' }} />
         <Stack.Screen name="Settings"component={SettingsScreen} options={{ title: 'Settings' }} />
+        <Stack.Screen name="Coach" component={CoachScreen} options={{ title: 'AI Coach' }} />
+        <Stack.Screen name="CoachConsent" component={CoachConsentScreen} options={{ title: 'AI Coach' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

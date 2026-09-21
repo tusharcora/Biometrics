@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, ScrollView } from 'react-native';
+import { View, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation, type RouteProp } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
@@ -13,6 +13,8 @@ import { BaselineProgressRing } from '../components/ui/baseline-progress-ring';
 import { ConfidenceBadge } from '../components/ui/confidence-badge';
 import { FactorBar, factorBarScale } from '../components/ui/factor-bar';
 import { COLORS } from '../theme';
+import { coachEntryRoute, useCoachStatus } from '../lib/useCoachStatus';
+import { scoreQuestion } from '../lib/coachPrompts';
 import {
   buildBaselineSentence,
   buildScoreHeadline,
@@ -37,6 +39,8 @@ export function ScoreDetailScreen() {
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
   const { date, type = 'RECOVERY' } = route.params;
   const [state, setState] = useState<LoadState>({ status: 'loading' });
+  const { status: coachStatus } = useCoachStatus(navigation);
+  const coachRoute = coachEntryRoute(coachStatus);
 
   React.useLayoutEffect(() => {
     navigation.setOptions({ title: scoreTypeLabel(type) });
@@ -120,6 +124,21 @@ export function ScoreDetailScreen() {
             {buildScoreHeadline(score)}
           </Text>
         </Card>
+
+        {coachRoute ? (
+          <Pressable
+            testID="ask-coach-button"
+            accessibilityRole="button"
+            onPress={() => navigation.navigate(coachRoute, { prefill: scoreQuestion(score.type) })}
+            className="active:opacity-80"
+          >
+            <Card className="flex-row items-center gap-3">
+              <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.accent} />
+              <Text className="flex-1 text-base font-semibold">Ask about this</Text>
+              <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+            </Card>
+          </Pressable>
+        ) : null}
 
         {factors.length > 0 ? (
           <Card className="gap-4">

@@ -25,23 +25,30 @@ enum BiometricMetricType {
 }
 
 model User {
-  id                String              @id @default(uuid())
-  email             String
-  authProvider      AuthProvider
-  providerUserId    String
-  createdAt         DateTime            @default(now())
-  healthConnection  HealthConnection?
-  biometricRecords  BiometricRecord[]
-  sleepSessions     SleepSession[]
-  refreshTokens     RefreshToken[]
-  baselineSnapshots BaselineSnapshot[]
-  dailyFeatures     UserDailyFeatures[]
-  dailyScores       DailyScore[]
-  scoreInputFlags   ScoreInputFlag[]
-  habitTypes        HabitType[]
-  habitLogs         HabitLog[]
-  habitCheckIns     HabitCheckIn[]
-  habitCorrelations HabitCorrelation[]
+  id                 String              @id @default(uuid())
+  email              String
+  authProvider       AuthProvider
+  providerUserId     String
+  createdAt          DateTime            @default(now())
+  healthConnection   HealthConnection?
+  biometricRecords   BiometricRecord[]
+  sleepSessions      SleepSession[]
+  refreshTokens      RefreshToken[]
+  baselineSnapshots  BaselineSnapshot[]
+  dailyFeatures      UserDailyFeatures[]
+  dailyScores        DailyScore[]
+  scoreInputFlags    ScoreInputFlag[]
+  habitTypes         HabitType[]
+  habitLogs          HabitLog[]
+  habitCheckIns      HabitCheckIn[]
+  habitCorrelations  HabitCorrelation[]
+  coachConsents      CoachConsent[]
+  coachConversations CoachConversation[]
+  coachMessages      CoachMessage[]
+
+  // The coach persona the user picked in Settings (an id from
+  // src/coach/personas). Null means the default persona.
+  coachPersonaId String?
 
   // The single source of the sleep goal: scoring's sleep-debt factor, the
   // dashboard goal and the coach's getUserGoals() must all read this one value
@@ -290,28 +297,85 @@ model HabitCheckIn {
 // the latest TESTED run; they are null only if the row was never tested (which
 // cannot happen for a row created by a pass, but keeps the columns honest).
 model HabitCorrelation {
-  id                  String                 @id @default(uuid())
-  userId              String
-  user                User                   @relation(fields: [userId], references: [id])
-  habitType           String
-  factor              String
-  lagDays             Int
-  status              HabitCorrelationStatus
-  consecutivePasses   Int                    @default(0)
-  consecutiveMisses   Int                    @default(0)
-  lastEvaluatedAt     DateTime
+  id                String                 @id @default(uuid())
+  userId            String
+  user              User                   @relation(fields: [userId], references: [id])
+  habitType         String
+  factor            String
+  lagDays           Int
+  status            HabitCorrelationStatus
+  consecutivePasses Int                    @default(0)
+  consecutiveMisses Int                    @default(0)
+  lastEvaluatedAt   DateTime
   // ISO week the row was last evaluated in ("2026-W38"): makes a repeated run
   // for the same week a no-op instead of double-counting a pass or a miss.
-  lastRunKey          String
-  r                   Float?
-  pValue              Float?
-  qValue              Float?
-  effectSizePercent   Float?
-  comparisonPercent   Float?
-  sampleSize          Int                    @default(0)
-  direction           String?
-  series              Json?
+  lastRunKey        String
+  r                 Float?
+  pValue            Float?
+  qValue            Float?
+  effectSizePercent Float?
+  comparisonPercent Float?
+  sampleSize        Int                    @default(0)
+  direction         String?
+  series            Json?
 
   @@unique([userId, habitType, factor, lagDays])
   @@index([userId, status])
+}
+
+// AI Coach (spec 2026-09-20-ai-coach-design.md). One row per consent grant for a
+// consent-text version; the latest un-revoked row for the CURRENT version is
+// what lets a coach turn run (a version bump therefore requires re-consent).
+// Revocation stamps revokedAt rather than deleting the row, keeping an audit
+// trail of what was agreed to and when.
+model CoachConsent {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  version     String
+  consentedAt DateTime  @default(now())
+  revokedAt   DateTime?
+
+  @@index([userId, consentedAt])
+}
+
+model CoachConversation {
+  id            String         @id @default(uuid())
+  userId        String
+  user          User           @relation(fields: [userId], references: [id])
+  createdAt     DateTime       @default(now())
+  lastMessageAt DateTime       @default(now())
+  messages      CoachMessage[]
+
+  @@index([userId, lastMessageAt])
+}
+
+enum CoachMessageRole {
+  USER
+  ASSISTANT
+}
+
+// Where an assistant reply came from: the model (guardrail-validated), the
+// server-composed fallback, or the fixed non-LLM safety reply. Null for USER rows.
+enum CoachMessageSource {
+  MODEL
+  FALLBACK
+  SAFETY
+}
+
+model CoachMessage {
+  id              String              @id @default(uuid())
+  conversationId  String
+  conversation    CoachConversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User                @relation(fields: [userId], references: [id])
+  role            CoachMessageRole
+  text            String
+  source          CoachMessageSource?
+  // Guardrail/latency events that occurred while producing this reply (reasons
+  // and counts only, never text).
+  guardrailEvents Json?
+  createdAt       DateTime            @default(now())
+
+  @@index([conversationId, createdAt])
 }
