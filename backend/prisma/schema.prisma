@@ -25,21 +25,31 @@ enum BiometricMetricType {
 }
 
 model User {
-  id               String            @id @default(uuid())
-  email            String
-  authProvider     AuthProvider
-  providerUserId   String
-  createdAt        DateTime          @default(now())
-  healthConnection HealthConnection?
-  biometricRecords BiometricRecord[]
-  sleepSessions    SleepSession[]
-  refreshTokens    RefreshToken[]
+  id                String              @id @default(uuid())
+  email             String
+  authProvider      AuthProvider
+  providerUserId    String
+  createdAt         DateTime            @default(now())
+  healthConnection  HealthConnection?
+  biometricRecords  BiometricRecord[]
+  sleepSessions     SleepSession[]
+  refreshTokens     RefreshToken[]
+  baselineSnapshots BaselineSnapshot[]
+  dailyFeatures     UserDailyFeatures[]
+  dailyScores       DailyScore[]
+  scoreInputFlags   ScoreInputFlag[]
+
+  // The single source of the sleep goal: scoring's sleep-debt factor, the
+  // dashboard goal and the coach's getUserGoals() must all read this one value
+  // (src/users/goals.ts) so they cannot drift apart. The 480 here must match
+  // DEFAULT_SLEEP_GOAL_MINUTES in that file.
+  sleepGoalMinutes Int @default(480)
 
   // IANA zone name (e.g. "America/Los_Angeles"), client-supplied. It defines
   // which local civil date a sleep session's end instant belongs to, so the
   // derived SLEEP daily rollup lines up with the civil dates Google reports
   // for STEPS/RESTING_HR/HRV. "UTC" is the fallback until the client reports.
-  timezone         String            @default("UTC")
+  timezone String @default("UTC")
 
   // Identity is keyed on the provider subject, not the email address: the same
   // person may hold both an Apple and a Google account sharing one email, and
@@ -58,18 +68,18 @@ model RefreshToken {
 }
 
 model HealthConnection {
-  id                    String                  @id @default(uuid())
-  userId                String                  @unique
-  user                  User                    @relation(fields: [userId], references: [id])
-  healthUserId          String                  @unique
+  id                    String                 @id @default(uuid())
+  userId                String                 @unique
+  user                  User                   @relation(fields: [userId], references: [id])
+  healthUserId          String                 @unique
   encryptedAccessToken  String
   encryptedRefreshToken String
   tokenExpiresAt        DateTime
   webhookSubscriptionId String?
-  status                HealthConnectionStatus  @default(CONNECTED)
+  status                HealthConnectionStatus @default(CONNECTED)
   lastSyncedAt          DateTime?
-  createdAt             DateTime                @default(now())
-  updatedAt             DateTime                @updatedAt
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
 }
 
 model BiometricRecord {
@@ -101,4 +111,120 @@ model SleepSession {
 
   @@unique([userId, startTime])
   @@index([userId, endTime])
+}
+
+enum ScoreType {
+  RECOVERY
+  SLEEP
+}
+
+enum ConfidenceLevel {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum ScoreInputFlagType {
+  OUTLIER
+}
+
+// Stage 3 output: the baseline a day's z-scores were computed against, so a
+// score is reproducible after the rolling window has moved on. `metric` is a
+// string (HRV | RESTING_HR | SLEEP | SLEEP_DEBT, later sleep-efficiency and
+// circadian) so Slice 1.5 can add series without a migration. While a metric
+// is cold-starting the stat columns are null and only daysOfHistory is
+// meaningful (it drives the "Building your baseline (9/14)" state).
+model BaselineSnapshot {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id])
+  metric           String
+  date             DateTime @db.Date
+  ewma             Float?
+  // sigma-hat = 1.4826 x MAD: on the same scale as a standard deviation.
+  spread           Float?
+  // Raw (unscaled) median absolute deviation.
+  mad              Float?
+  daysOfHistory    Int
+  algorithmVersion String
+
+  @@unique([userId, metric, date])
+  @@index([userId, date])
+}
+
+// Stage 2 output: one row per user per civil date, reused by every later
+// stage and (later) the coach. Z columns are nullable while cold-starting.
+model UserDailyFeatures {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id])
+  date             DateTime @db.Date
+  algorithmVersion String
+
+  sleepDebtRolling14d     Float?
+  hrvBaselineDeviationPct Float?
+  rhrBaselineDeviationPct Float?
+  // Computed and stored so the series exists to validate later, but
+  // deliberately EXCLUDED from the Recovery composite (steps are not a
+  // validated training-load proxy).
+  acuteChronicLoadRatio   Float?
+
+  // Correlation series for the habit engine (imputed days are excludable).
+  hrvZ                  Float?
+  hrvZImputed           Boolean @default(false)
+  rhrZ                  Float?
+  rhrZImputed           Boolean @default(false)
+  sleepDurationZ        Float?
+  sleepDurationZImputed Boolean @default(false)
+
+  // Slice 1.5 (Sleep Score) columns; nothing writes them yet.
+  sleepEfficiency              Float?
+  sleepEfficiencyZ             Float?
+  sleepEfficiencyZImputed      Boolean @default(false)
+  circadianConsistencyScore    Float?
+  circadianConsistencyZ        Float?
+  circadianConsistencyZImputed Boolean @default(false)
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date])
+}
+
+// Stage 4/5 output. `factors` is the per-factor vector
+// [{factor, z, weight, contribution, points, imputed, excluded}]. `score` is
+// null when every factor is excluded (cold start): the row is still written so
+// the client can show baseline progress.
+model DailyScore {
+  id               String          @id @default(uuid())
+  userId           String
+  user             User            @relation(fields: [userId], references: [id])
+  date             DateTime        @db.Date
+  type             ScoreType
+  algorithmVersion String
+  score            Float?
+  confidenceLevel  ConfidenceLevel
+  factors          Json
+  // Bumped on every recompute; the nightly sweep compares it with the inputs'
+  // syncedAt to find scores older than their data.
+  updatedAt        DateTime        @updatedAt
+
+  @@unique([userId, date, type])
+  @@index([userId, date])
+}
+
+// Persisted Stage-1 verdicts. The raw BiometricRecord is never altered or
+// deleted; the score computation just skips a flagged value.
+model ScoreInputFlag {
+  id        String             @id @default(uuid())
+  userId    String
+  user      User               @relation(fields: [userId], references: [id])
+  metric    String
+  date      DateTime           @db.Date
+  flag      ScoreInputFlagType
+  value     Float
+  median    Float
+  mad       Float
+  createdAt DateTime           @default(now())
+
+  @@unique([userId, metric, date, flag])
 }

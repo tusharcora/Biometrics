@@ -143,15 +143,18 @@ export async function recomputeAllSleepRollups(userId: string): Promise<void> {
   await prisma.$transaction(rollupWrites(userId, [...dates].sort(), totals));
 }
 
-/** Upsert a batch of sessions, then refresh the rollup of every local date it touched. */
-export async function storeSleepSessions(userId: string, sessions: SleepSessionPoint[]): Promise<void> {
+/**
+ * Upsert a batch of sessions, then refresh the rollup of every local date it
+ * touched. Returns those dates so the caller can ask for the affected scores to
+ * be recomputed.
+ */
+export async function storeSleepSessions(userId: string, sessions: SleepSessionPoint[]): Promise<string[]> {
   const touched = await upsertSleepSessions(userId, sessions);
-  if (touched.length === 0) return;
+  if (touched.length === 0) return [];
   const timeZone = await timezoneOf(userId);
-  await recomputeSleepRollups(
-    userId,
-    touched.map((end) => localCivilDate(end, timeZone)),
-  );
+  const dates = [...new Set(touched.map((end) => localCivilDate(end, timeZone)))].sort();
+  await recomputeSleepRollups(userId, dates);
+  return dates;
 }
 
 export async function getBiometricsForUser(userId: string) {

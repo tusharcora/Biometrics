@@ -13,6 +13,14 @@ jest.mock('../../src/health/client');
 jest.mock('../../src/health/oauth');
 jest.mock('../../src/health/subscriber');
 jest.mock('../../src/sync/tokenRefreshJob');
+// The worker asks for score recomputes after storing data; those go to a real
+// Redis queue. Stubbed so sync tests never leave delayed jobs behind (the
+// score trigger itself is covered in tests/scoring/).
+jest.mock('../../src/scoring/queue', () => ({
+  COMPUTE_DAILY_SCORE_JOB: 'computeDailyScore',
+  SCORE_SWEEP_JOB: 'scoreSweep',
+  enqueueScoreCompute: jest.fn().mockResolvedValue(undefined),
+}));
 
 beforeAll(() => {
   migrateTestDb();

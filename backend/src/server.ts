@@ -1,6 +1,7 @@
 import { createApp } from './app';
 import { startSyncWorker } from './sync/worker';
 import { enqueueImmediateTokenRefreshSweep, scheduleTokenRefreshSweep } from './sync/queue';
+import { scheduleNightlyScoreSweep } from './scoring/queue';
 
 const port = Number(process.env.PORT ?? 3000);
 
@@ -18,4 +19,10 @@ scheduleTokenRefreshSweep().catch((err) =>
 );
 enqueueImmediateTokenRefreshSweep().catch((err) =>
   console.error('Failed to enqueue the startup token refresh sweep', err),
+);
+
+// Nightly backstop for the debounced per-webhook score recompute: catches
+// missed debounce windows and back-fills days with data but no score.
+scheduleNightlyScoreSweep().catch((err) =>
+  console.error('Failed to schedule the nightly score sweep', err),
 );

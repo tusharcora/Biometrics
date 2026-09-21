@@ -1,0 +1,71 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`FactorBar matches its snapshot 1`] = `
+<View
+  accessibilityLabel="HRV: −4.5 pts"
+  accessible={true}
+  className="gap-1.5"
+  testID="factor-bar-HRV"
+>
+  <View
+    className="flex-row items-center justify-between"
+  >
+    <View
+      className="flex-row items-center gap-2"
+    >
+      <Text
+        className="text-foreground text-sm font-medium"
+      >
+        HRV
+      </Text>
+    </View>
+    <Text
+      className="text-foreground text-sm font-semibold"
+      style={
+        {
+          "fontVariant": [
+            "tabular-nums",
+          ],
+        }
+      }
+    >
+      −4.5 pts
+    </Text>
+  </View>
+  <View
+    className="h-2 flex-row overflow-hidden rounded-full bg-muted"
+  >
+    <View
+      style={
+        {
+          "flex": 1,
+          "flexDirection": "row",
+          "justifyContent": "flex-end",
+        }
+      }
+    >
+      <View
+        className="h-full bg-score-poor"
+        style={
+          {
+            "width": "50%",
+          }
+        }
+        testID="factor-bar-neg-HRV"
+      />
+    </View>
+    <View
+      className="h-full w-px bg-border"
+    />
+    <View
+      style={
+        {
+          "flex": 1,
+          "flexDirection": "row",
+          "justifyContent": "flex-start",
+        }
+      }
+    />
+  </View>
+</View>
+`;

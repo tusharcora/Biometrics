@@ -14,13 +14,17 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 /**
- * The screen calls /me/biometrics and /me/connection independently, so route
+ * The screen calls /me/biometrics, /me/connection and /me/scores independently, so route
  * each path to its own canned response rather than one blanket resolution.
  */
-function mockApi(options: { records?: unknown; connection?: unknown; recordsError?: Error }) {
+function mockApi(options: { records?: unknown; connection?: unknown; recordsError?: Error; scores?: unknown[]; scoresError?: Error }) {
   (apiFetch as jest.Mock).mockImplementation((path: string) => {
     if (path === '/me/connection') {
       return Promise.resolve(options.connection ?? { status: 'CONNECTED' });
+    }
+    if (path.startsWith('/me/scores')) {
+      if (options.scoresError) return Promise.reject(options.scoresError);
+      return Promise.resolve({ scores: options.scores ?? [] });
     }
     if (options.recordsError) return Promise.reject(options.recordsError);
     return Promise.resolve(options.records ?? []);
@@ -206,5 +210,85 @@ describe('DashboardScreen', () => {
     fireEvent.press(getByTestId('settings-button'));
 
     expect(mockNavigate).toHaveBeenCalledWith('Settings');
+  });
+  describe('Recovery score card', () => {
+    const steps = [{ id: '1', metricType: 'STEPS', value: 9000, recordedAt: '2026-09-01T00:00:00.000Z' }];
+    const recovery = {
+      date: '2026-09-19',
+      type: 'RECOVERY',
+      score: 78,
+      confidenceLevel: 'HIGH',
+      algorithmVersion: 'v1',
+      factors: [
+        { factor: 'HRV', label: 'HRV', z: 1.2, weight: 0.45, contribution: 0.54, points: 8.2, imputed: false, excluded: false },
+      ],
+      coldStart: [],
+    };
+
+    it('shows the latest recovery score with its confidence at the top of the dashboard', async () => {
+      mockApi({ records: steps, scores: [{ ...recovery, type: 'SLEEP', score: 55 }, recovery] });
+
+      const { getByTestId, getByText } = render(<DashboardScreen />);
+
+      await waitFor(() => expect(getByTestId('recovery-score-card')).toBeTruthy());
+      expect(getByText('78')).toBeTruthy();
+      expect(getByText('Recovery Score')).toBeTruthy();
+      expect(getByTestId('confidence-badge')).toBeTruthy();
+      expect(apiFetch).toHaveBeenCalledWith('/me/scores?days=7');
+    });
+
+    it('opens the score detail screen for that day when pressed', async () => {
+      mockApi({ records: steps, scores: [recovery] });
+
+      const { getByTestId } = render(<DashboardScreen />);
+
+      await waitFor(() => expect(getByTestId('recovery-score-card')).toBeTruthy());
+      fireEvent.press(getByTestId('recovery-score-card'));
+
+      expect(mockNavigate).toHaveBeenCalledWith('ScoreDetail', { date: '2026-09-19', type: 'RECOVERY' });
+    });
+
+    it('shows the baseline progress ring instead of a score when the score is null', async () => {
+      mockApi({
+        records: steps,
+        scores: [
+          {
+            ...recovery,
+            score: null,
+            confidenceLevel: 'LOW',
+            factors: [],
+            coldStart: [
+              { metric: 'HRV', daysCollected: 9, daysRequired: 14 },
+              { metric: 'RESTING_HR', daysCollected: 3, daysRequired: 14 },
+            ],
+          },
+        ],
+      });
+
+      const { getByTestId, getByText, queryByTestId } = render(<DashboardScreen />);
+
+      await waitFor(() => expect(getByTestId('baseline-progress-ring')).toBeTruthy());
+      expect(getByText('9/14 days')).toBeTruthy();
+      expect(queryByTestId('score-ring')).toBeNull();
+      expect(queryByTestId('confidence-badge')).toBeNull();
+    });
+
+    it('says the score is not ready when none has been calculated yet, without breaking the metric cards', async () => {
+      mockApi({ records: steps, scores: [] });
+
+      const { getByText, getByTestId } = render(<DashboardScreen />);
+
+      await waitFor(() => expect(getByText(/Recovery Score will appear/i)).toBeTruthy());
+      expect(getByTestId('metric-card-STEPS')).toBeTruthy();
+    });
+
+    it('degrades to an inline message when the scores request fails, keeping the metric cards', async () => {
+      mockApi({ records: steps, scoresError: new Error('boom') });
+
+      const { getByText, getByTestId } = render(<DashboardScreen />);
+
+      await waitFor(() => expect(getByText(/Recovery Score is unavailable/i)).toBeTruthy());
+      expect(getByTestId('metric-card-STEPS')).toBeTruthy();
+    });
   });
 });

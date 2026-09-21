@@ -9,6 +9,15 @@ import { processSyncJob } from '../../src/sync/worker';
 import * as queue from '../../src/sync/queue';
 import * as serviceAccount from '../../src/health/serviceAccount';
 
+// The worker asks for score recomputes after storing data; those go to a real
+// Redis queue. Stubbed so sync tests never leave delayed jobs behind (the
+// score trigger itself is covered in tests/scoring/).
+jest.mock('../../src/scoring/queue', () => ({
+  COMPUTE_DAILY_SCORE_JOB: 'computeDailyScore',
+  SCORE_SWEEP_JOB: 'scoreSweep',
+  enqueueScoreCompute: jest.fn().mockResolvedValue(undefined),
+}));
+
 beforeAll(() => {
   migrateTestDb();
   process.env.JWT_ACCESS_SECRET = 'test-access-secret';

@@ -3,6 +3,7 @@ import { authRouter } from './auth/routes';
 import { healthRouter } from './health/routes';
 import { biometricsRouter } from './biometrics/routes';
 import { usersRouter } from './users/routes';
+import { scoresRouter } from './scoring/routes';
 
 export function createApp(): Express {
   const app = express();
@@ -18,5 +19,6 @@ export function createApp(): Express {
   app.use(healthRouter);
   app.use(biometricsRouter);
   app.use(usersRouter);
+  app.use(scoresRouter);
   return app;
 }

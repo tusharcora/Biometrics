@@ -11,6 +11,9 @@ import { upsertBiometricRecords, storeSleepSessions } from '../biometrics/reposi
 import { BiometricMetricType, HealthMetricPoint, SleepSessionPoint } from '../types';
 import { FetchJobData, BackfillJobData } from './queue';
 import { refreshedTokenUpdateData } from './tokenUpdate';
+import { computeDailyScore } from '../scoring/compute';
+import { runScoreSweep } from '../scoring/sweep';
+import { COMPUTE_DAILY_SCORE_JOB, SCORE_SWEEP_JOB, enqueueScoreCompute, ComputeDailyScoreJobData } from '../scoring/queue';
 
 const ALL_METRIC_TYPES: BiometricMetricType[] = ['HRV', 'RESTING_HR', 'SLEEP', 'STEPS'];
 const SYNC_WORKER_CONCURRENCY = 5;
@@ -125,10 +128,33 @@ class JobTokenSession {
 // SLEEP is stored as whole sessions (idempotent upsert) and the BiometricRecord
 // row is a rollup re-derived for every touched local date -- see
 // biometrics/repository.ts for why summing per-day rows was rejected.
-async function syncSleep(session: JobTokenSession, userId: string, startDate: string, endDate: string): Promise<void> {
+async function syncSleep(session: JobTokenSession, userId: string, startDate: string, endDate: string): Promise<string[]> {
   const [from, to] = sleepWindow(startDate, endDate);
-  await storeSleepSessions(userId, await session.fetchSleep(from, to));
+  return storeSleepSessions(userId, await session.fetchSleep(from, to));
 }
+
+// HRV, RHR and SLEEP feed the Recovery Score; STEPS does not (its only derived
+// feature, ACWR, is stored but excluded from the composite).
+const SCORE_INPUT_METRICS = new Set<BiometricMetricType>(['HRV', 'RESTING_HR', 'SLEEP']);
+
+/**
+ * Asks for the affected days' scores to be recomputed, debounced per user+day
+ * so a burst of overnight sleep + HRV + RHR webhooks becomes one recompute.
+ * Scoring is derived data: a failure to enqueue must never fail (and so
+ * retry) a sync job whose data is already safely stored. The nightly sweep is
+ * the backstop for anything missed here.
+ */
+async function requestScores(userId: string, dates: string[]): Promise<void> {
+  for (const date of new Set(dates)) {
+    try {
+      await enqueueScoreCompute(userId, date);
+    } catch (err) {
+      console.error(`Failed to enqueue score recompute for user ${userId} on ${date}`, err);
+    }
+  }
+}
+
+const civilDateOf = (p: HealthMetricPoint) => p.recordedAt.toISOString().slice(0, 10);
 
 async function handleFetchJob(data: FetchJobData): Promise<void> {
   const conn = await prisma.healthConnection.findUnique({ where: { userId: data.userId } });
@@ -143,10 +169,11 @@ async function handleFetchJob(data: FetchJobData): Promise<void> {
     // single-day job must ask for [date, date + 1).
     const end = nextDay(data.date);
     if (data.metricType === 'SLEEP') {
-      await syncSleep(session, data.userId, data.date, end);
+      await requestScores(data.userId, await syncSleep(session, data.userId, data.date, end));
     } else {
       const points = await session.fetch(data.metricType, data.date, end);
       await upsertBiometricRecords(data.userId, data.metricType, points);
+      if (SCORE_INPUT_METRICS.has(data.metricType)) await requestScores(data.userId, points.map(civilDateOf));
     }
     await prisma.healthConnection.update({
       where: { userId: data.userId },
@@ -167,14 +194,17 @@ async function handleBackfillJob(data: BackfillJobData): Promise<void> {
 
   try {
     const session = new JobTokenSession(conn);
+    const scoreDates: string[] = [];
     for (const metricType of ALL_METRIC_TYPES) {
       if (metricType === 'SLEEP') {
-        await syncSleep(session, data.userId, data.startDate, data.endDate);
+        scoreDates.push(...(await syncSleep(session, data.userId, data.startDate, data.endDate)));
         continue;
       }
       const points = await session.fetch(metricType, data.startDate, data.endDate);
       await upsertBiometricRecords(data.userId, metricType, points);
+      if (SCORE_INPUT_METRICS.has(metricType)) scoreDates.push(...points.map(civilDateOf));
     }
+    await requestScores(data.userId, scoreDates);
     await prisma.healthConnection.update({ where: { userId: data.userId }, data: { lastSyncedAt: new Date() } });
   } catch (err) {
     if (isUnauthorized(err)) {
@@ -193,6 +223,11 @@ export async function processSyncJob(job: Job): Promise<void> {
   } else if (job.name === TOKEN_REFRESH_SWEEP_JOB) {
     // Scheduled through the queue so exactly one instance sweeps per tick.
     await runTokenRefreshSweep();
+  } else if (job.name === COMPUTE_DAILY_SCORE_JOB) {
+    const { userId, date } = job.data as ComputeDailyScoreJobData;
+    await computeDailyScore(userId, date);
+  } else if (job.name === SCORE_SWEEP_JOB) {
+    await runScoreSweep();
   }
 }
 

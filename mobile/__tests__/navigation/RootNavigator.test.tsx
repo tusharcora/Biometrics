@@ -17,12 +17,14 @@ jest.mock('@react-navigation/native', () => ({
   DefaultTheme: { dark: false, colors: {}, fonts: {} },
   DarkTheme: { dark: true, colors: {}, fonts: {} },
 }));
+const mockRegisteredScreens: string[] = [];
 jest.mock('@react-navigation/native-stack', () => {
   const ReactLib = require('react');
   return {
     createNativeStackNavigator: () => ({
       Navigator: ({ initialRouteName, children }: any) => {
         const screens = ReactLib.Children.toArray(children);
+        mockRegisteredScreens.splice(0, mockRegisteredScreens.length, ...screens.map((child: any) => child.props.name));
         const match = screens.find((child: any) => child.props.name === initialRouteName);
         return match ? ReactLib.createElement(match.props.component) : null;
       },
@@ -117,5 +119,15 @@ describe('RootNavigator', () => {
     const { getByText } = render(<RootNavigator />);
 
     await waitFor(() => expect(getByText('CONNECT_SCREEN')).toBeTruthy());
+  });
+
+  it('registers the ScoreDetail route', async () => {
+    signedIn(true);
+    (apiFetch as jest.Mock).mockResolvedValue({ status: 'CONNECTED', lastSyncedAt: null });
+
+    const { getByText } = render(<RootNavigator />);
+
+    await waitFor(() => expect(getByText('DASHBOARD_SCREEN')).toBeTruthy());
+    expect(mockRegisteredScreens).toContain('ScoreDetail');
   });
 });

@@ -10,11 +10,23 @@ import * as subscriber from '../../src/health/subscriber';
 import { encryptToken, decryptToken } from '../../src/crypto/tokenCipher';
 import * as tokenRefreshJob from '../../src/sync/tokenRefreshJob';
 import { TOKEN_REFRESH_SWEEP_JOB } from '../../src/sync/queue';
+import * as scoringQueue from '../../src/scoring/queue';
+import * as scoreSweep from '../../src/scoring/sweep';
+import { seedHistory, day } from '../scoring/dbHelpers';
 
 jest.mock('../../src/health/client');
 jest.mock('../../src/health/oauth');
 jest.mock('../../src/health/subscriber');
 jest.mock('../../src/sync/tokenRefreshJob');
+jest.mock('../../src/scoring/sweep');
+// The worker asks for score recomputes after storing data; those go to a real
+// Redis queue. Stubbed so sync tests never leave delayed jobs behind (the
+// score trigger itself is covered in tests/scoring/).
+jest.mock('../../src/scoring/queue', () => ({
+  COMPUTE_DAILY_SCORE_JOB: 'computeDailyScore',
+  SCORE_SWEEP_JOB: 'scoreSweep',
+  enqueueScoreCompute: jest.fn().mockResolvedValue(undefined),
+}));
 
 beforeAll(() => {
   migrateTestDb();
@@ -30,6 +42,7 @@ beforeEach(() => {
   (healthClient.fetchMetricRange as jest.Mock).mockReset();
   (healthClient.fetchSleepSessions as jest.Mock).mockReset().mockResolvedValue([]);
   (subscriber.deleteUserSubscription as jest.Mock).mockReset().mockResolvedValue(undefined);
+  (scoringQueue.enqueueScoreCompute as jest.Mock).mockReset().mockResolvedValue(undefined);
 });
 
 afterAll(async () => {
@@ -513,6 +526,100 @@ describe('processSyncJob', () => {
       expect(oauth.refreshHealthTokens).toHaveBeenCalledTimes(1);
       expect((healthClient.fetchSleepSessions as jest.Mock).mock.calls[1][0]).toBe('refreshed-access');
       expect((await sleepState(user.id)).rollups).toEqual([['2026-09-02', 420]]);
+    });
+  });
+
+  // Slice 1: new HRV/RHR/SLEEP data asks for a (debounced) score recompute for
+  // exactly the civil days it touched.
+  describe('score triggers', () => {
+    const enqueue = () => scoringQueue.enqueueScoreCompute as jest.Mock;
+
+    it('requests a recompute for the day of each stored HRV / RESTING_HR point', async () => {
+      const user = await createConnectedUser();
+      (healthClient.fetchMetricRange as jest.Mock).mockResolvedValue([{ recordedAt: new Date('2026-09-01'), value: 44 }]);
+
+      await processSyncJob({ name: 'fetch', data: { userId: user.id, metricType: 'HRV', date: '2026-09-01' } } as Job);
+      await processSyncJob({ name: 'fetch', data: { userId: user.id, metricType: 'RESTING_HR', date: '2026-09-01' } } as Job);
+
+      // One call per webhook; collapsing them into one job is the queue's deterministic job id.
+      expect(enqueue()).toHaveBeenCalledTimes(2);
+      expect(enqueue()).toHaveBeenCalledWith(user.id, '2026-09-01');
+    });
+
+    it('does not request a recompute for STEPS, which is not a score input', async () => {
+      const user = await createConnectedUser();
+      (healthClient.fetchMetricRange as jest.Mock).mockResolvedValue([{ recordedAt: new Date('2026-09-01'), value: 8000 }]);
+
+      await processSyncJob({ name: 'fetch', data: { userId: user.id, metricType: 'STEPS', date: '2026-09-01' } } as Job);
+
+      expect(enqueue()).not.toHaveBeenCalled();
+    });
+
+    it('requests a recompute for the local civil date each stored sleep session ends on', async () => {
+      const user = await createConnectedUser();
+      await prisma.user.update({ where: { id: user.id }, data: { timezone: 'America/Los_Angeles' } });
+      // Ends 2026-09-02T06:00Z = 2026-09-01 23:00 in Los Angeles.
+      (healthClient.fetchSleepSessions as jest.Mock).mockResolvedValue([
+        { startTime: new Date('2026-09-01T22:00:00Z'), endTime: new Date('2026-09-02T06:00:00Z'), minutesAsleep: 420 },
+      ]);
+
+      await processSyncJob({ name: 'fetch', data: { userId: user.id, metricType: 'SLEEP', date: '2026-09-02' } } as Job);
+
+      expect(enqueue()).toHaveBeenCalledTimes(1);
+      expect(enqueue()).toHaveBeenCalledWith(user.id, '2026-09-01');
+    });
+
+    it('requests one recompute per distinct day for a backfill, not one per metric', async () => {
+      const user = await createConnectedUser();
+      (healthClient.fetchMetricRange as jest.Mock).mockImplementation(async (_t: string, metric: string) =>
+        metric === 'STEPS'
+          ? [{ recordedAt: new Date('2026-08-03'), value: 5000 }]
+          : [
+              { recordedAt: new Date('2026-08-01'), value: 40 },
+              { recordedAt: new Date('2026-08-02'), value: 41 },
+            ],
+      );
+
+      await processSyncJob({ name: 'backfill', data: { userId: user.id, startDate: '2026-08-01', endDate: '2026-08-03' } } as Job);
+
+      const dates = enqueue().mock.calls.map((c) => c[1]).sort();
+      expect(dates).toEqual(['2026-08-01', '2026-08-02']);
+    });
+
+    it('never fails (or retries) a sync job whose data is stored just because the score enqueue failed', async () => {
+      const user = await createConnectedUser();
+      (healthClient.fetchMetricRange as jest.Mock).mockResolvedValue([{ recordedAt: new Date('2026-09-01'), value: 44 }]);
+      enqueue().mockRejectedValue(new Error('redis down'));
+      const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+
+      await expect(
+        processSyncJob({ name: 'fetch', data: { userId: user.id, metricType: 'HRV', date: '2026-09-01' } } as Job),
+      ).resolves.toBeUndefined();
+
+      expect(await prisma.biometricRecord.count({ where: { userId: user.id, metricType: 'HRV' } })).toBe(1);
+      const conn = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
+      expect(conn?.lastSyncedAt).not.toBeNull();
+      errorSpy.mockRestore();
+    });
+
+    it('runs a computeDailyScore job through the worker and persists the score', async () => {
+      const user = await createConnectedUser();
+      const last = await seedHistory(user.id, '2026-06-01', 40);
+
+      await processSyncJob({ name: 'computeDailyScore', data: { userId: user.id, date: last } } as Job);
+
+      const score = await prisma.dailyScore.findUnique({
+        where: { userId_date_type: { userId: user.id, date: day(last), type: 'RECOVERY' } },
+      });
+      expect(score?.score).not.toBeNull();
+    });
+
+    it('runs the score sweep for a scoreSweep job', async () => {
+      (scoreSweep.runScoreSweep as jest.Mock).mockResolvedValue({ usersChecked: 0, jobsEnqueued: 0 });
+
+      await processSyncJob({ name: 'scoreSweep', data: {} } as Job);
+
+      expect(scoreSweep.runScoreSweep).toHaveBeenCalledTimes(1);
     });
   });
 });

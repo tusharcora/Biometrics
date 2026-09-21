@@ -13,6 +13,10 @@
   --color-accent: 0 176 185;
   --color-accent-foreground: 255 255 255;
   --color-destructive: 192 57 43;
+  --color-score-excellent: 22 163 74;
+  --color-score-good: 101 163 13;
+  --color-score-fair: 217 119 6;
+  --color-score-poor: 220 38 38;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -27,5 +31,9 @@
     --color-accent: 45 197 200;
     --color-accent-foreground: 12 12 13;
     --color-destructive: 248 113 113;
+    --color-score-excellent: 74 222 128;
+    --color-score-good: 163 230 53;
+    --color-score-fair: 251 191 36;
+    --color-score-poor: 248 113 113;
   }
 }

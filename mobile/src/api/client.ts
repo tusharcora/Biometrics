@@ -5,6 +5,19 @@ export function setBaseUrl(url: string): void {
   baseUrl = url;
 }
 
+// Carries the HTTP status so callers can tell "nothing there" (404) apart from
+// a real failure. The message format is unchanged from before.
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    Object.setPrototypeOf(this, ApiError.prototype);
+  }
+}
+
 export interface ApiFetchOptions extends RequestInit {
   /**
    * Skip both attaching the session token and the 401-retry-refresh. Use for
@@ -48,7 +61,7 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
 
   if (skipAuth) {
     const res = await fetch(`${baseUrl}${path}`, requestInit);
-    if (!res.ok) throw new Error(`Request to ${path} failed with ${res.status}`);
+    if (!res.ok) throw new ApiError(res.status, `Request to ${path} failed with ${res.status}`);
     return res.json() as Promise<T>;
   }
 
@@ -64,7 +77,7 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
     accessToken = await refreshAccessToken();
     res = await doFetch(accessToken);
   }
-  if (!res.ok) throw new Error(`Request to ${path} failed with ${res.status}`);
+  if (!res.ok) throw new ApiError(res.status, `Request to ${path} failed with ${res.status}`);
   return res.json() as Promise<T>;
 }
 

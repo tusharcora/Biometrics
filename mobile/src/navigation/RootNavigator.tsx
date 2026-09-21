@@ -5,10 +5,12 @@ import { NavigationContainer, DefaultTheme, DarkTheme, type Theme } from '@react
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../auth/AuthContext';
 import { apiFetch } from '../api/client';
+import type { ScoreType } from '../api/scores';
 import { SignInScreen } from '../screens/SignInScreen';
 import { ConnectHealthScreen } from '../screens/ConnectHealthScreen';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { MetricDetailScreen } from '../screens/MetricDetailScreen';
+import { ScoreDetailScreen } from '../screens/ScoreDetailScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { syncTimezone } from '../lib/timezone';
 import { COLORS } from '../theme';
@@ -28,6 +30,7 @@ export type RootStackParamList = {
   ConnectHealth: undefined;
   Dashboard: undefined;
   MetricDetail: { metricType: MetricRecord['metricType']; records: MetricRecord[] };
+  ScoreDetail: { date: string; type: ScoreType };
   Settings: undefined;
 };
 
@@ -103,6 +106,7 @@ export function RootNavigator() {
         <Stack.Screen name="ConnectHealth" component={ConnectHealthScreen} options={{ title: 'Connect Health' }} />
         <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ title: 'Dashboard' }} />
         <Stack.Screen name="MetricDetail" component={MetricDetailScreen} options={{ title: '' }} />
+        <Stack.Screen name="ScoreDetail" component={ScoreDetailScreen} options={{ title: 'Score' }} />
         <Stack.Screen name="Settings" component={SettingsScreen} options={{ title: 'Settings' }} />
       </Stack.Navigator>
     </NavigationContainer>

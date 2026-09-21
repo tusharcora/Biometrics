@@ -6,17 +6,22 @@ import { useNavigation } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
 import { Ionicons } from '@expo/vector-icons';
 import { apiFetch } from '../api/client';
+import { fetchScores, type DailyScoreDTO } from '../api/scores';
 import { useAuth } from '../auth/AuthContext';
 import { Text } from '../components/ui/text';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { Ring } from '../components/ui/ring';
+import { ScoreRing } from '../components/ui/score-ring';
+import { BaselineProgressRing } from '../components/ui/baseline-progress-ring';
+import { ConfidenceBadge } from '../components/ui/confidence-badge';
 import { TrendLine } from '../components/ui/trend-line';
 import { CountUp } from '../components/ui/count-up';
 import { ThemeToggle } from '../components/ui/theme-toggle';
 import { COLORS, METRIC_CONFIG, METRIC_ORDER, type MetricType } from '../theme';
 import { computeStats, buildHeadline, type MetricRecord } from '../lib/metricInsights';
+import { pickColdStartProgress } from '../lib/scoreInsights';
 
 type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';
 
@@ -54,6 +59,55 @@ function computeHeadlineInsight(records: MetricRecord[]): string | null {
   return best?.message ?? null;
 }
 
+// undefined while loading, null when no Recovery Score has been calculated yet.
+type RecoveryState = DailyScoreDTO | null | undefined;
+
+function RecoveryScoreCard({ recovery, failed, onPress }: { recovery: RecoveryState; failed: boolean; onPress: (score: DailyScoreDTO) => void }) {
+  if (failed) {
+    return (
+      <Card testID="recovery-score-unavailable">
+        <Text className="text-sm text-muted-foreground">Recovery Score is unavailable right now.</Text>
+      </Card>
+    );
+  }
+
+  if (recovery === undefined) {
+    return <Skeleton testID="recovery-score-loading" className="h-28 w-full" />;
+  }
+
+  if (recovery === null) {
+    return (
+      <Card testID="recovery-score-empty">
+        <Text className="text-sm text-muted-foreground">Your Recovery Score will appear once it has been calculated.</Text>
+      </Card>
+    );
+  }
+
+  const cold = recovery.score === null ? pickColdStartProgress(recovery.coldStart) : null;
+
+  return (
+    <Pressable testID="recovery-score-card" onPress={() => onPress(recovery)} className="active:opacity-80">
+      <Card className="flex-row items-center gap-4">
+        {recovery.score === null && cold ? (
+          <BaselineProgressRing daysCollected={cold.daysCollected} daysRequired={cold.daysRequired} />
+        ) : (
+          <ScoreRing score={recovery.score} factors={recovery.factors} />
+        )}
+        <View className="flex-1 gap-1.5">
+          <Text className="text-base font-semibold">Recovery Score</Text>
+          {recovery.score !== null ? (
+            <ConfidenceBadge level={recovery.confidenceLevel} />
+          ) : (
+            <Text className="text-xs text-muted-foreground">Building your baseline</Text>
+          )}
+          <Text className="text-xs text-muted-foreground">Tap to see what moved it</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color="rgb(120, 113, 108)" />
+      </Card>
+    </Pressable>
+  );
+}
+
 export function DashboardScreen() {
   const navigation = useNavigation<any>();
   const { signOut } = useAuth();
@@ -62,6 +116,8 @@ export function DashboardScreen() {
   const [records, setRecords] = useState<MetricRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus | null>(null);
+  const [recovery, setRecovery] = useState<RecoveryState>(undefined);
+  const [recoveryFailed, setRecoveryFailed] = useState(false);
 
   useEffect(() => {
     apiFetch<MetricRecord[]>('/me/biometrics')
@@ -75,6 +131,24 @@ export function DashboardScreen() {
     apiFetch<{ status: ConnectionStatus }>('/me/connection')
       .then((res) => setConnectionStatus(res?.status ?? null))
       .catch(() => setConnectionStatus(null));
+  }, []);
+
+  useEffect(() => {
+    // Independent of the metric cards: a scores failure must not take the rest
+    // of the dashboard down with it.
+    let cancelled = false;
+    (async () => {
+      try {
+        const scores = await fetchScores(7);
+        // Newest first; the card is the most recent Recovery Score.
+        if (!cancelled) setRecovery(scores?.find((s) => s.type === 'RECOVERY') ?? null);
+      } catch {
+        if (!cancelled) setRecoveryFailed(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const latest = useMemo(() => latestByMetric(records ?? []), [records]);
@@ -158,6 +232,12 @@ export function DashboardScreen() {
           <Text className="text-2xl font-bold">Today</Text>
           {headerActions}
         </View>
+
+        <RecoveryScoreCard
+          recovery={recovery}
+          failed={recoveryFailed}
+          onPress={(score) => navigation.navigate('ScoreDetail', { date: score.date, type: 'RECOVERY' })}
+        />
 
         <View className="flex-row flex-wrap gap-3">
           {METRIC_ORDER.map((type, index) => {
