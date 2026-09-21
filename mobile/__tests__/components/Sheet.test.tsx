@@ -57,4 +57,65 @@ describe('Sheet', () => {
 
     expect(onClose).toHaveBeenCalledTimes(1);
   });
+
+  it('does not call onClose if the sheet is unmounted during the exit animation', () => {
+    const onClose = jest.fn();
+    const { getByTestId, unmount } = render(
+      <Sheet visible onClose={onClose}>
+        <Text>details</Text>
+      </Sheet>,
+    );
+
+    fireEvent.press(getByTestId('sheet-backdrop'));
+    unmount();
+    act(() => {
+      jest.advanceTimersByTime(MOTION.duration.normal + 10);
+    });
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it('can be dismissed again after being reopened, calling onClose once per dismissal', () => {
+    const onClose = jest.fn();
+    const sheet = (visible: boolean) => (
+      <Sheet visible={visible} onClose={onClose}>
+        <Text>details</Text>
+      </Sheet>
+    );
+    const { getByTestId, rerender } = render(sheet(true));
+
+    fireEvent.press(getByTestId('sheet-backdrop'));
+    act(() => {
+      jest.advanceTimersByTime(MOTION.duration.normal + 10);
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
+
+    rerender(sheet(false));
+    rerender(sheet(true));
+
+    fireEvent.press(getByTestId('sheet-backdrop'));
+    act(() => {
+      jest.advanceTimersByTime(MOTION.duration.normal + 10);
+    });
+    expect(onClose).toHaveBeenCalledTimes(2);
+  });
+
+  it('drops the pending close when the sheet is reshown during the exit animation', () => {
+    const onClose = jest.fn();
+    const sheet = (visible: boolean) => (
+      <Sheet visible={visible} onClose={onClose}>
+        <Text>details</Text>
+      </Sheet>
+    );
+    const { getByTestId, rerender } = render(sheet(true));
+
+    fireEvent.press(getByTestId('sheet-backdrop'));
+    rerender(sheet(false));
+    rerender(sheet(true));
+    act(() => {
+      jest.advanceTimersByTime(MOTION.duration.normal + 10);
+    });
+
+    expect(onClose).not.toHaveBeenCalled();
+  });
 });

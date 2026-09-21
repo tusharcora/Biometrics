@@ -19,20 +19,39 @@ interface SheetProps {
 
 // Bottom detail sheet. Slides in on show; a backdrop tap, the Android back
 // button, or a downward drag on the handle slides it out and then calls
-// `onClose` exactly once. (A parent that flips `visible` off directly just
-// makes it disappear, without the exit animation.)
+// `onClose` exactly once. `onClose` MUST hide the sheet by setting `visible`
+// to false; a parent that leaves it visible gets a stuck overlay. (A parent
+// that flips `visible` off directly just makes it disappear, without the exit
+// animation, and cancels any pending `onClose`.)
 export function Sheet({ visible, onClose, children, testID = 'sheet' }: SheetProps) {
   const { height } = useWindowDimensions();
   const reduced = useReducedMotion();
   const translateY = useSharedValue(height);
   const closing = useRef(false);
+  const closeTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Latest values for the show effect, which must only re-run when `visible`
+  // changes (a resize or reduce-motion toggle mid-exit must not reset it).
+  const latest = useRef({ height, reduced });
+  latest.current = { height, reduced };
+
+  const clearCloseTimer = useCallback(() => {
+    if (closeTimer.current !== null) {
+      clearTimeout(closeTimer.current);
+      closeTimer.current = null;
+    }
+  }, []);
 
   useEffect(() => {
     if (!visible) return;
+    clearCloseTimer();
     closing.current = false;
-    translateY.value = height;
-    translateY.value = reduced ? 0 : withSpring(0, MOTION.spring.settle);
-  }, [visible, height, reduced, translateY]);
+    translateY.value = latest.current.height;
+    translateY.value = latest.current.reduced ? 0 : withSpring(0, MOTION.spring.settle);
+  }, [visible, clearCloseTimer, translateY]);
+
+  // Never call onClose after the sheet has unmounted.
+  useEffect(() => clearCloseTimer, [clearCloseTimer]);
 
   const dismiss = useCallback(() => {
     if (closing.current) return;
@@ -42,7 +61,10 @@ export function Sheet({ visible, onClose, children, testID = 'sheet' }: SheetPro
       return;
     }
     translateY.value = withTiming(height, { duration: MOTION.duration.normal });
-    setTimeout(onClose, MOTION.duration.normal);
+    closeTimer.current = setTimeout(() => {
+      closeTimer.current = null;
+      onClose();
+    }, MOTION.duration.normal);
   }, [height, onClose, reduced, translateY]);
 
   const pan = useMemo(
