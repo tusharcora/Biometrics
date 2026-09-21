@@ -3,7 +3,7 @@
 // (fine for one dashboard sentence, not for a score someone tracks daily).
 
 import type { ScoreConfig } from './configs/v1';
-import type { Baseline, DailyPoint } from './types';
+import type { Baseline, BaselineMetric, DailyPoint } from './types';
 
 export function median(values: number[]): number {
   if (values.length === 0) throw new Error('median of an empty series');
@@ -56,15 +56,28 @@ export function computeBaseline(history: DailyPoint[], cfg: ScoreConfig): Baseli
   };
 }
 
-/** sigma-hat with the floor applied (see ScoreConfig.spreadFloorFraction). */
-function flooredSpread(baseline: Extract<Baseline, { coldStart: false }>, cfg: ScoreConfig): number {
-  return Math.max(baseline.spread, cfg.spreadFloorFraction * Math.abs(baseline.ewma), Number.EPSILON);
+/**
+ * sigma-hat with the floors applied: the relative floor (ScoreConfig.spreadFloorFraction)
+ * and, when `metric` has one, its absolute floor in the metric's own units
+ * (ScoreConfig.spreadFloors).
+ */
+function flooredSpread(
+  baseline: Extract<Baseline, { coldStart: false }>,
+  cfg: ScoreConfig,
+  metric?: BaselineMetric,
+): number {
+  const absoluteFloor = (metric && cfg.spreadFloors?.[metric]) || 0;
+  return Math.max(baseline.spread, cfg.spreadFloorFraction * Math.abs(baseline.ewma), absoluteFloor, Number.EPSILON);
 }
 
-/** (value - ewma) / sigma-hat, with the spread floored (see ScoreConfig.spreadFloorFraction). Null while cold-starting. */
-export function zScore(value: number, baseline: Baseline, cfg: ScoreConfig): number | null {
+/**
+ * (value - ewma) / sigma-hat, with the spread floored (see ScoreConfig.spreadFloorFraction
+ * and, for `metric`, ScoreConfig.spreadFloors). Null while cold-starting. NOT clamped:
+ * the composite applies cfg.zClamp, so this stays the raw z the features store.
+ */
+export function zScore(value: number, baseline: Baseline, cfg: ScoreConfig, metric?: BaselineMetric): number | null {
   if (baseline.coldStart) return null;
-  return (value - baseline.ewma) / flooredSpread(baseline, cfg);
+  return (value - baseline.ewma) / flooredSpread(baseline, cfg, metric);
 }
 
 /**
@@ -87,8 +100,19 @@ export function sleepDurationZVsGoal(
   baseline: Baseline,
   cfg: ScoreConfig,
 ): number | null {
-  if (baseline.coldStart) return null;
+  const z = sleepDurationZRawVsGoal(minutesAsleep, goalMinutes, baseline, cfg);
+  if (z === null) return null;
   const { min, max } = cfg.sleepScore.durationZClamp;
-  const z = (minutesAsleep - goalMinutes) / flooredSpread(baseline, cfg);
   return Math.min(max, Math.max(min, z));
+}
+
+/** The duration z before its [-3, +1] clamp; recorded as `zRaw` for explainability. Null while cold-starting. */
+export function sleepDurationZRawVsGoal(
+  minutesAsleep: number,
+  goalMinutes: number,
+  baseline: Baseline,
+  cfg: ScoreConfig,
+): number | null {
+  if (baseline.coldStart) return null;
+  return (minutesAsleep - goalMinutes) / flooredSpread(baseline, cfg, 'SLEEP');
 }

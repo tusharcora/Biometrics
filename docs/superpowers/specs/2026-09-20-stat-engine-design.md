@@ -138,6 +138,13 @@ piece has a stated reason.
   - List endpoints are paginated; the client now follows `nextPageToken`.
   - The three Slice 0 live checks are recorded in
     `docs/superpowers/notes/slice0-live-checks.md`.
+- **v5**: config v3 (live) after the Sleep Score proved too volatile on real
+  data.
+  - Every factor's z-score is clamped to ±3 before weighting.
+  - Baseline spread has per-metric floors in the metric's own units
+    (efficiency 0.05, bedtime consistency 10 points) on top of the existing
+    fractional floor.
+  - The measurements behind this are in Implementation Status.
 
 ## Goals
 
@@ -578,6 +585,13 @@ the baseline doesn't chase the last data point:
   expressed in standard deviations: a raw MAD under-reports spread
   relative to σ by roughly this factor for normal-ish data, so `k` is
   calibrated against the scaled `σ̂`, never raw MAD.
+- **Spread floors.** The effective spread is `max(σ̂, spreadFloorFraction ×
+  |EWMA|, spreadFloors[metric])`. The fractional floor (2% of the mean) is
+  applied to every metric. The per-metric floor (config v3) is in the
+  metric's own units and exists for near-constant metrics whose natural
+  day-to-day spread is far smaller than a difference that matters: sleep
+  efficiency (0.05) and bedtime consistency (10 points). Without it, a
+  normal night at 0.90 efficiency against a 0.98 baseline scores as −3.6σ.
 - **Cold-start handling**: fewer than 14 days of history for a metric →
   the metric is excluded from the composite score entirely for that user
   (not defaulted to a population average — a population baseline would
@@ -607,6 +621,13 @@ score = 100 / (1 + e^(-k · Σ(w_i · z_i)))
 standard deviations (per the σ̂-scaled spread above) of favorable
 deviation lands near 90 — chosen and documented in the model config, not
 hardcoded magic numbers in the formula.
+
+**Bounded influence (config v3):** each factor's z is clamped to ±3 before
+weighting, so no single factor can dominate the sum. The stored factor vector's
+`z` is the value actually used (so `contribution = w · z` stays exact) and
+`zRaw` keeps the unclamped value for explainability; the API never exposes
+`zRaw`. Duration keeps its own tighter `[−3, +1]` clamp. Cold-start
+renormalization happens after the clamp.
 
 **Recovery Score** weights (Slice 1 — `acuteChronicLoadRatio` excluded
 per the flag in Stage 2 above, so weights are renormalized across three
@@ -909,9 +930,21 @@ section wins**.
   `backend/scripts/resyncRestingHr.ts` (dry-run by default) wipes and
   re-syncs them, and the version bump below causes the affected days to be
   rescored.
-- The Sleep Score weights are decided (config v2, see Stage 4) and v2 is the
-  live algorithm version. Days older than the sweep's 90-day lookback keep
-  their v1 scores.
+- The Sleep Score weights are decided (config v2, see Stage 4). Days older
+  than the sweep's 90-day lookback keep their older scores.
+- **Config v3 is the live algorithm version.** On one real account the
+  Sleep Score swung between about 12 and 70 from small changes: bedtime
+  consistency (a rolling 14-day statistic with a day-to-day spread near 3)
+  produced z = −6.1, worth −25.9 points on a 0.20 weight, and a single normal
+  0.90-efficiency night produced z = −3.6 against a spread that was already at
+  its 2% floor; while consistency was still cold-starting, efficiency's
+  renormalized weight rose from 0.30 to 0.375. v3 adds the ±3 clamp and the
+  per-metric floors (Stage 3 and Stage 4). Replaying that account's history
+  through v2 and v3 (`scripts/backtest.ts`): Recovery moved by a mean of 0.02
+  points (max 0.38), i.e. effectively unchanged; the Sleep Score's extreme lows
+  softened (12.5 to 29.8, 17.0 to 33.6) and a genuinely short night stayed low
+  (15.0 to 16.1). This is a regression check, not a validation of accuracy.
+  `scripts/rescoreUser.ts` rescores one user's window inline (no queue).
 
 Slice 0
 - `PUT /me/timezone` recomputes rollups on every call, not only on a

@@ -9,11 +9,10 @@ import { migrateTestDb } from '../setupTestDb';
 import { createUser, seedHistory, seedSessions, day } from './dbHelpers';
 
 describe('score config v2 (Sleep Score weights)', () => {
-  it('is the live version, registered next to v1', () => {
-    expect(LIVE_VERSION).toBe('v2');
-    expect(getLiveConfig()).toBe(v2Config);
+  it('stays registered and importable (v3 is now live, see v3Config.test.ts)', () => {
+    expect(LIVE_VERSION).not.toBe('v2');
     expect(getScoreConfig('v2')).toBe(v2Config);
-    expect(Object.keys(SCORE_CONFIGS).sort()).toEqual(['v1', 'v2']);
+    expect(Object.keys(SCORE_CONFIGS).sort()).toEqual(['v1', 'v2', 'v3']);
   });
 
   it('uses the approved Sleep Score weights: duration 0.50, efficiency 0.30, consistency 0.20', () => {

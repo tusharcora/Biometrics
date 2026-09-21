@@ -58,6 +58,12 @@ export type Baseline =
 export interface FactorInput {
   factor: FactorKey;
   z: number | null;
+  /**
+   * The z before ANY clamp, when the caller has already clamped `z` itself (the
+   * Sleep Score's duration z is clamped to [-3, +1] upstream). Optional: when
+   * absent, `z` is the raw value. Only used to record `zRaw` on the output.
+   */
+  zRaw?: number | null;
   imputed: boolean;
   excluded: boolean;
 }
@@ -65,7 +71,10 @@ export interface FactorInput {
 /** Stage 4 output per factor (before Stage 5 adds `points`). */
 export interface FactorContribution {
   factor: FactorKey;
+  /** The z actually used in the weighted sum (after cfg.zClamp), so contribution = weight * direction * z stays exactly true. */
   z: number | null;
+  /** The unclamped z, recorded only under a config with a zClamp (v3+), for explainability. */
+  zRaw?: number | null;
   /** The weight actually used that day, after renormalizing around excluded factors (0 when excluded). */
   weight: number;
   /** weight * direction * z. */

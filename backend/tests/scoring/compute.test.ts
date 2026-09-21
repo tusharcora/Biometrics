@@ -32,7 +32,7 @@ describe('computeDailyScore', () => {
     const factors = score!.factors as Array<Record<string, unknown>>;
     expect(factors.map((f) => f.factor).sort()).toEqual(['HRV', 'RHR', 'SLEEP_DEBT']);
     expect(Object.keys(factors[0]!).sort()).toEqual(
-      ['contribution', 'excluded', 'factor', 'imputed', 'points', 'weight', 'z'].sort(),
+      ['contribution', 'excluded', 'factor', 'imputed', 'points', 'weight', 'z', 'zRaw'].sort(),
     );
 
     const snapshots = await prisma.baselineSnapshot.findMany({ where: { userId: user.id, date: day(last) } });

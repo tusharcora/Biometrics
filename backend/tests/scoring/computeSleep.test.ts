@@ -33,7 +33,7 @@ describe('computeDailyScore: Sleep Score (Slice 1.5)', () => {
     expect(score.confidenceLevel).toBe('HIGH');
     const factors = score.factors as Array<Record<string, any>>;
     expect(factors.map((f) => f.factor).sort()).toEqual(['CIRCADIAN_CONSISTENCY', 'SLEEP_DURATION', 'SLEEP_EFFICIENCY']);
-    expect(Object.keys(factors[0]!).sort()).toEqual(['contribution', 'excluded', 'factor', 'imputed', 'points', 'weight', 'z']);
+    expect(Object.keys(factors[0]!).sort()).toEqual(['contribution', 'excluded', 'factor', 'imputed', 'points', 'weight', 'z', 'zRaw']);
     expect(factors.reduce((sum, f) => sum + f.weight, 0)).toBeCloseTo(1, 9);
     expect(factors.every((f) => !f.excluded && !f.imputed)).toBe(true);
 

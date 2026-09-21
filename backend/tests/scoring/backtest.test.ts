@@ -135,6 +135,23 @@ describe('backtest: Sleep Score (Slice 1.5)', () => {
     for (const d of scored) expect(d.delta).toBeCloseTo(d.candidate! - d.live!, 9);
   });
 
+  it('replays v2 -> v3 on synthetic data: the Sleep Score moves (floors and clamp), Recovery does not (no z there reaches the clamp)', async () => {
+    const both = await runBacktestAll({
+      candidate: getScoreConfig('v3'),
+      live: getScoreConfig('v2'),
+      days: 30,
+      now: NOW,
+      loadUsers: async () => [userWithSessions()],
+    });
+    expect(both.SLEEP.liveVersion).toBe('v2');
+    expect(both.SLEEP.candidateVersion).toBe('v3');
+    expect(both.SLEEP.comparedDays).toBeGreaterThan(0);
+    expect(both.SLEEP.maxAbsDelta).toBeGreaterThan(0);
+    expect(both.RECOVERY.comparedDays).toBeGreaterThan(0);
+    expect(both.RECOVERY.maxAbsDelta).toBe(0);
+    expect(formatReport(both.SLEEP)).toContain('SLEEP score: live v2');
+  });
+
   it('skips days with no observed sleep in the SLEEP replay (no Sleep Score exists for them)', async () => {
     const user = userWithSessions();
     const gapDate = shiftDate(START, 75);

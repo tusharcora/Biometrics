@@ -115,6 +115,8 @@ function scoreRowData(algorithmVersion: string, outcome: ScoreOutcome) {
     factors: outcome.factors.map((x) => ({
       factor: x.factor,
       z: x.z,
+      // Only present under a config with a zClamp; the shape of older versions' rows is unchanged.
+      ...(x.zRaw !== undefined ? { zRaw: x.zRaw } : {}),
       weight: x.weight,
       contribution: x.contribution,
       points: x.points,
