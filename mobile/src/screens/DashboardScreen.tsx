@@ -25,6 +25,7 @@ import { COLORS, METRIC_CONFIG, METRIC_ORDER, type MetricType } from '../theme';
 import { computeStats, buildHeadline, type MetricRecord } from '../lib/metricInsights';
 import { pickColdStartProgress, scoreTypeLabel } from '../lib/scoreInsights';
 import { coachEntryRoute, useCoachStatus } from '../lib/useCoachStatus';
+import { useTabBarClearance } from '../navigation/tabBarLayout';
 
 type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';
 
@@ -137,6 +138,7 @@ function ScoreCard({
 
 export function DashboardScreen() {
   const navigation = useNavigation<any>();
+  const clearance = useTabBarClearance();
   const { signOut } = useAuth();
   const { colorScheme: scheme } = useColorScheme();
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
@@ -265,7 +267,7 @@ export function DashboardScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background">
-      <ScrollView contentContainerStyle={{ gap: 16, padding: 16 }}>
+      <ScrollView contentContainerStyle={{ gap: 16, padding: 16, paddingBottom: clearance }}>
         <View className="flex-row items-center justify-between">
           <Text className="text-2xl font-bold">Today</Text>
           {headerActions}

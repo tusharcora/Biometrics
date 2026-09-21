@@ -23,6 +23,8 @@ import { ChatBubble } from '../components/ui/chat-bubble';
 import { MemoryProposalChips } from '../components/memory-proposal-chips';
 import { COLORS } from '../theme';
 import type { RootStackParamList } from '../navigation/RootNavigator';
+import { useTabBarClearance } from '../navigation/tabBarLayout';
+import { useKeyboardVisible } from '../lib/useKeyboardVisible';
 
 type CoachRoute = RouteProp<RootStackParamList, 'Coach'>;
 
@@ -56,6 +58,8 @@ const ERROR_TEXT = {
 // suggests token streaming.
 export function CoachScreen() {
   const navigation = useNavigation<any>();
+  const clearance = useTabBarClearance();
+  const keyboardVisible = useKeyboardVisible();
   const route = useRoute<CoachRoute>();
   const { colorScheme: scheme } = useColorScheme();
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
@@ -212,7 +216,12 @@ export function CoachScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background">
-      <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={90}>
+      <KeyboardAvoidingView
+        className="flex-1"
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        keyboardVerticalOffset={90}
+        style={{ paddingBottom: keyboardVisible ? 0 : clearance }}
+      >
         <ScrollView
           ref={scrollRef}
           keyboardShouldPersistTaps="handled"

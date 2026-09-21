@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { useColorScheme } from 'nativewind';
-import { NavigationContainer, DefaultTheme, DarkTheme, type Theme } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme, DarkTheme, type NavigatorScreenParams, type Theme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../auth/AuthContext';
 import { apiFetch } from '../api/client';
@@ -16,6 +16,7 @@ import { SettingsScreen } from '../screens/SettingsScreen';
 import { CoachScreen } from '../screens/CoachScreen';
 import { CoachConsentScreen } from '../screens/CoachConsentScreen';
 import { CoachMemoryScreen } from '../screens/CoachMemoryScreen';
+import { TabsNavigator, type TabParamList } from './TabsNavigator';
 import { syncTimezone } from '../lib/timezone';
 import { COLORS } from '../theme';
 import type { MetricRecord } from '../lib/metricInsights';
@@ -31,6 +32,8 @@ const DARK_NAV_THEME: Theme = {
 };
 
 export type RootStackParamList = {
+  // The five-tab shell (Home, Activity, Coach, Metrics, Profile).
+  Tabs: NavigatorScreenParams<TabParamList> | undefined;
   ConnectHealth: undefined;
   Dashboard: undefined;
   MetricDetail: { metricType: MetricRecord['metricType']; records: MetricRecord[] };
@@ -77,7 +80,7 @@ export function RootNavigator() {
         if (!cancelled) {
           // An already-connected user should not be stranded on the connect
           // screen every time they open the app.
-          setInitialRoute(res.status === 'CONNECTED' ? 'Dashboard' : 'ConnectHealth');
+          setInitialRoute(res.status === 'CONNECTED' ? 'Tabs' : 'ConnectHealth');
         }
       })
       .catch(() => {
@@ -115,6 +118,7 @@ export function RootNavigator() {
           headerTintColor: colors.foreground,
         }}
       >
+        <Stack.Screen name="Tabs" component={TabsNavigator} options={{ headerShown: false }} />
         <Stack.Screen name="ConnectHealth" component={ConnectHealthScreen} options={{ title: 'Connect Health' }} />
         <Stack.Screen name="Dashboard" component={DashboardScreen} options={{ title: 'Dashboard' }} />
         <Stack.Screen name="MetricDetail" component={MetricDetailScreen} options={{ title: '' }} />

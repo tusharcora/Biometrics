@@ -7,6 +7,7 @@ import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { CoachSettingsSection } from '../components/coach-settings-section';
 import { COLORS } from '../theme';
+import { useTabBarClearance } from '../navigation/tabBarLayout';
 import {
   clearTimezoneOverride,
   getTimezoneState,
@@ -18,6 +19,7 @@ import {
 const MAX_RESULTS = 60;
 
 export function SettingsScreen() {
+  const clearance = useTabBarClearance();
   const { colorScheme: scheme } = useColorScheme();
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
   const [state, setState] = useState<TimezoneState | null>(null);
@@ -98,7 +100,7 @@ export function SettingsScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background">
-      <View className="gap-3 p-4">
+      <View className="gap-3 p-4" style={{ paddingBottom: clearance }}>
         <Card className="gap-1">
           <Pressable testID="timezone-row" onPress={() => setPicking(true)} className="active:opacity-70">
             <Text className="text-sm text-muted-foreground">Time zone</Text>
