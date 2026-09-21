@@ -13,11 +13,14 @@ export interface OrbProps {
   dimmed?: boolean;
   label?: string;
   testID?: string;
+  // Overrides the theme derived from the app's color scheme, for an orb that
+  // sits on a surface whose color does not follow the theme (the tab bar pill).
+  theme?: 'dark' | 'light';
 }
 
 // The app's orb. The theme is passed explicitly because this app's theme is a
 // manual toggle, and the vendored component's "auto" only follows the OS.
-export function Orb({ state, size, paused = false, dimmed = false, label, testID }: OrbProps) {
+export function Orb({ state, size, paused = false, dimmed = false, label, testID, theme }: OrbProps) {
   const { colorScheme } = useColorScheme();
   return (
     <View testID={testID} style={{ width: size, height: size, opacity: dimmed ? DIMMED_OPACITY : 1 }}>
@@ -25,7 +28,7 @@ export function Orb({ state, size, paused = false, dimmed = false, label, testID
         state={state}
         size={size}
         paused={paused}
-        theme={colorScheme === 'light' ? 'light' : 'dark'}
+        theme={theme ?? (colorScheme === 'light' ? 'light' : 'dark')}
         accessibilityLabel={label}
       />
     </View>

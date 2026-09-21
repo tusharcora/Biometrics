@@ -7,7 +7,8 @@ import { DIMMED_OPACITY } from '../../src/components/orb/Orb';
 import { useCoachStatus } from '../../src/lib/useCoachStatus';
 import { useKeyboardVisible } from '../../src/lib/useKeyboardVisible';
 
-jest.mock('nativewind', () => ({ useColorScheme: () => ({ colorScheme: 'dark' }) }));
+let mockScheme: 'light' | 'dark' = 'dark';
+jest.mock('nativewind', () => ({ useColorScheme: () => ({ colorScheme: mockScheme }) }));
 jest.mock('../../src/lib/useCoachStatus', () => ({ useCoachStatus: jest.fn() }));
 jest.mock('../../src/lib/useKeyboardVisible', () => ({ useKeyboardVisible: jest.fn() }));
 
@@ -35,6 +36,7 @@ function bar(props: ReturnType<typeof makeProps>) {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockScheme = 'dark';
   (useKeyboardVisible as jest.Mock).mockReturnValue(false);
   setCoach(enabledStatus);
 });
@@ -114,6 +116,13 @@ describe('FloatingTabBar', () => {
 
       expect(getByTestId('thinking-orb').props.accessibilityLabel).toBe('breathing:64:playing:dark');
       expect(getByTestId('hub-orb')).toHaveStyle({ opacity: DIMMED_OPACITY });
+    });
+
+    it('keeps the light-dotted ink on the always-dark pill when the app theme is light', () => {
+      mockScheme = 'light';
+      const { getByTestId } = render(bar(makeProps(0)));
+
+      expect(getByTestId('thinking-orb').props.accessibilityLabel).toBe('breathing:64:playing:dark');
     });
 
     it('breathes at full brightness on the Coach tab', () => {

@@ -10,7 +10,7 @@ import { hubOrbAppearance } from '../lib/hubOrb';
 import { useCoachStatus } from '../lib/useCoachStatus';
 import { useKeyboardVisible } from '../lib/useKeyboardVisible';
 import { COLORS, MOTION } from '../theme';
-import { FLOATING_BAR_HEIGHT, FLOATING_BAR_MARGIN, HUB_TAB, TAB_LABELS, activeCircleTarget, slotCenterX } from './tabBarLayout';
+import { FLOATING_BAR_HEIGHT, FLOATING_BAR_MARGIN, HUB_TAB, TAB_LABELS, activeCircleTarget, circleAnimates, slotCenterX } from './tabBarLayout';
 
 const CIRCLE_SIZE = 48;
 // The pill has a 1 dp border, so its content area is 2 dp shorter.
@@ -48,11 +48,14 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
 
   const circleX = useSharedValue(0);
   const circleScale = useSharedValue(target.visible ? 1 : 0);
+  const measuredWidth = useRef(0);
   useEffect(() => {
     const x = slotCenterX(target.index, innerWidth, state.routes.length) - CIRCLE_SIZE / 2;
     const scale = target.visible ? 1 : 0;
-    circleX.value = reduced ? x : withSpring(x, MOTION.spring.settle);
-    circleScale.value = reduced ? scale : withSpring(scale, MOTION.spring.settle);
+    const animate = circleAnimates(measuredWidth.current, reduced);
+    measuredWidth.current = innerWidth;
+    circleX.value = animate ? withSpring(x, MOTION.spring.settle) : x;
+    circleScale.value = animate ? withSpring(scale, MOTION.spring.settle) : scale;
   }, [target.index, target.visible, innerWidth, state.routes.length, reduced, circleX, circleScale]);
   const circleStyle = useAnimatedStyle(() => ({ transform: [{ translateX: circleX.value }, { scale: circleScale.value }] }));
 
@@ -113,7 +116,7 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
                 style={{ height: FLOATING_BAR_HEIGHT - 2 }}
               >
                 {isHub ? (
-                  <Orb testID="hub-orb" size={64} state={hub.state} paused={hub.paused} dimmed={hub.dimmed} />
+                  <Orb testID="hub-orb" size={64} theme="dark" state={hub.state} paused={hub.paused} dimmed={hub.dimmed} />
                 ) : (
                   <Ionicons
                     name={ICONS[route.name] ?? 'ellipse-outline'}

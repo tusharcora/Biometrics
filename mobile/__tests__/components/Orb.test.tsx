@@ -13,6 +13,20 @@ describe('Orb', () => {
     expect(getByTestId('thinking-orb').props.accessibilityLabel).toBe('breathing:64:paused:light');
   });
 
+  it('follows the app scheme when no theme prop is given', () => {
+    mockScheme = 'light';
+    const { getByTestId } = render(<Orb state="breathing" size={64} />);
+
+    expect(getByTestId('thinking-orb').props.accessibilityLabel).toBe('breathing:64:playing:light');
+  });
+
+  it('uses the theme prop instead of the app scheme when one is given', () => {
+    mockScheme = 'light';
+    const { getByTestId } = render(<Orb state="breathing" size={64} theme="dark" />);
+
+    expect(getByTestId('thinking-orb').props.accessibilityLabel).toBe('breathing:64:playing:dark');
+  });
+
   it('defaults to the dark ink when the scheme is not known', () => {
     mockScheme = undefined;
     const { getByTestId } = render(<Orb state="working" size={20} />);

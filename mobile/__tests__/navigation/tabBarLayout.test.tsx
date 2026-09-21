@@ -7,6 +7,7 @@ import {
   FLOATING_BAR_HEIGHT,
   FLOATING_BAR_MARGIN,
   activeCircleTarget,
+  circleAnimates,
   slotCenterX,
   useTabBarClearance,
 } from '../../src/navigation/tabBarLayout';
@@ -58,5 +59,19 @@ describe('useTabBarClearance', () => {
   it('falls back to the bar margin when there is no provider', () => {
     const { result } = renderHook(() => useTabBarClearance());
     expect(result.current).toBe(FLOATING_BAR_HEIGHT + FLOATING_BAR_MARGIN + 16);
+  });
+});
+
+describe('circleAnimates', () => {
+  it('does not animate before the bar has been measured (first layout places the circle directly)', () => {
+    expect(circleAnimates(0, false)).toBe(false);
+  });
+
+  it('does not animate under reduced motion, even once measured', () => {
+    expect(circleAnimates(358, true)).toBe(false);
+  });
+
+  it('animates once the bar has been measured and motion is not reduced', () => {
+    expect(circleAnimates(358, false)).toBe(true);
   });
 });

@@ -23,6 +23,13 @@ export function slotCenterX(index: number, innerWidth: number, count: number): n
   return count > 0 ? (index + 0.5) * (innerWidth / count) : 0;
 }
 
+// The circle springs between slots only once the bar has been measured before:
+// the first measured layout places it directly, so it does not slide in from the
+// left edge on mount. Reduced motion always snaps.
+export function circleAnimates(previousInnerWidth: number, reduced: boolean): boolean {
+  return previousInnerWidth > 0 && !reduced;
+}
+
 // The white circle sits behind the active icon. The hub has the orb instead,
 // so the circle hides there (and for any route we do not know).
 export function activeCircleTarget(activeRouteName: string): { index: number; visible: boolean } {
