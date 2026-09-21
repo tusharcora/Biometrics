@@ -1,4 +1,5 @@
 import { computeDailyScore } from '../../src/scoring/compute';
+import { getLiveConfig } from '../../src/scoring/configs';
 import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
 import { createUser, seedHistory, seedSessions, day } from './dbHelpers';
@@ -24,7 +25,7 @@ describe('computeDailyScore', () => {
       where: { userId_date_type: { userId: user.id, date: day(last), type: 'RECOVERY' } },
     });
     expect(score).not.toBeNull();
-    expect(score!.algorithmVersion).toBe('v1');
+    expect(score!.algorithmVersion).toBe(getLiveConfig().version);
     expect(score!.score).not.toBeNull();
     expect(score!.confidenceLevel).toBe('HIGH');
 

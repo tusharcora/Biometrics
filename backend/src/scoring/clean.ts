@@ -21,9 +21,10 @@ import type { Baseline, DailyPoint, OutlierFlag } from './types';
  * user's old level after a genuine shift (every new value rejected, the median
  * never moving); the median is robust enough to shrug off a few artifacts.
  *
- * For RESTING_HR (a daily-minimum-BPM proxy) this is the only guard against a
- * single artifact-low reading, and a milder dip still inside 5 MAD passes
- * through: a stated limitation, not a solved problem.
+ * RESTING_HR is Google's dedicated daily resting heart rate, which is steadier
+ * than the old daily-minimum proxy, but this is still the only guard against a
+ * single artifact reading, and a milder deviation inside 5 MAD passes through:
+ * a stated limitation, not a solved problem.
  */
 export function rejectOutliers(
   points: DailyPoint[],

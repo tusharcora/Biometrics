@@ -1,6 +1,6 @@
 import { prisma } from '../db/client';
 import { BiometricMetricType, HealthMetricPoint, SleepSessionPoint } from '../types';
-import { localCivilDate, civilDateToUtcMidnight } from './civilDate';
+import { sessionEndCivilDate, civilDateToUtcMidnight } from './civilDate';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 
@@ -18,19 +18,27 @@ export async function upsertBiometricRecords(
   }
 }
 
+/** A session end an upsert touched, with the offset that end was keyed under (null: the user's timezone). */
+interface TouchedEnd {
+  endTime: Date;
+  endUtcOffsetSeconds: number | null;
+}
+
 /**
  * Stores whole sleep sessions, overwrite-on-match on (userId, startTime).
  * Re-fetching a session yields the same values, so every re-sync, retry and
  * overlapping window is a no-op; if Google revises a session the row converges
- * to the latest values. (Summing into a per-day row instead would double-count
- * on every repeat webhook, retried job and re-run backfill.)
+ * to the latest values, including its UTC offsets (so re-fetching a row stored
+ * before the offsets were captured fills them in). (Summing into a per-day row
+ * instead would double-count on every repeat webhook, retried job and re-run
+ * backfill.)
  *
- * Returns the end instants this call touched -- the new end of every session
- * AND the previous end of any session whose end moved -- so the caller can
- * recompute every rollup date that may have changed, including the one a
- * revised session just left.
+ * Returns the ends this call touched -- the new end of every session AND the
+ * previous end of any session whose end moved -- each with the offset it was
+ * keyed under, so the caller can recompute every rollup date that may have
+ * changed, including the one a revised (or newly offset-keyed) session just left.
  */
-export async function upsertSleepSessions(userId: string, sessions: SleepSessionPoint[]): Promise<Date[]> {
+async function upsertSleepSessionsTouched(userId: string, sessions: SleepSessionPoint[]): Promise<TouchedEnd[]> {
   if (sessions.length === 0) return [];
 
   // Last one wins if a batch repeats a startTime, matching what sequential
@@ -41,20 +49,33 @@ export async function upsertSleepSessions(userId: string, sessions: SleepSession
 
   const existing = await prisma.sleepSession.findMany({
     where: { userId, startTime: { in: unique.map((s) => s.startTime) } },
-    select: { endTime: true },
+    select: { endTime: true, endUtcOffsetSeconds: true },
   });
 
   await prisma.$transaction(
-    unique.map((s) =>
-      prisma.sleepSession.upsert({
+    unique.map((s) => {
+      // `?? null`: a missing offset is stored as null (converge to the latest fetch), never left stale.
+      const offsets = {
+        startUtcOffsetSeconds: s.startUtcOffsetSeconds ?? null,
+        endUtcOffsetSeconds: s.endUtcOffsetSeconds ?? null,
+      };
+      return prisma.sleepSession.upsert({
         where: { userId_startTime: { userId, startTime: s.startTime } },
-        update: { endTime: s.endTime, minutesAsleep: s.minutesAsleep, syncedAt: new Date() },
-        create: { userId, startTime: s.startTime, endTime: s.endTime, minutesAsleep: s.minutesAsleep },
-      }),
-    ),
+        update: { endTime: s.endTime, minutesAsleep: s.minutesAsleep, ...offsets, syncedAt: new Date() },
+        create: { userId, startTime: s.startTime, endTime: s.endTime, minutesAsleep: s.minutesAsleep, ...offsets },
+      });
+    }),
   );
 
-  return [...unique.map((s) => s.endTime), ...existing.map((e) => e.endTime)];
+  return [
+    ...unique.map((s) => ({ endTime: s.endTime, endUtcOffsetSeconds: s.endUtcOffsetSeconds ?? null })),
+    ...existing,
+  ];
+}
+
+/** As upsertSleepSessionsTouched, returning only the end instants. */
+export async function upsertSleepSessions(userId: string, sessions: SleepSessionPoint[]): Promise<Date[]> {
+  return (await upsertSleepSessionsTouched(userId, sessions)).map((t) => t.endTime);
 }
 
 async function timezoneOf(userId: string): Promise<string> {
@@ -63,14 +84,15 @@ async function timezoneOf(userId: string): Promise<string> {
   return user.timezone;
 }
 
-// Sum of minutesAsleep per local civil date of each session's end instant.
+// Sum of minutesAsleep per local civil date of each session's end instant: the
+// record's own end offset when it has one, else the user's timezone.
 function totalsByLocalDate(
-  sessions: { endTime: Date; minutesAsleep: number }[],
+  sessions: { endTime: Date; endUtcOffsetSeconds: number | null; minutesAsleep: number }[],
   timeZone: string,
 ): Map<string, number> {
   const totals = new Map<string, number>();
   for (const s of sessions) {
-    const date = localCivilDate(s.endTime, timeZone);
+    const date = sessionEndCivilDate(s, timeZone);
     totals.set(date, (totals.get(date) ?? 0) + s.minutesAsleep);
   }
   return totals;
@@ -107,13 +129,13 @@ export async function recomputeSleepRollups(userId: string, civilDates: string[]
 
   const timeZone = await timezoneOf(userId);
   // A local civil date spans at most [D 00:00 - 14h, D+1 00:00 + 12h) in UTC
-  // across every real zone, so [D - 1d, D + 2d) always contains its sessions.
-  // The exact bucketing is then done per-session with Intl, not by this range.
+  // across every real zone or record offset, so [D - 1d, D + 2d) always
+  // contains its sessions. The exact bucketing is then done per-session.
   const from = new Date(civilDateToUtcMidnight(dates[0]!).getTime() - DAY_MS);
   const to = new Date(civilDateToUtcMidnight(dates[dates.length - 1]!).getTime() + 2 * DAY_MS);
   const sessions = await prisma.sleepSession.findMany({
     where: { userId, endTime: { gte: from, lt: to } },
-    select: { endTime: true, minutesAsleep: true },
+    select: { endTime: true, endUtcOffsetSeconds: true, minutesAsleep: true },
   });
 
   await prisma.$transaction(rollupWrites(userId, dates, totalsByLocalDate(sessions, timeZone)));
@@ -123,13 +145,14 @@ export async function recomputeSleepRollups(userId: string, civilDates: string[]
  * Rebuilds every SLEEP rollup for a user from scratch under their current
  * timezone. Used when the timezone changes: rollups keyed under the old zone
  * are dropped and the sessions re-bucketed, which is cheap because rollups
- * are derived.
+ * are derived. Sessions that carry their own UTC offset are keyed by it, so
+ * they do not move with the timezone.
  */
 export async function recomputeAllSleepRollups(userId: string): Promise<void> {
   const timeZone = await timezoneOf(userId);
   const sessions = await prisma.sleepSession.findMany({
     where: { userId },
-    select: { endTime: true, minutesAsleep: true },
+    select: { endTime: true, endUtcOffsetSeconds: true, minutesAsleep: true },
   });
   const totals = totalsByLocalDate(sessions, timeZone);
 
@@ -149,10 +172,10 @@ export async function recomputeAllSleepRollups(userId: string): Promise<void> {
  * be recomputed.
  */
 export async function storeSleepSessions(userId: string, sessions: SleepSessionPoint[]): Promise<string[]> {
-  const touched = await upsertSleepSessions(userId, sessions);
+  const touched = await upsertSleepSessionsTouched(userId, sessions);
   if (touched.length === 0) return [];
   const timeZone = await timezoneOf(userId);
-  const dates = [...new Set(touched.map((end) => localCivilDate(end, timeZone)))].sort();
+  const dates = [...new Set(touched.map((end) => sessionEndCivilDate(end, timeZone)))].sort();
   await recomputeSleepRollups(userId, dates);
   return dates;
 }

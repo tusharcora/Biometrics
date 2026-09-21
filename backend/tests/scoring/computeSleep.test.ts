@@ -1,4 +1,5 @@
 import { computeDailyScore } from '../../src/scoring/compute';
+import { getLiveConfig } from '../../src/scoring/configs';
 import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
 import { createUser, seedHistory, seedSessions, day } from './dbHelpers';
@@ -27,7 +28,7 @@ describe('computeDailyScore: Sleep Score (Slice 1.5)', () => {
     expect(await computeDailyScore(user.id, last)).toBe('scored');
 
     const score = (await sleepRow(user.id, last))!;
-    expect(score.algorithmVersion).toBe('v1');
+    expect(score.algorithmVersion).toBe(getLiveConfig().version);
     expect(score.score).not.toBeNull();
     expect(score.confidenceLevel).toBe('HIGH');
     const factors = score.factors as Array<Record<string, any>>;
@@ -91,7 +92,7 @@ describe('computeDailyScore: Sleep Score (Slice 1.5)', () => {
     expect(a.factors).toEqual(b.factors);
   });
 
-  it('renormalizes around a cold-starting circadian factor: 0.45/0.80 and 0.35/0.80, MEDIUM confidence', async () => {
+  it('renormalizes the v2 weights around a cold-starting circadian factor: 0.50/0.80 and 0.30/0.80, MEDIUM confidence', async () => {
     const user = await createUser();
     const last = await seedHistory(user.id, START, 20);
     await seedSessions(user.id, START, 20);
@@ -101,8 +102,8 @@ describe('computeDailyScore: Sleep Score (Slice 1.5)', () => {
     const score = (await sleepRow(user.id, last))!;
     const by = Object.fromEntries((score.factors as any[]).map((f) => [f.factor, f]));
     expect(by.CIRCADIAN_CONSISTENCY.excluded).toBe(true);
-    expect(by.SLEEP_DURATION.weight).toBeCloseTo(0.45 / 0.8, 9);
-    expect(by.SLEEP_EFFICIENCY.weight).toBeCloseTo(0.35 / 0.8, 9);
+    expect(by.SLEEP_DURATION.weight).toBeCloseTo(0.5 / 0.8, 9);
+    expect(by.SLEEP_EFFICIENCY.weight).toBeCloseTo(0.3 / 0.8, 9);
     expect(score.confidenceLevel).toBe('MEDIUM');
     const features = (await prisma.userDailyFeatures.findFirst({ where: { userId: user.id } }))!;
     expect(features.circadianConsistencyZ).toBeNull();
@@ -183,5 +184,26 @@ describe('computeDailyScore: Sleep Score (Slice 1.5)', () => {
     const b = (await prisma.userDailyFeatures.findFirst({ where: { userId: ny.id } }))!;
     expect(a.sleepEfficiency).toBeCloseTo(390 / 420, 4);
     expect(b.sleepEfficiency).toBeNull();
+  });
+
+  it("buckets a session by its own stored UTC offset, ignoring the user's timezone", async () => {
+    const traveller = await createUser({ timezone: 'America/New_York' });
+    const home = await createUser({ timezone: 'America/New_York' });
+    const last = await seedHistory(traveller.id, START, 20);
+    await seedHistory(home.id, START, 20);
+    // Ends 03:00Z on the scored day. New York says the evening before, but the
+    // traveller's record says +00:00 (they are in London-ish UTC time): that day.
+    const endTime = new Date(`${last}T03:00:00Z`);
+    const session = { startTime: new Date(endTime.getTime() - 420 * 60_000), endTime, minutesAsleep: 390 };
+    await prisma.sleepSession.create({ data: { userId: traveller.id, ...session, startUtcOffsetSeconds: 0, endUtcOffsetSeconds: 0 } });
+    await prisma.sleepSession.create({ data: { userId: home.id, ...session } });
+
+    await computeDailyScore(traveller.id, last);
+    await computeDailyScore(home.id, last);
+
+    const a = (await prisma.userDailyFeatures.findFirst({ where: { userId: traveller.id } }))!;
+    const b = (await prisma.userDailyFeatures.findFirst({ where: { userId: home.id } }))!;
+    expect(a.sleepEfficiency).toBeCloseTo(390 / 420, 4);
+    expect(b.sleepEfficiency).toBeNull(); // null offset -> falls back to New York, the evening before
   });
 });

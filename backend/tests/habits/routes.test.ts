@@ -447,7 +447,7 @@ describe('GET /me/habits/patterns', () => {
     });
   });
 
-  it('labels the RHR factor "Daily minimum HR" and resolves custom-type thresholds', async () => {
+  it('labels the RHR factor "Resting HR" and resolves custom-type thresholds', async () => {
     const user = await createUser();
     const h = await authed(user.id);
     const created = await request(app).post('/me/habits/types').set(h).send({ label: 'Sauna', unit: 'sessions', exposureThreshold: 1.5 });
@@ -460,7 +460,7 @@ describe('GET /me/habits/patterns', () => {
 
     const res = await request(app).get('/me/habits/patterns').set(h);
     const rhr = res.body.patterns.find((p: any) => p.factor === 'RHR');
-    expect(rhr.factorLabel).toBe('Daily minimum HR');
+    expect(rhr.factorLabel).toBe('Resting HR');
     const sauna = res.body.patterns.find((p: any) => p.habitType === created.body.habitType.type);
     expect(sauna).toMatchObject({ exposureThreshold: 1.5, exposureUnit: 'sessions', factorLabel: 'Bedtime consistency' });
   });

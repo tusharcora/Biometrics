@@ -44,7 +44,7 @@ export interface PipelineInput {
    * are simply cold-starting; nothing in the Recovery Score reads them.
    */
   sessions?: SleepSessionInput[];
-  /** IANA zone the sessions' wall-clock onset and end date are read in (User.timezone). Defaults to UTC. */
+  /** IANA zone (User.timezone) sessions without their own UTC offset are read in. Defaults to UTC. */
   timezone?: string;
 }
 

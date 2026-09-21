@@ -62,6 +62,69 @@ function clockFormatterFor(timeZone: string): Intl.DateTimeFormat {
   return f;
 }
 
+// The UTC offsets in real use span -12:00 .. +14:00. Anything beyond +-18h (the
+// ISO/Java ZoneOffset limit) is not an offset, so it is treated as malformed.
+const MAX_UTC_OFFSET_SECONDS = 18 * 60 * 60;
+
+/**
+ * Parses Google's `startUtcOffset` / `endUtcOffset` (a Duration string such as
+ * "-14400s", "19800s", "0s") into whole seconds east of UTC. Anything else,
+ * including fractional seconds, a missing "s", stray whitespace, a non-string
+ * or an out-of-range value, is null: the caller then falls back to
+ * User.timezone rather than propagate a NaN into a date.
+ */
+export function parseUtcOffsetSeconds(raw: unknown): number | null {
+  if (typeof raw !== 'string') return null;
+  const m = /^([+-]?)(\d+)s$/.exec(raw);
+  if (!m) return null;
+  const magnitude = Number(m[2]);
+  if (!Number.isSafeInteger(magnitude) || magnitude > MAX_UTC_OFFSET_SECONDS) return null;
+  // `+ 0` turns -0 (from "-0s") into 0.
+  return (m[1] === '-' ? -magnitude : magnitude) + 0;
+}
+
+/** The wall clock of `instant` at a fixed UTC offset, as a Date whose UTC fields ARE that wall clock. */
+function wallClockAtOffset(instant: Date, offsetSeconds: number): Date {
+  return new Date(instant.getTime() + offsetSeconds * 1000);
+}
+
+/**
+ * The local civil date a sleep session's END belongs to (the SLEEP rollup key,
+ * and the night an HRV / resting-HR day is attributed to). The record's own
+ * `endUtcOffsetSeconds` wins when present: it is the offset Google itself used,
+ * so it stays right when the user travels. Without it (a row stored before the
+ * offsets were captured, or a malformed value) it falls back to User.timezone.
+ */
+export function sessionEndCivilDate(
+  session: { endTime: Date; endUtcOffsetSeconds?: number | null },
+  timeZone: string,
+): string {
+  const offset = session.endUtcOffsetSeconds;
+  if (typeof offset === 'number' && Number.isFinite(offset)) {
+    return wallClockAtOffset(session.endTime, offset).toISOString().slice(0, 10);
+  }
+  return localCivilDate(session.endTime, timeZone);
+}
+
+const MINUTES_PER_DAY = 24 * 60;
+
+/**
+ * Minutes since 12:00 local of a session's START (its bedtime), using the
+ * record's own `startUtcOffsetSeconds` when present and User.timezone
+ * otherwise. Same noon-anchoring as minutesSinceLocalNoon.
+ */
+export function sessionStartMinutesSinceLocalNoon(
+  session: { startTime: Date; startUtcOffsetSeconds?: number | null },
+  timeZone: string,
+): number {
+  const offset = session.startUtcOffsetSeconds;
+  if (typeof offset === 'number' && Number.isFinite(offset)) {
+    const wall = wallClockAtOffset(session.startTime, offset);
+    return (wall.getUTCHours() * 60 + wall.getUTCMinutes() - 12 * 60 + MINUTES_PER_DAY) % MINUTES_PER_DAY;
+  }
+  return minutesSinceLocalNoon(session.startTime, timeZone);
+}
+
 /**
  * Minutes elapsed since 12:00 (noon) local wall-clock time, in [0, 1440).
  * Noon-anchored so a night's bedtimes (say 22:00 .. 02:00) form one contiguous

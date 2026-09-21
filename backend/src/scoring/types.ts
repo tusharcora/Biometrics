@@ -17,11 +17,17 @@ export type SleepFactorKey = 'SLEEP_DURATION' | 'SLEEP_EFFICIENCY' | 'CIRCADIAN_
 /** Every factor a DailyScore's vector can hold, across both score types. */
 export type FactorKey = RecoveryFactorKey | SleepFactorKey;
 
-/** A stored sleep session: the SleepSession columns the Sleep Score features read. */
+/**
+ * A stored sleep session: the SleepSession columns the Sleep Score features read.
+ * The UTC offsets (seconds east of UTC) are the record's own local-time basis; when
+ * absent or null the features fall back to the user's timezone.
+ */
 export interface SleepSessionInput {
   startTime: Date;
   endTime: Date;
   minutesAsleep: number;
+  startUtcOffsetSeconds?: number | null;
+  endUtcOffsetSeconds?: number | null;
 }
 
 export type ConfidenceLevel = 'HIGH' | 'MEDIUM' | 'LOW';

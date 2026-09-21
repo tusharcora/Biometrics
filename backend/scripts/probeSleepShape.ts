@@ -19,7 +19,7 @@
 import { prisma } from '../src/db/client';
 import { decryptToken } from '../src/crypto/tokenCipher';
 import { fetchMetricRange, fetchSleepSessions } from '../src/health/client';
-import { localCivilDate } from '../src/biometrics/civilDate';
+import { localCivilDate, sessionEndCivilDate } from '../src/biometrics/civilDate';
 import type { HealthMetricPoint, SleepSessionPoint } from '../src/types';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -53,7 +53,7 @@ function parseArgs(argv: string[]): { userId: string; days: number } {
 
 function printSessions(sessions: SleepSessionPoint[], timeZone: string): void {
   console.log('\n== 1. Sessions (sorted by end) ==');
-  console.log('start (UTC)            end (UTC)              asleep  inBed  asleep/inBed  endLocal    endUTC      flags');
+  console.log('start (UTC)            end (UTC)              asleep  inBed  asleep/inBed  endLocal    endUTC      endByOffset flags');
   for (const s of sessions) {
     const inBed = minutesBetween(s.startTime, s.endTime);
     const ratio = inBed > 0 ? (s.minutesAsleep / inBed).toFixed(2) : 'n/a';
@@ -69,6 +69,7 @@ function printSessions(sessions: SleepSessionPoint[], timeZone: string): void {
         String(ratio).padStart(12),
         localCivilDate(s.endTime, timeZone),
         isoDate(s.endTime),
+        sessionEndCivilDate(s, timeZone).padEnd(11),
         flags.join('; '),
       ].join('  '),
     );

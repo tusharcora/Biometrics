@@ -59,12 +59,10 @@ export function scoreTypeLabel(type: DailyScoreDTO['type']): string {
   return SCORE_TYPE_LABEL[type];
 }
 
-// RESTING_HR is a daily-minimum-BPM proxy (heartRate.beatsPerMinuteMin), so it
-// is never described as a resting heart rate here either.
 const METRIC_NAMES: Record<string, string> = {
   HRV: 'HRV',
-  RESTING_HR: 'daily minimum heart rate',
-  RHR: 'daily minimum heart rate',
+  RESTING_HR: 'resting heart rate',
+  RHR: 'resting heart rate',
   SLEEP: 'sleep',
   SLEEP_DEBT: 'sleep debt',
   SLEEP_EFFICIENCY: 'sleep efficiency',

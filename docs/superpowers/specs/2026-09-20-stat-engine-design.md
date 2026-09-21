@@ -127,6 +127,17 @@ piece has a stated reason.
   - The combined predecessor spec is archived at
     `archive/2026-09-20-ai-coach-ui-scoring-design.md` with a SUPERSEDED
     banner and is not maintained.
+- **v4**: applied the results of the first live run against a real account and
+  three product decisions that followed.
+  - RESTING_HR now comes from Google's dedicated `daily-resting-heart-rate`
+    type instead of the daily-minimum BPM of a heart-rate rollup.
+  - The Sleep Score weights are decided (config v2: duration 0.50, efficiency
+    0.30, consistency 0.20) and v2 is the live version.
+  - A sleep night's local date now comes from the record's own UTC offset, with
+    `User.timezone` only as a fallback.
+  - List endpoints are paginated; the client now follows `nextPageToken`.
+  - The three Slice 0 live checks are recorded in
+    `docs/superpowers/notes/slice0-live-checks.md`.
 
 ## Goals
 
@@ -163,7 +174,7 @@ piece has a stated reason.
    - re-key SLEEP to the local civil date of the session's **end**;
    - wipe and re-sync existing SLEEP data under the new key;
    - check whether Google exposes a dedicated resting-heart-rate data
-     type; until it does, the daily-minimum-HR labelling in §2 stands.
+     type (it does: `daily-resting-heart-rate`, which is now the input).
 
    **Exit criteria**, all verified against a real connected account and
    kept as regression tests: (a) for any civil day D, HRV, RHR and the
@@ -261,9 +272,16 @@ re-bucket on their side. Concretely:
 2. **Confirm live, against a real account**, what timezone basis
    Google's civil-date rollups actually use, so `User.timezone` is being
    compared against the right reference rather than an assumed one.
-3. **Re-key SLEEP** to the **civil date, in the user's stored timezone,
-   of the sleep session's end instant** — not its start instant, and not
-   UTC. The night that produced this morning's HRV and RHR reading is the
+3. **Re-key SLEEP** to the **civil date of the sleep session's end
+   instant, in the session's own local time** — not its start instant, and
+   not UTC. Every Google sleep record carries `startUtcOffset` and
+   `endUtcOffset`; the local end date is `endTime + endUtcOffset` (stored
+   as `SleepSession.endUtcOffsetSeconds`), and the user's `User.timezone`
+   is only the fallback for a row without an offset. The record's own
+   offset matches Google's civil dates exactly and stays correct when the
+   user travels: one real account has nights recorded at UTC−6 and UTC−4
+   inside the same 30-day window. The night that produced this morning's
+   HRV and RHR reading is the
    night that ended this morning, so keying off the end instant
    (converted to local time) is what makes SLEEP line up with what
    STEPS/RESTING_HR/HRV already report for that civil day. Under the
@@ -342,8 +360,9 @@ with a partial one.
    latest values.
 2. **The daily total is derived, never accumulated.**
    `dailyMinutesAsleep(user, D)` = `SUM(minutesAsleep)` over stored
-   sessions whose end instant falls on local civil date `D` in
-   `User.timezone`. The `BiometricRecord` SLEEP row for `D` — which the
+   sessions whose local end date is `D`: the end instant shifted by the
+   record's own `endUtcOffsetSeconds`, or converted with `User.timezone`
+   when the row has no offset. The `BiometricRecord` SLEEP row for `D` — which the
    dashboard and the Stat Engine already read — becomes a **materialized
    rollup**: after upserting a batch of sessions, recompute and overwrite
    the rollup for every civil date the batch touched. Overwriting with a
@@ -429,12 +448,8 @@ computation's internal job structure.
   unlike a stddev-based rule) from that user's trailing 90-day median for
   that metric. Rejected points are flagged (`ScoreInputFlag.OUTLIER`),
   never silently dropped from the table — the raw record stays, only the
-  score computation skips it. **For RESTING_HR specifically** (see the
-  proxy note below), this is the only defense against a single
-  artifact-low reading during a light-sleep arousal or a strap glitch —
-  it catches a value 5 MAD below the trailing median, but a milder
-  single-night dip that's still within 5 MAD passes through uncaught,
-  which is a real, stated limitation, not a solved problem.
+  score computation skips it. **For RESTING_HR** this is a backstop only: Google's dedicated resting value
+  is already a smoothed daily figure (see Stage 4).
 - **Gap imputation**: a missing day for a metric with a real trend (HRV,
   RHR) is imputed via that metric's existing Stage-3 EWMA baseline (the
   same 30-day baseline used for z-scoring — not a separate imputation-
@@ -616,22 +631,19 @@ ACWR entirely from the table above, generalized to apply per-day, per-
 user, for any factor currently cold-starting — not a special case unique
 to ACWR's permanent exclusion.
 
-**RESTING_HR is a daily-minimum-BPM proxy, not a true resting heart
-rate — stated explicitly, not left implicit.** Confirmed at
-`client.ts:160`: the value comes from `heartRate.beatsPerMinuteMin`, the
-daily rollup's minimum reading, not a value Google computes from a
-detected resting state. A single artifact-low reading during a period of
-light-sleep arousal, or a strap contact glitch, becomes that day's entire
-"resting HR" input to a 0.35-weighted factor — the second-heaviest
-weight in the composite. Stage 1's MAD-based outlier filter (above)
-catches this only when the artifact reading is more than 5 MAD from the
-90-day trailing median, which a plausible-but-wrong low reading may not
-be. Whether Google exposes a dedicated resting-heart-rate data type
-(distinct from the daily-minimum rollup) is an open question for a
-future live-API check, not resolved here (see Open Questions) — until
-then, this factor's honest label is "daily minimum heart rate," and the
-UI (`FactorBar`, §5) should reflect that framing rather than implying
-a clinical resting-HR measurement.
+**RESTING_HR is Google's dedicated resting heart rate.** It comes from the
+`daily-resting-heart-rate` data type (`dailyRestingHeartRate.beatsPerMinute`,
+one value per civil day, with a `calculationMethod` of `WITH_SLEEP` or
+`ONLY_WITH_AWAKE_DATA`), fetched through the same paginated list endpoint as
+daily HRV. It replaces the daily-minimum BPM of a heart-rate rollup, which on
+the account it was measured on ran a median 12 bpm below true resting heart
+rate and showed single-reading artifacts (a 39–41 bpm minimum against a
+steady 51). The dedicated value is smoother day to day (spread 2.8 against 4.0
+bpm on that account), so its baseline spread is smaller and z-scores react
+more strongly to a real change; the implementation floors the spread so a run
+of identical values cannot collapse it to zero. Days computed
+`ONLY_WITH_AWAKE_DATA` (no sleep data that day) are stored and scored like any
+other; they are less reliable and are not separately flagged.
 
 **These weights are stated honestly as illustrative, not derived** — and
 that has a real consequence, not glossed over: there is no ground-truth
@@ -652,19 +664,18 @@ the backfill note below for its cold-start behavior). Its own
 weight-renormalization rule follows the same pattern stated above for
 Recovery.
 
-**Sleep Score weights: OPEN DECISION.** This spec fixes no weights for the
-Sleep Score, and there is no outcome label to derive them from. The
-shipped v1 config carries a **placeholder** — duration 0.45, efficiency
-0.35, circadian consistency 0.20 — that was copied from the Recovery
-Score's weight magnitudes (HRV 0.45 / RHR 0.35 / sleep debt 0.20) with no
-sleep-specific rationale. Treat it as unreviewed, not as a tuned or agreed
-value. One consequence worth deciding with eyes open: circadian
-consistency is excluded for about 27 nights, so early Sleep Scores are
-renormalized to roughly 56% duration / 44% efficiency regardless of what
-this table says. Candidate tables: keep the placeholder; equal thirds; or
-0.50 / 0.30 / 0.20 (duration dominant, consistency smallest and noisiest).
-A decision is a config version bump (`configs/v2.ts`) and should go through
-the backtest diff (§3) before it replaces v1.
+**Sleep Score weights (config v2): duration 0.50, efficiency 0.30,
+circadian consistency 0.20.** A product decision, not derived from outcome data
+(there is no ground-truth sleep-quality label). Duration is dominant;
+efficiency is down-weighted because its observed range is narrow (about 0.90 to
+0.99 on the account measured), so small differences turn into large z-scores;
+consistency is smallest as the noisiest. Because consistency is excluded for
+about 27 nights, early Sleep Scores renormalize to 62.5% duration and 37.5%
+efficiency whatever the table says. v1 (0.45 / 0.35 / 0.20, which had been
+copied from the Recovery magnitudes) stays available for backtests. A weight
+change is a config version bump: a stored score whose `algorithmVersion` differs
+from the live version is treated as stale and rescored by the sweep within its
+90-day lookback.
 
 `DailyScore` (Recovery Score in Slice 1; Sleep Score added in Slice 1.5)
 is stored with `algorithmVersion`, `confidenceLevel` (`HIGH`/`MEDIUM`/
@@ -774,9 +785,8 @@ message-arrival animation rather than defining a second one.
 - **`FactorBar`** — horizontal bar for the Stage-5 breakdown, signed
   (extends left for negative contributions, right for positive), with a
   shared 0-centered scale across all factors so magnitudes are visually
-  comparable. For RESTING_HR specifically, the label reads "daily
-  minimum HR" rather than "resting HR," per the proxy note in §2 Stage
-  4.
+  comparable. The label for each factor comes from the server (for RESTING_HR,
+  "Resting HR").
 - **`ConfidenceBadge`** — small `Badge` variant surfacing
   `DailyScore.confidenceLevel` (§2 Stage 4) — a score computed from
   partially imputed or renormalized-around data says so, visually, every
@@ -841,9 +851,8 @@ built by rendering its intermediate outputs directly, in order.
   account seeded with old-convention SLEEP rows, no session is present
   under two keys and the rollup for every day equals the sum of that
   day's sessions.
-- **RESTING_HR proxy**: a test asserting the `FactorBar` label for this
-  factor reads as a daily-minimum proxy, not "resting heart rate," so a
-  future component change can't silently drop the honest framing.
+- **RESTING_HR label**: a test asserting the `FactorBar` label reads
+  "Resting HR" and that "daily minimum" never appears in rendered RHR text.
 - **Design System**: component snapshot tests (existing pattern,
   extended to new components) plus a visual-regression pass on
   `ScoreRing`'s segmented-arc rendering across factor-count edge cases
@@ -853,22 +862,11 @@ built by rendering its intermediate outputs directly, in order.
 
 ## Open Questions / Risks
 
-- **Sleep-interval semantics need a live check in Slice 0**: whether
-  `endTime − startTime` reliably represents time-in-bed for a real
-  session, and how a night with more than one `Sleep` object (a nap, a
-  device-reported split session) is actually represented in the raw API
-  response. The `SleepSession` schema holds either way; this determines
-  how sessions map to nights and whether `sleepEfficiency` is
-  meaningful.
-- **Google's civil-date timezone basis is unconfirmed** — the day-
-  alignment fix in §2 depends on knowing what timezone basis Google's
-  own rollups use; this needs a live check against a real account before
-  `User.timezone`-based re-keying can be verified correct, not just
-  internally consistent.
-- **Whether Google exposes a dedicated resting-heart-rate data type**
-  (distinct from the daily-minimum rollup this app currently uses) is
-  unresolved — worth a live-API check before assuming the
-  daily-minimum-proxy framing is permanent rather than a stopgap.
+- **Multi-session nights are still unobserved.** The one real account
+  measured has one main sleep per day (every record `metadata.mainSleep:
+  true`), so nap and split-night handling is untested against real data. The
+  design (store every session, sum by local end date) holds either way, and
+  `mainSleep` is the likely marker for a nap.
 - Two composite scores (Recovery, Sleep) rather than one is a genuine
   product bet, not just an engineering choice — worth validating with
   real users before a third (Strain) score is added, since score-count
@@ -893,8 +891,10 @@ section wins**.
   SLEEP by the local end date agrees with the other three metrics. This
   account's sleep never straddles a UTC/local date boundary, so the
   sleep-based probe alone could not separate the two bases; steps samples
-  did. Every record also carries `startUtcOffset`/`endUtcOffset`, which would
-  be a more robust key than `User.timezone` when the user travels (not done).
+  did. Every record also carries `startUtcOffset`/`endUtcOffset`, and the
+  night's day is now keyed from them (see §2), with `User.timezone` as the
+  fallback. The same account has nights at both UTC−6 and UTC−4 in one
+  window, which a single profile timezone would have mis-dated.
 - `endTime − startTime` **is** time in bed: it equals
   `summary.minutesInSleepPeriod` on every session, and
   `summary.minutesAwake` exists. `sleepEfficiency` is sound.
@@ -903,9 +903,15 @@ section wins**.
   untested against real data.
 - **Pagination bug found and fixed:** list endpoints are paginated and the
   client used to read only the first page, dropping 13 of 25 nights.
-- **A dedicated `daily-resting-heart-rate` type exists** and differs from the
-  daily-minimum proxy used today (median +12 bpm, steadier day to day).
-  Switching the RHR factor to it is an open scoring decision.
+- **A dedicated `daily-resting-heart-rate` type exists** and is now the
+  RESTING_HR input (median +12 bpm above the daily-minimum value it replaced,
+  steadier day to day). Existing RESTING_HR rows hold the old values, so
+  `backend/scripts/resyncRestingHr.ts` (dry-run by default) wipes and
+  re-syncs them, and the version bump below causes the affected days to be
+  rescored.
+- The Sleep Score weights are decided (config v2, see Stage 4) and v2 is the
+  live algorithm version. Days older than the sweep's 90-day lookback keep
+  their v1 scores.
 
 Slice 0
 - `PUT /me/timezone` recomputes rollups on every call, not only on a
@@ -914,8 +920,9 @@ Slice 0
 - `scripts/resyncSleep.ts` is dry-run by default and only wipes users with
   a CONNECTED health connection; deleting rows for disconnected users would
   lose history a backfill cannot restore.
-- `listDataPoints` still does not paginate (existing behaviour), which can
-  matter for long backfills.
+- List endpoints are paginated: `listAllPages` follows `nextPageToken`
+  (capped at 50 pages) for sleep, daily HRV and daily resting HR.
+  `dailyRollUp` responses were not observed to paginate.
 
 Slice 1
 - The stage functions are pure; `pipeline.ts` composes them and is shared
@@ -945,14 +952,14 @@ Slice 1
   default is flipped.
 
 Slice 1.5
-- Weights 0.45 / 0.35 / 0.20 (duration / efficiency / consistency) are a
-  **placeholder copied from the Recovery Score's magnitudes**, not a
-  decision; see "Sleep Score weights: OPEN DECISION" in Stage 4.
+- Weights are 0.50 / 0.30 / 0.20 (duration / efficiency / consistency) in
+  config v2, a product decision; see Stage 4.
 - Duration is scored against the user's sleep goal:
   `z = clamp((minutesAsleep − goal) / σ̂, −3, +1)`, so sleeping past goal
   earns no extra credit. Efficiency is stored as a 0–1 fraction capped at 1.
 - The main session for onset is the longest by `minutesAsleep` (a field
-  confirmed live), not by interval. Consistency = `100·max(0, 1 −
+  confirmed live), not by interval; onset time is measured in the session's
+  own local time using `startUtcOffset` when present. Consistency = `100·max(0, 1 −
   stddev/120 min)` over noon-anchored onsets; it needs at least 14 nights of
   history and at least 7 nights in the trailing 14-day window, then 14 more
   such days for its baseline — so it is excluded for about 27 nights, like

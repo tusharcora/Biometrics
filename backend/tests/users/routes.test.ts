@@ -86,6 +86,38 @@ describe('PUT /me/timezone', () => {
     expect(await dates()).toEqual(['2026-09-02']);
   });
 
+  it('leaves sessions that carry their own UTC offset where the offset puts them, moving only the rest', async () => {
+    const user = await createUser();
+    await storeSleepSessions(user.id, [
+      // No offset: follows the zone (UTC Sep 3, Los Angeles Sep 2).
+      { startTime: new Date('2026-09-02T20:00:00Z'), endTime: new Date('2026-09-03T05:30:00Z'), minutesAsleep: 500 },
+      // Offset +09:00: ends 22:00Z Sep 5 = Sep 6 local, whatever the zone is.
+      {
+        startTime: new Date('2026-09-05T14:00:00Z'),
+        endTime: new Date('2026-09-05T22:00:00Z'),
+        minutesAsleep: 430,
+        startUtcOffsetSeconds: 32400,
+        endUtcOffsetSeconds: 32400,
+      },
+    ]);
+    const { accessToken } = await issueSessionTokens(user.id);
+
+    await request(createApp())
+      .put('/me/timezone')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ timezone: 'America/Los_Angeles' })
+      .expect(200);
+
+    const rows = await prisma.biometricRecord.findMany({
+      where: { userId: user.id, metricType: 'SLEEP' },
+      orderBy: { recordedAt: 'asc' },
+    });
+    expect(rows.map((r) => [r.recordedAt.toISOString().slice(0, 10), r.value])).toEqual([
+      ['2026-09-02', 500],
+      ['2026-09-06', 430],
+    ]);
+  });
+
   it('is idempotent: repeating the same PUT leaves the rollups unchanged (and repairs a half-finished one)', async () => {
     const user = await createUser();
     await storeSleepSessions(user.id, [

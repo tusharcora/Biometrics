@@ -7,7 +7,7 @@ import type { FactorDTO } from '../../src/api/scores';
 function factor(overrides: Partial<FactorDTO> & Pick<FactorDTO, 'factor'>): FactorDTO {
   const labels: Record<FactorDTO['factor'], string> = {
     HRV: 'HRV',
-    RHR: 'Daily minimum HR',
+    RHR: 'Resting HR',
     SLEEP_DEBT: 'Sleep debt',
     SLEEP_DURATION: 'Sleep duration',
     SLEEP_EFFICIENCY: 'Sleep efficiency',
@@ -102,15 +102,16 @@ describe('FactorBar', () => {
     expect(fillWidth(getByTestId('factor-bar-pos-HRV'))).toBe('50%');
   });
 
-  it('renders the RESTING_HR factor as a daily-minimum proxy, never "resting heart rate"', () => {
+  it('renders the RESTING_HR factor with the server label "Resting HR", never a daily minimum', () => {
     const { getByText, queryByText, getByTestId } = render(
-      <FactorBar factor={factor({ factor: 'RHR', label: 'Daily minimum HR', points: -3.1 })} scale={10} />,
+      <FactorBar factor={factor({ factor: 'RHR', label: 'Resting HR', points: -3.1 })} scale={10} />,
     );
 
-    expect(getByText(/daily minimum hr/i)).toBeTruthy();
-    expect(queryByText(/resting heart rate/i)).toBeNull();
-    expect(queryByText(/resting hr/i)).toBeNull();
-    expect(getByTestId('factor-bar-RHR').props.accessibilityLabel).not.toMatch(/resting/i);
+    expect(getByText('Resting HR')).toBeTruthy();
+    expect(queryByText(/daily minimum/i)).toBeNull();
+    expect(queryByText(/minimum/i)).toBeNull();
+    expect(getByTestId('factor-bar-RHR').props.accessibilityLabel).toMatch(/resting hr/i);
+    expect(getByTestId('factor-bar-RHR').props.accessibilityLabel).not.toMatch(/minimum/i);
   });
 
   it('shows an excluded factor as still building, with no bar and no fake points', () => {

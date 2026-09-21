@@ -1,5 +1,6 @@
 import fetch from 'node-fetch';
 import { BiometricMetricType, HealthMetricPoint, SleepSessionPoint } from '../types';
+import { parseUtcOffsetSeconds } from '../biometrics/civilDate';
 
 const BASE_URL = 'https://health.googleapis.com/v4';
 
@@ -147,6 +148,23 @@ async function listDailyHeartRateVariability(
   return listAllPages(url, accessToken, 'daily-heart-rate-variability');
 }
 
+// Resting heart rate is Google's own dedicated daily type (confirmed live,
+// HTTP 200), replacing the old daily-minimum-BPM rollup of `heart-rate`, which
+// ran ~12 bpm below true resting HR and showed single-reading artifacts. Same
+// shape as daily HRV: a hyphenated collection URL and an underscored
+// `daily_resting_heart_rate.date` civil-date filter. Each point carries
+// `dailyRestingHeartRate.beatsPerMinute` (a numeric string) and a
+// `calculationMethod` of WITH_SLEEP or ONLY_WITH_AWAKE_DATA, which is not used.
+async function listDailyRestingHeartRate(
+  accessToken: string,
+  startDate: string,
+  endDate: string,
+): Promise<any[]> {
+  const filter = `daily_resting_heart_rate.date >= "${startDate}" AND daily_resting_heart_rate.date < "${endDate}"`;
+  const url = `${BASE_URL}/users/me/dataTypes/daily-resting-heart-rate/dataPoints?${new URLSearchParams({ filter }).toString()}`;
+  return listAllPages(url, accessToken, 'daily-resting-heart-rate');
+}
+
 // Metrics Google delivers as one pre-aggregated value per civil day. SLEEP is
 // deliberately excluded: it is fetched as whole sessions by fetchSleepSessions
 // and its daily value is derived by us (see biometrics/repository.ts).
@@ -166,10 +184,19 @@ export async function fetchMetricRange(
         .map((r) => ({ recordedAt: civilDateToDate(r.civilStartTime), value: Number(r.steps.countSum) }));
     }
     case 'RESTING_HR': {
-      const rows = await dailyRollUp(accessToken, 'heart-rate', startDate, endDate);
-      return rows
-        .filter((r) => r.heartRate?.beatsPerMinuteMin !== undefined)
-        .map((r) => ({ recordedAt: civilDateToDate(r.civilStartTime), value: r.heartRate.beatsPerMinuteMin }));
+      const rows = await listDailyRestingHeartRate(accessToken, startDate, endDate);
+      // One data point per day, like HRV. beatsPerMinute is a numeric string;
+      // a row without a finite value cannot be scored and is skipped.
+      const points: HealthMetricPoint[] = [];
+      for (const r of rows) {
+        const day = r.dailyRestingHeartRate;
+        const raw = day?.beatsPerMinute;
+        const bpm = typeof raw === 'string' || typeof raw === 'number' ? Number(raw) : NaN;
+        // Number('') is 0, so blank strings are rejected explicitly.
+        if (!day?.date || String(raw).trim() === '' || !Number.isFinite(bpm)) continue;
+        points.push({ recordedAt: civilDateToDate(day), value: bpm });
+      }
+      return points;
     }
     case 'HRV': {
       const rows = await listDailyHeartRateVariability(accessToken, startDate, endDate);
@@ -197,9 +224,11 @@ export async function fetchMetricRange(
  * `sleep.interval.end_time` instead. `summary.minutesAsleep` is a numeric
  * string ("468"), the same string-encoded-int64 pattern as steps' countSum.
  *
- * Sessions are returned as-is rather than keyed to a day here: which civil day
- * a session belongs to depends on the user's timezone, which this layer does
- * not know. Rows missing either interval bound or minutesAsleep are skipped
+ * Sessions are returned as-is rather than keyed to a day here. Every record
+ * carries `interval.startUtcOffset` / `endUtcOffset` ("-14400s", verified
+ * live), parsed to seconds and returned so the day key can follow the record's
+ * own local time; a null offset means the caller falls back to the user's
+ * timezone. Rows missing either interval bound or minutesAsleep are skipped
  * (they cannot be keyed or summed) rather than defaulted.
  */
 export async function fetchSleepSessions(
@@ -217,7 +246,14 @@ export async function fetchSleepSessions(
     const endTime = new Date(interval.endTime);
     const minutesAsleep = Number(minutes);
     if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime()) || !Number.isFinite(minutesAsleep)) continue;
-    sessions.push({ startTime, endTime, minutesAsleep });
+    sessions.push({
+      startTime,
+      endTime,
+      minutesAsleep,
+      // Malformed or absent offsets are null (never NaN); the day key then falls back to User.timezone.
+      startUtcOffsetSeconds: parseUtcOffsetSeconds(interval.startUtcOffset),
+      endUtcOffsetSeconds: parseUtcOffsetSeconds(interval.endUtcOffset),
+    });
   }
   return sessions;
 }
