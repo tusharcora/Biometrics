@@ -3,6 +3,7 @@ import { requireAuth, AuthedRequest } from '../auth/middleware';
 import { isValidTimeZone } from '../biometrics/civilDate';
 import { recomputeAllSleepRollups } from '../biometrics/repository';
 import { prisma } from '../db/client';
+import { deleteUserAccount } from './deletion';
 
 export const usersRouter = Router();
 
@@ -33,4 +34,19 @@ usersRouter.put('/me/timezone', requireAuth, async (req: AuthedRequest, res) => 
   await recomputeAllSleepRollups(userId);
 
   res.json({ timezone });
+});
+
+/**
+ * In-app account deletion (App Store requirement). Irreversible, so the body
+ * must be exactly { "confirm": "DELETE" }: a bare DELETE (a retried request, a
+ * misrouted client) deletes nothing. Everything the user owns goes, and their
+ * tokens stop working (see requireAuth and deleteUserAccount).
+ */
+usersRouter.delete('/me', requireAuth, async (req: AuthedRequest, res) => {
+  if (req.body?.confirm !== 'DELETE') {
+    res.status(400).json({ error: 'Send {"confirm":"DELETE"} to delete your account' });
+    return;
+  }
+  await deleteUserAccount(req.userId!);
+  res.status(204).send();
 });

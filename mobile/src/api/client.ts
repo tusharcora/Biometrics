@@ -119,6 +119,18 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
   return res.json() as Promise<T>;
 }
 
+// Permanently deletes the signed-in account and everything stored for it. The
+// server answers 204 on success, 400 if the confirmation word is wrong and 401
+// if the session is not valid. Once it succeeds the tokens are dead, so the
+// caller must clear them locally rather than call the sign-out endpoint.
+export function deleteAccount(): Promise<void> {
+  return apiFetch<void>('/me', {
+    method: 'DELETE',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ confirm: 'DELETE' }),
+  });
+}
+
 // Tells the backend which IANA zone to use for civil-date bucketing (sleep
 // rollups, habit days). A 400 from the server means the zone name was invalid.
 export function updateTimezone(timezone: string): Promise<{ timezone: string }> {

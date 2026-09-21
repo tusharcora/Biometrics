@@ -2,6 +2,7 @@ import fetch from 'node-fetch';
 
 const AUTHORIZE_URL = 'https://accounts.google.com/o/oauth2/v2/auth';
 const TOKEN_URL = 'https://oauth2.googleapis.com/token';
+const REVOKE_URL = 'https://oauth2.googleapis.com/revoke';
 const SCOPES = [
   'https://www.googleapis.com/auth/googlehealth.activity_and_fitness.readonly',
   'https://www.googleapis.com/auth/googlehealth.health_metrics_and_measurements.readonly',
@@ -82,4 +83,20 @@ export async function exchangeCodeForTokens(code: string): Promise<HealthTokenRe
 
 export async function refreshHealthTokens(refreshToken: string): Promise<HealthTokenResponse> {
   return requestToken(new URLSearchParams({ grant_type: 'refresh_token', refresh_token: refreshToken }));
+}
+
+/**
+ * Revokes a grant at Google (account deletion). Revoking the refresh token also
+ * invalidates the access tokens minted from it. The error carries only the HTTP
+ * status: the token is in the request body and must never reach a log.
+ */
+export async function revokeHealthToken(refreshToken: string): Promise<void> {
+  const res = await fetch(REVOKE_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ token: refreshToken }).toString(),
+  });
+  if (!res.ok) {
+    throw new Error(`Google token revocation returned ${res.status}`);
+  }
 }

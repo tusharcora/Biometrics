@@ -1,11 +1,12 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { View, Pressable, TextInput, FlatList } from 'react-native';
+import { View, Pressable, TextInput, FlatList, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useColorScheme } from 'nativewind';
 import { Text } from '../components/ui/text';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { CoachSettingsSection } from '../components/coach-settings-section';
+import { DeleteAccountSection } from '../components/delete-account-section';
 import { COLORS } from '../theme';
 import {
   clearTimezoneOverride,
@@ -98,7 +99,7 @@ export function SettingsScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background">
-      <View className="gap-3 p-4">
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12, padding: 16 }}>
         <Card className="gap-1">
           <Pressable testID="timezone-row" onPress={() => setPicking(true)} className="active:opacity-70">
             <Text className="text-sm text-muted-foreground">Time zone</Text>
@@ -117,7 +118,8 @@ export function SettingsScreen() {
         ) : null}
         {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
         <CoachSettingsSection />
-      </View>
+        <DeleteAccountSection />
+      </ScrollView>
     </SafeAreaView>
   );
 }

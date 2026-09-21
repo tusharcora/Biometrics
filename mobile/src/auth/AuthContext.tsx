@@ -11,6 +11,8 @@ interface AuthContextValue {
   signInWithApple: (identityToken: string) => Promise<void>;
   signInWithGoogle: (idToken: string) => Promise<void>;
   signOut: () => Promise<void>;
+  /** Drops the stored tokens and the in-memory session without touching the server. */
+  clearSession: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
@@ -66,16 +68,35 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       body: JSON.stringify({ refreshToken }),
       skipAuth: true,
     }).catch(() => undefined);
-    await SecureStore.deleteItemAsync('accessToken');
-    await SecureStore.deleteItemAsync('refreshToken');
+    await clearSession();
+  }
+
+  // Local-only sign-out, for when the server has already ended the session
+  // (account deletion): calling the sign-out endpoint would be rejected. A
+  // keychain failure must not keep the user signed in, so the in-memory
+  // session goes either way.
+  async function clearSession() {
+    await Promise.all([
+      SecureStore.deleteItemAsync('accessToken'),
+      SecureStore.deleteItemAsync('refreshToken'),
+    ]).catch(() => undefined);
     setSession(null);
   }
 
   return (
-    <AuthContext.Provider value={{ session, signInWithApple, signInWithGoogle, signOut }}>
+    <AuthContext.Provider value={{ session, signInWithApple, signInWithGoogle, signOut, clearSession }}>
       {children}
     </AuthContext.Provider>
   );
+}
+
+/**
+ * Like useAuth, but returns undefined outside an AuthProvider instead of
+ * throwing -- for leaf components (Settings) that must still render in
+ * isolation.
+ */
+export function useOptionalAuth(): AuthContextValue | undefined {
+  return useContext(AuthContext);
 }
 
 export function useAuth(): AuthContextValue {

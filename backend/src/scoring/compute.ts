@@ -89,7 +89,17 @@ export async function computeDailyScore(
     cfg,
   );
 
-  await persist(userId, result);
+  try {
+    await persist(userId, result);
+  } catch (err) {
+    // The account was deleted while this job was computing: the write hit a
+    // foreign-key violation. That is the same outcome as the user having been
+    // gone at the start, not a failure to retry.
+    if ((err as { code?: string } | null)?.code === 'P2003' && !(await prisma.user.findUnique({ where: { id: userId }, select: { id: true } }))) {
+      return 'no-user';
+    }
+    throw err;
+  }
   return result.hasObservedInput ? 'scored' : 'no-input';
 }
 
