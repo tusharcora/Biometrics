@@ -31,7 +31,7 @@ export type RootStackParamList = {
   ConnectHealth: undefined;
   Dashboard: undefined;
   MetricDetail: { metricType: MetricRecord['metricType']; records: MetricRecord[] };
-  ScoreDetail: { date: string; type: ScoreType };
+  ScoreDetail: { date: string; type?: ScoreType }; // type defaults to RECOVERY
   Patterns: undefined;
   Settings: undefined;
 };

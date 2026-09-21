@@ -1,6 +1,14 @@
 import type { BaselineDTO, ColdStartDTO, DailyScoreDTO, FactorDTO } from '../api/scores';
 
 export const SCORE_FRAMING = 'This is a comparison against your own recent readings, not a medical assessment.';
+// Sleep duration is scored against the user's sleep goal rather than their own
+// average, so the Sleep Score can't use the "own recent readings" wording.
+export const SLEEP_SCORE_FRAMING =
+  'This reflects how your recent nights compare with your goals and your own patterns, not a medical assessment.';
+
+function scoreFraming(type: DailyScoreDTO['type']): string {
+  return type === 'SLEEP' ? SLEEP_SCORE_FRAMING : SCORE_FRAMING;
+}
 
 // Below this many points a factor is treated as "not moving the score".
 const NEGLIGIBLE_POINTS = 0.5;
@@ -32,6 +40,9 @@ const METRIC_NAMES: Record<string, string> = {
   RESTING_HR: 'daily minimum heart rate',
   RHR: 'daily minimum heart rate',
   SLEEP: 'sleep',
+  SLEEP_DEBT: 'sleep debt',
+  SLEEP_EFFICIENCY: 'sleep efficiency',
+  CIRCADIAN_CONSISTENCY: 'bedtime consistency',
   STEPS: 'steps',
 };
 
@@ -71,14 +82,17 @@ export function pickColdStartProgress(coldStart: ColdStartDTO[]): ColdStartDTO |
 // "not a medical assessment" framing.
 export function buildScoreHeadline(score: DailyScoreDTO): string {
   const typeLabel = scoreTypeLabel(score.type);
+  const isSleep = score.type === 'SLEEP';
+  const framing = scoreFraming(score.type);
   const active = score.factors.filter((f) => !f.excluded);
 
   if (score.score === null || active.length === 0) {
     const cold = pickColdStartProgress(score.coldStart);
+    const need = isSleep ? 'to build your baseline' : 'to compare you against your own baseline';
     const detail = cold
-      ? `: you have ${cold.daysCollected} of ${cold.daysRequired} days of ${metricName(cold.metric)} so far, and we need all ${cold.daysRequired} to compare you against your own baseline.`
+      ? `: you have ${cold.daysCollected} of ${cold.daysRequired} days of ${metricName(cold.metric)} so far, and we need all ${cold.daysRequired} ${need}.`
       : '.';
-    return `Your ${typeLabel} isn’t ready yet${detail} ${SCORE_FRAMING}`;
+    return `Your ${typeLabel} isn’t ready yet${detail} ${framing}`;
   }
 
   const sentences: string[] = [`Your ${typeLabel} is ${Math.round(score.score)}.`];
@@ -91,10 +105,26 @@ export function buildScoreHeadline(score: DailyScoreDTO): string {
     )[0].factor;
 
   if (Math.abs(top.points) < NEGLIGIBLE_POINTS) {
-    sentences.push('That’s right around your own baseline — no single factor stands out today.');
+    sentences.push(
+      isSleep
+        ? `No single factor stands out in your ${typeLabel} today.`
+        : 'That’s right around your own baseline — no single factor stands out today.',
+    );
   } else {
     const role = top.points > 0 ? 'lift' : 'drag';
     sentences.push(`${top.label} is the biggest ${role} on your ${typeLabel} today (${formatPoints(top.points)}).`);
+  }
+
+  // Duration is scored against the goal, not the person's own average.
+  const duration = active.find((f) => f.factor === 'SLEEP_DURATION');
+  if (duration) {
+    const outcome =
+      duration.points <= -NEGLIGIBLE_POINTS
+        ? 'you came in under it'
+        : duration.points >= NEGLIGIBLE_POINTS
+          ? 'you met it'
+          : 'you were right around it';
+    sentences.push(`${duration.label} is measured against your sleep goal, and ${outcome}.`);
   }
 
   for (const f of active) {
@@ -105,12 +135,15 @@ export function buildScoreHeadline(score: DailyScoreDTO): string {
 
   const excluded = score.factors.filter((f) => f.excluded);
   if (excluded.length > 0) {
+    const names = excluded.map((f) => f.label).join(' and ');
     sentences.push(
-      `Still building a baseline for ${excluded.map((f) => f.label).join(' and ')}, so today’s score relies on the other factors.`,
+      isSleep
+        ? `${names} ${excluded.length > 1 ? 'need' : 'needs'} a few more nights before it counts, so today’s score relies on the other factors.`
+        : `Still building a baseline for ${names}, so today’s score relies on the other factors.`,
     );
   }
 
-  sentences.push(SCORE_FRAMING);
+  sentences.push(framing);
   return sentences.join(' ');
 }
 
@@ -118,9 +151,15 @@ function formatBaselineValue(value: number): string {
   return String(Math.round(value * 10) / 10);
 }
 
+// '%' attaches to the number ("91.2%"); every other unit is spaced ("42 ms", "78 pts").
+function formatWithUnit(value: number, unit: string): string {
+  const n = formatBaselineValue(value);
+  return unit === '%' ? `${n}%` : `${n} ${unit}`;
+}
+
 export function buildBaselineSentence(baseline: BaselineDTO): string {
-  const value = `${formatBaselineValue(baseline.ewma)} ${baseline.unit}`;
-  const spread = `${formatBaselineValue(baseline.spread)} ${baseline.unit}`;
+  const value = formatWithUnit(baseline.ewma, baseline.unit);
+  const spread = formatWithUnit(baseline.spread, baseline.unit);
   const basis =
     baseline.daysOfHistory < baseline.windowDays
       ? `based on the ${baseline.daysOfHistory} days of data so far`

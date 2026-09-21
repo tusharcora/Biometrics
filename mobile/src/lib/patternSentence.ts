@@ -78,23 +78,21 @@ export function buildSampleCaveat(sampleSize: number): string {
 export interface AlignedPoint {
   day: string; // the habit day
   exposed: boolean;
-  // The factor z-score/value on habit day + lag; null when missing or beyond the series.
+  // The factor reading the server tested for this habit day (habit day + lag);
+  // null when that reading was missing or imputed.
   value: number | null;
 }
 
-// Pair each habit day with the factor reading `lagDays` later -- the same
-// pairing the server tested -- so the sparkline shows the tested relationship.
-// Habit days whose lagged day is past the end of the series are dropped.
-export function alignSeries(series: PatternSeriesDTO, lagDays: number): AlignedPoint[] {
-  const points: AlignedPoint[] = [];
-  for (let i = 0; i + lagDays < series.days.length; i++) {
-    points.push({
-      day: series.days[i],
-      exposed: series.habit[i] === 1,
-      value: series.factor[i + lagDays] ?? null,
-    });
-  }
-  return points;
+// The server already returns the series aligned at the tested lag: entry i of
+// `factor` is the reading on habit day `days[i]` + lagDays (see the backend
+// engine's sparkline()). Shifting it again here would apply the lag twice and
+// drop the last `lagDays` points, so this only zips the parallel arrays.
+export function alignSeries(series: PatternSeriesDTO): AlignedPoint[] {
+  return series.days.map((day, i) => ({
+    day,
+    exposed: series.habit[i] === 1,
+    value: series.factor[i] ?? null,
+  }));
 }
 
 // "Log 'nothing today' on days you don't drink so patterns can be found -- 3 of 8 needed"

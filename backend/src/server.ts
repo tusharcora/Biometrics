@@ -2,6 +2,7 @@ import { createApp } from './app';
 import { startSyncWorker } from './sync/worker';
 import { enqueueImmediateTokenRefreshSweep, scheduleTokenRefreshSweep } from './sync/queue';
 import { scheduleNightlyScoreSweep } from './scoring/queue';
+import { scheduleWeeklyHabitCorrelationSweep } from './habits/queue';
 
 const port = Number(process.env.PORT ?? 3000);
 
@@ -25,4 +26,10 @@ enqueueImmediateTokenRefreshSweep().catch((err) =>
 // missed debounce windows and back-fills days with data but no score.
 scheduleNightlyScoreSweep().catch((err) =>
   console.error('Failed to schedule the nightly score sweep', err),
+);
+
+// Weekly habit/biometric correlation run. Weekly, not nightly: a pattern needs
+// new data between runs to be worth re-testing.
+scheduleWeeklyHabitCorrelationSweep().catch((err) =>
+  console.error('Failed to schedule the weekly habit correlation sweep', err),
 );

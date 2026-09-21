@@ -31,8 +31,8 @@ function humanize(habitType: string): string {
   return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
-// The factor line, one point per habit day but showing the reading `lag` days
-// after it (already applied by alignSeries); gaps in the data break the line.
+// The factor line, one point per habit day showing the reading `lag` days after
+// it (already applied by the server); gaps in the data break the line.
 function linePath(points: AlignedPoint[]): string | null {
   const values = points.map((p) => p.value).filter((v): v is number => v !== null);
   if (values.length < 2) return null;
@@ -98,7 +98,7 @@ interface CorrelationCardProps {
 export function CorrelationCard({ pattern, habitLabel }: CorrelationCardProps) {
   const { colorScheme: scheme } = useColorScheme();
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
-  const points = alignSeries(pattern.series, pattern.lagDays);
+  const points = alignSeries(pattern.series);
   const factor = factorPhrase(pattern.factor, pattern.factorLabel);
 
   return (

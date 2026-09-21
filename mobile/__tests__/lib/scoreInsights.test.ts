@@ -6,11 +6,20 @@ import {
   sortFactorsByImpact,
   pickColdStartProgress,
   SCORE_FRAMING,
+  SLEEP_SCORE_FRAMING,
+  metricName,
 } from '../../src/lib/scoreInsights';
 import type { DailyScoreDTO, FactorDTO } from '../../src/api/scores';
 
 function factor(overrides: Partial<FactorDTO> & Pick<FactorDTO, 'factor'>): FactorDTO {
-  const labels = { HRV: 'HRV', RHR: 'Daily minimum HR', SLEEP_DEBT: 'Sleep debt' } as const;
+  const labels = {
+    HRV: 'HRV',
+    RHR: 'Daily minimum HR',
+    SLEEP_DEBT: 'Sleep debt',
+    SLEEP_DURATION: 'Sleep duration',
+    SLEEP_EFFICIENCY: 'Sleep efficiency',
+    CIRCADIAN_CONSISTENCY: 'Bedtime consistency',
+  } as const;
   return {
     label: labels[overrides.factor],
     z: 0,
@@ -184,6 +193,170 @@ describe('buildScoreHeadline', () => {
     const numbers = headline.match(/\d+(\.\d+)?/g) ?? [];
 
     expect(numbers.sort()).toEqual(['3.4', '64']);
+  });
+});
+
+describe('buildScoreHeadline (SLEEP)', () => {
+  const sleepScore = (overrides: Partial<DailyScoreDTO> = {}) => score({ type: 'SLEEP', score: 74, ...overrides });
+
+  it('names a single dominant factor as the biggest lift', () => {
+    const headline = buildScoreHeadline(
+      sleepScore({
+        factors: [
+          factor({ factor: 'SLEEP_DURATION', points: 0.1, weight: 0.45 }),
+          factor({ factor: 'SLEEP_EFFICIENCY', points: 9.3, weight: 0.35 }),
+          factor({ factor: 'CIRCADIAN_CONSISTENCY', points: -0.2, weight: 0.2 }),
+        ],
+      }),
+    );
+
+    expect(headline).toContain('Your Sleep Score is 74.');
+    expect(headline).toContain('Sleep efficiency is the biggest lift on your Sleep Score today (+9.3 pts).');
+    expect(headline).not.toContain('Bedtime consistency is the biggest');
+  });
+
+  it('says duration is measured against the sleep goal, and that the night fell short of it', () => {
+    const headline = buildScoreHeadline(
+      sleepScore({
+        score: 48,
+        factors: [
+          factor({ factor: 'SLEEP_DURATION', points: -7.6, weight: 0.45 }),
+          factor({ factor: 'SLEEP_EFFICIENCY', points: 1.2, weight: 0.35 }),
+          factor({ factor: 'CIRCADIAN_CONSISTENCY', points: 0.3, weight: 0.2 }),
+        ],
+      }),
+    );
+
+    expect(headline).toContain('Sleep duration is the biggest drag on your Sleep Score today (−7.6 pts).');
+    expect(headline).toContain('against your sleep goal');
+    expect(headline).toContain('under it');
+  });
+
+  it('never implies duration is compared to the person’s own average', () => {
+    const headline = buildScoreHeadline(
+      sleepScore({
+        factors: [
+          factor({ factor: 'SLEEP_DURATION', points: -4, weight: 0.45 }),
+          factor({ factor: 'SLEEP_EFFICIENCY', points: 2, weight: 0.35 }),
+        ],
+      }),
+    );
+
+    expect(headline).not.toMatch(/your own (recent )?(readings|average)/i);
+    expect(headline).not.toContain('your own baseline');
+  });
+
+  it('describes a duration at or above goal without saying it fell short', () => {
+    const headline = buildScoreHeadline(
+      sleepScore({ score: 88, factors: [factor({ factor: 'SLEEP_DURATION', points: 6, weight: 0.45 })] }),
+    );
+
+    expect(headline).toContain('Sleep duration is the biggest lift');
+    expect(headline).toContain('against your sleep goal');
+    expect(headline).toContain('met it');
+    expect(headline).not.toContain('under it');
+  });
+
+  it('keeps a high-efficiency night to the efficiency sentence when duration is not a factor yet', () => {
+    const headline = buildScoreHeadline(
+      sleepScore({ factors: [factor({ factor: 'SLEEP_EFFICIENCY', points: 5.5, weight: 0.35 })] }),
+    );
+
+    expect(headline).toContain('Sleep efficiency is the biggest lift on your Sleep Score today (+5.5 pts).');
+    expect(headline).not.toContain('sleep goal');
+  });
+
+  it('says bedtime consistency needs more nights when only some factors are available', () => {
+    const headline = buildScoreHeadline(
+      sleepScore({
+        factors: [
+          factor({ factor: 'SLEEP_DURATION', points: 3, weight: 0.45 }),
+          factor({ factor: 'SLEEP_EFFICIENCY', points: -1, weight: 0.35 }),
+          factor({ factor: 'CIRCADIAN_CONSISTENCY', points: 0, excluded: true, weight: 0.2 }),
+        ],
+        coldStart: [{ metric: 'CIRCADIAN_CONSISTENCY', daysCollected: 9, daysRequired: 27 }],
+      }),
+    );
+
+    expect(headline).toContain('Bedtime consistency needs a few more nights');
+    expect(headline).toContain('relies on the other factors');
+    expect(headline).not.toContain('Bedtime consistency is the biggest');
+  });
+
+  it('explains an all-excluded day with the closest-to-ready metric and no invented number', () => {
+    const headline = buildScoreHeadline(
+      sleepScore({
+        score: null,
+        factors: [
+          factor({ factor: 'SLEEP_DURATION', excluded: true }),
+          factor({ factor: 'SLEEP_EFFICIENCY', excluded: true }),
+          factor({ factor: 'CIRCADIAN_CONSISTENCY', excluded: true }),
+        ],
+        coldStart: [
+          { metric: 'SLEEP', daysCollected: 5, daysRequired: 7 },
+          { metric: 'CIRCADIAN_CONSISTENCY', daysCollected: 2, daysRequired: 27 },
+        ],
+      }),
+    );
+
+    expect(headline).toContain('Your Sleep Score isn’t ready yet');
+    expect(headline).toContain('5 of 7 days of sleep');
+    expect(headline).not.toMatch(/biggest (lift|drag)/);
+    expect(headline).toContain(SLEEP_SCORE_FRAMING);
+  });
+
+  it('says nothing stands out when every factor is near zero', () => {
+    const headline = buildScoreHeadline(
+      sleepScore({
+        factors: [factor({ factor: 'SLEEP_EFFICIENCY', points: 0.1 }), factor({ factor: 'SLEEP_DURATION', points: -0.2 })],
+      }),
+    );
+
+    expect(headline).not.toMatch(/biggest (lift|drag)/);
+    expect(headline).toContain('No single factor stands out');
+  });
+
+  it.each([
+    ['a lift', [factor({ factor: 'SLEEP_EFFICIENCY', points: 5 })], 72],
+    ['a duration drag', [factor({ factor: 'SLEEP_DURATION', points: -5 })], 72],
+    ['a cold start', [], null],
+  ] as const)('always carries the not-a-medical-assessment framing (%s)', (_name, factors, value) => {
+    const headline = buildScoreHeadline(sleepScore({ score: value, factors: [...factors] }));
+
+    expect(headline).toContain(SLEEP_SCORE_FRAMING);
+    expect(headline).toContain('not a medical assessment');
+  });
+
+  it('only uses numbers present in the data', () => {
+    const headline = buildScoreHeadline(
+      sleepScore({
+        score: 61,
+        factors: [factor({ factor: 'SLEEP_DURATION', points: -3.4 }), factor({ factor: 'SLEEP_EFFICIENCY', points: 1 })],
+      }),
+    );
+    const numbers = headline.match(/\d+(\.\d+)?/g) ?? [];
+
+    expect(numbers.sort()).toEqual(['3.4', '61']);
+  });
+});
+
+describe('buildBaselineSentence (sleep metrics)', () => {
+  it('formats a SLEEP_EFFICIENCY baseline as percentages', () => {
+    expect(
+      buildBaselineSentence({ metric: 'SLEEP_EFFICIENCY', ewma: 91.24, spread: 3.06, daysOfHistory: 30, windowDays: 30, unit: '%' }),
+    ).toBe('Your sleep efficiency baseline: 91.2% ± 3.1%, based on your last 30 days.');
+  });
+
+  it('formats a CIRCADIAN_CONSISTENCY baseline in pts under the bedtime-consistency name', () => {
+    expect(
+      buildBaselineSentence({ metric: 'CIRCADIAN_CONSISTENCY', ewma: 78, spread: 8, daysOfHistory: 27, windowDays: 30, unit: 'pts' }),
+    ).toBe('Your bedtime consistency baseline: 78 pts ± 8 pts, based on the 27 days of data so far.');
+  });
+
+  it('names the new metrics in plain words', () => {
+    expect(metricName('SLEEP_EFFICIENCY')).toBe('sleep efficiency');
+    expect(metricName('CIRCADIAN_CONSISTENCY')).toBe('bedtime consistency');
+    expect(metricName('SLEEP_DEBT')).toBe('sleep debt');
   });
 });
 

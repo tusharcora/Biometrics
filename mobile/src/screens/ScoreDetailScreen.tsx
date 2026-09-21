@@ -35,7 +35,7 @@ export function ScoreDetailScreen() {
   const navigation = useNavigation<any>();
   const { colorScheme: scheme } = useColorScheme();
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
-  const { date, type } = route.params;
+  const { date, type = 'RECOVERY' } = route.params;
   const [state, setState] = useState<LoadState>({ status: 'loading' });
 
   React.useLayoutEffect(() => {
@@ -96,7 +96,10 @@ export function ScoreDetailScreen() {
     );
   }
 
-  const { score, baselines } = detail;
+  const { score } = detail;
+  // The duration factor is scored against the user's sleep goal, so a SLEEP
+  // baseline is never listed as something the Sleep Score was compared to.
+  const baselines = score.type === 'SLEEP' ? detail.baselines.filter((b) => b.metric !== 'SLEEP') : detail.baselines;
   const cold = pickColdStartProgress(score.coldStart);
 
   return (

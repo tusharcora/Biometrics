@@ -68,7 +68,7 @@ exports[`CorrelationCard matches its snapshot for a negative lag-1 pattern 1`] =
         }
       >
         <RNSVGPath
-          d="M 0.00 44.00 L 75.00 0.00 L 150.00 36.24 M 300.00 5.18 L 300.00 5.18"
+          d="M 0.00 2.59 L 60.00 44.00 L 120.00 0.00 L 180.00 36.24 M 300.00 5.18 L 300.00 5.18"
           fill={null}
           propList={
             [
@@ -120,7 +120,7 @@ exports[`CorrelationCard matches its snapshot for a negative lag-1 pattern 1`] =
             ]
           }
           width={3}
-          x={73.5}
+          x={58.5}
           y={55}
         />
         <RNSVGRect
@@ -137,7 +137,7 @@ exports[`CorrelationCard matches its snapshot for a negative lag-1 pattern 1`] =
             ]
           }
           width={3}
-          x={148.5}
+          x={118.5}
           y={50}
         />
         <RNSVGRect
@@ -154,7 +154,7 @@ exports[`CorrelationCard matches its snapshot for a negative lag-1 pattern 1`] =
             ]
           }
           width={3}
-          x={223.5}
+          x={178.5}
           y={55}
         />
         <RNSVGRect
@@ -171,8 +171,25 @@ exports[`CorrelationCard matches its snapshot for a negative lag-1 pattern 1`] =
             ]
           }
           width={3}
-          x={297}
+          x={238.5}
           y={55}
+        />
+        <RNSVGRect
+          fill={
+            {
+              "payload": 4278235321,
+              "type": 0,
+            }
+          }
+          height={8}
+          propList={
+            [
+              "fill",
+            ]
+          }
+          width={3}
+          x={297}
+          y={50}
         />
       </RNSVGGroup>
     </RNSVGSvgView>
@@ -269,7 +286,7 @@ exports[`CorrelationCard matches its snapshot for a positive lag-3 small-sample 
         }
       >
         <RNSVGPath
-          d="M 0.00 44.00 L 0.00 44.00 M 300.00 0.00 L 300.00 0.00"
+          d="M 0.00 2.59 L 60.00 44.00 L 120.00 0.00 L 180.00 36.24 M 300.00 5.18 L 300.00 5.18"
           fill={null}
           propList={
             [
@@ -321,7 +338,58 @@ exports[`CorrelationCard matches its snapshot for a positive lag-3 small-sample 
             ]
           }
           width={3}
-          x={148.5}
+          x={58.5}
+          y={55}
+        />
+        <RNSVGRect
+          fill={
+            {
+              "payload": 4278235321,
+              "type": 0,
+            }
+          }
+          height={8}
+          propList={
+            [
+              "fill",
+            ]
+          }
+          width={3}
+          x={118.5}
+          y={50}
+        />
+        <RNSVGRect
+          fill={
+            {
+              "payload": 4293387748,
+              "type": 0,
+            }
+          }
+          height={3}
+          propList={
+            [
+              "fill",
+            ]
+          }
+          width={3}
+          x={178.5}
+          y={55}
+        />
+        <RNSVGRect
+          fill={
+            {
+              "payload": 4293387748,
+              "type": 0,
+            }
+          }
+          height={3}
+          propList={
+            [
+              "fill",
+            ]
+          }
+          width={3}
+          x={238.5}
           y={55}
         />
         <RNSVGRect

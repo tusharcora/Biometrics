@@ -129,23 +129,30 @@ describe('sample size', () => {
 });
 
 describe('alignSeries', () => {
-  it('pairs each habit day with the factor value `lag` days later', () => {
-    const aligned = alignSeries(
-      { days: ['d1', 'd2', 'd3', 'd4'], habit: [1, 0, 1, 0], factor: [10, 20, null, 40] },
-      1,
-    );
+  // The server's series is already aligned at the tested lag: factor[i] is the
+  // reading for habit day days[i] + lag. The client must NOT shift it again.
+  it('zips the server-aligned arrays without shifting the factor by the lag', () => {
+    const aligned = alignSeries({ days: ['d1', 'd2', 'd3', 'd4'], habit: [1, 0, 1, 0], factor: [10, 20, null, 40] });
 
     expect(aligned).toEqual([
-      { day: 'd1', exposed: true, value: 20 },
-      { day: 'd2', exposed: false, value: null },
-      { day: 'd3', exposed: true, value: 40 },
+      { day: 'd1', exposed: true, value: 10 },
+      { day: 'd2', exposed: false, value: 20 },
+      { day: 'd3', exposed: true, value: null },
+      { day: 'd4', exposed: false, value: 40 },
     ]);
   });
 
-  it('drops habit days whose lagged factor day falls beyond the series', () => {
-    const aligned = alignSeries({ days: ['d1', 'd2', 'd3'], habit: [1, 1, 1], factor: [1, 2, 3] }, 3);
+  it('keeps every habit day, including the last ones (no tail is dropped)', () => {
+    const aligned = alignSeries({ days: ['d1', 'd2', 'd3'], habit: [1, 1, 1], factor: [1, 2, 3] });
 
-    expect(aligned).toEqual([]);
+    expect(aligned).toHaveLength(3);
+    expect(aligned.map((p) => p.value)).toEqual([1, 2, 3]);
+  });
+
+  it('treats a missing factor entry as null', () => {
+    const aligned = alignSeries({ days: ['d1', 'd2'], habit: [0, 1], factor: [5] });
+
+    expect(aligned[1]).toEqual({ day: 'd2', exposed: true, value: null });
   });
 });
 

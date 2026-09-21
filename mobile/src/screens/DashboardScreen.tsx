@@ -6,7 +6,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
 import { Ionicons } from '@expo/vector-icons';
 import { apiFetch } from '../api/client';
-import { fetchScores, type DailyScoreDTO } from '../api/scores';
+import { fetchScores, type DailyScoreDTO, type ScoreType } from '../api/scores';
 import { useAuth } from '../auth/AuthContext';
 import { Text } from '../components/ui/text';
 import { Card } from '../components/ui/card';
@@ -22,7 +22,7 @@ import { ThemeToggle } from '../components/ui/theme-toggle';
 import { HabitLogCard } from '../components/habit-log-card';
 import { COLORS, METRIC_CONFIG, METRIC_ORDER, type MetricType } from '../theme';
 import { computeStats, buildHeadline, type MetricRecord } from '../lib/metricInsights';
-import { pickColdStartProgress } from '../lib/scoreInsights';
+import { pickColdStartProgress, scoreTypeLabel } from '../lib/scoreInsights';
 
 type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';
 
@@ -60,44 +60,56 @@ function computeHeadlineInsight(records: MetricRecord[]): string | null {
   return best?.message ?? null;
 }
 
-// undefined while loading, null when no Recovery Score has been calculated yet.
-type RecoveryState = DailyScoreDTO | null | undefined;
+// undefined while loading, null when no score of that type exists yet (for
+// Sleep: no night of sleep recorded).
+type ScoreState = DailyScoreDTO | null | undefined;
 
-function RecoveryScoreCard({ recovery, failed, onPress }: { recovery: RecoveryState; failed: boolean; onPress: (score: DailyScoreDTO) => void }) {
+const SCORE_CARD_COPY: Record<ScoreType, { slug: string; empty: string }> = {
+  RECOVERY: { slug: 'recovery', empty: 'Your Recovery Score will appear once it has been calculated.' },
+  SLEEP: { slug: 'sleep', empty: 'Your Sleep Score will appear once a night of sleep has been recorded.' },
+};
+
+// One card per score type. A Sleep Score with fewer factors than usual (e.g.
+// Bedtime consistency still building) is normal, so a present score always
+// shows the ring and confidence badge; the cold-start ring is only for a null score.
+function ScoreCard({ type, score, failed, onPress }: { type: ScoreType; score: ScoreState; failed: boolean; onPress: (score: DailyScoreDTO) => void }) {
+  const { slug, empty } = SCORE_CARD_COPY[type];
+  const label = scoreTypeLabel(type);
+
   if (failed) {
     return (
-      <Card testID="recovery-score-unavailable">
-        <Text className="text-sm text-muted-foreground">Recovery Score is unavailable right now.</Text>
+      <Card testID={`${slug}-score-unavailable`}>
+        <Text className="text-sm text-muted-foreground">{`${label} is unavailable right now.`}</Text>
       </Card>
     );
   }
 
-  if (recovery === undefined) {
-    return <Skeleton testID="recovery-score-loading" className="h-28 w-full" />;
+  if (score === undefined) {
+    return <Skeleton testID={`${slug}-score-loading`} className="h-28 w-full" />;
   }
 
-  if (recovery === null) {
+  if (score === null) {
     return (
-      <Card testID="recovery-score-empty">
-        <Text className="text-sm text-muted-foreground">Your Recovery Score will appear once it has been calculated.</Text>
+      <Card testID={`${slug}-score-empty`}>
+        <Text className="text-sm text-muted-foreground">{empty}</Text>
       </Card>
     );
   }
 
-  const cold = recovery.score === null ? pickColdStartProgress(recovery.coldStart) : null;
+  const cold = score.score === null ? pickColdStartProgress(score.coldStart) : null;
 
   return (
-    <Pressable testID="recovery-score-card" onPress={() => onPress(recovery)} className="active:opacity-80">
+    <Pressable testID={`${slug}-score-card`} onPress={() => onPress(score)} className="active:opacity-80">
       <Card className="flex-row items-center gap-4">
-        {recovery.score === null && cold ? (
+        {score.score === null && cold ? (
           <BaselineProgressRing daysCollected={cold.daysCollected} daysRequired={cold.daysRequired} />
         ) : (
-          <ScoreRing score={recovery.score} factors={recovery.factors} />
+          <ScoreRing score={score.score} factors={score.factors} />
         )}
         <View className="flex-1 gap-1.5">
-          <Text className="text-base font-semibold">Recovery Score</Text>
-          {recovery.score !== null ? (
-            <ConfidenceBadge level={recovery.confidenceLevel} />
+          <Text className="text-base font-semibold">{label}</Text>
+          {score.score !== null ? (
+            <ConfidenceBadge level={score.confidenceLevel} />
           ) : (
             <Text className="text-xs text-muted-foreground">Building your baseline</Text>
           )}
@@ -117,8 +129,9 @@ export function DashboardScreen() {
   const [records, setRecords] = useState<MetricRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus | null>(null);
-  const [recovery, setRecovery] = useState<RecoveryState>(undefined);
-  const [recoveryFailed, setRecoveryFailed] = useState(false);
+  const [recovery, setRecovery] = useState<ScoreState>(undefined);
+  const [sleep, setSleep] = useState<ScoreState>(undefined);
+  const [scoresFailed, setScoresFailed] = useState(false);
 
   useEffect(() => {
     apiFetch<MetricRecord[]>('/me/biometrics')
@@ -141,10 +154,14 @@ export function DashboardScreen() {
     (async () => {
       try {
         const scores = await fetchScores(7);
-        // Newest first; the card is the most recent Recovery Score.
-        if (!cancelled) setRecovery(scores?.find((s) => s.type === 'RECOVERY') ?? null);
+        // One request returns both types, newest first; each card is the most
+        // recent score of its type. No Sleep Score means no recorded sleep.
+        if (!cancelled) {
+          setRecovery(scores?.find((s) => s.type === 'RECOVERY') ?? null);
+          setSleep(scores?.find((s) => s.type === 'SLEEP') ?? null);
+        }
       } catch {
-        if (!cancelled) setRecoveryFailed(true);
+        if (!cancelled) setScoresFailed(true);
       }
     })();
     return () => {
@@ -234,10 +251,18 @@ export function DashboardScreen() {
           {headerActions}
         </View>
 
-        <RecoveryScoreCard
-          recovery={recovery}
-          failed={recoveryFailed}
+        <ScoreCard
+          type="RECOVERY"
+          score={recovery}
+          failed={scoresFailed}
           onPress={(score) => navigation.navigate('ScoreDetail', { date: score.date, type: 'RECOVERY' })}
+        />
+
+        <ScoreCard
+          type="SLEEP"
+          score={sleep}
+          failed={scoresFailed}
+          onPress={(score) => navigation.navigate('ScoreDetail', { date: score.date, type: 'SLEEP' })}
         />
 
         <HabitLogCard />

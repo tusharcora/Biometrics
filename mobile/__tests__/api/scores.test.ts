@@ -26,6 +26,21 @@ describe('fetchScores', () => {
     expect(apiFetch).toHaveBeenCalledWith('/me/scores?days=14');
   });
 
+  it('adds the type filter only when one is given', async () => {
+    (apiFetch as jest.Mock).mockResolvedValue({ scores: [] });
+
+    await fetchScores(7, 'SLEEP');
+
+    expect(apiFetch).toHaveBeenCalledWith('/me/scores?days=7&type=SLEEP');
+  });
+
+  it('returns both score types untouched when no type is given', async () => {
+    const sleep = { ...score, type: 'SLEEP' };
+    (apiFetch as jest.Mock).mockResolvedValue({ scores: [score, sleep] });
+
+    await expect(fetchScores(7)).resolves.toEqual([score, sleep]);
+  });
+
   it('returns an empty list when the response has no scores', async () => {
     (apiFetch as jest.Mock).mockResolvedValue({});
 
@@ -40,6 +55,14 @@ describe('fetchScoreDetail', () => {
 
     await expect(fetchScoreDetail('2026-09-19', 'RECOVERY')).resolves.toEqual(detail);
     expect(apiFetch).toHaveBeenCalledWith('/me/scores/2026-09-19?type=RECOVERY');
+  });
+
+  it('requests the SLEEP detail when asked', async () => {
+    (apiFetch as jest.Mock).mockResolvedValue({ score: { ...score, type: 'SLEEP' }, baselines: [], previous: null });
+
+    await fetchScoreDetail('2026-09-19', 'SLEEP');
+
+    expect(apiFetch).toHaveBeenCalledWith('/me/scores/2026-09-19?type=SLEEP');
   });
 
   it('defaults to the RECOVERY type', async () => {

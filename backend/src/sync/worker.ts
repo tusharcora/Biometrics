@@ -14,6 +14,13 @@ import { refreshedTokenUpdateData } from './tokenUpdate';
 import { computeDailyScore } from '../scoring/compute';
 import { runScoreSweep } from '../scoring/sweep';
 import { COMPUTE_DAILY_SCORE_JOB, SCORE_SWEEP_JOB, enqueueScoreCompute, ComputeDailyScoreJobData } from '../scoring/queue';
+import { runHabitCorrelations } from '../habits/job';
+import { runHabitCorrelationSweep } from '../habits/sweep';
+import {
+  HABIT_CORRELATION_SWEEP_JOB,
+  RUN_HABIT_CORRELATIONS_JOB,
+  RunHabitCorrelationsJobData,
+} from '../habits/queue';
 
 const ALL_METRIC_TYPES: BiometricMetricType[] = ['HRV', 'RESTING_HR', 'SLEEP', 'STEPS'];
 const SYNC_WORKER_CONCURRENCY = 5;
@@ -228,6 +235,11 @@ export async function processSyncJob(job: Job): Promise<void> {
     await computeDailyScore(userId, date);
   } else if (job.name === SCORE_SWEEP_JOB) {
     await runScoreSweep();
+  } else if (job.name === HABIT_CORRELATION_SWEEP_JOB) {
+    await runHabitCorrelationSweep();
+  } else if (job.name === RUN_HABIT_CORRELATIONS_JOB) {
+    const { userId, runKey } = job.data as RunHabitCorrelationsJobData;
+    await runHabitCorrelations(userId, { runKey });
   }
 }
 

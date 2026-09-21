@@ -5,7 +5,14 @@ import { FactorBar, factorBarScale, factorBarGeometry } from '../../src/componen
 import type { FactorDTO } from '../../src/api/scores';
 
 function factor(overrides: Partial<FactorDTO> & Pick<FactorDTO, 'factor'>): FactorDTO {
-  const labels = { HRV: 'HRV', RHR: 'Daily minimum HR', SLEEP_DEBT: 'Sleep debt' } as const;
+  const labels: Record<FactorDTO['factor'], string> = {
+    HRV: 'HRV',
+    RHR: 'Daily minimum HR',
+    SLEEP_DEBT: 'Sleep debt',
+    SLEEP_DURATION: 'Sleep duration',
+    SLEEP_EFFICIENCY: 'Sleep efficiency',
+    CIRCADIAN_CONSISTENCY: 'Bedtime consistency',
+  };
   return {
     label: labels[overrides.factor],
     z: 0,
@@ -125,6 +132,22 @@ describe('FactorBar', () => {
 
   it('matches its snapshot', () => {
     const { toJSON } = render(<FactorBar factor={factor({ factor: 'HRV', points: -4.5 })} scale={9} />);
+
+    expect(toJSON()).toMatchSnapshot();
+  });
+
+  it('renders a Sleep Score factor with the server label and a Building baseline state', () => {
+    const { getByText, getByTestId } = render(
+      <FactorBar factor={factor({ factor: 'CIRCADIAN_CONSISTENCY', excluded: true, z: null })} scale={9} />,
+    );
+
+    expect(getByText('Bedtime consistency')).toBeTruthy();
+    expect(getByText('Building baseline')).toBeTruthy();
+    expect(getByTestId('factor-bar-CIRCADIAN_CONSISTENCY')).toBeTruthy();
+  });
+
+  it('matches its snapshot: sleep duration below goal', () => {
+    const { toJSON } = render(<FactorBar factor={factor({ factor: 'SLEEP_DURATION', points: -6.4 })} scale={9} />);
 
     expect(toJSON()).toMatchSnapshot();
   });
