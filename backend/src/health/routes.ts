@@ -6,6 +6,7 @@ import { getIdentity, registerUserSubscription, deleteUserSubscription } from '.
 import { isValidWebhookAuthorization } from './webhookVerify';
 import { encryptToken } from '../crypto/tokenCipher';
 import { enqueueBackfillJob, enqueueFetchJob } from '../sync/queue';
+import { isEmptyWindow } from '../sync/window';
 import { connection } from '../sync/queue';
 import { prisma } from '../db/client';
 import { BiometricMetricType } from '../types';
@@ -13,7 +14,8 @@ import { BiometricMetricType } from '../types';
 export const healthRouter = Router();
 
 const OAUTH_STATE_TTL_SECONDS = 600;
-const BACKFILL_WINDOW_DAYS = 30;
+// Exported so the SLEEP wipe-and-resync script repopulates over exactly this window.
+export const BACKFILL_WINDOW_DAYS = 30;
 
 // Bare data type strings as they arrive in webhook notifications map to our metric types.
 const WEBHOOK_DATA_TYPE_TO_METRIC: Record<string, BiometricMetricType> = {
@@ -149,7 +151,15 @@ healthRouter.get('/health/callback', async (req, res) => {
       const startDate = existing?.lastSyncedAt
         ? existing.lastSyncedAt
         : new Date(endDate.getTime() - BACKFILL_WINDOW_DAYS * 24 * 60 * 60 * 1000);
-      await enqueueBackfillJob({ userId, startDate: isoDate(startDate), endDate: isoDate(endDate) });
+      // The window is half-open and ends at today, so a reconnect on the same
+      // UTC day as the last sync has nothing before today left to fetch. Today
+      // itself arrives through the webhook/day-fetch path. Enqueuing that empty
+      // window would only get a 400 back from Google and fail the job.
+      const startIso = isoDate(startDate);
+      const endIso = isoDate(endDate);
+      if (!isEmptyWindow(startIso, endIso)) {
+        await enqueueBackfillJob({ userId, startDate: startIso, endDate: endIso });
+      }
     } catch (err) {
       console.error('Google Health subscription registration or connection write failed', err);
       // If the subscription was created at Google but the connection row was

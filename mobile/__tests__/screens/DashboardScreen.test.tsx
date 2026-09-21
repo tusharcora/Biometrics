@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, within } from '@testing-library/react-native';
 import { DashboardScreen } from '../../src/screens/DashboardScreen';
 import { apiFetch } from '../../src/api/client';
 import { useAuth } from '../../src/auth/AuthContext';
@@ -14,13 +14,31 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 /**
- * The screen calls /me/biometrics and /me/connection independently, so route
+ * The screen calls /me/biometrics, /me/connection and /me/scores independently, so route
  * each path to its own canned response rather than one blanket resolution.
  */
-function mockApi(options: { records?: unknown; connection?: unknown; recordsError?: Error }) {
+function mockApi(options: {
+  records?: unknown;
+  connection?: unknown;
+  recordsError?: Error;
+  scores?: unknown[];
+  scoresError?: Error;
+  habitsError?: Error;
+}) {
   (apiFetch as jest.Mock).mockImplementation((path: string) => {
     if (path === '/me/connection') {
       return Promise.resolve(options.connection ?? { status: 'CONNECTED' });
+    }
+    if (path.startsWith('/me/habits')) {
+      if (options.habitsError) return Promise.reject(options.habitsError);
+      if (path === '/me/habits/config') {
+        return Promise.resolve({ habitTypes: [{ type: 'ALCOHOL', label: 'Alcohol', unit: 'drinks', exposureThreshold: 2, builtIn: true }] });
+      }
+      return Promise.resolve({ today: '2026-09-20', days: [{ habitDay: '2026-09-20', checkedIn: false, observed: { ALCOHOL: false } }] });
+    }
+    if (path.startsWith('/me/scores')) {
+      if (options.scoresError) return Promise.reject(options.scoresError);
+      return Promise.resolve({ scores: options.scores ?? [] });
     }
     if (options.recordsError) return Promise.reject(options.recordsError);
     return Promise.resolve(options.records ?? []);
@@ -193,5 +211,256 @@ describe('DashboardScreen', () => {
     fireEvent.press(getByTestId('sign-out-button'));
 
     expect(mockSignOut).toHaveBeenCalled();
+  });
+
+  it('opens Settings from the header', async () => {
+    mockApi({
+      records: [{ id: '1', metricType: 'STEPS', value: 9000, recordedAt: '2026-09-01T00:00:00.000Z' }],
+    });
+
+    const { getByTestId } = render(<DashboardScreen />);
+
+    await waitFor(() => expect(getByTestId('settings-button')).toBeTruthy());
+    fireEvent.press(getByTestId('settings-button'));
+
+    expect(mockNavigate).toHaveBeenCalledWith('Settings');
+  });
+
+  describe('habit logging and patterns', () => {
+    const steps = [{ id: '1', metricType: 'STEPS', value: 9000, recordedAt: '2026-09-01T00:00:00.000Z' }];
+
+    it('shows the "Anything to log today?" card below the Recovery card', async () => {
+      mockApi({ records: steps, scores: [] });
+
+      const { getByText, getByTestId, toJSON } = render(<DashboardScreen />);
+
+      await waitFor(() => expect(getByText('Anything to log today?')).toBeTruthy());
+      expect(getByTestId('nothing-today-button')).toBeTruthy();
+      expect(apiFetch).toHaveBeenCalledWith('/me/habits/config');
+      expect(apiFetch).toHaveBeenCalledWith('/me/habits/status?days=14');
+
+      const tree = JSON.stringify(toJSON());
+      expect(tree.indexOf('Recovery Score will appear')).toBeGreaterThanOrEqual(0);
+      expect(tree.indexOf('Recovery Score will appear')).toBeLessThan(tree.indexOf('Anything to log today?'));
+      expect(tree.indexOf('Anything to log today?')).toBeLessThan(tree.indexOf('metric-card-STEPS'));
+    });
+
+    it('keeps the rest of the dashboard when the habit endpoints fail, with a retry', async () => {
+      mockApi({ records: steps, habitsError: new Error('boom') });
+
+      const { getByText, getByTestId } = render(<DashboardScreen />);
+
+      await waitFor(() => expect(getByText(/Habits are unavailable/i)).toBeTruthy());
+      expect(getByTestId('habit-log-retry')).toBeTruthy();
+      expect(getByTestId('metric-card-STEPS')).toBeTruthy();
+    });
+
+    it('opens the Patterns screen from the dashboard', async () => {
+      mockApi({ records: steps });
+
+      const { getByTestId } = render(<DashboardScreen />);
+
+      await waitFor(() => expect(getByTestId('patterns-button')).toBeTruthy());
+      fireEvent.press(getByTestId('patterns-button'));
+
+      expect(mockNavigate).toHaveBeenCalledWith('Patterns');
+    });
+  });
+
+  describe('Recovery score card', () => {
+    const steps = [{ id: '1', metricType: 'STEPS', value: 9000, recordedAt: '2026-09-01T00:00:00.000Z' }];
+    const recovery = {
+      date: '2026-09-19',
+      type: 'RECOVERY',
+      score: 78,
+      confidenceLevel: 'HIGH',
+      algorithmVersion: 'v1',
+      factors: [
+        { factor: 'HRV', label: 'HRV', z: 1.2, weight: 0.45, contribution: 0.54, points: 8.2, imputed: false, excluded: false },
+      ],
+      coldStart: [],
+    };
+
+    it('shows the latest recovery score with its confidence at the top of the dashboard', async () => {
+      mockApi({ records: steps, scores: [{ ...recovery, type: 'SLEEP', score: 55 }, recovery] });
+
+      const { getByTestId, getByText } = render(<DashboardScreen />);
+
+      await waitFor(() => expect(getByTestId('recovery-score-card')).toBeTruthy());
+      // The SLEEP entry is a distractor for the Recovery card (it has its own card).
+      const card = within(getByTestId('recovery-score-card'));
+      expect(card.getByText('78')).toBeTruthy();
+      expect(getByText('Recovery Score')).toBeTruthy();
+      expect(card.getByTestId('confidence-badge')).toBeTruthy();
+      expect(apiFetch).toHaveBeenCalledWith('/me/scores?days=7');
+    });
+
+    it('opens the score detail screen for that day when pressed', async () => {
+      mockApi({ records: steps, scores: [recovery] });
+
+      const { getByTestId } = render(<DashboardScreen />);
+
+      await waitFor(() => expect(getByTestId('recovery-score-card')).toBeTruthy());
+      fireEvent.press(getByTestId('recovery-score-card'));
+
+      expect(mockNavigate).toHaveBeenCalledWith('ScoreDetail', { date: '2026-09-19', type: 'RECOVERY' });
+    });
+
+    it('shows the baseline progress ring instead of a score when the score is null', async () => {
+      mockApi({
+        records: steps,
+        scores: [
+          {
+            ...recovery,
+            score: null,
+            confidenceLevel: 'LOW',
+            factors: [],
+            coldStart: [
+              { metric: 'HRV', daysCollected: 9, daysRequired: 14 },
+              { metric: 'RESTING_HR', daysCollected: 3, daysRequired: 14 },
+            ],
+          },
+        ],
+      });
+
+      const { getByTestId, getByText, queryByTestId } = render(<DashboardScreen />);
+
+      await waitFor(() => expect(getByTestId('baseline-progress-ring')).toBeTruthy());
+      expect(getByText('9/14 days')).toBeTruthy();
+      expect(queryByTestId('score-ring')).toBeNull();
+      expect(queryByTestId('confidence-badge')).toBeNull();
+    });
+
+    it('says the score is not ready when none has been calculated yet, without breaking the metric cards', async () => {
+      mockApi({ records: steps, scores: [] });
+
+      const { getByText, getByTestId } = render(<DashboardScreen />);
+
+      await waitFor(() => expect(getByText(/Recovery Score will appear/i)).toBeTruthy());
+      expect(getByTestId('metric-card-STEPS')).toBeTruthy();
+    });
+
+    it('degrades to an inline message when the scores request fails, keeping the metric cards', async () => {
+      mockApi({ records: steps, scoresError: new Error('boom') });
+
+      const { getByText, getByTestId } = render(<DashboardScreen />);
+
+      await waitFor(() => expect(getByText(/Recovery Score is unavailable/i)).toBeTruthy());
+      expect(getByTestId('metric-card-STEPS')).toBeTruthy();
+    });
+  });
+
+  describe('Sleep score card', () => {
+    const steps = [{ id: '1', metricType: 'STEPS', value: 9000, recordedAt: '2026-09-01T00:00:00.000Z' }];
+    const recovery = {
+      date: '2026-09-19',
+      type: 'RECOVERY',
+      score: 78,
+      confidenceLevel: 'HIGH',
+      algorithmVersion: 'v1',
+      factors: [{ factor: 'HRV', label: 'HRV', z: 1.2, weight: 0.45, contribution: 0.54, points: 8.2, imputed: false, excluded: false }],
+      coldStart: [],
+    };
+    const sleep = {
+      date: '2026-09-19',
+      type: 'SLEEP',
+      score: 64,
+      confidenceLevel: 'MEDIUM',
+      algorithmVersion: 'v1',
+      factors: [
+        { factor: 'SLEEP_DURATION', label: 'Sleep duration', z: -0.5, weight: 0.45, contribution: -0.2, points: -3, imputed: false, excluded: false },
+        { factor: 'SLEEP_EFFICIENCY', label: 'Sleep efficiency', z: 0.7, weight: 0.35, contribution: 0.25, points: 4, imputed: false, excluded: false },
+        { factor: 'CIRCADIAN_CONSISTENCY', label: 'Bedtime consistency', z: null, weight: 0.2, contribution: 0, points: 0, imputed: false, excluded: true },
+      ],
+      coldStart: [{ metric: 'CIRCADIAN_CONSISTENCY', daysCollected: 9, daysRequired: 27 }],
+    };
+
+    it('shows the latest Sleep Score with a confidence badge, even with a factor still building', async () => {
+      mockApi({ records: steps, scores: [recovery, sleep] });
+
+      const { getByTestId } = render(<DashboardScreen />);
+
+      await waitFor(() => expect(getByTestId('sleep-score-card')).toBeTruthy());
+      const card = within(getByTestId('sleep-score-card'));
+      expect(card.getByText('Sleep Score')).toBeTruthy();
+      expect(card.getByText('64')).toBeTruthy();
+      expect(card.getByTestId('confidence-badge')).toBeTruthy();
+      expect(card.queryByTestId('baseline-progress-ring')).toBeNull();
+      // Recovery card is unaffected and both come from one request.
+      expect(within(getByTestId('recovery-score-card')).getByText('78')).toBeTruthy();
+      expect((apiFetch as jest.Mock).mock.calls.filter(([p]) => String(p).startsWith('/me/scores'))).toHaveLength(1);
+    });
+
+    it('renders the Sleep card below the Recovery card', async () => {
+      mockApi({ records: steps, scores: [recovery, sleep] });
+
+      const { getByTestId, toJSON } = render(<DashboardScreen />);
+
+      await waitFor(() => expect(getByTestId('sleep-score-card')).toBeTruthy());
+      const tree = JSON.stringify(toJSON());
+      expect(tree.indexOf('recovery-score-card')).toBeLessThan(tree.indexOf('sleep-score-card'));
+    });
+
+    it('opens the SLEEP score detail for that day when pressed', async () => {
+      mockApi({ records: steps, scores: [recovery, sleep] });
+
+      const { getByTestId } = render(<DashboardScreen />);
+
+      await waitFor(() => expect(getByTestId('sleep-score-card')).toBeTruthy());
+      fireEvent.press(getByTestId('sleep-score-card'));
+
+      expect(mockNavigate).toHaveBeenCalledWith('ScoreDetail', { date: '2026-09-19', type: 'SLEEP' });
+    });
+
+    it('shows the cold-start ring, and no score ring or badge, when the Sleep Score is null', async () => {
+      mockApi({
+        records: steps,
+        scores: [
+          recovery,
+          { ...sleep, score: null, confidenceLevel: 'LOW', coldStart: [{ metric: 'SLEEP', daysCollected: 4, daysRequired: 7 }] },
+        ],
+      });
+
+      const { getByTestId } = render(<DashboardScreen />);
+
+      await waitFor(() => expect(getByTestId('sleep-score-card')).toBeTruthy());
+      const card = within(getByTestId('sleep-score-card'));
+      expect(card.getByTestId('baseline-progress-ring')).toBeTruthy();
+      expect(card.getByText('4/7 days')).toBeTruthy();
+      expect(card.queryByTestId('score-ring')).toBeNull();
+      expect(card.queryByTestId('confidence-badge')).toBeNull();
+    });
+
+    it('explains there is no Sleep Score yet when no sleep was recorded, without a ring', async () => {
+      mockApi({ records: steps, scores: [recovery] });
+
+      const { getByTestId, getByText } = render(<DashboardScreen />);
+
+      await waitFor(() => expect(getByTestId('sleep-score-empty')).toBeTruthy());
+      expect(getByText(/Sleep Score will appear/i)).toBeTruthy();
+      expect(getByTestId('recovery-score-card')).toBeTruthy();
+    });
+
+    it('degrades to an inline message when the scores request fails, keeping the metric cards', async () => {
+      mockApi({ records: steps, scoresError: new Error('boom') });
+
+      const { getByText, getByTestId } = render(<DashboardScreen />);
+
+      await waitFor(() => expect(getByText(/Sleep Score is unavailable/i)).toBeTruthy());
+      expect(getByTestId('sleep-score-unavailable')).toBeTruthy();
+      expect(getByTestId('metric-card-STEPS')).toBeTruthy();
+    });
+
+    it('shows a skeleton while scores load', async () => {
+      mockApi({ records: steps });
+      const base = (apiFetch as jest.Mock).getMockImplementation()!;
+      (apiFetch as jest.Mock).mockImplementation((path: string) =>
+        path.startsWith('/me/scores') ? new Promise(() => {}) : base(path),
+      );
+
+      const { getByTestId } = render(<DashboardScreen />);
+
+      await waitFor(() => expect(getByTestId('sleep-score-loading')).toBeTruthy());
+    });
   });
 });

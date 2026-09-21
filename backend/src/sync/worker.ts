@@ -3,14 +3,31 @@ import type { HealthConnection } from '@prisma/client';
 import { prisma } from '../db/client';
 import { connection, TOKEN_REFRESH_SWEEP_JOB } from './queue';
 import { runTokenRefreshSweep } from './tokenRefreshJob';
-import { fetchMetricRange } from '../health/client';
+import { fetchMetricRange, fetchSleepSessions, DailyMetricType } from '../health/client';
 import { refreshHealthTokens } from '../health/oauth';
 import { deleteUserSubscription } from '../health/subscriber';
 import { decryptToken } from '../crypto/tokenCipher';
-import { upsertBiometricRecords } from '../biometrics/repository';
-import { BiometricMetricType, HealthMetricPoint } from '../types';
+import { upsertBiometricRecords, storeSleepSessions } from '../biometrics/repository';
+import { BiometricMetricType, HealthMetricPoint, SleepSessionPoint } from '../types';
 import { FetchJobData, BackfillJobData } from './queue';
+import { isEmptyWindow } from './window';
 import { refreshedTokenUpdateData } from './tokenUpdate';
+import { computeDailyScore } from '../scoring/compute';
+import { runScoreSweep } from '../scoring/sweep';
+import { COMPUTE_DAILY_SCORE_JOB, SCORE_SWEEP_JOB, enqueueScoreCompute, ComputeDailyScoreJobData } from '../scoring/queue';
+import { runHabitCorrelations } from '../habits/job';
+import { runHabitCorrelationSweep } from '../habits/sweep';
+import {
+  HABIT_CORRELATION_SWEEP_JOB,
+  RUN_HABIT_CORRELATIONS_JOB,
+  RunHabitCorrelationsJobData,
+} from '../habits/queue';
+
+import { getCoachProvider, getPushSender } from '../coach/config';
+import { runWeeklyDigest } from '../coach/digest';
+import { COACH_RETENTION_JOB, COACH_WEEKLY_DIGEST_JOB } from '../coach/queue';
+import { runCoachRetention } from '../coach/retention';
+import { LoggerCoachTelemetry } from '../coach/telemetry';
 
 const ALL_METRIC_TYPES: BiometricMetricType[] = ['HRV', 'RESTING_HR', 'SLEEP', 'STEPS'];
 const SYNC_WORKER_CONCURRENCY = 5;
@@ -28,6 +45,25 @@ function nextDay(isoDate: string): string {
   }
   d.setUTCDate(d.getUTCDate() + 1);
   return d.toISOString().slice(0, 10);
+}
+
+function shiftDay(isoDate: string, days: number): string {
+  const d = new Date(`${isoDate}T00:00:00Z`);
+  if (Number.isNaN(d.getTime())) {
+    throw new Error(`Invalid job date "${isoDate}": expected YYYY-MM-DD`);
+  }
+  d.setUTCDate(d.getUTCDate() + days);
+  return d.toISOString().slice(0, 10);
+}
+
+// SLEEP's day key is a local civil date but the fetch filter is on UTC
+// instants, so a window covering exactly [start, end) can miss sessions that
+// belong to its edge days. Widen by one day each side: for a single-day job
+// [D, D+1) this is the spec's [D-1, D+2). Sessions are idempotent, so the
+// overlap costs nothing; a session that is still missed is simply absent
+// until a later window includes it, and the rollup converges then.
+function sleepWindow(startDate: string, endDate: string): [string, string] {
+  return [shiftDay(startDate, -1), shiftDay(endDate, 1)];
 }
 
 async function disconnect(userId: string, webhookSubscriptionId: string | null): Promise<void> {
@@ -61,9 +97,17 @@ class JobTokenSession {
     this.accessToken = decryptToken(conn.encryptedAccessToken);
   }
 
-  async fetch(metricType: BiometricMetricType, startDate: string, endDate: string): Promise<HealthMetricPoint[]> {
+  async fetch(metricType: DailyMetricType, startDate: string, endDate: string): Promise<HealthMetricPoint[]> {
+    return this.withRefresh((token) => fetchMetricRange(token, metricType, startDate, endDate));
+  }
+
+  async fetchSleep(startDate: string, endDate: string): Promise<SleepSessionPoint[]> {
+    return this.withRefresh((token) => fetchSleepSessions(token, startDate, endDate));
+  }
+
+  private async withRefresh<T>(call: (accessToken: string) => Promise<T>): Promise<T> {
     try {
-      return await fetchMetricRange(this.accessToken, metricType, startDate, endDate);
+      return await call(this.accessToken);
     } catch (err) {
       if (!isUnauthorized(err) || this.refreshed) throw err;
 
@@ -90,10 +134,41 @@ class JobTokenSession {
 
       // A second 401 with a freshly minted token means access really is gone;
       // let it propagate to the disconnect path.
-      return await fetchMetricRange(this.accessToken, metricType, startDate, endDate);
+      return await call(this.accessToken);
     }
   }
 }
+
+// SLEEP is stored as whole sessions (idempotent upsert) and the BiometricRecord
+// row is a rollup re-derived for every touched local date -- see
+// biometrics/repository.ts for why summing per-day rows was rejected.
+async function syncSleep(session: JobTokenSession, userId: string, startDate: string, endDate: string): Promise<string[]> {
+  const [from, to] = sleepWindow(startDate, endDate);
+  return storeSleepSessions(userId, await session.fetchSleep(from, to));
+}
+
+// HRV, RHR and SLEEP feed the Recovery Score (SLEEP also feeds the Sleep Score);
+// STEPS does not (its only derived feature, ACWR, is stored but excluded from the composite).
+const SCORE_INPUT_METRICS = new Set<BiometricMetricType>(['HRV', 'RESTING_HR', 'SLEEP']);
+
+/**
+ * Asks for the affected days' scores to be recomputed, debounced per user+day
+ * so a burst of overnight sleep + HRV + RHR webhooks becomes one recompute.
+ * Scoring is derived data: a failure to enqueue must never fail (and so
+ * retry) a sync job whose data is already safely stored. The nightly sweep is
+ * the backstop for anything missed here.
+ */
+async function requestScores(userId: string, dates: string[]): Promise<void> {
+  for (const date of new Set(dates)) {
+    try {
+      await enqueueScoreCompute(userId, date);
+    } catch (err) {
+      console.error(`Failed to enqueue score recompute for user ${userId} on ${date}`, err);
+    }
+  }
+}
+
+const civilDateOf = (p: HealthMetricPoint) => p.recordedAt.toISOString().slice(0, 10);
 
 async function handleFetchJob(data: FetchJobData): Promise<void> {
   const conn = await prisma.healthConnection.findUnique({ where: { userId: data.userId } });
@@ -106,8 +181,14 @@ async function handleFetchJob(data: FetchJobData): Promise<void> {
     // confirmed-live usage retrieves the `start` bucket with end = start + 1.
     // Passing the same date for both bounds is an empty range, so a
     // single-day job must ask for [date, date + 1).
-    const points = await session.fetch(data.metricType, data.date, nextDay(data.date));
-    await upsertBiometricRecords(data.userId, data.metricType, points);
+    const end = nextDay(data.date);
+    if (data.metricType === 'SLEEP') {
+      await requestScores(data.userId, await syncSleep(session, data.userId, data.date, end));
+    } else {
+      const points = await session.fetch(data.metricType, data.date, end);
+      await upsertBiometricRecords(data.userId, data.metricType, points);
+      if (SCORE_INPUT_METRICS.has(data.metricType)) await requestScores(data.userId, points.map(civilDateOf));
+    }
     await prisma.healthConnection.update({
       where: { userId: data.userId },
       data: { lastSyncedAt: new Date() },
@@ -122,15 +203,27 @@ async function handleFetchJob(data: FetchJobData): Promise<void> {
 }
 
 async function handleBackfillJob(data: BackfillJobData): Promise<void> {
+  // Nothing to fetch, and Google answers an empty window with a 400 that would
+  // fail the job (e.g. a reconnect on the same day as the last sync). Not a
+  // sync, so lastSyncedAt is deliberately left alone.
+  if (isEmptyWindow(data.startDate, data.endDate)) return;
+
   const conn = await prisma.healthConnection.findUnique({ where: { userId: data.userId } });
   if (!conn || conn.status === 'DISCONNECTED') return;
 
   try {
     const session = new JobTokenSession(conn);
+    const scoreDates: string[] = [];
     for (const metricType of ALL_METRIC_TYPES) {
+      if (metricType === 'SLEEP') {
+        scoreDates.push(...(await syncSleep(session, data.userId, data.startDate, data.endDate)));
+        continue;
+      }
       const points = await session.fetch(metricType, data.startDate, data.endDate);
       await upsertBiometricRecords(data.userId, metricType, points);
+      if (SCORE_INPUT_METRICS.has(metricType)) scoreDates.push(...points.map(civilDateOf));
     }
+    await requestScores(data.userId, scoreDates);
     await prisma.healthConnection.update({ where: { userId: data.userId }, data: { lastSyncedAt: new Date() } });
   } catch (err) {
     if (isUnauthorized(err)) {
@@ -149,6 +242,26 @@ export async function processSyncJob(job: Job): Promise<void> {
   } else if (job.name === TOKEN_REFRESH_SWEEP_JOB) {
     // Scheduled through the queue so exactly one instance sweeps per tick.
     await runTokenRefreshSweep();
+  } else if (job.name === COMPUTE_DAILY_SCORE_JOB) {
+    const { userId, date } = job.data as ComputeDailyScoreJobData;
+    await computeDailyScore(userId, date);
+  } else if (job.name === SCORE_SWEEP_JOB) {
+    await runScoreSweep();
+  } else if (job.name === HABIT_CORRELATION_SWEEP_JOB) {
+    await runHabitCorrelationSweep();
+  } else if (job.name === RUN_HABIT_CORRELATIONS_JOB) {
+    const { userId, runKey } = job.data as RunHabitCorrelationsJobData;
+    await runHabitCorrelations(userId, { runKey });
+  } else if (job.name === COACH_WEEKLY_DIGEST_JOB) {
+    // A no-op unless COACH_ENABLED; the provider and push sender are the configured slots.
+    await runWeeklyDigest({
+      provider: getCoachProvider(),
+      pushSender: getPushSender(),
+      telemetry: new LoggerCoachTelemetry(),
+    });
+  } else if (job.name === COACH_RETENTION_JOB) {
+    // Not gated on COACH_ENABLED: expiry must keep running if the coach is switched off.
+    await runCoachRetention({ telemetry: new LoggerCoachTelemetry() });
   }
 }
 

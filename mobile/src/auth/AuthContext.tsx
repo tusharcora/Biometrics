@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
 import * as SecureStore from 'expo-secure-store';
-import { apiFetch } from '../api/client';
+import { apiFetch, onSessionExpired } from '../api/client';
 
 interface Session {
   accessToken: string;
@@ -28,6 +28,10 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (token) setSession({ accessToken: token });
     });
   }, []);
+
+  // The API client clears the stored tokens when the server rejects the
+  // refresh token; mirror that here so the navigator returns to sign-in.
+  useEffect(() => onSessionExpired(() => setSession(null)), []);
 
   async function signInWithApple(identityToken: string) {
     // skipAuth: there is no session yet, and a 401 here means "bad identity

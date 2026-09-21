@@ -5,6 +5,19 @@ export function setBaseUrl(url: string): void {
   baseUrl = url;
 }
 
+// Carries the HTTP status so callers can tell "nothing there" (404) apart from
+// a real failure. The message format is unchanged from before.
+export class ApiError extends Error {
+  readonly status: number;
+
+  constructor(status: number, message: string) {
+    super(message);
+    this.name = 'ApiError';
+    this.status = status;
+    Object.setPrototypeOf(this, ApiError.prototype);
+  }
+}
+
 export interface ApiFetchOptions extends RequestInit {
   /**
    * Skip both attaching the session token and the 401-retry-refresh. Use for
@@ -19,6 +32,30 @@ export interface ApiFetchOptions extends RequestInit {
 // Callers that arrive while a refresh is in flight await that same promise.
 let inFlightRefresh: Promise<string> | null = null;
 
+// Lets the auth layer find out that the stored session can no longer be used.
+// The API client cannot import the auth context (the context imports this
+// module), so it publishes the event and AuthProvider subscribes.
+type SessionExpiredListener = () => void;
+const sessionExpiredListeners = new Set<SessionExpiredListener>();
+
+/** Subscribe to "the stored session was rejected for good". Returns an unsubscribe function. */
+export function onSessionExpired(listener: SessionExpiredListener): () => void {
+  sessionExpiredListeners.add(listener);
+  return () => {
+    sessionExpiredListeners.delete(listener);
+  };
+}
+
+async function expireSession(): Promise<void> {
+  // Failing to delete must not stop the listeners: the in-memory session is
+  // what the navigator reads, and it has to go either way.
+  await Promise.all([
+    SecureStore.deleteItemAsync('accessToken'),
+    SecureStore.deleteItemAsync('refreshToken'),
+  ]).catch(() => undefined);
+  sessionExpiredListeners.forEach((listener) => listener());
+}
+
 async function performRefresh(): Promise<string> {
   const refreshToken = await SecureStore.getItemAsync('refreshToken');
   const res = await fetch(`${baseUrl}/auth/refresh`, {
@@ -26,7 +63,19 @@ async function performRefresh(): Promise<string> {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ refreshToken }),
   });
-  if (!res.ok) throw new Error('Session expired, please sign in again');
+  if (!res.ok) {
+    // A 4xx means the server REJECTED our refresh token: unknown, revoked or
+    // expired -- for instance after the app is pointed at a different backend.
+    // Retrying can never succeed, so end the session instead of stranding the
+    // user on a screen that only shows an error. A 5xx (or a thrown network
+    // error, which propagates untouched) is a transient failure and must not
+    // sign anyone out.
+    if (res.status >= 400 && res.status < 500) {
+      await expireSession();
+      throw new Error('Session expired, please sign in again');
+    }
+    throw new Error('Could not refresh your session, please try again');
+  }
   const tokens = await res.json();
   await SecureStore.setItemAsync('accessToken', tokens.accessToken);
   await SecureStore.setItemAsync('refreshToken', tokens.refreshToken);
@@ -48,7 +97,7 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
 
   if (skipAuth) {
     const res = await fetch(`${baseUrl}${path}`, requestInit);
-    if (!res.ok) throw new Error(`Request to ${path} failed with ${res.status}`);
+    if (!res.ok) throw new ApiError(res.status, `Request to ${path} failed with ${res.status}`);
     return res.json() as Promise<T>;
   }
 
@@ -64,6 +113,18 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
     accessToken = await refreshAccessToken();
     res = await doFetch(accessToken);
   }
-  if (!res.ok) throw new Error(`Request to ${path} failed with ${res.status}`);
+  if (!res.ok) throw new ApiError(res.status, `Request to ${path} failed with ${res.status}`);
+  // 204 No Content (e.g. DELETE) has no body to parse.
+  if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;
+}
+
+// Tells the backend which IANA zone to use for civil-date bucketing (sleep
+// rollups, habit days). A 400 from the server means the zone name was invalid.
+export function updateTimezone(timezone: string): Promise<{ timezone: string }> {
+  return apiFetch<{ timezone: string }>('/me/timezone', {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ timezone }),
+  });
 }

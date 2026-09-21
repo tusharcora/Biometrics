@@ -64,6 +64,12 @@ export const COLORS = {
     border: 'rgb(231, 229, 228)',
     muted: 'rgb(120, 113, 108)',
     accent: 'rgb(0, 176, 185)',
+    // 4-band "is this number good" scale for Recovery/Sleep scores, separate
+    // from the per-metric colours above ("which metric is this").
+    scoreExcellent: 'rgb(22, 163, 74)',
+    scoreGood: 'rgb(101, 163, 13)',
+    scoreFair: 'rgb(217, 119, 6)',
+    scorePoor: 'rgb(220, 38, 38)',
   },
   dark: {
     background: 'rgb(12, 12, 13)',
@@ -71,5 +77,25 @@ export const COLORS = {
     border: 'rgb(39, 39, 42)',
     muted: 'rgb(161, 161, 170)',
     accent: 'rgb(45, 197, 200)',
+    scoreExcellent: 'rgb(74, 222, 128)',
+    scoreGood: 'rgb(163, 230, 53)',
+    scoreFair: 'rgb(251, 191, 36)',
+    scorePoor: 'rgb(248, 113, 113)',
+  },
+};
+
+// Duration/easing constants for score-transition animations, so no component
+// inlines its own. Easings are cubic-bezier control points (not Reanimated
+// functions) so this file stays free of native imports; consumers wrap them
+// with Easing.bezier(...MOTION.easing.x).
+export const MOTION = {
+  duration: {
+    fast: 150,
+    normal: 300,
+    slow: 600,
+  },
+  easing: {
+    standard: [0.4, 0, 0.2, 1] as const,
+    decelerate: [0, 0, 0.2, 1] as const,
   },
 };

@@ -25,14 +25,45 @@ enum BiometricMetricType {
 }
 
 model User {
-  id               String            @id @default(uuid())
-  email            String
-  authProvider     AuthProvider
-  providerUserId   String
-  createdAt        DateTime          @default(now())
-  healthConnection HealthConnection?
-  biometricRecords BiometricRecord[]
-  refreshTokens    RefreshToken[]
+  id                 String              @id @default(uuid())
+  email              String
+  authProvider       AuthProvider
+  providerUserId     String
+  createdAt          DateTime            @default(now())
+  healthConnection   HealthConnection?
+  biometricRecords   BiometricRecord[]
+  sleepSessions      SleepSession[]
+  refreshTokens      RefreshToken[]
+  baselineSnapshots  BaselineSnapshot[]
+  dailyFeatures      UserDailyFeatures[]
+  dailyScores        DailyScore[]
+  scoreInputFlags    ScoreInputFlag[]
+  habitTypes         HabitType[]
+  habitLogs          HabitLog[]
+  habitCheckIns      HabitCheckIn[]
+  habitCorrelations  HabitCorrelation[]
+  coachConsents      CoachConsent[]
+  coachConversations CoachConversation[]
+  coachMessages      CoachMessage[]
+  coachMemories      CoachMemory[]
+  coachDigests       CoachDigest[]
+  pushTokens         PushToken[]
+
+  // The coach persona the user picked in Settings (an id from
+  // src/coach/personas). Null means the default persona.
+  coachPersonaId String?
+
+  // The single source of the sleep goal: scoring's sleep-debt factor, the
+  // dashboard goal and the coach's getUserGoals() must all read this one value
+  // (src/users/goals.ts) so they cannot drift apart. The 480 here must match
+  // DEFAULT_SLEEP_GOAL_MINUTES in that file.
+  sleepGoalMinutes Int @default(480)
+
+  // IANA zone name (e.g. "America/Los_Angeles"), client-supplied. It defines
+  // which local civil date a sleep session's end instant belongs to, so the
+  // derived SLEEP daily rollup lines up with the civil dates Google reports
+  // for STEPS/RESTING_HR/HRV. "UTC" is the fallback until the client reports.
+  timezone String @default("UTC")
 
   // Identity is keyed on the provider subject, not the email address: the same
   // person may hold both an Apple and a Google account sharing one email, and
@@ -51,18 +82,18 @@ model RefreshToken {
 }
 
 model HealthConnection {
-  id                    String                  @id @default(uuid())
-  userId                String                  @unique
-  user                  User                    @relation(fields: [userId], references: [id])
-  healthUserId          String                  @unique
+  id                    String                 @id @default(uuid())
+  userId                String                 @unique
+  user                  User                   @relation(fields: [userId], references: [id])
+  healthUserId          String                 @unique
   encryptedAccessToken  String
   encryptedRefreshToken String
   tokenExpiresAt        DateTime
   webhookSubscriptionId String?
-  status                HealthConnectionStatus  @default(CONNECTED)
+  status                HealthConnectionStatus @default(CONNECTED)
   lastSyncedAt          DateTime?
-  createdAt             DateTime                @default(now())
-  updatedAt             DateTime                @updatedAt
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
 }
 
 model BiometricRecord {
@@ -76,4 +107,340 @@ model BiometricRecord {
 
   @@unique([userId, metricType, recordedAt])
   @@index([userId, recordedAt])
+}
+
+// One row per Sleep object returned by Google, keyed by its start instant so a
+// re-fetch of the same session overwrites in place (idempotent). The
+// BiometricRecord SLEEP row for a day is a rollup *derived* from these rows
+// (sum of minutesAsleep for sessions ending on that local civil date), never
+// accumulated across syncs.
+model SleepSession {
+  id            String   @id @default(uuid())
+  userId        String
+  user          User     @relation(fields: [userId], references: [id])
+  startTime     DateTime
+  endTime       DateTime
+  minutesAsleep Float
+  syncedAt      DateTime @default(now())
+
+  @@unique([userId, startTime])
+  @@index([userId, endTime])
+}
+
+enum ScoreType {
+  RECOVERY
+  SLEEP
+}
+
+enum ConfidenceLevel {
+  HIGH
+  MEDIUM
+  LOW
+}
+
+enum ScoreInputFlagType {
+  OUTLIER
+}
+
+// Stage 3 output: the baseline a day's z-scores were computed against, so a
+// score is reproducible after the rolling window has moved on. `metric` is a
+// string (HRV | RESTING_HR | SLEEP | SLEEP_DEBT, later sleep-efficiency and
+// circadian) so Slice 1.5 can add series without a migration. While a metric
+// is cold-starting the stat columns are null and only daysOfHistory is
+// meaningful (it drives the "Building your baseline (9/14)" state).
+model BaselineSnapshot {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id])
+  metric           String
+  date             DateTime @db.Date
+  ewma             Float?
+  // sigma-hat = 1.4826 x MAD: on the same scale as a standard deviation.
+  spread           Float?
+  // Raw (unscaled) median absolute deviation.
+  mad              Float?
+  daysOfHistory    Int
+  algorithmVersion String
+
+  @@unique([userId, metric, date])
+  @@index([userId, date])
+}
+
+// Stage 2 output: one row per user per civil date, reused by every later
+// stage and (later) the coach. Z columns are nullable while cold-starting.
+model UserDailyFeatures {
+  id               String   @id @default(uuid())
+  userId           String
+  user             User     @relation(fields: [userId], references: [id])
+  date             DateTime @db.Date
+  algorithmVersion String
+
+  sleepDebtRolling14d     Float?
+  hrvBaselineDeviationPct Float?
+  rhrBaselineDeviationPct Float?
+  // Computed and stored so the series exists to validate later, but
+  // deliberately EXCLUDED from the Recovery composite (steps are not a
+  // validated training-load proxy).
+  acuteChronicLoadRatio   Float?
+
+  // Correlation series for the habit engine (imputed days are excludable).
+  hrvZ                  Float?
+  hrvZImputed           Boolean @default(false)
+  rhrZ                  Float?
+  rhrZImputed           Boolean @default(false)
+  sleepDurationZ        Float?
+  sleepDurationZImputed Boolean @default(false)
+
+  // Slice 1.5 (Sleep Score) columns; nothing writes them yet.
+  sleepEfficiency              Float?
+  sleepEfficiencyZ             Float?
+  sleepEfficiencyZImputed      Boolean @default(false)
+  circadianConsistencyScore    Float?
+  circadianConsistencyZ        Float?
+  circadianConsistencyZImputed Boolean @default(false)
+
+  updatedAt DateTime @updatedAt
+
+  @@unique([userId, date])
+}
+
+// Stage 4/5 output. `factors` is the per-factor vector
+// [{factor, z, weight, contribution, points, imputed, excluded}]. `score` is
+// null when every factor is excluded (cold start): the row is still written so
+// the client can show baseline progress.
+model DailyScore {
+  id               String          @id @default(uuid())
+  userId           String
+  user             User            @relation(fields: [userId], references: [id])
+  date             DateTime        @db.Date
+  type             ScoreType
+  algorithmVersion String
+  score            Float?
+  confidenceLevel  ConfidenceLevel
+  factors          Json
+  // Bumped on every recompute; the nightly sweep compares it with the inputs'
+  // syncedAt to find scores older than their data.
+  updatedAt        DateTime        @updatedAt
+
+  @@unique([userId, date, type])
+  @@index([userId, date])
+}
+
+// Persisted Stage-1 verdicts. The raw BiometricRecord is never altered or
+// deleted; the score computation just skips a flagged value.
+model ScoreInputFlag {
+  id        String             @id @default(uuid())
+  userId    String
+  user      User               @relation(fields: [userId], references: [id])
+  metric    String
+  date      DateTime           @db.Date
+  flag      ScoreInputFlagType
+  value     Float
+  median    Float
+  mad       Float
+  createdAt DateTime           @default(now())
+
+  @@unique([userId, metric, date, flag])
+}
+
+enum HabitCorrelationStatus {
+  CANDIDATE
+  CONFIRMED
+  RETIRED
+}
+
+// User-defined habit types only. The built-ins (ALCOHOL, CAFFEINE, WORKOUT) live
+// in code (src/habits/config.ts) so their thresholds ship with a deploy instead
+// of needing a per-user seed. `type` is the stable id HabitLog rows reference;
+// it is generated once and never derived from the (editable-looking) label.
+model HabitType {
+  id                String   @id @default(uuid())
+  userId            String
+  user              User     @relation(fields: [userId], references: [id])
+  type              String
+  label             String
+  unit              String
+  exposureThreshold Float
+  createdAt         DateTime @default(now())
+
+  @@unique([userId, type])
+}
+
+// `value` 0 is a real entry meaning "none", not a missing value. `habitDay` is
+// derived once at write time (04:00-local boundary, the timezone then in
+// effect) and stored, so a later timezone change never rewrites history.
+model HabitLog {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  habitType String
+  value     Float
+  unit      String
+  loggedAt  DateTime
+  habitDay  DateTime @db.Date
+  note      String?
+  createdAt DateTime @default(now())
+
+  @@index([userId, habitDay])
+}
+
+// "Everything for this day is logged, including nothing."
+model HabitCheckIn {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  habitDay  DateTime @db.Date
+  createdAt DateTime @default(now())
+
+  @@unique([userId, habitDay])
+}
+
+// One row per (habit, factor, lag) hypothesis that has ever passed the weekly
+// BH + |r| gate. Only CONFIRMED rows are ever surfaced. The stat columns hold
+// the latest TESTED run; they are null only if the row was never tested (which
+// cannot happen for a row created by a pass, but keeps the columns honest).
+model HabitCorrelation {
+  id                String                 @id @default(uuid())
+  userId            String
+  user              User                   @relation(fields: [userId], references: [id])
+  habitType         String
+  factor            String
+  lagDays           Int
+  status            HabitCorrelationStatus
+  consecutivePasses Int                    @default(0)
+  consecutiveMisses Int                    @default(0)
+  lastEvaluatedAt   DateTime
+  // ISO week the row was last evaluated in ("2026-W38"): makes a repeated run
+  // for the same week a no-op instead of double-counting a pass or a miss.
+  lastRunKey        String
+  r                 Float?
+  pValue            Float?
+  qValue            Float?
+  effectSizePercent Float?
+  comparisonPercent Float?
+  sampleSize        Int                    @default(0)
+  direction         String?
+  series            Json?
+
+  @@unique([userId, habitType, factor, lagDays])
+  @@index([userId, status])
+}
+
+// AI Coach (spec 2026-09-20-ai-coach-design.md). One row per consent grant for a
+// consent-text version; the latest un-revoked row for the CURRENT version is
+// what lets a coach turn run (a version bump therefore requires re-consent).
+// Revocation stamps revokedAt rather than deleting the row, keeping an audit
+// trail of what was agreed to and when.
+model CoachConsent {
+  id          String    @id @default(uuid())
+  userId      String
+  user        User      @relation(fields: [userId], references: [id])
+  version     String
+  consentedAt DateTime  @default(now())
+  revokedAt   DateTime?
+
+  @@index([userId, consentedAt])
+}
+
+model CoachConversation {
+  id            String         @id @default(uuid())
+  userId        String
+  user          User           @relation(fields: [userId], references: [id])
+  createdAt     DateTime       @default(now())
+  lastMessageAt DateTime       @default(now())
+  messages      CoachMessage[]
+
+  @@index([userId, lastMessageAt])
+}
+
+enum CoachMessageRole {
+  USER
+  ASSISTANT
+}
+
+// Where an assistant reply came from: the model (guardrail-validated), the
+// server-composed fallback, or the fixed non-LLM safety reply. Null for USER rows.
+enum CoachMessageSource {
+  MODEL
+  FALLBACK
+  SAFETY
+}
+
+model CoachMessage {
+  id              String              @id @default(uuid())
+  conversationId  String
+  conversation    CoachConversation   @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  userId          String
+  user            User                @relation(fields: [userId], references: [id])
+  role            CoachMessageRole
+  text            String
+  source          CoachMessageSource?
+  // Guardrail/latency events that occurred while producing this reply (reasons
+  // and counts only, never text).
+  guardrailEvents Json?
+  createdAt       DateTime            @default(now())
+
+  @@index([conversationId, createdAt])
+}
+
+// Coach memory (spec section 5/6): an ALLOWLIST, not a free-text store. The only
+// way a row is written is a validated proposeMemory call (closed category enum,
+// value <= 140 chars, health-fact classifier as a second layer). PENDING until
+// the user's next message fails to correct or dismiss it, then CONFIRMED; only
+// CONFIRMED rows are ever surfaced into a prompt.
+enum CoachMemoryCategory {
+  TRAINING_GOAL
+  SCHEDULE
+  PREFERENCE
+}
+
+enum CoachMemoryStatus {
+  PENDING
+  CONFIRMED
+}
+
+model CoachMemory {
+  id          String              @id @default(uuid())
+  userId      String
+  user        User                @relation(fields: [userId], references: [id])
+  category    CoachMemoryCategory
+  value       String              @db.VarChar(140)
+  status      CoachMemoryStatus   @default(PENDING)
+  createdAt   DateTime            @default(now())
+  confirmedAt DateTime?
+
+  @@index([userId, status, createdAt])
+}
+
+// The weekly synthesis recap. One per user per local week (weekStart is the
+// Monday of that week), which is what makes the weekly job idempotent.
+model CoachDigest {
+  id        String   @id @default(uuid())
+  userId    String
+  user      User     @relation(fields: [userId], references: [id])
+  text      String
+  personaId String
+  weekStart DateTime @db.Date
+  createdAt DateTime @default(now())
+
+  @@unique([userId, weekStart])
+  @@index([userId, createdAt])
+}
+
+enum PushPlatform {
+  ios
+  android
+}
+
+// A device push token. The token is unique across users: a device that signs in
+// as someone else moves the row rather than duplicating it.
+model PushToken {
+  id        String       @id @default(uuid())
+  userId    String
+  user      User         @relation(fields: [userId], references: [id])
+  token     String       @unique
+  platform  PushPlatform
+  createdAt DateTime     @default(now())
+
+  @@index([userId])
 }

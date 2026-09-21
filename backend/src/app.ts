@@ -2,6 +2,10 @@ import express, { Express } from 'express';
 import { authRouter } from './auth/routes';
 import { healthRouter } from './health/routes';
 import { biometricsRouter } from './biometrics/routes';
+import { usersRouter } from './users/routes';
+import { scoresRouter } from './scoring/routes';
+import { habitsRouter } from './habits/routes';
+import { coachRouter } from './coach/routes';
 
 export function createApp(): Express {
   const app = express();
@@ -16,5 +20,9 @@ export function createApp(): Express {
   app.use(authRouter);
   app.use(healthRouter);
   app.use(biometricsRouter);
+  app.use(usersRouter);
+  app.use(scoresRouter);
+  app.use(habitsRouter);
+  app.use(coachRouter);
   return app;
 }

@@ -3,9 +3,11 @@ import { render, waitFor } from '@testing-library/react-native';
 import { RootNavigator } from '../../src/navigation/RootNavigator';
 import { apiFetch } from '../../src/api/client';
 import { useAuth } from '../../src/auth/AuthContext';
+import { syncTimezone } from '../../src/lib/timezone';
 
 jest.mock('../../src/api/client');
 jest.mock('../../src/auth/AuthContext');
+jest.mock('../../src/lib/timezone');
 
 // The real native stack pulls in react-native-safe-area-context, which this
 // project does not install. Stub the navigator down to "render whichever screen
@@ -15,12 +17,14 @@ jest.mock('@react-navigation/native', () => ({
   DefaultTheme: { dark: false, colors: {}, fonts: {} },
   DarkTheme: { dark: true, colors: {}, fonts: {} },
 }));
+const mockRegisteredScreens: string[] = [];
 jest.mock('@react-navigation/native-stack', () => {
   const ReactLib = require('react');
   return {
     createNativeStackNavigator: () => ({
       Navigator: ({ initialRouteName, children }: any) => {
         const screens = ReactLib.Children.toArray(children);
+        mockRegisteredScreens.splice(0, mockRegisteredScreens.length, ...screens.map((child: any) => child.props.name));
         const match = screens.find((child: any) => child.props.name === initialRouteName);
         return match ? ReactLib.createElement(match.props.component) : null;
       },
@@ -65,6 +69,17 @@ describe('RootNavigator', () => {
     const { getByText } = render(<RootNavigator />);
 
     expect(getByText('SIGN_IN_SCREEN')).toBeTruthy();
+    expect(syncTimezone).not.toHaveBeenCalled();
+  });
+
+  it('syncs the time zone once on launch when authenticated', async () => {
+    signedIn(true);
+    (apiFetch as jest.Mock).mockResolvedValue({ status: 'CONNECTED', lastSyncedAt: null });
+
+    const { getByText } = render(<RootNavigator />);
+
+    await waitFor(() => expect(getByText('DASHBOARD_SCREEN')).toBeTruthy());
+    expect(syncTimezone).toHaveBeenCalledTimes(1);
   });
 
   // The old navigator hardcoded the connect screen, so an already-connected
@@ -104,5 +119,25 @@ describe('RootNavigator', () => {
     const { getByText } = render(<RootNavigator />);
 
     await waitFor(() => expect(getByText('CONNECT_SCREEN')).toBeTruthy());
+  });
+
+  it('registers the ScoreDetail route', async () => {
+    signedIn(true);
+    (apiFetch as jest.Mock).mockResolvedValue({ status: 'CONNECTED', lastSyncedAt: null });
+
+    const { getByText } = render(<RootNavigator />);
+
+    await waitFor(() => expect(getByText('DASHBOARD_SCREEN')).toBeTruthy());
+    expect(mockRegisteredScreens).toContain('ScoreDetail');
+  });
+
+  it('registers the Patterns route', async () => {
+    signedIn(true);
+    (apiFetch as jest.Mock).mockResolvedValue({ status: 'CONNECTED', lastSyncedAt: null });
+
+    const { getByText } = render(<RootNavigator />);
+
+    await waitFor(() => expect(getByText('DASHBOARD_SCREEN')).toBeTruthy());
+    expect(mockRegisteredScreens).toContain('Patterns');
   });
 });

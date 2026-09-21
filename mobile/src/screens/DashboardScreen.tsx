@@ -6,17 +6,25 @@ import { useNavigation } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
 import { Ionicons } from '@expo/vector-icons';
 import { apiFetch } from '../api/client';
+import { fetchScoresWithBands, type DailyScoreDTO, type ScoreBandsDTO, type ScoreType } from '../api/scores';
 import { useAuth } from '../auth/AuthContext';
 import { Text } from '../components/ui/text';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { Ring } from '../components/ui/ring';
+import { ScoreRing } from '../components/ui/score-ring';
+import { BaselineProgressRing } from '../components/ui/baseline-progress-ring';
+import { ConfidenceBadge } from '../components/ui/confidence-badge';
 import { TrendLine } from '../components/ui/trend-line';
 import { CountUp } from '../components/ui/count-up';
 import { ThemeToggle } from '../components/ui/theme-toggle';
+import { HabitLogCard } from '../components/habit-log-card';
+import { CoachDigestCard } from '../components/coach-digest-card';
 import { COLORS, METRIC_CONFIG, METRIC_ORDER, type MetricType } from '../theme';
 import { computeStats, buildHeadline, type MetricRecord } from '../lib/metricInsights';
+import { pickColdStartProgress, scoreTypeLabel } from '../lib/scoreInsights';
+import { coachEntryRoute, useCoachStatus } from '../lib/useCoachStatus';
 
 type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';
 
@@ -54,6 +62,79 @@ function computeHeadlineInsight(records: MetricRecord[]): string | null {
   return best?.message ?? null;
 }
 
+// undefined while loading, null when no score of that type exists yet (for
+// Sleep: no night of sleep recorded).
+type ScoreState = DailyScoreDTO | null | undefined;
+
+const SCORE_CARD_COPY: Record<ScoreType, { slug: string; empty: string }> = {
+  RECOVERY: { slug: 'recovery', empty: 'Your Recovery Score will appear once it has been calculated.' },
+  SLEEP: { slug: 'sleep', empty: 'Your Sleep Score will appear once a night of sleep has been recorded.' },
+};
+
+// One card per score type. A Sleep Score with fewer factors than usual (e.g.
+// Bedtime consistency still building) is normal, so a present score always
+// shows the ring and confidence badge; the cold-start ring is only for a null score.
+function ScoreCard({
+  type,
+  score,
+  bands,
+  failed,
+  onPress,
+}: {
+  type: ScoreType;
+  score: ScoreState;
+  bands?: ScoreBandsDTO;
+  failed: boolean;
+  onPress: (score: DailyScoreDTO) => void;
+}) {
+  const { slug, empty } = SCORE_CARD_COPY[type];
+  const label = scoreTypeLabel(type);
+
+  if (failed) {
+    return (
+      <Card testID={`${slug}-score-unavailable`}>
+        <Text className="text-sm text-muted-foreground">{`${label} is unavailable right now.`}</Text>
+      </Card>
+    );
+  }
+
+  if (score === undefined) {
+    return <Skeleton testID={`${slug}-score-loading`} className="h-28 w-full" />;
+  }
+
+  if (score === null) {
+    return (
+      <Card testID={`${slug}-score-empty`}>
+        <Text className="text-sm text-muted-foreground">{empty}</Text>
+      </Card>
+    );
+  }
+
+  const cold = score.score === null ? pickColdStartProgress(score.coldStart) : null;
+
+  return (
+    <Pressable testID={`${slug}-score-card`} onPress={() => onPress(score)} className="active:opacity-80">
+      <Card className="flex-row items-center gap-4">
+        {score.score === null && cold ? (
+          <BaselineProgressRing daysCollected={cold.daysCollected} daysRequired={cold.daysRequired} />
+        ) : (
+          <ScoreRing score={score.score} factors={score.factors} bands={bands} />
+        )}
+        <View className="flex-1 gap-1.5">
+          <Text className="text-base font-semibold">{label}</Text>
+          {score.score !== null ? (
+            <ConfidenceBadge level={score.confidenceLevel} />
+          ) : (
+            <Text className="text-xs text-muted-foreground">Building your baseline</Text>
+          )}
+          <Text className="text-xs text-muted-foreground">Tap to see what moved it</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={18} color="rgb(120, 113, 108)" />
+      </Card>
+    </Pressable>
+  );
+}
+
 export function DashboardScreen() {
   const navigation = useNavigation<any>();
   const { signOut } = useAuth();
@@ -62,6 +143,14 @@ export function DashboardScreen() {
   const [records, setRecords] = useState<MetricRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus | null>(null);
+  const [recovery, setRecovery] = useState<ScoreState>(undefined);
+  const [sleep, setSleep] = useState<ScoreState>(undefined);
+  const [scoresFailed, setScoresFailed] = useState(false);
+  // Undefined until loaded (and on an older server): scoreBand uses its defaults.
+  const [bands, setBands] = useState<ScoreBandsDTO | undefined>(undefined);
+  // Null until known, and null on failure: the coach entry simply isn't drawn.
+  const { status: coachStatus } = useCoachStatus(navigation);
+  const coachRoute = coachEntryRoute(coachStatus);
 
   useEffect(() => {
     apiFetch<MetricRecord[]>('/me/biometrics')
@@ -77,6 +166,29 @@ export function DashboardScreen() {
       .catch(() => setConnectionStatus(null));
   }, []);
 
+  useEffect(() => {
+    // Independent of the metric cards: a scores failure must not take the rest
+    // of the dashboard down with it.
+    let cancelled = false;
+    (async () => {
+      try {
+        const { scores, bands: serverBands } = await fetchScoresWithBands(7);
+        // One request returns both types, newest first; each card is the most
+        // recent score of its type. No Sleep Score means no recorded sleep.
+        if (!cancelled) {
+          setBands(serverBands);
+          setRecovery(scores?.find((s) => s.type === 'RECOVERY') ?? null);
+          setSleep(scores?.find((s) => s.type === 'SLEEP') ?? null);
+        }
+      } catch {
+        if (!cancelled) setScoresFailed(true);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
   const latest = useMemo(() => latestByMetric(records ?? []), [records]);
   const insight = useMemo(() => computeHeadlineInsight(records ?? []), [records]);
 
@@ -88,6 +200,9 @@ export function DashboardScreen() {
   const headerActions = (
     <View className="flex-row items-center gap-4">
       <ThemeToggle color={colors.muted} />
+      <Pressable testID="settings-button" onPress={() => navigation.navigate('Settings')} hitSlop={8} className="active:opacity-70">
+        <Ionicons name="settings-outline" size={20} color={colors.muted} />
+      </Pressable>
       <Button testID="sign-out-button" variant="ghost" size="sm" onPress={() => signOut()}>
         Sign Out
       </Button>
@@ -155,6 +270,52 @@ export function DashboardScreen() {
           <Text className="text-2xl font-bold">Today</Text>
           {headerActions}
         </View>
+
+        <ScoreCard
+          type="RECOVERY"
+          score={recovery}
+          bands={bands}
+          failed={scoresFailed}
+          onPress={(score) => navigation.navigate('ScoreDetail', { date: score.date, type: 'RECOVERY' })}
+        />
+
+        <ScoreCard
+          type="SLEEP"
+          score={sleep}
+          bands={bands}
+          failed={scoresFailed}
+          onPress={(score) => navigation.navigate('ScoreDetail', { date: score.date, type: 'SLEEP' })}
+        />
+
+        <HabitLogCard />
+
+        {coachRoute === 'Coach' ? <CoachDigestCard /> : null}
+
+        <Pressable testID="patterns-button" onPress={() => navigation.navigate('Patterns')} className="active:opacity-80">
+          <Card className="flex-row items-center gap-3">
+            <Ionicons name="git-compare-outline" size={18} color={colors.accent} />
+            <View className="flex-1 gap-0.5">
+              <Text className="text-base font-semibold">Patterns</Text>
+              <Text className="text-xs text-muted-foreground">How your habits line up with your recovery</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+          </Card>
+        </Pressable>
+
+        {coachRoute ? (
+          <Pressable testID="coach-entry-button" onPress={() => navigation.navigate(coachRoute)} className="active:opacity-80">
+            <Card className="flex-row items-center gap-3">
+              <Ionicons name="chatbubbles-outline" size={18} color={colors.accent} />
+              <View className="flex-1 gap-0.5">
+                <Text className="text-base font-semibold">AI Coach</Text>
+                <Text className="text-xs text-muted-foreground">
+                  {coachRoute === 'CoachConsent' ? 'Review what is shared, then ask about your scores' : 'Ask about your scores and patterns'}
+                </Text>
+              </View>
+              <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+            </Card>
+          </Pressable>
+        ) : null}
 
         <View className="flex-row flex-wrap gap-3">
           {METRIC_ORDER.map((type, index) => {

@@ -9,6 +9,15 @@ import { processSyncJob } from '../../src/sync/worker';
 import * as queue from '../../src/sync/queue';
 import * as serviceAccount from '../../src/health/serviceAccount';
 
+// The worker asks for score recomputes after storing data; those go to a real
+// Redis queue. Stubbed so sync tests never leave delayed jobs behind (the
+// score trigger itself is covered in tests/scoring/).
+jest.mock('../../src/scoring/queue', () => ({
+  COMPUTE_DAILY_SCORE_JOB: 'computeDailyScore',
+  SCORE_SWEEP_JOB: 'scoreSweep',
+  enqueueScoreCompute: jest.fn().mockResolvedValue(undefined),
+}));
+
 beforeAll(() => {
   migrateTestDb();
   process.env.JWT_ACCESS_SECRET = 'test-access-secret';
@@ -91,7 +100,7 @@ describe('connect Google Health and sync end to end (mocked Google API)', () => 
       .get('/v4/users/me/dataTypes/sleep/dataPoints')
       .query(true)
       .reply(200, {
-        dataPoints: [{ sleep: { interval: { startTime: '2026-09-01T22:00:00Z' }, summary: { minutesAsleep: '400' } } }],
+        dataPoints: [{ sleep: { interval: { startTime: '2026-09-01T22:00:00Z', endTime: '2026-09-02T05:40:00Z' }, summary: { minutesAsleep: '400' } } }],
       });
     nock('https://health.googleapis.com')
       .get('/v4/users/me/dataTypes/daily-heart-rate-variability/dataPoints')
@@ -105,5 +114,11 @@ describe('connect Google Health and sync end to end (mocked Google API)', () => 
     const res = await request(createApp()).get('/me/biometrics').set('Authorization', `Bearer ${accessToken}`);
     expect(res.status).toBe(200);
     expect(res.body.length).toBeGreaterThanOrEqual(4);
+    // SLEEP is a rollup keyed on the local civil date of the session's END
+    // (user timezone defaults to UTC), not the UTC date of its start.
+    const sleep = res.body.filter((r: any) => r.metricType === 'SLEEP');
+    expect(sleep).toHaveLength(1);
+    expect(sleep[0].value).toBe(400);
+    expect(sleep[0].recordedAt).toBe('2026-09-02T00:00:00.000Z');
   });
 });

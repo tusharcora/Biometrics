@@ -6,7 +6,8 @@
   },
   "scripts": {
     "build": "tsc",
-    "test": "jest"
+    "test": "jest",
+    "eval:coach": "ts-node --project tsconfig.evals.json evals/coach/run.ts"
   },
   "keywords": [],
   "author": "",

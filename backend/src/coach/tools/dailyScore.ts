@@ -1,0 +1,104 @@
+import { civilDateToUtcMidnight } from '../../biometrics/civilDate';
+import { prisma } from '../../db/client';
+import { toDailyScoreDTO } from '../../scoring/dto';
+import { shiftDate } from '../../scoring/dates';
+
+export type Direction = 'higher' | 'lower' | 'unchanged';
+
+export interface DailyScoreToolFactor {
+  type: 'RECOVERY' | 'SLEEP';
+  factor: string;
+  label: string;
+  z: number | null;
+  contribution: number;
+  points: number;
+  imputed: boolean;
+  excluded: boolean;
+}
+
+// The read-only shape the model sees (spec section 2). deltaFromYesterday and
+// direction are computed HERE, on the server: the model has no arithmetic this
+// spec trusts, so it is handed the delta and its sign as fields to reference.
+// "Yesterday" is the literal previous civil day; when either day has no score
+// there is nothing honest to compare, so the delta and direction are null.
+export interface DailyScoreToolResult {
+  date: string;
+  recoveryScore: number | null;
+  sleepScore: number | null;
+  factors: DailyScoreToolFactor[];
+  confidence: 'HIGH' | 'MEDIUM' | 'LOW' | null;
+  deltaFromYesterday: number | null;
+  direction: Direction | null;
+  sleepDeltaFromYesterday: number | null;
+  sleepDirection: Direction | null;
+}
+
+const round1 = (n: number) => Math.round(n * 10) / 10;
+
+/** Pure: the signed difference and its direction from two already-rounded scores. */
+export function compareScores(
+  today: number | null,
+  yesterday: number | null,
+): { delta: number | null; direction: Direction | null } {
+  if (today === null || yesterday === null) return { delta: null, direction: null };
+  const delta = round1(today - yesterday);
+  // A delta that rounds to zero is "unchanged": never report "higher by 0".
+  return { delta, direction: delta > 0 ? 'higher' : delta < 0 ? 'lower' : 'unchanged' };
+}
+
+export async function getDailyScore(userId: string, date: string): Promise<DailyScoreToolResult> {
+  const day = civilDateToUtcMidnight(date);
+  const yesterday = civilDateToUtcMidnight(shiftDate(date, -1));
+  const rows = await prisma.dailyScore.findMany({ where: { userId, date: { in: [day, yesterday] } } });
+
+  const rowFor = (d: Date, type: 'RECOVERY' | 'SLEEP') =>
+    rows.find((r) => r.date.getTime() === d.getTime() && r.type === type);
+  const scoreOf = (row: (typeof rows)[number] | undefined): number | null =>
+    row ? toDailyScoreDTO(row, []).score : null;
+
+  const recovery = rowFor(day, 'RECOVERY');
+  const sleep = rowFor(day, 'SLEEP');
+  const recoveryScore = scoreOf(recovery);
+  const sleepScore = scoreOf(sleep);
+  const rec = compareScores(recoveryScore, scoreOf(rowFor(yesterday, 'RECOVERY')));
+  const slp = compareScores(sleepScore, scoreOf(rowFor(yesterday, 'SLEEP')));
+
+  const factors: DailyScoreToolFactor[] = [];
+  for (const row of [recovery, sleep]) {
+    if (!row) continue;
+    for (const f of toDailyScoreDTO(row, []).factors) {
+      factors.push({
+        type: row.type,
+        factor: f.factor,
+        label: f.label,
+        z: f.z,
+        contribution: f.contribution,
+        points: f.points,
+        imputed: f.imputed,
+        excluded: f.excluded,
+      });
+    }
+  }
+
+  return {
+    date,
+    recoveryScore,
+    sleepScore,
+    factors,
+    confidence: (recovery ?? sleep)?.confidenceLevel ?? null,
+    deltaFromYesterday: rec.delta,
+    direction: rec.direction,
+    sleepDeltaFromYesterday: slp.delta,
+    sleepDirection: slp.direction,
+  };
+}
+
+/** The newest civil date on or before `onOrBefore` that has an actual (non-cold-start) Recovery score. */
+export async function findMostRecentScoreDate(userId: string, onOrBefore: string): Promise<string | null> {
+  const row = await prisma.dailyScore.findFirst({
+    where: { userId, type: 'RECOVERY', score: { not: null }, date: { lte: civilDateToUtcMidnight(onOrBefore) } },
+    orderBy: { date: 'desc' },
+    select: { date: true },
+  });
+  return row ? row.date.toISOString().slice(0, 10) : null;
+}
