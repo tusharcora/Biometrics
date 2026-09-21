@@ -15,6 +15,15 @@ export function indicatorOffset(index: number, innerWidth: number, count: number
   return index * (innerWidth / count);
 }
 
+export interface IndicatorPlan {
+  target: number;
+  animate: boolean;
+}
+
+export function indicatorPlan(target: number, reduced: boolean): IndicatorPlan {
+  return { target, animate: !reduced };
+}
+
 interface SegmentedControlProps<T extends string> {
   options: SegmentOption<T>[];
   value: T;
@@ -31,7 +40,8 @@ export function SegmentedControl<T extends string>({ options, value, onChange, t
 
   useEffect(() => {
     const target = indicatorOffset(index, innerWidth, options.length);
-    x.value = reduced ? target : withSpring(target, MOTION.spring.settle);
+    const plan = indicatorPlan(target, reduced);
+    x.value = plan.animate ? withSpring(plan.target, MOTION.spring.settle) : plan.target;
   }, [index, innerWidth, options.length, reduced, x]);
 
   const indicatorStyle = useAnimatedStyle(() => ({ transform: [{ translateX: x.value }] }));
