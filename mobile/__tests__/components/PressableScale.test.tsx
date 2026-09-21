@@ -62,4 +62,34 @@ describe('PressableScale', () => {
 
     expect(onPress).not.toHaveBeenCalled();
   });
+
+  it('does not include opacity in animated style when reduced motion is off', () => {
+    const { getByTestId } = render(
+      <PressableScale testID="p">
+        <Text>Go</Text>
+      </PressableScale>,
+    );
+
+    const styles = getByTestId('p').props.style;
+    const flatStyle = Array.isArray(styles) ? Object.assign({}, ...styles) : styles;
+
+    // Animated style should not have opacity key when reduced motion is off
+    expect(flatStyle).not.toHaveProperty('opacity');
+    // Should still have transform
+    expect(flatStyle).toHaveProperty('transform');
+  });
+
+  it('preserves caller-supplied opacity style when reduced motion is off', () => {
+    const { getByTestId } = render(
+      <PressableScale testID="p" style={{ opacity: 0.5 }}>
+        <Text>Go</Text>
+      </PressableScale>,
+    );
+
+    const styles = getByTestId('p').props.style;
+    const flatStyle = Array.isArray(styles) ? Object.assign({}, ...styles) : styles;
+
+    // Caller-supplied opacity should be preserved (it's in the first position of the array)
+    expect(styles).toContainEqual({ opacity: 0.5 });
+  });
 });

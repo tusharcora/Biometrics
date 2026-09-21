@@ -21,7 +21,13 @@ export function PressableScale({ onPressIn, onPressOut, style, ...props }: Press
   const reduced = useReducedMotion();
   const scale = useSharedValue(1);
   const opacity = useSharedValue(1);
-  const animatedStyle = useAnimatedStyle(() => ({ opacity: opacity.value, transform: [{ scale: scale.value }] }));
+  const animatedStyle = useAnimatedStyle(() => {
+    const baseStyle: any = { transform: [{ scale: scale.value }] };
+    if (reduced) {
+      baseStyle.opacity = opacity.value;
+    }
+    return baseStyle;
+  });
 
   function animateTo(pressed: boolean) {
     const target = pressTargets(reduced, pressed);
