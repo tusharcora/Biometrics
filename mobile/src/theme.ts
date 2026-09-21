@@ -117,9 +117,21 @@ export const MOTION = {
     fast: 150,
     normal: 300,
     slow: 600,
+    reveal: 400,
   },
   easing: {
     standard: [0.4, 0, 0.2, 1] as const,
     decelerate: [0, 0, 0.2, 1] as const,
   },
+  // Spring configs shared by every pressable and sliding indicator, so no
+  // component inlines its own numbers.
+  spring: {
+    press: { damping: 15, stiffness: 300 },
+    settle: { damping: 20, stiffness: 200 },
+  },
+  // A pressed control settles at `scale`; with reduced motion it only dims to
+  // `reducedOpacity` instead of changing size.
+  press: { scale: 0.96, reducedOpacity: 0.7 },
+  // Delay between consecutive staggered entrances, in ms.
+  stagger: 70,
 };

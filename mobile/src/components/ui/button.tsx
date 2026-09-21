@@ -1,11 +1,8 @@
 import React from 'react';
-import { Pressable, type PressableProps, type GestureResponderEvent } from 'react-native';
-import Animated, { useAnimatedStyle, useSharedValue, withSpring } from 'react-native-reanimated';
 import { cva, type VariantProps } from 'class-variance-authority';
 import { cn } from '../../lib/utils';
 import { Text } from './text';
-
-const AnimatedPressable = Animated.createAnimatedComponent(Pressable);
+import { PressableScale, type PressableScaleProps } from './pressable-scale';
 
 const buttonVariants = cva('items-center justify-center rounded-xl active:opacity-80', {
   variants: {
@@ -33,35 +30,14 @@ const textVariants = cva('text-base font-semibold', {
   defaultVariants: { variant: 'primary' },
 });
 
-interface ButtonProps extends PressableProps, VariantProps<typeof buttonVariants> {
-  className?: string;
+interface ButtonProps extends PressableScaleProps, VariantProps<typeof buttonVariants> {
   children: React.ReactNode;
-  onPress?: (e: GestureResponderEvent) => void;
 }
 
-export function Button({ className, variant, size, children, onPressIn, onPressOut, ...props }: ButtonProps) {
-  const scale = useSharedValue(1);
-  const animatedStyle = useAnimatedStyle(() => ({ transform: [{ scale: scale.value }] }));
-
+export function Button({ className, variant, size, children, ...props }: ButtonProps) {
   return (
-    <AnimatedPressable
-      className={cn(buttonVariants({ variant, size }), className)}
-      style={animatedStyle}
-      onPressIn={(e) => {
-        scale.value = withSpring(0.96, { damping: 15, stiffness: 300 });
-        onPressIn?.(e);
-      }}
-      onPressOut={(e) => {
-        scale.value = withSpring(1, { damping: 15, stiffness: 300 });
-        onPressOut?.(e);
-      }}
-      {...props}
-    >
-      {typeof children === 'string' ? (
-        <Text className={textVariants({ variant })}>{children}</Text>
-      ) : (
-        children
-      )}
-    </AnimatedPressable>
+    <PressableScale className={cn(buttonVariants({ variant, size }), className)} {...props}>
+      {typeof children === 'string' ? <Text className={textVariants({ variant })}>{children}</Text> : children}
+    </PressableScale>
   );
 }
