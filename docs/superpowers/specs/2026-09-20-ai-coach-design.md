@@ -799,3 +799,8 @@ Decisions made in implementation:
 - The eval harness (`backend/evals/coach/`, `npm run eval:coach`, also run
   under jest) has 35 fixtures plus 4 deliberately wrong directional replies
   that it must catch.
+- **Mobile entry (redesign, `2026-09-21-app-redesign-design.md`):** the coach is now
+  the centre tab of the floating bar. The hub orb is **always drawn**, dim and
+  paused when the coach is disabled or its status is unknown, and opens the Coach
+  tab's existing "unavailable" state. Every other entry point (digest card, "Ask
+  about this") is still hidden unless `coachEntryRoute(status)` is non-null.

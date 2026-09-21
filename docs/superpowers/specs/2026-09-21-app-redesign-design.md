@@ -222,8 +222,8 @@ its README states it has **not been runtime-verified on a device**.
   latest peer requirements (React ≥19, RN ≥0.78, Reanimated ≥4,
   worklets ≥0.7) are met by this app. It is a new native dependency: a dev
   client rebuild (`expo run:ios`) is required.
-- Vendor the port's four source files (`ThinkingOrb.tsx`, `theme.ts`,
-  `types.ts`, `index.ts`, ≈8 KB) into `mobile/src/components/orb/`, keep the
+- Vendor the port's three source files (`ThinkingOrb.tsx`, `theme.ts`,
+  `types.ts`, ≈8 KB; its `index.ts` only re-exports the engine and is not needed) into `mobile/src/components/orb/`, keep the
   MIT licence text alongside them, and pass `theme` explicitly from our
   `ThemeProvider` (the port's `auto` follows the OS scheme, but this app's
   theme is a manual toggle).
