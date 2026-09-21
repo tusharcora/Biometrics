@@ -3,11 +3,17 @@ import React from 'react';
 import { AuthProvider } from './src/auth/AuthContext';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { ThemeProvider } from './src/theme/ThemeProvider';
+import { OrbGalleryScreen } from './src/screens/dev/OrbGalleryScreen';
 import { setBaseUrl } from './src/api/client';
 
 setBaseUrl(process.env.EXPO_PUBLIC_API_BASE_URL ?? 'http://localhost:3000');
 
 export default function App() {
+  // Dev-only escape hatch for looking at every orb state: EXPO_PUBLIC_ORB_GALLERY=1
+  if (__DEV__ && process.env.EXPO_PUBLIC_ORB_GALLERY === '1') {
+    return <OrbGalleryScreen />;
+  }
+
   return (
     <ThemeProvider>
       <AuthProvider>
