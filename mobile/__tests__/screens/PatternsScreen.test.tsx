@@ -50,7 +50,7 @@ describe('PatternsScreen', () => {
     (fetchPatterns as jest.Mock).mockResolvedValue({
       patterns: [
         pattern(),
-        pattern({ habitType: 'CAFFEINE', exposureThreshold: 3, exposureUnit: 'cups', factor: 'RHR', factorLabel: 'Resting heart rate', lagDays: 2, effectSizePercent: 4, direction: 'higher', sampleSize: 20 }),
+        pattern({ habitType: 'CAFFEINE', exposureThreshold: 3, exposureUnit: 'cups', factor: 'RHR', factorLabel: 'Resting HR', lagDays: 2, effectSizePercent: 4, direction: 'higher', sampleSize: 20 }),
       ],
       notEnoughData: [],
     });
@@ -59,12 +59,12 @@ describe('PatternsScreen', () => {
 
     expect(await findByTestId('correlation-card-ALCOHOL-HRV-1')).toBeTruthy();
     expect(getByText(/^The morning after you log 2\+ drinks, your HRV has averaged 14% below baseline/)).toBeTruthy();
-    expect(getByText(/^2 days after you log 3\+ cups, your daily minimum heart rate has averaged 4% above baseline/)).toBeTruthy();
+    expect(getByText(/^2 days after you log 3\+ cups, your resting heart rate has averaged 4% above baseline/)).toBeTruthy();
     expect(getAllByTestId(/^correlation-card-/)).toHaveLength(2);
     // The habit's label comes from the config.
     expect(getByText('Alcohol')).toBeTruthy();
     expect(getByText('Caffeine')).toBeTruthy();
-    expect(queryByText(/resting/i)).toBeNull();
+    expect(queryByText(/daily minimum/i)).toBeNull();
     expect(queryByTestId('patterns-empty')).toBeNull();
   });
 

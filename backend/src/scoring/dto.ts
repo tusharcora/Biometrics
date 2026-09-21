@@ -43,11 +43,12 @@ export interface BaselineDTO {
   unit: string;
 }
 
-// RESTING_HR is Google's daily-minimum BPM, not a detected resting heart rate,
-// so the honest label is "Daily minimum HR" (spec §2 Stage 4).
+// RESTING_HR is Google's own daily resting heart rate (the dedicated
+// daily-resting-heart-rate type), so it is labelled as what it is. It used to
+// be the daily-minimum BPM proxy and read "Daily minimum HR".
 export const FACTOR_LABELS: Record<FactorKey, string> = {
   HRV: 'HRV',
-  RHR: 'Daily minimum HR',
+  RHR: 'Resting HR',
   SLEEP_DEBT: 'Sleep debt',
   SLEEP_DURATION: 'Sleep duration',
   SLEEP_EFFICIENCY: 'Sleep efficiency',

@@ -98,4 +98,69 @@ Record:
 
 ## Results
 
-_To be filled in after running the probe._
+Run 2026-09-21 against one connected account (Fitbit-linked, "Google Fitbit Air", stored
+timezone `America/New_York`, all records at UTC-4). Aggregates only: the raw probe output holds
+real sleep times and is deliberately not committed.
+
+### A bug the probe exposed: list responses are paginated
+
+`dataPoints.list` returns one page per call and signals more with `nextPageToken`
+(`pageToken` is the confirmed query parameter). A 30-day sleep window holds **25 sessions**
+in two pages (12 + 13). The client ignored the token, so only the first page (12 sessions)
+was ever stored and 13 nights were silently missing. Fixed in `health/client.ts`
+(`listAllPages`, capped at 50 pages, tests added). The account was re-backfilled and now holds
+26 sessions back to 2026-08-22 (the sleep window is widened by one day each side). Daily HRV
+was a single page (25 of 25). `dailyRollUp` responses were not observed to paginate and are
+unchanged.
+
+### Check 1: Google civil-date timezone basis. Verdict: local, with one limit on the evidence
+
+- Steps samples carry `civilStartTime` as the local wall clock beside `startUtcOffset`
+  (an instant at 00:39Z is `20:39` on the previous civil date, offset `-14400s`). Google's civil
+  times follow the record's own UTC offset, not UTC.
+- For the one day with a complete comparison (09-18) the `dailyRollUp` total equals the
+  local-day sum of the samples (594) and not the UTC-day sum (760). Other days' sample sums
+  exceed the rollup (multiple sources overlap), so they cannot be compared exactly.
+- HRV, resting HR and steps exist on the sleep END date for every night, and HRV exists only
+  on nights that have a session: all three describe the wake-up day.
+- **Limit:** this account sleeps roughly 01:00-10:00 local and wakes 09:00-13:00 local, so
+  the UTC end date equals the local end date on every night. The probe's fit statistic
+  (12/25 under both bases) therefore cannot separate "user timezone" from "UTC" using sleep
+  alone. The steps evidence above is what separates them.
+- Exit criterion (a): for every night, HRV, resting HR and the SLEEP rollup fall on the same
+  civil date.
+- **Refinement worth considering:** every sleep record carries `startUtcOffset` and
+  `endUtcOffset`. Keying by the record's own `endUtcOffset` gives Google's exact local end date
+  and would stay correct when the user travels, unlike `User.timezone`. Not implemented.
+
+### Check 2: sleep interval semantics. Verdict: the interval IS time in bed
+
+- `interval.endTime - interval.startTime` equals `summary.minutesInSleepPeriod` on 12 of 12
+  sessions, and `minutesAsleep + minutesAwake` equals it on 12 of 12.
+- `summary.minutesInSleepPeriod` and `summary.minutesAwake` exist (this corrects the earlier
+  statement that only `minutesAsleep` was confirmed).
+- `asleep / inBed` ranged 0.90 to 0.99 (median about 0.96); no session had `minutesAsleep`
+  above the interval. The range is narrow, so efficiency z-scores are sensitive to small
+  differences: worth remembering when weighting the Sleep Score.
+
+### Check 3: multi-session nights. Verdict: not observed on this account
+
+- 25 sessions in the window, one per local day, every one `metadata.mainSleep: true` and
+  `type: STAGES`. No nap or split night exists here, so the multi-session representation is
+  still unobserved.
+- `metadata.mainSleep` exists and is the likely way a nap is marked; using it to pick the
+  main session for onset time (instead of the longest by `minutesAsleep`) is an option.
+- Sleep records are revised after creation (`updateTime` hours later than `createTime`),
+  which supports the overwrite-on-match design.
+
+### Related items
+
+- Backfill reach: a 30-day window yields 25 nights for this account (data begins 2026-08-22).
+  Several nights have no session, so missing nights are normal.
+- **A dedicated resting heart rate type exists**: `daily-resting-heart-rate` (HTTP 200,
+  `dailyRestingHeartRate.beatsPerMinute`, with `calculationMethod` `WITH_SLEEP` or
+  `ONLY_WITH_AWAKE_DATA`). Over 30 overlapping days the dedicated value ran a median 12 bpm
+  above the stored daily-minimum proxy (proxy day-to-day spread 3.99 bpm, dedicated 2.78), and
+  the proxy showed single-reading artifacts (for example 39-41 bpm against a steady 51).
+  Switching is a scoring decision and is not done; see the stat-engine spec.
+- Exit criterion (b) on the real account (run the wipe-and-resync twice and diff) was not run.

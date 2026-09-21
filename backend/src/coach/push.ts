@@ -13,9 +13,10 @@
 // could be interpolated. Any future proactive nudge (threshold-triggered or
 // daily check-in) must go through this same function.
 //
-// No real push provider ships: only the PushSender interface and a no-op
-// implementation. A real APNs/FCM sender is wired in later, behind the same gate
-// as the model provider.
+// Two senders exist: the no-op default, and ExpoPushSender, selected with
+// PUSH_PROVIDER=expo (config.ts). The Expo sender re-checks every title and body
+// against the fixed table before it builds a request, so even a future caller
+// that bypassed sendGenericPush() could not put other text on the wire.
 
 import { prisma } from '../db/client';
 
@@ -66,4 +67,119 @@ export async function sendGenericPush(sender: PushSender, userId: string, kind: 
     genericPushPayload(kind),
   );
   return rows.length;
+}
+
+export const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
+export const EXPO_PUSH_CHUNK_SIZE = 100;
+const EXPO_REQUEST_TIMEOUT_MS = 15_000;
+
+const EXPO_TOKEN_SHAPE = /^Expo(?:nent)?PushToken\[[^\]\s]+\]$/;
+
+/** True for `ExponentPushToken[...]` and `ExpoPushToken[...]`. */
+export function isExpoPushToken(token: string): boolean {
+  return EXPO_TOKEN_SHAPE.test(token);
+}
+
+/** For logs: keeps the wrapper and the first four characters, e.g. `ExponentPushToken[abcd…]`. A token is a device credential. */
+export function maskPushToken(token: string): string {
+  const m = /^(Expo(?:nent)?PushToken)\[([^\]]*)\]?$/.exec(token);
+  if (m) return `${m[1]}[${m[2]!.slice(0, 4)}…]`;
+  return `${token.slice(0, 4)}…`;
+}
+
+/** Throws unless title and body are exactly the fixed strings for the payload's kind. */
+function assertGenericPayload(payload: GenericPushPayload): void {
+  if (!Object.prototype.hasOwnProperty.call(GENERIC_PUSH_PAYLOADS, payload?.kind)) throw new Error('push_text_not_generic');
+  const fixed = GENERIC_PUSH_PAYLOADS[payload.kind];
+  if (payload.title !== fixed.title || payload.body !== fixed.body) throw new Error('push_text_not_generic');
+}
+
+/** Logs the event and masked tokens only: never a full token, the access token, a provider message or any health data. */
+function logPush(event: string, fields: Record<string, unknown>): void {
+  console.error(JSON.stringify({ event, ...fields }));
+}
+
+interface ExpoTicket {
+  status?: unknown;
+  details?: { error?: unknown } | null;
+}
+
+export interface ExpoPushSenderOptions {
+  /** Test seam; defaults to the global fetch. */
+  fetchFn?: typeof fetch;
+}
+
+/**
+ * Delivers the generic push through the Expo push service. A failed request is
+ * logged and skipped (never thrown), so one bad chunk neither loses the other
+ * chunks' results nor fails the digest job. The only throw is the refusal of
+ * non-generic text, which is a programming error.
+ */
+export class ExpoPushSender implements PushSender {
+  private readonly fetchFn: typeof fetch;
+
+  constructor(options: ExpoPushSenderOptions = {}) {
+    this.fetchFn = options.fetchFn ?? ((input, init) => fetch(input, init));
+  }
+
+  async send(targets: PushTarget[], payload: GenericPushPayload): Promise<void> {
+    assertGenericPayload(payload);
+    for (let i = 0; i < targets.length; i += EXPO_PUSH_CHUNK_SIZE) {
+      await this.sendChunk(targets.slice(i, i + EXPO_PUSH_CHUNK_SIZE), payload);
+    }
+  }
+
+  private async sendChunk(chunk: PushTarget[], payload: GenericPushPayload): Promise<void> {
+    const headers: Record<string, string> = { Accept: 'application/json', 'Content-Type': 'application/json' };
+    const accessToken = process.env.EXPO_ACCESS_TOKEN?.trim();
+    if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+    const messages = chunk.map((t) => ({
+      to: t.token,
+      title: payload.title,
+      body: payload.body,
+      sound: 'default',
+      data: { kind: payload.kind },
+    }));
+
+    let tickets: ExpoTicket[];
+    try {
+      const res = await this.fetchFn(EXPO_PUSH_URL, {
+        method: 'POST',
+        headers,
+        body: JSON.stringify(messages),
+        signal: AbortSignal.timeout(EXPO_REQUEST_TIMEOUT_MS),
+      });
+      if (!res.ok) {
+        logPush('coach.push_chunk_failed', { status: res.status, size: chunk.length });
+        return;
+      }
+      const body = (await res.json()) as { data?: unknown } | null;
+      if (!body || !Array.isArray(body.data) || body.data.length !== chunk.length) {
+        logPush('coach.push_chunk_failed', { reason: 'unexpected_response', size: chunk.length });
+        return;
+      }
+      tickets = body.data as ExpoTicket[];
+    } catch (err) {
+      // The error class only: a fetch error message can echo request values.
+      logPush('coach.push_chunk_failed', { error: err instanceof Error ? err.name : 'unknown', size: chunk.length });
+      return;
+    }
+
+    const dead: string[] = [];
+    tickets.forEach((ticket, i) => {
+      if (ticket?.status !== 'error') return;
+      const token = chunk[i]!.token;
+      const code = typeof ticket.details?.error === 'string' ? ticket.details.error : 'unknown';
+      if (code === 'DeviceNotRegistered') dead.push(token);
+      else logPush('coach.push_ticket_error', { error: code, token: maskPushToken(token) });
+    });
+    if (dead.length > 0) {
+      try {
+        await prisma.pushToken.deleteMany({ where: { token: { in: dead } } });
+        logPush('coach.push_token_removed', { count: dead.length, tokens: dead.map(maskPushToken) });
+      } catch (err) {
+        logPush('coach.push_token_cleanup_failed', { error: err instanceof Error ? err.name : 'unknown', count: dead.length });
+      }
+    }
+  }
 }

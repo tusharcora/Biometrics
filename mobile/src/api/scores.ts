@@ -5,7 +5,7 @@ export type ConfidenceLevel = 'HIGH' | 'MEDIUM' | 'LOW';
 
 // One weighted term of a score -- the addends of the Stage 4 sum (see the Stat
 // Engine spec). `label` comes from the server and is rendered as given; the
-// RHR factor's label is a daily-minimum proxy, not a clinical resting HR.
+// RHR factor's label is "Resting HR".
 // The Sleep Score's factors are SLEEP_DURATION (scored against the user's
 // sleep goal), SLEEP_EFFICIENCY and CIRCADIAN_CONSISTENCY ("Bedtime
 // consistency"); circadian needs ~27 nights, so a Sleep Score with fewer

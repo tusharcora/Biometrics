@@ -19,6 +19,11 @@ export function logistic(weightedSum: number, k: number): number {
   return 100 / (1 + Math.exp(-k * weightedSum));
 }
 
+/** Clamp `z` to cfg.zClamp; a config without one leaves it untouched. */
+function clampZ(z: number, cfg: ScoreConfig): number {
+  return cfg.zClamp ? Math.min(cfg.zClamp.max, Math.max(cfg.zClamp.min, z)) : z;
+}
+
 const LEVELS: ConfidenceLevel[] = ['HIGH', 'MEDIUM', 'LOW'];
 
 /**
@@ -38,6 +43,12 @@ function confidenceFor(inputs: FactorInput[]): ConfidenceLevel {
  * `model` picks which score is being computed: it defaults to the Recovery
  * weights on `cfg`, and the Sleep Score passes `cfg.sleepScore`. Everything else
  * (k, the logistic, renormalization, confidence) is shared.
+ *
+ * Under a config with a zClamp every factor's z is clamped BEFORE weighting (and
+ * so before it can influence anything else), the clamped z is what is stored and
+ * summed (contribution = weight * direction * z stays exactly true), and the
+ * unclamped one is kept as `zRaw`. Exclusion and renormalization depend only on
+ * whether a z exists, never its size, so the weights still sum to 1.
  */
 export function computeComposite(
   inputs: FactorInput[],
@@ -55,11 +66,13 @@ export function computeComposite(
       return { factor: f.factor, z: null, weight: 0, contribution: 0, imputed: false, excluded: true };
     }
     const weight = model.weights[f.factor]! / totalWeight;
+    const z = clampZ(f.z, cfg);
     return {
       factor: f.factor,
-      z: f.z,
+      z,
+      ...(cfg.zClamp ? { zRaw: f.zRaw ?? f.z } : {}),
       weight,
-      contribution: weight * model.direction[f.factor]! * f.z,
+      contribution: weight * model.direction[f.factor]! * z,
       imputed: f.imputed,
       excluded: false,
     };

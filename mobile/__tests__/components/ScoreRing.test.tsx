@@ -6,7 +6,7 @@ import { COLORS } from '../../src/theme';
 import type { FactorDTO } from '../../src/api/scores';
 
 function factor(overrides: Partial<FactorDTO> & Pick<FactorDTO, 'factor'>): FactorDTO {
-  const labels = { HRV: 'HRV', RHR: 'Daily minimum HR', SLEEP_DEBT: 'Sleep debt' } as const;
+  const labels = { HRV: 'HRV', RHR: 'Resting HR', SLEEP_DEBT: 'Sleep debt' } as const;
   return {
     label: labels[overrides.factor],
     z: 0,

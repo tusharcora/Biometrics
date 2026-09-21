@@ -1,7 +1,7 @@
 // Stage 2 -- Feature derivation. Pure functions over daily series; persistence
 // into UserDailyFeatures happens in the orchestrator.
 
-import { localCivilDate, minutesSinceLocalNoon } from '../biometrics/civilDate';
+import { sessionEndCivilDate, sessionStartMinutesSinceLocalNoon } from '../biometrics/civilDate';
 import { shiftDate } from './dates';
 import type { ScoreConfig } from './configs/v1';
 import type { DailyPoint, SleepSessionInput } from './types';
@@ -91,9 +91,10 @@ function intervalMinutes(s: SleepSessionInput): number {
 }
 
 /**
- * Sessions grouped by the local civil date of their END instant in `timeZone`:
- * the same key the SLEEP rollup (Slice 0) uses, so "night D" is the night that
- * produced day D's HRV and RHR.
+ * Sessions grouped by the local civil date of their END instant: at the
+ * record's own end UTC offset when it has one, else in `timeZone`. The same key
+ * the SLEEP rollup uses, so "night D" is the night that produced day D's HRV and
+ * RHR.
  */
 export function groupSessionsByNight(
   sessions: SleepSessionInput[],
@@ -101,7 +102,7 @@ export function groupSessionsByNight(
 ): Map<string, SleepSessionInput[]> {
   const byNight = new Map<string, SleepSessionInput[]>();
   for (const s of sessions) {
-    const date = localCivilDate(s.endTime, timeZone);
+    const date = sessionEndCivilDate(s, timeZone);
     const list = byNight.get(date);
     if (list) list.push(s);
     else byNight.set(date, [s]);
@@ -156,7 +157,8 @@ export function buildSleepEfficiencySeries(
 
 /**
  * One point per night: the onset (start instant) of that night's MAIN session,
- * in minutes since 12:00 local. Main = the longest by minutesAsleep (a
+ * in minutes since 12:00 local (read at the record's own start UTC offset when it
+ * has one, else in `timeZone`). Main = the longest by minutesAsleep (a
  * confirmed field, unlike the derived interval), earliest start on a tie, so a
  * nap or a brief split session never stands in for the night's bedtime.
  * Noon-anchored so bedtimes either side of midnight are one contiguous run.
@@ -175,7 +177,7 @@ export function mainSessionOnsets(sessions: SleepSessionInput[], timeZone: strin
         main = s;
       }
     }
-    if (main) out.push({ date, value: minutesSinceLocalNoon(main.startTime, timeZone) });
+    if (main) out.push({ date, value: sessionStartMinutesSinceLocalNoon(main, timeZone) });
   }
   return out.sort((a, b) => (a.date < b.date ? -1 : 1));
 }

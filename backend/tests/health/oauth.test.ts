@@ -1,5 +1,5 @@
 import nock from 'nock';
-import { buildAuthorizeUrl, exchangeCodeForTokens, refreshHealthTokens } from '../../src/health/oauth';
+import { buildAuthorizeUrl, exchangeCodeForTokens, refreshHealthTokens, revokeHealthToken } from '../../src/health/oauth';
 
 beforeAll(() => {
   process.env.GOOGLE_HEALTH_CLIENT_ID = 'client-123.apps.googleusercontent.com';
@@ -52,5 +52,32 @@ describe('refreshHealthTokens', () => {
 
     const tokens = await refreshHealthTokens('refresh-1');
     expect(tokens.accessToken).toBe('access-2');
+  });
+});
+
+describe('revokeHealthToken', () => {
+  it('POSTs the token, form-encoded, to Google\'s revoke endpoint', async () => {
+    let contentType: string | undefined;
+    const scope = nock('https://oauth2.googleapis.com')
+      .post('/revoke', (body) => body.token === 'refresh/with+odd chars')
+      .reply(200, function () {
+        contentType = this.req.headers['content-type'] as string | undefined;
+        return {};
+      });
+
+    await expect(revokeHealthToken('refresh/with+odd chars')).resolves.toBeUndefined();
+
+    expect(scope.isDone()).toBe(true);
+    expect(contentType).toBe('application/x-www-form-urlencoded');
+  });
+
+  it('throws on a non-2xx answer, naming the status but never the token', async () => {
+    nock('https://oauth2.googleapis.com').post('/revoke').reply(400, { error: 'invalid_token' });
+
+    const err = await revokeHealthToken('secret-refresh-token').catch((e: Error) => e);
+
+    expect(err).toBeInstanceOf(Error);
+    expect((err as Error).message).toContain('400');
+    expect((err as Error).message).not.toContain('secret-refresh-token');
   });
 });

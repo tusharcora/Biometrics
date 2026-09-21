@@ -1,6 +1,6 @@
 import type { CoachModelProvider } from './model/provider';
 import { UnconfiguredProvider } from './model/provider';
-import { NoopPushSender, PushSender } from './push';
+import { ExpoPushSender, NoopPushSender, PushSender } from './push';
 
 /**
  * The whole coach is behind COACH_ENABLED, default OFF. No LLM provider has been
@@ -26,15 +26,26 @@ export function setCoachProvider(provider: CoachModelProvider): void {
   activeProvider = provider;
 }
 
-// The single push slot. Only the no-op sender ships: no real push provider
-// (APNs/FCM) is wired, and push content is generic by construction (push.ts).
-let activePushSender: PushSender = new NoopPushSender();
+// The push slot. PUSH_PROVIDER=expo selects the Expo sender; anything else (the
+// default) is the no-op sender, which delivers nothing. Push content is generic
+// by construction (push.ts). Read per call, like COACH_ENABLED, so tests can
+// switch it; setPushSender() is an explicit override that wins over the env.
+let overrideSender: PushSender | null = null;
+const noopSender = new NoopPushSender();
+let expoSender: ExpoPushSender | null = null;
 
-export function getPushSender(): PushSender {
-  return activePushSender;
+/** True when PUSH_PROVIDER selects the Expo push service. */
+export function isExpoPushProvider(): boolean {
+  return process.env.PUSH_PROVIDER?.trim().toLowerCase() === 'expo';
 }
 
-/** Wiring point for a real APNs/FCM sender later. Also used by tests. */
-export function setPushSender(sender: PushSender): void {
-  activePushSender = sender;
+export function getPushSender(): PushSender {
+  if (overrideSender) return overrideSender;
+  if (isExpoPushProvider()) return (expoSender ??= new ExpoPushSender());
+  return noopSender;
+}
+
+/** Explicit sender override (tests). Pass null to fall back to PUSH_PROVIDER. */
+export function setPushSender(sender: PushSender | null): void {
+  overrideSender = sender;
 }

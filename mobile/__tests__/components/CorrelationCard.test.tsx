@@ -57,13 +57,13 @@ describe('CorrelationCard', () => {
     expect(getByText('Lower than on other days')).toBeTruthy();
   });
 
-  it('words the RHR factor as the daily minimum heart rate, never resting heart rate', () => {
+  it('words the RHR factor as resting heart rate, never a daily minimum', () => {
     const { getByTestId, queryByText } = render(
-      <CorrelationCard pattern={pattern({ factor: 'RHR', factorLabel: 'Resting heart rate', effectSizePercent: 4, direction: 'higher' })} />,
+      <CorrelationCard pattern={pattern({ factor: 'RHR', factorLabel: 'Resting HR', effectSizePercent: 4, direction: 'higher' })} />,
     );
 
-    expect(getByTestId('pattern-sentence').props.children).toContain('your daily minimum heart rate has averaged 4% above baseline');
-    expect(queryByText(/resting/i)).toBeNull();
+    expect(getByTestId('pattern-sentence').props.children).toContain('your resting heart rate has averaged 4% above baseline');
+    expect(queryByText(/daily minimum/i)).toBeNull();
   });
 
   it('shows the control comparison alongside the effect', () => {

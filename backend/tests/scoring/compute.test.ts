@@ -1,4 +1,5 @@
 import { computeDailyScore } from '../../src/scoring/compute';
+import { getLiveConfig } from '../../src/scoring/configs';
 import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
 import { createUser, seedHistory, seedSessions, day } from './dbHelpers';
@@ -24,14 +25,14 @@ describe('computeDailyScore', () => {
       where: { userId_date_type: { userId: user.id, date: day(last), type: 'RECOVERY' } },
     });
     expect(score).not.toBeNull();
-    expect(score!.algorithmVersion).toBe('v1');
+    expect(score!.algorithmVersion).toBe(getLiveConfig().version);
     expect(score!.score).not.toBeNull();
     expect(score!.confidenceLevel).toBe('HIGH');
 
     const factors = score!.factors as Array<Record<string, unknown>>;
     expect(factors.map((f) => f.factor).sort()).toEqual(['HRV', 'RHR', 'SLEEP_DEBT']);
     expect(Object.keys(factors[0]!).sort()).toEqual(
-      ['contribution', 'excluded', 'factor', 'imputed', 'points', 'weight', 'z'].sort(),
+      ['contribution', 'excluded', 'factor', 'imputed', 'points', 'weight', 'z', 'zRaw'].sort(),
     );
 
     const snapshots = await prisma.baselineSnapshot.findMany({ where: { userId: user.id, date: day(last) } });

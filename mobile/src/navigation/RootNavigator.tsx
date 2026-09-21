@@ -17,6 +17,7 @@ import { CoachScreen } from '../screens/CoachScreen';
 import { CoachConsentScreen } from '../screens/CoachConsentScreen';
 import { CoachMemoryScreen } from '../screens/CoachMemoryScreen';
 import { syncTimezone } from '../lib/timezone';
+import { syncPushRegistration } from '../lib/pushRegistration';
 import { COLORS } from '../theme';
 import type { MetricRecord } from '../lib/metricInsights';
 
@@ -63,6 +64,9 @@ export function RootNavigator() {
     // Fire-and-forget: syncTimezone swallows its own failures and must never
     // hold up the first screen. Runs once per authenticated launch/sign-in.
     void syncTimezone();
+    // Same contract: swallows its own failures, only touches users who opted
+    // in, and never prompts for permission.
+    void syncPushRegistration();
   }, [session]);
 
   useEffect(() => {

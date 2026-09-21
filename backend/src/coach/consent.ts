@@ -25,7 +25,7 @@ export const COACH_CONSENT: ConsentText = {
   dataItems: [
     'The messages you type to the coach in the current conversation',
     'Your Recovery Score and Sleep Score values, and how confident each one is',
-    'The per-factor breakdown behind each score (for example HRV, daily minimum heart rate, sleep debt, sleep duration, sleep efficiency and bedtime consistency)',
+    'The per-factor breakdown behind each score (for example HRV, resting heart rate, sleep debt, sleep duration, sleep efficiency and bedtime consistency)',
     'Habit patterns the app has already confirmed for you: the habit name, which factor it affects, the size of the effect and how many days it is based on',
     'Your goals, such as your sleep goal',
   ],

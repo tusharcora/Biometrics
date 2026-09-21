@@ -8,13 +8,11 @@ import type { NotEnoughDataDTO, PatternDTO, PatternFactor, PatternSeriesDTO } fr
 // Below this many paired observations a pattern is flagged as tentative.
 export const SMALL_SAMPLE_THRESHOLD = 10;
 
-const DAILY_MINIMUM_HR = 'daily minimum heart rate';
+const RESTING_HR = 'resting heart rate';
 
-// RESTING_HR is a daily-minimum-BPM proxy, so it is never described as a
-// resting heart rate.
 const FACTOR_PHRASES: Record<PatternFactor, string> = {
   HRV: 'HRV',
-  RHR: DAILY_MINIMUM_HR,
+  RHR: RESTING_HR,
   SLEEP_DURATION: 'sleep duration',
   SLEEP_EFFICIENCY: 'sleep efficiency',
   CIRCADIAN_CONSISTENCY: 'sleep-timing consistency',
@@ -23,7 +21,7 @@ const FACTOR_PHRASES: Record<PatternFactor, string> = {
 export function factorPhrase(factor: PatternFactor, serverLabel: string): string {
   const known = FACTOR_PHRASES[factor];
   if (known) return known;
-  return /resting/i.test(serverLabel) ? DAILY_MINIMUM_HR : serverLabel;
+  return /resting/i.test(serverLabel) ? RESTING_HR : serverLabel;
 }
 
 export function lagPhrase(lagDays: number): string {

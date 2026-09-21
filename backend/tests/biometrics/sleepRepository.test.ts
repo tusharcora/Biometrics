@@ -193,3 +193,142 @@ describe('other metrics keep overwrite-on-conflict', () => {
     expect(rows[0]!.value).toBe(2500);
   });
 });
+
+// Change 3: the day key comes from each record's own UTC offset, not from
+// User.timezone (which is wrong the moment the user travels).
+describe("sleep rollups keyed by the record's own UTC offset", () => {
+  function withOffsets(start: string, end: string, minutesAsleep: number, startOffset: number | null, endOffset: number | null): SleepSessionPoint {
+    return { ...session(start, end, minutesAsleep), startUtcOffsetSeconds: startOffset, endUtcOffsetSeconds: endOffset };
+  }
+
+  it('stores both offsets on the row', async () => {
+    const user = await createUser();
+    await upsertSleepSessions(user.id, [withOffsets('2026-09-01T22:00:00Z', '2026-09-02T06:00:00Z', 420, -14400, 3600)]);
+    const [row] = await prisma.sleepSession.findMany({ where: { userId: user.id } });
+    expect(row!.startUtcOffsetSeconds).toBe(-14400);
+    expect(row!.endUtcOffsetSeconds).toBe(3600);
+  });
+
+  it('stores null offsets when the point carries none (or null)', async () => {
+    const user = await createUser();
+    await upsertSleepSessions(user.id, [mainSleep, withOffsets('2026-09-02T22:00:00Z', '2026-09-03T06:00:00Z', 400, null, null)]);
+    const rows = await prisma.sleepSession.findMany({ where: { userId: user.id } });
+    expect(rows).toHaveLength(2);
+    for (const r of rows) {
+      expect(r.startUtcOffsetSeconds).toBeNull();
+      expect(r.endUtcOffsetSeconds).toBeNull();
+    }
+  });
+
+  it("the offset overrides the user timezone: a New York user's +09:00 (Tokyo) night lands on the Tokyo date", async () => {
+    const user = await createUser('America/New_York');
+    // Ends 22:00Z Sep 2: 18:00 Sep 2 in New York, but 07:00 Sep 3 at +09:00.
+    await storeSleepSessions(user.id, [withOffsets('2026-09-02T14:00:00Z', '2026-09-02T22:00:00Z', 440, 32400, 32400)]);
+    expect(await rollups(user.id)).toEqual([{ date: '2026-09-03', value: 440 }]);
+  });
+
+  it('a null offset falls back to the user timezone', async () => {
+    const user = await createUser('America/New_York');
+    await storeSleepSessions(user.id, [withOffsets('2026-09-02T14:00:00Z', '2026-09-02T22:00:00Z', 440, null, null)]);
+    expect(await rollups(user.id)).toEqual([{ date: '2026-09-02', value: 440 }]);
+  });
+
+  it('negative offset: 02:00Z at -04:00 is 22:00 the previous local day, whatever the user zone says', async () => {
+    const user = await createUser('Asia/Tokyo');
+    await storeSleepSessions(user.id, [withOffsets('2026-09-01T18:00:00Z', '2026-09-02T02:00:00Z', 460, -14400, -14400)]);
+    expect(await rollups(user.id)).toEqual([{ date: '2026-09-01', value: 460 }]);
+  });
+
+  it('zero offset is UTC, not "missing"', async () => {
+    const user = await createUser('Asia/Tokyo');
+    // Tokyo would say Sep 3 (08:30); the record says +00:00, so Sep 2.
+    await storeSleepSessions(user.id, [withOffsets('2026-09-02T15:00:00Z', '2026-09-02T23:30:00Z', 450, 0, 0)]);
+    expect(await rollups(user.id)).toEqual([{ date: '2026-09-02', value: 450 }]);
+  });
+
+  it('half-hour offset: +05:30 is local midnight at 18:30Z', async () => {
+    const user = await createUser('UTC');
+    await storeSleepSessions(user.id, [
+      withOffsets('2026-09-02T10:00:00Z', '2026-09-02T18:29:00Z', 400, 19800, 19800), // 23:59 local Sep 2
+      withOffsets('2026-09-03T10:00:00Z', '2026-09-03T18:31:00Z', 300, 19800, 19800), // 00:01 local Sep 4
+    ]);
+    expect(await rollups(user.id)).toEqual([
+      { date: '2026-09-02', value: 400 },
+      { date: '2026-09-04', value: 300 },
+    ]);
+  });
+
+  it('a night that crosses local midnight is keyed by the END date (start 23:00 local Sep 2, end 07:00 local Sep 3)', async () => {
+    const user = await createUser('America/Los_Angeles');
+    // +09:00: start 14:00Z = 23:00 Sep 2, end 22:00Z = 07:00 Sep 3.
+    await storeSleepSessions(user.id, [withOffsets('2026-09-02T14:00:00Z', '2026-09-02T22:00:00Z', 470, 32400, 32400)]);
+    expect(await rollups(user.id)).toEqual([{ date: '2026-09-03', value: 470 }]);
+  });
+
+  it('sums sessions from different offsets that land on the same local date', async () => {
+    const user = await createUser('UTC');
+    await storeSleepSessions(user.id, [
+      withOffsets('2026-09-01T22:00:00Z', '2026-09-02T06:00:00Z', 420, 0, 0), // Sep 2
+      withOffsets('2026-09-02T00:30:00Z', '2026-09-02T02:00:00Z', 60, 32400, 32400), // 11:00 Sep 2 at +09:00
+      withOffsets('2026-09-02T18:00:00Z', '2026-09-03T02:00:00Z', 300, -18000, -18000), // 21:00 Sep 2 at -05:00
+    ]);
+    expect(await rollups(user.id)).toEqual([{ date: '2026-09-02', value: 780 }]);
+  });
+
+  it('re-upsert is idempotent and FILLS previously-null offsets, moving the rollup to the offset-derived date', async () => {
+    const user = await createUser('America/New_York');
+    await storeSleepSessions(user.id, [withOffsets('2026-09-02T14:00:00Z', '2026-09-02T22:00:00Z', 440, null, null)]);
+    expect(await rollups(user.id)).toEqual([{ date: '2026-09-02', value: 440 }]); // New York fallback
+
+    const filled = withOffsets('2026-09-02T14:00:00Z', '2026-09-02T22:00:00Z', 440, 32400, 32400);
+    const touchedDates = await storeSleepSessions(user.id, [filled]);
+    // Both the date it left and the date it arrived on are reported for rescoring.
+    expect(touchedDates).toEqual(['2026-09-02', '2026-09-03']);
+    expect(await rollups(user.id)).toEqual([{ date: '2026-09-03', value: 440 }]);
+    const rows = await prisma.sleepSession.findMany({ where: { userId: user.id } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.startUtcOffsetSeconds).toBe(32400);
+    expect(rows[0]!.endUtcOffsetSeconds).toBe(32400);
+
+    // A third identical fetch changes nothing.
+    await storeSleepSessions(user.id, [filled]);
+    expect(await rollups(user.id)).toEqual([{ date: '2026-09-03', value: 440 }]);
+    expect(await prisma.sleepSession.count({ where: { userId: user.id } })).toBe(1);
+  });
+
+  it('a revised end offset reports the date under its PREVIOUS offset too', async () => {
+    const user = await createUser('UTC');
+    await storeSleepSessions(user.id, [withOffsets('2026-09-02T14:00:00Z', '2026-09-02T22:00:00Z', 440, -14400, -14400)]); // 18:00 Sep 2
+    const dates = await storeSleepSessions(user.id, [withOffsets('2026-09-02T14:00:00Z', '2026-09-02T22:00:00Z', 440, 32400, 32400)]); // 07:00 Sep 3
+    expect(dates).toEqual(['2026-09-02', '2026-09-03']);
+    expect(await rollups(user.id)).toEqual([{ date: '2026-09-03', value: 440 }]);
+  });
+
+  it('recomputeAllSleepRollups: a timezone change moves null-offset sessions but not sessions that carry an offset', async () => {
+    const user = await createUser('UTC');
+    await storeSleepSessions(user.id, [
+      // Ends 05:30Z Sep 3: UTC Sep 3, Los Angeles Sep 2. No offset -> follows the zone.
+      withOffsets('2026-09-02T20:00:00Z', '2026-09-03T05:30:00Z', 500, null, null),
+      // Ends 22:00Z Sep 5 at +09:00 = Sep 6. Offset -> ignores the zone.
+      withOffsets('2026-09-05T14:00:00Z', '2026-09-05T22:00:00Z', 430, 32400, 32400),
+    ]);
+    expect(await rollups(user.id)).toEqual([
+      { date: '2026-09-03', value: 500 },
+      { date: '2026-09-06', value: 430 },
+    ]);
+
+    await prisma.user.update({ where: { id: user.id }, data: { timezone: 'America/Los_Angeles' } });
+    await recomputeAllSleepRollups(user.id);
+    expect(await rollups(user.id)).toEqual([
+      { date: '2026-09-02', value: 500 },
+      { date: '2026-09-06', value: 430 },
+    ]);
+  });
+
+  it('recomputeSleepRollups uses the stored offsets when asked for a date', async () => {
+    const user = await createUser('America/New_York');
+    await upsertSleepSessions(user.id, [withOffsets('2026-09-02T14:00:00Z', '2026-09-02T22:00:00Z', 440, 32400, 32400)]);
+    await recomputeSleepRollups(user.id, ['2026-09-02', '2026-09-03']);
+    expect(await rollups(user.id)).toEqual([{ date: '2026-09-03', value: 440 }]);
+  });
+});

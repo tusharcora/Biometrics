@@ -27,7 +27,7 @@ export interface BacktestUserData {
   sleepGoalMinutes: number;
   /** Stored sessions (Sleep Score efficiency / bedtime consistency). Omitted means those factors cold-start. */
   sessions?: SleepSessionInput[];
-  /** IANA zone the sessions are read in. Defaults to UTC. */
+  /** IANA zone sessions without their own UTC offset are read in. Defaults to UTC. */
   timezone?: string;
 }
 

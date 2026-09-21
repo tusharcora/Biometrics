@@ -16,4 +16,10 @@ module.exports = {
   // one-off failures in other DB suites fit the same pattern, though only
   // this one was captured with its error message.
   testTimeout: 20000,
+  // Purge the "@example.com" fixture users every suite leaves behind, before
+  // and after the run. Both are no-ops unless DATABASE_URL names a "_test"
+  // database. There is no timeout on these hooks, which matters for the first
+  // run after a long backlog has built up.
+  globalSetup: '<rootDir>/tests/globalSetup.ts',
+  globalTeardown: '<rootDir>/tests/globalTeardown.ts',
 };
