@@ -13,7 +13,7 @@ function isThemePreference(value: string | null): value is ThemePreference {
 // Call once, before the first render that reads colors.
 export async function restoreThemePreference(): Promise<ThemePreference> {
   const stored = await SecureStore.getItemAsync(STORAGE_KEY);
-  const preference = isThemePreference(stored) ? stored : 'system';
+  const preference = isThemePreference(stored) ? stored : 'dark';
   colorScheme.set(preference);
   return preference;
 }

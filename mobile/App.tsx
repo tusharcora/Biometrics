@@ -3,6 +3,7 @@ import React from 'react';
 import { AuthProvider } from './src/auth/AuthContext';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { ThemeProvider } from './src/theme/ThemeProvider';
+import { ThemedStatusBar } from './src/components/themed-status-bar';
 import { OrbGalleryScreen } from './src/screens/dev/OrbGalleryScreen';
 import { setBaseUrl } from './src/api/client';
 
@@ -16,6 +17,7 @@ export default function App() {
 
   return (
     <ThemeProvider>
+      <ThemedStatusBar />
       <AuthProvider>
         <RootNavigator />
       </AuthProvider>
