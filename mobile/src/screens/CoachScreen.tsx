@@ -94,6 +94,10 @@ export function CoachScreen() {
   const conversationIdRef = useRef<string | null>(null);
   conversationIdRef.current = conversationId;
   phaseRef.current = phase;
+  // Mirrors `messages` so `load()` can see a message the user just sent (the
+  // optimistic bubble) before the reply -- and conversationIdRef -- arrives.
+  const messagesRef = useRef<ChatMessage[]>([]);
+  messagesRef.current = messages;
 
   useEffect(() => {
     mounted.current = true;
@@ -147,15 +151,19 @@ export function CoachScreen() {
       // rows carry no safety card, memory chips or unsent bubbles, so re-reading
       // them would wipe what the live conversation is showing. A chat that
       // opened without its history (the fetch failed) is retried, unless the
-      // user has meanwhile started a conversation, which the retry would wipe.
-      if (phaseRef.current === 'ready' && (historyLoaded.current || conversationIdRef.current)) return;
+      // user has meanwhile started a conversation -- which includes a message
+      // they just sent but whose reply (and conversationId) has not arrived
+      // yet -- because the retry would wipe it.
+      if (phaseRef.current === 'ready' && (historyLoaded.current || conversationIdRef.current || messagesRef.current.length > 0)) return;
       const conversation = await fetchLatestConversation();
       if (!mounted.current || reloadPending.current) return;
       setConversationId(conversation.conversationId);
       setMessages(
         conversation.messages.map((m) => ({
           id: m.id,
-          role: m.role === 'USER' ? 'user' : 'assistant',
+          // CoachHistoryMessageDTO.role is already 'user' | 'assistant' -- the
+          // server lowercases it before sending (see that type's comment).
+          role: m.role,
           text: m.text,
           source: m.source,
         })),
