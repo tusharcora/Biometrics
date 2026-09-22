@@ -114,10 +114,10 @@ describe('FloatingTabBar', () => {
       expect(getByTestId('thinking-orb').props.accessibilityLabel).toBe('shaping:64:paused:dark');
     });
 
-    it('breathes, dimmed, while another tab is active', () => {
+    it('breathes, dimmed and paused, while another tab is active', () => {
       const { getByTestId } = render(bar(makeProps(0)));
 
-      expect(getByTestId('thinking-orb').props.accessibilityLabel).toBe('breathing:64:playing:dark');
+      expect(getByTestId('thinking-orb').props.accessibilityLabel).toBe('breathing:64:paused:dark');
       expect(getByTestId('hub-orb')).toHaveStyle({ opacity: DIMMED_OPACITY });
     });
 
@@ -125,7 +125,7 @@ describe('FloatingTabBar', () => {
       mockScheme = 'light';
       const { getByTestId } = render(bar(makeProps(0)));
 
-      expect(getByTestId('thinking-orb').props.accessibilityLabel).toBe('breathing:64:playing:dark');
+      expect(getByTestId('thinking-orb').props.accessibilityLabel).toBe('breathing:64:paused:dark');
     });
 
     it('breathes at full brightness on the Coach tab', () => {

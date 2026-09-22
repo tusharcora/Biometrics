@@ -177,7 +177,12 @@ param for coach entry points (`ScoreDetail`, digest card).
 - The **active** icon sits in a white circle that slides between positions
   (shared-value animation), as in the reference. The centre orb has no white
   circle; while the Coach tab is active the orb plays its `listening`/state
-  animation at full brightness and inactive it plays `breathing` dimmed.
+  animation at full brightness. Inactive it plays `breathing` dimmed **and
+  paused** — a deliberate narrowing found in implementation: the vendored
+  orb drives its animation with a 60 fps React `setState`, and a
+  barely-visible moving orb on every tab was not worth that cost for as
+  long as the coach stays enabled (see §3.3 and the redesign-foundation
+  plan's final review).
 - Hides while the keyboard is open (the coach prompt bar takes its place)
   and on pushed detail screens.
 - Every item has an accessibility label and role; the orb is labelled
@@ -242,7 +247,7 @@ its README states it has **not been runtime-verified on a device**.
 
 | Place | Size | State |
 |---|---|---|
-| Tab bar centre, tab inactive | 64 | `breathing` (dimmed) |
+| Tab bar centre, tab inactive | 64 | `breathing` (dimmed, **paused** -- implementation deviation, see §2.3) |
 | Coach header, idle | 64 | `breathing` |
 | Coach, input focused / user typing | 64 | `listening` |
 | Coach, message just sent | 64 | `searching`, then `solving` |

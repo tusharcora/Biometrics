@@ -18,15 +18,17 @@ describe('hubOrbAppearance', () => {
     expect(hubOrbAppearance({ ...enabled, enabled: false }, true)).toEqual({ state: 'shaping', paused: true, dimmed: true });
   });
 
-  it('breathes dimmed while the coach is enabled and another tab is active', () => {
-    expect(hubOrbAppearance(enabled, false)).toEqual({ state: 'breathing', paused: false, dimmed: true });
+  it('breathes dimmed and paused while the coach is enabled and another tab is active', () => {
+    // Paused, not just dimmed: a 60 fps Skia render loop on every tab is not
+    // worth the cost for an orb that is already faded to 0.45 opacity.
+    expect(hubOrbAppearance(enabled, false)).toEqual({ state: 'breathing', paused: true, dimmed: true });
   });
 
-  it('breathes at full brightness on the Coach tab', () => {
+  it('breathes at full brightness, unpaused, on the Coach tab', () => {
     expect(hubOrbAppearance(enabled, true)).toEqual({ state: 'breathing', paused: false, dimmed: false });
   });
 
   it('treats an enabled-but-not-consented coach like an enabled one', () => {
-    expect(hubOrbAppearance({ ...enabled, consented: false }, false)).toEqual({ state: 'breathing', paused: false, dimmed: true });
+    expect(hubOrbAppearance({ ...enabled, consented: false }, false)).toEqual({ state: 'breathing', paused: true, dimmed: true });
   });
 });
