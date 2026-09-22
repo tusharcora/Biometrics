@@ -8,6 +8,7 @@ import { Button } from '../components/ui/button';
 import { CoachSettingsSection } from '../components/coach-settings-section';
 import { DeleteAccountSection } from '../components/delete-account-section';
 import { COLORS } from '../theme';
+import { useTabBarClearance } from '../navigation/tabBarLayout';
 import {
   clearTimezoneOverride,
   getTimezoneState,
@@ -19,6 +20,7 @@ import {
 const MAX_RESULTS = 60;
 
 export function SettingsScreen() {
+  const clearance = useTabBarClearance();
   const { colorScheme: scheme } = useColorScheme();
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
   const [state, setState] = useState<TimezoneState | null>(null);
@@ -62,36 +64,38 @@ export function SettingsScreen() {
   if (picking) {
     return (
       <SafeAreaView className="flex-1 bg-background">
-        <View className="gap-3 p-4">
-          <TextInput
-            testID="timezone-search-input"
-            value={query}
-            onChangeText={setQuery}
-            placeholder="Search time zones"
-            placeholderTextColor={colors.muted}
-            autoCapitalize="none"
-            autoCorrect={false}
-            style={{ color: colors.foreground }}
-            className="rounded-xl border border-border bg-card px-4 py-3"
+        <View testID="timezone-picker" className="flex-1" style={{ paddingBottom: clearance }}>
+          <View className="gap-3 p-4">
+            <TextInput
+              testID="timezone-search-input"
+              value={query}
+              onChangeText={setQuery}
+              placeholder="Search time zones"
+              placeholderTextColor={colors.muted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              style={{ color: colors.foreground }}
+              className="rounded-xl border border-border bg-card px-4 py-3"
+            />
+            {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
+          </View>
+          <FlatList
+            data={matches}
+            keyExtractor={(zone) => zone}
+            keyboardShouldPersistTaps="handled"
+            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16 }}
+            ListEmptyComponent={<Text className="p-4 text-center text-muted-foreground">No matching time zones.</Text>}
+            renderItem={({ item }) => (
+              <Pressable testID={`timezone-option-${item}`} onPress={() => choose(item)} className="py-3 active:opacity-70">
+                <Text className={item === state?.timezone ? 'font-semibold' : ''}>{item}</Text>
+              </Pressable>
+            )}
           />
-          {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
-        </View>
-        <FlatList
-          data={matches}
-          keyExtractor={(zone) => zone}
-          keyboardShouldPersistTaps="handled"
-          contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16 }}
-          ListEmptyComponent={<Text className="p-4 text-center text-muted-foreground">No matching time zones.</Text>}
-          renderItem={({ item }) => (
-            <Pressable testID={`timezone-option-${item}`} onPress={() => choose(item)} className="py-3 active:opacity-70">
-              <Text className={item === state?.timezone ? 'font-semibold' : ''}>{item}</Text>
-            </Pressable>
-          )}
-        />
-        <View className="items-center p-2">
-          <Button testID="timezone-cancel-button" variant="ghost" size="sm" onPress={() => setPicking(false)}>
-            Cancel
-          </Button>
+          <View className="items-center p-2">
+            <Button testID="timezone-cancel-button" variant="ghost" size="sm" onPress={() => setPicking(false)}>
+              Cancel
+            </Button>
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -99,7 +103,10 @@ export function SettingsScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background">
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12, padding: 16 }}>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ gap: 12, padding: 16, paddingBottom: clearance }}
+      >
         <Card className="gap-1">
           <Pressable testID="timezone-row" onPress={() => setPicking(true)} className="active:opacity-70">
             <Text className="text-sm text-muted-foreground">Time zone</Text>

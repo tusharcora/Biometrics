@@ -38,6 +38,43 @@ describe('score colour tokens', () => {
   });
 });
 
+describe('design tokens (new semantic colors)', () => {
+  const tailwind = require('../../tailwind.config.js');
+  const [lightBlock, darkBlock] = css.split('@media (prefers-color-scheme: dark)') as [string, string];
+
+  function readVar(block: string, name: string): string {
+    const match = block.match(new RegExp(`--color-${name}:\\s*(\\d+)\\s+(\\d+)\\s+(\\d+);`));
+    if (!match) throw new Error(`--color-${name} not found`);
+    return `rgb(${match[1]}, ${match[2]}, ${match[3]})`;
+  }
+
+  // CSS variable name -> COLORS key. Only the tokens added by the redesign.
+  const NEW_TOKENS: Array<[string, string]> = [
+    ['surface-raised', 'surfaceRaised'],
+    ['hairline', 'hairline'],
+    ['bar', 'bar'],
+    ['bar-icon', 'barIcon'],
+    ['bar-active', 'barActive'],
+    ['bar-icon-active', 'barIconActive'],
+    ['heat-empty', 'heatEmpty'],
+    ['heat-0', 'heat0'],
+    ['heat-1', 'heat1'],
+    ['heat-2', 'heat2'],
+    ['heat-3', 'heat3'],
+    ['heat-4', 'heat4'],
+  ];
+
+  it.each(NEW_TOKENS)('--color-%s is identical in global.css and COLORS.%s (light and dark)', (cssName, key) => {
+    expect((COLORS.light as Record<string, string>)[key]).toBe(readVar(lightBlock, cssName));
+    expect((COLORS.dark as Record<string, string>)[key]).toBe(readVar(darkBlock, cssName));
+  });
+
+  it.each(NEW_TOKENS)('--color-%s is registered with Tailwind', (cssName) => {
+    const tailwindStr = require('fs').readFileSync(require('path').join(__dirname, '../../tailwind.config.js'), 'utf8');
+    expect(tailwindStr).toContain(`var(--color-${cssName})`);
+  });
+});
+
 describe('MOTION tokens', () => {
   it('exposes ordered fast < normal < slow durations', () => {
     expect(MOTION.duration.fast).toBeLessThan(MOTION.duration.normal);

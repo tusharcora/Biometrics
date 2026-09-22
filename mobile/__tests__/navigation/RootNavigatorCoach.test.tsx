@@ -30,10 +30,10 @@ jest.mock('@react-navigation/native-stack', () => {
   };
 });
 
-jest.mock('../../src/screens/DashboardScreen', () => {
+jest.mock('../../src/navigation/TabsNavigator', () => {
   const { Text } = require('react-native');
   const ReactLib = require('react');
-  return { DashboardScreen: () => ReactLib.createElement(Text, null, 'DASHBOARD_SCREEN') };
+  return { TabsNavigator: () => ReactLib.createElement(Text, null, 'TABS_SCREEN') };
 });
 
 beforeEach(() => {
@@ -47,7 +47,8 @@ describe('RootNavigator: AI Coach routes', () => {
   it('registers the Coach chat and CoachConsent routes', async () => {
     const { getByText } = render(<RootNavigator />);
 
-    await waitFor(() => expect(getByText('DASHBOARD_SCREEN')).toBeTruthy());
-    expect(mockRegisteredScreens).toEqual(expect.arrayContaining(['Coach', 'CoachConsent']));
+    await waitFor(() => expect(getByText('TABS_SCREEN')).toBeTruthy());
+    expect(mockRegisteredScreens).toEqual(expect.arrayContaining(['Tabs', 'CoachConsent']));
+    expect(mockRegisteredScreens).not.toContain('Coach');
   });
 });

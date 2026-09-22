@@ -11,6 +11,7 @@ import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { COLORS } from '../theme';
 import type { RootStackParamList } from '../navigation/RootNavigator';
+import { navigateToCoachEntry } from '../navigation/coachNavigation';
 
 type ConsentRoute = RouteProp<RootStackParamList, 'CoachConsent'>;
 
@@ -55,7 +56,7 @@ export function CoachConsentScreen() {
   useEffect(() => {
     // The server is authoritative: if it already counts the current version as
     // accepted there is nothing to ask.
-    if (alreadyConsented) navigation.replace('Coach', { prefill });
+    if (alreadyConsented) navigateToCoachEntry(navigation, 'Coach', prefill);
   }, [alreadyConsented, navigation, prefill]);
 
   async function agree(version: string) {
@@ -63,7 +64,7 @@ export function CoachConsentScreen() {
     setError(null);
     try {
       await acceptCoachConsent(version);
-      navigation.replace('Coach', { prefill });
+      navigateToCoachEntry(navigation, 'Coach', prefill);
     } catch (e) {
       if (e instanceof StaleConsentVersionError) {
         setTextChanged(true);
