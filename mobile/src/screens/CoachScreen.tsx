@@ -36,6 +36,9 @@ interface ChatMessage {
   fresh?: boolean;
   // Memories the coach proposed to keep on this turn (shown under the bubble).
   memoryProposals?: MemoryDTO[];
+  // Set on a user bubble whose send failed, so the transcript does not show it
+  // sitting there as though the coach received it.
+  failed?: boolean;
   // Present on a crisis-safety reply.
   safety?: {
     resources: string[];
@@ -68,6 +71,9 @@ export function CoachScreen() {
   const [input, setInput] = useState(prefill ?? '');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<{ text: string; request: SendCoachMessageInput } | null>(null);
+  // True when the status check itself could not be completed, as opposed to
+  // having completed and said the coach is available.
+  const [statusUnverified, setStatusUnverified] = useState(false);
   const scrollRef = useRef<ScrollView>(null);
   const mounted = useRef(true);
   const localId = useRef(0);
@@ -85,8 +91,21 @@ export function CoachScreen() {
   useEffect(() => {
     let cancelled = false;
     (async () => {
+      let status;
       try {
-        const status = await fetchCoachStatus();
+        status = await fetchCoachStatus();
+      } catch {
+        // Could not reach the status endpoint. Failing closed would hide a
+        // working coach over one dropped request, so the screen stays usable --
+        // but it must not silently imply everything is fine, which is what a
+        // bare 'ready' did. Say so; the first send will surface the real state.
+        if (!cancelled) {
+          setStatusUnverified(true);
+          setPhase('ready');
+        }
+        return;
+      }
+      try {
         if (cancelled) return;
         if (!status.enabled) {
           setPhase('unavailable');
@@ -110,9 +129,8 @@ export function CoachScreen() {
         );
         setPhase('ready');
       } catch {
-        // History is a convenience: a failure to load it must not lock the user
-        // out of asking a question. Status failures already fail closed above
-        // only when the server says so.
+        // History alone is a convenience: failing to load past messages must
+        // not stop someone asking a new question.
         if (!cancelled) setPhase('ready');
       }
     })();
@@ -143,6 +161,7 @@ export function CoachScreen() {
           res = await sendCoachMessage(request);
         }
         if (!mounted.current) return;
+        setStatusUnverified(false);
         setConversationId(res.conversationId);
         setMessages((prev) => {
           // A resend under safetyOverride settles the earlier safety card.
@@ -165,6 +184,11 @@ export function CoachScreen() {
         });
       } catch (e) {
         if (!mounted.current) return;
+        // Whatever went wrong, the message did not land. Mark the bubble so the
+        // transcript stops showing it as though the coach had received it.
+        setMessages((prev) =>
+          prev.map((m) => (m.role === 'user' && m.text === request.message && !m.failed ? { ...m, failed: true } : m)),
+        );
         if (e instanceof CoachConsentRequiredError) {
           navigation.replace('CoachConsent', { prefill: undefined });
         } else if (e instanceof CoachDisabledError) {
@@ -231,6 +255,12 @@ export function CoachScreen() {
           contentContainerStyle={{ gap: 12, padding: 16, flexGrow: 1 }}
           onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
         >
+          {statusUnverified ? (
+            <Text testID="coach-status-unverified" className="px-1 pb-2 text-sm text-muted-foreground">
+              We couldn't check the coach just now. You can still send a message.
+            </Text>
+          ) : null}
+
           {messages.length === 0 && !sending ? (
             <View testID="coach-empty" className="flex-1 items-center justify-center gap-2 py-16">
               <Ionicons name="chatbubbles-outline" size={28} color={colors.muted} />
@@ -242,6 +272,11 @@ export function CoachScreen() {
 
           {messages.map((message) => (
             <View key={message.id} className="gap-1">
+              {message.failed ? (
+                <Text testID={`coach-message-failed-${message.id}`} className="self-end text-xs text-destructive">
+                  Not sent
+                </Text>
+              ) : null}
               <ChatBubble role={message.role} text={message.text} source={message.source as CoachMessageSource} animate={message.fresh === true}>
                 {message.safety ? (
                   <View className="gap-3">

@@ -305,4 +305,31 @@ describe('CoachScreen: safety reply', () => {
     expect(await utils.findByText('Here you go.')).toBeTruthy();
     expect(sendCoachMessage).toHaveBeenLastCalledWith(expect.objectContaining({ safetyOverride: true }));
   });
+  // A status fetch that never completed is not the same as one that said
+  // "available", but the screen used to render both as a plain ready chat.
+  it('says so when the status check could not be completed, and still lets you send', async () => {
+    (fetchCoachStatus as jest.Mock).mockRejectedValueOnce(new Error('offline'));
+
+    const utils = render(<CoachScreen />);
+
+    expect(await utils.findByTestId('coach-status-unverified')).toBeTruthy();
+    expect(utils.getByTestId('coach-input')).toBeTruthy();
+    expect(utils.queryByTestId('coach-unavailable')).toBeNull();
+  });
+
+  it('marks a user message whose send failed instead of leaving it looking delivered', async () => {
+    (fetchCoachStatus as jest.Mock).mockResolvedValue(status);
+    (fetchLatestConversation as jest.Mock).mockResolvedValue({ conversationId: null, messages: [] });
+    const utils = render(<CoachScreen />);
+    await utils.findByTestId('coach-input');
+
+    (sendCoachMessage as jest.Mock).mockRejectedValueOnce(new Error('network'));
+    fireEvent.changeText(utils.getByTestId('coach-input'), 'did this send?');
+    await act(async () => {
+      fireEvent.press(utils.getByTestId('coach-send-button'));
+    });
+
+    await utils.findByTestId('coach-error');
+    expect(utils.getByText('Not sent')).toBeTruthy();
+  });
 });
