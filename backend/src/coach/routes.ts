@@ -5,6 +5,7 @@ import { CoachClock, systemClock } from './clock';
 import { COACH_CONSENT, COACH_CONSENT_VERSION, grantConsent, hasCurrentConsent, revokeConsent } from './consent';
 import { getCoachProvider, isCoachEnabled, isExpoPushProvider } from './config';
 import { isExpoPushToken } from './push';
+import { TurnInProgressError, TurnRateLimitedError, withTurnGuard } from './turnGuard';
 import type { CoachModelProvider } from './model/provider';
 import { toMemoryDTO, validateMemoryValue } from './memory';
 import { createCoachOrchestrator, HISTORY_WINDOW, OrchestratorDeps } from './orchestrator';
@@ -180,12 +181,17 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
         ...(deps.tools ? { tools: deps.tools } : {}),
         ...(deps.budgets ? { budgets: deps.budgets } : {}),
       });
-      const turn = await orchestrator.handleTurn({
-        userId,
-        message: message.trim(),
-        history,
-        safetyOverride: safetyOverride === true,
-      });
+      // Guarded here, not around the whole handler: validation and the history
+      // read are cheap, and a 400 should not consume a rate-limit slot. The
+      // model call is what costs a minute and (once a provider is wired) money.
+      const turn = await withTurnGuard(userId, () =>
+        orchestrator.handleTurn({
+          userId,
+          message: message.trim(),
+          history,
+          safetyOverride: safetyOverride === true,
+        }),
+      );
 
       // The assistant row is stamped strictly after the user row so transcript order is unambiguous.
       const repliedAt = new Date(Math.max(Date.now(), receivedAt.getTime() + 1));
@@ -224,6 +230,16 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
         ...(turn.memoryProposals && turn.memoryProposals.length > 0 ? { memoryProposals: turn.memoryProposals } : {}),
       });
     } catch (err) {
+      // Neither is a server fault, so neither is logged as one.
+      if (err instanceof TurnRateLimitedError) {
+        res.set('Retry-After', String(err.retryAfterSeconds));
+        res.status(429).json({ error: 'too_many_messages', retryAfterSeconds: err.retryAfterSeconds });
+        return;
+      }
+      if (err instanceof TurnInProgressError) {
+        res.status(409).json({ error: 'turn_in_progress' });
+        return;
+      }
       logFailure('message', err);
       res.status(500).json({ error: 'coach_unavailable' });
     }
