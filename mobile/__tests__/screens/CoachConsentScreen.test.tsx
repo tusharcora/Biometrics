@@ -10,11 +10,11 @@ jest.mock('../../src/api/coach', () => ({
   revokeCoachConsent: jest.fn(),
 }));
 
-const mockReplace = jest.fn();
+const mockNavigate = jest.fn();
 const mockGoBack = jest.fn();
 let mockParams: unknown;
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ replace: mockReplace, goBack: mockGoBack, navigate: jest.fn() }),
+  useNavigation: () => ({ goBack: mockGoBack, navigate: mockNavigate }),
   useRoute: () => ({ params: mockParams }),
 }));
 
@@ -69,7 +69,7 @@ describe('CoachConsentScreen', () => {
     fireEvent.press(await findByTestId('coach-consent-agree'));
 
     await waitFor(() => expect(acceptCoachConsent).toHaveBeenCalledWith('v1'));
-    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('Coach', { prefill: 'Why did my score change today?' }));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('Tabs', { screen: 'Coach', params: { prefill: 'Why did my score change today?' } }, { pop: true }));
   });
 
   it('"Not now" leaves the coach off: goes back and never calls the consent API', async () => {
@@ -79,7 +79,7 @@ describe('CoachConsentScreen', () => {
 
     expect(mockGoBack).toHaveBeenCalledTimes(1);
     expect(acceptCoachConsent).not.toHaveBeenCalled();
-    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 
   it('re-shows the new text when the consent version changed (409), and agrees to the new version', async () => {
@@ -94,11 +94,11 @@ describe('CoachConsentScreen', () => {
     (fetchCoachStatus as jest.Mock).mockResolvedValue(updated);
     expect(await findByText(updated.consent.summary)).toBeTruthy();
     expect(await findByTestId('coach-consent-updated-note')).toBeTruthy();
-    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
 
     fireEvent.press(await findByTestId('coach-consent-agree'));
     await waitFor(() => expect(acceptCoachConsent).toHaveBeenLastCalledWith('v2'));
-    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('Coach', { prefill: undefined }));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('Tabs', { screen: 'Coach' }, { pop: true }));
   });
 
   it('shows an error and stays put when accepting fails', async () => {
@@ -108,7 +108,7 @@ describe('CoachConsentScreen', () => {
     fireEvent.press(await findByTestId('coach-consent-agree'));
 
     expect(await findByTestId('coach-consent-error')).toBeTruthy();
-    expect(mockReplace).not.toHaveBeenCalled();
+    expect(mockNavigate).not.toHaveBeenCalled();
   });
 
   it('skips straight to the chat when the server already reports consent', async () => {
@@ -116,7 +116,7 @@ describe('CoachConsentScreen', () => {
     mockParams = { prefill: 'Hi' };
     render(<CoachConsentScreen />);
 
-    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('Coach', { prefill: 'Hi' }));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('Tabs', { screen: 'Coach', params: { prefill: 'Hi' } }, { pop: true }));
   });
 
   it('renders no consent controls when the coach is disabled', async () => {

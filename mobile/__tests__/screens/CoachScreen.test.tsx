@@ -1,6 +1,9 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { CoachScreen } from '../../src/screens/CoachScreen';
+import { useKeyboardVisible } from '../../src/lib/useKeyboardVisible';
+import { FLOATING_BAR_HEIGHT, FLOATING_BAR_MARGIN } from '../../src/navigation/tabBarLayout';
 import {
   CoachConsentRequiredError,
   CoachDisabledError,
@@ -19,10 +22,24 @@ jest.mock('../../src/api/coach', () => ({
   sendCoachMessage: jest.fn(),
 }));
 
-const mockReplace = jest.fn();
+jest.mock('../../src/lib/useKeyboardVisible', () => ({ useKeyboardVisible: jest.fn(() => false) }));
+
+const mockNavigate = jest.fn();
+const mockSetParams = jest.fn();
+let mockFocusListener: (() => void) | undefined;
 let mockParams: unknown;
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ replace: mockReplace, navigate: jest.fn(), goBack: jest.fn() }),
+  useNavigation: () => ({
+    navigate: mockNavigate,
+    setParams: mockSetParams,
+    goBack: jest.fn(),
+    addListener: (_event: string, cb: () => void) => {
+      mockFocusListener = cb;
+      return () => {
+        mockFocusListener = undefined;
+      };
+    },
+  }),
   useRoute: () => ({ params: mockParams }),
 }));
 
@@ -66,6 +83,8 @@ function type(utils: ReturnType<typeof render>, text: string) {
 beforeEach(() => {
   jest.clearAllMocks();
   mockParams = undefined;
+  mockFocusListener = undefined;
+  (useKeyboardVisible as jest.Mock).mockReturnValue(false);
   (fetchCoachStatus as jest.Mock).mockResolvedValue(status);
   (fetchLatestConversation as jest.Mock).mockResolvedValue({ conversationId: null, messages: [] });
 });
@@ -76,8 +95,192 @@ describe('CoachScreen: gating', () => {
     mockParams = { prefill: 'Why did my score change today?' };
     render(<CoachScreen />);
 
-    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('CoachConsent', { prefill: 'Why did my score change today?' }));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('CoachConsent', { prefill: 'Why did my score change today?' }));
     expect(fetchLatestConversation).not.toHaveBeenCalled();
+  });
+
+  it('shows a review card, instead of bouncing back to consent, when the user returns without agreeing', async () => {
+    (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, consented: false });
+    const { findByTestId, queryByTestId } = render(<CoachScreen />);
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledTimes(1));
+
+    await act(async () => {
+      mockFocusListener?.();
+    });
+
+    expect(await findByTestId('coach-needs-consent')).toBeTruthy();
+    expect(queryByTestId('coach-input')).toBeNull();
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+
+    fireEvent.press(await findByTestId('coach-review-consent-button'));
+    expect(mockNavigate).toHaveBeenCalledTimes(2);
+    expect(mockNavigate).toHaveBeenLastCalledWith('CoachConsent', { prefill: undefined });
+  });
+
+  it('reloads when the tab regains focus after the user agreed', async () => {
+    (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, consented: false });
+    const { findByTestId } = render(<CoachScreen />);
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledTimes(1));
+
+    (fetchCoachStatus as jest.Mock).mockResolvedValue(status);
+    await act(async () => {
+      mockFocusListener?.();
+    });
+
+    expect(await findByTestId('coach-input')).toBeTruthy();
+  });
+
+  it('does not lose a focus that fires during the first load: the stale result is discarded and one fresh load runs', async () => {
+    const first = deferred<CoachStatusDTO>();
+    (fetchCoachStatus as jest.Mock).mockReturnValueOnce(first.promise).mockResolvedValue(status);
+    const { findByTestId } = render(<CoachScreen />);
+
+    // Focus while the first status request is still pending.
+    await act(async () => {
+      mockFocusListener?.();
+    });
+    expect(fetchCoachStatus).toHaveBeenCalledTimes(1);
+
+    // The first response is stale: the user has since consented.
+    await act(async () => {
+      first.resolve({ ...status, consented: false });
+    });
+
+    expect(await findByTestId('coach-input')).toBeTruthy();
+    expect(fetchCoachStatus).toHaveBeenCalledTimes(2);
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('keeps a safety card, and does not re-read history, when the tab regains focus on a ready chat', async () => {
+    const safetyReply = reply(
+      "I'm really sorry you're feeling this way.",
+      { source: 'safety' },
+      { resources: ['Call or text 988 (US)'], canContinue: true },
+    );
+    (sendCoachMessage as jest.Mock).mockResolvedValueOnce(safetyReply);
+    const utils = await openChat();
+    type(utils, 'I feel awful');
+    fireEvent.press(utils.getByTestId('coach-send-button'));
+    await utils.findByTestId('coach-safety-resources');
+
+    await act(async () => {
+      mockFocusListener?.();
+    });
+
+    expect(fetchCoachStatus).toHaveBeenCalledTimes(2);
+    expect(fetchLatestConversation).toHaveBeenCalledTimes(1);
+    expect(utils.getByTestId('coach-safety-resources')).toBeTruthy();
+    expect(utils.getByText('I feel awful')).toBeTruthy();
+  });
+
+  it('opens the chat when the first history load fails, then retries the history on the next focus and continues that conversation', async () => {
+    (fetchLatestConversation as jest.Mock).mockRejectedValueOnce(new Error('offline')).mockResolvedValue({
+      conversationId: 'conv-9',
+      messages: [{ id: 'h1', role: 'assistant', text: 'Earlier answer', source: 'model', createdAt: '2026-09-19T10:00:00.000Z' }],
+    });
+    (sendCoachMessage as jest.Mock).mockResolvedValue(reply('Next answer', {}));
+    const utils = await openChat();
+    expect(utils.queryByText('Earlier answer')).toBeNull();
+    expect(fetchLatestConversation).toHaveBeenCalledTimes(1);
+
+    await act(async () => {
+      mockFocusListener?.();
+    });
+
+    expect(await utils.findByText('Earlier answer')).toBeTruthy();
+    expect(utils.getByTestId('chat-bubble-assistant')).toHaveTextContent('Earlier answer');
+    expect(fetchLatestConversation).toHaveBeenCalledTimes(2);
+    type(utils, 'And now?');
+    fireEvent.press(utils.getByTestId('coach-send-button'));
+    await waitFor(() => expect(sendCoachMessage).toHaveBeenCalledTimes(1));
+    expect(sendCoachMessage).toHaveBeenCalledWith({ message: 'And now?', conversationId: 'conv-9' });
+  });
+
+  it('does not retry the history after a failed load once the user has started a conversation', async () => {
+    (fetchLatestConversation as jest.Mock).mockRejectedValueOnce(new Error('offline'));
+    (sendCoachMessage as jest.Mock).mockResolvedValue(reply('Fresh answer'));
+    const utils = await openChat();
+    type(utils, 'Hello');
+    fireEvent.press(utils.getByTestId('coach-send-button'));
+    await utils.findByText('Fresh answer');
+
+    await act(async () => {
+      mockFocusListener?.();
+    });
+
+    expect(fetchLatestConversation).toHaveBeenCalledTimes(1);
+    expect(utils.getByText('Fresh answer')).toBeTruthy();
+    expect(utils.getByText('Hello')).toBeTruthy();
+  });
+
+  it('does not let a focus reload wipe a message sent while its reply is still in flight', async () => {
+    (fetchLatestConversation as jest.Mock).mockRejectedValueOnce(new Error('offline'));
+    const pending = deferred<CoachReplyDTO>();
+    (sendCoachMessage as jest.Mock).mockReturnValue(pending.promise);
+    const utils = await openChat();
+
+    type(utils, 'Hello');
+    fireEvent.press(utils.getByTestId('coach-send-button'));
+    expect(await utils.findByText('Hello')).toBeTruthy();
+
+    // The reply (and conversationId) have not arrived yet -- the tab regains
+    // focus in that window, before either historyLoaded or conversationId is set.
+    await act(async () => {
+      mockFocusListener?.();
+    });
+
+    expect(fetchLatestConversation).toHaveBeenCalledTimes(1);
+    expect(utils.getByText('Hello')).toBeTruthy();
+
+    await act(async () => pending.resolve(reply('Fresh answer')));
+
+    expect(await utils.findByText('Fresh answer')).toBeTruthy();
+    expect(utils.getByText('Hello')).toBeTruthy();
+  });
+
+  it('consumes a prefill param once applied, and fills the input again when the same text re-arrives', async () => {
+    mockParams = { prefill: 'Why did my score change today?' };
+    const utils = await openChat();
+    expect(utils.getByTestId('coach-input').props.value).toBe('Why did my score change today?');
+    expect(mockSetParams).toHaveBeenCalledWith({ prefill: undefined });
+
+    // The user clears the input; the param has been consumed.
+    fireEvent.changeText(utils.getByTestId('coach-input'), '');
+    mockParams = undefined;
+    utils.rerender(<CoachScreen />);
+    expect(utils.getByTestId('coach-input').props.value).toBe('');
+
+    // The identical text arrives again.
+    mockParams = { prefill: 'Why did my score change today?' };
+    utils.rerender(<CoachScreen />);
+    expect(utils.getByTestId('coach-input').props.value).toBe('Why did my score change today?');
+  });
+
+  it('still carries the prefill to the consent screen from the review card after the param was consumed', async () => {
+    (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, consented: false });
+    mockParams = { prefill: 'Why did my score change today?' };
+    const utils = render(<CoachScreen />);
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledTimes(1));
+    // The param is consumed by the app, so the route no longer has it.
+    mockParams = undefined;
+    utils.rerender(<CoachScreen />);
+
+    await act(async () => {
+      mockFocusListener?.();
+    });
+    fireEvent.press(await utils.findByTestId('coach-review-consent-button'));
+
+    expect(mockNavigate).toHaveBeenLastCalledWith('CoachConsent', { prefill: 'Why did my score change today?' });
+  });
+
+  it('puts a prefill that arrives after mount into the input', async () => {
+    const utils = await openChat();
+    expect(utils.getByTestId('coach-input').props.value).toBe('');
+
+    mockParams = { prefill: 'Why did my score change today?' };
+    utils.rerender(<CoachScreen />);
+
+    expect(utils.getByTestId('coach-input').props.value).toBe('Why did my score change today?');
   });
 
   it('shows no chat UI at all when the coach is disabled', async () => {
@@ -95,15 +298,19 @@ describe('CoachScreen: conversation', () => {
     (fetchLatestConversation as jest.Mock).mockResolvedValue({
       conversationId: 'conv-1',
       messages: [
-        { id: 'a', role: 'USER', text: 'How did I sleep?', createdAt: '2026-09-19T10:00:00.000Z' },
-        { id: 'b', role: 'ASSISTANT', text: 'You slept a little less than usual.', source: 'model', createdAt: '2026-09-19T10:00:05.000Z' },
+        { id: 'a', role: 'user', text: 'How did I sleep?', createdAt: '2026-09-19T10:00:00.000Z' },
+        { id: 'b', role: 'assistant', text: 'You slept a little less than usual.', source: 'model', createdAt: '2026-09-19T10:00:05.000Z' },
       ],
     });
-    const { findByText, getByTestId } = render(<CoachScreen />);
+    const { findByText, getByTestId, getByText } = render(<CoachScreen />);
 
     expect(await findByText('How did I sleep?')).toBeTruthy();
     expect(await findByText('You slept a little less than usual.')).toBeTruthy();
     expect(getByTestId('coach-input')).toBeTruthy();
+    // Real history rows carry a lowercase role; a restored user message must
+    // render as a user bubble, not the assistant's.
+    expect(getByTestId('chat-bubble-user')).toHaveTextContent('How did I sleep?');
+    expect(getByTestId('chat-bubble-assistant')).toHaveTextContent('You slept a little less than usual.');
   });
 
   it('shows an empty state when there is no conversation yet', async () => {
@@ -236,7 +443,7 @@ describe('CoachScreen: errors and retry', () => {
     type(utils, 'Hello');
     fireEvent.press(utils.getByTestId('coach-send-button'));
 
-    await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('CoachConsent', { prefill: undefined }));
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('CoachConsent', { prefill: undefined }));
   });
 
   it('shows the coach as unavailable when the server says it is disabled (404)', async () => {
@@ -331,5 +538,23 @@ describe('CoachScreen: safety reply', () => {
 
     await utils.findByTestId('coach-error');
     expect(utils.getByText('Not sent')).toBeTruthy();
+  });
+});
+
+describe('CoachScreen: tab bar clearance', () => {
+  // No SafeAreaProvider here, so the bottom inset falls back to the bar margin.
+  const clearance = FLOATING_BAR_HEIGHT + FLOATING_BAR_MARGIN + 16;
+
+  it('clears the floating bar with a wrapper the keyboard-avoiding view cannot override', async () => {
+    const { getByTestId } = await openChat();
+
+    expect(StyleSheet.flatten(getByTestId('coach-clearance').props.style).paddingBottom).toBe(clearance);
+  });
+
+  it('drops the clearance while the keyboard is open, because the bar hides', async () => {
+    (useKeyboardVisible as jest.Mock).mockReturnValue(true);
+    const { getByTestId } = await openChat();
+
+    expect(StyleSheet.flatten(getByTestId('coach-clearance').props.style).paddingBottom).toBe(0);
   });
 });

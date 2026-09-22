@@ -43,10 +43,10 @@ jest.mock('../../src/screens/ConnectHealthScreen', () => {
   const ReactLib = require('react');
   return { ConnectHealthScreen: () => ReactLib.createElement(Text, null, 'CONNECT_SCREEN') };
 });
-jest.mock('../../src/screens/DashboardScreen', () => {
+jest.mock('../../src/navigation/TabsNavigator', () => {
   const { Text } = require('react-native');
   const ReactLib = require('react');
-  return { DashboardScreen: () => ReactLib.createElement(Text, null, 'DASHBOARD_SCREEN') };
+  return { TabsNavigator: () => ReactLib.createElement(Text, null, 'TABS_SCREEN') };
 });
 
 function signedIn(signed: boolean) {
@@ -78,19 +78,19 @@ describe('RootNavigator', () => {
 
     const { getByText } = render(<RootNavigator />);
 
-    await waitFor(() => expect(getByText('DASHBOARD_SCREEN')).toBeTruthy());
+    await waitFor(() => expect(getByText('TABS_SCREEN')).toBeTruthy());
     expect(syncTimezone).toHaveBeenCalledTimes(1);
   });
 
   // The old navigator hardcoded the connect screen, so an already-connected
   // user had no route back to their dashboard.
-  it('lands a connected user on the Dashboard', async () => {
+  it('lands a connected user on the tabs', async () => {
     signedIn(true);
     (apiFetch as jest.Mock).mockResolvedValue({ status: 'CONNECTED', lastSyncedAt: null });
 
     const { getByText } = render(<RootNavigator />);
 
-    await waitFor(() => expect(getByText('DASHBOARD_SCREEN')).toBeTruthy());
+    await waitFor(() => expect(getByText('TABS_SCREEN')).toBeTruthy());
     expect(apiFetch).toHaveBeenCalledWith('/me/connection');
   });
 
@@ -127,7 +127,7 @@ describe('RootNavigator', () => {
 
     const { getByText } = render(<RootNavigator />);
 
-    await waitFor(() => expect(getByText('DASHBOARD_SCREEN')).toBeTruthy());
+    await waitFor(() => expect(getByText('TABS_SCREEN')).toBeTruthy());
     expect(mockRegisteredScreens).toContain('ScoreDetail');
   });
 
@@ -137,7 +137,17 @@ describe('RootNavigator', () => {
 
     const { getByText } = render(<RootNavigator />);
 
-    await waitFor(() => expect(getByText('DASHBOARD_SCREEN')).toBeTruthy());
+    await waitFor(() => expect(getByText('TABS_SCREEN')).toBeTruthy());
     expect(mockRegisteredScreens).toContain('Patterns');
+  });
+
+  it('registers the Tabs route', async () => {
+    signedIn(true);
+    (apiFetch as jest.Mock).mockResolvedValue({ status: 'CONNECTED', lastSyncedAt: null });
+
+    const { getByText } = render(<RootNavigator />);
+
+    await waitFor(() => expect(getByText('TABS_SCREEN')).toBeTruthy());
+    expect(mockRegisteredScreens).toContain('Tabs');
   });
 });

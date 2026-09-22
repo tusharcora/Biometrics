@@ -17,6 +17,18 @@
   --color-score-good: 101 163 13;
   --color-score-fair: 217 119 6;
   --color-score-poor: 220 38 38;
+  --color-surface-raised: 255 255 255;
+  --color-hairline: 231 229 228;
+  --color-bar: 24 24 27;
+  --color-bar-icon: 212 212 216;
+  --color-bar-active: 250 250 249;
+  --color-bar-icon-active: 24 24 27;
+  --color-heat-empty: 245 245 244;
+  --color-heat-0: 231 229 228;
+  --color-heat-1: 254 215 170;
+  --color-heat-2: 253 186 116;
+  --color-heat-3: 251 146 60;
+  --color-heat-4: 234 88 12;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -35,5 +47,17 @@
     --color-score-good: 163 230 53;
     --color-score-fair: 251 191 36;
     --color-score-poor: 248 113 113;
+    --color-surface-raised: 32 32 36;
+    --color-hairline: 58 58 64;
+    --color-bar: 28 28 31;
+    --color-bar-icon: 212 212 216;
+    --color-bar-active: 250 250 249;
+    --color-bar-icon-active: 12 12 13;
+    --color-heat-empty: 20 20 23;
+    --color-heat-0: 39 39 42;
+    --color-heat-1: 124 45 18;
+    --color-heat-2: 194 65 12;
+    --color-heat-3: 234 88 12;
+    --color-heat-4: 251 146 60;
   }
 }

@@ -16,6 +16,16 @@ jest.mock('@react-navigation/native', () => ({
   DefaultTheme: { dark: false, colors: {}, fonts: {} },
   DarkTheme: { dark: true, colors: {}, fonts: {} },
 }));
+// RootNavigator now pulls in TabsNavigator, and the real bottom-tabs calls
+// createScreenFactory() in its module body -- an export the stub of
+// '@react-navigation/native' above drops, so the suite threw at import time.
+// Stubbed the same way TabsNavigator.test.tsx already does.
+jest.mock('@react-navigation/bottom-tabs', () => ({
+  createBottomTabNavigator: () => ({
+    Navigator: () => null,
+    Screen: () => null,
+  }),
+}));
 jest.mock('@react-navigation/native-stack', () => {
   const ReactLib = require('react');
   return {

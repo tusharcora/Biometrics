@@ -70,6 +70,18 @@ export const COLORS = {
     scoreGood: 'rgb(101, 163, 13)',
     scoreFair: 'rgb(217, 119, 6)',
     scorePoor: 'rgb(220, 38, 38)',
+    surfaceRaised: 'rgb(255, 255, 255)',
+    hairline: 'rgb(231, 229, 228)',
+    bar: 'rgb(24, 24, 27)',
+    barIcon: 'rgb(212, 212, 216)',
+    barActive: 'rgb(250, 250, 249)',
+    barIconActive: 'rgb(24, 24, 27)',
+    heatEmpty: 'rgb(245, 245, 244)',
+    heat0: 'rgb(231, 229, 228)',
+    heat1: 'rgb(254, 215, 170)',
+    heat2: 'rgb(253, 186, 116)',
+    heat3: 'rgb(251, 146, 60)',
+    heat4: 'rgb(234, 88, 12)',
   },
   dark: {
     background: 'rgb(12, 12, 13)',
@@ -81,6 +93,18 @@ export const COLORS = {
     scoreGood: 'rgb(163, 230, 53)',
     scoreFair: 'rgb(251, 191, 36)',
     scorePoor: 'rgb(248, 113, 113)',
+    surfaceRaised: 'rgb(32, 32, 36)',
+    hairline: 'rgb(58, 58, 64)',
+    bar: 'rgb(28, 28, 31)',
+    barIcon: 'rgb(212, 212, 216)',
+    barActive: 'rgb(250, 250, 249)',
+    barIconActive: 'rgb(12, 12, 13)',
+    heatEmpty: 'rgb(20, 20, 23)',
+    heat0: 'rgb(39, 39, 42)',
+    heat1: 'rgb(124, 45, 18)',
+    heat2: 'rgb(194, 65, 12)',
+    heat3: 'rgb(234, 88, 12)',
+    heat4: 'rgb(251, 146, 60)',
   },
 };
 
@@ -93,9 +117,21 @@ export const MOTION = {
     fast: 150,
     normal: 300,
     slow: 600,
+    reveal: 400,
   },
   easing: {
     standard: [0.4, 0, 0.2, 1] as const,
     decelerate: [0, 0, 0.2, 1] as const,
   },
+  // Spring configs shared by every pressable and sliding indicator, so no
+  // component inlines its own numbers.
+  spring: {
+    press: { damping: 15, stiffness: 300 },
+    settle: { damping: 20, stiffness: 200 },
+  },
+  // A pressed control settles at `scale`; with reduced motion it only dims to
+  // `reducedOpacity` instead of changing size.
+  press: { scale: 0.96, reducedOpacity: 0.7 },
+  // Delay between consecutive staggered entrances, in ms.
+  stagger: 70,
 };

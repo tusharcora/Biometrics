@@ -33,6 +33,8 @@ npm run build && npm test
 cd mobile
 npm install
 npm test
+# Running the app needs a development build (Skia is a native dependency, so Expo Go is not supported):
+npx expo run:ios   # or: npx expo run:android
 ```
 
 ## Known limitations

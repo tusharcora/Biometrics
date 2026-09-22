@@ -9,11 +9,22 @@ function isThemePreference(value: string | null): value is ThemePreference {
   return value === 'light' || value === 'dark' || value === 'system';
 }
 
+// Synchronously puts NativeWind on the dark default, before the first render,
+// so a light-OS launch does not flash light while the stored choice loads.
+export function applyDefaultThemeSync(): void {
+  colorScheme.set('dark');
+}
+
 // Restores the persisted choice into NativeWind's color scheme at app start.
 // Call once, before the first render that reads colors.
 export async function restoreThemePreference(): Promise<ThemePreference> {
-  const stored = await SecureStore.getItemAsync(STORAGE_KEY);
-  const preference = isThemePreference(stored) ? stored : 'system';
+  let stored: string | null = null;
+  try {
+    stored = await SecureStore.getItemAsync(STORAGE_KEY);
+  } catch {
+    // Keychain unavailable (e.g. an unsigned build): behave as if nothing is stored.
+  }
+  const preference = isThemePreference(stored) ? stored : 'dark';
   colorScheme.set(preference);
   return preference;
 }

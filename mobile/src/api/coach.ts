@@ -72,7 +72,10 @@ export interface CoachReplyDTO {
 
 export interface CoachHistoryMessageDTO {
   id: string;
-  role: 'USER' | 'ASSISTANT';
+  // The server's messageDTO (backend/src/coach/routes.ts) always lowercases
+  // the stored 'USER'/'ASSISTANT' enum before sending it; this must match
+  // that shape exactly, or every restored message is misread as the coach's.
+  role: 'user' | 'assistant';
   text: string;
   source?: string;
   createdAt: string;
