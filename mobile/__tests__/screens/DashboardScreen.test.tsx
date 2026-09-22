@@ -137,6 +137,30 @@ describe('DashboardScreen', () => {
     expect(mockNavigate).toHaveBeenCalledWith('MetricDetail', { metricType: 'STEPS', records: stepsRecords });
   });
 
+  // Signing in now lands here rather than on the connect screen, so a user who
+  // has never connected meets this state first: it has to offer the connect
+  // step, not describe a sync that cannot happen yet.
+  it('offers the connect step to a user who has never connected', async () => {
+    mockApi({ records: [], connection: { status: 'NOT_CONNECTED' } });
+
+    const { getByTestId } = render(<DashboardScreen />);
+
+    // Heading and button share the wording, so the testID is the unambiguous handle.
+    await waitFor(() => expect(getByTestId('connect-health-button')).toBeTruthy());
+
+    fireEvent.press(getByTestId('connect-health-button'));
+    expect(mockNavigate).toHaveBeenCalledWith('ConnectHealth');
+  });
+
+  it('does not offer the connect step to a connected user with no data yet', async () => {
+    mockApi({ records: [], connection: { status: 'CONNECTED' } });
+
+    const { queryByTestId, getByText } = render(<DashboardScreen />);
+
+    await waitFor(() => expect(getByText(/No data yet/i)).toBeTruthy());
+    expect(queryByTestId('connect-health-button')).toBeNull();
+  });
+
   it('shows an empty state when there are no records yet', async () => {
     mockApi({ records: [] });
 
