@@ -197,7 +197,13 @@ export function createCoachOrchestrator(deps: OrchestratorDeps) {
     const remaining = budget - (clock.now() - startedAt);
     const controller = new AbortController();
     const turn = { expired: false, modelCalls: 0 };
-    const results: TurnToolResult[] = preamble.today ? [{ name: 'getDailyScore', result: preamble.today }] : [];
+    // The preamble is presented to the model as a getDailyScore call for today
+    // (see PREAMBLE_CALL_ID below), so it is recorded with the same arguments:
+    // grounding compares them to catch a reference that could mean either this
+    // result or a later call for a different day.
+    const results: TurnToolResult[] = preamble.today
+      ? [{ name: 'getDailyScore', result: preamble.today, args: { date: today } }]
+      : [];
 
     const expire = (): CoachTurnResult => {
       turn.expired = true;
@@ -253,7 +259,7 @@ export function createCoachOrchestrator(deps: OrchestratorDeps) {
             } else if (outcome.ok) {
               ok = true;
               payload = outcome.result;
-              results.push({ name: call.name, result: outcome.result });
+              results.push({ name: call.name, result: outcome.result, args: call.args });
             } else {
               payload = { error: outcome.error };
             }
