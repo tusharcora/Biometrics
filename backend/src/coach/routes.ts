@@ -360,12 +360,27 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
       return;
     }
     try {
-      // Idempotent; a token seen under another account moves to this one (a shared device).
-      await prisma.pushToken.upsert({
-        where: { token },
-        create: { userId: req.userId!, token, platform },
-        update: { userId: req.userId!, platform },
+      // A device token must never silently change hands: whoever holds the
+      // string would otherwise redirect another account's coach notifications
+      // to their own device. The update is scoped to this user's own rows and
+      // the create leans on the unique constraint, so two concurrent claims
+      // cannot race one through. A genuinely shared device still works --
+      // signing out unregisters the token first (unregisterPushBestEffort).
+      const claimed = await prisma.pushToken.updateMany({
+        where: { token, userId: req.userId! },
+        data: { platform },
       });
+      if (claimed.count === 0) {
+        try {
+          await prisma.pushToken.create({ data: { userId: req.userId!, token, platform } });
+        } catch (err) {
+          if ((err as { code?: string } | null)?.code === 'P2002') {
+            res.status(409).json({ error: 'token_registered_to_another_account' });
+            return;
+          }
+          throw err;
+        }
+      }
       res.status(204).end();
     } catch (err) {
       logFailure('push_token_register', err);

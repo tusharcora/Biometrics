@@ -482,6 +482,23 @@ describe('pre-request crisis classifier', () => {
     expect(telemetry.named('coach.safety_classifier')[0]!.attributes).toMatchObject({ triggered: true, overridden: false });
   });
 
+  // Privacy: the event is keyed to a userId, so naming the matched category
+  // persisted "this user said something self-harm-shaped" into application
+  // logs -- which outlive the 90-day coach transcript retention and are often
+  // shipped off to a third-party aggregator.
+  it('does not record which crisis category fired against the user', async () => {
+    const user = await seededUser();
+    const provider = new ScriptedProvider([]);
+    const { orchestrator, telemetry } = setup(provider);
+
+    await orchestrator.handleTurn(turn(user.id, 'I want to kill myself'));
+
+    const event = telemetry.named('coach.safety_classifier')[0]!;
+    expect(event.attributes).toMatchObject({ triggered: true });
+    expect(Object.keys(event.attributes)).not.toContain('categories');
+    expect(JSON.stringify(event.attributes)).not.toMatch(/self_harm/);
+  });
+
   it('flags borderline phrasing (biased toward false positives)', async () => {
     const user = await seededUser();
     const provider = new ScriptedProvider([]);

@@ -12,7 +12,10 @@ const PATTERNS: Record<CrisisCategory, RegExp[]> = {
   self_harm: [
     /\bsuicid/,
     /\bkill(ing)?\s+(my\s*self|myself|me)\b/,
-    /\b(end|take)\s+(my\s+own\s+life|my\s+life|it\s+all)\b/,
+    /\b(end|ending|ended|take|taking|took)\s+(my\s+own\s+life|my\s+life)\b/,
+    // "end it all" is idiomatic; "taking it all (slower|in)" is not, so the
+    // take/took forms deliberately do not extend to this one.
+    /\b(end|ending|ended)\s+it\s+all\b/,
     /\bwant(ed)?\s+to\s+(die|be\s+dead|disappear)\b/,
     /\bwish\s+i\s+(was|were)\s+(dead|never\s+born)\b/,
     /\b(don't|do\s+not|dont)\s+want\s+to\s+(be\s+alive|live|be\s+here|wake\s+up|go\s+on)\b/,
@@ -20,7 +23,7 @@ const PATTERNS: Record<CrisisCategory, RegExp[]> = {
     /\bno\s+(reason|point)\s+(to|in)\s+(live|living|go\s+on|going\s+on|continue|continuing)\b/,
     /\b(can't|cannot|cant)\s+(go\s+on|do\s+this\s+anymore|take\s+it\s+anymore|keep\s+going)\b/,
     /\bself[\s-]?harm/,
-    /\b(hurt|harm|cut|cutting|injure)\s+(my\s*self|myself)\b/,
+    /\b(hurt|hurting|harm|harming|harmed|cut|cutting|injure|injuring|injured)\s+(my\s*self|myself)\b/,
     /\bover\s?dos(e|ed|ing)\b/,
   ],
   medication: [

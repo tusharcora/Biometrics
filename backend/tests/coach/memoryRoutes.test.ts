@@ -257,12 +257,33 @@ describe('push token endpoints', () => {
     expect(rows[0]).toMatchObject({ userId: user.id, platform: 'android' });
   });
 
-  it('a token seen under another account moves to the caller (unique token)', async () => {
+  // Used to assert the token MOVED to the second caller, which is what let any
+  // authenticated user redirect another account's notifications. A shared
+  // device now hands the token over explicitly: signing out unregisters it
+  // first, and only then can the next account claim it.
+  it('a token registered to another account is refused, not moved (409)', async () => {
     const a = await createUser();
     const b = await createUser();
     const t = token();
     await request(createApp()).post('/me/push-token').set(await authed(a.id)).send({ token: t, platform: 'ios' });
-    await request(createApp()).post('/me/push-token').set(await authed(b.id)).send({ token: t, platform: 'ios' });
+
+    const res = await request(createApp()).post('/me/push-token').set(await authed(b.id)).send({ token: t, platform: 'ios' });
+
+    expect(res.status).toBe(409);
+    const rows = await prisma.pushToken.findMany({ where: { token: t } });
+    expect(rows.map((r) => r.userId)).toEqual([a.id]);
+  });
+
+  it('the rightful owner can hand the token over by unregistering first', async () => {
+    const a = await createUser();
+    const b = await createUser();
+    const t = token();
+    await request(createApp()).post('/me/push-token').set(await authed(a.id)).send({ token: t, platform: 'ios' });
+    await request(createApp()).delete('/me/push-token').set(await authed(a.id)).send({ token: t });
+
+    const res = await request(createApp()).post('/me/push-token').set(await authed(b.id)).send({ token: t, platform: 'ios' });
+
+    expect(res.status).toBe(204);
     const rows = await prisma.pushToken.findMany({ where: { token: t } });
     expect(rows.map((r) => r.userId)).toEqual([b.id]);
   });

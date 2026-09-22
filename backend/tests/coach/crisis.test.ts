@@ -8,6 +8,13 @@ describe('pre-request crisis classifier', () => {
     ['borderline: better off without me', 'everyone would be better off without me', 'self_harm'],
     ['borderline: cannot go on (curly apostrophe)', 'I can’t go on like this', 'self_harm'],
     ['self harm phrase', 'urges to self-harm after a bad night', 'self_harm'],
+    // -ing/-ed phrasings: the patterns covered 'cutting' and 'killing' but not
+    // the other verbs, so these common wordings screened as ordinary messages.
+    ['progressive: hurting myself', 'i keep hurting myself', 'self_harm'],
+    ['progressive: harming myself', 'i have been harming myself', 'self_harm'],
+    ['progressive: injuring myself', 'injuring myself again', 'self_harm'],
+    ['progressive: ending it all', 'thinking about ending it all', 'self_harm'],
+    ['past: hurt myself', 'i hurt myself last night', 'self_harm'],
     ['overdose', 'what happens in an overdose', 'self_harm'],
     ['dosing question', 'how much melatonin should I take to sleep', 'medication'],
     ['borderline: any dose word', 'is a higher dose better?', 'medication'],
@@ -29,6 +36,8 @@ describe('pre-request crisis classifier', () => {
     'how did I sleep last night',
     'what is my HRV trend this month',
     'which habits hurt my sleep score',
+    'my legs hurt after that run',
+    'i am taking it all a bit slower this week',
     'should I go to bed earlier',
     'how does alcohol affect my recovery',
     'what was my resting heart rate yesterday',

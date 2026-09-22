@@ -352,6 +352,35 @@ describe('POST /me/push-token shape validation', () => {
     expect(await prisma.pushToken.count({ where: { token } })).toBe(0);
   });
 
+  // Security: the upsert was keyed on the globally unique token and rewrote
+  // userId unconditionally, so anyone holding another user's token could
+  // silently redirect their coach notifications.
+  it('refuses to move a token already registered to a different user', async () => {
+    const victim = await createUser();
+    const attacker = await createUser();
+    const token = `raw-shared-${victim.id}`;
+    await prisma.pushToken.create({ data: { userId: victim.id, token, platform: 'ios' } });
+
+    const res = await request(app()).post('/me/push-token').set(await authed(attacker.id)).send({ token, platform: 'ios' });
+
+    expect(res.status).toBe(409);
+    expect(res.body).toEqual({ error: 'token_registered_to_another_account' });
+    const row = await prisma.pushToken.findUnique({ where: { token } });
+    expect(row?.userId).toBe(victim.id);
+  });
+
+  it('re-registering your own token stays idempotent and can update the platform', async () => {
+    const user = await createUser();
+    const token = `raw-own-${user.id}`;
+    await prisma.pushToken.create({ data: { userId: user.id, token, platform: 'ios' } });
+
+    const res = await request(app()).post('/me/push-token').set(await authed(user.id)).send({ token, platform: 'android' });
+
+    expect(res.status).toBe(204);
+    const row = await prisma.pushToken.findUnique({ where: { token } });
+    expect(row).toMatchObject({ userId: user.id, platform: 'android' });
+  });
+
   it('flag-off (404 coach_disabled) and auth (401) behaviour is unchanged under expo', async () => {
     process.env.PUSH_PROVIDER = 'expo';
     const user = await createUser();

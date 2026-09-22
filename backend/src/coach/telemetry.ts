@@ -43,7 +43,7 @@ export interface CoachTelemetry {
   emit(event: CoachEvent): void;
 }
 
-const FORBIDDEN_KEYS = /^(text|message|content|body|prompt|reply|result|args|value|memory|digest|title)$/i;
+const FORBIDDEN_KEYS = /^(text|message|content|body|prompt|reply|result|args|value|memory|digest|title|categories|category)$/i;
 
 export class LoggerCoachTelemetry implements CoachTelemetry {
   constructor(private readonly log: (line: string) => void = (line) => console.info(line)) {}

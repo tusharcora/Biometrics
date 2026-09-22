@@ -63,7 +63,10 @@ function isoDate(d: Date): string {
 export async function resyncSleep(opts: ResyncOptions): Promise<ResyncSummary> {
   const now = opts.now ?? new Date();
   const endDate = isoDate(now);
-  const startDate = isoDate(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - BACKFILL_WINDOW_DAYS * DAY_MS));
+  // The floor, not the whole story: the delete below is unbounded by date, so
+  // the re-backfill has to reach at least as far back as the oldest row it
+  // destroys (computed per user), or that history is gone for good.
+  const windowStart = isoDate(new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()) - BACKFILL_WINDOW_DAYS * DAY_MS));
 
   const users = await prisma.user.findMany({
     where: opts.userId
@@ -92,6 +95,16 @@ export async function resyncSleep(opts: ResyncOptions): Promise<ResyncSummary> {
       summary.sleepRecordsDeleted += await prisma.biometricRecord.count({ where });
       continue;
     }
+
+    // Read the oldest night BEFORE deleting it, so the backfill window can be
+    // widened to cover everything this user is about to lose.
+    const oldest = await prisma.biometricRecord.findFirst({
+      where,
+      orderBy: { recordedAt: 'asc' },
+      select: { recordedAt: true },
+    });
+    const oldestDate = oldest ? isoDate(oldest.recordedAt) : undefined;
+    const startDate = oldestDate && oldestDate < windowStart ? oldestDate : windowStart;
 
     // Delete strictly before enqueueing: a backfill that ran first and then got
     // wiped would leave the user with no SLEEP rollups at all.

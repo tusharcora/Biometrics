@@ -153,6 +153,21 @@ describe('resyncSleep', () => {
     expect(enqueue).toHaveBeenCalledWith({ userId: user.id, startDate: expectedStart, endDate: '2026-09-20' });
   });
 
+  // Regression: the delete is unbounded by date but the backfill window was
+  // not, so any night older than BACKFILL_WINDOW_DAYS was wiped and never
+  // restored -- one-way data loss for a script documented as "safe to re-run".
+  it('re-backfills from the oldest deleted night, not just the default window', async () => {
+    const user = await createUser({ timezone: 'UTC' });
+    await prisma.biometricRecord.create({
+      data: { userId: user.id, metricType: 'SLEEP', recordedAt: new Date('2026-03-04T00:00:00Z'), value: 400 },
+    });
+    const enqueue = jest.fn();
+
+    await resyncSleep({ apply: true, userId: user.id, enqueue, now: new Date('2026-09-20T15:00:00Z') });
+
+    expect(enqueue).toHaveBeenCalledWith({ userId: user.id, startDate: '2026-03-04', endDate: '2026-09-20' });
+  });
+
   it('only touches the requested user with --user', async () => {
     const target = await createUser();
     const other = await createUser();
