@@ -190,6 +190,7 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
           message: message.trim(),
           history,
           safetyOverride: safetyOverride === true,
+          conversationId: conversationId ?? null,
         }),
       );
 
@@ -214,6 +215,13 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
         }
         await tx.coachMessage.create({ data: { conversationId: id, ...userData } });
         const assistant = await tx.coachMessage.create({ data: { conversationId: id, ...assistantData } });
+        // Proposals are written during the turn, before a brand-new
+        // conversation has an id. Stamp them here so the user's next message in
+        // THIS conversation -- and only this one -- can settle them.
+        const proposalIds = (turn.memoryProposals ?? []).map((m) => m.id);
+        if (proposalIds.length > 0) {
+          await tx.coachMemory.updateMany({ where: { id: { in: proposalIds }, userId }, data: { conversationId: id } });
+        }
         return { id, assistant };
       });
 

@@ -61,7 +61,7 @@ export async function runFixture(fixture: EvalFixture): Promise<FixtureResult> {
   const failures: CheckFailure[] = [];
   const fail = (check: CheckFailure['check'], message: string) => failures.push({ check, message });
   let text = '';
-  const { userId } = await seedSnapshot(fixture.snapshot);
+  const { userId, conversationId } = await seedSnapshot(fixture.snapshot);
   try {
     const provider = new ScriptedProvider(fixture.script);
     const telemetry = new CollectingTelemetry();
@@ -71,7 +71,7 @@ export async function runFixture(fixture: EvalFixture): Promise<FixtureResult> {
       clock: inertClock,
       tools: withGroundedOverrides(coachTools, fixture.groundedOverrides),
     });
-    const result = await orchestrator.handleTurn({ userId, message: fixture.question, history: [] });
+    const result = await orchestrator.handleTurn({ userId, message: fixture.question, history: [], conversationId });
     text = result.text;
     const want = fixture.expect;
 

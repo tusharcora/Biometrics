@@ -357,6 +357,7 @@ model CoachConversation {
   createdAt     DateTime       @default(now())
   lastMessageAt DateTime       @default(now())
   messages      CoachMessage[]
+  memories      CoachMemory[]
 
   @@index([userId, lastMessageAt])
 }
@@ -416,8 +417,18 @@ model CoachMemory {
   status      CoachMemoryStatus   @default(PENDING)
   createdAt   DateTime            @default(now())
   confirmedAt DateTime?
+  // The conversation the proposal was made in. A PENDING entry is settled by
+  // the user's next message IN THAT CONVERSATION; without this, a message in
+  // any other conversation confirmed or dismissed it. Null only for rows that
+  // predate this column.
+  conversationId String?
+  conversation   CoachConversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
+  // Dedupe enforced by the database, not only by the read-then-write check in
+  // createPendingMemories, which two turns could pass at the same time.
+  @@unique([userId, category, value])
   @@index([userId, status, createdAt])
+  @@index([conversationId, status])
 }
 
 // The weekly synthesis recap. One per user per local week (weekStart is the
