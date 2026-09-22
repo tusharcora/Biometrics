@@ -126,10 +126,13 @@ export function createCoachOrchestrator(deps: OrchestratorDeps) {
     //    message ("that's not why I'm asking") but is still telemetry-logged.
     const crisis = classifyCrisis(input.message);
     if (crisis.triggered || input.safetyOverride) {
+      // Deliberately no category: this event carries a userId, so naming the
+      // match would persist a mental-health signal about a named user into
+      // application logs, which outlive the coach transcript retention window.
+      // triggered/overridden are enough to monitor the classifier's rate.
       emit('coach.safety_classifier', {
         triggered: crisis.triggered,
         overridden: Boolean(input.safetyOverride),
-        categories: crisis.categories.join(','),
       });
     }
     const tier = routeTier(input.message);
