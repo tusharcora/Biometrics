@@ -7,7 +7,7 @@ import { fetchMetricRange, fetchSleepSessions, DailyMetricType } from '../health
 import { refreshHealthTokens } from '../health/oauth';
 import { deleteUserSubscription } from '../health/subscriber';
 import { decryptToken } from '../crypto/tokenCipher';
-import { upsertBiometricRecords, storeSleepSessions } from '../biometrics/repository';
+import { upsertBiometricRecords, storeSleepSessions, datesNeedingRescore } from '../biometrics/repository';
 import { BiometricMetricType, HealthMetricPoint, SleepSessionPoint } from '../types';
 import { FetchJobData, BackfillJobData } from './queue';
 import { isEmptyWindow } from './window';
@@ -144,7 +144,13 @@ class JobTokenSession {
 // biometrics/repository.ts for why summing per-day rows was rejected.
 async function syncSleep(session: JobTokenSession, userId: string, startDate: string, endDate: string): Promise<string[]> {
   const [from, to] = sleepWindow(startDate, endDate);
-  return storeSleepSessions(userId, await session.fetchSleep(from, to));
+  const touched = await storeSleepSessions(userId, await session.fetchSleep(from, to));
+  // A night is an input to its own day AND to every later day whose sleep-debt
+  // window still contains it, so a night that arrives late (a delayed webhook,
+  // a reconnect backfill, a night Google revised) invalidates the fortnight
+  // after it too. The nightly sweep will not catch those days: its staleness
+  // test is per day, and their own inputs never changed.
+  return datesNeedingRescore(touched);
 }
 
 // HRV, RHR and SLEEP feed the Recovery Score (SLEEP also feeds the Sleep Score);

@@ -6,6 +6,7 @@ import {
   recomputeSleepRollups,
   recomputeAllSleepRollups,
   storeSleepSessions,
+  datesNeedingRescore,
   upsertBiometricRecords,
 } from '../../src/biometrics/repository';
 import { SleepSessionPoint } from '../../src/types';
@@ -345,5 +346,34 @@ describe("sleep rollups keyed by the record's own UTC offset", () => {
     await upsertSleepSessions(user.id, [withOffsets('2026-09-02T14:00:00Z', '2026-09-02T22:00:00Z', 440, 32400, 32400)]);
     await recomputeSleepRollups(user.id, ['2026-09-02', '2026-09-03']);
     expect(await rollups(user.id)).toEqual([{ date: '2026-09-03', value: 440 }]);
+  });
+});
+
+describe('datesNeedingRescore', () => {
+  // A night is an input to its own day AND to every later day whose sleep-debt
+  // window still contains it. Returning only the touched day left the next two
+  // weeks scored against a window that no longer matched the data -- and the
+  // nightly sweep cannot catch it, because those days' own inputs never moved.
+  it('covers the whole sleep-debt window forward from each changed night', () => {
+    const out = datesNeedingRescore(['2026-09-02'], '2026-12-31');
+
+    expect(out[0]).toBe('2026-09-02');
+    expect(out).toHaveLength(14);
+    expect(out[13]).toBe('2026-09-15');
+  });
+
+  it('never asks for a day that has not happened yet', () => {
+    const out = datesNeedingRescore(['2026-09-02'], '2026-09-04');
+    expect(out).toEqual(['2026-09-02', '2026-09-03', '2026-09-04']);
+  });
+
+  it('merges overlapping windows instead of repeating days', () => {
+    const out = datesNeedingRescore(['2026-09-02', '2026-09-03'], '2026-12-31');
+    expect(new Set(out).size).toBe(out.length);
+    expect(out).toHaveLength(15);
+  });
+
+  it('returns nothing for no changed nights', () => {
+    expect(datesNeedingRescore([], '2026-12-31')).toEqual([]);
   });
 });

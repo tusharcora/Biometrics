@@ -565,8 +565,14 @@ describe('processSyncJob', () => {
 
       await processSyncJob({ name: 'fetch', data: { userId: user.id, metricType: 'SLEEP', date: '2026-09-02' } } as Job);
 
-      expect(enqueue()).toHaveBeenCalledTimes(1);
-      expect(enqueue()).toHaveBeenCalledWith(user.id, '2026-09-01');
+      const dates = enqueue().mock.calls.map((c: unknown[]) => c[1]);
+      // The night's own local day, derived from the user's zone, comes first.
+      expect(dates[0]).toBe('2026-09-01');
+      expect(enqueue().mock.calls.every((c: unknown[]) => c[0] === user.id)).toBe(true);
+      // ...and the days after it, whose sleep-debt window now contains this night.
+      expect(dates).toContain('2026-09-02');
+      expect(dates).toContain('2026-09-14');
+      expect(new Set(dates).size).toBe(dates.length);
     });
 
     it('requests one recompute per distinct day for a backfill, not one per metric', async () => {

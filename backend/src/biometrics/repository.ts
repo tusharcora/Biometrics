@@ -1,3 +1,5 @@
+import { shiftDate } from '../scoring/dates';
+import { getLiveConfig } from '../scoring/configs';
 import { prisma } from '../db/client';
 import { BiometricMetricType, HealthMetricPoint, SleepSessionPoint } from '../types';
 import { sessionEndCivilDate, civilDateToUtcMidnight } from './civilDate';
@@ -205,6 +207,37 @@ export async function storeSleepSessions(userId: string, sessions: SleepSessionP
   const dates = [...new Set(touched.map((end) => sessionEndCivilDate(end, timeZone)))].sort();
   await recomputeSleepRollups(userId, dates);
   return dates;
+}
+
+/**
+ * The days whose scores a set of changed sleep nights invalidates.
+ *
+ * A night is not only an input to its own day: sleepDebtRolling sums the
+ * deficit over a trailing window, so night D is still inside the window of
+ * every day up to D + windowDays - 1. Returning only the touched dates meant a
+ * late webhook, a reconnect backfill or a night Google revised re-scored day D
+ * alone and left the following two weeks computed from a window that no longer
+ * matched the data. The nightly sweep does not catch it either: its staleness
+ * test is per day, and those days' own inputs never changed.
+ *
+ * Nothing is emitted past today -- there is no score to recompute for a day
+ * that has not happened.
+ */
+export function datesNeedingRescore(touchedDates: string[], today = isoDateOf(new Date())): string[] {
+  const windowDays = getLiveConfig().sleepDebtWindowDays;
+  const out = new Set<string>();
+  for (const date of touchedDates) {
+    for (let i = 0; i < windowDays; i++) {
+      const d = shiftDate(date, i);
+      if (d > today) break;
+      out.add(d);
+    }
+  }
+  return [...out].sort();
+}
+
+function isoDateOf(d: Date): string {
+  return d.toISOString().slice(0, 10);
 }
 
 export async function getBiometricsForUser(userId: string) {
