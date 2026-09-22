@@ -140,7 +140,13 @@ export async function loadAnalysisInput(
   const observed = buildObservedDays(
     logs.map((l) => ({ habitType: l.habitType, value: l.value, habitDay: isoDay(l.habitDay) })),
     checkIns.map((c) => isoDay(c.habitDay)),
-    types,
+    // A custom type is only observable from the day it was created, in the
+    // user's own zone; before that its "unexposed" days are invented.
+    types.map((t) => ({
+      type: t.type,
+      exposureThreshold: t.exposureThreshold,
+      ...(t.createdAt ? { observedFrom: habitDayFor(t.createdAt, user?.timezone ?? 'UTC') } : {}),
+    })),
   );
   const habits = types
     .map((t) => ({ habitType: t.type, observations: observed.get(t.type) ?? [] }))

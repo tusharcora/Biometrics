@@ -13,6 +13,7 @@ export async function listHabitTypes(userId: string): Promise<HabitTypeConfig[]>
       unit: c.unit,
       exposureThreshold: c.exposureThreshold,
       builtIn: false,
+      createdAt: c.createdAt,
     })),
   ];
 }

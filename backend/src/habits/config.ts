@@ -30,6 +30,13 @@ export interface HabitTypeConfig {
   unit: string;
   exposureThreshold: number;
   builtIn: boolean;
+  /**
+   * When a custom type was created. Days before it cannot be observations of
+   * it -- the user had no way to log something that did not exist yet -- so
+   * they must not be seeded as "unexposed". Absent for built-ins, which have
+   * always been available.
+   */
+  createdAt?: Date;
 }
 
 // Built-ins live in code (not seeded per user) so a threshold change ships with
