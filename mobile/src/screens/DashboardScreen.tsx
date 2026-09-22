@@ -16,7 +16,6 @@ import { Ring } from '../components/ui/ring';
 import { ScoreRing } from '../components/ui/score-ring';
 import { BaselineProgressRing } from '../components/ui/baseline-progress-ring';
 import { ConfidenceBadge } from '../components/ui/confidence-badge';
-import { TrendLine } from '../components/ui/trend-line';
 import { CountUp } from '../components/ui/count-up';
 import { ThemeToggle } from '../components/ui/theme-toggle';
 import { HabitLogCard } from '../components/habit-log-card';
@@ -309,17 +308,6 @@ export function DashboardScreen() {
 
         {coachRoute === 'Coach' ? <CoachDigestCard /> : null}
 
-        <Pressable testID="patterns-button" onPress={() => navigation.navigate('Patterns')} className="active:opacity-80">
-          <Card className="flex-row items-center gap-3">
-            <Ionicons name="git-compare-outline" size={18} color={colors.accent} />
-            <View className="flex-1 gap-0.5">
-              <Text className="text-base font-semibold">Patterns</Text>
-              <Text className="text-xs text-muted-foreground">How your habits line up with your recovery</Text>
-            </View>
-            <Ionicons name="chevron-forward" size={18} color={colors.muted} />
-          </Card>
-        </Pressable>
-
         {coachRoute ? (
           <Pressable testID="coach-entry-button" onPress={() => navigateToCoachEntry(navigation, coachRoute)} className="active:opacity-80">
             <Card className="flex-row items-center gap-3">
@@ -374,31 +362,7 @@ export function DashboardScreen() {
             <Text className="flex-1 text-sm text-muted-foreground">{insight}</Text>
           </Card>
         ) : null}
-
-        <Text className="text-sm font-semibold text-muted-foreground">Trends</Text>
-        {METRIC_ORDER.map((type) => {
-          const series = seriesFor(records, type);
-          if (series.length === 0) return null;
-          const config = METRIC_CONFIG[type];
-          const color = scheme === 'dark' ? config.color.dark : config.color.light;
-          const latestRecord = series[series.length - 1];
-          return (
-            <Pressable key={type} testID={`trend-card-${type}`} onPress={() => openDetail(type)} className="active:opacity-80">
-              <Card className="gap-3">
-                <View className="flex-row items-center justify-between">
-                  <View className="flex-row items-center gap-2">
-                    <Ionicons name={config.icon as any} size={16} color={color} />
-                    <Text className="font-medium">{config.label}</Text>
-                  </View>
-                  <Text className="font-semibold" style={{ fontVariant: ['tabular-nums'] }}>
-                    {config.format(latestRecord.value)}
-                  </Text>
-                </View>
-                <TrendLine data={series.map((r) => r.value)} color={color} />
-              </Card>
-            </Pressable>
-          );
-        })}
+        {/* Per-metric trends and the Patterns entry live on the Metrics tab. */}
       </ScrollView>
     </SafeAreaView>
   );

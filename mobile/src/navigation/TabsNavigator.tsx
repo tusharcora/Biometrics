@@ -4,7 +4,8 @@ import { useColorScheme } from 'nativewind';
 import { DashboardScreen } from '../screens/DashboardScreen';
 import { CoachScreen } from '../screens/CoachScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
-import { TabPlaceholderScreen } from '../screens/TabPlaceholderScreen';
+import { ActivityScreen } from '../screens/ActivityScreen';
+import { MetricsScreen } from '../screens/MetricsScreen';
 import { COLORS } from '../theme';
 import { FloatingTabBar } from './FloatingTabBar';
 
@@ -18,9 +19,6 @@ export type TabParamList = {
 };
 
 const Tab = createBottomTabNavigator<TabParamList>();
-
-const ActivityTab = () => <TabPlaceholderScreen title="Activity" note="Your activity heat map is coming soon." />;
-const MetricsTab = () => <TabPlaceholderScreen title="Metrics" note="Trends for each metric are coming soon." />;
 
 export function TabsNavigator() {
   const { colorScheme } = useColorScheme();
@@ -39,9 +37,9 @@ export function TabsNavigator() {
       }}
     >
       <Tab.Screen name="Home" component={DashboardScreen} options={{ headerShown: false }} />
-      <Tab.Screen name="Activity" component={ActivityTab} options={{ headerShown: false }} />
+      <Tab.Screen name="Activity" component={ActivityScreen} options={{ headerShown: false }} />
       <Tab.Screen name="Coach" component={CoachScreen} options={{ title: 'AI Coach' }} />
-      <Tab.Screen name="Metrics" component={MetricsTab} options={{ headerShown: false }} />
+      <Tab.Screen name="Metrics" component={MetricsScreen} options={{ headerShown: false }} />
       <Tab.Screen name="Profile" component={SettingsScreen} options={{ title: 'Profile' }} />
     </Tab.Navigator>
   );

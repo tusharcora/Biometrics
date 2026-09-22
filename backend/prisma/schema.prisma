@@ -92,6 +92,9 @@ model HealthConnection {
   webhookSubscriptionId String?
   status                HealthConnectionStatus @default(CONNECTED)
   lastSyncedAt          DateTime?
+  // Set once the one-off 365-day STEPS history backfill (activity heat map)
+  // has succeeded; null means it still needs to run (see sync/stepsHistory.ts).
+  stepsHistoryBackfilledAt DateTime?
   createdAt             DateTime               @default(now())
   updatedAt             DateTime               @updatedAt
 }

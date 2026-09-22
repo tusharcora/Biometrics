@@ -58,7 +58,7 @@ describe('DashboardScreen: weekly digest card', () => {
     (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, enabled: false });
     const { findByTestId, queryByTestId } = render(<DashboardScreen />);
 
-    await findByTestId('patterns-button');
+    await findByTestId('metric-card-STEPS');
     await waitFor(() => expect(fetchCoachStatus).toHaveBeenCalled());
     expect(fetchLatestDigest).not.toHaveBeenCalled();
     expect(queryByTestId('coach-digest-card')).toBeNull();
@@ -77,7 +77,7 @@ describe('DashboardScreen: weekly digest card', () => {
     (fetchCoachStatus as jest.Mock).mockRejectedValue(new Error('offline'));
     const { findByTestId, queryByTestId } = render(<DashboardScreen />);
 
-    await findByTestId('patterns-button');
+    await findByTestId('metric-card-STEPS');
     await waitFor(() => expect(fetchCoachStatus).toHaveBeenCalled());
     expect(fetchLatestDigest).not.toHaveBeenCalled();
     expect(queryByTestId('coach-digest-card')).toBeNull();
@@ -88,6 +88,6 @@ describe('DashboardScreen: weekly digest card', () => {
     const { findByTestId } = render(<DashboardScreen />);
 
     expect(await findByTestId('coach-digest-error')).toBeTruthy();
-    expect(await findByTestId('patterns-button')).toBeTruthy();
+    expect(await findByTestId('metric-card-STEPS')).toBeTruthy();
   });
 });

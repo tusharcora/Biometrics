@@ -9,8 +9,9 @@ import { deleteUserSubscription } from '../health/subscriber';
 import { decryptToken } from '../crypto/tokenCipher';
 import { upsertBiometricRecords, storeSleepSessions, datesNeedingRescore } from '../biometrics/repository';
 import { BiometricMetricType, HealthMetricPoint, SleepSessionPoint } from '../types';
-import { FetchJobData, BackfillJobData } from './queue';
+import { FetchJobData, BackfillJobData, STEPS_HISTORY_BACKFILL_JOB, StepsHistoryBackfillJobData } from './queue';
 import { isEmptyWindow } from './window';
+import { stepsHistoryWindow } from './stepsHistory';
 import { refreshedTokenUpdateData } from './tokenUpdate';
 import { computeDailyScore } from '../scoring/compute';
 import { runScoreSweep } from '../scoring/sweep';
@@ -240,11 +241,43 @@ async function handleBackfillJob(data: BackfillJobData): Promise<void> {
   }
 }
 
+/**
+ * A year of daily STEPS for the activity heat map, and nothing else. Separate
+ * from handleBackfillJob so the scoring inputs (a 30-day backfill of all four
+ * metrics) are unchanged. STEPS is not a score input, so no scores are
+ * requested, and lastSyncedAt is left alone: this is history, not a sync.
+ */
+async function handleStepsHistoryJob(data: StepsHistoryBackfillJobData): Promise<void> {
+  const conn = await prisma.healthConnection.findUnique({ where: { userId: data.userId } });
+  if (!conn || conn.status === 'DISCONNECTED') return;
+
+  const { startDate, endDate } = stepsHistoryWindow();
+  try {
+    if (!isEmptyWindow(startDate, endDate)) {
+      // fetchMetricRange chunks the year into windows Google accepts.
+      const points = await new JobTokenSession(conn).fetch('STEPS', startDate, endDate);
+      await upsertBiometricRecords(data.userId, 'STEPS', points);
+    }
+    await prisma.healthConnection.update({
+      where: { userId: data.userId },
+      data: { stepsHistoryBackfilledAt: new Date() },
+    });
+  } catch (err) {
+    if (isUnauthorized(err)) {
+      await disconnect(data.userId, conn.webhookSubscriptionId);
+      return;
+    }
+    throw err; // other errors (e.g. 429) are retried by BullMQ's job retry policy
+  }
+}
+
 export async function processSyncJob(job: Job): Promise<void> {
   if (job.name === 'fetch') {
     await handleFetchJob(job.data as FetchJobData);
   } else if (job.name === 'backfill') {
     await handleBackfillJob(job.data as BackfillJobData);
+  } else if (job.name === STEPS_HISTORY_BACKFILL_JOB) {
+    await handleStepsHistoryJob(job.data as StepsHistoryBackfillJobData);
   } else if (job.name === TOKEN_REFRESH_SWEEP_JOB) {
     // Scheduled through the queue so exactly one instance sweeps per tick.
     await runTokenRefreshSweep();

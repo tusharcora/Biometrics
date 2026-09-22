@@ -122,19 +122,15 @@ describe('DashboardScreen', () => {
     expect(mockNavigate).toHaveBeenCalledWith('MetricDetail', { metricType: 'STEPS', records: stepsRecords });
   });
 
-  it('opens a metric detail page when its trend card is pressed', async () => {
-    const stepsRecords = [
-      { id: '1', metricType: 'STEPS', value: 8000, recordedAt: '2026-09-01T00:00:00.000Z' },
-      { id: '2', metricType: 'STEPS', value: 12000, recordedAt: '2026-09-02T00:00:00.000Z' },
-    ];
-    mockApi({ records: stepsRecords });
+  // Trends and the Patterns entry moved to the Metrics tab (spec 2.2).
+  it('no longer shows the trend list or the Patterns entry', async () => {
+    mockApi({ records: [{ id: '1', metricType: 'STEPS', value: 8000, recordedAt: '2026-09-01T00:00:00.000Z' }] });
 
-    const { getByTestId } = render(<DashboardScreen />);
+    const { findByTestId, queryByTestId } = render(<DashboardScreen />);
 
-    await waitFor(() => expect(getByTestId('trend-card-STEPS')).toBeTruthy());
-    fireEvent.press(getByTestId('trend-card-STEPS'));
-
-    expect(mockNavigate).toHaveBeenCalledWith('MetricDetail', { metricType: 'STEPS', records: stepsRecords });
+    await findByTestId('metric-card-STEPS');
+    expect(queryByTestId('trend-card-STEPS')).toBeNull();
+    expect(queryByTestId('patterns-button')).toBeNull();
   });
 
   // Signing in now lands here rather than on the connect screen, so a user who
@@ -277,17 +273,6 @@ describe('DashboardScreen', () => {
       await waitFor(() => expect(getByText(/Habits are unavailable/i)).toBeTruthy());
       expect(getByTestId('habit-log-retry')).toBeTruthy();
       expect(getByTestId('metric-card-STEPS')).toBeTruthy();
-    });
-
-    it('opens the Patterns screen from the dashboard', async () => {
-      mockApi({ records: steps });
-
-      const { getByTestId } = render(<DashboardScreen />);
-
-      await waitFor(() => expect(getByTestId('patterns-button')).toBeTruthy());
-      fireEvent.press(getByTestId('patterns-button'));
-
-      expect(mockNavigate).toHaveBeenCalledWith('Patterns');
     });
   });
 

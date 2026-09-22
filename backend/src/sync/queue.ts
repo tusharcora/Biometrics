@@ -31,6 +31,26 @@ export function enqueueBackfillJob(data: BackfillJobData) {
   return syncQueue.add('backfill', data);
 }
 
+export const STEPS_HISTORY_BACKFILL_JOB = 'backfillStepsHistory';
+
+export interface StepsHistoryBackfillJobData {
+  userId: string;
+}
+
+/**
+ * One job per user at a time: the job id dedupes a connect that races the
+ * startup sweep. Removed on completion AND failure so the id is free again for
+ * the next reconnect or server start (the job is idempotent either way).
+ */
+export function enqueueStepsHistoryBackfill(userId: string) {
+  return syncQueue.add(STEPS_HISTORY_BACKFILL_JOB, { userId } satisfies StepsHistoryBackfillJobData, {
+    // BullMQ rejects a custom job id containing ':'.
+    jobId: `${STEPS_HISTORY_BACKFILL_JOB}-${userId}`,
+    removeOnComplete: true,
+    removeOnFail: true,
+  });
+}
+
 /**
  * Schedules the token refresh sweep as a repeatable queue job rather than a
  * per-process setInterval. Without this, every backend instance would sweep

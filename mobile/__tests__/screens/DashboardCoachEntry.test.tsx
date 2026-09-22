@@ -58,7 +58,7 @@ describe('DashboardScreen: AI Coach entry', () => {
     (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, enabled: false });
     const { findByTestId, queryByTestId, queryByText } = render(<DashboardScreen />);
 
-    await findByTestId('patterns-button');
+    await findByTestId('metric-card-STEPS');
     await waitFor(() => expect(fetchCoachStatus).toHaveBeenCalled());
     expect(queryByTestId('coach-entry-button')).toBeNull();
     expect(queryByText(/AI Coach/i)).toBeNull();
@@ -68,7 +68,7 @@ describe('DashboardScreen: AI Coach entry', () => {
     (fetchCoachStatus as jest.Mock).mockRejectedValue(new Error('offline'));
     const { findByTestId, queryByTestId } = render(<DashboardScreen />);
 
-    await findByTestId('patterns-button');
+    await findByTestId('metric-card-STEPS');
     await waitFor(() => expect(fetchCoachStatus).toHaveBeenCalled());
     expect(queryByTestId('coach-entry-button')).toBeNull();
   });
