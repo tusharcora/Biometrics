@@ -3,8 +3,17 @@ import { ApiError, apiFetch } from './client';
 // The whole coach reply arrives at once (spec 2: no incremental streaming).
 // The server gives a turn 12 s end to end before it returns its own fallback
 // reply, so the client must wait strictly longer -- otherwise a slow turn would
-// surface as a network error instead of the server's fallback.
-export const COACH_REQUEST_TIMEOUT_MS = 20_000;
+// surface as a network error instead of the server's fallback. A slower local
+// model runs with a raised server budget (COACH_FAST_BUDGET_MS); set
+// EXPO_PUBLIC_COACH_TIMEOUT_MS above it to match.
+export const DEFAULT_COACH_REQUEST_TIMEOUT_MS = 20_000;
+
+export function coachTimeoutFromEnv(raw: string | undefined): number {
+  const n = Number(raw);
+  return raw && Number.isFinite(n) && n > 0 ? n : DEFAULT_COACH_REQUEST_TIMEOUT_MS;
+}
+
+export const COACH_REQUEST_TIMEOUT_MS = coachTimeoutFromEnv(process.env.EXPO_PUBLIC_COACH_TIMEOUT_MS);
 
 export interface CoachPersonaDTO {
   id: string;

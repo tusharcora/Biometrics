@@ -3,7 +3,7 @@ import { AuthedRequest, requireAuth } from '../auth/middleware';
 import { prisma } from '../db/client';
 import { CoachClock, systemClock } from './clock';
 import { COACH_CONSENT, COACH_CONSENT_VERSION, grantConsent, hasCurrentConsent, revokeConsent } from './consent';
-import { getCoachProvider, isCoachEnabled, isExpoPushProvider } from './config';
+import { getCoachBudgets, getCoachProvider, isCoachEnabled, isExpoPushProvider } from './config';
 import { isExpoPushToken } from './push';
 import { TurnInProgressError, TurnRateLimitedError, withTurnGuard } from './turnGuard';
 import type { CoachModelProvider } from './model/provider';
@@ -53,8 +53,9 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
     telemetry: overrides.telemetry ?? new LoggerCoachTelemetry(),
     clock: overrides.clock ?? systemClock,
     ...(overrides.tools ? { tools: overrides.tools } : {}),
-    ...(overrides.budgets ? { budgets: overrides.budgets } : {}),
   };
+  const budgets = overrides.budgets ?? getCoachBudgets();
+  if (budgets) deps.budgets = budgets;
   const router = Router();
 
   // Auth first, so an unauthenticated caller learns nothing about the flag.

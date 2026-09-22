@@ -1,5 +1,24 @@
 # Local model as the AI coach: spike results and future plan
 
+## Update 2026-09-22: shipped as a provider
+
+`COACH_PROVIDER=ollama` now selects `src/coach/model/ollama.ts` (loopback-only by
+default; see `backend/.env.example`). The spike probe became `npm run eval:coach:local`.
+Same 34 fixtures, 300 s budget, on the M1 Pro:
+
+| | `feadxus/flux2-klein-4b-uncensored` (Qwen3 4B) | `qwen3.8:27b` |
+|---|---|---|
+| Model replies | 34/34 | 32/34 (2 safe fallbacks after a failed regenerate) |
+| First-try guardrail rejects | 11 | 5 |
+| Tool use | **never called a tool** (history/goal questions answered from the preamble or "not available") | right tool every time |
+| Median / p90 latency | 3.4 s / 5.3 s | 30 s / 72 s |
+| Within 12 s / 90 s | 34 / 34 | 0 / 30 |
+
+Recommended setup: `OLLAMA_MODEL=qwen3.8:27b`, `COACH_FAST_BUDGET_MS=90000`, and the
+app's `EXPO_PUBLIC_COACH_TIMEOUT_MS=95000`. The 4B is fast but its lack of tool use
+makes it answer wrongly; it is also an "uncensored" fine-tune, which is a poor fit for
+a health coach. The original spike write-up follows.
+
 Status: **spike done, follow-up parked** (2026-09-21). Nothing here ships; the coach is
 still dark by default (`COACH_ENABLED=false`) with only `UnconfiguredProvider` and
 `ScriptedProvider` in the tree.

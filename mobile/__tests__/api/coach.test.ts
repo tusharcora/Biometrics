@@ -2,6 +2,8 @@ import * as SecureStore from 'expo-secure-store';
 import { setBaseUrl } from '../../src/api/client';
 import {
   COACH_REQUEST_TIMEOUT_MS,
+  DEFAULT_COACH_REQUEST_TIMEOUT_MS,
+  coachTimeoutFromEnv,
   CoachConsentRequiredError,
   CoachDisabledError,
   StaleConversationError,
@@ -136,6 +138,14 @@ describe('sendCoachMessage', () => {
   it('uses a 20 s client timeout, longer than the server 12 s budget', () => {
     expect(COACH_REQUEST_TIMEOUT_MS).toBe(20000);
     expect(COACH_REQUEST_TIMEOUT_MS).toBeGreaterThan(12000);
+  });
+
+  it('takes a longer timeout from EXPO_PUBLIC_COACH_TIMEOUT_MS for a slower local model', () => {
+    expect(coachTimeoutFromEnv('120000')).toBe(120000);
+    expect(coachTimeoutFromEnv(undefined)).toBe(DEFAULT_COACH_REQUEST_TIMEOUT_MS);
+    expect(coachTimeoutFromEnv('')).toBe(DEFAULT_COACH_REQUEST_TIMEOUT_MS);
+    expect(coachTimeoutFromEnv('soon')).toBe(DEFAULT_COACH_REQUEST_TIMEOUT_MS);
+    expect(coachTimeoutFromEnv('-5')).toBe(DEFAULT_COACH_REQUEST_TIMEOUT_MS);
   });
 
   describe('timeout', () => {
