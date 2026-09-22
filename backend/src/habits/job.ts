@@ -69,9 +69,14 @@ export async function runHabitCorrelations(
       { status: row.status as HabitCorrelationStatus, consecutivePasses: row.consecutivePasses, consecutiveMisses: row.consecutiveMisses },
       hypothesis?.passes ?? false,
     )!;
+    // updateMany, not update, so the run key can sit in the WHERE clause: the
+    // read-then-check above is not atomic, and two runs racing for the same
+    // week (a BullMQ retry, a doubled schedule) both passed it. Whichever
+    // commits first stamps runKey; the other matches nothing and advances no
+    // counter, instead of turning one week into two consecutive passes.
     writes.push(
-      prisma.habitCorrelation.update({
-        where: { id: row.id },
+      prisma.habitCorrelation.updateMany({
+        where: { id: row.id, lastRunKey: { not: runKey } },
         data: { ...next, lastEvaluatedAt: now, lastRunKey: runKey, ...(hypothesis ? statColumns(hypothesis) : {}) },
       }),
     );
@@ -96,6 +101,16 @@ export async function runHabitCorrelations(
     );
   }
 
-  if (writes.length > 0) await prisma.$transaction(writes);
+  if (writes.length > 0) {
+    try {
+      await prisma.$transaction(writes);
+    } catch (err) {
+      // The (userId, habitType, factor, lagDays) unique constraint is the same
+      // guard for the create path: a concurrent run that got there first owns
+      // the row, and this run has nothing to add.
+      if ((err as { code?: string } | null)?.code !== 'P2002') throw err;
+      return { skipped: true, tested: 0, passed: 0 };
+    }
+  }
   return { skipped: false, tested: hypotheses.length, passed: hypotheses.filter((h) => h.passes).length };
 }

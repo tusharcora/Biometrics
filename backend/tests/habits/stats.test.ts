@@ -7,6 +7,7 @@ import {
   lag1Autocorrelation,
   effectiveSampleSize,
   correlationPValue,
+  seasonalParamsFor,
   benjaminiHochberg,
 } from '../../src/habits/stats';
 
@@ -158,6 +159,32 @@ describe('effectiveSampleSize (Pyper-Peterman)', () => {
   });
   it('never exceeds n (a negative autocorrelation product is not credited)', () => {
     expect(effectiveSampleSize(40, 0.6, -0.6)).toBe(40);
+  });
+});
+
+describe('degrees of freedom charged for de-seasonalization', () => {
+  it('counts one parameter per distinct weekday present, minus the overall mean', () => {
+    expect(seasonalParamsFor([0, 1, 2, 3, 4, 5, 6])).toBe(6);
+    expect(seasonalParamsFor([1, 1, 3, 3, 5])).toBe(2);
+    expect(seasonalParamsFor([2, 2, 2])).toBe(0);
+    expect(seasonalParamsFor([])).toBe(0);
+  });
+
+  // Fitting 7 weekday means from the data and then testing the residuals as if
+  // they were raw observations makes p look smaller than the evidence supports.
+  it('makes the p-value larger (more conservative), never smaller', () => {
+    const unadjusted = correlationPValue(0.5, 27);
+    const adjusted = correlationPValue(0.5, 27, 6);
+
+    expect(adjusted).toBeGreaterThan(unadjusted);
+    expect(correlationPValue(0.5, 27, 0)).toBe(unadjusted);
+  });
+
+  it('floors df at 1 so a short, heavily-adjusted series still returns a finite p', () => {
+    const p = correlationPValue(0.5, 4, 6);
+    expect(Number.isFinite(p)).toBe(true);
+    expect(p).toBeGreaterThan(0);
+    expect(p).toBeLessThanOrEqual(1);
   });
 });
 

@@ -77,6 +77,30 @@ describe('runHabitCorrelations: persistence rule end to end', () => {
     expect(await getConfirmedCorrelations(user.id)).toHaveLength(1);
   });
 
+  // The runKey check before the writes is a read-then-act: two runs racing for
+  // the same week both pass it, so the write itself has to refuse the second.
+  // Racing two full runs does not reproduce the interleaving reliably (they
+  // serialise), so this drives the write predicate directly, which is the part
+  // the fix changed.
+  it('a write stamped with this week\'s runKey cannot be advanced again by a second run', async () => {
+    const user = await createUser();
+    await seedScenario(user.id, strongEffect);
+    await runHabitCorrelations(user.id, { now: NOW, runKey: '2026-W27' });
+
+    const row = await hrvLag1(user.id);
+    expect(row).toMatchObject({ consecutivePasses: 1, lastRunKey: '2026-W27' });
+
+    // Exactly what a second run for the same week would attempt.
+    const second = await prisma.habitCorrelation.updateMany({
+      where: { id: row!.id, lastRunKey: { not: '2026-W27' } },
+      data: { consecutivePasses: 2, status: 'CONFIRMED', lastEvaluatedAt: NOW, lastRunKey: '2026-W27' },
+    });
+
+    expect(second.count).toBe(0);
+    expect(await hrvLag1(user.id)).toMatchObject({ status: 'CANDIDATE', consecutivePasses: 1 });
+    expect(await getConfirmedCorrelations(user.id)).toEqual([]);
+  });
+
   it('keeps a CONFIRMED row through one miss, retires it on the second, and re-confirms it after two passes', async () => {
     const user = await createUser();
     await seedScenario(user.id, strongEffect);
