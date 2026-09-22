@@ -94,6 +94,21 @@ describe('recomputeSleepRollups', () => {
     expect(await prisma.sleepSession.count({ where: { userId: user.id } })).toBe(2);
   });
 
+  // Two sync jobs for the same user used to read their own snapshot of the
+  // sessions, each compute a total from it, and both write -- so whichever
+  // committed last could persist a rollup that omitted the other's session.
+  it('two concurrent stores for the same night leave the rollup equal to the sum', async () => {
+    const user = await createUser();
+
+    await Promise.all([
+      storeSleepSessions(user.id, [mainSleep]),
+      storeSleepSessions(user.id, [nap]),
+    ]);
+
+    expect(await rollups(user.id)).toEqual([{ date: '2026-09-02', value: 470 }]);
+    expect(await prisma.sleepSession.count({ where: { userId: user.id } })).toBe(2);
+  });
+
   it('never lowers a total when a window returns only some of a day\'s sessions, and a later window raises it', async () => {
     const user = await createUser();
     await storeSleepSessions(user.id, [mainSleep, nap]);
