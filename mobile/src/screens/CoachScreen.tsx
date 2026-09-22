@@ -13,6 +13,7 @@ import {
   sendCoachMessage,
   type CoachMessageSource,
   type MemoryDTO,
+  StaleConversationError,
   type SendCoachMessageInput,
 } from '../api/coach';
 import { Text } from '../components/ui/text';
@@ -37,6 +38,9 @@ interface ChatMessage {
   fresh?: boolean;
   // Memories the coach proposed to keep on this turn (shown under the bubble).
   memoryProposals?: MemoryDTO[];
+  // Set on a user bubble whose send failed, so the transcript does not show it
+  // sitting there as though the coach received it.
+  failed?: boolean;
   // Present on a crisis-safety reply.
   safety?: {
     resources: string[];
@@ -81,6 +85,9 @@ export function CoachScreen() {
   // one fresh load runs instead.
   const reloadPending = useRef(false);
   const loadRef = useRef<() => Promise<void>>(async () => {});
+  // True when the status check itself could not be completed, as opposed to
+  // having completed and said the coach is available.
+  const [statusUnverified, setStatusUnverified] = useState(false);
   // The phase, readable from inside load() without making it re-create.
   const phaseRef = useRef<Phase>('loading');
   // True only once the conversation history was actually fetched and applied.
@@ -128,8 +135,22 @@ export function CoachScreen() {
     }
     loadInFlight.current = true;
     try {
-      const status = await fetchCoachStatus();
+      let status;
+      try {
+        status = await fetchCoachStatus();
+      } catch {
+        // The status request did not complete. Failing closed would hide a
+        // working coach over one dropped request, so the screen stays usable --
+        // but it must not imply everything is fine, which is what falling
+        // through to a bare 'ready' did. Say so; the first send settles it.
+        if (mounted.current) {
+          setStatusUnverified(true);
+          setPhase('ready');
+        }
+        return;
+      }
       if (!mounted.current || reloadPending.current) return;
+      setStatusUnverified(false);
       if (!status.enabled) {
         setPhase('unavailable');
         return;
@@ -171,9 +192,9 @@ export function CoachScreen() {
       historyLoaded.current = true;
       setPhase('ready');
     } catch {
-      // History is a convenience: a failure to load it must not lock the user
-      // out of asking a question. Status failures already fail closed above
-      // only when the server says so.
+      // History alone is a convenience now: failing to load past messages must
+      // not stop someone asking a new question. A status failure is handled
+      // above, where it can be reported rather than silently swallowed.
       if (mounted.current) setPhase('ready');
     } finally {
       loadInFlight.current = false;
@@ -206,11 +227,23 @@ export function CoachScreen() {
       setSending(true);
       setError(null);
       try {
-        const res = await sendCoachMessage({
-          ...request,
-          ...(conversationIdRef.current ? { conversationId: conversationIdRef.current } : {}),
-        });
+        let res;
+        try {
+          res = await sendCoachMessage({
+            ...request,
+            ...(conversationIdRef.current ? { conversationId: conversationIdRef.current } : {}),
+          });
+        } catch (e) {
+          // The server retains transcripts for 90 days, so an id held across a
+          // long gap can simply be gone. The coach is still there: drop the id
+          // and send the same message as a new conversation, once.
+          if (!(e instanceof StaleConversationError) || !conversationIdRef.current) throw e;
+          conversationIdRef.current = null;
+          setConversationId(null);
+          res = await sendCoachMessage(request);
+        }
         if (!mounted.current) return;
+        setStatusUnverified(false);
         setConversationId(res.conversationId);
         setMessages((prev) => {
           // A resend under safetyOverride settles the earlier safety card.
@@ -233,6 +266,11 @@ export function CoachScreen() {
         });
       } catch (e) {
         if (!mounted.current) return;
+        // Whatever went wrong, the message did not land. Mark the bubble so the
+        // transcript stops showing it as though the coach had received it.
+        setMessages((prev) =>
+          prev.map((m) => (m.role === 'user' && m.text === request.message && !m.failed ? { ...m, failed: true } : m)),
+        );
         if (e instanceof CoachConsentRequiredError) {
           navigation.navigate('CoachConsent', { prefill: undefined });
         } else if (e instanceof CoachDisabledError) {
@@ -320,6 +358,12 @@ export function CoachScreen() {
             contentContainerStyle={{ gap: 12, padding: 16, flexGrow: 1 }}
             onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
           >
+            {statusUnverified ? (
+              <Text testID="coach-status-unverified" className="px-1 text-sm text-muted-foreground">
+                We couldn't check the coach just now. You can still send a message.
+              </Text>
+            ) : null}
+
             {messages.length === 0 && !sending ? (
               <View testID="coach-empty" className="flex-1 items-center justify-center gap-2 py-16">
                 <Ionicons name="chatbubbles-outline" size={28} color={colors.muted} />
@@ -331,6 +375,11 @@ export function CoachScreen() {
 
             {messages.map((message) => (
               <View key={message.id} className="gap-1">
+                {message.failed ? (
+                  <Text testID={`coach-message-failed-${message.id}`} className="self-end text-xs text-destructive">
+                    Not sent
+                  </Text>
+                ) : null}
                 <ChatBubble role={message.role} text={message.text} source={message.source as CoachMessageSource} animate={message.fresh === true}>
                   {message.safety ? (
                     <View className="gap-3">

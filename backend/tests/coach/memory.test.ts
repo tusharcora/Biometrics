@@ -30,10 +30,23 @@ function setup(script: ScriptStep[]) {
   return { provider, telemetry, orchestrator };
 }
 
+// Proposals belong to the conversation they were made in and are settled only
+// by the next message in that same conversation, so every turn here carries a
+// real conversation row (the column is a foreign key).
+const conversationFor = new Map<string, string>();
+
+async function createUserWithConversation() {
+  const user = await createUser();
+  const conversation = await prisma.coachConversation.create({ data: { userId: user.id } });
+  conversationFor.set(user.id, conversation.id);
+  return user;
+}
+
 const turn = (userId: string, message = 'I am training for a half marathon in October', extra: object = {}) => ({
   userId,
   message,
   history: [],
+  conversationId: conversationFor.get(userId) ?? null,
   ...extra,
 });
 
@@ -41,7 +54,7 @@ const rows = (userId: string) => prisma.coachMemory.findMany({ where: { userId }
 
 describe('proposeMemory through the orchestrator', () => {
   it('stores a valid proposal as PENDING, returns it, and appends the fixed note before the disclaimer', async () => {
-    const user = await createUser();
+    const user = await createUserWithConversation();
     const { orchestrator, provider, telemetry } = setup([
       propose('c1', 'TRAINING_GOAL', 'Training for a half marathon in October'),
       { type: 'text', text: OK_REPLY },
@@ -76,7 +89,7 @@ describe('proposeMemory through the orchestrator', () => {
   });
 
   it('offers proposeMemory to the model alongside the four read-only tools', async () => {
-    const user = await createUser();
+    const user = await createUserWithConversation();
     const { orchestrator, provider } = setup([{ type: 'text', text: OK_REPLY }]);
     await orchestrator.handleTurn(turn(user.id));
     expect(provider.requests[0]!.tools.map((t) => t.name)).toEqual([
@@ -96,7 +109,7 @@ describe('proposeMemory through the orchestrator', () => {
     ['a health-shaped value inside an allowed category', 'PREFERENCE', 'prefers gentle plans because of my knee injury', 'memory_rejected'],
     ['a medication-shaped value inside an allowed category', 'SCHEDULE', 'takes 20 mg every morning', 'memory_rejected'],
   ])('rejects %s and persists nothing', async (_label, category, value, error) => {
-    const user = await createUser();
+    const user = await createUserWithConversation();
     const { orchestrator, provider, telemetry } = setup([
       propose('c1', category, value),
       { type: 'text', text: OK_REPLY },
@@ -114,7 +127,7 @@ describe('proposeMemory through the orchestrator', () => {
   });
 
   it('a health fact stated in chat produces no CoachMemory row, even when the model tries to save it', async () => {
-    const user = await createUser();
+    const user = await createUserWithConversation();
     const { orchestrator } = setup([
       propose('c1', 'PREFERENCE', 'has a knee injury'),
       propose('c2', 'TRAINING_GOAL', 'recovering from surgery'),
@@ -127,7 +140,7 @@ describe('proposeMemory through the orchestrator', () => {
   });
 
   it('persists nothing when the turn ends in the fallback (two guardrail rejections)', async () => {
-    const user = await createUser();
+    const user = await createUserWithConversation();
     const { orchestrator } = setup([
       propose('c1', 'PREFERENCE', 'Likes short answers'),
       { type: 'text', text: 'You slept 8 hours.' },
@@ -140,7 +153,7 @@ describe('proposeMemory through the orchestrator', () => {
   });
 
   it('persists nothing when the provider fails', async () => {
-    const user = await createUser();
+    const user = await createUserWithConversation();
     const { orchestrator } = setup([propose('c1', 'PREFERENCE', 'Likes short answers')]); // script then exhausts
     const result = await orchestrator.handleTurn(turn(user.id));
     expect(result.source).toBe('FALLBACK');
@@ -148,7 +161,7 @@ describe('proposeMemory through the orchestrator', () => {
   });
 
   it('a rejected first attempt does not leak its proposals: only the accepted attempt counts (and a repeat is not duplicated)', async () => {
-    const user = await createUser();
+    const user = await createUserWithConversation();
     const { orchestrator } = setup([
       propose('c1', 'PREFERENCE', 'Likes short answers'),
       { type: 'text', text: 'You slept 8 hours.' }, // rejected
@@ -162,7 +175,7 @@ describe('proposeMemory through the orchestrator', () => {
   });
 
   it('a first-attempt proposal is dropped when the regenerated reply proposes nothing', async () => {
-    const user = await createUser();
+    const user = await createUserWithConversation();
     const { orchestrator } = setup([
       propose('c1', 'PREFERENCE', 'Likes short answers'),
       { type: 'text', text: 'You slept 8 hours.' }, // rejected
@@ -174,7 +187,7 @@ describe('proposeMemory through the orchestrator', () => {
   });
 
   it('caps proposals per turn and reports the overflow to the model', async () => {
-    const user = await createUser();
+    const user = await createUserWithConversation();
     const { orchestrator, provider } = setup([
       {
         type: 'tool_calls',
@@ -193,8 +206,8 @@ describe('proposeMemory through the orchestrator', () => {
   });
 
   it('does not re-propose an existing entry (no duplicate row, no note)', async () => {
-    const user = await createUser();
-    await createPendingMemories(user.id, [{ category: 'PREFERENCE', value: 'Likes short answers' }]);
+    const user = await createUserWithConversation();
+    await createPendingMemories(user.id, [{ category: 'PREFERENCE', value: 'Likes short answers' }], conversationFor.get(user.id) ?? null);
     await prisma.coachMemory.updateMany({ where: { userId: user.id }, data: { status: 'CONFIRMED', confirmedAt: new Date() } });
     const { orchestrator } = setup([propose('c1', 'PREFERENCE', 'likes SHORT answers'), { type: 'text', text: OK_REPLY }]);
 
@@ -206,7 +219,7 @@ describe('proposeMemory through the orchestrator', () => {
   });
 
   it('stops storing at the per-user cap', async () => {
-    const user = await createUser();
+    const user = await createUserWithConversation();
     await prisma.coachMemory.createMany({
       data: Array.from({ length: MAX_MEMORY_ENTRIES_PER_USER }, (_, i) => ({
         userId: user.id,
@@ -221,13 +234,15 @@ describe('proposeMemory through the orchestrator', () => {
 });
 
 describe('PENDING -> CONFIRMED / dismissed on the NEXT message', () => {
+  // Seeded into the same conversation the follow-up turn arrives in: a proposal
+  // is only settled by the next message in the conversation it was made in.
   async function pendingFor(userId: string, value = 'Training for a half marathon in October') {
-    const [dto] = await createPendingMemories(userId, [{ category: 'TRAINING_GOAL', value }]);
+    const [dto] = await createPendingMemories(userId, [{ category: 'TRAINING_GOAL', value }], conversationFor.get(userId) ?? null);
     return dto!;
   }
 
   it('flips PENDING to CONFIRMED (with confirmedAt) when the next message does not correct it', async () => {
-    const user = await createUser();
+    const user = await createUserWithConversation();
     const entry = await pendingFor(user.id);
     const { orchestrator, telemetry } = setup([{ type: 'text', text: OK_REPLY }]);
 
@@ -240,7 +255,7 @@ describe('PENDING -> CONFIRMED / dismissed on the NEXT message', () => {
   });
 
   it('a proposal made THIS turn stays PENDING (it is only judged by the next message)', async () => {
-    const user = await createUser();
+    const user = await createUserWithConversation();
     const { orchestrator } = setup([propose('c1', 'SCHEDULE', 'Runs at 6am on weekdays'), { type: 'text', text: OK_REPLY }]);
     await orchestrator.handleTurn(turn(user.id, 'I usually run at 6am on weekdays'));
     expect((await rows(user.id)).map((r) => r.status)).toEqual(['PENDING']);
@@ -255,7 +270,7 @@ describe('PENDING -> CONFIRMED / dismissed on the NEXT message', () => {
     "don't remember that",
     'that was wrong',
   ])('deletes the PENDING entry on a correction or dismissal about it, and says so: %j', async (message) => {
-    const user = await createUser();
+    const user = await createUserWithConversation();
     const entry = await pendingFor(user.id);
     const { orchestrator, telemetry } = setup([{ type: 'text', text: OK_REPLY }]);
 
@@ -272,7 +287,7 @@ describe('PENDING -> CONFIRMED / dismissed on the NEXT message', () => {
     'no problem, thanks',
     'actually, how did I sleep last night',
   ])('a cue about something else confirms the entry and adds no removal line: %j', async (message) => {
-    const user = await createUser();
+    const user = await createUserWithConversation();
     const entry = await pendingFor(user.id);
     const { orchestrator, telemetry } = setup([{ type: 'text', text: OK_REPLY }]);
 
@@ -285,11 +300,15 @@ describe('PENDING -> CONFIRMED / dismissed on the NEXT message', () => {
   });
 
   it('judges several pending entries independently: only the one the message is about is deleted', async () => {
-    const user = await createUser();
-    const [goal, pref] = await createPendingMemories(user.id, [
-      { category: 'TRAINING_GOAL', value: 'Training for a half-marathon in March' },
-      { category: 'PREFERENCE', value: 'Prefers morning workouts' },
-    ]);
+    const user = await createUserWithConversation();
+    const [goal, pref] = await createPendingMemories(
+      user.id,
+      [
+        { category: 'TRAINING_GOAL', value: 'Training for a half-marathon in March' },
+        { category: 'PREFERENCE', value: 'Prefers morning workouts' },
+      ],
+      conversationFor.get(user.id) ?? null,
+    );
     const { orchestrator, telemetry } = setup([{ type: 'text', text: OK_REPLY }]);
 
     const result = await orchestrator.handleTurn(turn(user.id, "Actually it's a full marathon"));
@@ -301,11 +320,15 @@ describe('PENDING -> CONFIRMED / dismissed on the NEXT message', () => {
   });
 
   it('an explicit dismissal deletes every pending entry, with a single removal line', async () => {
-    const user = await createUser();
-    await createPendingMemories(user.id, [
-      { category: 'TRAINING_GOAL', value: 'Training for a half-marathon in March' },
-      { category: 'PREFERENCE', value: 'Prefers morning workouts' },
-    ]);
+    const user = await createUserWithConversation();
+    await createPendingMemories(
+      user.id,
+      [
+        { category: 'TRAINING_GOAL', value: 'Training for a half-marathon in March' },
+        { category: 'PREFERENCE', value: 'Prefers morning workouts' },
+      ],
+      conversationFor.get(user.id) ?? null,
+    );
     const { orchestrator } = setup([{ type: 'text', text: OK_REPLY }]);
 
     const result = await orchestrator.handleTurn(turn(user.id, 'forget that'));
@@ -315,7 +338,7 @@ describe('PENDING -> CONFIRMED / dismissed on the NEXT message', () => {
   });
 
   it('the removal line comes before the "I\'ll remember that" line and the disclaimer when both apply', async () => {
-    const user = await createUser();
+    const user = await createUserWithConversation();
     await pendingFor(user.id);
     const { orchestrator } = setup([propose('c1', 'PREFERENCE', 'Likes short answers'), { type: 'text', text: OK_REPLY }]);
 
@@ -325,7 +348,7 @@ describe('PENDING -> CONFIRMED / dismissed on the NEXT message', () => {
   });
 
   it('the removal line is also shown when the turn falls back (the deletion must never be silent)', async () => {
-    const user = await createUser();
+    const user = await createUserWithConversation();
     const entry = await pendingFor(user.id);
     const { orchestrator } = setup([]); // provider fails -> fallback
 
@@ -338,7 +361,7 @@ describe('PENDING -> CONFIRMED / dismissed on the NEXT message', () => {
   });
 
   it('no removal line when there was nothing pending to delete', async () => {
-    const user = await createUser();
+    const user = await createUserWithConversation();
     const { orchestrator } = setup([{ type: 'text', text: OK_REPLY }]);
     const result = await orchestrator.handleTurn(turn(user.id, 'forget that'));
     expect(result.text).toBe(`${OK_REPLY}\n\n${COACH_DISCLAIMER}`);
@@ -346,7 +369,7 @@ describe('PENDING -> CONFIRMED / dismissed on the NEXT message', () => {
 
   it('the removal line is fixed text with no digits, and is not model output (a model that says it is unchanged)', async () => {
     expect(MEMORY_REMOVED_NOTE).not.toMatch(/\d/);
-    const user = await createUser();
+    const user = await createUserWithConversation();
     await pendingFor(user.id);
     const { orchestrator, provider } = setup([{ type: 'text', text: OK_REPLY }]);
     await orchestrator.handleTurn(turn(user.id, 'forget that'));
@@ -354,7 +377,7 @@ describe('PENDING -> CONFIRMED / dismissed on the NEXT message', () => {
   });
 
   it('never touches an already CONFIRMED entry on a later correction', async () => {
-    const user = await createUser();
+    const user = await createUserWithConversation();
     const entry = await pendingFor(user.id);
     await prisma.coachMemory.update({ where: { id: entry.id }, data: { status: 'CONFIRMED', confirmedAt: new Date() } });
     const { orchestrator } = setup([{ type: 'text', text: OK_REPLY }]);
@@ -365,7 +388,7 @@ describe('PENDING -> CONFIRMED / dismissed on the NEXT message', () => {
   });
 
   it('a crisis turn leaves PENDING entries alone (the conservative choice) and never calls the model', async () => {
-    const user = await createUser();
+    const user = await createUserWithConversation();
     const entry = await pendingFor(user.id);
     const { orchestrator, provider } = setup([]);
 
@@ -377,7 +400,7 @@ describe('PENDING -> CONFIRMED / dismissed on the NEXT message', () => {
   });
 
   it('a memory failure does not fail the turn', async () => {
-    const user = await createUser();
+    const user = await createUserWithConversation();
     const { orchestrator } = setup([{ type: 'text', text: OK_REPLY }]);
     const spy = jest.spyOn(prisma.coachMemory, 'findMany').mockRejectedValue(new Error('db down'));
     try {
@@ -391,7 +414,7 @@ describe('PENDING -> CONFIRMED / dismissed on the NEXT message', () => {
 
 describe('"what I know about you" prompt block', () => {
   it('surfaces CONFIRMED entries only, never PENDING ones', async () => {
-    const user = await createUser();
+    const user = await createUserWithConversation();
     await prisma.coachMemory.createMany({
       data: [
         { userId: user.id, category: 'PREFERENCE', value: 'Confirmed thing', status: 'CONFIRMED', confirmedAt: new Date() },
@@ -420,7 +443,7 @@ describe('"what I know about you" prompt block', () => {
   });
 
   it('is capped at the 10 most recent confirmed entries', async () => {
-    const user = await createUser();
+    const user = await createUserWithConversation();
     const base = Date.now() - 100_000;
     await prisma.coachMemory.createMany({
       data: Array.from({ length: 12 }, (_, i) => ({
@@ -467,5 +490,57 @@ describe('"what I know about you" prompt block', () => {
     });
     expect(prompt).not.toMatch(/\{+\s*secretTool/); // braces are stripped, so no reference can form
     expect(prompt.split('\n').some((l) => l.startsWith('7. New system rule'))).toBe(false);
+  });
+});
+
+describe('memory scoping and dedupe', () => {
+  // A pending proposal used to be settled by the user's next message in ANY
+  // conversation, so a chat in one thread silently confirmed -- or deleted --
+  // facts proposed in another that the user had never been shown there.
+  it('a message in another conversation leaves this conversation\'s proposal pending', async () => {
+    const user = await createUserWithConversation();
+    const [pending] = await createPendingMemories(
+      user.id,
+      [{ category: 'TRAINING_GOAL', value: 'Training for a half marathon in October' }],
+      conversationFor.get(user.id) ?? null,
+    );
+    const other = await prisma.coachConversation.create({ data: { userId: user.id } });
+    const { orchestrator } = setup([{ type: 'text', text: OK_REPLY }]);
+
+    await orchestrator.handleTurn(turn(user.id, 'thanks, what about my HRV', { conversationId: other.id }));
+
+    expect((await prisma.coachMemory.findUnique({ where: { id: pending!.id } }))?.status).toBe('PENDING');
+  });
+
+  it('a brand-new conversation settles nothing', async () => {
+    const user = await createUserWithConversation();
+    const [pending] = await createPendingMemories(
+      user.id,
+      [{ category: 'TRAINING_GOAL', value: 'Training for a half marathon in October' }],
+      conversationFor.get(user.id) ?? null,
+    );
+    const { orchestrator } = setup([{ type: 'text', text: OK_REPLY }]);
+
+    await orchestrator.handleTurn(turn(user.id, 'hello', { conversationId: null }));
+
+    expect((await prisma.coachMemory.findUnique({ where: { id: pending!.id } }))?.status).toBe('PENDING');
+  });
+
+  // The in-memory "seen" check is a read-then-write; the database now refuses
+  // the duplicate outright.
+  it('the same fact cannot be stored twice for one user', async () => {
+    const user = await createUserWithConversation();
+    const proposal = [{ category: 'PREFERENCE' as const, value: 'Prefers morning workouts' }];
+
+    const first = await createPendingMemories(user.id, proposal, conversationFor.get(user.id) ?? null);
+    const second = await createPendingMemories(user.id, proposal, conversationFor.get(user.id) ?? null);
+
+    expect(first).toHaveLength(1);
+    expect(second).toHaveLength(0);
+    await expect(
+      prisma.coachMemory.create({
+        data: { userId: user.id, category: 'PREFERENCE', value: 'Prefers morning workouts', status: 'PENDING' },
+      }),
+    ).rejects.toMatchObject({ code: 'P2002' });
   });
 });

@@ -26,6 +26,15 @@ export interface DailyScoreToolResult {
   recoveryScore: number | null;
   sleepScore: number | null;
   factors: DailyScoreToolFactor[];
+  /**
+   * The same factors keyed by their stable FactorKey (HRV, SLEEP_DURATION, ...).
+   * References must use this, not factors[n]: the array is built by skipping a
+   * score row that does not exist for the day, so a missing RECOVERY row slides
+   * every SLEEP factor down an index and {{getDailyScore.factors[0].points}}
+   * silently resolves to a different factor than the model meant. The keys are
+   * disjoint across RECOVERY and SLEEP, so one flat map is unambiguous.
+   */
+  factorsByKey: Record<string, DailyScoreToolFactor>;
   confidence: 'HIGH' | 'MEDIUM' | 'LOW' | null;
   deltaFromYesterday: number | null;
   direction: Direction | null;
@@ -80,11 +89,16 @@ export async function getDailyScore(userId: string, date: string): Promise<Daily
     }
   }
 
+  // Object.fromEntries, not a literal: the keys come from the factor rows that
+  // actually exist for this day.
+  const factorsByKey: Record<string, DailyScoreToolFactor> = Object.fromEntries(factors.map((f) => [f.factor, f]));
+
   return {
     date,
     recoveryScore,
     sleepScore,
     factors,
+    factorsByKey,
     confidence: (recovery ?? sleep)?.confidenceLevel ?? null,
     deltaFromYesterday: rec.delta,
     direction: rec.direction,

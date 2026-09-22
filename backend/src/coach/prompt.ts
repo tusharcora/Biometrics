@@ -93,7 +93,7 @@ export function buildSystemPrompt(persona: CoachPersona, ctx: PromptContext): st
     'Grounding rules (enforced in code; a reply that breaks them is discarded):',
     '1. Get every fact from the tools. Today\'s score has already been fetched for you this turn.',
     '2. Write every measured quantity as a reference of the form {{toolName.path}}, for',
-    '   example {{getDailyScore.recoveryScore}} or {{getDailyScore.factors[0].points}} or',
+    '   example {{getDailyScore.recoveryScore}} or {{getDailyScore.factorsByKey.HRV.points}} or',
     '   {{getHabitCorrelations.correlations[0].effectSizePercent}}. The server replaces the',
     '   reference with the real value. Only paths present in this turn\'s tool results exist;',
     '   a reference to any other path is rejected. When a tool was called more than once, a',

@@ -6,16 +6,35 @@ export function setBaseUrl(url: string): void {
 }
 
 // Carries the HTTP status so callers can tell "nothing there" (404) apart from
-// a real failure. The message format is unchanged from before.
+// a real failure, plus the server's own `error` code when it sent one: a status
+// alone cannot separate two different 404s (coach disabled vs. a conversation
+// that has since been retained away). The message format is unchanged.
 export class ApiError extends Error {
   readonly status: number;
+  readonly code: string | undefined;
 
-  constructor(status: number, message: string) {
+  constructor(status: number, message: string, code?: string) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
+    this.code = code;
     Object.setPrototypeOf(this, ApiError.prototype);
   }
+}
+
+// Best effort: the body may be empty, HTML from a proxy, or already consumed.
+// A failure to read it just means no code, never a different error.
+async function errorCodeOf(res: Response): Promise<string | undefined> {
+  try {
+    const body = (await res.json()) as { error?: unknown };
+    return typeof body?.error === 'string' ? body.error : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+async function apiErrorFor(res: Response, path: string): Promise<ApiError> {
+  return new ApiError(res.status, `Request to ${path} failed with ${res.status}`, await errorCodeOf(res));
 }
 
 export interface ApiFetchOptions extends RequestInit {
@@ -97,7 +116,7 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
 
   if (skipAuth) {
     const res = await fetch(`${baseUrl}${path}`, requestInit);
-    if (!res.ok) throw new ApiError(res.status, `Request to ${path} failed with ${res.status}`);
+    if (!res.ok) throw await apiErrorFor(res, path);
     return res.json() as Promise<T>;
   }
 
@@ -113,7 +132,7 @@ export async function apiFetch<T>(path: string, options: ApiFetchOptions = {}): 
     accessToken = await refreshAccessToken();
     res = await doFetch(accessToken);
   }
-  if (!res.ok) throw new ApiError(res.status, `Request to ${path} failed with ${res.status}`);
+  if (!res.ok) throw await apiErrorFor(res, path);
   // 204 No Content (e.g. DELETE) has no body to parse.
   if (res.status === 204) return undefined as T;
   return res.json() as Promise<T>;

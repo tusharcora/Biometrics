@@ -160,17 +160,37 @@ export function effectiveSampleSize(n: number, rhoHabit: number, rhoFactor: numb
 
 /**
  * Two-sided p for a correlation `r` given an effective sample size:
- * t = r sqrt((n_eff - 2) / (1 - r^2)) on (n_eff - 2) degrees of freedom. The
- * p-value is continuous, so unlike a permutation test it has no floor tied to
- * how many days of data exist.
+ * t = r sqrt(df / (1 - r^2)) on df degrees of freedom. The p-value is
+ * continuous, so unlike a permutation test it has no floor tied to how many
+ * days of data exist.
+ *
+ * `seasonalParams` is how many parameters were estimated FROM THIS DATA before
+ * the correlation was taken -- the weekday means deseasonalize() subtracts.
+ * Fitting them and then testing the residuals as if they were raw observations
+ * is the classic way to get p-values that are too small: the residuals are
+ * closer together than the data was, so r looks more reliable than it is. The
+ * standard correction for correlating residuals after removing p regressors is
+ * df = n - 2 - p.
+ *
+ * df is floored at 1 so a short, heavily-adjusted series degrades to a weak,
+ * honest test rather than a non-finite one.
  */
-export function correlationPValue(r: number, nEff: number): number {
+export function correlationPValue(r: number, nEff: number, seasonalParams = 0): number {
   const a = Math.abs(r);
   if (a >= 1) return 0;
   if (a === 0) return 1;
-  const df = nEff - 2;
+  const df = Math.max(1, nEff - 2 - seasonalParams);
   const t = a * Math.sqrt(df / (1 - a * a));
   return studentTTwoSidedP(t, df);
+}
+
+/**
+ * Degrees of freedom deseasonalize() consumes: one mean per weekday actually
+ * present, minus the one the overall mean already accounts for. A series
+ * spanning a full week costs 6; three distinct weekdays cost 2.
+ */
+export function seasonalParamsFor(weekdays: number[]): number {
+  return Math.max(0, new Set(weekdays).size - 1);
 }
 
 /**

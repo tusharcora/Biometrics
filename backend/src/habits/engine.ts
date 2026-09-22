@@ -11,6 +11,7 @@ import {
   correlationPValue,
   deseasonalize,
   effectiveSampleSize,
+  seasonalParamsFor,
   lag1Autocorrelation,
   pearson,
 } from './stats';
@@ -157,7 +158,10 @@ function testPairs(pairs: Pair[]): { r: number; pValue: number; nEff: number } {
 
   const r = pearson(x, y);
   const nEff = effectiveSampleSize(pairs.length, lag1Autocorrelation(x, dayNumbers), lag1Autocorrelation(y, dayNumbers));
-  return { r, pValue: correlationPValue(r, nEff), nEff };
+  // The weekday means removed above were fitted from these same pairs, so they
+  // cost degrees of freedom; charging nothing for them understates the p-value.
+  const seasonalParams = seasonalParamsFor(pairs.map((p) => weekdayOf(p.day)));
+  return { r, pValue: correlationPValue(r, nEff, seasonalParams), nEff };
 }
 
 interface PairCounts {

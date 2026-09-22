@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { requireAuth, AuthedRequest } from '../auth/middleware';
 import { isValidTimeZone } from '../biometrics/civilDate';
 import { recomputeAllSleepRollups } from '../biometrics/repository';
+import { enqueueScoreCompute } from '../scoring/queue';
 import { prisma } from '../db/client';
 import { deleteUserAccount } from './deletion';
 
@@ -31,7 +32,17 @@ usersRouter.put('/me/timezone', requireAuth, async (req: AuthedRequest, res) => 
   // cheap and idempotent, and it means a request that saved the zone but
   // failed mid-recompute is repaired by simply retrying the same PUT, instead
   // of the retry being a no-op that leaves rollups keyed under the old zone.
-  await recomputeAllSleepRollups(userId);
+  const rekeyed = await recomputeAllSleepRollups(userId);
+
+  // Scores are derived from the rollups that just moved, so they are stale the
+  // moment the zone changes. Enqueued, not computed inline: a long history must
+  // not make this request slow, and a failure here must not fail a time zone
+  // change the user already made (the nightly sweep is the backstop).
+  for (const date of rekeyed) {
+    await enqueueScoreCompute(userId, date).catch((err) =>
+      console.error(`Failed to enqueue a score recompute for ${date} after a time zone change`, err),
+    );
+  }
 
   res.json({ timezone });
 });

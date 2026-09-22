@@ -23,6 +23,12 @@
 export interface TurnToolResult {
   name: string;
   result: unknown;
+  /**
+   * The arguments the tool was called with, when the caller records them.
+   * Only used to detect an ambiguous reference (see lookup): two calls of the
+   * same tool with DIFFERENT arguments in one turn.
+   */
+  args?: unknown;
 }
 
 export type GuardrailReason = 'unwrapped_number' | 'invalid_field_path' | 'empty_reply';
@@ -69,8 +75,21 @@ export function parseReference(raw: string): ParsedReference | null {
 type Primitive = string | number | boolean;
 
 function lookup(results: readonly TurnToolResult[], ref: ParsedReference): Primitive | undefined {
-  let latest: TurnToolResult | undefined;
-  for (const r of results) if (r.name === ref.tool) latest = r;
+  const forTool = results.filter((r) => r.name === ref.tool);
+  // A reference still reads the most recent call of that tool, which is fine
+  // while every call asked the same question. When the model has called the
+  // same tool with different arguments in one turn -- getDailyScore for today
+  // AND for a day it wanted to compare against -- "the most recent" is a
+  // coin flip, and the reference resolves to a real number from the wrong day
+  // with nothing to notice it. Refuse instead: an unresolved reference is an
+  // invalid_field_path, which regenerates the reply rather than shipping a
+  // confidently wrong figure.
+  // Only calls whose arguments were actually recorded can be compared. The
+  // turn preamble is a getDailyScore for today recorded without args, so it
+  // must not look "different" from the model asking for the same thing.
+  const recordedArgs = forTool.filter((r) => r.args !== undefined).map((r) => JSON.stringify(r.args));
+  if (new Set(recordedArgs).size > 1) return undefined;
+  const latest = forTool[forTool.length - 1];
   let node: unknown = latest?.result;
   for (const seg of ref.path) {
     if (typeof seg === 'number') {

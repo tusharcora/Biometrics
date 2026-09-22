@@ -2,6 +2,7 @@ import React, { createContext, useContext, useEffect, useState, ReactNode } from
 import * as SecureStore from 'expo-secure-store';
 import { apiFetch, onSessionExpired } from '../api/client';
 import { disablePush } from '../lib/pushRegistration';
+import { clearTimezoneState } from '../lib/timezone';
 
 interface Session {
   accessToken: string;
@@ -101,6 +102,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     await Promise.all([
       SecureStore.deleteItemAsync('accessToken'),
       SecureStore.deleteItemAsync('refreshToken'),
+      // Device-global, so it would otherwise carry into the next account that
+      // signs in here and suppress that account's own time zone sync.
+      clearTimezoneState(),
     ]).catch(() => undefined);
     setSession(null);
   }

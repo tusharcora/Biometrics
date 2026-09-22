@@ -1,7 +1,9 @@
 import { createApp } from './app';
 import { listenOrExit } from './listen';
 import { startSyncWorker } from './sync/worker';
-import { enqueueImmediateTokenRefreshSweep, scheduleTokenRefreshSweep } from './sync/queue';
+import { connection, syncQueue, enqueueImmediateTokenRefreshSweep, scheduleTokenRefreshSweep } from './sync/queue';
+import { prisma } from './db/client';
+import { installShutdownHandlers } from './shutdown';
 import { scheduleNightlyScoreSweep } from './scoring/queue';
 import { scheduleWeeklyHabitCorrelationSweep } from './habits/queue';
 import { scheduleDailyCoachRetention, scheduleWeeklyCoachDigest } from './coach/queue';
@@ -11,7 +13,7 @@ const port = Number(process.env.PORT ?? 3000);
 // Queue workers and schedulers start only once the port is really bound. If
 // another backend already owns it, this process must exit rather than run a
 // second worker against the same queues while serving nothing (see listen.ts).
-listenOrExit(createApp(), port, {
+const server = listenOrExit(createApp(), port, {
   onListening: () => {
     console.log(`Backend listening on port ${port}`);
     startBackgroundWork();
@@ -19,7 +21,11 @@ listenOrExit(createApp(), port, {
 });
 
 function startBackgroundWork(): void {
-  startSyncWorker();
+  const worker = startSyncWorker();
+
+  // Registered only once the port is bound and the worker exists, so a process
+  // that exited because the port was taken never drains another one's queues.
+  installShutdownHandlers({ server, worker, queue: syncQueue, redis: connection, prisma });
 
   // The sweep runs as a repeatable queue job, not a per-process setInterval, so
   // that running more than one backend instance does not have several of them

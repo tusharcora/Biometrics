@@ -5,6 +5,15 @@ import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
 import { issueSessionTokens } from '../../src/auth/jwt';
 import { storeSleepSessions } from '../../src/biometrics/repository';
+import { enqueueScoreCompute } from '../../src/scoring/queue';
+
+// The route asks for score recomputes; those would otherwise go to a real Redis
+// queue and leave delayed jobs behind. The enqueue itself is asserted below.
+jest.mock('../../src/scoring/queue', () => ({
+  COMPUTE_DAILY_SCORE_JOB: 'computeDailyScore',
+  SCORE_SWEEP_JOB: 'scoreSweep',
+  enqueueScoreCompute: jest.fn().mockResolvedValue(undefined),
+}));
 
 beforeAll(() => {
   migrateTestDb();
@@ -26,6 +35,30 @@ describe('PUT /me/timezone', () => {
   it('defaults a new user to UTC', async () => {
     const user = await createUser();
     expect(user.timezone).toBe('UTC');
+  });
+
+  // The rollups are re-keyed under the new zone, so every score built on one is
+  // stale. Waiting for the nightly sweep meant a day of scores computed against
+  // the old day boundaries.
+  it('asks for a score recompute on every re-keyed day', async () => {
+    (enqueueScoreCompute as jest.Mock).mockClear();
+    const user = await createUser();
+    const { accessToken } = await issueSessionTokens(user.id);
+    await storeSleepSessions(user.id, [
+      { startTime: new Date('2026-09-01T22:00:00Z'), endTime: new Date('2026-09-02T06:00:00Z'), minutesAsleep: 420, startUtcOffsetSeconds: null, endUtcOffsetSeconds: null },
+    ]);
+    (enqueueScoreCompute as jest.Mock).mockClear();
+
+    const res = await request(createApp())
+      .put('/me/timezone')
+      .set('Authorization', `Bearer ${accessToken}`)
+      .send({ timezone: 'America/Los_Angeles' });
+
+    expect(res.status).toBe(200);
+    expect(enqueueScoreCompute).toHaveBeenCalled();
+    const dates = (enqueueScoreCompute as jest.Mock).mock.calls.map((c) => c[1]);
+    expect(dates.length).toBeGreaterThan(0);
+    expect((enqueueScoreCompute as jest.Mock).mock.calls.every((c) => c[0] === user.id)).toBe(true);
   });
 
   it('stores a valid IANA zone and echoes it back', async () => {

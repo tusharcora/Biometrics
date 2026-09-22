@@ -155,3 +155,36 @@ describe('disclaimer', () => {
     expect(COACH_DISCLAIMER).toMatch(/comparison against your own recent readings, not a medical assessment/i);
   });
 });
+
+describe('a reference the turn cannot disambiguate', () => {
+  const ref = '{{getDailyScore.recoveryScore}}';
+
+  // A reference reads the most recent call of its tool. That is fine while
+  // every call asked the same question, but a turn that fetched today AND a
+  // past day to compare against makes "most recent" a coin flip -- and the
+  // reference still resolves, to a real number from the wrong day.
+  it('is refused when the same tool was called with different arguments', () => {
+    const verdict = validateReply(ref, [
+      { name: 'getDailyScore', result: { recoveryScore: 72 }, args: { date: '2026-09-22' } },
+      { name: 'getDailyScore', result: { recoveryScore: 41 }, args: { date: '2026-09-01' } },
+    ]);
+
+    expect(verdict.ok).toBe(false);
+    if (!verdict.ok) expect(verdict.reasons).toContain('invalid_field_path');
+  });
+
+  it('still resolves when the repeated calls asked the same thing', () => {
+    const verdict = validateReply(ref, [
+      { name: 'getDailyScore', result: { recoveryScore: 72 }, args: { date: '2026-09-22' } },
+      { name: 'getDailyScore', result: { recoveryScore: 72 }, args: { date: '2026-09-22' } },
+    ]);
+
+    expect(verdict.ok).toBe(true);
+    if (verdict.ok) expect(verdict.text).toContain('72');
+  });
+
+  it('is unaffected when only one call recorded its arguments', () => {
+    const verdict = validateReply(ref, [{ name: 'getDailyScore', result: { recoveryScore: 72 } }]);
+    expect(verdict.ok).toBe(true);
+  });
+});

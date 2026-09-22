@@ -17,7 +17,7 @@ const RECOVERY_FACTORS = [
 
 export const todayCivil = () => localCivilDate(new Date(), 'UTC');
 
-export async function seedSnapshot(snapshot: UserSnapshot): Promise<{ userId: string }> {
+export async function seedSnapshot(snapshot: UserSnapshot): Promise<{ userId: string; conversationId: string }> {
   const user = await prisma.user.create({
     data: { email: `eval-${randomUUID()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
   });
@@ -39,17 +39,28 @@ export async function seedSnapshot(snapshot: UserSnapshot): Promise<{ userId: st
       },
     });
   }
+  // Fixtures run their question as the next message of one ongoing
+  // conversation, and a pending proposal is settled only from the conversation
+  // it was made in, so the seeded PENDING rows have to belong to that one.
+  const conversation = await prisma.coachConversation.create({ data: { userId: user.id } });
   for (const [status, entries] of [
     ['PENDING', snapshot.pendingMemories ?? []],
     ['CONFIRMED', snapshot.confirmedMemories ?? []],
   ] as const) {
     for (const e of entries) {
       await prisma.coachMemory.create({
-        data: { userId: user.id, category: e.category, value: e.value, status, ...(status === 'CONFIRMED' ? { confirmedAt: new Date() } : {}) },
+        data: {
+          userId: user.id,
+          category: e.category,
+          value: e.value,
+          status,
+          ...(status === 'PENDING' ? { conversationId: conversation.id } : {}),
+          ...(status === 'CONFIRMED' ? { confirmedAt: new Date() } : {}),
+        },
       });
     }
   }
-  return { userId: user.id };
+  return { userId: user.id, conversationId: conversation.id };
 }
 
 export async function cleanupUser(userId: string): Promise<void> {

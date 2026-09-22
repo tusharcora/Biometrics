@@ -94,7 +94,11 @@ export interface MemoryProposal {
  * store is the last gate whoever calls it), skips a duplicate of an existing
  * entry, and stops at the per-user cap. Returns only the rows created now.
  */
-export async function createPendingMemories(userId: string, proposals: MemoryProposal[]): Promise<MemoryDTO[]> {
+export async function createPendingMemories(
+  userId: string,
+  proposals: MemoryProposal[],
+  conversationId: string | null = null,
+): Promise<MemoryDTO[]> {
   const created: MemoryDTO[] = [];
   if (proposals.length === 0) return created;
   const existing = await prisma.coachMemory.findMany({ where: { userId }, select: { category: true, value: true } });
@@ -105,9 +109,17 @@ export async function createPendingMemories(userId: string, proposals: MemoryPro
     if (!checked.ok) continue;
     const key = `${checked.category}|${checked.value.toLowerCase()}`;
     if (seen.has(key) || total >= MAX_MEMORY_ENTRIES_PER_USER) continue;
-    const row = await prisma.coachMemory.create({
-      data: { userId, category: checked.category, value: checked.value, status: 'PENDING' },
-    });
+    let row;
+    try {
+      row = await prisma.coachMemory.create({
+        data: { userId, category: checked.category, value: checked.value, status: 'PENDING', conversationId },
+      });
+    } catch (err) {
+      // The (userId, category, value) unique index: another turn proposed the
+      // same fact between the read above and this write. Nothing to add.
+      if ((err as { code?: string } | null)?.code === 'P2002') continue;
+      throw err;
+    }
     seen.add(key);
     total++;
     created.push(toMemoryDTO(row));
@@ -128,8 +140,21 @@ export interface MemoryResolution {
  * written after the reply is validated. `dismissed` counts rows actually
  * deleted; the orchestrator tells the user when it is above zero.
  */
-export async function resolvePendingMemories(userId: string, message: string): Promise<MemoryResolution> {
-  const pending = await prisma.coachMemory.findMany({ where: { userId, status: 'PENDING' }, select: { id: true, value: true } });
+export async function resolvePendingMemories(
+  userId: string,
+  message: string,
+  conversationId: string | null,
+): Promise<MemoryResolution> {
+  // A proposal belongs to the conversation it was made in. Resolving across all
+  // of a user's conversations meant a message in one settled -- confirmed or
+  // silently deleted -- proposals the user had never been shown in that thread.
+  // A brand-new conversation has nothing of its own pending yet, so it settles
+  // nothing.
+  if (conversationId === null) return { confirmed: 0, dismissed: 0 };
+  const pending = await prisma.coachMemory.findMany({
+    where: { userId, status: 'PENDING', conversationId },
+    select: { id: true, value: true },
+  });
   if (pending.length === 0) return { confirmed: 0, dismissed: 0 };
   const dismissIds: string[] = [];
   const confirmIds: string[] = [];

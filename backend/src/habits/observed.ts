@@ -18,6 +18,13 @@ export interface ObservedDay {
 export interface ExposureRule {
   type: string;
   exposureThreshold: number;
+  /**
+   * The first day this type could be observed at all (YYYY-MM-DD). Check-in
+   * days before it are not "the user did not do this", they are days the type
+   * did not exist, and counting them as unexposed hands the control group ~90
+   * invented days the moment a custom type is created.
+   */
+  observedFrom?: string;
 }
 
 /**
@@ -36,12 +43,17 @@ export function buildObservedDays(
   const checkedIn = new Set(checkInDays);
   const result = new Map<string, ObservedDay[]>();
 
-  for (const { type, exposureThreshold } of types) {
+  for (const { type, exposureThreshold, observedFrom } of types) {
     const totals = new Map<string, number>();
     for (const log of logs) {
       if (log.habitType === type) totals.set(log.habitDay, (totals.get(log.habitDay) ?? 0) + log.value);
     }
-    for (const day of checkedIn) if (!totals.has(day)) totals.set(day, 0);
+    // A real log still counts even if it somehow predates the type; only the
+    // implied zeroes are withheld.
+    for (const day of checkedIn) {
+      if (observedFrom !== undefined && day < observedFrom) continue;
+      if (!totals.has(day)) totals.set(day, 0);
+    }
 
     const days = [...totals.entries()]
       .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))

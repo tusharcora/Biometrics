@@ -241,7 +241,10 @@ export async function fetchSleepSessions(
   for (const r of rows) {
     const interval = r.sleep?.interval;
     const minutes = r.sleep?.summary?.minutesAsleep;
-    if (!interval?.startTime || !interval?.endTime || minutes === undefined) continue;
+    // `== null` on purpose: Google sends an explicit null for a night it
+    // recorded but could not summarise, and Number(null) is 0 -- which passes
+    // the isFinite guard below and stores a real night as zero minutes asleep.
+    if (!interval?.startTime || !interval?.endTime || minutes == null) continue;
     const startTime = new Date(interval.startTime);
     const endTime = new Date(interval.endTime);
     const minutesAsleep = Number(minutes);

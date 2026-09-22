@@ -1,5 +1,6 @@
 import express from 'express';
 import request from 'supertest';
+import { RATE_LIMIT_MAX_TURNS, resetTurnGuards } from '../../src/coach/turnGuard';
 import { createApp } from '../../src/app';
 import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
@@ -445,5 +446,43 @@ describe('conversation transcripts', () => {
     // Latest never leaks across users either.
     const latest = await request(createApp()).get('/me/coach/conversations/latest').set(await authed(other.id));
     expect(latest.body.conversationId).toBeNull();
+  });
+});
+
+describe('POST /me/coach/message: per-user guards', () => {
+  // A coach turn can hold a synthesis-tier loop open for 60s and, once a real
+  // provider is wired, costs money every time. The endpoint had nothing in
+  // front of it.
+  it('rate limits a burst and says when to retry', async () => {
+    resetTurnGuards();
+    const { app } = scriptedApp(Array.from({ length: RATE_LIMIT_MAX_TURNS + 1 }, () => ({ type: 'text' as const, text: GOOD })));
+    const user = await consented();
+    const headers = await authed(user.id);
+
+    for (let i = 0; i < RATE_LIMIT_MAX_TURNS; i++) {
+      const ok = await request(app).post('/me/coach/message').set(headers).send({ message: `hello ${i}` });
+      expect(ok.status).toBe(200);
+    }
+
+    const limited = await request(app).post('/me/coach/message').set(headers).send({ message: 'one too many' });
+
+    expect(limited.status).toBe(429);
+    expect(limited.body.error).toBe('too_many_messages');
+    expect(Number(limited.headers['retry-after'])).toBeGreaterThan(0);
+  });
+
+  it('does not spend a rate-limit slot on a request that fails validation', async () => {
+    resetTurnGuards();
+    const { app } = scriptedApp([{ type: 'text', text: GOOD }]);
+    const user = await consented();
+    const headers = await authed(user.id);
+
+    for (let i = 0; i < RATE_LIMIT_MAX_TURNS + 3; i++) {
+      const bad = await request(app).post('/me/coach/message').set(headers).send({ message: '' });
+      expect(bad.status).toBe(400);
+    }
+
+    const ok = await request(app).post('/me/coach/message').set(headers).send({ message: 'still allowed' });
+    expect(ok.status).toBe(200);
   });
 });

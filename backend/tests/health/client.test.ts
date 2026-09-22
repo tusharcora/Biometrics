@@ -235,6 +235,36 @@ describe('fetchMetricRange', () => {
     ]);
   });
 
+  // Google sends an explicit null for a night it recorded but could not
+  // summarise. The guard only checked for `undefined`, and Number(null) is 0,
+  // so such a night was stored as "0 minutes asleep" -- which then reads as a
+  // catastrophic night to every baseline and to sleep debt.
+  it('skips a sleep object whose minutesAsleep is null rather than storing it as 0', async () => {
+    nock('https://health.googleapis.com')
+      .get('/v4/users/me/dataTypes/sleep/dataPoints')
+      .query(true)
+      .reply(200, {
+        dataPoints: [
+          {
+            sleep: {
+              interval: { startTime: '2026-09-01T22:00:00Z', endTime: '2026-09-02T06:00:00Z' },
+              summary: { minutesAsleep: null },
+            },
+          },
+          {
+            sleep: {
+              interval: { startTime: '2026-09-03T22:00:00Z', endTime: '2026-09-04T06:00:00Z' },
+              summary: { minutesAsleep: '400' },
+            },
+          },
+        ],
+      });
+
+    const sessions = await fetchSleepSessions('token-1', '2026-09-01', '2026-09-05');
+
+    expect(sessions.map((s) => s.minutesAsleep)).toEqual([400]);
+  });
+
   it('fetches HRV via dataPoints.list on the separate "daily-heart-rate-variability" collection, one point per day', async () => {
     // Confirmed live against a real Fitbit-linked account: HRV is a daily
     // pre-aggregated type, not sample-based. dailyRollUp explicitly rejects

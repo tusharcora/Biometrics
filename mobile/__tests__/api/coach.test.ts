@@ -4,6 +4,7 @@ import {
   COACH_REQUEST_TIMEOUT_MS,
   CoachConsentRequiredError,
   CoachDisabledError,
+  StaleConversationError,
   CoachTimeoutError,
   StaleConsentVersionError,
   acceptCoachConsent,
@@ -112,6 +113,23 @@ describe('sendCoachMessage', () => {
     fetchMock.mockResolvedValueOnce(fail(403, { error: 'consent_required' }));
     await expect(sendCoachMessage({ message: 'Hi' })).rejects.toBeInstanceOf(CoachConsentRequiredError);
     fetchMock.mockResolvedValueOnce(fail(404, { error: 'coach_disabled' }));
+    await expect(sendCoachMessage({ message: 'Hi' })).rejects.toBeInstanceOf(CoachDisabledError);
+  });
+
+  // Both are 404s. Mapping them by status alone hid the whole chat behind
+  // "coach unavailable" whenever a conversation aged past the 90-day retention.
+  it('separates a stale conversation 404 from a coach-disabled 404', async () => {
+    fetchMock.mockResolvedValueOnce(fail(404, { error: 'conversation_not_found' }));
+    await expect(sendCoachMessage({ message: 'Hi', conversationId: 'gone' })).rejects.toBeInstanceOf(
+      StaleConversationError,
+    );
+
+    fetchMock.mockResolvedValueOnce(fail(404, { error: 'coach_disabled' }));
+    await expect(sendCoachMessage({ message: 'Hi' })).rejects.toBeInstanceOf(CoachDisabledError);
+  });
+
+  it('still treats a 404 with no error code as coach-disabled', async () => {
+    fetchMock.mockResolvedValueOnce(fail(404, {}));
     await expect(sendCoachMessage({ message: 'Hi' })).rejects.toBeInstanceOf(CoachDisabledError);
   });
 

@@ -53,3 +53,36 @@ describe('buildObservedDays', () => {
     expect(out).toEqual([{ day: '2026-09-07', exposed: true }]);
   });
 });
+
+describe('a type that did not exist yet', () => {
+  // Creating a custom type used to hand it every earlier check-in day as an
+  // "unexposed" observation, so a brand-new habit arrived with ~90 days of
+  // invented control-group evidence behind it.
+  it('does not seed unexposed days before the type was created', () => {
+    const checkIns = ['2026-09-01', '2026-09-02', '2026-09-03', '2026-09-04'];
+
+    const observed = buildObservedDays([], checkIns, [
+      { type: 'SAUNA', exposureThreshold: 1, observedFrom: '2026-09-03' },
+    ]);
+
+    expect(observed.get('SAUNA')!.map((d) => d.day)).toEqual(['2026-09-03', '2026-09-04']);
+  });
+
+  it('keeps a real log even if it predates the type, withholding only the implied zeroes', () => {
+    const observed = buildObservedDays(
+      [{ habitType: 'SAUNA', value: 1, habitDay: '2026-09-01' }],
+      ['2026-09-01', '2026-09-02', '2026-09-03'],
+      [{ type: 'SAUNA', exposureThreshold: 1, observedFrom: '2026-09-03' }],
+    );
+
+    expect(observed.get('SAUNA')!).toEqual([
+      { day: '2026-09-01', exposed: true },
+      { day: '2026-09-03', exposed: false },
+    ]);
+  });
+
+  it('a type with no start day (a built-in) is observed on every check-in day, as before', () => {
+    const observed = buildObservedDays([], ['2026-09-01', '2026-09-02'], [{ type: 'ALCOHOL', exposureThreshold: 2 }]);
+    expect(observed.get('ALCOHOL')!.map((d) => d.day)).toEqual(['2026-09-01', '2026-09-02']);
+  });
+});

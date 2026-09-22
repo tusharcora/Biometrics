@@ -1,3 +1,5 @@
+import { shiftDate } from '../scoring/dates';
+import { getLiveConfig } from '../scoring/configs';
 import { prisma } from '../db/client';
 import { BiometricMetricType, HealthMetricPoint, SleepSessionPoint } from '../types';
 import { sessionEndCivilDate, civilDateToUtcMidnight } from './civilDate';
@@ -102,14 +104,16 @@ function totalsByLocalDate(
 // has sessions, delete the row when it has none left (e.g. its only session
 // was revised onto another date). Always a full overwrite from the derived
 // value, never an increment, so running it twice is a no-op.
-function rollupWrites(userId: string, dates: string[], totals: Map<string, number>) {
+type RollupClient = Pick<typeof prisma, 'biometricRecord'>;
+
+function rollupWrites(client: RollupClient, userId: string, dates: string[], totals: Map<string, number>) {
   return dates.map((date) => {
     const recordedAt = civilDateToUtcMidnight(date);
     const total = totals.get(date);
     if (total === undefined) {
-      return prisma.biometricRecord.deleteMany({ where: { userId, metricType: 'SLEEP', recordedAt } });
+      return client.biometricRecord.deleteMany({ where: { userId, metricType: 'SLEEP', recordedAt } });
     }
-    return prisma.biometricRecord.upsert({
+    return client.biometricRecord.upsert({
       where: { userId_metricType_recordedAt: { userId, metricType: 'SLEEP', recordedAt } },
       update: { value: total, syncedAt: new Date() },
       create: { userId, metricType: 'SLEEP', recordedAt, value: total },
@@ -133,12 +137,22 @@ export async function recomputeSleepRollups(userId: string, civilDates: string[]
   // contains its sessions. The exact bucketing is then done per-session.
   const from = new Date(civilDateToUtcMidnight(dates[0]!).getTime() - DAY_MS);
   const to = new Date(civilDateToUtcMidnight(dates[dates.length - 1]!).getTime() + 2 * DAY_MS);
-  const sessions = await prisma.sleepSession.findMany({
-    where: { userId, endTime: { gte: from, lt: to } },
-    select: { endTime: true, endUtcOffsetSeconds: true, minutesAsleep: true },
+  // The read has to sit inside the same transaction as the write, and be
+  // serialised against other jobs for this user. Two sync jobs used to read
+  // their own snapshot of the sessions, compute a total from it, and then both
+  // write -- so whichever committed last could persist a total that omitted
+  // the other's sessions. A per-user advisory lock (rather than SERIALIZABLE)
+  // keeps that ordering without making unrelated users retry each other.
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
+    const sessions = await tx.sleepSession.findMany({
+      where: { userId, endTime: { gte: from, lt: to } },
+      select: { endTime: true, endUtcOffsetSeconds: true, minutesAsleep: true },
+    });
+    for (const write of rollupWrites(tx, userId, dates, totalsByLocalDate(sessions, timeZone))) {
+      await write;
+    }
   });
-
-  await prisma.$transaction(rollupWrites(userId, dates, totalsByLocalDate(sessions, timeZone)));
 }
 
 /**
@@ -148,22 +162,37 @@ export async function recomputeSleepRollups(userId: string, civilDates: string[]
  * are derived. Sessions that carry their own UTC offset are keyed by it, so
  * they do not move with the timezone.
  */
-export async function recomputeAllSleepRollups(userId: string): Promise<void> {
+export async function recomputeAllSleepRollups(userId: string): Promise<string[]> {
   const timeZone = await timezoneOf(userId);
-  const sessions = await prisma.sleepSession.findMany({
-    where: { userId },
-    select: { endTime: true, endUtcOffsetSeconds: true, minutesAsleep: true },
-  });
-  const totals = totalsByLocalDate(sessions, timeZone);
+  const touchedDates: string[] = [];
 
-  const existing = await prisma.biometricRecord.findMany({
-    where: { userId, metricType: 'SLEEP' },
-    select: { recordedAt: true },
-  });
-  const dates = new Set(totals.keys());
-  for (const r of existing) dates.add(r.recordedAt.toISOString().slice(0, 10));
+  await prisma.$transaction(async (tx) => {
+    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
+    const sessions = await tx.sleepSession.findMany({
+      where: { userId },
+      select: { endTime: true, endUtcOffsetSeconds: true, minutesAsleep: true },
+    });
+    const totals = totalsByLocalDate(sessions, timeZone);
 
-  await prisma.$transaction(rollupWrites(userId, [...dates].sort(), totals));
+    const existing = await tx.biometricRecord.findMany({
+      where: { userId, metricType: 'SLEEP' },
+      select: { recordedAt: true },
+    });
+    const dates = new Set(totals.keys());
+    for (const r of existing) dates.add(r.recordedAt.toISOString().slice(0, 10));
+
+    const sorted = [...dates].sort();
+    touchedDates.push(...sorted);
+    for (const write of rollupWrites(tx, userId, sorted, totals)) {
+      await write;
+    }
+  });
+
+  // Every SLEEP rollup was just re-keyed under the new zone, so every score
+  // built on one is stale. The nightly sweep would eventually notice (the
+  // rewrites bump syncedAt), but "eventually" here means the user sees scores
+  // from their old day boundaries until tomorrow.
+  return touchedDates;
 }
 
 /**
@@ -178,6 +207,37 @@ export async function storeSleepSessions(userId: string, sessions: SleepSessionP
   const dates = [...new Set(touched.map((end) => sessionEndCivilDate(end, timeZone)))].sort();
   await recomputeSleepRollups(userId, dates);
   return dates;
+}
+
+/**
+ * The days whose scores a set of changed sleep nights invalidates.
+ *
+ * A night is not only an input to its own day: sleepDebtRolling sums the
+ * deficit over a trailing window, so night D is still inside the window of
+ * every day up to D + windowDays - 1. Returning only the touched dates meant a
+ * late webhook, a reconnect backfill or a night Google revised re-scored day D
+ * alone and left the following two weeks computed from a window that no longer
+ * matched the data. The nightly sweep does not catch it either: its staleness
+ * test is per day, and those days' own inputs never changed.
+ *
+ * Nothing is emitted past today -- there is no score to recompute for a day
+ * that has not happened.
+ */
+export function datesNeedingRescore(touchedDates: string[], today = isoDateOf(new Date())): string[] {
+  const windowDays = getLiveConfig().sleepDebtWindowDays;
+  const out = new Set<string>();
+  for (const date of touchedDates) {
+    for (let i = 0; i < windowDays; i++) {
+      const d = shiftDate(date, i);
+      if (d > today) break;
+      out.add(d);
+    }
+  }
+  return [...out].sort();
+}
+
+function isoDateOf(d: Date): string {
+  return d.toISOString().slice(0, 10);
 }
 
 export async function getBiometricsForUser(userId: string) {
