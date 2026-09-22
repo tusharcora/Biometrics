@@ -148,6 +148,36 @@ describe('Slice 1.5 Stage 2: circadian consistency', () => {
     expect(mainSessionOnsets(sessions, 'UTC').map((o) => o.value)).toEqual([690, 750]);
   });
 
+  it("reads a session's own UTC offsets over the user's timezone: night date from the end offset, onset from the start offset", () => {
+    // User zone New York. The record says +09:00 (Tokyo): starts 14:30Z = 23:30 local Sep 2, ends 22:00Z = 07:00 Sep 3.
+    const s = {
+      ...sleepSession('2026-09-02T14:30:00Z', 450, 420),
+      startUtcOffsetSeconds: 32400,
+      endUtcOffsetSeconds: 32400,
+    };
+    expect([...groupSessionsByNight([s], 'America/New_York').keys()]).toEqual(['2026-09-03']);
+    expect(mainSessionOnsets([s], 'America/New_York')).toEqual([{ date: '2026-09-03', value: 690 }]);
+    // Without offsets the same instants follow New York: end 18:00 Sep 2, onset 10:30 -> 1350.
+    const bare = sleepSession('2026-09-02T14:30:00Z', 450, 420);
+    expect(mainSessionOnsets([bare], 'America/New_York')).toEqual([{ date: '2026-09-02', value: 1350 }]);
+    // Null offsets are "absent", not zero.
+    const nulls = { ...bare, startUtcOffsetSeconds: null, endUtcOffsetSeconds: null };
+    expect(mainSessionOnsets([nulls], 'America/New_York')).toEqual([{ date: '2026-09-02', value: 1350 }]);
+  });
+
+  it('a night crossing local midnight at half-hour and negative offsets stays one contiguous run of onsets', () => {
+    const at = (startIso: string, offset: number) => ({ ...sleepSession(startIso, 480, 440), startUtcOffsetSeconds: offset, endUtcOffsetSeconds: offset });
+    const onsets = mainSessionOnsets(
+      [
+        at('2026-09-01T18:00:00Z', 19800), // 23:30 local (+05:30), ends 07:30 Sep 2
+        at('2026-09-03T00:00:00Z', -18000), // 19:00 local (-05:00) Sep 2, ends 03:00 Sep 3 local: onset 420
+        at('2026-09-03T19:00:00Z', 19800), // 00:30 local Sep 4 (+05:30): onset 750
+      ],
+      'UTC',
+    );
+    expect(onsets.map((o) => o.value)).toEqual([690, 420, 750]);
+  });
+
   it("uses the user's timezone for the wall clock (23:30 in New York is 03:30Z)", () => {
     const sessions = [sleepSession('2026-08-02T03:30:00Z', 480, 440)];
     expect(mainSessionOnsets(sessions, 'America/New_York')[0]!.value).toBe(690);

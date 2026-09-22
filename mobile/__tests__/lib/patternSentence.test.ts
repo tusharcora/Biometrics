@@ -44,14 +44,15 @@ describe('factorPhrase', () => {
     expect(factorPhrase('CIRCADIAN_CONSISTENCY', 'Circadian consistency')).toBe('sleep-timing consistency');
   });
 
-  it('never calls the RHR factor resting heart rate, whatever label the server sends', () => {
-    expect(factorPhrase('RHR', 'Resting heart rate')).toBe('daily minimum heart rate');
-    expect(factorPhrase('RHR', 'RESTING_HR')).toBe('daily minimum heart rate');
+  it('words the RHR factor as resting heart rate, whatever label the server sends', () => {
+    expect(factorPhrase('RHR', 'Resting HR')).toBe('resting heart rate');
+    expect(factorPhrase('RHR', 'RESTING_HR')).toBe('resting heart rate');
+    expect(factorPhrase('RHR', 'Resting HR')).not.toMatch(/minimum/i);
   });
 
-  it('falls back to the server label for an unknown factor, still avoiding "resting"', () => {
+  it('falls back to the server label for an unknown factor, normalising a "resting" label', () => {
     expect(factorPhrase('SOMETHING_NEW' as never, 'Skin temperature')).toBe('Skin temperature');
-    expect(factorPhrase('SOMETHING_NEW' as never, 'Resting pulse')).toBe('daily minimum heart rate');
+    expect(factorPhrase('SOMETHING_NEW' as never, 'Resting pulse')).toBe('resting heart rate');
   });
 });
 
@@ -77,13 +78,13 @@ describe('buildPatternSentence', () => {
     );
   });
 
-  it('describes the RHR factor as the daily minimum heart rate', () => {
+  it('describes the RHR factor as resting heart rate', () => {
     const sentence = buildPatternSentence(
-      pattern({ habitType: 'CAFFEINE', exposureThreshold: 3, exposureUnit: 'cups', factor: 'RHR', factorLabel: 'Resting heart rate', effectSizePercent: 5, direction: 'higher' }),
+      pattern({ habitType: 'CAFFEINE', exposureThreshold: 3, exposureUnit: 'cups', factor: 'RHR', factorLabel: 'Resting HR', effectSizePercent: 5, direction: 'higher' }),
     );
 
-    expect(sentence).toContain('your daily minimum heart rate has averaged 5% above baseline');
-    expect(sentence).not.toMatch(/resting/i);
+    expect(sentence).toContain('your resting heart rate has averaged 5% above baseline');
+    expect(sentence).not.toMatch(/minimum/i);
   });
 
   it('formats a fractional threshold without trailing noise', () => {

@@ -504,13 +504,9 @@ shipping to anyone, not an implementation detail inside it:
   written, and nothing in this spec says how long they're kept or what
   happens to them when a user deletes their account. **Adopted**: coach
   chat transcripts and `CoachMemory` are deleted as part of the same
-  account-deletion flow that already needs to exist for `User`,
-  `HealthConnection`, and `BiometricRecord` (account deletion isn't
-  designed anywhere in this spec or the phases before it — this is a
-  real, currently-unaddressed gap in the whole app, not specific to the
-  coach, but the coach is the first place this spec touches data whose
-  absence-on-deletion actually matters for a privacy claim made to the
-  user). Short of full deletion, chat transcripts are retained for a
+  account deletion flow (`DELETE /me`), which removes every row a user owns
+  (their `User`, `HealthConnection` and `BiometricRecord` rows included).
+  Short of full deletion, chat transcripts are retained for a
   bounded window (proposed: 90 days, matching a reasonable abuse-
   monitoring need) and then hard-deleted on a scheduled job, not kept
   indefinitely by default.
@@ -674,12 +670,10 @@ per-word timing or animation-frame loop.
   and sits alongside the migration spec's existing CASA/Restricted-Scope
   review as a second, separate compliance question this app now has to
   answer.
-- Account deletion isn't designed anywhere in this codebase yet, for any
-  phase — this spec's §5 retention answer for coach data (deleted with
-  the account) assumes an account-deletion flow that doesn't currently
-  exist. Worth scoping as its own small spec once this feature
-  approaches, rather than letting the coach be the feature that quietly
-  requires it first.
+- Account deletion (`DELETE /me`) is implemented, but its Google-side steps
+  (deleting the webhook subscription and revoking the OAuth grant) are
+  best-effort and have only been tested against mocks, never against
+  Google's real endpoints.
 - The 12-second latency budget (§2) is a starting number, not measured
   against real provider latency for this app's actual tool-call pattern
   — worth revisiting once a provider is chosen (§5) and real latency
@@ -736,8 +730,7 @@ anyone**: it is dark by default and the gates in §5 are unresolved.
   provider, weekly digests are the deterministic server-composed fallback.
 - **Still unresolved, and blocking any release:** a named provider with
   written no-training / bounded-retention / tool-result-coverage terms; the
-  Google Health API downstream-sharing terms review; account deletion (only
-  the exported `deleteUserCoachData` exists); and confirming the chosen
+  Google Health API downstream-sharing terms review; and confirming the chosen
   provider supports structured/tool output for `{{field}}` references.
 
 Decisions made in implementation:
@@ -786,16 +779,30 @@ Decisions made in implementation:
 - Digest data is pre-fetched under the names `recoveryHistory`,
   `sleepHistory` and `getHabitCorrelations`. A user with no data gets no
   digest. The push payload is always a fixed string from a small set and
-  contains no digits; only `NoopPushSender` exists.
-- **The weekly digest push cannot reach anyone yet.** Mobile registers no
-  push tokens (no notification library is installed and none was added),
-  and the backend only has `NoopPushSender`; the token routes are ready.
-  This is a known follow-up, not part of this round. Reaching a device
-  needs a notification library (a native dependency), a permission flow,
-  token registration, and a real sender (Expo push or APNs/FCM — one more
-  third party, which will only ever see the fixed generic strings). It is
-  also moot until the provider gate in §5 is resolved, because no digest is
-  generated for a user unless the coach is enabled and consented.
+  contains no digits. `NoopPushSender` is the default; `ExpoPushSender`
+  is selected with `PUSH_PROVIDER=expo`.
+- **Push is built end to end but has never been delivered to a device.**
+  Mobile has a "Weekly recap notifications" switch that requests permission,
+  obtains an Expo push token and registers it (`POST /me/push-token`); the
+  backend sends through Expo's push service, refuses any text that is not one
+  of the fixed generic strings for that payload kind, masks tokens in logs,
+  and deletes a token Expo reports as `DeviceNotRegistered`. Real delivery
+  needs three things nobody has done: a paid Apple Developer team, an EAS
+  `projectId` in `extra.eas.projectId`, and a native rebuild with
+  `EXPO_PUSH=1 npx expo prebuild --platform ios`. The `expo-notifications`
+  config plugin is deliberately **off by default** (`app.config.js`) because
+  it adds the `aps-environment` entitlement, which Xcode will not sign on a
+  free personal team. Without it the switch reports that notifications are
+  unavailable in that build and everything else works. It is also moot until
+  the provider gate in §5 is resolved, since no digest is generated unless
+  the coach is enabled and consented.
+- **Account deletion** (`DELETE /me`, body `{"confirm":"DELETE"}`) deletes
+  the user and every row they own in one transaction, after best-effort
+  deletion of the Google webhook subscription and revocation of the OAuth
+  grant (neither blocks). One ordered `USER_OWNED_MODELS` list drives it, and a
+  test introspects the Prisma schema so a future table with a `userId` cannot
+  outlive its user. `requireAuth` now reads the user on every request, so a
+  deleted account's still-valid JWT is rejected.
 - The eval harness (`backend/evals/coach/`, `npm run eval:coach`, also run
   under jest) has 35 fixtures plus 4 deliberately wrong directional replies
   that it must catch.

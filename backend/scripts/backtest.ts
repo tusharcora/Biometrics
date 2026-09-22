@@ -82,7 +82,7 @@ export function dbLoader(userId?: string): BacktestOptions['loadUsers'] {
           userId: u.id,
           endTime: { gte: civilDateToUtcMidnight(shiftDate(lookbackFrom, -1)), lt: civilDateToUtcMidnight(shiftDate(to, 2)) },
         },
-        select: { startTime: true, endTime: true, minutesAsleep: true },
+        select: { startTime: true, endTime: true, minutesAsleep: true, startUtcOffsetSeconds: true, endUtcOffsetSeconds: true },
       });
       const by = (type: string): DailyPoint[] =>
         records.filter((r) => r.metricType === type).map((r) => ({ date: r.recordedAt.toISOString().slice(0, 10), value: r.value }));

@@ -15,7 +15,7 @@ import type { DailyScoreDTO, FactorDTO } from '../../src/api/scores';
 function factor(overrides: Partial<FactorDTO> & Pick<FactorDTO, 'factor'>): FactorDTO {
   const labels = {
     HRV: 'HRV',
-    RHR: 'Daily minimum HR',
+    RHR: 'Resting HR',
     SLEEP_DEBT: 'Sleep debt',
     SLEEP_DURATION: 'Sleep duration',
     SLEEP_EFFICIENCY: 'Sleep efficiency',
@@ -75,7 +75,7 @@ describe('buildScoreHeadline', () => {
       }),
     );
 
-    expect(headline).toContain('Daily minimum HR is the biggest drag on your Recovery Score today (−6.4 pts).');
+    expect(headline).toContain('Resting HR is the biggest drag on your Recovery Score today (−6.4 pts).');
   });
 
   it('handles a single dominant factor without mentioning the others', () => {
@@ -117,7 +117,7 @@ describe('buildScoreHeadline', () => {
       }),
     );
 
-    expect(headline).toContain('Daily minimum HR is the biggest drag');
+    expect(headline).toContain('Resting HR is the biggest drag');
     expect(headline).toContain('Still building a baseline for HRV, so today’s score relies on the other factors.');
   });
 
@@ -155,7 +155,7 @@ describe('buildScoreHeadline', () => {
     expect(headline).not.toMatch(/biggest (lift|drag)/);
   });
 
-  it('describes a cold-start RESTING_HR metric as a daily-minimum proxy, never resting heart rate', () => {
+  it('describes a cold-start RESTING_HR metric as resting heart rate, never a daily minimum', () => {
     const headline = buildScoreHeadline(
       score({
         score: null,
@@ -164,8 +164,8 @@ describe('buildScoreHeadline', () => {
       }),
     );
 
-    expect(headline).toContain('daily minimum heart rate');
-    expect(headline.toLowerCase()).not.toContain('resting heart rate');
+    expect(headline).toContain('resting heart rate');
+    expect(headline.toLowerCase()).not.toContain('daily minimum');
   });
 
   it('copes with a null score and no cold-start detail', () => {
@@ -380,11 +380,11 @@ describe('buildBaselineSentence', () => {
     );
   });
 
-  it('names the RESTING_HR baseline as a daily minimum heart rate', () => {
+  it('names the RESTING_HR baseline as resting heart rate', () => {
     const sentence = buildBaselineSentence({ metric: 'RESTING_HR', ewma: 52, spread: 3, daysOfHistory: 30, windowDays: 30, unit: 'bpm' });
 
-    expect(sentence).toContain('daily minimum heart rate baseline');
-    expect(sentence.toLowerCase()).not.toContain('resting heart rate');
+    expect(sentence).toContain('resting heart rate baseline');
+    expect(sentence.toLowerCase()).not.toContain('daily minimum');
   });
 });
 

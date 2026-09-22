@@ -6,8 +6,9 @@
 //     never stop old transcripts from expiring.
 //   * deleteUserCoachData(): removes EVERYTHING the coach holds for one user
 //     (transcripts, conversations, memory, digests, consent rows, push tokens).
-//     It is exported for the future account-deletion flow. Account deletion
-//     itself is not built here; the spec calls that out as its own piece of work.
+//     Account deletion (src/users/deletion.ts) deletes the same Coach* tables as
+//     part of its own single transaction, walking the shared USER_OWNED_MODELS
+//     list; this function remains for removing coach data on its own.
 //
 // Telemetry carries counts only.
 

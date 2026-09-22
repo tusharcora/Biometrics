@@ -52,7 +52,7 @@ async function loadSessions(userId: string, date: string, cfg: ScoreConfig): Pro
         lt: civilDateToUtcMidnight(shiftDate(date, 2)),
       },
     },
-    select: { startTime: true, endTime: true, minutesAsleep: true },
+    select: { startTime: true, endTime: true, minutesAsleep: true, startUtcOffsetSeconds: true, endUtcOffsetSeconds: true },
   });
 }
 
@@ -62,8 +62,11 @@ async function loadSessions(userId: string, date: string, cfg: ScoreConfig): Pro
  * (RECOVERY, and SLEEP when the night was observed). Everything is an
  * upsert keyed on (user, date[, metric|type]), so recomputing is always safe
  * to repeat (BullMQ retries, a debounced webhook and the nightly sweep can all
- * land on the same day). It is one job, not a flow: there is no network call
- * and no stage that can fail independently of the others.
+ * land on the same day). It never short-circuits on an existing score, so a
+ * row written by an older algorithm version is simply overwritten with the live
+ * version's answer (the sweep enqueues such days as stale). It is one job, not
+ * a flow: there is no network call and no stage that can fail independently of
+ * the others.
  *
  * "Day D" is the civil date key BiometricRecord already uses, so HRV(D), RHR(D)
  * and the SLEEP rollup(D) are the same night (Slice 0).
@@ -86,7 +89,17 @@ export async function computeDailyScore(
     cfg,
   );
 
-  await persist(userId, result);
+  try {
+    await persist(userId, result);
+  } catch (err) {
+    // The account was deleted while this job was computing: the write hit a
+    // foreign-key violation. That is the same outcome as the user having been
+    // gone at the start, not a failure to retry.
+    if ((err as { code?: string } | null)?.code === 'P2003' && !(await prisma.user.findUnique({ where: { id: userId }, select: { id: true } }))) {
+      return 'no-user';
+    }
+    throw err;
+  }
   return result.hasObservedInput ? 'scored' : 'no-input';
 }
 
@@ -102,6 +115,8 @@ function scoreRowData(algorithmVersion: string, outcome: ScoreOutcome) {
     factors: outcome.factors.map((x) => ({
       factor: x.factor,
       z: x.z,
+      // Only present under a config with a zClamp; the shape of older versions' rows is unchanged.
+      ...(x.zRaw !== undefined ? { zRaw: x.zRaw } : {}),
       weight: x.weight,
       contribution: x.contribution,
       points: x.points,

@@ -224,9 +224,10 @@ function pad2(n: number): string {
   return String(n).padStart(2, '0');
 }
 
-// Metrics fetched via dailyRollUp, which buckets by the user's civil (local)
-// calendar date. The other two (SLEEP, HRV) go through dataPoints.list, whose
-// filter is on raw UTC instants -- see fetchDateOfInterval.
+// Metrics keyed by Google's civil (local) calendar date: STEPS via dailyRollUp,
+// RESTING_HR via the dedicated daily-resting-heart-rate list, whose filter is a
+// civil-date literal. The other two (SLEEP, HRV) are resolved from the raw UTC
+// instant -- see fetchDateOfInterval.
 const CIVIL_DATE_METRICS: ReadonlySet<BiometricMetricType> = new Set(['STEPS', 'RESTING_HR']);
 
 /**
@@ -234,8 +235,8 @@ const CIVIL_DATE_METRICS: ReadonlySet<BiometricMetricType> = new Set(['STEPS', '
  * a changed interval, or null if the interval carries nothing usable. Which
  * calendar the day is on depends on how the metric is fetched:
  *
- * - STEPS / RESTING_HR use dailyRollUp, which buckets by the user's civil
- *   date, so the day must be the civil date too. Deriving it from the UTC
+ * - STEPS / RESTING_HR are fetched by the user's civil date (dailyRollUp /
+ *   the daily-resting-heart-rate filter), so the day must be the civil date too. Deriving it from the UTC
  *   date of `physicalTimeInterval.startTime` is wrong for users west of UTC
  *   in the evening (the instant is already "tomorrow" in UTC), so the civil
  *   fields are preferred and the UTC computation is only a last-resort

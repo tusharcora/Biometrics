@@ -1,6 +1,7 @@
 import { prisma } from '../db/client';
 import { civilDateToUtcMidnight } from '../biometrics/civilDate';
 import { shiftDate } from './dates';
+import { LIVE_VERSION } from './configs';
 import { enqueueScoreCompute, ScoreQueue } from './queue';
 import { syncQueue } from '../sync/queue';
 
@@ -34,7 +35,9 @@ interface DayInputs {
  * queued a moment earlier.
  *
  * Both score types are covered by that one job, so a day is enqueued when
- * EITHER is missing or stale:
+ * EITHER is missing or stale (stale includes "scored by a version other than
+ * LIVE_VERSION", so flipping the live version re-scores every day in the
+ * lookback window over the following sweeps):
  *  - RECOVERY is expected for any day with an HRV, RESTING_HR or SLEEP input;
  *  - SLEEP is expected only for a day with a SLEEP input (a day with just HRV
  *    never gets a Sleep Score, so it must not be re-enqueued forever for
@@ -75,21 +78,29 @@ export async function runScoreSweep({
   const userIds = [...new Set([...days.values()].map((d) => d.userId))];
   const scores = await prisma.dailyScore.findMany({
     where: { userId: { in: userIds }, date: { gte: since } },
-    select: { userId: true, date: true, type: true, updatedAt: true },
+    select: { userId: true, date: true, type: true, updatedAt: true, algorithmVersion: true },
   });
-  const scoredAt = new Map(
-    scores.map((s) => [`${s.userId}|${s.date.toISOString().slice(0, 10)}|${s.type}`, s.updatedAt]),
+  const scored = new Map(
+    scores.map((s) => [
+      `${s.userId}|${s.date.toISOString().slice(0, 10)}|${s.type}`,
+      { updatedAt: s.updatedAt, algorithmVersion: s.algorithmVersion },
+    ]),
   );
 
-  const isStale = (last: Date | undefined, newestInput: Date | null) =>
-    last === undefined || (newestInput !== null && newestInput > last);
+  // Stale = missing, older than its newest input, or written by a different
+  // algorithm version than the live one (a version flip re-scores history: the
+  // stored row is the OLD algorithm's answer however fresh its timestamp).
+  const isStale = (last: { updatedAt: Date; algorithmVersion: string } | undefined, newestInput: Date | null) =>
+    last === undefined ||
+    last.algorithmVersion !== LIVE_VERSION ||
+    (newestInput !== null && newestInput > last.updatedAt);
 
   let jobsEnqueued = 0;
   for (const day of days.values()) {
     const key = `${day.userId}|${day.date}`;
     const stale =
-      isStale(scoredAt.get(`${key}|RECOVERY`), day.newest) ||
-      (day.hasSleep && isStale(scoredAt.get(`${key}|SLEEP`), day.newestSleep));
+      isStale(scored.get(`${key}|RECOVERY`), day.newest) ||
+      (day.hasSleep && isStale(scored.get(`${key}|SLEEP`), day.newestSleep));
     if (!stale) continue;
     await enqueueScoreCompute(day.userId, day.date, { queue, delayMs: 0 });
     jobsEnqueued++;

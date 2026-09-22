@@ -78,12 +78,12 @@ describe('GET /me/scores', () => {
     );
   });
 
-  it('labels the RHR factor "Daily minimum HR", not "resting heart rate"', async () => {
+  it('labels the RHR factor "Resting HR" (the dedicated daily resting HR type, no longer the daily-minimum proxy)', async () => {
     const user = await createUser();
     await putScore(user.id, localCivilDate(new Date(), 'UTC'), 60);
     const res = await request(createApp()).get('/me/scores').set(await authed(user.id));
     const labels = Object.fromEntries(res.body.scores[0].factors.map((f: any) => [f.factor, f.label]));
-    expect(labels).toEqual({ HRV: 'HRV', RHR: 'Daily minimum HR', SLEEP_DEBT: 'Sleep debt' });
+    expect(labels).toEqual({ HRV: 'HRV', RHR: 'Resting HR', SLEEP_DEBT: 'Sleep debt' });
   });
 
   it('defaults to the last 30 days and honors ?days=N', async () => {

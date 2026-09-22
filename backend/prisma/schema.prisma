@@ -115,13 +115,21 @@ model BiometricRecord {
 // (sum of minutesAsleep for sessions ending on that local civil date), never
 // accumulated across syncs.
 model SleepSession {
-  id            String   @id @default(uuid())
-  userId        String
-  user          User     @relation(fields: [userId], references: [id])
-  startTime     DateTime
-  endTime       DateTime
-  minutesAsleep Float
-  syncedAt      DateTime @default(now())
+  id                    String   @id @default(uuid())
+  userId                String
+  user                  User     @relation(fields: [userId], references: [id])
+  startTime             DateTime
+  endTime               DateTime
+  minutesAsleep         Float
+  // The record's own UTC offsets (sleep.interval.startUtcOffset / endUtcOffset,
+  // "-14400s" -> -14400), in seconds east of UTC. They are Google's local-time
+  // basis for this session, so the day key and bedtime follow the traveller
+  // rather than User.timezone. Null on rows stored before they were captured
+  // (or when Google omitted them): those fall back to User.timezone until a
+  // re-fetch fills them in.
+  startUtcOffsetSeconds Int?
+  endUtcOffsetSeconds   Int?
+  syncedAt              DateTime @default(now())
 
   @@unique([userId, startTime])
   @@index([userId, endTime])

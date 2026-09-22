@@ -3,7 +3,7 @@
 // backtest tool replays the same function under a different config, so the
 // live job and the backtest can never drift apart.
 
-import { computeBaseline, sleepDurationZVsGoal, zScore } from './baseline';
+import { computeBaseline, sleepDurationZRawVsGoal, sleepDurationZVsGoal, zScore } from './baseline';
 import { imputeFromBaseline, rejectOutliers } from './clean';
 import { computeComposite } from './composite';
 import { shiftDate } from './dates';
@@ -44,7 +44,7 @@ export interface PipelineInput {
    * are simply cold-starting; nothing in the Recovery Score reads them.
    */
   sessions?: SleepSessionInput[];
-  /** IANA zone the sessions' wall-clock onset and end date are read in (User.timezone). Defaults to UTC. */
+  /** IANA zone (User.timezone) sessions without their own UTC offset are read in. Defaults to UTC. */
   timezone?: string;
 }
 
@@ -115,7 +115,7 @@ interface TrendMetric {
 }
 
 /** HRV and RHR: a trending metric that is outlier-screened and gap-imputed from its own EWMA. */
-function scoreTrendMetric(points: DailyPoint[], date: string, cfg: ScoreConfig): TrendMetric {
+function scoreTrendMetric(points: DailyPoint[], date: string, cfg: ScoreConfig, metric: BaselineMetric): TrendMetric {
   const series = upTo(points, date);
   const { kept, outliers } = rejectOutliers(series, cfg);
   const outlier = outliers.find((o) => o.date === date);
@@ -128,7 +128,7 @@ function scoreTrendMetric(points: DailyPoint[], date: string, cfg: ScoreConfig):
   if (today) {
     return {
       baseline,
-      z: zScore(today.value, baseline, cfg),
+      z: zScore(today.value, baseline, cfg, metric),
       imputed: false,
       deviationPct: baselineDeviationPct(today.value, baseline.ewma),
       observed: true,
@@ -138,7 +138,7 @@ function scoreTrendMetric(points: DailyPoint[], date: string, cfg: ScoreConfig):
   const filled = imputeFromBaseline(baseline)!;
   return {
     baseline,
-    z: zScore(filled.value, baseline, cfg),
+    z: zScore(filled.value, baseline, cfg, metric),
     imputed: filled.imputed,
     deviationPct: 0,
     observed: false,
@@ -157,18 +157,18 @@ interface OwnBaselineMetric {
  * sigma-hat. Like SLEEP they are not outlier-screened. A day with no value is
  * imputed from the baseline centre (z = 0, flagged) once the baseline exists.
  */
-function scoreOwnBaseline(series: DailyPoint[], date: string, cfg: ScoreConfig): OwnBaselineMetric {
+function scoreOwnBaseline(series: DailyPoint[], date: string, cfg: ScoreConfig, metric: BaselineMetric): OwnBaselineMetric {
   const today = series.find((p) => p.date === date);
   const baseline = computeBaseline(trailing(series, date, cfg.historyDays), cfg);
   if (baseline.coldStart) return { baseline, z: null, imputed: false };
-  return { baseline, z: zScore(today ? today.value : baseline.ewma, baseline, cfg), imputed: !today };
+  return { baseline, z: zScore(today ? today.value : baseline.ewma, baseline, cfg, metric), imputed: !today };
 }
 
 export function scoreDay(input: PipelineInput, cfg: ScoreConfig): PipelineResult {
   const { date } = input;
 
-  const hrv = scoreTrendMetric(input.hrv, date, cfg);
-  const rhr = scoreTrendMetric(input.rhr, date, cfg);
+  const hrv = scoreTrendMetric(input.hrv, date, cfg, 'HRV');
+  const rhr = scoreTrendMetric(input.rhr, date, cfg, 'RESTING_HR');
 
   // SLEEP is not outlier-screened: a very short night is exactly what sleep
   // debt exists to capture, and rejecting it would hide the signal.
@@ -178,7 +178,7 @@ export function scoreDay(input: PipelineInput, cfg: ScoreConfig): PipelineResult
   let sleepDurationZ: number | null = null;
   let sleepDurationZImputed = false;
   if (!sleepBaseline.coldStart) {
-    sleepDurationZ = zScore(sleepTonight ? sleepTonight.value : sleepBaseline.ewma, sleepBaseline, cfg);
+    sleepDurationZ = zScore(sleepTonight ? sleepTonight.value : sleepBaseline.ewma, sleepBaseline, cfg, 'SLEEP');
     sleepDurationZImputed = !sleepTonight;
   }
 
@@ -186,7 +186,7 @@ export function scoreDay(input: PipelineInput, cfg: ScoreConfig): PipelineResult
   const debtToday = sleepDebtRolling(sleep, date, input.sleepGoalMinutes, cfg);
   const debtSeries = buildSleepDebtSeries(sleep, date, input.sleepGoalMinutes, cfg);
   const debtBaseline = computeBaseline(trailing(debtSeries, date, cfg.historyDays), cfg);
-  const debtZ = zScore(debtToday, debtBaseline, cfg);
+  const debtZ = zScore(debtToday, debtBaseline, cfg, 'SLEEP_DEBT');
 
   const factorInputs: FactorInput[] = [
     { factor: 'HRV', z: hrv.z, imputed: hrv.imputed, excluded: hrv.z === null },
@@ -202,14 +202,16 @@ export function scoreDay(input: PipelineInput, cfg: ScoreConfig): PipelineResult
   const sessions = input.sessions ?? [];
   const efficiencySeries = buildSleepEfficiencySeries(sessions, timeZone, date);
   const circadianSeries = buildCircadianSeries(mainSessionOnsets(sessions, timeZone), date, cfg);
-  const efficiency = scoreOwnBaseline(efficiencySeries, date, cfg);
-  const circadian = scoreOwnBaseline(circadianSeries, date, cfg);
+  const efficiency = scoreOwnBaseline(efficiencySeries, date, cfg, 'SLEEP_EFFICIENCY');
+  const circadian = scoreOwnBaseline(circadianSeries, date, cfg, 'CIRCADIAN_CONSISTENCY');
 
   let sleepScore: ScoreOutcome | null = null;
   if (sleepTonight) {
     const durationZ = sleepDurationZVsGoal(sleepTonight.value, input.sleepGoalMinutes, sleepBaseline, cfg);
+    // Duration's own [-3, +1] clamp is applied above; zRaw is the value before it.
+    const durationZRaw = sleepDurationZRawVsGoal(sleepTonight.value, input.sleepGoalMinutes, sleepBaseline, cfg);
     const sleepInputs: FactorInput[] = [
-      { factor: 'SLEEP_DURATION', z: durationZ, imputed: false, excluded: durationZ === null },
+      { factor: 'SLEEP_DURATION', z: durationZ, zRaw: durationZRaw, imputed: false, excluded: durationZ === null },
       { factor: 'SLEEP_EFFICIENCY', z: efficiency.z, imputed: efficiency.imputed, excluded: efficiency.z === null },
       { factor: 'CIRCADIAN_CONSISTENCY', z: circadian.z, imputed: circadian.imputed, excluded: circadian.z === null },
     ];

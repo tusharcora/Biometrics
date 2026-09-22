@@ -1,4 +1,4 @@
-import type { RecoveryFactorKey, SleepFactorKey } from '../types';
+import type { BaselineMetric, RecoveryFactorKey, SleepFactorKey } from '../types';
 
 /**
  * Scoring algorithm v1. Versioned configs are NEVER mutated in place: a change
@@ -53,6 +53,21 @@ export interface ScoreConfig {
    * pin the score to 0 or 100.
    */
   spreadFloorFraction: number;
+  /**
+   * Optional (v3+). Absolute per-metric spread floors, in the metric's OWN units
+   * (a fraction for SLEEP_EFFICIENCY, points for CIRCADIAN_CONSISTENCY), for
+   * near-constant metrics where a fraction of the mean is still far too small a
+   * scale. The effective spread is the max of sigma-hat, spreadFloorFraction *
+   * |ewma|, this floor (0 when the metric has none) and Number.EPSILON.
+   */
+  spreadFloors?: Partial<Record<BaselineMetric, number>>;
+  /**
+   * Optional (v3+). Every factor's z, Recovery and Sleep alike, is clamped to
+   * [min, max] before weighting, so no single factor can dominate a score.
+   * Duration's own (tighter) durationZClamp still applies first and is never
+   * widened by this. Absent means no clamp (v1, v2).
+   */
+  zClamp?: { min: number; max: number };
   outlier: {
     /** Reject a value more than this many raw MADs from the trailing median. */
     madMultiplier: number;

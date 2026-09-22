@@ -24,8 +24,8 @@ interface FactorBarProps {
 
 // Signed contribution bar for the Stage 5 breakdown: extends left of the
 // centre line when the factor hurt the score, right when it helped. The label
-// is rendered exactly as the server sends it (the RHR factor arrives as a
-// daily-minimum proxy label, never "resting heart rate").
+// is rendered exactly as the server sends it (the RHR factor arrives as
+// "Resting HR").
 export function FactorBar({ factor, scale }: FactorBarProps) {
   const { side, fraction } = factorBarGeometry(factor.points, scale);
   const width = `${fraction * 100}%` as `${number}%`;

@@ -82,19 +82,20 @@ describe('connect Google Health and sync end to end (mocked Google API)', () => 
 
     // The default 30-day backfill window is chunked into <=14-day dailyRollUp
     // calls (confirmed live: heart-rate rejects a single request spanning
-    // more than 14 days), so a fresh connect's backfill makes 3 calls per
-    // dailyRollUp-backed metric (30 / 14 -> 3 windows), not 1.
+    // more than 14 days), so a fresh connect's backfill makes 3 calls for the
+    // dailyRollUp-backed metric (STEPS: 30 / 14 -> 3 windows), not 1.
     nock('https://health.googleapis.com')
       .post('/v4/users/me/dataTypes/steps/dataPoints:dailyRollUp')
       .times(3)
       .reply(200, {
         rollupDataPoints: [{ civilStartTime: { date: { year: 2026, month: 9, day: 1 } }, steps: { countSum: '7000' } }],
       });
+    // RESTING_HR comes from Google's dedicated daily type (one list call).
     nock('https://health.googleapis.com')
-      .post('/v4/users/me/dataTypes/heart-rate/dataPoints:dailyRollUp')
-      .times(3)
+      .get('/v4/users/me/dataTypes/daily-resting-heart-rate/dataPoints')
+      .query(true)
       .reply(200, {
-        rollupDataPoints: [{ civilStartTime: { date: { year: 2026, month: 9, day: 1 } }, heartRate: { beatsPerMinuteMin: 55 } }],
+        dataPoints: [{ dailyRestingHeartRate: { date: { year: 2026, month: 9, day: 1 }, beatsPerMinute: '55' } }],
       });
     nock('https://health.googleapis.com')
       .get('/v4/users/me/dataTypes/sleep/dataPoints')

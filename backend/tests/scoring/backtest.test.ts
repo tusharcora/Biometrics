@@ -1,7 +1,7 @@
 import { runBacktest, runBacktestAll, parseArgs } from '../../scripts/backtest';
 import { backtest, formatReport, BACKTEST_DISCLAIMER, CHANGE_THRESHOLD_POINTS, BacktestUserData } from '../../src/scoring/backtest';
 import { v1Config } from '../../src/scoring/configs/v1';
-import { getScoreConfig } from '../../src/scoring/configs';
+import { getScoreConfig, LIVE_VERSION } from '../../src/scoring/configs';
 import { shiftDate } from '../../src/scoring/dates';
 import type { DailyPoint } from '../../src/scoring/types';
 import { noonAnchoredNights } from './helpers';
@@ -53,7 +53,7 @@ describe('backtest', () => {
 
     const report = await runBacktest({ candidate, days: 30, now: NOW, loadUsers: async () => [syntheticUser()] });
 
-    expect(report.liveVersion).toBe('v1');
+    expect(report.liveVersion).toBe(LIVE_VERSION);
     expect(report.candidateVersion).toBe('v2-test');
     const scored = report.days.filter((d) => d.delta !== null);
     expect(scored.length).toBeGreaterThan(0);
@@ -112,7 +112,7 @@ describe('backtest: Sleep Score (Slice 1.5)', () => {
   }
 
   it('replays the SLEEP type and shows no change when the candidate is the live config', async () => {
-    const report = await runBacktest({ candidate: v1Config, days: 30, now: NOW, type: 'SLEEP', loadUsers: async () => [userWithSessions()] });
+    const report = await runBacktest({ candidate: getScoreConfig(LIVE_VERSION), days: 30, now: NOW, type: 'SLEEP', loadUsers: async () => [userWithSessions()] });
     expect(report.type).toBe('SLEEP');
     expect(report.days.length).toBe(30);
     expect(report.comparedDays).toBeGreaterThan(0);
@@ -135,6 +135,23 @@ describe('backtest: Sleep Score (Slice 1.5)', () => {
     for (const d of scored) expect(d.delta).toBeCloseTo(d.candidate! - d.live!, 9);
   });
 
+  it('replays v2 -> v3 on synthetic data: the Sleep Score moves (floors and clamp), Recovery does not (no z there reaches the clamp)', async () => {
+    const both = await runBacktestAll({
+      candidate: getScoreConfig('v3'),
+      live: getScoreConfig('v2'),
+      days: 30,
+      now: NOW,
+      loadUsers: async () => [userWithSessions()],
+    });
+    expect(both.SLEEP.liveVersion).toBe('v2');
+    expect(both.SLEEP.candidateVersion).toBe('v3');
+    expect(both.SLEEP.comparedDays).toBeGreaterThan(0);
+    expect(both.SLEEP.maxAbsDelta).toBeGreaterThan(0);
+    expect(both.RECOVERY.comparedDays).toBeGreaterThan(0);
+    expect(both.RECOVERY.maxAbsDelta).toBe(0);
+    expect(formatReport(both.SLEEP)).toContain('SLEEP score: live v2');
+  });
+
   it('skips days with no observed sleep in the SLEEP replay (no Sleep Score exists for them)', async () => {
     const user = userWithSessions();
     const gapDate = shiftDate(START, 75);
@@ -146,8 +163,8 @@ describe('backtest: Sleep Score (Slice 1.5)', () => {
   });
 
   it('labels each report with its score type in the printed output', async () => {
-    const report = await runBacktest({ candidate: v1Config, days: 5, now: NOW, type: 'SLEEP', loadUsers: async () => [userWithSessions()] });
-    expect(formatReport(report)).toContain('SLEEP score: live v1');
+    const report = await runBacktest({ candidate: getScoreConfig(LIVE_VERSION), days: 5, now: NOW, type: 'SLEEP', loadUsers: async () => [userWithSessions()] });
+    expect(formatReport(report)).toContain(`SLEEP score: live ${LIVE_VERSION}`);
     expect(formatReport(report)).toContain(BACKTEST_DISCLAIMER);
   });
 });

@@ -3,7 +3,8 @@ import { AuthedRequest, requireAuth } from '../auth/middleware';
 import { prisma } from '../db/client';
 import { CoachClock, systemClock } from './clock';
 import { COACH_CONSENT, COACH_CONSENT_VERSION, grantConsent, hasCurrentConsent, revokeConsent } from './consent';
-import { getCoachProvider, isCoachEnabled } from './config';
+import { getCoachProvider, isCoachEnabled, isExpoPushProvider } from './config';
+import { isExpoPushToken } from './push';
 import type { CoachModelProvider } from './model/provider';
 import { toMemoryDTO, validateMemoryValue } from './memory';
 import { createCoachOrchestrator, HISTORY_WINDOW, OrchestratorDeps } from './orchestrator';
@@ -352,6 +353,10 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
     }
     if (platform !== 'ios' && platform !== 'android') {
       res.status(400).json({ error: "platform must be 'ios' or 'android'" });
+      return;
+    }
+    if (isExpoPushProvider() && !isExpoPushToken(token)) {
+      res.status(400).json({ error: 'token must be an Expo push token' });
       return;
     }
     try {

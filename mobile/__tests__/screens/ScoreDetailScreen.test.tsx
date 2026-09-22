@@ -23,7 +23,7 @@ const detail: ScoreDetailDTO = {
     factors: [
       { factor: 'SLEEP_DEBT', label: 'Sleep debt', z: -0.4, weight: 0.2, contribution: -0.08, points: -1.4, imputed: false, excluded: false },
       { factor: 'HRV', label: 'HRV', z: 1.2, weight: 0.45, contribution: 0.54, points: 8.2, imputed: false, excluded: false },
-      { factor: 'RHR', label: 'Daily minimum HR', z: -0.6, weight: 0.35, contribution: -0.21, points: -3.1, imputed: false, excluded: false },
+      { factor: 'RHR', label: 'Resting HR', z: -0.6, weight: 0.35, contribution: -0.21, points: -3.1, imputed: false, excluded: false },
     ],
     coldStart: [],
   },
@@ -77,14 +77,14 @@ describe('ScoreDetailScreen', () => {
     expect(ids).toEqual(['factor-bar-HRV', 'factor-bar-RHR', 'factor-bar-SLEEP_DEBT']);
   });
 
-  it('labels the RESTING_HR factor and its baseline as a daily minimum, never resting heart rate', async () => {
+  it('labels the RESTING_HR factor and its baseline as resting heart rate, never a daily minimum', async () => {
     (fetchScoreDetail as jest.Mock).mockResolvedValue(detail);
 
     const { getByText, queryByText } = render(<ScoreDetailScreen />);
 
-    await waitFor(() => expect(getByText('Daily minimum HR')).toBeTruthy());
-    expect(getByText(/Your daily minimum heart rate baseline: 52 bpm ± 3 bpm/)).toBeTruthy();
-    expect(queryByText(/resting heart rate/i)).toBeNull();
+    await waitFor(() => expect(getByText('Resting HR')).toBeTruthy());
+    expect(getByText(/Your resting heart rate baseline: 52 bpm ± 3 bpm/)).toBeTruthy();
+    expect(queryByText(/daily minimum/i)).toBeNull();
   });
 
   it('shows the baseline-progress state instead of a score ring on a cold-start day', async () => {
