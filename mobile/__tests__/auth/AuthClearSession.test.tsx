@@ -28,6 +28,25 @@ beforeEach(() => {
 });
 
 describe('AuthContext.clearSession', () => {
+  // The time zone keys are device-global, so leaving them behind let the next
+  // account signed in on this device inherit the previous user's override and
+  // skip its own sync (syncTimezone short-circuits on lastSyncedTimezone).
+  it('also forgets the device-global time zone state', async () => {
+    const { getByTestId, getByText } = render(
+      <AuthProvider>
+        <Probe />
+      </AuthProvider>,
+    );
+    await waitFor(() => expect(getByTestId('status').props.children).toBe('signed-in'));
+
+    fireEvent.press(getByText('clear'));
+
+    await waitFor(() => expect(getByTestId('status').props.children).toBe('signed-out'));
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith('lastSyncedTimezone');
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith('timezoneOverridden');
+    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith('timezoneOverrideZone');
+  });
+
   it('deletes both stored tokens and signs out locally without any network call', async () => {
     const { getByTestId, getByText } = render(
       <AuthProvider>

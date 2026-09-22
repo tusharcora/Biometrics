@@ -78,6 +78,23 @@ export async function syncTimezone(): Promise<void> {
   }
 }
 
+/**
+ * Forgets everything this device remembers about the time zone.
+ *
+ * These keys are device-global, not per-account, so without this the next user
+ * to sign in on the same device inherited them: syncTimezone short-circuits on
+ * `lastSynced === timezone` and would never send the new account's zone to the
+ * server, and an override the previous user set silently became theirs.
+ * Called from sign-out, where a failure must not block signing out.
+ */
+export async function clearTimezoneState(): Promise<void> {
+  await Promise.all([
+    SecureStore.deleteItemAsync(LAST_SYNCED_KEY).catch(() => undefined),
+    SecureStore.deleteItemAsync(OVERRIDDEN_KEY).catch(() => undefined),
+    SecureStore.deleteItemAsync(OVERRIDE_ZONE_KEY).catch(() => undefined),
+  ]);
+}
+
 export async function setTimezoneOverride(timezone: string): Promise<void> {
   if (!isValidTimeZone(timezone)) throw new Error(`Invalid time zone: ${timezone}`);
   await SecureStore.setItemAsync(OVERRIDE_ZONE_KEY, timezone);
