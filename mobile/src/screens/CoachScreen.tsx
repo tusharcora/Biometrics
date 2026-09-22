@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, ScrollView, TextInput, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
@@ -20,6 +20,7 @@ import { Text } from '../components/ui/text';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
+import { PromptBar } from '../components/coach/PromptBar';
 import { ChatBubble } from '../components/ui/chat-bubble';
 import { MemoryProposalChips } from '../components/memory-proposal-chips';
 import { COLORS } from '../theme';
@@ -341,7 +342,6 @@ export function CoachScreen() {
     );
   }
 
-  const canSend = input.trim().length > 0 && !sending;
 
   return (
     <SafeAreaView className="flex-1 bg-background">
@@ -429,21 +429,8 @@ export function CoachScreen() {
             ) : null}
           </ScrollView>
 
-          <View className="flex-row items-end gap-2 border-t border-border p-3">
-            <TextInput
-              testID="coach-input"
-              value={input}
-              onChangeText={setInput}
-              placeholder="Ask the coach"
-              placeholderTextColor={colors.muted}
-              multiline
-              editable={!sending}
-              style={{ color: colors.foreground, maxHeight: 120 }}
-              className="flex-1 rounded-xl border border-border bg-card px-4 py-3"
-            />
-            <Button testID="coach-send-button" accessibilityLabel="Send" disabled={!canSend} onPress={send} className={canSend ? '' : 'opacity-50'}>
-              <Ionicons name="arrow-up" size={20} color="rgb(255,255,255)" />
-            </Button>
+          <View className="border-t border-border p-3">
+            <PromptBar value={input} onChangeText={setInput} onSend={send} busy={sending} />
           </View>
         </KeyboardAvoidingView>
       </View>
