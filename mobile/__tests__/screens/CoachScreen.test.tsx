@@ -176,7 +176,7 @@ describe('CoachScreen: gating', () => {
   it('opens the chat when the first history load fails, then retries the history on the next focus and continues that conversation', async () => {
     (fetchLatestConversation as jest.Mock).mockRejectedValueOnce(new Error('offline')).mockResolvedValue({
       conversationId: 'conv-9',
-      messages: [{ id: 'h1', role: 'ASSISTANT', text: 'Earlier answer', source: 'model', createdAt: '2026-09-19T10:00:00.000Z' }],
+      messages: [{ id: 'h1', role: 'assistant', text: 'Earlier answer', source: 'model', createdAt: '2026-09-19T10:00:00.000Z' }],
     });
     (sendCoachMessage as jest.Mock).mockResolvedValue(reply('Next answer', {}));
     const utils = await openChat();
@@ -188,6 +188,7 @@ describe('CoachScreen: gating', () => {
     });
 
     expect(await utils.findByText('Earlier answer')).toBeTruthy();
+    expect(utils.getByTestId('chat-bubble-assistant')).toHaveTextContent('Earlier answer');
     expect(fetchLatestConversation).toHaveBeenCalledTimes(2);
     type(utils, 'And now?');
     fireEvent.press(utils.getByTestId('coach-send-button'));
@@ -209,6 +210,31 @@ describe('CoachScreen: gating', () => {
 
     expect(fetchLatestConversation).toHaveBeenCalledTimes(1);
     expect(utils.getByText('Fresh answer')).toBeTruthy();
+    expect(utils.getByText('Hello')).toBeTruthy();
+  });
+
+  it('does not let a focus reload wipe a message sent while its reply is still in flight', async () => {
+    (fetchLatestConversation as jest.Mock).mockRejectedValueOnce(new Error('offline'));
+    const pending = deferred<CoachReplyDTO>();
+    (sendCoachMessage as jest.Mock).mockReturnValue(pending.promise);
+    const utils = await openChat();
+
+    type(utils, 'Hello');
+    fireEvent.press(utils.getByTestId('coach-send-button'));
+    expect(await utils.findByText('Hello')).toBeTruthy();
+
+    // The reply (and conversationId) have not arrived yet -- the tab regains
+    // focus in that window, before either historyLoaded or conversationId is set.
+    await act(async () => {
+      mockFocusListener?.();
+    });
+
+    expect(fetchLatestConversation).toHaveBeenCalledTimes(1);
+    expect(utils.getByText('Hello')).toBeTruthy();
+
+    await act(async () => pending.resolve(reply('Fresh answer')));
+
+    expect(await utils.findByText('Fresh answer')).toBeTruthy();
     expect(utils.getByText('Hello')).toBeTruthy();
   });
 
@@ -272,15 +298,19 @@ describe('CoachScreen: conversation', () => {
     (fetchLatestConversation as jest.Mock).mockResolvedValue({
       conversationId: 'conv-1',
       messages: [
-        { id: 'a', role: 'USER', text: 'How did I sleep?', createdAt: '2026-09-19T10:00:00.000Z' },
-        { id: 'b', role: 'ASSISTANT', text: 'You slept a little less than usual.', source: 'model', createdAt: '2026-09-19T10:00:05.000Z' },
+        { id: 'a', role: 'user', text: 'How did I sleep?', createdAt: '2026-09-19T10:00:00.000Z' },
+        { id: 'b', role: 'assistant', text: 'You slept a little less than usual.', source: 'model', createdAt: '2026-09-19T10:00:05.000Z' },
       ],
     });
-    const { findByText, getByTestId } = render(<CoachScreen />);
+    const { findByText, getByTestId, getByText } = render(<CoachScreen />);
 
     expect(await findByText('How did I sleep?')).toBeTruthy();
     expect(await findByText('You slept a little less than usual.')).toBeTruthy();
     expect(getByTestId('coach-input')).toBeTruthy();
+    // Real history rows carry a lowercase role; a restored user message must
+    // render as a user bubble, not the assistant's.
+    expect(getByTestId('chat-bubble-user')).toHaveTextContent('How did I sleep?');
+    expect(getByTestId('chat-bubble-assistant')).toHaveTextContent('You slept a little less than usual.');
   });
 
   it('shows an empty state when there is no conversation yet', async () => {

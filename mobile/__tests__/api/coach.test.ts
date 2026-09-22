@@ -150,7 +150,7 @@ describe('sendCoachMessage', () => {
 
 describe('fetchLatestConversation', () => {
   it('returns the conversation', async () => {
-    const body = { conversationId: 'c1', messages: [{ id: 'a', role: 'USER', text: 'Hi', createdAt: 'x' }] };
+    const body = { conversationId: 'c1', messages: [{ id: 'a', role: 'user', text: 'Hi', createdAt: 'x' }] };
     fetchMock.mockResolvedValueOnce(ok(body));
     await expect(fetchLatestConversation()).resolves.toEqual(body);
   });
