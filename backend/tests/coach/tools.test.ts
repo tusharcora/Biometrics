@@ -1,3 +1,4 @@
+import { civilDateToUtcMidnight } from '../../src/biometrics/civilDate';
 import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
 import { coachTools, COACH_TOOL_SCHEMAS, MAX_HISTORY_DAYS } from '../../src/coach/tools';
@@ -60,6 +61,7 @@ describe('getDailyScore', () => {
         'deltaFromYesterday',
         'direction',
         'factors',
+        'factorsByKey',
         'recoveryScore',
         'sleepDeltaFromYesterday',
         'sleepDirection',
@@ -78,6 +80,48 @@ describe('getDailyScore', () => {
     });
     expect(r.factors).toHaveLength(3);
     expect(r.factors[0]).toMatchObject({ type: 'RECOVERY', factor: 'HRV', label: 'HRV', excluded: false });
+  });
+
+  // factors[] is built by skipping a score row that does not exist, so its
+  // indices move. A grounding reference must be able to name a factor instead.
+  it('keys every factor by its stable FactorKey, so a missing RECOVERY row cannot shift SLEEP factors', async () => {
+    // putScore only attaches factors to a RECOVERY row, so the SLEEP rows here
+    // are written directly with their own.
+    const sleepFactors = [
+      { factor: 'SLEEP_DURATION', z: 0.4, weight: 0.5, contribution: 0.2, points: 5, imputed: false, excluded: false },
+      { factor: 'SLEEP_EFFICIENCY', z: -0.2, weight: 0.5, contribution: -0.1, points: -2, imputed: false, excluded: false },
+    ];
+    const putSleep = (userId: string) =>
+      prisma.dailyScore.create({
+        data: {
+          userId,
+          date: civilDateToUtcMidnight(todayUtc()),
+          type: 'SLEEP',
+          algorithmVersion: 'v1',
+          score: 66,
+          confidenceLevel: 'HIGH',
+          factors: sleepFactors as any,
+        },
+      });
+
+    const both = await createUser();
+    await putScore(both.id, todayUtc(), 72);
+    await putSleep(both.id);
+    const withRecovery = await run(both.id, 'getDailyScore', { date: todayUtc() });
+
+    const sleepOnly = await createUser();
+    await putSleep(sleepOnly.id);
+    const withoutRecovery = await run(sleepOnly.id, 'getDailyScore', { date: todayUtc() });
+
+    // The positional view genuinely moves: this is the bug the key map exists for.
+    expect(withRecovery.factors[0].factor).toBe('HRV');
+    expect(withoutRecovery.factors[0].factor).toBe('SLEEP_DURATION');
+
+    // The keyed view does not.
+    expect(withRecovery.factorsByKey.SLEEP_DURATION).toMatchObject({ type: 'SLEEP', factor: 'SLEEP_DURATION', points: 5 });
+    expect(withoutRecovery.factorsByKey.SLEEP_DURATION).toMatchObject({ type: 'SLEEP', factor: 'SLEEP_DURATION', points: 5 });
+    expect(withRecovery.factorsByKey.HRV).toMatchObject({ type: 'RECOVERY', factor: 'HRV' });
+    expect(withoutRecovery.factorsByKey.HRV).toBeUndefined();
   });
 
   it('direction is "higher", "lower" or "unchanged" from the sign of the delta', () => {
