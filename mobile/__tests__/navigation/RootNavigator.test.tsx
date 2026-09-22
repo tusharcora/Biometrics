@@ -84,41 +84,39 @@ describe('RootNavigator', () => {
 
   // The old navigator hardcoded the connect screen, so an already-connected
   // user had no route back to their dashboard.
-  it('lands a connected user on the tabs', async () => {
+  // Connecting Google Health used to be a gate: a user who had not connected,
+  // or whose status could not be read, saw the connect screen and nothing else.
+  // Signing in now always lands on the tabs, and connecting is offered by the
+  // dashboard's own prompt and from the Profile tab.
+  it.each([
+    ['connected', { status: 'CONNECTED', lastSyncedAt: null }],
+    ['never connected', { status: 'NOT_CONNECTED', lastSyncedAt: null }],
+    ['disconnected', { status: 'DISCONNECTED', lastSyncedAt: null }],
+  ])('lands a %s user on the tabs', async (_label, status) => {
     signedIn(true);
-    (apiFetch as jest.Mock).mockResolvedValue({ status: 'CONNECTED', lastSyncedAt: null });
+    (apiFetch as jest.Mock).mockResolvedValue(status);
 
     const { getByText } = render(<RootNavigator />);
 
     await waitFor(() => expect(getByText('TABS_SCREEN')).toBeTruthy());
-    expect(apiFetch).toHaveBeenCalledWith('/me/connection');
   });
 
-  it('lands a never-connected user on the connect screen', async () => {
-    signedIn(true);
-    (apiFetch as jest.Mock).mockResolvedValue({ status: 'NOT_CONNECTED', lastSyncedAt: null });
-
-    const { getByText } = render(<RootNavigator />);
-
-    await waitFor(() => expect(getByText('CONNECT_SCREEN')).toBeTruthy());
-  });
-
-  it('lands a disconnected user on the connect screen', async () => {
-    signedIn(true);
-    (apiFetch as jest.Mock).mockResolvedValue({ status: 'DISCONNECTED', lastSyncedAt: null });
-
-    const { getByText } = render(<RootNavigator />);
-
-    await waitFor(() => expect(getByText('CONNECT_SCREEN')).toBeTruthy());
-  });
-
-  it('falls back to the connect screen when the status lookup fails', async () => {
+  it('lands on the tabs even when the connection status cannot be read', async () => {
     signedIn(true);
     (apiFetch as jest.Mock).mockRejectedValue(new Error('offline'));
 
     const { getByText } = render(<RootNavigator />);
 
-    await waitFor(() => expect(getByText('CONNECT_SCREEN')).toBeTruthy());
+    await waitFor(() => expect(getByText('TABS_SCREEN')).toBeTruthy());
+  });
+
+  it('does not block the first screen on a connection lookup', async () => {
+    signedIn(true);
+    (apiFetch as jest.Mock).mockImplementation(() => new Promise(() => undefined));
+
+    const { getByText } = render(<RootNavigator />);
+
+    await waitFor(() => expect(getByText('TABS_SCREEN')).toBeTruthy());
   });
 
   it('registers the ScoreDetail route', async () => {

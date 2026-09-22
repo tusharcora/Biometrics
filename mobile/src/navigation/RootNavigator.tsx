@@ -4,7 +4,6 @@ import { useColorScheme } from 'nativewind';
 import { NavigationContainer, DefaultTheme, DarkTheme, type NavigatorScreenParams, type Theme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../auth/AuthContext';
-import { apiFetch } from '../api/client';
 import type { ScoreType } from '../api/scores';
 import { SignInScreen } from '../screens/SignInScreen';
 import { ConnectHealthScreen } from '../screens/ConnectHealthScreen';
@@ -65,29 +64,13 @@ export function RootNavigator() {
   }, [session]);
 
   useEffect(() => {
-    if (!session) {
-      setInitialRoute(null);
-      return;
-    }
-
-    let cancelled = false;
-    apiFetch<{ status: ConnectionStatus }>('/me/connection')
-      .then((res) => {
-        if (!cancelled) {
-          // An already-connected user should not be stranded on the connect
-          // screen every time they open the app.
-          setInitialRoute(res.status === 'CONNECTED' ? 'Tabs' : 'ConnectHealth');
-        }
-      })
-      .catch(() => {
-        // If we cannot tell, the connect screen is the safe landing spot: it is
-        // reachable from a connected state, whereas a frozen dashboard is not.
-        if (!cancelled) setInitialRoute('ConnectHealth');
-      });
-
-    return () => {
-      cancelled = true;
-    };
+    // Signing in lands on the tabs -- the dashboard -- whatever the connection
+    // status is. Connecting Google Health used to be a gate in front of the
+    // app: a user who had not connected yet, or whose status could not be
+    // read, saw the connect screen and nothing else, with no way to look
+    // around first. It is a task you can do from the dashboard's own prompt or
+    // from the Profile tab, not a wall.
+    setInitialRoute(session ? 'Tabs' : null);
   }, [session]);
 
   if (!session) {

@@ -1,7 +1,8 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useContext, useEffect, useMemo, useState } from 'react';
 import { View, Pressable, TextInput, FlatList, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useColorScheme } from 'nativewind';
+import { NavigationContext } from '@react-navigation/native';
 import { Text } from '../components/ui/text';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
@@ -20,6 +21,10 @@ import {
 const MAX_RESULTS = 60;
 
 export function SettingsScreen() {
+  // Context rather than useNavigation(): this screen is also rendered in
+  // isolation (see useAuthOptional below for the same reason), and
+  // useNavigation throws when there is no navigator above it.
+  const navigation = useContext(NavigationContext);
   const clearance = useTabBarClearance();
   const { colorScheme: scheme } = useColorScheme();
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
@@ -107,6 +112,19 @@ export function SettingsScreen() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ gap: 12, padding: 16, paddingBottom: clearance }}
       >
+        {/* Connecting is a task reachable from a tab, not a gate in front of the
+            app: signing in lands on the dashboard whatever the status is. */}
+        <Card className="gap-1">
+          <Pressable
+            testID="connect-health-row"
+            onPress={() => navigation?.navigate('ConnectHealth' as never)}
+            className="active:opacity-70"
+          >
+            <Text className="text-sm text-muted-foreground">Google Health</Text>
+            <Text className="text-base font-medium">Connect or reconnect</Text>
+            <Text className="text-xs text-muted-foreground">Sync steps, sleep, heart rate and HRV</Text>
+          </Pressable>
+        </Card>
         <Card className="gap-1">
           <Pressable testID="timezone-row" onPress={() => setPicking(true)} className="active:opacity-70">
             <Text className="text-sm text-muted-foreground">Time zone</Text>

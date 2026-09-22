@@ -254,12 +254,27 @@ export function DashboardScreen() {
   }
 
   if (records.length === 0) {
+    // Never connected: this is where someone lands on their first sign-in, so
+    // it has to offer the connect step rather than describe a sync that cannot
+    // happen yet. Connecting is no longer a gate in front of the app, so the
+    // dashboard is the thing that asks for it.
+    const neverConnected = connectionStatus === 'NOT_CONNECTED';
     return (
       <SafeAreaView className="flex-1 bg-background">
         <View className="flex-1 items-center justify-center gap-3 p-6">
-          <Text className="text-center text-muted-foreground">
-            No data yet — check back after your Google Health syncs.
+          <Text className="text-xl font-semibold">
+            {neverConnected ? 'Connect Google Health' : 'No data yet'}
           </Text>
+          <Text className="text-center text-muted-foreground">
+            {neverConnected
+              ? 'Your scores and trends appear here once Google Health is connected.'
+              : 'Check back after your Google Health syncs.'}
+          </Text>
+          {neverConnected ? (
+            <Button testID="connect-health-button" onPress={() => navigation.navigate('ConnectHealth')}>
+              Connect Google Health
+            </Button>
+          ) : null}
           {headerActions}
         </View>
       </SafeAreaView>
