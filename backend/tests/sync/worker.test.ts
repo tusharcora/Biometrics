@@ -9,7 +9,8 @@ import * as oauth from '../../src/health/oauth';
 import * as subscriber from '../../src/health/subscriber';
 import { encryptToken, decryptToken } from '../../src/crypto/tokenCipher';
 import * as tokenRefreshJob from '../../src/sync/tokenRefreshJob';
-import { TOKEN_REFRESH_SWEEP_JOB } from '../../src/sync/queue';
+import { TOKEN_REFRESH_SWEEP_JOB, STEPS_HISTORY_BACKFILL_JOB } from '../../src/sync/queue';
+import { stepsHistoryWindow } from '../../src/sync/stepsHistory';
 import * as scoringQueue from '../../src/scoring/queue';
 import * as scoreSweep from '../../src/scoring/sweep';
 import { seedHistory, day } from '../scoring/dbHelpers';
@@ -678,5 +679,102 @@ describe('backfill with an empty window', () => {
     } as Job);
 
     expect(healthClient.fetchMetricRange).toHaveBeenCalledWith('access-token', 'HRV', '2026-09-20', '2026-09-21');
+  });
+});
+
+describe('processSyncJob: steps history backfill', () => {
+  const historyJob = (userId: string) => ({ name: STEPS_HISTORY_BACKFILL_JOB, data: { userId } }) as Job;
+
+  it('fetches only STEPS over the 365 days before today and stores them', async () => {
+    const user = await createConnectedUser();
+    (healthClient.fetchMetricRange as jest.Mock).mockResolvedValue([
+      { recordedAt: new Date('2026-01-10T00:00:00Z'), value: 6400 },
+      { recordedAt: new Date('2026-05-20T00:00:00Z'), value: 11200 },
+    ]);
+
+    await processSyncJob(historyJob(user.id));
+
+    const { startDate, endDate } = stepsHistoryWindow();
+    expect(healthClient.fetchMetricRange).toHaveBeenCalledTimes(1);
+    expect(healthClient.fetchMetricRange).toHaveBeenCalledWith('access-token', 'STEPS', startDate, endDate);
+    expect(healthClient.fetchSleepSessions).not.toHaveBeenCalled();
+    const records = await prisma.biometricRecord.findMany({ where: { userId: user.id }, orderBy: { recordedAt: 'asc' } });
+    expect(records.map((r) => [r.metricType, r.value])).toEqual([['STEPS', 6400], ['STEPS', 11200]]);
+  });
+
+  it('marks the history as backfilled, leaves lastSyncedAt alone and requests no scores', async () => {
+    const user = await createConnectedUser();
+    (healthClient.fetchMetricRange as jest.Mock).mockResolvedValue([{ recordedAt: new Date('2026-03-01T00:00:00Z'), value: 900 }]);
+
+    await processSyncJob(historyJob(user.id));
+
+    const conn = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
+    expect(conn?.stepsHistoryBackfilledAt).toBeInstanceOf(Date);
+    expect(conn?.lastSyncedAt).toBeNull();
+    expect(scoringQueue.enqueueScoreCompute).not.toHaveBeenCalled();
+  });
+
+  it('is idempotent: a re-run overwrites the same days instead of duplicating them', async () => {
+    const user = await createConnectedUser();
+    (healthClient.fetchMetricRange as jest.Mock)
+      .mockResolvedValueOnce([{ recordedAt: new Date('2026-04-02T00:00:00Z'), value: 3000 }])
+      .mockResolvedValueOnce([{ recordedAt: new Date('2026-04-02T00:00:00Z'), value: 3500 }]);
+
+    await processSyncJob(historyJob(user.id));
+    await processSyncJob(historyJob(user.id));
+
+    const records = await prisma.biometricRecord.findMany({ where: { userId: user.id } });
+    expect(records).toHaveLength(1);
+    expect(records[0].value).toBe(3500);
+  });
+
+  it('does nothing for a disconnected connection', async () => {
+    const user = await createConnectedUser();
+    await prisma.healthConnection.update({ where: { userId: user.id }, data: { status: 'DISCONNECTED' } });
+
+    await processSyncJob(historyJob(user.id));
+
+    expect(healthClient.fetchMetricRange).not.toHaveBeenCalled();
+    const conn = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
+    expect(conn?.stepsHistoryBackfilledAt).toBeNull();
+  });
+
+  it('refreshes once on a 401 and retries with the new token', async () => {
+    const user = await createConnectedUser();
+    const unauthorized = Object.assign(new Error('unauthorized'), { status: 401 });
+    (healthClient.fetchMetricRange as jest.Mock).mockRejectedValueOnce(unauthorized).mockResolvedValueOnce([]);
+    (oauth.refreshHealthTokens as jest.Mock).mockReset().mockResolvedValue({
+      accessToken: 'fresh-access', refreshToken: 'fresh-refresh', expiresIn: 3600,
+    });
+
+    await processSyncJob(historyJob(user.id));
+
+    expect(healthClient.fetchMetricRange).toHaveBeenLastCalledWith('fresh-access', 'STEPS', expect.any(String), expect.any(String));
+    const conn = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
+    expect(conn?.status).toBe('CONNECTED');
+    expect(conn?.stepsHistoryBackfilledAt).toBeInstanceOf(Date);
+  });
+
+  it('disconnects on a 401 that survives the refresh, without marking the history done', async () => {
+    const user = await createConnectedUser();
+    const unauthorized = Object.assign(new Error('unauthorized'), { status: 401 });
+    (healthClient.fetchMetricRange as jest.Mock).mockRejectedValue(unauthorized);
+
+    await processSyncJob(historyJob(user.id));
+
+    const conn = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
+    expect(conn?.status).toBe('DISCONNECTED');
+    expect(conn?.stepsHistoryBackfilledAt).toBeNull();
+  });
+
+  it('rethrows other errors so BullMQ retries, without marking the history done', async () => {
+    const user = await createConnectedUser();
+    (healthClient.fetchMetricRange as jest.Mock).mockRejectedValue(Object.assign(new Error('rate limited'), { status: 429 }));
+
+    await expect(processSyncJob(historyJob(user.id))).rejects.toThrow('rate limited');
+
+    const conn = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
+    expect(conn?.status).toBe('CONNECTED');
+    expect(conn?.stepsHistoryBackfilledAt).toBeNull();
   });
 });

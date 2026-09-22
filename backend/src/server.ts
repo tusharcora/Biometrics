@@ -5,6 +5,7 @@ import { connection, syncQueue, enqueueImmediateTokenRefreshSweep, scheduleToken
 import { prisma } from './db/client';
 import { installShutdownHandlers } from './shutdown';
 import { scheduleNightlyScoreSweep } from './scoring/queue';
+import { enqueuePendingStepsHistoryBackfills } from './sync/stepsHistory';
 import { scheduleWeeklyHabitCorrelationSweep } from './habits/queue';
 import { scheduleDailyCoachRetention, scheduleWeeklyCoachDigest } from './coach/queue';
 
@@ -56,5 +57,11 @@ function startBackgroundWork(): void {
   );
   scheduleDailyCoachRetention().catch((err) =>
     console.error('Failed to schedule the daily coach retention job', err),
+  );
+
+  // A year of steps history for the activity heat map, for every connection
+  // that does not have it yet (including ones made before it existed).
+  enqueuePendingStepsHistoryBackfills().catch((err) =>
+    console.error('Failed to enqueue pending steps history backfills', err),
   );
 }

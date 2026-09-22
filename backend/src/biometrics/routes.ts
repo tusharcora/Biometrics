@@ -1,12 +1,27 @@
 import { Router } from 'express';
 import { requireAuth, AuthedRequest } from '../auth/middleware';
 import { getBiometricsForUser } from './repository';
+import { getActivityForUser, parseActivityRange } from './activity';
 import { prisma } from '../db/client';
 
 export const biometricsRouter = Router();
 
 biometricsRouter.get('/me/biometrics', requireAuth, async (req: AuthedRequest, res) => {
   res.json(await getBiometricsForUser(req.userId!));
+});
+
+/**
+ * Daily steps for the activity heat map over a bounded civil-date range
+ * (?from=YYYY-MM-DD&to=YYYY-MM-DD, both inclusive). Bounded because a year of
+ * history is too much to pull through the unbounded /me/biometrics.
+ */
+biometricsRouter.get('/me/activity', requireAuth, async (req: AuthedRequest, res) => {
+  const range = parseActivityRange(req.query.from, req.query.to);
+  if ('error' in range) {
+    res.status(400).json({ error: range.error });
+    return;
+  }
+  res.json(await getActivityForUser(req.userId!, range));
 });
 
 /**
