@@ -103,7 +103,10 @@ export function SettingsScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background">
-      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ gap: 12, padding: 16 }}>
+      <ScrollView
+        keyboardShouldPersistTaps="handled"
+        contentContainerStyle={{ gap: 12, padding: 16, paddingBottom: clearance }}
+      >
         <Card className="gap-1">
           <Pressable testID="timezone-row" onPress={() => setPicking(true)} className="active:opacity-70">
             <Text className="text-sm text-muted-foreground">Time zone</Text>
