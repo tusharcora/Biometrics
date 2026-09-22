@@ -117,6 +117,17 @@ export class StaleConsentVersionError extends Error {
   }
 }
 
+// A conversation the server no longer has (the daily retention job deletes
+// transcripts past 90 days). The coach itself is fine: the caller should drop
+// the stale id and start a new conversation rather than hide the whole screen.
+export class StaleConversationError extends Error {
+  constructor() {
+    super('That conversation is no longer available');
+    this.name = 'StaleConversationError';
+    Object.setPrototypeOf(this, StaleConversationError.prototype);
+  }
+}
+
 export class CoachTimeoutError extends Error {
   constructor() {
     super('The coach took too long to answer');
@@ -143,12 +154,16 @@ export class CoachMemoryNotFoundError extends Error {
   }
 }
 
-// Status codes are enough to tell these apart on the coach endpoints, and
-// apiFetch already surfaces them; anything else is passed through unchanged.
+// Status alone is not enough for 404: the coach endpoints return it both for
+// "coach is switched off" and for a conversationId the server has since deleted.
+// Mapping both to CoachDisabledError hid the entire chat until app restart over
+// a stale id. The server's `error` code separates them.
 function mapCoachError(error: unknown): unknown {
   if (error instanceof ApiError) {
     if (error.status === 403) return new CoachConsentRequiredError();
-    if (error.status === 404) return new CoachDisabledError();
+    if (error.status === 404) {
+      return error.code === 'conversation_not_found' ? new StaleConversationError() : new CoachDisabledError();
+    }
     if (error.status === 409) return new StaleConsentVersionError();
   }
   return error;

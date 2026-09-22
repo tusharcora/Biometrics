@@ -13,6 +13,7 @@ import {
   sendCoachMessage,
   type CoachMessageSource,
   type MemoryDTO,
+  StaleConversationError,
   type SendCoachMessageInput,
 } from '../api/coach';
 import { Text } from '../components/ui/text';
@@ -126,10 +127,21 @@ export function CoachScreen() {
       setSending(true);
       setError(null);
       try {
-        const res = await sendCoachMessage({
-          ...request,
-          ...(conversationIdRef.current ? { conversationId: conversationIdRef.current } : {}),
-        });
+        let res;
+        try {
+          res = await sendCoachMessage({
+            ...request,
+            ...(conversationIdRef.current ? { conversationId: conversationIdRef.current } : {}),
+          });
+        } catch (e) {
+          // The server retains transcripts for 90 days, so an id held across a
+          // long gap can simply be gone. The coach is still there: drop the id
+          // and send the same message as a new conversation, once.
+          if (!(e instanceof StaleConversationError) || !conversationIdRef.current) throw e;
+          conversationIdRef.current = null;
+          setConversationId(null);
+          res = await sendCoachMessage(request);
+        }
         if (!mounted.current) return;
         setConversationId(res.conversationId);
         setMessages((prev) => {
