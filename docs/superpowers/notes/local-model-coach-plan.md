@@ -1,5 +1,32 @@
 # Local model as the AI coach: spike results and future plan
 
+## Update 2026-09-22: shipped as a provider
+
+`COACH_PROVIDER=ollama` now selects `src/coach/model/ollama.ts` (loopback-only by
+default; see `backend/.env.example`). The spike probe became `npm run eval:coach:local`.
+Same 34 fixtures, 300 s budget, on the M1 Pro:
+
+| | **`qwen3.6:35b`** (MoE, ~3B active) | `qwen3.8:27b` | `richardyoung/qwen2.5-7b-instruct-abliterated` | `feadxus/flux2-klein-4b-uncensored` (Qwen3 4B) |
+|---|---|---|---|---|
+| Model replies | **33/34** (1 safe fallback) | 32/34 (2 safe fallbacks) | 11/34 | 34/34 |
+| First-try guardrail rejects | **3** | 5 | 34 (writes raw digits instead of `{{ref}}`) | 11 |
+| Tool use | right tool when needed | right tool every time | calls tools | **never called a tool** |
+| Median / p90 latency | **3.1 s / 5.0 s** | 30 s / 72 s | 14 s / 14 s | 3.4 s / 5.3 s |
+| Within 12 s | 32/34 (max 16 s) | 0/34 | 3/34 | 34/34 |
+
+Recommended setup: `OLLAMA_MODEL=qwen3.6:35b` (pinned tag; 22 GB, fits the 32 GB M1 Pro
+when it is the only model loaded), `COACH_FAST_BUDGET_MS=30000`, and the app's
+`EXPO_PUBLIC_COACH_TIMEOUT_MS=35000`. Reading its replies: the eight direction-check
+flags are all false positives (each says "lower", which is right), and it declined to
+store a health fact as a memory. Remaining weaknesses, shared with the 27B: awkward
+wording around the signed delta and direction word ("a lower change from yesterday",
+"by -2.6 points"; see Formatting below), an occasional guess from missing data ("Sleep
+Score isn't available... you might not have had enough rest"), and one case describing
+a positive factor contribution as pulling the score down. The 7B abliterated and 4B
+uncensored models are refusal-stripped fine-tunes and fail tool use or grounding; do
+not use them. Re-run `npm run eval:coach:local` before changing the model. The
+original spike write-up follows.
+
 Status: **spike done, follow-up parked** (2026-09-21). Nothing here ships; the coach is
 still dark by default (`COACH_ENABLED=false`) with only `UnconfiguredProvider` and
 `ScriptedProvider` in the tree.
