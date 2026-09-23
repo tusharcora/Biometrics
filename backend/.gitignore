@@ -11,3 +11,6 @@ service-account-key.json
 *.sa.json
 
 /src/generated/prisma
+
+# Build output (`npm run build`); produced locally and in the Docker build, never committed.
+/dist

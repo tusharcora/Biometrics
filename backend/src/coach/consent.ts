@@ -1,13 +1,15 @@
-// Coach consent (spec section 5). The coach sends score values, factor
-// breakdowns, confirmed habit-pattern fields and goals to a third-party LLM
-// provider on every turn, which the rest of the app never does, so it is gated
+// Coach consent (spec section 5). The coach gives score values, factor
+// breakdowns, daily metrics, habit logs, confirmed habit-pattern fields and
+// goals to an LLM on every turn, which the rest of the app never does, so it is gated
 // on its own explicit, versioned opt-in that the SERVER enforces. Bumping
 // COACH_CONSENT_VERSION invalidates every stored consent: the next message is
 // refused (403 consent_required) until the user re-consents to the new text.
 
 import { prisma } from '../db/client';
 
-export const COACH_CONSENT_VERSION = '1';
+// Version 2: the coach can also read daily metrics (steps, resting heart rate,
+// HRV, sleep time) with up to 90 days of history, and recent habit logs.
+export const COACH_CONSENT_VERSION = '2';
 
 export interface ConsentText {
   version: string;
@@ -18,16 +20,18 @@ export interface ConsentText {
 export const COACH_CONSENT: ConsentText = {
   version: COACH_CONSENT_VERSION,
   summary:
-    'The coach uses an AI language model run by a third-party provider. When you send the coach a message, the items ' +
-    'below are sent to that provider so it can answer, and only the items that message actually needs. Never sent: your ' +
-    'sign-in or Google Health access tokens, your full biometric history, or your raw habit logs. The rest of the app ' +
-    'works exactly the same if you decline, and you can withdraw this consent at any time.',
+    'The coach uses an AI language model. When you send the coach a message, the items below are given to that model so ' +
+    'it can answer, and only the items that message actually needs. Never sent: your sign-in or Google Health access ' +
+    'tokens, or the free-text notes on your habit logs. The rest of the app works exactly the same if you decline, and ' +
+    'you can withdraw this consent at any time.',
   dataItems: [
     'The messages you type to the coach in the current conversation',
     'Your Recovery Score and Sleep Score values, and how confident each one is',
     'The per-factor breakdown behind each score (for example HRV, resting heart rate, sleep debt, sleep duration, sleep efficiency and bedtime consistency)',
+    'Your daily readings: steps, resting heart rate, HRV and time asleep, for a given day or up to the last 90 days',
+    'What you logged in the habit log over up to the last 30 days (amounts only, never your notes)',
     'Habit patterns the app has already confirmed for you: the habit name, which factor it affects, the size of the effect and how many days it is based on',
-    'Your goals, such as your sleep goal',
+    'Your goals, such as your sleep goal and the daily step goal',
   ],
 };
 

@@ -1,7 +1,9 @@
 // The coach's tool registry (spec section 2): thin READ-ONLY wrappers over the
-// Stat Engine and correlation tables. No tool writes, none takes SQL, and none
-// returns raw habit logs or a pre-composed sentence: every value the model may
-// state arrives as a structured field it references with {{tool.path}}.
+// Stat Engine, the user's daily metrics, habit logs and correlation tables. No
+// tool writes, none takes SQL, and none returns a pre-composed sentence or a
+// free-text note: every value the model may state arrives as a structured
+// field it references with {{tool.path}}. (Raw metrics and habit logs were
+// added with consent version 2, whose text lists them.)
 
 import { civilDateToUtcMidnight } from '../../biometrics/civilDate';
 import { prisma } from '../../db/client';
@@ -11,6 +13,15 @@ import { isCivilDate, shiftDate } from '../../scoring/dates';
 import { getSleepGoalMinutes } from '../../users/goals';
 import { MAX_MEMORY_VALUE_CHARS, MEMORY_CATEGORIES, MemoryProposal, validateMemoryInput } from '../memory';
 import { DailyScoreToolResult, findMostRecentScoreDate, getDailyScore } from './dailyScore';
+import {
+  DailyMetricsToolResult,
+  getDailyMetrics,
+  getHabitLogs,
+  getMetricHistory,
+  MAX_HABIT_LOG_DAYS,
+  METRIC_KEYS,
+  MetricKey,
+} from './metrics';
 
 export type { DailyScoreToolResult } from './dailyScore';
 
@@ -37,6 +48,8 @@ export interface CoachTools {
   /** Typed access for the orchestrator's turn preamble. */
   getDailyScore(userId: string, date: string): Promise<DailyScoreToolResult>;
   findMostRecentScoreDate(userId: string, onOrBefore: string): Promise<string | null>;
+  /** Today's raw readings for the preamble. Optional so narrow test doubles need not provide it. */
+  getDailyMetrics?(userId: string, date: string): Promise<DailyMetricsToolResult>;
 }
 
 export const MAX_HISTORY_DAYS = 90;
@@ -48,7 +61,8 @@ export const COACH_TOOL_SCHEMAS: CoachToolSchema[] = [
     name: 'getDailyScore',
     description:
       "The user's Recovery Score and Sleep Score for one local date, their per-factor breakdown, a confidence level, and " +
-      'the change from the day before (deltaFromYesterday, direction: higher | lower | unchanged), all precomputed. ' +
+      'the change from the day before (deltaFromYesterday, direction: higher | lower | unchanged, and changeDisplay / ' +
+      'sleepChangeDisplay as full phrases such as "4 points lower than yesterday"), all precomputed. ' +
       "Today's result is already available this turn.",
     parameters: {
       type: 'object',
@@ -81,6 +95,57 @@ export const COACH_TOOL_SCHEMAS: CoachToolSchema[] = [
     name: 'getUserGoals',
     description: "The user's goals, currently the sleep goal, from the same source the sleep-debt score uses.",
     parameters: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'getTodayMetrics',
+    description:
+      "Today's raw readings, in the same shape as getDailyMetrics. Already fetched for you every turn; reference it " +
+      'directly, e.g. {{getTodayMetrics.steps.display}}.',
+    parameters: { type: 'object', properties: {}, additionalProperties: false },
+  },
+  {
+    name: 'getDailyMetrics',
+    description:
+      "The user's raw readings for one local date other than today (today's are in getTodayMetrics): steps (with goal, " +
+      'percentOfGoal, goalMet), restingHeartRate (bpm), ' +
+      'hrv (ms) and sleep (minutes asleep, with goalMinutes and percentOfGoal). Each has value, a ready-to-read display ' +
+      'string, deltaFromYesterday, direction (higher | lower | unchanged) and changeDisplay (the change as a full phrase, ' +
+      'e.g. "2h 25m less than the night before"), all precomputed; a value is null when that ' +
+      'day was not recorded. Use this for questions about steps, heart rate, HRV or how long they slept.',
+    parameters: {
+      type: 'object',
+      properties: { date: { type: 'string', description: 'Civil date, YYYY-MM-DD. Defaults to today.' } },
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'getMetricHistory',
+    description:
+      'One raw metric (STEPS, RESTING_HR, HRV or SLEEP minutes) over the last N days, oldest first: points with display ' +
+      'strings, days, daysWithData, and the precomputed average/averageDisplay, highest, lowest, earliest and latest ' +
+      '(each with date, dateLabel such as "Sep 21", value, display), trend (up | down | steady, second-half vs ' +
+      'first-half average) with trendPercent and trendDisplay ("down 8%"); STEPS also has daysAtGoal. Use it for any question about a trend, a week, a month or "how many days".',
+    parameters: {
+      type: 'object',
+      properties: {
+        metric: { type: 'string', enum: [...METRIC_KEYS] },
+        days: { type: 'integer', minimum: 1, maximum: MAX_HISTORY_DAYS },
+      },
+      required: ['metric', 'days'],
+      additionalProperties: false,
+    },
+  },
+  {
+    name: 'getHabitLogs',
+    description:
+      'What the user logged (alcohol, caffeine, workouts, custom habits) over the last N days: a per-habit summary ' +
+      '(daysLogged, total, daysWithNone) and the individual entries, newest first, plus checkedInDays.',
+    parameters: {
+      type: 'object',
+      properties: { days: { type: 'integer', minimum: 1, maximum: MAX_HABIT_LOG_DAYS } },
+      required: ['days'],
+      additionalProperties: false,
+    },
   },
 ];
 
@@ -115,6 +180,8 @@ export interface ProposeMemoryResult {
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
+
+const isPositiveInt = (n: unknown): n is number => typeof n === 'number' && Number.isInteger(n) && n >= 1;
 
 function asRecord(args: unknown): Record<string, unknown> | null {
   if (args === undefined || args === null) return {};
@@ -202,6 +269,24 @@ export const coachTools: CoachTools = {
         return { ok: true, result: await getHabitCorrelations(userId) };
       case 'getUserGoals':
         return { ok: true, result: await getUserGoals(userId) };
+      case 'getTodayMetrics':
+        return { ok: true, result: await getDailyMetrics(userId, ctx.today) };
+      case 'getDailyMetrics': {
+        const date = a.date === undefined ? ctx.today : a.date;
+        if (!isCivilDate(date)) return { ok: false, error: 'invalid_arguments' };
+        return { ok: true, result: await getDailyMetrics(userId, date) };
+      }
+      case 'getMetricHistory': {
+        const metric = a.metric;
+        const days = a.days;
+        if (!METRIC_KEYS.includes(metric as MetricKey)) return { ok: false, error: 'invalid_arguments' };
+        if (!isPositiveInt(days)) return { ok: false, error: 'invalid_arguments' };
+        return { ok: true, result: await getMetricHistory(userId, metric as MetricKey, Math.min(days, MAX_HISTORY_DAYS), ctx.today) };
+      }
+      case 'getHabitLogs': {
+        if (!isPositiveInt(a.days)) return { ok: false, error: 'invalid_arguments' };
+        return { ok: true, result: await getHabitLogs(userId, Math.min(a.days, MAX_HABIT_LOG_DAYS), ctx.today) };
+      }
       default:
         return { ok: false, error: 'unknown_tool' };
     }
@@ -209,4 +294,5 @@ export const coachTools: CoachTools = {
 
   getDailyScore,
   findMostRecentScoreDate,
+  getDailyMetrics,
 };

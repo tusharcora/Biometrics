@@ -1,4 +1,5 @@
 import { prisma } from '../../src/db/client';
+import { civilDateToUtcMidnight } from '../../src/biometrics/civilDate';
 import { migrateTestDb } from '../setupTestDb';
 import { createCoachOrchestrator, MAX_MODEL_CALLS, OrchestratorDeps } from '../../src/coach/orchestrator';
 import { ScriptedProvider, ScriptStep, UnconfiguredProvider, CoachModelProvider } from '../../src/coach/model/provider';
@@ -106,11 +107,27 @@ describe('model loop and tool calls', () => {
     expect(result.text).toContain('Over the week your average was 69.1.'); // (60 + 75 + 72.4) / 3
     expect(provider.callCount).toBe(2);
     const toolMsgs = provider.requests[1]!.messages.filter((m) => m.role === 'tool');
-    expect(toolMsgs.map((m) => (m.role === 'tool' ? m.name : ''))).toEqual(['getDailyScore', 'getScoreHistory']);
+    expect(toolMsgs.map((m) => (m.role === 'tool' ? m.name : ''))).toEqual(['getDailyScore', 'getTodayMetrics', 'getScoreHistory']);
     const calls = telemetry.named('coach.tool_call');
     expect(calls.map((c) => c.attributes.tool)).toEqual(['getDailyScore', 'getScoreHistory']);
     expect(calls.every((c) => c.userId === user.id && c.personaId === 'encouraging')).toBe(true);
     expect(calls[1]!.attributes.ok).toBe(true);
+  });
+
+  it("pre-fetches today's raw readings for the model, and a reference to them resolves", async () => {
+    const user = await seededUser();
+    await prisma.biometricRecord.create({
+      data: { userId: user.id, metricType: 'SLEEP', value: 270, recordedAt: civilDateToUtcMidnight(todayUtc()) },
+    });
+    const provider = new ScriptedProvider([{ type: 'text', text: 'You slept {{getTodayMetrics.sleep.display}}.' }]);
+    const { orchestrator } = setup(provider);
+
+    const result = await orchestrator.handleTurn(turn(user.id));
+
+    expect(result.source).toBe('MODEL');
+    expect(result.text).toContain('You slept 4h 30m.');
+    const preambleMetrics = provider.requests[0]!.messages.find((m) => m.role === 'tool' && m.name === 'getTodayMetrics');
+    expect(preambleMetrics).toBeDefined();
   });
 
   it('an unknown tool or bad arguments yields an error tool message, not a crash or a resolvable value', async () => {
@@ -128,7 +145,7 @@ describe('model loop and tool calls', () => {
     const { orchestrator, telemetry } = setup(provider);
     const result = await orchestrator.handleTurn(turn(user.id));
     expect(result.source).toBe('MODEL');
-    const errs = provider.requests[1]!.messages.filter((m) => m.role === 'tool' && m.toolCallId !== 'preamble-getDailyScore');
+    const errs = provider.requests[1]!.messages.filter((m) => m.role === 'tool' && !m.toolCallId.startsWith('preamble-'));
     expect(errs.map((m) => (m.role === 'tool' ? JSON.parse(m.content) : null))).toEqual([
       { error: 'unknown_tool' },
       { error: 'invalid_arguments' },
@@ -422,7 +439,8 @@ describe('fallback material', () => {
 
   it('a failed pre-fetch gets the static no-numbers message (and the model is still tried)', async () => {
     const user = await seededUser();
-    const failing = { ...coachTools, getDailyScore: async () => { throw new Error('db down'); } };
+    const dbDown = async (): Promise<never> => { throw new Error('db down'); };
+    const failing = { ...coachTools, getDailyScore: dbDown, getDailyMetrics: dbDown };
     const provider = new ScriptedProvider([{ type: 'text', text: 'Take 3 naps.' }, { type: 'text', text: 'Still 3 naps.' }]);
     const { orchestrator, telemetry } = setup(provider, { tools: failing });
     const result = await orchestrator.handleTurn(turn(user.id));
