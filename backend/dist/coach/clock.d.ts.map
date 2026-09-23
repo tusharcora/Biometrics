@@ -1,0 +1,1 @@
+{"version":3,"file":"clock.d.ts","sourceRoot":"","sources":["../../src/coach/clock.ts"],"names":[],"mappings":"AAEA,MAAM,WAAW,WAAW;IAC1B,MAAM,IAAI,IAAI,CAAC;CAChB;AAED,MAAM,WAAW,UAAU;IACzB,GAAG,IAAI,MAAM,CAAC;IACd,QAAQ,CAAC,EAAE,EAAE,MAAM,IAAI,EAAE,EAAE,EAAE,MAAM,GAAG,WAAW,CAAC;CACnD;AAED,eAAO,MAAM,WAAW,EAAE,UAMzB,CAAC"}

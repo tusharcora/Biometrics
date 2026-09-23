@@ -1,0 +1,104 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.isCoachEnabled = isCoachEnabled;
+exports.getCoachProvider = getCoachProvider;
+exports.setCoachProvider = setCoachProvider;
+exports.resetCoachProviderFromEnv = resetCoachProviderFromEnv;
+exports.getCoachBudgets = getCoachBudgets;
+exports.isExpoPushProvider = isExpoPushProvider;
+exports.getPushSender = getPushSender;
+exports.setPushSender = setPushSender;
+const provider_1 = require("./model/provider");
+const ollama_1 = require("./model/ollama");
+const push_1 = require("./push");
+/**
+ * The whole coach is behind COACH_ENABLED, default OFF. No LLM provider has been
+ * cleared against the spec's data-handling gate, so this must not be switched on
+ * in any environment a real user can reach. Read per request (not at import) so
+ * it can be toggled without a restart in tests.
+ */
+function isCoachEnabled() {
+    const v = process.env.COACH_ENABLED?.trim().toLowerCase();
+    return v === 'true' || v === '1';
+}
+// The single provider slot. There is deliberately no failover provider: a
+// fallback would have to clear the same data-handling bar (spec section 5).
+//
+// COACH_PROVIDER selects it: `ollama` is a model served by a local Ollama
+// (model/ollama.ts; loopback-only unless OLLAMA_ALLOW_REMOTE=true, so health
+// data stays on this machine); anything else, or unset, is the unconfigured
+// provider and every turn takes the server-composed fallback. Built once, on
+// first use. A bad Ollama configuration is logged and degrades to the
+// unconfigured provider rather than crashing the server.
+let overrideProvider = null;
+let envProvider = null;
+function providerFromEnv() {
+    if (process.env.COACH_PROVIDER?.trim().toLowerCase() !== 'ollama')
+        return new provider_1.UnconfiguredProvider();
+    try {
+        const provider = (0, ollama_1.ollamaProviderFromEnv)();
+        console.log(JSON.stringify({ event: 'coach.provider_configured', provider: provider.id }));
+        return provider;
+    }
+    catch (err) {
+        console.error(JSON.stringify({ event: 'coach.provider_config_invalid', error: err instanceof Error ? err.message : 'unknown' }));
+        return new provider_1.UnconfiguredProvider();
+    }
+}
+function getCoachProvider() {
+    if (overrideProvider)
+        return overrideProvider;
+    return (envProvider ??= providerFromEnv());
+}
+/** Explicit provider override (tests, evals). Pass null to go back to COACH_PROVIDER. */
+function setCoachProvider(provider) {
+    overrideProvider = provider;
+}
+/** Forget the env-built provider so the next call re-reads COACH_PROVIDER / OLLAMA_* (tests). */
+function resetCoachProviderFromEnv() {
+    envProvider = null;
+}
+/**
+ * Latency budgets for a turn, overridable because a local model is much slower
+ * than the 12 s the fast tier was designed around (a 27B on an M1 Pro answered
+ * in 15-72 s in the spike). Unset means the orchestrator's defaults. The mobile
+ * client gives up after its own timeout (EXPO_PUBLIC_COACH_TIMEOUT_MS), which
+ * must be longer than the fast budget or answers arrive after it stopped waiting.
+ */
+function getCoachBudgets() {
+    const read = (name) => {
+        const raw = process.env[name]?.trim();
+        if (!raw)
+            return undefined;
+        const n = Number(raw);
+        return Number.isFinite(n) && n > 0 ? n : undefined;
+    };
+    const fast = read('COACH_FAST_BUDGET_MS');
+    const synthesis = read('COACH_SYNTHESIS_BUDGET_MS');
+    if (fast === undefined && synthesis === undefined)
+        return undefined;
+    return { ...(fast !== undefined ? { fast } : {}), ...(synthesis !== undefined ? { synthesis } : {}) };
+}
+// The push slot. PUSH_PROVIDER=expo selects the Expo sender; anything else (the
+// default) is the no-op sender, which delivers nothing. Push content is generic
+// by construction (push.ts). Read per call, like COACH_ENABLED, so tests can
+// switch it; setPushSender() is an explicit override that wins over the env.
+let overrideSender = null;
+const noopSender = new push_1.NoopPushSender();
+let expoSender = null;
+/** True when PUSH_PROVIDER selects the Expo push service. */
+function isExpoPushProvider() {
+    return process.env.PUSH_PROVIDER?.trim().toLowerCase() === 'expo';
+}
+function getPushSender() {
+    if (overrideSender)
+        return overrideSender;
+    if (isExpoPushProvider())
+        return (expoSender ??= new push_1.ExpoPushSender());
+    return noopSender;
+}
+/** Explicit sender override (tests). Pass null to fall back to PUSH_PROVIDER. */
+function setPushSender(sender) {
+    overrideSender = sender;
+}
+//# sourceMappingURL=config.js.map

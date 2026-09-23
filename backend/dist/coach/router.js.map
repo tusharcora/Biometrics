@@ -1,0 +1,1 @@
+{"version":3,"file":"router.js","sourceRoot":"","sources":["../../src/coach/router.ts"],"names":[],"mappings":";;AAQA,8BAEC;AARD,gFAAgF;AAChF,uEAAuE;AACvE,+DAA+D;AAC/D,MAAM,YAAY,GAChB,sLAAsL,CAAC;AAEzL,SAAgB,SAAS,CAAC,OAAe;IACvC,OAAO,YAAY,CAAC,IAAI,CAAC,OAAO,CAAC,CAAC,CAAC,CAAC,WAAW,CAAC,CAAC,CAAC,MAAM,CAAC;AAC3D,CAAC"}

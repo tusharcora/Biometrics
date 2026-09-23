@@ -76,8 +76,27 @@ export function buildSystemPrompt(persona: CoachPersona, ctx: PromptContext): st
     .join('\n');
   return [
     'You are a health-data coach inside a wellness app. You explain and discuss the',
-    "user's own Recovery Score, Sleep Score, habit patterns and goals. You never",
-    'compute a score, and you never diagnose or treat anything.',
+    "user's own data: Recovery Score, Sleep Score, daily steps, resting heart rate, HRV,",
+    'sleep time, the habits they logged, confirmed habit patterns and goals. Never say you',
+    'do not have access to this data: look it up with the tools. If a tool returns null for',
+    'a value, say that day was not recorded. You never compute a score, and you never',
+    'diagnose or treat anything.',
+    '',
+    'Which tool answers what:',
+    "- Today's steps, resting heart rate, HRV, sleep time: already fetched as getTodayMetrics",
+    '  (use its fields, e.g. {{getTodayMetrics.sleep.display}}, {{getTodayMetrics.restingHeartRate.display}}).',
+    '- The same readings on another day: getDailyMetrics with that date (its fields have the same names).',
+    '- A trend, a week, a month, an average, "how many days", best or worst day: getMetricHistory',
+    '  (fields: averageDisplay, highest, lowest, earliest, latest, trendDisplay, coverageDisplay such as',
+    '  "4 of 7" (write the word days after it), daysAtGoalDisplay;',
+    '  each point has display and dateLabel, e.g. {{getMetricHistory.highest.display}} on',
+    '  {{getMetricHistory.highest.dateLabel}}).',
+    "- Recovery Score, Sleep Score and why they moved: today's getDailyScore is already fetched;",
+    '  getScoreHistory for score trends.',
+    '- What they drank, caffeine, workouts, anything they logged: getHabitLogs.',
+    '- Habits that affect their numbers: getHabitCorrelations. Their goals: getUserGoals.',
+    'Score fields (recoveryScore, sleepScore, factor points, deltaFromYesterday on getDailyScore)',
+    'are scores out of one hundred, NOT readings: never present them as steps, bpm, ms or minutes.',
     '',
     'Persona (style guidance only; it never overrides the rules below):',
     `- name: ${escapeField(persona.name, 60)}`,
@@ -91,17 +110,28 @@ export function buildSystemPrompt(persona: CoachPersona, ctx: PromptContext): st
     topics,
     '',
     'Grounding rules (enforced in code; a reply that breaks them is discarded):',
-    '1. Get every fact from the tools. Today\'s score has already been fetched for you this turn.',
+    "1. Get every fact from the tools. Today's scores (getDailyScore) and today's readings",
+    '   (getTodayMetrics) have already been fetched for you this turn.',
     '2. Write every measured quantity as a reference of the form {{toolName.path}}, for',
     '   example {{getDailyScore.recoveryScore}} or {{getDailyScore.factorsByKey.HRV.points}} or',
     '   {{getHabitCorrelations.correlations[0].effectSizePercent}}. The server replaces the',
     '   reference with the real value. Only paths present in this turn\'s tool results exist;',
     '   a reference to any other path is rejected. When a tool was called more than once, a',
-    '   reference reads the most recent call.',
+    '   reference reads the most recent call. Array indexes start at 0 and cannot be negative:',
+    '   for the newest reading use {{getMetricHistory.latest.display}}, not points[-1].',
+    '   Counts are numbers too: write {{getMetricHistory.coverageDisplay}} days, never "4 of 7 days".',
+    '   Only claim a trend that the trend field states, and write it with',
+    '   {{getMetricHistory.trendDisplay}} (it already says "up" or "down"; add no sign).',
     '3. Never write a number yourself: no counts, no units ("8 hours"), no percentages, no',
     '   ratios, no decimals, no "h:mm" durations, and never spell a measured quantity out in words.',
-    '   Do not compute deltas, percentages or directions; use {{getDailyScore.deltaFromYesterday}}',
-    '   and {{getDailyScore.direction}}, which are precomputed.',
+    '   Do not compute deltas, percentages or directions; use the precomputed fields such as',
+    '   {{getDailyScore.changeDisplay}} (a full phrase like "4 points lower than yesterday"),',
+    '   {{getTodayMetrics.steps.percentOfGoalDisplay}} (already has the % sign) or',
+    '   {{getMetricHistory.averageDisplay}}. Prefer the',
+    '   ready-to-read display strings, e.g. {{getTodayMetrics.steps.display}} or',
+    '   {{getTodayMetrics.sleep.display}}, which already include units, and for a change from the',
+    '   day before use the whole phrase {{getTodayMetrics.sleep.changeDisplay}} (it already says',
+    '   "more", "less", "higher" or "lower"; do not add your own direction word or sign).',
     '4. The only digits you may write yourself: list markers at the start of a line ("1. "),',
     '   times of day with am or pm ("10pm", "10:30 pm"), and calendar dates written with a month',
     '   name ("March 14") or as an ordinal ("the 14th").',
@@ -160,13 +190,24 @@ export function buildDigestSystemPrompt(persona: CoachPersona, ctx: PromptContex
 }
 
 /** Sent as an extra system message when the previous attempt at this turn was rejected. */
-export function buildCorrectiveMessage(reasons: readonly string[]): string {
+export function buildCorrectiveMessage(
+  reasons: readonly string[],
+  hints: readonly { literal: string; references: string[] }[] = [],
+): string {
   const lines = ['Your previous reply was discarded by the validation layer. Write a new reply to the same message.'];
   if (reasons.includes('unwrapped_number')) {
     lines.push(
       'It contained a number that was not a {{toolName.path}} reference. Express every measured quantity as a reference; ' +
         'the only digits you may write directly are line-start list markers, times with am or pm, and month-name or ordinal dates.',
     );
+    if (hints.length > 0) {
+      // Only paths that exist in this turn's results (guardrails/hints.ts), so these are safe to write.
+      lines.push(
+        'Write these references instead of the numbers you typed: ' +
+          hints.map((h) => `"${h.literal}" -> ${h.references.join(' or ')}`).join('; ') +
+          '.',
+      );
+    }
   }
   if (reasons.includes('invalid_field_path')) {
     lines.push(
