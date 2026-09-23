@@ -1,1 +1,0 @@
-{"version":3,"file":"tokenUpdate.d.ts","sourceRoot":"","sources":["../../src/sync/tokenUpdate.ts"],"names":[],"mappings":"AAAA,OAAO,KAAK,EAAE,mBAAmB,EAAE,MAAM,iBAAiB,CAAC;AAG3D,MAAM,WAAW,oBAAoB;IACnC,oBAAoB,EAAE,MAAM,CAAC;IAC7B,cAAc,EAAE,IAAI,CAAC;IACrB,qBAAqB,CAAC,EAAE,MAAM,CAAC;CAChC;AAED;;;;;;;;;;GAUG;AACH,wBAAgB,wBAAwB,CAAC,MAAM,EAAE,mBAAmB,GAAG,oBAAoB,CAS1F"}

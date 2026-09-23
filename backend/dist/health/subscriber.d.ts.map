@@ -1,1 +1,0 @@
-{"version":3,"file":"subscriber.d.ts","sourceRoot":"","sources":["../../src/health/subscriber.ts"],"names":[],"mappings":"AAiBA,wBAAsB,WAAW,CAAC,eAAe,EAAE,MAAM,GAAG,OAAO,CAAC;IAAE,YAAY,EAAE,MAAM,CAAA;CAAE,CAAC,CAS5F;AAED,wBAAsB,wBAAwB,CAAC,YAAY,EAAE,MAAM,GAAG,OAAO,CAAC,MAAM,CAAC,CA0BpF;AAED,wBAAsB,sBAAsB,CAAC,cAAc,EAAE,MAAM,GAAG,OAAO,CAAC,IAAI,CAAC,CAUlF"}

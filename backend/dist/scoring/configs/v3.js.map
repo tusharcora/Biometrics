@@ -1,1 +1,0 @@
-{"version":3,"file":"v3.js","sourceRoot":"","sources":["../../../src/scoring/configs/v3.ts"],"names":[],"mappings":";;;AACA,6BAAgC;AAEhC;;;;;;;;;;;;;;;;;;;;;;;;;;;GA2BG;AACU,QAAA,QAAQ,GAAgB;IACnC,GAAG,aAAQ;IACX,OAAO,EAAE,IAAI;IACb,MAAM,EAAE,EAAE,GAAG,EAAE,CAAC,CAAC,EAAE,GAAG,EAAE,CAAC,EAAE;IAC3B,YAAY,EAAE,EAAE,gBAAgB,EAAE,IAAI,EAAE,qBAAqB,EAAE,EAAE,EAAE;CACpE,CAAC"}
