@@ -303,3 +303,28 @@ sign-in and linking to the extent the simulator allows.
 - Better Auth and `@better-auth/expo` have not been exercised on Expo SDK 57
   specifically; the first implementation task installs them and runs the app
   before building on top.
+
+## Amendments made while planning (2026-09-23)
+
+Found while verifying Better Auth 1.7.5 against this codebase; the plan
+(`docs/superpowers/plans/2026-09-23-better-auth-migration.md`) implements
+these, and they supersede the sections above where they conflict.
+
+1. **Node 24.** better-auth 1.7.5 is ESM-only and the backend is CommonJS on
+   Node 20.15, which cannot `require()` it. The backend moves to Node 24
+   (`require(esm)`); Jest runs with `--experimental-vm-modules`. Verified in a
+   scratch project. Node 20 is past end-of-life anyway.
+2. **Dev users are migrated, not wiped.** The migration derives `name`,
+   `emailVerified` and `Account` rows from existing users so synced dev data
+   survives (the Data model section said "reset").
+3. **Verification lands on sign-in, not signed in.**
+   `autoSignInAfterVerification: false`; `biometrics://verified` opens the
+   sign-in screen with an "Email confirmed" banner. Restoring a session from a
+   cold-start deep link would rely on undocumented Expo-plugin internals.
+4. **No `onSessionExpired` event.** The Expo client clears its stored session
+   inside `authClient.signOut()` before the request is sent, so a 401 in
+   `api/client.ts` calls `authClient.signOut()` (unless the user has since
+   signed in again) and `AuthContext` derives `session` from `useSession()`.
+   `clearSession()` after account deletion uses the same call.
+5. **`GOOGLE_IOS_CLIENT_ID` is optional**: the existing `GOOGLE_CLIENT_ID`
+   already verifies the app's Google ID tokens.
