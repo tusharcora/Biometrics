@@ -43,7 +43,7 @@ export type RootStackParamList = {
   CoachMemory: undefined;
   // Reached from Settings: link or unlink Apple, Google, email + password.
   SignInMethods: undefined;
-  // Reached from Settings: signed-in devices (screen added separately).
+  // Reached from Settings: signed-in devices, with sign-out per device.
   Devices: undefined;
 };
 
@@ -52,7 +52,7 @@ export type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export function RootNavigator() {
-  const { session } = useAuth();
+  const { session, isPending } = useAuth();
   const { colorScheme: scheme } = useColorScheme();
   const navTheme = scheme === 'dark' ? DARK_NAV_THEME : LIGHT_NAV_THEME;
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
@@ -79,11 +79,14 @@ export function RootNavigator() {
     setInitialRoute(session ? 'Tabs' : null);
   }, [session]);
 
-  if (!session) {
+  // While the stored session is still resolving, show the loading view rather
+  // than flash the sign-in stack (whose NavigationContainer would also consume
+  // a cold-start deep link meant for the signed-in app).
+  if (!session && !isPending) {
     return <AuthNavigator theme={navTheme} />;
   }
 
-  if (initialRoute === null) {
+  if (!session || initialRoute === null) {
     return (
       <View style={styles.loading} testID="root-navigator-loading">
         <ActivityIndicator />

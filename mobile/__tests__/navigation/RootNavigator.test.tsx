@@ -74,6 +74,18 @@ describe('RootNavigator', () => {
     expect(syncTimezone).not.toHaveBeenCalled();
   });
 
+  // A stored session is resolved asynchronously on launch. Until then the app
+  // must not flash the sign-in stack, whose NavigationContainer would also
+  // consume a cold-start deep link meant for the signed-in app.
+  it('shows the loading view, not the sign-in screen, while the session is resolving', () => {
+    (useAuth as jest.Mock).mockReturnValue({ session: null, isPending: true, signOut: jest.fn() });
+
+    const { getByTestId, queryByText } = render(<RootNavigator />);
+
+    expect(getByTestId('root-navigator-loading')).toBeTruthy();
+    expect(queryByText('SIGN_IN_SCREEN')).toBeNull();
+  });
+
   it('syncs the time zone once on launch when authenticated', async () => {
     signedIn(true);
     (apiFetch as jest.Mock).mockResolvedValue({ status: 'CONNECTED', lastSyncedAt: null });
