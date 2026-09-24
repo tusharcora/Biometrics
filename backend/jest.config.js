@@ -2,11 +2,6 @@ module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
   roots: ['<rootDir>/tests'],
-  // jose is mocked per-file via jest.mock('jose') (see tests/auth/appleAuth.test.ts),
-  // which picks up __mocks__/jose.js automatically. A global moduleNameMapper here
-  // used to force-substitute that stub for every test file's 'jose' import,
-  // including better-auth's own internal use of jose -- breaking anything that
-  // imports better-auth without needing the mock at all.
   // Every DB-backed suite shares one Postgres test database (and one Redis).
   // Suites seed and delete rows for real, so parallel workers make results
   // order-dependent; run them serially.
