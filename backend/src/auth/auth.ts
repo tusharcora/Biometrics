@@ -95,6 +95,8 @@ export function createAuth(deps: AuthDeps) {
     session: {
       expiresIn: 30 * 24 * 60 * 60,
       updateAge: 24 * 60 * 60,
+      // Freshness is off: freshAge counts from session creation, so 30-day sliding sessions would lock users out of Devices/Unlink. Last-method unlink and different-email linking stay blocked server-side.
+      freshAge: 0,
     },
     databaseHooks: {
       user: {

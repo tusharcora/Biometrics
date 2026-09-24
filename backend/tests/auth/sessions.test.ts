@@ -52,9 +52,42 @@ describe('session management', () => {
     const email = `last-${randomUUID()}@example.com`;
     const cookie = await googleSignIn(app, email, 'A');
     const account = await prisma.account.findFirstOrThrow({ where: { user: { email } } });
+    // /unlink-account takes the Account row's own id as `accountId`.
     const res = await request(app).post('/auth/unlink-account').set(ORIGIN).set('Cookie', cookie)
-      .send({ providerId: 'google', accountId: account.accountId });
+      .send({ accountId: account.id });
     expect(res.status).toBe(400);
+    expect(res.body.code).toBe('FAILED_TO_UNLINK_LAST_ACCOUNT');
     expect(await prisma.account.count({ where: { user: { email } } })).toBe(1);
+  });
+
+  it('unlinks one sign-in method when another remains', async () => {
+    const { app } = createTestApp();
+    const email = `two-${randomUUID()}@example.com`;
+    const cookie = await googleSignIn(app, email, 'A');
+    const google = await prisma.account.findFirstOrThrow({ where: { user: { email } } });
+    await prisma.account.create({ data: { userId: google.userId, providerId: 'apple', accountId: `apple-${randomUUID()}` } });
+
+    const res = await request(app).post('/auth/unlink-account').set(ORIGIN).set('Cookie', cookie)
+      .send({ accountId: google.id });
+    expect(res.status).toBe(200);
+    const left = await prisma.account.findMany({ where: { user: { email } } });
+    expect(left.map((a) => a.providerId)).toEqual(['apple']);
+  });
+
+  it('manages sessions and methods without re-sign-in on a session older than a day', async () => {
+    const { app } = createTestApp();
+    const email = `old-${randomUUID()}@example.com`;
+    const cookie = await googleSignIn(app, email, 'A');
+    const google = await prisma.account.findFirstOrThrow({ where: { user: { email } } });
+    await prisma.account.create({ data: { userId: google.userId, providerId: 'apple', accountId: `apple-${randomUUID()}` } });
+    await prisma.session.updateMany({
+      where: { userId: google.userId },
+      data: { createdAt: new Date(Date.now() - 2 * 24 * 60 * 60 * 1000) },
+    });
+
+    expect((await request(app).get('/auth/list-sessions').set('Cookie', cookie)).status).toBe(200);
+    const unlink = await request(app).post('/auth/unlink-account').set(ORIGIN).set('Cookie', cookie)
+      .send({ accountId: google.id });
+    expect(unlink.status).toBe(200);
   });
 });

@@ -45,3 +45,12 @@ it('links Apple with the native identity token', async () => {
   fireEvent.press(await findByTestId('link-apple-button'));
   await waitFor(() => expect(m.linkSocial).toHaveBeenCalledWith({ provider: 'apple', idToken: { token: 'apple-token' } }));
 });
+
+it('explains a link refused for a different email', async () => {
+  m.listAccounts.mockResolvedValue(accounts('google'));
+  (AppleAuthentication.signInAsync as jest.Mock).mockResolvedValue({ identityToken: 'apple-token' });
+  m.linkSocial.mockResolvedValueOnce({ data: null, error: { code: 'LINKING_DIFFERENT_EMAILS_NOT_ALLOWED', status: 401, message: 'raw' } });
+  const { findByTestId, findByText } = render(<SignInMethodsScreen />);
+  fireEvent.press(await findByTestId('link-apple-button'));
+  expect(await findByText("That account uses a different email, so it can't be linked. (Apple's Hide My Email addresses can't be linked either.)")).toBeTruthy();
+});

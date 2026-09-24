@@ -29,6 +29,10 @@ const MESSAGES: Record<string, string> = {
   INVALID_TOKEN: 'This link has expired. Ask for a new one.',
   ACCOUNT_NOT_LINKED: 'An account with this email already exists. Sign in with your original method, then link this one in Settings.',
   FAILED_TO_UNLINK_LAST_ACCOUNT: 'You need at least one way to sign in.',
+  LINKING_DIFFERENT_EMAILS_NOT_ALLOWED: "That account uses a different email, so it can't be linked. (Apple's Hide My Email addresses can't be linked either.)",
+  SOCIAL_ACCOUNT_ALREADY_LINKED: 'That account is already linked to another Biometrics user.',
+  // Defensive: the server sets freshAge to 0, so this should not occur.
+  SESSION_NOT_FRESH: 'For your security, sign out and sign back in, then try again.',
 };
 
 export function messageFor(err: unknown): string {

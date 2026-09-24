@@ -18,6 +18,9 @@ describe('messageFor', () => {
     ['INVALID_EMAIL_OR_PASSWORD', 'That email and password do not match.'],
     ['EMAIL_NOT_VERIFIED', 'Confirm your email first. We sent you a link.'],
     ['PASSWORD_TOO_SHORT', 'Use at least 8 characters for your password.'],
+    ['LINKING_DIFFERENT_EMAILS_NOT_ALLOWED', "That account uses a different email, so it can't be linked. (Apple's Hide My Email addresses can't be linked either.)"],
+    ['SOCIAL_ACCOUNT_ALREADY_LINKED', 'That account is already linked to another Biometrics user.'],
+    ['SESSION_NOT_FRESH', 'For your security, sign out and sign back in, then try again.'],
   ])('maps %s to a friendly message', (code, message) => {
     expect(messageFor(new AuthError(code, 'raw', 400))).toBe(message);
   });
