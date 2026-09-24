@@ -57,3 +57,40 @@ it('throws an AuthError when Better Auth reports one', async () => {
   renderAuth();
   await expect(ctx.signInWithEmail('a@example.com', 'x')).rejects.toBeInstanceOf(AuthError);
 });
+
+describe('session identity', () => {
+  const sessionFor = (id: string) => ({ data: { user: { id, email: `${id}@example.com` }, session: {} }, isPending: false });
+  let effectRuns: number;
+  function SessionEffect() {
+    const { session } = useAuth();
+    React.useEffect(() => {
+      effectRuns += 1;
+    }, [session]);
+    return null;
+  }
+  const tree = () => (
+    <AuthProvider>
+      <SessionEffect />
+    </AuthProvider>
+  );
+
+  beforeEach(() => {
+    effectRuns = 0;
+  });
+
+  it('keeps the same session when a refetch returns the same user', () => {
+    mocked.useSession.mockReturnValue(sessionFor('u1'));
+    const { rerender } = render(tree());
+    mocked.useSession.mockReturnValue(sessionFor('u1'));
+    rerender(tree());
+    expect(effectRuns).toBe(1);
+  });
+
+  it('produces a new session when the user changes', () => {
+    mocked.useSession.mockReturnValue(sessionFor('u1'));
+    const { rerender } = render(tree());
+    mocked.useSession.mockReturnValue(sessionFor('u2'));
+    rerender(tree());
+    expect(effectRuns).toBe(2);
+  });
+});
