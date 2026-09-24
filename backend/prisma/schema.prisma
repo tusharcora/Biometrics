@@ -7,11 +7,6 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum AuthProvider {
-  APPLE
-  GOOGLE
-}
-
 enum HealthConnectionStatus {
   CONNECTED
   DISCONNECTED
@@ -24,16 +19,24 @@ enum BiometricMetricType {
   STEPS
 }
 
+// Identity is the Better Auth user: one row per person, email unique. Sign-in
+// methods (Apple, Google, email+password) are Account rows. A new method whose
+// VERIFIED email matches a VERIFIED user is linked to that user automatically
+// (spec 2026-09-23-better-auth-migration-design.md, decision 3); an unverified
+// sign-up can never attach to an existing account.
 model User {
   id                 String              @id @default(uuid())
-  email              String
-  authProvider       AuthProvider
-  providerUserId     String
+  name               String
+  email              String              @unique
+  emailVerified      Boolean             @default(false)
+  image              String?
+  updatedAt          DateTime            @updatedAt
+  sessions           Session[]
+  accounts           Account[]
   createdAt          DateTime            @default(now())
   healthConnection   HealthConnection?
   biometricRecords   BiometricRecord[]
   sleepSessions      SleepSession[]
-  refreshTokens      RefreshToken[]
   baselineSnapshots  BaselineSnapshot[]
   dailyFeatures      UserDailyFeatures[]
   dailyScores        DailyScore[]
@@ -64,39 +67,72 @@ model User {
   // derived SLEEP daily rollup lines up with the civil dates Google reports
   // for STEPS/RESTING_HR/HRV. "UTC" is the fallback until the client reports.
   timezone String @default("UTC")
-
-  // Identity is keyed on the provider subject, not the email address: the same
-  // person may hold both an Apple and a Google account sharing one email, and
-  // those are deliberately two separate accounts (no cross-provider linking).
-  @@unique([authProvider, providerUserId])
 }
 
-model RefreshToken {
-  id        String    @id @default(uuid())
-  userId    String
-  user      User      @relation(fields: [userId], references: [id])
-  tokenHash String    @unique
+// Better Auth core tables. Field names are Better Auth's; do not rename.
+model Session {
+  id        String   @id @default(uuid())
   expiresAt DateTime
-  revokedAt DateTime?
-  createdAt DateTime  @default(now())
+  token     String   @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  ipAddress String?
+  userAgent String?
+  userId    String
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Account {
+  id                    String    @id @default(uuid())
+  // The provider's subject ("sub") for apple/google; the user id for "credential".
+  accountId             String
+  // "apple" | "google" | "credential" (email + password)
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@unique([providerId, accountId])
+  @@index([userId])
+}
+
+model Verification {
+  id         String   @id @default(uuid())
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
 }
 
 model HealthConnection {
-  id                    String                 @id @default(uuid())
-  userId                String                 @unique
-  user                  User                   @relation(fields: [userId], references: [id])
-  healthUserId          String                 @unique
-  encryptedAccessToken  String
-  encryptedRefreshToken String
-  tokenExpiresAt        DateTime
-  webhookSubscriptionId String?
-  status                HealthConnectionStatus @default(CONNECTED)
-  lastSyncedAt          DateTime?
+  id                       String                 @id @default(uuid())
+  userId                   String                 @unique
+  user                     User                   @relation(fields: [userId], references: [id])
+  healthUserId             String                 @unique
+  encryptedAccessToken     String
+  encryptedRefreshToken    String
+  tokenExpiresAt           DateTime
+  webhookSubscriptionId    String?
+  status                   HealthConnectionStatus @default(CONNECTED)
+  lastSyncedAt             DateTime?
   // Set once the one-off 365-day STEPS history backfill (activity heat map)
   // has succeeded; null means it still needs to run (see sync/stepsHistory.ts).
   stepsHistoryBackfilledAt DateTime?
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
+  createdAt                DateTime               @default(now())
+  updatedAt                DateTime               @updatedAt
 }
 
 model BiometricRecord {
@@ -412,20 +448,20 @@ enum CoachMemoryStatus {
 }
 
 model CoachMemory {
-  id          String              @id @default(uuid())
-  userId      String
-  user        User                @relation(fields: [userId], references: [id])
-  category    CoachMemoryCategory
-  value       String              @db.VarChar(140)
-  status      CoachMemoryStatus   @default(PENDING)
-  createdAt   DateTime            @default(now())
-  confirmedAt DateTime?
+  id             String              @id @default(uuid())
+  userId         String
+  user           User                @relation(fields: [userId], references: [id])
+  category       CoachMemoryCategory
+  value          String              @db.VarChar(140)
+  status         CoachMemoryStatus   @default(PENDING)
+  createdAt      DateTime            @default(now())
+  confirmedAt    DateTime?
   // The conversation the proposal was made in. A PENDING entry is settled by
   // the user's next message IN THAT CONVERSATION; without this, a message in
   // any other conversation confirmed or dismissed it. Null only for rows that
   // predate this column.
   conversationId String?
-  conversation   CoachConversation? @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  conversation   CoachConversation?  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
 
   // Dedupe enforced by the database, not only by the read-then-write check in
   // createPendingMemories, which two turns could pass at the same time.

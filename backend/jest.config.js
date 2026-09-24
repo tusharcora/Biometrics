@@ -24,4 +24,5 @@ module.exports = {
   // run after a long backlog has built up.
   globalSetup: '<rootDir>/tests/globalSetup.ts',
   globalTeardown: '<rootDir>/tests/globalTeardown.ts',
+  setupFiles: ['<rootDir>/tests/setupEnv.ts'],
 };
