@@ -41,8 +41,7 @@ async function createUser(opts: { status?: 'CONNECTED' | 'DISCONNECTED' | 'NONE'
   const user = await prisma.user.create({
     data: {
       email: `resync-${randomUUID()}@example.com`,
-      authProvider: 'GOOGLE',
-      providerUserId: randomUUID(),
+      name: 'Test User',
       timezone: opts.timezone ?? 'UTC',
     },
   });

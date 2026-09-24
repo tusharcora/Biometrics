@@ -32,7 +32,7 @@ describe('stepsHistoryWindow', () => {
 describe('enqueuePendingStepsHistoryBackfills', () => {
   async function createConnection(prefix: string, data: { status?: 'CONNECTED' | 'DISCONNECTED'; stepsHistoryBackfilledAt?: Date }) {
     const user = await prisma.user.create({
-      data: { email: `${prefix}-${randomUUID()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+      data: { email: `${prefix}-${randomUUID()}@example.com`, name: 'Test User'},
     });
     await prisma.healthConnection.create({
       data: {

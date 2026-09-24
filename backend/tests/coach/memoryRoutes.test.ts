@@ -3,7 +3,7 @@ import request from 'supertest';
 import { createApp } from '../../src/app';
 import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
-import { issueSessionTokens } from '../../src/auth/jwt';
+import { authHeaderFor } from '../helpers/auth';
 import { createCoachRouter } from '../../src/coach/routes';
 import { COACH_CONSENT_VERSION } from '../../src/coach/consent';
 import { ScriptedProvider, ScriptStep } from '../../src/coach/model/provider';
@@ -13,7 +13,6 @@ import { FakeClock, RecordingTelemetry, createUser } from './helpers';
 
 beforeAll(() => {
   migrateTestDb();
-  process.env.JWT_ACCESS_SECRET = 'test-access-secret';
   process.env.TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 3).toString('base64');
 });
 
@@ -34,8 +33,7 @@ afterEach(() => {
 });
 
 async function authed(userId: string) {
-  const { accessToken } = await issueSessionTokens(userId);
-  return { Authorization: `Bearer ${accessToken}` };
+  return authHeaderFor(userId);
 }
 
 function scriptedApp(script: ScriptStep[]) {

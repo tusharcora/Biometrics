@@ -13,7 +13,6 @@ import { dateAt } from './helpers';
 
 beforeAll(() => {
   migrateTestDb();
-  process.env.JWT_ACCESS_SECRET = 'test-access-secret';
   process.env.TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 3).toString('base64');
 });
 

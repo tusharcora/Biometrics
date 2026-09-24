@@ -19,7 +19,7 @@ export const todayCivil = () => localCivilDate(new Date(), 'UTC');
 
 export async function seedSnapshot(snapshot: UserSnapshot): Promise<{ userId: string; conversationId: string }> {
   const user = await prisma.user.create({
-    data: { email: `eval-${randomUUID()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+    data: { email: `eval-${randomUUID()}@example.com`, name: 'Test User' },
   });
   const today = todayCivil();
   const scoreRows = [

@@ -20,7 +20,7 @@ afterAll(async () => {
 
 describe('runTokenRefreshSweep', () => {
   it('refreshes connections expiring within the next hour', async () => {
-    const user = await prisma.user.create({ data: { email: `t-${Date.now()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() } });
+    const user = await prisma.user.create({ data: { email: `t-${Date.now()}@example.com`, name: 'Test User'} });
     await prisma.healthConnection.create({
       data: {
         userId: user.id,
@@ -43,7 +43,7 @@ describe('runTokenRefreshSweep', () => {
   });
 
   it('marks a connection disconnected when the refresh token has been revoked', async () => {
-    const user = await prisma.user.create({ data: { email: `t2-${Date.now()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() } });
+    const user = await prisma.user.create({ data: { email: `t2-${Date.now()}@example.com`, name: 'Test User'} });
     await prisma.healthConnection.create({
       data: {
         userId: user.id,
@@ -65,7 +65,7 @@ describe('runTokenRefreshSweep', () => {
   // a revoked grant; the connection is healthy and should stay CONNECTED.
   it('does not disconnect a healthy connection when the post-refresh write fails', async () => {
     const user = await prisma.user.create({
-      data: { email: `t4-${Date.now()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+      data: { email: `t4-${Date.now()}@example.com`, name: 'Test User'},
     });
     const created = await prisma.healthConnection.create({
       data: {
@@ -103,10 +103,10 @@ describe('runTokenRefreshSweep', () => {
 
   it('isolates a failing connection so other connections in the same sweep still refresh', async () => {
     const failingUser = await prisma.user.create({
-      data: { email: `t3-fail-${Date.now()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+      data: { email: `t3-fail-${Date.now()}@example.com`, name: 'Test User'},
     });
     const succeedingUser = await prisma.user.create({
-      data: { email: `t3-ok-${Date.now()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+      data: { email: `t3-ok-${Date.now()}@example.com`, name: 'Test User'},
     });
     await prisma.healthConnection.create({
       data: {
@@ -149,7 +149,7 @@ describe('runTokenRefreshSweep', () => {
   });
 
   it('does not overwrite the stored refresh token when Google does not return a new one', async () => {
-    const user = await prisma.user.create({ data: { email: `t-${Date.now()}-norefresh@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() } });
+    const user = await prisma.user.create({ data: { email: `t-${Date.now()}-norefresh@example.com`, name: 'Test User'} });
     const conn = await prisma.healthConnection.create({
       data: {
         userId: user.id,
@@ -170,7 +170,7 @@ describe('runTokenRefreshSweep', () => {
 
   it('deletes the Google Health subscription when a refresh fails and a subscription exists', async () => {
     const user = await prisma.user.create({
-      data: { email: `t-${Date.now()}-refresh401@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+      data: { email: `t-${Date.now()}-refresh401@example.com`, name: 'Test User'},
     });
     const conn = await prisma.healthConnection.create({
       data: {
@@ -194,7 +194,7 @@ describe('runTokenRefreshSweep', () => {
 
   it('still marks the connection DISCONNECTED on refresh failure even if deleting the subscription fails', async () => {
     const user = await prisma.user.create({
-      data: { email: `t-${Date.now()}-refresh402@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+      data: { email: `t-${Date.now()}-refresh402@example.com`, name: 'Test User'},
     });
     const conn = await prisma.healthConnection.create({
       data: {

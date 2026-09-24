@@ -2,7 +2,7 @@ import request from 'supertest';
 import { createApp } from '../../src/app';
 import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
-import { issueSessionTokens } from '../../src/auth/jwt';
+import { authHeaderFor } from '../helpers/auth';
 import { computeDailyScore } from '../../src/scoring/compute';
 import { localCivilDate } from '../../src/biometrics/civilDate';
 import { shiftDate } from '../../src/scoring/dates';
@@ -10,7 +10,6 @@ import { createUser, seedHistory, seedSessions, day } from './dbHelpers';
 
 beforeAll(() => {
   migrateTestDb();
-  process.env.JWT_ACCESS_SECRET = 'test-access-secret';
   process.env.TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 3).toString('base64');
 });
 
@@ -31,8 +30,7 @@ const SLEEP_FACTORS = [
 ];
 
 async function authed(userId: string) {
-  const { accessToken } = await issueSessionTokens(userId);
-  return { Authorization: `Bearer ${accessToken}` };
+  return authHeaderFor(userId);
 }
 
 async function putScore(userId: string, type: 'RECOVERY' | 'SLEEP', date: string, score: number | null, factors?: unknown) {

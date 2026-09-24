@@ -4,7 +4,7 @@ import nock from 'nock';
 import { createApp } from '../../src/app';
 import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
-import { issueSessionTokens } from '../../src/auth/jwt';
+import { authHeaderFor } from '../helpers/auth';
 import { processSyncJob } from '../../src/sync/worker';
 import * as queue from '../../src/sync/queue';
 import * as serviceAccount from '../../src/health/serviceAccount';
@@ -20,7 +20,6 @@ jest.mock('../../src/scoring/queue', () => ({
 
 beforeAll(() => {
   migrateTestDb();
-  process.env.JWT_ACCESS_SECRET = 'test-access-secret';
   process.env.TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 1).toString('base64');
   process.env.GOOGLE_HEALTH_CLIENT_ID = 'client-id.apps.googleusercontent.com';
   process.env.GOOGLE_HEALTH_CLIENT_SECRET = 'client-secret';
@@ -36,11 +35,11 @@ afterAll(async () => {
 describe('connect Google Health and sync end to end (mocked Google API)', () => {
   it('connects, backfills, and serves data via /me/biometrics', async () => {
     const user = await prisma.user.create({
-      data: { email: `e2e-${Date.now()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+      data: { email: `e2e-${Date.now()}@example.com`, name: 'Test User'},
     });
-    const { accessToken } = await issueSessionTokens(user.id);
+    const authHeader = await authHeaderFor(user.id);
 
-    const authorizeRes = await request(createApp()).get('/health/authorize').set('Authorization', `Bearer ${accessToken}`);
+    const authorizeRes = await request(createApp()).get('/health/authorize').set(authHeader);
     const state = new URL(authorizeRes.body.url).searchParams.get('state')!;
 
     nock('https://oauth2.googleapis.com').post('/token').reply(200, {
@@ -112,7 +111,7 @@ describe('connect Google Health and sync end to end (mocked Google API)', () => 
 
     await processSyncJob({ name: 'backfill', data: enqueuedBackfill } as any);
 
-    const res = await request(createApp()).get('/me/biometrics').set('Authorization', `Bearer ${accessToken}`);
+    const res = await request(createApp()).get('/me/biometrics').set(authHeader);
     expect(res.status).toBe(200);
     expect(res.body.length).toBeGreaterThanOrEqual(4);
     // SLEEP is a rollup keyed on the local civil date of the session's END

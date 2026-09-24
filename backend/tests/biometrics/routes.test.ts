@@ -3,11 +3,10 @@ import { randomUUID } from 'crypto';
 import { createApp } from '../../src/app';
 import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
-import { issueSessionTokens } from '../../src/auth/jwt';
+import { authHeaderFor } from '../helpers/auth';
 
 beforeAll(() => {
   migrateTestDb();
-  process.env.JWT_ACCESS_SECRET = 'test-access-secret';
   process.env.TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 3).toString('base64');
 });
 
@@ -15,8 +14,7 @@ async function createUser(prefix: string) {
   return prisma.user.create({
     data: {
       email: `${prefix}-${randomUUID()}@example.com`,
-      authProvider: 'GOOGLE',
-      providerUserId: randomUUID(),
+      name: 'Test User',
     },
   });
 }
@@ -27,13 +25,13 @@ afterAll(async () => {
 
 describe('GET /me/biometrics', () => {
   it('returns the current user\'s biometric records', async () => {
-    const user = await prisma.user.create({ data: { email: `b-${Date.now()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() } });
+    const user = await prisma.user.create({ data: { email: `b-${Date.now()}@example.com`, name: 'Test User'} });
     await prisma.biometricRecord.create({
       data: { userId: user.id, metricType: 'STEPS', value: 9000, recordedAt: new Date('2026-09-01') },
     });
-    const { accessToken } = await issueSessionTokens(user.id);
+    const authHeader = await authHeaderFor(user.id);
 
-    const res = await request(createApp()).get('/me/biometrics').set('Authorization', `Bearer ${accessToken}`);
+    const res = await request(createApp()).get('/me/biometrics').set(authHeader);
 
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(1);
@@ -45,11 +43,11 @@ describe('GET /me/biometrics', () => {
     await prisma.biometricRecord.create({
       data: { userId: user.id, metricType: 'HRV', value: 42, recordedAt: new Date('2026-09-03') },
     });
-    const { accessToken } = await issueSessionTokens(user.id);
+    const authHeader = await authHeaderFor(user.id);
 
     const res = await request(createApp())
       .get('/me/biometrics')
-      .set('Authorization', `Bearer ${accessToken}`);
+      .set(authHeader);
 
     expect(res.status).toBe(200);
     // Internal columns must not leak to the client.
@@ -62,17 +60,17 @@ describe('GET /me/biometrics', () => {
   });
 
   it('does not return another user\'s biometric records', async () => {
-    const userA = await prisma.user.create({ data: { email: `a-${Date.now()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() } });
-    const userB = await prisma.user.create({ data: { email: `c-${Date.now()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() } });
+    const userA = await prisma.user.create({ data: { email: `a-${Date.now()}@example.com`, name: 'Test User'} });
+    const userB = await prisma.user.create({ data: { email: `c-${Date.now()}@example.com`, name: 'Test User'} });
     await prisma.biometricRecord.create({
       data: { userId: userA.id, metricType: 'STEPS', value: 1234, recordedAt: new Date('2026-09-02') },
     });
     await prisma.biometricRecord.create({
       data: { userId: userB.id, metricType: 'STEPS', value: 5678, recordedAt: new Date('2026-09-02') },
     });
-    const { accessToken } = await issueSessionTokens(userA.id);
+    const authHeader = await authHeaderFor(userA.id);
 
-    const res = await request(createApp()).get('/me/biometrics').set('Authorization', `Bearer ${accessToken}`);
+    const res = await request(createApp()).get('/me/biometrics').set(authHeader);
 
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(1);
@@ -90,8 +88,8 @@ describe('GET /me/activity', () => {
   }
 
   async function getActivity(userId: string, query: Record<string, string>) {
-    const { accessToken } = await issueSessionTokens(userId);
-    return request(createApp()).get('/me/activity').query(query).set('Authorization', `Bearer ${accessToken}`);
+    const authHeader = await authHeaderFor(userId);
+    return request(createApp()).get('/me/activity').query(query).set(authHeader);
   }
 
   it('returns daily steps within the inclusive range, oldest first, keyed by civil date', async () => {
@@ -185,11 +183,11 @@ describe('GET /me/activity', () => {
 describe('GET /me/connection', () => {
   it('reports NOT_CONNECTED when the user has never connected a health account', async () => {
     const user = await createUser('nc');
-    const { accessToken } = await issueSessionTokens(user.id);
+    const authHeader = await authHeaderFor(user.id);
 
     const res = await request(createApp())
       .get('/me/connection')
-      .set('Authorization', `Bearer ${accessToken}`);
+      .set(authHeader);
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ status: 'NOT_CONNECTED', lastSyncedAt: null });
@@ -208,11 +206,11 @@ describe('GET /me/connection', () => {
         lastSyncedAt: new Date('2026-09-10T08:30:00.000Z'),
       },
     });
-    const { accessToken } = await issueSessionTokens(user.id);
+    const authHeader = await authHeaderFor(user.id);
 
     const res = await request(createApp())
       .get('/me/connection')
-      .set('Authorization', `Bearer ${accessToken}`);
+      .set(authHeader);
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({
@@ -233,11 +231,11 @@ describe('GET /me/connection', () => {
         status: 'DISCONNECTED',
       },
     });
-    const { accessToken } = await issueSessionTokens(user.id);
+    const authHeader = await authHeaderFor(user.id);
 
     const res = await request(createApp())
       .get('/me/connection')
-      .set('Authorization', `Bearer ${accessToken}`);
+      .set(authHeader);
 
     expect(res.status).toBe(200);
     expect(res.body.status).toBe('DISCONNECTED');
@@ -262,11 +260,11 @@ describe('GET /me/connection', () => {
         status: 'CONNECTED',
       },
     });
-    const { accessToken } = await issueSessionTokens(userA.id);
+    const authHeader = await authHeaderFor(userA.id);
 
     const res = await request(createApp())
       .get('/me/connection')
-      .set('Authorization', `Bearer ${accessToken}`);
+      .set(authHeader);
 
     expect(res.body.status).toBe('NOT_CONNECTED');
   });

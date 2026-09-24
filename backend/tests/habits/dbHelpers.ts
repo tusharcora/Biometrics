@@ -1,13 +1,12 @@
 import { prisma } from '../../src/db/client';
-import { issueSessionTokens } from '../../src/auth/jwt';
+import { authHeaderFor } from '../helpers/auth';
 import { civilDateToUtcMidnight } from '../../src/biometrics/civilDate';
 import { ar1, dateAt, seededRandom } from './helpers';
 
 export { createUser } from '../scoring/dbHelpers';
 
 export async function authed(userId: string) {
-  const { accessToken } = await issueSessionTokens(userId);
-  return { Authorization: `Bearer ${accessToken}` };
+  return authHeaderFor(userId);
 }
 
 export interface ScenarioOptions {

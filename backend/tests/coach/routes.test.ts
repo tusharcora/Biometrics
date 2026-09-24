@@ -4,7 +4,7 @@ import { RATE_LIMIT_MAX_TURNS, resetTurnGuards } from '../../src/coach/turnGuard
 import { createApp } from '../../src/app';
 import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
-import { issueSessionTokens } from '../../src/auth/jwt';
+import { authHeaderFor } from '../helpers/auth';
 import { createCoachRouter } from '../../src/coach/routes';
 import { COACH_CONSENT_VERSION } from '../../src/coach/consent';
 import { COACH_DISCLAIMER } from '../../src/coach/guardrails/disclaimer';
@@ -14,7 +14,6 @@ import { FakeClock, RecordingTelemetry, createUser, daysAgo, putScore, todayUtc 
 
 beforeAll(() => {
   migrateTestDb();
-  process.env.JWT_ACCESS_SECRET = 'test-access-secret';
   process.env.TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 3).toString('base64');
 });
 
@@ -35,8 +34,7 @@ afterEach(() => {
 });
 
 async function authed(userId: string) {
-  const { accessToken } = await issueSessionTokens(userId);
-  return { Authorization: `Bearer ${accessToken}` };
+  return authHeaderFor(userId);
 }
 
 const GOOD = 'Your recovery is {{getDailyScore.recoveryScore}}, {{getDailyScore.direction}} than yesterday.';
