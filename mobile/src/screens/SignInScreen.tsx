@@ -1,4 +1,4 @@
-import React, { useCallback, useState } from 'react';
+import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
@@ -14,6 +14,8 @@ import { TextField } from '../components/ui/text-field';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'SignIn'>;
 
+const VERIFIED_NOTICE = 'Email confirmed. Sign in to continue.';
+
 export function SignInScreen({ navigation, route }: Props) {
   const { signInWithApple, signInWithGoogle, signInWithEmail, resendVerification } = useAuth();
   const [email, setEmail] = useState('');
@@ -21,7 +23,19 @@ export function SignInScreen({ navigation, route }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [unverified, setUnverified] = useState(false);
-  const [notice, setNotice] = useState<string | null>(route.params?.verified ? 'Email confirmed. Sign in to continue.' : null);
+  const verified = route.params?.verified === true;
+  const [notice, setNotice] = useState<string | null>(verified ? VERIFIED_NOTICE : null);
+
+  // When the app is already open on this screen, the email link updates the
+  // params of this same route instead of mounting a new screen, so the
+  // initial state above never sees it.
+  useEffect(() => {
+    if (!verified) return;
+    setNotice(VERIFIED_NOTICE);
+    // The "confirm your email first" error no longer applies.
+    setError(null);
+    setUnverified(false);
+  }, [verified]);
 
   const run = useCallback(async (action: () => Promise<void>) => {
     setBusy(true);

@@ -4,7 +4,18 @@ import { SignUpScreen } from '../../src/screens/SignUpScreen';
 import { useAuth } from '../../src/auth/AuthContext';
 
 jest.mock('../../src/auth/AuthContext', () => ({ useAuth: jest.fn() }));
-const navigation = { navigate: jest.fn(), goBack: jest.fn() } as any;
+const navigation = { navigate: jest.fn(), goBack: jest.fn(), popTo: jest.fn() } as any;
+
+beforeEach(() => jest.clearAllMocks());
+
+it('returns to the sign-in screen already in the stack instead of stacking a new one', async () => {
+  (useAuth as jest.Mock).mockReturnValue({ signUpWithEmail: jest.fn().mockResolvedValue(undefined) });
+  const { getByTestId, findByTestId } = render(<SignUpScreen navigation={navigation} route={{} as any} />);
+  fill(getByTestId);
+  fireEvent.press(await findByTestId('back-to-sign-in'));
+  expect(navigation.popTo).toHaveBeenCalledWith('SignIn');
+  expect(navigation.navigate).not.toHaveBeenCalled();
+});
 
 function fill(getByTestId: (id: string) => any) {
   fireEvent.changeText(getByTestId('name-input'), 'Pat');

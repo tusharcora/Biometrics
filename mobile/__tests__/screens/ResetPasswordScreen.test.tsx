@@ -5,7 +5,9 @@ import { useAuth } from '../../src/auth/AuthContext';
 import { AuthError } from '../../src/auth/authErrors';
 
 jest.mock('../../src/auth/AuthContext', () => ({ useAuth: jest.fn() }));
-const navigation = { navigate: jest.fn() } as any;
+const navigation = { navigate: jest.fn(), popTo: jest.fn() } as any;
+
+beforeEach(() => jest.clearAllMocks());
 
 it('resets with the token from the deep link and returns to sign-in', async () => {
   const resetPassword = jest.fn().mockResolvedValue(undefined);
@@ -14,7 +16,9 @@ it('resets with the token from the deep link and returns to sign-in', async () =
   fireEvent.changeText(getByTestId('password-input'), 'new password 1');
   fireEvent.press(getByTestId('reset-password-button'));
   await waitFor(() => expect(resetPassword).toHaveBeenCalledWith('tok', 'new password 1'));
-  expect(navigation.navigate).toHaveBeenCalledWith('SignIn', undefined);
+  // Back to the sign-in screen already in the stack, not a second copy of it.
+  expect(navigation.popTo).toHaveBeenCalledWith('SignIn');
+  expect(navigation.navigate).not.toHaveBeenCalled();
 });
 
 it('explains an expired link', async () => {
@@ -29,4 +33,20 @@ it('without a token, sends the user to ask for a new link', () => {
   (useAuth as jest.Mock).mockReturnValue({ resetPassword: jest.fn() });
   const { getByText } = render(<ResetPasswordScreen navigation={navigation} route={{ params: undefined } as any} />);
   expect(getByText('This link has expired. Ask for a new one.')).toBeTruthy();
+});
+
+// Warm app: a fresh reset link updates the params of the reset screen that is
+// already open, rather than mounting a new one.
+it('picks up a fresh token that arrives on an already-open reset screen', async () => {
+  const resetPassword = jest.fn().mockResolvedValue(undefined);
+  (useAuth as jest.Mock).mockReturnValue({ resetPassword });
+  const { queryByTestId, queryByText, getByTestId, rerender } = render(
+    <ResetPasswordScreen navigation={navigation} route={{ params: undefined } as any} />,
+  );
+  expect(queryByTestId('password-input')).toBeNull();
+  rerender(<ResetPasswordScreen navigation={navigation} route={{ params: { token: 'fresh' } } as any} />);
+  expect(queryByText('This link has expired. Ask for a new one.')).toBeNull();
+  fireEvent.changeText(getByTestId('password-input'), 'new password 1');
+  fireEvent.press(getByTestId('reset-password-button'));
+  await waitFor(() => expect(resetPassword).toHaveBeenCalledWith('fresh', 'new password 1'));
 });

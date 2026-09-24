@@ -66,3 +66,13 @@ it('ignores a cancelled Apple sheet', async () => {
   fireEvent.press(getByTestId('apple-sign-in-button'));
   await waitFor(() => expect(queryByTestId('sign-in-error')).toBeNull());
 });
+
+// Warm app: the email link updates the params of the sign-in screen that is
+// already open, rather than mounting a new one.
+it('shows the verified banner when the link opens an already-mounted sign-in screen', () => {
+  (useAuth as jest.Mock).mockReturnValue(auth());
+  const { queryByText, rerender } = render(<SignInScreen navigation={navigation} route={{ params: undefined } as any} />);
+  expect(queryByText('Email confirmed. Sign in to continue.')).toBeNull();
+  rerender(<SignInScreen navigation={navigation} route={{ params: { verified: true } } as any} />);
+  expect(queryByText('Email confirmed. Sign in to continue.')).toBeTruthy();
+});

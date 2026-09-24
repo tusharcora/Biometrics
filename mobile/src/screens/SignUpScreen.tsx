@@ -49,7 +49,7 @@ export function SignUpScreen({ navigation }: Props) {
           <Text className="text-base text-muted-foreground">
             We sent a link to {sentTo}. Open it on this phone to confirm your email, then sign in.
           </Text>
-          <Button testID="back-to-sign-in" onPress={() => navigation.navigate('SignIn', undefined)}>
+          <Button testID="back-to-sign-in" onPress={() => navigation.popTo('SignIn')}>
             Back to sign in
           </Button>
         </ScrollView>

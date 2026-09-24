@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
@@ -21,6 +21,14 @@ export function ResetPasswordScreen({ navigation, route }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(token ? null : EXPIRED);
 
+  // When the app is already open on this screen, a fresh reset link updates
+  // the params of this same route instead of mounting a new screen. A new
+  // token means the "expired" message (from a missing or rejected token) no
+  // longer applies.
+  useEffect(() => {
+    if (token) setError((current) => (current === EXPIRED ? null : current));
+  }, [token]);
+
   async function submit() {
     if (!token) return;
     if (password.length < MIN_PASSWORD_LENGTH) {
@@ -31,7 +39,8 @@ export function ResetPasswordScreen({ navigation, route }: Props) {
     setError(null);
     try {
       await resetPassword(token, password);
-      navigation.navigate('SignIn', undefined);
+      // Back to the sign-in screen already in the stack, not a second copy.
+      navigation.popTo('SignIn');
     } catch (err) {
       setError(messageFor(err));
     } finally {

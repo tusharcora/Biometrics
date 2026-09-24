@@ -40,7 +40,7 @@ export function ForgotPasswordScreen({ navigation }: Props) {
             <Text testID="reset-sent" className="text-base text-muted-foreground">
               If an account uses {email.trim()}, we sent it a link. Open it on this phone.
             </Text>
-            <Button onPress={() => navigation.navigate('SignIn', undefined)}>Back to sign in</Button>
+            <Button onPress={() => navigation.popTo('SignIn')}>Back to sign in</Button>
           </>
         ) : (
           <>
