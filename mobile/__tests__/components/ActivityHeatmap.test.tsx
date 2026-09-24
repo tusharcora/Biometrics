@@ -1,5 +1,6 @@
 import React from 'react';
 import { fireEvent, render, within } from '@testing-library/react-native';
+import { Circle, Rect } from 'react-native-svg';
 import { ActivityHeatmap } from '../../src/components/activity-heatmap';
 
 const TODAY = '2026-09-22';
@@ -120,5 +121,39 @@ describe('ActivityHeatmap', () => {
     expect(getByTestId('heatmap-grid').props.accessibilityLabel).toBe(
       'Steps heat map for September 2026: 1 active days, 1 at goal.',
     );
+  });
+  describe('cell shape', () => {
+    it('draws the month as rounded squares, not circles', () => {
+      const utils = renderHeatmap([['2026-09-21', 8000]]);
+
+      expect(utils.UNSAFE_queryAllByType(Circle)).toHaveLength(0);
+      const squares = utils.UNSAFE_getAllByType(Rect);
+      // One square per day through today, the 22nd; later days are not drawn.
+      expect(squares).toHaveLength(22);
+      // 50 dp bins minus the 6 dp gap; corners scale with the square.
+      expect(squares[0]!.props.width).toBe(44);
+      expect(squares[0]!.props.height).toBe(44);
+      expect(squares[0]!.props.rx).toBe(6);
+    });
+
+    it('grows the tapped day to fill its bin while its sheet is open', () => {
+      const utils = renderHeatmap([['2026-09-22', 12000]]);
+
+      fireEvent.press(utils.getByTestId('heatmap-grid'), { nativeEvent: SEP_22 });
+
+      const grown = utils.UNSAFE_getAllByType(Rect).filter((r) => r.props.width === 47);
+      expect(grown).toHaveLength(1);
+    });
+
+    it('keeps the year view on small squares with 2 dp corners', () => {
+      const utils = renderHeatmap([]);
+
+      fireEvent.press(utils.getByTestId('heatmap-view-year'));
+
+      expect(utils.UNSAFE_queryAllByType(Circle)).toHaveLength(0);
+      const rects = utils.UNSAFE_getAllByType(Rect);
+      expect(rects.length).toBeGreaterThan(300);
+      expect(new Set(rects.map((r) => r.props.rx))).toEqual(new Set([2]));
+    });
   });
 });
