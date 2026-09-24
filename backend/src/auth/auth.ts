@@ -1,4 +1,5 @@
 import { betterAuth } from 'better-auth';
+import { createAuthMiddleware } from 'better-auth/api';
 import { prismaAdapter } from 'better-auth/adapters/prisma';
 import { expo } from '@better-auth/expo';
 import { prisma } from '../db/client';
@@ -45,6 +46,18 @@ export function createAuth(deps: AuthDeps) {
     baseURL: requiredEnv('BETTER_AUTH_URL'),
     advanced: { database: { generateId: 'uuid' } },
     trustedOrigins: ['biometrics://', ...(isProduction ? [] : ['exp://', 'exp://**'])],
+    hooks: {
+      // Better Auth lowercases email for case-insensitive matching but does
+      // not trim surrounding whitespace, and its zod validator rejects an
+      // email containing any. A phone keyboard's autocapitalize/autospace can
+      // easily add both, so treat them the same as a normal address.
+      before: createAuthMiddleware(async (ctx) => {
+        if (typeof ctx.body?.email === 'string') {
+          const email = ctx.body.email.trim();
+          if (email !== ctx.body.email) return { context: { body: { ...ctx.body, email } } };
+        }
+      }),
+    },
     socialProviders: {
       apple: {
         clientId: appleBundleId,
