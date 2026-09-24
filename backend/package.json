@@ -4,9 +4,12 @@
   "directories": {
     "test": "tests"
   },
+  "engines": {
+    "node": ">=24"
+  },
   "scripts": {
     "build": "tsc",
-    "test": "jest",
+    "test": "NODE_OPTIONS=--experimental-vm-modules jest",
     "eval:coach": "ts-node --project tsconfig.evals.json evals/coach/run.ts",
     "eval:coach:local": "ts-node --project tsconfig.evals.json evals/coach/localModel.ts"
   },
@@ -15,12 +18,14 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@better-auth/expo": "1.7.5",
     "@prisma/client": "^6.19.3",
+    "better-auth": "1.7.5",
     "bullmq": "^6.3.6",
     "express": "^5.2.1",
     "google-auth-library": "^10.9.1",
     "ioredis": "^6.0.0",
-    "jose": "4.15.9",
+    "jose": "6.2.12",
     "jsonwebtoken": "^9.0.3",
     "node-fetch": "^2.7.0"
   },
