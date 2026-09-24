@@ -14,6 +14,8 @@ import { localCivilDate } from '../biometrics/civilDate';
 import { prisma } from '../db/client';
 import { CoachClock, systemClock } from './clock';
 import { composeFallback, loadPreamble, Preamble } from './fallback';
+import { planPrefetch } from './prefetch';
+import { referenceCopiedValues, suggestReferences } from './guardrails/hints';
 import { stripDisclaimer, withDisclaimer } from './guardrails/disclaimer';
 import { classifyCrisis, CRISIS_RESOURCES, SAFETY_REPLY } from './guardrails/crisis';
 import { GuardrailReason, TurnToolResult, validateReply } from './guardrails/grounding';
@@ -110,6 +112,7 @@ type RunOutcome =
   | { kind: 'expired' };
 
 const PREAMBLE_CALL_ID = 'preamble-getDailyScore';
+const PREAMBLE_METRICS_CALL_ID = 'preamble-getTodayMetrics';
 
 export function createCoachOrchestrator(deps: OrchestratorDeps) {
   const tools = deps.tools ?? coachTools;
@@ -204,6 +207,42 @@ export function createCoachOrchestrator(deps: OrchestratorDeps) {
     const results: TurnToolResult[] = preamble.today
       ? [{ name: 'getDailyScore', result: preamble.today, args: { date: today } }]
       : [];
+    // Today's raw readings (steps, resting HR, HRV, sleep) are pre-fetched the
+    // same way. Without them the model answered "how did I sleep" or "my heart
+    // rate" from the score breakdown, reading factor points as bpm or minutes.
+    // They go under their own tool name, getTodayMetrics, not getDailyMetrics:
+    // grounding refuses a reference to a tool called with two different
+    // arguments, so a pre-fetched getDailyMetrics(today) would make every
+    // question about another day ambiguous (and "today vs the 20th" impossible).
+    // Best effort: a turn without them is still a correct turn.
+    let todayMetrics: unknown = null;
+    if (tools.getDailyMetrics) {
+      try {
+        todayMetrics = await tools.getDailyMetrics(userId, today);
+        results.push({ name: 'getTodayMetrics', result: todayMetrics, args: {} });
+      } catch {
+        todayMetrics = null;
+      }
+    }
+
+    // Question-driven pre-fetch (prefetch.ts): the history or habit-log call the
+    // question plainly needs, made up front so the model cannot skip it and
+    // improvise. Recorded WITHOUT args: grounding only compares recorded args, so
+    // if the model calls the same tool itself (say with a different window) its
+    // own, later call is simply the one references read, rather than an
+    // ambiguity that discards the reply. Best effort, like the preamble.
+    const prefetched: { name: string; result: unknown }[] = [];
+    for (const call of planPrefetch(input.message)) {
+      try {
+        const outcome = await tools.run(userId, call.name, call.args, { today });
+        if (!outcome.ok) continue;
+        prefetched.push({ name: call.name, result: outcome.result });
+        results.push({ name: call.name, result: outcome.result });
+        emit('coach.tool_call', { tool: call.name, ok: true, round: 0, preamble: true });
+      } catch {
+        /* a turn without it is still a correct turn: the model can call the tool */
+      }
+    }
 
     const expire = (): CoachTurnResult => {
       turn.expired = true;
@@ -225,6 +264,19 @@ export function createCoachOrchestrator(deps: OrchestratorDeps) {
       convo.push(
         { role: 'assistant_tool_calls', calls: [{ id: PREAMBLE_CALL_ID, name: 'getDailyScore', args: { date: today } }] },
         { role: 'tool', toolCallId: PREAMBLE_CALL_ID, name: 'getDailyScore', content: JSON.stringify(preamble.today) },
+      );
+    }
+    if (todayMetrics !== null) {
+      convo.push(
+        { role: 'assistant_tool_calls', calls: [{ id: PREAMBLE_METRICS_CALL_ID, name: 'getTodayMetrics', args: {} }] },
+        { role: 'tool', toolCallId: PREAMBLE_METRICS_CALL_ID, name: 'getTodayMetrics', content: JSON.stringify(todayMetrics) },
+      );
+    }
+    for (const p of prefetched) {
+      const id = `preamble-${p.name}`;
+      convo.push(
+        { role: 'assistant_tool_calls', calls: [{ id, name: p.name, args: {} }] },
+        { role: 'tool', toolCallId: id, name: p.name, content: JSON.stringify(p.result) },
       );
     }
 
@@ -308,7 +360,9 @@ export function createCoachOrchestrator(deps: OrchestratorDeps) {
         }
         if (text === 'expired') return { kind: 'expired' };
 
-        const verdict = validateReply(text, results);
+        // Exact copies of unit-bearing tool values become references first (hints.ts): they are
+        // grounded by construction. Everything else is validated exactly as before.
+        const verdict = validateReply(referenceCopiedValues(text, results), results);
         if (verdict.ok) return { kind: 'reply', text: verdict.text, proposals };
 
         const outcome = attempt === 1 ? 'regenerate' : 'fallback';
@@ -317,7 +371,10 @@ export function createCoachOrchestrator(deps: OrchestratorDeps) {
           emit('coach.guardrail_reject', { reason, attempt, outcome });
         }
         // Discard and regenerate ONCE with a corrective system message; the rejected text is never resent.
-        corrective = buildCorrectiveMessage(verdict.reasons);
+        corrective = buildCorrectiveMessage(
+          verdict.reasons,
+          verdict.reasons.includes('unwrapped_number') ? suggestReferences(text, results) : [],
+        );
       }
       return { kind: 'fallback', reason: 'guardrail' };
     }

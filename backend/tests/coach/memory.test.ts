@@ -88,7 +88,7 @@ describe('proposeMemory through the orchestrator', () => {
     expect(MEMORY_NOTE).not.toMatch(/\d/);
   });
 
-  it('offers proposeMemory to the model alongside the four read-only tools', async () => {
+  it('offers proposeMemory to the model alongside the eight read-only tools', async () => {
     const user = await createUserWithConversation();
     const { orchestrator, provider } = setup([{ type: 'text', text: OK_REPLY }]);
     await orchestrator.handleTurn(turn(user.id));
@@ -97,6 +97,10 @@ describe('proposeMemory through the orchestrator', () => {
       'getScoreHistory',
       'getHabitCorrelations',
       'getUserGoals',
+      'getTodayMetrics',
+      'getDailyMetrics',
+      'getMetricHistory',
+      'getHabitLogs',
       'proposeMemory',
     ]);
   });

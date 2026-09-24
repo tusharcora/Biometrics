@@ -140,7 +140,11 @@ describe('GET /me/coach/status', () => {
     expect(text).toMatch(/habit/i);
     expect(text).toMatch(/goal/i);
     expect(text).toMatch(/never sent[^.]*tokens/i);
-    expect(text).toMatch(/full biometric history/i);
+    // Version 2: daily readings and habit logs are listed, and notes never leave.
+    expect(consent.version).toBe('2');
+    expect(text).toMatch(/steps, resting heart rate, HRV and time asleep/i);
+    expect(text).toMatch(/habit log/i);
+    expect(text).toMatch(/never sent[^.]*notes/i);
   });
 });
 

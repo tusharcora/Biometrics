@@ -40,6 +40,17 @@ export interface DailyScoreToolResult {
   direction: Direction | null;
   sleepDeltaFromYesterday: number | null;
   sleepDirection: Direction | null;
+  /** The recovery change as one phrase ("4 points lower than yesterday"), so the model never writes "down -4". */
+  changeDisplay: string | null;
+  sleepChangeDisplay: string | null;
+}
+
+/** Pure: a score delta as a phrase; null when there is nothing to compare. */
+export function describeScoreChange(delta: number | null): string | null {
+  if (delta === null) return null;
+  if (delta === 0) return 'unchanged from yesterday';
+  const size = Math.abs(delta);
+  return `${size} point${size === 1 ? '' : 's'} ${delta > 0 ? 'higher' : 'lower'} than yesterday`;
 }
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
@@ -104,6 +115,8 @@ export async function getDailyScore(userId: string, date: string): Promise<Daily
     direction: rec.direction,
     sleepDeltaFromYesterday: slp.delta,
     sleepDirection: slp.direction,
+    changeDisplay: describeScoreChange(rec.delta),
+    sleepChangeDisplay: describeScoreChange(slp.delta),
   };
 }
 

@@ -3,6 +3,7 @@ import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
 import { coachTools, COACH_TOOL_SCHEMAS, MAX_HISTORY_DAYS } from '../../src/coach/tools';
 import { compareScores } from '../../src/coach/tools/dailyScore';
+import { computeTrend, describeChange, MAX_HABIT_LOG_DAYS } from '../../src/coach/tools/metrics';
 import { createUser, daysAgo, putScore, todayUtc } from './helpers';
 
 beforeAll(() => {
@@ -22,8 +23,17 @@ async function run(userId: string, name: string, args: unknown) {
 }
 
 describe('tool registry', () => {
-  it('exposes exactly the four read-only tools, each with a JSON schema for the provider', () => {
-    expect(COACH_TOOL_SCHEMAS.map((t) => t.name)).toEqual(['getDailyScore', 'getScoreHistory', 'getHabitCorrelations', 'getUserGoals']);
+  it('exposes exactly the eight read-only tools, each with a JSON schema for the provider', () => {
+    expect(COACH_TOOL_SCHEMAS.map((t) => t.name)).toEqual([
+      'getDailyScore',
+      'getScoreHistory',
+      'getHabitCorrelations',
+      'getUserGoals',
+      'getTodayMetrics',
+      'getDailyMetrics',
+      'getMetricHistory',
+      'getHabitLogs',
+    ]);
     for (const t of COACH_TOOL_SCHEMAS) {
       expect(t.description.length).toBeGreaterThan(10);
       expect(t.parameters).toMatchObject({ type: 'object' });
@@ -41,6 +51,150 @@ describe('tool registry', () => {
     expect(await coachTools.run(user.id, 'getScoreHistory', { metric: 'RECOVERY', days: 0 }, ctx())).toEqual({ ok: false, error: 'invalid_arguments' });
     expect(await coachTools.run(user.id, 'getScoreHistory', { metric: 'RECOVERY', days: 2.5 }, ctx())).toEqual({ ok: false, error: 'invalid_arguments' });
     expect(await coachTools.run(user.id, 'getUserGoals', [], ctx())).toEqual({ ok: false, error: 'invalid_arguments' });
+    expect(await coachTools.run(user.id, 'getDailyMetrics', { date: '2026-13-01' }, ctx())).toEqual({ ok: false, error: 'invalid_arguments' });
+    expect(await coachTools.run(user.id, 'getMetricHistory', { metric: 'RECOVERY', days: 7 }, ctx())).toEqual({ ok: false, error: 'invalid_arguments' });
+    expect(await coachTools.run(user.id, 'getMetricHistory', { metric: 'STEPS', days: 0 }, ctx())).toEqual({ ok: false, error: 'invalid_arguments' });
+    expect(await coachTools.run(user.id, 'getHabitLogs', {}, ctx())).toEqual({ ok: false, error: 'invalid_arguments' });
+    expect(await coachTools.run(user.id, 'getHabitLogs', { days: 1.5 }, ctx())).toEqual({ ok: false, error: 'invalid_arguments' });
+  });
+});
+
+async function putRecord(userId: string, metricType: 'STEPS' | 'RESTING_HR' | 'HRV' | 'SLEEP', date: string, value: number) {
+  await prisma.biometricRecord.create({ data: { userId, metricType, value, recordedAt: civilDateToUtcMidnight(date) } });
+}
+
+describe('getDailyMetrics', () => {
+  it("returns the day's raw readings with display strings, goals and deltas PRECOMPUTED server-side", async () => {
+    const user = await createUser({ sleepGoalMinutes: 480 });
+    await putRecord(user.id, 'STEPS', daysAgo(1), 8000);
+    await putRecord(user.id, 'STEPS', todayUtc(), 12345.6);
+    await putRecord(user.id, 'RESTING_HR', daysAgo(1), 60);
+    await putRecord(user.id, 'RESTING_HR', todayUtc(), 58.4);
+    await putRecord(user.id, 'HRV', todayUtc(), 42.36);
+    await putRecord(user.id, 'SLEEP', todayUtc(), 432);
+
+    const r = await run(user.id, 'getDailyMetrics', {});
+
+    expect(r.date).toBe(todayUtc());
+    expect(r.steps).toEqual({
+      value: 12346,
+      display: '12,346 steps',
+      deltaFromYesterday: 4346,
+      direction: 'higher',
+      changeDisplay: '4,346 more steps than the day before',
+      goal: 10000,
+      percentOfGoal: 123,
+      percentOfGoalDisplay: '123%',
+      goalMet: true,
+    });
+    expect(r.restingHeartRate).toEqual({
+      value: 58,
+      display: '58 bpm',
+      deltaFromYesterday: -2,
+      direction: 'lower',
+      changeDisplay: '2 bpm lower than the day before',
+    });
+    // No HRV yesterday: nothing honest to compare against.
+    expect(r.hrv).toEqual({ value: 42.4, display: '42.4 ms', deltaFromYesterday: null, direction: null, changeDisplay: null });
+    expect(r.sleep).toMatchObject({ value: 432, display: '7h 12m', goalMinutes: 480, goalDisplay: '8h 0m', percentOfGoal: 90 });
+  });
+
+  it('reports an unrecorded day as nulls rather than zeros', async () => {
+    const user = await createUser();
+    const r = await run(user.id, 'getDailyMetrics', { date: daysAgo(3) });
+    expect(r.steps).toMatchObject({ value: null, display: null, percentOfGoal: null, goalMet: null });
+    expect(r.sleep).toMatchObject({ value: null, percentOfGoal: null });
+  });
+});
+
+describe('getMetricHistory', () => {
+  it('returns the window oldest first with average, highest, lowest and steps days-at-goal precomputed', async () => {
+    const user = await createUser();
+    await putRecord(user.id, 'STEPS', daysAgo(10), 99999); // outside a 7-day window
+    await putRecord(user.id, 'STEPS', daysAgo(2), 6000);
+    await putRecord(user.id, 'STEPS', daysAgo(1), 11000);
+    await putRecord(user.id, 'STEPS', todayUtc(), 13000);
+
+    const r = await run(user.id, 'getMetricHistory', { metric: 'STEPS', days: 7 });
+
+    expect(r.points.map((p: { date: string }) => p.date)).toEqual([daysAgo(2), daysAgo(1), todayUtc()]);
+    expect(r).toMatchObject({
+      metric: 'STEPS',
+      days: 7,
+      daysWithData: 3,
+      average: 10000,
+      averageDisplay: '10,000 steps',
+      highest: { date: todayUtc(), value: 13000, display: '13,000 steps' },
+      lowest: { date: daysAgo(2), value: 6000 },
+      earliest: { date: daysAgo(2), value: 6000 },
+      latest: { date: todayUtc(), value: 13000, display: '13,000 steps' },
+      trend: 'up',
+      daysAtGoal: 2,
+    });
+  });
+
+  it('caps the window at the history maximum and omits daysAtGoal for non-step metrics', async () => {
+    const user = await createUser();
+    await putRecord(user.id, 'HRV', todayUtc(), 40);
+    const r = await run(user.id, 'getMetricHistory', { metric: 'HRV', days: 5000 });
+    expect(r.days).toBe(MAX_HISTORY_DAYS);
+    expect(r.daysAtGoal).toBeUndefined();
+    expect(r.average).toBe(40);
+  });
+});
+
+describe('describeChange', () => {
+  it('phrases the day-over-day change per metric so the model never pairs a sign with a direction word', () => {
+    expect(describeChange('SLEEP', -145)).toBe('2h 25m less than the night before');
+    expect(describeChange('SLEEP', 30)).toBe('0h 30m more than the night before');
+    expect(describeChange('STEPS', -1200)).toBe('1,200 fewer steps than the day before');
+    expect(describeChange('HRV', 3.14)).toBe('3.1 ms higher than the day before');
+    expect(describeChange('RESTING_HR', 0)).toBe('the same as the day before');
+    expect(describeChange('RESTING_HR', null)).toBeNull();
+  });
+});
+
+describe('computeTrend', () => {
+  it('compares second-half and first-half averages with a steady band', () => {
+    // HRV 65.9, 78.1 | 69.8, 62.2: halves average 72.0 and 66.0 -> down 8%.
+    expect(computeTrend([65.9, 78.1, 69.8, 62.2])).toEqual({ trend: 'down', trendPercent: -8 });
+    // Halves average 100.5 and 101: +0.5%, inside the steady band.
+    expect(computeTrend([100, 101, 100, 102])).toEqual({ trend: 'steady', trendPercent: 0 });
+    expect(computeTrend([10, 20, 30])).toEqual({ trend: 'up', trendPercent: 200 });
+    expect(computeTrend([50])).toEqual({ trend: null, trendPercent: null });
+  });
+});
+
+describe('getHabitLogs', () => {
+  it('summarises and lists recent logs with labels, never exposing notes', async () => {
+    const user = await createUser();
+    const log = (type: string, value: number, unit: string, day: string, note?: string) =>
+      prisma.habitLog.create({
+        data: { userId: user.id, habitType: type, value, unit, habitDay: civilDateToUtcMidnight(day), loggedAt: new Date(`${day}T20:00:00Z`), note: note ?? null },
+      });
+    await log('ALCOHOL', 3, 'drinks', daysAgo(1), 'birthday party at work');
+    await log('ALCOHOL', 0, 'drinks', todayUtc());
+    await log('WORKOUT', 45, 'minutes', todayUtc());
+    await log('ALCOHOL', 5, 'drinks', daysAgo(20)); // outside a 7-day window
+    await prisma.habitCheckIn.create({ data: { userId: user.id, habitDay: civilDateToUtcMidnight(todayUtc()) } });
+
+    const r = await run(user.id, 'getHabitLogs', { days: 7 });
+
+    expect(r).toMatchObject({ days: 7, to: todayUtc(), checkedInDays: 1, entriesTruncated: false });
+    expect(r.habits).toEqual(
+      expect.arrayContaining([
+        { habitType: 'ALCOHOL', habitLabel: 'Alcohol', unit: 'drinks', daysLogged: 2, total: 3, daysWithNone: 1 },
+        { habitType: 'WORKOUT', habitLabel: 'Workout', unit: 'minutes', daysLogged: 1, total: 45, daysWithNone: 0 },
+      ]),
+    );
+    expect(r.entries).toHaveLength(3);
+    expect(r.entries[r.entries.length - 1]).toEqual({ date: daysAgo(1), habitLabel: 'Alcohol', value: 3, unit: 'drinks' });
+    expect(JSON.stringify(r)).not.toContain('birthday');
+  });
+
+  it('caps the window at the habit-log maximum', async () => {
+    const user = await createUser();
+    expect((await run(user.id, 'getHabitLogs', { days: 365 })).days).toBe(MAX_HABIT_LOG_DAYS);
   });
 });
 
@@ -56,6 +210,7 @@ describe('getDailyScore', () => {
 
     expect(Object.keys(r).sort()).toEqual(
       [
+        'changeDisplay',
         'confidence',
         'date',
         'deltaFromYesterday',
@@ -63,6 +218,7 @@ describe('getDailyScore', () => {
         'factors',
         'factorsByKey',
         'recoveryScore',
+        'sleepChangeDisplay',
         'sleepDeltaFromYesterday',
         'sleepDirection',
         'sleepScore',
