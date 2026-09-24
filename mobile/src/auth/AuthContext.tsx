@@ -1,28 +1,35 @@
-import React, { createContext, useContext, useEffect, useState, ReactNode } from 'react';
-import * as SecureStore from 'expo-secure-store';
-import { apiFetch, onSessionExpired } from '../api/client';
+import React, { createContext, useContext, ReactNode } from 'react';
+import { authClient } from './authClient';
+import { unwrap } from './authErrors';
 import { disablePush } from '../lib/pushRegistration';
 import { clearTimezoneState } from '../lib/timezone';
 
+export const VERIFIED_URL = 'biometrics://verified';
+export const RESET_URL = 'biometrics://reset-password';
+
 interface Session {
-  accessToken: string;
+  userId: string;
+  email: string;
 }
+
+type AppleName = { givenName?: string | null; familyName?: string | null } | null | undefined;
 
 interface AuthContextValue {
   session: Session | null;
-  signInWithApple: (identityToken: string) => Promise<void>;
+  isPending: boolean;
+  signInWithApple: (identityToken: string, fullName?: AppleName) => Promise<void>;
   signInWithGoogle: (idToken: string) => Promise<void>;
+  signInWithEmail: (email: string, password: string) => Promise<void>;
+  signUpWithEmail: (input: { name: string; email: string; password: string }) => Promise<void>;
+  resendVerification: (email: string) => Promise<void>;
+  requestPasswordReset: (email: string) => Promise<void>;
+  resetPassword: (token: string, newPassword: string) => Promise<void>;
   signOut: () => Promise<void>;
-  /** Drops the stored tokens and the in-memory session without touching the server. */
+  /** Drops the local session without push unregistration (after account deletion). */
   clearSession: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextValue | undefined>(undefined);
-
-async function storeSession(tokens: { accessToken: string; refreshToken: string }): Promise<void> {
-  await SecureStore.setItemAsync('accessToken', tokens.accessToken);
-  await SecureStore.setItemAsync('refreshToken', tokens.refreshToken);
-}
 
 const PUSH_UNREGISTER_TIMEOUT_MS = 2000;
 
@@ -42,85 +49,60 @@ async function unregisterPushBestEffort(): Promise<void> {
   }
 }
 
-export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
+// Emails are compared case-sensitively by the server; normalise once here.
+const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
-  useEffect(() => {
-    SecureStore.getItemAsync('accessToken').then((token) => {
-      if (token) setSession({ accessToken: token });
-    });
-  }, []);
-
-  // The API client clears the stored tokens when the server rejects the
-  // refresh token; mirror that here so the navigator returns to sign-in.
-  useEffect(() => onSessionExpired(() => setSession(null)), []);
-
-  async function signInWithApple(identityToken: string) {
-    // skipAuth: there is no session yet, and a 401 here means "bad identity
-    // token", not "expired session" — retrying it through the refresh path
-    // would turn a normal failed sign-in into a bogus "session expired".
-    const tokens = await apiFetch<{ accessToken: string; refreshToken: string }>('/auth/apple', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ identityToken }),
-      skipAuth: true,
-    });
-    await storeSession(tokens);
-    setSession({ accessToken: tokens.accessToken });
-  }
-
-  async function signInWithGoogle(idToken: string) {
-    const tokens = await apiFetch<{ accessToken: string; refreshToken: string }>('/auth/google', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ idToken }),
-      skipAuth: true,
-    });
-    await storeSession(tokens);
-    setSession({ accessToken: tokens.accessToken });
-  }
-
-  async function signOut() {
-    // Best effort, and before the tokens go: the unregister call needs the
-    // session. It is capped so a slow network can never hold up signing out.
-    await unregisterPushBestEffort();
-    const refreshToken = await SecureStore.getItemAsync('refreshToken');
-    await apiFetch('/auth/signout', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refreshToken }),
-      skipAuth: true,
-    }).catch(() => undefined);
-    await clearSession();
-  }
-
-  // Local-only sign-out, for when the server has already ended the session
-  // (account deletion): calling the sign-out endpoint would be rejected. A
-  // keychain failure must not keep the user signed in, so the in-memory
-  // session goes either way.
-  async function clearSession() {
-    await Promise.all([
-      SecureStore.deleteItemAsync('accessToken'),
-      SecureStore.deleteItemAsync('refreshToken'),
-      // Device-global, so it would otherwise carry into the next account that
-      // signs in here and suppress that account's own time zone sync.
-      clearTimezoneState(),
-    ]).catch(() => undefined);
-    setSession(null);
-  }
-
-  return (
-    <AuthContext.Provider value={{ session, signInWithApple, signInWithGoogle, signOut, clearSession }}>
-      {children}
-    </AuthContext.Provider>
-  );
+// Clears the stored cookie (inside authClient.signOut, before its request is
+// sent, so it clears even when the server call fails) and the device-global
+// time zone state, which would otherwise carry into the next account.
+async function dropLocalSession(): Promise<void> {
+  await authClient.signOut().catch(() => undefined);
+  await clearTimezoneState().catch(() => undefined);
 }
 
-/**
- * Like useAuth, but returns undefined outside an AuthProvider instead of
- * throwing -- for leaf components (Settings) that must still render in
- * isolation.
- */
+export function AuthProvider({ children }: { children: ReactNode }) {
+  const { data, isPending } = authClient.useSession();
+  const session: Session | null = data ? { userId: data.user.id, email: data.user.email } : null;
+
+  const value: AuthContextValue = {
+    session,
+    isPending,
+    async signInWithApple(identityToken, fullName) {
+      const firstName = fullName?.givenName ?? undefined;
+      const lastName = fullName?.familyName ?? undefined;
+      const user = firstName || lastName ? { user: { name: { firstName, lastName } } } : {};
+      await unwrap(authClient.signIn.social({ provider: 'apple', idToken: { token: identityToken, ...user } }));
+    },
+    async signInWithGoogle(idToken) {
+      await unwrap(authClient.signIn.social({ provider: 'google', idToken: { token: idToken } }));
+    },
+    async signInWithEmail(email, password) {
+      await unwrap(authClient.signIn.email({ email: normalizeEmail(email), password }));
+    },
+    async signUpWithEmail({ name, email, password }) {
+      await unwrap(authClient.signUp.email({ name: name.trim(), email: normalizeEmail(email), password, callbackURL: VERIFIED_URL }));
+    },
+    async resendVerification(email) {
+      await unwrap(authClient.sendVerificationEmail({ email: normalizeEmail(email), callbackURL: VERIFIED_URL }));
+    },
+    async requestPasswordReset(email) {
+      await unwrap(authClient.requestPasswordReset({ email: normalizeEmail(email), redirectTo: RESET_URL }));
+    },
+    async resetPassword(token, newPassword) {
+      await unwrap(authClient.resetPassword({ token, newPassword }));
+    },
+    async signOut() {
+      // Before the session goes: the push unregister call needs it.
+      await unregisterPushBestEffort();
+      await dropLocalSession();
+    },
+    clearSession: dropLocalSession,
+  };
+
+  return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
+}
+
+/** Like useAuth, but undefined outside an AuthProvider (for components rendered in isolation). */
 export function useOptionalAuth(): AuthContextValue | undefined {
   return useContext(AuthContext);
 }

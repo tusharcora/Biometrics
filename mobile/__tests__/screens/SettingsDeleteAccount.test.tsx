@@ -1,12 +1,13 @@
-import React from 'react';
+import React, { useSyncExternalStore } from 'react';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { Text } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { SettingsScreen } from '../../src/screens/SettingsScreen';
 import { AuthProvider, useAuth } from '../../src/auth/AuthContext';
+import { authClient } from '../../src/auth/authClient';
 import { setBaseUrl } from '../../src/api/client';
 import { fetchCoachStatus } from '../../src/api/coach';
-import { getTimezoneState, listTimeZones } from '../../src/lib/timezone';
+import { clearTimezoneState, getTimezoneState, listTimeZones } from '../../src/lib/timezone';
 
 jest.mock('expo-secure-store');
 jest.mock('../../src/lib/timezone');
@@ -14,6 +15,21 @@ jest.mock('../../src/api/coach');
 
 const fetchMock = jest.fn();
 (global as any).fetch = fetchMock;
+
+// A reactive stand-in for Better Auth's session atom: signed in until
+// authClient.signOut runs, which flips useSession() to null and re-renders.
+const signedIn = { data: { user: { id: 'u1', email: 'u1@example.com' }, session: {} }, isPending: false };
+const signedOut = { data: null, isPending: false };
+let current: typeof signedIn | typeof signedOut = signedIn;
+const listeners = new Set<() => void>();
+function setSessionState(next: typeof current) {
+  current = next;
+  listeners.forEach((l) => l());
+}
+function subscribe(l: () => void) {
+  listeners.add(l);
+  return () => listeners.delete(l);
+}
 
 function SessionProbe() {
   const { session } = useAuth();
@@ -51,12 +67,16 @@ beforeEach(() => {
   setBaseUrl('https://api.example.com');
   (getTimezoneState as jest.Mock).mockResolvedValue({ timezone: 'UTC', overridden: false });
   (listTimeZones as jest.Mock).mockReturnValue([]);
+  (clearTimezoneState as jest.Mock).mockResolvedValue(undefined);
   (fetchCoachStatus as jest.Mock).mockResolvedValue({ enabled: false });
-  (SecureStore.getItemAsync as jest.Mock).mockImplementation((key: string) =>
-    Promise.resolve(key === 'accessToken' ? 'access' : 'refresh'),
-  );
   (SecureStore.setItemAsync as jest.Mock).mockResolvedValue(undefined);
   (SecureStore.deleteItemAsync as jest.Mock).mockResolvedValue(undefined);
+  current = signedIn;
+  (authClient.useSession as jest.Mock).mockImplementation(() => useSyncExternalStore(subscribe, () => current));
+  (authClient.signOut as jest.Mock).mockImplementation(async () => {
+    setSessionState(signedOut);
+    return { data: {}, error: null };
+  });
 });
 
 describe('SettingsScreen: Delete account', () => {
@@ -125,7 +145,7 @@ describe('SettingsScreen: Delete account', () => {
     expect(utils.queryByTestId('delete-account-error')).toBeNull();
   });
 
-  it('on success clears the tokens and session locally and never calls the sign-out endpoint', async () => {
+  it('on success signs out through the auth client, which drops the local session', async () => {
     fetchMock.mockResolvedValueOnce({ ok: true, status: 204, json: jest.fn() });
     const utils = await renderSignedIn();
     open(utils);
@@ -134,15 +154,13 @@ describe('SettingsScreen: Delete account', () => {
     fireEvent.press(utils.getByTestId('delete-account-confirm'));
 
     await waitFor(() => expect(utils.getByTestId('session').props.children).toBe('signed-out'));
-    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith('accessToken');
-    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith('refreshToken');
+    expect(authClient.signOut).toHaveBeenCalled();
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('https://api.example.com/me');
     expect(init.method).toBe('DELETE');
     expect(JSON.parse(init.body)).toEqual({ confirm: 'DELETE' });
-    expect(fetchMock.mock.calls.some(([u]) => String(u).includes('/auth/signout'))).toBe(false);
   });
 
   it('shows progress and disables both buttons while the request runs', async () => {
@@ -196,7 +214,7 @@ describe('SettingsScreen: Delete account', () => {
     const error = await utils.findByTestId('delete-account-error');
     expect(error).toHaveTextContent(/connection|reach/i);
     expect(utils.getByTestId('session').props.children).toBe('signed-in');
-    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
+    expect(authClient.signOut).not.toHaveBeenCalled();
     expect(utils.getByTestId('delete-account-input').props.value).toBe('DELETE');
     expect(isDisabled(utils, 'delete-account-confirm')).toBe(false);
     expect(utils.queryByTestId('delete-account-progress')).toBeNull();
@@ -220,7 +238,7 @@ describe('SettingsScreen: Delete account', () => {
     expect(error).toHaveTextContent(/server/i);
     expect(error).not.toHaveTextContent(/connection/i);
     expect(utils.getByTestId('session').props.children).toBe('signed-in');
-    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
+    expect(authClient.signOut).not.toHaveBeenCalled();
     expect(utils.getByTestId('delete-account-input')).toBeTruthy();
   });
 });
