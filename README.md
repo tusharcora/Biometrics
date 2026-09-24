@@ -59,7 +59,7 @@ flowchart LR
   RD[("Redis")]
   OL["Ollama (local)<br/>qwen3.6:35b"]
 
-  App -- "JWT REST" --> API
+  App -- "REST + session cookie" --> API
   App -. "ID token" .-> GSI
   App -. "identity token" .-> Apple
   App -- "OAuth consent (browser)" --> GOA
@@ -79,14 +79,14 @@ flowchart LR
 | Layer | What it is |
 |---|---|
 | **Mobile** | Expo SDK 57 / React Native 0.86 / React 19 app with a dark-first design, a floating tab bar and animated "thinking orbs" (Skia). Needs a development build; Expo Go is not supported. |
-| **API** | Express 5 + TypeScript, JWT auth, Prisma 6 on PostgreSQL. |
+| **API** | Express 5 + TypeScript, [Better Auth](https://better-auth.com) sessions, Prisma 6 on PostgreSQL. |
 | **Background work** | A single BullMQ queue (`health-sync`) on Redis runs every sync, scoring, habit, coach-digest and retention job, with repeatable schedules. |
 | **Analytics** | A pure, versioned **stat engine** (per-user EWMA baselines → z-scores → logistic composite) and a **habit correlation engine** (de-seasonalised Pearson r with effective-n correction and Benjamini–Hochberg FDR). |
 | **AI coach** | A tool-using LLM orchestrator whose replies may only contain numbers the server fetched (a `{{tool.path}}` grounding guardrail). It runs on a local Ollama model; no hosted LLM provider is used. |
 
 ## 2. End-to-end data flow
 
-1. **Sign in.** The app gets an Apple identity token or a Google ID token and posts it to `POST /auth/apple` or `POST /auth/google`. The backend verifies it (Apple JWKS via `jose`; Google via `google-auth-library`), upserts the user on `(authProvider, providerUserId)` (never on email), and returns a **15-minute access JWT** plus an opaque **30-day refresh token**. The refresh token is single-use, rotated, and stored as a SHA-256 hash. Both tokens live in `expo-secure-store`.
+1. **Sign in.** Auth is **Better Auth**, mounted at `/auth/*`. The app signs in with an Apple identity token or a Google ID token (Better Auth's social ID-token sign-in verifies it), or with **email + password**: new accounts must confirm their email before the first sign-in, and "Forgot password" sends a reset link. Each sign-in method is an `Account` row on one `User`. A new method whose **verified** email matches a verified user is linked to that user; an unverified sign-up never attaches to an existing account. A successful sign-in creates a database-backed **30-day sliding session** (`Session` table, extended at most once a day while in use). The session cookie is kept in `expo-secure-store` and sent on every request.
 2. **Connect Google Health.** `GET /health/authorize` mints a single-use OAuth `state` (Redis, 10-minute TTL) and returns the consent URL, which the app opens in the system browser. Google redirects to `GET /health/callback`, and the backend:
    - exchanges the code for tokens, encrypting both with **AES-256-GCM** before storing them;
    - resolves the user's `healthUserId`;
@@ -112,7 +112,8 @@ flowchart LR
 ```
 backend/                 Express API, BullMQ worker, stat engine, habit engine, AI coach
   src/
-    auth/                Apple & Google sign-in, JWT + rotating refresh tokens, requireAuth
+    auth/                Better Auth config (Apple, Google, email + password, sessions), requireAuth
+    email/               verification / reset emails (Resend, or the console in development)
     health/              Google Health OAuth, API client, webhooks, service-account subscriptions
     sync/                BullMQ queue + worker, backfills, token-refresh sweep
     biometrics/          record storage, sleep rollups, civil-date/timezone helpers, /me/activity
@@ -122,7 +123,7 @@ backend/                 Express API, BullMQ worker, stat engine, habit engine, 
       model/             provider interface: Unconfigured, Scripted (tests), Ollama
     users/               timezone, goals, account deletion
     crypto/              AES-256-GCM token cipher
-  prisma/                schema.prisma + 11 migrations
+  prisma/                schema.prisma + 13 migrations
   evals/coach/           coach eval harness (scripted + real local model)
   scripts/               ops scripts (backtest, resync, subscriber registration, …)
   tests/                 71 Jest suites against a real Postgres + Redis
@@ -131,7 +132,7 @@ mobile/                  Expo (React Native) app
     screens/             Dashboard, Activity, Metrics, Coach, Settings, ScoreDetail, MetricDetail, Patterns, …
     navigation/          root stack + bottom tabs + custom FloatingTabBar
     components/          heat map, orbs (Skia), prompt bar, habit log, digest card, ui/ primitives
-    api/                 fetch client with coalesced token refresh; typed endpoints
+    api/                 fetch client that sends the session cookie; typed endpoints
     lib/                 pure logic: heatmap layout, metric trends, score insights, timezone, push
     theme/, theme.ts     dark-first tokens (mirrors global.css), metric config, motion tokens
   plugins/               iOS scene-delegate config plugin (iOS 27 SDK)
@@ -145,11 +146,11 @@ docs/superpowers/        design specs, implementation plans, research notes
 `src/server.ts` binds the HTTP port first. Only after `listen` succeeds does it start the BullMQ worker, register the schedulers and install the graceful-shutdown handler. That handler drains HTTP → worker → queue → Redis → Prisma within 15 s. A second backend started on a taken port exits instead of running a second set of workers.
 
 ### REST API
-Every `/me/*` route requires a Bearer JWT, and the user row is re-checked, so a deleted account's JWT stops working. Coach routes additionally return 404 `coach_disabled` unless `COACH_ENABLED` is set.
+Every `/me/*` route requires a valid Better Auth session (`requireAuth` looks it up in the database). Sessions are deleted with their user, so a deleted account's session stops working immediately. Coach routes additionally return 404 `coach_disabled` unless `COACH_ENABLED` is set.
 
 | Module | Routes |
 |---|---|
-| auth | `POST /auth/apple`, `POST /auth/google`, `POST /auth/refresh`, `POST /auth/signout` |
+| auth | Better Auth under `/auth/*`: `sign-in/social` (Apple / Google ID token), `sign-up/email`, `sign-in/email`, `verify-email`, `request-password-reset`, `reset-password`, `link-social`, `unlink-account`, `list-accounts`, `list-sessions`, `revoke-session`, `sign-out`, … |
 | health | `GET /health/authorize`, `GET /health/callback`, `GET/POST /webhooks/health` |
 | biometrics | `GET /me/biometrics`, `GET /me/activity?from&to` (daily steps, ≤ 400 days), `GET /me/connection` |
 | scoring | `GET /me/scores?days&type`, `GET /me/scores/:date?type` (with baselines, previous day, score bands) |
@@ -190,8 +191,10 @@ PostgreSQL via Prisma (`backend/prisma/schema.prisma`).
 
 | Model | Purpose |
 |---|---|
-| `User` | identity (`authProvider` + `providerUserId`), IANA `timezone`, `sleepGoalMinutes` (480), coach persona |
-| `RefreshToken` | hashed, rotating, single-use refresh tokens |
+| `User` | name, unique `email` + `emailVerified`, IANA `timezone`, `sleepGoalMinutes` (480), coach persona |
+| `Session` | Better Auth sessions: 30-day sliding expiry, device user agent / IP (for Settings → Devices) |
+| `Account` | one row per sign-in method (`apple`, `google`, or `credential` with the password hash) |
+| `Verification` | single-use email-verification and password-reset tokens |
 | `HealthConnection` | 1:1 Google Health link: encrypted tokens, webhook subscription id, status, `lastSyncedAt`, `stepsHistoryBackfilledAt` |
 | `BiometricRecord` | one value per (user, metric, civil day at UTC midnight); SLEEP rows are a derived rollup |
 | `SleepSession` | raw sleep sessions with their own UTC offsets (the source of the SLEEP rollup) |
@@ -297,7 +300,7 @@ No model is trained on user data.
   - a motion kit on Reanimated 4 (`PressableScale`, `Reveal`, `Sheet`, `SegmentedControl`, `CountUp`), all respecting reduce-motion;
   - SVG rings, trend lines and heat map (react-native-svg);
   - the vendored MIT **thinking-orbs** port rendered with **Skia**.
-- **Networking:** `apiFetch` attaches the JWT and coalesces concurrent 401s into one refresh. A rejected refresh signs the user out; network errors don't. The coach request has its own timeout (`EXPO_PUBLIC_COACH_TIMEOUT_MS`).
+- **Networking:** `apiFetch` sends the Better Auth session cookie from SecureStore. Sessions slide on the server, so there is no refresh step: a 401 signs the user out (unless they already signed in again); network errors don't. The coach request has its own timeout (`EXPO_PUBLIC_COACH_TIMEOUT_MS`).
 - **iOS:** the config plugin `plugins/with-ios-scene-delegate.js` adds the UIScene lifecycle the iOS 27 SDK requires. Push (`expo-notifications`) is only added at prebuild with `EXPO_PUSH=1`, because the `aps-environment` entitlement needs a paid Apple team.
 
 ## 11. Technology stack
@@ -305,15 +308,15 @@ No model is trained on user data.
 | Area | Technology |
 |---|---|
 | Language | TypeScript everywhere (strict; backend also uses `noUncheckedIndexedAccess` and `exactOptionalPropertyTypes`) |
-| Backend runtime | Node.js 20+ (Docker `node:20-slim`), Express 5 |
+| Backend runtime | Node.js 24+ (Docker `node:24-slim`), Express 5 |
 | Database | PostgreSQL 16 via **Prisma 6** (migrations committed) |
 | Queue / cache | **Redis** + **BullMQ 6** (ioredis) |
-| Auth | `jsonwebtoken` (access JWT), `jose` (Apple JWKS), `google-auth-library` (Google ID tokens, service account) |
-| Crypto | Node `crypto`: AES-256-GCM for stored OAuth tokens; SHA-256 for refresh tokens |
+| Auth | **Better Auth** (+ `@better-auth/expo`): Apple / Google ID-token sign-in, email + password, DB-backed sessions; `google-auth-library` for the service account |
+| Crypto | Node `crypto`: AES-256-GCM for stored OAuth tokens; Better Auth handles password hashing and session tokens |
 | LLM runtime | **Ollama** (local HTTP `/api/chat`), no LLM SDK |
 | Mobile | **Expo SDK 57**, React Native 0.86, React 19, React Navigation 7 (native-stack, bottom-tabs) |
 | Mobile UI | NativeWind 4 + Tailwind 3, Reanimated 4 + worklets, **@shopify/react-native-skia**, react-native-svg, `thinking-orbs` engine, Ionicons |
-| Mobile platform | expo-secure-store, expo-auth-session + web-browser (OAuth), expo-apple-authentication, expo-notifications |
+| Mobile platform | better-auth client + `@better-auth/expo` (session in expo-secure-store), expo-auth-session + web-browser (OAuth), expo-apple-authentication, expo-notifications |
 | Testing | Jest 30: ts-jest + Supertest + nock (backend, real Postgres/Redis); jest-expo + Testing Library (mobile) |
 | Packaging | Dockerfile for the backend (runs `prisma migrate deploy` on start, health-check probe) |
 
@@ -323,9 +326,10 @@ No model is trained on user data.
 |---|---|
 | **Google Health API** | steps, sleep sessions, daily HRV, daily resting HR, identity, per-user webhook subscriptions |
 | **Google OAuth 2.0** | user consent and token exchange, refresh and revocation for the Health scopes |
-| **Google Sign-In** | app sign-in (ID-token verification) |
+| **Google Sign-In** | app sign-in (ID token verified by Better Auth) |
 | **Google Cloud service account** | managing webhook subscriptions only (`cloud-platform` scope); never mixed with user tokens |
-| **Sign in with Apple** | app sign-in (identity token verified against Apple's JWKS) |
+| **Sign in with Apple** | app sign-in (identity token verified by Better Auth against Apple's JWKS) |
+| **Resend** | verification and password-reset emails (optional in development, where links are printed to the console) |
 | **Expo Push Service** | generic weekly-digest notifications (optional; `PUSH_PROVIDER=expo`) |
 | **Ollama** (self-hosted, local) | the coach's LLM (`qwen3.6:35b`) |
 | **PostgreSQL**, **Redis** | self-hosted persistence and job queue |
@@ -335,7 +339,7 @@ No hosted LLM, analytics or crash-reporting service is used.
 ## 13. Security & privacy
 
 - **Health data stays local for the AI.** The coach only talks to a loopback Ollama unless explicitly overridden. Only tool results and the user's message are sent to the model, never tokens or full history.
-- **Token handling:** Google tokens are AES-256-GCM encrypted at rest. Refresh tokens are hashed, rotated and single-use. The OAuth `state` is single-use and short-lived. Webhooks use a constant-time secret comparison.
+- **Token handling:** Google tokens are AES-256-GCM encrypted at rest. Sessions are database-backed and revocable per device; a password reset revokes every session. Session freshness is disabled (`session.freshAge: 0`, an owner decision) because freshness counts from session creation and would lock long-lived sessions out of Devices and unlinking; removing the last sign-in method and linking a different email stay blocked server-side. The OAuth `state` is single-use and short-lived. Webhooks use a constant-time secret comparison.
 - **Least exposure:** the API returns only the fields screens use, and the coach's telemetry drops message text. Push notifications carry fixed text only, never health numbers.
 - **User control:** the coach requires versioned consent, and memories can be viewed, edited and deleted. `DELETE /me` revokes Google access and deletes all data in one transaction. Coach transcripts expire after 90 days.
 
@@ -343,7 +347,11 @@ No hosted LLM, analytics or crash-reporting service is used.
 
 Templates: `backend/.env.example`, `mobile/.env.example`.
 
-**Backend (required):** `DATABASE_URL`, `REDIS_URL`, `JWT_ACCESS_SECRET`, `TOKEN_ENCRYPTION_KEY` (base64 of 32 bytes), `GOOGLE_HEALTH_CLIENT_ID` / `_SECRET` / `_REDIRECT_URI`, `GOOGLE_HEALTH_WEBHOOK_SECRET`, `GOOGLE_CLOUD_PROJECT_NUMBER`, `GOOGLE_APPLICATION_CREDENTIALS` (service-account key path), `GOOGLE_CLIENT_ID` (Sign-In), `APPLE_BUNDLE_ID`, `PORT` (default 3000).
+**Backend (required):** `DATABASE_URL`, `REDIS_URL`, `BETTER_AUTH_SECRET` (`openssl rand -base64 32`), `BETTER_AUTH_URL` (the API's public URL, used in email links), `TOKEN_ENCRYPTION_KEY` (base64 of 32 bytes), `GOOGLE_HEALTH_CLIENT_ID` / `_SECRET` / `_REDIRECT_URI`, `GOOGLE_HEALTH_WEBHOOK_SECRET`, `GOOGLE_CLOUD_PROJECT_NUMBER`, `GOOGLE_APPLICATION_CREDENTIALS` (service-account key path), `GOOGLE_CLIENT_ID` (Sign-In), `APPLE_BUNDLE_ID`, `PORT` (default 3000).
+
+**Backend (optional):** `GOOGLE_IOS_CLIENT_ID` (a second Google client id whose ID tokens are accepted).
+
+**Email:** `EMAIL_FROM` and `RESEND_API_KEY`. Without both, development prints verification and reset emails to the backend log instead of sending them; production refuses to boot without them.
 
 **AI coach (local model):**
 ```env
@@ -361,7 +369,7 @@ COACH_FAST_BUDGET_MS=30000
 
 ## 15. Running locally
 
-Prerequisites: Node ≥ 20.19 (Expo requirement), PostgreSQL, Redis, Xcode with an iOS simulator, and for the coach [Ollama](https://ollama.com) with the model pulled.
+Prerequisites: Node 24 (the backend requires it; run `nvm use`), PostgreSQL, Redis, Xcode with an iOS simulator, and for the coach [Ollama](https://ollama.com) with the model pulled.
 
 ```bash
 # 1. Coach model (optional, ~22 GB)
@@ -374,6 +382,8 @@ npm install
 npx prisma migrate deploy
 npm run build
 node --env-file=.env dist/server.js      # API on :3000; worker + schedulers start after bind
+# In development, verification and password-reset links are printed in the backend log as `[email] to=…`;
+# open them on the simulator with `xcrun simctl openurl booted '<link>'`.
 
 # 3. Mobile (Skia is native, so this needs a development build; Expo Go won't work)
 cd ../mobile
@@ -384,6 +394,28 @@ npx expo start --dev-client   # afterwards: JS-only changes
 ```
 
 The provider is built on the coach's first use, which logs `coach.provider_configured` with `ollama:qwen3.6:35b`. A bad Ollama configuration logs `coach.provider_config_invalid` instead, and the coach then answers with its fallback reply.
+
+### Upgrading an existing database (Better Auth migrations)
+
+`20260927120000_better_auth` moves existing users onto Better Auth's tables, and `20260928120000_normalize_user_email` lower-cases and trims their emails (Better Auth looks emails up in lower case). The second one refuses to run if two users share an email that differs only by case.
+
+Rehearse on a copy of the dev database first:
+
+```bash
+createdb biometrics_rehearsal && pg_dump biometrics | psql biometrics_rehearsal
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/biometrics_rehearsal npx prisma migrate deploy
+```
+
+If a migration fails, fix the data it reports (for example, merge or delete the duplicate user), mark it rolled back with `npx prisma migrate resolve --rolled-back <migration_name>` (`20260927120000_better_auth` or `20260928120000_normalize_user_email`), then re-run `npx prisma migrate deploy`. Prisma does not wrap a migration in a transaction, so one that fails partway can leave some of its changes behind: take a `pg_dump` backup before deploying so you can restore it instead.
+
+### Mobile sign-in
+
+The app signs in with Apple, Google, or email + password (new accounts confirm their email before first sign-in; "Forgot password" sends a reset link). Once signed in, **Settings → Account → Sign-in methods** links or unlinks methods on the account, and **Settings → Account → Devices** lists signed-in devices and signs them out.
+
+Linking a new method from **Settings → Sign-in methods** is Apple / Google only.
+
+Email links open the app through deep links: `biometrics://verified` opens sign-in with an "Email confirmed" banner (it does not sign you in automatically) and `biometrics://reset-password?token=…` (set a new password). iOS dev builds need the `biometrics` URL scheme, which is already set in `mobile/app.json`; rebuild the native project after pulling if the scheme or native modules changed.
+
 
 ## 16. Testing & evaluation
 

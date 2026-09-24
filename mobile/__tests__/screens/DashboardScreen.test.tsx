@@ -48,7 +48,7 @@ function mockApi(options: {
 beforeEach(() => {
   jest.clearAllMocks();
   (useAuth as jest.Mock).mockReturnValue({
-    session: { accessToken: 'token' },
+    session: { userId: 'u1', email: 'u1@example.com' },
     signInWithApple: jest.fn(),
     signInWithGoogle: jest.fn(),
     signOut: mockSignOut,

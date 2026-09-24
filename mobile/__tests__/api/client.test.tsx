@@ -1,232 +1,67 @@
-import * as SecureStore from 'expo-secure-store';
-import { apiFetch, onSessionExpired, setBaseUrl, updateTimezone } from '../../src/api/client';
-
-jest.mock('expo-secure-store');
+import { apiFetch, ApiError, setBaseUrl, updateTimezone } from '../../src/api/client';
+import { authClient } from '../../src/auth/authClient';
 
 const fetchMock = jest.fn();
 (global as any).fetch = fetchMock;
+const getCookie = authClient.getCookie as jest.Mock;
+const signOut = authClient.signOut as jest.Mock;
 
 beforeEach(() => {
   setBaseUrl('https://api.example.com');
   fetchMock.mockReset();
-  (SecureStore.getItemAsync as jest.Mock).mockImplementation((key: string) =>
-    Promise.resolve(key === 'accessToken' ? 'old-access' : 'refresh-token'),
-  );
-  (SecureStore.setItemAsync as jest.Mock).mockResolvedValue(undefined);
+  getCookie.mockReset().mockResolvedValue('biometrics.session_token=abc');
+  signOut.mockClear();
 });
 
 describe('apiFetch', () => {
-  it('attaches the stored access token to the request', async () => {
+  it('sends the stored session cookie and never sends browser credentials', async () => {
     fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ data: 'ok' }) });
-
-    const result = await apiFetch('/me/biometrics');
-
+    await expect(apiFetch('/me/biometrics')).resolves.toEqual({ data: 'ok' });
     expect(fetchMock).toHaveBeenCalledWith(
       'https://api.example.com/me/biometrics',
-      expect.objectContaining({ headers: expect.objectContaining({ Authorization: 'Bearer old-access' }) }),
+      expect.objectContaining({ credentials: 'omit', headers: expect.objectContaining({ Cookie: 'biometrics.session_token=abc' }) }),
     );
-    expect(result).toEqual({ data: 'ok' });
   });
 
-  it('resolves to undefined for a 204 No Content response instead of parsing an empty body', async () => {
-    const json = jest.fn().mockRejectedValue(new SyntaxError('Unexpected end of JSON input'));
+  it('resolves to undefined for a 204', async () => {
+    const json = jest.fn();
     fetchMock.mockResolvedValueOnce({ ok: true, status: 204, json });
-
-    await expect(apiFetch('/me/habits/logs/log-1', { method: 'DELETE' })).resolves.toBeUndefined();
+    await expect(apiFetch('/x', { method: 'DELETE' })).resolves.toBeUndefined();
     expect(json).not.toHaveBeenCalled();
   });
 
-  it('refreshes the token once and retries after a 401', async () => {
-    fetchMock
-      .mockResolvedValueOnce({ ok: false, status: 401 })
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ accessToken: 'new-access', refreshToken: 'new-refresh' }) })
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ data: 'ok-after-refresh' }) });
-
-    const result = await apiFetch('/me/biometrics');
-
-    expect(result).toEqual({ data: 'ok-after-refresh' });
-    expect(SecureStore.setItemAsync).toHaveBeenCalledWith('accessToken', 'new-access');
+  it('signs out on a 401 and throws an ApiError', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 401, json: async () => ({ error: 'Invalid or expired token' }) });
+    const err = await apiFetch('/me/scores').catch((e) => e);
+    expect(err).toBeInstanceOf(ApiError);
+    expect(err.status).toBe(401);
+    expect(signOut).toHaveBeenCalledTimes(1);
   });
 
-  // Refresh tokens are single-use and rotated server-side. Two concurrent
-  // refreshes would have the second present an already-revoked token, fail, and
-  // sign the user out for no reason.
-  it('coalesces concurrent refreshes into a single /auth/refresh call', async () => {
-    let resolveRefresh: (value: any) => void = () => {};
-    const refreshResponse = new Promise((resolve) => {
-      resolveRefresh = resolve;
-    });
-
-    // Every data request 401s until the (single) refresh resolves.
-    let refreshed = false;
-    fetchMock.mockImplementation((url: string) => {
-      if (url.endsWith('/auth/refresh')) return refreshResponse;
-      if (!refreshed) return Promise.resolve({ ok: false, status: 401 });
-      return Promise.resolve({ ok: true, status: 200, json: async () => ({ data: 'ok' }) });
-    });
-
-    const inFlight = Promise.all([apiFetch('/me/biometrics'), apiFetch('/me/connection')]);
-
-    // Let both initial requests 401 and reach the refresh path.
-    await Promise.resolve();
-    await Promise.resolve();
-    await Promise.resolve();
-
-    refreshed = true;
-    resolveRefresh({
-      ok: true,
-      status: 200,
-      json: async () => ({ accessToken: 'new-access', refreshToken: 'new-refresh' }),
-    });
-
-    await inFlight;
-
-    const refreshCalls = fetchMock.mock.calls.filter(([url]: [string]) =>
-      url.endsWith('/auth/refresh'),
-    );
-    expect(refreshCalls).toHaveLength(1);
+  it('does not sign out a newer session when a request made with an older cookie comes back 401', async () => {
+    getCookie.mockResolvedValueOnce('biometrics.session_token=old').mockResolvedValueOnce('biometrics.session_token=new');
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 401, json: async () => ({}) });
+    await apiFetch('/me/scores').catch(() => undefined);
+    expect(signOut).not.toHaveBeenCalled();
   });
 
-  it('starts a fresh refresh after a previous one failed', async () => {
-    fetchMock
-      .mockResolvedValueOnce({ ok: false, status: 401 })
-      .mockResolvedValueOnce({ ok: false, status: 401 });
-
-    await expect(apiFetch('/me/biometrics')).rejects.toThrow(/Session expired/);
-
-    fetchMock
-      .mockResolvedValueOnce({ ok: false, status: 401 })
-      .mockResolvedValueOnce({
-        ok: true,
-        status: 200,
-        json: async () => ({ accessToken: 'new-access', refreshToken: 'new-refresh' }),
-      })
-      .mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ data: 'recovered' }) });
-
-    // The failed refresh must not have left a poisoned in-flight promise.
-    await expect(apiFetch('/me/biometrics')).resolves.toEqual({ data: 'recovered' });
-  });
-});
-
-describe('apiFetch with skipAuth', () => {
-  it('does not attach an Authorization header', async () => {
-    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ ok: true }) });
-
-    await apiFetch('/auth/apple', { method: 'POST', skipAuth: true });
-
-    const [, init] = fetchMock.mock.calls[0];
-    expect(init.headers?.Authorization).toBeUndefined();
-    // skipAuth must not leak through as a fetch option.
-    expect(init.skipAuth).toBeUndefined();
+  it.each([500, 503])('never signs out on a %s', async (status) => {
+    fetchMock.mockResolvedValueOnce({ ok: false, status, json: async () => ({}) });
+    await apiFetch('/me/scores').catch(() => undefined);
+    expect(signOut).not.toHaveBeenCalled();
   });
 
-  // A 401 from /auth/apple means "bad identity token", not "expired session".
-  // Retrying it via refresh turned a failed sign-in into "Session expired".
-  it('does not attempt a token refresh on a 401', async () => {
-    fetchMock.mockResolvedValueOnce({ ok: false, status: 401 });
-
-    await expect(apiFetch('/auth/apple', { method: 'POST', skipAuth: true })).rejects.toThrow(
-      /failed with 401/,
-    );
-
-    expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(
-      fetchMock.mock.calls.some(([url]: [string]) => url.endsWith('/auth/refresh')),
-    ).toBe(false);
+  it('carries the server error code on ApiError', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: false, status: 404, json: async () => ({ error: 'coach_disabled' }) });
+    const err = await apiFetch('/coach').catch((e) => e);
+    expect(err.code).toBe('coach_disabled');
   });
 });
 
 describe('updateTimezone', () => {
-  it('PUTs the zone as JSON to /me/timezone with the auth token', async () => {
-    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ timezone: 'Asia/Tokyo' }) });
-
-    const result = await updateTimezone('Asia/Tokyo');
-
-    expect(result).toEqual({ timezone: 'Asia/Tokyo' });
-    const [url, init] = fetchMock.mock.calls[0];
-    expect(url).toBe('https://api.example.com/me/timezone');
-    expect(init.method).toBe('PUT');
-    expect(init.body).toBe(JSON.stringify({ timezone: 'Asia/Tokyo' }));
-    expect(init.headers).toEqual(
-      expect.objectContaining({ Authorization: 'Bearer old-access', 'Content-Type': 'application/json' }),
-    );
-  });
-
-  it('rejects when the server returns 400 for an invalid zone', async () => {
-    fetchMock.mockResolvedValueOnce({ ok: false, status: 400 });
-
-    await expect(updateTimezone('Nope/Zone')).rejects.toThrow(/failed with 400/);
-  });
-});
-
-describe('session expiry', () => {
-  beforeEach(() => {
-    (SecureStore.deleteItemAsync as jest.Mock).mockReset().mockResolvedValue(undefined);
-  });
-
-  // The case that actually happens: the app is pointed at a different backend
-  // (or the refresh token was revoked/expired), so /auth/refresh answers 4xx.
-  it('clears the stored tokens and notifies listeners when the refresh token is rejected', async () => {
-    const listener = jest.fn();
-    const off = onSessionExpired(listener);
-    fetchMock.mockResolvedValueOnce({ ok: false, status: 401 }).mockResolvedValueOnce({ ok: false, status: 401 });
-
-    await expect(apiFetch('/me/biometrics')).rejects.toThrow(/Session expired/);
-
-    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith('accessToken');
-    expect(SecureStore.deleteItemAsync).toHaveBeenCalledWith('refreshToken');
-    expect(listener).toHaveBeenCalledTimes(1);
-    off();
-  });
-
-  it('notifies once when several requests fail their shared refresh together', async () => {
-    const listener = jest.fn();
-    const off = onSessionExpired(listener);
-    fetchMock
-      .mockResolvedValueOnce({ ok: false, status: 401 })
-      .mockResolvedValueOnce({ ok: false, status: 401 })
-      .mockResolvedValueOnce({ ok: false, status: 401 })
-      .mockResolvedValueOnce({ ok: false, status: 401 });
-
-    await Promise.allSettled([apiFetch('/me/scores'), apiFetch('/me/habits/status')]);
-
-    expect(listener).toHaveBeenCalledTimes(1);
-    off();
-  });
-
-  // A backend hiccup is not a reason to throw the user out of the app.
-  it('keeps the session when the refresh fails with a server error', async () => {
-    const listener = jest.fn();
-    const off = onSessionExpired(listener);
-    fetchMock.mockResolvedValueOnce({ ok: false, status: 401 }).mockResolvedValueOnce({ ok: false, status: 503 });
-
-    await expect(apiFetch('/me/biometrics')).rejects.toThrow(/Could not refresh your session/);
-
-    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
-    expect(listener).not.toHaveBeenCalled();
-    off();
-  });
-
-  it('keeps the session when the refresh request cannot reach the server', async () => {
-    const listener = jest.fn();
-    const off = onSessionExpired(listener);
-    fetchMock.mockResolvedValueOnce({ ok: false, status: 401 }).mockRejectedValueOnce(new Error('Network request failed'));
-
-    await expect(apiFetch('/me/biometrics')).rejects.toThrow('Network request failed');
-
-    expect(SecureStore.deleteItemAsync).not.toHaveBeenCalled();
-    expect(listener).not.toHaveBeenCalled();
-    off();
-  });
-
-  it('stops notifying a listener once it has unsubscribed', async () => {
-    const listener = jest.fn();
-    const off = onSessionExpired(listener);
-    off();
-    fetchMock.mockResolvedValueOnce({ ok: false, status: 401 }).mockResolvedValueOnce({ ok: false, status: 401 });
-
-    await expect(apiFetch('/me/biometrics')).rejects.toThrow(/Session expired/);
-
-    expect(listener).not.toHaveBeenCalled();
+  it('PUTs the zone', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 200, json: async () => ({ timezone: 'Europe/Paris' }) });
+    await updateTimezone('Europe/Paris');
+    expect(fetchMock.mock.calls[0][1].method).toBe('PUT');
   });
 });

@@ -38,7 +38,7 @@ afterAll(async () => {
 
 async function createUser(opts: { status?: 'CONNECTED' | 'DISCONNECTED' | 'NONE' } = {}) {
   const user = await prisma.user.create({
-    data: { email: `resync-rhr-${randomUUID()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+    data: { email: `resync-rhr-${randomUUID()}@example.com`, name: 'Test User'},
   });
   if (opts.status !== 'NONE') {
     await prisma.healthConnection.create({

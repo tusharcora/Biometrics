@@ -6,7 +6,7 @@ import { USER_OWNED_MODELS, delegateFor, type OwnedCounts, type UserOwnedModel }
 /** A user with the given email and no data. */
 export async function createUserWithEmail(email: string) {
   return prisma.user.create({
-    data: { email, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+    data: { email, name: 'Test User'},
   });
 }
 
@@ -53,9 +53,10 @@ export async function seedAllOwnedRows(
   await prisma.coachDigest.create({ data: { userId, text: 'seed digest', personaId: 'default', weekStart: day } });
   await prisma.coachConsent.create({ data: { userId, version: 'v-test' } });
   await prisma.pushToken.create({ data: { userId, token: `push-${uniq}`, platform: 'ios' } });
-  await prisma.refreshToken.create({
-    data: { userId, tokenHash: `hash-${uniq}`, expiresAt: new Date(Date.now() + 86_400_000) },
+  await prisma.session.create({
+    data: { userId, token: `session-${uniq}`, expiresAt: new Date(Date.now() + 86_400_000) },
   });
+  await prisma.account.create({ data: { userId, providerId: 'google', accountId: `google-${uniq}` } });
   await prisma.healthConnection.create({
     data: {
       userId,

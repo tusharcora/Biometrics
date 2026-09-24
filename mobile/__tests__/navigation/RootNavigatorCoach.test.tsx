@@ -38,7 +38,7 @@ jest.mock('../../src/navigation/TabsNavigator', () => {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  (useAuth as jest.Mock).mockReturnValue({ session: { accessToken: 'token' }, signOut: jest.fn() });
+  (useAuth as jest.Mock).mockReturnValue({ session: { userId: 'u1', email: 'u1@example.com' }, signOut: jest.fn() });
   (apiFetch as jest.Mock).mockResolvedValue({ status: 'CONNECTED', lastSyncedAt: null });
   (syncTimezone as jest.Mock).mockResolvedValue(undefined);
 });

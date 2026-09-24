@@ -1,55 +1,113 @@
-import React, { useEffect } from 'react';
-import { View } from 'react-native';
+import React, { useCallback, useEffect, useState } from 'react';
+import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import Animated, { FadeInDown } from 'react-native-reanimated';
 import * as AppleAuthentication from 'expo-apple-authentication';
-import * as Google from 'expo-auth-session/providers/google';
+import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../auth/AuthContext';
+import { useGoogleIdToken } from '../auth/useGoogleIdToken';
+import { AuthError, messageFor } from '../auth/authErrors';
+import type { AuthStackParamList } from '../navigation/AuthNavigator';
 import { Text } from '../components/ui/text';
 import { Button } from '../components/ui/button';
+import { TextField } from '../components/ui/text-field';
 
-export function SignInScreen() {
-  const { signInWithApple, signInWithGoogle } = useAuth();
-  const [, response, promptAsync] = Google.useAuthRequest({
-    iosClientId: process.env.EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID,
-    androidClientId: process.env.EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID,
-  });
+type Props = NativeStackScreenProps<AuthStackParamList, 'SignIn'>;
 
+const VERIFIED_NOTICE = 'Email confirmed. Sign in to continue.';
+
+export function SignInScreen({ navigation, route }: Props) {
+  const { signInWithApple, signInWithGoogle, signInWithEmail, resendVerification } = useAuth();
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [unverified, setUnverified] = useState(false);
+  const verified = route.params?.verified === true;
+  const [notice, setNotice] = useState<string | null>(verified ? VERIFIED_NOTICE : null);
+
+  // When the app is already open on this screen, the email link updates the
+  // params of this same route instead of mounting a new screen, so the
+  // initial state above never sees it.
   useEffect(() => {
-    if (response?.type === 'success' && response.authentication?.idToken) {
-      signInWithGoogle(response.authentication.idToken);
-    }
-  }, [response]);
+    if (!verified) return;
+    setNotice(VERIFIED_NOTICE);
+    // The "confirm your email first" error no longer applies.
+    setError(null);
+    setUnverified(false);
+  }, [verified]);
 
-  async function handleAppleSignIn() {
-    const credential = await AppleAuthentication.signInAsync({
-      requestedScopes: [AppleAuthentication.AppleAuthenticationScope.EMAIL],
-    });
+  const run = useCallback(async (action: () => Promise<void>) => {
+    setBusy(true);
+    setError(null);
+    setUnverified(false);
+    try {
+      await action();
+    } catch (err) {
+      setError(messageFor(err));
+      setUnverified(err instanceof AuthError && err.code === 'EMAIL_NOT_VERIFIED');
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  const google = useGoogleIdToken(useCallback((idToken: string) => void run(() => signInWithGoogle(idToken)), [run, signInWithGoogle]));
+
+  async function handleApple() {
+    let credential: AppleAuthentication.AppleAuthenticationCredential;
+    try {
+      credential = await AppleAuthentication.signInAsync({
+        requestedScopes: [AppleAuthentication.AppleAuthenticationScope.EMAIL, AppleAuthentication.AppleAuthenticationScope.FULL_NAME],
+      });
+    } catch {
+      return; // The user closed the Apple sheet.
+    }
     if (credential.identityToken) {
-      await signInWithApple(credential.identityToken);
+      const token = credential.identityToken;
+      await run(() => signInWithApple(token, credential.fullName));
     }
   }
 
   return (
     <SafeAreaView className="flex-1 bg-background">
-      <View className="flex-1 justify-center gap-12 p-8">
+      <ScrollView contentContainerClassName="flex-grow justify-center gap-10 p-8" keyboardShouldPersistTaps="handled">
         <Animated.View entering={FadeInDown.duration(450)} className="gap-2">
           <Text className="text-4xl font-bold tracking-tight">Biometrics</Text>
           <Text className="text-base text-muted-foreground">Your health data, unified.</Text>
         </Animated.View>
+        {notice ? <Text className="text-sm text-foreground">{notice}</Text> : null}
         <Animated.View entering={FadeInDown.delay(120).duration(450)} className="gap-3">
-          <Button testID="apple-sign-in-button" className="w-full bg-foreground" onPress={handleAppleSignIn}>
+          <Button testID="apple-sign-in-button" className="w-full bg-foreground" onPress={handleApple} disabled={busy}>
             <Text className="text-base font-semibold text-background">Sign in with Apple</Text>
           </Button>
-          <Button
-            testID="google-sign-in-button"
-            className="w-full border border-border bg-card"
-            onPress={() => promptAsync()}
-          >
+          <Button testID="google-sign-in-button" className="w-full border border-border bg-card" onPress={() => google.prompt()} disabled={busy || !google.ready}>
             <Text className="text-base font-semibold">Sign in with Google</Text>
           </Button>
         </Animated.View>
-      </View>
+        <View className="gap-3">
+          <TextField label="Email" testID="email-input" value={email} onChangeText={setEmail} keyboardType="email-address" autoComplete="email" />
+          <TextField label="Password" testID="password-input" value={password} onChangeText={setPassword} secure autoComplete="password" />
+          {error ? <Text testID="sign-in-error" className="text-sm text-destructive">{error}</Text> : null}
+          {unverified ? (
+            <Button
+              testID="resend-verification-button"
+              variant="ghost"
+              onPress={() => run(async () => { await resendVerification(email); setNotice('We sent you a new link.'); })}
+            >
+              Resend confirmation email
+            </Button>
+          ) : null}
+          <Button testID="email-sign-in-button" className="w-full" onPress={() => run(() => signInWithEmail(email, password))} disabled={busy || !email || !password}>
+            Sign in
+          </Button>
+          <Button testID="forgot-password-link" variant="ghost" onPress={() => navigation.navigate('ForgotPassword')}>
+            Forgot password?
+          </Button>
+          <Button testID="create-account-link" variant="ghost" onPress={() => navigation.navigate('SignUp')}>
+            Create an account
+          </Button>
+        </View>
+      </ScrollView>
     </SafeAreaView>
   );
 }

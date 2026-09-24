@@ -21,7 +21,7 @@ afterAll(async () => {
 
 async function createUser(timezone = 'UTC') {
   return prisma.user.create({
-    data: { email: `sleep-${randomUUID()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID(), timezone },
+    data: { email: `sleep-${randomUUID()}@example.com`, name: 'Test User', timezone },
   });
 }
 

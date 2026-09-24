@@ -51,7 +51,7 @@ jest.mock('../../src/navigation/TabsNavigator', () => {
 
 function signedIn(signed: boolean) {
   (useAuth as jest.Mock).mockReturnValue({
-    session: signed ? { accessToken: 'token' } : null,
+    session: signed ? { userId: 'u1', email: 'u1@example.com' } : null,
     signInWithApple: jest.fn(),
     signInWithGoogle: jest.fn(),
     signOut: jest.fn(),
@@ -69,7 +69,21 @@ describe('RootNavigator', () => {
     const { getByText } = render(<RootNavigator />);
 
     expect(getByText('SIGN_IN_SCREEN')).toBeTruthy();
+    // Signed out, the app is the auth stack: sign-in plus the email screens.
+    expect(mockRegisteredScreens).toEqual(['SignIn', 'SignUp', 'ForgotPassword', 'ResetPassword']);
     expect(syncTimezone).not.toHaveBeenCalled();
+  });
+
+  // A stored session is resolved asynchronously on launch. Until then the app
+  // must not flash the sign-in stack, whose NavigationContainer would also
+  // consume a cold-start deep link meant for the signed-in app.
+  it('shows the loading view, not the sign-in screen, while the session is resolving', () => {
+    (useAuth as jest.Mock).mockReturnValue({ session: null, isPending: true, signOut: jest.fn() });
+
+    const { getByTestId, queryByText } = render(<RootNavigator />);
+
+    expect(getByTestId('root-navigator-loading')).toBeTruthy();
+    expect(queryByText('SIGN_IN_SCREEN')).toBeNull();
   });
 
   it('syncs the time zone once on launch when authenticated', async () => {

@@ -2,7 +2,7 @@ import express from 'express';
 import request from 'supertest';
 import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
-import { issueSessionTokens } from '../../src/auth/jwt';
+import { authHeaderFor } from '../helpers/auth';
 import { createCoachRouter } from '../../src/coach/routes';
 import { getPushSender, setPushSender } from '../../src/coach/config';
 import {
@@ -19,7 +19,6 @@ import { FakeClock, RecordingTelemetry, createUser } from './helpers';
 
 beforeAll(() => {
   migrateTestDb();
-  process.env.JWT_ACCESS_SECRET = 'test-access-secret';
   process.env.TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 3).toString('base64');
 });
 
@@ -313,8 +312,7 @@ describe('POST /me/push-token shape validation', () => {
     return a;
   }
   async function authed(userId: string) {
-    const { accessToken } = await issueSessionTokens(userId);
-    return { Authorization: `Bearer ${accessToken}` };
+    return authHeaderFor(userId);
   }
 
   it('with expo, rejects a token that is not Expo-shaped with 400 and stores nothing', async () => {

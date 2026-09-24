@@ -5,13 +5,15 @@ import { NavigationContainer, DefaultTheme, DarkTheme, type NavigatorScreenParam
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../auth/AuthContext';
 import type { ScoreType } from '../api/scores';
-import { SignInScreen } from '../screens/SignInScreen';
+import { AuthNavigator } from './AuthNavigator';
 import { ConnectHealthScreen } from '../screens/ConnectHealthScreen';
 import { MetricDetailScreen } from '../screens/MetricDetailScreen';
 import { ScoreDetailScreen } from '../screens/ScoreDetailScreen';
 import { PatternsScreen } from '../screens/PatternsScreen';
 import { CoachConsentScreen } from '../screens/CoachConsentScreen';
 import { CoachMemoryScreen } from '../screens/CoachMemoryScreen';
+import { SignInMethodsScreen } from '../screens/SignInMethodsScreen';
+import { DevicesScreen } from '../screens/DevicesScreen';
 import { TabsNavigator, type TabParamList } from './TabsNavigator';
 import { syncTimezone } from '../lib/timezone';
 import { syncPushRegistration } from '../lib/pushRegistration';
@@ -39,6 +41,10 @@ export type RootStackParamList = {
   CoachConsent: { prefill?: string } | undefined;
   // Reached from Settings -> Coach Memory, which only draws when consented.
   CoachMemory: undefined;
+  // Reached from Settings: link or unlink Apple, Google, email + password.
+  SignInMethods: undefined;
+  // Reached from Settings: signed-in devices, with sign-out per device.
+  Devices: undefined;
 };
 
 export type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';
@@ -46,7 +52,7 @@ export type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
 export function RootNavigator() {
-  const { session } = useAuth();
+  const { session, isPending } = useAuth();
   const { colorScheme: scheme } = useColorScheme();
   const navTheme = scheme === 'dark' ? DARK_NAV_THEME : LIGHT_NAV_THEME;
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
@@ -73,11 +79,14 @@ export function RootNavigator() {
     setInitialRoute(session ? 'Tabs' : null);
   }, [session]);
 
-  if (!session) {
-    return <SignInScreen />;
+  // While the stored session is still resolving, show the loading view rather
+  // than flash the sign-in stack (whose NavigationContainer would also consume
+  // a cold-start deep link meant for the signed-in app).
+  if (!session && !isPending) {
+    return <AuthNavigator theme={navTheme} />;
   }
 
-  if (initialRoute === null) {
+  if (!session || initialRoute === null) {
     return (
       <View style={styles.loading} testID="root-navigator-loading">
         <ActivityIndicator />
@@ -104,6 +113,8 @@ export function RootNavigator() {
         <Stack.Screen name="Patterns" component={PatternsScreen} options={{ title: 'Patterns' }} />
         <Stack.Screen name="CoachConsent" component={CoachConsentScreen} options={{ title: 'AI Coach' }} />
         <Stack.Screen name="CoachMemory" component={CoachMemoryScreen} options={{ title: 'Coach Memory' }} />
+        <Stack.Screen name="SignInMethods" component={SignInMethodsScreen} options={{ title: 'Sign-in methods' }} />
+        <Stack.Screen name="Devices" component={DevicesScreen} options={{ title: 'Devices' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

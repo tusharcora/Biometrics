@@ -3,7 +3,7 @@ import { randomUUID, createHmac } from 'crypto';
 import { createApp } from '../../src/app';
 import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
-import { issueSessionTokens } from '../../src/auth/jwt';
+import { authHeaderFor } from '../helpers/auth';
 import * as oauth from '../../src/health/oauth';
 import * as subscriber from '../../src/health/subscriber';
 import * as queue from '../../src/sync/queue';
@@ -43,7 +43,6 @@ beforeAll(() => {
   migrateTestDb();
   process.env.TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 9).toString('base64');
   process.env.GOOGLE_HEALTH_WEBHOOK_SECRET = 'Bearer webhook-secret';
-  process.env.JWT_ACCESS_SECRET = 'test-access-secret';
 });
 
 afterAll(async () => {
@@ -59,10 +58,10 @@ beforeEach(() => {
 });
 
 async function getHealthOAuthState(userId: string): Promise<string> {
-  const { accessToken } = await issueSessionTokens(userId);
+  const authHeader = await authHeaderFor(userId);
   const res = await request(createApp())
     .get('/health/authorize')
-    .set('Authorization', `Bearer ${accessToken}`);
+    .set(authHeader);
   expect(res.status).toBe(200);
   const state = new URL(res.body.url).searchParams.get('state');
   expect(state).toBeTruthy();
@@ -72,12 +71,12 @@ async function getHealthOAuthState(userId: string): Promise<string> {
 describe('GET /health/authorize', () => {
   it('requires auth and returns the Google authorize URL as JSON', async () => {
     const user = await prisma.user.create({
-      data: { email: `h-${randomUUID()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+      data: { email: `h-${randomUUID()}@example.com`, name: 'Test User'},
     });
-    const { accessToken } = await issueSessionTokens(user.id);
+    const authHeader = await authHeaderFor(user.id);
     (oauth.buildAuthorizeUrl as jest.Mock).mockReturnValue('https://accounts.google.com/o/oauth2/v2/auth?state=abc');
 
-    const res = await request(createApp()).get('/health/authorize').set('Authorization', `Bearer ${accessToken}`);
+    const res = await request(createApp()).get('/health/authorize').set(authHeader);
 
     expect(res.status).toBe(200);
     expect(res.body.url).toBe('https://accounts.google.com/o/oauth2/v2/auth?state=abc');
@@ -92,12 +91,12 @@ describe('GET /health/authorize', () => {
 describe('GET /health/callback', () => {
   it('succeeds with NO Authorization header, using the state token instead', async () => {
     const user = await prisma.user.create({
-      data: { email: `h-${randomUUID()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+      data: { email: `h-${randomUUID()}@example.com`, name: 'Test User'},
     });
-    const { accessToken } = await issueSessionTokens(user.id);
+    const authHeader = await authHeaderFor(user.id);
     (oauth.buildAuthorizeUrl as jest.Mock).mockImplementation((state: string) => `https://accounts.google.com/o/oauth2/v2/auth?state=${state}`);
 
-    const authorizeRes = await request(createApp()).get('/health/authorize').set('Authorization', `Bearer ${accessToken}`);
+    const authorizeRes = await request(createApp()).get('/health/authorize').set(authHeader);
     const state = new URL(authorizeRes.body.url).searchParams.get('state')!;
 
     (oauth.exchangeCodeForTokens as jest.Mock).mockResolvedValue({
@@ -123,7 +122,7 @@ describe('GET /health/callback', () => {
 
   it('rejects a replayed state token, because state is single-use', async () => {
     const user = await prisma.user.create({
-      data: { email: `h-${randomUUID()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+      data: { email: `h-${randomUUID()}@example.com`, name: 'Test User'},
     });
     const state = await getHealthOAuthState(user.id);
 
@@ -142,7 +141,7 @@ describe('GET /health/callback', () => {
 
   it('does not leave the connection CONNECTED when subscription registration fails', async () => {
     const user = await prisma.user.create({
-      data: { email: `h-${randomUUID()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+      data: { email: `h-${randomUUID()}@example.com`, name: 'Test User'},
     });
     const state = await getHealthOAuthState(user.id);
 
@@ -165,7 +164,7 @@ describe('GET /health/callback', () => {
   it('fails clearly, without touching Google or the DB, when the code exchange returns no refresh token', async () => {
     (subscriber.registerUserSubscription as jest.Mock).mockClear();
     const user = await prisma.user.create({
-      data: { email: `h-${randomUUID()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+      data: { email: `h-${randomUUID()}@example.com`, name: 'Test User'},
     });
     const state = await getHealthOAuthState(user.id);
 
@@ -189,7 +188,7 @@ describe('GET /health/callback', () => {
   describe('reconnecting while already connected', () => {
     async function createConnectedUser(subscriptionId: string) {
       const user = await prisma.user.create({
-        data: { email: `h-${randomUUID()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+        data: { email: `h-${randomUUID()}@example.com`, name: 'Test User'},
       });
       const healthUserId = `health-user-reconnect-${randomUUID()}`;
       await prisma.healthConnection.create({
@@ -396,7 +395,7 @@ describe('GET /health/callback', () => {
     // B's own, legitimate connection attempt for the same real account.
     const sharedHealthUserId = `health-user-shared-${randomUUID()}`;
     const userA = await prisma.user.create({
-      data: { email: `h-${randomUUID()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+      data: { email: `h-${randomUUID()}@example.com`, name: 'Test User'},
     });
     await prisma.healthConnection.create({
       data: {
@@ -409,7 +408,7 @@ describe('GET /health/callback', () => {
       },
     });
     const userB = await prisma.user.create({
-      data: { email: `h-${randomUUID()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+      data: { email: `h-${randomUUID()}@example.com`, name: 'Test User'},
     });
     const state = await getHealthOAuthState(userB.id);
 
@@ -454,7 +453,7 @@ describe('POST /webhooks/health', () => {
 
   it('enqueues a fetch job for a valid UPSERT notification', async () => {
     const user = await prisma.user.create({
-      data: { email: `h-${randomUUID()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+      data: { email: `h-${randomUUID()}@example.com`, name: 'Test User'},
     });
     const healthUserId = `health-user-2-${randomUUID()}`;
     await prisma.healthConnection.create({
@@ -494,7 +493,7 @@ describe('POST /webhooks/health', () => {
     (queue.enqueueFetchJob as jest.Mock).mockClear();
 
     const user = await prisma.user.create({
-      data: { email: `h-${randomUUID()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+      data: { email: `h-${randomUUID()}@example.com`, name: 'Test User'},
     });
     const healthUserId = `health-user-delete-${randomUUID()}`;
     await prisma.healthConnection.create({
@@ -532,7 +531,7 @@ describe('POST /webhooks/health', () => {
 
   async function createWebhookUser() {
     const user = await prisma.user.create({
-      data: { email: `h-${randomUUID()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+      data: { email: `h-${randomUUID()}@example.com`, name: 'Test User'},
     });
     const healthUserId = `health-user-wh-${randomUUID()}`;
     await prisma.healthConnection.create({

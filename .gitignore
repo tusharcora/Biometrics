@@ -1,3 +1,7 @@
 .worktrees/
 .claude-flow/
 mobile/.env
+
+# Local claude-flow / ruflo tooling state
+.swarm/
+ruvector.db

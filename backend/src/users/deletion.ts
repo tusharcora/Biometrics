@@ -42,7 +42,8 @@ export const USER_OWNED_MODELS = [
   'CoachDigest',
   'CoachConsent',
   'PushToken',
-  'RefreshToken',
+  'Session',
+  'Account',
   'HealthConnection',
 ] as const;
 

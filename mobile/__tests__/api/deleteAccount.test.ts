@@ -1,7 +1,4 @@
-import * as SecureStore from 'expo-secure-store';
 import { ApiError, deleteAccount, setBaseUrl } from '../../src/api/client';
-
-jest.mock('expo-secure-store');
 
 const fetchMock = jest.fn();
 (global as any).fetch = fetchMock;
@@ -9,14 +6,10 @@ const fetchMock = jest.fn();
 beforeEach(() => {
   setBaseUrl('https://api.example.com');
   fetchMock.mockReset();
-  (SecureStore.getItemAsync as jest.Mock).mockImplementation((key: string) =>
-    Promise.resolve(key === 'accessToken' ? 'old-access' : 'refresh-token'),
-  );
-  (SecureStore.setItemAsync as jest.Mock).mockResolvedValue(undefined);
-  (SecureStore.deleteItemAsync as jest.Mock).mockResolvedValue(undefined);
 });
 
 describe('deleteAccount', () => {
+  // The global authClient mock supplies the session cookie.
   it('sends an authenticated DELETE /me with the confirmation body', async () => {
     fetchMock.mockResolvedValueOnce({ ok: true, status: 204, json: jest.fn() });
 
@@ -28,7 +21,7 @@ describe('deleteAccount', () => {
     expect(init.method).toBe('DELETE');
     expect(JSON.parse(init.body)).toEqual({ confirm: 'DELETE' });
     expect(init.headers).toEqual(
-      expect.objectContaining({ 'Content-Type': 'application/json', Authorization: 'Bearer old-access' }),
+      expect.objectContaining({ 'Content-Type': 'application/json', Cookie: 'biometrics.session_token=test' }),
     );
   });
 

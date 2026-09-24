@@ -4,17 +4,17 @@ import { RATE_LIMIT_MAX_TURNS, resetTurnGuards } from '../../src/coach/turnGuard
 import { createApp } from '../../src/app';
 import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
-import { issueSessionTokens } from '../../src/auth/jwt';
+import { authHeaderFor } from '../helpers/auth';
 import { createCoachRouter } from '../../src/coach/routes';
 import { COACH_CONSENT_VERSION } from '../../src/coach/consent';
 import { COACH_DISCLAIMER } from '../../src/coach/guardrails/disclaimer';
 import { LoggerCoachTelemetry } from '../../src/coach/telemetry';
 import { ScriptedProvider, ScriptStep } from '../../src/coach/model/provider';
+import { resetCoachProviderFromEnv } from '../../src/coach/config';
 import { FakeClock, RecordingTelemetry, createUser, daysAgo, putScore, todayUtc } from './helpers';
 
 beforeAll(() => {
   migrateTestDb();
-  process.env.JWT_ACCESS_SECRET = 'test-access-secret';
   process.env.TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 3).toString('base64');
 });
 
@@ -35,8 +35,7 @@ afterEach(() => {
 });
 
 async function authed(userId: string) {
-  const { accessToken } = await issueSessionTokens(userId);
-  return { Authorization: `Bearer ${accessToken}` };
+  return authHeaderFor(userId);
 }
 
 const GOOD = 'Your recovery is {{getDailyScore.recoveryScore}}, {{getDailyScore.direction}} than yesterday.';
@@ -277,13 +276,24 @@ describe('POST /me/coach/message', () => {
   });
 
   it('with the default (unconfigured) provider every turn is the server-composed fallback, source "fallback"', async () => {
-    const user = await consented();
-    await putScore(user.id, todayUtc(), 66.5);
-    const res = await request(createApp()).post('/me/coach/message').set(await authed(user.id)).send({ message: 'how am I doing' });
-    expect(res.status).toBe(200);
-    expect(res.body.message.source).toBe('fallback');
-    expect(res.body.message.text).toContain('Your recovery score today is 66.5.');
-    expect(res.body.message.text.endsWith(COACH_DISCLAIMER)).toBe(true);
+    // A developer's .env may set COACH_PROVIDER=ollama; this case is about the
+    // unconfigured default, so it must not depend on the local environment.
+    const savedProvider = process.env.COACH_PROVIDER;
+    delete process.env.COACH_PROVIDER;
+    resetCoachProviderFromEnv();
+    try {
+      const user = await consented();
+      await putScore(user.id, todayUtc(), 66.5);
+      const res = await request(createApp()).post('/me/coach/message').set(await authed(user.id)).send({ message: 'how am I doing' });
+      expect(res.status).toBe(200);
+      expect(res.body.message.source).toBe('fallback');
+      expect(res.body.message.text).toContain('Your recovery score today is 66.5.');
+      expect(res.body.message.text.endsWith(COACH_DISCLAIMER)).toBe(true);
+    } finally {
+      if (savedProvider === undefined) delete process.env.COACH_PROVIDER;
+      else process.env.COACH_PROVIDER = savedProvider;
+      resetCoachProviderFromEnv();
+    }
   });
 
   it('continues a conversation with conversationId, feeding prior turns to the model', async () => {

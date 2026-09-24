@@ -24,7 +24,7 @@ const status: CoachStatusDTO = {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  (useAuth as jest.Mock).mockReturnValue({ session: { accessToken: 't' }, signOut: jest.fn() });
+  (useAuth as jest.Mock).mockReturnValue({ session: { userId: 'u1', email: 'u1@example.com' }, signOut: jest.fn() });
   (apiFetch as jest.Mock).mockImplementation((path: string) => {
     if (path === '/me/connection') return Promise.resolve({ status: 'CONNECTED' });
     if (path.startsWith('/me/habits')) {

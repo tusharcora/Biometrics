@@ -2,14 +2,13 @@ import request from 'supertest';
 import { createApp } from '../../src/app';
 import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
-import { issueSessionTokens } from '../../src/auth/jwt';
+import { authHeaderFor } from '../helpers/auth';
 import { getLiveConfig, SCORE_CONFIGS } from '../../src/scoring/configs';
 import { v1Config } from '../../src/scoring/configs/v1';
 import { createUser, day } from './dbHelpers';
 
 beforeAll(() => {
   migrateTestDb();
-  process.env.JWT_ACCESS_SECRET = 'test-access-secret';
   process.env.TOKEN_ENCRYPTION_KEY = Buffer.alloc(32, 3).toString('base64');
 });
 
@@ -18,8 +17,7 @@ afterAll(async () => {
 });
 
 async function authed(userId: string) {
-  const { accessToken } = await issueSessionTokens(userId);
-  return { Authorization: `Bearer ${accessToken}` };
+  return authHeaderFor(userId);
 }
 
 describe('scoreBands in the scoring config', () => {

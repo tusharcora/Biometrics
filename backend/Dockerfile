@@ -1,5 +1,6 @@
-FROM node:20-slim AS build
-# Required at runtime: DATABASE_URL, REDIS_URL, JWT_ACCESS_SECRET, JWT_REFRESH_SECRET,
+FROM node:24-slim AS build
+# Required at runtime: DATABASE_URL, REDIS_URL, BETTER_AUTH_SECRET, BETTER_AUTH_URL,
+# EMAIL_FROM, RESEND_API_KEY (production refuses to boot without the email ones),
 # TOKEN_ENCRYPTION_KEY, GOOGLE_HEALTH_CLIENT_ID, GOOGLE_HEALTH_CLIENT_SECRET,
 # GOOGLE_HEALTH_REDIRECT_URI, GOOGLE_HEALTH_WEBHOOK_SECRET, GOOGLE_CLOUD_PROJECT_NUMBER,
 # GOOGLE_APPLICATION_CREDENTIALS (path to a mounted service account key file),
@@ -14,7 +15,7 @@ COPY tsconfig.json ./
 COPY src ./src
 RUN npm run build
 
-FROM node:20-slim
+FROM node:24-slim
 WORKDIR /app
 ENV NODE_ENV=production
 RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*

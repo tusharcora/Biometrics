@@ -7,8 +7,7 @@ export async function createUser(over: { timezone?: string; sleepGoalMinutes?: n
   return prisma.user.create({
     data: {
       email: `score-${randomUUID()}@example.com`,
-      authProvider: 'GOOGLE',
-      providerUserId: randomUUID(),
+      name: 'Test User',
       ...over,
     },
   });

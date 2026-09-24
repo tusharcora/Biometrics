@@ -2,9 +2,6 @@ module.exports = {
   preset: 'ts-jest',
   testEnvironment: 'node',
   roots: ['<rootDir>/tests'],
-  moduleNameMapper: {
-    '^jose$': '<rootDir>/__mocks__/jose.js',
-  },
   // Every DB-backed suite shares one Postgres test database (and one Redis).
   // Suites seed and delete rows for real, so parallel workers make results
   // order-dependent; run them serially.
@@ -22,4 +19,5 @@ module.exports = {
   // run after a long backlog has built up.
   globalSetup: '<rootDir>/tests/globalSetup.ts',
   globalTeardown: '<rootDir>/tests/globalTeardown.ts',
+  setupFiles: ['<rootDir>/tests/setupEnv.ts'],
 };

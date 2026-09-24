@@ -52,7 +52,7 @@ afterAll(async () => {
 });
 
 async function createConnectedUser() {
-  const user = await prisma.user.create({ data: { email: `w-${Date.now()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() } });
+  const user = await prisma.user.create({ data: { email: `w-${Date.now()}@example.com`, name: 'Test User'} });
   await prisma.healthConnection.create({
     data: {
       userId: user.id,
@@ -192,7 +192,7 @@ describe('processSyncJob', () => {
   });
 
   it('deletes the Google Health subscription when a fetch job hits a 401', async () => {
-    const user = await prisma.user.create({ data: { email: `w-${Date.now()}-401@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() } });
+    const user = await prisma.user.create({ data: { email: `w-${Date.now()}-401@example.com`, name: 'Test User'} });
     const conn = await prisma.healthConnection.create({
       data: {
         userId: user.id,
@@ -214,7 +214,7 @@ describe('processSyncJob', () => {
   });
 
   it('still marks the connection DISCONNECTED even if deleting the subscription fails', async () => {
-    const user = await prisma.user.create({ data: { email: `w-${Date.now()}-402@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() } });
+    const user = await prisma.user.create({ data: { email: `w-${Date.now()}-402@example.com`, name: 'Test User'} });
     const conn = await prisma.healthConnection.create({
       data: {
         userId: user.id,
@@ -239,7 +239,7 @@ describe('processSyncJob', () => {
 
     async function createConnectedUserWithSubscription(subscriptionId: string) {
       const user = await prisma.user.create({
-        data: { email: `w-refresh-${randomUUID()}@example.com`, authProvider: 'GOOGLE', providerUserId: randomUUID() },
+        data: { email: `w-refresh-${randomUUID()}@example.com`, name: 'Test User'},
       });
       await prisma.healthConnection.create({
         data: {

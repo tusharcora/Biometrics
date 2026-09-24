@@ -45,7 +45,7 @@ jest.mock('../../src/screens/DashboardScreen', () => ({ DashboardScreen: () => n
 
 function signedIn(signed: boolean) {
   (useAuth as jest.Mock).mockReturnValue({
-    session: signed ? { accessToken: 'token' } : null,
+    session: signed ? { userId: 'u1', email: 'u1@example.com' } : null,
     signOut: jest.fn(),
   });
 }

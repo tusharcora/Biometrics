@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from 'express';
-import { verifyAccessToken } from './jwt';
+import { fromNodeHeaders } from 'better-auth/node';
+import { auth } from './auth';
 import { prisma } from '../db/client';
 
 export interface AuthedRequest extends Request {
@@ -7,27 +8,22 @@ export interface AuthedRequest extends Request {
 }
 
 export async function requireAuth(req: AuthedRequest, res: Response, next: NextFunction): Promise<void> {
-  const header = req.headers.authorization;
-  if (!header?.startsWith('Bearer ')) {
-    res.status(401).json({ error: 'Missing bearer token' });
+  if (!req.headers.cookie && !req.headers.authorization) {
+    res.status(401).json({ error: 'Missing session' });
     return;
   }
-  let userId: string;
-  try {
-    ({ userId } = verifyAccessToken(header.slice('Bearer '.length)));
-  } catch {
+  // Sessions live in the database and are deleted with their user, so a found
+  // session always belongs to an existing user.
+  const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) });
+  if (!session) {
+    // getSession can report "no session" when the database is unreachable. A
+    // 401 would make the app sign the user out for our outage, so confirm the
+    // database answers first: if it does not, this throws and Express sends a
+    // 500.
+    await prisma.$queryRaw`SELECT 1`;
     res.status(401).json({ error: 'Invalid or expired token' });
     return;
   }
-  // Access tokens are stateless JWTs that outlive the account for up to their
-  // TTL, so a deleted user is rejected by looking the user up rather than by
-  // trusting the signature alone. (One primary-key read per request.) A
-  // database failure is a 500 via Express, not a 401: it is not the caller's fault.
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { id: true } });
-  if (!user) {
-    res.status(401).json({ error: 'Invalid or expired token' });
-    return;
-  }
-  req.userId = userId;
+  req.userId = session.user.id;
   next();
 }
