@@ -20,14 +20,16 @@ docs/      Design specs and implementation plans (superpowers-driven development
 
 ## Setup
 
-See `backend/.env.example` and `mobile/.env.example` for required environment variables (Google OAuth credentials, a GCP service account for webhook subscription management, database/Redis connection strings).
+See `backend/.env.example` and `mobile/.env.example` for required environment variables. Backend setup requires: Better Auth credentials (`BETTER_AUTH_SECRET`, `BETTER_AUTH_URL`), Google OAuth client IDs (`GOOGLE_IOS_CLIENT_ID`), email sender config (`EMAIL_FROM`, optional `RESEND_API_KEY`), Google Health API credentials, a GCP service account for webhook subscription management, and database/Redis connection strings.
 
 ```bash
-# Backend
+# Backend (Node 24 is required; run `nvm use`)
 cd backend
 npm install
 npx prisma migrate deploy
 npm run build && npm test
+# In development, verification and password-reset links are printed in the backend log as `[email] to=…`;
+# open them on the simulator with `xcrun simctl openurl booted '<link>'`.
 
 # Mobile
 cd mobile
