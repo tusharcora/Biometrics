@@ -5,7 +5,7 @@ import { NavigationContainer, DefaultTheme, DarkTheme, type NavigatorScreenParam
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../auth/AuthContext';
 import type { ScoreType } from '../api/scores';
-import { SignInScreen } from '../screens/SignInScreen';
+import { AuthNavigator } from './AuthNavigator';
 import { ConnectHealthScreen } from '../screens/ConnectHealthScreen';
 import { MetricDetailScreen } from '../screens/MetricDetailScreen';
 import { ScoreDetailScreen } from '../screens/ScoreDetailScreen';
@@ -74,7 +74,7 @@ export function RootNavigator() {
   }, [session]);
 
   if (!session) {
-    return <SignInScreen />;
+    return <AuthNavigator theme={navTheme} />;
   }
 
   if (initialRoute === null) {

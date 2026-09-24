@@ -1,0 +1,35 @@
+import React from 'react';
+import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { SignUpScreen } from '../../src/screens/SignUpScreen';
+import { useAuth } from '../../src/auth/AuthContext';
+
+jest.mock('../../src/auth/AuthContext', () => ({ useAuth: jest.fn() }));
+const navigation = { navigate: jest.fn(), goBack: jest.fn() } as any;
+
+function fill(getByTestId: (id: string) => any) {
+  fireEvent.changeText(getByTestId('name-input'), 'Pat');
+  fireEvent.changeText(getByTestId('email-input'), 'pat@example.com');
+  fireEvent.changeText(getByTestId('password-input'), 'pw123456');
+  fireEvent.press(getByTestId('sign-up-button'));
+}
+
+it('shows "check your inbox" after sign-up (new or existing email look the same)', async () => {
+  const signUpWithEmail = jest.fn().mockResolvedValue(undefined);
+  (useAuth as jest.Mock).mockReturnValue({ signUpWithEmail });
+  const { getByTestId, findByText } = render(<SignUpScreen navigation={navigation} route={{} as any} />);
+  fill(getByTestId);
+  await findByText(/Check your inbox/);
+  expect(signUpWithEmail).toHaveBeenCalledWith({ name: 'Pat', email: 'pat@example.com', password: 'pw123456' });
+});
+
+it('refuses a password shorter than 8 characters before calling the server', async () => {
+  const signUpWithEmail = jest.fn();
+  (useAuth as jest.Mock).mockReturnValue({ signUpWithEmail });
+  const { getByTestId, findByText } = render(<SignUpScreen navigation={navigation} route={{} as any} />);
+  fireEvent.changeText(getByTestId('name-input'), 'Pat');
+  fireEvent.changeText(getByTestId('email-input'), 'pat@example.com');
+  fireEvent.changeText(getByTestId('password-input'), 'short');
+  fireEvent.press(getByTestId('sign-up-button'));
+  await findByText('Use at least 8 characters for your password.');
+  expect(signUpWithEmail).not.toHaveBeenCalled();
+});

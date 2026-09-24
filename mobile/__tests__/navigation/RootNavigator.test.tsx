@@ -69,6 +69,8 @@ describe('RootNavigator', () => {
     const { getByText } = render(<RootNavigator />);
 
     expect(getByText('SIGN_IN_SCREEN')).toBeTruthy();
+    // Signed out, the app is the auth stack: sign-in plus the email screens.
+    expect(mockRegisteredScreens).toEqual(['SignIn', 'SignUp', 'ForgotPassword', 'ResetPassword']);
     expect(syncTimezone).not.toHaveBeenCalled();
   });
 
