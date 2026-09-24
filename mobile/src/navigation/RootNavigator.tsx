@@ -13,6 +13,7 @@ import { PatternsScreen } from '../screens/PatternsScreen';
 import { CoachConsentScreen } from '../screens/CoachConsentScreen';
 import { CoachMemoryScreen } from '../screens/CoachMemoryScreen';
 import { SignInMethodsScreen } from '../screens/SignInMethodsScreen';
+import { DevicesScreen } from '../screens/DevicesScreen';
 import { TabsNavigator, type TabParamList } from './TabsNavigator';
 import { syncTimezone } from '../lib/timezone';
 import { syncPushRegistration } from '../lib/pushRegistration';
@@ -110,6 +111,7 @@ export function RootNavigator() {
         <Stack.Screen name="CoachConsent" component={CoachConsentScreen} options={{ title: 'AI Coach' }} />
         <Stack.Screen name="CoachMemory" component={CoachMemoryScreen} options={{ title: 'Coach Memory' }} />
         <Stack.Screen name="SignInMethods" component={SignInMethodsScreen} options={{ title: 'Sign-in methods' }} />
+        <Stack.Screen name="Devices" component={DevicesScreen} options={{ title: 'Devices' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );

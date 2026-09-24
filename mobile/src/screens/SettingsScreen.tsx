@@ -6,6 +6,7 @@ import { NavigationContext } from '@react-navigation/native';
 import { Text } from '../components/ui/text';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
+import { AccountSection } from '../components/account-section';
 import { CoachSettingsSection } from '../components/coach-settings-section';
 import { DeleteAccountSection } from '../components/delete-account-section';
 import { COLORS } from '../theme';
@@ -142,6 +143,7 @@ export function SettingsScreen() {
           </Button>
         ) : null}
         {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
+        <AccountSection />
         <CoachSettingsSection />
         <DeleteAccountSection />
       </ScrollView>
