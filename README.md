@@ -39,6 +39,12 @@ npm test
 npx expo run:ios   # or: npx expo run:android
 ```
 
+### Mobile sign-in
+
+The app signs in with Apple, Google, or email + password (new accounts confirm their email before first sign-in; "Forgot password" sends a reset link). Once signed in, **Settings → Account → Sign-in methods** links or unlinks methods on the account, and **Settings → Account → Devices** lists signed-in devices and signs them out.
+
+Email links open the app through deep links: `biometrics://verified` (email confirmed) and `biometrics://reset-password?token=…` (set a new password). iOS dev builds need the `biometrics` URL scheme, which is already set in `mobile/app.json`; rebuild the native project after pulling if the scheme or native modules changed.
+
 ## Known limitations
 
 See the [status report](https://claude.ai/artifact/FuYPXc1v8PM4WSqJdtn2kY) for full detail. In short: live webhook delivery hasn't been observed yet (the backfill path is fully proven), the mobile app doesn't currently run on very new iOS SDKs (a scene-lifecycle incompatibility, unrelated to the API integration), and public launch requires passing Google's CASA security review for Restricted OAuth scopes.
