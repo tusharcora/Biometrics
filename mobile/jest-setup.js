@@ -6,3 +6,5 @@ require('react-native-reanimated').setUpTests();
 // The stub body lives in jest-mocks/ThinkingOrb.js (an inline factory trips
 // babel-plugin-jest-hoist under NativeWind's Babel transform).
 jest.mock('./src/components/orb/ThinkingOrb', () => require('./jest-mocks/ThinkingOrb'));
+
+jest.mock('./src/auth/authClient', () => require('./jest-mocks/authClient'));
