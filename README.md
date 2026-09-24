@@ -395,6 +395,19 @@ npx expo start --dev-client   # afterwards: JS-only changes
 
 The provider is built on the coach's first use, which logs `coach.provider_configured` with `ollama:qwen3.6:35b`. A bad Ollama configuration logs `coach.provider_config_invalid` instead, and the coach then answers with its fallback reply.
 
+### Upgrading an existing database (Better Auth migrations)
+
+`20260927120000_better_auth` moves existing users onto Better Auth's tables, and `20260928120000_normalize_user_email` lower-cases and trims their emails (Better Auth looks emails up in lower case). The second one refuses to run if two users share an email that differs only by case.
+
+Rehearse on a copy of the dev database first:
+
+```bash
+createdb biometrics_rehearsal && pg_dump biometrics | psql biometrics_rehearsal
+DATABASE_URL=postgresql://postgres:postgres@localhost:5432/biometrics_rehearsal npx prisma migrate deploy
+```
+
+If a migration fails, fix the data it reports (for example, merge or delete the duplicate user), mark it rolled back with `npx prisma migrate resolve --rolled-back <migration_name>` (`20260927120000_better_auth` or `20260928120000_normalize_user_email`), then re-run `npx prisma migrate deploy`. Prisma does not wrap a migration in a transaction, so one that fails partway can leave some of its changes behind: take a `pg_dump` backup before deploying so you can restore it instead.
+
 ### Mobile sign-in
 
 The app signs in with Apple, Google, or email + password (new accounts confirm their email before first sign-in; "Forgot password" sends a reset link). Once signed in, **Settings → Account → Sign-in methods** links or unlinks methods on the account, and **Settings → Account → Devices** lists signed-in devices and signs them out.
