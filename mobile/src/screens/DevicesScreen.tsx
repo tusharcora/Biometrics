@@ -67,7 +67,7 @@ export function DevicesScreen() {
             <Text className="text-base font-medium">{describeDevice(s.userAgent)}</Text>
             <Text className="text-xs text-muted-foreground">Last active {new Date(s.updatedAt).toLocaleDateString()}</Text>
           </View>
-          {s.token === currentToken ? (
+          {!currentToken ? null : s.token === currentToken ? (
             <Badge testID={`this-device-badge-${s.id}`} variant="accent">
               This device
             </Badge>
@@ -84,7 +84,7 @@ export function DevicesScreen() {
           )}
         </Card>
       ))}
-      {others.length > 0 ? (
+      {currentToken && others.length > 0 ? (
         <Button
           testID="revoke-others-button"
           variant="ghost"

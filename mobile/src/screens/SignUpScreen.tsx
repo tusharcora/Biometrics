@@ -4,14 +4,13 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../auth/AuthContext';
 import { messageFor } from '../auth/authErrors';
+import { MIN_PASSWORD_LENGTH } from '../auth/passwordPolicy';
 import type { AuthStackParamList } from '../navigation/AuthNavigator';
 import { Text } from '../components/ui/text';
 import { Button } from '../components/ui/button';
 import { TextField } from '../components/ui/text-field';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'SignUp'>;
-
-export const MIN_PASSWORD_LENGTH = 8;
 
 export function SignUpScreen({ navigation }: Props) {
   const { signUpWithEmail } = useAuth();

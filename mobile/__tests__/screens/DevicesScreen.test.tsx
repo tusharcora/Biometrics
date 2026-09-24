@@ -22,6 +22,15 @@ it('marks this device and offers sign-out only on the others', async () => {
   expect(await findByTestId('revoke-s2')).toBeTruthy();
 });
 
+it('offers no sign-out controls until it knows which session is this device', async () => {
+  m.useSession.mockReturnValue({ data: null, isPending: false });
+  const { findByTestId, queryByTestId } = render(<DevicesScreen />);
+  expect(await findByTestId('device-s1')).toBeTruthy();
+  expect(queryByTestId('revoke-s1')).toBeNull();
+  expect(queryByTestId('revoke-s2')).toBeNull();
+  expect(queryByTestId('revoke-others-button')).toBeNull();
+});
+
 it('revokes one device by token and reloads', async () => {
   const { findByTestId } = render(<DevicesScreen />);
   fireEvent.press(await findByTestId('revoke-s2'));
