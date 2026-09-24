@@ -12,6 +12,7 @@ import { ScoreDetailScreen } from '../screens/ScoreDetailScreen';
 import { PatternsScreen } from '../screens/PatternsScreen';
 import { CoachConsentScreen } from '../screens/CoachConsentScreen';
 import { CoachMemoryScreen } from '../screens/CoachMemoryScreen';
+import { SignInMethodsScreen } from '../screens/SignInMethodsScreen';
 import { TabsNavigator, type TabParamList } from './TabsNavigator';
 import { syncTimezone } from '../lib/timezone';
 import { syncPushRegistration } from '../lib/pushRegistration';
@@ -39,6 +40,10 @@ export type RootStackParamList = {
   CoachConsent: { prefill?: string } | undefined;
   // Reached from Settings -> Coach Memory, which only draws when consented.
   CoachMemory: undefined;
+  // Reached from Settings: link or unlink Apple, Google, email + password.
+  SignInMethods: undefined;
+  // Reached from Settings: signed-in devices (screen added separately).
+  Devices: undefined;
 };
 
 export type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';
@@ -104,6 +109,7 @@ export function RootNavigator() {
         <Stack.Screen name="Patterns" component={PatternsScreen} options={{ title: 'Patterns' }} />
         <Stack.Screen name="CoachConsent" component={CoachConsentScreen} options={{ title: 'AI Coach' }} />
         <Stack.Screen name="CoachMemory" component={CoachMemoryScreen} options={{ title: 'Coach Memory' }} />
+        <Stack.Screen name="SignInMethods" component={SignInMethodsScreen} options={{ title: 'Sign-in methods' }} />
       </Stack.Navigator>
     </NavigationContainer>
   );
