@@ -345,7 +345,8 @@ describe('CoachScreen: conversation', () => {
     fireEvent.press(utils.getByTestId('coach-send-button'));
 
     expect(await utils.findByText('How is my recovery?')).toBeTruthy();
-    expect(utils.getByTestId('coach-thinking')).toHaveTextContent('Thinking…');
+    expect(utils.getByTestId('coach-thinking')).toHaveTextContent(/Thinking…/);
+    expect(utils.getByTestId('coach-thinking-timer')).toHaveTextContent(/^\d+\.\ds$/);
     expect(utils.getByTestId('coach-input').props.value).toBe('');
     expect(sendCoachMessage).toHaveBeenCalledWith({ message: 'How is my recovery?' });
 
@@ -358,9 +359,36 @@ describe('CoachScreen: conversation', () => {
 
     expect(await utils.findByText('Your recovery is steady.')).toBeTruthy();
     expect(utils.queryByTestId('coach-thinking')).toBeNull();
+    // The thinking line settles into how long the coach took, above the reply.
+    expect(utils.getByTestId('coach-thought-settled')).toHaveTextContent(/Thought for \d+\.\ds$/);
   });
 
-  it('never implies live streaming: no typing indicator, only the static "Thinking…" state', async () => {
+  it('keeps the settled "Thought for" line only on the latest reply', async () => {
+    (sendCoachMessage as jest.Mock).mockResolvedValueOnce(reply('First', { id: 'a1' })).mockResolvedValueOnce(reply('Second', { id: 'a2' }));
+    const utils = await openChat();
+
+    type(utils, 'One');
+    fireEvent.press(utils.getByTestId('coach-send-button'));
+    await utils.findByText('First');
+    type(utils, 'Two');
+    fireEvent.press(utils.getByTestId('coach-send-button'));
+    await utils.findByText('Second');
+
+    expect(utils.getAllByTestId('coach-thought-settled')).toHaveLength(1);
+  });
+
+  it('shows no "Thought for" line on replies loaded from history', async () => {
+    (fetchLatestConversation as jest.Mock).mockResolvedValue({
+      conversationId: 'conv-1',
+      messages: [{ id: 'h1', role: 'assistant', text: 'Earlier answer', source: 'model', createdAt: '2026-09-19T10:00:00.000Z' }],
+    });
+    const utils = await openChat();
+
+    expect(await utils.findByText('Earlier answer')).toBeTruthy();
+    expect(utils.queryByTestId('coach-thought-settled')).toBeNull();
+  });
+
+  it('never implies live streaming: no typing indicator, only the "Thinking…" line', async () => {
     const pending = deferred<CoachReplyDTO>();
     (sendCoachMessage as jest.Mock).mockReturnValue(pending.promise);
     const utils = await openChat();
@@ -370,7 +398,8 @@ describe('CoachScreen: conversation', () => {
     await utils.findByTestId('coach-thinking');
 
     expect(utils.queryByText(/typing|streaming|generating/i)).toBeNull();
-    expect(utils.getByTestId('coach-thinking')).toHaveTextContent('Thinking…');
+    expect(utils.getByTestId('coach-thinking')).toHaveTextContent(/Thinking…/);
+    expect(utils.getByTestId('coach-thinking-timer')).toHaveTextContent(/^\d+\.\ds$/);
     // No partial assistant bubble exists before the full reply arrives.
     expect(utils.queryByTestId('chat-bubble-assistant')).toBeNull();
     await act(async () => pending.resolve(reply('Hi')));
@@ -414,6 +443,7 @@ describe('CoachScreen: errors and retry', () => {
     fireEvent.press(utils.getByTestId('coach-send-button'));
     expect(await utils.findByTestId('coach-error')).toBeTruthy();
     expect(utils.queryByTestId('coach-thinking')).toBeNull();
+    expect(utils.queryByTestId('coach-thought-settled')).toBeNull();
 
     (sendCoachMessage as jest.Mock).mockResolvedValueOnce(reply('Steady.'));
     fireEvent.press(utils.getByTestId('coach-retry-button'));
