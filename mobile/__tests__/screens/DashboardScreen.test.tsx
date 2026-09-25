@@ -56,6 +56,23 @@ beforeEach(() => {
 });
 
 describe('DashboardScreen', () => {
+  it('reloads its data after a sync', async () => {
+    mockApi({});
+    const syncModule = require('../../src/sync/SyncProvider');
+    const syncState = { state: 'idle', lastSyncedAt: null, connection: 'CONNECTED', dataVersion: 0, syncNow: jest.fn() };
+    const spy = jest.spyOn(syncModule, 'useSync').mockReturnValue(syncState);
+    const utils = render(<DashboardScreen />);
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith('/me/biometrics'));
+    const loads = () => (apiFetch as jest.Mock).mock.calls.filter(([p]) => p === '/me/biometrics').length;
+    const before = loads();
+
+    spy.mockReturnValue({ ...syncState, dataVersion: 1 });
+    utils.rerender(<DashboardScreen />);
+
+    await waitFor(() => expect(loads()).toBe(before + 1));
+    spy.mockRestore();
+  });
+
   it('renders fetched biometric records', async () => {
     mockApi({
       records: [
