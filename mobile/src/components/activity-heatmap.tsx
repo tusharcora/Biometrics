@@ -1,7 +1,7 @@
 import React, { memo, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, View, type GestureResponderEvent } from 'react-native';
 import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
-import Svg, { Circle, Rect } from 'react-native-svg';
+import Svg, { Rect } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from 'nativewind';
 import { COLORS, METRIC_CONFIG, MOTION } from '../theme';
@@ -38,8 +38,8 @@ const VIEW_OPTIONS: { value: HeatmapView; label: string }[] = [
   { value: 'ytd', label: 'YTD' },
 ];
 
-// Month is a roomy calendar of circles; Year/YTD are compact week columns of
-// rects that scroll sideways when a year does not fit the screen.
+// Month is a roomy calendar of large squares; Year/YTD are compact week columns
+// of small squares that scroll sideways when a year does not fit the screen.
 const MONTH_GEOMETRY = { minBin: 28, maxBin: 52, gap: 6 };
 const WEEKS_GEOMETRY = { minBin: 13, maxBin: 20, gap: 3 };
 // Cells re-reveal in groups of columns (rows, for a month) rather than one by
@@ -57,9 +57,17 @@ function levelColor(level: HeatLevel | null, palette: Palette): string {
 
 const formatSteps = METRIC_CONFIG.STEPS.format;
 
+// Corners scale with the square so a month's large tiles and a year's small
+// ones read as the same shape; a year square (10-17 dp) stays at 2 dp.
+function cornerRadius(side: number): number {
+  return Math.max(2, Math.round(side * 0.14));
+}
+
 interface CellGroupProps {
   cells: HeatCell[];
-  shape: 'circle' | 'rect';
+  // 'tile': a month's large squares (outlined when empty, tapped day grows);
+  // 'rect': a year's compact week-column squares.
+  shape: 'tile' | 'rect';
   bin: number;
   gap: number;
   width: number;
@@ -76,32 +84,21 @@ const CellGroup = memo(function CellGroup({ cells, shape, bin, gap, width, heigh
       {cells.map((c) => {
         const fill = levelColor(c.level, palette);
         const selected = c.date === selectedDate;
-        if (shape === 'circle') {
-          // The tapped day grows to fill its bin while its sheet is open.
-          const r = selected ? bin / 2 - gap / 4 : bin / 2 - gap / 2;
-          return (
-            <Circle
-              key={c.date}
-              cx={c.col * bin + bin / 2}
-              cy={c.row * bin + bin / 2}
-              r={r}
-              fill={fill}
-              stroke={selected ? palette.foreground : c.level === null ? palette.hairline : undefined}
-              strokeWidth={selected ? 2 : 1}
-            />
-          );
-        }
+        const month = shape === 'tile';
+        // A month's tapped day grows to fill its bin while its sheet is open.
+        const inset = month && selected ? gap / 4 : gap / 2;
+        const side = bin - inset * 2;
         return (
           <Rect
             key={c.date}
-            x={c.col * bin + gap / 2}
-            y={c.row * bin + gap / 2}
-            width={bin - gap}
-            height={bin - gap}
-            rx={2}
+            x={c.col * bin + inset}
+            y={c.row * bin + inset}
+            width={side}
+            height={side}
+            rx={cornerRadius(side)}
             fill={fill}
-            stroke={selected ? palette.foreground : undefined}
-            strokeWidth={selected ? 1.5 : 0}
+            stroke={selected ? palette.foreground : month && c.level === null ? palette.hairline : undefined}
+            strokeWidth={selected ? (month ? 2 : 1.5) : month ? 1 : 0}
           />
         );
       })}
@@ -160,7 +157,7 @@ export function ActivityHeatmap({ steps, earliestDate, today, goal = METRIC_CONF
   const note = historyNote(earliestDate, range.start, today);
 
   const geometry = gridGeometry(grid, width, view === 'month' ? MONTH_GEOMETRY : WEEKS_GEOMETRY);
-  const shape = view === 'month' ? 'circle' : 'rect';
+  const shape = view === 'month' ? 'tile' : 'rect';
   const rangeLabel = view === 'month' ? monthTitle(monthCursor) : view === 'year' ? 'the last 12 months' : `${today.slice(0, 4)} so far`;
 
   function onGridPress(e: GestureResponderEvent) {
