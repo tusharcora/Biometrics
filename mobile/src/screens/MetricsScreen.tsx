@@ -17,6 +17,7 @@ import { todayCivil } from '../lib/heatmap';
 import type { MetricRecord } from '../lib/metricInsights';
 import { TREND_RANGES, changeText, rangeDays, seriesFor, trendSummary, type TrendRange } from '../lib/metricTrends';
 import { useTabBarClearance } from '../navigation/tabBarLayout';
+import { useSync } from '../sync/SyncProvider';
 import { COLORS, METRIC_CONFIG, METRIC_ORDER, type MetricType } from '../theme';
 
 const RANGE_OPTIONS = TREND_RANGES.map(({ value, label }) => ({ value, label }));
@@ -33,6 +34,8 @@ export function MetricsScreen() {
   const [range, setRange] = useState<TrendRange>('30d');
   const [today, setToday] = useState(() => todayCivil());
   const requestId = useRef(0);
+  // Bumped after each successful sync with Google Health, so the data reloads.
+  const { dataVersion, syncNow } = useSync();
 
   const load = useCallback(async () => {
     const id = ++requestId.current;
@@ -54,10 +57,12 @@ export function MetricsScreen() {
     return () => {
       requestId.current++;
     };
-  }, [load]);
+  }, [load, dataVersion]);
 
   async function onRefresh() {
     setRefreshing(true);
+    // Pull from Google Health first, then read what it brought in.
+    await syncNow('pull');
     await load();
     setRefreshing(false);
   }

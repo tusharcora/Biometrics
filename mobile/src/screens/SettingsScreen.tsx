@@ -10,6 +10,8 @@ import { AccountSection } from '../components/account-section';
 import { CoachSettingsSection } from '../components/coach-settings-section';
 import { DeleteAccountSection } from '../components/delete-account-section';
 import { COLORS } from '../theme';
+import { useSync } from '../sync/SyncProvider';
+import { formatLastSynced } from '../sync/formatLastSynced';
 import { useTabBarClearance } from '../navigation/tabBarLayout';
 import {
   clearTimezoneOverride,
@@ -26,6 +28,7 @@ export function SettingsScreen() {
   // isolation (see useAuthOptional below for the same reason), and
   // useNavigation throws when there is no navigator above it.
   const navigation = useContext(NavigationContext);
+  const { state: syncState, lastSyncedAt, connection, syncNow } = useSync();
   const clearance = useTabBarClearance();
   const { colorScheme: scheme } = useColorScheme();
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
@@ -125,6 +128,22 @@ export function SettingsScreen() {
             <Text className="text-base font-medium">Connect or reconnect</Text>
             <Text className="text-xs text-muted-foreground">Sync steps, sleep, heart rate and HRV</Text>
           </Pressable>
+          {connection === 'CONNECTED' ? (
+            <>
+              <Text testID="settings-last-synced" className="text-xs text-muted-foreground">
+                {lastSyncedAt ? formatLastSynced(lastSyncedAt, new Date(), 'Last synced') : 'Not synced yet'}
+              </Text>
+              <Pressable
+                testID="settings-sync-now"
+                accessibilityRole="button"
+                disabled={syncState === 'syncing'}
+                onPress={() => void syncNow('manual')}
+                className="mt-1 active:opacity-70"
+              >
+                <Text className="text-sm font-medium text-accent">{syncState === 'syncing' ? 'Syncing…' : 'Sync now'}</Text>
+              </Pressable>
+            </>
+          ) : null}
         </Card>
         <Card className="gap-1">
           <Pressable testID="timezone-row" onPress={() => setPicking(true)} className="active:opacity-70">
