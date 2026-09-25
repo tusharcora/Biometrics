@@ -21,7 +21,7 @@ import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { PromptBar } from '../components/coach/PromptBar';
-import { ThoughtLine } from '../components/coach/thought-line';
+import { LatticeLoader } from '../components/coach/lattice-loader';
 import { ChatBubble } from '../components/ui/chat-bubble';
 import { MemoryProposalChips } from '../components/memory-proposal-chips';
 import { COLORS } from '../theme';
@@ -38,8 +38,8 @@ interface ChatMessage {
   source?: CoachMessageSource | string;
   // True only for a reply that just arrived, so it fades in; history does not.
   fresh?: boolean;
-  // How long the coach worked on this reply, shown as "Thought for 2.4s" above
-  // it. Only on the latest reply that arrived in this session.
+  // How long the coach worked on this reply, shown as "Done in 2.4s" above it.
+  // Only on the latest reply that arrived in this session.
   thoughtSeconds?: number;
   // Memories the coach proposed to keep on this turn (shown under the bubble).
   memoryProposals?: MemoryDTO[];
@@ -63,8 +63,8 @@ const ERROR_TEXT = {
 };
 
 // The coach conversation. Each reply arrives whole in one response (spec 2/4),
-// so the only in-flight state is a "Thinking…" line with an elapsed timer (see
-// components/coach/thought-line); nothing here suggests token streaming.
+// so the only in-flight state is a "Thinking" loader with an elapsed timer (see
+// components/coach/lattice-loader); nothing here suggests token streaming.
 export function CoachScreen() {
   const navigation = useNavigation<any>();
   const clearance = useTabBarClearance();
@@ -253,7 +253,7 @@ export function CoachScreen() {
         setConversationId(res.conversationId);
         const thoughtSeconds = (Date.now() - startedAt) / 1000;
         setMessages((prev) => {
-          // Only the newest reply keeps its "Thought for" line.
+          // Only the newest reply keeps its "Done in" line.
           const earlier = prev.map((m) => (m.thoughtSeconds === undefined ? m : { ...m, thoughtSeconds: undefined }));
           // A resend under safetyOverride settles the earlier safety card.
           const settled = request.safetyOverride
@@ -390,7 +390,7 @@ export function CoachScreen() {
                   </Text>
                 ) : null}
                 {message.thoughtSeconds !== undefined ? (
-                  <ThoughtLine working={false} elapsedSeconds={message.thoughtSeconds} testID="coach-thought-settled" />
+                  <LatticeLoader status="done" elapsedSeconds={message.thoughtSeconds} testID="coach-thought-settled" />
                 ) : null}
                 <ChatBubble role={message.role} text={message.text} source={message.source as CoachMessageSource} animate={message.fresh === true}>
                   {message.safety ? (
@@ -423,7 +423,7 @@ export function CoachScreen() {
 
             {sending ? (
               <View className="items-start">
-                <ThoughtLine working testID="coach-thinking" />
+                <LatticeLoader status="working" testID="coach-thinking" />
               </View>
             ) : null}
 
