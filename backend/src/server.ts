@@ -6,6 +6,7 @@ import { prisma } from './db/client';
 import { installShutdownHandlers } from './shutdown';
 import { scheduleNightlyScoreSweep } from './scoring/queue';
 import { enqueuePendingStepsHistoryBackfills } from './sync/stepsHistory';
+import { scheduleCatchUpSweep } from './sync/catchUp';
 import { scheduleWeeklyHabitCorrelationSweep } from './habits/queue';
 import { scheduleDailyCoachRetention, scheduleWeeklyCoachDigest } from './coach/queue';
 
@@ -36,6 +37,12 @@ function startBackgroundWork(): void {
   );
   enqueueImmediateTokenRefreshSweep().catch((err) =>
     console.error('Failed to enqueue the startup token refresh sweep', err),
+  );
+
+  // Backstop for webhooks: every 3 hours, catch every connected user up with
+  // Google Health so scores and the coach see fresh data without the app open.
+  scheduleCatchUpSweep().catch((err) =>
+    console.error('Failed to schedule the catch-up sync sweep', err),
   );
 
   // Nightly backstop for the debounced per-webhook score recompute: catches

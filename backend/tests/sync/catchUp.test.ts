@@ -1,4 +1,13 @@
-import { catchUpWindow } from '../../src/sync/catchUp';
+import { syncQueue, connection } from '../../src/sync/queue';
+import {
+  CATCH_UP_SWEEP_JOB,
+  CATCH_UP_SWEEP_INTERVAL_MS,
+  catchUpJobId,
+  catchUpState,
+  catchUpWindow,
+  enqueueCatchUp,
+  scheduleCatchUpSweep,
+} from '../../src/sync/catchUp';
 
 describe('catchUpWindow', () => {
   it('starts the day before the last sync and ends after today', () => {
@@ -32,5 +41,52 @@ describe('catchUpWindow', () => {
       startDate: '2026-09-23',
       endDate: '2026-09-25',
     });
+  });
+});
+
+describe('catch-up queueing', () => {
+  const userId = `u-catchup-${Date.now()}`;
+
+  afterEach(async () => {
+    jest.restoreAllMocks();
+    await syncQueue.remove(catchUpJobId(userId)).catch(() => undefined);
+  });
+
+  afterAll(async () => {
+    await syncQueue.removeJobScheduler(CATCH_UP_SWEEP_JOB).catch(() => undefined);
+    await syncQueue.close();
+    await connection.quit();
+  });
+
+  it('queues one catch-up per user, however often it is asked', async () => {
+    await enqueueCatchUp(userId);
+    await enqueueCatchUp(userId);
+    const job = await syncQueue.getJob(catchUpJobId(userId));
+    expect(job?.name).toBe('catchUp');
+    expect(job?.data).toEqual({ userId });
+    const pending = await syncQueue.getJobs(['waiting', 'delayed', 'prioritized']);
+    expect(pending.filter((j) => j.id === catchUpJobId(userId))).toHaveLength(1);
+    expect(await catchUpState(userId)).toBe('syncing');
+  });
+
+  it('reports idle when there is no job', async () => {
+    expect(await catchUpState(`nobody-${Date.now()}`)).toBe('idle');
+  });
+
+  it('reports failed for a failed job, and replaces it on the next request', async () => {
+    const remove = jest.fn().mockResolvedValue(undefined);
+    jest.spyOn(syncQueue, 'getJob').mockResolvedValue({ getState: async () => 'failed', remove } as never);
+    expect(await catchUpState(userId)).toBe('failed');
+
+    const add = jest.spyOn(syncQueue, 'add').mockResolvedValue({} as never);
+    await enqueueCatchUp(userId);
+    expect(remove).toHaveBeenCalled();
+    expect(add).toHaveBeenCalledWith('catchUp', { userId }, expect.objectContaining({ jobId: catchUpJobId(userId) }));
+  });
+
+  it('registers the 3-hour backstop sweep', async () => {
+    await scheduleCatchUpSweep();
+    const sweep = (await syncQueue.getJobSchedulers()).find((s) => s.key === CATCH_UP_SWEEP_JOB);
+    expect(Number(sweep?.every)).toBe(CATCH_UP_SWEEP_INTERVAL_MS);
   });
 });
