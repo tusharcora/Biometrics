@@ -63,7 +63,8 @@ async function requestToken(body: URLSearchParams): Promise<HealthTokenResponse>
 
   if (!res.ok) {
     const errorBody = await res.text();
-    throw new Error(`Google token endpoint returned ${res.status}: ${errorBody}`);
+    // The status lets callers tell a revoked grant from Google being unavailable.
+    throw Object.assign(new Error(`Google token endpoint returned ${res.status}: ${errorBody}`), { status: res.status });
   }
 
   const json = (await res.json()) as GoogleTokenApiResponse;

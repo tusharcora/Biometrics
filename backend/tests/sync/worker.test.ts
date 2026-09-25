@@ -41,7 +41,7 @@ beforeEach(() => {
   // Default that refresh to failing so every pre-existing 401 test still
   // exercises the terminal disconnect path; the refresh-specific tests below
   // override this per test.
-  (oauth.refreshHealthTokens as jest.Mock).mockReset().mockRejectedValue(new Error('invalid_grant'));
+  (oauth.refreshHealthTokens as jest.Mock).mockReset().mockRejectedValue(Object.assign(new Error('invalid_grant'), { status: 400 }));
   (healthClient.fetchMetricRange as jest.Mock).mockReset();
   (healthClient.fetchSleepSessions as jest.Mock).mockReset().mockResolvedValue([]);
   (subscriber.deleteUserSubscription as jest.Mock).mockReset().mockResolvedValue(undefined);
@@ -314,7 +314,7 @@ describe('processSyncJob', () => {
     it('still disconnects and deletes the subscription when the refresh itself fails', async () => {
       const user = await createConnectedUserWithSubscription('sub-gone');
       (healthClient.fetchMetricRange as jest.Mock).mockRejectedValue(unauthorized());
-      (oauth.refreshHealthTokens as jest.Mock).mockRejectedValue(new Error('invalid_grant'));
+      (oauth.refreshHealthTokens as jest.Mock).mockRejectedValue(Object.assign(new Error('invalid_grant'), { status: 400 }));
 
       await processSyncJob({ name: 'fetch', data: { userId: user.id, metricType: 'STEPS', date: '2026-09-01' } } as Job);
 
@@ -326,6 +326,20 @@ describe('processSyncJob', () => {
       expect(conn?.status).toBe('DISCONNECTED');
       // The stale token is left untouched: nothing newer was ever obtained.
       expect(decryptToken(conn!.encryptedAccessToken)).toBe('stale-access');
+    });
+
+    it('stays CONNECTED and fails the job for a retry when the in-line refresh cannot reach Google', async () => {
+      const user = await createConnectedUserWithSubscription('sub-offline');
+      (healthClient.fetchMetricRange as jest.Mock).mockRejectedValue(unauthorized());
+      (oauth.refreshHealthTokens as jest.Mock).mockRejectedValue(new Error('getaddrinfo ENOTFOUND oauth2.googleapis.com'));
+
+      await expect(
+        processSyncJob({ name: 'fetch', data: { userId: user.id, metricType: 'STEPS', date: '2026-09-01' } } as Job),
+      ).rejects.toThrow(/ENOTFOUND/);
+
+      expect(subscriber.deleteUserSubscription).not.toHaveBeenCalled();
+      const conn = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
+      expect(conn?.status).toBe('CONNECTED');
     });
 
     it('still disconnects when the refresh succeeds but the retried fetch also 401s', async () => {

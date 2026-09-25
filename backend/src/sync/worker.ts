@@ -12,7 +12,7 @@ import { BiometricMetricType, HealthMetricPoint, SleepSessionPoint } from '../ty
 import { FetchJobData, BackfillJobData, STEPS_HISTORY_BACKFILL_JOB, StepsHistoryBackfillJobData } from './queue';
 import { isEmptyWindow } from './window';
 import { stepsHistoryWindow } from './stepsHistory';
-import { refreshedTokenUpdateData } from './tokenUpdate';
+import { isRevokedGrant, refreshedTokenUpdateData } from './tokenUpdate';
 import { localCivilDate } from '../biometrics/civilDate';
 import { CATCH_UP_JOB, CATCH_UP_SWEEP_JOB, CatchUpJobData, catchUpWindow, enqueueCatchUp } from './catchUp';
 import { computeDailyScore } from '../scoring/compute';
@@ -114,15 +114,17 @@ class JobTokenSession {
     } catch (err) {
       if (!isUnauthorized(err) || this.refreshed) throw err;
 
-      // One refresh per job. If the refresh itself fails, surface the ORIGINAL
-      // 401 so the caller's disconnect path runs exactly as before.
+      // One refresh per job. If Google refuses the grant, surface the ORIGINAL
+      // 401 so the caller's disconnect path runs. If Google could not be
+      // reached, surface the refresh error instead: it is not a 401, so the
+      // connection is kept and BullMQ retries the job.
       this.refreshed = true;
       let tokens;
       try {
         tokens = await refreshHealthTokens(decryptToken(this.conn.encryptedRefreshToken));
       } catch (refreshErr) {
         console.error(`In-line Google Health token refresh failed for user ${this.conn.userId}`, refreshErr);
-        throw err;
+        throw isRevokedGrant(refreshErr) ? err : refreshErr;
       }
 
       // Persist before retrying so a successful refresh is never lost even if

@@ -42,6 +42,13 @@ describe('exchangeCodeForTokens', () => {
       /Google token endpoint returned 400.*invalid_grant.*authorization code is invalid/
     );
   });
+
+  // The refresh paths tell a revoked grant (4xx) from an outage by this status.
+  it("carries the token endpoint's HTTP status on the error", async () => {
+    nock('https://oauth2.googleapis.com').post('/token').reply(503, 'unavailable');
+
+    await expect(refreshHealthTokens('some-refresh')).rejects.toMatchObject({ status: 503 });
+  });
 });
 
 describe('refreshHealthTokens', () => {

@@ -53,12 +53,40 @@ describe('runTokenRefreshSweep', () => {
         tokenExpiresAt: new Date(Date.now() + 30 * 60 * 1000),
       },
     });
-    (oauth.refreshHealthTokens as jest.Mock).mockRejectedValue(new Error('invalid_grant'));
+    (oauth.refreshHealthTokens as jest.Mock).mockRejectedValue(Object.assign(new Error('invalid_grant'), { status: 400 }));
 
     await runTokenRefreshSweep();
 
     const conn = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
     expect(conn?.status).toBe('DISCONNECTED');
+  });
+
+  // The server being offline for a moment (DNS failure, Google 5xx) says nothing
+  // about the grant; disconnecting here forced the user to reconnect by hand.
+  it.each([
+    ['a network failure', new Error('getaddrinfo ENOTFOUND oauth2.googleapis.com')],
+    ['a Google 5xx', Object.assign(new Error('Google token endpoint returned 503'), { status: 503 })],
+  ])('keeps the connection and its subscription on %s', async (_label, failure) => {
+    const user = await prisma.user.create({ data: { email: `t-net-${randomUUID()}@example.com`, name: 'Test User' } });
+    await prisma.healthConnection.create({
+      data: {
+        userId: user.id,
+        healthUserId: `fb-net-${randomUUID()}`,
+        encryptedAccessToken: encryptToken('old-access'),
+        encryptedRefreshToken: encryptToken('old-refresh'),
+        tokenExpiresAt: new Date(Date.now() + 30 * 60 * 1000),
+        webhookSubscriptionId: `sub-net-${randomUUID()}`,
+      },
+    });
+    (oauth.refreshHealthTokens as jest.Mock).mockRejectedValue(failure);
+    (subscriber.deleteUserSubscription as jest.Mock).mockClear();
+
+    await runTokenRefreshSweep();
+
+    const conn = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
+    expect(conn?.status).toBe('CONNECTED');
+    expect(decryptToken(conn!.encryptedAccessToken)).toBe('old-access');
+    expect(subscriber.deleteUserSubscription).not.toHaveBeenCalled();
   });
 
   // A transient DB failure after a successful refresh must not be mistaken for
@@ -129,7 +157,7 @@ describe('runTokenRefreshSweep', () => {
 
     (oauth.refreshHealthTokens as jest.Mock).mockImplementation((refreshToken: string) => {
       if (refreshToken === 'old-refresh-fail') {
-        return Promise.reject(new Error('invalid_grant'));
+        return Promise.reject(Object.assign(new Error('invalid_grant'), { status: 400 }));
       }
       return Promise.resolve({
         accessToken: 'new-access-ok',
@@ -182,7 +210,7 @@ describe('runTokenRefreshSweep', () => {
         webhookSubscriptionId: 'sub-to-delete-on-refresh-fail',
       },
     });
-    (oauth.refreshHealthTokens as jest.Mock).mockRejectedValue(new Error('invalid_grant'));
+    (oauth.refreshHealthTokens as jest.Mock).mockRejectedValue(Object.assign(new Error('invalid_grant'), { status: 400 }));
     (subscriber.deleteUserSubscription as jest.Mock).mockResolvedValue(undefined);
 
     await runTokenRefreshSweep();
@@ -206,7 +234,7 @@ describe('runTokenRefreshSweep', () => {
         webhookSubscriptionId: 'sub-that-fails-on-refresh',
       },
     });
-    (oauth.refreshHealthTokens as jest.Mock).mockRejectedValue(new Error('invalid_grant'));
+    (oauth.refreshHealthTokens as jest.Mock).mockRejectedValue(Object.assign(new Error('invalid_grant'), { status: 400 }));
     (subscriber.deleteUserSubscription as jest.Mock).mockRejectedValue(new Error('network error'));
 
     await runTokenRefreshSweep();
