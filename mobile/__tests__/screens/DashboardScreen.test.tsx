@@ -182,6 +182,26 @@ describe('DashboardScreen', () => {
     await waitFor(() => expect(getByText(/No data yet/i)).toBeTruthy());
   });
 
+  // A cold launch before the network is up fails the first load; the reload a
+  // sync triggers must bring the data back rather than leave the error up.
+  it('recovers from a failed load when a sync reloads the data', async () => {
+    mockApi({ recordsError: new Error('network error') });
+    const syncModule = require('../../src/sync/SyncProvider');
+    const syncState = { state: 'idle', lastSyncedAt: null, connection: 'CONNECTED', dataVersion: 0, syncNow: jest.fn() };
+    const spy = jest.spyOn(syncModule, 'useSync').mockReturnValue(syncState);
+    const utils = render(<DashboardScreen />);
+    await waitFor(() => expect(utils.getByText(/Something went wrong/i)).toBeTruthy());
+
+    mockApi({ records: [] });
+    spy.mockReturnValue({ ...syncState, dataVersion: 1 });
+    utils.rerender(<DashboardScreen />);
+
+    // The empty state replaces the error once the reload succeeds.
+    expect(await utils.findByText(/No data yet/i)).toBeTruthy();
+    expect(utils.queryByText(/Something went wrong/i)).toBeNull();
+    spy.mockRestore();
+  });
+
   it('shows an error state when the fetch fails', async () => {
     mockApi({ recordsError: new Error('network error') });
 

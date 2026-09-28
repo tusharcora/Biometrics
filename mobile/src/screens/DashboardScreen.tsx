@@ -160,7 +160,7 @@ export function DashboardScreen() {
 
   useEffect(() => {
     apiFetch<MetricRecord[]>('/me/biometrics')
-      .then(setRecords)
+      .then((r) => { setRecords(r); setError(null); })
       .catch(() => setError('Something went wrong loading your data.'));
   }, [dataVersion]);
 

@@ -23,7 +23,7 @@ syncRouter.post('/me/sync', requireAuth, async (req: AuthedRequest, res) => {
     return;
   }
   const lastSyncedAt = conn.lastSyncedAt?.toISOString() ?? null;
-  const state = await catchUpState(userId);
+  const state = await catchUpState(userId, conn.lastSyncedAt);
   if (state !== 'syncing' && conn.lastSyncedAt && Date.now() - conn.lastSyncedAt.getTime() < RECENT_SYNC_MS) {
     res.json({ state: 'idle', lastSyncedAt });
     return;
@@ -36,7 +36,7 @@ syncRouter.get('/me/sync', requireAuth, async (req: AuthedRequest, res) => {
   const userId = req.userId!;
   const conn = await connectionFor(userId);
   res.json({
-    state: conn ? await catchUpState(userId) : 'idle',
+    state: conn ? await catchUpState(userId, conn.lastSyncedAt) : 'idle',
     lastSyncedAt: conn?.lastSyncedAt?.toISOString() ?? null,
     connection: conn?.status ?? 'NOT_CONNECTED',
   });

@@ -57,12 +57,19 @@ export async function enqueueCatchUp(userId: string): Promise<void> {
   });
 }
 
-export async function catchUpState(userId: string): Promise<'idle' | 'syncing' | 'failed'> {
+/**
+ * A failed catch-up only counts while nothing newer has synced: a webhook fetch
+ * or a reconnect backfill can bring the data up to date after it failed.
+ */
+export async function catchUpState(userId: string, lastSyncedAt: Date | null = null): Promise<'idle' | 'syncing' | 'failed'> {
   const job = await syncQueue.getJob(catchUpJobId(userId));
   if (!job) return 'idle';
   const state = await job.getState();
   if (RUNNING.has(state)) return 'syncing';
-  if (state === 'failed') return 'failed';
+  if (state === 'failed') {
+    const supersededBySync = lastSyncedAt !== null && job.finishedOn !== undefined && job.finishedOn < lastSyncedAt.getTime();
+    return supersededBySync ? 'idle' : 'failed';
+  }
   return 'idle';
 }
 

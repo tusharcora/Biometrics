@@ -84,6 +84,16 @@ describe('catch-up queueing', () => {
     expect(add).toHaveBeenCalledWith('catchUp', { userId }, expect.objectContaining({ jobId: catchUpJobId(userId) }));
   });
 
+  // A webhook fetch or a reconnect backfill can bring the data up to date after
+  // a catch-up failed; that old failure must not keep saying "Couldn't sync".
+  it('reports idle for a failed job older than the last successful sync', async () => {
+    const failedAt = Date.now() - 600_000;
+    jest.spyOn(syncQueue, 'getJob').mockResolvedValue({ getState: async () => 'failed', finishedOn: failedAt } as never);
+    expect(await catchUpState(userId, new Date(failedAt + 60_000))).toBe('idle');
+    expect(await catchUpState(userId, new Date(failedAt - 60_000))).toBe('failed');
+    expect(await catchUpState(userId, null)).toBe('failed');
+  });
+
   it('registers the 3-hour backstop sweep', async () => {
     await scheduleCatchUpSweep();
     const sweep = (await syncQueue.getJobSchedulers()).find((s) => s.key === CATCH_UP_SWEEP_JOB);

@@ -82,6 +82,16 @@ describe('GET /me/sync', () => {
     expect(res.body).toEqual({ state, lastSyncedAt: last.toISOString(), connection: 'CONNECTED' });
   });
 
+  it('judges the catch-up state against the last successful sync', async () => {
+    const last = new Date(Date.now() - 600_000);
+    const user = await connectedUser(last);
+    const state = jest.spyOn(catchUp, 'catchUpState').mockResolvedValue('idle');
+
+    await request(createApp()).get('/me/sync').set(await authHeaderFor(user.id));
+
+    expect(state).toHaveBeenCalledWith(user.id, last);
+  });
+
   it('reports a disconnected connection', async () => {
     const user = await connectedUser(null, 'DISCONNECTED');
     jest.spyOn(catchUp, 'catchUpState').mockResolvedValue('idle');
