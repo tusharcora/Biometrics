@@ -24,6 +24,8 @@ import { COLORS, METRIC_CONFIG, METRIC_ORDER, type MetricType } from '../theme';
 import { computeStats, buildHeadline, type MetricRecord } from '../lib/metricInsights';
 import { pickColdStartProgress, scoreTypeLabel } from '../lib/scoreInsights';
 import { coachEntryRoute, useCoachStatus } from '../lib/useCoachStatus';
+import { useSync } from '../sync/SyncProvider';
+import { SyncStatusLine } from '../components/sync-status-line';
 import { navigateToCoachEntry } from '../navigation/coachNavigation';
 import { useTabBarClearance } from '../navigation/tabBarLayout';
 
@@ -153,12 +155,14 @@ export function DashboardScreen() {
   // Null until known, and null on failure: the coach entry simply isn't drawn.
   const { status: coachStatus } = useCoachStatus(navigation);
   const coachRoute = coachEntryRoute(coachStatus);
+  // Bumped after each successful sync with Google Health, so the data reloads.
+  const { dataVersion } = useSync();
 
   useEffect(() => {
     apiFetch<MetricRecord[]>('/me/biometrics')
-      .then(setRecords)
+      .then((r) => { setRecords(r); setError(null); })
       .catch(() => setError('Something went wrong loading your data.'));
-  }, []);
+  }, [dataVersion]);
 
   useEffect(() => {
     // A disconnected Google Health is why the data stops updating, so say so
@@ -166,7 +170,7 @@ export function DashboardScreen() {
     apiFetch<{ status: ConnectionStatus }>('/me/connection')
       .then((res) => setConnectionStatus(res?.status ?? null))
       .catch(() => setConnectionStatus(null));
-  }, []);
+  }, [dataVersion]);
 
   useEffect(() => {
     // Independent of the metric cards: a scores failure must not take the rest
@@ -189,7 +193,7 @@ export function DashboardScreen() {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [dataVersion]);
 
   const latest = useMemo(() => latestByMetric(records ?? []), [records]);
   const insight = useMemo(() => computeHeadlineInsight(records ?? []), [records]);
@@ -283,9 +287,12 @@ export function DashboardScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background">
       <ScrollView contentContainerStyle={{ gap: 16, padding: 16, paddingBottom: clearance }}>
-        <View className="flex-row items-center justify-between">
-          <Text className="text-2xl font-bold">Today</Text>
-          {headerActions}
+        <View className="gap-1">
+          <View className="flex-row items-center justify-between">
+            <Text className="text-2xl font-bold">Today</Text>
+            {headerActions}
+          </View>
+          <SyncStatusLine />
         </View>
 
         <ScoreCard

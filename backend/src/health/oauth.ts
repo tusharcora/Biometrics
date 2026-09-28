@@ -63,7 +63,18 @@ async function requestToken(body: URLSearchParams): Promise<HealthTokenResponse>
 
   if (!res.ok) {
     const errorBody = await res.text();
-    throw new Error(`Google token endpoint returned ${res.status}: ${errorBody}`);
+    // The status and Google's OAuth error code let callers tell a revoked grant
+    // (invalid_grant) from Google being unavailable or the app misconfigured.
+    let oauthError: string | undefined;
+    try {
+      oauthError = (JSON.parse(errorBody) as { error?: string }).error;
+    } catch {
+      oauthError = undefined;
+    }
+    throw Object.assign(new Error(`Google token endpoint returned ${res.status}: ${errorBody}`), {
+      status: res.status,
+      oauthError,
+    });
   }
 
   const json = (await res.json()) as GoogleTokenApiResponse;

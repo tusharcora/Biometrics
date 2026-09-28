@@ -2,7 +2,7 @@ import { prisma } from '../db/client';
 import { refreshHealthTokens } from '../health/oauth';
 import { deleteUserSubscription } from '../health/subscriber';
 import { decryptToken } from '../crypto/tokenCipher';
-import { refreshedTokenUpdateData } from './tokenUpdate';
+import { isRevokedGrant, refreshedTokenUpdateData } from './tokenUpdate';
 
 const REFRESH_LOOKAHEAD_MS = 60 * 60 * 1000; // refresh anything expiring within the next hour
 
@@ -24,6 +24,9 @@ export async function runTokenRefreshSweep(): Promise<void> {
       tokens = await refreshHealthTokens(refreshToken);
     } catch (err) {
       console.error(`Google Health token refresh failed for connection ${conn.id}`, err);
+      // A network or 5xx failure is retried by the next sweep; only Google
+      // refusing the grant means the user has to reconnect.
+      if (!isRevokedGrant(err)) continue;
       await prisma.healthConnection.update({
         where: { id: conn.id },
         data: { status: 'DISCONNECTED' },

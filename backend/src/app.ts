@@ -7,6 +7,7 @@ import { usersRouter } from './users/routes';
 import { scoresRouter } from './scoring/routes';
 import { habitsRouter } from './habits/routes';
 import { coachRouter } from './coach/routes';
+import { syncRouter } from './sync/routes';
 
 export function createApp(options: { auth?: Auth } = {}): Express {
   const app = express();
@@ -23,6 +24,7 @@ export function createApp(options: { auth?: Auth } = {}): Express {
   app.get('/health-check', (_req, res) => res.json({ status: 'ok' })); // renamed from /health to avoid clashing with the new /health/* route prefix
   app.use(healthRouter);
   app.use(biometricsRouter);
+  app.use(syncRouter);
   app.use(usersRouter);
   app.use(scoresRouter);
   app.use(habitsRouter);

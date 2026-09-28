@@ -12,7 +12,9 @@ import { BiometricMetricType, HealthMetricPoint, SleepSessionPoint } from '../ty
 import { FetchJobData, BackfillJobData, STEPS_HISTORY_BACKFILL_JOB, StepsHistoryBackfillJobData } from './queue';
 import { isEmptyWindow } from './window';
 import { stepsHistoryWindow } from './stepsHistory';
-import { refreshedTokenUpdateData } from './tokenUpdate';
+import { isRevokedGrant, refreshedTokenUpdateData } from './tokenUpdate';
+import { localCivilDate } from '../biometrics/civilDate';
+import { CATCH_UP_JOB, CATCH_UP_SWEEP_JOB, CatchUpJobData, catchUpWindow, enqueueCatchUp } from './catchUp';
 import { computeDailyScore } from '../scoring/compute';
 import { runScoreSweep } from '../scoring/sweep';
 import { COMPUTE_DAILY_SCORE_JOB, SCORE_SWEEP_JOB, enqueueScoreCompute, ComputeDailyScoreJobData } from '../scoring/queue';
@@ -112,15 +114,17 @@ class JobTokenSession {
     } catch (err) {
       if (!isUnauthorized(err) || this.refreshed) throw err;
 
-      // One refresh per job. If the refresh itself fails, surface the ORIGINAL
-      // 401 so the caller's disconnect path runs exactly as before.
+      // One refresh per job. If Google refuses the grant, surface the ORIGINAL
+      // 401 so the caller's disconnect path runs. If Google could not be
+      // reached, surface the refresh error instead: it is not a 401, so the
+      // connection is kept and BullMQ retries the job.
       this.refreshed = true;
       let tokens;
       try {
         tokens = await refreshHealthTokens(decryptToken(this.conn.encryptedRefreshToken));
       } catch (refreshErr) {
         console.error(`In-line Google Health token refresh failed for user ${this.conn.userId}`, refreshErr);
-        throw err;
+        throw isRevokedGrant(refreshErr) ? err : refreshErr;
       }
 
       // Persist before retrying so a successful refresh is never lost even if
@@ -214,8 +218,16 @@ async function handleBackfillJob(data: BackfillJobData): Promise<void> {
   // fail the job (e.g. a reconnect on the same day as the last sync). Not a
   // sync, so lastSyncedAt is deliberately left alone.
   if (isEmptyWindow(data.startDate, data.endDate)) return;
+  await syncWindow(data.userId, data.startDate, data.endDate);
+}
 
-  const conn = await prisma.healthConnection.findUnique({ where: { userId: data.userId } });
+/**
+ * Pull every metric and sleep over [startDate, endDate), store it, request
+ * the affected scores and stamp lastSyncedAt. Shared by the connect backfill
+ * and the catch-up sync. Revoked access disconnects the user and returns.
+ */
+export async function syncWindow(userId: string, startDate: string, endDate: string): Promise<void> {
+  const conn = await prisma.healthConnection.findUnique({ where: { userId } });
   if (!conn || conn.status === 'DISCONNECTED') return;
 
   try {
@@ -223,22 +235,38 @@ async function handleBackfillJob(data: BackfillJobData): Promise<void> {
     const scoreDates: string[] = [];
     for (const metricType of ALL_METRIC_TYPES) {
       if (metricType === 'SLEEP') {
-        scoreDates.push(...(await syncSleep(session, data.userId, data.startDate, data.endDate)));
+        scoreDates.push(...(await syncSleep(session, userId, startDate, endDate)));
         continue;
       }
-      const points = await session.fetch(metricType, data.startDate, data.endDate);
-      await upsertBiometricRecords(data.userId, metricType, points);
+      const points = await session.fetch(metricType, startDate, endDate);
+      await upsertBiometricRecords(userId, metricType, points);
       if (SCORE_INPUT_METRICS.has(metricType)) scoreDates.push(...points.map(civilDateOf));
     }
-    await requestScores(data.userId, scoreDates);
-    await prisma.healthConnection.update({ where: { userId: data.userId }, data: { lastSyncedAt: new Date() } });
+    await requestScores(userId, scoreDates);
+    await prisma.healthConnection.update({ where: { userId }, data: { lastSyncedAt: new Date() } });
   } catch (err) {
     if (isUnauthorized(err)) {
-      await disconnect(data.userId, conn.webhookSubscriptionId);
+      await disconnect(userId, conn.webhookSubscriptionId);
       return;
     }
     throw err; // other errors (e.g. 429) are retried by BullMQ's job retry policy
   }
+}
+
+// The window is worked out when the job runs, not when it was queued, so a job
+// that waited still covers up to now.
+async function handleCatchUpJob(data: CatchUpJobData): Promise<void> {
+  const conn = await prisma.healthConnection.findUnique({ where: { userId: data.userId }, select: { status: true, lastSyncedAt: true } });
+  if (!conn || conn.status === 'DISCONNECTED') return;
+  const user = await prisma.user.findUnique({ where: { id: data.userId }, select: { timezone: true } });
+  const timeZone = user?.timezone ?? 'UTC';
+  const { startDate, endDate } = catchUpWindow(conn.lastSyncedAt, localCivilDate(new Date(), timeZone), timeZone);
+  await syncWindow(data.userId, startDate, endDate);
+}
+
+async function handleCatchUpSweep(): Promise<void> {
+  const connected = await prisma.healthConnection.findMany({ where: { status: 'CONNECTED' }, select: { userId: true } });
+  for (const { userId } of connected) await enqueueCatchUp(userId);
 }
 
 /**
@@ -276,6 +304,10 @@ export async function processSyncJob(job: Job): Promise<void> {
     await handleFetchJob(job.data as FetchJobData);
   } else if (job.name === 'backfill') {
     await handleBackfillJob(job.data as BackfillJobData);
+  } else if (job.name === CATCH_UP_JOB) {
+    await handleCatchUpJob(job.data as CatchUpJobData);
+  } else if (job.name === CATCH_UP_SWEEP_JOB) {
+    await handleCatchUpSweep();
   } else if (job.name === STEPS_HISTORY_BACKFILL_JOB) {
     await handleStepsHistoryJob(job.data as StepsHistoryBackfillJobData);
   } else if (job.name === TOKEN_REFRESH_SWEEP_JOB) {

@@ -1,6 +1,18 @@
 import type { HealthTokenResponse } from '../health/oauth';
 import { encryptToken } from '../crypto/tokenCipher';
 
+/**
+ * True only when Google's token endpoint answered and refused this user's
+ * refresh token (400 invalid_grant). Anything else -- DNS failure, timeout, a
+ * 5xx, or the app's own credentials being wrong (401 invalid_client) -- says
+ * nothing about the grant, so the connection must be kept and the refresh
+ * tried again later rather than the user being disconnected.
+ */
+export function isRevokedGrant(err: unknown): boolean {
+  const e = err as { status?: unknown; oauthError?: unknown } | null;
+  return e?.status === 400 && e.oauthError === 'invalid_grant';
+}
+
 export interface RefreshedTokenUpdate {
   encryptedAccessToken: string;
   tokenExpiresAt: Date;

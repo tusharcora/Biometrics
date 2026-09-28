@@ -14,6 +14,8 @@ import { stepsHistoryWindow } from '../../src/sync/stepsHistory';
 import * as scoringQueue from '../../src/scoring/queue';
 import * as scoreSweep from '../../src/scoring/sweep';
 import { seedHistory, day } from '../scoring/dbHelpers';
+import * as catchUp from '../../src/sync/catchUp';
+import { localCivilDate } from '../../src/biometrics/civilDate';
 
 jest.mock('../../src/health/client');
 jest.mock('../../src/health/oauth');
@@ -39,7 +41,7 @@ beforeEach(() => {
   // Default that refresh to failing so every pre-existing 401 test still
   // exercises the terminal disconnect path; the refresh-specific tests below
   // override this per test.
-  (oauth.refreshHealthTokens as jest.Mock).mockReset().mockRejectedValue(new Error('invalid_grant'));
+  (oauth.refreshHealthTokens as jest.Mock).mockReset().mockRejectedValue(Object.assign(new Error('invalid_grant'), { status: 400, oauthError: 'invalid_grant' }));
   (healthClient.fetchMetricRange as jest.Mock).mockReset();
   (healthClient.fetchSleepSessions as jest.Mock).mockReset().mockResolvedValue([]);
   (subscriber.deleteUserSubscription as jest.Mock).mockReset().mockResolvedValue(undefined);
@@ -312,7 +314,7 @@ describe('processSyncJob', () => {
     it('still disconnects and deletes the subscription when the refresh itself fails', async () => {
       const user = await createConnectedUserWithSubscription('sub-gone');
       (healthClient.fetchMetricRange as jest.Mock).mockRejectedValue(unauthorized());
-      (oauth.refreshHealthTokens as jest.Mock).mockRejectedValue(new Error('invalid_grant'));
+      (oauth.refreshHealthTokens as jest.Mock).mockRejectedValue(Object.assign(new Error('invalid_grant'), { status: 400, oauthError: 'invalid_grant' }));
 
       await processSyncJob({ name: 'fetch', data: { userId: user.id, metricType: 'STEPS', date: '2026-09-01' } } as Job);
 
@@ -324,6 +326,20 @@ describe('processSyncJob', () => {
       expect(conn?.status).toBe('DISCONNECTED');
       // The stale token is left untouched: nothing newer was ever obtained.
       expect(decryptToken(conn!.encryptedAccessToken)).toBe('stale-access');
+    });
+
+    it('stays CONNECTED and fails the job for a retry when the in-line refresh cannot reach Google', async () => {
+      const user = await createConnectedUserWithSubscription('sub-offline');
+      (healthClient.fetchMetricRange as jest.Mock).mockRejectedValue(unauthorized());
+      (oauth.refreshHealthTokens as jest.Mock).mockRejectedValue(new Error('getaddrinfo ENOTFOUND oauth2.googleapis.com'));
+
+      await expect(
+        processSyncJob({ name: 'fetch', data: { userId: user.id, metricType: 'STEPS', date: '2026-09-01' } } as Job),
+      ).rejects.toThrow(/ENOTFOUND/);
+
+      expect(subscriber.deleteUserSubscription).not.toHaveBeenCalled();
+      const conn = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
+      expect(conn?.status).toBe('CONNECTED');
     });
 
     it('still disconnects when the refresh succeeds but the retried fetch also 401s', async () => {
@@ -776,5 +792,59 @@ describe('processSyncJob: steps history backfill', () => {
     const conn = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
     expect(conn?.status).toBe('CONNECTED');
     expect(conn?.stepsHistoryBackfilledAt).toBeNull();
+  });
+});
+
+async function createCatchUpUser(status: 'CONNECTED' | 'DISCONNECTED' = 'CONNECTED', lastSyncedAt: Date | null = null) {
+  const user = await prisma.user.create({ data: { email: `cu-${randomUUID()}@example.com`, name: 'Test User' } });
+  await prisma.healthConnection.create({
+    data: {
+      userId: user.id,
+      healthUserId: `fb-cu-${randomUUID()}`,
+      encryptedAccessToken: encryptToken('access-token'),
+      encryptedRefreshToken: encryptToken('refresh-token'),
+      tokenExpiresAt: new Date(Date.now() + 3600_000),
+      status,
+      lastSyncedAt,
+    },
+  });
+  return user;
+}
+
+describe('catch-up jobs', () => {
+  it('fetches every metric over the catch-up window and advances lastSyncedAt', async () => {
+    const lastSyncedAt = new Date(Date.now() - 2 * 24 * 3600_000);
+    const user = await createCatchUpUser('CONNECTED', lastSyncedAt);
+    (healthClient.fetchMetricRange as jest.Mock).mockResolvedValue([{ recordedAt: new Date(), value: 4200 }]);
+
+    await processSyncJob({ name: 'catchUp', data: { userId: user.id } } as Job);
+
+    const today = localCivilDate(new Date(), 'UTC');
+    const { startDate, endDate } = catchUp.catchUpWindow(lastSyncedAt, today, 'UTC');
+    expect(healthClient.fetchMetricRange).toHaveBeenCalledWith('access-token', 'STEPS', startDate, endDate);
+    const conn = await prisma.healthConnection.findUniqueOrThrow({ where: { userId: user.id } });
+    expect(conn.lastSyncedAt!.getTime()).toBeGreaterThan(lastSyncedAt.getTime());
+    expect(await prisma.biometricRecord.count({ where: { userId: user.id, metricType: 'STEPS' } })).toBe(1);
+  });
+
+  it('skips a disconnected user', async () => {
+    const user = await createCatchUpUser('DISCONNECTED');
+
+    await processSyncJob({ name: 'catchUp', data: { userId: user.id } } as Job);
+
+    expect(healthClient.fetchMetricRange).not.toHaveBeenCalled();
+  });
+
+  it('queues a catch-up for every connected user, and only those, on the sweep', async () => {
+    const on = await createCatchUpUser('CONNECTED');
+    const off = await createCatchUpUser('DISCONNECTED');
+    const enqueue = jest.spyOn(catchUp, 'enqueueCatchUp').mockResolvedValue(undefined);
+
+    await processSyncJob({ name: 'catchUpSweep', data: {} } as Job);
+
+    const queued = enqueue.mock.calls.map(([id]) => id);
+    expect(queued).toContain(on.id);
+    expect(queued).not.toContain(off.id);
+    enqueue.mockRestore();
   });
 });

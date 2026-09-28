@@ -8,6 +8,7 @@ import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { fetchRange, todayCivil } from '../lib/heatmap';
+import { useSync } from '../sync/SyncProvider';
 import { useTabBarClearance } from '../navigation/tabBarLayout';
 import { COLORS, METRIC_CONFIG } from '../theme';
 
@@ -25,6 +26,8 @@ export function ActivityScreen() {
   // Only the latest request may land: a slow first load must not overwrite a
   // pull-to-refresh that finished after it.
   const requestId = useRef(0);
+  // Bumped after each successful sync with Google Health, so the data reloads.
+  const { dataVersion, syncNow } = useSync();
 
   const load = useCallback(async () => {
     const id = ++requestId.current;
@@ -47,10 +50,12 @@ export function ActivityScreen() {
       // Drop anything still in flight once the tab is gone.
       requestId.current++;
     };
-  }, [load]);
+  }, [load, dataVersion]);
 
   async function onRefresh() {
     setRefreshing(true);
+    // Pull from Google Health first, then read what it brought in.
+    await syncNow('pull');
     await load();
     setRefreshing(false);
   }

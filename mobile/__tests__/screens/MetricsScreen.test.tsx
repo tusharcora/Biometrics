@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import { MetricsScreen } from '../../src/screens/MetricsScreen';
 import { apiFetch } from '../../src/api/client';
 import { addDays, todayCivil } from '../../src/lib/heatmap';
@@ -28,6 +28,28 @@ beforeEach(() => {
 });
 
 describe('MetricsScreen', () => {
+  it('syncs with Google Health on pull-to-refresh, then re-reads', async () => {
+    (apiFetch as jest.Mock).mockResolvedValue(records);
+    const syncNow = jest.fn().mockResolvedValue(undefined);
+    const syncModule = require('../../src/sync/SyncProvider');
+    const spy = jest
+      .spyOn(syncModule, 'useSync')
+      .mockReturnValue({ state: 'idle', lastSyncedAt: null, connection: 'CONNECTED', dataVersion: 0, syncNow });
+    const { UNSAFE_getByType, findByTestId } = render(<MetricsScreen />);
+    await findByTestId('trend-latest-STEPS');
+    const reads = () => (apiFetch as jest.Mock).mock.calls.filter(([p]) => p === '/me/biometrics').length;
+    const before = reads();
+
+    const { ScrollView } = require('react-native');
+    await act(async () => {
+      await UNSAFE_getByType(ScrollView).props.refreshControl.props.onRefresh();
+    });
+
+    expect(syncNow).toHaveBeenCalledWith('pull');
+    expect(reads()).toBe(before + 1);
+    spy.mockRestore();
+  });
+
   it('shows a trend card per metric for the default 30-day range', async () => {
     (apiFetch as jest.Mock).mockResolvedValue(records);
 
