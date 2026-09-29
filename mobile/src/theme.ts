@@ -21,7 +21,7 @@ export const METRIC_CONFIG: Record<MetricType, MetricConfig> = {
     label: 'Steps',
     format: (v) => Math.round(v).toLocaleString(),
     icon: 'footsteps-outline',
-    color: { light: 'rgb(249, 115, 22)', dark: 'rgb(251, 146, 60)' },
+    color: { light: 'rgb(234, 88, 12)', dark: 'rgb(251, 146, 60)' },
     goal: 10000,
     goalLabel: '10,000 steps',
   },
@@ -29,7 +29,7 @@ export const METRIC_CONFIG: Record<MetricType, MetricConfig> = {
     label: 'Resting Heart Rate',
     format: (v) => `${Math.round(v)} bpm`,
     icon: 'heart-outline',
-    color: { light: 'rgb(244, 63, 94)', dark: 'rgb(251, 113, 133)' },
+    color: { light: 'rgb(225, 29, 72)', dark: 'rgb(251, 113, 133)' },
   },
   SLEEP: {
     label: 'Sleep',
@@ -39,7 +39,7 @@ export const METRIC_CONFIG: Record<MetricType, MetricConfig> = {
       return `${hours}h ${minutes}m`;
     },
     icon: 'moon-outline',
-    color: { light: 'rgb(99, 102, 241)', dark: 'rgb(129, 140, 248)' },
+    color: { light: 'rgb(79, 70, 229)', dark: 'rgb(129, 140, 248)' },
     goal: 480,
     goalLabel: '8h goal',
   },
@@ -47,7 +47,7 @@ export const METRIC_CONFIG: Record<MetricType, MetricConfig> = {
     label: 'HRV',
     format: (v) => `${v.toFixed(1)} ms`,
     icon: 'pulse-outline',
-    color: { light: 'rgb(20, 184, 166)', dark: 'rgb(45, 212, 191)' },
+    color: { light: 'rgb(13, 148, 136)', dark: 'rgb(45, 212, 191)' },
   },
 };
 
@@ -59,11 +59,12 @@ export const METRIC_ORDER: MetricType[] = ['STEPS', 'RESTING_HR', 'SLEEP', 'HRV'
 // sync with global.css by hand.
 export const COLORS = {
   light: {
-    background: 'rgb(250, 250, 249)',
-    foreground: 'rgb(28, 25, 23)',
-    border: 'rgb(231, 229, 228)',
-    muted: 'rgb(120, 113, 108)',
-    accent: 'rgb(0, 176, 185)',
+    background: 'rgb(246, 246, 247)',
+    foreground: 'rgb(17, 18, 22)',
+    border: 'rgb(228, 228, 233)',
+    muted: 'rgb(98, 100, 110)',
+    accent: 'rgb(13, 148, 136)',
+    card: 'rgb(255, 255, 255)',
     // 4-band "is this number good" scale for Recovery/Sleep scores, separate
     // from the per-metric colours above ("which metric is this").
     scoreExcellent: 'rgb(22, 163, 74)',
@@ -71,42 +72,75 @@ export const COLORS = {
     scoreFair: 'rgb(217, 119, 6)',
     scorePoor: 'rgb(220, 38, 38)',
     surfaceRaised: 'rgb(255, 255, 255)',
-    hairline: 'rgb(231, 229, 228)',
-    bar: 'rgb(24, 24, 27)',
-    barIcon: 'rgb(212, 212, 216)',
-    barActive: 'rgb(250, 250, 249)',
-    barIconActive: 'rgb(24, 24, 27)',
+    hairline: 'rgb(228, 228, 233)',
+    // Light mode gets a light bar: a dark pill over light content read as a
+    // grey slab once the bar became glass. The active tab inverts (dark
+    // circle, white icon), mirroring dark mode.
+    bar: 'rgb(255, 255, 255)',
+    barIcon: 'rgb(98, 100, 110)',
+    barActive: 'rgb(17, 18, 22)',
+    barIconActive: 'rgb(255, 255, 255)',
     heatEmpty: 'rgb(245, 245, 244)',
     heat0: 'rgb(231, 229, 228)',
-    heat1: 'rgb(254, 215, 170)',
-    heat2: 'rgb(253, 186, 116)',
-    heat3: 'rgb(251, 146, 60)',
-    heat4: 'rgb(234, 88, 12)',
+    // A soft ramp on a light page: typical days read peach, only the
+    // biggest reach full orange.
+    heat1: 'rgb(255, 237, 213)',
+    heat2: 'rgb(254, 215, 170)',
+    heat3: 'rgb(253, 186, 116)',
+    heat4: 'rgb(249, 115, 22)',
+    // One accent per metric (the same values as METRIC_CONFIG), used only on
+    // that metric's own number, ring and line -- everything else stays neutral.
+    metricSteps: 'rgb(234, 88, 12)',
+    metricHeart: 'rgb(225, 29, 72)',
+    metricSleep: 'rgb(79, 70, 229)',
+    metricHrv: 'rgb(13, 148, 136)',
+    // The coach's own voice colour: the digest, memory prompts, coach entry.
+    coach: 'rgb(79, 70, 229)',
   },
   dark: {
-    background: 'rgb(12, 12, 13)',
+    background: 'rgb(10, 11, 14)',
     foreground: 'rgb(245, 245, 244)',
-    border: 'rgb(39, 39, 42)',
-    muted: 'rgb(161, 161, 170)',
-    accent: 'rgb(45, 197, 200)',
+    border: 'rgb(34, 37, 44)',
+    muted: 'rgb(155, 157, 166)',
+    accent: 'rgb(45, 212, 191)',
+    card: 'rgb(20, 22, 27)',
     scoreExcellent: 'rgb(74, 222, 128)',
     scoreGood: 'rgb(163, 230, 53)',
     scoreFair: 'rgb(251, 191, 36)',
     scorePoor: 'rgb(248, 113, 113)',
-    surfaceRaised: 'rgb(32, 32, 36)',
-    hairline: 'rgb(58, 58, 64)',
-    bar: 'rgb(28, 28, 31)',
+    surfaceRaised: 'rgb(28, 31, 38)',
+    hairline: 'rgb(44, 47, 55)',
+    bar: 'rgb(28, 30, 38)',
     barIcon: 'rgb(212, 212, 216)',
     barActive: 'rgb(250, 250, 249)',
-    barIconActive: 'rgb(12, 12, 13)',
-    heatEmpty: 'rgb(20, 20, 23)',
-    heat0: 'rgb(39, 39, 42)',
+    barIconActive: 'rgb(10, 11, 14)',
+    heatEmpty: 'rgb(20, 22, 27)',
+    heat0: 'rgb(34, 37, 44)',
     heat1: 'rgb(124, 45, 18)',
     heat2: 'rgb(194, 65, 12)',
     heat3: 'rgb(234, 88, 12)',
     heat4: 'rgb(251, 146, 60)',
+    metricSteps: 'rgb(251, 146, 60)',
+    metricHeart: 'rgb(251, 113, 133)',
+    metricSleep: 'rgb(129, 140, 248)',
+    metricHrv: 'rgb(45, 212, 191)',
+    coach: 'rgb(165, 180, 252)',
   },
 };
+
+// Loaded once in App.tsx (expo-font). React Native picks a face by family
+// name rather than by weight, so each weight is its own family; ui/text.tsx
+// maps the font-medium/semibold/bold classes onto these. Geist carries the UI
+// and the big tabular numerals; Instrument Serif is the editorial voice
+// (greetings, verdicts, the coach's digest) and is only used at display sizes.
+export const FONTS = {
+  sans: 'Geist_400Regular',
+  sansMedium: 'Geist_500Medium',
+  sansSemibold: 'Geist_600SemiBold',
+  sansBold: 'Geist_700Bold',
+  sansExtrabold: 'Geist_800ExtraBold',
+  display: 'InstrumentSerif_400Regular',
+} as const;
 
 // Duration/easing constants for score-transition animations, so no component
 // inlines its own. Easings are cubic-bezier control points (not Reanimated

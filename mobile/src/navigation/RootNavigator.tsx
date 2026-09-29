@@ -20,10 +20,11 @@ import { DevicesScreen } from '../screens/DevicesScreen';
 import { TabsNavigator, type TabParamList } from './TabsNavigator';
 import { syncTimezone } from '../lib/timezone';
 import { syncPushRegistration } from '../lib/pushRegistration';
-import { COLORS } from '../theme';
+import { COLORS, FONTS } from '../theme';
 import { ToastProvider } from '../components/ui/toast';
 import { SyncProvider } from '../sync/SyncProvider';
 import type { MetricRecord } from '../lib/metricInsights';
+import type { TrendRange } from '../lib/metricTrends';
 
 const LIGHT_NAV_THEME: Theme = {
   ...DefaultTheme,
@@ -39,7 +40,9 @@ export type RootStackParamList = {
   // The five-tab shell (Home, Activity, Coach, Metrics, Profile).
   Tabs: NavigatorScreenParams<TabParamList> | undefined;
   ConnectHealth: undefined;
-  MetricDetail: { metricType: MetricRecord['metricType']; records: MetricRecord[] };
+  // `records` is the metric's whole series; `range` is the window to open on
+  // (the Metrics tab passes its current one; default 30 days).
+  MetricDetail: { metricType: MetricRecord['metricType']; records: MetricRecord[]; range?: TrendRange };
   ScoreDetail: { date: string; type?: ScoreType }; // type defaults to RECOVERY
   Forecast: undefined;
   Patterns: undefined;
@@ -112,12 +115,14 @@ export function RootNavigator() {
               screenOptions={{
                 headerShadowVisible: false,
                 headerStyle: { backgroundColor: colors.background },
-                headerTitleStyle: { color: colors.foreground, fontWeight: '600' },
+                headerTitleStyle: { color: colors.foreground, fontFamily: FONTS.sansSemibold },
                 headerTintColor: colors.foreground,
+                // A bare chevron: the parent route's name ("Tabs") is not a place.
+                headerBackButtonDisplayMode: 'minimal',
               }}
             >
               <Stack.Screen name="Tabs" component={TabsNavigator} options={{ headerShown: false }} />
-              <Stack.Screen name="ConnectHealth" component={ConnectHealthScreen} options={{ title: 'Connect Health' }} />
+              <Stack.Screen name="ConnectHealth" component={ConnectHealthScreen} options={{ title: '' }} />
               <Stack.Screen name="MetricDetail" component={MetricDetailScreen} options={{ title: '' }} />
               <Stack.Screen name="ScoreDetail" component={ScoreDetailScreen} options={{ title: 'Score' }} />
               <Stack.Screen name="Forecast" component={ForecastScreen} options={{ title: FORECAST_COPY.title }} />

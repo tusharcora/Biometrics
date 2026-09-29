@@ -9,7 +9,9 @@ import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { CorrelationCard } from '../components/ui/correlation-card';
+import { SectionLabel } from '../components/ui/section-label';
 import { COLORS } from '../theme';
+import { withAlpha } from '../lib/utils';
 import { buildNotEnoughDataLine } from '../lib/patternSentence';
 
 type LoadState =
@@ -51,10 +53,11 @@ export function PatternsScreen() {
 
   if (state.status === 'loading') {
     return (
-      <SafeAreaView className="flex-1 bg-background">
-        <View testID="patterns-loading" className="gap-4 p-4">
-          <Skeleton className="h-48 w-full" />
-          <Skeleton className="h-48 w-full" />
+      <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
+        <View testID="patterns-loading" className="gap-5 px-5 pt-4">
+          <Skeleton className="h-3 w-32 rounded-full" />
+          <Skeleton className="h-64 w-full rounded-card" />
+          <Skeleton className="h-64 w-full rounded-card" />
         </View>
       </SafeAreaView>
     );
@@ -62,8 +65,11 @@ export function PatternsScreen() {
 
   if (state.status === 'error') {
     return (
-      <SafeAreaView className="flex-1 bg-background">
-        <View className="flex-1 items-center justify-center gap-3 p-6">
+      <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
+        <View className="flex-1 items-center justify-center gap-4 px-8">
+          <View className="h-12 w-12 items-center justify-center rounded-full bg-muted">
+            <Ionicons name="cloud-offline-outline" size={22} color={colors.muted} />
+          </View>
           <Text className="text-center text-muted-foreground">Patterns are unavailable right now.</Text>
           <Button testID="patterns-retry" variant="ghost" size="sm" onPress={() => setAttempt((n) => n + 1)}>
             Try again
@@ -77,50 +83,57 @@ export function PatternsScreen() {
   const labelFor = (habitType: string) => labels[habitType] ?? humanize(habitType);
 
   return (
-    <SafeAreaView className="flex-1 bg-background">
-      <ScrollView contentContainerStyle={{ gap: 16, padding: 16 }}>
-        {data.patterns.map((pattern) => (
-          <CorrelationCard
-            key={`${pattern.habitType}-${pattern.factor}-${pattern.lagDays}`}
-            pattern={pattern}
-            habitLabel={labelFor(pattern.habitType)}
-          />
-        ))}
+    <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
+      <ScrollView contentContainerStyle={{ gap: 24, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 32 }}>
+        {data.patterns.length > 0 ? (
+          <View className="gap-3">
+            <SectionLabel>Confirmed patterns</SectionLabel>
+            {data.patterns.map((pattern) => (
+              <CorrelationCard
+                key={`${pattern.habitType}-${pattern.factor}-${pattern.lagDays}`}
+                pattern={pattern}
+                habitLabel={labelFor(pattern.habitType)}
+              />
+            ))}
+          </View>
+        ) : null}
 
         {data.patterns.length === 0 ? (
-          <Card testID="patterns-empty" className="flex-row items-start gap-3">
-            <Ionicons name="sparkles-outline" size={18} color={colors.accent} />
-            <View className="flex-1 gap-1">
-              <Text className="text-sm font-semibold">No patterns yet</Text>
-              <Text className="text-sm text-muted-foreground">
-                A pattern only appears once it holds up in two weekly checks in a row, so the earliest you can see one is about two weeks
-                after you start logging. Patterns are comparisons within your own data, not medical claims.
-              </Text>
+          <Card testID="patterns-empty" className="gap-3 p-5">
+            <View className="h-10 w-10 items-center justify-center rounded-[12px]" style={{ backgroundColor: withAlpha(colors.accent, 0.14) }}>
+              <Ionicons name="sparkles-outline" size={19} color={colors.accent} />
             </View>
+            <Text className="font-display text-display-sm">No patterns yet</Text>
+            <Text className="text-sm text-muted-foreground">
+              A pattern only appears once it holds up in two weekly checks in a row, so the earliest you can see one is about two weeks
+              after you start logging. Patterns are comparisons within your own data, not medical claims.
+            </Text>
           </Card>
         ) : null}
 
         {data.notEnoughData.length > 0 ? (
-          <Card className="gap-4">
-            <Text className="text-sm font-semibold">Not enough data yet</Text>
-            {data.notEnoughData.map((item) => {
-              const unexposedShort = item.unexposedDays < item.requiredEach;
-              const have = Math.min(unexposedShort ? item.unexposedDays : item.exposedDays, item.requiredEach);
-              return (
-                <View key={item.habitType} testID={`not-enough-data-${item.habitType}`} className="gap-2">
-                  <Text className="text-sm text-muted-foreground">{buildNotEnoughDataLine(item, labelFor(item.habitType))}</Text>
-                  <View
-                    testID={`not-enough-data-progress-${item.habitType}`}
-                    accessibilityRole="progressbar"
-                    accessibilityValue={{ min: 0, max: item.requiredEach, now: have }}
-                    className="h-1.5 overflow-hidden rounded-full bg-muted"
-                  >
-                    <View className="h-full rounded-full bg-accent" style={{ width: `${(have / Math.max(item.requiredEach, 1)) * 100}%` }} />
+          <View className="gap-3">
+            <SectionLabel>Not enough data yet</SectionLabel>
+            <Card className="gap-5 p-5">
+              {data.notEnoughData.map((item) => {
+                const unexposedShort = item.unexposedDays < item.requiredEach;
+                const have = Math.min(unexposedShort ? item.unexposedDays : item.exposedDays, item.requiredEach);
+                return (
+                  <View key={item.habitType} testID={`not-enough-data-${item.habitType}`} className="gap-2.5">
+                    <Text className="text-sm">{buildNotEnoughDataLine(item, labelFor(item.habitType))}</Text>
+                    <View
+                      testID={`not-enough-data-progress-${item.habitType}`}
+                      accessibilityRole="progressbar"
+                      accessibilityValue={{ min: 0, max: item.requiredEach, now: have }}
+                      className="h-1.5 overflow-hidden rounded-full bg-muted"
+                    >
+                      <View className="h-full rounded-full bg-accent" style={{ width: `${(have / Math.max(item.requiredEach, 1)) * 100}%` }} />
+                    </View>
                   </View>
-                </View>
-              );
-            })}
-          </Card>
+                );
+              })}
+            </Card>
+          </View>
         ) : null}
       </ScrollView>
     </SafeAreaView>

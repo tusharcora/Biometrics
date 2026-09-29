@@ -38,9 +38,9 @@ export function TabsNavigator() {
     >
       <Tab.Screen name="Home" component={DashboardScreen} options={{ headerShown: false }} />
       <Tab.Screen name="Activity" component={ActivityScreen} options={{ headerShown: false }} />
-      <Tab.Screen name="Coach" component={CoachScreen} options={{ title: 'AI Coach' }} />
+      <Tab.Screen name="Coach" component={CoachScreen} options={{ title: 'AI Coach', headerShown: false }} />
       <Tab.Screen name="Metrics" component={MetricsScreen} options={{ headerShown: false }} />
-      <Tab.Screen name="Profile" component={SettingsScreen} options={{ title: 'Profile' }} />
+      <Tab.Screen name="Profile" component={SettingsScreen} options={{ title: 'Profile', headerShown: false }} />
     </Tab.Navigator>
   );
 }

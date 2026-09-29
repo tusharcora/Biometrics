@@ -2,7 +2,7 @@ import React from 'react';
 import { TextInput, View } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import { Text } from './text';
-import { COLORS } from '../../theme';
+import { COLORS, FONTS } from '../../theme';
 
 export interface TextFieldProps {
   label: string;
@@ -13,6 +13,14 @@ export interface TextFieldProps {
   keyboardType?: 'default' | 'email-address';
   autoComplete?: 'email' | 'password' | 'new-password' | 'name';
 }
+
+const TEXT_CONTENT_TYPE = {
+  email: 'username',
+  password: 'password',
+  'new-password': 'newPassword',
+  name: 'name',
+  none: 'none',
+} as const;
 
 export function TextField({ label, testID, value, onChangeText, secure, keyboardType = 'default', autoComplete }: TextFieldProps) {
   const { colorScheme } = useColorScheme();
@@ -29,8 +37,12 @@ export function TextField({ label, testID, value, onChangeText, secure, keyboard
         autoCapitalize={keyboardType === 'email-address' || secure ? 'none' : 'words'}
         autoCorrect={false}
         autoComplete={autoComplete}
+        // iOS AutoFill (and the Passwords app) key off textContentType, not
+        // autoComplete, to offer a saved login above the keyboard.
+        textContentType={TEXT_CONTENT_TYPE[autoComplete ?? 'none']}
         placeholderTextColor={colors.muted}
-        className="rounded-xl border border-border bg-card px-4 py-3 text-base text-foreground"
+        style={{ fontFamily: FONTS.sans }}
+        className="rounded-tile border border-border bg-card px-4 py-3 text-base text-foreground"
       />
     </View>
   );

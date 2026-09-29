@@ -1,7 +1,11 @@
 import React, { useCallback, useEffect, useMemo, useRef } from 'react';
 import { Modal, PanResponder, Pressable, View, useWindowDimensions } from 'react-native';
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, withTiming } from 'react-native-reanimated';
-import { MOTION } from '../../theme';
+import { useColorScheme } from 'nativewind';
+import { COLORS, MOTION } from '../../theme';
+import { GlassSurface } from './glass-surface';
+
+const SHEET_RADIUS = 38;
 
 export const DISMISS_DISTANCE = 80;
 export const DISMISS_VELOCITY = 0.8;
@@ -27,6 +31,9 @@ interface SheetProps {
 // again or unmounts.)
 export function Sheet({ visible, onClose, children, testID = 'sheet' }: SheetProps) {
   const { height } = useWindowDimensions();
+  const { colorScheme } = useColorScheme();
+  const scheme = colorScheme === 'light' ? 'light' : 'dark';
+  const colors = COLORS[scheme];
   const reduced = useReducedMotion();
   const translateY = useSharedValue(height);
   const closing = useRef(false);
@@ -98,11 +105,20 @@ export function Sheet({ visible, onClose, children, testID = 'sheet' }: SheetPro
           onPress={dismiss}
           className="absolute inset-0 bg-black/50"
         />
-        <Animated.View style={sheetStyle} className="rounded-t-3xl border border-hairline bg-surface-raised px-4 pb-8 pt-2">
-          <View testID={`${testID}-handle`} className="items-center py-2" {...pan.panHandlers}>
-            <View className="h-1 w-10 rounded-full bg-border" />
-          </View>
-          {children}
+        {/* Inset and fully rounded, as iOS 26 draws a partial sheet, on the
+            same material as the tab bar (glass where available). */}
+        <Animated.View style={[sheetStyle, { marginHorizontal: 8, marginBottom: 8 }]}>
+          <GlassSurface
+            scheme={scheme}
+            fallbackColor={colors.surfaceRaised}
+            borderRadius={SHEET_RADIUS}
+            style={{ paddingHorizontal: 16, paddingBottom: 28, paddingTop: 8, borderWidth: 1, borderColor: colors.hairline }}
+          >
+            <View testID={`${testID}-handle`} className="items-center py-2" {...pan.panHandlers}>
+              <View className="h-1 w-10 rounded-full bg-muted-foreground/40" />
+            </View>
+            {children}
+          </GlassSurface>
         </Animated.View>
       </View>
     </Modal>

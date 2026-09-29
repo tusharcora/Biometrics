@@ -2,13 +2,10 @@ import React from 'react';
 import { View, type ViewProps } from 'react-native';
 import { cn } from '../../lib/utils';
 
+// A surface one step above the background. Depth comes from that step and a
+// hairline border, not a drop shadow (shadows vanish on the dark background).
 export function Card({ className, ...props }: ViewProps & { className?: string }) {
-  return (
-    <View
-      className={cn('rounded-2xl border border-border bg-card p-4 shadow-sm shadow-black/5', className)}
-      {...props}
-    />
-  );
+  return <View className={cn('rounded-card border border-border bg-card p-4', className)} {...props} />;
 }
 
 export function CardHeader({ className, ...props }: ViewProps & { className?: string }) {

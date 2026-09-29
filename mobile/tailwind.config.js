@@ -31,6 +31,34 @@ module.exports = {
         'heat-2': 'rgb(var(--color-heat-2) / <alpha-value>)',
         'heat-3': 'rgb(var(--color-heat-3) / <alpha-value>)',
         'heat-4': 'rgb(var(--color-heat-4) / <alpha-value>)',
+        'metric-steps': 'rgb(var(--color-metric-steps) / <alpha-value>)',
+        'metric-heart': 'rgb(var(--color-metric-heart) / <alpha-value>)',
+        'metric-sleep': 'rgb(var(--color-metric-sleep) / <alpha-value>)',
+        'metric-hrv': 'rgb(var(--color-metric-hrv) / <alpha-value>)',
+        coach: 'rgb(var(--color-coach) / <alpha-value>)',
+      },
+      // Family names must match FONTS in src/theme.ts (the expo-font keys).
+      // ui/text.tsx swaps `sans` for the matching weight's family.
+      fontFamily: {
+        sans: ['Geist_400Regular'],
+        display: ['InstrumentSerif_400Regular'],
+      },
+      // The type scale. Everything a screen needs is one of these, rather
+      // than a one-off text-[13px]: eyebrow (small caps section labels),
+      // the numeral sizes for scores and metrics, and the serif display sizes.
+      fontSize: {
+        eyebrow: ['11px', { lineHeight: '14px', letterSpacing: '1.4px' }],
+        'numeral-sm': ['22px', { lineHeight: '26px', letterSpacing: '-0.5px' }],
+        numeral: ['30px', { lineHeight: '34px', letterSpacing: '-1px' }],
+        'numeral-lg': ['48px', { lineHeight: '52px', letterSpacing: '-1.8px' }],
+        'numeral-xl': ['80px', { lineHeight: '84px', letterSpacing: '-3px' }],
+        'display-sm': ['22px', { lineHeight: '28px' }],
+        display: ['28px', { lineHeight: '32px' }],
+        'display-lg': ['38px', { lineHeight: '42px' }],
+      },
+      borderRadius: {
+        tile: '18px',
+        card: '22px',
       },
     },
   },

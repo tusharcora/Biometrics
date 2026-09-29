@@ -6,6 +6,7 @@ import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from 'nativewind';
 import { Orb } from '../components/orb/Orb';
+import { GlassSurface } from '../components/ui/glass-surface';
 import { hubOrbAppearance } from '../lib/hubOrb';
 import { useCoachStatus } from '../lib/useCoachStatus';
 import { useKeyboardVisible } from '../lib/useKeyboardVisible';
@@ -26,7 +27,8 @@ const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
 export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
   const insets = useContext(SafeAreaInsetsContext);
   const { colorScheme } = useColorScheme();
-  const colors = colorScheme === 'light' ? COLORS.light : COLORS.dark;
+  const scheme = colorScheme === 'light' ? 'light' : 'dark';
+  const colors = COLORS[scheme];
   const reduced = useReducedMotion();
   const keyboardVisible = useKeyboardVisible();
   const { status, refresh } = useCoachStatus();
@@ -83,17 +85,29 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
       importantForAccessibility={keyboardVisible ? 'no-hide-descendants' : 'auto'}
       style={[{ position: 'absolute', left: 16, right: 16, bottom: Math.max(insets?.bottom ?? 0, FLOATING_BAR_MARGIN) }, barStyle]}
     >
+      {/* The shadow lives on a wrapper: the glass clips to its rounded shape. */}
       <View
-        className="border border-hairline bg-bar"
         style={{
           height: FLOATING_BAR_HEIGHT,
           borderRadius: FLOATING_BAR_HEIGHT / 2,
-          paddingHorizontal: 8,
           shadowColor: '#000',
-          shadowOpacity: 0.35,
-          shadowRadius: 16,
+          shadowOpacity: scheme === 'dark' ? 0.3 : 0.12,
+          shadowRadius: 18,
           shadowOffset: { width: 0, height: 8 },
           elevation: 12,
+        }}
+      >
+      {/* The material follows the theme, and so do the icons and the orb. */}
+      <GlassSurface
+        testID="floating-tab-bar-surface"
+        scheme={scheme}
+        fallbackColor={colors.bar}
+        borderRadius={FLOATING_BAR_HEIGHT / 2}
+        style={{
+          flex: 1,
+          paddingHorizontal: 8,
+          borderWidth: 1,
+          borderColor: scheme === 'dark' ? 'rgba(255, 255, 255, 0.10)' : 'rgba(0, 0, 0, 0.06)',
         }}
       >
         <View className="flex-1 flex-row items-center" onLayout={(e) => setInnerWidth(e.nativeEvent.layout.width)}>
@@ -118,7 +132,7 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
                 style={{ height: FLOATING_BAR_HEIGHT - 2 }}
               >
                 {isHub ? (
-                  <Orb testID="hub-orb" size={64} theme="dark" state={hub.state} paused={hub.paused} dimmed={hub.dimmed} />
+                  <Orb testID="hub-orb" size={64} theme={scheme} state={hub.state} paused={hub.paused} dimmed={hub.dimmed} />
                 ) : (
                   <Ionicons
                     name={ICONS[route.name] ?? 'ellipse-outline'}
@@ -130,6 +144,7 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
             );
           })}
         </View>
+      </GlassSurface>
       </View>
     </Animated.View>
   );

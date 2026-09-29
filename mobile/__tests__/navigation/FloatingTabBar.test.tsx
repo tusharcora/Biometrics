@@ -121,11 +121,11 @@ describe('FloatingTabBar', () => {
       expect(getByTestId('hub-orb')).toHaveStyle({ opacity: DIMMED_OPACITY });
     });
 
-    it('keeps the light-dotted ink on the always-dark pill when the app theme is light', () => {
+    it('follows the app theme, since the pill itself is light in light mode', () => {
       mockScheme = 'light';
       const { getByTestId } = render(bar(makeProps(0)));
 
-      expect(getByTestId('thinking-orb').props.accessibilityLabel).toBe('breathing:64:paused:dark');
+      expect(getByTestId('thinking-orb').props.accessibilityLabel).toBe('breathing:64:paused:light');
     });
 
     it('breathes at full brightness on the Coach tab', () => {

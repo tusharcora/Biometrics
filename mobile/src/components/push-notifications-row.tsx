@@ -4,6 +4,7 @@ import { useColorScheme } from 'nativewind';
 import { disablePush, enablePush, getPushState, type PushState } from '../lib/pushRegistration';
 import { COLORS } from '../theme';
 import { Text } from './ui/text';
+import { SettingsRow } from './ui/settings-list';
 
 const MESSAGES: Partial<Record<PushState['status'], string>> = {
   denied: 'Notifications are blocked — enable them in system settings',
@@ -47,23 +48,28 @@ export function PushNotificationsRow() {
   const message = MESSAGES[state.status];
 
   return (
-    <View testID="push-notifications" className="gap-1">
-      <View className="flex-row items-center gap-3 py-2">
-        <View className="flex-1">
-          <Text className="font-medium">Weekly recap notifications</Text>
-          <Text className="text-xs text-muted-foreground">A nudge when your weekly coach recap is ready</Text>
-        </View>
-        <Switch
-          testID="push-toggle"
-          accessibilityLabel="Weekly recap notifications"
-          value={state.status === 'on'}
-          disabled={busy}
-          onValueChange={(next) => void toggle(next)}
-          trackColor={{ true: colors.accent }}
-        />
-      </View>
+    <View testID="push-notifications">
+      <SettingsRow
+        icon="notifications-outline"
+        tint={colors.coach}
+        title="Weekly recap notifications"
+        subtitle="A nudge when your weekly coach recap is ready"
+        trailing={
+          <Switch
+            testID="push-toggle"
+            accessibilityLabel="Weekly recap notifications"
+            value={state.status === 'on'}
+            disabled={busy}
+            onValueChange={(next) => void toggle(next)}
+            trackColor={{ true: colors.accent }}
+          />
+        }
+      />
       {message ? (
-        <Text testID="push-message" className={state.status === 'error' ? 'text-sm text-destructive' : 'text-xs text-muted-foreground'}>
+        <Text
+          testID="push-message"
+          className={state.status === 'error' ? 'px-4 pb-3 text-sm text-destructive' : 'px-4 pb-3 text-xs text-muted-foreground'}
+        >
           {message}
         </Text>
       ) : null}

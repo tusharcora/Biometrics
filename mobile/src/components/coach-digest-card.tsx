@@ -1,11 +1,10 @@
 import React, { useEffect, useState } from 'react';
 import { View, Pressable, Modal, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useColorScheme } from 'nativewind';
-import { Ionicons } from '@expo/vector-icons';
 import { CoachConsentRequiredError, CoachDisabledError, fetchLatestDigest, type CoachDigestDTO } from '../api/coach';
-import { COLORS } from '../theme';
 import { Text } from './ui/text';
+import { StillOrb } from './ui/still-orb';
+import { SectionLabel } from './ui/section-label';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Skeleton } from './ui/skeleton';
@@ -22,8 +21,6 @@ function formatDigestDate(iso: string): string {
 // coach is enabled and consented; it renders nothing at all when there is no
 // digest, so a quiet week leaves no empty card.
 export function CoachDigestCard() {
-  const { colorScheme: scheme } = useColorScheme();
-  const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
   const [state, setState] = useState<State>({ status: 'loading' });
   const [open, setOpen] = useState(false);
 
@@ -63,18 +60,18 @@ export function CoachDigestCard() {
   return (
     <>
       <Pressable testID="coach-digest-card" accessibilityRole="button" onPress={() => setOpen(true)} className="active:opacity-80">
-        <Card className="gap-2">
+        <Card className="gap-2.5 border-coach/25 bg-coach/10">
           <View className="flex-row items-center gap-2">
-            <Ionicons name="newspaper-outline" size={18} color={colors.accent} />
-            <Text className="flex-1 text-base font-semibold">Your weekly recap</Text>
+            <StillOrb size={18} glow={false} />
+            <SectionLabel className="flex-1 text-coach">Your weekly recap</SectionLabel>
             <Text testID="coach-digest-date" className="text-xs text-muted-foreground">
               {formatDigestDate(digest.createdAt)}
             </Text>
           </View>
-          <Text testID="coach-digest-preview" numberOfLines={3} className="text-sm text-muted-foreground">
+          <Text testID="coach-digest-preview" numberOfLines={3} className="font-display text-display-sm">
             {digest.text}
           </Text>
-          <Text className="text-xs text-muted-foreground">Tap to read it all</Text>
+          <Text className="text-sm font-semibold text-coach">Tap to read it all →</Text>
         </Card>
       </Pressable>
 
@@ -82,7 +79,7 @@ export function CoachDigestCard() {
         <SafeAreaView className="flex-1 bg-background">
           <ScrollView contentContainerStyle={{ gap: 12, padding: 16 }}>
             <View className="flex-row items-center justify-between">
-              <Text className="text-xl font-bold">Your weekly recap</Text>
+              <Text className="font-display text-display">Your weekly recap</Text>
               <Text className="text-xs text-muted-foreground">{formatDigestDate(digest.createdAt)}</Text>
             </View>
             <Text testID="coach-digest-full" className="text-base">

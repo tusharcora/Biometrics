@@ -12,7 +12,9 @@ import { Reveal } from '../components/ui/reveal';
 import { SegmentedControl } from '../components/ui/segmented-control';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
-import { TrendLine } from '../components/ui/trend-line';
+import { RangeChart } from '../components/ui/range-chart';
+import { SectionLabel } from '../components/ui/section-label';
+import { rangeSentence, usualRange } from '../lib/usualRange';
 import { todayCivil } from '../lib/heatmap';
 import type { MetricRecord } from '../lib/metricInsights';
 import { TREND_RANGES, changeText, rangeDays, seriesFor, trendSummary, type TrendRange } from '../lib/metricTrends';
@@ -69,14 +71,17 @@ export function MetricsScreen() {
 
   const days = rangeDays(range);
   const summaries = useMemo(
-    () => METRIC_ORDER.map((type) => ({ type, summary: trendSummary(seriesFor(records ?? [], type), today, days) })),
+    () =>
+      METRIC_ORDER.map((type) => {
+        const series = seriesFor(records ?? [], type);
+        return { type, series, summary: trendSummary(series, today, days), usual: usualRange(series, today) };
+      }),
     [records, today, days],
   );
 
-  function openDetail(type: MetricType, points: MetricRecord[]) {
-    navigation.navigate('MetricDetail', { metricType: type, records: points });
+  function openDetail(type: MetricType, series: MetricRecord[]) {
+    navigation.navigate('MetricDetail', { metricType: type, records: series, range });
   }
-
   let body: React.ReactNode;
   if (records === null && !failed) {
     body = (
@@ -102,7 +107,7 @@ export function MetricsScreen() {
       </Card>
     );
   } else {
-    body = summaries.map(({ type, summary }, index) => {
+    body = summaries.map(({ type, series, summary, usual }, index) => {
       const config = METRIC_CONFIG[type];
       const color = config.color[scheme];
       return (
@@ -112,39 +117,46 @@ export function MetricsScreen() {
             accessibilityRole="button"
             accessibilityLabel={`${config.label} trend`}
             disabled={!summary}
-            onPress={() => summary && openDetail(type, summary.points)}
+            onPress={() => summary && openDetail(type, series)}
           >
             <Card className="gap-3">
-              <View className="flex-row items-center justify-between">
-                <View className="flex-row items-center gap-2">
-                  <Ionicons name={config.icon as any} size={16} color={color} />
-                  <Text className="font-medium">{config.label}</Text>
+              <View className="flex-row items-start justify-between gap-3">
+                <View className="flex-1 gap-1">
+                  <View className="flex-row items-center gap-1.5">
+                    <Ionicons name={config.icon as any} size={14} color={color} />
+                    <Text className="text-sm font-medium" style={{ color }}>
+                      {config.label}
+                    </Text>
+                  </View>
+                  {summary ? (
+                    <Text testID={`trend-latest-${type}`} className="text-numeral font-bold" style={{ fontVariant: ['tabular-nums'] }}>
+                      {config.format(summary.latest)}
+                    </Text>
+                  ) : null}
                 </View>
-                {summary ? (
-                  <Text testID={`trend-latest-${type}`} className="text-lg font-semibold" style={{ fontVariant: ['tabular-nums'] }}>
-                    {config.format(summary.latest)}
-                  </Text>
-                ) : null}
+                {summary ? <Ionicons name="chevron-forward" size={16} color={colors.muted} style={{ marginTop: 2 }} /> : null}
               </View>
 
               {summary ? (
                 <>
+                  {usual ? (
+                    <Text testID={`trend-position-${type}`} className="text-sm text-muted-foreground">
+                      {rangeSentence(summary.latest, usual, config.format)}
+                    </Text>
+                  ) : null}
                   {summary.points.length >= 2 ? (
-                    <TrendLine data={summary.points.map((p) => p.value)} color={color} />
+                    <RangeChart compact points={summary.points} range={usual} color={color} format={config.format} height={72} />
                   ) : (
                     <Text className="py-6 text-center text-xs text-muted-foreground">One reading in this range so far</Text>
                   )}
-                  <View className="flex-row justify-between">
+                  <View className="flex-row justify-between gap-3">
                     <Text testID={`trend-average-${type}`} className="text-xs text-muted-foreground">
                       {`Avg ${config.format(summary.average)}`}
                     </Text>
-                    <Text className="text-xs text-muted-foreground">
-                      {`${config.format(summary.min)} – ${config.format(summary.max)}`}
+                    <Text testID={`trend-change-${type}`} className="flex-1 text-right text-xs text-muted-foreground">
+                      {changeText(summary.changePercent, days)}
                     </Text>
                   </View>
-                  <Text testID={`trend-change-${type}`} className="text-xs text-muted-foreground">
-                    {changeText(summary.changePercent, days)}
-                  </Text>
                 </>
               ) : (
                 <Text testID={`trend-empty-${type}`} className="text-sm text-muted-foreground">
@@ -161,16 +173,21 @@ export function MetricsScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
       <ScrollView
-        contentContainerStyle={{ gap: 16, padding: 16, paddingBottom: clearance }}
+        contentContainerStyle={{ gap: 16, paddingHorizontal: 20, paddingTop: 8, paddingBottom: clearance }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.muted} />}
       >
-        <Text className="text-2xl font-bold">Metrics</Text>
+        <View className="gap-1">
+          <SectionLabel>Against your usual range</SectionLabel>
+          <Text className="font-display text-display-lg">Metrics</Text>
+        </View>
 
         <SegmentedControl testID="metrics-range" options={RANGE_OPTIONS} value={range} onChange={setRange} />
 
         <PressableScale testID="patterns-button" accessibilityRole="button" onPress={() => navigation.navigate('Patterns')}>
           <Card className="flex-row items-center gap-3">
-            <Ionicons name="git-compare-outline" size={18} color={colors.accent} />
+            <View className="h-10 w-10 items-center justify-center rounded-tile bg-accent/15">
+              <Ionicons name="git-compare-outline" size={18} color={colors.accent} />
+            </View>
             <View className="flex-1 gap-0.5">
               <Text className="text-base font-semibold">Patterns</Text>
               <Text className="text-xs text-muted-foreground">How your habits line up with your recovery</Text>

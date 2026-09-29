@@ -10,6 +10,14 @@ interface BaselineProgressRingProps {
   daysRequired: number;
   size?: number;
   strokeWidth?: number;
+  // False when the ring is too small to hold "9/14 days"; the caller then
+  // renders baselineLabel(...) beside it.
+  showLabel?: boolean;
+}
+
+export function baselineLabel(daysCollected: number, daysRequired: number): string {
+  const required = Math.max(1, Math.round(daysRequired));
+  return `${Math.max(0, Math.min(Math.round(daysCollected), required))}/${required} days`;
 }
 
 const TICK_GAP = 3;
@@ -17,7 +25,7 @@ const TICK_GAP = 3;
 // The cold-start state: one tick per required day, filled as days accumulate.
 // Deliberately NOT a continuous arc in a score colour, so "building your
 // baseline" can never be mistaken for a real (low) score ring.
-export function BaselineProgressRing({ daysCollected, daysRequired, size = 84, strokeWidth = 8 }: BaselineProgressRingProps) {
+export function BaselineProgressRing({ daysCollected, daysRequired, size = 84, strokeWidth = 8, showLabel = true }: BaselineProgressRingProps) {
   const { colorScheme: scheme } = useColorScheme();
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
   const required = Math.max(1, Math.round(daysRequired));
@@ -55,7 +63,9 @@ export function BaselineProgressRing({ daysCollected, daysRequired, size = 84, s
           );
         })}
       </Svg>
-      <CountUp value={collected} format={(v) => `${Math.round(v)}/${required} days`} className="text-xs font-semibold" />
+      {showLabel ? (
+        <CountUp value={collected} format={(v) => `${Math.round(v)}/${required} days`} className="text-xs font-semibold" />
+      ) : null}
     </View>
   );
 }

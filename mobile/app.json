@@ -9,7 +9,10 @@
     "userInterfaceStyle": "automatic",
     "ios": {
       "supportsTablet": true,
-      "bundleIdentifier": "com.tusharcora.biometrics"
+      "bundleIdentifier": "com.tusharcora.biometrics",
+      "infoPlist": {
+        "CFBundleDisplayName": "Biometrics"
+      }
     },
     "android": {
       "adaptiveIcon": {

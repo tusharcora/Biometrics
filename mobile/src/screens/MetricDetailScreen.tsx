@@ -1,35 +1,53 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, FlatList, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation, type RouteProp } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
-import { Ionicons } from '@expo/vector-icons';
 import { Text } from '../components/ui/text';
 import { Card } from '../components/ui/card';
-import { TrendLine } from '../components/ui/trend-line';
 import { CountUp } from '../components/ui/count-up';
-import { COLORS, METRIC_CONFIG } from '../theme';
+import { RangeChart } from '../components/ui/range-chart';
+import { SectionLabel } from '../components/ui/section-label';
+import { SegmentedControl } from '../components/ui/segmented-control';
+import { METRIC_CONFIG } from '../theme';
 import { computeStats, buildDetailSentences, type MetricRecord } from '../lib/metricInsights';
+import { TREND_RANGES, inWindow, rangeDays, type TrendRange } from '../lib/metricTrends';
+import { rangePendingText, rangeSentence, usualRange } from '../lib/usualRange';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type MetricDetailRoute = RouteProp<RootStackParamList, 'MetricDetail'>;
+
+const RANGE_OPTIONS = TREND_RANGES.map(({ value, label }) => ({ value, label }));
+
+/** "Wed, Sep 2" from a civil-date record, without shifting the day by timezone. */
+export function readingDate(record: MetricRecord): string {
+  const [y, m, d] = record.recordedAt.slice(0, 10).split('-').map(Number);
+  return new Date(y, m - 1, d).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' });
+}
 
 export function MetricDetailScreen() {
   const route = useRoute<MetricDetailRoute>();
   const navigation = useNavigation<any>();
   const { colorScheme: scheme } = useColorScheme();
-  const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
-  const { metricType, records } = route.params;
+  const { metricType, records, range: initialRange } = route.params;
   const config = METRIC_CONFIG[metricType];
   const color = scheme === 'dark' ? config.color.dark : config.color.light;
+  const [range, setRange] = useState<TrendRange>(initialRange ?? '30d');
+  const [scrubbed, setScrubbed] = useState<number | null>(null);
 
   const series = useMemo(
-    () => [...records].sort((a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime()),
+    () => [...records].sort((a, b) => (a.recordedAt < b.recordedAt ? -1 : a.recordedAt > b.recordedAt ? 1 : 0)),
     [records],
   );
-  const stats = useMemo(() => computeStats(series), [series]);
-  const sentences = useMemo(() => (stats ? buildDetailSentences(metricType, series, stats) : []), [metricType, series, stats]);
-  const recent = useMemo(() => [...series].reverse(), [series]);
+  // Windows end on the latest reading rather than the wall clock, so a gap in
+  // syncing shows the last stretch of data instead of an empty chart.
+  const latestDate = series.length > 0 ? series[series.length - 1].recordedAt.slice(0, 10) : null;
+  const days = rangeDays(range);
+  const windowed = useMemo(() => (latestDate ? inWindow(series, latestDate, days) : []), [series, latestDate, days]);
+  const usual = useMemo(() => (latestDate ? usualRange(series, latestDate) : null), [series, latestDate]);
+  const stats = useMemo(() => computeStats(windowed), [windowed]);
+  const sentences = useMemo(() => (stats ? buildDetailSentences(metricType, windowed, stats) : []), [metricType, windowed, stats]);
+  const recent = useMemo(() => [...windowed].reverse(), [windowed]);
 
   React.useLayoutEffect(() => {
     navigation.setOptions({ title: config.label });
@@ -37,7 +55,7 @@ export function MetricDetailScreen() {
 
   if (!stats) {
     return (
-      <SafeAreaView className="flex-1 bg-background">
+      <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
         <View className="flex-1 items-center justify-center p-6">
           <Text className="text-center text-muted-foreground">No {config.label.toLowerCase()} data yet.</Text>
         </View>
@@ -45,57 +63,93 @@ export function MetricDetailScreen() {
     );
   }
 
+  const shown = scrubbed !== null ? windowed[scrubbed] : null;
+  const headlineValue = shown ? shown.value : stats.latest;
+  const context = usual
+    ? rangeSentence(headlineValue, usual, config.format)
+    : rangePendingText(inWindow(series, latestDate!, 30).length);
+
   return (
-    <SafeAreaView className="flex-1 bg-background">
+    <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
       <FlatList
         data={recent}
         keyExtractor={(item) => item.id}
         contentContainerStyle={styles.list}
         ListHeaderComponent={
-          <View className="gap-4">
-            <View className="flex-row items-center gap-2">
-              <Ionicons name={config.icon as any} size={20} color={color} />
-              <CountUp value={stats.latest} format={config.format} className="text-4xl font-bold" />
+          <View className="gap-5 pb-2">
+            <View className="gap-1.5">
+              <SectionLabel style={{ color }}>{shown ? readingDate(shown) : 'Latest'}</SectionLabel>
+              {shown ? (
+                <Text className="text-numeral-lg font-bold" style={{ fontVariant: ['tabular-nums'] }}>
+                  {config.format(shown.value)}
+                </Text>
+              ) : (
+                <CountUp
+                  value={stats.latest}
+                  format={config.format}
+                  className="text-numeral-lg font-bold"
+                  style={{ fontVariant: ['tabular-nums'] }}
+                />
+              )}
+              <Text testID="metric-range-context" className="text-base text-muted-foreground">
+                {context}
+              </Text>
             </View>
 
-            <Card>
-              <TrendLine data={series.map((r) => r.value)} color={color} height={120} />
+            <SegmentedControl testID="metric-detail-range" options={RANGE_OPTIONS} value={range} onChange={setRange} />
+
+            <Card className="px-3 py-4">
+              <RangeChart
+                testID="metric-range-chart"
+                points={windowed}
+                range={usual}
+                color={color}
+                format={config.format}
+                height={200}
+                onSelect={setScrubbed}
+                accessibilityLabel={`${config.label} over ${days} days. ${context}.`}
+              />
             </Card>
 
-            <Card className="flex-row justify-between">
-              <View className="items-center gap-1">
-                <Text className="text-xs text-muted-foreground">Min</Text>
-                <Text className="font-semibold">{config.format(stats.min)}</Text>
-              </View>
-              <View className="items-center gap-1">
-                <Text className="text-xs text-muted-foreground">Average</Text>
-                <Text className="font-semibold">{config.format(stats.average)}</Text>
-              </View>
-              <View className="items-center gap-1">
-                <Text className="text-xs text-muted-foreground">Max</Text>
-                <Text className="font-semibold">{config.format(stats.max)}</Text>
-              </View>
-            </Card>
-
-            <Card className="gap-2">
-              <View className="flex-row items-center gap-2">
-                <Ionicons name="sparkles-outline" size={16} color={colors.accent} />
-                <Text className="text-sm font-semibold">Insights</Text>
-              </View>
-              {sentences.map((sentence, i) => (
-                <Text key={i} className="text-sm text-muted-foreground">
-                  {sentence}
-                </Text>
+            <View className="flex-row rounded-card border border-border bg-card">
+              {[
+                { label: 'Low', value: stats.min },
+                { label: 'Average', value: stats.average },
+                { label: 'High', value: stats.max },
+              ].map((cell, i) => (
+                <View key={cell.label} className={`flex-1 gap-1 px-4 py-3.5 ${i > 0 ? 'border-l border-border' : ''}`}>
+                  <Text className="text-xs text-muted-foreground">{cell.label}</Text>
+                  <Text className="text-base font-bold" numberOfLines={1} adjustsFontSizeToFit style={{ fontVariant: ['tabular-nums'] }}>
+                    {config.format(cell.value)}
+                  </Text>
+                </View>
               ))}
-            </Card>
+            </View>
 
-            <Text className="text-sm font-semibold text-muted-foreground">Recent readings</Text>
+            {sentences.length > 0 ? (
+              <Card className="gap-2">
+                <SectionLabel>Insights</SectionLabel>
+                {sentences.map((sentence, i) => (
+                  <Text key={i} className={i === 0 ? 'font-display text-display-sm' : 'text-sm text-muted-foreground'}>
+                    {sentence}
+                  </Text>
+                ))}
+              </Card>
+            ) : null}
+
+            <SectionLabel className="pt-1">Readings</SectionLabel>
           </View>
         }
-        renderItem={({ item }) => (
-          <View className="flex-row items-center justify-between border-b border-border py-3">
-            <Text style={{ fontVariant: ['tabular-nums'] }}>{config.format(item.value)}</Text>
-            <Text className="text-muted-foreground">{new Date(item.recordedAt).toDateString()}</Text>
+        renderItem={({ item, index }) => (
+          <View
+            className={`flex-row items-center justify-between bg-card px-4 py-3.5 ${index === 0 ? 'rounded-t-card' : 'border-t border-border'} ${
+              index === recent.length - 1 ? 'rounded-b-card' : ''
+            }`}
+          >
+            <Text className="text-muted-foreground">{readingDate(item)}</Text>
+            <Text className="font-semibold" style={{ fontVariant: ['tabular-nums'] }}>
+              {config.format(item.value)}
+            </Text>
           </View>
         )}
       />
@@ -104,5 +158,5 @@ export function MetricDetailScreen() {
 }
 
 const styles = StyleSheet.create({
-  list: { padding: 16, gap: 16 },
+  list: { padding: 20, paddingTop: 12 },
 });

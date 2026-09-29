@@ -55,8 +55,10 @@ export function buildDetailSentences(type: MetricType, series: MetricRecord[], s
   const sentences: string[] = [buildHeadline(type, stats)];
 
   const count = series.length;
+  // Lowercase mid-sentence ("resting heart rate"), but never an acronym ("HRV").
+  const name = config.label === config.label.toUpperCase() ? config.label : config.label.toLowerCase();
   sentences.push(
-    `Over the last ${count} reading${count === 1 ? '' : 's'}, ${config.label.toLowerCase()} ranged from ${config.format(
+    `Over the last ${count} reading${count === 1 ? '' : 's'}, ${name} ranged from ${config.format(
       stats.min,
     )} to ${config.format(stats.max)}, averaging ${config.format(stats.average)}.`,
   );

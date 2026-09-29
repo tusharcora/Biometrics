@@ -15,6 +15,14 @@ exports[`FactorBar matches its snapshot 1`] = `
     >
       <Text
         className="text-foreground text-sm font-medium"
+        style={
+          [
+            {
+              "fontFamily": "Geist_500Medium",
+            },
+            undefined,
+          ]
+        }
       >
         HRV
       </Text>
@@ -22,11 +30,16 @@ exports[`FactorBar matches its snapshot 1`] = `
     <Text
       className="text-foreground text-sm font-semibold"
       style={
-        {
-          "fontVariant": [
-            "tabular-nums",
-          ],
-        }
+        [
+          {
+            "fontFamily": "Geist_600SemiBold",
+          },
+          {
+            "fontVariant": [
+              "tabular-nums",
+            ],
+          },
+        ]
       }
     >
       −4.5 pts
@@ -85,6 +98,14 @@ exports[`FactorBar matches its snapshot: sleep duration below goal 1`] = `
     >
       <Text
         className="text-foreground text-sm font-medium"
+        style={
+          [
+            {
+              "fontFamily": "Geist_500Medium",
+            },
+            undefined,
+          ]
+        }
       >
         Sleep duration
       </Text>
@@ -92,11 +113,16 @@ exports[`FactorBar matches its snapshot: sleep duration below goal 1`] = `
     <Text
       className="text-foreground text-sm font-semibold"
       style={
-        {
-          "fontVariant": [
-            "tabular-nums",
-          ],
-        }
+        [
+          {
+            "fontFamily": "Geist_600SemiBold",
+          },
+          {
+            "fontVariant": [
+              "tabular-nums",
+            ],
+          },
+        ]
       }
     >
       −6.4 pts

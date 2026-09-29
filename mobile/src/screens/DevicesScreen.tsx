@@ -1,11 +1,14 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { ScrollView } from 'react-native';
+import { useColorScheme } from 'nativewind';
 import { authClient } from '../auth/authClient';
 import { unwrap, messageFor } from '../auth/authErrors';
+import { COLORS } from '../theme';
+import { cn } from '../lib/utils';
 import { Text } from '../components/ui/text';
-import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
+import { SettingsGroup, SettingsRow } from '../components/ui/settings-list';
 
 interface DeviceSession {
   id: string;
@@ -23,6 +26,8 @@ export function describeDevice(userAgent: string | null | undefined): string {
 }
 
 export function DevicesScreen() {
+  const { colorScheme: scheme } = useColorScheme();
+  const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
   const { data } = authClient.useSession();
   const currentToken = data?.session?.token;
   const [sessions, setSessions] = useState<DeviceSession[] | null>(null);
@@ -60,41 +65,57 @@ export function DevicesScreen() {
   const others = sessions?.filter((s) => s.token !== currentToken) ?? [];
 
   return (
-    <ScrollView contentContainerClassName="gap-3 p-4">
-      {sessions?.map((s) => (
-        <Card key={s.id} testID={`device-${s.id}`} className="flex-row items-center justify-between">
-          <View className="gap-1">
-            <Text className="text-base font-medium">{describeDevice(s.userAgent)}</Text>
-            <Text className="text-xs text-muted-foreground">Last active {new Date(s.updatedAt).toLocaleDateString()}</Text>
-          </View>
-          {!currentToken ? null : s.token === currentToken ? (
-            <Badge testID={`this-device-badge-${s.id}`} variant="accent">
-              This device
-            </Badge>
-          ) : (
-            <Button
-              testID={`revoke-${s.id}`}
-              variant="ghost"
-              disabled={busy}
-              // Better Auth revokes another device's session by its token.
-              onPress={() => act(() => unwrap(authClient.revokeSession({ token: s.token })))}
-            >
-              Sign out
-            </Button>
-          )}
-        </Card>
-      ))}
-      {currentToken && others.length > 0 ? (
-        <Button
-          testID="revoke-others-button"
-          variant="ghost"
-          disabled={busy}
-          onPress={() => act(() => unwrap(authClient.revokeOtherSessions()))}
-        >
-          Sign out all other devices
-        </Button>
+    <ScrollView className="bg-background" contentContainerStyle={{ gap: 24, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 32 }}>
+      {sessions && sessions.length > 0 ? (
+        <SettingsGroup label="Signed in">
+          {sessions.map((s) => {
+            const name = describeDevice(s.userAgent);
+            const current = !!currentToken && s.token === currentToken;
+            return (
+              <SettingsRow
+                key={s.id}
+                testID={`device-${s.id}`}
+                icon={name === 'iPad' ? 'tablet-portrait-outline' : 'phone-portrait-outline'}
+                tint={current ? colors.accent : colors.muted}
+                title={name}
+                subtitle={`Last active ${new Date(s.updatedAt).toLocaleDateString()}`}
+                trailing={
+                  !currentToken ? null : current ? (
+                    <Badge testID={`this-device-badge-${s.id}`} variant="accent" className="self-center">
+                      This device
+                    </Badge>
+                  ) : (
+                    <Button
+                      testID={`revoke-${s.id}`}
+                      variant="destructive"
+                      size="sm"
+                      className={cn(busy ? 'opacity-40' : '')}
+                      disabled={busy}
+                      // Better Auth revokes another device's session by its token.
+                      onPress={() => act(() => unwrap(authClient.revokeSession({ token: s.token })))}
+                    >
+                      Sign out
+                    </Button>
+                  )
+                }
+              />
+            );
+          })}
+        </SettingsGroup>
       ) : null}
-      {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
+      {currentToken && others.length > 0 ? (
+        <SettingsGroup>
+          <SettingsRow
+            testID="revoke-others-button"
+            icon="log-out-outline"
+            destructive
+            title="Sign out all other devices"
+            disabled={busy}
+            onPress={() => act(() => unwrap(authClient.revokeOtherSessions()))}
+          />
+        </SettingsGroup>
+      ) : null}
+      {error ? <Text className="px-4 text-sm text-destructive">{error}</Text> : null}
     </ScrollView>
   );
 }

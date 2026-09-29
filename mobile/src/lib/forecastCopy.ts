@@ -13,6 +13,8 @@ export const FORECAST_COPY = {
   lowConfidence: 'Today’s score isn’t confident enough to forecast from yet. Check back after tonight’s sync.',
   band: (lo: number, hi: number) => `Likely ${Math.round(lo)}–${Math.round(hi)}`,
   trackRecord: (within: number, hits: number, days: number) => `Within ±${within} on ${hits} of the last ${days} days`,
+  legendActual: 'Actual score',
+  legendForecast: 'Forecast',
   loadError: 'Couldn’t load tomorrow’s forecast. Try again in a moment.',
   unavailable: 'Tomorrow’s forecast is unavailable right now.',
   planCta: 'Plan tomorrow →',

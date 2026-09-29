@@ -171,6 +171,25 @@ export function buildScoreHeadline(score: DailyScoreDTO): string {
   return sentences.join(' ');
 }
 
+// The one-line verdict under the Home hero ring: which factor moved today's
+// score most, in plain words. Same factor ranking as buildScoreHeadline, but
+// short -- the full explanation (and the framing) lives on Score detail.
+// Null when there is no score to explain yet.
+export function buildScoreVerdict(score: DailyScoreDTO): string | null {
+  const active = score.factors.filter((f) => !f.excluded);
+  if (score.score === null || active.length === 0) return null;
+
+  const top = active
+    .map((factor, index) => ({ factor, index }))
+    .sort(
+      (a, b) =>
+        Math.abs(b.factor.points) - Math.abs(a.factor.points) || b.factor.weight - a.factor.weight || a.index - b.index,
+    )[0].factor;
+
+  if (Math.abs(top.points) < NEGLIGIBLE_POINTS) return 'Right around your own baseline today.';
+  return top.points > 0 ? `${top.label} is lifting it today.` : `${top.label} is holding it back today.`;
+}
+
 function formatBaselineValue(value: number): string {
   return String(Math.round(value * 10) / 10);
 }

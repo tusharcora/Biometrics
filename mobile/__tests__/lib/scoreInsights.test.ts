@@ -1,5 +1,6 @@
 import {
   buildScoreHeadline,
+  buildScoreVerdict,
   buildBaselineSentence,
   formatPoints,
   scoreBand,
@@ -45,6 +46,40 @@ function score(overrides: Partial<DailyScoreDTO> = {}): DailyScoreDTO {
     ...overrides,
   };
 }
+
+describe('buildScoreVerdict', () => {
+  it('names the factor that lifted the score most', () => {
+    const verdict = buildScoreVerdict(
+      score({ factors: [factor({ factor: 'HRV', points: 8.2 }), factor({ factor: 'RHR', points: -3.1 })] }),
+    );
+    expect(verdict).toBe('HRV is lifting it today.');
+  });
+
+  it('names the factor that held it back when the biggest mover is a drag', () => {
+    const verdict = buildScoreVerdict(
+      score({ factors: [factor({ factor: 'HRV', points: 1.1 }), factor({ factor: 'RHR', points: -6.4 })] }),
+    );
+    expect(verdict).toBe('Resting HR is holding it back today.');
+  });
+
+  it('ignores excluded factors', () => {
+    const verdict = buildScoreVerdict(
+      score({ factors: [factor({ factor: 'HRV', points: 99, excluded: true }), factor({ factor: 'SLEEP_DEBT', points: 2 })] }),
+    );
+    expect(verdict).toBe('Sleep debt is lifting it today.');
+  });
+
+  it('says the day is around baseline when no factor moved it', () => {
+    expect(buildScoreVerdict(score({ factors: [factor({ factor: 'HRV', points: 0.1 })] }))).toBe(
+      'Right around your own baseline today.',
+    );
+  });
+
+  it('is null when there is no score to explain', () => {
+    expect(buildScoreVerdict(score({ score: null, factors: [factor({ factor: 'HRV', excluded: true })] }))).toBeNull();
+    expect(buildScoreVerdict(score({ factors: [] }))).toBeNull();
+  });
+});
 
 describe('buildScoreHeadline', () => {
   it('names the largest-|points| factor as the biggest lift on a positive day', () => {

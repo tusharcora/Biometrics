@@ -1,12 +1,16 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { ScrollView } from 'react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
+import type { Ionicons } from '@expo/vector-icons';
+import { useColorScheme } from 'nativewind';
 import { authClient } from '../auth/authClient';
 import { unwrap, messageFor } from '../auth/authErrors';
 import { useGoogleIdToken } from '../auth/useGoogleIdToken';
+import { COLORS } from '../theme';
+import { cn } from '../lib/utils';
 import { Text } from '../components/ui/text';
-import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
+import { SettingsGroup, SettingsRow } from '../components/ui/settings-list';
 
 interface LinkedAccount {
   id: string;
@@ -15,9 +19,12 @@ interface LinkedAccount {
 }
 
 const LABELS: Record<string, string> = { apple: 'Apple', google: 'Google', credential: 'Email and password' };
+const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = { apple: 'logo-apple', google: 'logo-google', credential: 'mail-outline' };
 const LINKABLE = ['apple', 'google'] as const;
 
 export function SignInMethodsScreen() {
+  const { colorScheme: scheme } = useColorScheme();
+  const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
   const [accounts, setAccounts] = useState<LinkedAccount[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
@@ -69,40 +76,59 @@ export function SignInMethodsScreen() {
 
   const linked = new Set(accounts?.map((a) => a.providerId));
   const onlyOne = (accounts?.length ?? 0) <= 1;
+  const unlinked = accounts ? LINKABLE.filter((p) => !linked.has(p)) : [];
+  const tintFor = (providerId: string) => (providerId === 'credential' ? colors.metricSleep : providerId === 'apple' ? colors.foreground : colors.accent);
 
   return (
-    <ScrollView contentContainerClassName="gap-4 p-4">
-      <Text className="text-sm text-muted-foreground">
+    <ScrollView className="bg-background" contentContainerStyle={{ gap: 24, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 32 }}>
+      <Text className="px-4 text-sm text-muted-foreground">
         You can sign in with any of these. Linking only works for an account that uses the same email.
       </Text>
-      {accounts?.map((account) => (
-        <Card key={account.id} testID={`method-${account.providerId}`} className="flex-row items-center justify-between">
-          <Text className="text-base font-medium">{LABELS[account.providerId] ?? account.providerId}</Text>
-          <Button
-            testID={`unlink-${account.providerId}-button`}
-            variant="ghost"
-            disabled={busy || onlyOne}
-            // /unlink-account matches `accountId` against the account row's own id.
-            onPress={() => act(() => unwrap(authClient.unlinkAccount({ accountId: account.id })))}
-          >
-            Unlink
-          </Button>
-        </Card>
-      ))}
-      {onlyOne && accounts ? <Text className="text-xs text-muted-foreground">You need at least one way to sign in.</Text> : null}
-      <View className="gap-2">
-        {accounts && LINKABLE.filter((p) => !linked.has(p)).map((provider) => (
-          <Button
-            key={provider}
-            testID={`link-${provider}-button`}
-            disabled={busy || (provider === 'google' && !google.ready)}
-            onPress={() => (provider === 'apple' ? linkApple() : google.prompt())}
-          >
-            {`Link ${LABELS[provider]}`}
-          </Button>
-        ))}
-      </View>
-      {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
+      {accounts && accounts.length > 0 ? (
+        <SettingsGroup label="Linked" footer={onlyOne ? 'You need at least one way to sign in.' : undefined}>
+          {accounts.map((account) => (
+            <SettingsRow
+              key={account.id}
+              testID={`method-${account.providerId}`}
+              icon={ICONS[account.providerId] ?? 'key-outline'}
+              tint={tintFor(account.providerId)}
+              title={LABELS[account.providerId] ?? account.providerId}
+              trailing={
+                <Button
+                  testID={`unlink-${account.providerId}-button`}
+                  variant="destructive"
+                  size="sm"
+                  className={cn(busy || onlyOne ? 'opacity-40' : '')}
+                  disabled={busy || onlyOne}
+                  // /unlink-account matches `accountId` against the account row's own id.
+                  onPress={() => act(() => unwrap(authClient.unlinkAccount({ accountId: account.id })))}
+                >
+                  Unlink
+                </Button>
+              }
+            />
+          ))}
+        </SettingsGroup>
+      ) : null}
+      {accounts && accounts.length === 0 ? (
+        <Text className="px-4 text-xs text-muted-foreground">You need at least one way to sign in.</Text>
+      ) : null}
+      {unlinked.length > 0 ? (
+        <SettingsGroup label="Add a method">
+          {unlinked.map((provider) => (
+            <SettingsRow
+              key={provider}
+              testID={`link-${provider}-button`}
+              icon={ICONS[provider]}
+              tint={tintFor(provider)}
+              title={`Link ${LABELS[provider]}`}
+              disabled={busy || (provider === 'google' && !google.ready)}
+              onPress={() => (provider === 'apple' ? linkApple() : google.prompt())}
+            />
+          ))}
+        </SettingsGroup>
+      ) : null}
+      {error ? <Text className="px-4 text-sm text-destructive">{error}</Text> : null}
     </ScrollView>
   );
 }

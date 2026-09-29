@@ -1,11 +1,11 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { TextInput, View, type NativeSyntheticEvent, type TextInputContentSizeChangeEventData } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import Animated, { useAnimatedProps, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 import Svg, { Polygon } from 'react-native-svg';
 import { Text } from '../ui/text';
 import { PressableScale } from '../ui/pressable-scale';
-import { COLORS, MOTION } from '../../theme';
+import { COLORS, FONTS, MOTION } from '../../theme';
 
 const AnimatedPolygon = Animated.createAnimatedComponent(Polygon);
 
@@ -111,7 +111,11 @@ export function PromptBar({
 
   // 0 = arrow, 1 = stop square. Reduced motion snaps rather than morphs.
   const morph = useSharedValue(busy ? 1 : 0);
-  morph.value = reduced ? (busy ? 1 : 0) : withTiming(busy ? 1 : 0, { duration: MOTION.duration.fast });
+  // In an effect, not the render body: Reanimated warns (and can drop the
+  // write) when a shared value is set while React is rendering.
+  useEffect(() => {
+    morph.value = reduced ? (busy ? 1 : 0) : withTiming(busy ? 1 : 0, { duration: MOTION.duration.fast });
+  }, [busy, reduced, morph]);
 
   const glyphProps = useAnimatedProps(() => {
     const pts = ARROW_POINTS.map((from, i) => from + (SQUARE_POINTS[i]! - from) * morph.value);
@@ -126,7 +130,7 @@ export function PromptBar({
         <View
           testID="coach-command-menu"
           style={{ backgroundColor: colors.surfaceRaised }}
-          className="overflow-hidden rounded-2xl"
+          className="overflow-hidden rounded-card border border-border"
         >
           {matches.map((command) => (
             <PressableScale
@@ -146,7 +150,7 @@ export function PromptBar({
 
       {/* One filled surface holding the field and its toolbar, as in the
           reference: no outline, the controls live inside the bar. */}
-      <View style={{ backgroundColor: colors.surfaceRaised }} className="rounded-2xl px-4 pb-3 pt-3">
+      <View style={{ backgroundColor: colors.surfaceRaised }} className="rounded-[26px] border border-border px-4 pb-2.5 pt-3">
         <TextInput
           testID="coach-input"
           value={value}
@@ -158,7 +162,7 @@ export function PromptBar({
           placeholderTextColor={colors.muted}
           multiline
           editable={!busy}
-          style={{ color: colors.foreground, height, lineHeight: LINE_HEIGHT, textAlignVertical: 'top' }}
+          style={{ color: colors.foreground, fontFamily: FONTS.sans, fontSize: 16, height, lineHeight: LINE_HEIGHT, textAlignVertical: 'top' }}
         />
 
         <View className="mt-2 flex-row items-center">
@@ -170,7 +174,7 @@ export function PromptBar({
             accessibilityLabel="Prompt shortcuts"
             disabled={busy}
             onPress={() => onChangeText('/')}
-            className="h-8 w-8 items-center justify-center rounded-lg active:opacity-70"
+            className="h-9 w-9 items-center justify-center rounded-full bg-muted active:opacity-70"
           >
             <Text style={{ color: colors.muted }} className="text-xl leading-none">
               /
@@ -189,7 +193,7 @@ export function PromptBar({
               if (canSend) onSend();
             }}
             style={{ backgroundColor: send.background }}
-            className="h-9 w-9 items-center justify-center rounded-xl"
+            className="h-9 w-9 items-center justify-center rounded-full"
           >
             <View testID="coach-send-glyph" accessibilityLabel={busy ? 'Working' : 'Send'}>
               <Svg width={22} height={22} viewBox="0 0 24 24">

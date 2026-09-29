@@ -13,7 +13,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from 'nativewind';
-import { Text } from '../ui/text';
+import { Text, fontFamilyFor } from '../ui/text';
 import { COLORS } from '../../theme';
 
 // The coach's "working on it" line: a breathing sparkle, a label with a light
@@ -56,10 +56,12 @@ export interface ThoughtLineProps {
    */
   elapsedSeconds?: number;
   label?: string;
+  /** Replaces the breathing sparkle (the coach passes its orb). It is drawn as-is, without the breath. */
+  glyph?: React.ReactNode;
   testID?: string;
 }
 
-export function ThoughtLine({ working, elapsedSeconds, label = 'Thinking…', testID }: ThoughtLineProps) {
+export function ThoughtLine({ working, elapsedSeconds, label = 'Thinking…', glyph, testID }: ThoughtLineProps) {
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === 'dark' ? COLORS.dark : COLORS.light;
   const reduceMotion = useReducedMotion();
@@ -115,9 +117,11 @@ export function ThoughtLine({ working, elapsedSeconds, label = 'Thinking…', te
       accessibilityLiveRegion="polite"
       className="flex-row items-center gap-1.5 px-1"
     >
-      <Animated.View style={glyphStyle}>
-        <Ionicons name="sparkles" size={15} color={colors.accent} />
-      </Animated.View>
+      {glyph ?? (
+        <Animated.View style={glyphStyle}>
+          <Ionicons name="sparkles" size={15} color={colors.accent} />
+        </Animated.View>
+      )}
       {working ? (
         <>
           <View className="flex-row">
@@ -154,7 +158,7 @@ function SweepChar({ char, position, sweep }: { char: string; position: number; 
     return { opacity: SWEEP_FLOOR + (1 - SWEEP_FLOOR) * lit };
   });
   return (
-    <Animated.Text className="text-sm font-medium text-muted-foreground" style={style}>
+    <Animated.Text className="text-sm font-medium text-muted-foreground" style={[{ fontFamily: fontFamilyFor('font-medium') }, style]}>
       {char}
     </Animated.Text>
   );

@@ -4,12 +4,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useColorScheme } from 'nativewind';
 import { NavigationContext } from '@react-navigation/native';
 import { Text } from '../components/ui/text';
-import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
+import { Ionicons } from '@expo/vector-icons';
+import { SettingsGroup, SettingsRow } from '../components/ui/settings-list';
+import { useOptionalAuth } from '../auth/AuthContext';
 import { AccountSection } from '../components/account-section';
 import { CoachSettingsSection } from '../components/coach-settings-section';
 import { DeleteAccountSection } from '../components/delete-account-section';
-import { COLORS } from '../theme';
+import { COLORS, FONTS } from '../theme';
 import { useSync } from '../sync/SyncProvider';
 import { formatLastSynced } from '../sync/formatLastSynced';
 import { useTabBarClearance } from '../navigation/tabBarLayout';
@@ -30,6 +32,7 @@ export function SettingsScreen() {
   const navigation = useContext(NavigationContext);
   const { state: syncState, lastSyncedAt, connection, syncNow } = useSync();
   const clearance = useTabBarClearance();
+  const auth = useOptionalAuth();
   const { colorScheme: scheme } = useColorScheme();
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
   const [state, setState] = useState<TimezoneState | null>(null);
@@ -83,8 +86,8 @@ export function SettingsScreen() {
               placeholderTextColor={colors.muted}
               autoCapitalize="none"
               autoCorrect={false}
-              style={{ color: colors.foreground }}
-              className="rounded-xl border border-border bg-card px-4 py-3"
+              style={{ color: colors.foreground, fontFamily: FONTS.sans }}
+              className="rounded-tile border border-border bg-card px-4 py-3"
             />
             {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
           </View>
@@ -110,58 +113,67 @@ export function SettingsScreen() {
     );
   }
 
+  const email = auth?.session?.email ?? null;
+  const connected = connection === 'CONNECTED';
+
   return (
-    <SafeAreaView className="flex-1 bg-background">
+    <SafeAreaView className="flex-1 bg-background" edges={['top']}>
       <ScrollView
         keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ gap: 12, padding: 16, paddingBottom: clearance }}
+        contentContainerStyle={{ gap: 24, paddingHorizontal: 20, paddingTop: 8, paddingBottom: clearance }}
       >
+        <View className="items-center gap-2 pt-2">
+          <View className="h-20 w-20 items-center justify-center rounded-full border border-border bg-muted">
+            {email ? (
+              <Text className="font-display text-display-lg">{email.charAt(0).toUpperCase()}</Text>
+            ) : (
+              <Ionicons name="person-outline" size={30} color={colors.muted} />
+            )}
+          </View>
+          <Text className="font-display text-display">Profile</Text>
+          {email ? <Text className="text-sm text-muted-foreground">{email}</Text> : null}
+        </View>
+
         {/* Connecting is a task reachable from a tab, not a gate in front of the
             app: signing in lands on the dashboard whatever the status is. */}
-        <Card className="gap-1">
-          <Pressable
+        <SettingsGroup label="Health data">
+          <SettingsRow
             testID="connect-health-row"
+            icon="heart"
+            tint={colors.metricHeart}
+            title="Google Health"
+            subtitle="Sync steps, sleep, heart rate and HRV"
+            value={connected ? 'Connected' : 'Connect'}
             onPress={() => navigation?.navigate('ConnectHealth' as never)}
-            className="active:opacity-70"
-          >
-            <Text className="text-sm text-muted-foreground">Google Health</Text>
-            <Text className="text-base font-medium">Connect or reconnect</Text>
-            <Text className="text-xs text-muted-foreground">Sync steps, sleep, heart rate and HRV</Text>
-          </Pressable>
-          {connection === 'CONNECTED' ? (
-            <>
-              <Text testID="settings-last-synced" className="text-xs text-muted-foreground">
-                {lastSyncedAt ? formatLastSynced(lastSyncedAt, new Date(), 'Last synced') : 'Not synced yet'}
-              </Text>
-              <Pressable
-                testID="settings-sync-now"
-                accessibilityRole="button"
-                disabled={syncState === 'syncing'}
-                onPress={() => void syncNow('manual')}
-                className="mt-1 active:opacity-70"
-              >
-                <Text className="text-sm font-medium text-accent">{syncState === 'syncing' ? 'Syncing…' : 'Sync now'}</Text>
-              </Pressable>
-            </>
+          />
+          {connected ? (
+            <SettingsRow
+              testID="settings-sync-now"
+              icon="sync-outline"
+              title={syncState === 'syncing' ? 'Syncing…' : 'Sync now'}
+              subtitle={lastSyncedAt ? formatLastSynced(lastSyncedAt, new Date(), 'Last synced') : 'Not synced yet'}
+              subtitleTestID="settings-last-synced"
+              disabled={syncState === 'syncing'}
+              onPress={() => void syncNow('manual')}
+            />
           ) : null}
-        </Card>
-        <Card className="gap-1">
-          <Pressable testID="timezone-row" onPress={() => setPicking(true)} className="active:opacity-70">
-            <Text className="text-sm text-muted-foreground">Time zone</Text>
-            <Text testID="timezone-value" className="text-base font-medium">
-              {state ? state.timezone : '…'}
-            </Text>
-            <Text className="text-xs text-muted-foreground">
-              {state?.overridden ? 'Custom — tap to change' : 'Using your device time zone — tap to change'}
-            </Text>
-          </Pressable>
-        </Card>
-        {state?.overridden ? (
-          <Button testID="use-device-timezone-button" variant="ghost" onPress={useDevice}>
-            Use device time zone
-          </Button>
-        ) : null}
-        {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
+        </SettingsGroup>
+
+        <SettingsGroup label="Time zone" footer={error ?? undefined}>
+          <SettingsRow
+            testID="timezone-row"
+            icon="globe-outline"
+            tint={colors.metricHrv}
+            title={state?.overridden ? 'Custom time zone' : 'Device time zone'}
+            value={state ? state.timezone : '…'}
+            valueTestID="timezone-value"
+            onPress={() => setPicking(true)}
+          />
+          {state?.overridden ? (
+            <SettingsRow testID="use-device-timezone-button" icon="phone-portrait-outline" title="Use device time zone" onPress={useDevice} />
+          ) : null}
+        </SettingsGroup>
+
         <AccountSection />
         <CoachSettingsSection />
         <DeleteAccountSection />

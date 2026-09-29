@@ -1,6 +1,7 @@
 import React from 'react';
-import { render, waitFor } from '@testing-library/react-native';
-import { MetricDetailScreen } from '../../src/screens/MetricDetailScreen';
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { MetricDetailScreen, readingDate } from '../../src/screens/MetricDetailScreen';
+import { addDays } from '../../src/lib/heatmap';
 
 const mockSetOptions = jest.fn();
 let mockParams: unknown;
@@ -14,15 +15,22 @@ beforeEach(() => {
   jest.clearAllMocks();
 });
 
+function hrvSeries(values: number[], end = '2026-09-29') {
+  return values.map((value, i) => ({
+    id: `h-${i}`,
+    metricType: 'HRV',
+    value,
+    recordedAt: `${addDays(end, -(values.length - 1 - i))}T00:00:00.000Z`,
+  }));
+}
+
 describe('MetricDetailScreen', () => {
-  it('shows the latest value, min/average/max, an insight, and recent readings for the given metric', async () => {
-    mockParams = {
-      metricType: 'STEPS',
-      records: [
-        { id: '1', metricType: 'STEPS', value: 8000, recordedAt: '2026-09-01T00:00:00.000Z' },
-        { id: '2', metricType: 'STEPS', value: 12000, recordedAt: '2026-09-02T00:00:00.000Z' },
-      ],
-    };
+  it('shows the latest value, low/average/high, an insight, and recent readings for the given metric', async () => {
+    const records = [
+      { id: '1', metricType: 'STEPS', value: 8000, recordedAt: '2026-09-01T00:00:00.000Z' },
+      { id: '2', metricType: 'STEPS', value: 12000, recordedAt: '2026-09-02T00:00:00.000Z' },
+    ];
+    mockParams = { metricType: 'STEPS', records };
 
     const { getAllByText, getByText } = render(<MetricDetailScreen />);
 
@@ -30,7 +38,7 @@ describe('MetricDetailScreen', () => {
       expect(getAllByText(/12,000/).length).toBeGreaterThan(0);
     });
 
-    // Min/average/max computed from the real series (8,000 and 12,000).
+    // Low/average/high computed from the real series (8,000 and 12,000).
     expect(getAllByText(/8,000/).length).toBeGreaterThan(0);
     expect(getAllByText(/10,000/).length).toBeGreaterThan(0);
 
@@ -38,11 +46,13 @@ describe('MetricDetailScreen', () => {
     expect(getByText('Steps is 50% above your recent average.')).toBeTruthy();
     expect(getByText(/Today's reading is 120% of your 10,000 steps\./)).toBeTruthy();
 
-    // Recent readings list, most recent first. toDateString() is
-    // timezone-dependent, so compute the expected strings the same way the
-    // component does rather than hardcoding an assumed UTC date.
-    expect(getByText(new Date('2026-09-02T00:00:00.000Z').toDateString())).toBeTruthy();
-    expect(getByText(new Date('2026-09-01T00:00:00.000Z').toDateString())).toBeTruthy();
+    // Recent readings list, most recent first.
+    expect(getByText(readingDate(records[1]))).toBeTruthy();
+    expect(getByText(readingDate(records[0]))).toBeTruthy();
+  });
+
+  it('formats a reading date from its civil date, not shifted by timezone', () => {
+    expect(readingDate({ id: 'x', metricType: 'HRV', value: 1, recordedAt: '2026-09-02T00:00:00.000Z' })).toBe('Wed, Sep 2');
   });
 
   it('shows an empty state when the metric has no data', () => {
@@ -62,5 +72,36 @@ describe('MetricDetailScreen', () => {
     render(<MetricDetailScreen />);
 
     expect(mockSetOptions).toHaveBeenCalledWith({ title: 'Resting Heart Rate' });
+  });
+
+  it('says where the latest reading sits against the usual range', () => {
+    mockParams = { metricType: 'HRV', records: hrvSeries([44, 46, 48, 50, 52, 54, 56, 70]) };
+
+    const { getByTestId } = render(<MetricDetailScreen />);
+
+    expect(getByTestId('metric-range-context')).toHaveTextContent('Above your usual range of 45.4–60.2 ms');
+  });
+
+  it('counts the readings still needed before there is a usual range', () => {
+    mockParams = { metricType: 'HRV', records: hrvSeries([50, 52, 54]) };
+
+    const { getByTestId } = render(<MetricDetailScreen />);
+
+    expect(getByTestId('metric-range-context')).toHaveTextContent('Your usual range appears after 4 more readings');
+  });
+
+  it('opens on the range it was given, and the readings follow the selected range', () => {
+    const values = Array.from({ length: 40 }, (_, i) => 40 + (i % 10));
+    const records = hrvSeries(values);
+    mockParams = { metricType: 'HRV', records, range: '7d' };
+
+    const { queryByText, getByTestId } = render(<MetricDetailScreen />);
+
+    // 7 days ending on the latest reading: the 8th-newest is outside it.
+    expect(queryByText(readingDate(records[records.length - 7]))).toBeTruthy();
+    expect(queryByText(readingDate(records[records.length - 8]))).toBeNull();
+
+    fireEvent.press(getByTestId('metric-detail-range-90d'));
+    expect(queryByText(readingDate(records[records.length - 8]))).toBeTruthy();
   });
 });

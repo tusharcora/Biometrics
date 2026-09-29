@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, ScrollView, KeyboardAvoidingView, Platform, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
@@ -20,10 +20,14 @@ import { Text } from '../components/ui/text';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
-import { PromptBar } from '../components/coach/PromptBar';
+import { COACH_COMMANDS, PromptBar } from '../components/coach/PromptBar';
 import { ThoughtLine } from '../components/coach/thought-line';
 import { ChatBubble } from '../components/ui/chat-bubble';
 import { MemoryProposalChips } from '../components/memory-proposal-chips';
+import { Orb } from '../components/orb/Orb';
+import { StillOrb } from '../components/ui/still-orb';
+import { Glow } from '../components/ui/glow';
+import { PressableScale } from '../components/ui/pressable-scale';
 import { COLORS } from '../theme';
 import type { TabParamList } from '../navigation/TabsNavigator';
 import { useTabBarClearance } from '../navigation/tabBarLayout';
@@ -295,14 +299,15 @@ export function CoachScreen() {
     [navigation],
   );
 
-  function send() {
-    const text = input.trim();
+  // `suggestion` sends a one-tap starter question as-is; otherwise the field.
+  function send(suggestion?: string) {
+    const text = (suggestion ?? input).trim();
     if (!text || sending) return;
     localId.current += 1;
     // The prefill has been used; a later consent round-trip must not resurrect it.
     lastPrefill.current = undefined;
     setMessages((prev) => [...prev, { id: `local-${localId.current}`, role: 'user', text }]);
-    setInput('');
+    if (suggestion === undefined) setInput('');
     void deliver({ message: text });
   }
 
@@ -316,10 +321,36 @@ export function CoachScreen() {
     void deliver(error.request);
   }
 
+  // Coach memory is only reachable once the coach is set up and confirmed.
+  const header = (
+    <View className="flex-row items-center justify-between px-5 pb-2 pt-1">
+      <View className="flex-row items-center gap-3">
+        <StillOrb size={36} glow={false} />
+        <View>
+          <Text className="font-display text-display">Coach</Text>
+          <Text className="text-xs text-muted-foreground">Answers from your own data</Text>
+        </View>
+      </View>
+      {phase === 'ready' && !statusUnverified ? (
+        <Pressable
+          testID="coach-memory-button"
+          accessibilityRole="button"
+          accessibilityLabel="What the coach remembers"
+          onPress={() => navigation.navigate('CoachMemory')}
+          hitSlop={4}
+          className="h-11 w-11 items-center justify-center rounded-full border border-border bg-muted active:opacity-70"
+        >
+          <Ionicons name="bulb-outline" size={18} color={colors.foreground} />
+        </Pressable>
+      ) : null}
+    </View>
+  );
+
   if (phase === 'loading') {
     return (
       <SafeAreaView className="flex-1 bg-background">
-        <View testID="coach-loading" className="gap-3 p-4">
+        {header}
+        <View testID="coach-loading" className="gap-3 p-5">
           <Skeleton className="h-12 w-2/3" />
           <Skeleton className="ml-auto h-10 w-1/2" />
           <Skeleton className="h-16 w-3/4" />
@@ -331,8 +362,10 @@ export function CoachScreen() {
   if (phase === 'needs-consent') {
     return (
       <SafeAreaView className="flex-1 bg-background">
-        <View testID="coach-needs-consent" className="flex-1 items-center justify-center gap-3 p-6">
-          <Text className="text-center text-muted-foreground">The coach needs your OK before it can look at your scores.</Text>
+        {header}
+        <View testID="coach-needs-consent" className="flex-1 items-center justify-center gap-4 p-8">
+          <StillOrb size={56} />
+          <Text className="text-center text-base text-muted-foreground">The coach needs your OK before it can look at your scores.</Text>
           <Button testID="coach-review-consent-button" onPress={() => navigation.navigate('CoachConsent', { prefill: lastPrefill.current })}>
             Review what is shared
           </Button>
@@ -344,8 +377,10 @@ export function CoachScreen() {
   if (phase === 'unavailable') {
     return (
       <SafeAreaView className="flex-1 bg-background">
-        <View testID="coach-unavailable" className="flex-1 items-center justify-center p-6">
-          <Text className="text-center text-muted-foreground">The AI Coach is not available right now.</Text>
+        {header}
+        <View testID="coach-unavailable" className="flex-1 items-center justify-center gap-4 p-8">
+          <StillOrb size={56} glow={false} />
+          <Text className="text-center text-base text-muted-foreground">The AI Coach is not available right now.</Text>
         </View>
       </SafeAreaView>
     );
@@ -354,6 +389,7 @@ export function CoachScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background">
+      {header}
       {/* KeyboardAvoidingView owns its paddingBottom on iOS, so the bar clearance sits on this wrapper. */}
       <View testID="coach-clearance" style={{ flex: 1, paddingBottom: keyboardVisible ? 0 : clearance }}>
         <KeyboardAvoidingView
@@ -364,7 +400,7 @@ export function CoachScreen() {
           <ScrollView
             ref={scrollRef}
             keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ gap: 12, padding: 16, flexGrow: 1 }}
+            contentContainerStyle={{ gap: 16, paddingHorizontal: 20, paddingVertical: 12, flexGrow: 1 }}
             onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
           >
             {statusUnverified ? (
@@ -374,11 +410,32 @@ export function CoachScreen() {
             ) : null}
 
             {messages.length === 0 && !sending ? (
-              <View testID="coach-empty" className="flex-1 items-center justify-center gap-2 py-16">
-                <Ionicons name="chatbubbles-outline" size={28} color={colors.muted} />
-                <Text className="text-center text-muted-foreground">
-                  Ask about your scores, what moved them, or your habit patterns.
-                </Text>
+              <View testID="coach-empty" className="flex-1 items-center justify-center gap-5 py-10">
+                <View style={{ width: 64, height: 64 }} className="items-center justify-center">
+                  <Glow color={colors.accent} size={220} around={64} intensity={0.28} />
+                  {/* Paused: the tab bar's orb is already the live one on this screen. */}
+                  <Orb state="breathing" size={64} paused />
+                </View>
+                <View className="items-center gap-2 px-4">
+                  <Text className="font-display text-display text-center">What would you like to know?</Text>
+                  <Text className="text-center text-base text-muted-foreground">
+                    Ask about your scores, what moved them, or your habit patterns.
+                  </Text>
+                </View>
+                <View className="w-full gap-2">
+                  {COACH_COMMANDS.map((command) => (
+                    <PressableScale
+                      key={command.key}
+                      testID={`coach-suggestion-${command.key}`}
+                      accessibilityRole="button"
+                      onPress={() => send(command.prompt)}
+                      className="flex-row items-center justify-between rounded-tile border border-border bg-card px-4 py-3.5"
+                    >
+                      <Text className="text-base">{command.label}</Text>
+                      <Ionicons name="arrow-up" size={16} color={colors.muted} />
+                    </PressableScale>
+                  ))}
+                </View>
               </View>
             ) : null}
 
@@ -390,12 +447,12 @@ export function CoachScreen() {
                   </Text>
                 ) : null}
                 {message.thoughtSeconds !== undefined ? (
-                  <ThoughtLine working={false} elapsedSeconds={message.thoughtSeconds} testID="coach-thought-settled" />
+                  <ThoughtLine working={false} elapsedSeconds={message.thoughtSeconds} glyph={<StillOrb size={14} glow={false} />} testID="coach-thought-settled" />
                 ) : null}
                 <ChatBubble role={message.role} text={message.text} source={message.source as CoachMessageSource} animate={message.fresh === true}>
                   {message.safety ? (
                     <View className="gap-3">
-                      <Card testID="coach-safety-resources" className="gap-1 border-accent bg-muted">
+                      <Card testID="coach-safety-resources" className="gap-1 border-accent/40 bg-accent/10">
                         <Text className="text-sm font-semibold">Support is available</Text>
                         {message.safety.resources.map((resource) => (
                           <Text key={resource} className="text-sm">
@@ -423,7 +480,7 @@ export function CoachScreen() {
 
             {sending ? (
               <View className="items-start">
-                <ThoughtLine working testID="coach-thinking" />
+                <ThoughtLine working glyph={<Orb state="working" size={20} />} testID="coach-thinking" />
               </View>
             ) : null}
 
@@ -439,8 +496,8 @@ export function CoachScreen() {
             ) : null}
           </ScrollView>
 
-          <View className="border-t border-border p-3">
-            <PromptBar value={input} onChangeText={setInput} onSend={send} busy={sending} />
+          <View className="px-4 pb-2 pt-1">
+            <PromptBar value={input} onChangeText={setInput} onSend={() => send()} busy={sending} placeholder="Ask about your data" />
           </View>
         </KeyboardAvoidingView>
       </View>

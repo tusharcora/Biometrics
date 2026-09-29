@@ -6,6 +6,7 @@ import { fetchActivity } from '../api/activity';
 import { ActivityHeatmap } from '../components/activity-heatmap';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
+import { SectionLabel } from '../components/ui/section-label';
 import { Text } from '../components/ui/text';
 import { fetchRange, todayCivil } from '../lib/heatmap';
 import { useSync } from '../sync/SyncProvider';
@@ -63,19 +64,19 @@ export function ActivityScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
       <ScrollView
-        contentContainerStyle={{ gap: 16, padding: 16, paddingBottom: clearance }}
+        contentContainerStyle={{ gap: 16, paddingHorizontal: 20, paddingTop: 8, paddingBottom: clearance }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.muted} />}
       >
         <View className="gap-1">
-          <Text className="text-2xl font-bold">Activity</Text>
-          <Text className="text-sm text-muted-foreground">{`Daily steps against your ${METRIC_CONFIG.STEPS.goalLabel} goal`}</Text>
+          <SectionLabel>{`Steps · ${METRIC_CONFIG.STEPS.goalLabel} goal`}</SectionLabel>
+          <Text className="font-display text-display-lg">Activity</Text>
         </View>
 
         {state.phase === 'loading' ? (
           <View testID="activity-loading" className="gap-4">
-            <Skeleton className="h-10 w-full" />
-            <Skeleton className="h-80 w-full" />
-            <Skeleton className="h-28 w-full" />
+            <Skeleton className="h-10 w-full rounded-card" />
+            <Skeleton className="h-80 w-full rounded-card" />
+            <Skeleton className="h-28 w-full rounded-card" />
           </View>
         ) : null}
 

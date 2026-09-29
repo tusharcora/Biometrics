@@ -1,23 +1,40 @@
 import React, { useContext } from 'react';
-import { Pressable } from 'react-native';
 import { NavigationContext } from '@react-navigation/native';
-import { Card } from './ui/card';
-import { Text } from './ui/text';
+import { useColorScheme } from 'nativewind';
+import { useOptionalAuth } from '../auth/AuthContext';
+import { COLORS } from '../theme';
+import { SettingsGroup, SettingsRow } from './ui/settings-list';
 
 // Settings -> Account. Uses the navigation context rather than useNavigation()
-// because Settings is also rendered without a navigator (see SettingsScreen).
+// because Settings is also rendered without a navigator (see SettingsScreen),
+// and the optional auth hook for the same reason. Sign out lives here now that
+// Home no longer carries it in its header.
 export function AccountSection() {
   const navigation = useContext(NavigationContext);
+  const auth = useOptionalAuth();
+  const { colorScheme: scheme } = useColorScheme();
+  const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
   return (
-    <Card className="gap-3">
-      <Pressable testID="sign-in-methods-row" onPress={() => navigation?.navigate('SignInMethods' as never)} className="active:opacity-70">
-        <Text className="text-base font-medium">Sign-in methods</Text>
-        <Text className="text-xs text-muted-foreground">Apple, Google, email and password</Text>
-      </Pressable>
-      <Pressable testID="devices-row" onPress={() => navigation?.navigate('Devices' as never)} className="active:opacity-70">
-        <Text className="text-base font-medium">Devices</Text>
-        <Text className="text-xs text-muted-foreground">Where you are signed in</Text>
-      </Pressable>
-    </Card>
+    <SettingsGroup label="Account">
+      <SettingsRow
+        testID="sign-in-methods-row"
+        icon="key-outline"
+        tint={colors.metricSleep}
+        title="Sign-in methods"
+        subtitle="Apple, Google, email and password"
+        onPress={() => navigation?.navigate('SignInMethods' as never)}
+      />
+      <SettingsRow
+        testID="devices-row"
+        icon="phone-portrait-outline"
+        tint={colors.metricSleep}
+        title="Devices"
+        subtitle="Where you are signed in"
+        onPress={() => navigation?.navigate('Devices' as never)}
+      />
+      {auth ? (
+        <SettingsRow testID="sign-out-button" icon="log-out-outline" tint={colors.muted} title="Sign out" onPress={() => auth.signOut()} />
+      ) : null}
+    </SettingsGroup>
   );
 }
