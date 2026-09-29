@@ -15,6 +15,7 @@ import { GoogleMark, OnboardingHero } from '../components/onboarding-hero';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from 'nativewind';
 import { COLORS } from '../theme';
+import { devTestAccount } from '../auth/devTestAccount';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'SignIn'>;
 
@@ -24,6 +25,7 @@ export function SignInScreen({ navigation, route }: Props) {
   const { signInWithApple, signInWithGoogle, signInWithEmail, resendVerification } = useAuth();
   const { colorScheme: scheme } = useColorScheme();
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
+  const testAccount = devTestAccount();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -108,6 +110,21 @@ export function SignInScreen({ navigation, route }: Props) {
           <View className="h-px flex-1 bg-border" />
         </View>
         <View className="gap-3">
+          {testAccount ? (
+            <Button
+              testID="dev-test-account-button"
+              variant="secondary"
+              className="w-full border-dashed"
+              disabled={busy}
+              onPress={() => {
+                setEmail(testAccount.email);
+                setPassword(testAccount.password);
+                void run(() => signInWithEmail(testAccount.email, testAccount.password));
+              }}
+            >
+              {`Sign in as ${testAccount.email} (dev)`}
+            </Button>
+          ) : null}
           <TextField label="Email" testID="email-input" value={email} onChangeText={setEmail} keyboardType="email-address" autoComplete="email" />
           <TextField label="Password" testID="password-input" value={password} onChangeText={setPassword} secure autoComplete="password" />
           {error ? <Text testID="sign-in-error" className="text-sm text-destructive">{error}</Text> : null}
