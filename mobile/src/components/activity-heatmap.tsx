@@ -117,9 +117,9 @@ function groupCells(grid: HeatGrid, view: HeatmapView): HeatCell[][] {
 
 function Stat({ label, value, testID }: { label: string; value: string; testID: string }) {
   return (
-    <View className="w-[31%] grow gap-0.5 rounded-xl bg-muted px-3 py-2.5">
-      <Text className="text-[11px] text-muted-foreground">{label}</Text>
-      <Text testID={testID} className="text-base font-semibold" style={{ fontVariant: ['tabular-nums'] }}>
+    <View className="w-[31%] grow gap-1 rounded-tile border border-border bg-card px-3 py-3">
+      <Text className="text-xs text-muted-foreground">{label}</Text>
+      <Text testID={testID} className="text-numeral-sm font-bold" numberOfLines={1} adjustsFontSizeToFit style={{ fontVariant: ['tabular-nums'] }}>
         {value}
       </Text>
     </View>
@@ -329,7 +329,7 @@ function DayDetail({ cell, goal, average }: { cell: HeatCell; goal: number; aver
         </Text>
       ) : (
         <>
-          <Text testID="day-detail-steps" className="text-3xl font-bold" style={{ fontVariant: ['tabular-nums'] }}>
+          <Text testID="day-detail-steps" className="text-numeral-lg font-bold" style={{ fontVariant: ['tabular-nums'] }}>
             {`${formatSteps(cell.steps)} steps`}
           </Text>
           <Text testID="day-detail-goal" className="text-base">
