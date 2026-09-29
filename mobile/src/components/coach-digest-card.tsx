@@ -3,7 +3,7 @@ import { View, Pressable, Modal, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CoachConsentRequiredError, CoachDisabledError, fetchLatestDigest, type CoachDigestDTO } from '../api/coach';
 import { Text } from './ui/text';
-import { OrbDot } from './ui/orb-dot';
+import { StillOrb } from './ui/still-orb';
 import { SectionLabel } from './ui/section-label';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -62,7 +62,7 @@ export function CoachDigestCard() {
       <Pressable testID="coach-digest-card" accessibilityRole="button" onPress={() => setOpen(true)} className="active:opacity-80">
         <Card className="gap-2.5 border-coach/25 bg-coach/10">
           <View className="flex-row items-center gap-2">
-            <OrbDot size={18} glow={false} />
+            <StillOrb size={18} glow={false} />
             <SectionLabel className="flex-1 text-coach">Your weekly recap</SectionLabel>
             <Text testID="coach-digest-date" className="text-xs text-muted-foreground">
               {formatDigestDate(digest.createdAt)}

@@ -12,7 +12,7 @@ import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { SectionLabel } from '../components/ui/section-label';
-import { OrbDot } from '../components/ui/orb-dot';
+import { StillOrb } from '../components/ui/still-orb';
 import { ThemeToggle } from '../components/ui/theme-toggle';
 import { Reveal } from '../components/ui/reveal';
 import { HabitLogCard } from '../components/habit-log-card';
@@ -167,7 +167,7 @@ export function DashboardScreen() {
           {profileButton}
         </View>
         <View className="flex-1 items-center justify-center gap-4 px-8">
-          <OrbDot size={56} />
+          <StillOrb size={56} />
           <Text className="font-display text-display text-center">{title}</Text>
           <Text className="text-center text-base text-muted-foreground">{body}</Text>
           {action}

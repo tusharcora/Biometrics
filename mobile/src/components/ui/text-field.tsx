@@ -2,7 +2,7 @@ import React from 'react';
 import { TextInput, View } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import { Text } from './text';
-import { COLORS } from '../../theme';
+import { COLORS, FONTS } from '../../theme';
 
 export interface TextFieldProps {
   label: string;
@@ -30,7 +30,8 @@ export function TextField({ label, testID, value, onChangeText, secure, keyboard
         autoCorrect={false}
         autoComplete={autoComplete}
         placeholderTextColor={colors.muted}
-        className="rounded-xl border border-border bg-card px-4 py-3 text-base text-foreground"
+        style={{ fontFamily: FONTS.sans }}
+        className="rounded-tile border border-border bg-card px-4 py-3 text-base text-foreground"
       />
     </View>
   );
