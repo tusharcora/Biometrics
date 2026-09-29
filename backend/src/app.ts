@@ -5,6 +5,7 @@ import { healthRouter } from './health/routes';
 import { biometricsRouter } from './biometrics/routes';
 import { usersRouter } from './users/routes';
 import { scoresRouter } from './scoring/routes';
+import { forecastRouter } from './forecast/routes';
 import { habitsRouter } from './habits/routes';
 import { coachRouter } from './coach/routes';
 import { syncRouter } from './sync/routes';
@@ -27,6 +28,7 @@ export function createApp(options: { auth?: Auth } = {}): Express {
   app.use(syncRouter);
   app.use(usersRouter);
   app.use(scoresRouter);
+  app.use(forecastRouter);
   app.use(habitsRouter);
   app.use(coachRouter);
   return app;
