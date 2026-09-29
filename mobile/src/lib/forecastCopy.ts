@@ -13,5 +13,8 @@ export const FORECAST_COPY = {
   loadError: 'Couldn’t load tomorrow’s forecast. Try again in a moment.',
   unavailable: 'Tomorrow’s forecast is unavailable right now.',
   planCta: 'Plan tomorrow →',
+  trendLabel: 'Recent trend',
+  sleepLabel: (h: number) => `Sleep ${h} h`,
+  habitLabel: (n: number, unit: string) => `${n} ${n === 1 && unit.endsWith('s') ? unit.slice(0, -1) : unit}`,
   title: 'Tomorrow',
 } as const;

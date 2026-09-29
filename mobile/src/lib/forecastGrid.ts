@@ -1,5 +1,6 @@
 // Pure lookups into the server's precomputed what-if grid: no network while dragging.
 import type { ForecastCellDTO, ForecastLeverDTO, ReadyForecastDTO } from '../api/forecast';
+import { FORECAST_COPY } from './forecastCopy';
 
 export interface LeverValues {
   sleepHours: number;
@@ -28,8 +29,8 @@ export function findCell(f: ReadyForecastDTO, v: LeverValues): ForecastCellDTO {
 }
 
 export function contributionLabel(key: string, f: ReadyForecastDTO, v: LeverValues): string {
-  if (key === 'CARRY_OVER') return 'Recent trend';
-  if (key === 'SLEEP') return `Sleep ${snapSleep(v.sleepHours)} h`;
+  if (key === 'CARRY_OVER') return FORECAST_COPY.trendLabel;
+  if (key === 'SLEEP') return FORECAST_COPY.sleepLabel(snapSleep(v.sleepHours));
   const lever = f.levers.find((l) => l.key === key);
-  return lever ? `${v.habits[key] ?? 0} ${lever.unit}` : key;
+  return lever ? FORECAST_COPY.habitLabel(v.habits[key] ?? 0, lever.unit) : key;
 }

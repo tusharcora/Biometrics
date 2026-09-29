@@ -26,4 +26,10 @@ describe('forecastGrid', () => {
     expect(contributionLabel('ALCOHOL', READY, v)).toBe('3 drinks');
     expect(contributionLabel('MYSTERY', READY, v)).toBe('MYSTERY');
   });
+
+  it('singularizes the habit unit for exactly one', () => {
+    expect(contributionLabel('ALCOHOL', READY, { sleepHours: 7, habits: { ALCOHOL: 1 } })).toBe('1 drink');
+    expect(contributionLabel('WORKOUT', READY, { sleepHours: 7, habits: { WORKOUT: 1 } })).toBe('1 minute');
+    expect(contributionLabel('ALCOHOL', READY, { sleepHours: 7, habits: { ALCOHOL: 2 } })).toBe('2 drinks');
+  });
 });
