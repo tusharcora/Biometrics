@@ -122,7 +122,7 @@ export function RootNavigator() {
               }}
             >
               <Stack.Screen name="Tabs" component={TabsNavigator} options={{ headerShown: false }} />
-              <Stack.Screen name="ConnectHealth" component={ConnectHealthScreen} options={{ title: 'Connect Health' }} />
+              <Stack.Screen name="ConnectHealth" component={ConnectHealthScreen} options={{ title: '' }} />
               <Stack.Screen name="MetricDetail" component={MetricDetailScreen} options={{ title: '' }} />
               <Stack.Screen name="ScoreDetail" component={ScoreDetailScreen} options={{ title: 'Score' }} />
               <Stack.Screen name="Forecast" component={ForecastScreen} options={{ title: FORECAST_COPY.title }} />

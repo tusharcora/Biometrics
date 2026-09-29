@@ -73,16 +73,21 @@ export const COLORS = {
     scorePoor: 'rgb(220, 38, 38)',
     surfaceRaised: 'rgb(255, 255, 255)',
     hairline: 'rgb(228, 228, 233)',
-    bar: 'rgb(24, 24, 27)',
-    barIcon: 'rgb(212, 212, 216)',
-    barActive: 'rgb(250, 250, 249)',
-    barIconActive: 'rgb(24, 24, 27)',
+    // Light mode gets a light bar: a dark pill over light content read as a
+    // grey slab once the bar became glass. The active tab inverts (dark
+    // circle, white icon), mirroring dark mode.
+    bar: 'rgb(255, 255, 255)',
+    barIcon: 'rgb(98, 100, 110)',
+    barActive: 'rgb(17, 18, 22)',
+    barIconActive: 'rgb(255, 255, 255)',
     heatEmpty: 'rgb(245, 245, 244)',
     heat0: 'rgb(231, 229, 228)',
-    heat1: 'rgb(254, 215, 170)',
-    heat2: 'rgb(253, 186, 116)',
-    heat3: 'rgb(251, 146, 60)',
-    heat4: 'rgb(234, 88, 12)',
+    // A soft ramp on a light page: typical days read peach, only the
+    // biggest reach full orange.
+    heat1: 'rgb(255, 237, 213)',
+    heat2: 'rgb(254, 215, 170)',
+    heat3: 'rgb(253, 186, 116)',
+    heat4: 'rgb(249, 115, 22)',
     // One accent per metric (the same values as METRIC_CONFIG), used only on
     // that metric's own number, ring and line -- everything else stays neutral.
     metricSteps: 'rgb(234, 88, 12)',

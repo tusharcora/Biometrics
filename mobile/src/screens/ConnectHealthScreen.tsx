@@ -61,7 +61,7 @@ export function ConnectHealthScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
-      <ScrollView contentContainerClassName="flex-grow gap-7 px-5 pb-6 pt-4">
+      <ScrollView contentContainerClassName="flex-grow gap-7 px-5 pb-6 pt-12">
         <View className="flex-row items-center justify-center gap-4 pt-2" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
           <StillOrb size={72} />
           <View className="flex-row items-center gap-1.5">
