@@ -43,11 +43,23 @@ export function Slider({ value, min, max, step, threshold, muted, onChange, acce
   };
 
   const fromX = (x: number) => (width === 0 ? value : snapValue(min + (x / width) * (max - min), min, max, step));
+  // Nothing commits at touch-down: the slider sits in a vertical ScrollView, so a
+  // drag only claims the touch once it is clearly horizontal, and a tap sets the
+  // value on release. Exclusive gives the pan priority; the tap wins only if the
+  // pan fails (stationary touch), and a scroll fails both.
   const pan = Gesture.Pan()
     .runOnJS(true)
-    .minDistance(0)
-    .onBegin((e) => commit(fromX(e.x)))
+    .activeOffsetX([-8, 8])
+    .failOffsetY([-8, 8])
+    .onStart((e) => commit(fromX(e.x)))
     .onUpdate((e) => commit(fromX(e.x)));
+  const tap = Gesture.Tap()
+    .runOnJS(true)
+    .maxDistance(8)
+    .onEnd((e, success) => {
+      if (success) commit(fromX(e.x));
+    });
+  const gesture = Gesture.Exclusive(pan, tap);
 
   const fraction = (value - min) / (max - min);
   const thumbStyle = useAnimatedStyle(() => ({
@@ -56,7 +68,7 @@ export function Slider({ value, min, max, step, threshold, muted, onChange, acce
   const fillStyle = useAnimatedStyle(() => ({ width: withTiming(fraction * width, { duration: 90 }) }));
 
   return (
-    <GestureDetector gesture={pan}>
+    <GestureDetector gesture={gesture}>
       <View
         testID={testID}
         accessible

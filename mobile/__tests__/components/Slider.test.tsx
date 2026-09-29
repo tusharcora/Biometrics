@@ -1,6 +1,9 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import * as Haptics from 'expo-haptics';
+import { useState } from 'react';
 import { Slider, crossedThreshold, snapValue } from '../../src/components/ui/slider';
+
+beforeEach(() => jest.clearAllMocks());
 
 describe('snapValue', () => {
   it('snaps to the step and clamps to the range', () => {
@@ -39,14 +42,43 @@ describe('Slider', () => {
     expect(s.props.accessibilityValue).toMatchObject({ min: 0, max: 6, now: 1, text: '1 drinks' });
   });
 
-  it('increments and decrements through accessibility actions, with a haptic at the threshold', () => {
+  // Holds the value like a real parent, so each action starts from the last committed value.
+  function Controlled({ initial, onChange }: { initial: number; onChange: (v: number) => void }) {
+    const [value, setValue] = useState(initial);
+    return (
+      <Slider
+        {...props}
+        value={value}
+        onChange={(v) => {
+          setValue(v);
+          onChange(v);
+        }}
+      />
+    );
+  }
+  const act = (actionName: 'increment' | 'decrement') =>
+    fireEvent(screen.getByTestId('slider'), 'accessibilityAction', { nativeEvent: { actionName } });
+
+  it('increments and decrements through accessibility actions, with a haptic at each threshold crossing', () => {
     const onChange = jest.fn();
-    render(<Slider {...props} onChange={onChange} />);
-    fireEvent(screen.getByTestId('slider'), 'accessibilityAction', { nativeEvent: { actionName: 'increment' } });
+    render(<Controlled initial={1} onChange={onChange} />);
+    act('increment');
     expect(onChange).toHaveBeenLastCalledWith(2);
     expect(Haptics.selectionAsync).toHaveBeenCalledTimes(1);
-    fireEvent(screen.getByTestId('slider'), 'accessibilityAction', { nativeEvent: { actionName: 'decrement' } });
+    act('decrement');
+    expect(onChange).toHaveBeenLastCalledWith(1);
+    expect(Haptics.selectionAsync).toHaveBeenCalledTimes(2);
+    act('decrement');
     expect(onChange).toHaveBeenLastCalledWith(0);
+    expect(Haptics.selectionAsync).toHaveBeenCalledTimes(2);
+  });
+
+  it('fires no haptic for a change that does not cross the threshold', () => {
+    const onChange = jest.fn();
+    render(<Controlled initial={2} onChange={onChange} />);
+    act('increment');
+    expect(onChange).toHaveBeenLastCalledWith(3);
+    expect(Haptics.selectionAsync).not.toHaveBeenCalled();
   });
 
   it('does not go past its bounds', () => {
