@@ -1,0 +1,58 @@
+import { fireEvent, render, screen } from '@testing-library/react-native';
+import * as Haptics from 'expo-haptics';
+import { Slider, crossedThreshold, snapValue } from '../../src/components/ui/slider';
+
+describe('snapValue', () => {
+  it('snaps to the step and clamps to the range', () => {
+    expect(snapValue(7.3, 4, 10, 0.5)).toBe(7.5);
+    expect(snapValue(7.2, 4, 10, 0.5)).toBe(7);
+    expect(snapValue(12, 4, 10, 0.5)).toBe(10);
+    expect(snapValue(-3, 0, 6, 1)).toBe(0);
+  });
+});
+
+describe('crossedThreshold', () => {
+  it('is true only when the value moves across the threshold', () => {
+    expect(crossedThreshold(1, 2, 2)).toBe(true);
+    expect(crossedThreshold(2, 1, 2)).toBe(true);
+    expect(crossedThreshold(2, 3, 2)).toBe(false);
+    expect(crossedThreshold(0, 1, undefined)).toBe(false);
+  });
+});
+
+describe('Slider', () => {
+  const props = {
+    value: 1,
+    min: 0,
+    max: 6,
+    step: 1,
+    threshold: 2,
+    accessibilityLabel: 'Alcohol',
+    formatValue: (v: number) => `${v} drinks`,
+    testID: 'slider',
+  };
+
+  it('is adjustable and announces its value', () => {
+    render(<Slider {...props} onChange={jest.fn()} />);
+    const s = screen.getByTestId('slider');
+    expect(s.props.accessibilityRole).toBe('adjustable');
+    expect(s.props.accessibilityValue).toMatchObject({ min: 0, max: 6, now: 1, text: '1 drinks' });
+  });
+
+  it('increments and decrements through accessibility actions, with a haptic at the threshold', () => {
+    const onChange = jest.fn();
+    render(<Slider {...props} onChange={onChange} />);
+    fireEvent(screen.getByTestId('slider'), 'accessibilityAction', { nativeEvent: { actionName: 'increment' } });
+    expect(onChange).toHaveBeenLastCalledWith(2);
+    expect(Haptics.selectionAsync).toHaveBeenCalledTimes(1);
+    fireEvent(screen.getByTestId('slider'), 'accessibilityAction', { nativeEvent: { actionName: 'decrement' } });
+    expect(onChange).toHaveBeenLastCalledWith(0);
+  });
+
+  it('does not go past its bounds', () => {
+    const onChange = jest.fn();
+    render(<Slider {...props} value={6} onChange={onChange} />);
+    fireEvent(screen.getByTestId('slider'), 'accessibilityAction', { nativeEvent: { actionName: 'increment' } });
+    expect(onChange).not.toHaveBeenCalled();
+  });
+});

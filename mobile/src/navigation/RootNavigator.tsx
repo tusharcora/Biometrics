@@ -3,6 +3,7 @@ import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import { NavigationContainer, DefaultTheme, DarkTheme, type NavigatorScreenParams, type Theme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useAuth } from '../auth/AuthContext';
 import type { ScoreType } from '../api/scores';
 import { AuthNavigator } from './AuthNavigator';
@@ -98,32 +99,34 @@ export function RootNavigator() {
   }
 
   return (
-    <NavigationContainer theme={navTheme}>
-      {/* Signed in only: nothing syncs before sign-in. */}
-      <ToastProvider>
-        <SyncProvider>
-          <Stack.Navigator
-            initialRouteName={initialRoute}
-            screenOptions={{
-              headerShadowVisible: false,
-              headerStyle: { backgroundColor: colors.background },
-              headerTitleStyle: { color: colors.foreground, fontWeight: '600' },
-              headerTintColor: colors.foreground,
-            }}
-          >
-            <Stack.Screen name="Tabs" component={TabsNavigator} options={{ headerShown: false }} />
-            <Stack.Screen name="ConnectHealth" component={ConnectHealthScreen} options={{ title: 'Connect Health' }} />
-            <Stack.Screen name="MetricDetail" component={MetricDetailScreen} options={{ title: '' }} />
-            <Stack.Screen name="ScoreDetail" component={ScoreDetailScreen} options={{ title: 'Score' }} />
-            <Stack.Screen name="Patterns" component={PatternsScreen} options={{ title: 'Patterns' }} />
-            <Stack.Screen name="CoachConsent" component={CoachConsentScreen} options={{ title: 'AI Coach' }} />
-            <Stack.Screen name="CoachMemory" component={CoachMemoryScreen} options={{ title: 'Coach Memory' }} />
-            <Stack.Screen name="SignInMethods" component={SignInMethodsScreen} options={{ title: 'Sign-in methods' }} />
-            <Stack.Screen name="Devices" component={DevicesScreen} options={{ title: 'Devices' }} />
-          </Stack.Navigator>
-        </SyncProvider>
-      </ToastProvider>
-    </NavigationContainer>
+    <GestureHandlerRootView style={{ flex: 1 }}>
+      <NavigationContainer theme={navTheme}>
+        {/* Signed in only: nothing syncs before sign-in. */}
+        <ToastProvider>
+          <SyncProvider>
+            <Stack.Navigator
+              initialRouteName={initialRoute}
+              screenOptions={{
+                headerShadowVisible: false,
+                headerStyle: { backgroundColor: colors.background },
+                headerTitleStyle: { color: colors.foreground, fontWeight: '600' },
+                headerTintColor: colors.foreground,
+              }}
+            >
+              <Stack.Screen name="Tabs" component={TabsNavigator} options={{ headerShown: false }} />
+              <Stack.Screen name="ConnectHealth" component={ConnectHealthScreen} options={{ title: 'Connect Health' }} />
+              <Stack.Screen name="MetricDetail" component={MetricDetailScreen} options={{ title: '' }} />
+              <Stack.Screen name="ScoreDetail" component={ScoreDetailScreen} options={{ title: 'Score' }} />
+              <Stack.Screen name="Patterns" component={PatternsScreen} options={{ title: 'Patterns' }} />
+              <Stack.Screen name="CoachConsent" component={CoachConsentScreen} options={{ title: 'AI Coach' }} />
+              <Stack.Screen name="CoachMemory" component={CoachMemoryScreen} options={{ title: 'Coach Memory' }} />
+              <Stack.Screen name="SignInMethods" component={SignInMethodsScreen} options={{ title: 'Sign-in methods' }} />
+              <Stack.Screen name="Devices" component={DevicesScreen} options={{ title: 'Devices' }} />
+            </Stack.Navigator>
+          </SyncProvider>
+        </ToastProvider>
+      </NavigationContainer>
+    </GestureHandlerRootView>
   );
 }
 

@@ -8,3 +8,10 @@ require('react-native-reanimated').setUpTests();
 jest.mock('./src/components/orb/ThinkingOrb', () => require('./jest-mocks/ThinkingOrb'));
 
 jest.mock('./src/auth/authClient', () => require('./jest-mocks/authClient'));
+
+require('react-native-gesture-handler/jestSetup');
+jest.mock('expo-haptics', () => ({
+  selectionAsync: jest.fn(() => Promise.resolve()),
+  impactAsync: jest.fn(() => Promise.resolve()),
+  ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
+}));
