@@ -77,7 +77,7 @@ describe('MetricsScreen', () => {
     expect(getByTestId('trend-latest-HRV')).toHaveTextContent('42.0 ms');
   });
 
-  it("opens a metric's detail with the readings in the selected range", async () => {
+  it("opens a metric's detail with its whole series, on the selected range", async () => {
     (apiFetch as jest.Mock).mockResolvedValue(records);
 
     const { findByTestId, getByTestId } = render(<MetricsScreen />);
@@ -87,8 +87,25 @@ describe('MetricsScreen', () => {
 
     expect(mockNavigate).toHaveBeenCalledWith('MetricDetail', {
       metricType: 'STEPS',
-      records: [records[2], records[3]],
+      records: [records[0], records[1], records[2], records[3]],
+      range: '7d',
     });
+  });
+
+  it('places the latest reading against the usual range once there are enough readings', async () => {
+    const hrv = [44, 46, 48, 50, 52, 54, 56, 70].map((value, i) => ({
+      id: `hrv-${i}`,
+      metricType: 'HRV',
+      value,
+      recordedAt: daysAgo(7 - i),
+    }));
+    (apiFetch as jest.Mock).mockResolvedValue([...records, ...hrv]);
+
+    const { findByTestId, queryByTestId } = render(<MetricsScreen />);
+
+    expect(await findByTestId('trend-position-HRV')).toHaveTextContent('Above your usual range of 45.4–60.2 ms');
+    // Steps has only three readings in 30 days: too few to call anything usual.
+    expect(queryByTestId('trend-position-STEPS')).toBeNull();
   });
 
   it('opens Patterns from its entry card', async () => {
