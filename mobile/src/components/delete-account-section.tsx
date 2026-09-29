@@ -4,7 +4,8 @@ import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from 'nativewind';
 import { ApiError, deleteAccount } from '../api/client';
 import { useOptionalAuth } from '../auth/AuthContext';
-import { COLORS } from '../theme';
+import { COLORS, FONTS } from '../theme';
+import { SettingsGroup, SettingsRow } from './ui/settings-list';
 import { Text } from './ui/text';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
@@ -61,21 +62,14 @@ export function DeleteAccountSection() {
 
   if (!open) {
     return (
-      <Card testID="delete-account-section" className="mt-6 gap-2 border-destructive/40">
-        <View className="flex-row items-center gap-2">
-          <Ionicons name="trash-outline" size={18} color={colors.scorePoor} />
-          <Text className="text-base font-semibold">Delete account</Text>
-        </View>
-        <Text className="text-sm text-muted-foreground">Permanently delete your account and all the data stored for it.</Text>
-        <Button testID="delete-account-open" variant="destructive" onPress={() => setOpen(true)}>
-          Delete account…
-        </Button>
-      </Card>
+      <SettingsGroup testID="delete-account-section" footer="Permanently delete your account and all the data stored for it.">
+        <SettingsRow testID="delete-account-open" icon="trash-outline" destructive title="Delete account…" onPress={() => setOpen(true)} />
+      </SettingsGroup>
     );
   }
 
   return (
-    <Card testID="delete-account-section" className="mt-6 gap-3 border-destructive/40">
+    <Card testID="delete-account-section" className="gap-3 border-destructive/40">
       <View className="flex-row items-center gap-2">
         <Ionicons name="warning-outline" size={18} color={colors.scorePoor} />
         <Text className="text-base font-semibold text-destructive">Delete your account?</Text>
@@ -96,8 +90,8 @@ export function DeleteAccountSection() {
         placeholderTextColor={colors.muted}
         autoCapitalize="none"
         autoCorrect={false}
-        style={{ color: colors.foreground }}
-        className="rounded-xl border border-border bg-card px-4 py-3"
+        style={{ color: colors.foreground, fontFamily: FONTS.sans }}
+        className="rounded-tile border border-border bg-card px-4 py-3"
       />
       {error ? (
         <Text testID="delete-account-error" className="text-sm text-destructive">

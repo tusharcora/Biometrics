@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render } from '@testing-library/react-native';
+import { fireEvent, render, within } from '@testing-library/react-native';
 import { SettingsScreen } from '../../src/screens/SettingsScreen';
 import { useSync } from '../../src/sync/SyncProvider';
 import { getTimezoneState, listTimeZones } from '../../src/lib/timezone';
@@ -34,7 +34,8 @@ it('disables "Sync now" while syncing', () => {
   set({ state: 'syncing' });
   const { getByTestId } = render(<SettingsScreen />);
   expect(getByTestId('settings-sync-now')).toBeDisabled();
-  expect(getByTestId('settings-sync-now')).toHaveTextContent('Syncing…');
+  // The row also carries the last-synced line under its title.
+  expect(within(getByTestId('settings-sync-now')).getByText('Syncing…')).toBeTruthy();
 });
 
 it('hides the sync rows when Google Health is not connected', () => {

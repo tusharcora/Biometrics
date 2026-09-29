@@ -1,5 +1,5 @@
 import React, { useContext, useState } from 'react';
-import { View, Pressable } from 'react-native';
+import { View } from 'react-native';
 import { NavigationContext } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from 'nativewind';
@@ -7,8 +7,7 @@ import { revokeCoachConsent, setCoachPersona } from '../api/coach';
 import { useCoachStatus } from '../lib/useCoachStatus';
 import { COLORS } from '../theme';
 import { Text } from './ui/text';
-import { Card } from './ui/card';
-import { Button } from './ui/button';
+import { SettingsGroup, SettingsRow } from './ui/settings-list';
 import { PushNotificationsRow } from './push-notifications-row';
 
 // The AI Coach block on the Settings screen: persona picker and consent
@@ -60,83 +59,67 @@ export function CoachSettingsSection() {
 
   if (!status.consented) {
     return (
-      <Card testID="coach-settings" className="gap-2">
-        <View className="flex-row items-center gap-2">
-          <Ionicons name="chatbubbles-outline" size={18} color={colors.accent} />
-          <Text className="text-base font-semibold">AI Coach</Text>
-        </View>
-        <Text className="text-sm text-muted-foreground">
-          The AI Coach is off. Nothing is shared with it, and the rest of the app works as normal.
-        </Text>
-        <Button testID="coach-setup-button" variant="ghost" onPress={() => navigation?.navigate('CoachConsent' as never)}>
-          Set up AI Coach
-        </Button>
-      </Card>
+      <SettingsGroup testID="coach-settings" label="AI Coach" footer="The AI Coach is off. Nothing is shared with it, and the rest of the app works as normal.">
+        <SettingsRow
+          testID="coach-setup-button"
+          icon="sparkles-outline"
+          tint={colors.coach}
+          title="Set up AI Coach"
+          onPress={() => navigation?.navigate('CoachConsent' as never)}
+        />
+      </SettingsGroup>
     );
   }
 
   return (
-    <Card testID="coach-settings" className="gap-3">
-      <View className="flex-row items-center gap-2">
-        <Ionicons name="chatbubbles-outline" size={18} color={colors.accent} />
-        <Text className="text-base font-semibold">AI Coach</Text>
-      </View>
-
-      <Text className="text-sm text-muted-foreground">Coach style</Text>
-      <View className="gap-1">
+    <View testID="coach-settings" className="gap-6">
+      <SettingsGroup label="Coach style" footer={personaError ? undefined : 'How the coach talks to you.'}>
         {status.personas.map((persona) => {
           const selected = persona.id === status.personaId;
           return (
-            <Pressable
+            <SettingsRow
               key={persona.id}
               testID={`persona-option-${persona.id}`}
               accessibilityRole="radio"
-              accessibilityState={{ selected }}
+              selected={selected}
+              title={persona.name}
+              subtitle={`${persona.verbosity} · ${persona.proactivity}`}
               onPress={() => void pickPersona(persona.id)}
-              className="flex-row items-center gap-3 py-2 active:opacity-70"
-            >
-              <Ionicons name={selected ? 'radio-button-on' : 'radio-button-off'} size={20} color={selected ? colors.accent : colors.muted} />
-              <View className="flex-1">
-                <Text className={selected ? 'font-semibold' : ''}>{persona.name}</Text>
-                <Text className="text-xs text-muted-foreground">{`${persona.verbosity} · ${persona.proactivity}`}</Text>
-              </View>
-            </Pressable>
+              trailing={selected ? <Ionicons name="checkmark" size={20} color={colors.coach} /> : <View />}
+            />
           );
         })}
-      </View>
+      </SettingsGroup>
       {personaError ? (
-        <Text testID="persona-error" className="text-sm text-destructive">
+        <Text testID="persona-error" className="-mt-4 px-4 text-sm text-destructive">
           That style could not be saved.
         </Text>
       ) : null}
 
-      <Pressable
-        testID="coach-memory-row"
-        accessibilityRole="button"
-        onPress={() => navigation?.navigate('CoachMemory' as never)}
-        className="flex-row items-center gap-3 py-2 active:opacity-70"
-      >
-        <Ionicons name="bookmarks-outline" size={20} color={colors.muted} />
-        <View className="flex-1">
-          <Text className="font-medium">Coach Memory</Text>
-          <Text className="text-xs text-muted-foreground">See, edit or delete what the coach remembers</Text>
-        </View>
-        <Ionicons name="chevron-forward" size={18} color={colors.muted} />
-      </Pressable>
-
-      <PushNotificationsRow />
-
-      <Button testID="coach-revoke-button" variant="destructive" disabled={busy} onPress={() => void revoke()}>
-        Turn off AI Coach
-      </Button>
-      <Text className="text-xs text-muted-foreground">
-        Stops sharing your data with the coach. You can turn it back on any time.
-      </Text>
+      <SettingsGroup label="AI Coach" footer="Turning it off stops sharing your data with the coach. You can turn it back on any time.">
+        <SettingsRow
+          testID="coach-memory-row"
+          icon="bulb-outline"
+          tint={colors.coach}
+          title="Coach Memory"
+          subtitle="See, edit or delete what the coach remembers"
+          onPress={() => navigation?.navigate('CoachMemory' as never)}
+        />
+        <PushNotificationsRow />
+        <SettingsRow
+          testID="coach-revoke-button"
+          icon="power-outline"
+          destructive
+          title="Turn off AI Coach"
+          disabled={busy}
+          onPress={() => void revoke()}
+        />
+      </SettingsGroup>
       {revokeError ? (
-        <Text testID="coach-revoke-error" className="text-sm text-destructive">
+        <Text testID="coach-revoke-error" className="-mt-4 px-4 text-sm text-destructive">
           The AI Coach could not be turned off. Please try again.
         </Text>
       ) : null}
-    </Card>
+    </View>
   );
 }
