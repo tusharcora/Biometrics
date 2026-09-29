@@ -26,6 +26,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   (useAuth as jest.Mock).mockReturnValue({ session: { userId: 'u1', email: 'u1@example.com' }, signOut: jest.fn() });
   (apiFetch as jest.Mock).mockImplementation((path: string) => {
+    if (path === '/me/forecast') return Promise.resolve({ status: 'NOT_ENOUGH_DATA', reason: 'NO_HISTORY', daysOfHistory: 0 });
     if (path === '/me/connection') return Promise.resolve({ status: 'CONNECTED' });
     if (path.startsWith('/me/habits')) {
       return Promise.resolve(path === '/me/habits/config' ? { habitTypes: [] } : { today: '2026-09-20', days: [] });
