@@ -33,7 +33,10 @@ jest-expo (mobile).
 - Copy (verbatim): "No measurable effect for you yet", "An estimate from your own history — not medical advice.", "Within ±X on N of the last M days", "Forecast unlocks after 21 days of data".
 - Scripts run with `npx ts-node scripts/<name>.ts` and guard `main()` with `require.main === module`.
 - Both apps use npm. Backend tests: `cd backend && npm test -- <path>`. Mobile tests: `cd mobile && npx jest <path>`.
-- Commit messages carry no Claude/AI attribution trailers.
+- Commit messages carry no Claude/AI attribution trailers. PR titles, bodies and comments never mention Claude or Claude Code and carry no generated-by footer or watermark.
+- Backend layering: `routes.ts` is a thin controller; `load.ts` is the only forecast module that touches Prisma; everything else in `forecast/` is pure and synchronous. `forecast/` may import from `scoring/` and `habits/`, never the reverse. Demo seeding follows the same split: pure `generate.ts`, I/O in `account.ts`/`persist.ts`, orchestration in the script.
+- Mobile layering: `api/` does I/O only; `lib/` holds pure logic, hooks and copy; `components/` render from props and never fetch; `screens/` compose hooks and components. User-facing forecast strings live only in `lib/forecastCopy.ts`.
+- One responsibility per file; around 150 lines of implementation is the signal to split along a responsibility line.
 
 ## Review Focus
 
@@ -57,11 +60,14 @@ jest-expo (mobile).
 - `backend/src/forecast/backtest.ts`: `rollingBacktest`.
 - `backend/src/forecast/band.ts`: `quantile`, `bandFor`, `errorSummary`.
 - `backend/src/forecast/dto.ts`: `ForecastResponse` and the related types.
-- `backend/src/forecast/engine.ts`: `buildForecast` (gates, defaults, levers, grid).
+- `backend/src/forecast/levers.ts`: `buildLevers`, `buildDefaults` (slider definitions and starting values).
+- `backend/src/forecast/engine.ts`: `buildForecast` (gates and the what-if grid; orchestrates the rest).
 - `backend/src/forecast/load.ts`: `loadForecastData` (the only DB access).
 - `backend/src/forecast/routes.ts`: `forecastRouter`.
 - `backend/src/demo/generate.ts`: the pure synthetic-history generator.
-- `backend/scripts/seedDemoUser.ts`: the CLI plus `seedDemoUser()`.
+- `backend/src/demo/account.ts`: `createDemoAccount` (replaces any existing account with that email; Better Auth user plus credential).
+- `backend/src/demo/persist.ts`: `writeDemoHistory` (raw input rows only).
+- `backend/scripts/seedDemoUser.ts`: the CLI plus `seedDemoUser()`, which orchestrates account → history → real pipelines.
 - Tests: `backend/tests/forecast/{fixtures,carryOver,habitEffects,sleepLever,predict,backtest,engine,routes}.test.ts`, `backend/tests/demo/{generate,seedDemoUser}.test.ts`.
 
 **Backend — modify**
@@ -71,12 +77,15 @@ jest-expo (mobile).
 **Mobile — create**
 - `mobile/src/api/forecast.ts`: DTO types and `fetchForecast`.
 - `mobile/src/lib/forecastGrid.ts`: `snapSleep`, `exposedFor`, `findCell`, `contributionLabel`.
+- `mobile/src/lib/useForecast.ts`: the single hook that loads the forecast (used by the Dashboard and ForecastScreen).
+- `mobile/src/lib/forecastCopy.ts`: every user-facing forecast string.
+- `mobile/jest-mocks/forecastFixture.ts`: the shared `READY` test fixture.
 - `mobile/src/components/ui/slider.tsx`: `Slider`, `snapValue`, `crossedThreshold`.
 - `mobile/src/components/forecast/contribution-bars.tsx`: `ContributionBars`.
 - `mobile/src/components/forecast/track-record-chart.tsx`: `TrackRecordChart`.
 - `mobile/src/components/tomorrow-card.tsx`: `TomorrowCard`.
 - `mobile/src/screens/ForecastScreen.tsx`.
-- Tests: `mobile/__tests__/{api/forecast,lib/forecastGrid,components/Slider,components/TomorrowCard,screens/ForecastScreen}.test.ts(x)`.
+- Tests: `mobile/__tests__/{api/forecast,lib/forecastGrid,lib/useForecast,components/Slider,components/TomorrowCard,screens/ForecastScreen}.test.ts(x)`.
 
 **Mobile — modify**
 - `mobile/package.json`: add `react-native-gesture-handler` and `expo-haptics`.
@@ -938,13 +947,15 @@ git commit -m "feat(forecast): rolling-origin backtest, band and track record"
 ### Task 5: `buildForecast` — gates, defaults, levers and the what-if grid
 
 **Files:**
-- Create: `backend/src/forecast/dto.ts`, `backend/src/forecast/engine.ts`
-- Test: `backend/tests/forecast/engine.test.ts`
+- Create: `backend/src/forecast/dto.ts`, `backend/src/forecast/levers.ts`, `backend/src/forecast/engine.ts`
+- Test: `backend/tests/forecast/engine.test.ts` (it covers `levers.ts` through `buildForecast`)
 
 **Interfaces:**
 - Consumes: Tasks 1–4; `leverRange` and the constants in `forecast/config.ts`.
 - Produces:
   - `buildForecast(data: ForecastData): ForecastResponse`
+  - `buildLevers(data: ForecastData, modelled: ReadonlySet<string>, withEffect: ReadonlySet<string>): ForecastLever[]`
+  - `buildDefaults(data: ForecastData): { sleepHours: number; habits: Record<string, number> }`
   - `ForecastResponse`, `ForecastCell`, `ForecastLever` (in `dto.ts`)
 
 - [ ] **Step 1: Create `backend/src/forecast/dto.ts`**
@@ -1110,27 +1121,81 @@ describe('buildForecast READY', () => {
 Run: `cd backend && npm test -- tests/forecast/engine.test.ts`
 Expected: FAIL with "Cannot find module '../../src/forecast/engine'".
 
-- [ ] **Step 4: Implement `backend/src/forecast/engine.ts`**
+- [ ] **Step 4: Implement `backend/src/forecast/levers.ts`**
 
 ```ts
-// The whole forecast response: gates, defaults, levers, the precomputed
-// what-if grid and the track record. Pure.
+// Slider definitions and their starting values for the forecast response. Pure.
 import { shiftDate } from '../scoring/dates';
-import type { ConfidenceLevel } from '../scoring/types';
-import { rollingBacktest } from './backtest';
-import { bandFor, errorSummary, quantile } from './band';
+import { quantile } from './band';
 import {
   DEFAULT_SLEEP_HOURS,
   DEFAULT_SLEEP_WINDOW_DAYS,
-  MAX_GRID_HABITS,
-  MIN_BAND_PAIRS,
-  MIN_HISTORY_DAYS,
   SLEEP_MAX_HOURS,
   SLEEP_MIN_HOURS,
   SLEEP_STEP_HOURS,
   leverRange,
 } from './config';
-import type { ForecastCell, ForecastLever, ForecastResponse } from './dto';
+import type { ForecastLever } from './dto';
+import type { ForecastData } from './types';
+
+/**
+ * SLEEP first, then every habit type in listHabitTypes order. A habit is
+ * CONFIRMED when it is in the grid, NOT_MODELLED when it has an effect but was
+ * cut by MAX_GRID_HABITS, and NONE_YET otherwise.
+ */
+export function buildLevers(
+  data: ForecastData,
+  modelled: ReadonlySet<string>,
+  withEffect: ReadonlySet<string>,
+): ForecastLever[] {
+  return [
+    { key: 'SLEEP', label: 'Sleep', unit: 'hours', min: SLEEP_MIN_HOURS, max: SLEEP_MAX_HOURS, step: SLEEP_STEP_HOURS, effect: 'CONFIRMED' },
+    ...data.habitTypes.map(
+      (t): ForecastLever => ({
+        key: t.type,
+        label: t.label,
+        unit: t.unit,
+        ...leverRange(t),
+        threshold: t.exposureThreshold,
+        effect: modelled.has(t.type) ? 'CONFIRMED' : withEffect.has(t.type) ? 'NOT_MODELLED' : 'NONE_YET',
+      }),
+    ),
+  ];
+}
+
+/** 14-night median sleep rounded to the grid (7.5 h when there are no nights), plus today's habit totals. */
+export function buildDefaults(data: ForecastData): { sleepHours: number; habits: Record<string, number> } {
+  const from = shiftDate(data.today, -DEFAULT_SLEEP_WINDOW_DAYS);
+  const nights = data.sleep
+    .filter((p) => p.date > from && p.date <= data.today)
+    .map((p) => p.value)
+    .sort((a, b) => a - b);
+  const sleepHours =
+    nights.length === 0
+      ? DEFAULT_SLEEP_HOURS
+      : Math.min(
+          SLEEP_MAX_HOURS,
+          Math.max(SLEEP_MIN_HOURS, Math.round(quantile(nights, 0.5) / 60 / SLEEP_STEP_HOURS) * SLEEP_STEP_HOURS),
+        );
+  return {
+    sleepHours,
+    habits: Object.fromEntries(data.habitTypes.map((t) => [t.type, data.todayHabitTotals[t.type] ?? 0])),
+  };
+}
+```
+
+- [ ] **Step 5: Implement `backend/src/forecast/engine.ts`**
+
+```ts
+// Orchestrates the forecast response: gates, model fit, backtest and the
+// precomputed what-if grid. Lever and default details live in levers.ts. Pure.
+import { shiftDate } from '../scoring/dates';
+import type { ConfidenceLevel } from '../scoring/types';
+import { rollingBacktest } from './backtest';
+import { bandFor, errorSummary } from './band';
+import { MAX_GRID_HABITS, MIN_BAND_PAIRS, MIN_HISTORY_DAYS, SLEEP_MAX_HOURS, SLEEP_MIN_HOURS, SLEEP_STEP_HOURS } from './config';
+import type { ForecastCell, ForecastResponse } from './dto';
+import { buildDefaults, buildLevers } from './levers';
 import { fitModel, predictDay } from './predict';
 import type { ForecastData, Model } from './types';
 
@@ -1152,14 +1217,6 @@ function subsets<T>(items: readonly T[]): T[][] {
 
 const maxAbsEffect = (model: Model, habit: string) =>
   Math.max(...Object.values(model.effects.get(habit) ?? {}).map((v) => Math.abs(v!)));
-
-function defaultSleepHours(data: ForecastData): number {
-  const from = shiftDate(data.today, -DEFAULT_SLEEP_WINDOW_DAYS);
-  const nights = data.sleep.filter((p) => p.date > from && p.date <= data.today).map((p) => p.value).sort((a, b) => a - b);
-  if (nights.length === 0) return DEFAULT_SLEEP_HOURS;
-  const hours = quantile(nights, 0.5) / 60;
-  return Math.min(SLEEP_MAX_HOURS, Math.max(SLEEP_MIN_HOURS, Math.round(hours / SLEEP_STEP_HOURS) * SLEEP_STEP_HOURS));
-}
 
 export function buildForecast(data: ForecastData): ForecastResponse {
   const daysOfHistory = [...data.scores.values()].filter((s) => s.score !== null).length;
@@ -1199,27 +1256,12 @@ export function buildForecast(data: ForecastData): ForecastResponse {
     }
   }
 
-  const levers: ForecastLever[] = [
-    { key: 'SLEEP', label: 'Sleep', unit: 'hours', min: SLEEP_MIN_HOURS, max: SLEEP_MAX_HOURS, step: SLEEP_STEP_HOURS, effect: 'CONFIRMED' },
-    ...data.habitTypes.map((t): ForecastLever => ({
-      key: t.type,
-      label: t.label,
-      unit: t.unit,
-      ...leverRange(t),
-      threshold: t.exposureThreshold,
-      effect: kept.has(t.type) ? 'CONFIRMED' : withEffect.includes(t.type) ? 'NOT_MODELLED' : 'NONE_YET',
-    })),
-  ];
-
   return {
     status: 'READY',
     date: target,
     algorithmVersion: data.cfg.version,
-    defaults: {
-      sleepHours: defaultSleepHours(data),
-      habits: Object.fromEntries(data.habitTypes.map((t) => [t.type, data.todayHabitTotals[t.type] ?? 0])),
-    },
-    levers,
+    defaults: buildDefaults(data),
+    levers: buildLevers(data, kept, new Set(withEffect)),
     grid,
     trackRecord: {
       ...errorSummary(track),
@@ -1229,12 +1271,12 @@ export function buildForecast(data: ForecastData): ForecastResponse {
 }
 ```
 
-- [ ] **Step 5: Run the tests to verify they pass**
+- [ ] **Step 6: Run the tests to verify they pass**
 
 Run: `cd backend && npm test -- tests/forecast`
 Expected: PASS for every forecast test. If the "hits ≥ 15" assertion fails on the fixture, check the backtest first: with ceil(median |e|) as the tolerance, at least half the days hit by construction.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add backend/src/forecast backend/tests/forecast/engine.test.ts
@@ -1439,14 +1481,16 @@ git commit -m "feat(forecast): GET /me/forecast"
 ### Task 7: Demo data generator and seed script
 
 **Files:**
-- Create: `backend/src/demo/generate.ts`, `backend/scripts/seedDemoUser.ts`
-- Test: `backend/tests/demo/generate.test.ts`, `backend/tests/demo/seedDemoUser.test.ts`
+- Create: `backend/src/demo/generate.ts` (pure), `backend/src/demo/account.ts` (auth I/O), `backend/src/demo/persist.ts` (row I/O), `backend/scripts/seedDemoUser.ts` (orchestration + CLI)
+- Test: `backend/tests/demo/generate.test.ts`, `backend/tests/demo/seedDemoUser.test.ts` (it exercises `account.ts` and `persist.ts` end to end)
 - Modify: `docs/superpowers/specs/2026-09-28-recovery-forecast-design.md` §4 (the run command becomes `ts-node`; the history ends **today**, because the forecast needs today's score)
 
 **Interfaces:**
 - Consumes: `prisma`; `auth` (`auth/auth.ts`, Better Auth: `auth.$context` → `internalAdapter`, `password.hash`); `deleteUserAccount` (`users/deletion.ts`); `rescoreUser` (`scripts/rescoreUser.ts`); `runHabitCorrelations` (`habits/job.ts`); `civilDateToUtcMidnight`; `seededRandom`, `gaussian` (reimplemented in `src/demo`, because `src` must not import from `tests`); `loadForecastData`, `buildForecast` (test only).
 - Produces:
   - `generateDemoHistory(opts: { seed: number; endDate: string; days: number }): DemoHistory`
+  - `createDemoAccount(email: string, password: string): Promise<{ userId: string }>`
+  - `writeDemoHistory(userId: string, history: DemoHistory): Promise<void>`
   - `seedDemoUser(opts: { email: string; password: string; seed?: number; now?: Date; force?: boolean }): Promise<{ userId: string }>`
   - `parseArgs(argv: string[]): { email: string; seed: number; force: boolean }`
 
@@ -1657,7 +1701,74 @@ describe('seedDemoUser', () => {
 Run: `cd backend && npm test -- tests/demo/seedDemoUser.test.ts`
 Expected: FAIL with "Cannot find module '../../scripts/seedDemoUser'".
 
-- [ ] **Step 7: Implement `backend/scripts/seedDemoUser.ts`**
+- [ ] **Step 7: Implement `backend/src/demo/account.ts`**
+
+```ts
+// The demo account: replaces any existing user with this email, then creates a
+// verified Better Auth user with an email/password credential. Auth I/O only.
+import { auth } from '../auth/auth';
+import { prisma } from '../db/client';
+import { deleteUserAccount } from '../users/deletion';
+
+export async function createDemoAccount(email: string, password: string): Promise<{ userId: string }> {
+  const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  if (existing) await deleteUserAccount(existing.id);
+
+  const ctx = await auth.$context;
+  const user = await ctx.internalAdapter.createUser({ email, name: 'Demo User', emailVerified: true });
+  await ctx.internalAdapter.linkAccount({
+    userId: user.id,
+    providerId: 'credential',
+    accountId: user.id,
+    password: await ctx.password.hash(password),
+  });
+  await prisma.user.update({ where: { id: user.id }, data: { timezone: 'UTC' } });
+  return { userId: user.id };
+}
+```
+
+- [ ] **Step 8: Implement `backend/src/demo/persist.ts`**
+
+```ts
+// Writes a generated DemoHistory as raw input rows, exactly the shapes the sync
+// worker would have written. Never writes derived tables (scores, features,
+// correlations): those come from running the real pipelines afterwards.
+import { civilDateToUtcMidnight } from '../biometrics/civilDate';
+import { prisma } from '../db/client';
+import type { DemoHistory } from './generate';
+
+export async function writeDemoHistory(userId: string, h: DemoHistory): Promise<void> {
+  const records = [
+    ...h.hrv.map((p) => ({ metricType: 'HRV' as const, ...p })),
+    ...h.rhr.map((p) => ({ metricType: 'RESTING_HR' as const, ...p })),
+    ...h.steps.map((p) => ({ metricType: 'STEPS' as const, ...p })),
+    ...h.sleep.map((p) => ({ metricType: 'SLEEP' as const, ...p })),
+  ];
+  await prisma.$transaction([
+    prisma.biometricRecord.createMany({
+      data: records.map((r) => ({ userId, metricType: r.metricType, value: r.value, recordedAt: civilDateToUtcMidnight(r.date) })),
+    }),
+    prisma.sleepSession.createMany({
+      data: h.sessions.map((s) => ({ userId, ...s, startUtcOffsetSeconds: 0, endUtcOffsetSeconds: 0 })),
+    }),
+    prisma.habitLog.createMany({
+      data: h.habitLogs.map((l) => ({
+        userId,
+        habitType: l.habitType,
+        value: l.value,
+        unit: l.unit,
+        habitDay: civilDateToUtcMidnight(l.habitDay),
+        loggedAt: new Date(`${l.habitDay}T20:00:00Z`),
+      })),
+    }),
+    prisma.habitCheckIn.createMany({
+      data: h.checkInDays.map((d) => ({ userId, habitDay: civilDateToUtcMidnight(d) })),
+    }),
+  ]);
+}
+```
+
+- [ ] **Step 9: Implement `backend/scripts/seedDemoUser.ts`** (orchestration only)
 
 ```ts
 // Creates (or recreates) a showcase account with 90 days of synthetic history,
@@ -1668,12 +1779,11 @@ Expected: FAIL with "Cannot find module '../../scripts/seedDemoUser'".
 // Writes only raw inputs; never DailyScore, UserDailyFeatures or HabitCorrelation.
 // Refuses to run with NODE_ENV=production unless --force.
 // Never runs on import: the CLI entry point is guarded by require.main.
-import { auth } from '../src/auth/auth';
-import { civilDateToUtcMidnight } from '../src/biometrics/civilDate';
 import { prisma } from '../src/db/client';
+import { createDemoAccount } from '../src/demo/account';
 import { generateDemoHistory } from '../src/demo/generate';
+import { writeDemoHistory } from '../src/demo/persist';
 import { runHabitCorrelations } from '../src/habits/job';
-import { deleteUserAccount } from '../src/users/deletion';
 import { rescoreUser } from './rescoreUser';
 
 const DAYS = 90;
@@ -1690,53 +1800,16 @@ export async function seedDemoUser({
     throw new Error('Refusing to seed a demo user in production without --force');
   }
 
-  const existing = await prisma.user.findUnique({ where: { email }, select: { id: true } });
-  if (existing) await deleteUserAccount(existing.id);
-
-  const ctx = await auth.$context;
-  const user = await ctx.internalAdapter.createUser({ email, name: 'Demo User', emailVerified: true });
-  await ctx.internalAdapter.linkAccount({
-    userId: user.id,
-    providerId: 'credential',
-    accountId: user.id,
-    password: await ctx.password.hash(password),
-  });
-  await prisma.user.update({ where: { id: user.id }, data: { timezone: 'UTC' } });
-
+  const { userId } = await createDemoAccount(email, password);
   const today = now.toISOString().slice(0, 10);
-  const h = generateDemoHistory({ seed, endDate: today, days: DAYS });
-  const records = [
-    ...h.hrv.map((p) => ({ metricType: 'HRV' as const, ...p })),
-    ...h.rhr.map((p) => ({ metricType: 'RESTING_HR' as const, ...p })),
-    ...h.steps.map((p) => ({ metricType: 'STEPS' as const, ...p })),
-    ...h.sleep.map((p) => ({ metricType: 'SLEEP' as const, ...p })),
-  ];
-  await prisma.biometricRecord.createMany({
-    data: records.map((r) => ({ userId: user.id, metricType: r.metricType, value: r.value, recordedAt: civilDateToUtcMidnight(r.date) })),
-  });
-  await prisma.sleepSession.createMany({
-    data: h.sessions.map((s) => ({ userId: user.id, ...s, startUtcOffsetSeconds: 0, endUtcOffsetSeconds: 0 })),
-  });
-  await prisma.habitLog.createMany({
-    data: h.habitLogs.map((l) => ({
-      userId: user.id,
-      habitType: l.habitType,
-      value: l.value,
-      unit: l.unit,
-      habitDay: civilDateToUtcMidnight(l.habitDay),
-      loggedAt: new Date(`${l.habitDay}T20:00:00Z`),
-    })),
-  });
-  await prisma.habitCheckIn.createMany({
-    data: h.checkInDays.map((d) => ({ userId: user.id, habitDay: civilDateToUtcMidnight(d) })),
-  });
+  await writeDemoHistory(userId, generateDemoHistory({ seed, endDate: today, days: DAYS }));
 
-  await rescoreUser(user.id, { days: DAYS, now });
+  await rescoreUser(userId, { days: DAYS, now });
   // CONFIRMED needs two consecutive weekly passes; replay three weeks, as the weekly job would have.
   for (const weeksAgo of [2, 1, 0]) {
-    await runHabitCorrelations(user.id, { now: new Date(now.getTime() - weeksAgo * WEEK_MS) });
+    await runHabitCorrelations(userId, { now: new Date(now.getTime() - weeksAgo * WEEK_MS) });
   }
-  return { userId: user.id };
+  return { userId };
 }
 
 export function parseArgs(argv: string[]): { email: string; seed: number; force: boolean } {
@@ -1769,7 +1842,7 @@ if (require.main === module) {
 }
 ```
 
-- [ ] **Step 8: Run the seed test**
+- [ ] **Step 10: Run the seed test**
 
 Run: `cd backend && npm test -- tests/demo`
 Expected: PASS.
@@ -1778,18 +1851,18 @@ If ALCOHOL is not `CONFIRMED`, inspect `prisma.habitCorrelation.findMany({ where
 - If `consecutivePasses` is 1, the weekly replay is not advancing `runKey`. Check that `isoWeekKey` differs for the three `now` values.
 - If `|r|` is below 0.3, raise the planted HRV effect from 0.9 to 0.85 in `generate.ts` and update the generator test's threshold to match.
 
-If sign-in fails with 403, the Better Auth `emailVerified` flag was not set: add `await prisma.user.update({ where: { id: user.id }, data: { emailVerified: true } })`.
+The next two fixes both belong in `account.ts`:
+- If sign-in fails with 403, the Better Auth `emailVerified` flag was not set. Add `await prisma.user.update({ where: { id: user.id }, data: { emailVerified: true } })`.
+- If `internalAdapter.linkAccount` is not a function in Better Auth 1.7.5, use `ctx.internalAdapter.createAccount({ userId, providerId: 'credential', accountId: userId, password })`.
 
-If `internalAdapter.linkAccount` is not a function in Better Auth 1.7.5, use `ctx.internalAdapter.createAccount({ userId, providerId: 'credential', accountId: userId, password })`.
-
-- [ ] **Step 9: Update spec §4 to match**
+- [ ] **Step 11: Update spec §4 to match**
 
 In `docs/superpowers/specs/2026-09-28-recovery-forecast-design.md` §4:
 - Replace `npx tsx scripts/seedDemoUser.ts` with `npx ts-node scripts/seedDemoUser.ts`.
 - Replace "Generative model (90 days ending yesterday)" with "Generative model (90 days ending today — the forecast needs today's score)".
 - Add to §1.5: "The backtest uses today's CONFIRMED set; effect sizes are refitted on the truncated history."
 
-- [ ] **Step 10: Typecheck and commit**
+- [ ] **Step 12: Typecheck and commit**
 
 Run: `cd backend && npx tsc --noEmit`
 Expected: no errors.
@@ -2029,11 +2102,11 @@ git commit -m "feat(mobile): accessible snapping slider with threshold haptics"
 
 ---
 
-### Task 9: Mobile forecast API and grid lookup
+### Task 9: Mobile forecast API, grid lookup, data hook and copy
 
 **Files:**
-- Create: `mobile/src/api/forecast.ts`, `mobile/src/lib/forecastGrid.ts`
-- Test: `mobile/__tests__/api/forecast.test.ts`, `mobile/__tests__/lib/forecastGrid.test.ts`, fixture `mobile/jest-mocks/forecastFixture.ts`
+- Create: `mobile/src/api/forecast.ts`, `mobile/src/lib/forecastGrid.ts`, `mobile/src/lib/forecastCopy.ts`, `mobile/src/lib/useForecast.ts`
+- Test: `mobile/__tests__/api/forecast.test.ts`, `mobile/__tests__/lib/forecastGrid.test.ts`, `mobile/__tests__/lib/useForecast.test.tsx`, fixture `mobile/jest-mocks/forecastFixture.ts`
 
 **Interfaces:**
 - Consumes: `apiFetch` (`src/api/client`); `ConfidenceLevel` (`src/api/scores`).
@@ -2045,6 +2118,9 @@ git commit -m "feat(mobile): accessible snapping slider with threshold haptics"
   - `exposedFor(levers: ForecastLeverDTO[], habits: Record<string, number>): string[]`
   - `findCell(f: ReadyForecastDTO, v: LeverValues): ForecastCellDTO`
   - `contributionLabel(key: string, f: ReadyForecastDTO, v: LeverValues): string`
+  - `FORECAST_COPY` (every user-facing forecast string) and `FORECAST_MIN_DAYS = 21`
+  - `ForecastState = { status: 'loading' } | { status: 'error' } | { status: 'loaded'; forecast: ForecastDTO }`
+  - `useForecast(refreshKey?: unknown): ForecastState`: the only place a component loads the forecast. It refetches when `refreshKey` changes and keeps showing the previous result while the refetch is in flight.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -2237,11 +2313,112 @@ export function contributionLabel(key: string, f: ReadyForecastDTO, v: LeverValu
 Run: `cd mobile && npx jest __tests__/api/forecast.test.ts __tests__/lib/forecastGrid.test.ts`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 6: Create `mobile/src/lib/forecastCopy.ts`**
+
+```ts
+// Every user-facing forecast string, so the Dashboard card and the Forecast
+// screen can never drift apart. Components import from here; they never inline copy.
+export const FORECAST_MIN_DAYS = 21;
+
+export const FORECAST_COPY = {
+  noneYet: 'No measurable effect for you yet',
+  disclaimer: 'An estimate from your own history — not medical advice.',
+  effectOrder: 'Effects shown in order: recent trend, sleep, habits.',
+  unlocksAfter: (days: number) => `Forecast unlocks after ${FORECAST_MIN_DAYS} days of data (${days}/${FORECAST_MIN_DAYS})`,
+  lowConfidence: 'Today’s score isn’t confident enough to forecast from yet. Check back after tonight’s sync.',
+  band: (lo: number, hi: number) => `Likely ${Math.round(lo)}–${Math.round(hi)}`,
+  trackRecord: (within: number, hits: number, days: number) => `Within ±${within} on ${hits} of the last ${days} days`,
+  loadError: 'Couldn’t load tomorrow’s forecast. Try again in a moment.',
+  unavailable: 'Tomorrow’s forecast is unavailable right now.',
+  planCta: 'Plan tomorrow →',
+  title: 'Tomorrow',
+} as const;
+```
+
+- [ ] **Step 7: Write the failing hook test `mobile/__tests__/lib/useForecast.test.tsx`**
+
+```tsx
+import { renderHook, waitFor } from '@testing-library/react-native';
+import { apiFetch } from '../../src/api/client';
+import { useForecast } from '../../src/lib/useForecast';
+import { READY } from '../../jest-mocks/forecastFixture';
+
+jest.mock('../../src/api/client', () => ({ ...jest.requireActual('../../src/api/client'), apiFetch: jest.fn() }));
+
+describe('useForecast', () => {
+  beforeEach(() => (apiFetch as jest.Mock).mockReset());
+
+  it('goes loading -> loaded', async () => {
+    (apiFetch as jest.Mock).mockResolvedValue(READY);
+    const { result } = renderHook(() => useForecast());
+    expect(result.current).toEqual({ status: 'loading' });
+    await waitFor(() => expect(result.current).toEqual({ status: 'loaded', forecast: READY }));
+  });
+
+  it('reports errors', async () => {
+    (apiFetch as jest.Mock).mockRejectedValue(new Error('boom'));
+    const { result } = renderHook(() => useForecast());
+    await waitFor(() => expect(result.current).toEqual({ status: 'error' }));
+  });
+
+  it('refetches when refreshKey changes and keeps the last result meanwhile', async () => {
+    (apiFetch as jest.Mock).mockResolvedValue(READY);
+    const { result, rerender } = renderHook(({ k }) => useForecast(k), { initialProps: { k: 0 } });
+    await waitFor(() => expect(result.current.status).toBe('loaded'));
+    (apiFetch as jest.Mock).mockReturnValue(new Promise(() => {}));
+    rerender({ k: 1 });
+    expect(apiFetch).toHaveBeenCalledTimes(2);
+    expect(result.current.status).toBe('loaded');
+  });
+});
+```
+
+Run: `cd mobile && npx jest __tests__/lib/useForecast.test.tsx`
+Expected: FAIL with "Cannot find module '../../src/lib/useForecast'".
+
+- [ ] **Step 8: Implement `mobile/src/lib/useForecast.ts`**
+
+```ts
+import { useEffect, useState } from 'react';
+import { fetchForecast, type ForecastDTO } from '../api/forecast';
+
+export type ForecastState =
+  | { status: 'loading' }
+  | { status: 'error' }
+  | { status: 'loaded'; forecast: ForecastDTO };
+
+/**
+ * The single way screens load the forecast. Pass the sync `dataVersion` (or any
+ * key) to refetch after new data arrives; the previous result stays on screen
+ * while the refetch is in flight, so cards never flash back to a skeleton.
+ */
+export function useForecast(refreshKey: unknown = 0): ForecastState {
+  const [state, setState] = useState<ForecastState>({ status: 'loading' });
+  useEffect(() => {
+    let cancelled = false;
+    fetchForecast()
+      .then((forecast) => {
+        if (!cancelled) setState({ status: 'loaded', forecast });
+      })
+      .catch(() => {
+        if (!cancelled) setState((prev) => (prev.status === 'loaded' ? prev : { status: 'error' }));
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [refreshKey]);
+  return state;
+}
+```
+
+Run: `cd mobile && npx jest __tests__/lib`
+Expected: PASS.
+
+- [ ] **Step 9: Commit**
 
 ```bash
-git add mobile/src/api/forecast.ts mobile/src/lib/forecastGrid.ts mobile/jest-mocks/forecastFixture.ts mobile/__tests__/api/forecast.test.ts mobile/__tests__/lib/forecastGrid.test.ts
-git commit -m "feat(mobile): forecast API client and local what-if grid lookup"
+git add mobile/src/api/forecast.ts mobile/src/lib/forecastGrid.ts mobile/src/lib/forecastCopy.ts mobile/src/lib/useForecast.ts mobile/jest-mocks/forecastFixture.ts mobile/__tests__/api/forecast.test.ts mobile/__tests__/lib/forecastGrid.test.ts mobile/__tests__/lib/useForecast.test.tsx
+git commit -m "feat(mobile): forecast API client, grid lookup, data hook and copy"
 ```
 
 ---
@@ -2249,13 +2426,13 @@ git commit -m "feat(mobile): forecast API client and local what-if grid lookup"
 ### Task 10: `ForecastScreen`
 
 **Files:**
-- Create: `mobile/src/components/forecast/contribution-bars.tsx`, `mobile/src/components/forecast/track-record-chart.tsx`, `mobile/src/screens/ForecastScreen.tsx`
+- Create: `mobile/src/components/forecast/contribution-bars.tsx`, `mobile/src/components/forecast/track-record-chart.tsx`, `mobile/src/components/forecast/forecast-hero.tsx`, `mobile/src/components/forecast/lever-panel.tsx`, `mobile/src/screens/ForecastScreen.tsx`
 - Modify: `mobile/src/navigation/RootNavigator.tsx` (add `Forecast: undefined` to `RootStackParamList` at `:35`, and a `<Stack.Screen name="Forecast" component={ForecastScreen} options={{ title: 'Tomorrow' }} />` next to `ScoreDetail` at `:117`)
 - Test: `mobile/__tests__/screens/ForecastScreen.test.tsx`
 
 **Interfaces:**
-- Consumes: `fetchForecast`, `ReadyForecastDTO` (Task 9); `findCell`, `contributionLabel`, `LeverValues` (Task 9); `Slider` (Task 8); `ScoreRing`, `ConfidenceBadge`, `Card`, `Text`, `Skeleton` (existing UI).
-- Produces: `ForecastScreen` (default-free named export), `ContributionBars`, `TrackRecordChart`.
+- Consumes: `useForecast`, `FORECAST_COPY`, `findCell`, `contributionLabel`, `LeverValues`, `ReadyForecastDTO`, `ForecastCellDTO`, `ForecastLeverDTO` (Task 9); `Slider` (Task 8); `ScoreRing`, `ConfidenceBadge`, `Card`, `Text`, `Skeleton` (existing UI).
+- Produces: `ForecastScreen` (named export; composition only), and these presentational components, which take props and never fetch: `ForecastHero({ cell })`, `LeverPanel({ levers, values, onChange, onReset })`, `ContributionBars({ items })`, `TrackRecordChart({ series, actualColor, forecastColor, height? })`.
 
 - [ ] **Step 1: Write the failing tests `mobile/__tests__/screens/ForecastScreen.test.tsx`**
 
@@ -2421,54 +2598,126 @@ export function TrackRecordChart({ series, height = 96, actualColor, forecastCol
 }
 ```
 
-- [ ] **Step 5: Implement `mobile/src/screens/ForecastScreen.tsx`**
+- [ ] **Step 5: Implement `mobile/src/components/forecast/forecast-hero.tsx`**
 
 ```tsx
-import { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
-import { fetchForecast, type ForecastDTO, type ReadyForecastDTO } from '../api/forecast';
+import { View } from 'react-native';
+import type { ForecastCellDTO } from '../../api/forecast';
+import { FORECAST_COPY } from '../../lib/forecastCopy';
+import { Card } from '../ui/card';
+import { ConfidenceBadge } from '../ui/confidence-badge';
+import { ScoreRing } from '../ui/score-ring';
+import { Text } from '../ui/text';
+
+/** The forecast score ring, its band and confidence for one grid cell. */
+export function ForecastHero({ cell }: { cell: ForecastCellDTO }) {
+  return (
+    <Card className="items-center gap-2 py-6">
+      <View testID="forecast-score-value" accessibilityLabel={`Forecast ${Math.round(cell.score)}`}>
+        <ScoreRing score={cell.score} size={148} strokeWidth={12} />
+      </View>
+      <Text testID="forecast-band" className="text-muted-foreground">
+        {FORECAST_COPY.band(cell.band[0], cell.band[1])}
+      </Text>
+      <ConfidenceBadge level={cell.confidence} />
+    </Card>
+  );
+}
+```
+
+- [ ] **Step 6: Implement `mobile/src/components/forecast/lever-panel.tsx`**
+
+```tsx
+import { Pressable, View } from 'react-native';
+import type { ForecastLeverDTO } from '../../api/forecast';
+import { FORECAST_COPY } from '../../lib/forecastCopy';
+import type { LeverValues } from '../../lib/forecastGrid';
+import { Card } from '../ui/card';
+import { Slider } from '../ui/slider';
+import { Text } from '../ui/text';
+
+export interface LeverPanelProps {
+  levers: ForecastLeverDTO[];
+  values: LeverValues;
+  onChange: (key: string, value: number) => void;
+  onReset: () => void;
+}
+
+/** One slider per lever; levers without a CONFIRMED effect are muted and captioned. Controlled. */
+export function LeverPanel({ levers, values, onChange, onReset }: LeverPanelProps) {
+  return (
+    <Card className="gap-4">
+      <View className="flex-row items-center justify-between">
+        <Text className="text-base font-semibold">Plan tomorrow</Text>
+        <Pressable onPress={onReset} accessibilityRole="button">
+          <Text className="text-primary">Reset</Text>
+        </Pressable>
+      </View>
+      {levers.map((lever) => {
+        const value = lever.key === 'SLEEP' ? values.sleepHours : (values.habits[lever.key] ?? 0);
+        const muted = lever.effect !== 'CONFIRMED';
+        const tone = muted ? 'text-muted-foreground' : 'text-foreground';
+        return (
+          <View key={lever.key} className="gap-1">
+            <View className="flex-row justify-between">
+              <Text className={tone}>{lever.label}</Text>
+              <Text className={tone}>{`${value} ${lever.unit}`}</Text>
+            </View>
+            <Slider
+              testID={`lever-${lever.key}`}
+              value={value}
+              min={lever.min}
+              max={lever.max}
+              step={lever.step}
+              threshold={lever.threshold}
+              muted={muted}
+              onChange={(v) => onChange(lever.key, v)}
+              accessibilityLabel={lever.label}
+              formatValue={(v) => `${v} ${lever.unit}`}
+            />
+            {lever.effect === 'NONE_YET' ? <Text className="text-xs text-muted-foreground">{FORECAST_COPY.noneYet}</Text> : null}
+          </View>
+        );
+      })}
+    </Card>
+  );
+}
+```
+
+- [ ] **Step 7: Implement `mobile/src/screens/ForecastScreen.tsx`** (composition only: no fetching, no inline copy)
+
+```tsx
+import { useMemo, useState } from 'react';
+import { ScrollView } from 'react-native';
+import type { ReadyForecastDTO } from '../api/forecast';
 import { ContributionBars } from '../components/forecast/contribution-bars';
+import { ForecastHero } from '../components/forecast/forecast-hero';
+import { LeverPanel } from '../components/forecast/lever-panel';
 import { TrackRecordChart } from '../components/forecast/track-record-chart';
 import { Card } from '../components/ui/card';
-import { ConfidenceBadge } from '../components/ui/confidence-badge';
-import { ScoreRing } from '../components/ui/score-ring';
 import { Skeleton } from '../components/ui/skeleton';
-import { Slider } from '../components/ui/slider';
 import { Text } from '../components/ui/text';
+import { FORECAST_COPY } from '../lib/forecastCopy';
 import { contributionLabel, findCell, type LeverValues } from '../lib/forecastGrid';
-
-const NONE_YET_COPY = 'No measurable effect for you yet';
-const DISCLAIMER = 'An estimate from your own history — not medical advice.';
+import { useForecast } from '../lib/useForecast';
 
 export function ForecastScreen() {
-  const [forecast, setForecast] = useState<ForecastDTO | undefined>(undefined);
-  const [failed, setFailed] = useState(false);
+  const state = useForecast();
 
-  useEffect(() => {
-    let cancelled = false;
-    fetchForecast()
-      .then((f) => !cancelled && setForecast(f))
-      .catch(() => !cancelled && setFailed(true));
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  if (failed) {
+  if (state.status === 'error') {
     return (
       <Card testID="forecast-error" className="m-4">
-        <Text>Couldn’t load tomorrow’s forecast. Pull to refresh on the dashboard and try again.</Text>
+        <Text>{FORECAST_COPY.loadError}</Text>
       </Card>
     );
   }
-  if (!forecast) return <Skeleton testID="forecast-loading" className="m-4 h-64" />;
+  if (state.status === 'loading') return <Skeleton testID="forecast-loading" className="m-4 h-64" />;
+  const { forecast } = state;
   if (forecast.status === 'NOT_ENOUGH_DATA') {
     return (
       <Card className="m-4">
         <Text>
-          {forecast.reason === 'NO_HISTORY'
-            ? `Forecast unlocks after 21 days of data (${forecast.daysOfHistory}/21)`
-            : 'Today’s score isn’t confident enough to forecast from yet. Check back after tonight’s sync.'}
+          {forecast.reason === 'NO_HISTORY' ? FORECAST_COPY.unlocksAfter(forecast.daysOfHistory) : FORECAST_COPY.lowConfidence}
         </Text>
       </Card>
     );
@@ -2481,58 +2730,17 @@ function ReadyForecast({ forecast }: { forecast: ReadyForecastDTO }) {
   const cell = useMemo(() => findCell(forecast, values), [forecast, values]);
   const { withinPoints, hits, days, series } = forecast.trackRecord;
 
-  const set = (key: string, v: number) =>
+  const setLever = (key: string, v: number) =>
     setValues((prev) => (key === 'SLEEP' ? { ...prev, sleepHours: v } : { ...prev, habits: { ...prev.habits, [key]: v } }));
 
   return (
     <ScrollView contentContainerClassName="gap-4 p-4">
-      <Card className="items-center gap-2 py-6">
-        <View testID="forecast-score-value" accessibilityLabel={`Forecast ${Math.round(cell.score)}`}>
-          <ScoreRing score={cell.score} size={148} strokeWidth={12} />
-        </View>
-        <Text testID="forecast-band" className="text-muted-foreground">
-          {`Likely ${Math.round(cell.band[0])}–${Math.round(cell.band[1])}`}
-        </Text>
-        <ConfidenceBadge level={cell.confidence} />
-      </Card>
-
-      <Card className="gap-4">
-        <View className="flex-row items-center justify-between">
-          <Text className="text-base font-semibold">Plan tomorrow</Text>
-          <Pressable onPress={() => setValues(forecast.defaults)} accessibilityRole="button">
-            <Text className="text-primary">Reset</Text>
-          </Pressable>
-        </View>
-        {forecast.levers.map((lever) => {
-          const value = lever.key === 'SLEEP' ? values.sleepHours : (values.habits[lever.key] ?? 0);
-          const muted = lever.effect !== 'CONFIRMED';
-          return (
-            <View key={lever.key} className="gap-1">
-              <View className="flex-row justify-between">
-                <Text className={muted ? 'text-muted-foreground' : 'text-foreground'}>{lever.label}</Text>
-                <Text className={muted ? 'text-muted-foreground' : 'text-foreground'}>{`${value} ${lever.unit}`}</Text>
-              </View>
-              <Slider
-                testID={`lever-${lever.key}`}
-                value={value}
-                min={lever.min}
-                max={lever.max}
-                step={lever.step}
-                threshold={lever.threshold}
-                muted={muted}
-                onChange={(v) => set(lever.key, v)}
-                accessibilityLabel={lever.label}
-                formatValue={(v) => `${v} ${lever.unit}`}
-              />
-              {lever.effect === 'NONE_YET' ? <Text className="text-xs text-muted-foreground">{NONE_YET_COPY}</Text> : null}
-            </View>
-          );
-        })}
-      </Card>
+      <ForecastHero cell={cell} />
+      <LeverPanel levers={forecast.levers} values={values} onChange={setLever} onReset={() => setValues(forecast.defaults)} />
 
       <Card className="gap-3">
         <Text className="text-base font-semibold">Why</Text>
-        <Text className="text-xs text-muted-foreground">Effects shown in order: recent trend, sleep, habits.</Text>
+        <Text className="text-xs text-muted-foreground">{FORECAST_COPY.effectOrder}</Text>
         <ContributionBars
           items={cell.contributions.map((c) => ({ key: c.key, points: c.points, label: contributionLabel(c.key, forecast, values) }))}
         />
@@ -2541,28 +2749,28 @@ function ReadyForecast({ forecast }: { forecast: ReadyForecastDTO }) {
       <Card className="gap-2">
         <Text className="text-base font-semibold">Track record</Text>
         <TrackRecordChart series={series} actualColor="#94a3b8" forecastColor="#6366f1" />
-        <Text className="text-sm text-muted-foreground">{`Within ±${withinPoints} on ${hits} of the last ${days} days`}</Text>
+        <Text className="text-sm text-muted-foreground">{FORECAST_COPY.trackRecord(withinPoints, hits, days)}</Text>
       </Card>
 
-      <Text className="text-center text-xs text-muted-foreground">{DISCLAIMER}</Text>
+      <Text className="text-center text-xs text-muted-foreground">{FORECAST_COPY.disclaimer}</Text>
     </ScrollView>
   );
 }
 ```
 
-- [ ] **Step 6: Register the route**
+- [ ] **Step 8: Register the route**
 
 In `mobile/src/navigation/RootNavigator.tsx`:
 - Add `Forecast: undefined;` to `RootStackParamList`.
 - Add `import { ForecastScreen } from '../screens/ForecastScreen';`.
 - Add `<Stack.Screen name="Forecast" component={ForecastScreen} options={{ title: 'Tomorrow' }} />` directly after the `ScoreDetail` screen.
 
-- [ ] **Step 7: Run the tests to verify they pass**
+- [ ] **Step 9: Run the tests to verify they pass**
 
 Run: `cd mobile && npx jest __tests__/screens/ForecastScreen.test.tsx __tests__/lib/forecastGrid.test.ts`
 Expected: PASS. If `ScoreRing`'s internal `CountUp` makes the rendered number unstable in tests, the assertions already go through the `forecast-score-value` accessibility label, which is set synchronously.
 
-- [ ] **Step 8: Commit**
+- [ ] **Step 10: Commit**
 
 ```bash
 git add mobile/src/screens/ForecastScreen.tsx mobile/src/components/forecast mobile/src/navigation/RootNavigator.tsx mobile/__tests__
@@ -2575,13 +2783,13 @@ git commit -m "feat(mobile): Forecast screen with live what-if levers and track 
 
 **Files:**
 - Create: `mobile/src/components/tomorrow-card.tsx`
-- Modify: `mobile/src/screens/DashboardScreen.tsx` (load the forecast in the same `dataVersion` effect style as scores; render `TomorrowCard` between the RECOVERY and SLEEP `ScoreCard`s at `:298-314`)
+- Modify: `mobile/src/screens/DashboardScreen.tsx` (call `useForecast(dataVersion)`; render `TomorrowCard` between the RECOVERY and SLEEP `ScoreCard`s at `:298-314`)
 - Modify: `mobile/__tests__/screens/DashboardScreen.test.tsx` (`mockApi` at `:20`)
 - Test: `mobile/__tests__/components/TomorrowCard.test.tsx`
 
 **Interfaces:**
-- Consumes: `fetchForecast`, `ForecastDTO` (Task 9); `findCell` (Task 9); `ScoreRing`, `BaselineProgressRing`, `ConfidenceBadge`, `Card`, `Skeleton`, `Text`.
-- Produces: `TomorrowCard({ forecast: ForecastDTO | undefined; failed: boolean; onPress: () => void })`.
+- Consumes: `useForecast`, `ForecastState`, `FORECAST_COPY`, `FORECAST_MIN_DAYS`, `findCell` (Task 9); `ScoreRing`, `BaselineProgressRing`, `ConfidenceBadge`, `Card`, `Skeleton`, `Text`.
+- Produces: `TomorrowCard({ state: ForecastState; onPress: () => void })`. It is presentational and never fetches.
 
 - [ ] **Step 1: Write the failing tests `mobile/__tests__/components/TomorrowCard.test.tsx`**
 
@@ -2593,7 +2801,7 @@ import { READY } from '../../jest-mocks/forecastFixture';
 describe('TomorrowCard', () => {
   it('shows the default forecast with its band and opens the planner', () => {
     const onPress = jest.fn();
-    render(<TomorrowCard forecast={READY} failed={false} onPress={onPress} />);
+    render(<TomorrowCard state={{ status: 'loaded', forecast: READY }} onPress={onPress} />);
     expect(screen.getByTestId('tomorrow-card')).toBeTruthy();
     expect(screen.getByText('Likely 40–80')).toBeTruthy();
     fireEvent.press(screen.getByText('Plan tomorrow →'));
@@ -2602,15 +2810,18 @@ describe('TomorrowCard', () => {
 
   it('shows progress toward 21 days when there is not enough history', () => {
     render(
-      <TomorrowCard forecast={{ status: 'NOT_ENOUGH_DATA', reason: 'NO_HISTORY', daysOfHistory: 12 }} failed={false} onPress={jest.fn()} />,
+      <TomorrowCard
+        state={{ status: 'loaded', forecast: { status: 'NOT_ENOUGH_DATA', reason: 'NO_HISTORY', daysOfHistory: 12 } }}
+        onPress={jest.fn()}
+      />,
     );
     expect(screen.getByText('Forecast unlocks after 21 days of data (12/21)')).toBeTruthy();
   });
 
   it('shows loading and error states', () => {
-    const { rerender } = render(<TomorrowCard forecast={undefined} failed={false} onPress={jest.fn()} />);
+    const { rerender } = render(<TomorrowCard state={{ status: 'loading' }} onPress={jest.fn()} />);
     expect(screen.getByTestId('tomorrow-loading')).toBeTruthy();
-    rerender(<TomorrowCard forecast={undefined} failed onPress={jest.fn()} />);
+    rerender(<TomorrowCard state={{ status: 'error' }} onPress={jest.fn()} />);
     expect(screen.getByTestId('tomorrow-unavailable')).toBeTruthy();
   });
 });
@@ -2625,8 +2836,9 @@ Expected: FAIL with "Cannot find module".
 
 ```tsx
 import { Pressable, View } from 'react-native';
-import type { ForecastDTO } from '../api/forecast';
+import { FORECAST_COPY, FORECAST_MIN_DAYS } from '../lib/forecastCopy';
 import { findCell } from '../lib/forecastGrid';
+import type { ForecastState } from '../lib/useForecast';
 import { BaselineProgressRing } from './ui/baseline-progress-ring';
 import { Card } from './ui/card';
 import { ConfidenceBadge } from './ui/confidence-badge';
@@ -2634,23 +2846,23 @@ import { ScoreRing } from './ui/score-ring';
 import { Skeleton } from './ui/skeleton';
 import { Text } from './ui/text';
 
-export function TomorrowCard({ forecast, failed, onPress }: { forecast: ForecastDTO | undefined; failed: boolean; onPress: () => void }) {
-  if (failed) {
+/** Dashboard summary of tomorrow's default forecast. Presentational: the screen owns loading. */
+export function TomorrowCard({ state, onPress }: { state: ForecastState; onPress: () => void }) {
+  if (state.status === 'error') {
     return (
       <Card testID="tomorrow-unavailable">
-        <Text className="text-muted-foreground">Tomorrow’s forecast is unavailable right now.</Text>
+        <Text className="text-muted-foreground">{FORECAST_COPY.unavailable}</Text>
       </Card>
     );
   }
-  if (!forecast) return <Skeleton testID="tomorrow-loading" className="h-28 w-full" />;
+  if (state.status === 'loading') return <Skeleton testID="tomorrow-loading" className="h-28 w-full" />;
+  const { forecast } = state;
   if (forecast.status === 'NOT_ENOUGH_DATA') {
     return (
       <Card testID="tomorrow-locked" className="flex-row items-center gap-4">
-        <BaselineProgressRing daysCollected={Math.min(forecast.daysOfHistory, 21)} daysRequired={21} />
+        <BaselineProgressRing daysCollected={Math.min(forecast.daysOfHistory, FORECAST_MIN_DAYS)} daysRequired={FORECAST_MIN_DAYS} />
         <Text className="flex-1 text-muted-foreground">
-          {forecast.reason === 'NO_HISTORY'
-            ? `Forecast unlocks after 21 days of data (${forecast.daysOfHistory}/21)`
-            : 'Tomorrow’s forecast will appear once today’s score is confident.'}
+          {forecast.reason === 'NO_HISTORY' ? FORECAST_COPY.unlocksAfter(forecast.daysOfHistory) : FORECAST_COPY.lowConfidence}
         </Text>
       </Card>
     );
@@ -2661,10 +2873,10 @@ export function TomorrowCard({ forecast, failed, onPress }: { forecast: Forecast
       <Card className="flex-row items-center gap-4">
         <ScoreRing score={cell.score} />
         <View className="flex-1 gap-1">
-          <Text className="text-base font-semibold">Tomorrow</Text>
-          <Text className="text-muted-foreground">{`Likely ${Math.round(cell.band[0])}–${Math.round(cell.band[1])}`}</Text>
+          <Text className="text-base font-semibold">{FORECAST_COPY.title}</Text>
+          <Text className="text-muted-foreground">{FORECAST_COPY.band(cell.band[0], cell.band[1])}</Text>
           <ConfidenceBadge level={cell.confidence} />
-          <Text className="text-primary">Plan tomorrow →</Text>
+          <Text className="text-primary">{FORECAST_COPY.planCta}</Text>
         </View>
       </Card>
     </Pressable>
@@ -2677,31 +2889,20 @@ export function TomorrowCard({ forecast, failed, onPress }: { forecast: Forecast
 Add these imports:
 
 ```tsx
-import { fetchForecast, type ForecastDTO } from '../api/forecast';
 import { TomorrowCard } from '../components/tomorrow-card';
+import { useForecast } from '../lib/useForecast';
 ```
 
-Next to the existing score state, add:
+Next to the existing score state (after `dataVersion` is read from `useSync()`), add:
 
 ```tsx
-  const [forecast, setForecast] = useState<ForecastDTO | undefined>(undefined);
-  const [forecastFailed, setForecastFailed] = useState(false);
-  useEffect(() => {
-    let cancelled = false;
-    setForecastFailed(false);
-    fetchForecast()
-      .then((f) => !cancelled && setForecast(f))
-      .catch(() => !cancelled && setForecastFailed(true));
-    return () => {
-      cancelled = true;
-    };
-  }, [dataVersion]);
+  const forecastState = useForecast(dataVersion);
 ```
 
 Between `<ScoreCard type="RECOVERY" ... />` and `<ScoreCard type="SLEEP" ... />`, add:
 
 ```tsx
-          <TomorrowCard forecast={forecast} failed={forecastFailed} onPress={() => navigation.navigate('Forecast')} />
+          <TomorrowCard state={forecastState} onPress={() => navigation.navigate('Forecast')} />
 ```
 
 - [ ] **Step 5: Route `/me/forecast` in the Dashboard test mock**
