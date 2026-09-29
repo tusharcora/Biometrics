@@ -91,7 +91,7 @@ export function ScoreDetailScreen() {
 
   if (state.status === 'loading') {
     return (
-      <SafeAreaView className="flex-1 bg-background">
+      <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
         <View testID="score-detail-loading" className="items-center gap-5 px-5 pt-6">
           <Skeleton className="h-[216px] w-[216px] rounded-full" />
           <Skeleton className="h-6 w-40 rounded-full" />
@@ -104,7 +104,7 @@ export function ScoreDetailScreen() {
 
   if (state.status === 'error') {
     return (
-      <SafeAreaView className="flex-1 bg-background">
+      <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
         <View className="flex-1 items-center justify-center p-6">
           <Text className="text-center text-muted-foreground">Something went wrong loading this score.</Text>
         </View>
@@ -114,7 +114,7 @@ export function ScoreDetailScreen() {
 
   if (state.status === 'empty' || !detail) {
     return (
-      <SafeAreaView className="flex-1 bg-background">
+      <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
         <View className="flex-1 items-center justify-center p-6">
           <Text className="text-center text-muted-foreground">No score for this day yet.</Text>
         </View>

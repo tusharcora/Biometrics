@@ -55,7 +55,7 @@ export function MetricDetailScreen() {
 
   if (!stats) {
     return (
-      <SafeAreaView className="flex-1 bg-background">
+      <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
         <View className="flex-1 items-center justify-center p-6">
           <Text className="text-center text-muted-foreground">No {config.label.toLowerCase()} data yet.</Text>
         </View>

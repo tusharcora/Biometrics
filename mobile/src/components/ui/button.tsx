@@ -37,8 +37,9 @@ interface ButtonProps extends PressableScaleProps, VariantProps<typeof buttonVar
 }
 
 export function Button({ className, variant, size, children, ...props }: ButtonProps) {
+  // A disabled button dims, so a form that can't submit yet reads that way.
   return (
-    <PressableScale className={cn(buttonVariants({ variant, size }), className)} {...props}>
+    <PressableScale className={cn(buttonVariants({ variant, size }), props.disabled ? 'opacity-50' : '', className)} {...props}>
       {typeof children === 'string' ? <Text className={textVariants({ variant })}>{children}</Text> : children}
     </PressableScale>
   );

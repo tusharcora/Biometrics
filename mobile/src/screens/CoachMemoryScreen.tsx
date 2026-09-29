@@ -1,6 +1,8 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import { View, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useColorScheme } from 'nativewind';
+import { Ionicons } from '@expo/vector-icons';
 import {
   CoachConsentRequiredError,
   CoachDisabledError,
@@ -14,17 +16,31 @@ import { Text } from '../components/ui/text';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
+import { SettingsGroup } from '../components/ui/settings-list';
+import { StillOrb } from '../components/ui/still-orb';
 import { MemoryEditForm } from '../components/memory-edit-form';
+import { COLORS } from '../theme';
+import { withAlpha } from '../lib/utils';
+
+// One glyph per memory category, drawn in the coach's colour.
+const CATEGORY_ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
+  TRAINING_GOAL: 'flag-outline',
+  SCHEDULE: 'calendar-outline',
+  PREFERENCE: 'options-outline',
+};
 
 type Phase = 'loading' | 'ready' | 'error' | 'unavailable';
 
 interface MemoryRowProps {
   entry: MemoryDTO;
+  icon: keyof typeof Ionicons.glyphMap;
   onChange: (entry: MemoryDTO) => void;
   onRemove: (id: string) => void;
 }
 
-function MemoryRow({ entry, onChange, onRemove }: MemoryRowProps) {
+function MemoryRow({ entry, icon, onChange, onRemove }: MemoryRowProps) {
+  const { colorScheme: scheme } = useColorScheme();
+  const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
   const [editing, setEditing] = useState(false);
   const [confirming, setConfirming] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -49,7 +65,7 @@ function MemoryRow({ entry, onChange, onRemove }: MemoryRowProps) {
 
   if (editing) {
     return (
-      <Card testID={`memory-entry-${entry.id}`}>
+      <View testID={`memory-entry-${entry.id}`} className="px-4 py-3">
         <MemoryEditForm
           id={entry.id}
           initialValue={entry.value}
@@ -61,55 +77,63 @@ function MemoryRow({ entry, onChange, onRemove }: MemoryRowProps) {
           onCancel={() => setEditing(false)}
           onGone={() => onRemove(entry.id)}
         />
-      </Card>
+      </View>
     );
   }
 
   return (
-    <Card testID={`memory-entry-${entry.id}`} className="gap-2">
-      <Text className="text-base">{entry.value}</Text>
-      {entry.status === 'PENDING' ? (
-        <Text testID={`memory-pending-${entry.id}`} className="text-xs text-muted-foreground">
-          {PENDING_MEMORY_TEXT}
-        </Text>
-      ) : null}
-      {deleteError ? (
-        <Text testID={`memory-error-${entry.id}`} className="text-sm text-destructive">
-          {MEMORY_ERROR_TEXT.generic}
-        </Text>
-      ) : null}
-      {confirming ? (
-        <View className="gap-1">
-          <Text className="text-sm">Delete this memory?</Text>
-          <View className="flex-row justify-end gap-2">
-            <Button testID={`memory-cancel-delete-${entry.id}`} variant="ghost" size="sm" disabled={busy} onPress={() => setConfirming(false)}>
-              Cancel
-            </Button>
-            <Button testID={`memory-confirm-delete-${entry.id}`} variant="destructive" size="sm" disabled={busy} onPress={() => void confirmDelete()}>
-              Delete
-            </Button>
+    <View testID={`memory-entry-${entry.id}`} className="flex-row gap-3 px-4 py-3.5">
+      <View className="h-8 w-8 items-center justify-center rounded-[10px]" style={{ backgroundColor: withAlpha(colors.coach, 0.16) }}>
+        <Ionicons name={icon} size={17} color={colors.coach} />
+      </View>
+      <View className="flex-1 gap-1.5">
+        <Text className="text-base">{entry.value}</Text>
+        {entry.status === 'PENDING' ? (
+          <View className="flex-row items-center gap-1.5">
+            <View className="h-1.5 w-1.5 rounded-full bg-coach" />
+            <Text testID={`memory-pending-${entry.id}`} className="flex-1 text-xs text-coach">
+              {PENDING_MEMORY_TEXT}
+            </Text>
           </View>
-        </View>
-      ) : (
-        <View className="flex-row justify-end gap-4">
-          <Pressable testID={`memory-edit-${entry.id}`} accessibilityRole="button" hitSlop={8} onPress={() => setEditing(true)} className="active:opacity-70">
-            <Text className="text-sm font-semibold text-accent">Edit</Text>
-          </Pressable>
-          <Pressable
-            testID={`memory-delete-${entry.id}`}
-            accessibilityRole="button"
-            hitSlop={8}
-            onPress={() => {
-              setDeleteError(false);
-              setConfirming(true);
-            }}
-            className="active:opacity-70"
-          >
-            <Text className="text-sm font-semibold text-destructive">Delete</Text>
-          </Pressable>
-        </View>
-      )}
-    </Card>
+        ) : null}
+        {deleteError ? (
+          <Text testID={`memory-error-${entry.id}`} className="text-sm text-destructive">
+            {MEMORY_ERROR_TEXT.generic}
+          </Text>
+        ) : null}
+        {confirming ? (
+          <View className="mt-1 gap-2 rounded-tile bg-muted px-3 py-2.5">
+            <Text className="text-sm font-medium">Delete this memory?</Text>
+            <View className="flex-row justify-end gap-2">
+              <Button testID={`memory-cancel-delete-${entry.id}`} variant="ghost" size="sm" disabled={busy} onPress={() => setConfirming(false)}>
+                Cancel
+              </Button>
+              <Button testID={`memory-confirm-delete-${entry.id}`} variant="destructive" size="sm" disabled={busy} onPress={() => void confirmDelete()}>
+                Delete
+              </Button>
+            </View>
+          </View>
+        ) : (
+          <View className="flex-row gap-5 pt-0.5">
+            <Pressable testID={`memory-edit-${entry.id}`} accessibilityRole="button" hitSlop={8} onPress={() => setEditing(true)} className="active:opacity-70">
+              <Text className="text-sm font-semibold text-coach">Edit</Text>
+            </Pressable>
+            <Pressable
+              testID={`memory-delete-${entry.id}`}
+              accessibilityRole="button"
+              hitSlop={8}
+              onPress={() => {
+                setDeleteError(false);
+                setConfirming(true);
+              }}
+              className="active:opacity-70"
+            >
+              <Text className="text-sm font-semibold text-destructive">Delete</Text>
+            </Pressable>
+          </View>
+        )}
+      </View>
+    </View>
   );
 }
 
@@ -148,11 +172,12 @@ export function CoachMemoryScreen() {
 
   if (phase === 'loading') {
     return (
-      <SafeAreaView className="flex-1 bg-background">
-        <View testID="coach-memory-loading" className="gap-3 p-4">
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-16 w-full" />
-          <Skeleton className="h-16 w-full" />
+      <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
+        <View testID="coach-memory-loading" className="gap-3 px-5 pt-4">
+          <Skeleton className="h-3 w-28 rounded-full" />
+          <Skeleton className="h-20 w-full rounded-card" />
+          <Skeleton className="h-3 w-24 rounded-full" />
+          <Skeleton className="h-20 w-full rounded-card" />
         </View>
       </SafeAreaView>
     );
@@ -160,8 +185,9 @@ export function CoachMemoryScreen() {
 
   if (phase === 'unavailable') {
     return (
-      <SafeAreaView className="flex-1 bg-background">
-        <View testID="coach-memory-unavailable" className="flex-1 items-center justify-center p-6">
+      <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
+        <View testID="coach-memory-unavailable" className="flex-1 items-center justify-center gap-4 px-8">
+          <StillOrb size={48} glow={false} />
           <Text className="text-center text-muted-foreground">The AI Coach is not available right now.</Text>
         </View>
       </SafeAreaView>
@@ -170,8 +196,9 @@ export function CoachMemoryScreen() {
 
   if (phase === 'error') {
     return (
-      <SafeAreaView className="flex-1 bg-background">
-        <View className="flex-1 items-center justify-center gap-3 p-6">
+      <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
+        <View className="flex-1 items-center justify-center gap-4 px-8">
+          <StillOrb size={48} glow={false} />
           <Text testID="coach-memory-error" className="text-center text-muted-foreground">
             Your coach memory could not be loaded.
           </Text>
@@ -186,11 +213,12 @@ export function CoachMemoryScreen() {
   const groups = groupMemories(entries);
 
   return (
-    <SafeAreaView className="flex-1 bg-background">
-      <ScrollView contentContainerStyle={{ gap: 16, padding: 16 }}>
+    <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
+      <ScrollView contentContainerStyle={{ gap: 24, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 32 }}>
         {groups.length === 0 ? (
-          <Card testID="coach-memory-empty" className="gap-2">
-            <Text className="text-base font-semibold">Nothing remembered yet</Text>
+          <Card testID="coach-memory-empty" className="items-start gap-3 p-5">
+            <StillOrb size={40} />
+            <Text className="font-display text-display-sm">Nothing remembered yet</Text>
             <Text className="text-sm text-muted-foreground">
               The coach only remembers your training goals, your schedule and your preferences, and never health or medical details.
               Anything it remembers will appear here, and you can change or delete it at any time.
@@ -198,12 +226,17 @@ export function CoachMemoryScreen() {
           </Card>
         ) : (
           groups.map((group) => (
-            <View key={group.key} className="gap-2">
-              <Text className="text-sm font-semibold text-muted-foreground">{group.label}</Text>
+            <SettingsGroup key={group.key} label={group.label}>
               {group.entries.map((entry) => (
-                <MemoryRow key={entry.id} entry={entry} onChange={replace} onRemove={remove} />
+                <MemoryRow
+                  key={entry.id}
+                  entry={entry}
+                  icon={CATEGORY_ICONS[group.key] ?? 'bookmark-outline'}
+                  onChange={replace}
+                  onRemove={remove}
+                />
               ))}
-            </View>
+            </SettingsGroup>
           ))
         )}
       </ScrollView>

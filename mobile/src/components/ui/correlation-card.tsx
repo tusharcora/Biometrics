@@ -2,10 +2,13 @@ import React from 'react';
 import { View } from 'react-native';
 import Svg, { Path, Rect } from 'react-native-svg';
 import { useColorScheme } from 'nativewind';
+import { Ionicons } from '@expo/vector-icons';
 import { Text } from './text';
 import { Card } from './card';
 import { Badge } from './badge';
+import { SectionLabel } from './section-label';
 import { COLORS } from '../../theme';
+import { withAlpha } from '../../lib/utils';
 import {
   alignSeries,
   buildComparisonSentence,
@@ -70,7 +73,7 @@ function PatternSparkline({ points, lineColor, exposedColor, restColor }: { poin
   return (
     <View testID="pattern-sparkline">
       <Svg width="100%" height={HEIGHT} viewBox={`0 0 ${VIEWBOX_WIDTH} ${HEIGHT}`} preserveAspectRatio="none">
-        <Path d={path} stroke={lineColor} strokeWidth={2.5} fill="none" strokeLinejoin="round" strokeLinecap="round" />
+        <Path d={path} stroke={lineColor} strokeWidth={2} fill="none" strokeLinejoin="round" strokeLinecap="round" />
         {points.map((point, i) => (
           <Rect
             key={point.day}
@@ -78,6 +81,7 @@ function PatternSparkline({ points, lineColor, exposedColor, restColor }: { poin
             y={point.exposed ? TICK_TOP : TICK_TOP + 5}
             width={3}
             height={point.exposed ? 8 : 3}
+            rx={1.5}
             fill={point.exposed ? exposedColor : restColor}
           />
         ))}
@@ -101,37 +105,58 @@ export function CorrelationCard({ pattern, habitLabel }: CorrelationCardProps) {
   const points = alignSeries(pattern.series);
   const factor = factorPhrase(pattern.factor, pattern.factorLabel);
 
+  const lower = pattern.direction === 'lower';
+
   return (
-    <Card testID={`correlation-card-${pattern.habitType}-${pattern.factor}-${pattern.lagDays}`} className="gap-3">
+    <Card testID={`correlation-card-${pattern.habitType}-${pattern.factor}-${pattern.lagDays}`} className="gap-4 p-5">
       <View className="flex-row items-center justify-between gap-2">
-        <Text className="flex-1 text-base font-semibold">{habitLabel ?? humanize(pattern.habitType)}</Text>
+        <SectionLabel className="flex-1">{habitLabel ?? humanize(pattern.habitType)}</SectionLabel>
         <Badge testID="pattern-direction" variant="muted">
-          {pattern.direction === 'lower' ? 'Lower than on other days' : 'Higher than on other days'}
+          {lower ? 'Lower than on other days' : 'Higher than on other days'}
         </Badge>
       </View>
 
-      <Text testID="pattern-sentence" className="text-sm">
+      {/* The effect size, straight from the server's structured field -- the
+          same number the sentence below states, just set as the headline. */}
+      <View className="flex-row items-end gap-2">
+        <Ionicons name={lower ? 'arrow-down' : 'arrow-up'} size={22} color={colors.muted} style={{ marginBottom: 5 }} />
+        <Text className="text-numeral font-semibold" style={{ fontVariant: ['tabular-nums'] }}>
+          {`${formatNumber(Math.abs(pattern.effectSizePercent))}%`}
+        </Text>
+        <Text className="mb-1 flex-1 text-sm text-muted-foreground" numberOfLines={1}>
+          {`${factor} · ${lagPhrase(pattern.lagDays).toLowerCase()}`}
+        </Text>
+      </View>
+
+      <Text testID="pattern-sentence" className="text-base leading-6">
         {buildPatternSentence(pattern)}
       </Text>
 
-      <PatternSparkline points={points} lineColor={colors.accent} exposedColor={colors.accent} restColor={colors.border} />
       {points.length > 0 ? (
-        <Text testID="pattern-sparkline-caption" className="text-[11px] text-muted-foreground">
-          {`Line: your ${factor} ${lagPhrase(pattern.lagDays).toLowerCase()} each day. Tall ticks: days you logged ${formatNumber(pattern.exposureThreshold)}+ ${pattern.exposureUnit}.`}
-        </Text>
+        <View className="gap-2">
+          {/* Neutral line, accent only on the days that matter (the habit days). */}
+          <PatternSparkline points={points} lineColor={withAlpha(colors.muted, 0.6)} exposedColor={colors.accent} restColor={colors.border} />
+          <Text testID="pattern-sparkline-caption" className="text-xs text-muted-foreground">
+            {`Line: your ${factor} ${lagPhrase(pattern.lagDays).toLowerCase()} each day. Tall ticks: days you logged ${formatNumber(pattern.exposureThreshold)}+ ${pattern.exposureUnit}.`}
+          </Text>
+        </View>
       ) : null}
 
-      <Text className="text-xs text-muted-foreground">{buildComparisonSentence(pattern)}</Text>
-
-      <View className="gap-1">
-        <Text testID="pattern-caveat" className="text-xs text-muted-foreground">
-          {buildSampleCaveat(pattern.sampleSize)}
-        </Text>
-        {isSmallSample(pattern.sampleSize) ? (
-          <Text testID="pattern-small-sample" className="text-xs font-medium text-muted-foreground">
-            Small sample: treat this as tentative until more days are logged.
-          </Text>
-        ) : null}
+      <View className="gap-2 border-t border-border pt-4">
+        <Text className="text-sm text-muted-foreground">{buildComparisonSentence(pattern)}</Text>
+        <View className="flex-row items-start gap-2">
+          <Ionicons name="information-circle-outline" size={15} color={colors.muted} style={{ marginTop: 1 }} />
+          <View className="flex-1 gap-1">
+            <Text testID="pattern-caveat" className="text-xs text-muted-foreground">
+              {buildSampleCaveat(pattern.sampleSize)}
+            </Text>
+            {isSmallSample(pattern.sampleSize) ? (
+              <Text testID="pattern-small-sample" className="text-xs font-medium text-score-fair">
+                Small sample: treat this as tentative until more days are logged.
+              </Text>
+            ) : null}
+          </View>
+        </View>
       </View>
     </Card>
   );

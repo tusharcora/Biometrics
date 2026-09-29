@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { ScrollView } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../auth/AuthContext';
 import { messageFor } from '../auth/authErrors';
@@ -9,8 +10,21 @@ import type { AuthStackParamList } from '../navigation/AuthNavigator';
 import { Text } from '../components/ui/text';
 import { Button } from '../components/ui/button';
 import { TextField } from '../components/ui/text-field';
+import { StillOrb } from '../components/ui/still-orb';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'SignUp'>;
+
+// A lighter take on Sign in's hero: a small still orb, a serif title and one
+// muted line above the form.
+function AuthHeader({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <Animated.View entering={FadeInDown.duration(450)} className="items-center gap-3">
+      <StillOrb size={56} />
+      <Text className="text-center font-display text-display-lg">{title}</Text>
+      <Text className="text-center text-base text-muted-foreground">{children}</Text>
+    </Animated.View>
+  );
+}
 
 export function SignUpScreen({ navigation }: Props) {
   const { signUpWithEmail } = useAuth();
@@ -43,12 +57,11 @@ export function SignUpScreen({ navigation }: Props) {
   if (sentTo) {
     return (
       <SafeAreaView className="flex-1 bg-background">
-        <ScrollView contentContainerClassName="flex-grow justify-center gap-6 p-8">
-          <Text className="text-2xl font-bold">Check your inbox</Text>
-          <Text className="text-base text-muted-foreground">
+        <ScrollView contentContainerClassName="flex-grow justify-center gap-8 px-6 py-8">
+          <AuthHeader title="Check your inbox">
             We sent a link to {sentTo}. Open it on this phone to confirm your email, then sign in.
-          </Text>
-          <Button testID="back-to-sign-in" onPress={() => navigation.popTo('SignIn')}>
+          </AuthHeader>
+          <Button testID="back-to-sign-in" className="w-full py-4" onPress={() => navigation.popTo('SignIn')}>
             Back to sign in
           </Button>
         </ScrollView>
@@ -58,15 +71,22 @@ export function SignUpScreen({ navigation }: Props) {
 
   return (
     <SafeAreaView className="flex-1 bg-background">
-      <ScrollView contentContainerClassName="flex-grow justify-center gap-4 p-8" keyboardShouldPersistTaps="handled">
-        <Text className="text-2xl font-bold">Create an account</Text>
-        <TextField label="Name" testID="name-input" value={name} onChangeText={setName} autoComplete="name" />
-        <TextField label="Email" testID="email-input" value={email} onChangeText={setEmail} keyboardType="email-address" autoComplete="email" />
-        <TextField label="Password" testID="password-input" value={password} onChangeText={setPassword} secure autoComplete="new-password" />
-        {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
-        <Button testID="sign-up-button" onPress={submit} disabled={busy || !name.trim() || !email.trim() || !password}>
-          Create account
-        </Button>
+      <ScrollView contentContainerClassName="flex-grow justify-center gap-8 px-6 py-8" keyboardShouldPersistTaps="handled">
+        <AuthHeader title="Create an account">We'll email you a link to confirm it's you.</AuthHeader>
+        <View className="gap-3">
+          <TextField label="Name" testID="name-input" value={name} onChangeText={setName} autoComplete="name" />
+          <TextField label="Email" testID="email-input" value={email} onChangeText={setEmail} keyboardType="email-address" autoComplete="email" />
+          <TextField label="Password" testID="password-input" value={password} onChangeText={setPassword} secure autoComplete="new-password" />
+          {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
+          <Button
+            testID="sign-up-button"
+            className="mt-2 w-full py-4"
+            onPress={submit}
+            disabled={busy || !name.trim() || !email.trim() || !password}
+          >
+            Create account
+          </Button>
+        </View>
       </ScrollView>
     </SafeAreaView>
   );

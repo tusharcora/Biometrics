@@ -9,6 +9,8 @@ import { Text } from '../components/ui/text';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
+import { SettingsGroup, SettingsRow } from '../components/ui/settings-list';
+import { StillOrb } from '../components/ui/still-orb';
 import { COLORS } from '../theme';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { navigateToCoachEntry } from '../navigation/coachNavigation';
@@ -79,11 +81,12 @@ export function CoachConsentScreen() {
 
   if (state.status === 'loading' || alreadyConsented) {
     return (
-      <SafeAreaView className="flex-1 bg-background">
-        <View testID="coach-consent-loading" className="gap-4 p-4">
+      <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
+        <View testID="coach-consent-loading" className="gap-5 px-5 pt-4">
+          <Skeleton className="h-14 w-14 rounded-full" />
           <Skeleton className="h-8 w-2/3" />
-          <Skeleton className="h-32 w-full" />
-          <Skeleton className="h-24 w-full" />
+          <Skeleton className="h-32 w-full rounded-card" />
+          <Skeleton className="h-40 w-full rounded-card" />
         </View>
       </SafeAreaView>
     );
@@ -91,8 +94,9 @@ export function CoachConsentScreen() {
 
   if (state.status === 'error') {
     return (
-      <SafeAreaView className="flex-1 bg-background">
-        <View className="flex-1 items-center justify-center gap-3 p-6">
+      <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
+        <View className="flex-1 items-center justify-center gap-4 px-8">
+          <StillOrb size={48} glow={false} />
           <Text className="text-center text-muted-foreground">Something went wrong loading this screen.</Text>
           <Button testID="coach-consent-retry" variant="ghost" onPress={() => void load()}>
             Try again
@@ -106,8 +110,9 @@ export function CoachConsentScreen() {
 
   if (!coach.enabled) {
     return (
-      <SafeAreaView className="flex-1 bg-background">
-        <View testID="coach-consent-unavailable" className="flex-1 items-center justify-center p-6">
+      <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
+        <View testID="coach-consent-unavailable" className="flex-1 items-center justify-center gap-4 px-8">
+          <StillOrb size={48} glow={false} />
           <Text className="text-center text-muted-foreground">The AI Coach is not available right now.</Text>
         </View>
       </SafeAreaView>
@@ -115,39 +120,39 @@ export function CoachConsentScreen() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-background">
-      <ScrollView contentContainerStyle={{ gap: 16, padding: 16 }}>
-        <View className="flex-row items-center gap-3">
-          <Ionicons name="chatbubbles-outline" size={22} color={colors.accent} />
-          <Text className="flex-1 text-xl font-bold">Before you use the AI Coach</Text>
+    <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
+      <ScrollView contentContainerStyle={{ gap: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32 }}>
+        <View className="items-start gap-4">
+          <StillOrb size={56} />
+          <Text className="font-display text-display">Before you use the AI Coach</Text>
         </View>
 
         {textChanged ? (
-          <Card testID="coach-consent-updated-note">
-            <Text className="text-sm text-muted-foreground">
+          <View testID="coach-consent-updated-note" className="flex-row items-start gap-2.5 rounded-tile border border-coach/25 bg-coach/10 px-4 py-3">
+            <Ionicons name="refresh-outline" size={16} color={colors.coach} style={{ marginTop: 1 }} />
+            <Text className="flex-1 text-sm">
               This has changed since you last looked. Please read it again before you decide.
             </Text>
-          </Card>
+          </View>
         ) : null}
 
-        <Card className="gap-3">
-          <Text className="text-base">{coach.consent.summary}</Text>
+        <Card className="gap-3 p-5">
+          <Text className="text-base leading-6">{coach.consent.summary}</Text>
         </Card>
 
-        <Card className="gap-2">
-          <Text className="text-sm font-semibold">What is sent when you ask something</Text>
+        <SettingsGroup label="What is sent when you ask something">
           {coach.consent.dataItems.map((item) => (
-            <View key={item} className="flex-row items-start gap-2">
-              <Text className="text-sm text-muted-foreground">{'•'}</Text>
-              <Text className="flex-1 text-sm">{item}</Text>
-            </View>
+            <SettingsRow key={item} title={item} icon="arrow-up-circle-outline" tint={colors.coach} />
           ))}
-        </Card>
+        </SettingsGroup>
 
-        <Text testID="coach-consent-decline-note" className="text-sm text-muted-foreground">
-          Choosing not to turn on the AI Coach changes nothing else in the app. Your scores, habits and patterns all keep
-          working exactly as they do now. You can turn it off again at any time in Settings.
-        </Text>
+        <View className="flex-row items-start gap-2.5 px-1">
+          <Ionicons name="shield-checkmark-outline" size={16} color={colors.muted} style={{ marginTop: 2 }} />
+          <Text testID="coach-consent-decline-note" className="flex-1 text-sm text-muted-foreground">
+            Choosing not to turn on the AI Coach changes nothing else in the app. Your scores, habits and patterns all keep
+            working exactly as they do now. You can turn it off again at any time in Settings.
+          </Text>
+        </View>
 
         {error ? (
           <Text testID="coach-consent-error" className="text-sm text-destructive">

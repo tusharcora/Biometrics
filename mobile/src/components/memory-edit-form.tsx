@@ -3,7 +3,7 @@ import { View, TextInput } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import { CoachMemoryNotFoundError, CoachMemoryValidationError, updateCoachMemory, type MemoryDTO } from '../api/coach';
 import { MEMORY_ERROR_TEXT, MEMORY_MAX_LENGTH, validateMemoryText } from '../lib/coachMemory';
-import { COLORS } from '../theme';
+import { COLORS, FONTS } from '../theme';
 import { Text } from './ui/text';
 import { Button } from './ui/button';
 
@@ -61,10 +61,14 @@ export function MemoryEditForm({ id, initialValue, testIDPrefix, onSaved, onCanc
         autoFocus
         editable={!busy}
         placeholderTextColor={colors.muted}
-        style={{ color: colors.foreground }}
-        className="rounded-xl border border-border bg-background px-3 py-2"
+        style={{ color: colors.foreground, fontFamily: FONTS.sans, minHeight: 64, textAlignVertical: 'top' }}
+        className="rounded-tile border border-border bg-background px-3.5 py-3 text-base"
       />
-      <Text testID={`${testIDPrefix}-counter-${id}`} className="text-xs text-muted-foreground">
+      <Text
+        testID={`${testIDPrefix}-counter-${id}`}
+        className="self-end text-xs text-muted-foreground"
+        style={{ fontVariant: ['tabular-nums'] }}
+      >
         {`${value.length}/${MEMORY_MAX_LENGTH}`}
       </Text>
       {error ? (
@@ -72,7 +76,7 @@ export function MemoryEditForm({ id, initialValue, testIDPrefix, onSaved, onCanc
           {error}
         </Text>
       ) : null}
-      <View className="flex-row justify-end gap-2">
+      <View className="flex-row items-center justify-end gap-2">
         <Button testID={`${testIDPrefix}-cancel-${id}`} variant="ghost" size="sm" disabled={busy} onPress={onCancel}>
           Cancel
         </Button>

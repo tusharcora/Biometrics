@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
-import { ScrollView } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import Animated, { FadeInDown } from 'react-native-reanimated';
 import type { NativeStackScreenProps } from '@react-navigation/native-stack';
 import { useAuth } from '../auth/AuthContext';
 import { messageFor } from '../auth/authErrors';
@@ -9,6 +10,7 @@ import type { AuthStackParamList } from '../navigation/AuthNavigator';
 import { Text } from '../components/ui/text';
 import { Button } from '../components/ui/button';
 import { TextField } from '../components/ui/text-field';
+import { StillOrb } from '../components/ui/still-orb';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'ResetPassword'>;
 
@@ -50,22 +52,28 @@ export function ResetPasswordScreen({ navigation, route }: Props) {
 
   return (
     <SafeAreaView className="flex-1 bg-background">
-      <ScrollView contentContainerClassName="flex-grow justify-center gap-4 p-8" keyboardShouldPersistTaps="handled">
-        <Text className="text-2xl font-bold">Choose a new password</Text>
-        {token ? (
-          <>
+      <ScrollView contentContainerClassName="flex-grow justify-center gap-8 px-6 py-8" keyboardShouldPersistTaps="handled">
+        <Animated.View entering={FadeInDown.duration(450)} className="items-center gap-3">
+          <StillOrb size={56} />
+          <Text className="text-center font-display text-display-lg">Choose a new password</Text>
+          {token ? <Text className="text-center text-base text-muted-foreground">{`Use at least ${MIN_PASSWORD_LENGTH} characters.`}</Text> : null}
+        </Animated.View>
+        <View className="gap-3">
+          {token ? (
             <TextField label="New password" testID="password-input" value={password} onChangeText={setPassword} secure autoComplete="new-password" />
-            <Button testID="reset-password-button" onPress={submit} disabled={busy || !password}>
+          ) : null}
+          {error ? <Text className={error === EXPIRED ? 'text-center text-base text-muted-foreground' : 'text-sm text-destructive'}>{error}</Text> : null}
+          {token ? (
+            <Button testID="reset-password-button" className="mt-2 w-full py-4" onPress={submit} disabled={busy || !password}>
               Save password
             </Button>
-          </>
-        ) : null}
-        {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
-        {error === EXPIRED ? (
-          <Button variant="ghost" onPress={() => navigation.navigate('ForgotPassword')}>
-            Send a new link
-          </Button>
-        ) : null}
+          ) : null}
+          {error === EXPIRED ? (
+            <Button variant={token ? 'ghost' : 'primary'} className={token ? '' : 'mt-2 w-full py-4'} onPress={() => navigation.navigate('ForgotPassword')}>
+              Send a new link
+            </Button>
+          ) : null}
+        </View>
       </ScrollView>
     </SafeAreaView>
   );
