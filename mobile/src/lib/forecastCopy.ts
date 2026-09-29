@@ -2,6 +2,9 @@
 // screen can never drift apart. Components import from here; they never inline copy.
 export const FORECAST_MIN_DAYS = 21;
 
+// "1 drink", "2 drinks": the unit arrives plural from the API.
+const habitLabel = (n: number, unit: string) => `${n} ${n === 1 && unit.endsWith('s') ? unit.slice(0, -1) : unit}`;
+
 export const FORECAST_COPY = {
   noneYet: 'No measurable effect for you yet',
   disclaimer: 'An estimate from your own history — not medical advice.',
@@ -15,7 +18,10 @@ export const FORECAST_COPY = {
   planCta: 'Plan tomorrow →',
   trendLabel: 'Recent trend',
   sleepLabel: (h: number) => `Sleep ${h} h`,
-  habitLabel: (n: number, unit: string) => `${n} ${n === 1 && unit.endsWith('s') ? unit.slice(0, -1) : unit}`,
+  habitLabel,
+  /** A lever's current value: "7.5 h" for sleep, "1 drink" for a habit, matching the Why bars. */
+  leverValue: (value: number, unit: string, isSleep: boolean) => (isSleep ? `${value} h` : habitLabel(value, unit)),
+  notModelled: 'Not included in this forecast',
   title: 'Tomorrow',
   planHeading: 'Plan tomorrow',
   reset: 'Reset',

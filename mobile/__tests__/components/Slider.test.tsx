@@ -1,7 +1,7 @@
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import * as Haptics from 'expo-haptics';
 import { useState } from 'react';
-import { Slider, crossedThreshold, snapValue } from '../../src/components/ui/slider';
+import { Slider, crossedThreshold, snapValue, trackFraction } from '../../src/components/ui/slider';
 
 beforeEach(() => jest.clearAllMocks());
 
@@ -11,6 +11,14 @@ describe('snapValue', () => {
     expect(snapValue(7.2, 4, 10, 0.5)).toBe(7);
     expect(snapValue(12, 4, 10, 0.5)).toBe(10);
     expect(snapValue(-3, 0, 6, 1)).toBe(0);
+  });
+});
+
+describe('trackFraction', () => {
+  it('places the value along the track, clamped to it', () => {
+    expect(trackFraction(60, 0, 120)).toBe(0.5);
+    expect(trackFraction(150, 0, 120)).toBe(1);
+    expect(trackFraction(-10, 0, 120)).toBe(0);
   });
 });
 

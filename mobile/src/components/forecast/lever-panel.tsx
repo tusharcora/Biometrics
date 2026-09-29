@@ -24,14 +24,16 @@ export function LeverPanel({ levers, values, onChange, onReset }: LeverPanelProp
         </Pressable>
       </View>
       {levers.map((lever) => {
-        const value = lever.key === 'SLEEP' ? values.sleepHours : (values.habits[lever.key] ?? 0);
+        const isSleep = lever.key === 'SLEEP';
+        const value = isSleep ? values.sleepHours : (values.habits[lever.key] ?? 0);
+        const format = (v: number) => FORECAST_COPY.leverValue(v, lever.unit, isSleep);
         const muted = lever.effect !== 'CONFIRMED';
         const tone = muted ? 'text-muted-foreground' : 'text-foreground';
         return (
           <View key={lever.key} className="gap-1">
             <View className="flex-row justify-between">
               <Text className={tone}>{lever.label}</Text>
-              <Text className={tone}>{`${value} ${lever.unit}`}</Text>
+              <Text className={tone}>{format(value)}</Text>
             </View>
             <Slider
               testID={`lever-${lever.key}`}
@@ -43,9 +45,10 @@ export function LeverPanel({ levers, values, onChange, onReset }: LeverPanelProp
               muted={muted}
               onChange={(v) => onChange(lever.key, v)}
               accessibilityLabel={lever.label}
-              formatValue={(v) => `${v} ${lever.unit}`}
+              formatValue={format}
             />
             {lever.effect === 'NONE_YET' ? <Text className="text-xs text-muted-foreground">{FORECAST_COPY.noneYet}</Text> : null}
+            {lever.effect === 'NOT_MODELLED' ? <Text className="text-xs text-muted-foreground">{FORECAST_COPY.notModelled}</Text> : null}
           </View>
         );
       })}

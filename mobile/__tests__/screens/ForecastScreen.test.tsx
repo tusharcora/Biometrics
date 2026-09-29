@@ -34,6 +34,25 @@ describe('ForecastScreen', () => {
     expect(apiFetch).toHaveBeenCalledTimes(1);
   });
 
+  it('shows lever values in the same words as the Why bars', async () => {
+    (apiFetch as jest.Mock).mockResolvedValue(READY);
+    render(<ForecastScreen />);
+    await waitFor(() => screen.getByTestId('lever-ALCOHOL'));
+    increment('lever-ALCOHOL'); // 0 -> 1
+    expect(screen.getByText('1 drink')).toBeTruthy();
+    expect(screen.getByTestId('lever-ALCOHOL').props.accessibilityValue.text).toBe('1 drink');
+    expect(screen.getByTestId('lever-SLEEP').props.accessibilityValue.text).toBe('7.5 h');
+  });
+
+  it('captions levers the forecast does not model', async () => {
+    const levers = READY.levers.map((l) => (l.key === 'WORKOUT' ? { ...l, effect: 'NOT_MODELLED' } : l));
+    (apiFetch as jest.Mock).mockResolvedValue({ ...READY, levers });
+    render(<ForecastScreen />);
+    await waitFor(() => screen.getByTestId('lever-WORKOUT'));
+    expect(screen.getByText('Not included in this forecast')).toBeTruthy();
+    expect(screen.getAllByText('No measurable effect for you yet')).toHaveLength(1);
+  });
+
   it('greys out levers without a measured effect', async () => {
     (apiFetch as jest.Mock).mockResolvedValue(READY);
     render(<ForecastScreen />);

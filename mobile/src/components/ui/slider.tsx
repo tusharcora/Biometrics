@@ -28,6 +28,11 @@ export function crossedThreshold(prev: number, next: number, threshold?: number)
   return threshold !== undefined && prev < threshold !== next < threshold;
 }
 
+/** Where `value` sits along the track, clamped so an out-of-range value never draws past it. */
+export function trackFraction(value: number, min: number, max: number): number {
+  return Math.min(1, Math.max(0, (value - min) / (max - min)));
+}
+
 const THUMB = 24;
 
 export function Slider({ value, min, max, step, threshold, muted, onChange, accessibilityLabel, formatValue, testID }: SliderProps) {
@@ -61,7 +66,7 @@ export function Slider({ value, min, max, step, threshold, muted, onChange, acce
     });
   const gesture = Gesture.Exclusive(pan, tap);
 
-  const fraction = (value - min) / (max - min);
+  const fraction = trackFraction(value, min, max);
   const thumbStyle = useAnimatedStyle(() => ({
     transform: [{ translateX: withTiming(fraction * width - THUMB / 2, { duration: 90 }) }],
   }));
