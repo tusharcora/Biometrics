@@ -98,7 +98,7 @@ export interface EngineOutput {
   notEnoughData: NotEnoughData[];
 }
 
-interface Pair {
+export interface Pair {
   day: string;
   factorDay: string;
   exposed: boolean;
@@ -117,7 +117,7 @@ const round2 = (n: number) => Math.round(n * 100) / 100;
  * that is unobserved never reaches here (buildObservedDays excludes it), so
  * it can never be counted as a non-exposure.
  */
-function pairUp(observations: ObservedDay[], series: FactorSeries, lag: number): Pair[] {
+export function pairUp(observations: ObservedDay[], series: FactorSeries, lag: number): Pair[] {
   const pairs: Pair[] = [];
   for (const { day, exposed } of observations) {
     const factorDay = shiftDate(day, lag);
