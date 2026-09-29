@@ -39,7 +39,7 @@ export function TomorrowCard({ state, onPress }: { state: ForecastState; onPress
           <Text className="text-base font-semibold">{FORECAST_COPY.title}</Text>
           <Text className="text-muted-foreground">{FORECAST_COPY.band(cell.band[0], cell.band[1])}</Text>
           <ConfidenceBadge level={cell.confidence} />
-          <Text className="text-primary">{FORECAST_COPY.planCta}</Text>
+          <Text className="text-sm font-semibold text-accent">{FORECAST_COPY.planCta}</Text>
         </View>
       </Card>
     </Pressable>

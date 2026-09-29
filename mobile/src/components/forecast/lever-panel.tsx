@@ -20,7 +20,7 @@ export function LeverPanel({ levers, values, onChange, onReset }: LeverPanelProp
       <View className="flex-row items-center justify-between">
         <Text className="text-base font-semibold">{FORECAST_COPY.planHeading}</Text>
         <Pressable onPress={onReset} accessibilityRole="button">
-          <Text className="text-primary">{FORECAST_COPY.reset}</Text>
+          <Text className="text-sm font-semibold text-accent">{FORECAST_COPY.reset}</Text>
         </Pressable>
       </View>
       {levers.map((lever) => {

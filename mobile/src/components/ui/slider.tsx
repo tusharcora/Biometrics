@@ -89,7 +89,7 @@ export function Slider({ value, min, max, step, threshold, muted, onChange, acce
         className="h-10 justify-center"
       >
         <View className={`h-1.5 rounded-full ${muted ? 'bg-muted/40' : 'bg-muted'}`} />
-        <Animated.View style={fillStyle} className={`absolute h-1.5 rounded-full ${muted ? 'bg-muted-foreground/40' : 'bg-primary'}`} />
+        <Animated.View style={fillStyle} className={`absolute h-1.5 rounded-full ${muted ? 'bg-muted-foreground/40' : 'bg-accent'}`} />
         {threshold !== undefined && width > 0 ? (
           <View
             testID={testID ? `${testID}-threshold` : undefined}
@@ -99,7 +99,7 @@ export function Slider({ value, min, max, step, threshold, muted, onChange, acce
         ) : null}
         <Animated.View
           style={[thumbStyle, { width: THUMB, height: THUMB }]}
-          className={`absolute rounded-full border-2 ${muted ? 'border-muted-foreground/40 bg-card' : 'border-primary bg-card'}`}
+          className={`absolute rounded-full border-2 ${muted ? 'border-muted-foreground/40 bg-card' : 'border-accent bg-card'}`}
         />
       </View>
     </GestureDetector>
