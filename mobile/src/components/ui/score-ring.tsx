@@ -133,19 +133,41 @@ interface ScoreRingProps {
   strokeWidth?: number;
   // Server-provided band thresholds; the defaults apply when absent.
   bands?: ScoreBandsDTO;
+  // Size class for the centre number, so a hero ring can carry a display
+  // numeral and a tile ring a small one. Defaults to the original text-2xl.
+  numeralClassName?: string;
+  // Optional small-caps caption above the number (hero use).
+  label?: string;
 }
 
-export function ScoreRing({ score, factors = [], segmented = false, size = 84, strokeWidth = 8, bands }: ScoreRingProps) {
+export function ScoreRing({
+  score,
+  factors = [],
+  segmented = false,
+  size = 84,
+  strokeWidth = 8,
+  bands,
+  numeralClassName = 'text-2xl',
+  label,
+}: ScoreRingProps) {
   const { colorScheme: scheme } = useColorScheme();
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
   const fill = score === null ? 0 : Math.max(0, Math.min(score / 100, 1));
 
-  const center =
+  const numeral =
     score === null ? (
-      <Text className="text-2xl font-bold text-muted-foreground">{'—'}</Text>
+      <Text className={`${numeralClassName} font-bold text-muted-foreground`}>{'—'}</Text>
     ) : (
-      <CountUp value={score} format={(v) => String(Math.round(v))} className="text-2xl font-bold" style={{ fontVariant: ['tabular-nums'] }} />
+      <CountUp value={score} format={(v) => String(Math.round(v))} className={`${numeralClassName} font-bold`} style={{ fontVariant: ['tabular-nums'] }} />
     );
+  const center = label ? (
+    <View className="items-center">
+      <Text className="text-eyebrow font-semibold uppercase text-muted-foreground">{label}</Text>
+      {numeral}
+    </View>
+  ) : (
+    numeral
+  );
 
   const accessibilityLabel = score === null ? 'Score not available yet' : `Score ${Math.round(score)} out of 100`;
 

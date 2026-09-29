@@ -6,7 +6,7 @@ import { Text } from './ui/text';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Skeleton } from './ui/skeleton';
-import { COLORS } from '../theme';
+import { COLORS, FONTS } from '../theme';
 import {
   createCheckIn,
   fetchHabitConfig,
@@ -131,7 +131,7 @@ export function HabitLogCard() {
   }
 
   return (
-    <Card testID="habit-log-card" className="gap-4">
+    <Card testID="habit-log-card" className="gap-3.5">
       <Text className="text-base font-semibold">Anything to log today?</Text>
 
       {selected ? (
@@ -146,9 +146,9 @@ export function HabitLogCard() {
                   accessibilityRole="button"
                   accessibilityState={{ selected: active }}
                   onPress={() => chooseType(habit.type)}
-                  className={`rounded-full border px-3 py-1.5 active:opacity-80 ${active ? 'border-accent bg-accent/10' : 'border-border'}`}
+                  className={`rounded-full border px-3.5 py-2 active:opacity-80 ${active ? 'border-accent/50 bg-accent/15' : 'border-border bg-muted'}`}
                 >
-                  <Text className={`text-sm ${active ? 'font-semibold text-accent' : 'text-muted-foreground'}`}>{habit.label}</Text>
+                  <Text className={`text-sm ${active ? 'font-semibold text-accent' : 'font-medium'}`}>{habit.label}</Text>
                 </Pressable>
               );
             })}
@@ -161,7 +161,7 @@ export function HabitLogCard() {
               accessibilityLabel="Decrease"
               onPress={() => setValueText(stepValue(valueText, -1, stepSize(selected)))}
               hitSlop={8}
-              className="h-10 w-10 items-center justify-center rounded-full border border-border active:opacity-70"
+              className="h-10 w-10 items-center justify-center rounded-full border border-border bg-muted active:opacity-70"
             >
               <Ionicons name="remove" size={18} color={colors.foreground} />
             </Pressable>
@@ -173,8 +173,8 @@ export function HabitLogCard() {
               placeholderTextColor={colors.muted}
               keyboardType="decimal-pad"
               accessibilityLabel={`${selected.label} amount in ${selected.unit}`}
-              style={{ color: colors.foreground, fontVariant: ['tabular-nums'] }}
-              className="w-20 rounded-xl border border-border bg-card px-3 py-2 text-center text-base"
+              style={{ color: colors.foreground, fontFamily: FONTS.sansSemibold, fontVariant: ['tabular-nums'] }}
+              className="h-10 w-20 rounded-full border border-border bg-muted px-3 text-center text-base"
             />
             <Pressable
               testID="habit-increment"
@@ -182,24 +182,26 @@ export function HabitLogCard() {
               accessibilityLabel="Increase"
               onPress={() => setValueText(stepValue(valueText, 1, stepSize(selected)))}
               hitSlop={8}
-              className="h-10 w-10 items-center justify-center rounded-full border border-border active:opacity-70"
+              className="h-10 w-10 items-center justify-center rounded-full border border-border bg-muted active:opacity-70"
             >
               <Ionicons name="add" size={18} color={colors.foreground} />
             </Pressable>
             <Text className="flex-1 text-sm text-muted-foreground">{selected.unit}</Text>
           </View>
 
-          <Button
-            testID="habit-log-submit"
-            variant="ghost"
-            size="sm"
-            disabled={!canLog}
-            onPress={submitLog}
-            className={`border border-border ${canLog ? '' : 'opacity-50'}`}
-          >
-            {parsed === 0 ? 'Log none' : parsed === null || Number.isNaN(parsed) ? 'Log' : `Log ${parsed} ${selected.unit}`}
-          </Button>
-          <Text className="text-[11px] text-muted-foreground">Enter 0 to log that you had none.</Text>
+          <View className="flex-row items-center gap-3">
+            <Text className="flex-1 text-xs text-muted-foreground">Enter 0 to log that you had none.</Text>
+            <Button
+              testID="habit-log-submit"
+              variant={canLog ? 'primary' : 'secondary'}
+              size="sm"
+              disabled={!canLog}
+              onPress={submitLog}
+              className={canLog ? '' : 'opacity-50'}
+            >
+              {parsed === 0 ? 'Log none' : parsed === null || Number.isNaN(parsed) ? 'Log' : `Log ${parsed} ${selected.unit}`}
+            </Button>
+          </View>
         </View>
       ) : null}
 
@@ -215,7 +217,7 @@ export function HabitLogCard() {
           <Text className="flex-1 text-sm text-muted-foreground">You’ve checked in for today.</Text>
         </View>
       ) : (
-        <Button testID="nothing-today-button" disabled={busy} onPress={() => checkIn()}>
+        <Button testID="nothing-today-button" variant="secondary" size="sm" className="self-start" disabled={busy} onPress={() => checkIn()}>
           Nothing today
         </Button>
       )}
@@ -236,7 +238,7 @@ export function HabitLogCard() {
               >
                 <Text className="text-[10px] text-muted-foreground">{weekdayInitial(day.habitDay)}</Text>
                 <View
-                  className={`h-8 w-8 items-center justify-center rounded-full border ${day.done ? 'border-accent bg-accent/10' : 'border-border'}`}
+                  className={`h-8 w-8 items-center justify-center rounded-full border ${day.done ? 'border-accent/50 bg-accent/15' : 'border-border bg-muted'}`}
                 >
                   {day.done ? (
                     <Ionicons name="checkmark" size={14} color={colors.accent} />

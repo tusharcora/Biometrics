@@ -1,6 +1,6 @@
 import React from 'react';
 import { render, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
-import { DashboardScreen } from '../../src/screens/DashboardScreen';
+import { DashboardScreen, greetingFor } from '../../src/screens/DashboardScreen';
 import { apiFetch } from '../../src/api/client';
 import { useAuth } from '../../src/auth/AuthContext';
 import { READY } from '../../jest-mocks/forecastFixture';
@@ -258,10 +258,20 @@ describe('DashboardScreen', () => {
     expect(queryByText(/Reconnect your Google Health/i)).toBeNull();
   });
 
-  it('offers a sign-out affordance that calls signOut', async () => {
+  it('leaves sign-out to Profile once Home has data', async () => {
     mockApi({
       records: [{ id: '1', metricType: 'STEPS', value: 9000, recordedAt: '2026-09-01T00:00:00.000Z' }],
     });
+
+    const { findByTestId, queryByTestId } = render(<DashboardScreen />);
+
+    await findByTestId('metric-card-STEPS');
+    expect(queryByTestId('sign-out-button')).toBeNull();
+    expect(queryByTestId('settings-button')).toBeTruthy();
+  });
+
+  it('keeps sign-out reachable when Home cannot load', async () => {
+    mockApi({ recordsError: new Error('boom') });
 
     const { getByTestId } = render(<DashboardScreen />);
 
@@ -269,6 +279,12 @@ describe('DashboardScreen', () => {
     fireEvent.press(getByTestId('sign-out-button'));
 
     expect(mockSignOut).toHaveBeenCalled();
+  });
+
+  it('greets by time of day', () => {
+    expect(greetingFor(new Date(2026, 8, 29, 7))).toBe('Good morning');
+    expect(greetingFor(new Date(2026, 8, 29, 13))).toBe('Good afternoon');
+    expect(greetingFor(new Date(2026, 8, 29, 21))).toBe('Good evening');
   });
 
   it('keeps sign-out reachable from the reconnect prompt', async () => {

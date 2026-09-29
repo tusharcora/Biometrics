@@ -1,29 +1,29 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import Animated, { FadeInDown } from 'react-native-reanimated';
 import { useNavigation } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
 import { Ionicons } from '@expo/vector-icons';
 import { apiFetch } from '../api/client';
-import { fetchScoresWithBands, type DailyScoreDTO, type ScoreBandsDTO, type ScoreType } from '../api/scores';
+import { fetchScoresWithBands, type DailyScoreDTO, type ScoreBandsDTO } from '../api/scores';
 import { useAuth } from '../auth/AuthContext';
 import { Text } from '../components/ui/text';
 import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
-import { Ring } from '../components/ui/ring';
-import { ScoreRing } from '../components/ui/score-ring';
-import { BaselineProgressRing } from '../components/ui/baseline-progress-ring';
-import { ConfidenceBadge } from '../components/ui/confidence-badge';
-import { CountUp } from '../components/ui/count-up';
+import { SectionLabel } from '../components/ui/section-label';
+import { OrbDot } from '../components/ui/orb-dot';
 import { ThemeToggle } from '../components/ui/theme-toggle';
+import { Reveal } from '../components/ui/reveal';
 import { HabitLogCard } from '../components/habit-log-card';
 import { CoachDigestCard } from '../components/coach-digest-card';
 import { TomorrowCard } from '../components/tomorrow-card';
-import { COLORS, METRIC_CONFIG, METRIC_ORDER, type MetricType } from '../theme';
+import { RecoveryHero } from '../components/home/recovery-hero';
+import { SleepTile } from '../components/home/sleep-tile';
+import { CoachTile } from '../components/home/coach-tile';
+import { MetricTile } from '../components/home/metric-tile';
+import { COLORS, METRIC_ORDER, type MetricType } from '../theme';
 import { computeStats, buildHeadline, type MetricRecord } from '../lib/metricInsights';
-import { pickColdStartProgress, scoreTypeLabel } from '../lib/scoreInsights';
 import { coachEntryRoute, useCoachStatus } from '../lib/useCoachStatus';
 import { useForecast } from '../lib/useForecast';
 import { useSync } from '../sync/SyncProvider';
@@ -37,17 +37,6 @@ function seriesFor(records: MetricRecord[], type: MetricType): MetricRecord[] {
   return records
     .filter((r) => r.metricType === type)
     .sort((a, b) => new Date(a.recordedAt).getTime() - new Date(b.recordedAt).getTime());
-}
-
-function latestByMetric(records: MetricRecord[]): Partial<Record<MetricType, MetricRecord>> {
-  const latest: Partial<Record<MetricType, MetricRecord>> = {};
-  for (const record of records) {
-    const current = latest[record.metricType];
-    if (!current || new Date(record.recordedAt) > new Date(current.recordedAt)) {
-      latest[record.metricType] = record;
-    }
-  }
-  return latest;
 }
 
 // A real comparison against this person's own recent readings -- never a
@@ -67,83 +56,21 @@ function computeHeadlineInsight(records: MetricRecord[]): string | null {
   return best?.message ?? null;
 }
 
+export function greetingFor(date: Date): string {
+  const hour = date.getHours();
+  if (hour < 12) return 'Good morning';
+  if (hour < 18) return 'Good afternoon';
+  return 'Good evening';
+}
+
 // undefined while loading, null when no score of that type exists yet (for
 // Sleep: no night of sleep recorded).
 type ScoreState = DailyScoreDTO | null | undefined;
 
-const SCORE_CARD_COPY: Record<ScoreType, { slug: string; empty: string }> = {
-  RECOVERY: { slug: 'recovery', empty: 'Your Recovery Score will appear once it has been calculated.' },
-  SLEEP: { slug: 'sleep', empty: 'Your Sleep Score will appear once a night of sleep has been recorded.' },
-};
-
-// One card per score type. A Sleep Score with fewer factors than usual (e.g.
-// Bedtime consistency still building) is normal, so a present score always
-// shows the ring and confidence badge; the cold-start ring is only for a null score.
-function ScoreCard({
-  type,
-  score,
-  bands,
-  failed,
-  onPress,
-}: {
-  type: ScoreType;
-  score: ScoreState;
-  bands?: ScoreBandsDTO;
-  failed: boolean;
-  onPress: (score: DailyScoreDTO) => void;
-}) {
-  const { slug, empty } = SCORE_CARD_COPY[type];
-  const label = scoreTypeLabel(type);
-
-  if (failed) {
-    return (
-      <Card testID={`${slug}-score-unavailable`}>
-        <Text className="text-sm text-muted-foreground">{`${label} is unavailable right now.`}</Text>
-      </Card>
-    );
-  }
-
-  if (score === undefined) {
-    return <Skeleton testID={`${slug}-score-loading`} className="h-28 w-full" />;
-  }
-
-  if (score === null) {
-    return (
-      <Card testID={`${slug}-score-empty`}>
-        <Text className="text-sm text-muted-foreground">{empty}</Text>
-      </Card>
-    );
-  }
-
-  const cold = score.score === null ? pickColdStartProgress(score.coldStart) : null;
-
-  return (
-    <Pressable testID={`${slug}-score-card`} onPress={() => onPress(score)} className="active:opacity-80">
-      <Card className="flex-row items-center gap-4">
-        {score.score === null && cold ? (
-          <BaselineProgressRing daysCollected={cold.daysCollected} daysRequired={cold.daysRequired} />
-        ) : (
-          <ScoreRing score={score.score} factors={score.factors} bands={bands} />
-        )}
-        <View className="flex-1 gap-1.5">
-          <Text className="text-base font-semibold">{label}</Text>
-          {score.score !== null ? (
-            <ConfidenceBadge level={score.confidenceLevel} />
-          ) : (
-            <Text className="text-xs text-muted-foreground">Building your baseline</Text>
-          )}
-          <Text className="text-xs text-muted-foreground">Tap to see what moved it</Text>
-        </View>
-        <Ionicons name="chevron-forward" size={18} color="rgb(120, 113, 108)" />
-      </Card>
-    </Pressable>
-  );
-}
-
 export function DashboardScreen() {
   const navigation = useNavigation<any>();
   const clearance = useTabBarClearance();
-  const { signOut } = useAuth();
+  const { signOut, session } = useAuth();
   const { colorScheme: scheme } = useColorScheme();
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
   const [records, setRecords] = useState<MetricRecord[] | null>(null);
@@ -198,62 +125,89 @@ export function DashboardScreen() {
     };
   }, [dataVersion]);
 
-  const latest = useMemo(() => latestByMetric(records ?? []), [records]);
+  const seriesByMetric = useMemo(() => {
+    const all = records ?? [];
+    return Object.fromEntries(METRIC_ORDER.map((type) => [type, seriesFor(all, type)])) as Record<MetricType, MetricRecord[]>;
+  }, [records]);
   const insight = useMemo(() => computeHeadlineInsight(records ?? []), [records]);
 
   function openDetail(type: MetricType) {
-    navigation.navigate('MetricDetail', { metricType: type, records: seriesFor(records ?? [], type) });
+    navigation.navigate('MetricDetail', { metricType: type, records: seriesByMetric[type] });
   }
 
-  // Rendered on every branch so signing out is always reachable.
-  const headerActions = (
-    <View className="flex-row items-center gap-4">
-      <ThemeToggle color={colors.muted} />
-      <Pressable testID="settings-button" onPress={() => navigation.navigate('Tabs', { screen: 'Profile' })} hitSlop={8} className="active:opacity-70">
-        <Ionicons name="settings-outline" size={20} color={colors.muted} />
-      </Pressable>
-      <Button testID="sign-out-button" variant="ghost" size="sm" onPress={() => signOut()}>
-        Sign Out
-      </Button>
-    </View>
+  function openProfile() {
+    navigation.navigate('Tabs', { screen: 'Profile' });
+  }
+
+  const initial = session?.email?.trim().charAt(0).toUpperCase() ?? '';
+  const profileButton = (
+    <Pressable
+      testID="settings-button"
+      accessibilityRole="button"
+      accessibilityLabel="Profile and settings"
+      onPress={openProfile}
+      hitSlop={4}
+      className="h-11 w-11 items-center justify-center rounded-full border border-border bg-muted active:opacity-70"
+    >
+      {initial ? (
+        <Text className="text-base font-semibold">{initial}</Text>
+      ) : (
+        <Ionicons name="person-outline" size={18} color={colors.foreground} />
+      )}
+    </Pressable>
   );
 
-  if (connectionStatus === 'DISCONNECTED') {
+  // The fallback states can't reach anything else on Home, so they keep
+  // sign-out right there; the full Home moves it to Profile.
+  function fallback({ title, body, action }: { title: string; body: string; action?: React.ReactNode }) {
     return (
       <SafeAreaView className="flex-1 bg-background">
-        <View className="flex-1 items-center justify-center gap-3 p-6">
-          <Text className="text-xl font-semibold">Reconnect your Google Health</Text>
-          <Text className="text-center text-muted-foreground">
-            Your Google Health is disconnected, so your data has stopped updating.
-          </Text>
-          <Button testID="reconnect-health-button" onPress={() => navigation.navigate('ConnectHealth')}>
-            Reconnect Google Health
+        <View className="flex-row items-center justify-end gap-3 px-5 pt-2">
+          <ThemeToggle color={colors.muted} />
+          {profileButton}
+        </View>
+        <View className="flex-1 items-center justify-center gap-4 px-8">
+          <OrbDot size={56} />
+          <Text className="font-display text-display text-center">{title}</Text>
+          <Text className="text-center text-base text-muted-foreground">{body}</Text>
+          {action}
+          <Button testID="sign-out-button" variant="ghost" size="sm" onPress={() => signOut()}>
+            Sign Out
           </Button>
-          {headerActions}
         </View>
       </SafeAreaView>
     );
+  }
+
+  if (connectionStatus === 'DISCONNECTED') {
+    return fallback({
+      title: 'Reconnect your Google Health',
+      body: 'Your Google Health is disconnected, so your data has stopped updating.',
+      action: (
+        <Button testID="reconnect-health-button" onPress={() => navigation.navigate('ConnectHealth')}>
+          Reconnect Google Health
+        </Button>
+      ),
+    });
   }
 
   if (error !== null) {
-    return (
-      <SafeAreaView className="flex-1 bg-background">
-        <View className="flex-1 items-center justify-center gap-3 p-6">
-          <Text className="text-center text-muted-foreground">{error}</Text>
-          {headerActions}
-        </View>
-      </SafeAreaView>
-    );
+    return fallback({ title: 'Couldn’t load Today', body: error });
   }
 
   if (records === null) {
     return (
       <SafeAreaView className="flex-1 bg-background">
-        <View className="flex-row flex-wrap gap-3 p-4">
-          <Skeleton className="h-32 w-[47%]" />
-          <Skeleton className="h-32 w-[47%]" />
-          <Skeleton className="h-32 w-[47%]" />
-          <Skeleton className="h-32 w-[47%]" />
+        <View className="items-center gap-5 px-5 pt-16">
+          <Skeleton className="h-[216px] w-[216px] rounded-full" />
+          <View className="w-full flex-row gap-3">
+            <Skeleton className="h-32 flex-1 rounded-card" />
+            <Skeleton className="h-32 flex-1 rounded-card" />
+          </View>
+          <View className="w-full flex-row gap-3">
+            <Skeleton className="h-36 flex-1 rounded-card" />
+            <Skeleton className="h-36 flex-1 rounded-card" />
+          </View>
         </View>
       </SafeAreaView>
     );
@@ -265,113 +219,81 @@ export function DashboardScreen() {
     // happen yet. Connecting is no longer a gate in front of the app, so the
     // dashboard is the thing that asks for it.
     const neverConnected = connectionStatus === 'NOT_CONNECTED';
-    return (
-      <SafeAreaView className="flex-1 bg-background">
-        <View className="flex-1 items-center justify-center gap-3 p-6">
-          <Text className="text-xl font-semibold">
-            {neverConnected ? 'Connect Google Health' : 'No data yet'}
-          </Text>
-          <Text className="text-center text-muted-foreground">
-            {neverConnected
-              ? 'Your scores and trends appear here once Google Health is connected.'
-              : 'Check back after your Google Health syncs.'}
-          </Text>
-          {neverConnected ? (
-            <Button testID="connect-health-button" onPress={() => navigation.navigate('ConnectHealth')}>
-              Connect Google Health
-            </Button>
-          ) : null}
-          {headerActions}
-        </View>
-      </SafeAreaView>
-    );
+    return fallback({
+      title: neverConnected ? 'Connect Google Health' : 'No data yet',
+      body: neverConnected
+        ? 'Your scores and trends appear here once Google Health is connected.'
+        : 'Check back after your Google Health syncs.',
+      action: neverConnected ? (
+        <Button testID="connect-health-button" onPress={() => navigation.navigate('ConnectHealth')}>
+          Connect Google Health
+        </Button>
+      ) : null,
+    });
   }
 
+  const today = new Date();
+  const metricsWithData = METRIC_ORDER.filter((type) => seriesByMetric[type].length > 0);
+
   return (
-    <SafeAreaView className="flex-1 bg-background">
-      <ScrollView contentContainerStyle={{ gap: 16, padding: 16, paddingBottom: clearance }}>
-        <View className="gap-1">
-          <View className="flex-row items-center justify-between">
-            <Text className="text-2xl font-bold">Today</Text>
-            {headerActions}
+    <SafeAreaView className="flex-1 bg-background" edges={['top']}>
+      <ScrollView contentContainerStyle={{ gap: 20, paddingHorizontal: 20, paddingTop: 8, paddingBottom: clearance }}>
+        <View className="flex-row items-end justify-between gap-3">
+          <View className="flex-1 gap-1">
+            <SectionLabel>
+              {today.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
+            </SectionLabel>
+            <Text className="font-display text-display-lg">{greetingFor(today)}</Text>
+            <SyncStatusLine />
           </View>
-          <SyncStatusLine />
+          <View className="flex-row items-center gap-3 pb-1">
+            <ThemeToggle color={colors.muted} />
+            {profileButton}
+          </View>
         </View>
 
-        <ScoreCard
-          type="RECOVERY"
+        <RecoveryHero
           score={recovery}
           bands={bands}
           failed={scoresFailed}
           onPress={(score) => navigation.navigate('ScoreDetail', { date: score.date, type: 'RECOVERY' })}
         />
 
-        <TomorrowCard state={forecastState} onPress={() => navigation.navigate('Forecast')} />
+        <View className="flex-row gap-3">
+          <SleepTile
+            score={sleep}
+            bands={bands}
+            failed={scoresFailed}
+            onPress={(score) => navigation.navigate('ScoreDetail', { date: score.date, type: 'SLEEP' })}
+          />
+          {coachRoute ? (
+            <CoachTile needsConsent={coachRoute === 'CoachConsent'} onPress={() => navigateToCoachEntry(navigation, coachRoute)} />
+          ) : null}
+        </View>
 
-        <ScoreCard
-          type="SLEEP"
-          score={sleep}
-          bands={bands}
-          failed={scoresFailed}
-          onPress={(score) => navigation.navigate('ScoreDetail', { date: score.date, type: 'SLEEP' })}
-        />
+        <TomorrowCard state={forecastState} onPress={() => navigation.navigate('Forecast')} />
 
         <HabitLogCard />
 
         {coachRoute === 'Coach' ? <CoachDigestCard /> : null}
 
-        {coachRoute ? (
-          <Pressable testID="coach-entry-button" onPress={() => navigateToCoachEntry(navigation, coachRoute)} className="active:opacity-80">
-            <Card className="flex-row items-center gap-3">
-              <Ionicons name="chatbubbles-outline" size={18} color={colors.accent} />
-              <View className="flex-1 gap-0.5">
-                <Text className="text-base font-semibold">AI Coach</Text>
-                <Text className="text-xs text-muted-foreground">
-                  {coachRoute === 'CoachConsent' ? 'Review what is shared, then ask about your scores' : 'Ask about your scores and patterns'}
-                </Text>
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.muted} />
-            </Card>
-          </Pressable>
+        {metricsWithData.length > 0 ? (
+          <View className="gap-3">
+            <SectionLabel>Your metrics</SectionLabel>
+            <View className="flex-row flex-wrap gap-3">
+              {metricsWithData.map((type, index) => (
+                <Reveal key={type} index={index} className="w-[47%] grow">
+                  <MetricTile type={type} series={seriesByMetric[type]} onPress={() => openDetail(type)} />
+                </Reveal>
+              ))}
+            </View>
+          </View>
         ) : null}
 
-        <View className="flex-row flex-wrap gap-3">
-          {METRIC_ORDER.map((type, index) => {
-            const record = latest[type];
-            if (!record) return null;
-            const config = METRIC_CONFIG[type];
-            const color = scheme === 'dark' ? config.color.dark : config.color.light;
-            const percent = config.goal ? record.value / config.goal : undefined;
-            return (
-              <Animated.View key={type} entering={FadeInDown.delay(index * 70).duration(400)} className="w-[47%] grow">
-                <Pressable testID={`metric-card-${type}`} onPress={() => openDetail(type)} className="active:opacity-80">
-                  <Card className="items-center gap-2 py-5">
-                    <Ring size={84} strokeWidth={8} color={color} percent={percent}>
-                      <View className="items-center gap-0.5">
-                        <Ionicons name={config.icon as any} size={14} color={color} />
-                        <CountUp
-                          value={record.value}
-                          format={config.format}
-                          className="text-base font-bold"
-                          style={{ fontVariant: ['tabular-nums'] }}
-                        />
-                      </View>
-                    </Ring>
-                    <Text className="text-xs font-medium text-muted-foreground">{config.label}</Text>
-                    {config.goalLabel ? (
-                      <Text className="text-[10px] text-muted-foreground">{config.goalLabel}</Text>
-                    ) : null}
-                  </Card>
-                </Pressable>
-              </Animated.View>
-            );
-          })}
-        </View>
-
         {insight ? (
-          <Card className="flex-row items-center gap-3">
-            <Ionicons name="sparkles-outline" size={18} color={colors.accent} />
-            <Text className="flex-1 text-sm text-muted-foreground">{insight}</Text>
+          <Card className="gap-1.5">
+            <SectionLabel>Worth knowing</SectionLabel>
+            <Text className="text-base leading-snug">{insight}</Text>
           </Card>
         ) : null}
         {/* Per-metric trends and the Patterns entry live on the Metrics tab. */}
