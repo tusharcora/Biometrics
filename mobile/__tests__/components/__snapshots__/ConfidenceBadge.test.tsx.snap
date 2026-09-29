@@ -8,6 +8,14 @@ exports[`ConfidenceBadge matches its snapshot for HIGH 1`] = `
 >
   <Text
     className="text-xs font-medium text-accent"
+    style={
+      [
+        {
+          "fontFamily": "Geist_500Medium",
+        },
+        undefined,
+      ]
+    }
   >
     High confidence
   </Text>
@@ -22,6 +30,14 @@ exports[`ConfidenceBadge matches its snapshot for LOW 1`] = `
 >
   <Text
     className="text-xs font-medium text-destructive"
+    style={
+      [
+        {
+          "fontFamily": "Geist_500Medium",
+        },
+        undefined,
+      ]
+    }
   >
     Low confidence
   </Text>
@@ -36,6 +52,14 @@ exports[`ConfidenceBadge matches its snapshot for MEDIUM 1`] = `
 >
   <Text
     className="text-xs font-medium text-muted-foreground"
+    style={
+      [
+        {
+          "fontFamily": "Geist_500Medium",
+        },
+        undefined,
+      ]
+    }
   >
     Medium confidence
   </Text>

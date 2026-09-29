@@ -2,7 +2,7 @@
 
 exports[`CorrelationCard matches its snapshot for a negative lag-1 pattern 1`] = `
 <View
-  className="rounded-2xl border border-border bg-card p-4 shadow-sm shadow-black/5 gap-3"
+  className="rounded-card border border-border bg-card p-4 gap-3"
   testID="correlation-card-ALCOHOL-HRV-1"
 >
   <View
@@ -10,6 +10,14 @@ exports[`CorrelationCard matches its snapshot for a negative lag-1 pattern 1`] =
   >
     <Text
       className="text-foreground flex-1 text-base font-semibold"
+      style={
+        [
+          {
+            "fontFamily": "Geist_600SemiBold",
+          },
+          undefined,
+        ]
+      }
     >
       Alcohol
     </Text>
@@ -19,6 +27,14 @@ exports[`CorrelationCard matches its snapshot for a negative lag-1 pattern 1`] =
     >
       <Text
         className="text-xs font-medium text-muted-foreground"
+        style={
+          [
+            {
+              "fontFamily": "Geist_500Medium",
+            },
+            undefined,
+          ]
+        }
       >
         Lower than on other days
       </Text>
@@ -26,6 +42,14 @@ exports[`CorrelationCard matches its snapshot for a negative lag-1 pattern 1`] =
   </View>
   <Text
     className="text-foreground text-sm"
+    style={
+      [
+        {
+          "fontFamily": "Geist_400Regular",
+        },
+        undefined,
+      ]
+    }
     testID="pattern-sentence"
   >
     The morning after you log 2+ drinks, your HRV has averaged 14% below baseline (across 11 observations) — this is a pattern in your own data, not a general medical claim.
@@ -81,7 +105,7 @@ exports[`CorrelationCard matches its snapshot for a negative lag-1 pattern 1`] =
           }
           stroke={
             {
-              "payload": 4278235321,
+              "payload": 4279080072,
               "type": 0,
             }
           }
@@ -92,7 +116,7 @@ exports[`CorrelationCard matches its snapshot for a negative lag-1 pattern 1`] =
         <RNSVGRect
           fill={
             {
-              "payload": 4278235321,
+              "payload": 4279080072,
               "type": 0,
             }
           }
@@ -109,7 +133,7 @@ exports[`CorrelationCard matches its snapshot for a negative lag-1 pattern 1`] =
         <RNSVGRect
           fill={
             {
-              "payload": 4293387748,
+              "payload": 4293190889,
               "type": 0,
             }
           }
@@ -126,7 +150,7 @@ exports[`CorrelationCard matches its snapshot for a negative lag-1 pattern 1`] =
         <RNSVGRect
           fill={
             {
-              "payload": 4278235321,
+              "payload": 4279080072,
               "type": 0,
             }
           }
@@ -143,7 +167,7 @@ exports[`CorrelationCard matches its snapshot for a negative lag-1 pattern 1`] =
         <RNSVGRect
           fill={
             {
-              "payload": 4293387748,
+              "payload": 4293190889,
               "type": 0,
             }
           }
@@ -160,7 +184,7 @@ exports[`CorrelationCard matches its snapshot for a negative lag-1 pattern 1`] =
         <RNSVGRect
           fill={
             {
-              "payload": 4293387748,
+              "payload": 4293190889,
               "type": 0,
             }
           }
@@ -177,7 +201,7 @@ exports[`CorrelationCard matches its snapshot for a negative lag-1 pattern 1`] =
         <RNSVGRect
           fill={
             {
-              "payload": 4278235321,
+              "payload": 4279080072,
               "type": 0,
             }
           }
@@ -196,12 +220,28 @@ exports[`CorrelationCard matches its snapshot for a negative lag-1 pattern 1`] =
   </View>
   <Text
     className="text-[11px] text-muted-foreground"
+    style={
+      [
+        {
+          "fontFamily": "Geist_400Regular",
+        },
+        undefined,
+      ]
+    }
     testID="pattern-sparkline-caption"
   >
     Line: your HRV the morning after each day. Tall ticks: days you logged 2+ drinks.
   </Text>
   <Text
     className="text-xs text-muted-foreground"
+    style={
+      [
+        {
+          "fontFamily": "Geist_400Regular",
+        },
+        undefined,
+      ]
+    }
   >
     On days you log under 2 drinks, your HRV has averaged 1.5% above baseline.
   </Text>
@@ -210,6 +250,14 @@ exports[`CorrelationCard matches its snapshot for a negative lag-1 pattern 1`] =
   >
     <Text
       className="text-xs text-muted-foreground"
+      style={
+        [
+          {
+            "fontFamily": "Geist_400Regular",
+          },
+          undefined,
+        ]
+      }
       testID="pattern-caveat"
     >
       Based on 11 observations. The more days you log, the more reliable a pattern is.
@@ -220,7 +268,7 @@ exports[`CorrelationCard matches its snapshot for a negative lag-1 pattern 1`] =
 
 exports[`CorrelationCard matches its snapshot for a positive lag-3 small-sample pattern 1`] = `
 <View
-  className="rounded-2xl border border-border bg-card p-4 shadow-sm shadow-black/5 gap-3"
+  className="rounded-card border border-border bg-card p-4 gap-3"
   testID="correlation-card-ALCOHOL-SLEEP_EFFICIENCY-3"
 >
   <View
@@ -228,6 +276,14 @@ exports[`CorrelationCard matches its snapshot for a positive lag-3 small-sample 
   >
     <Text
       className="text-foreground flex-1 text-base font-semibold"
+      style={
+        [
+          {
+            "fontFamily": "Geist_600SemiBold",
+          },
+          undefined,
+        ]
+      }
     >
       Workout
     </Text>
@@ -237,6 +293,14 @@ exports[`CorrelationCard matches its snapshot for a positive lag-3 small-sample 
     >
       <Text
         className="text-xs font-medium text-muted-foreground"
+        style={
+          [
+            {
+              "fontFamily": "Geist_500Medium",
+            },
+            undefined,
+          ]
+        }
       >
         Higher than on other days
       </Text>
@@ -244,6 +308,14 @@ exports[`CorrelationCard matches its snapshot for a positive lag-3 small-sample 
   </View>
   <Text
     className="text-foreground text-sm"
+    style={
+      [
+        {
+          "fontFamily": "Geist_400Regular",
+        },
+        undefined,
+      ]
+    }
     testID="pattern-sentence"
   >
     3 days after you log 2+ drinks, your sleep efficiency has averaged 5.5% above baseline (across 8 observations) — this is a pattern in your own data, not a general medical claim.
@@ -299,7 +371,7 @@ exports[`CorrelationCard matches its snapshot for a positive lag-3 small-sample 
           }
           stroke={
             {
-              "payload": 4278235321,
+              "payload": 4279080072,
               "type": 0,
             }
           }
@@ -310,7 +382,7 @@ exports[`CorrelationCard matches its snapshot for a positive lag-3 small-sample 
         <RNSVGRect
           fill={
             {
-              "payload": 4278235321,
+              "payload": 4279080072,
               "type": 0,
             }
           }
@@ -327,7 +399,7 @@ exports[`CorrelationCard matches its snapshot for a positive lag-3 small-sample 
         <RNSVGRect
           fill={
             {
-              "payload": 4293387748,
+              "payload": 4293190889,
               "type": 0,
             }
           }
@@ -344,7 +416,7 @@ exports[`CorrelationCard matches its snapshot for a positive lag-3 small-sample 
         <RNSVGRect
           fill={
             {
-              "payload": 4278235321,
+              "payload": 4279080072,
               "type": 0,
             }
           }
@@ -361,7 +433,7 @@ exports[`CorrelationCard matches its snapshot for a positive lag-3 small-sample 
         <RNSVGRect
           fill={
             {
-              "payload": 4293387748,
+              "payload": 4293190889,
               "type": 0,
             }
           }
@@ -378,7 +450,7 @@ exports[`CorrelationCard matches its snapshot for a positive lag-3 small-sample 
         <RNSVGRect
           fill={
             {
-              "payload": 4293387748,
+              "payload": 4293190889,
               "type": 0,
             }
           }
@@ -395,7 +467,7 @@ exports[`CorrelationCard matches its snapshot for a positive lag-3 small-sample 
         <RNSVGRect
           fill={
             {
-              "payload": 4278235321,
+              "payload": 4279080072,
               "type": 0,
             }
           }
@@ -414,12 +486,28 @@ exports[`CorrelationCard matches its snapshot for a positive lag-3 small-sample 
   </View>
   <Text
     className="text-[11px] text-muted-foreground"
+    style={
+      [
+        {
+          "fontFamily": "Geist_400Regular",
+        },
+        undefined,
+      ]
+    }
     testID="pattern-sparkline-caption"
   >
     Line: your sleep efficiency 3 days after each day. Tall ticks: days you logged 2+ drinks.
   </Text>
   <Text
     className="text-xs text-muted-foreground"
+    style={
+      [
+        {
+          "fontFamily": "Geist_400Regular",
+        },
+        undefined,
+      ]
+    }
   >
     On days you log under 2 drinks, your sleep efficiency has averaged 0.5% below baseline.
   </Text>
@@ -428,12 +516,28 @@ exports[`CorrelationCard matches its snapshot for a positive lag-3 small-sample 
   >
     <Text
       className="text-xs text-muted-foreground"
+      style={
+        [
+          {
+            "fontFamily": "Geist_400Regular",
+          },
+          undefined,
+        ]
+      }
       testID="pattern-caveat"
     >
       Based on 8 observations. The more days you log, the more reliable a pattern is.
     </Text>
     <Text
       className="text-xs font-medium text-muted-foreground"
+      style={
+        [
+          {
+            "fontFamily": "Geist_500Medium",
+          },
+          undefined,
+        ]
+      }
       testID="pattern-small-sample"
     >
       Small sample: treat this as tentative until more days are logged.

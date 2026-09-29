@@ -4,10 +4,11 @@ import { cn } from '../../lib/utils';
 import { Text } from './text';
 import { PressableScale, type PressableScaleProps } from './pressable-scale';
 
-const buttonVariants = cva('items-center justify-center rounded-xl active:opacity-80', {
+const buttonVariants = cva('items-center justify-center rounded-full active:opacity-80', {
   variants: {
     variant: {
       primary: 'bg-accent px-6 py-3.5',
+      secondary: 'border border-border bg-muted px-5 py-3',
       ghost: 'px-4 py-2.5',
       destructive: 'px-4 py-2.5',
     },
@@ -23,6 +24,7 @@ const textVariants = cva('text-base font-semibold', {
   variants: {
     variant: {
       primary: 'text-accent-foreground',
+      secondary: 'text-foreground',
       ghost: 'text-muted-foreground',
       destructive: 'text-destructive',
     },

@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { COLORS, MOTION } from '../../src/theme';
+import { COLORS, FONTS, METRIC_CONFIG, METRIC_ORDER, MOTION, type MetricType } from '../../src/theme';
 
 const SCORE_KEYS = ['scoreExcellent', 'scoreGood', 'scoreFair', 'scorePoor'] as const;
 const CSS_NAMES: Record<(typeof SCORE_KEYS)[number], string> = {
@@ -62,6 +62,17 @@ describe('design tokens (new semantic colors)', () => {
     ['heat-2', 'heat2'],
     ['heat-3', 'heat3'],
     ['heat-4', 'heat4'],
+    ['metric-steps', 'metricSteps'],
+    ['metric-heart', 'metricHeart'],
+    ['metric-sleep', 'metricSleep'],
+    ['metric-hrv', 'metricHrv'],
+    ['coach', 'coach'],
+    ['background', 'background'],
+    ['foreground', 'foreground'],
+    ['border', 'border'],
+    ['muted-foreground', 'muted'],
+    ['accent', 'accent'],
+    ['card', 'card'],
   ];
 
   it.each(NEW_TOKENS)('--color-%s is identical in global.css and COLORS.%s (light and dark)', (cssName, key) => {
@@ -72,6 +83,36 @@ describe('design tokens (new semantic colors)', () => {
   it.each(NEW_TOKENS)('--color-%s is registered with Tailwind', (cssName) => {
     const tailwindStr = require('fs').readFileSync(require('path').join(__dirname, '../../tailwind.config.js'), 'utf8');
     expect(tailwindStr).toContain(`var(--color-${cssName})`);
+  });
+});
+
+describe('metric colours', () => {
+  const METRIC_TOKEN: Record<MetricType, keyof typeof COLORS.light> = {
+    STEPS: 'metricSteps',
+    RESTING_HR: 'metricHeart',
+    SLEEP: 'metricSleep',
+    HRV: 'metricHrv',
+  };
+
+  it.each(METRIC_ORDER)('%s uses the same colour in METRIC_CONFIG and the metric token', (type) => {
+    expect(METRIC_CONFIG[type].color.light).toBe(COLORS.light[METRIC_TOKEN[type]]);
+    expect(METRIC_CONFIG[type].color.dark).toBe(COLORS.dark[METRIC_TOKEN[type]]);
+  });
+});
+
+describe('type tokens', () => {
+  const tailwind = require('../../tailwind.config.js');
+
+  it('registers the sans and display families under the names App.tsx loads', () => {
+    expect(tailwind.theme.extend.fontFamily.sans).toEqual([FONTS.sans]);
+    expect(tailwind.theme.extend.fontFamily.display).toEqual([FONTS.display]);
+  });
+
+  it('loads every family in FONTS in App.tsx', () => {
+    const app = fs.readFileSync(path.join(__dirname, '../../App.tsx'), 'utf8');
+    for (const family of Object.values(FONTS)) {
+      expect(app).toContain(`  ${family},`);
+    }
   });
 });
 
