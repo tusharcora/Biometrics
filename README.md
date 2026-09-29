@@ -2,6 +2,23 @@
 
 A Whoop/Bezel-style personal health app. Wearable data (steps, resting heart rate, sleep, HRV) is synced from a Fitbit through the **Google Health API** into a Node backend. The backend turns it into daily **Recovery** and **Sleep** scores, finds **habit ↔ biometric patterns**, and serves an **AI coach** that runs on a **local LLM (Ollama)**, so health data never leaves the machine. A React Native (Expo) app presents all of it.
 
+🎬 **[Watch the demo](docs/media/redesign-demo.mp4)** (64 s): Home, Score detail, Metrics against your usual range, Forecast, Patterns, Coach, Activity and Profile in dark mode, then again in light.
+
+<table>
+  <tr>
+    <td><img src="docs/media/home-dark.jpg" width="190" alt="Home: Recovery hero ring, Sleep and Ask Coach tiles, Tomorrow forecast"></td>
+    <td><img src="docs/media/hrv-dark.jpg" width="190" alt="HRV detail drawn against the usual range"></td>
+    <td><img src="docs/media/forecast-dark.jpg" width="190" alt="Tomorrow's forecast with what-if levers"></td>
+    <td><img src="docs/media/coach-dark.jpg" width="190" alt="AI Coach with starter questions"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/media/profile-dark.jpg" width="190" alt="Profile as grouped rows"></td>
+    <td><img src="docs/media/home-light.jpg" width="190" alt="Home in light mode"></td>
+    <td><img src="docs/media/profile-light.jpg" width="190" alt="Profile in light mode"></td>
+    <td></td>
+  </tr>
+</table>
+
 📋 **[Migration status report](https://claude.ai/artifact/FuYPXc1v8PM4WSqJdtn2kY)**: what shipped in the Fitbit → Google Health API migration, the 8 real bugs only live device testing found, and what's left before a public launch.
 
 ---
@@ -192,7 +209,7 @@ PostgreSQL via Prisma (`backend/prisma/schema.prisma`).
 | Model | Purpose |
 |---|---|
 | `User` | name, unique `email` + `emailVerified`, IANA `timezone`, `sleepGoalMinutes` (480), coach persona |
-| `Session` | Better Auth sessions: 30-day sliding expiry, device user agent / IP (for Settings → Devices) |
+| `Session` | Better Auth sessions: 30-day sliding expiry, device user agent / IP (for Profile → Devices) |
 | `Account` | one row per sign-in method (`apple`, `google`, or `credential` with the password hash) |
 | `Verification` | single-use email-verification and password-reset tokens |
 | `HealthConnection` | 1:1 Google Health link: encrypted tokens, webhook subscription id, status, `lastSyncedAt`, `stepsHistoryBackfilledAt` |
@@ -290,16 +307,21 @@ No model is trained on user data.
 
 - **Navigation:** a native stack (`RootNavigator`) wraps the bottom **tabs**: Home · Activity · **Coach** (the centre orb) · Metrics · Profile. Detail screens push over the tabs: MetricDetail, ScoreDetail, Patterns, ConnectHealth, CoachConsent, CoachMemory. Signed-out users see SignIn.
 - **Screens:**
-  - **Home:** Recovery and Sleep score rings, the habit log, the coach digest and a headline insight.
-  - **Activity:** a steps heat map with Month (circle calendar), Year and YTD views (week-column rects). Levels are relative to the 10,000-step goal, and no-data cells are drawn distinctly. Tapping a day opens a sheet with its details; the view also shows range stats (total, average, active days, goal streak, best day).
-  - **Metrics:** 7D / 30D / 90D trend cards per metric (average, range, change vs the previous period) and the Patterns entry.
-  - **Coach:** the chat with the prompt bar, slash commands, memory chips and an orb whose animation follows the conversation state.
-  - **Profile:** time zone, theme, coach persona, memories, push notifications and account deletion.
-- **Design system:**
-  - dark-first NativeWind/Tailwind tokens (`global.css`, mirrored in `theme.ts`);
-  - a motion kit on Reanimated 4 (`PressableScale`, `Reveal`, `Sheet`, `SegmentedControl`, `CountUp`), all respecting reduce-motion;
-  - SVG rings, trend lines and heat map (react-native-svg);
-  - the vendored MIT **thinking-orbs** port rendered with **Skia**.
+  - **Home:** today's **Recovery** as a large hero ring (band-coloured, with a glow) and a one-line verdict naming the factor that moved it most. Below it, Sleep and Ask Coach tiles, Tomorrow's forecast, the habit check-in, the coach's weekly recap and a two-column metrics grid.
+  - **Score detail:** the same hero, the confidence and band, the full explanation, the factor bars ("what moved it"), cold-start progress and the baselines used. A floating glass button asks the coach about it.
+  - **Metrics / Metric detail:** every metric is drawn against its **usual range**: the middle 80% of the person's own last 30 days, shown once there are at least 7 readings. The line stays neutral and only readings outside the band take the metric's colour. The detail view adds 7D / 30D / 90D windows and drag-to-scrub with a haptic tick.
+  - **Forecast:** tomorrow's likely Recovery range, what-if levers and the forecast's track record.
+  - **Patterns:** habit → metric effects, each leading with its effect size, with the sample size and caveats.
+  - **Activity:** a steps heat map with Month (calendar), Year and YTD views. Levels are relative to the 10,000-step goal, and no-data cells are drawn distinctly. Tapping a day opens a glass sheet with its details. The view also shows range stats: total, average, active days, goal streak and best day.
+  - **Coach:** the chat, with the orb as its face (header, empty state, and a live orb while a reply is worked on), one-tap starter questions, slash commands, memory cards and a pill prompt bar.
+  - **Profile:** iOS grouped rows for Google Health and sync, time zone, account (sign-in methods, devices, sign out), coach style, coach memory, notifications and account deletion.
+  - **Sign-in / onboarding:** Apple, Google and email sign-in; sign up and password reset; Connect Google Health with the read-only data it will use.
+- **Design system** (`global.css` ⇄ `src/theme.ts` ⇄ `tailwind.config.js`, kept in step by `__tests__/theme/tokens.test.ts`):
+  - **Colour:** one cool-neutral ramp for dark (the default) and light, stepped surfaces instead of shadows, one accent per metric, and an indigo for the coach.
+  - **Type:** Geist for the UI and tabular numerals, and Instrument Serif for editorial lines (loaded with `expo-font`). A named scale covers `text-eyebrow`, `text-numeral*` and `text-display*`. `components/ui/text.tsx` maps font weights to Geist's faces.
+  - **Components:** `components/ui/`: `Card`, `SectionLabel`, `SettingsGroup`/`SettingsRow`, `RangeChart`, `ScoreRing`, `Glow`, `StillOrb` (the coach orb, paused, for small places), `GlassSurface`, `Button`, and the Reanimated 4 motion kit (`PressableScale`, `Reveal`, `Sheet`, `SegmentedControl`, `CountUp`), all respecting reduce-motion.
+  - **Chrome:** real iOS 26 **Liquid Glass** (`expo-glass-effect`) on the floating tab bar, sheets and floating buttons. It falls back to the system blur (`expo-blur`) on older iOS and to an opaque surface under Reduce Transparency. Content surfaces stay opaque.
+  - **The orb:** the vendored MIT **thinking-orbs** port, rendered with **Skia**. Only the tab bar's orb and a reply in progress animate.
 - **Networking:** `apiFetch` sends the Better Auth session cookie from SecureStore. Sessions slide on the server, so there is no refresh step: a 401 signs the user out (unless they already signed in again); network errors don't. The coach request has its own timeout (`EXPO_PUBLIC_COACH_TIMEOUT_MS`).
 - **iOS:** the config plugin `plugins/with-ios-scene-delegate.js` adds the UIScene lifecycle the iOS 27 SDK requires. Push (`expo-notifications`) is only added at prebuild with `EXPO_PUSH=1`, because the `aps-environment` entitlement needs a paid Apple team.
 
@@ -315,7 +337,7 @@ No model is trained on user data.
 | Crypto | Node `crypto`: AES-256-GCM for stored OAuth tokens; Better Auth handles password hashing and session tokens |
 | LLM runtime | **Ollama** (local HTTP `/api/chat`), no LLM SDK |
 | Mobile | **Expo SDK 57**, React Native 0.86, React 19, React Navigation 7 (native-stack, bottom-tabs) |
-| Mobile UI | NativeWind 4 + Tailwind 3, Reanimated 4 + worklets, **@shopify/react-native-skia**, react-native-svg, `thinking-orbs` engine, Ionicons |
+| Mobile UI | NativeWind 4 + Tailwind 3, Reanimated 4 + worklets, **@shopify/react-native-skia**, react-native-svg, `thinking-orbs` engine, Ionicons; **expo-glass-effect** + **expo-blur** (Liquid Glass with fallback), expo-haptics; fonts **Geist** and **Instrument Serif** via `@expo-google-fonts` |
 | Mobile platform | better-auth client + `@better-auth/expo` (session in expo-secure-store), expo-auth-session + web-browser (OAuth), expo-apple-authentication, expo-notifications |
 | Testing | Jest 30: ts-jest + Supertest + nock (backend, real Postgres/Redis); jest-expo + Testing Library (mobile) |
 | Packaging | Dockerfile for the backend (runs `prisma migrate deploy` on start, health-check probe) |
@@ -365,7 +387,7 @@ COACH_FAST_BUDGET_MS=30000
 
 **Push (optional):** `PUSH_PROVIDER=expo`, `EXPO_ACCESS_TOKEN`.
 
-**Mobile:** `EXPO_PUBLIC_API_BASE_URL` (default `http://localhost:3000`), `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`, `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID`, `EXPO_PUBLIC_COACH_TIMEOUT_MS` (keep it above the fast budget, e.g. `35000`), and `EXPO_PUBLIC_ORB_GALLERY=1` (dev orb gallery). Build-time: `EXPO_PUSH=1` to include push.
+**Mobile:** `EXPO_PUBLIC_API_BASE_URL` (default `http://localhost:3000`), `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`, `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID`, `EXPO_PUBLIC_COACH_TIMEOUT_MS` (keep it above the fast budget, e.g. `35000`), `EXPO_PUBLIC_ORB_GALLERY=1` (dev orb gallery), and `EXPO_PUBLIC_DEV_SIGN_IN_EMAIL` / `EXPO_PUBLIC_DEV_SIGN_IN_PASSWORD` (dev builds only: a one-tap "Sign in as … (dev)" button for a local test account). Build-time: `EXPO_PUSH=1` to include push.
 
 ## 15. Running locally
 
@@ -393,6 +415,19 @@ npx expo run:ios              # first time / after native changes
 npx expo start --dev-client   # afterwards: JS-only changes
 ```
 
+The redesign added native modules (`expo-glass-effect`, `expo-blur`), so an existing development build must be rebuilt once (`npx expo run:ios`) before it can load the current JavaScript.
+
+**A demo account** with 90 days of synthetic history, scored by the real pipelines:
+
+```bash
+cd backend
+DEMO_USER_PASSWORD='<choose one>' npx ts-node scripts/seedDemoUser.ts --email demo@example.com
+# Forgot it later? Reset the password without reseeding (local only):
+NEW_PASSWORD='<new one>' TS_NODE_TRANSPILE_ONLY=1 npx ts-node scripts/setUserPassword.ts --email demo@example.com
+```
+
+Put the same email and password in `mobile/.env` as `EXPO_PUBLIC_DEV_SIGN_IN_EMAIL` / `EXPO_PUBLIC_DEV_SIGN_IN_PASSWORD` (then restart Metro) to get a one-tap dev sign-in button. It never appears in a release build.
+
 The provider is built on the coach's first use, which logs `coach.provider_configured` with `ollama:qwen3.6:35b`. A bad Ollama configuration logs `coach.provider_config_invalid` instead, and the coach then answers with its fallback reply.
 
 ### Upgrading an existing database (Better Auth migrations)
@@ -410,9 +445,9 @@ If a migration fails, fix the data it reports (for example, merge or delete the 
 
 ### Mobile sign-in
 
-The app signs in with Apple, Google, or email + password (new accounts confirm their email before first sign-in; "Forgot password" sends a reset link). Once signed in, **Settings → Account → Sign-in methods** links or unlinks methods on the account, and **Settings → Account → Devices** lists signed-in devices and signs them out.
+The app signs in with Apple, Google, or email + password (new accounts confirm their email before first sign-in; "Forgot password" sends a reset link). Once signed in, **Profile → Account → Sign-in methods** links or unlinks methods on the account, **Profile → Account → Devices** lists signed-in devices and signs them out, and **Profile → Account → Sign out** signs out.
 
-Linking a new method from **Settings → Sign-in methods** is Apple / Google only.
+Linking a new method from **Profile → Sign-in methods** is Apple / Google only.
 
 Email links open the app through deep links: `biometrics://verified` opens sign-in with an "Email confirmed" banner (it does not sign you in automatically) and `biometrics://reset-password?token=…` (set a new password). iOS dev builds need the `biometrics` URL scheme, which is already set in `mobile/app.json`; rebuild the native project after pulling if the scheme or native modules changed.
 
@@ -425,7 +460,7 @@ cd backend && npm test        # 71 suites, ~1,300 tests (serial: maxWorkers 1)
 docker compose -f docker-compose.test.yml up -d   # optional Postgres 16 on :5434
 
 # Mobile
-cd mobile && npm test         # 77 test files, ~760 tests
+cd mobile && npm test         # 102 test files, ~970 tests
 
 # Coach evals
 cd backend && npm run eval:coach          # scripted provider, no network (also run in Jest)
@@ -443,6 +478,8 @@ Backend Jest runs may not exit on their own because of an open Redis handle; use
 - `backtest.ts`: compare scoring configs over history.
 - `probeSleepShape.ts`: inspect raw Google sleep payloads.
 - `purgeTestFixtures.ts`: clean test users.
+- `seedDemoUser.ts`: create (or recreate) the demo account with 90 days of synthetic history, run through the real scoring and habit pipelines.
+- `setUserPassword.ts`: set a new password on an existing local account without touching its data (refuses in production).
 
 ## 18. Status & known limitations
 
@@ -452,6 +489,8 @@ Backend Jest runs may not exit on their own because of an open Redis handle; use
 - **The coach is a prototype.** The local model is fast and well grounded, but it can still word deltas awkwardly or guess from missing data (see the local-model note). The guardrails prevent made-up numbers, not every weak inference.
 - **Push is built end-to-end but hasn't been delivered to a real device.** It needs a paid Apple team and an EAS build.
 - **The redesign's device card (spec §5) is not built yet.**
+- **Coach replies are plain text.** The mockups' inline data cards and follow-up chips need the backend to return structured replies.
+- **App icon is still Expo's template icon**; it needs artwork.
 
 ## 19. Design docs
 
