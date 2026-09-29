@@ -10,6 +10,8 @@ import { AuthNavigator } from './AuthNavigator';
 import { ConnectHealthScreen } from '../screens/ConnectHealthScreen';
 import { MetricDetailScreen } from '../screens/MetricDetailScreen';
 import { ScoreDetailScreen } from '../screens/ScoreDetailScreen';
+import { ForecastScreen } from '../screens/ForecastScreen';
+import { FORECAST_COPY } from '../lib/forecastCopy';
 import { PatternsScreen } from '../screens/PatternsScreen';
 import { CoachConsentScreen } from '../screens/CoachConsentScreen';
 import { CoachMemoryScreen } from '../screens/CoachMemoryScreen';
@@ -39,6 +41,7 @@ export type RootStackParamList = {
   ConnectHealth: undefined;
   MetricDetail: { metricType: MetricRecord['metricType']; records: MetricRecord[] };
   ScoreDetail: { date: string; type?: ScoreType }; // type defaults to RECOVERY
+  Forecast: undefined;
   Patterns: undefined;
   // Pushed over the tabs. `prefill` is carried through the consent screen.
   CoachConsent: { prefill?: string } | undefined;
@@ -117,6 +120,7 @@ export function RootNavigator() {
               <Stack.Screen name="ConnectHealth" component={ConnectHealthScreen} options={{ title: 'Connect Health' }} />
               <Stack.Screen name="MetricDetail" component={MetricDetailScreen} options={{ title: '' }} />
               <Stack.Screen name="ScoreDetail" component={ScoreDetailScreen} options={{ title: 'Score' }} />
+              <Stack.Screen name="Forecast" component={ForecastScreen} options={{ title: FORECAST_COPY.title }} />
               <Stack.Screen name="Patterns" component={PatternsScreen} options={{ title: 'Patterns' }} />
               <Stack.Screen name="CoachConsent" component={CoachConsentScreen} options={{ title: 'AI Coach' }} />
               <Stack.Screen name="CoachMemory" component={CoachMemoryScreen} options={{ title: 'Coach Memory' }} />

@@ -17,4 +17,8 @@ export const FORECAST_COPY = {
   sleepLabel: (h: number) => `Sleep ${h} h`,
   habitLabel: (n: number, unit: string) => `${n} ${n === 1 && unit.endsWith('s') ? unit.slice(0, -1) : unit}`,
   title: 'Tomorrow',
+  planHeading: 'Plan tomorrow',
+  reset: 'Reset',
+  whyHeading: 'Why',
+  trackRecordHeading: 'Track record',
 } as const;
