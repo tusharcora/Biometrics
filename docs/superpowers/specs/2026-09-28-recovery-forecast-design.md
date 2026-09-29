@@ -124,6 +124,8 @@ as the sleep lever, the actual habit log used for exposure). This yields paired
   |error| ≤ X. The UI shows "within ±X on N of the last M days". Also the
   per-day `{date, forecast, actual}` series for the chart.
 
+The backtest uses today's CONFIRMED set; effect sizes are refitted on the truncated history.
+
 ### 1.6 Gates
 
 `status: NOT_ENOUGH_DATA` with a `reason` instead of a number when:
@@ -250,7 +252,7 @@ A "Reset" action returns every lever to `defaults`.
 
 Creates a showcase account whose screens exercise every state of this feature.
 
-- Usage: `npx tsx scripts/seedDemoUser.ts --email demo@example.com`, with the
+- Usage: `npx ts-node scripts/seedDemoUser.ts --email demo@example.com`, with the
   password taken from `DEMO_USER_PASSWORD`. The user is created through Better
   Auth's server API so that it can sign in normally.
 - **Idempotent**: deletes the user with that email (and all its rows) and
@@ -258,7 +260,7 @@ Creates a showcase account whose screens exercise every state of this feature.
 - No `HealthConnection` is created, so the sync worker never touches the user.
 - A seeded PRNG (`--seed`, default fixed) makes the output reproducible.
 
-**Generative model (90 days ending yesterday)**:
+**Generative model (90 days ending today — the forecast needs today's score)**:
 
 - Latent recovery state `r(d) = 0.6·r(d−1) + ε`, plus weekday effects (shorter
   sleep and later bedtimes on Fri/Sat nights).
@@ -267,8 +269,8 @@ Creates a showcase account whose screens exercise every state of this feature.
   varied by weekday.
 - Habit logs: alcohol ≥ 2 drinks on ~25% of nights (clustered on weekends),
   caffeine varied freely, workouts ~4×/week.
-- **Planted effects** (applied to the next day): alcohol exposure → HRV −10%
-  and RHR +3 bpm; workout → HRV +4%; **caffeine → no effect**.
+- **Planted effects** (applied to the next day): alcohol exposure → HRV −18%
+  and RHR +5 bpm; workout → HRV +4%; **caffeine → no effect**.
 
 The script writes only raw inputs (`BiometricRecord`, `SleepSession`, habit
 logs, `User.timezone`) and then runs the **real** scoring pipeline and habit
