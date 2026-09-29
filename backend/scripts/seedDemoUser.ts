@@ -4,7 +4,8 @@
 //   DEMO_USER_PASSWORD=... npx ts-node scripts/seedDemoUser.ts --email demo@example.com [--seed 1] [--force]
 //
 // Writes only raw inputs; never DailyScore, UserDailyFeatures or HabitCorrelation.
-// Refuses to run with NODE_ENV=production unless --force.
+// Refuses to run with NODE_ENV=production, or to replace an existing account that
+// has a health connection, unless --force.
 // Never runs on import: the CLI entry point is guarded by require.main.
 import { prisma } from '../src/db/client';
 import { createDemoAccount } from '../src/demo/account';
@@ -27,7 +28,7 @@ export async function seedDemoUser({
     throw new Error('Refusing to seed a demo user in production without --force');
   }
 
-  const { userId } = await createDemoAccount(email, password);
+  const { userId } = await createDemoAccount(email, password, { force });
   const today = now.toISOString().slice(0, 10);
   await writeDemoHistory(userId, generateDemoHistory({ seed, endDate: today, days: DAYS }));
 
@@ -46,7 +47,9 @@ export function parseArgs(argv: string[]): { email: string; seed: number; force:
   };
   const email = get('--email');
   if (!email) throw new Error('Usage: seedDemoUser --email <email> [--seed N] [--force]');
-  return { email, seed: Number(get('--seed') ?? 1), force: argv.includes('--force') };
+  const seed = Number(get('--seed') ?? 1);
+  if (!Number.isInteger(seed)) throw new Error(`--seed must be an integer, got ${get('--seed')}`);
+  return { email, seed, force: argv.includes('--force') };
 }
 
 async function main() {
