@@ -1,8 +1,9 @@
 import React from 'react';
-import { render, fireEvent, waitFor, within } from '@testing-library/react-native';
+import { render, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 import { DashboardScreen } from '../../src/screens/DashboardScreen';
 import { apiFetch } from '../../src/api/client';
 import { useAuth } from '../../src/auth/AuthContext';
+import { READY } from '../../jest-mocks/forecastFixture';
 
 jest.mock('../../src/api/client');
 jest.mock('../../src/auth/AuthContext');
@@ -24,8 +25,12 @@ function mockApi(options: {
   scores?: unknown[];
   scoresError?: Error;
   habitsError?: Error;
+  forecast?: unknown;
 }) {
   (apiFetch as jest.Mock).mockImplementation((path: string) => {
+    if (path === '/me/forecast') {
+      return Promise.resolve(options.forecast ?? { status: 'NOT_ENOUGH_DATA', reason: 'NO_HISTORY', daysOfHistory: 0 });
+    }
     if (path === '/me/connection') {
       return Promise.resolve(options.connection ?? { status: 'CONNECTED' });
     }
@@ -56,6 +61,13 @@ beforeEach(() => {
 });
 
 describe('DashboardScreen', () => {
+  it('shows the Tomorrow card and opens the Forecast screen', async () => {
+    mockApi({ forecast: READY, records: [{ id: '1', metricType: 'STEPS', value: 9000, recordedAt: '2026-09-01T00:00:00.000Z' }] });
+    render(<DashboardScreen />);
+    fireEvent.press(await screen.findByTestId('tomorrow-card'));
+    expect(mockNavigate).toHaveBeenCalledWith('Forecast');
+  });
+
   it('reloads its data after a sync', async () => {
     mockApi({});
     const syncModule = require('../../src/sync/SyncProvider');
@@ -369,12 +381,14 @@ describe('DashboardScreen', () => {
         ],
       });
 
-      const { getByTestId, getByText, queryByTestId } = render(<DashboardScreen />);
+      const { findByTestId } = render(<DashboardScreen />);
 
-      await waitFor(() => expect(getByTestId('baseline-progress-ring')).toBeTruthy());
-      expect(getByText('9/14 days')).toBeTruthy();
-      expect(queryByTestId('score-ring')).toBeNull();
-      expect(queryByTestId('confidence-badge')).toBeNull();
+      // Scoped to the recovery card: the Tomorrow card draws its own progress ring.
+      const card = within(await findByTestId('recovery-score-card'));
+      expect(card.getByTestId('baseline-progress-ring')).toBeTruthy();
+      expect(card.getByText('9/14 days')).toBeTruthy();
+      expect(card.queryByTestId('score-ring')).toBeNull();
+      expect(card.queryByTestId('confidence-badge')).toBeNull();
     });
 
     it('says the score is not ready when none has been calculated yet, without breaking the metric cards', async () => {

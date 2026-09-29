@@ -46,6 +46,7 @@ const steps = [{ id: '1', metricType: 'STEPS', value: 9000, recordedAt: '2026-09
 
 function mockDashboardApi(scoresResponse: unknown) {
   (apiFetch as jest.Mock).mockImplementation((path: string) => {
+    if (path === '/me/forecast') return Promise.resolve({ status: 'NOT_ENOUGH_DATA', reason: 'NO_HISTORY', daysOfHistory: 0 });
     if (path === '/me/connection') return Promise.resolve({ status: 'CONNECTED' });
     if (path.startsWith('/me/habits')) return Promise.reject(new Error('n/a'));
     if (path.startsWith('/me/scores')) return Promise.resolve(scoresResponse);

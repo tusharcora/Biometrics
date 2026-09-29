@@ -20,10 +20,12 @@ import { CountUp } from '../components/ui/count-up';
 import { ThemeToggle } from '../components/ui/theme-toggle';
 import { HabitLogCard } from '../components/habit-log-card';
 import { CoachDigestCard } from '../components/coach-digest-card';
+import { TomorrowCard } from '../components/tomorrow-card';
 import { COLORS, METRIC_CONFIG, METRIC_ORDER, type MetricType } from '../theme';
 import { computeStats, buildHeadline, type MetricRecord } from '../lib/metricInsights';
 import { pickColdStartProgress, scoreTypeLabel } from '../lib/scoreInsights';
 import { coachEntryRoute, useCoachStatus } from '../lib/useCoachStatus';
+import { useForecast } from '../lib/useForecast';
 import { useSync } from '../sync/SyncProvider';
 import { SyncStatusLine } from '../components/sync-status-line';
 import { navigateToCoachEntry } from '../navigation/coachNavigation';
@@ -157,6 +159,7 @@ export function DashboardScreen() {
   const coachRoute = coachEntryRoute(coachStatus);
   // Bumped after each successful sync with Google Health, so the data reloads.
   const { dataVersion } = useSync();
+  const forecastState = useForecast(dataVersion);
 
   useEffect(() => {
     apiFetch<MetricRecord[]>('/me/biometrics')
@@ -302,6 +305,8 @@ export function DashboardScreen() {
           failed={scoresFailed}
           onPress={(score) => navigation.navigate('ScoreDetail', { date: score.date, type: 'RECOVERY' })}
         />
+
+        <TomorrowCard state={forecastState} onPress={() => navigation.navigate('Forecast')} />
 
         <ScoreCard
           type="SLEEP"
