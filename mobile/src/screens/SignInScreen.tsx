@@ -11,6 +11,10 @@ import type { AuthStackParamList } from '../navigation/AuthNavigator';
 import { Text } from '../components/ui/text';
 import { Button } from '../components/ui/button';
 import { TextField } from '../components/ui/text-field';
+import { GoogleMark, OnboardingHero } from '../components/onboarding-hero';
+import { Ionicons } from '@expo/vector-icons';
+import { useColorScheme } from 'nativewind';
+import { COLORS } from '../theme';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'SignIn'>;
 
@@ -18,6 +22,8 @@ const VERIFIED_NOTICE = 'Email confirmed. Sign in to continue.';
 
 export function SignInScreen({ navigation, route }: Props) {
   const { signInWithApple, signInWithGoogle, signInWithEmail, resendVerification } = useAuth();
+  const { colorScheme: scheme } = useColorScheme();
+  const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -70,20 +76,37 @@ export function SignInScreen({ navigation, route }: Props) {
 
   return (
     <SafeAreaView className="flex-1 bg-background">
-      <ScrollView contentContainerClassName="flex-grow justify-center gap-10 p-8" keyboardShouldPersistTaps="handled">
-        <Animated.View entering={FadeInDown.duration(450)} className="gap-2">
-          <Text className="text-4xl font-bold tracking-tight">Biometrics</Text>
+      <ScrollView contentContainerClassName="flex-grow justify-center gap-8 px-6 py-8" keyboardShouldPersistTaps="handled">
+        <Animated.View entering={FadeInDown.duration(450)} className="items-center gap-3">
+          <OnboardingHero />
+          <Text className="font-display text-[56px] leading-[60px]">Biometrics</Text>
           <Text className="text-base text-muted-foreground">Your health data, unified.</Text>
         </Animated.View>
-        {notice ? <Text className="text-sm text-foreground">{notice}</Text> : null}
+        {notice ? <Text className="text-center text-sm text-foreground">{notice}</Text> : null}
         <Animated.View entering={FadeInDown.delay(120).duration(450)} className="gap-3">
-          <Button testID="apple-sign-in-button" className="w-full bg-foreground" onPress={handleApple} disabled={busy}>
-            <Text className="text-base font-semibold text-background">Sign in with Apple</Text>
+          <Button testID="apple-sign-in-button" className="w-full bg-foreground py-4" onPress={handleApple} disabled={busy}>
+            <View className="flex-row items-center gap-2">
+              <Ionicons name="logo-apple" size={19} color={colors.background} />
+              <Text className="text-base font-semibold text-background">Sign in with Apple</Text>
+            </View>
           </Button>
-          <Button testID="google-sign-in-button" className="w-full border border-border bg-card" onPress={() => google.prompt()} disabled={busy || !google.ready}>
-            <Text className="text-base font-semibold">Sign in with Google</Text>
+          <Button
+            testID="google-sign-in-button"
+            className="w-full border border-border bg-card py-4"
+            onPress={() => google.prompt()}
+            disabled={busy || !google.ready}
+          >
+            <View className="flex-row items-center gap-2">
+              <GoogleMark />
+              <Text className="text-base font-semibold">Sign in with Google</Text>
+            </View>
           </Button>
         </Animated.View>
+        <View className="flex-row items-center gap-3">
+          <View className="h-px flex-1 bg-border" />
+          <Text className="text-xs text-muted-foreground">or with email</Text>
+          <View className="h-px flex-1 bg-border" />
+        </View>
         <View className="gap-3">
           <TextField label="Email" testID="email-input" value={email} onChangeText={setEmail} keyboardType="email-address" autoComplete="email" />
           <TextField label="Password" testID="password-input" value={password} onChangeText={setPassword} secure autoComplete="password" />
@@ -100,12 +123,14 @@ export function SignInScreen({ navigation, route }: Props) {
           <Button testID="email-sign-in-button" className="w-full" onPress={() => run(() => signInWithEmail(email, password))} disabled={busy || !email || !password}>
             Sign in
           </Button>
-          <Button testID="forgot-password-link" variant="ghost" onPress={() => navigation.navigate('ForgotPassword')}>
-            Forgot password?
-          </Button>
-          <Button testID="create-account-link" variant="ghost" onPress={() => navigation.navigate('SignUp')}>
-            Create an account
-          </Button>
+          <View className="flex-row justify-center">
+            <Button testID="forgot-password-link" variant="ghost" size="sm" onPress={() => navigation.navigate('ForgotPassword')}>
+              Forgot password?
+            </Button>
+            <Button testID="create-account-link" variant="ghost" size="sm" onPress={() => navigation.navigate('SignUp')}>
+              <Text className="text-base font-semibold text-accent">Create an account</Text>
+            </Button>
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
