@@ -490,7 +490,6 @@ Backend Jest runs may not exit on their own because of an open Redis handle; use
 - **Push is built end-to-end but hasn't been delivered to a real device.** It needs a paid Apple team and an EAS build.
 - **The redesign's device card (spec §5) is not built yet.**
 - **Coach replies are plain text.** The mockups' inline data cards and follow-up chips need the backend to return structured replies.
-- **App icon is still Expo's template icon**; it needs artwork.
 
 ## 19. Design docs
 
