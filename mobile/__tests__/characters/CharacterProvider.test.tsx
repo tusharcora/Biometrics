@@ -362,6 +362,91 @@ describe('CharacterProvider: chooseCharacter', () => {
   });
 });
 
+describe('CharacterProvider: chooseCharacter races and guards', () => {
+  it('is not undone by a status fetch that started before the choice and lands after the save', async () => {
+    const { result } = renderCharacter();
+    await waitFor(() => expect(result.current.characterId).toBe('ember'));
+    const staleStatus = deferred<CoachStatusDTO>();
+    const save = deferred<{ personaId: string }>();
+    (fetchCoachStatus as jest.Mock).mockReturnValue(staleStatus.promise);
+    (setCoachPersona as jest.Mock).mockReturnValue(save.promise);
+
+    let refreshing!: Promise<void>;
+    let choosing!: Promise<void>;
+    act(() => {
+      refreshing = result.current.refreshStatus();
+      choosing = result.current.chooseCharacter('pip');
+    });
+    await act(async () => {
+      save.resolve({ personaId: 'pip' });
+      await choosing;
+    });
+    await act(async () => {
+      staleStatus.resolve(status);
+      await refreshing;
+    });
+
+    expect(result.current.characterId).toBe('pip');
+    expect(result.current.personaChosen).toBe(true);
+    expect(result.current.status?.personaId).toBe('pip');
+    expect(writeCachedCharacter).toHaveBeenLastCalledWith('pip');
+  });
+
+  it('lets a stale status through once the choice it raced has failed', async () => {
+    const { result } = renderCharacter();
+    await waitFor(() => expect(result.current.characterId).toBe('ember'));
+    const staleStatus = deferred<CoachStatusDTO>();
+    (fetchCoachStatus as jest.Mock).mockReturnValue(staleStatus.promise);
+    (setCoachPersona as jest.Mock).mockRejectedValue(new Error('offline'));
+
+    let refreshing!: Promise<void>;
+    act(() => {
+      refreshing = result.current.refreshStatus();
+    });
+    await act(async () => {
+      await result.current.chooseCharacter('pip').catch(() => {});
+    });
+    await act(async () => {
+      staleStatus.resolve(status);
+      await refreshing;
+    });
+
+    expect(result.current.characterId).toBe('ember');
+    expect(writeCachedCharacter).toHaveBeenLastCalledWith('ember');
+  });
+
+  it('does nothing while signed out', async () => {
+    mockAuth = { session: null, isPending: false };
+    const { result } = renderCharacter();
+    await waitFor(() => expect(clearCachedCharacter).toHaveBeenCalled());
+
+    await act(() => result.current.chooseCharacter('pip'));
+
+    expect(result.current.characterId).toBe('hoot');
+    expect(result.current.personaChosen).toBe(false);
+    expect(setCoachPersona).not.toHaveBeenCalled();
+    expect(writeCachedCharacter).not.toHaveBeenCalled();
+  });
+
+  it('rejects an id this app does not know, without changing anything', async () => {
+    const { result } = renderCharacter();
+    await waitFor(() => expect(result.current.characterId).toBe('ember'));
+    (writeCachedCharacter as jest.Mock).mockClear();
+
+    let caught: unknown;
+    await act(async () => {
+      await result.current.chooseCharacter('luna' as never).catch((e: unknown) => {
+        caught = e;
+      });
+    });
+
+    expect(caught).toBeInstanceOf(Error);
+    expect(result.current.characterId).toBe('ember');
+    expect(setCoachPersona).not.toHaveBeenCalled();
+    expect(writeCachedCharacter).not.toHaveBeenCalled();
+  });
+});
+
 describe('CharacterProvider: recovery band', () => {
   it("is the band of today's Recovery Score, fetched once for one day", async () => {
     (fetchScoresWithBands as jest.Mock).mockResolvedValue({ scores: [recovery(30)], bands: { excellent: 75, good: 55, fair: 40 } });

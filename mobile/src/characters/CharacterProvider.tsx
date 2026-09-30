@@ -53,11 +53,17 @@ export function CharacterProvider({ children }: { children: React.ReactNode }): 
   // A choice still waiting on PUT: a status fetch that started before it must
   // not undo it.
   const pendingChoice = useRef<CharacterId | null>(null);
+  // Bumped on every choice. lastChoice is the choice now in effect (pending or
+  // saved; a failed one hands back the one before it). A status fetch that
+  // started before a newer choice may carry the server's pre-choice persona,
+  // whichever order the replies land in, so that choice is laid over it.
+  const choiceSeq = useRef(0);
+  const lastChoice = useRef<{ seq: number; id: CharacterId } | null>(null);
   const latest = useRef({ characterId, personaChosen, status });
   latest.current = { characterId, personaChosen, status };
 
-  const applyStatus = useCallback((next: CoachStatusDTO | null) => {
-    const merged = next && pendingChoice.current ? { ...next, personaId: pendingChoice.current, personaChosen: true } : next;
+  const applyStatus = useCallback((next: CoachStatusDTO | null, choice: CharacterId | null = pendingChoice.current) => {
+    const merged = next && choice ? { ...next, personaId: choice, personaChosen: true } : next;
     setStatus(merged);
     // An empty personaId means the server did not say (a malformed status);
     // keep showing the cached character then. An unknown id is Hoot.
@@ -72,10 +78,12 @@ export function CharacterProvider({ children }: { children: React.ReactNode }): 
   const refreshStatus = useCallback(async () => {
     if (!signedIn.current) return;
     const started = epoch.current;
+    const seqAtStart = choiceSeq.current;
     try {
       const next = await fetchCoachStatus();
       if (epoch.current !== started) return;
-      applyStatus(next);
+      const choiceSince = choiceSeq.current !== seqAtStart ? (lastChoice.current?.id ?? null) : null;
+      applyStatus(next, choiceSince ?? pendingChoice.current);
     } catch {
       if (epoch.current !== started) return;
       // Unknown, which every coach entry treats as disabled. The character
@@ -104,6 +112,7 @@ export function CharacterProvider({ children }: { children: React.ReactNode }): 
     signedIn.current = account.startsWith('user:');
     serverKnown.current = false;
     pendingChoice.current = null;
+    lastChoice.current = null;
     setStatus(null);
     setStatusLoaded(false);
     setRecoveryBand(null);
@@ -147,24 +156,33 @@ export function CharacterProvider({ children }: { children: React.ReactNode }): 
   );
 
   const chooseCharacter = useCallback(async (id: CharacterId) => {
+    // Signed out (or still loading) there is no account to save to, and the
+    // character must stay Hoot.
+    if (!signedIn.current) return;
+    if (!isCharacterId(id)) throw new Error(`Unknown character: ${String(id)}`);
     const started = epoch.current;
     const previous = latest.current;
+    const previousChoice = lastChoice.current;
+    choiceSeq.current += 1;
+    const seq = choiceSeq.current;
+    lastChoice.current = { seq, id };
     pendingChoice.current = id;
     setCharacterId(id);
     setPersonaChosen(true);
     setStatus((s) => (s ? { ...s, personaId: id, personaChosen: true } : s));
-    if (signedIn.current) void writeCachedCharacter(id);
+    void writeCachedCharacter(id);
     try {
       await setCoachPersona(id);
       if (epoch.current === started) serverKnown.current = true;
     } catch (error) {
       // Put the previous character back, unless the account changed or a
       // newer choice has since replaced this one.
-      if (epoch.current === started && pendingChoice.current === id) {
+      if (epoch.current === started && lastChoice.current?.seq === seq) {
+        lastChoice.current = previousChoice;
         setCharacterId(previous.characterId);
         setPersonaChosen(previous.personaChosen);
         setStatus((s) => (s ? { ...s, personaId: previous.status?.personaId ?? s.personaId, personaChosen: previous.personaChosen } : s));
-        if (signedIn.current) void writeCachedCharacter(previous.characterId);
+        void writeCachedCharacter(previous.characterId);
       }
       throw error;
     } finally {
