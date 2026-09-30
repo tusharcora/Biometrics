@@ -1,4 +1,12 @@
-import { DEFAULT_PERSONA_ID, findPersona, listPersonas, resolvePersona, REQUIRED_DISALLOWED_TOPICS } from '../../src/coach/personas';
+import {
+  DEFAULT_PERSONA_ID,
+  findPersona,
+  listPersonas,
+  LIVE_PERSONA_VERSION,
+  PERSONA_SETS,
+  resolvePersona,
+  REQUIRED_DISALLOWED_TOPICS,
+} from '../../src/coach/personas';
 import type { CoachPersona } from '../../src/coach/personas';
 import { v1Personas } from '../../src/coach/personas/v1';
 import { LEGACY_PERSONA_IDS, v2Characters } from '../../src/coach/personas/v2';
@@ -9,15 +17,23 @@ import { routeTier } from '../../src/coach/router';
 const CHARACTER_IDS = ['hoot', 'pip', 'mochi', 'nimbus', 'ember', 'beep', 'doze', 'beat'];
 
 describe('personas', () => {
-  it('ships Direct, Encouraging and Clinical', () => {
-    expect(listPersonas().map((p) => p.name)).toEqual(['Direct', 'Encouraging', 'Clinical']);
+  it('ships the eight companion characters as v2, Hoot first', () => {
+    expect(LIVE_PERSONA_VERSION).toBe('v2');
+    expect(listPersonas().map((p) => p.id)).toEqual(CHARACTER_IDS);
+    expect(listPersonas().map((p) => p.name)).toEqual(['Hoot', 'Pip', 'Mochi', 'Nimbus', 'Ember', 'Beep', 'Doze', 'Beat']);
   });
 
-  it('defaults to "Encouraging, normal, threshold-triggered"', () => {
-    expect(DEFAULT_PERSONA_ID).toBe('encouraging');
-    expect(findPersona(DEFAULT_PERSONA_ID)).toMatchObject({ name: 'Encouraging', verbosity: 'normal', proactivity: 'threshold-triggered' });
-    expect(resolvePersona(null).id).toBe('encouraging');
-    expect(resolvePersona('retired-persona').id).toBe('encouraging');
+  it('keeps v1 registered and unchanged', () => {
+    expect(PERSONA_SETS.v1).toBe(v1Personas);
+    expect(v1Personas.personas.map((p) => p.id)).toEqual(['direct', 'encouraging', 'clinical']);
+  });
+
+  it('defaults to Hoot, normal, threshold-triggered', () => {
+    expect(DEFAULT_PERSONA_ID).toBe('hoot');
+    expect(findPersona(DEFAULT_PERSONA_ID)).toMatchObject({ name: 'Hoot', verbosity: 'normal', proactivity: 'threshold-triggered' });
+    expect(resolvePersona(null).id).toBe('hoot');
+    expect(resolvePersona(undefined).id).toBe('hoot');
+    expect(resolvePersona('retired-persona').id).toBe('hoot');
   });
 
   it.each(listPersonas().map((p) => [p.id, p] as const))('%s always disallows medical diagnosis and medication dosing', (_id, p) => {
@@ -29,6 +45,32 @@ describe('personas', () => {
     expect(findPersona('nope')).toBeUndefined();
     expect(findPersona(42)).toBeUndefined();
     expect(findPersona(undefined)).toBeUndefined();
+    expect(findPersona(null)).toBeUndefined();
+    expect(findPersona(['hoot'])).toBeUndefined();
+  });
+
+  it('matches ids exactly: no case folding, no trimming', () => {
+    expect(findPersona('Hoot')).toBeUndefined();
+    expect(findPersona(' hoot')).toBeUndefined();
+    expect(findPersona('Encouraging')).toBeUndefined();
+  });
+
+  it('never matches an inherited property of the legacy map', () => {
+    for (const id of ['toString', '__proto__', 'constructor', 'hasOwnProperty']) {
+      expect(findPersona(id)).toBeUndefined();
+      expect(resolvePersona(id).id).toBe('hoot');
+    }
+  });
+});
+
+describe('legacy persona ids', () => {
+  it.each([
+    ['encouraging', 'pip'],
+    ['direct', 'hoot'],
+    ['clinical', 'beep'],
+  ])('%s resolves to %s through both findPersona and resolvePersona', (legacy, character) => {
+    expect(findPersona(legacy)?.id).toBe(character);
+    expect(resolvePersona(legacy).id).toBe(character);
   });
 });
 

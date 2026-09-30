@@ -125,15 +125,21 @@ describe('GET /me/coach/status', () => {
     const res = await request(createApp()).get('/me/coach/status').set(await authed(user.id));
     expect(res.status).toBe(200);
     expect(Object.keys(res.body).sort()).toEqual(['consent', 'consented', 'enabled', 'personaChosen', 'personaId', 'personas']);
-    expect(res.body).toMatchObject({ enabled: true, consented: false, personaId: 'encouraging', personaChosen: false });
+    expect(res.body).toMatchObject({ enabled: true, consented: false, personaId: 'hoot', personaChosen: false });
     expect(Object.keys(res.body.consent).sort()).toEqual(['dataItems', 'summary', 'version']);
     expect(res.body.consent.version).toBe(COACH_CONSENT_VERSION);
     expect(Array.isArray(res.body.consent.dataItems)).toBe(true);
-    // v1 personas have no picker copy, so tagline and greeting are null rather than missing.
+    // The contract the mobile picker reads: every character, in picker order, with its copy.
+    const t = 'threshold-triggered';
     expect(res.body.personas).toEqual([
-      { id: 'direct', name: 'Direct', verbosity: 'terse', proactivity: 'reactive-only', tagline: null, greeting: null },
-      { id: 'encouraging', name: 'Encouraging', verbosity: 'normal', proactivity: 'threshold-triggered', tagline: null, greeting: null },
-      { id: 'clinical', name: 'Clinical', verbosity: 'detailed', proactivity: 'reactive-only', tagline: null, greeting: null },
+      { id: 'hoot', name: 'Hoot', verbosity: 'normal', proactivity: t, tagline: 'Calm and curious. Spots the patterns in your weeks.', greeting: "I've been watching your numbers overnight. Want to see what stood out?" },
+      { id: 'pip', name: 'Pip', verbosity: 'terse', proactivity: t, tagline: 'Your tiny cheerleader. Celebrates every small win.', greeting: "Hi! You showed up, and that's already a win. What should we look at?" },
+      { id: 'mochi', name: 'Mochi', verbosity: 'terse', proactivity: t, tagline: 'Soft and gentle. Rest is never something to feel bad about.', greeting: 'Hey you. No pressure today. How are you feeling?' },
+      { id: 'nimbus', name: 'Nimbus', verbosity: 'normal', proactivity: t, tagline: 'Reads your body like a forecast and plans your day around it.', greeting: "Today's forecast: mostly clear, good day to push a little. Want the details?" },
+      { id: 'ember', name: 'Ember', verbosity: 'terse', proactivity: t, tagline: 'All energy. Helps you train smart and push when it counts.', greeting: "Your body's got fuel today. Want to put it to work?" },
+      { id: 'beep', name: 'Beep', verbosity: 'terse', proactivity: t, tagline: 'Just the numbers, clearly. No fluff.', greeting: 'Data synced. Three metrics moved since yesterday. Want the list?' },
+      { id: 'doze', name: 'Doze', verbosity: 'normal', proactivity: t, tagline: 'Your sleep expert. Cosy, slow and all about good nights.', greeting: '*yawn* Oh, hi. Shall we talk about how you slept?' },
+      { id: 'beat', name: 'Beat', verbosity: 'normal', proactivity: t, tagline: 'Listens to your heart, literally.', greeting: "Your heart's been busy. Want to hear how it's doing?" },
     ]);
   });
 
@@ -150,6 +156,17 @@ describe('GET /me/coach/status', () => {
     await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: 'retired-persona' } });
     const res = await request(createApp()).get('/me/coach/status').set(await authed(user.id));
     expect(res.body).toMatchObject({ personaId: DEFAULT_PERSONA_ID, personaChosen: true });
+  });
+
+  it.each([
+    ['encouraging', 'pip'],
+    ['direct', 'hoot'],
+    ['clinical', 'beep'],
+  ])('a legacy %s row (not yet migrated) reads as %s and counts as chosen', async (legacy, character) => {
+    const user = await createUser();
+    await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: legacy } });
+    const res = await request(createApp()).get('/me/coach/status').set(await authed(user.id));
+    expect(res.body).toMatchObject({ personaId: character, personaChosen: true });
   });
 
   it('reports the persona while the coach is off, since the character is also the app look', async () => {
@@ -265,11 +282,23 @@ describe('PUT /me/coach/persona', () => {
   it('sets the persona, echoes it, and status reflects it', async () => {
     const user = await createUser();
     const headers = await authed(user.id);
-    const res = await request(createApp()).put('/me/coach/persona').set(headers).send({ personaId: 'clinical' });
+    const res = await request(createApp()).put('/me/coach/persona').set(headers).send({ personaId: 'mochi' });
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ personaId: 'clinical' });
-    expect((await request(createApp()).get('/me/coach/status').set(headers)).body.personaId).toBe('clinical');
-    expect((await prisma.user.findUnique({ where: { id: user.id } }))?.coachPersonaId).toBe('clinical');
+    expect(res.body).toEqual({ personaId: 'mochi' });
+    expect((await request(createApp()).get('/me/coach/status').set(headers)).body).toMatchObject({ personaId: 'mochi', personaChosen: true });
+    expect((await prisma.user.findUnique({ where: { id: user.id } }))?.coachPersonaId).toBe('mochi');
+  });
+
+  it.each([
+    ['encouraging', 'pip'],
+    ['direct', 'hoot'],
+    ['clinical', 'beep'],
+  ])('accepts the legacy id %s from an older app and stores its character, %s', async (legacy, character) => {
+    const user = await createUser();
+    const res = await request(createApp()).put('/me/coach/persona').set(await authed(user.id)).send({ personaId: legacy });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ personaId: character });
+    expect((await prisma.user.findUnique({ where: { id: user.id } }))?.coachPersonaId).toBe(character);
   });
 
   it.each([['false'], [undefined]])('works while the coach is off (COACH_ENABLED=%j)', async (flag) => {
@@ -307,10 +336,11 @@ describe('PUT /me/coach/persona', () => {
   it('the chosen persona is the one the coach uses on the next turn', async () => {
     const { app, provider, telemetry } = scriptedApp([{ type: 'text', text: 'Fine.' }]);
     const user = await consented();
-    await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: 'direct' } });
+    await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: 'ember' } });
     await request(app).post('/me/coach/message').set(await authed(user.id)).send({ message: 'hi' });
-    expect(provider.requests[0]!.system).toContain('"Direct"');
-    expect(telemetry.events.every((e) => e.personaId === 'direct')).toBe(true);
+    expect(provider.requests[0]!.system).toContain('- name: "Ember"');
+    expect(provider.requests[0]!.system).toContain('- coaching focus: "Training load, strain and performance."');
+    expect(telemetry.events.every((e) => e.personaId === 'ember')).toBe(true);
   });
 });
 
