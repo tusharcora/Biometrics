@@ -269,6 +269,9 @@ export function CoachScreen() {
   const deliver = useCallback(
     async (request: SendCoachMessageInput) => {
       const startedAt = Date.now();
+      // A new send ends any earlier reply's "answering": a safety reply or a
+      // failed send must leave the character idle, not finish the old one.
+      setAnsweredAt(null);
       setSending(true);
       setError(null);
       try {

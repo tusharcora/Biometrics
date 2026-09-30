@@ -132,6 +132,38 @@ describe('CoachScreen: character', () => {
     expect(label(utils, 'coach-header-character')).toBe('character:ember:idle:36:playing:mini');
   });
 
+  it('leaves the character idle for a safety reply that lands right after a normal one', async () => {
+    (sendCoachMessage as jest.Mock).mockResolvedValueOnce(reply('You slept well.')).mockResolvedValueOnce(reply('Support is available.', 'safety'));
+    const utils = renderCoach();
+    await utils.findByTestId('coach-input');
+
+    fireEvent.press(utils.getByTestId('coach-suggestion-sleep'));
+    await utils.findByText('You slept well.');
+    expect(label(utils, 'coach-header-character')).toBe('character:ember:answering:36:playing:mini');
+
+    fireEvent.changeText(utils.getByTestId('coach-input'), 'I feel awful');
+    fireEvent.press(utils.getByTestId('coach-send-button'));
+    await utils.findByTestId('coach-safety-resources');
+
+    expect(label(utils, 'coach-header-character')).toBe('character:ember:idle:36:playing:mini');
+  });
+
+  it('leaves the character idle for a failed send right after a normal reply', async () => {
+    (sendCoachMessage as jest.Mock).mockResolvedValueOnce(reply('You slept well.')).mockRejectedValueOnce(new Error('offline'));
+    const utils = renderCoach();
+    await utils.findByTestId('coach-input');
+
+    fireEvent.press(utils.getByTestId('coach-suggestion-sleep'));
+    await utils.findByText('You slept well.');
+    expect(label(utils, 'coach-header-character')).toBe('character:ember:answering:36:playing:mini');
+
+    fireEvent.changeText(utils.getByTestId('coach-input'), 'And today?');
+    fireEvent.press(utils.getByTestId('coach-send-button'));
+    await utils.findByTestId('coach-error');
+
+    expect(label(utils, 'coach-header-character')).toBe('character:ember:idle:36:playing:mini');
+  });
+
   it('holds the characters still while the Coach tab is not focused, even when a reply lands', async () => {
     (sendCoachMessage as jest.Mock).mockResolvedValue(reply('Done.'));
     const utils = renderCoach({ focused: false });
