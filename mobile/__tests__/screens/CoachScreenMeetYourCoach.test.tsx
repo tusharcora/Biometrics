@@ -2,6 +2,7 @@ import React from 'react';
 import { act, render, waitFor } from '@testing-library/react-native';
 import { CoachScreen } from '../../src/screens/CoachScreen';
 import { fetchCoachStatus, fetchLatestConversation, type CoachStatusDTO } from '../../src/api/coach';
+import { apiFetch } from '../../src/api/client';
 import { withCharacter } from '../../jest-mocks/characterContext';
 import type { CharacterContextValue } from '../../src/characters/CharacterContext';
 
@@ -10,6 +11,13 @@ jest.mock('../../src/api/coach', () => ({
   fetchCoachStatus: jest.fn(),
   fetchLatestConversation: jest.fn(),
   sendCoachMessage: jest.fn(),
+}));
+
+// The network layer under fetchCoachStatus, so a test can run the real status
+// normalization instead of the mocked function.
+jest.mock('../../src/api/client', () => ({
+  ...jest.requireActual('../../src/api/client'),
+  apiFetch: jest.fn(),
 }));
 
 jest.mock('../../src/lib/useKeyboardVisible', () => ({ useKeyboardVisible: jest.fn(() => false) }));
@@ -132,9 +140,31 @@ describe('CoachScreen: Meet your coach on the first visit', () => {
   });
 
   it('does not open for a server that does not report personaChosen', async () => {
+    // The real fetchCoachStatus runs over a server body without the field. Its
+    // result feeds both paths: the screen's own load and the provider's status.
+    const realFetchCoachStatus = jest.requireActual<typeof import('../../src/api/coach')>('../../src/api/coach').fetchCoachStatus;
     const { personaChosen: _omitted, ...legacy } = status;
-    (fetchCoachStatus as jest.Mock).mockResolvedValue(legacy);
-    renderCoach(null);
+    (apiFetch as jest.Mock).mockImplementation(async (path: string) => {
+      if (path !== '/me/coach/status') throw new Error(`unexpected request ${path}`);
+      return legacy;
+    });
+    (fetchCoachStatus as jest.Mock).mockImplementation(realFetchCoachStatus);
+    const normalized = await realFetchCoachStatus();
+    expect(normalized.enabled).toBe(true);
+
+    renderCoach({ status: normalized, statusLoaded: true, personaChosen: false });
+
+    await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('CoachConsent', { prefill: undefined }));
+    expect(apiFetch).toHaveBeenCalledTimes(2);
+    expect(routes()).not.toContain('MeetYourCoach');
+  });
+
+  it("follows the status, not the provider's own flag, for a status with no character id", async () => {
+    // The provider's personaChosen stays at its initial false when the status
+    // has an empty personaId; the status itself says chosen, so nothing opens.
+    const noId = { ...status, personaId: '', personaChosen: true };
+    (fetchCoachStatus as jest.Mock).mockResolvedValue(noId);
+    renderCoach({ status: noId, statusLoaded: true, personaChosen: false });
 
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('CoachConsent', { prefill: undefined }));
     expect(routes()).not.toContain('MeetYourCoach');

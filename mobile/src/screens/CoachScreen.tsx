@@ -154,11 +154,14 @@ export function CoachScreen() {
 
   // First Coach-tab visit with the coach enabled and no character chosen yet:
   // the picker comes first, before consent (spec §5). A status that is
-  // unknown or failed (null) never opens it.
+  // unknown or failed (null) never opens it. Same rule as load() below: only
+  // the status's own literal personaChosen false counts (fetchCoachStatus reads
+  // a server that doesn't report it as chosen).
+  const providerStatus = characterCtx?.statusLoaded ? characterCtx.status : null;
+  const providerSaysNotChosen = !!providerStatus?.enabled && providerStatus.personaChosen === false;
   useEffect(() => {
-    if (!characterCtx?.statusLoaded || !characterCtx.status?.enabled || characterCtx.personaChosen) return;
-    openPicker();
-  }, [characterCtx?.statusLoaded, characterCtx?.status?.enabled, characterCtx?.personaChosen, openPicker]);
+    if (providerSaysNotChosen) openPicker();
+  }, [providerSaysNotChosen, openPicker]);
 
   const load = useCallback(async () => {
     // Mount and tab focus can both trigger a load. Run one at a time, but never

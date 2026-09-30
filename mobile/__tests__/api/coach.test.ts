@@ -81,7 +81,9 @@ describe('fetchCoachStatus', () => {
     });
   });
 
-  it('reads a server that predates characters as not chosen, with no picker copy', async () => {
+  // A server that predates characters can't store their ids, so it must never
+  // prompt the picker: a missing personaChosen reads as chosen (ruling R18).
+  it('reads a server that predates characters as chosen, with no picker copy', async () => {
     fetchMock.mockResolvedValueOnce(
       ok({
         enabled: true,
@@ -92,18 +94,24 @@ describe('fetchCoachStatus', () => {
       }),
     );
     const result = await fetchCoachStatus();
-    expect(result.personaChosen).toBe(false);
+    expect(result.personaChosen).toBe(true);
     expect(result.personas).toEqual([
       { id: 'encouraging', name: 'Encouraging', verbosity: 'normal', proactivity: 'threshold-triggered', tagline: null, greeting: null },
     ]);
   });
 
-  it('only counts personaChosen when it is literally true, and drops malformed persona entries', async () => {
-    fetchMock.mockResolvedValueOnce(ok({ ...status, personaChosen: 'yes', personaId: 7, personas: [null, 'hoot', status.personas[0]] }));
+  it('only reads personaChosen as not chosen when it is literally false, and drops malformed persona entries', async () => {
+    fetchMock.mockResolvedValueOnce(ok({ ...status, personaChosen: 'no', personaId: 7, personas: [null, 'hoot', status.personas[0]] }));
     const result = await fetchCoachStatus();
-    expect(result.personaChosen).toBe(false);
+    // Not a boolean: treated like a missing field, so no prompt.
+    expect(result.personaChosen).toBe(true);
     expect(result.personaId).toBe('');
     expect(result.personas).toEqual(status.personas);
+  });
+
+  it('keeps a literal personaChosen false as not chosen', async () => {
+    fetchMock.mockResolvedValueOnce(ok({ ...status, personaChosen: false }));
+    expect((await fetchCoachStatus()).personaChosen).toBe(false);
   });
 });
 

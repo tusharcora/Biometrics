@@ -226,7 +226,10 @@ export async function fetchCoachStatus(): Promise<CoachStatusDTO> {
   // The character is also the app's look, so it is read even while the coach is off.
   const persona = {
     personaId: typeof res.personaId === 'string' ? res.personaId : '',
-    personaChosen: res.personaChosen === true,
+    // Only a literal false means "not chosen yet". A server that doesn't send
+    // the field (it predates characters and can't store their ids) must never
+    // prompt the picker, so anything else reads as chosen.
+    personaChosen: res.personaChosen !== false,
     personas: Array.isArray(res.personas)
       ? res.personas.filter((p): p is CoachPersonaDTO => !!p && typeof p === 'object').map(personaDTO)
       : [],
