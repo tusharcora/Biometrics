@@ -12,29 +12,34 @@ focus and on-screen moods (idle / thinking / answering / resting). Characters re
 Direct / Encouraging / Clinical "Coach style" setting. Rendering is **Skia driven by Reanimated**.
 
 - **Spec (source of truth):** `docs/superpowers/specs/2026-09-29-companion-characters-design.md`
-- **Visual reference:** `docs/design/companions/Buddy<Name>.dc.html` — open in a browser; each shows
-  the character large, its tab-bar mini version, and all four moods animating.
-  Also on the design canvas (owner's account): https://claude.ai/artifact/DCn88XbzNo1zAtdPv73cUF,
-  section "AI assistant — companions".
-- **Branch:** `feature/companion-characters` (pushed). It is stacked on
-  `worktree-redesign-tokens-home`, which is open as PR #39
-  (https://github.com/tusharcora/Biometrics/pull/39). Open your work as a **separate draft PR
-  targeting `worktree-redesign-tokens-home`**, not `main`.
+- **Visual reference:** the design canvas (owner's account):
+  https://claude.ai/artifact/DCn88XbzNo1zAtdPv73cUF, section "AI assistant — companions". Each
+  character shows large, as its tab-bar mini version, and in all four moods animating.
+  `docs/design/companions/Buddy<Name>.dc.html` are the same designs as source files: read them for
+  path data and keyframes. They load a canvas runtime (`./support.js`) that is not in the repo, so
+  opening them directly in a browser may not animate; use the canvas to watch them.
+- **Branch / PRs:** `feature/companion-characters` (pushed) holds the docs in PR #40
+  (https://github.com/tusharcora/Biometrics/pull/40), based on `worktree-redesign-tokens-home`.
+  The redesign itself (PR #39) is **merged to `main`**; that branch still has two follow-up commits
+  not yet on `main` (README/demo media, new app icon), which is why #40 isn't based on `main`.
+  #40 is merged after the spec is signed off. Put the code in **one new draft PR** (one commit per
+  phase), based on `main` if those two commits have landed there, otherwise on
+  `worktree-redesign-tokens-home`.
 
 ## Status
 
 | Step | State |
 |---|---|
 | Brainstorm + decisions | ✅ done, approved by the owner |
-| Written spec | ✅ committed — **owner has not yet signed off on the written file** |
+| Written spec | ✅ committed and revised after a review against the code — **owner has not yet signed off on the written file** |
 | Implementation plan | ⬜ not started (save to `docs/superpowers/plans/2026-09-29-companion-characters.md`) |
 | Code | ⬜ nothing written |
 
 ## What to do
 
-1. **Review the spec.** Check it against the code (paths below). Flag anything wrong or ambiguous
-   — e.g. names in `schema.prisma`, how `CoachScreen` tracks `sending`, where Dashboard scores are
-   fetched. Do not re-open settled decisions (table below) unless the code makes one impossible;
+1. **Review the spec.** It has already been checked against the code once (paths, Prisma names,
+   line numbers, persona types, score fetching); re-check anything you touch, and flag what is
+   still wrong or ambiguous. Do not re-open settled decisions (table below) unless the code makes one impossible;
    if so, raise it with the owner rather than changing it silently.
 2. **Write the implementation plan** following the spec's §8 phases, with bite-sized TDD steps,
    exact file paths and test commands. Get the owner's approval before coding.
@@ -53,7 +58,12 @@ Direct / Encouraging / Clinical "Coach style" setting. Rendering is **Skia drive
 | Tab bar | Character **always animates idle** on every tab, full brightness (dimmed only if coach unavailable). The owner asked for this explicitly. |
 | Picker | "Meet your coach" pager on first Coach-tab visit (skip = Hoot) + "Your coach" row in Profile. |
 | Rendering | Skia + Reanimated (chosen for smoothness). Not react-native-svg, not Lottie/Rive. |
-| Delivery | Separate draft PR stacked on #39, six phases (spec §8). |
+| Weekly recap | Every character is `threshold-triggered`, so all of them get the weekly recap. Former Direct/Clinical users (no recap today) start getting one; the owner accepted this. |
+| Verbosity | Existing values only: Pip, Mochi, Ember, Beep `terse`; Hoot, Nimbus, Doze, Beat `normal`. |
+| Mini variant | Explicit `mini` prop, default `size <= 40`; the 64 px tab bar passes `mini`. |
+| Sign-out | Cached character is cleared; signed-out screens always show Hoot. |
+| Picker order | Picker before consent on first Coach-tab visit, only when the coach is enabled. |
+| Delivery | PR #40 = docs, merged after spec sign-off. Code in one new draft PR, six phases (spec §8). |
 
 ## Codebase map (verified 2026-09-29)
 
@@ -79,7 +89,9 @@ Direct / Encouraging / Clinical "Coach style" setting. Rendering is **Skia drive
   every field goes through `escapeField()` (~18); `buildDigestSystemPrompt` (~161).
 - Routes: `B/src/coach/routes.ts` — status (~70), `PUT /me/coach/persona` (~117, currently behind
   `requireEnabled`; the spec removes that for this route only).
-- Storage: `B/prisma/schema.prisma` `model User` → `coachPersonaId String?`. Migrations in
+- Storage: `B/prisma/schema.prisma` `model User` (no `@@map`, table `"User"`) → `coachPersonaId String?`.
+  `model CoachDigest.personaId` stores the persona that wrote each recap; left with legacy values.
+- Digest: `B/src/coach/digest.ts:286` skips the recap for `reactive-only` personas. Migrations in
   `B/prisma/migrations/` (timestamped folders; latest `20260928120000_normalize_user_email`).
 - Provider: local Ollama only (`B/src/coach/model/ollama.ts`); coach gated by `COACH_ENABLED`.
 
@@ -90,7 +102,10 @@ Direct / Encouraging / Clinical "Coach style" setting. Rendering is **Skia drive
   `M/components/ui/settings-list.tsx` (`SettingsGroup`, `SettingsRow`).
 - Device storage is expo-secure-store only (see `M/theme/preference.ts` for the pattern).
 - Recovery band for the resting mood: `scoreBand()` in `M/lib/scoreInsights.ts:~45`; scores via
-  `fetchScoresWithBands` in `M/api/scores.ts`.
+  `fetchScoresWithBands(days, type?)` in `M/api/scores.ts`. Only `DashboardScreen.tsx:~111` calls
+  it, into local state, so `CharacterProvider` does its own `fetchScoresWithBands(1, 'RECOVERY')`.
+- Coach status today: `M/lib/useCoachStatus.ts`, fetched separately by each caller. The spec
+  moves ownership into `CharacterProvider` and keeps the hook's signature.
 - Navigation: `M/navigation/RootNavigator.tsx`, `TabsNavigator.tsx` (Coach is the hub tab),
   `AuthNavigator.tsx`.
 
@@ -125,7 +140,9 @@ Direct / Encouraging / Clinical "Coach style" setting. Rendering is **Skia drive
 - **Mobile tests:** `cd mobile && npm test` (jest-expo). At handoff: 102 suites / 971 tests passing
   on the redesign branch.
 - **Backend tests:** `cd backend && npm test` — needs the test Postgres from
-  `docker-compose.test.yml` (port 5434), `maxWorkers: 1`.
+  `backend/docker-compose.test.yml` (port 5434), `maxWorkers: 1`.
+- **Expect test churn:** 7 backend and 9 mobile test files use the legacy persona ids or expect
+  `encouraging` as the default; update them in phases 1 and 4.
 - **Coach evals (optional, needs local Ollama):** `cd backend && npm run eval:coach`.
 - **iOS simulator build — important:** the repo lives in iCloud Documents, which breaks Xcode
   builds in place. Build from a copy outside iCloud: rsync `mobile/` (excluding `node_modules`,
@@ -147,7 +164,7 @@ Direct / Encouraging / Clinical "Coach style" setting. Rendering is **Skia drive
   `mobile/tailwind.config.js`, checked by `mobile/__tests__/theme/tokens.test.ts` — add new
   colours in all three.
 - Every screen supports light and dark mode; characters must read well on both.
-- Don't push to `main`, don't force-push, don't merge PR #39.
+- Don't push to `main`, don't force-push, don't merge PRs yourself.
 - Match the surrounding code style; the redesign uses `Text` weight classes mapped to Geist /
   Instrument Serif fonts and `cn()` from `M/lib/utils`.
 
@@ -160,5 +177,5 @@ Direct / Encouraging / Clinical "Coach style" setting. Rendering is **Skia drive
 - Coach replies clearly differ in voice/focus per character (spot-check with the local model if
   available), with safety rules unchanged.
 - Backend + mobile test suites green; new tests per spec §7.
-- README updated; simulator screenshots of each character; draft PR open against
-  `worktree-redesign-tokens-home` with a summary of phases.
+- README updated; simulator screenshots of each character; the implementation draft PR open
+  (base per "Branch / PRs" above) with a summary of phases.

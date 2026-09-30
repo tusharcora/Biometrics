@@ -1,8 +1,11 @@
 # Companion characters — design
 
 **Date:** 2026-09-29
-**Branch:** `feature/companion-characters` (stacked on `worktree-redesign-tokens-home`, PR #39)
-**Status:** approved in conversation, awaiting written-spec review
+**Branch:** `feature/companion-characters` (docs PR #40, based on `worktree-redesign-tokens-home`;
+the redesign itself merged to `main` as PR #39)
+**Status:** approved in conversation, awaiting written-spec review. Revised after a review
+against the code (verbosity/proactivity values, mini variant, recovery band source, persona
+types, a11y, picker order, sign-out cache).
 
 ## Goal
 
@@ -22,6 +25,7 @@ the design canvas ("AI assistant — companions") are the visual source of truth
 | Tab bar | Always animating in **idle**, on every tab, full brightness |
 | Picker | "Meet your coach" gallery on first Coach-tab visit + "Your coach" row in Profile |
 | Rendering | **Skia driven by Reanimated** (GPU; shared values drive Skia on the UI thread) |
+| Weekly recap | Every character is `threshold-triggered`, so the choice of character never turns the weekly recap on or off. Users who had Direct or Clinical (`reactive-only`, no recap) start receiving recaps as Hoot / Beep; the owner accepted this. |
 
 ## Non-goals
 
@@ -45,6 +49,10 @@ interface CharacterProps {
   size: number;              // px, square
   paused?: boolean;          // freeze on the mood's still pose
   dimmed?: boolean;          // 0.45 opacity, matching the old Orb
+  mini?: boolean;            // head/face-only variant; default: size <= 40
+  glow?: boolean;            // soft accent glow behind the character (existing ui/glow), default false
+  theme?: 'dark' | 'light';  // override for surfaces that don't follow the app theme (tab bar pill)
+  accessibilityLabel?: string; // set → announced as an image; unset → hidden from screen readers
   testID?: string;
 }
 ```
@@ -54,10 +62,15 @@ interface CharacterProps {
   `state="shaping"` (coach unavailable) → `mood="idle" dimmed`.
 - Renders a Skia `<Canvas>` sized `size×size` with a 100×100 drawing space (same coordinates as
   the mockups, so path data ports directly).
-- `size < 48` renders the character's **mini** variant (head/face only, as in the mockups'
-  tab-bar pill). The tab bar and the 20 px thinking indicator use it.
+- `mini` renders the character's **mini** variant (head/face only, as in the mockups' tab-bar
+  pill). It defaults to `size <= 40` (the 14/18/20/36/40 px call sites; a full body doesn't read
+  that small). The tab bar draws at 64 px and passes `mini` explicitly, as the mockups show.
+- `glow` and `theme` carry over from `StillOrb`/`Orb` so call sites keep their current look
+  (glow uses the character's accent colour from the registry).
 - Reduce Motion (`useReducedMotion()` from Reanimated) → behaves as `paused`.
-- Accessibility: `accessibilityRole="image"`, label `"<Name>, your coach"`.
+- Accessibility: hidden from screen readers by default, like `StillOrb` today, because most call
+  sites are decorative. With `accessibilityLabel` set it becomes `accessibilityRole="image"`;
+  the picker pages and the Profile "Your coach" row pass `"<Name>, your coach"`.
 
 ### Character art
 `mobile/src/components/characters/art/<Name>.tsx`, one per character.
@@ -104,10 +117,17 @@ present; see §3). Exports `CHARACTER_IDS` and `DEFAULT_CHARACTER_ID = 'hoot'`.
 ### `CharacterProvider`
 `mobile/src/characters/CharacterProvider.tsx`, mounted above the navigators in `App.tsx`.
 
-- Holds `characterId` and `personaChosen`.
-- Source of truth is `GET /me/coach/status` (`personaId`, `personaChosen`).
-- Caches the last known id in SecureStore (`characterId`) so cold start and signed-out screens show
-  the right character instantly; with nothing cached → Hoot.
+- Holds `characterId`, `personaChosen`, the coach status and today's `recoveryBand`.
+- **Owns coach status.** Source of truth is `GET /me/coach/status` (`personaId`, `personaChosen`).
+  `useCoachStatus()` keeps its current signature but reads from this provider (with `refresh`),
+  so its callers don't change and status isn't fetched once per screen.
+- **Recovery band.** Fetches `fetchScoresWithBands(1, 'RECOVERY')` once and again when the app
+  returns to the foreground, and exposes `scoreBand()` of today's score (or `null`). The
+  Dashboard keeps its own fetch unchanged.
+- Caches the last known id in SecureStore (`characterId`) so a signed-in cold start shows the
+  right character instantly; with nothing cached → Hoot. The cache is **cleared on sign-out**,
+  so signed-out screens always show Hoot and the next account never sees the previous one's
+  character.
 - `chooseCharacter(id)`: optimistic update + cache write → `PUT /me/coach/persona`; on failure
   reverts and surfaces an error (same pattern as today's `coach-settings-section.tsx`).
 - An id the app doesn't know → Hoot.
@@ -119,8 +139,9 @@ present; see §3). Exports `CHARACTER_IDS` and `DEFAULT_CHARACTER_ID = 'hoot'`.
 - The picker animates only the visible page.
 
 ### Clean-up
-- Remove `thinking-orbs`, `components/orb/*`, `components/ui/still-orb.tsx`, the ThinkingOrb jest
-  mock and orb tests once no references remain.
+- Remove `thinking-orbs`, `components/orb/*`, `components/ui/still-orb.tsx`, `lib/hubOrb.ts`
+  (its pause-off-tab rule existed only because the old orb re-rendered at 60 fps), the ThinkingOrb
+  jest mock and orb tests once no references remain.
 - `OrbGalleryScreen` becomes `CharacterGalleryScreen` (dev only, same env flag renamed to
   `EXPO_PUBLIC_CHARACTER_GALLERY`): all 8 characters × 4 moods, plus mini variants.
 
@@ -130,18 +151,21 @@ All characters share the same data access, facts and safety rules (including
 `REQUIRED_DISALLOWED_TOPICS`). Personality changes only how things are said and what is
 emphasised first. It never changes numbers, invents data or gives medical advice.
 
-| id | Voice | Focus | Verbosity | Greeting |
+| id | Voice | Focus | Verbosity (`Verbosity` type) | Greeting |
 |---|---|---|---|---|
-| hoot | Calm, wise, curious; explains the "why", asks one thoughtful question | Patterns and trends across weeks | medium | "I've been watching your numbers overnight. Want to see what stood out?" |
-| pip | Upbeat cheerleader, simple words, celebrates small wins | Habits, streaks, one small next step | short | "Hi! You showed up, and that's already a win. What should we look at?" |
-| mochi | Soft, gentle, never pushy; rest without guilt | Stress, recovery, self-kindness | short | "Hey you. No pressure today. How are you feeling?" |
-| nimbus | Breezy; weather and forecast framing | What kind of day to plan given today's readiness | medium | "Today's forecast: mostly clear, good day to push a little. Want the details?" |
-| ember | Energetic, motivating, pushes to act | Training load, strain, performance | short | "Your body's got fuel today. Want to put it to work?" |
-| beep | Precise, terse, numbers first, minimal fluff | Raw metrics against the user's usual range | short | "Data synced. Three metrics moved since yesterday. Want the list?" |
-| doze | Slow, cosy, sleepy-calm | Sleep, wind-down, consistent bedtimes | medium | "*yawn* Oh, hi. Shall we talk about how you slept?" |
-| beat | Warm, caring, heart-centred | Resting heart rate, HRV, cardio health | medium | "Your heart's been busy. Want to hear how it's doing?" |
+| hoot | Calm, wise, curious; explains the "why", asks one thoughtful question | Patterns and trends across weeks | normal | "I've been watching your numbers overnight. Want to see what stood out?" |
+| pip | Upbeat cheerleader, simple words, celebrates small wins | Habits, streaks, one small next step | terse | "Hi! You showed up, and that's already a win. What should we look at?" |
+| mochi | Soft, gentle, never pushy; rest without guilt | Stress, recovery, self-kindness | terse | "Hey you. No pressure today. How are you feeling?" |
+| nimbus | Breezy; weather and forecast framing | What kind of day to plan given today's readiness | normal | "Today's forecast: mostly clear, good day to push a little. Want the details?" |
+| ember | Energetic, motivating, pushes to act | Training load, strain, performance | terse | "Your body's got fuel today. Want to put it to work?" |
+| beep | Precise, terse, numbers first, minimal fluff | Raw metrics against the user's usual range | terse | "Data synced. Three metrics moved since yesterday. Want the list?" |
+| doze | Slow, cosy, sleepy-calm | Sleep, wind-down, consistent bedtimes | normal | "*yawn* Oh, hi. Shall we talk about how you slept?" |
+| beat | Warm, caring, heart-centred | Resting heart rate, HRV, cardio health | normal | "Your heart's been busy. Want to hear how it's doing?" |
 
-Each also gets a `proactivity` value, `disallowedTopics` including the required set, and a
+Verbosity uses the existing `Verbosity` values (`terse | normal | detailed`); no character is
+`detailed`. Every character's `proactivity` is **`threshold-triggered`** (today's default), since
+`digest.ts` skips the weekly recap for `reactive-only` personas and a character should not decide
+whether someone gets a recap. Each also gets `disallowedTopics` including the required set, and a
 one-line tagline for the picker:
 
 | id | Tagline |
@@ -158,11 +182,14 @@ one-line tagline for the picker:
 ## 3. Backend
 
 ### Personas v2
-- New file `backend/src/coach/personas/v2.ts`. The shared `CoachPersona` type moves to
-  `personas/types.ts` and gains optional `focus?`, `tagline?` and `greeting?` fields (v1's data
-  file is not edited; it simply omits them). v2 declares its entries as
+- New file `backend/src/coach/personas/v2.ts`. `CoachPersona` is defined in `v1.ts`, and v1 must
+  not be edited, so a new `personas/types.ts` extends it instead:
+  `export type CoachPersona = V1CoachPersona & { focus?: string; tagline?: string; greeting?: string }`
+  (re-exporting `Verbosity`, `Proactivity`, `PersonaSet`, `REQUIRED_DISALLOWED_TOPICS` from v1).
+  `index.ts` and `prompt.ts` import from `types.ts`. v2 declares its entries as
   `CharacterPersona = CoachPersona & Required<Pick<CoachPersona, 'focus' | 'tagline' | 'greeting'>>`,
   so every character must provide all three. Prompt code prints the focus line only when present.
+  v1 stays untouched and still type-checks, since the new fields are optional.
 - `PERSONA_SETS` registers v2; `LIVE_PERSONA_VERSION = 'v2'`; `defaultPersonaId = 'hoot'`.
 - `resolvePersona(id)` translates legacy ids before lookup:
   `encouraging → pip`, `direct → hoot`, `clinical → beep`; `null`/unknown → hoot.
@@ -186,7 +213,12 @@ UPDATE "User" SET "coachPersonaId" = 'hoot' WHERE "coachPersonaId" = 'direct';
 UPDATE "User" SET "coachPersonaId" = 'beep' WHERE "coachPersonaId" = 'clinical';
 ```
 `NULL` stays `NULL` (resolves to Hoot, and `personaChosen` stays false so these users see the
-picker once). Table/column names are verified against `schema.prisma` when implementing.
+picker once). Names verified against `schema.prisma`: `model User` has no `@@map`, so the table
+is `"User"`; the column is `coachPersonaId`.
+
+`CoachDigest.personaId` (and telemetry `personaId`) keep their legacy values on purpose: they
+record which persona wrote a past recap, nothing reads them for behaviour, and any lookup goes
+through `resolvePersona`, which translates legacy ids anyway.
 
 ## 4. Moods
 
@@ -206,7 +238,9 @@ characterMood({ sending, answeredAt, now, recoveryBand }): CharacterMood
 - Used on the Coach screen, the Home coach tile and the digest card.
 - The tab bar ignores it and always shows idle.
 - Signed-out screens show Hoot, idle.
-- Recovery band comes from the existing `scoreBand()` over the scores the Dashboard already fetches.
+- Recovery band is `recoveryBand` from `CharacterProvider` (§1), i.e. `scoreBand()` over today's
+  recovery score. The Dashboard keeps its scores in local state, so there is nothing to share
+  from it; the provider does its own one-day fetch.
 
 ## 5. "Meet your coach"
 
@@ -215,8 +249,12 @@ characterMood({ sending, answeredAt, now, recoveryBand }): CharacterMood
 - Horizontal pager of the 8 characters, Hoot first; page indicator dots.
 - Each page: large animated character (only the visible page animates), name, tagline, greeting in
   a speech bubble, and a primary button "Choose <Name>".
-- Opens automatically on first visit to the Coach tab when `personaChosen` is false. A "Skip" link
-  chooses Hoot, so it never reappears (server-side flag, survives reinstall).
+- Opens automatically on first visit to the Coach tab when the coach is **enabled** and
+  `personaChosen` is false. It comes **before** consent: choosing a character needs no consent,
+  so the picker shows first and the Coach screen's existing consent redirect happens afterwards
+  as today. When the coach is disabled it never auto-opens (the Profile row still works).
+  A "Skip" link chooses Hoot, so it never reappears (server-side flag, survives reinstall). If
+  that save fails, the picker closes anyway and shows again on the next Coach-tab visit.
 - Profile: the "Coach style" section is replaced by a "Your coach" row (small animated character +
   name) that opens this screen in switch mode (starts on the current character; no Skip link).
 
@@ -238,6 +276,9 @@ characterMood({ sending, answeredAt, now, recoveryBand }): CharacterMood
 - `resolvePersona` / `findPersona`: legacy ids, null, unknown.
 - Routes: status returns `personaChosen`, tagline, greeting; PUT accepts new and legacy ids, works
   with the coach disabled, stores the canonical id.
+- Digest: a user on any v2 character gets a weekly recap (none is `reactive-only`).
+- Existing tests that use the legacy ids or expect `encouraging` as the default (7 backend and
+  9 mobile files) are updated in phases 1 and 4.
 - Migration: seed legacy rows, run it, assert mapping.
 
 **Mobile (jest-expo + RNTL)**
@@ -246,7 +287,9 @@ characterMood({ sending, answeredAt, now, recoveryBand }): CharacterMood
 - Skia mocked like the orb today: the mock `Character` renders a view with
   `accessibilityLabel="character:<id>:<mood>:<size>:<paused>"`, so screens can assert which
   character and mood show.
-- `CharacterProvider`: cache read, Hoot fallback, optimistic revert.
+- `CharacterProvider`: cache read, Hoot fallback, optimistic revert, cache cleared on sign-out,
+  recovery band, `useCoachStatus()` reading from the provider.
+- `Character`: `mini` default by size, hidden from screen readers unless labelled.
 - `MeetYourCoachScreen`: paging, choose, skip = Hoot, switch mode.
 - Settings "Your coach" row; tab bar always idle; updated call-site tests; orb tests removed with
   the orb.
@@ -257,8 +300,10 @@ characterMood({ sending, answeredAt, now, recoveryBand }): CharacterMood
 
 ## 8. Delivery
 
-Draft PR from `feature/companion-characters`, stacked on #39. Phases, each committed with tests
-green:
+PR #40 carries the docs only and is merged once the owner signs off the written spec. The code
+goes in **one new draft PR**, one commit per phase, each with tests green. Base it on whatever
+holds the redesign at that point: `main` once the two redesign follow-up commits (README/demo,
+app icon) are merged, otherwise `worktree-redesign-tokens-home`. Phases:
 
 1. Backend: personas v2, focus in prompts, legacy id translation, status fields, PUT without
    `requireEnabled`, migration.
