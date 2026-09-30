@@ -48,6 +48,23 @@ describe('useCharacterMood', () => {
     expect(result.current).toBe('resting');
   });
 
+  it('still falls back when its timer fires a little early against Date.now()', () => {
+    const answeredAt = Date.now();
+    const { result } = renderHook(() => useCharacterMood({ sending: false, answeredAt }), { wrapper: withBand('scorePoor') });
+    expect(result.current).toBe('answering');
+
+    // Wind the wall clock back 1 ms so the scheduled timer fires while
+    // Date.now() still says the reply is fresh (RN timers and Date.now() are
+    // different clocks).
+    jest.setSystemTime(Date.now() - 1);
+    act(() => jest.advanceTimersByTime(ANSWERING_MS));
+    expect(result.current).toBe('answering');
+
+    act(() => jest.advanceTimersByTime(5));
+    expect(result.current).toBe('resting');
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
   it('does not schedule anything for a reply that is already old', () => {
     const answeredAt = Date.now() - ANSWERING_MS - 10;
     const { result } = renderHook(() => useCharacterMood({ sending: false, answeredAt }));
