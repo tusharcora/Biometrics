@@ -43,7 +43,7 @@ export function MeetYourCoachScreen() {
   // Anything but an explicit 'first' is the harmless mode: no Skip, nothing
   // saved unless a character is chosen.
   const mode = route.params?.mode === 'first' ? 'first' : 'switch';
-  const { characterId, status, chooseCharacter } = useCharacter();
+  const { characterId, personaChosen, status, chooseCharacter } = useCharacter();
   const toast = useToast();
   const { width } = useWindowDimensions();
   const listRef = useRef<FlatList<CharacterId>>(null);
@@ -73,8 +73,10 @@ export function MeetYourCoachScreen() {
 
   async function choose(id: CharacterId) {
     if (saving) return;
-    // Nothing to save when switching to the character you already have.
-    if (mode === 'switch' && id === characterId) {
+    // Nothing to save when switching to the character you already chose. One
+    // that was never chosen (the default) is saved, so the first-visit picker
+    // does not come back.
+    if (mode === 'switch' && personaChosen && id === characterId) {
       navigation.goBack();
       return;
     }

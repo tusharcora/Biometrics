@@ -186,12 +186,21 @@ describe('MeetYourCoachScreen: switching from Profile', () => {
   });
 
   it('closes without saving when the current character is chosen again', async () => {
-    const utils = renderMeet({ characterId: 'beat' });
+    const utils = renderMeet({ characterId: 'beat', personaChosen: true });
 
     fireEvent.press(utils.getByTestId('meet-choose'));
 
     await waitFor(() => expect(mockGoBack).toHaveBeenCalledTimes(1));
     expect(chooseCharacter).not.toHaveBeenCalled();
+  });
+
+  it('saves the current character when none has been chosen yet, so the first-visit picker does not come back', async () => {
+    const utils = renderMeet({ characterId: 'hoot', personaChosen: false });
+
+    fireEvent.press(utils.getByTestId('meet-choose'));
+
+    await waitFor(() => expect(mockGoBack).toHaveBeenCalledTimes(1));
+    expect(chooseCharacter).toHaveBeenCalledWith('hoot');
   });
 
   it('stays open with a short error when saving fails, and can try again', async () => {
