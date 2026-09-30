@@ -72,12 +72,22 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
       const userId = req.userId!;
       const enabled = isCoachEnabled();
       const user = await prisma.user.findUnique({ where: { id: userId }, select: { coachPersonaId: true } });
+      const storedPersonaId = user?.coachPersonaId ?? null;
       res.json({
         enabled,
         consented: enabled ? await hasCurrentConsent(userId) : false,
         consent: { version: COACH_CONSENT.version, summary: COACH_CONSENT.summary, dataItems: COACH_CONSENT.dataItems },
-        personaId: resolvePersona(user?.coachPersonaId).id,
-        personas: listPersonas().map((p) => ({ id: p.id, name: p.name, verbosity: p.verbosity, proactivity: p.proactivity })),
+        personaId: resolvePersona(storedPersonaId).id,
+        // False until the user picks a character (Skip picks Hoot), so the app shows its picker once.
+        personaChosen: storedPersonaId !== null,
+        personas: listPersonas().map((p) => ({
+          id: p.id,
+          name: p.name,
+          verbosity: p.verbosity,
+          proactivity: p.proactivity,
+          tagline: p.tagline ?? null,
+          greeting: p.greeting ?? null,
+        })),
       });
     } catch (err) {
       logFailure('status', err);
@@ -114,7 +124,8 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
     }
   });
 
-  router.put('/me/coach/persona', requireAuth, requireEnabled, async (req: AuthedRequest, res) => {
+  // No requireEnabled: the character is also the app's look, so it can be chosen while the coach is off.
+  router.put('/me/coach/persona', requireAuth, async (req: AuthedRequest, res) => {
     const persona = findPersona(req.body?.personaId);
     if (!persona) {
       res.status(400).json({ error: 'unknown_persona' });

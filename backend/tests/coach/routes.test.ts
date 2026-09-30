@@ -11,6 +11,7 @@ import { COACH_DISCLAIMER } from '../../src/coach/guardrails/disclaimer';
 import { LoggerCoachTelemetry } from '../../src/coach/telemetry';
 import { ScriptedProvider, ScriptStep } from '../../src/coach/model/provider';
 import { resetCoachProviderFromEnv } from '../../src/coach/config';
+import { DEFAULT_PERSONA_ID, listPersonas } from '../../src/coach/personas';
 import { FakeClock, RecordingTelemetry, createUser, daysAgo, putScore, todayUtc } from './helpers';
 
 beforeAll(() => {
@@ -94,7 +95,10 @@ describe('COACH_ENABLED flag (default off)', () => {
     expect(res.body.enabled).toBe(false);
   });
 
-  it.each(ROUTES.filter(([, p]) => p !== '/me/coach/status'))('%s %s returns 404 coach_disabled when off', async (method, path) => {
+  // Status and PUT persona stay open: the character is also the app's look, so it is shown and chosen while the coach is off.
+  const GATED = ROUTES.filter(([, p]) => p !== '/me/coach/status' && p !== '/me/coach/persona');
+
+  it.each(GATED)('%s %s returns 404 coach_disabled when off', async (method, path) => {
     process.env.COACH_ENABLED = 'false';
     const user = await consented();
     const res = await request(createApp())
@@ -120,16 +124,57 @@ describe('GET /me/coach/status', () => {
     const user = await createUser();
     const res = await request(createApp()).get('/me/coach/status').set(await authed(user.id));
     expect(res.status).toBe(200);
-    expect(Object.keys(res.body).sort()).toEqual(['consent', 'consented', 'enabled', 'personaId', 'personas']);
-    expect(res.body).toMatchObject({ enabled: true, consented: false, personaId: 'encouraging' });
+    expect(Object.keys(res.body).sort()).toEqual(['consent', 'consented', 'enabled', 'personaChosen', 'personaId', 'personas']);
+    expect(res.body).toMatchObject({ enabled: true, consented: false, personaId: 'encouraging', personaChosen: false });
     expect(Object.keys(res.body.consent).sort()).toEqual(['dataItems', 'summary', 'version']);
     expect(res.body.consent.version).toBe(COACH_CONSENT_VERSION);
     expect(Array.isArray(res.body.consent.dataItems)).toBe(true);
+    // v1 personas have no picker copy, so tagline and greeting are null rather than missing.
     expect(res.body.personas).toEqual([
-      { id: 'direct', name: 'Direct', verbosity: 'terse', proactivity: 'reactive-only' },
-      { id: 'encouraging', name: 'Encouraging', verbosity: 'normal', proactivity: 'threshold-triggered' },
-      { id: 'clinical', name: 'Clinical', verbosity: 'detailed', proactivity: 'reactive-only' },
+      { id: 'direct', name: 'Direct', verbosity: 'terse', proactivity: 'reactive-only', tagline: null, greeting: null },
+      { id: 'encouraging', name: 'Encouraging', verbosity: 'normal', proactivity: 'threshold-triggered', tagline: null, greeting: null },
+      { id: 'clinical', name: 'Clinical', verbosity: 'detailed', proactivity: 'reactive-only', tagline: null, greeting: null },
     ]);
+  });
+
+  it('personaChosen turns true once a persona is stored, and personaId is that persona', async () => {
+    const chosen = listPersonas()[1]!.id;
+    const user = await createUser();
+    await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: chosen } });
+    const res = await request(createApp()).get('/me/coach/status').set(await authed(user.id));
+    expect(res.body).toMatchObject({ personaId: chosen, personaChosen: true });
+  });
+
+  it('an unknown stored id serves the default but still counts as chosen (the user did pick once)', async () => {
+    const user = await createUser();
+    await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: 'retired-persona' } });
+    const res = await request(createApp()).get('/me/coach/status').set(await authed(user.id));
+    expect(res.body).toMatchObject({ personaId: DEFAULT_PERSONA_ID, personaChosen: true });
+  });
+
+  it('reports the persona while the coach is off, since the character is also the app look', async () => {
+    process.env.COACH_ENABLED = 'false';
+    const chosen = listPersonas()[1]!.id;
+    const user = await createUser();
+    await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: chosen } });
+    const res = await request(createApp()).get('/me/coach/status').set(await authed(user.id));
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ enabled: false, consented: false, personaId: chosen, personaChosen: true });
+    expect(res.body.personas.map((p: { id: string }) => p.id)).toEqual(listPersonas().map((p) => p.id));
+  });
+
+  it('a user row that is gone reads as the default and not chosen, rather than a 500', async () => {
+    const user = await createUser();
+    const headers = await authed(user.id);
+    const realFindUnique = prisma.user.findUnique.bind(prisma.user);
+    // Only the status handler's own lookup (the one selecting coachPersonaId) sees a missing row; auth is untouched.
+    jest
+      .spyOn(prisma.user, 'findUnique')
+      .mockImplementation(((args: { select?: { coachPersonaId?: boolean } }) =>
+        args.select?.coachPersonaId ? Promise.resolve(null) : realFindUnique(args as never)) as never);
+    const res = await request(createApp()).get('/me/coach/status').set(headers);
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ personaId: DEFAULT_PERSONA_ID, personaChosen: false });
   });
 
   it('consent text states which fields leave the device and what never does', async () => {
@@ -227,7 +272,32 @@ describe('PUT /me/coach/persona', () => {
     expect((await prisma.user.findUnique({ where: { id: user.id } }))?.coachPersonaId).toBe('clinical');
   });
 
-  it.each([[{ personaId: 'pirate' }], [{}], [{ personaId: 7 }]])('400 for an unknown persona %j', async (body) => {
+  it.each([['false'], [undefined]])('works while the coach is off (COACH_ENABLED=%j)', async (flag) => {
+    if (flag === undefined) delete process.env.COACH_ENABLED;
+    else process.env.COACH_ENABLED = flag;
+    const chosen = listPersonas()[1]!.id;
+    const user = await createUser();
+    const headers = await authed(user.id);
+    const res = await request(createApp()).put('/me/coach/persona').set(headers).send({ personaId: chosen });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ personaId: chosen });
+    expect((await request(createApp()).get('/me/coach/status').set(headers)).body).toMatchObject({
+      enabled: false,
+      personaId: chosen,
+      personaChosen: true,
+    });
+  });
+
+  it.each([
+    [{ personaId: 'pirate' }],
+    [{}],
+    [{ personaId: 7 }],
+    [{ personaId: null }],
+    [{ personaId: ['hoot'] }],
+    [{ personaId: 'Hoot' }],
+    [{ personaId: 'toString' }],
+    [{ personaId: '__proto__' }],
+  ])('400 for an unknown persona %j', async (body) => {
     const user = await createUser();
     const res = await request(createApp()).put('/me/coach/persona').set(await authed(user.id)).send(body);
     expect(res.status).toBe(400);
