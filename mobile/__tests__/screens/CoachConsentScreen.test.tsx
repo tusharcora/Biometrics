@@ -1,4 +1,5 @@
 import React from 'react';
+import { characterLabel, withCharacter } from '../../jest-mocks/characterContext';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { CoachConsentScreen } from '../../src/screens/CoachConsentScreen';
 import { acceptCoachConsent, fetchCoachStatus, StaleConsentVersionError, type CoachStatusDTO } from '../../src/api/coach';
@@ -135,5 +136,14 @@ describe('CoachConsentScreen', () => {
     fireEvent.press(await findByTestId('coach-consent-retry'));
 
     expect(await findByTestId('coach-consent-agree')).toBeTruthy();
+  });
+});
+
+describe('CoachConsentScreen: character', () => {
+  it("shows the user's character above the consent text", async () => {
+    const utils = render(withCharacter(<CoachConsentScreen />, { characterId: 'beep' }));
+    await utils.findByText(status.consent.summary);
+
+    expect(characterLabel(utils, 'coach-consent-character')).toBe('character:beep:idle:56:playing:full');
   });
 });

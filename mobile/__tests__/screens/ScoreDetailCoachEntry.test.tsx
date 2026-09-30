@@ -1,4 +1,5 @@
 import React from 'react';
+import { characterLabel, withCharacter } from '../../jest-mocks/characterContext';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { ScoreDetailScreen } from '../../src/screens/ScoreDetailScreen';
 import { fetchScoreDetail, type ScoreDetailDTO } from '../../src/api/scores';
@@ -100,5 +101,14 @@ describe('ScoreDetailScreen: Ask about this', () => {
     expect(await findByTestId('score-headline')).toBeTruthy();
     await waitFor(() => expect(fetchCoachStatus).toHaveBeenCalled());
     expect(queryByTestId('ask-coach-button')).toBeNull();
+  });
+});
+
+describe('ScoreDetailScreen: coach character', () => {
+  it("shows the user's character on the Ask Coach button", async () => {
+    const utils = render(withCharacter(<ScoreDetailScreen />, { characterId: 'nimbus', status }));
+    await utils.findByTestId('ask-coach-button');
+
+    expect(characterLabel(utils, 'ask-coach-character')).toBe('character:nimbus:idle:40:playing:mini');
   });
 });
