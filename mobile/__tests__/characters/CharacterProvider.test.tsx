@@ -1,0 +1,422 @@
+import React from 'react';
+import { AppState } from 'react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
+import { CharacterProvider, useCharacter, useSetCoachStatus } from '../../src/characters/CharacterProvider';
+import { fetchCoachStatus, setCoachPersona, type CoachStatusDTO } from '../../src/api/coach';
+import { fetchScoresWithBands, type DailyScoreDTO } from '../../src/api/scores';
+import { clearCachedCharacter, readCachedCharacter, writeCachedCharacter } from '../../src/characters/characterCache';
+
+jest.mock('../../src/api/coach', () => ({
+  ...jest.requireActual('../../src/api/coach'),
+  fetchCoachStatus: jest.fn(),
+  setCoachPersona: jest.fn(),
+}));
+jest.mock('../../src/api/scores', () => ({ fetchScoresWithBands: jest.fn() }));
+jest.mock('../../src/characters/characterCache');
+
+let mockAuth: { session: { userId: string; email: string } | null; isPending: boolean } | undefined;
+jest.mock('../../src/auth/AuthContext', () => ({ useOptionalAuth: () => mockAuth }));
+
+const status: CoachStatusDTO = {
+  enabled: true,
+  consented: true,
+  consent: { version: 'v1', summary: 's', dataItems: ['x'] },
+  personaId: 'ember',
+  personaChosen: true,
+  personas: [],
+};
+
+function recovery(score: number | null): DailyScoreDTO {
+  return { date: '2026-09-29', type: 'RECOVERY', score, confidenceLevel: 'HIGH', algorithmVersion: 'v1', factors: [], coldStart: [] };
+}
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (error: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
+}
+
+const signedIn = (userId = 'u1') => ({ session: { userId, email: `${userId}@example.com` }, isPending: false });
+
+function renderCharacter() {
+  return renderHook(() => useCharacter(), { wrapper: CharacterProvider });
+}
+
+let appStateListener: ((state: string) => void) | undefined;
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  mockAuth = signedIn();
+  (readCachedCharacter as jest.Mock).mockResolvedValue(null);
+  (writeCachedCharacter as jest.Mock).mockResolvedValue(undefined);
+  (clearCachedCharacter as jest.Mock).mockResolvedValue(undefined);
+  (fetchCoachStatus as jest.Mock).mockResolvedValue(status);
+  (setCoachPersona as jest.Mock).mockResolvedValue({ personaId: 'pip' });
+  (fetchScoresWithBands as jest.Mock).mockResolvedValue({ scores: [recovery(80)], bands: { excellent: 75, good: 55, fair: 40 } });
+  appStateListener = undefined;
+  jest.spyOn(AppState, 'addEventListener').mockImplementation(((_: string, listener: (state: string) => void) => {
+    appStateListener = listener;
+    return { remove: jest.fn() };
+  }) as never);
+});
+
+describe('CharacterProvider: which character', () => {
+  it('is Hoot before anything has loaded when nothing is cached', async () => {
+    (fetchCoachStatus as jest.Mock).mockReturnValue(new Promise(() => {}));
+    const { result } = renderCharacter();
+
+    expect(result.current.characterId).toBe('hoot');
+    await waitFor(() => expect(readCachedCharacter).toHaveBeenCalled());
+    expect(result.current.characterId).toBe('hoot');
+    expect(result.current.statusLoaded).toBe(false);
+  });
+
+  it('shows the cached character on a signed-in cold start, before the status arrives', async () => {
+    (readCachedCharacter as jest.Mock).mockResolvedValue('doze');
+    (fetchCoachStatus as jest.Mock).mockReturnValue(new Promise(() => {}));
+    const { result } = renderCharacter();
+
+    await waitFor(() => expect(result.current.characterId).toBe('doze'));
+  });
+
+  it("switches to the server's character, exposes the status, and caches it", async () => {
+    (readCachedCharacter as jest.Mock).mockResolvedValue('doze');
+    const { result } = renderCharacter();
+
+    await waitFor(() => expect(result.current.characterId).toBe('ember'));
+    expect(result.current.status).toEqual(status);
+    expect(result.current.statusLoaded).toBe(true);
+    expect(result.current.personaChosen).toBe(true);
+    expect(writeCachedCharacter).toHaveBeenCalledWith('ember');
+  });
+
+  it('does not let a slow cache read replace the character the server already named', async () => {
+    const cache = deferred<string | null>();
+    (readCachedCharacter as jest.Mock).mockReturnValue(cache.promise);
+    const { result } = renderCharacter();
+    await waitFor(() => expect(result.current.characterId).toBe('ember'));
+
+    await act(async () => cache.resolve('doze'));
+
+    expect(result.current.characterId).toBe('ember');
+  });
+
+  it('shows Hoot for an id this app does not know', async () => {
+    (readCachedCharacter as jest.Mock).mockResolvedValue('doze');
+    (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, personaId: 'luna' });
+    const { result } = renderCharacter();
+
+    await waitFor(() => expect(result.current.statusLoaded).toBe(true));
+    expect(result.current.characterId).toBe('hoot');
+    expect(writeCachedCharacter).toHaveBeenCalledWith('hoot');
+  });
+
+  it('ignores a cached id this app does not know and shows Hoot', async () => {
+    // characterCache validates too, but the provider must never expose an
+    // unvalidated id: CharacterCanvas has no fallback for one.
+    (readCachedCharacter as jest.Mock).mockResolvedValue('luna');
+    (fetchCoachStatus as jest.Mock).mockReturnValue(new Promise(() => {}));
+    const { result } = renderCharacter();
+
+    await waitFor(() => expect(readCachedCharacter).toHaveBeenCalled());
+    await act(async () => {});
+    expect(result.current.characterId).toBe('hoot');
+  });
+
+  it('shows Hoot when a status set through useSetCoachStatus names an unknown id', async () => {
+    const { result } = renderHook(() => ({ character: useCharacter(), setStatus: useSetCoachStatus() }), {
+      wrapper: CharacterProvider,
+    });
+    await waitFor(() => expect(result.current.character.characterId).toBe('ember'));
+
+    act(() => result.current.setStatus?.({ ...status, personaId: 'twinkle' }));
+
+    expect(result.current.character.characterId).toBe('hoot');
+    expect(writeCachedCharacter).toHaveBeenLastCalledWith('hoot');
+  });
+
+  it('keeps the cached character when the status does not name one (malformed status)', async () => {
+    (readCachedCharacter as jest.Mock).mockResolvedValue('doze');
+    (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, enabled: false, consented: false, personaId: '', personaChosen: false });
+    const { result } = renderCharacter();
+
+    await waitFor(() => expect(result.current.statusLoaded).toBe(true));
+    await waitFor(() => expect(result.current.characterId).toBe('doze'));
+    expect(writeCachedCharacter).not.toHaveBeenCalled();
+  });
+
+  it("still shows the user's character when the coach is switched off", async () => {
+    (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, enabled: false, consented: false });
+    const { result } = renderCharacter();
+
+    await waitFor(() => expect(result.current.characterId).toBe('ember'));
+    expect(result.current.status?.enabled).toBe(false);
+  });
+
+  it('keeps the cached character and reports an unknown status when the status request fails', async () => {
+    (readCachedCharacter as jest.Mock).mockResolvedValue('doze');
+    (fetchCoachStatus as jest.Mock).mockRejectedValue(new Error('offline'));
+    const { result } = renderCharacter();
+
+    await waitFor(() => expect(result.current.statusLoaded).toBe(true));
+    await waitFor(() => expect(result.current.characterId).toBe('doze'));
+    expect(result.current.status).toBeNull();
+    expect(result.current.personaChosen).toBe(false);
+  });
+
+  it('reports personaChosen false for a user who never picked', async () => {
+    (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, personaId: 'hoot', personaChosen: false });
+    const { result } = renderCharacter();
+
+    await waitFor(() => expect(result.current.statusLoaded).toBe(true));
+    expect(result.current.personaChosen).toBe(false);
+    expect(result.current.characterId).toBe('hoot');
+  });
+
+  it('refreshStatus reads the status again', async () => {
+    const { result } = renderCharacter();
+    await waitFor(() => expect(result.current.characterId).toBe('ember'));
+    (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, personaId: 'beat', consented: false });
+
+    await act(() => result.current.refreshStatus());
+
+    expect(result.current.characterId).toBe('beat');
+    expect(result.current.status?.consented).toBe(false);
+  });
+});
+
+describe('CharacterProvider: signed out', () => {
+  it('is Hoot, clears the cache and fetches nothing', async () => {
+    mockAuth = { session: null, isPending: false };
+    (readCachedCharacter as jest.Mock).mockResolvedValue('doze');
+    const { result } = renderCharacter();
+
+    await waitFor(() => expect(clearCachedCharacter).toHaveBeenCalled());
+    expect(result.current.characterId).toBe('hoot');
+    expect(result.current.status).toBeNull();
+    expect(result.current.statusLoaded).toBe(false);
+    expect(readCachedCharacter).not.toHaveBeenCalled();
+    expect(fetchCoachStatus).not.toHaveBeenCalled();
+    expect(fetchScoresWithBands).not.toHaveBeenCalled();
+  });
+
+  it('treats no AuthProvider at all as signed out', async () => {
+    mockAuth = undefined;
+    const { result } = renderCharacter();
+
+    await waitFor(() => expect(clearCachedCharacter).toHaveBeenCalled());
+    expect(result.current.characterId).toBe('hoot');
+    expect(fetchCoachStatus).not.toHaveBeenCalled();
+  });
+
+  it('keeps the cache, and fetches nothing, while the session is still loading on a cold start', async () => {
+    mockAuth = { session: null, isPending: true };
+    (readCachedCharacter as jest.Mock).mockResolvedValue('doze');
+    const { result } = renderCharacter();
+
+    await waitFor(() => expect(result.current.characterId).toBe('doze'));
+    expect(clearCachedCharacter).not.toHaveBeenCalled();
+    expect(fetchCoachStatus).not.toHaveBeenCalled();
+  });
+
+  it('goes back to Hoot, clears the cache and drops the status on sign-out', async () => {
+    const { result, rerender } = renderCharacter();
+    await waitFor(() => expect(result.current.characterId).toBe('ember'));
+
+    mockAuth = { session: null, isPending: false };
+    rerender({});
+
+    await waitFor(() => expect(result.current.characterId).toBe('hoot'));
+    expect(clearCachedCharacter).toHaveBeenCalledTimes(1);
+    expect(result.current.status).toBeNull();
+    expect(result.current.recoveryBand).toBeNull();
+    expect(result.current.personaChosen).toBe(false);
+  });
+
+  it('ignores a status reply that lands after sign-out', async () => {
+    const reply = deferred<CoachStatusDTO>();
+    (fetchCoachStatus as jest.Mock).mockReturnValue(reply.promise);
+    const { result, rerender } = renderCharacter();
+    await waitFor(() => expect(fetchCoachStatus).toHaveBeenCalled());
+
+    mockAuth = { session: null, isPending: false };
+    rerender({});
+    await act(async () => reply.resolve(status));
+
+    expect(result.current.characterId).toBe('hoot');
+    expect(result.current.status).toBeNull();
+    expect(writeCachedCharacter).not.toHaveBeenCalled();
+  });
+
+  it('loads the next account afresh after a switch', async () => {
+    const { result, rerender } = renderCharacter();
+    await waitFor(() => expect(result.current.characterId).toBe('ember'));
+    (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, personaId: 'mochi' });
+
+    mockAuth = signedIn('u2');
+    rerender({});
+
+    await waitFor(() => expect(result.current.characterId).toBe('mochi'));
+    expect(fetchCoachStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it('ignores a status reply that lands after unmount', async () => {
+    const reply = deferred<CoachStatusDTO>();
+    (fetchCoachStatus as jest.Mock).mockReturnValue(reply.promise);
+    const { unmount } = renderCharacter();
+    await waitFor(() => expect(fetchCoachStatus).toHaveBeenCalled());
+
+    unmount();
+    await act(async () => reply.resolve(status));
+
+    expect(writeCachedCharacter).not.toHaveBeenCalled();
+  });
+});
+
+describe('CharacterProvider: chooseCharacter', () => {
+  it('switches at once, saves to the server and the cache', async () => {
+    const save = deferred<{ personaId: string }>();
+    (setCoachPersona as jest.Mock).mockReturnValue(save.promise);
+    (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, personaId: 'hoot', personaChosen: false });
+    const { result } = renderCharacter();
+    await waitFor(() => expect(result.current.statusLoaded).toBe(true));
+
+    let done!: Promise<void>;
+    act(() => {
+      done = result.current.chooseCharacter('pip');
+    });
+
+    expect(result.current.characterId).toBe('pip');
+    expect(result.current.personaChosen).toBe(true);
+    expect(result.current.status?.personaId).toBe('pip');
+    expect(setCoachPersona).toHaveBeenCalledWith('pip');
+    expect(writeCachedCharacter).toHaveBeenLastCalledWith('pip');
+    await act(async () => {
+      save.resolve({ personaId: 'pip' });
+      await done;
+    });
+    expect(result.current.characterId).toBe('pip');
+  });
+
+  it('puts the previous character back and rethrows when saving fails', async () => {
+    (setCoachPersona as jest.Mock).mockRejectedValue(new Error('offline'));
+    (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, personaId: 'hoot', personaChosen: false });
+    const { result } = renderCharacter();
+    await waitFor(() => expect(result.current.statusLoaded).toBe(true));
+
+    let caught: unknown;
+    await act(async () => {
+      await result.current.chooseCharacter('pip').catch((e: unknown) => {
+        caught = e;
+      });
+    });
+
+    expect((caught as Error).message).toBe('offline');
+    expect(result.current.characterId).toBe('hoot');
+    expect(result.current.personaChosen).toBe(false);
+    expect(result.current.status?.personaId).toBe('hoot');
+    expect(result.current.status?.personaChosen).toBe(false);
+    expect(writeCachedCharacter).toHaveBeenLastCalledWith('hoot');
+  });
+
+  it('works while the coach status is unknown (status request failed)', async () => {
+    (fetchCoachStatus as jest.Mock).mockRejectedValue(new Error('offline'));
+    const { result } = renderCharacter();
+    await waitFor(() => expect(result.current.statusLoaded).toBe(true));
+
+    await act(() => result.current.chooseCharacter('beep'));
+
+    expect(result.current.characterId).toBe('beep');
+    expect(result.current.status).toBeNull();
+  });
+
+  it('is not undone by a status fetch that started before the choice', async () => {
+    const { result } = renderCharacter();
+    await waitFor(() => expect(result.current.characterId).toBe('ember'));
+    const staleStatus = deferred<CoachStatusDTO>();
+    const save = deferred<{ personaId: string }>();
+    (fetchCoachStatus as jest.Mock).mockReturnValue(staleStatus.promise);
+    (setCoachPersona as jest.Mock).mockReturnValue(save.promise);
+
+    let refreshing!: Promise<void>;
+    let choosing!: Promise<void>;
+    act(() => {
+      refreshing = result.current.refreshStatus();
+      choosing = result.current.chooseCharacter('pip');
+    });
+    await act(async () => {
+      staleStatus.resolve(status);
+      await refreshing;
+    });
+
+    expect(result.current.characterId).toBe('pip');
+    expect(result.current.status?.personaId).toBe('pip');
+    await act(async () => {
+      save.resolve({ personaId: 'pip' });
+      await choosing;
+    });
+  });
+});
+
+describe('CharacterProvider: recovery band', () => {
+  it("is the band of today's Recovery Score, fetched once for one day", async () => {
+    (fetchScoresWithBands as jest.Mock).mockResolvedValue({ scores: [recovery(30)], bands: { excellent: 75, good: 55, fair: 40 } });
+    const { result } = renderCharacter();
+
+    await waitFor(() => expect(result.current.recoveryBand).toBe('scorePoor'));
+    expect(fetchScoresWithBands).toHaveBeenCalledTimes(1);
+    expect(fetchScoresWithBands).toHaveBeenCalledWith(1, 'RECOVERY');
+  });
+
+  it("uses the server's band thresholds", async () => {
+    (fetchScoresWithBands as jest.Mock).mockResolvedValue({ scores: [recovery(60)], bands: { excellent: 90, good: 70, fair: 65 } });
+    const { result } = renderCharacter();
+
+    await waitFor(() => expect(result.current.recoveryBand).toBe('scorePoor'));
+  });
+
+  it('is null when there is no score today, or the score is still cold-starting', async () => {
+    (fetchScoresWithBands as jest.Mock).mockResolvedValue({ scores: [recovery(null)], bands: undefined });
+    const { result } = renderCharacter();
+    await waitFor(() => expect(fetchScoresWithBands).toHaveBeenCalled());
+    await act(async () => {});
+
+    expect(result.current.recoveryBand).toBeNull();
+  });
+
+  it('is null when the scores request fails', async () => {
+    (fetchScoresWithBands as jest.Mock).mockRejectedValue(new Error('offline'));
+    const { result } = renderCharacter();
+    await waitFor(() => expect(fetchScoresWithBands).toHaveBeenCalled());
+    await act(async () => {});
+
+    expect(result.current.recoveryBand).toBeNull();
+  });
+
+  it('is read again when the app returns to the foreground', async () => {
+    const { result } = renderCharacter();
+    await waitFor(() => expect(result.current.recoveryBand).toBe('scoreExcellent'));
+    (fetchScoresWithBands as jest.Mock).mockResolvedValue({ scores: [recovery(10)], bands: undefined });
+
+    await act(async () => appStateListener?.('background'));
+    await act(async () => appStateListener?.('active'));
+
+    await waitFor(() => expect(result.current.recoveryBand).toBe('scorePoor'));
+    expect(fetchScoresWithBands).toHaveBeenCalledTimes(2);
+  });
+
+  it('is not fetched on foreground while signed out', async () => {
+    mockAuth = { session: null, isPending: false };
+    renderCharacter();
+    await waitFor(() => expect(clearCachedCharacter).toHaveBeenCalled());
+
+    await act(async () => appStateListener?.('background'));
+    await act(async () => appStateListener?.('active'));
+
+    expect(fetchScoresWithBands).not.toHaveBeenCalled();
+  });
+});
