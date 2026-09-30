@@ -1,6 +1,7 @@
 import type { ComponentType } from 'react';
 import type { CharacterArtProps, CharacterId } from '../types';
 import { BeepArt } from './BeepArt';
+import { DozeArt } from './DozeArt';
 import { EmberArt } from './EmberArt';
 import { HootArt } from './HootArt';
 import { MochiArt } from './MochiArt';
@@ -16,4 +17,5 @@ export const ART: Partial<Record<CharacterId, ComponentType<CharacterArtProps>>>
   nimbus: NimbusArt,
   ember: EmberArt,
   beep: BeepArt,
+  doze: DozeArt,
 };
