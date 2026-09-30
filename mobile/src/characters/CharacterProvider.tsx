@@ -79,11 +79,17 @@ export function CharacterProvider({ children }: { children: React.ReactNode }): 
     if (!signedIn.current) return;
     const started = epoch.current;
     const seqAtStart = choiceSeq.current;
+    // The server may answer this GET before it applies a PUT still in flight,
+    // so a choice pending now can be missing from the reply too.
+    const choicePendingAtStart = pendingChoice.current !== null;
     try {
       const next = await fetchCoachStatus();
       if (epoch.current !== started) return;
-      const choiceSince = choiceSeq.current !== seqAtStart ? (lastChoice.current?.id ?? null) : null;
-      applyStatus(next, choiceSince ?? pendingChoice.current);
+      // lastChoice is the choice in effect now: if the raced one failed it has
+      // already been handed back, so the server's reply applies as sent.
+      const mayBeStale = choicePendingAtStart || choiceSeq.current !== seqAtStart;
+      const choice = mayBeStale ? (lastChoice.current?.id ?? null) : null;
+      applyStatus(next, choice ?? pendingChoice.current);
     } catch {
       if (epoch.current !== started) return;
       // Unknown, which every coach entry treats as disabled. The character

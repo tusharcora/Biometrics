@@ -392,6 +392,61 @@ describe('CharacterProvider: chooseCharacter races and guards', () => {
     expect(writeCachedCharacter).toHaveBeenLastCalledWith('pip');
   });
 
+  it('is not undone by a status fetch that started while the save was pending and lands after it', async () => {
+    const { result } = renderCharacter();
+    await waitFor(() => expect(result.current.characterId).toBe('ember'));
+    const staleStatus = deferred<CoachStatusDTO>();
+    const save = deferred<{ personaId: string }>();
+    (fetchCoachStatus as jest.Mock).mockReturnValue(staleStatus.promise);
+    (setCoachPersona as jest.Mock).mockReturnValue(save.promise);
+
+    let refreshing!: Promise<void>;
+    let choosing!: Promise<void>;
+    act(() => {
+      choosing = result.current.chooseCharacter('pip');
+      refreshing = result.current.refreshStatus();
+    });
+    await act(async () => {
+      save.resolve({ personaId: 'pip' });
+      await choosing;
+    });
+    await act(async () => {
+      staleStatus.resolve(status);
+      await refreshing;
+    });
+
+    expect(result.current.characterId).toBe('pip');
+    expect(result.current.status?.personaId).toBe('pip');
+    expect(writeCachedCharacter).toHaveBeenLastCalledWith('pip');
+  });
+
+  it('lets a status through that started while a save was pending, once that save has failed', async () => {
+    const { result } = renderCharacter();
+    await waitFor(() => expect(result.current.characterId).toBe('ember'));
+    const staleStatus = deferred<CoachStatusDTO>();
+    const save = deferred<{ personaId: string }>();
+    (fetchCoachStatus as jest.Mock).mockReturnValue(staleStatus.promise);
+    (setCoachPersona as jest.Mock).mockReturnValue(save.promise);
+
+    let refreshing!: Promise<void>;
+    let choosing!: Promise<void>;
+    act(() => {
+      choosing = result.current.chooseCharacter('pip');
+      refreshing = result.current.refreshStatus();
+    });
+    await act(async () => {
+      save.reject(new Error('offline'));
+      await choosing.catch(() => {});
+    });
+    await act(async () => {
+      staleStatus.resolve(status);
+      await refreshing;
+    });
+
+    expect(result.current.characterId).toBe('ember');
+    expect(writeCachedCharacter).toHaveBeenLastCalledWith('ember');
+  });
+
   it('lets a stale status through once the choice it raced has failed', async () => {
     const { result } = renderCharacter();
     await waitFor(() => expect(result.current.characterId).toBe('ember'));
