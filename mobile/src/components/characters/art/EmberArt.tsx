@@ -312,9 +312,14 @@ function IdleFull({ paused }: { paused: boolean }) {
           <Ellipse cx={63} cy={75} rx={3.5} ry={2} color="rgba(244,63,94,0.45)" />
         </Bob>
       </Group>
-      <Spark t={sparks} index={0} durationS={2.2} />
-      <Spark t={sparks} index={1} durationS={2.2} />
-      <Spark t={sparks} index={2} durationS={2.2} />
+      {/* Still pose: CSS holds delayed sparks at opacity 0, so draw none. */}
+      {!paused && (
+        <>
+          <Spark t={sparks} index={0} durationS={2.2} />
+          <Spark t={sparks} index={1} durationS={2.2} />
+          <Spark t={sparks} index={2} durationS={2.2} />
+        </>
+      )}
     </>
   );
 }
@@ -339,9 +344,7 @@ function ThinkingFull({ paused }: { paused: boolean }) {
           <Ellipse cx={51} cy={77} rx={2.4} ry={2.8} color={INK} />
         </Bob>
       </Group>
-      {[0, 1, 2, 3, 4].map((i) => (
-        <Spark key={i} t={sparks} index={i} durationS={1.1} />
-      ))}
+      {!paused && [0, 1, 2, 3, 4].map((i) => <Spark key={i} t={sparks} index={i} durationS={1.1} />)}
     </>
   );
 }
@@ -372,9 +375,7 @@ function AnsweringFull({ paused }: { paused: boolean }) {
           <Ellipse cx={64} cy={74} rx={3.5} ry={2} color="rgba(244,63,94,0.55)" />
         </Bob>
       </Group>
-      {[0, 1, 2, 3, 4].map((i) => (
-        <Burst key={i} t={bursts} index={i} />
-      ))}
+      {!paused && [0, 1, 2, 3, 4].map((i) => <Burst key={i} t={bursts} index={i} />)}
     </>
   );
 }
