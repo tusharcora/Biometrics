@@ -44,8 +44,12 @@ describe('CharacterContext', () => {
   });
 
   it('throws outside a provider for the required hook', () => {
-    jest.spyOn(console, 'error').mockImplementation(() => undefined);
-    expect(() => renderHook(() => useCharacter())).toThrow('useCharacter must be used inside CharacterProvider');
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => undefined);
+    try {
+      expect(() => renderHook(() => useCharacter())).toThrow('useCharacter must be used inside CharacterProvider');
+    } finally {
+      errors.mockRestore();
+    }
   });
 
   it('returns the provided value', () => {
