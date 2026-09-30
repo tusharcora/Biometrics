@@ -1,5 +1,6 @@
 import type { ComponentType } from 'react';
 import type { CharacterArtProps, CharacterId } from '../types';
+import { EmberArt } from './EmberArt';
 import { HootArt } from './HootArt';
 import { MochiArt } from './MochiArt';
 import { NimbusArt } from './NimbusArt';
@@ -12,4 +13,5 @@ export const ART: Partial<Record<CharacterId, ComponentType<CharacterArtProps>>>
   pip: PipArt,
   mochi: MochiArt,
   nimbus: NimbusArt,
+  ember: EmberArt,
 };
