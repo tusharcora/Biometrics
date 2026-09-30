@@ -1,4 +1,5 @@
 import React from 'react';
+import { characterLabel, withCharacter } from '../../jest-mocks/characterContext';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { ResetPasswordScreen } from '../../src/screens/ResetPasswordScreen';
 import { useAuth } from '../../src/auth/AuthContext';
@@ -49,4 +50,11 @@ it('picks up a fresh token that arrives on an already-open reset screen', async 
   fireEvent.changeText(getByTestId('password-input'), 'new password 1');
   fireEvent.press(getByTestId('reset-password-button'));
   await waitFor(() => expect(resetPassword).toHaveBeenCalledWith('fresh', 'new password 1'));
+});
+
+it('always shows Hoot, whatever character a provider holds (signed-out screens)', () => {
+  (useAuth as jest.Mock).mockReturnValue({ resetPassword: jest.fn() });
+  const utils = render(withCharacter(<ResetPasswordScreen navigation={navigation} route={{ params: { token: 'tok' } } as any} />, { characterId: 'ember' }));
+
+  expect(characterLabel(utils, 'auth-character')).toBe('character:hoot:idle:56:playing:full');
 });
