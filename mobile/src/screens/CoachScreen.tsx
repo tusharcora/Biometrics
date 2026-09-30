@@ -24,8 +24,9 @@ import { COACH_COMMANDS, PromptBar } from '../components/coach/PromptBar';
 import { ThoughtLine } from '../components/coach/thought-line';
 import { ChatBubble } from '../components/ui/chat-bubble';
 import { MemoryProposalChips } from '../components/memory-proposal-chips';
-import { Orb } from '../components/orb/Orb';
-import { StillOrb } from '../components/ui/still-orb';
+import { Character } from '../components/characters/Character';
+import { useCharacterMood } from '../characters/useCharacterMood';
+import { useScreenFocused } from '../characters/useScreenFocused';
 import { Glow } from '../components/ui/glow';
 import { PressableScale } from '../components/ui/pressable-scale';
 import { COLORS } from '../theme';
@@ -83,6 +84,10 @@ export function CoachScreen() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [input, setInput] = useState(prefill ?? '');
   const [sending, setSending] = useState(false);
+  // When the latest reply landed, for the character's "answering" mood.
+  const [answeredAt, setAnsweredAt] = useState<number | null>(null);
+  const mood = useCharacterMood({ sending, answeredAt });
+  const focused = useScreenFocused();
   const [error, setError] = useState<{ text: string; request: SendCoachMessageInput } | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const mounted = useRef(true);
@@ -278,6 +283,8 @@ export function CoachScreen() {
           };
           return [...settled, next];
         });
+        // A crisis-safety reply is not a moment for the character to celebrate.
+        if (res.message.source !== 'safety') setAnsweredAt(Date.now());
       } catch (e) {
         if (!mounted.current) return;
         // Whatever went wrong, the message did not land. Mark the bubble so the
@@ -325,7 +332,7 @@ export function CoachScreen() {
   const header = (
     <View className="flex-row items-center justify-between px-5 pb-2 pt-1">
       <View className="flex-row items-center gap-3">
-        <StillOrb size={36} glow={false} />
+        <Character testID="coach-header-character" mood={mood} size={36} paused={!focused} />
         <View>
           <Text className="font-display text-display">Coach</Text>
           <Text className="text-xs text-muted-foreground">Answers from your own data</Text>
@@ -364,7 +371,7 @@ export function CoachScreen() {
       <SafeAreaView className="flex-1 bg-background">
         {header}
         <View testID="coach-needs-consent" className="flex-1 items-center justify-center gap-4 p-8">
-          <StillOrb size={56} />
+          <Character mood="idle" size={56} glow paused={!focused} />
           <Text className="text-center text-base text-muted-foreground">The coach needs your OK before it can look at your scores.</Text>
           <Button testID="coach-review-consent-button" onPress={() => navigation.navigate('CoachConsent', { prefill: lastPrefill.current })}>
             Review what is shared
@@ -379,7 +386,7 @@ export function CoachScreen() {
       <SafeAreaView className="flex-1 bg-background">
         {header}
         <View testID="coach-unavailable" className="flex-1 items-center justify-center gap-4 p-8">
-          <StillOrb size={56} glow={false} />
+          <Character mood="idle" size={56} paused={!focused} />
           <Text className="text-center text-base text-muted-foreground">The AI Coach is not available right now.</Text>
         </View>
       </SafeAreaView>
@@ -413,8 +420,7 @@ export function CoachScreen() {
               <View testID="coach-empty" className="flex-1 items-center justify-center gap-5 py-10">
                 <View style={{ width: 64, height: 64 }} className="items-center justify-center">
                   <Glow color={colors.accent} size={220} around={64} intensity={0.28} />
-                  {/* Paused: the tab bar's orb is already the live one on this screen. */}
-                  <Orb state="breathing" size={64} paused />
+                  <Character testID="coach-hero-character" mood={mood} size={64} paused={!focused} />
                 </View>
                 <View className="items-center gap-2 px-4">
                   <Text className="font-display text-display text-center">What would you like to know?</Text>
@@ -447,7 +453,7 @@ export function CoachScreen() {
                   </Text>
                 ) : null}
                 {message.thoughtSeconds !== undefined ? (
-                  <ThoughtLine working={false} elapsedSeconds={message.thoughtSeconds} glyph={<StillOrb size={14} glow={false} />} testID="coach-thought-settled" />
+                  <ThoughtLine working={false} elapsedSeconds={message.thoughtSeconds} glyph={<Character mood="idle" size={14} paused />} testID="coach-thought-settled" />
                 ) : null}
                 <ChatBubble role={message.role} text={message.text} source={message.source as CoachMessageSource} animate={message.fresh === true}>
                   {message.safety ? (
@@ -480,7 +486,7 @@ export function CoachScreen() {
 
             {sending ? (
               <View className="items-start">
-                <ThoughtLine working glyph={<Orb state="working" size={20} />} testID="coach-thinking" />
+                <ThoughtLine working glyph={<Character testID="coach-thinking-character" mood="thinking" size={20} paused={!focused} />} testID="coach-thinking" />
               </View>
             ) : null}
 
