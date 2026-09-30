@@ -18,6 +18,8 @@ type MeetRoute = RouteProp<RootStackParamList, 'MeetYourCoach'>;
 type MeetNavigation = NativeStackNavigationProp<RootStackParamList, 'MeetYourCoach'>;
 
 const ART_SIZE = 180;
+// Each page dot's tap target (the dot itself stays small).
+const DOT_TARGET = 44;
 
 // The server's copy wins when it has any (spec §1 Registry); a missing, null
 // or blank field falls back to the app's own.
@@ -134,7 +136,10 @@ export function MeetYourCoachScreen() {
               {/* Only the page on screen animates (spec §1 Performance). */}
               <Character characterId={id} mood="idle" size={ART_SIZE} paused={i !== index} glow accessibilityLabel={name} />
               <View className="items-center gap-1.5">
-                <Text className="font-display text-display-lg">{name}</Text>
+                {/* The character above already reads the name to a screen reader. */}
+                <Text className="font-display text-display-lg" accessibilityElementsHidden importantForAccessibility="no">
+                  {name}
+                </Text>
                 <Text testID={`meet-tagline-${id}`} className="text-center text-base text-muted-foreground">
                   {tagline}
                 </Text>
@@ -154,7 +159,8 @@ export function MeetYourCoachScreen() {
       />
 
       <View className="gap-4 px-5 pb-4">
-        <View className="flex-row items-center justify-center gap-2">
+        {/* Eight 44pt targets need 352pt, so this row uses the full width. */}
+        <View className="-mx-5 flex-row items-center justify-center">
           {CHARACTER_IDS.map((id, i) => (
             <Pressable
               key={id}
@@ -162,10 +168,11 @@ export function MeetYourCoachScreen() {
               accessibilityRole="button"
               accessibilityLabel={`Show ${CHARACTERS[id].name}`}
               accessibilityState={{ selected: i === index }}
-              hitSlop={8}
               onPress={() => goTo(i)}
-              className={cn('h-2 rounded-full', i === index ? 'w-5 bg-foreground' : 'w-2 bg-border')}
-            />
+              style={{ width: DOT_TARGET, height: DOT_TARGET, alignItems: 'center', justifyContent: 'center' }}
+            >
+              <View className={cn('h-2 rounded-full', i === index ? 'w-5 bg-foreground' : 'w-2 bg-border')} />
+            </Pressable>
           ))}
         </View>
         {error ? (

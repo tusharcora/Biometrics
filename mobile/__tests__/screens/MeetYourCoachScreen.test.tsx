@@ -79,6 +79,35 @@ describe('MeetYourCoachScreen: first visit', () => {
     expect(utils.queryByLabelText('Hoot, your coach')).toBeNull();
   });
 
+  it("reads each page's name once: the character's label, not the heading too", () => {
+    const utils = renderMeet({ personaChosen: false, status });
+
+    // The heading is still on screen, just hidden from the screen reader.
+    expect(utils.getByText('Pip', HIDDEN_OK)).toBeTruthy();
+    expect(utils.queryByText('Pip')).toBeNull();
+    expect(utils.getAllByLabelText('Pip')).toHaveLength(1);
+  });
+
+  it('gives every page dot a 44pt tap target, as a labelled button', () => {
+    const utils = renderMeet({ personaChosen: false, status });
+
+    for (const [id, name] of [
+      ['hoot', 'Hoot'],
+      ['pip', 'Pip'],
+      ['mochi', 'Mochi'],
+      ['nimbus', 'Nimbus'],
+      ['ember', 'Ember'],
+      ['beep', 'Beep'],
+      ['doze', 'Doze'],
+      ['beat', 'Beat'],
+    ]) {
+      const dot = utils.getByTestId(`meet-dot-${id}`);
+      expect(dot).toHaveProp('accessibilityRole', 'button');
+      expect(dot).toHaveProp('accessibilityLabel', `Show ${name}`);
+      expect(dot).toHaveStyle({ width: 44, height: 44 });
+    }
+  });
+
   it("shows the server's tagline and greeting when it has them, else the app's own", () => {
     const utils = renderMeet({ personaChosen: false, status });
 
