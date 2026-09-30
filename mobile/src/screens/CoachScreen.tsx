@@ -33,6 +33,7 @@ import { COLORS } from '../theme';
 import type { TabParamList } from '../navigation/TabsNavigator';
 import { useTabBarClearance } from '../navigation/tabBarLayout';
 import { useKeyboardVisible } from '../lib/useKeyboardVisible';
+import { useCharacterOptional } from '../characters/CharacterContext';
 
 type CoachRoute = RouteProp<TabParamList, 'Coach'>;
 
@@ -93,6 +94,9 @@ export function CoachScreen() {
   const mounted = useRef(true);
   const localId = useRef(0);
   const redirectedToConsent = useRef(false);
+  // Meet your coach opens by itself at most once per mount of this tab.
+  const pickerOpened = useRef(false);
+  const characterCtx = useCharacterOptional();
   const loadInFlight = useRef(false);
   // A load requested while another is in flight (e.g. tab focus during the first
   // load). The in-flight result may be stale by then, so it is discarded and
@@ -140,6 +144,22 @@ export function CoachScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill]);
 
+  // Returns true only for the call that actually opened it.
+  const openPicker = useCallback(() => {
+    if (pickerOpened.current) return false;
+    pickerOpened.current = true;
+    navigation.navigate('MeetYourCoach', { mode: 'first' });
+    return true;
+  }, [navigation]);
+
+  // First Coach-tab visit with the coach enabled and no character chosen yet:
+  // the picker comes first, before consent (spec §5). A status that is
+  // unknown or failed (null) never opens it.
+  useEffect(() => {
+    if (!characterCtx?.statusLoaded || !characterCtx.status?.enabled || characterCtx.personaChosen) return;
+    openPicker();
+  }, [characterCtx?.statusLoaded, characterCtx?.status?.enabled, characterCtx?.personaChosen, openPicker]);
+
   const load = useCallback(async () => {
     // Mount and tab focus can both trigger a load. Run one at a time, but never
     // drop a request: the finally below re-runs once if one arrived meanwhile.
@@ -169,6 +189,10 @@ export function CoachScreen() {
         setPhase('unavailable');
         return;
       }
+      // The same rule from this screen's own status, for when it settles before
+      // the provider's. Strictly false: a server that doesn't send the field
+      // never triggers it.
+      const pickerJustOpened = status.personaChosen === false && openPicker();
       if (!status.consented) {
         // The server decides: a changed consent version lands here too. Send
         // the user to consent once; if they come back without agreeing, stay on
@@ -177,6 +201,9 @@ export function CoachScreen() {
           setPhase('needs-consent');
           return;
         }
+        // The picker is (or is about to be) on top of this tab: consent waits
+        // until the user is back here, when the focus reload redirects.
+        if (pickerJustOpened || navigation.isFocused?.() === false) return;
         redirectedToConsent.current = true;
         navigation.navigate('CoachConsent', { prefill: lastPrefill.current });
         return;
@@ -217,7 +244,7 @@ export function CoachScreen() {
         if (mounted.current) void loadRef.current();
       }
     }
-  }, [navigation]);
+  }, [navigation, openPicker]);
   loadRef.current = load;
 
   useEffect(() => {
