@@ -2,6 +2,7 @@ import type { ComponentType } from 'react';
 import type { CharacterArtProps, CharacterId } from '../types';
 import { HootArt } from './HootArt';
 import { MochiArt } from './MochiArt';
+import { NimbusArt } from './NimbusArt';
 import { PipArt } from './PipArt';
 
 // Filled in one character at a time (phases 2–3); CharacterCanvas draws Hoot
@@ -10,4 +11,5 @@ export const ART: Partial<Record<CharacterId, ComponentType<CharacterArtProps>>>
   hoot: HootArt,
   pip: PipArt,
   mochi: MochiArt,
+  nimbus: NimbusArt,
 };
