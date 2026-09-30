@@ -1,8 +1,8 @@
-import type { CoachPersona, PersonaSet } from './v1';
+import type { CoachPersona, PersonaSet } from './types';
 import { v1Personas } from './v1';
 
-export type { CoachPersona, PersonaSet, Verbosity, Proactivity } from './v1';
-export { REQUIRED_DISALLOWED_TOPICS } from './v1';
+export type { CoachPersona, CharacterPersona, PersonaSet, Verbosity, Proactivity } from './types';
+export { REQUIRED_DISALLOWED_TOPICS } from './types';
 
 /** Every shipped version, by id. Add a new file and register it here; never edit an old one. */
 export const PERSONA_SETS: Record<string, PersonaSet> = {
