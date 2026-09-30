@@ -8,6 +8,7 @@ import { Geist_700Bold } from '@expo-google-fonts/geist/700Bold';
 import { Geist_800ExtraBold } from '@expo-google-fonts/geist/800ExtraBold';
 import { InstrumentSerif_400Regular } from '@expo-google-fonts/instrument-serif/400Regular';
 import { AuthProvider } from './src/auth/AuthContext';
+import { CharacterProvider } from './src/characters/CharacterProvider';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { ThemeProvider } from './src/theme/ThemeProvider';
 import { applyDefaultThemeSync } from './src/theme/preference';
@@ -48,7 +49,10 @@ export default function App() {
     <ThemeProvider>
       <ThemedStatusBar />
       <AuthProvider>
-        <RootNavigator />
+        {/* Inside AuthProvider: it follows the session (Hoot when signed out). */}
+        <CharacterProvider>
+          <RootNavigator />
+        </CharacterProvider>
       </AuthProvider>
     </ThemeProvider>
   );
