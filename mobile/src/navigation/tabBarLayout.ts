@@ -4,7 +4,7 @@ import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 export const TAB_ORDER = ['Home', 'Activity', 'Coach', 'Metrics', 'Profile'] as const;
 export type TabName = (typeof TAB_ORDER)[number];
 
-// The centre slot holds the coach orb instead of an icon.
+// The centre slot holds the coach character instead of an icon.
 export const HUB_TAB: TabName = 'Coach';
 
 export const TAB_LABELS: Record<string, string> = {
@@ -15,7 +15,7 @@ export const TAB_LABELS: Record<string, string> = {
   Profile: 'Profile',
 };
 
-// About 80 dp so the 64 dp orb fits inside the pill (spec 2.3).
+// About 80 dp so the 64 dp character fits inside the pill (spec 2.3).
 export const FLOATING_BAR_HEIGHT = 80;
 export const FLOATING_BAR_MARGIN = 12;
 
@@ -30,7 +30,7 @@ export function circleAnimates(previousInnerWidth: number, reduced: boolean): bo
   return previousInnerWidth > 0 && !reduced;
 }
 
-// The white circle sits behind the active icon. The hub has the orb instead,
+// The white circle sits behind the active icon. The hub has the character instead,
 // so the circle hides there (and for any route we do not know).
 export function activeCircleTarget(activeRouteName: string): { index: number; visible: boolean } {
   const index = (TAB_ORDER as readonly string[]).indexOf(activeRouteName);

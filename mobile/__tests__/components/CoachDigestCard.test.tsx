@@ -1,4 +1,5 @@
 import React from 'react';
+import { characterLabel, withCharacter } from '../../jest-mocks/characterContext';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { CoachDigestCard } from '../../src/components/coach-digest-card';
 import { CoachConsentRequiredError, CoachDisabledError, fetchLatestDigest } from '../../src/api/coach';
@@ -71,5 +72,21 @@ describe('CoachDigestCard', () => {
     const second = render(<CoachDigestCard />);
     await waitFor(() => expect(second.queryByTestId('coach-digest-loading')).toBeNull());
     expect(second.toJSON()).toBeNull();
+  });
+});
+
+describe('CoachDigestCard character', () => {
+  it("shows the user's character on the recap, idle", async () => {
+    const utils = render(withCharacter(<CoachDigestCard />, { characterId: 'beat' }));
+    await utils.findByTestId('coach-digest-card');
+
+    expect(characterLabel(utils, 'coach-digest-character')).toBe('character:beat:idle:18:playing:mini');
+  });
+
+  it('rests on a poor recovery day', async () => {
+    const utils = render(withCharacter(<CoachDigestCard />, { characterId: 'beat', recoveryBand: 'scorePoor' }));
+    await utils.findByTestId('coach-digest-card');
+
+    expect(characterLabel(utils, 'coach-digest-character')).toBe('character:beat:resting:18:playing:mini');
   });
 });

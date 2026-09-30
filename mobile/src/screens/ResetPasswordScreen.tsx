@@ -10,7 +10,8 @@ import type { AuthStackParamList } from '../navigation/AuthNavigator';
 import { Text } from '../components/ui/text';
 import { Button } from '../components/ui/button';
 import { TextField } from '../components/ui/text-field';
-import { StillOrb } from '../components/ui/still-orb';
+import { Character } from '../components/characters/Character';
+import { useScreenFocused } from '../characters/useScreenFocused';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'ResetPassword'>;
 
@@ -22,6 +23,7 @@ export function ResetPasswordScreen({ navigation, route }: Props) {
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(token ? null : EXPIRED);
+  const focused = useScreenFocused();
 
   // When the app is already open on this screen, a fresh reset link updates
   // the params of this same route instead of mounting a new screen. A new
@@ -54,7 +56,7 @@ export function ResetPasswordScreen({ navigation, route }: Props) {
     <SafeAreaView className="flex-1 bg-background">
       <ScrollView contentContainerClassName="flex-grow justify-center gap-8 px-6 py-8" keyboardShouldPersistTaps="handled">
         <Animated.View entering={FadeInDown.duration(450)} className="items-center gap-3">
-          <StillOrb size={56} />
+          <Character testID="auth-character" characterId="hoot" mood="idle" size={56} glow paused={!focused} />
           <Text className="text-center font-display text-display-lg">Choose a new password</Text>
           {token ? <Text className="text-center text-base text-muted-foreground">{`Use at least ${MIN_PASSWORD_LENGTH} characters.`}</Text> : null}
         </Animated.View>

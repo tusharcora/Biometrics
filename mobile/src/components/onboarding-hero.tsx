@@ -3,7 +3,8 @@ import { View } from 'react-native';
 import Svg, { Circle, Path } from 'react-native-svg';
 import { useColorScheme } from 'nativewind';
 import { COLORS, METRIC_CONFIG, METRIC_ORDER } from '../theme';
-import { StillOrb } from './ui/still-orb';
+import { Character } from './characters/Character';
+import { useScreenFocused } from '../characters/useScreenFocused';
 
 const SIZE = 260;
 const STROKE = 7;
@@ -12,10 +13,11 @@ const GAP = 6;
 // never implies a reading before anything has synced.
 const SHARES = [0.72, 0.8, 0.46, 0.6];
 
-// The sign-in hero: the coach's orb inside four thin rings, one per metric
-// colour -- the app's two visual ideas (the coach, and your own four signals)
-// in one mark.
+// The sign-in hero: Hoot (signed-out screens always show Hoot) inside four
+// thin rings, one per metric colour -- the app's two visual ideas (the coach,
+// and your own four signals) in one mark.
 export function OnboardingHero() {
+  const focused = useScreenFocused();
   const { colorScheme: scheme } = useColorScheme();
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
   const center = SIZE / 2;
@@ -49,7 +51,7 @@ export function OnboardingHero() {
           );
         })}
       </Svg>
-      <StillOrb size={120} />
+      <Character testID="onboarding-character" characterId="hoot" mood="idle" size={120} glow paused={!focused} />
     </View>
   );
 }

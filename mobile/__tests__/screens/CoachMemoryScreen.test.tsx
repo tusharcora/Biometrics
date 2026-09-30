@@ -1,4 +1,5 @@
 import React from 'react';
+import { characterLabel, withCharacter } from '../../jest-mocks/characterContext';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { CoachMemoryScreen } from '../../src/screens/CoachMemoryScreen';
 import {
@@ -225,5 +226,23 @@ describe('CoachMemoryScreen', () => {
 
       expect(await findByTestId('coach-memory-empty')).toBeTruthy();
     });
+  });
+});
+
+describe('CoachMemoryScreen: character', () => {
+  it("shows the user's character on the empty state", async () => {
+    (listCoachMemory as jest.Mock).mockResolvedValue([]);
+    const utils = render(withCharacter(<CoachMemoryScreen />, { characterId: 'doze' }));
+    await utils.findByTestId('coach-memory-empty');
+
+    expect(characterLabel(utils, 'coach-memory-character')).toBe('character:doze:idle:40:playing:mini');
+  });
+
+  it("shows the user's character when the coach is unavailable", async () => {
+    (listCoachMemory as jest.Mock).mockRejectedValue(new CoachDisabledError());
+    const utils = render(withCharacter(<CoachMemoryScreen />, { characterId: 'doze' }));
+    await utils.findByTestId('coach-memory-unavailable');
+
+    expect(characterLabel(utils, 'coach-memory-character')).toBe('character:doze:idle:48:playing:full');
   });
 });

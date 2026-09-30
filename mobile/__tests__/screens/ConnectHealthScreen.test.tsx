@@ -1,4 +1,5 @@
 import React from 'react';
+import { characterLabel, withCharacter } from '../../jest-mocks/characterContext';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { ConnectHealthScreen } from '../../src/screens/ConnectHealthScreen';
@@ -138,5 +139,13 @@ describe('ConnectHealthScreen', () => {
 
     await waitFor(() => expect(WebBrowser.openAuthSessionAsync).toHaveBeenCalled());
     expect(queryByTestId('connect-health-error')).toBeNull();
+  });
+});
+
+describe('ConnectHealthScreen: character', () => {
+  it("shows the user's character", () => {
+    const utils = render(withCharacter(<ConnectHealthScreen />, { characterId: 'ember' }));
+
+    expect(characterLabel(utils, 'connect-health-character')).toBe('character:ember:idle:72:playing:full');
   });
 });

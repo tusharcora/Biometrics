@@ -14,8 +14,9 @@ const status: CoachStatusDTO = {
   enabled: true,
   consented: true,
   consent: { version: 'v1', summary: 's', dataItems: ['x'] },
-  personaId: 'encouraging',
-  personas: [{ id: 'encouraging', name: 'Encouraging', verbosity: 'normal', proactivity: 'threshold-triggered' }],
+  personaId: 'pip',
+  personaChosen: true,
+  personas: [{ id: 'pip', name: 'Pip', verbosity: 'terse', proactivity: 'threshold-triggered', tagline: null, greeting: null }],
 };
 
 function renderSettings() {
@@ -147,6 +148,6 @@ describe('SettingsScreen: weekly recap notifications', () => {
     (getPushState as jest.Mock).mockRejectedValue(new Error('boom'));
     const { findByTestId } = renderSettings();
 
-    expect(await findByTestId('persona-option-encouraging')).toBeTruthy();
+    expect(await findByTestId('coach-memory-row')).toBeTruthy();
   });
 });

@@ -1,4 +1,5 @@
 import React from 'react';
+import { characterLabel, withCharacter } from '../../jest-mocks/characterContext';
 import { render, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 import { DashboardScreen, greetingFor } from '../../src/screens/DashboardScreen';
 import { apiFetch } from '../../src/api/client';
@@ -538,5 +539,14 @@ describe('DashboardScreen', () => {
 
       await waitFor(() => expect(getByTestId('sleep-score-loading')).toBeTruthy());
     });
+  });
+});
+
+describe('DashboardScreen: fallback character', () => {
+  it("shows the user's character on a state Home cannot load", async () => {
+    mockApi({ recordsError: new Error('network error') });
+    const utils = render(withCharacter(<DashboardScreen />, { characterId: 'pip' }));
+
+    await waitFor(() => expect(characterLabel(utils, 'dashboard-fallback-character')).toBe('character:pip:idle:56:playing:full'));
   });
 });

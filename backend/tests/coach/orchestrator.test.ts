@@ -110,7 +110,7 @@ describe('model loop and tool calls', () => {
     expect(toolMsgs.map((m) => (m.role === 'tool' ? m.name : ''))).toEqual(['getDailyScore', 'getTodayMetrics', 'getScoreHistory']);
     const calls = telemetry.named('coach.tool_call');
     expect(calls.map((c) => c.attributes.tool)).toEqual(['getDailyScore', 'getScoreHistory']);
-    expect(calls.every((c) => c.userId === user.id && c.personaId === 'encouraging')).toBe(true);
+    expect(calls.every((c) => c.userId === user.id && c.personaId === 'hoot')).toBe(true);
     expect(calls[1]!.attributes.ok).toBe(true);
   });
 
@@ -179,13 +179,25 @@ describe('model loop and tool calls', () => {
 
   it('builds the system prompt from the user\'s chosen persona', async () => {
     const user = await seededUser();
-    await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: 'direct' } });
+    await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: 'doze' } });
     const provider = new ScriptedProvider([{ type: 'text', text: 'Fine.' }]);
     const { orchestrator, telemetry } = setup(provider);
     const result = await orchestrator.handleTurn(turn(user.id));
-    expect(result.personaId).toBe('direct');
-    expect(provider.requests[0]!.system).toContain('"Direct"');
-    expect(telemetry.events.every((e) => e.personaId === 'direct')).toBe(true);
+    expect(result.personaId).toBe('doze');
+    expect(provider.requests[0]!.system).toContain('- name: "Doze"');
+    expect(provider.requests[0]!.system).toContain('- coaching focus: "Sleep, winding down and consistent bedtimes."');
+    expect(telemetry.events.every((e) => e.personaId === 'doze')).toBe(true);
+  });
+
+  it('a legacy stored id (not yet migrated) coaches as its character', async () => {
+    const user = await seededUser();
+    await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: 'clinical' } });
+    const provider = new ScriptedProvider([{ type: 'text', text: 'Fine.' }]);
+    const { orchestrator, telemetry } = setup(provider);
+    const result = await orchestrator.handleTurn(turn(user.id));
+    expect(result.personaId).toBe('beep');
+    expect(provider.requests[0]!.system).toContain('- name: "Beep"');
+    expect(telemetry.events.every((e) => e.personaId === 'beep')).toBe(true);
   });
 
   it('replays windowed history to the model without the server-added disclaimer', async () => {
@@ -239,7 +251,7 @@ describe('guardrail: reject, regenerate once', () => {
     expect(rejects).toHaveLength(1);
     expect(rejects[0]!.attributes).toMatchObject({ reason: 'unwrapped_number', attempt: 1, outcome: 'regenerate' });
     expect(rejects[0]!.userId).toBe(user.id);
-    expect(rejects[0]!.personaId).toBe('encouraging');
+    expect(rejects[0]!.personaId).toBe('hoot');
     // The corrective system message is sent; the discarded text is not.
     const second = provider.requests[1]!.messages;
     expect(second[second.length - 1]).toMatchObject({ role: 'system' });

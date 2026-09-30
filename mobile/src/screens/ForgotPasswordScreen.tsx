@@ -9,7 +9,8 @@ import type { AuthStackParamList } from '../navigation/AuthNavigator';
 import { Text } from '../components/ui/text';
 import { Button } from '../components/ui/button';
 import { TextField } from '../components/ui/text-field';
-import { StillOrb } from '../components/ui/still-orb';
+import { Character } from '../components/characters/Character';
+import { useScreenFocused } from '../characters/useScreenFocused';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'ForgotPassword'>;
 
@@ -19,6 +20,7 @@ export function ForgotPasswordScreen({ navigation }: Props) {
   const [busy, setBusy] = useState(false);
   const [sent, setSent] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const focused = useScreenFocused();
 
   async function submit() {
     setBusy(true);
@@ -37,7 +39,7 @@ export function ForgotPasswordScreen({ navigation }: Props) {
     <SafeAreaView className="flex-1 bg-background">
       <ScrollView contentContainerClassName="flex-grow justify-center gap-8 px-6 py-8" keyboardShouldPersistTaps="handled">
         <Animated.View entering={FadeInDown.duration(450)} className="items-center gap-3">
-          <StillOrb size={56} />
+          <Character testID="auth-character" characterId="hoot" mood="idle" size={56} glow paused={!focused} />
           <Text className="text-center font-display text-display-lg">Reset your password</Text>
           {sent ? (
             <Text testID="reset-sent" className="text-center text-base text-muted-foreground">

@@ -12,7 +12,8 @@ import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { SectionLabel } from '../components/ui/section-label';
-import { StillOrb } from '../components/ui/still-orb';
+import { Character } from '../components/characters/Character';
+import { useScreenFocused } from '../characters/useScreenFocused';
 import { ThemeToggle } from '../components/ui/theme-toggle';
 import { Reveal } from '../components/ui/reveal';
 import { HabitLogCard } from '../components/habit-log-card';
@@ -84,6 +85,7 @@ export function DashboardScreen() {
   // Null until known, and null on failure: the coach entry simply isn't drawn.
   const { status: coachStatus } = useCoachStatus(navigation);
   const coachRoute = coachEntryRoute(coachStatus);
+  const focused = useScreenFocused();
   // Bumped after each successful sync with Google Health, so the data reloads.
   const { dataVersion } = useSync();
   const forecastState = useForecast(dataVersion);
@@ -167,7 +169,7 @@ export function DashboardScreen() {
           {profileButton}
         </View>
         <View className="flex-1 items-center justify-center gap-4 px-8">
-          <StillOrb size={56} />
+          <Character testID="dashboard-fallback-character" mood="idle" size={56} glow paused={!focused} />
           <Text className="font-display text-display text-center">{title}</Text>
           <Text className="text-center text-base text-muted-foreground">{body}</Text>
           {action}

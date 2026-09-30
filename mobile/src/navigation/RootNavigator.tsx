@@ -17,6 +17,7 @@ import { CoachConsentScreen } from '../screens/CoachConsentScreen';
 import { CoachMemoryScreen } from '../screens/CoachMemoryScreen';
 import { SignInMethodsScreen } from '../screens/SignInMethodsScreen';
 import { DevicesScreen } from '../screens/DevicesScreen';
+import { MeetYourCoachScreen } from '../screens/MeetYourCoachScreen';
 import { TabsNavigator, type TabParamList } from './TabsNavigator';
 import { syncTimezone } from '../lib/timezone';
 import { syncPushRegistration } from '../lib/pushRegistration';
@@ -54,6 +55,9 @@ export type RootStackParamList = {
   SignInMethods: undefined;
   // Reached from Settings: signed-in devices, with sign-out per device.
   Devices: undefined;
+  // The character picker. 'first' opens by itself on the first Coach-tab
+  // visit (starts on Hoot, has Skip); 'switch' comes from Profile.
+  MeetYourCoach: { mode: 'first' | 'switch' };
 };
 
 export type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';
@@ -131,6 +135,13 @@ export function RootNavigator() {
               <Stack.Screen name="CoachMemory" component={CoachMemoryScreen} options={{ title: 'Coach Memory' }} />
               <Stack.Screen name="SignInMethods" component={SignInMethodsScreen} options={{ title: 'Sign-in methods' }} />
               <Stack.Screen name="Devices" component={DevicesScreen} options={{ title: 'Devices' }} />
+              <Stack.Screen
+                name="MeetYourCoach"
+                component={MeetYourCoachScreen}
+                // No swipe-to-dismiss on the first visit. Android back still
+                // closes it unsaved, like a failed Skip, so it returns next launch.
+                options={({ route }) => ({ headerShown: false, presentation: 'modal', gestureEnabled: route.params?.mode !== 'first' })}
+              />
             </Stack.Navigator>
           </SyncProvider>
         </ToastProvider>

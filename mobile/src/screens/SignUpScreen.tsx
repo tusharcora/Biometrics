@@ -10,16 +10,18 @@ import type { AuthStackParamList } from '../navigation/AuthNavigator';
 import { Text } from '../components/ui/text';
 import { Button } from '../components/ui/button';
 import { TextField } from '../components/ui/text-field';
-import { StillOrb } from '../components/ui/still-orb';
+import { Character } from '../components/characters/Character';
+import { useScreenFocused } from '../characters/useScreenFocused';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'SignUp'>;
 
-// A lighter take on Sign in's hero: a small still orb, a serif title and one
-// muted line above the form.
+// A lighter take on Sign in's hero: a small Hoot (signed-out screens always
+// show Hoot), a serif title and one muted line above the form.
 function AuthHeader({ title, children }: { title: string; children: React.ReactNode }) {
+  const focused = useScreenFocused();
   return (
     <Animated.View entering={FadeInDown.duration(450)} className="items-center gap-3">
-      <StillOrb size={56} />
+      <Character testID="auth-character" characterId="hoot" mood="idle" size={56} glow paused={!focused} />
       <Text className="text-center font-display text-display-lg">{title}</Text>
       <Text className="text-center text-base text-muted-foreground">{children}</Text>
     </Animated.View>

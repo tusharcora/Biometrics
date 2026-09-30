@@ -20,6 +20,9 @@ export interface CoachPersonaDTO {
   name: string;
   verbosity: string;
   proactivity: string;
+  // Picker copy for a companion character; null from a server that predates them.
+  tagline: string | null;
+  greeting: string | null;
 }
 
 export interface CoachConsentDTO {
@@ -34,6 +37,8 @@ export interface CoachStatusDTO {
   consented: boolean;
   consent: CoachConsentDTO;
   personaId: string;
+  // False until the user has picked a character (Skip picks Hoot); the picker opens once.
+  personaChosen: boolean;
   personas: CoachPersonaDTO[];
 }
 
@@ -198,14 +203,38 @@ const DISABLED_STATUS: CoachStatusDTO = {
   consented: false,
   consent: { version: '', summary: '', dataItems: [] },
   personaId: '',
+  personaChosen: false,
   personas: [],
 };
 
 // A malformed status must fail closed: the coach stays invisible rather than
 // half-rendering.
+function personaDTO(p: Partial<CoachPersonaDTO>): CoachPersonaDTO {
+  return {
+    id: p.id ?? '',
+    name: p.name ?? '',
+    verbosity: p.verbosity ?? '',
+    proactivity: p.proactivity ?? '',
+    tagline: typeof p.tagline === 'string' ? p.tagline : null,
+    greeting: typeof p.greeting === 'string' ? p.greeting : null,
+  };
+}
+
 export async function fetchCoachStatus(): Promise<CoachStatusDTO> {
   const res = await coachFetch<Partial<CoachStatusDTO> | undefined>('/me/coach/status');
-  if (!res || typeof res !== 'object' || Array.isArray(res) || res.enabled !== true) return DISABLED_STATUS;
+  if (!res || typeof res !== 'object' || Array.isArray(res)) return DISABLED_STATUS;
+  // The character is also the app's look, so it is read even while the coach is off.
+  const persona = {
+    personaId: typeof res.personaId === 'string' ? res.personaId : '',
+    // Only a literal false means "not chosen yet". A server that doesn't send
+    // the field (it predates characters and can't store their ids) must never
+    // prompt the picker, so anything else reads as chosen.
+    personaChosen: res.personaChosen !== false,
+    personas: Array.isArray(res.personas)
+      ? res.personas.filter((p): p is CoachPersonaDTO => !!p && typeof p === 'object').map(personaDTO)
+      : [],
+  };
+  if (res.enabled !== true) return { ...DISABLED_STATUS, ...persona };
   return {
     enabled: true,
     consented: res.consented === true,
@@ -214,8 +243,7 @@ export async function fetchCoachStatus(): Promise<CoachStatusDTO> {
       summary: res.consent?.summary ?? '',
       dataItems: res.consent?.dataItems ?? [],
     },
-    personaId: res.personaId ?? '',
-    personas: res.personas ?? [],
+    ...persona,
   };
 }
 

@@ -56,7 +56,7 @@ export interface ThoughtLineProps {
    */
   elapsedSeconds?: number;
   label?: string;
-  /** Replaces the breathing sparkle (the coach passes its orb). It is drawn as-is, without the breath. */
+  /** Replaces the breathing sparkle (the coach passes its character). It is drawn as-is, without the breath. */
   glyph?: React.ReactNode;
   testID?: string;
 }

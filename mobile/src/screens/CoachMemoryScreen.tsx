@@ -17,7 +17,8 @@ import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { SettingsGroup } from '../components/ui/settings-list';
-import { StillOrb } from '../components/ui/still-orb';
+import { Character } from '../components/characters/Character';
+import { useScreenFocused } from '../characters/useScreenFocused';
 import { MemoryEditForm } from '../components/memory-edit-form';
 import { COLORS } from '../theme';
 import { withAlpha } from '../lib/utils';
@@ -143,6 +144,7 @@ export function CoachMemoryScreen() {
   const [phase, setPhase] = useState<Phase>('loading');
   const [entries, setEntries] = useState<MemoryDTO[]>([]);
   const [attempt, setAttempt] = useState(0);
+  const focused = useScreenFocused();
 
   useEffect(() => {
     let cancelled = false;
@@ -187,7 +189,7 @@ export function CoachMemoryScreen() {
     return (
       <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
         <View testID="coach-memory-unavailable" className="flex-1 items-center justify-center gap-4 px-8">
-          <StillOrb size={48} glow={false} />
+          <Character testID="coach-memory-character" mood="idle" size={48} paused={!focused} />
           <Text className="text-center text-muted-foreground">The AI Coach is not available right now.</Text>
         </View>
       </SafeAreaView>
@@ -198,7 +200,7 @@ export function CoachMemoryScreen() {
     return (
       <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
         <View className="flex-1 items-center justify-center gap-4 px-8">
-          <StillOrb size={48} glow={false} />
+          <Character testID="coach-memory-character" mood="idle" size={48} paused={!focused} />
           <Text testID="coach-memory-error" className="text-center text-muted-foreground">
             Your coach memory could not be loaded.
           </Text>
@@ -217,7 +219,7 @@ export function CoachMemoryScreen() {
       <ScrollView contentContainerStyle={{ gap: 24, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 32 }}>
         {groups.length === 0 ? (
           <Card testID="coach-memory-empty" className="items-start gap-3 p-5">
-            <StillOrb size={40} />
+            <Character testID="coach-memory-character" mood="idle" size={40} glow paused={!focused} />
             <Text className="font-display text-display-sm">Nothing remembered yet</Text>
             <Text className="text-sm text-muted-foreground">
               The coach only remembers your training goals, your schedule and your preferences, and never health or medical details.

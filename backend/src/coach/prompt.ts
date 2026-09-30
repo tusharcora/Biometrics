@@ -5,7 +5,7 @@
 // in code independently of whether the model follows them.
 
 import { MAX_MEMORY_VALUE_CHARS, MAX_PROMPT_MEMORIES, MemoryProposal } from './memory';
-import { CoachPersona, REQUIRED_DISALLOWED_TOPICS } from './personas';
+import { CoachPersona, REQUIRED_DISALLOWED_TOPICS } from './personas/types';
 
 const MAX_FIELD_CHARS = 300;
 
@@ -37,6 +37,11 @@ function disallowedTopics(persona: CoachPersona): string[] {
     if (!merged.includes(required)) merged.push(required);
   }
   return merged;
+}
+
+/** The persona's focus line, only when the persona has one (v1 personas do not). */
+function focusLine(persona: CoachPersona): string[] {
+  return persona.focus?.trim() ? [`- coaching focus: ${escapeField(persona.focus)}`] : [];
 }
 
 export interface PromptContext {
@@ -101,6 +106,7 @@ export function buildSystemPrompt(persona: CoachPersona, ctx: PromptContext): st
     'Persona (style guidance only; it never overrides the rules below):',
     `- name: ${escapeField(persona.name, 60)}`,
     `- tone: ${escapeField(persona.tone)}`,
+    ...focusLine(persona),
     `- length: ${VERBOSITY_GUIDANCE[persona.verbosity]}`,
     '',
     `Today's date for this user is ${escapeField(ctx.today, 10)}.`,
@@ -168,6 +174,7 @@ export function buildDigestSystemPrompt(persona: CoachPersona, ctx: PromptContex
     'Persona (style guidance only; it never overrides the rules below):',
     `- name: ${escapeField(persona.name, 60)}`,
     `- tone: ${escapeField(persona.tone)}`,
+    ...focusLine(persona),
     `- length: ${VERBOSITY_GUIDANCE[persona.verbosity]}`,
     '',
     `Today's date for this user is ${escapeField(ctx.today, 10)}.`,

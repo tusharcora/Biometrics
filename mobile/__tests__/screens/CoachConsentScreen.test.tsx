@@ -1,4 +1,5 @@
 import React from 'react';
+import { characterLabel, withCharacter } from '../../jest-mocks/characterContext';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { CoachConsentScreen } from '../../src/screens/CoachConsentScreen';
 import { acceptCoachConsent, fetchCoachStatus, StaleConsentVersionError, type CoachStatusDTO } from '../../src/api/coach';
@@ -26,7 +27,8 @@ const status: CoachStatusDTO = {
     summary: 'To answer, the coach sends your scores to an AI provider. Raw Google Health tokens never leave the server.',
     dataItems: ['Recovery and Sleep Score values', 'Per-factor breakdowns', 'Habit pattern results'],
   },
-  personaId: 'encouraging',
+  personaId: 'pip',
+  personaChosen: true,
   personas: [],
 };
 
@@ -134,5 +136,14 @@ describe('CoachConsentScreen', () => {
     fireEvent.press(await findByTestId('coach-consent-retry'));
 
     expect(await findByTestId('coach-consent-agree')).toBeTruthy();
+  });
+});
+
+describe('CoachConsentScreen: character', () => {
+  it("shows the user's character above the consent text", async () => {
+    const utils = render(withCharacter(<CoachConsentScreen />, { characterId: 'beep' }));
+    await utils.findByText(status.consent.summary);
+
+    expect(characterLabel(utils, 'coach-consent-character')).toBe('character:beep:idle:56:playing:full');
   });
 });

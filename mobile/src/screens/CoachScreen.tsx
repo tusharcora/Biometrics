@@ -24,14 +24,16 @@ import { COACH_COMMANDS, PromptBar } from '../components/coach/PromptBar';
 import { ThoughtLine } from '../components/coach/thought-line';
 import { ChatBubble } from '../components/ui/chat-bubble';
 import { MemoryProposalChips } from '../components/memory-proposal-chips';
-import { Orb } from '../components/orb/Orb';
-import { StillOrb } from '../components/ui/still-orb';
+import { Character } from '../components/characters/Character';
+import { useCharacterMood } from '../characters/useCharacterMood';
+import { useScreenFocused } from '../characters/useScreenFocused';
 import { Glow } from '../components/ui/glow';
 import { PressableScale } from '../components/ui/pressable-scale';
 import { COLORS } from '../theme';
 import type { TabParamList } from '../navigation/TabsNavigator';
 import { useTabBarClearance } from '../navigation/tabBarLayout';
 import { useKeyboardVisible } from '../lib/useKeyboardVisible';
+import { useCharacterOptional } from '../characters/CharacterContext';
 
 type CoachRoute = RouteProp<TabParamList, 'Coach'>;
 
@@ -83,11 +85,18 @@ export function CoachScreen() {
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [input, setInput] = useState(prefill ?? '');
   const [sending, setSending] = useState(false);
+  // When the latest reply landed, for the character's "answering" mood.
+  const [answeredAt, setAnsweredAt] = useState<number | null>(null);
+  const mood = useCharacterMood({ sending, answeredAt });
+  const focused = useScreenFocused();
   const [error, setError] = useState<{ text: string; request: SendCoachMessageInput } | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const mounted = useRef(true);
   const localId = useRef(0);
   const redirectedToConsent = useRef(false);
+  // Meet your coach opens by itself at most once per mount of this tab.
+  const pickerOpened = useRef(false);
+  const characterCtx = useCharacterOptional();
   const loadInFlight = useRef(false);
   // A load requested while another is in flight (e.g. tab focus during the first
   // load). The in-flight result may be stale by then, so it is discarded and
@@ -135,6 +144,26 @@ export function CoachScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill]);
 
+  // Returns true only for the call that actually opened it.
+  const openPicker = useCallback(() => {
+    if (pickerOpened.current) return false;
+    pickerOpened.current = true;
+    navigation.navigate('MeetYourCoach', { mode: 'first' });
+    return true;
+  }, [navigation]);
+
+  // First Coach-tab visit with the coach enabled and no character chosen yet:
+  // the picker comes first, before consent (spec §5). A status that is
+  // unknown or failed (null) never opens it. Same rule as load() below: only
+  // the status's own literal personaChosen false counts (fetchCoachStatus reads
+  // a server that doesn't report it as chosen). It only opens over this tab:
+  // a status that settles after the user left waits for them to come back.
+  const providerStatus = characterCtx?.statusLoaded ? characterCtx.status : null;
+  const providerSaysNotChosen = !!providerStatus?.enabled && providerStatus.personaChosen === false;
+  useEffect(() => {
+    if (providerSaysNotChosen && focused && navigation.isFocused?.() !== false) openPicker();
+  }, [providerSaysNotChosen, focused, navigation, openPicker]);
+
   const load = useCallback(async () => {
     // Mount and tab focus can both trigger a load. Run one at a time, but never
     // drop a request: the finally below re-runs once if one arrived meanwhile.
@@ -164,6 +193,10 @@ export function CoachScreen() {
         setPhase('unavailable');
         return;
       }
+      // The same rule from this screen's own status, for when it settles before
+      // the provider's. Strictly false: a server that doesn't send the field
+      // never triggers it. Not while the tab is hidden: the focus reload opens it.
+      const pickerJustOpened = status.personaChosen === false && navigation.isFocused?.() !== false && openPicker();
       if (!status.consented) {
         // The server decides: a changed consent version lands here too. Send
         // the user to consent once; if they come back without agreeing, stay on
@@ -172,6 +205,9 @@ export function CoachScreen() {
           setPhase('needs-consent');
           return;
         }
+        // The picker is (or is about to be) on top of this tab: consent waits
+        // until the user is back here, when the focus reload redirects.
+        if (pickerJustOpened || navigation.isFocused?.() === false) return;
         redirectedToConsent.current = true;
         navigation.navigate('CoachConsent', { prefill: lastPrefill.current });
         return;
@@ -212,7 +248,7 @@ export function CoachScreen() {
         if (mounted.current) void loadRef.current();
       }
     }
-  }, [navigation]);
+  }, [navigation, openPicker]);
   loadRef.current = load;
 
   useEffect(() => {
@@ -234,6 +270,9 @@ export function CoachScreen() {
   const deliver = useCallback(
     async (request: SendCoachMessageInput) => {
       const startedAt = Date.now();
+      // A new send ends any earlier reply's "answering": a safety reply or a
+      // failed send must leave the character idle, not finish the old one.
+      setAnsweredAt(null);
       setSending(true);
       setError(null);
       try {
@@ -278,6 +317,8 @@ export function CoachScreen() {
           };
           return [...settled, next];
         });
+        // A crisis-safety reply is not a moment for the character to celebrate.
+        if (res.message.source !== 'safety') setAnsweredAt(Date.now());
       } catch (e) {
         if (!mounted.current) return;
         // Whatever went wrong, the message did not land. Mark the bubble so the
@@ -325,7 +366,7 @@ export function CoachScreen() {
   const header = (
     <View className="flex-row items-center justify-between px-5 pb-2 pt-1">
       <View className="flex-row items-center gap-3">
-        <StillOrb size={36} glow={false} />
+        <Character testID="coach-header-character" mood={mood} size={36} paused={!focused} />
         <View>
           <Text className="font-display text-display">Coach</Text>
           <Text className="text-xs text-muted-foreground">Answers from your own data</Text>
@@ -364,7 +405,7 @@ export function CoachScreen() {
       <SafeAreaView className="flex-1 bg-background">
         {header}
         <View testID="coach-needs-consent" className="flex-1 items-center justify-center gap-4 p-8">
-          <StillOrb size={56} />
+          <Character mood="idle" size={56} glow paused={!focused} />
           <Text className="text-center text-base text-muted-foreground">The coach needs your OK before it can look at your scores.</Text>
           <Button testID="coach-review-consent-button" onPress={() => navigation.navigate('CoachConsent', { prefill: lastPrefill.current })}>
             Review what is shared
@@ -379,7 +420,7 @@ export function CoachScreen() {
       <SafeAreaView className="flex-1 bg-background">
         {header}
         <View testID="coach-unavailable" className="flex-1 items-center justify-center gap-4 p-8">
-          <StillOrb size={56} glow={false} />
+          <Character mood="idle" size={56} paused={!focused} />
           <Text className="text-center text-base text-muted-foreground">The AI Coach is not available right now.</Text>
         </View>
       </SafeAreaView>
@@ -413,8 +454,7 @@ export function CoachScreen() {
               <View testID="coach-empty" className="flex-1 items-center justify-center gap-5 py-10">
                 <View style={{ width: 64, height: 64 }} className="items-center justify-center">
                   <Glow color={colors.accent} size={220} around={64} intensity={0.28} />
-                  {/* Paused: the tab bar's orb is already the live one on this screen. */}
-                  <Orb state="breathing" size={64} paused />
+                  <Character testID="coach-hero-character" mood={mood} size={64} paused={!focused} />
                 </View>
                 <View className="items-center gap-2 px-4">
                   <Text className="font-display text-display text-center">What would you like to know?</Text>
@@ -447,7 +487,7 @@ export function CoachScreen() {
                   </Text>
                 ) : null}
                 {message.thoughtSeconds !== undefined ? (
-                  <ThoughtLine working={false} elapsedSeconds={message.thoughtSeconds} glyph={<StillOrb size={14} glow={false} />} testID="coach-thought-settled" />
+                  <ThoughtLine working={false} elapsedSeconds={message.thoughtSeconds} glyph={<Character mood="idle" size={14} paused />} testID="coach-thought-settled" />
                 ) : null}
                 <ChatBubble role={message.role} text={message.text} source={message.source as CoachMessageSource} animate={message.fresh === true}>
                   {message.safety ? (
@@ -480,7 +520,7 @@ export function CoachScreen() {
 
             {sending ? (
               <View className="items-start">
-                <ThoughtLine working glyph={<Orb state="working" size={20} />} testID="coach-thinking" />
+                <ThoughtLine working glyph={<Character testID="coach-thinking-character" mood="thinking" size={20} paused={!focused} />} testID="coach-thinking" />
               </View>
             ) : null}
 

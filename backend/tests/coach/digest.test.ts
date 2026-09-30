@@ -16,6 +16,7 @@ import {
   genericPushPayload,
   sendGenericPush,
 } from '../../src/coach/push';
+import * as personas from '../../src/coach/personas';
 import { coachTools, CoachTools } from '../../src/coach/tools';
 import { FakeClock, RecordingTelemetry, createUser, daysAgo, hang, putScore, settle, todayUtc } from './helpers';
 
@@ -48,7 +49,7 @@ class RecordingPushSender implements PushSender {
 const GOOD_DIGEST =
   'This past week your recovery averaged {{recoveryHistory.average}}, peaking at {{recoveryHistory.highest}}. Keep it steady.';
 
-/** A consented user (default persona: encouraging, threshold-triggered) with 7 days of recovery + sleep scores. */
+/** A consented user (default persona: hoot, threshold-triggered) with 7 days of recovery + sleep scores. */
 async function digestUser(opts: { persona?: string | null; consent?: boolean; scores?: boolean } = {}) {
   const user = await createUser();
   if (opts.persona !== undefined) await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: opts.persona } });
@@ -121,8 +122,12 @@ describe('gating', () => {
     expect(telemetry.named('coach.digest_generated')).toHaveLength(0);
   });
 
-  it.each(['direct', 'clinical'])("skips a 'reactive-only' persona (%s)", async (persona) => {
-    const user = await digestUser({ persona });
+  // No live persona is reactive-only (every character is threshold-triggered), but the gate stays for
+  // any later persona set, so it is exercised through a stubbed persona.
+  it("skips a 'reactive-only' persona", async () => {
+    const user = await digestUser();
+    const hoot = personas.resolvePersona('hoot');
+    jest.spyOn(personas, 'resolvePersona').mockReturnValue({ ...hoot, proactivity: 'reactive-only' });
     const { deps, provider, pushSender, telemetry } = setup([{ type: 'text', text: GOOD_DIGEST }]);
 
     const summary = await sweep(deps, user.id);
@@ -134,8 +139,8 @@ describe('gating', () => {
     expect(telemetry.named('coach.digest_skipped')[0]!.attributes).toEqual({ reason: 'skipped_reactive_only' });
   });
 
-  it('generates for a threshold-triggered persona (the default) and for an unknown stored persona id', async () => {
-    const a = await digestUser({ persona: 'encouraging' });
+  it('generates for the default persona (no stored id) and for an unknown stored persona id', async () => {
+    const a = await digestUser();
     const b = await digestUser({ persona: 'retired-persona' }); // falls back to the default persona
     const { deps } = setup([
       { type: 'text', text: GOOD_DIGEST },
@@ -158,6 +163,40 @@ describe('gating', () => {
   });
 });
 
+describe('companion characters', () => {
+  // Spec 2026-09-29 section 2: the choice of character never turns the weekly recap on or off.
+  it.each(['hoot', 'pip', 'mochi', 'nimbus', 'ember', 'beep', 'doze', 'beat'])(
+    '%s gets a weekly recap written in its own persona',
+    async (id) => {
+      const user = await digestUser({ persona: id });
+      const { deps, provider } = setup([{ type: 'text', text: GOOD_DIGEST }]);
+
+      const summary = await sweep(deps, user.id);
+
+      expect(summary).toMatchObject({ usersChecked: 1, generated: 1, skipped: 0 });
+      const [row] = await digestsOf(user.id);
+      expect(row!.personaId).toBe(id);
+      const persona = personas.findPersona(id)!;
+      expect(provider.requests[0]!.system).toContain(`- name: ${JSON.stringify(persona.name)}`);
+      expect(provider.requests[0]!.system).toContain(`- coaching focus: ${JSON.stringify(persona.focus)}`);
+    },
+  );
+
+  it.each([
+    ['encouraging', 'pip'],
+    ['direct', 'hoot'],
+    ['clinical', 'beep'],
+  ])('a former %s user (not yet migrated) now gets a recap as %s', async (legacy, character) => {
+    const user = await digestUser({ persona: legacy });
+    const { deps } = setup([{ type: 'text', text: GOOD_DIGEST }]);
+
+    const summary = await sweep(deps, user.id);
+
+    expect(summary.generated).toBe(1);
+    expect((await digestsOf(user.id))[0]!.personaId).toBe(character);
+  });
+});
+
 describe('generation (synthesis tier, grounded)', () => {
   it('stores a validated model recap with the disclaimer and the resolved values, on the synthesis tier', async () => {
     const user = await digestUser();
@@ -170,7 +209,7 @@ describe('generation (synthesis tier, grounded)', () => {
     expect(row!.text).toBe(
       `This past week your recovery averaged 70, peaking at 80. Keep it steady.\n\n${COACH_DISCLAIMER}`,
     );
-    expect(row!.personaId).toBe('encouraging');
+    expect(row!.personaId).toBe('hoot');
     expect(row!.weekStart.toISOString().slice(0, 10)).toBe(weekStartOf(todayUtc()));
 
     const request = provider.requests[0]!;
@@ -495,6 +534,6 @@ describe('sweep robustness and telemetry', () => {
     const serialized = JSON.stringify(telemetry.events);
     expect(serialized).not.toContain('averaged');
     expect(serialized).not.toContain('Keep it steady');
-    expect(telemetry.events.every((e) => e.userId === user.id && e.personaId === 'encouraging')).toBe(true);
+    expect(telemetry.events.every((e) => e.userId === user.id && e.personaId === 'hoot')).toBe(true);
   });
 });
