@@ -19,16 +19,20 @@ A Whoop/Bezel-style personal health app. Wearable data (steps, resting heart rat
   </tr>
 </table>
 
+<sub>(These screens predate the companion characters.)</sub>
+
 <table>
   <tr>
-    <td><img src="docs/media/character-hoot.jpg" width="95" alt="Hoot"></td>
-    <td><img src="docs/media/character-pip.jpg" width="95" alt="Pip"></td>
-    <td><img src="docs/media/character-mochi.jpg" width="95" alt="Mochi"></td>
-    <td><img src="docs/media/character-nimbus.jpg" width="95" alt="Nimbus"></td>
-    <td><img src="docs/media/character-ember.jpg" width="95" alt="Ember"></td>
-    <td><img src="docs/media/character-beep.jpg" width="95" alt="Beep"></td>
-    <td><img src="docs/media/character-doze.jpg" width="95" alt="Doze"></td>
-    <td><img src="docs/media/character-beat.jpg" width="95" alt="Beat"></td>
+    <td><img src="docs/media/character-hoot.jpg" width="190" alt="Hoot: idle, thinking, answering and resting"></td>
+    <td><img src="docs/media/character-pip.jpg" width="190" alt="Pip: idle, thinking, answering and resting"></td>
+    <td><img src="docs/media/character-mochi.jpg" width="190" alt="Mochi: idle, thinking, answering and resting"></td>
+    <td><img src="docs/media/character-nimbus.jpg" width="190" alt="Nimbus: idle, thinking, answering and resting"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/media/character-ember.jpg" width="190" alt="Ember: idle, thinking, answering and resting"></td>
+    <td><img src="docs/media/character-beep.jpg" width="190" alt="Beep: idle, thinking, answering and resting"></td>
+    <td><img src="docs/media/character-doze.jpg" width="190" alt="Doze: idle, thinking, answering and resting"></td>
+    <td><img src="docs/media/character-beat.jpg" width="190" alt="Beat: idle, thinking, answering and resting"></td>
   </tr>
 </table>
 
