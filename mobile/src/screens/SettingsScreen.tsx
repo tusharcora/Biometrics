@@ -11,6 +11,7 @@ import { useOptionalAuth } from '../auth/AuthContext';
 import { AccountSection } from '../components/account-section';
 import { CoachSettingsSection } from '../components/coach-settings-section';
 import { DeleteAccountSection } from '../components/delete-account-section';
+import { YourCoachRow } from '../components/your-coach-row';
 import { COLORS, FONTS } from '../theme';
 import { useSync } from '../sync/SyncProvider';
 import { formatLastSynced } from '../sync/formatLastSynced';
@@ -175,6 +176,7 @@ export function SettingsScreen() {
         </SettingsGroup>
 
         <AccountSection />
+        <YourCoachRow />
         <CoachSettingsSection />
         <DeleteAccountSection />
       </ScrollView>

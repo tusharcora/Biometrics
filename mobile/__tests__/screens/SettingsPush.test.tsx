@@ -148,6 +148,6 @@ describe('SettingsScreen: weekly recap notifications', () => {
     (getPushState as jest.Mock).mockRejectedValue(new Error('boom'));
     const { findByTestId } = renderSettings();
 
-    expect(await findByTestId('persona-option-pip')).toBeTruthy();
+    expect(await findByTestId('coach-memory-row')).toBeTruthy();
   });
 });

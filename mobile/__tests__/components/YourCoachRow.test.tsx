@@ -5,6 +5,9 @@ import { YourCoachRow } from '../../src/components/your-coach-row';
 import { characterLabel, withCharacter } from '../../jest-mocks/characterContext';
 import type { CharacterId } from '../../src/components/characters/types';
 
+// Synchronous icons: the real font load re-renders after these tests finish.
+jest.mock('@expo/vector-icons', () => require('../../jest-mocks/vectorIcons'));
+
 const navigate = jest.fn();
 let listeners: Record<string, () => void> = {};
 const navigation = {

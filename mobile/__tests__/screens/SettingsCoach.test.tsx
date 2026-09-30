@@ -4,6 +4,7 @@ import { NavigationContext } from '@react-navigation/native';
 import { SettingsScreen } from '../../src/screens/SettingsScreen';
 import { fetchCoachStatus, revokeCoachConsent, setCoachPersona, type CoachStatusDTO } from '../../src/api/coach';
 import { getTimezoneState, listTimeZones } from '../../src/lib/timezone';
+import { withCharacter } from '../../jest-mocks/characterContext';
 
 jest.mock('../../src/lib/timezone');
 jest.mock('../../src/api/coach');
@@ -21,12 +22,16 @@ const status: CoachStatusDTO = {
 };
 
 const navigate = jest.fn();
+const screen = (
+  <NavigationContext.Provider value={{ navigate } as any}>
+    <SettingsScreen />
+  </NavigationContext.Provider>
+);
+
+// Without a CharacterProvider, useCoachStatus fetches its own copy (phase 4),
+// so these tests drive status through the fetchCoachStatus mock.
 function renderSettings() {
-  return render(
-    <NavigationContext.Provider value={{ navigate } as any}>
-      <SettingsScreen />
-    </NavigationContext.Provider>,
-  );
+  return render(screen);
 }
 
 beforeEach(() => {
@@ -34,62 +39,52 @@ beforeEach(() => {
   (getTimezoneState as jest.Mock).mockResolvedValue({ timezone: 'UTC', overridden: false });
   (listTimeZones as jest.Mock).mockReturnValue([]);
   (fetchCoachStatus as jest.Mock).mockResolvedValue(status);
-  (setCoachPersona as jest.Mock).mockResolvedValue({ personaId: 'hoot' });
   (revokeCoachConsent as jest.Mock).mockResolvedValue(undefined);
 });
 
-describe('SettingsScreen: AI Coach', () => {
-  it('shows nothing about the coach when it is disabled', async () => {
+describe('SettingsScreen: Your coach', () => {
+  it('shows the current character and opens Meet your coach to switch', async () => {
+    const { findByTestId } = render(withCharacter(screen, { characterId: 'pip', status }));
+
+    const row = await findByTestId('your-coach-row');
+    expect(row).toHaveTextContent(/Pip/);
+    fireEvent.press(row);
+
+    expect(navigate).toHaveBeenCalledWith('MeetYourCoach', { mode: 'switch' });
+  });
+
+  it('keeps the row while the coach is disabled, and nothing else about the coach', async () => {
     (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, enabled: false });
-    const { findByTestId, queryByTestId, queryByText } = renderSettings();
+    const { findByTestId, queryByTestId } = renderSettings();
 
     await findByTestId('timezone-value');
     await waitFor(() => expect(fetchCoachStatus).toHaveBeenCalled());
+    expect(await findByTestId('your-coach-row')).toHaveTextContent(/Hoot/);
     expect(queryByTestId('coach-settings')).toBeNull();
-    expect(queryByText(/coach/i)).toBeNull();
+    expect(queryByTestId('coach-memory-row')).toBeNull();
   });
 
-  it('lists the server personas and marks the current one', async () => {
-    const { findByTestId } = renderSettings();
+  it('no longer has a Coach style picker', async () => {
+    const { findByTestId, queryByText, queryByTestId } = renderSettings();
 
-    const current = await findByTestId('persona-option-pip');
-    const other = await findByTestId('persona-option-hoot');
-    expect(current.props.accessibilityState).toEqual(expect.objectContaining({ selected: true }));
-    expect(other.props.accessibilityState).toEqual(expect.objectContaining({ selected: false }));
-    expect(current).toHaveTextContent(/Pip/);
-    expect(other).toHaveTextContent(/Hoot/);
+    await findByTestId('coach-revoke-button');
+    expect(queryByText('Coach style')).toBeNull();
+    expect(queryByTestId('persona-option-hoot')).toBeNull();
+    expect(setCoachPersona).not.toHaveBeenCalled();
   });
+});
 
-  it('saves a newly picked persona and marks it selected', async () => {
-    const { findByTestId } = renderSettings();
-
-    fireEvent.press(await findByTestId('persona-option-hoot'));
-
-    await waitFor(() => expect(setCoachPersona).toHaveBeenCalledWith('hoot'));
-    await waitFor(async () =>
-      expect((await findByTestId('persona-option-hoot')).props.accessibilityState).toEqual(expect.objectContaining({ selected: true })),
-    );
-  });
-
-  it('puts the previous persona back and says so when saving fails', async () => {
-    (setCoachPersona as jest.Mock).mockRejectedValue(new Error('offline'));
-    const { findByTestId } = renderSettings();
-
-    fireEvent.press(await findByTestId('persona-option-hoot'));
-
-    expect(await findByTestId('persona-error')).toBeTruthy();
-    expect((await findByTestId('persona-option-pip')).props.accessibilityState).toEqual(expect.objectContaining({ selected: true }));
-  });
-
-  it('revokes consent with DELETE and switches the section to its "off" state', async () => {
+describe('SettingsScreen: AI Coach', () => {
+  it('revokes consent with DELETE and switches the section to its "off" state at once', async () => {
     const { findByTestId, queryByTestId } = renderSettings();
 
     fireEvent.press(await findByTestId('coach-revoke-button'));
 
     await waitFor(() => expect(revokeCoachConsent).toHaveBeenCalledTimes(1));
     expect(await findByTestId('coach-setup-button')).toBeTruthy();
-    expect(queryByTestId('persona-option-hoot')).toBeNull();
     expect(queryByTestId('coach-revoke-button')).toBeNull();
+    // Optimistic: no second status read was needed.
+    expect(fetchCoachStatus).toHaveBeenCalledTimes(1);
   });
 
   it('keeps consent shown as on, with an error, if revoking fails', async () => {
@@ -104,11 +99,10 @@ describe('SettingsScreen: AI Coach', () => {
 
   it('offers to set up the coach (via consent) when enabled but not consented', async () => {
     (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, consented: false });
-    const { findByTestId, queryByTestId } = renderSettings();
+    const { findByTestId } = renderSettings();
 
     fireEvent.press(await findByTestId('coach-setup-button'));
 
     expect(navigate).toHaveBeenCalledWith('CoachConsent');
-    expect(queryByTestId('persona-option-hoot')).toBeNull();
   });
 });
