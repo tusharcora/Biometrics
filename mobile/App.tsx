@@ -13,6 +13,7 @@ import { ThemeProvider } from './src/theme/ThemeProvider';
 import { applyDefaultThemeSync } from './src/theme/preference';
 import { ThemedStatusBar } from './src/components/themed-status-bar';
 import { OrbGalleryScreen } from './src/screens/dev/OrbGalleryScreen';
+import { CharacterGalleryScreen } from './src/screens/dev/CharacterGalleryScreen';
 import { setBaseUrl } from './src/api/client';
 import { API_BASE_URL } from './src/auth/authClient';
 
@@ -32,6 +33,11 @@ export default function App() {
     InstrumentSerif_400Regular,
   });
   if (!fontsLoaded && !fontError) return null;
+
+  // Dev-only: every character in every mood. EXPO_PUBLIC_CHARACTER_GALLERY=1
+  if (__DEV__ && process.env.EXPO_PUBLIC_CHARACTER_GALLERY === '1') {
+    return <CharacterGalleryScreen />;
+  }
 
   // Dev-only escape hatch for looking at every orb state: EXPO_PUBLIC_ORB_GALLERY=1
   if (__DEV__ && process.env.EXPO_PUBLIC_ORB_GALLERY === '1') {
