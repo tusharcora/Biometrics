@@ -29,7 +29,7 @@ const status: CoachStatusDTO = {
   enabled: true,
   consented: true,
   consent: { version: 'v1', summary: 's', dataItems: ['x'] },
-  personaId: 'encouraging',
+  personaId: 'pip',
   personaChosen: true,
   personas: [],
 };

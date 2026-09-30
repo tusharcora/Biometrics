@@ -26,7 +26,7 @@ const status: CoachStatusDTO = {
     summary: 'To answer, the coach sends your scores to an AI provider. Raw Google Health tokens never leave the server.',
     dataItems: ['Recovery and Sleep Score values', 'Per-factor breakdowns', 'Habit pattern results'],
   },
-  personaId: 'encouraging',
+  personaId: 'pip',
   personaChosen: true,
   personas: [],
 };

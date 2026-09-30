@@ -12,11 +12,11 @@ const status: CoachStatusDTO = {
   enabled: true,
   consented: true,
   consent: { version: 'v1', summary: 's', dataItems: ['x'] },
-  personaId: 'encouraging',
+  personaId: 'pip',
   personaChosen: true,
   personas: [
-    { id: 'encouraging', name: 'Encouraging', verbosity: 'normal', proactivity: 'threshold-triggered', tagline: null, greeting: null },
-    { id: 'direct', name: 'Direct', verbosity: 'terse', proactivity: 'reactive-only', tagline: null, greeting: null },
+    { id: 'pip', name: 'Pip', verbosity: 'terse', proactivity: 'threshold-triggered', tagline: null, greeting: null },
+    { id: 'hoot', name: 'Hoot', verbosity: 'normal', proactivity: 'threshold-triggered', tagline: null, greeting: null },
   ],
 };
 
@@ -34,7 +34,7 @@ beforeEach(() => {
   (getTimezoneState as jest.Mock).mockResolvedValue({ timezone: 'UTC', overridden: false });
   (listTimeZones as jest.Mock).mockReturnValue([]);
   (fetchCoachStatus as jest.Mock).mockResolvedValue(status);
-  (setCoachPersona as jest.Mock).mockResolvedValue({ personaId: 'direct' });
+  (setCoachPersona as jest.Mock).mockResolvedValue({ personaId: 'hoot' });
   (revokeCoachConsent as jest.Mock).mockResolvedValue(undefined);
 });
 
@@ -52,22 +52,22 @@ describe('SettingsScreen: AI Coach', () => {
   it('lists the server personas and marks the current one', async () => {
     const { findByTestId } = renderSettings();
 
-    const current = await findByTestId('persona-option-encouraging');
-    const other = await findByTestId('persona-option-direct');
+    const current = await findByTestId('persona-option-pip');
+    const other = await findByTestId('persona-option-hoot');
     expect(current.props.accessibilityState).toEqual(expect.objectContaining({ selected: true }));
     expect(other.props.accessibilityState).toEqual(expect.objectContaining({ selected: false }));
-    expect(current).toHaveTextContent(/Encouraging/);
-    expect(other).toHaveTextContent(/Direct/);
+    expect(current).toHaveTextContent(/Pip/);
+    expect(other).toHaveTextContent(/Hoot/);
   });
 
   it('saves a newly picked persona and marks it selected', async () => {
     const { findByTestId } = renderSettings();
 
-    fireEvent.press(await findByTestId('persona-option-direct'));
+    fireEvent.press(await findByTestId('persona-option-hoot'));
 
-    await waitFor(() => expect(setCoachPersona).toHaveBeenCalledWith('direct'));
+    await waitFor(() => expect(setCoachPersona).toHaveBeenCalledWith('hoot'));
     await waitFor(async () =>
-      expect((await findByTestId('persona-option-direct')).props.accessibilityState).toEqual(expect.objectContaining({ selected: true })),
+      expect((await findByTestId('persona-option-hoot')).props.accessibilityState).toEqual(expect.objectContaining({ selected: true })),
     );
   });
 
@@ -75,10 +75,10 @@ describe('SettingsScreen: AI Coach', () => {
     (setCoachPersona as jest.Mock).mockRejectedValue(new Error('offline'));
     const { findByTestId } = renderSettings();
 
-    fireEvent.press(await findByTestId('persona-option-direct'));
+    fireEvent.press(await findByTestId('persona-option-hoot'));
 
     expect(await findByTestId('persona-error')).toBeTruthy();
-    expect((await findByTestId('persona-option-encouraging')).props.accessibilityState).toEqual(expect.objectContaining({ selected: true }));
+    expect((await findByTestId('persona-option-pip')).props.accessibilityState).toEqual(expect.objectContaining({ selected: true }));
   });
 
   it('revokes consent with DELETE and switches the section to its "off" state', async () => {
@@ -88,7 +88,7 @@ describe('SettingsScreen: AI Coach', () => {
 
     await waitFor(() => expect(revokeCoachConsent).toHaveBeenCalledTimes(1));
     expect(await findByTestId('coach-setup-button')).toBeTruthy();
-    expect(queryByTestId('persona-option-direct')).toBeNull();
+    expect(queryByTestId('persona-option-hoot')).toBeNull();
     expect(queryByTestId('coach-revoke-button')).toBeNull();
   });
 
@@ -109,6 +109,6 @@ describe('SettingsScreen: AI Coach', () => {
     fireEvent.press(await findByTestId('coach-setup-button'));
 
     expect(navigate).toHaveBeenCalledWith('CoachConsent');
-    expect(queryByTestId('persona-option-direct')).toBeNull();
+    expect(queryByTestId('persona-option-hoot')).toBeNull();
   });
 });
