@@ -20,7 +20,7 @@ export interface CharacterProps {
   dimmed?: boolean;
   mini?: boolean;
   glow?: boolean;
-  /** Set → announced as an image. Unset → decorative and hidden, like StillOrb was. */
+  /** Set → announced as an image. Unset → decorative and hidden from screen readers. */
   accessibilityLabel?: string;
   testID?: string;
 }

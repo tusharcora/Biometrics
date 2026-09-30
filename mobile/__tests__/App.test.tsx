@@ -7,8 +7,7 @@ import { clearCachedCharacter, readCachedCharacter, writeCachedCharacter } from 
 
 // App imports the NativeWind stylesheet, which jest cannot parse.
 jest.mock('../global.css', () => ({}));
-// The dev galleries draw real Skia art; they are not under test here.
-jest.mock('../src/screens/dev/OrbGalleryScreen', () => ({ OrbGalleryScreen: () => null }));
+// The dev gallery draws real Skia art; it is not under test here.
 jest.mock('../src/screens/dev/CharacterGalleryScreen', () => ({ CharacterGalleryScreen: () => null }));
 jest.mock('expo-font', () => ({ useFonts: () => [true, null] }));
 jest.mock('expo-secure-store');

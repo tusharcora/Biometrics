@@ -6,7 +6,7 @@
 // icon's name for any test that wants to look at it. Not global: snapshot tests
 // (e.g. CorrelationCard) record the real icon's output.
 // Lives in its own file for the same NativeWind/babel-plugin-jest-hoist reason
-// as jest-mocks/ThinkingOrb.js.
+// as jest-mocks/CharacterCanvas.js.
 const React = require('react');
 const { View } = require('react-native');
 
