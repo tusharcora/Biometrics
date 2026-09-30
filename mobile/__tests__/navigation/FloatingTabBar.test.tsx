@@ -1,9 +1,11 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, within } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { FloatingTabBar } from '../../src/navigation/FloatingTabBar';
 import { TAB_ORDER } from '../../src/navigation/tabBarLayout';
-import { DIMMED_OPACITY } from '../../src/components/orb/Orb';
+import { DIMMED_OPACITY } from '../../src/components/characters/Character';
+import { withCharacter } from '../../jest-mocks/characterContext';
 import { useCoachStatus } from '../../src/lib/useCoachStatus';
 import { useKeyboardVisible } from '../../src/lib/useKeyboardVisible';
 
@@ -16,11 +18,31 @@ const METRICS = { frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top:
 // The bar is hidden from the accessibility tree while the keyboard is open, so
 // queries for it must opt in to hidden elements.
 const HIDDEN_OK = { includeHiddenElements: true };
-const enabledStatus = { enabled: true, consented: true, consent: { version: 'v1', summary: 's', dataItems: [] }, personaId: 'p', personas: [] };
+const enabledStatus = {
+  enabled: true,
+  consented: true,
+  consent: { version: 'v1', summary: 's', dataItems: [] },
+  personaId: 'hoot',
+  personaChosen: true,
+  personas: [],
+};
 const refresh = jest.fn();
 
 function setCoach(status: unknown) {
   (useCoachStatus as jest.Mock).mockReturnValue({ status, setStatus: jest.fn(), refresh });
+}
+
+// The hub character's mock label, and the opacity it is drawn at (every
+// opacity between the canvas and the hub-character wrapper, multiplied).
+function hub(utils: ReturnType<typeof render>) {
+  const wrapper = utils.getByTestId('hub-character', HIDDEN_OK);
+  const canvas = within(wrapper).getByTestId('character-canvas', HIDDEN_OK);
+  let opacity = 1;
+  for (let node: typeof canvas | null = canvas; node; node = node === wrapper ? null : node.parent) {
+    const style = StyleSheet.flatten(node.props.style);
+    if (style && typeof style.opacity === 'number') opacity *= style.opacity;
+  }
+  return { label: canvas.props.accessibilityLabel as string, opacity };
 }
 
 function makeProps(index = 0, preventDefault = false) {
@@ -45,11 +67,11 @@ beforeEach(() => {
 });
 
 describe('FloatingTabBar', () => {
-  it('renders five labelled tabs, with the coach orb in the middle', () => {
+  it('renders five labelled tabs, with the coach character in the middle', () => {
     const { getByLabelText, getByTestId } = render(bar(makeProps()));
 
     for (const label of ['Home', 'Activity', 'AI coach', 'Metrics', 'Profile']) expect(getByLabelText(label)).toBeTruthy();
-    expect(getByTestId('tab-Coach')).toContainElement(getByTestId('hub-orb'));
+    expect(getByTestId('tab-Coach')).toContainElement(getByTestId('hub-character', HIDDEN_OK));
   });
 
   it('marks only the focused tab selected', () => {
@@ -98,40 +120,54 @@ describe('FloatingTabBar', () => {
     expect((props as unknown as { navigation: { navigate: jest.Mock } }).navigation.navigate).toHaveBeenCalledWith('Coach', undefined);
   });
 
-  describe('hub orb', () => {
-    it('is dim, paused and shaping when the status is unknown', () => {
+  describe('hub character', () => {
+    it.each([0, 1, 2, 3, 4])('idles, animating at full brightness, with tab %i focused', (index) => {
+      const utils = render(bar(makeProps(index)));
+
+      expect(hub(utils)).toEqual({ label: 'character:hoot:idle:64:playing:mini', opacity: 1 });
+    });
+
+    it('keeps idling, never paused, when the focused tab changes', () => {
+      const utils = render(bar(makeProps(2)));
+
+      utils.rerender(bar(makeProps(0)));
+
+      expect(hub(utils)).toEqual({ label: 'character:hoot:idle:64:playing:mini', opacity: 1 });
+    });
+
+    it('idles dimmed when the status is unknown', () => {
       setCoach(null);
-      const { getByTestId } = render(bar(makeProps(0)));
+      const utils = render(bar(makeProps(0)));
 
-      expect(getByTestId('thinking-orb').props.accessibilityLabel).toBe('shaping:64:paused:dark');
-      expect(getByTestId('hub-orb')).toHaveStyle({ opacity: DIMMED_OPACITY });
+      expect(hub(utils)).toEqual({ label: 'character:hoot:idle:64:playing:mini', opacity: DIMMED_OPACITY });
     });
 
-    it('is dim, paused and shaping when the coach is disabled', () => {
+    it('idles dimmed when the coach is disabled, even on the Coach tab', () => {
       setCoach({ ...enabledStatus, enabled: false });
-      const { getByTestId } = render(bar(makeProps(2)));
+      const utils = render(bar(makeProps(2)));
 
-      expect(getByTestId('thinking-orb').props.accessibilityLabel).toBe('shaping:64:paused:dark');
+      expect(hub(utils)).toEqual({ label: 'character:hoot:idle:64:playing:mini', opacity: DIMMED_OPACITY });
     });
 
-    it('breathes, dimmed and paused, while another tab is active', () => {
-      const { getByTestId } = render(bar(makeProps(0)));
+    it('is not dimmed for an enabled coach the user has not consented to yet', () => {
+      setCoach({ ...enabledStatus, consented: false });
+      const utils = render(bar(makeProps(0)));
 
-      expect(getByTestId('thinking-orb').props.accessibilityLabel).toBe('breathing:64:paused:dark');
-      expect(getByTestId('hub-orb')).toHaveStyle({ opacity: DIMMED_OPACITY });
+      expect(hub(utils).opacity).toBe(1);
     });
 
-    it('follows the app theme, since the pill itself is light in light mode', () => {
+    it("shows the user's character from CharacterProvider", () => {
+      const utils = render(withCharacter(bar(makeProps(0)), { characterId: 'pip', recoveryBand: 'scorePoor' }));
+
+      // Idle even on a poor recovery day: the tab bar ignores moods.
+      expect(hub(utils).label).toBe('character:pip:idle:64:playing:mini');
+    });
+
+    it('draws the same character in light mode (its colours are fixed)', () => {
       mockScheme = 'light';
-      const { getByTestId } = render(bar(makeProps(0)));
+      const utils = render(bar(makeProps(0)));
 
-      expect(getByTestId('thinking-orb').props.accessibilityLabel).toBe('breathing:64:paused:light');
-    });
-
-    it('breathes at full brightness on the Coach tab', () => {
-      const { getByTestId } = render(bar(makeProps(2)));
-
-      expect(getByTestId('hub-orb')).toHaveStyle({ opacity: 1 });
+      expect(hub(utils).label).toBe('character:hoot:idle:64:playing:mini');
     });
   });
 
