@@ -138,7 +138,8 @@ export function RootNavigator() {
               <Stack.Screen
                 name="MeetYourCoach"
                 component={MeetYourCoachScreen}
-                // No swipe-to-dismiss on the first visit: leaving is Skip or a choice.
+                // No swipe-to-dismiss on the first visit. Android back still
+                // closes it unsaved, like a failed Skip, so it returns next launch.
                 options={({ route }) => ({ headerShown: false, presentation: 'modal', gestureEnabled: route.params?.mode !== 'first' })}
               />
             </Stack.Navigator>
