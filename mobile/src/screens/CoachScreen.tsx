@@ -156,12 +156,13 @@ export function CoachScreen() {
   // the picker comes first, before consent (spec §5). A status that is
   // unknown or failed (null) never opens it. Same rule as load() below: only
   // the status's own literal personaChosen false counts (fetchCoachStatus reads
-  // a server that doesn't report it as chosen).
+  // a server that doesn't report it as chosen). It only opens over this tab:
+  // a status that settles after the user left waits for them to come back.
   const providerStatus = characterCtx?.statusLoaded ? characterCtx.status : null;
   const providerSaysNotChosen = !!providerStatus?.enabled && providerStatus.personaChosen === false;
   useEffect(() => {
-    if (providerSaysNotChosen) openPicker();
-  }, [providerSaysNotChosen, openPicker]);
+    if (providerSaysNotChosen && focused && navigation.isFocused?.() !== false) openPicker();
+  }, [providerSaysNotChosen, focused, navigation, openPicker]);
 
   const load = useCallback(async () => {
     // Mount and tab focus can both trigger a load. Run one at a time, but never
@@ -194,8 +195,8 @@ export function CoachScreen() {
       }
       // The same rule from this screen's own status, for when it settles before
       // the provider's. Strictly false: a server that doesn't send the field
-      // never triggers it.
-      const pickerJustOpened = status.personaChosen === false && openPicker();
+      // never triggers it. Not while the tab is hidden: the focus reload opens it.
+      const pickerJustOpened = status.personaChosen === false && navigation.isFocused?.() !== false && openPicker();
       if (!status.consented) {
         // The server decides: a changed consent version lands here too. Send
         // the user to consent once; if they come back without agreeing, stay on

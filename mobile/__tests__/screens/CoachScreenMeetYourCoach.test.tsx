@@ -1,5 +1,6 @@
 import React from 'react';
 import { act, render, waitFor } from '@testing-library/react-native';
+import { NavigationContext } from '@react-navigation/native';
 import { CoachScreen } from '../../src/screens/CoachScreen';
 import { fetchCoachStatus, fetchLatestConversation, type CoachStatusDTO } from '../../src/api/coach';
 import { apiFetch } from '../../src/api/client';
@@ -24,22 +25,32 @@ jest.mock('../../src/lib/useKeyboardVisible', () => ({ useKeyboardVisible: jest.
 
 const mockNavigate = jest.fn();
 let mockFocused = true;
-let mockFocusListener: (() => void) | undefined;
+let mockListeners: Record<string, Set<() => void>> = {};
+// One navigation object for useNavigation() and the NavigationContext the
+// screen's focus hook reads, as in the app.
+const mockNavigation = {
+  navigate: mockNavigate,
+  setParams: jest.fn(),
+  goBack: jest.fn(),
+  isFocused: () => mockFocused,
+  addListener: (event: string, cb: () => void) => {
+    (mockListeners[event] ??= new Set()).add(cb);
+    return () => {
+      mockListeners[event]?.delete(cb);
+    };
+  },
+};
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({
-    navigate: mockNavigate,
-    setParams: jest.fn(),
-    goBack: jest.fn(),
-    isFocused: () => mockFocused,
-    addListener: (_event: string, cb: () => void) => {
-      mockFocusListener = cb;
-      return () => {
-        mockFocusListener = undefined;
-      };
-    },
-  }),
+  NavigationContext: jest.requireActual('@react-navigation/native').NavigationContext,
+  useNavigation: () => mockNavigation,
   useRoute: () => ({ params: undefined }),
 }));
+
+// The tab gains (or loses) focus, as the navigator reports it.
+function emit(event: 'focus' | 'blur') {
+  mockFocused = event === 'focus';
+  mockListeners[event]?.forEach((cb) => cb());
+}
 
 const status: CoachStatusDTO = {
   enabled: true,
@@ -50,8 +61,16 @@ const status: CoachStatusDTO = {
   personas: [],
 };
 
+function coach(overrides: Partial<CharacterContextValue> | null) {
+  return (
+    <NavigationContext.Provider value={mockNavigation as never}>
+      {overrides ? withCharacter(<CoachScreen />, overrides) : <CoachScreen />}
+    </NavigationContext.Provider>
+  );
+}
+
 function renderCoach(overrides: Partial<CharacterContextValue> | null) {
-  return render(overrides ? withCharacter(<CoachScreen />, overrides) : <CoachScreen />);
+  return render(coach(overrides));
 }
 
 // Navigation calls by route name, in order.
@@ -62,7 +81,7 @@ function routes() {
 beforeEach(() => {
   jest.clearAllMocks();
   mockFocused = true;
-  mockFocusListener = undefined;
+  mockListeners = {};
   (fetchCoachStatus as jest.Mock).mockResolvedValue(status);
   (fetchLatestConversation as jest.Mock).mockResolvedValue({ conversationId: null, messages: [] });
 });
@@ -79,9 +98,8 @@ describe('CoachScreen: Meet your coach on the first visit', () => {
     expect(routes()).toEqual(['MeetYourCoach']);
 
     // Back from the picker: the focus reload sends the user to consent as before.
-    mockFocused = true;
     await act(async () => {
-      mockFocusListener?.();
+      emit('focus');
     });
     await waitFor(() => expect(routes()).toEqual(['MeetYourCoach', 'CoachConsent']));
   });
@@ -91,6 +109,42 @@ describe('CoachScreen: Meet your coach on the first visit', () => {
 
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('MeetYourCoach', { mode: 'first' }));
     expect(routes()).toEqual(['MeetYourCoach']);
+  });
+
+  it("waits for focus when the provider's status settles after the user left the Coach tab", async () => {
+    // The screen's own status never settles here, so only the provider path is in play.
+    (fetchCoachStatus as jest.Mock).mockReturnValue(new Promise(() => {}));
+    const utils = renderCoach({ status: null, statusLoaded: false, personaChosen: false });
+    await act(async () => {
+      emit('blur');
+    });
+
+    utils.rerender(coach({ status, statusLoaded: true, personaChosen: false }));
+    await act(async () => {});
+    expect(mockNavigate).not.toHaveBeenCalled();
+
+    await act(async () => {
+      emit('focus');
+    });
+    expect(routes()).toEqual(['MeetYourCoach']);
+    expect(mockNavigate).toHaveBeenCalledWith('MeetYourCoach', { mode: 'first' });
+  });
+
+  it("waits for focus when the screen's own status settles after the user left the Coach tab", async () => {
+    let settle!: (s: CoachStatusDTO) => void;
+    (fetchCoachStatus as jest.Mock).mockReturnValueOnce(new Promise<CoachStatusDTO>((res) => (settle = res)));
+    renderCoach({ status: null, statusLoaded: false, personaChosen: false });
+    await act(async () => {
+      emit('blur');
+    });
+
+    await act(async () => settle(status));
+    expect(mockNavigate).not.toHaveBeenCalled();
+
+    await act(async () => {
+      emit('focus');
+    });
+    await waitFor(() => expect(routes()).toEqual(['MeetYourCoach']));
   });
 
   it('still loads the chat underneath for a consented user', async () => {
@@ -106,10 +160,10 @@ describe('CoachScreen: Meet your coach on the first visit', () => {
     await waitFor(() => expect(fetchCoachStatus).toHaveBeenCalledTimes(1));
 
     await act(async () => {
-      mockFocusListener?.();
+      emit('focus');
     });
     await act(async () => {
-      mockFocusListener?.();
+      emit('focus');
     });
 
     expect(routes().filter((r) => r === 'MeetYourCoach')).toHaveLength(1);
