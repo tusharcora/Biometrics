@@ -10,6 +10,7 @@ const base: CoachStatusDTO = {
   consented: true,
   consent: { version: 'v1', summary: 's', dataItems: ['x'] },
   personaId: 'a',
+  personaChosen: true,
   personas: [],
 };
 

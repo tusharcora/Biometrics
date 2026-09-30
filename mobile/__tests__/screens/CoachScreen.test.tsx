@@ -48,6 +48,7 @@ const status: CoachStatusDTO = {
   consented: true,
   consent: { version: 'v1', summary: 's', dataItems: ['x'] },
   personaId: 'encouraging',
+  personaChosen: true,
   personas: [],
 };
 

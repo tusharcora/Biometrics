@@ -27,6 +27,7 @@ const status: CoachStatusDTO = {
     dataItems: ['Recovery and Sleep Score values', 'Per-factor breakdowns', 'Habit pattern results'],
   },
   personaId: 'encouraging',
+  personaChosen: true,
   personas: [],
 };
 

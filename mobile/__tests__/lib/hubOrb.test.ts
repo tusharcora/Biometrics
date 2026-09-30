@@ -6,6 +6,7 @@ const enabled: CoachStatusDTO = {
   consented: true,
   consent: { version: 'v1', summary: 's', dataItems: [] },
   personaId: 'encouraging',
+  personaChosen: true,
   personas: [],
 };
 

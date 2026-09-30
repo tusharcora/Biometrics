@@ -13,7 +13,8 @@ const status: CoachStatusDTO = {
   consented: true,
   consent: { version: 'v1', summary: 's', dataItems: ['x'] },
   personaId: 'encouraging',
-  personas: [{ id: 'encouraging', name: 'Encouraging', verbosity: 'normal', proactivity: 'threshold-triggered' }],
+  personaChosen: true,
+  personas: [{ id: 'encouraging', name: 'Encouraging', verbosity: 'normal', proactivity: 'threshold-triggered', tagline: null, greeting: null }],
 };
 
 const navigate = jest.fn();

@@ -13,9 +13,10 @@ const status: CoachStatusDTO = {
   consented: true,
   consent: { version: 'v1', summary: 's', dataItems: ['x'] },
   personaId: 'encouraging',
+  personaChosen: true,
   personas: [
-    { id: 'encouraging', name: 'Encouraging', verbosity: 'normal', proactivity: 'threshold-triggered' },
-    { id: 'direct', name: 'Direct', verbosity: 'terse', proactivity: 'reactive-only' },
+    { id: 'encouraging', name: 'Encouraging', verbosity: 'normal', proactivity: 'threshold-triggered', tagline: null, greeting: null },
+    { id: 'direct', name: 'Direct', verbosity: 'terse', proactivity: 'reactive-only', tagline: null, greeting: null },
   ],
 };
 

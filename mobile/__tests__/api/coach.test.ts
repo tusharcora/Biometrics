@@ -26,8 +26,18 @@ const status = {
   enabled: true,
   consented: false,
   consent: { version: 'v1', summary: 'Scores are sent to a provider.', dataItems: ['Recovery score'] },
-  personaId: 'encouraging',
-  personas: [{ id: 'encouraging', name: 'Encouraging', verbosity: 'normal', proactivity: 'threshold-triggered' }],
+  personaId: 'hoot',
+  personaChosen: true,
+  personas: [
+    {
+      id: 'hoot',
+      name: 'Hoot',
+      verbosity: 'normal',
+      proactivity: 'threshold-triggered',
+      tagline: 'Calm and curious. Spots the patterns in your weeks.',
+      greeting: "I've been watching your numbers overnight. Want to see what stood out?",
+    },
+  ],
 };
 
 function ok(body: unknown, statusCode = 200) {
@@ -55,6 +65,45 @@ describe('fetchCoachStatus', () => {
     const result = await fetchCoachStatus();
     expect(result.enabled).toBe(false);
     expect(result.consented).toBe(false);
+    expect(result.personaChosen).toBe(false);
+  });
+
+  it('keeps the character while the coach is off, since it is also the app look', async () => {
+    fetchMock.mockResolvedValueOnce(ok({ ...status, enabled: false, consented: true, personaId: 'mochi' }));
+    const result = await fetchCoachStatus();
+    expect(result).toEqual({
+      enabled: false,
+      consented: false,
+      consent: { version: '', summary: '', dataItems: [] },
+      personaId: 'mochi',
+      personaChosen: true,
+      personas: status.personas,
+    });
+  });
+
+  it('reads a server that predates characters as not chosen, with no picker copy', async () => {
+    fetchMock.mockResolvedValueOnce(
+      ok({
+        enabled: true,
+        consented: true,
+        consent: status.consent,
+        personaId: 'encouraging',
+        personas: [{ id: 'encouraging', name: 'Encouraging', verbosity: 'normal', proactivity: 'threshold-triggered' }],
+      }),
+    );
+    const result = await fetchCoachStatus();
+    expect(result.personaChosen).toBe(false);
+    expect(result.personas).toEqual([
+      { id: 'encouraging', name: 'Encouraging', verbosity: 'normal', proactivity: 'threshold-triggered', tagline: null, greeting: null },
+    ]);
+  });
+
+  it('only counts personaChosen when it is literally true, and drops malformed persona entries', async () => {
+    fetchMock.mockResolvedValueOnce(ok({ ...status, personaChosen: 'yes', personaId: 7, personas: [null, 'hoot', status.personas[0]] }));
+    const result = await fetchCoachStatus();
+    expect(result.personaChosen).toBe(false);
+    expect(result.personaId).toBe('');
+    expect(result.personas).toEqual(status.personas);
   });
 });
 
@@ -82,12 +131,12 @@ describe('consent', () => {
 
 describe('setCoachPersona', () => {
   it('PUTs the persona id', async () => {
-    fetchMock.mockResolvedValueOnce(ok({ personaId: 'direct' }));
-    await expect(setCoachPersona('direct')).resolves.toEqual({ personaId: 'direct' });
+    fetchMock.mockResolvedValueOnce(ok({ personaId: 'pip' }));
+    await expect(setCoachPersona('pip')).resolves.toEqual({ personaId: 'pip' });
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('https://api.example.com/me/coach/persona');
     expect(init.method).toBe('PUT');
-    expect(JSON.parse(init.body)).toEqual({ personaId: 'direct' });
+    expect(JSON.parse(init.body)).toEqual({ personaId: 'pip' });
   });
 });
 
