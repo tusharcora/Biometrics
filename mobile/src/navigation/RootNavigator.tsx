@@ -54,6 +54,9 @@ export type RootStackParamList = {
   SignInMethods: undefined;
   // Reached from Settings: signed-in devices, with sign-out per device.
   Devices: undefined;
+  // The character picker. 'first' opens by itself on the first Coach-tab
+  // visit (starts on Hoot, has Skip); 'switch' comes from Profile.
+  MeetYourCoach: { mode: 'first' | 'switch' };
 };
 
 export type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';
