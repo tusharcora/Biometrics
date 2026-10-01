@@ -18,6 +18,12 @@ function statusColor(item: AnswerCardItemDTO, colors: Palette): string {
   return colors.foreground;
 }
 
+function statusTextColor(item: AnswerCardItemDTO, colors: Palette): string {
+  if (item.status === 'below') return colors.statusBelowText;
+  if (item.status === 'above') return colors.statusAboveText;
+  return colors.foreground;
+}
+
 // The words follow the number, not the (goodness) status: a resting HR above
 // its usual is "above usual" even though the server marks it below.
 function comparison(item: AnswerCardItemDTO): string | null {
@@ -26,11 +32,11 @@ function comparison(item: AnswerCardItemDTO): string | null {
   return item.value < item.usual ? 'below usual' : 'above usual';
 }
 
-function Tile({ item, colors, dark }: { item: AnswerCardItemDTO; colors: Palette; dark: boolean }) {
+function Tile({ item, colors }: { item: AnswerCardItemDTO; colors: Palette }) {
   const words = comparison(item);
-  // Status colours are not text-safe on a light background (R35), so light
-  // mode keeps the number in the text colour; the words carry the status.
-  const valueColor = dark ? statusColor(item, colors) : colors.foreground;
+  // Small text, so the text-safe status colours (R40: rose/teal-700 in light
+  // mode); the words still carry the status for anyone who can't see colour.
+  const valueColor = statusTextColor(item, colors);
   return (
     <View
       testID={`answer-tile-${item.factId}`}
@@ -83,7 +89,7 @@ export function AnswerCard({ card, onOpenSource }: { card: AnswerCardDTO; onOpen
       {card.tiles ? (
         <View className="flex-row flex-wrap gap-1.5">
           {card.tiles.map((item) => (
-            <Tile key={item.factId} item={item} colors={colors} dark={dark} />
+            <Tile key={item.factId} item={item} colors={colors} />
           ))}
         </View>
       ) : null}

@@ -96,10 +96,42 @@ describe('TodayBar', () => {
     expect(style(tick).height as number).toBeGreaterThan(style(track).height as number);
   });
 
-  it('never colours the small value text with a status colour in light mode (R35)', () => {
+  it('colours the small value numbers with the text-safe status colours (R40)', () => {
+    const colours = (scheme: 'light' | 'dark') =>
+      [recovery, hrv, rhr, sleep].map((bar) => {
+        mockScheme = scheme;
+        const { getByTestId, unmount } = render(<TodayBar bar={bar} onPress={() => {}} />);
+        const colour = style(getByTestId(`today-bar-value-${bar.metric}`)).color;
+        unmount();
+        return colour;
+      });
+    const p = COLORS.light;
+    const d = COLORS.dark;
+    expect(colours('light')).toEqual([p.statusBelowText, p.statusAboveText, p.foreground, p.foreground]);
+    expect(colours('dark')).toEqual([d.statusBelowText, d.statusAboveText, d.foreground, d.foreground]);
+  });
+
+  it('sets the value at 12px bold and the usual smaller in the dimmer usual colour', () => {
     const { getByTestId } = render(<TodayBar bar={recovery} onPress={() => {}} />);
 
-    expect(style(getByTestId('today-bar-value-recovery')).color).toBe(COLORS.light.foreground);
+    expect(style(getByTestId('today-bar-value-recovery')).fontSize).toBe(12);
+    expect(style(getByTestId('today-bar-usual-recovery')).fontSize).toBe(10.5);
+    expect(style(getByTestId('today-bar-usual-recovery')).color).toBe(COLORS.light.todayUsual);
+  });
+
+  it('shows the sleep usual without the word, but still says it', () => {
+    const { getByTestId } = render(<TodayBar bar={sleep} onPress={() => {}} />);
+
+    expect(getByTestId('today-bar-text-sleep')).toHaveTextContent('6h 48m / 7h 13m', { exact: true });
+    expect(getByTestId('today-bar-sleep').props.accessibilityLabel).toContain('usual 7h 13m');
+  });
+
+  it('is a 36pt row whose tap area stays inside the 8pt gap to its neighbours', () => {
+    const { getByTestId } = render(<TodayBar bar={recovery} onPress={() => {}} />);
+    const row = getByTestId('today-bar-recovery');
+
+    expect(style(row).minHeight).toBe(36);
+    expect(row.props.hitSlop).toEqual({ top: 3, bottom: 3, left: 4, right: 4 });
   });
 
   it('says higher or lower by the number for resting HR, and near as about usual', () => {
@@ -136,7 +168,7 @@ describe('CoachToday', () => {
 
     expect(getByTestId('coach-today-sentence')).toHaveTextContent(summary.sentence!.text);
     expect(style(getByTestId('today-span-recovery')).textDecorationLine).toBe('underline');
-    expect(style(getByTestId('today-span-recovery')).color).toBe(COLORS.light.statusBelow);
+    expect(style(getByTestId('today-span-recovery')).color).toBe(COLORS.light.statusBelowText);
     expect(getAllByTestId(/^today-bar-(recovery|sleep|hrv|rhr)$/)).toHaveLength(4);
     expect(getByTestId('coach-today-footnote')).toHaveTextContent('Comparisons against your own readings, not medical advice.');
   });
@@ -159,7 +191,8 @@ describe('CoachToday', () => {
     const { getByTestId } = render(<CoachToday summary={summary} loading={false} onAsk={onAsk} />);
     const span = getByTestId('today-span-sleep');
 
-    expect(span.props.accessibilityRole).toBe('button');
+    // 'link' so Android makes the nested span focusable (R40).
+    expect(span.props.accessibilityRole).toBe('link');
     fireEvent.press(span);
 
     expect(onAsk).toHaveBeenCalledWith(spanQuestion('sleep', summary.bars));
@@ -171,6 +204,26 @@ describe('CoachToday', () => {
     expect(queryByTestId('coach-today-sentence')).toBeNull();
     expect(getByTestId('coach-today-bars')).toBeTruthy();
     expect(getByTestId('coach-today-footnote')).toBeTruthy();
+  });
+
+  it('shows nothing, not a lone footnote, when there is neither a sentence nor a bar', () => {
+    const { toJSON } = render(<CoachToday summary={{ ...summary, sentence: null, bars: [] }} loading={false} onAsk={() => {}} />);
+
+    expect(toJSON()).toBeNull();
+  });
+
+  it('gives the bars one stable press handler across re-renders', () => {
+    const onAsk = jest.fn();
+    // The memoised TodayBar elements: the nodes holding both `bar` and `onPress`.
+    const handlers = (root: ReturnType<typeof render>['UNSAFE_root']) =>
+      root.findAll((node) => node.props.bar !== undefined && typeof node.props.onPress === 'function').map((node) => node.props.onPress);
+    const { UNSAFE_root, rerender } = render(<CoachToday summary={summary} loading={false} onAsk={onAsk} />);
+    const before = handlers(UNSAFE_root);
+    rerender(<CoachToday summary={summary} loading onAsk={onAsk} />);
+
+    expect(before.length).toBeGreaterThanOrEqual(4);
+    expect(handlers(UNSAFE_root)).toEqual(before);
+    expect(new Set(before).size).toBe(1);
   });
 
   it('shows skeleton bars while loading', () => {

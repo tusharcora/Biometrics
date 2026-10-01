@@ -68,12 +68,13 @@ describe('AnswerCard', () => {
     expect(getByTestId('answer-tile-sleep.wakeups').props.accessibilityLabel).toBe('wake-ups 4');
   });
 
-  // R35: status colours are not text-safe on a light background, so light
-  // mode keeps tile numbers in the foreground colour; the words carry status.
-  it('keeps tile values in the text colour in light mode', () => {
+  // R40: tile numbers take the text-safe status colours (rose/teal-700 in
+  // light mode); a value near usual stays in the text colour.
+  it('colours tile values with the text-safe status colours in light mode', () => {
     const { getByTestId } = render(<AnswerCard card={tiles} />);
 
-    expect(style(getByTestId('answer-tile-value-sleep.total')).color).toBe(COLORS.light.foreground);
+    expect(style(getByTestId('answer-tile-value-sleep.total')).color).toBe(COLORS.light.statusBelowText);
+    expect(style(getByTestId('answer-tile-value-sleep.total')).color).not.toBe(COLORS.light.statusBelow);
     expect(style(getByTestId('answer-tile-value-sleep.deep')).color).toBe(COLORS.light.foreground);
   });
 
@@ -81,7 +82,7 @@ describe('AnswerCard', () => {
     mockScheme = 'dark';
     const { getByTestId } = render(<AnswerCard card={tiles} />);
 
-    expect(style(getByTestId('answer-tile-value-sleep.total')).color).toBe(COLORS.dark.statusBelow);
+    expect(style(getByTestId('answer-tile-value-sleep.total')).color).toBe(COLORS.dark.statusBelowText);
     expect(style(getByTestId('answer-tile-value-sleep.deep')).color).toBe(COLORS.dark.foreground);
   });
 

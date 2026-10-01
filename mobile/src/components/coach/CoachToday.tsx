@@ -1,8 +1,8 @@
-import React from 'react';
+import React, { memo, useCallback } from 'react';
 import { View } from 'react-native';
 import { useColorScheme } from 'nativewind';
-import type { TodaySummaryDTO } from '../../api/coach';
-import { barColorKey, barQuestion, spanQuestion } from '../../lib/coachToday';
+import type { TodayBarDTO, TodaySummaryDTO } from '../../api/coach';
+import { barQuestion, spanQuestion } from '../../lib/coachToday';
 import { COLORS } from '../../theme';
 import { Skeleton } from '../ui/skeleton';
 import { Text } from '../ui/text';
@@ -15,7 +15,8 @@ interface CoachTodayProps {
   // null: not loaded (yet), or the request failed.
   summary: TodaySummaryDTO | null;
   loading: boolean;
-  // Sends a question to the coach, as if typed.
+  // Sends a question to the coach, as if typed. Keep it stable (useCallback):
+  // the bars are memoised on it.
   onAsk: (question: string) => void;
 }
 
@@ -23,9 +24,10 @@ interface CoachTodayProps {
 // sentence with tappable metric words, then four "today vs usual" bars, then
 // the one footnote on the page. Skeleton bars while the first load runs; a
 // short promise before any data exists; nothing if the summary failed.
-export function CoachToday({ summary, loading, onAsk }: CoachTodayProps) {
+export const CoachToday = memo(function CoachToday({ summary, loading, onAsk }: CoachTodayProps) {
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === 'dark' ? COLORS.dark : COLORS.light;
+  const askAboutBar = useCallback((bar: TodayBarDTO) => onAsk(barQuestion(bar)), [onAsk]);
 
   if (!summary) {
     if (!loading) return null;
@@ -33,9 +35,11 @@ export function CoachToday({ summary, loading, onAsk }: CoachTodayProps) {
       <View testID="coach-today-loading" className="gap-3">
         <Skeleton className="h-6 w-11/12" />
         <Skeleton className="h-6 w-2/3" />
-        <View className="mt-1 gap-2.5">
+        <View className="gap-2">
           {[0, 1, 2, 3].map((i) => (
-            <Skeleton key={i} className="h-2 w-full rounded-full" />
+            <View key={i} className="h-9 justify-center">
+              <Skeleton className="h-2 w-full rounded-full" />
+            </View>
           ))}
         </View>
       </View>
@@ -51,6 +55,8 @@ export function CoachToday({ summary, loading, onAsk }: CoachTodayProps) {
   }
 
   const { sentence, bars } = summary;
+  // Nothing to compare, so no footnote about comparisons either.
+  if (!sentence && bars.length === 0) return null;
 
   return (
     <View testID="coach-today" className="gap-3">
@@ -60,19 +66,20 @@ export function CoachToday({ summary, loading, onAsk }: CoachTodayProps) {
             if (!span.metric) return <Text key={index} className="font-display text-display-sm">{span.text}</Text>;
             const metric = span.metric;
             const bar = bars.find((b) => b.metric === metric);
-            const tinted = bar && (bar.status === 'below' || bar.status === 'above');
+            // Text, so the text-safe status colours (R40), like the bar values.
+            const color = bar?.status === 'below' ? colors.statusBelowText : bar?.status === 'above' ? colors.statusAboveText : colors.foreground;
             return (
               <Text
                 key={index}
                 testID={`today-span-${metric}`}
-                accessibilityRole="button"
+                accessibilityRole="link"
                 accessibilityHint="Asks your coach about it"
                 onPress={() => onAsk(spanQuestion(metric, bars))}
                 className="font-display text-display-sm"
                 style={{
                   textDecorationLine: 'underline',
                   textDecorationStyle: 'dotted',
-                  color: tinted ? colors[barColorKey(bar)] : colors.foreground,
+                  color,
                 }}
               >
                 {span.text}
@@ -82,9 +89,9 @@ export function CoachToday({ summary, loading, onAsk }: CoachTodayProps) {
         </Text>
       ) : null}
       {bars.length > 0 ? (
-        <View testID="coach-today-bars" className="gap-1.5">
+        <View testID="coach-today-bars" className="gap-2">
           {bars.map((bar) => (
-            <TodayBar key={bar.metric} bar={bar} onPress={(b) => onAsk(barQuestion(b))} />
+            <TodayBar key={bar.metric} bar={bar} onPress={askAboutBar} />
           ))}
         </View>
       ) : null}
@@ -93,4 +100,4 @@ export function CoachToday({ summary, loading, onAsk }: CoachTodayProps) {
       </Text>
     </View>
   );
-}
+});

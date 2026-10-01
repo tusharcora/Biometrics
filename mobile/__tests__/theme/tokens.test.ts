@@ -77,6 +77,9 @@ describe('design tokens (new semantic colors)', () => {
     ['status-below', 'statusBelow'],
     ['status-near', 'statusNear'],
     ['status-above', 'statusAbove'],
+    ['status-below-text', 'statusBelowText'],
+    ['status-above-text', 'statusAboveText'],
+    ['today-usual', 'todayUsual'],
     ['today-track', 'todayTrack'],
     ['today-tick', 'todayTick'],
     ['tip', 'tip'],
@@ -92,6 +95,35 @@ describe('design tokens (new semantic colors)', () => {
   it('uses teal-700 for the light status-above', () => {
     expect(readVar(lightBlock, 'status-above')).toBe('rgb(15, 118, 110)');
     expect(COLORS.light.statusAbove).toBe('rgb(15, 118, 110)');
+  });
+
+  // R40: small numbers coloured by status must be readable (WCAG AA 4.5:1) on
+  // every surface they sit on: the page, a card, and a muted tile.
+  function contrast(a: string, b: string): number {
+    const lum = (rgb: string) => {
+      const [r, g, b2] = rgb.match(/\d+/g)!.map((v) => {
+        const c = Number(v) / 255;
+        return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+      }) as [number, number, number];
+      return 0.2126 * r + 0.7152 * g + 0.0722 * b2;
+    };
+    const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x) as [number, number];
+    return (hi + 0.05) / (lo + 0.05);
+  }
+
+  // today-usual only appears in the today bars (page or card, never a tile).
+  it.each([
+    ['status-below-text', 'light', ['background', 'card', 'muted']],
+    ['status-above-text', 'light', ['background', 'card', 'muted']],
+    ['today-usual', 'light', ['background', 'card']],
+    ['status-below-text', 'dark', ['background', 'card', 'muted']],
+    ['status-above-text', 'dark', ['background', 'card', 'muted']],
+    ['today-usual', 'dark', ['background', 'card']],
+  ] as const)('--color-%s is text-safe (>= 4.5:1) on %s surfaces', (name, theme, surfaces) => {
+    const block = theme === 'light' ? lightBlock : darkBlock;
+    for (const surface of surfaces) {
+      expect(contrast(readVar(block, name), readVar(block, surface))).toBeGreaterThanOrEqual(4.5);
+    }
   });
 
   it.each(NEW_TOKENS)('--color-%s is registered with Tailwind', (cssName) => {
