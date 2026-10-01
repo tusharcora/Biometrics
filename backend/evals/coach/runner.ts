@@ -1,22 +1,31 @@
-// Eval runner (spec section 7): seeds a fixture's user snapshot, runs the
-// fixture's question through the REAL orchestrator with a ScriptedProvider (no
-// network, no SDK), and checks the run against the fixture's expectations.
+// Eval runner (spec 2026-09-30, section 7): seeds a fixture's user snapshot,
+// runs the fixture's question through the REAL answer pipeline with a
+// ScriptedStreamProvider (no network, no model), and checks the events, the
+// system prompt, the fact sheet and the database against the fixture.
 //
 // Two suites:
 //   FIXTURES           every one must pass.
 //   NEGATIVE_FIXTURES  every one must FAIL, on the check it names and no other:
-//                      they prove the eval catches a class of error (notably the
-//                      directional-claim class the runtime guardrail cannot).
+//                      they prove the eval catches a class of error the runtime
+//                      cannot (a contradicted direction, a number pinned on the
+//                      wrong metric, an answer that buries the point) or would
+//                      miss if its own check regressed (an invented number, with
+//                      the runtime check switched off).
 
+import { deltaDisplayOf, statusOf } from '../../src/coach/answer/card';
+import { buildFactSheet, defaultFactData, FactSheet } from '../../src/coach/answer/facts';
+import { AnswerEvent, runAnswer, STATUS_LABELS } from '../../src/coach/answer/pipeline';
+import { AnswerRoute, routeQuestion } from '../../src/coach/answer/route';
+import { validateSentence } from '../../src/coach/answer/validate';
 import { CoachClock } from '../../src/coach/clock';
-import { createCoachOrchestrator } from '../../src/coach/orchestrator';
-import { ScriptedProvider } from '../../src/coach/model/provider';
+import { ScriptedStreamProvider } from '../../src/coach/model/provider';
 import { CoachEvent, CoachTelemetry } from '../../src/coach/telemetry';
-import { CoachTools, coachTools, DailyScoreToolResult } from '../../src/coach/tools';
 import { prisma } from '../../src/db/client';
-import { checkDirectionalClaims } from './directionCheck';
-import { cleanupUser, seedSnapshot } from './seed';
-import type { CheckFailure, EvalFixture, FixtureResult, NegativeFixture } from './types';
+import { checkAttribution } from './attributionCheck';
+import { checkDirectionalClaims, directionOf } from './directionCheck';
+import { checkQuality } from './qualityCheck';
+import { cleanupUser, seedSnapshot, todayCivil } from './seed';
+import type { CheckFailure, EvalFixture, FixtureResult, NegativeFixture, Outcome } from './types';
 
 /** Never fires: the eval is deterministic and must not depend on wall-clock timers. */
 const inertClock: CoachClock = { now: () => Date.now(), setTimer: () => ({ cancel: () => {} }) };
@@ -28,94 +37,134 @@ class CollectingTelemetry implements CoachTelemetry {
   }
 }
 
-function withGroundedOverrides(base: CoachTools, overrides: EvalFixture['groundedOverrides']): CoachTools {
-  if (!overrides) return base;
-  const patch = (r: DailyScoreToolResult): DailyScoreToolResult => ({ ...r, ...overrides });
-  return {
-    ...base,
-    getDailyScore: async (userId, date) => patch(await base.getDailyScore(userId, date)),
-    run: async (userId, name, args, ctx) => {
-      const outcome = await base.run(userId, name, args, ctx);
-      return name === 'getDailyScore' && outcome.ok ? { ok: true, result: patch(outcome.result as DailyScoreToolResult) } : outcome;
-    },
-  };
+const sameList = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((x, i) => x === b[i]);
+const show = (list: readonly string[]) => `[${list.map((s) => JSON.stringify(s)).join(', ')}]`;
+
+const ROUTE_OF_LABEL = new Map<string, AnswerRoute>(Object.entries(STATUS_LABELS).map(([route, label]) => [label, route as AnswerRoute]));
+
+function outcomeOf(events: readonly AnswerEvent[]): Outcome | 'none' {
+  for (const e of events) {
+    if (e.type === 'safety') return 'safety';
+    if (e.type === 'error') return `error:${e.code}`;
+  }
+  return events.some((e) => e.type === 'done') ? 'answer' : 'none';
 }
 
-const sameList = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((x, i) => x === b[i]);
-
-/** The `direction` the model was actually handed for today's score: the last getDailyScore tool message. */
-function groundedDirection(provider: ScriptedProvider): string | null {
-  let direction: string | null = null;
-  for (const request of provider.requests) {
-    for (const m of request.messages) {
-      if (m.role === 'tool' && m.name === 'getDailyScore') {
-        const parsed = JSON.parse(m.content) as { direction?: string | null };
-        if (typeof parsed.direction === 'string') direction = parsed.direction;
+/** Every shown sentence and every card value must be grounded in the fact sheet. */
+function groundedFailures(sentences: readonly string[], card: Extract<AnswerEvent, { type: 'card' }>['card'] | null, sheet: FactSheet): string[] {
+  const out: string[] = [];
+  for (const s of sentences) if (!validateSentence(s, sheet).ok) out.push(`shown sentence is not grounded in the fact sheet: ${JSON.stringify(s)}`);
+  if (card) {
+    const facts = new Map(sheet.facts.map((f) => [f.id, f]));
+    for (const item of [...(card.tiles ?? []), ...(card.ranked ?? [])]) {
+      const fact = facts.get(item.factId);
+      if (!fact) out.push(`card row ${item.factId} is not on the fact sheet`);
+      else if (item.display !== fact.display || item.value !== fact.value) out.push(`card row ${item.factId} does not show the fact sheet's value`);
+      else if (item.usual !== fact.usual || item.status !== statusOf(fact) || item.deltaDisplay !== deltaDisplayOf(fact)) {
+        out.push(`card row ${item.factId} does not show the fact sheet's usual, status or difference`);
       }
     }
+    for (const text of [card.headline, card.tip ?? '']) {
+      if (text && !validateSentence(text, sheet).ok) out.push(`card text is not grounded in the fact sheet: ${JSON.stringify(text)}`);
+    }
   }
-  return direction;
+  return out;
 }
 
-export async function runFixture(fixture: EvalFixture): Promise<FixtureResult> {
+export async function runFixture(fixture: EvalFixture, options: { unguarded?: boolean } = {}): Promise<FixtureResult> {
   const failures: CheckFailure[] = [];
   const fail = (check: CheckFailure['check'], message: string) => failures.push({ check, message });
   let text = '';
   const { userId, conversationId } = await seedSnapshot(fixture.snapshot);
   try {
-    const provider = new ScriptedProvider(fixture.script);
+    const provider = new ScriptedStreamProvider(fixture.script);
     const telemetry = new CollectingTelemetry();
-    const orchestrator = createCoachOrchestrator({
-      provider,
-      telemetry,
-      clock: inertClock,
-      tools: withGroundedOverrides(coachTools, fixture.groundedOverrides),
-    });
-    const result = await orchestrator.handleTurn({ userId, message: fixture.question, history: [], conversationId });
-    text = result.text;
+    const events: AnswerEvent[] = [];
+    const answer = runAnswer(
+      { userId, message: fixture.question, history: [], conversationId },
+      {
+        provider,
+        engine: 'local',
+        telemetry,
+        clock: inertClock,
+        ...(options.unguarded ? { validate: () => ({ ok: true as const }) } : {}),
+      },
+    );
+    for await (const e of answer) events.push(e);
+
+    const sentences = events.flatMap((e) => (e.type === 'text' ? [e.sentence] : []));
+    text = sentences.join(' ');
+    const card = events.find((e): e is Extract<AnswerEvent, { type: 'card' }> => e.type === 'card')?.card ?? null;
+    const status = events.find((e): e is Extract<AnswerEvent, { type: 'status' }> => e.type === 'status');
+    const route = status ? ROUTE_OF_LABEL.get(status.label) : undefined;
+    const sheet = await buildFactSheet(userId, route ?? routeQuestion(fixture.question), { ...defaultFactData, today: todayCivil() });
     const want = fixture.expect;
 
-    if (result.source !== want.source) fail('source', `expected ${want.source}, got ${result.source}`);
+    const outcome = outcomeOf(events);
+    if (outcome !== want.outcome) fail('outcome', `expected ${want.outcome}, got ${outcome}`);
+    if (want.route !== undefined && route !== want.route) fail('route', `expected the ${want.route} route, got ${route ?? 'none'}`);
     if (want.modelCalls !== undefined && provider.callCount !== want.modelCalls) {
       fail('modelCalls', `expected ${want.modelCalls} model calls, got ${provider.callCount}`);
     }
-    if (want.toolCalls) {
-      const seen = telemetry.events
-        .filter((e) => e.name === 'coach.tool_call' && e.attributes.preamble !== true)
-        .map((e) => String(e.attributes.tool));
-      if (!sameList(seen, want.toolCalls)) fail('toolCalls', `expected [${want.toolCalls.join(', ')}], got [${seen.join(', ')}]`);
+    if (want.sentences && !sameList(sentences, want.sentences)) fail('sentences', `expected ${show(want.sentences)}, got ${show(sentences)}`);
+    for (const v of want.textPresent ?? []) if (!text.includes(v)) fail('textPresent', `reply is missing ${JSON.stringify(v)}`);
+    for (const v of want.textAbsent ?? []) if (text.includes(v)) fail('textAbsent', `reply contains the forbidden text ${JSON.stringify(v)}`);
+    if (want.dropped) {
+      const seen = telemetry.events.filter((e) => e.name === 'coach.answer_sentence_dropped').map((e) => String(e.attributes.reason));
+      if (!sameList(seen, want.dropped)) fail('dropped', `expected dropped ${show(want.dropped)}, got ${show(seen)}`);
     }
-    for (const v of want.valuesPresent ?? []) if (!text.includes(v)) fail('valuesPresent', `reply is missing the expected value ${JSON.stringify(v)}`);
-    for (const v of want.valuesAbsent ?? []) if (text.includes(v)) fail('valuesAbsent', `reply contains the forbidden text ${JSON.stringify(v)}`);
-    if (want.guardrail) {
-      const seen = result.events.flatMap((e) => (e.type === 'guardrail_reject' ? [`${e.reason}#${e.attempt}:${e.outcome}`] : []));
-      const expected = want.guardrail.map((g) => `${g.reason}#${g.attempt}:${g.outcome}`);
-      if (!sameList(seen, expected)) fail('guardrail', `expected guardrail events [${expected.join(', ')}], got [${seen.join(', ')}]`);
-    }
-    if (want.directionConsistent) {
-      const grounded = groundedDirection(provider);
-      if (grounded !== 'higher' && grounded !== 'lower' && grounded !== 'unchanged') {
-        fail('direction', 'the turn has no grounded direction to check the reply against');
+    if (want.card !== undefined) {
+      if (want.card === null) {
+        if (card) fail('card', `expected no card, got one headed ${JSON.stringify(card.headline)}`);
+      } else if (!card) {
+        fail('card', 'expected a card, got none');
       } else {
-        const check = checkDirectionalClaims(text, grounded);
-        if (!check.ok) {
-          fail(
-            'direction',
-            `grounded direction is "${grounded}" but the reply says ${check.contradictions.map((c) => `"${c.word}"`).join(', ')}`,
-          );
+        const rows = card.tiles ?? card.ranked ?? [];
+        if (want.card.tiles && !(card.tiles && sameList(card.tiles.map((t) => t.factId), want.card.tiles))) {
+          fail('card', `expected tiles ${show(want.card.tiles)}, got ${card.tiles ? show(card.tiles.map((t) => t.factId)) : 'none'}`);
+        }
+        if (want.card.ranked && !(card.ranked && sameList(card.ranked.map((r) => r.factId), want.card.ranked))) {
+          fail('card', `expected ranked rows ${show(want.card.ranked)}, got ${card.ranked ? show(card.ranked.map((r) => r.factId)) : 'none'}`);
+        }
+        if (want.card.labels && !sameList(rows.map((r) => r.label), want.card.labels)) {
+          fail('card', `expected labels ${show(want.card.labels)}, got ${show(rows.map((r) => r.label))}`);
+        }
+        if (want.card.tip !== undefined && (card.tip !== undefined) !== want.card.tip) fail('card', `expected ${want.card.tip ? 'a' : 'no'} tip`);
+        if (want.card.source !== undefined && card.source !== want.card.source) {
+          fail('card', `expected source ${JSON.stringify(want.card.source)}, got ${JSON.stringify(card.source)}`);
         }
       }
     }
+    for (const g of groundedFailures(sentences, card, sheet)) fail('grounded', g);
+    const system = provider.requests[0]?.system ?? '';
+    for (const p of want.promptIncludes ?? []) if (!system.includes(p)) fail('prompt', `system prompt is missing ${JSON.stringify(p)}`);
+    for (const p of want.promptExcludes ?? []) if (system.includes(p)) fail('prompt', `system prompt contains ${JSON.stringify(p)}`);
+    if (want.directionOf) {
+      const fact = sheet.facts.find((f) => f.id === want.directionOf);
+      const grounded = fact ? directionOf(fact) : null;
+      if (!grounded) {
+        fail('direction', `the fact sheet has no ${want.directionOf} with a usual to check against`);
+      } else {
+        const check = checkDirectionalClaims(text, grounded);
+        if (!check.ok) {
+          fail('direction', `${want.directionOf} is ${grounded} than usual but the reply says ${check.contradictions.map((c) => `"${c.word}"`).join(', ')}`);
+        }
+      }
+    }
+    if (want.attribution) {
+      for (const p of checkAttribution(sentences, sheet).problems) {
+        fail('attribution', `${JSON.stringify(p.sentence)} uses a number that is not one of the ${p.metric} facts`);
+      }
+    }
+    if (want.quality) for (const q of checkQuality(sentences, sheet, want.quality)) fail('quality', q);
     if (want.memory) {
       const rows = await prisma.coachMemory.findMany({ where: { userId }, select: { value: true, status: true } });
       const byStatus = (s: string) => rows.filter((r) => r.status === s).map((r) => r.value).sort();
-      const pending = byStatus('PENDING');
-      const confirmed = byStatus('CONFIRMED');
-      if (want.memory.pending && !sameList(pending, [...want.memory.pending].sort())) {
-        fail('memory', `expected ${want.memory.pending.length} pending memory rows, got ${pending.length}`);
+      if (want.memory.pending && !sameList(byStatus('PENDING'), [...want.memory.pending].sort())) {
+        fail('memory', `expected pending ${show(want.memory.pending)}, got ${show(byStatus('PENDING'))}`);
       }
-      if (want.memory.confirmed && !sameList(confirmed, [...want.memory.confirmed].sort())) {
-        fail('memory', `expected ${want.memory.confirmed.length} confirmed memory rows, got ${confirmed.length}`);
+      if (want.memory.confirmed && !sameList(byStatus('CONFIRMED'), [...want.memory.confirmed].sort())) {
+        fail('memory', `expected confirmed ${show(want.memory.confirmed)}, got ${show(byStatus('CONFIRMED'))}`);
       }
     }
   } catch (err) {
@@ -143,7 +192,7 @@ export interface NegativeResult {
 export async function runNegativeFixtures(fixtures: readonly NegativeFixture[]): Promise<NegativeResult[]> {
   const out: NegativeResult[] = [];
   for (const f of fixtures) {
-    const result = await runFixture(f);
+    const result = await runFixture(f, { unguarded: f.unguarded === true });
     out.push({
       id: f.id,
       mustFailCheck: f.mustFailCheck,

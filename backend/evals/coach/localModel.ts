@@ -1,84 +1,61 @@
-// `npm run eval:coach:local`: runs the coach eval fixtures' (snapshot, question)
-// pairs through the REAL orchestrator with the local Ollama provider (built from
-// OLLAMA_* env, exactly as the server builds it) and reports, per fixture, what
-// a real model did: reply source, latency, guardrail retries, tool calls, and
-// whether its stated direction matches the grounded one. Scripted outputs in
-// the fixtures are ignored. Promoted from the local-model spike
-// (docs/superpowers/notes/local-model-coach-plan.md).
+// `npm run eval:coach:local`: runs the eval fixtures' (snapshot, question)
+// pairs through the REAL answer pipeline with the local Ollama provider (built
+// from OLLAMA_* env, exactly as the server builds it) and reports, per fixture,
+// what a real model did: outcome, time to the first sentence, total time,
+// dropped sentences, whether a card came back, and whether everything shown is
+// grounded in the fact sheet (and, where the fixture asks, whether its
+// direction agrees, whether each number sits on its own metric, and whether it
+// meets the quality bar: answer first, name the drivers, a step in words, no
+// stock check-in). Scripted outputs in the fixtures are ignored. The model is
+// warmed first, so the timings are the warm ones the spec targets (first
+// sentence within 6 s on the owner's Mac).
 //
 // Env: OLLAMA_MODEL (required) and the other OLLAMA_* settings; EVAL_BUDGET_MS
-// (default 300000, so quality is measured apart from speed; latency is reported
-// separately); EVAL_IDS (comma list); EVAL_LIMIT; EVAL_OUT (jsonl path).
+// (default: the local answer budget, COACH_LOCAL_BUDGET_MS or 45000);
+// EVAL_IDS (comma list); EVAL_LIMIT; EVAL_OUT (jsonl path).
 // DATABASE_URL must name a *_test database: each fixture seeds and deletes a user.
 //
 // Output quotes model replies to fixture questions about seeded fixture data;
-// no real user's data is ever read.
+// no real user's data is ever read. This calls a real model, so it is never
+// part of the jest suite (tests/coach/evals.test.ts runs the scripted fixtures).
 
 import * as fs from 'fs';
-import { createCoachOrchestrator } from '../../src/coach/orchestrator';
-import { coachTools } from '../../src/coach/tools';
+import { buildFactSheet, defaultFactData } from '../../src/coach/answer/facts';
+import { AnswerEvent, runAnswer, STATUS_LABELS } from '../../src/coach/answer/pipeline';
+import { AnswerRoute } from '../../src/coach/answer/route';
+import { validateSentence } from '../../src/coach/answer/validate';
+import { getAnswerBudgetMs } from '../../src/coach/config';
 import { ollamaProviderFromEnv } from '../../src/coach/model/ollama';
-import type { CoachModelProvider, CoachModelRequest, CoachModelResponse, CoachStreamRequest } from '../../src/coach/model/provider';
 import { prisma } from '../../src/db/client';
-import { checkDirectionalClaims } from './directionCheck';
+import { checkAttribution } from './attributionCheck';
+import { checkDirectionalClaims, directionOf } from './directionCheck';
 import { FIXTURES } from './fixtures';
-import { cleanupUser, seedSnapshot } from './seed';
+import { checkQuality } from './qualityCheck';
+import { cleanupUser, seedSnapshot, todayCivil } from './seed';
 
 if (!/_test(\?|$)/.test(process.env.DATABASE_URL ?? '')) {
   console.error('refusing to run: DATABASE_URL must name a *_test database');
   process.exit(2);
 }
 
-const BUDGET = Number(process.env.EVAL_BUDGET_MS ?? 300_000);
+const BUDGET = Number(process.env.EVAL_BUDGET_MS ?? getAnswerBudgetMs('local'));
 const OUT = process.env.EVAL_OUT;
+const ROUTE_OF_LABEL = new Map<string, AnswerRoute>(Object.entries(STATUS_LABELS).map(([route, label]) => [label, route as AnswerRoute]));
 
-/** Wraps the real provider to record requests and per-call latency. */
-class RecordingProvider implements CoachModelProvider {
-  readonly id: string;
-  readonly requests: CoachModelRequest[] = [];
-  readonly callMs: number[] = [];
-  constructor(private readonly inner: CoachModelProvider) {
-    this.id = inner.id;
-  }
-  async generate(request: CoachModelRequest): Promise<CoachModelResponse> {
-    this.requests.push(request);
-    const started = Date.now();
-    try {
-      return await this.inner.generate(request);
-    } finally {
-      this.callMs.push(Date.now() - started);
-    }
-  }
-  stream(request: CoachStreamRequest): AsyncIterable<string> {
-    return this.inner.stream(request);
-  }
-}
-
-// Same as runner.ts (not exported there).
-function withGroundedOverrides(base: typeof coachTools, overrides: Record<string, unknown> | undefined): typeof coachTools {
-  if (!overrides) return base;
-  const patch = <T>(r: T): T => ({ ...r, ...overrides });
-  return {
-    ...base,
-    getDailyScore: async (userId, date) => patch(await base.getDailyScore(userId, date)),
-    run: async (userId, name, args, ctx) => {
-      const outcome = await base.run(userId, name, args, ctx);
-      return name === 'getDailyScore' && outcome.ok ? { ok: true, result: patch(outcome.result) } : outcome;
-    },
-  };
-}
-
-function groundedDirection(provider: RecordingProvider): string | null {
-  let direction: string | null = null;
-  for (const request of provider.requests) {
-    for (const m of request.messages) {
-      if (m.role === 'tool' && m.name === 'getDailyScore') {
-        const parsed = JSON.parse(m.content) as { direction?: unknown };
-        if (typeof parsed.direction === 'string') direction = parsed.direction;
-      }
-    }
-  }
-  return direction;
+interface Row {
+  id: string;
+  outcome: string;
+  firstSentenceMs: number | null;
+  totalMs: number;
+  sentences: number;
+  dropped: number;
+  card: boolean;
+  grounded: boolean;
+  directionOk: boolean | null;
+  attributionOk: boolean;
+  /** Quality problems against the fixture's quality expectation; null when it has none. */
+  quality: string[] | null;
+  text: string;
 }
 
 function percentile(sorted: number[], p: number): number {
@@ -87,57 +64,88 @@ function percentile(sorted: number[], p: number): number {
 }
 
 async function main(): Promise<number> {
-  const base = ollamaProviderFromEnv();
+  const provider = ollamaProviderFromEnv();
   const ids = process.env.EVAL_IDS ? new Set(process.env.EVAL_IDS.split(',')) : null;
-  const fixtures = FIXTURES.filter((f) => f.category !== 'safety') // the safety path never reaches the model
+  const fixtures = FIXTURES.filter((f) => f.category !== 'safety' && f.category !== 'errors') // those paths never reach the model
     .filter((f) => (ids ? ids.has(f.id) : true))
     .slice(0, Number(process.env.EVAL_LIMIT ?? 1000));
   if (OUT) fs.writeFileSync(OUT, '');
-  console.log(`provider=${base.id} fixtures=${fixtures.length} budget=${BUDGET}ms`);
+  console.log(`provider=${provider.id} fixtures=${fixtures.length} budget=${BUDGET}ms`);
+  const warmStarted = Date.now();
+  await provider.warm();
+  console.log(`warm-up ${Date.now() - warmStarted}ms`);
 
-  const rows: { source: string; wallMs: number; directionOk: boolean | null; retried: boolean }[] = [];
+  const rows: Row[] = [];
   for (const fx of fixtures) {
-    const { userId } = await seedSnapshot(fx.snapshot);
-    const provider = new RecordingProvider(base);
-    const events: { name: string; attributes: Record<string, unknown> }[] = [];
-    const orchestrator = createCoachOrchestrator({
-      provider,
-      telemetry: { emit: (e: { name: string; attributes: Record<string, unknown> }) => events.push(e) } as never,
-      budgets: { fast: BUDGET, synthesis: BUDGET },
-      tools: withGroundedOverrides(coachTools, fx.groundedOverrides as Record<string, unknown> | undefined),
-    });
+    const { userId, conversationId } = await seedSnapshot(fx.snapshot);
     const t0 = Date.now();
     try {
-      const result = await orchestrator.handleTurn({ userId, message: fx.question, history: [] });
-      const wallMs = Date.now() - t0;
-      const grounded = groundedDirection(provider);
-      let directionOk: boolean | null = null;
-      if (result.source === 'MODEL' && (grounded === 'higher' || grounded === 'lower' || grounded === 'unchanged')) {
-        directionOk = checkDirectionalClaims(result.text, grounded).ok;
+      const events: AnswerEvent[] = [];
+      let firstSentenceMs: number | null = null;
+      let dropped = 0;
+      const answer = runAnswer(
+        { userId, message: fx.question, history: [], conversationId },
+        {
+          provider,
+          engine: 'local',
+          budgetMs: BUDGET,
+          telemetry: { emit: (e) => void (e.name === 'coach.answer_sentence_dropped' && dropped++) },
+        },
+      );
+      for await (const e of answer) {
+        if (e.type === 'text' && firstSentenceMs === null) firstSentenceMs = Date.now() - t0;
+        events.push(e);
       }
-      const guardrail = result.events.filter((e) => e.type === 'guardrail_reject').map((e) => JSON.stringify(e));
-      const tools = events.filter((e) => e.name === 'coach.tool_call' && e.attributes.preamble !== true).map((e) => String(e.attributes.tool));
-      rows.push({ source: result.source, wallMs, directionOk, retried: guardrail.length > 0 });
-      const row = { id: fx.id, category: fx.category, source: result.source, wallMs, modelCalls: provider.callMs.length, tools, guardrail, directionOk, text: result.text };
+      const totalMs = Date.now() - t0;
+      const sentences = events.flatMap((e) => (e.type === 'text' ? [e.sentence] : []));
+      const text = sentences.join(' ');
+      const status = events.find((e): e is Extract<AnswerEvent, { type: 'status' }> => e.type === 'status');
+      const route = (status && ROUTE_OF_LABEL.get(status.label)) ?? 'today';
+      const sheet = await buildFactSheet(userId, route, { ...defaultFactData, today: todayCivil() });
+      const error = events.find((e): e is Extract<AnswerEvent, { type: 'error' }> => e.type === 'error');
+      const directionFact = fx.expect.directionOf ? sheet.facts.find((f) => f.id === fx.expect.directionOf) : undefined;
+      const grounded = directionFact ? directionOf(directionFact) : null;
+      const row: Row = {
+        id: fx.id,
+        outcome: error ? `error:${error.code}` : 'answer',
+        firstSentenceMs,
+        totalMs,
+        sentences: sentences.length,
+        dropped,
+        card: events.some((e) => e.type === 'card'),
+        grounded: sentences.every((s) => validateSentence(s, sheet).ok),
+        directionOk: grounded ? checkDirectionalClaims(text, grounded).ok : null,
+        attributionOk: checkAttribution(sentences, sheet).ok,
+        quality: fx.expect.quality ? checkQuality(sentences, sheet, fx.expect.quality) : null,
+        text,
+      };
+      rows.push(row);
       if (OUT) fs.appendFileSync(OUT, JSON.stringify(row) + '\n');
-      console.log(`${result.source.padEnd(8)} ${String(wallMs).padStart(6)}ms  calls=${provider.callMs.length} retry=${guardrail.length > 0 ? 'y' : 'n'} tools=[${tools.join(',')}]  ${fx.id}`);
+      console.log(
+        `${row.outcome.padEnd(24)} first=${String(firstSentenceMs ?? '-').padStart(6)}ms total=${String(totalMs).padStart(6)}ms ` +
+          `sentences=${row.sentences} dropped=${dropped} card=${row.card ? 'y' : 'n'}  ${fx.id}`,
+      );
+      for (const q of row.quality ?? []) console.log(`        - quality: ${q}`);
     } catch (err) {
-      rows.push({ source: 'ERROR', wallMs: Date.now() - t0, directionOk: null, retried: false });
-      console.log(`ERROR    ${err instanceof Error ? err.name : 'unknown'}  ${fx.id}`);
+      rows.push({ id: fx.id, outcome: 'crash', firstSentenceMs: null, totalMs: Date.now() - t0, sentences: 0, dropped: 0, card: false, grounded: true, directionOk: null, attributionOk: true, quality: null, text: '' });
+      console.log(`crash ${err instanceof Error ? err.name : 'unknown'}  ${fx.id}`);
     } finally {
       await cleanupUser(userId);
     }
   }
 
-  const model = rows.filter((r) => r.source === 'MODEL');
-  const ms = model.map((r) => r.wallMs).sort((a, b) => a - b);
-  const checked = model.filter((r) => r.directionOk !== null);
-  console.log(`\nmodel replies ${model.length}/${rows.length}, first-try guardrail rejects ${rows.filter((r) => r.retried).length}`);
-  console.log(`direction ok ${checked.filter((r) => r.directionOk).length}/${checked.length} (checker over-flags free prose; read the flagged ones)`);
-  console.log(`latency of model replies: min ${ms[0] ?? 0} median ${percentile(ms, 50)} p90 ${percentile(ms, 90)} max ${ms[ms.length - 1] ?? 0} ms`);
-  for (const budget of [12_000, 30_000, 60_000, 90_000]) {
-    console.log(`  within ${budget / 1000}s: ${ms.filter((m) => m <= budget).length}/${rows.length}`);
-  }
+  const answered = rows.filter((r) => r.outcome === 'answer');
+  const first = answered.flatMap((r) => (r.firstSentenceMs === null ? [] : [r.firstSentenceMs])).sort((a, b) => a - b);
+  const total = answered.map((r) => r.totalMs).sort((a, b) => a - b);
+  const checked = answered.filter((r) => r.directionOk !== null);
+  console.log(`\nanswered ${answered.length}/${rows.length}, with a dropped sentence ${rows.filter((r) => r.dropped > 0).length}, with a card ${rows.filter((r) => r.card).length}`);
+  console.log(`grounded ${answered.filter((r) => r.grounded).length}/${answered.length} (must be all: anything else is a validator bug)`);
+  console.log(`direction ok ${checked.filter((r) => r.directionOk).length}/${checked.length} (the checker over-flags free prose; read the flagged ones)`);
+  console.log(`attribution ok ${answered.filter((r) => r.attributionOk).length}/${answered.length}`);
+  const rated = answered.filter((r) => r.quality !== null);
+  console.log(`quality ok ${rated.filter((r) => r.quality!.length === 0).length}/${rated.length} (lexicon checks; read the flagged ones)`);
+  console.log(`first sentence: median ${percentile(first, 50)} p90 ${percentile(first, 90)} max ${first[first.length - 1] ?? 0} ms (target: 6000 or less, warm)`);
+  console.log(`full answer:    median ${percentile(total, 50)} p90 ${percentile(total, 90)} max ${total[total.length - 1] ?? 0} ms`);
   return 0;
 }
 

@@ -216,6 +216,19 @@ describe('runAnswer: validation', () => {
     expect(await prisma.coachConversation.count({ where: { userId: inp.userId } })).toBe(0);
   });
 
+  it('uses an injected sentence validator (the eval harness switches validation off to prove its own check)', async () => {
+    const seen: string[] = [];
+    const { deps } = setup([['Your HRV is 60 ms. Take it easy.']], {
+      validate: (sentence) => {
+        seen.push(sentence);
+        return { ok: true };
+      },
+    });
+    const events = await collect(runAnswer(await input(), deps));
+    expect(texts(events)).toEqual(['Your HRV is 60 ms.', 'Take it easy.']);
+    expect(seen).toEqual(['Your HRV is 60 ms.', 'Take it easy.']);
+  });
+
   it('drops a card that references no known fact, and still answers', async () => {
     const { deps } = setup([['Recovery is 26.\n```card\n{"headline":"Hi","tiles":[{"fact":"nope"}]}\n```']]);
     const events = await collect(runAnswer(await input(), deps));

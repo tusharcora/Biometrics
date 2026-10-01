@@ -1,7 +1,8 @@
 // `npm run eval:coach`: runs the coach eval suite against the database named by
 // DATABASE_URL (each fixture uses a throwaway user that is deleted afterwards)
 // and exits non-zero on any failure. No network, no model: the provider is a
-// ScriptedProvider. The same suite is CI-gated by tests/coach/evals.test.ts.
+// ScriptedStreamProvider driving the real answer pipeline. The same suite is
+// CI-gated by tests/coach/evals.test.ts.
 //
 // Output is fixture ids, categories, check names and messages that quote only
 // the fixture's own text; it never prints a user's data.

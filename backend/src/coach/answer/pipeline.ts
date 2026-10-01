@@ -38,7 +38,7 @@ import { parseModelOutput } from './parse';
 import { buildAnswerSystemPrompt, buildRegenerationNote } from './prompt';
 import { AnswerRoute, routeQuestion } from './route';
 import { sentenceSplitter } from './sentences';
-import { resolveCard, validateSentence } from './validate';
+import { resolveCard, SentenceVerdict, validateSentence } from './validate';
 
 export type AnswerEngine = 'local' | 'hosted';
 
@@ -88,6 +88,8 @@ export interface AnswerDeps {
   budgetMs?: number;
   factData?: FactData;
   loadUser?: (userId: string) => Promise<{ timezone: string; coachPersonaId: string | null }>;
+  /** The per-sentence check. Only the eval harness replaces it (to prove its own number check); never the server. */
+  validate?: (sentence: string, sheet: FactSheet) => SentenceVerdict;
 }
 
 export const DEFAULT_ANSWER_BUDGET_MS = 45_000;
@@ -309,7 +311,7 @@ export async function* runAnswer(input: AnswerInput, deps: AnswerDeps): AsyncGen
       const splitter = sentenceSplitter();
       const handle = function* (sentences: string[]): Generator<AnswerEvent> {
         for (const sentence of sentences) {
-          const verdict = validateSentence(sentence, sheet);
+          const verdict = (deps.validate ?? validateSentence)(sentence, sheet);
           if (verdict.ok) {
             result.accepted.push(sentence);
             yield { type: 'text', sentence };
