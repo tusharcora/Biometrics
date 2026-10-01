@@ -76,12 +76,49 @@ describe('buildAnswerSystemPrompt', () => {
     for (const route of ['today', 'general'] as const) {
       const p = buildAnswerSystemPrompt(hoot, { today: '2026-09-30', sheet: { ...SHEET, route } });
       expect(p).toContain('- Answer their actual question in your first sentence.');
-      expect(p).toContain('- When [factor.*] facts show what drove a score, explain that why in plain words.');
+      expect(p).toContain('[factor.*]');
       // In words: validate.ts drops "30 minutes earlier" on data routes and "tonight" near a number on general.
-      expect(p).toContain('- Offer one specific, doable next step, in words rather than new numbers (e.g. "a bit earlier to bed tonight").');
+      expect(p).toContain('- Offer one specific, doable next step that fits their facts, in words rather than new numbers.');
       expect(p).toContain('- If a note mentions their goal or preference, connect your answer to it.');
-      expect(p).toContain('- Talk like a friend who knows their data, not like a report.');
+      expect(p).toContain('a friend who knows their data, not a report.');
     }
+  });
+
+  // R18 Q1: the live smoke blamed one driver and skipped the sheet's personal habit pattern.
+  it('asks for every relevant driver, including personal [habit.*] patterns, when explaining why', () => {
+    const p = buildAnswerSystemPrompt(hoot, { today: '2026-09-30', sheet: SHEET });
+    expect(p).toContain(
+      '- When explaining why, name every driver the facts show, not just one: [factor.*] effects on a score,\n' +
+        '  readings that are off their usual, and their personal patterns ([habit.*]) when they fit the question.',
+    );
+  });
+
+  // R18 Q1: "the lack of restorative depth in that 7h 14m of sleep" with no depth data on the sheet.
+  it('forbids metrics or causes the facts do not show', () => {
+    const p = buildAnswerSystemPrompt(hoot, { today: '2026-09-30', sheet: SHEET });
+    expect(p).toContain(
+      "- About the user, mention only metrics, causes and patterns the facts show. Never guess at what they don't\n" +
+        '  (sleep depth or stages, stress, illness, how tired or active they were).',
+    );
+  });
+
+  // R18 Q2: 5 of 5 smoke answers ended in a question, two of them generic check-ins.
+  it('makes the question back optional and bans generic check-ins', () => {
+    const p = buildAnswerSystemPrompt(hoot, { today: '2026-09-30', sheet: SHEET });
+    expect(p).not.toContain('Ask one short question back');
+    expect(p).toContain(
+      '- A question back is optional: ask one only when their answer would genuinely change what you suggest;\n' +
+        '  most replies need none. Never a generic check-in like "have you noticed any changes or stressors?".',
+    );
+  });
+
+  // R18 Q2: the persona's voice, and no stock advice echoed reply after reply.
+  it("asks for the persona's voice and fresh advice, without a copyable stock phrase", () => {
+    const p = buildAnswerSystemPrompt(hoot, { today: '2026-09-30', sheet: SHEET });
+    expect(p).toContain("- Speak in the persona's voice and tone throughout: a friend who knows their data, not a report.");
+    expect(p).toContain('- Say it in your own words: no stock phrases, and never repeat advice you already gave in this chat.');
+    // The old example was echoed verbatim in two of five smoke answers.
+    expect(p).not.toContain('a bit earlier to bed');
   });
 
   it('sends urgent-sounding symptoms to urgent care on every route', () => {
