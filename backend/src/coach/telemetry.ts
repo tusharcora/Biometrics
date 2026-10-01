@@ -28,7 +28,12 @@ export type CoachEventName =
   | 'coach.push_sent'
   | 'coach.push_failed'
   | 'coach.retention_run'
-  | 'coach.user_data_deleted';
+  | 'coach.user_data_deleted'
+  | 'coach.answer_sentence_dropped'
+  | 'coach.answer_regenerated'
+  | 'coach.answer_done'
+  | 'coach.answer_error'
+  | 'coach.model_warm';
 
 export type CoachEventAttributes = Record<string, string | number | boolean>;
 
