@@ -13,7 +13,13 @@
 // windowed conversation) are ever placed in a request. Tokens and full history
 // have no path into it.
 
-import type { CoachToolSchema } from '../tools';
+/** A tool offered on a `generate` call. Nothing offers tools any more; removed together with `generate`. */
+export interface CoachToolSchema {
+  name: string;
+  description: string;
+  /** JSON Schema for the arguments, handed to the model provider. */
+  parameters: Record<string, unknown>;
+}
 
 export type CoachTier = 'fast' | 'synthesis';
 

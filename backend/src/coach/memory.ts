@@ -141,7 +141,7 @@ export interface MemoryResolution {
  * is deleted, every other one becomes CONFIRMED. Every PENDING row at this point
  * was proposed on an earlier turn, because this turn's proposals are only
  * written after the reply is validated. `dismissed` counts rows actually
- * deleted; the orchestrator tells the user when it is above zero.
+ * deleted (reported in coach.memory_resolved; the entry also leaves the Coach memory list).
  */
 export async function resolvePendingMemories(
   userId: string,

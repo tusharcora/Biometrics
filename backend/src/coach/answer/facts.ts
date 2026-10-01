@@ -10,7 +10,7 @@
 
 import { shiftDate } from '../../scoring/dates';
 import { MAX_MEMORY_VALUE_CHARS, MemoryCategory, MemoryProposal, loadConfirmedMemories } from '../memory';
-import { escapeField } from '../prompt';
+import { escapeField } from '../escape';
 import { getHabitCorrelations, getScoreHistory, getUserGoals } from '../tools';
 import { DailyScoreToolResult, getDailyScore } from '../tools/dailyScore';
 import { DailyMetricsToolResult, getDailyMetrics, getMetricHistory, MetricHistoryToolResult, MetricKey } from '../tools/metrics';

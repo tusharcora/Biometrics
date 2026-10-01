@@ -13,7 +13,7 @@ import { hasCurrentConsent } from '../consent';
 import { EngineSelection, selectEngine } from '../engine';
 import type { CoachModelProvider } from '../model/provider';
 import { CoachPersona, REQUIRED_DISALLOWED_TOPICS, resolvePersona } from '../personas';
-import { escapeField } from '../prompt';
+import { escapeField } from '../escape';
 import type { CoachTelemetry } from '../telemetry';
 import type { CardStatus } from './card';
 import { statusOf } from './card';

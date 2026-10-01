@@ -1,7 +1,6 @@
 import { classifyHealthFact } from '../../src/coach/guardrails/healthFact';
 import { classifyMemoryFeedback } from '../../src/coach/guardrails/memoryFeedback';
 import { validateMemoryInput, MEMORY_CATEGORIES, MAX_MEMORY_VALUE_CHARS } from '../../src/coach/memory';
-import { COACH_TOOL_SCHEMAS, coachTools, PROPOSE_MEMORY_SCHEMA } from '../../src/coach/tools';
 
 describe('health-fact classifier (memory second layer)', () => {
   it.each([
@@ -177,34 +176,5 @@ describe('next-message feedback detector', () => {
   it('without an entry value only the explicit rule can dismiss', () => {
     expect(classifyMemoryFeedback('nope')).toBe('confirm');
     expect(classifyMemoryFeedback('I meant something else')).toBe('confirm');
-  });
-});
-
-describe('proposeMemory tool', () => {
-  const ctx = { today: '2026-09-20' };
-
-  it('is exposed to the model but is not part of the read-only registry, and its schema pins the closed enum and the length', () => {
-    expect(COACH_TOOL_SCHEMAS.map((t) => t.name)).not.toContain('proposeMemory');
-    expect(coachTools.schemas.map((t) => t.name)).toContain('proposeMemory');
-    const props = (PROPOSE_MEMORY_SCHEMA.parameters as any).properties;
-    expect(props.category.enum).toEqual(['TRAINING_GOAL', 'SCHEDULE', 'PREFERENCE']);
-    expect(props.value.maxLength).toBe(140);
-    expect((PROPOSE_MEMORY_SCHEMA.parameters as any).additionalProperties).toBe(false);
-  });
-
-  it('validates only: a good call returns the normalised proposal and touches no database', async () => {
-    const out = await coachTools.run('no-such-user', 'proposeMemory', { category: 'SCHEDULE', value: ' Runs at 6am ' }, ctx);
-    expect(out).toEqual({ ok: true, result: { proposal: { category: 'SCHEDULE', value: 'Runs at 6am' } } });
-  });
-
-  it.each([
-    [{ category: 'MEDICAL', value: 'x' }, 'invalid_arguments'],
-    [{ category: 'SCHEDULE', value: 'y'.repeat(141) }, 'invalid_arguments'],
-    [{ category: 'SCHEDULE', value: 'has a knee injury' }, 'memory_rejected'],
-    [{}, 'invalid_arguments'],
-    [null, 'invalid_arguments'],
-    ['nope', 'invalid_arguments'],
-  ])('rejects %j as %s', async (args, error) => {
-    expect(await coachTools.run('u', 'proposeMemory', args, ctx)).toEqual({ ok: false, error });
   });
 });

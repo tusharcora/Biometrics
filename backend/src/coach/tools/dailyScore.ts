@@ -119,13 +119,3 @@ export async function getDailyScore(userId: string, date: string): Promise<Daily
     sleepChangeDisplay: describeScoreChange(slp.delta),
   };
 }
-
-/** The newest civil date on or before `onOrBefore` that has an actual (non-cold-start) Recovery score. */
-export async function findMostRecentScoreDate(userId: string, onOrBefore: string): Promise<string | null> {
-  const row = await prisma.dailyScore.findFirst({
-    where: { userId, type: 'RECOVERY', score: { not: null }, date: { lte: civilDateToUtcMidnight(onOrBefore) } },
-    orderBy: { date: 'desc' },
-    select: { date: true },
-  });
-  return row ? row.date.toISOString().slice(0, 10) : null;
-}

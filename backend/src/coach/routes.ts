@@ -3,15 +3,14 @@ import { AuthedRequest, requireAuth } from '../auth/middleware';
 import { prisma } from '../db/client';
 import { CoachClock, systemClock } from './clock';
 import { COACH_CONSENT, COACH_HOSTED_CONSENT, consentTextFor, grantConsent, hasCurrentConsent, revokeConsent, setEngineIfConsented } from './consent';
-import { getAnswerBudgetMs, getCoachBudgets, getCoachProvider, getHostedProvider, isCoachEnabled, isExpoPushProvider } from './config';
+import { getAnswerBudgetMs, getCoachProvider, getHostedProvider, isCoachEnabled, isExpoPushProvider } from './config';
 import { isExpoPushToken } from './push';
 import { TurnInProgressError, TurnRateLimitedError, withTurnGuard } from './turnGuard';
 import type { CoachModelProvider } from './model/provider';
 import { toMemoryDTO, validateMemoryValue } from './memory';
-import { HISTORY_WINDOW, OrchestratorDeps } from './orchestrator';
 import { cleanLegacyText, LEGACY_DISCLAIMER } from './answer/history';
 import type { FactData } from './answer/facts';
-import { AnswerDeps, AnswerEvent, runAnswer } from './answer/pipeline';
+import { ANSWER_HISTORY_WINDOW, AnswerDeps, AnswerEvent, runAnswer } from './answer/pipeline';
 import { warmModel } from './answer/warm';
 import { clearTodaySummary, generateTodaySummary, getTodaySummary, summaryEngineDeps, TodayDeps } from './answer/today';
 import type { MemoryDTO } from './memory';
@@ -19,7 +18,6 @@ import { findPersona, listPersonas, resolvePersona } from './personas';
 import { CRISIS_RESOURCES } from './guardrails/crisis';
 import { selectEngine } from './engine';
 import { CoachTelemetry, LoggerCoachTelemetry } from './telemetry';
-import type { CoachTools } from './tools';
 
 export const MAX_MESSAGE_CHARS = 2000;
 export const MAX_PUSH_TOKEN_CHARS = 512;
@@ -35,8 +33,6 @@ export interface CoachRouterDeps {
   today?: TodayDeps;
   telemetry: CoachTelemetry;
   clock: CoachClock;
-  tools?: CoachTools;
-  budgets?: OrchestratorDeps['budgets'];
   /** Overrides COACH_LOCAL_BUDGET_MS (tests). */
   answerBudgetMs?: number;
   /** Overrides the fact sheet's data access (tests). */
@@ -158,10 +154,7 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
       }),
     telemetry: overrides.telemetry ?? new LoggerCoachTelemetry(),
     clock: overrides.clock ?? systemClock,
-    ...(overrides.tools ? { tools: overrides.tools } : {}),
   };
-  const budgets = overrides.budgets ?? getCoachBudgets();
-  if (budgets) deps.budgets = budgets;
   const router = Router();
 
   // The day summary is written by the same engine the user's messages go to.
@@ -403,7 +396,7 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
         const prior = await prisma.coachMessage.findMany({
           where: { conversationId },
           orderBy: { createdAt: 'desc' },
-          take: HISTORY_WINDOW,
+          take: ANSWER_HISTORY_WINDOW,
         });
         history = prior.reverse().map((m) => ({
           role: m.role === 'USER' ? 'user' : 'assistant',

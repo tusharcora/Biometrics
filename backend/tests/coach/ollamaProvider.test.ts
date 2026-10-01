@@ -9,7 +9,6 @@ import {
 } from '../../src/coach/model/ollama';
 import type { CoachModelRequest } from '../../src/coach/model/provider';
 import {
-  getCoachBudgets,
   getCoachProvider,
   resetCoachProviderFromEnv,
   setCoachProvider,
@@ -224,15 +223,5 @@ describe('coach provider selection', () => {
     process.env.OLLAMA_MODEL = 'm';
     process.env.OLLAMA_NUM_CTX = 'lots';
     expect(() => ollamaProviderFromEnv()).toThrow(OllamaConfigError);
-  });
-
-  it('reads latency budgets from env, ignoring junk', () => {
-    delete process.env.COACH_FAST_BUDGET_MS;
-    delete process.env.COACH_SYNTHESIS_BUDGET_MS;
-    expect(getCoachBudgets()).toBeUndefined();
-
-    process.env.COACH_FAST_BUDGET_MS = '90000';
-    process.env.COACH_SYNTHESIS_BUDGET_MS = 'soon';
-    expect(getCoachBudgets()).toEqual({ fast: 90000 });
   });
 });

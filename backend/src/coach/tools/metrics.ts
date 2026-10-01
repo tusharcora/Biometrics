@@ -1,4 +1,4 @@
-// Coach tools over the user's own daily metrics and habit logs. Same contract
+// Readers over the user's own daily metrics, for the fact sheet. Same contract
 // as the score tools: read-only, structured fields only, every comparison
 // (delta, direction, percent of goal, averages) computed HERE so the model
 // never does arithmetic, and ready-made display strings for values a person
@@ -7,7 +7,6 @@
 
 import { civilDateToUtcMidnight } from '../../biometrics/civilDate';
 import { prisma } from '../../db/client';
-import { listHabitTypes } from '../../habits/habitTypes';
 import { shiftDate } from '../../scoring/dates';
 import { getSleepGoalMinutes } from '../../users/goals';
 import { compareScores, Direction } from './dailyScore';
@@ -17,8 +16,6 @@ export type MetricKey = (typeof METRIC_KEYS)[number];
 
 // The same goal the app draws the steps ring and heat map against (mobile METRIC_CONFIG).
 export const STEPS_GOAL = 10_000;
-export const MAX_HABIT_LOG_DAYS = 30;
-const MAX_HABIT_LOG_ENTRIES = 60;
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
@@ -249,64 +246,4 @@ export async function getMetricHistory(userId: string, metric: MetricKey, days: 
     result.daysAtGoalDisplay = `${result.daysAtGoal} of ${days}`;
   }
   return result;
-}
-
-export interface HabitLogsToolResult {
-  days: number;
-  from: string;
-  to: string;
-  checkedInDays: number;
-  habits: { habitType: string; habitLabel: string; unit: string; daysLogged: number; total: number; daysWithNone: number }[];
-  entries: { date: string; habitLabel: string; value: number; unit: string }[];
-  entriesTruncated: boolean;
-}
-
-/**
- * What the user logged over the last N days: a per-habit summary plus the
- * individual entries (newest first, capped). Free-text notes are never
- * included: they are the user's words, not data, and could carry anything.
- */
-export async function getHabitLogs(userId: string, days: number, today: string): Promise<HabitLogsToolResult> {
-  const from = shiftDate(today, -(days - 1));
-  const range = { gte: civilDateToUtcMidnight(from), lte: civilDateToUtcMidnight(today) };
-  const [logs, checkIns, types] = await Promise.all([
-    prisma.habitLog.findMany({
-      where: { userId, habitDay: range },
-      orderBy: [{ habitDay: 'desc' }, { loggedAt: 'desc' }],
-      select: { habitType: true, value: true, unit: true, habitDay: true },
-    }),
-    prisma.habitCheckIn.count({ where: { userId, habitDay: range } }),
-    listHabitTypes(userId),
-  ]);
-  const labelOf = new Map(types.map((t) => [t.type, t.label]));
-  const byType = new Map<string, { unit: string; days: Set<string>; noneDays: Set<string>; total: number }>();
-  for (const l of logs) {
-    const day = l.habitDay.toISOString().slice(0, 10);
-    const agg = byType.get(l.habitType) ?? { unit: l.unit, days: new Set<string>(), noneDays: new Set<string>(), total: 0 };
-    agg.days.add(day);
-    if (l.value === 0) agg.noneDays.add(day);
-    agg.total += l.value;
-    byType.set(l.habitType, agg);
-  }
-  return {
-    days,
-    from,
-    to: today,
-    checkedInDays: checkIns,
-    habits: [...byType.entries()].map(([habitType, a]) => ({
-      habitType,
-      habitLabel: labelOf.get(habitType) ?? habitType,
-      unit: a.unit,
-      daysLogged: a.days.size,
-      total: round1(a.total),
-      daysWithNone: a.noneDays.size,
-    })),
-    entries: logs.slice(0, MAX_HABIT_LOG_ENTRIES).map((l) => ({
-      date: l.habitDay.toISOString().slice(0, 10),
-      habitLabel: labelOf.get(l.habitType) ?? l.habitType,
-      value: round1(l.value),
-      unit: l.unit,
-    })),
-    entriesTruncated: logs.length > MAX_HABIT_LOG_ENTRIES,
-  };
 }

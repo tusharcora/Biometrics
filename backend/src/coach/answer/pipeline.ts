@@ -12,7 +12,7 @@
 // unreachable/failed -> model_unavailable, budget -> timeout, two failed
 // attempts -> validation_failed, anything else -> internal. Only a finished
 // (or stopped-with-text) answer is persisted, so Retry resends cleanly.
-// Replaces the orchestrator's tool loop, which stays in the tree until phase 5.
+// It replaced the multi-round tool loop (removed in phase 5).
 
 import { randomUUID } from 'crypto';
 import { localCivilDateOrUtc } from '../../biometrics/civilDate';
@@ -57,7 +57,7 @@ export interface AnswerInput {
   userId: string;
   /** Already trimmed and length-checked by the route. */
   message: string;
-  /** Prior turns of this conversation, oldest first (the route loads the last HISTORY_WINDOW). */
+  /** Prior turns of this conversation, oldest first (the route loads the last ANSWER_HISTORY_WINDOW). */
   history: Array<{ role: 'user' | 'assistant'; text: string }>;
   /**
    * An existing conversation the caller has checked belongs to the user; omitted starts a

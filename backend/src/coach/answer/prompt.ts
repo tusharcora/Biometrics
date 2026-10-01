@@ -1,13 +1,13 @@
 // The answer system prompt (spec 2026-09-30, section 2.3). One call, no tools:
 // the persona's voice, today's date, the fact sheet, the safety rules and the
 // output contract (talk, then optional ```card and ```memory blocks). Persona
-// fields go through escapeField exactly as in the old prompt, so the persona
+// fields go through escapeField (escape.ts), so the persona
 // config is never a prompt-injection surface. The rules here are advisory;
 // validate.ts enforces the number and topic rules in code on every sentence.
 
 import { MEMORY_CATEGORIES } from '../memory';
 import { CoachPersona, REQUIRED_DISALLOWED_TOPICS } from '../personas/types';
-import { escapeField } from '../prompt';
+import { escapeField } from '../escape';
 import { FactSheet, renderFactSheet } from './facts';
 
 /** Reply length per persona verbosity: 2-5 sentences overall (spec 2.3). */

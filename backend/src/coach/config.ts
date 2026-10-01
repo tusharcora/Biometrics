@@ -54,26 +54,6 @@ export function resetCoachProviderFromEnv(): void {
   envProvider = null;
 }
 
-/**
- * Latency budgets for a turn, overridable because a local model is much slower
- * than the 12 s the fast tier was designed around (a 27B on an M1 Pro answered
- * in 15-72 s in the spike). Unset means the orchestrator's defaults. The mobile
- * client gives up after its own timeout (EXPO_PUBLIC_COACH_TIMEOUT_MS), which
- * must be longer than the fast budget or answers arrive after it stopped waiting.
- */
-export function getCoachBudgets(): { fast?: number; synthesis?: number } | undefined {
-  const read = (name: string): number | undefined => {
-    const raw = process.env[name]?.trim();
-    if (!raw) return undefined;
-    const n = Number(raw);
-    return Number.isFinite(n) && n > 0 ? n : undefined;
-  };
-  const fast = read('COACH_FAST_BUDGET_MS');
-  const synthesis = read('COACH_SYNTHESIS_BUDGET_MS');
-  if (fast === undefined && synthesis === undefined) return undefined;
-  return { ...(fast !== undefined ? { fast } : {}), ...(synthesis !== undefined ? { synthesis } : {}) };
-}
-
 export const LOCAL_ANSWER_BUDGET_MS = 45_000;
 export const HOSTED_ANSWER_BUDGET_MS = 30_000;
 
