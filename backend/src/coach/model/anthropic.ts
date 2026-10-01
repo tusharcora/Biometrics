@@ -26,13 +26,7 @@
 
 import Anthropic from '@anthropic-ai/sdk';
 import { CoachClock, systemClock } from '../clock';
-import type {
-  CoachModelMessage,
-  CoachModelProvider,
-  CoachModelRequest,
-  CoachModelResponse,
-  CoachStreamRequest,
-} from './provider';
+import type { CoachModelProvider, CoachStreamRequest } from './provider';
 
 export const DEFAULT_HOSTED_MODEL = 'claude-opus-5-5';
 export const HOSTED_MAX_TOKENS = 2000;
@@ -103,28 +97,6 @@ export function toAnthropicMessages(messages: readonly ChatMessage[]): ChatMessa
   return out;
 }
 
-/** The legacy tool-loop transcript as plain text turns: the hosted model is never given tools. */
-function legacyMessages(messages: readonly CoachModelMessage[]): ChatMessage[] {
-  const out: ChatMessage[] = [];
-  for (const m of messages) {
-    switch (m.role) {
-      case 'user':
-      case 'assistant':
-        out.push({ role: m.role, content: m.content });
-        break;
-      case 'system':
-        out.push({ role: 'user', content: `[system notice] ${m.content}` });
-        break;
-      case 'tool':
-        out.push({ role: 'user', content: `[${m.name} result] ${m.content}` });
-        break;
-      case 'assistant_tool_calls':
-        break;
-    }
-  }
-  return toAnthropicMessages(out);
-}
-
 export class AnthropicProvider implements CoachModelProvider {
   readonly id: string;
   private readonly client: Pick<Anthropic, 'beta'>;
@@ -189,22 +161,6 @@ export class AnthropicProvider implements CoachModelProvider {
     } finally {
       timer.cancel();
     }
-  }
-
-  async generate(request: CoachModelRequest): Promise<CoachModelResponse> {
-    const message = await this.client.beta.messages.create(
-      { ...this.params(request.system, legacyMessages(request.messages)), stream: false },
-      { signal: request.signal },
-    );
-    if (message.stop_reason === 'refusal') throw new HostedRefusalError();
-    // Only the content after the last fallback boundary is the serving model's answer.
-    const lastFallback = message.content.map((b) => b.type).lastIndexOf('fallback');
-    const text = message.content
-      .slice(lastFallback + 1)
-      .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === 'text')
-      .map((b) => b.text)
-      .join('');
-    return { type: 'text', text };
   }
 }
 

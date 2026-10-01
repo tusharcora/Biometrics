@@ -14,7 +14,7 @@ import {
   maskPushToken,
   PushTarget,
 } from '../../src/coach/push';
-import { ScriptedProvider } from '../../src/coach/model/provider';
+import { ScriptedStreamProvider } from '../../src/coach/model/provider';
 import { FakeClock, RecordingTelemetry, createUser } from './helpers';
 import { testServer } from '../helpers/server';
 
@@ -309,7 +309,7 @@ describe('POST /me/push-token shape validation', () => {
   function app() {
     const a = express();
     a.use(express.json());
-    a.use(createCoachRouter({ getProvider: () => new ScriptedProvider([]), telemetry: new RecordingTelemetry(), clock: new FakeClock() }));
+    a.use(createCoachRouter({ getProvider: () => new ScriptedStreamProvider([]), telemetry: new RecordingTelemetry(), clock: new FakeClock() }));
     return a;
   }
   async function authed(userId: string) {

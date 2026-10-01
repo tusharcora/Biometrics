@@ -48,7 +48,6 @@ function setup(today: { now?: () => Date } = {}) {
       requests.push(req);
       yield NEW_VOICE;
     },
-    generate: async () => ({ type: 'text', text: '' }),
   };
   const tasks: Array<() => Promise<unknown>> = [];
   const a = express();

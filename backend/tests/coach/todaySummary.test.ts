@@ -64,9 +64,6 @@ function scripted(steps: Step[]) {
       yield text.slice(0, 10);
       yield text.slice(10);
     },
-    generate: async () => {
-      throw new Error('not used');
-    },
   };
   const selection: EngineSelection = { requested: 'local', provider, servedBy: () => 'local' };
   return { requests, selection };

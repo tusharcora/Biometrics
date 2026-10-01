@@ -21,7 +21,7 @@ export function isCoachEnabled(): boolean {
 // COACH_PROVIDER selects it: `ollama` is a model served by a local Ollama
 // (model/ollama.ts; loopback-only unless OLLAMA_ALLOW_REMOTE=true, so health
 // data stays on this machine); anything else, or unset, is the unconfigured
-// provider and every turn takes the server-composed fallback. Built once, on
+// provider and every answer is a model_unavailable error card. Built once, on
 // first use. A bad Ollama configuration is logged and degrades to the
 // unconfigured provider rather than crashing the server.
 let overrideProvider: CoachModelProvider | null = null;

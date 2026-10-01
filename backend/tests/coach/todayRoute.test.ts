@@ -53,9 +53,6 @@ function fake(id: string) {
       requests.push(req);
       yield GOOD;
     },
-    generate: async () => {
-      throw new Error('not used');
-    },
   };
   return provider;
 }

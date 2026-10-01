@@ -12,7 +12,7 @@ import {
   getHostedFirstTextMs,
   toAnthropicMessages,
 } from '../../src/coach/model/anthropic';
-import type { CoachModelRequest, CoachStreamRequest } from '../../src/coach/model/provider';
+import type { CoachStreamRequest } from '../../src/coach/model/provider';
 import { FakeClock } from './helpers';
 
 // The real SDK is never called: the constructor is auto-mocked (so the env
@@ -22,12 +22,12 @@ jest.mock('@anthropic-ai/sdk');
 type Event = { type: string; delta?: { type: string; text?: string }; content_block?: { type: string } };
 
 /**
- * A fake of the slice of the SDK the provider uses: beta.messages.stream / create.
+ * A fake of the slice of the SDK the provider uses: beta.messages.stream.
  * Like the SDK's stream, it fails with an abort error once the request signal
  * fires, and records when its iterator is closed early (the SDK aborts the HTTP
  * request on iterator.return()).
  */
-function fakeClient(opts: { events?: Event[]; stopReason?: string; failWith?: Error; content?: unknown[] } = {}) {
+function fakeClient(opts: { events?: Event[]; stopReason?: string; failWith?: Error } = {}) {
   const cancelled = { value: false };
   const stream = jest.fn((_body: Record<string, unknown>, options?: { signal?: AbortSignal }) => {
     const events = opts.events ?? [];
@@ -49,11 +49,7 @@ function fakeClient(opts: { events?: Event[]; stopReason?: string; failWith?: Er
       finalMessage: async () => ({ stop_reason: opts.stopReason ?? 'end_turn', content: [] }),
     };
   });
-  const create = jest.fn(async (_body: Record<string, unknown>, _options?: { signal?: AbortSignal }) => {
-    if (opts.failWith) throw opts.failWith;
-    return { stop_reason: opts.stopReason ?? 'end_turn', content: opts.content ?? [] };
-  });
-  return { client: { beta: { messages: { stream, create } } } as unknown as Anthropic, stream, create, cancelled };
+  return { client: { beta: { messages: { stream } } } as unknown as Anthropic, stream, cancelled };
 }
 
 const textDelta = (text: string): Event => ({ type: 'content_block_delta', delta: { type: 'text_delta', text } });
@@ -238,7 +234,7 @@ describe('AnthropicProvider.stream time to first text', () => {
       },
       finalMessage: async () => ({ stop_reason: 'end_turn', content: [] }),
     }));
-    return { client: { beta: { messages: { stream, create: jest.fn() } } } as unknown as Anthropic, stream };
+    return { client: { beta: { messages: { stream } } } as unknown as Anthropic, stream };
   }
 
   const flush = () => new Promise((r) => setImmediate(r));
@@ -315,49 +311,6 @@ describe('AnthropicProvider.stream time to first text', () => {
       if (saved === undefined) delete process.env.COACH_HOSTED_FIRST_TEXT_MS;
       else process.env.COACH_HOSTED_FIRST_TEXT_MS = saved;
     }
-  });
-});
-
-describe('AnthropicProvider.generate (legacy text-only path)', () => {
-  const legacy = (overrides: Partial<CoachModelRequest> = {}): CoachModelRequest => ({
-    tier: 'fast',
-    system: 'SYS',
-    messages: [
-      { role: 'user', content: 'hi' },
-      { role: 'assistant_tool_calls', calls: [{ id: 'c1', name: 'getDailyScore', args: {} }] },
-      { role: 'tool', toolCallId: 'c1', name: 'getDailyScore', content: '{"recoveryScore":80}' },
-      { role: 'system', content: 'Use only the numbers above.' },
-    ],
-    tools: [{ name: 'getDailyScore', description: 'd', parameters: {} }],
-    signal: new AbortController().signal,
-    ...overrides,
-  });
-
-  it('sends no tools and folds tool results and notices into user text', async () => {
-    const { client, create } = fakeClient({ content: [{ type: 'thinking' }, { type: 'text', text: 'Recovery is 80.' }] });
-    const res = await new AnthropicProvider({ client }).generate(legacy());
-
-    expect(res).toEqual({ type: 'text', text: 'Recovery is 80.' });
-    const [body] = create.mock.calls[0]!;
-    expect(body).not.toHaveProperty('tools');
-    expect(body).toMatchObject({ output_config: { effort: 'low' }, betas: [HOSTED_FALLBACK_BETA], fallbacks: 'default' });
-    expect(body.messages).toEqual([
-      { role: 'user', content: 'hi' },
-      { role: 'user', content: '[getDailyScore result] {"recoveryScore":80}' },
-      { role: 'user', content: '[system notice] Use only the numbers above.' },
-    ]);
-  });
-
-  it('returns only the serving model text after a server-side fallback', async () => {
-    const { client } = fakeClient({
-      content: [{ type: 'text', text: 'Partial from the declining model' }, { type: 'fallback' }, { type: 'text', text: 'Recovery is 80.' }],
-    });
-    expect(await new AnthropicProvider({ client }).generate(legacy())).toEqual({ type: 'text', text: 'Recovery is 80.' });
-  });
-
-  it('throws HostedRefusalError on a refusal', async () => {
-    const { client } = fakeClient({ stopReason: 'refusal' });
-    await expect(new AnthropicProvider({ client }).generate(legacy())).rejects.toBeInstanceOf(HostedRefusalError);
   });
 });
 

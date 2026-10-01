@@ -12,7 +12,7 @@ import {
   scheduleWeeklyCoachDigest,
 } from '../../src/coach/queue';
 import { getCoachProvider, setCoachProvider } from '../../src/coach/config';
-import { ScriptedProvider } from '../../src/coach/model/provider';
+import { ScriptedStreamProvider } from '../../src/coach/model/provider';
 import { processSyncJob } from '../../src/sync/worker';
 import { RecordingTelemetry, createUser } from './helpers';
 
@@ -219,7 +219,7 @@ describe('scheduled job wiring', () => {
 
     it('the digest job is a no-op while COACH_ENABLED is off: the provider is never called', async () => {
       delete process.env.COACH_ENABLED;
-      const provider = new ScriptedProvider([]);
+      const provider = new ScriptedStreamProvider([]);
       setCoachProvider(provider);
       await processSyncJob(job(COACH_WEEKLY_DIGEST_JOB));
       expect(provider.callCount).toBe(0);

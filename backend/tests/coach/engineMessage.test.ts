@@ -48,9 +48,6 @@ function fake(id: string, opts: { failWith?: Error; warm?: () => Promise<void> }
       if (opts.failWith) throw opts.failWith;
       yield ANSWER;
     },
-    generate: async () => {
-      throw new Error(`${id}.generate is not used by the answer pipeline`);
-    },
   };
   return provider;
 }

@@ -148,7 +148,6 @@ describe('runDaySummaryJob', () => {
       async *stream() {
         yield 'Recovery is up at 71. Go enjoy a longer walk today.';
       },
-      generate: async () => ({ type: 'text', text: '' }),
     };
 
     const outcome = await runDaySummaryJob(
@@ -240,7 +239,6 @@ describe('summaryEngineDeps', () => {
   const provider = (id: string): CoachModelProvider => ({
     id,
     async *stream() {},
-    generate: async () => ({ type: 'text', text: '' }),
   });
   const slots = {
     getProvider: () => provider('local'),

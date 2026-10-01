@@ -119,13 +119,6 @@ const DEADLINE = Symbol('deadline');
 const STOPPED = Symbol('stopped');
 type Interrupt = typeof DEADLINE | typeof STOPPED;
 
-class ModelError extends Error {
-  constructor() {
-    super('model call failed');
-    this.name = 'ModelError';
-  }
-}
-
 interface AttemptResult {
   outcome: 'ok' | 'deadline' | 'stopped' | 'model_error';
   accepted: string[];

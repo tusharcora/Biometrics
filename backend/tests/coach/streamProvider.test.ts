@@ -1,7 +1,6 @@
 import {
   CoachStreamRequest,
   ProviderNotConfiguredError,
-  ScriptedProvider,
   ScriptedStreamProvider,
   UnconfiguredProvider,
 } from '../../src/coach/model/provider';
@@ -49,19 +48,14 @@ describe('ScriptedStreamProvider', () => {
     expect(await collect(p.stream(req()))).toEqual(['max=600']);
   });
 
-  it('fails loudly when the script runs out, and never generates', async () => {
+  it('fails loudly when the script runs out', async () => {
     const p = new ScriptedStreamProvider([]);
     await expect(collect(p.stream(req()))).rejects.toThrow('ScriptedStreamProvider: script exhausted');
-    await expect(p.generate()).rejects.toThrow('ScriptedStreamProvider does not generate');
   });
 });
 
 describe('stream on the other providers', () => {
   it('the unconfigured provider throws ProviderNotConfiguredError', async () => {
     await expect(collect(new UnconfiguredProvider().stream(req()))).rejects.toBeInstanceOf(ProviderNotConfiguredError);
-  });
-
-  it('the generate-only ScriptedProvider refuses to stream', async () => {
-    await expect(collect(new ScriptedProvider([]).stream(req()))).rejects.toThrow('ScriptedProvider does not stream');
   });
 });

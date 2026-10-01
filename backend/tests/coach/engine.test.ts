@@ -7,7 +7,7 @@ import { HostedWithLocalFallback, selectEngine } from '../../src/coach/engine';
 import { runAnswer } from '../../src/coach/answer/pipeline';
 import type { AnswerEvent } from '../../src/coach/answer/pipeline';
 import type { FactData } from '../../src/coach/answer/facts';
-import type { CoachModelProvider, CoachModelRequest, CoachStreamRequest } from '../../src/coach/model/provider';
+import type { CoachModelProvider, CoachStreamRequest } from '../../src/coach/model/provider';
 import { AnthropicProvider, HostedRefusalError } from '../../src/coach/model/anthropic';
 import { FakeClock, RecordingTelemetry, createUser } from './helpers';
 
@@ -24,10 +24,6 @@ function fake(id: string, chunks: string[], failAfter?: Error) {
       requests.push(request);
       for (const c of chunks) yield c;
       if (failAfter) throw failAfter;
-    },
-    async generate(_request: CoachModelRequest) {
-      if (failAfter) throw failAfter;
-      return { type: 'text' as const, text: chunks.join('') };
     },
   };
   return provider;
@@ -182,13 +178,6 @@ describe('HostedWithLocalFallback', () => {
     expect(await collect(p.stream(req()))).toEqual(['L.']);
     expect(p.servedBy).toBe('local');
   });
-
-  it('falls back the same way on the legacy generate path', async () => {
-    const p = new HostedWithLocalFallback(fake('hosted', [], new HostedRefusalError()), fake('local', ['From local.']));
-    const res = await p.generate({ tier: 'fast', system: 's', messages: [], tools: [], signal: new AbortController().signal });
-    expect(res).toEqual({ type: 'text', text: 'From local.' });
-    expect(p.servedBy).toBe('local');
-  });
 });
 
 // Through the real answer pipeline: the fallback happens inside the provider, so
@@ -287,9 +276,6 @@ describe('hosted fallback through runAnswer', () => {
             reject(Object.assign(new Error('Request was aborted.'), { name: 'APIUserAbortError' })),
           ),
         );
-      },
-      generate: async () => {
-        throw new Error('unused');
       },
     };
     return provider;

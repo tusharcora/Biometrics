@@ -20,12 +20,7 @@
 
 import { prisma } from '../db/client';
 import { hasCurrentConsent } from './consent';
-import type {
-  CoachModelProvider,
-  CoachModelRequest,
-  CoachModelResponse,
-  CoachStreamRequest,
-} from './model/provider';
+import type { CoachModelProvider, CoachStreamRequest } from './model/provider';
 
 export type EngineName = 'local' | 'hosted';
 
@@ -87,18 +82,6 @@ export class HostedWithLocalFallback implements CoachModelProvider {
       }
     }
     yield* this.local.stream(request);
-  }
-
-  async generate(request: CoachModelRequest): Promise<CoachModelResponse> {
-    if (this.servedBy === 'hosted') {
-      try {
-        return await this.hosted.generate(request);
-      } catch (err) {
-        if (request.signal.aborted) throw err;
-        this.fellBack(err);
-      }
-    }
-    return this.local.generate(request);
   }
 }
 

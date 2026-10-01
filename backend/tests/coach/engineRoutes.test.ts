@@ -37,9 +37,6 @@ afterEach(() => {
 /** A provider that must never be called by these routes. */
 const inert = (id: string): CoachModelProvider => ({
   id,
-  generate: async () => {
-    throw new Error(`${id} called`);
-  },
   // eslint-disable-next-line require-yield
   stream: async function* () {
     throw new Error(`${id} called`);
