@@ -292,9 +292,11 @@ describe('AnthropicProvider.stream time to first text', () => {
     expect(clock.pendingTimers).toBe(0);
   });
 
-  it('reads COACH_HOSTED_FIRST_TEXT_MS, clamped to 1-60 s, defaulting to 10 s', () => {
+  it('reads COACH_HOSTED_FIRST_TEXT_MS, clamped to 1 s - min(60 s, half the hosted budget), defaulting to 10 s', () => {
     const saved = process.env.COACH_HOSTED_FIRST_TEXT_MS;
+    const savedBudget = process.env.COACH_HOSTED_BUDGET_MS;
     try {
+      delete process.env.COACH_HOSTED_BUDGET_MS; // the 30 s default: at most 15 s to first text
       delete process.env.COACH_HOSTED_FIRST_TEXT_MS;
       expect(getHostedFirstTextMs()).toBe(10_000);
       process.env.COACH_HOSTED_FIRST_TEXT_MS = 'soon';
@@ -305,11 +307,21 @@ describe('AnthropicProvider.stream time to first text', () => {
       expect(getHostedFirstTextMs()).toBe(1_000);
       process.env.COACH_HOSTED_FIRST_TEXT_MS = '-1';
       expect(getHostedFirstTextMs()).toBe(1_000);
+      // Final review I6: 60 s against a 30 s budget left the local fallback no time at all.
+      process.env.COACH_HOSTED_FIRST_TEXT_MS = '60000';
+      expect(getHostedFirstTextMs()).toBe(15_000);
       process.env.COACH_HOSTED_FIRST_TEXT_MS = '900000';
+      expect(getHostedFirstTextMs()).toBe(15_000);
+      process.env.COACH_HOSTED_BUDGET_MS = '200000';
       expect(getHostedFirstTextMs()).toBe(60_000);
+      process.env.COACH_HOSTED_BUDGET_MS = '8000';
+      delete process.env.COACH_HOSTED_FIRST_TEXT_MS;
+      expect(getHostedFirstTextMs()).toBe(4_000); // the 10 s default, capped at half of 8 s
     } finally {
       if (saved === undefined) delete process.env.COACH_HOSTED_FIRST_TEXT_MS;
       else process.env.COACH_HOSTED_FIRST_TEXT_MS = saved;
+      if (savedBudget === undefined) delete process.env.COACH_HOSTED_BUDGET_MS;
+      else process.env.COACH_HOSTED_BUDGET_MS = savedBudget;
     }
   });
 });

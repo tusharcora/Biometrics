@@ -23,6 +23,27 @@ describe('getAnswerBudgetMs', () => {
     process.env.COACH_LOCAL_BUDGET_MS = '-5';
     expect(getAnswerBudgetMs('local')).toBe(45_000);
   });
+
+  // Final review I6: 0.5 or a value past setTimeout's 2^31-1 made every answer time out at once.
+  it('clamps a budget to 5 s - 10 min, as whole milliseconds, and logs the clamp once', () => {
+    const log = jest.spyOn(console, 'log').mockImplementation(() => {});
+    try {
+      process.env.COACH_LOCAL_BUDGET_MS = '0.5';
+      expect(getAnswerBudgetMs('local')).toBe(5_000);
+      expect(getAnswerBudgetMs('local')).toBe(5_000);
+      process.env.COACH_HOSTED_BUDGET_MS = '3000000000';
+      expect(getAnswerBudgetMs('hosted')).toBe(600_000);
+      process.env.COACH_LOCAL_BUDGET_MS = '61234.9';
+      expect(getAnswerBudgetMs('local')).toBe(61_234);
+      const clamped = log.mock.calls.map(([line]) => JSON.parse(String(line))).filter((e) => e.event === 'coach.config_clamped');
+      expect(clamped).toEqual([
+        { event: 'coach.config_clamped', name: 'COACH_LOCAL_BUDGET_MS', value: 5_000 },
+        { event: 'coach.config_clamped', name: 'COACH_HOSTED_BUDGET_MS', value: 600_000 },
+      ]);
+    } finally {
+      log.mockRestore();
+    }
+  });
 });
 
 describe('warmModel', () => {

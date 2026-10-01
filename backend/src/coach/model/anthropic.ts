@@ -25,6 +25,7 @@
 // are ever sent; no user id, email or name has a path into a request.
 
 import Anthropic from '@anthropic-ai/sdk';
+import { getAnswerBudgetMs, logClampOnce } from '../budgets';
 import { CoachClock, systemClock } from '../clock';
 import type { CoachModelProvider, CoachStreamRequest } from './provider';
 
@@ -36,15 +37,19 @@ const MIN_HOSTED_FIRST_TEXT_MS = 1_000;
 const MAX_HOSTED_FIRST_TEXT_MS = 60_000;
 
 /**
- * COACH_HOSTED_FIRST_TEXT_MS, clamped to 1-60 s; unset or not a number means
- * the 10 s default. Keep it well under COACH_HOSTED_BUDGET_MS: what is left of
- * that budget is what the local fallback gets.
+ * COACH_HOSTED_FIRST_TEXT_MS, clamped to 1 s - min(60 s, half of
+ * COACH_HOSTED_BUDGET_MS); unset or not a number means the 10 s default (under
+ * the same cap). What is left of the hosted budget is what the local fallback
+ * gets, so the cap always leaves it at least half.
  */
 export function getHostedFirstTextMs(): number {
+  const max = Math.min(MAX_HOSTED_FIRST_TEXT_MS, Math.floor(getAnswerBudgetMs('hosted') / 2));
   const raw = process.env.COACH_HOSTED_FIRST_TEXT_MS?.trim();
   const n = raw ? Number(raw) : NaN;
-  if (!Number.isFinite(n)) return DEFAULT_HOSTED_FIRST_TEXT_MS;
-  return Math.min(MAX_HOSTED_FIRST_TEXT_MS, Math.max(MIN_HOSTED_FIRST_TEXT_MS, Math.round(n)));
+  const ms = Number.isFinite(n) ? Math.round(n) : DEFAULT_HOSTED_FIRST_TEXT_MS;
+  const clamped = Math.min(max, Math.max(MIN_HOSTED_FIRST_TEXT_MS, ms));
+  if (Number.isFinite(n) && clamped !== ms) logClampOnce('COACH_HOSTED_FIRST_TEXT_MS', clamped);
+  return clamped;
 }
 
 /** The hosted model produced no text within the time-to-first-text limit. */

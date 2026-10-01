@@ -55,20 +55,8 @@ export function resetCoachProviderFromEnv(): void {
   envProvider = null;
 }
 
-export const LOCAL_ANSWER_BUDGET_MS = 45_000;
-export const HOSTED_ANSWER_BUDGET_MS = 30_000;
-
-/**
- * End-to-end budget for one streamed answer (spec 2026-09-30, section 2.5):
- * COACH_LOCAL_BUDGET_MS (default 45 s) or COACH_HOSTED_BUDGET_MS (default 30 s).
- * The mobile client's timeout must be longer than the budget.
- */
-export function getAnswerBudgetMs(engine: 'local' | 'hosted'): number {
-  const name = engine === 'hosted' ? 'COACH_HOSTED_BUDGET_MS' : 'COACH_LOCAL_BUDGET_MS';
-  const fallback = engine === 'hosted' ? HOSTED_ANSWER_BUDGET_MS : LOCAL_ANSWER_BUDGET_MS;
-  const n = Number(process.env[name]?.trim());
-  return Number.isFinite(n) && n > 0 ? n : fallback;
-}
+// The answer budgets live in budgets.ts (the hosted provider reads them too); re-exported here.
+export { HOSTED_ANSWER_BUDGET_MS, LOCAL_ANSWER_BUDGET_MS, getAnswerBudgetMs } from './budgets';
 
 export const DEFAULT_SUMMARY_CONCURRENCY = 1;
 export const MAX_SUMMARY_CONCURRENCY = 8;
