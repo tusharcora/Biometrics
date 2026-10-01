@@ -50,4 +50,11 @@ describe('RootNavigator: Coach Memory route', () => {
     await waitFor(() => expect(getByText('TABS_SCREEN')).toBeTruthy());
     expect(mockRegisteredScreens).toEqual(expect.arrayContaining(['CoachMemory']));
   });
+
+  it('registers the HostedConsent route (Profile -> AI engine -> Claude)', async () => {
+    const { getByText } = render(<RootNavigator />);
+
+    await waitFor(() => expect(getByText('TABS_SCREEN')).toBeTruthy());
+    expect(mockRegisteredScreens).toEqual(expect.arrayContaining(['HostedConsent']));
+  });
 });

@@ -499,6 +499,12 @@ export function grantHostedConsent(version: string): Promise<{ consented: true }
   return coachFetch<{ consented: true }>('/me/coach/consent', json('POST', { version, scope: 'hosted' }));
 }
 
+// Withdraws only the hosted opt-in; the coach consent stays. The server puts
+// the engine back to on-device in the same transaction, so refetch status after.
+export async function revokeHostedConsent(): Promise<void> {
+  await coachFetch<void>('/me/coach/consent?scope=hosted', { method: 'DELETE' });
+}
+
 // Newest first, 20 per page; pass the last row's lastMessageAt for the next page.
 export async function listConversations(before?: string): Promise<CoachConversationSummaryDTO[]> {
   const query = before ? `?before=${encodeURIComponent(before)}` : '';

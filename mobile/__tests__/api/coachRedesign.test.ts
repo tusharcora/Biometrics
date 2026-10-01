@@ -11,6 +11,7 @@ import {
   fetchConversation,
   fetchTodaySummary,
   grantHostedConsent,
+  revokeHostedConsent,
   listConversations,
   mapCoachError,
   sendCoachMessage,
@@ -251,5 +252,15 @@ describe('today summary', () => {
 
   it('reads a malformed body as no data', () => {
     expect(toTodaySummary(undefined)).toEqual({ date: '', hasData: false, sentence: null, bars: [] });
+  });
+});
+
+describe('revokeHostedConsent', () => {
+  it('DELETEs the hosted scope only and tolerates the 204', async () => {
+    fetchMock.mockResolvedValueOnce({ ok: true, status: 204, json: jest.fn() });
+    await expect(revokeHostedConsent()).resolves.toBeUndefined();
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('https://api.example.com/me/coach/consent?scope=hosted');
+    expect(init.method).toBe('DELETE');
   });
 });
