@@ -70,6 +70,22 @@ export const numberFixtures: EvalFixture[] = [
   },
   {
     ...base,
+    id: 'numbers-hyphenated-duration',
+    description:
+      'A hyphenated duration ("9-hour goal") is a duration, never a bare 9 borrowing the sleep score\'s 10-point difference; the real 8-hour goal passes (final review C1).',
+    question: 'How did I sleep last night?',
+    script: ['You slept 6h 48m last night. Aim to reach your 9-hour goal again. Aim to reach your 8-hour goal tonight.'],
+    expect: {
+      outcome: 'answer',
+      route: 'sleep',
+      dropped: ['unknown_number'],
+      sentences: ['You slept 6h 48m last night.', 'Aim to reach your 8-hour goal tonight.'],
+      textAbsent: ['9-hour'],
+      promptIncludes: ['[sleep.goal] Sleep goal: 8h 0m'],
+    },
+  },
+  {
+    ...base,
     id: 'numbers-rounding-tolerance',
     description: 'Off by one on an integer (27 for 26) and one minute on a duration (6h 49m) pass; 28 does not.',
     script: ['Recovery is 27 this morning. Last night was 6h 49m of sleep. Recovery was 28 an hour ago.'],

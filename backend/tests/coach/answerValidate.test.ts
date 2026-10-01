@@ -541,3 +541,55 @@ describe('validateSentence: numbers in a sentence naming two or more metrics (R3
     expect(validateSentence(sentence, PROBE)).toEqual(ok);
   });
 });
+
+// Final review C1: a hyphenated duration ("8-hour", "20-minute") is a duration,
+// never a bare number that may borrow any small value on the sheet.
+describe('validateSentence: hyphenated durations (final review C1)', () => {
+  const SLEEP: FactSheet = {
+    route: 'sleep',
+    facts: [
+      { id: 'sleep.total', label: 'Sleep last night', value: 408, unit: 'minutes', display: '6h 48m', usual: 433 },
+      { id: 'sleep_score.today', label: 'Sleep score today', value: 70, unit: 'score', display: '70', usual: 80 },
+      { id: 'sleep.goal', label: 'Sleep goal', value: 480, unit: 'minutes', display: '8h 0m' },
+      { id: 'sleep.avg7', label: 'Sleep 7-night average', value: 429, unit: 'minutes', display: '7h 9m', usual: 433 },
+    ],
+    notes: ['Sleep recorded on 7 of the last 7 nights'],
+  };
+  const TODAY: FactSheet = {
+    route: 'today',
+    facts: [
+      { id: 'recovery.today', label: 'Recovery today', value: 26, unit: 'score', display: '26', usual: 58 },
+      { id: 'sleep.total', label: 'Sleep last night', value: 408, unit: 'minutes', display: '6h 48m', usual: 433 },
+      { id: 'factor.rhr', label: 'Resting HR effect on the recovery score', value: -2.3, unit: 'score', display: '-2.3 points' },
+      { id: 'factor.hrv', label: 'HRV effect on the recovery score', value: -20, unit: 'score', display: '-20 points' },
+    ],
+    notes: [],
+  };
+
+  it('reads "8-hour", "20-minute" and "6-hour 48-minute" as durations', () => {
+    expect(extractNumbers('your 8-hour goal')).toEqual([{ kind: 'duration', minutes: 480 }]);
+    expect(extractNumbers('a 20-minute walk')).toEqual([{ kind: 'duration', minutes: 20 }]);
+    expect(extractNumbers('a 2 - hour nap')).toEqual([{ kind: 'duration', minutes: 120 }]);
+    expect(extractNumbers('a 6-hour 48-minute night')).toEqual([{ kind: 'duration', minutes: 408 }]);
+  });
+
+  it('keeps a range a range', () => {
+    expect(extractNumbers('7-9 hours')).toEqual([
+      { kind: 'duration', minutes: 420 },
+      { kind: 'duration', minutes: 540 },
+    ]);
+  });
+
+  it.each([
+    ['Aim to reach your 9-hour goal again.', 'no 9-hour value (it borrowed the sleep-score difference 10)', SLEEP],
+    ['Aim to reach your 6-hour goal again.', 'no 6-hour value (it borrowed the 7-of-7 nights note)', SLEEP],
+    ['A 2-hour nap could help.', 'no 2-hour value (it borrowed the resting HR factor 2.3)', TODAY],
+    ['Go for a 20-minute walk.', 'a new number (it borrowed the HRV factor 20)', TODAY],
+  ])('rejects %j (%s)', (sentence, _why, sheet) => {
+    expect(validateSentence(sentence as string, sheet as FactSheet)).toEqual(unknown);
+  });
+
+  it('accepts the real goal written with a hyphen', () => {
+    expect(validateSentence('Aim to reach your 8-hour goal again.', SLEEP)).toEqual(ok);
+  });
+});

@@ -103,10 +103,13 @@ const NUM = String.raw`(\d+(?:\.\d+)?)`;
 const HOURS = String.raw`(?:hours?|hrs?|h)`;
 const MINUTES = String.raw`(?:minutes?|mins?|m)`;
 
+// A range is scanned first, so "7-9 hours" stays two durations; after it, a hyphen between a
+// number and its unit ("an 8-hour goal", "a 20-minute walk") still makes a duration, never a bare
+// number free to match any small value on the sheet.
 const RANGE_RE = new RegExp(String.raw`${NUM}\s*(?:-|–|—|to)\s*${NUM}\s*(${HOURS}|${MINUTES})\b`, 'gi');
-const HOURS_MINUTES_RE = new RegExp(String.raw`(\d+)\s*${HOURS}\s*(?:and\s*)?(\d+)\s*${MINUTES}\b`, 'gi');
-const HOURS_RE = new RegExp(String.raw`${NUM}\s*${HOURS}\b`, 'gi');
-const MINUTES_RE = new RegExp(String.raw`${NUM}\s*${MINUTES}\b`, 'gi');
+const HOURS_MINUTES_RE = new RegExp(String.raw`(\d+)\s*-?\s*${HOURS}\s*(?:and\s*)?(\d+)\s*-?\s*${MINUTES}\b`, 'gi');
+const HOURS_RE = new RegExp(String.raw`${NUM}\s*-?\s*${HOURS}\b`, 'gi');
+const MINUTES_RE = new RegExp(String.raw`${NUM}\s*-?\s*${MINUTES}\b`, 'gi');
 const CLOCK_DURATION_RE = /\b(\d{1,2}):([0-5]\d)\b/g;
 const PLAIN_RE = /\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?/g;
 
