@@ -24,6 +24,7 @@ jest.mock('../../src/sync/queue', () => {
     enqueueFetchJob: jest.fn(),
     enqueueBackfillJob: jest.fn(),
     enqueueStepsHistoryBackfill: jest.fn(),
+    enqueueSleepHistoryBackfill: jest.fn(),
     connection: {
       set: async (key: string, value: string) => {
         store.set(key, value);
@@ -273,11 +274,12 @@ describe('GET /health/callback', () => {
       expect(arg.startDate < arg.endDate).toBe(true);
     });
 
-    it('enqueues the steps history backfill for the heat map after connecting', async () => {
+    it('enqueues the steps and sleep history backfills for the heat map after connecting', async () => {
       (subscriber.deleteUserSubscription as jest.Mock).mockReset().mockResolvedValue(undefined);
       const { user, healthUserId } = await createConnectedUser('sub-history');
       const state = await getHealthOAuthState(user.id);
       (queue.enqueueStepsHistoryBackfill as jest.Mock).mockReset().mockResolvedValue(undefined);
+      (queue.enqueueSleepHistoryBackfill as jest.Mock).mockReset().mockResolvedValue(undefined);
 
       (oauth.exchangeCodeForTokens as jest.Mock).mockResolvedValue({
         accessToken: 'health-access-5', refreshToken: 'health-refresh-5', expiresIn: 7200,
@@ -288,13 +290,15 @@ describe('GET /health/callback', () => {
       await request(await testServer(createApp())).get('/health/callback').query({ code: 'code', state });
 
       expect(queue.enqueueStepsHistoryBackfill).toHaveBeenCalledWith(user.id);
+      expect(queue.enqueueSleepHistoryBackfill).toHaveBeenCalledWith(user.id);
     });
 
-    it('still completes the connect when the steps history cannot be enqueued', async () => {
+    it('still completes the connect, and still queues the sleep history, when the steps history cannot be enqueued', async () => {
       (subscriber.deleteUserSubscription as jest.Mock).mockReset().mockResolvedValue(undefined);
       const { user, healthUserId } = await createConnectedUser('sub-history-fail');
       const state = await getHealthOAuthState(user.id);
       (queue.enqueueStepsHistoryBackfill as jest.Mock).mockReset().mockRejectedValue(new Error('redis down'));
+      (queue.enqueueSleepHistoryBackfill as jest.Mock).mockReset().mockResolvedValue(undefined);
       const consoleError = jest.spyOn(console, 'error').mockImplementation(() => undefined);
 
       (oauth.exchangeCodeForTokens as jest.Mock).mockResolvedValue({
@@ -310,6 +314,7 @@ describe('GET /health/callback', () => {
       expect(res.headers.location).toContain('status=connected');
       const conn = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
       expect(conn?.status).toBe('CONNECTED');
+      expect(queue.enqueueSleepHistoryBackfill).toHaveBeenCalledWith(user.id);
     });
 
     it('still completes the connect when deleting the previous subscription fails', async () => {

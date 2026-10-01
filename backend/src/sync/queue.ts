@@ -51,6 +51,21 @@ export function enqueueStepsHistoryBackfill(userId: string) {
   });
 }
 
+export const SLEEP_HISTORY_BACKFILL_JOB = 'backfillSleepHistory';
+
+export interface SleepHistoryBackfillJobData {
+  userId: string;
+}
+
+/** The sleep counterpart of enqueueStepsHistoryBackfill, deduped the same way. */
+export function enqueueSleepHistoryBackfill(userId: string) {
+  return syncQueue.add(SLEEP_HISTORY_BACKFILL_JOB, { userId } satisfies SleepHistoryBackfillJobData, {
+    jobId: `${SLEEP_HISTORY_BACKFILL_JOB}-${userId}`,
+    removeOnComplete: true,
+    removeOnFail: true,
+  });
+}
+
 /**
  * Schedules the token refresh sweep as a repeatable queue job rather than a
  * per-process setInterval. Without this, every backend instance would sweep

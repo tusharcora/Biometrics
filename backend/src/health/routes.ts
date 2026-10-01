@@ -5,7 +5,7 @@ import { buildAuthorizeUrl, exchangeCodeForTokens } from './oauth';
 import { getIdentity, registerUserSubscription, deleteUserSubscription } from './subscriber';
 import { isValidWebhookAuthorization } from './webhookVerify';
 import { encryptToken } from '../crypto/tokenCipher';
-import { enqueueBackfillJob, enqueueFetchJob, enqueueStepsHistoryBackfill } from '../sync/queue';
+import { enqueueBackfillJob, enqueueFetchJob, enqueueSleepHistoryBackfill, enqueueStepsHistoryBackfill } from '../sync/queue';
 import { isEmptyWindow } from '../sync/window';
 import { connection } from '../sync/queue';
 import { prisma } from '../db/client';
@@ -160,13 +160,18 @@ healthRouter.get('/health/callback', async (req, res) => {
       if (!isEmptyWindow(startIso, endIso)) {
         await enqueueBackfillJob({ userId, startDate: startIso, endDate: endIso });
       }
-      // A year of steps for the activity heat map. Only history: failing to
-      // queue it must not fail a connection that is already live, and the
-      // startup sweep picks up any connection still missing it.
+      // A year of steps and of sleep for the activity heat map. Only history:
+      // failing to queue it must not fail a connection that is already live,
+      // and the startup sweeps pick up any connection still missing it.
       try {
         await enqueueStepsHistoryBackfill(userId);
       } catch (historyErr) {
         console.error(`Failed to enqueue the steps history backfill for user ${userId}`, historyErr);
+      }
+      try {
+        await enqueueSleepHistoryBackfill(userId);
+      } catch (historyErr) {
+        console.error(`Failed to enqueue the sleep history backfill for user ${userId}`, historyErr);
       }
     } catch (err) {
       console.error('Google Health subscription registration or connection write failed', err);

@@ -119,6 +119,24 @@ export function sessionEndCivilDate(
   return localCivilDate(session.endTime, timeZone);
 }
 
+/**
+ * "HH:MM" (24-hour) of `instant` on the local wall clock: at the record's own
+ * UTC offset when it has one, else in `timeZone`. Same precedence as
+ * sessionEndCivilDate, so a night's bedtime and wake time follow the traveller.
+ */
+export function localClockTime(instant: Date, offsetSeconds: number | null | undefined, timeZone: string): string {
+  if (typeof offsetSeconds === 'number' && Number.isFinite(offsetSeconds)) {
+    return wallClockAtOffset(instant, offsetSeconds).toISOString().slice(11, 16);
+  }
+  const parts = clockFormatterFor(timeZone).formatToParts(instant);
+  const hour = parts.find((p) => p.type === 'hour')?.value;
+  const minute = parts.find((p) => p.type === 'minute')?.value;
+  if (!hour || !minute) {
+    throw new Error(`Could not derive local clock time for ${instant.toISOString()} in ${timeZone}`);
+  }
+  return `${hour}:${minute}`;
+}
+
 const MINUTES_PER_DAY = 24 * 60;
 
 /**

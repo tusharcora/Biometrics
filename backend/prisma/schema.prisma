@@ -137,7 +137,10 @@ model HealthConnection {
   // Set once the one-off 365-day STEPS history backfill (activity heat map)
   // has succeeded; null means it still needs to run (see sync/stepsHistory.ts).
   stepsHistoryBackfilledAt DateTime?
-  createdAt                DateTime               @default(now())
+  // The same for the one-off 365-day sleep history behind the activity heat
+  // map's Sleep page (see sync/sleepHistory.ts).
+  sleepHistoryBackfilledAt DateTime?
+  createdAt               DateTime               @default(now())
   updatedAt                DateTime               @updatedAt
 }
 

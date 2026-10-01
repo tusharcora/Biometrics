@@ -5,6 +5,7 @@ import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
 import { authHeaderFor } from '../helpers/auth';
 import { testServer } from '../helpers/server';
+import { storeSleepSessions } from '../../src/biometrics/repository';
 
 beforeAll(() => {
   migrateTestDb();
@@ -178,6 +179,120 @@ describe('GET /me/activity', () => {
     const res = await getActivity(me.id, { from: '2026-09-01', to: '2026-09-01' });
 
     expect(res.body).toEqual({ days: [], earliestDate: null });
+  });
+});
+
+describe('GET /me/sleep', () => {
+  // Through the real storage path, so the rollups are derived exactly as a sync derives them.
+  async function seedNight(userId: string, start: string, end: string, minutesAsleep: number, offsetSeconds: number | null = 0) {
+    await storeSleepSessions(userId, [
+      { startTime: new Date(start), endTime: new Date(end), minutesAsleep, startUtcOffsetSeconds: offsetSeconds, endUtcOffsetSeconds: offsetSeconds },
+    ]);
+  }
+
+  async function getSleep(userId: string, query: Record<string, string>) {
+    const authHeader = await authHeaderFor(userId);
+    return request(await testServer(createApp())).get('/me/sleep').query(query).set(authHeader);
+  }
+
+  it('returns each night on the date it ended, with local bedtime, wake time, time in bed and minutes asleep', async () => {
+    const user = await createUser('sleep-night');
+    // 23:52 -> 07:58 at UTC-4: ends on Sep 24 local.
+    await seedNight(user.id, '2026-09-24T03:52:00Z', '2026-09-24T11:58:00Z', 467, -14400);
+
+    const res = await getSleep(user.id, { from: '2026-09-01', to: '2026-09-30' });
+
+    expect(res.status).toBe(200);
+    expect(res.body.nights).toEqual([
+      { date: '2026-09-24', minutesAsleep: 467, minutesInBed: 486, bedtime: '23:52', wakeTime: '07:58', sleepScore: null },
+    ]);
+    expect(res.body.earliestDate).toBe('2026-09-24');
+  });
+
+  it("falls back to the user's timezone for a session stored without offsets", async () => {
+    const user = await createUser('sleep-tz');
+    await prisma.user.update({ where: { id: user.id }, data: { timezone: 'America/Los_Angeles' } });
+    // 22:30 -> 06:15 Pacific (UTC-7 in September).
+    await seedNight(user.id, '2026-09-10T05:30:00Z', '2026-09-10T13:15:00Z', 430, null);
+
+    const res = await getSleep(user.id, { from: '2026-09-10', to: '2026-09-10' });
+
+    expect(res.body.nights).toEqual([
+      { date: '2026-09-10', minutesAsleep: 430, minutesInBed: 465, bedtime: '22:30', wakeTime: '06:15', sleepScore: null },
+    ]);
+  });
+
+  it('sums a nap into the minutes but takes the bedtime and wake time from the main sleep', async () => {
+    const user = await createUser('sleep-nap');
+    await seedNight(user.id, '2026-09-11T23:30:00Z', '2026-09-12T07:00:00Z', 420);
+    await seedNight(user.id, '2026-09-12T14:00:00Z', '2026-09-12T14:40:00Z', 35);
+
+    const res = await getSleep(user.id, { from: '2026-09-12', to: '2026-09-12' });
+
+    expect(res.body.nights).toEqual([
+      { date: '2026-09-12', minutesAsleep: 455, minutesInBed: 490, bedtime: '23:30', wakeTime: '07:00', sleepScore: null },
+    ]);
+  });
+
+  it("includes that day's Sleep Score, rounded", async () => {
+    const user = await createUser('sleep-score');
+    await seedNight(user.id, '2026-09-14T23:00:00Z', '2026-09-15T07:00:00Z', 450);
+    await prisma.dailyScore.create({
+      data: { userId: user.id, date: new Date('2026-09-15'), type: 'SLEEP', algorithmVersion: 'test', score: 71.6, confidenceLevel: 'HIGH', factors: [] },
+    });
+    // A Recovery Score on the same day is not the Sleep Score.
+    await prisma.dailyScore.create({
+      data: { userId: user.id, date: new Date('2026-09-15'), type: 'RECOVERY', algorithmVersion: 'test', score: 40, confidenceLevel: 'HIGH', factors: [] },
+    });
+
+    const res = await getSleep(user.id, { from: '2026-09-15', to: '2026-09-15' });
+
+    expect(res.body.nights[0].sleepScore).toBe(72);
+  });
+
+  it('keeps nights outside the range out, but reports the oldest night as earliestDate', async () => {
+    const user = await createUser('sleep-range');
+    await seedNight(user.id, '2026-03-01T23:00:00Z', '2026-03-02T07:00:00Z', 400);
+    await seedNight(user.id, '2026-08-31T23:00:00Z', '2026-09-01T07:00:00Z', 410);
+    await seedNight(user.id, '2026-09-30T23:00:00Z', '2026-10-01T07:00:00Z', 420);
+
+    const res = await getSleep(user.id, { from: '2026-09-01', to: '2026-09-30' });
+
+    expect(res.body.nights.map((n: { date: string }) => n.date)).toEqual(['2026-09-01']);
+    expect(res.body.earliestDate).toBe('2026-03-02');
+  });
+
+  it('returns no nights and a null earliestDate when there is no sleep history', async () => {
+    const user = await createUser('sleep-empty');
+
+    const res = await getSleep(user.id, { from: '2026-09-01', to: '2026-09-30' });
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ nights: [], earliestDate: null });
+  });
+
+  it('validates the range like /me/activity', async () => {
+    const user = await createUser('sleep-invalid');
+
+    const res = await getSleep(user.id, { from: '2025-08-27', to: '2026-10-01' });
+
+    expect(res.status).toBe(400);
+    expect(typeof res.body.error).toBe('string');
+  });
+
+  it('rejects an unauthenticated request', async () => {
+    const res = await request(await testServer(createApp())).get('/me/sleep').query({ from: '2026-09-01', to: '2026-09-02' });
+    expect(res.status).toBe(401);
+  });
+
+  it("does not return another user's sleep", async () => {
+    const me = await createUser('sleep-me');
+    const other = await createUser('sleep-other');
+    await seedNight(other.id, '2026-09-01T23:00:00Z', '2026-09-02T07:00:00Z', 480);
+
+    const res = await getSleep(me.id, { from: '2026-09-01', to: '2026-09-30' });
+
+    expect(res.body).toEqual({ nights: [], earliestDate: null });
   });
 });
 

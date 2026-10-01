@@ -6,6 +6,7 @@ import { prisma } from './db/client';
 import { installShutdownHandlers } from './shutdown';
 import { scheduleNightlyScoreSweep } from './scoring/queue';
 import { enqueuePendingStepsHistoryBackfills } from './sync/stepsHistory';
+import { enqueuePendingSleepHistoryBackfills } from './sync/sleepHistory';
 import { scheduleCatchUpSweep } from './sync/catchUp';
 import { scheduleWeeklyHabitCorrelationSweep } from './habits/queue';
 import { scheduleDailyCoachRetention, scheduleWeeklyCoachDigest } from './coach/queue';
@@ -81,5 +82,9 @@ function startBackgroundWork(): void {
   // that does not have it yet (including ones made before it existed).
   enqueuePendingStepsHistoryBackfills().catch((err) =>
     console.error('Failed to enqueue pending steps history backfills', err),
+  );
+  // And a year of sleep history for its Sleep page.
+  enqueuePendingSleepHistoryBackfills().catch((err) =>
+    console.error('Failed to enqueue pending sleep history backfills', err),
   );
 }

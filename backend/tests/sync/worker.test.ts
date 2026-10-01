@@ -9,8 +9,9 @@ import * as oauth from '../../src/health/oauth';
 import * as subscriber from '../../src/health/subscriber';
 import { encryptToken, decryptToken } from '../../src/crypto/tokenCipher';
 import * as tokenRefreshJob from '../../src/sync/tokenRefreshJob';
-import { TOKEN_REFRESH_SWEEP_JOB, STEPS_HISTORY_BACKFILL_JOB } from '../../src/sync/queue';
+import { TOKEN_REFRESH_SWEEP_JOB, STEPS_HISTORY_BACKFILL_JOB, SLEEP_HISTORY_BACKFILL_JOB } from '../../src/sync/queue';
 import { stepsHistoryWindow } from '../../src/sync/stepsHistory';
+import { sleepHistoryWindow } from '../../src/sync/sleepHistory';
 import * as scoringQueue from '../../src/scoring/queue';
 import * as scoreSweep from '../../src/scoring/sweep';
 import { seedHistory, day } from '../scoring/dbHelpers';
@@ -821,6 +822,113 @@ describe('processSyncJob: steps history backfill', () => {
     const conn = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
     expect(conn?.status).toBe('CONNECTED');
     expect(conn?.stepsHistoryBackfilledAt).toBeNull();
+  });
+});
+
+describe('processSyncJob: sleep history backfill', () => {
+  const historyJob = (userId: string) => ({ name: SLEEP_HISTORY_BACKFILL_JOB, data: { userId } }) as Job;
+  const daysAgo = (n: number) => {
+    const d = new Date();
+    d.setUTCDate(d.getUTCDate() - n);
+    return d.toISOString().slice(0, 10);
+  };
+  // A night ending at 07:00 UTC on `date` (offset 0, so it keys onto `date`).
+  const night = (date: string, minutesAsleep: number) => ({
+    startTime: new Date(new Date(`${date}T07:00:00Z`).getTime() - 8 * 3600_000),
+    endTime: new Date(`${date}T07:00:00Z`),
+    minutesAsleep,
+    startUtcOffsetSeconds: 0,
+    endUtcOffsetSeconds: 0,
+  });
+
+  it('fetches a year of sleep sessions only, and stores them with their rollups', async () => {
+    const user = await createConnectedUser();
+    (healthClient.fetchSleepSessions as jest.Mock).mockResolvedValue([night(daysAgo(200), 420), night(daysAgo(10), 465)]);
+
+    await processSyncJob(historyJob(user.id));
+
+    const { startDate, endDate } = sleepHistoryWindow();
+    expect(healthClient.fetchMetricRange).not.toHaveBeenCalled();
+    expect(healthClient.fetchSleepSessions).toHaveBeenCalledTimes(1);
+    // Widened a day each side like every sleep fetch (see sleepWindow in the worker).
+    const [, from, to] = (healthClient.fetchSleepSessions as jest.Mock).mock.calls[0];
+    expect(from < startDate && to > endDate).toBe(true);
+    expect(await prisma.sleepSession.count({ where: { userId: user.id } })).toBe(2);
+    const rollups = await prisma.biometricRecord.findMany({ where: { userId: user.id, metricType: 'SLEEP' }, orderBy: { recordedAt: 'asc' } });
+    expect(rollups.map((r) => [r.recordedAt.toISOString().slice(0, 10), r.value])).toEqual([
+      [daysAgo(200), 420],
+      [daysAgo(10), 465],
+    ]);
+  });
+
+  it('re-scores the days a recent night feeds, but nothing older than the sweep lookback', async () => {
+    const user = await createConnectedUser();
+    (healthClient.fetchSleepSessions as jest.Mock).mockResolvedValue([night(daysAgo(200), 420), night(daysAgo(10), 465)]);
+
+    await processSyncJob(historyJob(user.id));
+
+    const dates = (scoringQueue.enqueueScoreCompute as jest.Mock).mock.calls.map((c) => c[1] as string);
+    expect(dates).toContain(daysAgo(10));
+    expect(dates).not.toContain(daysAgo(200));
+    expect(dates.every((d) => d >= daysAgo(90))).toBe(true);
+  });
+
+  it('marks the history as backfilled and leaves lastSyncedAt alone', async () => {
+    const user = await createConnectedUser();
+
+    await processSyncJob(historyJob(user.id));
+
+    const conn = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
+    expect(conn?.sleepHistoryBackfilledAt).toBeInstanceOf(Date);
+    expect(conn?.stepsHistoryBackfilledAt).toBeNull();
+    expect(conn?.lastSyncedAt).toBeNull();
+  });
+
+  it('is idempotent: a re-run overwrites the same night instead of duplicating it', async () => {
+    const user = await createConnectedUser();
+    (healthClient.fetchSleepSessions as jest.Mock)
+      .mockResolvedValueOnce([night(daysAgo(120), 400)])
+      .mockResolvedValueOnce([night(daysAgo(120), 410)]);
+
+    await processSyncJob(historyJob(user.id));
+    await processSyncJob(historyJob(user.id));
+
+    const rollups = await prisma.biometricRecord.findMany({ where: { userId: user.id, metricType: 'SLEEP' } });
+    expect(rollups).toHaveLength(1);
+    expect(rollups[0].value).toBe(410);
+  });
+
+  it('does nothing for a disconnected connection', async () => {
+    const user = await createConnectedUser();
+    await prisma.healthConnection.update({ where: { userId: user.id }, data: { status: 'DISCONNECTED' } });
+
+    await processSyncJob(historyJob(user.id));
+
+    expect(healthClient.fetchSleepSessions).not.toHaveBeenCalled();
+    const conn = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
+    expect(conn?.sleepHistoryBackfilledAt).toBeNull();
+  });
+
+  it('disconnects on a 401 that survives the refresh, without marking the history done', async () => {
+    const user = await createConnectedUser();
+    (healthClient.fetchSleepSessions as jest.Mock).mockRejectedValue(Object.assign(new Error('unauthorized'), { status: 401 }));
+
+    await processSyncJob(historyJob(user.id));
+
+    const conn = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
+    expect(conn?.status).toBe('DISCONNECTED');
+    expect(conn?.sleepHistoryBackfilledAt).toBeNull();
+  });
+
+  it('rethrows other errors so BullMQ retries, without marking the history done', async () => {
+    const user = await createConnectedUser();
+    (healthClient.fetchSleepSessions as jest.Mock).mockRejectedValue(Object.assign(new Error('rate limited'), { status: 429 }));
+
+    await expect(processSyncJob(historyJob(user.id))).rejects.toThrow('rate limited');
+
+    const conn = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
+    expect(conn?.status).toBe('CONNECTED');
+    expect(conn?.sleepHistoryBackfilledAt).toBeNull();
   });
 });
 
