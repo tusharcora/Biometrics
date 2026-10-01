@@ -507,7 +507,7 @@ export async function listConversations(before?: string): Promise<CoachConversat
     .filter((r): r is Record<string, unknown> => isRecord(r) && typeof r.id === 'string' && typeof r.lastMessageAt === 'string')
     .map((r) => ({
       id: r.id as string,
-      title: typeof r.title === 'string' && r.title.trim() ? r.title : 'New chat',
+      title: typeof r.title === 'string' && r.title.trim() ? r.title : 'Conversation',
       lastMessageAt: r.lastMessageAt as string,
       ...(typeof r.messageCount === 'number' && Number.isFinite(r.messageCount) ? { messageCount: r.messageCount } : {}),
     }));

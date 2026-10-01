@@ -143,7 +143,7 @@ describe('conversations', () => {
     );
     await expect(listConversations()).resolves.toEqual([
       { id: 'c2', title: 'How did I sleep?', lastMessageAt: '2026-09-30T08:00:00.000Z', messageCount: 4 },
-      { id: 'c1', title: 'New chat', lastMessageAt: '2026-09-28T08:00:00.000Z' },
+      { id: 'c1', title: 'Conversation', lastMessageAt: '2026-09-28T08:00:00.000Z' },
     ]);
     expect(fetchMock.mock.calls[0][0]).toBe('https://api.example.com/me/coach/conversations');
   });
