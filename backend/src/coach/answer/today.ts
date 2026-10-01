@@ -4,10 +4,22 @@
 // and always agree with each other; the AI sentence is an optional upgrade
 // written by the user's engine and validated like a reply.
 
+import type { Prisma } from '@prisma/client';
+import { civilDateToUtcMidnight, localCivilDate } from '../../biometrics/civilDate';
+import { prisma } from '../../db/client';
+import { CoachClock, systemClock, TimerHandle } from '../clock';
+import { getAnswerBudgetMs, getCoachProvider, getHostedProvider, isCoachEnabled } from '../config';
+import { hasCurrentConsent } from '../consent';
+import { EngineSelection, selectEngine } from '../engine';
+import { CoachPersona, REQUIRED_DISALLOWED_TOPICS, resolvePersona } from '../personas';
+import { escapeField } from '../prompt';
 import type { CardStatus } from './card';
 import { statusOf } from './card';
 import type { Fact, FactSheet, FactUnit } from './facts';
-import { formatValue } from './facts';
+import { buildFactSheet, defaultFactData, formatValue, renderFactSheet } from './facts';
+import { parseModelOutput } from './parse';
+import { sentenceSplitter } from './sentences';
+import { validateSentence } from './validate';
 
 export type TodayMetric = 'recovery' | 'sleep' | 'hrv' | 'rhr';
 
@@ -159,4 +171,242 @@ export function spansFor(text: string): TodaySpan[] {
   }
   if (at < text.length) spans.push({ text: text.slice(at) });
   return spans;
+}
+
+// ---- the stored sentence ------------------------------------------------------
+
+export const SUMMARY_MAX_WORDS = 45;
+const SUMMARY_MAX_TOKENS = 300;
+export const TODAY_REQUEST = "Write today's summary for the top of my Coach page.";
+
+export type SummaryRejection = 'empty' | 'too_long' | 'unknown_number' | 'disallowed_topic';
+
+const CORRECTIVE: Record<SummaryRejection, string> = {
+  empty: 'Your last draft was empty. Write the summary now.',
+  too_long: `Your last draft was too long. Keep it to ${SUMMARY_MAX_WORDS} words or fewer.`,
+  unknown_number:
+    'Your last draft used a number that is not in the facts. Use only numbers exactly as they appear in the facts, or none.',
+  disallowed_topic:
+    'Your last draft touched a topic you must not discuss. Stay with what the numbers show and one everyday suggestion.',
+};
+
+export interface TodayDeps {
+  /** The `today` fact sheet for the user's local day. Default: buildFactSheet(userId, 'today', { ...defaultFactData, today }). */
+  loadSheet?: (userId: string, today: string) => Promise<FactSheet>;
+  now?: () => Date;
+  /** The engine that writes the sentence. Default: the user's engine, hosted falling back to local. */
+  selectProvider?: (userId: string) => Promise<EngineSelection>;
+  clock?: CoachClock;
+  /** Default: the selected engine's answer budget (COACH_LOCAL_BUDGET_MS / COACH_HOSTED_BUDGET_MS). */
+  budgetMs?: number;
+  /** getTodaySummary only: called when today has data but no sentence has been written for it yet. */
+  onMissing?: () => void;
+  /** generateTodaySummary only: replace a sentence already stored for today (the after-sync job). */
+  force?: boolean;
+}
+
+export type SummaryOutcome =
+  | 'ai'
+  | 'template'
+  | 'skipped_disabled'
+  | 'skipped_no_consent'
+  | 'skipped_no_data'
+  | 'skipped_exists'
+  | 'skipped_persona_changed';
+
+const defaultLoadSheet = (userId: string, today: string) => buildFactSheet(userId, 'today', { ...defaultFactData, today });
+const defaultSelect = (userId: string) => selectEngine(userId, { local: getCoachProvider(), hosted: getHostedProvider() });
+
+function safeCivilDate(now: Date, timezone: string): string {
+  try {
+    return localCivilDate(now, timezone);
+  } catch {
+    return localCivilDate(now, 'UTC');
+  }
+}
+
+async function loadUser(userId: string) {
+  return prisma.user.findUnique({ where: { id: userId }, select: { timezone: true, coachPersonaId: true } });
+}
+
+/**
+ * Validates a model draft like a reply: fenced blocks dropped, at most
+ * SUMMARY_MAX_WORDS words, every sentence through validateSentence (numbers
+ * only from the fact sheet, no disallowed topic).
+ */
+export function checkSummary(
+  raw: string,
+  sheet: FactSheet,
+): { ok: true; text: string } | { ok: false; reason: SummaryRejection } {
+  // A max-token cutoff can leave the start of a fence ("``") that parseModelOutput does not see as one.
+  const text = parseModelOutput(raw)
+    .reply.replace(/`+\s*$/, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+  if (text.length === 0) return { ok: false, reason: 'empty' };
+  if (text.split(' ').length > SUMMARY_MAX_WORDS) return { ok: false, reason: 'too_long' };
+  const splitter = sentenceSplitter();
+  for (const sentence of [...splitter.push(text), ...splitter.end()]) {
+    const verdict = validateSentence(sentence, sheet);
+    if (!verdict.ok) return { ok: false, reason: verdict.reason };
+  }
+  return { ok: true, text };
+}
+
+function disallowedTopics(persona: CoachPersona): string[] {
+  const merged = [...persona.disallowedTopics];
+  for (const t of REQUIRED_DISALLOWED_TOPICS) if (!merged.includes(t)) merged.push(t);
+  return merged;
+}
+
+export function buildTodaySummaryPrompt(persona: CoachPersona, sheet: FactSheet, today: string): string {
+  return [
+    `You are ${escapeField(persona.name)}, the user's companion coach in a health app.`,
+    `Your tone: ${escapeField(persona.tone)}`,
+    ...(persona.focus ? [`Your coaching focus: ${escapeField(persona.focus)}`] : []),
+    `Today is ${today}.`,
+    '',
+    "Write the one short paragraph shown at the top of the user's Coach page, in this order:",
+    "1. What happened: last night's sleep and today's recovery, HRV or resting heart rate against your usual.",
+    '2. Why: the most likely reason, taken from a factor.* or habit.* fact when there is one (say what it is in plain words, never the id).',
+    '3. One concrete thing the user can do today, small enough to actually do.',
+    'Be specific to these numbers; never write a generic line that could fit any day.',
+    `At most ${SUMMARY_MAX_WORDS} words, in your own voice, speaking to the user as "you".`,
+    'Use only numbers that appear in the facts below, written the same way; never estimate or invent one. If a fact is missing, do not mention it.',
+    `Never give a medical diagnosis or medication or supplement advice. Topics you never discuss: ${disallowedTopics(persona).map((t) => escapeField(t)).join(', ')}.`,
+    'Plain sentences only: no list, no heading, no question, no code or card block.',
+    '',
+    'Facts:',
+    renderFactSheet(sheet),
+  ].join('\n');
+}
+
+/** One draft, then one corrective regeneration, all within the budget. Null when no draft passed. */
+async function writeSentence(
+  selection: EngineSelection,
+  persona: CoachPersona,
+  sheet: FactSheet,
+  today: string,
+  deps: TodayDeps,
+): Promise<string | null> {
+  const clock = deps.clock ?? systemClock;
+  const budget = deps.budgetMs ?? getAnswerBudgetMs(selection.requested);
+  const controller = new AbortController();
+  const system = buildTodaySummaryPrompt(persona, sheet, today);
+
+  async function attempts(): Promise<string | null> {
+    let note: string | null = null;
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      let raw = '';
+      for await (const chunk of selection.provider.stream({
+        system,
+        messages: [{ role: 'user', content: note ? `${TODAY_REQUEST}\n\n${note}` : TODAY_REQUEST }],
+        maxTokens: SUMMARY_MAX_TOKENS,
+        signal: controller.signal,
+      })) {
+        raw += chunk;
+      }
+      if (controller.signal.aborted) return null;
+      const verdict = checkSummary(raw, sheet);
+      if (verdict.ok) return verdict.text;
+      note = CORRECTIVE[verdict.reason];
+    }
+    return null;
+  }
+
+  let timer: TimerHandle | undefined;
+  const deadline = new Promise<null>((resolve) => {
+    timer = clock.setTimer(() => {
+      controller.abort();
+      resolve(null);
+    }, budget);
+  });
+  try {
+    return await Promise.race([attempts().catch(() => null), deadline]);
+  } finally {
+    timer?.cancel();
+  }
+}
+
+async function generate(userId: string, deps: TodayDeps): Promise<SummaryOutcome> {
+  if (!isCoachEnabled()) return 'skipped_disabled';
+  if (!(await hasCurrentConsent(userId))) return 'skipped_no_consent';
+  const user = await loadUser(userId);
+  if (!user) return 'skipped_no_data';
+
+  const today = safeCivilDate((deps.now ?? (() => new Date()))(), user.timezone);
+  const where = { userId_date: { userId, date: civilDateToUtcMidnight(today) } };
+  if (!deps.force && (await prisma.coachDaySummary.findUnique({ where, select: { id: true } }))) return 'skipped_exists';
+
+  const sheet = await (deps.loadSheet ?? defaultLoadSheet)(userId, today);
+  if (buildBars(sheet).length === 0) return 'skipped_no_data';
+
+  const persona = resolvePersona(user.coachPersonaId);
+  const selection = await (deps.selectProvider ?? defaultSelect)(userId);
+  const text = await writeSentence(selection, persona, sheet, today, deps);
+
+  // A character switch while the model was writing: this sentence is in the old voice.
+  const current = await prisma.user.findUnique({ where: { id: userId }, select: { coachPersonaId: true } });
+  if (resolvePersona(current?.coachPersonaId).id !== persona.id) return 'skipped_persona_changed';
+
+  const row =
+    text !== null
+      ? { text, spans: spansFor(text), source: 'AI' as const }
+      : { ...templateSentence(sheet), source: 'TEMPLATE' as const };
+  const data = { text: row.text, spans: row.spans as unknown as Prisma.InputJsonValue, source: row.source };
+  try {
+    await prisma.coachDaySummary.upsert({
+      where,
+      create: { userId, date: civilDateToUtcMidnight(today), ...data },
+      update: { ...data, createdAt: new Date() },
+    });
+  } catch (err) {
+    // Another instance wrote today's row first; theirs stands.
+    if ((err as { code?: string } | null)?.code === 'P2002') return 'skipped_exists';
+    throw err;
+  }
+  return text !== null ? 'ai' : 'template';
+}
+
+const inFlight = new Map<string, Promise<SummaryOutcome>>();
+
+/**
+ * Writes today's sentence with the user's engine and stores it (AI), or stores
+ * the template (TEMPLATE) when no draft passed validation in time, so a failing
+ * model is not retried on every page load. One run per user at a time in this
+ * process: a second caller shares the first run.
+ */
+export function generateTodaySummary(userId: string, deps: TodayDeps = {}): Promise<SummaryOutcome> {
+  const running = inFlight.get(userId);
+  if (running) return running;
+  const run = generate(userId, deps).finally(() => inFlight.delete(userId));
+  inFlight.set(userId, run);
+  return run;
+}
+
+/**
+ * GET /me/coach/today. Bars and the template are computed live from the fact
+ * sheet, so the page never waits on a model; only a stored AI sentence
+ * replaces the template.
+ */
+export async function getTodaySummary(userId: string, deps: TodayDeps = {}): Promise<TodaySummaryDTO> {
+  const user = await loadUser(userId);
+  const date = safeCivilDate((deps.now ?? (() => new Date()))(), user?.timezone ?? 'UTC');
+  const sheet = await (deps.loadSheet ?? defaultLoadSheet)(userId, date);
+  const bars = buildBars(sheet);
+  if (bars.length === 0) return { date, hasData: false, sentence: null, bars };
+
+  const stored = await prisma.coachDaySummary.findUnique({
+    where: { userId_date: { userId, date: civilDateToUtcMidnight(date) } },
+  });
+  if (stored?.source === 'AI') {
+    return {
+      date,
+      hasData: true,
+      sentence: { text: stored.text, spans: stored.spans as unknown as TodaySpan[], source: 'ai' },
+      bars,
+    };
+  }
+  if (!stored) deps.onMissing?.();
+  return { date, hasData: true, sentence: { ...templateSentence(sheet), source: 'template' }, bars };
 }
