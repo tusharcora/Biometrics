@@ -73,6 +73,21 @@ export function getCoachBudgets(): { fast?: number; synthesis?: number } | undef
   return { ...(fast !== undefined ? { fast } : {}), ...(synthesis !== undefined ? { synthesis } : {}) };
 }
 
+export const LOCAL_ANSWER_BUDGET_MS = 45_000;
+export const HOSTED_ANSWER_BUDGET_MS = 30_000;
+
+/**
+ * End-to-end budget for one streamed answer (spec 2026-09-30, section 2.5):
+ * COACH_LOCAL_BUDGET_MS (default 45 s) or COACH_HOSTED_BUDGET_MS (default 30 s).
+ * The mobile client's timeout must be longer than the budget.
+ */
+export function getAnswerBudgetMs(engine: 'local' | 'hosted'): number {
+  const name = engine === 'hosted' ? 'COACH_HOSTED_BUDGET_MS' : 'COACH_LOCAL_BUDGET_MS';
+  const fallback = engine === 'hosted' ? HOSTED_ANSWER_BUDGET_MS : LOCAL_ANSWER_BUDGET_MS;
+  const n = Number(process.env[name]?.trim());
+  return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
 // The push slot. PUSH_PROVIDER=expo selects the Expo sender; anything else (the
 // default) is the no-op sender, which delivers nothing. Push content is generic
 // by construction (push.ts). Read per call, like COACH_ENABLED, so tests can
