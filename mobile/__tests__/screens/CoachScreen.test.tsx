@@ -569,17 +569,8 @@ describe('CoachScreen: streamed answers', () => {
     expect(utils.queryByTestId('coach-error')).toBeNull();
   });
 
-  it('renders a fallback reply exactly like a normal one', async () => {
-    scriptTurn(stream, [{ type: 'text', sentence: 'Your recovery score today is higher than yesterday.' }, doneEvent()]);
-    const utils = await openChat();
-    await ask(utils, 'How am I?');
-
-    expect(await utils.findByText('Your recovery score today is higher than yesterday.')).toBeTruthy();
-    expect(utils.queryByTestId('coach-safety-resources')).toBeNull();
-    expect(utils.queryByTestId('coach-safety-override')).toBeNull();
-    expect(utils.queryByTestId('coach-error')).toBeNull();
-  });
-
+  // A live streamed answer has no fallback source any more (errors are events), so only a restored
+  // legacy fallback row can be one; the live variant of this test could not fail and was removed.
   it('renders a restored fallback reply exactly like a normal one', async () => {
     (fetchLatestConversation as jest.Mock).mockResolvedValue({
       conversationId: 'conv-1',
