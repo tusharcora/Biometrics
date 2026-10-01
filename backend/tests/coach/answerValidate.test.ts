@@ -159,7 +159,7 @@ describe('resolveCard', () => {
           { fact: 'sleep.total', label: 'Sleep' },
         ],
         tip: 'Keep today easy.',
-        source: 'Today · Recovery',
+        source: 'Wellness App Data',
       },
       SHEET,
     );
@@ -171,8 +171,21 @@ describe('resolveCard', () => {
         { factId: 'sleep.total', label: 'Sleep', display: '6h 48m', value: 408, usual: 433, status: 'near' },
       ],
       tip: 'Keep today easy.',
-      source: 'Today · Recovery',
+      source: 'Today',
     });
+  });
+
+  // R18 Q3: the model made up vague sources ("Wellness App Data", "Sleep tracking data").
+  it.each([
+    ['today', 'Today'],
+    ['sleep', 'Last night and your past 7 nights'],
+    ['trends', 'Your last 30 days'],
+    ['general', 'Your profile'],
+  ] as const)("labels a %s card with the app's own source and ignores the model's", (route, source) => {
+    for (const modelSource of ['Wellness App Data', undefined, 42]) {
+      const card = resolveCard({ headline: 'Steady', tiles: [{ fact: 'recovery.today' }], source: modelSource }, { ...SHEET, route });
+      expect(card?.source).toBe(source);
+    }
   });
 
   it('drops unknown fact ids and duplicates, and caps tiles at four', () => {
@@ -215,12 +228,12 @@ describe('resolveCard', () => {
     expect(resolveCard({ headline: 'Today', tiles: 'recovery.today' }, SHEET)).toBeNull();
   });
 
-  it('drops a tip that fails validation and falls back to the route source', () => {
+  it('drops a tip that fails validation and labels the card from the route', () => {
     const card = resolveCard({ headline: 'Today', tiles: [{ fact: 'recovery.today' }], tip: 'Take 5 mg of melatonin.', source: 42 }, SHEET);
     expect(card).toEqual({
       headline: 'Today',
       tiles: [{ factId: 'recovery.today', label: 'Recovery today', display: '26', value: 26, usual: 58, status: 'below' }],
-      source: "Today's scores and readings",
+      source: 'Today',
     });
   });
 });

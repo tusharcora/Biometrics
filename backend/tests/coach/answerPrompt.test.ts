@@ -55,9 +55,15 @@ describe('buildAnswerSystemPrompt', () => {
     }
     const p = buildAnswerSystemPrompt(hoot, { today: '2026-09-30', sheet: SHEET });
     expect(p).toContain('"tiles": [{"fact": "recovery.today", "label"');
-    // Only a failing headline drops the card (a failing tip is omitted, a failing source falls back).
-    expect(p).toContain('The headline, tip and source follow the same number rule as the reply; a headline that breaks it drops\n   the card.');
+    // Only a failing headline drops the card (a failing tip is omitted).
+    expect(p).toContain('The headline and tip follow the same number rule as the reply; a headline that breaks it drops the');
     expect(p).not.toContain('the whole card is dropped');
+  });
+
+  it('does not ask the model for a card source: the app labels the card from the route (R18 Q3)', () => {
+    const p = buildAnswerSystemPrompt(hoot, { today: '2026-09-30', sheet: SHEET });
+    expect(p).not.toContain('"source"');
+    expect(p).not.toMatch(/\bsource follow/);
   });
 
   it('asks for no card when the sheet has no facts', () => {

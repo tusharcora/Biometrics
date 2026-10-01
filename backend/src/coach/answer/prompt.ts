@@ -52,12 +52,12 @@ export function buildAnswerSystemPrompt(persona: CoachPersona, ctx: AnswerPrompt
     ? [
         '2. Only if the reply used the facts, then a card block, for example:',
         '```card',
-        `{"headline": "short summary", "tiles": [{"fact": ${JSON.stringify(exampleFact)}, "label": "short label"}], "tip": "one small thing to try", "source": "where this comes from"}`,
+        `{"headline": "short summary", "tiles": [{"fact": ${JSON.stringify(exampleFact)}, "label": "short label"}], "tip": "one small thing to try"}`,
         '```',
         '   Use "tiles" (1 to 4) for a few numbers, or "ranked" (2 to 5, same shape) for a ranked list instead of',
         '   tiles. Use only fact ids from the facts above; the app fills in the values. "tip" is optional.',
-        '   The headline, tip and source follow the same number rule as the reply; a headline that breaks it drops',
-        '   the card.',
+        '   The headline and tip follow the same number rule as the reply; a headline that breaks it drops the',
+        '   card.',
       ]
     : ['2. No card block: there are no facts to show.'];
   return [

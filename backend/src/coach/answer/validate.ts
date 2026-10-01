@@ -362,12 +362,16 @@ export const MAX_RANKED = 5;
 const MAX_HEADLINE_CHARS = 120;
 const MAX_LABEL_CHARS = 32;
 const MAX_TIP_CHARS = 200;
-const MAX_SOURCE_CHARS = 60;
 
-export const DEFAULT_CARD_SOURCE: Record<AnswerRoute, string> = {
-  today: "Today's scores and readings",
-  sleep: 'Sleep · last 7 nights',
-  trends: 'Trends · last 30 days',
+/**
+ * What a card's numbers come from, per route: the window its sheet covers.
+ * Set by the app, never the model, which made up vague ones ("Wellness App
+ * Data", "Sleep tracking data").
+ */
+export const CARD_SOURCE: Record<AnswerRoute, string> = {
+  today: 'Today',
+  sleep: 'Last night and your past 7 nights',
+  trends: 'Your last 30 days',
   general: 'Your profile',
 };
 
@@ -407,7 +411,8 @@ function rows(raw: unknown, max: number, facts: Map<string, Fact>): CardItem[] {
 }
 
 /**
- * Schema-checks the model's card and fills every value from the fact sheet.
+ * Schema-checks the model's card and fills every value from the fact sheet;
+ * the source label comes from the route (CARD_SOURCE).
  * Unknown fact ids are dropped; a card without a valid headline or without any
  * valid tile/ranked row is dropped (null) and the talk is shown alone.
  */
@@ -420,7 +425,8 @@ export function resolveCard(raw: RawCard | undefined, sheet: FactSheet): AnswerC
   const ranked = tiles.length > 0 ? [] : rows(raw.ranked, MAX_RANKED, facts);
   if (tiles.length === 0 && ranked.length === 0) return null;
 
-  const card: AnswerCard = { headline, source: cleanText(raw.source, MAX_SOURCE_CHARS, sheet) ?? DEFAULT_CARD_SOURCE[sheet.route] };
+  // Any model-written source is ignored (R18).
+  const card: AnswerCard = { headline, source: CARD_SOURCE[sheet.route] };
   if (tiles.length > 0) card.tiles = tiles;
   else card.ranked = ranked;
   const tip = cleanText(raw.tip, MAX_TIP_CHARS, sheet);
