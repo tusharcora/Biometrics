@@ -300,6 +300,13 @@ describe('extractNumbers: number words and exemptions (fix round 1)', () => {
     expect(extractNumbers('Recovery 26/100.')).toEqual([{ kind: 'plain', value: 26 }]);
     expect(extractNumbers('Your 7-day and 30-day averages over the last 30 days.')).toEqual([]);
   });
+
+  it('skips the window phrases the trend labels use (R13)', () => {
+    expect(extractNumbers('HRV is down 8% over 30 days.')).toEqual([{ kind: 'plain', value: 8 }]);
+    for (const w of ['over 30 days', 'in the last 7 nights', 'across the past 30 days', 'for 7 nights', 'over the 30 days']) {
+      expect(extractNumbers(`Steady ${w}.`)).toEqual([]);
+    }
+  });
 });
 
 describe('validateSentence: number words (fix round 1)', () => {
@@ -329,5 +336,27 @@ describe('validateSentence: general route claims about the user (fix round 1)', 
   it('still allows general knowledge that is not about the user', () => {
     expect(validateSentence('Most adults need seven to nine hours of sleep.', GENERAL)).toEqual(ok);
     expect(validateSentence('Caffeine has a half-life of about 5 hours.', GENERAL)).toEqual(ok);
+  });
+});
+
+describe('validateSentence: trend window phrases (R13)', () => {
+  const TRENDS: FactSheet = {
+    route: 'trends',
+    facts: [
+      { id: 'hrv.avg7', label: 'HRV 7-day average', value: 48, unit: 'ms', display: '48 ms', usual: 52 },
+      { id: 'hrv.avg30', label: 'HRV 30-day average', value: 52, unit: 'ms', display: '52 ms' },
+      { id: 'hrv.trend30', label: 'HRV trend over 30 days', value: -8, unit: 'percent', display: 'down 8%' },
+    ],
+    notes: [],
+  };
+
+  it("accepts a real trend echoed with the label's window", () => {
+    expect(validateSentence('HRV is down 8% over 30 days.', TRENDS)).toEqual(ok);
+    expect(validateSentence('Your HRV has slipped 8% across the past 30 days.', TRENDS)).toEqual(ok);
+  });
+
+  it('still rejects an invented trend or a bare 30 with no window word', () => {
+    expect(validateSentence('HRV is down 15% over 30 days.', TRENDS)).toEqual(unknown);
+    expect(validateSentence('Your HRV is 30 ms.', TRENDS)).toEqual(unknown);
   });
 });

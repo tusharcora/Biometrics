@@ -78,9 +78,11 @@ const EXEMPT_PATTERNS: RegExp[] = [
   // The score scale after a number: "26/100", "26 out of 100" (the 26 is still checked).
   /(?<=\d)\s*\/\s*100\b/g,
   /(?<=\d)\s+out\s+of\s+100\b/gi,
-  // The sheet's windows: "7-day average", "30-night", "the last 30 days".
+  // The sheet's windows: "7-day average", "30-night", "the last 30 days", and the trend label's own
+  // "over 30 days" (also "in/across/for the past 7 nights"), which the model echoes.
   new RegExp(String.raw`\b${WINDOW_DAYS}-(?:day|night)s?\b`, 'gi'),
   new RegExp(String.raw`\b(?:last|past)\s+${WINDOW_DAYS}\s+(?:days|nights)\b`, 'gi'),
+  new RegExp(String.raw`\b(?:over|in|across|for)\s+(?:the\s+)?(?:(?:last|past)\s+)?${WINDOW_DAYS}\s+(?:days|nights)\b`, 'gi'),
 ];
 
 /** A unit right after a plain number, which limits what the number may match. */
