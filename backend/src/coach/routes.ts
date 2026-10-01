@@ -354,9 +354,13 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
       // The switch is already saved: a failure here is logged and the request still answers 200, so the
       // app never shows a false error (and retries) for a character change that took effect.
       if (before && resolvePersona(before.coachPersonaId).id !== persona.id) {
-        await clearTodaySummary(userId, todayDeps);
-        if (isCoachEnabled() && (await hasCurrentConsent(userId, 'local'))) {
-          deps.background(() => generateTodaySummary(userId, { ...todayDeps, force: true }));
+        try {
+          await clearTodaySummary(userId, todayDeps);
+          if (isCoachEnabled() && (await hasCurrentConsent(userId, 'local'))) {
+            deps.background(() => generateTodaySummary(userId, { ...todayDeps, force: true }));
+          }
+        } catch (err) {
+          logFailure('persona_summary', err);
         }
       }
       res.json({ personaId: persona.id });

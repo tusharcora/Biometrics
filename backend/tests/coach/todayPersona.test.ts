@@ -40,7 +40,7 @@ const SHEET: FactSheet = {
 };
 const NEW_VOICE = 'Recovery is 26, so we go easy and still move. Short walk, early night.';
 
-function setup() {
+function setup(today: { now?: () => Date } = {}) {
   const requests: CoachStreamRequest[] = [];
   const local: CoachModelProvider = {
     id: 'local',
@@ -59,7 +59,7 @@ function setup() {
       getHostedProvider: () => null,
       telemetry: new RecordingTelemetry(),
       clock: new FakeClock(),
-      today: { loadSheet: async () => SHEET, now: () => NOW },
+      today: { loadSheet: async () => SHEET, now: () => NOW, ...today },
       background: (task) => {
         tasks.push(task);
       },
@@ -123,6 +123,25 @@ describe('PUT /me/coach/persona and the day summary', () => {
     expect(res.status).toBe(200);
     expect(await rowOf(user.id)).toBeNull();
     expect(tasks).toHaveLength(0);
+  });
+
+  it('answers 200 for a saved switch even when dropping the old sentence fails, and logs it', async () => {
+    const user = await userWithSummary('hoot');
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const { app, tasks } = setup({
+      now: () => {
+        throw new Error('clock unavailable');
+      },
+    });
+
+    const res = await choose(app, user.id, 'ember');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ personaId: 'ember' });
+    const saved = await prisma.user.findUniqueOrThrow({ where: { id: user.id }, select: { coachPersonaId: true } });
+    expect(saved.coachPersonaId).toBe('ember');
+    expect(tasks).toHaveLength(0);
+    expect(errors).toHaveBeenCalledWith(JSON.stringify({ event: 'coach.request_failed', where: 'persona_summary', error: 'Error' }));
   });
 
   it('still drops the stale sentence but schedules no model call without the coach consent', async () => {
