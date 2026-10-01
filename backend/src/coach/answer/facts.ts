@@ -10,7 +10,7 @@
 
 import { shiftDate } from '../../scoring/dates';
 import { MAX_MEMORY_VALUE_CHARS, MemoryCategory, MemoryProposal, loadConfirmedMemories } from '../memory';
-import { escapeField } from '../escape';
+import { cleanField, escapeField } from '../escape';
 import { getHabitCorrelations, getScoreHistory, getUserGoals } from '../tools';
 import { DailyScoreToolResult, getDailyScore } from '../tools/dailyScore';
 import { DailyMetricsToolResult, getDailyMetrics, getMetricHistory, MetricHistoryToolResult, MetricKey } from '../tools/metrics';
@@ -329,8 +329,9 @@ async function trendFacts(userId: string, deps: FactDeps, b: SheetBuilder): Prom
     b.add(
       fact({
         id: `habit.${slug(c.habitType)}.${slug(c.factor)}${lag}`,
-        // Custom habit labels and units are the user's free text: quoted data, like memory notes.
-        label: `${escapeField(c.habitLabel, MAX_HABIT_LABEL_CHARS)} (${c.exposureThreshold}+ ${escapeField(c.exposureUnit, MAX_HABIT_UNIT_CHARS)}) and ${lagLabel(c.lagDays)} ${c.factor}`,
+        // Custom habit labels and units are the user's free text, cleaned like memory notes (one line, no
+        // fence or markup, capped) but not quoted: the label is also shown back to them (card, digest).
+        label: `${cleanField(c.habitLabel, MAX_HABIT_LABEL_CHARS)} (${c.exposureThreshold}+ ${cleanField(c.exposureUnit, MAX_HABIT_UNIT_CHARS)}) and ${lagLabel(c.lagDays)} ${c.factor}`,
         unit: 'percent',
         value: size,
         display: `${size}% ${c.direction}`,

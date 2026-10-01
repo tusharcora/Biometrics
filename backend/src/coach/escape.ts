@@ -8,11 +8,19 @@
 const MAX_FIELD_CHARS = 300;
 
 export function escapeField(value: unknown, max = MAX_FIELD_CHARS): string {
-  const cleaned = String(value ?? '')
+  return JSON.stringify(cleanField(value, max));
+}
+
+/**
+ * The same cleaning without the quotes, for user-written text that is also
+ * shown back to the user (a custom habit's label in a card or a digest): one
+ * line, no fence, tag or reference, capped.
+ */
+export function cleanField(value: unknown, max = MAX_FIELD_CHARS): string {
+  return String(value ?? '')
     .replace(/[\u0000-\u001f\u007f-\u009f\u2028\u2029]+/g, ' ')
     .replace(/[{}`<>]/g, '')
     .replace(/\s+/g, ' ')
     .trim()
     .slice(0, max);
-  return JSON.stringify(cleaned);
 }
