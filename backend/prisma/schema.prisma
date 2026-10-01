@@ -56,6 +56,11 @@ model User {
   // src/coach/personas). Null means the default persona.
   coachPersonaId String?
 
+  // Which model answers this user's coach messages (spec 2026-09-30 section 3).
+  // HOSTED is honoured only while the hosted engine is offered and the user
+  // holds a current HOSTED consent; otherwise the local model answers.
+  coachEngine CoachEngine @default(LOCAL)
+
   // The single source of the sleep goal: scoring's sleep-debt factor, the
   // dashboard goal and the coach's getUserGoals() must all read this one value
   // (src/users/goals.ts) so they cannot drift apart. The 480 here must match
@@ -379,14 +384,24 @@ model HabitCorrelation {
 // Revocation stamps revokedAt rather than deleting the row, keeping an audit
 // trail of what was agreed to and when.
 model CoachConsent {
-  id          String    @id @default(uuid())
+  id          String            @id @default(uuid())
   userId      String
-  user        User      @relation(fields: [userId], references: [id])
+  user        User              @relation(fields: [userId], references: [id])
   version     String
-  consentedAt DateTime  @default(now())
+  // LOCAL: the coach itself (the model this server runs). HOSTED: sending the
+  // question and fact sheet to the hosted model (Anthropic). Each scope has its
+  // own versioned text, and one scope's row never satisfies the other.
+  scope       CoachConsentScope @default(LOCAL)
+  consentedAt DateTime          @default(now())
   revokedAt   DateTime?
 
   @@index([userId, consentedAt])
+  @@index([userId, scope, consentedAt])
+}
+
+enum CoachConsentScope {
+  LOCAL
+  HOSTED
 }
 
 model CoachConversation {
