@@ -56,7 +56,12 @@ beforeEach(() => {
 describe('fetchCoachStatus', () => {
   it('returns the server status', async () => {
     fetchMock.mockResolvedValueOnce(ok(status));
-    await expect(fetchCoachStatus()).resolves.toEqual(status);
+    // A server without engine fields answers on the device only.
+    await expect(fetchCoachStatus()).resolves.toEqual({
+      ...status,
+      engine: 'local',
+      engines: { hosted: { available: false, consented: false, consent: null } },
+    });
     expect(fetchMock).toHaveBeenCalledWith('https://api.example.com/me/coach/status', expect.anything());
   });
 
@@ -78,6 +83,8 @@ describe('fetchCoachStatus', () => {
       personaId: 'mochi',
       personaChosen: true,
       personas: status.personas,
+      engine: 'local',
+      engines: { hosted: { available: false, consented: false, consent: null } },
     });
   });
 
@@ -192,9 +199,9 @@ describe('sendCoachMessage', () => {
     await expect(sendCoachMessage({ message: 'Hi' })).rejects.toBeInstanceOf(CoachDisabledError);
   });
 
-  it('uses a 20 s client timeout, longer than the server 12 s budget', () => {
-    expect(COACH_REQUEST_TIMEOUT_MS).toBe(20000);
-    expect(COACH_REQUEST_TIMEOUT_MS).toBeGreaterThan(12000);
+  it('uses a 60 s client timeout, longer than the 45 s local-model server budget', () => {
+    expect(COACH_REQUEST_TIMEOUT_MS).toBe(60000);
+    expect(COACH_REQUEST_TIMEOUT_MS).toBeGreaterThan(45000);
   });
 
   it('takes a longer timeout from EXPO_PUBLIC_COACH_TIMEOUT_MS for a slower local model', () => {
@@ -209,7 +216,7 @@ describe('sendCoachMessage', () => {
     beforeEach(() => jest.useFakeTimers());
     afterEach(() => jest.useRealTimers());
 
-    it('aborts the request and rejects with CoachTimeoutError after 20 s', async () => {
+    it('aborts the request and rejects with CoachTimeoutError after the client timeout', async () => {
       let signal: AbortSignal | undefined;
       fetchMock.mockImplementation((_url: string, init: RequestInit) => {
         signal = init.signal as AbortSignal;
