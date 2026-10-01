@@ -2,8 +2,9 @@
 // block): answers should be informative, personable and not automated. That
 // means the first sentence answers the question, a "why" names every driver the
 // fact sheet shows, there is one concrete next step in words, and no stock
-// check-in question; and, as everywhere, no invented number. The runtime only
-// enforces the numbers; these fixtures pin the prompt instructions and prove
+// check-in question; and, as everywhere, no invented number. The runtime
+// enforces the numbers and drops a closing stock question once another
+// sentence was shown; these fixtures pin the prompt instructions and prove
 // the eval's quality check, including one must-fail reply that is perfectly
 // grounded but buries the answer behind filler.
 
@@ -65,6 +66,27 @@ export const qualityFixtures: EvalFixture[] = [
       directionOf: 'recovery.today',
       promptIncludes: ['A question back is optional', 'Never a generic check-in'],
       quality: { answersFirst: ['recovery'], namesDrivers: true, nextStep: true, noStockCheckIn: true },
+    },
+  },
+  {
+    ...base,
+    id: 'quality-closing-offer-dropped',
+    description:
+      'The C8 shape: a short, grounded answer that ends on an offer of choices. The runtime drops the offer, so the reply ends on its suggestion; the prompt asks for that and for two or three numbers only (final review I4, R48).',
+    question: 'Should I train hard today?',
+    script: [
+      'Not today: recovery is 26, well under your usual 58, mostly because your HRV and resting heart rate are off. Keep it to an easy walk and save the hard session for when it bounces back. Would you prefer to focus on light movement or complete rest?',
+    ],
+    expect: {
+      outcome: 'answer',
+      route: 'today',
+      dropped: ['stock_question'],
+      sentences: [
+        'Not today: recovery is 26, well under your usual 58, mostly because your HRV and resting heart rate are off.',
+        'Keep it to an easy walk and save the hard session for when it bounces back.',
+      ],
+      promptIncludes: ["End on your suggestion; never offer choices or ask what they'd prefer", 'Use at most two or three of their numbers'],
+      quality: { answersFirst: ['today', 'recovery'], namesDrivers: true, nextStep: true, noStockCheckIn: true },
     },
   },
 ];

@@ -76,7 +76,7 @@ export interface FixtureExpectation {
   /** Substrings that must NOT appear in the shown text. */
   textAbsent?: string[];
   /** Reasons of the dropped sentences, in order. Omit to not check; [] means none. */
-  dropped?: Array<'unknown_number' | 'disallowed_topic'>;
+  dropped?: Array<'unknown_number' | 'disallowed_topic' | 'stock_question'>;
   /** The card: null for no card. Every card value is always checked against the fact sheet. */
   card?: CardExpectation | null;
   /** Substrings the system prompt must contain: the character's voice, the facts. */

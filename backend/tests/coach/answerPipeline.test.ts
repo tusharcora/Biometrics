@@ -185,6 +185,27 @@ describe('runAnswer: validation', () => {
     expect(telemetry.named('coach.answer_sentence_dropped')[0]!.attributes).toEqual({ reason: 'unknown_number', attempt: 1, route: 'today' });
   });
 
+  // Final review I4: C8 local replies still closed on an offer or a choice.
+  it('drops a closing stock question or offer once another sentence was shown', async () => {
+    const { deps, telemetry } = setup([['Your recovery is 26. Keep today easy. ', 'Would you prefer a gentle walk or complete rest?']]);
+    const events = await collect(runAnswer(await input(), deps));
+    expect(texts(events)).toEqual(['Your recovery is 26.', 'Keep today easy.']);
+    const row = await prisma.coachMessage.findUniqueOrThrow({ where: { id: doneOf(events).messageId } });
+    expect(row.text).toBe('Your recovery is 26. Keep today easy.');
+    expect(row.guardrailEvents).toEqual([{ type: 'sentence_dropped', reason: 'stock_question', attempt: 1 }]);
+    expect(telemetry.named('coach.answer_sentence_dropped')[0]!.attributes).toEqual({ reason: 'stock_question', attempt: 1, route: 'today' });
+  });
+
+  it('keeps a stock question when it is the only sentence, and a specific question back always', async () => {
+    const alone = setup([['How are you feeling?']]);
+    expect(texts(await collect(runAnswer(await input(), alone.deps)))).toEqual(['How are you feeling?']);
+    const specific = setup([["Your recovery is 26. Do you feel any soreness from Saturday's long run?"]]);
+    expect(texts(await collect(runAnswer(await input(), specific.deps)))).toEqual([
+      'Your recovery is 26.',
+      "Do you feel any soreness from Saturday's long run?",
+    ]);
+  });
+
   it('regenerates once when no sentence could be shown, with a note and without the rejected text', async () => {
     const { deps, provider } = setup([['Your HRV is 60 ms. Take 3 mg of melatonin.'], ['Recovery is 26 today.']]);
     const events = await collect(runAnswer(await input(), deps));

@@ -23,12 +23,17 @@
 //                   stressors...?", "Do you feel ...?", "How are you doing?")
 //                   and no offer of something the app cannot do ("Would you
 //                   like to look at ...?", "Would you prefer a guided
-//                   relaxation session?"). A specific question back is fine.
+//                   relaxation session?"). A specific question back is fine,
+//                   including a feeling question anchored on a concrete event
+//                   ("Do you feel any soreness from Saturday's long run?").
+//                   The runtime drops these too (answer/checkIn.ts), so the
+//                   check is the backstop.
 //
 // Like the direction check, these are deliberately simple lexicon checks, not
 // a judge model: scripted fixtures opt in, and `npm run eval:coach:local`
 // reports them on real replies for a human to read.
 
+import { isStockCheckIn } from '../../src/coach/answer/checkIn';
 import type { Fact, FactSheet } from '../../src/coach/answer/facts';
 import { extractNumbers, validateSentence } from '../../src/coach/answer/validate';
 
@@ -96,34 +101,9 @@ export function isNextStep(sentence: string, sheet?: FactSheet): boolean {
 
 // ---- noStockCheckIn -------------------------------------------------------
 
-/** The R18-banned check-in shapes, and offers of things the app cannot do. */
-const STOCK_CHECK_IN = new RegExp(
-  [
-    String.raw`\bhow\s+(?:are|have)\s+you\s+(?:been\s+)?(?:feeling|doing)\b`,
-    String.raw`\bhow(?:'s|\s+is|\s+has)\s+(?:your\s+)?(?:day|week|everything|life)\b`,
-    String.raw`\bhow\s+has\s+(?:the|this)\s+week\s+(?:been|felt)\b`,
-    String.raw`\bhow\s+are\s+things\b`,
-    String.raw`\bhave\s+you\s+noticed\b`,
-    String.raw`\bdo\s+you\s+feel\b`,
-    String.raw`\bare\s+you\s+feeling\b`,
-    String.raw`\banything\s+(?:new|changed|different)\b`,
-    String.raw`\bany\s+(?:recent\s+)?changes?\s+(?:in|to)\s+your\b`,
-    String.raw`\bfeeling\s+stressed\b`,
-    String.raw`\bwhat\s+did\s+your\s+(?:evening|day)\s+look\s+like\b`,
-    // App-action offers: the coach cannot run a session, a review or a plan for them.
-    String.raw`\bwould\s+you\s+like\s+(?:me\s+)?to\b`,
-    String.raw`\bwould\s+you\s+prefer\b`,
-    String.raw`\bdo\s+you\s+want\s+(?:me\s+)?to\b`,
-    String.raw`\bshall\s+(?:i|we)\b`,
-    String.raw`\bwant\s+me\s+to\b`,
-  ].join('|'),
-  'i',
-);
-
-export function isStockCheckIn(sentence: string): boolean {
-  const s = sentence.trim();
-  return s.endsWith('?') && STOCK_CHECK_IN.test(s);
-}
+// The test lives with the runtime (answer/checkIn.ts), which drops a closing stock
+// question; the eval flags any that still reach the user with the same test.
+export { isStockCheckIn };
 
 // ---- all together ---------------------------------------------------------
 

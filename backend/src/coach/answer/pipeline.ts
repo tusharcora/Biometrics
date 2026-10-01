@@ -2,7 +2,8 @@
 //
 //   crisis classifier -> memory feedback -> route -> status event -> fact sheet
 //   -> ONE streamed model call -> each sentence validated as it completes
-//   (dropped when it fails, the rest keeps streaming) -> one regeneration only
+//   (dropped when it fails, the rest keeps streaming; a closing stock question
+//   or offer is dropped once another sentence was shown) -> one regeneration only
 //   when no sentence at all could be shown -> card resolved from the fact sheet
 //   -> memory block through the existing memory validation -> the clean reply,
 //   card, engine and duration persisted -> done.
@@ -31,6 +32,7 @@ import type { CoachModelProvider } from '../model/provider';
 import { resolvePersona } from '../personas';
 import type { CoachEventAttributes, CoachEventName, CoachTelemetry } from '../telemetry';
 import type { AnswerCard } from './card';
+import { isStockCheckIn } from './checkIn';
 import { buildFactSheet, defaultFactData, FactData, FactSheet } from './facts';
 import { cleanLegacyText } from './history';
 import { parseModelOutput } from './parse';
@@ -105,7 +107,7 @@ export const STATUS_LABELS: Record<AnswerRoute, string> = {
 
 /** Persisted on the assistant row: reasons and counts only, never text. */
 export type AnswerGuardrailEvent =
-  | { type: 'sentence_dropped'; reason: 'unknown_number' | 'disallowed_topic'; attempt: number }
+  | { type: 'sentence_dropped'; reason: 'unknown_number' | 'disallowed_topic' | 'stock_question'; attempt: number }
   | { type: 'regenerated' }
   | { type: 'card_dropped' }
   | { type: 'stopped' };
@@ -294,6 +296,13 @@ export async function* runAnswer(input: AnswerInput, deps: AnswerDeps): AsyncGen
       const handle = function* (sentences: string[]): Generator<AnswerEvent> {
         for (const sentence of sentences) {
           const verdict = (deps.validate ?? validateSentence)(sentence, sheet);
+          // A closing offer or check-in reads as automated; drop it once the reply already has a sentence,
+          // so the reply still reads (these are always the last sentence, so nothing reads disjointed).
+          if (verdict.ok && result.accepted.length > 0 && isStockCheckIn(sentence)) {
+            guardrailEvents.push({ type: 'sentence_dropped', reason: 'stock_question', attempt: n });
+            emit('coach.answer_sentence_dropped', { reason: 'stock_question', attempt: n, route });
+            continue;
+          }
           if (verdict.ok) {
             result.accepted.push(sentence);
             yield { type: 'text', sentence };

@@ -209,6 +209,10 @@ describe('quality checker on the real B13 transcripts', () => {
   it('passes a specific question back that would change the advice', () => {
     expect(isStockCheckIn('Is your long run still on for this weekend?')).toBe(false);
     expect(isStockCheckIn('How are you doing.')).toBe(false); // only questions are judged
+    // A feeling question anchored on a concrete event is specific (C2 minor); an offer never is.
+    expect(isStockCheckIn("Do you feel any soreness from Saturday's long run?")).toBe(false);
+    expect(isStockCheckIn('Are you feeling the hills from your run yesterday?')).toBe(false);
+    expect(isStockCheckIn('Would you prefer to skip your run on Saturday?')).toBe(true);
     expect(checkQuality(['Your recovery is 39 today.', 'Is your long run still on for this weekend?'], TODAY, { noStockCheckIn: true })).toEqual([]);
   });
 
