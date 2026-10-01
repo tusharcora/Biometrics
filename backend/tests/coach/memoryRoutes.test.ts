@@ -6,7 +6,7 @@ import { migrateTestDb } from '../setupTestDb';
 import { authHeaderFor } from '../helpers/auth';
 import { createCoachRouter } from '../../src/coach/routes';
 import { COACH_CONSENT_VERSION } from '../../src/coach/consent';
-import { ScriptedProvider, ScriptStep } from '../../src/coach/model/provider';
+import { ScriptedStreamProvider, StreamStep } from '../../src/coach/model/provider';
 import { MEMORY_NOTE } from '../../src/coach/orchestrator';
 import { civilDateToUtcMidnight } from '../../src/biometrics/civilDate';
 import { FakeClock, RecordingTelemetry, createUser } from './helpers';
@@ -36,8 +36,8 @@ async function authed(userId: string) {
   return authHeaderFor(userId);
 }
 
-function scriptedApp(script: ScriptStep[]) {
-  const provider = new ScriptedProvider(script);
+function scriptedApp(script: StreamStep[]) {
+  const provider = new ScriptedStreamProvider(script);
   const app = express();
   app.use(express.json());
   app.use(createCoachRouter({ getProvider: () => provider, telemetry: new RecordingTelemetry(), clock: new FakeClock() }));
@@ -86,9 +86,8 @@ describe('auth and flag', () => {
 describe('POST /me/coach/message memoryProposals', () => {
   it('returns the entries created this turn, keeps every existing field, and the next uncorrected message confirms them', async () => {
     const { app } = scriptedApp([
-      { type: 'tool_calls', calls: [{ id: 'c1', name: 'proposeMemory', args: { category: 'SCHEDULE', value: 'Runs at 6am on weekdays' } }] },
-      { type: 'text', text: 'Great, a morning routine helps.' },
-      { type: 'text', text: 'Happy to help with that.' },
+      'Great, a morning routine helps.\n```memory\n{"category":"SCHEDULE","value":"Runs at 6am on weekdays"}\n```',
+      'Happy to help with that.',
     ]);
     const user = await consented();
 
@@ -115,7 +114,7 @@ describe('POST /me/coach/message memoryProposals', () => {
   });
 
   it('omits memoryProposals when nothing was proposed', async () => {
-    const { app } = scriptedApp([{ type: 'text', text: 'All good.' }]);
+    const { app } = scriptedApp(['All good.']);
     const user = await consented();
     const res = await request(app).post('/me/coach/message').set(await authed(user.id)).send({ message: 'hello' });
     expect(res.status).toBe(200);

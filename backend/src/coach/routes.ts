@@ -3,12 +3,17 @@ import { AuthedRequest, requireAuth } from '../auth/middleware';
 import { prisma } from '../db/client';
 import { CoachClock, systemClock } from './clock';
 import { COACH_CONSENT, COACH_CONSENT_VERSION, grantConsent, hasCurrentConsent, revokeConsent } from './consent';
-import { getCoachBudgets, getCoachProvider, isCoachEnabled, isExpoPushProvider } from './config';
+import { getAnswerBudgetMs, getCoachBudgets, getCoachProvider, isCoachEnabled, isExpoPushProvider } from './config';
 import { isExpoPushToken } from './push';
 import { TurnInProgressError, TurnRateLimitedError, withTurnGuard } from './turnGuard';
 import type { CoachModelProvider } from './model/provider';
 import { toMemoryDTO, validateMemoryValue } from './memory';
-import { createCoachOrchestrator, HISTORY_WINDOW, OrchestratorDeps } from './orchestrator';
+import { HISTORY_WINDOW, MEMORY_NOTE, OrchestratorDeps } from './orchestrator';
+import { withDisclaimer } from './guardrails/disclaimer';
+import type { FactData } from './answer/facts';
+import { AnswerDeps, AnswerEvent, runAnswer } from './answer/pipeline';
+import { warmModel } from './answer/warm';
+import type { MemoryDTO } from './memory';
 import { findPersona, listPersonas, resolvePersona } from './personas';
 import { CoachTelemetry, LoggerCoachTelemetry } from './telemetry';
 import type { CoachTools } from './tools';
@@ -23,6 +28,10 @@ export interface CoachRouterDeps {
   clock: CoachClock;
   tools?: CoachTools;
   budgets?: OrchestratorDeps['budgets'];
+  /** Overrides COACH_LOCAL_BUDGET_MS (tests). */
+  answerBudgetMs?: number;
+  /** Overrides the fact sheet's data access (tests). */
+  factData?: FactData;
 }
 
 interface MessageRow {
@@ -30,6 +39,7 @@ interface MessageRow {
   role: 'USER' | 'ASSISTANT';
   text: string;
   source: 'MODEL' | 'FALLBACK' | 'SAFETY' | null;
+  card: unknown;
   createdAt: Date;
 }
 
@@ -38,8 +48,65 @@ const messageDTO = (m: MessageRow) => ({
   role: m.role === 'USER' ? 'user' : 'assistant',
   text: m.text,
   source: m.source === null ? null : (m.source.toLowerCase() as 'model' | 'fallback' | 'safety'),
+  // The resolved answer card, so history renders exactly as it did live; null for talk-only and older rows.
+  card: m.card ?? null,
   createdAt: m.createdAt.toISOString(),
 });
+
+/** Writes one server-sent event: `event: <type>` and the whole event as JSON data. */
+function writeSse(res: Response, event: AnswerEvent): void {
+  res.write(`event: ${event.type}\ndata: ${JSON.stringify(event)}\n\n`);
+}
+
+/**
+ * Streams the pipeline as SSE. A client that goes away (the user tapped stop,
+ * or the network dropped) aborts the answer; the pipeline still runs to its
+ * end so a partial reply is stored, but nothing more is written.
+ */
+async function streamAnswer(events: AsyncIterable<AnswerEvent>, res: Response, stop: AbortController): Promise<void> {
+  res.status(200).set({
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+  });
+  res.flushHeaders();
+  let open = true;
+  res.on('close', () => {
+    open = false;
+    if (!res.writableFinished) stop.abort();
+  });
+  // A client that left before the headers went out never fires 'close' again.
+  if (res.destroyed) {
+    open = false;
+    stop.abort();
+  }
+  for await (const event of events) {
+    if (open) writeSse(res, event);
+  }
+  if (open) res.end();
+}
+
+interface CollectedAnswer {
+  sentences: string[];
+  safety?: { text: string; resources: unknown[] };
+  memory?: MemoryDTO[];
+  done?: Extract<AnswerEvent, { type: 'done' }>;
+  error?: Extract<AnswerEvent, { type: 'error' }>;
+}
+
+/** Consumes the whole pipeline for the JSON response older app builds expect. */
+async function collectAnswer(events: AsyncIterable<AnswerEvent>): Promise<CollectedAnswer> {
+  const out: CollectedAnswer = { sentences: [] };
+  for await (const e of events) {
+    if (e.type === 'text') out.sentences.push(e.sentence);
+    else if (e.type === 'safety') out.safety = { text: e.text, resources: e.resources };
+    else if (e.type === 'memory') out.memory = e.proposals;
+    else if (e.type === 'done') out.done = e;
+    else if (e.type === 'error') out.error = e;
+  }
+  return out;
+}
 
 /** Logs the failure class only: a Prisma or provider error message can echo request values. */
 function logFailure(where: string, err: unknown): void {
@@ -89,6 +156,8 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
           greeting: p.greeting ?? null,
         })),
       });
+      // The app hits status when it opens the Coach tab: load the model now so the first answer skips the cold start.
+      if (enabled) warmModel(deps.getProvider());
     } catch (err) {
       logFailure('status', err);
       res.status(500).json({ error: 'coach_unavailable' });
@@ -186,68 +255,64 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
       }
 
       const receivedAt = new Date();
-      const orchestrator = createCoachOrchestrator({
+      const wantsStream = (req.get('accept') ?? '').includes('text/event-stream');
+      // Phase 1 answers every message with the local engine; engine selection arrives with the hosted provider.
+      const engine = 'local' as const;
+      const answerDeps: AnswerDeps = {
         provider: deps.getProvider(),
+        engine,
         telemetry: deps.telemetry,
         clock: deps.clock,
-        ...(deps.tools ? { tools: deps.tools } : {}),
-        ...(deps.budgets ? { budgets: deps.budgets } : {}),
-      });
-      // Guarded here, not around the whole handler: validation and the history
-      // read are cheap, and a 400 should not consume a rate-limit slot. The
-      // model call is what costs a minute and (once a provider is wired) money.
-      const turn = await withTurnGuard(userId, () =>
-        orchestrator.handleTurn({
+        budgetMs: overrides.answerBudgetMs ?? getAnswerBudgetMs(engine),
+        ...(overrides.factData ? { factData: overrides.factData } : {}),
+      };
+      const stop = new AbortController();
+      const answer = runAnswer(
+        {
           userId,
           message: message.trim(),
           history,
+          ...(conversationId !== undefined ? { conversationId } : {}),
           safetyOverride: safetyOverride === true,
-          conversationId: conversationId ?? null,
-        }),
+          receivedAt,
+          ...(wantsStream ? { signal: stop.signal } : {}),
+        },
+        answerDeps,
       );
 
-      // The assistant row is stamped strictly after the user row so transcript order is unambiguous.
-      const repliedAt = new Date(Math.max(Date.now(), receivedAt.getTime() + 1));
-      const assistantData = {
-        userId,
-        role: 'ASSISTANT' as const,
-        text: turn.text,
-        source: turn.source,
-        ...(turn.events.length > 0 ? { guardrailEvents: turn.events } : {}),
-        createdAt: repliedAt,
-      };
-      const userData = { userId, role: 'USER' as const, text: message.trim(), createdAt: receivedAt };
+      // Guarded here, not around the whole handler: validation and the history
+      // read are cheap, and a 400 should not consume a rate-limit slot.
+      if (wantsStream) {
+        await withTurnGuard(userId, () => streamAnswer(answer, res, stop));
+        return;
+      }
 
-      const saved = await prisma.$transaction(async (tx) => {
-        let id = conversationId;
-        if (id === undefined) {
-          id = (await tx.coachConversation.create({ data: { userId, createdAt: receivedAt, lastMessageAt: repliedAt } })).id;
-        } else {
-          await tx.coachConversation.update({ where: { id }, data: { lastMessageAt: repliedAt } });
-        }
-        await tx.coachMessage.create({ data: { conversationId: id, ...userData } });
-        const assistant = await tx.coachMessage.create({ data: { conversationId: id, ...assistantData } });
-        // Proposals are written during the turn, before a brand-new
-        // conversation has an id. Stamp them here so the user's next message in
-        // THIS conversation -- and only this one -- can settle them.
-        const proposalIds = (turn.memoryProposals ?? []).map((m) => m.id);
-        if (proposalIds.length > 0) {
-          await tx.coachMemory.updateMany({ where: { id: { in: proposalIds }, userId }, data: { conversationId: id } });
-        }
-        return { id, assistant };
-      });
-
+      const outcome = await withTurnGuard(userId, () => collectAnswer(answer));
+      if (outcome.error) {
+        if (outcome.error.code === 'internal') res.status(500).json({ error: 'coach_unavailable' });
+        else res.status(503).json({ error: outcome.error.code, retryable: outcome.error.retryable });
+        return;
+      }
+      if (!outcome.done) {
+        res.status(500).json({ error: 'coach_unavailable' });
+        return;
+      }
+      const saved = await prisma.coachMessage.findUniqueOrThrow({ where: { id: outcome.done.messageId }, select: { createdAt: true } });
+      // Older apps render text only: the disclaimer and the memory note are added to the RESPONSE (never stored).
+      const body = outcome.safety
+        ? outcome.safety.text
+        : [outcome.sentences.join(' '), ...(outcome.memory && outcome.memory.length > 0 ? [MEMORY_NOTE] : [])].join('\n\n');
       res.json({
-        conversationId: saved.id,
+        conversationId: outcome.done.conversationId,
         message: {
-          id: saved.assistant.id,
+          id: outcome.done.messageId,
           role: 'assistant',
-          text: turn.text,
-          source: turn.source.toLowerCase(),
-          createdAt: repliedAt.toISOString(),
+          text: withDisclaimer(body),
+          source: outcome.safety ? 'safety' : 'model',
+          createdAt: saved.createdAt.toISOString(),
         },
-        ...(turn.safety ? { safety: turn.safety } : {}),
-        ...(turn.memoryProposals && turn.memoryProposals.length > 0 ? { memoryProposals: turn.memoryProposals } : {}),
+        ...(outcome.safety ? { safety: { resources: outcome.safety.resources, canContinue: true } } : {}),
+        ...(outcome.memory && outcome.memory.length > 0 ? { memoryProposals: outcome.memory } : {}),
       });
     } catch (err) {
       // Neither is a server fault, so neither is logged as one.
@@ -261,6 +326,13 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
         return;
       }
       logFailure('message', err);
+      if (res.headersSent) {
+        if (!res.writableEnded) {
+          writeSse(res, { type: 'error', code: 'internal', retryable: true });
+          res.end();
+        }
+        return;
+      }
       res.status(500).json({ error: 'coach_unavailable' });
     }
   });

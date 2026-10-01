@@ -9,7 +9,7 @@ import { createCoachRouter } from '../../src/coach/routes';
 import { COACH_CONSENT_VERSION } from '../../src/coach/consent';
 import { COACH_DISCLAIMER } from '../../src/coach/guardrails/disclaimer';
 import { LoggerCoachTelemetry } from '../../src/coach/telemetry';
-import { ScriptedProvider, ScriptStep } from '../../src/coach/model/provider';
+import { ScriptedStreamProvider, StreamStep } from '../../src/coach/model/provider';
 import { resetCoachProviderFromEnv } from '../../src/coach/config';
 import { DEFAULT_PERSONA_ID, listPersonas } from '../../src/coach/personas';
 import { FakeClock, RecordingTelemetry, createUser, daysAgo, putScore, todayUtc } from './helpers';
@@ -39,11 +39,11 @@ async function authed(userId: string) {
   return authHeaderFor(userId);
 }
 
-const GOOD = 'Your recovery is {{getDailyScore.recoveryScore}}, {{getDailyScore.direction}} than yesterday.';
+const GOOD = 'Your recovery is 72 today.';
 
-/** An app whose coach runs against a scripted provider and a recording telemetry sink. */
-function scriptedApp(script: ScriptStep[]) {
-  const provider = new ScriptedProvider(script);
+/** An app whose coach runs against a scripted streaming provider and a recording telemetry sink. */
+function scriptedApp(script: StreamStep[]) {
+  const provider = new ScriptedStreamProvider(script);
   const telemetry = new RecordingTelemetry();
   const app = express();
   app.use(express.json());
@@ -111,7 +111,7 @@ describe('COACH_ENABLED flag (default off)', () => {
 
   it('never calls the model or persists anything while off', async () => {
     process.env.COACH_ENABLED = 'false';
-    const { app, provider } = scriptedApp([{ type: 'text', text: GOOD }]);
+    const { app, provider } = scriptedApp([GOOD]);
     const user = await consented();
     await request(app).post('/me/coach/message').set(await authed(user.id)).send({ message: 'hi' });
     expect(provider.callCount).toBe(0);
@@ -213,7 +213,7 @@ describe('GET /me/coach/status', () => {
 
 describe('consent gate', () => {
   it('POST /me/coach/message is 403 consent_required without consent, and the model is never called', async () => {
-    const { app, provider } = scriptedApp([{ type: 'text', text: GOOD }]);
+    const { app, provider } = scriptedApp([GOOD]);
     const user = await createUser();
     const res = await request(app).post('/me/coach/message').set(await authed(user.id)).send({ message: 'hi' });
     expect(res.status).toBe(403);
@@ -247,7 +247,7 @@ describe('consent gate', () => {
   });
 
   it('a consent to an older version does not satisfy the current one (a version bump requires re-consent)', async () => {
-    const { app, provider } = scriptedApp([{ type: 'text', text: GOOD }]);
+    const { app, provider } = scriptedApp([GOOD]);
     const user = await createUser();
     await prisma.coachConsent.create({ data: { userId: user.id, version: '0-old' } });
     const res = await request(app).post('/me/coach/message').set(await authed(user.id)).send({ message: 'hi' });
@@ -258,7 +258,7 @@ describe('consent gate', () => {
   });
 
   it('DELETE consent revokes it (204) and messages are refused again until re-consent', async () => {
-    const { app, provider } = scriptedApp([{ type: 'text', text: 'Fine.' }, { type: 'text', text: 'Fine.' }]);
+    const { app, provider } = scriptedApp(['Fine.', 'Fine.']);
     const user = await consented();
     const headers = await authed(user.id);
     expect((await request(app).post('/me/coach/message').set(headers).send({ message: 'hi' })).status).toBe(200);
@@ -334,7 +334,7 @@ describe('PUT /me/coach/persona', () => {
   });
 
   it('the chosen persona is the one the coach uses on the next turn', async () => {
-    const { app, provider, telemetry } = scriptedApp([{ type: 'text', text: 'Fine.' }]);
+    const { app, provider, telemetry } = scriptedApp(['Fine.']);
     const user = await consented();
     await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: 'ember' } });
     await request(app).post('/me/coach/message').set(await authed(user.id)).send({ message: 'hi' });
@@ -346,7 +346,7 @@ describe('PUT /me/coach/persona', () => {
 
 describe('POST /me/coach/message', () => {
   it('returns the contract shape and persists both messages in order', async () => {
-    const { app } = scriptedApp([{ type: 'text', text: GOOD }]);
+    const { app } = scriptedApp([GOOD]);
     const user = await consented();
     await putScore(user.id, daysAgo(1), 75);
     await putScore(user.id, todayUtc(), 72.4);
@@ -359,14 +359,15 @@ describe('POST /me/coach/message', () => {
     expect(res.body.message).toMatchObject({
       role: 'assistant',
       source: 'model',
-      text: `Your recovery is 72.4, lower than yesterday.\n\n${COACH_DISCLAIMER}`,
+      text: `Your recovery is 72 today.\n\n${COACH_DISCLAIMER}`,
     });
     expect(new Date(res.body.message.createdAt).toISOString()).toBe(res.body.message.createdAt);
 
     const rows = await prisma.coachMessage.findMany({ where: { conversationId: res.body.conversationId }, orderBy: { createdAt: 'asc' } });
+    // Stored clean: the disclaimer is added to the older apps' JSON response only.
     expect(rows.map((r) => [r.role, r.source, r.text])).toEqual([
       ['USER', null, 'why is my score low'],
-      ['ASSISTANT', 'MODEL', res.body.message.text],
+      ['ASSISTANT', 'MODEL', 'Your recovery is 72 today.'],
     ]);
     expect(rows[1]!.id).toBe(res.body.message.id);
     expect(rows.every((r) => r.userId === user.id)).toBe(true);
@@ -375,7 +376,7 @@ describe('POST /me/coach/message', () => {
     expect(conv!.lastMessageAt.getTime()).toBeGreaterThanOrEqual(rows[1]!.createdAt.getTime());
   });
 
-  it('with the default (unconfigured) provider every turn is the server-composed fallback, source "fallback"', async () => {
+  it('with the default (unconfigured) provider the answer is a 503 model_unavailable, never a template reply', async () => {
     // A developer's .env may set COACH_PROVIDER=ollama; this case is about the
     // unconfigured default, so it must not depend on the local environment.
     const savedProvider = process.env.COACH_PROVIDER;
@@ -385,10 +386,9 @@ describe('POST /me/coach/message', () => {
       const user = await consented();
       await putScore(user.id, todayUtc(), 66.5);
       const res = await request(createApp()).post('/me/coach/message').set(await authed(user.id)).send({ message: 'how am I doing' });
-      expect(res.status).toBe(200);
-      expect(res.body.message.source).toBe('fallback');
-      expect(res.body.message.text).toContain('Your recovery score today is 66.5.');
-      expect(res.body.message.text.endsWith(COACH_DISCLAIMER)).toBe(true);
+      expect(res.status).toBe(503);
+      expect(res.body).toEqual({ error: 'model_unavailable', retryable: true });
+      expect(await prisma.coachMessage.count({ where: { userId: user.id } })).toBe(0);
     } finally {
       if (savedProvider === undefined) delete process.env.COACH_PROVIDER;
       else process.env.COACH_PROVIDER = savedProvider;
@@ -397,7 +397,7 @@ describe('POST /me/coach/message', () => {
   });
 
   it('continues a conversation with conversationId, feeding prior turns to the model', async () => {
-    const { app, provider } = scriptedApp([{ type: 'text', text: 'First.' }, { type: 'text', text: 'Second.' }]);
+    const { app, provider } = scriptedApp(['First.', 'Second.']);
     const user = await consented();
     const headers = await authed(user.id);
     const one = await request(app).post('/me/coach/message').set(headers).send({ message: 'hello' });
@@ -413,7 +413,7 @@ describe('POST /me/coach/message', () => {
   });
 
   it('omitting conversationId starts a new conversation', async () => {
-    const { app } = scriptedApp([{ type: 'text', text: 'A.' }, { type: 'text', text: 'B.' }]);
+    const { app } = scriptedApp(['A.', 'B.']);
     const user = await consented();
     const headers = await authed(user.id);
     const one = await request(app).post('/me/coach/message').set(headers).send({ message: 'hello' });
@@ -422,7 +422,7 @@ describe('POST /me/coach/message', () => {
   });
 
   it("404s on another user's or an unknown conversationId, without calling the model", async () => {
-    const { app, provider } = scriptedApp([{ type: 'text', text: 'A.' }, { type: 'text', text: 'B.' }]);
+    const { app, provider } = scriptedApp(['A.', 'B.']);
     const owner = await consented();
     const other = await consented();
     const conv = (await request(app).post('/me/coach/message').set(await authed(owner.id)).send({ message: 'hello' })).body.conversationId;
@@ -443,7 +443,7 @@ describe('POST /me/coach/message', () => {
     ['non-string conversationId', { message: 'hi', conversationId: 5 }],
     ['non-boolean safetyOverride', { message: 'hi', safetyOverride: 'yes' }],
   ])('400 for an invalid body: %s', async (_l, body) => {
-    const { app, provider } = scriptedApp([{ type: 'text', text: 'A.' }]);
+    const { app, provider } = scriptedApp(['A.']);
     const user = await consented();
     const res = await request(app).post('/me/coach/message').set(await authed(user.id)).send(body);
     expect(res.status).toBe(400);
@@ -451,14 +451,14 @@ describe('POST /me/coach/message', () => {
   });
 
   it('accepts a message of exactly 2000 characters', async () => {
-    const { app } = scriptedApp([{ type: 'text', text: 'A.' }]);
+    const { app } = scriptedApp(['A.']);
     const user = await consented();
     const res = await request(app).post('/me/coach/message').set(await authed(user.id)).send({ message: 'x'.repeat(2000) });
     expect(res.status).toBe(200);
   });
 
   it('a crisis message gets the fixed safety reply with resources and canContinue, no model call, both messages persisted', async () => {
-    const { app, provider } = scriptedApp([{ type: 'text', text: 'never' }]);
+    const { app, provider } = scriptedApp(['never']);
     const user = await consented();
     const res = await request(app).post('/me/coach/message').set(await authed(user.id)).send({ message: 'I want to end my life' });
     expect(res.status).toBe(200);
@@ -471,7 +471,7 @@ describe('POST /me/coach/message', () => {
   });
 
   it('safetyOverride:true returns control to normal chat for that message', async () => {
-    const { app, provider, telemetry } = scriptedApp([{ type: 'text', text: 'Glad to help with your data.' }]);
+    const { app, provider, telemetry } = scriptedApp(['Glad to help with your data.']);
     const user = await consented();
     const res = await request(app)
       .post('/me/coach/message')
@@ -485,21 +485,17 @@ describe('POST /me/coach/message', () => {
   });
 
   it('persists guardrail events on the assistant message when a reply was rejected then regenerated', async () => {
-    const { app } = scriptedApp([{ type: 'text', text: 'Here are 3 tips.' }, { type: 'text', text: 'Rest well.' }]);
+    const { app } = scriptedApp(['Here are 3 tips.', 'Rest well.']);
     const user = await consented();
     const res = await request(app).post('/me/coach/message').set(await authed(user.id)).send({ message: 'tips?' });
     const assistant = await prisma.coachMessage.findUnique({ where: { id: res.body.message.id } });
-    expect(assistant?.guardrailEvents).toEqual([{ type: 'guardrail_reject', reason: 'unwrapped_number', attempt: 1, outcome: 'regenerate' }]);
+    expect(assistant?.guardrailEvents).toEqual([{ type: 'sentence_dropped', reason: 'unknown_number', attempt: 1 }, { type: 'regenerated' }]);
   });
 
-  it('never writes message text or tool results to the logs', async () => {
+  it('never writes message text or fact values to the logs', async () => {
     const SENTINEL = 'quokka-sentinel-question';
     const spies = (['log', 'info', 'warn', 'error', 'debug'] as const).map((m) => jest.spyOn(console, m).mockImplementation(() => {}));
-    const provider = new ScriptedProvider([
-      { type: 'tool_calls', calls: [{ id: 'c', name: 'getUserGoals', args: {} }] },
-      { type: 'text', text: 'Take 3 naps.' },
-      { type: 'text', text: `Still ${SENTINEL} 4 naps.` },
-    ]);
+    const provider = new ScriptedStreamProvider(['Take 3 naps.', `Still ${SENTINEL}. Your recovery is 71.`]);
     const app = express();
     app.use(express.json());
     app.use(createCoachRouter({ getProvider: () => provider, telemetry: new LoggerCoachTelemetry(), clock: new FakeClock() }));
@@ -508,10 +504,10 @@ describe('POST /me/coach/message', () => {
     const res = await request(app).post('/me/coach/message').set(await authed(user.id)).send({ message: `${SENTINEL} why` });
     expect(res.status).toBe(200);
     const logged = spies.flatMap((s) => s.mock.calls.map((c) => c.join(' '))).join('\n');
-    expect(logged).toContain('coach.tool_call'); // logging is on...
+    expect(logged).toContain('coach.answer_done'); // logging is on...
     expect(logged).toContain(user.id);
     expect(logged).not.toContain(SENTINEL); // ...but carries ids/counts/reasons only
-    expect(logged).not.toContain('71.1');
+    expect(logged).not.toContain('recovery is'); // no reply text (a bare "71" could appear inside a uuid)
     expect(logged).not.toContain('naps');
   });
 });
@@ -525,7 +521,7 @@ describe('conversation transcripts', () => {
   });
 
   it('GET /latest and GET /:id return the transcript in order with the contract shape', async () => {
-    const { app } = scriptedApp([{ type: 'text', text: 'A.' }, { type: 'text', text: 'B.' }]);
+    const { app } = scriptedApp(['A.', 'B.']);
     const user = await consented();
     const headers = await authed(user.id);
     const first = await request(app).post('/me/coach/message').set(headers).send({ message: 'one' });
@@ -535,7 +531,7 @@ describe('conversation transcripts', () => {
     expect(latest.status).toBe(200);
     expect(latest.body.conversationId).toBe(second.body.conversationId);
     expect(latest.body.messages).toHaveLength(2);
-    expect(Object.keys(latest.body.messages[0]).sort()).toEqual(['createdAt', 'id', 'role', 'source', 'text']);
+    expect(Object.keys(latest.body.messages[0]).sort()).toEqual(['card', 'createdAt', 'id', 'role', 'source', 'text']);
     expect(latest.body.messages.map((m: any) => [m.role, m.source])).toEqual([
       ['user', null],
       ['assistant', 'model'],
@@ -549,7 +545,7 @@ describe('conversation transcripts', () => {
   });
 
   it("GET /:id is 404 for another user's conversation and for an unknown id", async () => {
-    const { app } = scriptedApp([{ type: 'text', text: 'A.' }]);
+    const { app } = scriptedApp(['A.']);
     const owner = await consented();
     const other = await createUser();
     const conv = (await request(app).post('/me/coach/message').set(await authed(owner.id)).send({ message: 'private' })).body.conversationId;
@@ -569,7 +565,7 @@ describe('POST /me/coach/message: per-user guards', () => {
   // front of it.
   it('rate limits a burst and says when to retry', async () => {
     resetTurnGuards();
-    const { app } = scriptedApp(Array.from({ length: RATE_LIMIT_MAX_TURNS + 1 }, () => ({ type: 'text' as const, text: GOOD })));
+    const { app } = scriptedApp(Array.from({ length: RATE_LIMIT_MAX_TURNS + 1 }, () => 'Fine.'));
     const user = await consented();
     const headers = await authed(user.id);
 
@@ -587,7 +583,7 @@ describe('POST /me/coach/message: per-user guards', () => {
 
   it('does not spend a rate-limit slot on a request that fails validation', async () => {
     resetTurnGuards();
-    const { app } = scriptedApp([{ type: 'text', text: GOOD }]);
+    const { app } = scriptedApp(['Fine.']);
     const user = await consented();
     const headers = await authed(user.id);
 
