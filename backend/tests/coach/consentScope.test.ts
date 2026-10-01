@@ -31,7 +31,10 @@ describe('hosted consent text', () => {
         "Anthropic doesn't use it to train models. You can switch back any time.",
     );
     expect(COACH_HOSTED_CONSENT.dataItems.length).toBeGreaterThanOrEqual(3);
-    expect(COACH_HOSTED_CONSENT.dataItems.join(' ')).toMatch(/never sent/i);
+    const items = COACH_HOSTED_CONSENT.dataItems.join(' ');
+    expect(items).toMatch(/we never add your name, email, account id/i);
+    expect(items).toMatch(/anything you type yourself[^.]*is sent as part of the conversation/i);
+    expect(items).not.toMatch(/never sent: your name/i);
   });
 
   it('consentTextFor picks the text by scope', () => {
@@ -43,7 +46,8 @@ describe('hosted consent text', () => {
 describe('scoped consent', () => {
   it('a hosted grant does not count as the local consent, nor the other way round', async () => {
     const user = await createUser();
-    await grantConsent(user.id, 'hosted');
+    // Written directly: grantConsent refuses a hosted grant without the local consent.
+    await prisma.coachConsent.create({ data: { userId: user.id, version: COACH_HOSTED_CONSENT_VERSION, scope: 'HOSTED' } });
     expect(await hasCurrentConsent(user.id, 'hosted')).toBe(true);
     expect(await hasCurrentConsent(user.id)).toBe(false);
 
@@ -63,17 +67,39 @@ describe('scoped consent', () => {
     expect(await hasCurrentConsent(user.id, 'hosted')).toBe(true);
   });
 
+  it('a hosted grant without the current local consent adds nothing and reports false', async () => {
+    const user = await createUser();
+    expect(await grantConsent(user.id, 'hosted')).toBe(false);
+    expect(await prisma.coachConsent.count({ where: { userId: user.id } })).toBe(0);
+
+    expect(await grantConsent(user.id)).toBe(true);
+    await revokeConsent(user.id);
+    expect(await grantConsent(user.id, 'hosted')).toBe(false);
+    expect(await hasCurrentConsent(user.id, 'hosted')).toBe(false);
+  });
+
+  it('a revoke-all racing a hosted grant never leaves a live hosted row behind', async () => {
+    for (let i = 0; i < 5; i++) {
+      const user = await createUser();
+      await grantConsent(user.id);
+      await Promise.all([grantConsent(user.id, 'hosted'), revokeConsent(user.id)]);
+      expect(await prisma.coachConsent.count({ where: { userId: user.id, revokedAt: null } })).toBe(0);
+    }
+  });
+
   it('stores the scope and the scope version, and a repeat grant adds no row', async () => {
     const user = await createUser();
+    await grantConsent(user.id);
     await grantConsent(user.id, 'hosted');
     await grantConsent(user.id, 'hosted');
-    const rows = await prisma.coachConsent.findMany({ where: { userId: user.id } });
+    const rows = await prisma.coachConsent.findMany({ where: { userId: user.id, scope: 'HOSTED' } });
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ scope: 'HOSTED', version: COACH_HOSTED_CONSENT_VERSION, revokedAt: null });
   });
 
   it('a hosted row with a stale version is not current, and re-granting adds a current HOSTED row', async () => {
     const user = await createUser();
+    await grantConsent(user.id);
     await prisma.coachConsent.create({
       data: { userId: user.id, scope: 'HOSTED', version: 'hosted-0', consentedAt: new Date(Date.now() - 60_000) },
     });

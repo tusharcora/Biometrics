@@ -211,13 +211,13 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
           res.status(404).json({ error: 'hosted_unavailable' });
           return;
         }
-        // The hosted opt-in builds on the coach consent: it only changes WHERE the answer is written.
-        if (!(await hasCurrentConsent(req.userId!))) {
-          res.status(403).json({ error: 'consent_required' });
-          return;
-        }
       }
-      await grantConsent(req.userId!, scope);
+      // The hosted opt-in builds on the coach consent: it only changes WHERE the answer is written.
+      // grantConsent checks the local consent in the same transaction as the hosted insert.
+      if (!(await grantConsent(req.userId!, scope))) {
+        res.status(403).json({ error: 'consent_required' });
+        return;
+      }
       res.json({ consented: true });
     } catch (err) {
       logFailure('consent_grant', err);

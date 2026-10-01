@@ -5,6 +5,7 @@
 // COACH_CONSENT_VERSION invalidates every stored consent: the next message is
 // refused (403 consent_required) until the user re-consents to the new text.
 
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../db/client';
 
 // Version 2: the coach can also read daily metrics (steps, resting heart rate,
@@ -51,7 +52,8 @@ export const COACH_HOSTED_CONSENT: ConsentText = {
     'The question you type and the recent messages of the current conversation',
     'A short summary of the health numbers the answer needs: your scores and their usual values, last night’s sleep, HRV, resting heart rate, confirmed habit patterns, goals and what you asked the coach to remember',
     'The same summary for the one-sentence recap of your day at the top of the Coach page',
-    'Never sent: your name, email, account id, sign-in or Google Health tokens, or the notes on your habit logs',
+    'We never add your name, email, account id, sign-in or Google Health tokens, or the notes on your habit logs. ' +
+      'Anything you type yourself, including your name if you write it, is sent as part of the conversation',
   ],
 };
 
@@ -69,8 +71,12 @@ export function consentTextFor(scope: ConsentScope): ConsentText {
  * scope's CURRENT version. Scoped because the latest row overall may be the
  * other scope's: a hosted grant must never read as a stale local consent.
  */
-export async function hasCurrentConsent(userId: string, scope: ConsentScope = 'local'): Promise<boolean> {
-  const latest = await prisma.coachConsent.findFirst({
+export async function hasCurrentConsent(
+  userId: string,
+  scope: ConsentScope = 'local',
+  db: Prisma.TransactionClient = prisma,
+): Promise<boolean> {
+  const latest = await db.coachConsent.findFirst({
     where: { userId, revokedAt: null, scope: SCOPE_COLUMN[scope] },
     orderBy: { consentedAt: 'desc' },
     select: { version: true },
@@ -78,25 +84,46 @@ export async function hasCurrentConsent(userId: string, scope: ConsentScope = 'l
   return latest?.version === SCOPE_VERSION[scope];
 }
 
-/** Idempotent: a repeat grant for the current version of the scope does not add a row. */
-export async function grantConsent(userId: string, scope: ConsentScope = 'local'): Promise<void> {
-  if (await hasCurrentConsent(userId, scope)) return;
-  await prisma.coachConsent.create({ data: { userId, version: SCOPE_VERSION[scope], scope: SCOPE_COLUMN[scope] } });
+// Grants and revokes for one user are serialised on that user's row. Without
+// the lock, a revoke-all could commit between a hosted grant's local-consent
+// check and its insert, and the revoke's UPDATE (whose snapshot predates the
+// insert) would leave the new hosted row live behind a revoked local consent.
+async function lockUser(db: Prisma.TransactionClient, userId: string): Promise<void> {
+  await db.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`;
+}
+
+/**
+ * Idempotent: a repeat grant for the current version of the scope does not add
+ * a row. A hosted grant builds on the coach (local) consent: when the user does
+ * not hold the current local consent at the moment of the insert it adds
+ * nothing and returns false (the route answers 403 consent_required).
+ * Otherwise returns true.
+ */
+export async function grantConsent(userId: string, scope: ConsentScope = 'local'): Promise<boolean> {
+  return prisma.$transaction(async (tx) => {
+    await lockUser(tx, userId);
+    if (scope === 'hosted' && !(await hasCurrentConsent(userId, 'local', tx))) return false;
+    if (await hasCurrentConsent(userId, scope, tx)) return true;
+    await tx.coachConsent.create({ data: { userId, version: SCOPE_VERSION[scope], scope: SCOPE_COLUMN[scope] } });
+    return true;
+  });
 }
 
 /**
  * 'all' (the default, and what DELETE /me/coach/consent has always meant)
  * withdraws both scopes; 'hosted' withdraws only the hosted opt-in. Either way
  * the user is back on the local engine, in the same transaction, so no message
- * can go to the hosted model after the revoke returns.
+ * started after the revoke returns goes to the hosted model. (A request already
+ * in flight is not stopped.)
  */
 export async function revokeConsent(userId: string, scope: 'hosted' | 'all' = 'all'): Promise<void> {
   const now = new Date();
-  await prisma.$transaction([
-    prisma.coachConsent.updateMany({
+  await prisma.$transaction(async (tx) => {
+    await lockUser(tx, userId);
+    await tx.coachConsent.updateMany({
       where: { userId, revokedAt: null, ...(scope === 'hosted' ? { scope: 'HOSTED' as const } : {}) },
       data: { revokedAt: now },
-    }),
-    prisma.user.updateMany({ where: { id: userId }, data: { coachEngine: 'LOCAL' } }),
-  ]);
+    });
+    await tx.user.updateMany({ where: { id: userId }, data: { coachEngine: 'LOCAL' } });
+  });
 }
