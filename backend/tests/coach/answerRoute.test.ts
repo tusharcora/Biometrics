@@ -54,6 +54,32 @@ describe('routeQuestion', () => {
     expect(routeQuestion('why?')).toBe('today');
   });
 
+  it.each([
+    ["How's recovery today?", 'today'],
+    ["What's today's score?", 'today'],
+    ['Is HRV up today?', 'today'],
+    ['How was last night?', 'sleep'],
+    ["How was last night's sleep?", 'sleep'],
+    ['Any change in recovery this week?', 'trends'],
+    ['How are we doing today?', 'today'],
+  ] as const)('an implicitly personal question never routes to general: %s -> %s', (message, route) => {
+    expect(routeQuestion(message)).toBe(route);
+  });
+
+  it('a personal follow-up to a general question routes on the previous topic, personally', () => {
+    expect(routeQuestion('and what is mine?', 'What is HRV?')).toBe('today');
+    expect(routeQuestion('is mine normal?', 'What does resting heart rate tell you?')).toBe('today');
+    expect(routeQuestion('how about for me?', 'How much sleep do adults need?')).toBe('sleep');
+    // "tell me" is an imperative, not a personal reference
+    expect(routeQuestion('tell me more', 'What is HRV?')).toBe('general');
+  });
+
+  it('a today metric beats a sleep match that rests only on "night" or "tired"', () => {
+    expect(routeQuestion('Why is my recovery low after last night?')).toBe('today');
+    expect(routeQuestion("I'm tired, should I train today?")).toBe('today');
+    expect(routeQuestion('Why did I wake up so tired?')).toBe('sleep');
+  });
+
   it('is case- and apostrophe-insensitive', () => {
     expect(routeQuestion('HOW DID I SLEEP')).toBe('sleep');
     expect(routeQuestion('What’s HRV?')).toBe('general');

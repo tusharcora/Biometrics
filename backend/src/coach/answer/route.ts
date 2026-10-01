@@ -12,7 +12,12 @@
 
 export type AnswerRoute = 'today' | 'sleep' | 'trends' | 'general';
 
-const PERSONAL_RE = /\b(my|me|i|i'm|im|i've|i'd|i'll|mine|myself)\b/;
+// First-person words, plus time and collective words that only make sense about
+// the user's own data ("How's recovery today?", "How was last night?").
+const PERSONAL_RE =
+  /\b(my|me|i|i'm|im|i've|i'd|i'll|mine|myself|we|us|our|today|tonight|yesterday|this morning|last night|this week)\b/;
+// Imperatives that contain "me" without being about the user ("tell me more").
+const IMPERATIVE_ME_RE = /\b(tell|show|give|explain to) me\b/g;
 const GENERAL_SHAPE_RE = /^(what|what's|whats|why|how|is|are|does|do|can|could|should|any|tips?|explain|tell me about)\b/;
 
 const HABIT_RE =
@@ -21,6 +26,10 @@ const TRENDS_RE =
   /\b(trend\w*|months?|monthly|weeks|lately|recently|over time|averages?|compare|comparison|progress|goals?|patterns?|correlat\w*|this year|(?:last|past) \d+ days)\b/;
 const WEEK_RE = /\b(week|weekly)\b/;
 const SLEEP_RE = /\b(sleep\w*|slept|asleep|bed|bedtime|naps?|napping|woke|wake|waking|tired|rested|insomnia|night)\b/;
+// Sleep words that are about sleep on their own; "night" and "tired" are not.
+const STRONG_SLEEP_RE = /\b(sleep\w*|slept|asleep|bed|bedtime|naps?|napping|woke|wake|waking|rested|insomnia)\b/;
+// Today's metrics, which beat a sleep match resting only on "night"/"tired".
+const TODAY_METRIC_RE = /\b(recovery|hrv|heart rate|rhr|train\w*|workouts?)\b/;
 const TODAY_RE =
   /\b(today|this morning|right now|now|recovery|scores?|hrv|heart|rhr|pulse|steps?|readiness|train\w*|run|running|push|rest day|energy)\b/;
 
@@ -34,16 +43,28 @@ function hasTopic(text: string): boolean {
   return [HABIT_RE, TRENDS_RE, WEEK_RE, SLEEP_RE, TODAY_RE].some((re) => re.test(text));
 }
 
+function isPersonal(text: string): boolean {
+  return PERSONAL_RE.test(text.replace(IMPERATIVE_ME_RE, ' '));
+}
+
+// Route by topic alone, treating the question as personal.
+function topicRoute(text: string): Exclude<AnswerRoute, 'general'> {
+  if (HABIT_RE.test(text) || TRENDS_RE.test(text)) return 'trends';
+  if (STRONG_SLEEP_RE.test(text) || (SLEEP_RE.test(text) && !TODAY_METRIC_RE.test(text))) return 'sleep';
+  if (WEEK_RE.test(text)) return 'trends';
+  return 'today';
+}
+
 export function routeQuestion(message: string, previousUserMessage?: string): AnswerRoute {
   const text = normalize(message);
   const topic = hasTopic(text);
 
   if (!topic && previousUserMessage !== undefined && text.split(' ').length <= FOLLOW_UP_MAX_WORDS) {
-    return routeQuestion(previousUserMessage);
+    const inherited = routeQuestion(previousUserMessage);
+    // "and what is mine?" after "What is HRV?" asks about the user's own data.
+    if (inherited === 'general' && isPersonal(text)) return topicRoute(normalize(previousUserMessage));
+    return inherited;
   }
-  if (topic && !PERSONAL_RE.test(text) && GENERAL_SHAPE_RE.test(text)) return 'general';
-  if (HABIT_RE.test(text) || TRENDS_RE.test(text)) return 'trends';
-  if (SLEEP_RE.test(text)) return 'sleep';
-  if (WEEK_RE.test(text)) return 'trends';
-  return 'today';
+  if (topic && !isPersonal(text) && GENERAL_SHAPE_RE.test(text)) return 'general';
+  return topicRoute(text);
 }
