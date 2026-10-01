@@ -255,6 +255,20 @@ export class OllamaProvider implements CoachModelProvider {
     return { type: 'text', text: stripThinking(String(message.content ?? '')) };
   }
 
+  /**
+   * The model options a streamed answer and the warm-up share. Ollama reloads
+   * the model whenever a load option (num_ctx above all) differs from the
+   * loaded one, so the warm-up must load with exactly these or the next answer
+   * pays a second cold load. Per-answer settings (num_predict) are added by
+   * stream() on top.
+   */
+  private answerModelOptions(): { temperature: number; num_ctx: number } {
+    return {
+      temperature: this.options.temperature ?? 0.3,
+      num_ctx: this.options.numCtx ?? 8192,
+    };
+  }
+
   private chatUrl(): string {
     return `${this.options.baseUrl.replace(/\/+$/, '')}/api/chat`;
   }
@@ -270,11 +284,7 @@ export class OllamaProvider implements CoachModelProvider {
       stream: true,
       think: false,
       keep_alive: this.options.keepAlive ?? STREAM_KEEP_ALIVE,
-      options: {
-        temperature: this.options.temperature ?? 0.3,
-        num_ctx: this.options.numCtx ?? 8192,
-        num_predict: request.maxTokens,
-      },
+      options: { ...this.answerModelOptions(), num_predict: request.maxTokens },
       messages: [{ role: 'system', content: request.system }, ...request.messages],
     };
     const res = await this.fetchImpl(this.chatUrl(), {
@@ -328,13 +338,22 @@ export class OllamaProvider implements CoachModelProvider {
     }
   }
 
-  /** Loads the model into memory (an empty chat) so the first question skips the cold start. Never throws. */
+  /**
+   * Loads the model into memory (an empty chat) so the first question skips the
+   * cold start. It loads with the answer's own options (same num_ctx), so the
+   * next stream() finds the model already loaded as it needs it. Never throws.
+   */
   async warm(): Promise<void> {
     try {
       await this.fetchImpl(this.chatUrl(), {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ model: this.options.model, messages: [], keep_alive: this.options.keepAlive ?? STREAM_KEEP_ALIVE }),
+        body: JSON.stringify({
+          model: this.options.model,
+          messages: [],
+          keep_alive: this.options.keepAlive ?? STREAM_KEEP_ALIVE,
+          options: this.answerModelOptions(),
+        }),
       });
     } catch {
       /* best effort: the first answer simply pays the cold start */

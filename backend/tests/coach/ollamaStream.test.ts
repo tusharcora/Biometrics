@@ -142,7 +142,33 @@ describe('OllamaProvider.warm', () => {
     await provider.warm();
     const [url, init] = fetchImpl.mock.calls[0];
     expect(url).toBe(`${BASE}/api/chat`);
-    expect(JSON.parse(init.body)).toEqual({ model: 'qwen3.6:35b', messages: [], keep_alive: '24h' });
+    expect(JSON.parse(init.body)).toEqual({
+      model: 'qwen3.6:35b',
+      messages: [],
+      keep_alive: '24h',
+      options: { temperature: 0.3, num_ctx: 8192 },
+    });
+  });
+
+  // A different num_ctx makes Ollama reload the model, so a warm-up that loads at
+  // the default context (65536 on the owner's Mac) makes the next answer cold.
+  it.each([
+    ['defaults', {}],
+    ['configured context, temperature and keep-alive', { numCtx: 16384, temperature: 0.5, keepAlive: '2h' }],
+  ])('loads the model with the same model, keep-alive and load options a streamed answer uses (%s)', async (_name, over) => {
+    const warmFetch = jest.fn(async () => ({ ok: true, status: 200 })) as unknown as jest.Mock & typeof fetch;
+    const streamFetch = streamingFetch(ndjsonBytes([delta('Hi.'), DONE], []));
+    await new OllamaProvider({ baseUrl: BASE, model: 'qwen3.6:35b', fetchImpl: warmFetch, ...over }).warm();
+    await collect(new OllamaProvider({ baseUrl: BASE, model: 'qwen3.6:35b', fetchImpl: streamFetch, ...over }).stream(req()));
+
+    const warmBody = JSON.parse(warmFetch.mock.calls[0][1].body);
+    const streamBody = JSON.parse(streamFetch.mock.calls[0][1].body as string);
+    // num_predict is a per-answer output budget, not a load option.
+    const { num_predict: _perAnswer, ...streamLoadOptions } = streamBody.options;
+    expect(warmBody.options).toEqual(streamLoadOptions);
+    expect(warmBody.options.num_ctx).toBe(streamBody.options.num_ctx);
+    expect(warmBody.model).toBe(streamBody.model);
+    expect(warmBody.keep_alive).toBe(streamBody.keep_alive);
   });
 
   it('never throws', async () => {
