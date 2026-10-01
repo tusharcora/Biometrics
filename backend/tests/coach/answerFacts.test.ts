@@ -205,6 +205,27 @@ describe('buildFactSheet: today', () => {
     ]);
   });
 
+  it('treats a 0 sleep, HRV or resting HR reading as missing, and a 0 usual as none; a 0 recovery score stays', async () => {
+    const { deps } = fakeData({
+      score: dailyScore({ recoveryScore: 0 }),
+      metrics: dailyMetrics({ sleep: 0, hrv: 0, restingHeartRate: 0 }),
+    });
+    const sheet = await buildFactSheet('u1', 'today', deps);
+    expect(ids(sheet)).toEqual(['recovery.today', 'sleep_score.today', 'steps.today', 'factor.hrv', 'factor.rhr']);
+    expect(line(sheet, 'recovery.today')).toBe('[recovery.today] Recovery today: 0 (usual 58, 58 lower than usual)');
+    expect(sheet.notes).toEqual(['No HRV reading today', 'No resting heart rate reading today', 'No sleep recorded last night']);
+
+    const zeroUsual = fakeData({ usual: { HRV: 0, RESTING_HR: 0, SLEEP: 0 } });
+    const withReadings = await buildFactSheet('u1', 'today', zeroUsual.deps);
+    expect(line(withReadings, 'hrv.today')).toBe('[hrv.today] HRV today: 41 ms');
+    expect(line(withReadings, 'rhr.today')).toBe('[rhr.today] Resting heart rate today: 61 bpm');
+    expect(line(withReadings, 'sleep.total')).toBe('[sleep.total] Sleep last night: 6h 48m');
+
+    const sleepRoute = await buildFactSheet('u1', 'sleep', fakeData({ metrics: dailyMetrics({ sleep: 0 }) }).deps);
+    expect(ids(sleepRoute)).not.toContain('sleep.total');
+    expect(sleepRoute.notes).toContain('No sleep recorded last night');
+  });
+
   it('omits the usual (and the comparison) when there is no history', async () => {
     const { deps } = fakeData({ usual: { HRV: null }, recoveryUsual: null });
     const sheet = await buildFactSheet('u1', 'today', deps);

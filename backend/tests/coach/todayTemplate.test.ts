@@ -179,7 +179,9 @@ describe('spansFor (AI sentence)', () => {
 
   it.each([
     ['A short night (6h 48m) pulled recovery to 26; rest HR 61 bpm agrees.', [['night', 'sleep'], ['recovery', 'recovery'], ['rest HR', 'rhr']]],
-    ['Your heart rate rose after sleeping 5h 0m.', [['heart rate', 'rhr'], ['sleeping', 'sleep']]],
+    ['Your resting HR rose after sleeping 5h 0m.', [['resting HR', 'rhr'], ['sleeping', 'sleep']]],
+    ['Your heart rate variability dipped to 41 ms.', [['heart rate variability', 'hrv']]],
+    ['Your max heart rate peaked at 172 bpm after sleeping 5h 0m.', [['sleeping', 'sleep']]],
     ['You were asleep by 11; resting HR is 55 bpm.', [['asleep', 'sleep'], ['resting HR', 'rhr']]],
     ['Two short nights in a row show in your HRV.', [['nights', 'sleep'], ['HRV', 'hrv']]],
   ])('marks the wider metric words and rebuilds the text (%s)', (text, expected) => {

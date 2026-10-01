@@ -154,8 +154,9 @@ export function templateSentence(sheet: FactSheet): TodaySentence {
 const METRIC_WORDS: Array<[TodayMetric, RegExp]> = [
   ['recovery', /\brecovery\b/i],
   ['sleep', /\b(sleep|sleeping|slept|asleep|nights?)\b/i],
-  ['hrv', /\bHRV\b/i],
-  ['rhr', /\b(resting heart rate|resting HR|rest HR|heart rate)\b/i],
+  ['hrv', /\b(HRV|heart rate variability)\b/i],
+  // Only resting heart rate: a bare "heart rate" may be max or average heart rate, or HRV spelled out.
+  ['rhr', /\b(resting heart rate|resting HR|rest HR)\b/i],
 ];
 
 /** Tappable spans for a model-written sentence: the first mention of each metric. */

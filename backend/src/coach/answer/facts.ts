@@ -140,14 +140,24 @@ interface FactInput {
   lowerIsBetter?: boolean;
   note?: string;
   display?: string;
+  /** A device reading (sleep, HRV, resting HR) where 0 means "not recorded", never a real value. */
+  zeroIsMissing?: boolean;
 }
 
-/** A fact with its value and usual rounded for its unit; null when there is no value. */
+/**
+ * A fact with its value and usual rounded for its unit; null when there is no
+ * value. With zeroIsMissing, a 0 reading is no value and a 0 usual is no usual,
+ * so the sheet, the today bars and the model never see "HRV 0 ms".
+ */
 function fact(input: FactInput): Fact | null {
   if (input.value === null || input.value === undefined) return null;
   const value = roundFor(input.unit, input.value);
+  if (input.zeroIsMissing && value === 0) return null;
   const out: Fact = { id: input.id, label: input.label, value, unit: input.unit, display: input.display ?? formatValue(input.unit, value) };
-  if (input.usual !== null && input.usual !== undefined) out.usual = roundFor(input.unit, input.usual);
+  if (input.usual !== null && input.usual !== undefined) {
+    const usual = roundFor(input.unit, input.usual);
+    if (!(input.zeroIsMissing && usual === 0)) out.usual = usual;
+  }
   if (input.lowerIsBetter) out.lowerIsBetter = true;
   if (input.note) out.note = input.note;
   return out;
@@ -192,12 +202,12 @@ async function todayFacts(userId: string, deps: FactDeps, b: SheetBuilder): Prom
   ]);
   b.add(fact({ id: 'recovery.today', label: 'Recovery today', unit: 'score', value: score.recoveryScore, usual: recoveryUsual.average }), 'No Recovery score for today yet');
   b.add(fact({ id: 'sleep_score.today', label: 'Sleep score today', unit: 'score', value: score.sleepScore, usual: sleepScoreUsual.average }), 'No Sleep score for today yet');
-  b.add(fact({ id: 'hrv.today', label: 'HRV today', unit: 'ms', value: metrics.hrv.value, usual: hrv.average }), 'No HRV reading today');
+  b.add(fact({ id: 'hrv.today', label: 'HRV today', unit: 'ms', value: metrics.hrv.value, usual: hrv.average, zeroIsMissing: true }), 'No HRV reading today');
   b.add(
-    fact({ id: 'rhr.today', label: 'Resting heart rate today', unit: 'bpm', value: metrics.restingHeartRate.value, usual: rhr.average, lowerIsBetter: true }),
+    fact({ id: 'rhr.today', label: 'Resting heart rate today', unit: 'bpm', value: metrics.restingHeartRate.value, usual: rhr.average, lowerIsBetter: true, zeroIsMissing: true }),
     'No resting heart rate reading today',
   );
-  b.add(fact({ id: 'sleep.total', label: 'Sleep last night', unit: 'minutes', value: metrics.sleep.value, usual: sleep.average }), 'No sleep recorded last night');
+  b.add(fact({ id: 'sleep.total', label: 'Sleep last night', unit: 'minutes', value: metrics.sleep.value, usual: sleep.average, zeroIsMissing: true }), 'No sleep recorded last night');
   b.add(fact({ id: 'steps.today', label: 'Steps today so far', unit: 'count', value: metrics.steps.value, usual: steps.average }), 'No steps recorded today');
 
   const drivers = score.factors
@@ -229,7 +239,7 @@ async function sleepFacts(userId: string, deps: FactDeps, b: SheetBuilder): Prom
     deps.getMetricHistory(userId, 'SLEEP', 7, deps.today),
     deps.getUserGoals(userId),
   ]);
-  b.add(fact({ id: 'sleep.total', label: 'Sleep last night', unit: 'minutes', value: metrics.sleep.value, usual: usual.average }), 'No sleep recorded last night');
+  b.add(fact({ id: 'sleep.total', label: 'Sleep last night', unit: 'minutes', value: metrics.sleep.value, usual: usual.average, zeroIsMissing: true }), 'No sleep recorded last night');
   b.add(fact({ id: 'sleep_score.today', label: 'Sleep score today', unit: 'score', value: score.sleepScore, usual: sleepScoreUsual.average }), 'No Sleep score for today yet');
   b.add(fact({ id: 'sleep.goal', label: 'Sleep goal', unit: 'minutes', value: goals.sleepGoalMinutes }));
   b.add(fact({ id: 'sleep.avg7', label: 'Sleep 7-night average', unit: 'minutes', value: week.average, usual: usual.average }));
