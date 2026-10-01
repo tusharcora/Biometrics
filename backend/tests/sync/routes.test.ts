@@ -6,6 +6,7 @@ import { migrateTestDb } from '../setupTestDb';
 import { authHeaderFor, createTestUser } from '../helpers/auth';
 import * as catchUp from '../../src/sync/catchUp';
 import { encryptToken } from '../../src/crypto/tokenCipher';
+import { testServer } from '../helpers/server';
 
 beforeAll(() => {
   migrateTestDb();
@@ -37,7 +38,7 @@ describe('POST /me/sync', () => {
     const enqueue = jest.spyOn(catchUp, 'enqueueCatchUp').mockResolvedValue(undefined);
     jest.spyOn(catchUp, 'catchUpState').mockResolvedValue('idle');
 
-    const res = await request(createApp()).post('/me/sync').set(await authHeaderFor(user.id));
+    const res = await request(await testServer(createApp())).post('/me/sync').set(await authHeaderFor(user.id));
 
     expect(res.status).toBe(202);
     expect(res.body).toEqual({ state: 'syncing', lastSyncedAt: last.toISOString() });
@@ -50,7 +51,7 @@ describe('POST /me/sync', () => {
     const enqueue = jest.spyOn(catchUp, 'enqueueCatchUp').mockResolvedValue(undefined);
     jest.spyOn(catchUp, 'catchUpState').mockResolvedValue('idle');
 
-    const res = await request(createApp()).post('/me/sync').set(await authHeaderFor(user.id));
+    const res = await request(await testServer(createApp())).post('/me/sync').set(await authHeaderFor(user.id));
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ state: 'idle', lastSyncedAt: last.toISOString() });
@@ -59,13 +60,13 @@ describe('POST /me/sync', () => {
 
   it('answers 409 when Google Health is not connected', async () => {
     const user = await createTestUser();
-    const res = await request(createApp()).post('/me/sync').set(await authHeaderFor(user.id));
+    const res = await request(await testServer(createApp())).post('/me/sync').set(await authHeaderFor(user.id));
     expect(res.status).toBe(409);
     expect(res.body).toEqual({ error: 'not_connected' });
   });
 
   it('needs a session', async () => {
-    const res = await request(createApp()).post('/me/sync');
+    const res = await request(await testServer(createApp())).post('/me/sync');
     expect(res.status).toBe(401);
   });
 });
@@ -76,7 +77,7 @@ describe('GET /me/sync', () => {
     const user = await connectedUser(last);
     jest.spyOn(catchUp, 'catchUpState').mockResolvedValue(state);
 
-    const res = await request(createApp()).get('/me/sync').set(await authHeaderFor(user.id));
+    const res = await request(await testServer(createApp())).get('/me/sync').set(await authHeaderFor(user.id));
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ state, lastSyncedAt: last.toISOString(), connection: 'CONNECTED' });
@@ -87,7 +88,7 @@ describe('GET /me/sync', () => {
     const user = await connectedUser(last);
     const state = jest.spyOn(catchUp, 'catchUpState').mockResolvedValue('idle');
 
-    await request(createApp()).get('/me/sync').set(await authHeaderFor(user.id));
+    await request(await testServer(createApp())).get('/me/sync').set(await authHeaderFor(user.id));
 
     expect(state).toHaveBeenCalledWith(user.id, last);
   });
@@ -95,13 +96,13 @@ describe('GET /me/sync', () => {
   it('reports a disconnected connection', async () => {
     const user = await connectedUser(null, 'DISCONNECTED');
     jest.spyOn(catchUp, 'catchUpState').mockResolvedValue('idle');
-    const res = await request(createApp()).get('/me/sync').set(await authHeaderFor(user.id));
+    const res = await request(await testServer(createApp())).get('/me/sync').set(await authHeaderFor(user.id));
     expect(res.body).toEqual({ state: 'idle', lastSyncedAt: null, connection: 'DISCONNECTED' });
   });
 
   it('reports NOT_CONNECTED with no connection', async () => {
     const user = await createTestUser();
-    const res = await request(createApp()).get('/me/sync').set(await authHeaderFor(user.id));
+    const res = await request(await testServer(createApp())).get('/me/sync').set(await authHeaderFor(user.id));
     expect(res.body).toEqual({ state: 'idle', lastSyncedAt: null, connection: 'NOT_CONNECTED' });
   });
 });

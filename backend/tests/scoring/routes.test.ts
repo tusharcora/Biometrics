@@ -8,6 +8,7 @@ import { localCivilDate } from '../../src/biometrics/civilDate';
 import { shiftDate } from '../../src/scoring/dates';
 import { getLiveConfig } from '../../src/scoring/configs';
 import { createUser, seedHistory, day } from './dbHelpers';
+import { testServer } from '../helpers/server';
 
 beforeAll(() => {
   migrateTestDb();
@@ -44,8 +45,8 @@ async function putScore(userId: string, date: string, score: number | null, fact
 
 describe('auth', () => {
   it('rejects unauthenticated requests on both routes', async () => {
-    expect((await request(createApp()).get('/me/scores')).status).toBe(401);
-    expect((await request(createApp()).get('/me/scores/2026-09-01')).status).toBe(401);
+    expect((await request(await testServer(createApp())).get('/me/scores')).status).toBe(401);
+    expect((await request(await testServer(createApp())).get('/me/scores/2026-09-01')).status).toBe(401);
   });
 });
 
@@ -57,7 +58,7 @@ describe('GET /me/scores', () => {
     await putScore(user.id, today, 72.34);
     await putScore(user.id, shiftDate(today, -1), 55);
 
-    const res = await request(createApp()).get('/me/scores').set(await authed(user.id));
+    const res = await request(await testServer(createApp())).get('/me/scores').set(await authed(user.id));
 
     expect(res.status).toBe(200);
     // Edited: `bands` (from the live scoring config) is now a top-level field.
@@ -79,7 +80,7 @@ describe('GET /me/scores', () => {
   it('labels the RHR factor "Resting HR" (the dedicated daily resting HR type, no longer the daily-minimum proxy)', async () => {
     const user = await createUser();
     await putScore(user.id, localCivilDate(new Date(), 'UTC'), 60);
-    const res = await request(createApp()).get('/me/scores').set(await authed(user.id));
+    const res = await request(await testServer(createApp())).get('/me/scores').set(await authed(user.id));
     const labels = Object.fromEntries(res.body.scores[0].factors.map((f: any) => [f.factor, f.label]));
     expect(labels).toEqual({ HRV: 'HRV', RHR: 'Resting HR', SLEEP_DEBT: 'Sleep debt' });
   });
@@ -92,10 +93,10 @@ describe('GET /me/scores', () => {
     await putScore(user.id, shiftDate(today, -29), 60);
     await putScore(user.id, shiftDate(today, -30), 60);
 
-    const dflt = await request(createApp()).get('/me/scores').set(await authed(user.id));
+    const dflt = await request(await testServer(createApp())).get('/me/scores').set(await authed(user.id));
     expect(dflt.body.scores).toHaveLength(3);
 
-    const three = await request(createApp()).get('/me/scores?days=3').set(await authed(user.id));
+    const three = await request(await testServer(createApp())).get('/me/scores?days=3').set(await authed(user.id));
     expect(three.body.scores.map((s: any) => s.date)).toEqual([today, shiftDate(today, -2)]);
   });
 
@@ -105,15 +106,15 @@ describe('GET /me/scores', () => {
     await putScore(user.id, shiftDate(today, -119), 60);
     await putScore(user.id, shiftDate(today, -120), 60);
 
-    const res = await request(createApp()).get('/me/scores?days=9999').set(await authed(user.id));
+    const res = await request(await testServer(createApp())).get('/me/scores?days=9999').set(await authed(user.id));
 
     expect(res.body.scores.map((s: any) => s.date)).toEqual([shiftDate(today, -119)]);
   });
 
   it('rejects a non-numeric or non-positive days', async () => {
     const user = await createUser();
-    expect((await request(createApp()).get('/me/scores?days=abc').set(await authed(user.id))).status).toBe(400);
-    expect((await request(createApp()).get('/me/scores?days=0').set(await authed(user.id))).status).toBe(400);
+    expect((await request(await testServer(createApp())).get('/me/scores?days=abc').set(await authed(user.id))).status).toBe(400);
+    expect((await request(await testServer(createApp())).get('/me/scores?days=0').set(await authed(user.id))).status).toBe(400);
   });
 
   it("does not return another user's scores", async () => {
@@ -121,7 +122,7 @@ describe('GET /me/scores', () => {
     const other = await createUser();
     await putScore(other.id, localCivilDate(new Date(), 'UTC'), 80);
 
-    const res = await request(createApp()).get('/me/scores').set(await authed(mine.id));
+    const res = await request(await testServer(createApp())).get('/me/scores').set(await authed(mine.id));
 
     expect(res.body.scores).toEqual([]);
   });
@@ -139,7 +140,7 @@ describe('GET /me/scores', () => {
       data: { userId: user.id, metric: 'HRV', date: day(today), daysOfHistory: 9, algorithmVersion: 'v1' },
     });
 
-    const res = await request(createApp()).get('/me/scores').set(await authed(user.id));
+    const res = await request(await testServer(createApp())).get('/me/scores').set(await authed(user.id));
 
     const score = res.body.scores[0];
     expect(score.score).toBeNull();
@@ -167,7 +168,7 @@ describe('GET /me/scores/:date', () => {
       });
     }
 
-    const res = await request(createApp()).get('/me/scores/2026-09-03').set(await authed(user.id));
+    const res = await request(await testServer(createApp())).get('/me/scores/2026-09-03').set(await authed(user.id));
 
     expect(res.status).toBe(200);
     // Edited: `bands` (from the live scoring config) is now a top-level field.
@@ -191,7 +192,7 @@ describe('GET /me/scores/:date', () => {
       data: { userId: user.id, metric: 'HRV', date: day('2026-09-03'), daysOfHistory: 9, algorithmVersion: 'v1' },
     });
 
-    const res = await request(createApp()).get('/me/scores/2026-09-03').set(await authed(user.id));
+    const res = await request(await testServer(createApp())).get('/me/scores/2026-09-03').set(await authed(user.id));
 
     expect(res.status).toBe(200);
     expect(res.body.previous).toBeNull();
@@ -202,8 +203,8 @@ describe('GET /me/scores/:date', () => {
     const user = await createUser();
     await putScore(user.id, '2026-09-03', 71);
 
-    expect((await request(createApp()).get('/me/scores/2026-09-04').set(await authed(user.id))).status).toBe(404);
-    expect((await request(createApp()).get('/me/scores/2026-09-03?type=SLEEP').set(await authed(user.id))).status).toBe(404);
+    expect((await request(await testServer(createApp())).get('/me/scores/2026-09-04').set(await authed(user.id))).status).toBe(404);
+    expect((await request(await testServer(createApp())).get('/me/scores/2026-09-03?type=SLEEP').set(await authed(user.id))).status).toBe(404);
   });
 
   it("404s for another user's score", async () => {
@@ -211,14 +212,14 @@ describe('GET /me/scores/:date', () => {
     const other = await createUser();
     await putScore(other.id, '2026-09-03', 71);
 
-    expect((await request(createApp()).get('/me/scores/2026-09-03').set(await authed(mine.id))).status).toBe(404);
+    expect((await request(await testServer(createApp())).get('/me/scores/2026-09-03').set(await authed(mine.id))).status).toBe(404);
   });
 
   it('400s on a malformed date or unknown type', async () => {
     const user = await createUser();
-    expect((await request(createApp()).get('/me/scores/2026-9-3').set(await authed(user.id))).status).toBe(400);
-    expect((await request(createApp()).get('/me/scores/2026-02-31').set(await authed(user.id))).status).toBe(400);
-    expect((await request(createApp()).get('/me/scores/2026-09-03?type=STRAIN').set(await authed(user.id))).status).toBe(400);
+    expect((await request(await testServer(createApp())).get('/me/scores/2026-9-3').set(await authed(user.id))).status).toBe(400);
+    expect((await request(await testServer(createApp())).get('/me/scores/2026-02-31').set(await authed(user.id))).status).toBe(400);
+    expect((await request(await testServer(createApp())).get('/me/scores/2026-09-03?type=STRAIN').set(await authed(user.id))).status).toBe(400);
   });
 
   it('serves a score computed by the engine end to end', async () => {
@@ -226,7 +227,7 @@ describe('GET /me/scores/:date', () => {
     const last = await seedHistory(user.id, '2026-06-01', 40);
     await computeDailyScore(user.id, last);
 
-    const res = await request(createApp()).get(`/me/scores/${last}`).set(await authed(user.id));
+    const res = await request(await testServer(createApp())).get(`/me/scores/${last}`).set(await authed(user.id));
 
     expect(res.status).toBe(200);
     expect(typeof res.body.score.score).toBe('number');

@@ -12,6 +12,7 @@ import { resetTurnGuards } from '../../src/coach/turnGuard';
 import { migrateTestDb } from '../setupTestDb';
 import { authHeaderFor } from '../helpers/auth';
 import { FakeClock, RecordingTelemetry, createUser, putScore, todayUtc } from './helpers';
+import { testServer } from '../helpers/server';
 
 beforeAll(() => {
   migrateTestDb();
@@ -71,8 +72,8 @@ function parseSse(body: string): SseEvent[] {
     });
 }
 
-function postSse(app: express.Express, headers: Record<string, string>, body: object) {
-  return request(app)
+async function postSse(app: express.Express, headers: Record<string, string>, body: object) {
+  return request(await testServer(app))
     .post('/me/coach/message')
     .set(headers)
     .set('Accept', 'text/event-stream')
@@ -153,12 +154,12 @@ describe('POST /me/coach/message with Accept: text/event-stream', () => {
     const { app } = scripted([step]);
     const user = await consented();
     const headers = await authHeaderFor(user.id);
-    const server = app.listen(0);
+    const server = await testServer(app);
     try {
       const { port } = server.address() as AddressInfo;
       await new Promise<void>((resolve, reject) => {
         const req = http.request(
-          { port, method: 'POST', path: '/me/coach/message', headers: { ...headers, Accept: 'text/event-stream', 'Content-Type': 'application/json' } },
+          { host: '127.0.0.1', port, method: 'POST', path: '/me/coach/message', headers: { ...headers, Accept: 'text/event-stream', 'Content-Type': 'application/json' } },
           (res) => {
             res.setEncoding('utf8');
             res.on('data', (chunk: string) => {
@@ -191,7 +192,7 @@ describe('POST /me/coach/message without the Accept header (older apps)', () => 
     const { app } = scripted([['Your recovery is 72 today.\n', CARD]]);
     const user = await consented();
     await putScore(user.id, todayUtc(), 72.4);
-    const res = await request(app).post('/me/coach/message').set(await authHeaderFor(user.id)).send({ message: 'How am I doing?' });
+    const res = await request(await testServer(app)).post('/me/coach/message').set(await authHeaderFor(user.id)).send({ message: 'How am I doing?' });
     expect(res.status).toBe(200);
     expect(Object.keys(res.body).sort()).toEqual(['conversationId', 'message']);
     expect(Object.keys(res.body.message).sort()).toEqual(['createdAt', 'id', 'role', 'source', 'text']);
@@ -216,10 +217,10 @@ describe('POST /me/coach/message without the Accept header (older apps)', () => 
     const { app } = scripted([step]);
     const user = await consented();
     const headers = await authHeaderFor(user.id);
-    const server = app.listen(0);
+    const server = await testServer(app);
     try {
       const { port } = server.address() as AddressInfo;
-      const req = http.request({ port, method: 'POST', path: '/me/coach/message', headers: { ...headers, 'Content-Type': 'application/json' } });
+      const req = http.request({ host: '127.0.0.1', port, method: 'POST', path: '/me/coach/message', headers: { ...headers, 'Content-Type': 'application/json' } });
       req.on('error', () => {});
       req.end(JSON.stringify({ message: 'Should I rest today?' }));
       await firstSentenceShown;
@@ -242,7 +243,7 @@ describe('POST /me/coach/message without the Accept header (older apps)', () => 
   ] as const)('maps a %s error to 503 with the code', async (code, script) => {
     const { app } = scripted([...script] as StreamStep[]);
     const user = await consented();
-    const res = await request(app).post('/me/coach/message').set(await authHeaderFor(user.id)).send({ message: 'How am I doing?' });
+    const res = await request(await testServer(app)).post('/me/coach/message').set(await authHeaderFor(user.id)).send({ message: 'How am I doing?' });
     expect(res.status).toBe(503);
     expect(res.body).toEqual({ error: code, retryable: true });
     expect(await prisma.coachMessage.count({ where: { userId: user.id } })).toBe(0);
@@ -255,8 +256,8 @@ describe('conversation transcripts carry the card', () => {
     const user = await consented();
     await putScore(user.id, todayUtc(), 72.4);
     const headers = await authHeaderFor(user.id);
-    const sent = await request(app).post('/me/coach/message').set(headers).send({ message: 'How am I doing?' });
-    const res = await request(app).get(`/me/coach/conversations/${sent.body.conversationId}`).set(headers);
+    const sent = await request(await testServer(app)).post('/me/coach/message').set(headers).send({ message: 'How am I doing?' });
+    const res = await request(await testServer(app)).get(`/me/coach/conversations/${sent.body.conversationId}`).set(headers);
     expect(res.body.messages.map((m: { card: unknown }) => m.card === null)).toEqual([true, false]);
     expect(res.body.messages[1].card.headline).toBe('Recovery is steady');
   });
@@ -268,8 +269,8 @@ describe('GET /me/coach/status warms the model', () => {
     const app = appWith(provider);
     const user = await createUser();
     const headers = await authHeaderFor(user.id);
-    expect((await request(app).get('/me/coach/status').set(headers)).status).toBe(200);
-    expect((await request(app).get('/me/coach/status').set(headers)).status).toBe(200);
+    expect((await request(await testServer(app)).get('/me/coach/status').set(headers)).status).toBe(200);
+    expect((await request(await testServer(app)).get('/me/coach/status').set(headers)).status).toBe(200);
     expect(provider.warm).toHaveBeenCalledTimes(1);
   });
 
@@ -287,7 +288,7 @@ describe('GET /me/coach/status warms the model', () => {
       }),
     );
     const user = await createUser();
-    const res = await request(app).get('/me/coach/status').set(await authHeaderFor(user.id));
+    const res = await request(await testServer(app)).get('/me/coach/status').set(await authHeaderFor(user.id));
     expect(res.status).toBe(200);
     expect(res.body.enabled).toBe(true);
     const logged = errors.mock.calls.map((c) => c.join(' ')).join('\n');
@@ -300,7 +301,7 @@ describe('GET /me/coach/status warms the model', () => {
     process.env.COACH_ENABLED = 'false';
     const provider = Object.assign(new ScriptedStreamProvider([]), { warm: jest.fn(async () => {}) });
     const user = await createUser();
-    await request(appWith(provider)).get('/me/coach/status').set(await authHeaderFor(user.id));
+    await request(await testServer(appWith(provider))).get('/me/coach/status').set(await authHeaderFor(user.id));
     expect(provider.warm).not.toHaveBeenCalled();
   });
 });

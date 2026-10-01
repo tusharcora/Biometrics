@@ -8,6 +8,7 @@ import { authHeaderFor } from '../helpers/auth';
 import { processSyncJob } from '../../src/sync/worker';
 import * as queue from '../../src/sync/queue';
 import * as serviceAccount from '../../src/health/serviceAccount';
+import { testServer } from '../helpers/server';
 
 // The worker asks for score recomputes after storing data; those go to a real
 // Redis queue. Stubbed so sync tests never leave delayed jobs behind (the
@@ -39,7 +40,7 @@ describe('connect Google Health and sync end to end (mocked Google API)', () => 
     });
     const authHeader = await authHeaderFor(user.id);
 
-    const authorizeRes = await request(createApp()).get('/health/authorize').set(authHeader);
+    const authorizeRes = await request(await testServer(createApp())).get('/health/authorize').set(authHeader);
     const state = new URL(authorizeRes.body.url).searchParams.get('state')!;
 
     nock('https://oauth2.googleapis.com').post('/token').reply(200, {
@@ -76,7 +77,7 @@ describe('connect Google Health and sync end to end (mocked Google API)', () => 
       return {} as any;
     });
 
-    const connectRes = await request(createApp()).get('/health/callback').query({ code: 'auth-code', state });
+    const connectRes = await request(await testServer(createApp())).get('/health/callback').query({ code: 'auth-code', state });
     expect(connectRes.status).toBe(302);
 
     // The default 30-day backfill window is chunked into <=14-day dailyRollUp
@@ -111,7 +112,7 @@ describe('connect Google Health and sync end to end (mocked Google API)', () => 
 
     await processSyncJob({ name: 'backfill', data: enqueuedBackfill } as any);
 
-    const res = await request(createApp()).get('/me/biometrics').set(authHeader);
+    const res = await request(await testServer(createApp())).get('/me/biometrics').set(authHeader);
     expect(res.status).toBe(200);
     expect(res.body.length).toBeGreaterThanOrEqual(4);
     // SLEEP is a rollup keyed on the local civil date of the session's END

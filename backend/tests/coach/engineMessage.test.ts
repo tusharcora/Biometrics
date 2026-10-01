@@ -11,6 +11,7 @@ import type { CoachModelProvider, CoachStreamRequest } from '../../src/coach/mod
 import { resetTurnGuards } from '../../src/coach/turnGuard';
 import { resetWarmState } from '../../src/coach/answer/warm';
 import { FakeClock, RecordingTelemetry, createUser } from './helpers';
+import { testServer } from '../helpers/server';
 
 beforeAll(() => {
   migrateTestDb();
@@ -83,7 +84,7 @@ function sse(text: string): Array<{ event: string; data: any }> {
 }
 
 async function ask(app: express.Express, userId: string) {
-  const res = await request(app)
+  const res = await request(await testServer(app))
     .post('/me/coach/message')
     .set(await authHeaderFor(userId))
     .set('Accept', 'text/event-stream')
@@ -178,7 +179,7 @@ describe('POST /me/coach/message engine selection', () => {
     const user = await userOn('HOSTED');
     const { app, telemetry } = appWith(local, hosted);
 
-    const res = await request(app)
+    const res = await request(await testServer(app))
       .post('/me/coach/message')
       .set(await authHeaderFor(user.id))
       .send({ message: 'What is a good bedtime routine?' });

@@ -1,8 +1,10 @@
 import request from 'supertest';
 import { randomUUID } from 'crypto';
+import type { Express } from 'express';
 import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
 import { createTestApp, fakeIdToken, linkIn } from '../helpers/auth';
+import { testServer } from '../helpers/server';
 
 beforeAll(() => migrateTestDb());
 afterAll(() => prisma.$disconnect());
@@ -10,14 +12,14 @@ afterAll(() => prisma.$disconnect());
 const ORIGIN = { 'expo-origin': 'biometrics://' };
 const PASSWORD = 'correct horse battery';
 
-async function signUp(app: Parameters<typeof request>[0], email: string, password = PASSWORD) {
-  return request(app).post('/auth/sign-up/email').set(ORIGIN)
+async function signUp(app: Express, email: string, password = PASSWORD) {
+  return request(await testServer(app)).post('/auth/sign-up/email').set(ORIGIN)
     .send({ email, password, name: 'Pat', callbackURL: 'biometrics://verified' });
 }
 
-async function verify(app: Parameters<typeof request>[0], email: ReturnType<typeof createTestApp>['email'], address: string) {
+async function verify(app: Express, email: ReturnType<typeof createTestApp>['email'], address: string) {
   const url = new URL(linkIn(email.lastTo(address)));
-  return request(app).get(url.pathname + url.search);
+  return request(await testServer(app)).get(url.pathname + url.search);
 }
 
 describe('email and password', () => {
@@ -27,7 +29,7 @@ describe('email and password', () => {
     expect((await signUp(app, address)).status).toBe(200);
     expect(email.lastTo(address)?.subject).toContain('Confirm');
 
-    const early = await request(app).post('/auth/sign-in/email').set(ORIGIN).send({ email: address, password: PASSWORD });
+    const early = await request(await testServer(app)).post('/auth/sign-in/email').set(ORIGIN).send({ email: address, password: PASSWORD });
     expect(early.status).toBe(403);
 
     const verified = await verify(app, email, address);
@@ -35,7 +37,7 @@ describe('email and password', () => {
     expect(verified.headers.location).toMatch(/^biometrics:\/\/verified/);
     expect((await prisma.user.findUniqueOrThrow({ where: { email: address } })).emailVerified).toBe(true);
 
-    const ok = await request(app).post('/auth/sign-in/email').set(ORIGIN).send({ email: address, password: PASSWORD });
+    const ok = await request(await testServer(app)).post('/auth/sign-in/email').set(ORIGIN).send({ email: address, password: PASSWORD });
     expect(ok.status).toBe(200);
   });
 
@@ -44,7 +46,7 @@ describe('email and password', () => {
     const address = `case-${randomUUID()}@example.com`;
     await signUp(app, `  ${address.toUpperCase()} `);
     await verify(app, email, address);
-    const ok = await request(app).post('/auth/sign-in/email').set(ORIGIN).send({ email: address, password: PASSWORD });
+    const ok = await request(await testServer(app)).post('/auth/sign-in/email').set(ORIGIN).send({ email: address, password: PASSWORD });
     expect(ok.status).toBe(200);
     expect(await prisma.user.count({ where: { email: address } })).toBe(1);
   });
@@ -65,7 +67,7 @@ describe('email and password', () => {
     const address = `unverified-${randomUUID()}@example.com`;
     await signUp(app, address);
     const token = fakeIdToken({ iss: 'https://accounts.google.com', aud: 'test-google-client-id', sub: `g-${address}`, email: address, email_verified: true });
-    const res = await request(app).post('/auth/sign-in/social').send({ provider: 'google', idToken: { token } });
+    const res = await request(await testServer(app)).post('/auth/sign-in/social').send({ provider: 'google', idToken: { token } });
     expect(res.status).not.toBe(200);
     const accounts = await prisma.account.findMany({ where: { user: { email: address } } });
     expect(accounts.map((a) => a.providerId)).toEqual(['credential']);
@@ -76,29 +78,29 @@ describe('email and password', () => {
     const address = `reset-${randomUUID()}@example.com`;
     await signUp(app, address);
     await verify(app, email, address);
-    const signIn = await request(app).post('/auth/sign-in/email').set(ORIGIN).send({ email: address, password: PASSWORD });
+    const signIn = await request(await testServer(app)).post('/auth/sign-in/email').set(ORIGIN).send({ email: address, password: PASSWORD });
     const oldCookie = signIn.headers['set-cookie']!.map((c: string) => c.split(';')[0]).join('; ');
 
-    const asked = await request(app).post('/auth/request-password-reset').set(ORIGIN)
+    const asked = await request(await testServer(app)).post('/auth/request-password-reset').set(ORIGIN)
       .send({ email: address, redirectTo: 'biometrics://reset-password' });
     expect(asked.status).toBe(200);
     const link = new URL(linkIn(email.lastTo(address)));
-    const redirect = await request(app).get(link.pathname + link.search);
+    const redirect = await request(await testServer(app)).get(link.pathname + link.search);
     expect(redirect.headers.location).toMatch(/^biometrics:\/\/reset-password\?token=/);
     const token = new URL(redirect.headers.location.replace('biometrics://', 'http://x/')).searchParams.get('token');
 
-    const reset = await request(app).post('/auth/reset-password').set(ORIGIN).send({ newPassword: 'a brand new password', token });
+    const reset = await request(await testServer(app)).post('/auth/reset-password').set(ORIGIN).send({ newPassword: 'a brand new password', token });
     expect(reset.status).toBe(200);
 
-    const oldSession = await request(app).get('/auth/get-session').set('Cookie', oldCookie);
+    const oldSession = await request(await testServer(app)).get('/auth/get-session').set('Cookie', oldCookie);
     expect(oldSession.body).toBeNull();
-    const again = await request(app).post('/auth/sign-in/email').set(ORIGIN).send({ email: address, password: 'a brand new password' });
+    const again = await request(await testServer(app)).post('/auth/sign-in/email').set(ORIGIN).send({ email: address, password: 'a brand new password' });
     expect(again.status).toBe(200);
   });
 
   it('answers a reset request for an unknown email the same way (no enumeration)', async () => {
     const { app } = createTestApp();
-    const res = await request(app).post('/auth/request-password-reset').set(ORIGIN)
+    const res = await request(await testServer(app)).post('/auth/request-password-reset').set(ORIGIN)
       .send({ email: `nobody-${randomUUID()}@example.com`, redirectTo: 'biometrics://reset-password' });
     expect(res.status).toBe(200);
   });

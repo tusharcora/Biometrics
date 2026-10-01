@@ -7,6 +7,7 @@ import { computeDailyScore } from '../../src/scoring/compute';
 import { localCivilDate } from '../../src/biometrics/civilDate';
 import { shiftDate } from '../../src/scoring/dates';
 import { createUser, seedHistory, seedSessions, day } from './dbHelpers';
+import { testServer } from '../helpers/server';
 
 beforeAll(() => {
   migrateTestDb();
@@ -64,7 +65,7 @@ describe('Sleep Score over the API (Slice 1.5)', () => {
       });
     }
 
-    const res = await request(createApp()).get('/me/scores/2026-09-03?type=SLEEP').set(await authed(user.id));
+    const res = await request(await testServer(createApp())).get('/me/scores/2026-09-03?type=SLEEP').set(await authed(user.id));
 
     expect(res.status).toBe(200);
     expect(res.body.score).toMatchObject({ date: '2026-09-03', type: 'SLEEP', score: 80.1, confidenceLevel: 'HIGH' });
@@ -88,9 +89,9 @@ describe('Sleep Score over the API (Slice 1.5)', () => {
   it('still defaults the detail endpoint to RECOVERY: a SLEEP-only date 404s without ?type=SLEEP', async () => {
     const user = await createUser();
     await putScore(user.id, 'SLEEP', '2026-09-03', 80);
-    expect((await request(createApp()).get('/me/scores/2026-09-03').set(await authed(user.id))).status).toBe(404);
+    expect((await request(await testServer(createApp())).get('/me/scores/2026-09-03').set(await authed(user.id))).status).toBe(404);
     await putScore(user.id, 'RECOVERY', '2026-09-03', 71);
-    const res = await request(createApp()).get('/me/scores/2026-09-03').set(await authed(user.id));
+    const res = await request(await testServer(createApp())).get('/me/scores/2026-09-03').set(await authed(user.id));
     expect(res.body.score.type).toBe('RECOVERY');
   });
 
@@ -111,7 +112,7 @@ describe('Sleep Score over the API (Slice 1.5)', () => {
       data: { userId: user.id, metric: 'CIRCADIAN_CONSISTENCY', date: day(today), daysOfHistory: 2, algorithmVersion: 'v1' },
     });
 
-    const res = await request(createApp()).get('/me/scores?type=SLEEP').set(await authed(user.id));
+    const res = await request(await testServer(createApp())).get('/me/scores?type=SLEEP').set(await authed(user.id));
 
     expect(res.body.scores[0].score).toBeNull();
     expect(res.body.scores[0].coldStart).toEqual([
@@ -129,7 +130,7 @@ describe('Sleep Score over the API (Slice 1.5)', () => {
     await putScore(user.id, 'SLEEP', shiftDate(today, -1), 55);
     await putScore(user.id, 'RECOVERY', shiftDate(today, -1), 60);
 
-    const res = await request(createApp()).get('/me/scores').set(await authed(user.id));
+    const res = await request(await testServer(createApp())).get('/me/scores').set(await authed(user.id));
 
     expect(res.status).toBe(200);
     expect(res.body.scores.map((s: any) => [s.date, s.type])).toEqual([
@@ -146,11 +147,11 @@ describe('Sleep Score over the API (Slice 1.5)', () => {
     await putScore(user.id, 'RECOVERY', today, 72);
     await putScore(user.id, 'SLEEP', today, 81);
 
-    const sleep = await request(createApp()).get('/me/scores?type=SLEEP').set(await authed(user.id));
+    const sleep = await request(await testServer(createApp())).get('/me/scores?type=SLEEP').set(await authed(user.id));
     expect(sleep.body.scores.map((s: any) => s.type)).toEqual(['SLEEP']);
-    const recovery = await request(createApp()).get('/me/scores?type=RECOVERY').set(await authed(user.id));
+    const recovery = await request(await testServer(createApp())).get('/me/scores?type=RECOVERY').set(await authed(user.id));
     expect(recovery.body.scores.map((s: any) => s.type)).toEqual(['RECOVERY']);
-    expect((await request(createApp()).get('/me/scores?type=STRAIN').set(await authed(user.id))).status).toBe(400);
+    expect((await request(await testServer(createApp())).get('/me/scores?type=STRAIN').set(await authed(user.id))).status).toBe(400);
   });
 
   it('serves a Sleep Score computed by the engine end to end, next to an unchanged Recovery Score', async () => {
@@ -159,7 +160,7 @@ describe('Sleep Score over the API (Slice 1.5)', () => {
     await seedSessions(user.id, '2026-06-01', 45);
     await computeDailyScore(user.id, last);
 
-    const res = await request(createApp()).get(`/me/scores/${last}?type=SLEEP`).set(await authed(user.id));
+    const res = await request(await testServer(createApp())).get(`/me/scores/${last}?type=SLEEP`).set(await authed(user.id));
 
     expect(res.status).toBe(200);
     expect(typeof res.body.score.score).toBe('number');
@@ -167,7 +168,7 @@ describe('Sleep Score over the API (Slice 1.5)', () => {
     expect(res.body.score.coldStart).toEqual([]);
     expect(res.body.baselines.map((b: any) => b.metric)).toEqual(['SLEEP', 'SLEEP_EFFICIENCY', 'CIRCADIAN_CONSISTENCY']);
 
-    const recovery = await request(createApp()).get(`/me/scores/${last}`).set(await authed(user.id));
+    const recovery = await request(await testServer(createApp())).get(`/me/scores/${last}`).set(await authed(user.id));
     expect(recovery.body.score.type).toBe('RECOVERY');
     expect(recovery.body.score.factors.map((f: any) => f.factor).sort()).toEqual(['HRV', 'RHR', 'SLEEP_DEBT']);
     expect(recovery.body.baselines.map((b: any) => b.metric)).toEqual(['HRV', 'RESTING_HR', 'SLEEP_DEBT']);

@@ -16,6 +16,7 @@ import {
 } from '../../src/coach/push';
 import { ScriptedProvider } from '../../src/coach/model/provider';
 import { FakeClock, RecordingTelemetry, createUser } from './helpers';
+import { testServer } from '../helpers/server';
 
 beforeAll(() => {
   migrateTestDb();
@@ -319,7 +320,7 @@ describe('POST /me/push-token shape validation', () => {
     process.env.PUSH_PROVIDER = 'expo';
     const user = await createUser();
     const raw = `raw-apns-token-${user.id}`;
-    const res = await request(app()).post('/me/push-token').set(await authed(user.id)).send({ token: raw, platform: 'ios' });
+    const res = await request(await testServer(app())).post('/me/push-token').set(await authed(user.id)).send({ token: raw, platform: 'ios' });
     expect(res.status).toBe(400);
     expect(await prisma.pushToken.count({ where: { token: raw } })).toBe(0);
   });
@@ -328,7 +329,7 @@ describe('POST /me/push-token shape validation', () => {
     process.env.PUSH_PROVIDER = 'expo';
     const user = await createUser();
     const token = `${prefix}[${user.id}]`;
-    const res = await request(app()).post('/me/push-token').set(await authed(user.id)).send({ token, platform: 'ios' });
+    const res = await request(await testServer(app())).post('/me/push-token').set(await authed(user.id)).send({ token, platform: 'ios' });
     expect(res.status).toBe(204);
     expect(await prisma.pushToken.count({ where: { token } })).toBe(1);
   });
@@ -336,7 +337,7 @@ describe('POST /me/push-token shape validation', () => {
   it('with noop (default) accepts any token shape, as before', async () => {
     const user = await createUser();
     const token = `raw-apns-token-${user.id}`;
-    const res = await request(app()).post('/me/push-token').set(await authed(user.id)).send({ token, platform: 'android' });
+    const res = await request(await testServer(app())).post('/me/push-token').set(await authed(user.id)).send({ token, platform: 'android' });
     expect(res.status).toBe(204);
   });
 
@@ -345,7 +346,7 @@ describe('POST /me/push-token shape validation', () => {
     const user = await createUser();
     const token = `raw-${user.id}`;
     await prisma.pushToken.create({ data: { userId: user.id, token, platform: 'ios' } });
-    const res = await request(app()).delete('/me/push-token').set(await authed(user.id)).send({ token });
+    const res = await request(await testServer(app())).delete('/me/push-token').set(await authed(user.id)).send({ token });
     expect(res.status).toBe(204);
     expect(await prisma.pushToken.count({ where: { token } })).toBe(0);
   });
@@ -359,7 +360,7 @@ describe('POST /me/push-token shape validation', () => {
     const token = `raw-shared-${victim.id}`;
     await prisma.pushToken.create({ data: { userId: victim.id, token, platform: 'ios' } });
 
-    const res = await request(app()).post('/me/push-token').set(await authed(attacker.id)).send({ token, platform: 'ios' });
+    const res = await request(await testServer(app())).post('/me/push-token').set(await authed(attacker.id)).send({ token, platform: 'ios' });
 
     expect(res.status).toBe(409);
     expect(res.body).toEqual({ error: 'token_registered_to_another_account' });
@@ -372,7 +373,7 @@ describe('POST /me/push-token shape validation', () => {
     const token = `raw-own-${user.id}`;
     await prisma.pushToken.create({ data: { userId: user.id, token, platform: 'ios' } });
 
-    const res = await request(app()).post('/me/push-token').set(await authed(user.id)).send({ token, platform: 'android' });
+    const res = await request(await testServer(app())).post('/me/push-token').set(await authed(user.id)).send({ token, platform: 'android' });
 
     expect(res.status).toBe(204);
     const row = await prisma.pushToken.findUnique({ where: { token } });
@@ -382,9 +383,9 @@ describe('POST /me/push-token shape validation', () => {
   it('flag-off (404 coach_disabled) and auth (401) behaviour is unchanged under expo', async () => {
     process.env.PUSH_PROVIDER = 'expo';
     const user = await createUser();
-    expect((await request(app()).post('/me/push-token').send({ token: 'x', platform: 'ios' })).status).toBe(401);
+    expect((await request(await testServer(app())).post('/me/push-token').send({ token: 'x', platform: 'ios' })).status).toBe(401);
     process.env.COACH_ENABLED = 'false';
-    const res = await request(app()).post('/me/push-token').set(await authed(user.id)).send({ token: 'x', platform: 'ios' });
+    const res = await request(await testServer(app())).post('/me/push-token').set(await authed(user.id)).send({ token: 'x', platform: 'ios' });
     expect(res.status).toBe(404);
     expect(res.body).toEqual({ error: 'coach_disabled' });
   });
