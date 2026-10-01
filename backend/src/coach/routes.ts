@@ -13,7 +13,7 @@ import { withDisclaimer } from './guardrails/disclaimer';
 import type { FactData } from './answer/facts';
 import { AnswerDeps, AnswerEvent, runAnswer } from './answer/pipeline';
 import { warmModel } from './answer/warm';
-import { generateTodaySummary, getTodaySummary, summaryEngineDeps, TodayDeps } from './answer/today';
+import { clearTodaySummary, generateTodaySummary, getTodaySummary, summaryEngineDeps, TodayDeps } from './answer/today';
 import type { MemoryDTO } from './memory';
 import { findPersona, listPersonas, resolvePersona } from './personas';
 import { selectEngine } from './engine';
@@ -314,10 +314,21 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
       return;
     }
     try {
-      const result = await prisma.user.updateMany({ where: { id: req.userId! }, data: { coachPersonaId: persona.id } });
+      const userId = req.userId!;
+      const before = await prisma.user.findUnique({ where: { id: userId }, select: { coachPersonaId: true } });
+      const result = await prisma.user.updateMany({ where: { id: userId }, data: { coachPersonaId: persona.id } });
       if (result.count === 0) {
         res.status(404).json({ error: 'User not found' });
         return;
+      }
+      // Today's sentence was written in the old character's voice: drop it and write a new one in the
+      // background (forced, so a run already in flight in the old voice is never reused), and only for a
+      // user whose sentence may be written at all (the same gate GET /me/coach/today applies).
+      if (before && resolvePersona(before.coachPersonaId).id !== persona.id) {
+        await clearTodaySummary(userId, todayDeps);
+        if (isCoachEnabled() && (await hasCurrentConsent(userId, 'local'))) {
+          deps.background(() => generateTodaySummary(userId, { ...todayDeps, force: true }));
+        }
       }
       res.json({ personaId: persona.id });
     } catch (err) {

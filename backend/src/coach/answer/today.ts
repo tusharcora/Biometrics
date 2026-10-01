@@ -532,3 +532,10 @@ export async function getTodaySummary(userId: string, deps: TodayDeps = {}): Pro
   if (!stored) deps.onMissing?.();
   return { date, hasData: true, sentence: { ...templateSentence(sheet), source: 'template' }, bars };
 }
+
+/** Drops today's stored sentence (the character changed), so the page shows the template until a new one is written. */
+export async function clearTodaySummary(userId: string, deps: Pick<TodayDeps, 'now'> = {}): Promise<void> {
+  const user = await loadUser(userId);
+  const date = safeCivilDate((deps.now ?? (() => new Date()))(), user?.timezone ?? 'UTC');
+  await prisma.coachDaySummary.deleteMany({ where: { userId, date: civilDateToUtcMidnight(date) } });
+}
