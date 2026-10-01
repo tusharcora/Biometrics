@@ -100,6 +100,11 @@ export function parseCoachEvent(message: SseMessage): CoachStreamEvent | null {
   }
 }
 
+// Carries an error thrown by onEvent past the stream's own error mapping.
+class CallerError {
+  constructor(readonly error: unknown) {}
+}
+
 // Events after which the server has said how the turn ended.
 const TERMINAL: ReadonlySet<CoachStreamEvent['type']> = new Set(['done', 'error', 'safety']);
 
@@ -108,7 +113,9 @@ const TERMINAL: ReadonlySet<CoachStreamEvent['type']> = new Set(['done', 'error'
 // coach error for an HTTP failure (403, 404, ...), CoachStreamAbortedError
 // when `signal` aborts, CoachTimeoutError after COACH_REQUEST_TIMEOUT_MS
 // (longer than the server's budget), and CoachStreamInterruptedError when the
-// stream ends early. Events already delivered stay delivered in every case.
+// stream ends early; once a done/error/safety event has arrived, a later abort,
+// timeout or drop resolves instead. An error thrown by `onEvent` cancels the
+// request and is rethrown unchanged. Events already delivered stay delivered.
 export async function streamCoachMessage(
   body: SendCoachMessageInput,
   onEvent: (event: CoachStreamEvent) => void,
@@ -157,7 +164,11 @@ export async function streamCoachMessage(
         const event = parseCoachEvent(message);
         if (!event) continue;
         if (TERMINAL.has(event.type)) ended = true;
-        onEvent(event);
+        try {
+          onEvent(event);
+        } catch (error) {
+          throw new CallerError(error);
+        }
       }
     };
 
@@ -172,11 +183,19 @@ export async function streamCoachMessage(
       deliver(parser.push(decoder.decode()));
       deliver(parser.end());
     } catch (error) {
+      // The caller's own bug is theirs to see, not a network fault.
+      if (error instanceof CallerError) throw error.error;
+      // The server already said how the turn ended: a later stop, timeout or
+      // dropped connection loses nothing.
+      if (ended) return;
       throw failure(error, true);
     }
     if (!ended) throw new CoachStreamInterruptedError();
   } finally {
     clearTimeout(timer);
     signal?.removeEventListener('abort', onAbort);
+    // Close the connection however this ended (a no-op after a normal end), so
+    // the server stops writing and stores what was shown as a stopped answer.
+    controller.abort();
   }
 }

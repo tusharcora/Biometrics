@@ -9,32 +9,37 @@ export function setBaseUrl(url: string): void {
 // a real failure, plus the server's own `error` code when it sent one: a status
 // alone cannot separate two different 404s (coach disabled vs. a conversation
 // that has since been retained away). The message format is unchanged.
+// `body` is the parsed JSON error body (undefined when there was none), for
+// codes that carry more than their name (429's retryAfterSeconds).
 export class ApiError extends Error {
   readonly status: number;
   readonly code: string | undefined;
+  readonly body: unknown;
 
-  constructor(status: number, message: string, code?: string) {
+  constructor(status: number, message: string, code?: string, body?: unknown) {
     super(message);
     this.name = 'ApiError';
     this.status = status;
     this.code = code;
+    this.body = body;
     Object.setPrototypeOf(this, ApiError.prototype);
   }
 }
 
 // Best effort: the body may be empty, HTML from a proxy, or already consumed.
-// A failure to read it just means no code, never a different error.
-async function errorCodeOf(res: Response): Promise<string | undefined> {
+// A failure to read it just means no body, never a different error.
+async function errorBodyOf(res: Response): Promise<unknown> {
   try {
-    const body = (await res.json()) as { error?: unknown };
-    return typeof body?.error === 'string' ? body.error : undefined;
+    return await res.json();
   } catch {
     return undefined;
   }
 }
 
 async function apiErrorFor(res: Response, path: string): Promise<ApiError> {
-  return new ApiError(res.status, `Request to ${path} failed with ${res.status}`, await errorCodeOf(res));
+  const body = await errorBodyOf(res);
+  const error = body && typeof body === 'object' ? (body as { error?: unknown }).error : undefined;
+  return new ApiError(res.status, `Request to ${path} failed with ${res.status}`, typeof error === 'string' ? error : undefined, body);
 }
 
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {

@@ -275,6 +275,19 @@ export class TurnInProgressError extends Error {
   }
 }
 
+// 429 { error: 'too_many_messages', retryAfterSeconds } on POST /me/coach/message:
+// the per-user turn limit. retryAfterSeconds is undefined when the server sent none.
+export class TooManyMessagesError extends Error {
+  readonly retryAfterSeconds: number | undefined;
+
+  constructor(retryAfterSeconds?: number) {
+    super('Too many messages, try again shortly');
+    this.name = 'TooManyMessagesError';
+    this.retryAfterSeconds = retryAfterSeconds;
+    Object.setPrototypeOf(this, TooManyMessagesError.prototype);
+  }
+}
+
 // 400 on PATCH /me/coach/memory/:id: the new text failed server validation.
 export class CoachMemoryValidationError extends Error {
   constructor() {
@@ -307,6 +320,10 @@ export function mapCoachError(error: unknown): unknown {
     }
     if (error.status === 409) {
       return error.code === 'turn_in_progress' ? new TurnInProgressError() : new StaleConsentVersionError();
+    }
+    if (error.status === 429 && error.code === 'too_many_messages') {
+      const retryAfter = isRecord(error.body) ? error.body.retryAfterSeconds : undefined;
+      return new TooManyMessagesError(typeof retryAfter === 'number' && Number.isFinite(retryAfter) && retryAfter >= 0 ? retryAfter : undefined);
     }
   }
   return error;

@@ -1,6 +1,15 @@
 import { fetch as expoFetch } from 'expo/fetch';
-import { setBaseUrl } from '../../src/api/client';
-import { COACH_REQUEST_TIMEOUT_MS, CoachConsentRequiredError, CoachTimeoutError, StaleConversationError, type CoachStreamEvent } from '../../src/api/coach';
+import { ApiError, setBaseUrl } from '../../src/api/client';
+import {
+  COACH_REQUEST_TIMEOUT_MS,
+  CoachConsentRequiredError,
+  CoachTimeoutError,
+  StaleConversationError,
+  TooManyMessagesError,
+  TurnInProgressError,
+  type CoachStreamEvent,
+} from '../../src/api/coach';
+import { authClient } from '../../src/auth/authClient';
 import { CoachStreamAbortedError, CoachStreamInterruptedError, parseCoachEvent, streamCoachMessage } from '../../src/api/coachStream';
 
 jest.mock('expo/fetch', () => ({ fetch: jest.fn() }));
@@ -180,9 +189,88 @@ describe('streamCoachMessage', () => {
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
+  it('rethrows an error thrown by onEvent unchanged and cancels the request', async () => {
+    respond([sse('text', { sentence: 'Mostly clear skies.' })], { hang: true });
+    const bug = new RangeError('render failed');
+    const promise = streamCoachMessage({ message: 'Hi' }, () => {
+      throw bug;
+    });
+
+    await expect(promise).rejects.toBe(bug);
+    expect((fetchMock.mock.calls[0][1].signal as AbortSignal).aborted).toBe(true);
+  });
+
+  it('cancels the request once it settles, even after a normal end', async () => {
+    respond([sse('done', DONE)]);
+    await streamCoachMessage({ message: 'Hi' }, () => {});
+    expect((fetchMock.mock.calls[0][1].signal as AbortSignal).aborted).toBe(true);
+  });
+
+  it('resolves when the caller aborts after the turn has ended', async () => {
+    respond([sse('safety', { text: 'Support is available.', resources: [] }), sse('done', DONE)], { hang: true });
+    const controller = new AbortController();
+    const events: CoachStreamEvent[] = [];
+    await expect(
+      streamCoachMessage({ message: 'Hi' }, (e) => {
+        events.push(e);
+        if (e.type === 'done') controller.abort();
+      }, controller.signal),
+    ).resolves.toBeUndefined();
+    expect(events.map((e) => e.type)).toEqual(['safety', 'done']);
+  });
+
+  it('maps 409 turn_in_progress and 429 too_many_messages before the stream starts', async () => {
+    respondStatus(409, { error: 'turn_in_progress' });
+    await expect(streamCoachMessage({ message: 'Hi' }, () => {})).rejects.toBeInstanceOf(TurnInProgressError);
+
+    respondStatus(429, { error: 'too_many_messages', retryAfterSeconds: 42 });
+    const limited = await streamCoachMessage({ message: 'Hi' }, () => {}).catch((e) => e);
+    expect(limited).toBeInstanceOf(TooManyMessagesError);
+    expect(limited.retryAfterSeconds).toBe(42);
+
+    respondStatus(429, { error: 'too_many_messages' });
+    const unspecified = await streamCoachMessage({ message: 'Hi' }, () => {}).catch((e) => e);
+    expect(unspecified).toBeInstanceOf(TooManyMessagesError);
+    expect(unspecified.retryAfterSeconds).toBeUndefined();
+  });
+
+  it('signs out on a 401 before the stream starts', async () => {
+    const signOut = authClient.signOut as jest.Mock;
+    signOut.mockClear();
+    respondStatus(401, { error: 'Invalid or expired token' });
+    const error = await streamCoachMessage({ message: 'Hi' }, () => {}).catch((e) => e);
+
+    expect(error).toBeInstanceOf(ApiError);
+    expect(error.status).toBe(401);
+    expect(signOut).toHaveBeenCalledTimes(1);
+  });
+
   describe('timeout', () => {
     beforeEach(() => jest.useFakeTimers());
     afterEach(() => jest.useRealTimers());
+
+    it('rejects with CoachTimeoutError when the headers never arrive', async () => {
+      fetchMock.mockImplementationOnce(
+        (_url: string, init: RequestInit) =>
+          new Promise((_resolve, reject) => {
+            (init.signal as AbortSignal).addEventListener('abort', () => reject(new Error('aborted')));
+          }),
+      );
+      const promise = streamCoachMessage({ message: 'Hi' }, () => {});
+      const assertion = expect(promise).rejects.toBeInstanceOf(CoachTimeoutError);
+
+      await jest.advanceTimersByTimeAsync(COACH_REQUEST_TIMEOUT_MS);
+      await assertion;
+    });
+
+    it('resolves when the timeout fires after the turn has ended', async () => {
+      respond([sse('done', DONE)], { hang: true });
+      const promise = streamCoachMessage({ message: 'Hi' }, () => {});
+      const assertion = expect(promise).resolves.toBeUndefined();
+
+      await jest.advanceTimersByTimeAsync(COACH_REQUEST_TIMEOUT_MS);
+      await assertion;
+    });
 
     it('aborts and rejects with CoachTimeoutError once the client timeout passes', async () => {
       respond([sse('status', { label: 'Thinking…' })], { hang: true });

@@ -5,6 +5,7 @@ import {
   HostedUnavailableError,
   StaleConsentVersionError,
   StaleConversationError,
+  TooManyMessagesError,
   TurnInProgressError,
   fetchCoachStatus,
   fetchConversation,
@@ -12,6 +13,7 @@ import {
   grantHostedConsent,
   listConversations,
   mapCoachError,
+  sendCoachMessage,
   setCoachEngine,
   toAnswerCard,
   toTodaySummary,
@@ -111,6 +113,20 @@ describe('mapCoachError', () => {
   it('maps a 409 turn_in_progress to TurnInProgressError, not a stale consent', () => {
     expect(mapCoachError(new ApiError(409, 'Conflict', 'turn_in_progress'))).toBeInstanceOf(TurnInProgressError);
     expect(mapCoachError(new ApiError(409, 'Conflict', 'stale_consent_version'))).toBeInstanceOf(StaleConsentVersionError);
+  });
+
+  it('maps a 429 too_many_messages to TooManyMessagesError with the retry delay from the body', () => {
+    const mapped = mapCoachError(new ApiError(429, 'Too many', 'too_many_messages', { error: 'too_many_messages', retryAfterSeconds: 30 }));
+    expect(mapped).toBeInstanceOf(TooManyMessagesError);
+    expect((mapped as TooManyMessagesError).retryAfterSeconds).toBe(30);
+    expect((mapCoachError(new ApiError(429, 'Too many', 'too_many_messages', { retryAfterSeconds: 'soon' })) as TooManyMessagesError).retryAfterSeconds).toBeUndefined();
+  });
+
+  it('gives the JSON send path the same TooManyMessagesError', async () => {
+    fetchMock.mockResolvedValueOnce(fail(429, { error: 'too_many_messages', retryAfterSeconds: 12 }));
+    const error = await sendCoachMessage({ message: 'Hi' }).catch((e) => e);
+    expect(error).toBeInstanceOf(TooManyMessagesError);
+    expect(error.retryAfterSeconds).toBe(12);
   });
 });
 
