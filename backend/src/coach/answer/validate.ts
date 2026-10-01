@@ -3,25 +3,39 @@
 // number it writes must be one the fact sheet already holds.
 //
 //   * Numbers: every number, duration and h:mm in a sentence must match a
-//     number in the rendered fact sheet (or a fact's value/usual): integers
+//     value the sheet holds: a fact's value, usual or precomputed comparison,
+//     or a number in a fact note or sheet note. Digits inside fact ids and
+//     labels ("recovery.avg7", "30-day average") never count. Integers match
 //     within ±1, decimals within ±1%, durations within ±1% or ±1 minute, with
 //     "6h 48m" = "408 minutes" = "6.8 hours". A hedged number ("about 7
-//     hours", "~8,000 steps", "just under 400 minutes") may be within ±10% of a
-//     value of the same family (durations vs plain numbers). Exempt: times of day ("10pm",
-//     "at 22:30"), month-name dates, ordinals and line-start list markers.
-//     On the general route an unknown number is allowed as general knowledge
-//     ("most adults need 7–9 hours") unless the sentence states it about the
-//     user ("you slept 5 hours", "your recovery is 40").
+//     hours", "~8,000 steps", "just under 400 minutes") may be within ±10%.
+//   * Units and metrics: a number with a unit next to it ("62 ms", "26%",
+//     "3,120 steps", "32 points", "26/100") matches only values of that unit;
+//     a bare number matches any non-duration value. When the sentence names
+//     exactly one metric (recovery, sleep score, HRV, resting HR, sleep,
+//     steps), only that metric's values (and metric-less ones, e.g. notes)
+//     count, so "Your HRV is 61" cannot borrow resting HR's 61.
+//   * Number words ("seven hours", "five points", "nine thousand steps") are
+//     read as numbers when a unit or metric word follows; "one thing to try"
+//     is left alone.
+//   * Exempt: times of day ("10pm", "at 22:30"), month-name dates with an
+//     optional year ("Sep 26, 2026"), ordinals, line-start list markers, the
+//     "/100" or "out of 100" scale and the sheet's 7- and 30-day windows.
+//   * General route: an unknown number is allowed as general knowledge
+//     ("most adults need 7–9 hours") unless the sentence is about the user:
+//     "you/your" within a few words of the number, a time word ("last night",
+//     "today"), a user-only score (recovery, sleep score), or a phrase like
+//     "you slept"/"your HRV".
 //   * Topics: medication and dosing (the crisis classifier's medication
 //     patterns), supplement recommendations and diagnoses are never shown.
 //
 // A sentence is judged on its own so the pipeline can drop one bad sentence
-// and keep streaming (drop-and-continue). Spelled-out numbers ("seven hours")
-// are not detected; the prompt forbids them.
+// and keep streaming (drop-and-continue). Known limit: the direction of a
+// change ("higher" vs "lower") is not checked.
 
 import { classifyCrisis } from '../guardrails/crisis';
 import { AnswerCard, CardItem, statusOf } from './card';
-import { Fact, FactSheet, renderFactSheet } from './facts';
+import { Fact, FactSheet, FactUnit, USUAL_DAYS, comparisonDiff } from './facts';
 import type { RawCard } from './parse';
 import type { AnswerRoute } from './route';
 
@@ -33,6 +47,23 @@ const HEDGE_RE = /(?:\b(?:about|around|roughly|nearly|almost|close\s+to|just\s+(
 /** How far a hedged number may be from a fact value of its family (durations or plain numbers). */
 export const HEDGE_TOLERANCE = 0.1;
 
+/** The kind of value a number is: durations, one per unit, or 'none' (a bare count from a note). */
+type Family = 'duration' | 'ms' | 'bpm' | 'percent' | 'count' | 'score' | 'none';
+type Metric = 'recovery' | 'sleep_score' | 'hrv' | 'rhr' | 'sleep' | 'steps';
+
+const FAMILY_OF_UNIT: Record<FactUnit, Family> = {
+  minutes: 'duration',
+  ms: 'ms',
+  bpm: 'bpm',
+  percent: 'percent',
+  count: 'count',
+  score: 'score',
+  none: 'none',
+};
+
+/** The sheet's averaging windows ("7-day average", "last 30 days") are not data. */
+const WINDOW_DAYS = `(?:7|${USUAL_DAYS})`;
+
 const EXEMPT_PATTERNS: RegExp[] = [
   // A list marker at the start of a line: "1. Sleep earlier tonight."
   /^\s*\d{1,2}[.)]\s/gm,
@@ -40,10 +71,25 @@ const EXEMPT_PATTERNS: RegExp[] = [
   /\b(1[0-2]|0?[1-9])(:[0-5]\d)?\s?(a\.?m\.?|p\.?m\.?)(?![A-Za-z])/gi,
   // A 24-hour time introduced as a time of day: "at 22:30", "after 04:00".
   /\b(at|after|before|around|by|until|till|from|past)\s+([01]?\d|2[0-3]):[0-5]\d\b/gi,
-  // A month name followed by a day: "March 14", "Sep 26".
-  /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2}(st|nd|rd|th)?\b/g,
+  // A month name followed by a day and an optional year: "March 14", "Sep 26, 2026".
+  /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2}(st|nd|rd|th)?\b(,?\s+\d{4}\b)?/g,
   // An ordinal: "the 14th".
   /\b\d{1,2}(st|nd|rd|th)\b/g,
+  // The score scale after a number: "26/100", "26 out of 100" (the 26 is still checked).
+  /(?<=\d)\s*\/\s*100\b/g,
+  /(?<=\d)\s+out\s+of\s+100\b/gi,
+  // The sheet's windows: "7-day average", "30-night", "the last 30 days".
+  new RegExp(String.raw`\b${WINDOW_DAYS}-(?:day|night)s?\b`, 'gi'),
+  new RegExp(String.raw`\b(?:last|past)\s+${WINDOW_DAYS}\s+(?:days|nights)\b`, 'gi'),
+];
+
+/** A unit right after a plain number, which limits what the number may match. */
+const UNIT_AFTER: Array<[RegExp, Family]> = [
+  [/^\s*(?:ms|milliseconds?)\b/i, 'ms'],
+  [/^\s*(?:bpm|beats)\b/i, 'bpm'],
+  [/^\s*(?:%|percent\b|per\s+cent\b)/i, 'percent'],
+  [/^\s*steps\b/i, 'count'],
+  [/^\s*(?:points?\b|pts\b|\/\s*100\b|out\s+of\s+100\b)/i, 'score'],
 ];
 
 const NUM = String.raw`(\d+(?:\.\d+)?)`;
@@ -57,19 +103,46 @@ const MINUTES_RE = new RegExp(String.raw`${NUM}\s*${MINUTES}\b`, 'gi');
 const CLOCK_DURATION_RE = /\b(\d{1,2}):([0-5]\d)\b/g;
 const PLAIN_RE = /\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?/g;
 
-interface Located {
-  start: number;
-  token: NumberToken;
+// ---- number words -------------------------------------------------------
+
+const ONES = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
+const TENS = ['twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
+/** A unit or metric word that turns a preceding number word into a number. */
+const UNIT_OR_METRIC_WORD = String.raw`(?:hours?|hrs?|minutes?|mins?|ms|milliseconds?|bpm|beats|percent|per\s+cent|points?|pts|steps|hrv|recovery|sleep|resting\s+heart)\b`;
+const WORD_NUMBER_RE = new RegExp(
+  String.raw`\b(?:(${TENS.join('|')})(?:[-\s]+(${ONES.slice(1, 10).join('|')}))?|(${ONES.join('|')})|(a))(?:\s+(hundred|thousand))?(?=\s+${UNIT_OR_METRIC_WORD})`,
+  'gi',
+);
+
+/** "seven hours" → "7 hours", "nine thousand steps" → "9000 steps"; number words elsewhere are left alone. */
+function wordsToDigits(text: string): string {
+  return text.replace(WORD_NUMBER_RE, (match, tens?: string, unit?: string, ones?: string, a?: string, scale?: string) => {
+    if (a !== undefined && scale === undefined) return match;
+    let n = a !== undefined ? 1 : tens !== undefined ? 20 + 10 * TENS.indexOf(tens.toLowerCase()) : ONES.indexOf(ones!.toLowerCase());
+    if (unit !== undefined) n += ONES.indexOf(unit.toLowerCase());
+    if (scale !== undefined) n *= scale.toLowerCase() === 'hundred' ? 100 : 1000;
+    return String(n);
+  });
 }
 
-/** Every number, duration and h:mm in `text`, in order, outside the exempt shapes. Signs are ignored. */
-export function extractNumbers(text: string): NumberToken[] {
+// ---- extraction ---------------------------------------------------------
+
+interface Scanned {
+  start: number;
+  token: NumberToken;
+  /** For a plain number: the unit written right after it, if any. */
+  unit?: Family;
+}
+
+/** Every number in `input` with its adjacent unit, in order, outside the exempt shapes. */
+function scanNumbers(input: string): Scanned[] {
+  const text = wordsToDigits(input);
   const masked = new Array<boolean>(text.length).fill(false);
   const free = (s: number, e: number) => masked.slice(s, e).every((m) => !m);
   const mask = (s: number, e: number) => masked.fill(true, s, e);
   for (const re of EXEMPT_PATTERNS) for (const m of text.matchAll(re)) mask(m.index!, m.index! + m[0].length);
 
-  const found: Located[] = [];
+  const found: Scanned[] = [];
   const scan = (re: RegExp, toTokens: (m: RegExpMatchArray) => NumberToken[]) => {
     for (const m of text.matchAll(re)) {
       const s = m.index!;
@@ -77,7 +150,15 @@ export function extractNumbers(text: string): NumberToken[] {
       if (!free(s, e)) continue;
       mask(s, e);
       const hedged = HEDGE_RE.test(text.slice(0, s));
-      toTokens(m).forEach((token, i) => found.push({ start: s + i, token: hedged ? { ...token, hedged: true } : token }));
+      toTokens(m).forEach((token, i) => {
+        const item: Scanned = { start: s + i, token: hedged ? { ...token, hedged: true } : token };
+        if (token.kind === 'plain') {
+          const after = text.slice(e);
+          const unit = UNIT_AFTER.find(([re]) => re.test(after));
+          if (unit) item.unit = unit[1];
+        }
+        found.push(item);
+      });
     }
   };
   const isHours = (unit: string) => /^h/i.test(unit);
@@ -93,46 +174,136 @@ export function extractNumbers(text: string): NumberToken[] {
   scan(CLOCK_DURATION_RE, (m) => [minutes(Number(m[1]) * 60 + Number(m[2]))]);
   scan(PLAIN_RE, (m) => [{ kind: 'plain', value: Number(m[0].replace(/,/g, '')) }]);
 
-  return found.sort((a, b) => a.start - b.start).map((f) => f.token);
+  return found.sort((a, b) => a.start - b.start);
 }
+
+/** Every number, duration and h:mm in `text`, in order, outside the exempt shapes. Signs are ignored. */
+export function extractNumbers(text: string): NumberToken[] {
+  return scanNumbers(text).map((s) => s.token);
+}
+
+// ---- the allowed values -------------------------------------------------
 
 interface Allowed {
-  plain: number[];
-  durations: number[];
+  value: number;
+  family: Family;
+  /** Undefined for values not tied to one metric (sheet notes, score drivers). */
+  metric: Metric | undefined;
 }
 
-const allowedCache = new WeakMap<FactSheet, Allowed>();
+const METRIC_OF_ID_HEAD: Record<string, Metric> = {
+  recovery: 'recovery',
+  sleep_score: 'sleep_score',
+  hrv: 'hrv',
+  rhr: 'rhr',
+  sleep: 'sleep',
+  steps: 'steps',
+};
 
-function allowedFor(sheet: FactSheet): Allowed {
+/** 'hrv.today' → hrv; 'habit.caffeine.hrv.lag2' → the habit's factor (hrv, rhr, sleep_*); 'factor.*' → none. */
+function metricOf(fact: Fact): Metric | undefined {
+  const [head, , factor] = fact.id.split('.');
+  if (head === 'habit') {
+    if (factor === 'hrv' || factor === 'rhr') return factor;
+    return factor?.startsWith('sleep') ? 'sleep' : undefined;
+  }
+  return head === undefined ? undefined : METRIC_OF_ID_HEAD[head];
+}
+
+function noteValues(text: string, metric: Metric | undefined): Allowed[] {
+  return scanNumbers(text).map((s) =>
+    s.token.kind === 'duration'
+      ? { value: s.token.minutes, family: 'duration', metric }
+      : { value: s.token.value, family: s.unit ?? 'none', metric },
+  );
+}
+
+// Sheets are treated as immutable once built, so the allowed values are computed once per sheet.
+const allowedCache = new WeakMap<FactSheet, Allowed[]>();
+
+/** Built from structured fact data, never from the rendered text, so id and label digits stay out. */
+function allowedFor(sheet: FactSheet): Allowed[] {
   const cached = allowedCache.get(sheet);
   if (cached) return cached;
-  const allowed: Allowed = { plain: [], durations: [] };
-  for (const t of extractNumbers(renderFactSheet(sheet))) {
-    if (t.kind === 'plain') allowed.plain.push(t.value);
-    else allowed.durations.push(t.minutes);
-  }
+  const allowed: Allowed[] = [];
   for (const f of sheet.facts) {
-    const list = f.unit === 'minutes' ? allowed.durations : allowed.plain;
-    list.push(Math.abs(f.value));
-    if (f.usual !== undefined) list.push(Math.abs(f.usual));
+    const family = FAMILY_OF_UNIT[f.unit];
+    const metric = metricOf(f);
+    const diff = comparisonDiff(f);
+    for (const value of [f.value, f.usual, diff]) {
+      if (value !== undefined) allowed.push({ value: Math.abs(value), family, metric });
+    }
+    if (f.note) allowed.push(...noteValues(f.note, metric));
   }
+  for (const note of sheet.notes) allowed.push(...noteValues(note, undefined));
   allowedCache.set(sheet, allowed);
   return allowed;
 }
 
-function isKnown(token: NumberToken, allowed: Allowed): boolean {
-  // A hedged approximation ("about 7 hours" for 6h 48m) may be within 10% of a value of its family.
+const PLAIN_FAMILIES: Family[] = ['ms', 'bpm', 'percent', 'count', 'score', 'none'];
+
+function isKnown(s: Scanned, allowed: Allowed[], metric: Metric | undefined): boolean {
+  const { token } = s;
+  const families = token.kind === 'duration' ? ['duration'] : s.unit ? [s.unit] : PLAIN_FAMILIES;
+  const candidates = allowed.filter((a) => families.includes(a.family) && (!metric || !a.metric || a.metric === metric));
+  // A hedged approximation ("about 7 hours" for 6h 48m) may be within 10% of a value.
   const hedge = (a: number) => (token.hedged ? Math.abs(a) * HEDGE_TOLERANCE : 0);
   if (token.kind === 'duration') {
-    return allowed.durations.some((a) => Math.abs(token.minutes - a) <= Math.max(1, a * 0.01, hedge(a)));
+    return candidates.some(({ value: a }) => Math.abs(token.minutes - a) <= Math.max(1, a * 0.01, hedge(a)));
   }
   const tolerance = (a: number) => Math.max(Number.isInteger(token.value) ? 1 : Math.max(0.05, Math.abs(a) * 0.01), hedge(a));
-  return allowed.plain.some((a) => Math.abs(token.value - a) <= tolerance(a));
+  return candidates.some(({ value: a }) => Math.abs(token.value - a) <= tolerance(a));
 }
+
+/** The one metric a sentence names, if it names exactly one. */
+function singleMetric(sentence: string): Metric | undefined {
+  let s = sentence.toLowerCase();
+  const found = new Set<Metric>();
+  const take = (re: RegExp, metric: Metric) => {
+    if (re.test(s)) {
+      found.add(metric);
+      s = s.replace(re, ' ');
+    }
+  };
+  take(/\bsleep\s+scores?\b/g, 'sleep_score');
+  take(/\bhrv\b|\bheart\s+rate\s+variability\b/g, 'hrv');
+  take(/\brhr\b|\bresting\s+(?:hr|heart(?:\s+rate)?)\b/g, 'rhr');
+  take(/\brecovery\b/g, 'recovery');
+  take(/\b(?:sleep|sleeping|slept)\b/g, 'sleep');
+  take(/\bsteps\b/g, 'steps');
+  return found.size === 1 ? [...found][0] : undefined;
+}
+
+// ---- general-route allowance --------------------------------------------
 
 /** A sentence stating a number ABOUT the user: never a general-knowledge figure. */
 const USER_CLAIM_RE =
   /\b(you|you've|you're)\s+(slept|got|had|walked|logged|averaged|scored|hit|reached|were|are at)\b|\byour\s+(recovery|sleep|hrv|heart|resting|rhr|steps?|scores?|readings?|average|numbers?|data|bedtime|night|week|month)\b/i;
+/** A time word that ties a number to the user's own days. */
+const USER_TIME_RE = /\b(last\s+night|tonight|today|yesterday|this\s+(morning|week|month)|last\s+week)\b/i;
+/** Scores only the user has: any number near them is the user's. */
+const USER_SCORE_RE = /\b(recovery|sleep\s+scores?)\b/i;
+const YOU_WORDS = new Set(['you', "you've", "you're", 'your', 'yours', "you'd", "you'll", 'yourself']);
+/** How many words apart "you"/"your" and a number may be for the number to be about the user. */
+const YOU_NUMBER_WORDS = 4;
+
+function youNearNumber(text: string): boolean {
+  const words = text.replace(/[‘’]/g, "'").split(/\s+/);
+  const you: number[] = [];
+  const numbers: number[] = [];
+  words.forEach((w, i) => {
+    if (YOU_WORDS.has(w.toLowerCase().replace(/[^a-z']/g, ''))) you.push(i);
+    if (/\d/.test(w)) numbers.push(i);
+  });
+  return you.some((y) => numbers.some((n) => Math.abs(y - n) <= YOU_NUMBER_WORDS));
+}
+
+function isAboutUser(sentence: string): boolean {
+  const text = wordsToDigits(sentence);
+  return USER_CLAIM_RE.test(text) || USER_TIME_RE.test(text) || USER_SCORE_RE.test(text) || youNearNumber(text);
+}
+
+// ---- topics and verdict -------------------------------------------------
 
 const DIAGNOSIS_RE =
   /\bdiagnos\w*|\b(you\s+(may|might|could|probably|likely)?\s*have|sounds?\s+like|signs?\s+of|symptoms?\s+of|consistent\s+with)\s+(an?\s+)?(sleep\s+apnea|apnoea|apnea|insomnia|depression|anxiety|diabetes|hypertension|arrhythmia|afib|atrial\s+fibrillation|thyroid|anemia|heart\s+disease|(a\s+)?(disorder|condition|disease|infection))\b/i;
@@ -148,14 +319,14 @@ export type SentenceVerdict = { ok: true } | { ok: false; reason: 'unknown_numbe
 
 export function validateSentence(sentence: string, sheet: FactSheet): SentenceVerdict {
   if (isDisallowedTopic(sentence)) return { ok: false, reason: 'disallowed_topic' };
-  const tokens = extractNumbers(sentence);
-  if (tokens.length === 0) return { ok: true };
+  const scanned = scanNumbers(sentence);
+  if (scanned.length === 0) return { ok: true };
   const allowed = allowedFor(sheet);
-  const generalAllowance = sheet.route === 'general' && !USER_CLAIM_RE.test(sentence);
-  for (const t of tokens) {
-    if (!isKnown(t, allowed) && !generalAllowance) return { ok: false, reason: 'unknown_number' };
-  }
-  return { ok: true };
+  const metric = singleMetric(sentence);
+  if (scanned.every((s) => isKnown(s, allowed, metric))) return { ok: true };
+  // General knowledge ("most adults need 7–9 hours") only on the general route, and never about the user.
+  if (sheet.route === 'general' && !isAboutUser(sentence)) return { ok: true };
+  return { ok: false, reason: 'unknown_number' };
 }
 
 // ---- card ---------------------------------------------------------------

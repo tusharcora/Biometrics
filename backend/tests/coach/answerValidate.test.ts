@@ -224,3 +224,110 @@ describe('resolveCard', () => {
     });
   });
 });
+
+// Fix round 1 (ruling R9): invented numbers about the user must not pass by
+// borrowing another metric's value, a digit from an id or label, or a number word.
+const PROBE: FactSheet = {
+  route: 'today',
+  facts: [
+    { id: 'recovery.today', label: 'Recovery today', value: 26, unit: 'score', display: '26', usual: 58 },
+    { id: 'hrv.today', label: 'HRV today', value: 41, unit: 'ms', display: '41 ms', usual: 52.3 },
+    { id: 'rhr.today', label: 'Resting heart rate today', value: 61, unit: 'bpm', display: '61 bpm', usual: 57, lowerIsBetter: true },
+    { id: 'sleep.total', label: 'Sleep last night', value: 408, unit: 'minutes', display: '6h 48m', usual: 433 },
+    { id: 'recovery.avg7', label: 'Recovery 7-day average', value: 44, unit: 'score', display: '44', usual: 58 },
+    { id: 'hrv.avg30', label: 'HRV 30-day average', value: 52.3, unit: 'ms', display: '52.3 ms' },
+    { id: 'habit.alcohol.hrv.lag2', label: 'Alcohol (1+ drinks) and 2-days-later HRV', value: 12, unit: 'percent', display: '12% lower', note: '(n=14)' },
+  ],
+  notes: ['Sleep recorded on 5 of the last 7 nights'],
+};
+
+describe('validateSentence: units, metrics and sheet digits (fix round 1)', () => {
+  it.each([
+    ['Your HRV was 62 ms.', "resting HR's 61 is not an HRV value"],
+    ['Your HRV dropped 26%.', "recovery's 26 is not a percent"],
+    ['Your HRV is 31 ms.', "the 30 in 'hrv.avg30' / '30-day' is not a value"],
+    ['Your HRV is 7 ms.', "the 7 in 'recovery.avg7' / '7-day' is not a value"],
+    ['Your HRV is 61.', 'a bare number in an HRV sentence must be an HRV value'],
+    ['Your recovery is 2.', "the 2 in 'lag2' is not a value"],
+    ['Your resting heart rate is 41 bpm.', "HRV's 41 is not a bpm value"],
+    ['You have 26 steps so far.', "recovery's 26 is not a step count"],
+    ['Recovery is 12 points below usual.', "the habit's 12% is not a score"],
+  ])('rejects %j (%s)', (sentence) => {
+    expect(validateSentence(sentence, PROBE)).toEqual(unknown);
+  });
+
+  it.each([
+    'Your HRV is 41 ms, against a usual 52.3 ms.',
+    'Your HRV is 11.3 ms below usual.',
+    'Your resting heart rate is 61 bpm, 4 bpm above usual.',
+    'Your recovery is 26/100.',
+    'Your recovery is 26 out of 100.',
+    'Your recovery is 32 points below usual.',
+    'Your 7-day recovery average is 44.',
+    'Your HRV 30-day average is 52.3 ms.',
+    'Over the last 30 days your HRV averaged 52.3 ms.',
+    'Alcohol showed 12% lower HRV two days later, across 14 nights.',
+    'Sleep was recorded on 5 of the last 7 nights.',
+    'You slept about 7 hours.',
+    'Since Sep 26, 2026 your recovery has been 26.',
+  ])('accepts %j', (sentence) => {
+    expect(validateSentence(sentence, PROBE)).toEqual(ok);
+  });
+
+  it('accepts "Your HRV is N ms." only near an HRV value (sweep 0-120)', () => {
+    const accepted = Array.from({ length: 121 }, (_, n) => n).filter((n) => validateSentence(`Your HRV is ${n} ms.`, PROBE).ok);
+    // 41 (today), 52.3 (usual and 30-day average) and 11.3 (the difference), integers within ±1.
+    expect(accepted).toEqual([11, 12, 40, 41, 42, 52, 53]);
+  });
+});
+
+describe('extractNumbers: number words and exemptions (fix round 1)', () => {
+  it('reads number words followed by a unit or metric word', () => {
+    expect(extractNumbers('nine hours')).toEqual([{ kind: 'duration', minutes: 540 }]);
+    expect(extractNumbers('about seven hours')).toEqual([{ kind: 'duration', minutes: 420, hedged: true }]);
+    expect(extractNumbers('five points lower')).toEqual([{ kind: 'plain', value: 5 }]);
+    expect(extractNumbers('Twenty-five minutes')).toEqual([{ kind: 'duration', minutes: 25 }]);
+    expect(extractNumbers('nine thousand steps')).toEqual([{ kind: 'plain', value: 9000 }]);
+  });
+
+  it('leaves number words without a unit alone', () => {
+    expect(extractNumbers('Here is one thing to try.')).toEqual([]);
+    expect(extractNumbers('Take it one step at a time.')).toEqual([]);
+  });
+
+  it('skips a year after a month-date, the /100 scale and the sheet windows', () => {
+    expect(extractNumbers('Since Sep 26, 2026.')).toEqual([]);
+    expect(extractNumbers('Recovery 26/100.')).toEqual([{ kind: 'plain', value: 26 }]);
+    expect(extractNumbers('Your 7-day and 30-day averages over the last 30 days.')).toEqual([]);
+  });
+});
+
+describe('validateSentence: number words (fix round 1)', () => {
+  it('rejects invented number words about the user', () => {
+    expect(validateSentence('You slept nine hours.', PROBE)).toEqual(unknown);
+    expect(validateSentence('You slept about nine hours.', PROBE)).toEqual(unknown);
+    expect(validateSentence('Your recovery is five points below usual.', PROBE)).toEqual(unknown);
+  });
+
+  it('accepts a hedged number word within 10%', () => {
+    expect(validateSentence('You slept about seven hours.', PROBE)).toEqual(ok);
+  });
+});
+
+describe('validateSentence: general route claims about the user (fix round 1)', () => {
+  it.each([
+    "You've been sleeping 5 hours a night.",
+    "You're averaging 5 hours.",
+    'Last night was only 5 hours.',
+    'Sleep 5 hours and recovery will drop to 20.',
+    'You slept five hours.',
+    'This week you managed 6 hours a night.',
+  ])('rejects %j', (sentence) => {
+    expect(validateSentence(sentence, GENERAL)).toEqual(unknown);
+  });
+
+  it('still allows general knowledge that is not about the user', () => {
+    expect(validateSentence('Most adults need seven to nine hours of sleep.', GENERAL)).toEqual(ok);
+    expect(validateSentence('Caffeine has a half-life of about 5 hours.', GENERAL)).toEqual(ok);
+  });
+});

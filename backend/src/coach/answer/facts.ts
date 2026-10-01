@@ -3,9 +3,10 @@
 // same read-only data access the coach tools use (tools/*), so every value and
 // rounding matches what the app shows. Missing data is stated explicitly, the
 // usual is the 30 days ending yesterday, and the rendered sheet stays within
-// about 1,000 tokens. The validator (validate.ts) accepts only numbers that
-// appear in the rendered sheet, so each comparison the model may want to state
-// ("32 lower than usual") is precomputed here.
+// about 1,000 tokens. The validator (validate.ts) accepts only numbers held by
+// the sheet's facts and notes (never digits from ids or labels), so each
+// comparison the model may want to state ("32 lower than usual") is
+// precomputed here.
 
 import { shiftDate } from '../../scoring/dates';
 import { MAX_MEMORY_VALUE_CHARS, MemoryCategory, MemoryProposal, loadConfirmedMemories } from '../memory';
@@ -104,10 +105,16 @@ function roundFor(unit: FactUnit, value: number): number {
   return unit === 'ms' ? round1(value) : Math.round(value);
 }
 
-function comparison(fact: Fact): string {
+/** Value minus usual, rounded for the unit; undefined when the sheet states no comparison. */
+export function comparisonDiff(fact: Fact): number | undefined {
   // Step counts accumulate through the day, so "lower than usual" would be noise.
-  if (fact.usual === undefined || fact.unit === 'count') return '';
-  const diff = roundFor(fact.unit, fact.value - fact.usual);
+  if (fact.usual === undefined || fact.unit === 'count') return undefined;
+  return roundFor(fact.unit, fact.value - fact.usual);
+}
+
+function comparison(fact: Fact): string {
+  const diff = comparisonDiff(fact);
+  if (diff === undefined) return '';
   if (diff === 0) return ', same as usual';
   const size = formatValue(fact.unit, roundFor(fact.unit, Math.abs(diff)));
   const word = fact.unit === 'minutes' ? (diff > 0 ? 'more' : 'less') : diff > 0 ? 'higher' : 'lower';
