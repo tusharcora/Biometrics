@@ -55,7 +55,9 @@ describe('buildAnswerSystemPrompt', () => {
     }
     const p = buildAnswerSystemPrompt(hoot, { today: '2026-09-30', sheet: SHEET });
     expect(p).toContain('"tiles": [{"fact": "recovery.today", "label"');
-    expect(p).toContain('The headline, tip and source follow the same number rule as the reply, or the whole card is dropped.');
+    // Only a failing headline drops the card (a failing tip is omitted, a failing source falls back).
+    expect(p).toContain('The headline, tip and source follow the same number rule as the reply; a headline that breaks it drops\n   the card.');
+    expect(p).not.toContain('the whole card is dropped');
   });
 
   it('asks for no card when the sheet has no facts', () => {
@@ -69,7 +71,8 @@ describe('buildAnswerSystemPrompt', () => {
       const p = buildAnswerSystemPrompt(hoot, { today: '2026-09-30', sheet: { ...SHEET, route } });
       expect(p).toContain('- Answer their actual question in your first sentence.');
       expect(p).toContain('- When [factor.*] facts show what drove a score, explain that why in plain words.');
-      expect(p).toContain('- Offer one specific, doable next step.');
+      // In words: validate.ts drops "30 minutes earlier" on data routes and "tonight" near a number on general.
+      expect(p).toContain('- Offer one specific, doable next step, in words rather than new numbers (e.g. "a bit earlier to bed tonight").');
       expect(p).toContain('- If a note mentions their goal or preference, connect your answer to it.');
       expect(p).toContain('- Talk like a friend who knows their data, not like a report.');
     }

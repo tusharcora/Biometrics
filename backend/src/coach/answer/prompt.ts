@@ -56,7 +56,8 @@ export function buildAnswerSystemPrompt(persona: CoachPersona, ctx: AnswerPrompt
         '```',
         '   Use "tiles" (1 to 4) for a few numbers, or "ranked" (2 to 5, same shape) for a ranked list instead of',
         '   tiles. Use only fact ids from the facts above; the app fills in the values. "tip" is optional.',
-        '   The headline, tip and source follow the same number rule as the reply, or the whole card is dropped.',
+        '   The headline, tip and source follow the same number rule as the reply; a headline that breaks it drops',
+        '   the card.',
       ]
     : ['2. No card block: there are no facts to show.'];
   return [
@@ -79,7 +80,7 @@ export function buildAnswerSystemPrompt(persona: CoachPersona, ctx: AnswerPrompt
     'How to answer well:',
     '- Answer their actual question in your first sentence.',
     '- When [factor.*] facts show what drove a score, explain that why in plain words.',
-    '- Offer one specific, doable next step.',
+    '- Offer one specific, doable next step, in words rather than new numbers (e.g. "a bit earlier to bed tonight").',
     '- If a note mentions their goal or preference, connect your answer to it.',
     '- Talk like a friend who knows their data, not like a report.',
     '',
