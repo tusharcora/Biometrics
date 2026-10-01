@@ -98,10 +98,11 @@ export const COLORS = {
     coach: 'rgb(79, 70, 229)',
     // Coach today bars and answer tiles: where a number sits against the
     // user's own 30-day usual (rose below, teal above, neutral near). Sleep's
-    // "near" uses metricSleep instead (spec 1.2).
+    // "near" uses metricSleep instead (spec 1.2). Light teal is 700 so a fill
+    // clears 3:1 on the track; still never used for small text in light mode.
     statusBelow: 'rgb(225, 29, 72)',
     statusNear: 'rgb(113, 113, 122)',
-    statusAbove: 'rgb(13, 148, 136)',
+    statusAbove: 'rgb(15, 118, 110)',
     // The bar's empty track and the tick marking the usual.
     todayTrack: 'rgb(228, 228, 233)',
     todayTick: 'rgb(17, 18, 22)',

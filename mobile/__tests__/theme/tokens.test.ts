@@ -88,6 +88,12 @@ describe('design tokens (new semantic colors)', () => {
     expect((COLORS.dark as Record<string, string>)[key]).toBe(readVar(darkBlock, cssName));
   });
 
+  // R36: light teal-600 was 2.95:1 as a fill on the track; teal-700 clears 3:1.
+  it('uses teal-700 for the light status-above', () => {
+    expect(readVar(lightBlock, 'status-above')).toBe('rgb(15, 118, 110)');
+    expect(COLORS.light.statusAbove).toBe('rgb(15, 118, 110)');
+  });
+
   it.each(NEW_TOKENS)('--color-%s is registered with Tailwind', (cssName) => {
     const tailwindStr = require('fs').readFileSync(require('path').join(__dirname, '../../tailwind.config.js'), 'utf8');
     expect(tailwindStr).toContain(`var(--color-${cssName})`);
