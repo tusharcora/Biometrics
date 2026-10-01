@@ -161,6 +161,31 @@ describe('useCoachConversation: stop', () => {
     expect(result.current.answeredAt).toBeNull();
   });
 
+  it('has a stable stop that is safe before any turn and when pressed repeatedly', async () => {
+    const { result, rerender } = setup();
+    const stop = result.current.stop;
+    await act(async () => stop());
+    expect(result.current.messages).toEqual([]);
+    expect(result.current.error).toBeNull();
+
+    const live = openTurn();
+    act(() => result.current.send('How did I sleep?'));
+    live.emit({ type: 'text', sentence: 'Mostly clear skies.' });
+    rerender({});
+    expect(result.current.stop).toBe(stop);
+
+    await act(async () => {
+      result.current.stop();
+      result.current.stop();
+    });
+    await act(async () => result.current.stop());
+
+    expect(live.signal.aborted).toBe(true);
+    expect(result.current.messages[1]).toEqual(expect.objectContaining({ text: 'Mostly clear skies.', state: 'stopped' }));
+    expect(result.current.error).toBeNull();
+    expect(result.current.streaming).toBe(false);
+  });
+
   it('drops the empty answer when stopped before anything arrived, keeping the question', async () => {
     const live = openTurn();
     const { result } = setup();

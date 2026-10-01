@@ -189,7 +189,8 @@ export interface CoachHistoryMessageDTO {
   // that shape exactly, or every restored message is misread as the coach's.
   role: 'user' | 'assistant';
   text: string;
-  source?: string;
+  // null on user rows (the server stores no source for them).
+  source?: string | null;
   createdAt: string;
   // Redesign history fields. Each is optional: rows stored before the
   // redesign render as plain talk. The server sends card/safety/engine as null
