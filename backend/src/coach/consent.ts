@@ -35,22 +35,68 @@ export const COACH_CONSENT: ConsentText = {
   ],
 };
 
-/** True when the user's latest un-revoked consent is for the CURRENT version. */
-export async function hasCurrentConsent(userId: string): Promise<boolean> {
+// The hosted engine's own opt-in (spec 2026-09-30 section 3), on top of the
+// coach consent above: switching to the hosted model sends the question and
+// the fact sheet to Anthropic. A separate scope with its own version, so the
+// two texts are bumped independently. The "hosted-" prefix keeps the two
+// version strings from ever being equal.
+export const COACH_HOSTED_CONSENT_VERSION = 'hosted-1';
+
+export const COACH_HOSTED_CONSENT: ConsentText = {
+  version: COACH_HOSTED_CONSENT_VERSION,
+  summary:
+    'Your question and a summary of your recent health numbers are sent to Anthropic to write the answer. ' +
+    "Anthropic doesn't use it to train models. You can switch back any time.",
+  dataItems: [
+    'The question you type and the recent messages of the current conversation',
+    'A short summary of the health numbers the answer needs: your scores and their usual values, last night’s sleep, HRV, resting heart rate, confirmed habit patterns, goals and what you asked the coach to remember',
+    'The same summary for the one-sentence recap of your day at the top of the Coach page',
+    'Never sent: your name, email, account id, sign-in or Google Health tokens, or the notes on your habit logs',
+  ],
+};
+
+export type ConsentScope = 'local' | 'hosted';
+
+const SCOPE_COLUMN = { local: 'LOCAL', hosted: 'HOSTED' } as const;
+const SCOPE_VERSION = { local: COACH_CONSENT_VERSION, hosted: COACH_HOSTED_CONSENT_VERSION } as const;
+
+export function consentTextFor(scope: ConsentScope): ConsentText {
+  return scope === 'hosted' ? COACH_HOSTED_CONSENT : COACH_CONSENT;
+}
+
+/**
+ * True when the user's latest un-revoked consent OF THIS SCOPE is for that
+ * scope's CURRENT version. Scoped because the latest row overall may be the
+ * other scope's: a hosted grant must never read as a stale local consent.
+ */
+export async function hasCurrentConsent(userId: string, scope: ConsentScope = 'local'): Promise<boolean> {
   const latest = await prisma.coachConsent.findFirst({
-    where: { userId, revokedAt: null },
+    where: { userId, revokedAt: null, scope: SCOPE_COLUMN[scope] },
     orderBy: { consentedAt: 'desc' },
     select: { version: true },
   });
-  return latest?.version === COACH_CONSENT_VERSION;
+  return latest?.version === SCOPE_VERSION[scope];
 }
 
-/** Idempotent: a repeat grant for the current version does not add a row. */
-export async function grantConsent(userId: string): Promise<void> {
-  if (await hasCurrentConsent(userId)) return;
-  await prisma.coachConsent.create({ data: { userId, version: COACH_CONSENT_VERSION } });
+/** Idempotent: a repeat grant for the current version of the scope does not add a row. */
+export async function grantConsent(userId: string, scope: ConsentScope = 'local'): Promise<void> {
+  if (await hasCurrentConsent(userId, scope)) return;
+  await prisma.coachConsent.create({ data: { userId, version: SCOPE_VERSION[scope], scope: SCOPE_COLUMN[scope] } });
 }
 
-export async function revokeConsent(userId: string): Promise<void> {
-  await prisma.coachConsent.updateMany({ where: { userId, revokedAt: null }, data: { revokedAt: new Date() } });
+/**
+ * 'all' (the default, and what DELETE /me/coach/consent has always meant)
+ * withdraws both scopes; 'hosted' withdraws only the hosted opt-in. Either way
+ * the user is back on the local engine, in the same transaction, so no message
+ * can go to the hosted model after the revoke returns.
+ */
+export async function revokeConsent(userId: string, scope: 'hosted' | 'all' = 'all'): Promise<void> {
+  const now = new Date();
+  await prisma.$transaction([
+    prisma.coachConsent.updateMany({
+      where: { userId, revokedAt: null, ...(scope === 'hosted' ? { scope: 'HOSTED' as const } : {}) },
+      data: { revokedAt: now },
+    }),
+    prisma.user.updateMany({ where: { id: userId }, data: { coachEngine: 'LOCAL' } }),
+  ]);
 }

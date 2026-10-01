@@ -1,0 +1,113 @@
+import { prisma } from '../../src/db/client';
+import {
+  COACH_CONSENT_VERSION,
+  COACH_HOSTED_CONSENT,
+  COACH_HOSTED_CONSENT_VERSION,
+  consentTextFor,
+  COACH_CONSENT,
+  grantConsent,
+  hasCurrentConsent,
+  revokeConsent,
+} from '../../src/coach/consent';
+import { migrateTestDb } from '../setupTestDb';
+import { createUser } from './helpers';
+
+beforeAll(() => migrateTestDb());
+afterAll(() => prisma.$disconnect());
+
+const engineOf = async (userId: string) =>
+  (await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { coachEngine: true } })).coachEngine;
+
+describe('hosted consent text', () => {
+  it('is versioned separately from the local consent, and the versions can never collide', () => {
+    expect(COACH_HOSTED_CONSENT.version).toBe(COACH_HOSTED_CONSENT_VERSION);
+    expect(COACH_HOSTED_CONSENT_VERSION).toBe('hosted-1');
+    expect(COACH_HOSTED_CONSENT_VERSION).not.toBe(COACH_CONSENT_VERSION);
+  });
+
+  it('carries the spec wording and names what is and is not sent', () => {
+    expect(COACH_HOSTED_CONSENT.summary).toBe(
+      'Your question and a summary of your recent health numbers are sent to Anthropic to write the answer. ' +
+        "Anthropic doesn't use it to train models. You can switch back any time.",
+    );
+    expect(COACH_HOSTED_CONSENT.dataItems.length).toBeGreaterThanOrEqual(3);
+    expect(COACH_HOSTED_CONSENT.dataItems.join(' ')).toMatch(/never sent/i);
+  });
+
+  it('consentTextFor picks the text by scope', () => {
+    expect(consentTextFor('local')).toBe(COACH_CONSENT);
+    expect(consentTextFor('hosted')).toBe(COACH_HOSTED_CONSENT);
+  });
+});
+
+describe('scoped consent', () => {
+  it('a hosted grant does not count as the local consent, nor the other way round', async () => {
+    const user = await createUser();
+    await grantConsent(user.id, 'hosted');
+    expect(await hasCurrentConsent(user.id, 'hosted')).toBe(true);
+    expect(await hasCurrentConsent(user.id)).toBe(false);
+
+    const other = await createUser();
+    await grantConsent(other.id);
+    expect(await hasCurrentConsent(other.id)).toBe(true);
+    expect(await hasCurrentConsent(other.id, 'hosted')).toBe(false);
+  });
+
+  it('a newer hosted row never hides the current local consent (the old latest-row-wins read did)', async () => {
+    const user = await createUser();
+    await prisma.coachConsent.create({
+      data: { userId: user.id, version: COACH_CONSENT_VERSION, consentedAt: new Date(Date.now() - 60_000) },
+    });
+    await prisma.coachConsent.create({ data: { userId: user.id, version: COACH_HOSTED_CONSENT_VERSION, scope: 'HOSTED' } });
+    expect(await hasCurrentConsent(user.id)).toBe(true);
+    expect(await hasCurrentConsent(user.id, 'hosted')).toBe(true);
+  });
+
+  it('stores the scope and the scope version, and a repeat grant adds no row', async () => {
+    const user = await createUser();
+    await grantConsent(user.id, 'hosted');
+    await grantConsent(user.id, 'hosted');
+    const rows = await prisma.coachConsent.findMany({ where: { userId: user.id } });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({ scope: 'HOSTED', version: COACH_HOSTED_CONSENT_VERSION, revokedAt: null });
+  });
+
+  it('a hosted row with a stale version is not current, and re-granting adds a current HOSTED row', async () => {
+    const user = await createUser();
+    await prisma.coachConsent.create({
+      data: { userId: user.id, scope: 'HOSTED', version: 'hosted-0', consentedAt: new Date(Date.now() - 60_000) },
+    });
+    expect(await hasCurrentConsent(user.id, 'hosted')).toBe(false);
+
+    await grantConsent(user.id, 'hosted');
+    const latest = await prisma.coachConsent.findFirstOrThrow({ where: { userId: user.id }, orderBy: { consentedAt: 'desc' } });
+    expect(latest).toMatchObject({ scope: 'HOSTED', version: COACH_HOSTED_CONSENT_VERSION });
+  });
+
+  it('revoking hosted keeps the local consent and moves the user back to the local engine', async () => {
+    const user = await createUser();
+    await grantConsent(user.id);
+    await grantConsent(user.id, 'hosted');
+    await prisma.user.update({ where: { id: user.id }, data: { coachEngine: 'HOSTED' } });
+
+    await revokeConsent(user.id, 'hosted');
+
+    expect(await hasCurrentConsent(user.id)).toBe(true);
+    expect(await hasCurrentConsent(user.id, 'hosted')).toBe(false);
+    expect(await engineOf(user.id)).toBe('LOCAL');
+  });
+
+  it('revoking everything (the default) revokes both scopes and resets the engine', async () => {
+    const user = await createUser();
+    await grantConsent(user.id);
+    await grantConsent(user.id, 'hosted');
+    await prisma.user.update({ where: { id: user.id }, data: { coachEngine: 'HOSTED' } });
+
+    await revokeConsent(user.id);
+
+    expect(await hasCurrentConsent(user.id)).toBe(false);
+    expect(await hasCurrentConsent(user.id, 'hosted')).toBe(false);
+    expect(await engineOf(user.id)).toBe('LOCAL');
+    expect(await prisma.coachConsent.count({ where: { userId: user.id, revokedAt: null } })).toBe(0);
+  });
+});

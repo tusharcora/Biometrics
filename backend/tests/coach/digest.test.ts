@@ -122,6 +122,17 @@ describe('gating', () => {
     expect(telemetry.named('coach.digest_generated')).toHaveLength(0);
   });
 
+  it('a user whose only consent is the HOSTED scope is not a digest candidate', async () => {
+    const user = await digestUser();
+    await prisma.coachConsent.updateMany({ where: { userId: user.id }, data: { scope: 'HOSTED' } });
+    const { deps, provider } = setup([{ type: 'text', text: GOOD_DIGEST }]);
+
+    const summary = await sweep(deps, user.id);
+
+    expect(summary).toMatchObject({ usersChecked: 0, generated: 0 });
+    expect(provider.callCount).toBe(0);
+  });
+
   // No live persona is reactive-only (every character is threshold-triggered), but the gate stays for
   // any later persona set, so it is exercised through a stubbed persona.
   it("skips a 'reactive-only' persona", async () => {

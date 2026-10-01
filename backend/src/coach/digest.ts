@@ -333,7 +333,7 @@ export async function runWeeklyDigest(deps: DigestDeps): Promise<DigestSweepSumm
     const users = await prisma.user.findMany({
       where: {
         ...(deps.userIds ? { id: { in: deps.userIds } } : {}),
-        coachConsents: { some: { revokedAt: null, version: COACH_CONSENT_VERSION } },
+        coachConsents: { some: { revokedAt: null, version: COACH_CONSENT_VERSION, scope: 'LOCAL' } },
       },
       select: { id: true, timezone: true, coachPersonaId: true },
       orderBy: { id: 'asc' },
