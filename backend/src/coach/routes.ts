@@ -295,10 +295,15 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
   router.get('/me/coach/today', requireAuth, requireEnabled, async (req: AuthedRequest, res) => {
     const userId = req.userId!;
     try {
+      // Only a consented user's sentence is ever written, so only then is a run worth scheduling
+      // (generateTodaySummary checks again); otherwise every page load would queue a no-op.
+      const canWrite = isCoachEnabled() && (await hasCurrentConsent(userId, 'local'));
       const summary = await getTodaySummary(userId, {
         ...todayDeps,
-        onMissing: () => deps.background(() => generateTodaySummary(userId, todayDeps)),
+        ...(canWrite ? { onMissing: () => deps.background(() => generateTodaySummary(userId, todayDeps)) } : {}),
       });
+      // Today's own numbers: never cached by a shared proxy, nor kept once the day moves on.
+      res.set('Cache-Control', 'private, no-store');
       res.json(summary);
     } catch (err) {
       logFailure('today', err);

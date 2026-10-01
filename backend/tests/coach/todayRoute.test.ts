@@ -1,6 +1,7 @@
 import express from 'express';
 import request from 'supertest';
 import { prisma } from '../../src/db/client';
+import { civilDateToUtcMidnight } from '../../src/biometrics/civilDate';
 import { migrateTestDb } from '../setupTestDb';
 import { authHeaderFor } from '../helpers/auth';
 import { createCoachRouter } from '../../src/coach/routes';
@@ -121,13 +122,32 @@ describe('GET /me/coach/today', () => {
 
   it('shows bars and the template without the coach consent, but never calls a model', async () => {
     const user = await createUser();
-    const { app, local, runTasks } = setup();
+    const { app, local, tasks } = setup();
     const res = await request(await testServer(app)).get('/me/coach/today').set(await authHeaderFor(user.id));
     expect(res.status).toBe(200);
     expect(res.body.sentence.source).toBe('template');
-    await runTasks();
+    expect(tasks).toHaveLength(0); // no run is even scheduled: it could never write anything
     expect(local.requests).toHaveLength(0);
     expect(await prisma.coachDaySummary.count({ where: { userId: user.id } })).toBe(0);
+  });
+
+  it('is never cached: private, no-store', async () => {
+    const user = await consentedUser();
+    const res = await request(await testServer(setup().app)).get('/me/coach/today').set(await authHeaderFor(user.id));
+    expect(res.status).toBe(200);
+    expect(res.headers['cache-control']).toBe('private, no-store');
+  });
+
+  it('schedules nothing when a TEMPLATE marker is already stored for today, and serves a fresh template', async () => {
+    const user = await consentedUser();
+    await prisma.coachDaySummary.create({
+      data: { userId: user.id, date: civilDateToUtcMidnight('2026-09-30'), text: 'Recovery 99, stale.', spans: [], source: 'TEMPLATE' },
+    });
+    const { app, tasks } = setup();
+    const res = await request(await testServer(app)).get('/me/coach/today').set(await authHeaderFor(user.id));
+    expect(res.status).toBe(200);
+    expect(res.body.sentence).toEqual({ ...templateSentence(LOW_DAY), source: 'template' });
+    expect(tasks).toHaveLength(0);
   });
 
   it("writes the sentence with the user's hosted engine when chosen", async () => {
