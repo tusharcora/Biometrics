@@ -360,3 +360,63 @@ describe('validateSentence: trend window phrases (R13)', () => {
     expect(validateSentence('Your HRV is 30 ms.', TRENDS)).toEqual(unknown);
   });
 });
+
+// Fix wave R18 (D2): a number with an explicit unit matches its unit family
+// across the sheet; naming one metric only narrows a family that metric has
+// values in. Bare numbers keep the strict single-metric scoping.
+describe('validateSentence: unit-carrying numbers across metrics (R18 D2)', () => {
+  // The live smoke's sleep sheet (seed 7).
+  const SLEEP: FactSheet = {
+    route: 'sleep',
+    facts: [
+      { id: 'sleep.total', label: 'Sleep last night', value: 434, unit: 'minutes', display: '7h 14m', usual: 417 },
+      { id: 'sleep_score.today', label: 'Sleep score today', value: 36, unit: 'score', display: '36', usual: 33 },
+      { id: 'sleep.goal', label: 'Sleep goal', value: 480, unit: 'minutes', display: '8h 0m' },
+      { id: 'sleep.avg7', label: 'Sleep 7-night average', value: 413, unit: 'minutes', display: '6h 53m', usual: 417 },
+      { id: 'sleep.shortest7', label: 'Shortest night this week (Sep 26)', value: 330, unit: 'minutes', display: '5h 30m' },
+      { id: 'sleep.longest7', label: 'Longest night this week (Sep 28)', value: 505, unit: 'minutes', display: '8h 25m' },
+    ],
+    notes: ['Sleep recorded on 7 of the last 7 nights'],
+  };
+  const TRENDS: FactSheet = {
+    route: 'trends',
+    facts: [
+      { id: 'hrv.avg7', label: 'HRV 7-day average', value: 45.9, unit: 'ms', display: '45.9 ms', usual: 53.2 },
+      { id: 'hrv.trend30', label: 'HRV trend over 30 days', value: -8, unit: 'percent', display: 'down 8%' },
+      { id: 'rhr.avg7', label: 'Resting heart rate 7-day average', value: 62, unit: 'bpm', display: '62 bpm', usual: 59, lowerIsBetter: true },
+      { id: 'steps.trend30', label: 'Steps trend over 30 days', value: 10, unit: 'percent', display: 'up 10%' },
+      { id: 'recovery.avg7', label: 'Recovery 7-day average', value: 37, unit: 'score', display: '37', usual: 47 },
+    ],
+    notes: [],
+  };
+
+  it('accepts the smoke sentence that names only "sleep score" but quotes a sleep duration', () => {
+    expect(
+      validateSentence(
+        'Your sleep score was 36, slightly higher than your typical 33, though your 7-night average has dipped to 6 hours and 53 minutes.',
+        SLEEP,
+      ),
+    ).toEqual(ok);
+  });
+
+  it.each([
+    ['Your sleep score of 36 came after a week averaging 6h 53m.', SLEEP],
+    ['Your recovery averaged 37 while your heart sat at 62 bpm.', TRENDS],
+    ['Your recovery averaged 37 with your HRV at 45.9 ms.', TRENDS],
+  ])('accepts %j: each unit-carrying number is on the sheet in its own family', (sentence, sheet) => {
+    expect(validateSentence(sentence as string, sheet as FactSheet)).toEqual(ok);
+  });
+
+  it.each([
+    ['Your sleep score of 36 came after 6 hours and 10 minutes in bed.', SLEEP, 'no such duration on the sheet'],
+    ['Your sleep score was 40 points, above your 33.', SLEEP, 'a score number is still checked against the sleep score'],
+    ['Your sleep score was 20.', SLEEP, 'an invented bare number'],
+    ['Your recovery averaged 37 while your heart sat at 65 bpm.', TRENDS, 'no such bpm value'],
+    ['Your recovery averaged 37 with your HRV at 62 ms.', TRENDS, "resting HR's 62 bpm is not an ms value"],
+    // Percent is shared by several metrics: a metric that has its own percent
+    // values keeps to them, so HRV cannot borrow the steps trend's 10%.
+    ['Your HRV is down 10% this month.', TRENDS, "the steps trend's 10% is not an HRV value"],
+  ])('rejects %j (%s)', (sentence, sheet) => {
+    expect(validateSentence(sentence as string, sheet as FactSheet)).toEqual(unknown);
+  });
+});
