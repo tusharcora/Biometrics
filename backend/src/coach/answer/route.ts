@@ -2,7 +2,8 @@
 // Deterministic and cheap: a handful of keyword groups decide which fact sheet
 // the one model call gets. The crisis classifier runs BEFORE this, unchanged.
 //
-//   general  a health/fitness knowledge question with no personal reference
+//   general  a health/fitness knowledge question with no personal reference, no
+//            user-only score and no metric's state ("Why is recovery low?" is today)
 //   trends   weeks, months, habits, correlations, goals
 //   sleep    last night and this week's sleep
 //   today    today's scores and readings; also anything ambiguous
@@ -13,12 +14,25 @@
 export type AnswerRoute = 'today' | 'sleep' | 'trends' | 'general';
 
 // First-person words, plus time and collective words that only make sense about
-// the user's own data ("How's recovery today?", "How was last night?").
+// the user's own data ("How's recovery today?", "How was last night?", "How's HRV right now?").
 const PERSONAL_RE =
-  /\b(my|me|i|i'm|im|i've|i'd|i'll|mine|myself|we|us|our|today|tonight|yesterday|this morning|last night|this week)\b/;
+  /\b(my|me|i|i'm|im|i've|i'd|i'll|mine|myself|we|us|our|today|tonight|tomorrow|yesterday|this morning|last night|this week|now|right now|currently|lately|recently|so far)\b/;
 // Imperatives that contain "me" without being about the user ("tell me more").
 const IMPERATIVE_ME_RE = /\b(tell|show|give|explain to) me\b/g;
 const GENERAL_SHAPE_RE = /^(what|what's|whats|why|how|is|are|does|do|can|could|should|any|tips?|explain|tell me about)\b/;
+// Scores only the user has: a question about one is about their data ("Why is recovery low?").
+const USER_SCORE_RE = /\b(recovery|readiness|sleep scores?|scores?)\b/;
+// A metric with a word about its current state ("How did sleep go?", "Why is resting heart rate up?").
+const METRIC_RE = /\b(recovery|readiness|scores?|hrv|heart rate|rhr|pulse|sleep|steps)\b/;
+const STATE_RE = /\b(low|lower|high|higher|up|down|looking|doing|go|going|went|been)\b/;
+// Definitional and population shapes stay general even when they name a score or a state:
+// "What is recovery?", "What causes low HRV?", "How much sleep do adults need?", "Is caffeine bad for sleep?".
+const DEFINITIONAL_RE =
+  /^(what is|what's|whats|what are|what does|what do|what causes|what makes|define|explain|tell me about)\b|\b(adults?|people|most|everyone|someone|a person|athletes?|kids|children|teens?)\b|\b(good|bad) for\b/;
+// A workout the user asks about doing today: today's readiness, not the workout habit's history.
+const TODAY_TIME_RE = /\b(today|this morning|right now|now|tonight)\b/;
+const WORKOUT_RE = /\b(work out|workouts?|exercis\w*|gym|train\w*|run|running)\b/;
+const NON_WORKOUT_HABIT_RE = /\b(habits?|caffeine|coffees?|espressos?|teas?|alcohol|drinks?|drinking|drank|beers?|wines?|booze|logged)\b/;
 
 const HABIT_RE =
   /\b(habits?|caffeine|coffees?|espressos?|teas?|alcohol|drinks?|drinking|drank|beers?|wines?|booze|workouts?|work out|exercis\w*|gym|logged)\b/;
@@ -47,8 +61,15 @@ function isPersonal(text: string): boolean {
   return PERSONAL_RE.test(text.replace(IMPERATIVE_ME_RE, ' '));
 }
 
+/** Only the user's own data can answer it: a user-only score, or a metric with a state word. */
+function asksAboutUserData(text: string): boolean {
+  if (DEFINITIONAL_RE.test(text)) return false;
+  return USER_SCORE_RE.test(text) || (METRIC_RE.test(text) && STATE_RE.test(text));
+}
+
 // Route by topic alone, treating the question as personal.
 function topicRoute(text: string): Exclude<AnswerRoute, 'general'> {
+  if (TODAY_TIME_RE.test(text) && WORKOUT_RE.test(text) && !NON_WORKOUT_HABIT_RE.test(text) && !TRENDS_RE.test(text)) return 'today';
   if (HABIT_RE.test(text) || TRENDS_RE.test(text)) return 'trends';
   if (STRONG_SLEEP_RE.test(text) || (SLEEP_RE.test(text) && !TODAY_METRIC_RE.test(text))) return 'sleep';
   if (WEEK_RE.test(text)) return 'trends';
@@ -65,6 +86,6 @@ export function routeQuestion(message: string, previousUserMessage?: string): An
     if (inherited === 'general' && isPersonal(text)) return topicRoute(normalize(previousUserMessage));
     return inherited;
   }
-  if (topic && !isPersonal(text) && GENERAL_SHAPE_RE.test(text)) return 'general';
+  if (topic && !isPersonal(text) && !asksAboutUserData(text) && GENERAL_SHAPE_RE.test(text)) return 'general';
   return topicRoute(text);
 }

@@ -66,6 +66,46 @@ describe('routeQuestion', () => {
     expect(routeQuestion(message)).toBe(route);
   });
 
+  // Final review I1: these all reached `general` and got no data.
+  it.each([
+    ['Why is recovery low?', 'today'],
+    ['How did sleep go?', 'sleep'],
+    ['Why is resting heart rate up?', 'today'],
+    ['How many steps so far?', 'today'],
+    ["How's HRV right now?", 'today'],
+    ['Is HRV down lately?', 'trends'],
+    ['How is recovery looking?', 'today'],
+    ['Is recovery high?', 'today'],
+    ['How is sleep score doing?', 'sleep'],
+    ['Is readiness up?', 'today'],
+    ['How is HRV currently?', 'today'],
+    ['Can I run tomorrow?', 'today'],
+    ['Has sleep improved recently?', 'trends'],
+  ] as const)('a question about a user-only score or a metric\'s state is never general: %s -> %s', (message, route) => {
+    expect(routeQuestion(message)).toBe(route);
+  });
+
+  it.each([
+    ['Should I work out today?', 'today'],
+    ['Should I hit the gym this morning?', 'today'],
+    ['Can I exercise right now?', 'today'],
+  ] as const)('a workout question about today goes to today, not trends: %s -> %s', (message, route) => {
+    expect(routeQuestion(message)).toBe(route);
+  });
+
+  it.each([
+    'How much sleep do adults need?',
+    'What is HRV?',
+    'What is recovery?',
+    'What causes low HRV?',
+    'What does a high resting heart rate mean?',
+    'What is a good sleep score?',
+    'How many steps should adults take?',
+    'Is caffeine bad for sleep?',
+  ])('keeps a definitional or population question general: %s', (message) => {
+    expect(routeQuestion(message)).toBe('general');
+  });
+
   it('a personal follow-up to a general question routes on the previous topic, personally', () => {
     expect(routeQuestion('and what is mine?', 'What is HRV?')).toBe('today');
     expect(routeQuestion('is mine normal?', 'What does resting heart rate tell you?')).toBe('today');
