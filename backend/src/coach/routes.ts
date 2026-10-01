@@ -11,11 +11,12 @@ import { toMemoryDTO, validateMemoryValue } from './memory';
 import { HISTORY_WINDOW, MEMORY_NOTE, OrchestratorDeps } from './orchestrator';
 import { withDisclaimer } from './guardrails/disclaimer';
 import type { FactData } from './answer/facts';
-import { AnswerDeps, AnswerEvent, runAnswer } from './answer/pipeline';
+import { AnswerDeps, AnswerEvent, cleanHistoryText, runAnswer } from './answer/pipeline';
 import { warmModel } from './answer/warm';
 import { clearTodaySummary, generateTodaySummary, getTodaySummary, summaryEngineDeps, TodayDeps } from './answer/today';
 import type { MemoryDTO } from './memory';
 import { findPersona, listPersonas, resolvePersona } from './personas';
+import { CRISIS_RESOURCES } from './guardrails/crisis';
 import { selectEngine } from './engine';
 import { CoachTelemetry, LoggerCoachTelemetry } from './telemetry';
 import type { CoachTools } from './tools';
@@ -48,18 +49,44 @@ interface MessageRow {
   text: string;
   source: 'MODEL' | 'FALLBACK' | 'SAFETY' | null;
   card: unknown;
+  engine: 'LOCAL' | 'HOSTED' | null;
+  guardrailEvents: unknown;
   createdAt: Date;
 }
 
-const messageDTO = (m: MessageRow) => ({
+const isStopped = (events: unknown): boolean =>
+  Array.isArray(events) && events.some((e) => (e as { type?: unknown } | null)?.type === 'stopped');
+
+/**
+ * One transcript message, carrying everything the live stream showed so history
+ * renders the same (spec 1.3): the resolved card, the engine, the stopped
+ * marker, the safety resources and the memory chips proposed on it. Every key
+ * an older app build reads (id, role, text, source, createdAt) keeps its shape.
+ */
+const messageDTO = (m: MessageRow, memoryProposals: MemoryDTO[] = []) => ({
   id: m.id,
   role: m.role === 'USER' ? 'user' : 'assistant',
-  text: m.text,
+  // Pre-redesign replies were stored with the disclaimer and memory note appended; the page shows
+  // the disclaimer once as a footnote and memories as chips, so neither belongs in the text.
+  text: m.role === 'ASSISTANT' ? cleanHistoryText(m.text) : m.text,
   source: m.source === null ? null : (m.source.toLowerCase() as 'model' | 'fallback' | 'safety'),
   // The resolved answer card, so history renders exactly as it did live; null for talk-only and older rows.
-  card: m.card ?? null,
+  card: typeof m.card === 'object' && m.card !== null && !Array.isArray(m.card) ? m.card : null,
+  engine: m.engine === null ? null : (m.engine.toLowerCase() as 'local' | 'hosted'),
+  stopped: isStopped(m.guardrailEvents),
+  safety: m.source === 'SAFETY' ? { resources: [...CRISIS_RESOURCES] } : null,
+  memoryProposals,
   createdAt: m.createdAt.toISOString(),
 });
+
+export const CONVERSATION_PAGE_SIZE = 20;
+const TITLE_MAX_CHARS = 60;
+
+/** The first question, on one line, cut to 60 characters. */
+function conversationTitle(text: string | undefined): string {
+  const line = (text ?? '').replace(/\s+/g, ' ').trim();
+  return line.length <= TITLE_MAX_CHARS ? line : `${line.slice(0, TITLE_MAX_CHARS - 1)}…`;
+}
 
 /** Writes one server-sent event: `event: <type>` and the whole event as JSON data. */
 function writeSse(res: Response, event: AnswerEvent): void {
@@ -324,6 +351,8 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
       // Today's sentence was written in the old character's voice: drop it and write a new one in the
       // background (forced, so a run already in flight in the old voice is never reused), and only for a
       // user whose sentence may be written at all (the same gate GET /me/coach/today applies).
+      // The switch is already saved: a failure here is logged and the request still answers 200, so the
+      // app never shows a false error (and retries) for a character change that took effect.
       if (before && resolvePersona(before.coachPersonaId).id !== persona.id) {
         await clearTodaySummary(userId, todayDeps);
         if (isCoachEnabled() && (await hasCurrentConsent(userId, 'local'))) {
@@ -488,13 +517,70 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
       res.json({ conversationId: null, messages: [] });
       return;
     }
-    const rows = await prisma.coachMessage.findMany({
-      where: { conversationId },
-      orderBy: { createdAt: 'desc' },
-      take: MAX_TRANSCRIPT_MESSAGES,
+    const rows = (
+      await prisma.coachMessage.findMany({
+        where: { conversationId },
+        orderBy: { createdAt: 'desc' },
+        take: MAX_TRANSCRIPT_MESSAGES,
+      })
+    ).reverse();
+    // Memory chips go on the message that proposed them; rows from before
+    // CoachMemory.messageId existed belong to no message and are not shown.
+    const memories = await prisma.coachMemory.findMany({
+      where: { userId, messageId: { in: rows.map((r) => r.id) } },
+      orderBy: [{ createdAt: 'asc' }, { id: 'asc' }],
     });
-    res.json({ conversationId, messages: rows.reverse().map(messageDTO) });
+    const byMessage = new Map<string, MemoryDTO[]>();
+    for (const memory of memories) {
+      const list = byMessage.get(memory.messageId!) ?? [];
+      list.push(toMemoryDTO(memory));
+      byMessage.set(memory.messageId!, list);
+    }
+    res.json({ conversationId, messages: rows.map((m) => messageDTO(m, byMessage.get(m.id))) });
   }
+
+  // Past conversations for the conversations sheet, newest first, 20 per page;
+  // the next page is ?before=<the last row's lastMessageAt>.
+  router.get('/me/coach/conversations', requireAuth, requireEnabled, async (req: AuthedRequest, res) => {
+    const before = req.query.before;
+    let beforeDate: Date | undefined;
+    if (before !== undefined) {
+      beforeDate = typeof before === 'string' ? new Date(before) : new Date(Number.NaN);
+      if (Number.isNaN(beforeDate.getTime())) {
+        res.status(400).json({ error: 'before must be an ISO date' });
+        return;
+      }
+    }
+    try {
+      const rows = await prisma.coachConversation.findMany({
+        where: {
+          userId: req.userId!,
+          // A conversation whose messages retention removed has nothing to open.
+          messages: { some: {} },
+          ...(beforeDate ? { lastMessageAt: { lt: beforeDate } } : {}),
+        },
+        orderBy: [{ lastMessageAt: 'desc' }, { id: 'desc' }],
+        take: CONVERSATION_PAGE_SIZE,
+        select: {
+          id: true,
+          lastMessageAt: true,
+          _count: { select: { messages: true } },
+          messages: { where: { role: 'USER' }, orderBy: { createdAt: 'asc' }, take: 1, select: { text: true } },
+        },
+      });
+      res.json({
+        conversations: rows.map((c) => ({
+          id: c.id,
+          title: conversationTitle(c.messages[0]?.text),
+          lastMessageAt: c.lastMessageAt.toISOString(),
+          messageCount: c._count.messages,
+        })),
+      });
+    } catch (err) {
+      logFailure('conversation_list', err);
+      res.status(500).json({ error: 'coach_unavailable' });
+    }
+  });
 
   router.get('/me/coach/conversations/latest', requireAuth, requireEnabled, async (req: AuthedRequest, res) => {
     try {

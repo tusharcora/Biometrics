@@ -107,8 +107,11 @@ async function defaultLoadUser(userId: string) {
   return { timezone: user?.timezone ?? 'UTC', coachPersonaId: user?.coachPersonaId ?? null };
 }
 
-/** Stored replies from before the redesign carry the disclaimer and memory notes; the model never sees them. */
-function cleanHistoryText(text: string): string {
+/**
+ * Stored replies from before the redesign carry the disclaimer and memory notes;
+ * neither the model (history) nor the transcript (GET /me/coach/conversations) shows them.
+ */
+export function cleanHistoryText(text: string): string {
   let t = stripDisclaimer(text);
   for (const note of [MEMORY_NOTE, MEMORY_REMOVED_NOTE]) t = t.split(note).join('');
   return t.trim();
@@ -202,6 +205,13 @@ export async function* runAnswer(input: AnswerInput, deps: AnswerDeps): AsyncGen
       // with this conversation: a PENDING row the user never received must never exist,
       // because their next message in the thread would silently confirm it.
       const memories = reply.proposals.length > 0 ? await createPendingMemories(input.userId, reply.proposals, id, tx) : [];
+      // Linked to this reply so history shows their chips on it.
+      if (memories.length > 0) {
+        await tx.coachMemory.updateMany({
+          where: { id: { in: memories.map((m) => m.id) }, userId: input.userId },
+          data: { messageId: assistant.id },
+        });
+      }
       return { id, assistantId: assistant.id, memories };
     });
     return { messageId: saved.assistantId, conversationId: saved.id, durationMs, memories: saved.memories };

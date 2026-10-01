@@ -85,6 +85,7 @@ const ROUTES = [
   ['put', '/me/coach/persona'],
   ['put', '/me/coach/engine'],
   ['get', '/me/coach/today'],
+  ['get', '/me/coach/conversations'],
   ['post', '/me/coach/message'],
   ['get', '/me/coach/conversations/latest'],
   ['get', '/me/coach/conversations/some-id'],
@@ -563,7 +564,9 @@ describe('conversation transcripts', () => {
     expect(latest.status).toBe(200);
     expect(latest.body.conversationId).toBe(second.body.conversationId);
     expect(latest.body.messages).toHaveLength(2);
-    expect(Object.keys(latest.body.messages[0]).sort()).toEqual(['card', 'createdAt', 'id', 'role', 'source', 'text']);
+    expect(Object.keys(latest.body.messages[0]).sort()).toEqual([
+      'card', 'createdAt', 'engine', 'id', 'memoryProposals', 'role', 'safety', 'source', 'stopped', 'text',
+    ]);
     expect(latest.body.messages.map((m: any) => [m.role, m.source])).toEqual([
       ['user', null],
       ['assistant', 'model'],

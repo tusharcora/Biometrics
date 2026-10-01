@@ -228,6 +228,8 @@ describe('runAnswer: memory block', () => {
     const stored = await prisma.coachMemory.findMany({ where: { userId: inp.userId } });
     expect(stored).toHaveLength(1);
     expect(stored[0]!.conversationId).toBe(doneOf(events).conversationId);
+    // History shows the chip on the reply that proposed it.
+    expect(stored[0]!.messageId).toBe(doneOf(events).messageId);
     expect(texts(events).join(' ')).not.toContain('6am');
   });
 
