@@ -14,12 +14,16 @@
 //     a bare number matches any non-duration value. When the sentence names
 //     one or more metrics (recovery, sleep score, HRV, resting HR, sleep,
 //     steps), only the named metrics' values (and metric-less ones, e.g.
-//     notes) count, so "Your HRV is 61" cannot borrow resting HR's 61, nor
-//     "Your recovery dropped 8%" the HRV trend's 8%, nor "Your HRV is 26
-//     after a short night" recovery's 26. The one exception is a unit
-//     owned by a single metric that is related to the named one: "your sleep
-//     score was 36 ... your average dipped to 6h 53m" matches the duration
-//     against the sleep facts (see candidatesFor).
+//     missing-data notes) count, so "Your HRV is 61" cannot borrow resting
+//     HR's 61, nor "Your recovery dropped 8%" the HRV trend's 8%, nor "Your
+//     HRV is 26 after a short night" recovery's 26. A score driver's points
+//     ([factor.*]) count only when the sentence names both the driver and
+//     the score it moves ("HRV took 9 points off your recovery", never "Your
+//     HRV is 9"); the nights-recorded note is sleep's; a memory note's
+//     numbers count only in a sentence naming no metric. The one exception
+//     is a unit owned by a single metric that is related to the named one:
+//     "your sleep score was 36 ... your average dipped to 6h 53m" matches
+//     the duration against the sleep facts (see candidatesFor).
 //   * Number words ("seven hours", "five points", "nine thousand steps") are
 //     read as numbers when a unit or metric word follows; "one thing to try"
 //     is left alone.
@@ -40,7 +44,7 @@
 
 import { classifyCrisis } from '../guardrails/crisis';
 import { AnswerCard, CardItem, deltaDisplayOf, statusOf } from './card';
-import { Fact, FactSheet, FactUnit, USUAL_DAYS, comparisonDiff } from './facts';
+import { Fact, FactSheet, FactUnit, MEMORY_NOTE_PREFIX, SLEEP_NIGHTS_NOTE_PREFIX, USUAL_DAYS, comparisonDiff } from './facts';
 import type { RawCard } from './parse';
 import type { AnswerRoute } from './route';
 
@@ -194,11 +198,19 @@ export function extractNumbers(text: string): NumberToken[] {
 
 // ---- the allowed values -------------------------------------------------
 
-interface Allowed {
+/** Where a value may be used, beyond its unit family. */
+interface Scope {
+  /** The metric the value belongs to; undefined for values tied to none (missing-data notes). */
+  metric: Metric | undefined;
+  /** A score driver's points: also the score it moves must be named ("HRV took 9 points off recovery"). */
+  drives?: Metric;
+  /** A memory note's number: only in a sentence naming no metric ("you run 5 times a week"). */
+  unnamedOnly?: true;
+}
+
+interface Allowed extends Scope {
   value: number;
   family: Family;
-  /** Undefined for values not tied to one metric (sheet notes, score drivers). */
-  metric: Metric | undefined;
 }
 
 const METRIC_OF_ID_HEAD: Record<string, Metric> = {
@@ -210,21 +222,45 @@ const METRIC_OF_ID_HEAD: Record<string, Metric> = {
   steps: 'steps',
 };
 
-/** 'hrv.today' → hrv; 'habit.caffeine.hrv.lag2' → the habit's factor (hrv, rhr, sleep_*); 'factor.*' → none. */
-function metricOf(fact: Fact): Metric | undefined {
-  const [head, , factor] = fact.id.split('.');
+/** Each score driver (scoring/types.ts factor keys, lower-cased in 'factor.*' ids): its metric and the score it moves. */
+const DRIVERS: Record<string, { metric: Metric; drives: Metric }> = {
+  hrv: { metric: 'hrv', drives: 'recovery' },
+  rhr: { metric: 'rhr', drives: 'recovery' },
+  sleep_debt: { metric: 'sleep', drives: 'recovery' },
+  sleep_duration: { metric: 'sleep', drives: 'sleep_score' },
+  sleep_efficiency: { metric: 'sleep', drives: 'sleep_score' },
+  circadian_consistency: { metric: 'sleep', drives: 'sleep_score' },
+};
+
+/**
+ * 'hrv.today' → hrv; 'habit.caffeine.hrv.lag2' → the habit's factor (hrv, rhr, sleep_*);
+ * 'factor.hrv' → hrv, moving recovery. An unknown driver counts only where no metric is named.
+ */
+function scopeOf(fact: Fact): Scope {
+  const [head, second, factor] = fact.id.split('.');
   if (head === 'habit') {
-    if (factor === 'hrv' || factor === 'rhr') return factor;
-    return factor?.startsWith('sleep') ? 'sleep' : undefined;
+    if (factor === 'hrv' || factor === 'rhr') return { metric: factor };
+    return { metric: factor?.startsWith('sleep') ? 'sleep' : undefined };
   }
-  return head === undefined ? undefined : METRIC_OF_ID_HEAD[head];
+  if (head === 'factor') {
+    const driver = second === undefined ? undefined : DRIVERS[second];
+    return driver ? { metric: driver.metric, drives: driver.drives } : { metric: undefined, unnamedOnly: true };
+  }
+  return { metric: head === undefined ? undefined : METRIC_OF_ID_HEAD[head] };
 }
 
-function noteValues(text: string, metric: Metric | undefined): Allowed[] {
+/** A sheet note's scope: the nights-recorded note is sleep's; a memory note counts only where no metric is named. */
+function noteScope(note: string): Scope {
+  if (note.startsWith(SLEEP_NIGHTS_NOTE_PREFIX)) return { metric: 'sleep' };
+  if (note.startsWith(MEMORY_NOTE_PREFIX)) return { metric: undefined, unnamedOnly: true };
+  return { metric: undefined };
+}
+
+function noteValues(text: string, scope: Scope): Allowed[] {
   return scanNumbers(text).map((s) =>
     s.token.kind === 'duration'
-      ? { value: s.token.minutes, family: 'duration', metric }
-      : { value: s.token.value, family: s.unit ?? 'none', metric },
+      ? { ...scope, value: s.token.minutes, family: 'duration' }
+      : { ...scope, value: s.token.value, family: s.unit ?? 'none' },
   );
 }
 
@@ -238,14 +274,14 @@ function allowedFor(sheet: FactSheet): Allowed[] {
   const allowed: Allowed[] = [];
   for (const f of sheet.facts) {
     const family = FAMILY_OF_UNIT[f.unit];
-    const metric = metricOf(f);
+    const scope = scopeOf(f);
     const diff = comparisonDiff(f);
     for (const value of [f.value, f.usual, diff]) {
-      if (value !== undefined) allowed.push({ value: Math.abs(value), family, metric });
+      if (value !== undefined) allowed.push({ ...scope, value: Math.abs(value), family });
     }
-    if (f.note) allowed.push(...noteValues(f.note, metric));
+    if (f.note) allowed.push(...noteValues(f.note, scope));
   }
-  for (const note of sheet.notes) allowed.push(...noteValues(note, undefined));
+  for (const note of sheet.notes) allowed.push(...noteValues(note, noteScope(note)));
   allowedCache.set(sheet, allowed);
   return allowed;
 }
@@ -261,9 +297,10 @@ const RELATED: Partial<Record<Metric, Metric[]>> = { sleep_score: ['sleep'] };
  * The values a number may match. Its unit family always limits them (a
  * duration, "62 ms", "61 bpm", "8%", "9,645 steps", "6.3 points"; a bare number
  * is any non-duration family). When the sentence names one metric, only that
- * metric's values and metric-less ones (notes, score drivers) count, so
+ * metric's values and metric-less ones (missing-data notes) count, so
  * "Your HRV is 61" cannot borrow resting HR's 61 and "Your recovery dropped 8%"
- * cannot borrow the HRV trend's 8%.
+ * cannot borrow the HRV trend's 8%. A score driver's points also need the
+ * score it moves named, and memory-note numbers never count here.
  *
  * One exception: a number whose unit family belongs to a single metric
  * (durations: sleep, ms: HRV, bpm: resting HR, steps: steps) may match that
@@ -288,7 +325,9 @@ function candidatesFor(s: Scanned, allowed: Allowed[], named: ReadonlySet<Metric
     const borrows = [...named].some((m) => (RELATED[m] ?? []).includes(owner) && !inFamily.some((a) => a.metric === m));
     if (borrows) scope.add(owner);
   }
-  return inFamily.filter((a) => !a.metric || scope.has(a.metric));
+  return inFamily.filter(
+    (a) => !a.unnamedOnly && (!a.metric || scope.has(a.metric)) && (a.drives === undefined || named.has(a.drives)),
+  );
 }
 
 function isKnown(s: Scanned, allowed: Allowed[], named: ReadonlySet<Metric>): boolean {

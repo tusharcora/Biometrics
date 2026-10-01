@@ -188,7 +188,7 @@ export async function runFixtures(fixtures: readonly EvalFixture[]): Promise<Fix
 export interface NegativeResult {
   id: string;
   mustFailCheck: NegativeFixture['mustFailCheck'];
-  /** True when the fixture failed on exactly the named check and on nothing else. */
+  /** True when the fixture failed on the named check and on nothing else (besides its declared alsoFails). */
   caught: boolean;
   failures: CheckFailure[];
 }
@@ -197,10 +197,11 @@ export async function runNegativeFixtures(fixtures: readonly NegativeFixture[]):
   const out: NegativeResult[] = [];
   for (const f of fixtures) {
     const result = await runFixture(f, { unguarded: f.unguarded === true });
+    const allowed = new Set([f.mustFailCheck, ...(f.alsoFails ?? [])]);
     out.push({
       id: f.id,
       mustFailCheck: f.mustFailCheck,
-      caught: result.failures.length > 0 && result.failures.every((x) => x.check === f.mustFailCheck),
+      caught: result.failures.some((x) => x.check === f.mustFailCheck) && result.failures.every((x) => allowed.has(x.check)),
       failures: result.failures,
     });
   }

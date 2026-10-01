@@ -145,4 +145,10 @@ export interface NegativeFixture extends EvalFixture {
    * check catches an invented number even if the runtime check regressed.
    */
   unguarded?: boolean;
+  /**
+   * Other checks this fixture is known to fail as well, e.g. `grounded` for an
+   * unguarded reply the runtime check would also have dropped. The fixture is
+   * caught only when the named check fails and nothing outside these does.
+   */
+  alsoFails?: CheckName[];
 }

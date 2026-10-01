@@ -81,10 +81,9 @@ describe('attribution checker', () => {
     expect(check.problems).toEqual([{ sentence: 'Your HRV is 58 ms today.', metric: 'hrv' }]);
   });
 
-  it("catches what the runtime validator lets through: a score driver's points read as the metric's own value", () => {
-    // The runtime check lets a named metric use metric-less values (score drivers, notes),
-    // so the 9 points HRV cost the recovery score pass as "HRV is 9".
-    expect(validateSentence('Your HRV is 9 this morning.', SHEET).ok).toBe(true);
+  it("catches a score driver's points read as the metric's own value, as the runtime now does too (final review I2)", () => {
+    // The 9 points HRV cost the recovery score are not an HRV reading.
+    expect(validateSentence('Your HRV is 9 this morning.', SHEET).ok).toBe(false);
     expect(checkAttribution(['Your HRV is 9 this morning.'], SHEET).problems).toEqual([{ sentence: 'Your HRV is 9 this morning.', metric: 'hrv' }]);
   });
 
@@ -327,11 +326,14 @@ describe('eval suite', () => {
     }
   });
 
-  it('catches every must-fail fixture on its named check and no other, including an invented number', () => {
+  it('catches every must-fail fixture on its named check and no other (besides its declared alsoFails), including an invented number', () => {
     expect(report.negatives).toHaveLength(NEGATIVE_FIXTURES.length);
     expect(NEGATIVE_FIXTURES.map((f) => f.mustFailCheck).sort()).toEqual(['attribution', 'direction', 'grounded', 'quality']);
     for (const n of report.negatives) {
-      expect(n.failures.map((f) => f.check).every((c) => c === n.mustFailCheck)).toBe(true);
+      const fixture = NEGATIVE_FIXTURES.find((f) => f.id === n.id)!;
+      const allowed = [n.mustFailCheck, ...(fixture.alsoFails ?? [])];
+      expect(n.failures.map((f) => f.check)).toContain(n.mustFailCheck);
+      expect(n.failures.map((f) => f.check).every((c) => allowed.includes(c))).toBe(true);
       expect(n.caught).toBe(true);
     }
     expect(report.ok).toBe(true);
@@ -414,11 +416,21 @@ describe('runner behaviour', () => {
     expect(unguarded.failures.map((f) => f.check)).toEqual(['grounded']);
   });
 
-  it('the direction, attribution and quality classes pass the runtime validator: only the eval catches them', async () => {
-    for (const id of ['direction-contradicts-usual', 'attribution-borrowed-number', 'quality-answer-buried']) {
+  it('the direction and quality classes pass the runtime validator: only the eval catches them', async () => {
+    for (const id of ['direction-contradicts-usual', 'quality-answer-buried']) {
       const f = NEGATIVE_FIXTURES.find((x) => x.id === id)!;
       const runtimeOnly = await runFixture({ ...f, expect: { outcome: 'answer', dropped: [] } });
       expect(runtimeOnly.passed).toBe(true);
     }
+  });
+
+  it('a score driver borrowed by its own metric is dropped at runtime (final review I2); unguarded, the attribution check catches it', async () => {
+    const borrowed = NEGATIVE_FIXTURES.find((f) => f.id === 'attribution-borrowed-number')!;
+    const guarded = await runFixture({ ...borrowed, expect: { outcome: 'error:validation_failed', dropped: ['unknown_number', 'unknown_number'] }, script: [...borrowed.script, ...borrowed.script] });
+    expect(guarded.failures).toEqual([]);
+    const unguarded = await runFixture(borrowed, { unguarded: true });
+    expect(unguarded.failures.map((f) => f.check).sort()).toEqual(['attribution', 'grounded']);
+    const [negative] = await runNegativeFixtures([borrowed]);
+    expect(negative!.caught).toBe(true);
   });
 });

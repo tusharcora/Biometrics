@@ -1,12 +1,13 @@
 // Claims the runtime validator cannot judge, because every number in them is
 // real: a direction that contradicts the fact sheet ("higher than usual" for a
 // value below it), and a real number pinned on the wrong metric. The runtime
-// check scopes numbers to the metrics a sentence names, but lets any metric use
-// metric-less values (score drivers, notes), so "your HRV is 9" passes when 9
-// is the points HRV cost the recovery score. The eval's direction and attribution checks
-// catch both; the must-fail fixtures prove it. The last must-fail fixture runs
-// the pipeline with its own validation switched off and proves the eval's
-// `grounded` check still catches an invented number.
+// check scopes numbers to the metrics a sentence names and, since the final
+// review (I2), scopes score drivers and notes too, so "your HRV is 9" (the
+// points HRV cost the recovery score) is dropped at runtime as well; the eval's
+// attribution check stays as the backstop for one-metric sentences. The
+// direction must-fail runs through the real pipeline; the attribution and
+// grounded must-fails run it with its own validation switched off and prove
+// the eval still catches a borrowed or an invented number.
 
 import type { EvalFixture, NegativeFixture } from '../types';
 import { LOW_DAY } from './common';
@@ -54,10 +55,14 @@ export const claimNegativeFixtures: NegativeFixture[] = [
     ...base,
     id: 'attribution-borrowed-number',
     category: 'attribution',
-    description: '"HRV is 9" borrows the 9 points HRV cost the recovery score: a metric-less value, so only the eval catches it.',
+    description:
+      '"HRV is 9" borrows the 9 points HRV cost the recovery score. The runtime drops it; with that validation switched off, the eval\'s attribution check must still catch it.',
     script: ['Your HRV is 9 this morning.'],
     expect: { outcome: 'answer', dropped: [], attribution: true },
     mustFailCheck: 'attribution',
+    unguarded: true,
+    // The runtime validator now drops it too, and the grounded check re-runs that validator.
+    alsoFails: ['grounded'],
   },
   {
     ...base,

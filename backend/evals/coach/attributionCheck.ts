@@ -1,8 +1,9 @@
 // Number-attribution checker. The runtime validator (answer/validate.ts)
-// scopes a number to the metrics its sentence names, but any metric may still
-// use metric-less values (score drivers, notes), so "your HRV is 9" passes when
-// 9 is the points HRV cost the recovery score: every number is real, but it is
-// pinned on the wrong metric. The eval catches that class: a sentence that
+// scopes a number to the metrics its sentence names, score drivers and notes
+// included since the final review (I2), so "your HRV is 9", where 9 is the
+// points HRV cost the recovery score, is dropped at runtime. This check is the
+// backstop for that class (every number real, but pinned on the wrong metric)
+// should the runtime scoping regress: a sentence that
 // names exactly one metric may only use numbers from that metric's own facts
 // (same tolerance, units and hedging rules as the runtime check, which it
 // reuses on a sheet cut down to that metric). Which metrics a sentence names is
