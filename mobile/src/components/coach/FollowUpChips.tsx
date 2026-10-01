@@ -16,7 +16,7 @@ export function FollowUpChips({ questions, onAsk, disabled = false }: { question
     <View testID="follow-up-chips" className="flex-row flex-wrap gap-2">
       {questions.map((question, index) => (
         <PressableScale
-          key={question}
+          key={`${question}-${index}`}
           testID={`follow-up-${index}`}
           accessibilityRole="button"
           accessibilityLabel={question}

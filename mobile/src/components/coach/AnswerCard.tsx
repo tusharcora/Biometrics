@@ -7,6 +7,14 @@ import { Text } from '../ui/text';
 
 const RANK_BAR_MAX = 70;
 
+// Tiles sit in three equal columns like the mockup's grid: a cell is a third of
+// the row and its padding makes the 6pt gutter (the row's negative margin
+// cancels the outer half), so a 4th tile wraps to a new row at a third, and
+// one or two tiles keep that width rather than stretching.
+const TILE_GUTTER = 6;
+const TILE_CELL = { width: '33.3333%', padding: TILE_GUTTER / 2 } as const;
+const TILE_ROW = { margin: -TILE_GUTTER / 2 } as const;
+
 // Stretches the small source line's touch area to 44pt (16pt line + 2 × 14).
 const SOURCE_HIT_SLOP = { top: 14, bottom: 14, left: 8, right: 8 };
 
@@ -30,7 +38,10 @@ function comparison(item: AnswerCardItemDTO): string | null {
   if (!item.status) return null;
   // R41: the server's signed difference ("−25m vs usual"); cards stored before it fall back to words.
   if (item.deltaDisplay) return `${item.deltaDisplay} vs usual`;
-  if (item.status === 'near' || item.usual === undefined || item.value === item.usual) return 'on par';
+  if (item.status === 'near') return 'on par';
+  // Nothing to compare against: no words rather than a guess.
+  if (item.usual === undefined) return null;
+  if (item.value === item.usual) return 'on par';
   return item.value < item.usual ? 'below usual' : 'above usual';
 }
 
@@ -66,7 +77,7 @@ function Tile({ item, colors }: { item: AnswerCardItemDTO; colors: Palette }) {
       testID={`answer-tile-${item.factId}`}
       accessible
       accessibilityLabel={`${item.label} ${item.display}${spoken ? `, ${spoken}` : ''}`}
-      className="min-w-[30%] flex-1 rounded-tile bg-muted px-2.5 py-2"
+      className="flex-1 rounded-tile bg-muted px-2.5 py-2"
     >
       <Text testID={`answer-tile-value-${item.factId}`} className="text-base font-bold" style={{ color: valueColor }}>
         {item.display}
@@ -89,7 +100,7 @@ function RankedRow({ item, rank, largest, colors }: { item: AnswerCardItemDTO; r
       <Text className="w-4 text-sm text-muted-foreground">{rank}</Text>
       <Text className="shrink text-sm">{item.label}</Text>
       <View testID={`answer-rank-bar-${rank}`} className="h-1.5 rounded-full" style={{ width, backgroundColor: color }} />
-      <Text className="ml-auto text-xs text-muted-foreground" numberOfLines={1}>
+      <Text testID={`answer-rank-effect-${rank}`} className="ml-auto text-xs text-foreground/80" numberOfLines={1}>
         {item.display}
       </Text>
     </View>
@@ -111,16 +122,18 @@ export function AnswerCard({ card, onOpenSource }: { card: AnswerCardDTO; onOpen
     <View testID="answer-card" className="gap-2 rounded-card border border-border bg-card p-3.5">
       <Text className="text-base font-semibold">{card.headline}</Text>
       {card.tiles ? (
-        <View className="flex-row flex-wrap gap-1.5">
-          {card.tiles.map((item) => (
-            <Tile key={item.factId} item={item} colors={colors} />
+        <View testID="answer-tiles" className="flex-row flex-wrap" style={TILE_ROW}>
+          {card.tiles.map((item, index) => (
+            <View key={`${item.factId}-${index}`} testID={`answer-tile-cell-${item.factId}`} style={TILE_CELL}>
+              <Tile item={item} colors={colors} />
+            </View>
           ))}
         </View>
       ) : null}
       {card.ranked ? (
         <View>
           {card.ranked.map((item, index) => (
-            <RankedRow key={item.factId} item={item} rank={index + 1} largest={largest} colors={colors} />
+            <RankedRow key={`${item.factId}-${index}`} item={item} rank={index + 1} largest={largest} colors={colors} />
           ))}
         </View>
       ) : null}

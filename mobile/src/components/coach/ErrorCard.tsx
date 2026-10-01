@@ -1,5 +1,5 @@
-import React from 'react';
-import { View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { AccessibilityInfo, Platform, View } from 'react-native';
 import type { CoachTurnError } from '../../lib/useCoachConversation';
 import { Button } from '../ui/button';
 import { Text } from '../ui/text';
@@ -13,6 +13,11 @@ export const ERROR_COPY: Record<CoachTurnError['kind'], string> = {
   // 429 without a Retry-After; with one, errorCopy says when.
   rate_limited: "You've sent a lot of messages in a short time. Try again a little later.",
 };
+
+// 'interrupted' when not one event arrived: the answer never started.
+const DROPPED_BEFORE_ANSWER = 'The connection dropped before I could answer. You can try again.';
+// 'unavailable' when the server says retrying the same question would not help.
+const REPHRASE_HINT = 'Try asking it a different way.';
 
 const RATE_LIMITED_LEAD = "You've sent a lot of messages in a short time.";
 
@@ -29,16 +34,48 @@ export function errorCopy(error: CoachTurnError): string {
   if (error.kind === 'rate_limited' && error.retryAfterSeconds !== undefined) {
     return `${RATE_LIMITED_LEAD} Try again in ${waitWords(error.retryAfterSeconds)}.`;
   }
+  if (error.kind === 'interrupted' && !error.received) return DROPPED_BEFORE_ANSWER;
+  if (error.kind === 'unavailable' && !error.retryable) return `${ERROR_COPY.unavailable} ${REPHRASE_HINT}`;
   return ERROR_COPY[error.kind];
+}
+
+// setTimeout's ceiling (about 24.8 days); a longer wait is clamped, never fired at once.
+const MAX_TIMEOUT_MS = 2 ** 31 - 1;
+
+function waitMs(error: CoachTurnError): number {
+  return error.kind === 'rate_limited' && error.retryAfterSeconds !== undefined && error.retryAfterSeconds > 0
+    ? Math.min(error.retryAfterSeconds * 1000, MAX_TIMEOUT_MS)
+    : 0;
+}
+
+// True until the server's Retry-After has passed, counted from when this error appeared.
+function useWaiting(error: CoachTurnError): boolean {
+  // The error whose wait has run out; a new error object starts a new wait.
+  const [elapsed, setElapsed] = useState<CoachTurnError | null>(null);
+  useEffect(() => {
+    const ms = waitMs(error);
+    if (ms === 0) return;
+    const timer = setTimeout(() => setElapsed(error), ms);
+    return () => clearTimeout(timer);
+  }, [error]);
+  return waitMs(error) > 0 && elapsed !== error;
 }
 
 // A turn that did not finish (spec 6): muted and distinct from an answer, so
 // it is never read as the coach's reply, with Retry when retrying can help.
 export function ErrorCard({ error, onRetry }: { error: CoachTurnError; onRetry: () => void }) {
+  const copy = errorCopy(error);
+  const waiting = useWaiting(error);
+  // Announced once per error. Android reads the polite live region below;
+  // iOS has no live regions, so it is announced explicitly.
+  useEffect(() => {
+    if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(errorCopy(error));
+  }, [error]);
+
   return (
     <View accessibilityRole="alert" className="gap-1 rounded-tile border border-dashed border-border px-3.5 py-3">
-      <Text testID="coach-error" className="text-sm text-muted-foreground">
-        {errorCopy(error)}
+      <Text testID="coach-error" accessibilityLiveRegion="polite" className="text-sm text-muted-foreground">
+        {copy}
       </Text>
       {error.retryable ? (
         <Button
@@ -47,6 +84,8 @@ export function ErrorCard({ error, onRetry }: { error: CoachTurnError; onRetry: 
           variant="ghost"
           size="sm"
           className="min-h-[44px] self-start px-0"
+          disabled={waiting}
+          accessibilityState={{ disabled: waiting }}
           onPress={onRetry}
         >
           Try again

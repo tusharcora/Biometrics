@@ -232,7 +232,7 @@ describe('useCoachConversation: errors and retry', () => {
     await act(async () => result.current.send('How did I sleep?'));
 
     expect(result.current.messages[1]).toEqual(expect.objectContaining({ text: 'Partly there.', state: 'interrupted' }));
-    expect(result.current.error).toEqual({ kind: 'unavailable', retryable: true, request: { message: 'How did I sleep?' }, userMessageId: 'local-1' });
+    expect(result.current.error).toEqual({ kind: 'unavailable', retryable: true, received: true, request: { message: 'How did I sleep?' }, userMessageId: 'local-1' });
     expect(result.current.messages[0]!.failed).toBeUndefined();
 
     turn([{ type: 'text', sentence: 'All there.' }, done()]);
@@ -250,7 +250,7 @@ describe('useCoachConversation: errors and retry', () => {
     await act(async () => result.current.send('Hello'));
 
     expect(result.current.messages).toEqual([expect.objectContaining({ role: 'user', text: 'Hello', failed: true })]);
-    expect(result.current.error).toEqual({ kind: 'unavailable', retryable: true, request: { message: 'Hello' }, userMessageId: 'local-1' });
+    expect(result.current.error).toEqual({ kind: 'unavailable', retryable: true, received: false, request: { message: 'Hello' }, userMessageId: 'local-1' });
     expect(result.current.answeredAt).toBeNull();
   });
 
@@ -262,6 +262,17 @@ describe('useCoachConversation: errors and retry', () => {
 
     expect(result.current.messages[1]).toEqual(expect.objectContaining({ text: 'Mostly clear skies.', state: 'interrupted' }));
     expect(result.current.error?.kind).toBe('interrupted');
+    expect(result.current.error?.received).toBe(true);
+  });
+
+  // R41: the error card words a drop before anything arrived differently.
+  it('says whether anything arrived before the stream dropped', async () => {
+    turn([], new CoachStreamInterruptedError());
+    const { result } = setup();
+
+    await act(async () => result.current.send('How did I sleep?'));
+
+    expect(result.current.error).toEqual(expect.objectContaining({ kind: 'interrupted', received: false }));
   });
 
   it('reports a client timeout, and a server timeout event, as a timeout', async () => {
@@ -295,7 +306,7 @@ describe('useCoachConversation: errors and retry', () => {
 
     await act(async () => result.current.send('Hello'));
 
-    expect(result.current.error).toEqual({ kind: 'busy', retryable: true, request: { message: 'Hello' }, userMessageId: 'local-1' });
+    expect(result.current.error).toEqual({ kind: 'busy', retryable: true, received: false, request: { message: 'Hello' }, userMessageId: 'local-1' });
     expect(result.current.messages).toEqual([expect.objectContaining({ role: 'user', text: 'Hello', failed: true })]);
     expect(onConsentRequired).not.toHaveBeenCalled();
 
@@ -314,10 +325,10 @@ describe('useCoachConversation: errors and retry', () => {
     const { result } = setup();
 
     await act(async () => result.current.send('Hello'));
-    expect(result.current.error).toEqual({ kind: 'rate_limited', retryable: true, retryAfterSeconds: 30, request: { message: 'Hello' }, userMessageId: 'local-1' });
+    expect(result.current.error).toEqual({ kind: 'rate_limited', retryable: true, received: false, retryAfterSeconds: 30, request: { message: 'Hello' }, userMessageId: 'local-1' });
 
     await act(async () => result.current.retry());
-    expect(result.current.error).toEqual({ kind: 'rate_limited', retryable: true, request: { message: 'Hello' }, userMessageId: 'local-1' });
+    expect(result.current.error).toEqual({ kind: 'rate_limited', retryable: true, received: false, request: { message: 'Hello' }, userMessageId: 'local-1' });
   });
 
   it('fails safe to a retryable card for an internal or unknown error code', async () => {
@@ -326,7 +337,7 @@ describe('useCoachConversation: errors and retry', () => {
 
     await act(async () => result.current.send('Hello'));
 
-    expect(result.current.error).toEqual({ kind: 'unavailable', retryable: true, request: { message: 'Hello' }, userMessageId: 'local-1' });
+    expect(result.current.error).toEqual({ kind: 'unavailable', retryable: true, received: true, request: { message: 'Hello' }, userMessageId: 'local-1' });
     expect(result.current.streaming).toBe(false);
   });
 
@@ -391,7 +402,7 @@ describe('useCoachConversation: errors and retry', () => {
     const { result } = setup();
 
     await act(async () => result.current.send('Hello'));
-    expect(result.current.error).toEqual({ kind: 'unavailable', retryable: false, request: { message: 'Hello' }, userMessageId: 'local-1' });
+    expect(result.current.error).toEqual({ kind: 'unavailable', retryable: false, received: true, request: { message: 'Hello' }, userMessageId: 'local-1' });
 
     await act(async () => result.current.retry());
     expect(stream).toHaveBeenCalledTimes(1);
@@ -439,7 +450,7 @@ describe('useCoachConversation: safety', () => {
     await act(async () => result.current.overrideSafety('I feel awful'));
 
     expect(result.current.messages.some((m) => m.failed)).toBe(false);
-    expect(result.current.error).toEqual({ kind: 'unavailable', retryable: true, request: { message: 'I feel awful', safetyOverride: true } });
+    expect(result.current.error).toEqual({ kind: 'unavailable', retryable: true, received: false, request: { message: 'I feel awful', safetyOverride: true } });
   });
 });
 

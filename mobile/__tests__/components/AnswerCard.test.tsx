@@ -1,6 +1,6 @@
 import React from 'react';
-import { StyleSheet } from 'react-native';
-import { fireEvent, render } from '@testing-library/react-native';
+import { AccessibilityInfo, StyleSheet } from 'react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import type { AnswerCardDTO } from '../../src/api/coach';
 import { AnswerCard } from '../../src/components/coach/AnswerCard';
 import { ErrorCard } from '../../src/components/coach/ErrorCard';
@@ -81,6 +81,53 @@ describe('AnswerCard', () => {
     expect(getByTestId('answer-tile-sleep.long').props.accessibilityLabel).toBe('longest 9h 0m, 1 hour 47 minutes above usual');
     expect(getByTestId('answer-tile-rhr.today').props.accessibilityLabel).toBe('resting HR 61 bpm, 4 beats per minute above usual');
     expect(getByTestId('answer-tile-recovery.today').props.accessibilityLabel).toBe('recovery 46, 12 points below usual');
+  });
+
+  it('says nothing about usual when there is no usual and the value is not near it', () => {
+    const card: AnswerCardDTO = {
+      headline: 'h',
+      tiles: [
+        { factId: 'a', label: 'below', display: '1', value: 1, status: 'below' },
+        { factId: 'b', label: 'near', display: '2', value: 2, status: 'near' },
+      ],
+      source: 's',
+    };
+    const { getByTestId } = render(<AnswerCard card={card} />);
+
+    expect(getByTestId('answer-tile-a')).toHaveTextContent(/^1below$/);
+    expect(getByTestId('answer-tile-a').props.accessibilityLabel).toBe('below 1');
+    expect(getByTestId('answer-tile-b')).toHaveTextContent('2near · on par');
+  });
+
+  // The mockup's grid: three equal columns; a 4th tile wraps at a third of the row.
+  it('lays tiles out in three equal columns', () => {
+    const four: AnswerCardDTO = {
+      ...tiles,
+      tiles: [...tiles.tiles!, { factId: 'sleep.rem', label: 'REM', display: '1h 30m', value: 90 }],
+    };
+    const { getByTestId } = render(<AnswerCard card={four} />);
+
+    for (const id of ['sleep.total', 'sleep.deep', 'sleep.wakeups', 'sleep.rem']) {
+      expect(style(getByTestId(`answer-tile-cell-${id}`)).width).toBe('33.3333%');
+    }
+  });
+
+  it('renders a repeated fact id twice without a key clash', () => {
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const card: AnswerCardDTO = { ...ranked, ranked: [ranked.ranked![0]!, ranked.ranked![0]!] };
+    const { getAllByText } = render(<AnswerCard card={card} />);
+
+    expect(getAllByText('Caffeine after 2pm')).toHaveLength(2);
+    expect(spy.mock.calls.some((call) => String(call[0]).includes('same key'))).toBe(false);
+    spy.mockRestore();
+  });
+
+  it('shows the ranked effect brighter than the source line', () => {
+    const { getByTestId } = render(<AnswerCard card={ranked} />);
+
+    // The source line keeps the muted token; the effect uses the text token at 80%.
+    expect(String(getByTestId('answer-rank-effect-1').props.className)).toContain('text-foreground/80');
+    expect(String(getByTestId('answer-source').props.className)).toContain('text-muted-foreground');
   });
 
   it('reads each tile to a screen reader in words', () => {
@@ -186,7 +233,7 @@ describe('ErrorCard', () => {
     ['rate_limited', "You've sent a lot of messages in a short time. Try again a little later."],
   ] as const)('explains %s and offers retry', (kind, text) => {
     const onRetry = jest.fn();
-    const { getByTestId } = render(<ErrorCard error={{ kind, retryable: true, request }} onRetry={onRetry} />);
+    const { getByTestId } = render(<ErrorCard error={{ kind, retryable: true, received: true, request }} onRetry={onRetry} />);
 
     expect(getByTestId('coach-error')).toHaveTextContent(text);
     fireEvent.press(getByTestId('coach-retry-button'));
@@ -199,14 +246,79 @@ describe('ErrorCard', () => {
     [150, 'Try again in about 3 minutes.'],
     [7200, 'Try again in about 2 hours.'],
   ])('says when to try again after a rate limit of %ss', (retryAfterSeconds, text) => {
-    const { getByTestId } = render(<ErrorCard error={{ kind: 'rate_limited', retryable: true, retryAfterSeconds, request }} onRetry={() => {}} />);
+    const { getByTestId } = render(<ErrorCard error={{ kind: 'rate_limited', retryable: true, received: false, retryAfterSeconds, request }} onRetry={() => {}} />);
 
     expect(getByTestId('coach-error')).toHaveTextContent(`You've sent a lot of messages in a short time. ${text}`);
   });
 
-  it('offers no retry when the server says it would not help', () => {
-    const { queryByTestId } = render(<ErrorCard error={{ kind: 'unavailable', retryable: false, request }} onRetry={() => {}} />);
+  it('offers no retry when the server says it would not help, and suggests rephrasing', () => {
+    const { getByTestId, queryByTestId } = render(<ErrorCard error={{ kind: 'unavailable', retryable: false, received: true, request }} onRetry={() => {}} />);
 
     expect(queryByTestId('coach-retry-button')).toBeNull();
+    expect(getByTestId('coach-error')).toHaveTextContent("I couldn't answer that just now. Try asking it a different way.");
+  });
+
+  it('says the connection dropped when nothing arrived before the interruption', () => {
+    const { getByTestId } = render(<ErrorCard error={{ kind: 'interrupted', retryable: true, received: false, request }} onRetry={() => {}} />);
+
+    expect(getByTestId('coach-error')).toHaveTextContent('The connection dropped before I could answer. You can try again.');
+  });
+
+  describe('waiting out a rate limit', () => {
+    beforeEach(() => jest.useFakeTimers());
+    afterEach(() => jest.useRealTimers());
+
+    it('keeps Try again disabled until Retry-After has passed, counted from when the error appeared', () => {
+      const onRetry = jest.fn();
+      const error = { kind: 'rate_limited', retryable: true, received: false, retryAfterSeconds: 30, request } as const;
+      const { getByTestId } = render(<ErrorCard error={error} onRetry={onRetry} />);
+
+      const button = () => getByTestId('coach-retry-button');
+      expect(button().props.accessibilityState).toEqual(expect.objectContaining({ disabled: true }));
+      fireEvent.press(button());
+      expect(onRetry).not.toHaveBeenCalled();
+
+      act(() => jest.advanceTimersByTime(29_000));
+      expect(button().props.accessibilityState).toEqual(expect.objectContaining({ disabled: true }));
+
+      act(() => jest.advanceTimersByTime(1_000));
+      expect(button().props.accessibilityState).toEqual(expect.objectContaining({ disabled: false }));
+      fireEvent.press(button());
+      expect(onRetry).toHaveBeenCalledTimes(1);
+    });
+
+    it('starts a new wait for a new rate-limit error and clears its timer on unmount', () => {
+      const first = { kind: 'rate_limited', retryable: true, received: false, retryAfterSeconds: 10, request } as const;
+      const { getByTestId, rerender, unmount } = render(<ErrorCard error={first} onRetry={() => {}} />);
+      act(() => jest.advanceTimersByTime(10_000));
+      expect(getByTestId('coach-retry-button').props.accessibilityState).toEqual(expect.objectContaining({ disabled: false }));
+
+      rerender(<ErrorCard error={{ ...first }} onRetry={() => {}} />);
+      expect(getByTestId('coach-retry-button').props.accessibilityState).toEqual(expect.objectContaining({ disabled: true }));
+
+      const clear = jest.spyOn(global, 'clearTimeout');
+      unmount();
+      expect(clear).toHaveBeenCalled();
+      clear.mockRestore();
+    });
+
+    it('does not hold back a rate limit without Retry-After', () => {
+      const { getByTestId } = render(<ErrorCard error={{ kind: 'rate_limited', retryable: true, received: false, request }} onRetry={() => {}} />);
+
+      expect(getByTestId('coach-retry-button').props.accessibilityState).toEqual(expect.objectContaining({ disabled: false }));
+    });
+  });
+
+  it('announces the error once when it appears', () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {});
+    announce.mockClear();
+    const error = { kind: 'timeout', retryable: true, received: false, request } as const;
+    const { getByTestId, rerender } = render(<ErrorCard error={error} onRetry={() => {}} />);
+
+    expect(getByTestId('coach-error').props.accessibilityLiveRegion).toBe('polite');
+    rerender(<ErrorCard error={error} onRetry={() => {}} />);
+    expect(announce).toHaveBeenCalledTimes(1);
+    expect(announce).toHaveBeenCalledWith('That took too long. Nothing was lost; you can try again.');
+    announce.mockRestore();
   });
 });

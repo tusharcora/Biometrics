@@ -50,6 +50,9 @@ export interface CoachTurnError {
   retryable: boolean;
   // rate_limited only, when the server said how long to wait.
   retryAfterSeconds?: number;
+  // Whether any stream event arrived before the turn failed: an 'interrupted'
+  // turn that received nothing dropped before the coach could answer.
+  received: boolean;
   // Resent as-is by retry() (never carries the conversation id; that is added fresh).
   request: SendCoachMessageInput;
   // The local user message this turn answers, marked "not sent" on failure and cleared
@@ -70,7 +73,7 @@ function strings(raw: unknown): string[] {
 
 // A failed request -> the error card. Anything unrecognised is 'unavailable'
 // and retryable, so a new server error never strands the user.
-function thrownError(thrown: unknown, turn: Pick<CoachTurnError, 'request' | 'userMessageId'>): CoachTurnError {
+function thrownError(thrown: unknown, turn: Pick<CoachTurnError, 'request' | 'userMessageId' | 'received'>): CoachTurnError {
   if (thrown instanceof CoachTimeoutError) return { kind: 'timeout', retryable: true, ...turn };
   if (thrown instanceof CoachStreamInterruptedError) return { kind: 'interrupted', retryable: true, ...turn };
   if (thrown instanceof TurnInProgressError) return { kind: 'busy', retryable: true, ...turn };
@@ -216,7 +219,7 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
         case 'error':
           if (event.code === 'consent_required') consentEvent = true;
           // 'internal' also stands for any code this build does not know: fail safe to Retry.
-          else eventError = { kind: event.code === 'timeout' ? 'timeout' : 'unavailable', retryable: event.code === 'internal' || event.retryable, ...turn };
+          else eventError = { kind: event.code === 'timeout' ? 'timeout' : 'unavailable', retryable: event.code === 'internal' || event.retryable, received: true, ...turn };
           break;
       }
     };
@@ -260,7 +263,7 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
 
     const failure: CoachTurnError | null =
       eventError ??
-      (thrown && !(thrown instanceof CoachConsentRequiredError) && !(thrown instanceof CoachDisabledError) ? thrownError(thrown, turn) : null);
+      (thrown && !(thrown instanceof CoachConsentRequiredError) && !(thrown instanceof CoachDisabledError) ? thrownError(thrown, { ...turn, received }) : null);
 
     if (thrown || consentEvent || failure) {
       const id = answerId;
