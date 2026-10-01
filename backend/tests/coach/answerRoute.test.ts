@@ -84,4 +84,27 @@ describe('routeQuestion', () => {
     expect(routeQuestion('HOW DID I SLEEP')).toBe('sleep');
     expect(routeQuestion('What’s HRV?')).toBe('general');
   });
+
+  // The questions the app sends when a today bar, a sentence word or a
+  // suggestion is tapped (mobile/src/lib/coachToday.ts). Kept in step by hand.
+  it.each([
+    ['Why is my recovery lower than usual today?', 'today'],
+    ['Why is my recovery higher than usual today?', 'today'],
+    ['Why is my HRV lower than usual today?', 'today'],
+    ['Why is my resting heart rate higher than usual today?', 'today'],
+    ["How's my recovery looking today?", 'today'],
+    ["How's my HRV looking today?", 'today'],
+    ["How's my resting heart rate looking today?", 'today'],
+    ['Should I train hard today?', 'today'],
+    ['Why was my sleep shorter than usual last night?', 'sleep'],
+    ['Why was my sleep longer than usual last night?', 'sleep'],
+    ['How did I sleep last night?', 'sleep'],
+    ['How much sleep do adults really need?', 'general'],
+    ['What is HRV, and why does it matter?', 'general'],
+    ['What helps the body recover after a hard workout?', 'general'],
+  ])('routes the app question %p to %s', (message, route) => {
+    expect(routeQuestion(message)).toBe(route);
+    // A tapped question also routes the same mid-conversation.
+    expect(routeQuestion(message, 'How did I sleep?')).toBe(route);
+  });
 });
