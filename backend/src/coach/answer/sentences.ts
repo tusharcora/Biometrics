@@ -2,13 +2,15 @@
 // pipeline validates each sentence as it completes, so nothing shown is ever
 // retracted. A sentence ends at . ! or ? (plus any closing quotes/brackets)
 // followed by whitespace, or at a line break. Decimals ("41.3"), "a.m."/"p.m.",
-// "e.g."/"i.e."/"vs."/"approx." and a line-start list marker ("1.") never end
+// "e.g."/"i.e."/"vs."/"approx."/"Dr."/"Mr."/"Mrs."/"hr(s)."/"min(s)."/"U.S."
+// (also right after "(" or "[") and a line-start list marker ("1.") never end
 // a sentence. Everything from the first ``` fence on (the card and memory
 // blocks) is never yielded; it is returned by tail(). When the fence arrives,
 // text before it is flushed even without a full stop.
 
 const CLOSERS = /[.!?"'”’)\]]/;
-const ABBREVIATION_RE = /(^|\s)(a\.m|p\.m|e\.g|i\.e|vs|approx)\.$/i;
+// Not ms or etc: both often end a sentence ("62 ms.").
+const ABBREVIATION_RE = /(^|[\s(\[])(a\.m|p\.m|e\.g|i\.e|vs|approx|dr|mr|mrs|hrs?|mins?|u\.s)\.$/i;
 const LIST_MARKER_RE = /^\d{1,2}\.$/;
 
 export function sentenceSplitter(): { push(chunk: string): string[]; end(): string[]; tail(): string } {

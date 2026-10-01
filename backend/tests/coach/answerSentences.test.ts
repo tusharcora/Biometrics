@@ -48,4 +48,31 @@ describe('sentenceSplitter', () => {
   it('has an empty tail when there is no fence', () => {
     expect(run(['Just talk.']).tail).toBe('');
   });
+
+  it('keeps a decimal split across chunks in one sentence', () => {
+    const s = sentenceSplitter();
+    expect(s.push('You slept 7.')).toEqual([]);
+    expect(s.push('5 hours. Next.')).toEqual(['You slept 7.5 hours.']);
+    expect(s.end()).toEqual(['Next.']);
+  });
+
+  it('holds a terminator at the end of a chunk until the next chunk confirms it with whitespace', () => {
+    const s = sentenceSplitter();
+    expect(s.push('Recovery is 26!')).toEqual([]);
+    expect(s.push(' Rest today.')).toEqual(['Recovery is 26!']);
+    expect(s.end()).toEqual(['Rest today.']);
+  });
+
+  it('does not split after vs., Dr., hrs./min. or U.S.', () => {
+    expect(run(['Your HRV is 41 vs. 58 usual. Ok']).pushes.flat()).toEqual(['Your HRV is 41 vs. 58 usual.']);
+    expect(run(['Ask Dr. Lee about it. Ok']).pushes.flat()).toEqual(['Ask Dr. Lee about it.']);
+    expect(run(['Sleep 7 hrs. 30 min. tonight. Ok']).pushes.flat()).toEqual(['Sleep 7 hrs. 30 min. tonight.']);
+    expect(run(['In the U.S. adults sleep 7 hours. Ok']).pushes.flat()).toEqual(['In the U.S. adults sleep 7 hours.']);
+  });
+
+  it('does not split after an abbreviation that follows an opening bracket', () => {
+    const { pushes, end } = run(['Try a habit (e.g. 7.5 hours of sleep). Ok, [i.e. tonight]. Go']);
+    expect(pushes.flat()).toEqual(['Try a habit (e.g. 7.5 hours of sleep).', 'Ok, [i.e. tonight].']);
+    expect(end).toEqual(['Go']);
+  });
 });
