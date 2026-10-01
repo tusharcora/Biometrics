@@ -5,6 +5,7 @@ import path from 'path';
 import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
 import { createTestApp, fakeIdToken } from '../helpers/auth';
+import { testServer } from '../helpers/server';
 
 const MIGRATION = path.join(
   __dirname,
@@ -47,7 +48,7 @@ describe('20260928120000_normalize_user_email', () => {
         email: clean,
         email_verified: true,
       });
-      const res = await request(app).post('/auth/sign-in/social').send({ provider: 'google', idToken: { token } });
+      const res = await request(await testServer(app)).post('/auth/sign-in/social').send({ provider: 'google', idToken: { token } });
       expect(res.status).toBe(200);
       const matches = await prisma.user.findMany({ where: { email: { equals: clean, mode: 'insensitive' } } });
       expect(matches.map((u) => u.id)).toEqual([user.id]);

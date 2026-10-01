@@ -110,7 +110,11 @@ export function SettingsRow({
       accessibilityRole={accessibilityRole}
       accessibilityLabel={accessibilityLabel}
       accessibilityHint={accessibilityHint}
-      accessibilityState={accessibilityRole === 'radio' ? { selected: !!selected } : { disabled: !!disabled }}
+      accessibilityState={
+        accessibilityRole === 'radio'
+          ? { selected: !!selected }
+          : { disabled: !!disabled, ...(selected !== undefined ? { selected } : {}) }
+      }
       disabled={disabled}
       onPress={onPress}
       className={cn('active:bg-muted', disabled ? 'opacity-50' : '')}

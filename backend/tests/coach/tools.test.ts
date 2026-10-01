@@ -1,9 +1,9 @@
 import { civilDateToUtcMidnight } from '../../src/biometrics/civilDate';
 import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
-import { coachTools, COACH_TOOL_SCHEMAS, MAX_HISTORY_DAYS } from '../../src/coach/tools';
-import { compareScores } from '../../src/coach/tools/dailyScore';
-import { computeTrend, describeChange, MAX_HABIT_LOG_DAYS } from '../../src/coach/tools/metrics';
+import { getHabitCorrelations, getScoreHistory, getUserGoals } from '../../src/coach/tools';
+import { compareScores, getDailyScore } from '../../src/coach/tools/dailyScore';
+import { computeTrend, describeChange, getDailyMetrics, getMetricHistory } from '../../src/coach/tools/metrics';
 import { createUser, daysAgo, putScore, todayUtc } from './helpers';
 
 beforeAll(() => {
@@ -14,50 +14,27 @@ afterAll(async () => {
   await prisma.$disconnect();
 });
 
-const ctx = () => ({ today: todayUtc() });
-
-async function run(userId: string, name: string, args: unknown) {
-  const out = await coachTools.run(userId, name, args, ctx());
-  if (!out.ok) throw new Error(`tool failed: ${out.error}`);
-  return out.result as any;
+/** Calls the reader the fact sheet uses, defaulting the date to today as the old registry did. */
+async function run(userId: string, name: string, args: unknown): Promise<any> {
+  const a = (args ?? {}) as Record<string, any>;
+  const today = todayUtc();
+  switch (name) {
+    case 'getDailyScore':
+      return getDailyScore(userId, a.date ?? today);
+    case 'getDailyMetrics':
+      return getDailyMetrics(userId, a.date ?? today);
+    case 'getScoreHistory':
+      return getScoreHistory(userId, a.metric, a.days, today);
+    case 'getMetricHistory':
+      return getMetricHistory(userId, a.metric, a.days, today);
+    case 'getHabitCorrelations':
+      return getHabitCorrelations(userId);
+    case 'getUserGoals':
+      return getUserGoals(userId);
+    default:
+      throw new Error(`no reader named ${name}`);
+  }
 }
-
-describe('tool registry', () => {
-  it('exposes exactly the eight read-only tools, each with a JSON schema for the provider', () => {
-    expect(COACH_TOOL_SCHEMAS.map((t) => t.name)).toEqual([
-      'getDailyScore',
-      'getScoreHistory',
-      'getHabitCorrelations',
-      'getUserGoals',
-      'getTodayMetrics',
-      'getDailyMetrics',
-      'getMetricHistory',
-      'getHabitLogs',
-    ]);
-    for (const t of COACH_TOOL_SCHEMAS) {
-      expect(t.description.length).toBeGreaterThan(10);
-      expect(t.parameters).toMatchObject({ type: 'object' });
-    }
-    // No tool accepts free-form query text or writes: no propose/set/update/sql tool exists.
-    expect(COACH_TOOL_SCHEMAS.map((t) => t.name).join(' ')).not.toMatch(/write|set|update|delete|sql|propose/i);
-  });
-
-  it('rejects an unknown tool and invalid arguments without throwing', async () => {
-    const user = await createUser();
-    expect(await coachTools.run(user.id, 'runSql', {}, ctx())).toEqual({ ok: false, error: 'unknown_tool' });
-    expect(await coachTools.run(user.id, 'getDailyScore', { date: 'yesterday' }, ctx())).toEqual({ ok: false, error: 'invalid_arguments' });
-    expect(await coachTools.run(user.id, 'getDailyScore', { date: '2026-02-31' }, ctx())).toEqual({ ok: false, error: 'invalid_arguments' });
-    expect(await coachTools.run(user.id, 'getScoreHistory', { metric: 'HRV', days: 7 }, ctx())).toEqual({ ok: false, error: 'invalid_arguments' });
-    expect(await coachTools.run(user.id, 'getScoreHistory', { metric: 'RECOVERY', days: 0 }, ctx())).toEqual({ ok: false, error: 'invalid_arguments' });
-    expect(await coachTools.run(user.id, 'getScoreHistory', { metric: 'RECOVERY', days: 2.5 }, ctx())).toEqual({ ok: false, error: 'invalid_arguments' });
-    expect(await coachTools.run(user.id, 'getUserGoals', [], ctx())).toEqual({ ok: false, error: 'invalid_arguments' });
-    expect(await coachTools.run(user.id, 'getDailyMetrics', { date: '2026-13-01' }, ctx())).toEqual({ ok: false, error: 'invalid_arguments' });
-    expect(await coachTools.run(user.id, 'getMetricHistory', { metric: 'RECOVERY', days: 7 }, ctx())).toEqual({ ok: false, error: 'invalid_arguments' });
-    expect(await coachTools.run(user.id, 'getMetricHistory', { metric: 'STEPS', days: 0 }, ctx())).toEqual({ ok: false, error: 'invalid_arguments' });
-    expect(await coachTools.run(user.id, 'getHabitLogs', {}, ctx())).toEqual({ ok: false, error: 'invalid_arguments' });
-    expect(await coachTools.run(user.id, 'getHabitLogs', { days: 1.5 }, ctx())).toEqual({ ok: false, error: 'invalid_arguments' });
-  });
-});
 
 async function putRecord(userId: string, metricType: 'STEPS' | 'RESTING_HR' | 'HRV' | 'SLEEP', date: string, value: number) {
   await prisma.biometricRecord.create({ data: { userId, metricType, value, recordedAt: civilDateToUtcMidnight(date) } });
@@ -133,11 +110,32 @@ describe('getMetricHistory', () => {
     });
   });
 
-  it('caps the window at the history maximum and omits daysAtGoal for non-step metrics', async () => {
+  // Final review I5: a 0 sleep, HRV or resting HR reading is "not recorded", so it must not drag the
+  // usual, the trend or the week's shortest night down. A day with 0 steps is a real (if idle) day.
+  it.each(['SLEEP', 'HRV', 'RESTING_HR'] as const)('skips 0 readings for %s', async (metric) => {
+    const user = await createUser();
+    await putRecord(user.id, metric, daysAgo(3), 0);
+    await putRecord(user.id, metric, daysAgo(2), 60);
+    await putRecord(user.id, metric, daysAgo(1), 0);
+    await putRecord(user.id, metric, todayUtc(), 40);
+    const r = await run(user.id, 'getMetricHistory', { metric, days: 7 });
+    expect(r.points.map((p: { value: number }) => p.value)).toEqual([60, 40]);
+    expect(r).toMatchObject({ daysWithData: 2, average: 50, lowest: { value: 40 }, coverageDisplay: '2 of 7' });
+  });
+
+  it('keeps 0-step days', async () => {
+    const user = await createUser();
+    await putRecord(user.id, 'STEPS', daysAgo(1), 0);
+    await putRecord(user.id, 'STEPS', todayUtc(), 4000);
+    const r = await run(user.id, 'getMetricHistory', { metric: 'STEPS', days: 7 });
+    expect(r).toMatchObject({ daysWithData: 2, average: 2000, lowest: { value: 0 } });
+  });
+
+  it('omits daysAtGoal for non-step metrics', async () => {
     const user = await createUser();
     await putRecord(user.id, 'HRV', todayUtc(), 40);
-    const r = await run(user.id, 'getMetricHistory', { metric: 'HRV', days: 5000 });
-    expect(r.days).toBe(MAX_HISTORY_DAYS);
+    const r = await run(user.id, 'getMetricHistory', { metric: 'HRV', days: 90 });
+    expect(r.days).toBe(90);
     expect(r.daysAtGoal).toBeUndefined();
     expect(r.average).toBe(40);
   });
@@ -162,39 +160,6 @@ describe('computeTrend', () => {
     expect(computeTrend([100, 101, 100, 102])).toEqual({ trend: 'steady', trendPercent: 0 });
     expect(computeTrend([10, 20, 30])).toEqual({ trend: 'up', trendPercent: 200 });
     expect(computeTrend([50])).toEqual({ trend: null, trendPercent: null });
-  });
-});
-
-describe('getHabitLogs', () => {
-  it('summarises and lists recent logs with labels, never exposing notes', async () => {
-    const user = await createUser();
-    const log = (type: string, value: number, unit: string, day: string, note?: string) =>
-      prisma.habitLog.create({
-        data: { userId: user.id, habitType: type, value, unit, habitDay: civilDateToUtcMidnight(day), loggedAt: new Date(`${day}T20:00:00Z`), note: note ?? null },
-      });
-    await log('ALCOHOL', 3, 'drinks', daysAgo(1), 'birthday party at work');
-    await log('ALCOHOL', 0, 'drinks', todayUtc());
-    await log('WORKOUT', 45, 'minutes', todayUtc());
-    await log('ALCOHOL', 5, 'drinks', daysAgo(20)); // outside a 7-day window
-    await prisma.habitCheckIn.create({ data: { userId: user.id, habitDay: civilDateToUtcMidnight(todayUtc()) } });
-
-    const r = await run(user.id, 'getHabitLogs', { days: 7 });
-
-    expect(r).toMatchObject({ days: 7, to: todayUtc(), checkedInDays: 1, entriesTruncated: false });
-    expect(r.habits).toEqual(
-      expect.arrayContaining([
-        { habitType: 'ALCOHOL', habitLabel: 'Alcohol', unit: 'drinks', daysLogged: 2, total: 3, daysWithNone: 1 },
-        { habitType: 'WORKOUT', habitLabel: 'Workout', unit: 'minutes', daysLogged: 1, total: 45, daysWithNone: 0 },
-      ]),
-    );
-    expect(r.entries).toHaveLength(3);
-    expect(r.entries[r.entries.length - 1]).toEqual({ date: daysAgo(1), habitLabel: 'Alcohol', value: 3, unit: 'drinks' });
-    expect(JSON.stringify(r)).not.toContain('birthday');
-  });
-
-  it('caps the window at the habit-log maximum', async () => {
-    const user = await createUser();
-    expect((await run(user.id, 'getHabitLogs', { days: 365 })).days).toBe(MAX_HABIT_LOG_DAYS);
   });
 });
 
@@ -326,10 +291,10 @@ describe('getScoreHistory', () => {
     expect(r).toMatchObject({ metric: 'RECOVERY', days: 4, average: 75, highest: 90, lowest: 60 });
   });
 
-  it('returns nulls, not zeros, for an empty window, and caps days', async () => {
+  it('returns nulls, not zeros, for an empty window', async () => {
     const user = await createUser();
-    const r = await run(user.id, 'getScoreHistory', { metric: 'SLEEP', days: 9999 });
-    expect(r).toMatchObject({ points: [], average: null, highest: null, lowest: null, days: MAX_HISTORY_DAYS });
+    const r = await run(user.id, 'getScoreHistory', { metric: 'SLEEP', days: 30 });
+    expect(r).toMatchObject({ points: [], average: null, highest: null, lowest: null, days: 30 });
   });
 });
 

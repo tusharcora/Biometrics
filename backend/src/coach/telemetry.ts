@@ -1,12 +1,12 @@
 // Coach observability (spec "Cross-cutting: observability"). Correctness
-// monitoring, not performance: a spike in coach.guardrail_reject split by
-// reason is the signal that a prompt or persona change started producing
-// unwrapped numbers or bad field references.
+// monitoring, not performance: a spike in coach.answer_sentence_dropped split
+// by reason is the signal that a prompt or persona change started producing
+// numbers that are not on the fact sheet.
 //
 // DEVIATION: the spec describes OpenTelemetry spans. OpenTelemetry is not a
 // dependency of this repo, so events go through this small pluggable
 // interface and the default sink is a structured logger. An OTel sink can
-// implement CoachTelemetry later without touching the orchestrator.
+// implement CoachTelemetry later without touching the answer pipeline.
 //
 // Events carry ids, counts and reasons ONLY. The attribute type is restricted
 // to primitives and no call site is given message text or tool results, so a
@@ -14,10 +14,7 @@
 // like text.
 
 export type CoachEventName =
-  | 'coach.tool_call'
-  | 'coach.guardrail_reject'
   | 'coach.latency_budget_exceeded'
-  | 'coach.turn_fallback'
   | 'coach.safety_classifier'
   | 'coach.memory_proposed'
   | 'coach.memory_rejected'
@@ -28,7 +25,14 @@ export type CoachEventName =
   | 'coach.push_sent'
   | 'coach.push_failed'
   | 'coach.retention_run'
-  | 'coach.user_data_deleted';
+  | 'coach.user_data_deleted'
+  | 'coach.answer_sentence_dropped'
+  | 'coach.answer_regenerated'
+  | 'coach.answer_done'
+  | 'coach.answer_error'
+  | 'coach.model_warm'
+  | 'coach.hosted_fallback'
+  | 'coach.summary_failed';
 
 export type CoachEventAttributes = Record<string, string | number | boolean>;
 

@@ -1,55 +1,54 @@
-// Weekly synthesis digest (spec section 6): the Synthesis tier's one scheduled
-// use. Once a week, for each user who has the coach flag on, a CURRENT-version
-// consent, and a persona whose proactivity is not 'reactive-only', generate a
-// recap of the trailing 7 days from getScoreHistory + getHabitCorrelations and
-// store it as a CoachDigest (one per user per local week, so the job is
-// idempotent), then send a GENERIC push (push.ts).
+// Weekly synthesis digest: once a week, for each user who has the coach flag
+// on, a CURRENT-version coach consent, and a persona whose proactivity is not
+// 'reactive-only', write a short recap of the week and store it as a
+// CoachDigest (one per user per local week, so the job is idempotent), then
+// send a GENERIC push (push.ts).
 //
-// The recap goes through the SAME whole-reply grounding guardrail as chat
-// (validateReply): a reply with an ungrounded number or a bad {{reference}} is
-// discarded and regenerated ONCE; a second failure, a provider error or a
-// timeout falls back to a deterministic recap composed on the server from the
-// tool results with no model involved. A digest is therefore either grounded or
-// server-composed, never an unvalidated model reply. The data is pre-fetched
-// fresh by the server on every run (like the chat turn preamble) and named in
-// DIGEST_RESULT_NAMES, so the model can reference both metrics.
+// The recap uses the answer pipeline's building blocks (spec 2026-09-30):
+// the `trends` fact sheet (answer/facts.ts), one streamed model call with the
+// digest prompt (answer/prompt.ts), and every sentence checked by the same
+// validator as a chat reply (answer/validate.ts). A sentence with a number
+// that is not in the fact sheet, or a disallowed topic, is dropped; when no
+// sentence survives, the model is asked once more; after that, or on a
+// provider error or the time budget, the recap is composed on the server from
+// the fact sheet (and validated too). A digest is therefore always made of
+// validated sentences. The disclaimer is not stored in the text: the app shows
+// it under the recap.
 //
 // This is a background job with no user-facing latency budget, but it is still
-// bounded (a generous cap on the whole generation and on model calls) so a hung
-// provider cannot stall the sweep. The clock is injectable so tests never sleep.
+// bounded so a hung provider cannot stall the sweep. The clock is injectable so
+// tests never sleep.
 //
 // Logging: ids, counts and reasons only. Never the digest text.
 
-import { civilDateToUtcMidnight, localCivilDate } from '../biometrics/civilDate';
+import { civilDateToUtcMidnight, localCivilDateOrUtc } from '../biometrics/civilDate';
 import { prisma } from '../db/client';
 import { shiftDate } from '../scoring/dates';
+import { buildFactSheet, comparisonDiff, defaultFactData, Fact, FactData, FactSheet, formatValue } from './answer/facts';
+import { buildDigestSystemPrompt, buildRegenerationNote } from './answer/prompt';
+import { sentenceSplitter } from './answer/sentences';
+import { validateSentence } from './answer/validate';
 import { CoachClock, systemClock } from './clock';
 import { COACH_CONSENT_VERSION, hasCurrentConsent } from './consent';
 import { isCoachEnabled } from './config';
-import { withDisclaimer } from './guardrails/disclaimer';
-import { TurnToolResult, validateReply } from './guardrails/grounding';
-import type { CoachModelMessage, CoachModelProvider, ToolCallRequest } from './model/provider';
+import type { CoachModelProvider, CoachStreamRequest } from './model/provider';
 import { resolvePersona } from './personas';
-import { buildCorrectiveMessage, buildDigestSystemPrompt, DIGEST_RESULT_NAMES } from './prompt';
 import { PushSender, sendGenericPush } from './push';
 import type { CoachEventAttributes, CoachEventName, CoachTelemetry } from './telemetry';
-import { CoachTools, coachTools } from './tools';
 
-export const DIGEST_WINDOW_DAYS = 7;
 export const DIGEST_BUDGET_MS = 60_000;
-export const DIGEST_MAX_MODEL_CALLS = 6;
+export const DIGEST_MAX_TOKENS = 500;
+const MAX_ATTEMPTS = 2;
 const USER_BATCH = 200;
 
-/** Only these read tools are available to the digest generation; nothing else runs there. */
-const DIGEST_TOOLS = new Set(['getScoreHistory', 'getHabitCorrelations']);
-
-const REQUEST_TEXT = 'Write my weekly recap for the past week.';
+export const DIGEST_REQUEST = 'Write my weekly recap for the past week.';
 
 export interface DigestDeps {
   provider: CoachModelProvider;
   telemetry: CoachTelemetry;
   pushSender: PushSender;
-  tools?: CoachTools;
+  /** The fact sheet's data access. Defaults to the database readers (answer/facts.ts). */
+  factData?: FactData;
   clock?: CoachClock;
   /** Injectable "now" so tests can pin the week. */
   now?: () => Date;
@@ -80,171 +79,102 @@ export function weekStartOf(civilDate: string): string {
   return shiftDate(civilDate, -((dow + 6) % 7));
 }
 
-function safeCivilDate(now: Date, timezone: string): string {
-  try {
-    return localCivilDate(now, timezone);
-  } catch {
-    return localCivilDate(now, 'UTC');
-  }
+/** The sleep goal is always present, so it alone is not something to recap. */
+export function hasMaterial(sheet: FactSheet): boolean {
+  return sheet.facts.some((f) => f.id !== 'sleep.goal');
 }
 
-interface HistoryShape {
-  points: unknown[];
-  average: number | null;
+/** Keeps only the sentences that pass the reply validator. */
+function validatedSentences(text: string, sheet: FactSheet): { kept: string[]; dropped: Array<'unknown_number' | 'disallowed_topic'> } {
+  const splitter = sentenceSplitter();
+  const kept: string[] = [];
+  const dropped: Array<'unknown_number' | 'disallowed_topic'> = [];
+  for (const sentence of [...splitter.push(text), ...splitter.end()]) {
+    const verdict = validateSentence(sentence, sheet);
+    if (verdict.ok) kept.push(sentence);
+    else dropped.push(verdict.reason);
+  }
+  return { kept, dropped };
 }
-interface CorrelationsShape {
-  correlations: unknown[];
+
+function averageSentence(fact: Fact | undefined, lead: string, suffix = ''): string | null {
+  if (!fact) return null;
+  // The sheet's own comparison rule (facts.ts): a usual is mentioned only when the sheet states a difference.
+  const usual = comparisonDiff(fact) ? `, against your usual ${formatValue(fact.unit, fact.usual!)}` : '';
+  return `${lead} averaged ${fact.display}${suffix}${usual}.`;
 }
 
 /**
- * The deterministic, server-composed recap (no model): a fixed template whose
- * every number and name comes from a {{reference}} resolved against the fetched
- * results. Returns null when there is nothing to say.
+ * A habit label without its digit-bearing parenthetical ("Late caffeine (1+ cups) and next-day HRV" ->
+ * "Late caffeine and next-day HRV"): the validator never accepts digits that live only in a label.
  */
-export function composeDigestFallback(results: readonly TurnToolResult[]): string | null {
-  const n = DIGEST_RESULT_NAMES;
-  const find = (name: string) => results.find((r) => r.name === name)?.result;
-  const recovery = find(n.recovery) as HistoryShape | undefined;
-  const sleep = find(n.sleep) as HistoryShape | undefined;
-  const correlations = find(n.correlations) as CorrelationsShape | undefined;
-
-  const lines: string[] = ["Here's your weekly recap."];
-  if (recovery && recovery.points.length > 0 && recovery.average !== null) {
-    lines.push(
-      `Recovery Score: averaged {{${n.recovery}.average}} over the past week, from a low of {{${n.recovery}.lowest}} to a high of {{${n.recovery}.highest}}.`,
-    );
-  }
-  if (sleep && sleep.points.length > 0 && sleep.average !== null) {
-    lines.push(
-      `Sleep Score: averaged {{${n.sleep}.average}}, from a low of {{${n.sleep}.lowest}} to a high of {{${n.sleep}.highest}}.`,
-    );
-  }
-  const patternCount = Math.min(correlations?.correlations.length ?? 0, 2);
-  for (let i = 0; i < patternCount; i++) {
-    const c = `${n.correlations}.correlations[${i}]`;
-    lines.push(
-      `Pattern: {{${c}.habitLabel}} is linked to {{${c}.direction}} {{${c}.factor}} ({{${c}.effectSizePercent}} percent, across {{${c}.sampleSize}} days of data).`,
-    );
-  }
-  if (lines.length === 1) return null;
-
-  const template = lines.join('\n');
-  // The composed text goes through the same validator as a model reply: a
-  // template bug can only ever lose a digest, never publish an ungrounded one.
-  const verdict = validateReply(template, results);
-  return verdict.ok ? verdict.text : null;
+function withoutLabelNumbers(label: string): string {
+  return label.replace(/\s*\([^)]*\d[^)]*\)/g, '');
 }
 
-async function fetchDigestResults(tools: CoachTools, userId: string, today: string): Promise<TurnToolResult[]> {
-  const n = DIGEST_RESULT_NAMES;
-  const ctx = { today };
-  const [recovery, sleep, correlations] = await Promise.all([
-    tools.run(userId, 'getScoreHistory', { metric: 'RECOVERY', days: DIGEST_WINDOW_DAYS }, ctx),
-    tools.run(userId, 'getScoreHistory', { metric: 'SLEEP', days: DIGEST_WINDOW_DAYS }, ctx),
-    tools.run(userId, 'getHabitCorrelations', {}, ctx),
-  ]);
-  const out: TurnToolResult[] = [];
-  if (recovery.ok) out.push({ name: n.recovery, result: recovery.result });
-  if (sleep.ok) out.push({ name: n.sleep, result: sleep.result });
-  if (correlations.ok) out.push({ name: n.correlations, result: correlations.result });
-  return out;
-}
-
-function hasMaterial(results: readonly TurnToolResult[]): boolean {
-  return results.some((r) => {
-    const v = r.result as Partial<HistoryShape & CorrelationsShape>;
-    return (Array.isArray(v.points) && v.points.length > 0) || (Array.isArray(v.correlations) && v.correlations.length > 0);
-  });
+/**
+ * The deterministic, server-composed recap (no model): fixed sentences filled
+ * from the fact sheet, then put through the same validator as a model reply,
+ * so a template bug can only lose a sentence, never publish an unvalidated
+ * one. Null when there is nothing to say.
+ */
+export function composeDigestFallback(sheet: FactSheet): string | null {
+  const byId = new Map(sheet.facts.map((f) => [f.id, f]));
+  const lines = [
+    averageSentence(byId.get('recovery.avg7'), 'Recovery', ' over the last 7 days'),
+    averageSentence(byId.get('sleep.avg7'), 'Sleep', ' a night'),
+    averageSentence(byId.get('hrv.avg7'), 'HRV'),
+    averageSentence(byId.get('rhr.avg7'), 'Resting heart rate'),
+    ...sheet.facts.filter((f) => f.id.startsWith('habit.')).slice(0, 2).map((f) => `${withoutLabelNumbers(f.label)}: ${f.display}.`),
+  ].filter((l): l is string => l !== null);
+  if (lines.length === 0) return null;
+  const { kept } = validatedSentences(["Here's your week.", ...lines].join(' '), sheet);
+  return kept.length > 1 ? kept.join(' ') : null;
 }
 
 interface Generated {
   text: string;
   source: 'model' | 'fallback';
-  rejects: number;
+  dropped: number;
+  attempts: number;
+}
+
+async function streamText(provider: CoachModelProvider, request: CoachStreamRequest): Promise<string> {
+  let raw = '';
+  for await (const chunk of provider.stream(request)) raw += chunk;
+  return raw;
 }
 
 export async function generateDigestText(
   deps: DigestDeps,
-  userId: string,
   persona: ReturnType<typeof resolvePersona>,
   today: string,
-  fetched: TurnToolResult[],
+  sheet: FactSheet,
 ): Promise<Generated | null> {
-  const tools = deps.tools ?? coachTools;
   const clock = deps.clock ?? systemClock;
-  const n = DIGEST_RESULT_NAMES;
-  const results: TurnToolResult[] = [...fetched];
-  const system = buildDigestSystemPrompt(persona, { today });
-  const convo: CoachModelMessage[] = [{ role: 'user', content: REQUEST_TEXT }];
-  const preCalls: ToolCallRequest[] = [
-    { id: 'digest-recovery', name: n.recovery, args: { metric: 'RECOVERY', days: DIGEST_WINDOW_DAYS } },
-    { id: 'digest-sleep', name: n.sleep, args: { metric: 'SLEEP', days: DIGEST_WINDOW_DAYS } },
-    { id: 'digest-correlations', name: n.correlations, args: {} },
-  ].filter((c) => fetched.some((r) => r.name === c.name));
-  if (preCalls.length > 0) {
-    convo.push({ role: 'assistant_tool_calls', calls: preCalls });
-    for (const call of preCalls) {
-      const r = fetched.find((x) => x.name === call.name)!;
-      convo.push({ role: 'tool', toolCallId: call.id, name: call.name, content: JSON.stringify(r.result) });
-    }
-  }
-
+  const system = buildDigestSystemPrompt(persona, { today, sheet });
   const controller = new AbortController();
-  const state = { expired: false, modelCalls: 0 };
-  let rejects = 0;
+  let dropped = 0;
+  let attempts = 0;
 
-  async function generateOnce(corrective: string | null): Promise<string | 'expired'> {
-    for (let round = 1; ; round++) {
-      if (state.expired) return 'expired';
-      if (state.modelCalls >= DIGEST_MAX_MODEL_CALLS) throw new Error('model_call_limit');
-      state.modelCalls++;
-      const messages = corrective ? [...convo, { role: 'system' as const, content: corrective }] : [...convo];
-      const response = await deps.provider.generate({
-        tier: 'synthesis',
-        system,
-        messages,
-        tools: tools.schemas.filter((t) => DIGEST_TOOLS.has(t.name)),
-        signal: controller.signal,
-      });
-      if (state.expired) return 'expired';
-      if (response.type === 'text') return response.text;
-      convo.push({ role: 'assistant_tool_calls', calls: response.calls });
-      for (const call of response.calls) {
-        let payload: unknown;
-        if (!DIGEST_TOOLS.has(call.name)) {
-          payload = { error: 'unknown_tool' };
-        } else {
-          try {
-            const outcome = await tools.run(userId, call.name, call.args, { today });
-            if (outcome.ok) {
-              payload = outcome.result;
-              results.push({ name: call.name, result: outcome.result });
-            } else payload = { error: outcome.error };
-          } catch {
-            payload = { error: 'tool_failed' };
-          }
-        }
-        convo.push({ role: 'tool', toolCallId: call.id, name: call.name, content: JSON.stringify(payload) });
-      }
-    }
-  }
-
-  async function run(): Promise<{ kind: 'text'; text: string } | { kind: 'fallback' }> {
-    let corrective: string | null = null;
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      let text: string | 'expired';
+  async function run(): Promise<string | null> {
+    let note: string | null = null;
+    for (let n = 1; n <= MAX_ATTEMPTS; n++) {
+      attempts = n;
+      const messages: CoachStreamRequest['messages'] = [{ role: 'user', content: DIGEST_REQUEST }];
+      if (note) messages.push({ role: 'user', content: note });
+      let raw: string;
       try {
-        text = await generateOnce(corrective);
+        raw = await streamText(deps.provider, { system, messages, maxTokens: DIGEST_MAX_TOKENS, signal: controller.signal });
       } catch {
-        return { kind: 'fallback' };
+        return null;
       }
-      if (text === 'expired') return { kind: 'fallback' };
-      const verdict = validateReply(text, results);
-      if (verdict.ok) return { kind: 'text', text: verdict.text };
-      rejects++;
-      corrective = buildCorrectiveMessage(verdict.reasons);
+      const result = validatedSentences(raw, sheet);
+      dropped += result.dropped.length;
+      if (result.kept.length > 0) return result.kept.join(' ');
+      note = buildRegenerationNote(result.dropped.length > 0 ? [...new Set(result.dropped)] : ['empty']);
     }
-    return { kind: 'fallback' };
+    return null;
   }
 
   let cancelTimer = () => {};
@@ -252,21 +182,18 @@ export async function generateDigestText(
     const handle = clock.setTimer(() => resolve('deadline'), deps.budgetMs ?? DIGEST_BUDGET_MS);
     cancelTimer = () => handle.cancel();
   });
-  const running = run().catch((): { kind: 'fallback' } => ({ kind: 'fallback' }));
-  let outcome: Awaited<typeof running> | 'deadline';
+  const running = run().catch((): null => null);
+  let outcome: string | null | 'deadline';
   try {
     outcome = await Promise.race([running, deadline]);
   } finally {
     cancelTimer();
   }
-  if (outcome === 'deadline') {
-    state.expired = true;
-    controller.abort();
-  }
-  if (outcome !== 'deadline' && outcome.kind === 'text') return { text: outcome.text, source: 'model', rejects };
+  if (outcome === 'deadline') controller.abort();
+  if (outcome !== 'deadline' && outcome !== null) return { text: outcome, source: 'model', dropped, attempts };
 
-  const fallback = composeDigestFallback(fetched);
-  return fallback === null ? null : { text: fallback, source: 'fallback', rejects };
+  const fallback = composeDigestFallback(sheet);
+  return fallback === null ? null : { text: fallback, source: 'fallback', dropped, attempts };
 }
 
 export async function generateWeeklyDigestForUser(
@@ -286,7 +213,7 @@ export async function generateWeeklyDigestForUser(
   if (persona.proactivity === 'reactive-only') return skip('skipped_reactive_only');
   if (!(await hasCurrentConsent(user.id))) return skip('skipped_no_consent');
 
-  const today = safeCivilDate(now, user.timezone);
+  const today = localCivilDateOrUtc(now, user.timezone);
   const weekStart = weekStartOf(today);
   const weekStartDate = civilDateToUtcMidnight(weekStart);
   const existing = await prisma.coachDigest.findUnique({
@@ -295,23 +222,22 @@ export async function generateWeeklyDigestForUser(
   });
   if (existing) return skip('skipped_exists');
 
-  const tools = deps.tools ?? coachTools;
-  const fetched = await fetchDigestResults(tools, user.id, today);
-  if (!hasMaterial(fetched)) return skip('skipped_no_data');
+  const sheet = await buildFactSheet(user.id, 'trends', { ...(deps.factData ?? defaultFactData), today });
+  if (!hasMaterial(sheet)) return skip('skipped_no_data');
 
-  const generated = await generateDigestText(deps, user.id, persona, today, fetched);
+  const generated = await generateDigestText(deps, persona, today, sheet);
   if (generated === null) return skip('skipped_no_data');
 
   try {
     await prisma.coachDigest.create({
-      data: { userId: user.id, text: withDisclaimer(generated.text), personaId: persona.id, weekStart: weekStartDate },
+      data: { userId: user.id, text: generated.text, personaId: persona.id, weekStart: weekStartDate },
     });
   } catch (err) {
     // Two runs for the same user+week raced: the unique key keeps exactly one, and only the winner pushes.
     if ((err as { code?: string } | null)?.code === 'P2002') return skip('skipped_exists');
     throw err;
   }
-  emit('coach.digest_generated', { source: generated.source, guardrailRejects: generated.rejects, weekStart });
+  emit('coach.digest_generated', { source: generated.source, dropped: generated.dropped, attempts: generated.attempts, weekStart });
 
   // The digest is stored; a push failure must not undo or repeat it.
   try {
@@ -333,7 +259,7 @@ export async function runWeeklyDigest(deps: DigestDeps): Promise<DigestSweepSumm
     const users = await prisma.user.findMany({
       where: {
         ...(deps.userIds ? { id: { in: deps.userIds } } : {}),
-        coachConsents: { some: { revokedAt: null, version: COACH_CONSENT_VERSION } },
+        coachConsents: { some: { revokedAt: null, version: COACH_CONSENT_VERSION, scope: 'LOCAL' } },
       },
       select: { id: true, timezone: true, coachPersonaId: true },
       orderBy: { id: 'asc' },

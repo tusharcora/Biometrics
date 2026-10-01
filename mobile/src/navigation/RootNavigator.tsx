@@ -15,6 +15,7 @@ import { FORECAST_COPY } from '../lib/forecastCopy';
 import { PatternsScreen } from '../screens/PatternsScreen';
 import { CoachConsentScreen } from '../screens/CoachConsentScreen';
 import { CoachMemoryScreen } from '../screens/CoachMemoryScreen';
+import { HostedConsentScreen } from '../screens/HostedConsentScreen';
 import { SignInMethodsScreen } from '../screens/SignInMethodsScreen';
 import { DevicesScreen } from '../screens/DevicesScreen';
 import { MeetYourCoachScreen } from '../screens/MeetYourCoachScreen';
@@ -51,6 +52,8 @@ export type RootStackParamList = {
   CoachConsent: { prefill?: string } | undefined;
   // Reached from Settings -> Coach Memory, which only draws when consented.
   CoachMemory: undefined;
+  // Profile -> AI engine -> Claude: the hosted-model opt-in.
+  HostedConsent: undefined;
   // Reached from Settings: link or unlink Apple, Google, email + password.
   SignInMethods: undefined;
   // Reached from Settings: signed-in devices, with sign-out per device.
@@ -133,6 +136,7 @@ export function RootNavigator() {
               <Stack.Screen name="Patterns" component={PatternsScreen} options={{ title: 'Patterns' }} />
               <Stack.Screen name="CoachConsent" component={CoachConsentScreen} options={{ title: 'AI Coach' }} />
               <Stack.Screen name="CoachMemory" component={CoachMemoryScreen} options={{ title: 'Coach Memory' }} />
+              <Stack.Screen name="HostedConsent" component={HostedConsentScreen} options={{ title: 'AI engine' }} />
               <Stack.Screen name="SignInMethods" component={SignInMethodsScreen} options={{ title: 'Sign-in methods' }} />
               <Stack.Screen name="Devices" component={DevicesScreen} options={{ title: 'Devices' }} />
               <Stack.Screen

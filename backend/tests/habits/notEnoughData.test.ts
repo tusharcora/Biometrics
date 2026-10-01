@@ -10,6 +10,7 @@ import { habitDayFor } from '../../src/habits/habitDay';
 import { shiftDate } from '../../src/scoring/dates';
 import { authed, createUser, seedScenario } from './dbHelpers';
 import { dateAt } from './helpers';
+import { testServer } from '../helpers/server';
 
 beforeAll(() => {
   migrateTestDb();
@@ -137,7 +138,7 @@ describe('GET /me/habits/patterns no longer runs the statistics', () => {
     await seedScenario(user.id, { start: shiftDate(todayUtc(), -60), days: 50, seed: 7, effect: -1.6 });
     const s = spies();
 
-    const res = await request(app).get('/me/habits/patterns').set(await authed(user.id));
+    const res = await request(await testServer(app)).get('/me/habits/patterns').set(await authed(user.id));
 
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ patterns: [], notEnoughData: [] });
@@ -179,7 +180,7 @@ describe('GET /me/habits/patterns no longer runs the statistics', () => {
     });
     const findMany = jest.spyOn(prisma.habitCorrelation, 'findMany');
 
-    const res = await request(app).get('/me/habits/patterns').set(await authed(user.id));
+    const res = await request(await testServer(app)).get('/me/habits/patterns').set(await authed(user.id));
 
     expect(res.body.patterns).toEqual([]);
     expect(res.body.notEnoughData).toEqual([{ habitType: 'ALCOHOL', exposedDays: 3, unexposedDays: 9, requiredEach: 8 }]);
@@ -199,13 +200,13 @@ describe('GET /me/habits/patterns no longer runs the statistics', () => {
       data: { userId: user.id, date: civilDateToUtcMidnight(shiftDate(extra, 1)), algorithmVersion: 'v1', hrvZ: 0.4, hrvBaselineDeviationPct: 1 },
     });
 
-    const before = await request(app).get('/me/habits/patterns').set(h);
+    const before = await request(await testServer(app)).get('/me/habits/patterns').set(h);
     expect(before.body.notEnoughData).toEqual([{ habitType: 'ALCOHOL', exposedDays: 3, unexposedDays: 9, requiredEach: 8 }]);
 
-    const check = await request(app).post('/me/habits/check-ins').set(h).send({ habitDay: extra });
+    const check = await request(await testServer(app)).post('/me/habits/check-ins').set(h).send({ habitDay: extra });
     expect(check.status).toBe(201);
 
-    const after = await request(app).get('/me/habits/patterns').set(h);
+    const after = await request(await testServer(app)).get('/me/habits/patterns').set(h);
     // (A check-in makes every habit type observed for that day, so the built-ins appear too.)
     expect(after.body.notEnoughData.find((n: any) => n.habitType === 'ALCOHOL')).toEqual({
       habitType: 'ALCOHOL',

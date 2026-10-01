@@ -1,76 +1,63 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, ScrollView, KeyboardAvoidingView, Platform, Pressable } from 'react-native';
+import { AccessibilityInfo, View, ScrollView, KeyboardAvoidingView, Platform, Pressable, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
 import { Ionicons } from '@expo/vector-icons';
 import {
-  CoachConsentRequiredError,
-  CoachDisabledError,
-  CoachTimeoutError,
-  fetchCoachStatus,
-  fetchLatestConversation,
-  sendCoachMessage,
-  type CoachMessageSource,
-  type MemoryDTO,
   StaleConversationError,
-  type SendCoachMessageInput,
+  fetchCoachStatus,
+  fetchConversation,
+  fetchLatestConversation,
+  fetchTodaySummary,
+  type AnswerCardDTO,
+  type CoachEngineDTO,
+  type TodaySummaryDTO,
 } from '../api/coach';
 import { Text } from '../components/ui/text';
-import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
-import { COACH_COMMANDS, PromptBar } from '../components/coach/PromptBar';
+import { PromptBar } from '../components/coach/PromptBar';
 import { ThoughtLine } from '../components/coach/thought-line';
-import { ChatBubble } from '../components/ui/chat-bubble';
-import { MemoryProposalChips } from '../components/memory-proposal-chips';
+import { CoachToday, TODAY_FOOTNOTE, todayShowsFootnote } from '../components/coach/CoachToday';
+import { CoachMessageRow } from '../components/coach/CoachMessageRow';
+import { ErrorCard } from '../components/coach/ErrorCard';
+import { ConversationsSheet } from '../components/coach/ConversationsSheet';
 import { Character } from '../components/characters/Character';
+import { characterInfo } from '../components/characters/registry';
 import { useCharacterMood } from '../characters/useCharacterMood';
 import { useScreenFocused } from '../characters/useScreenFocused';
-import { Glow } from '../components/ui/glow';
 import { PressableScale } from '../components/ui/pressable-scale';
 import { COLORS } from '../theme';
 import type { TabParamList } from '../navigation/TabsNavigator';
 import { useTabBarClearance } from '../navigation/tabBarLayout';
 import { useKeyboardVisible } from '../lib/useKeyboardVisible';
 import { useCharacterOptional } from '../characters/CharacterContext';
+import { useCoachConversation, type CoachChatMessage } from '../lib/useCoachConversation';
+import { suggestedQuestions } from '../lib/coachToday';
+import { cardDestination } from '../lib/coachAnswers';
 
 type CoachRoute = RouteProp<TabParamList, 'Coach'>;
 
-interface ChatMessage {
-  id: string;
-  role: 'user' | 'assistant';
-  text: string;
-  source?: CoachMessageSource | string;
-  // True only for a reply that just arrived, so it fades in; history does not.
-  fresh?: boolean;
-  // How long the coach worked on this reply, shown as "Thought for 2.4s" above
-  // it. Only on the latest reply that arrived in this session.
-  thoughtSeconds?: number;
-  // Memories the coach proposed to keep on this turn (shown under the bubble).
-  memoryProposals?: MemoryDTO[];
-  // Set on a user bubble whose send failed, so the transcript does not show it
-  // sitting there as though the coach received it.
-  failed?: boolean;
-  // Present on a crisis-safety reply.
-  safety?: {
-    resources: string[];
-    // The user message that triggered it, resent if they say it was a false alarm.
-    originalMessage: string;
-    overridden: boolean;
-  };
-}
-
 type Phase = 'loading' | 'unavailable' | 'needs-consent' | 'ready';
 
-const ERROR_TEXT = {
-  timeout: 'The coach took too long to answer. Nothing was lost; you can try again.',
-  generic: 'Something went wrong sending that. You can try again.',
-};
+// How close to the bottom (pt) still counts as reading the latest message.
+const NEAR_BOTTOM = 80;
 
-// The coach conversation. Each reply arrives whole in one response (spec 2/4),
-// so the only in-flight state is a "Thinking…" line with an elapsed timer (see
-// components/coach/thought-line); nothing here suggests token streaming.
+// Why a past conversation picked from the sheet did not open.
+const CHAT_NOTES = {
+  gone: { testID: 'coach-conversation-gone', text: 'That conversation is no longer available.' },
+  failed: { testID: 'coach-conversation-failed', text: "Couldn't open that conversation just now. Try again in a moment." },
+} as const;
+
+function nearBottom({ contentOffset, contentSize, layoutMeasurement }: NativeScrollEvent): boolean {
+  return contentOffset.y + layoutMeasurement.height >= contentSize.height - NEAR_BOTTOM;
+}
+
+// The Coach page (spec 1): header, today's summary, suggested questions, the
+// conversation (streamed sentence by sentence) and the composer. Loading and
+// gating (status, character picker, consent) live here; the conversation
+// itself lives in useCoachConversation.
 export function CoachScreen() {
   const navigation = useNavigation<any>();
   const clearance = useTabBarClearance();
@@ -79,24 +66,30 @@ export function CoachScreen() {
   const { colorScheme: scheme } = useColorScheme();
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
   const prefill = route?.params?.prefill;
+  const characterCtx = useCharacterOptional();
+  const name = characterInfo(characterCtx?.characterId).name;
 
   const [phase, setPhase] = useState<Phase>('loading');
-  const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [conversationId, setConversationId] = useState<string | null>(null);
   const [input, setInput] = useState(prefill ?? '');
-  const [sending, setSending] = useState(false);
-  // When the latest reply landed, for the character's "answering" mood.
-  const [answeredAt, setAnsweredAt] = useState<number | null>(null);
-  const mood = useCharacterMood({ sending, answeredAt });
+  const [engine, setEngine] = useState<CoachEngineDTO>('local');
+  const [today, setToday] = useState<TodaySummaryDTO | null>(null);
+  const [todayLoading, setTodayLoading] = useState(true);
+  const [sheetOpen, setSheetOpen] = useState(false);
+  // A past conversation picked from the sheet did not open: gone (404) or failed.
+  const [chatNote, setChatNote] = useState<keyof typeof CHAT_NOTES | null>(null);
+  // Follow the end of the chat as it grows: on after a send, off after a
+  // history restore (the page opens at the top, today first) and while the
+  // user has scrolled up to read.
+  const followEnd = useRef(false);
+  // Bumped by every send, new chat and conversation open: an older history
+  // load that resolves later must not replace what the user has moved on to.
+  const chatSeq = useRef(0);
   const focused = useScreenFocused();
-  const [error, setError] = useState<{ text: string; request: SendCoachMessageInput } | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const mounted = useRef(true);
-  const localId = useRef(0);
   const redirectedToConsent = useRef(false);
   // Meet your coach opens by itself at most once per mount of this tab.
   const pickerOpened = useRef(false);
-  const characterCtx = useCharacterOptional();
   const loadInFlight = useRef(false);
   // A load requested while another is in flight (e.g. tab focus during the first
   // load). The in-flight result may be stale by then, so it is discarded and
@@ -106,22 +99,35 @@ export function CoachScreen() {
   // True when the status check itself could not be completed, as opposed to
   // having completed and said the coach is available.
   const [statusUnverified, setStatusUnverified] = useState(false);
-  // The phase, readable from inside load() without making it re-create.
   const phaseRef = useRef<Phase>('loading');
+  phaseRef.current = phase;
   // True only once the conversation history was actually fetched and applied.
-  // A failed history load still opens the chat (fail-open), but leaves this
-  // false so the next focus retries it.
   const historyLoaded = useRef(false);
   // The last non-empty prefill. The route param is consumed once applied (below),
   // but the consent round-trip must still carry it.
   const lastPrefill = useRef<string | undefined>(prefill);
-  // Read inside async handlers so a stale closure never resends the wrong id.
+
+  const conversation = useCoachConversation({
+    preferredEngine: engine,
+    onConsentRequired: () => navigation.navigate('CoachConsent', { prefill: undefined }),
+    onDisabled: () => setPhase('unavailable'),
+  });
+  const { messages, conversationId, streaming, waiting, statusLabel, answeredAt, error, send, stop, retry, overrideSafety, newChat } = conversation;
+  const restoreHook = conversation.restore;
+  // History opens at the top of the page, with today in view.
+  const restore = useCallback(
+    (past: Parameters<typeof restoreHook>[0]) => {
+      followEnd.current = false;
+      restoreHook(past);
+    },
+    [restoreHook],
+  );
+  const mood = useCharacterMood({ sending: streaming, answeredAt });
+  // Read inside load(): a message just sent (before its conversationId
+  // arrives) must stop a focus reload from replacing the chat with history.
   const conversationIdRef = useRef<string | null>(null);
   conversationIdRef.current = conversationId;
-  phaseRef.current = phase;
-  // Mirrors `messages` so `load()` can see a message the user just sent (the
-  // optimistic bubble) before the reply -- and conversationIdRef -- arrives.
-  const messagesRef = useRef<ChatMessage[]>([]);
+  const messagesRef = useRef<CoachChatMessage[]>([]);
   messagesRef.current = messages;
 
   useEffect(() => {
@@ -131,20 +137,16 @@ export function CoachScreen() {
     };
   }, []);
 
-  // A prefill can arrive after this tab is already mounted (the tab is reused
-  // by every entry point), so a changed param must reach the input.
-  // The param is consumed after it is applied, so the same text arriving again
-  // (a second "Ask about this" on the same score type) is a change again.
+  // A prefill can arrive after this tab is already mounted; the param is
+  // consumed once applied, so the same text arriving again is a change again.
   useEffect(() => {
     if (!prefill) return;
     lastPrefill.current = prefill;
     setInput(prefill);
     navigation.setParams?.({ prefill: undefined });
-    // Only a changed prefill should re-apply; `navigation` identity must not.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill]);
 
-  // Returns true only for the call that actually opened it.
   const openPicker = useCallback(() => {
     if (pickerOpened.current) return false;
     pickerOpened.current = true;
@@ -153,20 +155,28 @@ export function CoachScreen() {
   }, [navigation]);
 
   // First Coach-tab visit with the coach enabled and no character chosen yet:
-  // the picker comes first, before consent (spec §5). A status that is
-  // unknown or failed (null) never opens it. Same rule as load() below: only
-  // the status's own literal personaChosen false counts (fetchCoachStatus reads
-  // a server that doesn't report it as chosen). It only opens over this tab:
-  // a status that settles after the user left waits for them to come back.
+  // the picker comes first, before consent. Only over this tab.
   const providerStatus = characterCtx?.statusLoaded ? characterCtx.status : null;
   const providerSaysNotChosen = !!providerStatus?.enabled && providerStatus.personaChosen === false;
   useEffect(() => {
     if (providerSaysNotChosen && focused && navigation.isFocused?.() !== false) openPicker();
   }, [providerSaysNotChosen, focused, navigation, openPicker]);
 
+  // Today's summary. A failed refresh keeps what is on screen; a failed first
+  // load simply leaves the section out.
+  const loadToday = useCallback(async () => {
+    setTodayLoading(true);
+    try {
+      const summary = await fetchTodaySummary();
+      if (mounted.current) setToday(summary);
+    } catch {
+      // Keep the last summary, if any.
+    } finally {
+      if (mounted.current) setTodayLoading(false);
+    }
+  }, []);
+
   const load = useCallback(async () => {
-    // Mount and tab focus can both trigger a load. Run one at a time, but never
-    // drop a request: the finally below re-runs once if one arrived meanwhile.
     if (loadInFlight.current) {
       reloadPending.current = true;
       return;
@@ -177,13 +187,11 @@ export function CoachScreen() {
       try {
         status = await fetchCoachStatus();
       } catch {
-        // The status request did not complete. Failing closed would hide a
-        // working coach over one dropped request, so the screen stays usable --
-        // but it must not imply everything is fine, which is what falling
-        // through to a bare 'ready' did. Say so; the first send settles it.
+        // The status request did not complete: stay usable, but say so.
         if (mounted.current) {
           setStatusUnverified(true);
           setPhase('ready');
+          void loadToday();
         }
         return;
       }
@@ -193,53 +201,33 @@ export function CoachScreen() {
         setPhase('unavailable');
         return;
       }
-      // The same rule from this screen's own status, for when it settles before
-      // the provider's. Strictly false: a server that doesn't send the field
-      // never triggers it. Not while the tab is hidden: the focus reload opens it.
+      setEngine(status.engine ?? 'local');
       const pickerJustOpened = status.personaChosen === false && navigation.isFocused?.() !== false && openPicker();
       if (!status.consented) {
-        // The server decides: a changed consent version lands here too. Send
-        // the user to consent once; if they come back without agreeing, stay on
-        // a card rather than bouncing them straight back there.
         if (redirectedToConsent.current) {
           setPhase('needs-consent');
           return;
         }
-        // The picker is (or is about to be) on top of this tab: consent waits
-        // until the user is back here, when the focus reload redirects.
         if (pickerJustOpened || navigation.isFocused?.() === false) return;
         redirectedToConsent.current = true;
         navigation.navigate('CoachConsent', { prefill: lastPrefill.current });
         return;
       }
       redirectedToConsent.current = false;
-      // Once the chat is showing, a focus reload only re-checks status. History
-      // rows carry no safety card, memory chips or unsent bubbles, so re-reading
-      // them would wipe what the live conversation is showing. A chat that
-      // opened without its history (the fetch failed) is retried, unless the
-      // user has meanwhile started a conversation -- which includes a message
-      // they just sent but whose reply (and conversationId) has not arrived
-      // yet -- because the retry would wipe it.
+      void loadToday();
+      // Once the chat is showing, a focus reload only re-checks status and
+      // today: re-reading history would wipe what the live chat shows.
       if (phaseRef.current === 'ready' && (historyLoaded.current || conversationIdRef.current || messagesRef.current.length > 0)) return;
-      const conversation = await fetchLatestConversation();
+      const seq = chatSeq.current;
+      const latest = await fetchLatestConversation();
       if (!mounted.current || reloadPending.current) return;
-      setConversationId(conversation.conversationId);
-      setMessages(
-        conversation.messages.map((m) => ({
-          id: m.id,
-          // CoachHistoryMessageDTO.role is already 'user' | 'assistant' -- the
-          // server lowercases it before sending (see that type's comment).
-          role: m.role,
-          text: m.text,
-          source: m.source,
-        })),
-      );
+      // The user sent, or opened another chat, meanwhile: keep that.
+      if (seq !== chatSeq.current) return;
+      restore(latest);
       historyLoaded.current = true;
       setPhase('ready');
     } catch {
-      // History alone is a convenience now: failing to load past messages must
-      // not stop someone asking a new question. A status failure is handled
-      // above, where it can be reported rather than silently swallowed.
+      // Past messages are a convenience: failing to load them must not stop a new question.
       if (mounted.current) setPhase('ready');
     } finally {
       loadInFlight.current = false;
@@ -248,18 +236,15 @@ export function CoachScreen() {
         if (mounted.current) void loadRef.current();
       }
     }
-  }, [navigation, openPicker]);
+  }, [navigation, openPicker, loadToday, restore]);
   loadRef.current = load;
 
   useEffect(() => {
     void load();
-    // Load once on mount; later loads come from tab focus below.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  // The Coach tab stays mounted while the user visits consent and comes back,
-  // so re-read status whenever it regains focus. Optional so a screen rendered
-  // without a real navigator (as in tests) still works.
+  // The tab stays mounted while the user visits consent and comes back.
   useEffect(() => {
     const unsubscribe = navigation.addListener?.('focus', () => {
       void load();
@@ -267,122 +252,128 @@ export function CoachScreen() {
     return unsubscribe;
   }, [navigation, load]);
 
-  const deliver = useCallback(
-    async (request: SendCoachMessageInput) => {
-      const startedAt = Date.now();
-      // A new send ends any earlier reply's "answering": a safety reply or a
-      // failed send must leave the character idle, not finish the old one.
-      setAnsweredAt(null);
-      setSending(true);
-      setError(null);
-      try {
-        let res;
-        try {
-          res = await sendCoachMessage({
-            ...request,
-            ...(conversationIdRef.current ? { conversationId: conversationIdRef.current } : {}),
-          });
-        } catch (e) {
-          // The server retains transcripts for 90 days, so an id held across a
-          // long gap can simply be gone. The coach is still there: drop the id
-          // and send the same message as a new conversation, once.
-          if (!(e instanceof StaleConversationError) || !conversationIdRef.current) throw e;
-          conversationIdRef.current = null;
-          setConversationId(null);
-          res = await sendCoachMessage(request);
-        }
-        if (!mounted.current) return;
-        setStatusUnverified(false);
-        setConversationId(res.conversationId);
-        const thoughtSeconds = (Date.now() - startedAt) / 1000;
-        setMessages((prev) => {
-          // Only the newest reply keeps its "Thought for" line.
-          const earlier = prev.map((m) => (m.thoughtSeconds === undefined ? m : { ...m, thoughtSeconds: undefined }));
-          // A resend under safetyOverride settles the earlier safety card.
-          const settled = request.safetyOverride
-            ? earlier.map((m) => (m.safety && m.safety.originalMessage === request.message ? { ...m, safety: { ...m.safety, overridden: true } } : m))
-            : earlier;
-          const next: ChatMessage = {
-            id: res.message.id,
-            role: 'assistant',
-            text: res.message.text,
-            source: res.message.source,
-            fresh: true,
-            thoughtSeconds,
-            memoryProposals: res.memoryProposals?.length ? res.memoryProposals : undefined,
-            safety:
-              res.message.source === 'safety' && res.safety
-                ? { resources: res.safety.resources, originalMessage: request.message, overridden: false }
-                : undefined,
-          };
-          return [...settled, next];
-        });
-        // A crisis-safety reply is not a moment for the character to celebrate.
-        if (res.message.source !== 'safety') setAnsweredAt(Date.now());
-      } catch (e) {
-        if (!mounted.current) return;
-        // Whatever went wrong, the message did not land. Mark the bubble so the
-        // transcript stops showing it as though the coach had received it.
-        setMessages((prev) =>
-          prev.map((m) => (m.role === 'user' && m.text === request.message && !m.failed ? { ...m, failed: true } : m)),
-        );
-        if (e instanceof CoachConsentRequiredError) {
-          navigation.navigate('CoachConsent', { prefill: undefined });
-        } else if (e instanceof CoachDisabledError) {
-          setPhase('unavailable');
-        } else {
-          setError({ text: e instanceof CoachTimeoutError ? ERROR_TEXT.timeout : ERROR_TEXT.generic, request });
-        }
-      } finally {
-        if (mounted.current) setSending(false);
+  // A turn that got through settles an unverified status: the coach is there.
+  useEffect(() => {
+    if (answeredAt !== null || conversationId) setStatusUnverified(false);
+  }, [answeredAt, conversationId]);
+
+  // Screen readers hear once that the answer is in (not for a safety reply,
+  // a stop or an error: answeredAt is only set for a finished answer).
+  useEffect(() => {
+    if (answeredAt !== null) AccessibilityInfo.announceForAccessibility('Answer ready');
+  }, [answeredAt]);
+
+  // A question from a suggestion, a bar, a chip or the field. Stable, so the
+  // memoised today summary and rows do not re-render on every keystroke.
+  const ask = useCallback(
+    (text: string): boolean => {
+      const sent = send(text);
+      if (sent) {
+        chatSeq.current += 1;
+        followEnd.current = true;
+        lastPrefill.current = undefined;
+        setChatNote(null);
       }
+      return sent;
     },
-    [navigation],
+    [send],
   );
 
-  // `suggestion` sends a one-tap starter question as-is; otherwise the field.
-  function send(suggestion?: string) {
-    const text = (suggestion ?? input).trim();
-    if (!text || sending) return;
-    localId.current += 1;
-    // The prefill has been used; a later consent round-trip must not resurrect it.
-    lastPrefill.current = undefined;
-    setMessages((prev) => [...prev, { id: `local-${localId.current}`, role: 'user', text }]);
-    if (suggestion === undefined) setInput('');
-    void deliver({ message: text });
+  const retryTurn = useCallback(() => {
+    followEnd.current = true;
+    retry();
+  }, [retry]);
+
+  const resendWithOverride = useCallback(
+    (originalMessage: string) => {
+      followEnd.current = true;
+      overrideSafety(originalMessage);
+    },
+    [overrideSafety],
+  );
+
+  // Without a summary there is no day to open; cardDestination then opens the Metrics tab.
+  const cardDate = today?.date ?? '';
+  const openSource = useCallback(
+    (card: AnswerCardDTO) => {
+      const target = cardDestination(card, cardDate);
+      navigation.navigate(target.name, target.params);
+    },
+    [navigation, cardDate],
+  );
+
+  function sendTyped() {
+    if (ask(input)) setInput('');
   }
 
-  function overrideSafety(originalMessage: string) {
-    if (sending) return;
-    void deliver({ message: originalMessage, safetyOverride: true });
+  async function openConversation(id: string) {
+    setSheetOpen(false);
+    setChatNote(null);
+    const seq = ++chatSeq.current;
+    try {
+      const past = await fetchConversation(id);
+      if (!mounted.current || seq !== chatSeq.current) return;
+      restore(past);
+      historyLoaded.current = true;
+    } catch (e) {
+      // Stay on the chat that is showing, and say why gently.
+      if (mounted.current && seq === chatSeq.current) setChatNote(e instanceof StaleConversationError ? 'gone' : 'failed');
+    }
   }
 
-  function retry() {
-    if (!error || sending) return;
-    void deliver(error.request);
+  function startNewChat() {
+    setSheetOpen(false);
+    setChatNote(null);
+    chatSeq.current += 1;
+    followEnd.current = false;
+    newChat();
+    historyLoaded.current = true;
   }
 
-  // Coach memory is only reachable once the coach is set up and confirmed.
+  const onContentSizeChange = useCallback(() => {
+    if (followEnd.current) scrollRef.current?.scrollToEnd({ animated: true });
+  }, []);
+  // Only the user's own scrolling decides whether to keep following; the
+  // programmatic scrollToEnd fires no drag events.
+  const stopFollowing = useCallback(() => {
+    followEnd.current = false;
+  }, []);
+  const followIfNearBottom = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    followEnd.current = nearBottom(e.nativeEvent);
+  }, []);
+
+  const ready = phase === 'ready' && !statusUnverified;
   const header = (
     <View className="flex-row items-center justify-between px-5 pb-2 pt-1">
       <View className="flex-row items-center gap-3">
         <Character testID="coach-header-character" mood={mood} size={36} paused={!focused} />
-        <View>
-          <Text className="font-display text-display">Coach</Text>
-          <Text className="text-xs text-muted-foreground">Answers from your own data</Text>
-        </View>
+        <Text accessibilityRole="header" className="font-display text-display">
+          Coach
+        </Text>
       </View>
-      {phase === 'ready' && !statusUnverified ? (
-        <Pressable
-          testID="coach-memory-button"
-          accessibilityRole="button"
-          accessibilityLabel="What the coach remembers"
-          onPress={() => navigation.navigate('CoachMemory')}
-          hitSlop={4}
-          className="h-11 w-11 items-center justify-center rounded-full border border-border bg-muted active:opacity-70"
-        >
-          <Ionicons name="bulb-outline" size={18} color={colors.foreground} />
-        </Pressable>
+      {ready ? (
+        <View className="flex-row gap-2">
+          <Pressable
+            testID="coach-conversations-button"
+            accessibilityRole="button"
+            accessibilityLabel="Conversations and coach memory"
+            onPress={() => setSheetOpen(true)}
+            hitSlop={4}
+            className="h-11 w-11 items-center justify-center rounded-full border border-border bg-muted active:opacity-70"
+          >
+            <Ionicons name="menu-outline" size={20} color={colors.foreground} />
+          </Pressable>
+          <Pressable
+            testID="coach-new-chat-button"
+            accessibilityRole="button"
+            accessibilityLabel="New chat"
+            onPress={startNewChat}
+            hitSlop={4}
+            className="h-11 w-11 items-center justify-center rounded-full border border-border bg-muted active:opacity-70"
+          >
+            <Ionicons name="create-outline" size={18} color={colors.foreground} />
+          </Pressable>
+        </View>
       ) : null}
     </View>
   );
@@ -427,51 +418,64 @@ export function CoachScreen() {
     );
   }
 
+  const last = messages[messages.length - 1];
+  const lastQuestion = [...messages].reverse().find((m) => m.role === 'user')?.text;
 
   return (
     <SafeAreaView className="flex-1 bg-background">
       {header}
       {/* KeyboardAvoidingView owns its paddingBottom on iOS, so the bar clearance sits on this wrapper. */}
       <View testID="coach-clearance" style={{ flex: 1, paddingBottom: keyboardVisible ? 0 : clearance }}>
-        <KeyboardAvoidingView
-          className="flex-1"
-          behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-          keyboardVerticalOffset={90}
-        >
+        <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={90}>
           <ScrollView
             ref={scrollRef}
+            testID="coach-scroll"
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={{ gap: 16, paddingHorizontal: 20, paddingVertical: 12, flexGrow: 1 }}
-            onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+            onContentSizeChange={onContentSizeChange}
+            onScrollBeginDrag={stopFollowing}
+            onScrollEndDrag={followIfNearBottom}
+            onMomentumScrollEnd={followIfNearBottom}
           >
+            {chatNote ? (
+              <Text testID={CHAT_NOTES[chatNote].testID} className="px-1 text-sm text-muted-foreground">
+                {CHAT_NOTES[chatNote].text}
+              </Text>
+            ) : null}
+
             {statusUnverified ? (
               <Text testID="coach-status-unverified" className="px-1 text-sm text-muted-foreground">
                 We couldn't check the coach just now. You can still send a message.
               </Text>
             ) : null}
 
-            {messages.length === 0 && !sending ? (
-              <View testID="coach-empty" className="flex-1 items-center justify-center gap-5 py-10">
-                <View style={{ width: 64, height: 64 }} className="items-center justify-center">
-                  <Glow color={colors.accent} size={220} around={64} intensity={0.28} />
-                  <Character testID="coach-hero-character" mood={mood} size={64} paused={!focused} />
-                </View>
-                <View className="items-center gap-2 px-4">
-                  <Text className="font-display text-display text-center">What would you like to know?</Text>
-                  <Text className="text-center text-base text-muted-foreground">
-                    Ask about your scores, what moved them, or your habit patterns.
+            <CoachToday summary={today} loading={todayLoading} onAsk={ask} />
+            {/* The page's one disclaimer: CoachToday shows it beside its comparisons, the page otherwise. */}
+            {!todayShowsFootnote(today) ? (
+              <Text testID="coach-today-footnote" className="text-xs text-muted-foreground">
+                {TODAY_FOOTNOTE}
+              </Text>
+            ) : null}
+
+            {messages.length === 0 && !streaming ? (
+              <View testID="coach-empty" className="items-center gap-4 py-4">
+                <Character testID="coach-hero-character" mood={mood} size={64} paused={!focused} />
+                <View className="items-center gap-1 px-4">
+                  <Text accessibilityRole="header" className="text-center font-display text-display-sm">
+                    What would you like to know?
                   </Text>
+                  <Text className="text-center text-sm text-muted-foreground">Ask about your data, or anything health and fitness.</Text>
                 </View>
                 <View className="w-full gap-2">
-                  {COACH_COMMANDS.map((command) => (
+                  {suggestedQuestions(today).map((question, index) => (
                     <PressableScale
-                      key={command.key}
-                      testID={`coach-suggestion-${command.key}`}
+                      key={question}
+                      testID={`coach-suggestion-${index}`}
                       accessibilityRole="button"
-                      onPress={() => send(command.prompt)}
+                      onPress={() => ask(question)}
                       className="flex-row items-center justify-between rounded-tile border border-border bg-card px-4 py-3.5"
                     >
-                      <Text className="text-base">{command.label}</Text>
+                      <Text className="shrink text-base">{question}</Text>
                       <Ionicons name="arrow-up" size={16} color={colors.muted} />
                     </PressableScale>
                   ))}
@@ -479,68 +483,55 @@ export function CoachScreen() {
               </View>
             ) : null}
 
-            {messages.map((message) => (
-              <View key={message.id} className="gap-1">
-                {message.failed ? (
-                  <Text testID={`coach-message-failed-${message.id}`} className="self-end text-xs text-destructive">
-                    Not sent
-                  </Text>
-                ) : null}
-                {message.thoughtSeconds !== undefined ? (
-                  <ThoughtLine working={false} elapsedSeconds={message.thoughtSeconds} glyph={<Character mood="idle" size={14} paused />} testID="coach-thought-settled" />
-                ) : null}
-                <ChatBubble role={message.role} text={message.text} source={message.source as CoachMessageSource} animate={message.fresh === true}>
-                  {message.safety ? (
-                    <View className="gap-3">
-                      <Card testID="coach-safety-resources" className="gap-1 border-accent/40 bg-accent/10">
-                        <Text className="text-sm font-semibold">Support is available</Text>
-                        {message.safety.resources.map((resource) => (
-                          <Text key={resource} className="text-sm">
-                            {resource}
-                          </Text>
-                        ))}
-                      </Card>
-                      {!message.safety.overridden ? (
-                        <Button
-                          testID="coach-safety-override"
-                          variant="ghost"
-                          size="sm"
-                          disabled={sending}
-                          onPress={() => overrideSafety(message.safety!.originalMessage)}
-                        >
-                          {"That's not why I'm asking"}
-                        </Button>
-                      ) : null}
-                    </View>
-                  ) : null}
-                </ChatBubble>
-                {message.memoryProposals ? <MemoryProposalChips proposals={message.memoryProposals} /> : null}
-              </View>
-            ))}
+            {messages.map((message) => {
+              const showFollowUps = message === last && message.role === 'assistant' && !streaming && message.state === 'done' && !message.safety;
+              const unsettledSafety = !!message.safety && !message.safety.overridden;
+              return (
+                <CoachMessageRow
+                  key={message.clientKey ?? message.id}
+                  message={message}
+                  showFollowUps={showFollowUps}
+                  lastQuestion={showFollowUps ? lastQuestion : undefined}
+                  busy={showFollowUps || unsettledSafety ? streaming : false}
+                  onAsk={ask}
+                  onOverrideSafety={resendWithOverride}
+                  onOpenSource={openSource}
+                />
+              );
+            })}
 
-            {sending ? (
+            {waiting ? (
               <View className="items-start">
-                <ThoughtLine working glyph={<Character testID="coach-thinking-character" mood="thinking" size={20} paused={!focused} />} testID="coach-thinking" />
+                <ThoughtLine
+                  working
+                  label={statusLabel ?? 'Thinking…'}
+                  timer={false}
+                  glyph={<Character testID="coach-thinking-character" mood="thinking" size={20} paused={!focused} />}
+                  testID="coach-thinking"
+                />
               </View>
             ) : null}
 
-            {error ? (
-              <Card className="gap-2">
-                <Text testID="coach-error" className="text-sm text-destructive">
-                  {error.text}
-                </Text>
-                <Button testID="coach-retry-button" variant="ghost" size="sm" onPress={retry}>
-                  Try again
-                </Button>
-              </Card>
-            ) : null}
+            {error ? <ErrorCard error={error} onRetry={retryTurn} /> : null}
           </ScrollView>
 
           <View className="px-4 pb-2 pt-1">
-            <PromptBar value={input} onChangeText={setInput} onSend={() => send()} busy={sending} placeholder="Ask about your data" />
+            <PromptBar value={input} onChangeText={setInput} onSend={sendTyped} busy={streaming} onStop={stop} placeholder={`Ask ${name} anything…`} />
           </View>
         </KeyboardAvoidingView>
       </View>
+
+      <ConversationsSheet
+        visible={sheetOpen}
+        onClose={() => setSheetOpen(false)}
+        onOpen={(id) => void openConversation(id)}
+        onNewChat={startNewChat}
+        onOpenMemory={() => {
+          setSheetOpen(false);
+          navigation.navigate('CoachMemory');
+        }}
+        currentId={conversationId}
+      />
     </SafeAreaView>
   );
 }

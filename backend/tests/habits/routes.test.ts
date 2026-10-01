@@ -7,6 +7,7 @@ import { localCivilDate, civilDateToUtcMidnight } from '../../src/biometrics/civ
 import { habitDayFor } from '../../src/habits/habitDay';
 import { shiftDate } from '../../src/scoring/dates';
 import { authed, createUser } from './dbHelpers';
+import { testServer } from '../helpers/server';
 
 beforeAll(() => {
   migrateTestDb();
@@ -31,14 +32,14 @@ describe('auth', () => {
     ['get', '/me/habits/status'],
     ['get', '/me/habits/patterns'],
   ] as const)('%s %s requires a bearer token', async (method, path) => {
-    expect((await request(app)[method](path)).status).toBe(401);
+    expect((await request(await testServer(app))[method](path)).status).toBe(401);
   });
 });
 
 describe('GET /me/habits/config', () => {
   it('returns the three built-ins with their exposure thresholds', async () => {
     const user = await createUser();
-    const res = await request(app).get('/me/habits/config').set(await authed(user.id));
+    const res = await request(await testServer(app)).get('/me/habits/config').set(await authed(user.id));
 
     expect(res.status).toBe(200);
     expect(Object.keys(res.body)).toEqual(['habitTypes']);
@@ -52,13 +53,13 @@ describe('GET /me/habits/config', () => {
   it("includes the caller's custom types after the built-ins, and no one else's", async () => {
     const a = await createUser();
     const b = await createUser();
-    await request(app).post('/me/habits/types').set(await authed(a.id)).send({ label: 'Sauna', unit: 'sessions', exposureThreshold: 1 });
+    await request(await testServer(app)).post('/me/habits/types').set(await authed(a.id)).send({ label: 'Sauna', unit: 'sessions', exposureThreshold: 1 });
 
-    const mine = await request(app).get('/me/habits/config').set(await authed(a.id));
+    const mine = await request(await testServer(app)).get('/me/habits/config').set(await authed(a.id));
     expect(mine.body.habitTypes).toHaveLength(4);
     expect(mine.body.habitTypes[3]).toMatchObject({ label: 'Sauna', unit: 'sessions', exposureThreshold: 1, builtIn: false });
 
-    const theirs = await request(app).get('/me/habits/config').set(await authed(b.id));
+    const theirs = await request(await testServer(app)).get('/me/habits/config').set(await authed(b.id));
     expect(theirs.body.habitTypes).toHaveLength(3);
   });
 });
@@ -66,7 +67,7 @@ describe('GET /me/habits/config', () => {
 describe('POST /me/habits/types', () => {
   it('creates a custom type with a generated stable id and returns 201 { habitType }', async () => {
     const user = await createUser();
-    const res = await request(app)
+    const res = await request(await testServer(app))
       .post('/me/habits/types')
       .set(await authed(user.id))
       .send({ label: '  Late meal ', unit: 'meals', exposureThreshold: 1 });
@@ -81,17 +82,17 @@ describe('POST /me/habits/types', () => {
     const a = await createUser();
     const b = await createUser();
     const body = { label: 'Sauna', unit: 'sessions', exposureThreshold: 1 };
-    const ra = await request(app).post('/me/habits/types').set(await authed(a.id)).send(body);
-    const rb = await request(app).post('/me/habits/types').set(await authed(b.id)).send(body);
+    const ra = await request(await testServer(app)).post('/me/habits/types').set(await authed(a.id)).send(body);
+    const rb = await request(await testServer(app)).post('/me/habits/types').set(await authed(b.id)).send(body);
     expect(ra.body.habitType.type).not.toBe(rb.body.habitType.type);
 
-    const log = await request(app)
+    const log = await request(await testServer(app))
       .post('/me/habits/logs')
       .set(await authed(a.id))
       .send({ habitType: ra.body.habitType.type, value: 1 });
     expect(log.status).toBe(201);
     // ...but a type id is private to its owner.
-    const stolen = await request(app)
+    const stolen = await request(await testServer(app))
       .post('/me/habits/logs')
       .set(await authed(b.id))
       .send({ habitType: ra.body.habitType.type, value: 1 });
@@ -101,9 +102,9 @@ describe('POST /me/habits/types', () => {
   it('rejects a duplicate label case-insensitively, including built-in labels, with 409', async () => {
     const user = await createUser();
     const h = await authed(user.id);
-    expect((await request(app).post('/me/habits/types').set(h).send({ label: 'Sauna', unit: 'x', exposureThreshold: 1 })).status).toBe(201);
-    expect((await request(app).post('/me/habits/types').set(h).send({ label: 'sauna', unit: 'x', exposureThreshold: 1 })).status).toBe(409);
-    expect((await request(app).post('/me/habits/types').set(h).send({ label: 'ALCOHOL', unit: 'x', exposureThreshold: 1 })).status).toBe(409);
+    expect((await request(await testServer(app)).post('/me/habits/types').set(h).send({ label: 'Sauna', unit: 'x', exposureThreshold: 1 })).status).toBe(201);
+    expect((await request(await testServer(app)).post('/me/habits/types').set(h).send({ label: 'sauna', unit: 'x', exposureThreshold: 1 })).status).toBe(409);
+    expect((await request(await testServer(app)).post('/me/habits/types').set(h).send({ label: 'ALCOHOL', unit: 'x', exposureThreshold: 1 })).status).toBe(409);
   });
 
   it.each([
@@ -118,7 +119,7 @@ describe('POST /me/habits/types', () => {
     ['a missing threshold', { label: 'A', unit: 'x' }],
   ])('rejects %s with 400', async (_name, body) => {
     const user = await createUser();
-    const res = await request(app).post('/me/habits/types').set(await authed(user.id)).send(body);
+    const res = await request(await testServer(app)).post('/me/habits/types').set(await authed(user.id)).send(body);
     expect(res.status).toBe(400);
     expect(typeof res.body.error).toBe('string');
   });
@@ -127,7 +128,7 @@ describe('POST /me/habits/types', () => {
 describe('POST /me/habits/logs', () => {
   it('creates a log and returns 201 { log } with the HabitLogDTO shape', async () => {
     const user = await createUser();
-    const res = await request(app)
+    const res = await request(await testServer(app))
       .post('/me/habits/logs')
       .set(await authed(user.id))
       .send({ habitType: 'ALCOHOL', value: 3, note: 'wine', loggedAt: '2026-09-10T20:00:00Z' });
@@ -148,7 +149,7 @@ describe('POST /me/habits/logs', () => {
 
   it('defaults loggedAt to now, unit to the type unit and note to null', async () => {
     const user = await createUser();
-    const res = await request(app).post('/me/habits/logs').set(await authed(user.id)).send({ habitType: 'WORKOUT', value: 30 });
+    const res = await request(await testServer(app)).post('/me/habits/logs').set(await authed(user.id)).send({ habitType: 'WORKOUT', value: 30 });
     expect(res.status).toBe(201);
     expect(res.body.log.unit).toBe('minutes');
     expect(res.body.log.note).toBeNull();
@@ -157,7 +158,7 @@ describe('POST /me/habits/logs', () => {
 
   it('accepts 0 as a real "none" entry', async () => {
     const user = await createUser();
-    const res = await request(app).post('/me/habits/logs').set(await authed(user.id)).send({ habitType: 'ALCOHOL', value: 0 });
+    const res = await request(await testServer(app)).post('/me/habits/logs').set(await authed(user.id)).send({ habitType: 'ALCOHOL', value: 0 });
     expect(res.status).toBe(201);
     expect(res.body.log.value).toBe(0);
   });
@@ -175,7 +176,7 @@ describe('POST /me/habits/logs', () => {
     ['a non-string note', { habitType: 'ALCOHOL', value: 1, note: 5 }],
   ])('rejects %s with 400', async (_name, body) => {
     const user = await createUser();
-    const res = await request(app).post('/me/habits/logs').set(await authed(user.id)).send(body);
+    const res = await request(await testServer(app)).post('/me/habits/logs').set(await authed(user.id)).send(body);
     expect(res.status).toBe(400);
   });
 
@@ -183,8 +184,8 @@ describe('POST /me/habits/logs', () => {
     it('puts a 01:00 local log on the previous day and a 04:00 local log on the current day', async () => {
       const user = await createUser({ timezone: 'America/Los_Angeles' });
       const h = await authed(user.id);
-      const at1am = await request(app).post('/me/habits/logs').set(h).send({ habitType: 'ALCOHOL', value: 2, loggedAt: '2026-09-10T08:00:00Z' });
-      const at4am = await request(app).post('/me/habits/logs').set(h).send({ habitType: 'ALCOHOL', value: 2, loggedAt: '2026-09-10T11:00:00Z' });
+      const at1am = await request(await testServer(app)).post('/me/habits/logs').set(h).send({ habitType: 'ALCOHOL', value: 2, loggedAt: '2026-09-10T08:00:00Z' });
+      const at4am = await request(await testServer(app)).post('/me/habits/logs').set(h).send({ habitType: 'ALCOHOL', value: 2, loggedAt: '2026-09-10T11:00:00Z' });
       expect(at1am.body.log.habitDay).toBe('2026-09-09');
       expect(at4am.body.log.habitDay).toBe('2026-09-10');
     });
@@ -192,18 +193,18 @@ describe('POST /me/habits/logs', () => {
     it('does not rewrite stored habit days when the user later changes timezone', async () => {
       const user = await createUser({ timezone: 'America/Los_Angeles' });
       const h = await authed(user.id);
-      await request(app).post('/me/habits/logs').set(h).send({ habitType: 'ALCOHOL', value: 2, loggedAt: '2026-09-10T08:00:00Z' });
+      await request(await testServer(app)).post('/me/habits/logs').set(h).send({ habitType: 'ALCOHOL', value: 2, loggedAt: '2026-09-10T08:00:00Z' });
       const before = await prisma.habitLog.findFirst({ where: { userId: user.id } });
 
-      expect((await request(app).put('/me/timezone').set(h).send({ timezone: 'Asia/Tokyo' })).status).toBe(200);
+      expect((await request(await testServer(app)).put('/me/timezone').set(h).send({ timezone: 'Asia/Tokyo' })).status).toBe(200);
 
       const after = await prisma.habitLog.findFirst({ where: { userId: user.id } });
       expect(after!.habitDay).toEqual(before!.habitDay);
       expect(after!.habitDay.toISOString().slice(0, 10)).toBe('2026-09-09');
-      const listed = await request(app).get('/me/habits/logs?from=2026-09-01&to=2026-09-30').set(h);
+      const listed = await request(await testServer(app)).get('/me/habits/logs?from=2026-09-01&to=2026-09-30').set(h);
       expect(listed.body.logs[0].habitDay).toBe('2026-09-09');
       // ...while a NEW log at the same instant now buckets under Tokyo (17:00 on the 10th).
-      const fresh = await request(app).post('/me/habits/logs').set(h).send({ habitType: 'ALCOHOL', value: 2, loggedAt: '2026-09-10T08:00:00Z' });
+      const fresh = await request(await testServer(app)).post('/me/habits/logs').set(h).send({ habitType: 'ALCOHOL', value: 2, loggedAt: '2026-09-10T08:00:00Z' });
       expect(fresh.body.log.habitDay).toBe('2026-09-10');
     });
 
@@ -214,7 +215,7 @@ describe('POST /me/habits/logs', () => {
       const user = await createUser({ timezone: 'Pacific/Auckland' });
       const h = await authed(user.id);
       for (const loggedAt of ['2026-09-10T00:30:00Z', '2026-09-10T09:00:00Z', '2026-09-10T20:15:00Z']) {
-        const res = await request(app).post('/me/habits/logs').set(h).send({ habitType: 'CAFFEINE', value: 1, loggedAt });
+        const res = await request(await testServer(app)).post('/me/habits/logs').set(h).send({ habitType: 'CAFFEINE', value: 1, loggedAt });
         expect(res.body.log.habitDay).toBe(localCivilDate(new Date(loggedAt), 'Pacific/Auckland'));
       }
     });
@@ -223,7 +224,7 @@ describe('POST /me/habits/logs', () => {
 
 describe('GET /me/habits/logs and DELETE /me/habits/logs/:id', () => {
   async function log(userId: string, habitType: string, value: number, loggedAt: string) {
-    const res = await request(app).post('/me/habits/logs').set(await authed(userId)).send({ habitType, value, loggedAt });
+    const res = await request(await testServer(app)).post('/me/habits/logs').set(await authed(userId)).send({ habitType, value, loggedAt });
     return res.body.log;
   }
 
@@ -236,7 +237,7 @@ describe('GET /me/habits/logs and DELETE /me/habits/logs/:id', () => {
     await log(a.id, 'ALCOHOL', 3, '2026-09-20T20:00:00Z'); // outside the range
     await log(b.id, 'ALCOHOL', 9, '2026-09-03T20:00:00Z');
 
-    const res = await request(app).get('/me/habits/logs?from=2026-09-01&to=2026-09-05').set(await authed(a.id));
+    const res = await request(await testServer(app)).get('/me/habits/logs?from=2026-09-01&to=2026-09-05').set(await authed(a.id));
     expect(res.status).toBe(200);
     expect(Object.keys(res.body)).toEqual(['logs']);
     expect(res.body.logs.map((l: any) => [l.habitDay, l.habitType, l.value])).toEqual([
@@ -250,12 +251,12 @@ describe('GET /me/habits/logs and DELETE /me/habits/logs/:id', () => {
     const user = await createUser();
     const h = await authed(user.id);
     const now = new Date().toISOString();
-    await request(app).post('/me/habits/logs').set(h).send({ habitType: 'ALCOHOL', value: 1, loggedAt: now });
-    await request(app)
+    await request(await testServer(app)).post('/me/habits/logs').set(h).send({ habitType: 'ALCOHOL', value: 1, loggedAt: now });
+    await request(await testServer(app))
       .post('/me/habits/logs')
       .set(h)
       .send({ habitType: 'ALCOHOL', value: 1, loggedAt: new Date(Date.now() - 45 * 86_400_000).toISOString() });
-    const res = await request(app).get('/me/habits/logs').set(h);
+    const res = await request(await testServer(app)).get('/me/habits/logs').set(h);
     expect(res.body.logs).toHaveLength(1);
   });
 
@@ -267,16 +268,16 @@ describe('GET /me/habits/logs and DELETE /me/habits/logs/:id', () => {
     ['a range over a year', '?from=2024-01-01&to=2026-01-01'],
   ])('rejects %s with 400', async (_name, qs) => {
     const user = await createUser();
-    expect((await request(app).get(`/me/habits/logs${qs}`).set(await authed(user.id))).status).toBe(400);
+    expect((await request(await testServer(app)).get(`/me/habits/logs${qs}`).set(await authed(user.id))).status).toBe(400);
   });
 
   it('deletes an own log with 204 and it no longer lists', async () => {
     const user = await createUser();
     const created = await log(user.id, 'ALCOHOL', 2, '2026-09-03T20:00:00Z');
-    const del = await request(app).delete(`/me/habits/logs/${created.id}`).set(await authed(user.id));
+    const del = await request(await testServer(app)).delete(`/me/habits/logs/${created.id}`).set(await authed(user.id));
     expect(del.status).toBe(204);
     expect(del.text).toBe('');
-    const res = await request(app).get('/me/habits/logs?from=2026-09-01&to=2026-09-05').set(await authed(user.id));
+    const res = await request(await testServer(app)).get('/me/habits/logs?from=2026-09-01&to=2026-09-05').set(await authed(user.id));
     expect(res.body.logs).toEqual([]);
   });
 
@@ -285,8 +286,8 @@ describe('GET /me/habits/logs and DELETE /me/habits/logs/:id', () => {
     const other = await createUser();
     const created = await log(owner.id, 'ALCOHOL', 2, '2026-09-03T20:00:00Z');
 
-    expect((await request(app).delete(`/me/habits/logs/${randomUUID()}`).set(await authed(owner.id))).status).toBe(404);
-    expect((await request(app).delete(`/me/habits/logs/${created.id}`).set(await authed(other.id))).status).toBe(404);
+    expect((await request(await testServer(app)).delete(`/me/habits/logs/${randomUUID()}`).set(await authed(owner.id))).status).toBe(404);
+    expect((await request(await testServer(app)).delete(`/me/habits/logs/${created.id}`).set(await authed(other.id))).status).toBe(404);
     expect(await prisma.habitLog.count({ where: { id: created.id } })).toBe(1);
   });
 });
@@ -294,22 +295,22 @@ describe('GET /me/habits/logs and DELETE /me/habits/logs/:id', () => {
 describe('POST /me/habits/check-ins', () => {
   it("defaults to today's habit day and returns 201 { checkIn: { habitDay } }", async () => {
     const user = await createUser();
-    const res = await request(app).post('/me/habits/check-ins').set(await authed(user.id)).send({});
+    const res = await request(await testServer(app)).post('/me/habits/check-ins').set(await authed(user.id)).send({});
     expect(res.status).toBe(201);
     expect(res.body).toEqual({ checkIn: { habitDay: todayUtc() } });
   });
 
   it("uses the user's timezone for 'today'", async () => {
     const user = await createUser({ timezone: 'Pacific/Kiritimati' }); // UTC+14
-    const res = await request(app).post('/me/habits/check-ins').set(await authed(user.id)).send({});
+    const res = await request(await testServer(app)).post('/me/habits/check-ins').set(await authed(user.id)).send({});
     expect(res.body.checkIn.habitDay).toBe(habitDayFor(new Date(), 'Pacific/Kiritimati'));
   });
 
   it('is idempotent: repeating the same day keeps one row and still returns 201', async () => {
     const user = await createUser();
     const h = await authed(user.id);
-    const first = await request(app).post('/me/habits/check-ins').set(h).send({});
-    const second = await request(app).post('/me/habits/check-ins').set(h).send({ habitDay: todayUtc() });
+    const first = await request(await testServer(app)).post('/me/habits/check-ins').set(h).send({});
+    const second = await request(await testServer(app)).post('/me/habits/check-ins').set(h).send({ habitDay: todayUtc() });
     expect(first.status).toBe(201);
     expect(second.status).toBe(201);
     expect(await prisma.habitCheckIn.count({ where: { userId: user.id } })).toBe(1);
@@ -320,7 +321,7 @@ describe('POST /me/habits/check-ins', () => {
     const h = await authed(user.id);
     for (let back = 1; back <= 7; back++) {
       const habitDay = shiftDate(todayUtc(), -back);
-      const res = await request(app).post('/me/habits/check-ins').set(h).send({ habitDay });
+      const res = await request(await testServer(app)).post('/me/habits/check-ins').set(h).send({ habitDay });
       expect(res.status).toBe(201);
       expect(res.body.checkIn.habitDay).toBe(habitDay);
     }
@@ -330,7 +331,7 @@ describe('POST /me/habits/check-ins', () => {
     const user = await createUser();
     const h = await authed(user.id);
     for (const habitDay of [shiftDate(todayUtc(), -8), shiftDate(todayUtc(), 1), '2026-13-01', 'today', 20260901, null]) {
-      const res = await request(app).post('/me/habits/check-ins').set(h).send({ habitDay });
+      const res = await request(await testServer(app)).post('/me/habits/check-ins').set(h).send({ habitDay });
       expect(res.status).toBe(400);
     }
     expect(await prisma.habitCheckIn.count({ where: { userId: user.id } })).toBe(0);
@@ -342,10 +343,10 @@ describe('GET /me/habits/status', () => {
     const user = await createUser();
     const h = await authed(user.id);
     const today = todayUtc();
-    await request(app).post('/me/habits/logs').set(h).send({ habitType: 'ALCOHOL', value: 0 }); // today, alcohol only
-    await request(app).post('/me/habits/check-ins').set(h).send({ habitDay: shiftDate(today, -1) }); // yesterday, everything
+    await request(await testServer(app)).post('/me/habits/logs').set(h).send({ habitType: 'ALCOHOL', value: 0 }); // today, alcohol only
+    await request(await testServer(app)).post('/me/habits/check-ins').set(h).send({ habitDay: shiftDate(today, -1) }); // yesterday, everything
 
-    const res = await request(app).get('/me/habits/status').set(h);
+    const res = await request(await testServer(app)).get('/me/habits/status').set(h);
     expect(res.status).toBe(200);
     expect(res.body.today).toBe(today);
     expect(res.body.days).toHaveLength(14);
@@ -366,25 +367,25 @@ describe('GET /me/habits/status', () => {
   it('includes custom habit types and honours ?days=, capped', async () => {
     const user = await createUser();
     const h = await authed(user.id);
-    const created = await request(app).post('/me/habits/types').set(h).send({ label: 'Sauna', unit: 's', exposureThreshold: 1 });
+    const created = await request(await testServer(app)).post('/me/habits/types').set(h).send({ label: 'Sauna', unit: 's', exposureThreshold: 1 });
     const type = created.body.habitType.type;
 
-    const res = await request(app).get('/me/habits/status?days=3').set(h);
+    const res = await request(await testServer(app)).get('/me/habits/status?days=3').set(h);
     expect(res.body.days).toHaveLength(3);
     expect(Object.keys(res.body.days[0].observed)).toEqual(['ALCOHOL', 'CAFFEINE', 'WORKOUT', type]);
-    expect((await request(app).get('/me/habits/status?days=9999').set(h)).body.days).toHaveLength(60);
+    expect((await request(await testServer(app)).get('/me/habits/status?days=9999').set(h)).body.days).toHaveLength(60);
   });
 
   it.each(['0', '-1', 'abc', '1.5'])('rejects days=%s with 400', async (days) => {
     const user = await createUser();
-    expect((await request(app).get(`/me/habits/status?days=${days}`).set(await authed(user.id))).status).toBe(400);
+    expect((await request(await testServer(app)).get(`/me/habits/status?days=${days}`).set(await authed(user.id))).status).toBe(400);
   });
 
   it("does not leak another user's logs or check-ins", async () => {
     const a = await createUser();
     const b = await createUser();
-    await request(app).post('/me/habits/check-ins').set(await authed(a.id)).send({});
-    const res = await request(app).get('/me/habits/status').set(await authed(b.id));
+    await request(await testServer(app)).post('/me/habits/check-ins').set(await authed(a.id)).send({});
+    const res = await request(await testServer(app)).get('/me/habits/status').set(await authed(b.id));
     expect(res.body.days[0]).toMatchObject({ checkedIn: false, observed: { ALCOHOL: false } });
   });
 });
@@ -413,7 +414,7 @@ describe('GET /me/habits/patterns', () => {
 
   it('returns an empty result for a user with nothing', async () => {
     const user = await createUser();
-    const res = await request(app).get('/me/habits/patterns').set(await authed(user.id));
+    const res = await request(await testServer(app)).get('/me/habits/patterns').set(await authed(user.id));
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ patterns: [], notEnoughData: [] });
   });
@@ -428,7 +429,7 @@ describe('GET /me/habits/patterns', () => {
       ] as any,
     });
 
-    const res = await request(app).get('/me/habits/patterns').set(await authed(user.id));
+    const res = await request(await testServer(app)).get('/me/habits/patterns').set(await authed(user.id));
     expect(res.status).toBe(200);
     expect(res.body.patterns).toHaveLength(1);
     expect(res.body.patterns[0]).toEqual({
@@ -449,7 +450,7 @@ describe('GET /me/habits/patterns', () => {
   it('labels the RHR factor "Resting HR" and resolves custom-type thresholds', async () => {
     const user = await createUser();
     const h = await authed(user.id);
-    const created = await request(app).post('/me/habits/types').set(h).send({ label: 'Sauna', unit: 'sessions', exposureThreshold: 1.5 });
+    const created = await request(await testServer(app)).post('/me/habits/types').set(h).send({ label: 'Sauna', unit: 'sessions', exposureThreshold: 1.5 });
     await prisma.habitCorrelation.createMany({
       data: [
         row(user.id, { factor: 'RHR' }),
@@ -457,7 +458,7 @@ describe('GET /me/habits/patterns', () => {
       ] as any,
     });
 
-    const res = await request(app).get('/me/habits/patterns').set(h);
+    const res = await request(await testServer(app)).get('/me/habits/patterns').set(h);
     const rhr = res.body.patterns.find((p: any) => p.factor === 'RHR');
     expect(rhr.factorLabel).toBe('Resting HR');
     const sauna = res.body.patterns.find((p: any) => p.habitType === created.body.habitType.type);
@@ -468,7 +469,7 @@ describe('GET /me/habits/patterns', () => {
     const a = await createUser();
     const b = await createUser();
     await prisma.habitCorrelation.create({ data: row(a.id, {}) as any });
-    const res = await request(app).get('/me/habits/patterns').set(await authed(b.id));
+    const res = await request(await testServer(app)).get('/me/habits/patterns').set(await authed(b.id));
     expect(res.body.patterns).toEqual([]);
   });
 
@@ -497,7 +498,7 @@ describe('GET /me/habits/patterns', () => {
       })),
     });
 
-    const res = await request(app).get('/me/habits/patterns').set(await authed(user.id));
+    const res = await request(await testServer(app)).get('/me/habits/patterns').set(await authed(user.id));
     expect(res.body.patterns).toEqual([]);
     expect(res.body.notEnoughData).toEqual([{ habitType: 'ALCOHOL', exposedDays: 3, unexposedDays: 9, requiredEach: 8 }]);
   });

@@ -8,6 +8,7 @@ import { deleteUserSubscription } from '../../src/health/subscriber';
 import { revokeHealthToken } from '../../src/health/oauth';
 import { connection } from '../../src/sync/queue';
 import { countOwnedRows, createUserWithEmail, seedAllOwnedRows, totalRows } from './ownedData';
+import { testServer } from '../helpers/server';
 
 // No real Google calls: the route reaches Google only through these two.
 jest.mock('../../src/health/subscriber');
@@ -36,7 +37,7 @@ describe('DELETE /me', () => {
     await seedAllOwnedRows(user.id, { refreshToken: 'route-refresh-token', subscriptionId: 'route-sub' });
     const authHeader = await authHeaderFor(user.id);
 
-    const res = await request(createApp())
+    const res = await request(await testServer(createApp()))
       .delete('/me')
       .set(authHeader)
       .send({ confirm: 'DELETE' });
@@ -55,7 +56,7 @@ describe('DELETE /me', () => {
     const before = await countOwnedRows(other.id);
     const authHeader = await authHeaderFor(user.id);
 
-    await request(createApp()).delete('/me').set(authHeader).send({ confirm: 'DELETE' }).expect(204);
+    await request(await testServer(createApp())).delete('/me').set(authHeader).send({ confirm: 'DELETE' }).expect(204);
 
     expect(await prisma.user.findUnique({ where: { id: other.id } })).not.toBeNull();
     expect(await countOwnedRows(other.id)).toEqual(before);
@@ -65,7 +66,7 @@ describe('DELETE /me', () => {
     const user = await newUser();
     const authHeader = await authHeaderFor(user.id);
 
-    await request(createApp()).delete('/me').set(authHeader).send({ confirm: 'DELETE' }).expect(204);
+    await request(await testServer(createApp())).delete('/me').set(authHeader).send({ confirm: 'DELETE' }).expect(204);
 
     expect(deleteUserSubscription).not.toHaveBeenCalled();
     expect(revokeHealthToken).not.toHaveBeenCalled();
@@ -79,7 +80,7 @@ describe('DELETE /me', () => {
     (revokeHealthToken as jest.Mock).mockRejectedValue(new Error('Google token revocation returned 503'));
     const errors = jest.spyOn(console, 'error').mockImplementation(() => undefined);
 
-    const res = await request(createApp())
+    const res = await request(await testServer(createApp()))
       .delete('/me')
       .set(authHeader)
       .send({ confirm: 'DELETE' });
@@ -104,7 +105,7 @@ describe('DELETE /me', () => {
     const authHeader = await authHeaderFor(user.id);
     const before = await countOwnedRows(user.id);
 
-    const req = request(createApp()).delete('/me').set(authHeader);
+    const req = request(await testServer(createApp())).delete('/me').set(authHeader);
     const res = await (body === undefined ? req : req.send(body as object));
 
     expect(res.status).toBe(400);
@@ -119,7 +120,7 @@ describe('DELETE /me', () => {
     const user = await newUser();
     const authHeader = await authHeaderFor(user.id);
 
-    const res = await request(createApp())
+    const res = await request(await testServer(createApp()))
       .delete('/me')
       .set(authHeader)
       .set('Content-Type', 'text/plain')
@@ -130,12 +131,12 @@ describe('DELETE /me', () => {
   });
 
   it('rejects an unauthenticated request with 401', async () => {
-    const res = await request(createApp()).delete('/me').send({ confirm: 'DELETE' });
+    const res = await request(await testServer(createApp())).delete('/me').send({ confirm: 'DELETE' });
     expect(res.status).toBe(401);
   });
 
   it('rejects a garbage bearer token with 401', async () => {
-    const res = await request(createApp()).delete('/me').set('Authorization', 'Bearer nope').send({ confirm: 'DELETE' });
+    const res = await request(await testServer(createApp())).delete('/me').set('Authorization', 'Bearer nope').send({ confirm: 'DELETE' });
     expect(res.status).toBe(401);
   });
 
@@ -144,13 +145,13 @@ describe('DELETE /me', () => {
     const authHeader = await authHeaderFor(user.id);
     const app = createApp();
     // The session works before deletion.
-    await request(app).put('/me/timezone').set(authHeader).send({ timezone: 'UTC' }).expect(200);
+    await request(await testServer(app)).put('/me/timezone').set(authHeader).send({ timezone: 'UTC' }).expect(200);
 
-    await request(app).delete('/me').set(authHeader).send({ confirm: 'DELETE' }).expect(204);
+    await request(await testServer(app)).delete('/me').set(authHeader).send({ confirm: 'DELETE' }).expect(204);
 
     expect(await prisma.session.count({ where: { userId: user.id } })).toBe(0);
-    const after = await request(app).put('/me/timezone').set(authHeader).send({ timezone: 'UTC' });
+    const after = await request(await testServer(app)).put('/me/timezone').set(authHeader).send({ timezone: 'UTC' });
     expect(after.status).toBe(401);
-    expect((await request(app).delete('/me').set(authHeader).send({ confirm: 'DELETE' })).status).toBe(401);
+    expect((await request(await testServer(app)).delete('/me').set(authHeader).send({ confirm: 'DELETE' })).status).toBe(401);
   });
 });

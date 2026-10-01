@@ -7,6 +7,7 @@ import { authHeaderFor } from '../helpers/auth';
 import * as oauth from '../../src/health/oauth';
 import * as subscriber from '../../src/health/subscriber';
 import * as queue from '../../src/sync/queue';
+import { testServer } from '../helpers/server';
 
 jest.mock('../../src/health/oauth');
 jest.mock('../../src/health/subscriber');
@@ -59,7 +60,7 @@ beforeEach(() => {
 
 async function getHealthOAuthState(userId: string): Promise<string> {
   const authHeader = await authHeaderFor(userId);
-  const res = await request(createApp())
+  const res = await request(await testServer(createApp()))
     .get('/health/authorize')
     .set(authHeader);
   expect(res.status).toBe(200);
@@ -76,14 +77,14 @@ describe('GET /health/authorize', () => {
     const authHeader = await authHeaderFor(user.id);
     (oauth.buildAuthorizeUrl as jest.Mock).mockReturnValue('https://accounts.google.com/o/oauth2/v2/auth?state=abc');
 
-    const res = await request(createApp()).get('/health/authorize').set(authHeader);
+    const res = await request(await testServer(createApp())).get('/health/authorize').set(authHeader);
 
     expect(res.status).toBe(200);
     expect(res.body.url).toBe('https://accounts.google.com/o/oauth2/v2/auth?state=abc');
   });
 
   it('rejects an unauthenticated request', async () => {
-    const res = await request(createApp()).get('/health/authorize');
+    const res = await request(await testServer(createApp())).get('/health/authorize');
     expect(res.status).toBe(401);
   });
 });
@@ -96,7 +97,7 @@ describe('GET /health/callback', () => {
     const authHeader = await authHeaderFor(user.id);
     (oauth.buildAuthorizeUrl as jest.Mock).mockImplementation((state: string) => `https://accounts.google.com/o/oauth2/v2/auth?state=${state}`);
 
-    const authorizeRes = await request(createApp()).get('/health/authorize').set(authHeader);
+    const authorizeRes = await request(await testServer(createApp())).get('/health/authorize').set(authHeader);
     const state = new URL(authorizeRes.body.url).searchParams.get('state')!;
 
     (oauth.exchangeCodeForTokens as jest.Mock).mockResolvedValue({
@@ -106,7 +107,7 @@ describe('GET /health/callback', () => {
     (subscriber.getIdentity as jest.Mock).mockResolvedValue({ healthUserId });
     (subscriber.registerUserSubscription as jest.Mock).mockResolvedValue('sub-1');
 
-    const res = await request(createApp()).get('/health/callback').query({ code: 'auth-code', state });
+    const res = await request(await testServer(createApp())).get('/health/callback').query({ code: 'auth-code', state });
 
     expect(res.status).toBe(302);
     const conn = await prisma.healthConnection.findUnique({ where: { userId: user.id } });
@@ -116,7 +117,7 @@ describe('GET /health/callback', () => {
   });
 
   it('rejects a missing or unknown state token', async () => {
-    const res = await request(createApp()).get('/health/callback').query({ code: 'auth-code', state: 'unknown-state' });
+    const res = await request(await testServer(createApp())).get('/health/callback').query({ code: 'auth-code', state: 'unknown-state' });
     expect(res.status).toBe(401);
   });
 
@@ -132,10 +133,10 @@ describe('GET /health/callback', () => {
     (subscriber.getIdentity as jest.Mock).mockResolvedValue({ healthUserId: `health-user-replay-${randomUUID()}` });
     (subscriber.registerUserSubscription as jest.Mock).mockResolvedValue('sub-replay');
 
-    const first = await request(createApp()).get('/health/callback').query({ code: 'c1', state });
+    const first = await request(await testServer(createApp())).get('/health/callback').query({ code: 'c1', state });
     expect(first.status).toBe(302);
 
-    const replay = await request(createApp()).get('/health/callback').query({ code: 'c2', state });
+    const replay = await request(await testServer(createApp())).get('/health/callback').query({ code: 'c2', state });
     expect(replay.status).toBe(401);
   });
 
@@ -153,7 +154,7 @@ describe('GET /health/callback', () => {
       new Error('Google Health subscription registration failed'),
     );
 
-    const res = await request(createApp()).get('/health/callback').query({ code: 'code', state });
+    const res = await request(await testServer(createApp())).get('/health/callback').query({ code: 'code', state });
 
     expect(res.status).toBe(500);
     // The row must never exist claiming to be healthy with a subscription that
@@ -173,7 +174,7 @@ describe('GET /health/callback', () => {
     (oauth.exchangeCodeForTokens as jest.Mock).mockResolvedValue({ accessToken: 'health-access-norefresh', expiresIn: 3599 });
     const consoleError = jest.spyOn(console, 'error').mockImplementation(() => {});
 
-    const res = await request(createApp()).get('/health/callback').query({ code: 'code', state });
+    const res = await request(await testServer(createApp())).get('/health/callback').query({ code: 'code', state });
 
     expect(res.status).toBe(500);
     expect(consoleError).toHaveBeenCalledWith(
@@ -216,7 +217,7 @@ describe('GET /health/callback', () => {
       (subscriber.getIdentity as jest.Mock).mockResolvedValue({ healthUserId });
       (subscriber.registerUserSubscription as jest.Mock).mockResolvedValue('sub-new');
 
-      const res = await request(createApp()).get('/health/callback').query({ code: 'code', state });
+      const res = await request(await testServer(createApp())).get('/health/callback').query({ code: 'code', state });
 
       expect(res.status).toBe(302);
       expect(subscriber.deleteUserSubscription).toHaveBeenCalledTimes(1);
@@ -242,7 +243,7 @@ describe('GET /health/callback', () => {
       (subscriber.getIdentity as jest.Mock).mockResolvedValue({ healthUserId });
       (subscriber.registerUserSubscription as jest.Mock).mockResolvedValue('sub-same-day-new');
 
-      const res = await request(createApp()).get('/health/callback').query({ code: 'code', state });
+      const res = await request(await testServer(createApp())).get('/health/callback').query({ code: 'code', state });
 
       expect(res.status).toBe(302);
       expect(res.headers.location).toContain('status=connected');
@@ -264,7 +265,7 @@ describe('GET /health/callback', () => {
       (subscriber.getIdentity as jest.Mock).mockResolvedValue({ healthUserId });
       (subscriber.registerUserSubscription as jest.Mock).mockResolvedValue('sub-earlier-new');
 
-      await request(createApp()).get('/health/callback').query({ code: 'code', state });
+      await request(await testServer(createApp())).get('/health/callback').query({ code: 'code', state });
 
       expect(queue.enqueueBackfillJob).toHaveBeenCalledTimes(1);
       const arg = (queue.enqueueBackfillJob as jest.Mock).mock.calls[0][0];
@@ -284,7 +285,7 @@ describe('GET /health/callback', () => {
       (subscriber.getIdentity as jest.Mock).mockResolvedValue({ healthUserId });
       (subscriber.registerUserSubscription as jest.Mock).mockResolvedValue('sub-history-new');
 
-      await request(createApp()).get('/health/callback').query({ code: 'code', state });
+      await request(await testServer(createApp())).get('/health/callback').query({ code: 'code', state });
 
       expect(queue.enqueueStepsHistoryBackfill).toHaveBeenCalledWith(user.id);
     });
@@ -302,7 +303,7 @@ describe('GET /health/callback', () => {
       (subscriber.getIdentity as jest.Mock).mockResolvedValue({ healthUserId });
       (subscriber.registerUserSubscription as jest.Mock).mockResolvedValue('sub-history-fail-new');
 
-      const res = await request(createApp()).get('/health/callback').query({ code: 'code', state });
+      const res = await request(await testServer(createApp())).get('/health/callback').query({ code: 'code', state });
       consoleError.mockRestore();
 
       expect(res.status).toBe(302);
@@ -322,7 +323,7 @@ describe('GET /health/callback', () => {
       (subscriber.getIdentity as jest.Mock).mockResolvedValue({ healthUserId });
       (subscriber.registerUserSubscription as jest.Mock).mockResolvedValue('sub-new-2');
 
-      const res = await request(createApp()).get('/health/callback').query({ code: 'code', state });
+      const res = await request(await testServer(createApp())).get('/health/callback').query({ code: 'code', state });
 
       expect(res.status).toBe(302);
       expect(subscriber.deleteUserSubscription).toHaveBeenCalledWith('sub-old-undeletable');
@@ -354,7 +355,7 @@ describe('GET /health/callback', () => {
       });
       (subscriber.getIdentity as jest.Mock).mockResolvedValue({ healthUserId });
 
-      const res = await request(createApp()).get('/health/callback').query({ code: 'code', state });
+      const res = await request(await testServer(createApp())).get('/health/callback').query({ code: 'code', state });
 
       expect(res.status).toBe(302);
       expect(callOrder).toEqual(['delete', 'register']);
@@ -376,7 +377,7 @@ describe('GET /health/callback', () => {
       (subscriber.getIdentity as jest.Mock).mockResolvedValue({ healthUserId });
       (subscriber.registerUserSubscription as jest.Mock).mockResolvedValue('sub-new-4');
 
-      const res = await request(createApp()).get('/health/callback').query({ code: 'code', state });
+      const res = await request(await testServer(createApp())).get('/health/callback').query({ code: 'code', state });
 
       expect(res.status).toBe(302);
       expect(subscriber.deleteUserSubscription).toHaveBeenCalledWith('sub-stale-disconnected');
@@ -418,7 +419,7 @@ describe('GET /health/callback', () => {
     (subscriber.getIdentity as jest.Mock).mockResolvedValue({ healthUserId: sharedHealthUserId });
     (subscriber.registerUserSubscription as jest.Mock).mockResolvedValue('sub-b');
 
-    const res = await request(createApp()).get('/health/callback').query({ code: 'code', state });
+    const res = await request(await testServer(createApp())).get('/health/callback').query({ code: 'code', state });
 
     expect(res.status).toBe(302);
     expect(subscriber.deleteUserSubscription).toHaveBeenCalledWith('sub-a');
@@ -437,14 +438,14 @@ describe('GET /webhooks/health', () => {
     // handshake during subscriber creation (see scripts/registerHealthSubscriber.ts),
     // not a per-request GET challenge like some other providers use — this route exists only
     // in case Google ever sends a GET here, and returns a harmless 204.
-    const res = await request(createApp()).get('/webhooks/health');
+    const res = await request(await testServer(createApp())).get('/webhooks/health');
     expect(res.status).toBe(204);
   });
 });
 
 describe('POST /webhooks/health', () => {
   it('rejects a request with a bad or missing Authorization header', async () => {
-    const res = await request(createApp())
+    const res = await request(await testServer(createApp()))
       .post('/webhooks/health')
       .send([{ data: { healthUserId: 'health-user-1', dataType: 'steps', operation: 'UPSERT', intervals: [] } }]);
     expect(res.status).toBe(401);
@@ -477,7 +478,7 @@ describe('POST /webhooks/health', () => {
       },
     ]);
 
-    const res = await request(createApp())
+    const res = await request(await testServer(createApp()))
       .post('/webhooks/health')
       .set('Content-Type', 'application/json')
       .set('Authorization', 'Bearer webhook-secret')
@@ -517,7 +518,7 @@ describe('POST /webhooks/health', () => {
       },
     ]);
 
-    const res = await request(createApp())
+    const res = await request(await testServer(createApp()))
       .post('/webhooks/health')
       .set('Content-Type', 'application/json')
       .set('Authorization', 'Bearer webhook-secret')
@@ -546,8 +547,8 @@ describe('POST /webhooks/health', () => {
     return { user, healthUserId };
   }
 
-  function postWebhook(body: unknown) {
-    return request(createApp())
+  async function postWebhook(body: unknown) {
+    return request(await testServer(createApp()))
       .post('/webhooks/health')
       .set('Content-Type', 'application/json')
       .set('Authorization', 'Bearer webhook-secret')

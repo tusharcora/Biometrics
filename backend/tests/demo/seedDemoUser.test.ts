@@ -6,6 +6,7 @@ import { buildForecast } from '../../src/forecast/engine';
 import { loadForecastData } from '../../src/forecast/load';
 import { parseArgs, seedDemoUser } from '../../scripts/seedDemoUser';
 import { migrateTestDb } from '../setupTestDb';
+import { testServer } from '../helpers/server';
 
 const EMAIL = 'demo-seed@example.com';
 const PASSWORD = 'demo-password-123';
@@ -48,7 +49,7 @@ describe('seedDemoUser', () => {
     const second = await seedDemoUser({ email: EMAIL, password: PASSWORD, seed: 7, now: NOW });
     expect(second.userId).not.toBe(first.userId);
     expect(await prisma.user.count({ where: { email: EMAIL } })).toBe(1);
-    await request(createApp())
+    await request(await testServer(createApp()))
       .post('/auth/sign-in/email')
       .set({ 'expo-origin': 'biometrics://' })
       .send({ email: EMAIL, password: PASSWORD })

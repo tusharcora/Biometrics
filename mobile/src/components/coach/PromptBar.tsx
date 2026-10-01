@@ -22,6 +22,8 @@ export interface PromptBarProps {
   onSend: () => void;
   /** A turn is in flight: the field locks and the glyph becomes a stop square. */
   busy: boolean;
+  /** Given, the stop square is a real button while busy: it stops the streaming answer. */
+  onStop?: () => void;
   commands?: PromptCommand[];
   placeholder?: string;
 }
@@ -94,6 +96,7 @@ export function PromptBar({
   onChangeText,
   onSend,
   busy,
+  onStop,
   commands = COACH_COMMANDS,
   placeholder = 'Ask anything',
 }: PromptBarProps) {
@@ -104,6 +107,8 @@ export function PromptBar({
   const [height, setHeight] = useState(LINE_HEIGHT);
 
   const canSend = value.trim().length > 0 && !busy;
+  const canStop = busy && onStop !== undefined;
+  const controlLabel = canStop ? 'Stop' : busy ? 'Working' : 'Send';
   const query = parseSlashQuery(value);
   const matches = query === null ? [] : matchCommands(commands, query);
   const menuOpen = matches.length > 0;
@@ -186,16 +191,19 @@ export function PromptBar({
           <PressableScale
             testID="coach-send-button"
             accessibilityRole="button"
-            accessibilityLabel={busy ? 'Working' : 'Send'}
-            accessibilityState={{ disabled: !canSend }}
-            disabled={!canSend}
+            accessibilityLabel={controlLabel}
+            accessibilityState={{ disabled: !canSend && !canStop }}
+            disabled={!canSend && !canStop}
+            // 36pt circle + 4pt slop each side = a 44pt touch target.
+            hitSlop={4}
             onPress={() => {
-              if (canSend) onSend();
+              if (canStop) onStop!();
+              else if (canSend) onSend();
             }}
             style={{ backgroundColor: send.background }}
             className="h-9 w-9 items-center justify-center rounded-full"
           >
-            <View testID="coach-send-glyph" accessibilityLabel={busy ? 'Working' : 'Send'}>
+            <View testID="coach-send-glyph" accessibilityLabel={controlLabel}>
               <Svg width={22} height={22} viewBox="0 0 24 24">
                 <AnimatedPolygon animatedProps={glyphProps} fill={send.glyph} />
               </Svg>

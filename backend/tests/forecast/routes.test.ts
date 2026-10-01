@@ -8,6 +8,7 @@ import { rescoreUser } from '../../scripts/rescoreUser';
 import { authHeaderFor } from '../helpers/auth';
 import { createUser, seedHistory } from '../scoring/dbHelpers';
 import { migrateTestDb } from '../setupTestDb';
+import { testServer } from '../helpers/server';
 
 const NOW = new Date('2026-06-30T12:00:00Z');
 
@@ -20,12 +21,12 @@ describe('GET /me/forecast', () => {
   afterEach(() => jest.useRealTimers());
 
   it('requires auth', async () => {
-    await request(createApp()).get('/me/forecast').expect(401);
+    await request(await testServer(createApp())).get('/me/forecast').expect(401);
   });
 
   it('returns NOT_ENOUGH_DATA for a new user', async () => {
     const user = await createUser();
-    const res = await request(createApp()).get('/me/forecast').set(await authHeaderFor(user.id)).expect(200);
+    const res = await request(await testServer(createApp())).get('/me/forecast').set(await authHeaderFor(user.id)).expect(200);
     expect(res.body).toEqual({ status: 'NOT_ENOUGH_DATA', reason: 'NO_HISTORY', daysOfHistory: 0 });
   });
 
@@ -39,7 +40,7 @@ describe('GET /me/forecast', () => {
     const today = NOW.toISOString().slice(0, 10);
     await seedHistory(user.id, shiftDate(today, -39), 40);
     await rescoreUser(user.id, { days: 40, now: NOW });
-    const res = await request(createApp()).get('/me/forecast').set(await authHeaderFor(user.id)).expect(200);
+    const res = await request(await testServer(createApp())).get('/me/forecast').set(await authHeaderFor(user.id)).expect(200);
     expect(res.body.status).toBe('READY');
     expect(res.body.date).toBe(shiftDate(today, 1));
     expect(res.body.grid).toHaveLength(13);

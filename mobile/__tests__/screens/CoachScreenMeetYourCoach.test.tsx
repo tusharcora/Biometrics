@@ -2,7 +2,7 @@ import React from 'react';
 import { act, render, waitFor } from '@testing-library/react-native';
 import { NavigationContext } from '@react-navigation/native';
 import { CoachScreen } from '../../src/screens/CoachScreen';
-import { fetchCoachStatus, fetchLatestConversation, type CoachStatusDTO } from '../../src/api/coach';
+import { fetchCoachStatus, fetchLatestConversation, fetchTodaySummary, type CoachStatusDTO } from '../../src/api/coach';
 import { apiFetch } from '../../src/api/client';
 import { withCharacter } from '../../jest-mocks/characterContext';
 import type { CharacterContextValue } from '../../src/characters/CharacterContext';
@@ -11,7 +11,8 @@ jest.mock('../../src/api/coach', () => ({
   ...jest.requireActual('../../src/api/coach'),
   fetchCoachStatus: jest.fn(),
   fetchLatestConversation: jest.fn(),
-  sendCoachMessage: jest.fn(),
+  // Mocked so the only apiFetch calls in these tests are status reads.
+  fetchTodaySummary: jest.fn(),
 }));
 
 // The network layer under fetchCoachStatus, so a test can run the real status
@@ -84,6 +85,7 @@ beforeEach(() => {
   mockListeners = {};
   (fetchCoachStatus as jest.Mock).mockResolvedValue(status);
   (fetchLatestConversation as jest.Mock).mockResolvedValue({ conversationId: null, messages: [] });
+  (fetchTodaySummary as jest.Mock).mockResolvedValue({ date: '2026-09-30', hasData: false, sentence: null, bars: [] });
 });
 
 describe('CoachScreen: Meet your coach on the first visit', () => {

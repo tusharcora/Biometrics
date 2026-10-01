@@ -8,6 +8,7 @@ import { COLORS } from '../theme';
 import { Text } from './ui/text';
 import { SettingsGroup, SettingsRow } from './ui/settings-list';
 import { PushNotificationsRow } from './push-notifications-row';
+import { AiEngineRow } from './ai-engine-row';
 
 // The AI Coach block on the Settings screen: set-up, memory, notifications and
 // consent revocation. It renders nothing at all unless the server says the
@@ -79,6 +80,8 @@ export function CoachSettingsSection() {
           The AI Coach could not be turned off. Please try again.
         </Text>
       ) : null}
+      {/* Kept after the revoke error so that error stays tucked under its own group. */}
+      <AiEngineRow status={status} onChange={setStatus} onChooseHosted={() => navigation?.navigate('HostedConsent' as never)} />
     </View>
   );
 }
