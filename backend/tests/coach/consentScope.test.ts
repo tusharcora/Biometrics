@@ -1,3 +1,4 @@
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../../src/db/client';
 import {
   COACH_CONSENT_VERSION,
@@ -7,7 +8,9 @@ import {
   COACH_CONSENT,
   grantConsent,
   hasCurrentConsent,
+  lockConsent,
   revokeConsent,
+  setEngineIfConsented,
 } from '../../src/coach/consent';
 import { migrateTestDb } from '../setupTestDb';
 import { createUser } from './helpers';
@@ -78,13 +81,97 @@ describe('scoped consent', () => {
     expect(await hasCurrentConsent(user.id, 'hosted')).toBe(false);
   });
 
-  it('a revoke-all racing a hosted grant never leaves a live hosted row behind', async () => {
+  // Smoke test only: whether the two transactions actually interleave is up to the scheduler, so this
+  // can pass without the lock. The deterministic proof is 'grants, revokes and engine changes wait…' below.
+  it('smoke: a revoke-all racing a hosted grant never leaves a live hosted row behind', async () => {
     for (let i = 0; i < 5; i++) {
       const user = await createUser();
       await grantConsent(user.id);
       await Promise.all([grantConsent(user.id, 'hosted'), revokeConsent(user.id)]);
       expect(await prisma.coachConsent.count({ where: { userId: user.id, revokedAt: null } })).toBe(0);
     }
+  });
+
+  /** Runs `body` while another transaction holds the lock `take` acquires; releases it afterwards. */
+  async function whileLocked(take: (tx: Prisma.TransactionClient) => Promise<unknown>, body: () => Promise<void>) {
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    let markLocked!: () => void;
+    const locked = new Promise<void>((r) => (markLocked = r));
+    const holder = prisma.$transaction(
+      async (tx) => {
+        await take(tx);
+        markLocked();
+        await gate;
+      },
+      { timeout: 15_000 },
+    );
+    await locked;
+    try {
+      await body();
+    } finally {
+      release();
+      await holder;
+    }
+  }
+
+  const settledWithin = async (p: Promise<unknown>, ms: number) => {
+    let settled = false;
+    void p.then(
+      () => (settled = true),
+      () => (settled = true),
+    );
+    await new Promise((r) => setTimeout(r, ms));
+    return settled;
+  };
+
+  it('grants, revokes and engine changes wait for the per-user consent lock', async () => {
+    const user = await createUser();
+    await grantConsent(user.id);
+    const pending: Array<Promise<unknown>> = [];
+    await whileLocked(
+      (tx) => lockConsent(tx, user.id),
+      async () => {
+        pending.push(grantConsent(user.id, 'hosted'), revokeConsent(user.id, 'hosted'), setEngineIfConsented(user.id, 'local'));
+        for (const p of pending) expect(await settledWithin(p, 150)).toBe(false);
+      },
+    );
+    await Promise.all(pending);
+  });
+
+  it("a different user's consent lock does not hold this user up", async () => {
+    const [user, other] = [await createUser(), await createUser()];
+    await whileLocked(
+      (tx) => lockConsent(tx, other.id),
+      async () => {
+        expect(await settledWithin(revokeConsent(user.id), 1_000)).toBe(true);
+      },
+    );
+  });
+
+  it("the consent lock is apart from the sync job's per-user advisory lock", async () => {
+    const user = await createUser();
+    await whileLocked(
+      (tx) => tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${user.id}))`,
+      async () => {
+        expect(await settledWithin(grantConsent(user.id), 1_000)).toBe(true);
+        expect(await settledWithin(revokeConsent(user.id), 1_000)).toBe(true);
+      },
+    );
+  });
+
+  it('setEngineIfConsented writes HOSTED only with both current consents, and LOCAL always', async () => {
+    const user = await createUser();
+    expect(await setEngineIfConsented(user.id, 'hosted')).toBe('consent_required');
+    await grantConsent(user.id);
+    expect(await setEngineIfConsented(user.id, 'hosted')).toBe('consent_required');
+    await grantConsent(user.id, 'hosted');
+    expect(await setEngineIfConsented(user.id, 'hosted')).toBe('ok');
+    expect(await engineOf(user.id)).toBe('HOSTED');
+    await revokeConsent(user.id);
+    expect(await setEngineIfConsented(user.id, 'local')).toBe('ok');
+    expect(await engineOf(user.id)).toBe('LOCAL');
+    expect(await setEngineIfConsented('no-such-user', 'local')).toBe('user_not_found');
   });
 
   it('stores the scope and the scope version, and a repeat grant adds no row', async () => {

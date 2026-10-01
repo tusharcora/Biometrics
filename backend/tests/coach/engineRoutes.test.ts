@@ -107,6 +107,16 @@ describe('GET /me/coach/status: engine fields', () => {
     expect(res.body.engine).toBe('local');
   });
 
+  it('reports local when the coach consent is stale, even with a current hosted consent', async () => {
+    const user = await userWith({ hosted: true, engine: 'HOSTED' });
+    await prisma.coachConsent.create({ data: { userId: user.id, version: '1' } });
+    const res = await request(app({ hosted: true })).get('/me/coach/status').set(await authHeaderFor(user.id));
+    expect(res.status).toBe(200);
+    expect(res.body.consented).toBe(false);
+    expect(res.body.engines.hosted).toMatchObject({ available: true, consented: true });
+    expect(res.body.engine).toBe('local');
+  });
+
   it('says nothing is available while the coach flag is off', async () => {
     process.env.COACH_ENABLED = 'false';
     const user = await userWith({ local: true, hosted: true, engine: 'HOSTED' });
@@ -236,6 +246,7 @@ describe('PUT /me/coach/engine', () => {
     const user = await userWith({ hosted: true });
     const res = await request(app({ hosted: true })).put('/me/coach/engine').set(await authHeaderFor(user.id)).send({ engine: 'hosted' });
     expect(res.status).toBe(403);
+    expect(await engineOf(user.id)).toBe('LOCAL');
   });
 
   it('404s hosted while it is not offered, before looking at consent', async () => {

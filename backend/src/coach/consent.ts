@@ -84,12 +84,21 @@ export async function hasCurrentConsent(
   return latest?.version === SCOPE_VERSION[scope];
 }
 
-// Grants and revokes for one user are serialised on that user's row. Without
-// the lock, a revoke-all could commit between a hosted grant's local-consent
-// check and its insert, and the revoke's UPDATE (whose snapshot predates the
-// insert) would leave the new hosted row live behind a revoked local consent.
-async function lockUser(db: Prisma.TransactionClient, userId: string): Promise<void> {
-  await db.$queryRaw`SELECT id FROM "User" WHERE id = ${userId} FOR UPDATE`;
+/** Advisory-lock namespace for consent changes ('Cons'); keeps them apart from the sync lock in biometrics/repository.ts. */
+export const CONSENT_LOCK_NAMESPACE = 0x436f6e73;
+
+/**
+ * Serialises one user's consent grants, revokes and engine changes, for the rest
+ * of the transaction. Without it, a revoke-all could commit between a hosted
+ * grant's local-consent check and its insert, and the revoke's UPDATE (whose
+ * snapshot predates the insert) would leave the new hosted row live behind a
+ * revoked local consent. A transaction-scoped advisory lock rather than a User
+ * row lock: account deletion removes consent rows before the User row, and sync
+ * inserts take FOR KEY SHARE on it, so a row lock here could deadlock or stall
+ * them. The two-key form lives in its own keyspace, apart from the sync lock.
+ */
+export async function lockConsent(db: Prisma.TransactionClient, userId: string): Promise<void> {
+  await db.$executeRaw`SELECT pg_advisory_xact_lock(${CONSENT_LOCK_NAMESPACE}::int4, hashtext(${userId}))`;
 }
 
 /**
@@ -101,7 +110,7 @@ async function lockUser(db: Prisma.TransactionClient, userId: string): Promise<v
  */
 export async function grantConsent(userId: string, scope: ConsentScope = 'local'): Promise<boolean> {
   return prisma.$transaction(async (tx) => {
-    await lockUser(tx, userId);
+    await lockConsent(tx, userId);
     if (scope === 'hosted' && !(await hasCurrentConsent(userId, 'local', tx))) return false;
     if (await hasCurrentConsent(userId, scope, tx)) return true;
     await tx.coachConsent.create({ data: { userId, version: SCOPE_VERSION[scope], scope: SCOPE_COLUMN[scope] } });
@@ -119,11 +128,37 @@ export async function grantConsent(userId: string, scope: ConsentScope = 'local'
 export async function revokeConsent(userId: string, scope: 'hosted' | 'all' = 'all'): Promise<void> {
   const now = new Date();
   await prisma.$transaction(async (tx) => {
-    await lockUser(tx, userId);
+    await lockConsent(tx, userId);
     await tx.coachConsent.updateMany({
       where: { userId, revokedAt: null, ...(scope === 'hosted' ? { scope: 'HOSTED' as const } : {}) },
       data: { revokedAt: now },
     });
     await tx.user.updateMany({ where: { id: userId }, data: { coachEngine: 'LOCAL' } });
+  });
+}
+
+export type SetEngineResult = 'ok' | 'consent_required' | 'user_not_found';
+
+/**
+ * Stores the user's engine choice. HOSTED is written only while the user holds
+ * both the current coach (local) consent and the current hosted consent, checked
+ * under the same per-user consent lock as grant and revoke, so a concurrent revoke can
+ * never leave HOSTED stored behind a withdrawn consent. LOCAL needs no consent.
+ * Whether the hosted engine is offered at all is the caller's check.
+ */
+export async function setEngineIfConsented(userId: string, engine: 'local' | 'hosted'): Promise<SetEngineResult> {
+  return prisma.$transaction(async (tx) => {
+    await lockConsent(tx, userId);
+    if (
+      engine === 'hosted' &&
+      (!(await hasCurrentConsent(userId, 'local', tx)) || !(await hasCurrentConsent(userId, 'hosted', tx)))
+    ) {
+      return 'consent_required';
+    }
+    const result = await tx.user.updateMany({
+      where: { id: userId },
+      data: { coachEngine: engine === 'hosted' ? 'HOSTED' : 'LOCAL' },
+    });
+    return result.count === 0 ? 'user_not_found' : 'ok';
   });
 }

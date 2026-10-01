@@ -2,7 +2,7 @@ import { NextFunction, Response, Router } from 'express';
 import { AuthedRequest, requireAuth } from '../auth/middleware';
 import { prisma } from '../db/client';
 import { CoachClock, systemClock } from './clock';
-import { COACH_CONSENT, COACH_HOSTED_CONSENT, consentTextFor, grantConsent, hasCurrentConsent, revokeConsent } from './consent';
+import { COACH_CONSENT, COACH_HOSTED_CONSENT, consentTextFor, grantConsent, hasCurrentConsent, revokeConsent, setEngineIfConsented } from './consent';
 import { getAnswerBudgetMs, getCoachBudgets, getCoachProvider, getHostedProvider, isCoachEnabled, isExpoPushProvider } from './config';
 import { isExpoPushToken } from './push';
 import { TurnInProgressError, TurnRateLimitedError, withTurnGuard } from './turnGuard';
@@ -143,13 +143,15 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
       const user = await prisma.user.findUnique({ where: { id: userId }, select: { coachPersonaId: true, coachEngine: true } });
       const storedPersonaId = user?.coachPersonaId ?? null;
       const hostedAvailable = enabled && deps.getHostedProvider() !== null;
+      const localConsented = enabled ? await hasCurrentConsent(userId) : false;
       const hostedConsented = enabled ? await hasCurrentConsent(userId, 'hosted') : false;
       res.json({
         enabled,
-        consented: enabled ? await hasCurrentConsent(userId) : false,
+        consented: localConsented,
         consent: { version: COACH_CONSENT.version, summary: COACH_CONSENT.summary, dataItems: COACH_CONSENT.dataItems },
-        // The engine that will actually answer: a stored HOSTED choice only counts while it is offered and consented.
-        engine: user?.coachEngine === 'HOSTED' && hostedAvailable && hostedConsented ? 'hosted' : 'local',
+        // The engine that will actually answer: a stored HOSTED choice only counts while it is offered and both
+        // the coach consent and the hosted consent are current (the same rule PUT /me/coach/engine applies).
+        engine: user?.coachEngine === 'HOSTED' && hostedAvailable && localConsented && hostedConsented ? 'hosted' : 'local',
         engines: {
           hosted: {
             available: hostedAvailable,
@@ -248,21 +250,17 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
     }
     const userId = req.userId!;
     try {
-      if (engine === 'hosted') {
-        if (deps.getHostedProvider() === null) {
-          res.status(404).json({ error: 'hosted_unavailable' });
-          return;
-        }
-        if (!(await hasCurrentConsent(userId)) || !(await hasCurrentConsent(userId, 'hosted'))) {
-          res.status(403).json({ error: 'consent_required' });
-          return;
-        }
+      if (engine === 'hosted' && deps.getHostedProvider() === null) {
+        res.status(404).json({ error: 'hosted_unavailable' });
+        return;
       }
-      const result = await prisma.user.updateMany({
-        where: { id: userId },
-        data: { coachEngine: engine === 'hosted' ? 'HOSTED' : 'LOCAL' },
-      });
-      if (result.count === 0) {
+      // Both consents are checked and the choice written under the per-user consent lock that grant and revoke take.
+      const result = await setEngineIfConsented(userId, engine);
+      if (result === 'consent_required') {
+        res.status(403).json({ error: 'consent_required' });
+        return;
+      }
+      if (result === 'user_not_found') {
         res.status(404).json({ error: 'User not found' });
         return;
       }
