@@ -129,7 +129,11 @@ export async function runFixture(fixture: EvalFixture, options: { unguarded?: bo
         if (want.card.labels && !sameList(rows.map((r) => r.label), want.card.labels)) {
           fail('card', `expected labels ${show(want.card.labels)}, got ${show(rows.map((r) => r.label))}`);
         }
-        if (want.card.tip !== undefined && (card.tip !== undefined) !== want.card.tip) fail('card', `expected ${want.card.tip ? 'a' : 'no'} tip`);
+        const statuses = rows.map((r) => r.status ?? '');
+        if (want.card.statuses && !sameList(statuses, want.card.statuses)) fail('card', `expected statuses ${show(want.card.statuses)}, got ${show(statuses)}`);
+        const deltas = rows.map((r) => r.deltaDisplay ?? '');
+        if (want.card.deltas && !sameList(deltas, want.card.deltas)) fail('card', `expected differences ${show(want.card.deltas)}, got ${show(deltas)}`);
+        if (want.card.tip !== undefined &&(card.tip !== undefined) !== want.card.tip) fail('card', `expected ${want.card.tip ? 'a' : 'no'} tip`);
         if (want.card.source !== undefined && card.source !== want.card.source) {
           fail('card', `expected source ${JSON.stringify(want.card.source)}, got ${JSON.stringify(card.source)}`);
         }

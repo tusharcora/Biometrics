@@ -54,7 +54,7 @@ export const HEDGE_TOLERANCE = 0.1;
 
 /** The kind of value a number is: durations, one per unit, or 'none' (a bare count from a note). */
 type Family = 'duration' | 'ms' | 'bpm' | 'percent' | 'count' | 'score' | 'none';
-type Metric = 'recovery' | 'sleep_score' | 'hrv' | 'rhr' | 'sleep' | 'steps';
+export type Metric = 'recovery' | 'sleep_score' | 'hrv' | 'rhr' | 'sleep' | 'steps';
 
 const FAMILY_OF_UNIT: Record<FactUnit, Family> = {
   minutes: 'duration',
@@ -313,8 +313,8 @@ const NIGHT_NOT_SLEEP_RE = new RegExp(
   'g',
 );
 
-/** The metrics a sentence names. */
-function namedMetrics(sentence: string): Set<Metric> {
+/** The metrics a sentence names (the eval's attribution check reads it too, so the two always agree). */
+export function namedMetrics(sentence: string): Set<Metric> {
   let s = sentence.toLowerCase();
   const found = new Set<Metric>();
   const take = (re: RegExp, metric: Metric) => {

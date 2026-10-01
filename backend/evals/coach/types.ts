@@ -53,6 +53,10 @@ export interface CardExpectation {
   ranked?: string[];
   /** Labels shown on the tiles or rows, in order. */
   labels?: string[];
+  /** Statuses shown on the tiles or rows, in order ('' for none): pins the literal app output. */
+  statuses?: string[];
+  /** Differences from usual shown on the tiles or rows, in order ('' for none), e.g. "−32 points". */
+  deltas?: string[];
   /** Whether a tip survived validation. */
   tip?: boolean;
   /** The source line, which the app sets from the route (the model's is ignored). */

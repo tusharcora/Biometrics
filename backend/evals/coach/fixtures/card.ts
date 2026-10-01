@@ -33,7 +33,15 @@ export const cardFixtures: EvalFixture[] = [
     expect: {
       outcome: 'answer',
       dropped: [],
-      card: { tiles: ['recovery.today', 'hrv.today', 'sleep.total'], labels: ['Recovery', 'HRV', 'Sleep'], tip: true, source: 'Today' },
+      card: {
+        tiles: ['recovery.today', 'hrv.today', 'sleep.total'],
+        labels: ['Recovery', 'HRV', 'Sleep'],
+        // Literal app output: 26 vs 58 and 41 vs 52 are below; 6h 48m vs 7h 13m is within 10%, so near.
+        statuses: ['below', 'below', 'near'],
+        deltas: ['−32 points', '−11 ms', '−25m'],
+        tip: true,
+        source: 'Today',
+      },
     },
   },
   {

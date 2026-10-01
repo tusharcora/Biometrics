@@ -11,7 +11,7 @@ import { checkAttribution } from '../../evals/coach/attributionCheck';
 import { checkDirectionalClaims, directionOf, extractDirectionalClaims } from '../../evals/coach/directionCheck';
 import { FIXTURES, NEGATIVE_FIXTURES } from '../../evals/coach/fixtures';
 import { LOW_DAY } from '../../evals/coach/fixtures/common';
-import { checkQuality, isNextStep } from '../../evals/coach/qualityCheck';
+import { checkQuality, isNextStep, isStockCheckIn } from '../../evals/coach/qualityCheck';
 import { runEval, runFixture, runNegativeFixtures } from '../../evals/coach/runner';
 import type { EvalFixture, NegativeFixture } from '../../evals/coach/types';
 import type { FactSheet } from '../../src/coach/answer/facts';
@@ -137,6 +137,122 @@ describe('quality checker (the owner\'s bar: informative, personable, not automa
       expect.stringContaining('stock check-in'),
     ]);
     expect(checkQuality([...GOOD, 'Is your long run still on for Saturday?'], SHEET, { noStockCheckIn: true })).toEqual([]);
+  });
+});
+
+// The real phase-1 transcripts (task B13 fix wave report, section 6.4), verbatim:
+// what the owner disliked must be flagged and what was praised must pass.
+describe('quality checker on the real B13 transcripts', () => {
+  const TODAY: FactSheet = {
+    route: 'today',
+    facts: [
+      { id: 'recovery.today', label: 'Recovery today', value: 39, unit: 'score', display: '39', usual: 47 },
+      { id: 'hrv.today', label: 'HRV today', value: 50.1, unit: 'ms', display: '50.1 ms', usual: 53.2 },
+      { id: 'rhr.today', label: 'Resting heart rate today', value: 61, unit: 'bpm', display: '61 bpm', usual: 59, lowerIsBetter: true },
+      { id: 'sleep.total', label: 'Sleep last night', value: 434, unit: 'minutes', display: '7h 14m', usual: 417 },
+      { id: 'steps.today', label: 'Steps today so far', value: 9645, unit: 'count', display: '9,645', usual: 7781 },
+      { id: 'factor.sleep_debt', label: 'Sleep debt effect on the recovery score', value: -6.3, unit: 'score', display: '-6.3 points' },
+      { id: 'factor.hrv', label: 'HRV effect on the recovery score', value: -2.1, unit: 'score', display: '-2.1 points' },
+    ],
+    notes: [],
+  };
+  const TRENDS: FactSheet = {
+    route: 'trends',
+    facts: [
+      { id: 'hrv.avg7', label: 'HRV 7-day average', value: 45.9, unit: 'ms', display: '45.9 ms', usual: 53.2 },
+      { id: 'hrv.avg30', label: 'HRV 30-day average', value: 53.2, unit: 'ms', display: '53.2 ms' },
+      { id: 'hrv.trend30', label: 'HRV trend over 30 days', value: -8, unit: 'percent', display: '8% down' },
+      { id: 'habit.alcohol.hrv', label: 'Alcohol (1+ drinks) and next-day HRV', value: 17, unit: 'percent', display: '17% lower', note: '(n=21)' },
+    ],
+    notes: [],
+  };
+
+  const B_BEFORE = [
+    'Your recovery score is 39, which is 8 points lower than your usual 47.',
+    'This dip is largely driven by a sleep debt that has cost you 6.3 points toward your recovery score.',
+    'Have you noticed any specific stressors or late nights over the past few days?',
+  ];
+  const B_AFTER = [
+    'Your recovery score of 39 is lower than your usual 47, driven by a sleep debt effect of -6.3 points despite sleeping 17 minutes longer than average last night.',
+    'This is compounded by an HRV reading of 50.1 ms, which is 3.1 ms below your typical 53.2 ms, and a resting heart rate of 61 bpm that sits 2 bpm higher than your usual 59 bpm.',
+    'To help your body bounce back, try prioritizing gentle movement or rest today rather than intense training.',
+    'Do you feel physically tired or just mentally drained?',
+  ];
+  const C_AFTER_STEP =
+    'Given your recovery score of 39 is 8 points lower than usual and your resting heart rate is elevated at 61 bpm, it is best to prioritize active recovery over intense training today.';
+  const E_BEFORE = [
+    'Yes, your HRV has trended down by 8% over the last 30 days, with your current 7-day average at 45.9 ms compared to your usual 53.2 ms.',
+    'This decline often signals that your body is under more stress or needs more recovery time than it is currently getting.',
+    'Have you noticed any changes in your daily routine or stress levels recently?',
+  ];
+  const E_AFTER = [
+    'Yes, your HRV has trended down by 8% over the last 30 days, with your current 7-day average at 45.9 ms compared to your usual 53.2 ms.',
+    'This decline coincides with a slight dip in your sleep duration and an increase in your resting heart rate, suggesting your body is under more physiological stress than usual.',
+    'To help stabilize your HRV, consider reducing alcohol intake, as your data shows it lowers next-day HRV by 17%.',
+    'Would you like to review which recent days had the most significant drops?',
+  ];
+
+  it.each([
+    'Since you are aiming for a goal of 8 hours, do you feel rested enough tonight to try getting in bed a bit earlier?', // a before
+    'Would you like to look at what might have contributed to that variability?', // a after
+    'Have you noticed any specific stressors or late nights over the past few days?', // b before
+    'Do you feel physically tired or just mentally drained?', // b after
+    'Would you like to swap some of that activity for a gentle walk or stretching session instead?', // c before
+    'Would you prefer a guided relaxation session or just some quiet time to let your body recover?', // c after
+    'Would you like to explore small adjustments to help bridge that gap?', // d before
+    'Have you noticed any changes in your daily routine or stress levels recently?', // e before
+    'Would you like to review which recent days had the most significant drops?', // e after
+    'How are you doing?',
+  ])('flags the stock or app-action question %j', (q) => {
+    expect(checkQuality(['Your recovery is 39 today.', q], TODAY, { noStockCheckIn: true })).toEqual([expect.stringContaining('stock check-in')]);
+  });
+
+  it('passes a specific question back that would change the advice', () => {
+    expect(isStockCheckIn('Is your long run still on for this weekend?')).toBe(false);
+    expect(isStockCheckIn('How are you doing.')).toBe(false); // only questions are judged
+    expect(checkQuality(['Your recovery is 39 today.', 'Is your long run still on for this weekend?'], TODAY, { noStockCheckIn: true })).toEqual([]);
+  });
+
+  it('counts the praised steps, after a leading clause and with a grounded number', () => {
+    expect(isNextStep(B_AFTER[2]!, TODAY)).toBe(true);
+    expect(isNextStep(C_AFTER_STEP, TODAY)).toBe(true);
+    expect(isNextStep(E_AFTER[2]!, TRENDS)).toBe(true);
+    expect(isNextStep('Try to keep today light by avoiding intense workouts and aiming for a bit earlier to bed tonight.', TODAY)).toBe(true); // c before
+  });
+
+  it('does not count reminders, pointers at the app, or a step with a new number', () => {
+    expect(isNextStep('Keep in mind that HRV varies.', TODAY)).toBe(false);
+    expect(isNextStep('Take a look at your trends.', TODAY)).toBe(false);
+    expect(isNextStep('Remember that rest is part of training.', TODAY)).toBe(false);
+    expect(isNextStep('Aim for 8h 30m tonight.', TODAY)).toBe(false);
+    expect(isNextStep('Try 10 minutes of deep breathing before bed.', TODAY)).toBe(false); // the c-after tip the validator dropped
+  });
+
+  it('does not take a compliment or filler opener as the answer', () => {
+    for (const opener of ['Great question about your recovery!', 'Thanks for asking about your recovery.', 'Good question about recovery!']) {
+      expect(checkQuality([opener, ...B_AFTER], TODAY, { answersFirst: ['recovery'] })).toEqual([expect.stringContaining('opens with filler')]);
+    }
+  });
+
+  it('b: the praised after-reply answers first, names every driver and gives a step; only its closing question is flagged', () => {
+    expect(checkQuality(B_AFTER, TODAY, { answersFirst: ['recovery'], namesDrivers: true, nextStep: true })).toEqual([]);
+    expect(checkQuality(B_AFTER, TODAY, { noStockCheckIn: true })).toEqual([expect.stringContaining('Do you feel')]);
+  });
+
+  it('b: the disliked before-reply names one driver, gives no step and ends on a stock question', () => {
+    expect(checkQuality(B_BEFORE, TODAY, { answersFirst: ['recovery'], namesDrivers: true, nextStep: true, noStockCheckIn: true })).toEqual([
+      'the reply does not name the driver HRV',
+      'the reply offers no concrete next step in words',
+      expect.stringContaining('Have you noticed'),
+    ]);
+  });
+
+  it('e: the praised after-reply turns the personal alcohol pattern (a grounded 17%) into the step', () => {
+    expect(checkQuality(E_AFTER, TRENDS, { answersFirst: ['HRV'], nextStep: true })).toEqual([]);
+    expect(checkQuality(E_BEFORE, TRENDS, { answersFirst: ['HRV'], nextStep: true, noStockCheckIn: true })).toEqual([
+      'the reply offers no concrete next step in words',
+      expect.stringContaining('Have you noticed'),
+    ]);
   });
 });
 

@@ -44,6 +44,7 @@ const ROUTE_OF_LABEL = new Map<string, AnswerRoute>(Object.entries(STATUS_LABELS
 
 interface Row {
   id: string;
+  question: string;
   outcome: string;
   firstSentenceMs: number | null;
   totalMs: number;
@@ -53,8 +54,11 @@ interface Row {
   grounded: boolean;
   directionOk: boolean | null;
   attributionOk: boolean;
-  /** Quality problems against the fixture's quality expectation; null when it has none. */
-  quality: string[] | null;
+  /** Quality problems: the fixture's quality expectation, plus noStockCheckIn on every answered reply. */
+  quality: string[];
+  /** Every failed check, one line each: grounded, direction, attribution, quality. */
+  failures: Array<{ check: 'grounded' | 'direction' | 'attribution' | 'quality'; message: string }>;
+  endsWithQuestion: boolean;
   text: string;
 }
 
@@ -105,18 +109,32 @@ async function main(): Promise<number> {
       const error = events.find((e): e is Extract<AnswerEvent, { type: 'error' }> => e.type === 'error');
       const directionFact = fx.expect.directionOf ? sheet.facts.find((f) => f.id === fx.expect.directionOf) : undefined;
       const grounded = directionFact ? directionOf(directionFact) : null;
+      const failures: Row['failures'] = [];
+      for (const s of sentences) if (!validateSentence(s, sheet).ok) failures.push({ check: 'grounded', message: `not grounded: ${JSON.stringify(s)}` });
+      const direction = grounded ? checkDirectionalClaims(text, grounded) : null;
+      if (direction && !direction.ok) {
+        failures.push({ check: 'direction', message: `${fx.expect.directionOf} is ${grounded} but the reply says ${direction.contradictions.map((c) => `"${c.word}"`).join(', ')}` });
+      }
+      const attribution = checkAttribution(sentences, sheet);
+      for (const p of attribution.problems) failures.push({ check: 'attribution', message: `${JSON.stringify(p.sentence)} uses a number that is not one of the ${p.metric} facts` });
+      // A real model's reply is held to the no-stock-check-in bar whatever the fixture asks.
+      const quality = error ? [] : checkQuality(sentences, sheet, { ...fx.expect.quality, noStockCheckIn: true });
+      for (const q of quality) failures.push({ check: 'quality', message: q });
       const row: Row = {
         id: fx.id,
+        question: fx.question,
         outcome: error ? `error:${error.code}` : 'answer',
         firstSentenceMs,
         totalMs,
         sentences: sentences.length,
         dropped,
         card: events.some((e) => e.type === 'card'),
-        grounded: sentences.every((s) => validateSentence(s, sheet).ok),
-        directionOk: grounded ? checkDirectionalClaims(text, grounded).ok : null,
-        attributionOk: checkAttribution(sentences, sheet).ok,
-        quality: fx.expect.quality ? checkQuality(sentences, sheet, fx.expect.quality) : null,
+        grounded: !failures.some((f) => f.check === 'grounded'),
+        directionOk: direction ? direction.ok : null,
+        attributionOk: attribution.ok,
+        quality,
+        failures,
+        endsWithQuestion: text.trim().endsWith('?'),
         text,
       };
       rows.push(row);
@@ -125,9 +143,11 @@ async function main(): Promise<number> {
         `${row.outcome.padEnd(24)} first=${String(firstSentenceMs ?? '-').padStart(6)}ms total=${String(totalMs).padStart(6)}ms ` +
           `sentences=${row.sentences} dropped=${dropped} card=${row.card ? 'y' : 'n'}  ${fx.id}`,
       );
-      for (const q of row.quality ?? []) console.log(`        - quality: ${q}`);
+      console.log(`        Q: ${fx.question}`);
+      console.log(`        A: ${text || '(nothing shown)'}`);
+      for (const f of failures) console.log(`        - ${f.check}: ${f.message}`);
     } catch (err) {
-      rows.push({ id: fx.id, outcome: 'crash', firstSentenceMs: null, totalMs: Date.now() - t0, sentences: 0, dropped: 0, card: false, grounded: true, directionOk: null, attributionOk: true, quality: null, text: '' });
+      rows.push({ id: fx.id, outcome: 'crash', firstSentenceMs: null, totalMs: Date.now() - t0, sentences: 0, dropped: 0, card: false, question: fx.question, grounded: true, directionOk: null, attributionOk: true, quality: [], failures: [], endsWithQuestion: false, text: '' });
       console.log(`crash ${err instanceof Error ? err.name : 'unknown'}  ${fx.id}`);
     } finally {
       await cleanupUser(userId);
@@ -142,8 +162,8 @@ async function main(): Promise<number> {
   console.log(`grounded ${answered.filter((r) => r.grounded).length}/${answered.length} (must be all: anything else is a validator bug)`);
   console.log(`direction ok ${checked.filter((r) => r.directionOk).length}/${checked.length} (the checker over-flags free prose; read the flagged ones)`);
   console.log(`attribution ok ${answered.filter((r) => r.attributionOk).length}/${answered.length}`);
-  const rated = answered.filter((r) => r.quality !== null);
-  console.log(`quality ok ${rated.filter((r) => r.quality!.length === 0).length}/${rated.length} (lexicon checks; read the flagged ones)`);
+  console.log(`quality ok ${answered.filter((r) => r.quality.length === 0).length}/${answered.length} (lexicon checks, no stock check-in on every reply; read the flagged ones)`);
+  console.log(`ends with a question ${answered.filter((r) => r.endsWithQuestion).length}/${answered.length} (a question back is optional: most replies need none)`);
   console.log(`first sentence: median ${percentile(first, 50)} p90 ${percentile(first, 90)} max ${first[first.length - 1] ?? 0} ms (target: 6000 or less, warm)`);
   console.log(`full answer:    median ${percentile(total, 50)} p90 ${percentile(total, 90)} max ${total[total.length - 1] ?? 0} ms`);
   return 0;

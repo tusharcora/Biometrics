@@ -2,25 +2,35 @@
 // personable, not automated". The runtime validator only keeps answers honest
 // (every number grounded, no disallowed topic); these eval-only checks look at
 // whether an answer is any good, following the prompt's "How to answer well"
-// block (answer/prompt.ts):
+// block (answer/prompt.ts). Calibrated on the real phase-1 transcripts (task
+// B13 fix wave, section 6.4), which tests/coach/evals.test.ts keeps as cases:
 //
-//   answersFirst    the first shown sentence answers the question (it names one
-//                   of the words the fixture says the answer is about), instead
-//                   of filler like "Great question!".
+//   answersFirst    the first shown sentence answers the question: it names one
+//                   of the words the fixture says the answer is about, and it is
+//                   not a compliment or filler opener ("Great question about
+//                   your recovery!", "Thanks for asking").
 //   namesDrivers    every score driver on the fact sheet ([factor.*]) is named,
 //                   not just one.
-//   nextStep        at least one sentence is a concrete step, in words: it
-//                   opens with (or contains) a suggestion and carries no number
-//                   (times of day are fine: the validator exempts them).
-//   noStockCheckIn  no generic check-in question ("How have you been feeling
-//                   lately?"); a specific question back is fine.
+//   nextStep        at least one sentence is a concrete step: an imperative,
+//                   also after a leading clause ("To help your body bounce
+//                   back, try ..."), or a suggestion phrase ("it is best to").
+//                   It is "in words": a number in it must be on the fact sheet
+//                   ("cut back on alcohol, which lowers your next-day HRV by
+//                   17%" is fine), never a new one ("aim for 9 hours").
+//                   "Keep in mind ...", "take a look at your trends" and
+//                   "remember that ..." are not steps.
+//   noStockCheckIn  no generic check-in question ("Have you noticed any
+//                   stressors...?", "Do you feel ...?", "How are you doing?")
+//                   and no offer of something the app cannot do ("Would you
+//                   like to look at ...?", "Would you prefer a guided
+//                   relaxation session?"). A specific question back is fine.
 //
 // Like the direction check, these are deliberately simple lexicon checks, not
-// a judge model: they over- or under-flag free prose, so scripted fixtures opt
-// in, and `npm run eval:coach:local` reports them for a human to read.
+// a judge model: scripted fixtures opt in, and `npm run eval:coach:local`
+// reports them on real replies for a human to read.
 
 import type { Fact, FactSheet } from '../../src/coach/answer/facts';
-import { extractNumbers } from '../../src/coach/answer/validate';
+import { extractNumbers, validateSentence } from '../../src/coach/answer/validate';
 
 export interface QualityExpectation {
   /** The first shown sentence must contain one of these words or phrases (case-insensitive, whole words). */
@@ -29,12 +39,20 @@ export interface QualityExpectation {
   namesDrivers?: boolean;
   /** Some sentence must be a concrete next step written in words. */
   nextStep?: boolean;
-  /** No generic check-in question. */
+  /** No generic check-in question and no offer the app cannot fulfil. */
   noStockCheckIn?: boolean;
 }
 
 const escapeRe = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 const wordRe = (w: string) => new RegExp(String.raw`\b${escapeRe(w)}\b`, 'i');
+
+// ---- answersFirst ---------------------------------------------------------
+
+/** A compliment or filler opening the reply instead of the answer. */
+const FILLER_OPENER =
+  /^\s*(?:(?:that'?s|what|such)\s+)?(?:an?\s+)?(?:great|good|excellent|fantastic|interesting|nice|lovely|smart|fair)\s+(?:question|ask|point)\b|^\s*thanks?(?:\s+you)?(?:\s+so\s+much)?\s+for\s+(?:asking|the\s+question|reaching\s+out|checking\s+in)\b|^\s*(?:i'?m|i\s+am)\s+(?:happy|glad)\s+(?:to\s+help|you\s+asked)\b|^\s*(?:happy|glad)\s+to\s+help\b|^\s*let(?:'s|\s+us)\s+(?:take\s+a\s+look|dive\s+in|have\s+a\s+look|look\s+at)\b/i;
+
+// ---- namesDrivers ---------------------------------------------------------
 
 /** How a reply may name each score driver, by the factor part of its fact id. */
 const DRIVER_MENTION: Record<string, RegExp> = {
@@ -49,19 +67,65 @@ const DRIVER_MENTION: Record<string, RegExp> = {
 /** "Resting HR effect on the recovery score" -> "Resting HR". */
 const driverName = (fact: Fact) => fact.label.replace(/\s+effect on the .*$/i, '');
 
-/** A sentence that opens with a suggestion, or carries one ("you could ..."). */
-const STEP_OPENER =
-  /^(?:(?:so|then|maybe|perhaps|for now|today|tonight|this evening),?\s+)?(?:try|aim|keep|take|plan|consider|swap|skip|start|stick|save|ease|go|get|head|wind|make|give|choose|stay|hold|protect|focus|add|cut|move|build|book|set|leave|treat|let\s+(?:today|tonight|this))\b/i;
-const STEP_PHRASE = /\b(?:you could|you might|it may help to|it might help to|try to|aim to|a good (?:idea|move|step) (?:is|would be) to|worth (?:trying|keeping|making))\b/i;
+// ---- nextStep -------------------------------------------------------------
 
-/** A concrete step written in words: a suggestion with no number in it (times of day and dates are not numbers). */
-export function isNextStep(sentence: string): boolean {
+/** A leading clause before the step: "To help your body bounce back, ", "If you can, ", "Since it is low, ". */
+const LEADING_CLAUSE = /^(?:to|if|since|because|when|given|for|with|after|before|while|as|so|then|maybe|perhaps|for\s+now|today|tonight|this\s+evening)\b[^,;:]*[,;:]\s*/i;
+const IMPERATIVE =
+  /^(?:try|aim|keep|take|plan|consider|swap|skip|start|stick|save|ease|go|get|head|wind|make|give|choose|stay|hold|protect|focus|prioriti[sz]e|add|cut|move|build|book|set|leave|treat|limit|reduce|avoid|swap|let\s+(?:today|tonight|this))\b/i;
+const STEP_PHRASE =
+  /\b(?:you\s+could|you\s+might|it\s+may\s+help\s+to|it\s+might\s+help\s+to|try\s+to|aim\s+to|it(?:'s|\s+is)\s+(?:best|worth|a\s+good\s+idea)\s+to|a\s+good\s+(?:idea|move|step)\s+(?:is|would\s+be)\s+to|worth\s+(?:trying|keeping|making))\b/i;
+/** Advice-shaped phrases that are not a step: a reminder or a pointer at the app. */
+const NOT_A_STEP =
+  /\b(?:keep|bear)\s+in\s+mind\b|\bremember\s+that\b|\bnote\s+that\b|\b(?:take|have)\s+a\s+(?:look|peek)\b|\b(?:look|check)\s+(?:at|out)\s+(?:your|the)\s+(?:trends?|data|charts?|app|history|numbers)\b/i;
+
+/**
+ * A concrete step: an imperative (also after a leading clause) or a suggestion
+ * phrase, that is not a reminder or a pointer at the app. Its numbers must be
+ * on the sheet; with no sheet, any number (other than a time or date) disqualifies it.
+ */
+export function isNextStep(sentence: string, sheet?: FactSheet): boolean {
   const s = sentence.trim();
-  return (STEP_OPENER.test(s) || STEP_PHRASE.test(s)) && extractNumbers(s).length === 0;
+  if (NOT_A_STEP.test(s)) return false;
+  const clause = s.replace(LEADING_CLAUSE, '');
+  if (!IMPERATIVE.test(s) && !IMPERATIVE.test(clause) && !STEP_PHRASE.test(s)) return false;
+  if (extractNumbers(s).length === 0) return true;
+  // Grounded numbers only, judged as a claim about the user (never the general-knowledge allowance).
+  return sheet !== undefined && validateSentence(s, { ...sheet, route: sheet.route === 'general' ? 'today' : sheet.route }).ok;
 }
 
-const STOCK_CHECK_IN =
-  /\bhow (?:are|have) you (?:been )?feeling\b|\bhow(?:'s| is| has) your (?:day|week)\b|\bhow has (?:the|this) week (?:been|felt)\b|\banything (?:new|changed|different)\b|\bany (?:recent )?changes? (?:in|to) your\b|\bhow are things\b|\bhow is everything\b|\bwhat did your (?:evening|day) look like\b|\bfeeling stressed\b/i;
+// ---- noStockCheckIn -------------------------------------------------------
+
+/** The R18-banned check-in shapes, and offers of things the app cannot do. */
+const STOCK_CHECK_IN = new RegExp(
+  [
+    String.raw`\bhow\s+(?:are|have)\s+you\s+(?:been\s+)?(?:feeling|doing)\b`,
+    String.raw`\bhow(?:'s|\s+is|\s+has)\s+(?:your\s+)?(?:day|week|everything|life)\b`,
+    String.raw`\bhow\s+has\s+(?:the|this)\s+week\s+(?:been|felt)\b`,
+    String.raw`\bhow\s+are\s+things\b`,
+    String.raw`\bhave\s+you\s+noticed\b`,
+    String.raw`\bdo\s+you\s+feel\b`,
+    String.raw`\bare\s+you\s+feeling\b`,
+    String.raw`\banything\s+(?:new|changed|different)\b`,
+    String.raw`\bany\s+(?:recent\s+)?changes?\s+(?:in|to)\s+your\b`,
+    String.raw`\bfeeling\s+stressed\b`,
+    String.raw`\bwhat\s+did\s+your\s+(?:evening|day)\s+look\s+like\b`,
+    // App-action offers: the coach cannot run a session, a review or a plan for them.
+    String.raw`\bwould\s+you\s+like\s+(?:me\s+)?to\b`,
+    String.raw`\bwould\s+you\s+prefer\b`,
+    String.raw`\bdo\s+you\s+want\s+(?:me\s+)?to\b`,
+    String.raw`\bshall\s+(?:i|we)\b`,
+    String.raw`\bwant\s+me\s+to\b`,
+  ].join('|'),
+  'i',
+);
+
+export function isStockCheckIn(sentence: string): boolean {
+  const s = sentence.trim();
+  return s.endsWith('?') && STOCK_CHECK_IN.test(s);
+}
+
+// ---- all together ---------------------------------------------------------
 
 /** Problems with a reply against the quality bar; [] when it meets every check asked for. */
 export function checkQuality(sentences: readonly string[], sheet: FactSheet, want: QualityExpectation): string[] {
@@ -69,7 +133,9 @@ export function checkQuality(sentences: readonly string[], sheet: FactSheet, wan
   const text = sentences.join(' ');
   if (want.answersFirst) {
     const first = sentences[0] ?? '';
-    if (!want.answersFirst.some((w) => wordRe(w).test(first))) {
+    if (FILLER_OPENER.test(first)) {
+      problems.push(`the first sentence does not answer the question: it opens with filler: ${JSON.stringify(first)}`);
+    } else if (!want.answersFirst.some((w) => wordRe(w).test(first))) {
       problems.push(`the first sentence does not answer the question (expected one of ${want.answersFirst.map((w) => `"${w}"`).join(', ')}): ${JSON.stringify(first)}`);
     }
   }
@@ -82,10 +148,9 @@ export function checkQuality(sentences: readonly string[], sheet: FactSheet, wan
       if (!mention.test(text)) problems.push(`the reply does not name the driver ${driverName(d)}`);
     }
   }
-  if (want.nextStep && !sentences.some(isNextStep)) problems.push('the reply offers no concrete next step in words');
+  if (want.nextStep && !sentences.some((s) => isNextStep(s, sheet))) problems.push('the reply offers no concrete next step in words');
   if (want.noStockCheckIn) {
-    const stock = sentences.find((s) => s.trim().endsWith('?') && STOCK_CHECK_IN.test(s));
-    if (stock) problems.push(`the reply asks a stock check-in question: ${JSON.stringify(stock)}`);
+    for (const s of sentences.filter(isStockCheckIn)) problems.push(`the reply asks a stock check-in question: ${JSON.stringify(s)}`);
   }
   return problems;
 }
