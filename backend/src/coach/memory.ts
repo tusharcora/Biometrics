@@ -13,6 +13,7 @@
 //
 // Nothing here logs a value. Callers emit ids and counts only.
 
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../db/client';
 import { classifyHealthFact } from './guardrails/healthFact';
 import { classifyMemoryFeedback } from './guardrails/memoryFeedback';
@@ -93,15 +94,18 @@ export interface MemoryProposal {
  * Persists validated proposals as PENDING. Re-validates (defence in depth: the
  * store is the last gate whoever calls it), skips a duplicate of an existing
  * entry, and stops at the per-user cap. Returns only the rows created now.
+ * Pass a transaction client as `db` to write the proposals atomically with the
+ * reply that shows them.
  */
 export async function createPendingMemories(
   userId: string,
   proposals: MemoryProposal[],
   conversationId: string | null = null,
+  db: Prisma.TransactionClient = prisma,
 ): Promise<MemoryDTO[]> {
   const created: MemoryDTO[] = [];
   if (proposals.length === 0) return created;
-  const existing = await prisma.coachMemory.findMany({ where: { userId }, select: { category: true, value: true } });
+  const existing = await db.coachMemory.findMany({ where: { userId }, select: { category: true, value: true } });
   const seen = new Set(existing.map((e) => `${e.category}|${e.value.toLowerCase()}`));
   let total = existing.length;
   for (const proposal of proposals) {
@@ -109,17 +113,16 @@ export async function createPendingMemories(
     if (!checked.ok) continue;
     const key = `${checked.category}|${checked.value.toLowerCase()}`;
     if (seen.has(key) || total >= MAX_MEMORY_ENTRIES_PER_USER) continue;
-    let row;
-    try {
-      row = await prisma.coachMemory.create({
-        data: { userId, category: checked.category, value: checked.value, status: 'PENDING', conversationId },
-      });
-    } catch (err) {
-      // The (userId, category, value) unique index: another turn proposed the
-      // same fact between the read above and this write. Nothing to add.
-      if ((err as { code?: string } | null)?.code === 'P2002') continue;
-      throw err;
-    }
+    // ON CONFLICT DO NOTHING on the (userId, category, value) unique index:
+    // another turn proposed the same fact between the read above and this
+    // write, so there is nothing to add. Skipping in SQL (rather than catching
+    // P2002) keeps a surrounding transaction usable, since Postgres aborts a
+    // transaction on any failed statement.
+    const [row] = await db.coachMemory.createManyAndReturn({
+      data: [{ userId, category: checked.category, value: checked.value, status: 'PENDING', conversationId }],
+      skipDuplicates: true,
+    });
+    if (row === undefined) continue;
     seen.add(key);
     total++;
     created.push(toMemoryDTO(row));

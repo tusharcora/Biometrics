@@ -1,4 +1,7 @@
+import { randomUUID } from 'crypto';
 import { prisma } from '../../src/db/client';
+import * as memoryModule from '../../src/coach/memory';
+import { MEMORY_NOTE } from '../../src/coach/orchestrator';
 import { AnswerDeps, AnswerEvent, AnswerInput, runAnswer } from '../../src/coach/answer/pipeline';
 import type { FactData } from '../../src/coach/answer/facts';
 import { CoachStreamRequest, ScriptedStreamProvider, StreamStep, UnconfiguredProvider } from '../../src/coach/model/provider';
@@ -309,15 +312,19 @@ describe('runAnswer: errors, budget and stop', () => {
     const { deps } = setup([step]);
     const inp = await input({ signal: stop.signal });
     const events: AnswerEvent[] = [];
+    let abortedAtDone: boolean | undefined;
     const running = (async () => {
-      for await (const e of runAnswer(inp, deps)) events.push(e);
+      for await (const e of runAnswer(inp, deps)) {
+        if (e.type === 'done') abortedAtDone = seen.signal!.aborted;
+        events.push(e);
+      }
     })();
     await until(() => events.some((e) => e.type === 'text'));
     stop.abort();
     await running;
     expect(types(events)).toEqual(['status', 'text', 'done']);
     expect(doneOf(events).stopped).toBe(true);
-    expect(seen.signal!.aborted).toBe(true);
+    expect(abortedAtDone).toBe(true);
     const row = await prisma.coachMessage.findUniqueOrThrow({ where: { id: doneOf(events).messageId } });
     expect(row.text).toBe('Recovery is 26.');
     expect(row.guardrailEvents).toEqual([{ type: 'stopped' }]);
@@ -333,6 +340,109 @@ describe('runAnswer: errors, budget and stop', () => {
     stop.abort();
     expect(types(await running)).toEqual(['status']);
     expect(await prisma.coachMessage.count({ where: { userId: inp.userId } })).toBe(0);
+  });
+});
+
+describe('runAnswer: failure paths (fix round 1)', () => {
+  it('times out after text was already streamed: aborts the model at once, ends with timeout and stores nothing', async () => {
+    const seen: { signal?: AbortSignal } = {};
+    const step = async function* (req: CoachStreamRequest): AsyncIterable<string> {
+      yield 'Recovery is 26. ';
+      yield* hangUntilAborted(seen)(req);
+    };
+    const { deps, clock } = setup([step]);
+    const inp = await input();
+    const events: AnswerEvent[] = [];
+    let abortedAtError: boolean | undefined;
+    const running = (async () => {
+      for await (const e of runAnswer(inp, deps)) {
+        if (e.type === 'error') abortedAtError = seen.signal!.aborted;
+        events.push(e);
+      }
+    })();
+    await until(() => events.some((e) => e.type === 'text') && seen.signal !== undefined);
+    clock.advance(45_000);
+    await running;
+    expect(types(events)).toEqual(['status', 'text', 'error']);
+    expect(texts(events)).toEqual(['Recovery is 26.']);
+    expect(events[2]).toEqual({ type: 'error', code: 'timeout', retryable: true });
+    expect(abortedAtError).toBe(true);
+    expect(await prisma.coachMessage.count({ where: { userId: inp.userId } })).toBe(0);
+  });
+
+  it('a crisis message still yields the safety reply and resources before the error when storing fails', async () => {
+    const { deps, provider } = setup([], { loadUser: async () => Promise.reject(new Error('db down')) });
+    // An unknown conversation makes the persist transaction fail.
+    const inp = await input({ message: 'I want to end my life', conversationId: randomUUID() });
+    const events = await collect(runAnswer(inp, deps));
+    expect(types(events)).toEqual(['safety', 'error']);
+    expect(events[0]).toMatchObject({ type: 'safety', text: SAFETY_REPLY });
+    expect((events[0] as { resources: string[] }).resources.length).toBeGreaterThan(0);
+    expect(events[1]).toEqual({ type: 'error', code: 'internal', retryable: true });
+    expect(provider.callCount).toBe(0);
+    expect(await prisma.coachMessage.count({ where: { userId: inp.userId } })).toBe(0);
+  });
+
+  it('leaves no PENDING memory when the reply cannot be stored', async () => {
+    const { deps } = setup([['First.'], ['Ok. ```memory\n{"category":"SCHEDULE","value":"Runs at 6am"}\n```']]);
+    const inp = await input();
+    const first = doneOf(await collect(runAnswer(inp, deps)));
+    // The memory write itself would succeed; only storing the reply fails.
+    const spy = jest.spyOn(prisma, '$transaction').mockRejectedValue(new Error('db down'));
+    let events: AnswerEvent[];
+    try {
+      events = await collect(runAnswer({ ...inp, message: 'I run at 6am', conversationId: first.conversationId }, deps));
+    } finally {
+      spy.mockRestore();
+    }
+    expect(types(events)).toEqual(['status', 'text', 'error']);
+    expect(events[2]).toEqual({ type: 'error', code: 'internal', retryable: true });
+    expect(await prisma.coachMemory.count({ where: { userId: inp.userId } })).toBe(0);
+  });
+
+  it('stores the answer without its proposals when only the memory write fails', async () => {
+    const spy = jest.spyOn(memoryModule, 'createPendingMemories').mockRejectedValueOnce(new Error('db down'));
+    try {
+      const { deps } = setup([['Ok. ```memory\n{"category":"SCHEDULE","value":"Runs at 6am"}\n```']]);
+      const inp = await input({ message: 'I run at 6am' });
+      const events = await collect(runAnswer(inp, deps));
+      expect(types(events)).toEqual(['status', 'text', 'done']);
+      const row = await prisma.coachMessage.findUniqueOrThrow({ where: { id: doneOf(events).messageId } });
+      expect(row.text).toBe('Ok.');
+      expect(await prisma.coachMemory.count({ where: { userId: inp.userId } })).toBe(0);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
+  it("maps engine 'hosted' to HOSTED on the stored row and the done event", async () => {
+    const { deps } = setup([['Recovery is 26 today.']], { engine: 'hosted' });
+    const events = await collect(runAnswer(await input(), deps));
+    expect(doneOf(events).engine).toBe('hosted');
+    const row = await prisma.coachMessage.findUniqueOrThrow({ where: { id: doneOf(events).messageId } });
+    expect(row.engine).toBe('HOSTED');
+  });
+
+  it('emits the card before the memory, both after the text and before done', async () => {
+    const memory = '\n```memory\n{"category":"SCHEDULE","value":"Runs at 6am on weekdays"}\n```';
+    const { deps } = setup([[...GOOD, memory]]);
+    const events = await collect(runAnswer(await input({ message: 'How am I doing? I run at 6am on weekdays' }), deps));
+    expect(types(events)).toEqual(['status', 'text', 'text', 'text', 'card', 'memory', 'done']);
+  });
+
+  it('drops history turns that are empty once cleaned (the hosted API rejects empty messages)', async () => {
+    const { deps, provider } = setup([['Rest well tonight.']]);
+    const past = [
+      { role: 'user' as const, text: 'How did I sleep?' },
+      { role: 'assistant' as const, text: `\n\n${COACH_DISCLAIMER}` },
+      { role: 'user' as const, text: '   ' },
+      { role: 'assistant' as const, text: `${MEMORY_NOTE}\n\n${COACH_DISCLAIMER}` },
+    ];
+    await collect(runAnswer(await input({ message: 'why?', history: past }), deps));
+    expect(provider.requests[0]!.messages).toEqual([
+      { role: 'user', content: 'How did I sleep?' },
+      { role: 'user', content: 'why?' },
+    ]);
   });
 });
 

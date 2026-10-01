@@ -170,8 +170,8 @@ export async function* runAnswer(input: AnswerInput, deps: AnswerDeps): AsyncGen
     source: 'MODEL' | 'SAFETY';
     card: AnswerCard | null;
     model: boolean;
-    memoryIds: string[];
-  }): Promise<{ messageId: string; conversationId: string; durationMs: number }> {
+    proposals: MemoryProposal[];
+  }): Promise<{ messageId: string; conversationId: string; durationMs: number; memories: MemoryDTO[] }> {
     const durationMs = clock.now() - startedAt;
     // The assistant row is stamped strictly after the user row so transcript order is unambiguous.
     const repliedAt = new Date(Math.max(Date.now(), receivedAt.getTime() + 1));
@@ -198,17 +198,33 @@ export async function* runAnswer(input: AnswerInput, deps: AnswerDeps): AsyncGen
           createdAt: repliedAt,
         },
       });
-      // Proposals are written before a brand-new conversation has an id; stamp them so the
-      // user's next message in THIS conversation (and only this one) settles them.
-      if (reply.memoryIds.length > 0) {
-        await tx.coachMemory.updateMany({ where: { id: { in: reply.memoryIds }, userId: input.userId }, data: { conversationId: id } });
-      }
-      return { id, assistantId: assistant.id };
+      // Proposals are written in the same transaction as the reply that shows them, stamped
+      // with this conversation: a PENDING row the user never received must never exist,
+      // because their next message in the thread would silently confirm it.
+      const memories = reply.proposals.length > 0 ? await createPendingMemories(input.userId, reply.proposals, id, tx) : [];
+      return { id, assistantId: assistant.id, memories };
     });
-    return { messageId: saved.assistantId, conversationId: saved.id, durationMs };
+    return { messageId: saved.assistantId, conversationId: saved.id, durationMs, memories: saved.memories };
   }
 
   try {
+    // 1. Crisis first, unchanged: the fixed, non-model safety reply. The classifier is pure,
+    // so it runs before anything that can fail, and the reply and its resources reach the
+    // user before anything is written: a failure after that can add an error, never replace it.
+    const crisis = classifyCrisis(input.message);
+    if (crisis.triggered && !input.safetyOverride) {
+      yield { type: 'safety', text: SAFETY_REPLY, resources: [...CRISIS_RESOURCES] };
+      try {
+        personaId = resolvePersona((await (deps.loadUser ?? defaultLoadUser)(input.userId)).coachPersonaId).id;
+      } catch {
+        /* the persona only labels telemetry */
+      }
+      emit('coach.safety_classifier', { triggered: true, overridden: false });
+      const saved = await persist({ text: SAFETY_REPLY, source: 'SAFETY', card: null, model: false, proposals: [] });
+      yield { type: 'done', messageId: saved.messageId, conversationId: saved.conversationId, engine: deps.engine, durationMs: saved.durationMs };
+      return;
+    }
+
     let user: { timezone: string; coachPersonaId: string | null };
     try {
       user = await (deps.loadUser ?? defaultLoadUser)(input.userId);
@@ -218,17 +234,8 @@ export async function* runAnswer(input: AnswerInput, deps: AnswerDeps): AsyncGen
     }
     const persona = resolvePersona(user.coachPersonaId);
     personaId = persona.id;
-
-    // 1. Crisis first, unchanged: the fixed, non-model safety reply.
-    const crisis = classifyCrisis(input.message);
     if (crisis.triggered || input.safetyOverride) {
       emit('coach.safety_classifier', { triggered: crisis.triggered, overridden: Boolean(input.safetyOverride) });
-    }
-    if (crisis.triggered && !input.safetyOverride) {
-      const saved = await persist({ text: SAFETY_REPLY, source: 'SAFETY', card: null, model: false, memoryIds: [] });
-      yield { type: 'safety', text: SAFETY_REPLY, resources: [...CRISIS_RESOURCES] };
-      yield { type: 'done', messageId: saved.messageId, conversationId: saved.conversationId, engine: deps.engine, durationMs: saved.durationMs };
-      return;
     }
 
     // 2. Feedback on memory proposed earlier in this conversation. Best effort.
@@ -253,6 +260,7 @@ export async function* runAnswer(input: AnswerInput, deps: AnswerDeps): AsyncGen
       const built = await race(buildFactSheet(input.userId, route, { ...factData, today }));
       if (built === STOPPED) return;
       if (built === DEADLINE) {
+        controller.abort();
         emit('coach.latency_budget_exceeded', { budgetMs: budget, engine: deps.engine });
         yield fail('timeout');
         return;
@@ -264,10 +272,13 @@ export async function* runAnswer(input: AnswerInput, deps: AnswerDeps): AsyncGen
     }
 
     const system = buildAnswerSystemPrompt(persona, { today, sheet });
+    // A turn with nothing left after cleaning (an old row that held only the disclaimer or a
+    // memory note) is dropped: the hosted API rejects an empty message.
     const messages = [
       ...input.history
-        .slice(-ANSWER_HISTORY_WINDOW)
-        .map((m) => ({ role: m.role, content: m.role === 'assistant' ? cleanHistoryText(m.text) : m.text })),
+        .map((m) => ({ role: m.role, content: m.role === 'assistant' ? cleanHistoryText(m.text) : m.text.trim() }))
+        .filter((m) => m.content.length > 0)
+        .slice(-ANSWER_HISTORY_WINDOW),
       { role: 'user' as const, content: input.message },
     ];
 
@@ -308,8 +319,13 @@ export async function* runAnswer(input: AnswerInput, deps: AnswerDeps): AsyncGen
         } catch {
           return { ...result, outcome: 'model_error' };
         }
-        if (next === DEADLINE) return { ...result, outcome: 'deadline' };
-        if (next === STOPPED) return { ...result, outcome: 'stopped' };
+        if (next === DEADLINE || next === STOPPED) {
+          // Stop the model now, not when the generator finally unwinds. return() is not awaited:
+          // on a generator still suspended in next() it only settles once that next() does.
+          controller.abort();
+          iterator.return?.()?.catch(() => {});
+          return { ...result, outcome: next === DEADLINE ? 'deadline' : 'stopped' };
+        }
         if (next.done) break;
         result.raw += next.value;
         yield* handle(splitter.push(next.value));
@@ -347,7 +363,7 @@ export async function* runAnswer(input: AnswerInput, deps: AnswerDeps): AsyncGen
       // Stop: keep what the user already saw, marked; not a full answer (no card, no memory).
       if (result.accepted.length === 0) return;
       guardrailEvents.push({ type: 'stopped' });
-      const saved = await persist({ text: result.accepted.join(' '), source: 'MODEL', card: null, model: true, memoryIds: [] });
+      const saved = await persist({ text: result.accepted.join(' '), source: 'MODEL', card: null, model: true, proposals: [] });
       yield { type: 'done', messageId: saved.messageId, conversationId: saved.conversationId, engine: deps.engine, durationMs: saved.durationMs, stopped: true };
       return;
     }
@@ -369,19 +385,21 @@ export async function* runAnswer(input: AnswerInput, deps: AnswerDeps): AsyncGen
       if (checked.ok) proposals.push({ category: checked.category, value: checked.value });
       else emit('coach.memory_rejected', { reason: checked.reason });
     }
-    let memories: MemoryDTO[] = [];
-    if (proposals.length > 0) {
-      try {
-        memories = await createPendingMemories(input.userId, proposals, input.conversationId ?? null);
-      } catch {
-        /* the answer is still valid; the memory simply is not stored */
-      }
-      if (memories.length > 0) emit('coach.memory_proposed', { count: memories.length });
+    // 7. Persist the clean reply with its proposals in one transaction, then finish. If that
+    // fails with proposals, the answer is still valid: store it once more without them.
+    const reply = { text: result.accepted.join(' '), source: 'MODEL' as const, card, model: true };
+    let saved: Awaited<ReturnType<typeof persist>>;
+    try {
+      saved = await persist({ ...reply, proposals });
+    } catch (err) {
+      if (proposals.length === 0) throw err;
+      saved = await persist({ ...reply, proposals: [] });
     }
-
-    // 7. Persist the clean reply, then finish.
-    const saved = await persist({ text: result.accepted.join(' '), source: 'MODEL', card, model: true, memoryIds: memories.map((m) => m.id) });
-    if (memories.length > 0) yield { type: 'memory', proposals: memories };
+    const memories = saved.memories;
+    if (memories.length > 0) {
+      emit('coach.memory_proposed', { count: memories.length });
+      yield { type: 'memory', proposals: memories };
+    }
     emit('coach.answer_done', {
       route,
       engine: deps.engine,
