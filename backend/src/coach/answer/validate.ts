@@ -12,10 +12,11 @@
 //   * Units and metrics: a number with a unit next to it ("62 ms", "26%",
 //     "3,120 steps", "32 points", "26/100") matches only values of that unit;
 //     a bare number matches any non-duration value. When the sentence names
-//     exactly one metric (recovery, sleep score, HRV, resting HR, sleep,
-//     steps), only that metric's values (and metric-less ones, e.g. notes)
-//     count, so "Your HRV is 61" cannot borrow resting HR's 61, nor "Your
-//     recovery dropped 8%" the HRV trend's 8%. The one exception is a unit
+//     one or more metrics (recovery, sleep score, HRV, resting HR, sleep,
+//     steps), only the named metrics' values (and metric-less ones, e.g.
+//     notes) count, so "Your HRV is 61" cannot borrow resting HR's 61, nor
+//     "Your recovery dropped 8%" the HRV trend's 8%, nor "Your HRV is 26
+//     after a short night" recovery's 26. The one exception is a unit
 //     owned by a single metric that is related to the named one: "your sleep
 //     score was 36 ... your average dipped to 6h 53m" matches the duration
 //     against the sleep facts (see candidatesFor).
@@ -269,21 +270,27 @@ const RELATED: Partial<Record<Metric, Metric[]>> = { sleep_score: ['sleep'] };
  * "Your recovery is 61 bpm" does not. Percent and points are shared by several
  * metrics and never fall back.
  */
-function candidatesFor(s: Scanned, allowed: Allowed[], metric: Metric | undefined): Allowed[] {
+function candidatesFor(s: Scanned, allowed: Allowed[], named: ReadonlySet<Metric>): Allowed[] {
   const { token } = s;
   const families = token.kind === 'duration' ? ['duration'] : s.unit ? [s.unit] : PLAIN_FAMILIES;
   const inFamily = allowed.filter((a) => families.includes(a.family));
-  if (!metric) return inFamily;
-  const scoped = inFamily.filter((a) => !a.metric || a.metric === metric);
+  // A sentence naming no metric is judged by unit family alone.
+  if (named.size === 0) return inFamily;
+  // With one or more named metrics (two is the norm in a summary: "A short night (6h 48m) pulled
+  // your HRV down to 41"), a number may match only the named metrics' values and metric-less ones.
+  const scope = new Set(named);
   const unit: Family | undefined = token.kind === 'duration' ? 'duration' : s.unit;
   const owner = unit === undefined ? undefined : SINGLE_OWNER[unit];
-  const mayBorrow = owner !== undefined && (RELATED[metric] ?? []).includes(owner) && !inFamily.some((a) => a.metric === metric);
-  return mayBorrow ? inFamily.filter((a) => !a.metric || a.metric === owner) : scoped;
+  if (owner !== undefined) {
+    const borrows = [...named].some((m) => (RELATED[m] ?? []).includes(owner) && !inFamily.some((a) => a.metric === m));
+    if (borrows) scope.add(owner);
+  }
+  return inFamily.filter((a) => !a.metric || scope.has(a.metric));
 }
 
-function isKnown(s: Scanned, allowed: Allowed[], metric: Metric | undefined): boolean {
+function isKnown(s: Scanned, allowed: Allowed[], named: ReadonlySet<Metric>): boolean {
   const { token } = s;
-  const candidates = candidatesFor(s, allowed, metric);
+  const candidates = candidatesFor(s, allowed, named);
   // A hedged approximation ("about 7 hours" for 6h 48m) may be within 10% of a value.
   const hedge = (a: number) => (token.hedged ? Math.abs(a) * HEDGE_TOLERANCE : 0);
   if (token.kind === 'duration') {
@@ -293,11 +300,21 @@ function isKnown(s: Scanned, allowed: Allowed[], metric: Metric | undefined): bo
   return candidates.some(({ value: a }) => Math.abs(token.value - a) <= tolerance(a));
 }
 
-const NIGHT_NOT_SLEEP_RE =
-  /\b(?:last|past|this|each|every|per|a|tomorrow|the\s+other)\s+(?:\d+\s+)?nights?\b|\b\d+[-\s]nights?\b|\bnights?\s+(?:ago|before)\b|\b(?:early|earlier)\s+night\b/g;
+const WEEKDAY = String.raw`(?:mon|tues|wednes|thurs|fri|satur|sun)day`;
+/** "night" as a time or window, or in a suggestion, rather than the night's sleep. */
+const NIGHT_NOT_SLEEP_RE = new RegExp(
+  [
+    String.raw`\b(?:last|past|this|that|each|every|per|tomorrow|the\s+other|at)\s+(?:\d+\s+)?nights?\b`,
+    String.raw`\b(?:on\s+)?${WEEKDAY}\s+nights?\b`,
+    String.raw`\b\d+[-\s]nights?\b`,
+    String.raw`\bnights?\s+(?:ago|before)\b`,
+    String.raw`\b(?:early|earlier)\s+night\b`,
+  ].join('|'),
+  'g',
+);
 
-/** The one metric a sentence names, if it names exactly one. */
-function singleMetric(sentence: string): Metric | undefined {
+/** The metrics a sentence names. */
+function namedMetrics(sentence: string): Set<Metric> {
   let s = sentence.toLowerCase();
   const found = new Set<Metric>();
   const take = (re: RegExp, metric: Metric) => {
@@ -315,7 +332,7 @@ function singleMetric(sentence: string): Metric | undefined {
   s = s.replace(NIGHT_NOT_SLEEP_RE, ' ');
   take(/\b(?:sleep|sleeping|slept|asleep|nights?)\b/g, 'sleep');
   take(/\bsteps\b/g, 'steps');
-  return found.size === 1 ? [...found][0] : undefined;
+  return found;
 }
 
 // ---- general-route allowance --------------------------------------------
@@ -366,8 +383,8 @@ export function validateSentence(sentence: string, sheet: FactSheet): SentenceVe
   const scanned = scanNumbers(sentence);
   if (scanned.length === 0) return { ok: true };
   const allowed = allowedFor(sheet);
-  const metric = singleMetric(sentence);
-  if (scanned.every((s) => isKnown(s, allowed, metric))) return { ok: true };
+  const named = namedMetrics(sentence);
+  if (scanned.every((s) => isKnown(s, allowed, named))) return { ok: true };
   // General knowledge ("most adults need 7–9 hours") only on the general route, and never about the user.
   if (sheet.route === 'general' && !isAboutUser(sentence)) return { ok: true };
   return { ok: false, reason: 'unknown_number' };

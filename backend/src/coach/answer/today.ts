@@ -258,8 +258,9 @@ export function checkSummary(
     .trim();
   if (text.length === 0) return { ok: false, reason: 'empty' };
   if (text.split(' ').length > SUMMARY_MAX_WORDS) return { ok: false, reason: 'too_long' };
-  // No closing punctuation: the model was cut off mid-sentence.
-  if (!/[.!?…]["'”’)]*$/.test(text)) return { ok: false, reason: 'cut_off' };
+  // No closing punctuation (after any trailing emoji or markdown emphasis): the model was cut off mid-sentence.
+  const ending = text.replace(/[\s*_\p{Extended_Pictographic}\p{Emoji_Modifier}\uFE0F\u200D]+$/u, '');
+  if (!/[.!?…]["'”’)]*$/.test(ending)) return { ok: false, reason: 'cut_off' };
   const splitter = sentenceSplitter();
   for (const sentence of [...splitter.push(text), ...splitter.end()]) {
     const verdict = validateSentence(sentence, sheet);

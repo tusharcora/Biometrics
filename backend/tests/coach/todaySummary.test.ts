@@ -109,6 +109,21 @@ describe('checkSummary', () => {
     expect(checkSummary('Rest up today!', LOW_DAY)).toEqual({ ok: true, text: 'Rest up today!' });
   });
 
+  it('looks past a trailing emoji or markdown emphasis for the closing punctuation (R31)', () => {
+    for (const text of ['Rest up today. 🌙', 'Rest up *today.*', 'Rest up _today._', 'Take it easy today! 👍🏽']) {
+      expect(checkSummary(text, LOW_DAY)).toEqual({ ok: true, text });
+    }
+    expect(checkSummary('Rest up and get to 🌙', LOW_DAY)).toEqual({ ok: false, reason: 'cut_off' });
+    expect(checkSummary('Rest up *today*', LOW_DAY)).toEqual({ ok: false, reason: 'cut_off' });
+  });
+
+  it('passes the full mockup paragraph and a "night" sentence, and still rejects a borrowed number (R31)', () => {
+    const mockup = "Recovery's 26, about half your usual. A short night (6h 48m) pulled your HRV down to 41. Keep today light and aim for bed by 10:15.";
+    expect(checkSummary(mockup, LOW_DAY)).toEqual({ ok: true, text: mockup });
+    expect(checkSummary('After a night of 6h 48m, recovery is 26.', LOW_DAY)).toMatchObject({ ok: true });
+    expect(checkSummary('Your HRV is 61 after a rough night.', LOW_DAY)).toEqual({ ok: false, reason: 'unknown_number' });
+  });
+
   it("passes the owner's chosen style (\"night\" is a sleep word)", () => {
     const style1 = 'A short night (6h 48m) pulled your HRV down to 41. Keep today gentle and aim for an early night.';
     expect(checkSummary(style1, LOW_DAY)).toEqual({ ok: true, text: style1 });

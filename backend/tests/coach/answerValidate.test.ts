@@ -479,3 +479,36 @@ describe('validateSentence: "night" is a sleep word (R29)', () => {
     expect(validateSentence(sentence, LOW_DAY)).toEqual(unknown);
   });
 });
+
+// Fix round 2 of the day summary (R31): a sentence naming two or more metrics
+// keeps every bare or shared-family number to the named metrics' values (plus
+// metric-less ones), so "night" as a sleep word cannot reopen R9.
+describe('validateSentence: numbers in a sentence naming two or more metrics (R31)', () => {
+  it.each([
+    ['Your HRV is 61 after a rough night.', "resting HR's 61"],
+    ['Your recovery is 61 after a rough night.', "resting HR's 61"],
+    ['Your HRV is 26 after a short night.', "recovery's 26"],
+    ['Your HRV fell 32 points after a bad night.', "recovery's 32-point difference"],
+    ['Your recovery is 12% lower after a poor night.', "the alcohol/HRV habit's 12%"],
+    ['Your HRV was 61 on Monday night.', 'resting HR\'s 61 ("on Monday night" is a time)'],
+    ['Your HRV was 61 that night.', 'resting HR\'s 61 ("that night" is a time)'],
+    ['Your HRV was 61 at night.', 'resting HR\'s 61 ("at night" is a time)'],
+    ['Your HRV is 61 after poor sleep.', "resting HR's 61"],
+    ['Your recovery is 61 and you slept 6h 48m.', "resting HR's 61"],
+    ['Your recovery is 26 and your HRV is 61 bpm.', 'bpm belongs to resting HR, which is not named'],
+  ])('rejects %j (borrows %s)', (sentence) => {
+    expect(validateSentence(sentence, PROBE)).toEqual(unknown);
+  });
+
+  it.each([
+    'A short night (6h 48m) pulled your HRV down to 41.',
+    "Recovery's 26, about half your usual.",
+    'Keep today light and aim for bed by 10:15.',
+    'After a night of 6h 48m, recovery is 26.',
+    'Recovery sits at 26 after HRV dipped to 41 ms.',
+    'You slept 6h 48m and your resting HR rose to 61 bpm.',
+    'Your HRV fell 12% after drinking, and sleep was recorded on 5 of the last 7 nights.',
+  ])('accepts %j', (sentence) => {
+    expect(validateSentence(sentence, PROBE)).toEqual(ok);
+  });
+});
