@@ -5,18 +5,19 @@ import { anthropicProviderFromEnv } from './model/anthropic';
 import { ExpoPushSender, NoopPushSender, PushSender } from './push';
 
 /**
- * The whole coach is behind COACH_ENABLED, default OFF. No LLM provider has been
- * cleared against the spec's data-handling gate, so this must not be switched on
- * in any environment a real user can reach. Read per request (not at import) so
- * it can be toggled without a restart in tests.
+ * The whole coach is behind COACH_ENABLED, default OFF. The default engine is a
+ * model served by a local Ollama, so health data stays on this machine; the
+ * hosted engine is opt-in per user behind its own consent (see getHostedProvider).
+ * Read per request (not at import) so it can be toggled without a restart in tests.
  */
 export function isCoachEnabled(): boolean {
   const v = process.env.COACH_ENABLED?.trim().toLowerCase();
   return v === 'true' || v === '1';
 }
 
-// The single provider slot. There is deliberately no failover provider: a
-// fallback would have to clear the same data-handling bar (spec section 5).
+// The local provider slot, the default engine for every user. The hosted
+// engine (below) is a separate, opt-in slot; when a hosted answer fails, that
+// message falls back to this one (engine.ts), never the other way round.
 //
 // COACH_PROVIDER selects it: `ollama` is a model served by a local Ollama
 // (model/ollama.ts; loopback-only unless OLLAMA_ALLOW_REMOTE=true, so health

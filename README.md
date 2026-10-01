@@ -84,6 +84,7 @@ flowchart LR
   subgraph Server["Backend (Node / Express 5)"]
     API["REST API<br/>/auth /health /me/*"]
     W["BullMQ worker<br/>queue: health-sync"]
+    WS["Summary worker<br/>queue: coach-summary"]
     SE["Stat engine<br/>scores · baselines"]
     HC["Habit correlation<br/>engine"]
     CO["Coach answer pipeline<br/>fact sheet · one streamed call · validator"]
@@ -92,6 +93,7 @@ flowchart LR
   PG[("PostgreSQL<br/>Prisma")]
   RD[("Redis")]
   OL["Ollama (local)<br/>qwen3.6:35b"]
+  AN["Anthropic API (opt-in)<br/>claude-opus-5-5"]
 
   App -- "REST + session cookie" --> API
   App -. "ID token" .-> GSI
@@ -106,7 +108,9 @@ flowchart LR
   W --> HC --> PG
   API --> PG
   CO -- "/api/chat (loopback)" --> OL
+  CO -. "hosted engine, opt-in per user" .-> AN
   API --> CO
+  RD --> WS --> CO
   W -- "weekly digest push" --> Expo --> App
 ```
 
@@ -153,13 +157,13 @@ backend/                 Express API, BullMQ worker, stat engine, habit engine, 
     scoring/             stat engine (clean → features → baseline → composite → explain), configs v1–v3
     habits/              habit logging, observed-day rules, correlation stats, lifecycle
     coach/               answer pipeline (answer/), model providers, engine + consent, personas, memory, digest, day summary, push, retention
-      model/             provider interface: Unconfigured, Scripted (tests), Ollama
+      model/             provider interface: Unconfigured, ScriptedStream (tests), Ollama, Anthropic
     users/               timezone, goals, account deletion
     crypto/              AES-256-GCM token cipher
-  prisma/                schema.prisma + 13 migrations
+  prisma/                schema.prisma + 17 migrations
   evals/coach/           coach eval harness (scripted + real local model)
   scripts/               ops scripts (backtest, resync, subscriber registration, …)
-  tests/                 71 Jest suites against a real Postgres + Redis
+  tests/                 113 Jest suites against a real Postgres + Redis
 mobile/                  Expo (React Native) app
   src/
     screens/             Dashboard, Activity, Metrics, Coach, Settings, ScoreDetail, MetricDetail, Patterns, …
@@ -170,7 +174,7 @@ mobile/                  Expo (React Native) app
     lib/                 pure logic: heatmap layout, metric trends, score insights, timezone, push
     theme/, theme.ts     dark-first tokens (mirrors global.css), metric config, motion tokens
   plugins/               iOS scene-delegate config plugin (iOS 27 SDK)
-  __tests__/             77 Jest test files (jest-expo + Testing Library)
+  __tests__/             134 Jest test files (jest-expo + Testing Library)
 docs/superpowers/        design specs, implementation plans, research notes
 ```
 
@@ -190,7 +194,7 @@ Every `/me/*` route requires a valid Better Auth session (`requireAuth` looks it
 | scoring | `GET /me/scores?days&type`, `GET /me/scores/:date?type` (with baselines, previous day, score bands) |
 | habits | `GET /me/habits/config`, `POST /me/habits/types`, `POST/GET /me/habits/logs`, `DELETE /me/habits/logs/:id`, `POST /me/habits/check-ins`, `GET /me/habits/status`, `GET /me/habits/patterns` |
 | users | `PUT /me/timezone` (re-buckets sleep and re-scores), `DELETE /me` (body `{"confirm":"DELETE"}`; revokes Google access, deletes everything) |
-| coach | `GET /me/coach/status`, `POST/DELETE /me/coach/consent` (`?scope=hosted`), `PUT /me/coach/persona`, `PUT /me/coach/engine`, `POST /me/coach/message` (SSE with `Accept: text/event-stream`, JSON otherwise), `GET /me/coach/today`, `GET /me/coach/conversations`, `GET /me/coach/conversations/latest`, `GET /me/coach/conversations/:id`, `GET/PATCH/DELETE /me/coach/memory[/:id]`, `GET /me/coach/digests/latest`, `POST/DELETE /me/push-token` |
+| coach | `GET /me/coach/status`, `POST /me/coach/consent` (`scope` in the JSON body), `DELETE /me/coach/consent` (`?scope=hosted` revokes only the hosted consent; without it, both), `PUT /me/coach/persona`, `PUT /me/coach/engine`, `POST /me/coach/message` (SSE with `Accept: text/event-stream`, JSON otherwise), `GET /me/coach/today`, `GET /me/coach/conversations`, `GET /me/coach/conversations/latest`, `GET /me/coach/conversations/:id`, `GET/PATCH/DELETE /me/coach/memory[/:id]`, `GET /me/coach/digests/latest`, `POST/DELETE /me/push-token` |
 | infra | `GET /health-check` |
 
 ### Background jobs (queue `health-sync`, worker concurrency 5)
@@ -290,12 +294,12 @@ flowchart TD
 **How answers work.** `answer/route.ts` routes the question; `answer/facts.ts` builds the fact sheet (`[recovery.today] Recovery today: 26 (usual 58, 32 lower than usual)` …) from the same readers the app's screens use; `answer/prompt.ts` writes one system prompt (character voice, today's date, the facts, the rules); the model streams a conversational reply and, when it used the facts, a fenced ```` ```card ```` block naming fact ids (the server fills every value). `answer/validate.ts` checks each sentence as it completes: every number must be on the fact sheet (±1 on integers, ±1% or ±1 minute on durations; "6h 48m" = "408 minutes" = "6.8 hours"; a hedged "about 7 hours" may be within 10%); general-knowledge ranges are allowed only for general questions and never about the user. Nothing shown is ever retracted. The app shows the disclaimer once, as a page footnote; it is never part of a reply (only the JSON response kept for older app builds, which have no footnote, appends it).
 
 - **Today summary:** `GET /me/coach/today` returns the four "today vs usual" bars (recovery, sleep, HRV, resting HR) and one sentence. A template sentence is always available; an AI sentence (what happened → why → what to do today, ≤ 45 words, validated like a reply) is written after each sync on its own `coach-summary` queue (`COACH_SUMMARY_CONCURRENCY`, default 1) and cached per day.
-- **Engines:** local Ollama is the default. Hosted **Claude** (`claude-opus-5-5` through the Anthropic SDK, `effort: low`, server-side refusal fallback; `COACH_HOSTED_MODEL` overrides the model) is offered only when `COACH_HOSTED_ENABLED=true` and `ANTHROPIC_API_KEY` is set. It is used only for a user who chose it in **Profile → AI engine** (shown once the hosted engine is offered) and accepted the hosted consent ("Your question and a summary of your recent health numbers are sent to Anthropic…"); `GET /me/coach/status` reports `engine: "hosted"` only while that consent and the local coach consent are both current. Only the fact sheet and the recent conversation are sent: no name, email, account id or tokens (anything the user types is sent as part of the conversation, and the consent says so). The key stays on the server.
+- **Engines:** local Ollama is the default. Hosted **Claude** (`claude-opus-5-5` through the Anthropic SDK, `effort: low`, server-side refusal fallback; `COACH_HOSTED_MODEL` overrides the model) is offered only when `COACH_HOSTED_ENABLED=true` and `ANTHROPIC_API_KEY` is set. It is used only for a user who chose it in **Profile → AI engine** (shown while the hosted engine is offered, or while a hosted consent is still held so it can be withdrawn) and accepted the hosted consent ("Your question and a summary of your recent health numbers are sent to Anthropic…"); `GET /me/coach/status` reports `engine: "hosted"` only while that consent and the local coach consent are both current. Only the fact sheet and the recent conversation are sent: no name, email, account id or tokens (anything the user types is sent as part of the conversation, and the consent says so). The key stays on the server.
 - **Withdrawing hosted consent:** **Withdraw Claude consent** in the same group (`DELETE /me/coach/consent?scope=hosted`) stops anything further going to Anthropic and switches the user back to the local engine. Choosing **On-device** switches engine without withdrawing the consent.
-- **Hosted failures:** if a hosted call fails before any text, or produces no text within `COACH_HOSTED_FIRST_TEXT_MS` (default 10 s), that message is answered locally with the rest of the budget (`done.engine = "local"`, and the app notes it); the local model is warmed at the start of every hosted message so this is not a cold load. A refusal after text has streamed ends the reply there instead.
+- **Hosted failures:** if a hosted call fails before any text, or produces no text within `COACH_HOSTED_FIRST_TEXT_MS` (default 10 s), that message is answered locally with the rest of the budget (`done.engine = "local"`, and the app notes it); the local model is warmed at the start of hosted messages (at most once every 5 minutes per provider) so this is not a cold load. A refusal after text has streamed is not handed to the local model: the sentences already shown stay, an error line with Retry follows, and the answer is not stored.
 - **Cost (hosted):** roughly 1.5k input + 300–500 output tokens per message, about 1–2 cents on `claude-opus-5-5`.
 - **Budgets:** 45 s per local answer (`COACH_LOCAL_BUDGET_MS`), 30 s hosted (`COACH_HOSTED_BUDGET_MS`); the app waits 60 s (`EXPO_PUBLIC_COACH_TIMEOUT_MS`, keep it above the server budget). The local model is kept loaded (`keep_alive` 24h, `OLLAMA_KEEP_ALIVE`) and warmed when the Coach tab opens; on the owner's Mac the first sentence arrives in about 3–6 s once warm.
-- **Memory:** the model may append a ```` ```memory ```` block (training goal, schedule or preference, ≤ 140 characters); a health-fact classifier rejects health facts. Proposals appear as chips; the user's next message in that conversation confirms or dismisses them.
+- **Memory:** the model may append a ```` ```memory ```` block (training goal, schedule or preference, ≤ 140 characters); a health-fact classifier rejects health facts. Proposals appear as chips; the user's next message in that conversation confirms or dismisses them (correcting one deletes it silently). Confirmed memories are deleted with their conversation when it expires after 90 days.
 - **Safety:** crisis messages never reach the model; they get fixed resources (988, Crisis Text Line, findahelpline.com, 911). Diagnosis, medication dosing and supplement advice are dropped sentence by sentence. The coach speaks as one of eight **characters** (`hoot`, `pip`, `mochi`, `nimbus`, `ember`, `beep`, `doze`, `beat`; Hoot is the default); only the voice and focus differ. The retired styles map `encouraging → pip`, `direct → hoot`, `clinical → beep`.
 - **Other features:** one in-flight answer per user and 15 per 5 minutes (turn guard); conversation history with cards, safety cards and memory chips as they appeared live; a weekly digest written from the `trends` fact sheet and validated like replies (falling back to a recap composed from the sheet); push notifications with fixed text only, sent via Expo when `PUSH_PROVIDER=expo`; 90-day transcript retention; telemetry that drops message text.
 - **Model providers** (`coach/model/`): one `stream()` interface. `OllamaProvider` (`COACH_PROVIDER=ollama`; loopback only unless `OLLAMA_ALLOW_REMOTE=true`; `<think>` blocks filtered from the stream), `AnthropicProvider` (hosted, opt-in), `UnconfiguredProvider` (the default: every answer is an error card) and `ScriptedStreamProvider` (tests and evals).
@@ -399,7 +403,7 @@ No analytics or crash-reporting service is used; a hosted LLM is used only for u
 - **Health data stays local for the AI by default.** The local coach only talks to a loopback Ollama unless explicitly overridden. A user who opts into the hosted engine sends Anthropic the fact sheet and the recent conversation only, never identifiers or tokens; the API key stays on the server.
 - **Token handling:** Google tokens are AES-256-GCM encrypted at rest. Sessions are database-backed and revocable per device; a password reset revokes every session. Session freshness is disabled (`session.freshAge: 0`, an owner decision) because freshness counts from session creation and would lock long-lived sessions out of Devices and unlinking; removing the last sign-in method and linking a different email stay blocked server-side. The OAuth `state` is single-use and short-lived. Webhooks use a constant-time secret comparison.
 - **Least exposure:** the API returns only the fields screens use, and the coach's telemetry drops message text. Push notifications carry fixed text only, never health numbers.
-- **User control:** the coach requires versioned consent (the hosted engine a second one, which can be withdrawn at any time), and memories can be viewed, edited and deleted. `DELETE /me` revokes Google access and deletes all data in one transaction. Coach transcripts expire after 90 days.
+- **User control:** the coach requires versioned consent (the hosted engine a second one, which can be withdrawn at any time), and memories can be viewed, edited and deleted. `DELETE /me` revokes Google access and deletes all data in one transaction. Coach transcripts expire after 90 days, and confirmed memories are deleted with their conversation.
 
 ## 14. Configuration
 
@@ -494,11 +498,11 @@ Email links open the app through deep links: `biometrics://verified` opens sign-
 
 ```bash
 # Backend: uses a real Postgres + Redis; point DATABASE_URL/TEST_DATABASE_URL at a *_test database
-cd backend && npm test        # 71 suites, ~1,300 tests (serial: maxWorkers 1)
+cd backend && npm test        # 113 suites, 1,300+ tests (serial: maxWorkers 1)
 docker compose -f docker-compose.test.yml up -d   # optional Postgres 16 on :5434
 
 # Mobile
-cd mobile && npm test         # 102 test files, ~970 tests
+cd mobile && npm test         # 134 test files, 1,200+ tests
 
 # Coach evals
 cd backend && npm run eval:coach          # scripted stream through the real answer pipeline; no network (also run in Jest)
@@ -528,7 +532,7 @@ Backend Jest runs may not exit on their own because of an open Redis handle; use
 - **Public launch needs Google's CASA review.** All three Health scopes are Restricted. Until the app is verified it's limited to about 100 allowlisted test users, and refresh tokens expire after 7 days while the OAuth app is in Testing.
 - **Live webhook delivery hasn't been observed yet.** The backfill path is proven against a real account.
 - **Step history is limited to what Google holds.** The heat map requests a full year; the test account returned about 5 months.
-- **The coach's validator checks numbers, not reasoning.** It stops made-up numbers; direction words and which metric a number belongs to are checked by the evals, not at runtime.
+- **The coach's validator checks numbers, not reasoning.** The validator limits each number to the metric(s) the sentence names but does not judge direction words; the evals' direction and attribution checks catch what that scoping can miss.
 - **Push is built end-to-end but hasn't been delivered to a real device.** It needs a paid Apple team and an EAS build.
 - **The redesign's device card (spec §5) is not built yet.**
 
