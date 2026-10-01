@@ -72,6 +72,8 @@ export interface AnswerCardItemDTO {
   value: number;
   usual?: number;
   status?: CardStatusDTO;
+  // The signed difference from usual ("−25m", "+4 bpm"); absent on cards stored before it existed.
+  deltaDisplay?: string;
 }
 
 // The answer card under a data answer (spec 1.3). The server fills every
@@ -517,10 +519,12 @@ export async function fetchConversation(id: string): Promise<CoachConversationDT
 }
 
 const CARD_STATUSES: readonly string[] = ['below', 'near', 'above'];
+// "−1h 47m", "−12 points": anything much longer would not fit a tile.
+const MAX_DELTA_CHARS = 16;
 
 function cardItem(raw: unknown): AnswerCardItemDTO | null {
   if (!isRecord(raw)) return null;
-  const { factId, label, display, value, usual, status } = raw;
+  const { factId, label, display, value, usual, status, deltaDisplay } = raw;
   if (typeof factId !== 'string' || typeof label !== 'string' || typeof display !== 'string') return null;
   if (typeof value !== 'number' || !Number.isFinite(value)) return null;
   return {
@@ -530,6 +534,7 @@ function cardItem(raw: unknown): AnswerCardItemDTO | null {
     value,
     ...(typeof usual === 'number' && Number.isFinite(usual) ? { usual } : {}),
     ...(typeof status === 'string' && CARD_STATUSES.includes(status) ? { status: status as CardStatusDTO } : {}),
+    ...(typeof deltaDisplay === 'string' && deltaDisplay.trim() && deltaDisplay.length <= MAX_DELTA_CHARS ? { deltaDisplay: deltaDisplay.trim() } : {}),
   };
 }
 

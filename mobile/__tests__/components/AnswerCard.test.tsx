@@ -61,6 +61,28 @@ describe('AnswerCard', () => {
     expect(getByTestId('answer-tile-rhr.today')).toHaveTextContent('62 bpmresting HR · above usual');
   });
 
+  // R41: the difference from usual, like the chosen mockup ("total · −25m vs usual").
+  it('shows the difference from usual when the server sends it, and reads it in words', () => {
+    const card: AnswerCardDTO = {
+      headline: 'Decent night',
+      tiles: [
+        { factId: 'sleep.total', label: 'total', display: '6h 48m', value: 408, usual: 433, status: 'near', deltaDisplay: '−25m' },
+        { factId: 'sleep.long', label: 'longest', display: '9h 0m', value: 540, usual: 433, status: 'above', deltaDisplay: '+1h 47m' },
+        { factId: 'rhr.today', label: 'resting HR', display: '61 bpm', value: 61, usual: 57, status: 'below', deltaDisplay: '+4 bpm' },
+        { factId: 'recovery.today', label: 'recovery', display: '46', value: 46, usual: 58, status: 'below', deltaDisplay: '−12 points' },
+      ],
+      source: 'Today',
+    };
+    const { getByTestId } = render(<AnswerCard card={card} />);
+
+    expect(getByTestId('answer-tile-sleep.total')).toHaveTextContent('6h 48mtotal · −25m vs usual');
+    expect(getByTestId('answer-tile-rhr.today')).toHaveTextContent('61 bpmresting HR · +4 bpm vs usual');
+    expect(getByTestId('answer-tile-sleep.total').props.accessibilityLabel).toBe('total 6h 48m, 25 minutes below usual');
+    expect(getByTestId('answer-tile-sleep.long').props.accessibilityLabel).toBe('longest 9h 0m, 1 hour 47 minutes above usual');
+    expect(getByTestId('answer-tile-rhr.today').props.accessibilityLabel).toBe('resting HR 61 bpm, 4 beats per minute above usual');
+    expect(getByTestId('answer-tile-recovery.today').props.accessibilityLabel).toBe('recovery 46, 12 points below usual');
+  });
+
   it('reads each tile to a screen reader in words', () => {
     const { getByTestId } = render(<AnswerCard card={tiles} />);
 

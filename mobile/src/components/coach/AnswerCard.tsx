@@ -28,12 +28,36 @@ function statusTextColor(item: AnswerCardItemDTO, colors: Palette): string {
 // its usual is "above usual" even though the server marks it below.
 function comparison(item: AnswerCardItemDTO): string | null {
   if (!item.status) return null;
+  // R41: the server's signed difference ("−25m vs usual"); cards stored before it fall back to words.
+  if (item.deltaDisplay) return `${item.deltaDisplay} vs usual`;
   if (item.status === 'near' || item.usual === undefined || item.value === item.usual) return 'on par';
   return item.value < item.usual ? 'below usual' : 'above usual';
 }
 
+const plural = (n: string, unit: string) => `${n} ${unit}${n === '1' ? '' : 's'}`;
+
+// "−25m" -> "25 minutes below usual", "+1h 5m" -> "1 hour 5 minutes above usual",
+// "+4 bpm" -> "4 beats per minute above usual": abbreviations a screen reader would misread.
+function spokenDelta(delta: string): string {
+  const below = /^[−-]/.test(delta);
+  const size = delta
+    .replace(/^[−+-]\s*/, '')
+    .replace(/\b(\d+)h\b/g, (_, n: string) => plural(n, 'hour'))
+    .replace(/\b(\d+)m\b/g, (_, n: string) => plural(n, 'minute'))
+    .replace(/\bbpm\b/g, 'beats per minute')
+    .replace(/\bms\b/g, 'milliseconds')
+    .replace(/%/g, ' percent');
+  return `${size} ${below ? 'below' : 'above'} usual`;
+}
+
+function spokenComparison(item: AnswerCardItemDTO): string | null {
+  if (item.status && item.deltaDisplay) return spokenDelta(item.deltaDisplay);
+  return comparison(item);
+}
+
 function Tile({ item, colors }: { item: AnswerCardItemDTO; colors: Palette }) {
   const words = comparison(item);
+  const spoken = spokenComparison(item);
   // Small text, so the text-safe status colours (R40: rose/teal-700 in light
   // mode); the words still carry the status for anyone who can't see colour.
   const valueColor = statusTextColor(item, colors);
@@ -41,7 +65,7 @@ function Tile({ item, colors }: { item: AnswerCardItemDTO; colors: Palette }) {
     <View
       testID={`answer-tile-${item.factId}`}
       accessible
-      accessibilityLabel={`${item.label} ${item.display}${words ? `, ${words}` : ''}`}
+      accessibilityLabel={`${item.label} ${item.display}${spoken ? `, ${spoken}` : ''}`}
       className="min-w-[30%] flex-1 rounded-tile bg-muted px-2.5 py-2"
     >
       <Text testID={`answer-tile-value-${item.factId}`} className="text-base font-bold" style={{ color: valueColor }}>

@@ -198,6 +198,16 @@ describe('toAnswerCard', () => {
     expect(toAnswerCard(null)).toBeNull();
     expect(toAnswerCard('card')).toBeNull();
   });
+
+  // R41: the signed difference from usual, kept when well-formed; cards stored before it parse as before.
+  it('keeps a tile difference from usual and drops a malformed one', () => {
+    const withDelta = toAnswerCard({ headline: 'h', tiles: [{ ...tile, deltaDisplay: '−25m' }], source: 's' });
+    expect(withDelta?.tiles?.[0]?.deltaDisplay).toBe('−25m');
+    for (const deltaDisplay of [42, '', '   ', 'x'.repeat(40), null]) {
+      const card = toAnswerCard({ headline: 'h', tiles: [{ ...tile, deltaDisplay }], source: 's' });
+      expect(card?.tiles?.[0]).toEqual(tile);
+    }
+  });
 });
 
 describe('today summary', () => {

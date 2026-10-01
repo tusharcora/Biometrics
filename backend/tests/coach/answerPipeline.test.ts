@@ -115,8 +115,8 @@ describe('runAnswer: a validated, streamed answer', () => {
       card: {
         headline: 'Recovery is low today',
         tiles: [
-          { factId: 'recovery.today', label: 'Recovery', display: '26', value: 26, usual: 58, status: 'below' },
-          { factId: 'sleep.total', label: 'Sleep', display: '6h 48m', value: 408, usual: 433, status: 'near' },
+          { factId: 'recovery.today', label: 'Recovery', display: '26', value: 26, usual: 58, status: 'below', deltaDisplay: '−32 points' },
+          { factId: 'sleep.total', label: 'Sleep', display: '6h 48m', value: 408, usual: 433, status: 'near', deltaDisplay: '−25m' },
         ],
         tip: 'Keep today easy.',
         source: 'Today',

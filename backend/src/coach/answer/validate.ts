@@ -39,7 +39,7 @@
 // change ("higher" vs "lower") is not checked.
 
 import { classifyCrisis } from '../guardrails/crisis';
-import { AnswerCard, CardItem, statusOf } from './card';
+import { AnswerCard, CardItem, deltaDisplayOf, statusOf } from './card';
 import { Fact, FactSheet, FactUnit, USUAL_DAYS, comparisonDiff } from './facts';
 import type { RawCard } from './parse';
 import type { AnswerRoute } from './route';
@@ -439,6 +439,8 @@ function rows(raw: unknown, max: number, facts: Map<string, Fact>): CardItem[] {
     if (fact.usual !== undefined) row.usual = fact.usual;
     const status = statusOf(fact);
     if (status) row.status = status;
+    const delta = deltaDisplayOf(fact);
+    if (delta) row.deltaDisplay = delta;
     out.push(row);
     if (out.length === max) break;
   }

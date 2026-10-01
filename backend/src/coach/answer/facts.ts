@@ -105,18 +105,36 @@ function roundFor(unit: FactUnit, value: number): number {
   return unit === 'ms' ? round1(value) : Math.round(value);
 }
 
+/**
+ * Whether the sheet compares this fact with its usual. Step counts never: they
+ * accumulate through the day, so a morning total would always read as "lower
+ * than usual". The one rule behind the sheet's comparison, the card's status
+ * and its difference (card.ts).
+ */
+export function hasComparison(fact: Fact): fact is Fact & { usual: number } {
+  return fact.usual !== undefined && fact.unit !== 'count';
+}
+
 /** Value minus usual, rounded for the unit; undefined when the sheet states no comparison. */
 export function comparisonDiff(fact: Fact): number | undefined {
-  // Step counts accumulate through the day, so "lower than usual" would be noise.
-  if (fact.usual === undefined || fact.unit === 'count') return undefined;
+  if (!hasComparison(fact)) return undefined;
   return roundFor(fact.unit, fact.value - fact.usual);
+}
+
+/**
+ * The size of a difference as the sheet writes it ("25m", "4 bpm", "8%"),
+ * without its direction. Shared by the sheet's comparison and the card's
+ * difference so the two can never disagree.
+ */
+export function formatDiffSize(unit: FactUnit, diff: number): string {
+  return formatValue(unit, roundFor(unit, Math.abs(diff)));
 }
 
 function comparison(fact: Fact): string {
   const diff = comparisonDiff(fact);
   if (diff === undefined) return '';
   if (diff === 0) return ', same as usual';
-  const size = formatValue(fact.unit, roundFor(fact.unit, Math.abs(diff)));
+  const size = formatDiffSize(fact.unit, diff);
   const word = fact.unit === 'minutes' ? (diff > 0 ? 'more' : 'less') : diff > 0 ? 'higher' : 'lower';
   return `, ${size} ${word} than usual`;
 }

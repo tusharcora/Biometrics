@@ -166,13 +166,42 @@ describe('resolveCard', () => {
     expect(card).toEqual({
       headline: 'Recovery is well below usual',
       tiles: [
-        { factId: 'recovery.today', label: 'Recovery', display: '26', value: 26, usual: 58, status: 'below' },
-        { factId: 'rhr.today', label: 'Resting HR', display: '66 bpm', value: 66, usual: 57, status: 'below' },
-        { factId: 'sleep.total', label: 'Sleep', display: '6h 48m', value: 408, usual: 433, status: 'near' },
+        { factId: 'recovery.today', label: 'Recovery', display: '26', value: 26, usual: 58, status: 'below', deltaDisplay: '−32 points' },
+        { factId: 'rhr.today', label: 'Resting HR', display: '66 bpm', value: 66, usual: 57, status: 'below', deltaDisplay: '+9 bpm' },
+        { factId: 'sleep.total', label: 'Sleep', display: '6h 48m', value: 408, usual: 433, status: 'near', deltaDisplay: '−25m' },
       ],
       tip: 'Keep today easy.',
       source: 'Today',
     });
+  });
+
+  // R41: tiles show the difference from usual ("−25m vs usual"), built from the
+  // sheet's own comparison, so echoing it back always validates.
+  it('gives each comparable tile its difference from usual, one the validator accepts', () => {
+    const card = resolveCard(
+      { headline: 'Today', tiles: ['recovery.today', 'hrv.today', 'rhr.today', 'sleep.total'].map((fact) => ({ fact })) },
+      SHEET,
+    );
+    expect(card?.tiles?.map((t) => t.deltaDisplay)).toEqual(['−32 points', '−11.3 ms', '+9 bpm', '−25m']);
+    for (const tile of card!.tiles!) {
+      expect(validateSentence(`${tile.label} ${tile.display}, ${tile.deltaDisplay} vs usual.`, SHEET)).toEqual(ok);
+    }
+  });
+
+  it('gives no difference without a usual, with a usual of 0, for a step count or for no change', () => {
+    const sheet: FactSheet = {
+      route: 'today',
+      facts: [
+        { id: 'steps.today', label: 'Steps today so far', value: 3120, unit: 'count', display: '3,120', usual: 8450 },
+        { id: 'habit.caffeine.hrv', label: 'Caffeine and next-day HRV', value: 8, unit: 'percent', display: '8% lower' },
+        { id: 'hrv.today', label: 'HRV today', value: 3, unit: 'ms', display: '3 ms', usual: 0 },
+        { id: 'recovery.today', label: 'Recovery today', value: 58, unit: 'score', display: '58', usual: 58 },
+      ],
+      notes: [],
+    };
+    const card = resolveCard({ headline: 'Today', tiles: sheet.facts.map((f) => ({ fact: f.id })) }, sheet);
+    expect(card?.tiles).toHaveLength(4);
+    for (const tile of card!.tiles!) expect(tile).not.toHaveProperty('deltaDisplay');
   });
 
   // R18 Q3: the model made up vague sources ("Wellness App Data", "Sleep tracking data").
@@ -231,7 +260,7 @@ describe('resolveCard', () => {
     const card = resolveCard({ headline: 'Today', tiles: [{ fact: 'recovery.today' }], tip: 'Take 5 mg of melatonin.', source: 42 }, SHEET);
     expect(card).toEqual({
       headline: 'Today',
-      tiles: [{ factId: 'recovery.today', label: 'Recovery today', display: '26', value: 26, usual: 58, status: 'below' }],
+      tiles: [{ factId: 'recovery.today', label: 'Recovery today', display: '26', value: 26, usual: 58, status: 'below', deltaDisplay: '−32 points' }],
       source: 'Today',
     });
   });
