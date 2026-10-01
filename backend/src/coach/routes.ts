@@ -9,7 +9,7 @@ import { TurnInProgressError, TurnRateLimitedError, withTurnGuard } from './turn
 import type { CoachModelProvider } from './model/provider';
 import { toMemoryDTO, validateMemoryValue } from './memory';
 import { HISTORY_WINDOW, OrchestratorDeps } from './orchestrator';
-import { cleanLegacyText } from './answer/history';
+import { cleanLegacyText, LEGACY_DISCLAIMER } from './answer/history';
 import type { FactData } from './answer/facts';
 import { AnswerDeps, AnswerEvent, runAnswer } from './answer/pipeline';
 import { warmModel } from './answer/warm';
@@ -479,14 +479,16 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
         return;
       }
       const saved = await prisma.coachMessage.findUniqueOrThrow({ where: { id: outcome.done.messageId }, select: { createdAt: true, text: true } });
-      // The reply exactly as stored: the app shows the disclaimer once as a page footnote,
-      // and memory proposals travel as memoryProposals, never as text.
+      // Old app builds only (this JSON path; the current app streams over SSE and shows the
+      // disclaimer once as a page footnote). Those builds have no footnote, so the disclaimer is
+      // appended to this RESPONSE only — never stored (R46). Memory proposals travel as
+      // memoryProposals, never as text.
       res.json({
         conversationId: outcome.done.conversationId,
         message: {
           id: outcome.done.messageId,
           role: 'assistant',
-          text: saved.text,
+          text: `${saved.text}\n\n${LEGACY_DISCLAIMER}`,
           source: outcome.safety ? 'safety' : 'model',
           createdAt: saved.createdAt.toISOString(),
         },

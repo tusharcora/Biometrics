@@ -212,7 +212,7 @@ describe('POST /me/coach/message with Accept: text/event-stream', () => {
 });
 
 describe('POST /me/coach/message without the Accept header (older apps)', () => {
-  it('returns the old JSON shape from the same pipeline, with the clean reply (no disclaimer) as stored', async () => {
+  it('returns the old JSON shape from the same pipeline: reply plus disclaimer (no footnote in old builds), clean text stored', async () => {
     const { app } = scripted([['Your recovery is 72 today.\n', CARD]]);
     const user = await consented();
     await putScore(user.id, todayUtc(), 72.4);
@@ -220,11 +220,27 @@ describe('POST /me/coach/message without the Accept header (older apps)', () => 
     expect(res.status).toBe(200);
     expect(Object.keys(res.body).sort()).toEqual(['conversationId', 'message']);
     expect(Object.keys(res.body.message).sort()).toEqual(['createdAt', 'id', 'role', 'source', 'text']);
-    expect(res.body.message).toMatchObject({ role: 'assistant', source: 'model', text: 'Your recovery is 72 today.' });
+    expect(res.body.message).toMatchObject({ role: 'assistant', source: 'model', text: `Your recovery is 72 today.\n\n${LEGACY_DISCLAIMER}` });
     const row = await prisma.coachMessage.findUniqueOrThrow({ where: { id: res.body.message.id } });
     expect(row.text).toBe('Your recovery is 72 today.');
     expect(row.createdAt.toISOString()).toBe(res.body.message.createdAt);
     expect(row.card).not.toBeNull();
+  });
+
+  it('never stores the disclaimer it adds to the JSON response, so the transcript and the next turn stay clean (R46)', async () => {
+    const { app } = scripted([['Your recovery is 72 today.\n', CARD]]);
+    const user = await consented();
+    await putScore(user.id, todayUtc(), 72.4);
+    const headers = await authHeaderFor(user.id);
+    const res = await request(await testServer(app)).post('/me/coach/message').set(headers).send({ message: 'How am I doing?' });
+    expect(res.body.message.text.endsWith(LEGACY_DISCLAIMER)).toBe(true);
+    expect(res.body.message.text.split(LEGACY_DISCLAIMER)).toHaveLength(2);
+
+    const rows = await prisma.coachMessage.findMany({ where: { userId: user.id } });
+    expect(rows).toHaveLength(2);
+    for (const row of rows) expect(row.text).not.toContain(LEGACY_DISCLAIMER);
+    const transcript = await request(await testServer(app)).get(`/me/coach/conversations/${res.body.conversationId}`).set(headers);
+    expect(transcript.body.messages.map((m: { text: string }) => m.text)).toEqual(['How am I doing?', 'Your recovery is 72 today.']);
   });
 
   it('stops the answer and stores the partial reply, marked stopped, when an older client disconnects', async () => {

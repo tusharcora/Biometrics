@@ -2,9 +2,11 @@
 // builds appended the disclaimer to every reply and digest, and a fixed memory
 // note to some replies, and stored them that way. Rows are left as they are;
 // these helpers take the additions off when a stored text is shown again or
-// replayed to the model as history. Nothing new is ever written with them:
+// replayed to the model as history. Nothing new is ever stored with them:
 // the app shows the disclaimer once, as a page footnote, and memory proposals
-// travel as their own event.
+// travel as their own event. The one live use is the JSON message response
+// for old app builds, which have no footnote (R46): the disclaimer is appended
+// to that response only.
 
 export const LEGACY_DISCLAIMER = 'This is a comparison against your own recent readings, not a medical assessment.';
 

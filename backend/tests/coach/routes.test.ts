@@ -6,6 +6,7 @@ import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
 import { authHeaderFor } from '../helpers/auth';
 import { createCoachRouter } from '../../src/coach/routes';
+import { LEGACY_DISCLAIMER } from '../../src/coach/answer/history';
 import { COACH_CONSENT_VERSION } from '../../src/coach/consent';
 import { LoggerCoachTelemetry } from '../../src/coach/telemetry';
 import { ScriptedStreamProvider, StreamStep } from '../../src/coach/model/provider';
@@ -391,12 +392,12 @@ describe('POST /me/coach/message', () => {
     expect(res.body.message).toMatchObject({
       role: 'assistant',
       source: 'model',
-      text: 'Your recovery is 72 today.',
+      text: `Your recovery is 72 today.\n\n${LEGACY_DISCLAIMER}`,
     });
     expect(new Date(res.body.message.createdAt).toISOString()).toBe(res.body.message.createdAt);
 
     const rows = await prisma.coachMessage.findMany({ where: { conversationId: res.body.conversationId }, orderBy: { createdAt: 'asc' } });
-    // Stored and returned clean: the app shows the disclaimer once, as a page footnote.
+    // Stored clean: the disclaimer is added to the older apps' JSON response only (R46).
     expect(rows.map((r) => [r.role, r.source, r.text])).toEqual([
       ['USER', null, 'why is my score low'],
       ['ASSISTANT', 'MODEL', 'Your recovery is 72 today.'],

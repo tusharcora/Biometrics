@@ -97,8 +97,10 @@ describe('POST /me/coach/message memoryProposals', () => {
     expect(first.status).toBe(200);
     expect(Object.keys(first.body).sort()).toEqual(['conversationId', 'memoryProposals', 'message']);
     expect(Object.keys(first.body.message).sort()).toEqual(['createdAt', 'id', 'role', 'source', 'text']);
-    // The proposal travels as memoryProposals (the app shows it as a chip); nothing is added to the reply text.
-    expect(first.body.message.text).toBe('Great, a morning routine helps.');
+    // The proposal travels as memoryProposals (the app shows it as a chip); no memory note is added to the
+    // reply text. Old builds get the disclaimer on this JSON response only (R46); the row stays clean.
+    expect(first.body.message.text).toBe(`Great, a morning routine helps.\n\n${LEGACY_DISCLAIMER}`);
+    expect((await prisma.coachMessage.findUniqueOrThrow({ where: { id: first.body.message.id } })).text).toBe('Great, a morning routine helps.');
     expect(first.body.memoryProposals).toHaveLength(1);
     const dto = first.body.memoryProposals[0];
     expect(Object.keys(dto).sort()).toEqual(['category', 'createdAt', 'id', 'status', 'value']);
