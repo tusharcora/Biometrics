@@ -6,8 +6,7 @@ import { migrateTestDb } from '../setupTestDb';
 import { authHeaderFor } from '../helpers/auth';
 import { createUser } from './helpers';
 import { testServer } from '../helpers/server';
-import { COACH_DISCLAIMER } from '../../src/coach/guardrails/disclaimer';
-import { MEMORY_NOTE } from '../../src/coach/orchestrator';
+import { LEGACY_DISCLAIMER, LEGACY_REPLY_NOTES } from '../../src/coach/answer/history';
 
 beforeAll(() => {
   migrateTestDb();
@@ -179,7 +178,7 @@ describe('GET /me/coach/conversations/:id and /latest', () => {
         conversationId: c.id,
         userId: user.id,
         role: 'ASSISTANT',
-        text: `Nice routine.\n\n${MEMORY_NOTE}\n\n${COACH_DISCLAIMER}`,
+        text: `Nice routine.\n\n${LEGACY_REPLY_NOTES[0]}\n\n${LEGACY_DISCLAIMER}`,
         source: 'MODEL',
         createdAt: at(2),
       },

@@ -7,7 +7,7 @@ import { authHeaderFor } from '../helpers/auth';
 import { createCoachRouter } from '../../src/coach/routes';
 import { COACH_CONSENT_VERSION } from '../../src/coach/consent';
 import { ScriptedStreamProvider, StreamStep } from '../../src/coach/model/provider';
-import { MEMORY_NOTE } from '../../src/coach/orchestrator';
+import { LEGACY_DISCLAIMER } from '../../src/coach/answer/history';
 import { civilDateToUtcMidnight } from '../../src/biometrics/civilDate';
 import { FakeClock, RecordingTelemetry, createUser } from './helpers';
 import { testServer } from '../helpers/server';
@@ -97,7 +97,8 @@ describe('POST /me/coach/message memoryProposals', () => {
     expect(first.status).toBe(200);
     expect(Object.keys(first.body).sort()).toEqual(['conversationId', 'memoryProposals', 'message']);
     expect(Object.keys(first.body.message).sort()).toEqual(['createdAt', 'id', 'role', 'source', 'text']);
-    expect(first.body.message.text).toContain(MEMORY_NOTE);
+    // The proposal travels as memoryProposals (the app shows it as a chip); nothing is added to the reply text.
+    expect(first.body.message.text).toBe('Great, a morning routine helps.');
     expect(first.body.memoryProposals).toHaveLength(1);
     const dto = first.body.memoryProposals[0];
     expect(Object.keys(dto).sort()).toEqual(['category', 'createdAt', 'id', 'status', 'value']);
@@ -238,6 +239,13 @@ describe('GET /me/coach/digests/latest', () => {
     expect(res.status).toBe(200);
     expect(Object.keys(res.body.digest).sort()).toEqual(['createdAt', 'id', 'text']);
     expect(res.body.digest).toEqual({ id: latest.id, text: 'newer recap', createdAt: latest.createdAt.toISOString() });
+  });
+
+  it('serves a digest stored by an older build without its appended disclaimer (the app shows it as a footnote)', async () => {
+    const user = await createUser();
+    await digest(user.id, '2026-09-14', `Recovery averaged 70 this week.\n\n${LEGACY_DISCLAIMER}`);
+    const res = await request(await testServer(createApp())).get('/me/coach/digests/latest').set(await authed(user.id));
+    expect(res.body.digest.text).toBe('Recovery averaged 70 this week.');
   });
 });
 

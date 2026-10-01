@@ -41,6 +41,8 @@ describe('CoachDigestCard', () => {
     fireEvent.press(await findByTestId('coach-digest-card'));
 
     expect(getByTestId('coach-digest-full')).toHaveTextContent(digest.text);
+    // The server no longer appends the disclaimer to the recap; it is shown once, under it.
+    expect(getByTestId('coach-digest-footnote')).toHaveTextContent('Comparisons against your own readings, not medical advice.');
     fireEvent.press(getByTestId('coach-digest-close'));
     await waitFor(() => expect(queryByTestId('coach-digest-full')).toBeNull());
   });

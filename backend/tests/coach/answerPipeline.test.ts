@@ -1,11 +1,10 @@
 import { randomUUID } from 'crypto';
 import { prisma } from '../../src/db/client';
 import * as memoryModule from '../../src/coach/memory';
-import { MEMORY_NOTE } from '../../src/coach/orchestrator';
 import { AnswerDeps, AnswerEvent, AnswerInput, runAnswer } from '../../src/coach/answer/pipeline';
 import type { FactData } from '../../src/coach/answer/facts';
 import { CoachStreamRequest, ScriptedStreamProvider, StreamStep, UnconfiguredProvider } from '../../src/coach/model/provider';
-import { COACH_DISCLAIMER } from '../../src/coach/guardrails/disclaimer';
+import { LEGACY_DISCLAIMER, LEGACY_REPLY_NOTES } from '../../src/coach/answer/history';
 import { SAFETY_REPLY } from '../../src/coach/guardrails/crisis';
 import { migrateTestDb } from '../setupTestDb';
 import { FakeClock, RecordingTelemetry, createUser } from './helpers';
@@ -131,7 +130,7 @@ describe('runAnswer: a validated, streamed answer', () => {
     ]);
     expect(rows[1]!.id).toBe(done.messageId);
     expect(rows[1]).toMatchObject({ card: (card as { card: unknown }).card, engine: 'LOCAL', durationMs: 0, guardrailEvents: null });
-    expect(rows[1]!.text).not.toContain(COACH_DISCLAIMER);
+    expect(rows[1]!.text).not.toContain(LEGACY_DISCLAIMER);
 
     const request = provider.requests[0]!;
     expect(request.maxTokens).toBe(600);
@@ -142,7 +141,7 @@ describe('runAnswer: a validated, streamed answer', () => {
   it('sends the last 10 turns of history as clean text and routes a follow-up by the previous question', async () => {
     const { deps, provider } = setup([['Rest well tonight.']]);
     const past = Array.from({ length: 12 }, (_, i) =>
-      i % 2 === 0 ? { role: 'user' as const, text: `q${i}` } : { role: 'assistant' as const, text: `a${i}\n\n${COACH_DISCLAIMER}` },
+      i % 2 === 0 ? { role: 'user' as const, text: `q${i}` } : { role: 'assistant' as const, text: `a${i}\n\n${LEGACY_DISCLAIMER}` },
     );
     past[10] = { role: 'user', text: 'How did I sleep?' };
     const events = await collect(runAnswer(await input({ message: 'why?', history: past }), deps));
@@ -472,9 +471,9 @@ describe('runAnswer: failure paths (fix round 1)', () => {
     const { deps, provider } = setup([['Rest well tonight.']]);
     const past = [
       { role: 'user' as const, text: 'How did I sleep?' },
-      { role: 'assistant' as const, text: `\n\n${COACH_DISCLAIMER}` },
+      { role: 'assistant' as const, text: `\n\n${LEGACY_DISCLAIMER}` },
       { role: 'user' as const, text: '   ' },
-      { role: 'assistant' as const, text: `${MEMORY_NOTE}\n\n${COACH_DISCLAIMER}` },
+      { role: 'assistant' as const, text: `${LEGACY_REPLY_NOTES[0]}\n\n${LEGACY_DISCLAIMER}` },
     ];
     await collect(runAnswer(await input({ message: 'why?', history: past }), deps));
     expect(provider.requests[0]!.messages).toEqual([

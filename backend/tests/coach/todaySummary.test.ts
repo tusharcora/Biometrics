@@ -14,6 +14,7 @@ import {
 } from '../../src/coach/answer/today';
 import type { EngineSelection } from '../../src/coach/engine';
 import type { CoachModelProvider, CoachStreamRequest } from '../../src/coach/model/provider';
+import { LEGACY_DISCLAIMER, LEGACY_REPLY_NOTES } from '../../src/coach/answer/history';
 import { FakeClock, RecordingTelemetry, createUser, hang, settle } from './helpers';
 
 beforeAll(() => migrateTestDb());
@@ -231,6 +232,20 @@ describe('generateTodaySummary', () => {
 
     expect(requests).toHaveLength(2);
     expect(await rowOf(user.id)).toMatchObject({ text: templateSentence(LOW_DAY).text, source: 'TEMPLATE' });
+  });
+
+  it('never adds the disclaimer or a memory note to the sentence, stored or served (the page shows the footnote once)', async () => {
+    const appended = [LEGACY_DISCLAIMER, ...LEGACY_REPLY_NOTES];
+    const ai = await consentedUser();
+    expect(await generateTodaySummary(ai.id, deps(scripted([GOOD]).selection))).toBe('ai');
+    const template = await consentedUser();
+    expect(await generateTodaySummary(template.id, deps(scripted([new Error('ECONNREFUSED')]).selection))).toBe('template');
+
+    for (const user of [ai, template]) {
+      const stored = (await rowOf(user.id))!.text;
+      const served = (await getTodaySummary(user.id, deps(null))).sentence!.text;
+      for (const text of [stored, served]) for (const extra of appended) expect(text).not.toContain(extra);
+    }
   });
 
   it('stores the template when the model is unreachable', async () => {

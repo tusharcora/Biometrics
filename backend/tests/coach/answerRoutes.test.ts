@@ -5,7 +5,7 @@ import request from 'supertest';
 import { prisma } from '../../src/db/client';
 import { createCoachRouter } from '../../src/coach/routes';
 import { COACH_CONSENT_VERSION } from '../../src/coach/consent';
-import { COACH_DISCLAIMER } from '../../src/coach/guardrails/disclaimer';
+import { LEGACY_DISCLAIMER, LEGACY_REPLY_NOTES } from '../../src/coach/answer/history';
 import { CoachModelProvider, CoachStreamRequest, ScriptedStreamProvider, StreamStep, UnconfiguredProvider } from '../../src/coach/model/provider';
 import { resetWarmState } from '../../src/coach/answer/warm';
 import { resetTurnGuards } from '../../src/coach/turnGuard';
@@ -212,7 +212,7 @@ describe('POST /me/coach/message with Accept: text/event-stream', () => {
 });
 
 describe('POST /me/coach/message without the Accept header (older apps)', () => {
-  it('returns the old JSON shape from the same pipeline: reply plus disclaimer, clean text stored', async () => {
+  it('returns the old JSON shape from the same pipeline, with the clean reply (no disclaimer) as stored', async () => {
     const { app } = scripted([['Your recovery is 72 today.\n', CARD]]);
     const user = await consented();
     await putScore(user.id, todayUtc(), 72.4);
@@ -220,7 +220,7 @@ describe('POST /me/coach/message without the Accept header (older apps)', () => 
     expect(res.status).toBe(200);
     expect(Object.keys(res.body).sort()).toEqual(['conversationId', 'message']);
     expect(Object.keys(res.body.message).sort()).toEqual(['createdAt', 'id', 'role', 'source', 'text']);
-    expect(res.body.message).toMatchObject({ role: 'assistant', source: 'model', text: `Your recovery is 72 today.\n\n${COACH_DISCLAIMER}` });
+    expect(res.body.message).toMatchObject({ role: 'assistant', source: 'model', text: 'Your recovery is 72 today.' });
     const row = await prisma.coachMessage.findUniqueOrThrow({ where: { id: res.body.message.id } });
     expect(row.text).toBe('Your recovery is 72 today.');
     expect(row.createdAt.toISOString()).toBe(res.body.message.createdAt);
@@ -284,6 +284,17 @@ describe('conversation transcripts carry the card', () => {
     const res = await request(await testServer(app)).get(`/me/coach/conversations/${sent.body.conversationId}`).set(headers);
     expect(res.body.messages.map((m: { card: unknown }) => m.card === null)).toEqual([true, false]);
     expect(res.body.messages[1].card.headline).toBe('Recovery is steady');
+  });
+
+  it('serves replies stored by older builds without the disclaimer and memory notes they carried', async () => {
+    const user = await consented();
+    const conversation = await prisma.coachConversation.create({ data: { userId: user.id } });
+    const stored = `Noted.\n\n${LEGACY_REPLY_NOTES[0]}\n\n${LEGACY_DISCLAIMER}`;
+    await prisma.coachMessage.create({ data: { conversationId: conversation.id, userId: user.id, role: 'USER', text: 'I run at 6am', createdAt: new Date(Date.now() - 1000) } });
+    await prisma.coachMessage.create({ data: { conversationId: conversation.id, userId: user.id, role: 'ASSISTANT', text: stored, source: 'MODEL' } });
+    const res = await request(await testServer(appWith(new UnconfiguredProvider()))).get(`/me/coach/conversations/${conversation.id}`).set(await authHeaderFor(user.id));
+    expect(res.status).toBe(200);
+    expect(res.body.messages.map((m: { text: string }) => m.text)).toEqual(['I run at 6am', 'Noted.']);
   });
 });
 

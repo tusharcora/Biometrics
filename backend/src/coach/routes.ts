@@ -8,10 +8,10 @@ import { isExpoPushToken } from './push';
 import { TurnInProgressError, TurnRateLimitedError, withTurnGuard } from './turnGuard';
 import type { CoachModelProvider } from './model/provider';
 import { toMemoryDTO, validateMemoryValue } from './memory';
-import { HISTORY_WINDOW, MEMORY_NOTE, OrchestratorDeps } from './orchestrator';
-import { withDisclaimer } from './guardrails/disclaimer';
+import { HISTORY_WINDOW, OrchestratorDeps } from './orchestrator';
+import { cleanLegacyText } from './answer/history';
 import type { FactData } from './answer/facts';
-import { AnswerDeps, AnswerEvent, cleanHistoryText, runAnswer } from './answer/pipeline';
+import { AnswerDeps, AnswerEvent, runAnswer } from './answer/pipeline';
 import { warmModel } from './answer/warm';
 import { clearTodaySummary, generateTodaySummary, getTodaySummary, summaryEngineDeps, TodayDeps } from './answer/today';
 import type { MemoryDTO } from './memory';
@@ -68,7 +68,7 @@ const messageDTO = (m: MessageRow, memoryProposals: MemoryDTO[] = []) => ({
   role: m.role === 'USER' ? 'user' : 'assistant',
   // Pre-redesign replies were stored with the disclaimer and memory note appended; the page shows
   // the disclaimer once as a footnote and memories as chips, so neither belongs in the text.
-  text: m.role === 'ASSISTANT' ? cleanHistoryText(m.text) : m.text,
+  text: m.role === 'ASSISTANT' ? cleanLegacyText(m.text) : m.text,
   source: m.source === null ? null : (m.source.toLowerCase() as 'model' | 'fallback' | 'safety'),
   // The resolved answer card, so history renders exactly as it did live; null for talk-only and older rows.
   card: typeof m.card === 'object' && m.card !== null && !Array.isArray(m.card) ? m.card : null,
@@ -479,14 +479,14 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
         return;
       }
       const saved = await prisma.coachMessage.findUniqueOrThrow({ where: { id: outcome.done.messageId }, select: { createdAt: true, text: true } });
-      // Older apps render text only: the disclaimer and the memory note are added to the RESPONSE (never stored).
-      const body = [saved.text, ...(outcome.memory && outcome.memory.length > 0 ? [MEMORY_NOTE] : [])].join('\n\n');
+      // The reply exactly as stored: the app shows the disclaimer once as a page footnote,
+      // and memory proposals travel as memoryProposals, never as text.
       res.json({
         conversationId: outcome.done.conversationId,
         message: {
           id: outcome.done.messageId,
           role: 'assistant',
-          text: withDisclaimer(body),
+          text: saved.text,
           source: outcome.safety ? 'safety' : 'model',
           createdAt: saved.createdAt.toISOString(),
         },
@@ -676,7 +676,7 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
         orderBy: [{ weekStart: 'desc' }, { createdAt: 'desc' }],
       });
       res.json({
-        digest: digest ? { id: digest.id, text: digest.text, createdAt: digest.createdAt.toISOString() } : null,
+        digest: digest ? { id: digest.id, text: cleanLegacyText(digest.text), createdAt: digest.createdAt.toISOString() } : null,
       });
     } catch (err) {
       logFailure('digest_latest', err);

@@ -19,7 +19,6 @@ import { localCivilDateOrUtc } from '../../biometrics/civilDate';
 import { prisma } from '../../db/client';
 import { CoachClock, systemClock } from '../clock';
 import { classifyCrisis, CRISIS_RESOURCES, SAFETY_REPLY } from '../guardrails/crisis';
-import { stripDisclaimer } from '../guardrails/disclaimer';
 import {
   createPendingMemories,
   MAX_PROPOSALS_PER_TURN,
@@ -29,11 +28,11 @@ import {
   validateMemoryInput,
 } from '../memory';
 import type { CoachModelProvider } from '../model/provider';
-import { MEMORY_NOTE, MEMORY_REMOVED_NOTE } from '../orchestrator';
 import { resolvePersona } from '../personas';
 import type { CoachEventAttributes, CoachEventName, CoachTelemetry } from '../telemetry';
 import type { AnswerCard } from './card';
 import { buildFactSheet, defaultFactData, FactData, FactSheet } from './facts';
+import { cleanLegacyText } from './history';
 import { parseModelOutput } from './parse';
 import { buildAnswerSystemPrompt, buildRegenerationNote } from './prompt';
 import { AnswerRoute, routeQuestion } from './route';
@@ -114,16 +113,6 @@ export type AnswerGuardrailEvent =
 async function defaultLoadUser(userId: string) {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { timezone: true, coachPersonaId: true } });
   return { timezone: user?.timezone ?? 'UTC', coachPersonaId: user?.coachPersonaId ?? null };
-}
-
-/**
- * Stored replies from before the redesign carry the disclaimer and memory notes;
- * neither the model (history) nor the transcript (GET /me/coach/conversations) shows them.
- */
-export function cleanHistoryText(text: string): string {
-  let t = stripDisclaimer(text);
-  for (const note of [MEMORY_NOTE, MEMORY_REMOVED_NOTE]) t = t.split(note).join('');
-  return t.trim();
 }
 
 const DEADLINE = Symbol('deadline');
@@ -299,7 +288,7 @@ export async function* runAnswer(input: AnswerInput, deps: AnswerDeps): AsyncGen
     // memory note) is dropped: the hosted API rejects an empty message.
     const messages = [
       ...input.history
-        .map((m) => ({ role: m.role, content: m.role === 'assistant' ? cleanHistoryText(m.text) : m.text.trim() }))
+        .map((m) => ({ role: m.role, content: m.role === 'assistant' ? cleanLegacyText(m.text) : m.text.trim() }))
         .filter((m) => m.content.length > 0)
         .slice(-ANSWER_HISTORY_WINDOW),
       { role: 'user' as const, content: input.message },

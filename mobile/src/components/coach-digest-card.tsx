@@ -10,6 +10,7 @@ import { SectionLabel } from './ui/section-label';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 import { Skeleton } from './ui/skeleton';
+import { TODAY_FOOTNOTE } from './coach/CoachToday';
 
 type State = { status: 'loading' } | { status: 'hidden' } | { status: 'error' } | { status: 'ready'; digest: CoachDigestDTO };
 
@@ -88,6 +89,9 @@ export function CoachDigestCard() {
             </View>
             <Text testID="coach-digest-full" className="text-base">
               {digest.text}
+            </Text>
+            <Text testID="coach-digest-footnote" className="text-xs text-muted-foreground">
+              {TODAY_FOOTNOTE}
             </Text>
           </ScrollView>
           <View className="items-center p-2">
