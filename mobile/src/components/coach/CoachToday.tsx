@@ -6,7 +6,7 @@ import { barQuestion, spanQuestion } from '../../lib/coachToday';
 import { COLORS } from '../../theme';
 import { Skeleton } from '../ui/skeleton';
 import { Text } from '../ui/text';
-import { TodayBar } from './TodayBar';
+import { BAR_LABEL_WIDTH, BAR_VALUE_WIDTH, TodayBar } from './TodayBar';
 
 export const TODAY_FOOTNOTE = 'Comparisons against your own readings, not medical advice.';
 export const TODAY_EMPTY = "Once your first night syncs, I'll sum up your day here.";
@@ -37,8 +37,11 @@ export const CoachToday = memo(function CoachToday({ summary, loading, onAsk }: 
         <Skeleton className="h-6 w-2/3" />
         <View className="gap-2">
           {[0, 1, 2, 3].map((i) => (
-            <View key={i} className="h-9 justify-center">
-              <Skeleton className="h-2 w-full rounded-full" />
+            // Laid out like a TodayBar row, so the tracks don't change length when the data arrives.
+            <View key={i} testID={`today-bar-skeleton-${i}`} className="h-9 flex-row items-center gap-2">
+              <View style={{ width: BAR_LABEL_WIDTH }} />
+              <Skeleton className="h-2 flex-1 rounded-full" />
+              <View testID={`today-bar-skeleton-value-${i}`} style={{ width: BAR_VALUE_WIDTH }} />
             </View>
           ))}
         </View>

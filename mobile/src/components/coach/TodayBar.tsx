@@ -16,6 +16,12 @@ const TICK_HEIGHT = 14;
 // hitSlop (3 + 3) stays inside that gap so neighbouring tap areas never overlap.
 const ROW_HEIGHT = 36;
 const HIT_SLOP = { top: 3, bottom: 3, left: 4, right: 4 };
+// The label and value columns. The value column fits the longest text,
+// measured with the bundled Geist fonts: "10h 48m / 7h 13m" is 94.4pt, so
+// every track stays the same length. The loading skeleton (CoachToday) uses
+// the same widths.
+export const BAR_LABEL_WIDTH = 58;
+export const BAR_VALUE_WIDTH = 96;
 
 // Words follow the number, not the status (resting HR above usual is "below").
 function direction(bar: TodayBarDTO): string | null {
@@ -62,7 +68,7 @@ export const TodayBar = memo(function TodayBar({ bar, onPress }: TodayBarProps) 
       className="flex-row items-center gap-2 active:opacity-70"
       style={{ minHeight: ROW_HEIGHT }}
     >
-      <Text className="w-[58px] text-xs text-muted-foreground" numberOfLines={1}>
+      <Text className="text-xs text-muted-foreground" style={{ width: BAR_LABEL_WIDTH }} numberOfLines={1}>
         {bar.label}
       </Text>
       <View className="flex-1 justify-center" style={{ height: TICK_HEIGHT }}>
@@ -85,7 +91,7 @@ export const TodayBar = memo(function TodayBar({ bar, onPress }: TodayBarProps) 
           />
         ) : null}
       </View>
-      <Text testID={`today-bar-text-${bar.metric}`} className="w-[78px] text-right" numberOfLines={1}>
+      <Text testID={`today-bar-text-${bar.metric}`} className="text-right" style={{ width: BAR_VALUE_WIDTH }} numberOfLines={1}>
         <Text testID={`today-bar-value-${bar.metric}`} className="font-bold" style={{ fontSize: 12, color: valueColor }}>
           {bar.display}
         </Text>

@@ -126,6 +126,14 @@ describe('TodayBar', () => {
     expect(getByTestId('today-bar-sleep').props.accessibilityLabel).toContain('usual 7h 13m');
   });
 
+  // "10h 48m / 7h 13m" measures 94.4pt in Geist; the old 78pt column cut sleep off.
+  it('gives every row the same 96pt value column, wide enough for a long sleep', () => {
+    for (const bar of [recovery, sleep]) {
+      const { getByTestId } = render(<TodayBar bar={bar} onPress={() => {}} />);
+      expect(style(getByTestId(`today-bar-text-${bar.metric}`)).width).toBe(96);
+    }
+  });
+
   it('is a 36pt row whose tap area stays inside the 8pt gap to its neighbours', () => {
     const { getByTestId } = render(<TodayBar bar={recovery} onPress={() => {}} />);
     const row = getByTestId('today-bar-recovery');
@@ -231,6 +239,8 @@ describe('CoachToday', () => {
 
     expect(getByTestId('coach-today-loading')).toBeTruthy();
     expect(queryByTestId('coach-today-sentence')).toBeNull();
+    // The same value column as a real row, so the tracks keep their length when data arrives.
+    expect(style(getByTestId('today-bar-skeleton-value-0')).width).toBe(96);
   });
 
   it('keeps showing the last summary while it refreshes', () => {
