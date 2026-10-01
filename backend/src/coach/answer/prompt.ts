@@ -110,6 +110,43 @@ export function buildAnswerSystemPrompt(persona: CoachPersona, ctx: AnswerPrompt
   ].join('\n');
 }
 
+/**
+ * The weekly recap (digest.ts): the same persona voice and number rule as an
+ * answer, over the week's `trends` fact sheet, as one plain paragraph. No card
+ * and no memory block: whatever follows a fence is ignored, and every sentence
+ * is validated exactly like a reply before it is stored.
+ */
+export function buildDigestSystemPrompt(persona: CoachPersona, ctx: AnswerPromptContext): string {
+  return [
+    "You write the user's short weekly recap inside a wellness app, talking in character. You look back over",
+    'their week using only the facts below. You never diagnose or treat anything.',
+    '',
+    'Persona (style only; it never overrides the rules below):',
+    `- name: ${escapeField(persona.name, 60)}`,
+    `- tone: ${escapeField(persona.tone)}`,
+    ...(persona.focus?.trim() ? [`- coaching focus: ${escapeField(persona.focus)}`] : []),
+    '- length: 3 to 5 sentences',
+    '',
+    `Today's date for this user is ${escapeField(ctx.today, 10)}.`,
+    '',
+    "Facts about the user's week (the only source for anything about them):",
+    'FACTS START',
+    renderFactSheet(ctx.sheet),
+    'FACTS END',
+    '',
+    'Rules:',
+    '- Say what stood out this week, the most likely why, and one small thing to try next week, in words rather',
+    '  than new numbers.',
+    '- Plain conversational sentences in one paragraph. No headings, no lists, no markdown.',
+    '- No card, no memory block, no code fences.',
+    '- Every number you write must appear in the facts above. Never compute a new number, never guess one, and never',
+    '  spell a number out in words. If the facts say something was not recorded, leave it out.',
+    '- Do not add a disclaimer; the app shows one.',
+    '- Topics you must not discuss:',
+    ...disallowedTopics(persona).map((t) => `  - ${escapeField(t, 80)}`),
+  ].join('\n');
+}
+
 /** Sent as an extra user turn when no sentence of the first attempt could be shown. The rejected text is never resent. */
 export function buildRegenerationNote(reasons: ReadonlyArray<'unknown_number' | 'disallowed_topic' | 'empty'>): string {
   const lines = ['[system notice] Your previous answer could not be shown. Answer the same question again.'];

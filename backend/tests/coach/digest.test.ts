@@ -3,10 +3,18 @@ import path from 'path';
 import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
 import { civilDateToUtcMidnight } from '../../src/biometrics/civilDate';
+import { defaultFactData, FactData, FactSheet } from '../../src/coach/answer/facts';
 import { COACH_CONSENT_VERSION } from '../../src/coach/consent';
-import { composeDigestFallback, DIGEST_MAX_MODEL_CALLS, runWeeklyDigest, DigestDeps, weekStartOf } from '../../src/coach/digest';
-import { COACH_DISCLAIMER } from '../../src/coach/guardrails/disclaimer';
-import { ScriptedProvider, ScriptStep, UnconfiguredProvider, CoachModelProvider } from '../../src/coach/model/provider';
+import {
+  composeDigestFallback,
+  DIGEST_MAX_TOKENS,
+  DIGEST_REQUEST,
+  DigestDeps,
+  hasMaterial,
+  runWeeklyDigest,
+  weekStartOf,
+} from '../../src/coach/digest';
+import { CoachModelProvider, ScriptedStreamProvider, StreamStep, UnconfiguredProvider } from '../../src/coach/model/provider';
 import {
   GENERIC_PUSH_PAYLOADS,
   GenericPushPayload,
@@ -17,8 +25,7 @@ import {
   sendGenericPush,
 } from '../../src/coach/push';
 import * as personas from '../../src/coach/personas';
-import { coachTools, CoachTools } from '../../src/coach/tools';
-import { FakeClock, RecordingTelemetry, createUser, daysAgo, hang, putScore, settle, todayUtc } from './helpers';
+import { FakeClock, RecordingTelemetry, createUser, daysAgo, putScore, settle, todayUtc } from './helpers';
 
 beforeAll(() => {
   migrateTestDb();
@@ -46,8 +53,10 @@ class RecordingPushSender implements PushSender {
   }
 }
 
-const GOOD_DIGEST =
-  'This past week your recovery averaged {{recoveryHistory.average}}, peaking at {{recoveryHistory.highest}}. Keep it steady.';
+// digestUser's week: Recovery 60, 65, 70, 75, 80, 70, 70 -> 7-day and 30-day average 70.
+const GOOD_DIGEST = 'Your recovery averaged 70 across the last 7 days. That is a steady week. Keep your bedtime where it is.';
+const GOOD_TEXT = GOOD_DIGEST;
+const FALLBACK_TEXT = "Here's your week. Recovery averaged 70 over the last 7 days.";
 
 /** A consented user (default persona: hoot, threshold-triggered) with 7 days of recovery + sleep scores. */
 async function digestUser(opts: { persona?: string | null; consent?: boolean; scores?: boolean } = {}) {
@@ -55,7 +64,7 @@ async function digestUser(opts: { persona?: string | null; consent?: boolean; sc
   if (opts.persona !== undefined) await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: opts.persona } });
   if (opts.consent !== false) await prisma.coachConsent.create({ data: { userId: user.id, version: COACH_CONSENT_VERSION } });
   if (opts.scores !== false) {
-    const recovery = [60, 65, 70, 75, 80, 70, 70]; // average 70, lowest 60, highest 80
+    const recovery = [60, 65, 70, 75, 80, 70, 70];
     const sleep = [80, 82, 84, 86, 88, 90, 90];
     for (let i = 0; i < 7; i++) {
       await putScore(user.id, daysAgo(6 - i), recovery[i]!, 'RECOVERY');
@@ -65,17 +74,24 @@ async function digestUser(opts: { persona?: string | null; consent?: boolean; sc
   return user;
 }
 
-function setup(script: ScriptStep[] | CoachModelProvider, over: Partial<DigestDeps> = {}) {
-  const provider = Array.isArray(script) ? new ScriptedProvider(script) : script;
+function setup(script: StreamStep[] | CoachModelProvider, over: Partial<DigestDeps> = {}) {
+  const provider = Array.isArray(script) ? new ScriptedStreamProvider(script) : script;
   const telemetry = new RecordingTelemetry();
   const pushSender = new RecordingPushSender();
   const clock = new FakeClock();
   const deps: DigestDeps = { provider, telemetry, pushSender, clock, ...over };
-  return { provider, telemetry, pushSender, clock, deps };
+  return { provider: provider as ScriptedStreamProvider, telemetry, pushSender, clock, deps };
 }
 
 const digestsOf = (userId: string) => prisma.coachDigest.findMany({ where: { userId } });
 const sweep = (deps: DigestDeps, ...userIds: string[]) => runWeeklyDigest({ ...deps, userIds });
+
+/** A stream step that never produces anything until its request is aborted. */
+const hangUntilAborted: StreamStep = (request) =>
+  (async function* () {
+    await new Promise<void>((resolve) => request.signal?.addEventListener('abort', () => resolve(), { once: true }));
+    throw new Error('aborted');
+  })();
 
 describe('weekStartOf', () => {
   it.each([
@@ -93,7 +109,7 @@ describe('gating', () => {
   it('does nothing when COACH_ENABLED is off: no users read, no model call, no digest, no push', async () => {
     process.env.COACH_ENABLED = 'false';
     const user = await digestUser();
-    const { deps, provider, pushSender } = setup([{ type: 'text', text: GOOD_DIGEST }]);
+    const { deps, provider, pushSender } = setup([GOOD_DIGEST]);
 
     const summary = await sweep(deps, user.id);
 
@@ -110,7 +126,7 @@ describe('gating', () => {
   ])('skips a user with %s (no model call, no digest, no push)', async (_label, mutate) => {
     const user = await digestUser();
     await mutate(user.id);
-    const { deps, provider, pushSender, telemetry } = setup([{ type: 'text', text: GOOD_DIGEST }]);
+    const { deps, provider, pushSender, telemetry } = setup([GOOD_DIGEST]);
 
     const summary = await sweep(deps, user.id);
 
@@ -118,14 +134,13 @@ describe('gating', () => {
     expect(provider.callCount).toBe(0);
     expect(await digestsOf(user.id)).toHaveLength(0);
     expect(pushSender.calls).toHaveLength(0);
-    // A user with no valid consent row at all is not even a candidate; an outdated one is skipped by the per-user gate.
     expect(telemetry.named('coach.digest_generated')).toHaveLength(0);
   });
 
   it('a user whose only consent is the HOSTED scope is not a digest candidate', async () => {
     const user = await digestUser();
     await prisma.coachConsent.updateMany({ where: { userId: user.id }, data: { scope: 'HOSTED' } });
-    const { deps, provider } = setup([{ type: 'text', text: GOOD_DIGEST }]);
+    const { deps, provider } = setup([GOOD_DIGEST]);
 
     const summary = await sweep(deps, user.id);
 
@@ -139,7 +154,7 @@ describe('gating', () => {
     const user = await digestUser();
     const hoot = personas.resolvePersona('hoot');
     jest.spyOn(personas, 'resolvePersona').mockReturnValue({ ...hoot, proactivity: 'reactive-only' });
-    const { deps, provider, pushSender, telemetry } = setup([{ type: 'text', text: GOOD_DIGEST }]);
+    const { deps, provider, pushSender, telemetry } = setup([GOOD_DIGEST]);
 
     const summary = await sweep(deps, user.id);
 
@@ -153,17 +168,14 @@ describe('gating', () => {
   it('generates for the default persona (no stored id) and for an unknown stored persona id', async () => {
     const a = await digestUser();
     const b = await digestUser({ persona: 'retired-persona' }); // falls back to the default persona
-    const { deps } = setup([
-      { type: 'text', text: GOOD_DIGEST },
-      { type: 'text', text: GOOD_DIGEST },
-    ]);
+    const { deps } = setup([GOOD_DIGEST, GOOD_DIGEST]);
     const summary = await sweep(deps, a.id, b.id);
     expect(summary.generated).toBe(2);
   });
 
-  it('skips a user with nothing to recap (no scores, no patterns): no model call, no push', async () => {
+  it('skips a user with nothing to recap (only the sleep goal): no model call, no push', async () => {
     const user = await digestUser({ scores: false });
-    const { deps, provider, pushSender, telemetry } = setup([{ type: 'text', text: GOOD_DIGEST }]);
+    const { deps, provider, pushSender, telemetry } = setup([GOOD_DIGEST]);
 
     await sweep(deps, user.id);
 
@@ -180,7 +192,7 @@ describe('companion characters', () => {
     '%s gets a weekly recap written in its own persona',
     async (id) => {
       const user = await digestUser({ persona: id });
-      const { deps, provider } = setup([{ type: 'text', text: GOOD_DIGEST }]);
+      const { deps, provider } = setup([GOOD_DIGEST]);
 
       const summary = await sweep(deps, user.id);
 
@@ -199,7 +211,7 @@ describe('companion characters', () => {
     ['clinical', 'beep'],
   ])('a former %s user (not yet migrated) now gets a recap as %s', async (legacy, character) => {
     const user = await digestUser({ persona: legacy });
-    const { deps } = setup([{ type: 'text', text: GOOD_DIGEST }]);
+    const { deps } = setup([GOOD_DIGEST]);
 
     const summary = await sweep(deps, user.id);
 
@@ -208,113 +220,100 @@ describe('companion characters', () => {
   });
 });
 
-describe('generation (synthesis tier, grounded)', () => {
-  it('stores a validated model recap with the disclaimer and the resolved values, on the synthesis tier', async () => {
+describe('generation (trends fact sheet, validated like replies)', () => {
+  it('stores the validated recap as written, without a disclaimer, from one streamed call over the trends fact sheet', async () => {
     const user = await digestUser();
-    const { deps, provider, telemetry } = setup([{ type: 'text', text: GOOD_DIGEST }]);
+    const { deps, provider, telemetry } = setup([['Your recovery averaged 70 ', 'across the last 7 days. That is a steady week. ', 'Keep your bedtime where it is.']]);
 
     const summary = await sweep(deps, user.id);
 
     expect(summary).toMatchObject({ enabled: true, usersChecked: 1, generated: 1, failed: 0 });
     const [row] = await digestsOf(user.id);
-    expect(row!.text).toBe(
-      `This past week your recovery averaged 70, peaking at 80. Keep it steady.\n\n${COACH_DISCLAIMER}`,
-    );
+    expect(row!.text).toBe(GOOD_TEXT);
+    expect(row!.text).not.toMatch(/medical assessment/);
     expect(row!.personaId).toBe('hoot');
     expect(row!.weekStart.toISOString().slice(0, 10)).toBe(weekStartOf(todayUtc()));
 
+    expect(provider.callCount).toBe(1);
     const request = provider.requests[0]!;
-    expect(request.tier).toBe('synthesis');
-    expect(request.tools.map((t) => t.name)).toEqual(['getScoreHistory', 'getHabitCorrelations']); // no proposeMemory, no writers
-    const toolNames = request.messages.flatMap((m) => (m.role === 'tool' ? [m.name] : []));
-    expect(toolNames).toEqual(['recoveryHistory', 'sleepHistory', 'getHabitCorrelations']);
-    expect(telemetry.named('coach.digest_generated')[0]!.attributes).toMatchObject({ source: 'model', guardrailRejects: 0 });
+    expect(request.maxTokens).toBe(DIGEST_MAX_TOKENS);
+    expect(request.messages).toEqual([{ role: 'user', content: DIGEST_REQUEST }]);
+    expect(request.system).toContain('FACTS START\n[recovery.avg7] Recovery 7-day average: 70 (usual 70, same as usual)');
+    expect(request.system).toContain('[recovery.avg30] Recovery 30-day average: 70');
+    expect(request.system).not.toMatch(/\{\{|getScoreHistory|recoveryHistory/);
+    expect(telemetry.named('coach.digest_generated')[0]!.attributes).toMatchObject({ source: 'model', dropped: 0, attempts: 1 });
   });
 
-  it('lets the model reference both metrics and call getScoreHistory itself; results are grounded either way', async () => {
-    const user = await digestUser();
-    const { deps } = setup([
-      { type: 'tool_calls', calls: [{ id: 't1', name: 'getScoreHistory', args: { metric: 'SLEEP', days: 7 } }] },
-      { type: 'text', text: 'Recovery averaged {{recoveryHistory.average}}, sleep averaged {{sleepHistory.average}}, ok {{getScoreHistory.highest}}.' },
-    ]);
-    await sweep(deps, user.id);
-    const [row] = await digestsOf(user.id);
-    expect(row!.text).toContain('Recovery averaged 70, sleep averaged 85.7, ok 90.');
-  });
-
-  it('never runs a writer tool from inside the digest (proposeMemory is refused, nothing stored)', async () => {
-    const user = await digestUser();
-    const { deps, provider } = setup([
-      { type: 'tool_calls', calls: [{ id: 't1', name: 'proposeMemory', args: { category: 'PREFERENCE', value: 'Likes tea' } }] },
-      { type: 'text', text: GOOD_DIGEST },
-    ]);
-    await sweep(deps, user.id);
-    expect(await prisma.coachMemory.count({ where: { userId: user.id } })).toBe(0);
-    const tool = provider.requests[1]!.messages.filter((m) => m.role === 'tool').pop();
-    expect(tool && tool.role === 'tool' && JSON.parse(tool.content)).toEqual({ error: 'unknown_tool' });
-  });
-
-  it('an ungrounded first reply is discarded and regenerated once; the regenerated reply is stored', async () => {
+  it('drops a sentence with an invented number and keeps the rest', async () => {
     const user = await digestUser();
     const { deps, provider, telemetry } = setup([
-      { type: 'text', text: 'Your recovery averaged 72 this week.' }, // unwrapped number
-      { type: 'text', text: GOOD_DIGEST },
+      'Your recovery averaged 70 across the last 7 days. Your HRV hit 95 ms on Tuesday. Keep your bedtime where it is.',
     ]);
+
+    await sweep(deps, user.id);
+
+    expect(provider.callCount).toBe(1);
+    const [row] = await digestsOf(user.id);
+    expect(row!.text).toBe('Your recovery averaged 70 across the last 7 days. Keep your bedtime where it is.');
+    expect(telemetry.named('coach.digest_generated')[0]!.attributes).toMatchObject({ source: 'model', dropped: 1, attempts: 1 });
+  });
+
+  it('ignores any card or memory block after the recap and stores no memory', async () => {
+    const user = await digestUser();
+    const { deps } = setup([
+      `${GOOD_DIGEST}\n\`\`\`card\n{"headline":"Week","tiles":[{"fact":"recovery.avg7","label":"Recovery"}]}\n\`\`\`\n\`\`\`memory\n{"category":"PREFERENCE","value":"Likes tea"}\n\`\`\``,
+    ]);
+
+    await sweep(deps, user.id);
+
+    expect((await digestsOf(user.id))[0]!.text).toBe(GOOD_TEXT);
+    expect(await prisma.coachMemory.count({ where: { userId: user.id } })).toBe(0);
+  });
+
+  it('asks once more when no sentence survives, without resending the rejected text', async () => {
+    const user = await digestUser();
+    const { deps, provider, telemetry } = setup(['Your recovery averaged 91 this week.', GOOD_DIGEST]);
+
     await sweep(deps, user.id);
 
     expect(provider.callCount).toBe(2);
-    const corrective = provider.requests[1]!.messages.at(-1)!;
-    expect(corrective.role === 'system' && corrective.content).toMatch(/discarded/);
-    const [row] = await digestsOf(user.id);
-    expect(row!.text).toContain('averaged 70');
-    expect(row!.text).not.toContain('72');
-    expect(telemetry.named('coach.digest_generated')[0]!.attributes).toMatchObject({ source: 'model', guardrailRejects: 1 });
+    const second = provider.requests[1]!.messages;
+    expect(second[0]).toEqual({ role: 'user', content: DIGEST_REQUEST });
+    expect(second[1]!.content).toMatch(/^\[system notice\] Your previous answer could not be shown/);
+    expect(JSON.stringify(second)).not.toContain('91');
+    expect((await digestsOf(user.id))[0]!.text).toBe(GOOD_TEXT);
+    expect(telemetry.named('coach.digest_generated')[0]!.attributes).toMatchObject({ source: 'model', dropped: 1, attempts: 2 });
   });
 
   it.each([
-    ['unwrapped numbers', 'You slept 8 hours on average.'],
-    ['a ratio', 'Recovery was 7/10 this week.'],
-    ['a bad field path', 'Recovery averaged {{recoveryHistory.median}}.'],
-  ])('two consecutive rejections (%s) fall back to the server-composed digest, never an ungrounded one', async (_l, bad) => {
+    ['invented numbers', 'You slept 8 hours and 12 minutes on average.'],
+    ['a disallowed topic', 'Try some melatonin before bed.'],
+    ['an empty reply', '   '],
+  ])('two replies with nothing valid (%s) fall back to the server-composed recap', async (_label, bad) => {
     const user = await digestUser();
-    const { deps, provider, telemetry } = setup([
-      { type: 'text', text: bad },
-      { type: 'text', text: bad },
-    ]);
+    const { deps, provider, telemetry } = setup([bad, bad]);
+
     await sweep(deps, user.id);
 
-    expect(provider.callCount).toBe(2); // exactly one regenerate, nothing more
+    expect(provider.callCount).toBe(2); // exactly one retry, nothing more
     const [row] = await digestsOf(user.id);
-    expect(row!.text).toBe(
-      `Here's your weekly recap.\n` +
-        `Recovery Score: averaged 70 over the past week, from a low of 60 to a high of 80.\n` +
-        `Sleep Score: averaged 85.7, from a low of 80 to a high of 90.\n\n${COACH_DISCLAIMER}`,
-    );
-    expect(row!.text).not.toContain(bad);
-    expect(row!.text).not.toMatch(/\{\{|\}\}/);
-    expect(telemetry.named('coach.digest_generated')[0]!.attributes).toMatchObject({ source: 'fallback', guardrailRejects: 2 });
+    expect(row!.text).toBe(FALLBACK_TEXT);
+    expect(telemetry.named('coach.digest_generated')[0]!.attributes).toMatchObject({ source: 'fallback', attempts: 2 });
   });
 
-  it('falls back when the provider is unconfigured or throws (the shipped default provider)', async () => {
-    const user = await digestUser();
-    const { deps } = setup(new UnconfiguredProvider());
-    await sweep(deps, user.id);
-    const [row] = await digestsOf(user.id);
-    expect(row!.text).toContain('averaged 70');
+  it('falls back when the provider is unconfigured or the stream drops', async () => {
+    const a = await digestUser();
+    await sweep(setup(new UnconfiguredProvider()).deps, a.id);
+    expect((await digestsOf(a.id))[0]!.text).toBe(FALLBACK_TEXT);
+
+    const b = await digestUser();
+    await sweep(setup([{ chunks: ['Your recovery averaged 70 '], error: new Error('socket closed') }]).deps, b.id);
+    expect((await digestsOf(b.id))[0]!.text).toBe(FALLBACK_TEXT);
   });
 
-  it('falls back when the model call limit is hit by endless tool calls', async () => {
+  it('falls back at the budget, aborts the call and leaves no timer behind', async () => {
     const user = await digestUser();
-    const loop: ScriptStep = { type: 'tool_calls', calls: [{ id: 'x', name: 'getHabitCorrelations', args: {} }] };
-    const { deps, provider } = setup(Array.from({ length: DIGEST_MAX_MODEL_CALLS + 2 }, () => loop));
-    await sweep(deps, user.id);
-    expect(provider.callCount).toBe(DIGEST_MAX_MODEL_CALLS);
-    expect((await digestsOf(user.id))[0]!.text).toContain('weekly recap');
-  });
-
-  it('falls back on a timeout and leaves no timer behind', async () => {
-    const user = await digestUser();
-    const { deps, clock } = setup([hang]); // a never-settling provider call
+    const { deps, clock, provider } = setup([hangUntilAborted]);
     const running = sweep(deps, user.id);
     // Wait (on real time, bounded) until the digest generation has armed its budget timer.
     for (let i = 0; i < 500 && clock.pendingTimers === 0; i++) await new Promise((r) => setTimeout(r, 10));
@@ -324,43 +323,70 @@ describe('generation (synthesis tier, grounded)', () => {
     const summary = await running;
 
     expect(summary.generated).toBe(1);
-    expect((await digestsOf(user.id))[0]!.text).toContain('weekly recap');
+    expect((await digestsOf(user.id))[0]!.text).toBe(FALLBACK_TEXT);
+    expect(provider.requests[0]!.signal?.aborted).toBe(true);
     expect(clock.pendingTimers).toBe(0);
   });
 
   it('cancels its timer after a normal run', async () => {
     const user = await digestUser();
-    const { deps, clock } = setup([{ type: 'text', text: GOOD_DIGEST }]);
+    const { deps, clock } = setup([GOOD_DIGEST]);
     await sweep(deps, user.id);
     expect(clock.pendingTimers).toBe(0);
   });
 
-  it('the fallback includes confirmed habit patterns as grounded fields', async () => {
+  it('the fallback includes confirmed habit patterns, validated like everything else', async () => {
     const user = await digestUser({ scores: false });
-    const tools: CoachTools = {
-      ...coachTools,
-      run: async (u, name, args, ctx) =>
-        name === 'getHabitCorrelations'
-          ? {
-              ok: true,
-              result: {
-                correlations: [
-                  { habitType: 'caffeine', habitLabel: 'Late caffeine', factor: 'HRV', direction: 'lower', effectSizePercent: 12.5, sampleSize: 30 },
-                ],
-              },
-            }
-          : coachTools.run(u, name, args, ctx),
+    const factData: FactData = {
+      ...defaultFactData,
+      getHabitCorrelations: async () => ({
+        correlations: [
+          {
+            habitType: 'caffeine',
+            habitLabel: 'Late caffeine',
+            exposureThreshold: 1,
+            exposureUnit: 'cups',
+            factor: 'HRV',
+            lagDays: 1,
+            effectSizePercent: -12.5,
+            comparisonPercent: 87.5,
+            sampleSize: 30,
+            direction: 'lower',
+          },
+        ],
+      }),
     };
-    const { deps } = setup(new UnconfiguredProvider(), { tools });
+    const { deps } = setup(new UnconfiguredProvider(), { factData });
     await sweep(deps, user.id);
-    expect((await digestsOf(user.id))[0]!.text).toContain(
-      'Pattern: Late caffeine is linked to lower HRV (12.5 percent, across 30 days of data).',
-    );
+    expect((await digestsOf(user.id))[0]!.text).toBe("Here's your week. Late caffeine and next-day HRV: 13% lower.");
+  });
+});
+
+describe('composeDigestFallback and hasMaterial', () => {
+  const sheet = (facts: FactSheet['facts']): FactSheet => ({ route: 'trends', facts, notes: [] });
+  const goal = { id: 'sleep.goal', label: 'Sleep goal', value: 480, unit: 'minutes' as const, display: '8h 0m' };
+
+  it('has nothing to say with only the sleep goal', () => {
+    expect(hasMaterial(sheet([goal]))).toBe(false);
+    expect(composeDigestFallback(sheet([goal]))).toBeNull();
   });
 
-  it('composeDigestFallback has no digits outside resolved values and returns null with no material', () => {
-    expect(composeDigestFallback([])).toBeNull();
-    expect(composeDigestFallback([{ name: 'recoveryHistory', result: { points: [], average: null } }])).toBeNull();
+  it('states each weekly average against the 30-day one when they differ', () => {
+    const text = composeDigestFallback(
+      sheet([
+        goal,
+        { id: 'recovery.avg7', label: 'Recovery 7-day average', value: 64, unit: 'score', display: '64', usual: 58 },
+        { id: 'sleep.avg7', label: 'Sleep 7-day average', value: 408, unit: 'minutes', display: '6h 48m', usual: 433 },
+        { id: 'hrv.avg7', label: 'HRV 7-day average', value: 41, unit: 'ms', display: '41 ms', usual: 41 },
+        { id: 'rhr.avg7', label: 'Resting heart rate 7-day average', value: 58, unit: 'bpm', display: '58 bpm', usual: 55, lowerIsBetter: true },
+      ]),
+    );
+    expect(text).toBe(
+      "Here's your week. Recovery averaged 64 over the last 7 days, against your usual 58. " +
+        'Sleep averaged 6h 48m a night, against your usual 7h 13m. HRV averaged 41 ms. ' +
+        'Resting heart rate averaged 58 bpm, against your usual 55 bpm.',
+    );
+    expect(hasMaterial(sheet([goal, { id: 'hrv.avg7', label: 'HRV 7-day average', value: 41, unit: 'ms', display: '41 ms' }]))).toBe(true);
   });
 });
 
@@ -368,7 +394,7 @@ describe('idempotency per user and week', () => {
   it('a second run in the same week creates no second digest, calls no model, sends no second push', async () => {
     const user = await digestUser();
     await prisma.pushToken.create({ data: { userId: user.id, token: `t-${user.id}`, platform: 'ios' } });
-    const { deps, provider, pushSender } = setup([{ type: 'text', text: GOOD_DIGEST }, { type: 'text', text: GOOD_DIGEST }]);
+    const { deps, provider, pushSender } = setup([GOOD_DIGEST, GOOD_DIGEST]);
 
     await sweep(deps, user.id);
     const again = await sweep(deps, user.id);
@@ -379,7 +405,7 @@ describe('idempotency per user and week', () => {
     expect(pushSender.calls).toHaveLength(1);
   });
 
-  it('a digest from an earlier week does not block this week\'s', async () => {
+  it("a digest from an earlier week does not block this week's", async () => {
     const user = await digestUser();
     await prisma.coachDigest.create({
       data: {
@@ -389,7 +415,7 @@ describe('idempotency per user and week', () => {
         weekStart: civilDateToUtcMidnight(weekStartOf(daysAgo(7))),
       },
     });
-    const { deps } = setup([{ type: 'text', text: GOOD_DIGEST }]);
+    const { deps } = setup([GOOD_DIGEST]);
     await sweep(deps, user.id);
     expect(await digestsOf(user.id)).toHaveLength(2);
   });
@@ -402,7 +428,7 @@ describe('idempotency per user and week', () => {
     });
     // Simulate the loser of a race: the pre-check saw nothing, the insert hits the unique key.
     jest.spyOn(prisma.coachDigest, 'findUnique').mockResolvedValueOnce(null);
-    const { deps, pushSender } = setup([{ type: 'text', text: GOOD_DIGEST }]);
+    const { deps, pushSender } = setup([GOOD_DIGEST]);
 
     const summary = await sweep(deps, user.id);
 
@@ -430,10 +456,7 @@ describe('push content is generic', () => {
         { userId: user.id, token: `and-${user.id}`, platform: 'android' },
       ],
     });
-    // A digest text and scores full of digits, names and health values.
-    const { deps, pushSender } = setup([
-      { type: 'text', text: 'Your recovery averaged {{recoveryHistory.average}} and HRV fell to {{recoveryHistory.lowest}}.' },
-    ]);
+    const { deps, pushSender } = setup(['Your recovery averaged 70 and dipped to 60 at its lowest.']);
 
     await sweep(deps, user.id);
 
@@ -471,7 +494,7 @@ describe('push content is generic', () => {
 
   it('is never called for a user with no registered device', async () => {
     const user = await digestUser();
-    const { deps, pushSender } = setup([{ type: 'text', text: GOOD_DIGEST }]);
+    const { deps, pushSender } = setup([GOOD_DIGEST]);
     await sweep(deps, user.id);
     expect(pushSender.calls).toHaveLength(0);
   });
@@ -480,7 +503,7 @@ describe('push content is generic', () => {
     const user = await digestUser();
     await prisma.pushToken.create({ data: { userId: user.id, token: `f-${user.id}`, platform: 'ios' } });
     const failing: PushSender = { send: async () => { throw new TypeError('provider down: secret text'); } };
-    const { deps, telemetry } = setup([{ type: 'text', text: GOOD_DIGEST }], { pushSender: failing });
+    const { deps, telemetry } = setup([GOOD_DIGEST], { pushSender: failing });
 
     const summary = await sweep(deps, user.id);
 
@@ -520,14 +543,14 @@ describe('sweep robustness and telemetry', () => {
   it('one user failing does not stop the sweep; the failure is reported by error name only', async () => {
     const a = await digestUser();
     const b = await digestUser();
-    const tools: CoachTools = {
-      ...coachTools,
-      run: async (u, name, args, ctx) => {
-        if (u === a.id) throw new RangeError('boom with private text');
-        return coachTools.run(u, name, args, ctx);
+    const factData: FactData = {
+      ...defaultFactData,
+      getScoreHistory: async (userId, metric, days, today) => {
+        if (userId === a.id) throw new RangeError('boom with private text');
+        return defaultFactData.getScoreHistory(userId, metric, days, today);
       },
     };
-    const { deps, telemetry } = setup([{ type: 'text', text: GOOD_DIGEST }], { tools });
+    const { deps, telemetry } = setup([GOOD_DIGEST], { factData });
 
     const summary = await sweep(deps, a.id, b.id);
 
@@ -540,11 +563,11 @@ describe('sweep robustness and telemetry', () => {
 
   it('digest telemetry carries ids and counts only, never the digest text', async () => {
     const user = await digestUser();
-    const { deps, telemetry } = setup([{ type: 'text', text: GOOD_DIGEST }]);
+    const { deps, telemetry } = setup([GOOD_DIGEST]);
     await sweep(deps, user.id);
     const serialized = JSON.stringify(telemetry.events);
     expect(serialized).not.toContain('averaged');
-    expect(serialized).not.toContain('Keep it steady');
+    expect(serialized).not.toContain('bedtime');
     expect(telemetry.events.every((e) => e.userId === user.id && e.personaId === 'hoot')).toBe(true);
   });
 });
