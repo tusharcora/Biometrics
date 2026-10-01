@@ -73,6 +73,8 @@ export const defaultFactData: FactData = {
 
 export const USUAL_DAYS = 30;
 const MAX_HABIT_FACTS = 5;
+const MAX_HABIT_LABEL_CHARS = 60;
+const MAX_HABIT_UNIT_CHARS = 30;
 
 const round1 = (n: number) => Math.round(n * 10) / 10;
 
@@ -327,7 +329,8 @@ async function trendFacts(userId: string, deps: FactDeps, b: SheetBuilder): Prom
     b.add(
       fact({
         id: `habit.${slug(c.habitType)}.${slug(c.factor)}${lag}`,
-        label: `${c.habitLabel} (${c.exposureThreshold}+ ${c.exposureUnit}) and ${lagLabel(c.lagDays)} ${c.factor}`,
+        // Custom habit labels and units are the user's free text: quoted data, like memory notes.
+        label: `${escapeField(c.habitLabel, MAX_HABIT_LABEL_CHARS)} (${c.exposureThreshold}+ ${escapeField(c.exposureUnit, MAX_HABIT_UNIT_CHARS)}) and ${lagLabel(c.lagDays)} ${c.factor}`,
         unit: 'percent',
         value: size,
         display: `${size}% ${c.direction}`,
