@@ -102,6 +102,15 @@ describe('routeQuestion', () => {
     'What is a good sleep score?',
     'How many steps should adults take?',
     'Is caffeine bad for sleep?',
+    'What is HRV?',
+    'Tips for better sleep?',
+    'Is 7 hours of sleep enough?',
+    // R49: mechanism and population shapes stay general even with a score or state word.
+    'Why does HRV go down with age?',
+    'How is the recovery score calculated?',
+    'Why is HRV higher in the morning?',
+    'Is it bad to run when HRV is low?',
+    'Does stretching help recovery?',
   ])('keeps a definitional or population question general: %s', (message) => {
     expect(routeQuestion(message)).toBe('general');
   });

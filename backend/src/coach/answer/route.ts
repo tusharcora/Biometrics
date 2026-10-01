@@ -26,9 +26,20 @@ const USER_SCORE_RE = /\b(recovery|readiness|sleep scores?|scores?)\b/;
 const METRIC_RE = /\b(recovery|readiness|scores?|hrv|heart rate|rhr|pulse|sleep|steps)\b/;
 const STATE_RE = /\b(low|lower|high|higher|up|down|looking|doing|go|going|went|been)\b/;
 // Definitional and population shapes stay general even when they name a score or a state:
-// "What is recovery?", "What causes low HRV?", "How much sleep do adults need?", "Is caffeine bad for sleep?".
-const DEFINITIONAL_RE =
-  /^(what is|what's|whats|what are|what does|what do|what causes|what makes|define|explain|tell me about)\b|\b(adults?|people|most|everyone|someone|a person|athletes?|kids|children|teens?)\b|\b(good|bad) for\b/;
+// "What is recovery?", "What causes low HRV?", "How much sleep do adults need?", "Is caffeine bad for sleep?",
+// and mechanism shapes: "Why does HRV go down with age?", "How is the recovery score calculated?",
+// "Why is HRV higher in the morning?", "Is it bad to run when HRV is low?", "Does stretching help recovery?".
+const DEFINITIONAL_RE = new RegExp(
+  [
+    String.raw`^(what is|what's|whats|what are|what does|what do|what causes|what makes|define|explain|tell me about|why does|why do)\b`,
+    String.raw`\b(adults?|people|most|everyone|someone|a person|athletes?|kids|children|teens?)\b`,
+    String.raw`\b(good|bad) for\b`,
+    String.raw`\b(calculated|measured|computed|worked out)\b`,
+    String.raw`\bwith age\b|\bin the (morning|evening)s?\b`,
+    String.raw`^does .*\b(help|affect|hurt|improve|lower|raise|boost)\b`,
+    String.raw`\bwhen (?:your |the )?(recovery|readiness|hrv|heart rate|resting heart rate|rhr|pulse|sleep|steps|scores?) (?:is|are)\b`,
+  ].join('|'),
+);
 // A workout the user asks about doing today: today's readiness, not the workout habit's history.
 const TODAY_TIME_RE = /\b(today|this morning|right now|now|tonight)\b/;
 const WORKOUT_RE = /\b(work out|workouts?|exercis\w*|gym|train\w*|run|running)\b/;
