@@ -193,7 +193,6 @@ describe('resolveCard', () => {
       {
         headline: 'Today',
         tiles: ['recovery.today', 'nope', 'recovery.today', 'hrv.today', 'rhr.today', 'sleep.total', 'steps.today'].map((fact) => ({ fact, label: 'L' })),
-        source: 'Today',
       },
       SHEET,
     );
@@ -374,9 +373,9 @@ describe('validateSentence: trend window phrases (R13)', () => {
   });
 });
 
-// Fix wave R18 (D2): a number with an explicit unit matches its unit family
-// across the sheet; naming one metric only narrows a family that metric has
-// values in. Bare numbers keep the strict single-metric scoping.
+// Fix wave R18 (D2), narrowed in round 2 (R20): a named metric keeps every
+// number to its own values, except that a unit owned by one related metric
+// (sleep durations for the sleep score) may match that metric's values.
 describe('validateSentence: unit-carrying numbers across metrics (R18 D2)', () => {
   // The live smoke's sleep sheet (seed 7).
   const SLEEP: FactSheet = {
@@ -414,10 +413,26 @@ describe('validateSentence: unit-carrying numbers across metrics (R18 D2)', () =
 
   it.each([
     ['Your sleep score of 36 came after a week averaging 6h 53m.', SLEEP],
-    ['Your recovery averaged 37 while your heart sat at 62 bpm.', TRENDS],
     ['Your recovery averaged 37 with your HRV at 45.9 ms.', TRENDS],
   ])('accepts %j: each unit-carrying number is on the sheet in its own family', (sentence, sheet) => {
     expect(validateSentence(sentence as string, sheet as FactSheet)).toEqual(ok);
+  });
+
+  // Round 2 (R20): the review's probes. Percent and points are shared by several
+  // metrics, so a named metric never borrows another metric's value in them; a
+  // single-owner unit (bpm, ms, steps, durations) is borrowed only by a related
+  // metric (the sleep score and sleep durations).
+  it.each([
+    ['Your recovery is 10% lower this month.', "the steps trend's 10%", TRENDS],
+    ['Your recovery dropped 8% this month.', "the HRV trend's 8%", TRENDS],
+    ['Your recovery is 12% lower than usual.', "the alcohol/HRV habit's 12%", PROBE],
+    ['Your sleep score fell 12% today.', "the alcohol/HRV habit's 12%", PROBE],
+    ['Your HRV fell 32 points.', "recovery's 32-point difference", PROBE],
+    ['Your recovery is 61 bpm.', "resting HR's 61 bpm: bpm is unrelated to recovery", PROBE],
+    ['Your HRV is 61 bpm.', "resting HR's 61 bpm: bpm is unrelated to HRV", PROBE],
+    ['Your recovery averaged 37 while your heart sat at 62 bpm.', 'bpm is unrelated to recovery (safe direction: an over-rejection)', TRENDS],
+  ])('rejects %j (borrows %s)', (sentence, _why, sheet) => {
+    expect(validateSentence(sentence as string, sheet as FactSheet)).toEqual(unknown);
   });
 
   it.each([
@@ -426,8 +441,7 @@ describe('validateSentence: unit-carrying numbers across metrics (R18 D2)', () =
     ['Your sleep score was 20.', SLEEP, 'an invented bare number'],
     ['Your recovery averaged 37 while your heart sat at 65 bpm.', TRENDS, 'no such bpm value'],
     ['Your recovery averaged 37 with your HRV at 62 ms.', TRENDS, "resting HR's 62 bpm is not an ms value"],
-    // Percent is shared by several metrics: a metric that has its own percent
-    // values keeps to them, so HRV cannot borrow the steps trend's 10%.
+    // Percent is shared by several metrics, so HRV cannot borrow the steps trend's 10%.
     ['Your HRV is down 10% this month.', TRENDS, "the steps trend's 10% is not an HRV value"],
   ])('rejects %j (%s)', (sentence, sheet) => {
     expect(validateSentence(sentence as string, sheet as FactSheet)).toEqual(unknown);

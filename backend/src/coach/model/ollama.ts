@@ -217,11 +217,7 @@ export class OllamaProvider implements CoachModelProvider {
       stream: false,
       think: this.options.think ?? false,
       keep_alive: this.options.keepAlive ?? '60m',
-      options: {
-        temperature: this.options.temperature ?? 0.3,
-        num_ctx: this.options.numCtx ?? 8192,
-        num_predict: this.options.numPredict ?? 400,
-      },
+      options: { ...this.answerModelOptions(), num_predict: this.options.numPredict ?? 400 },
       messages: toOllamaMessages(request.system, request.messages),
       tools: request.tools.map((t) => ({
         type: 'function',
@@ -256,11 +252,11 @@ export class OllamaProvider implements CoachModelProvider {
   }
 
   /**
-   * The model options a streamed answer and the warm-up share. Ollama reloads
-   * the model whenever a load option (num_ctx above all) differs from the
-   * loaded one, so the warm-up must load with exactly these or the next answer
-   * pays a second cold load. Per-answer settings (num_predict) are added by
-   * stream() on top.
+   * The model options every chat call shares: tool calls, streamed answers
+   * and the warm-up. Ollama reloads the model whenever a load option (num_ctx
+   * above all) differs from the loaded one, so the warm-up must load with
+   * exactly these or the next answer pays a second cold load. Each caller adds
+   * its own output budget (num_predict) on top.
    */
   private answerModelOptions(): { temperature: number; num_ctx: number } {
     return {

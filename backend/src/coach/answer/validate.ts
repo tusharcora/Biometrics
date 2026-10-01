@@ -14,10 +14,11 @@
 //     a bare number matches any non-duration value. When the sentence names
 //     exactly one metric (recovery, sleep score, HRV, resting HR, sleep,
 //     steps), only that metric's values (and metric-less ones, e.g. notes)
-//     count, so "Your HRV is 61" cannot borrow resting HR's 61. For a number
-//     with a unit that narrowing applies only when the named metric has values
-//     of that unit: "your sleep score was 36 ... your average dipped to 6h 53m"
-//     matches the duration against the sleep facts (see candidatesFor).
+//     count, so "Your HRV is 61" cannot borrow resting HR's 61, nor "Your
+//     recovery dropped 8%" the HRV trend's 8%. The one exception is a unit
+//     owned by a single metric that is related to the named one: "your sleep
+//     score was 36 ... your average dipped to 6h 53m" matches the duration
+//     against the sleep facts (see candidatesFor).
 //   * Number words ("seven hours", "five points", "nine thousand steps") are
 //     read as numbers when a unit or metric word follows; "one thing to try"
 //     is left alone.
@@ -247,17 +248,26 @@ function allowedFor(sheet: FactSheet): Allowed[] {
 
 const PLAIN_FAMILIES: Family[] = ['ms', 'bpm', 'percent', 'count', 'score', 'none'];
 
+/** Unit families that belong to one metric, so a value in them can only be that metric's. */
+const SINGLE_OWNER: Partial<Record<Family, Metric>> = { duration: 'sleep', ms: 'hrv', bpm: 'rhr', count: 'steps' };
+/** A named metric may borrow a single-owner family from these metrics only. */
+const RELATED: Partial<Record<Metric, Metric[]>> = { sleep_score: ['sleep'] };
+
 /**
- * The values a number may match. A bare number is scoped to the sentence's one
- * named metric. A number with a unit (a duration, "62 ms", "61 bpm", "8%",
- * "9,645 steps", "6.3 points") is matched within its unit family across the
- * sheet: "Your sleep score was 36, ... your average dipped to 6h 53m" names
- * only the sleep score, yet a duration can never be a score. The named metric
- * still narrows a family it has values in, because percent and points are
- * shared (HRV and steps trends; recovery, sleep score and score drivers), so
- * "Your HRV is down 10%" cannot borrow the steps trend's 10%. ms, bpm and
- * steps each belong to one metric, so the family alone already keeps "Your
- * HRV was 62 ms" off resting HR's 61 bpm.
+ * The values a number may match. Its unit family always limits them (a
+ * duration, "62 ms", "61 bpm", "8%", "9,645 steps", "6.3 points"; a bare number
+ * is any non-duration family). When the sentence names one metric, only that
+ * metric's values and metric-less ones (notes, score drivers) count, so
+ * "Your HRV is 61" cannot borrow resting HR's 61 and "Your recovery dropped 8%"
+ * cannot borrow the HRV trend's 8%.
+ *
+ * One exception: a number whose unit family belongs to a single metric
+ * (durations: sleep, ms: HRV, bpm: resting HR, steps: steps) may match that
+ * owner's values when the named metric is related to it and has none of its
+ * own in the family. Today that is the sleep score and sleep durations, so
+ * "Your sleep score was 36, ... your average dipped to 6h 53m" passes while
+ * "Your recovery is 61 bpm" does not. Percent and points are shared by several
+ * metrics and never fall back.
  */
 function candidatesFor(s: Scanned, allowed: Allowed[], metric: Metric | undefined): Allowed[] {
   const { token } = s;
@@ -265,8 +275,10 @@ function candidatesFor(s: Scanned, allowed: Allowed[], metric: Metric | undefine
   const inFamily = allowed.filter((a) => families.includes(a.family));
   if (!metric) return inFamily;
   const scoped = inFamily.filter((a) => !a.metric || a.metric === metric);
-  const hasUnit = token.kind === 'duration' || s.unit !== undefined;
-  return hasUnit && !inFamily.some((a) => a.metric === metric) ? inFamily : scoped;
+  const unit: Family | undefined = token.kind === 'duration' ? 'duration' : s.unit;
+  const owner = unit === undefined ? undefined : SINGLE_OWNER[unit];
+  const mayBorrow = owner !== undefined && (RELATED[metric] ?? []).includes(owner) && !inFamily.some((a) => a.metric === metric);
+  return mayBorrow ? inFamily.filter((a) => !a.metric || a.metric === owner) : scoped;
 }
 
 function isKnown(s: Scanned, allowed: Allowed[], metric: Metric | undefined): boolean {

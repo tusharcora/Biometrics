@@ -93,7 +93,7 @@ export function buildAnswerSystemPrompt(persona: CoachPersona, ctx: AnswerPrompt
     '- Plain sentences, in character: no headings, bullet lists or markdown.',
     ...numberRule,
     '- A question back is optional: ask one only when their answer would genuinely change what you suggest;',
-    '  most replies need none. Never a generic check-in like "have you noticed any changes or stressors?".',
+    '  most replies need none. Never a generic check-in about recent changes or stress.',
     '- Do not add a disclaimer; the app shows one.',
     '- If they describe urgent-sounding symptoms (chest pain, fainting, trouble breathing), tell them to seek',
     '  urgent medical care now, and do not coach around it.',

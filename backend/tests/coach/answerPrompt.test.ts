@@ -106,9 +106,11 @@ describe('buildAnswerSystemPrompt', () => {
   it('makes the question back optional and bans generic check-ins', () => {
     const p = buildAnswerSystemPrompt(hoot, { today: '2026-09-30', sheet: SHEET });
     expect(p).not.toContain('Ask one short question back');
+    // Described, not quoted: a quoted example question is something a small model can copy.
+    expect(p).not.toContain('have you noticed');
     expect(p).toContain(
       '- A question back is optional: ask one only when their answer would genuinely change what you suggest;\n' +
-        '  most replies need none. Never a generic check-in like "have you noticed any changes or stressors?".',
+        '  most replies need none. Never a generic check-in about recent changes or stress.',
     );
   });
 
