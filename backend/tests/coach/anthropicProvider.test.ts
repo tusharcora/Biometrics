@@ -16,16 +16,32 @@ import type { CoachModelRequest, CoachStreamRequest } from '../../src/coach/mode
 // factory can be checked), and every provider under test gets a fake client.
 jest.mock('@anthropic-ai/sdk');
 
-type Event = { type: string; delta?: { type: string; text?: string } };
+type Event = { type: string; delta?: { type: string; text?: string }; content_block?: { type: string } };
 
-/** A fake of the slice of the SDK the provider uses: beta.messages.stream / create. */
+/**
+ * A fake of the slice of the SDK the provider uses: beta.messages.stream / create.
+ * Like the SDK's stream, it fails with an abort error once the request signal
+ * fires, and records when its iterator is closed early (the SDK aborts the HTTP
+ * request on iterator.return()).
+ */
 function fakeClient(opts: { events?: Event[]; stopReason?: string; failWith?: Error; content?: unknown[] } = {}) {
-  const stream = jest.fn((_body: Record<string, unknown>, _options?: { signal?: AbortSignal }) => {
+  const cancelled = { value: false };
+  const stream = jest.fn((_body: Record<string, unknown>, options?: { signal?: AbortSignal }) => {
     const events = opts.events ?? [];
     return {
-      async *[Symbol.asyncIterator]() {
-        if (opts.failWith) throw opts.failWith;
-        for (const e of events) yield e;
+      [Symbol.asyncIterator]() {
+        let i = 0;
+        return {
+          async next(): Promise<IteratorResult<Event>> {
+            if (opts.failWith) throw opts.failWith;
+            if (options?.signal?.aborted) throw Object.assign(new Error('Request was aborted.'), { name: 'APIUserAbortError' });
+            return i < events.length ? { value: events[i++]!, done: false } : { value: undefined, done: true };
+          },
+          async return(): Promise<IteratorResult<Event>> {
+            cancelled.value = true;
+            return { value: undefined, done: true };
+          },
+        };
       },
       finalMessage: async () => ({ stop_reason: opts.stopReason ?? 'end_turn', content: [] }),
     };
@@ -34,10 +50,12 @@ function fakeClient(opts: { events?: Event[]; stopReason?: string; failWith?: Er
     if (opts.failWith) throw opts.failWith;
     return { stop_reason: opts.stopReason ?? 'end_turn', content: opts.content ?? [] };
   });
-  return { client: { beta: { messages: { stream, create } } } as unknown as Anthropic, stream, create };
+  return { client: { beta: { messages: { stream, create } } } as unknown as Anthropic, stream, create, cancelled };
 }
 
 const textDelta = (text: string): Event => ({ type: 'content_block_delta', delta: { type: 'text_delta', text } });
+/** A server-side fallback boundary: the model before it declined, the next one takes over. */
+const fallbackStart: Event = { type: 'content_block_start', content_block: { type: 'fallback' } };
 
 function streamRequest(overrides: Partial<CoachStreamRequest> = {}): CoachStreamRequest {
   return {
@@ -110,7 +128,7 @@ describe('AnthropicProvider.stream', () => {
     const { client } = fakeClient({
       events: [
         { type: 'message_start' },
-        { type: 'content_block_start' },
+        { type: 'content_block_start', content_block: { type: 'text' } },
         { type: 'content_block_delta', delta: { type: 'thinking_delta' } },
         textDelta('Your recovery '),
         textDelta('is 26.'),
@@ -124,6 +142,58 @@ describe('AnthropicProvider.stream', () => {
   it('throws HostedRefusalError when the whole fallback chain refused', async () => {
     const { client } = fakeClient({ events: [], stopReason: 'refusal' });
     await expect(collect(new AnthropicProvider({ client }).stream(streamRequest()))).rejects.toBeInstanceOf(HostedRefusalError);
+  });
+
+  it('throws HostedRefusalError after text was already yielded when the chain refused', async () => {
+    const { client } = fakeClient({ events: [textDelta('Your recovery ')], stopReason: 'refusal' });
+    const seen: string[] = [];
+    const run = async () => {
+      for await (const chunk of new AnthropicProvider({ client }).stream(streamRequest())) seen.push(chunk);
+    };
+    await expect(run()).rejects.toBeInstanceOf(HostedRefusalError);
+    expect(seen).toEqual(['Your recovery ']);
+  });
+
+  it('streams the fallback model normally when the switch came before any text', async () => {
+    const { client } = fakeClient({
+      events: [{ type: 'message_start' }, fallbackStart, { type: 'content_block_stop' }, textDelta('Recovery is 26.')],
+    });
+    expect(await collect(new AnthropicProvider({ client }).stream(streamRequest()))).toEqual(['Recovery is 26.']);
+  });
+
+  it('stops with HostedRefusalError on a mid-reply model switch, never appending the second answer', async () => {
+    const { client, cancelled } = fakeClient({
+      events: [textDelta('Your recovery '), fallbackStart, { type: 'content_block_stop' }, textDelta('Recovery is 26.')],
+    });
+    const seen: string[] = [];
+    const run = async () => {
+      for await (const chunk of new AnthropicProvider({ client }).stream(streamRequest())) seen.push(chunk);
+    };
+    await expect(run()).rejects.toBeInstanceOf(HostedRefusalError);
+    expect(seen).toEqual(['Your recovery ']);
+    expect(cancelled.value).toBe(true);
+  });
+
+  it('cancels the SDK stream when the caller stops iterating', async () => {
+    const { client, cancelled } = fakeClient({ events: [textDelta('One. '), textDelta('Two.')] });
+    const iterator = new AnthropicProvider({ client }).stream(streamRequest())[Symbol.asyncIterator]();
+    expect(await iterator.next()).toEqual({ value: 'One. ', done: false });
+    await iterator.return?.();
+    expect(cancelled.value).toBe(true);
+  });
+
+  it('stops with the abort error when the request signal fires', async () => {
+    const controller = new AbortController();
+    const { client } = fakeClient({ events: [textDelta('One. '), textDelta('Two.')] });
+    const seen: string[] = [];
+    const run = async () => {
+      for await (const chunk of new AnthropicProvider({ client }).stream(streamRequest({ signal: controller.signal }))) {
+        seen.push(chunk);
+        controller.abort();
+      }
+    };
+    await expect(run()).rejects.toMatchObject({ name: 'APIUserAbortError' });
+    expect(seen).toEqual(['One. ']);
   });
 
   it('passes an SDK error through unchanged', async () => {
@@ -167,6 +237,13 @@ describe('AnthropicProvider.generate (legacy text-only path)', () => {
       { role: 'user', content: '[getDailyScore result] {"recoveryScore":80}' },
       { role: 'user', content: '[system notice] Use only the numbers above.' },
     ]);
+  });
+
+  it('returns only the serving model text after a server-side fallback', async () => {
+    const { client } = fakeClient({
+      content: [{ type: 'text', text: 'Partial from the declining model' }, { type: 'fallback' }, { type: 'text', text: 'Recovery is 80.' }],
+    });
+    expect(await new AnthropicProvider({ client }).generate(legacy())).toEqual({ type: 'text', text: 'Recovery is 80.' });
   });
 
   it('throws HostedRefusalError on a refusal', async () => {

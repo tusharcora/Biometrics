@@ -121,8 +121,21 @@ export class AnthropicProvider implements CoachModelProvider {
       this.params(request.system, toAnthropicMessages(request.messages)),
       request.signal ? { signal: request.signal } : undefined,
     );
+    let yielded = false;
     for await (const event of stream) {
-      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') yield event.delta.text;
+      // A server-side fallback hands the turn to another model mid-response; the
+      // declining model's earlier output stays in the stream. Before any text went
+      // out that is invisible (the fallback model's answer streams normally); after
+      // it, appending a second answer to a shown fragment would garble the reply,
+      // so stop here. Leaving the loop by throwing aborts the SDK stream.
+      if (event.type === 'content_block_start' && event.content_block.type === 'fallback') {
+        if (yielded) throw new HostedRefusalError();
+        continue;
+      }
+      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+        yielded = true;
+        yield event.delta.text;
+      }
     }
     const final = await stream.finalMessage();
     if (final.stop_reason === 'refusal') throw new HostedRefusalError();
@@ -134,7 +147,10 @@ export class AnthropicProvider implements CoachModelProvider {
       { signal: request.signal },
     );
     if (message.stop_reason === 'refusal') throw new HostedRefusalError();
+    // Only the content after the last fallback boundary is the serving model's answer.
+    const lastFallback = message.content.map((b) => b.type).lastIndexOf('fallback');
     const text = message.content
+      .slice(lastFallback + 1)
       .filter((b): b is Anthropic.Beta.BetaTextBlock => b.type === 'text')
       .map((b) => b.text)
       .join('');

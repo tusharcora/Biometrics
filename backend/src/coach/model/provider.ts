@@ -53,6 +53,7 @@ export type CoachModelResponse =
 export interface CoachStreamRequest {
   system: string;
   messages: { role: 'user' | 'assistant'; content: string }[];
+  /** Output cap. The hosted provider ignores it and uses a fixed HOSTED_MAX_TOKENS, since thinking counts toward its limit. */
   maxTokens: number;
   /** Aborted on the answer budget or when the client stops; a real provider cancels the in-flight call. */
   signal?: AbortSignal;
