@@ -1,6 +1,6 @@
 // The fact sheet (spec 2026-09-30, section 2.2): everything the one model call
 // may say about the user, as labelled lines with stable ids. Built from the
-// same read-only data access the coach tools use (tools/*), so every value and
+// read-only readers in tools/* (the same queries the app's screens use), so every value and
 // rounding matches what the app shows. Missing data is stated explicitly, the
 // usual is the 30 days ending yesterday, and the rendered sheet stays within
 // about 1,000 tokens. The validator (validate.ts) accepts only numbers held by

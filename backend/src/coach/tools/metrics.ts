@@ -1,9 +1,9 @@
 // Readers over the user's own daily metrics, for the fact sheet. Same contract
-// as the score tools: read-only, structured fields only, every comparison
+// as the score readers: read-only, structured fields only, every comparison
 // (delta, direction, percent of goal, averages) computed HERE so the model
 // never does arithmetic, and ready-made display strings for values a person
-// reads with separators or units ("9,234", "7h 12m"). Resolved references are
-// rendered with String(value), so a raw 9234 would read "9234".
+// reads with separators or units ("9,234", "7h 12m"), so the sheet shows them
+// exactly as the app does.
 
 import { civilDateToUtcMidnight } from '../../biometrics/civilDate';
 import { prisma } from '../../db/client';

@@ -6,6 +6,8 @@ import type { FactData } from '../../src/coach/answer/facts';
 import { CoachStreamRequest, ScriptedStreamProvider, StreamStep, UnconfiguredProvider } from '../../src/coach/model/provider';
 import { LEGACY_DISCLAIMER, LEGACY_REPLY_NOTES } from '../../src/coach/answer/history';
 import { SAFETY_REPLY } from '../../src/coach/guardrails/crisis';
+import { escapeField } from '../../src/coach/escape';
+import { resolvePersona } from '../../src/coach/personas';
 import { migrateTestDb } from '../setupTestDb';
 import { FakeClock, RecordingTelemetry, createUser } from './helpers';
 
@@ -266,7 +268,7 @@ describe('runAnswer: memory block', () => {
 
 describe('runAnswer: safety', () => {
   it('answers a crisis message with the fixed safety reply and resources, without calling the model', async () => {
-    const { deps, provider } = setup([]);
+    const { deps, provider, telemetry } = setup([]);
     const inp = await input({ message: 'I want to end my life' });
     const events = await collect(runAnswer(inp, deps));
     expect(types(events)).toEqual(['safety', 'done']);
@@ -282,13 +284,18 @@ describe('runAnswer: safety', () => {
     const safety = events[0] as Extract<AnswerEvent, { type: 'safety' }>;
     expect(safety.conversationId).toBe(doneOf(events).conversationId);
     expect(rows.every((r) => r.conversationId === safety.conversationId)).toBe(true);
+    // Privacy: the event is keyed to a userId, so it must never say which crisis category
+    // fired; application logs outlive the transcript retention. Exact, so a new key fails.
+    expect(telemetry.named('coach.safety_classifier')[0]!.attributes).toEqual({ triggered: true, overridden: false });
   });
 
   it('safetyOverride answers normally', async () => {
-    const { deps, provider } = setup([['Happy to look at your data.']]);
+    const { deps, provider, telemetry } = setup([['Happy to look at your data.']]);
     const events = await collect(runAnswer(await input({ message: 'should I take melatonin', safetyOverride: true }), deps));
     expect(types(events)).toEqual(['status', 'text', 'done']);
     expect(provider.callCount).toBe(1);
+    // The override is still recorded, and still without the category.
+    expect(telemetry.named('coach.safety_classifier')[0]!.attributes).toEqual({ triggered: true, overridden: true });
   });
 });
 
@@ -491,5 +498,51 @@ describe('runAnswer: telemetry', () => {
     const done = telemetry.named('coach.answer_done')[0]!;
     expect(done.attributes).toEqual({ route: 'today', engine: 'local', sentences: 1, dropped: 1, card: false, attempts: 1, durationMs: 0 });
     expect(JSON.stringify(telemetry.events)).not.toContain(SENTINEL);
+  });
+
+  it('never logs a provider error message, which can echo request text', async () => {
+    const SENTINEL = 'wombat-sentinel';
+    const spies = (['log', 'info', 'warn', 'error', 'debug'] as const).map((m) => jest.spyOn(console, m).mockImplementation(() => {}));
+    try {
+      const { deps, telemetry } = setup([new Error(`upstream rejected: ${SENTINEL} how am I?`)]);
+      const events = await collect(runAnswer(await input({ message: `${SENTINEL} how am I?` }), deps));
+      expect(events[events.length - 1]).toMatchObject({ type: 'error', code: 'model_unavailable' });
+      for (const spy of spies) expect(JSON.stringify(spy.mock.calls)).not.toContain(SENTINEL);
+      expect(JSON.stringify(telemetry.events)).not.toContain(SENTINEL);
+    } finally {
+      for (const spy of spies) spy.mockRestore();
+    }
+  });
+});
+
+describe('runAnswer: the user and their persona', () => {
+  it("uses the user's local civil date (User.timezone), not the UTC date", async () => {
+    const user = await createUser({ timezone: 'Pacific/Kiritimati' }); // UTC+14
+    const { deps, provider, clock } = setup([['Hello there.']]);
+    // Move to the next 12:00 UTC: Kiritimati is then already on the following civil date.
+    const noon = new Date(clock.now());
+    noon.setUTCHours(12, 0, 0, 0);
+    if (noon.getTime() <= clock.now()) noon.setUTCDate(noon.getUTCDate() + 1);
+    clock.advance(noon.getTime() - clock.now());
+    const utcDate = new Date(clock.now()).toISOString().slice(0, 10);
+    const localDate = new Intl.DateTimeFormat('en-CA', { timeZone: 'Pacific/Kiritimati' }).format(new Date(clock.now()));
+    expect(localDate).not.toBe(utcDate);
+
+    await collect(runAnswer({ userId: user.id, message: 'How am I doing today?', history: [] }, deps));
+    expect(provider.requests[0]!.system).toContain(`Today's date for this user is ${escapeField(localDate, 10)}.`);
+    expect(provider.requests[0]!.system).not.toContain(`Today's date for this user is ${escapeField(utcDate, 10)}.`);
+  });
+
+  it("builds the prompt from the user's chosen persona and labels telemetry with it", async () => {
+    const user = await createUser();
+    await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: 'doze' } });
+    const doze = resolvePersona('doze');
+    const { deps, provider, telemetry } = setup([['Fine.']]);
+    await collect(runAnswer({ userId: user.id, message: 'How am I doing today?', history: [] }, deps));
+    const system = provider.requests[0]!.system;
+    expect(system).toContain(`- name: ${escapeField(doze.name, 60)}`);
+    expect(system).toContain(`- coaching focus: ${escapeField(doze.focus)}`);
+    expect(telemetry.events.length).toBeGreaterThan(0);
+    expect(telemetry.events.every((e) => e.personaId === 'doze')).toBe(true);
   });
 });

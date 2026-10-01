@@ -28,11 +28,11 @@ export interface DailyScoreToolResult {
   factors: DailyScoreToolFactor[];
   /**
    * The same factors keyed by their stable FactorKey (HRV, SLEEP_DURATION, ...).
-   * References must use this, not factors[n]: the array is built by skipping a
+   * Look factors up here, not by factors[n]: the array is built by skipping a
    * score row that does not exist for the day, so a missing RECOVERY row slides
-   * every SLEEP factor down an index and {{getDailyScore.factors[0].points}}
-   * silently resolves to a different factor than the model meant. The keys are
-   * disjoint across RECOVERY and SLEEP, so one flat map is unambiguous.
+   * every SLEEP factor down an index and factors[0] is then a different factor.
+   * The keys are disjoint across RECOVERY and SLEEP, so one flat map is
+   * unambiguous.
    */
   factorsByKey: Record<string, DailyScoreToolFactor>;
   confidence: 'HIGH' | 'MEDIUM' | 'LOW' | null;
