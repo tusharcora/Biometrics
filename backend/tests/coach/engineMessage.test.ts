@@ -9,6 +9,7 @@ import { COACH_CONSENT_VERSION, COACH_HOSTED_CONSENT_VERSION } from '../../src/c
 import { HostedRefusalError } from '../../src/coach/model/anthropic';
 import type { CoachModelProvider, CoachStreamRequest } from '../../src/coach/model/provider';
 import { resetTurnGuards } from '../../src/coach/turnGuard';
+import { resetWarmState } from '../../src/coach/answer/warm';
 import { FakeClock, RecordingTelemetry, createUser } from './helpers';
 
 beforeAll(() => {
@@ -24,6 +25,7 @@ beforeEach(() => {
   savedFlag = process.env.COACH_ENABLED;
   process.env.COACH_ENABLED = 'true';
   resetTurnGuards();
+  resetWarmState();
   jest.spyOn(console, 'info').mockImplementation(() => {});
 });
 afterEach(() => {
@@ -34,11 +36,12 @@ afterEach(() => {
 
 const ANSWER = 'Keep a steady bedtime. Dim the lights an hour before bed.';
 
-function fake(id: string, opts: { failWith?: Error } = {}) {
+function fake(id: string, opts: { failWith?: Error; warm?: () => Promise<void> } = {}) {
   const requests: CoachStreamRequest[] = [];
   const provider: CoachModelProvider & { requests: CoachStreamRequest[] } = {
     id,
     requests,
+    ...(opts.warm ? { warm: opts.warm } : {}),
     async *stream(req: CoachStreamRequest) {
       requests.push(req);
       if (opts.failWith) throw opts.failWith;
@@ -92,12 +95,6 @@ async function ask(app: express.Express, userId: string) {
   return { events, done, stored };
 }
 
-/** Makes the post-commit engine correction (withServedEngine's write) fail once. */
-function failEngineCorrection() {
-  jest.spyOn(prisma.coachMessage, 'updateMany').mockRejectedValueOnce(new Error('connection lost'));
-  return jest.spyOn(console, 'error').mockImplementation(() => {});
-}
-
 describe('POST /me/coach/message engine selection', () => {
   it('a user on the local engine is answered locally; the hosted model is never called', async () => {
     const local = fake('local');
@@ -137,6 +134,34 @@ describe('POST /me/coach/message engine selection', () => {
     expect(telemetry.named('coach.hosted_fallback')).toEqual([
       { name: 'coach.hosted_fallback', userId: user.id, personaId: 'none', attributes: { error: 'HostedRefusalError' } },
     ]);
+    expect(telemetry.named('coach.answer_done').map((e) => e.attributes.engine)).toEqual(['local']);
+  });
+
+  it('stores the served engine with the reply: no correction write after it', async () => {
+    const local = fake('local');
+    const hosted = fake('hosted', { failWith: new HostedRefusalError() });
+    const user = await userOn('HOSTED');
+    const updates = jest.spyOn(prisma.coachMessage, 'updateMany');
+
+    const { done, stored } = await ask(appWith(local, hosted).app, user.id);
+
+    expect(done.engine).toBe('local');
+    expect(stored.engine).toBe('LOCAL');
+    expect(updates).not.toHaveBeenCalled();
+  });
+
+  it('warms the local model when a message goes to the hosted engine, so a fallback finds it loaded', async () => {
+    const warm = jest.fn(async () => {});
+    const user = await userOn('HOSTED');
+    await ask(appWith(fake('local', { warm }), fake('hosted')).app, user.id);
+    expect(warm).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not warm from the message route for a user on the local engine', async () => {
+    const warm = jest.fn(async () => {});
+    const user = await userOn('LOCAL');
+    await ask(appWith(fake('local', { warm }), fake('hosted')).app, user.id);
+    expect(warm).not.toHaveBeenCalled();
   });
 
   it('answers locally when hosted is chosen but switched off', async () => {
@@ -163,39 +188,5 @@ describe('POST /me/coach/message engine selection', () => {
     const stored = await prisma.coachMessage.findUniqueOrThrow({ where: { id: res.body.message.id } });
     expect(stored.engine).toBe('LOCAL');
     expect(telemetry.named('coach.hosted_fallback')).toHaveLength(1);
-  });
-
-  it('a failed engine correction after the reply was stored still finishes the stream with done', async () => {
-    const local = fake('local');
-    const hosted = fake('hosted', { failWith: new HostedRefusalError() });
-    const user = await userOn('HOSTED');
-    const errors = failEngineCorrection();
-
-    const { events, done, stored } = await ask(appWith(local, hosted).app, user.id);
-
-    expect(events.some((e) => e.event === 'error')).toBe(false);
-    expect(events[events.length - 1]!.event).toBe('done');
-    expect(done.engine).toBe('local');
-    // The correction did not land; the reply itself is stored and was shown.
-    expect(stored.engine).toBe('HOSTED');
-    expect(stored.text).toBe(ANSWER);
-    expect(errors.mock.calls.map((c) => String(c[0]))).toEqual([
-      JSON.stringify({ event: 'coach.request_failed', where: 'engine_correction', error: 'Error' }),
-    ]);
-  });
-
-  it('a failed engine correction still returns the stored reply on the JSON path', async () => {
-    const local = fake('local');
-    const hosted = fake('hosted', { failWith: new HostedRefusalError() });
-    const user = await userOn('HOSTED');
-    failEngineCorrection();
-
-    const res = await request(appWith(local, hosted).app)
-      .post('/me/coach/message')
-      .set(await authHeaderFor(user.id))
-      .send({ message: 'What is a good bedtime routine?' });
-
-    expect(res.status).toBe(200);
-    expect(res.body.message.text).toContain(ANSWER);
   });
 });

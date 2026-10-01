@@ -7,18 +7,18 @@
 //
 // A hosted call that fails before any text reached the user (network, 5xx,
 // rate limit, or a refusal the server-side fallback could not rescue) is
-// retried on the local model for that one message, and the message is
-// reported as done.engine = 'local' so the app can say "answered by the
-// on-device model". Once hosted text has been shown it cannot be taken back,
-// and once the caller aborted (budget spent, user tapped stop) there is no one
-// to answer, so neither case falls back.
+// retried on the local model for that one message. runAnswer reads
+// EngineSelection.servedBy (as AnswerDeps.servedEngine) before it stores the
+// reply, so the stored engine, done.engine and telemetry all say 'local' and
+// the app can say "answered by the on-device model". Once hosted text has been
+// shown it cannot be taken back, and once the caller aborted (budget spent,
+// user tapped stop) there is no one to answer, so neither case falls back.
 //
 // The fallback lives inside the provider, not around runAnswer: the pipeline
 // runs once per message, so memory resolution, the status event and the stored
 // reply each happen once, whichever model ends up answering.
 
 import { prisma } from '../db/client';
-import type { AnswerEvent } from './answer/pipeline';
 import { hasCurrentConsent } from './consent';
 import type {
   CoachModelProvider,
@@ -65,7 +65,11 @@ export class HostedWithLocalFallback implements CoachModelProvider {
 
   private fellBack(err: unknown): void {
     this.servedBy = 'local';
-    this.onFallback?.(err instanceof Error ? err.name : 'unknown');
+    try {
+      this.onFallback?.(err instanceof Error ? err.name : 'unknown');
+    } catch {
+      /* telemetry must never stop the local answer */
+    }
   }
 
   async *stream(request: CoachStreamRequest): AsyncIterable<string> {
@@ -73,7 +77,7 @@ export class HostedWithLocalFallback implements CoachModelProvider {
       let yielded = false;
       try {
         for await (const chunk of this.hosted.stream(request)) {
-          if (chunk.length > 0) yielded = true;
+          if (chunk.trim().length > 0) yielded = true;
           yield chunk;
         }
         return;
@@ -100,47 +104,15 @@ export class HostedWithLocalFallback implements CoachModelProvider {
 
 export async function selectEngine(userId: string, options: SelectEngineOptions): Promise<EngineSelection> {
   if (options.hosted) {
-    const user = await prisma.user.findUnique({ where: { id: userId }, select: { coachEngine: true } });
-    if (
-      user?.coachEngine === 'HOSTED' &&
-      (await hasCurrentConsent(userId, 'local')) &&
-      (await hasCurrentConsent(userId, 'hosted'))
-    ) {
+    const [user, local, hosted] = await Promise.all([
+      prisma.user.findUnique({ where: { id: userId }, select: { coachEngine: true } }),
+      hasCurrentConsent(userId, 'local'),
+      hasCurrentConsent(userId, 'hosted'),
+    ]);
+    if (user?.coachEngine === 'HOSTED' && local && hosted) {
       const provider = new HostedWithLocalFallback(options.hosted, options.local, options.onFallback);
       return { requested: 'hosted', provider, servedBy: () => provider.servedBy };
     }
   }
   return { requested: 'local', provider: options.local, servedBy: () => 'local' };
-}
-
-/**
- * Passes the answer events through, correcting `done.engine` (and the stored
- * assistant message's engine) when the hosted call fell back to the local model.
- */
-export async function* withServedEngine(
-  events: AsyncIterable<AnswerEvent>,
-  selection: EngineSelection,
-): AsyncIterable<AnswerEvent> {
-  for await (const event of events) {
-    if (event.type === 'done') {
-      const engine = selection.servedBy();
-      if (engine !== event.engine) {
-        // The reply is already stored and shown, so a failed correction must not
-        // turn this message into an error: it only leaves the stored engine stale
-        // (the history note), which is logged by error class only.
-        try {
-          await prisma.coachMessage.updateMany({
-            where: { id: event.messageId },
-            data: { engine: engine === 'hosted' ? 'HOSTED' : 'LOCAL' },
-          });
-        } catch (err) {
-          const name = err instanceof Error ? err.name : 'unknown';
-          console.error(JSON.stringify({ event: 'coach.request_failed', where: 'engine_correction', error: name }));
-        }
-        yield { ...event, engine };
-        continue;
-      }
-    }
-    yield event;
-  }
 }

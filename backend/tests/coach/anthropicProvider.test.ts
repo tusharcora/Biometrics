@@ -7,10 +7,13 @@ import {
   HOSTED_MAX_TOKENS,
   HostedConfigError,
   HostedRefusalError,
+  HostedTimeoutError,
   anthropicProviderFromEnv,
+  getHostedFirstTextMs,
   toAnthropicMessages,
 } from '../../src/coach/model/anthropic';
 import type { CoachModelRequest, CoachStreamRequest } from '../../src/coach/model/provider';
+import { FakeClock } from './helpers';
 
 // The real SDK is never called: the constructor is auto-mocked (so the env
 // factory can be checked), and every provider under test gets a fake client.
@@ -95,9 +98,9 @@ describe('AnthropicProvider.stream', () => {
   it('sends the Opus 5.5 request shape: low effort, server-side fallback, no thinking or sampling params', async () => {
     const { client, stream } = fakeClient({ events: [textDelta('Hi.')] });
     const provider = new AnthropicProvider({ client });
-    const signal = new AbortController().signal;
+    const caller = new AbortController();
 
-    await collect(provider.stream(streamRequest({ signal })));
+    await collect(provider.stream(streamRequest({ signal: caller.signal })));
 
     expect(stream).toHaveBeenCalledTimes(1);
     const [body, options] = stream.mock.calls[0]!;
@@ -115,7 +118,11 @@ describe('AnthropicProvider.stream', () => {
     expect(HOSTED_MAX_TOKENS).toBe(2000);
     expect(body).not.toHaveProperty('thinking');
     expect(body).not.toHaveProperty('temperature');
-    expect(options).toEqual({ signal });
+    // The SDK gets the caller's signal combined with the provider's own first-text timeout.
+    expect(Object.keys(options!)).toEqual(['signal']);
+    expect(options!.signal!.aborted).toBe(false);
+    caller.abort();
+    expect(options!.signal!.aborted).toBe(true);
   });
 
   it('uses the configured model', async () => {
@@ -202,10 +209,112 @@ describe('AnthropicProvider.stream', () => {
     await expect(collect(new AnthropicProvider({ client }).stream(streamRequest()))).rejects.toBe(failure);
   });
 
-  it('omits the request options when there is no signal', async () => {
+  it('passes its own first-text signal when the caller gives none', async () => {
     const { client, stream } = fakeClient({ events: [] });
     await collect(new AnthropicProvider({ client }).stream(streamRequest()));
-    expect(stream.mock.calls[0]![1]).toBeUndefined();
+    expect(stream.mock.calls[0]![1]!.signal).toBeInstanceOf(AbortSignal);
+  });
+});
+
+describe('AnthropicProvider.stream time to first text', () => {
+  /** An SDK stream that sends `events`, then nothing until its signal fires (then fails like the SDK). */
+  function stallingClient(events: Event[] = []) {
+    const stream = jest.fn((_body: Record<string, unknown>, options: { signal: AbortSignal }) => ({
+      [Symbol.asyncIterator]() {
+        let i = 0;
+        return {
+          next(): Promise<IteratorResult<Event>> {
+            if (i < events.length) return Promise.resolve({ value: events[i++]!, done: false });
+            return new Promise((_resolve, reject) => {
+              const fail = () => reject(Object.assign(new Error('Request was aborted.'), { name: 'APIUserAbortError' }));
+              if (options.signal.aborted) fail();
+              else options.signal.addEventListener('abort', fail);
+            });
+          },
+          async return(): Promise<IteratorResult<Event>> {
+            return { value: undefined, done: true };
+          },
+        };
+      },
+      finalMessage: async () => ({ stop_reason: 'end_turn', content: [] }),
+    }));
+    return { client: { beta: { messages: { stream, create: jest.fn() } } } as unknown as Anthropic, stream };
+  }
+
+  const flush = () => new Promise((r) => setImmediate(r));
+
+  it('fails with HostedTimeoutError after 10 s without text, leaving the caller signal alone', async () => {
+    const clock = new FakeClock();
+    const { client, stream } = stallingClient();
+    const caller = new AbortController();
+    const provider = new AnthropicProvider({ client, clock });
+    const run = collect(provider.stream(streamRequest({ signal: caller.signal })));
+    run.catch(() => {});
+    await flush();
+
+    clock.advance(9_999);
+    await flush();
+    expect(stream.mock.calls[0]![1].signal.aborted).toBe(false);
+    clock.advance(1);
+
+    await expect(run).rejects.toBeInstanceOf(HostedTimeoutError);
+    await expect(run).rejects.toMatchObject({ name: 'HostedTimeoutError' });
+    expect(stream.mock.calls[0]![1].signal.aborted).toBe(true);
+    expect(caller.signal.aborted).toBe(false);
+  });
+
+  it('a fallback boundary or blank text does not count as first text', async () => {
+    const clock = new FakeClock();
+    const { client } = stallingClient([fallbackStart, textDelta(' ')]);
+    const run = collect(new AnthropicProvider({ client, clock, firstTextTimeoutMs: 5_000 }).stream(streamRequest()));
+    run.catch(() => {});
+    await flush();
+    clock.advance(5_000);
+    await expect(run).rejects.toBeInstanceOf(HostedTimeoutError);
+  });
+
+  it('clears the timer once the first text arrives', async () => {
+    const clock = new FakeClock();
+    const { client, stream } = stallingClient([textDelta('Recovery is 26.')]);
+    const iterator = new AnthropicProvider({ client, clock }).stream(streamRequest())[Symbol.asyncIterator]();
+    expect(await iterator.next()).toEqual({ value: 'Recovery is 26.', done: false });
+    expect(clock.pendingTimers).toBe(0);
+    clock.advance(60_000);
+    expect(stream.mock.calls[0]![1].signal.aborted).toBe(false);
+    await iterator.return?.();
+  });
+
+  it('reports a caller abort as the abort, not as a timeout', async () => {
+    const clock = new FakeClock();
+    const { client } = stallingClient();
+    const caller = new AbortController();
+    const run = collect(new AnthropicProvider({ client, clock }).stream(streamRequest({ signal: caller.signal })));
+    run.catch(() => {});
+    await flush();
+    caller.abort();
+    await expect(run).rejects.toMatchObject({ name: 'APIUserAbortError' });
+    expect(clock.pendingTimers).toBe(0);
+  });
+
+  it('reads COACH_HOSTED_FIRST_TEXT_MS, clamped to 1-60 s, defaulting to 10 s', () => {
+    const saved = process.env.COACH_HOSTED_FIRST_TEXT_MS;
+    try {
+      delete process.env.COACH_HOSTED_FIRST_TEXT_MS;
+      expect(getHostedFirstTextMs()).toBe(10_000);
+      process.env.COACH_HOSTED_FIRST_TEXT_MS = 'soon';
+      expect(getHostedFirstTextMs()).toBe(10_000);
+      process.env.COACH_HOSTED_FIRST_TEXT_MS = ' 8000 ';
+      expect(getHostedFirstTextMs()).toBe(8_000);
+      process.env.COACH_HOSTED_FIRST_TEXT_MS = '5';
+      expect(getHostedFirstTextMs()).toBe(1_000);
+      process.env.COACH_HOSTED_FIRST_TEXT_MS = '-1';
+      expect(getHostedFirstTextMs()).toBe(1_000);
+      process.env.COACH_HOSTED_FIRST_TEXT_MS = '900000';
+      expect(getHostedFirstTextMs()).toBe(60_000);
+    } finally {
+      if (saved === undefined) delete process.env.COACH_HOSTED_FIRST_TEXT_MS;
+      else process.env.COACH_HOSTED_FIRST_TEXT_MS = saved;
+    }
   });
 });
 

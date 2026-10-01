@@ -67,7 +67,14 @@ export interface AnswerInput {
 
 export interface AnswerDeps {
   provider: CoachModelProvider;
+  /** The engine selected for this message. */
   engine: AnswerEngine;
+  /**
+   * The engine that actually answered, when it can differ from `engine` (a hosted
+   * call that fell back to the local model). Read after streaming, so the stored
+   * reply, the done event and telemetry all name the model that wrote the text.
+   */
+  servedEngine?: () => AnswerEngine;
   telemetry: CoachTelemetry;
   clock?: CoachClock;
   /** End-to-end budget for this answer (COACH_LOCAL_BUDGET_MS / COACH_HOSTED_BUDGET_MS). */
@@ -139,6 +146,7 @@ export async function* runAnswer(input: AnswerInput, deps: AnswerDeps): AsyncGen
   const receivedAt = input.receivedAt ?? new Date();
   const budget = deps.budgetMs ?? DEFAULT_ANSWER_BUDGET_MS;
   const factData = deps.factData ?? defaultFactData;
+  const servedEngine = (): AnswerEngine => deps.servedEngine?.() ?? deps.engine;
   const controller = new AbortController();
   const guardrailEvents: AnswerGuardrailEvent[] = [];
 
@@ -161,7 +169,7 @@ export async function* runAnswer(input: AnswerInput, deps: AnswerDeps): AsyncGen
   const emit = (name: CoachEventName, attributes: CoachEventAttributes) =>
     deps.telemetry.emit({ name, userId: input.userId, personaId, attributes });
   const fail = (code: Extract<AnswerEvent, { type: 'error' }>['code']): AnswerEvent => {
-    emit('coach.answer_error', { code, engine: deps.engine });
+    emit('coach.answer_error', { code, engine: servedEngine() });
     return { type: 'error', code, retryable: true };
   };
 
@@ -194,7 +202,7 @@ export async function* runAnswer(input: AnswerInput, deps: AnswerDeps): AsyncGen
           source: reply.source,
           ...(guardrailEvents.length > 0 ? { guardrailEvents: [...guardrailEvents] } : {}),
           ...(reply.card ? { card: reply.card as object } : {}),
-          ...(reply.model ? { engine: deps.engine === 'hosted' ? ('HOSTED' as const) : ('LOCAL' as const), durationMs } : {}),
+          ...(reply.model ? { engine: servedEngine() === 'hosted' ? ('HOSTED' as const) : ('LOCAL' as const), durationMs } : {}),
           createdAt: repliedAt,
         },
       });
@@ -221,7 +229,7 @@ export async function* runAnswer(input: AnswerInput, deps: AnswerDeps): AsyncGen
       }
       emit('coach.safety_classifier', { triggered: true, overridden: false });
       const saved = await persist({ text: SAFETY_REPLY, source: 'SAFETY', card: null, model: false, proposals: [] });
-      yield { type: 'done', messageId: saved.messageId, conversationId: saved.conversationId, engine: deps.engine, durationMs: saved.durationMs };
+      yield { type: 'done', messageId: saved.messageId, conversationId: saved.conversationId, engine: servedEngine(), durationMs: saved.durationMs };
       return;
     }
 
@@ -261,7 +269,7 @@ export async function* runAnswer(input: AnswerInput, deps: AnswerDeps): AsyncGen
       if (built === STOPPED) return;
       if (built === DEADLINE) {
         controller.abort();
-        emit('coach.latency_budget_exceeded', { budgetMs: budget, engine: deps.engine });
+        emit('coach.latency_budget_exceeded', { budgetMs: budget, engine: servedEngine() });
         yield fail('timeout');
         return;
       }
@@ -355,7 +363,7 @@ export async function* runAnswer(input: AnswerInput, deps: AnswerDeps): AsyncGen
       return;
     }
     if (result.outcome === 'deadline') {
-      emit('coach.latency_budget_exceeded', { budgetMs: budget, engine: deps.engine });
+      emit('coach.latency_budget_exceeded', { budgetMs: budget, engine: servedEngine() });
       yield fail('timeout');
       return;
     }
@@ -364,7 +372,7 @@ export async function* runAnswer(input: AnswerInput, deps: AnswerDeps): AsyncGen
       if (result.accepted.length === 0) return;
       guardrailEvents.push({ type: 'stopped' });
       const saved = await persist({ text: result.accepted.join(' '), source: 'MODEL', card: null, model: true, proposals: [] });
-      yield { type: 'done', messageId: saved.messageId, conversationId: saved.conversationId, engine: deps.engine, durationMs: saved.durationMs, stopped: true };
+      yield { type: 'done', messageId: saved.messageId, conversationId: saved.conversationId, engine: servedEngine(), durationMs: saved.durationMs, stopped: true };
       return;
     }
     if (result.accepted.length === 0) {
@@ -402,14 +410,14 @@ export async function* runAnswer(input: AnswerInput, deps: AnswerDeps): AsyncGen
     }
     emit('coach.answer_done', {
       route,
-      engine: deps.engine,
+      engine: servedEngine(),
       sentences: result.accepted.length,
       dropped: result.rejected.length,
       card: card !== null,
       attempts,
       durationMs: saved.durationMs,
     });
-    yield { type: 'done', messageId: saved.messageId, conversationId: saved.conversationId, engine: deps.engine, durationMs: saved.durationMs };
+    yield { type: 'done', messageId: saved.messageId, conversationId: saved.conversationId, engine: servedEngine(), durationMs: saved.durationMs };
   } catch {
     // Error names only are ever logged by the caller; the event carries the code.
     yield fail('internal');

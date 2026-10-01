@@ -2,12 +2,13 @@
 import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
 import { COACH_CONSENT_VERSION, COACH_HOSTED_CONSENT_VERSION } from '../../src/coach/consent';
-import { HostedWithLocalFallback, selectEngine, withServedEngine } from '../../src/coach/engine';
+import type Anthropic from '@anthropic-ai/sdk';
+import { HostedWithLocalFallback, selectEngine } from '../../src/coach/engine';
 import { runAnswer } from '../../src/coach/answer/pipeline';
 import type { AnswerEvent } from '../../src/coach/answer/pipeline';
 import type { FactData } from '../../src/coach/answer/facts';
 import type { CoachModelProvider, CoachModelRequest, CoachStreamRequest } from '../../src/coach/model/provider';
-import { HostedRefusalError } from '../../src/coach/model/anthropic';
+import { AnthropicProvider, HostedRefusalError } from '../../src/coach/model/anthropic';
 import { FakeClock, RecordingTelemetry, createUser } from './helpers';
 
 beforeAll(() => migrateTestDb());
@@ -167,56 +168,26 @@ describe('HostedWithLocalFallback', () => {
     expect(p.servedBy).toBe('local');
   });
 
+  it('still falls back when hosted yielded only whitespace before failing', async () => {
+    const local = fake('local', ['L.']);
+    const p = new HostedWithLocalFallback(fake('hosted', ['', ' \n'], new HostedRefusalError()), local);
+    expect(await collect(p.stream(req()))).toEqual(['', ' \n', 'L.']);
+    expect(p.servedBy).toBe('local');
+  });
+
+  it('answers locally even when the fallback telemetry callback throws', async () => {
+    const p = new HostedWithLocalFallback(fake('hosted', [], new HostedRefusalError()), fake('local', ['L.']), () => {
+      throw new Error('telemetry down');
+    });
+    expect(await collect(p.stream(req()))).toEqual(['L.']);
+    expect(p.servedBy).toBe('local');
+  });
+
   it('falls back the same way on the legacy generate path', async () => {
     const p = new HostedWithLocalFallback(fake('hosted', [], new HostedRefusalError()), fake('local', ['From local.']));
     const res = await p.generate({ tier: 'fast', system: 's', messages: [], tools: [], signal: new AbortController().signal });
     expect(res).toEqual({ type: 'text', text: 'From local.' });
     expect(p.servedBy).toBe('local');
-  });
-});
-
-describe('withServedEngine', () => {
-  async function* events(list: AnswerEvent[]): AsyncIterable<AnswerEvent> {
-    for (const e of list) yield e;
-  }
-  async function drain(it: AsyncIterable<AnswerEvent>) {
-    const out: AnswerEvent[] = [];
-    for await (const e of it) out.push(e);
-    return out;
-  }
-
-  it('rewrites done.engine and the stored message when the hosted call fell back', async () => {
-    const user = await createUser();
-    const conversation = await prisma.coachConversation.create({ data: { userId: user.id } });
-    const message = await prisma.coachMessage.create({
-      data: { conversationId: conversation.id, userId: user.id, role: 'ASSISTANT', text: 'Local answer.', engine: 'HOSTED' },
-    });
-    const selection = { requested: 'hosted' as const, provider: fake('x', []), servedBy: () => 'local' as const };
-
-    const out = await drain(
-      withServedEngine(
-        events([
-          { type: 'text', sentence: 'Local answer.' },
-          { type: 'done', messageId: message.id, conversationId: conversation.id, engine: 'hosted', durationMs: 5 },
-        ]),
-        selection,
-      ),
-    );
-
-    expect(out).toEqual([
-      { type: 'text', sentence: 'Local answer.' },
-      { type: 'done', messageId: message.id, conversationId: conversation.id, engine: 'local', durationMs: 5 },
-    ]);
-    expect((await prisma.coachMessage.findUniqueOrThrow({ where: { id: message.id } })).engine).toBe('LOCAL');
-  });
-
-  it('passes events through untouched when the engine did not change', async () => {
-    const list: AnswerEvent[] = [
-      { type: 'status', label: 'Thinking' },
-      { type: 'done', messageId: 'm', conversationId: 'c', engine: 'hosted', durationMs: 1 },
-    ];
-    const selection = { requested: 'hosted' as const, provider: fake('x', []), servedBy: () => 'hosted' as const };
-    expect(await drain(withServedEngine(events(list), selection))).toEqual(list);
   });
 });
 
@@ -268,28 +239,65 @@ describe('hosted fallback through runAnswer', () => {
     loadConfirmedMemories: async () => [],
   };
 
-  async function answer(hosted: CoachModelProvider, local: CoachModelProvider) {
+  /** Answers one message for a hosted user; `drive` runs alongside (to advance the clock). */
+  async function answer(
+    hosted: CoachModelProvider,
+    local: CoachModelProvider,
+    opts: { clock?: FakeClock; drive?: () => Promise<void> } = {},
+  ) {
     const user = await userWith({ engine: 'HOSTED', hostedConsent: true });
     const onFallback = jest.fn();
     const selection = await selectEngine(user.id, { local, hosted, onFallback });
     expect(selection.requested).toBe('hosted');
+    const telemetry = new RecordingTelemetry();
     const deps = {
       provider: selection.provider,
       engine: selection.requested,
-      telemetry: new RecordingTelemetry(),
-      clock: new FakeClock(),
+      servedEngine: selection.servedBy,
+      telemetry,
+      clock: opts.clock ?? new FakeClock(),
       budgetMs: 30_000,
       factData: FACT_DATA,
     };
-    const out: AnswerEvent[] = [];
     const input = { userId: user.id, message: 'How am I doing today?', history: [] };
-    for await (const e of withServedEngine(runAnswer(input, deps), selection)) out.push(e);
-    return { out, onFallback, userId: user.id };
+    const running = (async () => {
+      const out: AnswerEvent[] = [];
+      for await (const e of runAnswer(input, deps)) out.push(e);
+      return out;
+    })();
+    if (opts.drive) await opts.drive();
+    return { out: await running, onFallback, telemetry, userId: user.id };
+  }
+
+  async function until(cond: () => boolean): Promise<void> {
+    for (let i = 0; i < 400 && !cond(); i++) await new Promise((r) => setTimeout(r, 5));
+    if (!cond()) throw new Error('condition never became true');
+  }
+
+  /** A hosted stream that sends nothing until its request signal fires, then fails like the SDK does. */
+  function silentHosted() {
+    const requests: CoachStreamRequest[] = [];
+    const provider: CoachModelProvider & { requests: CoachStreamRequest[] } = {
+      id: 'hosted',
+      requests,
+      async *stream(request: CoachStreamRequest) {
+        requests.push(request);
+        await new Promise((_resolve, reject) =>
+          request.signal!.addEventListener('abort', () =>
+            reject(Object.assign(new Error('Request was aborted.'), { name: 'APIUserAbortError' })),
+          ),
+        );
+      },
+      generate: async () => {
+        throw new Error('unused');
+      },
+    };
+    return provider;
   }
 
   it('answers locally after a hosted failure before any text: one status, done.engine local, stored LOCAL', async () => {
     const local = fake('local', ['Your recovery is 26 today.']);
-    const { out, onFallback, userId } = await answer(fake('hosted', [], new HostedRefusalError()), local);
+    const { out, onFallback, telemetry, userId } = await answer(fake('hosted', [], new HostedRefusalError()), local);
 
     expect(out.map((e) => e.type)).toEqual(['status', 'text', 'done']);
     expect((out[2] as Extract<AnswerEvent, { type: 'done' }>).engine).toBe('local');
@@ -297,6 +305,63 @@ describe('hosted fallback through runAnswer', () => {
     const stored = await prisma.coachMessage.findMany({ where: { userId } });
     expect(stored).toHaveLength(2);
     expect(stored.find((m) => m.role === 'ASSISTANT')!.engine).toBe('LOCAL');
+    expect(telemetry.named('coach.answer_done').map((e) => e.attributes.engine)).toEqual(['local']);
+  });
+
+  it('does not fall back when the answer budget runs out on a silent hosted call', async () => {
+    const clock = new FakeClock();
+    const hosted = silentHosted();
+    const local = fake('local', ['never']);
+    const { out, onFallback, telemetry } = await answer(hosted, local, {
+      clock,
+      drive: async () => {
+        await until(() => hosted.requests.length === 1);
+        clock.advance(30_000);
+      },
+    });
+
+    expect(out).toEqual([
+      expect.objectContaining({ type: 'status' }),
+      { type: 'error', code: 'timeout', retryable: true },
+    ]);
+    expect(local.requests).toHaveLength(0);
+    expect(onFallback).not.toHaveBeenCalled();
+    expect(telemetry.named('coach.latency_budget_exceeded').map((e) => e.attributes.engine)).toEqual(['hosted']);
+  });
+
+  it('answers locally within the budget when the hosted model sends no text for 10 s (first-text timeout)', async () => {
+    const clock = new FakeClock();
+    const sdkStream = jest.fn((_body: unknown, options: { signal: AbortSignal }) => ({
+      [Symbol.asyncIterator]: () => ({
+        next: () =>
+          new Promise<never>((_resolve, reject) =>
+            options.signal.addEventListener('abort', () =>
+              reject(Object.assign(new Error('Request was aborted.'), { name: 'APIUserAbortError' })),
+            ),
+          ),
+        return: async () => ({ value: undefined, done: true as const }),
+      }),
+      finalMessage: async () => ({ stop_reason: 'end_turn', content: [] }),
+    }));
+    const client = { beta: { messages: { stream: sdkStream, create: jest.fn() } } } as unknown as Anthropic;
+    const hosted = new AnthropicProvider({ client, clock, firstTextTimeoutMs: 10_000 });
+    const local = fake('local', ['Your recovery is 26 today.']);
+
+    const { out, onFallback, telemetry, userId } = await answer(hosted, local, {
+      clock,
+      drive: async () => {
+        await until(() => sdkStream.mock.calls.length === 1);
+        clock.advance(10_000);
+      },
+    });
+
+    expect(out.map((e) => e.type)).toEqual(['status', 'text', 'done']);
+    expect((out[2] as Extract<AnswerEvent, { type: 'done' }>).engine).toBe('local');
+    expect(onFallback).toHaveBeenCalledWith('HostedTimeoutError');
+    expect(local.requests).toHaveLength(1);
+    expect(telemetry.named('coach.latency_budget_exceeded')).toHaveLength(0);
+    const stored = await prisma.coachMessage.findFirstOrThrow({ where: { userId, role: 'ASSISTANT' } });
+    expect(stored.engine).toBe('LOCAL');
   });
 
   it('does not re-answer locally after hosted text was shown: no second status, no local sentences', async () => {

@@ -15,7 +15,7 @@ import { AnswerDeps, AnswerEvent, runAnswer } from './answer/pipeline';
 import { warmModel } from './answer/warm';
 import type { MemoryDTO } from './memory';
 import { findPersona, listPersonas, resolvePersona } from './personas';
-import { selectEngine, withServedEngine } from './engine';
+import { selectEngine } from './engine';
 import { CoachTelemetry, LoggerCoachTelemetry } from './telemetry';
 import type { CoachTools } from './tools';
 
@@ -344,30 +344,36 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
           deps.telemetry.emit({ name: 'coach.hosted_fallback', userId, personaId: 'none', attributes: { error } }),
       });
       const engine = selection.requested;
+      // A hosted message can still end up on the local model: start loading it now
+      // (throttled, fire-and-forget) so a fallback does not pay the cold start.
+      if (engine === 'hosted') {
+        try {
+          warmModel(deps.getProvider());
+        } catch (err) {
+          logFailure('message_warm', err);
+        }
+      }
       const answerDeps: AnswerDeps = {
         provider: selection.provider,
         engine,
+        servedEngine: selection.servedBy,
         telemetry: deps.telemetry,
         clock: deps.clock,
         budgetMs: overrides.answerBudgetMs ?? getAnswerBudgetMs(engine),
         ...(overrides.factData ? { factData: overrides.factData } : {}),
       };
       const stop = new AbortController();
-      // Both paths below consume `answer`, so both see the engine that actually served it.
-      const answer = withServedEngine(
-        runAnswer(
-          {
-            userId,
-            message: message.trim(),
-            history,
-            ...(conversationId !== undefined ? { conversationId } : {}),
-            safetyOverride: safetyOverride === true,
-            receivedAt,
-            signal: stop.signal,
-          },
-          answerDeps,
-        ),
-        selection,
+      const answer = runAnswer(
+        {
+          userId,
+          message: message.trim(),
+          history,
+          ...(conversationId !== undefined ? { conversationId } : {}),
+          safetyOverride: safetyOverride === true,
+          receivedAt,
+          signal: stop.signal,
+        },
+        answerDeps,
       );
 
       // Guarded here, not around the whole handler: validation and the history

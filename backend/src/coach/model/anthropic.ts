@@ -16,11 +16,16 @@
 //   answer locally instead.
 // - max_tokens 2000: thinking counts toward it, so it is sized well above the
 //   ~300-500 token answer.
+// - time to first text: COACH_HOSTED_FIRST_TEXT_MS (default 10 s). A stream with
+//   no text by then is cancelled on the provider's OWN signal (the caller's is
+//   left alone) and fails with HostedTimeoutError, so the engine's local fallback
+//   still has most of the answer budget for a cold local load.
 //
 // Only the system prompt (persona + fact sheet) and the windowed conversation
 // are ever sent; no user id, email or name has a path into a request.
 
 import Anthropic from '@anthropic-ai/sdk';
+import { CoachClock, systemClock } from '../clock';
 import type {
   CoachModelMessage,
   CoachModelProvider,
@@ -32,6 +37,29 @@ import type {
 export const DEFAULT_HOSTED_MODEL = 'claude-opus-5-5';
 export const HOSTED_MAX_TOKENS = 2000;
 export const HOSTED_FALLBACK_BETA = 'server-side-fallback-2026-07-01';
+export const DEFAULT_HOSTED_FIRST_TEXT_MS = 10_000;
+const MIN_HOSTED_FIRST_TEXT_MS = 1_000;
+const MAX_HOSTED_FIRST_TEXT_MS = 60_000;
+
+/**
+ * COACH_HOSTED_FIRST_TEXT_MS, clamped to 1-60 s; unset or not a number means
+ * the 10 s default. Keep it well under COACH_HOSTED_BUDGET_MS: what is left of
+ * that budget is what the local fallback gets.
+ */
+export function getHostedFirstTextMs(): number {
+  const raw = process.env.COACH_HOSTED_FIRST_TEXT_MS?.trim();
+  const n = raw ? Number(raw) : NaN;
+  if (!Number.isFinite(n)) return DEFAULT_HOSTED_FIRST_TEXT_MS;
+  return Math.min(MAX_HOSTED_FIRST_TEXT_MS, Math.max(MIN_HOSTED_FIRST_TEXT_MS, Math.round(n)));
+}
+
+/** The hosted model produced no text within the time-to-first-text limit. */
+export class HostedTimeoutError extends Error {
+  constructor(ms: number) {
+    super(`The hosted model produced no text within ${ms} ms`);
+    this.name = 'HostedTimeoutError';
+  }
+}
 
 /** The hosted model (and any fallback model) declined the request. */
 export class HostedRefusalError extends Error {
@@ -52,6 +80,10 @@ export interface AnthropicProviderOptions {
   /** The SDK client, or the slice of it this provider uses. Injected in tests. */
   client: Pick<Anthropic, 'beta'>;
   model?: string | undefined;
+  /** Time to first text before the stream is dropped. Defaults to getHostedFirstTextMs(). */
+  firstTextTimeoutMs?: number;
+  /** Timer source for the first-text timeout. Injected in tests. */
+  clock?: CoachClock;
 }
 
 type ChatMessage = { role: 'user' | 'assistant'; content: string };
@@ -97,10 +129,14 @@ export class AnthropicProvider implements CoachModelProvider {
   readonly id: string;
   private readonly client: Pick<Anthropic, 'beta'>;
   private readonly model: string;
+  private readonly firstTextTimeoutMs: number;
+  private readonly clock: CoachClock;
 
   constructor(options: AnthropicProviderOptions) {
     this.client = options.client;
     this.model = options.model?.trim() || DEFAULT_HOSTED_MODEL;
+    this.firstTextTimeoutMs = options.firstTextTimeoutMs ?? getHostedFirstTextMs();
+    this.clock = options.clock ?? systemClock;
     this.id = `anthropic:${this.model}`;
   }
 
@@ -117,28 +153,42 @@ export class AnthropicProvider implements CoachModelProvider {
   }
 
   async *stream(request: CoachStreamRequest): AsyncIterable<string> {
-    const stream = this.client.beta.messages.stream(
-      this.params(request.system, toAnthropicMessages(request.messages)),
-      request.signal ? { signal: request.signal } : undefined,
-    );
-    let yielded = false;
-    for await (const event of stream) {
-      // A server-side fallback hands the turn to another model mid-response; the
-      // declining model's earlier output stays in the stream. Before any text went
-      // out that is invisible (the fallback model's answer streams normally); after
-      // it, appending a second answer to a shown fragment would garble the reply,
-      // so stop here. Leaving the loop by throwing aborts the SDK stream.
-      if (event.type === 'content_block_start' && event.content_block.type === 'fallback') {
-        if (yielded) throw new HostedRefusalError();
-        continue;
+    // The first-text timeout cancels the call on its own controller, combined with
+    // the caller's signal: the caller's signal stays un-aborted, so the engine reads
+    // the timeout as a hosted failure (and answers locally), not as a stop.
+    const firstText = new AbortController();
+    const timer = this.clock.setTimer(() => firstText.abort(), this.firstTextTimeoutMs);
+    const signal = request.signal ? AbortSignal.any([request.signal, firstText.signal]) : firstText.signal;
+    try {
+      const stream = this.client.beta.messages.stream(
+        this.params(request.system, toAnthropicMessages(request.messages)),
+        { signal },
+      );
+      let yielded = false;
+      for await (const event of stream) {
+        // A server-side fallback hands the turn to another model mid-response; the
+        // declining model's earlier output stays in the stream. Before any text went
+        // out that is invisible (the fallback model's answer streams normally); after
+        // it, appending a second answer to a shown fragment would garble the reply,
+        // so stop here. Leaving the loop by throwing aborts the SDK stream.
+        if (event.type === 'content_block_start' && event.content_block.type === 'fallback') {
+          if (yielded) throw new HostedRefusalError();
+          continue;
+        }
+        if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
+          if (event.delta.text.trim().length > 0) timer.cancel();
+          yielded = true;
+          yield event.delta.text;
+        }
       }
-      if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') {
-        yielded = true;
-        yield event.delta.text;
-      }
+      const final = await stream.finalMessage();
+      if (final.stop_reason === 'refusal') throw new HostedRefusalError();
+    } catch (err) {
+      if (firstText.signal.aborted && !request.signal?.aborted) throw new HostedTimeoutError(this.firstTextTimeoutMs);
+      throw err;
+    } finally {
+      timer.cancel();
     }
-    const final = await stream.finalMessage();
-    if (final.stop_reason === 'refusal') throw new HostedRefusalError();
   }
 
   async generate(request: CoachModelRequest): Promise<CoachModelResponse> {
