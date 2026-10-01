@@ -125,10 +125,18 @@ export async function* withServedEngine(
     if (event.type === 'done') {
       const engine = selection.servedBy();
       if (engine !== event.engine) {
-        await prisma.coachMessage.updateMany({
-          where: { id: event.messageId },
-          data: { engine: engine === 'hosted' ? 'HOSTED' : 'LOCAL' },
-        });
+        // The reply is already stored and shown, so a failed correction must not
+        // turn this message into an error: it only leaves the stored engine stale
+        // (the history note), which is logged by error class only.
+        try {
+          await prisma.coachMessage.updateMany({
+            where: { id: event.messageId },
+            data: { engine: engine === 'hosted' ? 'HOSTED' : 'LOCAL' },
+          });
+        } catch (err) {
+          const name = err instanceof Error ? err.name : 'unknown';
+          console.error(JSON.stringify({ event: 'coach.request_failed', where: 'engine_correction', error: name }));
+        }
         yield { ...event, engine };
         continue;
       }

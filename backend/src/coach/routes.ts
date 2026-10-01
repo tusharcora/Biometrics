@@ -15,6 +15,7 @@ import { AnswerDeps, AnswerEvent, runAnswer } from './answer/pipeline';
 import { warmModel } from './answer/warm';
 import type { MemoryDTO } from './memory';
 import { findPersona, listPersonas, resolvePersona } from './personas';
+import { selectEngine, withServedEngine } from './engine';
 import { CoachTelemetry, LoggerCoachTelemetry } from './telemetry';
 import type { CoachTools } from './tools';
 
@@ -334,10 +335,17 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
 
       const receivedAt = new Date();
       const wantsStream = (req.get('accept') ?? '').includes('text/event-stream');
-      // Phase 1 answers every message with the local engine; engine selection arrives with the hosted provider.
-      const engine = 'local' as const;
+      // The user's engine: hosted only while chosen, offered and consented, and a
+      // hosted failure before any text is answered locally (done.engine says which).
+      const selection = await selectEngine(userId, {
+        local: deps.getProvider(),
+        hosted: deps.getHostedProvider(),
+        onFallback: (error) =>
+          deps.telemetry.emit({ name: 'coach.hosted_fallback', userId, personaId: 'none', attributes: { error } }),
+      });
+      const engine = selection.requested;
       const answerDeps: AnswerDeps = {
-        provider: deps.getProvider(),
+        provider: selection.provider,
         engine,
         telemetry: deps.telemetry,
         clock: deps.clock,
@@ -345,17 +353,21 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
         ...(overrides.factData ? { factData: overrides.factData } : {}),
       };
       const stop = new AbortController();
-      const answer = runAnswer(
-        {
-          userId,
-          message: message.trim(),
-          history,
-          ...(conversationId !== undefined ? { conversationId } : {}),
-          safetyOverride: safetyOverride === true,
-          receivedAt,
-          signal: stop.signal,
-        },
-        answerDeps,
+      // Both paths below consume `answer`, so both see the engine that actually served it.
+      const answer = withServedEngine(
+        runAnswer(
+          {
+            userId,
+            message: message.trim(),
+            history,
+            ...(conversationId !== undefined ? { conversationId } : {}),
+            safetyOverride: safetyOverride === true,
+            receivedAt,
+            signal: stop.signal,
+          },
+          answerDeps,
+        ),
+        selection,
       );
 
       // Guarded here, not around the whole handler: validation and the history

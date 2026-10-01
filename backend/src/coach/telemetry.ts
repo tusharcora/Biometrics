@@ -33,7 +33,8 @@ export type CoachEventName =
   | 'coach.answer_regenerated'
   | 'coach.answer_done'
   | 'coach.answer_error'
-  | 'coach.model_warm';
+  | 'coach.model_warm'
+  | 'coach.hosted_fallback';
 
 export type CoachEventAttributes = Record<string, string | number | boolean>;
 
