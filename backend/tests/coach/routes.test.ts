@@ -10,7 +10,7 @@ import { COACH_CONSENT_VERSION } from '../../src/coach/consent';
 import { COACH_DISCLAIMER } from '../../src/coach/guardrails/disclaimer';
 import { LoggerCoachTelemetry } from '../../src/coach/telemetry';
 import { ScriptedStreamProvider, StreamStep } from '../../src/coach/model/provider';
-import { getCoachProvider, resetCoachProviderFromEnv } from '../../src/coach/config';
+import { getCoachProvider, resetCoachProviderFromEnv, resetHostedProviderFromEnv } from '../../src/coach/config';
 import { resetWarmState } from '../../src/coach/answer/warm';
 import { DEFAULT_PERSONA_ID, listPersonas } from '../../src/coach/personas';
 import { FakeClock, RecordingTelemetry, createUser, daysAgo, putScore, todayUtc } from './helpers';
@@ -26,6 +26,7 @@ afterAll(async () => {
 
 let savedFlag: string | undefined;
 let savedProviderEnv: string | undefined;
+let savedHostedFlag: string | undefined;
 beforeEach(() => {
   savedFlag = process.env.COACH_ENABLED;
   process.env.COACH_ENABLED = 'true';
@@ -35,6 +36,10 @@ beforeEach(() => {
   delete process.env.COACH_PROVIDER;
   resetCoachProviderFromEnv();
   resetWarmState();
+  // Hermetic for the hosted engine too: createApp() reads COACH_HOSTED_ENABLED, and no test here builds a real Anthropic client.
+  savedHostedFlag = process.env.COACH_HOSTED_ENABLED;
+  delete process.env.COACH_HOSTED_ENABLED;
+  resetHostedProviderFromEnv();
   jest.spyOn(console, 'info').mockImplementation(() => {}); // default telemetry sink
 });
 afterEach(() => {
@@ -42,7 +47,10 @@ afterEach(() => {
   else process.env.COACH_ENABLED = savedFlag;
   if (savedProviderEnv === undefined) delete process.env.COACH_PROVIDER;
   else process.env.COACH_PROVIDER = savedProviderEnv;
+  if (savedHostedFlag === undefined) delete process.env.COACH_HOSTED_ENABLED;
+  else process.env.COACH_HOSTED_ENABLED = savedHostedFlag;
   resetCoachProviderFromEnv();
+  resetHostedProviderFromEnv();
   resetWarmState();
   jest.restoreAllMocks();
 });
@@ -74,6 +82,7 @@ const ROUTES = [
   ['post', '/me/coach/consent'],
   ['delete', '/me/coach/consent'],
   ['put', '/me/coach/persona'],
+  ['put', '/me/coach/engine'],
   ['post', '/me/coach/message'],
   ['get', '/me/coach/conversations/latest'],
   ['get', '/me/coach/conversations/some-id'],
@@ -145,7 +154,7 @@ describe('GET /me/coach/status', () => {
     const user = await createUser();
     const res = await request(createApp()).get('/me/coach/status').set(await authed(user.id));
     expect(res.status).toBe(200);
-    expect(Object.keys(res.body).sort()).toEqual(['consent', 'consented', 'enabled', 'personaChosen', 'personaId', 'personas']);
+    expect(Object.keys(res.body).sort()).toEqual(['consent', 'consented', 'enabled', 'engine', 'engines', 'personaChosen', 'personaId', 'personas']);
     expect(res.body).toMatchObject({ enabled: true, consented: false, personaId: 'hoot', personaChosen: false });
     expect(Object.keys(res.body.consent).sort()).toEqual(['dataItems', 'summary', 'version']);
     expect(res.body.consent.version).toBe(COACH_CONSENT_VERSION);
