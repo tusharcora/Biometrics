@@ -1,6 +1,7 @@
 import type { CoachModelProvider } from './model/provider';
 import { UnconfiguredProvider } from './model/provider';
 import { ollamaProviderFromEnv } from './model/ollama';
+import { anthropicProviderFromEnv } from './model/anthropic';
 import { ExpoPushSender, NoopPushSender, PushSender } from './push';
 
 /**
@@ -86,6 +87,40 @@ export function getAnswerBudgetMs(engine: 'local' | 'hosted'): number {
   const fallback = engine === 'hosted' ? HOSTED_ANSWER_BUDGET_MS : LOCAL_ANSWER_BUDGET_MS;
   const n = Number(process.env[name]?.trim());
   return Number.isFinite(n) && n > 0 ? n : fallback;
+}
+
+// The hosted engine (spec 2026-09-30 section 3): Claude through the Anthropic
+// SDK, offered only when COACH_HOSTED_ENABLED is true AND ANTHROPIC_API_KEY is
+// set. Both are read per call, like COACH_ENABLED, so switching the flag off
+// takes effect on the next message; the provider itself is built once.
+let envHostedProvider: CoachModelProvider | null = null;
+
+function envFlag(name: string): boolean {
+  const v = process.env[name]?.trim().toLowerCase();
+  return v === 'true' || v === '1';
+}
+
+/** The hosted provider, or null when the hosted engine is not offered. */
+export function getHostedProvider(): CoachModelProvider | null {
+  if (!envFlag('COACH_HOSTED_ENABLED') || !process.env.ANTHROPIC_API_KEY?.trim()) return null;
+  if (envHostedProvider) return envHostedProvider;
+  try {
+    envHostedProvider = anthropicProviderFromEnv();
+    console.log(JSON.stringify({ event: 'coach.hosted_provider_configured', provider: envHostedProvider.id }));
+    return envHostedProvider;
+  } catch (err) {
+    console.error(JSON.stringify({ event: 'coach.hosted_provider_config_invalid', error: err instanceof Error ? err.name : 'unknown' }));
+    return null;
+  }
+}
+
+export function isHostedEngineAvailable(): boolean {
+  return getHostedProvider() !== null;
+}
+
+/** Forget the env-built hosted provider so the next call re-reads ANTHROPIC_API_KEY / COACH_HOSTED_MODEL (tests). */
+export function resetHostedProviderFromEnv(): void {
+  envHostedProvider = null;
 }
 
 // The push slot. PUSH_PROVIDER=expo selects the Expo sender; anything else (the
