@@ -96,6 +96,18 @@ export const COLORS = {
     metricHrv: 'rgb(13, 148, 136)',
     // The coach's own voice colour: the digest, memory prompts, coach entry.
     coach: 'rgb(79, 70, 229)',
+    // Coach today bars and answer tiles: where a number sits against the
+    // user's own 30-day usual (rose below, teal above, neutral near). Sleep's
+    // "near" uses metricSleep instead (spec 1.2).
+    statusBelow: 'rgb(225, 29, 72)',
+    statusNear: 'rgb(113, 113, 122)',
+    statusAbove: 'rgb(13, 148, 136)',
+    // The bar's empty track and the tick marking the usual.
+    todayTrack: 'rgb(228, 228, 233)',
+    todayTick: 'rgb(17, 18, 22)',
+    // The answer card's "Try:" line.
+    tip: 'rgb(204, 251, 241)',
+    tipForeground: 'rgb(17, 94, 89)',
   },
   dark: {
     background: 'rgb(10, 11, 14)',
@@ -125,6 +137,13 @@ export const COLORS = {
     metricSleep: 'rgb(129, 140, 248)',
     metricHrv: 'rgb(45, 212, 191)',
     coach: 'rgb(165, 180, 252)',
+    statusBelow: 'rgb(251, 113, 133)',
+    statusNear: 'rgb(161, 161, 170)',
+    statusAbove: 'rgb(45, 212, 191)',
+    todayTrack: 'rgb(35, 38, 45)',
+    todayTick: 'rgb(245, 245, 244)',
+    tip: 'rgb(15, 42, 42)',
+    tipForeground: 'rgb(204, 251, 241)',
   },
 };
 

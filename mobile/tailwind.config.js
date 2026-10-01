@@ -36,6 +36,13 @@ module.exports = {
         'metric-sleep': 'rgb(var(--color-metric-sleep) / <alpha-value>)',
         'metric-hrv': 'rgb(var(--color-metric-hrv) / <alpha-value>)',
         coach: 'rgb(var(--color-coach) / <alpha-value>)',
+        'status-below': 'rgb(var(--color-status-below) / <alpha-value>)',
+        'status-near': 'rgb(var(--color-status-near) / <alpha-value>)',
+        'status-above': 'rgb(var(--color-status-above) / <alpha-value>)',
+        'today-track': 'rgb(var(--color-today-track) / <alpha-value>)',
+        'today-tick': 'rgb(var(--color-today-tick) / <alpha-value>)',
+        tip: 'rgb(var(--color-tip) / <alpha-value>)',
+        'tip-foreground': 'rgb(var(--color-tip-foreground) / <alpha-value>)',
       },
       // Family names must match FONTS in src/theme.ts (the expo-font keys).
       // ui/text.tsx swaps `sans` for the matching weight's family.

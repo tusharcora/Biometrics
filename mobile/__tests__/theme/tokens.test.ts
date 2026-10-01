@@ -73,6 +73,14 @@ describe('design tokens (new semantic colors)', () => {
     ['muted-foreground', 'muted'],
     ['accent', 'accent'],
     ['card', 'card'],
+    // Coach redesign: today-vs-usual status, bar track and tick, answer-card tip.
+    ['status-below', 'statusBelow'],
+    ['status-near', 'statusNear'],
+    ['status-above', 'statusAbove'],
+    ['today-track', 'todayTrack'],
+    ['today-tick', 'todayTick'],
+    ['tip', 'tip'],
+    ['tip-foreground', 'tipForeground'],
   ];
 
   it.each(NEW_TOKENS)('--color-%s is identical in global.css and COLORS.%s (light and dark)', (cssName, key) => {
