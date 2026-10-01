@@ -293,6 +293,9 @@ function isKnown(s: Scanned, allowed: Allowed[], metric: Metric | undefined): bo
   return candidates.some(({ value: a }) => Math.abs(token.value - a) <= tolerance(a));
 }
 
+const NIGHT_NOT_SLEEP_RE =
+  /\b(?:last|past|this|each|every|per|a|tomorrow|the\s+other)\s+(?:\d+\s+)?nights?\b|\b\d+[-\s]nights?\b|\bnights?\s+(?:ago|before)\b|\b(?:early|earlier)\s+night\b/g;
+
 /** The one metric a sentence names, if it names exactly one. */
 function singleMetric(sentence: string): Metric | undefined {
   let s = sentence.toLowerCase();
@@ -307,7 +310,10 @@ function singleMetric(sentence: string): Metric | undefined {
   take(/\bhrv\b|\bheart\s+rate\s+variability\b/g, 'hrv');
   take(/\brhr\b|\bresting\s+(?:hr|heart(?:\s+rate)?)\b/g, 'rhr');
   take(/\brecovery\b/g, 'recovery');
-  take(/\b(?:sleep|sleeping|slept)\b/g, 'sleep');
+  // "night" names sleep ("A short night (6h 48m) pulled your HRV down to 41"), except as a time or
+  // window ("last night", "past 7 nights", "30-night") or a suggestion ("an early night").
+  s = s.replace(NIGHT_NOT_SLEEP_RE, ' ');
+  take(/\b(?:sleep|sleeping|slept|asleep|nights?)\b/g, 'sleep');
   take(/\bsteps\b/g, 'steps');
   return found.size === 1 ? [...found][0] : undefined;
 }

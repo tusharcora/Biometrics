@@ -140,6 +140,7 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
   // The day summary is written by the same engine the user's messages go to.
   const todayDeps: TodayDeps = {
     clock: deps.clock,
+    telemetry: deps.telemetry,
     selectProvider: (userId) => selectEngine(userId, { local: deps.getProvider(), hosted: deps.getHostedProvider() }),
     ...overrides.today,
   };

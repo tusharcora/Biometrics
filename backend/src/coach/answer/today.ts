@@ -13,6 +13,7 @@ import { hasCurrentConsent } from '../consent';
 import { EngineSelection, selectEngine } from '../engine';
 import { CoachPersona, REQUIRED_DISALLOWED_TOPICS, resolvePersona } from '../personas';
 import { escapeField } from '../prompt';
+import type { CoachTelemetry } from '../telemetry';
 import type { CardStatus } from './card';
 import { statusOf } from './card';
 import type { Fact, FactSheet, FactUnit } from './facts';
@@ -186,10 +187,13 @@ export const SUMMARY_MAX_WORDS = 45;
 const SUMMARY_MAX_TOKENS = 300;
 export const TODAY_REQUEST = "Write today's summary for the top of my Coach page.";
 
-export type SummaryRejection = 'empty' | 'too_long' | 'unknown_number' | 'disallowed_topic';
+export type SummaryRejection = 'empty' | 'too_long' | 'cut_off' | 'unknown_number' | 'disallowed_topic';
+/** Why a run stored the template instead of an AI sentence (telemetry only; never shown). */
+export type SummaryFailure = SummaryRejection | 'model_unavailable' | 'timeout';
 
 const CORRECTIVE: Record<SummaryRejection, string> = {
   empty: 'Your last draft was empty. Write the summary now.',
+  cut_off: 'Your last draft stopped mid-sentence. Write it again, complete and a little shorter.',
   too_long: `Your last draft was too long. Keep it to ${SUMMARY_MAX_WORDS} words or fewer.`,
   unknown_number:
     'Your last draft used a number that is not in the facts. Use only numbers exactly as they appear in the facts, or none.',
@@ -210,6 +214,8 @@ export interface TodayDeps {
   onMissing?: () => void;
   /** generateTodaySummary only: replace a sentence already stored for today (the after-sync job). */
   force?: boolean;
+  /** generateTodaySummary only: receives coach.summary_failed (reason and engine; never text). */
+  telemetry?: CoachTelemetry;
 }
 
 export type SummaryOutcome =
@@ -252,6 +258,8 @@ export function checkSummary(
     .trim();
   if (text.length === 0) return { ok: false, reason: 'empty' };
   if (text.split(' ').length > SUMMARY_MAX_WORDS) return { ok: false, reason: 'too_long' };
+  // No closing punctuation: the model was cut off mid-sentence.
+  if (!/[.!?…]["'”’)]*$/.test(text)) return { ok: false, reason: 'cut_off' };
   const splitter = sentenceSplitter();
   for (const sentence of [...splitter.push(text), ...splitter.end()]) {
     const verdict = validateSentence(sentence, sheet);
@@ -277,6 +285,7 @@ export function buildTodaySummaryPrompt(persona: CoachPersona, sheet: FactSheet,
     "1. What happened: last night's sleep and today's recovery, HRV or resting heart rate against your usual.",
     '2. Why: the most likely reason, taken from a factor.* or habit.* fact when there is one (say what it is in plain words, never the id).',
     '3. One concrete thing the user can do today, small enough to actually do.',
+    'Say the suggestion in words, never with a new number or time: "an early night", not "bed by 10:15".',
     'Be specific to these numbers; never write a generic line that could fit any day.',
     `At most ${SUMMARY_MAX_WORDS} words, in your own voice, speaking to the user as "you".`,
     'Use only numbers that appear in the facts below, written the same way; never estimate or invent one. If a fact is missing, do not mention it.',
@@ -288,21 +297,33 @@ export function buildTodaySummaryPrompt(persona: CoachPersona, sheet: FactSheet,
   ].join('\n');
 }
 
-/** One draft, then one corrective regeneration, all within the budget. Null when no draft passed. */
+type Written = { text: string } | { failure: SummaryFailure };
+
+/**
+ * The budget for a summary run. A hosted selection may fall back to the local
+ * model mid-run, so it gets the larger of the two budgets.
+ */
+function budgetFor(selection: EngineSelection): number {
+  const local = getAnswerBudgetMs('local');
+  return selection.requested === 'hosted' ? Math.max(getAnswerBudgetMs('hosted'), local) : local;
+}
+
+/** One draft, then one corrective regeneration, all within the budget. */
 async function writeSentence(
   selection: EngineSelection,
   persona: CoachPersona,
   sheet: FactSheet,
   today: string,
   deps: TodayDeps,
-): Promise<string | null> {
+): Promise<Written> {
   const clock = deps.clock ?? systemClock;
-  const budget = deps.budgetMs ?? getAnswerBudgetMs(selection.requested);
+  const budget = deps.budgetMs ?? budgetFor(selection);
   const controller = new AbortController();
   const system = buildTodaySummaryPrompt(persona, sheet, today);
 
-  async function attempts(): Promise<string | null> {
+  async function attempts(): Promise<Written> {
     let note: string | null = null;
+    let rejected: SummaryRejection = 'empty';
     for (let attempt = 1; attempt <= 2; attempt++) {
       let raw = '';
       for await (const chunk of selection.provider.stream({
@@ -313,23 +334,27 @@ async function writeSentence(
       })) {
         raw += chunk;
       }
-      if (controller.signal.aborted) return null;
+      if (controller.signal.aborted) return { failure: 'timeout' };
       const verdict = checkSummary(raw, sheet);
-      if (verdict.ok) return verdict.text;
+      if (verdict.ok) return { text: verdict.text };
+      rejected = verdict.reason;
       note = CORRECTIVE[verdict.reason];
     }
-    return null;
+    return { failure: rejected };
   }
 
   let timer: TimerHandle | undefined;
-  const deadline = new Promise<null>((resolve) => {
+  const deadline = new Promise<Written>((resolve) => {
     timer = clock.setTimer(() => {
       controller.abort();
-      resolve(null);
+      resolve({ failure: 'timeout' });
     }, budget);
   });
   try {
-    return await Promise.race([attempts().catch(() => null), deadline]);
+    return await Promise.race([
+      attempts().catch((): Written => ({ failure: controller.signal.aborted ? 'timeout' : 'model_unavailable' })),
+      deadline,
+    ]);
   } finally {
     timer?.cancel();
   }
@@ -350,45 +375,113 @@ async function generate(userId: string, deps: TodayDeps): Promise<SummaryOutcome
 
   const persona = resolvePersona(user.coachPersonaId);
   const selection = await (deps.selectProvider ?? defaultSelect)(userId);
-  const text = await writeSentence(selection, persona, sheet, today, deps);
+  const written = await writeSentence(selection, persona, sheet, today, deps);
+  const text = 'text' in written ? written.text : null;
 
   // A character switch while the model was writing: this sentence is in the old voice.
-  const current = await prisma.user.findUnique({ where: { id: userId }, select: { coachPersonaId: true } });
-  if (resolvePersona(current?.coachPersonaId).id !== persona.id) return 'skipped_persona_changed';
+  if (await personaChanged(userId, persona)) return 'skipped_persona_changed';
+  if ('failure' in written) {
+    deps.telemetry?.emit({
+      name: 'coach.summary_failed',
+      userId,
+      personaId: persona.id,
+      attributes: { reason: written.failure, engine: selection.servedBy() },
+    });
+  }
 
   const row =
     text !== null
       ? { text, spans: spansFor(text), source: 'AI' as const }
       : { ...templateSentence(sheet), source: 'TEMPLATE' as const };
   const data = { text: row.text, spans: row.spans as unknown as Prisma.InputJsonValue, source: row.source };
+  let stored: { id: string; createdAt: Date };
   try {
-    await prisma.coachDaySummary.upsert({
+    stored = await prisma.coachDaySummary.upsert({
       where,
       create: { userId, date: civilDateToUtcMidnight(today), ...data },
       update: { ...data, createdAt: new Date() },
+      select: { id: true, createdAt: true },
     });
   } catch (err) {
     // Another instance wrote today's row first; theirs stands.
     if ((err as { code?: string } | null)?.code === 'P2002') return 'skipped_exists';
     throw err;
   }
+  // The character changed between the check above and the write: take this row back (only while it
+  // is still ours), so the rewrite the switch asked for writes in the new voice.
+  if (await personaChanged(userId, persona)) {
+    await prisma.coachDaySummary.deleteMany({ where: { id: stored.id, createdAt: stored.createdAt } });
+    return 'skipped_persona_changed';
+  }
   return text !== null ? 'ai' : 'template';
 }
 
-const inFlight = new Map<string, Promise<SummaryOutcome>>();
+async function personaChanged(userId: string, persona: CoachPersona): Promise<boolean> {
+  const current = await prisma.user.findUnique({ where: { id: userId }, select: { coachPersonaId: true } });
+  return resolvePersona(current?.coachPersonaId).id !== persona.id;
+}
+
+const wroteRow = (outcome: SummaryOutcome | null) => outcome === 'ai' || outcome === 'template';
+
+interface FollowUp {
+  force: boolean;
+  deps: TodayDeps;
+  promise: Promise<SummaryOutcome>;
+}
+
+interface UserRuns {
+  current: Promise<SummaryOutcome>;
+  /** At most one run waits behind the current one; every later caller shares it. */
+  followUp: FollowUp | null;
+}
+
+const runs = new Map<string, UserRuns>();
+
+function startRun(userId: string, state: UserRuns, deps: TodayDeps): Promise<SummaryOutcome> {
+  state.current = generate(userId, deps).finally(() => {
+    if (!state.followUp && runs.get(userId) === state) runs.delete(userId);
+  });
+  return state.current;
+}
 
 /**
  * Writes today's sentence with the user's engine and stores it (AI), or stores
  * the template (TEMPLATE) when no draft passed validation in time, so a failing
- * model is not retried on every page load. One run per user at a time in this
- * process: a second caller shares the first run.
+ * model is not retried on every page load.
+ *
+ * One run per user at a time in this process. A caller that arrives while a
+ * run is in flight gets one queued follow-up run, shared by every later
+ * caller so a burst still collapses, which starts once the current run ends:
+ * - when any of them forces (the after-sync job), the follow-up rewrites from
+ *   the sheet as it is then, so the stored sentence never predates the sync;
+ * - otherwise it reuses the current run's result when that run stored a row,
+ *   and runs again when it did not (the character changed mid-run, so the
+ *   follow-up writes in the new voice).
  */
 export function generateTodaySummary(userId: string, deps: TodayDeps = {}): Promise<SummaryOutcome> {
-  const running = inFlight.get(userId);
-  if (running) return running;
-  const run = generate(userId, deps).finally(() => inFlight.delete(userId));
-  inFlight.set(userId, run);
-  return run;
+  const state = runs.get(userId);
+  if (!state) {
+    const fresh: UserRuns = { current: Promise.resolve('skipped_exists'), followUp: null };
+    runs.set(userId, fresh);
+    return startRun(userId, fresh, deps);
+  }
+  if (state.followUp) {
+    state.followUp.force ||= !!deps.force;
+    return state.followUp.promise;
+  }
+  const followUp: FollowUp = { force: !!deps.force, deps, promise: Promise.resolve('skipped_exists') };
+  followUp.promise = state.current
+    .catch(() => null)
+    .then((first) => {
+      state.followUp = null;
+      if (!followUp.force && wroteRow(first)) {
+        if (runs.get(userId) === state) runs.delete(userId);
+        return first!;
+      }
+      return startRun(userId, state, { ...followUp.deps, force: followUp.force });
+    });
+  state.followUp = followUp;
+  return followUp.promise;
 }
 
 /**

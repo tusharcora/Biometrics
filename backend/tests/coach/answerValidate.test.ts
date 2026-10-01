@@ -447,3 +447,35 @@ describe('validateSentence: unit-carrying numbers across metrics (R18 D2)', () =
     expect(validateSentence(sentence as string, sheet as FactSheet)).toEqual(unknown);
   });
 });
+
+// Fix round 1 of the day summary (R29): "night" names sleep, so the owner's
+// chosen summary style passes; time and window phrases with "night" do not.
+describe('validateSentence: "night" is a sleep word (R29)', () => {
+  const LOW_DAY: FactSheet = {
+    route: 'today',
+    facts: [
+      { id: 'recovery.today', label: 'Recovery today', value: 26, unit: 'score', display: '26', usual: 58 },
+      { id: 'sleep.total', label: 'Sleep last night', value: 408, unit: 'minutes', display: '6h 48m', usual: 433 },
+      { id: 'hrv.today', label: 'HRV today', value: 41, unit: 'ms', display: '41 ms', usual: 52 },
+      { id: 'rhr.today', label: 'Resting heart rate today', value: 61, unit: 'bpm', display: '61 bpm', usual: 55, lowerIsBetter: true },
+    ],
+    notes: [],
+  };
+
+  it.each([
+    'A short night (6h 48m) pulled your HRV down to 41.',
+    'A short night of 6h 48m pulled your HRV down.',
+    'You were asleep for 6h 48m, and your HRV sits at 41 ms.',
+  ])('accepts %j', (sentence) => {
+    expect(validateSentence(sentence, LOW_DAY)).toEqual(ok);
+  });
+
+  it.each([
+    ['Your HRV last night was 61.', "resting HR's 61: \"last night\" is a time, not sleep"],
+    ['Your recovery is 61; aim for an early night.', "resting HR's 61: \"an early night\" is a suggestion"],
+    ['Your HRV over the past 7 nights is 61.', "a window is not sleep"],
+    ['A short night of 7h 30m pulled your HRV down.', 'no such duration on the sheet'],
+  ])('rejects %j (%s)', (sentence) => {
+    expect(validateSentence(sentence, LOW_DAY)).toEqual(unknown);
+  });
+});

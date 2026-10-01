@@ -14,7 +14,7 @@ import {
 } from '../../src/coach/answer/today';
 import type { EngineSelection } from '../../src/coach/engine';
 import type { CoachModelProvider, CoachStreamRequest } from '../../src/coach/model/provider';
-import { FakeClock, createUser, hang, settle } from './helpers';
+import { FakeClock, RecordingTelemetry, createUser, hang, settle } from './helpers';
 
 beforeAll(() => migrateTestDb());
 afterAll(() => prisma.$disconnect());
@@ -102,6 +102,16 @@ describe('checkSummary', () => {
   it('rejects an empty reply and an invented number', () => {
     expect(checkSummary('   ', LOW_DAY)).toEqual({ ok: false, reason: 'empty' });
     expect(checkSummary(INVENTED, LOW_DAY)).toEqual({ ok: false, reason: 'unknown_number' });
+  });
+
+  it('rejects a draft cut off mid-sentence (no closing punctuation)', () => {
+    expect(checkSummary('Recovery sits at 26 after HRV dipped to 41 ms, so you', LOW_DAY)).toEqual({ ok: false, reason: 'cut_off' });
+    expect(checkSummary('Rest up today!', LOW_DAY)).toEqual({ ok: true, text: 'Rest up today!' });
+  });
+
+  it("passes the owner's chosen style (\"night\" is a sleep word)", () => {
+    const style1 = 'A short night (6h 48m) pulled your HRV down to 41. Keep today gentle and aim for an early night.';
+    expect(checkSummary(style1, LOW_DAY)).toEqual({ ok: true, text: style1 });
   });
 
   it('drops any fenced block and collapses whitespace', () => {
@@ -284,5 +294,139 @@ describe('generateTodaySummary', () => {
     ]);
     expect([a, b]).toEqual(['ai', 'ai']);
     expect(requests).toHaveLength(1);
+  });
+});
+
+// Fix round 1 (R29).
+describe('generateTodaySummary: runs asked for while one is in flight', () => {
+  const LATER = 'Recovery is 26 today. Keep it gentle and aim for an early night.';
+
+  async function untilCalled(requests: CoachStreamRequest[], n: number) {
+    for (let i = 0; i < 400 && requests.length < n; i++) await new Promise((r) => setTimeout(r, 5));
+    expect(requests).toHaveLength(n);
+  }
+
+  it('a forced run asked for during a lazy run runs after it, and its sentence is the one stored', async () => {
+    const user = await consentedUser();
+    let release!: () => void;
+    const gate = new Promise<void>((r) => (release = r));
+    const { requests, selection } = scripted([
+      async () => {
+        await gate;
+        return GOOD;
+      },
+      LATER,
+    ]);
+
+    const lazy = generateTodaySummary(user.id, deps(selection));
+    const forced = generateTodaySummary(user.id, { ...deps(selection), force: true });
+    // A later, unforced caller shares the queued forced run: no third model call.
+    const later = generateTodaySummary(user.id, deps(selection));
+    await untilCalled(requests, 1);
+    release();
+
+    expect(await lazy).toBe('ai');
+    expect(await forced).toBe('ai');
+    expect(await later).toBe('ai');
+    expect(requests).toHaveLength(2);
+    expect((await rowOf(user.id))!.text).toBe(LATER);
+  });
+
+  it('after a character switch mid-run, the queued rewrite writes in the new voice', async () => {
+    const user = await consentedUser({ coachPersonaId: 'hoot' });
+    const { requests, selection } = scripted([
+      async () => {
+        await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: 'ember' } });
+        return GOOD;
+      },
+      LATER,
+    ]);
+
+    const first = generateTodaySummary(user.id, deps(selection));
+    const rewrite = generateTodaySummary(user.id, deps(selection));
+
+    expect(await first).toBe('skipped_persona_changed');
+    expect(await rewrite).toBe('ai');
+    expect(requests).toHaveLength(2);
+    expect(requests[1]!.system).toContain('"Ember"');
+    expect((await rowOf(user.id))!.text).toBe(LATER);
+  });
+
+  it('takes its row back when the character changes between the check and the write', async () => {
+    const user = await consentedUser({ coachPersonaId: 'hoot' });
+    const { selection } = scripted([GOOD]);
+    const original = prisma.coachDaySummary.upsert.bind(prisma.coachDaySummary);
+    const spy = jest.spyOn(prisma.coachDaySummary, 'upsert').mockImplementationOnce(((args: Parameters<typeof original>[0]) => {
+      return prisma.user
+        .update({ where: { id: user.id }, data: { coachPersonaId: 'ember' } })
+        .then(() => original(args));
+    }) as unknown as typeof prisma.coachDaySummary.upsert);
+    try {
+      expect(await generateTodaySummary(user.id, deps(selection))).toBe('skipped_persona_changed');
+    } finally {
+      spy.mockRestore();
+    }
+    expect(await rowOf(user.id)).toBeNull();
+  });
+});
+
+describe('generateTodaySummary: failure telemetry and budget (R29)', () => {
+  it.each([
+    ['both drafts invent a number', [INVENTED, INVENTED] as Step[], 'unknown_number'],
+    ['both drafts are cut off', ['Recovery sits at 26 so', 'Recovery sits at 26 so'] as Step[], 'cut_off'],
+    ['the model is unreachable', [new Error('ECONNREFUSED')] as Step[], 'model_unavailable'],
+  ])('emits coach.summary_failed with the reason when %s (no text)', async (_label, steps, reason) => {
+    const user = await consentedUser();
+    const telemetry = new RecordingTelemetry();
+    const { selection } = scripted(steps);
+    expect(await generateTodaySummary(user.id, deps(selection, { telemetry }))).toBe('template');
+    expect(telemetry.named('coach.summary_failed')).toEqual([
+      { name: 'coach.summary_failed', userId: user.id, personaId: expect.any(String), attributes: { reason, engine: 'local' } },
+    ]);
+  });
+
+  it('emits timeout when the budget runs out, and nothing on success', async () => {
+    const user = await consentedUser();
+    const telemetry = new RecordingTelemetry();
+    const { requests, selection } = scripted(['hang']);
+    const d = deps(selection, { telemetry });
+    const running = generateTodaySummary(user.id, d);
+    for (let i = 0; i < 400 && requests.length === 0; i++) await new Promise((r) => setTimeout(r, 5));
+    await settle();
+    d.clock.advance(45_000);
+    expect(await running).toBe('template');
+    expect(telemetry.named('coach.summary_failed').map((e) => e.attributes.reason)).toEqual(['timeout']);
+
+    const other = await consentedUser();
+    const quiet = new RecordingTelemetry();
+    expect(await generateTodaySummary(other.id, deps(scripted([GOOD]).selection, { telemetry: quiet }))).toBe('ai');
+    expect(quiet.events).toEqual([]);
+  });
+
+  it('gives a hosted selection the local budget too, since it may fall back mid-run', async () => {
+    const saved = { local: process.env.COACH_LOCAL_BUDGET_MS, hosted: process.env.COACH_HOSTED_BUDGET_MS };
+    delete process.env.COACH_LOCAL_BUDGET_MS;
+    delete process.env.COACH_HOSTED_BUDGET_MS;
+    try {
+      const user = await consentedUser();
+      const { requests, selection } = scripted(['hang']);
+      const hosted: EngineSelection = { ...selection, requested: 'hosted', servedBy: () => 'hosted' };
+      const d = deps(hosted, { budgetMs: undefined });
+      let done = false;
+      const running = generateTodaySummary(user.id, d).finally(() => (done = true));
+      for (let i = 0; i < 400 && requests.length === 0; i++) await new Promise((r) => setTimeout(r, 5));
+      await settle();
+
+      d.clock.advance(30_000);
+      await settle();
+      expect(done).toBe(false);
+      d.clock.advance(15_000);
+      expect(await running).toBe('template');
+    } finally {
+      for (const [k, v] of [['COACH_LOCAL_BUDGET_MS', saved.local], ['COACH_HOSTED_BUDGET_MS', saved.hosted]] as const) {
+        if (v === undefined) delete process.env[k];
+        else process.env[k] = v;
+      }
+    }
   });
 });

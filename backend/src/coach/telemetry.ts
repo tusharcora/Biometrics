@@ -34,7 +34,8 @@ export type CoachEventName =
   | 'coach.answer_done'
   | 'coach.answer_error'
   | 'coach.model_warm'
-  | 'coach.hosted_fallback';
+  | 'coach.hosted_fallback'
+  | 'coach.summary_failed';
 
 export type CoachEventAttributes = Record<string, string | number | boolean>;
 
