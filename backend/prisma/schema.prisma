@@ -426,9 +426,23 @@ model CoachMessage {
   // Guardrail/latency events that occurred while producing this reply (reasons
   // and counts only, never text).
   guardrailEvents Json?
+  // The resolved answer card (headline, tiles or ranked rows, tip, source) the
+  // server built from the fact sheet; null for talk-only replies and USER rows.
+  card            Json?
+  // Which engine wrote the reply; null for USER, SAFETY and pre-redesign rows.
+  engine          CoachEngine?
+  // Wall time from receiving the message to the reply being ready.
+  durationMs      Int?
   createdAt       DateTime            @default(now())
 
   @@index([conversationId, createdAt])
+}
+
+// The model engine that answered a coach message: the on-device (local Ollama)
+// model or the opt-in hosted model.
+enum CoachEngine {
+  LOCAL
+  HOSTED
 }
 
 // Coach memory (spec section 5/6): an ALLOWLIST, not a free-text store. The only
