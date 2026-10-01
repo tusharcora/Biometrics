@@ -86,6 +86,20 @@ export const numberFixtures: EvalFixture[] = [
   },
   {
     ...base,
+    id: 'numbers-steps-so-far-no-usual',
+    description:
+      'Steps so far are a partial day: the sheet states no full-day usual, so "2,950 against your usual 8,000" is dropped while the count itself is fine (final review I3).',
+    script: ['Recovery is 26 today. You have 2,950 steps so far. You only managed 2,950 steps against your usual 8,000. Keep it light.'],
+    expect: {
+      outcome: 'answer',
+      dropped: ['unknown_number'],
+      sentences: ['Recovery is 26 today.', 'You have 2,950 steps so far.', 'Keep it light.'],
+      promptIncludes: ['[steps.today] Steps today so far: 2,950 (a partial day: the day is not over)', 'Steps so far today are a partial day'],
+      promptExcludes: ['usual 8,000'],
+    },
+  },
+  {
+    ...base,
     id: 'numbers-rounding-tolerance',
     description: 'Off by one on an integer (27 for 26) and one minute on a duration (6h 49m) pass; 28 does not.',
     script: ['Recovery is 27 this morning. Last night was 6h 49m of sleep. Recovery was 28 an hour ago.'],

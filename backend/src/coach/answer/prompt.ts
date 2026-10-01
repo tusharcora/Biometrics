@@ -44,8 +44,18 @@ export function buildAnswerSystemPrompt(persona: CoachPersona, ctx: AnswerPrompt
         "- Every number you write must appear in the facts above. Use the user's numbers naturally",
         '  ("recovery is 26, well under your usual 58"). Never compute a new number, never guess one, and never',
         '  spell a number out in words. Times of day and dates are fine.',
+        // R48: replies recited 8-10 numbers and the card repeated them; the talk explains, the card lists.
+        '- Use at most two or three of their numbers in the reply; the card shows the rest. Explain the main',
+        '  driver in plain words.',
         '- If the facts say something was not recorded, say you do not have it yet.',
       ];
+  // Steps accumulate through the day, so a morning count says nothing yet (final review I3).
+  const stepsRule = ctx.sheet.facts.some((f) => f.id === 'steps.today')
+    ? [
+        '- Steps so far today are a partial day: never compare them with a full day or a usual, and never read',
+        '  anything into them (energy, activity) before the day is over.',
+      ]
+    : [];
   // A real id from this sheet, never a placeholder: small models copy example literals verbatim.
   const exampleFact = ctx.sheet.facts[0]?.id;
   const cardFormat = exampleFact
@@ -92,6 +102,8 @@ export function buildAnswerSystemPrompt(persona: CoachPersona, ctx: AnswerPrompt
     'Rules:',
     '- Plain sentences, in character: no headings, bullet lists or markdown.',
     ...numberRule,
+    ...stepsRule,
+    "- End on your suggestion; never offer choices or ask what they'd prefer or would like to do.",
     '- A question back is optional: ask one only when their answer would genuinely change what you suggest;',
     '  most replies need none. Never a generic check-in about recent changes or stress.',
     '- Do not add a disclaimer; the app shows one.',

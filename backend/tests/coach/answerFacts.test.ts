@@ -171,7 +171,9 @@ describe('buildFactSheet: today', () => {
     expect(line(sheet, 'hrv.today')).toBe('[hrv.today] HRV today: 41 ms (usual 52.3 ms, 11.3 ms lower than usual)');
     expect(line(sheet, 'rhr.today')).toBe('[rhr.today] Resting heart rate today: 61 bpm (usual 57 bpm, 4 bpm higher than usual)');
     expect(line(sheet, 'sleep.total')).toBe('[sleep.total] Sleep last night: 6h 48m (usual 7h 13m, 25m less than usual)');
-    expect(line(sheet, 'steps.today')).toBe('[steps.today] Steps today so far: 3,120 (usual 8,450)');
+    // A partial day: no usual to compare with (final review I3).
+    expect(line(sheet, 'steps.today')).toBe('[steps.today] Steps today so far: 3,120 (a partial day: the day is not over)');
+    expect(sheet.facts.find((f) => f.id === 'steps.today')?.usual).toBeUndefined();
     expect(line(sheet, 'factor.hrv')).toBe('[factor.hrv] HRV effect on the recovery score: -9.4 points');
     expect(sheet.facts.find((f) => f.id === 'rhr.today')?.lowerIsBetter).toBe(true);
   });
@@ -188,6 +190,8 @@ describe('buildFactSheet: today', () => {
         `getMetricHistory SLEEP 30 ${YESTERDAY}`,
       ]),
     );
+    // Steps so far are never compared with a full-day usual, so it is not read.
+    expect(calls).not.toContain(`getMetricHistory STEPS 30 ${YESTERDAY}`);
   });
 
   it('states missing data explicitly instead of leaving it out silently', async () => {

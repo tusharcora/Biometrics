@@ -7,7 +7,7 @@
 //   [hrv.today]         HRV today: 41 ms (usual 52 ms, 11 ms lower than usual)
 //   [rhr.today]         Resting heart rate today: 58 bpm (usual 55 bpm, 3 bpm higher than usual)
 //   [sleep.total]       Sleep last night: 6h 48m (usual 7h 13m, 25m less than usual)
-//   [steps.today]       Steps today so far: 2,950 (usual 8,000)
+//   [steps.today]       Steps today so far: 2,950 (a partial day: the day is not over)
 //   [factor.hrv] / [factor.rhr]  the two biggest drivers of today's recovery
 
 import type { UserSnapshot } from '../types';

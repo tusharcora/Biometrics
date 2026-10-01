@@ -115,6 +115,32 @@ describe('buildAnswerSystemPrompt', () => {
     );
   });
 
+  // Final review I4: C8 local replies still ended on "Would you prefer ...?" / "Would you like to ...?".
+  it('asks the reply to end on the suggestion, never on an offer or a choice', () => {
+    const p = buildAnswerSystemPrompt(hoot, { today: '2026-09-30', sheet: SHEET });
+    expect(p).toContain("- End on your suggestion; never offer choices or ask what they'd prefer or would like to do.");
+  });
+
+  // R48: replies quoted 8-10 numbers in four sentences and the card repeated them.
+  it('keeps the talk to two or three of their numbers on a data route; the card carries the rest', () => {
+    const data = buildAnswerSystemPrompt(hoot, { today: '2026-09-30', sheet: SHEET });
+    const general = buildAnswerSystemPrompt(hoot, { today: '2026-09-30', sheet: { ...SHEET, route: 'general' } });
+    const line = '- Use at most two or three of their numbers in the reply; the card shows the rest. Explain the main';
+    expect(data).toContain(line);
+    expect(data).toContain('  driver in plain words.');
+    expect(general).not.toContain(line);
+  });
+
+  // Final review I3: "only 2,950 steps so far compared to your usual 8,000, so your energy is lower".
+  it('says steps so far are a partial day, when the sheet has them', () => {
+    const steps = { id: 'steps.today', label: 'Steps today so far', value: 2950, unit: 'count' as const, display: '2,950' };
+    const line =
+      '- Steps so far today are a partial day: never compare them with a full day or a usual, and never read\n' +
+      '  anything into them (energy, activity) before the day is over.';
+    expect(buildAnswerSystemPrompt(hoot, { today: '2026-09-30', sheet: { ...SHEET, facts: [...SHEET.facts, steps] } })).toContain(line);
+    expect(buildAnswerSystemPrompt(hoot, { today: '2026-09-30', sheet: SHEET })).not.toContain(line);
+  });
+
   // R18 Q2: the persona's voice, and no stock advice echoed reply after reply.
   it("asks for the persona's voice and fresh advice, without a copyable stock phrase", () => {
     const p = buildAnswerSystemPrompt(hoot, { today: '2026-09-30', sheet: SHEET });

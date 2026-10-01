@@ -211,7 +211,7 @@ const FACTOR_SCORE: Record<'RECOVERY' | 'SLEEP', string> = { RECOVERY: 'recovery
 
 async function todayFacts(userId: string, deps: FactDeps, b: SheetBuilder): Promise<void> {
   const yesterday = shiftDate(deps.today, -1);
-  const [score, metrics, recoveryUsual, sleepScoreUsual, hrv, rhr, sleep, steps] = await Promise.all([
+  const [score, metrics, recoveryUsual, sleepScoreUsual, hrv, rhr, sleep] = await Promise.all([
     deps.getDailyScore(userId, deps.today),
     deps.getDailyMetrics(userId, deps.today),
     deps.getScoreHistory(userId, 'RECOVERY', USUAL_DAYS, yesterday),
@@ -219,7 +219,6 @@ async function todayFacts(userId: string, deps: FactDeps, b: SheetBuilder): Prom
     deps.getMetricHistory(userId, 'HRV', USUAL_DAYS, yesterday),
     deps.getMetricHistory(userId, 'RESTING_HR', USUAL_DAYS, yesterday),
     deps.getMetricHistory(userId, 'SLEEP', USUAL_DAYS, yesterday),
-    deps.getMetricHistory(userId, 'STEPS', USUAL_DAYS, yesterday),
   ]);
   b.add(fact({ id: 'recovery.today', label: 'Recovery today', unit: 'score', value: score.recoveryScore, usual: recoveryUsual.average }), 'No Recovery score for today yet');
   b.add(fact({ id: 'sleep_score.today', label: 'Sleep score today', unit: 'score', value: score.sleepScore, usual: sleepScoreUsual.average }), 'No Sleep score for today yet');
@@ -229,7 +228,12 @@ async function todayFacts(userId: string, deps: FactDeps, b: SheetBuilder): Prom
     'No resting heart rate reading today',
   );
   b.add(fact({ id: 'sleep.total', label: 'Sleep last night', unit: 'minutes', value: metrics.sleep.value, usual: sleep.average, zeroIsMissing: true }), 'No sleep recorded last night');
-  b.add(fact({ id: 'steps.today', label: 'Steps today so far', unit: 'count', value: metrics.steps.value, usual: steps.average }), 'No steps recorded today');
+  // Steps accumulate through the day: a full-day usual next to a morning count invites "only 2,950
+  // against your usual 8,000" and a guess at their energy, so the sheet states no usual at all.
+  b.add(
+    fact({ id: 'steps.today', label: 'Steps today so far', unit: 'count', value: metrics.steps.value, note: '(a partial day: the day is not over)' }),
+    'No steps recorded today',
+  );
 
   const drivers = score.factors
     .filter((f) => !f.excluded && !f.imputed)
