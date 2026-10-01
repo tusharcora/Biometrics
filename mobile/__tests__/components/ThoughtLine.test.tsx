@@ -24,6 +24,13 @@ describe('ThoughtLine', () => {
     expect(getByLabelText('Thinking')).toBeTruthy();
   });
 
+  it('speaks a status label, and can leave the timer out', () => {
+    const { getByTestId, getByLabelText, queryByTestId } = render(<ThoughtLine working label="Looking at your sleep…" timer={false} testID="line" />);
+    expect(getByTestId('line')).toHaveTextContent(/Looking at your sleep…/);
+    expect(getByLabelText('Looking at your sleep')).toBeTruthy();
+    expect(queryByTestId('line-timer')).toBeNull();
+  });
+
   it('counts the elapsed time up while working', () => {
     const { getByTestId } = render(<ThoughtLine working testID="line" />);
     act(() => {

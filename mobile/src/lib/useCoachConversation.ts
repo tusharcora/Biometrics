@@ -19,6 +19,9 @@ import { CoachStreamAbortedError, CoachStreamInterruptedError, streamCoachMessag
 
 export interface CoachChatMessage {
   id: string;
+  // A live answer's first id, kept when `id` becomes the server's on `done`, so
+  // its row is not remounted (losing memory-chip edits or focus). Absent on history.
+  clientKey?: string;
   role: 'user' | 'assistant';
   // An assistant message's sentences, joined as they arrive.
   text: string;
@@ -153,7 +156,7 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
     // Becomes the server's message id on `done`. Every update below captures
     // it by value when it is queued, never reads it later.
     let answerId = pendingId;
-    setMessages((prev) => [...prev, { id: pendingId, role: 'assistant', text: '', state: 'streaming', fresh: true }]);
+    setMessages((prev) => [...prev, { id: pendingId, clientKey: pendingId, role: 'assistant', text: '', state: 'streaming', fresh: true }]);
 
     // Captures the id now: a queued update must find the message under the id it had.
     const patch = (fn: (m: CoachChatMessage) => CoachChatMessage) => {
@@ -164,6 +167,8 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
     // Answer content shown (text, card or safety): the same test as `kept` below.
     let shown = false;
     let safetyTurn = false;
+    // The server ended the turn early (a stop it saw first): not a finished answer.
+    let stoppedTurn = false;
     let consentEvent = false;
     let eventError: CoachTurnError | null = null;
 
@@ -207,6 +212,7 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
           break;
         case 'done': {
           adoptConversation(event.conversationId);
+          if (event.stopped) stoppedTurn = true;
           const id = answerId;
           const local = options.current.preferredEngine === 'hosted' && event.engine === 'local';
           setMessages((prev) =>
@@ -292,7 +298,8 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
     // it): settle the reply here, since no `done` will.
     patch((m) => (m.state === 'streaming' ? { ...m, state: 'done' } : m));
     // A crisis-safety reply is not a moment for the character to celebrate.
-    if (!safetyTurn) setAnsweredAt(Date.now());
+    // Nor is an answer that was stopped part-way.
+    if (!safetyTurn && !stoppedTurn) setAnsweredAt(Date.now());
   }, []);
 
   // Returns false when nothing was sent (empty, or an answer is still streaming).

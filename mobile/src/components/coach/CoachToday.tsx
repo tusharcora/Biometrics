@@ -11,6 +11,12 @@ import { BAR_LABEL_WIDTH, BAR_VALUE_WIDTH, TodayBar } from './TodayBar';
 export const TODAY_FOOTNOTE = 'Comparisons against your own readings, not medical advice.';
 export const TODAY_EMPTY = "Once your first night syncs, I'll sum up your day here.";
 
+// Whether CoachToday shows the page's footnote itself: only beside a sentence
+// or bars to compare. Otherwise the page must show it (it appears exactly once).
+export function todayShowsFootnote(summary: TodaySummaryDTO | null): boolean {
+  return !!summary && summary.hasData && (!!summary.sentence || summary.bars.length > 0);
+}
+
 interface CoachTodayProps {
   // null: not loaded (yet), or the request failed.
   summary: TodaySummaryDTO | null;
@@ -57,9 +63,9 @@ export const CoachToday = memo(function CoachToday({ summary, loading, onAsk }: 
     );
   }
 
+  // Nothing to compare: the page shows the footnote instead.
+  if (!todayShowsFootnote(summary)) return null;
   const { sentence, bars } = summary;
-  // Nothing to compare, so no footnote about comparisons either.
-  if (!sentence && bars.length === 0) return null;
 
   return (
     <View testID="coach-today" className="gap-3">

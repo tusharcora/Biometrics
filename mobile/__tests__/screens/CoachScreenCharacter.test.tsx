@@ -169,6 +169,25 @@ describe('CoachScreen: character', () => {
     expect(label(utils, 'coach-header-character')).toBe('character:ember:idle:36:playing:mini');
   });
 
+  it('leaves the character idle for a failed send right after a normal answer', async () => {
+    scriptTurn(stream, answer('You slept well.'));
+    scriptTurn(stream, [], new Error('offline'));
+    const utils = renderCoach();
+    await utils.findByTestId('coach-input');
+
+    await tapSuggestion(utils);
+    await utils.findByText('You slept well.');
+    expect(label(utils, 'coach-header-character')).toBe('character:ember:answering:36:playing:mini');
+
+    fireEvent.changeText(utils.getByTestId('coach-input'), 'And today?');
+    await act(async () => {
+      fireEvent.press(utils.getByTestId('coach-send-button'));
+    });
+    await utils.findByTestId('coach-error');
+
+    expect(label(utils, 'coach-header-character')).toBe('character:ember:idle:36:playing:mini');
+  });
+
   it('holds the characters still while the Coach tab is not focused, even when an answer lands', async () => {
     scriptTurn(stream, answer('Done.'));
     const utils = renderCoach({ focused: false });

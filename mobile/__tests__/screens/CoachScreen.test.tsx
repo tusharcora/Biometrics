@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet } from 'react-native';
+import { AccessibilityInfo, ScrollView, StyleSheet } from 'react-native';
 import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { CoachScreen } from '../../src/screens/CoachScreen';
 import { useKeyboardVisible } from '../../src/lib/useKeyboardVisible';
@@ -148,8 +148,11 @@ describe('CoachScreen: gating', () => {
     });
 
     expect(await findByTestId('coach-needs-consent')).toBeTruthy();
+    // No bounce: returning without agreeing does not navigate to consent again.
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
     expect(queryByTestId('coach-input')).toBeNull();
     fireEvent.press(await findByTestId('coach-review-consent-button'));
+    expect(mockNavigate).toHaveBeenCalledTimes(2);
     expect(mockNavigate).toHaveBeenLastCalledWith('CoachConsent', { prefill: undefined });
   });
 
@@ -284,6 +287,120 @@ describe('CoachScreen: gating', () => {
   });
 });
 
+describe('CoachScreen: status unverified', () => {
+  it('clears the "couldn\'t check" line and shows the header actions once an answer gets through', async () => {
+    (fetchCoachStatus as jest.Mock).mockRejectedValueOnce(new Error('offline'));
+    scriptTurn(stream, answer('Hi.'));
+    const utils = render(<CoachScreen />);
+    await utils.findByTestId('coach-status-unverified');
+
+    await ask(utils, 'Hello');
+
+    expect(await utils.findByText('Hi.')).toBeTruthy();
+    expect(utils.queryByTestId('coach-status-unverified')).toBeNull();
+    expect(utils.getByTestId('coach-conversations-button')).toBeTruthy();
+    expect(utils.getByTestId('coach-new-chat-button')).toBeTruthy();
+  });
+
+  it('keeps the line after a failed send', async () => {
+    (fetchCoachStatus as jest.Mock).mockRejectedValueOnce(new Error('offline'));
+    scriptTurn(stream, [], new Error('offline'));
+    const utils = render(<CoachScreen />);
+    await utils.findByTestId('coach-status-unverified');
+
+    await ask(utils, 'Hello');
+
+    expect(await utils.findByTestId('coach-error')).toBeTruthy();
+    expect(utils.getByTestId('coach-status-unverified')).toBeTruthy();
+  });
+});
+
+describe('CoachScreen: the one disclaimer', () => {
+  const pending = new Promise<TodaySummaryDTO>(() => {});
+  it.each([
+    ['with no data yet', () => (fetchTodaySummary as jest.Mock).mockResolvedValue({ date: '2026-09-30', hasData: false, sentence: null, bars: [] })],
+    ['when the summary has nothing to compare', () => (fetchTodaySummary as jest.Mock).mockResolvedValue({ date: '2026-09-30', hasData: true, sentence: null, bars: [] })],
+    ['when the summary fails', () => (fetchTodaySummary as jest.Mock).mockRejectedValue(new Error('offline'))],
+    ['while the summary loads', () => (fetchTodaySummary as jest.Mock).mockReturnValue(pending)],
+    ['when the status is unverified and the summary fails', () => {
+      (fetchCoachStatus as jest.Mock).mockRejectedValueOnce(new Error('offline'));
+      (fetchTodaySummary as jest.Mock).mockRejectedValue(new Error('offline'));
+    }],
+    ['beside the summary', () => undefined],
+  ])('shows exactly one "not medical advice" footnote %s', async (_name, arrange) => {
+    arrange();
+    const utils = render(<CoachScreen />);
+    await utils.findByTestId('coach-input');
+    await act(async () => {});
+
+    expect(utils.getAllByTestId('coach-today-footnote')).toHaveLength(1);
+    expect(utils.getByTestId('coach-today-footnote')).toHaveTextContent(/not medical advice/);
+  });
+});
+
+describe('CoachScreen: scrolling', () => {
+  let scrollToEnd: jest.SpyInstance;
+  beforeEach(() => {
+    scrollToEnd = jest.spyOn(ScrollView.prototype as unknown as { scrollToEnd: () => void }, 'scrollToEnd');
+    scrollToEnd.mockClear();
+  });
+  afterEach(() => scrollToEnd.mockRestore());
+
+  const scroller = (utils: ReturnType<typeof render>) => utils.getByTestId('coach-scroll');
+  const grow = (utils: ReturnType<typeof render>) => fireEvent(scroller(utils), 'contentSizeChange', 390, 2000);
+  const dragTo = (utils: ReturnType<typeof render>, y: number) => {
+    fireEvent(scroller(utils), 'scrollBeginDrag');
+    fireEvent(scroller(utils), 'scrollEndDrag', {
+      nativeEvent: { contentOffset: { x: 0, y }, contentSize: { width: 390, height: 2000 }, layoutMeasurement: { width: 390, height: 600 } },
+    });
+  };
+
+  it('opens a restored conversation at the top, with today in view', async () => {
+    (fetchLatestConversation as jest.Mock).mockResolvedValue({
+      conversationId: 'conv-1',
+      messages: [{ id: 'h1', role: 'assistant', text: 'Earlier answer', source: 'model', createdAt: 't' }],
+    });
+    const utils = await openChat();
+    await utils.findByText('Earlier answer');
+
+    grow(utils);
+
+    expect(scrollToEnd).not.toHaveBeenCalled();
+  });
+
+  it('follows a new answer to the end, but not once the reader scrolls up, and again once they are back at the bottom', async () => {
+    const live = openTurn(stream);
+    const utils = await openChat();
+    await ask(utils, 'How did I sleep?');
+    grow(utils);
+    expect(scrollToEnd).toHaveBeenCalledTimes(1);
+
+    dragTo(utils, 200);
+    await live.emit({ type: 'text', sentence: 'Mostly clear skies.' });
+    grow(utils);
+    expect(scrollToEnd).toHaveBeenCalledTimes(1);
+
+    dragTo(utils, 1350);
+    await live.emit({ type: 'text', sentence: 'The cloud was the early wake-ups.' });
+    grow(utils);
+    expect(scrollToEnd).toHaveBeenCalledTimes(2);
+  });
+
+  it('jumps to the end on send even when the reader had scrolled up', async () => {
+    scriptTurn(stream, answer('One.'));
+    scriptTurn(stream, answer('Two.'));
+    const utils = await openChat();
+    await ask(utils, 'First');
+    dragTo(utils, 0);
+    scrollToEnd.mockClear();
+
+    await ask(utils, 'Second');
+    grow(utils);
+
+    expect(scrollToEnd).toHaveBeenCalled();
+  });
+});
+
 describe('CoachScreen: today and suggestions', () => {
   it('leads with the today summary and one footnote, then questions picked from it', async () => {
     const utils = await openChat();
@@ -415,11 +532,11 @@ describe('CoachScreen: streamed answers', () => {
 
   it('notes an answer the on-device model wrote for a user who chose Claude', async () => {
     (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, engine: 'hosted' });
-    scriptTurn(stream, answer('Hi.', { engine: 'local' }));
+    scriptTurn(stream, answer('Hi.', { engine: 'local', messageId: 'a-local' }));
     const utils = await openChat();
     await ask(utils, 'Hello');
 
-    expect(await utils.findByTestId('coach-local-note')).toHaveTextContent('Answered by the on-device model');
+    expect(await utils.findByTestId('coach-local-note-a-local')).toHaveTextContent('Answered by the on-device model');
   });
 
   it('shows follow-ups only under the latest finished answer', async () => {
@@ -450,6 +567,84 @@ describe('CoachScreen: streamed answers', () => {
     expect(utils.queryByTestId('chat-bubble-assistant')).toBeNull();
     expect(utils.queryByText('Not sent')).toBeNull();
     expect(utils.queryByTestId('coach-error')).toBeNull();
+  });
+
+  it('renders a fallback reply exactly like a normal one', async () => {
+    scriptTurn(stream, [{ type: 'text', sentence: 'Your recovery score today is higher than yesterday.' }, doneEvent()]);
+    const utils = await openChat();
+    await ask(utils, 'How am I?');
+
+    expect(await utils.findByText('Your recovery score today is higher than yesterday.')).toBeTruthy();
+    expect(utils.queryByTestId('coach-safety-resources')).toBeNull();
+    expect(utils.queryByTestId('coach-safety-override')).toBeNull();
+    expect(utils.queryByTestId('coach-error')).toBeNull();
+  });
+
+  it('renders a restored fallback reply exactly like a normal one', async () => {
+    (fetchLatestConversation as jest.Mock).mockResolvedValue({
+      conversationId: 'conv-1',
+      messages: [{ id: 'f', role: 'assistant', text: 'I could not put together a fuller answer.', source: 'fallback', createdAt: 't' }],
+    });
+    const utils = await openChat();
+
+    expect(await utils.findByText('I could not put together a fuller answer.')).toBeTruthy();
+    expect(utils.queryByTestId('coach-safety-resources')).toBeNull();
+    expect(utils.queryByTestId('coach-error')).toBeNull();
+  });
+
+  it('shows no memory line when the answer carries no proposals', async () => {
+    scriptTurn(stream, answer('Nice work.'));
+    const utils = await openChat();
+    await ask(utils, 'hello');
+
+    expect(await utils.findByText('Nice work.')).toBeTruthy();
+    expect(utils.queryByText(/I'll remember/)).toBeNull();
+  });
+
+  it('keeps a memory chip being edited when its answer finishes (the row is not remounted)', async () => {
+    const live = openTurn(stream);
+    const utils = await openChat();
+    await ask(utils, 'I train at 6am');
+    await live.emit({ type: 'text', sentence: 'Got it.' }, { type: 'memory', proposals: [PROPOSAL] });
+    fireEvent.press(utils.getByTestId('memory-chip-edit-m1'));
+    expect(utils.getByTestId('memory-chip-input-m1')).toBeTruthy();
+
+    await live.finish(doneEvent({ messageId: 'server-1' }));
+
+    expect(utils.getByTestId('memory-chip-input-m1')).toBeTruthy();
+  });
+
+  it('speaks the status line, without a timer, while waiting', async () => {
+    const live = openTurn(stream);
+    const utils = await openChat();
+    await ask(utils, 'How did I sleep?');
+    await live.emit({ type: 'status', label: 'Looking at your sleep…' });
+
+    expect(utils.getByTestId('coach-thinking').props.accessibilityLabel).toBe('Looking at your sleep');
+    expect(utils.queryByTestId('coach-thinking-timer')).toBeNull();
+  });
+
+  it('announces a finished answer once, but not a safety reply', async () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
+    scriptTurn(stream, answer('Steady.'));
+    scriptTurn(stream, [SAFETY, doneEvent()]);
+    const utils = await openChat();
+    await ask(utils, 'How am I?');
+    await utils.findByText('Steady.');
+    expect(announce).toHaveBeenCalledTimes(1);
+    expect(announce).toHaveBeenCalledWith('Answer ready');
+
+    await ask(utils, 'I feel awful');
+    await utils.findByTestId('coach-safety-resources');
+    expect(announce).toHaveBeenCalledTimes(1);
+    announce.mockRestore();
+  });
+
+  it('marks the page title and the empty-chat prompt as headers', async () => {
+    const utils = await openChat();
+
+    const headers = utils.getAllByRole('header').map((h) => h.props.children);
+    expect(headers).toEqual(expect.arrayContaining(['Coach', 'What would you like to know?']));
   });
 
   it('does not allow sending an empty message', async () => {
@@ -561,6 +756,47 @@ describe('CoachScreen: header and conversations sheet', () => {
     scriptTurn(stream, answer('Hi.'));
     await ask(utils, 'Hello');
     expect(utils.queryByTestId('coach-conversation-gone')).toBeNull();
+  });
+
+  it('says so gently, keeping the chat, when a past conversation cannot be opened', async () => {
+    (listConversations as jest.Mock).mockResolvedValue([{ id: 'conv-7', title: 'What is HRV?', lastMessageAt: '2026-09-28T10:00:00.000Z' }]);
+    (fetchConversation as jest.Mock).mockRejectedValue(new Error('offline'));
+    scriptTurn(stream, answer('Hi.'));
+    const utils = await openChat();
+    await ask(utils, 'Hello');
+    await utils.findByText('Hi.');
+
+    fireEvent.press(utils.getByTestId('coach-conversations-button'));
+    const row = await utils.findByTestId('conversation-conv-7');
+    await act(async () => {
+      fireEvent.press(row);
+    });
+
+    expect(await utils.findByTestId('coach-conversation-failed')).toHaveTextContent(/Couldn't open that conversation/);
+    expect(utils.getByText('Hi.')).toBeTruthy();
+  });
+
+  it('does not let a past conversation that loads late wipe a question sent meanwhile', async () => {
+    const past = deferred<{ conversationId: string; messages: unknown[] }>();
+    (listConversations as jest.Mock).mockResolvedValue([{ id: 'conv-7', title: 'What is HRV?', lastMessageAt: '2026-09-28T10:00:00.000Z' }]);
+    (fetchConversation as jest.Mock).mockReturnValue(past.promise);
+    scriptTurn(stream, answer('Fresh answer.'));
+    const utils = await openChat();
+
+    fireEvent.press(utils.getByTestId('coach-conversations-button'));
+    const row = await utils.findByTestId('conversation-conv-7');
+    await act(async () => {
+      fireEvent.press(row);
+    });
+    await ask(utils, 'Hello');
+    await utils.findByText('Fresh answer.');
+    await act(async () => {
+      past.resolve({ conversationId: 'conv-7', messages: [{ id: 'old', role: 'assistant', text: 'Old answer', source: 'model', createdAt: 't' }] });
+    });
+
+    expect(utils.getByText('Fresh answer.')).toBeTruthy();
+    expect(utils.getByText('Hello')).toBeTruthy();
+    expect(utils.queryByText('Old answer')).toBeNull();
   });
 
   it('reaches the coach memory from ☰', async () => {

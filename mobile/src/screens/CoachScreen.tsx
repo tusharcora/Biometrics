@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { View, ScrollView, KeyboardAvoidingView, Platform, Pressable } from 'react-native';
+import { AccessibilityInfo, View, ScrollView, KeyboardAvoidingView, Platform, Pressable, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
@@ -10,23 +10,19 @@ import {
   fetchConversation,
   fetchLatestConversation,
   fetchTodaySummary,
+  type AnswerCardDTO,
   type CoachEngineDTO,
-  type CoachMessageSource,
   type TodaySummaryDTO,
 } from '../api/coach';
 import { Text } from '../components/ui/text';
-import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { PromptBar } from '../components/coach/PromptBar';
 import { ThoughtLine } from '../components/coach/thought-line';
-import { CoachToday } from '../components/coach/CoachToday';
-import { AnswerCard } from '../components/coach/AnswerCard';
-import { FollowUpChips } from '../components/coach/FollowUpChips';
+import { CoachToday, TODAY_FOOTNOTE, todayShowsFootnote } from '../components/coach/CoachToday';
+import { CoachMessageRow } from '../components/coach/CoachMessageRow';
 import { ErrorCard } from '../components/coach/ErrorCard';
 import { ConversationsSheet } from '../components/coach/ConversationsSheet';
-import { ChatBubble } from '../components/ui/chat-bubble';
-import { MemoryProposalChips } from '../components/memory-proposal-chips';
 import { Character } from '../components/characters/Character';
 import { characterInfo } from '../components/characters/registry';
 import { useCharacterMood } from '../characters/useCharacterMood';
@@ -39,11 +35,24 @@ import { useKeyboardVisible } from '../lib/useKeyboardVisible';
 import { useCharacterOptional } from '../characters/CharacterContext';
 import { useCoachConversation, type CoachChatMessage } from '../lib/useCoachConversation';
 import { suggestedQuestions } from '../lib/coachToday';
-import { cardDestination, followUpsFor } from '../lib/coachAnswers';
+import { cardDestination } from '../lib/coachAnswers';
 
 type CoachRoute = RouteProp<TabParamList, 'Coach'>;
 
 type Phase = 'loading' | 'unavailable' | 'needs-consent' | 'ready';
+
+// How close to the bottom (pt) still counts as reading the latest message.
+const NEAR_BOTTOM = 80;
+
+// Why a past conversation picked from the sheet did not open.
+const CHAT_NOTES = {
+  gone: { testID: 'coach-conversation-gone', text: 'That conversation is no longer available.' },
+  failed: { testID: 'coach-conversation-failed', text: "Couldn't open that conversation just now. Try again in a moment." },
+} as const;
+
+function nearBottom({ contentOffset, contentSize, layoutMeasurement }: NativeScrollEvent): boolean {
+  return contentOffset.y + layoutMeasurement.height >= contentSize.height - NEAR_BOTTOM;
+}
 
 // The Coach page (spec 1): header, today's summary, suggested questions, the
 // conversation (streamed sentence by sentence) and the composer. Loading and
@@ -66,8 +75,15 @@ export function CoachScreen() {
   const [today, setToday] = useState<TodaySummaryDTO | null>(null);
   const [todayLoading, setTodayLoading] = useState(true);
   const [sheetOpen, setSheetOpen] = useState(false);
-  // A past conversation picked from the sheet was gone (deleted or past retention).
-  const [conversationGone, setConversationGone] = useState(false);
+  // A past conversation picked from the sheet did not open: gone (404) or failed.
+  const [chatNote, setChatNote] = useState<keyof typeof CHAT_NOTES | null>(null);
+  // Follow the end of the chat as it grows: on after a send, off after a
+  // history restore (the page opens at the top, today first) and while the
+  // user has scrolled up to read.
+  const followEnd = useRef(false);
+  // Bumped by every send, new chat and conversation open: an older history
+  // load that resolves later must not replace what the user has moved on to.
+  const chatSeq = useRef(0);
   const focused = useScreenFocused();
   const scrollRef = useRef<ScrollView>(null);
   const mounted = useRef(true);
@@ -96,7 +112,16 @@ export function CoachScreen() {
     onConsentRequired: () => navigation.navigate('CoachConsent', { prefill: undefined }),
     onDisabled: () => setPhase('unavailable'),
   });
-  const { messages, conversationId, streaming, waiting, statusLabel, answeredAt, error, restore, send, stop } = conversation;
+  const { messages, conversationId, streaming, waiting, statusLabel, answeredAt, error, send, stop, retry, overrideSafety, newChat } = conversation;
+  const restoreHook = conversation.restore;
+  // History opens at the top of the page, with today in view.
+  const restore = useCallback(
+    (past: Parameters<typeof restoreHook>[0]) => {
+      followEnd.current = false;
+      restoreHook(past);
+    },
+    [restoreHook],
+  );
   const mood = useCharacterMood({ sending: streaming, answeredAt });
   // Read inside load(): a message just sent (before its conversationId
   // arrives) must stop a focus reload from replacing the chat with history.
@@ -193,8 +218,11 @@ export function CoachScreen() {
       // Once the chat is showing, a focus reload only re-checks status and
       // today: re-reading history would wipe what the live chat shows.
       if (phaseRef.current === 'ready' && (historyLoaded.current || conversationIdRef.current || messagesRef.current.length > 0)) return;
+      const seq = chatSeq.current;
       const latest = await fetchLatestConversation();
       if (!mounted.current || reloadPending.current) return;
+      // The user sent, or opened another chat, meanwhile: keep that.
+      if (seq !== chatSeq.current) return;
       restore(latest);
       historyLoaded.current = true;
       setPhase('ready');
@@ -224,18 +252,54 @@ export function CoachScreen() {
     return unsubscribe;
   }, [navigation, load]);
 
+  // A turn that got through settles an unverified status: the coach is there.
+  useEffect(() => {
+    if (answeredAt !== null || conversationId) setStatusUnverified(false);
+  }, [answeredAt, conversationId]);
+
+  // Screen readers hear once that the answer is in (not for a safety reply,
+  // a stop or an error: answeredAt is only set for a finished answer).
+  useEffect(() => {
+    if (answeredAt !== null) AccessibilityInfo.announceForAccessibility('Answer ready');
+  }, [answeredAt]);
+
   // A question from a suggestion, a bar, a chip or the field. Stable, so the
-  // memoised today summary does not re-render on every keystroke.
+  // memoised today summary and rows do not re-render on every keystroke.
   const ask = useCallback(
     (text: string): boolean => {
       const sent = send(text);
       if (sent) {
+        chatSeq.current += 1;
+        followEnd.current = true;
         lastPrefill.current = undefined;
-        setConversationGone(false);
+        setChatNote(null);
       }
       return sent;
     },
     [send],
+  );
+
+  const retryTurn = useCallback(() => {
+    followEnd.current = true;
+    retry();
+  }, [retry]);
+
+  const resendWithOverride = useCallback(
+    (originalMessage: string) => {
+      followEnd.current = true;
+      overrideSafety(originalMessage);
+    },
+    [overrideSafety],
+  );
+
+  // Without a summary there is no day to open; cardDestination then opens the Metrics tab.
+  const cardDate = today?.date ?? '';
+  const openSource = useCallback(
+    (card: AnswerCardDTO) => {
+      const target = cardDestination(card, cardDate);
+      navigation.navigate(target.name, target.params);
+    },
+    [navigation, cardDate],
   );
 
   function sendTyped() {
@@ -244,32 +308,48 @@ export function CoachScreen() {
 
   async function openConversation(id: string) {
     setSheetOpen(false);
-    setConversationGone(false);
+    setChatNote(null);
+    const seq = ++chatSeq.current;
     try {
       const past = await fetchConversation(id);
-      if (mounted.current) {
-        restore(past);
-        historyLoaded.current = true;
-      }
+      if (!mounted.current || seq !== chatSeq.current) return;
+      restore(past);
+      historyLoaded.current = true;
     } catch (e) {
-      // Offline: stay on the chat that is showing. Gone (404): say so gently.
-      if (mounted.current && e instanceof StaleConversationError) setConversationGone(true);
+      // Stay on the chat that is showing, and say why gently.
+      if (mounted.current && seq === chatSeq.current) setChatNote(e instanceof StaleConversationError ? 'gone' : 'failed');
     }
   }
 
   function startNewChat() {
     setSheetOpen(false);
-    setConversationGone(false);
-    conversation.newChat();
+    setChatNote(null);
+    chatSeq.current += 1;
+    followEnd.current = false;
+    newChat();
     historyLoaded.current = true;
   }
+
+  const onContentSizeChange = useCallback(() => {
+    if (followEnd.current) scrollRef.current?.scrollToEnd({ animated: true });
+  }, []);
+  // Only the user's own scrolling decides whether to keep following; the
+  // programmatic scrollToEnd fires no drag events.
+  const stopFollowing = useCallback(() => {
+    followEnd.current = false;
+  }, []);
+  const followIfNearBottom = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
+    followEnd.current = nearBottom(e.nativeEvent);
+  }, []);
 
   const ready = phase === 'ready' && !statusUnverified;
   const header = (
     <View className="flex-row items-center justify-between px-5 pb-2 pt-1">
       <View className="flex-row items-center gap-3">
         <Character testID="coach-header-character" mood={mood} size={36} paused={!focused} />
-        <Text className="font-display text-display">Coach</Text>
+        <Text accessibilityRole="header" className="font-display text-display">
+          Coach
+        </Text>
       </View>
       {ready ? (
         <View className="flex-row gap-2">
@@ -338,82 +418,8 @@ export function CoachScreen() {
     );
   }
 
-  // Without a summary there is no day to open; cardDestination then opens the Metrics tab.
-  const cardDate = today?.date ?? '';
   const last = messages[messages.length - 1];
-
-  function renderMessage(message: CoachChatMessage) {
-    if (message.role === 'user') {
-      return (
-        <View key={message.id} className="gap-1">
-          {message.failed ? (
-            <Text testID={`coach-message-failed-${message.id}`} className="self-end text-xs text-destructive">
-              Not sent
-            </Text>
-          ) : null}
-          <ChatBubble role="user" text={message.text} />
-        </View>
-      );
-    }
-    // The empty answer being waited on shows as the thinking line instead.
-    if (message.state === 'streaming' && !message.text && !message.safety) return null;
-    const isLatest = message === last;
-    const showFollowUps = isLatest && !streaming && message.state === 'done' && !message.safety;
-    // The question this answers: a chip repeating it is dropped.
-    const lastQuestion = showFollowUps ? [...messages].reverse().find((m) => m.role === 'user')?.text : undefined;
-    return (
-      <View key={message.id} className="gap-2">
-        {message.text ? (
-          <ChatBubble role="assistant" text={message.text} source={message.source as CoachMessageSource} animate={false}>
-            {message.safety ? (
-              <View className="gap-3">
-                <Card testID="coach-safety-resources" className="gap-1 border-accent/40 bg-accent/10">
-                  <Text className="text-sm font-semibold">Support is available</Text>
-                  {message.safety.resources.map((resource) => (
-                    <Text key={resource} className="text-sm">
-                      {resource}
-                    </Text>
-                  ))}
-                </Card>
-                {!message.safety.overridden ? (
-                  <Button
-                    testID="coach-safety-override"
-                    variant="ghost"
-                    size="sm"
-                    disabled={streaming}
-                    onPress={() => conversation.overrideSafety(message.safety!.originalMessage)}
-                  >
-                    {"That's not why I'm asking"}
-                  </Button>
-                ) : null}
-              </View>
-            ) : null}
-          </ChatBubble>
-        ) : null}
-        {message.card ? (
-          <AnswerCard
-            card={message.card}
-            onOpenSource={() => {
-              const target = cardDestination(message.card!, cardDate);
-              navigation.navigate(target.name, target.params);
-            }}
-          />
-        ) : null}
-        {message.state === 'stopped' ? (
-          <Text testID={`coach-stopped-${message.id}`} className="text-xs text-muted-foreground">
-            Stopped
-          </Text>
-        ) : null}
-        {message.answeredLocally ? (
-          <Text testID="coach-local-note" className="text-xs text-muted-foreground">
-            Answered by the on-device model
-          </Text>
-        ) : null}
-        {message.memoryProposals ? <MemoryProposalChips proposals={message.memoryProposals} /> : null}
-        {showFollowUps ? <FollowUpChips questions={followUpsFor(message.card, lastQuestion)} onAsk={ask} disabled={streaming} /> : null}
-      </View>
-    );
-  }
+  const lastQuestion = [...messages].reverse().find((m) => m.role === 'user')?.text;
 
   return (
     <SafeAreaView className="flex-1 bg-background">
@@ -423,13 +429,17 @@ export function CoachScreen() {
         <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={90}>
           <ScrollView
             ref={scrollRef}
+            testID="coach-scroll"
             keyboardShouldPersistTaps="handled"
             contentContainerStyle={{ gap: 16, paddingHorizontal: 20, paddingVertical: 12, flexGrow: 1 }}
-            onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: true })}
+            onContentSizeChange={onContentSizeChange}
+            onScrollBeginDrag={stopFollowing}
+            onScrollEndDrag={followIfNearBottom}
+            onMomentumScrollEnd={followIfNearBottom}
           >
-            {conversationGone ? (
-              <Text testID="coach-conversation-gone" className="px-1 text-sm text-muted-foreground">
-                That conversation is no longer available.
+            {chatNote ? (
+              <Text testID={CHAT_NOTES[chatNote].testID} className="px-1 text-sm text-muted-foreground">
+                {CHAT_NOTES[chatNote].text}
               </Text>
             ) : null}
 
@@ -440,12 +450,20 @@ export function CoachScreen() {
             ) : null}
 
             <CoachToday summary={today} loading={todayLoading} onAsk={ask} />
+            {/* The page's one disclaimer: CoachToday shows it beside its comparisons, the page otherwise. */}
+            {!todayShowsFootnote(today) ? (
+              <Text testID="coach-today-footnote" className="text-xs text-muted-foreground">
+                {TODAY_FOOTNOTE}
+              </Text>
+            ) : null}
 
             {messages.length === 0 && !streaming ? (
               <View testID="coach-empty" className="items-center gap-4 py-4">
                 <Character testID="coach-hero-character" mood={mood} size={64} paused={!focused} />
                 <View className="items-center gap-1 px-4">
-                  <Text className="text-center font-display text-display-sm">What would you like to know?</Text>
+                  <Text accessibilityRole="header" className="text-center font-display text-display-sm">
+                    What would you like to know?
+                  </Text>
                   <Text className="text-center text-sm text-muted-foreground">Ask about your data, or anything health and fitness.</Text>
                 </View>
                 <View className="w-full gap-2">
@@ -465,20 +483,36 @@ export function CoachScreen() {
               </View>
             ) : null}
 
-            {messages.map(renderMessage)}
+            {messages.map((message) => {
+              const showFollowUps = message === last && message.role === 'assistant' && !streaming && message.state === 'done' && !message.safety;
+              const unsettledSafety = !!message.safety && !message.safety.overridden;
+              return (
+                <CoachMessageRow
+                  key={message.clientKey ?? message.id}
+                  message={message}
+                  showFollowUps={showFollowUps}
+                  lastQuestion={showFollowUps ? lastQuestion : undefined}
+                  busy={showFollowUps || unsettledSafety ? streaming : false}
+                  onAsk={ask}
+                  onOverrideSafety={resendWithOverride}
+                  onOpenSource={openSource}
+                />
+              );
+            })}
 
             {waiting ? (
               <View className="items-start">
                 <ThoughtLine
                   working
                   label={statusLabel ?? 'Thinking…'}
+                  timer={false}
                   glyph={<Character testID="coach-thinking-character" mood="thinking" size={20} paused={!focused} />}
                   testID="coach-thinking"
                 />
               </View>
             ) : null}
 
-            {error ? <ErrorCard error={error} onRetry={conversation.retry} /> : null}
+            {error ? <ErrorCard error={error} onRetry={retryTurn} /> : null}
           </ScrollView>
 
           <View className="px-4 pb-2 pt-1">

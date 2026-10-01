@@ -161,6 +161,32 @@ describe('useCoachConversation: stop', () => {
     expect(result.current.answeredAt).toBeNull();
   });
 
+  it('does not celebrate a turn the server ended as stopped, and marks it stopped', async () => {
+    turn([{ type: 'text', sentence: 'Mostly clear skies.' }, done({ stopped: true })]);
+    const { result } = setup();
+
+    await act(async () => {
+      result.current.send('How did I sleep?');
+    });
+
+    expect(result.current.messages[1]).toEqual(expect.objectContaining({ id: 'a1', state: 'stopped' }));
+    expect(result.current.answeredAt).toBeNull();
+  });
+
+  it('keeps a live answer\'s client key when its id becomes the server\'s', async () => {
+    const live = openTurn();
+    const { result } = setup();
+    act(() => result.current.send('How did I sleep?'));
+    live.emit({ type: 'text', sentence: 'Mostly clear skies.' });
+    const key = result.current.messages[1]!.clientKey;
+    expect(key).toBeTruthy();
+
+    live.emit(done());
+    await live.finish();
+
+    expect(result.current.messages[1]).toEqual(expect.objectContaining({ id: 'a1', clientKey: key }));
+  });
+
   it('has a stable stop that is safe before any turn and when pressed repeatedly', async () => {
     const { result, rerender } = setup();
     const stop = result.current.stop;
