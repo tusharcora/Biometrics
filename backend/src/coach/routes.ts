@@ -13,7 +13,7 @@ import { withDisclaimer } from './guardrails/disclaimer';
 import type { FactData } from './answer/facts';
 import { AnswerDeps, AnswerEvent, runAnswer } from './answer/pipeline';
 import { warmModel } from './answer/warm';
-import { generateTodaySummary, getTodaySummary, TodayDeps } from './answer/today';
+import { generateTodaySummary, getTodaySummary, summaryEngineDeps, TodayDeps } from './answer/today';
 import type { MemoryDTO } from './memory';
 import { findPersona, listPersonas, resolvePersona } from './personas';
 import { selectEngine } from './engine';
@@ -138,12 +138,7 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
   const router = Router();
 
   // The day summary is written by the same engine the user's messages go to.
-  const todayDeps: TodayDeps = {
-    clock: deps.clock,
-    telemetry: deps.telemetry,
-    selectProvider: (userId) => selectEngine(userId, { local: deps.getProvider(), hosted: deps.getHostedProvider() }),
-    ...overrides.today,
-  };
+  const todayDeps: TodayDeps = { ...summaryEngineDeps(deps), ...overrides.today };
 
   // Auth first, so an unauthenticated caller learns nothing about the flag.
   function requireEnabled(_req: AuthedRequest, res: Response, next: NextFunction): void {

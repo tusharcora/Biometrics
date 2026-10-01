@@ -11,6 +11,7 @@ import { CoachClock, systemClock, TimerHandle } from '../clock';
 import { getAnswerBudgetMs, getCoachProvider, getHostedProvider, isCoachEnabled } from '../config';
 import { hasCurrentConsent } from '../consent';
 import { EngineSelection, selectEngine } from '../engine';
+import type { CoachModelProvider } from '../model/provider';
 import { CoachPersona, REQUIRED_DISALLOWED_TOPICS, resolvePersona } from '../personas';
 import { escapeField } from '../prompt';
 import type { CoachTelemetry } from '../telemetry';
@@ -226,6 +227,26 @@ export type SummaryOutcome =
   | 'skipped_no_data'
   | 'skipped_exists'
   | 'skipped_persona_changed';
+
+export interface SummaryEngineSlots {
+  getProvider: () => CoachModelProvider;
+  getHostedProvider: () => CoachModelProvider | null;
+  clock: CoachClock;
+  telemetry: CoachTelemetry;
+}
+
+/**
+ * The day summary's engine, clock and telemetry, built the same way for the
+ * HTTP routes and the after-sync job: the engine the user's messages go to
+ * (hosted only while chosen, offered and consented; hosted falls back to local).
+ */
+export function summaryEngineDeps(slots: SummaryEngineSlots): TodayDeps {
+  return {
+    clock: slots.clock,
+    telemetry: slots.telemetry,
+    selectProvider: (userId) => selectEngine(userId, { local: slots.getProvider(), hosted: slots.getHostedProvider() }),
+  };
+}
 
 const defaultLoadSheet = (userId: string, today: string) => buildFactSheet(userId, 'today', { ...defaultFactData, today });
 const defaultSelect = (userId: string) => selectEngine(userId, { local: getCoachProvider(), hosted: getHostedProvider() });
