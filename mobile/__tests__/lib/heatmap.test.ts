@@ -80,7 +80,7 @@ describe('monthGrid', () => {
     expect(grid.cols).toBe(7);
     expect(grid.rows).toBe(5); // 2 leading blanks + 30 days
     expect(grid.cells).toHaveLength(30);
-    expect(grid.cells[0]).toMatchObject({ date: '2026-09-01', col: 2, row: 0, steps: null, level: null });
+    expect(grid.cells[0]).toMatchObject({ date: '2026-09-01', col: 2, row: 0, value: null, level: null });
     expect(grid.cells[29]).toMatchObject({ date: '2026-09-30', col: 3, row: 4 });
   });
 
@@ -94,7 +94,7 @@ describe('monthGrid', () => {
     const grid = monthGrid('2026-09-01', '2026-09-22', new Map([['2026-09-22', 12000]]), GOAL);
     expect(grid.cells).toHaveLength(22);
     expect(grid.rows).toBe(5);
-    expect(grid.cells[21]).toMatchObject({ date: '2026-09-22', steps: 12000, level: 4 });
+    expect(grid.cells[21]).toMatchObject({ date: '2026-09-22', value: 12000, level: 4 });
   });
 });
 

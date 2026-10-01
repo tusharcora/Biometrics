@@ -1,5 +1,5 @@
-import React, { memo, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, View, type GestureResponderEvent } from 'react-native';
+import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
+import { Pressable, ScrollView, View, type GestureResponderEvent, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
 import Svg, { Rect } from 'react-native-svg';
 import { Ionicons } from '@expo/vector-icons';
@@ -7,10 +7,9 @@ import { useColorScheme } from 'nativewind';
 import { COLORS, METRIC_CONFIG, MOTION } from '../theme';
 import {
   cellAt,
-  compareToAverage,
-  formatDayTitle,
   formatShortDate,
   gridGeometry,
+  heatLevel,
   historyNote,
   monthGrid,
   monthLabels,
@@ -18,6 +17,7 @@ import {
   monthTitle,
   rangeStats,
   shiftMonth,
+  sleepHeatLevel,
   viewRange,
   weekColumnsGrid,
   yearStart,
@@ -25,11 +25,18 @@ import {
   type HeatGrid,
   type HeatLevel,
   type HeatmapView,
+  type LevelOf,
   type StepsByDate,
+  type ValuesByDate,
 } from '../lib/heatmap';
+import { formatClock, formatDuration, sleepRangeStats, type SleepByDate } from '../lib/sleepStats';
+import { DayDetail, NightDetail } from './activity-sheets';
+import { Button } from './ui/button';
 import { Card } from './ui/card';
+import { SectionLabel } from './ui/section-label';
 import { SegmentedControl } from './ui/segmented-control';
 import { Sheet } from './ui/sheet';
+import { Skeleton } from './ui/skeleton';
 import { Text } from './ui/text';
 
 const VIEW_OPTIONS: { value: HeatmapView; label: string }[] = [
@@ -47,12 +54,60 @@ const WEEKS_GEOMETRY = { minBin: 13, maxBin: 20, gap: 3 };
 const WEEK_COLUMNS_PER_GROUP = 8;
 const WEEKDAY_INITIALS = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 const MONTH_LABEL_HEIGHT = 16;
+// The month pager: each page is the width less PAGE_PEEK, so the other page's
+// card shows PAGE_PEEK - PAGE_GAP at the edge as a cue to swipe.
+const PAGE_PEEK = 24;
+const PAGE_GAP = 10;
 
 type Palette = (typeof COLORS)['dark'];
 
-function levelColor(level: HeatLevel | null, palette: Palette): string {
+export type ActivityMetric = 'steps' | 'sleep';
+
+export type SleepState =
+  | { phase: 'loading' }
+  | { phase: 'error' }
+  | { phase: 'ready'; nights: SleepByDate; earliestDate: string | null };
+
+interface MetricSpec {
+  metric: ActivityMetric;
+  label: string;
+  // Prefix on every testID, so both metrics' cards can be on screen at once.
+  prefix: string;
+  icon: 'footsteps-outline' | 'moon-outline';
+  goal: number;
+  levelOf: LevelOf;
+  ramp: (p: Palette) => readonly [string, string, string, string, string];
+  accent: (p: Palette) => string;
+  history: 'step' | 'sleep';
+}
+
+const STEPS_SPEC: MetricSpec = {
+  metric: 'steps',
+  label: 'Steps',
+  prefix: '',
+  icon: 'footsteps-outline',
+  goal: METRIC_CONFIG.STEPS.goal ?? 10000,
+  levelOf: heatLevel,
+  ramp: (p) => [p.heat0, p.heat1, p.heat2, p.heat3, p.heat4],
+  accent: (p) => p.metricSteps,
+  history: 'step',
+};
+
+const SLEEP_SPEC: MetricSpec = {
+  metric: 'sleep',
+  label: 'Sleep',
+  prefix: 'sleep-',
+  icon: 'moon-outline',
+  goal: METRIC_CONFIG.SLEEP.goal ?? 480,
+  levelOf: sleepHeatLevel,
+  ramp: (p) => [p.heat0, p.sleepHeat1, p.sleepHeat2, p.sleepHeat3, p.sleepHeat4],
+  accent: (p) => p.metricSleep,
+  history: 'sleep',
+};
+
+function levelColor(level: HeatLevel | null, palette: Palette, spec: MetricSpec): string {
   if (level === null) return palette.heatEmpty;
-  return [palette.heat0, palette.heat1, palette.heat2, palette.heat3, palette.heat4][level];
+  return spec.ramp(palette)[level];
 }
 
 const formatSteps = METRIC_CONFIG.STEPS.format;
@@ -73,16 +128,17 @@ interface CellGroupProps {
   width: number;
   height: number;
   palette: Palette;
+  spec: MetricSpec;
   selectedDate: string | null;
 }
 
 // One Svg layer per reveal group; memoised so opening the day sheet (which
 // only changes the selection) does not redraw every other group.
-const CellGroup = memo(function CellGroup({ cells, shape, bin, gap, width, height, palette, selectedDate }: CellGroupProps) {
+const CellGroup = memo(function CellGroup({ cells, shape, bin, gap, width, height, palette, spec, selectedDate }: CellGroupProps) {
   return (
     <Svg width={width} height={height} style={{ position: 'absolute', left: 0, top: 0 }} pointerEvents="none">
       {cells.map((c) => {
-        const fill = levelColor(c.level, palette);
+        const fill = levelColor(c.level, palette, spec);
         const selected = c.date === selectedDate;
         const month = shape === 'tile';
         // A month's tapped day grows to fill its bin while its sheet is open.
@@ -126,52 +182,72 @@ function Stat({ label, value, testID }: { label: string; value: string; testID: 
   );
 }
 
-export interface ActivityHeatmapProps {
-  steps: StepsByDate;
+interface HeatmapCardProps {
+  spec: MetricSpec;
+  values: ValuesByDate;
   earliestDate: string | null;
   today: string;
-  goal?: number;
+  view: HeatmapView;
+  monthCursor: string;
+  onMonthCursor: (month: string) => void;
+  selectedDate: string | null;
+  onSelect: (date: string) => void;
+  accessibilityLabel: string;
+  // Year/YTD stack both metrics, so each card names its metric instead of a month.
+  summary?: string;
 }
 
-export function ActivityHeatmap({ steps, earliestDate, today, goal = METRIC_CONFIG.STEPS.goal ?? 10000 }: ActivityHeatmapProps) {
+// One metric's heat map: month calendar or week columns, legend and history note.
+function HeatmapCard({
+  spec,
+  values,
+  earliestDate,
+  today,
+  view,
+  monthCursor,
+  onMonthCursor,
+  selectedDate,
+  onSelect,
+  accessibilityLabel,
+  summary,
+}: HeatmapCardProps) {
   const { colorScheme } = useColorScheme();
   const palette = colorScheme === 'light' ? COLORS.light : COLORS.dark;
   const reduced = useReducedMotion();
-  const [view, setView] = useState<HeatmapView>('month');
-  const [monthCursor, setMonthCursor] = useState(() => monthStart(today));
   const [width, setWidth] = useState(0);
-  const [selected, setSelected] = useState<HeatCell | null>(null);
   const scrollRef = useRef<ScrollView>(null);
+  const p = spec.prefix;
 
   const firstMonth = monthStart(yearStart(today));
   const lastMonth = monthStart(today);
   const range = viewRange(view, today, monthCursor);
 
   const grid = useMemo(
-    () => (view === 'month' ? monthGrid(monthCursor, today, steps, goal) : weekColumnsGrid(range.start, range.end, steps, goal)),
-    [view, monthCursor, today, steps, goal, range.start, range.end],
+    () =>
+      view === 'month'
+        ? monthGrid(monthCursor, today, values, spec.goal, spec.levelOf)
+        : weekColumnsGrid(range.start, range.end, values, spec.goal, spec.levelOf),
+    [view, monthCursor, today, values, spec, range.start, range.end],
   );
   const groups = useMemo(() => groupCells(grid, view), [grid, view]);
   const labels = useMemo(() => (view === 'month' ? [] : monthLabels(grid)), [grid, view]);
-  const stats = useMemo(() => rangeStats(steps, range.start, range.end, today, goal), [steps, range.start, range.end, today, goal]);
-  const note = historyNote(earliestDate, range.start, today);
+  const note = historyNote(earliestDate, range.start, today, spec.history);
 
   const geometry = gridGeometry(grid, width, view === 'month' ? MONTH_GEOMETRY : WEEKS_GEOMETRY);
   const shape = view === 'month' ? 'tile' : 'rect';
-  const rangeLabel = view === 'month' ? monthTitle(monthCursor) : view === 'year' ? 'the last 12 months' : `${today.slice(0, 4)} so far`;
 
   function onGridPress(e: GestureResponderEvent) {
     const top = view === 'month' ? 0 : MONTH_LABEL_HEIGHT;
     const hit = cellAt(grid, geometry.bin, e.nativeEvent.locationX, e.nativeEvent.locationY - top);
-    if (hit) setSelected(hit);
+    if (hit) onSelect(hit.date);
   }
 
   const gridBody = (
     <Pressable
-      testID="heatmap-grid"
+      testID={`${p}heatmap-grid`}
       onPress={onGridPress}
       accessibilityRole="image"
-      accessibilityLabel={`Steps heat map for ${rangeLabel}: ${stats.activeDays} active days, ${stats.goalDays} at goal.`}
+      accessibilityLabel={accessibilityLabel}
       style={{ width: geometry.width, height: geometry.height + (view === 'month' ? 0 : MONTH_LABEL_HEIGHT) }}
     >
       {/* Nothing inside the grid may take the touch: the hit-test reads
@@ -206,7 +282,8 @@ export function ActivityHeatmap({ steps, earliestDate, today, goal = METRIC_CONF
               width={geometry.width}
               height={geometry.height}
               palette={palette}
-              selectedDate={selected?.date ?? null}
+              spec={spec}
+              selectedDate={selectedDate}
             />
           </Animated.View>
         ))}
@@ -215,133 +292,355 @@ export function ActivityHeatmap({ steps, earliestDate, today, goal = METRIC_CONF
   );
 
   return (
-    <View className="gap-4">
-      <SegmentedControl testID="heatmap-view" options={VIEW_OPTIONS} value={view} onChange={setView} />
-
-      <Card className="gap-3">
-        {view === 'month' ? (
-          <View className="flex-row items-center justify-between">
-            <Pressable
-              testID="heatmap-prev-month"
-              accessibilityRole="button"
-              accessibilityLabel="Previous month"
-              disabled={monthCursor <= firstMonth}
-              onPress={() => setMonthCursor((m) => shiftMonth(m, -1))}
-              hitSlop={10}
-              className={monthCursor <= firstMonth ? 'opacity-30' : 'active:opacity-60'}
-            >
-              <Ionicons name="chevron-back" size={20} color={palette.foreground} />
-            </Pressable>
-            <Text testID="heatmap-title" className="text-base font-semibold">
-              {monthTitle(monthCursor)}
-            </Text>
-            <Pressable
-              testID="heatmap-next-month"
-              accessibilityRole="button"
-              accessibilityLabel="Next month"
-              disabled={monthCursor >= lastMonth}
-              onPress={() => setMonthCursor((m) => shiftMonth(m, 1))}
-              hitSlop={10}
-              className={monthCursor >= lastMonth ? 'opacity-30' : 'active:opacity-60'}
-            >
-              <Ionicons name="chevron-forward" size={20} color={palette.foreground} />
-            </Pressable>
-          </View>
-        ) : (
-          <Text testID="heatmap-title" className="text-base font-semibold">
-            {view === 'year' ? 'Last 12 months' : `${today.slice(0, 4)} year to date`}
+    <Card className="gap-3">
+      {view === 'month' ? (
+        <View className="flex-row items-center justify-between">
+          <Pressable
+            testID={`${p}heatmap-prev-month`}
+            accessibilityRole="button"
+            accessibilityLabel="Previous month"
+            disabled={monthCursor <= firstMonth}
+            onPress={() => onMonthCursor(shiftMonth(monthCursor, -1))}
+            hitSlop={10}
+            className={monthCursor <= firstMonth ? 'opacity-30' : 'active:opacity-60'}
+          >
+            <Ionicons name="chevron-back" size={20} color={palette.foreground} />
+          </Pressable>
+          <Text testID={`${p}heatmap-title`} className="text-base font-semibold">
+            {monthTitle(monthCursor)}
           </Text>
-        )}
-
-        <View testID="heatmap-canvas" onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
-          {width > 0 ? (
-            view === 'month' ? (
-              <View className="items-center gap-1">
-                <View className="flex-row" style={{ width: geometry.width }}>
-                  {WEEKDAY_INITIALS.map((d, i) => (
-                    <Text key={i} className="text-center text-[11px] text-muted-foreground" style={{ width: geometry.bin }}>
-                      {d}
-                    </Text>
-                  ))}
-                </View>
-                {gridBody}
-              </View>
-            ) : (
-              <ScrollView
-                ref={scrollRef}
-                horizontal
-                showsHorizontalScrollIndicator={false}
-                // Open on the most recent weeks: today is at the right edge.
-                onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
-              >
-                {gridBody}
-              </ScrollView>
-            )
+          <Pressable
+            testID={`${p}heatmap-next-month`}
+            accessibilityRole="button"
+            accessibilityLabel="Next month"
+            disabled={monthCursor >= lastMonth}
+            onPress={() => onMonthCursor(shiftMonth(monthCursor, 1))}
+            hitSlop={10}
+            className={monthCursor >= lastMonth ? 'opacity-30' : 'active:opacity-60'}
+          >
+            <Ionicons name="chevron-forward" size={20} color={palette.foreground} />
+          </Pressable>
+        </View>
+      ) : (
+        <View testID={`${p}heatmap-metric`} className="flex-row items-center justify-between">
+          <View className="flex-row items-center gap-2">
+            <View className="h-7 w-7 items-center justify-center rounded-full" style={{ backgroundColor: levelColor(1, palette, spec) }}>
+              <Ionicons name={spec.icon} size={15} color={spec.accent(palette)} />
+            </View>
+            <Text className="text-base font-semibold">{spec.label}</Text>
+          </View>
+          {summary ? (
+            <Text className="text-sm text-muted-foreground" style={{ fontVariant: ['tabular-nums'] }}>
+              {summary}
+            </Text>
           ) : null}
         </View>
+      )}
 
-        <View testID="heatmap-legend" className="flex-row items-center justify-end gap-1.5">
-          <View className="mr-auto flex-row items-center gap-1.5">
-            <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: palette.heatEmpty, borderWidth: 1, borderColor: palette.hairline }} />
-            <Text className="text-[11px] text-muted-foreground">No data</Text>
-          </View>
-          <Text className="text-[11px] text-muted-foreground">Less</Text>
-          {([0, 1, 2, 3, 4] as HeatLevel[]).map((level) => (
-            <View key={level} style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: levelColor(level, palette) }} />
-          ))}
-          <Text className="text-[11px] text-muted-foreground">More</Text>
-        </View>
-
-        {note ? (
-          <Text testID="heatmap-history-note" className="text-xs text-muted-foreground">
-            {note}
-          </Text>
+      <View testID={`${p}heatmap-canvas`} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
+        {width > 0 ? (
+          view === 'month' ? (
+            <View className="items-center gap-1">
+              <View className="flex-row" style={{ width: geometry.width }}>
+                {WEEKDAY_INITIALS.map((d, i) => (
+                  <Text key={i} className="text-center text-[11px] text-muted-foreground" style={{ width: geometry.bin }}>
+                    {d}
+                  </Text>
+                ))}
+              </View>
+              {gridBody}
+            </View>
+          ) : (
+            <ScrollView
+              ref={scrollRef}
+              horizontal
+              showsHorizontalScrollIndicator={false}
+              // Open on the most recent weeks: today is at the right edge.
+              onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
+            >
+              {gridBody}
+            </ScrollView>
+          )
         ) : null}
-      </Card>
-
-      <View testID="heatmap-stats" className="flex-row flex-wrap gap-2">
-        <Stat testID="stat-total" label="Total steps" value={formatSteps(stats.total)} />
-        <Stat testID="stat-average" label="Daily average" value={stats.average === null ? '--' : formatSteps(stats.average)} />
-        <Stat testID="stat-active" label="Active days" value={String(stats.activeDays)} />
-        <Stat testID="stat-streak" label="Goal streak" value={`${stats.streak} day${stats.streak === 1 ? '' : 's'}`} />
-        <Stat
-          testID="stat-best"
-          label="Best day"
-          value={stats.best ? `${formatSteps(stats.best.steps)} · ${formatShortDate(stats.best.date)}` : '--'}
-        />
       </View>
 
-      <Sheet testID="day-sheet" visible={selected !== null} onClose={() => setSelected(null)}>
-        {selected ? <DayDetail cell={selected} goal={goal} average={stats.average} /> : null}
-      </Sheet>
-    </View>
+      <View testID={`${p}heatmap-legend`} className="flex-row items-center justify-end gap-1.5">
+        <View className="mr-auto flex-row items-center gap-1.5">
+          <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: palette.heatEmpty, borderWidth: 1, borderColor: palette.hairline }} />
+          <Text className="text-[11px] text-muted-foreground">No data</Text>
+        </View>
+        <Text className="text-[11px] text-muted-foreground">Less</Text>
+        {([0, 1, 2, 3, 4] as HeatLevel[]).map((level) => (
+          <View key={level} style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: levelColor(level, palette, spec) }} />
+        ))}
+        <Text className="text-[11px] text-muted-foreground">More</Text>
+      </View>
+
+      {note ? (
+        <Text testID={`${p}heatmap-history-note`} className="text-xs text-muted-foreground">
+          {note}
+        </Text>
+      ) : null}
+    </Card>
   );
 }
 
-function DayDetail({ cell, goal, average }: { cell: HeatCell; goal: number; average: number | null }) {
-  const comparison = cell.steps === null ? null : compareToAverage(cell.steps, average);
+export interface ActivityHeatmapProps {
+  steps: StepsByDate;
+  earliestDate: string | null;
+  today: string;
+  sleep: SleepState;
+  onRetrySleep?: () => void;
+}
+
+// The Activity tab: Steps and Sleep. Month swipes between one page per metric;
+// Year and YTD stack both; tapping a day opens that metric's sheet.
+export function ActivityHeatmap({ steps, earliestDate, today, sleep, onRetrySleep }: ActivityHeatmapProps) {
+  const { colorScheme } = useColorScheme();
+  const palette = colorScheme === 'light' ? COLORS.light : COLORS.dark;
+  const reduced = useReducedMotion();
+  const [view, setView] = useState<HeatmapView>('month');
+  const [monthCursor, setMonthCursor] = useState(() => monthStart(today));
+  const [page, setPage] = useState<ActivityMetric>('steps');
+  const [selection, setSelection] = useState<{ metric: ActivityMetric; date: string } | null>(null);
+  const [pagerWidth, setPagerWidth] = useState(0);
+  const pagerRef = useRef<ScrollView>(null);
+
+  const range = viewRange(view, today, monthCursor);
+  const rangeLabel = view === 'month' ? monthTitle(monthCursor) : view === 'year' ? 'the last 12 months' : `${today.slice(0, 4)} so far`;
+
+  const stepStats = useMemo(() => rangeStats(steps, range.start, range.end, today, STEPS_SPEC.goal), [steps, range.start, range.end, today]);
+  const nights = sleep.phase === 'ready' ? sleep.nights : null;
+  const sleepValues = useMemo<ValuesByDate>(
+    () => new Map(nights ? [...nights].map(([date, n]) => [date, n.minutesAsleep] as const) : []),
+    [nights],
+  );
+  const sleepStats = useMemo(
+    () => (nights ? sleepRangeStats(nights, range.start, range.end, today, SLEEP_SPEC.goal) : null),
+    [nights, range.start, range.end, today],
+  );
+
+  // The second page's offset: the steps card then peeks in from the left.
+  const pageWidth = pagerWidth > 0 ? pagerWidth - PAGE_PEEK : undefined;
+  const sleepOffset = pagerWidth > 0 ? pagerWidth - 2 * PAGE_PEEK + PAGE_GAP : 0;
+
+  function goTo(metric: ActivityMetric) {
+    setPage(metric);
+    pagerRef.current?.scrollTo?.({ x: metric === 'sleep' ? sleepOffset : 0, animated: !reduced });
+  }
+
+  function onPagerSettle(e: NativeSyntheticEvent<NativeScrollEvent>) {
+    setPage(e.nativeEvent.contentOffset.x > sleepOffset / 2 ? 'sleep' : 'steps');
+  }
+
+  // Back in Month (the pager remounts at the first page) or once it is
+  // measured, put it back on the page the header says is showing.
+  useEffect(() => {
+    if (view === 'month' && pagerWidth > 0 && page === 'sleep') {
+      pagerRef.current?.scrollTo?.({ x: sleepOffset, animated: false });
+    }
+    // Only on a remount or a resize: a swipe already moved the pager itself.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [view, pagerWidth]);
+
+  function select(metric: ActivityMetric, date: string) {
+    setSelection({ metric, date });
+  }
+
+  // From one metric's sheet to the same day on the other: the month pager follows.
+  function crossTo(metric: ActivityMetric, date: string) {
+    setSelection({ metric, date });
+    if (view === 'month') goTo(metric);
+  }
+
+  const stepsCard = (
+    <HeatmapCard
+      spec={STEPS_SPEC}
+      values={steps}
+      earliestDate={earliestDate}
+      today={today}
+      view={view}
+      monthCursor={monthCursor}
+      onMonthCursor={setMonthCursor}
+      selectedDate={selection?.metric === 'steps' ? selection.date : null}
+      onSelect={(date) => select('steps', date)}
+      accessibilityLabel={`Steps heat map for ${rangeLabel}: ${stepStats.activeDays} active days, ${stepStats.goalDays} at goal.`}
+      summary={stepStats.average === null ? undefined : `${formatSteps(stepStats.average)} avg / day`}
+    />
+  );
+
+  const stepsStatsRow = (
+    <View testID="heatmap-stats" className="flex-row flex-wrap gap-2">
+      <Stat testID="stat-total" label="Total steps" value={formatSteps(stepStats.total)} />
+      <Stat testID="stat-average" label="Daily average" value={stepStats.average === null ? '--' : formatSteps(stepStats.average)} />
+      <Stat testID="stat-active" label="Active days" value={String(stepStats.activeDays)} />
+      <Stat testID="stat-streak" label="Goal streak" value={`${stepStats.streak} day${stepStats.streak === 1 ? '' : 's'}`} />
+      <Stat
+        testID="stat-best"
+        label="Best day"
+        value={stepStats.best ? `${formatSteps(stepStats.best.steps)} · ${formatShortDate(stepStats.best.date)}` : '--'}
+      />
+    </View>
+  );
+
+  let sleepSection: React.ReactNode;
+  if (sleep.phase === 'loading') {
+    sleepSection = (
+      <View testID="sleep-loading" className="gap-4">
+        <Skeleton className="h-80 w-full rounded-card" />
+        <Skeleton className="h-28 w-full rounded-card" />
+      </View>
+    );
+  } else if (sleep.phase === 'error') {
+    sleepSection = (
+      <Card testID="sleep-error" className="items-center gap-3 py-10">
+        <Text className="text-center text-muted-foreground">Your sleep could not be loaded.</Text>
+        {onRetrySleep ? (
+          <Button testID="sleep-retry" onPress={onRetrySleep}>
+            Try again
+          </Button>
+        ) : null}
+      </Card>
+    );
+  } else {
+    sleepSection = (
+      <>
+        <HeatmapCard
+          spec={SLEEP_SPEC}
+          values={sleepValues}
+          earliestDate={sleep.earliestDate}
+          today={today}
+          view={view}
+          monthCursor={monthCursor}
+          onMonthCursor={setMonthCursor}
+          selectedDate={selection?.metric === 'sleep' ? selection.date : null}
+          onSelect={(date) => select('sleep', date)}
+          accessibilityLabel={`Sleep heat map for ${rangeLabel}: ${sleepStats?.nights ?? 0} nights recorded, ${sleepStats?.goalNights ?? 0} at goal.`}
+          summary={sleepStats?.averageMinutes == null ? undefined : `${formatDuration(sleepStats.averageMinutes)} avg / night`}
+        />
+        <View testID="sleep-heatmap-stats" className="flex-row flex-wrap gap-2">
+          <Stat
+            testID="sleep-stat-average"
+            label="Avg asleep"
+            value={sleepStats?.averageMinutes == null ? '--' : formatDuration(sleepStats.averageMinutes)}
+          />
+          <Stat testID="sleep-stat-goal" label="Nights at goal" value={String(sleepStats?.goalNights ?? 0)} />
+          <Stat
+            testID="sleep-stat-streak"
+            label="Goal streak"
+            value={`${sleepStats?.streak ?? 0} night${sleepStats?.streak === 1 ? '' : 's'}`}
+          />
+          <Stat
+            testID="sleep-stat-bedtime"
+            label="Avg bedtime"
+            value={sleepStats?.averageBedtime ? formatClock(sleepStats.averageBedtime) : '--'}
+          />
+          <Stat
+            testID="sleep-stat-longest"
+            label="Longest night"
+            value={sleepStats?.longest ? `${formatDuration(sleepStats.longest.minutes)} · ${formatShortDate(sleepStats.longest.date)}` : '--'}
+          />
+        </View>
+      </>
+    );
+  }
+
+  const title = view === 'month' ? (page === 'sleep' ? 'Sleep' : 'Steps') : 'Steps & sleep';
+  const subtitle =
+    view === 'month'
+      ? page === 'sleep'
+        ? `Nightly sleep against your ${METRIC_CONFIG.SLEEP.goalLabel}`
+        : `Daily steps against your ${METRIC_CONFIG.STEPS.goalLabel} goal`
+      : null;
+
   return (
-    <View testID="day-detail" className="gap-2 pb-2">
-      <Text className="text-sm text-muted-foreground">{formatDayTitle(cell.date)}</Text>
-      {cell.steps === null ? (
-        <Text testID="day-detail-empty" className="text-base">
-          No steps were recorded for this day.
-        </Text>
-      ) : (
-        <>
-          <Text testID="day-detail-steps" className="text-numeral-lg font-bold" style={{ fontVariant: ['tabular-nums'] }}>
-            {`${formatSteps(cell.steps)} steps`}
-          </Text>
-          <Text testID="day-detail-goal" className="text-base">
-            {`${Math.round((cell.steps / goal) * 100)}% of your ${formatSteps(goal)}-step goal`}
-          </Text>
-          {comparison ? (
-            <Text testID="day-detail-comparison" className="text-sm text-muted-foreground">
-              {comparison}
+    <View className="gap-4">
+      <View className="gap-1">
+        <View className="flex-row items-end justify-between">
+          <View className="gap-1">
+            <SectionLabel>Activity</SectionLabel>
+            <Text testID="activity-title" className="font-display text-display-lg">
+              {title}
             </Text>
+          </View>
+          {view === 'month' ? (
+            <View accessibilityRole="tablist" className="flex-row items-center pb-2">
+              {(['steps', 'sleep'] as const).map((metric) => {
+                const on = page === metric;
+                const color = metric === 'sleep' ? palette.metricSleep : palette.metricSteps;
+                return (
+                  <Pressable
+                    key={metric}
+                    testID={`activity-page-${metric}`}
+                    accessibilityRole="tab"
+                    accessibilityLabel={metric === 'sleep' ? 'Sleep page' : 'Steps page'}
+                    accessibilityState={{ selected: on }}
+                    onPress={() => goTo(metric)}
+                    className="h-11 items-center justify-center px-1.5"
+                  >
+                    <View style={{ height: 8, width: on ? 22 : 8, borderRadius: 4, backgroundColor: on ? color : palette.hairline }} />
+                  </Pressable>
+                );
+              })}
+            </View>
           ) : null}
-        </>
+        </View>
+        {subtitle ? <Text className="text-sm text-muted-foreground">{subtitle}</Text> : null}
+      </View>
+
+      <SegmentedControl testID="heatmap-view" options={VIEW_OPTIONS} value={view} onChange={setView} />
+
+      {view === 'month' ? (
+        <View testID="activity-pager" onLayout={(e) => setPagerWidth(e.nativeEvent.layout.width)}>
+          <ScrollView
+            ref={pagerRef}
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            snapToOffsets={[0, sleepOffset]}
+            decelerationRate="fast"
+            disableIntervalMomentum
+            onMomentumScrollEnd={onPagerSettle}
+            contentContainerStyle={{ gap: PAGE_GAP }}
+          >
+            <View testID="activity-page-steps-content" className="gap-4" style={{ width: pageWidth }}>
+              {stepsCard}
+              {stepsStatsRow}
+            </View>
+            <View testID="activity-page-sleep-content" className="gap-4" style={{ width: pageWidth }}>
+              {sleepSection}
+            </View>
+          </ScrollView>
+        </View>
+      ) : (
+        <View className="gap-4">
+          <Text testID="heatmap-title" className="text-base font-semibold">
+            {view === 'year' ? 'Last 12 months' : `${today.slice(0, 4)} year to date`}
+          </Text>
+          {stepsCard}
+          {stepsStatsRow}
+          {sleepSection}
+        </View>
       )}
+
+      <Sheet testID="day-sheet" visible={selection !== null} onClose={() => setSelection(null)}>
+        {selection?.metric === 'steps' ? (
+          <DayDetail
+            date={selection.date}
+            steps={steps.get(selection.date) ?? null}
+            goal={STEPS_SPEC.goal}
+            average={stepStats.average}
+            sleepLink={nights ? { night: nights.get(selection.date) ?? null, onPress: () => crossTo('sleep', selection.date) } : undefined}
+          />
+        ) : selection ? (
+          <NightDetail
+            date={selection.date}
+            night={nights?.get(selection.date) ?? null}
+            goal={SLEEP_SPEC.goal}
+            average={sleepStats?.averageMinutes ?? null}
+            stepsLink={{ steps: steps.get(selection.date) ?? null, onPress: () => crossTo('steps', selection.date) }}
+          />
+        ) : null}
+      </Sheet>
     </View>
   );
 }

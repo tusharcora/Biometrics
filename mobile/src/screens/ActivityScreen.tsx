@@ -3,7 +3,8 @@ import { RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useColorScheme } from 'nativewind';
 import { fetchActivity } from '../api/activity';
-import { ActivityHeatmap } from '../components/activity-heatmap';
+import { fetchSleep } from '../api/sleep';
+import { ActivityHeatmap, type SleepState } from '../components/activity-heatmap';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { SectionLabel } from '../components/ui/section-label';
@@ -11,12 +12,12 @@ import { Text } from '../components/ui/text';
 import { fetchRange, todayCivil } from '../lib/heatmap';
 import { useSync } from '../sync/SyncProvider';
 import { useTabBarClearance } from '../navigation/tabBarLayout';
-import { COLORS, METRIC_CONFIG } from '../theme';
+import { COLORS } from '../theme';
 
 type LoadState =
   | { phase: 'loading' }
   | { phase: 'error' }
-  | { phase: 'ready'; steps: Map<string, number>; earliestDate: string | null; today: string };
+  | { phase: 'ready'; steps: Map<string, number>; earliestDate: string | null; today: string; sleep: SleepState };
 
 export function ActivityScreen() {
   const clearance = useTabBarClearance();
@@ -35,14 +36,28 @@ export function ActivityScreen() {
     // One request covers every view and every month the month view can reach.
     const today = todayCivil();
     const { from, to } = fetchRange(today);
-    try {
-      const res = await fetchActivity(from, to);
-      if (id !== requestId.current) return;
-      setState({ phase: 'ready', steps: new Map(res.days.map((d) => [d.date, d.steps])), earliestDate: res.earliestDate, today });
-    } catch {
-      if (id !== requestId.current) return;
+    // Sleep is fetched alongside but fails on its own: a sleep outage leaves
+    // the Steps page working and puts a retry on the Sleep page instead.
+    const [stepsRes, sleepRes] = await Promise.allSettled([fetchActivity(from, to), fetchSleep(from, to)]);
+    if (id !== requestId.current) return;
+    if (stepsRes.status === 'rejected') {
       setState((prev) => (prev.phase === 'ready' ? prev : { phase: 'error' }));
+      return;
     }
+    const res = stepsRes.value;
+    setState((prev) => ({
+      phase: 'ready',
+      steps: new Map(res.days.map((d) => [d.date, d.steps])),
+      earliestDate: res.earliestDate,
+      today,
+      sleep:
+        sleepRes.status === 'fulfilled'
+          ? { phase: 'ready', nights: new Map(sleepRes.value.nights.map((n) => [n.date, n])), earliestDate: sleepRes.value.earliestDate }
+          : // A failed refresh keeps the sleep already on screen.
+            prev.phase === 'ready' && prev.sleep.phase === 'ready'
+            ? prev.sleep
+            : { phase: 'error' },
+    }));
   }, []);
 
   useEffect(() => {
@@ -67,10 +82,12 @@ export function ActivityScreen() {
         contentContainerStyle={{ gap: 16, paddingHorizontal: 20, paddingTop: 8, paddingBottom: clearance }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.muted} />}
       >
-        <View className="gap-1">
-          <SectionLabel>{`Steps · ${METRIC_CONFIG.STEPS.goalLabel} goal`}</SectionLabel>
-          <Text className="font-display text-display-lg">Activity</Text>
-        </View>
+        {state.phase !== 'ready' ? (
+          <View className="gap-1">
+            <SectionLabel>Steps & sleep</SectionLabel>
+            <Text className="font-display text-display-lg">Activity</Text>
+          </View>
+        ) : null}
 
         {state.phase === 'loading' ? (
           <View testID="activity-loading" className="gap-4">
@@ -96,7 +113,16 @@ export function ActivityScreen() {
         ) : null}
 
         {state.phase === 'ready' ? (
-          <ActivityHeatmap steps={state.steps} earliestDate={state.earliestDate} today={state.today} />
+          <ActivityHeatmap
+            steps={state.steps}
+            earliestDate={state.earliestDate}
+            today={state.today}
+            sleep={state.sleep}
+            onRetrySleep={() => {
+              setState((prev) => (prev.phase === 'ready' ? { ...prev, sleep: { phase: 'loading' } } : prev));
+              load();
+            }}
+          />
         ) : null}
       </ScrollView>
     </SafeAreaView>
