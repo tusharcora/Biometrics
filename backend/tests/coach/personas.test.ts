@@ -9,7 +9,8 @@ import {
 } from '../../src/coach/personas';
 import type { CoachPersona } from '../../src/coach/personas';
 import { v1Personas } from '../../src/coach/personas/v1';
-import { LEGACY_PERSONA_IDS, v2Characters } from '../../src/coach/personas/v2';
+import { LEGACY_PERSONA_IDS, v2Characters, v2Personas } from '../../src/coach/personas/v2';
+import { v3Personas } from '../../src/coach/personas/v3';
 import { buildCorrectiveMessage, buildDigestSystemPrompt, buildSystemPrompt, escapeField } from '../../src/coach/prompt';
 import { routeTier } from '../../src/coach/router';
 
@@ -17,10 +18,36 @@ import { routeTier } from '../../src/coach/router';
 const CHARACTER_IDS = ['hoot', 'pip', 'mochi', 'nimbus', 'ember', 'beep', 'doze', 'beat'];
 
 describe('personas', () => {
-  it('ships the eight companion characters as v2, Hoot first', () => {
-    expect(LIVE_PERSONA_VERSION).toBe('v2');
+  it('ships the eight companion characters as v3, Hoot first', () => {
+    expect(LIVE_PERSONA_VERSION).toBe('v3');
+    expect(PERSONA_SETS.v3).toBe(v3Personas);
     expect(listPersonas().map((p) => p.id)).toEqual(CHARACTER_IDS);
     expect(listPersonas().map((p) => p.name)).toEqual(['Hoot', 'Pip', 'Mochi', 'Nimbus', 'Ember', 'Beep', 'Doze', 'Beat']);
+  });
+
+  // Ruling R19: a mandatory closing question made every reply read as automated.
+  it('no served persona makes a closing question mandatory', () => {
+    const MANDATES_QUESTION = /\b(?:end|finish|close|wrap\s+up)\s+(?:with|on|by\s+asking)\b[^.]*\bquestions?\b|\balways\s+ask\b|\bask\b[^.]*\b(?:every|each)\s+(?:reply|answer|time|message)\b/i;
+    for (const p of listPersonas()) {
+      for (const text of [p.tone, p.focus ?? '']) expect(text).not.toMatch(MANDATES_QUESTION);
+    }
+    // The pattern does catch the retired wording.
+    expect(v2Characters.find((p) => p.id === 'hoot')!.tone).toMatch(MANDATES_QUESTION);
+  });
+
+  it("v3 is v2 with only Hoot's closing-question clause softened; v2 stays registered and unchanged", () => {
+    expect(PERSONA_SETS.v2).toBe(v2Personas);
+    expect(v3Personas.defaultPersonaId).toBe(v2Personas.defaultPersonaId);
+    const hoot = findPersona('hoot')!;
+    expect(hoot.tone).toBe(
+      'Calm, wise and curious. Explain the why behind what the data shows, and ask a thoughtful question only when the answer would change your advice.',
+    );
+    expect(v2Characters.find((p) => p.id === 'hoot')!.tone).toBe(
+      'Calm, wise and curious. Explain the why behind what the data shows, and end with one thoughtful question.',
+    );
+    expect(v3Personas.personas.map(({ tone: _t, ...rest }) => rest)).toEqual(v2Characters.map(({ tone: _t, ...rest }) => rest));
+    const changed = v3Personas.personas.filter((p, i) => p.tone !== v2Characters[i]!.tone).map((p) => p.id);
+    expect(changed).toEqual(['hoot']);
   });
 
   it('keeps v1 registered and unchanged', () => {
