@@ -84,6 +84,7 @@ const ROUTES = [
   ['delete', '/me/coach/consent'],
   ['put', '/me/coach/persona'],
   ['put', '/me/coach/engine'],
+  ['get', '/me/coach/today'],
   ['post', '/me/coach/message'],
   ['get', '/me/coach/conversations/latest'],
   ['get', '/me/coach/conversations/some-id'],

@@ -13,6 +13,7 @@ import { withDisclaimer } from './guardrails/disclaimer';
 import type { FactData } from './answer/facts';
 import { AnswerDeps, AnswerEvent, runAnswer } from './answer/pipeline';
 import { warmModel } from './answer/warm';
+import { generateTodaySummary, getTodaySummary, TodayDeps } from './answer/today';
 import type { MemoryDTO } from './memory';
 import { findPersona, listPersonas, resolvePersona } from './personas';
 import { selectEngine } from './engine';
@@ -27,6 +28,10 @@ export interface CoachRouterDeps {
   getProvider: () => CoachModelProvider;
   /** The hosted engine's provider, or null while it is not offered (COACH_HOSTED_ENABLED + ANTHROPIC_API_KEY). */
   getHostedProvider: () => CoachModelProvider | null;
+  /** Runs work after the response has been sent (the day summary). Default: fire and forget, failures logged. */
+  background: (task: () => Promise<unknown>) => void;
+  /** Overrides for the day summary's data and timing (tests). */
+  today?: TodayDeps;
   telemetry: CoachTelemetry;
   clock: CoachClock;
   tools?: CoachTools;
@@ -119,6 +124,11 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
   const deps: CoachRouterDeps = {
     getProvider: overrides.getProvider ?? getCoachProvider,
     getHostedProvider: overrides.getHostedProvider ?? getHostedProvider,
+    background:
+      overrides.background ??
+      ((task) => {
+        void task().catch((err) => logFailure('background', err));
+      }),
     telemetry: overrides.telemetry ?? new LoggerCoachTelemetry(),
     clock: overrides.clock ?? systemClock,
     ...(overrides.tools ? { tools: overrides.tools } : {}),
@@ -126,6 +136,13 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
   const budgets = overrides.budgets ?? getCoachBudgets();
   if (budgets) deps.budgets = budgets;
   const router = Router();
+
+  // The day summary is written by the same engine the user's messages go to.
+  const todayDeps: TodayDeps = {
+    clock: deps.clock,
+    selectProvider: (userId) => selectEngine(userId, { local: deps.getProvider(), hosted: deps.getHostedProvider() }),
+    ...overrides.today,
+  };
 
   // Auth first, so an unauthenticated caller learns nothing about the flag.
   function requireEnabled(_req: AuthedRequest, res: Response, next: NextFunction): void {
@@ -268,6 +285,22 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
       res.json({ engine });
     } catch (err) {
       logFailure('engine', err);
+      res.status(500).json({ error: 'coach_unavailable' });
+    }
+  });
+
+  // Bars and the template sentence are the user's own numbers, computed here with no model, so they
+  // need the flag but not consent. The AI sentence is written in the background, and only with consent.
+  router.get('/me/coach/today', requireAuth, requireEnabled, async (req: AuthedRequest, res) => {
+    const userId = req.userId!;
+    try {
+      const summary = await getTodaySummary(userId, {
+        ...todayDeps,
+        onMissing: () => deps.background(() => generateTodaySummary(userId, todayDeps)),
+      });
+      res.json(summary);
+    } catch (err) {
+      logFailure('today', err);
       res.status(500).json({ error: 'coach_unavailable' });
     }
   });
