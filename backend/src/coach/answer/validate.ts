@@ -17,9 +17,9 @@
 //     missing-data notes) count, so "Your HRV is 61" cannot borrow resting
 //     HR's 61, nor "Your recovery dropped 8%" the HRV trend's 8%, nor "Your
 //     HRV is 26 after a short night" recovery's 26. A score driver's points
-//     ([factor.*]) count only when the sentence names both the driver and
-//     the score it moves ("HRV took 9 points off your recovery", never "Your
-//     HRV is 9"); the nights-recorded note is sleep's; a memory note's
+//     ([factor.*]) count only when the sentence names the driver (its metric
+//     or its own words: "irregular bedtimes") and the score it moves (or a bare
+//     "score"): "HRV took 9 points off your recovery", never "Your HRV is 9"; the nights-recorded note is sleep's; a memory note's
 //     numbers count only in a sentence naming no metric. The one exception
 //     is a unit owned by a single metric that is related to the named one:
 //     "your sleep score was 36 ... your average dipped to 6h 53m" matches
@@ -204,6 +204,8 @@ interface Scope {
   metric: Metric | undefined;
   /** A score driver's points: also the score it moves must be named ("HRV took 9 points off recovery"). */
   drives?: Metric;
+  /** A score driver's key ('circadian_consistency'): its own words name it too (DRIVER_MENTION). */
+  driver?: string;
   /** A memory note's number: only in a sentence naming no metric ("you run 5 times a week"). */
   unnamedOnly?: true;
 }
@@ -233,6 +235,23 @@ const DRIVERS: Record<string, { metric: Metric; drives: Metric }> = {
 };
 
 /**
+ * How a sentence may name each score driver besides its metric word, by driver key: "Irregular
+ * bedtimes cost your sleep score 4 points" names the circadian driver. The eval's namesDrivers
+ * check (evals/coach/qualityCheck.ts) reads the same map.
+ */
+export const DRIVER_MENTION: Record<string, RegExp> = {
+  hrv: /\bhrv\b|heart rate variability/i,
+  rhr: /\bresting\s+(?:hr|heart)|\brhr\b/i,
+  sleep_debt: /\bsleep\b|\bslept\b|\bnights?\b/i,
+  sleep_duration: /\bsleep\b|\bslept\b|\bnights?\b/i,
+  sleep_efficiency: /\bsleep\b|\brestless\b|\befficien/i,
+  circadian_consistency: /\bbedtimes?\b|\bconsisten|\bschedule\b|\broutine\b/i,
+};
+
+/** A bare "score": the driver already fixes which score it is ("HRV took 9 points off your score"). */
+const SCORE_WORD_RE = /\bscores?\b/i;
+
+/**
  * 'hrv.today' → hrv; 'habit.caffeine.hrv.lag2' → the habit's factor (hrv, rhr, sleep_*);
  * 'factor.hrv' → hrv, moving recovery. An unknown driver counts only where no metric is named.
  */
@@ -244,7 +263,9 @@ function scopeOf(fact: Fact): Scope {
   }
   if (head === 'factor') {
     const driver = second === undefined ? undefined : DRIVERS[second];
-    return driver ? { metric: driver.metric, drives: driver.drives } : { metric: undefined, unnamedOnly: true };
+    return driver && second !== undefined
+      ? { metric: driver.metric, drives: driver.drives, driver: second }
+      : { metric: undefined, unnamedOnly: true };
   }
   return { metric: head === undefined ? undefined : METRIC_OF_ID_HEAD[head] };
 }
@@ -299,8 +320,10 @@ const RELATED: Partial<Record<Metric, Metric[]>> = { sleep_score: ['sleep'] };
  * is any non-duration family). When the sentence names one metric, only that
  * metric's values and metric-less ones (missing-data notes) count, so
  * "Your HRV is 61" cannot borrow resting HR's 61 and "Your recovery dropped 8%"
- * cannot borrow the HRV trend's 8%. A score driver's points also need the
- * score it moves named, and memory-note numbers never count here.
+ * cannot borrow the HRV trend's 8%. A score driver's points count only when
+ * the sentence names the driver (its metric or its own words, DRIVER_MENTION)
+ * and the score it moves (that score, or a bare "score"); memory-note numbers
+ * never count here.
  *
  * One exception: a number whose unit family belongs to a single metric
  * (durations: sleep, ms: HRV, bpm: resting HR, steps: steps) may match that
@@ -310,7 +333,7 @@ const RELATED: Partial<Record<Metric, Metric[]>> = { sleep_score: ['sleep'] };
  * "Your recovery is 61 bpm" does not. Percent and points are shared by several
  * metrics and never fall back.
  */
-function candidatesFor(s: Scanned, allowed: Allowed[], named: ReadonlySet<Metric>): Allowed[] {
+function candidatesFor(s: Scanned, allowed: Allowed[], named: ReadonlySet<Metric>, sentence: string): Allowed[] {
   const { token } = s;
   const families = token.kind === 'duration' ? ['duration'] : s.unit ? [s.unit] : PLAIN_FAMILIES;
   const inFamily = allowed.filter((a) => families.includes(a.family));
@@ -325,14 +348,24 @@ function candidatesFor(s: Scanned, allowed: Allowed[], named: ReadonlySet<Metric
     const borrows = [...named].some((m) => (RELATED[m] ?? []).includes(owner) && !inFamily.some((a) => a.metric === m));
     if (borrows) scope.add(owner);
   }
-  return inFamily.filter(
-    (a) => !a.unnamedOnly && (!a.metric || scope.has(a.metric)) && (a.drives === undefined || named.has(a.drives)),
-  );
+  // "sleep score" names the score, not a sleep driver (as in namedMetrics).
+  const driverText = sentence.replace(/\bsleep\s+scores?\b/gi, ' ');
+  const driverNamed = (a: Allowed) =>
+    (a.metric !== undefined && scope.has(a.metric)) || (a.driver !== undefined && (DRIVER_MENTION[a.driver]?.test(driverText) ?? false));
+  // A bare "score" stands for the driver's own score, unless the sentence names the other one.
+  const otherScore = (m: Metric): Metric => (m === 'recovery' ? 'sleep_score' : 'recovery');
+  const scoreNamed = (a: Allowed) =>
+    a.drives !== undefined && (named.has(a.drives) || (SCORE_WORD_RE.test(sentence) && !named.has(otherScore(a.drives))));
+  return inFamily.filter((a) => {
+    if (a.unnamedOnly) return false;
+    if (a.drives !== undefined) return driverNamed(a) && scoreNamed(a);
+    return !a.metric || scope.has(a.metric);
+  });
 }
 
-function isKnown(s: Scanned, allowed: Allowed[], named: ReadonlySet<Metric>): boolean {
+function isKnown(s: Scanned, allowed: Allowed[], named: ReadonlySet<Metric>, sentence: string): boolean {
   const { token } = s;
-  const candidates = candidatesFor(s, allowed, named);
+  const candidates = candidatesFor(s, allowed, named, sentence);
   // A hedged approximation ("about 7 hours" for 6h 48m) may be within 10% of a value.
   const hedge = (a: number) => (token.hedged ? Math.abs(a) * HEDGE_TOLERANCE : 0);
   if (token.kind === 'duration') {
@@ -426,7 +459,7 @@ export function validateSentence(sentence: string, sheet: FactSheet): SentenceVe
   if (scanned.length === 0) return { ok: true };
   const allowed = allowedFor(sheet);
   const named = namedMetrics(sentence);
-  if (scanned.every((s) => isKnown(s, allowed, named))) return { ok: true };
+  if (scanned.every((s) => isKnown(s, allowed, named, sentence))) return { ok: true };
   // General knowledge ("most adults need 7–9 hours") only on the general route, and never about the user.
   if (sheet.route === 'general' && !isAboutUser(sentence)) return { ok: true };
   return { ok: false, reason: 'unknown_number' };

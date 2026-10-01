@@ -622,9 +622,19 @@ describe('validateSentence: score drivers and notes are scoped (final review I2)
     ],
     notes: ['Sleep recorded on 4 of the last 7 nights'],
   };
+  const CIRCADIAN: FactSheet = {
+    route: 'today',
+    facts: [
+      { id: 'sleep_score.today', label: 'Sleep score today', value: 70, unit: 'score', display: '70', usual: 72 },
+      { id: 'factor.circadian_consistency', label: 'Bedtime consistency effect on the sleep score', value: -4, unit: 'score', display: '-4 points' },
+    ],
+    notes: [],
+  };
 
   it.each([
     ['Your HRV is 9.', 'the 9 points HRV cost recovery are not an HRV reading', TODAY],
+    ['Your HRV is 9 this morning.', 'no score named', TODAY],
+    ['Your sleep score is 4.', "the bedtime driver's points need the driver named", CIRCADIAN],
     ['Your HRV dropped 9 points.', 'the same, with a unit', TODAY],
     ['Your recovery is 9.', "a driver's points need the driver named too", TODAY],
     ['Your resting heart rate is 2.3 higher.', "the resting HR driver's points are not a resting HR reading", TODAY],
@@ -645,6 +655,11 @@ describe('validateSentence: score drivers and notes are scoped (final review I2)
     ['That cost you 9 points.', TODAY],
     ['Sleep was recorded on 4 of the last 7 nights.', SLEEP],
     ['You only have 4 nights of sleep this week.', SLEEP],
+    // R49: a driver named by its own words, and the score as a bare "score" (the driver fixes which one).
+    ['Irregular bedtimes cost your sleep score 4 points.', CIRCADIAN],
+    ['An inconsistent bedtime took 4 points off your sleep score.', CIRCADIAN],
+    ['Your HRV contributed -9 points to your score.', TODAY],
+    ['Restless sleep cost your score 4 points.', TODAY],
   ])('accepts %j', (sentence, sheet) => {
     expect(validateSentence(sentence as string, sheet as FactSheet)).toEqual(ok);
   });

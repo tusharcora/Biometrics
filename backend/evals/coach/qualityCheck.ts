@@ -35,7 +35,7 @@
 
 import { isStockCheckIn } from '../../src/coach/answer/checkIn';
 import type { Fact, FactSheet } from '../../src/coach/answer/facts';
-import { extractNumbers, validateSentence } from '../../src/coach/answer/validate';
+import { DRIVER_MENTION, extractNumbers, validateSentence } from '../../src/coach/answer/validate';
 
 export interface QualityExpectation {
   /** The first shown sentence must contain one of these words or phrases (case-insensitive, whole words). */
@@ -58,16 +58,6 @@ const FILLER_OPENER =
   /^\s*(?:(?:that'?s|what|such)\s+)?(?:an?\s+)?(?:great|good|excellent|fantastic|interesting|nice|lovely|smart|fair)\s+(?:question|ask|point)\b|^\s*thanks?(?:\s+you)?(?:\s+so\s+much)?\s+for\s+(?:asking|the\s+question|reaching\s+out|checking\s+in)\b|^\s*(?:i'?m|i\s+am)\s+(?:happy|glad)\s+(?:to\s+help|you\s+asked)\b|^\s*(?:happy|glad)\s+to\s+help\b|^\s*let(?:'s|\s+us)\s+(?:take\s+a\s+look|dive\s+in|have\s+a\s+look|look\s+at)\b/i;
 
 // ---- namesDrivers ---------------------------------------------------------
-
-/** How a reply may name each score driver, by the factor part of its fact id. */
-const DRIVER_MENTION: Record<string, RegExp> = {
-  hrv: /\bhrv\b|heart rate variability/i,
-  rhr: /\bresting\s+(?:hr|heart)|\brhr\b/i,
-  sleep_debt: /\bsleep\b|\bslept\b|\bnights?\b/i,
-  sleep_duration: /\bsleep\b|\bslept\b|\bnights?\b/i,
-  sleep_efficiency: /\bsleep\b|\brestless\b|\befficien/i,
-  circadian_consistency: /\bbedtimes?\b|\bconsisten|\bschedule\b|\broutine\b/i,
-};
 
 /** "Resting HR effect on the recovery score" -> "Resting HR". */
 const driverName = (fact: Fact) => fact.label.replace(/\s+effect on the .*$/i, '');
