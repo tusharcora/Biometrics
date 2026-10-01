@@ -38,8 +38,18 @@ async function apiErrorFor(res: Response, path: string): Promise<ApiError> {
 }
 
 export async function apiFetch<T>(path: string, options: RequestInit = {}): Promise<T> {
+  const res = await apiResponse(path, options);
+  // 204 No Content (e.g. DELETE) has no body to parse.
+  if (res.status === 204) return undefined as T;
+  return res.json() as Promise<T>;
+}
+
+// The authenticated request under apiFetch, returning the Response itself so
+// a caller can read the body as a stream. `fetchImpl` lets the coach stream
+// use expo/fetch, whose body is a real ReadableStream on iOS and Android.
+export async function apiResponse(path: string, options: RequestInit = {}, fetchImpl: typeof fetch = fetch): Promise<Response> {
   const cookie = await authClient.getCookie();
-  const res = await fetch(`${baseUrl}${path}`, {
+  const res = await fetchImpl(`${baseUrl}${path}`, {
     ...options,
     // The session travels as an explicit Cookie header from SecureStore; the
     // platform cookie jar must not add or override anything.
@@ -57,9 +67,7 @@ export async function apiFetch<T>(path: string, options: RequestInit = {}): Prom
     throw await apiErrorFor(res, path);
   }
   if (!res.ok) throw await apiErrorFor(res, path);
-  // 204 No Content (e.g. DELETE) has no body to parse.
-  if (res.status === 204) return undefined as T;
-  return res.json() as Promise<T>;
+  return res;
 }
 
 // Permanently deletes the signed-in account and everything stored for it. The
