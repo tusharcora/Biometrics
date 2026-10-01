@@ -89,6 +89,20 @@ export function getAnswerBudgetMs(engine: 'local' | 'hosted'): number {
   return Number.isFinite(n) && n > 0 ? n : fallback;
 }
 
+export const DEFAULT_SUMMARY_CONCURRENCY = 1;
+export const MAX_SUMMARY_CONCURRENCY = 8;
+
+/**
+ * How many day summaries one process writes at once (COACH_SUMMARY_CONCURRENCY,
+ * default 1, clamped to 1-8). Each is a full model generation, so on one Mac
+ * running the local model they are best written one after another.
+ */
+export function getSummaryConcurrency(): number {
+  const n = Number(process.env.COACH_SUMMARY_CONCURRENCY?.trim() || NaN);
+  if (!Number.isFinite(n)) return DEFAULT_SUMMARY_CONCURRENCY;
+  return Math.min(MAX_SUMMARY_CONCURRENCY, Math.max(1, Math.floor(n)));
+}
+
 // The hosted engine (spec 2026-09-30 section 3): Claude through the Anthropic
 // SDK, offered only when COACH_HOSTED_ENABLED is true AND ANTHROPIC_API_KEY is
 // set. Both are read per call, like COACH_ENABLED, so switching the flag off

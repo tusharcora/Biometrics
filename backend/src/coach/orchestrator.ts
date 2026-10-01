@@ -10,7 +10,7 @@
 // including mid-regenerate, the orchestrator stops waiting and returns the
 // preamble-composed fallback. The clock is injectable so tests never sleep.
 
-import { localCivilDate } from '../biometrics/civilDate';
+import { localCivilDateOrUtc } from '../biometrics/civilDate';
 import { prisma } from '../db/client';
 import { CoachClock, systemClock } from './clock';
 import { composeFallback, loadPreamble, Preamble } from './fallback';
@@ -98,14 +98,6 @@ async function defaultLoadUser(userId: string) {
   return { timezone: user?.timezone ?? 'UTC', coachPersonaId: user?.coachPersonaId ?? null };
 }
 
-function safeCivilDate(now: number, timezone: string): string {
-  try {
-    return localCivilDate(new Date(now), timezone);
-  } catch {
-    return localCivilDate(new Date(now), 'UTC');
-  }
-}
-
 type RunOutcome =
   | { kind: 'reply'; text: string; proposals: MemoryProposal[] }
   | { kind: 'fallback'; reason: string }
@@ -179,7 +171,7 @@ export function createCoachOrchestrator(deps: OrchestratorDeps) {
     }
 
     // 2. Turn preamble: fresh every turn, before the first model call.
-    const today = safeCivilDate(clock.now(), user.timezone);
+    const today = localCivilDateOrUtc(clock.now(), user.timezone);
     const preamble: Preamble = await loadPreamble(tools, userId, today);
     emit('coach.tool_call', { tool: 'getDailyScore', ok: preamble.today !== null, round: 0, preamble: true });
 

@@ -20,7 +20,7 @@
 //
 // Logging: ids, counts and reasons only. Never the digest text.
 
-import { civilDateToUtcMidnight, localCivilDate } from '../biometrics/civilDate';
+import { civilDateToUtcMidnight, localCivilDateOrUtc } from '../biometrics/civilDate';
 import { prisma } from '../db/client';
 import { shiftDate } from '../scoring/dates';
 import { CoachClock, systemClock } from './clock';
@@ -78,14 +78,6 @@ export interface DigestSweepSummary {
 export function weekStartOf(civilDate: string): string {
   const dow = new Date(`${civilDate}T00:00:00Z`).getUTCDay(); // 0 = Sunday
   return shiftDate(civilDate, -((dow + 6) % 7));
-}
-
-function safeCivilDate(now: Date, timezone: string): string {
-  try {
-    return localCivilDate(now, timezone);
-  } catch {
-    return localCivilDate(now, 'UTC');
-  }
 }
 
 interface HistoryShape {
@@ -286,7 +278,7 @@ export async function generateWeeklyDigestForUser(
   if (persona.proactivity === 'reactive-only') return skip('skipped_reactive_only');
   if (!(await hasCurrentConsent(user.id))) return skip('skipped_no_consent');
 
-  const today = safeCivilDate(now, user.timezone);
+  const today = localCivilDateOrUtc(now, user.timezone);
   const weekStart = weekStartOf(today);
   const weekStartDate = civilDateToUtcMidnight(weekStart);
   const existing = await prisma.coachDigest.findUnique({

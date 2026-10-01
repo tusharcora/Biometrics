@@ -5,7 +5,7 @@
 // written by the user's engine and validated like a reply.
 
 import type { Prisma } from '@prisma/client';
-import { civilDateToUtcMidnight, localCivilDate } from '../../biometrics/civilDate';
+import { civilDateToUtcMidnight, localCivilDateOrUtc } from '../../biometrics/civilDate';
 import { prisma } from '../../db/client';
 import { CoachClock, systemClock, TimerHandle } from '../clock';
 import { getAnswerBudgetMs, getCoachProvider, getHostedProvider, isCoachEnabled } from '../config';
@@ -251,14 +251,6 @@ export function summaryEngineDeps(slots: SummaryEngineSlots): TodayDeps {
 const defaultLoadSheet = (userId: string, today: string) => buildFactSheet(userId, 'today', { ...defaultFactData, today });
 const defaultSelect = (userId: string) => selectEngine(userId, { local: getCoachProvider(), hosted: getHostedProvider() });
 
-function safeCivilDate(now: Date, timezone: string): string {
-  try {
-    return localCivilDate(now, timezone);
-  } catch {
-    return localCivilDate(now, 'UTC');
-  }
-}
-
 async function loadUser(userId: string) {
   return prisma.user.findUnique({ where: { id: userId }, select: { timezone: true, coachPersonaId: true } });
 }
@@ -388,7 +380,7 @@ async function generate(userId: string, deps: TodayDeps): Promise<SummaryOutcome
   const user = await loadUser(userId);
   if (!user) return 'skipped_no_data';
 
-  const today = safeCivilDate((deps.now ?? (() => new Date()))(), user.timezone);
+  const today = localCivilDateOrUtc((deps.now ?? (() => new Date()))(), user.timezone);
   const where = { userId_date: { userId, date: civilDateToUtcMidnight(today) } };
   if (!deps.force && (await prisma.coachDaySummary.findUnique({ where, select: { id: true } }))) return 'skipped_exists';
 
@@ -513,7 +505,7 @@ export function generateTodaySummary(userId: string, deps: TodayDeps = {}): Prom
  */
 export async function getTodaySummary(userId: string, deps: TodayDeps = {}): Promise<TodaySummaryDTO> {
   const user = await loadUser(userId);
-  const date = safeCivilDate((deps.now ?? (() => new Date()))(), user?.timezone ?? 'UTC');
+  const date = localCivilDateOrUtc((deps.now ?? (() => new Date()))(), user?.timezone ?? 'UTC');
   const sheet = await (deps.loadSheet ?? defaultLoadSheet)(userId, date);
   const bars = buildBars(sheet);
   if (bars.length === 0) return { date, hasData: false, sentence: null, bars };
@@ -536,6 +528,6 @@ export async function getTodaySummary(userId: string, deps: TodayDeps = {}): Pro
 /** Drops today's stored sentence (the character changed), so the page shows the template until a new one is written. */
 export async function clearTodaySummary(userId: string, deps: Pick<TodayDeps, 'now'> = {}): Promise<void> {
   const user = await loadUser(userId);
-  const date = safeCivilDate((deps.now ?? (() => new Date()))(), user?.timezone ?? 'UTC');
+  const date = localCivilDateOrUtc((deps.now ?? (() => new Date()))(), user?.timezone ?? 'UTC');
   await prisma.coachDaySummary.deleteMany({ where: { userId, date: civilDateToUtcMidnight(date) } });
 }

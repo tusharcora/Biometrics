@@ -14,7 +14,7 @@
 // (or stopped-with-text) answer is persisted, so Retry resends cleanly.
 // Replaces the orchestrator's tool loop, which stays in the tree until phase 5.
 
-import { localCivilDate } from '../../biometrics/civilDate';
+import { localCivilDateOrUtc } from '../../biometrics/civilDate';
 import { prisma } from '../../db/client';
 import { CoachClock, systemClock } from '../clock';
 import { classifyCrisis, CRISIS_RESOURCES, SAFETY_REPLY } from '../guardrails/crisis';
@@ -105,14 +105,6 @@ export type AnswerGuardrailEvent =
 async function defaultLoadUser(userId: string) {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { timezone: true, coachPersonaId: true } });
   return { timezone: user?.timezone ?? 'UTC', coachPersonaId: user?.coachPersonaId ?? null };
-}
-
-function safeCivilDate(now: number, timezone: string): string {
-  try {
-    return localCivilDate(new Date(now), timezone);
-  } catch {
-    return localCivilDate(new Date(now), 'UTC');
-  }
 }
 
 /** Stored replies from before the redesign carry the disclaimer and memory notes; the model never sees them. */
@@ -262,7 +254,7 @@ export async function* runAnswer(input: AnswerInput, deps: AnswerDeps): AsyncGen
     yield { type: 'status', label: STATUS_LABELS[route] };
 
     // 4. The fact sheet.
-    const today = safeCivilDate(clock.now(), user.timezone);
+    const today = localCivilDateOrUtc(clock.now(), user.timezone);
     let sheet: FactSheet;
     try {
       const built = await race(buildFactSheet(input.userId, route, { ...factData, today }));

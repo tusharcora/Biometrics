@@ -45,6 +45,19 @@ export function localCivilDate(instant: Date, timeZone: string): string {
   return `${year}-${month}-${day}`;
 }
 
+/**
+ * localCivilDate, falling back to UTC when the stored timezone is not one
+ * Intl knows (a bad value must not break the coach for that user).
+ */
+export function localCivilDateOrUtc(instant: Date | number, timeZone: string): string {
+  const at = typeof instant === 'number' ? new Date(instant) : instant;
+  try {
+    return localCivilDate(at, timeZone);
+  } catch {
+    return localCivilDate(at, 'UTC');
+  }
+}
+
 /** UTC midnight of a YYYY-MM-DD civil date: the `recordedAt` convention shared by all four metrics. */
 export function civilDateToUtcMidnight(civilDate: string): Date {
   return new Date(`${civilDate}T00:00:00Z`);

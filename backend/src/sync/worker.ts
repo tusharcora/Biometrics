@@ -29,7 +29,7 @@ import {
 import { getCoachProvider, getPushSender } from '../coach/config';
 import { runWeeklyDigest } from '../coach/digest';
 import { COACH_RETENTION_JOB, COACH_WEEKLY_DIGEST_JOB } from '../coach/queue';
-import { COACH_DAY_SUMMARY_JOB, DaySummaryJobData, refreshDaySummaryAfterScore, runDaySummaryJob } from '../coach/daySummaryJob';
+import { refreshDaySummaryAfterScore } from '../coach/daySummaryJob';
 import { runCoachRetention } from '../coach/retention';
 import { LoggerCoachTelemetry } from '../coach/telemetry';
 
@@ -316,11 +316,9 @@ export async function processSyncJob(job: Job): Promise<void> {
     await runTokenRefreshSweep();
   } else if (job.name === COMPUTE_DAILY_SCORE_JOB) {
     const { userId, date } = job.data as ComputeDailyScoreJobData;
-    // Today's scores just landed: the Coach page's day summary is rewritten from them (never throws).
+    // Today's scores just landed: the Coach page's day summary is rewritten from them, on the
+    // separate 'coach-summary' queue so the model never holds a sync slot (never throws).
     if ((await computeDailyScore(userId, date)) === 'scored') await refreshDaySummaryAfterScore(userId, date);
-  } else if (job.name === COACH_DAY_SUMMARY_JOB) {
-    // A no-op unless COACH_ENABLED and the user's coach consent (checked inside).
-    await runDaySummaryJob(job.data as DaySummaryJobData);
   } else if (job.name === SCORE_SWEEP_JOB) {
     await runScoreSweep();
   } else if (job.name === HABIT_CORRELATION_SWEEP_JOB) {

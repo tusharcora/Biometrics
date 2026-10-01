@@ -34,7 +34,6 @@ jest.mock('../../src/scoring/queue', () => ({
 
 // The after-score day summary itself is covered in tests/coach/daySummaryJob.test.ts; only the wiring here.
 jest.mock('../../src/coach/daySummaryJob', () => ({
-  COACH_DAY_SUMMARY_JOB: 'coachDaySummary',
   refreshDaySummaryAfterScore: jest.fn().mockResolvedValue(false),
   runDaySummaryJob: jest.fn().mockResolvedValue('ai'),
 }));
@@ -660,9 +659,11 @@ describe('processSyncJob', () => {
       expect(refresh).not.toHaveBeenCalled();
     });
 
-    it('runs the day summary for a coachDaySummary job', async () => {
+    it('leaves coachDaySummary jobs to the coach-summary worker', async () => {
+      const run = daySummaryJob.runDaySummaryJob as jest.Mock;
+      run.mockClear();
       await processSyncJob({ name: 'coachDaySummary', data: { userId: 'u-1', date: '2026-09-30' } } as Job);
-      expect(daySummaryJob.runDaySummaryJob).toHaveBeenCalledWith({ userId: 'u-1', date: '2026-09-30' });
+      expect(run).not.toHaveBeenCalled();
     });
 
     it('runs the score sweep for a scoreSweep job', async () => {
