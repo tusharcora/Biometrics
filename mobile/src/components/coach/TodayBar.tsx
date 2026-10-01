@@ -3,6 +3,7 @@ import { Pressable, View } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import type { TodayBarDTO } from '../../api/coach';
 import { barColorKey, barFill, tickPosition } from '../../lib/coachToday';
+import { spokenUnits } from '../../lib/spokenUnits';
 import { COLORS } from '../../theme';
 import { Text } from '../ui/text';
 
@@ -17,9 +18,10 @@ const TICK_HEIGHT = 14;
 const ROW_HEIGHT = 36;
 const HIT_SLOP = { top: 3, bottom: 3, left: 4, right: 4 };
 // The label and value columns. The value column fits the longest text,
-// measured with the bundled Geist fonts: "10h 48m / 7h 13m" is 94.4pt, so
-// every track stays the same length. The loading skeleton (CoachToday) uses
-// the same widths.
+// measured with the bundled Geist fonts (12px bold value, 10.5px usual):
+// "10h 48m / 7h 13m" 94.6pt, "103.4 ms / 98.7" 83.1pt, "103 bpm / 98" 73.1pt,
+// "100 / 100" 50.3pt; so every track stays the same length. The loading
+// skeleton (CoachToday) uses the same widths.
 export const BAR_LABEL_WIDTH = 58;
 export const BAR_VALUE_WIDTH = 96;
 
@@ -30,12 +32,17 @@ function direction(bar: TodayBarDTO): string | null {
   return bar.value > bar.usual ? 'Higher than usual.' : 'Lower than usual.';
 }
 
-// Sleep's durations are long ("7h 13m"), so its usual drops the word to keep
-// the value column -- and so the track -- the same width as the others.
-function usualText(bar: TodayBarDTO): string | null {
+// The usual as a bare number after the value's unit ("41.2 ms / 52.3",
+// "61 bpm / 55"), so the value column -- and so the track -- stays narrow.
+// Durations keep their h/m form ("6h 48m / 7h 13m").
+export function bareUsual(bar: Pick<TodayBarDTO, 'unit' | 'usualDisplay'>): string | null {
   if (!bar.usualDisplay) return null;
-  return bar.metric === 'sleep' ? ` / ${bar.usualDisplay}` : ` / usual ${bar.usualDisplay}`;
+  if (bar.unit === 'minutes') return bar.usualDisplay;
+  return bar.usualDisplay.replace(/\s*(?:ms|bpm|%)$/, '');
 }
+
+// Large text may grow the value only this far before the column clips it.
+const MAX_FONT_SCALE = 1.3;
 
 interface TodayBarProps {
   bar: TodayBarDTO;
@@ -45,7 +52,7 @@ interface TodayBarProps {
 
 // One "today vs usual" row (spec 1.2, sentence-style option 1): label, a track
 // filled to today's value on the metric's scale, a tick at the 30-day usual,
-// and "value / usual N". The whole row is a button that asks the coach about it.
+// and "value / N" (the usual). The whole row is a button that asks the coach about it.
 export const TodayBar = memo(function TodayBar({ bar, onPress }: TodayBarProps) {
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === 'dark' ? COLORS.dark : COLORS.light;
@@ -54,8 +61,9 @@ export const TodayBar = memo(function TodayBar({ bar, onPress }: TodayBarProps) 
   // Small text, so the text-safe status colours (R35/R40), never the fills.
   const valueColor = bar.status === 'below' ? colors.statusBelowText : bar.status === 'above' ? colors.statusAboveText : colors.foreground;
   const words = direction(bar);
-  const usual = usualText(bar);
-  const spoken = `${bar.label} ${bar.display}${bar.usualDisplay ? `, usual ${bar.usualDisplay}.` : '.'}${words ? ` ${words}` : ''}`;
+  const usual = bareUsual(bar);
+  // The full words for a screen reader: "HRV 41.2 milliseconds, usual 52.3 milliseconds."
+  const spoken = `${bar.label} ${spokenUnits(bar.display)}${bar.usualDisplay ? `, usual ${spokenUnits(bar.usualDisplay)}.` : '.'}${words ? ` ${words}` : ''}`;
 
   return (
     <Pressable
@@ -91,13 +99,13 @@ export const TodayBar = memo(function TodayBar({ bar, onPress }: TodayBarProps) 
           />
         ) : null}
       </View>
-      <Text testID={`today-bar-text-${bar.metric}`} className="text-right" style={{ width: BAR_VALUE_WIDTH }} numberOfLines={1}>
-        <Text testID={`today-bar-value-${bar.metric}`} className="font-bold" style={{ fontSize: 12, color: valueColor }}>
+      <Text testID={`today-bar-text-${bar.metric}`} className="text-right" style={{ width: BAR_VALUE_WIDTH }} numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE}>
+        <Text testID={`today-bar-value-${bar.metric}`} maxFontSizeMultiplier={MAX_FONT_SCALE} className="font-bold" style={{ fontSize: 12, color: valueColor }}>
           {bar.display}
         </Text>
         {usual ? (
-          <Text testID={`today-bar-usual-${bar.metric}`} style={{ fontSize: 10.5, color: colors.todayUsual }}>
-            {usual}
+          <Text testID={`today-bar-usual-${bar.metric}`} maxFontSizeMultiplier={MAX_FONT_SCALE} style={{ fontSize: 10.5, color: colors.todayUsual }}>
+            {` / ${usual}`}
           </Text>
         ) : null}
       </Text>

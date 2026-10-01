@@ -83,6 +83,12 @@ describe('AnswerCard', () => {
     expect(getByTestId('answer-tile-recovery.today').props.accessibilityLabel).toBe('recovery 46, 12 points below usual');
   });
 
+  it('sets tile captions at 11px', () => {
+    const { getByTestId } = render(<AnswerCard card={tiles} />);
+
+    expect(String(getByTestId('answer-tile-caption-sleep.total').props.className)).toContain('text-[11px]');
+  });
+
   it('says nothing about usual when there is no usual and the value is not near it', () => {
     const card: AnswerCardDTO = {
       headline: 'h',
@@ -281,8 +287,11 @@ describe('ErrorCard', () => {
       act(() => jest.advanceTimersByTime(29_000));
       expect(button().props.accessibilityState).toEqual(expect.objectContaining({ disabled: true }));
 
+      expect(getByTestId('coach-error')).toHaveTextContent("You've sent a lot of messages in a short time. Try again in under a minute.");
+
       act(() => jest.advanceTimersByTime(1_000));
       expect(button().props.accessibilityState).toEqual(expect.objectContaining({ disabled: false }));
+      expect(getByTestId('coach-error')).toHaveTextContent(/^You've sent a lot of messages in a short time\. You can try again now\.$/);
       fireEvent.press(button());
       expect(onRetry).toHaveBeenCalledTimes(1);
     });

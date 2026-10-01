@@ -20,6 +20,8 @@ const DROPPED_BEFORE_ANSWER = 'The connection dropped before I could answer. You
 const REPHRASE_HINT = 'Try asking it a different way.';
 
 const RATE_LIMITED_LEAD = "You've sent a lot of messages in a short time.";
+// Once Retry-After has passed and Try again is enabled again.
+const RATE_LIMIT_OVER = `${RATE_LIMITED_LEAD} You can try again now.`;
 
 function waitWords(seconds: number): string {
   if (seconds < 45) return 'under a minute';
@@ -64,8 +66,8 @@ function useWaiting(error: CoachTurnError): boolean {
 // A turn that did not finish (spec 6): muted and distinct from an answer, so
 // it is never read as the coach's reply, with Retry when retrying can help.
 export function ErrorCard({ error, onRetry }: { error: CoachTurnError; onRetry: () => void }) {
-  const copy = errorCopy(error);
   const waiting = useWaiting(error);
+  const copy = waitMs(error) > 0 && !waiting ? RATE_LIMIT_OVER : errorCopy(error);
   // Announced once per error. Android reads the polite live region below;
   // iOS has no live regions, so it is announced explicitly.
   useEffect(() => {

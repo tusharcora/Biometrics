@@ -3,7 +3,7 @@ import { StyleSheet } from 'react-native';
 import { fireEvent, render } from '@testing-library/react-native';
 import type { TodayBarDTO, TodaySummaryDTO } from '../../src/api/coach';
 import { CoachToday } from '../../src/components/coach/CoachToday';
-import { TodayBar } from '../../src/components/coach/TodayBar';
+import { TodayBar, bareUsual } from '../../src/components/coach/TodayBar';
 import { barQuestion, spanQuestion } from '../../src/lib/coachToday';
 import { COLORS } from '../../src/theme';
 
@@ -37,8 +37,9 @@ const sleep: TodayBarDTO = {
   status: 'near',
   scaleMax: 606.2,
 };
-const hrv: TodayBarDTO = { ...recovery, metric: 'hrv', label: 'HRV', value: 63, usual: 52, unit: 'ms', display: '63', usualDisplay: '52', status: 'above', scaleMax: 88.2 };
-const rhr: TodayBarDTO = { ...recovery, metric: 'rhr', label: 'Rest HR', value: 58, usual: 58, unit: 'bpm', display: '58', usualDisplay: '58', status: 'near', scaleMax: 81.2 };
+// Server-shaped displays (formatValue): HRV and resting HR carry their units.
+const hrv: TodayBarDTO = { ...recovery, metric: 'hrv', label: 'HRV', value: 63.4, usual: 52.3, unit: 'ms', display: '63.4 ms', usualDisplay: '52.3 ms', status: 'above', scaleMax: 88.8 };
+const rhr: TodayBarDTO = { ...recovery, metric: 'rhr', label: 'Rest HR', value: 58, usual: 58, unit: 'bpm', display: '58 bpm', usualDisplay: '58 bpm', status: 'near', scaleMax: 81.2 };
 
 const summary: TodaySummaryDTO = {
   date: '2026-09-30',
@@ -62,12 +63,12 @@ beforeEach(() => {
 });
 
 describe('TodayBar', () => {
-  it('fills to the value on its scale, ticks the usual, and reads "value / usual N"', () => {
+  it('fills to the value on its scale, ticks the usual, and reads "value / N"', () => {
     const { getByTestId } = render(<TodayBar bar={recovery} onPress={() => {}} />);
 
     expect(style(getByTestId('today-bar-fill-recovery')).width).toBe('26%');
     expect(style(getByTestId('today-bar-tick-recovery')).left).toBe('58%');
-    expect(getByTestId('today-bar-recovery')).toHaveTextContent('Recovery26 / usual 58');
+    expect(getByTestId('today-bar-recovery')).toHaveTextContent('Recovery26 / 58');
   });
 
   it('colours by status: rose below, teal above, neutral near, violet for sleep near usual', () => {
@@ -119,19 +120,55 @@ describe('TodayBar', () => {
     expect(style(getByTestId('today-bar-usual-recovery')).color).toBe(COLORS.light.todayUsual);
   });
 
-  it('shows the sleep usual without the word, but still says it', () => {
-    const { getByTestId } = render(<TodayBar bar={sleep} onPress={() => {}} />);
-
-    expect(getByTestId('today-bar-text-sleep')).toHaveTextContent('6h 48m / 7h 13m', { exact: true });
-    expect(getByTestId('today-bar-sleep').props.accessibilityLabel).toContain('usual 7h 13m');
+  // R42: the value keeps its unit; the usual is a bare number (durations keep h/m),
+  // and a screen reader still hears the full words.
+  it('shows the usual as a bare number after the value and its unit, but says it in full', () => {
+    const cases: Array<[TodayBarDTO, string]> = [
+      [recovery, '26 / 58'],
+      [sleep, '6h 48m / 7h 13m'],
+      [hrv, '63.4 ms / 52.3'],
+      [rhr, '58 bpm / 58'],
+    ];
+    for (const [bar, text] of cases) {
+      const { getByTestId, unmount } = render(<TodayBar bar={bar} onPress={() => {}} />);
+      expect(getByTestId(`today-bar-text-${bar.metric}`)).toHaveTextContent(text, { exact: true });
+      unmount();
+    }
+    const label = (bar: TodayBarDTO) => {
+      const { getByTestId, unmount } = render(<TodayBar bar={bar} onPress={() => {}} />);
+      const value = getByTestId(`today-bar-${bar.metric}`).props.accessibilityLabel as string;
+      unmount();
+      return value;
+    };
+    expect(label(sleep)).toContain('usual 7 hours 13 minutes');
+    expect(label(hrv)).toBe('HRV 63.4 milliseconds, usual 52.3 milliseconds. Higher than usual.');
+    expect(label(rhr)).toBe('Rest HR 58 beats per minute, usual 58 beats per minute. About usual.');
   });
 
-  // "10h 48m / 7h 13m" measures 94.4pt in Geist; the old 78pt column cut sleep off.
-  it('gives every row the same 96pt value column, wide enough for a long sleep', () => {
-    for (const bar of [recovery, sleep]) {
-      const { getByTestId } = render(<TodayBar bar={bar} onPress={() => {}} />);
+  it('strips only a trailing unit from the usual', () => {
+    expect(bareUsual({ unit: 'ms', usualDisplay: '98.7 ms' })).toBe('98.7');
+    expect(bareUsual({ unit: 'bpm', usualDisplay: '55 bpm' })).toBe('55');
+    expect(bareUsual({ unit: 'percent', usualDisplay: '26%' })).toBe('26');
+    expect(bareUsual({ unit: 'minutes', usualDisplay: '7h 13m' })).toBe('7h 13m');
+    expect(bareUsual({ unit: 'score', usualDisplay: '58' })).toBe('58');
+    expect(bareUsual({ unit: 'score', usualDisplay: null })).toBeNull();
+  });
+
+  // Measured in Geist (12px bold value, 10.5px usual): "10h 48m / 7h 13m" 94.6pt is the
+  // widest; "103.4 ms / 98.7" 83.1pt, "103 bpm / 98" 73.1pt, "100 / 100" 50.3pt.
+  it('gives every row the same 96pt value column, wide enough for the longest value', () => {
+    for (const bar of [recovery, sleep, hrv, rhr]) {
+      const { getByTestId, unmount } = render(<TodayBar bar={bar} onPress={() => {}} />);
       expect(style(getByTestId(`today-bar-text-${bar.metric}`)).width).toBe(96);
+      unmount();
     }
+  });
+
+  it('caps how far large text grows the value column', () => {
+    const { getByTestId } = render(<TodayBar bar={hrv} onPress={() => {}} />);
+
+    expect(getByTestId('today-bar-value-hrv').props.maxFontSizeMultiplier).toBe(1.3);
+    expect(getByTestId('today-bar-usual-hrv').props.maxFontSizeMultiplier).toBe(1.3);
   });
 
   it('is a 36pt row whose tap area stays inside the 8pt gap to its neighbours', () => {
@@ -143,12 +180,12 @@ describe('TodayBar', () => {
   });
 
   it('says higher or lower by the number for resting HR, and near as about usual', () => {
-    const rhrHigh = { ...rhr, value: 66, display: '66', status: 'below' as const };
+    const rhrHigh = { ...rhr, value: 66, display: '66 bpm', status: 'below' as const };
     const a = render(<TodayBar bar={rhrHigh} onPress={() => {}} />);
-    expect(a.getByTestId('today-bar-rhr').props.accessibilityLabel).toBe('Rest HR 66, usual 58. Higher than usual.');
+    expect(a.getByTestId('today-bar-rhr').props.accessibilityLabel).toBe('Rest HR 66 beats per minute, usual 58 beats per minute. Higher than usual.');
     a.unmount();
     const b = render(<TodayBar bar={sleep} onPress={() => {}} />);
-    expect(b.getByTestId('today-bar-sleep').props.accessibilityLabel).toBe('Sleep 6h 48m, usual 7h 13m. About usual.');
+    expect(b.getByTestId('today-bar-sleep').props.accessibilityLabel).toBe('Sleep 6 hours 48 minutes, usual 7 hours 13 minutes. About usual.');
   });
 
   it('draws no tick when there is no usual yet', () => {

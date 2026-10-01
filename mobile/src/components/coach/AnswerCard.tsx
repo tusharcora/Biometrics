@@ -2,6 +2,7 @@ import React from 'react';
 import { Pressable, View } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import type { AnswerCardDTO, AnswerCardItemDTO } from '../../api/coach';
+import { spokenUnits } from '../../lib/spokenUnits';
 import { COLORS } from '../../theme';
 import { Text } from '../ui/text';
 
@@ -45,19 +46,11 @@ function comparison(item: AnswerCardItemDTO): string | null {
   return item.value < item.usual ? 'below usual' : 'above usual';
 }
 
-const plural = (n: string, unit: string) => `${n} ${unit}${n === '1' ? '' : 's'}`;
-
 // "−25m" -> "25 minutes below usual", "+1h 5m" -> "1 hour 5 minutes above usual",
 // "+4 bpm" -> "4 beats per minute above usual": abbreviations a screen reader would misread.
 function spokenDelta(delta: string): string {
   const below = /^[−-]/.test(delta);
-  const size = delta
-    .replace(/^[−+-]\s*/, '')
-    .replace(/\b(\d+)h\b/g, (_, n: string) => plural(n, 'hour'))
-    .replace(/\b(\d+)m\b/g, (_, n: string) => plural(n, 'minute'))
-    .replace(/\bbpm\b/g, 'beats per minute')
-    .replace(/\bms\b/g, 'milliseconds')
-    .replace(/%/g, ' percent');
+  const size = spokenUnits(delta.replace(/^[−+-]\s*/, ''));
   return `${size} ${below ? 'below' : 'above'} usual`;
 }
 
@@ -82,7 +75,7 @@ function Tile({ item, colors }: { item: AnswerCardItemDTO; colors: Palette }) {
       <Text testID={`answer-tile-value-${item.factId}`} className="text-base font-bold" style={{ color: valueColor }}>
         {item.display}
       </Text>
-      <Text className="text-xs text-muted-foreground">{words ? `${item.label} · ${words}` : item.label}</Text>
+      <Text testID={`answer-tile-caption-${item.factId}`} className="text-[11px] text-muted-foreground">{words ? `${item.label} · ${words}` : item.label}</Text>
     </View>
   );
 }

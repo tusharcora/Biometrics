@@ -275,6 +275,28 @@ describe('useCoachConversation: errors and retry', () => {
     expect(result.current.error).toEqual(expect.objectContaining({ kind: 'interrupted', received: false }));
   });
 
+  // R42: a status line is not an answer; only shown text, a card or a safety reply counts.
+  it('counts a drop right after the status event as dropped before any answer', async () => {
+    turn([{ type: 'status', label: 'Thinking…' }], new CoachStreamInterruptedError());
+    const { result } = setup();
+
+    await act(async () => result.current.send('How did I sleep?'));
+
+    expect(result.current.error).toEqual(expect.objectContaining({ kind: 'interrupted', received: false }));
+  });
+
+  it('counts a card alone as an answer shown', async () => {
+    turn(
+      [{ type: 'card', card: { headline: 'Short night', tiles: [{ factId: 'sleep.total', label: 'total', display: '6h 48m', value: 408 }], source: 'Today' } }],
+      new CoachStreamInterruptedError(),
+    );
+    const { result } = setup();
+
+    await act(async () => result.current.send('How did I sleep?'));
+
+    expect(result.current.error).toEqual(expect.objectContaining({ kind: 'interrupted', received: true }));
+  });
+
   it('reports a client timeout, and a server timeout event, as a timeout', async () => {
     turn([], new CoachTimeoutError());
     const { result } = setup();
@@ -337,7 +359,7 @@ describe('useCoachConversation: errors and retry', () => {
 
     await act(async () => result.current.send('Hello'));
 
-    expect(result.current.error).toEqual({ kind: 'unavailable', retryable: true, received: true, request: { message: 'Hello' }, userMessageId: 'local-1' });
+    expect(result.current.error).toEqual({ kind: 'unavailable', retryable: true, received: false, request: { message: 'Hello' }, userMessageId: 'local-1' });
     expect(result.current.streaming).toBe(false);
   });
 
@@ -402,7 +424,7 @@ describe('useCoachConversation: errors and retry', () => {
     const { result } = setup();
 
     await act(async () => result.current.send('Hello'));
-    expect(result.current.error).toEqual({ kind: 'unavailable', retryable: false, received: true, request: { message: 'Hello' }, userMessageId: 'local-1' });
+    expect(result.current.error).toEqual({ kind: 'unavailable', retryable: false, received: false, request: { message: 'Hello' }, userMessageId: 'local-1' });
 
     await act(async () => result.current.retry());
     expect(stream).toHaveBeenCalledTimes(1);

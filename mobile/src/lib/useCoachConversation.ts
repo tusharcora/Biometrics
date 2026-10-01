@@ -50,8 +50,9 @@ export interface CoachTurnError {
   retryable: boolean;
   // rate_limited only, when the server said how long to wait.
   retryAfterSeconds?: number;
-  // Whether any stream event arrived before the turn failed: an 'interrupted'
-  // turn that received nothing dropped before the coach could answer.
+  // Whether any of the answer (text, card or safety reply) was shown before the
+  // turn failed. A turn that failed with only a status event, or nothing, had
+  // its connection drop before the coach could answer.
   received: boolean;
   // Resent as-is by retry() (never carries the conversation id; that is added fresh).
   request: SendCoachMessageInput;
@@ -160,6 +161,8 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
       setMessages((prev) => prev.map((m) => (m.id === id ? fn(m) : m)));
     };
     let received = false;
+    // Answer content shown (text, card or safety): the same test as `kept` below.
+    let shown = false;
     let safetyTurn = false;
     let consentEvent = false;
     let eventError: CoachTurnError | null = null;
@@ -181,9 +184,11 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
           setStatusLabel(event.label);
           break;
         case 'text':
+          shown = true;
           patch((m) => ({ ...m, text: m.text ? `${m.text} ${event.sentence}` : event.sentence }));
           break;
         case 'card':
+          shown = true;
           patch((m) => ({ ...m, card: event.card }));
           break;
         case 'memory':
@@ -192,6 +197,7 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
         case 'safety':
           adoptConversation(event.conversationId);
           safetyTurn = true;
+          shown = true;
           patch((m) => ({
             ...m,
             text: event.text,
@@ -219,7 +225,7 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
         case 'error':
           if (event.code === 'consent_required') consentEvent = true;
           // 'internal' also stands for any code this build does not know: fail safe to Retry.
-          else eventError = { kind: event.code === 'timeout' ? 'timeout' : 'unavailable', retryable: event.code === 'internal' || event.retryable, received: true, ...turn };
+          else eventError = { kind: event.code === 'timeout' ? 'timeout' : 'unavailable', retryable: event.code === 'internal' || event.retryable, received: shown, ...turn };
           break;
       }
     };
@@ -263,7 +269,7 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
 
     const failure: CoachTurnError | null =
       eventError ??
-      (thrown && !(thrown instanceof CoachConsentRequiredError) && !(thrown instanceof CoachDisabledError) ? thrownError(thrown, { ...turn, received }) : null);
+      (thrown && !(thrown instanceof CoachConsentRequiredError) && !(thrown instanceof CoachDisabledError) ? thrownError(thrown, { ...turn, received: shown }) : null);
 
     if (thrown || consentEvent || failure) {
       const id = answerId;
