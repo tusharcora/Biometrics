@@ -172,7 +172,7 @@ describe('generateTodaySummary', () => {
 
     const row = await rowOf(user.id);
     expect(row).toMatchObject({ text: GOOD, source: 'AI' });
-    expect((row!.spans as Array<{ metric?: string }>).filter((s) => s.metric).map((s) => s.metric)).toEqual(['recovery', 'hrv']);
+    expect((row!.spans as Array<{ metric?: string }>).filter((s) => s.metric).map((s) => s.metric)).toEqual(['recovery', 'hrv', 'sleep']); // "an early night" is a sleep mention
     expect(requests).toHaveLength(1);
     const [req] = requests;
     expect(req!.messages).toEqual([{ role: 'user', content: TODAY_REQUEST }]);

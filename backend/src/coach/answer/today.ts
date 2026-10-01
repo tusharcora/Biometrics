@@ -69,10 +69,13 @@ function factFor(sheet: FactSheet, metric: TodayMetric): Fact | undefined {
   return sheet.facts.find((f) => f.id === TODAY_FACT_IDS[metric]);
 }
 
-/** Recovery 0-100; the others 0 -> 1.4 x the larger of value and usual, rounded up to a whole unit. */
+/**
+ * Recovery 0-100; the others 0 -> 1.4 x the larger of value and usual, rounded
+ * up to a whole unit, and never below 1 (the client divides by it).
+ */
 function scaleFor(metric: TodayMetric, value: number, usual: number | null): number {
   if (metric === 'recovery') return 100;
-  return Math.ceil(1.4 * Math.max(value, usual ?? value));
+  return Math.max(1, Math.ceil(1.4 * Math.max(value, usual ?? value)));
 }
 
 export function buildBars(sheet: FactSheet): TodayBar[] {
@@ -80,7 +83,10 @@ export function buildBars(sheet: FactSheet): TodayBar[] {
   for (const metric of METRICS) {
     const fact = factFor(sheet, metric);
     if (!fact) continue;
-    const usual = fact.usual ?? null;
+    // A recovery score of 0 is real; 0 sleep, HRV or resting HR is a missing reading.
+    if (metric !== 'recovery' && fact.value === 0) continue;
+    // A usual of 0 is no usual: no tick, no "0 ms", no comparison.
+    const usual = fact.usual ? fact.usual : null;
     bars.push({
       metric,
       label: LABELS[metric],
@@ -89,7 +95,7 @@ export function buildBars(sheet: FactSheet): TodayBar[] {
       unit: fact.unit,
       display: fact.display,
       usualDisplay: usual === null ? null : formatValue(fact.unit, usual),
-      status: statusOf(fact) ?? null,
+      status: usual === null ? null : (statusOf(fact) ?? null),
       scaleMax: scaleFor(metric, fact.value, usual),
     });
   }
@@ -147,9 +153,9 @@ export function templateSentence(sheet: FactSheet): TodaySentence {
 
 const METRIC_WORDS: Array<[TodayMetric, RegExp]> = [
   ['recovery', /\brecovery\b/i],
-  ['sleep', /\b(sleep|slept)\b/i],
+  ['sleep', /\b(sleep|sleeping|slept|asleep|nights?)\b/i],
   ['hrv', /\bHRV\b/i],
-  ['rhr', /\bresting (heart rate|HR)\b/i],
+  ['rhr', /\b(resting heart rate|resting HR|rest HR|heart rate)\b/i],
 ];
 
 /** Tappable spans for a model-written sentence: the first mention of each metric. */

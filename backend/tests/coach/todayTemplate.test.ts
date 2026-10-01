@@ -73,6 +73,23 @@ describe('buildBars', () => {
     expect(buildBars(sheet(hrv(41)))[0]).toMatchObject({ usual: null, usualDisplay: null, status: null, scaleMax: 58 });
   });
 
+  it('treats a 0 sleep, HRV or resting HR reading as missing, but keeps a recovery of 0', () => {
+    expect(buildBars(sheet(sleep(0, 433), hrv(0), rhr(0, 55)))).toEqual([]);
+    expect(buildBars(sheet(recovery(0, 58)))).toEqual([
+      { metric: 'recovery', label: 'Recovery', value: 0, usual: 58, unit: 'score', display: '0', usualDisplay: '58', status: 'below', scaleMax: 100 },
+    ]);
+  });
+
+  it('treats a usual of 0 as no usual: no tick, no "0 ms", no status', () => {
+    expect(buildBars(sheet(hrv(41, 0)))[0]).toMatchObject({ usual: null, usualDisplay: null, status: null, scaleMax: 58 });
+    expect(buildBars(sheet(sleep(408, 0)))[0]).toMatchObject({ usual: null, usualDisplay: null, status: null, scaleMax: 572 });
+  });
+
+  it('never has a scale below 1', () => {
+    expect(buildBars(sheet(hrv(0.3)))[0]!.scaleMax).toBe(1);
+    expect(buildBars(sheet(hrv(0.3, 0)))[0]!.scaleMax).toBe(1);
+  });
+
   it('skips missing metrics and ignores other facts', () => {
     const bars = buildBars(sheet({ id: 'habit.caffeine_late', label: 'x', value: -8, unit: 'score', display: '-8' }, sleep(400, 420)));
     expect(bars.map((b) => b.metric)).toEqual(['sleep']);
@@ -113,6 +130,26 @@ describe('templateSentence', () => {
     expect(templateSentence(sheet(sleep(408, 433))).text).toBe('Sleep 6h 48m today.');
   });
 
+  it('handles a recovery with no usual yet, followed by the biggest driver', () => {
+    const t = templateSentence(sheet(recovery(60), sleep(430, 433), hrv(41, 52)));
+    expect(t.text).toBe('Recovery 60 today. HRV 41 ms is lower than your usual 52 ms.');
+    expect(t.spans).toEqual([
+      { text: 'Recovery 60', metric: 'recovery' },
+      { text: ' today. ' },
+      { text: 'HRV 41 ms', metric: 'hrv' },
+      { text: ' is lower than your usual 52 ms.' },
+    ]);
+  });
+
+  it('never names a 0 reading as the driver', () => {
+    const t = templateSentence(sheet(recovery(30, 58), sleep(0, 433), hrv(41, 52)));
+    expect(t.text).toBe('Recovery 30, below your usual 58. HRV 41 ms is lower than your usual 52 ms.');
+  });
+
+  it('states a recovery of 0', () => {
+    expect(templateSentence(sheet(recovery(0, 58))).text).toBe('Recovery 0, below your usual 58.');
+  });
+
   it('is empty with no data', () => {
     expect(templateSentence(sheet())).toEqual({ text: '', spans: [] });
   });
@@ -138,6 +175,17 @@ describe('spansFor (AI sentence)', () => {
       { text: 'recovery', metric: 'recovery' },
       { text: 'resting heart rate', metric: 'rhr' },
     ]);
+  });
+
+  it.each([
+    ['A short night (6h 48m) pulled recovery to 26; rest HR 61 bpm agrees.', [['night', 'sleep'], ['recovery', 'recovery'], ['rest HR', 'rhr']]],
+    ['Your heart rate rose after sleeping 5h 0m.', [['heart rate', 'rhr'], ['sleeping', 'sleep']]],
+    ['You were asleep by 11; resting HR is 55 bpm.', [['asleep', 'sleep'], ['resting HR', 'rhr']]],
+    ['Two short nights in a row show in your HRV.', [['nights', 'sleep'], ['HRV', 'hrv']]],
+  ])('marks the wider metric words and rebuilds the text (%s)', (text, expected) => {
+    const spans = spansFor(text);
+    expect(joined(spans)).toBe(text);
+    expect(spans.filter((s) => s.metric)).toEqual(expected.map(([t, metric]) => ({ text: t, metric })));
   });
 
   it('is one plain span when no metric is named', () => {
