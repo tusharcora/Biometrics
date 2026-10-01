@@ -212,6 +212,17 @@ describe('buildFactSheet: today', () => {
     expect(sheet.facts.find((f) => f.id === 'recovery.today')).not.toHaveProperty('usual');
   });
 
+  it('leaves imputed factors out of the top score factors', async () => {
+    const factors = [
+      { type: 'RECOVERY' as const, factor: 'HRV', label: 'HRV', z: -2, contribution: -1, points: -15, imputed: true, excluded: false },
+      { type: 'RECOVERY' as const, factor: 'RHR', label: 'Resting heart rate', z: -0.4, contribution: -0.1, points: -3.1, imputed: false, excluded: false },
+      { type: 'RECOVERY' as const, factor: 'SLEEP_DEBT', label: 'Sleep debt', z: 0.2, contribution: 0.05, points: 1.2, imputed: false, excluded: false },
+    ];
+    const { deps } = fakeData({ score: dailyScore({ factors, factorsByKey: Object.fromEntries(factors.map((f) => [f.factor, f])) }) });
+    const sheet = await buildFactSheet('u1', 'today', deps);
+    expect(ids(sheet).filter((id) => id.startsWith('factor.'))).toEqual(['factor.rhr', 'factor.sleep_debt']);
+  });
+
   it('says so when nothing has synced at all', async () => {
     const { deps } = fakeData({
       score: dailyScore({ recoveryScore: null, sleepScore: null, factors: [], factorsByKey: {} }),
@@ -260,6 +271,76 @@ describe('buildFactSheet: trends', () => {
     expect(line(sheet, 'recovery.avg7')).toBe('[recovery.avg7] Recovery 7-day average: 50 (usual 58, 8 lower than usual)');
     expect(line(sheet, 'hrv.trend30')).toBe('[hrv.trend30] HRV trend over 30 days: down 8%');
     expect(line(sheet, 'habit.caffeine.hrv')).toBe('[habit.caffeine.hrv] Caffeine (3+ cups) and next-day HRV: 8% lower (n=21)');
+  });
+
+  it('ends every trends window yesterday, never today', async () => {
+    const { deps, calls } = fakeData();
+    await buildFactSheet('u1', 'trends', deps);
+    const windows = calls.filter((c) => c.startsWith('getScoreHistory') || c.startsWith('getMetricHistory'));
+    expect(windows).toEqual(
+      expect.arrayContaining([
+        `getScoreHistory RECOVERY 7 ${YESTERDAY}`,
+        `getScoreHistory RECOVERY 30 ${YESTERDAY}`,
+        ...(['SLEEP', 'HRV', 'RESTING_HR', 'STEPS'] as const).flatMap((m) => [`getMetricHistory ${m} 7 ${YESTERDAY}`, `getMetricHistory ${m} 30 ${YESTERDAY}`]),
+      ]),
+    );
+    expect(windows).toHaveLength(10);
+    expect(windows.some((c) => c.endsWith(TODAY))).toBe(false);
+  });
+
+  it("does not count today's partial step count in the averages", async () => {
+    const { data } = fakeData();
+    // A store holding 8,000 steps every past day and a partial 1,200 so far today:
+    // the averages reflect only the days a window ending on `end` covers.
+    const stepsOn = (date: string) => (date === TODAY ? 1200 : 8000);
+    const deps = {
+      ...data,
+      today: TODAY,
+      async getMetricHistory(u: string, m: MetricKey, days: number, end: string) {
+        if (m !== 'STEPS') return data.getMetricHistory(u, m, days, end);
+        const values = Array.from({ length: days }, (_, i) => stepsOn(shiftDate(end, -i)));
+        return history(m, days, values.reduce((a, v) => a + v, 0) / days);
+      },
+    };
+    const sheet = await buildFactSheet('u1', 'trends', deps);
+    expect(sheet.facts.find((f) => f.id === 'steps.avg7')).toMatchObject({ value: 8000, usual: 8000 });
+    expect(sheet.facts.find((f) => f.id === 'steps.avg30')).toMatchObject({ value: 8000 });
+  });
+
+  it('gives the same habit and factor at different lags distinct ids', async () => {
+    const base = { habitType: 'CAFFEINE', habitLabel: 'Caffeine', exposureThreshold: 3, exposureUnit: 'cups', factor: 'HRV', comparisonPercent: 0, sampleSize: 21, direction: 'lower' as const };
+    const correlations = [
+      { ...base, lagDays: 1, effectSizePercent: -8.2 },
+      { ...base, lagDays: 0, effectSizePercent: -6 },
+      { ...base, lagDays: 2, effectSizePercent: -4 },
+    ];
+    const { deps } = fakeData({ correlations });
+    const sheet = await buildFactSheet('u1', 'trends', deps);
+    expect(ids(sheet).filter((id) => id.startsWith('habit.'))).toEqual(['habit.caffeine.hrv', 'habit.caffeine.hrv.lag0', 'habit.caffeine.hrv.lag2']);
+    expect(line(sheet, 'habit.caffeine.hrv.lag2')).toBe('[habit.caffeine.hrv.lag2] Caffeine (3+ cups) and 2-days-later HRV: 4% lower (n=21)');
+  });
+
+  it('keeps the five strongest habit patterns, largest effect first, then largest sample', async () => {
+    const base = { exposureThreshold: 1, exposureUnit: 'drinks', factor: 'HRV', lagDays: 1, comparisonPercent: 0, direction: 'higher' as const };
+    const effects: Array<[string, number, number]> = [
+      ['WEAK', 2, 30],
+      ['MID_SMALL_N', 6, 15],
+      ['STRONG_NEG', -12, 20],
+      ['WEAKEST', 1, 40],
+      ['MID_BIG_N', 6, 25],
+      ['STRONG', 10, 20],
+      ['FAIR', 4, 20],
+    ];
+    const correlations = effects.map(([habitType, effectSizePercent, sampleSize]) => ({ ...base, habitType, habitLabel: habitType, effectSizePercent, sampleSize }));
+    const { deps } = fakeData({ correlations });
+    const sheet = await buildFactSheet('u1', 'trends', deps);
+    expect(ids(sheet).filter((id) => id.startsWith('habit.'))).toEqual([
+      'habit.strong_neg.hrv',
+      'habit.strong.hrv',
+      'habit.mid_big_n.hrv',
+      'habit.mid_small_n.hrv',
+      'habit.fair.hrv',
+    ]);
   });
 
   it('keeps at most five habit patterns', async () => {

@@ -194,7 +194,7 @@ async function todayFacts(userId: string, deps: FactDeps, b: SheetBuilder): Prom
   b.add(fact({ id: 'steps.today', label: 'Steps today so far', unit: 'count', value: metrics.steps.value, usual: steps.average }), 'No steps recorded today');
 
   const drivers = score.factors
-    .filter((f) => !f.excluded)
+    .filter((f) => !f.excluded && !f.imputed)
     .sort((a, b2) => Math.abs(b2.points) - Math.abs(a.points))
     .slice(0, 2);
   for (const f of drivers) {
@@ -244,15 +244,25 @@ function lagLabel(lagDays: number): string {
   return `${lagDays}-days-later`;
 }
 
+const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+
+/** Strongest patterns first (largest effect, then largest sample), so the cap keeps the most informative ones. */
+function byStrength(a: HabitCorrelations['correlations'][number], b: HabitCorrelations['correlations'][number]): number {
+  return Math.abs(b.effectSizePercent) - Math.abs(a.effectSizePercent) || b.sampleSize - a.sampleSize;
+}
+
 async function trendFacts(userId: string, deps: FactDeps, b: SheetBuilder): Promise<void> {
+  // Every window ends yesterday: today's partial day (steps build up through the
+  // day) would drag averages and trends down, and "usual" is the 30 days ending yesterday.
+  const yesterday = shiftDate(deps.today, -1);
   const [rec7, rec30, histories, habits, goals] = await Promise.all([
-    deps.getScoreHistory(userId, 'RECOVERY', 7, deps.today),
-    deps.getScoreHistory(userId, 'RECOVERY', USUAL_DAYS, deps.today),
+    deps.getScoreHistory(userId, 'RECOVERY', 7, yesterday),
+    deps.getScoreHistory(userId, 'RECOVERY', USUAL_DAYS, yesterday),
     Promise.all(
       TREND_METRICS.map(async (m) => ({
         m,
-        week: await deps.getMetricHistory(userId, m.key, 7, deps.today),
-        month: await deps.getMetricHistory(userId, m.key, USUAL_DAYS, deps.today),
+        week: await deps.getMetricHistory(userId, m.key, 7, yesterday),
+        month: await deps.getMetricHistory(userId, m.key, USUAL_DAYS, yesterday),
       })),
     ),
     deps.getHabitCorrelations(userId),
@@ -268,12 +278,13 @@ async function trendFacts(userId: string, deps: FactDeps, b: SheetBuilder): Prom
       b.add(fact({ id: `${m.id}.trend30`, label: `${m.label} trend over 30 days`, unit: 'percent', value: month.trendPercent, display: month.trendDisplay }));
     }
   }
-  for (const c of habits.correlations.slice(0, MAX_HABIT_FACTS)) {
-    const slug = (s: string) => s.toLowerCase().replace(/[^a-z0-9]+/g, '_');
+  for (const c of [...habits.correlations].sort(byStrength).slice(0, MAX_HABIT_FACTS)) {
     const size = Math.round(Math.abs(c.effectSizePercent));
+    // The same habit and factor can be stored at several lags; next-day (lag 1) keeps the short id.
+    const lag = c.lagDays === 1 ? '' : `.lag${c.lagDays}`;
     b.add(
       fact({
-        id: `habit.${slug(c.habitType)}.${slug(c.factor)}`,
+        id: `habit.${slug(c.habitType)}.${slug(c.factor)}${lag}`,
         label: `${c.habitLabel} (${c.exposureThreshold}+ ${c.exposureUnit}) and ${lagLabel(c.lagDays)} ${c.factor}`,
         unit: 'percent',
         value: size,
