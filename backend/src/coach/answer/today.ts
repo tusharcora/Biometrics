@@ -12,7 +12,7 @@ import { getAnswerBudgetMs, getCoachProvider, getHostedProvider, isCoachEnabled 
 import { hasCurrentConsent } from '../consent';
 import { EngineSelection, selectEngine } from '../engine';
 import type { CoachModelProvider } from '../model/provider';
-import { CoachPersona, REQUIRED_DISALLOWED_TOPICS, resolvePersona } from '../personas';
+import { CoachPersona, resolvePersona } from '../personas';
 import { escapeField } from '../escape';
 import type { CoachTelemetry } from '../telemetry';
 import type { CardStatus } from './card';
@@ -20,6 +20,7 @@ import { statusOf } from './card';
 import type { Fact, FactSheet, FactUnit } from './facts';
 import { buildFactSheet, defaultFactData, formatValue, renderFactSheet } from './facts';
 import { parseModelOutput } from './parse';
+import { disallowedTopics } from './prompt';
 import { sentenceSplitter } from './sentences';
 import { validateSentence } from './validate';
 
@@ -280,12 +281,6 @@ export function checkSummary(
     if (!verdict.ok) return { ok: false, reason: verdict.reason };
   }
   return { ok: true, text };
-}
-
-function disallowedTopics(persona: CoachPersona): string[] {
-  const merged = [...persona.disallowedTopics];
-  for (const t of REQUIRED_DISALLOWED_TOPICS) if (!merged.includes(t)) merged.push(t);
-  return merged;
 }
 
 export function buildTodaySummaryPrompt(persona: CoachPersona, sheet: FactSheet, today: string): string {

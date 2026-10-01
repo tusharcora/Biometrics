@@ -16,9 +16,9 @@ export interface DailyScoreToolFactor {
   excluded: boolean;
 }
 
-// The read-only shape the model sees (spec section 2). deltaFromYesterday and
-// direction are computed HERE, on the server: the model has no arithmetic this
-// spec trusts, so it is handed the delta and its sign as fields to reference.
+// One day's scores, read-only, as the fact sheet (answer/facts.ts) and the day
+// summary build on them. deltaFromYesterday and direction are computed here, on
+// the server, never left to the model's arithmetic.
 // "Yesterday" is the literal previous civil day; when either day has no score
 // there is nothing honest to compare, so the delta and direction are null.
 export interface DailyScoreToolResult {

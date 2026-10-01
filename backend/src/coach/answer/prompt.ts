@@ -17,7 +17,8 @@ export const SENTENCE_RANGE: Record<CoachPersona['verbosity'], string> = {
   detailed: '4 to 5',
 };
 
-function disallowedTopics(persona: CoachPersona): string[] {
+/** The persona's disallowed topics plus any required one a config omits; every prompt (answer, digest, day summary) uses this. */
+export function disallowedTopics(persona: CoachPersona): string[] {
   const merged = [...persona.disallowedTopics];
   for (const required of REQUIRED_DISALLOWED_TOPICS) if (!merged.includes(required)) merged.push(required);
   return merged;

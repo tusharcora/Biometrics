@@ -1,6 +1,6 @@
-// Sentence and card validation (spec 2026-09-30, section 2.4). Replaces the
-// {{tool.path}} placeholder rule: the model writes numbers directly, and every
-// number it writes must be one the fact sheet already holds.
+// Sentence and card validation (spec 2026-09-30, section 2.4): the model writes
+// numbers directly, and every number it writes must be one the fact sheet
+// already holds.
 //
 //   * Numbers: every number, duration and h:mm in a sentence must match a
 //     value the sheet holds: a fact's value, usual or precomputed comparison,

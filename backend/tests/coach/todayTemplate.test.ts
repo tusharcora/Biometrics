@@ -1,6 +1,8 @@
 import type { Fact, FactSheet } from '../../src/coach/answer/facts';
 import { formatValue } from '../../src/coach/answer/facts';
-import { buildBars, spansFor, templateSentence } from '../../src/coach/answer/today';
+import { buildBars, buildTodaySummaryPrompt, spansFor, templateSentence } from '../../src/coach/answer/today';
+import { disallowedTopics } from '../../src/coach/answer/prompt';
+import { REQUIRED_DISALLOWED_TOPICS, resolvePersona } from '../../src/coach/personas';
 
 const recovery = (value: number, usual?: number): Fact => ({
   id: 'recovery.today',
@@ -192,5 +194,15 @@ describe('spansFor (AI sentence)', () => {
 
   it('is one plain span when no metric is named', () => {
     expect(spansFor('Take it easy today.')).toEqual([{ text: 'Take it easy today.' }]);
+  });
+});
+
+describe('buildTodaySummaryPrompt: disallowed topics (final review M3)', () => {
+  it('adds the required topics a persona omits, through the same helper as the answer prompt', () => {
+    const persona = { ...resolvePersona(null), disallowedTopics: ['politics'] };
+    const sheet: FactSheet = { route: 'today', facts: [recovery(26, 58)], notes: [] };
+    const p = buildTodaySummaryPrompt(persona, sheet, '2026-09-30');
+    for (const t of disallowedTopics(persona)) expect(p).toContain(JSON.stringify(t));
+    expect(disallowedTopics(persona)).toEqual(['politics', ...REQUIRED_DISALLOWED_TOPICS]);
   });
 });
