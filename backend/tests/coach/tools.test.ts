@@ -110,6 +110,27 @@ describe('getMetricHistory', () => {
     });
   });
 
+  // Final review I5: a 0 sleep, HRV or resting HR reading is "not recorded", so it must not drag the
+  // usual, the trend or the week's shortest night down. A day with 0 steps is a real (if idle) day.
+  it.each(['SLEEP', 'HRV', 'RESTING_HR'] as const)('skips 0 readings for %s', async (metric) => {
+    const user = await createUser();
+    await putRecord(user.id, metric, daysAgo(3), 0);
+    await putRecord(user.id, metric, daysAgo(2), 60);
+    await putRecord(user.id, metric, daysAgo(1), 0);
+    await putRecord(user.id, metric, todayUtc(), 40);
+    const r = await run(user.id, 'getMetricHistory', { metric, days: 7 });
+    expect(r.points.map((p: { value: number }) => p.value)).toEqual([60, 40]);
+    expect(r).toMatchObject({ daysWithData: 2, average: 50, lowest: { value: 40 }, coverageDisplay: '2 of 7' });
+  });
+
+  it('keeps 0-step days', async () => {
+    const user = await createUser();
+    await putRecord(user.id, 'STEPS', daysAgo(1), 0);
+    await putRecord(user.id, 'STEPS', todayUtc(), 4000);
+    const r = await run(user.id, 'getMetricHistory', { metric: 'STEPS', days: 7 });
+    expect(r).toMatchObject({ daysWithData: 2, average: 2000, lowest: { value: 0 } });
+  });
+
   it('omits daysAtGoal for non-step metrics', async () => {
     const user = await createUser();
     await putRecord(user.id, 'HRV', todayUtc(), 40);

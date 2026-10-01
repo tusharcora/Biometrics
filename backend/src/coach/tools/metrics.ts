@@ -205,13 +205,18 @@ export function computeTrend(values: number[]): { trend: MetricHistoryToolResult
   return { trend: Math.abs(pct) < STEADY_PERCENT ? 'steady' : pct > 0 ? 'up' : 'down', trendPercent: pct };
 }
 
-/** The last N days (ending today) of one metric, oldest first, with precomputed summary values. */
+/**
+ * The last N days (ending today) of one metric, oldest first, with precomputed summary values.
+ * A 0 sleep, HRV or resting HR reading means "not recorded" and is skipped, so it never drags the
+ * usual, the trend or the week's shortest night down; a 0-step day is a real day and counts.
+ */
 export async function getMetricHistory(userId: string, metric: MetricKey, days: number, today: string): Promise<MetricHistoryToolResult> {
   const rows = await prisma.biometricRecord.findMany({
     where: {
       userId,
       metricType: metric,
       recordedAt: { gte: civilDateToUtcMidnight(shiftDate(today, -(days - 1))), lte: civilDateToUtcMidnight(today) },
+      ...(metric === 'STEPS' ? {} : { value: { gt: 0 } }),
     },
     orderBy: { recordedAt: 'asc' },
     select: { recordedAt: true, value: true },
