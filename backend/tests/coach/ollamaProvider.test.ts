@@ -215,7 +215,7 @@ describe('coach provider selection', () => {
   it('lets an explicit override win over the environment', () => {
     process.env.COACH_PROVIDER = 'ollama';
     process.env.OLLAMA_MODEL = 'm';
-    const stub = { id: 'stub', generate: jest.fn() };
+    const stub = { id: 'stub', generate: jest.fn(), stream: jest.fn() };
     setCoachProvider(stub);
     expect(getCoachProvider()).toBe(stub);
   });

@@ -21,6 +21,7 @@ import type {
   CoachModelProvider,
   CoachModelRequest,
   CoachModelResponse,
+  CoachStreamRequest,
   CoachTier,
 } from './provider';
 
@@ -47,6 +48,17 @@ export class OllamaHttpError extends Error {
     this.name = 'OllamaHttpError';
   }
 }
+
+/** A streamed answer that Ollama ended with an error line, or a line that is not JSON. Never echoes the line. */
+export class OllamaStreamError extends Error {
+  constructor(reason: 'error_line' | 'malformed_line' | 'no_body') {
+    super(`Ollama stream failed: ${reason}`);
+    this.name = 'OllamaStreamError';
+  }
+}
+
+/** How long the model stays loaded after an answer: a cold load costs ~14 s on the owner's Mac. */
+export const STREAM_KEEP_ALIVE = '24h';
 
 export class OllamaConfigError extends Error {
   constructor(message: string) {
@@ -102,6 +114,71 @@ export function toOllamaMessages(system: string, messages: CoachModelMessage[]):
 export function stripThinking(text: string): string {
   // A complete block, then any unterminated one the output budget cut off.
   return text.replace(/<think>[\s\S]*?<\/think>/g, '').replace(/<think>[\s\S]*$/, '').trim();
+}
+
+/** Length of the longest suffix of `s` that is a proper prefix of `tag`. */
+function partialTagSuffix(s: string, tag: string): number {
+  for (let k = Math.min(tag.length - 1, s.length); k > 0; k--) {
+    if (s.endsWith(tag.slice(0, k))) return k;
+  }
+  return 0;
+}
+
+/**
+ * Streaming counterpart of stripThinking: drops <think>...</think> across
+ * deltas, holding back a partial tag until the next delta decides it. Call
+ * with final=true once at the end to flush what was held back.
+ */
+export function thinkFilter(): (text: string, final?: boolean) => string {
+  let inThink = false;
+  let carry = '';
+  return (text, final = false) => {
+    let s = carry + text;
+    carry = '';
+    let out = '';
+    while (s.length > 0) {
+      if (inThink) {
+        const end = s.indexOf('</think>');
+        if (end === -1) {
+          const k = partialTagSuffix(s, '</think>');
+          carry = s.slice(s.length - k);
+          s = '';
+        } else {
+          s = s.slice(end + '</think>'.length);
+          inThink = false;
+        }
+      } else {
+        const start = s.indexOf('<think>');
+        if (start === -1) {
+          const k = partialTagSuffix(s, '<think>');
+          out += s.slice(0, s.length - k);
+          carry = s.slice(s.length - k);
+          s = '';
+        } else {
+          out += s.slice(0, start);
+          s = s.slice(start + '<think>'.length);
+          inThink = true;
+        }
+      }
+    }
+    if (final) {
+      if (!inThink) out += carry;
+      carry = '';
+    }
+    return out;
+  };
+}
+
+/** One NDJSON line of /api/chat with stream:true: its content delta, and whether it is the last line. */
+function parseStreamLine(line: string): { text: string; done: boolean } {
+  let json: { message?: { content?: unknown }; done?: unknown; error?: unknown };
+  try {
+    json = JSON.parse(line);
+  } catch {
+    throw new OllamaStreamError('malformed_line');
+  }
+  if (json.error !== undefined) throw new OllamaStreamError('error_line');
+  return { text: typeof json.message?.content === 'string' ? json.message.content : '', done: json.done === true };
 }
 
 // Ollama normally sends arguments as an object; some templates send a JSON string.
@@ -176,6 +253,92 @@ export class OllamaProvider implements CoachModelProvider {
       };
     }
     return { type: 'text', text: stripThinking(String(message.content ?? '')) };
+  }
+
+  private chatUrl(): string {
+    return `${this.options.baseUrl.replace(/\/+$/, '')}/api/chat`;
+  }
+
+  /**
+   * One answer, streamed (spec 2026-09-30, section 2.6): /api/chat with
+   * stream:true returns NDJSON, one {message:{content}} delta per line and a
+   * final {done:true}. No tools, thinking off, the model kept loaded for 24h.
+   */
+  async *stream(request: CoachStreamRequest): AsyncIterable<string> {
+    const body = {
+      model: this.options.model,
+      stream: true,
+      think: false,
+      keep_alive: this.options.keepAlive ?? STREAM_KEEP_ALIVE,
+      options: {
+        temperature: this.options.temperature ?? 0.3,
+        num_ctx: this.options.numCtx ?? 8192,
+        num_predict: request.maxTokens,
+      },
+      messages: [{ role: 'system', content: request.system }, ...request.messages],
+    };
+    const res = await this.fetchImpl(this.chatUrl(), {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(body),
+      ...(request.signal ? { signal: request.signal } : {}),
+    });
+    if (!res.ok) throw new OllamaHttpError(res.status);
+    if (!res.body) throw new OllamaStreamError('no_body');
+
+    const decoder = new TextDecoder();
+    const filter = thinkFilter();
+    let pending = '';
+    const lines = function* (final: boolean): Generator<string> {
+      let nl: number;
+      while ((nl = pending.indexOf('\n')) !== -1) {
+        const line = pending.slice(0, nl).trim();
+        pending = pending.slice(nl + 1);
+        if (line) yield line;
+      }
+      if (final && pending.trim()) {
+        const line = pending.trim();
+        pending = '';
+        yield line;
+      }
+    };
+
+    let done = false;
+    const read = function* (final: boolean): Generator<string> {
+      for (const line of lines(final)) {
+        const delta = parseStreamLine(line);
+        const text = filter(delta.text, delta.done);
+        if (text) yield text;
+        if (delta.done) {
+          done = true;
+          return;
+        }
+      }
+    };
+    for await (const chunk of res.body as unknown as AsyncIterable<Uint8Array>) {
+      pending += decoder.decode(chunk, { stream: true });
+      yield* read(false);
+      if (done) return;
+    }
+    pending += decoder.decode();
+    yield* read(true);
+    if (!done) {
+      const rest = filter('', true);
+      if (rest) yield rest;
+    }
+  }
+
+  /** Loads the model into memory (an empty chat) so the first question skips the cold start. Never throws. */
+  async warm(): Promise<void> {
+    try {
+      await this.fetchImpl(this.chatUrl(), {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ model: this.options.model, messages: [], keep_alive: this.options.keepAlive ?? STREAM_KEEP_ALIVE }),
+      });
+    } catch {
+      /* best effort: the first answer simply pays the cold start */
+    }
   }
 }
 

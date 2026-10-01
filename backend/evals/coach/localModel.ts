@@ -18,7 +18,7 @@ import * as fs from 'fs';
 import { createCoachOrchestrator } from '../../src/coach/orchestrator';
 import { coachTools } from '../../src/coach/tools';
 import { ollamaProviderFromEnv } from '../../src/coach/model/ollama';
-import type { CoachModelProvider, CoachModelRequest, CoachModelResponse } from '../../src/coach/model/provider';
+import type { CoachModelProvider, CoachModelRequest, CoachModelResponse, CoachStreamRequest } from '../../src/coach/model/provider';
 import { prisma } from '../../src/db/client';
 import { checkDirectionalClaims } from './directionCheck';
 import { FIXTURES } from './fixtures';
@@ -48,6 +48,9 @@ class RecordingProvider implements CoachModelProvider {
     } finally {
       this.callMs.push(Date.now() - started);
     }
+  }
+  stream(request: CoachStreamRequest): AsyncIterable<string> {
+    return this.inner.stream(request);
   }
 }
 

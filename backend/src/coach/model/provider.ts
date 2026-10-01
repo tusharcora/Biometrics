@@ -44,10 +44,29 @@ export type CoachModelResponse =
   | { type: 'text'; text: string }
   | { type: 'tool_calls'; calls: ToolCallRequest[] };
 
+/**
+ * One streamed answer (spec 2026-09-30, section 2.3): the answer pipeline makes
+ * exactly one call per attempt, with no tools. `system` carries the persona,
+ * the fact sheet and the output contract; `messages` is the recent
+ * conversation, clean text only.
+ */
+export interface CoachStreamRequest {
+  system: string;
+  messages: { role: 'user' | 'assistant'; content: string }[];
+  maxTokens: number;
+  /** Aborted on the answer budget or when the client stops; a real provider cancels the in-flight call. */
+  signal?: AbortSignal;
+}
+
 export interface CoachModelProvider {
   /** Stable id for telemetry. */
   readonly id: string;
+  /** The tool-loop call; kept for the weekly digest and the old orchestrator until phase 5. */
   generate(request: CoachModelRequest): Promise<CoachModelResponse>;
+  /** Text deltas of one answer, in order. Throws on a transport or model failure. */
+  stream(request: CoachStreamRequest): AsyncIterable<string>;
+  /** Optional: load the model ahead of the first question. Must never throw. */
+  warm?(): Promise<void>;
 }
 
 export class ProviderNotConfiguredError extends Error {
@@ -60,6 +79,9 @@ export class ProviderNotConfiguredError extends Error {
 export class UnconfiguredProvider implements CoachModelProvider {
   readonly id = 'unconfigured';
   async generate(): Promise<CoachModelResponse> {
+    throw new ProviderNotConfiguredError();
+  }
+  async *stream(): AsyncIterable<string> {
     throw new ProviderNotConfiguredError();
   }
 }
@@ -90,5 +112,62 @@ export class ScriptedProvider implements CoachModelProvider {
     const step = this.script[this.cursor++];
     if (step === undefined) throw new Error('ScriptedProvider: script exhausted');
     return typeof step === 'function' ? step(request) : step;
+  }
+
+  async *stream(): AsyncIterable<string> {
+    throw new Error('ScriptedProvider does not stream; use ScriptedStreamProvider');
+  }
+}
+
+export type StreamStep =
+  /** The whole reply as one chunk. */
+  | string
+  /** The reply as these chunks, in order. */
+  | string[]
+  /** Fails before any text. */
+  | Error
+  /** Streams these chunks, then fails (a dropped connection). */
+  | { chunks: string[]; error: Error }
+  /** Full control: inspect the request, wait on the signal, advance a fake clock. */
+  | ((request: CoachStreamRequest) => AsyncIterable<string>);
+
+/**
+ * Deterministic streaming provider for tests: one script step per stream()
+ * call, every request recorded, and a loud failure when the script runs out.
+ */
+export class ScriptedStreamProvider implements CoachModelProvider {
+  readonly id = 'scripted-stream';
+  readonly requests: CoachStreamRequest[] = [];
+  private cursor = 0;
+
+  constructor(private readonly script: StreamStep[]) {}
+
+  get callCount(): number {
+    return this.requests.length;
+  }
+
+  async generate(): Promise<CoachModelResponse> {
+    throw new Error('ScriptedStreamProvider does not generate');
+  }
+
+  async *stream(request: CoachStreamRequest): AsyncIterable<string> {
+    this.requests.push(request);
+    const step = this.script[this.cursor++];
+    if (step === undefined) throw new Error('ScriptedStreamProvider: script exhausted');
+    if (typeof step === 'function') {
+      yield* step(request);
+      return;
+    }
+    if (step instanceof Error) throw step;
+    if (typeof step === 'string') {
+      yield step;
+      return;
+    }
+    if (Array.isArray(step)) {
+      yield* step;
+      return;
+    }
+    yield* step.chunks;
+    throw step.error;
   }
 }
