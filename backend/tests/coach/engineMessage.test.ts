@@ -118,6 +118,8 @@ describe('POST /me/coach/message engine selection', () => {
     expect(hosted.requests).toHaveLength(1);
     expect(local.requests).toHaveLength(0);
     expect(events.filter((e) => e.event === 'text').map((e) => e.data.sentence).join(' ')).toBe(ANSWER);
+    // The hosted path names the new conversation up front too.
+    expect(events.find((e) => e.event === 'status')!.data.conversationId).toBe(done.conversationId);
   });
 
   it('a failed hosted call is answered locally, reported as local, and logged by error name only', async () => {

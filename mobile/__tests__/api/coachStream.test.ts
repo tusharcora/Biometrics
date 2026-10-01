@@ -289,6 +289,14 @@ describe('streamCoachMessage', () => {
 describe('parseCoachEvent', () => {
   it('reads the fields of each event type and ignores a type field inside the data', () => {
     expect(parseCoachEvent({ event: 'status', data: '{"type":"text","label":"Looking…"}' })).toEqual({ type: 'status', label: 'Looking…' });
+    expect(parseCoachEvent({ event: 'status', data: '{"label":"Looking…","conversationId":"c9"}' })).toEqual({ type: 'status', label: 'Looking…', conversationId: 'c9' });
+    expect(parseCoachEvent({ event: 'status', data: '{"label":"Looking…","conversationId":7}' })).toEqual({ type: 'status', label: 'Looking…' });
+    expect(parseCoachEvent({ event: 'safety', data: '{"text":"Sorry.","resources":["988"],"conversationId":"c9"}' })).toEqual({
+      type: 'safety',
+      text: 'Sorry.',
+      resources: ['988'],
+      conversationId: 'c9',
+    });
     expect(parseCoachEvent({ event: 'done', data: JSON.stringify({ ...DONE, engine: 'hosted', stopped: true }) })).toEqual({
       type: 'done',
       ...DONE,

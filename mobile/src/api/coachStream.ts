@@ -64,7 +64,9 @@ export function parseCoachEvent(message: SseMessage): CoachStreamEvent | null {
   if (!data) return null;
   switch (message.event) {
     case 'status':
-      return typeof data.label === 'string' ? { type: 'status', label: data.label } : null;
+      return typeof data.label === 'string'
+        ? { type: 'status', label: data.label, ...(typeof data.conversationId === 'string' ? { conversationId: data.conversationId } : {}) }
+        : null;
     case 'text':
       return typeof data.sentence === 'string' && data.sentence.trim() ? { type: 'text', sentence: data.sentence } : null;
     case 'card': {
@@ -77,7 +79,12 @@ export function parseCoachEvent(message: SseMessage): CoachStreamEvent | null {
     }
     case 'safety':
       return typeof data.text === 'string'
-        ? { type: 'safety', text: data.text, resources: Array.isArray(data.resources) ? data.resources.filter((r): r is string => typeof r === 'string') : [] }
+        ? {
+            type: 'safety',
+            text: data.text,
+            resources: Array.isArray(data.resources) ? data.resources.filter((r): r is string => typeof r === 'string') : [],
+            ...(typeof data.conversationId === 'string' ? { conversationId: data.conversationId } : {}),
+          }
         : null;
     case 'done':
       if (typeof data.messageId !== 'string' || typeof data.conversationId !== 'string') return null;

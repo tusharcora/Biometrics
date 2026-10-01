@@ -90,11 +90,13 @@ export type CoachErrorCode = 'model_unavailable' | 'timeout' | 'validation_faile
 
 // One server-sent event from POST /me/coach/message (spec 2.5), as JSON.
 export type CoachStreamEvent =
-  | { type: 'status'; label: string }
+  // conversationId arrives before anything is stored (status, or safety for a crisis
+  // message), so a first turn stopped or dropped before `done` keeps its conversation.
+  | { type: 'status'; label: string; conversationId?: string }
   | { type: 'text'; sentence: string }
   | { type: 'card'; card: AnswerCardDTO }
   | { type: 'memory'; proposals: MemoryDTO[] }
-  | { type: 'safety'; text: string; resources: string[] }
+  | { type: 'safety'; text: string; resources: string[]; conversationId?: string }
   | { type: 'done'; messageId: string; conversationId: string; engine: CoachEngineDTO; durationMs: number; stopped?: boolean }
   | { type: 'error'; code: CoachErrorCode; retryable: boolean };
 

@@ -14,6 +14,7 @@
 // (or stopped-with-text) answer is persisted, so Retry resends cleanly.
 // Replaces the orchestrator's tool loop, which stays in the tree until phase 5.
 
+import { randomUUID } from 'crypto';
 import { localCivilDateOrUtc } from '../../biometrics/civilDate';
 import { prisma } from '../../db/client';
 import { CoachClock, systemClock } from '../clock';
@@ -42,11 +43,14 @@ import { resolveCard, validateSentence } from './validate';
 export type AnswerEngine = 'local' | 'hosted';
 
 export type AnswerEvent =
-  | { type: 'status'; label: string }
+  // conversationId is sent before anything is stored, so a client whose first turn is
+  // stopped or dropped before `done` still continues the same conversation. When that
+  // turn stores nothing, the id was never created and the next message gets a 404.
+  | { type: 'status'; label: string; conversationId: string }
   | { type: 'text'; sentence: string }
   | { type: 'card'; card: AnswerCard }
   | { type: 'memory'; proposals: MemoryDTO[] }
-  | { type: 'safety'; text: string; resources: unknown[] }
+  | { type: 'safety'; text: string; resources: unknown[]; conversationId: string }
   | { type: 'done'; messageId: string; conversationId: string; engine: AnswerEngine; durationMs: number; stopped?: boolean }
   | { type: 'error'; code: 'model_unavailable' | 'timeout' | 'validation_failed' | 'consent_required' | 'internal'; retryable: boolean };
 
@@ -56,7 +60,10 @@ export interface AnswerInput {
   message: string;
   /** Prior turns of this conversation, oldest first (the route loads the last HISTORY_WINDOW). */
   history: Array<{ role: 'user' | 'assistant'; text: string }>;
-  /** An existing conversation the caller has checked belongs to the user; omitted starts a new one. */
+  /**
+   * An existing conversation the caller has checked belongs to the user; omitted starts a
+   * new one, whose id is reserved up front and only created when the turn is stored.
+   */
   conversationId?: string;
   safetyOverride?: boolean;
   /** Aborted when the user taps stop (the client went away). */
@@ -144,6 +151,10 @@ export async function* runAnswer(input: AnswerInput, deps: AnswerDeps): AsyncGen
   const servedEngine = (): AnswerEngine => deps.servedEngine?.() ?? deps.engine;
   const controller = new AbortController();
   const guardrailEvents: AnswerGuardrailEvent[] = [];
+  // A new conversation's id is reserved now (status/safety carry it) and its row is created
+  // by persist(), so a turn that stores nothing leaves no empty conversation behind.
+  const isNewConversation = input.conversationId === undefined;
+  const conversationId = input.conversationId ?? randomUUID();
 
   // Budget and stop, as promises every await is raced against.
   let cancelTimer = () => {};
@@ -179,9 +190,9 @@ export async function* runAnswer(input: AnswerInput, deps: AnswerDeps): AsyncGen
     // The assistant row is stamped strictly after the user row so transcript order is unambiguous.
     const repliedAt = new Date(Math.max(Date.now(), receivedAt.getTime() + 1));
     const saved = await prisma.$transaction(async (tx) => {
-      let id = input.conversationId;
-      if (id === undefined) {
-        id = (await tx.coachConversation.create({ data: { userId: input.userId, createdAt: receivedAt, lastMessageAt: repliedAt } })).id;
+      const id = conversationId;
+      if (isNewConversation) {
+        await tx.coachConversation.create({ data: { id, userId: input.userId, createdAt: receivedAt, lastMessageAt: repliedAt } });
       } else {
         await tx.coachConversation.update({ where: { id }, data: { lastMessageAt: repliedAt } });
       }
@@ -223,7 +234,7 @@ export async function* runAnswer(input: AnswerInput, deps: AnswerDeps): AsyncGen
     // user before anything is written: a failure after that can add an error, never replace it.
     const crisis = classifyCrisis(input.message);
     if (crisis.triggered && !input.safetyOverride) {
-      yield { type: 'safety', text: SAFETY_REPLY, resources: [...CRISIS_RESOURCES] };
+      yield { type: 'safety', text: SAFETY_REPLY, resources: [...CRISIS_RESOURCES], conversationId };
       try {
         personaId = resolvePersona((await (deps.loadUser ?? defaultLoadUser)(input.userId)).coachPersonaId).id;
       } catch {
@@ -261,7 +272,7 @@ export async function* runAnswer(input: AnswerInput, deps: AnswerDeps): AsyncGen
     // 3. Route, and tell the user what is happening.
     const previousUserMessage = [...input.history].reverse().find((m) => m.role === 'user')?.text;
     const route = routeQuestion(input.message, previousUserMessage);
-    yield { type: 'status', label: STATUS_LABELS[route] };
+    yield { type: 'status', label: STATUS_LABELS[route], conversationId };
 
     // 4. The fact sheet.
     const today = localCivilDateOrUtc(clock.now(), user.timezone);

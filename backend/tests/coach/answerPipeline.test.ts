@@ -106,7 +106,8 @@ describe('runAnswer: a validated, streamed answer', () => {
     const events = await collect(runAnswer(inp, deps));
 
     expect(types(events)).toEqual(['status', 'text', 'text', 'text', 'card', 'done']);
-    expect(events[0]).toEqual({ type: 'status', label: 'Looking at your day…' });
+    const done = doneOf(events);
+    expect(events[0]).toEqual({ type: 'status', label: 'Looking at your day…', conversationId: done.conversationId });
     expect(texts(events)).toEqual(['Your recovery is 26 today, well under your usual 58.', 'You slept 6h 48m.', 'Want a tip?']);
     const card = events.find((e) => e.type === 'card');
     expect(card).toEqual({
@@ -122,7 +123,6 @@ describe('runAnswer: a validated, streamed answer', () => {
       },
     });
 
-    const done = doneOf(events);
     expect(done).toMatchObject({ engine: 'local', durationMs: 0 });
     const rows = await prisma.coachMessage.findMany({ where: { conversationId: done.conversationId }, orderBy: { createdAt: 'asc' } });
     expect(rows.map((r) => [r.role, r.source, r.text])).toEqual([
@@ -146,12 +146,20 @@ describe('runAnswer: a validated, streamed answer', () => {
     );
     past[10] = { role: 'user', text: 'How did I sleep?' };
     const events = await collect(runAnswer(await input({ message: 'why?', history: past }), deps));
-    expect(events[0]).toEqual({ type: 'status', label: 'Looking at your sleep…' });
+    expect(events[0]).toMatchObject({ type: 'status', label: 'Looking at your sleep…' });
     const sent = provider.requests[0]!.messages;
     expect(sent).toHaveLength(11);
     expect(sent[0]).toEqual({ role: 'user', content: 'q2' });
     expect(sent[1]).toEqual({ role: 'assistant', content: 'a3' });
     expect(sent[10]).toEqual({ role: 'user', content: 'why?' });
+  });
+
+  it("names an existing conversation's own id on the status event", async () => {
+    const { deps } = setup([['First.'], ['Second.']]);
+    const inp = await input();
+    const first = doneOf(await collect(runAnswer(inp, deps)));
+    const events = await collect(runAnswer({ ...inp, message: 'and now?', conversationId: first.conversationId }, deps));
+    expect(events[0]).toMatchObject({ type: 'status', conversationId: first.conversationId });
   });
 
   it('continues an existing conversation', async () => {
@@ -160,6 +168,7 @@ describe('runAnswer: a validated, streamed answer', () => {
     const first = doneOf(await collect(runAnswer(inp, deps)));
     const second = doneOf(await collect(runAnswer({ ...inp, message: 'and now?', conversationId: first.conversationId }, deps)));
     expect(second.conversationId).toBe(first.conversationId);
+    expect(await prisma.coachConversation.count({ where: { userId: inp.userId } })).toBe(1);
     expect(await prisma.coachMessage.count({ where: { conversationId: first.conversationId } })).toBe(4);
   });
 });
@@ -204,6 +213,7 @@ describe('runAnswer: validation', () => {
     expect(types(events)).toEqual(['status', 'error']);
     expect(events[1]).toEqual({ type: 'error', code: 'validation_failed', retryable: true });
     expect(await prisma.coachMessage.count({ where: { userId: inp.userId } })).toBe(0);
+    expect(await prisma.coachConversation.count({ where: { userId: inp.userId } })).toBe(0);
   });
 
   it('drops a card that references no known fact, and still answers', async () => {
@@ -256,6 +266,10 @@ describe('runAnswer: safety', () => {
       [null, 'I want to end my life', null],
       ['SAFETY', SAFETY_REPLY, null],
     ]);
+    // A new conversation's id reaches the client with the safety reply, before anything is stored.
+    const safety = events[0] as Extract<AnswerEvent, { type: 'safety' }>;
+    expect(safety.conversationId).toBe(doneOf(events).conversationId);
+    expect(rows.every((r) => r.conversationId === safety.conversationId)).toBe(true);
   });
 
   it('safetyOverride answers normally', async () => {
@@ -330,6 +344,10 @@ describe('runAnswer: errors, budget and stop', () => {
     const row = await prisma.coachMessage.findUniqueOrThrow({ where: { id: doneOf(events).messageId } });
     expect(row.text).toBe('Recovery is 26.');
     expect(row.guardrailEvents).toEqual([{ type: 'stopped' }]);
+    // The first turn of a new chat: the status event already named the conversation it was stored in.
+    const status = events[0] as Extract<AnswerEvent, { type: 'status' }>;
+    expect(status.conversationId).toBe(doneOf(events).conversationId);
+    expect(row.conversationId).toBe(status.conversationId);
   });
 
   it('on stop before any sentence, stores nothing and emits nothing more', async () => {
@@ -340,8 +358,13 @@ describe('runAnswer: errors, budget and stop', () => {
     const running = collect(runAnswer(inp, deps));
     await until(() => seen.signal !== undefined);
     stop.abort();
-    expect(types(await running)).toEqual(['status']);
+    const events = await running;
+    expect(types(events)).toEqual(['status']);
     expect(await prisma.coachMessage.count({ where: { userId: inp.userId } })).toBe(0);
+    // The reserved id was never created: no empty conversation is left behind.
+    const reserved = (events[0] as Extract<AnswerEvent, { type: 'status' }>).conversationId;
+    expect(reserved).toEqual(expect.any(String));
+    expect(await prisma.coachConversation.count({ where: { userId: inp.userId } })).toBe(0);
   });
 });
 

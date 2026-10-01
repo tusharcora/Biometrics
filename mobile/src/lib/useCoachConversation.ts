@@ -52,6 +52,9 @@ export interface CoachTurnError {
   retryAfterSeconds?: number;
   // Resent as-is by retry() (never carries the conversation id; that is added fresh).
   request: SendCoachMessageInput;
+  // The local user message this turn answers, marked "not sent" on failure and cleared
+  // by retry(). Absent for a turn that added no user message (the safety override).
+  userMessageId?: string;
 }
 
 export interface UseCoachConversationOptions {
@@ -67,14 +70,14 @@ function strings(raw: unknown): string[] {
 
 // A failed request -> the error card. Anything unrecognised is 'unavailable'
 // and retryable, so a new server error never strands the user.
-function thrownError(thrown: unknown, request: SendCoachMessageInput): CoachTurnError {
-  if (thrown instanceof CoachTimeoutError) return { kind: 'timeout', retryable: true, request };
-  if (thrown instanceof CoachStreamInterruptedError) return { kind: 'interrupted', retryable: true, request };
-  if (thrown instanceof TurnInProgressError) return { kind: 'busy', retryable: true, request };
+function thrownError(thrown: unknown, turn: Pick<CoachTurnError, 'request' | 'userMessageId'>): CoachTurnError {
+  if (thrown instanceof CoachTimeoutError) return { kind: 'timeout', retryable: true, ...turn };
+  if (thrown instanceof CoachStreamInterruptedError) return { kind: 'interrupted', retryable: true, ...turn };
+  if (thrown instanceof TurnInProgressError) return { kind: 'busy', retryable: true, ...turn };
   if (thrown instanceof TooManyMessagesError) {
-    return { kind: 'rate_limited', retryable: true, ...(thrown.retryAfterSeconds !== undefined ? { retryAfterSeconds: thrown.retryAfterSeconds } : {}), request };
+    return { kind: 'rate_limited', retryable: true, ...(thrown.retryAfterSeconds !== undefined ? { retryAfterSeconds: thrown.retryAfterSeconds } : {}), ...turn };
   }
-  return { kind: 'unavailable', retryable: true, request };
+  return { kind: 'unavailable', retryable: true, ...turn };
 }
 
 // History rows -> messages, rendered exactly as they were live (spec 1.3). A
@@ -129,8 +132,9 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
     };
   }, []);
 
-  const runTurn = useCallback(async (request: SendCoachMessageInput) => {
+  const runTurn = useCallback(async (request: SendCoachMessageInput, userMessageId?: string) => {
     if (streamingRef.current) return;
+    const turn = { request, ...(userMessageId !== undefined ? { userMessageId } : {}) };
     const gen = generation.current;
     const live = () => mounted.current && generation.current === gen;
     const controller = new AbortController();
@@ -157,11 +161,20 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
     let consentEvent = false;
     let eventError: CoachTurnError | null = null;
 
+    // A new conversation's id arrives before anything is stored: held from then on, a
+    // first turn stopped or dropped before `done` still continues the same conversation.
+    const adoptConversation = (id: string | undefined) => {
+      if (!id || conversationIdRef.current === id) return;
+      conversationIdRef.current = id;
+      setConversationId(id);
+    };
+
     const onEvent = (event: CoachStreamEvent) => {
       if (!live()) return;
       received = true;
       switch (event.type) {
         case 'status':
+          adoptConversation(event.conversationId);
           setStatusLabel(event.label);
           break;
         case 'text':
@@ -174,6 +187,7 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
           patch((m) => ({ ...m, memoryProposals: [...(m.memoryProposals ?? []), ...event.proposals] }));
           break;
         case 'safety':
+          adoptConversation(event.conversationId);
           safetyTurn = true;
           patch((m) => ({
             ...m,
@@ -183,8 +197,7 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
           }));
           break;
         case 'done': {
-          conversationIdRef.current = event.conversationId;
-          setConversationId(event.conversationId);
+          adoptConversation(event.conversationId);
           const id = answerId;
           const local = options.current.preferredEngine === 'hosted' && event.engine === 'local';
           setMessages((prev) =>
@@ -203,7 +216,7 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
         case 'error':
           if (event.code === 'consent_required') consentEvent = true;
           // 'internal' also stands for any code this build does not know: fail safe to Retry.
-          else eventError = { kind: event.code === 'timeout' ? 'timeout' : 'unavailable', retryable: event.code === 'internal' || event.retryable, request };
+          else eventError = { kind: event.code === 'timeout' ? 'timeout' : 'unavailable', retryable: event.code === 'internal' || event.retryable, ...turn };
           break;
       }
     };
@@ -217,8 +230,9 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
       } catch (e) {
         thrown = e;
       }
-      // Transcripts are retained for 90 days, so a held id can be gone. Drop
-      // it and ask again as a new conversation, once.
+      // Transcripts are retained for 90 days, so a held id can be gone; so is the id
+      // a first turn announced and then never stored (stopped before any text, or an
+      // error). Drop it and ask again as a new conversation, once.
       if (thrown instanceof StaleConversationError && body.conversationId && !received && live()) {
         conversationIdRef.current = null;
         setConversationId(null);
@@ -246,7 +260,7 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
 
     const failure: CoachTurnError | null =
       eventError ??
-      (thrown && !(thrown instanceof CoachConsentRequiredError) && !(thrown instanceof CoachDisabledError) ? thrownError(thrown, request) : null);
+      (thrown && !(thrown instanceof CoachConsentRequiredError) && !(thrown instanceof CoachDisabledError) ? thrownError(thrown, turn) : null);
 
     if (thrown || consentEvent || failure) {
       const id = answerId;
@@ -254,8 +268,9 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
         const answer = prev.find((m) => m.id === id);
         const kept = !!answer && (!!answer.text || !!answer.card || !!answer.safety);
         let next = kept ? prev.map((m) => (m.id === id ? { ...m, state: 'interrupted' as const } : m)) : prev.filter((m) => m.id !== id);
-        // Nothing came back at all: the question never reached the coach.
-        if (!received) next = next.map((m) => (m.role === 'user' && m.text === request.message && !m.failed ? { ...m, failed: true } : m));
+        // Nothing came back at all: the question never reached the coach. Matched by id, so
+        // an earlier question with the same text is never marked.
+        if (!received && userMessageId !== undefined) next = next.map((m) => (m.id === userMessageId ? { ...m, failed: true } : m));
         return next;
       });
       if (thrown instanceof CoachConsentRequiredError || consentEvent) options.current.onConsentRequired?.();
@@ -277,8 +292,9 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
       const message = text.trim();
       if (!message || streamingRef.current) return false;
       seq.current += 1;
-      setMessages((prev) => [...prev, { id: `local-${seq.current}`, role: 'user', text: message }]);
-      void runTurn({ message });
+      const userMessageId = `local-${seq.current}`;
+      setMessages((prev) => [...prev, { id: userMessageId, role: 'user', text: message }]);
+      void runTurn({ message }, userMessageId);
       return true;
     },
     [runTurn],
@@ -289,14 +305,14 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
   }, []);
 
   const retry = useCallback(() => {
-    if (!error || streamingRef.current) return;
-    const { request } = error;
+    if (!error || !error.retryable || streamingRef.current) return;
+    const { request, userMessageId } = error;
     setMessages((prev) => {
       const last = prev[prev.length - 1];
       const trimmed = last && last.role === 'assistant' && last.state === 'interrupted' ? prev.slice(0, -1) : prev;
-      return trimmed.map((m) => (m.role === 'user' && m.failed && m.text === request.message ? { ...m, failed: undefined } : m));
+      return trimmed.map((m) => (m.id === userMessageId && m.failed ? { ...m, failed: undefined } : m));
     });
-    void runTurn(request);
+    void runTurn(request, userMessageId);
   }, [error, runTurn]);
 
   const overrideSafety = useCallback(

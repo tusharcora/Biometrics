@@ -174,6 +174,54 @@ describe('useCoachConversation: stop', () => {
     expect(result.current.streaming).toBe(false);
     expect(result.current.error).toBeNull();
   });
+
+  it('keeps the conversation of a first turn stopped before done: the next question continues it', async () => {
+    const live = openTurn();
+    const { result } = setup();
+    act(() => result.current.send('How did I sleep?'));
+    live.emit({ type: 'status', label: 'Looking at your sleep…', conversationId: 'c-new' });
+    expect(result.current.conversationId).toBe('c-new');
+    live.emit({ type: 'text', sentence: 'Mostly clear skies.' });
+
+    await act(async () => result.current.stop());
+    expect(result.current.conversationId).toBe('c-new');
+
+    turn([{ type: 'status', label: 'Thinking…', conversationId: 'c-new' }, { type: 'text', sentence: 'Sure.' }, done({ messageId: 'a2', conversationId: 'c-new' })]);
+    await act(async () => result.current.send('And tonight?'));
+
+    expect(stream.mock.calls[1][0]).toEqual({ message: 'And tonight?', conversationId: 'c-new' });
+    expect(result.current.conversationId).toBe('c-new');
+    expect(result.current.messages.map((m) => m.text)).toEqual(['How did I sleep?', 'Mostly clear skies.', 'And tonight?', 'Sure.']);
+  });
+
+  it('keeps the conversation of a first turn whose stream dropped before done', async () => {
+    turn([{ type: 'status', label: 'Thinking…', conversationId: 'c-new' }, { type: 'text', sentence: 'Partly.' }], new CoachStreamInterruptedError());
+    turn([{ type: 'text', sentence: 'Two.' }, done({ messageId: 'a2', conversationId: 'c-new' })]);
+    const { result } = setup();
+
+    await act(async () => result.current.send('First'));
+    expect(result.current.error?.kind).toBe('interrupted');
+    expect(result.current.conversationId).toBe('c-new');
+
+    await act(async () => result.current.send('Second'));
+    expect(stream.mock.calls[1][0]).toEqual({ message: 'Second', conversationId: 'c-new' });
+  });
+
+  it('starts afresh, once, when a stopped first turn stored nothing and its id is unknown', async () => {
+    const live = openTurn();
+    const { result } = setup();
+    act(() => result.current.send('How did I sleep?'));
+    live.emit({ type: 'status', label: 'Thinking…', conversationId: 'never-stored' });
+    await act(async () => result.current.stop());
+
+    turn([], new StaleConversationError());
+    turn([{ type: 'status', label: 'Thinking…', conversationId: 'c2' }, { type: 'text', sentence: 'Hi.' }, done({ conversationId: 'c2' })]);
+    await act(async () => result.current.send('Hello'));
+
+    expect(stream.mock.calls[1][0]).toEqual({ message: 'Hello', conversationId: 'never-stored' });
+    expect(stream.mock.calls[2][0]).toEqual({ message: 'Hello' });
+    expect(result.current.conversationId).toBe('c2');
+  });
 });
 
 describe('useCoachConversation: errors and retry', () => {
@@ -184,7 +232,7 @@ describe('useCoachConversation: errors and retry', () => {
     await act(async () => result.current.send('How did I sleep?'));
 
     expect(result.current.messages[1]).toEqual(expect.objectContaining({ text: 'Partly there.', state: 'interrupted' }));
-    expect(result.current.error).toEqual({ kind: 'unavailable', retryable: true, request: { message: 'How did I sleep?' } });
+    expect(result.current.error).toEqual({ kind: 'unavailable', retryable: true, request: { message: 'How did I sleep?' }, userMessageId: 'local-1' });
     expect(result.current.messages[0]!.failed).toBeUndefined();
 
     turn([{ type: 'text', sentence: 'All there.' }, done()]);
@@ -202,7 +250,7 @@ describe('useCoachConversation: errors and retry', () => {
     await act(async () => result.current.send('Hello'));
 
     expect(result.current.messages).toEqual([expect.objectContaining({ role: 'user', text: 'Hello', failed: true })]);
-    expect(result.current.error).toEqual({ kind: 'unavailable', retryable: true, request: { message: 'Hello' } });
+    expect(result.current.error).toEqual({ kind: 'unavailable', retryable: true, request: { message: 'Hello' }, userMessageId: 'local-1' });
     expect(result.current.answeredAt).toBeNull();
   });
 
@@ -247,7 +295,7 @@ describe('useCoachConversation: errors and retry', () => {
 
     await act(async () => result.current.send('Hello'));
 
-    expect(result.current.error).toEqual({ kind: 'busy', retryable: true, request: { message: 'Hello' } });
+    expect(result.current.error).toEqual({ kind: 'busy', retryable: true, request: { message: 'Hello' }, userMessageId: 'local-1' });
     expect(result.current.messages).toEqual([expect.objectContaining({ role: 'user', text: 'Hello', failed: true })]);
     expect(onConsentRequired).not.toHaveBeenCalled();
 
@@ -266,10 +314,10 @@ describe('useCoachConversation: errors and retry', () => {
     const { result } = setup();
 
     await act(async () => result.current.send('Hello'));
-    expect(result.current.error).toEqual({ kind: 'rate_limited', retryable: true, retryAfterSeconds: 30, request: { message: 'Hello' } });
+    expect(result.current.error).toEqual({ kind: 'rate_limited', retryable: true, retryAfterSeconds: 30, request: { message: 'Hello' }, userMessageId: 'local-1' });
 
     await act(async () => result.current.retry());
-    expect(result.current.error).toEqual({ kind: 'rate_limited', retryable: true, request: { message: 'Hello' } });
+    expect(result.current.error).toEqual({ kind: 'rate_limited', retryable: true, request: { message: 'Hello' }, userMessageId: 'local-1' });
   });
 
   it('fails safe to a retryable card for an internal or unknown error code', async () => {
@@ -278,7 +326,7 @@ describe('useCoachConversation: errors and retry', () => {
 
     await act(async () => result.current.send('Hello'));
 
-    expect(result.current.error).toEqual({ kind: 'unavailable', retryable: true, request: { message: 'Hello' } });
+    expect(result.current.error).toEqual({ kind: 'unavailable', retryable: true, request: { message: 'Hello' }, userMessageId: 'local-1' });
     expect(result.current.streaming).toBe(false);
   });
 
@@ -306,6 +354,50 @@ describe('useCoachConversation: errors and retry', () => {
     expect(result.current.conversationId).toBe('new');
     expect(result.current.messages.map((m) => m.text)).toEqual(['First', 'One.', 'Second', 'Two.']);
   });
+
+  it('marks only the failed question "not sent" when an earlier one had the same text, and retry clears only it', async () => {
+    turn([{ type: 'text', sentence: 'One.' }, done()]);
+    turn([], new Error('offline'));
+    const { result } = setup();
+
+    await act(async () => result.current.send('Same'));
+    await act(async () => result.current.send('Same'));
+
+    expect(result.current.messages.map((m) => [m.role, m.text, m.failed])).toEqual([
+      ['user', 'Same', undefined],
+      ['assistant', 'One.', undefined],
+      ['user', 'Same', true],
+    ]);
+    const failedId = result.current.messages[2]!.id;
+    expect(result.current.error?.userMessageId).toBe(failedId);
+
+    turn([], new Error('offline'));
+    await act(async () => result.current.retry());
+    expect(result.current.messages.map((m) => m.failed)).toEqual([undefined, undefined, true]);
+    expect(result.current.error?.userMessageId).toBe(failedId);
+
+    turn([{ type: 'text', sentence: 'Two.' }, done({ messageId: 'a2' })]);
+    await act(async () => result.current.retry());
+    expect(result.current.messages.map((m) => [m.text, m.failed])).toEqual([
+      ['Same', undefined],
+      ['One.', undefined],
+      ['Same', undefined],
+      ['Two.', undefined],
+    ]);
+  });
+
+  it('does nothing on retry when the error is not retryable', async () => {
+    turn([{ type: 'error', code: 'validation_failed', retryable: false }]);
+    const { result } = setup();
+
+    await act(async () => result.current.send('Hello'));
+    expect(result.current.error).toEqual({ kind: 'unavailable', retryable: false, request: { message: 'Hello' }, userMessageId: 'local-1' });
+
+    await act(async () => result.current.retry());
+    expect(stream).toHaveBeenCalledTimes(1);
+    expect(result.current.error?.retryable).toBe(false);
+    expect(result.current.streaming).toBe(false);
+  });
 });
 
 describe('useCoachConversation: safety', () => {
@@ -330,6 +422,24 @@ describe('useCoachConversation: safety', () => {
     expect(result.current.messages.filter((m) => m.text === 'I feel awful')).toHaveLength(1);
     expect(result.current.messages[1]!.safety!.overridden).toBe(true);
     expect(result.current.answeredAt).toEqual(expect.any(Number));
+  });
+
+  it('keeps the conversation named on the safety event when the stream drops before done', async () => {
+    turn([{ type: 'safety', text: 'Sorry.', resources: [], conversationId: 'c-safe' }], new CoachStreamInterruptedError());
+    const { result } = setup();
+    await act(async () => result.current.send('I feel awful'));
+    expect(result.current.conversationId).toBe('c-safe');
+  });
+
+  it('marks no question "not sent" when an override resend fails (it added none)', async () => {
+    turn([{ type: 'safety', text: 'Sorry.', resources: [] }, done()]);
+    turn([], new Error('offline'));
+    const { result } = setup();
+    await act(async () => result.current.send('I feel awful'));
+    await act(async () => result.current.overrideSafety('I feel awful'));
+
+    expect(result.current.messages.some((m) => m.failed)).toBe(false);
+    expect(result.current.error).toEqual({ kind: 'unavailable', retryable: true, request: { message: 'I feel awful', safetyOverride: true } });
   });
 });
 

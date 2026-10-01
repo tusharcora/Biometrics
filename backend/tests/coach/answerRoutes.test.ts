@@ -107,6 +107,8 @@ describe('POST /me/coach/message with Accept: text/event-stream', () => {
     expect(events[3]!.data.card.tiles[0]).toMatchObject({ factId: 'recovery.today', display: '72' });
     const done = events[4]!.data;
     expect(done).toMatchObject({ engine: 'local', durationMs: expect.any(Number) });
+    // A new chat's id is on the first status event, before anything is stored.
+    expect(events[0]!.data.conversationId).toBe(done.conversationId);
 
     const row = await prisma.coachMessage.findUniqueOrThrow({ where: { id: done.messageId } });
     expect(row).toMatchObject({ conversationId: done.conversationId, text: 'Your recovery is 72 today. Nice work.', engine: 'LOCAL' });
@@ -119,6 +121,7 @@ describe('POST /me/coach/message with Accept: text/event-stream', () => {
     const events = parseSse((await postSse(app, await authHeaderFor(user.id), { message: 'I want to end my life' })).body);
     expect(events.map((e) => e.event)).toEqual(['safety', 'done']);
     expect(events[0]!.data.resources.length).toBeGreaterThan(0);
+    expect(events[0]!.data.conversationId).toBe(events[1]!.data.conversationId);
     expect(provider.callCount).toBe(0);
   });
 
@@ -127,10 +130,31 @@ describe('POST /me/coach/message with Accept: text/event-stream', () => {
     const user = await consented();
     const res = await postSse(app, await authHeaderFor(user.id), { message: 'How did I sleep?' });
     expect(res.status).toBe(200);
-    expect(parseSse(res.body).map((e) => e.data)).toEqual([
-      { type: 'status', label: 'Looking at your sleep…' },
+    const events = parseSse(res.body).map((e) => e.data);
+    expect(events).toEqual([
+      { type: 'status', label: 'Looking at your sleep…', conversationId: expect.any(String) },
       { type: 'error', code: 'model_unavailable', retryable: true },
     ]);
+    // Nothing was stored, so the reserved id was never created: no empty conversation, and
+    // a client that sends it back gets conversation_not_found (and starts afresh).
+    expect(await prisma.coachConversation.count({ where: { userId: user.id } })).toBe(0);
+    const again = await request(await testServer(app))
+      .post('/me/coach/message')
+      .set(await authHeaderFor(user.id))
+      .send({ message: 'How did I sleep?', conversationId: events[0]!.conversationId });
+    expect(again.status).toBe(404);
+    expect(again.body).toEqual({ error: 'conversation_not_found' });
+  });
+
+  it('keeps an existing conversation id on the status event', async () => {
+    const { app } = scripted([['First.'], ['Second.']]);
+    const user = await consented();
+    const headers = await authHeaderFor(user.id);
+    const first = parseSse((await postSse(app, headers, { message: 'How am I doing today?' })).body);
+    const conversationId = first[first.length - 1]!.data.conversationId;
+    const second = parseSse((await postSse(app, headers, { message: 'and now?', conversationId })).body);
+    expect(second[0]!.data).toMatchObject({ type: 'status', conversationId });
+    expect(second[second.length - 1]!.data).toMatchObject({ type: 'done', conversationId });
   });
 
   it('answers request errors before the stream as plain JSON', async () => {
