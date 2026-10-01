@@ -5,7 +5,8 @@
 //     empty. It does not depend on COACH_ENABLED: turning the coach off must
 //     never stop old transcripts from expiring.
 //   * deleteUserCoachData(): removes EVERYTHING the coach holds for one user
-//     (transcripts, conversations, memory, digests, consent rows, push tokens).
+//     (transcripts, conversations, memory, digests, day summaries, consent rows,
+//     push tokens).
 //     Account deletion (src/users/deletion.ts) deletes the same Coach* tables as
 //     part of its own single transaction, walking the shared USER_OWNED_MODELS
 //     list; this function remains for removing coach data on its own.
@@ -54,6 +55,7 @@ export interface UserDataDeletionSummary {
   conversations: number;
   memories: number;
   digests: number;
+  daySummaries: number;
   consents: number;
   pushTokens: number;
 }
@@ -66,6 +68,7 @@ export async function deleteUserCoachData(userId: string, telemetry?: CoachTelem
     const conversations = await tx.coachConversation.deleteMany({ where: { userId } });
     const memories = await tx.coachMemory.deleteMany({ where: { userId } });
     const digests = await tx.coachDigest.deleteMany({ where: { userId } });
+    const daySummaries = await tx.coachDaySummary.deleteMany({ where: { userId } });
     const consents = await tx.coachConsent.deleteMany({ where: { userId } });
     const pushTokens = await tx.pushToken.deleteMany({ where: { userId } });
     return {
@@ -73,6 +76,7 @@ export async function deleteUserCoachData(userId: string, telemetry?: CoachTelem
       conversations: conversations.count,
       memories: memories.count,
       digests: digests.count,
+      daySummaries: daySummaries.count,
       consents: consents.count,
       pushTokens: pushTokens.count,
     };

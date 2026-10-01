@@ -50,6 +50,7 @@ model User {
   coachMessages      CoachMessage[]
   coachMemories      CoachMemory[]
   coachDigests       CoachDigest[]
+  coachDaySummaries  CoachDaySummary[]
   pushTokens         PushToken[]
 
   // The coach persona the user picked in Settings (an id from
@@ -449,6 +450,8 @@ model CoachMessage {
   // Wall time from receiving the message to the reply being ready.
   durationMs      Int?
   createdAt       DateTime            @default(now())
+  // Memory proposals this reply made, so history shows their chips on it.
+  memories        CoachMemory[]
 
   @@index([conversationId, createdAt])
 }
@@ -491,12 +494,18 @@ model CoachMemory {
   // predate this column.
   conversationId String?
   conversation   CoachConversation?  @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  // The assistant message that proposed it, so history can show the chip on
+  // that message. Null for rows that predate this column, and once the message
+  // is gone (retention): the memory itself outlives its transcript.
+  messageId      String?
+  message        CoachMessage?       @relation(fields: [messageId], references: [id], onDelete: SetNull)
 
   // Dedupe enforced by the database, not only by the read-then-write check in
   // createPendingMemories, which two turns could pass at the same time.
   @@unique([userId, category, value])
   @@index([userId, status, createdAt])
   @@index([conversationId, status])
+  @@index([messageId])
 }
 
 // The weekly synthesis recap. One per user per local week (weekStart is the
@@ -512,6 +521,29 @@ model CoachDigest {
 
   @@unique([userId, weekStart])
   @@index([userId, createdAt])
+}
+
+// The Coach page's one-sentence picture of the day (spec 2026-09-30 section 4).
+// One per user per local day. AI when the user's engine wrote a sentence that
+// passed validation; TEMPLATE when generation failed and the server's template
+// sentence was stored instead, so a failing model is not retried on every
+// page load. `spans` marks the words that tap through to a metric.
+enum CoachSummarySource {
+  AI
+  TEMPLATE
+}
+
+model CoachDaySummary {
+  id        String             @id @default(uuid())
+  userId    String
+  user      User               @relation(fields: [userId], references: [id])
+  date      DateTime           @db.Date
+  text      String
+  spans     Json
+  source    CoachSummarySource
+  createdAt DateTime           @default(now())
+
+  @@unique([userId, date])
 }
 
 enum PushPlatform {
