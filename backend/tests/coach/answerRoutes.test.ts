@@ -202,6 +202,40 @@ describe('POST /me/coach/message without the Accept header (older apps)', () => 
     expect(row.card).not.toBeNull();
   });
 
+  it('stops the answer and stores the partial reply, marked stopped, when an older client disconnects', async () => {
+    let signal: AbortSignal | undefined;
+    let shown!: () => void;
+    const firstSentenceShown = new Promise<void>((r) => (shown = r));
+    const step = async function* (req: CoachStreamRequest): AsyncIterable<string> {
+      signal = req.signal!;
+      yield 'Rest is good today. ';
+      yield 'More';
+      shown(); // the first sentence has been through validation by the time the second chunk is pulled
+      await new Promise((_resolve, reject) => req.signal!.addEventListener('abort', () => reject(new Error('aborted'))));
+    };
+    const { app } = scripted([step]);
+    const user = await consented();
+    const headers = await authHeaderFor(user.id);
+    const server = app.listen(0);
+    try {
+      const { port } = server.address() as AddressInfo;
+      const req = http.request({ port, method: 'POST', path: '/me/coach/message', headers: { ...headers, 'Content-Type': 'application/json' } });
+      req.on('error', () => {});
+      req.end(JSON.stringify({ message: 'Should I rest today?' }));
+      await firstSentenceShown;
+      req.destroy();
+      for (let i = 0; i < 200 && !(signal?.aborted && (await prisma.coachMessage.count({ where: { userId: user.id } })) === 2); i++) {
+        await new Promise((r) => setTimeout(r, 10));
+      }
+      expect(signal?.aborted).toBe(true);
+      const assistant = await prisma.coachMessage.findFirstOrThrow({ where: { userId: user.id, role: 'ASSISTANT' } });
+      expect(assistant.text).toBe('Rest is good today.');
+      expect(assistant.guardrailEvents).toEqual([{ type: 'stopped' }]);
+    } finally {
+      server.close();
+    }
+  });
+
   it.each([
     ['model_unavailable', [new Error('down')]],
     ['validation_failed', [['Your HRV is 99 ms.'], ['Your HRV is 98 ms.']]],
@@ -237,6 +271,29 @@ describe('GET /me/coach/status warms the model', () => {
     expect((await request(app).get('/me/coach/status').set(headers)).status).toBe(200);
     expect((await request(app).get('/me/coach/status').set(headers)).status).toBe(200);
     expect(provider.warm).toHaveBeenCalledTimes(1);
+  });
+
+  it('answers status normally when getting the provider throws', async () => {
+    const errors = jest.spyOn(console, 'error').mockImplementation(() => {});
+    const app = express();
+    app.use(express.json());
+    app.use(
+      createCoachRouter({
+        getProvider: () => {
+          throw new Error('no provider');
+        },
+        telemetry: new RecordingTelemetry(),
+        clock: new FakeClock(),
+      }),
+    );
+    const user = await createUser();
+    const res = await request(app).get('/me/coach/status').set(await authHeaderFor(user.id));
+    expect(res.status).toBe(200);
+    expect(res.body.enabled).toBe(true);
+    const logged = errors.mock.calls.map((c) => c.join(' ')).join('\n');
+    // Logged as a warm-up failure, not as a failed status request (whose 500 would follow a sent 200).
+    expect(logged).toContain('"where":"status_warm"');
+    expect(logged).not.toContain('"where":"status"');
   });
 
   it('does not warm while the coach is off', async () => {

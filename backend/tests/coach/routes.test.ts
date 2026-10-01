@@ -10,7 +10,8 @@ import { COACH_CONSENT_VERSION } from '../../src/coach/consent';
 import { COACH_DISCLAIMER } from '../../src/coach/guardrails/disclaimer';
 import { LoggerCoachTelemetry } from '../../src/coach/telemetry';
 import { ScriptedStreamProvider, StreamStep } from '../../src/coach/model/provider';
-import { resetCoachProviderFromEnv } from '../../src/coach/config';
+import { getCoachProvider, resetCoachProviderFromEnv } from '../../src/coach/config';
+import { resetWarmState } from '../../src/coach/answer/warm';
 import { DEFAULT_PERSONA_ID, listPersonas } from '../../src/coach/personas';
 import { FakeClock, RecordingTelemetry, createUser, daysAgo, putScore, todayUtc } from './helpers';
 
@@ -24,14 +25,25 @@ afterAll(async () => {
 });
 
 let savedFlag: string | undefined;
+let savedProviderEnv: string | undefined;
 beforeEach(() => {
   savedFlag = process.env.COACH_ENABLED;
   process.env.COACH_ENABLED = 'true';
+  // Hermetic: a developer's .env may select a real Ollama model, and GET /status warms the
+  // env provider. The unconfigured default has no warm(), so these tests never touch the network.
+  savedProviderEnv = process.env.COACH_PROVIDER;
+  delete process.env.COACH_PROVIDER;
+  resetCoachProviderFromEnv();
+  resetWarmState();
   jest.spyOn(console, 'info').mockImplementation(() => {}); // default telemetry sink
 });
 afterEach(() => {
   if (savedFlag === undefined) delete process.env.COACH_ENABLED;
   else process.env.COACH_ENABLED = savedFlag;
+  if (savedProviderEnv === undefined) delete process.env.COACH_PROVIDER;
+  else process.env.COACH_PROVIDER = savedProviderEnv;
+  resetCoachProviderFromEnv();
+  resetWarmState();
   jest.restoreAllMocks();
 });
 
@@ -120,6 +132,15 @@ describe('COACH_ENABLED flag (default off)', () => {
 });
 
 describe('GET /me/coach/status', () => {
+  it('fires no network warm-up in tests (the env provider is the unconfigured default)', async () => {
+    const fetchSpy = jest.spyOn(globalThis, 'fetch');
+    const user = await createUser();
+    expect((await request(createApp()).get('/me/coach/status').set(await authed(user.id))).status).toBe(200);
+    await new Promise((r) => setImmediate(r)); // the warm-up is fire-and-forget
+    expect(getCoachProvider().warm).toBeUndefined();
+    expect(fetchSpy).not.toHaveBeenCalled();
+  });
+
   it('returns the contract shape', async () => {
     const user = await createUser();
     const res = await request(createApp()).get('/me/coach/status').set(await authed(user.id));

@@ -88,7 +88,6 @@ async function streamAnswer(events: AsyncIterable<AnswerEvent>, res: Response, s
 }
 
 interface CollectedAnswer {
-  sentences: string[];
   safety?: { text: string; resources: unknown[] };
   memory?: MemoryDTO[];
   done?: Extract<AnswerEvent, { type: 'done' }>;
@@ -97,10 +96,9 @@ interface CollectedAnswer {
 
 /** Consumes the whole pipeline for the JSON response older app builds expect. */
 async function collectAnswer(events: AsyncIterable<AnswerEvent>): Promise<CollectedAnswer> {
-  const out: CollectedAnswer = { sentences: [] };
+  const out: CollectedAnswer = {};
   for await (const e of events) {
-    if (e.type === 'text') out.sentences.push(e.sentence);
-    else if (e.type === 'safety') out.safety = { text: e.text, resources: e.resources };
+    if (e.type === 'safety') out.safety = { text: e.text, resources: e.resources };
     else if (e.type === 'memory') out.memory = e.proposals;
     else if (e.type === 'done') out.done = e;
     else if (e.type === 'error') out.error = e;
@@ -135,6 +133,7 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
   }
 
   router.get('/me/coach/status', requireAuth, async (req: AuthedRequest, res) => {
+    let warm = false;
     try {
       const userId = req.userId!;
       const enabled = isCoachEnabled();
@@ -156,11 +155,19 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
           greeting: p.greeting ?? null,
         })),
       });
-      // The app hits status when it opens the Coach tab: load the model now so the first answer skips the cold start.
-      if (enabled) warmModel(deps.getProvider());
+      warm = enabled;
     } catch (err) {
       logFailure('status', err);
       res.status(500).json({ error: 'coach_unavailable' });
+    }
+    // The app hits status when it opens the Coach tab: load the model now so the first answer
+    // skips the cold start. After the response, and never able to fail it.
+    if (warm) {
+      try {
+        warmModel(deps.getProvider());
+      } catch (err) {
+        logFailure('status_warm', err);
+      }
     }
   });
 
@@ -275,7 +282,7 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
           ...(conversationId !== undefined ? { conversationId } : {}),
           safetyOverride: safetyOverride === true,
           receivedAt,
-          ...(wantsStream ? { signal: stop.signal } : {}),
+          signal: stop.signal,
         },
         answerDeps,
       );
@@ -287,7 +294,14 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
         return;
       }
 
+      // An older app that gives up (its timeout, or the network dropped) stops the answer too:
+      // what it was shown so far is stored as stopped, and the response below goes nowhere.
+      res.on('close', () => {
+        if (!res.writableFinished) stop.abort();
+      });
+      if (res.destroyed) stop.abort();
       const outcome = await withTurnGuard(userId, () => collectAnswer(answer));
+      if (res.destroyed) return;
       if (outcome.error) {
         if (outcome.error.code === 'internal') res.status(500).json({ error: 'coach_unavailable' });
         else res.status(503).json({ error: outcome.error.code, retryable: outcome.error.retryable });
@@ -297,11 +311,9 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
         res.status(500).json({ error: 'coach_unavailable' });
         return;
       }
-      const saved = await prisma.coachMessage.findUniqueOrThrow({ where: { id: outcome.done.messageId }, select: { createdAt: true } });
+      const saved = await prisma.coachMessage.findUniqueOrThrow({ where: { id: outcome.done.messageId }, select: { createdAt: true, text: true } });
       // Older apps render text only: the disclaimer and the memory note are added to the RESPONSE (never stored).
-      const body = outcome.safety
-        ? outcome.safety.text
-        : [outcome.sentences.join(' '), ...(outcome.memory && outcome.memory.length > 0 ? [MEMORY_NOTE] : [])].join('\n\n');
+      const body = [saved.text, ...(outcome.memory && outcome.memory.length > 0 ? [MEMORY_NOTE] : [])].join('\n\n');
       res.json({
         conversationId: outcome.done.conversationId,
         message: {
