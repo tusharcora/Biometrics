@@ -111,14 +111,15 @@ describe('routeQuestion', () => {
   // The follow-up chips under an answer card (mobile/src/lib/coachAnswers.ts),
   // each sent after the question the card answered. Kept in step by hand.
   it.each([
-    ['What would help me sleep better?', 'How did I sleep last night?', 'sleep'],
+    ["What's been affecting my sleep lately?", 'How did I sleep last night?', 'trends'],
     ["How's my sleep this week?", 'How did I sleep last night?', 'sleep'],
     ['Should I train today?', "How's my recovery looking today?", 'today'],
     ['What moved my recovery?', "How's my recovery looking today?", 'today'],
-    ['What affects my HRV?', "How's my HRV looking today?", 'today'],
+    ["What's been affecting my HRV lately?", "How's my HRV looking today?", 'trends'],
     ["How's my HRV this week?", "How's my HRV looking today?", 'trends'],
-    ['Why does my resting heart rate change?', "How's my resting heart rate looking today?", 'today'],
-    ["How's my week looking?", "How's my resting heart rate looking today?", 'trends'],
+    ["What's been moving my resting heart rate lately?", "How's my resting heart rate looking today?", 'trends'],
+    ["How's my resting heart rate this week?", "How's my resting heart rate looking today?", 'trends'],
+    ['How have my steps been this week?', 'How many steps have I done?', 'trends'],
     // No topic of its own: inherits the habit question it follows.
     ['How sure is that?', 'Does caffeine affect my recovery?', 'trends'],
     ['Which habit should I change first?', 'Does caffeine affect my recovery?', 'trends'],

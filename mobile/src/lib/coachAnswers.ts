@@ -11,31 +11,49 @@ import type { ScoreType } from '../api/scores';
 // Fact areas that belong with another: the sleep score is about sleep.
 const AREA_ALIASES: Record<string, string> = { sleep_score: 'sleep' };
 
+// Score drivers are 'factor.<key>' for both scores (backend todayFacts); the
+// key names the score it drives (backend scoring/pipeline.ts factor inputs).
+const FACTOR_AREA: Record<string, string> = {
+  hrv: 'recovery',
+  rhr: 'recovery',
+  sleep_debt: 'recovery',
+  sleep_duration: 'sleep',
+  sleep_efficiency: 'sleep',
+  circadian_consistency: 'sleep',
+};
+
 function firstArea(card: AnswerCardDTO | undefined): string | null {
   const first = card?.tiles?.[0] ?? card?.ranked?.[0];
   if (!first) return null;
-  const area = first.factId.split('.')[0]!;
-  return AREA_ALIASES[area] ?? area;
+  const [area, key] = first.factId.split('.');
+  if (area === 'factor') return (key && FACTOR_AREA[key]) || null;
+  return AREA_ALIASES[area!] ?? area!;
 }
 
 // Each is sent as a chat message, so each must route as intended on the
-// server (backend/src/coach/answer/route.ts; checked in
-// backend/tests/coach/answerRoute.test.ts). "How sure is that?" has no topic
-// of its own and inherits the habit question it follows.
+// server (backend/src/coach/answer/route.ts; pinned in
+// backend/tests/coach/answerRoute.test.ts). The "lately"/"this week" chips
+// reach the trends sheet, where the habit evidence lives. "How sure is that?"
+// has no topic of its own and inherits the habit question it follows.
 const FOLLOW_UPS: Record<string, string[]> = {
-  sleep: ['What would help me sleep better?', "How's my sleep this week?"],
+  sleep: ["What's been affecting my sleep lately?", "How's my sleep this week?"],
   recovery: ['Should I train today?', 'What moved my recovery?'],
-  hrv: ['What affects my HRV?', "How's my HRV this week?"],
-  rhr: ['Why does my resting heart rate change?', "How's my week looking?"],
+  hrv: ["What's been affecting my HRV lately?", "How's my HRV this week?"],
+  rhr: ["What's been moving my resting heart rate lately?", "How's my resting heart rate this week?"],
+  steps: ['How have my steps been this week?'],
   habit: ['How sure is that?', 'Which habit should I change first?'],
 };
 
 // A general (card-less) answer gets one chip that brings it back to the user.
 const GENERAL_FOLLOW_UP = ['How does that apply to me?'];
 
-export function followUpsFor(card: AnswerCardDTO | undefined): string[] {
+const sameQuestion = (a: string, b: string) => a.trim().toLowerCase() === b.trim().toLowerCase();
+
+// `previousQuestion` is the user's last message: a chip repeating it is dropped.
+export function followUpsFor(card: AnswerCardDTO | undefined, previousQuestion?: string): string[] {
   const area = firstArea(card);
-  return (area && FOLLOW_UPS[area]) || GENERAL_FOLLOW_UP;
+  const chips = (area && FOLLOW_UPS[area]) || GENERAL_FOLLOW_UP;
+  return previousQuestion === undefined ? chips : chips.filter((chip) => !sameQuestion(chip, previousQuestion));
 }
 
 export type CardDestination =
@@ -43,18 +61,21 @@ export type CardDestination =
   | { name: 'Patterns'; params: undefined }
   | { name: 'Tabs'; params: { screen: 'Metrics' } };
 
+const METRICS_TAB: CardDestination = { name: 'Tabs', params: { screen: 'Metrics' } };
+
 // The source line opens the screen that holds the underlying data. HRV and
 // resting HR have no stack screen that loads itself (MetricDetail needs the
-// series passed in), so they open the Metrics tab.
+// series passed in), so they open the Metrics tab. A score detail needs a
+// day; without one (the today summary failed to load) it is the Metrics tab.
 export function cardDestination(card: AnswerCardDTO, date: string): CardDestination {
   switch (firstArea(card)) {
     case 'recovery':
-      return { name: 'ScoreDetail', params: { date, type: 'RECOVERY' } };
+      return date ? { name: 'ScoreDetail', params: { date, type: 'RECOVERY' } } : METRICS_TAB;
     case 'sleep':
-      return { name: 'ScoreDetail', params: { date, type: 'SLEEP' } };
+      return date ? { name: 'ScoreDetail', params: { date, type: 'SLEEP' } } : METRICS_TAB;
     case 'habit':
       return { name: 'Patterns', params: undefined };
     default:
-      return { name: 'Tabs', params: { screen: 'Metrics' } };
+      return METRICS_TAB;
   }
 }

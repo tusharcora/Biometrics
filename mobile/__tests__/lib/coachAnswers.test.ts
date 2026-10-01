@@ -9,12 +9,16 @@ function card(...factIds: string[]): AnswerCardDTO {
   };
 }
 
+const SLEEP_CHIPS = ["What's been affecting my sleep lately?", "How's my sleep this week?"];
+const RECOVERY_CHIPS = ['Should I train today?', 'What moved my recovery?'];
+
 describe('followUpsFor', () => {
   it('follows the first fact on the card', () => {
-    expect(followUpsFor(card('sleep.total', 'recovery.today'))).toEqual(['What would help me sleep better?', "How's my sleep this week?"]);
-    expect(followUpsFor(card('recovery.today'))).toEqual(['Should I train today?', 'What moved my recovery?']);
-    expect(followUpsFor(card('hrv.today'))).toEqual(['What affects my HRV?', "How's my HRV this week?"]);
-    expect(followUpsFor(card('rhr.today'))).toEqual(['Why does my resting heart rate change?', "How's my week looking?"]);
+    expect(followUpsFor(card('sleep.total', 'recovery.today'))).toEqual(SLEEP_CHIPS);
+    expect(followUpsFor(card('recovery.today'))).toEqual(RECOVERY_CHIPS);
+    expect(followUpsFor(card('hrv.today'))).toEqual(["What's been affecting my HRV lately?", "How's my HRV this week?"]);
+    expect(followUpsFor(card('rhr.today'))).toEqual(["What's been moving my resting heart rate lately?", "How's my resting heart rate this week?"]);
+    expect(followUpsFor(card('steps.today'))).toEqual(['How have my steps been this week?']);
   });
 
   it('asks how sure a habit finding is, from a ranked card', () => {
@@ -29,7 +33,19 @@ describe('followUpsFor', () => {
 
   // The server's fact sheet names the sleep score 'sleep_score.today'.
   it('treats the sleep score fact as sleep', () => {
-    expect(followUpsFor(card('sleep_score.today'))).toEqual(['What would help me sleep better?', "How's my sleep this week?"]);
+    expect(followUpsFor(card('sleep_score.today'))).toEqual(SLEEP_CHIPS);
+  });
+
+  // Score drivers are 'factor.<key>' for both scores; the key says which.
+  it('places a score driver with the score it drives', () => {
+    for (const key of ['hrv', 'rhr', 'sleep_debt']) expect(followUpsFor(card(`factor.${key}`))).toEqual(RECOVERY_CHIPS);
+    for (const key of ['sleep_duration', 'sleep_efficiency', 'circadian_consistency']) expect(followUpsFor(card(`factor.${key}`))).toEqual(SLEEP_CHIPS);
+    expect(followUpsFor(card('factor.mystery'))).toEqual(['How does that apply to me?']);
+  });
+
+  it('drops a chip that repeats the question just asked', () => {
+    expect(followUpsFor(card('recovery.today'), '  should I TRAIN today? ')).toEqual(['What moved my recovery?']);
+    expect(followUpsFor(card('recovery.today'), 'How did I sleep?')).toEqual(RECOVERY_CHIPS);
   });
 });
 
@@ -40,10 +56,23 @@ describe('cardDestination', () => {
     expect(cardDestination(card('sleep_score.today'), '2026-09-30')).toEqual({ name: 'ScoreDetail', params: { date: '2026-09-30', type: 'SLEEP' } });
   });
 
+  it('opens the score a driver belongs to', () => {
+    expect(cardDestination(card('factor.sleep_debt'), '2026-09-30')).toEqual({ name: 'ScoreDetail', params: { date: '2026-09-30', type: 'RECOVERY' } });
+    expect(cardDestination(card('factor.circadian_consistency'), '2026-09-30')).toEqual({ name: 'ScoreDetail', params: { date: '2026-09-30', type: 'SLEEP' } });
+    expect(cardDestination(card('factor.mystery'), '2026-09-30')).toEqual({ name: 'Tabs', params: { screen: 'Metrics' } });
+  });
+
+  it('opens the Metrics tab instead of a score detail when there is no date', () => {
+    expect(cardDestination(card('recovery.today'), '')).toEqual({ name: 'Tabs', params: { screen: 'Metrics' } });
+    expect(cardDestination(card('sleep.total'), '')).toEqual({ name: 'Tabs', params: { screen: 'Metrics' } });
+    expect(cardDestination(card('habit.walk'), '')).toEqual({ name: 'Patterns', params: undefined });
+  });
+
   it('opens Patterns for habits and the Metrics tab for HRV, resting HR and anything else', () => {
     expect(cardDestination(card('habit.walk'), '2026-09-30')).toEqual({ name: 'Patterns', params: undefined });
     expect(cardDestination(card('hrv.today'), '2026-09-30')).toEqual({ name: 'Tabs', params: { screen: 'Metrics' } });
     expect(cardDestination(card('rhr.today'), '2026-09-30')).toEqual({ name: 'Tabs', params: { screen: 'Metrics' } });
+    expect(cardDestination(card('steps.today'), '2026-09-30')).toEqual({ name: 'Tabs', params: { screen: 'Metrics' } });
     expect(cardDestination(card('goal.steps'), '2026-09-30')).toEqual({ name: 'Tabs', params: { screen: 'Metrics' } });
   });
 });
