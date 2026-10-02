@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useColorScheme } from 'nativewind';
 import { useReducedMotion } from 'react-native-reanimated';
@@ -9,9 +9,10 @@ import { useScreenFocused } from '../characters/useScreenFocused';
 import { DEFAULT_THINKING_TEXT, THINKING_TEXT_NAMES, THINKING_TEXTS, type ThinkingTextId } from '../components/characters/thinking';
 import { DEFAULT_CHARACTER_ID } from '../components/characters/types';
 import { ThinkingRow } from '../components/coach/thinking/ThinkingRow';
-import { SettingsGroup, SettingsRow } from '../components/ui/settings-list';
+import { SettingsGroup } from '../components/ui/settings-list';
 import { Text } from '../components/ui/text';
 import type { ThinkingStep } from '../lib/useCoachConversation';
+import { cn } from '../lib/utils';
 import { COLORS } from '../theme';
 
 export const THINKING_TEXT_ERROR = "Your thinking text couldn't be saved. Please try again.";
@@ -23,6 +24,11 @@ const SAMPLE_STEPS: ReadonlyArray<Omit<ThinkingStep, 'done'>> = [
   { id: 'write', label: 'Writing it up…' },
 ];
 const STEP_MS = 1000;
+// Each row's own preview: a fixed moment part-way through.
+const ROW_STEPS: ThinkingStep[] = [
+  { ...SAMPLE_STEPS[0]!, done: true },
+  { ...SAMPLE_STEPS[1]!, done: false },
+];
 
 // Phase n: the first n steps are ticked and the next one is in progress; the
 // last phase ticks them all, then the loop starts again.
@@ -81,16 +87,33 @@ export function ThinkingTextScreen() {
             const isSelected = id === selected;
             const { name, blurb } = THINKING_TEXT_NAMES[id];
             return (
-              <SettingsRow
+              <Pressable
                 key={id}
                 testID={`thinking-text-${id}`}
                 accessibilityRole="radio"
-                selected={isSelected}
-                title={name}
-                subtitle={blurb}
+                accessibilityLabel={`${name}. ${blurb}`}
+                accessibilityState={{ selected: isSelected }}
                 onPress={() => void choose(id)}
-                trailing={isSelected ? <Ionicons name="checkmark" size={18} color={colors.foreground} /> : <View className="w-[18px]" />}
-              />
+                className="gap-2.5 px-4 py-3 active:bg-muted"
+              >
+                <View className="flex-row items-center gap-3">
+                  <View className="flex-1 gap-0.5">
+                    <Text className={cn('text-base', isSelected ? 'font-semibold' : '')}>{name}</Text>
+                    <Text className="text-xs text-muted-foreground">{blurb}</Text>
+                  </View>
+                  {isSelected ? <Ionicons name="checkmark" size={18} color={colors.foreground} /> : <View className="w-[18px]" />}
+                </View>
+                {/* The row previews itself. Decorative for screen readers (the
+                    row's label says what it is); only the selected row moves. */}
+                <View
+                  testID={`thinking-text-preview-${id}`}
+                  accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants"
+                  pointerEvents="none"
+                >
+                  <ThinkingRow style={id} characterId={characterId} steps={ROW_STEPS} paused={!isSelected || still} />
+                </View>
+              </Pressable>
             );
           })}
         </SettingsGroup>
