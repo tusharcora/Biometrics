@@ -15,6 +15,7 @@ import { warmModel } from './answer/warm';
 import { clearTodaySummary, generateTodaySummary, getTodaySummary, summaryEngineDeps, TodayDeps } from './answer/today';
 import type { MemoryDTO } from './memory';
 import { findPersona, listPersonas, resolvePersona } from './personas';
+import { isThinkingAttachment, isThinkingText, resolveThinkingAttachment, resolveThinkingText } from './thinking';
 import { CRISIS_RESOURCES } from './guardrails/crisis';
 import { selectEngine } from './engine';
 import { CoachTelemetry, LoggerCoachTelemetry } from './telemetry';
@@ -174,7 +175,10 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
     try {
       const userId = req.userId!;
       const enabled = isCoachEnabled();
-      const user = await prisma.user.findUnique({ where: { id: userId }, select: { coachPersonaId: true, coachEngine: true } });
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        select: { coachPersonaId: true, coachEngine: true, coachThinkingAttachment: true, coachThinkingText: true },
+      });
       const storedPersonaId = user?.coachPersonaId ?? null;
       const hostedAvailable = enabled && deps.getHostedProvider() !== null;
       const localConsented = enabled ? await hasCurrentConsent(userId) : false;
@@ -198,7 +202,7 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
           },
         },
         personaId: resolvePersona(storedPersonaId).id,
-        // False until the user picks a character (Skip picks Hoot), so the app shows its picker once.
+        // False until the user picks a character (Skip picks Mochi), so the app shows its picker once.
         personaChosen: storedPersonaId !== null,
         personas: listPersonas().map((p) => ({
           id: p.id,
@@ -208,6 +212,8 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
           tagline: p.tagline ?? null,
           greeting: p.greeting ?? null,
         })),
+        thinkingAttachment: resolveThinkingAttachment(user?.coachThinkingAttachment),
+        thinkingText: resolveThinkingText(user?.coachThinkingText),
       });
       warm = enabled;
     } catch (err) {
@@ -359,6 +365,28 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
       res.json({ personaId: persona.id });
     } catch (err) {
       logFailure('persona', err);
+      res.status(500).json({ error: 'coach_unavailable' });
+    }
+  });
+
+  // A look, like the character: can be set while the coach is off.
+  router.put('/me/coach/thinking', requireAuth, async (req: AuthedRequest, res) => {
+    const { attachment, text } = (req.body ?? {}) as { attachment?: unknown; text?: unknown };
+    const hasA = attachment !== undefined;
+    const hasT = text !== undefined;
+    if ((!hasA && !hasT) || (hasA && !isThinkingAttachment(attachment)) || (hasT && !isThinkingText(text))) {
+      res.status(400).json({ error: 'unknown_thinking_style' });
+      return;
+    }
+    try {
+      const user = await prisma.user.update({
+        where: { id: req.userId! },
+        data: { ...(hasA ? { coachThinkingAttachment: attachment as string } : {}), ...(hasT ? { coachThinkingText: text as string } : {}) },
+        select: { coachThinkingAttachment: true, coachThinkingText: true },
+      });
+      res.json({ thinkingAttachment: resolveThinkingAttachment(user.coachThinkingAttachment), thinkingText: resolveThinkingText(user.coachThinkingText) });
+    } catch (err) {
+      logFailure('thinking', err);
       res.status(500).json({ error: 'coach_unavailable' });
     }
   });
