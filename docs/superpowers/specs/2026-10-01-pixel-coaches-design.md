@@ -215,11 +215,28 @@ those two styles.
 The answer stream already sends one `status` event (`pipeline.ts`, step 3, labels in
 `STATUS_LABELS`). It gains two more `status` events, and all three carry a new `step` field:
 
-| step | When | Label |
-|---|---|---|
-| `route` | after routing (existing event) | the existing label, e.g. "Looking at your sleep…" |
-| `facts` | the fact sheet is built | "Checking your numbers…" |
-| `write` | just before the first model call | "Writing it up…" |
+| step | When |
+|---|---|
+| `route` | after routing (the existing event) |
+| `facts` | the route's fact sheet has been built |
+| `write` | just before the first model call |
+
+**Labels depend on the route**, because each route loads different data (`facts.ts`) and a
+general question is not about the user's day at all. Each label names what that route really
+did:
+
+| Route (question type) | `route` | `facts` | `write` |
+|---|---|---|---|
+| `today` ("how am I doing today?") | Looking at your day… | Comparing today with your usual… *(today's score and metrics vs. 30-day history)* | Writing it up… |
+| `sleep` ("how did I sleep?") | Looking at your sleep… | Going through your recent nights… *(last 7 nights, 30-day sleep history, sleep goal)* | Writing it up… |
+| `trends` ("am I improving?") | Looking at your trends… | Comparing your last 30 days… *(7- vs 30-day averages, trends, habit links)* | Writing it up… |
+| `general` ("how much sleep do adults need?") | Thinking it over… | Checking your goals… *(only the sleep goal and typical sleep)* | Writing an answer… |
+
+These replace `STATUS_LABELS` as `STEP_LABELS: Record<AnswerRoute, Record<Step, string>>` in
+`pipeline.ts`. The `route` labels for today, sleep and trends keep today's wording. General
+changes from "Thinking…" to "Thinking it over…" so it reads as a step. A test checks that every
+route has all three labels and that no `general` label says "your day", "your sleep" or "your
+numbers".
 
 `step` is optional in the parser, so older clients ignore it and newer clients handle older
 servers (with no `step`, F shows the label as a single line). The `steps` style ticks the
