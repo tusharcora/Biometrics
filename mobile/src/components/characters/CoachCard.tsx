@@ -1,9 +1,11 @@
 import React from 'react';
 import { Platform, View } from 'react-native';
+import { useColorScheme } from 'nativewind';
 import Svg, { Circle, Defs, LinearGradient, Pattern, Rect, Stop } from 'react-native-svg';
 import { Text } from '../ui/text';
 import { Character } from './Character';
 import { CHARACTERS } from './registry';
+import { darkenHex, mixHex } from './sprites/compose';
 import type { CharacterId } from './types';
 
 const ART_HEIGHT = 176;
@@ -11,6 +13,38 @@ const SPRITE = 120;
 const DOT_GAP = 12;
 // No mono face is bundled; the system one matches the mockup's ui-monospace.
 const MONO = Platform.select({ ios: 'Menlo', default: 'monospace' });
+const CHIP_ALPHA = 0.16;
+const LIGHT_CARD = '#FFFFFF';
+const MIN_CONTRAST = 4.5;
+
+function luminance(hex: string): number {
+  const n = parseInt(hex.slice(1), 16);
+  const [r, g, b] = [16, 8, 0].map((s) => {
+    const c = ((n >> s) & 255) / 255;
+    return c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  });
+  return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
+}
+
+function contrast(a: string, b: string): number {
+  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
+  return (hi! + 0.05) / (lo! + 0.05);
+}
+
+/**
+ * Focus-chip text colour. Dark mode keeps the accent. Light mode darkens it
+ * until it reads at 4.5:1 on the chip (accent at 16 % over the white card),
+ * since pale accents (Luna, Peep, Boo, Bun, Mochi) vanish on white.
+ */
+export function chipTextColor(accent: string, scheme: 'light' | 'dark' | undefined): string {
+  if (scheme === 'dark') return accent;
+  const chip = mixHex(LIGHT_CARD, accent, CHIP_ALPHA);
+  for (let k = 1; k > 0; k -= 0.05) {
+    const text = darkenHex(accent, k);
+    if (contrast(text, chip) >= MIN_CONTRAST) return text;
+  }
+  return '#000000';
+}
 
 export interface CoachCardProps {
   characterId: CharacterId;
@@ -55,6 +89,8 @@ function ArtPanel({ accent }: { accent: string }) {
 // panel, then name, tagline and a first hello in a speech bubble.
 export function CoachCard({ characterId, tagline, greeting, paused = false, testID }: CoachCardProps) {
   const c = CHARACTERS[characterId];
+  const { colorScheme } = useColorScheme();
+  const chipText = chipTextColor(c.accent, colorScheme);
   const number = `No.${String(c.number).padStart(2, '0')}`;
   return (
     <View testID={testID} className="overflow-hidden rounded-[24px] border border-border bg-card">
@@ -72,8 +108,8 @@ export function CoachCard({ characterId, tagline, greeting, paused = false, test
         >
           {number}
         </Text>
-        <View className="absolute right-3 top-2.5 rounded-full px-2.5 py-1" style={{ backgroundColor: withAlpha(c.accent, 0.16) }}>
-          <Text className="text-[11px] font-semibold" style={{ color: c.accent }}>
+        <View className="absolute right-3 top-2.5 rounded-full px-2.5 py-1" style={{ backgroundColor: withAlpha(c.accent, CHIP_ALPHA) }}>
+          <Text testID="coach-card-focus" className="text-[11px] font-semibold" style={{ color: chipText }}>
             {c.focus}
           </Text>
         </View>
@@ -85,7 +121,9 @@ export function CoachCard({ characterId, tagline, greeting, paused = false, test
         <Text accessibilityRole="header" className="text-xl font-bold" style={{ letterSpacing: -0.2 }}>
           {c.name}
         </Text>
-        <Text className="text-[13px] leading-[18px] text-muted-foreground">{tagline ?? c.tagline}</Text>
+        <Text className="text-[13px] leading-[18px] text-muted-foreground" style={{ minHeight: 36 }}>
+          {tagline ?? c.tagline}
+        </Text>
         <View className="mt-1.5 rounded-[14px] border border-border bg-muted px-3 py-2.5">
           {/* Speech-bubble tail: a rotated square sharing the bubble's fill and edge. */}
           <View
