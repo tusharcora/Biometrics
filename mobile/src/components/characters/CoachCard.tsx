@@ -1,5 +1,5 @@
 import React from 'react';
-import { Platform, View } from 'react-native';
+import { Platform, View, type Text as RNText } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import Svg, { Circle, Defs, LinearGradient, Pattern, Rect, Stop } from 'react-native-svg';
 import { Text } from '../ui/text';
@@ -54,6 +54,11 @@ export interface CoachCardProps {
   greeting?: string;
   paused?: boolean;
   testID?: string;
+  /** testIDs for the tagline and greeting texts (the picker's meet-tagline-<id>). */
+  taglineTestID?: string;
+  greetingTestID?: string;
+  /** Ref to the name heading, so a sheet can move screen-reader focus to it. */
+  nameRef?: React.Ref<RNText>;
 }
 
 // The accent's tinted panel: a 10 % → 4 % vertical wash with a 12 pt dot grid
@@ -87,7 +92,7 @@ function ArtPanel({ accent }: { accent: string }) {
 // A coach's collectible card for the picker sheet and the dev gallery
 // (02-coach-cards.html): number, focus chip, the coach idling on its accent
 // panel, then name, tagline and a first hello in a speech bubble.
-export function CoachCard({ characterId, tagline, greeting, paused = false, testID }: CoachCardProps) {
+export function CoachCard({ characterId, tagline, greeting, paused = false, testID, taglineTestID, greetingTestID, nameRef }: CoachCardProps) {
   const c = CHARACTERS[characterId];
   const { colorScheme } = useColorScheme();
   const chipText = chipTextColor(c.accent, colorScheme);
@@ -118,10 +123,10 @@ export function CoachCard({ characterId, tagline, greeting, paused = false, test
         </View>
       </View>
       <View className="gap-2 px-4 pb-4 pt-3.5">
-        <Text accessibilityRole="header" className="text-xl font-bold" style={{ letterSpacing: -0.2 }}>
+        <Text ref={nameRef} accessibilityRole="header" className="text-xl font-bold" style={{ letterSpacing: -0.2 }}>
           {c.name}
         </Text>
-        <Text className="text-[13px] leading-[18px] text-muted-foreground" style={{ minHeight: 36 }}>
+        <Text testID={taglineTestID} className="text-[13px] leading-[18px] text-muted-foreground" style={{ minHeight: 36 }}>
           {tagline ?? c.tagline}
         </Text>
         <View className="mt-1.5 rounded-[14px] border border-border bg-muted px-3 py-2.5">
@@ -131,7 +136,7 @@ export function CoachCard({ characterId, tagline, greeting, paused = false, test
             className="absolute border-l border-t border-border bg-muted"
             style={{ top: -6, left: 22, width: 10, height: 10, transform: [{ rotate: '45deg' }] }}
           />
-          <Text className="text-[13px] leading-[18px]">{greeting ?? c.greeting}</Text>
+          <Text testID={greetingTestID} className="text-[13px] leading-[18px]">{greeting ?? c.greeting}</Text>
         </View>
       </View>
     </View>

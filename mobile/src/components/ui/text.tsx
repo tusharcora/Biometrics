@@ -24,6 +24,7 @@ export function fontFamilyFor(className?: string): string {
   return FONTS.sans;
 }
 
-export function Text({ className, style, ...props }: TextProps & { className?: string }) {
+// React 19 passes `ref` as a prop, so it reaches the native text through the spread.
+export function Text({ className, style, ...props }: TextProps & { className?: string; ref?: React.Ref<RNText> }) {
   return <RNText className={cn('text-foreground', className)} style={[{ fontFamily: fontFamilyFor(className) }, style]} {...props} />;
 }

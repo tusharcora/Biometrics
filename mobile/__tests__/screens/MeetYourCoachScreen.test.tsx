@@ -1,10 +1,13 @@
 import React from 'react';
-import { Dimensions } from 'react-native';
+import { AccessibilityInfo } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { MeetYourCoachScreen } from '../../src/screens/MeetYourCoachScreen';
-import { HIDDEN_OK, withCharacter } from '../../jest-mocks/characterContext';
+import { HIDDEN_OK, characterLabel, withCharacter } from '../../jest-mocks/characterContext';
 import type { CharacterContextValue } from '../../src/characters/CharacterContext';
 import type { CoachStatusDTO } from '../../src/api/coach';
+import { CHARACTER_IDS } from '../../src/components/characters/types';
+import { CHARACTERS } from '../../src/components/characters/registry';
+import { MOTION } from '../../src/theme';
 
 const mockGoBack = jest.fn();
 let mockParams: unknown;
@@ -16,27 +19,26 @@ jest.mock('@react-navigation/native', () => ({
 const mockToastShow = jest.fn();
 jest.mock('../../src/components/ui/toast', () => ({ useToast: () => ({ show: mockToastShow }) }));
 
-const { width } = Dimensions.get('window');
-
 const status: CoachStatusDTO = {
   enabled: true,
   consented: false,
   consent: { version: 'v1', summary: 's', dataItems: ['x'] },
-  personaId: 'hoot',
+  personaId: 'mochi',
   personaChosen: false,
   personas: [
-    { id: 'hoot', name: 'Hoot', verbosity: 'normal', proactivity: 'threshold-triggered', tagline: 'Server tagline for Hoot.', greeting: 'Server hello from Hoot.' },
-    { id: 'pip', name: 'Pip', verbosity: 'terse', proactivity: 'threshold-triggered', tagline: null, greeting: '   ' },
+    { id: 'mochi', name: 'Mochi', verbosity: 'normal', proactivity: 'threshold-triggered', tagline: 'Server tagline for Mochi.', greeting: 'Server hello from Mochi.' },
+    { id: 'boba', name: 'Boba', verbosity: 'terse', proactivity: 'threshold-triggered', tagline: null, greeting: '   ' },
   ],
 };
 
 let chooseCharacter: jest.Mock;
 
-function renderMeet(overrides: Partial<CharacterContextValue> = {}) {
+function renderMeet(params: { mode?: 'first' | 'switch' } | undefined, overrides: Partial<CharacterContextValue> = {}) {
+  mockParams = params;
   return render(withCharacter(<MeetYourCoachScreen />, { chooseCharacter, ...overrides }));
 }
 
-// Labels of the characters that are animating (only the visible page may).
+// Labels of the characters that are animating.
 function playing(utils: ReturnType<typeof render>) {
   return utils
     .getAllByTestId('character-canvas', HIDDEN_OK)
@@ -44,215 +46,249 @@ function playing(utils: ReturnType<typeof render>) {
     .filter((label) => label.includes(':playing:'));
 }
 
-function swipeTo(utils: ReturnType<typeof render>, page: number) {
-  fireEvent(utils.getByTestId('meet-pager'), 'momentumScrollEnd', {
-    nativeEvent: {
-      contentOffset: { x: width * page, y: 0 },
-      contentSize: { width: width * 8, height: 600 },
-      layoutMeasurement: { width, height: 600 },
-    },
+function openSheet(utils: ReturnType<typeof render>, id: string) {
+  fireEvent.press(utils.getByTestId(`meet-tile-${id}`));
+  return utils.getByTestId('meet-sheet');
+}
+
+// The sheet slides out on a timer before it closes; tests that close it run
+// on fake timers and advance past the exit animation.
+function closeSheet(utils: ReturnType<typeof render>) {
+  fireEvent.press(utils.getByTestId('meet-sheet-backdrop'));
+  act(() => {
+    jest.advanceTimersByTime(MOTION.duration.normal + 10);
   });
+  expect(utils.queryByTestId('meet-sheet')).toBeNull();
 }
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockParams = { mode: 'first' };
   chooseCharacter = jest.fn(() => Promise.resolve());
 });
 
-describe('MeetYourCoachScreen: first visit', () => {
-  it('starts on Hoot, with only Hoot animating, and offers Skip', () => {
-    const utils = renderMeet({ personaChosen: false, status });
+afterEach(() => {
+  jest.useRealTimers();
+});
 
-    expect(utils.getByTestId('meet-choose')).toHaveTextContent('Choose Hoot');
-    expect(playing(utils)).toEqual(['character:hoot:idle:180:playing:none']);
-    expect(utils.getByTestId('meet-dot-hoot').props.accessibilityState).toEqual(expect.objectContaining({ selected: true }));
-    expect(utils.getByTestId('meet-skip')).toBeTruthy();
-    expect(utils.queryByTestId('meet-close')).toBeNull();
+describe('MeetYourCoachScreen: grid', () => {
+  it('shows all 15 coaches in a grid, only the selected one animating', () => {
+    const s = renderMeet({ mode: 'first' });
+    for (const id of CHARACTER_IDS) expect(s.getByTestId(`meet-tile-${id}`)).toBeTruthy();
+    expect(characterLabel(s, 'meet-tile-mochi')).toMatch(/:playing:/);
+    expect(characterLabel(s, 'meet-tile-kit')).toMatch(/:paused:/);
+    expect(playing(s)).toEqual(['character:mochi:idle:56:playing:none']);
   });
 
-  it("labels each page's character with its name", () => {
-    const utils = renderMeet({ personaChosen: false, status });
-
-    expect(utils.getByLabelText('Hoot')).toBeTruthy();
-    expect(utils.getByLabelText('Beat')).toBeTruthy();
-    expect(utils.queryByLabelText('Hoot, your coach')).toBeNull();
-  });
-
-  it("reads each page's name once: the character's label, not the heading too", () => {
-    const utils = renderMeet({ personaChosen: false, status });
-
-    // The heading is still on screen, just hidden from the screen reader.
-    expect(utils.getByText('Pip', HIDDEN_OK)).toBeTruthy();
-    expect(utils.queryByText('Pip')).toBeNull();
-    expect(utils.getAllByLabelText('Pip')).toHaveLength(1);
-  });
-
-  it('gives every page dot a 44pt tap target, as a labelled button', () => {
-    const utils = renderMeet({ personaChosen: false, status });
-
-    for (const [id, name] of [
-      ['hoot', 'Hoot'],
-      ['pip', 'Pip'],
-      ['mochi', 'Mochi'],
-      ['nimbus', 'Nimbus'],
-      ['ember', 'Ember'],
-      ['beep', 'Beep'],
-      ['doze', 'Doze'],
-      ['beat', 'Beat'],
-    ]) {
-      const dot = utils.getByTestId(`meet-dot-${id}`);
-      expect(dot).toHaveProp('accessibilityRole', 'button');
-      expect(dot).toHaveProp('accessibilityLabel', `Show ${name}`);
-      expect(dot).toHaveStyle({ width: 44, height: 44 });
+  it('labels tiles with name and focus for screen readers, as buttons with a selected state', () => {
+    const s = renderMeet({ mode: 'first' });
+    expect(s.getByTestId('meet-tile-luna').props.accessibilityLabel).toBe('Luna, Sleep');
+    for (const id of CHARACTER_IDS) {
+      const tile = s.getByTestId(`meet-tile-${id}`);
+      expect(tile).toHaveProp('accessibilityRole', 'button');
+      expect(tile.props.accessibilityLabel).toBe(`${CHARACTERS[id].name}, ${CHARACTERS[id].focus}`);
+      expect(tile.props.accessibilityState).toEqual(expect.objectContaining({ selected: id === 'mochi' }));
     }
   });
 
-  it("shows the server's tagline and greeting when it has them, else the app's own", () => {
-    const utils = renderMeet({ personaChosen: false, status });
+  it('does not open the sheet by itself', () => {
+    const s = renderMeet({ mode: 'first' });
+    expect(s.queryByTestId('meet-sheet')).toBeNull();
+    expect(s.queryByTestId('meet-choose')).toBeNull();
+  });
 
-    expect(utils.getByTestId('meet-tagline-hoot')).toHaveTextContent('Server tagline for Hoot.');
-    expect(utils.getByTestId('meet-greeting-hoot')).toHaveTextContent('Server hello from Hoot.');
-    // null tagline and a blank greeting both fall back to the registry.
-    expect(utils.getByTestId('meet-tagline-pip')).toHaveTextContent('Your tiny cheerleader. Celebrates every small win.');
-    expect(utils.getByTestId('meet-greeting-pip')).toHaveTextContent("Hi! You showed up, and that's already a win. What should we look at?");
-    // Not in the server's list at all.
-    expect(utils.getByTestId('meet-greeting-doze')).toHaveTextContent('*yawn* Oh, hi. Shall we talk about how you slept?');
+  it('a tap selects the tile: it animates and the others pause', () => {
+    const s = renderMeet({ mode: 'first' });
+    fireEvent.press(s.getByTestId('meet-tile-gloop'));
+    expect(s.getByTestId('meet-tile-gloop').props.accessibilityState).toEqual(expect.objectContaining({ selected: true }));
+    expect(s.getByTestId('meet-tile-mochi').props.accessibilityState).toEqual(expect.objectContaining({ selected: false }));
+    expect(characterLabel(s, 'meet-tile-mochi')).toMatch(/:paused:/);
+  });
+});
+
+describe('MeetYourCoachScreen: card sheet', () => {
+  it('opens the card sheet on tap and chooses that coach', async () => {
+    const s = renderMeet({ mode: 'switch' }, { chooseCharacter, characterId: 'mochi' });
+    fireEvent.press(s.getByTestId('meet-tile-kit'));
+    expect(s.getByTestId('meet-sheet')).toBeTruthy();
+    expect(s.getByText('Dry wit. Gently judges your bedtime.')).toBeTruthy();
+    expect(s.getByTestId('meet-choose')).toHaveTextContent('Choose Kit');
+    await act(async () => fireEvent.press(s.getByTestId('meet-choose')));
+    expect(chooseCharacter).toHaveBeenCalledWith('kit');
+    expect(mockGoBack).toHaveBeenCalledTimes(1);
+  });
+
+  it("shows the server's tagline and greeting when it has them, else the app's own", () => {
+    const s = renderMeet({ mode: 'first' }, { status });
+    openSheet(s, 'mochi');
+    expect(s.getByTestId('meet-tagline-mochi')).toHaveTextContent('Server tagline for Mochi.');
+    expect(s.getByTestId('meet-greeting-mochi')).toHaveTextContent('Server hello from Mochi.');
+  });
+
+  it('falls back to the app copy for a null or blank server field, or a coach the server does not list', () => {
+    const s = renderMeet({ mode: 'first' }, { status });
+    openSheet(s, 'boba');
+    expect(s.getByTestId('meet-tagline-boba')).toHaveTextContent(CHARACTERS.boba.tagline);
+    expect(s.getByTestId('meet-greeting-boba')).toHaveTextContent(CHARACTERS.boba.greeting);
   });
 
   it('uses the app copy when the status is unknown', () => {
-    const utils = renderMeet({ personaChosen: false, status: null });
-
-    expect(utils.getByTestId('meet-greeting-hoot')).toHaveTextContent("I've been watching your numbers overnight. Want to see what stood out?");
+    const s = renderMeet({ mode: 'first' }, { status: null });
+    openSheet(s, 'luna');
+    expect(s.getByTestId('meet-greeting-luna')).toHaveTextContent(CHARACTERS.luna.greeting);
   });
 
-  it('pages: the visible page animates and the button follows it', () => {
-    const utils = renderMeet({ personaChosen: false, status });
-
-    swipeTo(utils, 2);
-
-    expect(utils.getByTestId('meet-choose')).toHaveTextContent('Choose Mochi');
-    expect(playing(utils)).toEqual(['character:mochi:idle:180:playing:none']);
-    expect(utils.getByTestId('meet-dot-mochi').props.accessibilityState).toEqual(expect.objectContaining({ selected: true }));
+  it('pauses the grid while the sheet is open, so only the card animates', () => {
+    const s = renderMeet({ mode: 'first' });
+    openSheet(s, 'kit');
+    expect(playing(s)).toEqual(['character:kit:idle:120:playing:none']);
   });
 
-  it('keeps the page in range for an overscroll past either end', () => {
-    const utils = renderMeet({ personaChosen: false, status });
-
-    swipeTo(utils, 12);
-    expect(utils.getByTestId('meet-choose')).toHaveTextContent('Choose Beat');
-
-    swipeTo(utils, -3);
-    expect(utils.getByTestId('meet-choose')).toHaveTextContent('Choose Hoot');
+  it('moves screen-reader focus to the card name when the sheet opens', () => {
+    jest.useFakeTimers();
+    const focus = jest.spyOn(AccessibilityInfo, 'sendAccessibilityEvent');
+    const s = renderMeet({ mode: 'first' });
+    openSheet(s, 'kit');
+    expect(focus).not.toHaveBeenCalled();
+    act(() => {
+      jest.advanceTimersByTime(1000);
+    });
+    expect(focus).toHaveBeenCalledTimes(1);
+    expect(focus).toHaveBeenCalledWith(expect.anything(), 'focus');
+    focus.mockRestore();
   });
 
-  it('jumps to a page from its dot', () => {
-    const utils = renderMeet({ personaChosen: false, status });
-
-    fireEvent.press(utils.getByTestId('meet-dot-beep'));
-
-    expect(utils.getByTestId('meet-choose')).toHaveTextContent('Choose Beep');
-  });
-
-  it('chooses the visible character and closes', async () => {
-    const utils = renderMeet({ personaChosen: false, status });
-    swipeTo(utils, 4);
-
-    fireEvent.press(utils.getByTestId('meet-choose'));
-
-    await waitFor(() => expect(mockGoBack).toHaveBeenCalledTimes(1));
-    expect(chooseCharacter).toHaveBeenCalledWith('ember');
-  });
-
-  it('saves Hoot on Skip, even when Hoot is already the current character', async () => {
-    const utils = renderMeet({ characterId: 'hoot', personaChosen: false, status });
-    swipeTo(utils, 3);
-
-    fireEvent.press(utils.getByTestId('meet-skip'));
-
-    await waitFor(() => expect(mockGoBack).toHaveBeenCalledTimes(1));
-    expect(chooseCharacter).toHaveBeenCalledWith('hoot');
-    expect(chooseCharacter).toHaveBeenCalledTimes(1);
-  });
-
-  it('closes anyway, with a short error, when saving fails', async () => {
-    chooseCharacter.mockRejectedValue(new Error('offline'));
-    const utils = renderMeet({ personaChosen: false, status });
-
-    fireEvent.press(utils.getByTestId('meet-skip'));
-
-    await waitFor(() => expect(mockGoBack).toHaveBeenCalledTimes(1));
-    expect(mockToastShow).toHaveBeenCalledWith("Couldn't save your coach. We'll ask again later.", 'error');
+  it('closes the sheet from its backdrop without saving', () => {
+    jest.useFakeTimers();
+    const s = renderMeet({ mode: 'first' });
+    openSheet(s, 'kit');
+    closeSheet(s);
+    expect(chooseCharacter).not.toHaveBeenCalled();
+    expect(mockGoBack).not.toHaveBeenCalled();
+    // The tapped coach stays selected.
+    expect(s.getByTestId('meet-tile-kit').props.accessibilityState).toEqual(expect.objectContaining({ selected: true }));
   });
 
   it('saves once for a double tap', async () => {
     let resolveSave!: () => void;
     chooseCharacter.mockImplementation(() => new Promise<void>((r) => (resolveSave = r)));
-    const utils = renderMeet({ personaChosen: false, status });
+    const s = renderMeet({ mode: 'first' });
+    openSheet(s, 'avo');
 
-    fireEvent.press(utils.getByTestId('meet-choose'));
-    fireEvent.press(utils.getByTestId('meet-choose'));
+    fireEvent.press(s.getByTestId('meet-choose'));
+    fireEvent.press(s.getByTestId('meet-choose'));
     await act(async () => resolveSave());
 
     expect(chooseCharacter).toHaveBeenCalledTimes(1);
+    expect(chooseCharacter).toHaveBeenCalledWith('avo');
     expect(mockGoBack).toHaveBeenCalledTimes(1);
   });
 });
 
-describe('MeetYourCoachScreen: switching from Profile', () => {
-  beforeEach(() => {
-    mockParams = { mode: 'switch' };
+describe('MeetYourCoachScreen: first visit', () => {
+  it('preselects Mochi and offers Skip, not Close', () => {
+    const s = renderMeet({ mode: 'first' }, { characterId: 'kit', personaChosen: false });
+    expect(s.getByTestId('meet-tile-mochi').props.accessibilityState).toEqual(expect.objectContaining({ selected: true }));
+    expect(s.getByTestId('meet-skip')).toBeTruthy();
+    expect(s.queryByTestId('meet-close')).toBeNull();
   });
 
-  it('starts on the current character and has Close instead of Skip', () => {
-    const utils = renderMeet({ characterId: 'ember', status: { ...status, personaChosen: true } });
+  it('Skip saves Mochi', async () => {
+    const chooseCharacter = jest.fn(async () => {});
+    const s = renderMeet({ mode: 'first' }, { chooseCharacter });
+    await act(async () => fireEvent.press(s.getByTestId('meet-skip')));
+    expect(chooseCharacter).toHaveBeenCalledWith('mochi');
+  });
 
-    expect(utils.getByTestId('meet-choose')).toHaveTextContent('Choose Ember');
-    expect(playing(utils)).toEqual(['character:ember:idle:180:playing:none']);
-    expect(utils.queryByTestId('meet-skip')).toBeNull();
-    fireEvent.press(utils.getByTestId('meet-close'));
+  it('Skip saves Mochi even when another tile is selected and Mochi is already current', async () => {
+    jest.useFakeTimers();
+    const s = renderMeet({ mode: 'first' }, { characterId: 'mochi', personaChosen: false });
+    openSheet(s, 'bao');
+    closeSheet(s);
+
+    await act(async () => fireEvent.press(s.getByTestId('meet-skip')));
+
+    expect(mockGoBack).toHaveBeenCalledTimes(1);
+    expect(chooseCharacter).toHaveBeenCalledWith('mochi');
+    expect(chooseCharacter).toHaveBeenCalledTimes(1);
+  });
+
+  it('closes anyway, with a short error, when saving fails', async () => {
+    chooseCharacter.mockRejectedValue(new Error('offline'));
+    const s = renderMeet({ mode: 'first' }, { personaChosen: false });
+    openSheet(s, 'peep');
+
+    fireEvent.press(s.getByTestId('meet-choose'));
+
+    await waitFor(() => expect(mockGoBack).toHaveBeenCalledTimes(1));
+    expect(chooseCharacter).toHaveBeenCalledWith('peep');
+    expect(mockToastShow).toHaveBeenCalledWith("Couldn't save your coach. We'll ask again later.", 'error');
+  });
+});
+
+describe('MeetYourCoachScreen: switching from Profile', () => {
+  it('preselects the current coach and has Close instead of Skip', () => {
+    const s = renderMeet({ mode: 'switch' }, { characterId: 'cap', personaChosen: true });
+    expect(s.getByTestId('meet-tile-cap').props.accessibilityState).toEqual(expect.objectContaining({ selected: true }));
+    expect(playing(s)).toEqual(['character:cap:idle:56:playing:none']);
+    expect(s.queryByTestId('meet-skip')).toBeNull();
+    fireEvent.press(s.getByTestId('meet-close'));
     expect(mockGoBack).toHaveBeenCalledTimes(1);
   });
 
-  it('closes without saving when the current character is chosen again', async () => {
-    const utils = renderMeet({ characterId: 'beat', personaChosen: true });
+  it('closes without saving when the current coach is chosen again', async () => {
+    const s = renderMeet({ mode: 'switch' }, { characterId: 'bao', personaChosen: true });
+    openSheet(s, 'bao');
 
-    fireEvent.press(utils.getByTestId('meet-choose'));
+    fireEvent.press(s.getByTestId('meet-choose'));
 
     await waitFor(() => expect(mockGoBack).toHaveBeenCalledTimes(1));
     expect(chooseCharacter).not.toHaveBeenCalled();
   });
 
-  it('saves the current character when none has been chosen yet, so the first-visit picker does not come back', async () => {
-    const utils = renderMeet({ characterId: 'hoot', personaChosen: false });
+  it('saves the current coach when none has been chosen yet, so the first-visit picker does not come back', async () => {
+    const s = renderMeet({ mode: 'switch' }, { characterId: 'mochi', personaChosen: false });
+    openSheet(s, 'mochi');
 
-    fireEvent.press(utils.getByTestId('meet-choose'));
+    fireEvent.press(s.getByTestId('meet-choose'));
 
     await waitFor(() => expect(mockGoBack).toHaveBeenCalledTimes(1));
-    expect(chooseCharacter).toHaveBeenCalledWith('hoot');
+    expect(chooseCharacter).toHaveBeenCalledWith('mochi');
   });
 
-  it('stays open with a short error when saving fails, and can try again', async () => {
+  it('stays open with a short error in the sheet when saving fails, and can try again', async () => {
     chooseCharacter.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(undefined);
-    const utils = renderMeet({ characterId: 'hoot' });
-    swipeTo(utils, 1);
+    const s = renderMeet({ mode: 'switch' }, { characterId: 'mochi' });
+    openSheet(s, 'boba');
 
-    fireEvent.press(utils.getByTestId('meet-choose'));
+    fireEvent.press(s.getByTestId('meet-choose'));
 
-    expect(await utils.findByTestId('meet-error')).toHaveTextContent("Pip couldn't be saved. Please try again.");
+    expect(await s.findByTestId('meet-error')).toHaveTextContent("Boba couldn't be saved. Please try again.");
+    expect(s.getByTestId('meet-sheet')).toBeTruthy();
     expect(mockGoBack).not.toHaveBeenCalled();
     expect(mockToastShow).not.toHaveBeenCalled();
 
-    fireEvent.press(utils.getByTestId('meet-choose'));
+    fireEvent.press(s.getByTestId('meet-choose'));
     await waitFor(() => expect(mockGoBack).toHaveBeenCalledTimes(1));
     expect(chooseCharacter).toHaveBeenCalledTimes(2);
   });
 
-  it('treats missing params as switch mode', () => {
-    mockParams = undefined;
-    const utils = renderMeet({ characterId: 'nimbus' });
+  it('clears the error when another coach is opened', async () => {
+    jest.useFakeTimers();
+    chooseCharacter.mockRejectedValueOnce(new Error('offline'));
+    const s = renderMeet({ mode: 'switch' }, { characterId: 'mochi' });
+    openSheet(s, 'boba');
+    await act(async () => fireEvent.press(s.getByTestId('meet-choose')));
+    expect(s.getByTestId('meet-error')).toBeTruthy();
 
-    expect(utils.getByTestId('meet-choose')).toHaveTextContent('Choose Nimbus');
-    expect(utils.queryByTestId('meet-skip')).toBeNull();
+    closeSheet(s);
+    openSheet(s, 'kit');
+
+    expect(s.queryByTestId('meet-error')).toBeNull();
+  });
+
+  it('treats missing params as switch mode', () => {
+    const s = renderMeet(undefined, { characterId: 'jelly' });
+    expect(s.getByTestId('meet-tile-jelly').props.accessibilityState).toEqual(expect.objectContaining({ selected: true }));
+    expect(s.queryByTestId('meet-skip')).toBeNull();
   });
 });
