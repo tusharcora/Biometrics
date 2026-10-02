@@ -56,6 +56,10 @@ model User {
   // The coach persona the user picked in Settings (an id from
   // src/coach/personas). Null means the default persona.
   coachPersonaId String?
+  /// Thinking attachment shown next to the coach while it works; null = default ('bulb').
+  coachThinkingAttachment String?
+  /// How the chat shows a reply is on its way; null = default ('steps').
+  coachThinkingText       String?
 
   // Which model answers this user's coach messages (spec 2026-09-30 section 3).
   // HOSTED is honoured only while the hosted engine is offered and the user
