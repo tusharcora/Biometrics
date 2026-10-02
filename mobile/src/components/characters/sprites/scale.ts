@@ -11,14 +11,27 @@ export interface CrispLayout {
   offsetYPt: number;
 }
 
-// Whole-device-pixel layout for a pixel sprite (spec §2 "Crisp scaling").
+/**
+ * Whole-device-pixel layout for a pixel sprite (spec §2 "Crisp scaling").
+ *
+ * `slotPt` is the slot WIDTH in points; the slot height is `slotPt * rows / cells`.
+ * Everything is computed in whole device pixels and divided by `pixelRatio` once,
+ * so float error can never drop or add a device pixel. Slots narrower than
+ * `max(cells, rows)` device pixels overflow: `cellPx` is clamped to 1 and the
+ * offsets go negative.
+ */
 export function crispLayout(slotPt: number, pixelRatio: number, cells = 24, rows = cells): CrispLayout {
-  const cellPx = Math.max(1, Math.floor((slotPt * pixelRatio) / Math.max(cells, rows)));
+  // Floor (with a float guard) rather than round, so a slot that is not a whole
+  // number of device pixels never gets a drawing past its edge.
+  const slotPx = Math.floor(slotPt * pixelRatio + 1e-6);
+  const cellPx = Math.max(1, Math.floor(slotPx / Math.max(cells, rows)));
   const cellPt = cellPx / pixelRatio;
   const drawnPt = cellPt * cells;
-  const drawnHPt = cellPt * rows;
-  // Offsets are rounded to device pixels so the grid never straddles one.
-  const offsetPt = Math.floor(((slotPt - drawnPt) / 2) * pixelRatio) / pixelRatio;
-  const offsetYPt = Math.floor(((slotPt * (rows / cells) - drawnHPt) / 2) * pixelRatio) / pixelRatio;
+  // Horizontal slack is slotPx - cellPx*cells; vertical slack is the same scaled
+  // by rows/cells (slot height slotPx*rows/cells minus drawn height cellPx*rows).
+  // Both halves are floored in integer device pixels so the grid never straddles one.
+  const slackPx = slotPx - cellPx * cells;
+  const offsetPt = Math.floor(slackPx / 2) / pixelRatio;
+  const offsetYPt = Math.floor((rows * slackPx) / (2 * cells)) / pixelRatio;
   return { cellPx, cellPt, drawnPt, offsetPt, offsetYPt };
 }
