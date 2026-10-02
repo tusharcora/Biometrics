@@ -4,7 +4,7 @@ import { Character } from '../../components/characters/Character';
 import { CHARACTERS } from '../../components/characters/registry';
 import { CHARACTER_IDS, CHARACTER_MOODS } from '../../components/characters/types';
 
-// Dev-only: every character in every mood, full size and both mini sizes, with
+// Dev-only: every character in every mood, plus two smaller sizes, with
 // a background and a pause toggle. Plain React Native styles on purpose, so it
 // works independently of the app's theming. Shown by launching with
 // EXPO_PUBLIC_CHARACTER_GALLERY=1 (see App.tsx). Watch the perf monitor here.
@@ -35,7 +35,7 @@ export function CharacterGalleryScreen() {
                 <Text style={{ color: foreground, fontSize: 11 }}>{mood}</Text>
               </View>
             ))}
-            <Character characterId={id} mood="idle" size={64} mini paused={paused} />
+            <Character characterId={id} mood="idle" size={64} paused={paused} />
             <Character characterId={id} mood="thinking" size={20} paused={paused} />
           </View>
         </View>

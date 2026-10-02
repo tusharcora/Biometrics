@@ -131,6 +131,14 @@ const DRAW: Record<ThinkingAttachmentId, Draw> = {
   },
 };
 
+// Attachments below this size don't read; the thinking text carries it (spec §4).
+export const MIN_ATTACHMENT_SIZE = 24;
+
+/** Whether a coach of this size draws the attachment stage (and so is size × 36/24 wide). */
+export function drawsAttachment(attachment: ThinkingAttachmentId | null, size: number): boolean {
+  return attachment !== null && size >= MIN_ATTACHMENT_SIZE;
+}
+
 export function attachmentFrame(id: ThinkingAttachmentId, tMs: number, done: boolean): readonly Cell[] {
   const t = ((tMs % ATTACHMENT_LOOP_MS) + ATTACHMENT_LOOP_MS) % ATTACHMENT_LOOP_MS;
   return DRAW[id](t, done).filter(([x, y]) => x >= 0 && y >= 0 && x < STAGE_W && y < STAGE_H);

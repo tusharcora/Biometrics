@@ -29,7 +29,7 @@ export function withCharacter(ui: React.ReactElement, overrides: Partial<Charact
 }
 
 // The CharacterCanvas mock's label inside the element with this testID:
-// "character:<id>:<mood>:<size>:<paused|playing>:<mini|full>".
+// "character:<id>:<mood>:<size>:<paused|playing>:<attachment|none>".
 export function characterLabel(screen: Pick<ReturnType<typeof render>, 'getByTestId'>, testID: string): string {
   return within(screen.getByTestId(testID, HIDDEN_OK)).getByTestId('character-canvas', HIDDEN_OK).props.accessibilityLabel;
 }

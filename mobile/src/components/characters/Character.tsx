@@ -3,23 +3,28 @@ import { View } from 'react-native';
 import { useReducedMotion } from 'react-native-reanimated';
 import { useCharacterOptional } from '../../characters/CharacterContext';
 import { Glow } from '../ui/glow';
+import { drawsAttachment, STAGE_W } from './attachments/frames';
 import { CharacterCanvas } from './CharacterCanvas';
 import { characterInfo } from './registry';
+import { SPRITE_SIZE } from './sprites/compose';
+import { DEFAULT_THINKING_ATTACHMENT, type ThinkingAttachmentId } from './thinking';
 import { DEFAULT_CHARACTER_ID, type CharacterId, type CharacterMood } from './types';
 
 export const DIMMED_OPACITY = 0.45;
-/** At this size and below a full body doesn't read, so the head-only mini variant is the default. */
-export const MINI_MAX_SIZE = 40;
 
 export interface CharacterProps {
-  /** Omitted → the user's current character (CharacterProvider), or Hoot outside it. */
+  /** Omitted → the user's current character (CharacterProvider), or Mochi outside it. */
   characterId?: CharacterId;
   mood: CharacterMood;
   size: number;
   paused?: boolean;
   dimmed?: boolean;
-  mini?: boolean;
   glow?: boolean;
+  /**
+   * Shown while thinking (and its "answer's here" frame while answering).
+   * Omitted → the user's thinking attachment setting; null hides it.
+   */
+  attachment?: ThinkingAttachmentId | null;
   /** Set → announced as an image. Unset → decorative and hidden from screen readers. */
   accessibilityLabel?: string;
   testID?: string;
@@ -32,8 +37,8 @@ export function Character({
   size,
   paused = false,
   dimmed = false,
-  mini,
   glow = false,
+  attachment,
   accessibilityLabel,
   testID,
 }: CharacterProps) {
@@ -41,6 +46,14 @@ export function Character({
   const id = characterId ?? current?.characterId ?? DEFAULT_CHARACTER_ID;
   const reduceMotion = useReducedMotion();
   const labelled = accessibilityLabel !== undefined;
+  const attachmentId = attachment === undefined ? current?.thinkingAttachment ?? DEFAULT_THINKING_ATTACHMENT : attachment;
+  // Shown while thinking and answering, and only at sizes where it reads (spec §4).
+  const showsAttachment = (mood === 'thinking' || mood === 'answering') && drawsAttachment(attachmentId, size);
+  const canvasAttachment = showsAttachment ? attachmentId : null;
+  // Reserve the attachment's room to the right of the coach (spec §4). The stage
+  // is also taller (36×32); the canvas sits on the slot's bottom edge so the
+  // coach stays put and the attachment rises above it.
+  const width = showsAttachment ? (size * STAGE_W) / SPRITE_SIZE : size;
   return (
     <View
       testID={testID}
@@ -49,7 +62,13 @@ export function Character({
       accessibilityLabel={accessibilityLabel}
       accessibilityElementsHidden={!labelled}
       importantForAccessibility={labelled ? 'yes' : 'no-hide-descendants'}
-      style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center', opacity: dimmed ? DIMMED_OPACITY : 1 }}
+      style={{
+        width,
+        height: size,
+        alignItems: 'flex-start',
+        justifyContent: 'flex-end',
+        opacity: dimmed ? DIMMED_OPACITY : 1,
+      }}
     >
       {glow ? <Glow color={characterInfo(id).accent} size={size * 2.4} around={size} intensity={0.3} /> : null}
       <CharacterCanvas
@@ -57,7 +76,8 @@ export function Character({
         mood={mood}
         size={size}
         paused={paused || reduceMotion}
-        mini={mini ?? size <= MINI_MAX_SIZE}
+        attachment={canvasAttachment}
+        done={mood === 'answering'}
       />
     </View>
   );

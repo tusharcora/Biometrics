@@ -14,9 +14,3 @@ export function isCharacterId(value: unknown): value is CharacterId {
   return typeof value === 'string' && (CHARACTER_IDS as readonly string[]).includes(value);
 }
 
-/** Every art component draws in a 100×100 space (the mockups' viewBox). */
-export interface CharacterArtProps {
-  mood: CharacterMood;
-  mini: boolean;
-  paused: boolean;
-}

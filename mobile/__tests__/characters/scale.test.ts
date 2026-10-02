@@ -91,4 +91,19 @@ describe('crispLayout', () => {
   it('never returns zero, even for tiny slots', () => {
     expect(crispLayout(4, 1).cellPx).toBe(1);
   });
+
+  // CharacterCanvas lays out the attachment stage with
+  // crispLayout(size × 36/24, dpr, 36, 32); the coach must keep the cell size
+  // it has in its own 24×24 slot, so it doesn't grow or shrink while thinking.
+  it('gives the coach the same cell size on the 36×32 attachment stage', () => {
+    const failures: string[] = [];
+    for (const dpr of [1, 2, 3, 2.625, 3.5]) {
+      for (let size = 18; size <= 300; size++) {
+        const stage = crispLayout((size * 36) / 24, dpr, 36, 32).cellPx;
+        const own = crispLayout(size, dpr).cellPx;
+        if (stage !== own) failures.push(`${size}pt@${dpr}x: ${stage} vs ${own}`);
+      }
+    }
+    expect(failures).toEqual([]);
+  });
 });
