@@ -18,13 +18,14 @@ import { Text } from '../components/ui/text';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { PromptBar } from '../components/coach/PromptBar';
-import { ThoughtLine } from '../components/coach/thought-line';
+import { ThinkingRow } from '../components/coach/thinking/ThinkingRow';
 import { CoachToday, TODAY_FOOTNOTE, todayShowsFootnote } from '../components/coach/CoachToday';
 import { CoachMessageRow } from '../components/coach/CoachMessageRow';
 import { ErrorCard } from '../components/coach/ErrorCard';
 import { ConversationsSheet } from '../components/coach/ConversationsSheet';
 import { Character } from '../components/characters/Character';
 import { characterInfo } from '../components/characters/registry';
+import { DEFAULT_THINKING_TEXT } from '../components/characters/thinking';
 import { useCharacterMood } from '../characters/useCharacterMood';
 import { useScreenFocused } from '../characters/useScreenFocused';
 import { PressableScale } from '../components/ui/pressable-scale';
@@ -40,6 +41,9 @@ import { cardDestination } from '../lib/coachAnswers';
 type CoachRoute = RouteProp<TabParamList, 'Coach'>;
 
 type Phase = 'loading' | 'unavailable' | 'needs-consent' | 'ready';
+
+// How long the steps checklist stays up, all ticked, once the answer starts (spec §5).
+const STEPS_LINGER_MS = 300;
 
 // How close to the bottom (pt) still counts as reading the latest message.
 const NEAR_BOTTOM = 80;
@@ -67,7 +71,8 @@ export function CoachScreen() {
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
   const prefill = route?.params?.prefill;
   const characterCtx = useCharacterOptional();
-  const name = characterInfo(characterCtx?.characterId).name;
+  const { id: characterId, name } = characterInfo(characterCtx?.characterId);
+  const thinkingText = characterCtx?.thinkingText ?? DEFAULT_THINKING_TEXT;
 
   const [phase, setPhase] = useState<Phase>('loading');
   const [input, setInput] = useState(prefill ?? '');
@@ -112,7 +117,7 @@ export function CoachScreen() {
     onConsentRequired: () => navigation.navigate('CoachConsent', { prefill: undefined }),
     onDisabled: () => setPhase('unavailable'),
   });
-  const { messages, conversationId, streaming, waiting, statusLabel, answeredAt, error, send, stop, retry, overrideSafety, newChat } = conversation;
+  const { messages, conversationId, streaming, waiting, steps, answeredAt, error, send, stop, retry, overrideSafety, newChat } = conversation;
   const restoreHook = conversation.restore;
   // History opens at the top of the page, with today in view.
   const restore = useCallback(
@@ -123,6 +128,8 @@ export function CoachScreen() {
     [restoreHook],
   );
   const mood = useCharacterMood({ sending: streaming, answeredAt });
+  const lingering = useStepsLinger(waiting, thinkingText === 'steps' && steps.length > 0 && steps.every((step) => step.done));
+  const showThinking = waiting || lingering;
   // Read inside load(): a message just sent (before its conversationId
   // arrives) must stop a focus reload from replacing the chat with history.
   const conversationIdRef = useRef<string | null>(null);
@@ -500,15 +507,9 @@ export function CoachScreen() {
               );
             })}
 
-            {waiting ? (
+            {showThinking ? (
               <View className="items-start">
-                <ThoughtLine
-                  working
-                  label={statusLabel ?? 'Thinking…'}
-                  timer={false}
-                  glyph={<Character testID="coach-thinking-character" mood="thinking" size={20} paused={!focused} />}
-                  testID="coach-thinking"
-                />
+                <ThinkingRow style={thinkingText} characterId={characterId} steps={steps} paused={!focused} testID="coach-thinking" />
               </View>
             ) : null}
 
@@ -534,4 +535,30 @@ export function CoachScreen() {
       />
     </SafeAreaView>
   );
+}
+
+// True for STEPS_LINGER_MS after `waiting` turns false, when `allTicked`: the
+// steps happen quickly, so the finished checklist stays up long enough to
+// read. Steps persist after the turn (useCoachConversation), so the lingering
+// row shows them all ticked. A turn that ended unticked (an error, a stop)
+// drops the row at once.
+function useStepsLinger(waiting: boolean, allTicked: boolean): boolean {
+  const [lingering, setLingering] = useState(false);
+  const wasWaiting = useRef(false);
+  const allTickedRef = useRef(allTicked);
+  allTickedRef.current = allTicked;
+  useEffect(() => {
+    if (waiting) {
+      wasWaiting.current = true;
+      setLingering(false);
+      return undefined;
+    }
+    if (!wasWaiting.current) return undefined;
+    wasWaiting.current = false;
+    if (!allTickedRef.current) return undefined;
+    setLingering(true);
+    const timer = setTimeout(() => setLingering(false), STEPS_LINGER_MS);
+    return () => clearTimeout(timer);
+  }, [waiting]);
+  return lingering;
 }

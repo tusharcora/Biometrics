@@ -79,7 +79,7 @@ describe('CoachScreen: character', () => {
     expect(label(utils, 'coach-hero-character')).toBe('character:kit:resting:64:playing:none');
   });
 
-  it('thinks from the question until the answer is done, with a small thinking character (no attachment) on the status line', async () => {
+  it('thinks from the question until the answer is done, with the 36 pt thinking coach and its attachment on the pending row', async () => {
     const live = openTurn(stream);
     const utils = renderCoach();
     await utils.findByTestId('coach-input');
@@ -91,7 +91,7 @@ describe('CoachScreen: character', () => {
 
     await utils.findByTestId('coach-thinking');
     expect(label(utils, 'coach-header-character')).toBe('character:kit:thinking:36:playing:bulb');
-    expect(label(utils, 'coach-thinking-character')).toBe('character:kit:thinking:20:playing:none');
+    expect(label(utils, 'coach-thinking')).toBe('character:kit:thinking:36:playing:bulb');
 
     await live.emit({ type: 'text', sentence: 'Well.' });
     expect(label(utils, 'coach-header-character')).toBe('character:kit:thinking:36:playing:bulb');
