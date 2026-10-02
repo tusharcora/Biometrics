@@ -98,14 +98,14 @@ describe('glyphPoints', () => {
 // something, and otherwise recedes into the bar rather than sitting on it as a
 // permanently coloured button.
 describe('sendColors', () => {
-  const colors = { barActive: 'WHITE', background: 'DARK', hairline: 'SUBTLE', muted: 'GREY' };
+  const colors = { barActive: 'WHITE', background: 'DARK', muted: 'GREY' };
 
   it('fills and inverts once there is something to do', () => {
     expect(sendColors(true, colors)).toEqual({ background: 'WHITE', glyph: 'DARK' });
   });
 
-  it('recedes into the bar when there is nothing to send', () => {
-    expect(sendColors(false, colors)).toEqual({ background: 'SUBTLE', glyph: 'GREY' });
+  it('is a bare arrow, with no fill, when there is nothing to send', () => {
+    expect(sendColors(false, colors)).toEqual({ background: 'transparent', glyph: 'GREY' });
   });
 });
 
@@ -174,10 +174,24 @@ describe('PromptBar', () => {
     expect(queryByTestId('coach-command-menu')).toBeNull();
   });
 
-  it('opens the shortcuts from the toolbar button', () => {
+  it('opens the shortcuts from the hint under an empty bar', () => {
     const { getByTestId, onChangeText } = setup({ value: '' });
+    expect(getByTestId('coach-commands-button')).toHaveTextContent('Type / for shortcuts');
     fireEvent.press(getByTestId('coach-commands-button'));
     expect(onChangeText).toHaveBeenCalledWith('/');
+  });
+
+  it('hides the shortcuts hint once there is text, and while a turn runs', () => {
+    expect(setup({ value: 'How did I sleep?' }).queryByTestId('coach-commands-button')).toBeNull();
+    expect(setup({ value: '', busy: true }).queryByTestId('coach-commands-button')).toBeNull();
+  });
+
+  it('keeps the field and the send control in one row', () => {
+    const { getByTestId } = setup({ value: 'Hi' });
+    const bar = getByTestId('coach-prompt-bar');
+    expect(bar).toContainElement(getByTestId('coach-input'));
+    expect(bar).toContainElement(getByTestId('coach-send-button'));
+    expect(bar.props.className).toContain('flex-row');
   });
 
   it('paints the send control as active while busy, so a running turn still reads as live', () => {

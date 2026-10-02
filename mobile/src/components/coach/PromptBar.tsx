@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { TextInput, View, type NativeSyntheticEvent, type TextInputContentSizeChangeEventData } from 'react-native';
+import { Pressable, TextInput, View, type NativeSyntheticEvent, type TextInputContentSizeChangeEventData } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import Animated, { useAnimatedProps, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 import Svg, { Polygon } from 'react-native-svg';
@@ -78,17 +78,17 @@ export function glyphPoints(t: number): number[] {
 
 /**
  * How the send control paints. It is filled and near-white whenever it means
- * something -- a message ready to send, or a turn to watch -- and recedes into
- * the bar when there is nothing to do, which is what makes the bar read as one
+ * something -- a message ready to send, or a turn to watch -- and is just a
+ * bare grey arrow when there is nothing to do, so the quiet bar reads as one
  * surface rather than a field plus a button.
  */
 export function sendColors(
   active: boolean,
-  colors: { barActive: string; background: string; hairline: string; muted: string },
+  colors: { barActive: string; background: string; muted: string },
 ): { background: string; glyph: string } {
   return active
     ? { background: colors.barActive, glyph: colors.background }
-    : { background: colors.hairline, glyph: colors.muted };
+    : { background: 'transparent', glyph: colors.muted };
 }
 
 export function PromptBar({
@@ -153,9 +153,13 @@ export function PromptBar({
         </View>
       ) : null}
 
-      {/* One filled surface holding the field and its toolbar, as in the
-          reference: no outline, the controls live inside the bar. */}
-      <View style={{ backgroundColor: colors.surfaceRaised }} className="rounded-[26px] border border-border px-4 pb-2.5 pt-3">
+      {/* The quiet bar: one slim rounded rectangle, the field and the send
+          control in a single row. It grows with the text up to MAX_ROWS. */}
+      <View
+        testID="coach-prompt-bar"
+        style={{ backgroundColor: colors.card, borderRadius: 16, minHeight: 52 }}
+        className="flex-row items-end border border-border py-1.5 pl-4 pr-1.5"
+      >
         <TextInput
           testID="coach-input"
           value={value}
@@ -167,50 +171,58 @@ export function PromptBar({
           placeholderTextColor={colors.muted}
           multiline
           editable={!busy}
-          style={{ color: colors.foreground, fontFamily: FONTS.sans, fontSize: 16, height, lineHeight: LINE_HEIGHT, textAlignVertical: 'top' }}
+          style={{
+            flex: 1,
+            color: colors.foreground,
+            fontFamily: FONTS.sans,
+            fontSize: 16,
+            height,
+            lineHeight: LINE_HEIGHT,
+            // iOS pads a multiline field's content by default, which made one
+            // line measure as two; the bar's own padding does that job.
+            paddingTop: 0,
+            paddingBottom: 0,
+            marginVertical: 9,
+            textAlignVertical: 'top',
+          }}
         />
 
-        <View className="mt-2 flex-row items-center">
-          {/* The reference's leading "+" slot. Here it opens the commands,
-              which is the one affordance in that cluster this app can back. */}
-          <PressableScale
-            testID="coach-commands-button"
-            accessibilityRole="button"
-            accessibilityLabel="Prompt shortcuts"
-            disabled={busy}
-            onPress={() => onChangeText('/')}
-            className="h-9 w-9 items-center justify-center rounded-full bg-muted active:opacity-70"
-          >
-            <Text style={{ color: colors.muted }} className="text-xl leading-none">
-              /
-            </Text>
-          </PressableScale>
-
-          <View className="flex-1" />
-
-          <PressableScale
-            testID="coach-send-button"
-            accessibilityRole="button"
-            accessibilityLabel={controlLabel}
-            accessibilityState={{ disabled: !canSend && !canStop }}
-            disabled={!canSend && !canStop}
-            // 36pt circle + 4pt slop each side = a 44pt touch target.
-            hitSlop={4}
-            onPress={() => {
-              if (canStop) onStop!();
-              else if (canSend) onSend();
-            }}
-            style={{ backgroundColor: send.background }}
-            className="h-9 w-9 items-center justify-center rounded-full"
-          >
-            <View testID="coach-send-glyph" accessibilityLabel={controlLabel}>
-              <Svg width={22} height={22} viewBox="0 0 24 24">
-                <AnimatedPolygon animatedProps={glyphProps} fill={send.glyph} />
-              </Svg>
-            </View>
-          </PressableScale>
-        </View>
+        <PressableScale
+          testID="coach-send-button"
+          accessibilityRole="button"
+          accessibilityLabel={controlLabel}
+          accessibilityState={{ disabled: !canSend && !canStop }}
+          disabled={!canSend && !canStop}
+          onPress={() => {
+            if (canStop) onStop!();
+            else if (canSend) onSend();
+          }}
+          // 44 x 40: a full-height touch target inside the bar.
+          style={{ backgroundColor: send.background, opacity: canSend || busy ? 1 : 0.5 }}
+          className="ml-2 h-10 w-11 items-center justify-center rounded-xl"
+        >
+          <View testID="coach-send-glyph" accessibilityLabel={controlLabel}>
+            <Svg width={22} height={22} viewBox="0 0 24 24">
+              <AnimatedPolygon animatedProps={glyphProps} fill={send.glyph} />
+            </Svg>
+          </View>
+        </PressableScale>
       </View>
+
+      {/* The shortcuts live behind "/"; with the field empty, a quiet hint says
+          so and is itself a way in. */}
+      {value === '' && !busy ? (
+        <Pressable
+          testID="coach-commands-button"
+          accessibilityRole="button"
+          accessibilityLabel="Prompt shortcuts"
+          onPress={() => onChangeText('/')}
+          hitSlop={8}
+          className="self-start pl-4 active:opacity-60"
+        >
+          <Text className="text-xs text-muted-foreground">Type / for shortcuts</Text>
+        </Pressable>
+      ) : null}
     </View>
   );
 }

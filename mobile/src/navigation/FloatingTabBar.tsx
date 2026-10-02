@@ -6,15 +6,28 @@ import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from 'nativewind';
 import { Character } from '../components/characters/Character';
-import { GlassSurface } from '../components/ui/glass-surface';
+import { Text } from '../components/ui/text';
 import { useCoachStatus } from '../lib/useCoachStatus';
 import { useKeyboardVisible } from '../lib/useKeyboardVisible';
 import { COLORS, MOTION } from '../theme';
-import { FLOATING_BAR_HEIGHT, FLOATING_BAR_MARGIN, HUB_TAB, TAB_LABELS, activeCircleTarget, circleAnimates, slotCenterX } from './tabBarLayout';
+import {
+  FLOATING_BAR_HEIGHT,
+  FLOATING_BAR_MARGIN,
+  FLOATING_BAR_RADIUS,
+  HUB_TAB,
+  TAB_LABELS,
+  activeIndicatorTarget,
+  indicatorAnimates,
+  slotCenterX,
+} from './tabBarLayout';
 
-const CIRCLE_SIZE = 48;
-// The pill has a 1 dp border, so its content area is 2 dp shorter.
-const CIRCLE_TOP = (FLOATING_BAR_HEIGHT - 2 - CIRCLE_SIZE) / 2;
+// The short line on the bar's top edge that marks the active tab.
+const INDICATOR_WIDTH = 20;
+const INDICATOR_HEIGHT = 3;
+// The bar has a 1 dp border, so its content area is 2 dp shorter.
+const SLOT_HEIGHT = FLOATING_BAR_HEIGHT - 2;
+// Small enough to sit inside the lower bar without crowding its icons.
+const HUB_CHARACTER_SIZE = 52;
 
 const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   Home: 'home-outline',
@@ -38,7 +51,7 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
   // only dimmed while the coach is off or its status unknown, which every coach
   // entry treats the same way.
   const hubDimmed = !status || !status.enabled;
-  const target = activeCircleTarget(activeName);
+  const target = activeIndicatorTarget(activeName);
 
   // Consent can change while another tab is open (accept, revoke), so re-read
   // the coach status whenever the user moves between tabs -- but not on first
@@ -50,18 +63,18 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
     void refresh();
   }, [state.index, refresh]);
 
-  const circleX = useSharedValue(0);
-  const circleScale = useSharedValue(target.visible ? 1 : 0);
+  const indicatorX = useSharedValue(0);
+  const indicatorScale = useSharedValue(target.visible ? 1 : 0);
   const measuredWidth = useRef(0);
   useEffect(() => {
-    const x = slotCenterX(target.index, innerWidth, state.routes.length) - CIRCLE_SIZE / 2;
+    const x = slotCenterX(target.index, innerWidth, state.routes.length) - INDICATOR_WIDTH / 2;
     const scale = target.visible ? 1 : 0;
-    const animate = circleAnimates(measuredWidth.current, reduced);
+    const animate = indicatorAnimates(measuredWidth.current, reduced);
     measuredWidth.current = innerWidth;
-    circleX.value = animate ? withSpring(x, MOTION.spring.settle) : x;
-    circleScale.value = animate ? withSpring(scale, MOTION.spring.settle) : scale;
-  }, [target.index, target.visible, innerWidth, state.routes.length, reduced, circleX, circleScale]);
-  const circleStyle = useAnimatedStyle(() => ({ transform: [{ translateX: circleX.value }, { scale: circleScale.value }] }));
+    indicatorX.value = animate ? withSpring(x, MOTION.spring.settle) : x;
+    indicatorScale.value = animate ? withSpring(scale, MOTION.spring.settle) : scale;
+  }, [target.index, target.visible, innerWidth, state.routes.length, reduced, indicatorX, indicatorScale]);
+  const indicatorStyle = useAnimatedStyle(() => ({ transform: [{ translateX: indicatorX.value }, { scaleX: indicatorScale.value }] }));
 
   const hidden = useSharedValue(0);
   useEffect(() => {
@@ -85,68 +98,76 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
       pointerEvents={keyboardVisible ? 'none' : 'box-none'}
       accessibilityElementsHidden={keyboardVisible}
       importantForAccessibility={keyboardVisible ? 'no-hide-descendants' : 'auto'}
-      style={[{ position: 'absolute', left: 16, right: 16, bottom: Math.max(insets?.bottom ?? 0, FLOATING_BAR_MARGIN) }, barStyle]}
+      style={[{ position: 'absolute', left: 20, right: 20, bottom: Math.max(insets?.bottom ?? 0, FLOATING_BAR_MARGIN) }, barStyle]}
     >
-      {/* The shadow lives on a wrapper: the glass clips to its rounded shape. */}
+      {/* A quiet, solid rounded rectangle: icons only, with the active tab
+          marked by a short line on the top edge and its label. */}
       <View
+        testID="floating-tab-bar-surface"
         style={{
           height: FLOATING_BAR_HEIGHT,
-          borderRadius: FLOATING_BAR_HEIGHT / 2,
-          shadowColor: '#000',
-          shadowOpacity: scheme === 'dark' ? 0.3 : 0.12,
-          shadowRadius: 18,
-          shadowOffset: { width: 0, height: 8 },
-          elevation: 12,
-        }}
-      >
-      {/* The material follows the theme, and so do the icons. */}
-      <GlassSurface
-        testID="floating-tab-bar-surface"
-        scheme={scheme}
-        fallbackColor={colors.bar}
-        borderRadius={FLOATING_BAR_HEIGHT / 2}
-        style={{
-          flex: 1,
-          paddingHorizontal: 8,
+          borderRadius: FLOATING_BAR_RADIUS,
+          paddingHorizontal: 4,
+          backgroundColor: colors.card,
           borderWidth: 1,
-          borderColor: scheme === 'dark' ? 'rgba(255, 255, 255, 0.10)' : 'rgba(0, 0, 0, 0.06)',
+          borderColor: scheme === 'dark' ? 'rgba(255, 255, 255, 0.07)' : 'rgba(0, 0, 0, 0.06)',
+          shadowColor: '#000',
+          shadowOpacity: scheme === 'dark' ? 0.25 : 0.08,
+          shadowRadius: 14,
+          shadowOffset: { width: 0, height: 6 },
+          elevation: 8,
         }}
       >
         <View className="flex-1 flex-row items-center" onLayout={(e) => setInnerWidth(e.nativeEvent.layout.width)}>
           <Animated.View
+            testID="tab-indicator"
             pointerEvents="none"
-            className="absolute left-0 rounded-full bg-bar-active"
-            style={[{ width: CIRCLE_SIZE, height: CIRCLE_SIZE, top: CIRCLE_TOP }, circleStyle]}
+            style={[
+              {
+                position: 'absolute',
+                left: 0,
+                top: 0,
+                width: INDICATOR_WIDTH,
+                height: INDICATOR_HEIGHT,
+                borderBottomLeftRadius: INDICATOR_HEIGHT,
+                borderBottomRightRadius: INDICATOR_HEIGHT,
+                backgroundColor: colors.foreground,
+              },
+              indicatorStyle,
+            ]}
           />
           {state.routes.map((route, index) => {
             const focused = state.index === index;
             const isHub = route.name === HUB_TAB;
+            const label = TAB_LABELS[route.name] ?? route.name;
             return (
               <Pressable
                 key={route.key}
                 testID={`tab-${route.name}`}
                 accessibilityRole="button"
-                accessibilityLabel={TAB_LABELS[route.name] ?? route.name}
+                accessibilityLabel={label}
                 accessibilityState={{ selected: focused }}
                 onPress={() => press(route, focused)}
                 hitSlop={4}
                 className="flex-1 items-center justify-center"
-                style={{ height: FLOATING_BAR_HEIGHT - 2 }}
+                style={{ height: SLOT_HEIGHT }}
               >
                 {isHub ? (
-                  <Character testID="hub-character" mood="idle" size={64} mini dimmed={hubDimmed} />
+                  <Character testID="hub-character" mood="idle" size={HUB_CHARACTER_SIZE} mini dimmed={hubDimmed} />
                 ) : (
-                  <Ionicons
-                    name={ICONS[route.name] ?? 'ellipse-outline'}
-                    size={22}
-                    color={focused ? colors.barIconActive : colors.barIcon}
-                  />
+                  <View className="items-center" style={{ gap: 3 }}>
+                    <Ionicons name={ICONS[route.name] ?? 'ellipse-outline'} size={22} color={focused ? colors.foreground : colors.muted} />
+                    {focused ? (
+                      <Text testID={`tab-label-${route.name}`} className="text-[10px] font-semibold" style={{ color: colors.foreground }}>
+                        {label}
+                      </Text>
+                    ) : null}
+                  </View>
                 )}
               </Pressable>
             );
           })}
         </View>
-      </GlassSurface>
       </View>
     </Animated.View>
   );
