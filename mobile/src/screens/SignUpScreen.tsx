@@ -15,13 +15,13 @@ import { useScreenFocused } from '../characters/useScreenFocused';
 
 type Props = NativeStackScreenProps<AuthStackParamList, 'SignUp'>;
 
-// A lighter take on Sign in's hero: a small Hoot (signed-out screens always
-// show Hoot), a serif title and one muted line above the form.
+// A lighter take on Sign in's hero: a small Mochi (signed-out screens always
+// show Mochi), a serif title and one muted line above the form.
 function AuthHeader({ title, children }: { title: string; children: React.ReactNode }) {
   const focused = useScreenFocused();
   return (
     <Animated.View entering={FadeInDown.duration(450)} className="items-center gap-3">
-      <Character testID="auth-character" characterId="hoot" mood="idle" size={56} glow paused={!focused} />
+      <Character testID="auth-character" characterId="mochi" mood="idle" size={56} glow paused={!focused} />
       <Text className="text-center font-display text-display-lg">{title}</Text>
       <Text className="text-center text-base text-muted-foreground">{children}</Text>
     </Animated.View>

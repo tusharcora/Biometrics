@@ -9,11 +9,11 @@ jest.mock('@react-navigation/native', () => ({}));
 jest.mock('@expo/vector-icons', () => require('../../jest-mocks/vectorIcons'));
 
 describe('YourCoachRow under a navigation stub without NavigationContext', () => {
-  it('renders Hoot and ignores a press instead of throwing', () => {
+  it('renders Mochi and ignores a press instead of throwing', () => {
     const { getByTestId } = render(<YourCoachRow />);
 
     const row = getByTestId('your-coach-row');
-    expect(row).toHaveTextContent(/Hoot/);
+    expect(row).toHaveTextContent(/Mochi/);
     expect(() => fireEvent.press(row)).not.toThrow();
   });
 });

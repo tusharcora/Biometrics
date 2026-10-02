@@ -46,7 +46,7 @@ export default function App() {
     <ThemeProvider>
       <ThemedStatusBar />
       <AuthProvider>
-        {/* Inside AuthProvider: it follows the session (Hoot when signed out). */}
+        {/* Inside AuthProvider: it follows the session (Mochi when signed out). */}
         <CharacterProvider>
           <RootNavigator />
         </CharacterProvider>

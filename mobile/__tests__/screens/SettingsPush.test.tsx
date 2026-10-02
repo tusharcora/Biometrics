@@ -14,9 +14,9 @@ const status: CoachStatusDTO = {
   enabled: true,
   consented: true,
   consent: { version: 'v1', summary: 's', dataItems: ['x'] },
-  personaId: 'pip',
+  personaId: 'kit',
   personaChosen: true,
-  personas: [{ id: 'pip', name: 'Pip', verbosity: 'terse', proactivity: 'threshold-triggered', tagline: null, greeting: null }],
+  personas: [{ id: 'kit', name: 'Kit', verbosity: 'terse', proactivity: 'threshold-triggered', tagline: null, greeting: null }],
 };
 
 function renderSettings() {

@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, within } from '@testing-library/react-native';
 import { NavigationContext } from '@react-navigation/native';
 import { SettingsScreen } from '../../src/screens/SettingsScreen';
 import { fetchCoachStatus, revokeCoachConsent, revokeHostedConsent, setCoachPersona, type CoachStatusDTO } from '../../src/api/coach';
@@ -13,11 +13,11 @@ const status: CoachStatusDTO = {
   enabled: true,
   consented: true,
   consent: { version: 'v1', summary: 's', dataItems: ['x'] },
-  personaId: 'pip',
+  personaId: 'kit',
   personaChosen: true,
   personas: [
-    { id: 'pip', name: 'Pip', verbosity: 'terse', proactivity: 'threshold-triggered', tagline: null, greeting: null },
-    { id: 'hoot', name: 'Hoot', verbosity: 'normal', proactivity: 'threshold-triggered', tagline: null, greeting: null },
+    { id: 'kit', name: 'Kit', verbosity: 'terse', proactivity: 'threshold-triggered', tagline: null, greeting: null },
+    { id: 'mochi', name: 'Mochi', verbosity: 'normal', proactivity: 'threshold-triggered', tagline: null, greeting: null },
   ],
 };
 
@@ -44,10 +44,10 @@ beforeEach(() => {
 
 describe('SettingsScreen: Your coach', () => {
   it('shows the current character and opens Meet your coach to switch', async () => {
-    const { findByTestId } = render(withCharacter(screen, { characterId: 'pip', status }));
+    const { findByTestId } = render(withCharacter(screen, { characterId: 'kit', status }));
 
     const row = await findByTestId('your-coach-row');
-    expect(row).toHaveTextContent(/Pip/);
+    expect(row).toHaveTextContent(/Kit/);
     fireEvent.press(row);
 
     expect(navigate).toHaveBeenCalledWith('MeetYourCoach', { mode: 'switch' });
@@ -59,9 +59,36 @@ describe('SettingsScreen: Your coach', () => {
 
     await findByTestId('timezone-value');
     await waitFor(() => expect(fetchCoachStatus).toHaveBeenCalled());
-    expect(await findByTestId('your-coach-row')).toHaveTextContent(/Hoot/);
+    expect(await findByTestId('your-coach-row')).toHaveTextContent(/Mochi/);
     expect(queryByTestId('coach-settings')).toBeNull();
     expect(queryByTestId('coach-memory-row')).toBeNull();
+  });
+
+  it('shows Thinking style and Thinking text under Your coach, with the current choices', async () => {
+    const { findByTestId } = render(withCharacter(screen, { characterId: 'kit', status }));
+
+    const group = await findByTestId('your-coach');
+    const style = await findByTestId('settings-thinking-style');
+    const text = await findByTestId('settings-thinking-text');
+    expect(within(group).getByTestId('settings-thinking-style')).toBe(style);
+    expect(within(group).getByTestId('settings-thinking-text')).toBe(text);
+    expect(style).toHaveTextContent(/Thinking style/);
+    expect(style).toHaveTextContent(/Lightbulb/);
+    expect(text).toHaveTextContent(/Thinking text/);
+    expect(text).toHaveTextContent(/What it's doing/);
+  });
+
+  it('names a changed choice and opens the right screen', async () => {
+    const { findByTestId } = render(withCharacter(screen, { status, thinkingAttachment: 'gears', thinkingText: 'dialog' }));
+
+    const style = await findByTestId('settings-thinking-style');
+    const text = await findByTestId('settings-thinking-text');
+    expect(style).toHaveTextContent(/Gears/);
+    expect(text).toHaveTextContent(/Retro dialog box/);
+    fireEvent.press(style);
+    expect(navigate).toHaveBeenCalledWith('ThinkingStyle');
+    fireEvent.press(text);
+    expect(navigate).toHaveBeenCalledWith('ThinkingText');
   });
 
   it('no longer has a Coach style picker', async () => {
@@ -69,7 +96,7 @@ describe('SettingsScreen: Your coach', () => {
 
     await findByTestId('coach-revoke-button');
     expect(queryByText('Coach style')).toBeNull();
-    expect(queryByTestId('persona-option-hoot')).toBeNull();
+    expect(queryByTestId('persona-option-mochi')).toBeNull();
     expect(setCoachPersona).not.toHaveBeenCalled();
   });
 });
