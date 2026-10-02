@@ -2,14 +2,21 @@ import React from 'react';
 import { AppState } from 'react-native';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { CharacterProvider, useCharacter, useSetCoachStatus } from '../../src/characters/CharacterProvider';
-import { fetchCoachStatus, setCoachPersona, type CoachStatusDTO } from '../../src/api/coach';
+import { fetchCoachStatus, setCoachPersona, setCoachThinking, type CoachStatusDTO } from '../../src/api/coach';
 import { fetchScoresWithBands, type DailyScoreDTO } from '../../src/api/scores';
-import { clearCachedCharacter, readCachedCharacter, writeCachedCharacter } from '../../src/characters/characterCache';
+import {
+  clearCachedCharacter,
+  readCachedCharacter,
+  readCachedThinking,
+  writeCachedCharacter,
+  writeCachedThinking,
+} from '../../src/characters/characterCache';
 
 jest.mock('../../src/api/coach', () => ({
   ...jest.requireActual('../../src/api/coach'),
   fetchCoachStatus: jest.fn(),
   setCoachPersona: jest.fn(),
+  setCoachThinking: jest.fn(),
 }));
 jest.mock('../../src/api/scores', () => ({ fetchScoresWithBands: jest.fn() }));
 jest.mock('../../src/characters/characterCache');
@@ -24,6 +31,8 @@ const status: CoachStatusDTO = {
   personaId: 'kit',
   personaChosen: true,
   personas: [],
+  thinkingAttachment: 'bulb',
+  thinkingText: 'steps',
 };
 
 function recovery(score: number | null): DailyScoreDTO {
@@ -54,6 +63,9 @@ beforeEach(() => {
   (readCachedCharacter as jest.Mock).mockResolvedValue(null);
   (writeCachedCharacter as jest.Mock).mockResolvedValue(undefined);
   (clearCachedCharacter as jest.Mock).mockResolvedValue(undefined);
+  (readCachedThinking as jest.Mock).mockResolvedValue(null);
+  (writeCachedThinking as jest.Mock).mockResolvedValue(undefined);
+  (setCoachThinking as jest.Mock).mockResolvedValue({ thinkingAttachment: 'bulb', thinkingText: 'steps' });
   (fetchCoachStatus as jest.Mock).mockResolvedValue(status);
   (setCoachPersona as jest.Mock).mockResolvedValue({ personaId: 'axo' });
   (fetchScoresWithBands as jest.Mock).mockResolvedValue({ scores: [recovery(80)], bands: { excellent: 75, good: 55, fair: 40 } });
@@ -499,6 +511,166 @@ describe('CharacterProvider: chooseCharacter races and guards', () => {
     expect(result.current.characterId).toBe('kit');
     expect(setCoachPersona).not.toHaveBeenCalled();
     expect(writeCachedCharacter).not.toHaveBeenCalled();
+  });
+});
+
+describe('CharacterProvider: thinking settings', () => {
+  it('starts on the defaults and takes the server values once the status arrives, caching them', async () => {
+    const reply = deferred<CoachStatusDTO>();
+    (fetchCoachStatus as jest.Mock).mockReturnValue(reply.promise);
+    const { result } = renderCharacter();
+
+    expect(result.current.thinkingAttachment).toBe('bulb');
+    expect(result.current.thinkingText).toBe('steps');
+    await act(async () => reply.resolve({ ...status, thinkingAttachment: 'clock', thinkingText: 'tag' }));
+
+    expect(result.current.thinkingAttachment).toBe('clock');
+    expect(result.current.thinkingText).toBe('tag');
+    expect(writeCachedThinking).toHaveBeenCalledWith({ attachment: 'clock', text: 'tag' });
+  });
+
+  it('shows the cached settings on a signed-in cold start, before the status arrives', async () => {
+    (readCachedThinking as jest.Mock).mockResolvedValue({ attachment: 'gears', text: 'dialog' });
+    (fetchCoachStatus as jest.Mock).mockReturnValue(new Promise(() => {}));
+    const { result } = renderCharacter();
+
+    await waitFor(() => expect(result.current.thinkingAttachment).toBe('gears'));
+    expect(result.current.thinkingText).toBe('dialog');
+  });
+
+  it('does not let a slow cache read replace the settings the server already sent', async () => {
+    const cache = deferred<{ attachment: string; text: string } | null>();
+    (readCachedThinking as jest.Mock).mockReturnValue(cache.promise);
+    (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, thinkingAttachment: 'clock', thinkingText: 'tag' });
+    const { result } = renderCharacter();
+    await waitFor(() => expect(result.current.thinkingAttachment).toBe('clock'));
+
+    await act(async () => cache.resolve({ attachment: 'gears', text: 'dialog' }));
+
+    expect(result.current.thinkingAttachment).toBe('clock');
+    expect(result.current.thinkingText).toBe('tag');
+  });
+
+  it('falls back to the defaults for a status without thinking fields (an older server, via useSetCoachStatus)', async () => {
+    (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, thinkingAttachment: 'clock', thinkingText: 'tag' });
+    const { result } = renderHook(() => ({ character: useCharacter(), setStatus: useSetCoachStatus() }), {
+      wrapper: CharacterProvider,
+    });
+    await waitFor(() => expect(result.current.character.thinkingAttachment).toBe('clock'));
+    const { thinkingAttachment: _a, thinkingText: _t, ...older } = status;
+
+    act(() => result.current.setStatus?.(older as CoachStatusDTO));
+
+    expect(result.current.character.thinkingAttachment).toBe('bulb');
+    expect(result.current.character.thinkingText).toBe('steps');
+  });
+
+  it('switches at once, saves only the given setting, and caches it', async () => {
+    const { result } = renderCharacter();
+    await waitFor(() => expect(result.current.statusLoaded).toBe(true));
+
+    await act(async () => {
+      await result.current.chooseThinking({ text: 'dialog' });
+    });
+
+    expect(result.current.thinkingAttachment).toBe('bulb');
+    expect(result.current.thinkingText).toBe('dialog');
+    expect(result.current.status?.thinkingText).toBe('dialog');
+    expect(setCoachThinking).toHaveBeenCalledWith({ text: 'dialog' });
+    expect(writeCachedThinking).toHaveBeenLastCalledWith({ attachment: 'bulb', text: 'dialog' });
+  });
+
+  it('switches the thinking text at once and rolls back when the save fails', async () => {
+    const save = deferred<never>();
+    (setCoachThinking as jest.Mock).mockReturnValue(save.promise);
+    const { result } = renderCharacter();
+    await waitFor(() => expect(result.current.statusLoaded).toBe(true));
+    expect(result.current.thinkingText).toBe('steps');
+
+    let failed: unknown;
+    let done!: Promise<void>;
+    act(() => {
+      done = result.current.chooseThinking({ text: 'dialog', attachment: 'gears' }).catch((e: unknown) => {
+        failed = e;
+      });
+    });
+    expect(result.current.thinkingText).toBe('dialog');
+    expect(result.current.thinkingAttachment).toBe('gears');
+
+    await act(async () => {
+      save.reject(new Error('offline'));
+      await done;
+    });
+
+    expect(failed).toBeInstanceOf(Error);
+    expect(result.current.thinkingText).toBe('steps');
+    expect(result.current.thinkingAttachment).toBe('bulb');
+    expect(result.current.status?.thinkingText).toBe('steps');
+    expect(writeCachedThinking).toHaveBeenLastCalledWith({ attachment: 'bulb', text: 'steps' });
+  });
+
+  it('is not undone by a status fetch that started before the choice and lands after the save', async () => {
+    const { result } = renderCharacter();
+    await waitFor(() => expect(result.current.statusLoaded).toBe(true));
+    const staleStatus = deferred<CoachStatusDTO>();
+    (fetchCoachStatus as jest.Mock).mockReturnValue(staleStatus.promise);
+
+    let refreshing!: Promise<void>;
+    act(() => {
+      refreshing = result.current.refreshStatus();
+    });
+    await act(async () => {
+      await result.current.chooseThinking({ attachment: 'spinner' });
+    });
+    await act(async () => {
+      staleStatus.resolve(status);
+      await refreshing;
+    });
+
+    expect(result.current.thinkingAttachment).toBe('spinner');
+  });
+
+  it('rejects an unknown id without saving anything', async () => {
+    const { result } = renderCharacter();
+    await waitFor(() => expect(result.current.statusLoaded).toBe(true));
+
+    let caught: unknown;
+    await act(async () => {
+      await result.current.chooseThinking({ attachment: 'rocket' as never }).catch((e: unknown) => {
+        caught = e;
+      });
+    });
+
+    expect(caught).toBeInstanceOf(Error);
+    expect(result.current.thinkingAttachment).toBe('bulb');
+    expect(setCoachThinking).not.toHaveBeenCalled();
+  });
+
+  it('is the defaults when signed out, reads no cache and saves nothing', async () => {
+    mockAuth = { session: null, isPending: false };
+    (readCachedThinking as jest.Mock).mockResolvedValue({ attachment: 'gears', text: 'dialog' });
+    const { result } = renderCharacter();
+
+    await waitFor(() => expect(clearCachedCharacter).toHaveBeenCalled());
+    await act(async () => {
+      await result.current.chooseThinking({ text: 'dialog' });
+    });
+    expect(result.current.thinkingAttachment).toBe('bulb');
+    expect(result.current.thinkingText).toBe('steps');
+    expect(readCachedThinking).not.toHaveBeenCalled();
+    expect(setCoachThinking).not.toHaveBeenCalled();
+  });
+
+  it('goes back to the defaults on sign-out', async () => {
+    (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, thinkingAttachment: 'clock', thinkingText: 'tag' });
+    const { result, rerender } = renderCharacter();
+    await waitFor(() => expect(result.current.thinkingAttachment).toBe('clock'));
+
+    mockAuth = { session: null, isPending: false };
+    rerender({});
+
+    await waitFor(() => expect(result.current.thinkingAttachment).toBe('bulb'));
+    expect(result.current.thinkingText).toBe('steps');
   });
 });
 

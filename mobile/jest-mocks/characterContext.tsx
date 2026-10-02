@@ -10,13 +10,16 @@ export const HIDDEN_OK = { includeHiddenElements: true } as const;
 
 export function fakeCharacter(overrides: Partial<CharacterContextValue> = {}): CharacterContextValue {
   return {
-    characterId: 'hoot',
+    characterId: 'mochi',
     personaChosen: true,
     status: null,
     statusLoaded: true,
     recoveryBand: null,
+    thinkingAttachment: 'bulb',
+    thinkingText: 'steps',
     refreshStatus: jest.fn(async () => {}),
     chooseCharacter: jest.fn(async () => {}),
+    chooseThinking: jest.fn(async () => {}),
     ...overrides,
   };
 }
