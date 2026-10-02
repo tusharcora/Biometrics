@@ -32,6 +32,9 @@ export default function App() {
     Geist_800ExtraBold,
     InstrumentSerif_400Regular,
   });
+  // The pixel face for two thinking-text styles (spec §5). Not waited on: those
+  // styles use the system mono until it is in.
+  useFonts({ Silkscreen: require('./assets/fonts/Silkscreen-Regular.ttf') });
   if (!fontsLoaded && !fontError) return null;
 
   // Dev-only: every character in every mood. EXPO_PUBLIC_CHARACTER_GALLERY=1
