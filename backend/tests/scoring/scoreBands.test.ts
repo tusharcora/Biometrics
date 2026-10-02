@@ -6,6 +6,7 @@ import { authHeaderFor } from '../helpers/auth';
 import { getLiveConfig, SCORE_CONFIGS } from '../../src/scoring/configs';
 import { v1Config } from '../../src/scoring/configs/v1';
 import { createUser, day } from './dbHelpers';
+import { testServer } from '../helpers/server';
 
 beforeAll(() => {
   migrateTestDb();
@@ -39,7 +40,7 @@ describe('scoreBands in the scoring config', () => {
 describe('bands on the score endpoints', () => {
   it('GET /me/scores returns the live config bands, even with no scores', async () => {
     const user = await createUser();
-    const res = await request(createApp()).get('/me/scores').set(await authed(user.id));
+    const res = await request(await testServer(createApp())).get('/me/scores').set(await authed(user.id));
     expect(res.status).toBe(200);
     expect(res.body.scores).toEqual([]);
     expect(res.body.bands).toEqual(getLiveConfig().scoreBands);
@@ -58,7 +59,7 @@ describe('bands on the score endpoints', () => {
         factors: [] as any,
       },
     });
-    const res = await request(createApp()).get(`/me/scores/2026-09-03?type=${type}`).set(await authed(user.id));
+    const res = await request(await testServer(createApp())).get(`/me/scores/2026-09-03?type=${type}`).set(await authed(user.id));
     expect(res.status).toBe(200);
     expect(Object.keys(res.body).sort()).toEqual(['bands', 'baselines', 'previous', 'score']);
     expect(res.body.bands).toEqual(getLiveConfig().scoreBands);

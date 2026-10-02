@@ -36,7 +36,7 @@ describe('activeCircleTarget', () => {
     expect(activeCircleTarget('Metrics')).toEqual({ index: 3, visible: true });
   });
 
-  it('hides the circle on the coach tab, which has the orb instead', () => {
+  it('hides the circle on the coach tab, which has the character instead', () => {
     expect(activeCircleTarget('Coach')).toEqual({ index: 2, visible: false });
   });
 

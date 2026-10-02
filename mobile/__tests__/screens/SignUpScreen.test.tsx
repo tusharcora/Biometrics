@@ -1,4 +1,5 @@
 import React from 'react';
+import { characterLabel, withCharacter } from '../../jest-mocks/characterContext';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { SignUpScreen } from '../../src/screens/SignUpScreen';
 import { useAuth } from '../../src/auth/AuthContext';
@@ -43,4 +44,11 @@ it('refuses a password shorter than 8 characters before calling the server', asy
   fireEvent.press(getByTestId('sign-up-button'));
   await findByText('Use at least 8 characters for your password.');
   expect(signUpWithEmail).not.toHaveBeenCalled();
+});
+
+it('always shows Hoot, whatever character a provider holds (signed-out screens)', () => {
+  (useAuth as jest.Mock).mockReturnValue({ signUpWithEmail: jest.fn() });
+  const utils = render(withCharacter(<SignUpScreen navigation={navigation} route={{} as any} />, { characterId: 'ember' }));
+
+  expect(characterLabel(utils, 'auth-character')).toBe('character:hoot:idle:56:playing:full');
 });

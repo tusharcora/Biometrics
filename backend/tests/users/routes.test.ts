@@ -6,6 +6,7 @@ import { migrateTestDb } from '../setupTestDb';
 import { authHeaderFor } from '../helpers/auth';
 import { storeSleepSessions } from '../../src/biometrics/repository';
 import { enqueueScoreCompute } from '../../src/scoring/queue';
+import { testServer } from '../helpers/server';
 
 // The route asks for score recomputes; those would otherwise go to a real Redis
 // queue and leave delayed jobs behind. The enqueue itself is asserted below.
@@ -48,7 +49,7 @@ describe('PUT /me/timezone', () => {
     ]);
     (enqueueScoreCompute as jest.Mock).mockClear();
 
-    const res = await request(createApp())
+    const res = await request(await testServer(createApp()))
       .put('/me/timezone')
       .set(authHeader)
       .send({ timezone: 'America/Los_Angeles' });
@@ -64,7 +65,7 @@ describe('PUT /me/timezone', () => {
     const user = await createUser();
     const authHeader = await authHeaderFor(user.id);
 
-    const res = await request(createApp())
+    const res = await request(await testServer(createApp()))
       .put('/me/timezone')
       .set(authHeader)
       .send({ timezone: 'America/Los_Angeles' });
@@ -84,7 +85,7 @@ describe('PUT /me/timezone', () => {
     const user = await createUser();
     const authHeader = await authHeaderFor(user.id);
 
-    const res = await request(createApp()).put('/me/timezone').set(authHeader).send(body);
+    const res = await request(await testServer(createApp())).put('/me/timezone').set(authHeader).send(body);
 
     expect(res.status).toBe(400);
     expect(res.body.error).toEqual(expect.any(String));
@@ -92,7 +93,7 @@ describe('PUT /me/timezone', () => {
   });
 
   it('rejects an unauthenticated request', async () => {
-    const res = await request(createApp()).put('/me/timezone').send({ timezone: 'UTC' });
+    const res = await request(await testServer(createApp())).put('/me/timezone').send({ timezone: 'UTC' });
     expect(res.status).toBe(401);
   });
 
@@ -109,7 +110,7 @@ describe('PUT /me/timezone', () => {
     expect(await dates()).toEqual(['2026-09-03']);
     const authHeader = await authHeaderFor(user.id);
 
-    await request(createApp())
+    await request(await testServer(createApp()))
       .put('/me/timezone')
       .set(authHeader)
       .send({ timezone: 'America/Los_Angeles' })
@@ -134,7 +135,7 @@ describe('PUT /me/timezone', () => {
     ]);
     const authHeader = await authHeaderFor(user.id);
 
-    await request(createApp())
+    await request(await testServer(createApp()))
       .put('/me/timezone')
       .set(authHeader)
       .send({ timezone: 'America/Los_Angeles' })
@@ -156,11 +157,11 @@ describe('PUT /me/timezone', () => {
       { startTime: new Date('2026-09-02T20:00:00Z'), endTime: new Date('2026-09-03T05:30:00Z'), minutesAsleep: 500 },
     ]);
     const authHeader = await authHeaderFor(user.id);
-    const put = () =>
-      request(createApp()).put('/me/timezone').set(authHeader).send({ timezone: 'America/Los_Angeles' });
+    const putExpecting200 = async () =>
+      request(await testServer(createApp())).put('/me/timezone').set(authHeader).send({ timezone: 'America/Los_Angeles' }).expect(200);
 
-    await put().expect(200);
-    await put().expect(200);
+    await putExpecting200();
+    await putExpecting200();
 
     const rows = await prisma.biometricRecord.findMany({ where: { userId: user.id, metricType: 'SLEEP' } });
     expect(rows.map((r) => [r.recordedAt.toISOString().slice(0, 10), r.value])).toEqual([['2026-09-02', 500]]);

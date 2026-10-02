@@ -9,6 +9,7 @@ import { enqueuePendingStepsHistoryBackfills } from './sync/stepsHistory';
 import { scheduleCatchUpSweep } from './sync/catchUp';
 import { scheduleWeeklyHabitCorrelationSweep } from './habits/queue';
 import { scheduleDailyCoachRetention, scheduleWeeklyCoachDigest } from './coach/queue';
+import { coachSummaryQueue, startDaySummaryWorker } from './coach/daySummaryJob';
 
 const port = Number(process.env.PORT ?? 3000);
 
@@ -23,11 +24,21 @@ const server = listenOrExit(createApp(), port, {
 });
 
 function startBackgroundWork(): void {
-  const worker = startSyncWorker();
+  const syncWorker = startSyncWorker();
+  // Coach day summaries: their own queue and worker (COACH_SUMMARY_CONCURRENCY, default 1),
+  // so model generations never take sync slots.
+  const summaryWorker = startDaySummaryWorker();
 
-  // Registered only once the port is bound and the worker exists, so a process
+  // Registered only once the port is bound and the workers exist, so a process
   // that exited because the port was taken never drains another one's queues.
-  installShutdownHandlers({ server, worker, queue: syncQueue, redis: connection, prisma });
+  // Both workers drain before either queue (and then Redis) closes.
+  installShutdownHandlers({
+    server,
+    worker: { close: async () => void (await Promise.all([syncWorker.close(), summaryWorker.close()])) },
+    queue: { close: async () => void (await Promise.all([syncQueue.close(), coachSummaryQueue.close()])) },
+    redis: connection,
+    prisma,
+  });
 
   // The sweep runs as a repeatable queue job, not a per-process setInterval, so
   // that running more than one backend instance does not have several of them

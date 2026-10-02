@@ -18,7 +18,8 @@ import { Glow } from '../components/ui/glow';
 import { GlassSurface } from '../components/ui/glass-surface';
 import { PressableScale } from '../components/ui/pressable-scale';
 import { SectionLabel } from '../components/ui/section-label';
-import { StillOrb } from '../components/ui/still-orb';
+import { Character } from '../components/characters/Character';
+import { useScreenFocused } from '../characters/useScreenFocused';
 import { coachEntryRoute, useCoachStatus } from '../lib/useCoachStatus';
 import { navigateToCoachEntry } from '../navigation/coachNavigation';
 import { scoreQuestion } from '../lib/coachPrompts';
@@ -61,6 +62,7 @@ export function ScoreDetailScreen() {
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const { status: coachStatus } = useCoachStatus(navigation);
   const coachRoute = coachEntryRoute(coachStatus);
+  const focused = useScreenFocused();
   // Context, not the hook: tests render this screen without a provider.
   const insets = useContext(SafeAreaInsetsContext);
 
@@ -221,7 +223,7 @@ export function ScoreDetailScreen() {
               borderRadius={30}
               style={{ height: 60, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 10, borderWidth: 1, borderColor: colors.hairline }}
             >
-              <StillOrb size={40} glow={false} />
+              <Character testID="ask-coach-character" mood="idle" size={40} paused={!focused} />
               <Text className="flex-1 text-base font-semibold">Ask Coach about this</Text>
               <Ionicons name="chevron-forward" size={18} color={colors.muted} style={{ marginRight: 8 }} />
             </GlassSurface>

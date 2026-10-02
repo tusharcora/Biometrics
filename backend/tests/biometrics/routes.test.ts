@@ -4,6 +4,7 @@ import { createApp } from '../../src/app';
 import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
 import { authHeaderFor } from '../helpers/auth';
+import { testServer } from '../helpers/server';
 
 beforeAll(() => {
   migrateTestDb();
@@ -31,7 +32,7 @@ describe('GET /me/biometrics', () => {
     });
     const authHeader = await authHeaderFor(user.id);
 
-    const res = await request(createApp()).get('/me/biometrics').set(authHeader);
+    const res = await request(await testServer(createApp())).get('/me/biometrics').set(authHeader);
 
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(1);
@@ -45,7 +46,7 @@ describe('GET /me/biometrics', () => {
     });
     const authHeader = await authHeaderFor(user.id);
 
-    const res = await request(createApp())
+    const res = await request(await testServer(createApp()))
       .get('/me/biometrics')
       .set(authHeader);
 
@@ -55,7 +56,7 @@ describe('GET /me/biometrics', () => {
   });
 
   it('rejects an unauthenticated request', async () => {
-    const res = await request(createApp()).get('/me/biometrics');
+    const res = await request(await testServer(createApp())).get('/me/biometrics');
     expect(res.status).toBe(401);
   });
 
@@ -70,7 +71,7 @@ describe('GET /me/biometrics', () => {
     });
     const authHeader = await authHeaderFor(userA.id);
 
-    const res = await request(createApp()).get('/me/biometrics').set(authHeader);
+    const res = await request(await testServer(createApp())).get('/me/biometrics').set(authHeader);
 
     expect(res.status).toBe(200);
     expect(res.body).toHaveLength(1);
@@ -89,7 +90,7 @@ describe('GET /me/activity', () => {
 
   async function getActivity(userId: string, query: Record<string, string>) {
     const authHeader = await authHeaderFor(userId);
-    return request(createApp()).get('/me/activity').query(query).set(authHeader);
+    return request(await testServer(createApp())).get('/me/activity').query(query).set(authHeader);
   }
 
   it('returns daily steps within the inclusive range, oldest first, keyed by civil date', async () => {
@@ -165,7 +166,7 @@ describe('GET /me/activity', () => {
   });
 
   it('rejects an unauthenticated request', async () => {
-    const res = await request(createApp()).get('/me/activity').query({ from: '2026-09-01', to: '2026-09-02' });
+    const res = await request(await testServer(createApp())).get('/me/activity').query({ from: '2026-09-01', to: '2026-09-02' });
     expect(res.status).toBe(401);
   });
 
@@ -185,7 +186,7 @@ describe('GET /me/connection', () => {
     const user = await createUser('nc');
     const authHeader = await authHeaderFor(user.id);
 
-    const res = await request(createApp())
+    const res = await request(await testServer(createApp()))
       .get('/me/connection')
       .set(authHeader);
 
@@ -208,7 +209,7 @@ describe('GET /me/connection', () => {
     });
     const authHeader = await authHeaderFor(user.id);
 
-    const res = await request(createApp())
+    const res = await request(await testServer(createApp()))
       .get('/me/connection')
       .set(authHeader);
 
@@ -233,7 +234,7 @@ describe('GET /me/connection', () => {
     });
     const authHeader = await authHeaderFor(user.id);
 
-    const res = await request(createApp())
+    const res = await request(await testServer(createApp()))
       .get('/me/connection')
       .set(authHeader);
 
@@ -243,7 +244,7 @@ describe('GET /me/connection', () => {
   });
 
   it('rejects an unauthenticated request', async () => {
-    const res = await request(createApp()).get('/me/connection');
+    const res = await request(await testServer(createApp())).get('/me/connection');
     expect(res.status).toBe(401);
   });
 
@@ -262,7 +263,7 @@ describe('GET /me/connection', () => {
     });
     const authHeader = await authHeaderFor(userA.id);
 
-    const res = await request(createApp())
+    const res = await request(await testServer(createApp()))
       .get('/me/connection')
       .set(authHeader);
 

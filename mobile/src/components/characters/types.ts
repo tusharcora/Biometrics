@@ -1,0 +1,19 @@
+// Shared types for the companion characters (spec §1).
+export const CHARACTER_IDS = ['hoot', 'pip', 'mochi', 'nimbus', 'ember', 'beep', 'doze', 'beat'] as const;
+export type CharacterId = (typeof CHARACTER_IDS)[number];
+
+export const CHARACTER_MOODS = ['idle', 'thinking', 'answering', 'resting'] as const;
+export type CharacterMood = (typeof CHARACTER_MOODS)[number];
+
+export const DEFAULT_CHARACTER_ID: CharacterId = 'hoot';
+
+export function isCharacterId(value: unknown): value is CharacterId {
+  return typeof value === 'string' && (CHARACTER_IDS as readonly string[]).includes(value);
+}
+
+/** Every art component draws in a 100×100 space (the mockups' viewBox). */
+export interface CharacterArtProps {
+  mood: CharacterMood;
+  mini: boolean;
+  paused: boolean;
+}

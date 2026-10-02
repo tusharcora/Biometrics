@@ -1,4 +1,5 @@
 import React from 'react';
+import { characterLabel, withCharacter } from '../../jest-mocks/characterContext';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { SignInScreen } from '../../src/screens/SignInScreen';
@@ -75,4 +76,11 @@ it('shows the verified banner when the link opens an already-mounted sign-in scr
   expect(queryByText('Email confirmed. Sign in to continue.')).toBeNull();
   rerender(<SignInScreen navigation={navigation} route={{ params: { verified: true } } as any} />);
   expect(queryByText('Email confirmed. Sign in to continue.')).toBeTruthy();
+});
+
+it('shows Hoot in the sign-in hero, whatever character a provider holds', () => {
+  (useAuth as jest.Mock).mockReturnValue(auth());
+  const utils = render(withCharacter(<SignInScreen navigation={navigation} route={{ params: undefined } as any} />, { characterId: 'ember' }));
+
+  expect(characterLabel(utils, 'onboarding-character')).toBe('character:hoot:idle:120:playing:full');
 });

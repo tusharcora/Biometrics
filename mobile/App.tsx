@@ -8,11 +8,12 @@ import { Geist_700Bold } from '@expo-google-fonts/geist/700Bold';
 import { Geist_800ExtraBold } from '@expo-google-fonts/geist/800ExtraBold';
 import { InstrumentSerif_400Regular } from '@expo-google-fonts/instrument-serif/400Regular';
 import { AuthProvider } from './src/auth/AuthContext';
+import { CharacterProvider } from './src/characters/CharacterProvider';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { ThemeProvider } from './src/theme/ThemeProvider';
 import { applyDefaultThemeSync } from './src/theme/preference';
 import { ThemedStatusBar } from './src/components/themed-status-bar';
-import { OrbGalleryScreen } from './src/screens/dev/OrbGalleryScreen';
+import { CharacterGalleryScreen } from './src/screens/dev/CharacterGalleryScreen';
 import { setBaseUrl } from './src/api/client';
 import { API_BASE_URL } from './src/auth/authClient';
 
@@ -33,16 +34,19 @@ export default function App() {
   });
   if (!fontsLoaded && !fontError) return null;
 
-  // Dev-only escape hatch for looking at every orb state: EXPO_PUBLIC_ORB_GALLERY=1
-  if (__DEV__ && process.env.EXPO_PUBLIC_ORB_GALLERY === '1') {
-    return <OrbGalleryScreen />;
+  // Dev-only: every character in every mood. EXPO_PUBLIC_CHARACTER_GALLERY=1
+  if (__DEV__ && process.env.EXPO_PUBLIC_CHARACTER_GALLERY === '1') {
+    return <CharacterGalleryScreen />;
   }
 
   return (
     <ThemeProvider>
       <ThemedStatusBar />
       <AuthProvider>
-        <RootNavigator />
+        {/* Inside AuthProvider: it follows the session (Hoot when signed out). */}
+        <CharacterProvider>
+          <RootNavigator />
+        </CharacterProvider>
       </AuthProvider>
     </ThemeProvider>
   );

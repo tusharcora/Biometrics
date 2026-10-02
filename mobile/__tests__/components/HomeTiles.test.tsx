@@ -1,4 +1,5 @@
 import React from 'react';
+import { characterLabel, withCharacter } from '../../jest-mocks/characterContext';
 import { render, fireEvent } from '@testing-library/react-native';
 import { MetricTile, trendCaption } from '../../src/components/home/metric-tile';
 import { RecoveryHero } from '../../src/components/home/recovery-hero';
@@ -117,5 +118,19 @@ describe('CoachTile', () => {
   it('says consent comes first when the coach is not set up yet', () => {
     const { getByText } = render(<CoachTile needsConsent onPress={jest.fn()} />);
     expect(getByText('See what’s shared first')).toBeTruthy();
+  });
+});
+
+describe('CoachTile character', () => {
+  it("shows the user's character, idle", () => {
+    const utils = render(withCharacter(<CoachTile needsConsent={false} onPress={jest.fn()} />, { characterId: 'mochi' }));
+
+    expect(characterLabel(utils, 'coach-tile-character')).toBe('character:mochi:idle:40:playing:mini');
+  });
+
+  it('rests on a poor recovery day', () => {
+    const utils = render(withCharacter(<CoachTile needsConsent={false} onPress={jest.fn()} />, { characterId: 'mochi', recoveryBand: 'scorePoor' }));
+
+    expect(characterLabel(utils, 'coach-tile-character')).toBe('character:mochi:resting:40:playing:mini');
   });
 });

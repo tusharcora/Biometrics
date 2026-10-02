@@ -185,4 +185,26 @@ describe('PromptBar', () => {
     // Empty field, but a turn is running: the control must not look dormant.
     expect(getByTestId('coach-send-button').props.accessibilityLabel).toBe('Working');
   });
+
+  // Streaming answers can be stopped (coach redesign, spec 1.4).
+  it('turns the square into a Stop button while busy when the caller can stop', () => {
+    const onStop = jest.fn();
+    const { getByTestId, onSend } = setup({ value: '', busy: true, onStop });
+    const button = getByTestId('coach-send-button');
+
+    expect(button.props.accessibilityLabel).toBe('Stop');
+    expect(getByTestId('coach-send-glyph').props.accessibilityLabel).toBe('Stop');
+    expect(button.props.accessibilityState).toEqual({ disabled: false });
+    fireEvent.press(button);
+    expect(onStop).toHaveBeenCalledTimes(1);
+    expect(onSend).not.toHaveBeenCalled();
+  });
+
+  it('sends as before when not busy, even with a stop handler', () => {
+    const onStop = jest.fn();
+    const { getByTestId, onSend } = setup({ value: 'hello', onStop });
+    fireEvent.press(getByTestId('coach-send-button'));
+    expect(onSend).toHaveBeenCalledTimes(1);
+    expect(onStop).not.toHaveBeenCalled();
+  });
 });

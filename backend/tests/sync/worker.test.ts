@@ -16,6 +16,7 @@ import * as scoreSweep from '../../src/scoring/sweep';
 import { seedHistory, day } from '../scoring/dbHelpers';
 import * as catchUp from '../../src/sync/catchUp';
 import { localCivilDate } from '../../src/biometrics/civilDate';
+import * as daySummaryJob from '../../src/coach/daySummaryJob';
 
 jest.mock('../../src/health/client');
 jest.mock('../../src/health/oauth');
@@ -29,6 +30,12 @@ jest.mock('../../src/scoring/queue', () => ({
   COMPUTE_DAILY_SCORE_JOB: 'computeDailyScore',
   SCORE_SWEEP_JOB: 'scoreSweep',
   enqueueScoreCompute: jest.fn().mockResolvedValue(undefined),
+}));
+
+// The after-score day summary itself is covered in tests/coach/daySummaryJob.test.ts; only the wiring here.
+jest.mock('../../src/coach/daySummaryJob', () => ({
+  refreshDaySummaryAfterScore: jest.fn().mockResolvedValue(false),
+  runDaySummaryJob: jest.fn().mockResolvedValue('ai'),
 }));
 
 beforeAll(() => {
@@ -635,6 +642,28 @@ describe('processSyncJob', () => {
         where: { userId_date_type: { userId: user.id, date: day(last), type: 'RECOVERY' } },
       });
       expect(score?.score).not.toBeNull();
+    });
+
+    it('asks for the day summary after a scored day, and not after a day with no input', async () => {
+      const refresh = daySummaryJob.refreshDaySummaryAfterScore as jest.Mock;
+      refresh.mockClear();
+      const user = await createConnectedUser();
+      const last = await seedHistory(user.id, '2026-06-01', 40);
+
+      await processSyncJob({ name: 'computeDailyScore', data: { userId: user.id, date: last } } as Job);
+      expect(refresh).toHaveBeenCalledWith(user.id, last);
+
+      refresh.mockClear();
+      const empty = await prisma.user.create({ data: { email: `w-${randomUUID()}@example.com`, name: 'Test User' } });
+      await processSyncJob({ name: 'computeDailyScore', data: { userId: empty.id, date: '2026-06-01' } } as Job);
+      expect(refresh).not.toHaveBeenCalled();
+    });
+
+    it('leaves coachDaySummary jobs to the coach-summary worker', async () => {
+      const run = daySummaryJob.runDaySummaryJob as jest.Mock;
+      run.mockClear();
+      await processSyncJob({ name: 'coachDaySummary', data: { userId: 'u-1', date: '2026-09-30' } } as Job);
+      expect(run).not.toHaveBeenCalled();
     });
 
     it('runs the score sweep for a scoreSweep job', async () => {

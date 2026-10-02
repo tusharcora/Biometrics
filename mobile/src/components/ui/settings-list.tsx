@@ -33,6 +33,8 @@ interface SettingsRowProps {
   value?: string;
   valueTestID?: string;
   icon?: keyof typeof Ionicons.glyphMap;
+  // Drawn in place of the icon tile (the Your coach row's character).
+  leading?: React.ReactNode;
   // A token colour for the icon tile (the tile is that colour at low alpha).
   tint?: string;
   onPress?: () => void;
@@ -41,6 +43,9 @@ interface SettingsRowProps {
   // Anything drawn at the trailing edge in place of value + chevron (a Switch).
   trailing?: React.ReactNode;
   accessibilityRole?: 'button' | 'radio';
+  // Replaces the default reading (the row's text) when that reads badly.
+  accessibilityLabel?: string;
+  accessibilityHint?: string;
   selected?: boolean;
   testID?: string;
 }
@@ -52,12 +57,15 @@ export function SettingsRow({
   value,
   valueTestID,
   icon,
+  leading,
   tint,
   onPress,
   disabled,
   destructive,
   trailing,
   accessibilityRole = 'button',
+  accessibilityLabel,
+  accessibilityHint,
   selected,
   testID,
 }: SettingsRowProps) {
@@ -67,11 +75,11 @@ export function SettingsRow({
 
   const body = (
     <View className="min-h-[56px] flex-row items-center gap-3 px-4 py-3">
-      {icon ? (
+      {leading ?? (icon ? (
         <View className="h-8 w-8 items-center justify-center rounded-[10px]" style={{ backgroundColor: withAlpha(iconColor, 0.16) }}>
           <Ionicons name={icon} size={17} color={iconColor} />
         </View>
-      ) : null}
+      ) : null)}
       <View className="flex-1 gap-0.5">
         <Text className={cn('text-base', destructive ? 'text-destructive' : '', selected ? 'font-semibold' : '')}>{title}</Text>
         {subtitle ? (
@@ -100,7 +108,13 @@ export function SettingsRow({
     <Pressable
       testID={testID}
       accessibilityRole={accessibilityRole}
-      accessibilityState={accessibilityRole === 'radio' ? { selected: !!selected } : { disabled: !!disabled }}
+      accessibilityLabel={accessibilityLabel}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={
+        accessibilityRole === 'radio'
+          ? { selected: !!selected }
+          : { disabled: !!disabled, ...(selected !== undefined ? { selected } : {}) }
+      }
       disabled={disabled}
       onPress={onPress}
       className={cn('active:bg-muted', disabled ? 'opacity-50' : '')}

@@ -12,7 +12,7 @@ import {
   scheduleWeeklyCoachDigest,
 } from '../../src/coach/queue';
 import { getCoachProvider, setCoachProvider } from '../../src/coach/config';
-import { ScriptedProvider } from '../../src/coach/model/provider';
+import { ScriptedStreamProvider } from '../../src/coach/model/provider';
 import { processSyncJob } from '../../src/sync/worker';
 import { RecordingTelemetry, createUser } from './helpers';
 
@@ -122,6 +122,9 @@ describe('deleteUserCoachData', () => {
       ],
     });
     await prisma.coachDigest.create({ data: { userId, text: 'recap', personaId: 'encouraging', weekStart: new Date('2026-09-14T00:00:00Z') } });
+    await prisma.coachDaySummary.create({
+      data: { userId, date: new Date('2026-09-30T00:00:00Z'), text: 'Recovery 26.', spans: [], source: 'TEMPLATE' },
+    });
     await prisma.coachConsent.create({ data: { userId, version: COACH_CONSENT_VERSION } });
     await prisma.pushToken.create({ data: { userId, token: `tok-${userId}`, platform: 'ios' } });
   }
@@ -130,6 +133,7 @@ describe('deleteUserCoachData', () => {
     conversations: await prisma.coachConversation.count({ where: { userId } }),
     memories: await prisma.coachMemory.count({ where: { userId } }),
     digests: await prisma.coachDigest.count({ where: { userId } }),
+    daySummaries: await prisma.coachDaySummary.count({ where: { userId } }),
     consents: await prisma.coachConsent.count({ where: { userId } }),
     pushTokens: await prisma.pushToken.count({ where: { userId } }),
   });
@@ -143,9 +147,9 @@ describe('deleteUserCoachData', () => {
 
     const summary = await deleteUserCoachData(victim.id, telemetry);
 
-    expect(summary).toEqual({ messages: 2, conversations: 1, memories: 2, digests: 1, consents: 1, pushTokens: 1 });
-    expect(await counts(victim.id)).toEqual({ messages: 0, conversations: 0, memories: 0, digests: 0, consents: 0, pushTokens: 0 });
-    expect(await counts(bystander.id)).toEqual({ messages: 2, conversations: 1, memories: 2, digests: 1, consents: 1, pushTokens: 1 });
+    expect(summary).toEqual({ messages: 2, conversations: 1, memories: 2, digests: 1, daySummaries: 1, consents: 1, pushTokens: 1 });
+    expect(await counts(victim.id)).toEqual({ messages: 0, conversations: 0, memories: 0, digests: 0, daySummaries: 0, consents: 0, pushTokens: 0 });
+    expect(await counts(bystander.id)).toEqual({ messages: 2, conversations: 1, memories: 2, digests: 1, daySummaries: 1, consents: 1, pushTokens: 1 });
     // The user row itself is out of scope (account deletion is not built here).
     expect(await prisma.user.findUnique({ where: { id: victim.id } })).not.toBeNull();
     expect(telemetry.named('coach.user_data_deleted')[0]!.attributes).toEqual(summary);
@@ -153,7 +157,7 @@ describe('deleteUserCoachData', () => {
 
   it('is idempotent and safe for a user with no coach data', async () => {
     const user = await createUser();
-    expect(await deleteUserCoachData(user.id)).toEqual({ messages: 0, conversations: 0, memories: 0, digests: 0, consents: 0, pushTokens: 0 });
+    expect(await deleteUserCoachData(user.id)).toEqual({ messages: 0, conversations: 0, memories: 0, digests: 0, daySummaries: 0, consents: 0, pushTokens: 0 });
   });
 
   it('is atomic: a failure part-way rolls everything back', async () => {
@@ -177,7 +181,7 @@ describe('deleteUserCoachData', () => {
     } finally {
       spy.mockRestore();
     }
-    expect(await counts(user.id)).toEqual({ messages: 2, conversations: 1, memories: 2, digests: 1, consents: 1, pushTokens: 1 });
+    expect(await counts(user.id)).toEqual({ messages: 2, conversations: 1, memories: 2, digests: 1, daySummaries: 1, consents: 1, pushTokens: 1 });
   });
 });
 
@@ -215,7 +219,7 @@ describe('scheduled job wiring', () => {
 
     it('the digest job is a no-op while COACH_ENABLED is off: the provider is never called', async () => {
       delete process.env.COACH_ENABLED;
-      const provider = new ScriptedProvider([]);
+      const provider = new ScriptedStreamProvider([]);
       setCoachProvider(provider);
       await processSyncJob(job(COACH_WEEKLY_DIGEST_JOB));
       expect(provider.callCount).toBe(0);

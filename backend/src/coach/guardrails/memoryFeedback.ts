@@ -19,8 +19,8 @@
 // deleted an unrelated memory). The two errors are not symmetric: a wrongly
 // CONFIRMED memory is visible (Settings lists it, it can be edited or deleted,
 // and only categorised non-health values can exist at all), whereas a wrongly
-// DELETED one is silent and the user never knows it was lost. When a deletion
-// does happen the orchestrator says so in the reply.
+// DELETED one is silent and the user never knows it was lost, so the rule only
+// deletes on a dismissal or a correction about that fact.
 
 const APOSTROPHES = /[‘’ʼ]/g;
 

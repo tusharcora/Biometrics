@@ -39,6 +39,16 @@
   --color-metric-sleep: 79 70 229;
   --color-metric-hrv: 13 148 136;
   --color-coach: 79 70 229;
+  --color-status-below: 225 29 72;
+  --color-status-near: 113 113 122;
+  --color-status-above: 15 118 110;
+  --color-status-below-text: 190 18 60;
+  --color-status-above-text: 15 118 110;
+  --color-today-usual: 108 110 120;
+  --color-today-track: 228 228 233;
+  --color-today-tick: 17 18 22;
+  --color-tip: 204 251 241;
+  --color-tip-foreground: 17 94 89;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -74,5 +84,15 @@
     --color-metric-sleep: 129 140 248;
     --color-metric-hrv: 45 212 191;
     --color-coach: 165 180 252;
+    --color-status-below: 251 113 133;
+    --color-status-near: 161 161 170;
+    --color-status-above: 45 212 191;
+    --color-status-below-text: 251 113 133;
+    --color-status-above-text: 45 212 191;
+    --color-today-usual: 128 130 139;
+    --color-today-track: 35 38 45;
+    --color-today-tick: 245 245 244;
+    --color-tip: 15 42 42;
+    --color-tip-foreground: 204 251 241;
   }
 }

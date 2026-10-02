@@ -18,6 +18,7 @@
   "license": "ISC",
   "description": "",
   "dependencies": {
+    "@anthropic-ai/sdk": "0.130.0",
     "@better-auth/expo": "1.7.5",
     "@prisma/client": "^6.19.3",
     "better-auth": "1.7.5",

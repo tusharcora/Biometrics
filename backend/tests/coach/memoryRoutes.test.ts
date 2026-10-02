@@ -6,10 +6,11 @@ import { migrateTestDb } from '../setupTestDb';
 import { authHeaderFor } from '../helpers/auth';
 import { createCoachRouter } from '../../src/coach/routes';
 import { COACH_CONSENT_VERSION } from '../../src/coach/consent';
-import { ScriptedProvider, ScriptStep } from '../../src/coach/model/provider';
-import { MEMORY_NOTE } from '../../src/coach/orchestrator';
+import { ScriptedStreamProvider, StreamStep } from '../../src/coach/model/provider';
+import { LEGACY_DISCLAIMER } from '../../src/coach/answer/history';
 import { civilDateToUtcMidnight } from '../../src/biometrics/civilDate';
 import { FakeClock, RecordingTelemetry, createUser } from './helpers';
+import { testServer } from '../helpers/server';
 
 beforeAll(() => {
   migrateTestDb();
@@ -36,8 +37,8 @@ async function authed(userId: string) {
   return authHeaderFor(userId);
 }
 
-function scriptedApp(script: ScriptStep[]) {
-  const provider = new ScriptedProvider(script);
+function scriptedApp(script: StreamStep[]) {
+  const provider = new ScriptedStreamProvider(script);
   const app = express();
   app.use(express.json());
   app.use(createCoachRouter({ getProvider: () => provider, telemetry: new RecordingTelemetry(), clock: new FakeClock() }));
@@ -66,15 +67,15 @@ const NEW_ROUTES = [
 
 describe('auth and flag', () => {
   it.each(NEW_ROUTES)('%s %s requires a bearer token (flag on and off)', async (method, path) => {
-    expect((await request(createApp())[method](path)).status).toBe(401);
+    expect((await request(await testServer(createApp()))[method](path)).status).toBe(401);
     process.env.COACH_ENABLED = 'false';
-    expect((await request(createApp())[method](path)).status).toBe(401);
+    expect((await request(await testServer(createApp()))[method](path)).status).toBe(401);
   });
 
   it.each(NEW_ROUTES)('%s %s returns 404 coach_disabled when the flag is off', async (method, path) => {
     process.env.COACH_ENABLED = 'false';
     const user = await consented();
-    const res = await request(createApp())
+    const res = await request(await testServer(createApp()))
       [method](path)
       .set(await authed(user.id))
       .send({ value: 'x', token: 'abc', platform: 'ios' });
@@ -86,38 +87,40 @@ describe('auth and flag', () => {
 describe('POST /me/coach/message memoryProposals', () => {
   it('returns the entries created this turn, keeps every existing field, and the next uncorrected message confirms them', async () => {
     const { app } = scriptedApp([
-      { type: 'tool_calls', calls: [{ id: 'c1', name: 'proposeMemory', args: { category: 'SCHEDULE', value: 'Runs at 6am on weekdays' } }] },
-      { type: 'text', text: 'Great, a morning routine helps.' },
-      { type: 'text', text: 'Happy to help with that.' },
+      'Great, a morning routine helps.\n```memory\n{"category":"SCHEDULE","value":"Runs at 6am on weekdays"}\n```',
+      'Happy to help with that.',
     ]);
     const user = await consented();
 
-    const first = await request(app).post('/me/coach/message').set(await authed(user.id)).send({ message: 'I usually run at 6am on weekdays' });
+    const first = await request(await testServer(app)).post('/me/coach/message').set(await authed(user.id)).send({ message: 'I usually run at 6am on weekdays' });
 
     expect(first.status).toBe(200);
     expect(Object.keys(first.body).sort()).toEqual(['conversationId', 'memoryProposals', 'message']);
     expect(Object.keys(first.body.message).sort()).toEqual(['createdAt', 'id', 'role', 'source', 'text']);
-    expect(first.body.message.text).toContain(MEMORY_NOTE);
+    // The proposal travels as memoryProposals (the app shows it as a chip); no memory note is added to the
+    // reply text. Old builds get the disclaimer on this JSON response only (R46); the row stays clean.
+    expect(first.body.message.text).toBe(`Great, a morning routine helps.\n\n${LEGACY_DISCLAIMER}`);
+    expect((await prisma.coachMessage.findUniqueOrThrow({ where: { id: first.body.message.id } })).text).toBe('Great, a morning routine helps.');
     expect(first.body.memoryProposals).toHaveLength(1);
     const dto = first.body.memoryProposals[0];
     expect(Object.keys(dto).sort()).toEqual(['category', 'createdAt', 'id', 'status', 'value']);
     expect(dto).toMatchObject({ category: 'SCHEDULE', value: 'Runs at 6am on weekdays', status: 'PENDING' });
     expect(new Date(dto.createdAt).toISOString()).toBe(dto.createdAt);
 
-    const second = await request(app)
+    const second = await request(await testServer(app))
       .post('/me/coach/message')
       .set(await authed(user.id))
       .send({ message: 'thanks, what about my sleep', conversationId: first.body.conversationId });
     expect(second.status).toBe(200);
     expect(second.body.memoryProposals).toBeUndefined();
-    const listed = await request(app).get('/me/coach/memory').set(await authed(user.id));
+    const listed = await request(await testServer(app)).get('/me/coach/memory').set(await authed(user.id));
     expect(listed.body.entries.map((e: any) => e.status)).toEqual(['CONFIRMED']);
   });
 
   it('omits memoryProposals when nothing was proposed', async () => {
-    const { app } = scriptedApp([{ type: 'text', text: 'All good.' }]);
+    const { app } = scriptedApp(['All good.']);
     const user = await consented();
-    const res = await request(app).post('/me/coach/message').set(await authed(user.id)).send({ message: 'hello' });
+    const res = await request(await testServer(app)).post('/me/coach/message').set(await authed(user.id)).send({ message: 'hello' });
     expect(res.status).toBe(200);
     expect('memoryProposals' in res.body).toBe(false);
   });
@@ -131,7 +134,7 @@ describe('GET /me/coach/memory', () => {
     await mem(user.id, { value: 'Newest', status: 'PENDING', createdAt: new Date(Date.now() - 1000) });
     await mem(other.id, { value: 'Not mine' });
 
-    const res = await request(createApp()).get('/me/coach/memory').set(await authed(user.id));
+    const res = await request(await testServer(createApp())).get('/me/coach/memory').set(await authed(user.id));
 
     expect(res.status).toBe(200);
     expect(Object.keys(res.body)).toEqual(['entries']);
@@ -142,7 +145,7 @@ describe('GET /me/coach/memory', () => {
 
   it('returns an empty list for a user with none', async () => {
     const user = await createUser();
-    const res = await request(createApp()).get('/me/coach/memory').set(await authed(user.id));
+    const res = await request(await testServer(createApp())).get('/me/coach/memory').set(await authed(user.id));
     expect(res.body).toEqual({ entries: [] });
   });
 });
@@ -152,7 +155,7 @@ describe('PATCH /me/coach/memory/:id', () => {
     const user = await createUser();
     const row = await mem(user.id, { status: 'PENDING' });
 
-    const res = await request(createApp())
+    const res = await request(await testServer(createApp()))
       .patch(`/me/coach/memory/${row.id}`)
       .set(await authed(user.id))
       .send({ value: '  Prefers detailed answers  ' });
@@ -171,7 +174,7 @@ describe('PATCH /me/coach/memory/:id', () => {
   ])('400s on a %s value and leaves the row untouched', async (_label, value, reason) => {
     const user = await createUser();
     const row = await mem(user.id);
-    const res = await request(createApp()).patch(`/me/coach/memory/${row.id}`).set(await authed(user.id)).send({ value });
+    const res = await request(await testServer(createApp())).patch(`/me/coach/memory/${row.id}`).set(await authed(user.id)).send({ value });
     expect(res.status).toBe(400);
     expect(res.body).toEqual({ error: 'invalid_memory_value', reason });
     expect((await prisma.coachMemory.findUnique({ where: { id: row.id } }))?.value).toBe('Likes short answers');
@@ -180,7 +183,7 @@ describe('PATCH /me/coach/memory/:id', () => {
   it('accepts exactly 140 characters', async () => {
     const user = await createUser();
     const row = await mem(user.id);
-    const res = await request(createApp()).patch(`/me/coach/memory/${row.id}`).set(await authed(user.id)).send({ value: 'a'.repeat(140) });
+    const res = await request(await testServer(createApp())).patch(`/me/coach/memory/${row.id}`).set(await authed(user.id)).send({ value: 'a'.repeat(140) });
     expect(res.status).toBe(200);
   });
 
@@ -188,8 +191,8 @@ describe('PATCH /me/coach/memory/:id', () => {
     const user = await createUser();
     const other = await createUser();
     const theirs = await mem(other.id);
-    const a = await request(createApp()).patch(`/me/coach/memory/${theirs.id}`).set(await authed(user.id)).send({ value: 'hijack' });
-    const b = await request(createApp()).patch('/me/coach/memory/does-not-exist').set(await authed(user.id)).send({ value: 'x' });
+    const a = await request(await testServer(createApp())).patch(`/me/coach/memory/${theirs.id}`).set(await authed(user.id)).send({ value: 'hijack' });
+    const b = await request(await testServer(createApp())).patch('/me/coach/memory/does-not-exist').set(await authed(user.id)).send({ value: 'x' });
     expect(a.status).toBe(404);
     expect(b.status).toBe(404);
     expect((await prisma.coachMemory.findUnique({ where: { id: theirs.id } }))?.value).toBe('Likes short answers');
@@ -200,7 +203,7 @@ describe('DELETE /me/coach/memory/:id', () => {
   it('deletes the caller\'s entry with 204', async () => {
     const user = await createUser();
     const row = await mem(user.id);
-    const res = await request(createApp()).delete(`/me/coach/memory/${row.id}`).set(await authed(user.id));
+    const res = await request(await testServer(createApp())).delete(`/me/coach/memory/${row.id}`).set(await authed(user.id));
     expect(res.status).toBe(204);
     expect(await prisma.coachMemory.findUnique({ where: { id: row.id } })).toBeNull();
   });
@@ -209,8 +212,8 @@ describe('DELETE /me/coach/memory/:id', () => {
     const user = await createUser();
     const other = await createUser();
     const theirs = await mem(other.id);
-    expect((await request(createApp()).delete(`/me/coach/memory/${theirs.id}`).set(await authed(user.id))).status).toBe(404);
-    expect((await request(createApp()).delete('/me/coach/memory/nope').set(await authed(user.id))).status).toBe(404);
+    expect((await request(await testServer(createApp())).delete(`/me/coach/memory/${theirs.id}`).set(await authed(user.id))).status).toBe(404);
+    expect((await request(await testServer(createApp())).delete('/me/coach/memory/nope').set(await authed(user.id))).status).toBe(404);
     expect(await prisma.coachMemory.findUnique({ where: { id: theirs.id } })).not.toBeNull();
   });
 });
@@ -221,7 +224,7 @@ describe('GET /me/coach/digests/latest', () => {
 
   it('returns { digest: null } when there is none', async () => {
     const user = await createUser();
-    const res = await request(createApp()).get('/me/coach/digests/latest').set(await authed(user.id));
+    const res = await request(await testServer(createApp())).get('/me/coach/digests/latest').set(await authed(user.id));
     expect(res.status).toBe(200);
     expect(res.body).toEqual({ digest: null });
   });
@@ -233,11 +236,18 @@ describe('GET /me/coach/digests/latest', () => {
     const latest = await digest(user.id, '2026-09-14', 'newer recap');
     await digest(other.id, '2026-09-21', 'someone else');
 
-    const res = await request(createApp()).get('/me/coach/digests/latest').set(await authed(user.id));
+    const res = await request(await testServer(createApp())).get('/me/coach/digests/latest').set(await authed(user.id));
 
     expect(res.status).toBe(200);
     expect(Object.keys(res.body.digest).sort()).toEqual(['createdAt', 'id', 'text']);
     expect(res.body.digest).toEqual({ id: latest.id, text: 'newer recap', createdAt: latest.createdAt.toISOString() });
+  });
+
+  it('serves a digest stored by an older build without its appended disclaimer (the app shows it as a footnote)', async () => {
+    const user = await createUser();
+    await digest(user.id, '2026-09-14', `Recovery averaged 70 this week.\n\n${LEGACY_DISCLAIMER}`);
+    const res = await request(await testServer(createApp())).get('/me/coach/digests/latest').set(await authed(user.id));
+    expect(res.body.digest.text).toBe('Recovery averaged 70 this week.');
   });
 });
 
@@ -248,8 +258,8 @@ describe('push token endpoints', () => {
     const user = await createUser();
     const t = token();
     const headers = await authed(user.id);
-    expect((await request(createApp()).post('/me/push-token').set(headers).send({ token: t, platform: 'ios' })).status).toBe(204);
-    expect((await request(createApp()).post('/me/push-token').set(headers).send({ token: t, platform: 'android' })).status).toBe(204);
+    expect((await request(await testServer(createApp())).post('/me/push-token').set(headers).send({ token: t, platform: 'ios' })).status).toBe(204);
+    expect((await request(await testServer(createApp())).post('/me/push-token').set(headers).send({ token: t, platform: 'android' })).status).toBe(204);
     const rows = await prisma.pushToken.findMany({ where: { token: t } });
     expect(rows).toHaveLength(1);
     expect(rows[0]).toMatchObject({ userId: user.id, platform: 'android' });
@@ -263,9 +273,9 @@ describe('push token endpoints', () => {
     const a = await createUser();
     const b = await createUser();
     const t = token();
-    await request(createApp()).post('/me/push-token').set(await authed(a.id)).send({ token: t, platform: 'ios' });
+    await request(await testServer(createApp())).post('/me/push-token').set(await authed(a.id)).send({ token: t, platform: 'ios' });
 
-    const res = await request(createApp()).post('/me/push-token').set(await authed(b.id)).send({ token: t, platform: 'ios' });
+    const res = await request(await testServer(createApp())).post('/me/push-token').set(await authed(b.id)).send({ token: t, platform: 'ios' });
 
     expect(res.status).toBe(409);
     const rows = await prisma.pushToken.findMany({ where: { token: t } });
@@ -276,10 +286,10 @@ describe('push token endpoints', () => {
     const a = await createUser();
     const b = await createUser();
     const t = token();
-    await request(createApp()).post('/me/push-token').set(await authed(a.id)).send({ token: t, platform: 'ios' });
-    await request(createApp()).delete('/me/push-token').set(await authed(a.id)).send({ token: t });
+    await request(await testServer(createApp())).post('/me/push-token').set(await authed(a.id)).send({ token: t, platform: 'ios' });
+    await request(await testServer(createApp())).delete('/me/push-token').set(await authed(a.id)).send({ token: t });
 
-    const res = await request(createApp()).post('/me/push-token').set(await authed(b.id)).send({ token: t, platform: 'ios' });
+    const res = await request(await testServer(createApp())).post('/me/push-token').set(await authed(b.id)).send({ token: t, platform: 'ios' });
 
     expect(res.status).toBe(204);
     const rows = await prisma.pushToken.findMany({ where: { token: t } });
@@ -297,7 +307,7 @@ describe('push token endpoints', () => {
     ['upper-case platform', { token: 'abc', platform: 'IOS' }],
   ])('POST 400s on %s', async (_label, body) => {
     const user = await createUser();
-    const res = await request(createApp()).post('/me/push-token').set(await authed(user.id)).send(body);
+    const res = await request(await testServer(createApp())).post('/me/push-token').set(await authed(user.id)).send(body);
     expect(res.status).toBe(400);
   });
 
@@ -314,9 +324,9 @@ describe('push token endpoints', () => {
     });
     const headers = await authed(user.id);
 
-    expect((await request(createApp()).delete('/me/push-token').set(headers).send({ token: mine })).status).toBe(204);
-    expect((await request(createApp()).delete('/me/push-token').set(headers).send({ token: mine })).status).toBe(204);
-    expect((await request(createApp()).delete('/me/push-token').set(headers).send({ token: theirs })).status).toBe(204);
+    expect((await request(await testServer(createApp())).delete('/me/push-token').set(headers).send({ token: mine })).status).toBe(204);
+    expect((await request(await testServer(createApp())).delete('/me/push-token').set(headers).send({ token: mine })).status).toBe(204);
+    expect((await request(await testServer(createApp())).delete('/me/push-token').set(headers).send({ token: theirs })).status).toBe(204);
 
     expect(await prisma.pushToken.count({ where: { token: mine } })).toBe(0);
     expect(await prisma.pushToken.count({ where: { token: theirs } })).toBe(1);
@@ -324,7 +334,7 @@ describe('push token endpoints', () => {
 
   it('DELETE 400s without a token', async () => {
     const user = await createUser();
-    const res = await request(createApp()).delete('/me/push-token').set(await authed(user.id)).send({});
+    const res = await request(await testServer(createApp())).delete('/me/push-token').set(await authed(user.id)).send({});
     expect(res.status).toBe(400);
   });
 });

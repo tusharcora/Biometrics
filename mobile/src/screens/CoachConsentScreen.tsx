@@ -10,7 +10,8 @@ import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { SettingsGroup, SettingsRow } from '../components/ui/settings-list';
-import { StillOrb } from '../components/ui/still-orb';
+import { Character } from '../components/characters/Character';
+import { useScreenFocused } from '../characters/useScreenFocused';
 import { COLORS } from '../theme';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { navigateToCoachEntry } from '../navigation/coachNavigation';
@@ -37,6 +38,7 @@ export function CoachConsentScreen() {
   // Set once the server has rejected our version: the text on screen is then
   // the new one, and the user has to agree to it afresh.
   const [textChanged, setTextChanged] = useState(false);
+  const focused = useScreenFocused();
 
   const load = useCallback(async () => {
     setState({ status: 'loading' });
@@ -96,7 +98,7 @@ export function CoachConsentScreen() {
     return (
       <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
         <View className="flex-1 items-center justify-center gap-4 px-8">
-          <StillOrb size={48} glow={false} />
+          <Character testID="coach-consent-character" mood="idle" size={48} paused={!focused} />
           <Text className="text-center text-muted-foreground">Something went wrong loading this screen.</Text>
           <Button testID="coach-consent-retry" variant="ghost" onPress={() => void load()}>
             Try again
@@ -112,7 +114,7 @@ export function CoachConsentScreen() {
     return (
       <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
         <View testID="coach-consent-unavailable" className="flex-1 items-center justify-center gap-4 px-8">
-          <StillOrb size={48} glow={false} />
+          <Character testID="coach-consent-character" mood="idle" size={48} paused={!focused} />
           <Text className="text-center text-muted-foreground">The AI Coach is not available right now.</Text>
         </View>
       </SafeAreaView>
@@ -123,7 +125,7 @@ export function CoachConsentScreen() {
     <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
       <ScrollView contentContainerStyle={{ gap: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32 }}>
         <View className="items-start gap-4">
-          <StillOrb size={56} />
+          <Character testID="coach-consent-character" mood="idle" size={56} glow paused={!focused} />
           <Text className="font-display text-display">Before you use the AI Coach</Text>
         </View>
 

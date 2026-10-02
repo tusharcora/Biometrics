@@ -26,8 +26,18 @@ const status = {
   enabled: true,
   consented: false,
   consent: { version: 'v1', summary: 'Scores are sent to a provider.', dataItems: ['Recovery score'] },
-  personaId: 'encouraging',
-  personas: [{ id: 'encouraging', name: 'Encouraging', verbosity: 'normal', proactivity: 'threshold-triggered' }],
+  personaId: 'hoot',
+  personaChosen: true,
+  personas: [
+    {
+      id: 'hoot',
+      name: 'Hoot',
+      verbosity: 'normal',
+      proactivity: 'threshold-triggered',
+      tagline: 'Calm and curious. Spots the patterns in your weeks.',
+      greeting: "I've been watching your numbers overnight. Want to see what stood out?",
+    },
+  ],
 };
 
 function ok(body: unknown, statusCode = 200) {
@@ -46,7 +56,12 @@ beforeEach(() => {
 describe('fetchCoachStatus', () => {
   it('returns the server status', async () => {
     fetchMock.mockResolvedValueOnce(ok(status));
-    await expect(fetchCoachStatus()).resolves.toEqual(status);
+    // A server without engine fields answers on the device only.
+    await expect(fetchCoachStatus()).resolves.toEqual({
+      ...status,
+      engine: 'local',
+      engines: { hosted: { available: false, consented: false, consent: null } },
+    });
     expect(fetchMock).toHaveBeenCalledWith('https://api.example.com/me/coach/status', expect.anything());
   });
 
@@ -55,6 +70,55 @@ describe('fetchCoachStatus', () => {
     const result = await fetchCoachStatus();
     expect(result.enabled).toBe(false);
     expect(result.consented).toBe(false);
+    expect(result.personaChosen).toBe(false);
+  });
+
+  it('keeps the character while the coach is off, since it is also the app look', async () => {
+    fetchMock.mockResolvedValueOnce(ok({ ...status, enabled: false, consented: true, personaId: 'mochi' }));
+    const result = await fetchCoachStatus();
+    expect(result).toEqual({
+      enabled: false,
+      consented: false,
+      consent: { version: '', summary: '', dataItems: [] },
+      personaId: 'mochi',
+      personaChosen: true,
+      personas: status.personas,
+      engine: 'local',
+      engines: { hosted: { available: false, consented: false, consent: null } },
+    });
+  });
+
+  // A server that predates characters can't store their ids, so it must never
+  // prompt the picker: a missing personaChosen reads as chosen (ruling R18).
+  it('reads a server that predates characters as chosen, with no picker copy', async () => {
+    fetchMock.mockResolvedValueOnce(
+      ok({
+        enabled: true,
+        consented: true,
+        consent: status.consent,
+        personaId: 'encouraging',
+        personas: [{ id: 'encouraging', name: 'Encouraging', verbosity: 'normal', proactivity: 'threshold-triggered' }],
+      }),
+    );
+    const result = await fetchCoachStatus();
+    expect(result.personaChosen).toBe(true);
+    expect(result.personas).toEqual([
+      { id: 'encouraging', name: 'Encouraging', verbosity: 'normal', proactivity: 'threshold-triggered', tagline: null, greeting: null },
+    ]);
+  });
+
+  it('only reads personaChosen as not chosen when it is literally false, and drops malformed persona entries', async () => {
+    fetchMock.mockResolvedValueOnce(ok({ ...status, personaChosen: 'no', personaId: 7, personas: [null, 'hoot', status.personas[0]] }));
+    const result = await fetchCoachStatus();
+    // Not a boolean: treated like a missing field, so no prompt.
+    expect(result.personaChosen).toBe(true);
+    expect(result.personaId).toBe('');
+    expect(result.personas).toEqual(status.personas);
+  });
+
+  it('keeps a literal personaChosen false as not chosen', async () => {
+    fetchMock.mockResolvedValueOnce(ok({ ...status, personaChosen: false }));
+    expect((await fetchCoachStatus()).personaChosen).toBe(false);
   });
 });
 
@@ -82,12 +146,12 @@ describe('consent', () => {
 
 describe('setCoachPersona', () => {
   it('PUTs the persona id', async () => {
-    fetchMock.mockResolvedValueOnce(ok({ personaId: 'direct' }));
-    await expect(setCoachPersona('direct')).resolves.toEqual({ personaId: 'direct' });
+    fetchMock.mockResolvedValueOnce(ok({ personaId: 'pip' }));
+    await expect(setCoachPersona('pip')).resolves.toEqual({ personaId: 'pip' });
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('https://api.example.com/me/coach/persona');
     expect(init.method).toBe('PUT');
-    expect(JSON.parse(init.body)).toEqual({ personaId: 'direct' });
+    expect(JSON.parse(init.body)).toEqual({ personaId: 'pip' });
   });
 });
 
@@ -135,9 +199,9 @@ describe('sendCoachMessage', () => {
     await expect(sendCoachMessage({ message: 'Hi' })).rejects.toBeInstanceOf(CoachDisabledError);
   });
 
-  it('uses a 20 s client timeout, longer than the server 12 s budget', () => {
-    expect(COACH_REQUEST_TIMEOUT_MS).toBe(20000);
-    expect(COACH_REQUEST_TIMEOUT_MS).toBeGreaterThan(12000);
+  it('uses a 60 s client timeout, longer than the 45 s local-model server budget', () => {
+    expect(COACH_REQUEST_TIMEOUT_MS).toBe(60000);
+    expect(COACH_REQUEST_TIMEOUT_MS).toBeGreaterThan(45000);
   });
 
   it('takes a longer timeout from EXPO_PUBLIC_COACH_TIMEOUT_MS for a slower local model', () => {
@@ -152,7 +216,7 @@ describe('sendCoachMessage', () => {
     beforeEach(() => jest.useFakeTimers());
     afterEach(() => jest.useRealTimers());
 
-    it('aborts the request and rejects with CoachTimeoutError after 20 s', async () => {
+    it('aborts the request and rejects with CoachTimeoutError after the client timeout', async () => {
       let signal: AbortSignal | undefined;
       fetchMock.mockImplementation((_url: string, init: RequestInit) => {
         signal = init.signal as AbortSignal;

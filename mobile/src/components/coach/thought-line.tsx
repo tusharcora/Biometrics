@@ -56,12 +56,14 @@ export interface ThoughtLineProps {
    */
   elapsedSeconds?: number;
   label?: string;
-  /** Replaces the breathing sparkle (the coach passes its orb). It is drawn as-is, without the breath. */
+  /** Show the elapsed timer while working (default true). The Coach page shows only the status label (spec 1.3). */
+  timer?: boolean;
+  /** Replaces the breathing sparkle (the coach passes its character). It is drawn as-is, without the breath. */
   glyph?: React.ReactNode;
   testID?: string;
 }
 
-export function ThoughtLine({ working, elapsedSeconds, label = 'Thinking…', glyph, testID }: ThoughtLineProps) {
+export function ThoughtLine({ working, elapsedSeconds, label = 'Thinking…', timer = true, glyph, testID }: ThoughtLineProps) {
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === 'dark' ? COLORS.dark : COLORS.light;
   const reduceMotion = useReducedMotion();
@@ -106,7 +108,8 @@ export function ThoughtLine({ working, elapsedSeconds, label = 'Thinking…', gl
   const glyphStyle = useAnimatedStyle(() => ({ opacity: glyphOpacity.value }));
   const settledStyle = useAnimatedStyle(() => ({ opacity: settle.value }));
 
-  const accessibilityLabel = working ? 'Thinking' : `Thought for ${spokenThoughtTime(settledSeconds)}`;
+  // Speaks the label itself ("Looking at your sleep"), without its trailing ellipsis.
+  const accessibilityLabel = working ? label.replace(/(…|\.\.\.)$/, '') : `Thought for ${spokenThoughtTime(settledSeconds)}`;
 
   return (
     <View
@@ -133,9 +136,11 @@ export function ThoughtLine({ working, elapsedSeconds, label = 'Thinking…', gl
               ))
             )}
           </View>
-          <Text testID={testID ? `${testID}-timer` : undefined} className="text-sm text-muted-foreground" style={{ fontVariant: ['tabular-nums'] }}>
-            {formatThoughtTime(tenths / 10)}
-          </Text>
+          {timer ? (
+            <Text testID={testID ? `${testID}-timer` : undefined} className="text-sm text-muted-foreground" style={{ fontVariant: ['tabular-nums'] }}>
+              {formatThoughtTime(tenths / 10)}
+            </Text>
+          ) : null}
         </>
       ) : (
         <Animated.View style={settledStyle}>

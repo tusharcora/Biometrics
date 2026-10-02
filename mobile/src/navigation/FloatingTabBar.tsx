@@ -5,9 +5,8 @@ import type { BottomTabBarProps } from '@react-navigation/bottom-tabs';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from 'nativewind';
-import { Orb } from '../components/orb/Orb';
+import { Character } from '../components/characters/Character';
 import { GlassSurface } from '../components/ui/glass-surface';
-import { hubOrbAppearance } from '../lib/hubOrb';
 import { useCoachStatus } from '../lib/useCoachStatus';
 import { useKeyboardVisible } from '../lib/useKeyboardVisible';
 import { COLORS, MOTION } from '../theme';
@@ -35,7 +34,10 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
   const [innerWidth, setInnerWidth] = useState(0);
 
   const activeName = state.routes[state.index]?.name ?? 'Home';
-  const hub = hubOrbAppearance(status, activeName === HUB_TAB);
+  // The hub character always idles, on every tab (spec §1, Performance). It is
+  // only dimmed while the coach is off or its status unknown, which every coach
+  // entry treats the same way.
+  const hubDimmed = !status || !status.enabled;
   const target = activeCircleTarget(activeName);
 
   // Consent can change while another tab is open (accept, revoke), so re-read
@@ -97,7 +99,7 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
           elevation: 12,
         }}
       >
-      {/* The material follows the theme, and so do the icons and the orb. */}
+      {/* The material follows the theme, and so do the icons. */}
       <GlassSurface
         testID="floating-tab-bar-surface"
         scheme={scheme}
@@ -132,7 +134,7 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
                 style={{ height: FLOATING_BAR_HEIGHT - 2 }}
               >
                 {isHub ? (
-                  <Orb testID="hub-orb" size={64} theme={scheme} state={hub.state} paused={hub.paused} dimmed={hub.dimmed} />
+                  <Character testID="hub-character" mood="idle" size={64} mini dimmed={hubDimmed} />
                 ) : (
                   <Ionicons
                     name={ICONS[route.name] ?? 'ellipse-outline'}
