@@ -88,23 +88,23 @@ async function choose(app: express.Express, userId: string, personaId: string) {
 
 describe('PUT /me/coach/persona and the day summary', () => {
   it("drops today's sentence and rewrites it in the new character's voice", async () => {
-    const user = await userWithSummary('hoot');
+    const user = await userWithSummary('mochi');
     const { app, requests, tasks } = setup();
 
-    const res = await choose(app, user.id, 'ember');
+    const res = await choose(app, user.id, 'kit');
 
     expect(res.status).toBe(200);
     expect(await rowOf(user.id)).toBeNull(); // the page shows the template until the new sentence exists
     expect(tasks).toHaveLength(1);
     await tasks[0]!();
-    expect(requests[0]!.system).toContain('"Ember"');
+    expect(requests[0]!.system).toContain('"Kit"');
     expect(await rowOf(user.id)).toMatchObject({ text: NEW_VOICE, source: 'AI' });
   });
 
   it.each([
-    ['the same character again', 'ember', 'ember'],
-    ['the default character when none was stored (null already means Hoot)', null, 'hoot'],
-    ['a legacy id that maps to the current character', 'hoot', 'direct'],
+    ['the same character again', 'kit', 'kit'],
+    ['the default character when none was stored (null already means Mochi)', null, 'mochi'],
+    ['the default character when the stored id is retired (it already reads as Mochi)', 'hoot', 'mochi'],
   ])('keeps the sentence for %s', async (_label, stored, chosen) => {
     const user = await userWithSummary(stored);
     const { app, tasks } = setup();
@@ -116,16 +116,16 @@ describe('PUT /me/coach/persona and the day summary', () => {
 
   it('still drops the stale sentence but schedules no model call while the coach is off', async () => {
     process.env.COACH_ENABLED = 'false';
-    const user = await userWithSummary('hoot');
+    const user = await userWithSummary('mochi');
     const { app, tasks } = setup();
-    const res = await choose(app, user.id, 'pip');
+    const res = await choose(app, user.id, 'kit');
     expect(res.status).toBe(200);
     expect(await rowOf(user.id)).toBeNull();
     expect(tasks).toHaveLength(0);
   });
 
   it('answers 200 for a saved switch even when dropping the old sentence fails, and logs it', async () => {
-    const user = await userWithSummary('hoot');
+    const user = await userWithSummary('mochi');
     const errors = jest.spyOn(console, 'error').mockImplementation(() => {});
     const { app, tasks } = setup({
       now: () => {
@@ -133,20 +133,20 @@ describe('PUT /me/coach/persona and the day summary', () => {
       },
     });
 
-    const res = await choose(app, user.id, 'ember');
+    const res = await choose(app, user.id, 'kit');
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ personaId: 'ember' });
+    expect(res.body).toEqual({ personaId: 'kit' });
     const saved = await prisma.user.findUniqueOrThrow({ where: { id: user.id }, select: { coachPersonaId: true } });
-    expect(saved.coachPersonaId).toBe('ember');
+    expect(saved.coachPersonaId).toBe('kit');
     expect(tasks).toHaveLength(0);
     expect(errors).toHaveBeenCalledWith(JSON.stringify({ event: 'coach.request_failed', where: 'persona_summary', error: 'Error' }));
   });
 
   it('still drops the stale sentence but schedules no model call without the coach consent', async () => {
-    const user = await userWithSummary('hoot', { consented: false });
+    const user = await userWithSummary('mochi', { consented: false });
     const { app, tasks } = setup();
-    const res = await choose(app, user.id, 'pip');
+    const res = await choose(app, user.id, 'kit');
     expect(res.status).toBe(200);
     expect(await rowOf(user.id)).toBeNull();
     expect(tasks).toHaveLength(0);

@@ -188,7 +188,7 @@ describe('getTodaySummary', () => {
 
 describe('generateTodaySummary', () => {
   it("stores a validated AI sentence with tappable spans, written from the today fact sheet in the character's voice", async () => {
-    const user = await consentedUser({ coachPersonaId: 'doze' });
+    const user = await consentedUser({ coachPersonaId: 'kit' });
     const { requests, selection } = scripted([GOOD]);
 
     expect(await generateTodaySummary(user.id, deps(selection))).toBe('ai');
@@ -201,7 +201,7 @@ describe('generateTodaySummary', () => {
     expect(req!.messages).toEqual([{ role: 'user', content: TODAY_REQUEST }]);
     expect(req!.maxTokens).toBe(300);
     expect(req!.signal).toBeInstanceOf(AbortSignal);
-    expect(req!.system).toContain('"Doze"');
+    expect(req!.system).toContain('"Kit"');
     expect(req!.system).toContain('[recovery.today] Recovery today: 26');
     expect(req!.system).toContain(`At most ${SUMMARY_MAX_WORDS} words`);
   });
@@ -301,10 +301,10 @@ describe('generateTodaySummary', () => {
   });
 
   it('discards a sentence written in the old voice when the character changed mid-generation', async () => {
-    const user = await consentedUser({ coachPersonaId: 'hoot' });
+    const user = await consentedUser({ coachPersonaId: 'mochi' });
     const { selection } = scripted([
       async () => {
-        await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: 'ember' } });
+        await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: 'kit' } });
         return GOOD;
       },
     ]);
@@ -360,10 +360,10 @@ describe('generateTodaySummary: runs asked for while one is in flight', () => {
   });
 
   it('after a character switch mid-run, the queued rewrite writes in the new voice', async () => {
-    const user = await consentedUser({ coachPersonaId: 'hoot' });
+    const user = await consentedUser({ coachPersonaId: 'mochi' });
     const { requests, selection } = scripted([
       async () => {
-        await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: 'ember' } });
+        await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: 'kit' } });
         return GOOD;
       },
       LATER,
@@ -375,17 +375,17 @@ describe('generateTodaySummary: runs asked for while one is in flight', () => {
     expect(await first).toBe('skipped_persona_changed');
     expect(await rewrite).toBe('ai');
     expect(requests).toHaveLength(2);
-    expect(requests[1]!.system).toContain('"Ember"');
+    expect(requests[1]!.system).toContain('"Kit"');
     expect((await rowOf(user.id))!.text).toBe(LATER);
   });
 
   it('takes its row back when the character changes between the check and the write', async () => {
-    const user = await consentedUser({ coachPersonaId: 'hoot' });
+    const user = await consentedUser({ coachPersonaId: 'mochi' });
     const { selection } = scripted([GOOD]);
     const original = prisma.coachDaySummary.upsert.bind(prisma.coachDaySummary);
     const spy = jest.spyOn(prisma.coachDaySummary, 'upsert').mockImplementationOnce(((args: Parameters<typeof original>[0]) => {
       return prisma.user
-        .update({ where: { id: user.id }, data: { coachPersonaId: 'ember' } })
+        .update({ where: { id: user.id }, data: { coachPersonaId: 'kit' } })
         .then(() => original(args));
     }) as unknown as typeof prisma.coachDaySummary.upsert);
     try {

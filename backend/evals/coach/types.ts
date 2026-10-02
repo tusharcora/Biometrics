@@ -21,7 +21,7 @@ export type ReadingType = 'SLEEP' | 'HRV' | 'RESTING_HR' | 'STEPS';
 
 /** Everything is keyed by days ago (0 = today, in the user's civil time). */
 export interface UserSnapshot {
-  /** The character; omitted means the default (Hoot). */
+  /** The character; omitted means the default (Mochi). */
   personaId?: string;
   recovery?: Array<[daysAgo: number, score: number]>;
   sleepScore?: Array<[daysAgo: number, score: number]>;
