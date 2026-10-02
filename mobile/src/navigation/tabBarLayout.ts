@@ -15,24 +15,26 @@ export const TAB_LABELS: Record<string, string> = {
   Profile: 'Profile',
 };
 
-// About 80 dp so the 64 dp character fits inside the pill (spec 2.3).
-export const FLOATING_BAR_HEIGHT = 80;
+// The quiet rounded rectangle: low enough to stay out of the way, tall enough
+// for a 22 dp icon over its label and the 52 dp hub character.
+export const FLOATING_BAR_HEIGHT = 62;
+export const FLOATING_BAR_RADIUS = 18;
 export const FLOATING_BAR_MARGIN = 12;
 
 export function slotCenterX(index: number, innerWidth: number, count: number): number {
   return count > 0 ? (index + 0.5) * (innerWidth / count) : 0;
 }
 
-// The circle springs between slots only once the bar has been measured before:
-// the first measured layout places it directly, so it does not slide in from the
-// left edge on mount. Reduced motion always snaps.
-export function circleAnimates(previousInnerWidth: number, reduced: boolean): boolean {
+// The active-tab line springs between slots only once the bar has been measured
+// before: the first measured layout places it directly, so it does not slide in
+// from the left edge on mount. Reduced motion always snaps.
+export function indicatorAnimates(previousInnerWidth: number, reduced: boolean): boolean {
   return previousInnerWidth > 0 && !reduced;
 }
 
-// The white circle sits behind the active icon. The hub has the character instead,
-// so the circle hides there (and for any route we do not know).
-export function activeCircleTarget(activeRouteName: string): { index: number; visible: boolean } {
+// The line sits over the active icon. The hub has the character instead, so the
+// line hides there (and for any route we do not know).
+export function activeIndicatorTarget(activeRouteName: string): { index: number; visible: boolean } {
   const index = (TAB_ORDER as readonly string[]).indexOf(activeRouteName);
   return { index: Math.max(0, index), visible: index >= 0 && activeRouteName !== HUB_TAB };
 }

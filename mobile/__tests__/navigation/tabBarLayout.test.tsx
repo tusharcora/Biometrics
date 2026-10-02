@@ -6,8 +6,8 @@ import {
   HUB_TAB,
   FLOATING_BAR_HEIGHT,
   FLOATING_BAR_MARGIN,
-  activeCircleTarget,
-  circleAnimates,
+  activeIndicatorTarget,
+  indicatorAnimates,
   slotCenterX,
   useTabBarClearance,
 } from '../../src/navigation/tabBarLayout';
@@ -31,17 +31,17 @@ describe('slotCenterX', () => {
   });
 });
 
-describe('activeCircleTarget', () => {
-  it('shows the circle on an icon tab', () => {
-    expect(activeCircleTarget('Metrics')).toEqual({ index: 3, visible: true });
+describe('activeIndicatorTarget', () => {
+  it('shows the line on an icon tab', () => {
+    expect(activeIndicatorTarget('Metrics')).toEqual({ index: 3, visible: true });
   });
 
-  it('hides the circle on the coach tab, which has the character instead', () => {
-    expect(activeCircleTarget('Coach')).toEqual({ index: 2, visible: false });
+  it('hides the line on the coach tab, which has the character instead', () => {
+    expect(activeIndicatorTarget('Coach')).toEqual({ index: 2, visible: false });
   });
 
-  it('hides the circle for an unknown route', () => {
-    expect(activeCircleTarget('Nope')).toEqual({ index: 0, visible: false });
+  it('hides the line for an unknown route', () => {
+    expect(activeIndicatorTarget('Nope')).toEqual({ index: 0, visible: false });
   });
 });
 
@@ -62,16 +62,16 @@ describe('useTabBarClearance', () => {
   });
 });
 
-describe('circleAnimates', () => {
-  it('does not animate before the bar has been measured (first layout places the circle directly)', () => {
-    expect(circleAnimates(0, false)).toBe(false);
+describe('indicatorAnimates', () => {
+  it('does not animate before the bar has been measured (first layout places the line directly)', () => {
+    expect(indicatorAnimates(0, false)).toBe(false);
   });
 
   it('does not animate under reduced motion, even once measured', () => {
-    expect(circleAnimates(358, true)).toBe(false);
+    expect(indicatorAnimates(358, true)).toBe(false);
   });
 
   it('animates once the bar has been measured and motion is not reduced', () => {
-    expect(circleAnimates(358, false)).toBe(true);
+    expect(indicatorAnimates(358, false)).toBe(true);
   });
 });

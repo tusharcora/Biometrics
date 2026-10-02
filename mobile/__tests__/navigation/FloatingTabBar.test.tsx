@@ -74,6 +74,21 @@ describe('FloatingTabBar', () => {
     expect(getByTestId('tab-Coach')).toContainElement(getByTestId('hub-character', HIDDEN_OK));
   });
 
+  it('labels only the focused tab, under its icon', () => {
+    const { getByTestId, queryByTestId } = render(bar(makeProps(1)));
+
+    expect(getByTestId('tab-label-Activity')).toHaveTextContent('Activity');
+    for (const name of ['Home', 'Metrics', 'Profile']) expect(queryByTestId(`tab-label-${name}`)).toBeNull();
+  });
+
+  it('is a solid rounded rectangle, not a pill', () => {
+    const { getByTestId } = render(bar(makeProps()));
+
+    const surface = StyleSheet.flatten(getByTestId('floating-tab-bar-surface').props.style);
+    expect(surface.height).toBe(62);
+    expect(surface.borderRadius).toBe(18);
+  });
+
   it('marks only the focused tab selected', () => {
     const { getByTestId } = render(bar(makeProps(3)));
 
@@ -124,7 +139,7 @@ describe('FloatingTabBar', () => {
     it.each([0, 1, 2, 3, 4])('idles, animating at full brightness, with tab %i focused', (index) => {
       const utils = render(bar(makeProps(index)));
 
-      expect(hub(utils)).toEqual({ label: 'character:hoot:idle:64:playing:mini', opacity: 1 });
+      expect(hub(utils)).toEqual({ label: 'character:hoot:idle:52:playing:mini', opacity: 1 });
     });
 
     it('keeps idling, never paused, when the focused tab changes', () => {
@@ -132,21 +147,21 @@ describe('FloatingTabBar', () => {
 
       utils.rerender(bar(makeProps(0)));
 
-      expect(hub(utils)).toEqual({ label: 'character:hoot:idle:64:playing:mini', opacity: 1 });
+      expect(hub(utils)).toEqual({ label: 'character:hoot:idle:52:playing:mini', opacity: 1 });
     });
 
     it('idles dimmed when the status is unknown', () => {
       setCoach(null);
       const utils = render(bar(makeProps(0)));
 
-      expect(hub(utils)).toEqual({ label: 'character:hoot:idle:64:playing:mini', opacity: DIMMED_OPACITY });
+      expect(hub(utils)).toEqual({ label: 'character:hoot:idle:52:playing:mini', opacity: DIMMED_OPACITY });
     });
 
     it('idles dimmed when the coach is disabled, even on the Coach tab', () => {
       setCoach({ ...enabledStatus, enabled: false });
       const utils = render(bar(makeProps(2)));
 
-      expect(hub(utils)).toEqual({ label: 'character:hoot:idle:64:playing:mini', opacity: DIMMED_OPACITY });
+      expect(hub(utils)).toEqual({ label: 'character:hoot:idle:52:playing:mini', opacity: DIMMED_OPACITY });
     });
 
     it('is not dimmed for an enabled coach the user has not consented to yet', () => {
@@ -160,14 +175,14 @@ describe('FloatingTabBar', () => {
       const utils = render(withCharacter(bar(makeProps(0)), { characterId: 'pip', recoveryBand: 'scorePoor' }));
 
       // Idle even on a poor recovery day: the tab bar ignores moods.
-      expect(hub(utils).label).toBe('character:pip:idle:64:playing:mini');
+      expect(hub(utils).label).toBe('character:pip:idle:52:playing:mini');
     });
 
     it('draws the same character in light mode (its colours are fixed)', () => {
       mockScheme = 'light';
       const utils = render(bar(makeProps(0)));
 
-      expect(hub(utils).label).toBe('character:hoot:idle:64:playing:mini');
+      expect(hub(utils).label).toBe('character:hoot:idle:52:playing:mini');
     });
   });
 
