@@ -611,7 +611,16 @@ describe('useCoachConversation: progress steps', () => {
     expect(result.current.steps.every((s) => s.done)).toBe(true);
     live.emit({ type: 'text', sentence: 'Deep sleep was up.' });
     expect(result.current.steps.every((s) => s.done)).toBe(true);
+    live.emit(done());
     await live.finish();
+
+    // Kept, all ticked, after the turn ends: the thinking text lingers on them.
+    expect(result.current.streaming).toBe(false);
+    expect(result.current.steps).toEqual([
+      { id: 'route', label: 'Looking at your sleep…', done: true },
+      { id: 'facts', label: 'Going through your recent nights…', done: true },
+      { id: 'write', label: 'Writing it up…', done: true },
+    ]);
   });
 
   it('shows a stepless status (older server) as one step, updating its label rather than adding another', async () => {
@@ -629,12 +638,12 @@ describe('useCoachConversation: progress steps', () => {
   });
 
   it('keeps the steps it has when the stream errors after the first one', async () => {
-    const live = openTurn();
+    turn([{ type: 'status', step: 'route', label: 'Thinking it over…' }, { type: 'error', code: 'internal', retryable: true }]);
     const { result } = setup();
 
-    act(() => result.current.send('hi'));
-    live.emit({ type: 'status', step: 'route', label: 'Thinking it over…' });
-    live.emit({ type: 'error', code: 'internal', retryable: true });
+    await act(async () => result.current.send('hi'));
+    expect(result.current.streaming).toBe(false);
+    expect(result.current.error).not.toBeNull();
     expect(result.current.steps).toEqual([{ id: 'route', label: 'Thinking it over…', done: false }]);
   });
 
@@ -658,17 +667,22 @@ describe('useCoachConversation: progress steps', () => {
     expect(result.current.steps).toEqual([{ id: 'facts', label: 'Going through your recent nights…', done: false }]);
   });
 
-  it('clears the steps on stop and on a new chat', async () => {
+  it('starts the next send after a stop with no steps, and a new chat clears them', async () => {
     const live = openTurn();
     const { result } = setup();
     act(() => result.current.send('hi'));
     live.emit({ type: 'status', step: 'route', label: 'Thinking it over…' });
     await act(async () => result.current.stop());
-    expect(result.current.steps).toEqual([]);
+    expect(result.current.streaming).toBe(false);
 
     const next = openTurn();
     act(() => result.current.send('again'));
+    expect(result.current.steps).toEqual([]);
     next.emit({ type: 'status', step: 'route', label: 'Thinking it over…' });
+    next.emit(done());
+    await next.finish();
+    expect(result.current.steps).toEqual([{ id: 'route', label: 'Thinking it over…', done: false }]);
+
     await act(async () => result.current.newChat());
     expect(result.current.steps).toEqual([]);
   });

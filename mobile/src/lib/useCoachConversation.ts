@@ -280,7 +280,8 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
     streamingRef.current = false;
     setStreaming(false);
     setStatusLabel(null);
-    setSteps([]);
+    // `steps` is kept: the thinking text lingers on them briefly after the turn
+    // (and an errored turn keeps the rows it had). The next turn clears them.
 
     if (thrown instanceof CoachStreamAbortedError) {
       // Stopped: the partial text stays, marked, and is not a full answer. A
