@@ -2,6 +2,7 @@ import { createContext, useContext } from 'react';
 import type { CoachStatusDTO } from '../api/coach';
 import type { ScoreBand } from '../lib/scoreInsights';
 import type { CharacterId } from '../components/characters/types';
+import type { ThinkingAttachmentId, ThinkingTextId } from '../components/characters/thinking';
 
 export interface CharacterContextValue {
   characterId: CharacterId;
@@ -12,9 +13,14 @@ export interface CharacterContextValue {
   statusLoaded: boolean;
   /** scoreBand() of today's recovery score; null when there is none or it failed to load. */
   recoveryBand: ScoreBand | null;
+  /** What the coach shows while it works on an answer; the defaults until known and when signed out. */
+  thinkingAttachment: ThinkingAttachmentId;
+  thinkingText: ThinkingTextId;
   refreshStatus(): Promise<void>;
   /** Optimistic: switches at once, reverts and rethrows if the save fails. */
   chooseCharacter(id: CharacterId): Promise<void>;
+  /** Optimistic like chooseCharacter. Only the settings given are sent and changed. */
+  chooseThinking(body: { attachment?: ThinkingAttachmentId; text?: ThinkingTextId }): Promise<void>;
 }
 
 export const CharacterContext = createContext<CharacterContextValue | null>(null);

@@ -22,7 +22,7 @@ const enabledStatus = {
   enabled: true,
   consented: true,
   consent: { version: 'v1', summary: 's', dataItems: [] },
-  personaId: 'hoot',
+  personaId: 'mochi',
   personaChosen: true,
   personas: [],
 };
@@ -139,7 +139,7 @@ describe('FloatingTabBar', () => {
     it.each([0, 1, 2, 3, 4])('idles, animating at full brightness, with tab %i focused', (index) => {
       const utils = render(bar(makeProps(index)));
 
-      expect(hub(utils)).toEqual({ label: 'character:hoot:idle:52:playing:mini', opacity: 1 });
+      expect(hub(utils)).toEqual({ label: 'character:mochi:idle:52:playing:none', opacity: 1 });
     });
 
     it('keeps idling, never paused, when the focused tab changes', () => {
@@ -147,21 +147,21 @@ describe('FloatingTabBar', () => {
 
       utils.rerender(bar(makeProps(0)));
 
-      expect(hub(utils)).toEqual({ label: 'character:hoot:idle:52:playing:mini', opacity: 1 });
+      expect(hub(utils)).toEqual({ label: 'character:mochi:idle:52:playing:none', opacity: 1 });
     });
 
     it('idles dimmed when the status is unknown', () => {
       setCoach(null);
       const utils = render(bar(makeProps(0)));
 
-      expect(hub(utils)).toEqual({ label: 'character:hoot:idle:52:playing:mini', opacity: DIMMED_OPACITY });
+      expect(hub(utils)).toEqual({ label: 'character:mochi:idle:52:playing:none', opacity: DIMMED_OPACITY });
     });
 
     it('idles dimmed when the coach is disabled, even on the Coach tab', () => {
       setCoach({ ...enabledStatus, enabled: false });
       const utils = render(bar(makeProps(2)));
 
-      expect(hub(utils)).toEqual({ label: 'character:hoot:idle:52:playing:mini', opacity: DIMMED_OPACITY });
+      expect(hub(utils)).toEqual({ label: 'character:mochi:idle:52:playing:none', opacity: DIMMED_OPACITY });
     });
 
     it('is not dimmed for an enabled coach the user has not consented to yet', () => {
@@ -172,17 +172,17 @@ describe('FloatingTabBar', () => {
     });
 
     it("shows the user's character from CharacterProvider", () => {
-      const utils = render(withCharacter(bar(makeProps(0)), { characterId: 'pip', recoveryBand: 'scorePoor' }));
+      const utils = render(withCharacter(bar(makeProps(0)), { characterId: 'kit', recoveryBand: 'scorePoor' }));
 
       // Idle even on a poor recovery day: the tab bar ignores moods.
-      expect(hub(utils).label).toBe('character:pip:idle:52:playing:mini');
+      expect(hub(utils).label).toBe('character:kit:idle:52:playing:none');
     });
 
     it('draws the same character in light mode (its colours are fixed)', () => {
       mockScheme = 'light';
       const utils = render(bar(makeProps(0)));
 
-      expect(hub(utils).label).toBe('character:hoot:idle:52:playing:mini');
+      expect(hub(utils).label).toBe('character:mochi:idle:52:playing:none');
     });
   });
 

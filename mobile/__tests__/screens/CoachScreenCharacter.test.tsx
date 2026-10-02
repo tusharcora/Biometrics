@@ -1,7 +1,8 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { act, render, fireEvent, waitFor } from '@testing-library/react-native';
 import { NavigationContext } from '@react-navigation/native';
-import { characterLabel as label, withCharacter } from '../../jest-mocks/characterContext';
+import { HIDDEN_OK, characterLabel as label, withCharacter } from '../../jest-mocks/characterContext';
 import { answer, doneEvent, openTurn, scriptTurn } from '../../jest-mocks/coachStreamFake';
 import { CoachScreen } from '../../src/screens/CoachScreen';
 import { fetchCoachStatus, fetchLatestConversation, fetchTodaySummary, type CoachStatusDTO } from '../../src/api/coach';
@@ -31,7 +32,7 @@ const status: CoachStatusDTO = {
   enabled: true,
   consented: true,
   consent: { version: 'v1', summary: 's', dataItems: ['x'] },
-  personaId: 'ember',
+  personaId: 'kit',
   personaChosen: true,
   personas: [],
 };
@@ -44,7 +45,7 @@ function renderCoach({ recoveryBand = null, focused = true }: { recoveryBand?: S
   const navigation = { isFocused: () => focused, addListener: () => () => undefined };
   return render(
     <NavigationContext.Provider value={navigation as never}>
-      {withCharacter(<CoachScreen />, { characterId: 'ember', status, recoveryBand })}
+      {withCharacter(<CoachScreen />, { characterId: 'kit', status, recoveryBand })}
     </NavigationContext.Provider>,
   );
 }
@@ -68,18 +69,43 @@ describe('CoachScreen: character', () => {
     const utils = renderCoach();
     await utils.findByTestId('coach-empty');
 
-    expect(label(utils, 'coach-header-character')).toBe('character:ember:idle:36:playing:mini');
-    expect(label(utils, 'coach-hero-character')).toBe('character:ember:idle:64:playing:full');
+    expect(label(utils, 'coach-header-character')).toBe('character:kit:idle:36:playing:none');
+    expect(label(utils, 'coach-hero-character')).toBe('character:kit:idle:64:playing:none');
+  });
+
+  it('keeps the header coach in a fixed 54 pt slot, so the title does not move between moods', async () => {
+    const live = openTurn(stream);
+    const utils = renderCoach();
+    await utils.findByTestId('coach-input');
+    const slotWidth = () => (StyleSheet.flatten(utils.getByTestId('coach-header-slot').props.style) as { width: number }).width;
+    const coachWidth = () => (StyleSheet.flatten(utils.getByTestId('coach-header-character', HIDDEN_OK).props.style) as { width: number }).width;
+    const seen: Array<[string, number, number]> = [];
+    const record = () => seen.push([label(utils, 'coach-header-character').split(':')[2]!, slotWidth(), coachWidth()]);
+
+    record();
+    fireEvent.changeText(utils.getByTestId('coach-input'), 'How did I sleep?');
+    await act(async () => {
+      fireEvent.press(utils.getByTestId('coach-send-button'));
+    });
+    record();
+    await live.finish({ type: 'text', sentence: 'Well.' }, doneEvent());
+    record();
+
+    expect(seen.map(([mood]) => mood)).toEqual(['idle', 'thinking', 'answering']);
+    for (const [, slot, coach] of seen) {
+      expect(slot).toBe(54);
+      expect(coach).toBeLessThanOrEqual(54);
+    }
   });
 
   it('rests on a poor recovery day', async () => {
     const utils = renderCoach({ recoveryBand: 'scorePoor' });
     await utils.findByTestId('coach-empty');
 
-    expect(label(utils, 'coach-hero-character')).toBe('character:ember:resting:64:playing:full');
+    expect(label(utils, 'coach-hero-character')).toBe('character:kit:resting:64:playing:none');
   });
 
-  it('thinks from the question until the answer is done, with a mini thinking character on the status line', async () => {
+  it('thinks from the question until the answer is done, with the 36 pt thinking coach and its attachment on the pending row', async () => {
     const live = openTurn(stream);
     const utils = renderCoach();
     await utils.findByTestId('coach-input');
@@ -90,13 +116,13 @@ describe('CoachScreen: character', () => {
     });
 
     await utils.findByTestId('coach-thinking');
-    expect(label(utils, 'coach-header-character')).toBe('character:ember:thinking:36:playing:mini');
-    expect(label(utils, 'coach-thinking-character')).toBe('character:ember:thinking:20:playing:mini');
+    expect(label(utils, 'coach-header-character')).toBe('character:kit:thinking:36:playing:bulb');
+    expect(label(utils, 'coach-thinking')).toBe('character:kit:thinking:36:playing:bulb');
 
     await live.emit({ type: 'text', sentence: 'Well.' });
-    expect(label(utils, 'coach-header-character')).toBe('character:ember:thinking:36:playing:mini');
+    expect(label(utils, 'coach-header-character')).toBe('character:kit:thinking:36:playing:bulb');
     await live.finish(doneEvent());
-    expect(label(utils, 'coach-header-character')).toBe('character:ember:answering:36:playing:mini');
+    expect(label(utils, 'coach-header-character')).toBe('character:kit:answering:36:playing:bulb');
   });
 
   it('answers right after an answer is done, then goes back to idle', async () => {
@@ -109,9 +135,9 @@ describe('CoachScreen: character', () => {
       await tapSuggestion(utils);
       await utils.findByText('You slept well.');
 
-      expect(label(utils, 'coach-header-character')).toBe('character:ember:answering:36:playing:mini');
+      expect(label(utils, 'coach-header-character')).toBe('character:kit:answering:36:playing:bulb');
       act(() => jest.advanceTimersByTime(2500));
-      expect(label(utils, 'coach-header-character')).toBe('character:ember:idle:36:playing:mini');
+      expect(label(utils, 'coach-header-character')).toBe('character:kit:idle:36:playing:none');
     } finally {
       jest.useRealTimers();
     }
@@ -125,7 +151,7 @@ describe('CoachScreen: character', () => {
     await tapSuggestion(utils);
     await utils.findByTestId('coach-safety-resources');
 
-    expect(label(utils, 'coach-header-character')).toBe('character:ember:idle:36:playing:mini');
+    expect(label(utils, 'coach-header-character')).toBe('character:kit:idle:36:playing:none');
   });
 
   it('does not answer after a failed send, or after a stop', async () => {
@@ -135,7 +161,7 @@ describe('CoachScreen: character', () => {
 
     await tapSuggestion(utils);
     await utils.findByTestId('coach-error');
-    expect(label(utils, 'coach-header-character')).toBe('character:ember:idle:36:playing:mini');
+    expect(label(utils, 'coach-header-character')).toBe('character:kit:idle:36:playing:none');
 
     const live = openTurn(stream);
     fireEvent.changeText(utils.getByTestId('coach-input'), 'Again');
@@ -147,7 +173,7 @@ describe('CoachScreen: character', () => {
       fireEvent.press(utils.getByTestId('coach-send-button'));
     });
     await waitFor(() => expect(utils.getByText('Stopped')).toBeTruthy());
-    expect(label(utils, 'coach-header-character')).toBe('character:ember:idle:36:playing:mini');
+    expect(label(utils, 'coach-header-character')).toBe('character:kit:idle:36:playing:none');
   });
 
   it('leaves the character idle for a safety reply that lands right after a normal one', async () => {
@@ -158,7 +184,7 @@ describe('CoachScreen: character', () => {
 
     await tapSuggestion(utils);
     await utils.findByText('You slept well.');
-    expect(label(utils, 'coach-header-character')).toBe('character:ember:answering:36:playing:mini');
+    expect(label(utils, 'coach-header-character')).toBe('character:kit:answering:36:playing:bulb');
 
     fireEvent.changeText(utils.getByTestId('coach-input'), 'I feel awful');
     await act(async () => {
@@ -166,7 +192,7 @@ describe('CoachScreen: character', () => {
     });
     await utils.findByTestId('coach-safety-resources');
 
-    expect(label(utils, 'coach-header-character')).toBe('character:ember:idle:36:playing:mini');
+    expect(label(utils, 'coach-header-character')).toBe('character:kit:idle:36:playing:none');
   });
 
   it('leaves the character idle for a failed send right after a normal answer', async () => {
@@ -177,7 +203,7 @@ describe('CoachScreen: character', () => {
 
     await tapSuggestion(utils);
     await utils.findByText('You slept well.');
-    expect(label(utils, 'coach-header-character')).toBe('character:ember:answering:36:playing:mini');
+    expect(label(utils, 'coach-header-character')).toBe('character:kit:answering:36:playing:bulb');
 
     fireEvent.changeText(utils.getByTestId('coach-input'), 'And today?');
     await act(async () => {
@@ -185,19 +211,19 @@ describe('CoachScreen: character', () => {
     });
     await utils.findByTestId('coach-error');
 
-    expect(label(utils, 'coach-header-character')).toBe('character:ember:idle:36:playing:mini');
+    expect(label(utils, 'coach-header-character')).toBe('character:kit:idle:36:playing:none');
   });
 
   it('holds the characters still while the Coach tab is not focused, even when an answer lands', async () => {
     scriptTurn(stream, answer('Done.'));
     const utils = renderCoach({ focused: false });
     await utils.findByTestId('coach-empty');
-    expect(label(utils, 'coach-hero-character')).toBe('character:ember:idle:64:paused:full');
+    expect(label(utils, 'coach-hero-character')).toBe('character:kit:idle:64:paused:none');
 
     await tapSuggestion(utils);
     await utils.findByText('Done.');
 
-    expect(label(utils, 'coach-header-character')).toBe('character:ember:answering:36:paused:mini');
+    expect(label(utils, 'coach-header-character')).toBe('character:kit:answering:36:paused:bulb');
   });
 
   it('stops the stream and does not update after unmount', async () => {
@@ -216,10 +242,10 @@ describe('CoachScreen: character', () => {
     errors.mockRestore();
   });
 
-  it('shows Hoot when rendered without a CharacterProvider', async () => {
+  it('shows Mochi when rendered without a CharacterProvider', async () => {
     const utils = render(<CoachScreen />);
     await utils.findByTestId('coach-empty');
 
-    await waitFor(() => expect(label(utils, 'coach-header-character')).toBe('character:hoot:idle:36:playing:mini'));
+    await waitFor(() => expect(label(utils, 'coach-header-character')).toBe('character:mochi:idle:36:playing:none'));
   });
 });

@@ -14,7 +14,7 @@
 
 import { deltaDisplayOf, statusOf } from '../../src/coach/answer/card';
 import { buildFactSheet, defaultFactData, FactSheet } from '../../src/coach/answer/facts';
-import { AnswerEvent, runAnswer, STATUS_LABELS } from '../../src/coach/answer/pipeline';
+import { AnswerEvent, runAnswer, STEP_LABELS } from '../../src/coach/answer/pipeline';
 import { AnswerRoute, routeQuestion } from '../../src/coach/answer/route';
 import { validateSentence } from '../../src/coach/answer/validate';
 import { CoachClock } from '../../src/coach/clock';
@@ -40,7 +40,7 @@ class CollectingTelemetry implements CoachTelemetry {
 const sameList = (a: readonly string[], b: readonly string[]) => a.length === b.length && a.every((x, i) => x === b[i]);
 const show = (list: readonly string[]) => `[${list.map((s) => JSON.stringify(s)).join(', ')}]`;
 
-const ROUTE_OF_LABEL = new Map<string, AnswerRoute>(Object.entries(STATUS_LABELS).map(([route, label]) => [label, route as AnswerRoute]));
+const ROUTE_OF_LABEL = new Map<string, AnswerRoute>(Object.entries(STEP_LABELS).map(([route, labels]) => [labels.route, route as AnswerRoute]));
 
 function outcomeOf(events: readonly AnswerEvent[]): Outcome | 'none' {
   for (const e of events) {
@@ -95,7 +95,7 @@ export async function runFixture(fixture: EvalFixture, options: { unguarded?: bo
     const sentences = events.flatMap((e) => (e.type === 'text' ? [e.sentence] : []));
     text = sentences.join(' ');
     const card = events.find((e): e is Extract<AnswerEvent, { type: 'card' }> => e.type === 'card')?.card ?? null;
-    const status = events.find((e): e is Extract<AnswerEvent, { type: 'status' }> => e.type === 'status');
+    const status = events.find((e): e is Extract<AnswerEvent, { type: 'status' }> => e.type === 'status' && e.step === 'route');
     const route = status ? ROUTE_OF_LABEL.get(status.label) : undefined;
     const sheet = await buildFactSheet(userId, route ?? routeQuestion(fixture.question), { ...defaultFactData, today: todayCivil() });
     const want = fixture.expect;

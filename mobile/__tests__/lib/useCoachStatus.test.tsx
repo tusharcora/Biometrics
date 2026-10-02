@@ -4,7 +4,13 @@ import { fetchCoachStatus, type CoachStatusDTO } from '../../src/api/coach';
 import { fetchScoresWithBands } from '../../src/api/scores';
 import { scoreQuestion } from '../../src/lib/coachPrompts';
 import { CharacterProvider, useCharacter } from '../../src/characters/CharacterProvider';
-import { clearCachedCharacter, readCachedCharacter, writeCachedCharacter } from '../../src/characters/characterCache';
+import {
+  clearCachedCharacter,
+  readCachedCharacter,
+  readCachedThinking,
+  writeCachedCharacter,
+  writeCachedThinking,
+} from '../../src/characters/characterCache';
 
 jest.mock('../../src/api/coach');
 jest.mock('../../src/api/scores', () => ({ fetchScoresWithBands: jest.fn() }));
@@ -17,9 +23,11 @@ const base: CoachStatusDTO = {
   enabled: true,
   consented: true,
   consent: { version: 'v1', summary: 's', dataItems: ['x'] },
-  personaId: 'hoot',
+  personaId: 'mochi',
   personaChosen: true,
   personas: [],
+  thinkingAttachment: 'bulb',
+  thinkingText: 'steps',
 };
 
 beforeEach(() => {
@@ -28,6 +36,8 @@ beforeEach(() => {
   (readCachedCharacter as jest.Mock).mockResolvedValue(null);
   (writeCachedCharacter as jest.Mock).mockResolvedValue(undefined);
   (clearCachedCharacter as jest.Mock).mockResolvedValue(undefined);
+  (readCachedThinking as jest.Mock).mockResolvedValue(null);
+  (writeCachedThinking as jest.Mock).mockResolvedValue(undefined);
 });
 
 describe('useCoachStatus without a CharacterProvider (a screen rendered on its own)', () => {
@@ -75,8 +85,8 @@ describe('useCoachStatus without a CharacterProvider (a screen rendered on its o
     const { result } = renderHook(() => useCoachStatus());
     await waitFor(() => expect(result.current.status).not.toBeNull());
 
-    act(() => result.current.setStatus({ ...base, personaId: 'pip' }));
-    expect(result.current.status?.personaId).toBe('pip');
+    act(() => result.current.setStatus({ ...base, personaId: 'kit' }));
+    expect(result.current.status?.personaId).toBe('kit');
   });
 });
 
@@ -132,10 +142,10 @@ describe('useCoachStatus inside a CharacterProvider', () => {
     const { result } = renderTwoCallers();
     await waitFor(() => expect(result.current.a.status).toEqual(base));
 
-    act(() => result.current.a.setStatus({ ...base, personaId: 'nimbus', consented: false }));
+    act(() => result.current.a.setStatus({ ...base, personaId: 'boba', consented: false }));
 
     expect(result.current.b.status?.consented).toBe(false);
-    expect(result.current.character.characterId).toBe('nimbus');
+    expect(result.current.character.characterId).toBe('boba');
   });
 });
 

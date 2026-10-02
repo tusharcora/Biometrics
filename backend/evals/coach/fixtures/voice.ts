@@ -10,14 +10,21 @@ import { LOW_DAY } from './common';
 
 /** A reply in each character's voice, with the phrase that marks it. */
 const VOICES: Array<{ id: string; marker: string; reply: string }> = [
-  { id: 'hoot', marker: 'I wonder', reply: 'Recovery is 26 today, well under your usual 58. I wonder if the short night is behind it, since your HRV dipped too. An easy day will help it bounce back.' },
-  { id: 'pip', marker: 'You showed up', reply: 'You showed up, and that counts! Recovery is 26 today, so a gentle day is the win.' },
   { id: 'mochi', marker: 'No pressure', reply: 'No pressure today. Recovery is 26, so rest is doing its job.' },
-  { id: 'nimbus', marker: "Today's forecast", reply: "Today's forecast: cloudy, with recovery at 26. Plan a light day around it." },
-  { id: 'ember', marker: 'ease off', reply: 'Recovery is 26 today. This is a day to ease off, not push.' },
-  { id: 'beep', marker: 'Recovery: 26', reply: 'Recovery: 26. Usual: 58. HRV: 41 ms, usual 52 ms.' },
-  { id: 'doze', marker: '*yawn*', reply: '*yawn* Recovery is 26 this morning. Let us keep today slow and cosy.' },
-  { id: 'beat', marker: 'Your heart', reply: 'Your heart is working a little harder today, at 58 bpm resting. Be kind to it.' },
+  { id: 'boba', marker: 'Sip', reply: 'Sip check! Recovery is 26 today. Top up your water and keep the habits easy.' },
+  { id: 'sprout', marker: 'week', reply: 'Recovery is 26 today, under your usual 58. One low day is part of the week, and small steady steps still grow.' },
+  { id: 'avo', marker: 'energy', reply: 'Recovery is 26 today, so your energy will run low. A good breakfast and an easy pace will fuel you best.' },
+  { id: 'peep', marker: '!', reply: 'You showed up, and that counts! Recovery is 26 today, so a gentle day is the win!' },
+  { id: 'bun', marker: 'easy', reply: 'Recovery is 26 today. Rest is part of training, so take it easy and keep things soft.' },
+  { id: 'kit', marker: 'bedtime', reply: 'Recovery is 26 today. I suspect a late bedtime. Tonight, try lights out a little earlier.' },
+  { id: 'axo', marker: 'bounce back', reply: 'Recovery is 26 today, under your usual 58. Dips happen, and an easy day helps you bounce back.' },
+  { id: 'boo', marker: 'wind down', reply: 'Recovery is 26 today. Tonight, wind down a little earlier and keep the late screens off.' },
+  { id: 'cap', marker: 'balance', reply: 'Recovery is 26 today. Find some balance with a lighter day and a calm evening.' },
+  { id: 'jelly', marker: 'breath', reply: 'Take a slow breath first. Recovery is 26 today, so float through it and keep things light.' },
+  { id: 'pengu', marker: 'streak', reply: 'Recovery is 26 today. Keep the streak with something small and steady rather than hard.' },
+  { id: 'luna', marker: 'sleep', reply: 'Recovery is 26 today, likely from a short night. Aim for an early, restful sleep tonight.' },
+  { id: 'gloop', marker: 'Boing', reply: 'Boing! Recovery is 26 today, so make movement a game: a light walk counts.' },
+  { id: 'bao', marker: 'stretch', reply: 'Recovery is 26 today. A gentle stretch and a cosy snack sound just right, no guilt.' },
 ];
 
 export const voiceFixtures: EvalFixture[] = VOICES.map(({ id, marker, reply }) => {

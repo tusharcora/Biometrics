@@ -37,41 +37,41 @@ beforeEach(() => {
 
 describe('YourCoachRow', () => {
   it('shows the current character, small and animating, with its name', () => {
-    const utils = renderRow('ember');
+    const utils = renderRow('kit');
 
-    expect(utils.getByTestId('your-coach-row')).toHaveTextContent(/Ember/);
-    expect(characterLabel(utils, 'your-coach-row')).toBe('character:ember:idle:36:playing:mini');
+    expect(utils.getByTestId('your-coach-row')).toHaveTextContent(/Kit/);
+    expect(characterLabel(utils, 'your-coach-row')).toBe('character:kit:idle:36:playing:none');
   });
 
   it('is announced as "<Name>, your coach"', () => {
-    const utils = renderRow('doze');
+    const utils = renderRow('boba');
 
-    expect(utils.getByLabelText('Doze, your coach')).toBeTruthy();
-    expect(utils.getByTestId('your-coach-row').props.accessibilityLabel).toBe('Doze, your coach');
+    expect(utils.getByLabelText('Boba, your coach')).toBeTruthy();
+    expect(utils.getByTestId('your-coach-row').props.accessibilityLabel).toBe('Boba, your coach');
   });
 
   it('opens Meet your coach in switch mode', () => {
-    const utils = renderRow('pip');
+    const utils = renderRow('avo');
 
     fireEvent.press(utils.getByTestId('your-coach-row'));
 
     expect(navigate).toHaveBeenCalledWith('MeetYourCoach', { mode: 'switch' });
   });
 
-  it('shows Hoot outside the provider', () => {
+  it('shows Mochi outside the provider', () => {
     const utils = renderRow(null);
 
-    expect(utils.getByTestId('your-coach-row')).toHaveTextContent(/Hoot/);
-    expect(characterLabel(utils, 'your-coach-row')).toBe('character:hoot:idle:36:playing:mini');
+    expect(utils.getByTestId('your-coach-row')).toHaveTextContent(/Mochi/);
+    expect(characterLabel(utils, 'your-coach-row')).toBe('character:mochi:idle:36:playing:none');
   });
 
   it('holds still while Profile is not focused and moves again on return', () => {
-    const utils = renderRow('beat');
+    const utils = renderRow('jelly');
 
     act(() => listeners.blur?.());
-    expect(characterLabel(utils, 'your-coach-row')).toBe('character:beat:idle:36:paused:mini');
+    expect(characterLabel(utils, 'your-coach-row')).toBe('character:jelly:idle:36:paused:none');
 
     act(() => listeners.focus?.());
-    expect(characterLabel(utils, 'your-coach-row')).toBe('character:beat:idle:36:playing:mini');
+    expect(characterLabel(utils, 'your-coach-row')).toBe('character:jelly:idle:36:playing:none');
   });
 });

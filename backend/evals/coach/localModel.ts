@@ -21,7 +21,7 @@
 
 import * as fs from 'fs';
 import { buildFactSheet, defaultFactData } from '../../src/coach/answer/facts';
-import { AnswerEvent, runAnswer, STATUS_LABELS } from '../../src/coach/answer/pipeline';
+import { AnswerEvent, runAnswer, STEP_LABELS } from '../../src/coach/answer/pipeline';
 import { AnswerRoute } from '../../src/coach/answer/route';
 import { validateSentence } from '../../src/coach/answer/validate';
 import { getAnswerBudgetMs } from '../../src/coach/config';
@@ -40,7 +40,7 @@ if (!/_test(\?|$)/.test(process.env.DATABASE_URL ?? '')) {
 
 const BUDGET = Number(process.env.EVAL_BUDGET_MS ?? getAnswerBudgetMs('local'));
 const OUT = process.env.EVAL_OUT;
-const ROUTE_OF_LABEL = new Map<string, AnswerRoute>(Object.entries(STATUS_LABELS).map(([route, label]) => [label, route as AnswerRoute]));
+const ROUTE_OF_LABEL = new Map<string, AnswerRoute>(Object.entries(STEP_LABELS).map(([route, labels]) => [labels.route, route as AnswerRoute]));
 
 interface Row {
   id: string;
@@ -103,7 +103,7 @@ async function main(): Promise<number> {
       const totalMs = Date.now() - t0;
       const sentences = events.flatMap((e) => (e.type === 'text' ? [e.sentence] : []));
       const text = sentences.join(' ');
-      const status = events.find((e): e is Extract<AnswerEvent, { type: 'status' }> => e.type === 'status');
+      const status = events.find((e): e is Extract<AnswerEvent, { type: 'status' }> => e.type === 'status' && e.step === 'route');
       const route = (status && ROUTE_OF_LABEL.get(status.label)) ?? 'today';
       const sheet = await buildFactSheet(userId, route, { ...defaultFactData, today: todayCivil() });
       const error = events.find((e): e is Extract<AnswerEvent, { type: 'error' }> => e.type === 'error');

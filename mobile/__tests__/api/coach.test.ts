@@ -15,6 +15,7 @@ import {
   revokeCoachConsent,
   sendCoachMessage,
   setCoachPersona,
+  setCoachThinking,
 } from '../../src/api/coach';
 
 jest.mock('expo-secure-store');
@@ -26,12 +27,12 @@ const status = {
   enabled: true,
   consented: false,
   consent: { version: 'v1', summary: 'Scores are sent to a provider.', dataItems: ['Recovery score'] },
-  personaId: 'hoot',
+  personaId: 'mochi',
   personaChosen: true,
   personas: [
     {
-      id: 'hoot',
-      name: 'Hoot',
+      id: 'mochi',
+      name: 'Mochi',
       verbosity: 'normal',
       proactivity: 'threshold-triggered',
       tagline: 'Calm and curious. Spots the patterns in your weeks.',
@@ -61,6 +62,8 @@ describe('fetchCoachStatus', () => {
       ...status,
       engine: 'local',
       engines: { hosted: { available: false, consented: false, consent: null } },
+      thinkingAttachment: 'bulb',
+      thinkingText: 'steps',
     });
     expect(fetchMock).toHaveBeenCalledWith('https://api.example.com/me/coach/status', expect.anything());
   });
@@ -85,6 +88,8 @@ describe('fetchCoachStatus', () => {
       personas: status.personas,
       engine: 'local',
       engines: { hosted: { available: false, consented: false, consent: null } },
+      thinkingAttachment: 'bulb',
+      thinkingText: 'steps',
     });
   });
 
@@ -108,7 +113,7 @@ describe('fetchCoachStatus', () => {
   });
 
   it('only reads personaChosen as not chosen when it is literally false, and drops malformed persona entries', async () => {
-    fetchMock.mockResolvedValueOnce(ok({ ...status, personaChosen: 'no', personaId: 7, personas: [null, 'hoot', status.personas[0]] }));
+    fetchMock.mockResolvedValueOnce(ok({ ...status, personaChosen: 'no', personaId: 7, personas: [null, 'mochi', status.personas[0]] }));
     const result = await fetchCoachStatus();
     // Not a boolean: treated like a missing field, so no prompt.
     expect(result.personaChosen).toBe(true);
@@ -119,6 +124,31 @@ describe('fetchCoachStatus', () => {
   it('keeps a literal personaChosen false as not chosen', async () => {
     fetchMock.mockResolvedValueOnce(ok({ ...status, personaChosen: false }));
     expect((await fetchCoachStatus()).personaChosen).toBe(false);
+  });
+
+  it('fills the thinking defaults when the server predates them (Review Focus 2)', async () => {
+    fetchMock.mockResolvedValueOnce(ok(status));
+    const result = await fetchCoachStatus();
+    expect(result.thinkingAttachment).toBe('bulb');
+    expect(result.thinkingText).toBe('steps');
+  });
+
+  it('reads the thinking settings the server sends, even while the coach is off', async () => {
+    fetchMock.mockResolvedValueOnce(ok({ ...status, enabled: false, thinkingAttachment: 'gears', thinkingText: 'dialog' }));
+    const result = await fetchCoachStatus();
+    expect([result.thinkingAttachment, result.thinkingText]).toEqual(['gears', 'dialog']);
+  });
+
+  it('replaces unknown thinking ids with the defaults', async () => {
+    fetchMock.mockResolvedValueOnce(ok({ enabled: false, personaId: 'mochi', thinkingAttachment: 'rocket', thinkingText: 42 }));
+    const result = await fetchCoachStatus();
+    expect([result.thinkingAttachment, result.thinkingText]).toEqual(['bulb', 'steps']);
+  });
+
+  it('gives a malformed body the thinking defaults', async () => {
+    fetchMock.mockResolvedValueOnce(ok('nope'));
+    const result = await fetchCoachStatus();
+    expect([result.thinkingAttachment, result.thinkingText]).toEqual(['bulb', 'steps']);
   });
 });
 
@@ -146,12 +176,23 @@ describe('consent', () => {
 
 describe('setCoachPersona', () => {
   it('PUTs the persona id', async () => {
-    fetchMock.mockResolvedValueOnce(ok({ personaId: 'pip' }));
-    await expect(setCoachPersona('pip')).resolves.toEqual({ personaId: 'pip' });
+    fetchMock.mockResolvedValueOnce(ok({ personaId: 'kit' }));
+    await expect(setCoachPersona('kit')).resolves.toEqual({ personaId: 'kit' });
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('https://api.example.com/me/coach/persona');
     expect(init.method).toBe('PUT');
-    expect(JSON.parse(init.body)).toEqual({ personaId: 'pip' });
+    expect(JSON.parse(init.body)).toEqual({ personaId: 'kit' });
+  });
+});
+
+describe('setCoachThinking', () => {
+  it('PUTs only the settings given', async () => {
+    fetchMock.mockResolvedValueOnce(ok({ thinkingAttachment: 'gears', thinkingText: 'steps' }));
+    await expect(setCoachThinking({ attachment: 'gears' })).resolves.toEqual({ thinkingAttachment: 'gears', thinkingText: 'steps' });
+    const [url, init] = fetchMock.mock.calls[0];
+    expect(url).toBe('https://api.example.com/me/coach/thinking');
+    expect(init.method).toBe('PUT');
+    expect(init.body).toBe(JSON.stringify({ attachment: 'gears' }));
   });
 });
 

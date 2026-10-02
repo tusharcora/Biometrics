@@ -23,16 +23,25 @@ A Whoop/Bezel-style personal health app. Wearable data (steps, resting heart rat
 
 <table>
   <tr>
-    <td><img src="docs/media/character-hoot.jpg" width="190" alt="Hoot: idle, thinking, answering and resting"></td>
-    <td><img src="docs/media/character-pip.jpg" width="190" alt="Pip: idle, thinking, answering and resting"></td>
-    <td><img src="docs/media/character-mochi.jpg" width="190" alt="Mochi: idle, thinking, answering and resting"></td>
-    <td><img src="docs/media/character-nimbus.jpg" width="190" alt="Nimbus: idle, thinking, answering and resting"></td>
+    <td><img src="docs/media/coach-mochi.png" width="150" alt="Mochi, squishy rice cake"></td>
+    <td><img src="docs/media/coach-boba.png" width="150" alt="Boba, bubble tea"></td>
+    <td><img src="docs/media/coach-sprout.png" width="150" alt="Sprout, potted seedling"></td>
+    <td><img src="docs/media/coach-avo.png" width="150" alt="Avo, avocado half"></td>
+    <td><img src="docs/media/coach-peep.png" width="150" alt="Peep, baby chick"></td>
   </tr>
   <tr>
-    <td><img src="docs/media/character-ember.jpg" width="190" alt="Ember: idle, thinking, answering and resting"></td>
-    <td><img src="docs/media/character-beep.jpg" width="190" alt="Beep: idle, thinking, answering and resting"></td>
-    <td><img src="docs/media/character-doze.jpg" width="190" alt="Doze: idle, thinking, answering and resting"></td>
-    <td><img src="docs/media/character-beat.jpg" width="190" alt="Beat: idle, thinking, answering and resting"></td>
+    <td><img src="docs/media/coach-bun.png" width="150" alt="Bun, bunny"></td>
+    <td><img src="docs/media/coach-kit.png" width="150" alt="Kit, ginger cat"></td>
+    <td><img src="docs/media/coach-axo.png" width="150" alt="Axo, axolotl"></td>
+    <td><img src="docs/media/coach-boo.png" width="150" alt="Boo, friendly ghost"></td>
+    <td><img src="docs/media/coach-cap.png" width="150" alt="Cap, mushroom"></td>
+  </tr>
+  <tr>
+    <td><img src="docs/media/coach-jelly.png" width="150" alt="Jelly, jellyfish"></td>
+    <td><img src="docs/media/coach-pengu.png" width="150" alt="Pengu, penguin"></td>
+    <td><img src="docs/media/coach-luna.png" width="150" alt="Luna, sleepy moon"></td>
+    <td><img src="docs/media/coach-gloop.png" width="150" alt="Gloop, slime drop"></td>
+    <td><img src="docs/media/coach-bao.png" width="150" alt="Bao, panda"></td>
   </tr>
 </table>
 
@@ -116,7 +125,7 @@ flowchart LR
 
 | Layer | What it is |
 |---|---|
-| **Mobile** | Expo SDK 57 / React Native 0.86 / React 19 app with a dark-first design, a floating tab bar and eight selectable animated companion characters (Skia driven by Reanimated). Needs a development build; Expo Go is not supported. |
+| **Mobile** | Expo SDK 57 / React Native 0.86 / React 19 app with a dark-first design, a floating tab bar and fifteen selectable pixel-art coaches (drawn with Skia). Needs a development build; Expo Go is not supported. |
 | **API** | Express 5 + TypeScript, [Better Auth](https://better-auth.com) sessions, Prisma 6 on PostgreSQL. |
 | **Background work** | BullMQ on Redis: the `health-sync` queue runs every sync, scoring, habit, coach-digest and retention job, with repeatable schedules; the coach's day summaries run on their own `coach-summary` queue. |
 | **Analytics** | A pure, versioned **stat engine** (per-user EWMA baselines → z-scores → logistic composite) and a **habit correlation engine** (de-seasonalised Pearson r with effective-n correction and Benjamini–Hochberg FDR). |
@@ -169,7 +178,7 @@ mobile/                  Expo (React Native) app
     screens/             Dashboard, Activity, Metrics, Coach, Settings, ScoreDetail, MetricDetail, Patterns, …
     navigation/          root stack + bottom tabs + custom FloatingTabBar
     characters/          CharacterProvider (current character, coach status, recovery band), moods
-    components/          companion characters (Skia), heat map, prompt bar, habit log, digest card, ui/ primitives
+    components/          pixel coaches (Skia), heat map, prompt bar, habit log, digest card, ui/ primitives
     api/                 fetch client that sends the session cookie; typed endpoints
     lib/                 pure logic: heatmap layout, metric trends, score insights, timezone, push
     theme/, theme.ts     dark-first tokens (mirrors global.css), metric config, motion tokens
@@ -300,7 +309,7 @@ flowchart TD
 - **Cost (hosted):** roughly 1.5k input + 300–500 output tokens per message, about 1–2 cents on `claude-opus-5-5`.
 - **Budgets:** 45 s per local answer (`COACH_LOCAL_BUDGET_MS`), 30 s hosted (`COACH_HOSTED_BUDGET_MS`); the app waits 60 s (`EXPO_PUBLIC_COACH_TIMEOUT_MS`, keep it above the server budget). The local model is kept loaded (`keep_alive` 24h, `OLLAMA_KEEP_ALIVE`) and warmed when the Coach tab opens; on the owner's Mac the first sentence arrives in about 3–6 s once warm.
 - **Memory:** the model may append a ```` ```memory ```` block (training goal, schedule or preference, ≤ 140 characters); a health-fact classifier rejects health facts. Proposals appear as chips; the user's next message in that conversation confirms or dismisses them (correcting one deletes it silently). Confirmed memories are deleted with their conversation when it expires after 90 days.
-- **Safety:** crisis messages never reach the model; they get fixed resources (988, Crisis Text Line, findahelpline.com, 911). Diagnosis, medication dosing and supplement advice are dropped sentence by sentence. The coach speaks as one of eight **characters** (`hoot`, `pip`, `mochi`, `nimbus`, `ember`, `beep`, `doze`, `beat`; Hoot is the default); only the voice and focus differ. The retired styles map `encouraging → pip`, `direct → hoot`, `clinical → beep`.
+- **Safety:** crisis messages never reach the model; they get fixed resources (988, Crisis Text Line, findahelpline.com, 911). Diagnosis, medication dosing and supplement advice are dropped sentence by sentence. The coach speaks as one of fifteen **coaches** (persona set v4: `mochi`, `boba`, `sprout`, `avo`, `peep`, `bun`, `kit`, `axo`, `boo`, `cap`, `jelly`, `pengu`, `luna`, `gloop`, `bao`; Mochi is the default); only the voice and focus differ. A stored id that no longer exists (the v1 styles and the seven retired v3 characters) resolves to Mochi.
 - **Other features:** one in-flight answer per user and 15 per 5 minutes (turn guard); conversation history with cards, safety cards and memory chips as they appeared live; a weekly digest written from the `trends` fact sheet and validated like replies (falling back to a recap composed from the sheet); push notifications with fixed text only, sent via Expo when `PUSH_PROVIDER=expo`; 90-day transcript retention; telemetry that drops message text.
 - **Model providers** (`coach/model/`): one `stream()` interface. `OllamaProvider` (`COACH_PROVIDER=ollama`; loopback only unless `OLLAMA_ALLOW_REMOTE=true`; `<think>` blocks filtered from the stream), `AnthropicProvider` (hosted, opt-in), `UnconfiguredProvider` (the default: every answer is an error card) and `ScriptedStreamProvider` (tests and evals).
 
@@ -332,7 +341,7 @@ No model is trained on user data.
 
 ## 10. Mobile app
 
-- **Navigation:** a native stack (`RootNavigator`) wraps the bottom **tabs**: Home · Activity · **Coach** (the centre character) · Metrics · Profile. Detail screens push over the tabs: MetricDetail, ScoreDetail, Patterns, ConnectHealth, CoachConsent, HostedConsent, CoachMemory, and the MeetYourCoach modal. Signed-out users see SignIn.
+- **Navigation:** a native stack (`RootNavigator`) wraps the bottom **tabs**: Home · Activity · **Coach** (the centre character) · Metrics · Profile. Detail screens push over the tabs: MetricDetail, ScoreDetail, Patterns, ConnectHealth, CoachConsent, HostedConsent, CoachMemory, ThinkingStyle, ThinkingText, and the MeetYourCoach modal. Signed-out users see SignIn.
 - **Screens:**
   - **Home:** today's **Recovery** as a large hero ring (band-coloured, with a glow) and a one-line verdict naming the factor that moved it most. Below it, Sleep and Ask Coach tiles, Tomorrow's forecast, the habit check-in, the coach's weekly recap and a two-column metrics grid.
   - **Score detail:** the same hero, the confidence and band, the full explanation, the factor bars ("what moved it"), cold-start progress and the baselines used. A floating glass button asks the coach about it.
@@ -341,26 +350,33 @@ No model is trained on user data.
   - **Patterns:** habit → metric effects, each leading with its effect size, with the sample size and caveats.
   - **Activity:** a steps heat map with Month (calendar), Year and YTD views. Levels are relative to the 10,000-step goal, and no-data cells are drawn distinctly. Tapping a day opens a glass sheet with its details. The view also shows range stats: total, average, active days, goal streak and best day.
   - **Coach:** today's summary (a sentence in your character's voice above four "today vs usual" bars, tap to ask), suggested questions, streamed answers with answer cards and follow-up chips, a stop button, past conversations (☰) and coach memory, with your character as its face.
-  - **Meet your coach:** a pager of the eight characters (name, one-liner, greeting) that opens on the first Coach-tab visit when the coach is enabled; Skip picks Hoot. Reopened from Profile to switch.
-  - **Profile:** iOS grouped rows for Google Health and sync, time zone, account (sign-in methods, devices, sign out), your coach, the AI engine (when the hosted engine is offered), coach memory, notifications and account deletion.
+  - **Meet your coach:** a 3-column grid of the fifteen coaches; tapping one opens its card (number, focus, tagline, greeting) in a bottom sheet with **Choose**. It opens on the first Coach-tab visit when the coach is enabled; Skip picks Mochi. Reopened from Profile to switch.
+  - **Profile:** iOS grouped rows for Google Health and sync, time zone, account (sign-in methods, devices, sign out), your coach with its **Thinking style** and **Thinking text** settings, the AI engine (when the hosted engine is offered), coach memory, notifications and account deletion.
   - **Sign-in / onboarding:** Apple, Google and email sign-in; sign up and password reset; Connect Google Health with the read-only data it will use.
 - **Design system** (`global.css` ⇄ `src/theme.ts` ⇄ `tailwind.config.js`, kept in step by `__tests__/theme/tokens.test.ts`):
   - **Colour:** one cool-neutral ramp for dark (the default) and light, stepped surfaces instead of shadows, one accent per metric, and an indigo for the coach.
   - **Type:** Geist for the UI and tabular numerals, and Instrument Serif for editorial lines (loaded with `expo-font`). A named scale covers `text-eyebrow`, `text-numeral*` and `text-display*`. `components/ui/text.tsx` maps font weights to Geist's faces.
   - **Components:** `components/ui/`: `Card`, `SectionLabel`, `SettingsGroup`/`SettingsRow`, `RangeChart`, `ScoreRing`, `Glow`, `GlassSurface`, `Button`, and the Reanimated 4 motion kit (`PressableScale`, `Reveal`, `Sheet`, `SegmentedControl`, `CountUp`), all respecting reduce-motion.
   - **Chrome:** real iOS 26 **Liquid Glass** (`expo-glass-effect`) on the floating tab bar, sheets and floating buttons. It falls back to the system blur (`expo-blur`) on older iOS and to an opaque surface under Reduce Transparency. Content surfaces stay opaque.
-  - **Companion characters** (`components/characters/`): Hoot, Pip, Mochi, Nimbus, Ember, Beep, Doze and Beat, drawn with **Skia** in a 100×100 space and animated by Reanimated shared values on the UI thread (no React re-render per frame). Each has four moods, cross-faded over 250 ms: **idle**, **thinking** (a message is sending), **answering** (a reply arrived in the last 2.5 s) and **resting** (today's Recovery is poor). `Character` takes a size, mood and `mini` (head-only, the default at 40 px and below). The tab bar's character always idles; elsewhere characters pause off screen, and Reduce Motion holds each mood's still pose. The choice is saved on the server (`PUT /me/coach/persona`) and cached in SecureStore for a fast cold start; signed out, it's always Hoot.
+  - **Pixel coaches** (`components/characters/`): fifteen symmetrical pixel-art coaches. Each is data (a 12-column left half and a palette); a pure TypeScript compositor mirrors, shades and outlines it into a 24×24 grid, and Skia draws that grid as a cached `Picture` at whole-device-pixel scales, so sprites stay crisp at every size. Each has four moods: **idle**, **thinking** (a message is sending), **answering** (a reply arrived in the last 2.5 s) and **resting** (today's Recovery is poor). While thinking, the coach wears a **thinking attachment** (Lightbulb by default, or one of eight others), and the chat's pending row uses a **thinking text** style (by default *What it's doing*, a checklist of the answer pipeline's real progress steps). Both are chosen in Profile → Your coach. The tab bar's coach always idles; elsewhere coaches pause off screen, and Reduce Motion holds a still frame. The choice is saved on the server (`PUT /me/coach/persona`, `PUT /me/coach/thinking`) and cached in SecureStore for a fast cold start; signed out, it's always Mochi.
 
-    | Character | Voice | Focus |
-    |---|---|---|
-    | Hoot (default) | calm, wise, curious | patterns across weeks |
-    | Pip | upbeat cheerleader | habits, streaks, one small next step |
-    | Mochi | soft and gentle | stress, recovery, rest without guilt |
-    | Nimbus | breezy, forecast framing | what kind of day to plan |
-    | Ember | energetic, motivating | training load, strain, performance |
-    | Beep | precise, numbers first | raw metrics against your usual range |
-    | Doze | slow, cosy | sleep and wind-down |
-    | Beat | warm, heart-centred | resting heart rate, HRV, cardio health |
+    | # | Coach | What it is | Focus |
+    |---|---|---|---|
+    | 01 | Mochi (default) | Squishy rice cake | Rest |
+    | 02 | Boba | Bubble tea | Daily habits |
+    | 03 | Sprout | Potted seedling | Progress |
+    | 04 | Avo | Avocado half | Energy |
+    | 05 | Peep | Baby chick | Motivation |
+    | 06 | Bun | Bunny | Rest days |
+    | 07 | Kit | Ginger cat | Bedtime |
+    | 08 | Axo | Axolotl | Recovery |
+    | 09 | Boo | Friendly ghost | Wind-down |
+    | 10 | Cap | Mushroom | Balance |
+    | 11 | Jelly | Jellyfish | Breathing |
+    | 12 | Pengu | Penguin | Consistency |
+    | 13 | Luna | Sleepy moon | Sleep |
+    | 14 | Gloop | Slime drop | Workouts |
+    | 15 | Bao | Panda | Movement |
 - **Networking:** `apiFetch` sends the Better Auth session cookie from SecureStore. Sessions slide on the server, so there is no refresh step: a 401 signs the user out (unless they already signed in again); network errors don't. Coach answers stream over SSE (`expo/fetch`) with their own timeout (`EXPO_PUBLIC_COACH_TIMEOUT_MS`, default 60 s).
 - **iOS:** the config plugin `plugins/with-ios-scene-delegate.js` adds the UIScene lifecycle the iOS 27 SDK requires. Push (`expo-notifications`) is only added at prebuild with `EXPO_PUSH=1`, because the `aps-environment` entitlement needs a paid Apple team.
 
@@ -376,7 +392,7 @@ No model is trained on user data.
 | Crypto | Node `crypto`: AES-256-GCM for stored OAuth tokens; Better Auth handles password hashing and session tokens |
 | LLM runtime | **Ollama** (local HTTP `/api/chat`, streamed) by default; **`@anthropic-ai/sdk`** for the opt-in hosted engine |
 | Mobile | **Expo SDK 57**, React Native 0.86, React 19, React Navigation 7 (native-stack, bottom-tabs) |
-| Mobile UI | NativeWind 4 + Tailwind 3, Reanimated 4 + worklets, **@shopify/react-native-skia** (companion characters), react-native-svg, Ionicons; **expo-glass-effect** + **expo-blur** (Liquid Glass with fallback), expo-haptics; fonts **Geist** and **Instrument Serif** via `@expo-google-fonts` |
+| Mobile UI | NativeWind 4 + Tailwind 3, Reanimated 4 + worklets, **@shopify/react-native-skia** (pixel coaches), react-native-svg, Ionicons; **expo-glass-effect** + **expo-blur** (Liquid Glass with fallback), expo-haptics; fonts **Geist** and **Instrument Serif** via `@expo-google-fonts` |
 | Mobile platform | better-auth client + `@better-auth/expo` (session in expo-secure-store), expo-auth-session + web-browser (OAuth), expo-apple-authentication, expo-notifications |
 | Testing | Jest 30: ts-jest + Supertest + nock (backend, real Postgres/Redis); jest-expo + Testing Library (mobile) |
 | Packaging | Dockerfile for the backend (runs `prisma migrate deploy` on start, health-check probe) |
@@ -429,7 +445,7 @@ OLLAMA_MODEL=qwen3.6:35b          # pin the exact tag
 
 **Push (optional):** `PUSH_PROVIDER=expo`, `EXPO_ACCESS_TOKEN`.
 
-**Mobile:** `EXPO_PUBLIC_API_BASE_URL` (default `http://localhost:3000`), `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`, `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID`, `EXPO_PUBLIC_COACH_TIMEOUT_MS` (default 60000; keep it above the server budget), `EXPO_PUBLIC_CHARACTER_GALLERY=1` (dev character gallery: every character in every mood, plus the mini variants), and `EXPO_PUBLIC_DEV_SIGN_IN_EMAIL` / `EXPO_PUBLIC_DEV_SIGN_IN_PASSWORD` (dev builds only: a one-tap "Sign in as … (dev)" button for a local test account). Build-time: `EXPO_PUSH=1` to include push.
+**Mobile:** `EXPO_PUBLIC_API_BASE_URL` (default `http://localhost:3000`), `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`, `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID`, `EXPO_PUBLIC_COACH_TIMEOUT_MS` (default 60000; keep it above the server budget), `EXPO_PUBLIC_CHARACTER_GALLERY=1` (dev character gallery: every coach in every mood, the thinking attachments and thinking text styles, and a size ladder), and `EXPO_PUBLIC_DEV_SIGN_IN_EMAIL` / `EXPO_PUBLIC_DEV_SIGN_IN_PASSWORD` (dev builds only: a one-tap "Sign in as … (dev)" button for a local test account). Build-time: `EXPO_PUSH=1` to include push.
 
 ## 15. Running locally
 
@@ -548,7 +564,8 @@ Backend Jest runs may not exit on their own because of an open Redis handle; use
 | `specs/2026-09-20-habits-correlation-design.md` | habit logging and correlation engine |
 | `specs/2026-09-20-ai-coach-design.md` | original AI coach (tool loop, since replaced): safety, memory, digest |
 | `specs/2026-09-21-app-redesign-design.md` | dark-first redesign, tab bar, orbs (since replaced), heat map, coach chat |
-| `specs/2026-09-29-companion-characters-design.md` | companion characters: eight selectable coaches, moods, Meet your coach |
+| `specs/2026-09-29-companion-characters-design.md` | companion characters: eight selectable coaches, moods, Meet your coach (superseded by pixel coaches) |
+| `specs/2026-10-01-pixel-coaches-design.md` | pixel coaches: fifteen pixel-art coaches, grid + card picker, thinking style and thinking text settings, real progress steps |
 | `specs/2026-09-30-coach-redesign-design.md` | coach redesign: answer pipeline, fact sheet, validator, streaming, hosted engine, today summary |
 | `plans/*` | task-by-task implementation plans |
 | `notes/slice0-live-checks.md` | live Google Health probe results |

@@ -1,16 +1,33 @@
 import React, { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { AppState } from 'react-native';
-import { fetchCoachStatus, setCoachPersona, type CoachStatusDTO } from '../api/coach';
+import { fetchCoachStatus, setCoachPersona, setCoachThinking, type CoachStatusDTO } from '../api/coach';
 import { fetchScoresWithBands } from '../api/scores';
 import { useOptionalAuth } from '../auth/AuthContext';
+import {
+  DEFAULT_THINKING_ATTACHMENT,
+  DEFAULT_THINKING_TEXT,
+  isThinkingAttachment,
+  isThinkingText,
+  type ThinkingAttachmentId,
+  type ThinkingTextId,
+} from '../components/characters/thinking';
 import { DEFAULT_CHARACTER_ID, isCharacterId, type CharacterId } from '../components/characters/types';
 import { scoreBand, type ScoreBand } from '../lib/scoreInsights';
 import { CharacterContext, type CharacterContextValue } from './CharacterContext';
-import { clearCachedCharacter, readCachedCharacter, writeCachedCharacter } from './characterCache';
+import {
+  clearCachedCharacter,
+  readCachedCharacter,
+  readCachedThinking,
+  writeCachedCharacter,
+  writeCachedThinking,
+  type CachedThinking,
+} from './characterCache';
 
 export { useCharacter, useCharacterOptional } from './CharacterContext';
 
 type StatusSetter = (next: CoachStatusDTO | null) => void;
+
+const DEFAULT_THINKING: CachedThinking = { attachment: DEFAULT_THINKING_ATTACHMENT, text: DEFAULT_THINKING_TEXT };
 
 // Lets useCoachStatus() callers replace the shared status locally (e.g. right
 // after revoking consent) without widening CharacterContextValue.
@@ -29,8 +46,8 @@ function accountKey(userId: string | null, isPending: boolean): string {
 
 // The user's character, the coach status and today's recovery band, for the
 // whole app (spec §1). Owns the coach status, so useCoachStatus() reads it from
-// here instead of fetching once per screen. Signed out, it is always Hoot, the
-// cached id is cleared and nothing is fetched.
+// here instead of fetching once per screen. Signed out, it is always Mochi with
+// the default thinking settings, the cache is cleared and nothing is fetched.
 export function CharacterProvider({ children }: { children: React.ReactNode }): React.ReactElement {
   const auth = useOptionalAuth();
   const userId = auth?.session?.userId ?? null;
@@ -41,6 +58,8 @@ export function CharacterProvider({ children }: { children: React.ReactNode }): 
   const [status, setStatus] = useState<CoachStatusDTO | null>(null);
   const [statusLoaded, setStatusLoaded] = useState(false);
   const [recoveryBand, setRecoveryBand] = useState<ScoreBand | null>(null);
+  const [thinkingAttachment, setThinkingAttachment] = useState<ThinkingAttachmentId>(DEFAULT_THINKING_ATTACHMENT);
+  const [thinkingText, setThinkingText] = useState<ThinkingTextId>(DEFAULT_THINKING_TEXT);
 
   // Bumped on every account change and on unmount. A request that started
   // under an older epoch is dropped, so a reply for the previous account (or
@@ -62,18 +81,60 @@ export function CharacterProvider({ children }: { children: React.ReactNode }): 
   const latest = useRef({ characterId, personaChosen, status });
   latest.current = { characterId, personaChosen, status };
 
-  const applyStatus = useCallback((next: CoachStatusDTO | null, choice: CharacterId | null = pendingChoice.current) => {
-    const merged = next && choice ? { ...next, personaId: choice, personaChosen: true } : next;
-    setStatus(merged);
-    // An empty personaId means the server did not say (a malformed status);
-    // keep showing the cached character then. An unknown id is Hoot.
-    if (!merged || !merged.personaId) return;
-    const id = isCharacterId(merged.personaId) ? merged.personaId : DEFAULT_CHARACTER_ID;
-    serverKnown.current = true;
-    setCharacterId(id);
-    setPersonaChosen(merged.personaChosen);
-    void writeCachedCharacter(id);
+  // The thinking settings on screen, kept in step with the state synchronously
+  // so a choice made before the next render still sees the one it replaces.
+  const thinking = useRef<CachedThinking>(DEFAULT_THINKING);
+  // Like serverKnown, for the thinking settings (or a choice of them).
+  const thinkingKnown = useRef(false);
+  // Thinking saves still in flight, and a counter bumped on every choice. A
+  // status reply that may predate a choice leaves the settings as they are.
+  const pendingThinking = useRef(0);
+  const thinkingSeq = useRef(0);
+
+  const showThinking = useCallback((next: CachedThinking) => {
+    thinking.current = next;
+    setThinkingAttachment(next.attachment);
+    setThinkingText(next.text);
   }, []);
+
+  const applyStatus = useCallback(
+    (
+      next: CoachStatusDTO | null,
+      choice: CharacterId | null = pendingChoice.current,
+      keepThinking: boolean = pendingThinking.current > 0,
+    ) => {
+      let merged = next && choice ? { ...next, personaId: choice, personaChosen: true } : next;
+      // An empty personaId means the server did not say (a malformed status);
+      // keep showing the cached character and thinking settings then.
+      if (!merged || !merged.personaId) {
+        setStatus(merged);
+        return;
+      }
+      // The thinking settings to show: the status's, unless a choice may be
+      // newer than it. Checked again here: a status set through
+      // useSetCoachStatus may come from an older server without them.
+      const shown: CachedThinking = keepThinking
+        ? thinking.current
+        : {
+            attachment: isThinkingAttachment(merged.thinkingAttachment) ? merged.thinkingAttachment : DEFAULT_THINKING_ATTACHMENT,
+            text: isThinkingText(merged.thinkingText) ? merged.thinkingText : DEFAULT_THINKING_TEXT,
+          };
+      merged = { ...merged, thinkingAttachment: shown.attachment, thinkingText: shown.text };
+      setStatus(merged);
+      // An unknown id is Mochi.
+      const id = isCharacterId(merged.personaId) ? merged.personaId : DEFAULT_CHARACTER_ID;
+      serverKnown.current = true;
+      setCharacterId(id);
+      setPersonaChosen(merged.personaChosen);
+      void writeCachedCharacter(id);
+      if (!keepThinking) {
+        thinkingKnown.current = true;
+        showThinking(shown);
+        void writeCachedThinking(shown);
+      }
+    },
+    [showThinking],
+  );
 
   const refreshStatus = useCallback(async () => {
     if (!signedIn.current) return;
@@ -82,6 +143,8 @@ export function CharacterProvider({ children }: { children: React.ReactNode }): 
     // The server may answer this GET before it applies a PUT still in flight,
     // so a choice pending now can be missing from the reply too.
     const choicePendingAtStart = pendingChoice.current !== null;
+    const thinkingSeqAtStart = thinkingSeq.current;
+    const thinkingPendingAtStart = pendingThinking.current > 0;
     try {
       const next = await fetchCoachStatus();
       if (epoch.current !== started) return;
@@ -89,7 +152,9 @@ export function CharacterProvider({ children }: { children: React.ReactNode }): 
       // already been handed back, so the server's reply applies as sent.
       const mayBeStale = choicePendingAtStart || choiceSeq.current !== seqAtStart;
       const choice = mayBeStale ? (lastChoice.current?.id ?? null) : null;
-      applyStatus(next, choice ?? pendingChoice.current);
+      // Likewise for a thinking choice made or pending during the fetch.
+      const keepThinking = thinkingPendingAtStart || pendingThinking.current > 0 || thinkingSeq.current !== thinkingSeqAtStart;
+      applyStatus(next, choice ?? pendingChoice.current, keepThinking);
     } catch {
       if (epoch.current !== started) return;
       // Unknown, which every coach entry treats as disabled. The character
@@ -119,15 +184,18 @@ export function CharacterProvider({ children }: { children: React.ReactNode }): 
     serverKnown.current = false;
     pendingChoice.current = null;
     lastChoice.current = null;
+    thinkingKnown.current = false;
+    pendingThinking.current = 0;
     setStatus(null);
     setStatusLoaded(false);
     setRecoveryBand(null);
 
     if (account === 'signed-out') {
-      // Signed-out screens always show Hoot, and the next account must never
-      // see this one's character.
+      // Signed-out screens always show Mochi with the default thinking
+      // settings, and the next account must never see this one's.
       setCharacterId(DEFAULT_CHARACTER_ID);
       setPersonaChosen(false);
+      showThinking(DEFAULT_THINKING);
       void clearCachedCharacter();
       return;
     }
@@ -137,11 +205,14 @@ export function CharacterProvider({ children }: { children: React.ReactNode }): 
       // has no fallback, so an unknown id must never reach it.
       if (isCharacterId(cached) && epoch.current === started && !serverKnown.current) setCharacterId(cached);
     });
+    void readCachedThinking().then((cached) => {
+      if (cached && epoch.current === started && !thinkingKnown.current) showThinking(cached);
+    });
     if (signedIn.current) {
       void refreshStatus();
       void refreshRecovery();
     }
-  }, [account, refreshStatus, refreshRecovery]);
+  }, [account, refreshStatus, refreshRecovery, showThinking]);
 
   // Today's recovery can change while the app is in the background (a sync,
   // or a new day), so it is read again whenever the app comes back.
@@ -163,7 +234,7 @@ export function CharacterProvider({ children }: { children: React.ReactNode }): 
 
   const chooseCharacter = useCallback(async (id: CharacterId) => {
     // Signed out (or still loading) there is no account to save to, and the
-    // character must stay Hoot.
+    // character must stay Mochi.
     if (!signedIn.current) return;
     if (!isCharacterId(id)) throw new Error(`Unknown character: ${String(id)}`);
     const started = epoch.current;
@@ -196,9 +267,58 @@ export function CharacterProvider({ children }: { children: React.ReactNode }): 
     }
   }, []);
 
+  const chooseThinking = useCallback(
+    async (body: { attachment?: ThinkingAttachmentId; text?: ThinkingTextId }) => {
+      // Signed out (or still loading) there is no account to save to, and the
+      // settings must stay the defaults.
+      if (!signedIn.current) return;
+      if (body.attachment !== undefined && !isThinkingAttachment(body.attachment)) {
+        throw new Error(`Unknown thinking attachment: ${String(body.attachment)}`);
+      }
+      if (body.text !== undefined && !isThinkingText(body.text)) throw new Error(`Unknown thinking text: ${String(body.text)}`);
+      const started = epoch.current;
+      const previous = thinking.current;
+      const next: CachedThinking = { attachment: body.attachment ?? previous.attachment, text: body.text ?? previous.text };
+      thinkingSeq.current += 1;
+      const seq = thinkingSeq.current;
+      pendingThinking.current += 1;
+      thinkingKnown.current = true;
+      showThinking(next);
+      setStatus((s) => (s ? { ...s, thinkingAttachment: next.attachment, thinkingText: next.text } : s));
+      void writeCachedThinking(next);
+      try {
+        await setCoachThinking(body);
+      } catch (error) {
+        // Put the previous settings back, unless the account changed or a
+        // newer choice has since replaced this one.
+        if (epoch.current === started && thinkingSeq.current === seq) {
+          showThinking(previous);
+          setStatus((s) => (s ? { ...s, thinkingAttachment: previous.attachment, thinkingText: previous.text } : s));
+          void writeCachedThinking(previous);
+        }
+        throw error;
+      } finally {
+        // An account change has already reset the count.
+        if (epoch.current === started) pendingThinking.current -= 1;
+      }
+    },
+    [showThinking],
+  );
+
   const value = useMemo<CharacterContextValue>(
-    () => ({ characterId, personaChosen, status, statusLoaded, recoveryBand, refreshStatus, chooseCharacter }),
-    [characterId, personaChosen, status, statusLoaded, recoveryBand, refreshStatus, chooseCharacter],
+    () => ({
+      characterId,
+      personaChosen,
+      status,
+      statusLoaded,
+      recoveryBand,
+      thinkingAttachment,
+      thinkingText,
+      refreshStatus,
+      chooseCharacter,
+      chooseThinking,
+    }),
+    [characterId, personaChosen, status, statusLoaded, recoveryBand, thinkingAttachment, thinkingText, refreshStatus, chooseCharacter, chooseThinking],
   );
 
   return (

@@ -13,7 +13,7 @@ const GAP = 6;
 // never implies a reading before anything has synced.
 const SHARES = [0.72, 0.8, 0.46, 0.6];
 
-// The sign-in hero: Hoot (signed-out screens always show Hoot) inside four
+// The sign-in hero: Mochi (signed-out screens always show Mochi) inside four
 // thin rings, one per metric colour -- the app's two visual ideas (the coach,
 // and your own four signals) in one mark.
 export function OnboardingHero() {
@@ -51,7 +51,7 @@ export function OnboardingHero() {
           );
         })}
       </Svg>
-      <Character testID="onboarding-character" characterId="hoot" mood="idle" size={120} glow paused={!focused} />
+      <Character testID="onboarding-character" characterId="mochi" mood="idle" size={120} glow paused={!focused} />
     </View>
   );
 }

@@ -10,13 +10,16 @@ export const HIDDEN_OK = { includeHiddenElements: true } as const;
 
 export function fakeCharacter(overrides: Partial<CharacterContextValue> = {}): CharacterContextValue {
   return {
-    characterId: 'hoot',
+    characterId: 'mochi',
     personaChosen: true,
     status: null,
     statusLoaded: true,
     recoveryBand: null,
+    thinkingAttachment: 'bulb',
+    thinkingText: 'steps',
     refreshStatus: jest.fn(async () => {}),
     chooseCharacter: jest.fn(async () => {}),
+    chooseThinking: jest.fn(async () => {}),
     ...overrides,
   };
 }
@@ -26,7 +29,7 @@ export function withCharacter(ui: React.ReactElement, overrides: Partial<Charact
 }
 
 // The CharacterCanvas mock's label inside the element with this testID:
-// "character:<id>:<mood>:<size>:<paused|playing>:<mini|full>".
+// "character:<id>:<mood>:<size>:<paused|playing>:<attachment|none>".
 export function characterLabel(screen: Pick<ReturnType<typeof render>, 'getByTestId'>, testID: string): string {
   return within(screen.getByTestId(testID, HIDDEN_OK)).getByTestId('character-canvas', HIDDEN_OK).props.accessibilityLabel;
 }

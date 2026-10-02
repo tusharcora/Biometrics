@@ -153,7 +153,7 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
                 style={{ height: SLOT_HEIGHT }}
               >
                 {isHub ? (
-                  <Character testID="hub-character" mood="idle" size={HUB_CHARACTER_SIZE} mini dimmed={hubDimmed} />
+                  <Character testID="hub-character" mood="idle" size={HUB_CHARACTER_SIZE} dimmed={hubDimmed} />
                 ) : (
                   <View className="items-center" style={{ gap: 3 }}>
                     <Ionicons name={ICONS[route.name] ?? 'ellipse-outline'} size={22} color={focused ? colors.foreground : colors.muted} />

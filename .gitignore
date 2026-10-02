@@ -1,4 +1,6 @@
 .worktrees/
+# Brainstorm mockup server output (kept docs live in docs/design/)
+.superpowers/
 .claude-flow/
 mobile/.env
 

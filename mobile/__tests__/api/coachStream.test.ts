@@ -287,6 +287,18 @@ describe('streamCoachMessage', () => {
 });
 
 describe('parseCoachEvent', () => {
+  it('parses an optional step on status, dropping an unknown one', () => {
+    expect(parseCoachEvent({ event: 'status', data: JSON.stringify({ label: 'Writing it up…', step: 'write' }) })).toEqual({ type: 'status', label: 'Writing it up…', step: 'write' });
+    expect(parseCoachEvent({ event: 'status', data: JSON.stringify({ label: 'Looking at your sleep…', step: 'route', conversationId: 'c9' }) })).toEqual({
+      type: 'status',
+      label: 'Looking at your sleep…',
+      step: 'route',
+      conversationId: 'c9',
+    });
+    expect(parseCoachEvent({ event: 'status', data: JSON.stringify({ label: 'Thinking…', step: 'dance' }) })).toEqual({ type: 'status', label: 'Thinking…' });
+    expect(parseCoachEvent({ event: 'status', data: JSON.stringify({ label: 'Thinking…', step: 3 }) })).toEqual({ type: 'status', label: 'Thinking…' });
+  });
+
   it('reads the fields of each event type and ignores a type field inside the data', () => {
     expect(parseCoachEvent({ event: 'status', data: '{"type":"text","label":"Looking…"}' })).toEqual({ type: 'status', label: 'Looking…' });
     expect(parseCoachEvent({ event: 'status', data: '{"label":"Looking…","conversationId":"c9"}' })).toEqual({ type: 'status', label: 'Looking…', conversationId: 'c9' });

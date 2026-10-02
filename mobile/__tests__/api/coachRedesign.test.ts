@@ -37,7 +37,7 @@ const baseStatus = {
   enabled: true,
   consented: true,
   consent: { version: 'v1', summary: 's', dataItems: ['x'] },
-  personaId: 'nimbus',
+  personaId: 'luna',
   personaChosen: true,
   personas: [],
 };

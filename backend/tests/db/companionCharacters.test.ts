@@ -1,7 +1,7 @@
 import { readFileSync } from 'fs';
 import path from 'path';
 import { prisma } from '../../src/db/client';
-import { findPersona } from '../../src/coach/personas';
+import { PERSONA_SETS } from '../../src/coach/personas';
 import { migrateTestDb } from '../setupTestDb';
 import { createUser } from '../coach/helpers';
 
@@ -72,7 +72,7 @@ describe(NAME, () => {
       [ids.never]: null, // still unchosen, so the picker shows once
       [ids.mochi]: 'mochi',
       [ids.hoot]: 'hoot',
-      [ids.unknown]: 'retired-persona', // resolvePersona serves Hoot for it at read time
+      [ids.unknown]: 'retired-persona', // resolvePersona serves the default for it at read time
       [ids.cased]: 'Encouraging', // exact match only, as the PUT route never stored another spelling
     });
   });
@@ -86,10 +86,13 @@ describe(NAME, () => {
     expect(Object.values(once)).toEqual(expect.arrayContaining(['pip', 'hoot', 'beep', null]));
   });
 
-  it('only ever writes ids that are live characters', () => {
+  // Historical: the ids it writes were live characters in v3, the set live when it shipped. v4 retired them
+  // (the 20261001130000 migration clears them), so this checks against v3, not the live set.
+  it('only ever writes ids that were live characters when it shipped (v3)', () => {
     const written = migrationStatements().map((s) => /SET "coachPersonaId" = '([a-z]+)'/.exec(s)![1]!);
     expect(written).toEqual(['pip', 'hoot', 'beep']);
-    for (const id of written) expect(findPersona(id)?.id).toBe(id);
+    const v3Ids = PERSONA_SETS.v3!.personas.map((p) => p.id);
+    for (const id of written) expect(v3Ids).toContain(id);
   });
 
   it('leaves the persona recorded on past recaps untouched', async () => {

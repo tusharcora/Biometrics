@@ -27,7 +27,7 @@ const status: CoachStatusDTO = {
     summary: 'To answer, the coach sends your scores to an AI provider. Raw Google Health tokens never leave the server.',
     dataItems: ['Recovery and Sleep Score values', 'Per-factor breakdowns', 'Habit pattern results'],
   },
-  personaId: 'pip',
+  personaId: 'kit',
   personaChosen: true,
   personas: [],
 };
@@ -141,9 +141,9 @@ describe('CoachConsentScreen', () => {
 
 describe('CoachConsentScreen: character', () => {
   it("shows the user's character above the consent text", async () => {
-    const utils = render(withCharacter(<CoachConsentScreen />, { characterId: 'beep' }));
+    const utils = render(withCharacter(<CoachConsentScreen />, { characterId: 'peep' }));
     await utils.findByText(status.consent.summary);
 
-    expect(characterLabel(utils, 'coach-consent-character')).toBe('character:beep:idle:56:playing:full');
+    expect(characterLabel(utils, 'coach-consent-character')).toBe('character:peep:idle:56:playing:none');
   });
 });

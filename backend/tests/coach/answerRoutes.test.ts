@@ -101,18 +101,19 @@ describe('POST /me/coach/message with Accept: text/event-stream', () => {
     expect(res.headers['content-type']).toMatch(/^text\/event-stream/);
     expect(res.headers['cache-control']).toBe('no-cache, no-transform');
     const events = parseSse(res.body);
-    expect(events.map((e) => e.event)).toEqual(['status', 'text', 'text', 'card', 'done']);
+    expect(events.map((e) => e.event)).toEqual(['status', 'status', 'status', 'text', 'text', 'card', 'done']);
+    expect(events.slice(0, 3).map((e) => e.data.step)).toEqual(['route', 'facts', 'write']);
     for (const e of events) expect(e.data.type).toBe(e.event);
     expect(events.filter((e) => e.event === 'text').map((e) => e.data.sentence)).toEqual(['Your recovery is 72 today.', 'Nice work.']);
-    expect(events[3]!.data.card.tiles[0]).toMatchObject({ factId: 'recovery.today', display: '72' });
-    const done = events[4]!.data;
+    expect(events[5]!.data.card.tiles[0]).toMatchObject({ factId: 'recovery.today', display: '72' });
+    const done = events[6]!.data;
     expect(done).toMatchObject({ engine: 'local', durationMs: expect.any(Number) });
     // A new chat's id is on the first status event, before anything is stored.
     expect(events[0]!.data.conversationId).toBe(done.conversationId);
 
     const row = await prisma.coachMessage.findUniqueOrThrow({ where: { id: done.messageId } });
     expect(row).toMatchObject({ conversationId: done.conversationId, text: 'Your recovery is 72 today. Nice work.', engine: 'LOCAL' });
-    expect(row.card).toEqual(events[3]!.data.card);
+    expect(row.card).toEqual(events[5]!.data.card);
   });
 
   it('streams the safety card for a crisis message', async () => {
@@ -132,7 +133,9 @@ describe('POST /me/coach/message with Accept: text/event-stream', () => {
     expect(res.status).toBe(200);
     const events = parseSse(res.body).map((e) => e.data);
     expect(events).toEqual([
-      { type: 'status', label: 'Looking at your sleep…', conversationId: expect.any(String) },
+      { type: 'status', step: 'route', label: 'Looking at your sleep…', conversationId: expect.any(String) },
+      { type: 'status', step: 'facts', label: 'Going through your recent nights…', conversationId: expect.any(String) },
+      { type: 'status', step: 'write', label: 'Writing it up…', conversationId: expect.any(String) },
       { type: 'error', code: 'model_unavailable', retryable: true },
     ]);
     // Nothing was stored, so the reserved id was never created: no empty conversation, and

@@ -1,7 +1,7 @@
 import { randomUUID } from 'crypto';
 import { prisma } from '../../src/db/client';
 import * as memoryModule from '../../src/coach/memory';
-import { AnswerDeps, AnswerEvent, AnswerInput, runAnswer } from '../../src/coach/answer/pipeline';
+import { AnswerDeps, AnswerEvent, AnswerInput, STEP_LABELS, runAnswer } from '../../src/coach/answer/pipeline';
 import type { FactData } from '../../src/coach/answer/facts';
 import { CoachStreamRequest, ScriptedStreamProvider, StreamStep, UnconfiguredProvider } from '../../src/coach/model/provider';
 import { LEGACY_DISCLAIMER, LEGACY_REPLY_NOTES } from '../../src/coach/answer/history';
@@ -106,9 +106,9 @@ describe('runAnswer: a validated, streamed answer', () => {
     const inp = await input();
     const events = await collect(runAnswer(inp, deps));
 
-    expect(types(events)).toEqual(['status', 'text', 'text', 'text', 'card', 'done']);
+    expect(types(events)).toEqual(['status', 'status', 'status', 'text', 'text', 'text', 'card', 'done']);
     const done = doneOf(events);
-    expect(events[0]).toEqual({ type: 'status', label: 'Looking at your day…', conversationId: done.conversationId });
+    expect(events[0]).toEqual({ type: 'status', step: 'route', label: 'Looking at your day…', conversationId: done.conversationId });
     expect(texts(events)).toEqual(['Your recovery is 26 today, well under your usual 58.', 'You slept 6h 48m.', 'Want a tip?']);
     const card = events.find((e) => e.type === 'card');
     expect(card).toEqual({
@@ -147,7 +147,7 @@ describe('runAnswer: a validated, streamed answer', () => {
     );
     past[10] = { role: 'user', text: 'How did I sleep?' };
     const events = await collect(runAnswer(await input({ message: 'why?', history: past }), deps));
-    expect(events[0]).toMatchObject({ type: 'status', label: 'Looking at your sleep…' });
+    expect(events[0]).toMatchObject({ type: 'status', step: 'route', label: 'Looking at your sleep…' });
     const sent = provider.requests[0]!.messages;
     expect(sent).toHaveLength(11);
     expect(sent[0]).toEqual({ role: 'user', content: 'q2' });
@@ -232,8 +232,8 @@ describe('runAnswer: validation', () => {
     const { deps } = setup([['Your HRV is 60 ms.'], ['Your HRV is 61 ms.']]);
     const inp = await input();
     const events = await collect(runAnswer(inp, deps));
-    expect(types(events)).toEqual(['status', 'error']);
-    expect(events[1]).toEqual({ type: 'error', code: 'validation_failed', retryable: true });
+    expect(types(events)).toEqual(['status', 'status', 'status', 'error']);
+    expect(events[3]).toEqual({ type: 'error', code: 'validation_failed', retryable: true });
     expect(await prisma.coachMessage.count({ where: { userId: inp.userId } })).toBe(0);
     expect(await prisma.coachConversation.count({ where: { userId: inp.userId } })).toBe(0);
   });
@@ -254,7 +254,7 @@ describe('runAnswer: validation', () => {
   it('drops a card that references no known fact, and still answers', async () => {
     const { deps } = setup([['Recovery is 26.\n```card\n{"headline":"Hi","tiles":[{"fact":"nope"}]}\n```']]);
     const events = await collect(runAnswer(await input(), deps));
-    expect(types(events)).toEqual(['status', 'text', 'done']);
+    expect(types(events)).toEqual(['status', 'status', 'status', 'text', 'done']);
     const row = await prisma.coachMessage.findUniqueOrThrow({ where: { id: doneOf(events).messageId } });
     expect(row.card).toBeNull();
     expect(row.guardrailEvents).toEqual([{ type: 'card_dropped' }]);
@@ -267,7 +267,7 @@ describe('runAnswer: memory block', () => {
     const { deps } = setup([[`Nice routine. ${block}`]]);
     const inp = await input({ message: 'I run at 6am on weekdays' });
     const events = await collect(runAnswer(inp, deps));
-    expect(types(events)).toEqual(['status', 'text', 'memory', 'done']);
+    expect(types(events)).toEqual(['status', 'status', 'status', 'text', 'memory', 'done']);
     const memory = events.find((e): e is Extract<AnswerEvent, { type: 'memory' }> => e.type === 'memory')!;
     expect(memory.proposals.map((p) => [p.category, p.value, p.status])).toEqual([['SCHEDULE', 'Runs at 6am on weekdays', 'PENDING']]);
     const stored = await prisma.coachMemory.findMany({ where: { userId: inp.userId } });
@@ -313,7 +313,7 @@ describe('runAnswer: safety', () => {
   it('safetyOverride answers normally', async () => {
     const { deps, provider, telemetry } = setup([['Happy to look at your data.']]);
     const events = await collect(runAnswer(await input({ message: 'should I take melatonin', safetyOverride: true }), deps));
-    expect(types(events)).toEqual(['status', 'text', 'done']);
+    expect(types(events)).toEqual(['status', 'status', 'status', 'text', 'done']);
     expect(provider.callCount).toBe(1);
     // The override is still recorded, and still without the category.
     expect(telemetry.named('coach.safety_classifier')[0]!.attributes).toEqual({ triggered: true, overridden: true });
@@ -332,8 +332,8 @@ describe('runAnswer: errors, budget and stop', () => {
   it('keeps sentences already sent when the stream drops mid-answer, then reports the error', async () => {
     const { deps } = setup([{ chunks: ['Recovery is 26. ', 'You slept'], error: new Error('socket hang up') }]);
     const events = await collect(runAnswer(await input(), deps));
-    expect(types(events)).toEqual(['status', 'text', 'error']);
-    expect(events[2]).toEqual({ type: 'error', code: 'model_unavailable', retryable: true });
+    expect(types(events)).toEqual(['status', 'status', 'status', 'text', 'error']);
+    expect(events[4]).toEqual({ type: 'error', code: 'model_unavailable', retryable: true });
   });
 
   it('reports internal when the fact sheet cannot be built', async () => {
@@ -378,7 +378,7 @@ describe('runAnswer: errors, budget and stop', () => {
     await until(() => events.some((e) => e.type === 'text'));
     stop.abort();
     await running;
-    expect(types(events)).toEqual(['status', 'text', 'done']);
+    expect(types(events)).toEqual(['status', 'status', 'status', 'text', 'done']);
     expect(doneOf(events).stopped).toBe(true);
     expect(abortedAtDone).toBe(true);
     const row = await prisma.coachMessage.findUniqueOrThrow({ where: { id: doneOf(events).messageId } });
@@ -399,7 +399,7 @@ describe('runAnswer: errors, budget and stop', () => {
     await until(() => seen.signal !== undefined);
     stop.abort();
     const events = await running;
-    expect(types(events)).toEqual(['status']);
+    expect(types(events)).toEqual(['status', 'status', 'status']);
     expect(await prisma.coachMessage.count({ where: { userId: inp.userId } })).toBe(0);
     // The reserved id was never created: no empty conversation is left behind.
     const reserved = (events[0] as Extract<AnswerEvent, { type: 'status' }>).conversationId;
@@ -428,9 +428,9 @@ describe('runAnswer: failure paths (fix round 1)', () => {
     await until(() => events.some((e) => e.type === 'text') && seen.signal !== undefined);
     clock.advance(45_000);
     await running;
-    expect(types(events)).toEqual(['status', 'text', 'error']);
+    expect(types(events)).toEqual(['status', 'status', 'status', 'text', 'error']);
     expect(texts(events)).toEqual(['Recovery is 26.']);
-    expect(events[2]).toEqual({ type: 'error', code: 'timeout', retryable: true });
+    expect(events[4]).toEqual({ type: 'error', code: 'timeout', retryable: true });
     expect(abortedAtError).toBe(true);
     expect(await prisma.coachMessage.count({ where: { userId: inp.userId } })).toBe(0);
   });
@@ -460,8 +460,8 @@ describe('runAnswer: failure paths (fix round 1)', () => {
     } finally {
       spy.mockRestore();
     }
-    expect(types(events)).toEqual(['status', 'text', 'error']);
-    expect(events[2]).toEqual({ type: 'error', code: 'internal', retryable: true });
+    expect(types(events)).toEqual(['status', 'status', 'status', 'text', 'error']);
+    expect(events[4]).toEqual({ type: 'error', code: 'internal', retryable: true });
     expect(await prisma.coachMemory.count({ where: { userId: inp.userId } })).toBe(0);
   });
 
@@ -471,7 +471,7 @@ describe('runAnswer: failure paths (fix round 1)', () => {
       const { deps } = setup([['Ok. ```memory\n{"category":"SCHEDULE","value":"Runs at 6am"}\n```']]);
       const inp = await input({ message: 'I run at 6am' });
       const events = await collect(runAnswer(inp, deps));
-      expect(types(events)).toEqual(['status', 'text', 'done']);
+      expect(types(events)).toEqual(['status', 'status', 'status', 'text', 'done']);
       const row = await prisma.coachMessage.findUniqueOrThrow({ where: { id: doneOf(events).messageId } });
       expect(row.text).toBe('Ok.');
       expect(await prisma.coachMemory.count({ where: { userId: inp.userId } })).toBe(0);
@@ -492,7 +492,7 @@ describe('runAnswer: failure paths (fix round 1)', () => {
     const memory = '\n```memory\n{"category":"SCHEDULE","value":"Runs at 6am on weekdays"}\n```';
     const { deps } = setup([[...GOOD, memory]]);
     const events = await collect(runAnswer(await input({ message: 'How am I doing? I run at 6am on weekdays' }), deps));
-    expect(types(events)).toEqual(['status', 'text', 'text', 'text', 'card', 'memory', 'done']);
+    expect(types(events)).toEqual(['status', 'status', 'status', 'text', 'text', 'text', 'card', 'memory', 'done']);
   });
 
   it('drops history turns that are empty once cleaned (the hosted API rejects empty messages)', async () => {
@@ -556,14 +556,90 @@ describe('runAnswer: the user and their persona', () => {
 
   it("builds the prompt from the user's chosen persona and labels telemetry with it", async () => {
     const user = await createUser();
-    await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: 'doze' } });
-    const doze = resolvePersona('doze');
+    await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: 'luna' } });
+    const luna = resolvePersona('luna');
     const { deps, provider, telemetry } = setup([['Fine.']]);
     await collect(runAnswer({ userId: user.id, message: 'How am I doing today?', history: [] }, deps));
     const system = provider.requests[0]!.system;
-    expect(system).toContain(`- name: ${escapeField(doze.name, 60)}`);
-    expect(system).toContain(`- coaching focus: ${escapeField(doze.focus)}`);
+    expect(system).toContain(`- name: ${escapeField(luna.name, 60)}`);
+    expect(system).toContain(`- coaching focus: ${escapeField(luna.focus)}`);
     expect(telemetry.events.length).toBeGreaterThan(0);
-    expect(telemetry.events.every((e) => e.personaId === 'doze')).toBe(true);
+    expect(telemetry.events.every((e) => e.personaId === 'luna')).toBe(true);
+  });
+});
+
+describe('runAnswer: progress steps', () => {
+  const statusesOf = (events: AnswerEvent[]) =>
+    events.filter((e): e is Extract<AnswerEvent, { type: 'status' }> => e.type === 'status').map((s) => [s.step, s.label]);
+
+  it('names only what each route really does', () => {
+    for (const route of ['today', 'sleep', 'trends', 'general'] as const) {
+      expect(Object.keys(STEP_LABELS[route]).sort()).toEqual(['facts', 'route', 'write']);
+    }
+    expect(Object.values(STEP_LABELS.general).join(' ')).not.toMatch(/your (day|sleep|numbers)/i);
+    expect(STEP_LABELS.general).toEqual({ route: 'Thinking it over…', facts: 'Checking your goals…', write: 'Writing an answer…' });
+    expect(STEP_LABELS.sleep).toEqual({ route: 'Looking at your sleep…', facts: 'Going through your recent nights…', write: 'Writing it up…' });
+    expect(STEP_LABELS.today).toEqual({ route: 'Looking at your day…', facts: 'Comparing today with your usual…', write: 'Writing it up…' });
+    expect(STEP_LABELS.trends).toEqual({ route: 'Looking at your trends…', facts: 'Comparing your last 30 days…', write: 'Writing it up…' });
+  });
+
+  it('streams route, facts and write before the first sentence', async () => {
+    const { deps } = setup([GOOD]);
+    const events = await collect(runAnswer(await input(), deps));
+    expect(statusesOf(events)).toEqual([
+      ['route', 'Looking at your day…'],
+      ['facts', 'Comparing today with your usual…'],
+      ['write', 'Writing it up…'],
+    ]);
+    const writeAt = events.findIndex((e) => e.type === 'status' && e.step === 'write');
+    expect(writeAt).toBe(2);
+    expect(events.findIndex((e) => e.type === 'text')).toBeGreaterThan(writeAt);
+  });
+
+  it('sends the write step once, even when the answer is regenerated', async () => {
+    const { deps, provider } = setup([[''], ['Recovery is 26 today.']]);
+    const events = await collect(runAnswer(await input(), deps));
+    expect(provider.callCount).toBe(2);
+    expect(statusesOf(events).map(([step]) => step)).toEqual(['route', 'facts', 'write']);
+  });
+
+  it('stops at the route step when the fact sheet fails', async () => {
+    const { deps } = setup([['Hi.']], {
+      factData: { ...FACT_DATA, getDailyScore: async () => Promise.reject(new Error('db down')) },
+    });
+    const events = await collect(runAnswer(await input(), deps));
+    expect(types(events)).toEqual(['status', 'error']);
+    expect(statusesOf(events)).toEqual([['route', 'Looking at your day…']]);
+    expect(events[1]).toEqual({ type: 'error', code: 'internal', retryable: true });
+  });
+
+  // A fact sheet that never finishes: the budget or a stop ends the turn before any 'facts' step.
+  const hangingFacts = (called: { yes: boolean }): FactData => ({
+    ...FACT_DATA,
+    getDailyScore: () => {
+      called.yes = true;
+      return new Promise(() => {});
+    },
+  });
+
+  it('sends no facts step when the budget runs out while building the fact sheet', async () => {
+    const called = { yes: false };
+    const { deps, clock } = setup([['Hi.']], { factData: hangingFacts(called) });
+    const running = collect(runAnswer(await input(), deps));
+    await until(() => called.yes);
+    clock.advance(45_000);
+    const events = await running;
+    expect(statusesOf(events).map(([step]) => step)).toEqual(['route']);
+    expect(events[events.length - 1]).toEqual({ type: 'error', code: 'timeout', retryable: true });
+  });
+
+  it('sends no facts step when stopped while building the fact sheet', async () => {
+    const called = { yes: false };
+    const stop = new AbortController();
+    const { deps } = setup([['Hi.']], { factData: hangingFacts(called) });
+    const running = collect(runAnswer(await input({ signal: stop.signal }), deps));
+    await until(() => called.yes);
+    stop.abort();
+    expect(types(await running)).toEqual(['status']);
   });
 });

@@ -58,7 +58,7 @@ const fallbackStart: Event = { type: 'content_block_start', content_block: { typ
 
 function streamRequest(overrides: Partial<CoachStreamRequest> = {}): CoachStreamRequest {
   return {
-    system: 'You are Hoot.',
+    system: 'You are Mochi.',
     messages: [{ role: 'user', content: 'How did I sleep?' }],
     maxTokens: 600,
     ...overrides,
@@ -103,7 +103,7 @@ describe('AnthropicProvider.stream', () => {
     expect(body).toEqual({
       model: DEFAULT_HOSTED_MODEL,
       max_tokens: HOSTED_MAX_TOKENS,
-      system: 'You are Hoot.',
+      system: 'You are Mochi.',
       messages: [{ role: 'user', content: 'How did I sleep?' }],
       output_config: { effort: 'low' },
       betas: [HOSTED_FALLBACK_BETA],

@@ -56,7 +56,7 @@ export function ResetPasswordScreen({ navigation, route }: Props) {
     <SafeAreaView className="flex-1 bg-background">
       <ScrollView contentContainerClassName="flex-grow justify-center gap-8 px-6 py-8" keyboardShouldPersistTaps="handled">
         <Animated.View entering={FadeInDown.duration(450)} className="items-center gap-3">
-          <Character testID="auth-character" characterId="hoot" mood="idle" size={56} glow paused={!focused} />
+          <Character testID="auth-character" characterId="mochi" mood="idle" size={56} glow paused={!focused} />
           <Text className="text-center font-display text-display-lg">Choose a new password</Text>
           {token ? <Text className="text-center text-base text-muted-foreground">{`Use at least ${MIN_PASSWORD_LENGTH} characters.`}</Text> : null}
         </Animated.View>

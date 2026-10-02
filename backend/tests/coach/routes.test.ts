@@ -12,7 +12,7 @@ import { LoggerCoachTelemetry } from '../../src/coach/telemetry';
 import { ScriptedStreamProvider, StreamStep } from '../../src/coach/model/provider';
 import { getCoachProvider, resetCoachProviderFromEnv, resetHostedProviderFromEnv } from '../../src/coach/config';
 import { resetWarmState } from '../../src/coach/answer/warm';
-import { DEFAULT_PERSONA_ID, listPersonas } from '../../src/coach/personas';
+import { DEFAULT_PERSONA_ID, RETIRED_CHARACTER_IDS, listPersonas } from '../../src/coach/personas';
 import { FakeClock, RecordingTelemetry, createUser, daysAgo, putScore, todayUtc } from './helpers';
 import { testServer } from '../helpers/server';
 
@@ -83,6 +83,7 @@ const ROUTES = [
   ['post', '/me/coach/consent'],
   ['delete', '/me/coach/consent'],
   ['put', '/me/coach/persona'],
+  ['put', '/me/coach/thinking'],
   ['put', '/me/coach/engine'],
   ['get', '/me/coach/today'],
   ['get', '/me/coach/conversations'],
@@ -119,8 +120,10 @@ describe('COACH_ENABLED flag (default off)', () => {
     expect(res.body.enabled).toBe(false);
   });
 
-  // Status and PUT persona stay open: the character is also the app's look, so it is shown and chosen while the coach is off.
-  const GATED = ROUTES.filter(([, p]) => p !== '/me/coach/status' && p !== '/me/coach/persona');
+  // Status, PUT persona and PUT thinking stay open: the character and its thinking style are also the app's look,
+  // so they are shown and chosen while the coach is off.
+  const OPEN: readonly string[] = ['/me/coach/status', '/me/coach/persona', '/me/coach/thinking'];
+  const GATED = ROUTES.filter(([, p]) => !OPEN.includes(p));
 
   it.each(GATED)('%s %s returns 404 coach_disabled when off', async (method, path) => {
     process.env.COACH_ENABLED = 'false';
@@ -157,23 +160,34 @@ describe('GET /me/coach/status', () => {
     const user = await createUser();
     const res = await request(await testServer(createApp())).get('/me/coach/status').set(await authed(user.id));
     expect(res.status).toBe(200);
-    expect(Object.keys(res.body).sort()).toEqual(['consent', 'consented', 'enabled', 'engine', 'engines', 'personaChosen', 'personaId', 'personas']);
-    expect(res.body).toMatchObject({ enabled: true, consented: false, personaId: 'hoot', personaChosen: false });
+    expect(Object.keys(res.body).sort()).toEqual([
+      'consent',
+      'consented',
+      'enabled',
+      'engine',
+      'engines',
+      'personaChosen',
+      'personaId',
+      'personas',
+      'thinkingAttachment',
+      'thinkingText',
+    ]);
+    expect(res.body).toMatchObject({ enabled: true, consented: false, personaId: 'mochi', personaChosen: false });
     expect(Object.keys(res.body.consent).sort()).toEqual(['dataItems', 'summary', 'version']);
     expect(res.body.consent.version).toBe(COACH_CONSENT_VERSION);
     expect(Array.isArray(res.body.consent.dataItems)).toBe(true);
     // The contract the mobile picker reads: every character, in picker order, with its copy.
-    const t = 'threshold-triggered';
-    expect(res.body.personas).toEqual([
-      { id: 'hoot', name: 'Hoot', verbosity: 'normal', proactivity: t, tagline: 'Calm and curious. Spots the patterns in your weeks.', greeting: "I've been watching your numbers overnight. Want to see what stood out?" },
-      { id: 'pip', name: 'Pip', verbosity: 'terse', proactivity: t, tagline: 'Your tiny cheerleader. Celebrates every small win.', greeting: "Hi! You showed up, and that's already a win. What should we look at?" },
-      { id: 'mochi', name: 'Mochi', verbosity: 'terse', proactivity: t, tagline: 'Soft and gentle. Rest is never something to feel bad about.', greeting: 'Hey you. No pressure today. How are you feeling?' },
-      { id: 'nimbus', name: 'Nimbus', verbosity: 'normal', proactivity: t, tagline: 'Reads your body like a forecast and plans your day around it.', greeting: "Today's forecast: mostly clear, good day to push a little. Want the details?" },
-      { id: 'ember', name: 'Ember', verbosity: 'terse', proactivity: t, tagline: 'All energy. Helps you train smart and push when it counts.', greeting: "Your body's got fuel today. Want to put it to work?" },
-      { id: 'beep', name: 'Beep', verbosity: 'terse', proactivity: t, tagline: 'Just the numbers, clearly. No fluff.', greeting: 'Data synced. Three metrics moved since yesterday. Want the list?' },
-      { id: 'doze', name: 'Doze', verbosity: 'normal', proactivity: t, tagline: 'Your sleep expert. Cosy, slow and all about good nights.', greeting: '*yawn* Oh, hi. Shall we talk about how you slept?' },
-      { id: 'beat', name: 'Beat', verbosity: 'normal', proactivity: t, tagline: 'Listens to your heart, literally.', greeting: "Your heart's been busy. Want to hear how it's doing?" },
-    ]);
+    expect(res.body.personas).toEqual(
+      listPersonas().map((p) => ({
+        id: p.id,
+        name: p.name,
+        verbosity: p.verbosity,
+        proactivity: p.proactivity,
+        tagline: p.tagline ?? null,
+        greeting: p.greeting ?? null,
+      })),
+    );
+    expect(res.body.personas).toHaveLength(15);
   });
 
   it('personaChosen turns true once a persona is stored, and personaId is that persona', async () => {
@@ -184,23 +198,25 @@ describe('GET /me/coach/status', () => {
     expect(res.body).toMatchObject({ personaId: chosen, personaChosen: true });
   });
 
-  it('an unknown stored id serves the default but still counts as chosen (the user did pick once)', async () => {
+  // Ruling R24: a stored id that is not live re-opens the picker (defence in depth beside the migration).
+  it('an unknown stored id serves the default and does not count as chosen', async () => {
     const user = await createUser();
     await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: 'retired-persona' } });
     const res = await request(await testServer(createApp())).get('/me/coach/status').set(await authed(user.id));
-    expect(res.body).toMatchObject({ personaId: DEFAULT_PERSONA_ID, personaChosen: true });
+    expect(res.body).toMatchObject({ personaId: DEFAULT_PERSONA_ID, personaChosen: false });
   });
 
-  it.each([
-    ['encouraging', 'pip'],
-    ['direct', 'hoot'],
-    ['clinical', 'beep'],
-  ])('a legacy %s row (not yet migrated) reads as %s and counts as chosen', async (legacy, character) => {
-    const user = await createUser();
-    await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: legacy } });
-    const res = await request(await testServer(createApp())).get('/me/coach/status').set(await authed(user.id));
-    expect(res.body).toMatchObject({ personaId: character, personaChosen: true });
-  });
+  // Ruling R6: a legacy v1 id is unknown, like a retired character, so it reads as the default, Mochi;
+  // R24: and the picker opens again.
+  it.each(['encouraging', 'direct', 'clinical'])(
+    'a legacy %s row (not yet migrated) reads as the default, mochi, and does not count as chosen',
+    async (legacy) => {
+      const user = await createUser();
+      await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: legacy } });
+      const res = await request(await testServer(createApp())).get('/me/coach/status').set(await authed(user.id));
+      expect(res.body).toMatchObject({ personaId: 'mochi', personaChosen: false });
+    },
+  );
 
   it('reports the persona while the coach is off, since the character is also the app look', async () => {
     process.env.COACH_ENABLED = 'false';
@@ -322,16 +338,30 @@ describe('PUT /me/coach/persona', () => {
     expect((await prisma.user.findUnique({ where: { id: user.id } }))?.coachPersonaId).toBe('mochi');
   });
 
-  it.each([
-    ['encouraging', 'pip'],
-    ['direct', 'hoot'],
-    ['clinical', 'beep'],
-  ])('accepts the legacy id %s from an older app and stores its character, %s', async (legacy, character) => {
+  // Ruling R6: a legacy v1 id from a very old app is unknown, so it is refused and nothing is stored.
+  it.each(['encouraging', 'direct', 'clinical'])('400 unknown_persona for the legacy id %s, and stores nothing', async (legacy) => {
     const user = await createUser();
+    await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: 'kit' } });
     const res = await request(await testServer(createApp())).put('/me/coach/persona').set(await authed(user.id)).send({ personaId: legacy });
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'unknown_persona' });
+    expect((await prisma.user.findUnique({ where: { id: user.id } }))?.coachPersonaId).toBe('kit');
+  });
+
+  // Ruling R23: an old build still offers the retired v3 characters, and its Skip sends 'hoot'. The default
+  // is saved instead, so that build's picker does not reopen on every launch.
+  it.each([...RETIRED_CHARACTER_IDS])('a retired character %s saves the default, mochi (200)', async (retired) => {
+    const user = await createUser();
+    const headers = await authed(user.id);
+    const res = await request(await testServer(createApp())).put('/me/coach/persona').set(headers).send({ personaId: retired });
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ personaId: character });
-    expect((await prisma.user.findUnique({ where: { id: user.id } }))?.coachPersonaId).toBe(character);
+    expect(res.body).toEqual({ personaId: 'mochi' });
+    expect((await prisma.user.findUnique({ where: { id: user.id } }))?.coachPersonaId).toBe('mochi');
+    expect((await request(await testServer(createApp())).get('/me/coach/status').set(headers)).body).toMatchObject({ personaId: 'mochi', personaChosen: true });
+  });
+
+  it('the retired set is exactly the seven v3 characters v4 dropped', () => {
+    expect([...RETIRED_CHARACTER_IDS].sort()).toEqual(['beat', 'beep', 'doze', 'ember', 'hoot', 'nimbus', 'pip']);
   });
 
   it.each([['false'], [undefined]])('works while the coach is off (COACH_ENABLED=%j)', async (flag) => {
@@ -369,12 +399,81 @@ describe('PUT /me/coach/persona', () => {
   it('the chosen persona is the one the coach uses on the next turn', async () => {
     const { app, provider, telemetry } = scriptedApp(['Fine.']);
     const user = await consented();
-    await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: 'ember' } });
+    await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: 'luna' } });
     await request(await testServer(app)).post('/me/coach/message').set(await authed(user.id)).send({ message: 'hi' });
-    expect(provider.requests[0]!.system).toContain('- name: "Ember"');
-    expect(provider.requests[0]!.system).toContain('- coaching focus: "Training load, strain and performance."');
-    expect(telemetry.events.every((e) => e.personaId === 'ember')).toBe(true);
+    expect(provider.requests[0]!.system).toContain('- name: "Luna"');
+    expect(provider.requests[0]!.system).toContain('- coaching focus: "Sleep."');
+    expect(telemetry.events.every((e) => e.personaId === 'luna')).toBe(true);
   });
+});
+
+describe('thinking settings', () => {
+  it('returns the defaults in the status until the user picks', async () => {
+    const user = await createUser();
+    const res = await request(await testServer(createApp())).get('/me/coach/status').set(await authed(user.id));
+    expect(res.body).toMatchObject({ thinkingAttachment: 'bulb', thinkingText: 'steps' });
+  });
+
+  it('saves either setting on its own and reports both', async () => {
+    const user = await createUser();
+    const headers = await authed(user.id);
+    const app = await testServer(createApp());
+    let res = await request(app).put('/me/coach/thinking').set(headers).send({ attachment: 'gears' });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ thinkingAttachment: 'gears', thinkingText: 'steps' });
+    res = await request(app).put('/me/coach/thinking').set(headers).send({ text: 'dialog' });
+    expect(res.body).toEqual({ thinkingAttachment: 'gears', thinkingText: 'dialog' });
+    res = await request(app).get('/me/coach/status').set(headers);
+    expect(res.body).toMatchObject({ thinkingAttachment: 'gears', thinkingText: 'dialog' });
+  });
+
+  it('works while the coach is off, since it is a look', async () => {
+    process.env.COACH_ENABLED = 'false';
+    const user = await createUser();
+    const res = await request(await testServer(createApp())).put('/me/coach/thinking').set(await authed(user.id)).send({ attachment: 'cloud', text: 'shimmer' });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ thinkingAttachment: 'cloud', thinkingText: 'shimmer' });
+  });
+
+  it.each([[{ attachment: 'rocket' }], [{ text: 'mime' }], [{}], [{ attachment: 42 }], [{ text: '__proto__' }], [{ attachment: 'gears', text: 'mime' }]])(
+    'rejects %j with 400 unknown_thinking_style and saves nothing',
+    async (body) => {
+      const user = await createUser();
+      const res = await request(await testServer(createApp())).put('/me/coach/thinking').set(await authed(user.id)).send(body);
+      expect(res.status).toBe(400);
+      expect(res.body).toEqual({ error: 'unknown_thinking_style' });
+      const row = await prisma.user.findUnique({ where: { id: user.id }, select: { coachThinkingAttachment: true, coachThinkingText: true } });
+      expect(row).toEqual({ coachThinkingAttachment: null, coachThinkingText: null });
+    },
+  );
+
+  it('404 when the user row is gone, as PUT /me/coach/persona does, rather than a 500', async () => {
+    const user = await createUser();
+    const headers = await authed(user.id);
+    jest.spyOn(prisma.user, 'updateMany').mockResolvedValue({ count: 0 });
+    const res = await request(await testServer(createApp())).put('/me/coach/thinking').set(headers).send({ attachment: 'gears' });
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: 'User not found' });
+  });
+
+  it('treats a stored value the app no longer knows as the default', async () => {
+    const user = await createUser();
+    await prisma.user.update({ where: { id: user.id }, data: { coachThinkingAttachment: 'retired', coachThinkingText: 'retired' } });
+    const res = await request(await testServer(createApp())).get('/me/coach/status').set(await authed(user.id));
+    expect(res.body).toMatchObject({ thinkingAttachment: 'bulb', thinkingText: 'steps' });
+  });
+});
+
+// Review Focus 1: a retired stored id must never reach any client.
+it('reports Mochi for a stored retired character, and never lists a retired id', async () => {
+  const user = await createUser();
+  await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: 'hoot' } });
+  const res = await request(await testServer(createApp())).get('/me/coach/status').set(await authed(user.id));
+  expect(res.body.personaId).toBe('mochi');
+  // Ruling R24: a stored id that is not live re-opens the picker, even before the migration clears it.
+  expect(res.body.personaChosen).toBe(false);
+  const ids = res.body.personas.map((p: { id: string }) => p.id);
+  for (const retired of ['hoot', 'pip', 'nimbus', 'ember', 'beep', 'doze', 'beat']) expect(ids).not.toContain(retired);
 });
 
 describe('POST /me/coach/message', () => {

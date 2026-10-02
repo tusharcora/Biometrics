@@ -1,14 +1,16 @@
-import React, { useCallback, useRef, useState } from 'react';
-import { FlatList, Pressable, View, useWindowDimensions, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import React, { useEffect, useRef, useState } from 'react';
+import { AccessibilityInfo, Pressable, ScrollView, View, type Text as RNText } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useCharacter } from '../characters/CharacterContext';
 import { Character } from '../components/characters/Character';
+import { CoachCard } from '../components/characters/CoachCard';
 import { CHARACTERS } from '../components/characters/registry';
-import { CHARACTER_IDS, type CharacterId } from '../components/characters/types';
+import { CHARACTER_IDS, DEFAULT_CHARACTER_ID, type CharacterId } from '../components/characters/types';
 import type { CoachStatusDTO } from '../api/coach';
 import { Button } from '../components/ui/button';
+import { Sheet } from '../components/ui/sheet';
 import { Text } from '../components/ui/text';
 import { useToast } from '../components/ui/toast';
 import { cn } from '../lib/utils';
@@ -17,9 +19,16 @@ import type { RootStackParamList } from '../navigation/RootNavigator';
 type MeetRoute = RouteProp<RootStackParamList, 'MeetYourCoach'>;
 type MeetNavigation = NativeStackNavigationProp<RootStackParamList, 'MeetYourCoach'>;
 
-const ART_SIZE = 180;
-// Each page dot's tap target (the dot itself stays small).
-const DOT_TARGET = 44;
+const COLUMNS = 3;
+const GRID_GAP = 8;
+const TILE_HEIGHT = 96;
+const TILE_SPRITE = 56;
+// Lets the sheet slide in before the screen reader moves into it.
+const FOCUS_DELAY_MS = 350;
+
+// The grid's rows, three coaches each, in picker order.
+const ROWS: CharacterId[][] = [];
+for (let i = 0; i < CHARACTER_IDS.length; i += COLUMNS) ROWS.push(CHARACTER_IDS.slice(i, i + COLUMNS));
 
 // The server's copy wins when it has any (spec §1 Registry); a missing, null
 // or blank field falls back to the app's own.
@@ -35,49 +44,49 @@ function pageCopy(id: CharacterId, status: CoachStatusDTO | null) {
   };
 }
 
-// "Meet your coach" (spec §5): a horizontal pager of the eight characters.
-// 'first' opens by itself on the first Coach-tab visit, starts on Hoot and can
-// be skipped (Skip saves Hoot so it never comes back); 'switch' comes from
-// Profile, starts on the current character and just closes.
+// "Meet your coach" (spec §9 Picker): a 3-column grid of all 15 coaches.
+// Tapping a tile selects it and raises its card in a bottom sheet with the
+// coach's hello and "Choose {Name}". Only the selected tile animates; the rest
+// stay paused, and the whole grid pauses while the sheet's card is up.
+// 'first' opens by itself on the first Coach-tab visit, preselects Mochi and
+// can be skipped (Skip saves Mochi so it never comes back); 'switch' comes
+// from Profile, preselects the current coach and just closes.
 export function MeetYourCoachScreen() {
   const navigation = useNavigation<MeetNavigation>();
   const route = useRoute<MeetRoute>();
   // Anything but an explicit 'first' is the harmless mode: no Skip, nothing
-  // saved unless a character is chosen.
+  // saved unless a coach is chosen.
   const mode = route.params?.mode === 'first' ? 'first' : 'switch';
   const { characterId, personaChosen, status, chooseCharacter } = useCharacter();
   const toast = useToast();
-  const { width } = useWindowDimensions();
-  const listRef = useRef<FlatList<CharacterId>>(null);
-  const startIndex = mode === 'first' ? 0 : Math.max(0, CHARACTER_IDS.indexOf(characterId));
-  const [index, setIndex] = useState(startIndex);
+  const [selected, setSelected] = useState<CharacterId>(() =>
+    mode === 'first' || !CHARACTER_IDS.includes(characterId) ? DEFAULT_CHARACTER_ID : characterId,
+  );
+  const [sheetOpen, setSheetOpen] = useState(false);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const nameRef = useRef<RNText>(null);
 
-  const activeId = CHARACTER_IDS[index] ?? CHARACTER_IDS[0];
-  const activeName = CHARACTERS[activeId].name;
+  // The sheet is modal: move screen-reader focus to the card's name on open.
+  useEffect(() => {
+    if (!sheetOpen) return;
+    const timer = setTimeout(() => {
+      if (nameRef.current) AccessibilityInfo.sendAccessibilityEvent(nameRef.current, 'focus');
+    }, FOCUS_DELAY_MS);
+    return () => clearTimeout(timer);
+  }, [sheetOpen]);
 
-  const onMomentumScrollEnd = useCallback(
-    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      if (width <= 0) return;
-      const next = Math.round(e.nativeEvent.contentOffset.x / width);
-      setIndex(Math.min(CHARACTER_IDS.length - 1, Math.max(0, next)));
-      setError(null);
-    },
-    [width],
-  );
-
-  function goTo(next: number) {
-    listRef.current?.scrollToIndex({ index: next, animated: true });
-    setIndex(next);
+  function openCard(id: CharacterId) {
+    setSelected(id);
     setError(null);
+    setSheetOpen(true);
   }
 
   async function choose(id: CharacterId) {
     if (saving) return;
-    // Nothing to save when switching to the character you already chose. One
-    // that was never chosen (the default) is saved, so the first-visit picker
-    // does not come back.
+    // Nothing to save when switching to the coach you already chose. One that
+    // was never chosen (the default) is saved, so the first-visit picker does
+    // not come back.
     if (mode === 'switch' && personaChosen && id === characterId) {
       navigation.goBack();
       return;
@@ -100,12 +109,14 @@ export function MeetYourCoachScreen() {
     }
   }
 
+  const copy = pageCopy(selected, status);
+
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom']}>
       <View className="flex-row items-center justify-between px-5 pt-2">
         <Text className="text-eyebrow font-semibold uppercase text-muted-foreground">Meet your coach</Text>
         {mode === 'first' ? (
-          <Button testID="meet-skip" variant="ghost" size="sm" disabled={saving} onPress={() => void choose('hoot')}>
+          <Button testID="meet-skip" variant="ghost" size="sm" disabled={saving} onPress={() => void choose(DEFAULT_CHARACTER_ID)}>
             Skip
           </Button>
         ) : (
@@ -115,75 +126,59 @@ export function MeetYourCoachScreen() {
         )}
       </View>
 
-      <FlatList
-        ref={listRef}
-        testID="meet-pager"
-        data={CHARACTER_IDS}
-        keyExtractor={(id) => id}
-        horizontal
-        pagingEnabled
-        showsHorizontalScrollIndicator={false}
-        initialScrollIndex={startIndex}
-        initialNumToRender={CHARACTER_IDS.length}
-        getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
-        onMomentumScrollEnd={onMomentumScrollEnd}
-        extraData={index}
-        renderItem={({ item: id, index: i }) => {
-          const { tagline, greeting } = pageCopy(id, status);
-          const name = CHARACTERS[id].name;
-          return (
-            <View testID={`meet-page-${id}`} style={{ width }} className="flex-1 items-center justify-center gap-6 px-8">
-              {/* Only the page on screen animates (spec §1 Performance). */}
-              <Character characterId={id} mood="idle" size={ART_SIZE} paused={i !== index} glow accessibilityLabel={name} />
-              <View className="items-center gap-1.5">
-                {/* The character above already reads the name to a screen reader. */}
-                <Text className="font-display text-display-lg" accessibilityElementsHidden importantForAccessibility="no">
-                  {name}
-                </Text>
-                <Text testID={`meet-tagline-${id}`} className="text-center text-base text-muted-foreground">
-                  {tagline}
-                </Text>
-              </View>
-              <View className="items-center">
-                {/* The bubble's tail, pointing up at the character. */}
-                <View className="-mb-1.5 h-3 w-3 rotate-45 border-l border-t border-border bg-card" />
-                <View className="max-w-[320px] rounded-card border border-border bg-card px-4 py-3">
-                  <Text testID={`meet-greeting-${id}`} className="text-center text-base">
-                    {greeting}
+      <ScrollView testID="meet-grid" contentContainerClassName="px-4 pb-6 pt-3" contentContainerStyle={{ gap: GRID_GAP }}>
+        {ROWS.map((row) => (
+          <View key={row.join('-')} className="flex-row" style={{ gap: GRID_GAP }}>
+            {row.map((id) => {
+              const c = CHARACTERS[id];
+              const isSelected = id === selected;
+              return (
+                <Pressable
+                  key={id}
+                  testID={`meet-tile-${id}`}
+                  accessibilityRole="button"
+                  accessibilityLabel={`${c.name}, ${c.focus}`}
+                  accessibilityState={{ selected: isSelected }}
+                  onPress={() => openCard(id)}
+                  style={{ height: TILE_HEIGHT }}
+                  className={cn(
+                    'flex-1 items-center justify-center gap-1 rounded-2xl border bg-card',
+                    isSelected ? 'border-foreground' : 'border-border',
+                  )}
+                >
+                  {/* Only the selected tile animates (spec §9 performance). */}
+                  <Character characterId={id} mood="idle" size={TILE_SPRITE} paused={!isSelected || sheetOpen} attachment={null} />
+                  <Text className="text-[11px] font-semibold" numberOfLines={1}>
+                    {c.name}
                   </Text>
-                </View>
-              </View>
-            </View>
-          );
-        }}
-      />
+                </Pressable>
+              );
+            })}
+          </View>
+        ))}
+      </ScrollView>
 
-      <View className="gap-4 px-5 pb-4">
-        {/* Eight 44pt targets need 352pt, so this row uses the full width. */}
-        <View className="-mx-5 flex-row items-center justify-center">
-          {CHARACTER_IDS.map((id, i) => (
-            <Pressable
-              key={id}
-              testID={`meet-dot-${id}`}
-              accessibilityRole="button"
-              accessibilityLabel={`Show ${CHARACTERS[id].name}`}
-              accessibilityState={{ selected: i === index }}
-              onPress={() => goTo(i)}
-              style={{ width: DOT_TARGET, height: DOT_TARGET, alignItems: 'center', justifyContent: 'center' }}
-            >
-              <View className={cn('h-2 rounded-full', i === index ? 'w-5 bg-foreground' : 'w-2 bg-border')} />
-            </Pressable>
-          ))}
+      {/* A backdrop tap, Android back or a drag on the handle closes it. */}
+      <Sheet testID="meet-sheet" visible={sheetOpen} onClose={() => setSheetOpen(false)}>
+        <View className="gap-4">
+          <CoachCard
+            characterId={selected}
+            tagline={copy.tagline}
+            greeting={copy.greeting}
+            taglineTestID={`meet-tagline-${selected}`}
+            greetingTestID={`meet-greeting-${selected}`}
+            nameRef={nameRef}
+          />
+          {error ? (
+            <Text testID="meet-error" className="text-center text-sm text-destructive">
+              {error}
+            </Text>
+          ) : null}
+          <Button testID="meet-choose" disabled={saving} onPress={() => void choose(selected)}>
+            {`Choose ${CHARACTERS[selected].name}`}
+          </Button>
         </View>
-        {error ? (
-          <Text testID="meet-error" className="text-center text-sm text-destructive">
-            {error}
-          </Text>
-        ) : null}
-        <Button testID="meet-choose" disabled={saving} onPress={() => void choose(activeId)}>
-          {`Choose ${activeName}`}
-        </Button>
-      </View>
+      </Sheet>
     </SafeAreaView>
   );
 }

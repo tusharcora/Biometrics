@@ -125,12 +125,12 @@ describe('CoachTile character', () => {
   it("shows the user's character, idle", () => {
     const utils = render(withCharacter(<CoachTile needsConsent={false} onPress={jest.fn()} />, { characterId: 'mochi' }));
 
-    expect(characterLabel(utils, 'coach-tile-character')).toBe('character:mochi:idle:40:playing:mini');
+    expect(characterLabel(utils, 'coach-tile-character')).toBe('character:mochi:idle:40:playing:none');
   });
 
   it('rests on a poor recovery day', () => {
     const utils = render(withCharacter(<CoachTile needsConsent={false} onPress={jest.fn()} />, { characterId: 'mochi', recoveryBand: 'scorePoor' }));
 
-    expect(characterLabel(utils, 'coach-tile-character')).toBe('character:mochi:resting:40:playing:mini');
+    expect(characterLabel(utils, 'coach-tile-character')).toBe('character:mochi:resting:40:playing:none');
   });
 });

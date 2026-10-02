@@ -1,4 +1,12 @@
 import { ApiError, apiFetch } from './client';
+import {
+  DEFAULT_THINKING_ATTACHMENT,
+  DEFAULT_THINKING_TEXT,
+  isThinkingAttachment,
+  isThinkingText,
+  type ThinkingAttachmentId,
+  type ThinkingTextId,
+} from '../components/characters/thinking';
 
 // The client must wait strictly longer than the server's own budget, or a slow
 // turn surfaces as a network error instead of the server's answer or error
@@ -36,9 +44,15 @@ export interface CoachStatusDTO {
   consented: boolean;
   consent: CoachConsentDTO;
   personaId: string;
-  // False until the user has picked a character (Skip picks Hoot); the picker opens once.
+  // False until the user has picked a character (Skip picks Mochi); the picker opens once.
   personaChosen: boolean;
   personas: CoachPersonaDTO[];
+  // How the coach looks while it works on an answer. fetchCoachStatus always
+  // fills both: a server that predates them, or an id this build does not
+  // know, reads as the defaults ('bulb' / 'steps'). Optional, like engine, so
+  // fixtures that predate them stay valid; read them from useCharacter().
+  thinkingAttachment?: ThinkingAttachmentId;
+  thinkingText?: ThinkingTextId;
   // Which model answers (phase 2). Optional so fixtures that predate engines
   // stay valid; fetchCoachStatus always fills both.
   engine?: CoachEngineDTO;
@@ -90,11 +104,15 @@ export interface AnswerCardDTO {
 
 export type CoachErrorCode = 'model_unavailable' | 'timeout' | 'validation_failed' | 'consent_required' | 'internal';
 
+// The answer pipeline's progress steps, in order, sent on `status` events.
+export type CoachStepId = 'route' | 'facts' | 'write';
+
 // One server-sent event from POST /me/coach/message (spec 2.5), as JSON.
 export type CoachStreamEvent =
   // conversationId arrives before anything is stored (status, or safety for a crisis
   // message), so a first turn stopped or dropped before `done` keeps its conversation.
-  | { type: 'status'; label: string; conversationId?: string }
+  // `step` names the pipeline step the label belongs to; absent from an older server.
+  | { type: 'status'; label: string; step?: CoachStepId; conversationId?: string }
   | { type: 'text'; sentence: string }
   | { type: 'card'; card: AnswerCardDTO }
   | { type: 'memory'; proposals: MemoryDTO[] }
@@ -357,6 +375,8 @@ const DISABLED_STATUS: CoachStatusDTO = {
   personas: [],
   engine: 'local',
   engines: LOCAL_ONLY,
+  thinkingAttachment: DEFAULT_THINKING_ATTACHMENT,
+  thinkingText: DEFAULT_THINKING_TEXT,
 };
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -392,7 +412,8 @@ function personaDTO(p: Partial<CoachPersonaDTO>): CoachPersonaDTO {
 export async function fetchCoachStatus(): Promise<CoachStatusDTO> {
   const res = await coachFetch<Partial<CoachStatusDTO> | undefined>('/me/coach/status');
   if (!res || typeof res !== 'object' || Array.isArray(res)) return DISABLED_STATUS;
-  // The character is also the app's look, so it is read even while the coach is off.
+  // The character and the thinking settings are also the app's look, so they
+  // are read even while the coach is off.
   const persona = {
     personaId: typeof res.personaId === 'string' ? res.personaId : '',
     // Only a literal false means "not chosen yet". A server that doesn't send
@@ -402,6 +423,8 @@ export async function fetchCoachStatus(): Promise<CoachStatusDTO> {
     personas: Array.isArray(res.personas)
       ? res.personas.filter((p): p is CoachPersonaDTO => !!p && typeof p === 'object').map(personaDTO)
       : [],
+    thinkingAttachment: isThinkingAttachment(res.thinkingAttachment) ? res.thinkingAttachment : DEFAULT_THINKING_ATTACHMENT,
+    thinkingText: isThinkingText(res.thinkingText) ? res.thinkingText : DEFAULT_THINKING_TEXT,
   };
   if (res.enabled !== true) return { ...DISABLED_STATUS, ...persona };
   return {
@@ -428,6 +451,14 @@ export async function revokeCoachConsent(): Promise<void> {
 
 export function setCoachPersona(personaId: string): Promise<{ personaId: string }> {
   return coachFetch<{ personaId: string }>('/me/coach/persona', json('PUT', { personaId }));
+}
+
+// Sends only the settings given; the server answers with both as stored.
+export function setCoachThinking(body: {
+  attachment?: ThinkingAttachmentId;
+  text?: ThinkingTextId;
+}): Promise<{ thinkingAttachment: string; thinkingText: string }> {
+  return coachFetch<{ thinkingAttachment: string; thinkingText: string }>('/me/coach/thinking', json('PUT', body));
 }
 
 export async function sendCoachMessage(input: SendCoachMessageInput): Promise<CoachReplyDTO> {

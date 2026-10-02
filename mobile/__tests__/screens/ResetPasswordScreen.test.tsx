@@ -52,9 +52,9 @@ it('picks up a fresh token that arrives on an already-open reset screen', async 
   await waitFor(() => expect(resetPassword).toHaveBeenCalledWith('fresh', 'new password 1'));
 });
 
-it('always shows Hoot, whatever character a provider holds (signed-out screens)', () => {
+it('always shows Mochi, whatever character a provider holds (signed-out screens)', () => {
   (useAuth as jest.Mock).mockReturnValue({ resetPassword: jest.fn() });
-  const utils = render(withCharacter(<ResetPasswordScreen navigation={navigation} route={{ params: { token: 'tok' } } as any} />, { characterId: 'ember' }));
+  const utils = render(withCharacter(<ResetPasswordScreen navigation={navigation} route={{ params: { token: 'tok' } } as any} />, { characterId: 'kit' }));
 
-  expect(characterLabel(utils, 'auth-character')).toBe('character:hoot:idle:56:playing:full');
+  expect(characterLabel(utils, 'auth-character')).toBe('character:mochi:idle:56:playing:none');
 });

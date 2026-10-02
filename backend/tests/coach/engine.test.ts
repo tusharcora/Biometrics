@@ -181,7 +181,8 @@ describe('HostedWithLocalFallback', () => {
 });
 
 // Through the real answer pipeline: the fallback happens inside the provider, so
-// runAnswer runs once: one status, one memory resolution, one stored reply.
+// runAnswer runs once: one set of progress steps (route, facts, write), one memory
+// resolution, one stored reply.
 describe('hosted fallback through runAnswer', () => {
   const none = { value: null, display: null, deltaFromYesterday: null, direction: null, changeDisplay: null };
   const FACT_DATA: FactData = {
@@ -281,12 +282,13 @@ describe('hosted fallback through runAnswer', () => {
     return provider;
   }
 
-  it('answers locally after a hosted failure before any text: one status, done.engine local, stored LOCAL', async () => {
+  it('answers locally after a hosted failure before any text: one set of steps, done.engine local, stored LOCAL', async () => {
     const local = fake('local', ['Your recovery is 26 today.']);
     const { out, onFallback, telemetry, userId } = await answer(fake('hosted', [], new HostedRefusalError()), local);
 
-    expect(out.map((e) => e.type)).toEqual(['status', 'text', 'done']);
-    expect((out[2] as Extract<AnswerEvent, { type: 'done' }>).engine).toBe('local');
+    expect(out.map((e) => e.type)).toEqual(['status', 'status', 'status', 'text', 'done']);
+    expect(out.filter((e) => e.type === 'status').map((e) => (e as Extract<AnswerEvent, { type: 'status' }>).step)).toEqual(['route', 'facts', 'write']);
+    expect((out[4] as Extract<AnswerEvent, { type: 'done' }>).engine).toBe('local');
     expect(onFallback).toHaveBeenCalledWith('HostedRefusalError');
     const stored = await prisma.coachMessage.findMany({ where: { userId } });
     expect(stored).toHaveLength(2);
@@ -307,7 +309,9 @@ describe('hosted fallback through runAnswer', () => {
     });
 
     expect(out).toEqual([
-      expect.objectContaining({ type: 'status' }),
+      expect.objectContaining({ type: 'status', step: 'route' }),
+      expect.objectContaining({ type: 'status', step: 'facts' }),
+      expect.objectContaining({ type: 'status', step: 'write' }),
       { type: 'error', code: 'timeout', retryable: true },
     ]);
     expect(local.requests).toHaveLength(0);
@@ -341,8 +345,9 @@ describe('hosted fallback through runAnswer', () => {
       },
     });
 
-    expect(out.map((e) => e.type)).toEqual(['status', 'text', 'done']);
-    expect((out[2] as Extract<AnswerEvent, { type: 'done' }>).engine).toBe('local');
+    expect(out.map((e) => e.type)).toEqual(['status', 'status', 'status', 'text', 'done']);
+    expect(out.filter((e) => e.type === 'status').map((e) => (e as Extract<AnswerEvent, { type: 'status' }>).step)).toEqual(['route', 'facts', 'write']);
+    expect((out[4] as Extract<AnswerEvent, { type: 'done' }>).engine).toBe('local');
     expect(onFallback).toHaveBeenCalledWith('HostedTimeoutError');
     expect(local.requests).toHaveLength(1);
     expect(telemetry.named('coach.latency_budget_exceeded')).toHaveLength(0);
@@ -350,12 +355,14 @@ describe('hosted fallback through runAnswer', () => {
     expect(stored.engine).toBe('LOCAL');
   });
 
-  it('does not re-answer locally after hosted text was shown: no second status, no local sentences', async () => {
+  it('does not re-answer locally after hosted text was shown: no repeated steps, no local sentences', async () => {
     const local = fake('local', ['Local text.']);
     const { out, onFallback } = await answer(fake('hosted', ['Your recovery is 26 today. '], new HostedRefusalError()), local);
 
     expect(out).toEqual([
-      expect.objectContaining({ type: 'status' }),
+      expect.objectContaining({ type: 'status', step: 'route' }),
+      expect.objectContaining({ type: 'status', step: 'facts' }),
+      expect.objectContaining({ type: 'status', step: 'write' }),
       { type: 'text', sentence: 'Your recovery is 26 today.' },
       { type: 'error', code: 'model_unavailable', retryable: true },
     ]);
