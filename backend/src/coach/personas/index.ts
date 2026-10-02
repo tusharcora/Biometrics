@@ -42,6 +42,18 @@ export function findPersona(id: unknown): CoachPersona | undefined {
   return listPersonas().find((p) => p.id === canonical);
 }
 
+/**
+ * The v3 characters v4 retired (hoot, pip, nimbus, …): v3's ids minus the live ones. Old builds still
+ * offer them, and their Skip sends 'hoot' (ruling R23). v1 ids (encouraging, …) are not in it.
+ */
+export const RETIRED_CHARACTER_IDS: ReadonlySet<string> = new Set(
+  PERSONA_SETS.v3!.personas.map((p) => p.id).filter((id) => !listPersonas().some((p) => p.id === id)),
+);
+
+export function isRetiredCharacterId(id: unknown): boolean {
+  return typeof id === 'string' && RETIRED_CHARACTER_IDS.has(id);
+}
+
 /** A stored id that no longer exists (persona retired in a later version) falls back to the default. */
 export function resolvePersona(id: string | null | undefined): CoachPersona {
   return findPersona(id) ?? findPersona(DEFAULT_PERSONA_ID)!;

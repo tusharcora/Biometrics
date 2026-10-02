@@ -14,7 +14,7 @@ import { ANSWER_HISTORY_WINDOW, AnswerDeps, AnswerEvent, runAnswer } from './ans
 import { warmModel } from './answer/warm';
 import { clearTodaySummary, generateTodaySummary, getTodaySummary, summaryEngineDeps, TodayDeps } from './answer/today';
 import type { MemoryDTO } from './memory';
-import { findPersona, listPersonas, resolvePersona } from './personas';
+import { DEFAULT_PERSONA_ID, findPersona, isRetiredCharacterId, listPersonas, resolvePersona } from './personas';
 import { isThinkingAttachment, isThinkingText, resolveThinkingAttachment, resolveThinkingText } from './thinking';
 import { CRISIS_RESOURCES } from './guardrails/crisis';
 import { selectEngine } from './engine';
@@ -203,7 +203,8 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
         },
         personaId: resolvePersona(storedPersonaId).id,
         // False until the user picks a character (Skip picks Mochi), so the app shows its picker once.
-        personaChosen: storedPersonaId !== null,
+        // A stored id that is no longer live (a retired character the migration missed) re-opens it (R24).
+        personaChosen: storedPersonaId !== null && findPersona(storedPersonaId) !== undefined,
         personas: listPersonas().map((p) => ({
           id: p.id,
           name: p.name,
@@ -334,7 +335,10 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
 
   // No requireEnabled: the character is also the app's look, so it can be chosen while the coach is off.
   router.put('/me/coach/persona', requireAuth, async (req: AuthedRequest, res) => {
-    const persona = findPersona(req.body?.personaId);
+    const requested: unknown = req.body?.personaId;
+    // A retired v3 character (an old build's picker, or its Skip, which sends 'hoot') saves the default
+    // instead of failing, so that build's picker does not reopen forever (R23). v1 and unknown ids stay 400.
+    const persona = findPersona(requested) ?? (isRetiredCharacterId(requested) ? findPersona(DEFAULT_PERSONA_ID) : undefined);
     if (!persona) {
       res.status(400).json({ error: 'unknown_persona' });
       return;

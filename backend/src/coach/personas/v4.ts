@@ -33,6 +33,4 @@ export const v4Characters: CharacterPersona[] = [
   coach({ id: 'bao', name: 'Bao', tone: 'Big-hearted and relaxed. Gentle movement, stretching, no guilt about snacks.', focus: 'Gentle movement and stretching.', tagline: 'Big-hearted, into snacks and stretches.', greeting: "Time for a stretch? I'll do it with you.", verbosity: 'normal' }),
 ];
 
-export const V4_IDS = v4Characters.map((p) => p.id);
-
 export const v4Personas: PersonaSet = { version: 'v4', defaultPersonaId: 'mochi', personas: v4Characters };

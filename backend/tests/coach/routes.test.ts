@@ -12,7 +12,7 @@ import { LoggerCoachTelemetry } from '../../src/coach/telemetry';
 import { ScriptedStreamProvider, StreamStep } from '../../src/coach/model/provider';
 import { getCoachProvider, resetCoachProviderFromEnv, resetHostedProviderFromEnv } from '../../src/coach/config';
 import { resetWarmState } from '../../src/coach/answer/warm';
-import { DEFAULT_PERSONA_ID, listPersonas } from '../../src/coach/personas';
+import { DEFAULT_PERSONA_ID, RETIRED_CHARACTER_IDS, listPersonas } from '../../src/coach/personas';
 import { FakeClock, RecordingTelemetry, createUser, daysAgo, putScore, todayUtc } from './helpers';
 import { testServer } from '../helpers/server';
 
@@ -198,21 +198,23 @@ describe('GET /me/coach/status', () => {
     expect(res.body).toMatchObject({ personaId: chosen, personaChosen: true });
   });
 
-  it('an unknown stored id serves the default but still counts as chosen (the user did pick once)', async () => {
+  // Ruling R24: a stored id that is not live re-opens the picker (defence in depth beside the migration).
+  it('an unknown stored id serves the default and does not count as chosen', async () => {
     const user = await createUser();
     await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: 'retired-persona' } });
     const res = await request(await testServer(createApp())).get('/me/coach/status').set(await authed(user.id));
-    expect(res.body).toMatchObject({ personaId: DEFAULT_PERSONA_ID, personaChosen: true });
+    expect(res.body).toMatchObject({ personaId: DEFAULT_PERSONA_ID, personaChosen: false });
   });
 
-  // Ruling R6: a legacy v1 id is unknown, like a retired character, so it reads as the default, Mochi.
+  // Ruling R6: a legacy v1 id is unknown, like a retired character, so it reads as the default, Mochi;
+  // R24: and the picker opens again.
   it.each(['encouraging', 'direct', 'clinical'])(
-    'a legacy %s row (not yet migrated) reads as the default, mochi, and counts as chosen',
+    'a legacy %s row (not yet migrated) reads as the default, mochi, and does not count as chosen',
     async (legacy) => {
       const user = await createUser();
       await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: legacy } });
       const res = await request(await testServer(createApp())).get('/me/coach/status').set(await authed(user.id));
-      expect(res.body).toMatchObject({ personaId: 'mochi', personaChosen: true });
+      expect(res.body).toMatchObject({ personaId: 'mochi', personaChosen: false });
     },
   );
 
@@ -346,6 +348,22 @@ describe('PUT /me/coach/persona', () => {
     expect((await prisma.user.findUnique({ where: { id: user.id } }))?.coachPersonaId).toBe('kit');
   });
 
+  // Ruling R23: an old build still offers the retired v3 characters, and its Skip sends 'hoot'. The default
+  // is saved instead, so that build's picker does not reopen on every launch.
+  it.each([...RETIRED_CHARACTER_IDS])('a retired character %s saves the default, mochi (200)', async (retired) => {
+    const user = await createUser();
+    const headers = await authed(user.id);
+    const res = await request(await testServer(createApp())).put('/me/coach/persona').set(headers).send({ personaId: retired });
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ personaId: 'mochi' });
+    expect((await prisma.user.findUnique({ where: { id: user.id } }))?.coachPersonaId).toBe('mochi');
+    expect((await request(await testServer(createApp())).get('/me/coach/status').set(headers)).body).toMatchObject({ personaId: 'mochi', personaChosen: true });
+  });
+
+  it('the retired set is exactly the seven v3 characters v4 dropped', () => {
+    expect([...RETIRED_CHARACTER_IDS].sort()).toEqual(['beat', 'beep', 'doze', 'ember', 'hoot', 'nimbus', 'pip']);
+  });
+
   it.each([['false'], [undefined]])('works while the coach is off (COACH_ENABLED=%j)', async (flag) => {
     if (flag === undefined) delete process.env.COACH_ENABLED;
     else process.env.COACH_ENABLED = flag;
@@ -452,8 +470,8 @@ it('reports Mochi for a stored retired character, and never lists a retired id',
   await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: 'hoot' } });
   const res = await request(await testServer(createApp())).get('/me/coach/status').set(await authed(user.id));
   expect(res.body.personaId).toBe('mochi');
-  // Stored is non-null, so personaChosen is true here; the migration is what clears it (Task 2).
-  expect(res.body.personaChosen).toBe(true);
+  // Ruling R24: a stored id that is not live re-opens the picker, even before the migration clears it.
+  expect(res.body.personaChosen).toBe(false);
   const ids = res.body.personas.map((p: { id: string }) => p.id);
   for (const retired of ['hoot', 'pip', 'nimbus', 'ember', 'beep', 'doze', 'beat']) expect(ids).not.toContain(retired);
 });
