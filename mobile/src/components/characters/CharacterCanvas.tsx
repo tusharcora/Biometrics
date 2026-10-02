@@ -24,6 +24,7 @@ const BOB_MS: Record<CharacterMood, number> = { idle: 1600, thinking: 1600, answ
 const HOP: Record<CharacterMood, number> = { idle: 1, thinking: 1, answering: 2, resting: 1 };
 const BLINK_EVERY = 4200;
 const BLINK_FOR = 140;
+
 // The only file that touches Skia. Jest uses jest-mocks/CharacterCanvas.js.
 export function CharacterCanvas({ characterId, mood, size, paused, attachment, done }: CharacterCanvasProps) {
   const t = useSpriteClock(paused);
@@ -58,6 +59,8 @@ export function CharacterCanvas({ characterId, mood, size, paused, attachment, d
     () =>
       createPicture((canvas) => {
         const paint = Skia.Paint();
+        // Cells land on whole device pixels; no antialiasing, so no seams between them.
+        paint.setAntiAlias(false);
         const draw = (x: number, y: number, color: string) => {
           paint.setColor(Skia.Color(color));
           canvas.drawRect(Skia.XYWHRect(x * cell, y * cell, cell, cell), paint);
