@@ -2,6 +2,7 @@ import type { CoachPersona, PersonaSet } from './types';
 import { v1Personas } from './v1';
 import { LEGACY_PERSONA_IDS, v2Personas } from './v2';
 import { v3Personas } from './v3';
+import { v4Personas } from './v4';
 
 export type { CoachPersona, CharacterPersona, PersonaSet, Verbosity, Proactivity } from './types';
 export { REQUIRED_DISALLOWED_TOPICS } from './types';
@@ -12,9 +13,10 @@ export const PERSONA_SETS: Record<string, PersonaSet> = {
   [v1Personas.version]: v1Personas,
   [v2Personas.version]: v2Personas,
   [v3Personas.version]: v3Personas,
+  [v4Personas.version]: v4Personas,
 };
 
-export const LIVE_PERSONA_VERSION = 'v3';
+export const LIVE_PERSONA_VERSION = 'v4';
 
 function liveSet(): PersonaSet {
   return PERSONA_SETS[LIVE_PERSONA_VERSION]!;

@@ -19,15 +19,53 @@ const SHEET: FactSheet = { route: 'today', facts: [], notes: [] };
 const chat = (p: CoachPersona) => buildAnswerSystemPrompt(p, { today: '2026-09-20', sheet: SHEET });
 const recap = (p: CoachPersona) => buildDigestSystemPrompt(p, { today: '2026-09-20', sheet: { ...SHEET, route: 'trends' } });
 
-// The same ids, in picker order, as the mobile character registry.
+// v3's ids, in its picker order. Still registered, no longer live.
 const CHARACTER_IDS = ['hoot', 'pip', 'mochi', 'nimbus', 'ember', 'beep', 'doze', 'beat'];
 
+const V4 = ['mochi', 'boba', 'sprout', 'avo', 'peep', 'bun', 'kit', 'axo', 'boo', 'cap', 'jelly', 'pengu', 'luna', 'gloop', 'bao'];
+const RETIRED = ['hoot', 'pip', 'nimbus', 'ember', 'beep', 'doze', 'beat'];
+
+describe('v4 personas', () => {
+  it('is live, lists the 15 coaches in picker order and defaults to Mochi', () => {
+    expect(LIVE_PERSONA_VERSION).toBe('v4');
+    expect(listPersonas().map((p) => p.id)).toEqual(V4);
+    expect(DEFAULT_PERSONA_ID).toBe('mochi');
+  });
+
+  it('keeps Mochi exactly as v3 had it', () => {
+    const v3Mochi = PERSONA_SETS.v3!.personas.find((p) => p.id === 'mochi');
+    expect(findPersona('mochi')).toEqual(v3Mochi);
+  });
+
+  it('treats retired characters and v1 styles as unknown, resolving them to Mochi', () => {
+    for (const id of [...RETIRED, 'encouraging', 'direct', 'clinical']) {
+      expect(findPersona(id)).toBeUndefined();
+      expect(resolvePersona(id).id).toBe('mochi');
+    }
+  });
+
+  it('gives every coach copy, the shared safety list and threshold-triggered recaps', () => {
+    const shared = listPersonas()[0]!.disallowedTopics;
+    for (const p of listPersonas()) {
+      expect(p.tagline && p.greeting && p.tone && p.focus).toBeTruthy();
+      expect(p.disallowedTopics).toEqual(shared);
+      expect(p.proactivity).toBe('threshold-triggered');
+      // Greetings never state a number about the user.
+      expect(p.greeting).not.toMatch(/\d/);
+    }
+  });
+
+  it('leaves older sets registered and unchanged', () => {
+    expect(PERSONA_SETS.v3!.defaultPersonaId).toBe('hoot');
+    expect(PERSONA_SETS.v3!.personas).toHaveLength(8);
+  });
+});
+
 describe('personas', () => {
-  it('ships the eight companion characters as v3, Hoot first', () => {
-    expect(LIVE_PERSONA_VERSION).toBe('v3');
+  it('keeps the eight v3 companion characters registered, Hoot first', () => {
     expect(PERSONA_SETS.v3).toBe(v3Personas);
-    expect(listPersonas().map((p) => p.id)).toEqual(CHARACTER_IDS);
-    expect(listPersonas().map((p) => p.name)).toEqual(['Hoot', 'Pip', 'Mochi', 'Nimbus', 'Ember', 'Beep', 'Doze', 'Beat']);
+    expect(v3Personas.personas.map((p) => p.id)).toEqual(CHARACTER_IDS);
+    expect(v3Personas.personas.map((p) => p.name)).toEqual(['Hoot', 'Pip', 'Mochi', 'Nimbus', 'Ember', 'Beep', 'Doze', 'Beat']);
   });
 
   // Ruling R19: a mandatory closing question made every reply read as automated.
@@ -43,7 +81,7 @@ describe('personas', () => {
   it("v3 is v2 with only Hoot's closing-question clause softened; v2 stays registered and unchanged", () => {
     expect(PERSONA_SETS.v2).toBe(v2Personas);
     expect(v3Personas.defaultPersonaId).toBe(v2Personas.defaultPersonaId);
-    const hoot = findPersona('hoot')!;
+    const hoot = v3Personas.personas.find((p) => p.id === 'hoot')!;
     expect(hoot.tone).toBe(
       'Calm, wise and curious. Explain the why behind what the data shows, and ask a thoughtful question only when the answer would change your advice.',
     );
@@ -60,12 +98,12 @@ describe('personas', () => {
     expect(v1Personas.personas.map((p) => p.id)).toEqual(['direct', 'encouraging', 'clinical']);
   });
 
-  it('defaults to Hoot, normal, threshold-triggered', () => {
-    expect(DEFAULT_PERSONA_ID).toBe('hoot');
-    expect(findPersona(DEFAULT_PERSONA_ID)).toMatchObject({ name: 'Hoot', verbosity: 'normal', proactivity: 'threshold-triggered' });
-    expect(resolvePersona(null).id).toBe('hoot');
-    expect(resolvePersona(undefined).id).toBe('hoot');
-    expect(resolvePersona('retired-persona').id).toBe('hoot');
+  it('defaults to Mochi, terse, threshold-triggered', () => {
+    expect(DEFAULT_PERSONA_ID).toBe('mochi');
+    expect(findPersona(DEFAULT_PERSONA_ID)).toMatchObject({ name: 'Mochi', verbosity: 'terse', proactivity: 'threshold-triggered' });
+    expect(resolvePersona(null).id).toBe('mochi');
+    expect(resolvePersona(undefined).id).toBe('mochi');
+    expect(resolvePersona('retired-persona').id).toBe('mochi');
   });
 
   it.each(listPersonas().map((p) => [p.id, p] as const))('%s always disallows medical diagnosis and medication dosing', (_id, p) => {
@@ -82,27 +120,30 @@ describe('personas', () => {
   });
 
   it('matches ids exactly: no case folding, no trimming', () => {
-    expect(findPersona('Hoot')).toBeUndefined();
-    expect(findPersona(' hoot')).toBeUndefined();
+    expect(findPersona('Mochi')).toBeUndefined();
+    expect(findPersona(' mochi')).toBeUndefined();
     expect(findPersona('Encouraging')).toBeUndefined();
   });
 
   it('never matches an inherited property of the legacy map', () => {
     for (const id of ['toString', '__proto__', 'constructor', 'hasOwnProperty']) {
       expect(findPersona(id)).toBeUndefined();
-      expect(resolvePersona(id).id).toBe('hoot');
+      expect(resolvePersona(id).id).toBe('mochi');
     }
   });
 });
 
 describe('legacy persona ids', () => {
+  // v1 styles still map to v3 characters, but v4 retired those characters, so
+  // they no longer match a live persona and fall back to the default.
   it.each([
     ['encouraging', 'pip'],
     ['direct', 'hoot'],
     ['clinical', 'beep'],
-  ])('%s resolves to %s through both findPersona and resolvePersona', (legacy, character) => {
-    expect(findPersona(legacy)?.id).toBe(character);
-    expect(resolvePersona(legacy).id).toBe(character);
+  ])('%s still maps to %s, which is retired, so it resolves to Mochi', (legacy, character) => {
+    expect(LEGACY_PERSONA_IDS[legacy as keyof typeof LEGACY_PERSONA_IDS]).toBe(character);
+    expect(findPersona(legacy)).toBeUndefined();
+    expect(resolvePersona(legacy).id).toBe('mochi');
   });
 });
 
