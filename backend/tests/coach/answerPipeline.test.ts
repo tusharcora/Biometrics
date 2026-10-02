@@ -612,4 +612,34 @@ describe('runAnswer: progress steps', () => {
     expect(statusesOf(events)).toEqual([['route', 'Looking at your day…']]);
     expect(events[1]).toEqual({ type: 'error', code: 'internal', retryable: true });
   });
+
+  // A fact sheet that never finishes: the budget or a stop ends the turn before any 'facts' step.
+  const hangingFacts = (called: { yes: boolean }): FactData => ({
+    ...FACT_DATA,
+    getDailyScore: () => {
+      called.yes = true;
+      return new Promise(() => {});
+    },
+  });
+
+  it('sends no facts step when the budget runs out while building the fact sheet', async () => {
+    const called = { yes: false };
+    const { deps, clock } = setup([['Hi.']], { factData: hangingFacts(called) });
+    const running = collect(runAnswer(await input(), deps));
+    await until(() => called.yes);
+    clock.advance(45_000);
+    const events = await running;
+    expect(statusesOf(events).map(([step]) => step)).toEqual(['route']);
+    expect(events[events.length - 1]).toEqual({ type: 'error', code: 'timeout', retryable: true });
+  });
+
+  it('sends no facts step when stopped while building the fact sheet', async () => {
+    const called = { yes: false };
+    const stop = new AbortController();
+    const { deps } = setup([['Hi.']], { factData: hangingFacts(called) });
+    const running = collect(runAnswer(await input({ signal: stop.signal }), deps));
+    await until(() => called.yes);
+    stop.abort();
+    expect(types(await running)).toEqual(['status']);
+  });
 });
