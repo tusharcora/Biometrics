@@ -9,14 +9,23 @@ import { deleteUserSubscription } from '../health/subscriber';
 import { decryptToken } from '../crypto/tokenCipher';
 import { upsertBiometricRecords, storeSleepSessions, datesNeedingRescore } from '../biometrics/repository';
 import { BiometricMetricType, HealthMetricPoint, SleepSessionPoint } from '../types';
-import { FetchJobData, BackfillJobData, STEPS_HISTORY_BACKFILL_JOB, StepsHistoryBackfillJobData } from './queue';
+import {
+  FetchJobData,
+  BackfillJobData,
+  SLEEP_HISTORY_BACKFILL_JOB,
+  SleepHistoryBackfillJobData,
+  STEPS_HISTORY_BACKFILL_JOB,
+  StepsHistoryBackfillJobData,
+} from './queue';
 import { isEmptyWindow } from './window';
 import { stepsHistoryWindow } from './stepsHistory';
+import { sleepHistoryWindow } from './sleepHistory';
 import { isRevokedGrant, refreshedTokenUpdateData } from './tokenUpdate';
 import { localCivilDate } from '../biometrics/civilDate';
 import { CATCH_UP_JOB, CATCH_UP_SWEEP_JOB, CatchUpJobData, catchUpWindow, enqueueCatchUp } from './catchUp';
 import { computeDailyScore } from '../scoring/compute';
-import { runScoreSweep } from '../scoring/sweep';
+import { runScoreSweep, SWEEP_LOOKBACK_DAYS } from '../scoring/sweep';
+import { shiftDate } from '../scoring/dates';
 import { COMPUTE_DAILY_SCORE_JOB, SCORE_SWEEP_JOB, enqueueScoreCompute, ComputeDailyScoreJobData } from '../scoring/queue';
 import { runHabitCorrelations } from '../habits/job';
 import { runHabitCorrelationSweep } from '../habits/sweep';
@@ -300,6 +309,41 @@ async function handleStepsHistoryJob(data: StepsHistoryBackfillJobData): Promise
   }
 }
 
+/**
+ * A year of sleep sessions for the Sleep page of the activity heat map.
+ * Stored through storeSleepSessions like any other sleep sync, so the SLEEP
+ * rollups stay derived from sessions. Unlike steps, sleep IS a score input:
+ * a night just before the 30-day connect backfill still sits in the
+ * sleep-debt window of days that were already scored, and the nightly sweep's
+ * per-day staleness test cannot see that. So the affected days are re-scored,
+ * but only inside the sweep's own lookback: scoring a year of old days nobody
+ * asked for would be new behaviour, not a backfill. lastSyncedAt is left
+ * alone: this is history, not a sync.
+ */
+async function handleSleepHistoryJob(data: SleepHistoryBackfillJobData): Promise<void> {
+  const conn = await prisma.healthConnection.findUnique({ where: { userId: data.userId } });
+  if (!conn || conn.status === 'DISCONNECTED') return;
+
+  const { startDate, endDate } = sleepHistoryWindow();
+  try {
+    if (!isEmptyWindow(startDate, endDate)) {
+      const rescore = await syncSleep(new JobTokenSession(conn), data.userId, startDate, endDate);
+      const oldest = shiftDate(endDate, -SWEEP_LOOKBACK_DAYS);
+      await requestScores(data.userId, rescore.filter((date) => date >= oldest));
+    }
+    await prisma.healthConnection.update({
+      where: { userId: data.userId },
+      data: { sleepHistoryBackfilledAt: new Date() },
+    });
+  } catch (err) {
+    if (isUnauthorized(err)) {
+      await disconnect(data.userId, conn.webhookSubscriptionId);
+      return;
+    }
+    throw err; // other errors (e.g. 429) are retried by BullMQ's job retry policy
+  }
+}
+
 export async function processSyncJob(job: Job): Promise<void> {
   if (job.name === 'fetch') {
     await handleFetchJob(job.data as FetchJobData);
@@ -311,6 +355,8 @@ export async function processSyncJob(job: Job): Promise<void> {
     await handleCatchUpSweep();
   } else if (job.name === STEPS_HISTORY_BACKFILL_JOB) {
     await handleStepsHistoryJob(job.data as StepsHistoryBackfillJobData);
+  } else if (job.name === SLEEP_HISTORY_BACKFILL_JOB) {
+    await handleSleepHistoryJob(job.data as SleepHistoryBackfillJobData);
   } else if (job.name === TOKEN_REFRESH_SWEEP_JOB) {
     // Scheduled through the queue so exactly one instance sweeps per tick.
     await runTokenRefreshSweep();

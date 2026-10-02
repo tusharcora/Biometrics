@@ -39,7 +39,7 @@ export const METRIC_CONFIG: Record<MetricType, MetricConfig> = {
       return `${hours}h ${minutes}m`;
     },
     icon: 'moon-outline',
-    color: { light: 'rgb(79, 70, 229)', dark: 'rgb(129, 140, 248)' },
+    color: { light: 'rgb(147, 51, 234)', dark: 'rgb(147, 51, 234)' },
     goal: 480,
     goalLabel: '8h goal',
   },
@@ -88,11 +88,17 @@ export const COLORS = {
     heat2: 'rgb(254, 215, 170)',
     heat3: 'rgb(253, 186, 116)',
     heat4: 'rgb(249, 115, 22)',
+    // Sleep's own ramp on the Sleep page, ending on its metric purple; level 0
+    // and empty days share the neutral heat0/heatEmpty above.
+    sleepHeat1: 'rgb(243, 232, 255)',
+    sleepHeat2: 'rgb(233, 213, 255)',
+    sleepHeat3: 'rgb(216, 180, 254)',
+    sleepHeat4: 'rgb(147, 51, 234)',
     // One accent per metric (the same values as METRIC_CONFIG), used only on
     // that metric's own number, ring and line -- everything else stays neutral.
     metricSteps: 'rgb(234, 88, 12)',
     metricHeart: 'rgb(225, 29, 72)',
-    metricSleep: 'rgb(79, 70, 229)',
+    metricSleep: 'rgb(147, 51, 234)',
     metricHrv: 'rgb(13, 148, 136)',
     // The coach's own voice colour: the digest, memory prompts, coach entry.
     coach: 'rgb(79, 70, 229)',
@@ -139,9 +145,13 @@ export const COLORS = {
     heat2: 'rgb(194, 65, 12)',
     heat3: 'rgb(234, 88, 12)',
     heat4: 'rgb(251, 146, 60)',
+    sleepHeat1: 'rgb(59, 7, 100)',
+    sleepHeat2: 'rgb(88, 28, 135)',
+    sleepHeat3: 'rgb(107, 33, 168)',
+    sleepHeat4: 'rgb(147, 51, 234)',
     metricSteps: 'rgb(251, 146, 60)',
     metricHeart: 'rgb(251, 113, 133)',
-    metricSleep: 'rgb(129, 140, 248)',
+    metricSleep: 'rgb(147, 51, 234)',
     metricHrv: 'rgb(45, 212, 191)',
     coach: 'rgb(165, 180, 252)',
     statusBelow: 'rgb(251, 113, 133)',

@@ -1,5 +1,5 @@
 import { prisma } from '../db/client';
-import { civilDateToUtcMidnight } from './civilDate';
+import { civilDateToUtcMidnight, localClockTime, sessionEndCivilDate } from './civilDate';
 
 // The heat map's widest view is a trailing year drawn as whole week columns
 // (up to 371 days); 400 leaves room for that without making this an unbounded
@@ -59,6 +59,92 @@ export async function getActivityForUser(userId: string, range: ActivityRange): 
 
   return {
     days: records.map((r) => ({ date: r.recordedAt.toISOString().slice(0, 10), steps: r.value })),
+    earliestDate: earliest ? earliest.recordedAt.toISOString().slice(0, 10) : null,
+  };
+}
+
+export interface SleepNightDTO {
+  /** The local civil date the night ENDED on: the SLEEP rollup's key. */
+  date: string;
+  /** Total minutes asleep across that date's sessions (the rollup scores read). */
+  minutesAsleep: number;
+  /** Total minutes from start to end across that date's sessions. */
+  minutesInBed: number | null;
+  /** Local "HH:MM" start and end of the night's longest session, so a nap never sets the bedtime. */
+  bedtime: string | null;
+  wakeTime: string | null;
+  /** That day's Sleep Score, once one has been computed. */
+  sleepScore: number | null;
+}
+
+export interface SleepActivityDTO {
+  nights: SleepNightDTO[];
+  // The user's oldest SLEEP rollup, so the client can tell "history not
+  // synced yet" apart from "no sleep recorded on those nights".
+  earliestDate: string | null;
+}
+
+type SessionTimes = { startTime: Date; endTime: Date; startUtcOffsetSeconds: number | null; endUtcOffsetSeconds: number | null };
+
+const minutesBetween = (s: SessionTimes) => (s.endTime.getTime() - s.startTime.getTime()) / 60000;
+
+/**
+ * Nightly sleep for an inclusive civil-date range: the Sleep page of the
+ * activity heat map and its night sheet. Minutes asleep come from the SLEEP
+ * rollup, so they always match what the Sleep Score saw; the times come from
+ * the sessions behind it, bucketed onto dates exactly as the rollup is.
+ */
+export async function getSleepForUser(userId: string, range: ActivityRange): Promise<SleepActivityDTO> {
+  const gte = civilDateToUtcMidnight(range.from);
+  const lt = new Date(civilDateToUtcMidnight(range.to).getTime() + DAY_MS);
+
+  const [user, records, earliest, scores, sessions] = await Promise.all([
+    prisma.user.findUnique({ where: { id: userId }, select: { timezone: true } }),
+    prisma.biometricRecord.findMany({
+      where: { userId, metricType: 'SLEEP', recordedAt: { gte, lt } },
+      select: { recordedAt: true, value: true },
+      orderBy: { recordedAt: 'asc' },
+    }),
+    prisma.biometricRecord.findFirst({
+      where: { userId, metricType: 'SLEEP' },
+      select: { recordedAt: true },
+      orderBy: { recordedAt: 'asc' },
+    }),
+    prisma.dailyScore.findMany({
+      where: { userId, type: 'SLEEP', date: { gte, lt } },
+      select: { date: true, score: true },
+    }),
+    // A local date spans at most [D - 14h, D + 1d + 12h) in UTC, so a day of
+    // margin each side holds every session ending on a date in the range.
+    prisma.sleepSession.findMany({
+      where: { userId, endTime: { gte: new Date(gte.getTime() - DAY_MS), lt: new Date(lt.getTime() + DAY_MS) } },
+      select: { startTime: true, endTime: true, startUtcOffsetSeconds: true, endUtcOffsetSeconds: true },
+    }),
+  ]);
+  const timeZone = user?.timezone ?? 'UTC';
+
+  const sessionsByDate = new Map<string, SessionTimes[]>();
+  for (const s of sessions) {
+    const date = sessionEndCivilDate(s, timeZone);
+    sessionsByDate.set(date, [...(sessionsByDate.get(date) ?? []), s]);
+  }
+  const scoreByDate = new Map(scores.map((s) => [s.date.toISOString().slice(0, 10), s.score]));
+
+  return {
+    nights: records.map((r) => {
+      const date = r.recordedAt.toISOString().slice(0, 10);
+      const own = sessionsByDate.get(date) ?? [];
+      const main = own.reduce<SessionTimes | null>((best, s) => (!best || minutesBetween(s) > minutesBetween(best) ? s : best), null);
+      const score = scoreByDate.get(date);
+      return {
+        date,
+        minutesAsleep: r.value,
+        minutesInBed: own.length > 0 ? Math.round(own.reduce((sum, s) => sum + minutesBetween(s), 0)) : null,
+        bedtime: main ? localClockTime(main.startTime, main.startUtcOffsetSeconds, timeZone) : null,
+        wakeTime: main ? localClockTime(main.endTime, main.endUtcOffsetSeconds, timeZone) : null,
+        sleepScore: score == null ? null : Math.round(score),
+      };
+    }),
     earliestDate: earliest ? earliest.recordedAt.toISOString().slice(0, 10) : null,
   };
 }

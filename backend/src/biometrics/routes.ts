@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { requireAuth, AuthedRequest } from '../auth/middleware';
 import { getBiometricsForUser } from './repository';
-import { getActivityForUser, parseActivityRange } from './activity';
+import { getActivityForUser, getSleepForUser, parseActivityRange } from './activity';
 import { prisma } from '../db/client';
 
 export const biometricsRouter = Router();
@@ -22,6 +22,20 @@ biometricsRouter.get('/me/activity', requireAuth, async (req: AuthedRequest, res
     return;
   }
   res.json(await getActivityForUser(req.userId!, range));
+});
+
+/**
+ * Nightly sleep for the Sleep page of the activity heat map, over the same
+ * bounded civil-date range as /me/activity: minutes asleep, time in bed,
+ * bedtime and wake time, and that day's Sleep Score.
+ */
+biometricsRouter.get('/me/sleep', requireAuth, async (req: AuthedRequest, res) => {
+  const range = parseActivityRange(req.query.from, req.query.to);
+  if ('error' in range) {
+    res.status(400).json({ error: range.error });
+    return;
+  }
+  res.json(await getSleepForUser(req.userId!, range));
 });
 
 /**

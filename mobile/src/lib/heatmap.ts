@@ -12,7 +12,8 @@ export interface HeatCell {
   date: string;
   col: number;
   row: number;
-  steps: number | null;
+  // The day's value in the metric's own unit: steps, or minutes asleep.
+  value: number | null;
   level: HeatLevel | null;
 }
 
@@ -95,11 +96,31 @@ export function heatLevel(steps: number | null | undefined, goal: number): HeatL
   return 4;
 }
 
-export type StepsByDate = ReadonlyMap<string, number>;
+/**
+ * Sleep's levels against the sleep goal. Steps' quarters would put nearly
+ * every real night (6-8h of an 8h goal) in one band, so sleep is split where
+ * nights actually differ: 1 = under 75% of goal (6h of 8h), 2 = 75-87.5%,
+ * 3 = 87.5-100%, 4 = at or above goal. 0 is a night recorded as no sleep.
+ */
+export function sleepHeatLevel(minutes: number | null | undefined, goal: number): HeatLevel | null {
+  if (minutes === null || minutes === undefined) return null;
+  if (minutes <= 0) return 0;
+  const ratio = minutes / goal;
+  if (ratio < 0.75) return 1;
+  if (ratio < 0.875) return 2;
+  if (ratio < 1) return 3;
+  return 4;
+}
 
-function cell(date: string, col: number, row: number, steps: StepsByDate, goal: number): HeatCell {
-  const value = steps.get(date);
-  return { date, col, row, steps: value ?? null, level: heatLevel(value, goal) };
+export type LevelOf = (value: number | null | undefined, goal: number) => HeatLevel | null;
+
+export type StepsByDate = ReadonlyMap<string, number>;
+/** A metric's daily values by civil date: steps, or minutes asleep. */
+export type ValuesByDate = ReadonlyMap<string, number>;
+
+function cell(date: string, col: number, row: number, values: ValuesByDate, goal: number, levelOf: LevelOf): HeatCell {
+  const value = values.get(date);
+  return { date, col, row, value: value ?? null, level: levelOf(value, goal) };
 }
 
 /**
@@ -107,7 +128,7 @@ function cell(date: string, col: number, row: number, steps: StepsByDate, goal: 
  * Leading and trailing blanks are positions with no cell; days after `today`
  * are left out too (they have not happened).
  */
-export function monthGrid(anyDateInMonth: string, today: string, steps: StepsByDate, goal: number): HeatGrid {
+export function monthGrid(anyDateInMonth: string, today: string, values: ValuesByDate, goal: number, levelOf: LevelOf = heatLevel): HeatGrid {
   const first = monthStart(anyDateInMonth);
   const lead = dayOfWeek(first);
   const next = shiftMonth(first, 1);
@@ -117,7 +138,7 @@ export function monthGrid(anyDateInMonth: string, today: string, steps: StepsByD
     const date = addDays(first, i);
     if (date > today) break;
     const slot = lead + i;
-    cells.push(cell(date, slot % 7, Math.floor(slot / 7), steps, goal));
+    cells.push(cell(date, slot % 7, Math.floor(slot / 7), values, goal, levelOf));
   }
   return { cells, cols: 7, rows: Math.ceil((lead + length) / 7) };
 }
@@ -127,12 +148,12 @@ export function monthGrid(anyDateInMonth: string, today: string, steps: StepsByD
  * seven rows. The first column starts on the Sunday on or before `start`;
  * days outside the range are positions with no cell.
  */
-export function weekColumnsGrid(start: string, end: string, steps: StepsByDate, goal: number): HeatGrid {
+export function weekColumnsGrid(start: string, end: string, values: ValuesByDate, goal: number, levelOf: LevelOf = heatLevel): HeatGrid {
   const origin = addDays(start, -dayOfWeek(start));
   const cells: HeatCell[] = [];
   for (let date = start; date <= end; date = addDays(date, 1)) {
     const offset = daysBetween(origin, date);
-    cells.push(cell(date, Math.floor(offset / 7), offset % 7, steps, goal));
+    cells.push(cell(date, Math.floor(offset / 7), offset % 7, values, goal, levelOf));
   }
   const cols = cells.length > 0 ? cells[cells.length - 1].col + 1 : 0;
   return { cells, cols, rows: 7 };
@@ -239,11 +260,11 @@ export function compareToAverage(steps: number, average: number | null): string 
 }
 
 /**
- * Honest note about missing history, keyed on the oldest steps record: null
- * when the range is fully covered by synced history.
+ * Honest note about missing history, keyed on the metric's oldest record:
+ * null when the range is fully covered by synced history.
  */
-export function historyNote(earliestDate: string | null, rangeStart: string, today: string): string | null {
-  if (earliestDate === null) return 'Your step history is still syncing.';
+export function historyNote(earliestDate: string | null, rangeStart: string, today: string, metric: 'step' | 'sleep' = 'step'): string | null {
+  if (earliestDate === null) return `Your ${metric} history is still syncing.`;
   if (earliestDate <= rangeStart) return null;
   const days = daysBetween(earliestDate, today) + 1;
   return `Only ${days} day${days === 1 ? '' : 's'} of history so far. Earlier days fill in as it syncs.`;
