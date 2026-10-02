@@ -623,6 +623,34 @@ describe('useCoachConversation: progress steps', () => {
     ]);
   });
 
+  it('ticks the open step on a card, so a card-only answer does not linger unticked (R15)', async () => {
+    const live = openTurn();
+    const { result } = setup();
+
+    act(() => result.current.send('How did I sleep?'));
+    live.emit({ type: 'status', step: 'route', label: 'Looking at your sleep…', conversationId: 'c1' });
+    live.emit({ type: 'status', step: 'facts', label: 'Going through your recent nights…' });
+    expect(result.current.steps.map((s) => s.done)).toEqual([true, false]);
+    live.emit({ type: 'card', card: CARD });
+    expect(result.current.steps).toEqual([
+      { id: 'route', label: 'Looking at your sleep…', done: true },
+      { id: 'facts', label: 'Going through your recent nights…', done: true },
+    ]);
+    await live.finish();
+  });
+
+  it('ticks the open step on done when nothing else did (R15)', async () => {
+    const live = openTurn();
+    const { result } = setup();
+
+    act(() => result.current.send('hi'));
+    live.emit({ type: 'status', step: 'route', label: 'Thinking it over…', conversationId: 'c1' });
+    expect(result.current.steps).toEqual([{ id: 'route', label: 'Thinking it over…', done: false }]);
+    live.emit(done());
+    expect(result.current.steps).toEqual([{ id: 'route', label: 'Thinking it over…', done: true }]);
+    await live.finish();
+  });
+
   it('shows a stepless status (older server) as one step, updating its label rather than adding another', async () => {
     const live = openTurn();
     const { result } = setup();
@@ -681,7 +709,8 @@ describe('useCoachConversation: progress steps', () => {
     next.emit({ type: 'status', step: 'route', label: 'Thinking it over…' });
     next.emit(done());
     await next.finish();
-    expect(result.current.steps).toEqual([{ id: 'route', label: 'Thinking it over…', done: false }]);
+    // The turn's done event ticks the step it left open (R15).
+    expect(result.current.steps).toEqual([{ id: 'route', label: 'Thinking it over…', done: true }]);
 
     await act(async () => result.current.newChat());
     expect(result.current.steps).toEqual([]);

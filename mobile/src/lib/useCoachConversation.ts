@@ -191,6 +191,10 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
       setConversationId(id);
     };
 
+    // The answer has started (or the turn ended): tick whatever step is still open.
+    const tickAllSteps = () =>
+      setSteps((prev) => (prev.some((s) => !s.done) ? prev.map((s) => (s.done ? s : { ...s, done: true })) : prev));
+
     const onEvent = (event: CoachStreamEvent) => {
       if (!live()) return;
       received = true;
@@ -207,11 +211,13 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
           break;
         case 'text':
           shown = true;
-          setSteps((prev) => (prev.some((s) => !s.done) ? prev.map((s) => (s.done ? s : { ...s, done: true })) : prev));
+          tickAllSteps();
           patch((m) => ({ ...m, text: m.text ? `${m.text} ${event.sentence}` : event.sentence }));
           break;
         case 'card':
           shown = true;
+          // A card-only answer has no text event: the card ends the steps (R15).
+          tickAllSteps();
           patch((m) => ({ ...m, card: event.card }));
           break;
         case 'memory':
@@ -231,6 +237,7 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
         case 'done': {
           adoptConversation(event.conversationId);
           if (event.stopped) stoppedTurn = true;
+          tickAllSteps();
           const id = answerId;
           const local = options.current.preferredEngine === 'hosted' && event.engine === 'local';
           setMessages((prev) =>
