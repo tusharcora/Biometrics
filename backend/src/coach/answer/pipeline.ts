@@ -1,7 +1,7 @@
 // The answer pipeline (spec 2026-09-30, section 2): "facts first, one pass".
 //
-//   crisis classifier -> memory feedback -> route -> status event -> fact sheet
-//   -> ONE streamed model call -> each sentence validated as it completes
+//   crisis classifier -> memory feedback -> route -> status (step 'route') -> fact
+//   sheet -> status ('facts') -> status ('write') -> ONE streamed model call -> each sentence validated as it completes
 //   (dropped when it fails, the rest keeps streaming; a closing stock question
 //   or offer is dropped once another sentence was shown) -> one regeneration only
 //   when no sentence at all could be shown -> card resolved from the fact sheet
@@ -47,7 +47,7 @@ export type AnswerEvent =
   // conversationId is sent before anything is stored, so a client whose first turn is
   // stopped or dropped before `done` still continues the same conversation. When that
   // turn stores nothing, the id was never created and the next message gets a 404.
-  | { type: 'status'; label: string; conversationId: string }
+  | { type: 'status'; step: AnswerStep; label: string; conversationId: string }
   | { type: 'text'; sentence: string }
   | { type: 'card'; card: AnswerCard }
   | { type: 'memory'; proposals: MemoryDTO[] }
@@ -98,11 +98,18 @@ export const ANSWER_MAX_TOKENS = 600;
 export const ANSWER_HISTORY_WINDOW = 10;
 const MAX_ATTEMPTS = 2;
 
-export const STATUS_LABELS: Record<AnswerRoute, string> = {
-  today: 'Looking at your day…',
-  sleep: 'Looking at your sleep…',
-  trends: 'Looking at your trends…',
-  general: 'Thinking…',
+export type AnswerStep = 'route' | 'facts' | 'write';
+
+/**
+ * What the app's "What it's doing" list shows (spec 2026-10-01 §5). Per route,
+ * because each loads different data (facts.ts) and a general question is not
+ * about the user's day: every label names work that route really does.
+ */
+export const STEP_LABELS: Record<AnswerRoute, Record<AnswerStep, string>> = {
+  today: { route: 'Looking at your day…', facts: 'Comparing today with your usual…', write: 'Writing it up…' },
+  sleep: { route: 'Looking at your sleep…', facts: 'Going through your recent nights…', write: 'Writing it up…' },
+  trends: { route: 'Looking at your trends…', facts: 'Comparing your last 30 days…', write: 'Writing it up…' },
+  general: { route: 'Thinking it over…', facts: 'Checking your goals…', write: 'Writing an answer…' },
 };
 
 /** Persisted on the assistant row: reasons and counts only, never text. */
@@ -258,7 +265,7 @@ export async function* runAnswer(input: AnswerInput, deps: AnswerDeps): AsyncGen
     // 3. Route, and tell the user what is happening.
     const previousUserMessage = [...input.history].reverse().find((m) => m.role === 'user')?.text;
     const route = routeQuestion(input.message, previousUserMessage);
-    yield { type: 'status', label: STATUS_LABELS[route], conversationId };
+    yield { type: 'status', step: 'route', label: STEP_LABELS[route].route, conversationId };
 
     // 4. The fact sheet.
     const today = localCivilDateOrUtc(clock.now(), user.timezone);
@@ -277,6 +284,7 @@ export async function* runAnswer(input: AnswerInput, deps: AnswerDeps): AsyncGen
       yield fail('internal');
       return;
     }
+    yield { type: 'status', step: 'facts', label: STEP_LABELS[route].facts, conversationId };
 
     const system = buildAnswerSystemPrompt(persona, { today, sheet });
     // A turn with nothing left after cleaning (an old row that held only the disclaimer or a
@@ -353,6 +361,7 @@ export async function* runAnswer(input: AnswerInput, deps: AnswerDeps): AsyncGen
     let note: string | null = null;
     for (let n = 1; n <= MAX_ATTEMPTS; n++) {
       attempts = n;
+      if (n === 1) yield { type: 'status', step: 'write', label: STEP_LABELS[route].write, conversationId };
       result = yield* attempt(n, note);
       if (result.outcome !== 'ok' || result.accepted.length > 0) break;
       if (n < MAX_ATTEMPTS) {
