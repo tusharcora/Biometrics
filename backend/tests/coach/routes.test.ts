@@ -205,16 +205,16 @@ describe('GET /me/coach/status', () => {
     expect(res.body).toMatchObject({ personaId: DEFAULT_PERSONA_ID, personaChosen: true });
   });
 
-  it.each([
-    ['encouraging', 'pip'],
-    ['direct', 'hoot'],
-    ['clinical', 'beep'],
-  ])('a legacy %s row (not yet migrated) reads as %s and counts as chosen', async (legacy, character) => {
-    const user = await createUser();
-    await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: legacy } });
-    const res = await request(await testServer(createApp())).get('/me/coach/status').set(await authed(user.id));
-    expect(res.body).toMatchObject({ personaId: character, personaChosen: true });
-  });
+  // Ruling R6: a legacy v1 id is unknown, like a retired character, so it reads as the default, Mochi.
+  it.each(['encouraging', 'direct', 'clinical'])(
+    'a legacy %s row (not yet migrated) reads as the default, mochi, and counts as chosen',
+    async (legacy) => {
+      const user = await createUser();
+      await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: legacy } });
+      const res = await request(await testServer(createApp())).get('/me/coach/status').set(await authed(user.id));
+      expect(res.body).toMatchObject({ personaId: 'mochi', personaChosen: true });
+    },
+  );
 
   it('reports the persona while the coach is off, since the character is also the app look', async () => {
     process.env.COACH_ENABLED = 'false';
@@ -336,16 +336,14 @@ describe('PUT /me/coach/persona', () => {
     expect((await prisma.user.findUnique({ where: { id: user.id } }))?.coachPersonaId).toBe('mochi');
   });
 
-  it.each([
-    ['encouraging', 'pip'],
-    ['direct', 'hoot'],
-    ['clinical', 'beep'],
-  ])('accepts the legacy id %s from an older app and stores its character, %s', async (legacy, character) => {
+  // Ruling R6: a legacy v1 id from a very old app is unknown, so it is refused and nothing is stored.
+  it.each(['encouraging', 'direct', 'clinical'])('400 unknown_persona for the legacy id %s, and stores nothing', async (legacy) => {
     const user = await createUser();
+    await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: 'kit' } });
     const res = await request(await testServer(createApp())).put('/me/coach/persona').set(await authed(user.id)).send({ personaId: legacy });
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({ personaId: character });
-    expect((await prisma.user.findUnique({ where: { id: user.id } }))?.coachPersonaId).toBe(character);
+    expect(res.status).toBe(400);
+    expect(res.body).toEqual({ error: 'unknown_persona' });
+    expect((await prisma.user.findUnique({ where: { id: user.id } }))?.coachPersonaId).toBe('kit');
   });
 
   it.each([['false'], [undefined]])('works while the coach is off (COACH_ENABLED=%j)', async (flag) => {
@@ -430,6 +428,15 @@ describe('thinking settings', () => {
       expect(row).toEqual({ coachThinkingAttachment: null, coachThinkingText: null });
     },
   );
+
+  it('404 when the user row is gone, as PUT /me/coach/persona does, rather than a 500', async () => {
+    const user = await createUser();
+    const headers = await authed(user.id);
+    jest.spyOn(prisma.user, 'updateMany').mockResolvedValue({ count: 0 });
+    const res = await request(await testServer(createApp())).put('/me/coach/thinking').set(headers).send({ attachment: 'gears' });
+    expect(res.status).toBe(404);
+    expect(res.body).toEqual({ error: 'User not found' });
+  });
 
   it('treats a stored value the app no longer knows as the default', async () => {
     const user = await createUser();

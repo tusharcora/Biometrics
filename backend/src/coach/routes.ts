@@ -379,11 +379,20 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
       return;
     }
     try {
-      const user = await prisma.user.update({
-        where: { id: req.userId! },
+      // updateMany, not update: a user row that is gone is a 404 (as on PUT /me/coach/persona), not a 500.
+      const userId = req.userId!;
+      const result = await prisma.user.updateMany({
+        where: { id: userId },
         data: { ...(hasA ? { coachThinkingAttachment: attachment as string } : {}), ...(hasT ? { coachThinkingText: text as string } : {}) },
-        select: { coachThinkingAttachment: true, coachThinkingText: true },
       });
+      const user =
+        result.count === 0
+          ? null
+          : await prisma.user.findUnique({ where: { id: userId }, select: { coachThinkingAttachment: true, coachThinkingText: true } });
+      if (!user) {
+        res.status(404).json({ error: 'User not found' });
+        return;
+      }
       res.json({ thinkingAttachment: resolveThinkingAttachment(user.coachThinkingAttachment), thinkingText: resolveThinkingText(user.coachThinkingText) });
     } catch (err) {
       logFailure('thinking', err);
