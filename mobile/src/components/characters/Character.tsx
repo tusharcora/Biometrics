@@ -47,7 +47,9 @@ export function Character({
   const reduceMotion = useReducedMotion();
   const labelled = accessibilityLabel !== undefined;
   const attachmentId = attachment === undefined ? current?.thinkingAttachment ?? DEFAULT_THINKING_ATTACHMENT : attachment;
-  // Shown while thinking and answering, and only at sizes where it reads (spec §4).
+  // Room is kept while thinking and answering, and only at sizes where it reads
+  // (spec §4). The canvas draws it all through thinking, and while answering
+  // only its "answer's here" frame for the first 0.8 s (showsAttachment).
   const showsAttachment = (mood === 'thinking' || mood === 'answering') && drawsAttachment(attachmentId, size);
   const canvasAttachment = showsAttachment ? attachmentId : null;
   // Reserve the attachment's room to the right of the coach (spec §4). The stage
@@ -77,7 +79,6 @@ export function Character({
         size={size}
         paused={paused || reduceMotion}
         attachment={canvasAttachment}
-        done={mood === 'answering'}
       />
     </View>
   );

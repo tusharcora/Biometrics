@@ -445,7 +445,7 @@ OLLAMA_MODEL=qwen3.6:35b          # pin the exact tag
 
 **Push (optional):** `PUSH_PROVIDER=expo`, `EXPO_ACCESS_TOKEN`.
 
-**Mobile:** `EXPO_PUBLIC_API_BASE_URL` (default `http://localhost:3000`), `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`, `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID`, `EXPO_PUBLIC_COACH_TIMEOUT_MS` (default 60000; keep it above the server budget), `EXPO_PUBLIC_CHARACTER_GALLERY=1` (dev character gallery: every character in every mood, plus the mini variants), and `EXPO_PUBLIC_DEV_SIGN_IN_EMAIL` / `EXPO_PUBLIC_DEV_SIGN_IN_PASSWORD` (dev builds only: a one-tap "Sign in as … (dev)" button for a local test account). Build-time: `EXPO_PUSH=1` to include push.
+**Mobile:** `EXPO_PUBLIC_API_BASE_URL` (default `http://localhost:3000`), `EXPO_PUBLIC_GOOGLE_IOS_CLIENT_ID`, `EXPO_PUBLIC_GOOGLE_ANDROID_CLIENT_ID`, `EXPO_PUBLIC_COACH_TIMEOUT_MS` (default 60000; keep it above the server budget), `EXPO_PUBLIC_CHARACTER_GALLERY=1` (dev character gallery: every coach in every mood, the thinking attachments and thinking text styles, and a size ladder), and `EXPO_PUBLIC_DEV_SIGN_IN_EMAIL` / `EXPO_PUBLIC_DEV_SIGN_IN_PASSWORD` (dev builds only: a one-tap "Sign in as … (dev)" button for a local test account). Build-time: `EXPO_PUSH=1` to include push.
 
 ## 15. Running locally
 

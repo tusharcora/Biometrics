@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { AccessibilityInfo, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useReducedMotion } from 'react-native-reanimated';
 import { useCharacterOptional } from '../characters/CharacterContext';
@@ -57,6 +57,8 @@ export function ThinkingStyleScreen() {
       await current.chooseThinking({ attachment: id });
     } catch {
       setError(THINKING_STYLE_ERROR);
+      // The line appears below the grid, out of VoiceOver's focus: say it too.
+      AccessibilityInfo.announceForAccessibility(THINKING_STYLE_ERROR);
     }
   }
 
@@ -84,7 +86,7 @@ export function ThinkingStyleScreen() {
                     testID={`thinking-style-${id}`}
                     accessibilityRole="radio"
                     accessibilityLabel={name}
-                    accessibilityState={{ selected: isSelected }}
+                    accessibilityState={{ checked: isSelected }}
                     onPress={() => void choose(id)}
                     className={cn(
                       'flex-1 items-center justify-end gap-1.5 rounded-2xl border bg-card pb-2.5 pt-6 active:opacity-70',

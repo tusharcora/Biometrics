@@ -470,7 +470,8 @@ describe('CoachScreen: streamed answers', () => {
     await live.emit({ type: 'text', sentence: 'Mostly clear skies.' });
     // The ticked step stays up for 300 ms beside the first sentence, then goes.
     expect(utils.getByTestId('thinking-step-status-done')).toBeTruthy();
-    await waitFor(() => expect(utils.queryByTestId('coach-thinking')).toBeNull());
+    // A real 300 ms timer: give it headroom when the whole suite loads the machine.
+    await waitFor(() => expect(utils.queryByTestId('coach-thinking')).toBeNull(), { timeout: 3000 });
     expect(utils.getByTestId('chat-bubble-assistant')).toHaveTextContent('Mostly clear skies.');
     await live.emit({ type: 'text', sentence: 'The cloud was the early wake-ups.' });
     expect(utils.getByTestId('chat-bubble-assistant')).toHaveTextContent('Mostly clear skies. The cloud was the early wake-ups.');
@@ -635,6 +636,42 @@ describe('CoachScreen: streamed answers', () => {
     await live.emit({ type: 'text', sentence: 'Mostly clear skies.' });
     expect(utils.queryByTestId('coach-thinking')).toBeNull();
     await live.finish(doneEvent());
+  });
+
+  it('New chat inside the steps linger window shows no thinking row', async () => {
+    const live = openTurn(stream);
+    const utils = await openChat();
+    await ask(utils, 'How did I sleep?');
+    await live.emit({ type: 'status', label: 'Looking at your sleep…' }, { type: 'text', sentence: 'Mostly clear skies.' });
+    expect(utils.getByTestId('thinking-step-status-done')).toBeTruthy();
+
+    await act(async () => {
+      fireEvent.press(utils.getByTestId('coach-new-chat-button'));
+    });
+
+    expect(utils.queryByTestId('coach-thinking')).toBeNull();
+    expect(utils.getByTestId('coach-empty')).toBeTruthy();
+  });
+
+  it('a turn the server stopped does not linger on its steps', async () => {
+    const live = openTurn(stream);
+    const utils = await openChat();
+    await ask(utils, 'How did I sleep?');
+    await live.emit({ type: 'status', label: 'Looking at your sleep…' });
+    expect(utils.getByTestId('thinking-step-status-active')).toBeTruthy();
+
+    await live.finish(doneEvent({ stopped: true }));
+
+    expect(utils.queryByTestId('coach-thinking')).toBeNull();
+  });
+
+  it('a turn that fails does not linger on its steps', async () => {
+    scriptTurn(stream, [{ type: 'status', label: 'Looking at your sleep…' }, { type: 'text', sentence: 'Mostly' }], new CoachTimeoutError());
+    const utils = await openChat();
+    await ask(utils, 'How did I sleep?');
+
+    expect(await utils.findByTestId('coach-error')).toBeTruthy();
+    expect(utils.queryByTestId('coach-thinking')).toBeNull();
   });
 
   it('with the dialog thinking text, the streaming answer types into the same box, then reads as a normal message', async () => {

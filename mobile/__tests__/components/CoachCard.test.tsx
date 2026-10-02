@@ -28,9 +28,14 @@ const contrast = (a: string, b: string) => {
   const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x);
   return (hi! + 0.05) / (lo! + 0.05);
 };
-// The chip's 16 % accent wash composited on the white light-mode card.
-const chipOnWhite = (accent: string) =>
-  '#' + channels(accent).map((v) => Math.round(255 * 0.84 + v * 0.16).toString(16).padStart(2, '0')).join('');
+// The chip's real fill: its 16 % accent wash over the art panel's 10 % top
+// wash over the card (white in light mode, global.css dark --color-card 20 22 27).
+const CARD_RGB = { light: [255, 255, 255], dark: [20, 22, 27] } as const;
+const chipFill = (accent: string, scheme: 'light' | 'dark') => {
+  const a = channels(accent);
+  const panel = CARD_RGB[scheme].map((c, i) => c * 0.9 + a[i]! * 0.1);
+  return '#' + panel.map((c, i) => Math.round(c * 0.84 + a[i]! * 0.16).toString(16).padStart(2, '0')).join('');
+};
 const focusColor = (s: ReturnType<typeof render>) =>
   (StyleSheet.flatten(s.getByTestId('coach-card-focus').props.style) as { color: string }).color;
 const IDS = Object.keys(CHARACTERS) as CharacterId[];
@@ -65,15 +70,16 @@ it('has 15 coaches to check', () => {
   expect(IDS).toHaveLength(15);
 });
 
-it.each(IDS)('light mode: %s focus chip text reads at 4.5:1 or better', (id) => {
-  mockScheme = 'light';
-  const s = render(<CoachCard characterId={id} />);
-  const accent = CHARACTERS[id].accent;
-  expect(contrast(focusColor(s), chipOnWhite(accent))).toBeGreaterThanOrEqual(4.5);
+describe.each(['light', 'dark'] as const)('%s mode', (scheme) => {
+  it.each(IDS)('%s focus chip text reads at 4.5:1 or better on the composited chip', (id) => {
+    mockScheme = scheme;
+    const s = render(<CoachCard characterId={id} />);
+    expect(contrast(focusColor(s), chipFill(CHARACTERS[id].accent, scheme))).toBeGreaterThanOrEqual(4.5);
+  });
 });
 
-it.each(IDS)('dark mode: %s focus chip text keeps the accent', (id) => {
+it('dark mode lightens accents that are too dim on the dark chip, and keeps ones that read', () => {
   mockScheme = 'dark';
-  const s = render(<CoachCard characterId={id} />);
-  expect(focusColor(s)).toBe(CHARACTERS[id].accent);
+  expect(focusColor(render(<CoachCard characterId="cap" />))).not.toBe(CHARACTERS.cap.accent);
+  expect(focusColor(render(<CoachCard characterId="luna" />))).toBe(CHARACTERS.luna.accent);
 });

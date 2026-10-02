@@ -1,7 +1,8 @@
 import React from 'react';
+import { AccessibilityInfo } from 'react-native';
 import { act, fireEvent, render, within } from '@testing-library/react-native';
-import { ThinkingStyleScreen } from '../../src/screens/ThinkingStyleScreen';
-import { ThinkingTextScreen } from '../../src/screens/ThinkingTextScreen';
+import { THINKING_STYLE_ERROR, ThinkingStyleScreen } from '../../src/screens/ThinkingStyleScreen';
+import { THINKING_TEXT_ERROR, ThinkingTextScreen } from '../../src/screens/ThinkingTextScreen';
 import { THINKING_ATTACHMENTS, THINKING_TEXTS } from '../../src/components/characters/thinking';
 import { characterLabel, HIDDEN_OK, withCharacter } from '../../jest-mocks/characterContext';
 
@@ -24,8 +25,8 @@ describe('ThinkingStyleScreen', () => {
     const chooseThinking = jest.fn(async () => {});
     const s = render(withCharacter(<ThinkingStyleScreen />, { chooseThinking }));
     for (const id of THINKING_ATTACHMENTS) expect(s.getByTestId(`thinking-style-${id}`)).toBeTruthy();
-    expect(s.getByTestId('thinking-style-bulb').props.accessibilityState).toMatchObject({ selected: true });
-    expect(s.getByTestId('thinking-style-gears').props.accessibilityState).toMatchObject({ selected: false });
+    expect(s.getByTestId('thinking-style-bulb').props.accessibilityState).toMatchObject({ checked: true });
+    expect(s.getByTestId('thinking-style-gears').props.accessibilityState).toMatchObject({ checked: false });
     expect(s.getByTestId('thinking-style-bulb').props.accessibilityRole).toBe('radio');
     await act(async () => fireEvent.press(s.getByTestId('thinking-style-gears')));
     expect(chooseThinking).toHaveBeenCalledWith({ attachment: 'gears' });
@@ -62,9 +63,12 @@ describe('ThinkingStyleScreen', () => {
       throw new Error('offline');
     });
     const s = render(withCharacter(<ThinkingStyleScreen />, { chooseThinking }));
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {});
     await act(async () => fireEvent.press(s.getByTestId('thinking-style-hourglass')));
     expect(s.getByText(/thinking style couldn't be saved/i)).toBeTruthy();
-    expect(s.getByTestId('thinking-style-bulb').props.accessibilityState).toMatchObject({ selected: true });
+    expect(announce).toHaveBeenCalledWith(THINKING_STYLE_ERROR);
+    announce.mockRestore();
+    expect(s.getByTestId('thinking-style-bulb').props.accessibilityState).toMatchObject({ checked: true });
   });
 });
 
@@ -73,8 +77,8 @@ describe('ThinkingTextScreen', () => {
     const chooseThinking = jest.fn(async () => {});
     const s = render(withCharacter(<ThinkingTextScreen />, { chooseThinking }));
     for (const id of THINKING_TEXTS) expect(s.getByTestId(`thinking-text-${id}`)).toBeTruthy();
-    expect(s.getByTestId('thinking-text-steps').props.accessibilityState).toMatchObject({ selected: true });
-    expect(s.getByTestId('thinking-text-dialog').props.accessibilityState).toMatchObject({ selected: false });
+    expect(s.getByTestId('thinking-text-steps').props.accessibilityState).toMatchObject({ checked: true });
+    expect(s.getByTestId('thinking-text-dialog').props.accessibilityState).toMatchObject({ checked: false });
     expect(s.getByTestId('thinking-text-steps')).toHaveTextContent(/What it's doing/);
     await act(async () => fireEvent.press(s.getByTestId('thinking-text-dialog')));
     expect(chooseThinking).toHaveBeenCalledWith({ text: 'dialog' });
@@ -91,9 +95,12 @@ describe('ThinkingTextScreen', () => {
       throw new Error('offline');
     });
     const s = render(withCharacter(<ThinkingTextScreen />, { chooseThinking }));
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {});
     await act(async () => fireEvent.press(s.getByTestId('thinking-text-tag')));
     expect(s.getByText(/couldn't be saved/i)).toBeTruthy();
-    expect(s.getByTestId('thinking-text-steps').props.accessibilityState).toMatchObject({ selected: true });
+    expect(announce).toHaveBeenCalledWith(THINKING_TEXT_ERROR);
+    announce.mockRestore();
+    expect(s.getByTestId('thinking-text-steps').props.accessibilityState).toMatchObject({ checked: true });
   });
 
   it('previews each style in its own row, with only the selected row moving', () => {

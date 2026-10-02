@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { AccessibilityInfo, Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useColorScheme } from 'nativewind';
 import { useReducedMotion } from 'react-native-reanimated';
@@ -66,6 +66,8 @@ export function ThinkingTextScreen() {
       await current.chooseThinking({ text: id });
     } catch {
       setError(THINKING_TEXT_ERROR);
+      // The line appears below the list, out of VoiceOver's focus: say it too.
+      AccessibilityInfo.announceForAccessibility(THINKING_TEXT_ERROR);
     }
   }
 
@@ -92,7 +94,7 @@ export function ThinkingTextScreen() {
                 testID={`thinking-text-${id}`}
                 accessibilityRole="radio"
                 accessibilityLabel={`${name}. ${blurb}`}
-                accessibilityState={{ selected: isSelected }}
+                accessibilityState={{ checked: isSelected }}
                 onPress={() => void choose(id)}
                 className="gap-2.5 px-4 py-3 active:bg-muted"
               >

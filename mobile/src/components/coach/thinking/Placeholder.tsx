@@ -11,6 +11,10 @@ const BARS = ['92%', '74%', '48%'] as const;
 const PULSE_MS = 700;
 const PULSE_LOW = 0.35;
 const PULSE_HIGH = 0.8;
+// The thinking bubble's width, and its lift off the row's bottom edge (the
+// streaming answer's bubble keeps both, so the box doesn't move; ReplyFrame).
+export const PLACEHOLDER_WIDTH = 210;
+export const PLACEHOLDER_BOTTOM = 10;
 
 /** The reply bubble B draws while thinking, and the answer then streams into (ReplyFrame). */
 export function PlaceholderBubble({ children, style, testID }: { children: React.ReactNode; style?: ViewStyle; testID?: string }) {
@@ -53,7 +57,7 @@ export function Placeholder({ characterId, paused }: ThinkingStyleProps) {
   const barStyle = useAnimatedStyle(() => ({ opacity: pulse.value }));
 
   return (
-    <PlaceholderBubble style={{ width: 210, marginBottom: 10 }}>
+    <PlaceholderBubble style={{ width: PLACEHOLDER_WIDTH, marginBottom: PLACEHOLDER_BOTTOM }}>
       <Text className="text-[11.5px] text-muted-foreground">
         <Text className="text-[11.5px] font-semibold" style={{ color: text }}>
           {name}

@@ -1,7 +1,7 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef } from 'react';
 import { PixelRatio } from 'react-native';
 import { Canvas, Picture, Skia, createPicture } from '@shopify/react-native-skia';
-import { attachmentFrame, drawsAttachment, moodEyes, STAGE_H, STAGE_W, type Cell } from './attachments/frames';
+import { answeringStart, attachmentFrame, drawsAttachment, moodEyes, showsAttachment, STAGE_H, STAGE_W, type Cell } from './attachments/frames';
 import { composeSprite, SPRITE_SIZE } from './sprites/compose';
 import { SPRITES } from './sprites/data';
 import { crispLayout } from './sprites/scale';
@@ -14,10 +14,11 @@ export interface CharacterCanvasProps {
   mood: CharacterMood;
   size: number;
   paused: boolean;
-  /** Drawn on the 36×32 stage next to the coach; the canvas widens to size × 36/24. */
+  /**
+   * Drawn on the 36×32 stage next to the coach (the canvas widens to size × 36/24):
+   * animated while thinking, its "answer's here" frame briefly while answering.
+   */
   attachment: ThinkingAttachmentId | null;
-  /** The attachment's "answer's here" frame (answering mood). */
-  done: boolean;
 }
 
 const BOB_MS: Record<CharacterMood, number> = { idle: 1600, thinking: 1600, answering: 500, resting: 3000 };
@@ -26,7 +27,7 @@ const BLINK_EVERY = 4200;
 const BLINK_FOR = 140;
 
 // The only file that touches Skia. Jest uses jest-mocks/CharacterCanvas.js.
-export function CharacterCanvas({ characterId, mood, size, paused, attachment, done }: CharacterCanvasProps) {
+export function CharacterCanvas({ characterId, mood, size, paused, attachment }: CharacterCanvasProps) {
   const t = useSpriteClock(paused);
   const withAttachment = drawsAttachment(attachment, size);
   const dpr = PixelRatio.get();
@@ -44,8 +45,14 @@ export function CharacterCanvas({ characterId, mood, size, paused, attachment, d
   const bobUp = paused ? 0 : Math.floor(t / (BOB_MS[mood] / 2)) % 2;
   const hop = bobUp * HOP[mood];
   const grid = composeSprite(SPRITES[characterId], moodEyes(mood, blinking), { dim: mood === 'resting' });
+  // The "answer's here" frame shows for ATTACHMENT_DONE_MS from the start of
+  // answering, timed on the sprite clock. Paused (Reduce Motion, out of focus)
+  // the clock reads 0, so the still done frame stays until the mood changes.
+  const answerStart = useRef<number | null>(null);
+  answerStart.current = answeringStart(answerStart.current, mood, t);
+  const sinceAnswering = answerStart.current === null ? 0 : t - answerStart.current;
   const extra: readonly Cell[] =
-    withAttachment && attachment && (mood === 'thinking' || (mood === 'answering' && done))
+    withAttachment && attachment && showsAttachment(mood, sinceAnswering)
       ? attachmentFrame(attachment, t, mood === 'answering')
       : [];
   // The coach sits at y 8–31 on the attachment stage.

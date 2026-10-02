@@ -1,5 +1,5 @@
 import React from 'react';
-import { Text } from 'react-native';
+import { StyleSheet, Text } from 'react-native';
 import { render, act } from '@testing-library/react-native';
 import { ThinkingRow } from '../../src/components/coach/thinking/ThinkingRow';
 import { ReplyFrame, REPLY_FRAME_STYLES } from '../../src/components/coach/thinking/ReplyFrame';
@@ -204,5 +204,29 @@ describe('ReplyFrame', () => {
     );
     expect(s.getByTestId('reply-frame-dialog')).toHaveTextContent(/Mostly clear\./);
     expect(s.getByTestId('thinking-dialog-tab')).toHaveTextContent('Kit');
+  });
+
+  // Spec §5 "the same box": the first sentence must not move it sideways or down.
+  it.each(REPLY_FRAME_STYLES)('%s keeps the pending row layout: the 36 pt thinking coach, then the box', (style) => {
+    const pending = render(<ThinkingRow style={style} characterId="kit" steps={[]} paused={false} testID="row" />);
+    const streaming = render(
+      <ReplyFrame style={style} characterId="kit">
+        <Text>Mostly clear.</Text>
+      </ReplyFrame>,
+    );
+    const row = streaming.getByTestId('reply-frame-row');
+    expect(row.props.className ?? '').toBe(pending.getByTestId('row').props.className);
+    expect(characterLabel(streaming, 'reply-frame-row')).toBe(characterLabel(pending, 'row'));
+    expect(characterLabel(streaming, 'reply-frame-row')).toBe('character:kit:thinking:36:playing:bulb');
+  });
+
+  it('the placeholder answer bubble keeps the thinking bubble’s width floor and bottom lift', () => {
+    const s = render(
+      <ReplyFrame style="placeholder" characterId="kit">
+        <Text>Ok.</Text>
+      </ReplyFrame>,
+    );
+    const style = StyleSheet.flatten(s.getByTestId('reply-frame-placeholder').props.style);
+    expect(style).toMatchObject({ minWidth: 210, marginBottom: 10 });
   });
 });

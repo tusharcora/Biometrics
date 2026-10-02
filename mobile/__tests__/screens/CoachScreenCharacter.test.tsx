@@ -1,7 +1,8 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { act, render, fireEvent, waitFor } from '@testing-library/react-native';
 import { NavigationContext } from '@react-navigation/native';
-import { characterLabel as label, withCharacter } from '../../jest-mocks/characterContext';
+import { HIDDEN_OK, characterLabel as label, withCharacter } from '../../jest-mocks/characterContext';
 import { answer, doneEvent, openTurn, scriptTurn } from '../../jest-mocks/coachStreamFake';
 import { CoachScreen } from '../../src/screens/CoachScreen';
 import { fetchCoachStatus, fetchLatestConversation, fetchTodaySummary, type CoachStatusDTO } from '../../src/api/coach';
@@ -70,6 +71,31 @@ describe('CoachScreen: character', () => {
 
     expect(label(utils, 'coach-header-character')).toBe('character:kit:idle:36:playing:none');
     expect(label(utils, 'coach-hero-character')).toBe('character:kit:idle:64:playing:none');
+  });
+
+  it('keeps the header coach in a fixed 54 pt slot, so the title does not move between moods', async () => {
+    const live = openTurn(stream);
+    const utils = renderCoach();
+    await utils.findByTestId('coach-input');
+    const slotWidth = () => (StyleSheet.flatten(utils.getByTestId('coach-header-slot').props.style) as { width: number }).width;
+    const coachWidth = () => (StyleSheet.flatten(utils.getByTestId('coach-header-character', HIDDEN_OK).props.style) as { width: number }).width;
+    const seen: Array<[string, number, number]> = [];
+    const record = () => seen.push([label(utils, 'coach-header-character').split(':')[2]!, slotWidth(), coachWidth()]);
+
+    record();
+    fireEvent.changeText(utils.getByTestId('coach-input'), 'How did I sleep?');
+    await act(async () => {
+      fireEvent.press(utils.getByTestId('coach-send-button'));
+    });
+    record();
+    await live.finish({ type: 'text', sentence: 'Well.' }, doneEvent());
+    record();
+
+    expect(seen.map(([mood]) => mood)).toEqual(['idle', 'thinking', 'answering']);
+    for (const [, slot, coach] of seen) {
+      expect(slot).toBe(54);
+      expect(coach).toBeLessThanOrEqual(54);
+    }
   });
 
   it('rests on a poor recovery day', async () => {

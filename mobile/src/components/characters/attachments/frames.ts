@@ -47,7 +47,8 @@ const DRAW: Record<ThinkingAttachmentId, Draw> = {
     const c = glyph(['.ggggg.', 'gggggHg', 'ggggggH', 'gg.f.gg', 'ggf.fgg', '.ggggg.', '..ggg..', '..mmm..', '..MMM..', '..mmm..'], 26, 1,
       { g: glass, H: flick === 2 ? '#FFFFFF' : '#A1A1AA', f: fil, m: '#94A3B8', M: '#64748B' });
     if (flick === 2) {
-      for (const [x, y] of [[23, 1], [24, 2], [36, 2], [22, 5], [23, 5], [35, 5]] as const) c.push([x, y, GOLD2]);
+      // The mockup's rays that land on the stage (its x < 36, y >= 0 filter).
+      for (const [x, y] of [[23, 1], [24, 2], [22, 5], [23, 5]] as const) c.push([x, y, GOLD2]);
       for (const [x, y] of [[24, 0], [34, 0], [24, 9], [34, 9]] as const) c.push([x, y, 'rgba(253,224,71,0.45)']);
     }
     return c;
@@ -144,8 +145,24 @@ export function attachmentFrame(id: ThinkingAttachmentId, tMs: number, done: boo
   return DRAW[id](t, done).filter(([x, y]) => x >= 0 && y >= 0 && x < STAGE_W && y < STAGE_H);
 }
 
-export function frameKey(id: ThinkingAttachmentId, tMs: number, done: boolean): string {
-  return `${id}:${done ? 'd' : ''}:${JSON.stringify(attachmentFrame(id, tMs, done))}`;
+/**
+ * Whether the attachment is drawn (spec §3/§4): throughout thinking; while
+ * answering only its "answer's here" frame, for the first ATTACHMENT_DONE_MS,
+ * then hidden for the rest of the answering mood.
+ */
+export function showsAttachment(mood: CharacterMood, msSinceAnswering: number): boolean {
+  if (mood === 'thinking') return true;
+  return mood === 'answering' && msSinceAnswering < ATTACHMENT_DONE_MS;
+}
+
+/**
+ * The sprite-clock time the answering mood started: latched on the first
+ * running tick (t > 0; a clock that hasn't ticked yet, or a paused one, reads
+ * 0) and cleared by any other mood.
+ */
+export function answeringStart(prev: number | null, mood: CharacterMood, t: number): number | null {
+  if (mood !== 'answering') return null;
+  return prev ?? (t > 0 ? t : null);
 }
 
 export function moodEyes(mood: CharacterMood, blinking: boolean): EyeMode {

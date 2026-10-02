@@ -25,6 +25,8 @@ import { ErrorCard } from '../components/coach/ErrorCard';
 import { ConversationsSheet } from '../components/coach/ConversationsSheet';
 import { Character } from '../components/characters/Character';
 import { characterInfo } from '../components/characters/registry';
+import { STAGE_W } from '../components/characters/attachments/frames';
+import { SPRITE_SIZE } from '../components/characters/sprites/compose';
 import { DEFAULT_THINKING_TEXT } from '../components/characters/thinking';
 import { useCharacterMood } from '../characters/useCharacterMood';
 import { useScreenFocused } from '../characters/useScreenFocused';
@@ -44,6 +46,10 @@ type Phase = 'loading' | 'unavailable' | 'needs-consent' | 'ready';
 
 // How long the steps checklist stays up, all ticked, once the answer starts (spec §5).
 const STEPS_LINGER_MS = 300;
+
+// The header coach, and its slot: wide enough for the thinking attachment's stage.
+const HEADER_CHARACTER_SIZE = 36;
+const HEADER_SLOT_WIDTH = (HEADER_CHARACTER_SIZE * STAGE_W) / SPRITE_SIZE;
 
 // How close to the bottom (pt) still counts as reading the latest message.
 const NEAR_BOTTOM = 80;
@@ -129,7 +135,11 @@ export function CoachScreen() {
   );
   const mood = useCharacterMood({ sending: streaming, answeredAt });
   const lingering = useStepsLinger(waiting, thinkingText === 'steps' && steps.length > 0 && steps.every((step) => step.done));
-  const showThinking = waiting || lingering;
+  // The linger is for an answer that started. A turn the server stopped, or one
+  // that failed, drops the row at once; so does New chat (it clears the steps).
+  const lastMessage = messages[messages.length - 1];
+  const turnCut = !!error || (lastMessage?.role === 'assistant' && (lastMessage.state === 'stopped' || lastMessage.state === 'interrupted'));
+  const showThinking = waiting || (lingering && steps.length > 0 && !turnCut);
   // Read inside load(): a message just sent (before its conversationId
   // arrives) must stop a focus reload from replacing the chat with history.
   const conversationIdRef = useRef<string | null>(null);
@@ -353,7 +363,11 @@ export function CoachScreen() {
   const header = (
     <View className="flex-row items-center justify-between px-5 pb-2 pt-1">
       <View className="flex-row items-center gap-3">
-        <Character testID="coach-header-character" mood={mood} size={36} paused={!focused} />
+        {/* A fixed slot as wide as the coach with its attachment (36 × 36/24), so
+            the title stays put as the attachment comes and goes. */}
+        <View testID="coach-header-slot" style={{ width: HEADER_SLOT_WIDTH, alignItems: 'flex-start' }}>
+          <Character testID="coach-header-character" mood={mood} size={HEADER_CHARACTER_SIZE} paused={!focused} />
+        </View>
         <Text accessibilityRole="header" className="font-display text-display">
           Coach
         </Text>
