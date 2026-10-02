@@ -11,7 +11,7 @@ beforeEach(() => jest.clearAllMocks());
 
 it('always shows Hoot, whatever character a provider holds (signed-out screens)', () => {
   (useAuth as jest.Mock).mockReturnValue({ requestPasswordReset: jest.fn() });
-  const utils = render(withCharacter(<ForgotPasswordScreen navigation={navigation} route={{} as any} />, { characterId: 'ember' }));
+  const utils = render(withCharacter(<ForgotPasswordScreen navigation={navigation} route={{} as any} />, { characterId: 'kit' }));
 
-  expect(characterLabel(utils, 'auth-character')).toBe('character:hoot:idle:56:playing:full');
+  expect(characterLabel(utils, 'auth-character')).toBe('character:hoot:idle:56:playing:none');
 });

@@ -65,7 +65,7 @@ describe('MeetYourCoachScreen: first visit', () => {
     const utils = renderMeet({ personaChosen: false, status });
 
     expect(utils.getByTestId('meet-choose')).toHaveTextContent('Choose Hoot');
-    expect(playing(utils)).toEqual(['character:hoot:idle:180:playing:full']);
+    expect(playing(utils)).toEqual(['character:hoot:idle:180:playing:none']);
     expect(utils.getByTestId('meet-dot-hoot').props.accessibilityState).toEqual(expect.objectContaining({ selected: true }));
     expect(utils.getByTestId('meet-skip')).toBeTruthy();
     expect(utils.queryByTestId('meet-close')).toBeNull();
@@ -132,7 +132,7 @@ describe('MeetYourCoachScreen: first visit', () => {
     swipeTo(utils, 2);
 
     expect(utils.getByTestId('meet-choose')).toHaveTextContent('Choose Mochi');
-    expect(playing(utils)).toEqual(['character:mochi:idle:180:playing:full']);
+    expect(playing(utils)).toEqual(['character:mochi:idle:180:playing:none']);
     expect(utils.getByTestId('meet-dot-mochi').props.accessibilityState).toEqual(expect.objectContaining({ selected: true }));
   });
 
@@ -208,7 +208,7 @@ describe('MeetYourCoachScreen: switching from Profile', () => {
     const utils = renderMeet({ characterId: 'ember', status: { ...status, personaChosen: true } });
 
     expect(utils.getByTestId('meet-choose')).toHaveTextContent('Choose Ember');
-    expect(playing(utils)).toEqual(['character:ember:idle:180:playing:full']);
+    expect(playing(utils)).toEqual(['character:ember:idle:180:playing:none']);
     expect(utils.queryByTestId('meet-skip')).toBeNull();
     fireEvent.press(utils.getByTestId('meet-close'));
     expect(mockGoBack).toHaveBeenCalledTimes(1);

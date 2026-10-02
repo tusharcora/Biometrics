@@ -10,14 +10,14 @@ const labels = (utils: ReturnType<typeof render>) =>
     .map((n) => n.props.accessibilityLabel as string);
 
 describe('CharacterGalleryScreen', () => {
-  it('shows every character in every mood plus both mini sizes', () => {
+  it('shows every character in every mood plus two smaller sizes', () => {
     const utils = render(<CharacterGalleryScreen />);
     const all = labels(utils);
-    expect(all).toHaveLength(8 * 6);
-    expect(all).toContain('character:hoot:thinking:96:playing:full');
-    expect(all).toContain('character:doze:resting:96:playing:full');
-    expect(all).toContain('character:beat:idle:64:playing:mini');
-    expect(all).toContain('character:ember:thinking:20:playing:mini');
+    expect(all).toHaveLength(15 * 6);
+    expect(all).toContain('character:mochi:thinking:96:playing:bulb');
+    expect(all).toContain('character:kit:resting:96:playing:none');
+    expect(all).toContain('character:bao:idle:64:playing:none');
+    expect(all).toContain('character:kit:thinking:20:playing:none');
   });
 
   it('pauses and resumes every character', () => {

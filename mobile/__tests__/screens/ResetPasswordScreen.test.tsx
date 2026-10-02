@@ -54,7 +54,7 @@ it('picks up a fresh token that arrives on an already-open reset screen', async 
 
 it('always shows Hoot, whatever character a provider holds (signed-out screens)', () => {
   (useAuth as jest.Mock).mockReturnValue({ resetPassword: jest.fn() });
-  const utils = render(withCharacter(<ResetPasswordScreen navigation={navigation} route={{ params: { token: 'tok' } } as any} />, { characterId: 'ember' }));
+  const utils = render(withCharacter(<ResetPasswordScreen navigation={navigation} route={{ params: { token: 'tok' } } as any} />, { characterId: 'kit' }));
 
-  expect(characterLabel(utils, 'auth-character')).toBe('character:hoot:idle:56:playing:full');
+  expect(characterLabel(utils, 'auth-character')).toBe('character:hoot:idle:56:playing:none');
 });

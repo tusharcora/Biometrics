@@ -79,16 +79,16 @@ describe('CoachDigestCard', () => {
 
 describe('CoachDigestCard character', () => {
   it("shows the user's character on the recap, idle", async () => {
-    const utils = render(withCharacter(<CoachDigestCard />, { characterId: 'beat' }));
+    const utils = render(withCharacter(<CoachDigestCard />, { characterId: 'jelly' }));
     await utils.findByTestId('coach-digest-card');
 
-    expect(characterLabel(utils, 'coach-digest-character')).toBe('character:beat:idle:18:playing:mini');
+    expect(characterLabel(utils, 'coach-digest-character')).toBe('character:jelly:idle:18:playing:none');
   });
 
   it('rests on a poor recovery day', async () => {
-    const utils = render(withCharacter(<CoachDigestCard />, { characterId: 'beat', recoveryBand: 'scorePoor' }));
+    const utils = render(withCharacter(<CoachDigestCard />, { characterId: 'jelly', recoveryBand: 'scorePoor' }));
     await utils.findByTestId('coach-digest-card');
 
-    expect(characterLabel(utils, 'coach-digest-character')).toBe('character:beat:resting:18:playing:mini');
+    expect(characterLabel(utils, 'coach-digest-character')).toBe('character:jelly:resting:18:playing:none');
   });
 });

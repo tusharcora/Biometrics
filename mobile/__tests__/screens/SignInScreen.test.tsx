@@ -80,7 +80,7 @@ it('shows the verified banner when the link opens an already-mounted sign-in scr
 
 it('shows Hoot in the sign-in hero, whatever character a provider holds', () => {
   (useAuth as jest.Mock).mockReturnValue(auth());
-  const utils = render(withCharacter(<SignInScreen navigation={navigation} route={{ params: undefined } as any} />, { characterId: 'ember' }));
+  const utils = render(withCharacter(<SignInScreen navigation={navigation} route={{ params: undefined } as any} />, { characterId: 'kit' }));
 
-  expect(characterLabel(utils, 'onboarding-character')).toBe('character:hoot:idle:120:playing:full');
+  expect(characterLabel(utils, 'onboarding-character')).toBe('character:hoot:idle:120:playing:none');
 });

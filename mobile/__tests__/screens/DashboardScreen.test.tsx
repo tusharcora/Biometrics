@@ -545,8 +545,8 @@ describe('DashboardScreen', () => {
 describe('DashboardScreen: fallback character', () => {
   it("shows the user's character on a state Home cannot load", async () => {
     mockApi({ recordsError: new Error('network error') });
-    const utils = render(withCharacter(<DashboardScreen />, { characterId: 'pip' }));
+    const utils = render(withCharacter(<DashboardScreen />, { characterId: 'avo' }));
 
-    await waitFor(() => expect(characterLabel(utils, 'dashboard-fallback-character')).toBe('character:pip:idle:56:playing:full'));
+    await waitFor(() => expect(characterLabel(utils, 'dashboard-fallback-character')).toBe('character:avo:idle:56:playing:none'));
   });
 });

@@ -48,7 +48,7 @@ it('refuses a password shorter than 8 characters before calling the server', asy
 
 it('always shows Hoot, whatever character a provider holds (signed-out screens)', () => {
   (useAuth as jest.Mock).mockReturnValue({ signUpWithEmail: jest.fn() });
-  const utils = render(withCharacter(<SignUpScreen navigation={navigation} route={{} as any} />, { characterId: 'ember' }));
+  const utils = render(withCharacter(<SignUpScreen navigation={navigation} route={{} as any} />, { characterId: 'kit' }));
 
-  expect(characterLabel(utils, 'auth-character')).toBe('character:hoot:idle:56:playing:full');
+  expect(characterLabel(utils, 'auth-character')).toBe('character:hoot:idle:56:playing:none');
 });

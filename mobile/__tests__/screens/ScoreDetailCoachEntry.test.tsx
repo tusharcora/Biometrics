@@ -106,9 +106,9 @@ describe('ScoreDetailScreen: Ask about this', () => {
 
 describe('ScoreDetailScreen: coach character', () => {
   it("shows the user's character on the Ask Coach button", async () => {
-    const utils = render(withCharacter(<ScoreDetailScreen />, { characterId: 'nimbus', status }));
+    const utils = render(withCharacter(<ScoreDetailScreen />, { characterId: 'sprout', status }));
     await utils.findByTestId('ask-coach-button');
 
-    expect(characterLabel(utils, 'ask-coach-character')).toBe('character:nimbus:idle:40:playing:mini');
+    expect(characterLabel(utils, 'ask-coach-character')).toBe('character:sprout:idle:40:playing:none');
   });
 });

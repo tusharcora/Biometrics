@@ -232,17 +232,17 @@ describe('CoachMemoryScreen', () => {
 describe('CoachMemoryScreen: character', () => {
   it("shows the user's character on the empty state", async () => {
     (listCoachMemory as jest.Mock).mockResolvedValue([]);
-    const utils = render(withCharacter(<CoachMemoryScreen />, { characterId: 'doze' }));
+    const utils = render(withCharacter(<CoachMemoryScreen />, { characterId: 'boba' }));
     await utils.findByTestId('coach-memory-empty');
 
-    expect(characterLabel(utils, 'coach-memory-character')).toBe('character:doze:idle:40:playing:mini');
+    expect(characterLabel(utils, 'coach-memory-character')).toBe('character:boba:idle:40:playing:none');
   });
 
   it("shows the user's character when the coach is unavailable", async () => {
     (listCoachMemory as jest.Mock).mockRejectedValue(new CoachDisabledError());
-    const utils = render(withCharacter(<CoachMemoryScreen />, { characterId: 'doze' }));
+    const utils = render(withCharacter(<CoachMemoryScreen />, { characterId: 'boba' }));
     await utils.findByTestId('coach-memory-unavailable');
 
-    expect(characterLabel(utils, 'coach-memory-character')).toBe('character:doze:idle:48:playing:full');
+    expect(characterLabel(utils, 'coach-memory-character')).toBe('character:boba:idle:48:playing:none');
   });
 });

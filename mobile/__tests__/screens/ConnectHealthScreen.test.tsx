@@ -144,8 +144,8 @@ describe('ConnectHealthScreen', () => {
 
 describe('ConnectHealthScreen: character', () => {
   it("shows the user's character", () => {
-    const utils = render(withCharacter(<ConnectHealthScreen />, { characterId: 'ember' }));
+    const utils = render(withCharacter(<ConnectHealthScreen />, { characterId: 'kit' }));
 
-    expect(characterLabel(utils, 'connect-health-character')).toBe('character:ember:idle:72:playing:full');
+    expect(characterLabel(utils, 'connect-health-character')).toBe('character:kit:idle:72:playing:none');
   });
 });
