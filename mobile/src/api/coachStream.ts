@@ -65,7 +65,13 @@ export function parseCoachEvent(message: SseMessage): CoachStreamEvent | null {
   switch (message.event) {
     case 'status':
       return typeof data.label === 'string'
-        ? { type: 'status', label: data.label, ...(typeof data.conversationId === 'string' ? { conversationId: data.conversationId } : {}) }
+        ? {
+            type: 'status',
+            label: data.label,
+            // An unknown step is dropped: the label still shows, as a stepless status.
+            ...(data.step === 'route' || data.step === 'facts' || data.step === 'write' ? { step: data.step } : {}),
+            ...(typeof data.conversationId === 'string' ? { conversationId: data.conversationId } : {}),
+          }
         : null;
     case 'text':
       return typeof data.sentence === 'string' && data.sentence.trim() ? { type: 'text', sentence: data.sentence } : null;

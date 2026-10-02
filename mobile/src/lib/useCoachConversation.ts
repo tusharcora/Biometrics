@@ -64,6 +64,15 @@ export interface CoachTurnError {
   userMessageId?: string;
 }
 
+// One row of the "thinking" checklist: a pipeline step ('route' | 'facts' | 'write'),
+// or 'status' for a stepless label from an older server. `done` once the next step
+// (or the answer's first sentence) arrives.
+export interface ThinkingStep {
+  id: string;
+  label: string;
+  done: boolean;
+}
+
 export interface UseCoachConversationOptions {
   // The user's engine setting, to flag an answer the device wrote instead.
   preferredEngine?: CoachEngineDTO;
@@ -117,6 +126,7 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
   const [conversationId, setConversationId] = useState<string | null>(null);
   const [streaming, setStreaming] = useState(false);
   const [statusLabel, setStatusLabel] = useState<string | null>(null);
+  const [steps, setSteps] = useState<ThinkingStep[]>([]);
   // When the latest answer finished, for the character's "answering" mood.
   const [answeredAt, setAnsweredAt] = useState<number | null>(null);
   const [error, setError] = useState<CoachTurnError | null>(null);
@@ -149,6 +159,7 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
     streamingRef.current = true;
     setStreaming(true);
     setStatusLabel(null);
+    setSteps([]);
     setError(null);
     setAnsweredAt(null);
     seq.current += 1;
@@ -187,9 +198,16 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
         case 'status':
           adoptConversation(event.conversationId);
           setStatusLabel(event.label);
+          setSteps((prev) => {
+            const id = event.step ?? 'status';
+            // The same step again (or a second stepless label): update it in place.
+            if (prev.some((s) => s.id === id)) return prev.map((s) => (s.id === id ? { ...s, label: event.label } : s));
+            return [...prev.map((s) => (s.done ? s : { ...s, done: true })), { id, label: event.label, done: false }];
+          });
           break;
         case 'text':
           shown = true;
+          setSteps((prev) => (prev.some((s) => !s.done) ? prev.map((s) => (s.done ? s : { ...s, done: true })) : prev));
           patch((m) => ({ ...m, text: m.text ? `${m.text} ${event.sentence}` : event.sentence }));
           break;
         case 'card':
@@ -262,6 +280,7 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
     streamingRef.current = false;
     setStreaming(false);
     setStatusLabel(null);
+    setSteps([]);
 
     if (thrown instanceof CoachStreamAbortedError) {
       // Stopped: the partial text stays, marked, and is not a full answer. A
@@ -347,6 +366,7 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
     conversationIdRef.current = id;
     setStreaming(false);
     setStatusLabel(null);
+    setSteps([]);
     setError(null);
     setAnsweredAt(null);
     setConversationId(id);
@@ -363,5 +383,5 @@ export function useCoachConversation({ preferredEngine, onConsentRequired, onDis
   const last = messages[messages.length - 1];
   const waiting = streaming && !!last && last.role === 'assistant' && !last.text && !last.safety;
 
-  return { messages, conversationId, streaming, waiting, statusLabel, answeredAt, error, send, stop, retry, overrideSafety, newChat, restore };
+  return { messages, conversationId, streaming, waiting, statusLabel, steps, answeredAt, error, send, stop, retry, overrideSafety, newChat, restore };
 }

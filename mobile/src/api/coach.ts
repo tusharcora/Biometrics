@@ -104,11 +104,15 @@ export interface AnswerCardDTO {
 
 export type CoachErrorCode = 'model_unavailable' | 'timeout' | 'validation_failed' | 'consent_required' | 'internal';
 
+// The answer pipeline's progress steps, in order, sent on `status` events.
+export type CoachStepId = 'route' | 'facts' | 'write';
+
 // One server-sent event from POST /me/coach/message (spec 2.5), as JSON.
 export type CoachStreamEvent =
   // conversationId arrives before anything is stored (status, or safety for a crisis
   // message), so a first turn stopped or dropped before `done` keeps its conversation.
-  | { type: 'status'; label: string; conversationId?: string }
+  // `step` names the pipeline step the label belongs to; absent from an older server.
+  | { type: 'status'; label: string; step?: CoachStepId; conversationId?: string }
   | { type: 'text'; sentence: string }
   | { type: 'card'; card: AnswerCardDTO }
   | { type: 'memory'; proposals: MemoryDTO[] }

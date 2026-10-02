@@ -588,6 +588,92 @@ describe('useCoachConversation: new chat and history', () => {
   });
 });
 
+describe('useCoachConversation: progress steps', () => {
+  it('builds the steps list, ticking each step when the next arrives (Review Focus 3)', async () => {
+    const live = openTurn();
+    const { result } = setup();
+    expect(result.current.steps).toEqual([]);
+
+    act(() => result.current.send('How did I sleep?'));
+    live.emit({ type: 'status', step: 'route', label: 'Looking at your sleep…', conversationId: 'c1' });
+    expect(result.current.steps).toEqual([{ id: 'route', label: 'Looking at your sleep…', done: false }]);
+    live.emit({ type: 'status', step: 'facts', label: 'Going through your recent nights…' });
+    expect(result.current.steps).toEqual([
+      { id: 'route', label: 'Looking at your sleep…', done: true },
+      { id: 'facts', label: 'Going through your recent nights…', done: false },
+    ]);
+    live.emit({ type: 'status', step: 'write', label: 'Writing it up…' });
+    expect(result.current.steps.map((s) => s.done)).toEqual([true, true, false]);
+    expect(result.current.statusLabel).toBe('Writing it up…');
+
+    live.emit({ type: 'text', sentence: 'You slept well.' });
+    expect(result.current.steps).toHaveLength(3);
+    expect(result.current.steps.every((s) => s.done)).toBe(true);
+    live.emit({ type: 'text', sentence: 'Deep sleep was up.' });
+    expect(result.current.steps.every((s) => s.done)).toBe(true);
+    await live.finish();
+  });
+
+  it('shows a stepless status (older server) as one step, updating its label rather than adding another', async () => {
+    const live = openTurn();
+    const { result } = setup();
+
+    act(() => result.current.send('hi'));
+    live.emit({ type: 'status', label: 'Thinking…' });
+    expect(result.current.steps).toEqual([{ id: 'status', label: 'Thinking…', done: false }]);
+    live.emit({ type: 'status', label: 'Still thinking…' });
+    expect(result.current.steps).toEqual([{ id: 'status', label: 'Still thinking…', done: false }]);
+    live.emit({ type: 'text', sentence: 'Hello.' });
+    expect(result.current.steps).toEqual([{ id: 'status', label: 'Still thinking…', done: true }]);
+    await live.finish();
+  });
+
+  it('keeps the steps it has when the stream errors after the first one', async () => {
+    const live = openTurn();
+    const { result } = setup();
+
+    act(() => result.current.send('hi'));
+    live.emit({ type: 'status', step: 'route', label: 'Thinking it over…' });
+    live.emit({ type: 'error', code: 'internal', retryable: true });
+    expect(result.current.steps).toEqual([{ id: 'route', label: 'Thinking it over…', done: false }]);
+  });
+
+  it('starts each send, and a retry, with no steps', async () => {
+    turn([{ type: 'status', step: 'route', label: 'Thinking it over…' }, { type: 'error', code: 'internal', retryable: true }]);
+    const { result } = setup();
+    await act(async () => result.current.send('hi'));
+    expect(result.current.error).not.toBeNull();
+
+    const live = openTurn();
+    act(() => result.current.retry());
+    expect(result.current.steps).toEqual([]);
+    live.emit({ type: 'status', step: 'route', label: 'Looking at your sleep…' });
+    expect(result.current.steps).toEqual([{ id: 'route', label: 'Looking at your sleep…', done: false }]);
+    await live.finish();
+
+    const next = openTurn();
+    act(() => result.current.send('again'));
+    expect(result.current.steps).toEqual([]);
+    next.emit({ type: 'status', step: 'facts', label: 'Going through your recent nights…' });
+    expect(result.current.steps).toEqual([{ id: 'facts', label: 'Going through your recent nights…', done: false }]);
+  });
+
+  it('clears the steps on stop and on a new chat', async () => {
+    const live = openTurn();
+    const { result } = setup();
+    act(() => result.current.send('hi'));
+    live.emit({ type: 'status', step: 'route', label: 'Thinking it over…' });
+    await act(async () => result.current.stop());
+    expect(result.current.steps).toEqual([]);
+
+    const next = openTurn();
+    act(() => result.current.send('again'));
+    next.emit({ type: 'status', step: 'route', label: 'Thinking it over…' });
+    await act(async () => result.current.newChat());
+    expect(result.current.steps).toEqual([]);
+  });
+});
+
 describe('fromHistory', () => {
   it('rebuilds a safety card, settled once the conversation went on, and a stopped answer', () => {
     const messages = fromHistory([
