@@ -26,12 +26,12 @@ const status = {
   enabled: true,
   consented: false,
   consent: { version: 'v1', summary: 'Scores are sent to a provider.', dataItems: ['Recovery score'] },
-  personaId: 'hoot',
+  personaId: 'mochi',
   personaChosen: true,
   personas: [
     {
-      id: 'hoot',
-      name: 'Hoot',
+      id: 'mochi',
+      name: 'Mochi',
       verbosity: 'normal',
       proactivity: 'threshold-triggered',
       tagline: 'Calm and curious. Spots the patterns in your weeks.',
@@ -108,7 +108,7 @@ describe('fetchCoachStatus', () => {
   });
 
   it('only reads personaChosen as not chosen when it is literally false, and drops malformed persona entries', async () => {
-    fetchMock.mockResolvedValueOnce(ok({ ...status, personaChosen: 'no', personaId: 7, personas: [null, 'hoot', status.personas[0]] }));
+    fetchMock.mockResolvedValueOnce(ok({ ...status, personaChosen: 'no', personaId: 7, personas: [null, 'mochi', status.personas[0]] }));
     const result = await fetchCoachStatus();
     // Not a boolean: treated like a missing field, so no prompt.
     expect(result.personaChosen).toBe(true);
@@ -146,12 +146,12 @@ describe('consent', () => {
 
 describe('setCoachPersona', () => {
   it('PUTs the persona id', async () => {
-    fetchMock.mockResolvedValueOnce(ok({ personaId: 'pip' }));
-    await expect(setCoachPersona('pip')).resolves.toEqual({ personaId: 'pip' });
+    fetchMock.mockResolvedValueOnce(ok({ personaId: 'kit' }));
+    await expect(setCoachPersona('kit')).resolves.toEqual({ personaId: 'kit' });
     const [url, init] = fetchMock.mock.calls[0];
     expect(url).toBe('https://api.example.com/me/coach/persona');
     expect(init.method).toBe('PUT');
-    expect(JSON.parse(init.body)).toEqual({ personaId: 'pip' });
+    expect(JSON.parse(init.body)).toEqual({ personaId: 'kit' });
   });
 });
 
