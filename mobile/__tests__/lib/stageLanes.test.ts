@@ -97,4 +97,17 @@ describe('layoutStageLanes rules', () => {
     expect(layoutStageLanes([], 300, 0).blocks).toEqual([]);
     expect(layoutStageLanes(MOCKUP_SEGMENTS, 0, 0).blocks).toEqual([]);
   });
+
+  it('draws nothing for a wake in the night that rounds to 0 min, and no links to it', () => {
+    const layout = layoutStageLanes([seg('LIGHT', 0, 60), seg('AWAKE', 60, 60.4), seg('DEEP', 60.4, 120)], 300, 0);
+    expect(layout.markers).toHaveLength(0);
+    expect(layout.blocks.map((b) => b.type)).toEqual(['LIGHT', 'DEEP']);
+    expect(layout.links).toHaveLength(0);
+  });
+
+  it('spans the night to the latest end, so an overlapping earlier segment stays inside the width', () => {
+    const layout = layoutStageLanes([seg('LIGHT', 0, 120), seg('REM', 50, 60)], 300, 0);
+    for (const b of layout.blocks) expect(b.left + b.width).toBeLessThanOrEqual(298);
+    expect(layout.blocks[0]!.width).toBeCloseTo(296 - 1);
+  });
 });

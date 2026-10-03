@@ -136,7 +136,8 @@ export function nightClock(
   const startOffset = startSec / 60;
   const endOffset = endSec / 60;
   // The DTO has no session instants, so the stage timeline stands in for its span.
-  const midpoint = stages.length > 0 ? (Date.parse(stages[0]!.start) + Date.parse(stages[stages.length - 1]!.end)) / 2 : Infinity;
+  // The latest end, not the last segment's: an earlier one can outlast it.
+  const midpoint = stages.length > 0 ? (Date.parse(stages[0]!.start) + Math.max(...stages.map((s) => Date.parse(s.end)))) / 2 : Infinity;
   return { offset: startOffset, at: (iso) => clockAt(iso, Date.parse(iso) >= midpoint ? endOffset : startOffset) };
 }
 

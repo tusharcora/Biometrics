@@ -161,7 +161,9 @@ export const COLORS = {
     sleepHeat2: 'rgb(88, 28, 135)',
     sleepHeat3: 'rgb(107, 33, 168)',
     sleepHeat4: 'rgb(147, 51, 234)',
-    // On a dark page the ramp flips: deep is the dimmest that still clears 3:1.
+    // On a dark page the stages are lighter tints of the same hues: indigo deep
+    // (the dimmest, still 3:1 on page and card) and light, magenta REM, orange
+    // awake; the text versions are paler again for small labels.
     sleepDeep: 'rgb(99, 102, 241)',
     sleepRem: 'rgb(232, 121, 249)',
     sleepLight: 'rgb(165, 180, 252)',

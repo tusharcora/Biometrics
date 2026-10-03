@@ -4,7 +4,7 @@ import Animated, { FadeIn, FadeInDown, useReducedMotion } from 'react-native-rea
 import Svg, { Defs, Line, LinearGradient, Path, Rect, Stop } from 'react-native-svg';
 import { useColorScheme } from 'nativewind';
 import type { StageType } from '../../api/sleep';
-import { midNightWakeIndexes, type StageSegment } from '../../lib/sleepCycles';
+import { midNightWakeIndexes, nightEndMs, type StageSegment } from '../../lib/sleepCycles';
 import { formatClock, formatShortDuration, type NightClock } from '../../lib/sleepStats';
 import { BLOCK_HEIGHT, LANE_ORDER, LANE_ROW, laneTop, layoutStageLanes } from '../../lib/stageLanes';
 import { mixWithWhite, withAlpha } from '../../lib/utils';
@@ -62,7 +62,7 @@ export function StageLanes({ stages, clock }: { stages: StageSegment[]; clock: N
   if (stages.length === 0) return null;
 
   const t0 = Date.parse(stages[0]!.start);
-  const t1 = Date.parse(stages[stages.length - 1]!.end);
+  const t1 = nightEndMs(stages);
   const axis = [t0, (t0 + t1) / 2, t1].map((t) => formatClock(clock.at(new Date(t).toISOString())));
   const colour = (type: StageType) => palette[STAGE_TOKEN[type]];
   const links = layout.links.map((l) => `M${l.x.toFixed(2)} ${l.y1} L${l.x.toFixed(2)} ${l.y2}`).join(' ');

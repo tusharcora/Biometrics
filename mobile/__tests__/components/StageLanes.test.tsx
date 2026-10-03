@@ -74,6 +74,22 @@ describe('StageLanes', () => {
   });
 });
 
+describe('StageLanes edge cases', () => {
+  it('ends the axis at the latest end when an earlier segment outlasts the last one', () => {
+    renderLanes([seg('LIGHT', 0, 120), seg('REM', 50, 60)]);
+
+    // 23:10 + 120 min, not 23:10 + 60 min.
+    expect(within(screen.getByTestId('stage-lanes-axis')).getByText('1:10 am')).toBeTruthy();
+  });
+
+  it('neither marks nor counts a wake that rounds to 0 min', () => {
+    renderLanes([seg('LIGHT', 0, 60), seg('AWAKE', 60, 60.4), seg('REM', 60.4, 120)]);
+
+    expect(screen.queryByTestId('stage-wake-marker')).toBeNull();
+    expect(screen.getByLabelText(/no wake-ups in the night$/)).toBeTruthy();
+  });
+});
+
 describe('stageLanesLabel', () => {
   it('says how many times the night was interrupted, or that it was not', () => {
     const minutes = { AWAKE: 5, REM: 60, LIGHT: 200, DEEP: 80 };

@@ -3,7 +3,7 @@
 // (the approved Night.dc.html mockup's maths). Pure, so it is unit-tested.
 
 import type { StageType } from '../api/sleep';
-import { findSleepCycles, midNightWakeIndexes, type StageSegment } from './sleepCycles';
+import { findSleepCycles, midNightBlipIndexes, midNightWakeIndexes, nightEndMs, type StageSegment } from './sleepCycles';
 
 // Top to bottom: the lighter the sleep, the higher its lane.
 export const LANE_ORDER: StageType[] = ['AWAKE', 'REM', 'LIGHT', 'DEEP'];
@@ -76,18 +76,21 @@ export function layoutStageLanes(segments: StageSegment[], width: number, offset
   const empty = { height, blocks: [], markers: [], links: [], hourGuides: [], cyclePills: [], minutes };
   if (segments.length === 0 || width <= 0) return empty;
   const t0 = Date.parse(segments[0]!.start);
-  const t1 = Date.parse(segments[segments.length - 1]!.end);
+  const t1 = nightEndMs(segments);
   const span = t1 - t0;
   if (!(span > 0)) return empty;
   const x = (t: number) => PAD + ((t - t0) / span) * (width - 2 * PAD);
 
   const midNight = midNightWakeIndexes(segments);
+  // A wake in the night under half a minute is not drawn, nor linked to.
+  const blips = midNightBlipIndexes(segments);
   const blocks: LaneBlock[] = [];
   const markers: WakeMarker[] = [];
   segments.forEach((s, index) => {
     const start = Date.parse(s.start);
     const end = Date.parse(s.end);
     const at = (start - t0) / span;
+    if (blips.has(index)) return;
     if (midNight.has(index) && end - start < MARKER_MAX_MS) {
       markers.push({ index, x: x((start + end) / 2), y: laneTop('AWAKE') + BLOCK_HEIGHT / 2, start: s.start, at });
       return;
@@ -102,6 +105,7 @@ export function layoutStageLanes(segments: StageSegment[], width: number, offset
   for (let i = 0; i + 1 < segments.length; i++) {
     const a = segments[i]!;
     const b = segments[i + 1]!;
+    if (blips.has(i) || blips.has(i + 1)) continue;
     if (a.type === b.type || Math.abs(Date.parse(b.start) - Date.parse(a.end)) > LINK_GAP_MS) continue;
     const down = LANE_ORDER.indexOf(b.type) > LANE_ORDER.indexOf(a.type);
     links.push({

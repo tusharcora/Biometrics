@@ -102,4 +102,9 @@ describe('midNightWakeIndexes', () => {
     ]);
     expect([...indexes]).toEqual([2]);
   });
+
+  it('ignores a wake that rounds to 0 min', () => {
+    const indexes = midNightWakeIndexes([seg('LIGHT', 0, 60), seg('AWAKE', 60, 60.4), seg('LIGHT', 60.4, 90), seg('AWAKE', 90, 91), seg('REM', 91, 120)]);
+    expect([...indexes]).toEqual([3]);
+  });
 });

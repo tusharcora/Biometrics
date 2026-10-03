@@ -139,6 +139,16 @@ describe('nightClock', () => {
     expect(clock.at('2026-11-01T10:00:00.000Z')).toBe('05:00');
   });
 
+  it('finds the midpoint from the latest end, not the last segment\'s', () => {
+    // The first stage runs to 11:00Z; the last one ends at 05:00Z. Midpoint 07:00Z.
+    const clock = nightClock({ bedtime: '23:00', startUtcOffsetSeconds: -14400, endUtcOffsetSeconds: -18000 }, [
+      stage('2026-11-01T03:00:00.000Z', '2026-11-01T11:00:00.000Z'),
+      stage('2026-11-01T04:00:00.000Z', '2026-11-01T05:00:00.000Z'),
+    ]);
+    expect(clock.at('2026-11-01T06:00:00.000Z')).toBe('02:00');
+    expect(clock.at('2026-11-01T07:00:00.000Z')).toBe('02:00');
+  });
+
   it('uses whichever offset it has when the other is unknown', () => {
     const clock = nightClock({ bedtime: '23:00', startUtcOffsetSeconds: null, endUtcOffsetSeconds: -18000 }, [
       stage('2026-11-01T04:00:00.000Z', '2026-11-01T11:00:00.000Z'),

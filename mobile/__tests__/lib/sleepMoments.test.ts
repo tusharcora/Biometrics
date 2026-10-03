@@ -24,6 +24,11 @@ describe('findSleepMoments', () => {
     expect(wakeUps.map((w) => w.minutes)).toEqual([30, 4]);
   });
 
+  it('does not count a wake that rounds to 0 min', () => {
+    const { wakeUps } = findSleepMoments([seg('LIGHT', 0, 60), seg('AWAKE', 60, 60.4), seg('LIGHT', 60.4, 90), seg('AWAKE', 90, 93), seg('REM', 93, 120)], null);
+    expect(wakeUps).toEqual([{ minutes: 3, start: seg('AWAKE', 90, 90).start }]);
+  });
+
   it('omits what a night without REM or wake-ups does not have', () => {
     expect(findSleepMoments([seg('LIGHT', 0, 60), seg('DEEP', 60, 100), seg('LIGHT', 100, 150)], null)).toEqual({
       fellAsleepMinutes: 0,

@@ -30,18 +30,35 @@ export interface SleepCycles {
 // REM this close to the previous REM period continues it rather than starting another.
 const REM_JOIN_MS = 15 * 60000;
 
-/** Indexes of AWAKE segments strictly between the night's first and last sleep: waking in the night. */
-export function midNightWakeIndexes(segments: StageSegment[]): Set<number> {
+/** The latest end across the segments (an earlier one can outlast the last), as ms. */
+export function nightEndMs(segments: { end: string }[]): number {
+  return Math.max(...segments.map((s) => Date.parse(s.end)));
+}
+
+/** A segment shorter than half a minute: it rounds to 0 min, so it is not shown or counted. */
+export function roundsToZero(s: StageSegment): boolean {
+  return Math.round((Date.parse(s.end) - Date.parse(s.start)) / 60000) === 0;
+}
+
+/** Whether segment `i` is AWAKE strictly between the night's first and last sleep. */
+function betweenSleep(segments: StageSegment[], i: number): boolean {
+  if (segments[i]!.type !== 'AWAKE') return false;
   const first = segments.findIndex((s) => s.type !== 'AWAKE');
-  let last = -1;
-  segments.forEach((s, i) => {
-    if (s.type !== 'AWAKE') last = i;
-  });
-  const out = new Set<number>();
-  for (let i = first + 1; first >= 0 && i < last; i++) {
-    if (segments[i]!.type === 'AWAKE') out.add(i);
-  }
-  return out;
+  const last = segments.map((s) => s.type !== 'AWAKE').lastIndexOf(true);
+  return first >= 0 && i > first && i < last;
+}
+
+/** Indexes of zero-minute AWAKE blips between the first and last sleep: neither drawn nor counted. */
+export function midNightBlipIndexes(segments: StageSegment[]): Set<number> {
+  return new Set(segments.map((_, i) => i).filter((i) => betweenSleep(segments, i) && roundsToZero(segments[i]!)));
+}
+
+/**
+ * Indexes of AWAKE segments strictly between the night's first and last sleep:
+ * waking in the night. One that rounds to 0 min is not a wake-up.
+ */
+export function midNightWakeIndexes(segments: StageSegment[]): Set<number> {
+  return new Set(segments.map((_, i) => i).filter((i) => betweenSleep(segments, i) && !roundsToZero(segments[i]!)));
 }
 
 /** Whole minutes per stage of the segments that fall within [from, to), clipped to it. */
@@ -59,7 +76,7 @@ export function findSleepCycles(segments: StageSegment[]): SleepCycles {
   const onsetSegment = segments.find((s) => s.type !== 'AWAKE');
   if (!onsetSegment) return { cycles: [], tail: { awakeMinutes: 0, sleepMinutes: 0 }, averageMinutes: null };
   const onset = Date.parse(onsetSegment.start);
-  const nightEnd = Math.max(...segments.map((s) => Date.parse(s.end)));
+  const nightEnd = nightEndMs(segments);
 
   // [start, end] of each REM period, in order.
   const remPeriods: [number, number][] = [];
