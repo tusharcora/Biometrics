@@ -66,6 +66,11 @@ describe('design tokens (new semantic colors)', () => {
     ['sleep-heat-2', 'sleepHeat2'],
     ['sleep-heat-3', 'sleepHeat3'],
     ['sleep-heat-4', 'sleepHeat4'],
+    // Sleep depth: the four stage colours of the hypnogram and stage bars.
+    ['sleep-deep', 'sleepDeep'],
+    ['sleep-rem', 'sleepRem'],
+    ['sleep-light', 'sleepLight'],
+    ['sleep-awake', 'sleepAwake'],
     ['metric-steps', 'metricSteps'],
     ['metric-heart', 'metricHeart'],
     ['metric-sleep', 'metricSleep'],
@@ -128,6 +133,22 @@ describe('design tokens (new semantic colors)', () => {
     for (const surface of surfaces) {
       expect(contrast(readVar(block, name), readVar(block, surface))).toBeGreaterThanOrEqual(4.5);
     }
+  });
+
+  // Stage colours are graphical marks (hypnogram blocks, stage bars), so they
+  // need WCAG 1.4.11's 3:1 against the page they are drawn on.
+  it.each([
+    ['sleep-deep', 'light'],
+    ['sleep-rem', 'light'],
+    ['sleep-light', 'light'],
+    ['sleep-awake', 'light'],
+    ['sleep-deep', 'dark'],
+    ['sleep-rem', 'dark'],
+    ['sleep-light', 'dark'],
+    ['sleep-awake', 'dark'],
+  ] as const)('--color-%s reaches 3:1 against the %s background', (name, theme) => {
+    const block = theme === 'light' ? lightBlock : darkBlock;
+    expect(contrast(readVar(block, name), readVar(block, 'background'))).toBeGreaterThanOrEqual(3);
   });
 
   it.each(NEW_TOKENS)('--color-%s is registered with Tailwind', (cssName) => {

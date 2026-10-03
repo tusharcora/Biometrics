@@ -94,6 +94,12 @@ export const COLORS = {
     sleepHeat2: 'rgb(233, 213, 255)',
     sleepHeat3: 'rgb(216, 180, 254)',
     sleepHeat4: 'rgb(147, 51, 234)',
+    // Sleep stages (hypnogram, stage bars): deep is the darkest purple, light the
+    // palest that still clears 3:1 on the page; awake is the warm odd one out.
+    sleepDeep: 'rgb(88, 28, 135)',
+    sleepRem: 'rgb(147, 51, 234)',
+    sleepLight: 'rgb(178, 104, 249)',
+    sleepAwake: 'rgb(234, 88, 12)',
     // One accent per metric (the same values as METRIC_CONFIG), used only on
     // that metric's own number, ring and line -- everything else stays neutral.
     metricSteps: 'rgb(234, 88, 12)',
@@ -149,6 +155,11 @@ export const COLORS = {
     sleepHeat2: 'rgb(88, 28, 135)',
     sleepHeat3: 'rgb(107, 33, 168)',
     sleepHeat4: 'rgb(147, 51, 234)',
+    // On a dark page the ramp flips: deep is the dimmest that still clears 3:1.
+    sleepDeep: 'rgb(134, 41, 217)',
+    sleepRem: 'rgb(168, 85, 247)',
+    sleepLight: 'rgb(216, 180, 254)',
+    sleepAwake: 'rgb(251, 146, 60)',
     metricSteps: 'rgb(251, 146, 60)',
     metricHeart: 'rgb(251, 113, 133)',
     metricSleep: 'rgb(147, 51, 234)',

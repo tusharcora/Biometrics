@@ -38,6 +38,10 @@
   --color-sleep-heat-2: 233 213 255;
   --color-sleep-heat-3: 216 180 254;
   --color-sleep-heat-4: 147 51 234;
+  --color-sleep-deep: 88 28 135;
+  --color-sleep-rem: 147 51 234;
+  --color-sleep-light: 178 104 249;
+  --color-sleep-awake: 234 88 12;
   --color-metric-steps: 234 88 12;
   --color-metric-heart: 225 29 72;
   --color-metric-sleep: 147 51 234;
@@ -87,6 +91,10 @@
     --color-sleep-heat-2: 88 28 135;
     --color-sleep-heat-3: 107 33 168;
     --color-sleep-heat-4: 147 51 234;
+    --color-sleep-deep: 134 41 217;
+    --color-sleep-rem: 168 85 247;
+    --color-sleep-light: 216 180 254;
+    --color-sleep-awake: 251 146 60;
     --color-metric-steps: 251 146 60;
     --color-metric-heart: 251 113 133;
     --color-metric-sleep: 147 51 234;

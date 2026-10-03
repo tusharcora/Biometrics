@@ -10,7 +10,7 @@ const TODAY = '2026-09-22';
 const NO_SLEEP: SleepState = { phase: 'ready', nights: new Map(), earliestDate: '2025-01-01' };
 
 function nightOf(date: string, minutesAsleep: number, extra: Partial<SleepNight> = {}): [string, SleepNight] {
-  return [date, { date, minutesAsleep, minutesInBed: null, bedtime: null, wakeTime: null, sleepScore: null, ...extra }];
+  return [date, { date, minutesAsleep, minutesInBed: null, bedtime: null, wakeTime: null, sleepScore: null, minutesAwake: null, stageMinutes: null, hasStages: false, ...extra }];
 }
 
 function sleepOf(nights: [string, SleepNight][], earliestDate: string | null = '2025-01-01'): SleepState {

@@ -6,7 +6,7 @@ function nights(entries: [string, number, string?][]): Map<string, SleepNight> {
   return new Map(
     entries.map(([date, minutesAsleep, bedtime]) => [
       date,
-      { date, minutesAsleep, minutesInBed: null, bedtime: bedtime ?? null, wakeTime: null, sleepScore: null },
+      { date, minutesAsleep, minutesInBed: null, bedtime: bedtime ?? null, wakeTime: null, sleepScore: null, minutesAwake: null, stageMinutes: null, hasStages: false },
     ]),
   );
 }

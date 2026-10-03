@@ -22,6 +22,9 @@ export interface FactorDTO {
   factor: FactorKey;
   label: string;
   z: number | null;
+  // SLEEP_DEBT and SLEEP_DURATION only: the sleep goal that score used. Absent
+  // on older scores; never guess one.
+  goalMinutes?: number;
   weight: number;
   contribution: number;
   points: number;
