@@ -190,6 +190,23 @@ describe('GET /me/sleep', () => {
     ]);
   }
 
+  // A night stored without a summary or stages, as every pre-stages night is.
+  const NO_DEPTH = { minutesAwake: null, stageMinutes: null, hasStages: false };
+
+  async function connect(userId: string, status: 'CONNECTED' | 'DISCONNECTED', sleepStagesBackfilledAt: Date | null) {
+    await prisma.healthConnection.create({
+      data: {
+        userId,
+        healthUserId: `sleep-conn-${randomUUID()}`,
+        encryptedAccessToken: 'x',
+        encryptedRefreshToken: 'x',
+        tokenExpiresAt: new Date(Date.now() + 3600_000),
+        status,
+        sleepStagesBackfilledAt,
+      },
+    });
+  }
+
   async function getSleep(userId: string, query: Record<string, string>) {
     const authHeader = await authHeaderFor(userId);
     return request(await testServer(createApp())).get('/me/sleep').query(query).set(authHeader);
@@ -204,7 +221,7 @@ describe('GET /me/sleep', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.nights).toEqual([
-      { date: '2026-09-24', minutesAsleep: 467, minutesInBed: 486, bedtime: '23:52', wakeTime: '07:58', sleepScore: null },
+      { date: '2026-09-24', minutesAsleep: 467, minutesInBed: 486, bedtime: '23:52', wakeTime: '07:58', sleepScore: null, ...NO_DEPTH },
     ]);
     expect(res.body.earliestDate).toBe('2026-09-24');
   });
@@ -218,7 +235,7 @@ describe('GET /me/sleep', () => {
     const res = await getSleep(user.id, { from: '2026-09-10', to: '2026-09-10' });
 
     expect(res.body.nights).toEqual([
-      { date: '2026-09-10', minutesAsleep: 430, minutesInBed: 465, bedtime: '22:30', wakeTime: '06:15', sleepScore: null },
+      { date: '2026-09-10', minutesAsleep: 430, minutesInBed: 465, bedtime: '22:30', wakeTime: '06:15', sleepScore: null, ...NO_DEPTH },
     ]);
   });
 
@@ -230,7 +247,7 @@ describe('GET /me/sleep', () => {
     const res = await getSleep(user.id, { from: '2026-09-12', to: '2026-09-12' });
 
     expect(res.body.nights).toEqual([
-      { date: '2026-09-12', minutesAsleep: 455, minutesInBed: 490, bedtime: '23:30', wakeTime: '07:00', sleepScore: null },
+      { date: '2026-09-12', minutesAsleep: 455, minutesInBed: 490, bedtime: '23:30', wakeTime: '07:00', sleepScore: null, ...NO_DEPTH },
     ]);
   });
 
@@ -243,7 +260,7 @@ describe('GET /me/sleep', () => {
     const res = await getSleep(user.id, { from: '2026-09-13', to: '2026-09-13' });
 
     expect(res.body.nights).toEqual([
-      { date: '2026-09-13', minutesAsleep: 405, minutesInBed: 510, bedtime: '03:30', wakeTime: '07:00', sleepScore: null },
+      { date: '2026-09-13', minutesAsleep: 405, minutesInBed: 510, bedtime: '03:30', wakeTime: '07:00', sleepScore: null, ...NO_DEPTH },
     ]);
   });
 
@@ -281,7 +298,105 @@ describe('GET /me/sleep', () => {
     const res = await getSleep(user.id, { from: '2026-09-01', to: '2026-09-30' });
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ nights: [], earliestDate: null });
+    expect(res.body).toEqual({ nights: [], earliestDate: null, stagesBackfillPending: false });
+  });
+
+  it('reports the main session\'s stage minutes, minutes awake and that it has stages', async () => {
+    const user = await createUser('sleep-stages');
+    await storeSleepSessions(user.id, [
+      {
+        startTime: new Date('2026-09-16T23:00:00Z'), endTime: new Date('2026-09-17T07:00:00Z'), minutesAsleep: 420,
+        startUtcOffsetSeconds: 0, endUtcOffsetSeconds: 0, sleepType: 'STAGES',
+        minutesAwake: 60, deepMinutes: 80, lightMinutes: 240, remMinutes: 100, awakeMinutes: 60,
+        stages: [
+          { type: 'LIGHT', startTime: new Date('2026-09-16T23:00:00Z'), endTime: new Date('2026-09-17T01:00:00Z') },
+          { type: 'DEEP', startTime: new Date('2026-09-17T01:00:00Z'), endTime: new Date('2026-09-17T02:20:00Z') },
+          { type: 'AWAKE', startTime: new Date('2026-09-17T02:20:00Z'), endTime: new Date('2026-09-17T03:20:00Z') },
+          { type: 'REM', startTime: new Date('2026-09-17T03:20:00Z'), endTime: new Date('2026-09-17T05:00:00Z') },
+        ],
+      },
+    ]);
+
+    const res = await getSleep(user.id, { from: '2026-09-17', to: '2026-09-17' });
+
+    expect(res.body.nights).toEqual([
+      {
+        date: '2026-09-17', minutesAsleep: 420, minutesInBed: 480, bedtime: '23:00', wakeTime: '07:00', sleepScore: null,
+        minutesAwake: 60, stageMinutes: { deep: 80, light: 240, rem: 100, awake: 60 }, hasStages: true,
+      },
+    ]);
+  });
+
+  it('does not count a night whose only stages are AWAKE as having stages', async () => {
+    const user = await createUser('sleep-awake-only');
+    await storeSleepSessions(user.id, [
+      {
+        startTime: new Date('2026-09-17T23:00:00Z'), endTime: new Date('2026-09-18T07:00:00Z'), minutesAsleep: 400,
+        startUtcOffsetSeconds: 0, endUtcOffsetSeconds: 0, minutesAwake: 80, awakeMinutes: 80,
+        stages: [{ type: 'AWAKE', startTime: new Date('2026-09-18T02:00:00Z'), endTime: new Date('2026-09-18T03:20:00Z') }],
+      },
+    ]);
+
+    const res = await getSleep(user.id, { from: '2026-09-18', to: '2026-09-18' });
+
+    expect(res.body.nights[0].hasStages).toBe(false);
+    // A partial summary still reports, with the missing stages as zero.
+    expect(res.body.nights[0].stageMinutes).toEqual({ deep: 0, light: 0, rem: 0, awake: 80 });
+    expect(res.body.nights[0].minutesAwake).toBe(80);
+  });
+
+  it('takes the depth fields from the main session, not a nap', async () => {
+    const user = await createUser('sleep-depth-main');
+    await storeSleepSessions(user.id, [
+      {
+        startTime: new Date('2026-09-18T23:00:00Z'), endTime: new Date('2026-09-19T07:00:00Z'), minutesAsleep: 420,
+        startUtcOffsetSeconds: 0, endUtcOffsetSeconds: 0,
+      },
+      {
+        startTime: new Date('2026-09-19T14:00:00Z'), endTime: new Date('2026-09-19T14:40:00Z'), minutesAsleep: 35,
+        startUtcOffsetSeconds: 0, endUtcOffsetSeconds: 0, minutesAwake: 5, deepMinutes: 0, lightMinutes: 35, remMinutes: 0, awakeMinutes: 5,
+        stages: [{ type: 'LIGHT', startTime: new Date('2026-09-19T14:00:00Z'), endTime: new Date('2026-09-19T14:35:00Z') }],
+      },
+    ]);
+
+    const res = await getSleep(user.id, { from: '2026-09-19', to: '2026-09-19' });
+
+    expect(res.body.nights[0]).toMatchObject(NO_DEPTH);
+  });
+
+  it('reports a stage backfill as pending while a connected account has not been backfilled', async () => {
+    const user = await createUser('sleep-backfill-pending');
+    await connect(user.id, 'CONNECTED', null);
+
+    const res = await getSleep(user.id, { from: '2026-09-01', to: '2026-09-30' });
+
+    expect(res.body.stagesBackfillPending).toBe(true);
+  });
+
+  it('reports no pending stage backfill once the marker is set', async () => {
+    const user = await createUser('sleep-backfill-done');
+    await connect(user.id, 'CONNECTED', new Date('2026-10-02T00:00:00Z'));
+
+    const res = await getSleep(user.id, { from: '2026-09-01', to: '2026-09-30' });
+
+    expect(res.body.stagesBackfillPending).toBe(false);
+  });
+
+  it('reports no pending stage backfill for a disconnected account', async () => {
+    const user = await createUser('sleep-backfill-disconnected');
+    await connect(user.id, 'DISCONNECTED', null);
+
+    const res = await getSleep(user.id, { from: '2026-09-01', to: '2026-09-30' });
+
+    expect(res.body.stagesBackfillPending).toBe(false);
+  });
+
+  it('reports no pending stage backfill without a connection', async () => {
+    const user = await createUser('sleep-backfill-none');
+
+    const res = await getSleep(user.id, { from: '2026-09-01', to: '2026-09-30' });
+
+    expect(res.body.stagesBackfillPending).toBe(false);
   });
 
   it('validates the range like /me/activity', async () => {
@@ -305,7 +420,7 @@ describe('GET /me/sleep', () => {
 
     const res = await getSleep(me.id, { from: '2026-09-01', to: '2026-09-30' });
 
-    expect(res.body).toEqual({ nights: [], earliestDate: null });
+    expect(res.body).toEqual({ nights: [], earliestDate: null, stagesBackfillPending: false });
   });
 });
 
