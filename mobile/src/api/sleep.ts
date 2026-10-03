@@ -36,6 +36,10 @@ export interface SleepNightDetail {
   // Local "HH:MM" start and end of the main session.
   bedtime: string;
   wakeTime: string;
+  // The main session's UTC offsets at its start and end (they differ across a
+  // DST change); null when unknown or from an older server.
+  startUtcOffsetSeconds: number | null;
+  endUtcOffsetSeconds: number | null;
   minutesAsleep: number;
   minutesInBed: number;
   minutesAwake: number | null;
@@ -91,8 +95,10 @@ export async function fetchSleep(from: string, to: string): Promise<SleepActivit
   };
 }
 
-export function fetchSleepNight(date: string): Promise<SleepNightDetail> {
-  return apiFetch<SleepNightDetail>(`/me/sleep/night/${encodeURIComponent(date)}`);
+// An older server sends no session offsets, so they default to unknown.
+export async function fetchSleepNight(date: string): Promise<SleepNightDetail> {
+  const res = await apiFetch<SleepNightDetail>(`/me/sleep/night/${encodeURIComponent(date)}`);
+  return { ...res, startUtcOffsetSeconds: res.startUtcOffsetSeconds ?? null, endUtcOffsetSeconds: res.endUtcOffsetSeconds ?? null };
 }
 
 export function fetchSleepRegularity(days: 7 | 30): Promise<SleepRegularity> {

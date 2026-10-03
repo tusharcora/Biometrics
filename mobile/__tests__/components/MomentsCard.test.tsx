@@ -1,11 +1,14 @@
 import React from 'react';
 import { render, screen } from '@testing-library/react-native';
-import { MOCKUP_OFFSET, MOCKUP_SEGMENTS, seg } from '../../jest-mocks/sleepNightFixture';
+import { MOCKUP_CLOCK, MOCKUP_SEGMENTS, seg } from '../../jest-mocks/sleepNightFixture';
+import { nightClock } from '../../src/lib/sleepStats';
+
+const UTC = nightClock({ bedtime: '00:00', startUtcOffsetSeconds: 0, endUtcOffsetSeconds: 0 }, []);
 import { MomentsCard } from '../../src/components/sleep/MomentsCard';
 
 describe('MomentsCard', () => {
   it('shows the stage mix of time asleep around the total', () => {
-    render(<MomentsCard stages={MOCKUP_SEGMENTS} offset={MOCKUP_OFFSET} minutesToFallAsleep={null} />);
+    render(<MomentsCard stages={MOCKUP_SEGMENTS} clock={MOCKUP_CLOCK} minutesToFallAsleep={null} minutesAsleep={444} />);
 
     const card = screen.getByTestId('moments-card');
     expect(card).toHaveTextContent(/7h 24m\s*asleep/);
@@ -16,8 +19,17 @@ describe('MomentsCard', () => {
     expect(screen.getByLabelText('Stage mix: deep 20 percent, light 52 percent, REM 28 percent of time asleep')).toBeTruthy();
   });
 
+  it('puts the night\'s own time asleep in the centre, the same number as the header', () => {
+    render(<MomentsCard stages={MOCKUP_SEGMENTS} clock={MOCKUP_CLOCK} minutesToFallAsleep={null} minutesAsleep={450} />);
+
+    const card = screen.getByTestId('moments-card');
+    expect(card).toHaveTextContent(/7h 30m\s*asleep/);
+    // The slices and rows stay shares of the stage sums.
+    expect(card).toHaveTextContent(/Deep\s*1h 30m\s*20%/);
+  });
+
   it('lists the night\'s highlights in order', () => {
-    render(<MomentsCard stages={MOCKUP_SEGMENTS} offset={MOCKUP_OFFSET} minutesToFallAsleep={null} />);
+    render(<MomentsCard stages={MOCKUP_SEGMENTS} clock={MOCKUP_CLOCK} minutesToFallAsleep={null} minutesAsleep={444} />);
 
     const rows = screen.getAllByTestId('moment-row');
     expect(rows).toHaveLength(4);
@@ -28,13 +40,13 @@ describe('MomentsCard', () => {
   });
 
   it('uses the night\'s own time to fall asleep when it has one', () => {
-    render(<MomentsCard stages={MOCKUP_SEGMENTS} offset={MOCKUP_OFFSET} minutesToFallAsleep={12} />);
+    render(<MomentsCard stages={MOCKUP_SEGMENTS} clock={MOCKUP_CLOCK} minutesToFallAsleep={12} minutesAsleep={444} />);
 
     expect(screen.getAllByTestId('moment-row')[0]).toHaveTextContent(/Fell asleep\s*after getting into bed\s*12m/);
   });
 
   it('leaves out highlights the night does not have', () => {
-    render(<MomentsCard stages={[seg('LIGHT', 0, 60), seg('DEEP', 60, 100), seg('LIGHT', 100, 150)]} offset={0} minutesToFallAsleep={null} />);
+    render(<MomentsCard stages={[seg('LIGHT', 0, 60), seg('DEEP', 60, 100), seg('LIGHT', 100, 150)]} clock={UTC} minutesToFallAsleep={null} minutesAsleep={444} />);
 
     const rows = screen.getAllByTestId('moment-row');
     expect(rows).toHaveLength(2);

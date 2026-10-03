@@ -19,6 +19,8 @@ const DETAIL: SleepNightDetail = {
   date: '2026-10-01',
   bedtime: '23:10',
   wakeTime: '07:00',
+  startUtcOffsetSeconds: 0,
+  endUtcOffsetSeconds: 0,
   minutesAsleep: 400,
   minutesInBed: 470,
   minutesAwake: 50,

@@ -18,7 +18,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { formatLongDay } from '../lib/heatmap';
 import { coachEntryRoute, useCoachStatus } from '../lib/useCoachStatus';
-import { formatClock, formatDuration, formatShortDuration, nightUtcOffset } from '../lib/sleepStats';
+import { formatClock, formatDuration, formatShortDuration, nightClock } from '../lib/sleepStats';
 import { navigateToCoachEntry } from '../navigation/coachNavigation';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { useSync } from '../sync/SyncProvider';
@@ -65,8 +65,8 @@ function NightHeadline({ night }: { night: SleepNightDetail }) {
 // `onAsk` is null when the coach must not be offered (disabled or status unknown).
 function NightBody({ night, coachName, onAsk }: { night: SleepNightDetail; coachName: string; onAsk: (() => void) | null }) {
   const stages = night.hasStages && night.stages.length > 0 ? night.stages : null;
-  // Stages are UTC instants; the lanes, cycles and moments tell time in the night's own zone.
-  const offset = stages ? nightUtcOffset(night.bedtime, stages[0]!.start) : 0;
+  // Stages are UTC instants; the lanes, cycles and moments tell time on the session's own clock.
+  const clock = nightClock(night, stages ?? []);
   const usual = usualLine(night.minutesAsleep, night.usualMinutesAsleep);
   // The backend can emit a zero-length nap in rare cases.
   const naps = night.naps.filter((n) => n.minutesAsleep > 0);
@@ -76,10 +76,10 @@ function NightBody({ night, coachName, onAsk }: { night: SleepNightDetail; coach
         <>
           <Card className="gap-2.5">
             <SectionLabel>Sleep stages</SectionLabel>
-            <StageLanes stages={stages} offset={offset} />
+            <StageLanes stages={stages} clock={clock} />
           </Card>
-          <SleepCyclesCard stages={stages} offset={offset} />
-          <MomentsCard stages={stages} offset={offset} minutesToFallAsleep={night.minutesToFallAsleep} />
+          <SleepCyclesCard stages={stages} clock={clock} />
+          <MomentsCard stages={stages} clock={clock} minutesToFallAsleep={night.minutesToFallAsleep} minutesAsleep={night.minutesAsleep} />
         </>
       ) : night.minutesInBed > 0 ? (
         <Card className="gap-2">

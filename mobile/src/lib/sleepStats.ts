@@ -110,6 +110,36 @@ export function clockAt(iso: string, offset: number): string {
   return `${String(local.getUTCHours()).padStart(2, '0')}:${String(local.getUTCMinutes()).padStart(2, '0')}`;
 }
 
+export interface NightClock {
+  // Minutes from UTC at bedtime (for whole-hour guides).
+  offset: number;
+  /** An instant's local "HH:MM" in this night, for formatClock. */
+  at: (iso: string) => string;
+}
+
+/**
+ * The clock a night's stage instants are told on: the main session's own UTC
+ * offsets from the server. When they differ (the clocks changed in the night),
+ * times from the night's midpoint on use the end offset. Only when the server
+ * sends neither is the offset read off bedtime (nightUtcOffset).
+ */
+export function nightClock(
+  night: { bedtime: string; startUtcOffsetSeconds: number | null; endUtcOffsetSeconds: number | null },
+  stages: { start: string; end: string }[],
+): NightClock {
+  const startSec = night.startUtcOffsetSeconds ?? night.endUtcOffsetSeconds;
+  const endSec = night.endUtcOffsetSeconds ?? night.startUtcOffsetSeconds;
+  if (startSec === null || endSec === null) {
+    const offset = stages.length > 0 ? nightUtcOffset(night.bedtime, stages[0]!.start) : 0;
+    return { offset, at: (iso) => clockAt(iso, offset) };
+  }
+  const startOffset = startSec / 60;
+  const endOffset = endSec / 60;
+  // The DTO has no session instants, so the stage timeline stands in for its span.
+  const midpoint = stages.length > 0 ? (Date.parse(stages[0]!.start) + Date.parse(stages[stages.length - 1]!.end)) / 2 : Infinity;
+  return { offset: startOffset, at: (iso) => clockAt(iso, Date.parse(iso) >= midpoint ? endOffset : startOffset) };
+}
+
 /** One line comparing a night to the visible range's average; null when there is nothing to compare. */
 export function compareSleepToAverage(minutes: number, average: number | null): string | null {
   if (average === null || average <= 0) return null;

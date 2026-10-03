@@ -5,7 +5,7 @@ import Svg, { Defs, Line, LinearGradient, Path, Rect, Stop } from 'react-native-
 import { useColorScheme } from 'nativewind';
 import type { StageType } from '../../api/sleep';
 import { midNightWakeIndexes, type StageSegment } from '../../lib/sleepCycles';
-import { clockAt, formatClock, formatShortDuration } from '../../lib/sleepStats';
+import { formatClock, formatShortDuration, type NightClock } from '../../lib/sleepStats';
 import { BLOCK_HEIGHT, LANE_ORDER, LANE_ROW, laneTop, layoutStageLanes } from '../../lib/stageLanes';
 import { mixWithWhite, withAlpha } from '../../lib/utils';
 import { COLORS } from '../../theme';
@@ -51,19 +51,19 @@ export function stageLanesLabel(minutes: Record<StageType, number>, wakeUps: num
 // solid block in its own lane, so lane and colour both name the stage, with
 // thin links where one stage hands over to the next, a marker for each brief
 // wake in the night, the sleep cycles as numbered pills beneath, and a local
-// time axis. `offset` is the night's minutes from UTC (nightUtcOffset).
-export function StageLanes({ stages, offset }: { stages: StageSegment[]; offset: number }) {
+// time axis. `clock` tells the night's local time (nightClock).
+export function StageLanes({ stages, clock }: { stages: StageSegment[]; clock: NightClock }) {
   const { colorScheme } = useColorScheme();
   const dark = colorScheme !== 'light';
   const palette = dark ? COLORS.dark : COLORS.light;
   const reduced = useReducedMotion();
   const [width, setWidth] = useState(0);
-  const layout = useMemo(() => layoutStageLanes(stages, width, offset), [stages, width, offset]);
+  const layout = useMemo(() => layoutStageLanes(stages, width, clock.offset), [stages, width, clock.offset]);
   if (stages.length === 0) return null;
 
   const t0 = Date.parse(stages[0]!.start);
   const t1 = Date.parse(stages[stages.length - 1]!.end);
-  const axis = [t0, (t0 + t1) / 2, t1].map((t) => formatClock(clockAt(new Date(t).toISOString(), offset)));
+  const axis = [t0, (t0 + t1) / 2, t1].map((t) => formatClock(clock.at(new Date(t).toISOString())));
   const colour = (type: StageType) => palette[STAGE_TOKEN[type]];
   const links = layout.links.map((l) => `M${l.x.toFixed(2)} ${l.y1} L${l.x.toFixed(2)} ${l.y2}`).join(' ');
 

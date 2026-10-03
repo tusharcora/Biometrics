@@ -2,7 +2,7 @@ import React from 'react';
 import { View } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import { findSleepCycles, type CycleTail, type SleepCycle, type StageSegment } from '../../lib/sleepCycles';
-import { clockAt, formatClock, formatShortDuration } from '../../lib/sleepStats';
+import { formatClock, formatShortDuration, type NightClock } from '../../lib/sleepStats';
 import { COLORS } from '../../theme';
 import { Card } from '../ui/card';
 import { SectionLabel } from '../ui/section-label';
@@ -16,7 +16,8 @@ function spokenMinutes(minutes: number): string {
 
 /** What followed the last cycle, or null when the last cycle ended the night. */
 export function tailLine(tail: CycleTail): string | null {
-  if (tail.sleepMinutes > 0) return `Then ${spokenMinutes(tail.sleepMinutes)} of light sleep before you woke.`;
+  // The tail can hold any stage (and a brief wake), so it is just "sleep".
+  if (tail.sleepMinutes > 0) return `Then ${spokenMinutes(tail.sleepMinutes)} of sleep before you woke.`;
   if (tail.awakeMinutes > 0) return `Then ${spokenMinutes(tail.awakeMinutes)} awake before you got up.`;
   return null;
 }
@@ -35,7 +36,7 @@ function cycleParts(stages: StageSegment[], cycle: SleepCycle) {
 // The night's sleep cycles (spec: Night.dc.html): one row per cycle with its
 // length, when it began, a stage bar scaled to the longest cycle and its deep,
 // REM and light minutes, then a line on how the night ended.
-export function SleepCyclesCard({ stages, offset }: { stages: StageSegment[]; offset: number }) {
+export function SleepCyclesCard({ stages, clock }: { stages: StageSegment[]; clock: NightClock }) {
   const { colorScheme } = useColorScheme();
   const palette = colorScheme === 'light' ? COLORS.light : COLORS.dark;
   const { cycles, tail, averageMinutes } = findSleepCycles(stages);
@@ -64,7 +65,7 @@ export function SleepCyclesCard({ stages, offset }: { stages: StageSegment[]; of
                 {formatShortDuration(c.minutes)}
               </Text>
               <Text className="text-xs text-muted-foreground" style={{ fontVariant: ['tabular-nums'] }}>
-                {formatClock(clockAt(c.start, offset))}
+                {formatClock(clock.at(c.start))}
               </Text>
             </View>
             <View className="h-2.5 overflow-hidden rounded-full bg-muted" style={{ width: `${(c.minutes / longest) * 100}%` }}>

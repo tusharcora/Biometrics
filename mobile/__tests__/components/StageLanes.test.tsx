@@ -1,6 +1,6 @@
 import React from 'react';
 import { fireEvent, render, screen, within } from '@testing-library/react-native';
-import { MOCKUP_OFFSET, MOCKUP_SEGMENTS, seg } from '../../jest-mocks/sleepNightFixture';
+import { MOCKUP_CLOCK, MOCKUP_SEGMENTS, seg } from '../../jest-mocks/sleepNightFixture';
 import { StageLanes, laneEntering, stageLanesLabel } from '../../src/components/sleep/StageLanes';
 
 let mockReduceMotion = false;
@@ -16,7 +16,7 @@ beforeEach(() => {
 
 // The chart area measures itself; jest has no layout pass, so the test sends one.
 function renderLanes(stages = MOCKUP_SEGMENTS) {
-  render(<StageLanes stages={stages} offset={MOCKUP_OFFSET} />);
+  render(<StageLanes stages={stages} clock={MOCKUP_CLOCK} />);
   fireEvent(screen.getByTestId('stage-lanes-area'), 'layout', { nativeEvent: { layout: { width: 250, height: 176 } } });
 }
 

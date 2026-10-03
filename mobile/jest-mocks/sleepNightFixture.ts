@@ -1,4 +1,5 @@
 import type { StageType } from '../src/api/sleep';
+import { nightClock } from '../src/lib/sleepStats';
 
 // The approved mockup's night (Night.dc.html): in bed 23:10 to 06:52 local,
 // four hours behind UTC, so bedtime is 03:10Z. Synthetic values only.
@@ -35,3 +36,6 @@ export const MOCKUP_SEGMENTS = (
     ['AWAKE', 455, 462],
   ] as [StageType, number, number][]
 ).map(([type, from, to]) => seg(type, from, to));
+
+// The mockup night's clock: New York in summer, four hours behind UTC.
+export const MOCKUP_CLOCK = nightClock({ bedtime: '23:10', startUtcOffsetSeconds: -14400, endUtcOffsetSeconds: -14400 }, MOCKUP_SEGMENTS);

@@ -5,7 +5,7 @@ import { useColorScheme } from 'nativewind';
 import type { StageType } from '../../api/sleep';
 import type { StageSegment } from '../../lib/sleepCycles';
 import { findSleepMoments } from '../../lib/sleepMoments';
-import { clockAt, formatClock, formatDuration, formatShortDuration } from '../../lib/sleepStats';
+import { formatClock, formatDuration, formatShortDuration, type NightClock } from '../../lib/sleepStats';
 import { COLORS } from '../../theme';
 import { Card } from '../ui/card';
 import { SectionLabel } from '../ui/section-label';
@@ -41,14 +41,26 @@ interface Moment {
 
 // The night's stage mix and highlights (spec: Night.dc.html): a ring of deep,
 // light and REM as shares of time asleep with a row per stage, then the
-// moments that stood out, each shown only when the night had one.
-export function MomentsCard({ stages, offset, minutesToFallAsleep }: { stages: StageSegment[]; offset: number; minutesToFallAsleep: number | null }) {
+// moments that stood out, each shown only when the night had one. The centre
+// is the night's own `minutesAsleep` (the header's number); the slices and
+// rows are shares of the stage sums.
+export function MomentsCard({
+  stages,
+  clock,
+  minutesToFallAsleep,
+  minutesAsleep,
+}: {
+  stages: StageSegment[];
+  clock: NightClock;
+  minutesToFallAsleep: number | null;
+  minutesAsleep: number;
+}) {
   const { colorScheme } = useColorScheme();
   const palette = colorScheme === 'light' ? COLORS.light : COLORS.dark;
   const minutes = stageMinutes(stages);
   const asleep = minutes.DEEP + minutes.LIGHT + minutes.REM;
   const pct = (type: StageType) => (asleep > 0 ? Math.round((minutes[type] / asleep) * 100) : 0);
-  const clock = (iso: string) => formatClock(clockAt(iso, offset));
+  const localTime = (iso: string) => formatClock(clock.at(iso));
 
   let angle = -Math.PI / 2;
   const ring = MIX.map((m) => {
@@ -64,16 +76,16 @@ export function MomentsCard({ stages, offset, minutesToFallAsleep }: { stages: S
     moments.push({ type: 'LIGHT', title: 'Fell asleep', detail: 'after getting into bed', value: formatShortDuration(found.fellAsleepMinutes) });
   }
   if (found.deepest) {
-    moments.push({ type: 'DEEP', title: 'Deepest stretch', detail: `from ${clock(found.deepest.start)}`, value: formatShortDuration(found.deepest.minutes) });
+    moments.push({ type: 'DEEP', title: 'Deepest stretch', detail: `from ${localTime(found.deepest.start)}`, value: formatShortDuration(found.deepest.minutes) });
   }
   if (found.longestRem) {
-    moments.push({ type: 'REM', title: 'Longest dream sleep', detail: `from ${clock(found.longestRem.start)}`, value: formatShortDuration(found.longestRem.minutes) });
+    moments.push({ type: 'REM', title: 'Longest dream sleep', detail: `from ${localTime(found.longestRem.start)}`, value: formatShortDuration(found.longestRem.minutes) });
   }
   if (found.wakeUps.length > 0) {
     moments.push({
       type: 'AWAKE',
       title: 'Woke during the night',
-      detail: found.wakeUps.map((w) => `${formatShortDuration(w.minutes)} at ${clock(w.start)}`).join(', '),
+      detail: found.wakeUps.map((w) => `${formatShortDuration(w.minutes)} at ${localTime(w.start)}`).join(', '),
       value: `${found.wakeUps.length}×`,
     });
   }
@@ -93,7 +105,7 @@ export function MomentsCard({ stages, offset, minutesToFallAsleep }: { stages: S
             {ring.map((r) => (r.d ? <Path key={r.type} d={r.d} fill={palette[STAGE_TOKEN[r.type]]} /> : null))}
           </Svg>
           <View pointerEvents="none" className="absolute inset-0 items-center justify-center">
-            <Text className="font-display text-display-sm">{formatDuration(asleep)}</Text>
+            <Text className="font-display text-display-sm">{formatDuration(minutesAsleep)}</Text>
             <Text className="text-[11px] text-muted-foreground">asleep</Text>
           </View>
         </View>

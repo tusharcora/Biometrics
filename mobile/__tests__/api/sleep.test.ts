@@ -50,8 +50,16 @@ describe('fetchSleepNight', () => {
     const detail = { date: '2026-10-01', hasStages: false, stages: [], stageTotals: null, naps: [] };
     (apiFetch as jest.Mock).mockResolvedValue(detail);
 
-    await expect(fetchSleepNight('2026-10-01')).resolves.toEqual(detail);
+    // An older server sends no session offsets: they read as unknown.
+    await expect(fetchSleepNight('2026-10-01')).resolves.toEqual({ ...detail, startUtcOffsetSeconds: null, endUtcOffsetSeconds: null });
     expect(apiFetch).toHaveBeenCalledWith('/me/sleep/night/2026-10-01');
+  });
+
+  it('passes the session offsets through', async () => {
+    const detail = { date: '2026-10-01', hasStages: false, stages: [], stageTotals: null, naps: [], startUtcOffsetSeconds: -14400, endUtcOffsetSeconds: -18000 };
+    (apiFetch as jest.Mock).mockResolvedValue(detail);
+
+    await expect(fetchSleepNight('2026-10-01')).resolves.toEqual(detail);
   });
 });
 
