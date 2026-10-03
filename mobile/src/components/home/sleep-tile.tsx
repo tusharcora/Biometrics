@@ -25,7 +25,9 @@ export function SleepTile({
   score: ScoreState;
   bands?: ScoreBandsDTO;
   failed: boolean;
-  onPress: (score: DailyScoreDTO) => void;
+  // null when there is no score yet: the tile still opens the Sleep screen,
+  // which has its own empty states and the bedtime goal.
+  onPress: (score: DailyScoreDTO | null) => void;
 }) {
   if (failed) {
     return (
@@ -41,9 +43,11 @@ export function SleepTile({
 
   if (score === null) {
     return (
-      <Card testID="sleep-score-empty" className="flex-1">
-        <Text className="text-sm text-muted-foreground">Your Sleep Score will appear once a night of sleep has been recorded.</Text>
-      </Card>
+      <PressableScale testID="sleep-score-empty" accessibilityRole="button" onPress={() => onPress(null)} className="flex-1">
+        <Card className="flex-1">
+          <Text className="text-sm text-muted-foreground">Your Sleep Score will appear once a night of sleep has been recorded.</Text>
+        </Card>
+      </PressableScale>
     );
   }
 

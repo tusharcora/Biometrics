@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { withCharacter } from '../../jest-mocks/characterContext';
 import { SleepScreen } from '../../src/screens/SleepScreen';
 import { fetchSleep, fetchSleepGoal, fetchSleepNight, fetchSleepRegularity, type SleepNight } from '../../src/api/sleep';
@@ -100,6 +100,11 @@ beforeEach(() => {
   (fetchScoresWithBands as jest.Mock).mockResolvedValue({ scores: [SCORE] });
 });
 
+// Let every section's request settle inside act before the screen unmounts.
+afterEach(async () => {
+  await act(async () => {});
+});
+
 function renderScreen() {
   return render(withCharacter(<SleepScreen />, { characterId: 'luna' }));
 }
@@ -135,6 +140,81 @@ describe('SleepScreen', () => {
     await waitFor(() => expect(fetchSleep).toHaveBeenLastCalledWith(D(13), TODAY));
     fireEvent.press(screen.getByTestId('sleep-range-week'));
     await waitFor(() => expect(fetchSleep).toHaveBeenLastCalledWith(D(6), TODAY));
+    await screen.findByTestId('stage-strip');
+  });
+
+  it('shows a retry, not the old week, when switching to two weeks fails', async () => {
+    renderScreen();
+    await screen.findByTestId(`sleep-window-bar-${D(0)}`);
+
+    (fetchSleep as jest.Mock).mockRejectedValueOnce(new Error('offline'));
+    fireEvent.press(screen.getByTestId('sleep-range-two-weeks'));
+
+    const retry = await screen.findByTestId('sleep-window-retry');
+    expect(screen.queryByTestId('sleep-window-chart')).toBeNull();
+    expect(screen.getByTestId('sleep-range-two-weeks').props.accessibilityState).toMatchObject({ selected: true });
+
+    (fetchSleep as jest.Mock).mockResolvedValue({ nights: [...NIGHTS, night(D(10))], earliestDate: D(30), stagesBackfillPending: false });
+    fireEvent.press(retry);
+    // The toggle and the chart agree: a night ten days back has a column.
+    expect(await screen.findByTestId(`sleep-window-bar-${D(10)}`)).toBeTruthy();
+    expect(fetchSleep).toHaveBeenLastCalledWith(D(13), TODAY);
+  });
+
+  it('keeps last night when a later sync refresh fails', async () => {
+    const syncModule = require('../../src/sync/SyncProvider');
+    const state = { state: 'idle', lastSyncedAt: null, connection: 'CONNECTED', dataVersion: 0, syncNow: jest.fn() };
+    const spy = jest.spyOn(syncModule, 'useSync').mockReturnValue(state);
+    const utils = renderScreen();
+    await screen.findByTestId(`sleep-window-bar-${D(0)}`);
+
+    (fetchSleep as jest.Mock).mockRejectedValueOnce(new Error('offline'));
+    spy.mockReturnValue({ ...state, dataVersion: 1 });
+    utils.rerender(withCharacter(<SleepScreen />, { characterId: 'luna' }));
+
+    await waitFor(() => expect(fetchSleep).toHaveBeenCalledTimes(2));
+    expect(screen.getByTestId(`sleep-window-bar-${D(0)}`)).toBeTruthy();
+    expect(screen.queryByTestId('sleep-window-retry')).toBeNull();
+    spy.mockRestore();
+  });
+
+  it('shows whichever goal time is set when only one is', async () => {
+    (fetchSleepGoal as jest.Mock).mockResolvedValue({ sleepGoalMinutes: 480, bedtimeGoal: '23:00', wakeGoal: null });
+    renderScreen();
+
+    await waitFor(() => expect(screen.getByTestId('sleep-goal-row')).toHaveTextContent(/Bed 11:00 pm · wake not set/));
+  });
+
+  it('retries last night after a failure', async () => {
+    (fetchSleepNight as jest.Mock).mockRejectedValueOnce(new Error('offline'));
+    renderScreen();
+
+    fireEvent.press(await screen.findByTestId('sleep-last-night-retry'));
+
+    expect(await screen.findByTestId('stage-strip')).toBeTruthy();
+    expect(fetchSleepNight).toHaveBeenCalledTimes(2);
+  });
+
+  it('lets only the latest last-night request land', async () => {
+    const syncModule = require('../../src/sync/SyncProvider');
+    const state = { state: 'idle', lastSyncedAt: null, connection: 'CONNECTED', dataVersion: 0, syncNow: jest.fn() };
+    const spy = jest.spyOn(syncModule, 'useSync').mockReturnValue(state);
+    let resolveFirst: (v: unknown) => void = () => {};
+    (fetchSleepNight as jest.Mock).mockReturnValueOnce(new Promise((r) => (resolveFirst = r))).mockResolvedValue(DETAIL);
+    const utils = renderScreen();
+    await waitFor(() => expect(fetchSleepNight).toHaveBeenCalledTimes(1));
+
+    // A sync starts a newer request, which answers first.
+    spy.mockReturnValue({ ...state, dataVersion: 1 });
+    utils.rerender(withCharacter(<SleepScreen />, { characterId: 'luna' }));
+    const label = (await screen.findByTestId('stage-strip')).props.accessibilityLabel;
+
+    // The older one resolves late with other stages; it must not replace the newer answer.
+    await act(async () => {
+      resolveFirst({ ...DETAIL, stages: [DETAIL.stages[0]] });
+    });
+    expect(screen.getByTestId('stage-strip').props.accessibilityLabel).toBe(label);
+    spy.mockRestore();
   });
 
   it('shows the sleep regularity card with its caption and the coach line', async () => {

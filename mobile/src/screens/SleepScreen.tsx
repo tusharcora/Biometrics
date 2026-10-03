@@ -53,32 +53,37 @@ function datesBetween(from: string, to: string): string[] {
   return out;
 }
 
-// Runs `load` on mount and whenever `deps` change; only the latest run lands.
-function useSection<T>(load: () => Promise<T>, deps: unknown[]): [Section<T>, () => void] {
-  const [state, setState] = useState<Section<T>>({ phase: 'loading' });
+// Runs `load` on mount and whenever `key` or `deps` change; only the latest
+// run lands. `key` names WHAT is loaded (e.g. the range): a new key shows the
+// loading state and, on failure, the error with its retry. `deps` only
+// refresh the same thing (a sync), so a failed refresh keeps what is on screen.
+function useSection<T>(key: string, load: () => Promise<T>, deps: unknown[]): [Section<T>, () => void] {
+  const [state, setState] = useState<Section<T> & { key?: string }>({ phase: 'loading' });
   const requestId = useRef(0);
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  const run = useCallback(load, deps);
+  const run = useCallback(load, [key, ...deps]);
   const reload = useCallback(() => {
     const id = ++requestId.current;
-    setState((prev) => (prev.phase === 'ready' ? prev : { phase: 'loading' }));
+    const same = (prev: Section<T> & { key?: string }) => prev.phase === 'ready' && prev.key === key;
+    setState((prev) => (same(prev) ? prev : { phase: 'loading' }));
     run().then(
       (data) => {
-        if (id === requestId.current) setState({ phase: 'ready', data });
+        if (id === requestId.current) setState({ phase: 'ready', data, key });
       },
       () => {
-        // A failed refresh keeps what is already on screen.
-        if (id === requestId.current) setState((prev) => (prev.phase === 'ready' ? prev : { phase: 'error' }));
+        if (id === requestId.current) setState((prev) => (same(prev) ? prev : { phase: 'error' }));
       },
     );
-  }, [run]);
+  }, [run, key]);
   useEffect(() => {
     reload();
     return () => {
       requestId.current++;
     };
   }, [reload]);
-  return [state, reload];
+  // Before the effect runs for a new key, never show the old key's data under it.
+  const shown: Section<T> = state.phase === 'ready' && state.key !== key ? { phase: 'loading' } : state;
+  return [shown, reload];
 }
 
 function SectionError({ testID, message, onRetry }: { testID: string; message: string; onRetry: () => void }) {
@@ -92,6 +97,15 @@ function SectionError({ testID, message, onRetry }: { testID: string; message: s
   );
 }
 
+/** "10:30 pm to 6:45 am", one side alone when only one is set, or the prompt to set one. */
+export function goalLine(goal: SleepGoal): string {
+  const { bedtimeGoal: bed, wakeGoal: wake } = goal;
+  if (bed && wake) return `${formatClock(bed)} to ${formatClock(wake)}`;
+  if (bed) return `Bed ${formatClock(bed)} · wake not set`;
+  if (wake) return `Bedtime not set · wake ${formatClock(wake)}`;
+  return 'Set a bedtime goal';
+}
+
 export function SleepScreen() {
   const navigation = useNavigation<any>();
   const { colorScheme } = useColorScheme();
@@ -102,21 +116,21 @@ export function SleepScreen() {
   const { dataVersion } = useSync();
   const [range, setRange] = useState<Range>('week');
 
-  const [score, reloadScore] = useSection<ScoreData>(async () => {
+  const [score, reloadScore] = useSection<ScoreData>('score', async () => {
     // The same source as the Home sleep tile: the newest Sleep Score.
     const { scores, bands } = await fetchScoresWithBands(7, 'SLEEP');
     return { score: scores[0] ?? null, bands };
   }, [dataVersion]);
 
-  const [nights, reloadNights] = useSection<NightsData>(async () => {
+  const [nights, reloadNights] = useSection<NightsData>(range, async () => {
     const to = todayCivil();
     const from = addDays(to, -(RANGE_DAYS[range] - 1));
     const res = await fetchSleep(from, to);
     return { dates: datesBetween(from, to), nights: res.nights, backfillPending: res.stagesBackfillPending };
-  }, [range, dataVersion]);
+  }, [dataVersion]);
 
-  const [regularity, reloadRegularity] = useSection<SleepRegularity>(() => fetchSleepRegularity(REGULARITY_DAYS), [dataVersion]);
-  const [goal, reloadGoal] = useSection<SleepGoal>(() => fetchSleepGoal(), [dataVersion]);
+  const [regularity, reloadRegularity] = useSection<SleepRegularity>('regularity', () => fetchSleepRegularity(REGULARITY_DAYS), [dataVersion]);
+  const [goal, reloadGoal] = useSection<SleepGoal>('goal', () => fetchSleepGoal(), [dataVersion]);
 
   // Last night is the newest night on record; its stages come from the one-night endpoint.
   const lastNight = useMemo(() => {
@@ -125,22 +139,26 @@ export function SleepScreen() {
   }, [nights]);
   const lastNightDate = lastNight?.hasStages ? lastNight.date : null;
   const [detail, setDetail] = useState<Section<SleepNightDetail> | null>(null);
+  // Only the latest request lands, so a retry or an older date can't overwrite a newer one.
+  const detailRequest = useRef(0);
   const loadDetail = useCallback(() => {
+    const id = ++detailRequest.current;
     if (!lastNightDate) {
       setDetail(null);
-      return () => {};
+      return;
     }
-    let cancelled = false;
     setDetail({ phase: 'loading' });
     fetchSleepNight(lastNightDate).then(
-      (data) => !cancelled && setDetail({ phase: 'ready', data }),
-      () => !cancelled && setDetail({ phase: 'error' }),
+      (data) => id === detailRequest.current && setDetail({ phase: 'ready', data }),
+      () => id === detailRequest.current && setDetail({ phase: 'error' }),
     );
-    return () => {
-      cancelled = true;
-    };
   }, [lastNightDate]);
-  useEffect(() => loadDetail(), [loadDetail, dataVersion]);
+  useEffect(() => {
+    loadDetail();
+    return () => {
+      detailRequest.current++;
+    };
+  }, [loadDetail, dataVersion]);
 
   const openNight = (date: string) => navigation.navigate('SleepNight', { date });
 
@@ -254,10 +272,8 @@ export function SleepScreen() {
                 <SectionLabel>Bedtime goal</SectionLabel>
                 {goal.phase === 'loading' ? (
                   <Skeleton className="h-5 w-40 rounded-full" />
-                ) : goal.data.bedtimeGoal && goal.data.wakeGoal ? (
-                  <Text className="text-base font-semibold">{`${formatClock(goal.data.bedtimeGoal)} to ${formatClock(goal.data.wakeGoal)}`}</Text>
                 ) : (
-                  <Text className="text-base font-semibold">Set a bedtime goal</Text>
+                  <Text className="text-base font-semibold">{goalLine(goal.data)}</Text>
                 )}
               </View>
               <Ionicons name="chevron-forward" size={18} color={colors.muted} />

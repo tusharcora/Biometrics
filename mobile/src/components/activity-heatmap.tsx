@@ -596,8 +596,8 @@ export function ActivityHeatmap({ steps, earliestDate, today, sleep, onRetrySlee
             onPress={onOpenSleepDetails}
             className="flex-row items-center gap-1 self-start py-1 active:opacity-70"
           >
-            <Text className="text-sm font-semibold">Sleep details</Text>
-            <Ionicons name="chevron-forward" size={14} color={palette.metricSleep} />
+            <Text className="text-sm font-semibold text-accent">Sleep details</Text>
+            <Ionicons name="chevron-forward" size={14} color={palette.accent} />
           </Pressable>
         ) : null}
       </View>

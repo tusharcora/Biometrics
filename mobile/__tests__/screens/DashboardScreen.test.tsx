@@ -519,6 +519,20 @@ describe('DashboardScreen', () => {
       expect(getByTestId('recovery-score-card')).toBeTruthy();
     });
 
+    it('still opens the Sleep screen when there is no Sleep Score yet', async () => {
+      mockApi({ records: steps, scores: [recovery] });
+
+      const { getByTestId } = render(<DashboardScreen />);
+
+      await waitFor(() => expect(getByTestId('sleep-score-empty')).toBeTruthy());
+      // A real button, not a press that bubbles up to SleepTile's own onPress prop.
+      expect(getByTestId('sleep-score-empty').props.accessibilityRole).toBe('button');
+      mockNavigate.mockClear();
+      fireEvent.press(getByTestId('sleep-score-empty'));
+
+      expect(mockNavigate.mock.calls).toEqual([['Sleep']]);
+    });
+
     it('degrades to an inline message when the scores request fails, keeping the metric cards', async () => {
       mockApi({ records: steps, scoresError: new Error('boom') });
 
