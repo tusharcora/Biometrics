@@ -18,6 +18,7 @@ import { fetchScoresWithBands, type DailyScoreDTO, type ScoreBandsDTO } from '..
 import { useCharacter } from '../characters/CharacterContext';
 import { characterInfo } from '../components/characters/registry';
 import { RegularityCard } from '../components/sleep/RegularityCard';
+import { SectionError, useSection, type Section } from '../components/sleep/Section';
 import { StageLegend, StageStrip } from '../components/sleep/StageStrip';
 import { WindowChart } from '../components/sleep/WindowChart';
 import { Button } from '../components/ui/button';
@@ -41,8 +42,6 @@ const RANGE_DAYS: Record<Range, number> = { week: 7, 'two-weeks': 14 };
 // This screen's regularity window (the endpoint also offers 30).
 const REGULARITY_DAYS = 7;
 
-// Each section loads and fails on its own (spec 2026-10-03 §3).
-type Section<T> = { phase: 'loading' } | { phase: 'error' } | { phase: 'ready'; data: T };
 type NightsData = { dates: string[]; nights: SleepNight[]; backfillPending: boolean };
 type ScoreData = { score: DailyScoreDTO | null; bands?: ScoreBandsDTO };
 
@@ -51,50 +50,6 @@ function datesBetween(from: string, to: string): string[] {
   const out: string[] = [];
   for (let d = from; d <= to; d = addDays(d, 1)) out.push(d);
   return out;
-}
-
-// Runs `load` on mount and whenever `key` or `deps` change; only the latest
-// run lands. `key` names WHAT is loaded (e.g. the range): a new key shows the
-// loading state and, on failure, the error with its retry. `deps` only
-// refresh the same thing (a sync), so a failed refresh keeps what is on screen.
-function useSection<T>(key: string, load: () => Promise<T>, deps: unknown[]): [Section<T>, () => void] {
-  const [state, setState] = useState<Section<T> & { key?: string }>({ phase: 'loading' });
-  const requestId = useRef(0);
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  const run = useCallback(load, [key, ...deps]);
-  const reload = useCallback(() => {
-    const id = ++requestId.current;
-    const same = (prev: Section<T> & { key?: string }) => prev.phase === 'ready' && prev.key === key;
-    setState((prev) => (same(prev) ? prev : { phase: 'loading' }));
-    run().then(
-      (data) => {
-        if (id === requestId.current) setState({ phase: 'ready', data, key });
-      },
-      () => {
-        if (id === requestId.current) setState((prev) => (same(prev) ? prev : { phase: 'error' }));
-      },
-    );
-  }, [run, key]);
-  useEffect(() => {
-    reload();
-    return () => {
-      requestId.current++;
-    };
-  }, [reload]);
-  // Before the effect runs for a new key, never show the old key's data under it.
-  const shown: Section<T> = state.phase === 'ready' && state.key !== key ? { phase: 'loading' } : state;
-  return [shown, reload];
-}
-
-function SectionError({ testID, message, onRetry }: { testID: string; message: string; onRetry: () => void }) {
-  return (
-    <Card className="items-center gap-3 py-6">
-      <Text className="text-center text-sm text-muted-foreground">{message}</Text>
-      <Button testID={testID} variant="secondary" size="sm" onPress={onRetry}>
-        Try again
-      </Button>
-    </Card>
-  );
 }
 
 /** "10:30 pm to 6:45 am", one side alone when only one is set, or the prompt to set one. */

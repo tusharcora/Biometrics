@@ -76,6 +76,12 @@ export function formatDuration(minutes: number): string {
   return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
 }
 
+/** 25 -> "25m", 80 -> "1h 20m": short spans without the leading "0h". */
+export function formatShortDuration(minutes: number): string {
+  const m = Math.round(minutes);
+  return m < 60 ? `${m}m` : formatDuration(m);
+}
+
 /** "23:52" -> "11:52 pm". */
 export function formatClock(clock: string): string {
   const [h, m] = clock.split(':').map(Number);

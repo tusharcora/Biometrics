@@ -7,7 +7,7 @@ import { Text } from '../ui/text';
 
 type Palette = typeof COLORS.light;
 
-const STAGE_TOKEN: Record<StageType, keyof Palette> = {
+export const STAGE_TOKEN: Record<StageType, keyof Palette> = {
   DEEP: 'sleepDeep',
   REM: 'sleepRem',
   LIGHT: 'sleepLight',
@@ -15,7 +15,7 @@ const STAGE_TOKEN: Record<StageType, keyof Palette> = {
 };
 
 // Legend and spoken order: deepest first, awake last.
-const STAGE_ORDER: { type: StageType; label: string; spoken: string }[] = [
+export const STAGE_ORDER: { type: StageType; label: string; spoken: string }[] = [
   { type: 'DEEP', label: 'Deep', spoken: 'deep' },
   { type: 'REM', label: 'REM', spoken: 'REM' },
   { type: 'LIGHT', label: 'Light', spoken: 'light' },

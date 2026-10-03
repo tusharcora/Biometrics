@@ -393,11 +393,13 @@ export interface ActivityHeatmapProps {
   onRetrySleep?: () => void;
   // The Sleep screen; the link is drawn wherever the sleep header shows.
   onOpenSleepDetails?: () => void;
+  // One night in full, from the night sheet.
+  onOpenNight?: (date: string) => void;
 }
 
 // The Activity tab: Steps and Sleep. Month swipes between one page per metric;
 // Year and YTD stack both; tapping a day opens that metric's sheet.
-export function ActivityHeatmap({ steps, earliestDate, today, sleep, onRetrySleep, onOpenSleepDetails }: ActivityHeatmapProps) {
+export function ActivityHeatmap({ steps, earliestDate, today, sleep, onRetrySleep, onOpenSleepDetails, onOpenNight }: ActivityHeatmapProps) {
   const { colorScheme } = useColorScheme();
   const palette = colorScheme === 'light' ? COLORS.light : COLORS.dark;
   const reduced = useReducedMotion();
@@ -453,6 +455,12 @@ export function ActivityHeatmap({ steps, earliestDate, today, sleep, onRetrySlee
   function crossTo(metric: ActivityMetric, date: string) {
     setSelection({ metric, date });
     if (view === 'month') goTo(metric);
+  }
+
+  // The sheet is a Modal, which would stay above a pushed screen: close it first.
+  function openNight(date: string) {
+    setSelection(null);
+    onOpenNight?.(date);
   }
 
   const stepsCard = (
@@ -652,6 +660,7 @@ export function ActivityHeatmap({ steps, earliestDate, today, sleep, onRetrySlee
             goal={SLEEP_SPEC.goal}
             average={sleepStats?.averageMinutes ?? null}
             stepsLink={{ steps: steps.get(selection.date) ?? null, onPress: () => crossTo('steps', selection.date) }}
+            onOpenFull={onOpenNight ? () => openNight(selection.date) : undefined}
           />
         ) : null}
       </Sheet>

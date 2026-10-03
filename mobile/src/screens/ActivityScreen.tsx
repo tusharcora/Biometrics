@@ -121,6 +121,7 @@ export function ActivityScreen() {
             today={state.today}
             sleep={state.sleep}
             onOpenSleepDetails={() => navigation.navigate('Sleep')}
+            onOpenNight={(date) => navigation.navigate('SleepNight', { date })}
             onRetrySleep={() => {
               setState((prev) => (prev.phase === 'ready' ? { ...prev, sleep: { phase: 'loading' } } : prev));
               load();

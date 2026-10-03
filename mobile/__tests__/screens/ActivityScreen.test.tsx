@@ -1,6 +1,7 @@
 import React from 'react';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { ActivityScreen } from '../../src/screens/ActivityScreen';
+import { ActivityHeatmap } from '../../src/components/activity-heatmap';
 import { fetchActivity } from '../../src/api/activity';
 import { fetchSleep } from '../../src/api/sleep';
 import { fetchRange, todayCivil } from '../../src/lib/heatmap';
@@ -57,6 +58,16 @@ describe('ActivityScreen: sleep', () => {
     fireEvent.press(getByTestId('activity-sleep-details'));
 
     expect(mockNavigate).toHaveBeenCalledWith('Sleep');
+  });
+  it('opens one night in full from the night sheet', async () => {
+    (fetchActivity as jest.Mock).mockResolvedValue({ days: [], earliestDate: '2025-01-01' });
+
+    const { findByTestId, UNSAFE_getByType } = render(<ActivityScreen />);
+    await findByTestId('heatmap-stats');
+
+    act(() => UNSAFE_getByType(ActivityHeatmap).props.onOpenNight('2026-10-01'));
+
+    expect(mockNavigate).toHaveBeenCalledWith('SleepNight', { date: '2026-10-01' });
   });
 });
 

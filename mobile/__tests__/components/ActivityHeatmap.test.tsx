@@ -273,6 +273,27 @@ describe('ActivityHeatmap', () => {
       expect(getByTestId('night-detail-steps-link')).toHaveTextContent(/No data/);
     });
 
+    it('opens the full night from the night sheet', () => {
+      const onOpenNight = jest.fn();
+      const utils = render(
+        <ActivityHeatmap
+          steps={new Map()}
+          earliestDate="2025-01-01"
+          today={TODAY}
+          sleep={sleepOf([nightOf('2026-09-22', 467)])}
+          onOpenNight={onOpenNight}
+        />,
+      );
+      fireEvent(utils.getByTestId('sleep-heatmap-canvas'), 'layout', { nativeEvent: { layout: { width: 350, height: 300 } } });
+
+      fireEvent.press(utils.getByTestId('sleep-heatmap-grid'), { nativeEvent: SEP_22 });
+      fireEvent.press(utils.getByTestId('night-open-full'));
+
+      expect(onOpenNight).toHaveBeenCalledWith('2026-09-22');
+      // The sheet is a Modal: it closes so it can't sit above the pushed screen.
+      expect(utils.queryByTestId('night-detail')).toBeNull();
+    });
+
     it('jumps between the two sheets for the same day, and the page follows', () => {
       const { getByTestId, queryByTestId } = renderHeatmap([['2026-09-22', 12000]], '2025-01-01', sleepOf([nightOf('2026-09-22', 467)]));
 

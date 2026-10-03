@@ -95,19 +95,37 @@ export function DayDetail({ date, steps, goal, average, sleepLink }: DayDetailPr
   );
 }
 
+// How much of the time in bed was asleep: a bar and a caption.
+export function InBedShare({ minutesAsleep, minutesInBed, testID }: { minutesAsleep: number; minutesInBed: number; testID: string }) {
+  const { colorScheme } = useColorScheme();
+  const palette = colorScheme === 'light' ? COLORS.light : COLORS.dark;
+  const share = minutesInBed > 0 ? Math.min(1, minutesAsleep / minutesInBed) : 0;
+  return (
+    <>
+      <View className="h-2.5 overflow-hidden rounded-full" style={{ backgroundColor: palette.sleepHeat1 }}>
+        <View className="h-full rounded-full" style={{ width: `${share * 100}%`, backgroundColor: palette.metricSleep }} />
+      </View>
+      <Text testID={testID} className="text-xs text-muted-foreground">
+        {`${formatDuration(minutesInBed)} in bed · ${Math.round(share * 100)}% of it asleep`}
+      </Text>
+    </>
+  );
+}
+
 export interface NightDetailProps {
   date: string;
   night: SleepNight | null;
   goal: number;
   average: number | null;
   stepsLink: { steps: number | null; onPress: () => void };
+  // The one-night screen; the link shows only for a recorded night.
+  onOpenFull?: () => void;
 }
 
-export function NightDetail({ date, night, goal, average, stepsLink }: NightDetailProps) {
+export function NightDetail({ date, night, goal, average, stepsLink, onOpenFull }: NightDetailProps) {
   const { colorScheme } = useColorScheme();
   const palette = colorScheme === 'light' ? COLORS.light : COLORS.dark;
   const comparison = night ? compareSleepToAverage(night.minutesAsleep, average) : null;
-  const asleepShare = night && night.minutesInBed ? Math.min(1, night.minutesAsleep / night.minutesInBed) : null;
   return (
     <View testID="night-detail" className="gap-2 pb-2">
       <Text testID="night-detail-title" className="text-sm text-muted-foreground">{`Night ending ${formatDayTitle(date)}`}</Text>
@@ -143,15 +161,8 @@ export function NightDetail({ date, night, goal, average, stepsLink }: NightDeta
                   </Text>
                 </View>
               </View>
-              {asleepShare !== null && night.minutesInBed ? (
-                <>
-                  <View className="h-2.5 overflow-hidden rounded-full" style={{ backgroundColor: palette.sleepHeat1 }}>
-                    <View className="h-full rounded-full" style={{ width: `${asleepShare * 100}%`, backgroundColor: palette.metricSleep }} />
-                  </View>
-                  <Text testID="night-detail-in-bed" className="text-xs text-muted-foreground">
-                    {`${formatDuration(night.minutesInBed)} in bed · ${Math.round(asleepShare * 100)}% of it asleep`}
-                  </Text>
-                </>
+              {night.minutesInBed ? (
+                <InBedShare minutesAsleep={night.minutesAsleep} minutesInBed={night.minutesInBed} testID="night-detail-in-bed" />
               ) : null}
             </View>
           ) : null}
@@ -184,6 +195,19 @@ export function NightDetail({ date, night, goal, average, stepsLink }: NightDeta
         <Text testID="night-detail-comparison" className="text-sm text-muted-foreground">
           {comparison}
         </Text>
+      ) : null}
+
+      {night && onOpenFull ? (
+        <Pressable
+          testID="night-open-full"
+          accessibilityRole="button"
+          hitSlop={8}
+          onPress={onOpenFull}
+          className="flex-row items-center gap-1 self-start py-1 active:opacity-70"
+        >
+          <Text className="text-sm font-semibold text-accent">Open full night</Text>
+          <Ionicons name="chevron-forward" size={14} color={palette.accent} />
+        </Pressable>
       ) : null}
     </View>
   );
