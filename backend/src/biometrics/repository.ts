@@ -1,5 +1,6 @@
 import { shiftDate } from '../scoring/dates';
 import { getLiveConfig } from '../scoring/configs';
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../db/client';
 import { BiometricMetricType, HealthMetricPoint, SleepSessionPoint } from '../types';
 import { sessionEndCivilDate, civilDateToUtcMidnight } from './civilDate';
@@ -27,6 +28,25 @@ interface TouchedEnd {
 }
 
 /**
+ * Serialises every sleep write for one user, for the rest of the transaction.
+ * Two sync jobs used to read their own snapshot of the sessions, compute a
+ * total from it, and then both write -- so whichever committed last could
+ * persist a total that omitted the other's sessions. A per-user advisory lock
+ * (rather than SERIALIZABLE) keeps that ordering without making unrelated
+ * users retry each other.
+ */
+async function lockUserSleep(tx: Prisma.TransactionClient, userId: string): Promise<void> {
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
+}
+
+// A store holds the lock while it writes every session in the batch, its
+// stages and the touched rollups. A stage backfill passes ~90 nights at once,
+// each a few round trips, and a second job for the same user can queue behind
+// the lock, so Prisma's 5s default is too tight; a minute is far above any
+// real batch while still failing a wedged transaction.
+const SLEEP_STORE_TIMEOUT_MS = 60_000;
+
+/**
  * Stores whole sleep sessions, overwrite-on-match on (userId, startTime).
  * Re-fetching a session yields the same values, so every re-sync, retry and
  * overlapping window is a no-op; if Google revises a session the row converges
@@ -44,8 +64,16 @@ interface TouchedEnd {
  * end of each such session -- each with the offset it was keyed under, so the
  * caller can recompute every rollup date that may have changed, including the
  * one a revised (or newly offset-keyed) session just left.
+ *
+ * Runs on the caller's transaction, which must already hold lockUserSleep: the
+ * change test reads the stored rows, and only the lock keeps them from moving
+ * before the writes land.
  */
-async function upsertSleepSessionsTouched(userId: string, sessions: SleepSessionPoint[]): Promise<TouchedEnd[]> {
+async function upsertSleepSessionsIn(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  sessions: SleepSessionPoint[],
+): Promise<TouchedEnd[]> {
   if (sessions.length === 0) return [];
 
   // Last one wins if a batch repeats a startTime, matching what sequential
@@ -54,7 +82,7 @@ async function upsertSleepSessionsTouched(userId: string, sessions: SleepSession
   for (const s of sessions) byStart.set(s.startTime.getTime(), s);
   const unique = [...byStart.values()];
 
-  const existing = await prisma.sleepSession.findMany({
+  const existing = await tx.sleepSession.findMany({
     where: { userId, startTime: { in: unique.map((s) => s.startTime) } },
     select: { startTime: true, endTime: true, minutesAsleep: true, startUtcOffsetSeconds: true, endUtcOffsetSeconds: true },
   });
@@ -68,33 +96,31 @@ async function upsertSleepSessionsTouched(userId: string, sessions: SleepSession
       || p.startUtcOffsetSeconds !== (s.startUtcOffsetSeconds ?? null) || p.endUtcOffsetSeconds !== (s.endUtcOffsetSeconds ?? null);
   });
 
-  await prisma.$transaction(
-    unique.map((s) => {
-      // `?? null`: a missing offset is stored as null (converge to the latest fetch), never left stale.
-      const offsets = {
-        startUtcOffsetSeconds: s.startUtcOffsetSeconds ?? null,
-        endUtcOffsetSeconds: s.endUtcOffsetSeconds ?? null,
-      };
-      const summary = {
-        sleepType: s.sleepType ?? null, mainSleep: s.mainSleep ?? null,
-        minutesInSleepPeriod: s.minutesInSleepPeriod ?? null, minutesAwake: s.minutesAwake ?? null,
-        minutesToFallAsleep: s.minutesToFallAsleep ?? null, minutesAfterWakeUp: s.minutesAfterWakeUp ?? null,
-        deepMinutes: s.deepMinutes ?? null, lightMinutes: s.lightMinutes ?? null, remMinutes: s.remMinutes ?? null, awakeMinutes: s.awakeMinutes ?? null,
-      };
-      const stageRows = (s.stages ?? []).map((g) => ({ type: g.type, startTime: g.startTime, endTime: g.endTime }));
-      return prisma.sleepSession.upsert({
-        where: { userId_startTime: { userId, startTime: s.startTime } },
-        update: {
-          endTime: s.endTime, minutesAsleep: s.minutesAsleep, ...offsets, ...summary, syncedAt: new Date(),
-          ...(s.stages ? { stages: { deleteMany: {}, create: stageRows } } : {}),
-        },
-        create: {
-          userId, startTime: s.startTime, endTime: s.endTime, minutesAsleep: s.minutesAsleep, ...offsets, ...summary,
-          ...(s.stages ? { stages: { create: stageRows } } : {}),
-        },
-      });
-    }),
-  );
+  for (const s of unique) {
+    // `?? null`: a missing offset is stored as null (converge to the latest fetch), never left stale.
+    const offsets = {
+      startUtcOffsetSeconds: s.startUtcOffsetSeconds ?? null,
+      endUtcOffsetSeconds: s.endUtcOffsetSeconds ?? null,
+    };
+    const summary = {
+      sleepType: s.sleepType ?? null, mainSleep: s.mainSleep ?? null,
+      minutesInSleepPeriod: s.minutesInSleepPeriod ?? null, minutesAwake: s.minutesAwake ?? null,
+      minutesToFallAsleep: s.minutesToFallAsleep ?? null, minutesAfterWakeUp: s.minutesAfterWakeUp ?? null,
+      deepMinutes: s.deepMinutes ?? null, lightMinutes: s.lightMinutes ?? null, remMinutes: s.remMinutes ?? null, awakeMinutes: s.awakeMinutes ?? null,
+    };
+    const stageRows = (s.stages ?? []).map((g) => ({ type: g.type, startTime: g.startTime, endTime: g.endTime }));
+    await tx.sleepSession.upsert({
+      where: { userId_startTime: { userId, startTime: s.startTime } },
+      update: {
+        endTime: s.endTime, minutesAsleep: s.minutesAsleep, ...offsets, ...summary, syncedAt: new Date(),
+        ...(s.stages ? { stages: { deleteMany: {}, createMany: { data: stageRows } } } : {}),
+      },
+      create: {
+        userId, startTime: s.startTime, endTime: s.endTime, minutesAsleep: s.minutesAsleep, ...offsets, ...summary,
+        ...(s.stages ? { stages: { createMany: { data: stageRows } } } : {}),
+      },
+    });
+  }
 
   const changedStarts = new Set(changed.map((s) => s.startTime.getTime()));
   return [
@@ -105,13 +131,17 @@ async function upsertSleepSessionsTouched(userId: string, sessions: SleepSession
   ];
 }
 
-/** As upsertSleepSessionsTouched, returning only the end instants. */
+/** As upsertSleepSessionsIn in its own locked transaction, returning only the end instants. */
 export async function upsertSleepSessions(userId: string, sessions: SleepSessionPoint[]): Promise<Date[]> {
-  return (await upsertSleepSessionsTouched(userId, sessions)).map((t) => t.endTime);
+  const touched = await prisma.$transaction(async (tx) => {
+    await lockUserSleep(tx, userId);
+    return upsertSleepSessionsIn(tx, userId, sessions);
+  }, { timeout: SLEEP_STORE_TIMEOUT_MS });
+  return touched.map((t) => t.endTime);
 }
 
-async function timezoneOf(userId: string): Promise<string> {
-  const user = await prisma.user.findUnique({ where: { id: userId }, select: { timezone: true } });
+async function timezoneOf(client: Pick<Prisma.TransactionClient, 'user'>, userId: string): Promise<string> {
+  const user = await client.user.findUnique({ where: { id: userId }, select: { timezone: true } });
   if (!user) throw new Error(`Cannot compute sleep rollups: user ${userId} not found`);
   return user.timezone;
 }
@@ -151,6 +181,29 @@ function rollupWrites(client: RollupClient, userId: string, dates: string[], tot
   });
 }
 
+// The rollups for `dates` (sorted, unique, non-empty), read and written on the
+// caller's transaction, which must already hold lockUserSleep: the read has to
+// sit inside the same locked transaction as the write (see lockUserSleep).
+async function recomputeSleepRollupsIn(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  dates: string[],
+  timeZone: string,
+): Promise<void> {
+  // A local civil date spans at most [D 00:00 - 14h, D+1 00:00 + 12h) in UTC
+  // across every real zone or record offset, so [D - 1d, D + 2d) always
+  // contains its sessions. The exact bucketing is then done per-session.
+  const from = new Date(civilDateToUtcMidnight(dates[0]!).getTime() - DAY_MS);
+  const to = new Date(civilDateToUtcMidnight(dates[dates.length - 1]!).getTime() + 2 * DAY_MS);
+  const sessions = await tx.sleepSession.findMany({
+    where: { userId, endTime: { gte: from, lt: to } },
+    select: { endTime: true, endUtcOffsetSeconds: true, minutesAsleep: true },
+  });
+  for (const write of rollupWrites(tx, userId, dates, totalsByLocalDate(sessions, timeZone))) {
+    await write;
+  }
+}
+
 /**
  * Recomputes the SLEEP BiometricRecord rollup for each given local civil date
  * (YYYY-MM-DD in the user's timezone) from the FULL stored session set.
@@ -161,27 +214,10 @@ export async function recomputeSleepRollups(userId: string, civilDates: string[]
   const dates = [...new Set(civilDates)].sort();
   if (dates.length === 0) return;
 
-  const timeZone = await timezoneOf(userId);
-  // A local civil date spans at most [D 00:00 - 14h, D+1 00:00 + 12h) in UTC
-  // across every real zone or record offset, so [D - 1d, D + 2d) always
-  // contains its sessions. The exact bucketing is then done per-session.
-  const from = new Date(civilDateToUtcMidnight(dates[0]!).getTime() - DAY_MS);
-  const to = new Date(civilDateToUtcMidnight(dates[dates.length - 1]!).getTime() + 2 * DAY_MS);
-  // The read has to sit inside the same transaction as the write, and be
-  // serialised against other jobs for this user. Two sync jobs used to read
-  // their own snapshot of the sessions, compute a total from it, and then both
-  // write -- so whichever committed last could persist a total that omitted
-  // the other's sessions. A per-user advisory lock (rather than SERIALIZABLE)
-  // keeps that ordering without making unrelated users retry each other.
+  const timeZone = await timezoneOf(prisma, userId);
   await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
-    const sessions = await tx.sleepSession.findMany({
-      where: { userId, endTime: { gte: from, lt: to } },
-      select: { endTime: true, endUtcOffsetSeconds: true, minutesAsleep: true },
-    });
-    for (const write of rollupWrites(tx, userId, dates, totalsByLocalDate(sessions, timeZone))) {
-      await write;
-    }
+    await lockUserSleep(tx, userId);
+    await recomputeSleepRollupsIn(tx, userId, dates, timeZone);
   });
 }
 
@@ -193,11 +229,11 @@ export async function recomputeSleepRollups(userId: string, civilDates: string[]
  * they do not move with the timezone.
  */
 export async function recomputeAllSleepRollups(userId: string): Promise<string[]> {
-  const timeZone = await timezoneOf(userId);
+  const timeZone = await timezoneOf(prisma, userId);
   const touchedDates: string[] = [];
 
   await prisma.$transaction(async (tx) => {
-    await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
+    await lockUserSleep(tx, userId);
     const sessions = await tx.sleepSession.findMany({
       where: { userId },
       select: { endTime: true, endUtcOffsetSeconds: true, minutesAsleep: true },
@@ -229,14 +265,24 @@ export async function recomputeAllSleepRollups(userId: string): Promise<string[]
  * Upsert a batch of sessions, then refresh the rollup of every local date it
  * touched. Returns those dates so the caller can ask for the affected scores to
  * be recomputed.
+ *
+ * One locked transaction covers the change test, the session and stage writes
+ * and the rollup writes. Because only changed sessions touch a date, they must
+ * commit together: if the rollup write failed after the sessions had
+ * committed, the job's retry would find the new values already stored, touch
+ * nothing, and leave the rollup (and the scores built on it) stale for good.
  */
 export async function storeSleepSessions(userId: string, sessions: SleepSessionPoint[]): Promise<string[]> {
-  const touched = await upsertSleepSessionsTouched(userId, sessions);
-  if (touched.length === 0) return [];
-  const timeZone = await timezoneOf(userId);
-  const dates = [...new Set(touched.map((end) => sessionEndCivilDate(end, timeZone)))].sort();
-  await recomputeSleepRollups(userId, dates);
-  return dates;
+  if (sessions.length === 0) return [];
+  return prisma.$transaction(async (tx) => {
+    await lockUserSleep(tx, userId);
+    const touched = await upsertSleepSessionsIn(tx, userId, sessions);
+    if (touched.length === 0) return [];
+    const timeZone = await timezoneOf(tx, userId);
+    const dates = [...new Set(touched.map((end) => sessionEndCivilDate(end, timeZone)))].sort();
+    await recomputeSleepRollupsIn(tx, userId, dates, timeZone);
+    return dates;
+  }, { timeout: SLEEP_STORE_TIMEOUT_MS });
 }
 
 /**
