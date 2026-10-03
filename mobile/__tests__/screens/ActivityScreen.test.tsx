@@ -10,8 +10,17 @@ jest.mock('../../src/api/activity');
 jest.mock('../../src/api/sleep');
 
 const mockNavigate = jest.fn();
+// Screen events by name, so a test can fire focus/blur.
+const mockListeners: Record<string, () => void> = {};
+const mockNavigation = {
+  navigate: mockNavigate,
+  addListener: (event: string, fn: () => void) => {
+    mockListeners[event] = fn;
+    return () => delete mockListeners[event];
+  },
+};
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ navigate: mockNavigate }),
+  useNavigation: () => mockNavigation,
 }));
 
 beforeEach(() => {
@@ -99,6 +108,26 @@ describe('ActivityScreen: sleep goal', () => {
 
     expect(await findByTestId('sleep-stat-goal')).toHaveTextContent('0');
     expect(UNSAFE_getByType(ActivityHeatmap).props.sleepGoal).toBe(480);
+  });
+
+  it('picks up a goal saved elsewhere on coming back to the tab', async () => {
+    (fetchActivity as jest.Mock).mockResolvedValue({ days: [], earliestDate: '2025-01-01' });
+    (fetchSleep as jest.Mock).mockResolvedValue(lastNight());
+
+    const { findByTestId, getByTestId, queryByTestId, UNSAFE_getByType } = render(<ActivityScreen />);
+    expect(await findByTestId('sleep-stat-goal')).toHaveTextContent('0');
+    // The first focus (opening the tab) loads nothing extra.
+    await act(async () => mockListeners.focus?.());
+    expect(fetchSleepGoal).toHaveBeenCalledTimes(1);
+
+    (fetchSleepGoal as jest.Mock).mockResolvedValue({ sleepGoalMinutes: 420, bedtimeGoal: '23:00', wakeGoal: '07:00' });
+    await act(async () => mockListeners.blur?.());
+    await act(async () => mockListeners.focus?.());
+
+    await waitFor(() => expect(getByTestId('sleep-stat-goal')).toHaveTextContent('1'));
+    expect(UNSAFE_getByType(ActivityHeatmap).props.sleepGoal).toBe(420);
+    // Re-read in place: the loading state never came back.
+    expect(queryByTestId('activity-loading')).toBeNull();
   });
 
   it('waits for the goal before drawing, so the colours never jump', async () => {

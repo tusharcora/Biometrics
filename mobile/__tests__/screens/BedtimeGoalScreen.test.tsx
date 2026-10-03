@@ -140,13 +140,33 @@ describe('BedtimeGoalScreen: save', () => {
     expect(screen.queryByTestId('goal-error')).toBeNull();
   });
 
-  it('saves the shown defaults when no goal was set', async () => {
+  it('keeps Save off for an unset goal with no edits', async () => {
     (fetchSleepGoal as jest.Mock).mockResolvedValue({ sleepGoalMinutes: 480, bedtimeGoal: null, wakeGoal: null });
     await loaded();
 
+    expect(value('goal-save')).toBeDisabled();
+    press('goal-save');
+    expect(saveSleepGoal).not.toHaveBeenCalled();
+  });
+
+  it('never writes the shown default times when only the sleep goal changed', async () => {
+    (fetchSleepGoal as jest.Mock).mockResolvedValue({ sleepGoalMinutes: 480, bedtimeGoal: null, wakeGoal: null });
+    await loaded();
+
+    press('goal-sleep-plus');
     await act(async () => press('goal-save'));
 
-    expect(saveSleepGoal).toHaveBeenCalledWith({ bedtimeGoal: '23:00', wakeGoal: '07:00' });
+    expect(saveSleepGoal).toHaveBeenCalledWith({ sleepGoalMinutes: 495 });
+  });
+
+  it('sends both times once a time stepper is used on an unset goal', async () => {
+    (fetchSleepGoal as jest.Mock).mockResolvedValue({ sleepGoalMinutes: 480, bedtimeGoal: null, wakeGoal: null });
+    await loaded();
+
+    press('goal-bed-plus');
+    await act(async () => press('goal-save'));
+
+    expect(saveSleepGoal).toHaveBeenCalledWith({ bedtimeGoal: '23:15', wakeGoal: '07:00' });
   });
 
   it('goes back to the saved goal and says so when saving fails', async () => {
@@ -232,6 +252,26 @@ describe('BedtimeGoalScreen: wind-down reminder', () => {
 
     expect(disableWindDown).toHaveBeenCalled();
     expect(value('winddown-switch').props.value).toBe(false);
+  });
+
+  it('holds the switch while a save is in flight, and Save while the switch is', async () => {
+    let finishSave: (g: unknown) => void = () => {};
+    (saveSleepGoal as jest.Mock).mockReturnValue(new Promise((r) => (finishSave = r)));
+    let finishEnable: (r: 'scheduled') => void = () => {};
+    await loaded();
+
+    press('goal-bed-plus');
+    await act(async () => press('goal-save'));
+    expect(value('winddown-switch')).toBeDisabled();
+    await act(async () => finishSave({ ...SAVED, bedtimeGoal: '23:15' }));
+    expect(value('winddown-switch')).not.toBeDisabled();
+
+    (enableWindDown as jest.Mock).mockReturnValue(new Promise((r) => (finishEnable = r)));
+    await act(async () => fireEvent(value('winddown-switch'), 'valueChange', true));
+    press('goal-wake-plus');
+    expect(value('goal-save')).toBeDisabled();
+    await act(async () => finishEnable('scheduled'));
+    expect(value('goal-save')).not.toBeDisabled();
   });
 
   it('stores a new lead and updates the preview', async () => {

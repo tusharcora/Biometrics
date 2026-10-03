@@ -32,7 +32,8 @@ const LEAD_OPTIONS: { value: `${WindDownLead}`; label: string }[] = [
   { value: '60', label: '60 min' },
 ];
 
-type Draft = { bed: string; wake: string; sleep: number };
+// `timesTouched`: a time stepper was used, so unset times now hold a choice.
+type Draft = { bed: string; wake: string; sleep: number; timesTouched: boolean };
 type LoadState = { phase: 'loading' } | { phase: 'error' } | { phase: 'ready'; saved: SleepGoal };
 // 'denied' points to Settings; 'error' is a native scheduling failure.
 type ReminderNote = 'denied' | 'error' | null;
@@ -41,6 +42,7 @@ const draftOf = (goal: SleepGoal): Draft => ({
   bed: goal.bedtimeGoal ?? DEFAULT_BEDTIME,
   wake: goal.wakeGoal ?? DEFAULT_WAKE,
   sleep: goal.sleepGoalMinutes,
+  timesTouched: false,
 });
 
 // "23:45" + 15 -> "00:00": clock arithmetic that wraps midnight both ways.
@@ -50,12 +52,14 @@ export function shiftClock(hhmm: string, delta: number): string {
   return `${String(Math.floor(total / 60)).padStart(2, '0')}:${String(total % 60).padStart(2, '0')}`;
 }
 
-// Only the fields that differ from the saved goal; an unset time counts as
-// changed, so saving the shown defaults stores them.
+// Only the fields that differ from the saved goal. An unset time's shown
+// default is never saved on its own: it counts only once a time stepper has
+// been used, so a sleep-goal-only change doesn't write 23:00/07:00.
 function changedFields(saved: SleepGoal, draft: Draft): Partial<SleepGoal> {
   const patch: Partial<SleepGoal> = {};
-  if (draft.bed !== saved.bedtimeGoal) patch.bedtimeGoal = draft.bed;
-  if (draft.wake !== saved.wakeGoal) patch.wakeGoal = draft.wake;
+  const timeChanged = (shown: string, stored: string | null) => (stored === null ? draft.timesTouched : shown !== stored);
+  if (timeChanged(draft.bed, saved.bedtimeGoal)) patch.bedtimeGoal = draft.bed;
+  if (timeChanged(draft.wake, saved.wakeGoal)) patch.wakeGoal = draft.wake;
   if (draft.sleep !== saved.sleepGoalMinutes) patch.sleepGoalMinutes = draft.sleep;
   return patch;
 }
@@ -67,7 +71,7 @@ export function BedtimeGoalScreen() {
   const coachName = characterInfo(characterId).name;
 
   const [state, setState] = useState<LoadState>({ phase: 'loading' });
-  const [draft, setDraft] = useState<Draft>({ bed: DEFAULT_BEDTIME, wake: DEFAULT_WAKE, sleep: 480 });
+  const [draft, setDraft] = useState<Draft>({ bed: DEFAULT_BEDTIME, wake: DEFAULT_WAKE, sleep: 480, timesTouched: false });
   const [saving, setSaving] = useState(false);
   const [saveFailed, setSaveFailed] = useState(false);
   const [reminderOn, setReminderOn] = useState(false);
@@ -97,6 +101,7 @@ export function BedtimeGoalScreen() {
   const load = useCallback(async () => {
     setState({ phase: 'loading' });
     try {
+      // readWindDown never rejects (it falls back to defaults), so only the goal can fail here.
       const [saved, reminder] = await Promise.all([fetchSleepGoal(), readWindDown()]);
       setState({ phase: 'ready', saved });
       setDraft(draftOf(saved));
@@ -105,7 +110,13 @@ export function BedtimeGoalScreen() {
       // The stored reminder carries the coach's name and the bedtime it was
       // set for; either may have changed since (a new coach, another device).
       if (reminder.enabled && saved.bedtimeGoal && (reminder.coachName !== coachName || reminder.bedtimeGoal !== saved.bedtimeGoal)) {
-        await scheduleReminder(saved.bedtimeGoal, reminder.leadMinutes);
+        // Busy, so the switch and Save wait for it instead of racing it.
+        setReminderBusy(true);
+        try {
+          await scheduleReminder(saved.bedtimeGoal, reminder.leadMinutes);
+        } finally {
+          setReminderBusy(false);
+        }
       }
     } catch {
       setState({ phase: 'error' });
@@ -146,7 +157,10 @@ export function BedtimeGoalScreen() {
   const { saved } = state;
   const patch = changedFields(saved, draft);
   const sameTimes = draft.bed === draft.wake;
-  const canSave = Object.keys(patch).length > 0 && !sameTimes && !saving;
+  // Save and the switch never overlap: either could otherwise schedule at a
+  // stale bedtime or undo the other's result.
+  const canSave = Object.keys(patch).length > 0 && !sameTimes && !saving && !reminderBusy;
+  const switchDisabled = !saved.bedtimeGoal || reminderBusy || saving;
   const windowMinutes = goalWindowMinutes(draft.bed, draft.wake);
   const short = !sameTimes && windowMinutes < draft.sleep;
 
@@ -169,7 +183,7 @@ export function BedtimeGoalScreen() {
   }
 
   async function toggleReminder(next: boolean) {
-    if (reminderBusy || !saved.bedtimeGoal) return;
+    if (switchDisabled || !saved.bedtimeGoal) return;
     setReminderBusy(true);
     try {
       if (next) {
@@ -200,15 +214,15 @@ export function BedtimeGoalScreen() {
               id="goal-bed"
               label="Bedtime"
               value={formatClock(draft.bed)}
-              onMinus={() => setDraft((d) => ({ ...d, bed: shiftClock(d.bed, -STEP) }))}
-              onPlus={() => setDraft((d) => ({ ...d, bed: shiftClock(d.bed, STEP) }))}
+              onMinus={() => setDraft((d) => ({ ...d, bed: shiftClock(d.bed, -STEP), timesTouched: true }))}
+              onPlus={() => setDraft((d) => ({ ...d, bed: shiftClock(d.bed, STEP), timesTouched: true }))}
             />
             <Stepper
               id="goal-wake"
               label="Wake time"
               value={formatClock(draft.wake)}
-              onMinus={() => setDraft((d) => ({ ...d, wake: shiftClock(d.wake, -STEP) }))}
-              onPlus={() => setDraft((d) => ({ ...d, wake: shiftClock(d.wake, STEP) }))}
+              onMinus={() => setDraft((d) => ({ ...d, wake: shiftClock(d.wake, -STEP), timesTouched: true }))}
+              onPlus={() => setDraft((d) => ({ ...d, wake: shiftClock(d.wake, STEP), timesTouched: true }))}
             />
             <Text testID="goal-window-line" className="text-sm" style={{ color: short ? colors.scoreFair : colors.muted }}>
               {sameTimes
@@ -255,8 +269,8 @@ export function BedtimeGoalScreen() {
                 testID="winddown-switch"
                 accessibilityLabel="Wind-down reminder"
                 value={reminderOn && !!saved.bedtimeGoal}
-                disabled={!saved.bedtimeGoal || reminderBusy}
-                accessibilityState={{ disabled: !saved.bedtimeGoal || reminderBusy, checked: reminderOn && !!saved.bedtimeGoal }}
+                disabled={switchDisabled}
+                accessibilityState={{ disabled: switchDisabled, checked: reminderOn && !!saved.bedtimeGoal }}
                 onValueChange={(next) => void toggleReminder(next)}
                 trackColor={{ true: colors.accent }}
               />

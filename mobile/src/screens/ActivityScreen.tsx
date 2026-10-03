@@ -82,6 +82,25 @@ export function ActivityScreen() {
     };
   }, [load, dataVersion]);
 
+  // Coming back (e.g. from the Bedtime goal screen) re-reads, so a new sleep
+  // goal recolours the heat map. load keeps what is on screen until the new
+  // data lands, so there is no flash; the first focus (opening) is skipped.
+  const blurred = useRef(false);
+  useEffect(() => {
+    const offBlur = navigation.addListener?.('blur', () => {
+      blurred.current = true;
+    });
+    const offFocus = navigation.addListener?.('focus', () => {
+      if (!blurred.current) return;
+      blurred.current = false;
+      load();
+    });
+    return () => {
+      offBlur?.();
+      offFocus?.();
+    };
+  }, [navigation, load]);
+
   async function onRefresh() {
     setRefreshing(true);
     // Pull from Google Health first, then read what it brought in.
