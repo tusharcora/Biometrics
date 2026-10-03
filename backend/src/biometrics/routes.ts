@@ -4,6 +4,9 @@ import { getBiometricsForUser } from './repository';
 import { getActivityForUser, getSleepForUser, isCivilDate, parseActivityRange } from './activity';
 import { getSleepNight } from './sleepNight';
 import { getSleepRegularity, parseRegularityDays } from './regularity';
+import { localCivilDateOrUtc } from './civilDate';
+import { getSleepGoal, parseSleepGoalPatch, updateSleepGoal } from '../users/goals';
+import { enqueueScoreCompute } from '../scoring/queue';
 import { prisma } from '../db/client';
 
 export const biometricsRouter = Router();
@@ -70,6 +73,43 @@ biometricsRouter.get('/me/sleep/regularity', requireAuth, async (req: AuthedRequ
     return;
   }
   res.json(await getSleepRegularity(req.userId!, days));
+});
+
+biometricsRouter.get('/me/sleep/goal', requireAuth, async (req: AuthedRequest, res) => {
+  res.json(await getSleepGoal(req.userId!));
+});
+
+/**
+ * Any subset of { sleepGoalMinutes, bedtimeGoal, wakeGoal }; returns the saved
+ * goal. The sleep goal is a scoring input, so changing it rescores the user's
+ * local today (only today: past scores keep the goal they were computed with).
+ * Bedtime and wake goals are display/reminder settings and never rescore.
+ */
+biometricsRouter.put('/me/sleep/goal', requireAuth, async (req: AuthedRequest, res) => {
+  const patch = parseSleepGoalPatch(req.body);
+  if (!patch) {
+    res.status(400).json({ error: 'invalid_goal' });
+    return;
+  }
+
+  const userId = req.userId!;
+  const before = await prisma.user.findUnique({ where: { id: userId }, select: { sleepGoalMinutes: true, timezone: true } });
+  const saved = before ? await updateSleepGoal(userId, patch) : null;
+  if (!before || !saved) {
+    res.status(404).json({ error: 'User not found' });
+    return;
+  }
+
+  // Enqueued, not computed inline, and a failure must not fail a goal the user
+  // already saved (the nightly sweep is the backstop).
+  if (patch.sleepGoalMinutes !== undefined && patch.sleepGoalMinutes !== before.sleepGoalMinutes) {
+    const today = localCivilDateOrUtc(new Date(), before.timezone);
+    await enqueueScoreCompute(userId, today).catch((err) =>
+      console.error(`Failed to enqueue a score recompute for ${today} after a sleep goal change`, err),
+    );
+  }
+
+  res.json(saved);
 });
 
 /**

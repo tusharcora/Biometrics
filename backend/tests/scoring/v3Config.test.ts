@@ -380,7 +380,9 @@ describe('v3 rollout against the database', () => {
     expect(dto.algorithmVersion).toBe('v3');
     expect(Object.keys(dto).sort()).toEqual(['algorithmVersion', 'coldStart', 'confidenceLevel', 'date', 'factors', 'score', 'type']);
     for (const f of dto.factors) {
-      expect(Object.keys(f).sort()).toEqual(['contribution', 'excluded', 'factor', 'imputed', 'label', 'points', 'weight', 'z']);
+      const keys = ['contribution', 'excluded', 'factor', 'imputed', 'label', 'points', 'weight', 'z'];
+      // SLEEP_DURATION also carries the sleep goal it was scored against (spec 2026-10-03 §2).
+      expect(Object.keys(f).sort()).toEqual((f.factor === 'SLEEP_DURATION' ? [...keys, 'goalMinutes'] : keys).sort());
     }
 
     // A row written by v2 reports v2 (the DTO shows the stored row's version, not the live one).

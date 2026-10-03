@@ -64,6 +64,8 @@ export interface FactorInput {
    * absent, `z` is the raw value. Only used to record `zRaw` on the output.
    */
   zRaw?: number | null;
+  /** The sleep goal the factor was scored against (SLEEP_DEBT, SLEEP_DURATION); carried through to the stored row. */
+  goalMinutes?: number;
   imputed: boolean;
   excluded: boolean;
 }
@@ -75,6 +77,8 @@ export interface FactorContribution {
   z: number | null;
   /** The unclamped z, recorded only under a config with a zClamp (v3+), for explainability. */
   zRaw?: number | null;
+  /** Passed through from FactorInput, excluded or not: "vs your goal" names the goal that day's score used. */
+  goalMinutes?: number;
   /** The weight actually used that day, after renormalizing around excluded factors (0 when excluded). */
   weight: number;
   /** weight * direction * z. */
