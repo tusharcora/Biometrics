@@ -3,6 +3,7 @@ import { requireAuth, AuthedRequest } from '../auth/middleware';
 import { getBiometricsForUser } from './repository';
 import { getActivityForUser, getSleepForUser, isCivilDate, parseActivityRange } from './activity';
 import { getSleepNight } from './sleepNight';
+import { getSleepRegularity, parseRegularityDays } from './regularity';
 import { prisma } from '../db/client';
 
 export const biometricsRouter = Router();
@@ -56,6 +57,19 @@ biometricsRouter.get('/me/sleep/night/:date', requireAuth, async (req: AuthedReq
     return;
   }
   res.json(night);
+});
+
+/**
+ * Bedtime and wake-time regularity over the last 7 or 30 nights (?days=7|30),
+ * for the Sleep screen's regularity card.
+ */
+biometricsRouter.get('/me/sleep/regularity', requireAuth, async (req: AuthedRequest, res) => {
+  const days = parseRegularityDays(req.query.days);
+  if (!days) {
+    res.status(400).json({ error: 'days must be 7 or 30' });
+    return;
+  }
+  res.json(await getSleepRegularity(req.userId!, days));
 });
 
 /**
