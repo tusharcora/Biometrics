@@ -1,5 +1,5 @@
 import fetch from 'node-fetch';
-import { BiometricMetricType, HealthMetricPoint, SleepSessionPoint } from '../types';
+import { BiometricMetricType, HealthMetricPoint, SleepSessionPoint, SleepStagePoint } from '../types';
 import { parseUtcOffsetSeconds } from '../biometrics/civilDate';
 
 const BASE_URL = 'https://health.googleapis.com/v4';
@@ -213,6 +213,21 @@ export async function fetchMetricRange(
   }
 }
 
+// Stage types the SleepStageType enum stores; anything else (e.g. SNORING) is skipped.
+const STAGE_TYPES = new Set(['AWAKE', 'LIGHT', 'DEEP', 'REM']);
+
+// Google sends counts as numeric strings; '' and garbage become null, never 0.
+function numOrNull(v: unknown): number | null {
+  if (v == null || String(v).trim() === '') return null;
+  const n = Number(v);
+  return Number.isFinite(n) ? n : null;
+}
+
+function stageMinutes(summary: any, type: string): number | null {
+  const row = Array.isArray(summary?.stagesSummary) ? summary.stagesSummary.find((r: any) => r?.type === type) : undefined;
+  return row ? numOrNull(row.minutes) : null;
+}
+
 /**
  * Fetches raw sleep sessions in [startDate, endDate) (same half-open
  * convention as fetchMetricRange), one entry per Google `Sleep` object.
@@ -230,6 +245,7 @@ export async function fetchMetricRange(
  * own local time; a null offset means the caller falls back to the user's
  * timezone. Rows missing either interval bound or minutesAsleep are skipped
  * (they cannot be keyed or summed) rather than defaulted.
+ * It also reads the stage timeline and night summary (spec 2026-10-03 §1).
  */
 export async function fetchSleepSessions(
   accessToken: string,
@@ -256,6 +272,21 @@ export async function fetchSleepSessions(
       // Malformed or absent offsets are null (never NaN); the day key then falls back to User.timezone.
       startUtcOffsetSeconds: parseUtcOffsetSeconds(interval.startUtcOffset),
       endUtcOffsetSeconds: parseUtcOffsetSeconds(interval.endUtcOffset),
+      sleepType: typeof r.sleep?.type === 'string' ? r.sleep.type : null,
+      mainSleep: typeof r.sleep?.metadata?.mainSleep === 'boolean' ? r.sleep.metadata.mainSleep : null,
+      minutesInSleepPeriod: numOrNull(r.sleep?.summary?.minutesInSleepPeriod),
+      minutesAwake: numOrNull(r.sleep?.summary?.minutesAwake),
+      minutesToFallAsleep: numOrNull(r.sleep?.summary?.minutesToFallAsleep),
+      minutesAfterWakeUp: numOrNull(r.sleep?.summary?.minutesAfterWakeUp),
+      deepMinutes: stageMinutes(r.sleep?.summary, 'DEEP'),
+      lightMinutes: stageMinutes(r.sleep?.summary, 'LIGHT'),
+      remMinutes: stageMinutes(r.sleep?.summary, 'REM'),
+      awakeMinutes: stageMinutes(r.sleep?.summary, 'AWAKE'),
+      stages: (Array.isArray(r.sleep?.stages) ? r.sleep.stages : [])
+        .filter((g: any) => STAGE_TYPES.has(g?.type) && g.startTime && g.endTime)
+        .map((g: any) => ({ type: g.type, startTime: new Date(g.startTime), endTime: new Date(g.endTime) }))
+        .filter((g: SleepStagePoint) => !Number.isNaN(g.startTime.getTime()) && !Number.isNaN(g.endTime.getTime()) && g.endTime > g.startTime)
+        .sort((a: SleepStagePoint, b: SleepStagePoint) => a.startTime.getTime() - b.startTime.getTime()),
     });
   }
   return sessions;
