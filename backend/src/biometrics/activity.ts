@@ -1,5 +1,6 @@
 import { prisma } from '../db/client';
 import { civilDateToUtcMidnight, localClockTime, sessionEndCivilDate } from './civilDate';
+import { pickMainSession } from './mainSession';
 
 // The heat map's widest view is a trailing year drawn as whole week columns
 // (up to 371 days); 400 leaves room for that without making this an unbounded
@@ -84,7 +85,7 @@ export interface SleepActivityDTO {
   earliestDate: string | null;
 }
 
-type SessionTimes = { startTime: Date; endTime: Date; startUtcOffsetSeconds: number | null; endUtcOffsetSeconds: number | null };
+type SessionTimes = { startTime: Date; endTime: Date; minutesAsleep: number; startUtcOffsetSeconds: number | null; endUtcOffsetSeconds: number | null };
 
 const minutesBetween = (s: SessionTimes) => (s.endTime.getTime() - s.startTime.getTime()) / 60000;
 
@@ -118,7 +119,7 @@ export async function getSleepForUser(userId: string, range: ActivityRange): Pro
     // margin each side holds every session ending on a date in the range.
     prisma.sleepSession.findMany({
       where: { userId, endTime: { gte: new Date(gte.getTime() - DAY_MS), lt: new Date(lt.getTime() + DAY_MS) } },
-      select: { startTime: true, endTime: true, startUtcOffsetSeconds: true, endUtcOffsetSeconds: true },
+      select: { startTime: true, endTime: true, minutesAsleep: true, startUtcOffsetSeconds: true, endUtcOffsetSeconds: true },
     }),
   ]);
   const timeZone = user?.timezone ?? 'UTC';
@@ -134,7 +135,7 @@ export async function getSleepForUser(userId: string, range: ActivityRange): Pro
     nights: records.map((r) => {
       const date = r.recordedAt.toISOString().slice(0, 10);
       const own = sessionsByDate.get(date) ?? [];
-      const main = own.reduce<SessionTimes | null>((best, s) => (!best || minutesBetween(s) > minutesBetween(best) ? s : best), null);
+      const main = pickMainSession(own);
       const score = scoreByDate.get(date);
       return {
         date,

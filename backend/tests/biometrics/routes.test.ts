@@ -234,6 +234,19 @@ describe('GET /me/sleep', () => {
     ]);
   });
 
+  it('takes the main sleep by minutes asleep, not by time in bed, as scoring does', async () => {
+    const user = await createUser('sleep-main-rule');
+    // A restless 5h in bed with 200 min asleep, then 3.5h in bed with 205 min asleep.
+    await seedNight(user.id, '2026-09-12T22:00:00Z', '2026-09-13T03:00:00Z', 200);
+    await seedNight(user.id, '2026-09-13T03:30:00Z', '2026-09-13T07:00:00Z', 205);
+
+    const res = await getSleep(user.id, { from: '2026-09-13', to: '2026-09-13' });
+
+    expect(res.body.nights).toEqual([
+      { date: '2026-09-13', minutesAsleep: 405, minutesInBed: 510, bedtime: '03:30', wakeTime: '07:00', sleepScore: null },
+    ]);
+  });
+
   it("includes that day's Sleep Score, rounded", async () => {
     const user = await createUser('sleep-score');
     await seedNight(user.id, '2026-09-14T23:00:00Z', '2026-09-15T07:00:00Z', 450);
