@@ -1,7 +1,8 @@
 import { Router } from 'express';
 import { requireAuth, AuthedRequest } from '../auth/middleware';
 import { getBiometricsForUser } from './repository';
-import { getActivityForUser, getSleepForUser, parseActivityRange } from './activity';
+import { getActivityForUser, getSleepForUser, isCivilDate, parseActivityRange } from './activity';
+import { getSleepNight } from './sleepNight';
 import { prisma } from '../db/client';
 
 export const biometricsRouter = Router();
@@ -36,6 +37,25 @@ biometricsRouter.get('/me/sleep', requireAuth, async (req: AuthedRequest, res) =
     return;
   }
   res.json(await getSleepForUser(req.userId!, range));
+});
+
+/**
+ * One night in full for the night screen (:date is the night-END civil date):
+ * the main session's times, stage timeline and totals, the naps, that day's
+ * Sleep Score and the usual minutes asleep. 404 when no session ends that date.
+ */
+biometricsRouter.get('/me/sleep/night/:date', requireAuth, async (req: AuthedRequest, res) => {
+  const { date } = req.params;
+  if (!isCivilDate(date)) {
+    res.status(400).json({ error: 'date must be a YYYY-MM-DD date' });
+    return;
+  }
+  const night = await getSleepNight(req.userId!, date);
+  if (!night) {
+    res.status(404).json({ error: 'not_found' });
+    return;
+  }
+  res.json(night);
 });
 
 /**

@@ -12,7 +12,7 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 // A real calendar date, not just the right shape: "2026-02-30" parses to
 // March 2nd, so the round trip is what rejects it.
-function isCivilDate(value: unknown): value is string {
+export function isCivilDate(value: unknown): value is string {
   if (typeof value !== 'string' || !ISO_DATE.test(value)) return false;
   const d = civilDateToUtcMidnight(value);
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
