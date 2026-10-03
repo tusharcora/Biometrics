@@ -26,3 +26,12 @@ export function withAlpha(color: string, alpha: number): string {
   if (!match) return color;
   return `rgba(${match[1]}, ${match[2]}, ${match[3]}, ${alpha})`;
 }
+
+// 'rgb(r, g, b)' moved `amount` (0 to 1) of the way to white: the lit top edge
+// of a gradient fill in a token colour.
+export function mixWithWhite(color: string, amount: number): string {
+  const match = color.match(/^rgb\((\d+),\s*(\d+),\s*(\d+)\)$/);
+  if (!match) return color;
+  const mix = (v: string) => Math.round(Number(v) + (255 - Number(v)) * amount);
+  return `rgb(${mix(match[1]!)}, ${mix(match[2]!)}, ${mix(match[3]!)})`;
+}

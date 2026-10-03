@@ -1,5 +1,6 @@
 import { prisma } from '../db/client';
 import { civilDateToUtcMidnight, localClockTime, sessionEndCivilDate } from './civilDate';
+import { pickMainSession } from './mainSession';
 
 // The heat map's widest view is a trailing year drawn as whole week columns
 // (up to 371 days); 400 leaves room for that without making this an unbounded
@@ -11,7 +12,7 @@ const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
 
 // A real calendar date, not just the right shape: "2026-02-30" parses to
 // March 2nd, so the round trip is what rejects it.
-function isCivilDate(value: unknown): value is string {
+export function isCivilDate(value: unknown): value is string {
   if (typeof value !== 'string' || !ISO_DATE.test(value)) return false;
   const d = civilDateToUtcMidnight(value);
   return !Number.isNaN(d.getTime()) && d.toISOString().slice(0, 10) === value;
@@ -70,11 +71,20 @@ export interface SleepNightDTO {
   minutesAsleep: number;
   /** Total minutes from start to end across that date's sessions. */
   minutesInBed: number | null;
-  /** Local "HH:MM" start and end of the night's longest session, so a nap never sets the bedtime. */
+  /**
+   * Local "HH:MM" start and end of the night's main session (most minutes asleep, earliest
+   * start on a tie), so a nap never sets the bedtime.
+   */
   bedtime: string | null;
   wakeTime: string | null;
   /** That day's Sleep Score, once one has been computed. */
   sleepScore: number | null;
+  /** The main session's minutes awake, when its source reported a summary. */
+  minutesAwake: number | null;
+  /** The main session's minutes in each stage; null when it has no stage summary at all. */
+  stageMinutes: { deep: number; light: number; rem: number; awake: number } | null;
+  /** Whether the main session has a DEEP, LIGHT or REM stage: AWAKE alone is not stages. */
+  hasStages: boolean;
 }
 
 export interface SleepActivityDTO {
@@ -82,9 +92,12 @@ export interface SleepActivityDTO {
   // The user's oldest SLEEP rollup, so the client can tell "history not
   // synced yet" apart from "no sleep recorded on those nights".
   earliestDate: string | null;
+  // True while a connected account's older nights still wait for their
+  // one-off stage backfill, so the client can say stages are on the way.
+  stagesBackfillPending: boolean;
 }
 
-type SessionTimes = { startTime: Date; endTime: Date; startUtcOffsetSeconds: number | null; endUtcOffsetSeconds: number | null };
+type SessionTimes = { startTime: Date; endTime: Date; minutesAsleep: number; startUtcOffsetSeconds: number | null; endUtcOffsetSeconds: number | null };
 
 const minutesBetween = (s: SessionTimes) => (s.endTime.getTime() - s.startTime.getTime()) / 60000;
 
@@ -98,7 +111,7 @@ export async function getSleepForUser(userId: string, range: ActivityRange): Pro
   const gte = civilDateToUtcMidnight(range.from);
   const lt = new Date(civilDateToUtcMidnight(range.to).getTime() + DAY_MS);
 
-  const [user, records, earliest, scores, sessions] = await Promise.all([
+  const [user, records, earliest, scores, sessions, conn] = await Promise.all([
     prisma.user.findUnique({ where: { id: userId }, select: { timezone: true } }),
     prisma.biometricRecord.findMany({
       where: { userId, metricType: 'SLEEP', recordedAt: { gte, lt } },
@@ -118,12 +131,17 @@ export async function getSleepForUser(userId: string, range: ActivityRange): Pro
     // margin each side holds every session ending on a date in the range.
     prisma.sleepSession.findMany({
       where: { userId, endTime: { gte: new Date(gte.getTime() - DAY_MS), lt: new Date(lt.getTime() + DAY_MS) } },
-      select: { startTime: true, endTime: true, startUtcOffsetSeconds: true, endUtcOffsetSeconds: true },
+      select: {
+        startTime: true, endTime: true, startUtcOffsetSeconds: true, endUtcOffsetSeconds: true, minutesAsleep: true,
+        minutesAwake: true, deepMinutes: true, lightMinutes: true, remMinutes: true, awakeMinutes: true,
+        stages: { where: { type: { in: ['DEEP', 'LIGHT', 'REM'] } }, select: { id: true }, take: 1 },
+      },
     }),
+    prisma.healthConnection.findUnique({ where: { userId }, select: { status: true, sleepStagesBackfilledAt: true } }),
   ]);
   const timeZone = user?.timezone ?? 'UTC';
 
-  const sessionsByDate = new Map<string, SessionTimes[]>();
+  const sessionsByDate = new Map<string, (typeof sessions)[number][]>();
   for (const s of sessions) {
     const date = sessionEndCivilDate(s, timeZone);
     sessionsByDate.set(date, [...(sessionsByDate.get(date) ?? []), s]);
@@ -134,7 +152,7 @@ export async function getSleepForUser(userId: string, range: ActivityRange): Pro
     nights: records.map((r) => {
       const date = r.recordedAt.toISOString().slice(0, 10);
       const own = sessionsByDate.get(date) ?? [];
-      const main = own.reduce<SessionTimes | null>((best, s) => (!best || minutesBetween(s) > minutesBetween(best) ? s : best), null);
+      const main = pickMainSession(own);
       const score = scoreByDate.get(date);
       return {
         date,
@@ -143,8 +161,14 @@ export async function getSleepForUser(userId: string, range: ActivityRange): Pro
         bedtime: main ? localClockTime(main.startTime, main.startUtcOffsetSeconds, timeZone) : null,
         wakeTime: main ? localClockTime(main.endTime, main.endUtcOffsetSeconds, timeZone) : null,
         sleepScore: score == null ? null : Math.round(score),
+        minutesAwake: main?.minutesAwake ?? null,
+        stageMinutes: main && [main.deepMinutes, main.lightMinutes, main.remMinutes, main.awakeMinutes].some((v) => v != null)
+          ? { deep: main.deepMinutes ?? 0, light: main.lightMinutes ?? 0, rem: main.remMinutes ?? 0, awake: main.awakeMinutes ?? 0 }
+          : null,
+        hasStages: (main?.stages.length ?? 0) > 0,
       };
     }),
     earliestDate: earliest ? earliest.recordedAt.toISOString().slice(0, 10) : null,
+    stagesBackfillPending: conn?.status === 'CONNECTED' && conn.sleepStagesBackfilledAt === null,
   };
 }

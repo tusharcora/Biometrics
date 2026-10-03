@@ -2,6 +2,7 @@ import React from 'react';
 import { View } from 'react-native';
 import { Text } from './text';
 import { formatPoints } from '../../lib/scoreInsights';
+import { formatGoalDuration } from '../../lib/sleepWindow';
 import type { FactorDTO } from '../../api/scores';
 
 // One shared 0-centred scale for every bar in a list: the largest |points|
@@ -54,6 +55,12 @@ export function FactorBar({ factor, scale }: FactorBarProps) {
           </Text>
         )}
       </View>
+      {/* The sleep factors carry the goal they were scored against; older scores don't, and never get a guess. */}
+      {factor.goalMinutes != null ? (
+        <Text testID={`factor-goal-${factor.factor}`} className="-mt-1 text-xs text-muted-foreground">
+          {`vs your goal of ${formatGoalDuration(factor.goalMinutes)}`}
+        </Text>
+      ) : null}
 
       <View className="h-2 flex-row overflow-hidden rounded-full bg-muted">
         <View style={{ flex: 1, flexDirection: 'row', justifyContent: 'flex-end' }}>

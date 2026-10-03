@@ -41,8 +41,9 @@ interface DayInputs {
  *  - RECOVERY is expected for any day with an HRV, RESTING_HR or SLEEP input;
  *  - SLEEP is expected only for a day with a SLEEP input (a day with just HRV
  *    never gets a Sleep Score, so it must not be re-enqueued forever for
- *    lacking one). Its input is the SLEEP rollup, whose syncedAt is bumped on
- *    every session upsert.
+ *    lacking one). Its input is the SLEEP rollup, whose syncedAt is bumped
+ *    whenever a session upsert is new or moves its end, minutes or offsets
+ *    (a stage or summary refresh alone leaves it alone).
  */
 export async function runScoreSweep({
   queue = syncQueue,

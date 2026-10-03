@@ -1,5 +1,5 @@
 import { Job, Worker } from 'bullmq';
-import type { HealthConnection } from '@prisma/client';
+import type { HealthConnection, Prisma } from '@prisma/client';
 import { prisma } from '../db/client';
 import { connection, TOKEN_REFRESH_SWEEP_JOB } from './queue';
 import { runTokenRefreshSweep } from './tokenRefreshJob';
@@ -14,6 +14,8 @@ import {
   BackfillJobData,
   SLEEP_HISTORY_BACKFILL_JOB,
   SleepHistoryBackfillJobData,
+  SLEEP_STAGES_BACKFILL_JOB,
+  SleepStagesBackfillJobData,
   STEPS_HISTORY_BACKFILL_JOB,
   StepsHistoryBackfillJobData,
 } from './queue';
@@ -310,38 +312,68 @@ async function handleStepsHistoryJob(data: StepsHistoryBackfillJobData): Promise
 }
 
 /**
- * A year of sleep sessions for the Sleep page of the activity heat map.
- * Stored through storeSleepSessions like any other sleep sync, so the SLEEP
- * rollups stay derived from sessions. Unlike steps, sleep IS a score input:
- * a night just before the 30-day connect backfill still sits in the
- * sleep-debt window of days that were already scored, and the nightly sweep's
- * per-day staleness test cannot see that. So the affected days are re-scored,
- * but only inside the sweep's own lookback: scoring a year of old days nobody
- * asked for would be new behaviour, not a backfill. lastSyncedAt is left
- * alone: this is history, not a sync.
+ * One pass over the sleep history window, shared by the history backfill and
+ * the one-off stage backfill; only the marker each sets differs. Sessions go
+ * through storeSleepSessions like any other sleep sync, so the SLEEP rollups
+ * stay derived from sessions. Sleep IS a score input: a night just before the
+ * 30-day connect backfill still sits in the sleep-debt window of days that
+ * were already scored, and the nightly sweep's per-day staleness test cannot
+ * see that. So the affected days are re-scored, but only inside the sweep's
+ * own lookback: scoring a year of old days nobody asked for would be new
+ * behaviour, not a backfill. lastSyncedAt is left alone: this is history, not
+ * a sync.
  */
+async function runSleepHistoryPass(
+  conn: HealthConnection,
+  marker: () => Prisma.HealthConnectionUpdateInput,
+): Promise<void> {
+  const { startDate, endDate } = sleepHistoryWindow();
+  try {
+    if (!isEmptyWindow(startDate, endDate)) {
+      const rescore = await syncSleep(new JobTokenSession(conn), conn.userId, startDate, endDate);
+      const oldest = shiftDate(endDate, -SWEEP_LOOKBACK_DAYS);
+      await requestScores(conn.userId, rescore.filter((date) => date >= oldest));
+    }
+    await prisma.healthConnection.update({ where: { userId: conn.userId }, data: marker() });
+  } catch (err) {
+    if (isUnauthorized(err)) {
+      await disconnect(conn.userId, conn.webhookSubscriptionId);
+      return;
+    }
+    // Any other error (e.g. 429) fails this attempt without setting the marker.
+    // The queue retries the job with exponential backoff (the pass is
+    // idempotent: batches that landed are a no-op the second time); only once
+    // every attempt has failed does removeOnFail drop it, and then the next
+    // server start's pending sweep re-enqueues it.
+    throw err;
+  }
+}
+
+/** A year of sleep sessions for the Sleep page of the activity heat map. */
 async function handleSleepHistoryJob(data: SleepHistoryBackfillJobData): Promise<void> {
   const conn = await prisma.healthConnection.findUnique({ where: { userId: data.userId } });
   if (!conn || conn.status === 'DISCONNECTED') return;
 
-  const { startDate, endDate } = sleepHistoryWindow();
-  try {
-    if (!isEmptyWindow(startDate, endDate)) {
-      const rescore = await syncSleep(new JobTokenSession(conn), data.userId, startDate, endDate);
-      const oldest = shiftDate(endDate, -SWEEP_LOOKBACK_DAYS);
-      await requestScores(data.userId, rescore.filter((date) => date >= oldest));
-    }
-    await prisma.healthConnection.update({
-      where: { userId: data.userId },
-      data: { sleepHistoryBackfilledAt: new Date() },
-    });
-  } catch (err) {
-    if (isUnauthorized(err)) {
-      await disconnect(data.userId, conn.webhookSubscriptionId);
-      return;
-    }
-    throw err; // other errors (e.g. 429) are retried by BullMQ's job retry policy
-  }
+  // This pull carries each night's stages, so the one-off stage backfill is done too.
+  await runSleepHistoryPass(conn, () => {
+    const now = new Date();
+    return { sleepHistoryBackfilledAt: now, sleepStagesBackfilledAt: now };
+  });
+}
+
+/**
+ * The one-off stage re-fetch for connections whose history was stored before
+ * stages were captured. storeSleepSessions only returns dates whose nights
+ * changed (not ones that just gained stages or a summary), so a stage-only
+ * pass asks for no scores, while a night Google revised meanwhile is re-scored
+ * like any sync. Skipped when the stages are already in, e.g. because a
+ * reconnect's history backfill finished first.
+ */
+async function handleSleepStagesJob(data: SleepStagesBackfillJobData): Promise<void> {
+  const conn = await prisma.healthConnection.findUnique({ where: { userId: data.userId } });
+  if (!conn || conn.status === 'DISCONNECTED' || conn.sleepStagesBackfilledAt) return;
+
+  await runSleepHistoryPass(conn, () => ({ sleepStagesBackfilledAt: new Date() }));
 }
 
 export async function processSyncJob(job: Job): Promise<void> {
@@ -357,6 +389,8 @@ export async function processSyncJob(job: Job): Promise<void> {
     await handleStepsHistoryJob(job.data as StepsHistoryBackfillJobData);
   } else if (job.name === SLEEP_HISTORY_BACKFILL_JOB) {
     await handleSleepHistoryJob(job.data as SleepHistoryBackfillJobData);
+  } else if (job.name === SLEEP_STAGES_BACKFILL_JOB) {
+    await handleSleepStagesJob(job.data as SleepStagesBackfillJobData);
   } else if (job.name === TOKEN_REFRESH_SWEEP_JOB) {
     // Scheduled through the queue so exactly one instance sweeps per tick.
     await runTokenRefreshSweep();

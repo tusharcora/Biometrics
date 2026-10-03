@@ -1,4 +1,4 @@
-import { cn, withAlpha } from '../../src/lib/utils';
+import { cn, mixWithWhite, withAlpha } from '../../src/lib/utils';
 
 describe('cn', () => {
   it('keeps a custom font size alongside a text colour', () => {
@@ -25,5 +25,17 @@ describe('withAlpha', () => {
 
   it('leaves anything else untouched', () => {
     expect(withAlpha('#fff', 0.5)).toBe('#fff');
+  });
+});
+
+describe('mixWithWhite', () => {
+  it('moves each channel a share of the way to white', () => {
+    expect(mixWithWhite('rgb(55, 48, 163)', 0.2)).toBe('rgb(95, 89, 181)');
+    expect(mixWithWhite('rgb(55, 48, 163)', 0)).toBe('rgb(55, 48, 163)');
+    expect(mixWithWhite('rgb(55, 48, 163)', 1)).toBe('rgb(255, 255, 255)');
+  });
+
+  it('leaves a colour it cannot read unchanged', () => {
+    expect(mixWithWhite('#fff', 0.5)).toBe('#fff');
   });
 });

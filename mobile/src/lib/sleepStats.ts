@@ -76,10 +76,69 @@ export function formatDuration(minutes: number): string {
   return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
 }
 
+/** 25 -> "25m", 80 -> "1h 20m": short spans without the leading "0h". */
+export function formatShortDuration(minutes: number): string {
+  const m = Math.round(minutes);
+  return m < 60 ? `${m}m` : formatDuration(m);
+}
+
 /** "23:52" -> "11:52 pm". */
 export function formatClock(clock: string): string {
   const [h, m] = clock.split(':').map(Number);
   return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'pm' : 'am'}`;
+}
+
+/**
+ * The night's offset from UTC in minutes (-240 for New York in summer). Stage
+ * segments are UTC instants, while the night's bedtime is the local "HH:MM" the
+ * screen shows, so the offset is the gap between bedtime and the first stage.
+ * Offsets come in quarter hours, which absorbs a first stage that starts a few
+ * minutes after bedtime.
+ */
+export function nightUtcOffset(bedtime: string, firstStart: string): number {
+  const [h, m] = bedtime.split(':').map(Number);
+  const start = new Date(firstStart);
+  const diff = h * 60 + m - (start.getUTCHours() * 60 + start.getUTCMinutes());
+  // Into -12h..+12h: a 23:10 bedtime at 03:10Z is four hours behind, not twenty ahead.
+  const wrapped = ((((diff + 720) % 1440) + 1440) % 1440) - 720;
+  return Math.round(wrapped / 15) * 15 || 0;
+}
+
+/** An ISO instant's local "HH:MM" at `offset` minutes from UTC, for formatClock. */
+export function clockAt(iso: string, offset: number): string {
+  const local = new Date(Date.parse(iso) + offset * 60000);
+  return `${String(local.getUTCHours()).padStart(2, '0')}:${String(local.getUTCMinutes()).padStart(2, '0')}`;
+}
+
+export interface NightClock {
+  // Minutes from UTC at bedtime (for whole-hour guides).
+  offset: number;
+  /** An instant's local "HH:MM" in this night, for formatClock. */
+  at: (iso: string) => string;
+}
+
+/**
+ * The clock a night's stage instants are told on: the main session's own UTC
+ * offsets from the server. When they differ (the clocks changed in the night),
+ * times from the night's midpoint on use the end offset. Only when the server
+ * sends neither is the offset read off bedtime (nightUtcOffset).
+ */
+export function nightClock(
+  night: { bedtime: string; startUtcOffsetSeconds: number | null; endUtcOffsetSeconds: number | null },
+  stages: { start: string; end: string }[],
+): NightClock {
+  const startSec = night.startUtcOffsetSeconds ?? night.endUtcOffsetSeconds;
+  const endSec = night.endUtcOffsetSeconds ?? night.startUtcOffsetSeconds;
+  if (startSec === null || endSec === null) {
+    const offset = stages.length > 0 ? nightUtcOffset(night.bedtime, stages[0]!.start) : 0;
+    return { offset, at: (iso) => clockAt(iso, offset) };
+  }
+  const startOffset = startSec / 60;
+  const endOffset = endSec / 60;
+  // The DTO has no session instants, so the stage timeline stands in for its span.
+  // The latest end, not the last segment's: an earlier one can outlast it.
+  const midpoint = stages.length > 0 ? (Date.parse(stages[0]!.start) + Math.max(...stages.map((s) => Date.parse(s.end)))) / 2 : Infinity;
+  return { offset: startOffset, at: (iso) => clockAt(iso, Date.parse(iso) >= midpoint ? endOffset : startOffset) };
 }
 
 /** One line comparing a night to the visible range's average; null when there is nothing to compare. */

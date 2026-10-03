@@ -62,8 +62,9 @@ export function computeComposite(
   const totalWeight = active.reduce((sum, f) => sum + model.weights[f.factor]!, 0);
 
   const factors: FactorContribution[] = inputs.map((f) => {
+    const goal = f.goalMinutes !== undefined ? { goalMinutes: f.goalMinutes } : {};
     if (f.excluded || f.z === null) {
-      return { factor: f.factor, z: null, weight: 0, contribution: 0, imputed: false, excluded: true };
+      return { factor: f.factor, z: null, ...goal, weight: 0, contribution: 0, imputed: false, excluded: true };
     }
     const weight = model.weights[f.factor]! / totalWeight;
     const z = clampZ(f.z, cfg);
@@ -71,6 +72,7 @@ export function computeComposite(
       factor: f.factor,
       z,
       ...(cfg.zClamp ? { zRaw: f.zRaw ?? f.z } : {}),
+      ...goal,
       weight,
       contribution: weight * model.direction[f.factor]! * z,
       imputed: f.imputed,

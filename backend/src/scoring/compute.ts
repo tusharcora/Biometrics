@@ -117,6 +117,8 @@ function scoreRowData(algorithmVersion: string, outcome: ScoreOutcome) {
       z: x.z,
       // Only present under a config with a zClamp; the shape of older versions' rows is unchanged.
       ...(x.zRaw !== undefined ? { zRaw: x.zRaw } : {}),
+      // The sleep goal the factor used (SLEEP_DEBT, SLEEP_DURATION); absent on rows computed before it was recorded.
+      ...(x.goalMinutes !== undefined ? { goalMinutes: x.goalMinutes } : {}),
       weight: x.weight,
       contribution: x.contribution,
       points: x.points,

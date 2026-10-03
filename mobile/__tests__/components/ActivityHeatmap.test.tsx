@@ -10,7 +10,7 @@ const TODAY = '2026-09-22';
 const NO_SLEEP: SleepState = { phase: 'ready', nights: new Map(), earliestDate: '2025-01-01' };
 
 function nightOf(date: string, minutesAsleep: number, extra: Partial<SleepNight> = {}): [string, SleepNight] {
-  return [date, { date, minutesAsleep, minutesInBed: null, bedtime: null, wakeTime: null, sleepScore: null, ...extra }];
+  return [date, { date, minutesAsleep, minutesInBed: null, bedtime: null, wakeTime: null, sleepScore: null, minutesAwake: null, stageMinutes: null, hasStages: false, ...extra }];
 }
 
 function sleepOf(nights: [string, SleepNight][], earliestDate: string | null = '2025-01-01'): SleepState {
@@ -273,6 +273,27 @@ describe('ActivityHeatmap', () => {
       expect(getByTestId('night-detail-steps-link')).toHaveTextContent(/No data/);
     });
 
+    it('opens the full night from the night sheet', () => {
+      const onOpenNight = jest.fn();
+      const utils = render(
+        <ActivityHeatmap
+          steps={new Map()}
+          earliestDate="2025-01-01"
+          today={TODAY}
+          sleep={sleepOf([nightOf('2026-09-22', 467)])}
+          onOpenNight={onOpenNight}
+        />,
+      );
+      fireEvent(utils.getByTestId('sleep-heatmap-canvas'), 'layout', { nativeEvent: { layout: { width: 350, height: 300 } } });
+
+      fireEvent.press(utils.getByTestId('sleep-heatmap-grid'), { nativeEvent: SEP_22 });
+      fireEvent.press(utils.getByTestId('night-open-full'));
+
+      expect(onOpenNight).toHaveBeenCalledWith('2026-09-22');
+      // The sheet is a Modal: it closes so it can't sit above the pushed screen.
+      expect(utils.queryByTestId('night-detail')).toBeNull();
+    });
+
     it('jumps between the two sheets for the same day, and the page follows', () => {
       const { getByTestId, queryByTestId } = renderHeatmap([['2026-09-22', 12000]], '2025-01-01', sleepOf([nightOf('2026-09-22', 467)]));
 
@@ -327,6 +348,31 @@ describe('ActivityHeatmap', () => {
       expect(getByTestId('stat-total')).toHaveTextContent('5,000');
       fireEvent.press(getByTestId('sleep-retry'));
       expect(retry).toHaveBeenCalled();
+    });
+
+    it('links to the Sleep screen from the Sleep page header', () => {
+      const open = jest.fn();
+      const { getByTestId, queryByTestId } = render(
+        <ActivityHeatmap steps={new Map()} earliestDate="2025-01-01" today={TODAY} sleep={NO_SLEEP} onOpenSleepDetails={open} />,
+      );
+
+      // Not on the Steps page.
+      expect(queryByTestId('activity-sleep-details')).toBeNull();
+      fireEvent.press(getByTestId('activity-page-sleep'));
+      expect(getByTestId('activity-sleep-details')).toHaveTextContent(/Sleep details/);
+      fireEvent.press(getByTestId('activity-sleep-details'));
+      expect(open).toHaveBeenCalledTimes(1);
+
+      // The stacked views show sleep too, so they keep the link.
+      fireEvent.press(getByTestId('heatmap-view-year'));
+      expect(getByTestId('activity-sleep-details')).toBeTruthy();
+    });
+
+    it('draws no Sleep details link without a handler', () => {
+      const { getByTestId, queryByTestId } = renderHeatmap([]);
+
+      fireEvent.press(getByTestId('activity-page-sleep'));
+      expect(queryByTestId('activity-sleep-details')).toBeNull();
     });
 
     it('hides the sleep link on a steps day while sleep is unavailable', () => {

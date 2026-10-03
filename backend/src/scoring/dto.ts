@@ -11,6 +11,8 @@ export interface FactorDTO {
   factor: FactorKey;
   label: string;
   z: number | null;
+  /** SLEEP_DEBT and SLEEP_DURATION only: the sleep goal that score used. Absent on older rows; never guessed. */
+  goalMinutes?: number;
   weight: number;
   contribution: number;
   points: number;
@@ -101,6 +103,7 @@ function configFor(version: string): ScoreConfig {
 interface StoredFactor {
   factor: FactorKey;
   z: number | null;
+  goalMinutes?: number;
   weight: number;
   contribution: number;
   points?: number;
@@ -116,6 +119,7 @@ export function toDailyScoreDTO(row: DailyScore, snapshotsForDate: BaselineSnaps
     factor: f.factor,
     label: FACTOR_LABELS[f.factor],
     z: roundOrNull(f.z, 2),
+    ...(f.goalMinutes !== undefined ? { goalMinutes: f.goalMinutes } : {}),
     weight: round(f.weight, 3),
     contribution: round(f.contribution, 3),
     points: round(f.points ?? 0, 2),
