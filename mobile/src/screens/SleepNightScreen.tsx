@@ -7,9 +7,10 @@ import { fetchSleepNight, type SleepNightDetail } from '../api/sleep';
 import { useCharacter } from '../characters/CharacterContext';
 import { InBedShare } from '../components/activity-sheets';
 import { characterInfo } from '../components/characters/registry';
+import { MomentsCard } from '../components/sleep/MomentsCard';
 import { SectionError, useSection } from '../components/sleep/Section';
-import { StageBreakdown } from '../components/sleep/StageBreakdown';
-import { StageLegend, StageStrip } from '../components/sleep/StageStrip';
+import { SleepCyclesCard } from '../components/sleep/SleepCyclesCard';
+import { StageLanes } from '../components/sleep/StageLanes';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { SectionLabel } from '../components/ui/section-label';
@@ -17,7 +18,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { formatLongDay } from '../lib/heatmap';
 import { coachEntryRoute, useCoachStatus } from '../lib/useCoachStatus';
-import { formatClock, formatDuration, formatShortDuration } from '../lib/sleepStats';
+import { formatClock, formatDuration, formatShortDuration, nightUtcOffset } from '../lib/sleepStats';
 import { navigateToCoachEntry } from '../navigation/coachNavigation';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { useSync } from '../sync/SyncProvider';
@@ -64,30 +65,22 @@ function NightHeadline({ night }: { night: SleepNightDetail }) {
 // `onAsk` is null when the coach must not be offered (disabled or status unknown).
 function NightBody({ night, coachName, onAsk }: { night: SleepNightDetail; coachName: string; onAsk: (() => void) | null }) {
   const stages = night.hasStages && night.stages.length > 0 ? night.stages : null;
+  // Stages are UTC instants; the lanes, cycles and moments tell time in the night's own zone.
+  const offset = stages ? nightUtcOffset(night.bedtime, stages[0]!.start) : 0;
   const usual = usualLine(night.minutesAsleep, night.usualMinutesAsleep);
   // The backend can emit a zero-length nap in rare cases.
   const naps = night.naps.filter((n) => n.minutesAsleep > 0);
   return (
     <>
       {stages ? (
-        <Card className="gap-3">
-          <SectionLabel>Stages</SectionLabel>
-          <View testID="night-stage-strip" className="gap-1.5">
-            <StageStrip stages={stages} start={stages[0]!.start} end={stages[stages.length - 1]!.end} />
-            <View className="flex-row justify-between">
-              <Text className="text-xs text-muted-foreground" style={{ fontVariant: ['tabular-nums'] }}>
-                {formatClock(night.bedtime)}
-              </Text>
-              <Text className="text-xs text-muted-foreground" style={{ fontVariant: ['tabular-nums'] }}>
-                {formatClock(night.wakeTime)}
-              </Text>
-            </View>
-          </View>
-          <StageLegend />
-          {night.stageTotals ? (
-            <StageBreakdown totals={night.stageTotals} minutesAsleep={night.minutesAsleep} minutesInBed={night.minutesInBed} />
-          ) : null}
-        </Card>
+        <>
+          <Card className="gap-2.5">
+            <SectionLabel>Sleep stages</SectionLabel>
+            <StageLanes stages={stages} offset={offset} />
+          </Card>
+          <SleepCyclesCard stages={stages} offset={offset} />
+          <MomentsCard stages={stages} offset={offset} minutesToFallAsleep={night.minutesToFallAsleep} />
+        </>
       ) : night.minutesInBed > 0 ? (
         <Card className="gap-2">
           <View className="flex-row justify-between">
@@ -136,8 +129,9 @@ function NightBody({ night, coachName, onAsk }: { night: SleepNightDetail; coach
   );
 }
 
-// One night in full (spec 2026-10-03 §3, 8c): date and time asleep, the stage
-// strip and breakdown, the night's numbers, naps, and a question for the coach.
+// One night in full (spec 2026-10-03 §3, 8c; stage lanes, cycles and moments
+// from Night.dc.html): date and time asleep, the stages, the night's numbers,
+// naps, and a question for the coach.
 export function SleepNightScreen() {
   const navigation = useNavigation<any>();
   const { date } = useRoute<RouteProp<RootStackParamList, 'SleepNight'>>().params;

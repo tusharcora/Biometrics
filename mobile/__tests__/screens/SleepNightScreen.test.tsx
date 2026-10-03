@@ -26,7 +26,8 @@ const DETAIL: SleepNightDetail = {
   minutesAfterWakeUp: 8,
   hasStages: true,
   stages: [
-    { type: 'LIGHT', start: '2026-09-30T23:22:00.000Z', end: '2026-10-01T01:22:00.000Z' },
+    // UTC, so the 23:10 bedtime is the first stage's start.
+    { type: 'LIGHT', start: '2026-09-30T23:10:00.000Z', end: '2026-10-01T01:22:00.000Z' },
     { type: 'DEEP', start: '2026-10-01T01:22:00.000Z', end: '2026-10-01T02:42:00.000Z' },
     { type: 'AWAKE', start: '2026-10-01T02:42:00.000Z', end: '2026-10-01T03:32:00.000Z' },
     { type: 'REM', start: '2026-10-01T03:32:00.000Z', end: '2026-10-01T05:12:00.000Z' },
@@ -78,26 +79,27 @@ describe('SleepNightScreen', () => {
     expect(fetchSleepNight).toHaveBeenCalledWith('2026-10-01');
   });
 
-  it('draws the stage strip with bedtime and wake at its ends, and a legend', async () => {
+  it('draws the stages as lanes across the night, in local time', async () => {
     renderScreen();
 
-    const strip = await screen.findByTestId('night-stage-strip');
-    expect(within(strip).getByTestId('stage-strip')).toBeTruthy();
-    expect(strip).toHaveTextContent(/11:10 pm/);
-    expect(strip).toHaveTextContent(/7:00 am/);
-    expect(screen.getByTestId('stage-legend')).toBeTruthy();
+    const lanes = await screen.findByTestId('stage-lanes');
+    expect(within(lanes).getByTestId('stage-lane-DEEP')).toHaveTextContent(/Deep\s*1h 20m/);
+    expect(within(lanes).getByTestId('stage-lanes-axis')).toHaveTextContent(/11:10 pm.*5:12 am/);
+    // The lanes name every stage, so the old strip, legend and breakdown are gone.
+    expect(screen.queryByTestId('stage-strip')).toBeNull();
+    expect(screen.queryByTestId('stage-legend')).toBeNull();
+    expect(screen.queryByTestId('night-breakdown-deep')).toBeNull();
   });
 
-  it('breaks the night down by stage: minutes, percentage and count', async () => {
+  it('follows the lanes with the sleep cycles and the night\'s moments', async () => {
     renderScreen();
 
-    await screen.findByTestId('night-breakdown-deep');
-    // Deep, light and REM are shares of time asleep (400 min).
-    expect(screen.getByTestId('night-breakdown-deep')).toHaveTextContent(/Deep.*1h 20m.*20%.*2 times/);
-    expect(screen.getByTestId('night-breakdown-light')).toHaveTextContent(/Light.*3h 40m.*55%.*4 times/);
-    expect(screen.getByTestId('night-breakdown-rem')).toHaveTextContent(/REM.*1h 40m.*25%.*3 times/);
-    // Awake is a share of time in bed (470 min): 47 / 470 = 10%.
-    expect(screen.getByTestId('night-breakdown-awake')).toHaveTextContent(/Awake.*47m.*10%.*5 times/);
+    // One REM period at the end: a single cycle from 23:10 to 05:12.
+    expect(await screen.findByTestId('cycles-card')).toHaveTextContent(/1 sleep cycle/);
+    const moments = screen.getByTestId('moments-card');
+    // The night's own 12 min to fall asleep beats the stages' zero.
+    expect(within(moments).getAllByTestId('moment-row')[0]).toHaveTextContent(/Fell asleep.*12m/);
+    expect(moments).toHaveTextContent(/Woke during the night\s*50m at 2:42 am\s*1×/);
   });
 
   it('lists the night numbers and the difference from the usual night', async () => {
@@ -212,7 +214,7 @@ describe('SleepNightScreen', () => {
 
     await screen.findByTestId('night-numbers');
     expect(screen.queryByTestId('night-no-stages')).toBeNull();
-    expect(screen.queryByTestId('night-stage-strip')).toBeNull();
+    expect(screen.queryByTestId('stage-lanes')).toBeNull();
   });
 
   it('shows the asleep/in-bed bar instead of stages when the night has none', async () => {
@@ -220,9 +222,9 @@ describe('SleepNightScreen', () => {
     renderScreen();
 
     expect(await screen.findByTestId('night-no-stages')).toHaveTextContent('7h 50m in bed · 85% of it asleep');
-    expect(screen.queryByTestId('night-stage-strip')).toBeNull();
-    expect(screen.queryByTestId('night-breakdown-deep')).toBeNull();
-    expect(screen.queryByTestId('night-breakdown-awake')).toBeNull();
+    expect(screen.queryByTestId('stage-lanes')).toBeNull();
+    expect(screen.queryByTestId('cycles-card')).toBeNull();
+    expect(screen.queryByTestId('moments-card')).toBeNull();
   });
 
   it('says so when there is no night for the date', async () => {
