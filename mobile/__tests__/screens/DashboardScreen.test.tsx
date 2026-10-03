@@ -543,6 +543,19 @@ describe('DashboardScreen', () => {
       expect(getByTestId('metric-card-STEPS')).toBeTruthy();
     });
 
+    it('still opens the Sleep screen when the scores request fails', async () => {
+      mockApi({ records: steps, scoresError: new Error('boom') });
+
+      const { getByTestId } = render(<DashboardScreen />);
+
+      await waitFor(() => expect(getByTestId('sleep-score-unavailable')).toBeTruthy());
+      expect(getByTestId('sleep-score-unavailable').props.accessibilityRole).toBe('button');
+      mockNavigate.mockClear();
+      fireEvent.press(getByTestId('sleep-score-unavailable'));
+
+      expect(mockNavigate.mock.calls).toEqual([['Sleep']]);
+    });
+
     it('shows a skeleton while scores load', async () => {
       mockApi({ records: steps });
       const base = (apiFetch as jest.Mock).getMockImplementation()!;

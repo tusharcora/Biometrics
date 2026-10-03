@@ -41,6 +41,26 @@ function NumberRow({ label, value }: { label: string; value: string }) {
   );
 }
 
+// The main session's time asleep. On a nap day the Sleep screen's "Last
+// night" card and chart show the day's total, naps included, so the figure is
+// labelled as main sleep and that total sits beside it.
+function NightHeadline({ night }: { night: SleepNightDetail }) {
+  const napMinutes = night.naps.reduce((sum, n) => sum + Math.max(0, n.minutesAsleep), 0);
+  return (
+    <View className="gap-0.5">
+      <View className="flex-row items-baseline gap-2">
+        <Text className="font-display text-display">{formatDuration(night.minutesAsleep)}</Text>
+        <Text className="text-base text-muted-foreground">main sleep</Text>
+      </View>
+      {napMinutes > 0 ? (
+        <Text testID="night-with-naps" className="text-sm text-muted-foreground" style={{ fontVariant: ['tabular-nums'] }}>
+          {`${formatDuration(night.minutesAsleep + napMinutes)} with naps`}
+        </Text>
+      ) : null}
+    </View>
+  );
+}
+
 // `onAsk` is null when the coach must not be offered (disabled or status unknown).
 function NightBody({ night, coachName, onAsk }: { night: SleepNightDetail; coachName: string; onAsk: (() => void) | null }) {
   const stages = night.hasStages && night.stages.length > 0 ? night.stages : null;
@@ -148,12 +168,7 @@ export function SleepNightScreen() {
       <ScrollView contentContainerStyle={{ gap: 16, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32 }}>
         <View testID="night-header" className="gap-1">
           <Text className="text-sm text-muted-foreground">{formatLongDay(date)}</Text>
-          {night.phase === 'ready' && night.data ? (
-            <View className="flex-row items-baseline gap-2">
-              <Text className="font-display text-display">{formatDuration(night.data.minutesAsleep)}</Text>
-              <Text className="text-base text-muted-foreground">asleep</Text>
-            </View>
-          ) : null}
+          {night.phase === 'ready' && night.data ? <NightHeadline night={night.data} /> : null}
         </View>
 
         {night.phase === 'loading' ? <Skeleton testID="night-loading" className="h-64 w-full rounded-card" /> : null}

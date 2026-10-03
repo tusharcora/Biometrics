@@ -78,6 +78,14 @@ it('routes a cold-start reminder tap and listens for warm taps, cleaning both up
   expect(stopListening).toHaveBeenCalled();
 });
 
+// A cold launch never sees an AppState change to 'active', so a reminder the
+// OS dropped while the app was not running is restored at mount.
+it('reschedules the reminder once at mount', () => {
+  signedIn(true);
+  render(<RootNavigator />);
+  expect(rescheduleWindDown).toHaveBeenCalledTimes(1);
+});
+
 it('reschedules the reminder each time the app comes back to the foreground', () => {
   signedIn(true);
   const { unmount } = render(<RootNavigator />);

@@ -108,8 +108,10 @@ export function RootNavigator() {
     const launch = new AbortController();
     void routeInitialNotification(launch.signal);
     const stopListening = listenForNotificationTaps();
-    // Each return to the foreground puts the reminder back, which covers
-    // time-zone changes and the OS dropping it. Does nothing while it is off.
+    // Launch and each return to the foreground put the reminder back, which
+    // covers time-zone changes and the OS dropping it (a cold launch never sees
+    // a change to 'active'). Does nothing while it is off.
+    void rescheduleWindDown();
     const appState = AppState.addEventListener('change', (state) => {
       if (state === 'active') void rescheduleWindDown();
     });

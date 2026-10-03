@@ -43,13 +43,21 @@ export function installNotificationHandler(): void {
   }
 }
 
+// `{ pop: true }`, as in coachNavigation: in React Navigation v7 a NAVIGATE
+// reuses an existing route only when it is the current one or `pop` is set, so
+// without it a tap while Sleep sits under the bedtime goal or a night would
+// push a second Sleep instead of returning to the first.
+function navigateToSleep(): void {
+  navigationRef.navigate('Sleep', undefined, { pop: true });
+}
+
 // Navigates to Sleep once the signed-in navigator is ready, polling until it
 // is, for up to 5 s. Signed out it never becomes ready, so this does nothing.
 function openSleep(signal?: AbortSignal): Promise<void> {
   return new Promise((resolve) => {
     if (signal?.aborted) return resolve();
     if (navigationRef.isReady()) {
-      navigationRef.navigate('Sleep');
+      navigateToSleep();
       return resolve();
     }
     const startedAt = Date.now();
@@ -60,7 +68,7 @@ function openSleep(signal?: AbortSignal): Promise<void> {
     };
     const timer = setInterval(() => {
       if (navigationRef.isReady()) {
-        navigationRef.navigate('Sleep');
+        navigateToSleep();
         finish();
       } else if (Date.now() - startedAt >= READY_TIMEOUT_MS) {
         finish();

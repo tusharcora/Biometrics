@@ -142,6 +142,25 @@ describe('SleepNightScreen', () => {
     expect(screen.queryByTestId('night-naps')).toBeNull();
   });
 
+  // The Sleep screen's "Last night" card and chart show the day's total, naps
+  // included, so the header says which figure it is and gives that total too.
+  it('labels the header as main sleep and adds the day total with naps', async () => {
+    renderScreen();
+
+    await screen.findByTestId('night-numbers');
+    expect(screen.getByTestId('night-header')).toHaveTextContent(/6h 40m\s*main sleep/);
+    expect(screen.getByTestId('night-with-naps')).toHaveTextContent('7h 05m with naps');
+  });
+
+  it('shows no with-naps total on a night without naps', async () => {
+    (fetchSleepNight as jest.Mock).mockResolvedValue({ ...DETAIL, naps: [{ ...DETAIL.naps[1]! }] });
+    renderScreen();
+
+    await screen.findByTestId('night-numbers');
+    expect(screen.getByTestId('night-header')).toHaveTextContent(/6h 40m\s*main sleep/);
+    expect(screen.queryByTestId('night-with-naps')).toBeNull();
+  });
+
   it('asks the coach about this night with the question prefilled, not sent', async () => {
     renderScreen();
 

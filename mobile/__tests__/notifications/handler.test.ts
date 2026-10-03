@@ -63,7 +63,7 @@ describe('routeInitialNotification (cold start)', () => {
   it('opens Sleep when the app was launched from a wind-down reminder', async () => {
     N.getLastNotificationResponseAsync.mockResolvedValue(response({ kind: WIND_DOWN_KIND }));
     await routeInitialNotification();
-    expect(ref.navigate).toHaveBeenCalledWith('Sleep');
+    expect(ref.navigate).toHaveBeenCalledWith('Sleep', undefined, { pop: true });
   });
 
   it('does nothing for any other launch', async () => {
@@ -86,7 +86,7 @@ describe('routeInitialNotification (cold start)', () => {
     ref.isReady.mockReturnValue(true);
     await jest.advanceTimersByTimeAsync(100);
     await done;
-    expect(ref.navigate).toHaveBeenCalledWith('Sleep');
+    expect(ref.navigate).toHaveBeenCalledWith('Sleep', undefined, { pop: true });
     expect(jest.getTimerCount()).toBe(0);
   });
 
@@ -130,7 +130,7 @@ describe('listenForNotificationTaps (warm start)', () => {
     listenForNotificationTaps();
     tap()(response({ kind: WIND_DOWN_KIND }));
     await Promise.resolve();
-    expect(ref.navigate).toHaveBeenCalledWith('Sleep');
+    expect(ref.navigate).toHaveBeenCalledWith('Sleep', undefined, { pop: true });
   });
 
   it('ignores taps on other notifications', async () => {
