@@ -16,15 +16,17 @@ import { SectionLabel } from '../components/ui/section-label';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { formatLongDay } from '../lib/heatmap';
+import { coachEntryRoute, useCoachStatus } from '../lib/useCoachStatus';
 import { formatClock, formatDuration, formatShortDuration } from '../lib/sleepStats';
 import { navigateToCoachEntry } from '../navigation/coachNavigation';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { useSync } from '../sync/SyncProvider';
 
-/** "+12m vs usual" / "−8m vs usual" (a real minus sign); null without a usual night. */
+/** "+12m vs usual" / "−8m vs usual" (a real minus sign) / "Same as usual"; null without a usual night. */
 export function usualLine(minutesAsleep: number, usual: number | null): string | null {
   if (usual === null) return null;
   const diff = Math.round(minutesAsleep - usual);
+  if (diff === 0) return 'Same as usual';
   return `${diff < 0 ? '−' : '+'}${formatShortDuration(Math.abs(diff))} vs usual`;
 }
 
@@ -39,7 +41,8 @@ function NumberRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function NightBody({ night, coachName, onAsk }: { night: SleepNightDetail; coachName: string; onAsk: () => void }) {
+// `onAsk` is null when the coach must not be offered (disabled or status unknown).
+function NightBody({ night, coachName, onAsk }: { night: SleepNightDetail; coachName: string; onAsk: (() => void) | null }) {
   const stages = night.hasStages && night.stages.length > 0 ? night.stages : null;
   const usual = usualLine(night.minutesAsleep, night.usualMinutesAsleep);
   // The backend can emit a zero-length nap in rare cases.
@@ -65,7 +68,7 @@ function NightBody({ night, coachName, onAsk }: { night: SleepNightDetail; coach
             <StageBreakdown totals={night.stageTotals} minutesAsleep={night.minutesAsleep} minutesInBed={night.minutesInBed} />
           ) : null}
         </Card>
-      ) : (
+      ) : night.minutesInBed > 0 ? (
         <Card className="gap-2">
           <View className="flex-row justify-between">
             <Text className="text-sm font-semibold" style={{ fontVariant: ['tabular-nums'] }}>
@@ -77,11 +80,11 @@ function NightBody({ night, coachName, onAsk }: { night: SleepNightDetail; coach
           </View>
           <InBedShare minutesAsleep={night.minutesAsleep} minutesInBed={night.minutesInBed} testID="night-no-stages" />
         </Card>
-      )}
+      ) : null}
 
       <Card testID="night-numbers" className="gap-2.5">
         <SectionLabel>The night</SectionLabel>
-        <NumberRow label="Time in bed" value={formatDuration(night.minutesInBed)} />
+        <NumberRow label="Time in bed" value={formatShortDuration(night.minutesInBed)} />
         {night.minutesAwake !== null ? <NumberRow label="Time awake" value={formatShortDuration(night.minutesAwake)} /> : null}
         {night.minutesToFallAsleep !== null ? (
           <NumberRow label="Time to fall asleep" value={formatShortDuration(night.minutesToFallAsleep)} />
@@ -104,9 +107,11 @@ function NightBody({ night, coachName, onAsk }: { night: SleepNightDetail; coach
         </Card>
       ) : null}
 
-      <Button testID="night-ask-coach" variant="secondary" onPress={onAsk}>
-        {`Ask ${coachName} about this night`}
-      </Button>
+      {onAsk ? (
+        <Button testID="night-ask-coach" variant="secondary" onPress={onAsk}>
+          {`Ask ${coachName} about this night`}
+        </Button>
+      ) : null}
     </>
   );
 }
@@ -120,6 +125,9 @@ export function SleepNightScreen() {
   const coachName = characterInfo(characterId).name;
   // Bumped after each successful sync with Google Health, so the night reloads.
   const { dataVersion } = useSync();
+  // Like every coach entry, nothing shows until the status says the coach is on.
+  const { status: coachStatus } = useCoachStatus(navigation);
+  const coachRoute = coachEntryRoute(coachStatus);
 
   // null: no night was recorded for this date (404), which is not a failure.
   const [night, reload] = useSection<SleepNightDetail | null>(
@@ -132,8 +140,8 @@ export function SleepNightScreen() {
     [dataVersion],
   );
 
-  // Opens the chat with the question in the input box; it is never sent for them.
-  const ask = () => navigateToCoachEntry(navigation, 'Coach', `How was my sleep on ${formatLongDay(date)}?`);
+  // Opens the chat (or consent first) with the question in the input box; it is never sent for them.
+  const ask = coachRoute ? () => navigateToCoachEntry(navigation, coachRoute, `How was my sleep on ${formatLongDay(date)}?`) : null;
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>

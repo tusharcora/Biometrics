@@ -4,6 +4,7 @@ import { withCharacter } from '../../jest-mocks/characterContext';
 import { SleepNightScreen } from '../../src/screens/SleepNightScreen';
 import { fetchSleepNight, type SleepNightDetail } from '../../src/api/sleep';
 import { ApiError } from '../../src/api/client';
+import type { CoachStatusDTO } from '../../src/api/coach';
 
 jest.mock('../../src/api/sleep');
 
@@ -45,6 +46,15 @@ const DETAIL: SleepNightDetail = {
   usualMinutesAsleep: 388,
 };
 
+const STATUS: CoachStatusDTO = {
+  enabled: true,
+  consented: true,
+  consent: { version: 'v1', summary: 's', dataItems: ['x'] },
+  personaId: 'luna',
+  personaChosen: true,
+  personas: [],
+};
+
 beforeEach(() => {
   jest.clearAllMocks();
   (fetchSleepNight as jest.Mock).mockResolvedValue(DETAIL);
@@ -54,8 +64,9 @@ afterEach(async () => {
   await act(async () => {});
 });
 
-function renderScreen() {
-  return render(withCharacter(<SleepNightScreen />, { characterId: 'luna' }));
+// The coach status comes from the character provider, as in the app.
+function renderScreen(status: CoachStatusDTO | null = STATUS) {
+  return render(withCharacter(<SleepNightScreen />, { characterId: 'luna', status }));
 }
 
 describe('SleepNightScreen', () => {
@@ -143,6 +154,46 @@ describe('SleepNightScreen', () => {
       { screen: 'Coach', params: { prefill: 'How was my sleep on Thursday 1 October?' } },
       { pop: true },
     );
+  });
+
+  it('takes an unconsented user to consent, carrying the question', async () => {
+    renderScreen({ ...STATUS, consented: false });
+
+    fireEvent.press(await screen.findByTestId('night-ask-coach'));
+
+    expect(mockNavigate).toHaveBeenCalledWith('CoachConsent', { prefill: 'How was my sleep on Thursday 1 October?' });
+  });
+
+  it('has no ask button when the coach is disabled', async () => {
+    renderScreen({ ...STATUS, enabled: false });
+
+    await screen.findByTestId('night-numbers');
+    expect(screen.queryByTestId('night-ask-coach')).toBeNull();
+  });
+
+  it('has no ask button while the coach status is unknown', async () => {
+    renderScreen(null);
+
+    await screen.findByTestId('night-numbers');
+    expect(screen.queryByTestId('night-ask-coach')).toBeNull();
+  });
+
+  it('says "Same as usual" when the night matches the usual one', async () => {
+    (fetchSleepNight as jest.Mock).mockResolvedValue({ ...DETAIL, usualMinutesAsleep: 400 });
+    renderScreen();
+
+    const numbers = await screen.findByTestId('night-numbers');
+    expect(numbers).toHaveTextContent(/Same as usual/);
+    expect(numbers).not.toHaveTextContent(/vs usual/);
+  });
+
+  it('draws no in-bed bar without stages when time in bed is zero', async () => {
+    (fetchSleepNight as jest.Mock).mockResolvedValue({ ...DETAIL, hasStages: false, stages: [], stageTotals: null, minutesInBed: 0 });
+    renderScreen();
+
+    await screen.findByTestId('night-numbers');
+    expect(screen.queryByTestId('night-no-stages')).toBeNull();
+    expect(screen.queryByTestId('night-stage-strip')).toBeNull();
   });
 
   it('shows the asleep/in-bed bar instead of stages when the night has none', async () => {
