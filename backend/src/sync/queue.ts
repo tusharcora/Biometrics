@@ -66,6 +66,21 @@ export function enqueueSleepHistoryBackfill(userId: string) {
   });
 }
 
+export const SLEEP_STAGES_BACKFILL_JOB = 'backfillSleepStages';
+
+export interface SleepStagesBackfillJobData {
+  userId: string;
+}
+
+/** The one-off stage re-fetch for sleep history stored before stages, deduped the same way. */
+export function enqueueSleepStagesBackfill(userId: string) {
+  return syncQueue.add(SLEEP_STAGES_BACKFILL_JOB, { userId } satisfies SleepStagesBackfillJobData, {
+    jobId: `${SLEEP_STAGES_BACKFILL_JOB}-${userId}`,
+    removeOnComplete: true,
+    removeOnFail: true,
+  });
+}
+
 /**
  * Schedules the token refresh sweep as a repeatable queue job rather than a
  * per-process setInterval. Without this, every backend instance would sweep
