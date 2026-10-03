@@ -211,6 +211,18 @@ describe('processSyncJob: sleep stages backfill', () => {
     expect(conn?.sleepStagesBackfilledAt).toBeNull();
   });
 
+  it('does nothing when the stages are already in, e.g. a reconnect history backfill finished first', async () => {
+    const done = new Date('2026-09-01T00:00:00Z');
+    const userId = await createConnection('stages-already-done', { sleepHistoryBackfilledAt: done, sleepStagesBackfilledAt: done });
+
+    await processSyncJob(stagesJob(userId));
+
+    expect(healthClient.fetchSleepSessions).not.toHaveBeenCalled();
+    expect(scoringQueue.enqueueScoreCompute).not.toHaveBeenCalled();
+    const conn = await prisma.healthConnection.findUnique({ where: { userId } });
+    expect(conn?.sleepStagesBackfilledAt?.getTime()).toBe(done.getTime());
+  });
+
   it('disconnects on a 401 that survives the refresh, without setting its marker', async () => {
     const userId = await createConnection('stages-401', { sleepHistoryBackfilledAt: new Date() });
     (healthClient.fetchSleepSessions as jest.Mock).mockRejectedValue(Object.assign(new Error('unauthorized'), { status: 401 }));
