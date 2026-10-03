@@ -16,8 +16,12 @@ import { ThemedStatusBar } from './src/components/themed-status-bar';
 import { CharacterGalleryScreen } from './src/screens/dev/CharacterGalleryScreen';
 import { setBaseUrl } from './src/api/client';
 import { API_BASE_URL } from './src/auth/authClient';
+import { installNotificationHandler } from './src/notifications/handler';
 
 applyDefaultThemeSync();
+// Before any notification can arrive: shows the wind-down reminder in the
+// foreground (and nothing else, as before).
+installNotificationHandler();
 setBaseUrl(API_BASE_URL);
 
 export default function App() {

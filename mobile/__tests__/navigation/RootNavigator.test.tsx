@@ -14,6 +14,8 @@ jest.mock('../../src/lib/timezone');
 // initialRouteName points at" — which is precisely what these tests assert.
 jest.mock('@react-navigation/native', () => ({
   NavigationContainer: ({ children }: any) => children,
+  // RootNavigator hands the container a shared ref (navigation/navigationRef.ts).
+  createNavigationContainerRef: () => ({ isReady: () => false, navigate: () => undefined }),
   DefaultTheme: { dark: false, colors: {}, fonts: {} },
   DarkTheme: { dark: true, colors: {}, fonts: {} },
 }));

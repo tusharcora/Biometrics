@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
+import { View, Text, ActivityIndicator, StyleSheet, AppState } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import { NavigationContainer, DefaultTheme, DarkTheme, type NavigatorScreenParams, type Theme } from '@react-navigation/native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
@@ -27,6 +27,9 @@ import { BedtimeGoalScreen } from '../screens/BedtimeGoalScreen';
 import { TabsNavigator, type TabParamList } from './TabsNavigator';
 import { syncTimezone } from '../lib/timezone';
 import { syncPushRegistration } from '../lib/pushRegistration';
+import { rescheduleWindDown } from '../lib/windDown';
+import { listenForNotificationTaps, routeInitialNotification } from '../notifications/handler';
+import { navigationRef } from './navigationRef';
 import { COLORS, FONTS } from '../theme';
 import { ToastProvider } from '../components/ui/toast';
 import { SyncProvider } from '../sync/SyncProvider';
@@ -99,6 +102,25 @@ export function RootNavigator() {
   }, [session]);
 
   useEffect(() => {
+    // A tapped wind-down reminder opens Sleep: the one that launched the app
+    // (once the signed-in navigator is ready; never while signed out) and any
+    // tapped while it runs.
+    const launch = new AbortController();
+    void routeInitialNotification(launch.signal);
+    const stopListening = listenForNotificationTaps();
+    // Each return to the foreground puts the reminder back, which covers
+    // time-zone changes and the OS dropping it. Does nothing while it is off.
+    const appState = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void rescheduleWindDown();
+    });
+    return () => {
+      launch.abort();
+      stopListening();
+      appState.remove();
+    };
+  }, []);
+
+  useEffect(() => {
     // Signing in lands on the tabs -- the dashboard -- whatever the connection
     // status is. Connecting Google Health used to be a gate in front of the
     // app: a user who had not connected yet, or whose status could not be
@@ -126,7 +148,7 @@ export function RootNavigator() {
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <NavigationContainer theme={navTheme}>
+      <NavigationContainer ref={navigationRef} theme={navTheme}>
         {/* Signed in only: nothing syncs before sign-in. */}
         <ToastProvider>
           <SyncProvider>

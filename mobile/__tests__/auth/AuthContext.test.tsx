@@ -4,6 +4,9 @@ import { render, act } from '@testing-library/react-native';
 import { AuthProvider, useAuth, VERIFIED_URL, RESET_URL } from '../../src/auth/AuthContext';
 import { authClient } from '../../src/auth/authClient';
 import { AuthError } from '../../src/auth/authErrors';
+import { clearWindDown } from '../../src/lib/windDown';
+
+jest.mock('../../src/lib/windDown', () => ({ clearWindDown: jest.fn(async () => undefined) }));
 
 const mocked = authClient as unknown as Record<string, any>;
 let ctx: ReturnType<typeof useAuth>;
@@ -92,5 +95,28 @@ describe('session identity', () => {
     mocked.useSession.mockReturnValue(sessionFor('u2'));
     rerender(tree());
     expect(effectRuns).toBe(2);
+  });
+});
+
+describe('wind-down reminder teardown', () => {
+  it('cancels and clears the reminder on sign-out', async () => {
+    renderAuth();
+    await act(() => ctx.signOut());
+    expect(clearWindDown).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancels and clears the reminder on clearSession (account deletion)', async () => {
+    renderAuth();
+    await act(() => ctx.clearSession());
+    expect(clearWindDown).toHaveBeenCalledTimes(1);
+  });
+
+  it('still signs out when clearing the reminder fails', async () => {
+    (clearWindDown as jest.Mock).mockRejectedValueOnce(new Error('native'));
+    renderAuth();
+    // dropLocalSession swallows it: sign-out still completes.
+    await act(() => ctx.signOut());
+    expect(mocked.signOut).toHaveBeenCalled();
+    expect(clearWindDown).toHaveBeenCalled();
   });
 });
