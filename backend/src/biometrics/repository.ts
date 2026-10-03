@@ -35,10 +35,15 @@ interface TouchedEnd {
  * instead would double-count on every repeat webhook, retried job and re-run
  * backfill.)
  *
- * Returns the ends this call touched -- the new end of every session AND the
- * previous end of any session whose end moved -- each with the offset it was
- * keyed under, so the caller can recompute every rollup date that may have
- * changed, including the one a revised (or newly offset-keyed) session just left.
+ * The night summary and stages are stored with the row. Stages are replaced
+ * wholesale, and only when the point carries them (`stages` defined), so a
+ * caller that never sends stages keeps the stored ones.
+ *
+ * Returns the ends of new or changed sessions only -- the new end of every
+ * session that is new or whose end, minutes or offsets moved, AND the previous
+ * end of each such session -- each with the offset it was keyed under, so the
+ * caller can recompute every rollup date that may have changed, including the
+ * one a revised (or newly offset-keyed) session just left.
  */
 async function upsertSleepSessionsTouched(userId: string, sessions: SleepSessionPoint[]): Promise<TouchedEnd[]> {
   if (sessions.length === 0) return [];
@@ -51,7 +56,16 @@ async function upsertSleepSessionsTouched(userId: string, sessions: SleepSession
 
   const existing = await prisma.sleepSession.findMany({
     where: { userId, startTime: { in: unique.map((s) => s.startTime) } },
-    select: { endTime: true, endUtcOffsetSeconds: true },
+    select: { startTime: true, endTime: true, minutesAsleep: true, startUtcOffsetSeconds: true, endUtcOffsetSeconds: true },
+  });
+  const prevByStart = new Map(existing.map((e) => [e.startTime.getTime(), e]));
+  // Only a session that is new, or whose end, minutes or offsets moved, can change a
+  // rollup or a score. Stage and summary refreshes still write the row but touch no date,
+  // so a stage backfill never makes the sweep rescore (spec 2026-10-03 §2).
+  const changed = unique.filter((s) => {
+    const p = prevByStart.get(s.startTime.getTime());
+    return !p || p.endTime.getTime() !== s.endTime.getTime() || p.minutesAsleep !== s.minutesAsleep
+      || p.startUtcOffsetSeconds !== (s.startUtcOffsetSeconds ?? null) || p.endUtcOffsetSeconds !== (s.endUtcOffsetSeconds ?? null);
   });
 
   await prisma.$transaction(
@@ -61,17 +75,33 @@ async function upsertSleepSessionsTouched(userId: string, sessions: SleepSession
         startUtcOffsetSeconds: s.startUtcOffsetSeconds ?? null,
         endUtcOffsetSeconds: s.endUtcOffsetSeconds ?? null,
       };
+      const summary = {
+        sleepType: s.sleepType ?? null, mainSleep: s.mainSleep ?? null,
+        minutesInSleepPeriod: s.minutesInSleepPeriod ?? null, minutesAwake: s.minutesAwake ?? null,
+        minutesToFallAsleep: s.minutesToFallAsleep ?? null, minutesAfterWakeUp: s.minutesAfterWakeUp ?? null,
+        deepMinutes: s.deepMinutes ?? null, lightMinutes: s.lightMinutes ?? null, remMinutes: s.remMinutes ?? null, awakeMinutes: s.awakeMinutes ?? null,
+      };
+      const stageRows = (s.stages ?? []).map((g) => ({ type: g.type, startTime: g.startTime, endTime: g.endTime }));
       return prisma.sleepSession.upsert({
         where: { userId_startTime: { userId, startTime: s.startTime } },
-        update: { endTime: s.endTime, minutesAsleep: s.minutesAsleep, ...offsets, syncedAt: new Date() },
-        create: { userId, startTime: s.startTime, endTime: s.endTime, minutesAsleep: s.minutesAsleep, ...offsets },
+        update: {
+          endTime: s.endTime, minutesAsleep: s.minutesAsleep, ...offsets, ...summary, syncedAt: new Date(),
+          ...(s.stages ? { stages: { deleteMany: {}, create: stageRows } } : {}),
+        },
+        create: {
+          userId, startTime: s.startTime, endTime: s.endTime, minutesAsleep: s.minutesAsleep, ...offsets, ...summary,
+          ...(s.stages ? { stages: { create: stageRows } } : {}),
+        },
       });
     }),
   );
 
+  const changedStarts = new Set(changed.map((s) => s.startTime.getTime()));
   return [
-    ...unique.map((s) => ({ endTime: s.endTime, endUtcOffsetSeconds: s.endUtcOffsetSeconds ?? null })),
-    ...existing,
+    ...changed.map((s) => ({ endTime: s.endTime, endUtcOffsetSeconds: s.endUtcOffsetSeconds ?? null })),
+    ...existing
+      .filter((e) => changedStarts.has(e.startTime.getTime()))
+      .map((e) => ({ endTime: e.endTime, endUtcOffsetSeconds: e.endUtcOffsetSeconds })),
   ];
 }
 

@@ -377,3 +377,55 @@ describe('datesNeedingRescore', () => {
     expect(datesNeedingRescore([], '2026-12-31')).toEqual([]);
   });
 });
+
+// Sleep depth (spec 2026-10-03 §2): the summary and stages are stored with the
+// session, but only a change that can move a rollup or a score touches a date.
+// A stage backfill over ~90 stored nights must not make every one of them rescore.
+describe('storeSleepSessions: stages and change detection', () => {
+  const night = (over: Partial<SleepSessionPoint> = {}): SleepSessionPoint => ({
+    startTime: new Date('2026-09-30T23:00:00Z'), endTime: new Date('2026-10-01T07:00:00Z'), minutesAsleep: 420,
+    startUtcOffsetSeconds: 0, endUtcOffsetSeconds: 0, stages: [], ...over,
+  });
+
+  it('stores the summary and replaces stages on resync without duplicating them', async () => {
+    const { id } = await createUser();
+    await storeSleepSessions(id, [night({ deepMinutes: 80, stages: [{ type: 'DEEP', startTime: new Date('2026-09-30T23:30:00Z'), endTime: new Date('2026-10-01T00:10:00Z') }] })]);
+    await storeSleepSessions(id, [night({ deepMinutes: 90, stages: [
+      { type: 'LIGHT', startTime: new Date('2026-09-30T23:05:00Z'), endTime: new Date('2026-09-30T23:30:00Z') },
+      { type: 'DEEP', startTime: new Date('2026-09-30T23:30:00Z'), endTime: new Date('2026-10-01T00:20:00Z') },
+    ] })]);
+    const s = await prisma.sleepSession.findFirstOrThrow({ where: { userId: id }, include: { stages: { orderBy: { startTime: 'asc' } } } });
+    expect(s.deepMinutes).toBe(90);
+    expect(s.stages.map((x) => x.type)).toEqual(['LIGHT', 'DEEP']);
+  });
+
+  it('keeps the stored stages when a caller sends none (stages undefined)', async () => {
+    const { id } = await createUser();
+    await storeSleepSessions(id, [night({ stages: [{ type: 'REM', startTime: new Date('2026-10-01T05:00:00Z'), endTime: new Date('2026-10-01T05:30:00Z') }] })]);
+    await storeSleepSessions(id, [night({ stages: undefined })]);
+    expect(await prisma.sleepStage.count({ where: { session: { userId: id } } })).toBe(1);
+  });
+
+  it('a stage-only resync touches no date and leaves the SLEEP rollup syncedAt alone', async () => {
+    const { id } = await createUser();
+    expect(await storeSleepSessions(id, [night()])).toEqual(['2026-10-01']);
+    const before = await prisma.biometricRecord.findFirstOrThrow({ where: { userId: id, metricType: 'SLEEP' } });
+    expect(await storeSleepSessions(id, [night({ deepMinutes: 80 })])).toEqual([]);
+    const after = await prisma.biometricRecord.findFirstOrThrow({ where: { userId: id, metricType: 'SLEEP' } });
+    expect(after.syncedAt.getTime()).toBe(before.syncedAt.getTime());
+  });
+
+  it('a real change still touches its date and rewrites the rollup', async () => {
+    const { id } = await createUser();
+    await storeSleepSessions(id, [night()]);
+    expect(await storeSleepSessions(id, [night({ minutesAsleep: 430 })])).toEqual(['2026-10-01']);
+    expect((await prisma.biometricRecord.findFirstOrThrow({ where: { userId: id, metricType: 'SLEEP' } })).value).toBe(430);
+  });
+
+  it('in a mixed batch only the changed session touches its date', async () => {
+    const { id } = await createUser();
+    const other = night({ startTime: new Date('2026-10-01T23:00:00Z'), endTime: new Date('2026-10-02T07:00:00Z') });
+    await storeSleepSessions(id, [night(), other]);
+    expect(await storeSleepSessions(id, [night({ remMinutes: 90 }), { ...other, minutesAsleep: 400 }])).toEqual(['2026-10-02']);
+  });
+});
