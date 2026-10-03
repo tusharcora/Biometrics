@@ -91,6 +91,36 @@ describe('GET /me/sleep/regularity', () => {
     });
   });
 
+  it('keeps a wake after noon contiguous with its bedtime: a 12:30 lie-in is a late wake, not a 00:30 one', async () => {
+    const user = await createUser('reg-lie-in');
+    const t = today();
+    const wakes = ['07:00', '07:00', '07:00', '12:30', '07:00', '07:00', '07:00'];
+    await storeSleepSessions(user.id, wakes.map((w, i) => night(shiftDate(t, i - 6), '23:00', w)));
+
+    const res = await getRegularity(user.id, 7);
+
+    // Wakes 1140 x6 and 1470 (not 30): mean 1187.1 -> "07:47", population std 115.5.
+    // Wrapped, the lie-in would be 30: std ~388 (wake sub-score 0) and averageWake "04:21".
+    expect(res.body).toMatchObject({
+      nights: 7,
+      bedtimeSpreadMinutes: 0,
+      wakeSpreadMinutes: 115,
+      averageBedtime: '23:00',
+      averageWake: '07:47',
+      score: 52, // (100 + 100 * (1 - 115.47/120)) / 2 = 51.9
+    });
+  });
+
+  it('shows an average wake past noon on the clock: a mean above 1440 wraps for display', async () => {
+    const user = await createUser('reg-late-wakes');
+    const t = today();
+    await storeSleepSessions(user.id, Array.from({ length: 4 }, (_, i) => night(shiftDate(t, -i), '23:00', '12:30')));
+
+    const res = await getRegularity(user.id, 7);
+
+    expect(res.body).toMatchObject({ nights: 4, averageWake: '12:30', wakeSpreadMinutes: 0, score: 100 });
+  });
+
   it('is null-scored with fewer than 4 nights in a 7-day window, but still reports averages and drift', async () => {
     const user = await createUser('reg-three');
     await storeSleepSessions(user.id, steadyNights(3));
@@ -133,8 +163,11 @@ describe('GET /me/sleep/regularity', () => {
     await storeSleepSessions(user.id, [
       ...steadyNights(2),
       night(shiftDate(t, -7), '23:00'), // the day before a 7-day window
-      // A short nap ending today: not a second night, and not the main session.
-      { ...night(t, '13:00', '13:30'), minutesAsleep: 25 },
+      // A real same-day nap (13:00 -> 13:30 today): not a second night, and not the main session.
+      {
+        startTime: new Date(`${t}T13:00:00Z`), endTime: new Date(`${t}T13:30:00Z`), minutesAsleep: 25,
+        startUtcOffsetSeconds: 0, endUtcOffsetSeconds: 0,
+      },
     ]);
 
     const res = await getRegularity(user.id, 7);

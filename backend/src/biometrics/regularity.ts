@@ -7,6 +7,7 @@ import { shiftDate } from '../scoring/dates';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 const MINUTES_PER_DAY = 24 * 60;
+const MINUTE_MS = 60_000;
 
 export type RegularityDays = 7 | 30;
 
@@ -36,10 +37,33 @@ export function parseRegularityDays(value: unknown): RegularityDays | null {
   return null;
 }
 
-/** Noon-anchored minutes back to a local "HH:MM". */
+/** Noon-anchored minutes (a wake may exceed 1440) back to a local "HH:MM". */
 function noonMinutesToClock(noonMinutes: number): string {
   const m = (Math.round(noonMinutes) + 12 * 60) % MINUTES_PER_DAY;
   return `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(m % 60).padStart(2, '0')}`;
+}
+
+/**
+ * Wake time on the same noon-anchored scale as its own bedtime, so it may run
+ * past 1440: a 12:30 lie-in after a 23:00 bedtime is 1470, not 30 (which would
+ * read as a 00:30 wake and blow up the spread). It is bedtime + the session's
+ * length, plus the local-clock shift between start and end (DST or travel):
+ * the end's own noon-anchored clock, lifted by whole days to the value nearest
+ * that elapsed-time estimate. With both UTC offsets stored this equals
+ * bedtime + length + (endOffset - startOffset) exactly; it also covers rows
+ * that fall back to User.timezone.
+ */
+function wakeMinutes(
+  main: { startTime: Date; endTime: Date; endUtcOffsetSeconds?: number | null },
+  bedtime: number,
+  timeZone: string,
+): number {
+  const elapsed = bedtime + (main.endTime.getTime() - main.startTime.getTime()) / MINUTE_MS;
+  const clock = sessionStartMinutesSinceLocalNoon(
+    { startTime: main.endTime, startUtcOffsetSeconds: main.endUtcOffsetSeconds ?? null },
+    timeZone,
+  );
+  return clock + MINUTES_PER_DAY * Math.round((elapsed - clock) / MINUTES_PER_DAY);
 }
 
 const mean = (values: number[]) => values.reduce((sum, v) => sum + v, 0) / values.length;
@@ -77,11 +101,8 @@ export async function getSleepRegularity(userId: string, days: RegularityDays): 
     if (date < from || date > to) continue;
     const main = pickMainSession(list);
     if (!main) continue;
-    nights.push({
-      date,
-      bedtime: sessionStartMinutesSinceLocalNoon(main, timeZone),
-      wake: sessionStartMinutesSinceLocalNoon({ startTime: main.endTime, startUtcOffsetSeconds: main.endUtcOffsetSeconds ?? null }, timeZone),
-    });
+    const bedtime = sessionStartMinutesSinceLocalNoon(main, timeZone);
+    nights.push({ date, bedtime, wake: wakeMinutes(main, bedtime, timeZone) });
   }
   nights.sort((a, b) => (a.date < b.date ? -1 : 1));
 
