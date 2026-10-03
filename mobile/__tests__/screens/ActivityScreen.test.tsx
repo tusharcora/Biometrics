@@ -8,6 +8,11 @@ import { fetchRange, todayCivil } from '../../src/lib/heatmap';
 jest.mock('../../src/api/activity');
 jest.mock('../../src/api/sleep');
 
+const mockNavigate = jest.fn();
+jest.mock('@react-navigation/native', () => ({
+  useNavigation: () => ({ navigate: mockNavigate }),
+}));
+
 beforeEach(() => {
   jest.clearAllMocks();
   (fetchSleep as jest.Mock).mockResolvedValue({ nights: [], earliestDate: null });
@@ -41,6 +46,17 @@ describe('ActivityScreen: sleep', () => {
 
     expect(await findByTestId('sleep-heatmap-stats')).toBeTruthy();
     expect(fetchSleep).toHaveBeenCalledTimes(2);
+  });
+
+  it('opens the Sleep screen from the Sleep page header', async () => {
+    (fetchActivity as jest.Mock).mockResolvedValue({ days: [], earliestDate: '2025-01-01' });
+
+    const { findByTestId, getByTestId } = render(<ActivityScreen />);
+
+    fireEvent.press(await findByTestId('activity-page-sleep'));
+    fireEvent.press(getByTestId('activity-sleep-details'));
+
+    expect(mockNavigate).toHaveBeenCalledWith('Sleep');
   });
 });
 

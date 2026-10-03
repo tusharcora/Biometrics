@@ -21,6 +21,9 @@ import { DevicesScreen } from '../screens/DevicesScreen';
 import { MeetYourCoachScreen } from '../screens/MeetYourCoachScreen';
 import { ThinkingStyleScreen } from '../screens/ThinkingStyleScreen';
 import { ThinkingTextScreen } from '../screens/ThinkingTextScreen';
+import { SleepScreen } from '../screens/SleepScreen';
+import { SleepNightScreen } from '../screens/SleepNightScreen';
+import { BedtimeGoalScreen } from '../screens/BedtimeGoalScreen';
 import { TabsNavigator, type TabParamList } from './TabsNavigator';
 import { syncTimezone } from '../lib/timezone';
 import { syncPushRegistration } from '../lib/pushRegistration';
@@ -66,6 +69,11 @@ export type RootStackParamList = {
   // The character picker. 'first' opens by itself on the first Coach-tab
   // visit (starts on Mochi, has Skip); 'switch' comes from Profile.
   MeetYourCoach: { mode: 'first' | 'switch' };
+  // Opened from the Home sleep card and the Activity Sleep page.
+  Sleep: undefined;
+  // One night in full; `date` is the civil date the night ended on.
+  SleepNight: { date: string };
+  BedtimeGoal: undefined;
 };
 
 export type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';
@@ -146,6 +154,9 @@ export function RootNavigator() {
               <Stack.Screen name="HostedConsent" component={HostedConsentScreen} options={{ title: 'AI engine' }} />
               <Stack.Screen name="SignInMethods" component={SignInMethodsScreen} options={{ title: 'Sign-in methods' }} />
               <Stack.Screen name="Devices" component={DevicesScreen} options={{ title: 'Devices' }} />
+              <Stack.Screen name="Sleep" component={SleepScreen} options={{ title: 'Sleep' }} />
+              <Stack.Screen name="SleepNight" component={SleepNightScreen} options={{ title: '' }} />
+              <Stack.Screen name="BedtimeGoal" component={BedtimeGoalScreen} options={{ title: 'Bedtime goal' }} />
               <Stack.Screen
                 name="MeetYourCoach"
                 component={MeetYourCoachScreen}

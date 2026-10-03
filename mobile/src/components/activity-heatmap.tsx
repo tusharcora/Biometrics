@@ -391,11 +391,13 @@ export interface ActivityHeatmapProps {
   today: string;
   sleep: SleepState;
   onRetrySleep?: () => void;
+  // The Sleep screen; the link is drawn wherever the sleep header shows.
+  onOpenSleepDetails?: () => void;
 }
 
 // The Activity tab: Steps and Sleep. Month swipes between one page per metric;
 // Year and YTD stack both; tapping a day opens that metric's sheet.
-export function ActivityHeatmap({ steps, earliestDate, today, sleep, onRetrySleep }: ActivityHeatmapProps) {
+export function ActivityHeatmap({ steps, earliestDate, today, sleep, onRetrySleep, onOpenSleepDetails }: ActivityHeatmapProps) {
   const { colorScheme } = useColorScheme();
   const palette = colorScheme === 'light' ? COLORS.light : COLORS.dark;
   const reduced = useReducedMotion();
@@ -586,6 +588,18 @@ export function ActivityHeatmap({ steps, earliestDate, today, sleep, onRetrySlee
           ) : null}
         </View>
         {subtitle ? <Text className="text-sm text-muted-foreground">{subtitle}</Text> : null}
+        {onOpenSleepDetails && (view !== 'month' || page === 'sleep') ? (
+          <Pressable
+            testID="activity-sleep-details"
+            accessibilityRole="link"
+            hitSlop={8}
+            onPress={onOpenSleepDetails}
+            className="flex-row items-center gap-1 self-start py-1 active:opacity-70"
+          >
+            <Text className="text-sm font-semibold">Sleep details</Text>
+            <Ionicons name="chevron-forward" size={14} color={palette.metricSleep} />
+          </Pressable>
+        ) : null}
       </View>
 
       <SegmentedControl testID="heatmap-view" options={VIEW_OPTIONS} value={view} onChange={setView} />

@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
 import { fetchActivity } from '../api/activity';
 import { fetchSleep } from '../api/sleep';
@@ -20,6 +21,7 @@ type LoadState =
   | { phase: 'ready'; steps: Map<string, number>; earliestDate: string | null; today: string; sleep: SleepState };
 
 export function ActivityScreen() {
+  const navigation = useNavigation<any>();
   const clearance = useTabBarClearance();
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === 'light' ? COLORS.light : COLORS.dark;
@@ -118,6 +120,7 @@ export function ActivityScreen() {
             earliestDate={state.earliestDate}
             today={state.today}
             sleep={state.sleep}
+            onOpenSleepDetails={() => navigation.navigate('Sleep')}
             onRetrySleep={() => {
               setState((prev) => (prev.phase === 'ready' ? { ...prev, sleep: { phase: 'loading' } } : prev));
               load();

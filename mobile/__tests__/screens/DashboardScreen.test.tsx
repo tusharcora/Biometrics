@@ -478,7 +478,7 @@ describe('DashboardScreen', () => {
       expect(tree.indexOf('recovery-score-card')).toBeLessThan(tree.indexOf('sleep-score-card'));
     });
 
-    it('opens the SLEEP score detail for that day when pressed', async () => {
+    it('opens the Sleep screen when pressed', async () => {
       mockApi({ records: steps, scores: [recovery, sleep] });
 
       const { getByTestId } = render(<DashboardScreen />);
@@ -486,7 +486,8 @@ describe('DashboardScreen', () => {
       await waitFor(() => expect(getByTestId('sleep-score-card')).toBeTruthy());
       fireEvent.press(getByTestId('sleep-score-card'));
 
-      expect(mockNavigate).toHaveBeenCalledWith('ScoreDetail', { date: '2026-09-19', type: 'SLEEP' });
+      expect(mockNavigate).toHaveBeenCalledWith('Sleep');
+      expect(mockNavigate).not.toHaveBeenCalledWith('ScoreDetail', expect.objectContaining({ type: 'SLEEP' }));
     });
 
     it('shows the cold-start ring, and no score ring or badge, when the Sleep Score is null', async () => {

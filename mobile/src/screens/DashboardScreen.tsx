@@ -266,7 +266,8 @@ export function DashboardScreen() {
             score={sleep}
             bands={bands}
             failed={scoresFailed}
-            onPress={(score) => navigation.navigate('ScoreDetail', { date: score.date, type: 'SLEEP' })}
+            // The Sleep screen; its score header links on to the score detail.
+            onPress={() => navigation.navigate('Sleep')}
           />
           {coachRoute ? (
             <CoachTile needsConsent={coachRoute === 'CoachConsent'} onPress={() => navigateToCoachEntry(navigation, coachRoute)} />
