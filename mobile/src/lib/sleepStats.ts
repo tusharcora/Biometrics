@@ -88,6 +88,28 @@ export function formatClock(clock: string): string {
   return `${h % 12 || 12}:${String(m).padStart(2, '0')} ${h >= 12 ? 'pm' : 'am'}`;
 }
 
+/**
+ * The night's offset from UTC in minutes (-240 for New York in summer). Stage
+ * segments are UTC instants, while the night's bedtime is the local "HH:MM" the
+ * screen shows, so the offset is the gap between bedtime and the first stage.
+ * Offsets come in quarter hours, which absorbs a first stage that starts a few
+ * minutes after bedtime.
+ */
+export function nightUtcOffset(bedtime: string, firstStart: string): number {
+  const [h, m] = bedtime.split(':').map(Number);
+  const start = new Date(firstStart);
+  const diff = h * 60 + m - (start.getUTCHours() * 60 + start.getUTCMinutes());
+  // Into -12h..+12h: a 23:10 bedtime at 03:10Z is four hours behind, not twenty ahead.
+  const wrapped = ((((diff + 720) % 1440) + 1440) % 1440) - 720;
+  return Math.round(wrapped / 15) * 15 || 0;
+}
+
+/** An ISO instant's local "HH:MM" at `offset` minutes from UTC, for formatClock. */
+export function clockAt(iso: string, offset: number): string {
+  const local = new Date(Date.parse(iso) + offset * 60000);
+  return `${String(local.getUTCHours()).padStart(2, '0')}:${String(local.getUTCMinutes()).padStart(2, '0')}`;
+}
+
 /** One line comparing a night to the visible range's average; null when there is nothing to compare. */
 export function compareSleepToAverage(minutes: number, average: number | null): string | null {
   if (average === null || average <= 0) return null;

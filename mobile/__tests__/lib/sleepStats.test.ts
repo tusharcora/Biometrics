@@ -1,6 +1,6 @@
 import type { SleepNight } from '../../src/api/sleep';
 import { sleepHeatLevel } from '../../src/lib/heatmap';
-import { compareSleepToAverage, formatClock, formatDuration, sleepRangeStats } from '../../src/lib/sleepStats';
+import { clockAt, compareSleepToAverage, formatClock, formatDuration, nightUtcOffset, sleepRangeStats } from '../../src/lib/sleepStats';
 
 function nights(entries: [string, number, string?][]): Map<string, SleepNight> {
   return new Map(
@@ -89,5 +89,26 @@ describe('formatting', () => {
     expect(compareSleepToAverage(380, 480)).toBe('1h 40m less than your average for this range.');
     expect(compareSleepToAverage(452, 450)).toBe('In line with your average for this range.');
     expect(compareSleepToAverage(452, null)).toBeNull();
+  });
+});
+
+// Stage segments are UTC instants; the night's local clock comes from its
+// bedtime, the same local "HH:MM" the screen shows.
+describe('night clock', () => {
+  it('reads the night\'s UTC offset off its bedtime and first stage', () => {
+    expect(nightUtcOffset('23:10', '2026-10-01T03:10:00.000Z')).toBe(-240);
+    expect(nightUtcOffset('00:22', '2026-09-30T23:22:00.000Z')).toBe(60);
+    expect(nightUtcOffset('05:40', '2026-10-01T00:10:00.000Z')).toBe(330);
+  });
+
+  it('rounds to the quarter hour, so a first stage a few minutes after bedtime still reads true', () => {
+    expect(nightUtcOffset('23:10', '2026-10-01T03:16:00.000Z')).toBe(-240);
+  });
+
+  it('gives an instant\'s local "HH:MM" at that offset', () => {
+    expect(clockAt('2026-10-01T03:35:00.000Z', -240)).toBe('23:35');
+    expect(clockAt('2026-10-01T09:10:00.000Z', -240)).toBe('05:10');
+    expect(clockAt('2026-09-30T23:22:00.000Z', 60)).toBe('00:22');
+    expect(formatClock(clockAt('2026-10-01T03:35:00.000Z', -240))).toBe('11:35 pm');
   });
 });
