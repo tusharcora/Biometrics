@@ -17,6 +17,9 @@ export interface SleepNightDetailDTO {
   /** Local "HH:MM" start and end of the main session, on its own clock. */
   bedtime: string;
   wakeTime: string;
+  /** The main session's stored UTC offsets, so stage instants read on the same clock; null when unknown. */
+  startUtcOffsetSeconds: number | null;
+  endUtcOffsetSeconds: number | null;
   minutesAsleep: number;
   /** Google's sleep period when reported, else the session's interval. */
   minutesInBed: number;
@@ -81,6 +84,8 @@ export async function getSleepNight(userId: string, date: string): Promise<Sleep
     date,
     bedtime: localClockTime(main.startTime, main.startUtcOffsetSeconds, timeZone),
     wakeTime: localClockTime(main.endTime, main.endUtcOffsetSeconds, timeZone),
+    startUtcOffsetSeconds: main.startUtcOffsetSeconds,
+    endUtcOffsetSeconds: main.endUtcOffsetSeconds,
     minutesAsleep: main.minutesAsleep,
     minutesInBed: main.minutesInSleepPeriod ?? Math.round((main.endTime.getTime() - main.startTime.getTime()) / 60000),
     minutesAwake: main.minutesAwake,

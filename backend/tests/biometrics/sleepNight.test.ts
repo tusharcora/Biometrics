@@ -65,6 +65,8 @@ describe('GET /me/sleep/night/:date', () => {
       date: '2026-09-20',
       bedtime: '23:00',
       wakeTime: '07:00',
+      startUtcOffsetSeconds: 0,
+      endUtcOffsetSeconds: 0,
       minutesAsleep: 420,
       minutesInBed: 470,
       minutesAwake: 50,
@@ -102,6 +104,9 @@ describe('GET /me/sleep/night/:date', () => {
     expect(res.status).toBe(200);
     expect(res.body.bedtime).toBe('22:30');
     expect(res.body.wakeTime).toBe('06:15');
+    // The session's own offsets, so the app tells stage times on the same clock.
+    expect(res.body.startUtcOffsetSeconds).toBe(3600);
+    expect(res.body.endUtcOffsetSeconds).toBe(3600);
   });
 
   it('reports no stages for a night without them, and falls back to the interval for time in bed', async () => {
