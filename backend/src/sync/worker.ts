@@ -340,9 +340,11 @@ async function runSleepHistoryPass(
       await disconnect(conn.userId, conn.webhookSubscriptionId);
       return;
     }
-    // Any other error (e.g. 429) fails the job without setting the marker. The
-    // queue sets no retry attempts and removeOnFail drops the job, so it is
-    // not retried now: the next server start's pending sweep re-enqueues it.
+    // Any other error (e.g. 429) fails this attempt without setting the marker.
+    // The queue retries the job with exponential backoff (the pass is
+    // idempotent: batches that landed are a no-op the second time); only once
+    // every attempt has failed does removeOnFail drop it, and then the next
+    // server start's pending sweep re-enqueues it.
     throw err;
   }
 }

@@ -100,11 +100,16 @@ biometricsRouter.put('/me/sleep/goal', requireAuth, async (req: AuthedRequest, r
     return;
   }
 
-  // Enqueued, not computed inline, and a failure must not fail a goal the user
-  // already saved (the nightly sweep is the backstop).
+  // Enqueued, not computed inline, and with no debounce: the user is waiting on
+  // the score they just changed, unlike a burst of webhooks. A failed enqueue
+  // must not fail a goal the user already saved, so it is only logged. Nothing
+  // backs it up: the nightly sweep rescores a day only when its inputs were
+  // synced after its score or the scoring version changed, and a goal change is
+  // neither, so today keeps the old goal until its next recompute (e.g. the
+  // next sync that touches today).
   if (patch.sleepGoalMinutes !== undefined && patch.sleepGoalMinutes !== before.sleepGoalMinutes) {
     const today = localCivilDateOrUtc(new Date(), before.timezone);
-    await enqueueScoreCompute(userId, today).catch((err) =>
+    await enqueueScoreCompute(userId, today, { delayMs: 0 }).catch((err) =>
       console.error(`Failed to enqueue a score recompute for ${today} after a sleep goal change`, err),
     );
   }

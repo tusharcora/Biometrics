@@ -101,8 +101,10 @@ describe('PUT /me/sleep/goal', () => {
     const res = await put(user.id, { sleepGoalMinutes: 420 });
     expect(res.status).toBe(200);
     expect(enqueue).toHaveBeenCalledTimes(1);
-    const [userId, date] = enqueue.mock.calls[0]!;
+    const [userId, date, opts] = enqueue.mock.calls[0]!;
     expect(userId).toBe(user.id);
+    // Not the 5-minute webhook debounce: the user is looking at the score they just changed.
+    expect(opts).toEqual({ delayMs: 0 });
     // Compared against the zone's today (UTC+14), which differs from UTC's for much of the day.
     expect([localCivilDateOrUtc(new Date(Date.now() - 60_000), 'Pacific/Kiritimati'), localCivilDateOrUtc(new Date(), 'Pacific/Kiritimati')]).toContain(date);
   });

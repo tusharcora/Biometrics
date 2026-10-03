@@ -57,12 +57,22 @@ export interface SleepHistoryBackfillJobData {
   userId: string;
 }
 
-/** The sleep counterpart of enqueueStepsHistoryBackfill, deduped the same way. */
+/**
+ * Retries for the two sleep history jobs. Each is the only thing that sets its
+ * marker, and without retries a 429 or a timeout dropped the job (removeOnFail)
+ * until the next server start re-enqueued it -- leaving the app on "Reading
+ * older nights..." meanwhile. The backoff is long because the usual cause is
+ * Google's rate limit, and the job is idempotent, so a repeat is harmless.
+ */
+const SLEEP_HISTORY_RETRY = { attempts: 4, backoff: { type: 'exponential', delay: 60_000 } } as const;
+
+/** The sleep counterpart of enqueueStepsHistoryBackfill, deduped the same way, and retried. */
 export function enqueueSleepHistoryBackfill(userId: string) {
   return syncQueue.add(SLEEP_HISTORY_BACKFILL_JOB, { userId } satisfies SleepHistoryBackfillJobData, {
     jobId: `${SLEEP_HISTORY_BACKFILL_JOB}-${userId}`,
     removeOnComplete: true,
     removeOnFail: true,
+    ...SLEEP_HISTORY_RETRY,
   });
 }
 
@@ -72,12 +82,13 @@ export interface SleepStagesBackfillJobData {
   userId: string;
 }
 
-/** The one-off stage re-fetch for sleep history stored before stages, deduped the same way. */
+/** The one-off stage re-fetch for sleep history stored before stages, deduped and retried the same way. */
 export function enqueueSleepStagesBackfill(userId: string) {
   return syncQueue.add(SLEEP_STAGES_BACKFILL_JOB, { userId } satisfies SleepStagesBackfillJobData, {
     jobId: `${SLEEP_STAGES_BACKFILL_JOB}-${userId}`,
     removeOnComplete: true,
     removeOnFail: true,
+    ...SLEEP_HISTORY_RETRY,
   });
 }
 

@@ -8,6 +8,7 @@ import {
   storeSleepSessions,
   datesNeedingRescore,
   upsertBiometricRecords,
+  SLEEP_STORE_BATCH_SIZE,
 } from '../../src/biometrics/repository';
 import { SleepSessionPoint } from '../../src/types';
 
@@ -380,7 +381,7 @@ describe('datesNeedingRescore', () => {
 
 // Sleep depth (spec 2026-10-03 §2): the summary and stages are stored with the
 // session, but only a change that can move a rollup or a score touches a date.
-// A stage backfill over ~90 stored nights must not make every one of them rescore.
+// A stage backfill over a year of stored nights must not make every one of them rescore.
 describe('storeSleepSessions: stages and change detection', () => {
   const night = (over: Partial<SleepSessionPoint> = {}): SleepSessionPoint => ({
     startTime: new Date('2026-09-30T23:00:00Z'), endTime: new Date('2026-10-01T07:00:00Z'), minutesAsleep: 420,
@@ -429,14 +430,14 @@ describe('storeSleepSessions: stages and change detection', () => {
     expect(await storeSleepSessions(id, [night({ remMinutes: 90 }), { ...other, minutesAsleep: 400 }])).toEqual(['2026-10-02']);
   });
 
-  it('a stage backfill of 90 nights with stages fits one transaction and touches no date', async () => {
+  it('a stage backfill of a full year of nights with stages completes and touches no date', async () => {
     const { id } = await createUser();
     const DAY = 24 * 3600_000;
-    const nights = Array.from({ length: 90 }, (_, i) => night({
-      startTime: new Date(Date.parse('2026-07-01T23:00:00Z') + i * DAY),
-      endTime: new Date(Date.parse('2026-07-02T07:00:00Z') + i * DAY),
+    const nights = Array.from({ length: 365 }, (_, i) => night({
+      startTime: new Date(Date.parse('2025-10-01T23:00:00Z') + i * DAY),
+      endTime: new Date(Date.parse('2025-10-02T07:00:00Z') + i * DAY),
     }));
-    expect(await storeSleepSessions(id, nights)).toHaveLength(90);
+    expect(await storeSleepSessions(id, nights)).toHaveLength(365);
     const withStages = nights.map((n) => ({
       ...n,
       deepMinutes: 80,
@@ -446,10 +447,93 @@ describe('storeSleepSessions: stages and change detection', () => {
         endTime: new Date(n.startTime.getTime() + (k + 1) * 20 * 60_000),
       })),
     }));
-    const started = Date.now();
     expect(await storeSleepSessions(id, withStages)).toEqual([]);
-    expect(Date.now() - started).toBeLessThan(30_000);
-    expect(await prisma.sleepStage.count({ where: { session: { userId: id } } })).toBe(90 * 24);
+    expect(await prisma.sleepStage.count({ where: { session: { userId: id } } })).toBe(365 * 24);
+  }, 120_000);
+
+  // A year in one transaction held the user's lock for the whole write and
+  // could outrun the transaction timeout against a remote database, so a large
+  // store is split into batches, each its own locked transaction.
+  describe('batching', () => {
+    const DAY = 24 * 3600_000;
+    const nightsFrom = (count: number) => Array.from({ length: count }, (_, i) => night({
+      startTime: new Date(Date.parse('2026-01-01T23:00:00Z') + i * DAY),
+      endTime: new Date(Date.parse('2026-01-02T07:00:00Z') + i * DAY),
+    }));
+
+    // Counts (and, on call `failCall`, fails the rollup writes of) the interactive
+    // transactions storeSleepSessions opens. The failing write is lazy like a
+    // real Prisma query (it rejects only when awaited), so the writes queued
+    // behind the first one never surface as unhandled rejections.
+    function spyTransactions(failCall?: number) {
+      const realTransaction = prisma.$transaction.bind(prisma);
+      let calls = 0;
+      const spy = jest.spyOn(prisma, '$transaction').mockImplementation(((arg: any, opts?: any) => {
+        if (typeof arg !== 'function') return realTransaction(arg, opts);
+        calls += 1;
+        if (calls !== failCall) return realTransaction(arg, opts);
+        const failure = { then: (_: unknown, reject: (e: Error) => void) => reject(new Error("Can't reach database server")) };
+        return realTransaction((tx: any) => arg(new Proxy(tx, {
+          get: (t, key) => key !== 'biometricRecord' ? t[key] : new Proxy(t.biometricRecord, {
+            get: (d, k) => (k === 'upsert' ? () => failure : d[k]),
+          }),
+        })), opts);
+      }) as any);
+      return { spy, calls: () => calls };
+    }
+
+    it('splits a year of nights into batches of SLEEP_STORE_BATCH_SIZE, one transaction each', async () => {
+      const { id } = await createUser();
+      const { spy, calls } = spyTransactions();
+      let dates: string[];
+      try {
+        dates = await storeSleepSessions(id, nightsFrom(365));
+      } finally {
+        spy.mockRestore();
+      }
+      expect(SLEEP_STORE_BATCH_SIZE).toBeGreaterThanOrEqual(30);
+      expect(SLEEP_STORE_BATCH_SIZE).toBeLessThanOrEqual(60);
+      expect(calls()).toBe(Math.ceil(365 / SLEEP_STORE_BATCH_SIZE));
+      expect(dates).toHaveLength(365);
+      expect(dates).toEqual([...dates].sort());
+      expect(await rollups(id)).toHaveLength(365);
+    }, 120_000);
+
+    it('a date two batches both touch is returned once and rolls up both sessions', async () => {
+      const { id } = await createUser();
+      const nights = nightsFrom(SLEEP_STORE_BATCH_SIZE);
+      const last = nights[nights.length - 1]!;
+      // Starts after every night, so it lands alone in the second batch, on the last night's date.
+      const nap = night({
+        startTime: new Date(last.endTime.getTime() + 5 * 3600_000),
+        endTime: new Date(last.endTime.getTime() + 6 * 3600_000),
+        minutesAsleep: 50,
+      });
+      const lastDate = last.endTime.toISOString().slice(0, 10);
+      const dates = await storeSleepSessions(id, [nap, ...nights]);
+      expect(dates).toHaveLength(SLEEP_STORE_BATCH_SIZE);
+      expect(dates.filter((d) => d === lastDate)).toHaveLength(1);
+      expect((await rollups(id)).find((r) => r.date === lastDate)!.value).toBe(420 + 50);
+    });
+
+    it('a failed batch rolls back only itself, and a retry heals it', async () => {
+      const { id } = await createUser();
+      const nights = nightsFrom(SLEEP_STORE_BATCH_SIZE + 3);
+      const { spy } = spyTransactions(2);
+      try {
+        await expect(storeSleepSessions(id, nights)).rejects.toThrow("Can't reach database server");
+      } finally {
+        spy.mockRestore();
+      }
+      // The first batch committed whole; the failed one left nothing behind.
+      expect(await prisma.sleepSession.count({ where: { userId: id } })).toBe(SLEEP_STORE_BATCH_SIZE);
+      expect(await rollups(id)).toHaveLength(SLEEP_STORE_BATCH_SIZE);
+
+      // The retry finds the first batch already stored and touches only the rest.
+      const retried = await storeSleepSessions(id, nights);
+      expect(retried).toEqual(nights.slice(SLEEP_STORE_BATCH_SIZE).map((n) => n.endTime.toISOString().slice(0, 10)));
+      expect(await rollups(id)).toHaveLength(SLEEP_STORE_BATCH_SIZE + 3);
+    });
   });
 
   it('an offset-only change (null -> 0) counts as changed and touches both keyed dates', async () => {

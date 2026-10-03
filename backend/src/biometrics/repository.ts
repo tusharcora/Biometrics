@@ -39,12 +39,19 @@ async function lockUserSleep(tx: Prisma.TransactionClient, userId: string): Prom
   await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userId}))`;
 }
 
-// A store holds the lock while it writes every session in the batch, its
-// stages and the touched rollups. A stage backfill passes ~90 nights at once,
-// each a few round trips, and a second job for the same user can queue behind
-// the lock, so Prisma's 5s default is too tight; a minute is far above any
-// real batch while still failing a wedged transaction.
+// A store holds the lock while it writes every session in a batch, its stages
+// and the touched rollups: each night is a few round trips, and a second job
+// for the same user can queue behind the lock, so Prisma's 5s default is too
+// tight; a minute is far above any one batch while still failing a wedged
+// transaction.
 const SLEEP_STORE_TIMEOUT_MS = 60_000;
+
+// The most sessions storeSleepSessions writes in one locked transaction. A
+// history or stage backfill passes a year of nights (~365 sessions, each with
+// a few dozen stage rows); in one transaction that held the user's lock for the
+// whole write, made every webhook sync for the user wait behind it, and against
+// a remote database could outrun the timeout above -- with nothing to retry it.
+export const SLEEP_STORE_BATCH_SIZE = 45;
 
 /**
  * Stores whole sleep sessions, overwrite-on-match on (userId, startTime).
@@ -266,14 +273,30 @@ export async function recomputeAllSleepRollups(userId: string): Promise<string[]
  * touched. Returns those dates so the caller can ask for the affected scores to
  * be recomputed.
  *
- * One locked transaction covers the change test, the session and stage writes
- * and the rollup writes. Because only changed sessions touch a date, they must
- * commit together: if the rollup write failed after the sessions had
- * committed, the job's retry would find the new values already stored, touch
- * nothing, and leave the rollup (and the scores built on it) stale for good.
+ * The sessions are written in batches of SLEEP_STORE_BATCH_SIZE (in start
+ * order, so a batch covers a run of nearby dates), each in its own locked
+ * transaction covering that batch's change test, session and stage writes and
+ * rollup writes. Because only changed sessions touch a date, those must commit
+ * together: if the rollup write failed after the sessions had committed, the
+ * job's retry would find the new values already stored, touch nothing, and
+ * leave the rollup (and the scores built on it) stale for good. A failed batch
+ * rolls back alone; the batches before it are already whole (sessions and
+ * rollups), so the retry touches only what did not land. A date two batches
+ * both touch stays correct because each batch recomputes its rollups from the
+ * full stored session set under the lock; the caller gets it once.
  */
 export async function storeSleepSessions(userId: string, sessions: SleepSessionPoint[]): Promise<string[]> {
   if (sessions.length === 0) return [];
+  // Stable, so a startTime repeated in the input still resolves last-one-wins.
+  const ordered = [...sessions].sort((a, b) => a.startTime.getTime() - b.startTime.getTime());
+  const dates = new Set<string>();
+  for (let i = 0; i < ordered.length; i += SLEEP_STORE_BATCH_SIZE) {
+    for (const date of await storeSleepBatch(userId, ordered.slice(i, i + SLEEP_STORE_BATCH_SIZE))) dates.add(date);
+  }
+  return [...dates].sort();
+}
+
+async function storeSleepBatch(userId: string, sessions: SleepSessionPoint[]): Promise<string[]> {
   return prisma.$transaction(async (tx) => {
     await lockUserSleep(tx, userId);
     const touched = await upsertSleepSessionsIn(tx, userId, sessions);
