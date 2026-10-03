@@ -282,4 +282,33 @@ describe('ScoreDetailScreen', () => {
       await waitFor(() => expect(getByText(/Something went wrong/i)).toBeTruthy());
     });
   });
+
+  it('shows "vs your goal" on a sleep factor that carries the goal it was scored against', async () => {
+    mockParams = { date: '2026-09-19', type: 'SLEEP' };
+    (fetchScoreDetail as jest.Mock).mockResolvedValue({
+      ...detail,
+      score: {
+        ...detail.score,
+        type: 'SLEEP',
+        factors: [
+          { factor: 'SLEEP_DURATION', label: 'Duration', z: null, goalMinutes: 450, weight: 0.5, contribution: 0.1, points: 3, imputed: false, excluded: false },
+          { factor: 'SLEEP_DEBT', label: 'Sleep debt', z: -0.4, goalMinutes: 480, weight: 0.2, contribution: -0.08, points: -1.4, imputed: false, excluded: false },
+        ],
+      },
+    });
+
+    const { findByTestId, getByTestId } = render(<ScoreDetailScreen />);
+
+    expect(await findByTestId('factor-goal-SLEEP_DURATION')).toHaveTextContent('vs your goal of 7h 30m');
+    expect(getByTestId('factor-goal-SLEEP_DEBT')).toHaveTextContent('vs your goal of 8h');
+  });
+
+  it('shows no goal text when the factor carries no goal', async () => {
+    (fetchScoreDetail as jest.Mock).mockResolvedValue(detail);
+
+    const { findByTestId, queryByText } = render(<ScoreDetailScreen />);
+
+    await findByTestId('factor-bar-SLEEP_DEBT');
+    expect(queryByText(/vs your goal/)).toBeNull();
+  });
 });

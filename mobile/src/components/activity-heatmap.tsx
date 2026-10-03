@@ -395,11 +395,13 @@ export interface ActivityHeatmapProps {
   onOpenSleepDetails?: () => void;
   // One night in full, from the night sheet.
   onOpenNight?: (date: string) => void;
+  // The saved sleep goal in minutes; 8h when not given.
+  sleepGoal?: number;
 }
 
 // The Activity tab: Steps and Sleep. Month swipes between one page per metric;
 // Year and YTD stack both; tapping a day opens that metric's sheet.
-export function ActivityHeatmap({ steps, earliestDate, today, sleep, onRetrySleep, onOpenSleepDetails, onOpenNight }: ActivityHeatmapProps) {
+export function ActivityHeatmap({ steps, earliestDate, today, sleep, onRetrySleep, onOpenSleepDetails, onOpenNight, sleepGoal }: ActivityHeatmapProps) {
   const { colorScheme } = useColorScheme();
   const palette = colorScheme === 'light' ? COLORS.light : COLORS.dark;
   const reduced = useReducedMotion();
@@ -414,14 +416,15 @@ export function ActivityHeatmap({ steps, earliestDate, today, sleep, onRetrySlee
   const rangeLabel = view === 'month' ? monthTitle(monthCursor) : view === 'year' ? 'the last 12 months' : `${today.slice(0, 4)} so far`;
 
   const stepStats = useMemo(() => rangeStats(steps, range.start, range.end, today, STEPS_SPEC.goal), [steps, range.start, range.end, today]);
+  const sleepSpec = useMemo<MetricSpec>(() => (sleepGoal ? { ...SLEEP_SPEC, goal: sleepGoal } : SLEEP_SPEC), [sleepGoal]);
   const nights = sleep.phase === 'ready' ? sleep.nights : null;
   const sleepValues = useMemo<ValuesByDate>(
     () => new Map(nights ? [...nights].map(([date, n]) => [date, n.minutesAsleep] as const) : []),
     [nights],
   );
   const sleepStats = useMemo(
-    () => (nights ? sleepRangeStats(nights, range.start, range.end, today, SLEEP_SPEC.goal) : null),
-    [nights, range.start, range.end, today],
+    () => (nights ? sleepRangeStats(nights, range.start, range.end, today, sleepSpec.goal) : null),
+    [nights, range.start, range.end, today, sleepSpec.goal],
   );
 
   // The second page's offset: the steps card then peeks in from the left.
@@ -516,7 +519,7 @@ export function ActivityHeatmap({ steps, earliestDate, today, sleep, onRetrySlee
     sleepSection = (
       <>
         <HeatmapCard
-          spec={SLEEP_SPEC}
+          spec={sleepSpec}
           values={sleepValues}
           earliestDate={sleep.earliestDate}
           today={today}
@@ -657,7 +660,7 @@ export function ActivityHeatmap({ steps, earliestDate, today, sleep, onRetrySlee
           <NightDetail
             date={selection.date}
             night={nights?.get(selection.date) ?? null}
-            goal={SLEEP_SPEC.goal}
+            goal={sleepSpec.goal}
             average={sleepStats?.averageMinutes ?? null}
             stepsLink={{ steps: steps.get(selection.date) ?? null, onPress: () => crossTo('steps', selection.date) }}
             onOpenFull={onOpenNight ? () => openNight(selection.date) : undefined}

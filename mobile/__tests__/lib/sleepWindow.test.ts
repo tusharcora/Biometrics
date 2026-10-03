@@ -1,4 +1,4 @@
-import { goalWindowMinutes, layoutSleepWindow, noonMinutes } from '../../src/lib/sleepWindow';
+import { formatGoalDuration, goalWindowMinutes, layoutSleepWindow, noonMinutes } from '../../src/lib/sleepWindow';
 
 it('anchors clock times at noon so after-midnight sorts late (Review Focus 1)', () => {
   expect(noonMinutes('12:00')).toBe(0);
@@ -37,4 +37,11 @@ it('draws average lines and the goal band', () => {
   const l = layoutSleepWindow([{ date: 'a', bedtime: '23:00', wakeTime: '07:00' }, { date: 'b', bedtime: '23:30', wakeTime: '07:30' }], { bedtimeGoal: '23:00', wakeGoal: '07:00' });
   expect(l.avgBedtime).toBeCloseTo((675 - 540) / 720);
   expect(l.goalBand).toEqual({ top: (660 - 540) / 720, height: 480 / 720 });
+});
+
+it('formats goal durations as {h}h {m}m, dropping 0m', () => {
+  expect(formatGoalDuration(480)).toBe('8h');
+  expect(formatGoalDuration(450)).toBe('7h 30m');
+  expect(formatGoalDuration(425)).toBe('7h 5m');
+  expect(formatGoalDuration(45)).toBe('45m');
 });

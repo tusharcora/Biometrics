@@ -5,13 +5,23 @@ import { SleepScreen } from '../../src/screens/SleepScreen';
 import { fetchSleep, fetchSleepGoal, fetchSleepNight, fetchSleepRegularity, type SleepNight } from '../../src/api/sleep';
 import { fetchScoresWithBands } from '../../src/api/scores';
 import { addDays, todayCivil } from '../../src/lib/heatmap';
+import { readWindDown } from '../../src/lib/windDown';
 
 jest.mock('../../src/api/sleep');
 jest.mock('../../src/api/scores');
+jest.mock('../../src/lib/windDown');
 
 const mockNavigate = jest.fn();
+// Screen events by name, so a test can fire focus/blur.
+const mockListeners: Record<string, () => void> = {};
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ navigate: mockNavigate }),
+  useNavigation: () => ({
+    navigate: mockNavigate,
+    addListener: (event: string, fn: () => void) => {
+      mockListeners[event] = fn;
+      return () => delete mockListeners[event];
+    },
+  }),
 }));
 
 const TODAY = todayCivil();
@@ -96,6 +106,7 @@ beforeEach(() => {
   (fetchSleep as jest.Mock).mockResolvedValue({ nights: NIGHTS, earliestDate: D(30), stagesBackfillPending: false });
   (fetchSleepRegularity as jest.Mock).mockResolvedValue(REGULARITY);
   (fetchSleepGoal as jest.Mock).mockResolvedValue({ sleepGoalMinutes: 480, bedtimeGoal: null, wakeGoal: null });
+  (readWindDown as jest.Mock).mockResolvedValue({ enabled: false, leadMinutes: 30, bedtimeGoal: null, coachName: 'Mochi', notificationId: null });
   (fetchSleepNight as jest.Mock).mockResolvedValue(DETAIL);
   (fetchScoresWithBands as jest.Mock).mockResolvedValue({ scores: [SCORE] });
 });
@@ -270,6 +281,39 @@ describe('SleepScreen', () => {
     renderScreen();
 
     await waitFor(() => expect(screen.getByTestId('sleep-goal-row')).toHaveTextContent(/10:30 pm to 6:45 am/));
+    await waitFor(() => expect(screen.getByTestId('sleep-goal-reminder')).toHaveTextContent('Reminder off'));
+  });
+
+  it('shows the reminder lead when the wind-down reminder is on', async () => {
+    (fetchSleepGoal as jest.Mock).mockResolvedValue({ sleepGoalMinutes: 480, bedtimeGoal: '23:00', wakeGoal: '07:00' });
+    (readWindDown as jest.Mock).mockResolvedValue({ enabled: true, leadMinutes: 45, bedtimeGoal: '23:00', coachName: 'Mochi', notificationId: 'n1' });
+    renderScreen();
+
+    await waitFor(() => expect(screen.getByTestId('sleep-goal-reminder')).toHaveTextContent('Reminder 45 min before bed'));
+  });
+
+  it('says nothing about a reminder while no bedtime is set', async () => {
+    renderScreen();
+
+    await waitFor(() => expect(screen.getByTestId('sleep-goal-row')).toHaveTextContent(/Set a bedtime goal/));
+    expect(screen.queryByTestId('sleep-goal-reminder')).toBeNull();
+  });
+
+  it('re-reads the goal and the reminder on coming back from the goal screen', async () => {
+    (fetchSleepGoal as jest.Mock).mockResolvedValue({ sleepGoalMinutes: 480, bedtimeGoal: '23:00', wakeGoal: '07:00' });
+    renderScreen();
+    await waitFor(() => expect(screen.getByTestId('sleep-goal-reminder')).toHaveTextContent('Reminder off'));
+    // The first focus (on open) loads nothing extra.
+    await act(async () => mockListeners.focus?.());
+    expect(fetchSleepGoal).toHaveBeenCalledTimes(1);
+
+    (fetchSleepGoal as jest.Mock).mockResolvedValue({ sleepGoalMinutes: 480, bedtimeGoal: '22:30', wakeGoal: '07:00' });
+    (readWindDown as jest.Mock).mockResolvedValue({ enabled: true, leadMinutes: 15, bedtimeGoal: '22:30', coachName: 'Mochi', notificationId: 'n1' });
+    await act(async () => mockListeners.blur?.());
+    await act(async () => mockListeners.focus?.());
+
+    await waitFor(() => expect(screen.getByTestId('sleep-goal-row')).toHaveTextContent(/10:30 pm to 7:00 am/));
+    expect(screen.getByTestId('sleep-goal-reminder')).toHaveTextContent('Reminder 15 min before bed');
   });
 
   it('shows last night with a stage strip and opens the whole night', async () => {

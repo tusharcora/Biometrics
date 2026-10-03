@@ -16,6 +16,15 @@ export function goalWindowMinutes(bedtime: string, wake: string): number {
   return d > 0 ? d : d + DAY;
 }
 
+/** A goal-sized duration: 480 → "8h", 450 → "7h 30m", 45 → "45m" (no padding, no "0m"). */
+export function formatGoalDuration(minutes: number): string {
+  const total = Math.round(minutes);
+  const h = Math.floor(total / 60);
+  const m = total % 60;
+  if (h === 0) return `${m}m`;
+  return m === 0 ? `${h}h` : `${h}h ${m}m`;
+}
+
 // Positions are fractions 0..1 of the axis, top to bottom.
 export interface WindowBar { date: string; top: number; height: number }
 

@@ -3,7 +3,7 @@ import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { ActivityScreen } from '../../src/screens/ActivityScreen';
 import { ActivityHeatmap } from '../../src/components/activity-heatmap';
 import { fetchActivity } from '../../src/api/activity';
-import { fetchSleep } from '../../src/api/sleep';
+import { fetchSleep, fetchSleepGoal } from '../../src/api/sleep';
 import { fetchRange, todayCivil } from '../../src/lib/heatmap';
 
 jest.mock('../../src/api/activity');
@@ -17,6 +17,7 @@ jest.mock('@react-navigation/native', () => ({
 beforeEach(() => {
   jest.clearAllMocks();
   (fetchSleep as jest.Mock).mockResolvedValue({ nights: [], earliestDate: null });
+  (fetchSleepGoal as jest.Mock).mockResolvedValue({ sleepGoalMinutes: 480, bedtimeGoal: null, wakeGoal: null });
 });
 
 describe('ActivityScreen: sleep', () => {
@@ -68,6 +69,51 @@ describe('ActivityScreen: sleep', () => {
     act(() => UNSAFE_getByType(ActivityHeatmap).props.onOpenNight('2026-10-01'));
 
     expect(mockNavigate).toHaveBeenCalledWith('SleepNight', { date: '2026-10-01' });
+  });
+});
+
+describe('ActivityScreen: sleep goal', () => {
+  // 452 min asleep: at goal against 420, short of 480.
+  const lastNight = () => ({
+    nights: [{ date: todayCivil(), minutesAsleep: 452, minutesInBed: 480, bedtime: '23:10', wakeTime: '07:10', sleepScore: 80 }],
+    earliestDate: '2025-01-01',
+  });
+
+  it('colours sleep against the saved goal', async () => {
+    (fetchActivity as jest.Mock).mockResolvedValue({ days: [], earliestDate: '2025-01-01' });
+    (fetchSleep as jest.Mock).mockResolvedValue(lastNight());
+    (fetchSleepGoal as jest.Mock).mockResolvedValue({ sleepGoalMinutes: 420, bedtimeGoal: null, wakeGoal: null });
+
+    const { findByTestId, UNSAFE_getByType } = render(<ActivityScreen />);
+
+    expect(await findByTestId('sleep-stat-goal')).toHaveTextContent('1');
+    expect(UNSAFE_getByType(ActivityHeatmap).props.sleepGoal).toBe(420);
+  });
+
+  it('falls back to 8h when the goal cannot be read', async () => {
+    (fetchActivity as jest.Mock).mockResolvedValue({ days: [], earliestDate: '2025-01-01' });
+    (fetchSleep as jest.Mock).mockResolvedValue(lastNight());
+    (fetchSleepGoal as jest.Mock).mockRejectedValue(new Error('offline'));
+
+    const { findByTestId, UNSAFE_getByType } = render(<ActivityScreen />);
+
+    expect(await findByTestId('sleep-stat-goal')).toHaveTextContent('0');
+    expect(UNSAFE_getByType(ActivityHeatmap).props.sleepGoal).toBe(480);
+  });
+
+  it('waits for the goal before drawing, so the colours never jump', async () => {
+    (fetchActivity as jest.Mock).mockResolvedValue({ days: [], earliestDate: '2025-01-01' });
+    (fetchSleep as jest.Mock).mockResolvedValue(lastNight());
+    let resolveGoal: (g: unknown) => void = () => {};
+    (fetchSleepGoal as jest.Mock).mockReturnValue(new Promise((r) => (resolveGoal = r)));
+
+    const { findByTestId, getByTestId, queryByTestId } = render(<ActivityScreen />);
+    await act(async () => {});
+
+    expect(getByTestId('activity-loading')).toBeTruthy();
+    expect(queryByTestId('sleep-stat-goal')).toBeNull();
+    await act(async () => resolveGoal({ sleepGoalMinutes: 420, bedtimeGoal: null, wakeGoal: null }));
+    expect(await findByTestId('sleep-stat-goal')).toHaveTextContent('1');
   });
 });
 

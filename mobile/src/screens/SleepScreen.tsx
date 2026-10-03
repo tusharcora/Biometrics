@@ -30,6 +30,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { addDays, todayCivil } from '../lib/heatmap';
 import { formatClock, formatDuration } from '../lib/sleepStats';
+import { readWindDown, type WindDownSettings } from '../lib/windDown';
 import { useSync } from '../sync/SyncProvider';
 import { COLORS } from '../theme';
 
@@ -86,6 +87,30 @@ export function SleepScreen() {
 
   const [regularity, reloadRegularity] = useSection<SleepRegularity>('regularity', () => fetchSleepRegularity(REGULARITY_DAYS), [dataVersion]);
   const [goal, reloadGoal] = useSection<SleepGoal>('goal', () => fetchSleepGoal(), [dataVersion]);
+  // The wind-down reminder lives on the device; read alongside the goal.
+  const [reminder, setReminder] = useState<WindDownSettings | null>(null);
+  const loadReminder = useCallback(() => {
+    readWindDown().then(setReminder, () => undefined);
+  }, []);
+  useEffect(loadReminder, [loadReminder]);
+  // Coming back from the goal screen re-reads the goal and the reminder; the
+  // first focus (opening the screen) is already covered by the loads above.
+  const blurred = useRef(false);
+  useEffect(() => {
+    const offBlur = navigation.addListener?.('blur', () => {
+      blurred.current = true;
+    });
+    const offFocus = navigation.addListener?.('focus', () => {
+      if (!blurred.current) return;
+      blurred.current = false;
+      reloadGoal();
+      loadReminder();
+    });
+    return () => {
+      offBlur?.();
+      offFocus?.();
+    };
+  }, [navigation, reloadGoal, loadReminder]);
 
   // Last night is the newest night on record; its stages come from the one-night endpoint.
   const lastNight = useMemo(() => {
@@ -230,6 +255,12 @@ export function SleepScreen() {
                 ) : (
                   <Text className="text-base font-semibold">{goalLine(goal.data)}</Text>
                 )}
+                {/* The reminder needs a bedtime, so it is only mentioned once one is set. */}
+                {goal.phase === 'ready' && goal.data.bedtimeGoal && reminder ? (
+                  <Text testID="sleep-goal-reminder" className="text-sm text-muted-foreground">
+                    {reminder.enabled ? `Reminder ${reminder.leadMinutes} min before bed` : 'Reminder off'}
+                  </Text>
+                ) : null}
               </View>
               <Ionicons name="chevron-forward" size={18} color={colors.muted} />
             </Card>
