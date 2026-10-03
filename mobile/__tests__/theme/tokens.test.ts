@@ -71,6 +71,11 @@ describe('design tokens (new semantic colors)', () => {
     ['sleep-rem', 'sleepRem'],
     ['sleep-light', 'sleepLight'],
     ['sleep-awake', 'sleepAwake'],
+    // Night screen redesign: text-safe stage label colours (lane names).
+    ['sleep-awake-text', 'sleepAwakeText'],
+    ['sleep-rem-text', 'sleepRemText'],
+    ['sleep-light-text', 'sleepLightText'],
+    ['sleep-deep-text', 'sleepDeepText'],
     ['metric-steps', 'metricSteps'],
     ['metric-heart', 'metricHeart'],
     ['metric-sleep', 'metricSleep'],
@@ -135,8 +140,8 @@ describe('design tokens (new semantic colors)', () => {
     }
   });
 
-  // Stage colours are graphical marks (hypnogram blocks, stage bars), so they
-  // need WCAG 1.4.11's 3:1 against the page they are drawn on.
+  // Stage colours are graphical marks (lane blocks, stage bars), so they need
+  // WCAG 1.4.11's 3:1 against the page and the card they are drawn on.
   it.each([
     ['sleep-deep', 'light'],
     ['sleep-rem', 'light'],
@@ -146,9 +151,49 @@ describe('design tokens (new semantic colors)', () => {
     ['sleep-rem', 'dark'],
     ['sleep-light', 'dark'],
     ['sleep-awake', 'dark'],
-  ] as const)('--color-%s reaches 3:1 against the %s background', (name, theme) => {
+  ] as const)('--color-%s reaches 3:1 against the %s background and card', (name, theme) => {
     const block = theme === 'light' ? lightBlock : darkBlock;
     expect(contrast(readVar(block, name), readVar(block, 'background'))).toBeGreaterThanOrEqual(3);
+    expect(contrast(readVar(block, name), readVar(block, 'card'))).toBeGreaterThanOrEqual(3);
+  });
+
+  // The lane names are small text in their stage's colour, on a card.
+  it.each([
+    ['sleep-deep-text', 'light'],
+    ['sleep-rem-text', 'light'],
+    ['sleep-light-text', 'light'],
+    ['sleep-awake-text', 'light'],
+    ['sleep-deep-text', 'dark'],
+    ['sleep-rem-text', 'dark'],
+    ['sleep-light-text', 'dark'],
+    ['sleep-awake-text', 'dark'],
+  ] as const)('--color-%s is text-safe (>= 4.5:1) on the %s card', (name, theme) => {
+    const block = theme === 'light' ? lightBlock : darkBlock;
+    expect(contrast(readVar(block, name), readVar(block, 'card'))).toBeGreaterThanOrEqual(4.5);
+  });
+
+  // The approved night-screen palette: indigo deep and light, magenta REM, orange awake.
+  it('uses the approved stage palette', () => {
+    expect(COLORS.light).toMatchObject({
+      sleepAwake: 'rgb(234, 88, 12)',
+      sleepRem: 'rgb(192, 38, 211)',
+      sleepLight: 'rgb(120, 131, 245)',
+      sleepDeep: 'rgb(55, 48, 163)',
+      sleepAwakeText: 'rgb(194, 65, 12)',
+      sleepRemText: 'rgb(162, 28, 175)',
+      sleepLightText: 'rgb(79, 70, 229)',
+      sleepDeepText: 'rgb(55, 48, 163)',
+    });
+    expect(COLORS.dark).toMatchObject({
+      sleepAwake: 'rgb(251, 146, 60)',
+      sleepRem: 'rgb(232, 121, 249)',
+      sleepLight: 'rgb(165, 180, 252)',
+      sleepDeep: 'rgb(99, 102, 241)',
+      sleepAwakeText: 'rgb(253, 186, 116)',
+      sleepRemText: 'rgb(240, 171, 252)',
+      sleepLightText: 'rgb(199, 210, 254)',
+      sleepDeepText: 'rgb(129, 140, 248)',
+    });
   });
 
   it.each(NEW_TOKENS)('--color-%s is registered with Tailwind', (cssName) => {
