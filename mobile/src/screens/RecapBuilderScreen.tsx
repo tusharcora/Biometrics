@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Linking, PixelRatio, ScrollView, Switch, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute } from '@react-navigation/native';
@@ -13,20 +13,13 @@ import { SegmentedControl } from '../components/ui/segmented-control';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { todayCivil } from '../lib/heatmap';
-import { captureToPng, saveImage, shareImage } from '../lib/recapCapture';
 import { readIncludePrefs, writeIncludePrefs } from '../lib/recapPrefs';
 import {
   FORMAT_LABELS, INCLUDE_LABELS, availableIncludes, exportLayout, previewScale, recapCoachId, resolveIncludes,
   type IncludeKey, type Includes, type ShareFormat,
 } from '../lib/recapShare';
+import { EXPORT_NOTICES, useRecapExport } from '../lib/useRecapExport';
 import { loadYearInPixels, type YearInPixels } from '../lib/yearPixels';
-
-const NOTICES = {
-  saved: 'Saved to Photos.',
-  denied: 'Photos access is off. Allow it in Settings to save images.',
-  failed: "The image couldn't be made. Please try again.",
-} as const;
-type Notice = keyof typeof NOTICES;
 
 // Build your recap (spec 2026-10-04 §3, 1c; recap restyle): pick a format (Card / Story / Year),
 // for the story one of its three frames, switch parts on and off, see a live preview (scaled,
@@ -48,11 +41,7 @@ export function RecapBuilderScreen() {
   const [prefsFormat, setPrefsFormat] = useState<ShareFormat | null>(null);
   const [recapFailed, setRecapFailed] = useState(false);
   const [yearFailed, setYearFailed] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [notice, setNotice] = useState<Notice | null>(null);
-  const exportRef = useRef<View>(null);
-  // Two presses in one frame both see busy === false; the ref lets only the first through.
-  const inFlight = useRef(false);
+  const { exportRef, busy, notice, save, share } = useRecapExport();
 
   useEffect(() => {
     if (!params.id) return;
@@ -108,28 +97,6 @@ export function RecapBuilderScreen() {
     );
   }
 
-  async function run(after: (uri: string) => Promise<void>) {
-    if (inFlight.current) return;
-    inFlight.current = true;
-    setBusy(true);
-    setNotice(null);
-    try {
-      let uri: string;
-      try {
-        uri = await captureToPng(exportRef);
-      } catch {
-        setNotice('failed');
-        return;
-      }
-      await after(uri);
-    } catch {
-      setNotice('failed');
-    } finally {
-      inFlight.current = false;
-      setBusy(false);
-    }
-  }
-
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
       <ScrollView contentContainerStyle={{ gap: 16, padding: 20 }}>
@@ -167,7 +134,7 @@ export function RecapBuilderScreen() {
         ) : null}
         {notice ? (
           <Text testID="builder-notice" className={notice === 'saved' ? 'text-sm text-muted-foreground' : 'text-sm text-destructive'}>
-            {NOTICES[notice]}
+            {EXPORT_NOTICES[notice]}
           </Text>
         ) : null}
         {notice === 'denied' ? (
@@ -188,10 +155,10 @@ export function RecapBuilderScreen() {
           </View>
         ) : null}
         <View className="flex-row gap-3">
-          <Button testID="builder-save" className="flex-1" variant="secondary" disabled={!canExport} onPress={() => void run(async (uri) => setNotice((await saveImage(uri)) === 'saved' ? 'saved' : 'denied'))}>
+          <Button testID="builder-save" className="flex-1" variant="secondary" disabled={!canExport} onPress={() => void save()}>
             Save image
           </Button>
-          <Button testID="builder-share" className="flex-1" disabled={!canExport} onPress={() => void run((uri) => shareImage(uri))}>
+          <Button testID="builder-share" className="flex-1" disabled={!canExport} onPress={() => void share()}>
             Share
           </Button>
         </View>
