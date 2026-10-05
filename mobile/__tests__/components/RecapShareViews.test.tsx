@@ -11,12 +11,12 @@ import { yearPixels } from '../../src/lib/yearPixels';
 const BASE = { personaId: 'luna', builtAt: '2026-10-05T09:00:00.000Z', openedAt: null, sleepGoalMinutes: 480, lineSource: 'ai' as const, story: null, rebuiltAt: null };
 const MONTH: Recap = {
   ...BASE, id: 'm', kind: 'MONTH', periodStart: '2026-09-01', periodEnd: '2026-09-30', line: 'Six nights in a row on goal, lovely.',
-  stats: { nightsWithData: 25, avgSleepMinutes: 455, longestOnGoalStreak: 6, bestRecovery: { date: '2026-09-09', score: 88 } },
+  stats: { nightsWithData: 25, avgSleepMinutes: 425, longestOnGoalStreak: 6, bestRecovery: { date: '2026-09-09', score: 88 } },
 };
 const WEEK: Recap = {
   ...BASE, id: 'w', kind: 'WEEK', periodStart: '2026-09-28', periodEnd: '2026-10-04', line: 'A steady week.',
   stats: {
-    nightsWithData: 6, bestNight: { date: '2026-09-29', minutesAsleep: 500 },
+    nightsWithData: 6, bestNight: { date: '2026-09-29', minutesAsleep: 485 },
     weekStrip: ['2026-09-28', '2026-09-29', '2026-09-30', '2026-10-01', '2026-10-02', '2026-10-03', '2026-10-04'].map((date, i) => ({
       date, minutesAsleep: i === 2 ? null : 480 - (i === 4 ? 60 : 0), onGoal: i === 2 ? null : i !== 4, recovery: null,
     })),
@@ -29,6 +29,7 @@ describe('RecapCardView', () => {
     expect(screen.getByText('MY SEPTEMBER')).toBeTruthy();
     expect(screen.getByText('Luna')).toBeTruthy();
     expect(screen.getByTestId('recap-card-quote')).toHaveTextContent('“Six nights in a row on goal, lovely.”');
+    expect(screen.getByTestId('recap-card-stat-avgSleep')).toHaveTextContent('7h 5mAvg sleep');
     expect(screen.getByTestId('recap-card-stat-bestRecovery')).toHaveTextContent('88Best recovery');
     expect(screen.queryByTestId('recap-card-stat-steps')).toBeNull();
     expect(screen.getByTestId('recap-card-app')).toHaveTextContent('Biometrics');
@@ -50,7 +51,7 @@ describe('WeeklyStoryView', () => {
     expect(screen.getByTestId('recap-story-day-2026-09-28').props.accessibilityLabel).toBe('M: on goal');
     expect(screen.getByTestId('recap-story-day-2026-09-30').props.accessibilityLabel).toBe('W: no data');
     expect(screen.getByTestId('recap-story-day-2026-10-02').props.accessibilityLabel).toBe('F: short');
-    expect(screen.getByTestId('recap-story-best')).toHaveTextContent('Best night · Tuesday · 8h 20m');
+    expect(screen.getByTestId('recap-story-best')).toHaveTextContent('Best night · Tuesday · 8h 5m');
     expect(screen.getByTestId('recap-story')).toHaveStyle({ width: 360, height: 640 });
   });
 });

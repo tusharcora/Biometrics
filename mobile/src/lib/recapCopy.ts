@@ -1,6 +1,6 @@
 import type { RecapComparison, RecapKind, RecapMilestones, RecapStats } from '../api/recaps';
 import { MONTH_LONG, MONTH_SHORT } from './heatmap';
-import { formatDuration, formatShortDuration } from './sleepStats';
+import { formatShortDuration, formatTextDuration } from './sleepStats';
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const plural = (n: number, word: string) => `${n} ${n === 1 ? word : `${word}s`}`;
@@ -41,7 +41,7 @@ export interface CardStat {
 /** The monthly card's stats, in a fixed order (spec §3: avg sleep, longest streak, best recovery, steps). */
 export function cardStats(stats: RecapStats): CardStat[] {
   const out: CardStat[] = [];
-  if (stats.avgSleepMinutes !== undefined) out.push({ key: 'avgSleep', label: 'Avg sleep', value: formatDuration(stats.avgSleepMinutes) });
+  if (stats.avgSleepMinutes !== undefined) out.push({ key: 'avgSleep', label: 'Avg sleep', value: formatTextDuration(stats.avgSleepMinutes) });
   if ((stats.longestOnGoalStreak ?? 0) > 0) out.push({ key: 'streak', label: 'Longest streak', value: plural(stats.longestOnGoalStreak!, 'night') });
   if (stats.bestRecovery) out.push({ key: 'bestRecovery', label: 'Best recovery', value: String(stats.bestRecovery.score) });
   if (stats.steps) out.push({ key: 'steps', label: 'Steps a day', value: stats.steps.dailyAverage.toLocaleString('en-US') });

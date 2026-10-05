@@ -13,8 +13,8 @@ it('names periods and days', () => {
 });
 
 it('lists up to four card stats in a fixed order, skipping missing ones', () => {
-  expect(cardStats({ nightsWithData: 25, avgSleepMinutes: 455, longestOnGoalStreak: 6, bestRecovery: { date: '2026-09-09', score: 88 }, steps: { total: 210000, dailyAverage: 7000 } })).toEqual([
-    { key: 'avgSleep', label: 'Avg sleep', value: '7h 35m' },
+  expect(cardStats({ nightsWithData: 25, avgSleepMinutes: 425, longestOnGoalStreak: 6, bestRecovery: { date: '2026-09-09', score: 88 }, steps: { total: 210000, dailyAverage: 7000 } })).toEqual([
+    { key: 'avgSleep', label: 'Avg sleep', value: '7h 5m' },
     { key: 'streak', label: 'Longest streak', value: '6 nights' },
     { key: 'bestRecovery', label: 'Best recovery', value: '88' },
     { key: 'steps', label: 'Steps a day', value: '7,000' },

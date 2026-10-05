@@ -3,7 +3,7 @@ import { Text, View } from 'react-native';
 import type { Recap, WeekStripEntry } from '../../api/recaps';
 import { weekdayName } from '../../lib/recapCopy';
 import { APP_NAME, fitQuote, QUOTE_MIN_FONT_SCALE, quoteLines, type Includes } from '../../lib/recapShare';
-import { formatDuration } from '../../lib/sleepStats';
+import { formatTextDuration } from '../../lib/sleepStats';
 import { COLORS, FONTS } from '../../theme';
 import { Character } from '../characters/Character';
 import { characterInfo } from '../characters/registry';
@@ -74,7 +74,7 @@ export function WeeklyStoryView({ recap, coachId, includes, scale, testID = 'rec
       </View>
       {includes.bestNight && best ? (
         <Text testID={`${testID}-best`} style={{ fontFamily: FONTS.sansSemibold, fontSize: u(15), lineHeight: u(BEST_LINE), color: c.foreground }}>
-          {`Best night · ${weekdayName(best.date)} · ${formatDuration(best.minutesAsleep)}`}
+          {`Best night · ${weekdayName(best.date)} · ${formatTextDuration(best.minutesAsleep)}`}
         </Text>
       ) : null}
       {includes.quote ? (
