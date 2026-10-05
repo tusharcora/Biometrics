@@ -71,14 +71,56 @@ it('remembers the choices per format in SecureStore', async () => {
 });
 
 it.each([
-  [2, 'card', 540, 540],
-  [3, 'card', 360, 360],
+  [2, 'card', 540, 675],
+  [3, 'card', 360, 450],
   [2, 'year', 540, 540],
 ] as const)('lays the export view out for 1080 px at pixel ratio %i (%s)', async (ratio, format, width, height) => {
   jest.spyOn(PixelRatio, 'get').mockReturnValue(ratio);
   mockParams = format === 'year' ? { format } : { id: 'r-month', format };
   render(withCharacter(<RecapBuilderScreen />));
   expect(await screen.findByTestId('builder-export')).toHaveStyle({ width, height });
+});
+
+it('uses the design labels, lists what to include, and starts Best recovery off', async () => {
+  render(withCharacter(<RecapBuilderScreen />));
+  expect(await screen.findByTestId('builder-include-label')).toHaveTextContent('Include');
+  expect(screen.getByTestId('builder-format')).toHaveTextContent('CardYear');
+  expect(screen.getByTestId('builder-include-quote').props.accessibilityLabel).toBe('A line from your coach');
+  await waitFor(() => expect(screen.getByTestId('builder-include-avgSleep').props.value).toBe(true));
+  expect(screen.getByTestId('builder-include-bestRecovery').props.value).toBe(false);
+  expect(preview().queryByTestId('preview-stat-bestRecovery')).toBeNull();
+  fireEvent(screen.getByTestId('builder-include-bestRecovery'), 'valueChange', true);
+  expect(preview().getByTestId('preview-stat-bestRecovery')).toBeTruthy();
+  await waitFor(() => expect(JSON.parse(store['recapInclude.card']!)).toEqual({ bestRecovery: true }));
+});
+
+const WEEK: Recap = {
+  ...MONTH, id: 'r-week', kind: 'WEEK', periodStart: '2026-09-28', periodEnd: '2026-10-04', story: 'A calm week.',
+  stats: { nightsWithData: 6, avgSleepMinutes: 455, nightsOnGoal: 5, weekStrip: [] },
+};
+
+it('previews, saves and shares the story frame picked (1, 2 or 3)', async () => {
+  mockParams = { id: 'r-week', format: 'story' };
+  (fetchRecap as jest.Mock).mockResolvedValue(WEEK);
+  render(withCharacter(<RecapBuilderScreen />));
+  expect(await preview().findByText('MY WEEK · 1 OF 3')).toBeTruthy();
+  expect(screen.getByTestId('builder-frame')).toHaveTextContent('123');
+  expect(within(screen.getByTestId('builder-export')).getByText('MY WEEK · 1 OF 3')).toBeTruthy();
+  fireEvent.press(screen.getByTestId('builder-frame-2'));
+  expect(preview().getByText('MY WEEK · 3 OF 3')).toBeTruthy();
+  expect(within(screen.getByTestId('builder-export')).getByText('MY WEEK · 3 OF 3')).toBeTruthy();
+  expect(within(screen.getByTestId('builder-export')).getByTestId('export-story')).toHaveTextContent('A calm week.');
+  const share = screen.getByTestId('builder-share');
+  await waitFor(() => expect(share).toBeEnabled());
+  fireEvent.press(share);
+  await waitFor(() => expect(shareImage).toHaveBeenCalledWith(URI));
+  expect(captureToPng).toHaveBeenCalledTimes(1);
+});
+
+it('offers no frame picker for the card', async () => {
+  render(withCharacter(<RecapBuilderScreen />));
+  await screen.findByTestId('preview-quote');
+  expect(screen.queryByTestId('builder-frame')).toBeNull();
 });
 
 it('a 9:16 story exports at 1080×1920 (540×960 points at ratio 2)', async () => {

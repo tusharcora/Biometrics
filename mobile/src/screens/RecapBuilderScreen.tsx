@@ -5,7 +5,7 @@ import { useRoute } from '@react-navigation/native';
 import { fetchRecap, type Recap } from '../api/recaps';
 import { useCharacter } from '../characters/CharacterContext';
 import { RecapCardView } from '../components/recap/RecapCardView';
-import { WeeklyStoryView } from '../components/recap/WeeklyStoryView';
+import { STORY_FRAME_COUNT, WeeklyStoryFrame, type StoryFrameIndex } from '../components/recap/WeeklyStoryView';
 import { YearPixelsView } from '../components/recap/YearPixelsView';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
@@ -28,9 +28,12 @@ const NOTICES = {
 } as const;
 type Notice = keyof typeof NOTICES;
 
-// Build your recap (spec 2026-10-04 §3, 1c): pick a format, switch parts on and off, see a live
-// preview (scaled, never captured), then Save image or Share. The export is a separate, fixed-size,
-// off-screen view captured at 1080 / PixelRatio.get() points wide.
+// Build your recap (spec 2026-10-04 §3, 1c; recap restyle): pick a format (Card / Story / Year),
+// for the story one of its three frames, switch parts on and off, see a live preview (scaled,
+// never captured), then Save image or Share. The export is a separate, fixed-size, off-screen view
+// captured at 1080 / PixelRatio.get() points wide: the card 1080×1350, a story frame 1080×1920.
+const FRAME_OPTIONS = Array.from({ length: STORY_FRAME_COUNT }, (_, i) => ({ value: String(i), label: String(i + 1) }));
+
 export function RecapBuilderScreen() {
   const { params } = useRoute<any>() as { params: { id?: string; format: ShareFormat } };
   const { characterId } = useCharacter();
@@ -38,6 +41,8 @@ export function RecapBuilderScreen() {
   const [recap, setRecap] = useState<Recap | null>(null);
   const [year, setYear] = useState<YearInPixels | null>(null);
   const [format, setFormat] = useState<ShareFormat>(params.format);
+  // The story frame previewed, saved and shared.
+  const [frame, setFrame] = useState<StoryFrameIndex>(0);
   const [prefs, setPrefs] = useState<Partial<Includes>>({});
   // The format whose stored choices have loaded: until then an export could miss a switched-off part.
   const [prefsFormat, setPrefsFormat] = useState<ShareFormat | null>(null);
@@ -91,7 +96,7 @@ export function RecapBuilderScreen() {
 
   function renderView(scale: number, testID: string) {
     if (format === 'year') {
-      return year ? <YearPixelsView testID={testID} year={year.year} pixels={year.pixels} goalMinutes={year.goalMinutes} coachId={characterId} includes={includes} scale={scale} palette="dark" /> : null;
+      return year ? <YearPixelsView testID={testID} year={year.year} pixels={year.pixels} goalMinutes={year.goalMinutes} coachId={characterId} includes={includes} scale={scale} /> : null;
     }
     if (!recap) return null;
     // The card and story show the recap's own coach, whose voice wrote the line (ruling S6).
@@ -99,7 +104,7 @@ export function RecapBuilderScreen() {
     return format === 'card' ? (
       <RecapCardView testID={testID} recap={recap} coachId={coachId} includes={includes} scale={scale} />
     ) : (
-      <WeeklyStoryView testID={testID} recap={recap} coachId={coachId} includes={includes} scale={scale} />
+      <WeeklyStoryFrame testID={testID} recap={recap} coachId={coachId} includes={includes} scale={scale} index={frame} />
     );
   }
 
@@ -131,6 +136,14 @@ export function RecapBuilderScreen() {
         {formats.length > 1 ? (
           <SegmentedControl testID="builder-format" options={formats.map((f) => ({ value: f, label: FORMAT_LABELS[f] }))} value={format} onChange={setFormat} />
         ) : null}
+        {format === 'story' && ready ? (
+          <SegmentedControl
+            testID="builder-frame"
+            options={FRAME_OPTIONS}
+            value={String(frame)}
+            onChange={(v) => setFrame(Number(v) as StoryFrameIndex)}
+          />
+        ) : null}
         <View testID="builder-preview" className="items-center">
           {ready ? renderView(previewScale(format, width - 40, 460), 'preview') : <Skeleton className="h-72 w-full rounded-card" />}
         </View>
@@ -138,14 +151,19 @@ export function RecapBuilderScreen() {
           Only you see this until you share
         </Text>
         {available.length > 0 ? (
-          <Card className="gap-1">
-            {available.map((key) => (
-              <View key={key} className="flex-row items-center justify-between py-2">
-                <Text className="text-base">{INCLUDE_LABELS[key]}</Text>
-                <Switch testID={`builder-include-${key}`} accessibilityLabel={INCLUDE_LABELS[key]} value={includes[key]} onValueChange={(v) => toggle(key, v)} />
-              </View>
-            ))}
-          </Card>
+          <View className="gap-2">
+            <Text testID="builder-include-label" className="text-sm font-semibold">
+              Include
+            </Text>
+            <Card className="gap-1">
+              {available.map((key) => (
+                <View key={key} className="flex-row items-center justify-between py-2">
+                  <Text className="text-base">{INCLUDE_LABELS[key]}</Text>
+                  <Switch testID={`builder-include-${key}`} accessibilityLabel={INCLUDE_LABELS[key]} value={includes[key]} onValueChange={(v) => toggle(key, v)} />
+                </View>
+              ))}
+            </Card>
+          </View>
         ) : null}
         {notice ? (
           <Text testID="builder-notice" className={notice === 'saved' ? 'text-sm text-muted-foreground' : 'text-sm text-destructive'}>

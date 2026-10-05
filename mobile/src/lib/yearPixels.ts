@@ -1,14 +1,38 @@
 import { fetchSleep, fetchSleepGoal } from '../api/sleep';
 
-// Year in pixels (spec 2026-10-04 §1, §3): one cell per night of the calendar year against the
-// user's CURRENT goal, not stored on the server. A night after today is "future": drawn empty,
-// never short, never counted.
+// Year in pixels (spec 2026-10-04 §1, §3; recap restyle 2026-10-05): one cell per night of the
+// calendar year, in date order (drawn 26 to a row), against the user's CURRENT goal, not stored on
+// the server. Each night keeps its minutes and gets one of four steps: no data, short (< 75 % of the
+// goal), near (75 % to under 100 %) and on goal (≥ 100 %). A night after today is "future": drawn
+// empty, never a step, never counted.
 
-export type PixelLevel = 'goal' | 'short' | 'none' | 'future';
+export type PixelLevel = 'none' | 'short' | 'near' | 'goal' | 'future';
+
+export interface PixelCell {
+  date: string;
+  /** Minutes asleep that night; null with no data (or a future night). */
+  minutes: number | null;
+  level: PixelLevel;
+}
 
 export interface YearPixels {
-  rows: Array<{ month: number; cells: Array<{ date: string; level: PixelLevel }> }>;
+  cells: PixelCell[];
   onGoal: number;
+}
+
+export const YEAR_COLUMNS = 26;
+/** Share of the goal from which a night is "near" rather than "short". */
+export const NEAR_GOAL_SHARE = 0.75;
+
+export function pixelLevel(minutes: number | null, goalMinutes: number): Exclude<PixelLevel, 'future'> {
+  if (minutes === null) return 'none';
+  if (minutes >= goalMinutes) return 'goal';
+  return minutes >= goalMinutes * NEAR_GOAL_SHARE ? 'near' : 'short';
+}
+
+/** The level's step on the four-step scale (0 no data … 3 on goal); null for a future night. */
+export function pixelStep(level: PixelLevel): 0 | 1 | 2 | 3 | null {
+  return level === 'future' ? null : (({ none: 0, short: 1, near: 2, goal: 3 }) as const)[level];
 }
 
 const pad = (n: number) => String(n).padStart(2, '0');
@@ -16,18 +40,22 @@ const pad = (n: number) => String(n).padStart(2, '0');
 export function yearPixels(year: number, nights: Array<{ date: string; minutesAsleep: number }>, goalMinutes: number, today: string): YearPixels {
   const minutes = new Map(nights.filter((n) => n.minutesAsleep > 0).map((n) => [n.date, n.minutesAsleep]));
   let onGoal = 0;
-  const rows = Array.from({ length: 12 }, (_, month) => {
+  const cells: PixelCell[] = [];
+  for (let month = 0; month < 12; month++) {
     const days = new Date(Date.UTC(year, month + 1, 0)).getUTCDate();
-    const cells = Array.from({ length: days }, (_, i) => {
-      const date = `${year}-${pad(month + 1)}-${pad(i + 1)}`;
-      const m = minutes.get(date);
-      const level: PixelLevel = date > today ? 'future' : m === undefined ? 'none' : m >= goalMinutes ? 'goal' : 'short';
+    for (let day = 1; day <= days; day++) {
+      const date = `${year}-${pad(month + 1)}-${pad(day)}`;
+      if (date > today) {
+        cells.push({ date, minutes: null, level: 'future' });
+        continue;
+      }
+      const m = minutes.get(date) ?? null;
+      const level = pixelLevel(m, goalMinutes);
       if (level === 'goal') onGoal++;
-      return { date, level };
-    });
-    return { month, cells };
-  });
-  return { rows, onGoal };
+      cells.push({ date, minutes: m, level });
+    }
+  }
+  return { cells, onGoal };
 }
 
 export interface YearInPixels {
