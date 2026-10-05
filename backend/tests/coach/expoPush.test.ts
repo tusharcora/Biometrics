@@ -380,13 +380,13 @@ describe('POST /me/push-token shape validation', () => {
     expect(row).toMatchObject({ userId: user.id, platform: 'android' });
   });
 
-  it('flag-off (404 coach_disabled) and auth (401) behaviour is unchanged under expo', async () => {
+  it('auth (401) is unchanged under expo, and a token registers with the coach flag off (app-level)', async () => {
     process.env.PUSH_PROVIDER = 'expo';
     const user = await createUser();
     expect((await request(await testServer(app())).post('/me/push-token').send({ token: 'x', platform: 'ios' })).status).toBe(401);
     process.env.COACH_ENABLED = 'false';
-    const res = await request(await testServer(app())).post('/me/push-token').set(await authed(user.id)).send({ token: 'x', platform: 'ios' });
-    expect(res.status).toBe(404);
-    expect(res.body).toEqual({ error: 'coach_disabled' });
+    const token = `ExponentPushToken[${user.id.slice(0, 8)}]`;
+    const res = await request(await testServer(app())).post('/me/push-token').set(await authed(user.id)).send({ token, platform: 'ios' });
+    expect(res.status).toBe(204);
   });
 });

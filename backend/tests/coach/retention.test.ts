@@ -127,6 +127,13 @@ describe('deleteUserCoachData', () => {
     });
     await prisma.coachConsent.create({ data: { userId, version: COACH_CONSENT_VERSION } });
     await prisma.pushToken.create({ data: { userId, token: `tok-${userId}`, platform: 'ios' } });
+    await prisma.recap.create({
+      data: {
+        userId, kind: 'WEEK', periodStart: new Date('2026-09-21T00:00:00Z'), periodEnd: new Date('2026-09-27T00:00:00Z'),
+        status: 'BUILT', stats: { nightsWithData: 6, nightsOnGoal: 5 }, sleepGoalMinutes: 480,
+        line: 'An AI line.', lineSource: 'AI', story: 'An AI story.', storySource: 'AI',
+      },
+    });
   }
   const counts = async (userId: string) => ({
     messages: await prisma.coachMessage.count({ where: { userId } }),
@@ -135,10 +142,9 @@ describe('deleteUserCoachData', () => {
     digests: await prisma.coachDigest.count({ where: { userId } }),
     daySummaries: await prisma.coachDaySummary.count({ where: { userId } }),
     consents: await prisma.coachConsent.count({ where: { userId } }),
-    pushTokens: await prisma.pushToken.count({ where: { userId } }),
   });
 
-  it('removes transcripts, conversations, memory, digests, consent rows and push tokens - for that user only', async () => {
+  it('removes transcripts, conversations, memory, digests and consent rows - for that user only; keeps push tokens', async () => {
     const victim = await createUser();
     const bystander = await createUser();
     await seedAll(victim.id);
@@ -147,9 +153,10 @@ describe('deleteUserCoachData', () => {
 
     const summary = await deleteUserCoachData(victim.id, telemetry);
 
-    expect(summary).toEqual({ messages: 2, conversations: 1, memories: 2, digests: 1, daySummaries: 1, consents: 1, pushTokens: 1 });
-    expect(await counts(victim.id)).toEqual({ messages: 0, conversations: 0, memories: 0, digests: 0, daySummaries: 0, consents: 0, pushTokens: 0 });
-    expect(await counts(bystander.id)).toEqual({ messages: 2, conversations: 1, memories: 2, digests: 1, daySummaries: 1, consents: 1, pushTokens: 1 });
+    expect(summary).toEqual({ messages: 2, conversations: 1, memories: 2, digests: 1, daySummaries: 1, consents: 1, recapTexts: 1 });
+    expect(await prisma.pushToken.count({ where: { userId: victim.id } })).toBe(1);
+    expect(await counts(victim.id)).toEqual({ messages: 0, conversations: 0, memories: 0, digests: 0, daySummaries: 0, consents: 0 });
+    expect(await counts(bystander.id)).toEqual({ messages: 2, conversations: 1, memories: 2, digests: 1, daySummaries: 1, consents: 1 });
     // The user row itself is out of scope (account deletion is not built here).
     expect(await prisma.user.findUnique({ where: { id: victim.id } })).not.toBeNull();
     expect(telemetry.named('coach.user_data_deleted')[0]!.attributes).toEqual(summary);
@@ -157,21 +164,21 @@ describe('deleteUserCoachData', () => {
 
   it('is idempotent and safe for a user with no coach data', async () => {
     const user = await createUser();
-    expect(await deleteUserCoachData(user.id)).toEqual({ messages: 0, conversations: 0, memories: 0, digests: 0, daySummaries: 0, consents: 0, pushTokens: 0 });
+    expect(await deleteUserCoachData(user.id)).toEqual({ messages: 0, conversations: 0, memories: 0, digests: 0, daySummaries: 0, consents: 0, recapTexts: 0 });
   });
 
   it('is atomic: a failure part-way rolls everything back', async () => {
     const user = await createUser();
     await seedAll(user.id);
-    // Fail the LAST delete inside the transaction: everything before it must roll back.
+    // Fail the LAST step inside the transaction (the recap lookup): every delete before it must roll back.
     const realTransaction = prisma.$transaction.bind(prisma) as (fn: (tx: any) => Promise<unknown>) => Promise<unknown>;
     const spy = jest.spyOn(prisma, '$transaction').mockImplementationOnce(((fn: (tx: any) => Promise<unknown>) =>
       realTransaction((tx) =>
         fn(
           new Proxy(tx, {
             get: (target, key) =>
-              key === 'pushToken'
-                ? { deleteMany: async () => { throw new Error('boom'); } }
+              key === 'recap'
+                ? { findMany: async () => { throw new Error('boom'); } }
                 : target[key as string],
           }),
         ),
@@ -181,7 +188,8 @@ describe('deleteUserCoachData', () => {
     } finally {
       spy.mockRestore();
     }
-    expect(await counts(user.id)).toEqual({ messages: 2, conversations: 1, memories: 2, digests: 1, daySummaries: 1, consents: 1, pushTokens: 1 });
+    expect(await counts(user.id)).toEqual({ messages: 2, conversations: 1, memories: 2, digests: 1, daySummaries: 1, consents: 1 });
+    expect(await prisma.recap.findFirstOrThrow({ where: { userId: user.id } })).toMatchObject({ lineSource: 'AI', story: 'An AI story.' });
   });
 });
 

@@ -61,8 +61,6 @@ const NEW_ROUTES = [
   ['patch', '/me/coach/memory/some-id'],
   ['delete', '/me/coach/memory/some-id'],
   ['get', '/me/coach/digests/latest'],
-  ['post', '/me/push-token'],
-  ['delete', '/me/push-token'],
 ] as const;
 
 describe('auth and flag', () => {

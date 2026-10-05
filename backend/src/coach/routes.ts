@@ -722,10 +722,11 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
 
   // ---- push tokens ------------------------------------------------------------
 
+  // App-level since the recap (spec 2026-10-04 §2): recap pushes reach users with the coach off.
   const isToken = (v: unknown): v is string =>
     typeof v === 'string' && v.length > 0 && v.length <= MAX_PUSH_TOKEN_CHARS && !/\s/.test(v);
 
-  router.post('/me/push-token', requireAuth, requireEnabled, async (req: AuthedRequest, res) => {
+  router.post('/me/push-token', requireAuth, async (req: AuthedRequest, res) => {
     const { token, platform } = (req.body ?? {}) as Record<string, unknown>;
     if (!isToken(token)) {
       res.status(400).json({ error: 'token must be a non-empty string without whitespace' });
@@ -768,7 +769,7 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
     }
   });
 
-  router.delete('/me/push-token', requireAuth, requireEnabled, async (req: AuthedRequest, res) => {
+  router.delete('/me/push-token', requireAuth, async (req: AuthedRequest, res) => {
     const token = (req.body ?? {}).token;
     if (!isToken(token)) {
       res.status(400).json({ error: 'token must be a non-empty string without whitespace' });
