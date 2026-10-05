@@ -138,8 +138,8 @@ export function DashboardScreen() {
     navigation.navigate('MetricDetail', { metricType: type, records: seriesByMetric[type] });
   }
 
-  // An unwatched recap rings the avatar in its coach's colour; a tap plays it (a week's story, a
-  // month's recap) instead of opening Profile.
+  // An unwatched weekly recap rings the avatar in its coach's colour; a tap plays its story
+  // instead of opening Profile.
   const ring = useStoryRing(scheme === 'dark' ? 'dark' : 'light', navigation);
   function openProfile() {
     if (ring) navigation.navigate(ring.destination.name, ring.destination.params);
@@ -287,7 +287,9 @@ export function DashboardScreen() {
 
         <HabitLogCard />
 
-        {coachRoute === 'Coach' ? <CoachDigestCard onOpenRecap={(id) => navigation.navigate('Recap', { id })} /> : null}
+        {/* The digest is the newest week's recap: it plays that week's story, whose last frame
+            offers the full recap. */}
+        {coachRoute === 'Coach' ? <CoachDigestCard onOpenRecap={(id) => navigation.navigate('RecapStory', { id })} /> : null}
 
         {metricsWithData.length > 0 ? (
           <View className="gap-3">

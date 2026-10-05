@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, waitFor } from '@testing-library/react-native';
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { DashboardScreen } from '../../src/screens/DashboardScreen';
 import { apiFetch } from '../../src/api/client';
 import { useAuth } from '../../src/auth/AuthContext';
@@ -9,8 +9,9 @@ jest.mock('../../src/api/client');
 jest.mock('../../src/auth/AuthContext');
 jest.mock('../../src/api/coach');
 
+const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ navigate: jest.fn() }),
+  useNavigation: () => ({ navigate: mockNavigate }),
 }));
 
 const status: CoachStatusDTO = {
@@ -45,6 +46,21 @@ describe('DashboardScreen: weekly digest card', () => {
     const { findByTestId } = render(<DashboardScreen />);
 
     expect(await findByTestId('coach-digest-preview')).toHaveTextContent('A steady week overall.');
+  });
+
+  it("opens that week's story (its last frame offers the full recap) when the digest is the newest week's recap", async () => {
+    const base = (apiFetch as jest.Mock).getMockImplementation()!;
+    (apiFetch as jest.Mock).mockImplementation((path: string) =>
+      path.startsWith('/me/recaps')
+        ? Promise.resolve({ recaps: [{ id: 'd1', kind: 'WEEK', periodStart: '2026-09-14', periodEnd: '2026-09-20', line: 'A week.', personaId: null, builtAt: '2026-09-21T09:00:00.000Z', openedAt: 'x' }] })
+        : base(path),
+    );
+    const { findByTestId, getByTestId } = render(<DashboardScreen />);
+    await findByTestId('coach-digest-preview');
+    await waitFor(() => {
+      fireEvent.press(getByTestId('coach-digest-card'));
+      expect(mockNavigate).toHaveBeenCalledWith('RecapStory', { id: 'd1' });
+    });
   });
 
   it('is hidden when there is no digest', async () => {
