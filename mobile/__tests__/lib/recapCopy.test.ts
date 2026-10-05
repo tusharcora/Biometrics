@@ -1,4 +1,4 @@
-import { cardStats, compareChanges, goalLabel, milestoneTiles, monthName, readyCardTitle, recapTitle, shortDate, signedChange, weekdayName, weekRange } from '../../src/lib/recapCopy';
+import { cardStats, compareChanges, goalLabel, milestoneTiles, monthName, readyCardTitle, recapTitle, shortDate, signedChange, storyRingHint, weekdayName, weekRange } from '../../src/lib/recapCopy';
 
 it('names periods and days', () => {
   expect(monthName('2026-09-01')).toBe('September');
@@ -10,6 +10,11 @@ it('names periods and days', () => {
   expect(readyCardTitle({ kind: 'WEEK', periodStart: '2026-09-28' })).toBe('Your week is ready');
   expect(goalLabel(480)).toBe('8h');
   expect(goalLabel(450)).toBe('7h 30m');
+});
+
+it('says a new recap is ready on a ringed avatar, and what a tap does', () => {
+  expect(storyRingHint({ kind: 'WEEK', periodStart: '2026-09-28' })).toBe('Your week is ready. Play your story');
+  expect(storyRingHint({ kind: 'MONTH', periodStart: '2026-09-01' })).toBe('Your September recap is ready. Open your recap');
 });
 
 it('lists up to four card stats in a fixed order, skipping missing ones', () => {

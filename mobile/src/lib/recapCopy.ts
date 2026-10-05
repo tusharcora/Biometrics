@@ -26,6 +26,11 @@ export function readyCardTitle(r: { kind: RecapKind; periodStart: string }): str
   return r.kind === 'MONTH' ? `Your ${monthName(r.periodStart)} recap is ready` : 'Your week is ready';
 }
 
+/** A ringed avatar's accessibility hint: what is ready and what a tap does (a week plays its story). */
+export function storyRingHint(r: { kind: RecapKind; periodStart: string }): string {
+  return `${readyCardTitle(r)}. ${r.kind === 'WEEK' ? 'Play your story' : 'Open your recap'}`;
+}
+
 /** 480 → "8h", 450 → "7h 30m". */
 export function goalLabel(minutes: number): string {
   const m = Math.round(minutes);

@@ -15,6 +15,8 @@ jest.mock('../../src/lib/timezone');
 jest.mock('../../src/api/coach');
 // Settings also reads the notification settings; keep that off the fetch mock these tests count.
 jest.mock('../../src/api/notifications');
+// ...and the newest recap, for the avatar's story ring.
+jest.mock('../../src/api/recaps');
 
 const fetchMock = jest.fn();
 (global as any).fetch = fetchMock;

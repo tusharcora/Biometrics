@@ -71,7 +71,11 @@ export function refreshUnwatchedRecap(): Promise<void> {
 export async function openRecap(id: string): Promise<void> {
   if (snapshot.watched.has(id)) return;
   publish({ watched: new Set([...snapshot.watched, id]), recap: snapshot.recap?.id === id ? null : snapshot.recap });
-  await markRecapOpened(id).catch(() => undefined);
+  try {
+    await markRecapOpened(id);
+  } catch {
+    // Best effort; the server catches up the next time it is opened.
+  }
 }
 
 /** Forgets the ring and what was opened (sign out; tests). */

@@ -5,6 +5,8 @@ import { DashboardScreen, greetingFor } from '../../src/screens/DashboardScreen'
 import { apiFetch } from '../../src/api/client';
 import { useAuth } from '../../src/auth/AuthContext';
 import { READY } from '../../jest-mocks/forecastFixture';
+import { StyleSheet } from 'react-native';
+import { storyRingColor } from '../../src/lib/recapTheme';
 
 jest.mock('../../src/api/client');
 jest.mock('../../src/auth/AuthContext');
@@ -572,17 +574,44 @@ describe('DashboardScreen', () => {
   });
 });
 
-describe('DashboardScreen: recap ready card', () => {
-  it('shows the recap ready card for the newest unopened recap', async () => {
-    mockApi({
-      // A record, so Home is past its "No data yet" fallback.
-      records: [{ id: '1', metricType: 'STEPS', value: 8000, recordedAt: '2026-09-01T00:00:00.000Z' }],
-      recaps: [{ id: 'w1', kind: 'WEEK', periodStart: '2026-09-28', periodEnd: '2026-10-04', line: 'A steady week.', personaId: null, builtAt: '2026-10-05T09:00:00.000Z', openedAt: null }],
-    });
+describe('DashboardScreen: story ring on the avatar', () => {
+  const steps = [{ id: '1', metricType: 'STEPS', value: 8000, recordedAt: '2026-09-01T00:00:00.000Z' }];
+  const week = { id: 'w1', kind: 'WEEK', periodStart: '2026-09-28', periodEnd: '2026-10-04', line: 'A steady week.', personaId: 'luna', builtAt: '2026-10-05T09:00:00.000Z', openedAt: null };
+  const ringOf = () => StyleSheet.flatten(screen.getByTestId('profile-story-ring').props.style);
+
+  it("rings the avatar in the unwatched recap's coach colour, with a dot, and a week plays its story", async () => {
+    mockApi({ records: steps, recaps: [week] });
     render(withCharacter(<DashboardScreen />));
-    expect(await screen.findByTestId('recap-ready-card')).toHaveTextContent(/Your week is ready/);
-    fireEvent.press(screen.getByTestId('recap-ready-open'));
-    expect(mockNavigate).toHaveBeenCalledWith('Recap', { id: 'w1' });
+    await waitFor(() => expect(screen.getByTestId('profile-story-ring-dot')).toBeTruthy());
+    const scheme = (ringOf().borderColor === storyRingColor('luna', 'dark') ? 'dark' : 'light') as 'light' | 'dark';
+    expect(ringOf()).toMatchObject({ borderColor: storyRingColor('luna', scheme) });
+    expect(StyleSheet.flatten(screen.getByTestId('profile-story-ring-dot').props.style)).toMatchObject({ backgroundColor: storyRingColor('luna', scheme) });
+    expect(screen.getByTestId('settings-button').props.accessibilityLabel).toBe('Profile. Your week is ready. Play your story');
+    // The old Home card is gone.
+    expect(screen.queryByTestId('recap-ready-card')).toBeNull();
+    fireEvent.press(screen.getByTestId('settings-button'));
+    expect(mockNavigate).toHaveBeenCalledWith('RecapStory', { id: 'w1' });
+  });
+
+  it('a month opens its recap screen', async () => {
+    mockApi({ records: steps, recaps: [{ ...week, id: 'sep', kind: 'MONTH', periodStart: '2026-09-01', periodEnd: '2026-09-30' }] });
+    render(withCharacter(<DashboardScreen />));
+    await waitFor(() => expect(screen.getByTestId('profile-story-ring-dot')).toBeTruthy());
+    expect(screen.getByTestId('settings-button').props.accessibilityLabel).toBe('Profile. Your September recap is ready. Open your recap');
+    fireEvent.press(screen.getByTestId('settings-button'));
+    expect(mockNavigate).toHaveBeenCalledWith('Recap', { id: 'sep' });
+  });
+
+  it('without an unwatched recap the avatar has no ring and opens Profile as before', async () => {
+    mockApi({ records: steps, recaps: [{ ...week, openedAt: '2026-10-05T10:00:00.000Z' }] });
+    render(withCharacter(<DashboardScreen />));
+    await waitFor(() => expect(screen.getByTestId('settings-button')).toBeTruthy());
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith('/me/recaps?limit=1'));
+    expect(screen.queryByTestId('profile-story-ring-dot')).toBeNull();
+    expect(ringOf()).toMatchObject({ borderWidth: 0 });
+    expect(screen.getByTestId('settings-button').props.accessibilityLabel).toBe('Profile and settings');
+    fireEvent.press(screen.getByTestId('settings-button'));
+    expect(mockNavigate).toHaveBeenCalledWith('Tabs', { screen: 'Profile' });
   });
 });
 

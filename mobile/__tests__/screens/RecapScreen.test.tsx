@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import { HIDDEN_OK, withCharacter } from '../../jest-mocks/characterContext';
 import { ApiError } from '../../src/api/client';
 import { fetchRecap, markRecapOpened, type Recap } from '../../src/api/recaps';
+import { resetUnwatchedRecap } from '../../src/lib/unwatchedRecap';
 import { changeColor } from '../../src/lib/recapTheme';
 import { RecapScreen } from '../../src/screens/RecapScreen';
 
@@ -33,6 +34,8 @@ const GONE = () => new ApiError(404, 'Request to /me/recaps/x failed with 404', 
 
 beforeEach(() => {
   jest.clearAllMocks();
+  // Each test opens its recap afresh (the store remembers what this session opened).
+  resetUnwatchedRecap();
   mockParams = { id: 'r-month' };
   mockCanGoBack = true;
   load.mockResolvedValue(MONTH);

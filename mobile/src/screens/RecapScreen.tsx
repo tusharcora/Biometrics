@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
 import { ApiError } from '../api/client';
-import { fetchRecap, markRecapOpened, type Recap } from '../api/recaps';
+import { fetchRecap, type Recap } from '../api/recaps';
 import { useCharacter } from '../characters/CharacterContext';
 import { Character } from '../components/characters/Character';
 import { characterInfo } from '../components/characters/registry';
@@ -20,6 +20,7 @@ import { compareChanges, milestoneTiles, monthName } from '../lib/recapCopy';
 import { readIncludePrefs } from '../lib/recapPrefs';
 import { DESIGN_HEIGHT, DESIGN_WIDTH, previewScale, recapCoachId, resolveIncludes, type Includes } from '../lib/recapShare';
 import { changeColor } from '../lib/recapTheme';
+import { openRecap } from '../lib/unwatchedRecap';
 
 type State = { phase: 'loading' } | { phase: 'ready'; recap: Recap } | { phase: 'missing' } | { phase: 'error' };
 
@@ -71,8 +72,8 @@ export function RecapScreen() {
   useEffect(() => {
     if (state.phase !== 'ready' || opened.current === state.recap.id) return;
     opened.current = state.recap.id;
-    // Best effort: the screen never depends on it.
-    markRecapOpened(state.recap.id).catch(() => undefined);
+    // Best effort: the screen never depends on it. Clears the avatar's story ring at once.
+    void openRecap(state.recap.id);
   }, [state]);
 
   // A push can open this screen with nothing behind it; then "back" is home.

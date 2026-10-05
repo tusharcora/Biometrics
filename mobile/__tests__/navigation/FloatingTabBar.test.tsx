@@ -1,5 +1,8 @@
 import React from 'react';
-import { render, fireEvent, within } from '@testing-library/react-native';
+import { act, render, fireEvent, within } from '@testing-library/react-native';
+import { fetchRecaps } from '../../src/api/recaps';
+import { storyRingColor } from '../../src/lib/recapTheme';
+import { openRecap } from '../../src/lib/unwatchedRecap';
 import { StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { FloatingTabBar } from '../../src/navigation/FloatingTabBar';
@@ -13,6 +16,7 @@ let mockScheme: 'light' | 'dark' = 'dark';
 jest.mock('nativewind', () => ({ useColorScheme: () => ({ colorScheme: mockScheme }) }));
 jest.mock('../../src/lib/useCoachStatus', () => ({ useCoachStatus: jest.fn() }));
 jest.mock('../../src/lib/useKeyboardVisible', () => ({ useKeyboardVisible: jest.fn() }));
+jest.mock('../../src/api/recaps', () => ({ fetchRecaps: jest.fn(), markRecapOpened: jest.fn() }));
 
 const METRICS = { frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 47, left: 0, right: 0, bottom: 34 } };
 // The bar is hidden from the accessibility tree while the keyboard is open, so
@@ -63,7 +67,41 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockScheme = 'dark';
   (useKeyboardVisible as jest.Mock).mockReturnValue(false);
+  (fetchRecaps as jest.Mock).mockResolvedValue([]);
   setCoach(enabledStatus);
+});
+
+describe('FloatingTabBar: story ring on the Profile tab', () => {
+  const week = { id: 'w1', kind: 'WEEK', periodStart: '2026-09-28', periodEnd: '2026-10-04', line: 'A week.', personaId: 'luna', builtAt: '2026-10-05T09:00:00.000Z', openedAt: null };
+
+  it.each(['dark', 'light'] as const)("rings the Profile icon in the recap coach's colour (%s), says so, and still opens Profile", async (scheme) => {
+    mockScheme = scheme;
+    (fetchRecaps as jest.Mock).mockResolvedValue([week]);
+    const props = makeProps(0);
+    const utils = render(bar(props));
+    await act(async () => {});
+    expect(StyleSheet.flatten(utils.getByTestId('tab-Profile-story-ring').props.style)).toMatchObject({ borderColor: storyRingColor('luna', scheme) });
+    expect(StyleSheet.flatten(utils.getByTestId('tab-Profile-story-ring-dot').props.style)).toMatchObject({ backgroundColor: storyRingColor('luna', scheme) });
+    expect(utils.getByTestId('tab-Profile').props.accessibilityLabel).toBe('Profile. Your week is ready. Play your story');
+    fireEvent.press(utils.getByTestId('tab-Profile'));
+    expect((props as unknown as { navigation: { navigate: jest.Mock } }).navigation.navigate).toHaveBeenCalledWith('Profile', undefined);
+  });
+
+  it('clears the moment the recap is opened anywhere', async () => {
+    (fetchRecaps as jest.Mock).mockResolvedValue([week]);
+    const utils = render(bar(makeProps(0)));
+    await act(async () => {});
+    expect(utils.getByTestId('tab-Profile-story-ring')).toBeTruthy();
+    await act(async () => openRecap('w1'));
+    expect(utils.queryByTestId('tab-Profile-story-ring')).toBeNull();
+    expect(utils.getByTestId('tab-Profile').props.accessibilityLabel).toBe('Profile');
+  });
+
+  it('has no ring without an unwatched recap', async () => {
+    const utils = render(bar(makeProps(0)));
+    await act(async () => {});
+    expect(utils.queryByTestId('tab-Profile-story-ring')).toBeNull();
+  });
 });
 
 describe('FloatingTabBar', () => {
