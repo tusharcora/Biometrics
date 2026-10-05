@@ -1,4 +1,4 @@
-import { frameProgress, initialViewer, isRunning, remainingMs, STORY_FRAME_MS, tapSide, viewerReducer, type ViewerState } from '../../src/lib/storyViewer';
+import { EXPIRE_GRACE_MS, frameProgress, initialViewer, isRunning, remainingMs, STORY_FRAME_MS, tapSide, viewerReducer, type ViewerState } from '../../src/lib/storyViewer';
 
 const run = (s: ViewerState, ...actions: Parameters<typeof viewerReducer>[1][]) => actions.reduce(viewerReducer, s);
 
@@ -63,6 +63,20 @@ it('a tap while paused moves frame and starts the new one paused, its full time 
   expect(isRunning(s)).toBe(false);
   expect(remainingMs(s, 5000)).toBe(5000);
   expect(remainingMs(run(s, { type: 'resume', reason: 'hold', now: 5000 }), 6000)).toBe(4000);
+});
+
+it("moves on when a frame's time runs out, and ignores a timer that races a tap", () => {
+  expect(EXPIRE_GRACE_MS).toBe(150);
+  const s = initialViewer(3, 0);
+  expect(run(s, { type: 'expire', index: 0, now: 5000 }).index).toBe(1);
+  // The tap landed first: the timer set for frame 1 is stale.
+  const tapped = run(s, { type: 'next', now: 4990 });
+  expect(run(tapped, { type: 'expire', index: 0, now: 5000 }).index).toBe(1);
+  // A timer for the frame on screen, but within the grace of a change, is a race too.
+  expect(run(tapped, { type: 'expire', index: 1, now: 4990 + EXPIRE_GRACE_MS - 1 }).index).toBe(1);
+  expect(run(tapped, { type: 'expire', index: 1, now: 4990 + STORY_FRAME_MS }).index).toBe(2);
+  // Expiry on the last frame closes.
+  expect(run(initialViewer(1, 0), { type: 'expire', index: 0, now: 5000 }).closed).toBe(true);
 });
 
 it('ignores everything once closed', () => {

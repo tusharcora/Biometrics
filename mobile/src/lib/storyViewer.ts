@@ -4,6 +4,11 @@
 // pauses, and going past the last frame closes the viewer. Times are passed in (`now`, ms).
 
 export const STORY_FRAME_MS = 5000;
+/**
+ * A frame's timer that fires this soon after the frame changed is racing a tap (both landed in
+ * the same moment) and is dropped, so one tap never moves two frames.
+ */
+export const EXPIRE_GRACE_MS = 150;
 
 /** Why the story is paused; it runs only when there is none. */
 export type PauseReason = 'hold' | 'drag' | 'share' | 'background';
@@ -16,15 +21,19 @@ export interface ViewerState {
   /** When the current run started; null while paused or closed. */
   startedAt: number | null;
   pausedBy: PauseReason[];
+  /** When the frame on screen was shown (a tap or an expiry), for EXPIRE_GRACE_MS. */
+  changedAt: number;
   closed: boolean;
 }
 
 export type ViewerAction =
   | { type: 'next' | 'prev' | 'close'; now: number }
+  /** The timer set for frame `index` ran out. */
+  | { type: 'expire'; index: number; now: number }
   | { type: 'pause' | 'resume'; reason: PauseReason; now: number };
 
 export function initialViewer(count: number, now: number): ViewerState {
-  return { index: 0, count, elapsed: 0, startedAt: now, pausedBy: [], closed: false };
+  return { index: 0, count, elapsed: 0, startedAt: now, pausedBy: [], changedAt: now, closed: false };
 }
 
 export function isRunning(s: ViewerState): boolean {
@@ -33,12 +42,16 @@ export function isRunning(s: ViewerState): boolean {
 
 /** A frame shown from its start: running now, or waiting for the pause to end. */
 function showFrame(s: ViewerState, index: number, now: number): ViewerState {
-  return { ...s, index, elapsed: 0, startedAt: s.pausedBy.length === 0 ? now : null };
+  return { ...s, index, elapsed: 0, startedAt: s.pausedBy.length === 0 ? now : null, changedAt: now };
 }
 
 export function viewerReducer(s: ViewerState, a: ViewerAction): ViewerState {
   if (s.closed) return s;
   switch (a.type) {
+    case 'expire':
+      // Stale (set for a frame no longer shown) or racing a tap: the tap already moved on.
+      if (a.index !== s.index || a.now - s.changedAt < EXPIRE_GRACE_MS) return s;
+      return viewerReducer(s, { type: 'next', now: a.now });
     case 'next':
       return s.index >= s.count - 1 ? { ...s, startedAt: null, closed: true } : showFrame(s, s.index + 1, a.now);
     case 'prev':

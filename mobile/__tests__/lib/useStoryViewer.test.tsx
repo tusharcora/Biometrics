@@ -62,6 +62,16 @@ it('with reduce motion never moves on by itself, but taps still step through and
   expect(onClose).toHaveBeenCalledTimes(1);
 });
 
+it('a tap just before the timer runs out moves one frame, not two', () => {
+  const { result } = renderHook(() => useStoryViewer({ count: 3, autoAdvance: true, onClose: jest.fn() }));
+  act(() => jest.advanceTimersByTime(STORY_FRAME_MS - 20));
+  act(() => result.current.next());
+  act(() => jest.advanceTimersByTime(40));
+  expect(result.current.index).toBe(1);
+  act(() => jest.advanceTimersByTime(STORY_FRAME_MS - 40));
+  expect(result.current.index).toBe(2);
+});
+
 it('closes once on request, and a later tap does nothing', () => {
   const onClose = jest.fn();
   const { result } = renderHook(() => useStoryViewer({ count: 3, autoAdvance: true, onClose }));

@@ -45,7 +45,8 @@ export function useStoryViewer({ count, autoAdvance, onClose }: UseStoryViewerOp
     if (!running) return;
     const left = remainingMs(state, now);
     progress.value = withTiming(1, { duration: left, easing: Easing.linear });
-    const timer = setTimeout(() => dispatch({ type: 'next', now: Date.now() }), left);
+    const shown = state.index;
+    const timer = setTimeout(() => dispatch({ type: 'expire', index: shown, now: Date.now() }), left);
     return () => clearTimeout(timer);
     // A new run starts only on a new frame or a resume (startedAt changes with both).
     // eslint-disable-next-line react-hooks/exhaustive-deps
