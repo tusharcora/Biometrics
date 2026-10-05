@@ -1,5 +1,6 @@
 import React from 'react';
 import * as SecureStore from 'expo-secure-store';
+import { AccessibilityInfo, StatusBar, StyleSheet } from 'react-native';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { State } from 'react-native-gesture-handler';
@@ -7,6 +8,7 @@ import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-han
 import { withCharacter } from '../../jest-mocks/characterContext';
 import type { Recap } from '../../src/api/recaps';
 import { captureToPng, saveImage, shareImage } from '../../src/lib/recapCapture';
+import { recapTint } from '../../src/lib/recapTheme';
 import { STORY_FRAME_MS } from '../../src/lib/storyViewer';
 import { RecapStoryScreen } from '../../src/screens/RecapStoryScreen';
 
@@ -52,9 +54,11 @@ beforeEach(() => {
   (captureToPng as jest.Mock).mockResolvedValue(URI);
   (saveImage as jest.Mock).mockResolvedValue('saved');
   (shareImage as jest.Mock).mockResolvedValue(undefined);
+  jest.spyOn(AccessibilityInfo, 'isScreenReaderEnabled').mockResolvedValue(false);
 });
 afterEach(() => {
   jest.useRealTimers();
+  jest.restoreAllMocks();
 });
 
 it('opens on frame 1 and moves on by itself every five seconds, closing after the last frame', async () => {
@@ -155,4 +159,56 @@ it("follows the builder's stored include choices", async () => {
   tap(10000);
   expect(screen.queryByTestId('story-best')).toBeNull();
   expect(screen.queryByTestId('story-export-best')).toBeNull();
+});
+
+it('draws light status bar content and dark-ground buttons on the coach ground, whatever the app theme', async () => {
+  await open();
+  const bars = screen.UNSAFE_getAllByType(StatusBar);
+  expect(bars[bars.length - 1]!.props.barStyle).toBe('light-content');
+  const t = recapTint('luna');
+  expect(StyleSheet.flatten(screen.getByTestId('story-viewer-share').props.style)).toMatchObject({ backgroundColor: t.text });
+  expect(screen.getByTestId('story-viewer-share-label')).toHaveStyle({ color: t.ground });
+  expect(StyleSheet.flatten(screen.getByTestId('story-viewer-save').props.style)).toMatchObject({ backgroundColor: t.surface, borderColor: t.border });
+  expect(screen.getByTestId('story-viewer-save-label')).toHaveStyle({ color: t.text });
+});
+
+it('draws no frame until the stored include choices have loaded, then starts from frame 1', async () => {
+  let finish!: (v: string | null) => void;
+  (SecureStore.getItemAsync as jest.Mock).mockImplementation(() => new Promise((r) => (finish = r)));
+  render(
+    <SafeAreaProvider initialMetrics={{ frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 47, left: 0, right: 0, bottom: 34 } }}>
+      {withCharacter(<RecapStoryScreen />)}
+    </SafeAreaProvider>,
+  );
+  act(() => jest.advanceTimersByTime(STORY_FRAME_MS * 2));
+  expect(screen.queryByTestId('story')).toBeNull();
+  expect(screen.queryByTestId('story-export')).toBeNull();
+  await act(async () => finish(JSON.stringify({ bestNight: false })));
+  expect(eyebrow()).toHaveTextContent('MY WEEK · 1 OF 3');
+  tap(10000);
+  expect(screen.queryByTestId('story-best')).toBeNull();
+});
+
+it('stays on a frame while a screen reader is on, still stepping by tap', async () => {
+  (AccessibilityInfo.isScreenReaderEnabled as jest.Mock).mockResolvedValue(true);
+  await open();
+  act(() => jest.advanceTimersByTime(STORY_FRAME_MS * 3));
+  expect(eyebrow()).toHaveTextContent('MY WEEK · 1 OF 3');
+  tap(10000);
+  expect(eyebrow()).toHaveTextContent('MY WEEK · 2 OF 3');
+});
+
+it('pauses when a screen reader is turned on mid-story and runs again when it is off', async () => {
+  const listeners: Array<(on: boolean) => void> = [];
+  jest.spyOn(AccessibilityInfo, 'addEventListener').mockImplementation(((event: string, fn: (on: boolean) => void) => {
+    if (event === 'screenReaderChanged') listeners.push(fn);
+    return { remove: jest.fn() };
+  }) as never);
+  await open();
+  act(() => listeners.forEach((fn) => fn(true)));
+  act(() => jest.advanceTimersByTime(STORY_FRAME_MS * 3));
+  expect(eyebrow()).toHaveTextContent('MY WEEK · 1 OF 3');
+  act(() => listeners.forEach((fn) => fn(false)));
+  act(() => jest.advanceTimersByTime(STORY_FRAME_MS));
+  expect(eyebrow()).toHaveTextContent('MY WEEK · 2 OF 3');
 });

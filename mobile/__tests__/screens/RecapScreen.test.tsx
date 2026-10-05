@@ -1,4 +1,5 @@
 import React from 'react';
+import * as SecureStore from 'expo-secure-store';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { HIDDEN_OK, withCharacter } from '../../jest-mocks/characterContext';
 import { ApiError } from '../../src/api/client';
@@ -7,6 +8,7 @@ import { changeColor } from '../../src/lib/recapTheme';
 import { RecapScreen } from '../../src/screens/RecapScreen';
 
 jest.mock('../../src/api/recaps');
+jest.mock('expo-secure-store');
 const mockNavigate = jest.fn();
 const mockGoBack = jest.fn();
 let mockCanGoBack = true;
@@ -35,6 +37,7 @@ beforeEach(() => {
   mockCanGoBack = true;
   load.mockResolvedValue(MONTH);
   opened.mockResolvedValue(undefined);
+  (SecureStore.getItemAsync as jest.Mock).mockResolvedValue(null);
 });
 
 it('shows a month with its coach in the quote card, every milestone (unearned ones locked) and signed changes for the comparisons present', async () => {
@@ -85,6 +88,16 @@ it('shows a week as its story card with the paragraph under it', async () => {
   expect(screen.getByTestId('recap-story-text')).toHaveTextContent('You hit your goal on 5 nights this week.');
   fireEvent.press(screen.getByTestId('recap-make-share'));
   expect(mockNavigate).toHaveBeenCalledWith('RecapBuilder', { id: 'r-week', format: 'story' });
+});
+
+it("draws the week's preview with the builder's stored include choices", async () => {
+  mockParams = { id: 'r-week' };
+  load.mockResolvedValue({ ...WEEK, stats: { ...WEEK.stats, bestNight: { date: '2026-09-29', minutesAsleep: 485 } } });
+  (SecureStore.getItemAsync as jest.Mock).mockImplementation((k: string) => Promise.resolve(k === 'recapInclude.story' ? JSON.stringify({ bestNight: false, quote: false }) : null));
+  render(withCharacter(<RecapScreen />));
+  await screen.findByTestId('recap-story-title');
+  expect(screen.queryByTestId('recap-story-best')).toBeNull();
+  expect(screen.queryByTestId('recap-story-says')).toBeNull();
 });
 
 it('opens the story viewer from the preview and from "View story"', async () => {

@@ -1,18 +1,20 @@
 import React, { useEffect, useState } from 'react';
-import { AppState, Linking, PixelRatio, Pressable, View, useWindowDimensions, type GestureResponderEvent } from 'react-native';
+import { AccessibilityInfo, AppState, Linking, PixelRatio, Pressable, View, useWindowDimensions, type GestureResponderEvent } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
+import { StatusBar } from 'expo-status-bar';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, type SharedValue } from 'react-native-reanimated';
 import type { Recap } from '../api/recaps';
 import { useCharacter } from '../characters/CharacterContext';
 import { STORY_FRAME_COUNT, STORY_FRAME_INSETS, STORY_PROGRESS_HEIGHT, WeeklyStoryFrame, type StoryFrameIndex } from '../components/recap/WeeklyStoryView';
-import { Button } from '../components/ui/button';
+import { PressableScale } from '../components/ui/pressable-scale';
 import { Text } from '../components/ui/text';
 import { readIncludePrefs } from '../lib/recapPrefs';
 import { DESIGN_HEIGHT, DESIGN_WIDTH, exportLayout, recapCoachId, resolveIncludes, type Includes } from '../lib/recapShare';
 import { recapTint, type RecapTint } from '../lib/recapTheme';
+import type { CharacterId } from '../components/characters/types';
 import { tapSide } from '../lib/storyViewer';
 import { EXPORT_NOTICES, useRecapExport } from '../lib/useRecapExport';
 import { useStoryViewer } from '../lib/useStoryViewer';
@@ -28,19 +30,17 @@ const ACTIONS_HEIGHT = 76;
 // on the right half goes forward, the left half back; press and hold pauses; a swipe down or
 // the close button closes, as does going past the last frame. Save and Share act on the frame on
 // screen through the same off-screen 1080×1920 capture as the builder. With reduce motion on,
-// nothing runs by itself: the bar shows the frame reached and taps step through.
+// nothing runs by itself (nor while a screen reader is on): the bar shows the frame reached and
+// taps step through.
 export function RecapStoryScreen() {
   const { params } = useRoute<any>() as { params: { recap: Recap } };
-  const navigation = useNavigation<any>();
   const { characterId } = useCharacter();
-  const { width, height } = useWindowDimensions();
-  const insets = useSafeAreaInsets();
-  const reduceMotion = useReducedMotion();
   const recap = params.recap;
   const coachId = recapCoachId(recap, characterId);
   const tint = recapTint(coachId);
 
-  // The builder's stored choices: a part switched off there stays off in a shared frame.
+  // The builder's stored choices: a part switched off there stays off here and in a shared frame.
+  // Nothing is drawn (and no timer runs) until they load, so a switched-off part never flashes.
   const [prefs, setPrefs] = useState<Partial<Includes> | null>(null);
   useEffect(() => {
     let cancelled = false;
@@ -51,7 +51,21 @@ export function RecapStoryScreen() {
       cancelled = true;
     };
   }, []);
-  const includes = resolveIncludes('story', prefs ?? {}, recap.stats);
+
+  return (
+    <View testID="story-viewer" style={{ flex: 1, backgroundColor: tint.ground }}>
+      {/* The coach's ground is dark in both themes: light status bar content while the viewer is up. */}
+      <StatusBar style="light" />
+      {prefs ? <StoryViewer recap={recap} coachId={coachId} tint={tint} includes={resolveIncludes('story', prefs, recap.stats)} /> : null}
+    </View>
+  );
+}
+
+function StoryViewer({ recap, coachId, tint, includes }: { recap: Recap; coachId: CharacterId; tint: RecapTint; includes: Includes }) {
+  const navigation = useNavigation<any>();
+  const { width, height } = useWindowDimensions();
+  const insets = useSafeAreaInsets();
+  const reduceMotion = useReducedMotion();
 
   const leave = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs'));
   const viewer = useStoryViewer({ count: STORY_FRAME_COUNT, autoAdvance: !reduceMotion, onClose: leave });
@@ -69,6 +83,20 @@ export function RecapStoryScreen() {
   useEffect(() => {
     const sub = AppState.addEventListener('change', (s) => (s === 'active' ? resume('background') : pause('background')));
     return () => sub.remove();
+  }, [pause, resume]);
+
+  // Nothing moves on by itself under VoiceOver / TalkBack: the reader sets the pace by tap.
+  useEffect(() => {
+    let live = true;
+    const apply = (on: boolean) => (on ? pause('screenReader') : resume('screenReader'));
+    void AccessibilityInfo.isScreenReaderEnabled().then((on) => {
+      if (live) apply(on);
+    });
+    const sub = AccessibilityInfo.addEventListener('screenReaderChanged', apply);
+    return () => {
+      live = false;
+      sub.remove();
+    };
   }, [pause, resume]);
 
   // The frame as large as fits between the safe area and the actions.
@@ -100,10 +128,10 @@ export function RecapStoryScreen() {
   const dragStyle = useAnimatedStyle(() => ({ transform: [{ translateY: dragY.value }], opacity: 1 - Math.min(dragY.value / 600, 0.5) }));
 
   const onTap = (e: GestureResponderEvent) => (tapSide(e.nativeEvent.locationX, frameW) === 'next' ? viewer.next() : viewer.prev());
-  const canExport = prefs !== null && !busy;
+  const canExport = !busy;
 
   return (
-    <View testID="story-viewer" style={{ flex: 1, backgroundColor: tint.ground }}>
+    <>
       <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
         <GestureDetector gesture={swipe}>
           <Animated.View style={[{ flex: 1, alignItems: 'center', justifyContent: 'center' }, dragStyle]}>
@@ -144,12 +172,8 @@ export function RecapStoryScreen() {
         </GestureDetector>
         <View style={{ minHeight: ACTIONS_HEIGHT, paddingHorizontal: 20, paddingTop: 12, gap: 8 }}>
           <View className="flex-row gap-3">
-            <Button testID="story-viewer-save" className="flex-1" variant="secondary" disabled={!canExport} onPress={() => void save()}>
-              Save image
-            </Button>
-            <Button testID="story-viewer-share" className="flex-1" disabled={!canExport} onPress={() => void share()}>
-              Share
-            </Button>
+            <ViewerButton testID="story-viewer-save" label="Save image" tint={tint} disabled={!canExport} onPress={() => void save()} />
+            <ViewerButton testID="story-viewer-share" label="Share" tint={tint} primary disabled={!canExport} onPress={() => void share()} />
           </View>
           {notice ? (
             <View className="flex-row items-center justify-center gap-3">
@@ -171,7 +195,35 @@ export function RecapStoryScreen() {
           <WeeklyStoryFrame testID="story-export" recap={recap} coachId={coachId} includes={includes} scale={layout.scale} index={index} />
         </View>
       </View>
-    </View>
+    </>
+  );
+}
+
+/** Save / Share on the coach's dark ground, the same in light and dark mode: Share filled light, Save a translucent tile. */
+function ViewerButton({ testID, label, tint, primary = false, disabled, onPress }: { testID: string; label: string; tint: RecapTint; primary?: boolean; disabled: boolean; onPress: () => void }) {
+  return (
+    <PressableScale
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityState={{ disabled }}
+      disabled={disabled}
+      onPress={onPress}
+      style={{
+        flex: 1,
+        alignItems: 'center',
+        justifyContent: 'center',
+        borderRadius: 999,
+        paddingVertical: 13,
+        borderWidth: 1,
+        backgroundColor: primary ? tint.text : tint.surface,
+        borderColor: primary ? tint.text : tint.border,
+        opacity: disabled ? 0.5 : 1,
+      }}
+    >
+      <Text testID={`${testID}-label`} className="text-base font-semibold" style={{ color: primary ? tint.ground : tint.text }}>
+        {label}
+      </Text>
+    </PressableScale>
   );
 }
 

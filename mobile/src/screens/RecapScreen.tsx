@@ -17,7 +17,8 @@ import { SectionLabel } from '../components/ui/section-label';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { compareChanges, milestoneTiles, monthName } from '../lib/recapCopy';
-import { previewScale, recapCoachId, resolveIncludes } from '../lib/recapShare';
+import { readIncludePrefs } from '../lib/recapPrefs';
+import { DESIGN_HEIGHT, DESIGN_WIDTH, previewScale, recapCoachId, resolveIncludes, type Includes } from '../lib/recapShare';
 import { changeColor } from '../lib/recapTheme';
 
 type State = { phase: 'loading' } | { phase: 'ready'; recap: Recap } | { phase: 'missing' } | { phase: 'error' };
@@ -31,6 +32,8 @@ export function RecapScreen() {
   const { characterId } = useCharacter();
   const { width } = useWindowDimensions();
   const [state, setState] = useState<State>({ phase: 'loading' });
+  // The builder's stored story choices: the week's preview shows what a shared frame would.
+  const [storyPrefs, setStoryPrefs] = useState<Partial<Includes> | null>(null);
   // The recap already marked opened: a re-render or refocus never posts again.
   const opened = useRef<string | null>(null);
   // The id this screen shows now. A push tapped while a recap is open re-uses this screen with a
@@ -54,6 +57,16 @@ export function RecapScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void readIncludePrefs('story').then((stored) => {
+      if (!cancelled) setStoryPrefs(stored);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     if (state.phase !== 'ready' || opened.current === state.recap.id) return;
@@ -105,7 +118,14 @@ export function RecapScreen() {
               className="items-center"
               onPress={() => navigation.navigate('RecapStory', { recap: state.recap })}
             >
-              <WeeklyStoryView recap={state.recap} coachId={coachId} includes={resolveIncludes('story', {}, state.recap.stats)} scale={previewScale('story', width - 40, 520)} />
+              {storyPrefs ? (
+                <WeeklyStoryView recap={state.recap} coachId={coachId} includes={resolveIncludes('story', storyPrefs, state.recap.stats)} scale={previewScale('story', width - 40, 520)} />
+              ) : (
+                // Until the stored choices load: no flash of a part switched off.
+                <View style={{ width: DESIGN_WIDTH * previewScale('story', width - 40, 520), height: DESIGN_HEIGHT.story * previewScale('story', width - 40, 520) }}>
+                  <Skeleton className="h-full w-full rounded-card" />
+                </View>
+              )}
             </Pressable>
             <Button testID="recap-view-story" variant="secondary" onPress={() => navigation.navigate('RecapStory', { recap: state.recap })}>
               View story
