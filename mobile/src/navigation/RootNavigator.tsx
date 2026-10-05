@@ -24,6 +24,8 @@ import { ThinkingTextScreen } from '../screens/ThinkingTextScreen';
 import { SleepScreen } from '../screens/SleepScreen';
 import { SleepNightScreen } from '../screens/SleepNightScreen';
 import { BedtimeGoalScreen } from '../screens/BedtimeGoalScreen';
+import { RecapScreen } from '../screens/RecapScreen';
+import type { ShareFormat } from '../lib/recapShare';
 import { TabsNavigator, type TabParamList } from './TabsNavigator';
 import { syncTimezone } from '../lib/timezone';
 import { syncPushRegistration } from '../lib/pushRegistration';
@@ -77,6 +79,13 @@ export type RootStackParamList = {
   // One night in full; `date` is the civil date the night ended on.
   SleepNight: { date: string };
   BedtimeGoal: undefined;
+  // Sleep → "Your recaps": the latest month, latest week, older ones and Year in pixels.
+  Recaps: undefined;
+  // One recap; from the list, the Home card, the coach digest card or a tapped push.
+  Recap: { id: string };
+  // Build your recap: a recap's own format plus Year in pixels, or Year in pixels alone.
+  RecapBuilder: { id?: string; format: ShareFormat };
+  YearInPixels: undefined;
 };
 
 export type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';
@@ -181,6 +190,7 @@ export function RootNavigator() {
               <Stack.Screen name="Sleep" component={SleepScreen} options={{ title: 'Sleep' }} />
               <Stack.Screen name="SleepNight" component={SleepNightScreen} options={{ title: '' }} />
               <Stack.Screen name="BedtimeGoal" component={BedtimeGoalScreen} options={{ title: 'Bedtime goal' }} />
+              <Stack.Screen name="Recap" component={RecapScreen} options={{ title: '' }} />
               <Stack.Screen
                 name="MeetYourCoach"
                 component={MeetYourCoachScreen}
