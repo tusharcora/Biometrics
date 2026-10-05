@@ -1,0 +1,67 @@
+import { contrast, hexAlpha } from '../components/characters/palette';
+import { characterInfo } from '../components/characters/registry';
+import { mixHex } from '../components/characters/sprites/compose';
+import type { CharacterId } from '../components/characters/types';
+
+// The recap share images' colours (recap restyle, owner decision 2026-10-05): every image is
+// tinted by its coach, a dark ground from the registry with the coach's accent on top and a dot
+// pattern of the accent. Pure, so the views and their tests share one source.
+
+export interface RecapTint {
+  /** The image's background. */
+  ground: string;
+  /** The coach's registry accent: dots, sprites' companions, fills. */
+  accent: string;
+  /** The accent as text (eyebrows, titles, app name): lightened only if it would not read. */
+  accentText: string;
+  /** Body text and big numbers. */
+  text: string;
+  /** Quotes and secondary text. */
+  soft: string;
+  /** Uppercase labels and captions. */
+  muted: string;
+  /** Translucent tile fill and its border. */
+  surface: string;
+  border: string;
+  /** Footer hairline. */
+  hairline: string;
+  /** The dot pattern's dots. */
+  dot: string;
+  /** A story progress segment not reached yet. */
+  track: string;
+}
+
+const MIN_TEXT_CONTRAST = 4.6;
+
+/** The accent, mixed toward white until it reads on the ground. */
+function readable(color: string, ground: string): string {
+  for (let i = 0; i <= 20; i++) {
+    const c = i === 0 ? color : mixHex(color, '#FFFFFF', i * 0.05);
+    if (contrast(c, ground) >= MIN_TEXT_CONTRAST) return c.toUpperCase();
+  }
+  return '#FFFFFF';
+}
+
+export function recapTint(coachId: CharacterId): RecapTint {
+  const { accent, ground } = characterInfo(coachId);
+  const text = mixHex('#FFFFFF', accent, 0.06).toUpperCase();
+  return {
+    ground,
+    accent,
+    accentText: readable(accent, ground),
+    text,
+    soft: mixHex(mixHex('#FFFFFF', accent, 0.18), ground, 0.1).toUpperCase(),
+    muted: readable(mixHex(mixHex('#FFFFFF', accent, 0.3), ground, 0.3), ground),
+    surface: hexAlpha(text, 0.07),
+    border: hexAlpha(text, 0.12),
+    hairline: hexAlpha(text, 0.12),
+    dot: hexAlpha(accent, 0.17),
+    track: hexAlpha(text, 0.35),
+  };
+}
+
+/** Year in pixels' four steps, no data → on goal (fixed purple, whatever the coach). */
+export const YEAR_SCALE = ['#2E2A4A', '#6B4FA8', '#9333EA', '#D8B4FE'] as const;
+
+/** A signed change: green when better, orange when worse, grey (the tint's muted) when equal. */
+export const CHANGE_COLORS = { better: '#86EFAC', worse: '#FDBA74' } as const;
