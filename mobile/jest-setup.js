@@ -15,3 +15,13 @@ jest.mock('expo-haptics', () => ({
   impactAsync: jest.fn(() => Promise.resolve()),
   ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
 }));
+
+// Recap export natives (spec 2026-10-04 §3). Tests set return values per case.
+jest.mock('@shopify/react-native-skia', () => require('./jest-mocks/skia'));
+jest.mock('expo-file-system', () => require('./jest-mocks/expoFileSystem'));
+jest.mock('expo-sharing', () => ({ shareAsync: jest.fn(() => Promise.resolve()), isAvailableAsync: jest.fn(() => Promise.resolve(true)) }));
+jest.mock('expo-media-library', () => ({
+  getPermissionsAsync: jest.fn(),
+  requestPermissionsAsync: jest.fn(),
+  saveToLibraryAsync: jest.fn(() => Promise.resolve()),
+}));
