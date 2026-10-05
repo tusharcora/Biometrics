@@ -158,6 +158,69 @@ describe('validateSentence with exactNumbers (recaps)', () => {
     expect(validateSentence('You went to bed early once.', counts)).toEqual(ok);
   });
 
+  describe('closes the residual count forms (final review F2)', () => {
+    const nights = (value: number): FactSheet => ({
+      route: 'recap',
+      facts: [{ id: 'sleep.streak', label: 'Most nights on goal in a row', value, unit: 'nights', display: `${value} nights` }],
+      notes: [],
+    });
+
+    it('checks a numeric ordinal as a count ("6th straight night")', () => {
+      expect(validateSentence('It was your 4th straight night on goal.', RECAP, EXACT)).toEqual(ok);
+      expect(validateSentence('It was your 7th straight night on goal.', RECAP, EXACT)).toEqual(unknown);
+      // The chat check still exempts ordinals.
+      expect(validateSentence('It was your 7th straight night on goal.', RECAP)).toEqual(ok);
+    });
+
+    it('keeps month-day ordinals exempt as dates', () => {
+      expect(validateSentence('On Oct 9th you slept 7h 12m.', RECAP, EXACT)).toEqual(ok);
+      expect(validateSentence('On 9th October you slept 7h 12m.', RECAP, EXACT)).toEqual(ok);
+      expect(validateSentence('On the 9th of October you slept 7h 12m.', RECAP, EXACT)).toEqual(ok);
+      expect(validateSentence('On Oct 9th you slept 7h 20m.', RECAP, EXACT)).toEqual(unknown);
+    });
+
+    it('reads ordinal words first..thirty-first as digits ("fifth straight night")', () => {
+      expect(validateSentence('It was your fourth straight night on goal.', RECAP, EXACT)).toEqual(ok);
+      expect(validateSentence('It was your seventh straight night on goal.', RECAP, EXACT)).toEqual(unknown);
+      expect(validateSentence('It was your twenty-first straight night on goal.', nights(21), EXACT)).toEqual(ok);
+      expect(validateSentence('It was your twenty-first straight night on goal.', nights(20), EXACT)).toEqual(unknown);
+      expect(validateSentence('It was your thirty-first straight night on goal.', nights(31), EXACT)).toEqual(ok);
+      expect(validateSentence('It was your thirty-first straight night on goal.', nights(30), EXACT)).toEqual(unknown);
+      expect(validateSentence('It was your fifteenth straight night on goal.', nights(15), EXACT)).toEqual(ok);
+      expect(validateSentence('It was your fifteenth straight night on goal.', nights(14), EXACT)).toEqual(unknown);
+      // Month-day ordinal words stay dates.
+      expect(validateSentence('On October ninth you slept 7h 12m.', RECAP, EXACT)).toEqual(ok);
+    });
+
+    it('reads "a couple nights" as 2', () => {
+      expect(validateSentence('You were on goal a couple nights.', nights(2), EXACT)).toEqual(ok);
+      expect(validateSentence('You were on goal a couple nights.', RECAP, EXACT)).toEqual(unknown);
+    });
+
+    it('reads "a pair of nights" as 2', () => {
+      expect(validateSentence('You were on goal a pair of nights.', nights(2), EXACT)).toEqual(ok);
+      expect(validateSentence('You were on goal a pair of nights.', RECAP, EXACT)).toEqual(unknown);
+    });
+
+    it('reads "a week straight" as 7 nights, with "full" or "whole" too', () => {
+      for (const sentence of ['You were on goal a week straight.', 'You were on goal a full week straight.', 'You were on goal a whole week straight.']) {
+        expect([sentence, validateSentence(sentence, nights(7), EXACT)]).toEqual([sentence, ok]);
+        expect([sentence, validateSentence(sentence, RECAP, EXACT)]).toEqual([sentence, unknown]);
+      }
+    });
+
+    it('reads "a fortnight straight" as 14 nights', () => {
+      expect(validateSentence('You were on goal a fortnight straight.', nights(14), EXACT)).toEqual(ok);
+      expect(validateSentence('You were on goal a fortnight straight.', nights(7), EXACT)).toEqual(unknown);
+    });
+
+    it('leaves the chat check unchanged for these forms', () => {
+      expect(validateSentence('You were on goal a couple nights.', RECAP)).toEqual(ok);
+      expect(validateSentence('You were on goal a week straight.', RECAP)).toEqual(ok);
+      expect(validateSentence('It was your seventh straight night on goal.', RECAP)).toEqual(ok);
+    });
+  });
+
   it('reads the singular "time" too (pre-flight M12)', () => {
     const once: FactSheet = {
       route: 'recap',

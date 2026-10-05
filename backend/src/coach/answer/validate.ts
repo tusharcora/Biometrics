@@ -39,8 +39,11 @@
 //     count units nights/days/times; durations ±1 minute. A night, day or
 //     time count needs its noun right after the number ("5 nights", "5 of 6
 //     nights", "5 straight nights"), and every number word is checked
-//     (zero, one, hundred, once, twice, a dozen, a couple of, a single...;
-//     only a lone "a"/"an" and "one of" stay prose). Known limit: a count matches
+//     (zero, one, hundred, once, twice, a dozen, a couple (of), a pair (of),
+//     a single, a week/fortnight straight = 7/14 nights...; only a lone
+//     "a"/"an" and "one of" stay prose). Ordinals are counts too ("your 6th
+//     straight night", "fifth", "twenty-first"), except in a date ("Oct 9th",
+//     "9th October"). Known limit: a count matches
 //     per family, not per fact, so "on goal 6 nights" can match the
 //     nights-recorded fact.
 //   * Topics: medication and dosing (the crisis classifier's medication
@@ -95,12 +98,18 @@ const BASE_EXEMPT_PATTERNS: RegExp[] = [
   /\b(at|after|before|around|by|until|till|from|past)\s+([01]?\d|2[0-3]):[0-5]\d\b/gi,
   // A month name followed by a day and an optional year: "March 14", "Sep 26, 2026".
   /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2}(st|nd|rd|th)?\b(,?\s+\d{4}\b)?/g,
-  // An ordinal: "the 14th".
-  /\b\d{1,2}(st|nd|rd|th)\b/g,
   // The score scale after a number: "26/100", "26 out of 100" (the 26 is still checked).
   /(?<=\d)\s*\/\s*100\b/g,
   /(?<=\d)\s+out\s+of\s+100\b/gi,
 ];
+/** An ordinal: "the 14th". Off under exactNumbers, where "your 6th straight night" is a claim. */
+const ORDINAL_EXEMPT_PATTERN = /\b\d{1,2}(st|nd|rd|th)\b/g;
+/**
+ * A day before a month name: "9 October", "9 of October". Only under exactNumbers, where ordinals
+ * were read as digits first ("9th October" → "9 October"); the chat check exempts them as ordinals.
+ */
+const DAY_MONTH_EXEMPT_PATTERN =
+  /\b\d{1,2}\s+(?:of\s+)?(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sept|Sep|Oct|Nov|Dec)\b\.?(,?\s+\d{4}\b)?/g;
 /** The sheet's averaging windows. Off under exactNumbers, where "a 7-night streak" is a claim. */
 const WINDOW_EXEMPT_PATTERNS: RegExp[] = [
   // The sheet's windows: "7-day average", "30-night", "the last 30 days", and the trend label's own
@@ -109,7 +118,8 @@ const WINDOW_EXEMPT_PATTERNS: RegExp[] = [
   new RegExp(String.raw`\b(?:last|past)\s+${WINDOW_DAYS}\s+(?:days|nights)\b`, 'gi'),
   new RegExp(String.raw`\b(?:over|in|across|for)\s+(?:the\s+)?(?:(?:last|past)\s+)?${WINDOW_DAYS}\s+(?:days|nights)\b`, 'gi'),
 ];
-const EXEMPT_PATTERNS: RegExp[] = [...BASE_EXEMPT_PATTERNS, ...WINDOW_EXEMPT_PATTERNS];
+const EXEMPT_PATTERNS: RegExp[] = [...BASE_EXEMPT_PATTERNS, ORDINAL_EXEMPT_PATTERN, ...WINDOW_EXEMPT_PATTERNS];
+const EXACT_EXEMPT_PATTERNS: RegExp[] = [...BASE_EXEMPT_PATTERNS, DAY_MONTH_EXEMPT_PATTERN];
 
 /** A unit right after a plain number, which limits what the number may match. */
 const UNIT_AFTER: Array<[RegExp, Family]> = [
@@ -178,9 +188,32 @@ const COUNT_WORDS: Array<[RegExp, string]> = [
   [/\btwice\b/gi, '2 times'],
   [/\bthrice\b/gi, '3 times'],
   [/\b(?:an?\s+)?dozen\b/gi, '12'],
-  [/\ba\s+couple\s+of\b/gi, '2'],
+  [/\ba\s+(?:couple|pair)(?:\s+of)?\b/gi, '2'],
   [/\ba\s+single\b/gi, '1'],
+  [/\ba\s+(?:full\s+|whole\s+)?week\s+straight\b/gi, '7 nights'],
+  [/\ba\s+(?:full\s+|whole\s+)?fortnight\s+straight\b/gi, '14 nights'],
 ];
+const ORDINAL_ONES = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth'];
+const ORDINAL_TEENS = ['tenth', 'eleventh', 'twelfth', 'thirteenth', 'fourteenth', 'fifteenth', 'sixteenth', 'seventeenth', 'eighteenth', 'nineteenth'];
+/** Ordinal words first..thirty-first, read before ANY_NUMBER_WORD_RE so "twenty-first" is not taken as "twenty". */
+const ORDINAL_WORD_RE = new RegExp(
+  String.raw`\b(?:(thirty)[-\s]+(first)|(?:(twenty)[-\s]+)?(${ORDINAL_ONES.join('|')})|(${ORDINAL_TEENS.join('|')})|(twentieth|thirtieth))\b`,
+  'gi',
+);
+/** A numeric ordinal's suffix: "6th" → "6", so "your 6th straight night" is a count of 6. */
+const NUMERIC_ORDINAL_RE = /\b(\d{1,2})(?:st|nd|rd|th)\b/gi;
+
+/** "fifth" → "5", "twenty-first" → "21", "6th" → "6"; dates stay exempt (DAY_MONTH_EXEMPT_PATTERN and the month-first rule). */
+function ordinalsToDigits(text: string): string {
+  return text
+    .replace(ORDINAL_WORD_RE, (_m, thirty?: string, thirtyOne?: string, twenty?: string, one?: string, teen?: string, round?: string) => {
+      if (thirty !== undefined && thirtyOne !== undefined) return '31';
+      if (one !== undefined) return String((twenty !== undefined ? 20 : 0) + ORDINAL_ONES.indexOf(one.toLowerCase()) + 1);
+      if (teen !== undefined) return String(10 + ORDINAL_TEENS.indexOf(teen.toLowerCase()));
+      return round!.toLowerCase() === 'twentieth' ? '20' : '30';
+    })
+    .replace(NUMERIC_ORDINAL_RE, '$1');
+}
 /** A scale with no number word before it: "a perfect hundred", "the hundred mark". */
 const BARE_SCALE: Array<[RegExp, string]> = [
   [/\bhundred\b/gi, '100'],
@@ -189,7 +222,7 @@ const BARE_SCALE: Array<[RegExp, string]> = [
 
 /** Every number word read as digits, for exactNumbers. */
 function allWordsToDigits(text: string): string {
-  const counted = COUNT_WORDS.reduce((t, [re, digits]) => t.replace(re, digits), text);
+  const counted = ordinalsToDigits(COUNT_WORDS.reduce((t, [re, digits]) => t.replace(re, digits), text));
   return BARE_SCALE.reduce((t, [re, digits]) => t.replace(re, digits), wordsToDigits(counted, ANY_NUMBER_WORD_RE));
 }
 
@@ -219,7 +252,7 @@ function scanNumbers(input: string, exact = false): Scanned[] {
   const masked = new Array<boolean>(text.length).fill(false);
   const free = (s: number, e: number) => masked.slice(s, e).every((m) => !m);
   const mask = (s: number, e: number) => masked.fill(true, s, e);
-  for (const re of exact ? BASE_EXEMPT_PATTERNS : EXEMPT_PATTERNS) for (const m of text.matchAll(re)) mask(m.index!, m.index! + m[0].length);
+  for (const re of exact ? EXACT_EXEMPT_PATTERNS : EXEMPT_PATTERNS) for (const m of text.matchAll(re)) mask(m.index!, m.index! + m[0].length);
 
   const unitsAfter = exact ? EXACT_UNIT_AFTER : UNIT_AFTER;
   const found: Scanned[] = [];
