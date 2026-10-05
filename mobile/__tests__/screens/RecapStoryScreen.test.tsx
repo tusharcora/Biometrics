@@ -314,6 +314,12 @@ describe('the story is the recap', () => {
     expect(markRecapOpened).toHaveBeenCalledWith('r-week');
   });
 
+  it('does not post again for a recap already opened on the server', async () => {
+    mockParams = { recap: { ...mockRecap, openedAt: '2026-10-05T10:00:00.000Z' } };
+    await open();
+    expect(markRecapOpened).not.toHaveBeenCalled();
+  });
+
   it("a week's push tapped while a story is up shows that week from its first frame", async () => {
     await open();
     tap(10000);

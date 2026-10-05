@@ -74,7 +74,7 @@ export function RecapScreen() {
     if (state.phase !== 'ready' || opened.current === state.recap.id) return;
     opened.current = state.recap.id;
     // Best effort: the screen never depends on it. Clears the avatar's story ring at once.
-    void openRecap(state.recap.id);
+    void openRecap(state.recap.id, state.recap.openedAt);
   }, [state]);
 
   // A push can open this screen with nothing behind it; then "back" is home.

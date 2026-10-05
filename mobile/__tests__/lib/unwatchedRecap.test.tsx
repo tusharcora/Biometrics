@@ -80,12 +80,26 @@ describe('useUnwatchedRecap (one store for the Home avatar, the tab bar and Prof
     expect(a.result.current.recap).toBeNull();
   });
 
-  it('a failed post still clears the ring (best effort, as on the recap screen)', async () => {
-    openedMock.mockRejectedValue(new Error('offline'));
+  it('a failed post clears the ring for now but is tried again on the next open', async () => {
+    openedMock.mockRejectedValueOnce(new Error('offline'));
     const a = renderHook(() => useUnwatchedRecap());
     await act(async () => {});
     await act(async () => openRecap('w40'));
     expect(a.result.current.recap).toBeNull();
+    // Not remembered as opened, so the next open posts again.
+    expect(a.result.current.watched.has('w40')).toBe(false);
+    await act(async () => openRecap('w40'));
+    expect(openedMock).toHaveBeenCalledTimes(2);
+    expect(a.result.current.watched.has('w40')).toBe(true);
+  });
+
+  it('does not post for a recap the server already has as opened, but still clears its ring', async () => {
+    const a = renderHook(() => useUnwatchedRecap());
+    await act(async () => {});
+    await act(async () => openRecap('w40', '2026-10-05T10:00:00.000Z'));
+    expect(openedMock).not.toHaveBeenCalled();
+    expect(a.result.current.recap).toBeNull();
+    expect(a.result.current.watched.has('w40')).toBe(true);
   });
 
   it('shows nothing when the list fails to load or is empty', async () => {

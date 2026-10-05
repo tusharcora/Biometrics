@@ -80,7 +80,7 @@ export function RecapStoryScreen() {
 
   // On screen: the recap is opened (once), which clears the avatar's ring everywhere.
   useEffect(() => {
-    if (recap?.kind === 'WEEK') void openRecap(recap.id);
+    if (recap?.kind === 'WEEK') void openRecap(recap.id, recap.openedAt);
   }, [recap]);
 
   // The builder's stored choices: a part switched off there stays off here and in a shared frame.

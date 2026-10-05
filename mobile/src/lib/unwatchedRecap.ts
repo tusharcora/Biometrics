@@ -65,16 +65,20 @@ export function refreshUnwatchedRecap(): Promise<void> {
 
 /**
  * A recap is on screen (its recap screen or its story): the ring clears at once everywhere and
- * the server is told, once per recap per session. Best effort: a failed post changes nothing on
- * screen.
+ * the server is told, once per recap per session, unless it already has it as opened
+ * (`serverOpenedAt`). A failed post is forgotten, so the next open tries again (the ring may
+ * come back on the next load, since the server still has it unopened).
  */
-export async function openRecap(id: string): Promise<void> {
+export async function openRecap(id: string, serverOpenedAt: string | null = null): Promise<void> {
   if (snapshot.watched.has(id)) return;
   publish({ watched: new Set([...snapshot.watched, id]), recap: snapshot.recap?.id === id ? null : snapshot.recap });
+  if (serverOpenedAt !== null) return;
   try {
     await markRecapOpened(id);
   } catch {
-    // Best effort; the server catches up the next time it is opened.
+    const watched = new Set(snapshot.watched);
+    watched.delete(id);
+    publish({ watched });
   }
 }
 
