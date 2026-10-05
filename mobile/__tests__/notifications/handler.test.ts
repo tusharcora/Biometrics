@@ -1,5 +1,6 @@
 import * as Notifications from 'expo-notifications';
 import {
+  RECAP_PUSH_KIND,
   WIND_DOWN_KIND,
   installNotificationHandler,
   listenForNotificationTaps,
@@ -158,5 +159,53 @@ describe('listenForNotificationTaps (warm start)', () => {
       throw new Error('unavailable');
     });
     expect(() => listenForNotificationTaps()()).not.toThrow();
+  });
+});
+
+const RECAP_ID = '3f2c7a8e-1b2d-4c5e-9f00-0123456789ab';
+
+describe('recap pushes', () => {
+  it('cold start: opens the recap that launched the app', async () => {
+    N.getLastNotificationResponseAsync.mockResolvedValue(response({ kind: RECAP_PUSH_KIND, recapId: RECAP_ID }));
+    await routeInitialNotification();
+    expect(ref.navigate).toHaveBeenCalledWith('Recap', { id: RECAP_ID }, { pop: true });
+  });
+
+  it('cold start: waits for the signed-in navigator first', async () => {
+    jest.useFakeTimers();
+    ref.isReady.mockReturnValue(false);
+    N.getLastNotificationResponseAsync.mockResolvedValue(response({ kind: RECAP_PUSH_KIND, recapId: RECAP_ID }));
+    const done = routeInitialNotification();
+    await Promise.resolve();
+    await Promise.resolve();
+    ref.isReady.mockReturnValue(true);
+    jest.advanceTimersByTime(100);
+    await done;
+    expect(ref.navigate).toHaveBeenCalledWith('Recap', { id: RECAP_ID }, { pop: true });
+  });
+
+  it('warm start: opens the recap from a push tapped while the app runs', () => {
+    const unsubscribe = listenForNotificationTaps();
+    const listener = N.addNotificationResponseReceivedListener.mock.calls[0]![0];
+    listener(response({ kind: RECAP_PUSH_KIND, recapId: RECAP_ID }));
+    expect(ref.navigate).toHaveBeenCalledWith('Recap', { id: RECAP_ID }, { pop: true });
+    unsubscribe();
+  });
+
+  it('ignores malformed recap data and other kinds, as before', async () => {
+    for (const data of [{ kind: 'recap' }, { kind: 'recap', recapId: 'not-a-uuid' }, { kind: 'recap', recapId: 42 }, { kind: 'weekly_digest' }]) {
+      N.getLastNotificationResponseAsync.mockResolvedValue(response(data));
+      await routeInitialNotification();
+    }
+    const unsubscribe = listenForNotificationTaps();
+    N.addNotificationResponseReceivedListener.mock.calls[0]![0](response({ kind: 'recap', recapId: 'x' }));
+    unsubscribe();
+    expect(ref.navigate).not.toHaveBeenCalled();
+  });
+
+  it('keeps a recap push hidden while the app is open, like every other push', async () => {
+    installNotificationHandler();
+    const handle = N.setNotificationHandler.mock.calls[0]![0]!.handleNotification;
+    expect(await handle(notification({ kind: RECAP_PUSH_KIND, recapId: RECAP_ID }))).toEqual({ shouldShowBanner: false, shouldShowList: false, shouldPlaySound: false, shouldSetBadge: false });
   });
 });

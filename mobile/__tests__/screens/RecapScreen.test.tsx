@@ -1,5 +1,5 @@
 import React from 'react';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { withCharacter } from '../../jest-mocks/characterContext';
 import { ApiError } from '../../src/api/client';
 import { fetchRecap, markRecapOpened, type Recap } from '../../src/api/recaps';
@@ -132,4 +132,19 @@ it('offers a retry after another failure', async () => {
   fireEvent.press(await screen.findByTestId('recap-retry'));
   expect(await screen.findByTestId('recap-title')).toBeTruthy();
   expect(load).toHaveBeenCalledTimes(2);
+});
+
+it('shows the new recap, never a stale one, when a push re-opens this screen with another id (T19 ruling)', async () => {
+  let resolveMonth!: (r: Recap) => void;
+  load.mockImplementation((id: string) => (id === 'r-month' ? new Promise<Recap>((r) => (resolveMonth = r)) : Promise.resolve(WEEK)));
+  const { rerender } = render(withCharacter(<RecapScreen />));
+  // The push lands while the first recap is still loading: same screen, new params.
+  mockParams = { id: 'r-week' };
+  rerender(withCharacter(<RecapScreen />));
+  expect(await screen.findByTestId('recap-title')).toHaveTextContent('Your week with Mochi');
+  // The first recap's answer arrives late and is dropped.
+  await act(async () => resolveMonth(MONTH));
+  expect(screen.getByTestId('recap-title')).toHaveTextContent('Your week with Mochi');
+  await waitFor(() => expect(opened).toHaveBeenCalledWith('r-week'));
+  expect(opened).not.toHaveBeenCalledWith('r-month');
 });

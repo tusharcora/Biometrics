@@ -28,12 +28,19 @@ export function RecapScreen() {
   const [state, setState] = useState<State>({ phase: 'loading' });
   // The recap already marked opened: a re-render or refocus never posts again.
   const opened = useRef<string | null>(null);
+  // The id this screen shows now. A push tapped while a recap is open re-uses this screen with a
+  // new id; an answer for the earlier id that lands late is dropped (T19 ruling).
+  const current = useRef(params.id);
+  current.current = params.id;
 
   const load = useCallback(async () => {
+    const id = params.id;
     setState({ phase: 'loading' });
     try {
-      setState({ phase: 'ready', recap: await fetchRecap(params.id) });
+      const recap = await fetchRecap(id);
+      if (current.current === id) setState({ phase: 'ready', recap });
     } catch (e) {
+      if (current.current !== id) return;
       // 404: gone (coach data deleted) or not this account's (stale push, account switch).
       setState(e instanceof ApiError && e.status === 404 ? { phase: 'missing' } : { phase: 'error' });
     }
