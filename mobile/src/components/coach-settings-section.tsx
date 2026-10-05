@@ -7,11 +7,10 @@ import { useCoachStatus } from '../lib/useCoachStatus';
 import { COLORS } from '../theme';
 import { Text } from './ui/text';
 import { SettingsGroup, SettingsRow } from './ui/settings-list';
-import { PushNotificationsRow } from './push-notifications-row';
 import { AiEngineRow } from './ai-engine-row';
 
-// The AI Coach block on the Settings screen: set-up, memory, notifications and
-// consent revocation. It renders nothing at all unless the server says the
+// The AI Coach block on the Settings screen: set-up, memory and consent
+// revocation. Notifications live in the app-level NotificationsSection. It renders nothing at all unless the server says the
 // coach is enabled. Choosing the character lives in YourCoachRow, which shows
 // either way.
 export function CoachSettingsSection() {
@@ -65,7 +64,6 @@ export function CoachSettingsSection() {
           subtitle="See, edit or delete what the coach remembers"
           onPress={() => navigation?.navigate('CoachMemory' as never)}
         />
-        <PushNotificationsRow />
         <SettingsRow
           testID="coach-revoke-button"
           icon="power-outline"

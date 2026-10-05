@@ -3,10 +3,10 @@ import * as SecureStore from 'expo-secure-store';
 import * as Notifications from 'expo-notifications';
 import Constants from 'expo-constants';
 import { apiFetch } from '../api/client';
-import { fetchCoachStatus } from '../api/coach';
 
-// Push registration for the coach's weekly recap. The user opts in from the
-// Settings toggle; nothing here ever prompts for permission except enablePush.
+// Push registration for the app's notifications (the 'Recap ready' switch, spec
+// 2026-10-04 §2). Tokens are app-level: they do not depend on the coach. Nothing
+// here ever prompts for permission except enablePush.
 //
 // Everything is best-effort: the `expo-notifications` config plugin is only
 // added to a build when EXPO_PUSH=1 (see app.config.js), so on most builds --
@@ -143,16 +143,13 @@ export async function disablePush(): Promise<PushState> {
   return OFF;
 }
 
-// Run on launch. Only touches users who already opted in (a stored token),
-// only while the coach is enabled and consented, and re-registers only when
-// the token has changed. Never prompts; never throws.
+// Run on launch. Only touches users who already opted in (a stored token) and
+// re-registers only when the token has changed. Tokens are app-level, so the
+// coach's state does not matter here. Never prompts; never throws.
 export async function syncPushRegistration(): Promise<void> {
   try {
     const stored = await readStoredToken();
     if (!stored) return;
-
-    const status = await fetchCoachStatus();
-    if (!status.enabled || !status.consented) return;
 
     const platform = getPlatform();
     const projectId = getProjectId();
