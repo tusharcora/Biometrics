@@ -2,6 +2,8 @@ import { contrast, hexAlpha } from '../components/characters/palette';
 import { characterInfo } from '../components/characters/registry';
 import { mixHex } from '../components/characters/sprites/compose';
 import type { CharacterId } from '../components/characters/types';
+import type { ChangeTone } from './recapCopy';
+import { COLORS } from '../theme';
 
 // The recap share images' colours (recap restyle, owner decision 2026-10-05): every image is
 // tinted by its coach, a dark ground from the registry with the coach's accent on top and a dot
@@ -65,3 +67,15 @@ export const YEAR_SCALE = ['#2E2A4A', '#6B4FA8', '#9333EA', '#D8B4FE'] as const;
 
 /** A signed change: green when better, orange when worse, grey (the tint's muted) when equal. */
 export const CHANGE_COLORS = { better: '#86EFAC', worse: '#FDBA74' } as const;
+
+/** The same on a light page, text-safe on white (green-700, orange-700). */
+const CHANGE_COLORS_LIGHT = { better: '#15803D', worse: '#C2410C' } as const;
+
+/**
+ * An in-app signed change (the month screen's comparison rows): the design's green and orange on
+ * a dark page, darker text-safe ones on a light page, the muted grey when nothing changed.
+ */
+export function changeColor(tone: ChangeTone, scheme: 'light' | 'dark'): string {
+  if (tone === 'same') return COLORS[scheme].muted;
+  return scheme === 'dark' ? CHANGE_COLORS[tone] : CHANGE_COLORS_LIGHT[tone];
+}

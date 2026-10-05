@@ -2,18 +2,23 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { useColorScheme } from 'nativewind';
 import { ApiError } from '../api/client';
 import { fetchRecap, markRecapOpened, type Recap } from '../api/recaps';
 import { useCharacter } from '../characters/CharacterContext';
+import { Character } from '../components/characters/Character';
 import { characterInfo } from '../components/characters/registry';
+import type { CharacterId } from '../components/characters/types';
+import { MilestoneTiles } from '../components/milestones/MilestoneTiles';
 import { WeeklyStoryView } from '../components/recap/WeeklyStoryView';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { SectionLabel } from '../components/ui/section-label';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
-import { compareRows, milestoneLines, monthName } from '../lib/recapCopy';
+import { compareChanges, milestoneTiles, monthName } from '../lib/recapCopy';
 import { previewScale, recapCoachId, resolveIncludes } from '../lib/recapShare';
+import { changeColor } from '../lib/recapTheme';
 
 type State = { phase: 'loading' } | { phase: 'ready'; recap: Recap } | { phase: 'missing' } | { phase: 'error' };
 
@@ -87,7 +92,7 @@ export function RecapScreen() {
           </Card>
         ) : null}
         {state.phase === 'ready' && state.recap.kind === 'MONTH' ? (
-          <MonthBody recap={state.recap} coachName={coachName} onShare={() => navigation.navigate('RecapBuilder', { id: state.recap.id, format: 'card' })} />
+          <MonthBody recap={state.recap} coachId={coachId} coachName={coachName} onShare={() => navigation.navigate('RecapBuilder', { id: state.recap.id, format: 'card' })} />
         ) : null}
         {state.phase === 'ready' && state.recap.kind === 'WEEK' ? (
           <View className="gap-4">
@@ -110,33 +115,41 @@ export function RecapScreen() {
   );
 }
 
-function MonthBody({ recap, coachName, onShare }: { recap: Recap; coachName: string; onShare: () => void }) {
-  const milestones = milestoneLines(recap.stats.milestones);
-  const rows = compareRows(recap.stats.comparison);
+function MonthBody({ recap, coachId, coachName, onShare }: { recap: Recap; coachId: CharacterId; coachName: string; onShare: () => void }) {
+  const { colorScheme } = useColorScheme();
+  const scheme = colorScheme === 'dark' ? 'dark' : 'light';
+  const rows = compareChanges(recap.stats.comparison);
   return (
     <View className="gap-4">
       <Text testID="recap-title" className="font-display text-display-lg">{`${monthName(recap.periodStart)} with ${coachName}`}</Text>
-      <Card>
-        <Text testID="recap-line" className="font-display text-display-sm">{recap.line}</Text>
+      <Card className="flex-row items-center gap-3.5">
+        <View testID="recap-line-coach">
+          <Character characterId={coachId} mood="idle" size={72} />
+        </View>
+        <Text testID="recap-line" className="flex-1 text-base leading-snug">{`“${recap.line}”`}</Text>
       </Card>
-      {milestones.length > 0 ? (
-        <Card testID="recap-milestones" className="gap-2">
-          <SectionLabel>Milestones</SectionLabel>
-          {milestones.map((m) => (
-            <Text key={m.key} testID={`recap-milestone-${m.key}`} className="text-base">{m.text}</Text>
-          ))}
-        </Card>
-      ) : null}
+      <View className="gap-2">
+        <SectionLabel>Milestones</SectionLabel>
+        <MilestoneTiles testID="recap-milestones" tiles={milestoneTiles(recap.stats.milestones)} />
+      </View>
       {rows.length > 0 ? (
-        <Card testID="recap-compare" className="gap-2">
+        <View className="gap-2">
           <SectionLabel>Compared with last month</SectionLabel>
-          {rows.map((row) => (
-            <View key={row.key} testID={`recap-compare-${row.key}`} className="flex-row items-center gap-2">
-              <Text className="w-5 text-base font-semibold">{row.arrow}</Text>
-              <Text className="text-base">{row.text}</Text>
-            </View>
-          ))}
-        </Card>
+          <Card testID="recap-compare" className="py-1">
+            {rows.map((row, i) => (
+              <View
+                key={row.key}
+                testID={`recap-compare-${row.key}`}
+                className={i < rows.length - 1 ? 'min-h-11 flex-row items-center justify-between border-b border-border' : 'min-h-11 flex-row items-center justify-between'}
+              >
+                <Text className="text-base">{row.label}</Text>
+                <Text testID={`recap-compare-${row.key}-change`} className="text-base font-semibold" style={{ color: changeColor(row.tone, scheme) }}>
+                  {row.text}
+                </Text>
+              </View>
+            ))}
+          </Card>
+        </View>
       ) : null}
       <Button testID="recap-make-share" onPress={onShare}>
         Make a shareable recap

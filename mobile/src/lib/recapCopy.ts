@@ -1,4 +1,5 @@
 import type { RecapComparison, RecapKind, RecapMilestones, RecapStats } from '../api/recaps';
+import type { MilestoneGlyph } from '../components/milestones/MilestoneTiles';
 import { MONTH_LONG, MONTH_SHORT } from './heatmap';
 import { formatShortDuration, formatTextDuration } from './sleepStats';
 
@@ -68,38 +69,47 @@ export function signedChange(key: ChangeKey, delta: number): { text: string; ton
   return { text: `${sign}${size}`, tone: d === 0 ? 'same' : better ? 'better' : 'worse' };
 }
 
-export interface CompareRow {
-  key: 'avgSleep' | 'spread' | 'recovery';
-  arrow: '↑' | '↓' | '=';
+export interface CompareChange {
+  key: ChangeKey;
+  label: string;
+  /** "+18m", "−9m", "+3 pts". */
   text: string;
+  tone: ChangeTone;
 }
 
-const arrowOf = (d: number): CompareRow['arrow'] => (d > 0 ? '↑' : d < 0 ? '↓' : '=');
-
-/** "Compared with last month": only the comparisons the server could make. */
-export function compareRows(c: RecapComparison | undefined): CompareRow[] {
-  const rows: CompareRow[] = [];
-  if (c?.avgSleepDelta !== undefined) {
-    const d = c.avgSleepDelta;
-    rows.push({ key: 'avgSleep', arrow: arrowOf(d), text: d === 0 ? 'Same sleep a night' : `${formatShortDuration(Math.abs(d))} ${d > 0 ? 'more' : 'less'} sleep a night` });
-  }
-  if (c?.bedtimeSpreadDelta !== undefined) {
-    const d = c.bedtimeSpreadDelta;
-    // A smaller spread is steadier bedtimes.
-    rows.push({ key: 'spread', arrow: arrowOf(d), text: d === 0 ? 'Bedtimes as steady' : `Bedtimes ${formatShortDuration(Math.abs(d))} ${d < 0 ? 'steadier' : 'less steady'}` });
-  }
-  if (c?.avgRecoveryDelta !== undefined) {
-    const d = c.avgRecoveryDelta;
-    rows.push({ key: 'recovery', arrow: arrowOf(d), text: d === 0 ? 'Same recovery' : `Recovery ${plural(Math.abs(d), 'point')} ${d > 0 ? 'higher' : 'lower'}` });
-  }
+/**
+ * "Compared with last month": only the comparisons the server could make, each a signed change the
+ * screen colours by tone (a smaller bedtime spread is the better direction).
+ */
+export function compareChanges(c: RecapComparison | undefined): CompareChange[] {
+  const rows: CompareChange[] = [];
+  const add = (key: ChangeKey, label: string, delta: number | undefined) => {
+    if (delta !== undefined) rows.push({ key, label, ...signedChange(key, delta) });
+  };
+  add('avgSleep', 'Average sleep', c?.avgSleepDelta);
+  add('spread', 'Bedtime spread', c?.bedtimeSpreadDelta);
+  add('recovery', 'Recovery average', c?.avgRecoveryDelta);
   return rows;
 }
 
-export function milestoneLines(m: RecapMilestones | undefined): Array<{ key: keyof RecapMilestones; text: string }> {
-  const out: Array<{ key: keyof RecapMilestones; text: string }> = [];
-  if (m?.streak) out.push({ key: 'streak', text: `${plural(m.streak.nights, 'night')} on goal in a row` });
-  if (m?.bestRecoveryWeek) out.push({ key: 'bestRecoveryWeek', text: `Best recovery week, beating last month's: ${m.bestRecoveryWeek.avgRecovery} (week of ${shortDate(m.bestRecoveryWeek.weekStart)})` });
-  if (m?.everyDayLogged) out.push({ key: 'everyDayLogged', text: 'Every night of the month logged' });
-  if (m?.steadiestMonth) out.push({ key: 'steadiestMonth', text: `Your steadiest bedtimes yet (${formatShortDuration(m.steadiestMonth.spreadMinutes)} spread)` });
-  return out;
+export type MilestoneKey = keyof RecapMilestones;
+
+export interface MilestoneTileContent {
+  key: MilestoneKey;
+  label: string;
+  glyph: MilestoneGlyph;
+  earned: boolean;
+}
+
+/**
+ * The month's milestones as tiles: all four kinds, always in this order, the ones not hit this
+ * month locked. A locked tile says what the milestone is, never how close the month came.
+ */
+export function milestoneTiles(m: RecapMilestones | undefined): MilestoneTileContent[] {
+  return [
+    { key: 'streak', label: m?.streak ? `${plural(m.streak.nights, 'night')} on goal in a row` : 'Nights on goal in a row', glyph: 'star', earned: !!m?.streak },
+    { key: 'bestRecoveryWeek', label: 'Best recovery week', glyph: 'heart', earned: !!m?.bestRecoveryWeek },
+    { key: 'everyDayLogged', label: 'Every night logged', glyph: 'calendar', earned: !!m?.everyDayLogged },
+    { key: 'steadiestMonth', label: 'Steadiest bedtimes yet', glyph: 'moon', earned: !!m?.steadiestMonth },
+  ];
 }

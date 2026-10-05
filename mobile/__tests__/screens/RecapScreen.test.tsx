@@ -1,8 +1,9 @@
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import { withCharacter } from '../../jest-mocks/characterContext';
+import { HIDDEN_OK, withCharacter } from '../../jest-mocks/characterContext';
 import { ApiError } from '../../src/api/client';
 import { fetchRecap, markRecapOpened, type Recap } from '../../src/api/recaps';
+import { changeColor } from '../../src/lib/recapTheme';
 import { RecapScreen } from '../../src/screens/RecapScreen';
 
 jest.mock('../../src/api/recaps');
@@ -36,24 +37,41 @@ beforeEach(() => {
   opened.mockResolvedValue(undefined);
 });
 
-it('shows a month with its coach, line, milestones and only the comparisons present', async () => {
+it('shows a month with its coach in the quote card, every milestone (unearned ones locked) and signed changes for the comparisons present', async () => {
   render(withCharacter(<RecapScreen />));
   expect(await screen.findByTestId('recap-title')).toHaveTextContent('September with Mochi');
-  expect(screen.getByTestId('recap-line')).toHaveTextContent('Six nights in a row on goal, lovely.');
-  expect(screen.getByTestId('recap-milestone-streak')).toHaveTextContent('6 nights on goal in a row');
+  expect(screen.getByTestId('recap-line')).toHaveTextContent('“Six nights in a row on goal, lovely.”');
+  expect(screen.getByTestId('recap-line-coach', HIDDEN_OK)).toBeTruthy();
+  expect(screen.getByTestId('recap-milestones-streak').props.accessibilityLabel).toBe('6 nights on goal in a row, earned');
+  expect(screen.getByTestId('recap-milestones-bestRecoveryWeek').props.accessibilityLabel).toBe('Best recovery week, locked');
+  expect(screen.getByTestId('recap-milestones-everyDayLogged').props.accessibilityLabel).toBe('Every night logged, locked');
+  expect(screen.getByTestId('recap-milestones-steadiestMonth').props.accessibilityLabel).toBe('Steadiest bedtimes yet, locked');
   expect(screen.getByText('Compared with last month')).toBeTruthy();
-  expect(screen.getByTestId('recap-compare-avgSleep')).toHaveTextContent('↑18m more sleep a night');
-  expect(screen.getByTestId('recap-compare-recovery')).toHaveTextContent('↓Recovery 4 points lower');
+  expect(screen.getByTestId('recap-compare-avgSleep')).toHaveTextContent('Average sleep+18m');
+  expect(screen.getByTestId('recap-compare-avgSleep-change')).toHaveStyle({ color: changeColor('better', 'light') });
+  expect(screen.getByTestId('recap-compare-recovery')).toHaveTextContent('Recovery average−4 pts');
+  expect(screen.getByTestId('recap-compare-recovery-change')).toHaveStyle({ color: changeColor('worse', 'light') });
   expect(screen.queryByTestId('recap-compare-spread')).toBeNull();
   fireEvent.press(screen.getByTestId('recap-make-share'));
   expect(mockNavigate).toHaveBeenCalledWith('RecapBuilder', { id: 'r-month', format: 'card' });
 });
 
-it('leaves out milestones and the comparison when the month has none', async () => {
+it('colours a smaller bedtime spread as better, a bigger one as worse, and no change grey', async () => {
+  load.mockResolvedValue({ ...MONTH, stats: { ...MONTH.stats, comparison: { bedtimeSpreadDelta: -9, avgSleepDelta: 0 } } });
+  render(withCharacter(<RecapScreen />));
+  await screen.findByTestId('recap-title');
+  expect(screen.getByTestId('recap-compare-spread')).toHaveTextContent('Bedtime spread−9m');
+  expect(screen.getByTestId('recap-compare-spread-change')).toHaveStyle({ color: changeColor('better', 'light') });
+  expect(screen.getByTestId('recap-compare-avgSleep-change')).toHaveStyle({ color: changeColor('same', 'light') });
+});
+
+it('still shows the four milestones, all locked, and leaves out the comparison when the month has none', async () => {
   load.mockResolvedValue({ ...MONTH, stats: { nightsWithData: 3 } });
   render(withCharacter(<RecapScreen />));
   await screen.findByTestId('recap-title');
-  expect(screen.queryByTestId('recap-milestones')).toBeNull();
+  for (const key of ['streak', 'bestRecoveryWeek', 'everyDayLogged', 'steadiestMonth']) {
+    expect(screen.getByTestId(`recap-milestones-${key}`).props.accessibilityLabel).toMatch(/, locked$/);
+  }
   expect(screen.queryByTestId('recap-compare')).toBeNull();
   expect(screen.queryByText('Compared with last month')).toBeNull();
 });

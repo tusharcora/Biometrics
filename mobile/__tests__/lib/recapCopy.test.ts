@@ -1,4 +1,4 @@
-import { cardStats, compareRows, goalLabel, milestoneLines, monthName, readyCardTitle, recapTitle, shortDate, signedChange, weekdayName, weekRange } from '../../src/lib/recapCopy';
+import { cardStats, compareChanges, goalLabel, milestoneTiles, monthName, readyCardTitle, recapTitle, shortDate, signedChange, weekdayName, weekRange } from '../../src/lib/recapCopy';
 
 it('names periods and days', () => {
   expect(monthName('2026-09-01')).toBe('September');
@@ -22,23 +22,33 @@ it('lists up to four card stats in a fixed order, skipping missing ones', () => 
   expect(cardStats({ nightsWithData: 9, longestOnGoalStreak: 1 }).map((s) => s.value)).toEqual(['1 night']);
 });
 
-it('words only the comparisons present, with a direction arrow each', () => {
-  expect(compareRows({ avgSleepDelta: 18, bedtimeSpreadDelta: -9, avgRecoveryDelta: -4 })).toEqual([
-    { key: 'avgSleep', arrow: '↑', text: '18m more sleep a night' },
-    { key: 'spread', arrow: '↓', text: 'Bedtimes 9m steadier' },
-    { key: 'recovery', arrow: '↓', text: 'Recovery 4 points lower' },
+it('shows only the comparisons present, each as a signed change coloured by whether it is better', () => {
+  expect(compareChanges({ avgSleepDelta: 18, bedtimeSpreadDelta: -9, avgRecoveryDelta: -4 })).toEqual([
+    { key: 'avgSleep', label: 'Average sleep', text: '+18m', tone: 'better' },
+    // A smaller bedtime spread is steadier, so a minus is better.
+    { key: 'spread', label: 'Bedtime spread', text: '−9m', tone: 'better' },
+    { key: 'recovery', label: 'Recovery average', text: '−4 pts', tone: 'worse' },
   ]);
-  expect(compareRows({ avgSleepDelta: 0 })).toEqual([{ key: 'avgSleep', arrow: '=', text: 'Same sleep a night' }]);
-  expect(compareRows(undefined)).toEqual([]);
+  expect(compareChanges({ bedtimeSpreadDelta: 15 })).toEqual([{ key: 'spread', label: 'Bedtime spread', text: '+15m', tone: 'worse' }]);
+  expect(compareChanges({ avgSleepDelta: 0 })).toEqual([{ key: 'avgSleep', label: 'Average sleep', text: '0m', tone: 'same' }]);
+  expect(compareChanges(undefined)).toEqual([]);
 });
 
-it('words the milestones achieved', () => {
-  expect(milestoneLines({ streak: { nights: 6 }, bestRecoveryWeek: { weekStart: '2026-09-07', avgRecovery: 80 }, everyDayLogged: { days: 30 }, steadiestMonth: { spreadMinutes: 10 } })).toEqual([
-    { key: 'streak', text: '6 nights on goal in a row' },
-    { key: 'bestRecoveryWeek', text: "Best recovery week, beating last month's: 80 (week of Sep 7)" },
-    { key: 'everyDayLogged', text: 'Every night of the month logged' },
-    { key: 'steadiestMonth', text: 'Your steadiest bedtimes yet (10m spread)' },
+it('lists all four milestones in a fixed order, the ones not hit locked and without a count', () => {
+  expect(milestoneTiles({ streak: { nights: 6 }, bestRecoveryWeek: { weekStart: '2026-09-07', avgRecovery: 80 }, everyDayLogged: { days: 30 }, steadiestMonth: { spreadMinutes: 10 } })).toEqual([
+    { key: 'streak', label: '6 nights on goal in a row', glyph: 'star', earned: true },
+    { key: 'bestRecoveryWeek', label: 'Best recovery week', glyph: 'heart', earned: true },
+    { key: 'everyDayLogged', label: 'Every night logged', glyph: 'calendar', earned: true },
+    { key: 'steadiestMonth', label: 'Steadiest bedtimes yet', glyph: 'moon', earned: true },
   ]);
+  expect(milestoneTiles({ bestRecoveryWeek: { weekStart: '2026-09-07', avgRecovery: 80 } }).map((t) => [t.key, t.label, t.earned])).toEqual([
+    ['streak', 'Nights on goal in a row', false],
+    ['bestRecoveryWeek', 'Best recovery week', true],
+    ['everyDayLogged', 'Every night logged', false],
+    ['steadiestMonth', 'Steadiest bedtimes yet', false],
+  ]);
+  expect(milestoneTiles(undefined).every((t) => !t.earned)).toBe(true);
+  expect(milestoneTiles({ streak: { nights: 1 } })[0]!.label).toBe('1 night on goal in a row');
 });
 
 it('signs a change and says whether it is better: more sleep, a smaller spread, more recovery', () => {
