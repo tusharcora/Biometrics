@@ -101,6 +101,33 @@ describe('validateSentence with exactNumbers (recaps)', () => {
     expect(countDisplay('times', 3)).toBe('3 times');
   });
 
+  it('never lets a bare number borrow a count fact from a count noun elsewhere in the sentence (review fix 1)', () => {
+    const counts: FactSheet = { ...RECAP, facts: [...RECAP.facts, ...TIMES.facts] };
+    expect(validateSentence('Your steps averaged 31 a day.', counts, EXACT)).toEqual(unknown);
+    expect(validateSentence('Recovery averaged 6 a night.', counts, EXACT)).toEqual(unknown);
+    expect(validateSentence('You slept 7h 12m a night, best was 4.', counts, EXACT)).toEqual(unknown);
+    expect(validateSentence('This time your recovery hit 3.', counts, EXACT)).toEqual(unknown);
+    // A count noun right after the number, or after "of 6" or a short adjective, still counts.
+    expect(validateSentence('You were on goal 5 straight nights.', counts, EXACT)).toEqual(ok);
+    expect(validateSentence('You were on goal 5 out of 6 nights.', counts, EXACT)).toEqual(ok);
+    expect(validateSentence('You were on goal 5 Friday nights.', counts, EXACT)).toEqual(unknown);
+  });
+
+  it('checks number words wherever they appear (review fix 2)', () => {
+    expect(validateSentence('You were on goal seven straight nights.', RECAP, EXACT)).toEqual(unknown);
+    expect(validateSentence('You were on goal five straight nights.', RECAP, EXACT)).toEqual(ok);
+    expect(validateSentence('Your best recovery was eighty-eight.', RECAP, EXACT)).toEqual(unknown);
+    expect(validateSentence('You went to bed early twice.', RECAP, EXACT)).toEqual(unknown);
+    expect(validateSentence('You went to bed early thrice.', TIMES, EXACT)).toEqual(ok);
+    expect(validateSentence('You logged sleep on a dozen nights.', RECAP, EXACT)).toEqual(unknown);
+    expect(validateSentence('You were on goal five out of six nights.', RECAP, EXACT)).toEqual(ok);
+    expect(validateSentence('You were on goal three out of six nights.', RECAP, EXACT)).toEqual(unknown);
+    // "one", "a" and "an" stay prose unless a unit follows.
+    expect(validateSentence('One thing stood out: you were on goal 5 nights.', RECAP, EXACT)).toEqual(ok);
+    // The chat check is unchanged.
+    expect(validateSentence('Your best recovery was eighty-eight.', RECAP)).toEqual(ok);
+  });
+
   it('reads the singular "time" too (pre-flight M12)', () => {
     const once: FactSheet = {
       route: 'recap',

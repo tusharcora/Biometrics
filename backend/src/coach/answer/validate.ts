@@ -36,7 +36,12 @@
 //     "today"), a user-only score (recovery, sleep score), or a phrase like
 //     "you slept"/"your HRV".
 //   * exactNumbers (recaps): exact integers, no hedges, no window exemptions,
-//     count units nights/days/times; durations ±1 minute.
+//     count units nights/days/times; durations ±1 minute. A night, day or
+//     time count needs its noun right after the number ("5 nights", "5 of 6
+//     nights", "5 straight nights"), and every number word from two upward
+//     (plus twice, thrice, a dozen) is checked. Known limit: a count matches
+//     per family, not per fact, so "on goal 6 nights" can match the
+//     nights-recorded fact.
 //   * Topics: medication and dosing (the crisis classifier's medication
 //     patterns), supplement recommendations and diagnoses are never shown.
 //
@@ -114,16 +119,22 @@ const UNIT_AFTER: Array<[RegExp, Family]> = [
   [/^\s*(?:points?\b|pts\b|\/\s*100\b|out\s+of\s+100\b)/i, 'score'],
 ];
 
+/**
+ * What may sit between a count and its noun: "5 of 6 nights", "5 out of 6 nights", and up to two
+ * of a closed set of adjectives ("5 straight nights", "3 more early nights"). A closed set keeps
+ * "5 Friday nights", "6 a night" and "4 this time" from reading as counts.
+ */
+const COUNT_LEAD = String.raw`^\s*(?:(?:out\s+)?of\s+\d+\s+)?(?:(?:straight|consecutive|more|full|good|great|solid|restful|better|short|shorter|long|longer|late|later|early|earlier|separate|different|whole|total)\s+){0,2}`;
 /** Count units after a number, recognised only with exactNumbers so chat and digest checks are unchanged. */
 const COUNT_UNIT_AFTER: Array<[RegExp, Family]> = [
-  [/^\s*-?\s*nights?\b/i, 'nights'],
-  [/^\s*-?\s*days?\b/i, 'days'],
-  [/^\s*times?\b/i, 'times'],
+  [new RegExp(String.raw`${COUNT_LEAD}-?\s*nights?\b`, 'i'), 'nights'],
+  [new RegExp(String.raw`${COUNT_LEAD}-?\s*days?\b`, 'i'), 'days'],
+  [new RegExp(String.raw`${COUNT_LEAD}times?\b`, 'i'), 'times'],
 ];
-const COUNT_FAMILIES: readonly Family[] = ['nights', 'days', 'times'];
-const isCountFamily = (f: Family | undefined): f is CountFamily => f !== undefined && COUNT_FAMILIES.includes(f);
-/** Under exactNumbers a bare number may be a night, day or time count only when the sentence uses that noun. */
-const COUNT_NOUN: Record<CountFamily, RegExp> = { nights: /\bnights?\b/i, days: /\bdays?\b/i, times: /\btimes?\b/i };
+/** The unit lookup under exactNumbers: the chat units first, then the counts. */
+const EXACT_UNIT_AFTER: Array<[RegExp, Family]> = [...UNIT_AFTER, ...COUNT_UNIT_AFTER];
+const COUNT_FAMILIES: ReadonlySet<Family> = new Set<Family>(['nights', 'days', 'times']);
+const isCountFamily = (f: Family | undefined): f is CountFamily => f !== undefined && COUNT_FAMILIES.has(f);
 
 const NUM = String.raw`(\d+(?:\.\d+)?)`;
 const HOURS = String.raw`(?:hours?|hrs?|h)`;
@@ -156,6 +167,28 @@ const WORD_NUMBER_RE = wordNumberRe(UNIT_OR_METRIC_WORDS, String.raw`\s+`);
 /** exactNumbers also reads "six nights", "three days", "two times" and "seven-night". */
 const WORD_NUMBER_EXACT_RE = wordNumberRe(String.raw`${UNIT_OR_METRIC_WORDS}|nights?|days?|times?`, String.raw`[-\s]+`);
 
+/**
+ * exactNumbers reads every number word from two upward, with or without a unit after it
+ * ("eighty-eight", "seven straight nights", "five out of six"). "one", "a" and "an" stay prose
+ * ("one thing to try") unless a unit follows (WORD_NUMBER_EXACT_RE) or, for "a", a scale does.
+ */
+const ANY_NUMBER_WORD_RE = new RegExp(
+  String.raw`\b(?:(${TENS.join('|')})(?:[-\s]+(${ONES.slice(1, 10).join('|')}))?|(${ONES.slice(2).join('|')})|(a))(?:\s+(hundred|thousand))?\b`,
+  'gi',
+);
+/** Count words with no digit form: "twice" and "thrice" are times, "a dozen" is 12. */
+const COUNT_WORDS: Array<[RegExp, string]> = [
+  [/\btwice\b/gi, '2 times'],
+  [/\bthrice\b/gi, '3 times'],
+  [/\b(?:a\s+)?dozen\b/gi, '12'],
+];
+
+/** Every number word read as digits, for exactNumbers. */
+function allWordsToDigits(text: string): string {
+  const counted = COUNT_WORDS.reduce((t, [re, digits]) => t.replace(re, digits), wordsToDigits(text, WORD_NUMBER_EXACT_RE));
+  return wordsToDigits(counted, ANY_NUMBER_WORD_RE);
+}
+
 /** "seven hours" → "7 hours", "nine thousand steps" → "9000 steps"; number words elsewhere are left alone. */
 function wordsToDigits(text: string, re: RegExp = WORD_NUMBER_RE): string {
   return text.replace(re, (match, tens?: string, unit?: string, ones?: string, a?: string, scale?: string) => {
@@ -178,13 +211,13 @@ interface Scanned {
 
 /** Every number in `input` with its adjacent unit, in order, outside the exempt shapes. */
 function scanNumbers(input: string, exact = false): Scanned[] {
-  const text = wordsToDigits(input, exact ? WORD_NUMBER_EXACT_RE : WORD_NUMBER_RE);
+  const text = exact ? allWordsToDigits(input) : wordsToDigits(input);
   const masked = new Array<boolean>(text.length).fill(false);
   const free = (s: number, e: number) => masked.slice(s, e).every((m) => !m);
   const mask = (s: number, e: number) => masked.fill(true, s, e);
   for (const re of exact ? BASE_EXEMPT_PATTERNS : EXEMPT_PATTERNS) for (const m of text.matchAll(re)) mask(m.index!, m.index! + m[0].length);
 
-  const unitsAfter = exact ? [...UNIT_AFTER, ...COUNT_UNIT_AFTER] : UNIT_AFTER;
+  const unitsAfter = exact ? EXACT_UNIT_AFTER : UNIT_AFTER;
   const found: Scanned[] = [];
   const scan = (re: RegExp, toTokens: (m: RegExpMatchArray) => NumberToken[]) => {
     for (const m of text.matchAll(re)) {
@@ -407,15 +440,14 @@ function isKnown(s: Scanned, allowed: Allowed[], named: ReadonlySet<Metric>, sen
 /**
  * exactNumbers candidates (spec 2026-10-04 §2). A duration or a number with a non-count unit is
  * scoped as in chat. A number with a count unit ("5 nights", "a 4-night streak") matches only that
- * family. A bare number matches only a count fact: steps by the sentence's metrics, and a night,
- * day or time count only when the sentence uses that noun.
+ * family. A bare number matches only steps' counts, scoped by the sentence's metrics: a night, day
+ * or time count needs its noun right after the number (COUNT_UNIT_AFTER), never elsewhere in the
+ * sentence, so "Your steps averaged 31 a day" cannot borrow 31 days logged.
  */
 function exactCandidates(s: Scanned, allowed: Allowed[], named: ReadonlySet<Metric>, sentence: string): Allowed[] {
-  if (s.token.kind === 'duration' || (s.unit !== undefined && !isCountFamily(s.unit))) return candidatesFor(s, allowed, named, sentence);
-  const usable = allowed.filter((a) => !a.unnamedOnly);
-  if (s.unit !== undefined) return usable.filter((a) => a.family === s.unit);
-  const counted = usable.filter((a) => isCountFamily(a.family) && COUNT_NOUN[a.family].test(sentence));
-  return [...candidatesFor({ ...s, unit: 'count' }, allowed, named, sentence), ...counted];
+  if (s.unit !== undefined && isCountFamily(s.unit)) return allowed.filter((a) => !a.unnamedOnly && a.family === s.unit);
+  if (s.token.kind === 'duration' || s.unit !== undefined) return candidatesFor(s, allowed, named, sentence);
+  return candidatesFor({ ...s, unit: 'count' }, allowed, named, sentence);
 }
 
 /** Every integer equals a sheet value exactly, with no hedge tolerance; durations keep ±1 minute. */
