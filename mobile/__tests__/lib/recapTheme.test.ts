@@ -1,7 +1,7 @@
 import { contrast } from '../../src/components/characters/palette';
 import { CHARACTERS } from '../../src/components/characters/registry';
 import { CHARACTER_IDS } from '../../src/components/characters/types';
-import { CHANGE_COLORS, changeColor, recapTint, yearCell, YEAR_SCALE } from '../../src/lib/recapTheme';
+import { CHANGE_COLORS, changeColor, recapTint, STORY_RING_NEUTRAL, storyRingColor, yearCell, YEAR_SCALE } from '../../src/lib/recapTheme';
 import { COLORS } from '../../src/theme';
 
 it("tints each image with its coach's ground and accent from the registry (Luna navy + yellow, Mochi plum + pink)", () => {
@@ -58,4 +58,35 @@ it.each(CHARACTER_IDS)('keeps every year cell readable on the %s ground: no data
     { fill: '#6B4FA8', outline: null }, { fill: '#9333EA', outline: null }, { fill: '#D8B4FE', outline: null },
   ]);
   expect(contrast(YEAR_SCALE.short, t.ground)).toBeGreaterThanOrEqual(1.8);
+});
+
+describe('story ring (an unwatched recap on the avatar, the tab bar and the shelf)', () => {
+  // The app's page backgrounds and card (tab bar) surfaces, as hex.
+  const SURFACES = { light: ['#F6F6F7', '#FFFFFF'], dark: ['#0A0B0E', '#14161B'] } as const;
+
+  it("is the recap coach's own accent in dark mode", () => {
+    expect(storyRingColor('mochi', 'dark')).toBe('#F9A8D4');
+    expect(storyRingColor('luna', 'dark')).toBe('#FEF08A');
+  });
+
+  it.each(CHARACTER_IDS)('stands out (3:1, non-text) on every surface in light and dark for %s', (id) => {
+    for (const scheme of ['light', 'dark'] as const) {
+      const ring = storyRingColor(id, scheme);
+      expect(ring).toMatch(/^#[0-9A-F]{6}$/i);
+      for (const surface of SURFACES[scheme]) expect(contrast(ring, surface)).toBeGreaterThanOrEqual(3);
+    }
+  });
+
+  it("darkens a pale accent in light mode but keeps the coach's hue (Luna's yellow)", () => {
+    const ring = storyRingColor('luna', 'light');
+    expect(ring).not.toBe('#FEF08A');
+    const [r, g, b] = [1, 3, 5].map((i) => parseInt(ring.slice(i, i + 2), 16));
+    expect(r!).toBeGreaterThan(b!);
+    expect(g!).toBeGreaterThan(b!);
+  });
+
+  it('has a quiet neutral ring for watched recaps, visible on the page in both themes', () => {
+    expect(contrast(STORY_RING_NEUTRAL.dark, SURFACES.dark[0])).toBeGreaterThanOrEqual(1.5);
+    expect(contrast(STORY_RING_NEUTRAL.light, SURFACES.light[0])).toBeGreaterThanOrEqual(1.5);
+  });
 });

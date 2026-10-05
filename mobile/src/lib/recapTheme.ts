@@ -91,3 +91,27 @@ export function changeColor(tone: ChangeTone, scheme: 'light' | 'dark'): string 
   if (tone === 'same') return COLORS[scheme].muted;
   return scheme === 'dark' ? CHANGE_COLORS[tone] : CHANGE_COLORS_LIGHT[tone];
 }
+
+// The app's page background and card (the tab bar) in each theme, as hex for contrast checks.
+const RING_SURFACES = { light: ['#F6F6F7', '#FFFFFF'], dark: ['#0A0B0E', '#14161B'] } as const;
+/** Non-text contrast (WCAG 1.4.11) for the ring and its dot, with a little headroom. */
+const MIN_RING_CONTRAST = 3.1;
+
+/**
+ * The story ring around the profile avatar (Home, the Profile tab, the Profile screen) and an
+ * unwatched shelf circle: the recap coach's accent. On a light page a pale accent (Luna's yellow,
+ * Bun's silver) is darkened toward black, keeping its hue, until it stands out at 3:1; on a dark
+ * page an accent that is too dark is lightened toward white.
+ */
+export function storyRingColor(coachId: CharacterId, scheme: 'light' | 'dark'): string {
+  const { accent } = characterInfo(coachId);
+  const toward = scheme === 'dark' ? '#FFFFFF' : '#000000';
+  for (let i = 0; i <= 20; i++) {
+    const c = (i === 0 ? accent : mixHex(accent, toward, i * 0.05)).toUpperCase();
+    if (RING_SURFACES[scheme].every((s) => contrast(c, s) >= MIN_RING_CONTRAST)) return c;
+  }
+  return toward;
+}
+
+/** A watched recap's quiet ring on the shelf (the design's zinc-700 in dark). */
+export const STORY_RING_NEUTRAL = { light: '#C4C4CC', dark: '#3F3F46' } as const;

@@ -1,0 +1,131 @@
+import { act, renderHook } from '@testing-library/react-native';
+import { AppState } from 'react-native';
+import { fetchRecaps, markRecapOpened, type RecapSummary } from '../../src/api/recaps';
+import {
+  isRecapWatched,
+  openRecap,
+  recapDestination,
+  refreshUnwatchedRecap,
+  resetUnwatchedRecap,
+  selectUnwatched,
+  useUnwatchedRecap,
+} from '../../src/lib/unwatchedRecap';
+
+jest.mock('../../src/api/recaps', () => ({ fetchRecaps: jest.fn(), markRecapOpened: jest.fn() }));
+const fetchMock = fetchRecaps as jest.Mock;
+const openedMock = markRecapOpened as jest.Mock;
+
+const summary = (over: Partial<RecapSummary> = {}): RecapSummary => ({
+  id: 'w40', kind: 'WEEK', periodStart: '2026-09-28', periodEnd: '2026-10-04', line: 'A steady week.', personaId: 'mochi',
+  builtAt: '2026-10-05T09:00:00.000Z', openedAt: null, ...over,
+});
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  resetUnwatchedRecap();
+  fetchMock.mockResolvedValue([summary()]);
+  openedMock.mockResolvedValue(undefined);
+});
+
+describe('selectUnwatched (the ready card rules: the newest recap, while it is unopened)', () => {
+  it('is the newest recap, week or month, when it has not been opened', () => {
+    expect(selectUnwatched(summary(), new Set())?.id).toBe('w40');
+    expect(selectUnwatched(summary({ id: 'sep', kind: 'MONTH' }), new Set())?.kind).toBe('MONTH');
+  });
+
+  it('is nothing once it is opened, on the server or here', () => {
+    expect(selectUnwatched(summary({ openedAt: '2026-10-05T10:00:00.000Z' }), new Set())).toBeNull();
+    expect(selectUnwatched(summary(), new Set(['w40']))).toBeNull();
+    expect(selectUnwatched(undefined, new Set())).toBeNull();
+  });
+
+  it('reads a recap as watched once opened on the server or in this session', () => {
+    expect(isRecapWatched(summary(), new Set())).toBe(false);
+    expect(isRecapWatched(summary({ openedAt: 'x' }), new Set())).toBe(true);
+    expect(isRecapWatched(summary(), new Set(['w40']))).toBe(true);
+  });
+});
+
+it('sends a week to the story viewer and a month to its recap screen', () => {
+  expect(recapDestination({ id: 'w40', kind: 'WEEK' })).toEqual({ name: 'RecapStory', params: { id: 'w40' } });
+  expect(recapDestination({ id: 'sep', kind: 'MONTH' })).toEqual({ name: 'Recap', params: { id: 'sep' } });
+});
+
+describe('useUnwatchedRecap (one store for the Home avatar, the tab bar and Profile)', () => {
+  it('loads the newest recap once for every screen that shows it', async () => {
+    const a = renderHook(() => useUnwatchedRecap());
+    const b = renderHook(() => useUnwatchedRecap());
+    await act(async () => {});
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+    expect(fetchMock).toHaveBeenCalledWith({ limit: 1 });
+    expect(a.result.current.recap?.id).toBe('w40');
+    expect(b.result.current.recap?.id).toBe('w40');
+  });
+
+  it('clears everywhere the moment the recap is opened, and posts opened once', async () => {
+    const a = renderHook(() => useUnwatchedRecap());
+    const b = renderHook(() => useUnwatchedRecap());
+    await act(async () => {});
+    await act(async () => openRecap('w40'));
+    expect(a.result.current.recap).toBeNull();
+    expect(b.result.current.recap).toBeNull();
+    expect(a.result.current.watched.has('w40')).toBe(true);
+    expect(openedMock).toHaveBeenCalledTimes(1);
+    expect(openedMock).toHaveBeenCalledWith('w40');
+    // The story after the recap screen (or a second open) does not post again.
+    await act(async () => openRecap('w40'));
+    expect(openedMock).toHaveBeenCalledTimes(1);
+    // A load that started before the open and lands after it does not bring the ring back.
+    await act(async () => refreshUnwatchedRecap());
+    expect(a.result.current.recap).toBeNull();
+  });
+
+  it('a failed post still clears the ring (best effort, as on the recap screen)', async () => {
+    openedMock.mockRejectedValue(new Error('offline'));
+    const a = renderHook(() => useUnwatchedRecap());
+    await act(async () => {});
+    await act(async () => openRecap('w40'));
+    expect(a.result.current.recap).toBeNull();
+  });
+
+  it('shows nothing when the list fails to load or is empty', async () => {
+    fetchMock.mockRejectedValue(new Error('500'));
+    const a = renderHook(() => useUnwatchedRecap());
+    await act(async () => {});
+    expect(a.result.current.recap).toBeNull();
+    fetchMock.mockResolvedValue([]);
+    await act(async () => refreshUnwatchedRecap());
+    expect(a.result.current.recap).toBeNull();
+  });
+
+  it('reloads on focus and when the app comes back to the foreground', async () => {
+    const listeners: Record<string, () => void> = {};
+    const navigation = { addListener: jest.fn((event: string, fn: () => void) => ((listeners[event] = fn), () => undefined)) };
+    let onAppState: ((s: string) => void) | undefined;
+    jest.spyOn(AppState, 'addEventListener').mockImplementation(((_: string, fn: (s: string) => void) => {
+      onAppState = fn;
+      return { remove: jest.fn() };
+    }) as never);
+    const a = renderHook(() => useUnwatchedRecap(navigation));
+    await act(async () => {});
+    expect(a.result.current.recap?.id).toBe('w40');
+    fetchMock.mockResolvedValue([summary({ id: 'sep', kind: 'MONTH', personaId: 'luna' })]);
+    await act(async () => listeners.focus!());
+    expect(a.result.current.recap?.id).toBe('sep');
+    fetchMock.mockResolvedValue([summary({ id: 'sep', kind: 'MONTH', openedAt: 'x' })]);
+    await act(async () => onAppState!('active'));
+    expect(a.result.current.recap).toBeNull();
+    jest.restoreAllMocks();
+  });
+
+  it('forgets everything when the last screen using it goes (sign out), so another account starts clean', async () => {
+    const a = renderHook(() => useUnwatchedRecap());
+    await act(async () => {});
+    await act(async () => openRecap('w40'));
+    a.unmount();
+    fetchMock.mockResolvedValue([summary()]);
+    const b = renderHook(() => useUnwatchedRecap());
+    await act(async () => {});
+    expect(b.result.current.recap?.id).toBe('w40');
+  });
+});
