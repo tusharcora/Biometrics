@@ -75,53 +75,9 @@ A Whoop/Bezel-style personal health app. Wearable data (steps, resting heart rat
 
 ## 1. System at a glance
 
-```mermaid
-flowchart LR
-  subgraph Device["iPhone (Expo / React Native)"]
-    App["Mobile app<br/>Home · Activity · Coach · Metrics · Profile"]
-  end
+<p align="center"><img src="docs/diagrams/system-overview.png" alt="System overview: the Expo app talks to the Express backend over REST and SSE; Google Health webhooks and OAuth feed the backend; BullMQ workers on Redis run sync, the stat engine and the habit engine into PostgreSQL; the coach pipeline calls local Ollama by default or Claude when the user opts in; Expo push and Resend handle notifications."></p>
 
-  subgraph Google["Google"]
-    GSI["Google Sign-In"]
-    GOA["OAuth 2.0"]
-    GHA["Health API v4<br/>steps · sleep · HRV · RHR"]
-    GWH["Health webhooks"]
-  end
-  Apple["Sign in with Apple"]
-  Expo["Expo push service"]
-
-  subgraph Server["Backend (Node / Express 5)"]
-    API["REST API<br/>/auth /health /me/*"]
-    W["BullMQ worker<br/>queue: health-sync"]
-    WS["Summary worker<br/>queue: coach-summary"]
-    SE["Stat engine<br/>scores · baselines"]
-    HC["Habit correlation<br/>engine"]
-    CO["Coach answer pipeline<br/>fact sheet · one streamed call · validator"]
-  end
-
-  PG[("PostgreSQL<br/>Prisma")]
-  RD[("Redis")]
-  OL["Ollama (local)<br/>qwen3.6:35b"]
-  AN["Anthropic API (opt-in)<br/>claude-opus-5-5"]
-
-  App -- "REST + session cookie" --> API
-  App -. "ID token" .-> GSI
-  App -. "identity token" .-> Apple
-  App -- "OAuth consent (browser)" --> GOA
-  GOA -- "callback + code" --> API
-  GWH -- "POST /webhooks/health" --> API
-  API --> RD
-  RD --> W
-  W -- "fetch / backfill" --> GHA
-  W --> SE --> PG
-  W --> HC --> PG
-  API --> PG
-  CO -- "/api/chat (loopback)" --> OL
-  CO -. "hosted engine, opt-in per user" .-> AN
-  API --> CO
-  RD --> WS --> CO
-  W -- "weekly digest push" --> Expo --> App
-```
+<sub>Diagrams are generated from Python with <a href="https://github.com/mingrammer/diagrams">mingrammer/diagrams</a>; sources and how to re-render them are in <a href="docs/diagrams/"><code>docs/diagrams/</code></a>.</sub>
 
 | Layer | What it is |
 |---|---|
@@ -132,6 +88,8 @@ flowchart LR
 | **AI coach** | Facts first, one pass: the question is routed, a compact fact sheet is built from the user's data, one streamed model call writes the reply (plus an optional answer card), and every sentence is validated against the fact sheet before it is shown. Local Ollama by default; hosted Claude is opt-in per user. |
 
 ## 2. End-to-end data flow
+
+<p align="center"><img src="docs/diagrams/sync-pipeline.png" alt="Sync and scoring: Fitbit syncs to the Google Health API, whose change notifications hit /webhooks/health; jobs on the health-sync queue fetch and backfill into BiometricRecord and SleepSession; computeDailyScore runs the five-stage stat engine (clean, features, baseline, composite, explain) into DailyScore; scheduled sweeps run scoring, weekly habit correlations, the coach digest and retention; scored days queue a coach day summary."></p>
 
 1. **Sign in.** Auth is **Better Auth**, mounted at `/auth/*`. The app signs in with an Apple identity token or a Google ID token (Better Auth's social ID-token sign-in verifies it), or with **email + password**: new accounts must confirm their email before the first sign-in, and "Forgot password" sends a reset link. Each sign-in method is an `Account` row on one `User`. A new method whose **verified** email matches a verified user is linked to that user; an unverified sign-up never attaches to an existing account. A successful sign-in creates a database-backed **30-day sliding session** (`Session` table, extended at most once a day while in use). The session cookie is kept in `expo-secure-store` and sent on every request.
 2. **Connect Google Health.** `GET /health/authorize` mints a single-use OAuth `state` (Redis, 10-minute TTL) and returns the consent URL, which the app opens in the system browser. Google redirects to `GET /health/callback`, and the backend:
@@ -184,6 +142,7 @@ mobile/                  Expo (React Native) app
     theme/, theme.ts     dark-first tokens (mirrors global.css), metric config, motion tokens
   plugins/               iOS scene-delegate config plugin (iOS 27 SDK)
   __tests__/             134 Jest test files (jest-expo + Testing Library)
+docs/diagrams/           architecture diagrams: Python sources (mingrammer/diagrams) + rendered PNGs
 docs/superpowers/        design specs, implementation plans, research notes
 ```
 
@@ -286,19 +245,7 @@ Configs are immutable (`configs/v1`–`v3`, `LIVE_VERSION = 'v3'`). Changing the
 
 `backend/src/coach/`. It's disabled unless `COACH_ENABLED=true`, and it requires the user's versioned consent.
 
-```mermaid
-flowchart TD
-  M[User message] --> C{Crisis classifier}
-  C -- match --> S[Fixed safety reply + crisis resources]
-  C -- no --> R[Route: today · sleep · trends · general]
-  R --> F[Fact sheet: labelled facts with ids, usual values, precomputed comparisons]
-  F --> L[One streamed model call<br/>reply + optional card / memory block]
-  L --> V{Each sentence: numbers on the fact sheet?<br/>no diagnosis / dosing / supplements?}
-  V -- yes --> T[SSE text event]
-  V -- no --> D[Drop the sentence]
-  D -- nothing left --> RG[Retry once] --> E[Error card if still nothing]
-  T --> K[Card resolved from the fact sheet] --> DN[done]
-```
+<p align="center"><img src="docs/diagrams/coach-pipeline.png" alt="Coach pipeline: turn guard, then crisis classifier (a match gets a fixed safety reply); otherwise route, fact sheet from Postgres, one system prompt, one streamed call to Ollama or opt-in Claude (falling back to local if no text within 10 s); each sentence is validated, passing sentences stream over SSE with an answer card and memory chip, failing ones are dropped, and if nothing is left the answer is retried once and then shown as an error card."></p>
 
 **How answers work.** `answer/route.ts` routes the question; `answer/facts.ts` builds the fact sheet (`[recovery.today] Recovery today: 26 (usual 58, 32 lower than usual)` …) from the same readers the app's screens use; `answer/prompt.ts` writes one system prompt (character voice, today's date, the facts, the rules); the model streams a conversational reply and, when it used the facts, a fenced ```` ```card ```` block naming fact ids (the server fills every value). `answer/validate.ts` checks each sentence as it completes: every number must be on the fact sheet (±1 on integers, ±1% or ±1 minute on durations; "6h 48m" = "408 minutes" = "6.8 hours"; a hedged "about 7 hours" may be within 10%); general-knowledge ranges are allowed only for general questions and never about the user. Nothing shown is ever retracted. The app shows the disclaimer once, as a page footnote; it is never part of a reply (only the JSON response kept for older app builds, which have no footnote, appends it).
 
