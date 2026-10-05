@@ -1,4 +1,4 @@
-import { dateRange } from '../../src/scoring/dates';
+import { dateRange, shiftDate } from '../../src/scoring/dates';
 import { computeRecapStats, isEligible } from '../../src/recap/stats';
 import type { DayData, RecapData } from '../../src/recap/types';
 
@@ -111,6 +111,102 @@ describe('computeRecapStats: MONTH milestones', () => {
     fill(d, '2026-09-01', '2026-09-30', (_date, i) => ({ sleepMinutes: 470, bedtime: i % 2 ? 630 : 650 })); // spread 10
     expect(computeRecapStats('MONTH', '2026-09-01', d, 480).milestones!.steadiestMonth).toEqual({ spreadMinutes: 10 });
     for (const date of dateRange('2026-06-01', '2026-06-30')) d.delete(date);
+    expect(computeRecapStats('MONTH', '2026-09-01', d, 480).milestones!.steadiestMonth).toBeUndefined();
+  });
+});
+
+describe('computeRecapStats: thresholds and edge rules', () => {
+  const fill = (d: RecapData, from: string, to: string, f: (date: string, i: number) => DayData) =>
+    dateRange(from, to).forEach((date, i) => d.set(date, { ...d.get(date), ...f(date, i) }));
+
+  it('compares with a previous WEEK of exactly 3 nights, only on the numbers both periods have', () => {
+    const s = computeRecapStats('WEEK', W, withPrevious(week(), 3), 480);
+    // 3 previous bedtimes: no previous spread, so no spread delta.
+    expect(s.comparison).toEqual({ avgSleepDelta: 28, avgRecoveryDelta: 12 });
+    expect(s.earlierBedtimes).toEqual({ nights: 4, of: 6 });
+  });
+
+  it('leaves out a delta when the eligible previous period lacks that input', () => {
+    const d = week();
+    dateRange('2026-09-21', '2026-09-24').forEach((date) => d.set(date, { sleepMinutes: 450 }));
+    const s = computeRecapStats('WEEK', W, d, 480);
+    expect(s.comparison).toEqual({ avgSleepDelta: 28 });
+    expect(s).not.toHaveProperty('earlierBedtimes');
+  });
+
+  it('compares with a previous MONTH of exactly 7 nights, not 6', () => {
+    for (const [nights, expected] of [[7, { avgSleepDelta: 20 }], [6, undefined]] as const) {
+      const d: RecapData = new Map();
+      fill(d, '2026-09-01', '2026-09-30', () => ({ sleepMinutes: 490 }));
+      fill(d, '2026-08-01', shiftDate('2026-08-01', nights - 1), () => ({ sleepMinutes: 470 }));
+      expect(computeRecapStats('MONTH', '2026-09-01', d, 480).comparison).toEqual(expected);
+    }
+  });
+
+  it('needs exactly 4 bedtimes for a spread', () => {
+    const d: RecapData = new Map();
+    fill(d, '2026-09-28', '2026-10-01', (_date, i) => ({ sleepMinutes: 480, bedtime: 600 + 10 * i }));
+    expect(computeRecapStats('WEEK', W, d, 480).bedtimeSpreadMinutes).toBe(11); // std of 0, 10, 20, 30
+    d.delete('2026-10-01');
+    expect(computeRecapStats('WEEK', W, d, 480)).not.toHaveProperty('bedtimeSpreadMinutes');
+  });
+
+  it('treats a 0-minute sleep rollup as no night', () => {
+    const d: RecapData = new Map([['2026-09-28', { sleepMinutes: 0 }], ['2026-09-29', { sleepMinutes: 480 }]]);
+    const s = computeRecapStats('WEEK', W, d, 0);
+    expect(s).toMatchObject({ nightsWithData: 1, avgSleepMinutes: 480, nightsOnGoal: 1, bestNight: { date: '2026-09-29', minutesAsleep: 480 } });
+    expect(s.weekStrip![0]).toEqual({ date: '2026-09-28', minutesAsleep: null, onGoal: null, recovery: null });
+  });
+
+  it('picks the best night by score when some nights have one, by length when none do, then the earliest', () => {
+    const partial: RecapData = new Map([['2026-09-28', { sleepMinutes: 500 }], ['2026-09-29', { sleepMinutes: 400, sleepScore: 60 }]]);
+    expect(computeRecapStats('WEEK', W, partial, 480).bestNight).toEqual({ date: '2026-09-29', minutesAsleep: 400 });
+    const none: RecapData = new Map([['2026-09-28', { sleepMinutes: 400 }], ['2026-09-29', { sleepMinutes: 500 }], ['2026-09-30', { sleepMinutes: 500 }]]);
+    expect(computeRecapStats('WEEK', W, none, 480).bestNight).toEqual({ date: '2026-09-29', minutesAsleep: 500 });
+  });
+
+  it('breaks a best-recovery tie (after rounding) by the earliest date', () => {
+    const d: RecapData = new Map([['2026-09-28', { recovery: 79.6 }], ['2026-09-29', { recovery: 80.4 }]]);
+    expect(computeRecapStats('WEEK', W, d, 480).bestRecovery).toEqual({ date: '2026-09-28', score: 80 });
+  });
+
+  it('awards the streak milestone at exactly 5 nights', () => {
+    const d: RecapData = new Map();
+    fill(d, '2026-09-01', '2026-09-30', (_date, i) => ({ sleepMinutes: i % 6 === 5 ? 400 : 490 }));
+    expect(computeRecapStats('MONTH', '2026-09-01', d, 480).milestones!.streak).toEqual({ nights: 5 });
+  });
+
+  it('awards the best recovery week when it beats last month by exactly 1, not 0', () => {
+    for (const [best, expected] of [[76, { weekStart: '2026-09-07', avgRecovery: 76 }], [75, undefined]] as const) {
+      const d: RecapData = new Map();
+      fill(d, '2026-08-01', '2026-08-31', () => ({ sleepMinutes: 470, recovery: 75 }));
+      fill(d, '2026-09-01', '2026-09-30', (date) => ({ sleepMinutes: 490, recovery: date >= '2026-09-07' && date <= '2026-09-13' ? best : 70 }));
+      expect(computeRecapStats('MONTH', '2026-09-01', d, 480).milestones!.bestRecoveryWeek).toEqual(expected);
+    }
+  });
+
+  it('only counts weeks with 4+ recovery days, in both months', () => {
+    const d: RecapData = new Map();
+    fill(d, '2026-08-01', '2026-08-31', () => ({ sleepMinutes: 470, recovery: 70 }));
+    fill(d, '2026-09-01', '2026-09-30', () => ({ sleepMinutes: 490 }));
+    fill(d, '2026-09-07', '2026-09-09', () => ({ recovery: 90 })); // 3 days: does not qualify
+    fill(d, '2026-09-14', '2026-09-17', () => ({ recovery: 80 })); // 4 days: qualifies
+    expect(computeRecapStats('MONTH', '2026-09-01', d, 480).milestones!.bestRecoveryWeek).toEqual({ weekStart: '2026-09-14', avgRecovery: 80 });
+
+    // Last month without a qualifying week (recovery on the 3rd, 13th, 23rd, 30th only): nothing to beat, no milestone.
+    for (const date of dateRange('2026-08-01', '2026-08-31')) {
+      d.set(date, { sleepMinutes: 470, ...(['03', '13', '23', '30'].includes(date.slice(8)) ? { recovery: 70 } : {}) });
+    }
+    expect(computeRecapStats('MONTH', '2026-09-01', d, 480).milestones!.bestRecoveryWeek).toBeUndefined();
+  });
+
+  it('does not call a month the steadiest when an earlier month ties it', () => {
+    const d: RecapData = new Map();
+    for (const [from, to] of [['2026-06-01', '2026-06-30'], ['2026-07-01', '2026-07-31']] as const) {
+      fill(d, from, to, (_date, i) => ({ sleepMinutes: 470, bedtime: i % 2 ? 600 : 680 })); // spread 40
+    }
+    fill(d, '2026-08-01', '2026-08-31', (_date, i) => ({ sleepMinutes: 470, bedtime: i % 2 ? 630 : 650 })); // spread 10 (rounded)
+    fill(d, '2026-09-01', '2026-09-30', (_date, i) => ({ sleepMinutes: 470, bedtime: i % 2 ? 630 : 650 })); // spread 10
     expect(computeRecapStats('MONTH', '2026-09-01', d, 480).milestones!.steadiestMonth).toBeUndefined();
   });
 });
