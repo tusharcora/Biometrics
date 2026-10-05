@@ -33,7 +33,8 @@ import { COACH_CONSENT_VERSION, hasCurrentConsent } from './consent';
 import { isCoachEnabled } from './config';
 import type { CoachModelProvider, CoachStreamRequest } from './model/provider';
 import { resolvePersona } from './personas';
-import { PushSender, sendGenericPush } from './push';
+import { sendCoachPush } from './coachPush';
+import type { PushSender } from './push';
 import type { CoachEventAttributes, CoachEventName, CoachTelemetry } from './telemetry';
 
 export const DIGEST_BUDGET_MS = 60_000;
@@ -241,7 +242,7 @@ export async function generateWeeklyDigestForUser(
 
   // The digest is stored; a push failure must not undo or repeat it.
   try {
-    const devices = await sendGenericPush(deps.pushSender, user.id, 'weekly_digest');
+    const devices = await sendCoachPush(deps.pushSender, user.id, 'weekly_digest');
     emit('coach.push_sent', { kind: 'weekly_digest', devices });
   } catch (err) {
     emit('coach.push_failed', { kind: 'weekly_digest', error: err instanceof Error ? err.name : 'unknown' });
