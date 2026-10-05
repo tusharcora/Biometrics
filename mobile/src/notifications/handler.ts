@@ -1,10 +1,11 @@
 import * as Notifications from 'expo-notifications';
 import { navigationRef } from '../navigation/navigationRef';
+import { fetchRecap } from '../api/recaps';
 import { WIND_DOWN_KIND } from '../lib/windDown';
 
 // What the app does with notifications while it runs: shows the wind-down
 // reminder in the foreground and opens the Sleep screen, or a recap, when one
-// is tapped.
+// is tapped (a week's recap plays its story; a month opens its recap screen).
 // Every native call here is best-effort: a build or simulator without the
 // notifications module must still start.
 
@@ -62,38 +63,52 @@ export function installNotificationHandler(): void {
 // route only when it is the current one or `pop` is set, so without it a tap would stack a second
 // copy. A recap tapped while another recap is on screen updates that screen's params, and
 // RecapScreen drops the earlier recap's late answer (T19 ruling).
-/** Where a tapped notification goes; null for anything else, which is ignored as before. */
-function routeFor(notification: Notifications.Notification): (() => void) | null {
-  if (isWindDown(notification)) return () => navigationRef.navigate('Sleep', undefined, { pop: true });
+/**
+ * Where a tapped notification goes, run once the navigator is ready; null for anything else,
+ * which is ignored as before. A recap push carries only its id, so the recap is loaded first to
+ * tell a week (its story, handed the recap) from a month (its recap screen). A failed load opens
+ * the recap screen, which says a gone recap isn't available (404) or offers a retry.
+ */
+function routeFor(notification: Notifications.Notification): ((signal?: AbortSignal) => Promise<void>) | null {
+  if (isWindDown(notification)) return async () => navigationRef.navigate('Sleep', undefined, { pop: true });
   const recapId = recapIdOf(notification);
-  return recapId ? () => navigationRef.navigate('Recap', { id: recapId }, { pop: true }) : null;
+  if (!recapId) return null;
+  return async (signal) => {
+    let recap: Awaited<ReturnType<typeof fetchRecap>> | null = null;
+    try {
+      recap = await fetchRecap(recapId);
+    } catch {
+      // The recap screen shows why.
+    }
+    if (signal?.aborted) return;
+    if (recap?.kind === 'WEEK') navigationRef.navigate('RecapStory', { recap }, { pop: true });
+    else navigationRef.navigate('Recap', { id: recapId }, { pop: true });
+  };
 }
 
-// Runs `go` once the signed-in navigator is ready, polling until it is, for up to 5 s. Signed out
-// it never becomes ready, so this does nothing.
-function openWhenReady(go: () => void, signal?: AbortSignal): Promise<void> {
+// Resolves true once the signed-in navigator is ready, polling for up to 5 s; false if it never
+// is (signed out) or the wait is called off.
+function whenReady(signal?: AbortSignal): Promise<boolean> {
   return new Promise((resolve) => {
-    if (signal?.aborted) return resolve();
-    if (navigationRef.isReady()) {
-      go();
-      return resolve();
-    }
+    if (signal?.aborted) return resolve(false);
+    if (navigationRef.isReady()) return resolve(true);
     const startedAt = Date.now();
-    const finish = () => {
+    const finish = (ready: boolean) => {
       clearInterval(timer);
-      signal?.removeEventListener('abort', finish);
-      resolve();
+      signal?.removeEventListener('abort', abort);
+      resolve(ready);
     };
+    const abort = () => finish(false);
     const timer = setInterval(() => {
-      if (navigationRef.isReady()) {
-        go();
-        finish();
-      } else if (Date.now() - startedAt >= READY_TIMEOUT_MS) {
-        finish();
-      }
+      if (navigationRef.isReady()) finish(true);
+      else if (Date.now() - startedAt >= READY_TIMEOUT_MS) finish(false);
     }, READY_POLL_MS);
-    signal?.addEventListener('abort', finish);
+    signal?.addEventListener('abort', abort);
   });
+}
+
+async function openWhenReady(go: (signal?: AbortSignal) => Promise<void>, signal?: AbortSignal): Promise<void> {
+  if (await whenReady(signal)) await go(signal);
 }
 
 // Cold start: the app was launched by tapping a notification. Pass a signal to stop waiting for

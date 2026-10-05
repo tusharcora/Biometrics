@@ -314,6 +314,21 @@ describe('the story is the recap', () => {
     expect(markRecapOpened).toHaveBeenCalledWith('r-week');
   });
 
+  it("a week's push tapped while a story is up shows that week from its first frame", async () => {
+    await open();
+    tap(10000);
+    mockParams = { recap: { ...mockRecap, id: 'r-next', periodStart: '2026-10-05', periodEnd: '2026-10-11' } };
+    screen.rerender(
+      <SafeAreaProvider initialMetrics={{ frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 47, left: 0, right: 0, bottom: 34 } }}>
+        {withCharacter(<RecapStoryScreen />)}
+      </SafeAreaProvider>,
+    );
+    await act(async () => {});
+    expect(screen.getByTestId('story-viewer-range')).toHaveTextContent('Oct 5 – Oct 11');
+    expect(eyebrow()).toHaveTextContent('MY WEEK · 1 OF 3');
+    expect(markRecapOpened).toHaveBeenCalledWith('r-next');
+  });
+
   it('loads a week by id (avatar, shelf) and plays it', async () => {
     mockParams = { id: 'r-week' };
     (fetchRecap as jest.Mock).mockResolvedValue(mockRecap);

@@ -7,6 +7,8 @@ import {
   routeInitialNotification,
 } from '../../src/notifications/handler';
 import { navigationRef } from '../../src/navigation/navigationRef';
+import { ApiError } from '../../src/api/client';
+import { fetchRecap } from '../../src/api/recaps';
 
 jest.mock('expo-notifications', () => ({
   setNotificationHandler: jest.fn(),
@@ -16,6 +18,7 @@ jest.mock('expo-notifications', () => ({
 jest.mock('../../src/navigation/navigationRef', () => ({
   navigationRef: { isReady: jest.fn(), navigate: jest.fn() },
 }));
+jest.mock('../../src/api/recaps', () => ({ fetchRecap: jest.fn() }));
 
 const N = Notifications as jest.Mocked<typeof Notifications>;
 const ref = navigationRef as unknown as { isReady: jest.Mock; navigate: jest.Mock };
@@ -165,30 +168,69 @@ describe('listenForNotificationTaps (warm start)', () => {
 const RECAP_ID = '3f2c7a8e-1b2d-4c5e-9f00-0123456789ab';
 
 describe('recap pushes', () => {
-  it('cold start: opens the recap that launched the app', async () => {
+  const week = { id: RECAP_ID, kind: 'WEEK', periodStart: '2026-09-28', periodEnd: '2026-10-04' };
+  const month = { id: RECAP_ID, kind: 'MONTH', periodStart: '2026-09-01', periodEnd: '2026-09-30' };
+  const load = fetchRecap as jest.Mock;
+  beforeEach(() => load.mockResolvedValue(week));
+
+  it("cold start: a week's push plays its story, with the recap it loaded", async () => {
+    N.getLastNotificationResponseAsync.mockResolvedValue(response({ kind: RECAP_PUSH_KIND, recapId: RECAP_ID }));
+    await routeInitialNotification();
+    expect(load).toHaveBeenCalledWith(RECAP_ID);
+    expect(ref.navigate).toHaveBeenCalledTimes(1);
+    expect(ref.navigate).toHaveBeenCalledWith('RecapStory', { recap: week }, { pop: true });
+  });
+
+  it("a month's push opens its recap screen", async () => {
+    load.mockResolvedValue(month);
     N.getLastNotificationResponseAsync.mockResolvedValue(response({ kind: RECAP_PUSH_KIND, recapId: RECAP_ID }));
     await routeInitialNotification();
     expect(ref.navigate).toHaveBeenCalledWith('Recap', { id: RECAP_ID }, { pop: true });
   });
 
-  it('cold start: waits for the signed-in navigator first', async () => {
+  it("a stale push (404) or a failed load opens the recap screen, which says it isn't available or offers a retry", async () => {
+    N.getLastNotificationResponseAsync.mockResolvedValue(response({ kind: RECAP_PUSH_KIND, recapId: RECAP_ID }));
+    load.mockRejectedValueOnce(new ApiError(404, 'gone', 'not_found'));
+    await routeInitialNotification();
+    expect(ref.navigate).toHaveBeenLastCalledWith('Recap', { id: RECAP_ID }, { pop: true });
+    load.mockRejectedValueOnce(new Error('offline'));
+    await routeInitialNotification();
+    expect(ref.navigate).toHaveBeenLastCalledWith('Recap', { id: RECAP_ID }, { pop: true });
+  });
+
+  it('cold start: waits for the signed-in navigator before loading', async () => {
     jest.useFakeTimers();
     ref.isReady.mockReturnValue(false);
     N.getLastNotificationResponseAsync.mockResolvedValue(response({ kind: RECAP_PUSH_KIND, recapId: RECAP_ID }));
     const done = routeInitialNotification();
     await Promise.resolve();
     await Promise.resolve();
+    expect(load).not.toHaveBeenCalled();
     ref.isReady.mockReturnValue(true);
     jest.advanceTimersByTime(100);
     await done;
-    expect(ref.navigate).toHaveBeenCalledWith('Recap', { id: RECAP_ID }, { pop: true });
+    expect(ref.navigate).toHaveBeenCalledWith('RecapStory', { recap: week }, { pop: true });
   });
 
-  it('warm start: opens the recap from a push tapped while the app runs', () => {
+  it('cold start: goes nowhere once the wait is called off (signed out meanwhile)', async () => {
+    let finish!: (v: unknown) => void;
+    load.mockImplementation(() => new Promise((r) => (finish = r)));
+    N.getLastNotificationResponseAsync.mockResolvedValue(response({ kind: RECAP_PUSH_KIND, recapId: RECAP_ID }));
+    const controller = new AbortController();
+    const done = routeInitialNotification(controller.signal);
+    await new Promise((r) => setImmediate(r));
+    controller.abort();
+    finish(week);
+    await done;
+    expect(ref.navigate).not.toHaveBeenCalled();
+  });
+
+  it("warm start: a week's push tapped while the app runs plays its story", async () => {
     const unsubscribe = listenForNotificationTaps();
     const listener = N.addNotificationResponseReceivedListener.mock.calls[0]![0];
     listener(response({ kind: RECAP_PUSH_KIND, recapId: RECAP_ID }));
-    expect(ref.navigate).toHaveBeenCalledWith('Recap', { id: RECAP_ID }, { pop: true });
+    await new Promise((r) => setImmediate(r));
+    expect(ref.navigate).toHaveBeenCalledWith('RecapStory', { recap: week }, { pop: true });
     unsubscribe();
   });
 

@@ -71,7 +71,8 @@ export function RecapStoryScreen() {
     void load();
   }, [load]);
 
-  const recap = loaded.phase === 'ready' ? loaded.recap : null;
+  // A push tapped while a story is up hands this screen a new recap: it shows that one.
+  const recap = given ?? (loaded.phase === 'ready' ? loaded.recap : null);
   // Only a week has a story: a month reached by id opens its recap screen instead.
   useEffect(() => {
     if (recap?.kind === 'MONTH') navigation.replace('Recap', { id: recap.id });
@@ -104,7 +105,7 @@ export function RecapStoryScreen() {
       {/* The coach's ground is dark in both themes: light status bar content while the viewer is up. */}
       <StatusBar style="light" />
       {recap?.kind === 'WEEK' && prefs ? (
-        <StoryViewer recap={recap} coachId={coachId} tint={tint} includes={resolveIncludes('story', prefs, recap.stats)} />
+        <StoryViewer key={recap.id} recap={recap} coachId={coachId} tint={tint} includes={resolveIncludes('story', prefs, recap.stats)} />
       ) : (
         <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
           <View style={{ alignItems: 'flex-end', paddingHorizontal: SIDE - 4 }}>
