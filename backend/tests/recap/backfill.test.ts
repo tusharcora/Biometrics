@@ -60,3 +60,39 @@ it('runs the backfill only once', async () => {
   expect(second.calls.filter((c) => c[0] === 'add')).toHaveLength(0);
   expect(second.calls.some((c) => c[0] === 'upsert')).toBe(true);
 });
+
+it('still registers the hourly sweep when the backfill throws, and leaves the marker unset so the next start retries', async () => {
+  const user = await createUser();
+  await seedNight(user.id, '2026-09-30', { minutes: 450 });
+  const store = new MemoryStore();
+  const { calls, queue } = fakeQueue();
+  (queue as { add: unknown }).add = async () => {
+    throw new Error('queue down');
+  };
+  const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    await startRecaps({ queue, store, now: NOW, userIds: [user.id] });
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+  } finally {
+    errorSpy.mockRestore();
+  }
+  expect(calls[calls.length - 1]).toEqual(['upsert', RECAP_SWEEP_JOB, { pattern: RECAP_SWEEP_CRON }, { name: RECAP_SWEEP_JOB }]);
+  expect(store.values.has(RECAP_BACKFILL_MARKER)).toBe(false);
+});
+
+it('still registers the hourly sweep when listing users with sleep data throws', async () => {
+  const store = new MemoryStore();
+  const { calls, queue } = fakeQueue();
+  const findMany = jest.spyOn(prisma.user, 'findMany').mockRejectedValue(new Error('db down'));
+  const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {});
+  try {
+    await startRecaps({ queue, store, now: NOW });
+    expect(errorSpy).toHaveBeenCalledTimes(1);
+  } finally {
+    errorSpy.mockRestore();
+    findMany.mockRestore();
+  }
+  expect(calls.filter((c) => c[0] === 'add')).toHaveLength(0);
+  expect(calls[calls.length - 1]).toEqual(['upsert', RECAP_SWEEP_JOB, { pattern: RECAP_SWEEP_CRON }, { name: RECAP_SWEEP_JOB }]);
+  expect(store.values.has(RECAP_BACKFILL_MARKER)).toBe(false);
+});

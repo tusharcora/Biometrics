@@ -1,6 +1,7 @@
 // Startup wiring (spec 2026-10-04 §2): retire the weekly digest scheduler, enqueue the one-off
 // launch backfill (the last 4 weeks and 3 months per user, AI text as normal, no push), and only
-// then register the hourly sweep, so the sweep finds those periods already queued or built.
+// then register the hourly sweep, so the sweep finds those periods already queued or built. A
+// failed backfill is logged and never stops the sweep from registering.
 // Backfill jobs use the sweep's job ids and carry noPush.
 
 import type { Queue } from 'bullmq';
@@ -42,11 +43,17 @@ export async function enqueueRecapBackfillOnce({
 export async function startRecaps(deps: { queue?: RecapStartQueue; store?: MarkerStore; now?: Date; userIds?: string[] } = {}): Promise<void> {
   const queue = deps.queue ?? syncQueue;
   await retireWeeklyCoachDigest(queue);
-  await enqueueRecapBackfillOnce({
-    queue,
-    ...(deps.store ? { store: deps.store } : {}),
-    ...(deps.now ? { now: deps.now } : {}),
-    ...(deps.userIds ? { userIds: deps.userIds } : {}),
-  });
+  try {
+    await enqueueRecapBackfillOnce({
+      queue,
+      ...(deps.store ? { store: deps.store } : {}),
+      ...(deps.now ? { now: deps.now } : {}),
+      ...(deps.userIds ? { userIds: deps.userIds } : {}),
+    });
+  } catch (err) {
+    // The digest scheduler is already gone, so the sweep must register regardless. The marker
+    // stays unset, so the next start retries the backfill. Error class only.
+    console.error(JSON.stringify({ event: 'recap.backfill_failed', error: err instanceof Error ? err.name : 'unknown' }));
+  }
   await scheduleRecapSweep(queue);
 }
