@@ -42,7 +42,7 @@ type Params = { recap: Recap } | { id: string };
 type Loaded = { phase: 'loading' } | { phase: 'ready'; recap: Recap } | { phase: 'missing' } | { phase: 'error' };
 
 // The weekly story viewer (recap restyle 2026-10-05; story placement 2026-10-05). It is the weekly
-// recap: a push for a week, the ringed avatar and the Sleep shelf open it straight away, by id, or
+// recap: a recap push, the ringed avatar and the Sleep shelf open it straight away, by id, or
 // a recap screen hands over the recap it already has. On the coach's ground: the animated bar,
 // a header with the coach, the week and Share / Close, the frame, and under it "Ask <Coach> about
 // your week…" with Save. Each frame runs about five seconds and moves on by itself; tap right
@@ -71,7 +71,7 @@ export function RecapStoryScreen() {
     void load();
   }, [load]);
 
-  // A push tapped while a story is up hands this screen a new recap: it shows that one.
+  // New params while a story is up (a push re-uses this screen): it shows the new recap.
   const recap = given ?? (loaded.phase === 'ready' ? loaded.recap : null);
   // Only a week has a story: a month reached by id opens its recap screen instead.
   useEffect(() => {
