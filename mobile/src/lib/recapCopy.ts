@@ -1,5 +1,5 @@
 import type { RecapComparison, RecapKind, RecapMilestones, RecapStats } from '../api/recaps';
-import type { MilestoneGlyph } from '../components/milestones/MilestoneTiles';
+import type { MilestoneTile } from './milestones';
 import { MONTH_LONG, MONTH_SHORT } from './heatmap';
 import { formatShortDuration, formatTextDuration } from './sleepStats';
 
@@ -94,11 +94,8 @@ export function compareChanges(c: RecapComparison | undefined): CompareChange[] 
 
 export type MilestoneKey = keyof RecapMilestones;
 
-export interface MilestoneTileContent {
+export interface MilestoneTileContent extends MilestoneTile {
   key: MilestoneKey;
-  label: string;
-  glyph: MilestoneGlyph;
-  earned: boolean;
 }
 
 /**

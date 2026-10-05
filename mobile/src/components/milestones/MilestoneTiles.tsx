@@ -2,21 +2,16 @@ import React from 'react';
 import { View } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import Svg, { Path, Rect } from 'react-native-svg';
+import type { MilestoneGlyph, MilestoneTile } from '../../lib/milestones';
 import { COLORS } from '../../theme';
 import { Text } from '../ui/text';
 
 // Milestone tiles (recap restyle 2026-10-05: the month screen's "Milestones"). A standalone grid,
-// three to a row, so a later Achievements screen can reuse it: every milestone is shown, the ones
-// not earned dimmed with a lock and no progress count.
+// three to a row, so a later Achievements screen can reuse it: every milestone is shown; one not
+// earned has its lock dimmed (not the tile, so the label keeps its contrast), a muted label and no
+// progress count.
 
-export type MilestoneGlyph = 'star' | 'heart' | 'calendar' | 'moon';
-
-export interface MilestoneTile {
-  key: string;
-  label: string;
-  glyph: MilestoneGlyph;
-  earned: boolean;
-}
+export type { MilestoneGlyph, MilestoneTile } from '../../lib/milestones';
 
 export interface MilestoneTilesProps {
   tiles: MilestoneTile[];
@@ -74,12 +69,18 @@ export function MilestoneTiles({ tiles, testID = 'milestone-tiles' }: MilestoneT
               accessible
               accessibilityLabel={`${tile.label}, ${tile.earned ? 'earned' : 'locked'}`}
               className="flex-1 items-center gap-1.5 rounded-2xl border border-border bg-card px-2 py-3"
-              style={{ opacity: tile.earned ? 1 : LOCKED_OPACITY }}
             >
-              <View style={{ height: GLYPH, justifyContent: 'center' }} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
+              <View
+                testID={`${testID}-${tile.key}-icon`}
+                style={{ height: GLYPH, justifyContent: 'center', opacity: tile.earned ? 1 : LOCKED_OPACITY }}
+                accessibilityElementsHidden
+                importantForAccessibility="no-hide-descendants"
+              >
                 {tile.earned ? <Glyph glyph={tile.glyph} scheme={scheme} testID={`${testID}-${tile.key}-glyph`} /> : <Lock color={COLORS[scheme].muted} testID={`${testID}-${tile.key}-lock`} />}
               </View>
-              <Text className="text-center text-xs">{tile.label}</Text>
+              <Text testID={`${testID}-${tile.key}-label`} className="text-center text-xs" style={{ color: tile.earned ? COLORS[scheme].foreground : COLORS[scheme].muted }}>
+                {tile.label}
+              </Text>
             </View>
           ))}
           {/* Empty slots keep a short last row on the same columns. */}
