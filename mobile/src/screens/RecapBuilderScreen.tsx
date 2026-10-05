@@ -39,27 +39,35 @@ export function RecapBuilderScreen() {
   const [year, setYear] = useState<YearInPixels | null>(null);
   const [format, setFormat] = useState<ShareFormat>(params.format);
   const [prefs, setPrefs] = useState<Partial<Includes>>({});
-  const [loadFailed, setLoadFailed] = useState(false);
+  // The format whose stored choices have loaded: until then an export could miss a switched-off part.
+  const [prefsFormat, setPrefsFormat] = useState<ShareFormat | null>(null);
+  const [recapFailed, setRecapFailed] = useState(false);
+  const [yearFailed, setYearFailed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<Notice | null>(null);
   const exportRef = useRef<View>(null);
+  // Two presses in one frame both see busy === false; the ref lets only the first through.
+  const inFlight = useRef(false);
 
   useEffect(() => {
     if (!params.id) return;
-    fetchRecap(params.id).then(setRecap, () => setLoadFailed(true));
+    fetchRecap(params.id).then(setRecap, () => setRecapFailed(true));
   }, [params.id]);
 
   useEffect(() => {
-    if (format !== 'year' || year) return;
-    loadYearInPixels(todayCivil()).then(setYear, () => setLoadFailed(true));
-  }, [format, year]);
+    if (format !== 'year' || year || yearFailed) return;
+    loadYearInPixels(todayCivil()).then(setYear, () => setYearFailed(true));
+  }, [format, year, yearFailed]);
 
   useEffect(() => {
     let cancelled = false;
     setPrefs({});
+    setPrefsFormat(null);
     // A switch flipped while the stored choices load wins over them.
     void readIncludePrefs(format).then((stored) => {
-      if (!cancelled) setPrefs((current) => ({ ...stored, ...current }));
+      if (cancelled) return;
+      setPrefs((current) => ({ ...stored, ...current }));
+      setPrefsFormat(format);
     });
     return () => {
       cancelled = true;
@@ -72,6 +80,8 @@ export function RecapBuilderScreen() {
   const available = availableIncludes(format, stats);
   const ready = format === 'year' ? year !== null : recap !== null;
   const layout = exportLayout(format, PixelRatio.get());
+  const canExport = ready && prefsFormat === format && !busy;
+  const loadError = format === 'year' ? (yearFailed ? "Your year couldn't be loaded." : null) : recapFailed ? 'Your recap could not be loaded.' : null;
 
   function toggle(key: IncludeKey, value: boolean) {
     const next = { ...prefs, [key]: value };
@@ -94,7 +104,8 @@ export function RecapBuilderScreen() {
   }
 
   async function run(after: (uri: string) => Promise<void>) {
-    if (busy) return;
+    if (inFlight.current) return;
+    inFlight.current = true;
     setBusy(true);
     setNotice(null);
     try {
@@ -109,6 +120,7 @@ export function RecapBuilderScreen() {
     } catch {
       setNotice('failed');
     } finally {
+      inFlight.current = false;
       setBusy(false);
     }
   }
@@ -145,16 +157,23 @@ export function RecapBuilderScreen() {
             Open Settings
           </Button>
         ) : null}
-        {loadFailed ? (
-          <Text testID="builder-load-error" className="text-sm text-destructive">
-            Your recap could not be loaded.
-          </Text>
+        {loadError ? (
+          <View className="gap-2">
+            <Text testID="builder-load-error" className="text-sm text-destructive">
+              {loadError}
+            </Text>
+            {format === 'year' ? (
+              <Button testID="builder-retry" variant="secondary" size="sm" onPress={() => setYearFailed(false)}>
+                Try again
+              </Button>
+            ) : null}
+          </View>
         ) : null}
         <View className="flex-row gap-3">
-          <Button testID="builder-save" className="flex-1" variant="secondary" disabled={!ready || busy} onPress={() => void run(async (uri) => setNotice((await saveImage(uri)) === 'saved' ? 'saved' : 'denied'))}>
+          <Button testID="builder-save" className="flex-1" variant="secondary" disabled={!canExport} onPress={() => void run(async (uri) => setNotice((await saveImage(uri)) === 'saved' ? 'saved' : 'denied'))}>
             Save image
           </Button>
-          <Button testID="builder-share" className="flex-1" disabled={!ready || busy} onPress={() => void run((uri) => shareImage(uri))}>
+          <Button testID="builder-share" className="flex-1" disabled={!canExport} onPress={() => void run((uri) => shareImage(uri))}>
             Share
           </Button>
         </View>

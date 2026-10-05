@@ -2,7 +2,9 @@ import type { RefObject } from 'react';
 import type { View } from 'react-native';
 import { ImageFormat, makeImageFromView } from '@shopify/react-native-skia';
 import { File, Paths } from 'expo-file-system';
-import * as MediaLibrary from 'expo-media-library';
+// The package root's saveToLibraryAsync is a stub that always throws (expo-media-library 57); the
+// legacy entry is the real add-only save with write-only permissions (iOS addOnly, Android no READ).
+import * as MediaLibrary from 'expo-media-library/legacy';
 import * as Sharing from 'expo-sharing';
 
 // Recap image export (spec 2026-10-04 §3). The ref is the OFF-SCREEN export view, laid out at

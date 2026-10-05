@@ -20,7 +20,8 @@ jest.mock('expo-haptics', () => ({
 jest.mock('@shopify/react-native-skia', () => require('./jest-mocks/skia'));
 jest.mock('expo-file-system', () => require('./jest-mocks/expoFileSystem'));
 jest.mock('expo-sharing', () => ({ shareAsync: jest.fn(() => Promise.resolve()), isAvailableAsync: jest.fn(() => Promise.resolve(true)) }));
-jest.mock('expo-media-library', () => ({
+// The legacy entry is the one the app imports: the package root's saveToLibraryAsync always throws.
+jest.mock('expo-media-library/legacy', () => ({
   getPermissionsAsync: jest.fn(),
   requestPermissionsAsync: jest.fn(),
   saveToLibraryAsync: jest.fn(() => Promise.resolve()),

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Linking, PixelRatio } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { characterLabel, withCharacter } from '../../jest-mocks/characterContext';
 import { fetchRecap, type Recap } from '../../src/api/recaps';
 import { fetchSleep, fetchSleepGoal } from '../../src/api/sleep';
@@ -145,4 +145,49 @@ it('keeps a switch flipped before the stored choices finish loading', async () =
   await waitFor(() => expect(screen.getByTestId('builder-include-steps').props.value).toBe(false));
   expect(screen.getByTestId('builder-include-quote').props.value).toBe(false);
   expect(preview().queryByTestId('preview-quote')).toBeNull();
+});
+
+it("won't export until the format's stored choices have loaded, also after a format switch", async () => {
+  const reads: Record<string, (v: string | null) => void> = {};
+  (SecureStore.getItemAsync as jest.Mock).mockImplementation((k: string) => new Promise((r) => (reads[k] = r)));
+  render(withCharacter(<RecapBuilderScreen />));
+  await screen.findByTestId('preview-quote');
+  expect(screen.getByTestId('builder-save')).toBeDisabled();
+  expect(screen.getByTestId('builder-share')).toBeDisabled();
+  await act(async () => reads['recapInclude.card']!(null));
+  expect(screen.getByTestId('builder-share')).toBeEnabled();
+
+  fireEvent.press(screen.getByTestId('builder-format-year'));
+  await screen.findByTestId('preview-count');
+  expect(screen.getByTestId('builder-share')).toBeDisabled();
+  await act(async () => reads['recapInclude.year']!(JSON.stringify({ coach: false })));
+  expect(screen.getByTestId('builder-share')).toBeEnabled();
+  expect(preview().queryByTestId('preview-coach')).toBeNull();
+});
+
+it('runs one export at a time, even for presses in the same frame', async () => {
+  let finish!: (uri: string) => void;
+  (captureToPng as jest.Mock).mockImplementation(() => new Promise((r) => (finish = r)));
+  render(withCharacter(<RecapBuilderScreen />));
+  const share = await screen.findByTestId('builder-share');
+  await waitFor(() => expect(share).toBeEnabled());
+  // Both presses land before React re-renders with the button disabled.
+  await act(async () => {
+    const onPress = screen.UNSAFE_getByProps({ testID: 'builder-share' }).props.onPress as () => void;
+    onPress();
+    onPress();
+  });
+  expect(captureToPng).toHaveBeenCalledTimes(1);
+  await act(async () => finish(URI));
+  expect(shareImage).toHaveBeenCalledTimes(1);
+});
+
+it("says when the year couldn't be loaded and tries again", async () => {
+  mockParams = { format: 'year' };
+  (fetchSleep as jest.Mock).mockRejectedValueOnce(new Error('offline'));
+  render(withCharacter(<RecapBuilderScreen />));
+  expect(await screen.findByTestId('builder-load-error')).toHaveTextContent("Your year couldn't be loaded.");
+  fireEvent.press(screen.getByTestId('builder-retry'));
+  expect(await screen.findByTestId('preview-count')).toBeTruthy();
+  expect(screen.queryByTestId('builder-load-error')).toBeNull();
 });
