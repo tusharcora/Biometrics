@@ -102,14 +102,12 @@ const BASE_EXEMPT_PATTERNS: RegExp[] = [
   /(?<=\d)\s*\/\s*100\b/g,
   /(?<=\d)\s+out\s+of\s+100\b/gi,
 ];
-/** An ordinal: "the 14th". Off under exactNumbers, where "your 6th straight night" is a claim. */
-const ORDINAL_EXEMPT_PATTERN = /\b\d{1,2}(st|nd|rd|th)\b/g;
 /**
- * A day before a month name: "9 October", "9 of October". Only under exactNumbers, where ordinals
- * were read as digits first ("9th October" → "9 October"); the chat check exempts them as ordinals.
+ * An ordinal: "the 14th", "9th October", "your 3rd best month". Under exactNumbers an ordinal
+ * before a count noun ("your 6th straight night") was already read as digits (ordinalsToDigits),
+ * so only the others stay exempt.
  */
-const DAY_MONTH_EXEMPT_PATTERN =
-  /\b\d{1,2}\s+(?:of\s+)?(?:January|February|March|April|May|June|July|August|September|October|November|December|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sept|Sep|Oct|Nov|Dec)\b\.?(,?\s+\d{4}\b)?/g;
+const ORDINAL_EXEMPT_PATTERN = /\b\d{1,2}(st|nd|rd|th)\b/g;
 /** The sheet's averaging windows. Off under exactNumbers, where "a 7-night streak" is a claim. */
 const WINDOW_EXEMPT_PATTERNS: RegExp[] = [
   // The sheet's windows: "7-day average", "30-night", "the last 30 days", and the trend label's own
@@ -119,7 +117,7 @@ const WINDOW_EXEMPT_PATTERNS: RegExp[] = [
   new RegExp(String.raw`\b(?:over|in|across|for)\s+(?:the\s+)?(?:(?:last|past)\s+)?${WINDOW_DAYS}\s+(?:days|nights)\b`, 'gi'),
 ];
 const EXEMPT_PATTERNS: RegExp[] = [...BASE_EXEMPT_PATTERNS, ORDINAL_EXEMPT_PATTERN, ...WINDOW_EXEMPT_PATTERNS];
-const EXACT_EXEMPT_PATTERNS: RegExp[] = [...BASE_EXEMPT_PATTERNS, DAY_MONTH_EXEMPT_PATTERN];
+const EXACT_EXEMPT_PATTERNS: RegExp[] = [...BASE_EXEMPT_PATTERNS, ORDINAL_EXEMPT_PATTERN];
 
 /** A unit right after a plain number, which limits what the number may match. */
 const UNIT_AFTER: Array<[RegExp, Family]> = [
@@ -131,11 +129,12 @@ const UNIT_AFTER: Array<[RegExp, Family]> = [
 ];
 
 /**
- * What may sit between a count and its noun: "5 of 6 nights", "5 out of 6 nights", and up to two
+ * What may sit between a count and its noun: "5 of 6 nights", "5 out of 6 nights", "20 of
+ * October's 28 nights" (also "of the"/"of your"), and up to two
  * of a closed set of adjectives ("5 straight nights", "3 late nights"). A closed set keeps
  * "5 Friday nights", "6 a night" and "4 this time" from reading as counts.
  */
-const COUNT_LEAD = String.raw`^\s*(?:(?:out\s+)?of\s+\d+\s+)?(?:(?:straight|consecutive|full|good|great|solid|restful|better|short|shorter|long|longer|late|later|early|earlier|separate|different|whole|total)\s+){0,2}`;
+const COUNT_LEAD = String.raw`^\s*(?:(?:out\s+)?of\s+(?:(?:the|your|(?:January|February|March|April|May|June|July|August|September|October|November|December)['’]s)\s+)?\d+\s+)?(?:(?:straight|consecutive|full|good|great|solid|restful|better|short|shorter|long|longer|late|later|early|earlier|separate|different|whole|total)\s+){0,2}`;
 /** Count units after a number, recognised only with exactNumbers so chat and digest checks are unchanged. */
 const COUNT_UNIT_AFTER: Array<[RegExp, Family]> = [
   [new RegExp(String.raw`${COUNT_LEAD}-?\s*nights?\b`, 'i'), 'nights'],
@@ -176,10 +175,13 @@ const WORD_NUMBER_RE = new RegExp(
 /**
  * Under exactNumbers every number word is a checked number, whatever follows it (fail-safe beats
  * prose: "Two things stood out" is rejected). Only "a"/"an" on their own and "one of" ("one of
- * your best weeks") stay prose; "a"/"an" before a scale is 1 ("a hundred").
+ * your best weeks") stay prose; "a"/"an" before a scale is 1 ("a hundred"). A tens word that
+ * leads an ordinal left as prose ("your twenty-third week") stays prose with it.
  */
+const ORDINAL_ONES = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth'];
+const ORDINAL_TEENS = ['tenth', 'eleventh', 'twelfth', 'thirteenth', 'fourteenth', 'fifteenth', 'sixteenth', 'seventeenth', 'eighteenth', 'nineteenth'];
 const ANY_NUMBER_WORD_RE = new RegExp(
-  String.raw`\b(?:(${TENS.join('|')})(?:[-\s]+(${ONES.slice(1, 10).join('|')}))?|(${ONES.map((w) => (w === 'one' ? String.raw`one(?!\s+of\b)` : w)).join('|')})|(an?)(?=\s+(?:hundred|thousand)\b))(?:\s+(hundred|thousand))?\b`,
+  String.raw`\b(?:(${TENS.join('|')})(?![-\s]+(?:${ORDINAL_ONES.join('|')})\b)(?:[-\s]+(${ONES.slice(1, 10).join('|')}))?|(${ONES.map((w) => (w === 'one' ? String.raw`one(?!\s+of\b)` : w)).join('|')})|(an?)(?=\s+(?:hundred|thousand)\b))(?:\s+(hundred|thousand))?\b`,
   'gi',
 );
 /** Count words with no digit form, read before ANY_NUMBER_WORD_RE so their "a" is taken with them. */
@@ -193,8 +195,6 @@ const COUNT_WORDS: Array<[RegExp, string]> = [
   [/\ba\s+(?:full\s+|whole\s+)?week\s+straight\b/gi, '7 nights'],
   [/\ba\s+(?:full\s+|whole\s+)?fortnight\s+straight\b/gi, '14 nights'],
 ];
-const ORDINAL_ONES = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth'];
-const ORDINAL_TEENS = ['tenth', 'eleventh', 'twelfth', 'thirteenth', 'fourteenth', 'fifteenth', 'sixteenth', 'seventeenth', 'eighteenth', 'nineteenth'];
 /** Ordinal words first..thirty-first, read before ANY_NUMBER_WORD_RE so "twenty-first" is not taken as "twenty". */
 const ORDINAL_WORD_RE = new RegExp(
   String.raw`\b(?:(thirty)[-\s]+(first)|(?:(twenty)[-\s]+)?(${ORDINAL_ONES.join('|')})|(${ORDINAL_TEENS.join('|')})|(twentieth|thirtieth))\b`,
@@ -203,16 +203,26 @@ const ORDINAL_WORD_RE = new RegExp(
 /** A numeric ordinal's suffix: "6th" → "6", so "your 6th straight night" is a count of 6. */
 const NUMERIC_ORDINAL_RE = /\b(\d{1,2})(?:st|nd|rd|th)\b/gi;
 
-/** "fifth" → "5", "twenty-first" → "21", "6th" → "6"; dates stay exempt (DAY_MONTH_EXEMPT_PATTERN and the month-first rule). */
+/** Whether a count noun phrase follows, as the count check reads it ("straight night", "nights on goal"). */
+const beforeCountNoun = (rest: string) => COUNT_UNIT_AFTER.some(([re]) => re.test(rest));
+
+/**
+ * An ordinal before a count noun is a count: "your fifth straight night" → "your 5 straight night",
+ * "6th night" → "6 night", "twenty-first night" → "21 night". Any other ordinal is left as written
+ * and stays prose ("a third of your nights", "your 3rd best month", "9th October", "Oct 9th").
+ */
 function ordinalsToDigits(text: string): string {
   return text
-    .replace(ORDINAL_WORD_RE, (_m, thirty?: string, thirtyOne?: string, twenty?: string, one?: string, teen?: string, round?: string) => {
+    .replace(ORDINAL_WORD_RE, (match: string, thirty?: string, thirtyOne?: string, twenty?: string, one?: string, teen?: string, round?: string, offset?: number) => {
+      if (!beforeCountNoun(text.slice(offset! + match.length))) return match;
       if (thirty !== undefined && thirtyOne !== undefined) return '31';
       if (one !== undefined) return String((twenty !== undefined ? 20 : 0) + ORDINAL_ONES.indexOf(one.toLowerCase()) + 1);
       if (teen !== undefined) return String(10 + ORDINAL_TEENS.indexOf(teen.toLowerCase()));
       return round!.toLowerCase() === 'twentieth' ? '20' : '30';
     })
-    .replace(NUMERIC_ORDINAL_RE, '$1');
+    .replace(NUMERIC_ORDINAL_RE, (match: string, digits: string, offset: number, all: string) =>
+      beforeCountNoun(all.slice(offset + match.length)) ? digits : match,
+    );
 }
 /** A scale with no number word before it: "a perfect hundred", "the hundred mark". */
 const BARE_SCALE: Array<[RegExp, string]> = [

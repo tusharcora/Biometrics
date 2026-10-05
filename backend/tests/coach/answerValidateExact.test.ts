@@ -214,6 +214,36 @@ describe('validateSentence with exactNumbers (recaps)', () => {
       expect(validateSentence('You were on goal a fortnight straight.', nights(7), EXACT)).toEqual(unknown);
     });
 
+    it('never exempts a count before a month name as a date (re-review)', () => {
+      const month: FactSheet = {
+        route: 'recap',
+        facts: [
+          { id: 'sleep.on_goal', label: 'Nights at or above the sleep goal', value: 20, unit: 'nights', display: '20 nights' },
+          { id: 'sleep.nights', label: 'Nights with sleep recorded', value: 28, unit: 'nights', display: '28 nights' },
+        ],
+        notes: [],
+      };
+      expect(validateSentence("You were on goal 25 of October's 28 nights.", month, EXACT)).toEqual(unknown);
+      expect(validateSentence("You were on goal 20 of October's 28 nights.", month, EXACT)).toEqual(ok);
+      expect(validateSentence('You hit goal on 25 October nights.', month, EXACT)).toEqual(unknown);
+      // Like "5 Friday nights", a month name is not in COUNT_LEAD's closed set, so this shape is
+      // never a recognised count: fail-safe even when true. The plain shape passes.
+      expect(validateSentence('You hit goal on 20 October nights.', month, EXACT)).toEqual(unknown);
+      expect(validateSentence('You hit goal on 20 nights in October.', month, EXACT)).toEqual(ok);
+      expect(validateSentence('You hit goal on 25 nights in October.', month, EXACT)).toEqual(unknown);
+    });
+
+    it('leaves an ordinal alone unless a count noun follows it (re-review)', () => {
+      for (const sentence of ['A third of your nights were on goal.', 'You were on goal for the third week.', 'This was your 3rd best month.', 'That was your second week running on goal.', 'It was your twenty-third week of tracking.']) {
+        expect([sentence, validateSentence(sentence, RECAP, EXACT)]).toEqual([sentence, ok]);
+      }
+      // Before a count noun the ordinal is still a checked count.
+      expect(validateSentence('It was your fourth night on goal.', RECAP, EXACT)).toEqual(ok);
+      expect(validateSentence('It was your fifth night on goal.', RECAP, EXACT)).toEqual(ok);
+      expect(validateSentence('It was your seventh night on goal.', RECAP, EXACT)).toEqual(unknown);
+      expect(validateSentence('It was your 7th night on goal.', RECAP, EXACT)).toEqual(unknown);
+    });
+
     it('leaves the chat check unchanged for these forms', () => {
       expect(validateSentence('You were on goal a couple nights.', RECAP)).toEqual(ok);
       expect(validateSentence('You were on goal a week straight.', RECAP)).toEqual(ok);
