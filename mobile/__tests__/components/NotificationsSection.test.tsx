@@ -55,6 +55,45 @@ it('a denied permission saves nothing and explains; it is never re-prompted here
   expect(screen.getByTestId('recap-ready-toggle').props.value).toBe(false);
 });
 
+it('shows the blocked message on load when the system already denied notifications', async () => {
+  state.mockResolvedValue({ status: 'denied' });
+  render(<NotificationsSection />);
+  expect(await screen.findByText('Notifications are blocked — enable them in system settings')).toBeTruthy();
+  expect(screen.getByTestId('recap-ready-toggle').props.value).toBe(false);
+});
+
+it('says notifications are unavailable, rather than vanishing, when turning on finds no push support', async () => {
+  enable.mockResolvedValue({ status: 'unavailable', reason: 'simulator' });
+  render(<NotificationsSection />);
+  fireEvent(await screen.findByTestId('recap-ready-toggle'), 'valueChange', true);
+  expect(await screen.findByText("Notifications aren't available in this build.")).toBeTruthy();
+  expect(screen.getByTestId('recap-ready-toggle').props.value).toBe(false);
+  expect(save).not.toHaveBeenCalled();
+});
+
+it('says so when registering this device failed, and saves nothing', async () => {
+  enable.mockResolvedValue({ status: 'error', reason: 'offline' });
+  render(<NotificationsSection />);
+  fireEvent(await screen.findByTestId('recap-ready-toggle'), 'valueChange', true);
+  expect(await screen.findByText("Couldn't turn on notifications. Try again.")).toBeTruthy();
+  expect(screen.queryByText('Your recap setting could not be saved. Please try again.')).toBeNull();
+  expect(screen.getByTestId('recap-ready-toggle').props.value).toBe(false);
+  expect(save).not.toHaveBeenCalled();
+});
+
+it('ignores a second flip while the first is still in flight', async () => {
+  let finish!: (s: { status: 'on' }) => void;
+  enable.mockReturnValue(new Promise((r) => (finish = r)));
+  fetchSettings.mockResolvedValue({ recapPushEnabled: false });
+  render(<NotificationsSection />);
+  const toggle = await screen.findByTestId('recap-ready-toggle');
+  fireEvent(toggle, 'valueChange', true);
+  fireEvent(toggle, 'valueChange', true);
+  await act(async () => finish({ status: 'on' }));
+  await waitFor(() => expect(save).toHaveBeenCalledTimes(1));
+  expect(enable).toHaveBeenCalledTimes(1);
+});
+
 it('turning it off only saves the setting and keeps this device registered', async () => {
   state.mockResolvedValue({ status: 'on' });
   render(<NotificationsSection />);

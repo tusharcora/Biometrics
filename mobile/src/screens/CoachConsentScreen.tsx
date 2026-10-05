@@ -12,7 +12,6 @@ import { Skeleton } from '../components/ui/skeleton';
 import { SettingsGroup, SettingsRow } from '../components/ui/settings-list';
 import { Character } from '../components/characters/Character';
 import { useScreenFocused } from '../characters/useScreenFocused';
-import { enablePush } from '../lib/pushRegistration';
 import { COLORS } from '../theme';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { navigateToCoachEntry } from '../navigation/coachNavigation';
@@ -69,11 +68,6 @@ export function CoachConsentScreen() {
     setError(null);
     try {
       await acceptCoachConsent(version);
-      // Turning the coach on registers this device for notifications, as it
-      // always has (spec 2026-10-04 §2). Best-effort and never awaited: a
-      // denied permission is not re-prompted, and the "Recap ready" switch in
-      // Settings stays the only visible control.
-      void enablePush();
       navigateToCoachEntry(navigation, 'Coach', prefill);
     } catch (e) {
       if (e instanceof StaleConsentVersionError) {

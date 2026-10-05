@@ -3,9 +3,6 @@ import { characterLabel, withCharacter } from '../../jest-mocks/characterContext
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { CoachConsentScreen } from '../../src/screens/CoachConsentScreen';
 import { acceptCoachConsent, fetchCoachStatus, StaleConsentVersionError, type CoachStatusDTO } from '../../src/api/coach';
-import { enablePush } from '../../src/lib/pushRegistration';
-
-jest.mock('../../src/lib/pushRegistration');
 
 jest.mock('../../src/api/coach', () => ({
   ...jest.requireActual('../../src/api/coach'),
@@ -40,7 +37,6 @@ beforeEach(() => {
   mockParams = undefined;
   (fetchCoachStatus as jest.Mock).mockResolvedValue(status);
   (acceptCoachConsent as jest.Mock).mockResolvedValue({ consented: true });
-  (enablePush as jest.Mock).mockResolvedValue({ status: 'on' });
 });
 
 describe('CoachConsentScreen', () => {
@@ -76,27 +72,6 @@ describe('CoachConsentScreen', () => {
 
     await waitFor(() => expect(acceptCoachConsent).toHaveBeenCalledWith('v1'));
     await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('Tabs', { screen: 'Coach', params: { prefill: 'Why did my score change today?' } }, { pop: true }));
-  });
-
-  it('registers this device for notifications once consent is saved, as turning the coach on always has', async () => {
-    const { findByTestId } = render(<CoachConsentScreen />);
-    await findByTestId('coach-consent-agree');
-    expect(enablePush).not.toHaveBeenCalled();
-
-    fireEvent.press(await findByTestId('coach-consent-agree'));
-
-    await waitFor(() => expect(enablePush).toHaveBeenCalledTimes(1));
-    expect((acceptCoachConsent as jest.Mock).mock.invocationCallOrder[0]).toBeLessThan((enablePush as jest.Mock).mock.invocationCallOrder[0]!);
-  });
-
-  it('does not touch notifications when consent could not be saved', async () => {
-    (acceptCoachConsent as jest.Mock).mockRejectedValueOnce(new Error('offline'));
-    const { findByTestId } = render(<CoachConsentScreen />);
-
-    fireEvent.press(await findByTestId('coach-consent-agree'));
-
-    expect(await findByTestId('coach-consent-error')).toBeTruthy();
-    expect(enablePush).not.toHaveBeenCalled();
   });
 
   it('"Not now" leaves the coach off: goes back and never calls the consent API', async () => {
