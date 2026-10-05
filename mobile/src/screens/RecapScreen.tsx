@@ -25,8 +25,9 @@ import { openRecap } from '../lib/unwatchedRecap';
 type State = { phase: 'loading' } | { phase: 'ready'; recap: Recap } | { phase: 'missing' } | { phase: 'error' };
 
 // One recap (spec 2026-10-04 §3): a month (1d) with its milestones and comparison, or a week as its
-// story card with the paragraph under it. Reached from the Recaps list, the Home card, the coach
-// digest card and a tapped push. Marked opened (its own POST) once it is on screen.
+// story card with the paragraph under it. Reached from the Recaps list, a ringed avatar or the
+// Sleep shelf (a month), the coach digest card, a month's push and "See full recap" at the end of
+// a week's story. Marked opened (its own POST, through the ring's store) once it is on screen.
 export function RecapScreen() {
   const { params } = useRoute<any>() as { params: { id: string } };
   const navigation = useNavigation<any>();
