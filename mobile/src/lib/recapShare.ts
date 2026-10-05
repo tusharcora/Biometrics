@@ -80,6 +80,49 @@ export function recapCoachId(recap: { personaId: string | null }, current: Chara
   return isCharacterId(recap.personaId) ? recap.personaId : current;
 }
 
+// The coach's quote never truncates on an image: it is sized to its box from an estimate of its
+// wrapped lines, and the Text keeps adjustsFontSizeToFit as a net for when the estimate is short.
+/** Line height of the drawn quote, as a multiple of its font size. */
+export const QUOTE_LINE_HEIGHT = 1.25;
+/** adjustsFontSizeToFit's floor, relative to the fitted size. */
+export const QUOTE_MIN_FONT_SCALE = 0.7;
+const QUOTE_MIN_FONT = 12;
+// Mean advance of Instrument Serif, spaces included, in ems: rounded up so the estimate wraps early.
+const QUOTE_ADVANCE_EM = 0.42;
+
+/** Lines the quote wraps to at this size (greedy word wrap on the mean advance), in design units. */
+export function quoteLines(text: string, fontSize: number, width: number): number {
+  const perLine = Math.max(1, Math.floor(width / (fontSize * QUOTE_ADVANCE_EM)));
+  let lines = 1;
+  let used = 0;
+  for (const word of text.split(/\s+/).filter(Boolean)) {
+    const needed = used === 0 ? word.length : used + 1 + word.length;
+    if (needed <= perLine || used === 0) {
+      used = needed;
+    } else {
+      lines++;
+      used = word.length;
+    }
+    // A word longer than a line breaks across lines.
+    while (used > perLine) {
+      lines++;
+      used -= perLine;
+    }
+  }
+  return lines;
+}
+
+/** The largest size (base down to 12, whole points) at which the wrapped quote fits the box. */
+export function fitQuote(text: string, width: number, maxHeight: number, baseSize: number): { fontSize: number; lines: number } {
+  let fontSize = baseSize;
+  let lines = quoteLines(text, fontSize, width);
+  while (fontSize > QUOTE_MIN_FONT && lines * fontSize * QUOTE_LINE_HEIGHT > maxHeight) {
+    fontSize--;
+    lines = quoteLines(text, fontSize, width);
+  }
+  return { fontSize, lines };
+}
+
 /** The on-screen preview's scale: the design fitted into a box. Never captured. */
 export function previewScale(format: ShareFormat, maxWidth: number, maxHeight: number): number {
   return Math.min(maxWidth / DESIGN_WIDTH, maxHeight / DESIGN_HEIGHT[format]);

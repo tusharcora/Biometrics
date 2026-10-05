@@ -40,19 +40,22 @@ export function YearPixelsView({ year, pixels, goalMinutes, coachId, includes, s
                 key={cell.date}
                 testID={`${testID}-cell-${cell.date}`}
                 accessibilityLabel={cell.level}
-                style={{ width: u(CELL), height: u(CELL), borderRadius: u(2), backgroundColor: fill(cell.level), borderWidth: cell.level === 'none' ? 1 : 0, borderColor: c.hairline }}
+                style={{ width: u(CELL), height: u(CELL), borderRadius: u(2), backgroundColor: fill(cell.level), borderWidth: cell.level === 'none' ? u(1) : 0, borderColor: c.hairline }}
               />
             ))}
           </View>
         ))}
       </View>
       <View style={{ gap: u(4) }}>
+        {/* The caption qualifies the count, so it goes with it. */}
         {includes.count ? (
-          <Text testID={`${testID}-count`} style={{ fontFamily: FONTS.sansBold, fontSize: u(18), color: c.foreground }}>
-            {`${pixels.onGoal} ${pixels.onGoal === 1 ? 'night' : 'nights'} on goal`}
-          </Text>
+          <>
+            <Text testID={`${testID}-count`} style={{ fontFamily: FONTS.sansBold, fontSize: u(18), color: c.foreground }}>
+              {`${pixels.onGoal} ${pixels.onGoal === 1 ? 'night' : 'nights'} on goal`}
+            </Text>
+            <Text testID={`${testID}-caption`} style={{ fontFamily: FONTS.sans, fontSize: u(11), color: c.muted }}>{`on your current goal of ${goalLabel(goalMinutes)}`}</Text>
+          </>
         ) : null}
-        <Text testID={`${testID}-caption`} style={{ fontFamily: FONTS.sans, fontSize: u(11), color: c.muted }}>{`on your current goal of ${goalLabel(goalMinutes)}`}</Text>
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
         {includes.coach ? (
