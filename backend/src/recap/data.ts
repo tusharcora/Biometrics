@@ -93,16 +93,23 @@ export async function hasNewerInputs(userId: string, from: string, to: string, s
 }
 
 /**
- * The nightly sweep's own staleness test (spec §2): for every date in the period that has a score,
- * DailyScore.updatedAt ≥ that date's SLEEP rollup syncedAt. STEPS never trigger a rescore, so they
- * are left out.
+ * The nightly sweep's own staleness test (spec §2): every date in the period with a positive SLEEP
+ * rollup has a SLEEP DailyScore row (as scoring/sweep.ts expects one for any day with a SLEEP
+ * input), and every score row's updatedAt ≥ that date's SLEEP rollup syncedAt. Without the first
+ * rule a late night synced before its debounced score exists would let the one rebuild run
+ * without it. STEPS never trigger a rescore, so they are left out.
  */
 export async function scoresCaughtUp(userId: string, from: string, to: string): Promise<boolean> {
   const { gte, lt } = bounds(from, to);
   const [sleeps, scores] = await Promise.all([
-    prisma.biometricRecord.findMany({ where: { userId, metricType: 'SLEEP', recordedAt: { gte, lt } }, select: { recordedAt: true, syncedAt: true } }),
-    prisma.dailyScore.findMany({ where: { userId, date: { gte, lt } }, select: { date: true, updatedAt: true } }),
+    prisma.biometricRecord.findMany({
+      where: { userId, metricType: 'SLEEP', recordedAt: { gte, lt } },
+      select: { recordedAt: true, syncedAt: true, value: true },
+    }),
+    prisma.dailyScore.findMany({ where: { userId, date: { gte, lt } }, select: { date: true, type: true, updatedAt: true } }),
   ]);
+  const sleepScored = new Set(scores.filter((s) => s.type === 'SLEEP').map((s) => dateKey(s.date)));
+  if (sleeps.some((s) => s.value > 0 && !sleepScored.has(dateKey(s.recordedAt)))) return false;
   const synced = new Map(sleeps.map((s) => [dateKey(s.recordedAt), s.syncedAt]));
   return scores.every((s) => {
     const at = synced.get(dateKey(s.date));

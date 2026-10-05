@@ -63,6 +63,25 @@ describe('loadRecapData', () => {
     expect(data.has('2026-10-02')).toBe(false);
     expect(data.get('2026-10-03')).toEqual({ steps: 5000 });
   });
+
+  it("keys the night and reads the bedtime at the session's own offsets, not the user's zone", async () => {
+    const user = await createUser();
+    // 22:30–23:50 at −05:00 on Sep 30 is 12:30–13:50 Oct 1 in Tokyo (+09:00).
+    await prisma.biometricRecord.create({ data: { userId: user.id, metricType: 'SLEEP', value: 75, recordedAt: civilDateToUtcMidnight('2026-09-30') } });
+    await prisma.sleepSession.create({
+      data: {
+        userId: user.id,
+        startTime: new Date('2026-10-01T03:30:00Z'),
+        endTime: new Date('2026-10-01T04:50:00Z'),
+        minutesAsleep: 75,
+        startUtcOffsetSeconds: -5 * 3600,
+        endUtcOffsetSeconds: -5 * 3600,
+      },
+    });
+    const data = await loadRecapData(user.id, 'Asia/Tokyo', '2026-09-28', '2026-10-04');
+    expect(data.get('2026-09-30')).toEqual({ sleepMinutes: 75, bedtime: 630 });
+    expect(data.has('2026-10-01')).toBe(false);
+  });
 });
 
 describe('recapDataRange', () => {
@@ -114,11 +133,35 @@ describe('freshness', () => {
     expect(await hasNewerInputs(user.id, '2026-09-28', '2026-10-04', new Date('2026-10-05T09:00:00Z'))).toBe(true);
   });
 
+  it('is not caught up while a night with a positive SLEEP rollup has no SLEEP score yet', async () => {
+    const user = await createUser();
+    await seedNight(user.id, '2026-10-01', { minutes: 455, sleepScore: 80, recovery: 60 });
+    // Zero and absent rollups expect no score, so they never block.
+    await prisma.biometricRecord.create({ data: { userId: user.id, metricType: 'SLEEP', value: 0, recordedAt: civilDateToUtcMidnight('2026-10-02') } });
+    expect(await scoresCaughtUp(user.id, '2026-09-28', '2026-10-04')).toBe(true);
+    // A late night synced before its debounced score exists: blocks, even with only RECOVERY.
+    await seedNight(user.id, '2026-10-03', { minutes: 430, recovery: 55 });
+    expect(await scoresCaughtUp(user.id, '2026-09-28', '2026-10-04')).toBe(false);
+    await prisma.dailyScore.create({
+      data: { userId: user.id, date: civilDateToUtcMidnight('2026-10-03'), type: 'SLEEP', algorithmVersion: 'v-test', score: 70, confidenceLevel: 'HIGH', factors: [], updatedAt: new Date('2026-10-05T07:00:00Z') },
+    });
+    expect(await scoresCaughtUp(user.id, '2026-09-28', '2026-10-04')).toBe(true);
+  });
+
+  it('a STEPS-only resync is newer input but leaves scoresCaughtUp alone', async () => {
+    const user = await createUser();
+    await seedNight(user.id, '2026-10-01', { minutes: 455, sleepScore: 80, steps: 8000 });
+    const builtAt = new Date('2026-10-05T09:00:00Z');
+    expect(await hasNewerInputs(user.id, '2026-09-28', '2026-10-04', builtAt)).toBe(false);
+    await prisma.biometricRecord.updateMany({ where: { userId: user.id, metricType: 'STEPS' }, data: { syncedAt: new Date('2026-10-05T10:00:00Z') } });
+    expect(await hasNewerInputs(user.id, '2026-09-28', '2026-10-04', builtAt)).toBe(true);
+    expect(await scoresCaughtUp(user.id, '2026-09-28', '2026-10-04')).toBe(true);
+  });
+
   it('waits until every scored date was scored after its SLEEP rollup last synced', async () => {
     const user = await createUser();
     // Seeded rollups sync at SYNCED (06:00) and are scored at SCORED (06:30).
-    await seedNight(user.id, '2026-10-01', { minutes: 455, recovery: 60 });
-    await seedNight(user.id, '2026-10-02', { minutes: 455 }); // no score: never blocks
+    await seedNight(user.id, '2026-10-01', { minutes: 455, sleepScore: 80, recovery: 60 });
     expect(await scoresCaughtUp(user.id, '2026-09-28', '2026-10-04')).toBe(true);
     await prisma.biometricRecord.updateMany({ where: { userId: user.id, metricType: 'SLEEP', recordedAt: civilDateToUtcMidnight('2026-10-01') }, data: { syncedAt: new Date('2026-10-05T07:00:00Z') } });
     expect(await scoresCaughtUp(user.id, '2026-09-28', '2026-10-04')).toBe(false);
