@@ -122,10 +122,40 @@ describe('validateSentence with exactNumbers (recaps)', () => {
     expect(validateSentence('You logged sleep on a dozen nights.', RECAP, EXACT)).toEqual(unknown);
     expect(validateSentence('You were on goal five out of six nights.', RECAP, EXACT)).toEqual(ok);
     expect(validateSentence('You were on goal three out of six nights.', RECAP, EXACT)).toEqual(unknown);
-    // "one", "a" and "an" stay prose unless a unit follows.
-    expect(validateSentence('One thing stood out: you were on goal 5 nights.', RECAP, EXACT)).toEqual(ok);
+    // Only a lone "a"/"an" and "one of" stay prose.
+    expect(validateSentence('That was one of your best weeks, on goal 5 nights.', RECAP, EXACT)).toEqual(ok);
+    expect(validateSentence('It was an easy week, with a 4-night streak.', RECAP, EXACT)).toEqual(ok);
     // The chat check is unchanged.
     expect(validateSentence('Your best recovery was eighty-eight.', RECAP)).toEqual(ok);
+  });
+
+  it('checks every other number word too, fail-safe over prose (review fix round 2)', () => {
+    const counts: FactSheet = { ...RECAP, facts: [...RECAP.facts, ...TIMES.facts] };
+    const rejected = [
+      'Your recovery hit one hundred.',
+      'Your best recovery was one hundred.',
+      'Recovery stayed under one hundred all week.',
+      'You walked one thousand.',
+      'Your recovery hit a perfect hundred.',
+      'Your recovery hit a solid hundred.',
+      'Your recovery reached the hundred mark.',
+      'You went to bed early once.',
+      'You were on goal one straight night.',
+      'You had one late night.',
+      'You were on goal zero straight nights.',
+      'You had zero late nights.',
+      'You were on goal a couple of nights.',
+      'You missed your goal on a single night.',
+      'You had 4 more good nights than last week.',
+      'Two things stood out.',
+    ];
+    for (const sentence of rejected) expect([sentence, validateSentence(sentence, counts, EXACT)]).toEqual([sentence, unknown]);
+    // The same shapes pass when the count is true.
+    expect(validateSentence('You went to bed early three times.', counts, EXACT)).toEqual(ok);
+    expect(validateSentence('You were on goal four straight nights.', counts, EXACT)).toEqual(ok);
+    // The chat check is unchanged.
+    expect(validateSentence('Your recovery hit one hundred.', counts)).toEqual(ok);
+    expect(validateSentence('You went to bed early once.', counts)).toEqual(ok);
   });
 
   it('reads the singular "time" too (pre-flight M12)', () => {

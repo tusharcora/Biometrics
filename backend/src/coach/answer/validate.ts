@@ -38,8 +38,9 @@
 //   * exactNumbers (recaps): exact integers, no hedges, no window exemptions,
 //     count units nights/days/times; durations ±1 minute. A night, day or
 //     time count needs its noun right after the number ("5 nights", "5 of 6
-//     nights", "5 straight nights"), and every number word from two upward
-//     (plus twice, thrice, a dozen) is checked. Known limit: a count matches
+//     nights", "5 straight nights"), and every number word is checked
+//     (zero, one, hundred, once, twice, a dozen, a couple of, a single...;
+//     only a lone "a"/"an" and "one of" stay prose). Known limit: a count matches
 //     per family, not per fact, so "on goal 6 nights" can match the
 //     nights-recorded fact.
 //   * Topics: medication and dosing (the crisis classifier's medication
@@ -121,10 +122,10 @@ const UNIT_AFTER: Array<[RegExp, Family]> = [
 
 /**
  * What may sit between a count and its noun: "5 of 6 nights", "5 out of 6 nights", and up to two
- * of a closed set of adjectives ("5 straight nights", "3 more early nights"). A closed set keeps
+ * of a closed set of adjectives ("5 straight nights", "3 late nights"). A closed set keeps
  * "5 Friday nights", "6 a night" and "4 this time" from reading as counts.
  */
-const COUNT_LEAD = String.raw`^\s*(?:(?:out\s+)?of\s+\d+\s+)?(?:(?:straight|consecutive|more|full|good|great|solid|restful|better|short|shorter|long|longer|late|later|early|earlier|separate|different|whole|total)\s+){0,2}`;
+const COUNT_LEAD = String.raw`^\s*(?:(?:out\s+)?of\s+\d+\s+)?(?:(?:straight|consecutive|full|good|great|solid|restful|better|short|shorter|long|longer|late|later|early|earlier|separate|different|whole|total)\s+){0,2}`;
 /** Count units after a number, recognised only with exactNumbers so chat and digest checks are unchanged. */
 const COUNT_UNIT_AFTER: Array<[RegExp, Family]> = [
   [new RegExp(String.raw`${COUNT_LEAD}-?\s*nights?\b`, 'i'), 'nights'],
@@ -157,36 +158,39 @@ const TENS = ['twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty'
 /** Unit or metric words that turn a preceding number word into a number. */
 const UNIT_OR_METRIC_WORDS = String.raw`hours?|hrs?|minutes?|mins?|ms|milliseconds?|bpm|beats|percent|per\s+cent|points?|pts|steps|hrv|recovery|sleep|resting\s+heart`;
 
-function wordNumberRe(units: string, gap: string): RegExp {
-  return new RegExp(
-    String.raw`\b(?:(${TENS.join('|')})(?:[-\s]+(${ONES.slice(1, 10).join('|')}))?|(${ONES.join('|')})|(a))(?:\s+(hundred|thousand))?(?=${gap}(?:${units})\b)`,
-    'gi',
-  );
-}
-const WORD_NUMBER_RE = wordNumberRe(UNIT_OR_METRIC_WORDS, String.raw`\s+`);
-/** exactNumbers also reads "six nights", "three days", "two times" and "seven-night". */
-const WORD_NUMBER_EXACT_RE = wordNumberRe(String.raw`${UNIT_OR_METRIC_WORDS}|nights?|days?|times?`, String.raw`[-\s]+`);
-
-/**
- * exactNumbers reads every number word from two upward, with or without a unit after it
- * ("eighty-eight", "seven straight nights", "five out of six"). "one", "a" and "an" stay prose
- * ("one thing to try") unless a unit follows (WORD_NUMBER_EXACT_RE) or, for "a", a scale does.
- */
-const ANY_NUMBER_WORD_RE = new RegExp(
-  String.raw`\b(?:(${TENS.join('|')})(?:[-\s]+(${ONES.slice(1, 10).join('|')}))?|(${ONES.slice(2).join('|')})|(a))(?:\s+(hundred|thousand))?\b`,
+const WORD_NUMBER_RE = new RegExp(
+  String.raw`\b(?:(${TENS.join('|')})(?:[-\s]+(${ONES.slice(1, 10).join('|')}))?|(${ONES.join('|')})|(a))(?:\s+(hundred|thousand))?(?=\s+(?:${UNIT_OR_METRIC_WORDS})\b)`,
   'gi',
 );
-/** Count words with no digit form: "twice" and "thrice" are times, "a dozen" is 12. */
+
+/**
+ * Under exactNumbers every number word is a checked number, whatever follows it (fail-safe beats
+ * prose: "Two things stood out" is rejected). Only "a"/"an" on their own and "one of" ("one of
+ * your best weeks") stay prose; "a"/"an" before a scale is 1 ("a hundred").
+ */
+const ANY_NUMBER_WORD_RE = new RegExp(
+  String.raw`\b(?:(${TENS.join('|')})(?:[-\s]+(${ONES.slice(1, 10).join('|')}))?|(${ONES.map((w) => (w === 'one' ? String.raw`one(?!\s+of\b)` : w)).join('|')})|(an?)(?=\s+(?:hundred|thousand)\b))(?:\s+(hundred|thousand))?\b`,
+  'gi',
+);
+/** Count words with no digit form, read before ANY_NUMBER_WORD_RE so their "a" is taken with them. */
 const COUNT_WORDS: Array<[RegExp, string]> = [
+  [/\bonce\b/gi, '1 time'],
   [/\btwice\b/gi, '2 times'],
   [/\bthrice\b/gi, '3 times'],
-  [/\b(?:a\s+)?dozen\b/gi, '12'],
+  [/\b(?:an?\s+)?dozen\b/gi, '12'],
+  [/\ba\s+couple\s+of\b/gi, '2'],
+  [/\ba\s+single\b/gi, '1'],
+];
+/** A scale with no number word before it: "a perfect hundred", "the hundred mark". */
+const BARE_SCALE: Array<[RegExp, string]> = [
+  [/\bhundred\b/gi, '100'],
+  [/\bthousand\b/gi, '1000'],
 ];
 
 /** Every number word read as digits, for exactNumbers. */
 function allWordsToDigits(text: string): string {
-  const counted = COUNT_WORDS.reduce((t, [re, digits]) => t.replace(re, digits), wordsToDigits(text, WORD_NUMBER_EXACT_RE));
-  return wordsToDigits(counted, ANY_NUMBER_WORD_RE);
+  const counted = COUNT_WORDS.reduce((t, [re, digits]) => t.replace(re, digits), text);
+  return BARE_SCALE.reduce((t, [re, digits]) => t.replace(re, digits), wordsToDigits(counted, ANY_NUMBER_WORD_RE));
 }
 
 /** "seven hours" → "7 hours", "nine thousand steps" → "9000 steps"; number words elsewhere are left alone. */
