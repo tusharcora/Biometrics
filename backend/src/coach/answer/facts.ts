@@ -16,7 +16,18 @@ import { DailyScoreToolResult, getDailyScore } from '../tools/dailyScore';
 import { DailyMetricsToolResult, getDailyMetrics, getMetricHistory, MetricHistoryToolResult, MetricKey } from '../tools/metrics';
 import type { AnswerRoute } from './route';
 
-export type FactUnit = 'score' | 'ms' | 'bpm' | 'minutes' | 'count' | 'percent' | 'none';
+export type FactUnit = 'score' | 'ms' | 'bpm' | 'minutes' | 'count' | 'percent' | 'none' | 'nights' | 'days' | 'times';
+
+/** Chat routes, plus the recap sheet (spec 2026-10-04 §2), which has no general-knowledge allowance. */
+export type SheetRoute = AnswerRoute | 'recap';
+
+const COUNT_WORD: Record<'nights' | 'days' | 'times', string> = { nights: 'night', days: 'day', times: 'time' };
+
+/** "1 night", "5 nights": a count with its unit word, so a sentence about steps cannot borrow it. */
+export function countDisplay(unit: 'nights' | 'days' | 'times', n: number): string {
+  const v = Math.round(n);
+  return `${v} ${v === 1 ? COUNT_WORD[unit] : `${COUNT_WORD[unit]}s`}`;
+}
 
 export interface Fact {
   /** Stable, e.g. 'recovery.today', 'sleep.total', 'habit.caffeine.hrv'. */
@@ -36,7 +47,7 @@ export interface Fact {
 }
 
 export interface FactSheet {
-  route: AnswerRoute;
+  route: SheetRoute;
   facts: Fact[];
   /** Plain lines, e.g. 'No sleep recorded last night'. */
   notes: string[];
@@ -97,6 +108,10 @@ export function formatValue(unit: FactUnit, value: number): string {
       return Math.round(value).toLocaleString('en-US');
     case 'percent':
       return `${value}%`;
+    case 'nights':
+    case 'days':
+    case 'times':
+      return countDisplay(unit, value);
     default:
       return String(value);
   }
