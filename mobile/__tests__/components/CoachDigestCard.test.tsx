@@ -3,11 +3,13 @@ import { characterLabel, withCharacter } from '../../jest-mocks/characterContext
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { CoachDigestCard } from '../../src/components/coach-digest-card';
 import { CoachConsentRequiredError, CoachDisabledError, fetchLatestDigest } from '../../src/api/coach';
+import { fetchRecaps } from '../../src/api/recaps';
 
 jest.mock('../../src/api/coach', () => ({
   ...jest.requireActual('../../src/api/coach'),
   fetchLatestDigest: jest.fn(),
 }));
+jest.mock('../../src/api/recaps');
 
 const digest = {
   id: 'd1',
@@ -18,6 +20,7 @@ const digest = {
 beforeEach(() => {
   jest.clearAllMocks();
   (fetchLatestDigest as jest.Mock).mockResolvedValue(digest);
+  (fetchRecaps as jest.Mock).mockResolvedValue([]);
 });
 
 describe('CoachDigestCard', () => {
@@ -74,6 +77,16 @@ describe('CoachDigestCard', () => {
     const second = render(<CoachDigestCard />);
     await waitFor(() => expect(second.queryByTestId('coach-digest-loading')).toBeNull());
     expect(second.toJSON()).toBeNull();
+  });
+
+  it("opens the week's recap instead of the sheet when the digest is that recap's story", async () => {
+    (fetchRecaps as jest.Mock).mockResolvedValue([{ id: 'd1', kind: 'WEEK' }]);
+    const onOpenRecap = jest.fn();
+    const { findByTestId, queryByTestId } = render(withCharacter(<CoachDigestCard onOpenRecap={onOpenRecap} />));
+    await waitFor(() => expect(fetchRecaps).toHaveBeenCalledWith({ kind: 'WEEK', limit: 1 }));
+    fireEvent.press(await findByTestId('coach-digest-card'));
+    await waitFor(() => expect(onOpenRecap).toHaveBeenCalledWith('d1'));
+    expect(queryByTestId('coach-digest-full')).toBeNull();
   });
 });
 

@@ -27,8 +27,10 @@ function mockApi(options: {
   scoresError?: Error;
   habitsError?: Error;
   forecast?: unknown;
+  recaps?: unknown[];
 }) {
   (apiFetch as jest.Mock).mockImplementation((path: string) => {
+    if (path.startsWith('/me/recaps')) return Promise.resolve({ recaps: options.recaps ?? [] });
     if (path === '/me/forecast') {
       return Promise.resolve(options.forecast ?? { status: 'NOT_ENOUGH_DATA', reason: 'NO_HISTORY', daysOfHistory: 0 });
     }
@@ -567,6 +569,20 @@ describe('DashboardScreen', () => {
 
       await waitFor(() => expect(getByTestId('sleep-score-loading')).toBeTruthy());
     });
+  });
+});
+
+describe('DashboardScreen: recap ready card', () => {
+  it('shows the recap ready card for the newest unopened recap', async () => {
+    mockApi({
+      // A record, so Home is past its "No data yet" fallback.
+      records: [{ id: '1', metricType: 'STEPS', value: 8000, recordedAt: '2026-09-01T00:00:00.000Z' }],
+      recaps: [{ id: 'w1', kind: 'WEEK', periodStart: '2026-09-28', periodEnd: '2026-10-04', line: 'A steady week.', personaId: null, builtAt: '2026-10-05T09:00:00.000Z', openedAt: null }],
+    });
+    render(withCharacter(<DashboardScreen />));
+    expect(await screen.findByTestId('recap-ready-card')).toHaveTextContent(/Your week is ready/);
+    fireEvent.press(screen.getByTestId('recap-ready-open'));
+    expect(mockNavigate).toHaveBeenCalledWith('Recap', { id: 'w1' });
   });
 });
 

@@ -266,6 +266,17 @@ export function SleepScreen() {
             </Card>
           </Pressable>
         )}
+
+        {/* 7. Recaps (spec 2026-10-04 §3) */}
+        <Pressable testID="sleep-recaps-row" accessibilityRole="button" onPress={() => navigation.navigate('Recaps')} className="active:opacity-70">
+          <Card className="flex-row items-center gap-3">
+            <View className="flex-1 gap-1">
+              <SectionLabel>Your recaps</SectionLabel>
+              <Text className="text-base font-semibold">Your week, month and year in sleep</Text>
+            </View>
+            <Ionicons name="chevron-forward" size={18} color={colors.muted} />
+          </Card>
+        </Pressable>
       </ScrollView>
     </SafeAreaView>
   );

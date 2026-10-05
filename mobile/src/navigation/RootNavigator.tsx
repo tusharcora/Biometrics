@@ -25,6 +25,8 @@ import { SleepScreen } from '../screens/SleepScreen';
 import { SleepNightScreen } from '../screens/SleepNightScreen';
 import { BedtimeGoalScreen } from '../screens/BedtimeGoalScreen';
 import { RecapScreen } from '../screens/RecapScreen';
+import { RecapsScreen } from '../screens/RecapsScreen';
+import { YearInPixelsScreen } from '../screens/YearInPixelsScreen';
 import type { ShareFormat } from '../lib/recapShare';
 import { TabsNavigator, type TabParamList } from './TabsNavigator';
 import { syncTimezone } from '../lib/timezone';
@@ -191,6 +193,8 @@ export function RootNavigator() {
               <Stack.Screen name="SleepNight" component={SleepNightScreen} options={{ title: '' }} />
               <Stack.Screen name="BedtimeGoal" component={BedtimeGoalScreen} options={{ title: 'Bedtime goal' }} />
               <Stack.Screen name="Recap" component={RecapScreen} options={{ title: '' }} />
+              <Stack.Screen name="Recaps" component={RecapsScreen} options={{ title: 'Your recaps' }} />
+              <Stack.Screen name="YearInPixels" component={YearInPixelsScreen} options={{ title: 'Year in pixels' }} />
               <Stack.Screen
                 name="MeetYourCoach"
                 component={MeetYourCoachScreen}

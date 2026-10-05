@@ -375,4 +375,10 @@ describe('SleepScreen', () => {
     expect(fetchSleepNight).not.toHaveBeenCalled();
     expect(screen.getByTestId('sleep-goal-row')).toBeTruthy();
   });
+
+  it('opens the recaps from "Your recaps"', async () => {
+    renderScreen();
+    fireEvent.press(await screen.findByTestId('sleep-recaps-row'));
+    expect(mockNavigate).toHaveBeenCalledWith('Recaps');
+  });
 });

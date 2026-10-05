@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { View, Pressable, Modal, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { CoachConsentRequiredError, CoachDisabledError, fetchLatestDigest, type CoachDigestDTO } from '../api/coach';
+import { fetchRecaps } from '../api/recaps';
 import { Text } from './ui/text';
 import { Character } from './characters/Character';
 import { useCharacterMood } from '../characters/useCharacterMood';
@@ -22,9 +23,11 @@ function formatDigestDate(iso: string): string {
 
 // The latest weekly recap from the coach. The caller only mounts this when the
 // coach is enabled and consented; it renders nothing at all when there is no
-// digest, so a quiet week leaves no empty card.
-export function CoachDigestCard() {
+// digest, so a quiet week leaves no empty card. When the digest is the WEEK
+// recap's story, tapping it opens that recap instead of the sheet.
+export function CoachDigestCard({ onOpenRecap }: { onOpenRecap?: (recapId: string) => void } = {}) {
   const [state, setState] = useState<State>({ status: 'loading' });
+  const [recapId, setRecapId] = useState<string | null>(null);
   const [open, setOpen] = useState(false);
   const mood = useCharacterMood({ sending: false, answeredAt: null });
   const focused = useScreenFocused();
@@ -34,6 +37,12 @@ export function CoachDigestCard() {
     (async () => {
       try {
         const digest = await fetchLatestDigest();
+        if (digest) {
+          // The digest endpoint serves the WEEK recap's story with the recap's id (spec 2026-10-04 §2).
+          // Settled before the card shows, so a tap always goes where it will go.
+          const [week] = await fetchRecaps({ kind: 'WEEK', limit: 1 }).catch(() => []);
+          if (!cancelled && week?.id === digest.id) setRecapId(digest.id);
+        }
         if (!cancelled) setState(digest ? { status: 'ready', digest } : { status: 'hidden' });
       } catch (e) {
         if (cancelled) return;
@@ -64,7 +73,12 @@ export function CoachDigestCard() {
 
   return (
     <>
-      <Pressable testID="coach-digest-card" accessibilityRole="button" onPress={() => setOpen(true)} className="active:opacity-80">
+      <Pressable
+        testID="coach-digest-card"
+        accessibilityRole="button"
+        onPress={() => (recapId && onOpenRecap ? onOpenRecap(recapId) : setOpen(true))}
+        className="active:opacity-80"
+      >
         <Card className="gap-2.5 border-coach/25 bg-coach/10">
           <View className="flex-row items-center gap-2">
             <Character testID="coach-digest-character" mood={mood} size={18} paused={!focused} />

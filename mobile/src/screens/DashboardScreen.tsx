@@ -18,6 +18,7 @@ import { ThemeToggle } from '../components/ui/theme-toggle';
 import { Reveal } from '../components/ui/reveal';
 import { HabitLogCard } from '../components/habit-log-card';
 import { CoachDigestCard } from '../components/coach-digest-card';
+import { RecapReadyCard } from '../components/recap/RecapReadyCard';
 import { TomorrowCard } from '../components/tomorrow-card';
 import { RecoveryHero } from '../components/home/recovery-hero';
 import { SleepTile } from '../components/home/sleep-tile';
@@ -274,11 +275,13 @@ export function DashboardScreen() {
           ) : null}
         </View>
 
+        <RecapReadyCard />
+
         <TomorrowCard state={forecastState} onPress={() => navigation.navigate('Forecast')} />
 
         <HabitLogCard />
 
-        {coachRoute === 'Coach' ? <CoachDigestCard /> : null}
+        {coachRoute === 'Coach' ? <CoachDigestCard onOpenRecap={(id) => navigation.navigate('Recap', { id })} /> : null}
 
         {metricsWithData.length > 0 ? (
           <View className="gap-3">
