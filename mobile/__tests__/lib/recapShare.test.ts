@@ -1,4 +1,6 @@
-import { availableIncludes, exportLayout, fitQuote, previewScale, QUOTE_LINE_HEIGHT, quoteLines, recapCoachId, resolveIncludes } from '../../src/lib/recapShare';
+import {
+  availableIncludes, exportLayout, fitQuote, FORMAT_LABELS, INCLUDE_LABELS, PIXEL_ADVANCE_EM, previewScale, QUOTE_LINE_HEIGHT, quoteLines, recapCoachId, resolveIncludes,
+} from '../../src/lib/recapShare';
 
 // 30 words, 199 characters: the longest line the coach writes for a recap.
 const LONG = 'Six nights running on goal this September, and your bedtimes finally settled into a calm, unhurried rhythm after a rocky start; protect that wind-down routine and October looks wonderfully promising.';
@@ -17,15 +19,30 @@ it('keeps every available switch on unless switched off, and every unavailable o
   expect(inc).toMatchObject({ avgSleep: true, quote: false, coach: true, steps: false, streak: false, bestNight: false, count: false });
 });
 
+it('starts Best recovery off (the design default) until it is switched on', () => {
+  expect(resolveIncludes('card', {}, FULL)).toMatchObject({ avgSleep: true, streak: true, bestRecovery: false, steps: true, quote: true });
+  expect(resolveIncludes('card', { bestRecovery: true }, FULL).bestRecovery).toBe(true);
+  expect(resolveIncludes('card', { bestRecovery: true }, { nightsWithData: 3 }).bestRecovery).toBe(false);
+});
+
+it('uses the design labels for formats and switches', () => {
+  expect(FORMAT_LABELS).toEqual({ card: 'Card', story: 'Story', year: 'Year' });
+  expect([INCLUDE_LABELS.avgSleep, INCLUDE_LABELS.streak, INCLUDE_LABELS.bestRecovery, INCLUDE_LABELS.steps, INCLUDE_LABELS.quote]).toEqual([
+    'Average sleep', 'Longest streak', 'Best recovery', 'Steps', 'A line from your coach',
+  ]);
+});
+
 it('lays the export view out at 1080 / pixel ratio points (1080 px on any device)', () => {
-  expect(exportLayout('card', 3)).toEqual({ width: 360, height: 360, scale: 1 });
-  expect(exportLayout('card', 2)).toEqual({ width: 540, height: 540, scale: 1.5 });
+  // The card is 4:5 (1080×1350), the story 9:16 (1080×1920), the year square.
+  expect(exportLayout('card', 3)).toEqual({ width: 360, height: 450, scale: 1 });
+  expect(exportLayout('card', 2)).toEqual({ width: 540, height: 675, scale: 1.5 });
   expect(exportLayout('story', 2)).toEqual({ width: 540, height: 960, scale: 1.5 });
   expect(exportLayout('year', 3)).toEqual({ width: 360, height: 360, scale: 1 });
 });
 
 it('fits a preview into its box', () => {
   expect(previewScale('card', 300, 1000)).toBeCloseTo(300 / 360);
+  expect(previewScale('card', 1000, 450)).toBeCloseTo(1);
   expect(previewScale('story', 360, 320)).toBeCloseTo(0.5);
 });
 
@@ -39,12 +56,13 @@ it('wraps a quote word by word', () => {
   expect(quoteLines('Short.', 20, 304)).toBe(1);
   // At 10pt a 4-letter word is ~17pt wide, so a 30pt line holds one word.
   expect(quoteLines('aaaa bbbb cccc', 10, 30)).toBe(3);
+  // Silkscreen titles are wider: the story's title wraps to two lines at 30pt on a 312pt line.
+  expect(quoteLines('How Sprout saw my week', 30, 312, PIXEL_ADVANCE_EM)).toBe(2);
 });
 
 it('keeps a short quote at its base size and shrinks a 30-word quote until it fits its box', () => {
-  expect(fitQuote('A steady week.', 304, 76, 20)).toEqual({ fontSize: 20, lines: 1 });
-  // The card's tightest box (coach and four stats on) and the story's.
-  for (const [width, height, base] of [[304, 76, 20], [296, 160, 22]] as const) {
+  expect(fitQuote('A steady week.', 268, 76, 17)).toEqual({ fontSize: 17, lines: 1 });
+  for (const [width, height, base] of [[268, 120, 17], [276, 120, 16]] as const) {
     const fit = fitQuote(`“${LONG}”`, width, height, base);
     expect(fit.fontSize).toBeLessThan(base);
     expect(fit.fontSize).toBeGreaterThanOrEqual(12);

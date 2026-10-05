@@ -1,4 +1,4 @@
-import { cardStats, compareRows, goalLabel, milestoneLines, monthName, readyCardTitle, recapTitle, shortDate, weekdayName } from '../../src/lib/recapCopy';
+import { cardStats, compareRows, goalLabel, milestoneLines, monthName, readyCardTitle, recapTitle, shortDate, signedChange, weekdayName, weekRange } from '../../src/lib/recapCopy';
 
 it('names periods and days', () => {
   expect(monthName('2026-09-01')).toBe('September');
@@ -14,7 +14,7 @@ it('names periods and days', () => {
 
 it('lists up to four card stats in a fixed order, skipping missing ones', () => {
   expect(cardStats({ nightsWithData: 25, avgSleepMinutes: 425, longestOnGoalStreak: 6, bestRecovery: { date: '2026-09-09', score: 88 }, steps: { total: 210000, dailyAverage: 7000 } })).toEqual([
-    { key: 'avgSleep', label: 'Avg sleep', value: '7h 5m' },
+    { key: 'avgSleep', label: 'Average sleep', value: '7h 5m' },
     { key: 'streak', label: 'Longest streak', value: '6 nights' },
     { key: 'bestRecovery', label: 'Best recovery', value: '88' },
     { key: 'steps', label: 'Steps a day', value: '7,000' },
@@ -39,4 +39,19 @@ it('words the milestones achieved', () => {
     { key: 'everyDayLogged', text: 'Every night of the month logged' },
     { key: 'steadiestMonth', text: 'Your steadiest bedtimes yet (10m spread)' },
   ]);
+});
+
+it('signs a change and says whether it is better: more sleep, a smaller spread, more recovery', () => {
+  expect(signedChange('avgSleep', 18)).toEqual({ text: '+18m', tone: 'better' });
+  expect(signedChange('avgSleep', -80)).toEqual({ text: '−1h 20m', tone: 'worse' });
+  expect(signedChange('avgSleep', 0)).toEqual({ text: '0m', tone: 'same' });
+  expect(signedChange('spread', -9)).toEqual({ text: '−9m', tone: 'better' });
+  expect(signedChange('spread', 12)).toEqual({ text: '+12m', tone: 'worse' });
+  expect(signedChange('recovery', 3)).toEqual({ text: '+3 pts', tone: 'better' });
+  expect(signedChange('recovery', -1)).toEqual({ text: '−1 pt', tone: 'worse' });
+  expect(signedChange('recovery', 0)).toEqual({ text: '0 pts', tone: 'same' });
+});
+
+it('names a week by its first and last day', () => {
+  expect(weekRange('2026-09-28', '2026-10-04')).toBe('Sep 28 – Oct 4');
 });

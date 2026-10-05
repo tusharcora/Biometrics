@@ -41,11 +41,31 @@ export interface CardStat {
 /** The monthly card's stats, in a fixed order (spec §3: avg sleep, longest streak, best recovery, steps). */
 export function cardStats(stats: RecapStats): CardStat[] {
   const out: CardStat[] = [];
-  if (stats.avgSleepMinutes !== undefined) out.push({ key: 'avgSleep', label: 'Avg sleep', value: formatTextDuration(stats.avgSleepMinutes) });
+  if (stats.avgSleepMinutes !== undefined) out.push({ key: 'avgSleep', label: 'Average sleep', value: formatTextDuration(stats.avgSleepMinutes) });
   if ((stats.longestOnGoalStreak ?? 0) > 0) out.push({ key: 'streak', label: 'Longest streak', value: plural(stats.longestOnGoalStreak!, 'night') });
   if (stats.bestRecovery) out.push({ key: 'bestRecovery', label: 'Best recovery', value: String(stats.bestRecovery.score) });
   if (stats.steps) out.push({ key: 'steps', label: 'Steps a day', value: stats.steps.dailyAverage.toLocaleString('en-US') });
   return out;
+}
+
+/** "Sep 28 – Oct 4". */
+export function weekRange(periodStart: string, periodEnd: string): string {
+  return `${shortDate(periodStart)} – ${shortDate(periodEnd)}`;
+}
+
+export type ChangeKey = 'avgSleep' | 'spread' | 'recovery';
+export type ChangeTone = 'better' | 'worse' | 'same';
+
+/**
+ * A stored comparison as a signed change ("+18m", "−9m", "+3 pts") and whether it is better: more
+ * sleep, a smaller bedtime spread and more recovery are better. Minus is U+2212, as in the design.
+ */
+export function signedChange(key: ChangeKey, delta: number): { text: string; tone: ChangeTone } {
+  const d = Math.round(delta);
+  const sign = d > 0 ? '+' : d < 0 ? '−' : '';
+  const size = key === 'recovery' ? `${Math.abs(d)} ${Math.abs(d) === 1 ? 'pt' : 'pts'}` : formatShortDuration(Math.abs(d));
+  const better = key === 'spread' ? d < 0 : d > 0;
+  return { text: `${sign}${size}`, tone: d === 0 ? 'same' : better ? 'better' : 'worse' };
 }
 
 export interface CompareRow {

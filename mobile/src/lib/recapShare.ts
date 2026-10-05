@@ -11,7 +11,8 @@ export type Includes = Record<IncludeKey, boolean>;
 /** The only identity on an image: the app's name, no URL (owner decision). */
 export const APP_NAME = 'Biometrics';
 export const DESIGN_WIDTH = 360;
-export const DESIGN_HEIGHT: Record<ShareFormat, number> = { card: 360, story: 640, year: 360 };
+// The card is 4:5 (1080×1350), the story 9:16 (1080×1920 a frame), the year square (recap restyle).
+export const DESIGN_HEIGHT: Record<ShareFormat, number> = { card: 450, story: 640, year: 360 };
 export const EXPORT_PIXELS = 1080;
 
 export const FORMAT_INCLUDES: Record<ShareFormat, IncludeKey[]> = {
@@ -24,14 +25,17 @@ export const INCLUDE_LABELS: Record<IncludeKey, string> = {
   avgSleep: 'Average sleep',
   streak: 'Longest streak',
   bestRecovery: 'Best recovery',
-  steps: 'Daily steps',
+  steps: 'Steps',
   bestNight: 'Best night',
-  quote: "Coach's quote",
+  quote: 'A line from your coach',
   coach: 'Coach character',
   count: 'Nights on goal',
 };
 
-export const FORMAT_LABELS: Record<ShareFormat, string> = { card: 'Monthly card', story: 'Weekly story', year: 'Year in pixels' };
+export const FORMAT_LABELS: Record<ShareFormat, string> = { card: 'Card', story: 'Story', year: 'Year' };
+
+/** Off until the user switches it on (the design's default). */
+const DEFAULT_OFF: ReadonlySet<IncludeKey> = new Set<IncludeKey>(['bestRecovery']);
 
 const ALL_KEYS: IncludeKey[] = ['avgSleep', 'streak', 'bestRecovery', 'steps', 'bestNight', 'quote', 'coach', 'count'];
 
@@ -55,10 +59,10 @@ export function availableIncludes(format: ShareFormat, stats: RecapStats | null)
   });
 }
 
-/** Every key: on when available and not switched off; an unavailable key is always off. */
+/** Every key: the user's choice when available, else its default (on, Best recovery off); an unavailable key is always off. */
 export function resolveIncludes(format: ShareFormat, stored: Partial<Includes>, stats: RecapStats | null): Includes {
   const available = new Set(availableIncludes(format, stats));
-  return Object.fromEntries(ALL_KEYS.map((k) => [k, available.has(k) && stored[k] !== false])) as Includes;
+  return Object.fromEntries(ALL_KEYS.map((k) => [k, available.has(k) && (stored[k] ?? !DEFAULT_OFF.has(k))])) as Includes;
 }
 
 /**
@@ -82,17 +86,19 @@ export function recapCoachId(recap: { personaId: string | null }, current: Chara
 
 // The coach's quote never truncates on an image: it is sized to its box from an estimate of its
 // wrapped lines, and the Text keeps adjustsFontSizeToFit as a net for when the estimate is short.
-/** Line height of the drawn quote, as a multiple of its font size. */
-export const QUOTE_LINE_HEIGHT = 1.25;
+/** Line height of the drawn quote (Geist), as a multiple of its font size. */
+export const QUOTE_LINE_HEIGHT = 1.4;
 /** adjustsFontSizeToFit's floor, relative to the fitted size. */
 export const QUOTE_MIN_FONT_SCALE = 0.7;
 const QUOTE_MIN_FONT = 12;
-// Mean advance of Instrument Serif, spaces included, in ems: rounded up so the estimate wraps early.
-const QUOTE_ADVANCE_EM = 0.42;
+// Mean advances, spaces included, in ems, rounded up so the estimate wraps early: Geist Regular
+// measures 0.465 on English text, Silkscreen (the titles) 0.706.
+export const SANS_ADVANCE_EM = 0.5;
+export const PIXEL_ADVANCE_EM = 0.75;
 
-/** Lines the quote wraps to at this size (greedy word wrap on the mean advance), in design units. */
-export function quoteLines(text: string, fontSize: number, width: number): number {
-  const perLine = Math.max(1, Math.floor(width / (fontSize * QUOTE_ADVANCE_EM)));
+/** Lines the text wraps to at this size (greedy word wrap on the mean advance), in design units. */
+export function quoteLines(text: string, fontSize: number, width: number, advanceEm: number = SANS_ADVANCE_EM): number {
+  const perLine = Math.max(1, Math.floor(width / (fontSize * advanceEm)));
   let lines = 1;
   let used = 0;
   for (const word of text.split(/\s+/).filter(Boolean)) {
