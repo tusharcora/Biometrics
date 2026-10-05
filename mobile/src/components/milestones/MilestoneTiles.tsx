@@ -41,7 +41,7 @@ const GLYPHS: Record<MilestoneGlyph, { px: Px[]; color: { light: string; dark: s
 function Glyph({ glyph, scheme, testID }: { glyph: MilestoneGlyph; scheme: 'light' | 'dark'; testID: string }) {
   const { px, color } = GLYPHS[glyph];
   return (
-    <Svg testID={testID} viewBox="0 0 8 8" width={GLYPH} height={GLYPH} shapeRendering="crispEdges">
+    <Svg testID={testID} viewBox="0 0 8 8" width={GLYPH} height={GLYPH}>
       {px.map(([x, y, w, h], i) => (
         <Rect key={i} x={x} y={y} width={w} height={h} fill={color[scheme]} />
       ))}
