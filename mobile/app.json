@@ -34,7 +34,8 @@
         {
           "photosPermission": "Allow Biometrics to save your recap images to Photos.",
           "savePhotosPermission": "Allow Biometrics to save your recap images to Photos.",
-          "isAccessMediaLocationEnabled": false
+          "isAccessMediaLocationEnabled": false,
+          "granularPermissions": []
         }
       ]
     ]

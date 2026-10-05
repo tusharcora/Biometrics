@@ -62,10 +62,17 @@ export interface Recap extends RecapSummary {
   rebuiltAt: string | null;
 }
 
-// Newest first (the server orders them). Anything but a list reads as none.
+// Newest first (the server orders them). Anything but a list reads as none, and so does a 404
+// from a server older than recaps; any other failure throws.
 export async function fetchRecaps(options: { kind?: RecapKind; limit?: number } = {}): Promise<RecapSummary[]> {
   const query = [options.kind ? `kind=${options.kind}` : null, options.limit ? `limit=${options.limit}` : null].filter(Boolean).join('&');
-  const res = await apiFetch<{ recaps?: unknown } | undefined>(`/me/recaps${query ? `?${query}` : ''}`);
+  let res: { recaps?: unknown } | undefined;
+  try {
+    res = await apiFetch<{ recaps?: unknown } | undefined>(`/me/recaps${query ? `?${query}` : ''}`);
+  } catch (error) {
+    if ((error as { status?: number } | null)?.status === 404) return [];
+    throw error;
+  }
   return Array.isArray(res?.recaps) ? (res!.recaps as RecapSummary[]) : [];
 }
 
