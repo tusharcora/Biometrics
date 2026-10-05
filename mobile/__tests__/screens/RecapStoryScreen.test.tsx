@@ -1,7 +1,7 @@
 import React from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { AccessibilityInfo, StatusBar, StyleSheet } from 'react-native';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
@@ -11,6 +11,9 @@ import { captureToPng, saveImage, shareImage } from '../../src/lib/recapCapture'
 import { recapTint } from '../../src/lib/recapTheme';
 import { STORY_FRAME_MS } from '../../src/lib/storyViewer';
 import { RecapStoryScreen } from '../../src/screens/RecapStoryScreen';
+import { ApiError } from '../../src/api/client';
+import { fetchRecap, markRecapOpened } from '../../src/api/recaps';
+import { resetUnwatchedRecap } from '../../src/lib/unwatchedRecap';
 
 jest.mock('expo-secure-store');
 jest.mock('../../src/lib/recapCapture', () => ({ captureToPng: jest.fn(), saveImage: jest.fn(), shareImage: jest.fn() }));
@@ -25,20 +28,27 @@ const mockRecap: Recap = {
   builtAt: '2026-10-05T09:00:00.000Z', openedAt: null, sleepGoalMinutes: 480, lineSource: 'ai', rebuiltAt: null,
   stats: { nightsWithData: 6, avgSleepMinutes: 455, nightsOnGoal: 5, longestOnGoalStreak: 3, bedtimeSpreadMinutes: 42, bestNight: { date: '2026-09-29', minutesAsleep: 485 }, weekStrip: [] },
 };
+const mockNavigate = jest.fn();
+const mockReplace = jest.fn();
+let mockParams: { recap: Recap } | { id: string } = { recap: mockRecap };
+let mockStack: { index: number; routes: { name: string; params?: object }[] } = { index: 0, routes: [{ name: 'RecapStory' }] };
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ goBack: mockGoBack, canGoBack: () => true }),
-  useRoute: () => ({ params: { recap: mockRecap } }),
+  useNavigation: () => ({ goBack: mockGoBack, canGoBack: () => true, navigate: mockNavigate, replace: mockReplace, getState: () => mockStack }),
+  useRoute: () => ({ params: mockParams }),
 }));
+jest.mock('../../src/api/recaps', () => ({ fetchRecap: jest.fn(), markRecapOpened: jest.fn() }));
 
 const URI = 'file:///cache/recap-1.png';
 let store: Record<string, string>;
 const eyebrow = () => screen.getByTestId('story-eyebrow');
 const tap = (x: number) => fireEvent.press(screen.getByTestId('story-viewer-tap'), { nativeEvent: { locationX: x } });
 
-async function open() {
+const CONSENTED = { enabled: true, consented: true } as never;
+
+async function open(character: Parameters<typeof withCharacter>[1] = {}) {
   render(
     <SafeAreaProvider initialMetrics={{ frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 47, left: 0, right: 0, bottom: 34 } }}>
-      {withCharacter(<RecapStoryScreen />)}
+      {withCharacter(<RecapStoryScreen />, character)}
     </SafeAreaProvider>,
   );
   // The stored include choices load first; Share and Save wait for them.
@@ -48,6 +58,10 @@ async function open() {
 beforeEach(() => {
   jest.useFakeTimers();
   jest.clearAllMocks();
+  resetUnwatchedRecap();
+  mockParams = { recap: mockRecap };
+  mockStack = { index: 0, routes: [{ name: 'RecapStory' }] };
+  (markRecapOpened as jest.Mock).mockResolvedValue(undefined);
   mockReduceMotion = false;
   store = {};
   (SecureStore.getItemAsync as jest.Mock).mockImplementation((k: string) => Promise.resolve(store[k] ?? null));
@@ -61,7 +75,7 @@ afterEach(() => {
   jest.restoreAllMocks();
 });
 
-it('opens on frame 1 and moves on by itself every five seconds, closing after the last frame', async () => {
+it('opens on frame 1 and moves on by itself every five seconds, holding on the last frame with its end actions', async () => {
   await open();
   expect(eyebrow()).toHaveTextContent('MY WEEK · 1 OF 3');
   // The frame's own bar is hidden; the viewer draws its animated one over it.
@@ -71,12 +85,13 @@ it('opens on frame 1 and moves on by itself every five seconds, closing after th
   expect(eyebrow()).toHaveTextContent('MY WEEK · 2 OF 3');
   act(() => jest.advanceTimersByTime(STORY_FRAME_MS));
   expect(eyebrow()).toHaveTextContent('MY WEEK · 3 OF 3');
+  expect(screen.getByTestId('story-end-actions')).toBeTruthy();
+  act(() => jest.advanceTimersByTime(STORY_FRAME_MS * 3));
+  expect(eyebrow()).toHaveTextContent('MY WEEK · 3 OF 3');
   expect(mockGoBack).not.toHaveBeenCalled();
-  act(() => jest.advanceTimersByTime(STORY_FRAME_MS));
-  expect(mockGoBack).toHaveBeenCalledTimes(1);
 });
 
-it('a tap on the right half goes forward, on the left half back', async () => {
+it('a tap on the right half goes forward, on the left half back; a tap past the last frame does not close it', async () => {
   await open();
   tap(10000);
   expect(eyebrow()).toHaveTextContent('MY WEEK · 2 OF 3');
@@ -85,7 +100,9 @@ it('a tap on the right half goes forward, on the left half back', async () => {
   tap(10000);
   tap(10000);
   tap(10000);
-  expect(mockGoBack).toHaveBeenCalledTimes(1);
+  tap(10000);
+  expect(eyebrow()).toHaveTextContent('MY WEEK · 3 OF 3');
+  expect(mockGoBack).not.toHaveBeenCalled();
 });
 
 it('pauses while pressed and held', async () => {
@@ -138,10 +155,12 @@ it('shares the frame on screen, from the off-screen 1080-wide export, paused whi
   expect(shareImage).toHaveBeenCalledWith(URI);
   // The share sheet is up: the story does not run out underneath it.
   act(() => jest.advanceTimersByTime(STORY_FRAME_MS * 2));
-  expect(mockGoBack).not.toHaveBeenCalled();
+  expect(screen.getByTestId('story-viewer-share')).toBeDisabled();
   await act(async () => finish());
-  act(() => jest.advanceTimersByTime(STORY_FRAME_MS));
-  expect(mockGoBack).toHaveBeenCalledTimes(1);
+  expect(screen.getByTestId('story-viewer-share')).not.toBeDisabled();
+  // The export is the frame alone: no end actions, no viewer chrome.
+  const exported = screen.getByTestId('story-export-view');
+  for (const id of ['story-end-actions', 'story-viewer-header', 'story-viewer-reply', 'story-viewer-progress']) expect(within(exported).queryByTestId(id)).toBeNull();
 });
 
 it('saves the frame on screen and says so', async () => {
@@ -161,15 +180,17 @@ it("follows the builder's stored include choices", async () => {
   expect(screen.queryByTestId('story-export-best')).toBeNull();
 });
 
-it('draws light status bar content and dark-ground buttons on the coach ground, whatever the app theme', async () => {
+it('draws light status bar content and the chrome on the coach ground, whatever the app theme', async () => {
   await open();
   const bars = screen.UNSAFE_getAllByType(StatusBar);
   expect(bars[bars.length - 1]!.props.barStyle).toBe('light-content');
   const t = recapTint('luna');
-  expect(StyleSheet.flatten(screen.getByTestId('story-viewer-share').props.style)).toMatchObject({ backgroundColor: t.text });
-  expect(screen.getByTestId('story-viewer-share-label')).toHaveStyle({ color: t.ground });
-  expect(StyleSheet.flatten(screen.getByTestId('story-viewer-save').props.style)).toMatchObject({ backgroundColor: t.surface, borderColor: t.border });
-  expect(screen.getByTestId('story-viewer-save-label')).toHaveStyle({ color: t.text });
+  expect(screen.getByTestId('story-viewer-title')).toHaveStyle({ color: t.text });
+  tap(10000);
+  tap(10000);
+  expect(StyleSheet.flatten(screen.getByTestId('story-end-full-recap').props.style)).toMatchObject({ backgroundColor: t.accent });
+  expect(screen.getByTestId('story-end-full-recap-label')).toHaveStyle({ color: t.ground });
+  expect(screen.getByTestId('story-end-again-label')).toHaveStyle({ color: t.text });
 });
 
 it('draws no frame until the stored include choices have loaded, then starts from frame 1', async () => {
@@ -211,4 +232,125 @@ it('pauses when a screen reader is turned on mid-story and runs again when it is
   act(() => listeners.forEach((fn) => fn(false)));
   act(() => jest.advanceTimersByTime(STORY_FRAME_MS));
   expect(eyebrow()).toHaveTextContent('MY WEEK · 2 OF 3');
+});
+
+describe('header and reply bar (design E)', () => {
+  it('shows the recap coach, the week and Share / Close above the frame', async () => {
+    await open();
+    expect(screen.getByTestId('story-viewer-title')).toHaveTextContent('Luna · Your week');
+    expect(screen.getByTestId('story-viewer-range')).toHaveTextContent('Sep 28 – Oct 4');
+    expect(screen.getByTestId('story-viewer-coach')).toBeTruthy();
+    expect(screen.getByTestId('story-viewer-share').props.accessibilityLabel).toBe('Share this frame');
+    expect(screen.getByTestId('story-viewer-close').props.accessibilityLabel).toBe('Close story');
+  });
+
+  it('asks the coach about the week: closes the viewer onto the chat with the question in the composer, not sent', async () => {
+    await open({ status: CONSENTED, characterId: 'mochi' });
+    expect(screen.getByTestId('story-viewer-ask')).toHaveTextContent('Ask Mochi about your week…');
+    fireEvent.press(screen.getByTestId('story-viewer-ask'));
+    expect(mockNavigate).toHaveBeenCalledWith('Tabs', { screen: 'Coach', params: { prefill: 'What stood out in my week of Sep 28 – Oct 4?' } }, { pop: true });
+  });
+
+  it('hides the ask bar when the coach is off or not consented, and keeps Save', async () => {
+    await open({ status: { enabled: true, consented: false } as never });
+    expect(screen.queryByTestId('story-viewer-ask')).toBeNull();
+    expect(screen.getByTestId('story-viewer-save')).toBeTruthy();
+  });
+
+  it('holds the story while a finger is on the bar', async () => {
+    await open({ status: CONSENTED });
+    fireEvent(screen.getByTestId('story-viewer-ask'), 'pressIn');
+    act(() => jest.advanceTimersByTime(STORY_FRAME_MS * 2));
+    expect(eyebrow()).toHaveTextContent('MY WEEK · 1 OF 3');
+    fireEvent(screen.getByTestId('story-viewer-ask'), 'pressOut');
+    act(() => jest.advanceTimersByTime(STORY_FRAME_MS));
+    expect(eyebrow()).toHaveTextContent('MY WEEK · 2 OF 3');
+  });
+});
+
+describe('end actions (design B)', () => {
+  async function atEnd() {
+    await open();
+    tap(10000);
+    tap(10000);
+    expect(screen.queryByTestId('story-viewer-reply')).toBeNull();
+  }
+
+  it('See full recap replaces the viewer with that recap', async () => {
+    await atEnd();
+    fireEvent.press(screen.getByTestId('story-end-full-recap'));
+    expect(mockReplace).toHaveBeenCalledWith('Recap', { id: 'r-week' });
+  });
+
+  it('See full recap goes back when the story was opened from that recap', async () => {
+    mockStack = { index: 1, routes: [{ name: 'Recap', params: { id: 'r-week' } }, { name: 'RecapStory' }] };
+    await atEnd();
+    fireEvent.press(screen.getByTestId('story-end-full-recap'));
+    expect(mockGoBack).toHaveBeenCalledTimes(1);
+    expect(mockReplace).not.toHaveBeenCalled();
+  });
+
+  it('Share this week opens the builder on the story format', async () => {
+    await atEnd();
+    fireEvent.press(screen.getByTestId('story-end-share'));
+    expect(mockReplace).toHaveBeenCalledWith('RecapBuilder', { id: 'r-week', format: 'story' });
+  });
+
+  it('Watch again restarts at frame 1 and runs again', async () => {
+    await atEnd();
+    fireEvent.press(screen.getByTestId('story-end-again'));
+    expect(eyebrow()).toHaveTextContent('MY WEEK · 1 OF 3');
+    expect(screen.getByTestId('story-viewer-reply')).toBeTruthy();
+    act(() => jest.advanceTimersByTime(STORY_FRAME_MS));
+    expect(eyebrow()).toHaveTextContent('MY WEEK · 2 OF 3');
+  });
+});
+
+describe('the story is the recap', () => {
+  it('marks the recap opened once', async () => {
+    await open();
+    tap(10000);
+    expect(markRecapOpened).toHaveBeenCalledTimes(1);
+    expect(markRecapOpened).toHaveBeenCalledWith('r-week');
+  });
+
+  it('loads a week by id (avatar, shelf) and plays it', async () => {
+    mockParams = { id: 'r-week' };
+    (fetchRecap as jest.Mock).mockResolvedValue(mockRecap);
+    await open();
+    await act(async () => {});
+    expect(fetchRecap).toHaveBeenCalledWith('r-week');
+    expect(eyebrow()).toHaveTextContent('MY WEEK · 1 OF 3');
+    expect(markRecapOpened).toHaveBeenCalledWith('r-week');
+  });
+
+  it("says a recap that is gone isn't available, with a way back", async () => {
+    mockParams = { id: 'r-gone' };
+    (fetchRecap as jest.Mock).mockRejectedValue(new ApiError(404, 'gone', 'not_found'));
+    await open();
+    await act(async () => {});
+    expect(screen.getByTestId('story-viewer-missing')).toHaveTextContent("This recap isn't available.");
+    fireEvent.press(screen.getByTestId('story-viewer-missing-back'));
+    expect(mockGoBack).toHaveBeenCalledTimes(1);
+    expect(markRecapOpened).not.toHaveBeenCalled();
+  });
+
+  it('offers a retry when the recap could not be loaded', async () => {
+    mockParams = { id: 'r-week' };
+    (fetchRecap as jest.Mock).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(mockRecap);
+    await open();
+    await act(async () => {});
+    expect(screen.getByTestId('story-viewer-error')).toBeTruthy();
+    await act(async () => fireEvent.press(screen.getByTestId('story-viewer-retry')));
+    expect(eyebrow()).toHaveTextContent('MY WEEK · 1 OF 3');
+  });
+
+  it('a month reached by id opens its recap screen instead', async () => {
+    mockParams = { id: 'r-month' };
+    (fetchRecap as jest.Mock).mockResolvedValue({ ...mockRecap, id: 'r-month', kind: 'MONTH' });
+    await open();
+    await act(async () => {});
+    expect(mockReplace).toHaveBeenCalledWith('Recap', { id: 'r-month' });
+    expect(screen.queryByTestId('story')).toBeNull();
+  });
 });

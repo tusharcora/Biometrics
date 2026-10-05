@@ -86,10 +86,12 @@ export type RootStackParamList = {
   BedtimeGoal: undefined;
   // Sleep → "Your recaps": the latest month, latest week, older ones and Year in pixels.
   Recaps: undefined;
-  // One recap; from the list, the Home card, the coach digest card or a tapped push.
+  // One recap; from the list, a ringed avatar (a month), the shelf, the coach digest card, a
+  // month's push, or "See full recap" at the end of a week's story.
   Recap: { id: string };
-  // A weekly recap's story, full screen (the viewer), opened from that recap.
-  RecapStory: { recap: Recap };
+  // A weekly recap's story, full screen (the viewer): with the recap from its recap screen or a
+  // week's push, or by id from a ringed avatar and the Sleep shelf (it loads the recap itself).
+  RecapStory: { recap: Recap } | { id: string };
   // Build your recap: a recap's own format plus Year in pixels, or Year in pixels alone.
   RecapBuilder: { id?: string; format: ShareFormat };
   YearInPixels: undefined;

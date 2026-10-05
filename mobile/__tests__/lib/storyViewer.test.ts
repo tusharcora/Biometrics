@@ -1,4 +1,4 @@
-import { EXPIRE_GRACE_MS, frameProgress, initialViewer, isRunning, remainingMs, STORY_FRAME_MS, tapSide, viewerReducer, type ViewerState } from '../../src/lib/storyViewer';
+import { EXPIRE_GRACE_MS, frameProgress, initialViewer, isRunning, remainingMs, showsEndActions, STORY_FRAME_MS, tapSide, viewerReducer, type ViewerState } from '../../src/lib/storyViewer';
 
 const run = (s: ViewerState, ...actions: Parameters<typeof viewerReducer>[1][]) => actions.reduce(viewerReducer, s);
 
@@ -27,12 +27,34 @@ it('steps forward and back, restarting the frame each time, and stays on the fir
   expect(remainingMs(s, 8000)).toBe(4000);
 });
 
-it('closes after the last frame, by tap or by its time running out', () => {
+it('holds on the last frame (its end actions are up): neither a tap nor its time running out closes it', () => {
   const last = run(initialViewer(3, 0), { type: 'next', now: 0 }, { type: 'next', now: 0 });
   expect(last.index).toBe(2);
-  expect(run(last, { type: 'next', now: 100 })).toMatchObject({ index: 2, closed: true });
-  expect(isRunning(run(last, { type: 'next', now: 100 }))).toBe(false);
+  expect(showsEndActions(last)).toBe(true);
+  expect(showsEndActions(initialViewer(3, 0))).toBe(false);
+  const tapped = run(last, { type: 'next', now: 100 });
+  expect(tapped).toMatchObject({ index: 2, closed: false, ended: true });
+  expect(isRunning(tapped)).toBe(false);
+  // Its bar shows full and stays full, even after a pause and resume.
+  expect(frameProgress(tapped, 100)).toBe(1);
+  const resumed = run(tapped, { type: 'pause', reason: 'hold', now: 200 }, { type: 'resume', reason: 'hold', now: 300 });
+  expect(isRunning(resumed)).toBe(false);
+  expect(frameProgress(resumed, 9000)).toBe(1);
+  expect(run(last, { type: 'expire', index: 2, now: 5000 })).toMatchObject({ index: 2, closed: false, ended: true });
+  // Close (X, swipe down) still closes.
+  expect(run(tapped, { type: 'close', now: 400 }).closed).toBe(true);
   expect(run(initialViewer(3, 0), { type: 'close', now: 10 }).closed).toBe(true);
+});
+
+it('goes back from the end, and Watch again restarts at frame 1 running', () => {
+  const ended = run(initialViewer(3, 0), { type: 'next', now: 0 }, { type: 'next', now: 0 }, { type: 'next', now: 0 });
+  const back = run(ended, { type: 'prev', now: 1000 });
+  expect(back).toMatchObject({ index: 1, ended: false });
+  expect(isRunning(back)).toBe(true);
+  const again = run(ended, { type: 'restart', now: 2000 });
+  expect(again).toMatchObject({ index: 0, ended: false, closed: false });
+  expect(isRunning(again)).toBe(true);
+  expect(remainingMs(again, 2000)).toBe(STORY_FRAME_MS);
 });
 
 it('pauses while held and resumes with the time that was left', () => {
@@ -75,8 +97,8 @@ it("moves on when a frame's time runs out, and ignores a timer that races a tap"
   // A timer for the frame on screen, but within the grace of a change, is a race too.
   expect(run(tapped, { type: 'expire', index: 1, now: 4990 + EXPIRE_GRACE_MS - 1 }).index).toBe(1);
   expect(run(tapped, { type: 'expire', index: 1, now: 4990 + STORY_FRAME_MS }).index).toBe(2);
-  // Expiry on the last frame closes.
-  expect(run(initialViewer(1, 0), { type: 'expire', index: 0, now: 5000 }).closed).toBe(true);
+  // Expiry on the last frame holds it.
+  expect(run(initialViewer(1, 0), { type: 'expire', index: 0, now: 5000 })).toMatchObject({ closed: false, ended: true });
 });
 
 it('ignores everything once closed', () => {

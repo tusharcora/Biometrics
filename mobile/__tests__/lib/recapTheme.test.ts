@@ -20,6 +20,11 @@ it.each(CHARACTER_IDS)('keeps every text colour readable on the %s ground', (id)
   expect(t.dot).toMatch(/^#[0-9A-F]{8}$/i);
 });
 
+it.each(CHARACTER_IDS)("reads the story's See full recap button (ground label on an accent fill) for %s", (id) => {
+  const t = recapTint(id);
+  expect(contrast(t.ground, t.accent)).toBeGreaterThanOrEqual(4.5);
+});
+
 it('changes the accent only when it must', () => {
   expect(recapTint('luna').accentText).toBe('#FEF08A');
 });
