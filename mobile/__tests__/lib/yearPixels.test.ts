@@ -1,4 +1,4 @@
-import { pixelLevel, pixelStep, YEAR_COLUMNS, yearPixels } from '../../src/lib/yearPixels';
+import { pixelLevel, YEAR_COLUMNS, yearPixels } from '../../src/lib/yearPixels';
 
 it('draws one cell per night of the calendar year in date order, Feb 29 included in a leap year (Review Focus 4)', () => {
   const leap = yearPixels(2028, [], 480, '2028-12-31');
@@ -40,5 +40,4 @@ it('buckets a night: on goal ≥ 100 %, near 75–<100 %, short < 75 %, no data 
   expect(pixelLevel(360, 480)).toBe('near');
   expect(pixelLevel(359, 480)).toBe('short');
   expect(pixelLevel(null, 480)).toBe('none');
-  expect([pixelStep('none'), pixelStep('short'), pixelStep('near'), pixelStep('goal'), pixelStep('future')]).toEqual([0, 1, 2, 3, null]);
 });

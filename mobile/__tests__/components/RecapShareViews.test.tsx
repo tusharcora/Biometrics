@@ -7,6 +7,7 @@ import { RecapCardView } from '../../src/components/recap/RecapCardView';
 import { coachStoryFit, STORY_FRAME_COUNT, WeeklyStoryFrame, WeeklyStoryView } from '../../src/components/recap/WeeklyStoryView';
 import { YearPixelsView } from '../../src/components/recap/YearPixelsView';
 import { quoteLines, resolveIncludes } from '../../src/lib/recapShare';
+import { recapTint, yearCell } from '../../src/lib/recapTheme';
 import { yearPixels } from '../../src/lib/yearPixels';
 
 const BASE = { personaId: 'luna', builtAt: '2026-10-05T09:00:00.000Z', openedAt: null, sleepGoalMinutes: 480, lineSource: 'ai' as const, story: null, rebuiltAt: null };
@@ -142,11 +143,17 @@ describe('YearPixelsView', () => {
     expect(screen.queryByTestId('year-pixels-row-14')).toBeTruthy();
     expect(screen.queryByTestId('year-pixels-row-15')).toBeNull();
     const cell = (d: string) => screen.getByTestId(`year-pixels-cell-${d}`);
-    expect([cell('2026-01-01'), cell('2026-01-04'), cell('2026-01-03'), cell('2026-01-02')].map((c) => StyleSheet.flatten(c.props.style).backgroundColor)).toEqual([
-      '#2E2A4A', '#6B4FA8', '#9333EA', '#D8B4FE',
-    ]);
-    expect(cell('2026-01-02').props.accessibilityLabel).toBe('goal');
-    expect(screen.getByTestId('year-pixels-legend')).toHaveTextContent('ShortOn goal');
+    const t = recapTint('luna');
+    expect([cell('2026-01-04'), cell('2026-01-03'), cell('2026-01-02')].map((c) => StyleSheet.flatten(c.props.style).backgroundColor)).toEqual(['#6B4FA8', '#9333EA', '#D8B4FE']);
+    // No data: an empty, outlined square; a night still to come: a faint fill, no outline.
+    expect(StyleSheet.flatten(cell('2026-01-01').props.style)).toMatchObject({ backgroundColor: 'transparent', borderColor: yearCell('none', t).outline });
+    expect(cell('2026-01-01').props.accessibilityLabel).toBe('no data');
+    expect(StyleSheet.flatten(cell('2026-12-31').props.style)).toMatchObject({ backgroundColor: yearCell('future', t).fill, borderWidth: 0 });
+    expect(cell('2026-01-02').props.accessibilityLabel).toBe('on goal');
+    // "No data" has its own swatch, apart from the sleep scale.
+    expect(screen.getByTestId('year-pixels-legend-none')).toHaveTextContent('No data');
+    expect(screen.getByTestId('year-pixels-legend-scale')).toHaveTextContent('ShortOn goal');
+    expect(screen.getByTestId('year-pixels-legend').props.accessibilityLabel).toBe('Outlined: no data. Then short, near goal and on goal, light to bright purple');
     expect(screen.getByTestId('year-pixels-count')).toHaveTextContent('1 night on goal');
     expect(screen.getByTestId('year-pixels-caption')).toHaveTextContent('on your current goal of 7h 30m');
     expect(screen.getByTestId('year-pixels-app')).toHaveTextContent('Biometrics');

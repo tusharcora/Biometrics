@@ -30,11 +30,6 @@ export function pixelLevel(minutes: number | null, goalMinutes: number): Exclude
   return minutes >= goalMinutes * NEAR_GOAL_SHARE ? 'near' : 'short';
 }
 
-/** The level's step on the four-step scale (0 no data … 3 on goal); null for a future night. */
-export function pixelStep(level: PixelLevel): 0 | 1 | 2 | 3 | null {
-  return level === 'future' ? null : (({ none: 0, short: 1, near: 2, goal: 3 }) as const)[level];
-}
-
 const pad = (n: number) => String(n).padStart(2, '0');
 
 export function yearPixels(year: number, nights: Array<{ date: string; minutesAsleep: number }>, goalMinutes: number, today: string): YearPixels {

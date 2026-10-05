@@ -2,12 +2,11 @@ import React from 'react';
 import { Text, View } from 'react-native';
 import { goalLabel } from '../../lib/recapCopy';
 import { APP_NAME, DESIGN_WIDTH, type Includes } from '../../lib/recapShare';
-import { recapTint, YEAR_SCALE } from '../../lib/recapTheme';
-import { pixelStep, YEAR_COLUMNS, type PixelLevel, type YearPixels } from '../../lib/yearPixels';
+import { recapTint, yearCell, YEAR_SCALE } from '../../lib/recapTheme';
+import { YEAR_COLUMNS, type PixelLevel, type YearPixels } from '../../lib/yearPixels';
 import { FONTS } from '../../theme';
 import { Character } from '../characters/Character';
 import type { CharacterId } from '../characters/types';
-import { hexAlpha } from '../characters/palette';
 import { pixelFont } from '../coach/thinking/shared';
 import { ShareCanvas } from './ShareCanvas';
 
@@ -34,16 +33,18 @@ const LEVEL_LABEL: Record<PixelLevel, string> = { none: 'no data', short: 'short
 
 /**
  * Year in pixels (recap restyle, 1b): square, tinted by the current coach; every night of the
- * year in a 26-column grid on the four-step purple scale (no data, short, near, on goal). A plain
+ * year in a 26-column grid: short, near and on goal on a purple scale, no data an outlined empty
+ * square, nights still to come a faint fill. A plain
  * ground, no dots: the grid is the pattern (the year artboard has none).
  */
 export function YearPixelsView({ year, pixels, goalMinutes, coachId, includes, scale, testID = 'year-pixels' }: YearPixelsViewProps) {
   const a = (n: number) => (n * scale * DESIGN_WIDTH) / ART;
   const t = recapTint(coachId);
   const pixel = pixelFont();
-  const fill = (level: PixelLevel) => {
-    const step = pixelStep(level);
-    return step === null ? hexAlpha(t.text, 0.05) : YEAR_SCALE[step];
+  // An outline is drawn inside the square (same size either way), so the grid never shifts.
+  const cellStyle = (level: PixelLevel, size: number) => {
+    const { fill, outline } = yearCell(level, t);
+    return { width: a(size), height: a(size), borderRadius: a(2), backgroundColor: fill, borderWidth: outline ? a(1.5) : 0, borderColor: outline ?? undefined };
   };
   return (
     <ShareCanvas testID={testID} tint={t} width={a(ART)} height={a(ART)} dotSpacing={0} dotRadius={0} style={{ padding: a(PAD), gap: a(GAP) }}>
@@ -68,8 +69,8 @@ export function YearPixelsView({ year, pixels, goalMinutes, coachId, includes, s
               <View
                 key={cell.date}
                 testID={`${testID}-cell-${cell.date}`}
-                accessibilityLabel={cell.level}
-                style={{ width: a(CELL), height: a(CELL), borderRadius: a(2), backgroundColor: fill(cell.level) }}
+                accessibilityLabel={LEVEL_LABEL[cell.level]}
+                style={cellStyle(cell.level, CELL)}
               />
             ))}
           </View>
@@ -78,14 +79,21 @@ export function YearPixelsView({ year, pixels, goalMinutes, coachId, includes, s
       <View
         testID={`${testID}-legend`}
         accessible
-        accessibilityLabel={`From ${LEVEL_LABEL.none} through ${LEVEL_LABEL.short} and ${LEVEL_LABEL.near} to ${LEVEL_LABEL.goal}`}
-        style={{ flexDirection: 'row', alignItems: 'center', gap: a(8) }}
+        accessibilityLabel={`Outlined: ${LEVEL_LABEL.none}. Then ${LEVEL_LABEL.short}, ${LEVEL_LABEL.near} and ${LEVEL_LABEL.goal}, light to bright purple`}
+        style={{ flexDirection: 'row', alignItems: 'center', gap: a(20) }}
       >
-        <Text style={{ fontFamily: FONTS.sans, fontSize: a(12), lineHeight: a(16), color: t.muted }}>Short</Text>
-        {YEAR_SCALE.map((c) => (
-          <View key={c} style={{ width: a(14), height: a(14), borderRadius: a(3), backgroundColor: c }} />
-        ))}
-        <Text style={{ fontFamily: FONTS.sans, fontSize: a(12), lineHeight: a(16), color: t.muted }}>On goal</Text>
+        {/* No data is not a step of the scale: its own swatch, apart. */}
+        <View testID={`${testID}-legend-none`} style={{ flexDirection: 'row', alignItems: 'center', gap: a(8) }}>
+          <View style={cellStyle('none', 14)} />
+          <Text style={{ fontFamily: FONTS.sans, fontSize: a(12), lineHeight: a(16), color: t.muted }}>No data</Text>
+        </View>
+        <View testID={`${testID}-legend-scale`} style={{ flexDirection: 'row', alignItems: 'center', gap: a(8) }}>
+          <Text style={{ fontFamily: FONTS.sans, fontSize: a(12), lineHeight: a(16), color: t.muted }}>Short</Text>
+          {Object.values(YEAR_SCALE).map((c) => (
+            <View key={c} style={{ width: a(14), height: a(14), borderRadius: a(3), backgroundColor: c }} />
+          ))}
+          <Text style={{ fontFamily: FONTS.sans, fontSize: a(12), lineHeight: a(16), color: t.muted }}>On goal</Text>
+        </View>
       </View>
       <View style={{ marginTop: 'auto', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: a(12), borderTopWidth: a(1), borderTopColor: t.hairline, paddingTop: a(12) }}>
         {/* The caption qualifies the count, so it goes with it. */}
