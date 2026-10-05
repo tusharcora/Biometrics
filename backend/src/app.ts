@@ -9,6 +9,7 @@ import { forecastRouter } from './forecast/routes';
 import { habitsRouter } from './habits/routes';
 import { coachRouter } from './coach/routes';
 import { syncRouter } from './sync/routes';
+import { recapRouter } from './recap/routes';
 
 export function createApp(options: { auth?: Auth } = {}): Express {
   const app = express();
@@ -31,5 +32,6 @@ export function createApp(options: { auth?: Auth } = {}): Express {
   app.use(forecastRouter);
   app.use(habitsRouter);
   app.use(coachRouter);
+  app.use(recapRouter);
   return app;
 }

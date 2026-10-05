@@ -5,6 +5,7 @@ import { recomputeAllSleepRollups } from '../biometrics/repository';
 import { enqueueScoreCompute } from '../scoring/queue';
 import { prisma } from '../db/client';
 import { deleteUserAccount } from './deletion';
+import { parseNotificationSettingsPatch } from './notifications';
 
 export const usersRouter = Router();
 
@@ -45,6 +46,31 @@ usersRouter.put('/me/timezone', requireAuth, async (req: AuthedRequest, res) => 
   }
 
   res.json({ timezone });
+});
+
+usersRouter.get('/me/notifications', requireAuth, async (req: AuthedRequest, res) => {
+  const user = await prisma.user.findUnique({ where: { id: req.userId! }, select: { recapPushEnabled: true } });
+  if (!user) {
+    res.status(404).json({ error: 'User not found' });
+    return;
+  }
+  res.json({ recapPushEnabled: user.recapPushEnabled });
+});
+
+/** Partial: { recapPushEnabled: boolean }. Anything else is 400 invalid_settings. */
+usersRouter.put('/me/notifications', requireAuth, async (req: AuthedRequest, res) => {
+  const patch = parseNotificationSettingsPatch(req.body);
+  if (!patch) {
+    res.status(400).json({ error: 'invalid_settings' });
+    return;
+  }
+  const result = await prisma.user.updateMany({ where: { id: req.userId! }, data: patch });
+  if (result.count === 0) {
+    res.status(404).json({ error: 'User not found' });
+    return;
+  }
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: req.userId! }, select: { recapPushEnabled: true } });
+  res.json({ recapPushEnabled: user.recapPushEnabled });
 });
 
 /**

@@ -707,8 +707,20 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
 
   router.get('/me/coach/digests/latest', requireAuth, requireEnabled, async (req: AuthedRequest, res) => {
     try {
+      const userId = req.userId!;
+      // Merged into the weekly recap (spec 2026-10-04 §2): the latest BUILT WEEK recap's story, in
+      // the same shape, falling back to the latest legacy CoachDigest when no recap has a story.
+      const recap = await prisma.recap.findFirst({
+        where: { userId, kind: 'WEEK', status: 'BUILT', story: { not: null } },
+        orderBy: { periodStart: 'desc' },
+        select: { id: true, story: true, builtAt: true },
+      });
+      if (recap?.story) {
+        res.json({ digest: { id: recap.id, text: recap.story, createdAt: recap.builtAt.toISOString() } });
+        return;
+      }
       const digest = await prisma.coachDigest.findFirst({
-        where: { userId: req.userId! },
+        where: { userId },
         orderBy: [{ weekStart: 'desc' }, { createdAt: 'desc' }],
       });
       res.json({
