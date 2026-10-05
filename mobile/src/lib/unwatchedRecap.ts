@@ -2,12 +2,12 @@ import { useEffect, useSyncExternalStore } from 'react';
 import { AppState } from 'react-native';
 import { fetchRecaps, markRecapOpened, type RecapKind, type RecapSummary } from '../api/recaps';
 
-// The story ring (weekly story placement, owner-approved 2026-10-05): while the newest recap,
-// week or month, is unopened, the Home avatar, the Profile tab and the Profile screen's avatar
-// wear a ring in its coach's colour. One small store feeds all three, so opening the recap (from
-// any of them, the shelf, the Recaps list or a push) clears them together. The selection is the
-// old Home ready card's: the newest recap, while unopened. Its dismissal is gone, since opening
-// is the only way to clear a ring.
+// The story ring (weekly story placement, owner-approved 2026-10-05): while the newest weekly
+// recap is unopened, the Home avatar, the Profile tab and the Profile screen's avatar wear a ring
+// in its coach's colour, and a tap plays its story. Weeks only (owner, 2026-10-05): a month keeps
+// its push and its shelf circle but never rings. One small store feeds all three, so opening the
+// recap (from any of them, the shelf, the Recaps list or a push) clears them together. There is
+// no dismissal: opening is the only way to clear a ring.
 
 interface Snapshot {
   /** The recap behind the ring, or null for no ring. */
@@ -29,9 +29,9 @@ function publish(next: Partial<Snapshot>): void {
   listeners.forEach((l) => l());
 }
 
-/** The ring's recap: the newest one, unless it is opened (on the server or in this session). */
+/** The ring's recap: the newest week, unless it is opened (on the server or in this session). */
 export function selectUnwatched(newest: RecapSummary | null | undefined, watched: ReadonlySet<string>): RecapSummary | null {
-  return newest && !isRecapWatched(newest, watched) ? newest : null;
+  return newest && newest.kind === 'WEEK' && !isRecapWatched(newest, watched) ? newest : null;
 }
 
 export function isRecapWatched(recap: Pick<RecapSummary, 'id' | 'openedAt'>, watched: ReadonlySet<string>): boolean {
@@ -43,14 +43,14 @@ export function recapDestination(recap: { id: string; kind: RecapKind }): { name
   return { name: recap.kind === 'WEEK' ? 'RecapStory' : 'Recap', params: { id: recap.id } };
 }
 
-/** Re-reads the newest recap. Calls made while one is running share it. A failure shows no ring. */
+/** Re-reads the newest weekly recap. Calls made while one is running share it. A failure shows no ring. */
 export function refreshUnwatchedRecap(): Promise<void> {
   if (inflight) return inflight;
   const at = epoch;
   const run = (async () => {
     let newest: RecapSummary | null = null;
     try {
-      newest = (await fetchRecaps({ limit: 1 }))[0] ?? null;
+      newest = (await fetchRecaps({ kind: 'WEEK', limit: 1 }))[0] ?? null;
     } catch {
       // No ring.
     }

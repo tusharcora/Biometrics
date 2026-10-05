@@ -593,20 +593,18 @@ describe('DashboardScreen: story ring on the avatar', () => {
     expect(mockNavigate).toHaveBeenCalledWith('RecapStory', { id: 'w1' });
   });
 
-  it('a month opens its recap screen', async () => {
-    mockApi({ records: steps, recaps: [{ ...week, id: 'sep', kind: 'MONTH', periodStart: '2026-09-01', periodEnd: '2026-09-30' }] });
+  it('only a week rings the avatar: Home asks for weeks alone', async () => {
+    mockApi({ records: steps, recaps: [week] });
     render(withCharacter(<DashboardScreen />));
     await waitFor(() => expect(screen.getByTestId('profile-story-ring-dot')).toBeTruthy());
-    expect(screen.getByTestId('settings-button').props.accessibilityLabel).toBe('Profile. Your September recap is ready. Open your recap');
-    fireEvent.press(screen.getByTestId('settings-button'));
-    expect(mockNavigate).toHaveBeenCalledWith('Recap', { id: 'sep' });
+    expect(apiFetch).toHaveBeenCalledWith('/me/recaps?kind=WEEK&limit=1');
   });
 
   it('without an unwatched recap the avatar has no ring and opens Profile as before', async () => {
     mockApi({ records: steps, recaps: [{ ...week, openedAt: '2026-10-05T10:00:00.000Z' }] });
     render(withCharacter(<DashboardScreen />));
     await waitFor(() => expect(screen.getByTestId('settings-button')).toBeTruthy());
-    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith('/me/recaps?limit=1'));
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith('/me/recaps?kind=WEEK&limit=1'));
     expect(screen.queryByTestId('profile-story-ring-dot')).toBeNull();
     expect(ringOf()).toMatchObject({ borderWidth: 0 });
     expect(screen.getByTestId('settings-button').props.accessibilityLabel).toBe('Profile and settings');

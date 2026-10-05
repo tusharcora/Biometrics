@@ -27,10 +27,10 @@ beforeEach(() => {
   openedMock.mockResolvedValue(undefined);
 });
 
-describe('selectUnwatched (the ready card rules: the newest recap, while it is unopened)', () => {
-  it('is the newest recap, week or month, when it has not been opened', () => {
+describe('selectUnwatched (the newest weekly recap, while it is unopened)', () => {
+  it('is the newest week when it has not been opened; a month never rings', () => {
     expect(selectUnwatched(summary(), new Set())?.id).toBe('w40');
-    expect(selectUnwatched(summary({ id: 'sep', kind: 'MONTH' }), new Set())?.kind).toBe('MONTH');
+    expect(selectUnwatched(summary({ id: 'sep', kind: 'MONTH' }), new Set())).toBeNull();
   });
 
   it('is nothing once it is opened, on the server or here', () => {
@@ -57,7 +57,8 @@ describe('useUnwatchedRecap (one store for the Home avatar, the tab bar and Prof
     const b = renderHook(() => useUnwatchedRecap());
     await act(async () => {});
     expect(fetchMock).toHaveBeenCalledTimes(1);
-    expect(fetchMock).toHaveBeenCalledWith({ limit: 1 });
+    // Weeks only: a month has its own push and shelf circle, never the ring.
+    expect(fetchMock).toHaveBeenCalledWith({ kind: 'WEEK', limit: 1 });
     expect(a.result.current.recap?.id).toBe('w40');
     expect(b.result.current.recap?.id).toBe('w40');
   });
@@ -123,10 +124,10 @@ describe('useUnwatchedRecap (one store for the Home avatar, the tab bar and Prof
     const a = renderHook(() => useUnwatchedRecap(navigation));
     await act(async () => {});
     expect(a.result.current.recap?.id).toBe('w40');
-    fetchMock.mockResolvedValue([summary({ id: 'sep', kind: 'MONTH', personaId: 'luna' })]);
+    fetchMock.mockResolvedValue([summary({ id: 'w41', personaId: 'luna' })]);
     await act(async () => listeners.focus!());
-    expect(a.result.current.recap?.id).toBe('sep');
-    fetchMock.mockResolvedValue([summary({ id: 'sep', kind: 'MONTH', openedAt: 'x' })]);
+    expect(a.result.current.recap?.id).toBe('w41');
+    fetchMock.mockResolvedValue([summary({ id: 'w41', openedAt: 'x' })]);
     await act(async () => onAppState!('active'));
     expect(a.result.current.recap).toBeNull();
     jest.restoreAllMocks();

@@ -39,11 +39,11 @@ it("rings the Profile avatar in the recap coach's colour and plays the week's st
   expect(navigate).toHaveBeenCalledWith('RecapStory', { id: 'w1' });
 });
 
-it('opens a month on its recap screen', async () => {
+it('asks for weeks only: a month never rings the avatar', async () => {
   (fetchRecaps as jest.Mock).mockResolvedValue([{ ...week, id: 'sep', kind: 'MONTH', periodStart: '2026-09-01' }]);
   await open();
-  fireEvent.press(screen.getByTestId('profile-avatar'));
-  expect(navigate).toHaveBeenCalledWith('Recap', { id: 'sep' });
+  expect(fetchRecaps).toHaveBeenCalledWith({ kind: 'WEEK', limit: 1 });
+  expect(screen.queryByTestId('profile-avatar-ring')).toBeNull();
 });
 
 it('drops the ring once the recap is opened, and re-reads it on focus', async () => {
