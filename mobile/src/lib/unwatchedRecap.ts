@@ -92,6 +92,11 @@ function subscribe(listener: () => void): () => void {
 
 const getSnapshot = () => snapshot;
 
+/** The recaps opened in this session, for lists that mark unwatched ones (the Sleep shelf). */
+export function useWatchedRecaps(): ReadonlySet<string> {
+  return useSyncExternalStore(subscribe, getSnapshot, getSnapshot).watched;
+}
+
 interface FocusSource {
   addListener?: (event: 'focus', callback: () => void) => () => void;
 }
