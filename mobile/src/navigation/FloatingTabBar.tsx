@@ -7,6 +7,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from 'nativewind';
 import { Character } from '../components/characters/Character';
 import { StoryRing, useStoryRing } from '../components/recap/StoryRing';
+import { readyCardTitle } from '../lib/recapCopy';
 import { Text } from '../components/ui/text';
 import { useCoachStatus } from '../lib/useCoachStatus';
 import { useKeyboardVisible } from '../lib/useKeyboardVisible';
@@ -151,7 +152,8 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
                 key={route.key}
                 testID={`tab-${route.name}`}
                 accessibilityRole="button"
-                accessibilityLabel={ringed ? `${label}. ${ring.hint}` : label}
+                // The tab still opens Profile, so it says what is ready, not what a tap plays.
+                accessibilityLabel={ringed ? `${label}. ${readyCardTitle(ring.recap)}` : label}
                 accessibilityState={{ selected: focused }}
                 onPress={() => press(route, focused)}
                 hitSlop={4}

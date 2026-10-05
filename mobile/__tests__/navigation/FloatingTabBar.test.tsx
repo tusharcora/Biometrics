@@ -82,7 +82,8 @@ describe('FloatingTabBar: story ring on the Profile tab', () => {
     await act(async () => {});
     expect(StyleSheet.flatten(utils.getByTestId('tab-Profile-story-ring').props.style)).toMatchObject({ borderColor: storyRingColor('luna', scheme) });
     expect(StyleSheet.flatten(utils.getByTestId('tab-Profile-story-ring-dot').props.style)).toMatchObject({ backgroundColor: storyRingColor('luna', scheme) });
-    expect(utils.getByTestId('tab-Profile').props.accessibilityLabel).toBe('Profile. Your week is ready. Play your story');
+    // The tab opens Profile, so it only says what is ready.
+    expect(utils.getByTestId('tab-Profile').props.accessibilityLabel).toBe('Profile. Your week is ready');
     fireEvent.press(utils.getByTestId('tab-Profile'));
     expect((props as unknown as { navigation: { navigate: jest.Mock } }).navigation.navigate).toHaveBeenCalledWith('Profile', undefined);
   });
