@@ -4,7 +4,7 @@ import { render, screen, within } from '@testing-library/react-native';
 import { HIDDEN_OK } from '../../jest-mocks/characterContext';
 import type { Recap } from '../../src/api/recaps';
 import { RecapCardView } from '../../src/components/recap/RecapCardView';
-import { STORY_FRAME_COUNT, WeeklyStoryFrame, WeeklyStoryView } from '../../src/components/recap/WeeklyStoryView';
+import { coachStoryFit, STORY_FRAME_COUNT, WeeklyStoryFrame, WeeklyStoryView } from '../../src/components/recap/WeeklyStoryView';
 import { YearPixelsView } from '../../src/components/recap/YearPixelsView';
 import { quoteLines, resolveIncludes } from '../../src/lib/recapShare';
 import { yearPixels } from '../../src/lib/yearPixels';
@@ -150,6 +150,8 @@ describe('YearPixelsView', () => {
     expect(screen.getByTestId('year-pixels-count')).toHaveTextContent('1 night on goal');
     expect(screen.getByTestId('year-pixels-caption')).toHaveTextContent('on your current goal of 7h 30m');
     expect(screen.getByTestId('year-pixels-app')).toHaveTextContent('Biometrics');
+    // The year artboard is a plain ground: no dot pattern, unlike the card and the story.
+    expect(screen.queryByTestId('year-pixels-dots', HIDDEN_OK)).toBeNull();
   });
 
   it('drops the caption with the count, and the coach when switched off', () => {
@@ -194,5 +196,23 @@ describe('a 30-word quote', () => {
     const story = Array.from({ length: 5 }, () => LONG).join(' ');
     render(<WeeklyStoryFrame recap={{ ...WEEK, story }} coachId="luna" includes={storyIncludes} scale={1} index={2} />);
     expectQuoteFits('recap-story-story', 1, 312, story);
+  });
+
+  it('a story at the longest the coach can write (about 2,000 characters) shrinks into its box, never truncated', () => {
+    const story = Array.from({ length: 10 }, () => LONG).join(' ');
+    for (const includes of [storyIncludes, { ...storyIncludes, coach: false }]) {
+      const recap = { ...WEEK, story };
+      const { unmount } = render(<WeeklyStoryFrame recap={recap} coachId="luna" includes={includes} scale={2} index={2} />);
+      const fit = coachStoryFit(recap, includes);
+      const text = screen.getByTestId('recap-story-story');
+      const { fontSize, lineHeight } = StyleSheet.flatten(text.props.style) as { fontSize: number; lineHeight: number };
+      expect(fontSize).toBe(fit.fontSize * 2);
+      // At the size drawn, the estimated wrap fits the box the frame leaves it.
+      expect(quoteLines(story, fit.fontSize, 312) * lineHeight).toBeLessThanOrEqual(fit.box * 2);
+      expect(text.props.numberOfLines).toBeGreaterThanOrEqual(quoteLines(story, fit.fontSize, 312));
+      expect(screen.getByTestId('recap-story-stat-spread')).toBeTruthy();
+      expect(screen.getByTestId('recap-story-app')).toHaveTextContent('Biometrics');
+      unmount();
+    }
   });
 });

@@ -70,3 +70,13 @@ it('keeps a short quote at its base size and shrinks a 30-word quote until it fi
     expect(fit.lines * fit.fontSize * QUOTE_LINE_HEIGHT).toBeLessThanOrEqual(height);
   }
 });
+
+it('goes below 12 pt only when given a lower floor, and then fits a story far longer than a quote', () => {
+  const story = Array.from({ length: 10 }, () => LONG).join(' ');
+  expect(fitQuote(story, 312, 282, 18).fontSize).toBe(12);
+  const fit = fitQuote(story, 312, 282, 18, 6);
+  expect(fit.fontSize).toBeLessThan(12);
+  expect(fit.fontSize).toBeGreaterThanOrEqual(6);
+  expect(fit.lines).toBe(quoteLines(story, fit.fontSize, 312));
+  expect(fit.lines * fit.fontSize * QUOTE_LINE_HEIGHT).toBeLessThanOrEqual(282);
+});

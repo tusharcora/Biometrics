@@ -118,11 +118,15 @@ export function quoteLines(text: string, fontSize: number, width: number, advanc
   return lines;
 }
 
-/** The largest size (base down to 12, whole points) at which the wrapped quote fits the box. */
-export function fitQuote(text: string, width: number, maxHeight: number, baseSize: number): { fontSize: number; lines: number } {
+/**
+ * The largest size (base down to `minSize`, whole points; 12 by default) at which the wrapped text
+ * fits the box. A quote is at most 30 words and always fits by 12; the weekly story has no word
+ * cap, so frame 3 passes a lower floor and a long story shrinks instead of overflowing.
+ */
+export function fitQuote(text: string, width: number, maxHeight: number, baseSize: number, minSize: number = QUOTE_MIN_FONT): { fontSize: number; lines: number } {
   let fontSize = baseSize;
   let lines = quoteLines(text, fontSize, width);
-  while (fontSize > QUOTE_MIN_FONT && lines * fontSize * QUOTE_LINE_HEIGHT > maxHeight) {
+  while (fontSize > minSize && lines * fontSize * QUOTE_LINE_HEIGHT > maxHeight) {
     fontSize--;
     lines = quoteLines(text, fontSize, width);
   }

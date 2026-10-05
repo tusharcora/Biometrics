@@ -34,7 +34,8 @@ const LEVEL_LABEL: Record<PixelLevel, string> = { none: 'no data', short: 'short
 
 /**
  * Year in pixels (recap restyle, 1b): square, tinted by the current coach; every night of the
- * year in a 26-column grid on the four-step purple scale (no data, short, near, on goal).
+ * year in a 26-column grid on the four-step purple scale (no data, short, near, on goal). A plain
+ * ground, no dots: the grid is the pattern (the year artboard has none).
  */
 export function YearPixelsView({ year, pixels, goalMinutes, coachId, includes, scale, testID = 'year-pixels' }: YearPixelsViewProps) {
   const a = (n: number) => (n * scale * DESIGN_WIDTH) / ART;
@@ -45,7 +46,7 @@ export function YearPixelsView({ year, pixels, goalMinutes, coachId, includes, s
     return step === null ? hexAlpha(t.text, 0.05) : YEAR_SCALE[step];
   };
   return (
-    <ShareCanvas testID={testID} tint={t} width={a(ART)} height={a(ART)} dotSpacing={a(16)} dotRadius={a(1.3)} style={{ padding: a(PAD), gap: a(GAP) }}>
+    <ShareCanvas testID={testID} tint={t} width={a(ART)} height={a(ART)} dotSpacing={0} dotRadius={0} style={{ padding: a(PAD), gap: a(GAP) }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: a(16), minHeight: a(SPRITE) }}>
         {includes.coach ? (
           <View testID={`${testID}-coach`}>

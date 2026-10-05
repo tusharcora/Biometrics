@@ -237,17 +237,29 @@ function CoachSawBody({ recap, coachId, includes, u, t, pixel, testID }: BodyPro
   );
 }
 
+/** The smallest the weekly story is drawn (design units): only a story near the coach's 500-token cap gets there. */
+const STORY_MIN = 6;
+
+/**
+ * Frame 3's text size: the weekly story (or the line) fitted into the room the frame leaves it, from
+ * 18 down to STORY_MIN, so a long story shrinks instead of overflowing or being cut off. `box` is
+ * that room in design units.
+ */
+export function coachStoryFit(recap: Pick<Recap, 'story' | 'line' | 'stats'>, includes: Includes): { fontSize: number; lines: number; box: number } {
+  const header = includes.coach ? 72 : 30;
+  const footer = 1 + 16 + FOOTER_LINE;
+  const blocks = [STORY_PROGRESS_HEIGHT, EYEBROW_LINE, header, coachFrameStats(recap.stats).length > 0 ? CARD_CHROME + CARD_VALUE_LINE : 0, footer].filter((h) => h > 0);
+  // The text is one more block, so one more gap.
+  const box = CONTENT_H - blocks.reduce((x, y) => x + y, 0) - blocks.length * GAP - 8;
+  return { ...fitQuote(coachFrameText(recap), CONTENT_W, box, STORY_BASE, STORY_MIN), box };
+}
+
 /** Frame 3: the coach's weekly story (the line when there is none), the streak and the spread. */
 function CoachStoryBody({ recap, coachId, includes, u, t, pixel, testID }: BodyProps) {
   const name = characterInfo(coachId).name;
   const text = coachFrameText(recap);
   const stats = coachFrameStats(recap.stats);
-  const header = includes.coach ? 72 : 30;
-  const footer = 1 + 16 + FOOTER_LINE;
-  const blocks = [STORY_PROGRESS_HEIGHT, EYEBROW_LINE, header, stats.length > 0 ? CARD_CHROME + CARD_VALUE_LINE : 0, footer].filter((h) => h > 0);
-  // The text is the fifth block, so one more gap.
-  const box = CONTENT_H - blocks.reduce((x, y) => x + y, 0) - blocks.length * GAP - 8;
-  const fit = fitQuote(text, CONTENT_W, box, STORY_BASE);
+  const fit = coachStoryFit(recap, includes);
   return (
     <>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: u(16) }}>
