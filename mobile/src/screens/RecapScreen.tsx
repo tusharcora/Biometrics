@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ScrollView, View, useWindowDimensions } from 'react-native';
+import { Pressable, ScrollView, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
@@ -97,9 +97,19 @@ export function RecapScreen() {
         {state.phase === 'ready' && state.recap.kind === 'WEEK' ? (
           <View className="gap-4">
             <Text testID="recap-title" className="font-display text-display-lg">{`Your week with ${coachName}`}</Text>
-            <View testID="recap-story-preview" className="items-center">
+            {/* The preview opens the full-screen story viewer, like the button under it. */}
+            <Pressable
+              testID="recap-story-preview"
+              accessibilityRole="button"
+              accessibilityLabel="View story"
+              className="items-center"
+              onPress={() => navigation.navigate('RecapStory', { recap: state.recap })}
+            >
               <WeeklyStoryView recap={state.recap} coachId={coachId} includes={resolveIncludes('story', {}, state.recap.stats)} scale={previewScale('story', width - 40, 520)} />
-            </View>
+            </Pressable>
+            <Button testID="recap-view-story" variant="secondary" onPress={() => navigation.navigate('RecapStory', { recap: state.recap })}>
+              View story
+            </Button>
             {state.recap.story ? (
               <Card>
                 <Text testID="recap-story-text" className="text-base leading-snug">{state.recap.story}</Text>

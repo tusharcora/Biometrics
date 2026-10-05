@@ -87,6 +87,18 @@ it('shows a week as its story card with the paragraph under it', async () => {
   expect(mockNavigate).toHaveBeenCalledWith('RecapBuilder', { id: 'r-week', format: 'story' });
 });
 
+it('opens the story viewer from the preview and from "View story"', async () => {
+  mockParams = { id: 'r-week' };
+  load.mockResolvedValue(WEEK);
+  render(withCharacter(<RecapScreen />));
+  fireEvent.press(await screen.findByTestId('recap-story-preview'));
+  expect(mockNavigate).toHaveBeenLastCalledWith('RecapStory', { recap: WEEK });
+  mockNavigate.mockClear();
+  fireEvent.press(screen.getByTestId('recap-view-story'));
+  expect(mockNavigate).toHaveBeenLastCalledWith('RecapStory', { recap: WEEK });
+  expect(screen.getByTestId('recap-story-preview').props.accessibilityLabel).toBe('View story');
+});
+
 it("names the recap's own coach after a coach switch, not the current one (ruling S6)", async () => {
   load.mockResolvedValue({ ...MONTH, personaId: 'luna' });
   const { unmount } = render(withCharacter(<RecapScreen />, { characterId: 'mochi' }));

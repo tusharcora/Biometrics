@@ -5,6 +5,7 @@ import { NavigationContainer, DefaultTheme, DarkTheme, type NavigatorScreenParam
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useAuth } from '../auth/AuthContext';
+import type { Recap } from '../api/recaps';
 import type { ScoreType } from '../api/scores';
 import { AuthNavigator } from './AuthNavigator';
 import { ConnectHealthScreen } from '../screens/ConnectHealthScreen';
@@ -26,6 +27,7 @@ import { SleepNightScreen } from '../screens/SleepNightScreen';
 import { BedtimeGoalScreen } from '../screens/BedtimeGoalScreen';
 import { RecapBuilderScreen } from '../screens/RecapBuilderScreen';
 import { RecapScreen } from '../screens/RecapScreen';
+import { RecapStoryScreen } from '../screens/RecapStoryScreen';
 import { RecapsScreen } from '../screens/RecapsScreen';
 import { YearInPixelsScreen } from '../screens/YearInPixelsScreen';
 import type { ShareFormat } from '../lib/recapShare';
@@ -86,6 +88,8 @@ export type RootStackParamList = {
   Recaps: undefined;
   // One recap; from the list, the Home card, the coach digest card or a tapped push.
   Recap: { id: string };
+  // A weekly recap's story, full screen (the viewer), opened from that recap.
+  RecapStory: { recap: Recap };
   // Build your recap: a recap's own format plus Year in pixels, or Year in pixels alone.
   RecapBuilder: { id?: string; format: ShareFormat };
   YearInPixels: undefined;
@@ -194,6 +198,12 @@ export function RootNavigator() {
               <Stack.Screen name="SleepNight" component={SleepNightScreen} options={{ title: '' }} />
               <Stack.Screen name="BedtimeGoal" component={BedtimeGoalScreen} options={{ title: 'Bedtime goal' }} />
               <Stack.Screen name="Recap" component={RecapScreen} options={{ title: '' }} />
+              <Stack.Screen
+                name="RecapStory"
+                component={RecapStoryScreen}
+                // Full screen with no system swipe: the viewer's own swipe down closes it.
+                options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }}
+              />
               <Stack.Screen name="Recaps" component={RecapsScreen} options={{ title: 'Your recaps' }} />
               <Stack.Screen name="YearInPixels" component={YearInPixelsScreen} options={{ title: 'Year in pixels' }} />
               <Stack.Screen name="RecapBuilder" component={RecapBuilderScreen} options={{ title: 'Build your recap' }} />
