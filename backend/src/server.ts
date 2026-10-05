@@ -9,7 +9,8 @@ import { enqueuePendingStepsHistoryBackfills } from './sync/stepsHistory';
 import { enqueuePendingSleepHistoryBackfills, enqueuePendingSleepStagesBackfills } from './sync/sleepHistory';
 import { scheduleCatchUpSweep } from './sync/catchUp';
 import { scheduleWeeklyHabitCorrelationSweep } from './habits/queue';
-import { scheduleDailyCoachRetention, scheduleWeeklyCoachDigest } from './coach/queue';
+import { scheduleDailyCoachRetention } from './coach/queue';
+import { startRecaps } from './recap/backfill';
 import { coachSummaryQueue, startDaySummaryWorker } from './coach/daySummaryJob';
 
 const port = Number(process.env.PORT ?? 3000);
@@ -69,11 +70,10 @@ function startBackgroundWork(): void {
     console.error('Failed to schedule the weekly habit correlation sweep', err),
   );
 
-  // Coach weekly digest (a no-op at run time unless COACH_ENABLED) and the daily
-  // 90-day transcript retention job (runs regardless of the flag).
-  scheduleWeeklyCoachDigest().catch((err) =>
-    console.error('Failed to schedule the weekly coach digest', err),
-  );
+  // Recaps replace the weekly digest: retire its scheduler, enqueue the one-off launch backfill,
+  // then register the hourly recap sweep, in that order (spec 2026-10-04 §2).
+  startRecaps().catch((err) => console.error('Failed to start the recap sweep', err));
+  // The daily 90-day transcript retention job (runs regardless of COACH_ENABLED).
   scheduleDailyCoachRetention().catch((err) =>
     console.error('Failed to schedule the daily coach retention job', err),
   );

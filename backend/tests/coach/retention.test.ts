@@ -6,10 +6,9 @@ import { deleteUserCoachData, runCoachRetention, TRANSCRIPT_RETENTION_DAYS } fro
 import {
   COACH_RETENTION_CRON,
   COACH_RETENTION_JOB,
-  COACH_WEEKLY_DIGEST_CRON,
   COACH_WEEKLY_DIGEST_JOB,
+  retireWeeklyCoachDigest,
   scheduleDailyCoachRetention,
-  scheduleWeeklyCoachDigest,
 } from '../../src/coach/queue';
 import { getCoachProvider, setCoachProvider } from '../../src/coach/config';
 import { ScriptedStreamProvider } from '../../src/coach/model/provider';
@@ -194,19 +193,19 @@ describe('deleteUserCoachData', () => {
 });
 
 describe('scheduled job wiring', () => {
-  it('registers the weekly digest and the daily retention as repeatable schedulers (score-sweep style)', async () => {
+  it('registers the daily retention scheduler and removes the retired weekly digest scheduler', async () => {
     const calls: unknown[][] = [];
-    const queue = { upsertJobScheduler: (async (...args: unknown[]) => void calls.push(args)) as any };
-
-    await scheduleWeeklyCoachDigest(queue);
+    const queue = {
+      upsertJobScheduler: (async (...args: unknown[]) => void calls.push(['upsert', ...args])) as any,
+      removeJobScheduler: (async (...args: unknown[]) => void calls.push(['remove', ...args])) as any,
+    };
+    await retireWeeklyCoachDigest(queue);
     await scheduleDailyCoachRetention(queue);
-
     expect(calls).toEqual([
-      [COACH_WEEKLY_DIGEST_JOB, { pattern: COACH_WEEKLY_DIGEST_CRON }, { name: COACH_WEEKLY_DIGEST_JOB }],
-      [COACH_RETENTION_JOB, { pattern: COACH_RETENTION_CRON }, { name: COACH_RETENTION_JOB }],
+      ['remove', COACH_WEEKLY_DIGEST_JOB],
+      ['upsert', COACH_RETENTION_JOB, { pattern: COACH_RETENTION_CRON }, { name: COACH_RETENTION_JOB }],
     ]);
-    expect(COACH_WEEKLY_DIGEST_CRON).toBe('0 8 * * 1'); // weekly
-    expect(COACH_RETENTION_CRON).toBe('15 4 * * *'); // daily
+    expect(COACH_RETENTION_CRON).toBe('15 4 * * *');
   });
 
   describe('worker dispatch', () => {
@@ -225,8 +224,8 @@ describe('scheduled job wiring', () => {
       jest.restoreAllMocks();
     });
 
-    it('the digest job is a no-op while COACH_ENABLED is off: the provider is never called', async () => {
-      delete process.env.COACH_ENABLED;
+    it('a tick from the retired digest scheduler does nothing', async () => {
+      process.env.COACH_ENABLED = 'true';
       const provider = new ScriptedStreamProvider([]);
       setCoachProvider(provider);
       await processSyncJob(job(COACH_WEEKLY_DIGEST_JOB));
