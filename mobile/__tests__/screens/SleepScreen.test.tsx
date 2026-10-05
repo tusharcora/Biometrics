@@ -391,11 +391,12 @@ describe('SleepScreen', () => {
     expect(mockNavigate).toHaveBeenCalledWith('RecapStory', { id: 'w1' });
   });
 
-  it('has no shelf without recaps', async () => {
+  it('keeps Recaps · See all without recaps (no circles), so the recaps and Year in pixels stay reachable', async () => {
     (fetchRecaps as jest.Mock).mockResolvedValue([]);
     renderScreen();
-    expect(await screen.findByTestId('sleep-goal-row')).toBeTruthy();
-    await waitFor(() => expect(fetchRecaps).toHaveBeenCalled());
-    expect(screen.queryByTestId('recap-shelf')).toBeNull();
+    expect(await screen.findByTestId('recap-shelf-empty')).toBeTruthy();
+    expect(screen.queryByTestId('recap-shelf-row')).toBeNull();
+    fireEvent.press(screen.getByTestId('recap-shelf-see-all'));
+    expect(mockNavigate).toHaveBeenCalledWith('Recaps');
   });
 });

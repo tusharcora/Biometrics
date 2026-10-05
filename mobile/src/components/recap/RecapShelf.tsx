@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { AppState, Pressable, ScrollView, View } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import { fetchRecaps, type RecapSummary } from '../../api/recaps';
 import { useCharacterOptional } from '../../characters/CharacterContext';
@@ -26,7 +26,8 @@ interface Navigator {
 // The story shelf at the top of Sleep (weekly story placement, design D): "Recaps" with See all,
 // then a row of circles, newest first, each on its coach's ground. An unwatched recap wears its
 // coach's ring, a watched one a neutral ring. A week plays its story; a month opens its recap.
-// Hidden while loading and when there are no recaps (or they could not be loaded).
+// The header and See all always show (the way to Your recaps and Year in pixels); the circles
+// only once there are recaps, with a one-line hint when there are none yet.
 export function RecapShelf({ navigation }: { navigation: Navigator }) {
   const { colorScheme } = useColorScheme();
   const scheme = colorScheme === 'dark' ? 'dark' : 'light';
@@ -50,14 +51,17 @@ export function RecapShelf({ navigation }: { navigation: Navigator }) {
   useEffect(() => {
     void load();
     const off = navigation.addListener?.('focus', () => void load());
+    const appState = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void load();
+    });
     return () => {
       latest.current++;
       off?.();
+      appState.remove();
     };
   }, [navigation, load]);
 
   const items = useMemo(() => shelfItems(recaps ?? [], todayCivil(), watched), [recaps, watched]);
-  if (items.length === 0) return null;
   const pixel = pixelFont();
 
   return (
@@ -68,55 +72,62 @@ export function RecapShelf({ navigation }: { navigation: Navigator }) {
           <Text className="text-sm font-semibold text-accent">See all</Text>
         </Pressable>
       </View>
+      {recaps !== null && recaps.length === 0 ? (
+        <Text testID="recap-shelf-empty" className="text-sm text-muted-foreground">
+          Your first recap arrives after your first full week of sleep.
+        </Text>
+      ) : null}
       {/* Bleeds to the screen edges so the row scrolls under the page's padding. */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -20 }} contentContainerStyle={{ gap: 14, paddingHorizontal: 20 }}>
-        {items.map((item) => {
-          const coach = recapCoachId(item, characterId);
-          const tint = recapTint(coach);
-          return (
-            <Pressable
-              key={item.id}
-              testID={`recap-shelf-item-${item.id}`}
-              accessibilityRole="button"
-              accessibilityLabel={item.accessibilityLabel}
-              onPress={() => {
-                const to = recapDestination(item);
-                navigation.navigate(to.name, to.params);
-              }}
-              className="items-center active:opacity-80"
-              style={{ gap: 6, width: CIRCLE + 8 }}
-            >
-              <View
-                testID={`recap-shelf-ring-${item.id}`}
-                style={{
-                  width: CIRCLE,
-                  height: CIRCLE,
-                  borderRadius: CIRCLE / 2,
-                  borderWidth: item.unwatched ? 3 : 2,
-                  borderColor: item.unwatched ? storyRingColor(coach, scheme) : STORY_RING_NEUTRAL[scheme],
-                  padding: 3,
+      {items.length > 0 ? (
+        <ScrollView testID="recap-shelf-row" horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -20 }} contentContainerStyle={{ gap: 14, paddingHorizontal: 20 }}>
+          {items.map((item) => {
+            const coach = recapCoachId(item, characterId);
+            const tint = recapTint(coach);
+            return (
+              <Pressable
+                key={item.id}
+                testID={`recap-shelf-item-${item.id}`}
+                accessibilityRole="button"
+                accessibilityLabel={item.accessibilityLabel}
+                onPress={() => {
+                  const to = recapDestination(item);
+                  navigation.navigate(to.name, to.params);
                 }}
+                className="items-center active:opacity-80"
+                style={{ gap: 6, width: CIRCLE + 8 }}
               >
                 <View
-                  testID={`recap-shelf-circle-${item.id}`}
-                  style={{ flex: 1, borderRadius: CIRCLE / 2, backgroundColor: tint.ground, alignItems: 'center', justifyContent: 'center' }}
+                  testID={`recap-shelf-ring-${item.id}`}
+                  style={{
+                    width: CIRCLE,
+                    height: CIRCLE,
+                    borderRadius: CIRCLE / 2,
+                    borderWidth: item.unwatched ? 3 : 2,
+                    borderColor: item.unwatched ? storyRingColor(coach, scheme) : STORY_RING_NEUTRAL[scheme],
+                    padding: 3,
+                  }}
                 >
-                  <Text testID={`recap-shelf-badge-${item.id}`} style={{ fontFamily: pixel, fontSize: 11, lineHeight: 12, color: tint.accentText, textAlign: 'center' }}>
-                    {item.badge}
-                  </Text>
+                  <View
+                    testID={`recap-shelf-circle-${item.id}`}
+                    style={{ flex: 1, borderRadius: CIRCLE / 2, backgroundColor: tint.ground, alignItems: 'center', justifyContent: 'center' }}
+                  >
+                    <Text testID={`recap-shelf-badge-${item.id}`} style={{ fontFamily: pixel, fontSize: 11, lineHeight: 12, color: tint.accentText, textAlign: 'center' }}>
+                      {item.badge}
+                    </Text>
+                  </View>
                 </View>
-              </View>
-              <Text
-                testID={`recap-shelf-label-${item.id}`}
-                numberOfLines={1}
-                style={{ fontSize: 12, fontFamily: item.unwatched ? FONTS.sansSemibold : FONTS.sans, color: item.unwatched ? colors.foreground : colors.muted }}
-              >
-                {item.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </ScrollView>
+                <Text
+                  testID={`recap-shelf-label-${item.id}`}
+                  numberOfLines={1}
+                  style={{ fontSize: 12, fontFamily: item.unwatched ? FONTS.sansSemibold : FONTS.sans, color: item.unwatched ? colors.foreground : colors.muted }}
+                >
+                  {item.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      ) : null}
     </View>
   );
 }

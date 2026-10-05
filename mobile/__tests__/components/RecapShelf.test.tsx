@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet } from 'react-native';
+import { AppState, StyleSheet } from 'react-native';
 import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 import { withCharacter } from '../../jest-mocks/characterContext';
 import { fetchRecaps, type RecapSummary } from '../../src/api/recaps';
@@ -77,19 +77,46 @@ it('turns a ring neutral as soon as that recap is opened, and reloads on focus',
   expect(screen.getByTestId('recap-shelf-item-w-newer')).toBeTruthy();
 });
 
-it('is hidden with no recaps and while loading', async () => {
+it('keeps Recaps and See all with no recaps, with a one-line hint and no circles', async () => {
   (fetchRecaps as jest.Mock).mockResolvedValue([]);
   await show();
-  expect(screen.queryByTestId('recap-shelf')).toBeNull();
+  expect(screen.getByTestId('recap-shelf')).toBeTruthy();
+  expect(screen.queryByTestId('recap-shelf-row')).toBeNull();
+  expect(screen.getByTestId('recap-shelf-empty')).toHaveTextContent('Your first recap arrives after your first full week of sleep.');
+  fireEvent.press(screen.getByTestId('recap-shelf-see-all'));
+  expect(navigate).toHaveBeenCalledWith('Recaps');
 });
 
-it('is hidden when the list fails to load, and keeps what it has when a reload fails', async () => {
+it('keeps Recaps and See all while loading, without circles or the empty hint', async () => {
+  (fetchRecaps as jest.Mock).mockReturnValue(new Promise(() => {}));
+  await show();
+  expect(screen.getByTestId('recap-shelf-see-all')).toBeTruthy();
+  expect(screen.queryByTestId('recap-shelf-row')).toBeNull();
+  expect(screen.queryByTestId('recap-shelf-empty')).toBeNull();
+});
+
+it('keeps See all when the list fails to load, and keeps what it has when a reload fails', async () => {
   (fetchRecaps as jest.Mock).mockRejectedValueOnce(new Error('500'));
   await show();
-  expect(screen.queryByTestId('recap-shelf')).toBeNull();
+  expect(screen.getByTestId('recap-shelf-see-all')).toBeTruthy();
+  expect(screen.queryByTestId('recap-shelf-row')).toBeNull();
+  expect(screen.queryByTestId('recap-shelf-empty')).toBeNull();
   await act(async () => listeners.focus!());
-  expect(screen.getByTestId('recap-shelf')).toBeTruthy();
+  expect(screen.getByTestId('recap-shelf-row')).toBeTruthy();
   (fetchRecaps as jest.Mock).mockRejectedValueOnce(new Error('500'));
   await act(async () => listeners.focus!());
   expect(screen.getByTestId('recap-shelf-item-w-new')).toBeTruthy();
+});
+
+it('reloads when the app comes back to the foreground', async () => {
+  let onAppState: ((s: string) => void) | undefined;
+  const spy = jest.spyOn(AppState, 'addEventListener').mockImplementation(((_: string, fn: (s: string) => void) => {
+    onAppState = fn;
+    return { remove: jest.fn() };
+  }) as never);
+  await show();
+  (fetchRecaps as jest.Mock).mockResolvedValue([recap({ id: 'w-fresh', periodEnd: addDays(TODAY, -1) }), WEEK, MONTH]);
+  await act(async () => onAppState!('active'));
+  expect(screen.getByTestId('recap-shelf-item-w-fresh')).toBeTruthy();
+  spy.mockRestore();
 });
