@@ -1,6 +1,6 @@
 # Recap — design (growth sub-project B)
 
-Date: 2026-10-04 (revised after review the same day). Branch `feature/recap`, stacked on `feature/sleep-depth` (PR #48).
+Date: 2026-10-04 (revised twice after review the same day). Branch `feature/recap`, stacked on `feature/sleep-depth` (PR #48).
 Source: the owner's picks on the growth canvas (https://claude.ai/artifact/JHqksi4S4DpFXNiFJho97e):
 1 shareable recap card, 1a weekly story, 1b year in pixels, 1c build your recap, 1d your month in the app.
 
@@ -69,7 +69,7 @@ of 8h"). Accepted consequence: after a goal change, the year count can differ fr
 the goal they were built with; the caption makes the rule visible.
 
 **Eligibility.** WEEK needs `nightsWithData` ≥ 3; MONTH needs ≥ 7. Below that the period is recorded as skipped
-(no recap shown, no push).
+(no recap shown, no push). A skipped period is re-checked while late data can still arrive (section 2, Late data).
 
 ## 2. Building, writing and announcing
 
@@ -84,16 +84,25 @@ One user's failure never blocks others.
 `status` (`BUILT|SKIPPED`), `stats` (JSON, section 1; null when skipped), `sleepGoalMinutes`, `line`, `lineSource`
 (`AI|TEMPLATE`), `story` (the weekly paragraph, nullable, WEEK only), `storySource` (`AI|TEMPLATE`, nullable),
 `personaId`, `builtAt`, `rebuiltAt` (null until the one allowed rebuild), `openedAt`, `pushedAt`.
-Unique `(userId, kind, periodStart)`. SKIPPED rows mark thin-data periods so the sweep never retries them.
+Unique `(userId, kind, periodStart)`. SKIPPED rows mark thin-data periods so the hourly due check does not rebuild
+them; only the late-data rule below re-checks them.
 `Recap` is added to `USER_OWNED_MODELS` (users/deletion.ts) and its schema test; account deletion removes recaps.
 Migration additive only.
 
 **One fact sheet.** A new `recap` fact sheet (coach/answer/facts.ts) holds exactly the section-1 numbers. Every
-count fact carries a count unit (`nights`, `days`, `times`, `steps`) and is marked exact.
+count fact carries a count unit (`nights`, `days`, `times`, `steps`). `nights`, `days` and `times` are new units,
+each with its own validator family, separate from the existing `count` family that steps own, so a sentence about
+steps cannot borrow a night count.
 
-**Stricter number check for recaps.** `validateSentence` gains an option `{ exactCounts: true }` used only by
-recaps: a number matching a count fact must equal it exactly (no ±1, no hedge tolerance); a bare number with no
-unit matches only a count fact with exactly that value; durations keep ±1 minute and scores keep exact integers.
+**Stricter number check for recaps.** `validateSentence` gains an option `{ exactNumbers: true }` used only by
+recaps. With it on:
+- Every integer must equal a sheet value exactly, counts and scores alike, with no ±1 and no hedge tolerance.
+  (Today every integer matches within ±1, scores included, so this is a change for scores too.)
+- A bare number with no unit matches only a count fact with exactly that value.
+- The averaging-window exemptions are off: "7-night", "for 7 nights", "last 30 days" and the like are checked as
+  numbers, because in a recap they read as claims ("a 7-night streak"). Dates, times of day and "/100" stay exempt.
+- Durations keep ±1 minute.
+
 Existing chat/digest behaviour is unchanged when the option is off.
 
 **Coach text (AI).** From the one sheet, in the user's persona (name, tone, focus, verbosity) with the existing
@@ -101,9 +110,10 @@ disallowed-topics list, no medical claims, second person, numbers only from the 
 direction stated explicitly in the prompt:
 - `line` — 1–2 sentences, ≤ 30 words (every recap).
 - `story` — the merged weekly digest: the paragraph the digest used to write, now built from the recap sheet
-  (WEEK only).
+  (WEEK only). It is narrower than the digest on purpose: it covers only the section-1 numbers. Anything else the
+  digest's `trends` sheet held is no longer in the weekly paragraph and stays available in chat.
 - Engine: the user's selected coach engine, as the daily one-liner chooses (`summaryEngineDeps`).
-- Each output: every sentence through `validateSentence(…, { exactCounts: true })`; a rejected draft gets one retry
+- Each output: every sentence through `validateSentence(…, { exactNumbers: true })`; a rejected draft gets one retry
   with the regeneration note, then a template (lines: small fixed set per situation; story: the existing
   `composeDigestFallback` adapted to the recap sheet), templates also validated. 60 s budget per recap.
 - Coach disabled or no current consent → no AI call: template line, no story. Persona `reactive-only` → template
@@ -113,6 +123,11 @@ direction stated explicitly in the prompt:
 `GET /me/coach/digests/latest` keeps its response shape but serves the latest BUILT WEEK recap's `story` (falling
 back to the latest legacy `CoachDigest` when no recap with a story exists), so existing screens keep working.
 
+**Coach data deletion.** `deleteUserCoachData` (coach/retention.ts) also clears coach-written recap text. For each
+of the user's recaps, `story` and `storySource` are set to null, and an AI `line` is replaced by the template line
+built from the stored `stats` (`lineSource` becomes `TEMPLATE`; no model call). The numbers stay, since they are not
+coach data. The deletion summary gains a `recapTexts` count.
+
 **Ready push.** Pushes stay inside the closed table in coach/push.ts:
 - WEEK reuses `weekly_digest` ("Your weekly recap is ready" / "Open the app to read it.").
 - MONTH adds `monthly_recap` ("Your monthly recap is ready" / "Open the app to see it.").
@@ -121,20 +136,40 @@ back to the latest legacy `CoachDigest` when no recap with a story exists), so e
   against that allowlist (keys `kind`,`recapId`; `kind === 'recap'`; `recapId` a UUID) as it does title/body.
 - Sent only when the user has a registered push token **and** `recapPushEnabled` is true; `pushedAt` prevents a
   second push; failures are logged and never fail the recap. SKIPPED periods never push.
+- **Push tokens become app-level (owner decision: recap pushes reach everyone).** `POST /me/push-token` and its
+  delete no longer require the coach (`requireEnabled` removed from those two routes only); `deleteUserCoachData`
+  stops deleting push tokens; account deletion still removes them. Every coach push sender (digest legacy, insight,
+  any coach-originated kind) checks coach enabled + current consent before sending, so turning the coach off still
+  stops coach pushes while recap pushes continue. Mobile registers the token (lib/pushRegistration.ts) when the user
+  first turns on a notification-backed feature — the "Recap ready" switch, or the coach as today — instead of only
+  with the coach; denied OS permission is never re-prompted. The "Recap ready" switch is shown whenever the device
+  can show notifications, with the coach on or off.
 
 **Notification setting.** New `User.recapPushEnabled Boolean @default(true)`; new routes
 `GET /me/notifications` → `{ recapPushEnabled }` and `PUT /me/notifications` (partial, boolean validated, 400
 `invalid_settings` otherwise).
 
-**Late data (one rebuild).** The hourly sweep also checks BUILT recaps with `openedAt` null, `rebuiltAt` null and a
-period that ended ≤ 3 days ago. If any input in the period changed after `builtAt` — a SLEEP or STEPS
-`BiometricRecord.syncedAt`, or a `DailyScore` computed time — **and** scores have caught up (the latest DailyScore
-computed time in the period is ≥ the latest rollup `syncedAt`), the recap is rebuilt (numbers and coach text) and
-`rebuiltAt` set; if scores have not caught up it waits for a later hour inside the window. Opened or rebuilt recaps
-never change. A rebuild does not push again.
+**Late data (one rebuild).** The hourly sweep also checks recaps whose period ended ≤ 3 days ago:
+- **BUILT, `openedAt` null, `rebuiltAt` null.** Timestamps are only a cheap first filter. Every sync sets `syncedAt`
+  to now even when the value is unchanged, and the catch-up sweep re-fetches recent days every three hours, so a newer
+  timestamp does not mean new data. When any SLEEP or STEPS `BiometricRecord.syncedAt` or `DailyScore.updatedAt` in
+  the period is newer than `builtAt`, the sweep recomputes the section-1 stats and compares them with the stored
+  `stats`. Equal → nothing happens and `rebuiltAt` stays null. Different → the recap is rebuilt (numbers and coach
+  text) and `rebuiltAt` set.
+- **Scores must have caught up first.** A rebuild waits for a later hour inside the window until, for every date in
+  the period that has a score, `DailyScore.updatedAt` ≥ that date's SLEEP rollup `syncedAt` (the nightly sweep's own
+  staleness test). STEPS are left out of this test because a STEPS change never triggers a rescore.
+- **SKIPPED.** The sweep recounts `nightsWithData`. If the period is now eligible, the row becomes a normal BUILT
+  recap. This is its first build, so it pushes once and may still have its one rebuild.
+
+Opened or rebuilt recaps never change. A rebuild does not push again. After the 3 days a SKIPPED row is final.
 
 **Launch backfill.** On first deploy a one-off job builds, per user, the last 4 weeks and last 3 months (AI text as
 normal, `pushedAt` set so no push), so the Recaps screen is not empty.
+It is enqueued **before** the hourly sweep is first registered and covers every period still inside the due window,
+so the sweep finds those rows already built. Backfill jobs use the sweep's job ids and carry `noPush`; the sweep's
+add for the same id is ignored while a backfill job is queued or running. As a backstop for a failed backfill job,
+the sweep never pushes for a WEEK that already has a `CoachDigest` row, because the old digest announced that week.
 
 **Endpoints.**
 - `GET /me/recaps?kind=WEEK|MONTH&limit=` → BUILT recaps newest first (summary fields).
@@ -171,8 +206,10 @@ pixels: on goal `sleepDeep`, short a muted track). Share images always render in
 follow light/dark.
 
 **Image.** The on-screen preview is scaled to fit and is never captured. The export renders a separate **off-screen
-view at a fixed logical size** — 360×360 (card, year) or 360×640 (story) — and captures it with Skia
-`makeImageFromView` at pixel scale 3, giving 1080×1080 / 1080×1920 PNGs written to the cache directory, then saved
+view** designed on a 360×360 (card, year) or 360×640 (story) grid and captures it with Skia `makeImageFromView`.
+That call has no scale argument and captures at the device's pixel ratio, so the view is laid out
+1080 / `PixelRatio.get()` logical points wide (the design grid scaled by 3 / pixel ratio). The capture is then
+1080×1080 / 1080×1920 on any device, 2x included. PNGs are written to the cache directory, then saved
 with `expo-media-library` or shared with `expo-sharing` (new native modules → one iOS rebuild).
 
 **Privacy.** Nothing leaves the phone until Save/Share. Images never include name or email, and only the numbers
@@ -180,7 +217,11 @@ left switched on.
 
 ## 4. Errors and edge cases
 
-- Thin data → SKIPPED row, no recap/push; per-stat omission; builder hides missing stats.
+- Thin data → SKIPPED row, no recap/push; per-stat omission; builder hides missing stats. A SKIPPED period that
+  becomes eligible within 3 days is built and pushed then.
+- A resync with unchanged values → no rebuild; the one allowed rebuild is kept for a real change.
+- Coach off → recap pushes still arrive (app-level push token); coach pushes stop. Denied OS permission → Home card only.
+- Coach data deleted → recap numbers stay; AI lines become template lines and stories are removed.
 - Previous period thin or absent → no comparison / no earlier-bedtimes fact (so the coach can't mention them).
 - Time zones → each user's own zone decides due-ness; nights keyed by their own end date.
 - Server down on the Monday / the 1st → built later inside the 7 / 10-day window, still pushed once.
@@ -191,17 +232,21 @@ left switched on.
 
 ## 5. Testing
 
-Backend (Jest, test DB): each number definition on hand-built periods (thin data, streak across a gap, first
-period with and without earlier history, goal snapshot), previous-period comparison from raw data, milestone rules,
+Backend (Jest, test DB): each number definition on hand-built periods (thin data, streak across a gap, first period
+with and without earlier history, goal snapshot), previous-period comparison from raw data, milestone rules,
 eligibility and SKIPPED rows, due-window maths (Monday 07:59 not due, Tuesday due, day 8 not due; same for months),
-dedupe on rerun, late-data rebuild (sleep, steps and score changes; waits for scores; only once; never after open),
-`exactCounts` validator (6 vs 5 nights rejected, bare numbers, hedges, existing callers unchanged), line and story
-paths (AI accepted, invalid → retry → template, coach off/no consent/reactive-only → no AI call), digest endpoint
-served from the WEEK recap, push kinds and `data` allowlist, `recapPushEnabled` and token gating, settings routes,
-recap endpoints (404s, pure GET, idempotent opened), deletion test with `Recap` in `USER_OWNED_MODELS`, backfill.
-Mobile (Jest/RNTL): each screen from a stored recap, builder switches change the preview, off-screen export size,
-year-pixel colouring/count/caption, Save permission-denied path, Share called with the captured file, push-tap
-routing cold and warm, Home ready card shows and dismisses, opened call made once.
+dedupe on rerun, late-data rebuild (sleep, steps and score changes; a resync with unchanged values neither rebuilds
+nor spends the rebuild; waits for scores per date; only once; never after open), a SKIPPED period that becomes
+eligible inside 3 days is built and pushed once, `exactNumbers` validator (6 vs 5 nights rejected, 88 vs 87 recovery
+rejected, "7-night streak" checked rather than exempt, a steps sentence cannot borrow a night count, bare numbers,
+hedges, existing callers unchanged), line and story paths (AI accepted, invalid → retry → template, coach off/no
+consent/reactive-only → no AI call), digest endpoint served from the WEEK recap, push kinds and `data` allowlist, push token registration with the coach off, coach-data deletion keeping tokens, coach push senders refusing when the coach is off while recap pushes still send,
+`recapPushEnabled` and token gating, settings routes, recap endpoints (404s, pure GET, idempotent opened), deletion
+test with `Recap` in `USER_OWNED_MODELS`, coach-data deletion clears stories and AI lines, backfill (no push; the
+sweep does not push for a week that has a `CoachDigest`).
+Mobile (Jest/RNTL): each screen from a stored recap, builder switches change the preview, off-screen export size at
+pixel ratios 2 and 3, year-pixel colouring/count/caption, Save permission-denied path, Share called with the captured
+file, push-tap routing cold and warm, Home ready card shows and dismisses, opened call made once.
 Simulator/device: trigger a WEEK and MONTH build for the owner, simulated push tap, each screen, both share formats
 and a saved image; light and dark in-app.
 
@@ -221,3 +266,11 @@ direction in the prompt and by templates.
 - Launch backfill: last 4 weeks + 3 months with AI text, no push.
 - Opening is a separate POST, not a side effect of GET.
 - Reactive-only personas get a template line and no story (as the digest did).
+
+Second revision:
+- A late-data rebuild fires only when the recomputed stats differ; a SKIPPED period is re-checked for 3 days.
+- The recap number check is exact for every integer and has no window exemptions.
+- Coach-data deletion replaces AI lines with template lines and removes stories; recap numbers stay.
+- Push tokens become app-level so recap pushes reach every user with notifications allowed (owner decision, 2026-10-04); coach pushes still require the coach on and consent.
+- The weekly story covers only the recap numbers, narrower than the old digest.
+- The launch backfill is enqueued before the sweep; the sweep never pushes for a week that has a `CoachDigest`.
