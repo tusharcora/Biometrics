@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
@@ -19,22 +19,46 @@ export function RecapReadyCard() {
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
   const [recap, setRecap] = useState<RecapSummary | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const [newest] = await fetchRecaps({ limit: 1 });
-        if (!newest || newest.openedAt !== null) return;
-        if ((await readDismissedRecapId()) === newest.id) return;
-        if (!cancelled) setRecap(newest);
-      } catch {
-        // No card.
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+  // Only the latest load, while mounted, may set the card.
+  const latest = useRef(0);
+  const mounted = useRef(false);
+  const load = useCallback(async () => {
+    const run = ++latest.current;
+    let next: RecapSummary | null = null;
+    try {
+      const [newest] = await fetchRecaps({ limit: 1 });
+      if (newest && newest.openedAt === null && (await readDismissedRecapId()) !== newest.id) next = newest;
+    } catch {
+      // No card.
+    }
+    if (mounted.current && run === latest.current) setRecap(next);
   }, []);
+
+  useEffect(() => {
+    mounted.current = true;
+    void load();
+    return () => {
+      mounted.current = false;
+    };
+  }, [load]);
+
+  // Home stays mounted, so coming back to it reloads the card: a recap opened from Recaps or a
+  // push hides it. The first focus (opening Home) is already covered by the load above.
+  const blurred = useRef(false);
+  useEffect(() => {
+    const offBlur = navigation.addListener?.('blur', () => {
+      blurred.current = true;
+    });
+    const offFocus = navigation.addListener?.('focus', () => {
+      if (!blurred.current) return;
+      blurred.current = false;
+      void load();
+    });
+    return () => {
+      offBlur?.();
+      offFocus?.();
+    };
+  }, [navigation, load]);
 
   if (!recap) return null;
 

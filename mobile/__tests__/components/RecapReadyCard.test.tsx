@@ -7,7 +7,22 @@ import { RecapReadyCard } from '../../src/components/recap/RecapReadyCard';
 jest.mock('../../src/api/recaps');
 jest.mock('expo-secure-store');
 const mockNavigate = jest.fn();
-jest.mock('@react-navigation/native', () => ({ useNavigation: () => ({ navigate: mockNavigate }) }));
+const mockListeners: Array<{ event: string; cb: () => void }> = [];
+const mockNavigation = {
+  navigate: (...a: unknown[]) => mockNavigate(...a),
+  addListener: (event: string, cb: () => void) => {
+    const entry = { event, cb };
+    mockListeners.push(entry);
+    return () => void mockListeners.splice(mockListeners.indexOf(entry), 1);
+  },
+};
+jest.mock('@react-navigation/native', () => ({ useNavigation: () => mockNavigation }));
+const emit = (event: string) => act(async () => mockListeners.filter((l) => l.event === event).forEach((l) => l.cb()));
+// Leaving Home and coming back.
+const refocus = async () => {
+  await emit('blur');
+  await emit('focus');
+};
 
 const list = fetchRecaps as jest.Mock;
 let store: Record<string, string>;
@@ -20,6 +35,7 @@ const settle = () => act(async () => {});
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockListeners.length = 0;
   store = {};
   (SecureStore.getItemAsync as jest.Mock).mockImplementation((k: string) => Promise.resolve(store[k] ?? null));
   (SecureStore.setItemAsync as jest.Mock).mockImplementation((k: string, v: string) => {
@@ -78,4 +94,33 @@ it('dismisses and remembers that recap only; a newer one shows again', async () 
   list.mockResolvedValue([recap({ id: 'w9', kind: 'WEEK', periodStart: '2026-10-05' })]);
   render(<RecapReadyCard />);
   expect(await screen.findByTestId('recap-ready-card')).toBeTruthy();
+});
+
+it('refetches when Home regains focus, so a recap opened elsewhere hides the card', async () => {
+  render(<RecapReadyCard />);
+  expect(await screen.findByTestId('recap-ready-card')).toBeTruthy();
+  // The first focus (opening Home) is covered by the mount load.
+  await emit('focus');
+  expect(list).toHaveBeenCalledTimes(1);
+  // Opened from Recaps or a push while Home stayed mounted.
+  list.mockResolvedValue([recap({ openedAt: '2026-10-01T10:00:00.000Z' })]);
+  await refocus();
+  await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+  await settle();
+  expect(screen.queryByTestId('recap-ready-card')).toBeNull();
+
+  // A newer unopened recap shows again on the next focus.
+  list.mockResolvedValue([recap({ id: 'w9', kind: 'WEEK', periodStart: '2026-10-05' })]);
+  await refocus();
+  expect(await screen.findByText('Your week is ready')).toBeTruthy();
+});
+
+it('keeps a dismissed recap hidden across refocus', async () => {
+  render(<RecapReadyCard />);
+  fireEvent.press(await screen.findByTestId('recap-ready-dismiss'));
+  await waitFor(() => expect(store.recapCardDismissed).toBe('m1'));
+  await refocus();
+  await waitFor(() => expect(list).toHaveBeenCalledTimes(2));
+  await settle();
+  expect(screen.queryByTestId('recap-ready-card')).toBeNull();
 });
