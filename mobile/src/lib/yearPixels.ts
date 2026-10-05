@@ -1,3 +1,5 @@
+import { fetchSleep, fetchSleepGoal } from '../api/sleep';
+
 // Year in pixels (spec 2026-10-04 §1, §3): one cell per night of the calendar year against the
 // user's CURRENT goal, not stored on the server. A night after today is "future": drawn empty,
 // never short, never counted.
@@ -26,4 +28,21 @@ export function yearPixels(year: number, nights: Array<{ date: string; minutesAs
     return { month, cells };
   });
   return { rows, onGoal };
+}
+
+export interface YearInPixels {
+  year: number;
+  pixels: YearPixels;
+  goalMinutes: number;
+}
+
+/**
+ * The year of `today` from GET /me/sleep (nights keyed by the local date they ended on) against
+ * the CURRENT goal. `today` is the user's local civil date, so tonight is never drawn as a past night.
+ * Shared by the Year in pixels screen and the recap builder.
+ */
+export async function loadYearInPixels(today: string): Promise<YearInPixels> {
+  const year = Number(today.slice(0, 4));
+  const [sleep, goal] = await Promise.all([fetchSleep(`${year}-01-01`, `${year}-12-31`), fetchSleepGoal()]);
+  return { year, pixels: yearPixels(year, sleep.nights, goal.sleepGoalMinutes, today), goalMinutes: goal.sleepGoalMinutes };
 }

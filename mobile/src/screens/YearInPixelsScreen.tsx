@@ -3,7 +3,6 @@ import { ScrollView, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
-import { fetchSleep, fetchSleepGoal } from '../api/sleep';
 import { useCharacter } from '../characters/CharacterContext';
 import { YearPixelsView } from '../components/recap/YearPixelsView';
 import { Button } from '../components/ui/button';
@@ -12,9 +11,9 @@ import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { todayCivil } from '../lib/heatmap';
 import { DESIGN_WIDTH } from '../lib/recapShare';
-import { yearPixels, type YearPixels } from '../lib/yearPixels';
+import { loadYearInPixels, type YearInPixels } from '../lib/yearPixels';
 
-type State = { phase: 'loading' } | { phase: 'ready'; pixels: YearPixels; goal: number } | { phase: 'error' };
+type State = { phase: 'loading' } | ({ phase: 'ready' } & YearInPixels) | { phase: 'error' };
 
 // Year in pixels (spec 2026-10-04 §1b): drawn on the phone from GET /me/sleep for this calendar
 // year (nights keyed by the local date they ended on), against the CURRENT goal (and it says so)
@@ -26,18 +25,16 @@ export function YearInPixelsScreen() {
   const { width } = useWindowDimensions();
   // The user's local civil date, so tonight's square is never drawn as a past night.
   const today = todayCivil();
-  const year = Number(today.slice(0, 4));
   const [state, setState] = useState<State>({ phase: 'loading' });
 
   const load = useCallback(async () => {
     setState({ phase: 'loading' });
     try {
-      const [sleep, goal] = await Promise.all([fetchSleep(`${year}-01-01`, `${year}-12-31`), fetchSleepGoal()]);
-      setState({ phase: 'ready', pixels: yearPixels(year, sleep.nights, goal.sleepGoalMinutes, today), goal: goal.sleepGoalMinutes });
+      setState({ phase: 'ready', ...(await loadYearInPixels(today)) });
     } catch {
       setState({ phase: 'error' });
     }
-  }, [year, today]);
+  }, [today]);
 
   useEffect(() => {
     void load();
@@ -58,9 +55,9 @@ export function YearInPixelsScreen() {
         {state.phase === 'ready' ? (
           <>
             <YearPixelsView
-              year={year}
+              year={state.year}
               pixels={state.pixels}
-              goalMinutes={state.goal}
+              goalMinutes={state.goalMinutes}
               coachId={characterId}
               includes={{ count: true, coach: true }}
               scale={(width - 40) / DESIGN_WIDTH}

@@ -24,6 +24,7 @@ import { ThinkingTextScreen } from '../screens/ThinkingTextScreen';
 import { SleepScreen } from '../screens/SleepScreen';
 import { SleepNightScreen } from '../screens/SleepNightScreen';
 import { BedtimeGoalScreen } from '../screens/BedtimeGoalScreen';
+import { RecapBuilderScreen } from '../screens/RecapBuilderScreen';
 import { RecapScreen } from '../screens/RecapScreen';
 import { RecapsScreen } from '../screens/RecapsScreen';
 import { YearInPixelsScreen } from '../screens/YearInPixelsScreen';
@@ -195,6 +196,7 @@ export function RootNavigator() {
               <Stack.Screen name="Recap" component={RecapScreen} options={{ title: '' }} />
               <Stack.Screen name="Recaps" component={RecapsScreen} options={{ title: 'Your recaps' }} />
               <Stack.Screen name="YearInPixels" component={YearInPixelsScreen} options={{ title: 'Year in pixels' }} />
+              <Stack.Screen name="RecapBuilder" component={RecapBuilderScreen} options={{ title: 'Build your recap' }} />
               <Stack.Screen
                 name="MeetYourCoach"
                 component={MeetYourCoachScreen}
