@@ -1,12 +1,12 @@
 import type { SleepNight } from '../../src/api/sleep';
 import { sleepHeatLevel } from '../../src/lib/heatmap';
-import { compareSleepToAverage, formatClock, formatDuration, sleepRangeStats } from '../../src/lib/sleepStats';
+import { clockAt, compareSleepToAverage, formatClock, formatDuration, nightClock, nightUtcOffset, sleepRangeStats } from '../../src/lib/sleepStats';
 
 function nights(entries: [string, number, string?][]): Map<string, SleepNight> {
   return new Map(
     entries.map(([date, minutesAsleep, bedtime]) => [
       date,
-      { date, minutesAsleep, minutesInBed: null, bedtime: bedtime ?? null, wakeTime: null, sleepScore: null },
+      { date, minutesAsleep, minutesInBed: null, bedtime: bedtime ?? null, wakeTime: null, sleepScore: null, minutesAwake: null, stageMinutes: null, hasStages: false },
     ]),
   );
 }
@@ -89,5 +89,84 @@ describe('formatting', () => {
     expect(compareSleepToAverage(380, 480)).toBe('1h 40m less than your average for this range.');
     expect(compareSleepToAverage(452, 450)).toBe('In line with your average for this range.');
     expect(compareSleepToAverage(452, null)).toBeNull();
+  });
+});
+
+// Stage segments are UTC instants; the night's local clock comes from its
+// bedtime, the same local "HH:MM" the screen shows.
+describe('night clock', () => {
+  it('reads the night\'s UTC offset off its bedtime and first stage', () => {
+    expect(nightUtcOffset('23:10', '2026-10-01T03:10:00.000Z')).toBe(-240);
+    expect(nightUtcOffset('00:22', '2026-09-30T23:22:00.000Z')).toBe(60);
+    expect(nightUtcOffset('05:40', '2026-10-01T00:10:00.000Z')).toBe(330);
+  });
+
+  it('rounds to the quarter hour, so a first stage a few minutes after bedtime still reads true', () => {
+    expect(nightUtcOffset('23:10', '2026-10-01T03:16:00.000Z')).toBe(-240);
+  });
+
+  it('gives an instant\'s local "HH:MM" at that offset', () => {
+    expect(clockAt('2026-10-01T03:35:00.000Z', -240)).toBe('23:35');
+    expect(clockAt('2026-10-01T09:10:00.000Z', -240)).toBe('05:10');
+    expect(clockAt('2026-09-30T23:22:00.000Z', 60)).toBe('00:22');
+    expect(formatClock(clockAt('2026-10-01T03:35:00.000Z', -240))).toBe('11:35 pm');
+  });
+});
+
+describe('nightClock', () => {
+  const stage = (start: string, end: string) => ({ start, end });
+
+  it('tells stage times on the session\'s own offset', () => {
+    const clock = nightClock({ bedtime: '22:30', startUtcOffsetSeconds: 3600, endUtcOffsetSeconds: 3600 }, [
+      stage('2026-09-21T21:30:00.000Z', '2026-09-22T05:15:00.000Z'),
+    ]);
+    expect(clock.offset).toBe(60);
+    expect(clock.at('2026-09-21T21:30:00.000Z')).toBe('22:30');
+    expect(clock.at('2026-09-22T05:15:00.000Z')).toBe('06:15');
+  });
+
+  it('switches to the end offset from the middle of a night the clocks went back in', () => {
+    // New York, 1 November 2026: EDT (-4h) at bedtime, EST (-5h) by morning.
+    const clock = nightClock({ bedtime: '23:00', startUtcOffsetSeconds: -14400, endUtcOffsetSeconds: -18000 }, [
+      stage('2026-11-01T03:00:00.000Z', '2026-11-01T07:00:00.000Z'),
+      stage('2026-11-01T07:00:00.000Z', '2026-11-01T11:00:00.000Z'),
+    ]);
+    expect(clock.offset).toBe(-240);
+    expect(clock.at('2026-11-01T03:30:00.000Z')).toBe('23:30');
+    expect(clock.at('2026-11-01T06:59:00.000Z')).toBe('02:59');
+    // At and after the midpoint (07:00Z) the end offset applies.
+    expect(clock.at('2026-11-01T07:00:00.000Z')).toBe('02:00');
+    expect(clock.at('2026-11-01T10:00:00.000Z')).toBe('05:00');
+  });
+
+  it('finds the midpoint from the latest end, not the last segment\'s', () => {
+    // The first stage runs to 11:00Z; the last one ends at 05:00Z. Midpoint 07:00Z.
+    const clock = nightClock({ bedtime: '23:00', startUtcOffsetSeconds: -14400, endUtcOffsetSeconds: -18000 }, [
+      stage('2026-11-01T03:00:00.000Z', '2026-11-01T11:00:00.000Z'),
+      stage('2026-11-01T04:00:00.000Z', '2026-11-01T05:00:00.000Z'),
+    ]);
+    expect(clock.at('2026-11-01T06:00:00.000Z')).toBe('02:00');
+    expect(clock.at('2026-11-01T07:00:00.000Z')).toBe('02:00');
+  });
+
+  it('uses whichever offset it has when the other is unknown', () => {
+    const clock = nightClock({ bedtime: '23:00', startUtcOffsetSeconds: null, endUtcOffsetSeconds: -18000 }, [
+      stage('2026-11-01T04:00:00.000Z', '2026-11-01T11:00:00.000Z'),
+    ]);
+    expect(clock.offset).toBe(-300);
+    expect(clock.at('2026-11-01T04:00:00.000Z')).toBe('23:00');
+  });
+
+  it('falls back to reading the offset off bedtime when the server sends none', () => {
+    const clock = nightClock({ bedtime: '23:10', startUtcOffsetSeconds: null, endUtcOffsetSeconds: null }, [
+      stage('2026-10-01T03:10:00.000Z', '2026-10-01T10:52:00.000Z'),
+    ]);
+    expect(clock.offset).toBe(-240);
+    expect(clock.at('2026-10-01T03:35:00.000Z')).toBe('23:35');
+  });
+
+  it('reads UTC with neither offsets nor stages', () => {
+    const clock = nightClock({ bedtime: '23:10', startUtcOffsetSeconds: null, endUtcOffsetSeconds: null }, []);
+    expect(clock.offset).toBe(0);
   });
 });

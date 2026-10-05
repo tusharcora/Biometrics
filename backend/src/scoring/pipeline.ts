@@ -192,7 +192,7 @@ export function scoreDay(input: PipelineInput, cfg: ScoreConfig): PipelineResult
     { factor: 'HRV', z: hrv.z, imputed: hrv.imputed, excluded: hrv.z === null },
     { factor: 'RHR', z: rhr.z, imputed: rhr.imputed, excluded: rhr.z === null },
     // Imputed when tonight's night is missing: the window is then 13 nights + 0.
-    { factor: 'SLEEP_DEBT', z: debtZ, imputed: !sleepTonight, excluded: debtZ === null },
+    { factor: 'SLEEP_DEBT', z: debtZ, goalMinutes: input.sleepGoalMinutes, imputed: !sleepTonight, excluded: debtZ === null },
   ];
   const composite = computeComposite(factorInputs, cfg);
 
@@ -211,7 +211,14 @@ export function scoreDay(input: PipelineInput, cfg: ScoreConfig): PipelineResult
     // Duration's own [-3, +1] clamp is applied above; zRaw is the value before it.
     const durationZRaw = sleepDurationZRawVsGoal(sleepTonight.value, input.sleepGoalMinutes, sleepBaseline, cfg);
     const sleepInputs: FactorInput[] = [
-      { factor: 'SLEEP_DURATION', z: durationZ, zRaw: durationZRaw, imputed: false, excluded: durationZ === null },
+      {
+        factor: 'SLEEP_DURATION',
+        z: durationZ,
+        zRaw: durationZRaw,
+        goalMinutes: input.sleepGoalMinutes,
+        imputed: false,
+        excluded: durationZ === null,
+      },
       { factor: 'SLEEP_EFFICIENCY', z: efficiency.z, imputed: efficiency.imputed, excluded: efficiency.z === null },
       { factor: 'CIRCADIAN_CONSISTENCY', z: circadian.z, imputed: circadian.imputed, excluded: circadian.z === null },
     ];

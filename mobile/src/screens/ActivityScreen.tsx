@@ -1,9 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
 import { fetchActivity } from '../api/activity';
-import { fetchSleep } from '../api/sleep';
+import { fetchSleep, fetchSleepGoal } from '../api/sleep';
 import { ActivityHeatmap, type SleepState } from '../components/activity-heatmap';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
@@ -17,9 +18,13 @@ import { COLORS } from '../theme';
 type LoadState =
   | { phase: 'loading' }
   | { phase: 'error' }
-  | { phase: 'ready'; steps: Map<string, number>; earliestDate: string | null; today: string; sleep: SleepState };
+  | { phase: 'ready'; steps: Map<string, number>; earliestDate: string | null; today: string; sleep: SleepState; sleepGoal: number };
+
+// Minutes asleep the sleep colours aim at when the saved goal can't be read.
+const DEFAULT_SLEEP_GOAL = 480;
 
 export function ActivityScreen() {
+  const navigation = useNavigation<any>();
   const clearance = useTabBarClearance();
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === 'light' ? COLORS.light : COLORS.dark;
@@ -38,7 +43,9 @@ export function ActivityScreen() {
     const { from, to } = fetchRange(today);
     // Sleep is fetched alongside but fails on its own: a sleep outage leaves
     // the Steps page working and puts a retry on the Sleep page instead.
-    const [stepsRes, sleepRes] = await Promise.allSettled([fetchActivity(from, to), fetchSleep(from, to)]);
+    // The sleep goal is waited for too, so the sleep colours never draw against
+    // 8h and then jump; without it they use 8h.
+    const [stepsRes, sleepRes, goalRes] = await Promise.allSettled([fetchActivity(from, to), fetchSleep(from, to), fetchSleepGoal()]);
     if (id !== requestId.current) return;
     if (stepsRes.status === 'rejected') {
       setState((prev) => (prev.phase === 'ready' ? prev : { phase: 'error' }));
@@ -50,6 +57,13 @@ export function ActivityScreen() {
       steps: new Map(res.days.map((d) => [d.date, d.steps])),
       earliestDate: res.earliestDate,
       today,
+      sleepGoal:
+        goalRes.status === 'fulfilled' && goalRes.value?.sleepGoalMinutes > 0
+          ? goalRes.value.sleepGoalMinutes
+          : // A failed refresh keeps the goal already in use.
+            prev.phase === 'ready'
+            ? prev.sleepGoal
+            : DEFAULT_SLEEP_GOAL,
       sleep:
         sleepRes.status === 'fulfilled'
           ? { phase: 'ready', nights: new Map(sleepRes.value.nights.map((n) => [n.date, n])), earliestDate: sleepRes.value.earliestDate }
@@ -67,6 +81,25 @@ export function ActivityScreen() {
       requestId.current++;
     };
   }, [load, dataVersion]);
+
+  // Coming back (e.g. from the Bedtime goal screen) re-reads, so a new sleep
+  // goal recolours the heat map. load keeps what is on screen until the new
+  // data lands, so there is no flash; the first focus (opening) is skipped.
+  const blurred = useRef(false);
+  useEffect(() => {
+    const offBlur = navigation.addListener?.('blur', () => {
+      blurred.current = true;
+    });
+    const offFocus = navigation.addListener?.('focus', () => {
+      if (!blurred.current) return;
+      blurred.current = false;
+      load();
+    });
+    return () => {
+      offBlur?.();
+      offFocus?.();
+    };
+  }, [navigation, load]);
 
   async function onRefresh() {
     setRefreshing(true);
@@ -118,6 +151,9 @@ export function ActivityScreen() {
             earliestDate={state.earliestDate}
             today={state.today}
             sleep={state.sleep}
+            sleepGoal={state.sleepGoal}
+            onOpenSleepDetails={() => navigation.navigate('Sleep')}
+            onOpenNight={(date) => navigation.navigate('SleepNight', { date })}
             onRetrySleep={() => {
               setState((prev) => (prev.phase === 'ready' ? { ...prev, sleep: { phase: 'loading' } } : prev));
               load();

@@ -135,6 +135,18 @@ describe('resyncSleep', () => {
     expect(await prisma.sleepSession.count({ where: { userId: user.id } })).toBe(3);
   });
 
+  // The backfill only rewrites the rollup of a new or changed session, so a
+  // night already in SleepSession must get its rollup back from the script.
+  it('rebuilds the rollups of nights already stored as sessions, even before the backfill runs', async () => {
+    const user = await createUser({ timezone: 'UTC' });
+    await prisma.sleepSession.createMany({ data: SESSIONS.map((s) => ({ userId: user.id, ...s })) });
+    await seedOldConventionRows(user.id);
+
+    await resyncSleep({ apply: true, userId: user.id, enqueue: jest.fn() });
+
+    expect(await sleepRollups(user.id)).toEqual([['2026-09-02', 470], ['2026-09-03', 400]]);
+  });
+
   it('leaves other metrics alone', async () => {
     const user = await createUser();
     await seedOldConventionRows(user.id);

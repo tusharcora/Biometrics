@@ -478,7 +478,7 @@ describe('DashboardScreen', () => {
       expect(tree.indexOf('recovery-score-card')).toBeLessThan(tree.indexOf('sleep-score-card'));
     });
 
-    it('opens the SLEEP score detail for that day when pressed', async () => {
+    it('opens the Sleep screen when pressed', async () => {
       mockApi({ records: steps, scores: [recovery, sleep] });
 
       const { getByTestId } = render(<DashboardScreen />);
@@ -486,7 +486,8 @@ describe('DashboardScreen', () => {
       await waitFor(() => expect(getByTestId('sleep-score-card')).toBeTruthy());
       fireEvent.press(getByTestId('sleep-score-card'));
 
-      expect(mockNavigate).toHaveBeenCalledWith('ScoreDetail', { date: '2026-09-19', type: 'SLEEP' });
+      expect(mockNavigate).toHaveBeenCalledWith('Sleep');
+      expect(mockNavigate).not.toHaveBeenCalledWith('ScoreDetail', expect.objectContaining({ type: 'SLEEP' }));
     });
 
     it('shows the cold-start ring, and no score ring or badge, when the Sleep Score is null', async () => {
@@ -518,6 +519,20 @@ describe('DashboardScreen', () => {
       expect(getByTestId('recovery-score-card')).toBeTruthy();
     });
 
+    it('still opens the Sleep screen when there is no Sleep Score yet', async () => {
+      mockApi({ records: steps, scores: [recovery] });
+
+      const { getByTestId } = render(<DashboardScreen />);
+
+      await waitFor(() => expect(getByTestId('sleep-score-empty')).toBeTruthy());
+      // A real button, not a press that bubbles up to SleepTile's own onPress prop.
+      expect(getByTestId('sleep-score-empty').props.accessibilityRole).toBe('button');
+      mockNavigate.mockClear();
+      fireEvent.press(getByTestId('sleep-score-empty'));
+
+      expect(mockNavigate.mock.calls).toEqual([['Sleep']]);
+    });
+
     it('degrades to an inline message when the scores request fails, keeping the metric cards', async () => {
       mockApi({ records: steps, scoresError: new Error('boom') });
 
@@ -526,6 +541,19 @@ describe('DashboardScreen', () => {
       await waitFor(() => expect(getByText(/Sleep Score is unavailable/i)).toBeTruthy());
       expect(getByTestId('sleep-score-unavailable')).toBeTruthy();
       expect(getByTestId('metric-card-STEPS')).toBeTruthy();
+    });
+
+    it('still opens the Sleep screen when the scores request fails', async () => {
+      mockApi({ records: steps, scoresError: new Error('boom') });
+
+      const { getByTestId } = render(<DashboardScreen />);
+
+      await waitFor(() => expect(getByTestId('sleep-score-unavailable')).toBeTruthy());
+      expect(getByTestId('sleep-score-unavailable').props.accessibilityRole).toBe('button');
+      mockNavigate.mockClear();
+      fireEvent.press(getByTestId('sleep-score-unavailable'));
+
+      expect(mockNavigate.mock.calls).toEqual([['Sleep']]);
     });
 
     it('shows a skeleton while scores load', async () => {

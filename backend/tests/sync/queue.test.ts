@@ -4,6 +4,10 @@ import {
   enqueueFetchJob,
   enqueueBackfillJob,
   enqueueImmediateTokenRefreshSweep,
+  enqueueSleepHistoryBackfill,
+  enqueueSleepStagesBackfill,
+  SLEEP_HISTORY_BACKFILL_JOB,
+  SLEEP_STAGES_BACKFILL_JOB,
   scheduleTokenRefreshSweep,
   TOKEN_REFRESH_SWEEP_JOB,
   TOKEN_REFRESH_SWEEP_INTERVAL_MS,
@@ -61,5 +65,26 @@ describe('sync queue', () => {
     expect(job.id).toBe(`${TOKEN_REFRESH_SWEEP_JOB}-startup`);
 
     await job.remove().catch(() => undefined);
+  });
+
+  // These two jobs are the only path that sets their marker, so a transient
+  // 429 or timeout must be retried, not dropped until the next server start.
+  it.each([
+    ['history', enqueueSleepHistoryBackfill, SLEEP_HISTORY_BACKFILL_JOB],
+    ['stage', enqueueSleepStagesBackfill, SLEEP_STAGES_BACKFILL_JOB],
+  ] as const)('the sleep %s backfill retries with exponential backoff', async (_, enqueue, name) => {
+    const add = jest.spyOn(syncQueue, 'add').mockResolvedValue(undefined as never);
+    try {
+      await enqueue('u1');
+      expect(add).toHaveBeenCalledWith(name, { userId: 'u1' }, expect.objectContaining({
+        jobId: `${name}-u1`,
+        removeOnComplete: true,
+        removeOnFail: true,
+        attempts: 4,
+        backoff: { type: 'exponential', delay: 60_000 },
+      }));
+    } finally {
+      add.mockRestore();
+    }
   });
 });

@@ -3,6 +3,7 @@ import { authClient } from './authClient';
 import { unwrap } from './authErrors';
 import { disablePush } from '../lib/pushRegistration';
 import { clearTimezoneState } from '../lib/timezone';
+import { clearWindDown } from '../lib/windDown';
 
 export const VERIFIED_URL = 'biometrics://verified';
 export const RESET_URL = 'biometrics://reset-password';
@@ -53,11 +54,13 @@ async function unregisterPushBestEffort(): Promise<void> {
 const normalizeEmail = (email: string) => email.trim().toLowerCase();
 
 // Clears the stored cookie (inside authClient.signOut, before its request is
-// sent, so it clears even when the server call fails) and the device-global
-// time zone state, which would otherwise carry into the next account.
+// sent, so it clears even when the server call fails), the device-global
+// time zone state, which would otherwise carry into the next account, and the
+// wind-down reminder with its settings.
 async function dropLocalSession(): Promise<void> {
   await authClient.signOut().catch(() => undefined);
   await clearTimezoneState().catch(() => undefined);
+  await clearWindDown().catch(() => undefined);
 }
 
 type AuthActions = Omit<AuthContextValue, 'session' | 'isPending'>;

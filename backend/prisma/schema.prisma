@@ -55,7 +55,7 @@ model User {
 
   // The coach persona the user picked in Settings (an id from
   // src/coach/personas). Null means the default persona.
-  coachPersonaId String?
+  coachPersonaId          String?
   /// Thinking attachment shown next to the coach while it works; null = default ('bulb').
   coachThinkingAttachment String?
   /// How the chat shows a reply is on its way; null = default ('steps').
@@ -71,6 +71,10 @@ model User {
   // (src/users/goals.ts) so they cannot drift apart. The 480 here must match
   // DEFAULT_SLEEP_GOAL_MINUTES in that file.
   sleepGoalMinutes Int @default(480)
+
+  /// Target bedtime and wake time, local "HH:MM"; null = not set. Display and reminder only, never scoring.
+  bedtimeGoal String?
+  wakeGoal    String?
 
   // IANA zone name (e.g. "America/Los_Angeles"), client-supplied. It defines
   // which local civil date a sleep session's end instant belongs to, so the
@@ -144,7 +148,8 @@ model HealthConnection {
   // The same for the one-off 365-day sleep history behind the activity heat
   // map's Sleep page (see sync/sleepHistory.ts).
   sleepHistoryBackfilledAt DateTime?
-  createdAt               DateTime               @default(now())
+  sleepStagesBackfilledAt  DateTime?
+  createdAt                DateTime               @default(now())
   updatedAt                DateTime               @updatedAt
 }
 
@@ -167,9 +172,9 @@ model BiometricRecord {
 // (sum of minutesAsleep for sessions ending on that local civil date), never
 // accumulated across syncs.
 model SleepSession {
-  id                    String   @id @default(uuid())
+  id                    String       @id @default(uuid())
   userId                String
-  user                  User     @relation(fields: [userId], references: [id])
+  user                  User         @relation(fields: [userId], references: [id])
   startTime             DateTime
   endTime               DateTime
   minutesAsleep         Float
@@ -181,10 +186,41 @@ model SleepSession {
   // re-fetch fills them in.
   startUtcOffsetSeconds Int?
   endUtcOffsetSeconds   Int?
-  syncedAt              DateTime @default(now())
+  // Google's night summary (spec 2026-10-03 §1). Null when Google omitted or garbled a value.
+  sleepType             String?
+  mainSleep             Boolean?
+  minutesInSleepPeriod  Float?
+  minutesAwake          Float?
+  minutesToFallAsleep   Float?
+  minutesAfterWakeUp    Float?
+  deepMinutes           Float?
+  lightMinutes          Float?
+  remMinutes            Float?
+  awakeMinutes          Float?
+  stages                SleepStage[]
+  syncedAt              DateTime     @default(now())
 
   @@unique([userId, startTime])
   @@index([userId, endTime])
+}
+
+enum SleepStageType {
+  AWAKE
+  LIGHT
+  DEEP
+  REM
+}
+
+/// One segment of a night's stage timeline, from Google's sleep.stages[] (spec 2026-10-03 §2).
+model SleepStage {
+  id        String         @id @default(uuid())
+  sessionId String
+  session   SleepSession   @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  type      SleepStageType
+  startTime DateTime
+  endTime   DateTime
+
+  @@index([sessionId, startTime])
 }
 
 enum ScoreType {

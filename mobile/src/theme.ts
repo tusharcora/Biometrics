@@ -94,6 +94,18 @@ export const COLORS = {
     sleepHeat2: 'rgb(233, 213, 255)',
     sleepHeat3: 'rgb(216, 180, 254)',
     sleepHeat4: 'rgb(147, 51, 234)',
+    // Sleep stages (stage lanes, stage bars): deep is the darkest indigo, light
+    // the palest that still clears 3:1 on the page and card; REM is magenta so
+    // it never reads as another depth of light; awake is the warm odd one out.
+    sleepDeep: 'rgb(55, 48, 163)',
+    sleepRem: 'rgb(192, 38, 211)',
+    sleepLight: 'rgb(120, 131, 245)',
+    sleepAwake: 'rgb(234, 88, 12)',
+    // Text-safe versions (>= 4.5:1 on a card) for the stage names beside the lanes.
+    sleepDeepText: 'rgb(55, 48, 163)',
+    sleepRemText: 'rgb(162, 28, 175)',
+    sleepLightText: 'rgb(79, 70, 229)',
+    sleepAwakeText: 'rgb(194, 65, 12)',
     // One accent per metric (the same values as METRIC_CONFIG), used only on
     // that metric's own number, ring and line -- everything else stays neutral.
     metricSteps: 'rgb(234, 88, 12)',
@@ -149,6 +161,17 @@ export const COLORS = {
     sleepHeat2: 'rgb(88, 28, 135)',
     sleepHeat3: 'rgb(107, 33, 168)',
     sleepHeat4: 'rgb(147, 51, 234)',
+    // On a dark page the stages are lighter tints of the same hues: indigo deep
+    // (the dimmest, still 3:1 on page and card) and light, magenta REM, orange
+    // awake; the text versions are paler again for small labels.
+    sleepDeep: 'rgb(99, 102, 241)',
+    sleepRem: 'rgb(232, 121, 249)',
+    sleepLight: 'rgb(165, 180, 252)',
+    sleepAwake: 'rgb(251, 146, 60)',
+    sleepDeepText: 'rgb(129, 140, 248)',
+    sleepRemText: 'rgb(240, 171, 252)',
+    sleepLightText: 'rgb(199, 210, 254)',
+    sleepAwakeText: 'rgb(253, 186, 116)',
     metricSteps: 'rgb(251, 146, 60)',
     metricHeart: 'rgb(251, 113, 133)',
     metricSleep: 'rgb(147, 51, 234)',

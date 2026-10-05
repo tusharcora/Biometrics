@@ -31,6 +31,7 @@
 // Never runs on import: the CLI entry point is guarded by require.main.
 import { prisma } from '../src/db/client';
 import { BACKFILL_WINDOW_DAYS } from '../src/health/routes';
+import { recomputeAllSleepRollups } from '../src/biometrics/repository';
 import type { BackfillJobData } from '../src/sync/queue';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -109,6 +110,10 @@ export async function resyncSleep(opts: ResyncOptions): Promise<ResyncSummary> {
     // Delete strictly before enqueueing: a backfill that ran first and then got
     // wiped would leave the user with no SLEEP rollups at all.
     summary.sleepRecordsDeleted += (await prisma.biometricRecord.deleteMany({ where })).count;
+    // Re-derive the rollups of nights already in SleepSession now: the backfill
+    // only rewrites the rollup of a session that is new or changed, so a night
+    // it re-fetches unchanged would otherwise be left with no rollup at all.
+    await recomputeAllSleepRollups(user.id);
     try {
       await opts.enqueue({ userId: user.id, startDate, endDate });
       summary.backfillsEnqueued += 1;

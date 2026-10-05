@@ -126,7 +126,8 @@ describe('fetchMetricRange', () => {
     // Whole sessions, NOT collapsed to one value per day: two sessions on one
     // day stay two objects so the caller can store and sum them idempotently.
     // No offsets in this response, so both come back null (never undefined/NaN).
-    expect(sessions).toEqual([
+    // toMatchObject: the night-summary/stage fields are covered by their own tests below.
+    expect(sessions).toMatchObject([
       {
         startTime: new Date('2026-09-01T22:00:00Z'),
         endTime: new Date('2026-09-02T06:10:00Z'),
@@ -224,7 +225,7 @@ describe('fetchMetricRange', () => {
       });
 
     const sessions = await fetchSleepSessions('token-1', '2026-09-01', '2026-09-05');
-    expect(sessions).toEqual([
+    expect(sessions).toMatchObject([
       {
         startTime: new Date('2026-09-03T22:00:00Z'),
         endTime: new Date('2026-09-04T06:00:00Z'),
@@ -263,6 +264,58 @@ describe('fetchMetricRange', () => {
     const sessions = await fetchSleepSessions('token-1', '2026-09-01', '2026-09-05');
 
     expect(sessions.map((s) => s.minutesAsleep)).toEqual([400]);
+  });
+
+  // Synthetic values; the shape matches a live STAGES sleep object.
+  const stagedPoint = {
+    sleep: {
+      interval: { startTime: '2026-09-30T23:00:00Z', startUtcOffset: '-14400s', endTime: '2026-10-01T07:00:00Z', endUtcOffset: '-14400s' },
+      type: 'STAGES',
+      stages: [
+        { startTime: '2026-09-30T23:05:00Z', endTime: '2026-09-30T23:35:00Z', type: 'LIGHT' },
+        { startTime: '2026-09-30T23:35:00Z', endTime: '2026-10-01T00:20:00Z', type: 'DEEP' },
+        { startTime: '2026-10-01T00:20:00Z', endTime: '2026-10-01T00:25:00Z', type: 'SNORING' },
+      ],
+      metadata: { stagesStatus: 'SUCCEEDED', processed: true, mainSleep: true },
+      summary: {
+        minutesInSleepPeriod: '480', minutesAfterWakeUp: '6', minutesToFallAsleep: '5', minutesAsleep: '420', minutesAwake: '60',
+        stagesSummary: [
+          { type: 'DEEP', minutes: '80', count: '4' }, { type: 'LIGHT', minutes: '240', count: '20' },
+          { type: 'REM', minutes: '100', count: '5' }, { type: 'AWAKE', minutes: '60', count: '25' },
+        ],
+      },
+    },
+  };
+
+  it('parses stages, skips unknown stage types and reads the night summary', async () => {
+    nock('https://health.googleapis.com')
+      .get('/v4/users/me/dataTypes/sleep/dataPoints')
+      .query(true)
+      .reply(200, { dataPoints: [stagedPoint] });
+
+    const [s] = await fetchSleepSessions('token', '2026-09-30', '2026-10-02');
+
+    expect(s).toMatchObject({
+      minutesAsleep: 420, sleepType: 'STAGES', mainSleep: true,
+      minutesInSleepPeriod: 480, minutesAwake: 60, minutesToFallAsleep: 5, minutesAfterWakeUp: 6,
+      deepMinutes: 80, lightMinutes: 240, remMinutes: 100, awakeMinutes: 60,
+    });
+    expect(s!.stages!.map((x) => x.type)).toEqual(['LIGHT', 'DEEP']);
+    expect(s!.stages![0]!.startTime.toISOString()).toBe('2026-09-30T23:05:00.000Z');
+  });
+
+  it('stores null for missing or unparseable summary numbers and [] for no stages', async () => {
+    nock('https://health.googleapis.com')
+      .get('/v4/users/me/dataTypes/sleep/dataPoints')
+      .query(true)
+      .reply(200, {
+        dataPoints: [{ sleep: { interval: stagedPoint.sleep.interval, summary: { minutesAsleep: '400', minutesAwake: 'n/a' } } }],
+      });
+
+    const [s] = await fetchSleepSessions('token', '2026-09-30', '2026-10-02');
+
+    expect(s).toMatchObject({ minutesAsleep: 400, minutesAwake: null, deepMinutes: null, sleepType: null, mainSleep: null });
+    expect(s!.stages).toEqual([]);
   });
 
   it('fetches HRV via dataPoints.list on the separate "daily-heart-rate-variability" collection, one point per day', async () => {

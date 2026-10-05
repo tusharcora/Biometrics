@@ -8,6 +8,7 @@ import {
   storeSleepSessions,
   datesNeedingRescore,
   upsertBiometricRecords,
+  SLEEP_STORE_BATCH_SIZE,
 } from '../../src/biometrics/repository';
 import { SleepSessionPoint } from '../../src/types';
 
@@ -375,5 +376,202 @@ describe('datesNeedingRescore', () => {
 
   it('returns nothing for no changed nights', () => {
     expect(datesNeedingRescore([], '2026-12-31')).toEqual([]);
+  });
+});
+
+// Sleep depth (spec 2026-10-03 §2): the summary and stages are stored with the
+// session, but only a change that can move a rollup or a score touches a date.
+// A stage backfill over a year of stored nights must not make every one of them rescore.
+describe('storeSleepSessions: stages and change detection', () => {
+  const night = (over: Partial<SleepSessionPoint> = {}): SleepSessionPoint => ({
+    startTime: new Date('2026-09-30T23:00:00Z'), endTime: new Date('2026-10-01T07:00:00Z'), minutesAsleep: 420,
+    startUtcOffsetSeconds: 0, endUtcOffsetSeconds: 0, stages: [], ...over,
+  });
+
+  it('stores the summary and replaces stages on resync without duplicating them', async () => {
+    const { id } = await createUser();
+    await storeSleepSessions(id, [night({ deepMinutes: 80, stages: [{ type: 'DEEP', startTime: new Date('2026-09-30T23:30:00Z'), endTime: new Date('2026-10-01T00:10:00Z') }] })]);
+    await storeSleepSessions(id, [night({ deepMinutes: 90, stages: [
+      { type: 'LIGHT', startTime: new Date('2026-09-30T23:05:00Z'), endTime: new Date('2026-09-30T23:30:00Z') },
+      { type: 'DEEP', startTime: new Date('2026-09-30T23:30:00Z'), endTime: new Date('2026-10-01T00:20:00Z') },
+    ] })]);
+    const s = await prisma.sleepSession.findFirstOrThrow({ where: { userId: id }, include: { stages: { orderBy: { startTime: 'asc' } } } });
+    expect(s.deepMinutes).toBe(90);
+    expect(s.stages.map((x) => x.type)).toEqual(['LIGHT', 'DEEP']);
+  });
+
+  it('keeps the stored stages when a caller sends none (stages undefined)', async () => {
+    const { id } = await createUser();
+    await storeSleepSessions(id, [night({ stages: [{ type: 'REM', startTime: new Date('2026-10-01T05:00:00Z'), endTime: new Date('2026-10-01T05:30:00Z') }] })]);
+    await storeSleepSessions(id, [night({ stages: undefined })]);
+    expect(await prisma.sleepStage.count({ where: { session: { userId: id } } })).toBe(1);
+  });
+
+  it('a stage-only resync touches no date and leaves the SLEEP rollup syncedAt alone', async () => {
+    const { id } = await createUser();
+    expect(await storeSleepSessions(id, [night()])).toEqual(['2026-10-01']);
+    const before = await prisma.biometricRecord.findFirstOrThrow({ where: { userId: id, metricType: 'SLEEP' } });
+    expect(await storeSleepSessions(id, [night({ deepMinutes: 80 })])).toEqual([]);
+    const after = await prisma.biometricRecord.findFirstOrThrow({ where: { userId: id, metricType: 'SLEEP' } });
+    expect(after.syncedAt.getTime()).toBe(before.syncedAt.getTime());
+  });
+
+  it('a real change still touches its date and rewrites the rollup', async () => {
+    const { id } = await createUser();
+    await storeSleepSessions(id, [night()]);
+    expect(await storeSleepSessions(id, [night({ minutesAsleep: 430 })])).toEqual(['2026-10-01']);
+    expect((await prisma.biometricRecord.findFirstOrThrow({ where: { userId: id, metricType: 'SLEEP' } })).value).toBe(430);
+  });
+
+  it('in a mixed batch only the changed session touches its date', async () => {
+    const { id } = await createUser();
+    const other = night({ startTime: new Date('2026-10-01T23:00:00Z'), endTime: new Date('2026-10-02T07:00:00Z') });
+    await storeSleepSessions(id, [night(), other]);
+    expect(await storeSleepSessions(id, [night({ remMinutes: 90 }), { ...other, minutesAsleep: 400 }])).toEqual(['2026-10-02']);
+  });
+
+  it('a stage backfill of a full year of nights with stages completes and touches no date', async () => {
+    const { id } = await createUser();
+    const DAY = 24 * 3600_000;
+    const nights = Array.from({ length: 365 }, (_, i) => night({
+      startTime: new Date(Date.parse('2025-10-01T23:00:00Z') + i * DAY),
+      endTime: new Date(Date.parse('2025-10-02T07:00:00Z') + i * DAY),
+    }));
+    expect(await storeSleepSessions(id, nights)).toHaveLength(365);
+    const withStages = nights.map((n) => ({
+      ...n,
+      deepMinutes: 80,
+      stages: Array.from({ length: 24 }, (_, k) => ({
+        type: (['LIGHT', 'DEEP', 'REM'] as const)[k % 3],
+        startTime: new Date(n.startTime.getTime() + k * 20 * 60_000),
+        endTime: new Date(n.startTime.getTime() + (k + 1) * 20 * 60_000),
+      })),
+    }));
+    expect(await storeSleepSessions(id, withStages)).toEqual([]);
+    expect(await prisma.sleepStage.count({ where: { session: { userId: id } } })).toBe(365 * 24);
+  }, 120_000);
+
+  // A year in one transaction held the user's lock for the whole write and
+  // could outrun the transaction timeout against a remote database, so a large
+  // store is split into batches, each its own locked transaction.
+  describe('batching', () => {
+    const DAY = 24 * 3600_000;
+    const nightsFrom = (count: number) => Array.from({ length: count }, (_, i) => night({
+      startTime: new Date(Date.parse('2026-01-01T23:00:00Z') + i * DAY),
+      endTime: new Date(Date.parse('2026-01-02T07:00:00Z') + i * DAY),
+    }));
+
+    // Counts (and, on call `failCall`, fails the rollup writes of) the interactive
+    // transactions storeSleepSessions opens. The failing write is lazy like a
+    // real Prisma query (it rejects only when awaited), so the writes queued
+    // behind the first one never surface as unhandled rejections.
+    function spyTransactions(failCall?: number) {
+      const realTransaction = prisma.$transaction.bind(prisma);
+      let calls = 0;
+      const spy = jest.spyOn(prisma, '$transaction').mockImplementation(((arg: any, opts?: any) => {
+        if (typeof arg !== 'function') return realTransaction(arg, opts);
+        calls += 1;
+        if (calls !== failCall) return realTransaction(arg, opts);
+        const failure = { then: (_: unknown, reject: (e: Error) => void) => reject(new Error("Can't reach database server")) };
+        return realTransaction((tx: any) => arg(new Proxy(tx, {
+          get: (t, key) => key !== 'biometricRecord' ? t[key] : new Proxy(t.biometricRecord, {
+            get: (d, k) => (k === 'upsert' ? () => failure : d[k]),
+          }),
+        })), opts);
+      }) as any);
+      return { spy, calls: () => calls };
+    }
+
+    it('splits a year of nights into batches of SLEEP_STORE_BATCH_SIZE, one transaction each', async () => {
+      const { id } = await createUser();
+      const { spy, calls } = spyTransactions();
+      let dates: string[];
+      try {
+        dates = await storeSleepSessions(id, nightsFrom(365));
+      } finally {
+        spy.mockRestore();
+      }
+      expect(SLEEP_STORE_BATCH_SIZE).toBeGreaterThanOrEqual(30);
+      expect(SLEEP_STORE_BATCH_SIZE).toBeLessThanOrEqual(60);
+      expect(calls()).toBe(Math.ceil(365 / SLEEP_STORE_BATCH_SIZE));
+      expect(dates).toHaveLength(365);
+      expect(dates).toEqual([...dates].sort());
+      expect(await rollups(id)).toHaveLength(365);
+    }, 120_000);
+
+    it('a date two batches both touch is returned once and rolls up both sessions', async () => {
+      const { id } = await createUser();
+      const nights = nightsFrom(SLEEP_STORE_BATCH_SIZE);
+      const last = nights[nights.length - 1]!;
+      // Starts after every night, so it lands alone in the second batch, on the last night's date.
+      const nap = night({
+        startTime: new Date(last.endTime.getTime() + 5 * 3600_000),
+        endTime: new Date(last.endTime.getTime() + 6 * 3600_000),
+        minutesAsleep: 50,
+      });
+      const lastDate = last.endTime.toISOString().slice(0, 10);
+      const dates = await storeSleepSessions(id, [nap, ...nights]);
+      expect(dates).toHaveLength(SLEEP_STORE_BATCH_SIZE);
+      expect(dates.filter((d) => d === lastDate)).toHaveLength(1);
+      expect((await rollups(id)).find((r) => r.date === lastDate)!.value).toBe(420 + 50);
+    });
+
+    it('a failed batch rolls back only itself, and a retry heals it', async () => {
+      const { id } = await createUser();
+      const nights = nightsFrom(SLEEP_STORE_BATCH_SIZE + 3);
+      const { spy } = spyTransactions(2);
+      try {
+        await expect(storeSleepSessions(id, nights)).rejects.toThrow("Can't reach database server");
+      } finally {
+        spy.mockRestore();
+      }
+      // The first batch committed whole; the failed one left nothing behind.
+      expect(await prisma.sleepSession.count({ where: { userId: id } })).toBe(SLEEP_STORE_BATCH_SIZE);
+      expect(await rollups(id)).toHaveLength(SLEEP_STORE_BATCH_SIZE);
+
+      // The retry finds the first batch already stored and touches only the rest.
+      const retried = await storeSleepSessions(id, nights);
+      expect(retried).toEqual(nights.slice(SLEEP_STORE_BATCH_SIZE).map((n) => n.endTime.toISOString().slice(0, 10)));
+      expect(await rollups(id)).toHaveLength(SLEEP_STORE_BATCH_SIZE + 3);
+    });
+  });
+
+  it('an offset-only change (null -> 0) counts as changed and touches both keyed dates', async () => {
+    // Ends 02:00Z Oct 1: 22:00 Sep 30 in New York (the null-offset fallback), Oct 1 at +00:00.
+    const { id } = await createUser('America/New_York');
+    const at = (offset: number | null) => night({ endTime: new Date('2026-10-01T02:00:00Z'), startUtcOffsetSeconds: offset, endUtcOffsetSeconds: offset });
+    expect(await storeSleepSessions(id, [at(null)])).toEqual(['2026-09-30']);
+    expect(await storeSleepSessions(id, [at(0)])).toEqual(['2026-09-30', '2026-10-01']);
+    expect(await rollups(id)).toEqual([{ date: '2026-10-01', value: 420 }]);
+  });
+
+  // The session write and the rollup write are one transaction: if the rollup
+  // write fails, the session write rolls back too, so the job's retry still
+  // sees the night as changed and rebuilds the rollup. (Committed separately,
+  // the retry would find the new values already stored, touch nothing, and
+  // leave the rollup on the old total for good.)
+  it('a failed rollup write rolls the session back, so a retry rebuilds the rollup', async () => {
+    const { id } = await createUser();
+    await storeSleepSessions(id, [night()]);
+
+    const realTransaction = prisma.$transaction.bind(prisma);
+    let failed = false;
+    const spy = jest.spyOn(prisma, '$transaction').mockImplementation(((arg: any, opts?: any) => {
+      if (typeof arg !== 'function' || failed) return realTransaction(arg, opts);
+      failed = true;
+      return realTransaction((tx: any) => arg(new Proxy(tx, {
+        get: (t, key) => key !== 'biometricRecord' ? t[key] : new Proxy(t.biometricRecord, {
+          get: (d, k) => (k === 'upsert' ? () => Promise.reject(new Error("Can't reach database server")) : d[k]),
+        }),
+      })), opts);
+    }) as any);
+    try {
+      await expect(storeSleepSessions(id, [night({ minutesAsleep: 430 })])).rejects.toThrow("Can't reach database server");
+    } finally {
+      spy.mockRestore();
+    }
+
+    expect(await storeSleepSessions(id, [night({ minutesAsleep: 430 })])).toEqual(['2026-10-01']);
+    expect(await rollups(id)).toEqual([{ date: '2026-10-01', value: 430 }]);
   });
 });

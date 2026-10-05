@@ -9,6 +9,8 @@ import {
   circadianConsistencyOn,
   buildSleepEfficiencySeries,
   buildCircadianSeries,
+  populationStdDev,
+  spreadToScore,
 } from '../../src/scoring/features';
 import { v1Config } from '../../src/scoring/configs/v1';
 import { series, sleepSession, noonAnchoredNights } from './helpers';
@@ -239,5 +241,18 @@ describe('Slice 1.5 Stage 2: circadian consistency', () => {
     expect(built[0]!.date).toBe('2026-07-15');
     expect(built[built.length - 1]!.date).toBe('2026-07-25');
     expect(built.every((p) => Math.abs(p.value - 100) < 1e-9)).toBe(true);
+  });
+});
+
+describe('spread maths shared by circadian consistency and sleep regularity', () => {
+  it('spreadToScore inverts and normalizes a stddev against the ceiling, floored at 0', () => {
+    expect(spreadToScore(0, 120)).toBe(100);
+    expect(spreadToScore(60, 120)).toBe(50);
+    expect(spreadToScore(240, 120)).toBe(0);
+  });
+
+  it('populationStdDev divides by n, not n - 1', () => {
+    expect(populationStdDev([10, 20, 30])).toBeCloseTo(8.165, 3);
+    expect(populationStdDev([630, 630, 630])).toBe(0);
   });
 });

@@ -277,6 +277,14 @@ export function formatDayTitle(date: string): string {
   return `${weekday}, ${MONTH_SHORT[d.getUTCMonth()]} ${d.getUTCDate()}, ${d.getUTCFullYear()}`;
 }
 
+const WEEKDAY_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
+
+/** "Thursday 1 October": a night's title, and how a question to the coach names it. */
+export function formatLongDay(date: string): string {
+  const d = toUtc(date);
+  return `${WEEKDAY_LONG[d.getUTCDay()]} ${d.getUTCDate()} ${MONTH_LONG[d.getUTCMonth()]}`;
+}
+
 /** "Sep 22" for stat captions. */
 export function formatShortDate(date: string): string {
   const d = toUtc(date);

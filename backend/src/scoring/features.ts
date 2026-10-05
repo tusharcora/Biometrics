@@ -2,6 +2,7 @@
 // into UserDailyFeatures happens in the orchestrator.
 
 import { sessionEndCivilDate, sessionStartMinutesSinceLocalNoon } from '../biometrics/civilDate';
+import { pickMainSession } from '../biometrics/mainSession';
 import { shiftDate } from './dates';
 import type { ScoreConfig } from './configs/v1';
 import type { DailyPoint, SleepSessionInput } from './types';
@@ -166,17 +167,7 @@ export function buildSleepEfficiencySeries(
 export function mainSessionOnsets(sessions: SleepSessionInput[], timeZone: string): DailyPoint[] {
   const out: DailyPoint[] = [];
   for (const [date, night] of groupSessionsByNight(sessions, timeZone)) {
-    let main: SleepSessionInput | undefined;
-    for (const s of night) {
-      if (!(intervalMinutes(s) > 0)) continue;
-      if (
-        !main ||
-        s.minutesAsleep > main.minutesAsleep ||
-        (s.minutesAsleep === main.minutesAsleep && s.startTime < main.startTime)
-      ) {
-        main = s;
-      }
-    }
+    const main = pickMainSession(night);
     if (main) out.push({ date, value: sessionStartMinutesSinceLocalNoon(main, timeZone) });
   }
   return out.sort((a, b) => (a.date < b.date ? -1 : 1));
@@ -203,9 +194,23 @@ export function circadianConsistencyOn(onsets: DailyPoint[], date: string, cfg: 
   const window = onsets.filter((o) => o.date >= from && o.date <= date).map((o) => o.value);
   if (window.length < minWindowNights) return null;
 
-  const mean = window.reduce((sum, v) => sum + v, 0) / window.length;
-  const variance = window.reduce((sum, v) => sum + (v - mean) ** 2, 0) / window.length;
-  return 100 * Math.max(0, 1 - Math.sqrt(variance) / maxStdMinutes);
+  return spreadToScore(populationStdDev(window), maxStdMinutes);
+}
+
+/** Population (divide by n) standard deviation; the caller guarantees a non-empty list. */
+export function populationStdDev(values: number[]): number {
+  const mean = values.reduce((sum, v) => sum + v, 0) / values.length;
+  const variance = values.reduce((sum, v) => sum + (v - mean) ** 2, 0) / values.length;
+  return Math.sqrt(variance);
+}
+
+/**
+ * A spread in minutes inverted and normalized to 0..100: 100 at no spread, 0 at
+ * maxStdMinutes or more. Shared by circadian consistency and the sleep
+ * regularity endpoint so the two can never use different maths.
+ */
+export function spreadToScore(stdMinutes: number, maxStdMinutes: number): number {
+  return 100 * Math.max(0, 1 - stdMinutes / maxStdMinutes);
 }
 
 /**

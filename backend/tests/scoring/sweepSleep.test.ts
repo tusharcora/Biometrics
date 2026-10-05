@@ -2,6 +2,7 @@ import { runScoreSweep } from '../../src/scoring/sweep';
 import { computeDailyScore } from '../../src/scoring/compute';
 import { COMPUTE_DAILY_SCORE_JOB, ScoreQueue } from '../../src/scoring/queue';
 import { prisma } from '../../src/db/client';
+import { storeSleepSessions } from '../../src/biometrics/repository';
 import { migrateTestDb } from '../setupTestDb';
 import { createUser, seedHistory, seedSessions, day } from './dbHelpers';
 
@@ -103,5 +104,34 @@ describe('nightly score sweep: both score types (Slice 1.5)', () => {
     const again = fakeQueue();
     await runScoreSweep({ queue: again.queue, now: NOW });
     expect(again.added.filter((a) => a.userId === user.id)).toEqual([]);
+  });
+});
+
+// Sleep depth (spec 2026-10-03 §2): a stage backfill resyncs nights whose
+// minutes and times did not move. It must not bump the SLEEP rollup's
+// syncedAt, or the sweep would rescore every stored night.
+describe('nightly score sweep: stage-only sleep resync', () => {
+  it('does not enqueue a day whose night was resynced with stages only', async () => {
+    const user = await createUser();
+    const night = {
+      startTime: new Date('2026-09-30T23:00:00Z'), endTime: new Date('2026-10-01T07:00:00Z'), minutesAsleep: 420,
+      startUtcOffsetSeconds: 0, endUtcOffsetSeconds: 0,
+    };
+    await storeSleepSessions(user.id, [night]);
+    await computeDailyScore(user.id, '2026-10-01');
+    const now = new Date('2026-10-02T12:00:00Z');
+    // Baseline: once scored, the day is not stale.
+    const baseline = fakeQueue();
+    await runScoreSweep({ queue: baseline.queue, now });
+    expect(baseline.added.filter((a) => a.userId === user.id)).toEqual([]);
+
+    await storeSleepSessions(user.id, [{
+      ...night, deepMinutes: 80,
+      stages: [{ type: 'DEEP', startTime: new Date('2026-09-30T23:30:00Z'), endTime: new Date('2026-10-01T00:10:00Z') }],
+    }]);
+    const { queue, added } = fakeQueue();
+    await runScoreSweep({ queue, now });
+
+    expect(added.filter((a) => a.userId === user.id)).toEqual([]);
   });
 });

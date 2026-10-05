@@ -1,5 +1,5 @@
 import { prisma } from '../db/client';
-import { enqueueSleepHistoryBackfill } from './queue';
+import { enqueueSleepHistoryBackfill, enqueueSleepStagesBackfill } from './queue';
 import { stepsHistoryWindow } from './stepsHistory';
 
 // The Sleep page of the activity heat map reaches as far back as the Steps
@@ -20,6 +20,24 @@ export async function enqueuePendingSleepHistoryBackfills(): Promise<number> {
   });
   for (const { userId } of pending) {
     await enqueueSleepHistoryBackfill(userId);
+  }
+  return pending.length;
+}
+
+/**
+ * Enqueues the one-off stage backfill for every connected user whose sleep
+ * history was stored before stages were captured. A history backfill pulls
+ * stages itself and sets both markers, so a connection still waiting for its
+ * history is left to that job. Runs once at server start. Returns how many
+ * were enqueued.
+ */
+export async function enqueuePendingSleepStagesBackfills(): Promise<number> {
+  const pending = await prisma.healthConnection.findMany({
+    where: { status: 'CONNECTED', sleepHistoryBackfilledAt: { not: null }, sleepStagesBackfilledAt: null },
+    select: { userId: true },
+  });
+  for (const { userId } of pending) {
+    await enqueueSleepStagesBackfill(userId);
   }
   return pending.length;
 }
