@@ -651,6 +651,8 @@ model Recap {
   rebuiltAt        DateTime?
   openedAt         DateTime?
   pushedAt         DateTime?
+  /// The late-data filter's mark: inputs stamped before it were already counted or compared. Null → builtAt.
+  inputsCheckedAt  DateTime?
 
   @@unique([userId, kind, periodStart])
   @@index([userId, status, periodEnd])

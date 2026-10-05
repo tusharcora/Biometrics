@@ -29,3 +29,11 @@ export interface RecapStats {
 /** One civil date's raw inputs; a key is absent when that input is missing. bedtime = noon-anchored minutes of the main session. */
 export interface DayData { sleepMinutes?: number; sleepScore?: number; recovery?: number; steps?: number; bedtime?: number }
 export type RecapData = Map<string, DayData>;
+
+export interface RecapJobData {
+  userId: string;
+  kind: RecapKind;
+  periodStart: string;
+  /** Launch backfill: build any finished period, and never push. */
+  noPush?: boolean;
+}
