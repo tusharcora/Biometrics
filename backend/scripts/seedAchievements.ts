@@ -1,77 +1,114 @@
+/// <reference types="node" />
 // Dev only: gives an existing account (the demo account) sample badge levels, so the simulator pass
 // can see the Profile card, the Badges screens, a celebration (two levels are left uncelebrated)
-// and the recap cards (levels dated in the last two weeks).
+// and the recap cards (levels dated in the newest complete week and month, whatever day it runs).
 //
-//   DATABASE_URL=<local dev database> node node_modules/.bin/ts-node scripts/seedAchievements.ts --email demo@example.com
+//   DATABASE_URL=<local dev database> node node_modules/.bin/ts-node --project tsconfig.evals.json scripts/seedAchievements.ts --email demo@example.com
 //
-// Refuses NODE_ENV=production and any DATABASE_URL whose host is not localhost. Idempotent: levels
-// already there are skipped. Never runs on import: the CLI entry point is guarded by require.main.
+// Refuses NODE_ENV=production and any DATABASE_URL that points off this machine (its host, and any
+// host / hostaddr query parameter, must be localhost or a unix socket path). Sets the start date the
+// way the app does (claimStartDate: start date and starting goals together, only where unset), and
+// never dates a level before the start date. Idempotent: levels already there are skipped. Never
+// runs on import: the CLI entry point is guarded by require.main. On failure it logs only the
+// error's name.
 import type { AchievementFamily } from '@prisma/client';
 import { familyDef } from '../src/achievements/catalogue';
+import { claimStartDate } from '../src/achievements/start';
 import { civilDateToUtcMidnight, localCivilDateOrUtc } from '../src/biometrics/civilDate';
 import { prisma } from '../src/db/client';
-import { mondayOf, monthStartOf } from '../src/recap/periods';
+import { lastCompletedPeriodStart, mondayOf, monthStartOf, periodEndOf } from '../src/recap/periods';
 import { shiftDate } from '../src/scoring/dates';
 
 type SeedEnv = { NODE_ENV?: string | undefined; DATABASE_URL?: string | undefined };
 
 const LOCAL_HOSTS = new Set(['localhost', '127.0.0.1', '[::1]', '::1']);
-const START_DAYS_BACK = 30;
 
-export function assertDevDatabase(env: SeedEnv): void {
-  if (env.NODE_ENV === 'production') throw new Error('Refusing to seed achievements in production');
-  let host = '';
-  try {
-    host = new URL(env.DATABASE_URL ?? '').hostname;
-  } catch {
-    host = '';
-  }
-  if (!LOCAL_HOSTS.has(host)) throw new Error('Refusing to seed achievements: DATABASE_URL is not a local database');
+function seedError(name: string, message: string): Error {
+  const err = new Error(message);
+  err.name = name;
+  return err;
 }
 
-/** [family, level, days before today, already celebrated]. */
-export const SAMPLE_LEVELS: ReadonlyArray<readonly [AchievementFamily, number, number, boolean]> = [
-  ['SLEEP_GOAL', 1, 12, true],
-  ['SLEEP_GOAL', 2, 8, true],
-  ['EVERY_DAY_LOGGED', 1, 6, true],
-  ['STEADY_BEDTIME', 1, 3, false],
-  ['CHECK_IN', 1, 2, false],
+/** A host the connection may use: this machine, or a unix socket directory. */
+const isLocalHost = (host: string) => LOCAL_HOSTS.has(host) || host.startsWith('/');
+
+export function assertDevDatabase(env: SeedEnv): void {
+  if (env.NODE_ENV === 'production') throw seedError('SeedProductionRefused', 'Refusing to seed achievements in production');
+  const nonLocal = seedError('SeedNonLocalRefused', 'Refusing to seed achievements: DATABASE_URL is not a local database');
+  let url: URL;
+  try {
+    url = new URL(env.DATABASE_URL ?? '');
+  } catch {
+    throw nonLocal;
+  }
+  if (!LOCAL_HOSTS.has(url.hostname)) throw nonLocal;
+  // libpq-style host / hostaddr parameters override the URL's host, so each one must be local too.
+  const params = [...url.searchParams.getAll('host'), ...url.searchParams.getAll('hostaddr')];
+  if (!params.flatMap((p) => p.split(',')).every((h) => isLocalHost(h.trim()))) throw nonLocal;
+}
+
+export function parseEmail(argv: string[]): string {
+  const i = argv.indexOf('--email');
+  const email = i >= 0 ? argv[i + 1] : undefined;
+  if (!email) throw seedError('SeedUsageError', 'Usage: seedAchievements --email <email>');
+  return email;
+}
+
+/**
+ * [family, level, anchor, days after the anchor, already celebrated]. MONTH_END is the last day of
+ * the newest complete month, WEEK_START the Monday of the newest complete week, so the month and
+ * week recaps always get a level. A monthly family's level sits on its month's last day.
+ */
+export const SAMPLE_LEVELS: ReadonlyArray<readonly [AchievementFamily, number, 'MONTH_END' | 'WEEK_START', number, boolean]> = [
+  ['SLEEP_GOAL', 1, 'MONTH_END', -20, true],
+  ['EVERY_DAY_LOGGED', 1, 'MONTH_END', 0, true],
+  ['SLEEP_GOAL', 2, 'WEEK_START', 4, true],
+  ['STEADY_BEDTIME', 1, 'WEEK_START', 5, false],
+  ['CHECK_IN', 1, 'WEEK_START', 6, false],
 ];
 
-export async function seedAchievements({ email, now = new Date(), env = process.env }: { email: string; now?: Date; env?: SeedEnv }): Promise<{ userId: string; created: number }> {
+export async function seedAchievements({ email, now = new Date(), env = process.env }: { email: string; now?: Date; env?: SeedEnv }): Promise<{ userId: string; created: number; skipped: number }> {
   assertDevDatabase(env);
-  const user = await prisma.user.findUnique({ where: { email }, select: { id: true, timezone: true, achievementsSince: true } });
-  if (!user) throw new Error('No user with that email');
+  const user = await prisma.user.findUnique({
+    where: { email },
+    select: { id: true, timezone: true, achievementsSince: true, sleepGoalMinutes: true, bedtimeGoal: true },
+  });
+  if (!user) throw seedError('SeedUnknownUser', 'No user with that email');
   const today = localCivilDateOrUtc(now, user.timezone);
-  if (!user.achievementsSince) {
-    await prisma.user.update({ where: { id: user.id }, data: { achievementsSince: civilDateToUtcMidnight(shiftDate(today, -START_DAYS_BACK)) } });
-  }
+  const monthStart = lastCompletedPeriodStart('MONTH', today);
+  const anchors = { MONTH_END: periodEndOf('MONTH', monthStart), WEEK_START: lastCompletedPeriodStart('WEEK', today) };
+  // No start date yet: start at the newest complete month, before every sample level.
+  if (!user.achievementsSince) await claimStartDate(user, monthStart);
+  const since = (user.achievementsSince ?? civilDateToUtcMidnight(monthStart)).toISOString().slice(0, 10);
+
+  const levels = SAMPLE_LEVELS.map(([family, level, anchor, offset, celebrated]) => ({
+    family,
+    level,
+    earnedOn: shiftDate(anchors[anchor], offset),
+    celebrated,
+  }));
+  const kept = levels.filter((l) => l.earnedOn >= since);
   const result = await prisma.achievement.createMany({
-    data: SAMPLE_LEVELS.map(([family, level, daysBack, celebrated]) => {
-      const earnedOn = shiftDate(today, -daysBack);
-      return {
-        userId: user.id,
-        family,
-        level,
-        value: familyDef(family).thresholds[level - 1]!,
-        earnedOn: civilDateToUtcMidnight(earnedOn),
-        weekStart: civilDateToUtcMidnight(mondayOf(earnedOn)),
-        monthStart: civilDateToUtcMidnight(monthStartOf(earnedOn)),
-        celebratedAt: celebrated ? now : null,
-      };
-    }),
+    data: kept.map(({ family, level, earnedOn, celebrated }) => ({
+      userId: user.id,
+      family,
+      level,
+      value: familyDef(family).thresholds[level - 1]!,
+      earnedOn: civilDateToUtcMidnight(earnedOn),
+      weekStart: civilDateToUtcMidnight(mondayOf(earnedOn)),
+      monthStart: civilDateToUtcMidnight(monthStartOf(earnedOn)),
+      celebratedAt: celebrated ? now : null,
+    })),
     skipDuplicates: true,
   });
-  return { userId: user.id, created: result.count };
+  return { userId: user.id, created: result.count, skipped: levels.length - kept.length };
 }
 
 async function main() {
-  const i = process.argv.indexOf('--email');
-  const email = i >= 0 ? process.argv[i + 1] : undefined;
-  if (!email) throw new Error('Usage: seedAchievements --email <email>');
+  const email = parseEmail(process.argv);
   try {
-    const { userId, created } = await seedAchievements({ email });
-    console.info(JSON.stringify({ event: 'achievements.seeded', userId, created }));
+    const { userId, created, skipped } = await seedAchievements({ email });
+    console.info(JSON.stringify({ event: 'achievements.seeded', userId, created, skippedBeforeStart: skipped }));
   } finally {
     await prisma.$disconnect();
   }
