@@ -64,6 +64,11 @@ export function tierName(level: number): string {
   return TIER_NAMES[level - 1] ?? '';
 }
 
+/** "Sleep goal streak, level II, Silver" or "Sleep goal streak, locked": a badge for screen readers. */
+export function badgeLabel(family: AchievementFamily, level: number): string {
+  return level > 0 ? `${FAMILY_NAMES[family]}, level ${numeral(level)}, ${tierName(level)}` : `${FAMILY_NAMES[family]}, locked`;
+}
+
 /** "Sleep goal streak III". */
 export function levelTitle(family: AchievementFamily, level: number): string {
   return `${FAMILY_NAMES[family]} ${numeral(level)}`;

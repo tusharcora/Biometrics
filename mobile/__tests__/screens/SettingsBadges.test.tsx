@@ -1,5 +1,6 @@
 import React from 'react';
 import { act, render, screen, waitFor } from '@testing-library/react-native';
+import { NavigationContext } from '@react-navigation/native';
 import { achievementsFixture } from '../../jest-mocks/achievementsFixture';
 import { fetchAchievements } from '../../src/api/achievements';
 import { getTimezoneState } from '../../src/lib/timezone';
@@ -30,4 +31,31 @@ it('leaves the card out against a backend without badges (404)', async () => {
   await act(async () => {});
   expect(screen.queryByTestId('badges-card')).toBeNull();
   expect(screen.getByTestId('connect-health-row')).toBeTruthy();
+});
+
+it('refreshes the badges each time Profile comes back into focus', async () => {
+  (fetchAchievements as jest.Mock).mockResolvedValue(null);
+  // Other Profile parts (the story ring) listen for focus too, so keep every listener.
+  const focus = new Set<() => void>();
+  const navigation = {
+    navigate: jest.fn(),
+    addListener: jest.fn((_event: 'focus', cb: () => void) => {
+      focus.add(cb);
+      return () => focus.delete(cb);
+    }),
+  };
+  render(
+    <NavigationContext.Provider value={navigation as any}>
+      <SettingsScreen />
+    </NavigationContext.Provider>,
+  );
+  await waitFor(() => expect(fetchAchievements).toHaveBeenCalledTimes(1));
+  await act(async () => {});
+  expect(screen.queryByTestId('badges-card')).toBeNull();
+
+  // A level earned since (or a first load that failed) shows on the next visit to the tab.
+  (fetchAchievements as jest.Mock).mockResolvedValue(achievementsFixture({ SLEEP_GOAL: { level: 1 } }));
+  await act(async () => focus.forEach((cb) => cb()));
+  await waitFor(() => expect(fetchAchievements).toHaveBeenCalledTimes(2));
+  expect(await screen.findByTestId('badges-card')).toBeTruthy();
 });

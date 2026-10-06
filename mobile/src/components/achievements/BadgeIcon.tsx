@@ -4,7 +4,7 @@ import Svg, { Polygon, Rect } from 'react-native-svg';
 import type { AchievementFamily } from '../../api/achievements';
 import { useCharacterOptional } from '../../characters/CharacterContext';
 import { LOCKED_PIP, glyphCells, octagonPoints, tierColors } from '../../lib/badgeArt';
-import { FAMILY_NAMES, numeral, tierName } from '../../lib/badges';
+import { badgeLabel } from '../../lib/badges';
 import { characterInfo } from '../characters/registry';
 
 export interface BadgeIconProps {
@@ -33,7 +33,7 @@ export function BadgeIcon({ family, level, size, pips = true, coachAccent, testI
   const t = tierColors(lv, accent);
   const ring = lv === 5 ? 9 : 6;
   const pip = Math.max(4, Math.round(size * 0.07));
-  const label = lv > 0 ? `${FAMILY_NAMES[family]}, level ${numeral(lv)}, ${tierName(lv)}` : `${FAMILY_NAMES[family]}, locked`;
+  const label = badgeLabel(family, lv);
   return (
     <View testID={testID} accessible accessibilityRole="image" accessibilityLabel={label} style={{ width: size, alignItems: 'center', gap: Math.round(size * 0.08) }}>
       <Svg width={size} height={size} viewBox={`0 0 ${VIEW} ${VIEW}`}>
