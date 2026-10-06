@@ -63,9 +63,9 @@ async function* allUsers(userIds?: string[]): AsyncGenerator<LaunchUser> {
 }
 
 /**
- * Check-ins saved before the launch on the launch habit day: on time when their createdAt falls in
- * that same habit day (computed in the zone at launch). Only false -> true; rows saved after the
- * launch keep the flag set at write time.
+ * Check-ins for the launch habit day: on time when their createdAt falls in that same habit day
+ * (computed in the zone at launch), the definition the write path uses. Only false -> true, so a
+ * rerun changes nothing; a backdated row's createdAt is never in its own habit day.
  *
  * It uses the user's current zone, not a stored zone at launch: the two differ only on a rerun
  * after a lost marker for a user who changed zone since the launch.
@@ -73,7 +73,7 @@ async function* allUsers(userIds?: string[]): AsyncGenerator<LaunchUser> {
 export async function backfillLaunchDayOnTime(userId: string, timeZone: string, launchAt: Date): Promise<number> {
   const launchDay = habitDayForOrUtc(launchAt, timeZone);
   const rows = await prisma.habitCheckIn.findMany({
-    where: { userId, habitDay: civilDateToUtcMidnight(launchDay), onTime: false, createdAt: { lt: launchAt } },
+    where: { userId, habitDay: civilDateToUtcMidnight(launchDay), onTime: false },
     select: { id: true, createdAt: true },
   });
   const ids = rows.filter((r) => habitDayForOrUtc(r.createdAt, timeZone) === launchDay).map((r) => r.id);

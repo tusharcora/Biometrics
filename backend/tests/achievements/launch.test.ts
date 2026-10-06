@@ -59,23 +59,32 @@ it('starts every user without a start date on their local launch date, with star
   expect(store.values.get(ACHIEVEMENTS_LAUNCH_MARKER)).toBe(LAUNCH.toISOString());
 });
 
-it('marks check-ins saved before the launch, during the launch habit day, as on time, and nothing else', async () => {
+it('marks launch habit day check-ins saved during that habit day as on time, and nothing else', async () => {
   const evening = await preLaunchUser();
   const eveningRow = await checkIn(evening.id, '2026-10-06', '2026-10-06T21:00:00Z');
   const afterMidnight = await preLaunchUser();
   const afterMidnightRow = await checkIn(afterMidnight.id, '2026-10-06', '2026-10-07T01:30:00Z');
   const backdated = await preLaunchUser();
   const backdatedRow = await checkIn(backdated.id, '2026-10-05', '2026-10-06T21:00:00Z');
+  // Saved after the launch but still in the launch habit day: on time by the same definition.
   const afterLaunch = await preLaunchUser();
   const afterLaunchRow = await checkIn(afterLaunch.id, '2026-10-06', '2026-10-07T03:00:00Z');
+  // Saved for the launch habit day once the next one had begun: late, stays off.
+  const late = await preLaunchUser();
+  const lateRow = await checkIn(late.id, '2026-10-06', '2026-10-07T12:00:00Z');
+  // Only false -> true: a flag already on is never turned off.
+  const alreadyOn = await preLaunchUser();
+  const alreadyOnRow = await checkIn(alreadyOn.id, '2026-10-06', '2026-10-07T12:00:00Z', true);
 
-  await runAchievementsLaunchOnce({ store: new MemoryStore(), launchAt: LAUNCH, userIds: [evening.id, afterMidnight.id, backdated.id, afterLaunch.id] });
+  const ids = [evening.id, afterMidnight.id, backdated.id, afterLaunch.id, late.id, alreadyOn.id];
+  await runAchievementsLaunchOnce({ store: new MemoryStore(), launchAt: LAUNCH, userIds: ids });
 
   expect(await onTimeOf(eveningRow.id)).toBe(true);
   expect(await onTimeOf(afterMidnightRow.id)).toBe(true);
   expect(await onTimeOf(backdatedRow.id)).toBe(false);
-  // Saved after the launch: its flag was set at write time and is never recomputed.
-  expect(await onTimeOf(afterLaunchRow.id)).toBe(false);
+  expect(await onTimeOf(afterLaunchRow.id)).toBe(true);
+  expect(await onTimeOf(lateRow.id)).toBe(false);
+  expect(await onTimeOf(alreadyOnRow.id)).toBe(true);
 });
 
 it('fixes launch-day check-ins for a user whose first badge load already set the start date', async () => {
@@ -94,7 +103,7 @@ it('a rerun after a lost marker moves no start date, writes no goal row and reco
   const before = await preLaunchUser();
   const beforeRow = await checkIn(before.id, '2026-10-06', '2026-10-06T21:00:00Z');
   const after = await preLaunchUser();
-  const afterRow = await checkIn(after.id, '2026-10-06', '2026-10-07T03:00:00Z');
+  const afterRow = await checkIn(after.id, '2026-10-06', '2026-10-07T12:00:00Z');
   const ids = [before.id, after.id];
   await runAchievementsLaunchOnce({ store: new MemoryStore(), launchAt: LAUNCH, userIds: ids });
 
