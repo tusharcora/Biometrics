@@ -4,7 +4,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import { withCharacter } from '../../jest-mocks/characterContext';
 import { achievementsFixture } from '../../jest-mocks/achievementsFixture';
 import { fetchAchievements, markCelebrated } from '../../src/api/achievements';
-import { CelebrationHost } from '../../src/components/achievements/CelebrationHost';
+import { CelebrationHost, MODAL_DISMISS_MS } from '../../src/components/achievements/CelebrationHost';
 import { resetAchievements } from '../../src/lib/achievementsStore';
 
 jest.mock('../../src/api/achievements');
@@ -77,19 +77,56 @@ it('swaps families inside one Modal, which goes only when the queue is empty', a
   await waitFor(() => expect(screen.UNSAFE_queryByType(Modal)).toBeNull());
 });
 
-it('waits while a full-screen modal route is up, and shows once it closes', async () => {
-  mockNav.route = 'RecapStory';
-  load.mockResolvedValue(TWO_FAMILIES);
-  render(withCharacter(<CelebrationHost />));
-  await waitFor(() => expect(load).toHaveBeenCalledTimes(1));
-  await act(async () => {});
-  expect(screen.queryByTestId('celebration-screen')).toBeNull();
+describe('behind a native modal route', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => jest.useRealTimers());
 
-  act(() => navigateTo('MeetYourCoach'));
-  expect(screen.queryByTestId('celebration-screen')).toBeNull();
+  async function renderOn(route: string) {
+    mockNav.route = route;
+    load.mockResolvedValue(TWO_FAMILIES);
+    const view = render(withCharacter(<CelebrationHost />));
+    await act(async () => {});
+    expect(load).toHaveBeenCalledTimes(1);
+    return view;
+  }
 
-  act(() => navigateTo('Tabs'));
-  expect(screen.getByTestId('celebration-title')).toHaveTextContent('SLEEP GOAL STREAK II');
+  it('waits while it is up, and shows once its dismissal has had time to finish', async () => {
+    await renderOn('RecapStory');
+    expect(screen.queryByTestId('celebration-screen')).toBeNull();
+
+    act(() => navigateTo('MeetYourCoach'));
+    expect(screen.queryByTestId('celebration-screen')).toBeNull();
+
+    // The state flips to Tabs at once while the native dismissal still animates.
+    act(() => navigateTo('Tabs'));
+    expect(screen.queryByTestId('celebration-screen')).toBeNull();
+    act(() => jest.advanceTimersByTime(MODAL_DISMISS_MS - 1));
+    expect(screen.queryByTestId('celebration-screen')).toBeNull();
+    act(() => jest.advanceTimersByTime(1));
+    expect(screen.getByTestId('celebration-title')).toHaveTextContent('SLEEP GOAL STREAK II');
+  });
+
+  it('keeps waiting when a modal route opens again within the delay', async () => {
+    await renderOn('RecapStory');
+    act(() => navigateTo('Tabs'));
+    act(() => jest.advanceTimersByTime(MODAL_DISMISS_MS / 2));
+    act(() => navigateTo('RecapStory'));
+    act(() => jest.advanceTimersByTime(MODAL_DISMISS_MS));
+    expect(screen.queryByTestId('celebration-screen')).toBeNull();
+
+    act(() => navigateTo('Tabs'));
+    act(() => jest.advanceTimersByTime(MODAL_DISMISS_MS));
+    expect(screen.getByTestId('celebration-title')).toHaveTextContent('SLEEP GOAL STREAK II');
+  });
+
+  it('clears the pending release on unmount', async () => {
+    const { unmount } = await renderOn('RecapStory');
+    const before = jest.getTimerCount();
+    act(() => navigateTo('Tabs'));
+    expect(jest.getTimerCount()).toBe(before + 1);
+    unmount();
+    expect(jest.getTimerCount()).toBeLessThanOrEqual(before);
+  });
 });
 
 it('waits for the navigator to be ready', async () => {

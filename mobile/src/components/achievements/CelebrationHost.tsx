@@ -5,24 +5,55 @@ import { celebrationQueue } from '../../lib/celebrationQueue';
 import { MODAL_ROUTES, navigationRef } from '../../navigation/navigationRef';
 import { CelebrationModal } from './CelebrationModal';
 
-/** Not yet: the navigator isn't ready, or a native modal route is up (a Modal over it is dropped). */
-function mustWait(): boolean {
-  if (!navigationRef.isReady()) return true;
+/**
+ * How long a native modal route takes to finish dismissing. Its state flips to the route below at
+ * once, while the dismissal still animates; a Modal presented meanwhile is dropped on iOS.
+ */
+export const MODAL_DISMISS_MS = 600;
+
+type WaitReason = 'not-ready' | 'modal' | null;
+
+/** Why not yet: the navigator isn't ready, or a native modal route is up (a Modal over it is dropped). */
+function waitReason(): WaitReason {
+  if (!navigationRef.isReady()) return 'not-ready';
   const route = navigationRef.getCurrentRoute()?.name;
-  return route !== undefined && MODAL_ROUTES.has(route);
+  return route !== undefined && MODAL_ROUTES.has(route) ? 'modal' : null;
 }
 
-/** Re-read on every navigation state change, and once the container is ready. */
+/**
+ * Re-read on every navigation state change, and once the container is ready. Waiting starts at
+ * once; leaving a modal route releases only after MODAL_DISMISS_MS.
+ */
 function useMustWait(): boolean {
-  const [wait, setWait] = useState(mustWait);
+  const [wait, setWait] = useState(() => waitReason() !== null);
   useEffect(() => {
-    const update = () => setWait(mustWait());
+    let last = waitReason();
+    let release: ReturnType<typeof setTimeout> | null = null;
+    const update = () => {
+      const reason = waitReason();
+      const previous = last;
+      last = reason;
+      if (reason !== null) {
+        if (release) clearTimeout(release);
+        release = null;
+        setWait(true);
+      } else if (previous === 'modal') {
+        if (release) clearTimeout(release);
+        release = setTimeout(() => {
+          release = null;
+          setWait(false);
+        }, MODAL_DISMISS_MS);
+      } else if (!release) {
+        setWait(false);
+      }
+    };
     const offState = navigationRef.addListener('state', update);
     const offReady = navigationRef.addListener('ready', update);
     update();
     return () => {
       offState();
       offReady();
+      if (release) clearTimeout(release);
     };
   }, []);
   return wait;
