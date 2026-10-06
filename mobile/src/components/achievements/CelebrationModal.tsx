@@ -1,6 +1,6 @@
-import React, { useRef, useState } from 'react';
-import { Modal, PixelRatio, Pressable, StyleSheet, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useContext, useRef, useState } from 'react';
+import { Modal, PixelRatio, Pressable, ScrollView, StyleSheet, useWindowDimensions, View, type DimensionValue } from 'react-native';
+import { initialWindowMetrics, SafeAreaInsetsContext, type EdgeInsets } from 'react-native-safe-area-context';
 import { useReducedMotion } from 'react-native-reanimated';
 import { useCharacterOptional } from '../../characters/CharacterContext';
 import { LOCKED_PIP, mixHex, tierColors } from '../../lib/badgeArt';
@@ -24,7 +24,16 @@ export interface CelebrationModalProps {
 }
 
 // Pixel confetti from the canvas (Unlock.dc.html): fixed spots and colours. None under Reduce Motion.
-const CONFETTI: ReadonlyArray<readonly [number, number]> = [[40, 120], [320, 96], [70, 300], [330, 260], [24, 210], [350, 180], [110, 70], [270, 60], [56, 420], [338, 400], [190, 40], [300, 340]];
+// Drawn behind everything and only where no text can be: in the side margins (x from the screen's
+// edge, y as a share of its height) and beside the badge (x from the hero's edge, y from its top).
+type ConfettiSpot = readonly ['left' | 'right', number, DimensionValue];
+const MARGIN_CONFETTI: ReadonlyArray<ConfettiSpot> = [['left', 8, '16%'], ['right', 10, '12%'], ['left', 12, '44%'], ['right', 6, '40%'], ['left', 6, '68%'], ['right', 12, '64%']];
+const HERO_CONFETTI: ReadonlyArray<ConfettiSpot> = [['left', 22, 10], ['right', 14, 0], ['left', 4, 70], ['right', 30, 60], ['left', 28, 130], ['right', 8, 120]];
+/** The page's side padding: the margins the confetti may use, kept clear of all text. */
+const SIDE = 24;
+const ZERO_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
+/** Below this much height between the insets, the badge and its coach draw smaller. */
+const COMPACT_HEIGHT = 700;
 const CONFETTI_COLORS = ['#FACC15', '#F9A8D4', '#5EEAD4', '#FDE68A', '#FDBA74'];
 const INK = '#FAFAF9';
 // The failed-share notice, as on the recap story viewer's dark ground.
@@ -52,6 +61,21 @@ export function CelebrationModal({ celebration, thresholds, onDone }: Celebratio
   );
 }
 
+/** One confetti square, as on the canvas: every third one larger. */
+function ConfettiSquare({ spot: [side, x, top], i }: { spot: ConfettiSpot; i: number }) {
+  const size = i % 3 ? 6 : 9;
+  return <View testID="celebration-confetti-square" style={{ position: 'absolute', [side]: x, top, width: size, height: size, backgroundColor: CONFETTI_COLORS[i % CONFETTI_COLORS.length], opacity: 0.85 }} />;
+}
+
+/**
+ * The window's safe-area insets. A Modal is its own native window, where SafeAreaView can measure
+ * nothing on its first frames (the eyebrow slid under the Dynamic Island); the provider's insets
+ * still reach it through context. Read directly (not useSafeAreaInsets), so it renders without one.
+ */
+function useInsets(): EdgeInsets {
+  return useContext(SafeAreaInsetsContext) ?? initialWindowMetrics?.insets ?? ZERO_INSETS;
+}
+
 /** One family's celebration: remounted per family, so its share and close state start afresh. */
 function CelebrationContent({ celebration, thresholds, onDone }: CelebrationModalProps) {
   const reduceMotion = useReducedMotion();
@@ -73,71 +97,88 @@ function CelebrationContent({ celebration, thresholds, onDone }: CelebrationModa
     onDone();
   };
 
+  const insets = useInsets();
+  const { height } = useWindowDimensions();
+  // Small phones (iPhone SE) get a smaller badge; the block also scrolls rather than clip.
+  const compact = height - insets.top - insets.bottom < COMPACT_HEIGHT;
+  const badgeSize = compact ? 140 : 190;
+  const coachSize = compact ? 64 : 86;
+
   return (
-    <View testID="celebration-screen" style={{ flex: 1, backgroundColor: ground }}>
+    <View testID="celebration-screen" style={{ flex: 1, backgroundColor: ground, paddingTop: insets.top, paddingBottom: insets.bottom }}>
       {reduceMotion ? null : (
         <View testID="celebration-confetti" pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={StyleSheet.absoluteFill}>
-          {CONFETTI.map(([x, y], i) => (
-            <View key={i} style={{ position: 'absolute', left: x, top: y, width: i % 3 ? 6 : 9, height: i % 3 ? 6 : 9, backgroundColor: CONFETTI_COLORS[i % CONFETTI_COLORS.length], opacity: 0.85 }} />
+          {MARGIN_CONFETTI.map((spot, i) => (
+            <ConfettiSquare key={i} spot={spot} i={i} />
           ))}
         </View>
       )}
-      <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
-        <View style={{ flex: 1, alignItems: 'center', gap: 18, paddingHorizontal: 24, paddingTop: 40, paddingBottom: 24 }}>
-          <Text style={{ fontFamily: pixel, fontSize: 14, letterSpacing: 2, color: t.ring }}>NEW BADGE LEVEL</Text>
-          <View style={{ flexDirection: 'row', alignItems: 'flex-end', marginTop: 12 }}>
-            <BadgeIcon testID="celebration-badge" family={family} level={level} size={190} pips={false} coachAccent={accent} />
-            <View testID="celebration-coach" style={{ marginLeft: -40, marginBottom: -10 }}>
-              <Character characterId={characterId} mood="idle" size={86} />
+      {/* The block centred between the top inset and the buttons; it scrolls if it cannot fit. */}
+      <ScrollView testID="celebration-scroll" style={{ flex: 1 }} contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', alignItems: 'center', gap: 18, paddingHorizontal: SIDE, paddingVertical: 24 }} showsVerticalScrollIndicator={false}>
+        <Text style={{ fontFamily: pixel, fontSize: 14, letterSpacing: 2, color: t.ring }}>NEW BADGE LEVEL</Text>
+        <View testID="celebration-hero" style={{ alignSelf: 'stretch', alignItems: 'center', marginTop: 12 }}>
+          {reduceMotion ? null : (
+            <View testID="celebration-hero-confetti" pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={StyleSheet.absoluteFill}>
+              {HERO_CONFETTI.map((spot, i) => (
+                <ConfettiSquare key={i} spot={spot} i={i + MARGIN_CONFETTI.length} />
+              ))}
+            </View>
+          )}
+          <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
+            <BadgeIcon testID="celebration-badge" family={family} level={level} size={badgeSize} pips={false} coachAccent={accent} />
+            <View testID="celebration-coach" style={{ marginLeft: -Math.round(coachSize * 0.47), marginBottom: -10 }}>
+              <Character characterId={characterId} mood="idle" size={coachSize} />
             </View>
           </View>
-          <View testID="celebration-pips" style={{ flexDirection: 'row', gap: 6 }}>
-            {[1, 2, 3, 4, 5].map((i) => (
-              <View key={i} style={{ width: 12, height: 12, backgroundColor: i <= level ? t.ring : LOCKED_PIP }} />
-            ))}
-          </View>
-          <Text testID="celebration-title" style={{ fontFamily: pixel, fontSize: 26, lineHeight: 30, textAlign: 'center', color: INK }}>
-            {levelTitle(family, level).toUpperCase()}
-          </Text>
-          <Text testID="celebration-value" style={{ fontFamily: FONTS.sans, fontSize: 17, lineHeight: 24, textAlign: 'center', color: t.glyph }}>
-            {valueLine(family, value)}
-          </Text>
-          <View style={{ alignSelf: 'stretch', flexDirection: 'row', gap: 12, alignItems: 'center', borderWidth: 1, borderColor: hexAlpha(t.ring, 0.3), backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 18, paddingVertical: 14, paddingHorizontal: 16 }}>
-            <Character characterId={characterId} mood="idle" size={36} />
-            <Text testID="celebration-coach-line" style={{ flex: 1, fontFamily: FONTS.sans, fontSize: 15, lineHeight: 21, color: INK }}>
-              {coachLine(family, level, thresholds)}
-            </Text>
-          </View>
-          <View style={{ flex: 1 }} />
-          {notice ? (
-            <Text testID="celebration-notice" accessibilityLiveRegion="polite" style={{ fontFamily: FONTS.sans, fontSize: 14, lineHeight: 20, textAlign: 'center', color: NOTICE_INK }}>
-              {EXPORT_NOTICES[notice]}
-            </Text>
-          ) : null}
-          <View style={{ alignSelf: 'stretch', flexDirection: 'row', gap: 10 }}>
-            <Pressable
-              testID="celebration-share"
-              accessibilityRole="button"
-              accessibilityState={{ disabled: busy }}
-              disabled={busy}
-              onPress={() => void share()}
-              style={{ flex: 1, height: 52, borderRadius: 26, borderWidth: 1, borderColor: hexAlpha(t.ring, 0.5), alignItems: 'center', justifyContent: 'center', opacity: busy ? 0.5 : 1 }}
-            >
-              <Text style={{ fontFamily: FONTS.sansSemibold, fontSize: 16, color: INK }}>Share</Text>
-            </Pressable>
-            <Pressable
-              testID="celebration-done"
-              accessibilityRole="button"
-              accessibilityState={{ disabled: closing }}
-              disabled={closing}
-              onPress={close}
-              style={{ flex: 1, height: 52, borderRadius: 26, backgroundColor: t.ring, alignItems: 'center', justifyContent: 'center' }}
-            >
-              <Text style={{ fontFamily: FONTS.sansBold, fontSize: 16, color: ground }}>Nice!</Text>
-            </Pressable>
-          </View>
         </View>
-      </SafeAreaView>
+        <View testID="celebration-pips" style={{ flexDirection: 'row', gap: 6 }}>
+          {[1, 2, 3, 4, 5].map((i) => (
+            <View key={i} style={{ width: 12, height: 12, backgroundColor: i <= level ? t.ring : LOCKED_PIP }} />
+          ))}
+        </View>
+        <Text testID="celebration-title" style={{ fontFamily: pixel, fontSize: 26, lineHeight: 30, textAlign: 'center', color: INK }}>
+          {levelTitle(family, level).toUpperCase()}
+        </Text>
+        <Text testID="celebration-value" style={{ fontFamily: FONTS.sans, fontSize: 17, lineHeight: 24, textAlign: 'center', color: t.glyph }}>
+          {valueLine(family, value)}
+        </Text>
+        <View style={{ alignSelf: 'stretch', flexDirection: 'row', gap: 12, alignItems: 'center', borderWidth: 1, borderColor: hexAlpha(t.ring, 0.3), backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 18, paddingVertical: 14, paddingHorizontal: 16 }}>
+          <Character characterId={characterId} mood="idle" size={36} />
+          <Text testID="celebration-coach-line" style={{ flex: 1, fontFamily: FONTS.sans, fontSize: 15, lineHeight: 21, color: INK }}>
+            {coachLine(family, level, thresholds)}
+          </Text>
+        </View>
+      </ScrollView>
+      {/* Pinned at the bottom, above the bottom inset. */}
+      <View testID="celebration-actions" style={{ gap: 12, paddingHorizontal: SIDE, paddingTop: 8, paddingBottom: 24 }}>
+        {notice ? (
+          <Text testID="celebration-notice" accessibilityLiveRegion="polite" style={{ fontFamily: FONTS.sans, fontSize: 14, lineHeight: 20, textAlign: 'center', color: NOTICE_INK }}>
+            {EXPORT_NOTICES[notice]}
+          </Text>
+        ) : null}
+        <View style={{ flexDirection: 'row', gap: 10 }}>
+          <Pressable
+            testID="celebration-share"
+            accessibilityRole="button"
+            accessibilityState={{ disabled: busy }}
+            disabled={busy}
+            onPress={() => void share()}
+            style={{ flex: 1, height: 52, borderRadius: 26, borderWidth: 1, borderColor: hexAlpha(t.ring, 0.5), alignItems: 'center', justifyContent: 'center', opacity: busy ? 0.5 : 1 }}
+          >
+            <Text style={{ fontFamily: FONTS.sansSemibold, fontSize: 16, color: INK }}>Share</Text>
+          </Pressable>
+          <Pressable
+            testID="celebration-done"
+            accessibilityRole="button"
+            accessibilityState={{ disabled: closing }}
+            disabled={closing}
+            onPress={close}
+            style={{ flex: 1, height: 52, borderRadius: 26, backgroundColor: t.ring, alignItems: 'center', justifyContent: 'center' }}
+          >
+            <Text style={{ fontFamily: FONTS.sansBold, fontSize: 16, color: ground }}>Nice!</Text>
+          </Pressable>
+        </View>
+      </View>
       {/* The export view: off screen at a fixed size, the only thing captured. */}
       <View pointerEvents="none" style={{ position: 'absolute', left: -10000, top: 0 }}>
         <View ref={exportRef} collapsable={false} testID="celebration-export" style={{ width: layout.width, height: layout.height }}>
