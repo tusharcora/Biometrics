@@ -155,9 +155,22 @@ export interface IncomingRequestDTO { id: string; createdAt: string; from: Perso
 export interface OutgoingRequestDTO { id: string; createdAt: string; toHandle: string }
 
 /**
+ * Writes a missing REQUEST Activity row for each incoming request the viewer may see (the same filter
+ * as the incoming list: visible, and not from someone they blocked), so a lost enqueue never loses the
+ * Activity item. Creates only; an existing row is left as it is.
+ */
+export async function backfillRequestActivity(userId: string, now: Date): Promise<void> {
+  const incoming = await prisma.buddyRequest.findMany({ where: incomingWhere(userId, now), select: { id: true, fromUserId: true, createdAt: true } });
+  if (incoming.length === 0) return;
+  await prisma.buddyActivity.createMany({
+    data: incoming.map((r) => ({ recipientId: userId, actorId: r.fromUserId, kind: 'REQUEST' as const, refId: r.id, createdAt: r.createdAt })),
+    skipDuplicates: true,
+  });
+}
+
+/**
  * Incoming: what the recipient may see. Outgoing: every row the sender sees as pending, with nothing
- * that tells their states apart. Reading the incoming list backfills a missing REQUEST Activity row
- * for each visible request, so a lost enqueue never loses the Activity item.
+ * that tells their states apart. Reading the list also backfills the incoming REQUEST Activity rows.
  */
 export async function listRequests(userId: string, now: Date): Promise<{ incoming: IncomingRequestDTO[]; outgoing: OutgoingRequestDTO[] }> {
   await expireStaleRequests(userId, now);
@@ -173,12 +186,7 @@ export async function listRequests(userId: string, now: Date): Promise<{ incomin
       select: { id: true, createdAt: true, toHandleAtSend: true },
     }),
   ]);
-  if (incoming.length > 0) {
-    await prisma.buddyActivity.createMany({
-      data: incoming.map((r) => ({ recipientId: userId, actorId: r.fromUser.id, kind: 'REQUEST' as const, refId: r.id, createdAt: r.createdAt })),
-      skipDuplicates: true,
-    });
-  }
+  await backfillRequestActivity(userId, now);
   return {
     incoming: incoming.map((r) => ({ id: r.id, createdAt: r.createdAt.toISOString(), from: toPerson(r.fromUser) })),
     outgoing: outgoing.map((r) => ({ id: r.id, createdAt: r.createdAt.toISOString(), toHandle: r.toHandleAtSend ?? '' })),

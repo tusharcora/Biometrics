@@ -5,6 +5,7 @@ import { Router } from 'express';
 import { requireAuth } from '../auth/middleware';
 import { prisma } from '../db/client';
 import { RATE_LIMITS } from '../lib/rateLimit';
+import { listActivity, markActivitySeen } from './activity';
 import { createCode, getActiveCode, redeemCode } from './codes';
 import { BuddyError, UUID_RE, buddyRoute, limitOrThrow } from './errors';
 import { getIdentity, isHandleAvailable, updateIdentity } from './handles';
@@ -131,6 +132,16 @@ buddiesRouter.delete('/me/blocks/:userId', requireAuth, buddyRoute(async (req, r
 buddiesRouter.get('/me/buddies', requireAuth, buddyRoute(async (req, res) => {
   res.set('Cache-Control', 'private, no-store');
   res.json(await listBuddies(req.userId!, req.query.cursor, new Date()));
+}));
+
+/** Activity: stickers, requests, pairings and buddies' badges, built at read time. */
+buddiesRouter.get('/me/buddies/activity', requireAuth, buddyRoute(async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  res.json(await listActivity(req.userId!, req.query.cursor, new Date()));
+}));
+
+buddiesRouter.post('/me/buddies/activity/seen', requireAuth, buddyRoute(async (req, res) => {
+  res.json({ seen: await markActivitySeen(req.userId!, new Date()) });
 }));
 
 // ---- /me/buddies/:buddyId routes: keep these LAST. Any new GET /me/buddies/<word> route goes above,
