@@ -13,9 +13,18 @@ export function normaliseHandleInput(raw: string): string {
   return (trimmed.startsWith('@') ? trimmed.slice(1) : trimmed).toLowerCase();
 }
 
-/** A contains check, case-insensitive, ignoring "_" and whitespace. */
+/**
+ * A contains check on a folded copy: compatibility forms unified (NFKC, so fullwidth letters match),
+ * marks stripped (NFKD then \p{M}, so "ADM\u0130N" matches), lowercased, "_", whitespace and the
+ * braille blank ignored. Only the check folds; the caller stores the value unchanged.
+ */
 export function containsReserved(text: string): boolean {
-  const folded = text.toLowerCase().replace(/[_\s]/g, '');
+  const folded = text
+    .normalize('NFKC')
+    .normalize('NFKD')
+    .replace(/\p{M}/gu, '')
+    .toLowerCase()
+    .replace(/[_\s\u2800]/g, '');
   return RESERVED_WORDS.some((word) => folded.includes(word));
 }
 
@@ -30,9 +39,17 @@ export function checkHandle(raw: unknown): { ok: true; handle: string } | { ok: 
   return { ok: true, handle };
 }
 
-/** NFC, then Cc (controls, incl. \n \r) and Cf (bidi overrides, zero-widths) and line/paragraph separators removed, then trimmed. */
+/**
+ * NFC, then Cc (controls, incl. \n \r), Cf (bidi overrides, zero-widths), default-ignorable code points
+ * (variation selectors, the grapheme joiner, Hangul fillers) and line/paragraph separators removed, then trimmed.
+ */
 export function sanitiseDisplayName(raw: string): string {
-  return raw.normalize('NFC').replace(/[\p{Cc}\p{Cf}\u2028\u2029]/gu, '').trim();
+  return raw.normalize('NFC').replace(/[\p{Cc}\p{Cf}\p{Default_Ignorable_Code_Point}\u2028\u2029]/gu, '').trim();
+}
+
+/** At least one letter, number, symbol or punctuation mark; the braille blank (U+2800, a symbol) does not count. */
+function hasVisibleCharacter(text: string): boolean {
+  return /[\p{L}\p{N}\p{S}\p{P}]/u.test(text.replace(/\u2800/g, ''));
 }
 
 export type DisplayNameProblem = 'empty' | 'length' | 'reserved';
@@ -41,7 +58,7 @@ export function checkDisplayName(raw: unknown): { ok: true; displayName: string 
   if (typeof raw !== 'string') return { ok: false, problem: 'empty' };
   const displayName = sanitiseDisplayName(raw);
   const length = [...displayName].length;
-  if (length === 0) return { ok: false, problem: 'empty' };
+  if (length === 0 || !hasVisibleCharacter(displayName)) return { ok: false, problem: 'empty' };
   if (length > DISPLAY_NAME_MAX) return { ok: false, problem: 'length' };
   if (containsReserved(displayName)) return { ok: false, problem: 'reserved' };
   return { ok: true, displayName };
@@ -57,7 +74,7 @@ const SIGN_IN_FALLBACK_NAME = 'Biometrics user';
 export function displayNamePrefill(user: { name: string; email: string }): string {
   const name = user.name.trim();
   const localPart = user.email.split('@')[0] ?? '';
-  if (!name || name === localPart || name === SIGN_IN_FALLBACK_NAME) return '';
+  if (!name || name.toLowerCase() === localPart.toLowerCase() || name === SIGN_IN_FALLBACK_NAME) return '';
   const first = name.split(/\s+/)[0]!;
   const check = checkDisplayName(first);
   return check.ok ? check.displayName : '';
@@ -81,7 +98,7 @@ export function assertHandleHoldSecret(env: NodeJS.ProcessEnv = process.env): vo
   handleHashSecret(env);
 }
 
-/** HMAC-SHA-256 of a normalised handle: exact lookups still work, released handles cannot be listed. */
+/** Expects a handle already normalised by checkHandle. HMAC-SHA-256 of it: exact lookups still work, released handles cannot be listed. */
 export function handleHash(handle: string, secret: string = handleHashSecret()): string {
   return createHmac('sha256', secret).update(`handle-hold:v1:${handle}`).digest('hex');
 }

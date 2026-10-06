@@ -24,6 +24,12 @@ describe('handles', () => {
     }
     expect(checkHandle('teal_sam')).toEqual({ ok: true, handle: 'teal_sam' });
   });
+
+  it('rejects look-alike letters (fullwidth, Turkish, Cyrillic) as characters', () => {
+    for (const bad of ['\uff53\uff41\uff4d', 'sam\u0131', 'SAM\u0130', '\u0441\u0430m']) {
+      expect([bad, checkHandle(bad)]).toEqual([bad, { ok: false, problem: 'characters' }]);
+    }
+  });
 });
 
 describe('display names', () => {
@@ -49,9 +55,34 @@ describe('display names', () => {
     expect(checkDisplayName(7)).toEqual({ ok: false, problem: 'empty' });
   });
 
+  it('removes default-ignorable code points, so they cannot split a reserved word', () => {
+    expect(sanitiseDisplayName('ad\u034fmin')).toBe('admin');
+    expect(sanitiseDisplayName('ad\ufe0fmin')).toBe('admin');
+    expect(sanitiseDisplayName('ad\u3164min')).toBe('admin');
+    for (const bad of ['ad\u034fmin', 'ad\ufe0fmin', 'ad\u3164min']) {
+      expect([bad, checkDisplayName(bad)]).toEqual([bad, { ok: false, problem: 'reserved' }]);
+    }
+  });
+
+  it('treats a name with no visible character as empty', () => {
+    for (const blank of ['\u3164', '\u2800', '\u2800 \u2800', ' \u034f ']) {
+      expect([blank, checkDisplayName(blank)]).toEqual([blank, { ok: false, problem: 'empty' }]);
+    }
+    expect(checkDisplayName('\u2800Sam')).toEqual({ ok: true, displayName: '\u2800Sam' });
+    expect(checkDisplayName('!')).toEqual({ ok: true, displayName: '!' });
+  });
+
   it('containsReserved folds case, spaces and underscores', () => {
     expect(containsReserved('B i o_metrics')).toBe(true);
     expect(containsReserved('Sam')).toBe(false);
+  });
+
+  it('containsReserved folds compatibility forms and marks, without changing the stored value', () => {
+    expect(containsReserved('\uff21\uff24\uff2d\uff29\uff2e')).toBe(true);
+    expect(containsReserved('ADM\u0130N')).toBe(true);
+    expect(containsReserved('a\u0301dmin')).toBe(true);
+    expect(checkDisplayName('\uff21\uff24\uff2d\uff29\uff2e')).toEqual({ ok: false, problem: 'reserved' });
+    expect(checkDisplayName('\uff33\uff41\uff4d')).toEqual({ ok: true, displayName: '\uff33\uff41\uff4d' });
   });
 
   it('prefills the first word of the name, but not a sign-in fallback', () => {
@@ -60,6 +91,8 @@ describe('display names', () => {
     expect(displayNamePrefill({ name: 'Biometrics user', email: '@example.com' })).toBe('');
     expect(displayNamePrefill({ name: '   ', email: 'x@example.com' })).toBe('');
     expect(displayNamePrefill({ name: 'Admin Person', email: 'x@example.com' })).toBe('');
+    expect(displayNamePrefill({ name: 'Jordan.K', email: 'jordan.k@example.com' })).toBe('');
+    expect(displayNamePrefill({ name: 'jordan', email: 'Jordan@example.com' })).toBe('');
   });
 });
 
