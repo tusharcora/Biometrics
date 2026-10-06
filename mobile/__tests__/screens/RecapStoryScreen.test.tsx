@@ -414,7 +414,20 @@ it('frame 3 shows the badge levels earned that week, on screen and in the shared
   expect(screen.getByTestId('story-export-badges')).toBeTruthy();
 });
 
-it('frame 3 has no badge card when the server has no badges (404) or the load fails', async () => {
+it('frame 3 has no badge card when the server has no badges (404)', async () => {
+  mockReduceMotion = true;
+  await open();
+  await act(async () => {});
+  tap(10000);
+  tap(10000);
+  expect(eyebrow()).toHaveTextContent('MY WEEK · 3 OF 3');
+  expect(screen.queryByTestId('story-badges')).toBeNull();
+  expect(screen.queryByTestId('story-export-badges')).toBeNull();
+  expect(screen.getByTestId('story-story')).toBeTruthy();
+});
+
+it('frame 3 has no badge card when loading the badges fails', async () => {
+  (fetchAchievements as jest.Mock).mockRejectedValue(new Error('network'));
   mockReduceMotion = true;
   await open();
   await act(async () => {});

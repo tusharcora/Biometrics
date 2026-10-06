@@ -42,10 +42,25 @@ const STORY_BASE = 18;
  * the highest level of each family first, then a "+n" chip for the rest (ruling F4).
  */
 const STORY_BADGE_ICON = 44;
+const STORY_BADGE_ICON_COMPACT = 32;
 const STORY_BADGE_MAX = 4;
+const BADGE_TITLE_LINE = 14;
+const BADGE_LINE = 18;
 const NO_BADGES: readonly BadgeRef[] = [];
-/** The card's height in design units: chrome and label, the icon, a gap and the title line. */
-export const BADGE_CARD_HEIGHT = CARD_CHROME + STORY_BADGE_ICON + 4 + 14;
+/** The full card's height in design units: chrome and label, the icon, a gap and up to two title lines. */
+export const BADGE_CARD_HEIGHT = CARD_CHROME + STORY_BADGE_ICON + 4 + 2 * BADGE_TITLE_LINE;
+/**
+ * How the badges are drawn when a long story needs the room: the full card, then a compact card
+ * (smaller icons, no titles), then a single "n badges this week" line. The story keeps its promise
+ * of never being cut off.
+ */
+export type BadgeMode = 'full' | 'compact' | 'line';
+const BADGE_HEIGHTS: Record<BadgeMode, number> = {
+  full: BADGE_CARD_HEIGHT,
+  compact: CARD_CHROME + STORY_BADGE_ICON_COMPACT,
+  line: BADGE_LINE,
+};
+const BADGE_MODES: readonly BadgeMode[] = ['full', 'compact', 'line'];
 
 /** The design's padding, so an overlay (the story viewer's own animated bar) can sit exactly on the frame's. */
 export const STORY_FRAME_INSETS = { top: PAD_Y, left: PAD_X, right: PAD_X, bottom: PAD_Y } as const;
@@ -256,22 +271,38 @@ const STORY_MIN = 6;
 /**
  * Frame 3's text size: the weekly story (or the line) fitted into the room the frame leaves it, from
  * 18 down to STORY_MIN, so a long story shrinks instead of overflowing or being cut off. `box` is
- * that room in design units.
+ * that room in design units. With badges, `badges` is the largest of their forms that leaves the
+ * story room at STORY_MIN or above (the line when none does); null without badges.
  */
-export function coachStoryFit(recap: Pick<Recap, 'story' | 'line' | 'stats'>, includes: Includes, badgeCount = 0): { fontSize: number; lines: number; box: number } {
+export function coachStoryFit(
+  recap: Pick<Recap, 'story' | 'line' | 'stats'>,
+  includes: Includes,
+  badgeCount = 0,
+): { fontSize: number; lines: number; box: number; badges: BadgeMode | null } {
   const header = includes.coach ? 72 : 30;
   const footer = 1 + 16 + FOOTER_LINE;
-  const blocks = [
-    STORY_PROGRESS_HEIGHT,
-    EYEBROW_LINE,
-    header,
-    coachFrameStats(recap.stats).length > 0 ? CARD_CHROME + CARD_VALUE_LINE : 0,
-    badgeCount > 0 ? BADGE_CARD_HEIGHT : 0,
-    footer,
-  ].filter((h) => h > 0);
-  // The text is one more block, so one more gap.
-  const box = CONTENT_H - blocks.reduce((x, y) => x + y, 0) - blocks.length * GAP - 8;
-  return { ...fitQuote(coachFrameText(recap), CONTENT_W, box, STORY_BASE, STORY_MIN), box };
+  const text = coachFrameText(recap);
+  const fitWith = (badgeHeight: number) => {
+    const blocks = [
+      STORY_PROGRESS_HEIGHT,
+      EYEBROW_LINE,
+      header,
+      coachFrameStats(recap.stats).length > 0 ? CARD_CHROME + CARD_VALUE_LINE : 0,
+      badgeHeight,
+      footer,
+    ].filter((h) => h > 0);
+    // The text is one more block, so one more gap.
+    const box = CONTENT_H - blocks.reduce((x, y) => x + y, 0) - blocks.length * GAP - 8;
+    const fit = fitQuote(text, CONTENT_W, box, STORY_BASE, STORY_MIN);
+    return { ...fit, box, fits: fit.lines * fit.fontSize * QUOTE_LINE_HEIGHT <= box };
+  };
+  if (badgeCount <= 0) {
+    const { fontSize, lines, box } = fitWith(0);
+    return { fontSize, lines, box, badges: null };
+  }
+  const mode = BADGE_MODES.find((m) => fitWith(BADGE_HEIGHTS[m]).fits) ?? 'line';
+  const { fontSize, lines, box } = fitWith(BADGE_HEIGHTS[mode]);
+  return { fontSize, lines, box, badges: mode };
 }
 
 /** Frame 3: the coach's weekly story (the line when there is none), the streak and the spread, and the week's badges. */
@@ -283,7 +314,8 @@ function CoachStoryBody({ recap, coachId, includes, u, t, pixel, testID, badges 
   const ordered = includes.badges ? highestPerFamilyFirst(badges) : NO_BADGES;
   const shown = ordered.slice(0, STORY_BADGE_MAX);
   const more = ordered.length - shown.length;
-  const fit = coachStoryFit(recap, includes, shown.length);
+  const fit = coachStoryFit(recap, includes, ordered.length);
+  const icon = fit.badges === 'full' ? STORY_BADGE_ICON : STORY_BADGE_ICON_COMPACT;
   return (
     <>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: u(16) }}>
@@ -317,16 +349,32 @@ function CoachStoryBody({ recap, coachId, includes, u, t, pixel, testID, badges 
           ))}
         </View>
       ) : null}
-      {shown.length > 0 ? (
+      {fit.badges === 'line' ? (
+        // A story near the coach's cap needs the room: the badges become one line.
+        <View testID={`${testID}-badges`}>
+          <Text testID={`${testID}-badges-line`} numberOfLines={1} style={{ fontFamily: FONTS.sansMedium, fontSize: u(13), lineHeight: u(BADGE_LINE), color: t.soft }}>
+            {`${ordered.length} ${ordered.length === 1 ? 'badge' : 'badges'} this week`}
+          </Text>
+        </View>
+      ) : null}
+      {fit.badges === 'full' || fit.badges === 'compact' ? (
         <View testID={`${testID}-badges`} style={cardStyle(u, t)}>
           <Label u={u} t={t}>Badges this week</Label>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: u(10) }}>
             {shown.map((b) => (
               <View key={`${b.family}-${b.level}`} testID={`${testID}-badge-${b.family}-${b.level}`} style={{ flex: 1, alignItems: 'center', gap: u(4) }}>
-                <BadgeIcon family={b.family} level={b.level} size={u(STORY_BADGE_ICON)} pips={false} testID={`${testID}-badge-${b.family}-${b.level}-icon`} />
-                <Text numberOfLines={1} adjustsFontSizeToFit style={{ fontFamily: FONTS.sans, fontSize: u(10), lineHeight: u(14), color: t.soft }}>
-                  {shortLevelTitle(b.family, b.level)}
-                </Text>
+                <BadgeIcon family={b.family} level={b.level} size={u(icon)} pips={false} testID={`${testID}-badge-${b.family}-${b.level}-icon`} />
+                {fit.badges === 'full' ? (
+                  <Text
+                    testID={`${testID}-badge-${b.family}-${b.level}-title`}
+                    numberOfLines={2}
+                    adjustsFontSizeToFit
+                    minimumFontScale={0.85}
+                    style={{ fontFamily: FONTS.sans, fontSize: u(10), lineHeight: u(BADGE_TITLE_LINE), textAlign: 'center', color: t.soft }}
+                  >
+                    {shortLevelTitle(b.family, b.level)}
+                  </Text>
+                ) : null}
               </View>
             ))}
             {more > 0 ? (
