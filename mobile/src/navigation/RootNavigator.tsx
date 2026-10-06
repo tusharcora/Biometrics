@@ -33,6 +33,7 @@ import { RecapsScreen } from '../screens/RecapsScreen';
 import { YearInPixelsScreen } from '../screens/YearInPixelsScreen';
 import { BadgesScreen } from '../screens/BadgesScreen';
 import { BadgeDetailScreen } from '../screens/BadgeDetailScreen';
+import { CelebrationHost } from '../components/achievements/CelebrationHost';
 import type { ShareFormat } from '../lib/recapShare';
 import { TabsNavigator, type TabParamList } from './TabsNavigator';
 import { syncTimezone } from '../lib/timezone';
@@ -227,6 +228,8 @@ export function RootNavigator() {
                 options={({ route }) => ({ headerShown: false, presentation: 'modal', gestureEnabled: route.params?.mode !== 'first' })}
               />
             </Stack.Navigator>
+            {/* New badge levels, celebrated once (start, foreground, after a check-in). */}
+            <CelebrationHost />
           </SyncProvider>
         </ToastProvider>
       </NavigationContainer>

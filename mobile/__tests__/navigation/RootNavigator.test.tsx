@@ -98,6 +98,16 @@ describe('RootNavigator', () => {
     expect(syncTimezone).toHaveBeenCalledTimes(1);
   });
 
+  it('checks for new badges to celebrate once signed in', async () => {
+    signedIn(true);
+    (apiFetch as jest.Mock).mockResolvedValue({ status: 'CONNECTED', lastSyncedAt: null });
+
+    const { getByText } = render(<RootNavigator />);
+
+    await waitFor(() => expect(getByText('TABS_SCREEN')).toBeTruthy());
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith('/me/achievements'));
+  });
+
   // The old navigator hardcoded the connect screen, so an already-connected
   // user had no route back to their dashboard.
   // Connecting Google Health used to be a gate: a user who had not connected,
