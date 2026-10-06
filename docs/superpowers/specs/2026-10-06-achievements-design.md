@@ -21,7 +21,8 @@ Owner decisions:
   Coach is deliberately long-term (100 nights, 180 days, 24 months).
 - **Start fresh:** only days/months from each user's start date count; history before it awards nothing.
 - **Unlock moment:** in-app full-screen celebration (next app open) + shown in that period's recap. **No push.**
-- **Late check-ins:** only check-ins made on their own local day count toward the check-in streak.
+- **Late check-ins:** only check-ins made during their own habit day (the app's 4am boundary) count toward the
+  check-in streak.
 - **Goal changes:** a streak restarts only when its goal gets easier (sleep goal lowered; bedtime goal moved by more
   than 30 min, or a first bedtime goal set more than 30 min from the usual bedtime). Otherwise each night is judged
   against the goal in effect that night.
@@ -34,7 +35,7 @@ Owner decisions:
 | Sleep goal streak (`SLEEP_GOAL`) | streak | the night's total sleep (the SLEEP daily rollup — Recap's definition) ≥ the sleep goal in effect for that night | 3 | 7 | 14 | 30 | 100 nights |
 | Steady bedtime (`STEADY_BEDTIME`) | streak | fell asleep within ±30 min of the bedtime goal in effect that night; with no goal, of the median bedtime of the previous 14 nights that have sleep data (may include nights before the start date; needs ≥ 7) | 3 | 7 | 14 | 30 | 100 nights |
 | Step goal streak (`STEP_GOAL`) | streak | a finished local day with steps ≥ `STEPS_GOAL` (10,000, `backend/src/coach/tools/metrics.ts`) | 3 | 7 | 14 | 30 | 100 days |
-| Daily check-in (`CHECK_IN`) | streak | a `HabitCheckIn` exists for that local day **and was created on that same local day** | 7 | 14 | 30 | 60 | 180 days |
+| Daily check-in (`CHECK_IN`) | streak | a `HabitCheckIn` exists for that habit day **with `onTime = true`** (made during that habit day, see §3) | 7 | 14 | 30 | 60 | 180 days |
 | Best recovery week (`BEST_RECOVERY_WEEK`) | monthly | that month's recap has the `bestRecoveryWeek` milestone | 1 | 3 | 6 | 12 | 24 months |
 | Every day logged (`EVERY_DAY_LOGGED`) | monthly | that month's recap has the `everyDayLogged` milestone | 1 | 3 | 6 | 12 | 24 months |
 | Steadiest month (`STEADIEST_MONTH`) | monthly | that month's recap has the `steadiestMonth` milestone | 1 | 2 | 4 | 6 | 12 months |
@@ -53,29 +54,37 @@ Levels are **never revoked**.
   `earnedOn` `@db.Date` (local date the run first reached the threshold; for monthly: the month's last day),
   `weekStart` `@db.Date` (Monday of earnedOn), `monthStart` `@db.Date` (1st of earnedOn's month), `createdAt`,
   `celebratedAt` nullable. `@@unique([userId, family, level])`, index `(userId, celebratedAt)`.
-- `User.achievementsSince` `@db.Date`, nullable. **Single definition:** set on the user's first evaluation to that
-  user's local date at that moment, and never changed. For existing users the first evaluation happens right after
-  the deploy (so it is the launch date); for new users it is their first sync / app load. Null = not started.
-- New table `GoalChange`: `id`, `userId` (cascade), `kind` enum (`SLEEP_MINUTES` | `BEDTIME`), `value` (minutes, or
-  "HH:MM" for bedtime; null = bedtime goal cleared), `effectiveOn` `@db.Date` (local date of the change),
-  `resetsStreak` boolean, `createdAt`. Written by the existing settings endpoints whenever the sleep goal or bedtime
-  goal changes:
-  - sleep goal: `resetsStreak = newMinutes < oldMinutes`;
+- `User.achievementsSince` `@db.Date`, nullable. **Single definition:** the user's local date on launch day for
+  existing users — set by a one-off launch job that runs once at deploy (Redis once-marker, like the recap launch
+  backfill) — and the user's local date at sign-up for new users (set when the user row is created). Never changed.
+  The launch job also writes each existing user's starting `GoalChange` rows (below); sign-up writes them for new users.
+- `HabitCheckIn.onTime` boolean, default false: set **when the row is written** by `POST /me/habits/check-ins` to
+  `habitDay === habitDayFor(now, user.timezone)` (the app's 4am habit-day boundary, `habits/habitDay.ts`). Stored, never
+  recomputed, so a later time-zone change can't rewrite history. Backdated check-ins save as before with `onTime = false`.
+- New table `GoalChange`: `id`, `userId` (cascade delete **and** listed in `USER_OWNED_MODELS`), `kind` enum
+  (`SLEEP_MINUTES` | `BEDTIME`), `sleepMinutes` Int? (for `SLEEP_MINUTES`), `bedtime` String? "HH:MM" (for `BEDTIME`;
+  null = goal cleared), `effectiveOn` `@db.Date` (the user's local date of the change), `resetsStreak` boolean,
+  `createdAt`, `@@unique([userId, kind, effectiveOn])` — **only the last change of a day counts** (a second change the
+  same day overwrites that day's row). Written in one place, `updateSleepGoal` (`users/goals.ts`), whenever the sleep
+  goal or bedtime goal changes. `resetsStreak` compares the new value with the goal in effect **before that day**
+  (so lowering and restoring on the same day is no reset):
+  - sleep goal: `resetsStreak = newMinutes < previousMinutes`;
   - bedtime goal: `resetsStreak` = moved by > 30 min (circular minutes), or set for the first time > 30 min from the
     current usual bedtime (median of the previous 14 nights with data; no usual bedtime → true), or cleared.
-  The goal in effect for a night = the latest change with `effectiveOn ≤` the night's date; before any change, the
-  user's goal at the start date (backfilled into one `GoalChange` row per kind on first evaluation).
+  **A change applies only to nights that end after its date:** the goal in effect for a night = the latest change
+  with `effectiveOn` **<** the night's wake date. Changing the goal in the evening never re-judges the night you
+  already slept that morning.
 - No progress table: runs and month counts are computed on demand from existing data (SLEEP and STEPS rollups,
   `SleepSession` main-session starts, `HabitCheckIn`, `Recap.stats.milestones`), from the family's start date.
 
 ## 4. Rules in detail
 
 - **Dates.** Sleep families use each night's local wake date (the date of its SLEEP rollup, as Recap and sleep depth
-  do). Steps and check-ins use the user's local calendar day (`User.timezone`). A check-in's own day =
-  `createdAt` converted to the user's local date.
-- **Family start date** = max(`achievementsSince`, the latest `GoalChange.effectiveOn` with `resetsStreak` for that
-  family's kind). Steps and check-in use `achievementsSince`. Monthly families count only months whose 1st is
-  ≥ `achievementsSince`.
+  do). Steps use the user's local calendar day (`User.timezone`). Check-ins use their stored `habitDay` and stored
+  `onTime` flag — nothing is recomputed from the current time zone.
+- **Family start date** = max(`achievementsSince`, the day after the latest `GoalChange.effectiveOn` with
+  `resetsStreak` for that family's kind) — a reset streak starts from the next night. Steps and check-in use
+  `achievementsSince`. Monthly families count only months whose 1st is ≥ `achievementsSince`.
 - **Paused vs broken.** A run is consecutive qualifying dates. A date with no data for the family breaks a run only if
   a later date has data, or the date is more than 2 days before today (local); otherwise the latest run is paused
   (late sync never costs a streak). `current` = the latest run if it is unbroken, else 0.
@@ -93,13 +102,13 @@ Levels are **never revoked**.
   inserts every level whose threshold the best run reached and that isn't stored (`createMany`, `skipDuplicates`),
   with `earnedOn` = the date that run first reached the threshold. Idempotent; safe to run twice or concurrently
   (the unique key decides).
-- Triggers (on the existing `health-sync` queue, low priority, jobId deduped per user per local hour):
-  - after every sync `fetch` job for a user (any metric, so steps-only users are covered) → streak families;
-  - after a check-in is saved → `CHECK_IN`;
-  - after a MONTH recap is built or rebuilt (`runRecapJob`) → monthly families;
-  - `GET /me/achievements` also evaluates inline first (bounded: at most once per user per 10 minutes) so the app is
-    never behind the data.
-- The first evaluation for a user sets `achievementsSince` and backfills the starting `GoalChange` rows.
+- **Trigger: on load only.** `GET /me/achievements` evaluates all families inline before answering, at most once per
+  user per 10 minutes (a Redis marker). Saving a check-in (`POST /me/habits/check-ins`) and saving a goal
+  (`updateSleepGoal`) clear that marker, so the next load re-evaluates at once. There are no queue triggers: nothing
+  is pushed, so a badge only matters when the app shows it, and evaluating on load covers every way data arrives
+  (sync fetch, backfill, catch-up, check-ins, recap rebuilds).
+- `achievementsSince` and the starting `GoalChange` rows are written by the launch job / at sign-up (§3), never by
+  the evaluator; an evaluation for a user with null `achievementsSince` (shouldn't happen) sets it to today and logs it.
 - Logs: event names with ids, family and level only — never health values.
 - The recap fact sheet stops emitting the old streak-milestone note (`coach/answer/facts.ts`), so the AI line never
   mentions a milestone the app doesn't show. Other recap facts are unchanged; AI text never mentions badges.
@@ -116,7 +125,8 @@ Levels are **never revoked**.
     the family closest to its next level, "See all". Hidden on 404 (old backend).
   - **Badges screen** ("See all"): the catalogue grid with each family's level; tapping opens **Badge detail**: big
     badge, current + best, ladder of the 5 levels (earned date / "N more" / locked).
-  - **Unlock celebration**: on app start and foreground, if `uncelebrated` is non-empty, a full-screen modal per
+  - **Unlock celebration**: on app start, on foreground, and right after a check-in is saved (the app refetches
+    `GET /me/achievements` then), if `uncelebrated` is non-empty, a full-screen modal per
     family's highest new level (highest first): badge, coach sprite, level name + value, fixed coach line ("<n> more
     <unit> for <next level>" or "Top level!"), Share (existing pipeline, a 1080 px badge card) and "Nice!". Closing
     marks that family's new levels celebrated (lower levels of the same family too). Reduce motion: no confetti.
@@ -138,19 +148,27 @@ Levels are **never revoked**.
 - New user / no data / Google disconnected: nothing awarded; all badges locked with a next-up hint.
 - Several levels at once (catch-up sync): all stored with their own `earnedOn`; one celebration per family.
 - A finished streak delivered late: awarded from the best run (§2), dated when it was reached.
-- Coach-data deletion leaves achievements and goal changes untouched; account deletion removes both.
+- **Accepted:** Recap and badges share the "total sleep vs goal" definition, but a recap judges its whole period by
+  one goal snapshot while badges judge each night by the goal in effect that night. After a mid-period goal change a
+  recap's on-goal count and the badge streak can differ.
+- **Accepted:** a user inactive at launch still starts on launch day (the launch job sets it), so days they missed
+  simply don't qualify.
+- Coach-data deletion leaves achievements, goal changes and check-in flags untouched; account deletion removes them.
 - Old app versions: unaffected (new endpoints only). New app vs old backend: 404 → badge UI hidden, month tiles as before.
 - Reinstall / new device: celebration state is server-side, so nothing re-celebrates.
 
 ## 8. Testing
 
 - Backend unit: each family's run calculator (qualifying days; gaps → paused vs broken; the 2-day rule; best vs
-  current; earnedOn per threshold; goal history judging each night by its own goal; reset only on easing; steady
-  bedtime median incl. pre-start nights and the ≥ 7 rule; same-day check-ins only; start-date cut-off); thresholds
-  table; monthly counts from recap milestones (rebuild gain/loss); fact sheet no longer emits the streak note.
-- Backend integration: evaluator idempotence and concurrency; triggers (sync fetch incl. steps-only, check-in, month
-  recap) enqueue and dedupe; GET evaluates inline with the 10-min bound; endpoints (shape, own rows only,
-  celebrated); GoalChange rows written by the settings endpoints; migration; account-deletion cascade.
+  current; earnedOn per threshold; goal history — a change applies from the next night, raising keeps the streak,
+  easing restarts from the next night, same-day lower-and-restore is no reset; steady bedtime median incl. pre-start
+  nights and the ≥ 7 rule; only `onTime` check-ins; start-date cut-off); thresholds table; monthly counts from recap
+  milestones (rebuild gain/loss); fact sheet no longer emits the streak note.
+- Backend integration: evaluator idempotence and concurrency; GET evaluates inline with the 10-min bound, and a
+  check-in or goal save clears it; `onTime` set at write (1am check-in → previous habit day, on time; backdated →
+  false); GoalChange written by `updateSleepGoal` (one row per day, last wins); launch job sets `achievementsSince`
+  and starting goals once; sign-up sets them; endpoints (shape, own rows only, celebrated); migration;
+  USER_OWNED_MODELS includes Achievement and GoalChange; account-deletion cascade.
 - Mobile: Profile card (locked / levels / next-up / 404 hidden), Badges + detail screens, celebration queue order and
   marking, weekly story card (with/without), month tiles (progress, level-up mark, pre-start months), 404 fallback.
 - Dev-only seed script awarding sample levels to the demo account (dev DB only) for the simulator pass.
