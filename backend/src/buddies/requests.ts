@@ -8,7 +8,7 @@
 import type { BuddyRequestStatus } from '@prisma/client';
 import { prisma } from '../db/client';
 import { RATE_LIMITS } from '../lib/rateLimit';
-import { BuddyError, isUniqueViolation, limitOrThrow } from './errors';
+import { BuddyError, UUID_RE, isUniqueViolation, limitOrThrow } from './errors';
 import { checkHandle } from './identity';
 import { enqueueBuddyNotice } from './notifyQueue';
 import { createPairTx, enqueuePaired, existingPairAfter, findPair, isBlockedEitherWay, requirePairingReady, type PairDeps, type PairResult } from './pairs';
@@ -191,4 +191,68 @@ export async function countRequests(userId: string, now: Date): Promise<{ incomi
     prisma.buddyRequest.count({ where: { fromUserId: userId, ...senderPendingWhere(now) } }),
   ]);
   return { incoming, outgoing };
+}
+
+async function requestFor(requestId: string) {
+  if (!UUID_RE.test(requestId)) return null;
+  return prisma.buddyRequest.findUnique({ where: { id: requestId } });
+}
+
+/**
+ * Recipient only, on a request they can see. One transaction re-checks a block either way, marks the
+ * request ACCEPTED (only while still visible and pending) and writes the pair; buddy_paired is enqueued
+ * after commit, only for a new pair. A repeat, or a concurrent accept that lost the race, is a success.
+ */
+export async function acceptRequest(userId: string, requestId: string, now: Date, deps: PairDeps = {}): Promise<{ buddyId: string }> {
+  await requirePairingReady(userId);
+  const row = await requestFor(requestId);
+  if (!row || row.toUserId !== userId) throw new BuddyError('request_gone');
+  const buddyId = row.fromUserId;
+  if (row.status === 'ACCEPTED') return { buddyId };
+  if (!recipientSees(row, now)) throw new BuddyError('request_gone');
+  let result: PairResult | null;
+  try {
+    result = await prisma.$transaction(async (tx) => {
+      if (await isBlockedEitherWay(userId, buddyId, tx)) return null;
+      const won = await tx.buddyRequest.updateMany({ where: { id: row.id, ...recipientVisibleWhere(now) }, data: { status: 'ACCEPTED', respondedAt: now } });
+      if (won.count === 0) return null;
+      return createPairTx(tx, userId, buddyId, now);
+    });
+  } catch (err) {
+    result = await existingPairAfter(err, userId, buddyId);
+  }
+  if (result === null) {
+    // Lost to a concurrent accept (success), or blocked / declined / cancelled meanwhile (gone).
+    const again = await prisma.buddyRequest.findUnique({ where: { id: row.id }, select: { status: true } });
+    if (again?.status === 'ACCEPTED') return { buddyId };
+    throw new BuddyError('request_gone');
+  }
+  if (result.created) await enqueuePaired(userId, buddyId, deps);
+  return { buddyId };
+}
+
+/** Recipient only. Silent: the sender keeps seeing "Pending" until 14 days after sending. A repeat is a success. */
+export async function declineRequest(userId: string, requestId: string, now: Date): Promise<void> {
+  const row = await requestFor(requestId);
+  if (!row || row.toUserId !== userId) throw new BuddyError('request_gone');
+  if (row.status === 'DECLINED') return;
+  if (!recipientSees(row, now) || (await isBlockedEitherWay(userId, row.fromUserId))) throw new BuddyError('request_gone');
+  const done = await prisma.buddyRequest.updateMany({ where: { id: row.id, ...recipientVisibleWhere(now) }, data: { status: 'DECLINED', respondedAt: now } });
+  if (done.count === 0) {
+    const again = await prisma.buddyRequest.findUnique({ where: { id: row.id }, select: { status: true } });
+    if (again?.status !== 'DECLINED') throw new BuddyError('request_gone');
+  }
+}
+
+/**
+ * Sender only, whatever the row's state, so a hidden or declined request cancels exactly like a
+ * pending one: PENDING → CANCELLED; a DECLINED row is withdrawn (it stays DECLINED for the 30-day
+ * swallow). Both writes always run: the same work for every state, and a decline racing in between
+ * is still withdrawn. Anything else, or a repeat, is a quiet success.
+ */
+export async function cancelRequest(userId: string, requestId: string, now: Date): Promise<void> {
+  const row = await requestFor(requestId);
+  if (!row || row.fromUserId !== userId) throw new BuddyError('request_gone');
+  await prisma.buddyRequest.updateMany({ where: { id: row.id, status: 'PENDING' }, data: { status: 'CANCELLED', respondedAt: now } });
+  await prisma.buddyRequest.updateMany({ where: { id: row.id, status: 'DECLINED', withdrawnAt: null }, data: { withdrawnAt: now } });
 }

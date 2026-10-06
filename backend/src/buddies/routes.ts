@@ -8,7 +8,7 @@ import { createCode, getActiveCode, redeemCode } from './codes';
 import { BuddyError, buddyRoute, limitOrThrow } from './errors';
 import { getIdentity, isHandleAvailable, updateIdentity } from './handles';
 import { checkDisplayName, checkHandle } from './identity';
-import { listRequests, sendRequest } from './requests';
+import { acceptRequest, cancelRequest, declineRequest, listRequests, sendRequest } from './requests';
 import { confirmMoodNotice, getSharing, parseSharingPatch, recordSharingConsent, updateSharing } from './sharing';
 
 export const buddiesRouter = Router();
@@ -88,5 +88,20 @@ buddiesRouter.get('/me/buddies/requests', requireAuth, buddyRoute(async (req, re
 
 buddiesRouter.post('/me/buddies/requests', requireAuth, buddyRoute(async (req, res) => {
   await sendRequest(req.userId!, (req.body as { handle?: unknown } | undefined)?.handle, new Date());
+  res.json({ ok: true });
+}));
+
+buddiesRouter.post('/me/buddies/requests/:id/accept', requireAuth, buddyRoute(async (req, res) => {
+  const { buddyId } = await acceptRequest(req.userId!, String(req.params.id), new Date());
+  res.json({ ok: true, buddyId });
+}));
+
+buddiesRouter.post('/me/buddies/requests/:id/decline', requireAuth, buddyRoute(async (req, res) => {
+  await declineRequest(req.userId!, String(req.params.id), new Date());
+  res.json({ ok: true });
+}));
+
+buddiesRouter.post('/me/buddies/requests/:id/cancel', requireAuth, buddyRoute(async (req, res) => {
+  await cancelRequest(req.userId!, String(req.params.id), new Date());
   res.json({ ok: true });
 }));
