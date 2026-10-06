@@ -25,7 +25,15 @@ export const USUAL_BEDTIME_NIGHTS = 14;
 export const MIN_USUAL_BEDTIME_NIGHTS = 7;
 const DAY_MINUTES = 24 * 60;
 
-/** `changes` ascending by effectiveOn, one kind. */
+/**
+ * The rows of one kind, oldest first: the only shape changeInEffect and familyStartDate accept.
+ * Every caller goes through here rather than trusting the order or kind of loaded rows.
+ */
+export function goalChangesOf(rows: readonly GoalChangeRow[], kind: GoalChangeKind): GoalChangeRow[] {
+  return rows.filter((row) => row.kind === kind).sort((a, b) => (a.effectiveOn < b.effectiveOn ? -1 : a.effectiveOn > b.effectiveOn ? 1 : 0));
+}
+
+/** `changes` ascending by effectiveOn, one kind (see goalChangesOf). */
 export function changeInEffect(changes: readonly GoalChangeRow[], wakeDate: string): GoalChangeRow | null {
   let found: GoalChangeRow | null = null;
   for (const change of changes) if (change.effectiveOn < wakeDate) found = change;

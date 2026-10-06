@@ -1,5 +1,5 @@
 import {
-  bedtimeGoalResets, bedtimeSeries, changeInEffect, circularDistance, familyStartDate, hhmmToNoonMinutes,
+  bedtimeGoalResets, bedtimeSeries, changeInEffect, circularDistance, familyStartDate, goalChangesOf, hhmmToNoonMinutes,
   sleepGoalResets, usualBedtimeBefore, type GoalChangeRow,
 } from '../../src/achievements/goalHistory';
 import type { RecapData } from '../../src/recap/types';
@@ -20,6 +20,16 @@ describe('changeInEffect', () => {
     expect(changeInEffect(changes, '2026-09-30')?.sleepMinutes).toBe(480);
     expect(changeInEffect(changes, '2026-10-01')?.sleepMinutes).toBe(480);
     expect(changeInEffect([], '2026-10-01')).toBeNull();
+  });
+});
+
+describe('goalChangesOf', () => {
+  it('keeps one kind, oldest first, without touching the input', () => {
+    const bed: GoalChangeRow = { kind: 'BEDTIME', sleepMinutes: null, bedtime: '22:00', effectiveOn: '2026-10-02', resetsStreak: true };
+    const rows = [sleep('2026-10-05', 510), bed, sleep('2026-09-30', 480), sleep('2026-10-03', 450)];
+    expect(goalChangesOf(rows, 'SLEEP_MINUTES').map((c) => c.effectiveOn)).toEqual(['2026-09-30', '2026-10-03', '2026-10-05']);
+    expect(goalChangesOf(rows, 'BEDTIME')).toEqual([bed]);
+    expect(rows.map((c) => c.effectiveOn)).toEqual(['2026-10-05', '2026-10-02', '2026-09-30', '2026-10-03']);
   });
 });
 
