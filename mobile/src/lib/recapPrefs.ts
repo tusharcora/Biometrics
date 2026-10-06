@@ -3,7 +3,7 @@ import type { IncludeKey, Includes, ShareFormat } from './recapShare';
 
 // The builder's include switches, per format, in SecureStore like the app's other device settings.
 // Only the user's own choices are stored; resolveIncludes fills in the defaults.
-const KEYS: IncludeKey[] = ['avgSleep', 'streak', 'bestRecovery', 'steps', 'bestNight', 'quote', 'coach', 'count'];
+const KEYS: IncludeKey[] = ['avgSleep', 'streak', 'bestRecovery', 'steps', 'bestNight', 'quote', 'coach', 'count', 'badges'];
 const keyFor = (format: ShareFormat) => `recapInclude.${format}`;
 
 export async function readIncludePrefs(format: ShareFormat): Promise<Partial<Includes>> {

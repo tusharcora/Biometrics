@@ -5,7 +5,7 @@ import { isCharacterId, type CharacterId } from '../components/characters/types'
 // geometry. Pure, so the builder and its tests share one source.
 
 export type ShareFormat = 'card' | 'story' | 'year';
-export type IncludeKey = 'avgSleep' | 'streak' | 'bestRecovery' | 'steps' | 'bestNight' | 'quote' | 'coach' | 'count';
+export type IncludeKey = 'avgSleep' | 'streak' | 'bestRecovery' | 'steps' | 'bestNight' | 'quote' | 'coach' | 'count' | 'badges';
 export type Includes = Record<IncludeKey, boolean>;
 
 /** The only identity on an image: the app's name, no URL (owner decision). */
@@ -17,7 +17,7 @@ export const EXPORT_PIXELS = 1080;
 
 export const FORMAT_INCLUDES: Record<ShareFormat, IncludeKey[]> = {
   card: ['avgSleep', 'streak', 'bestRecovery', 'steps', 'quote', 'coach'],
-  story: ['bestNight', 'quote', 'coach'],
+  story: ['bestNight', 'quote', 'coach', 'badges'],
   year: ['count', 'coach'],
 };
 
@@ -30,6 +30,7 @@ export const INCLUDE_LABELS: Record<IncludeKey, string> = {
   quote: 'A line from your coach',
   coach: 'Coach character',
   count: 'Nights on goal',
+  badges: 'Badges this week',
 };
 
 export const FORMAT_LABELS: Record<ShareFormat, string> = { card: 'Card', story: 'Story', year: 'Year' };
@@ -37,7 +38,7 @@ export const FORMAT_LABELS: Record<ShareFormat, string> = { card: 'Card', story:
 /** Off until the user switches it on (the design's default). */
 const DEFAULT_OFF: ReadonlySet<IncludeKey> = new Set<IncludeKey>(['bestRecovery']);
 
-const ALL_KEYS: IncludeKey[] = ['avgSleep', 'streak', 'bestRecovery', 'steps', 'bestNight', 'quote', 'coach', 'count'];
+const ALL_KEYS: IncludeKey[] = ['avgSleep', 'streak', 'bestRecovery', 'steps', 'bestNight', 'quote', 'coach', 'count', 'badges'];
 
 /** The switches a format offers for these stats: a missing stat (or a streak of 0) has none. */
 export function availableIncludes(format: ShareFormat, stats: RecapStats | null): IncludeKey[] {

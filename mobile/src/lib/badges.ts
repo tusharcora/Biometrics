@@ -166,3 +166,19 @@ export function levelsEarnedBetween(a: Achievements | null, from: string, to: st
   }
   return out;
 }
+
+/**
+ * The same levels with each family's highest first (in the given family order), then the lower ones
+ * (highest first), so a capped list shows the most families at their best (ruling F4).
+ */
+export function highestPerFamilyFirst(refs: readonly BadgeRef[]): BadgeRef[] {
+  const byLevel = [...refs].sort((x, y) => y.level - x.level);
+  const top: BadgeRef[] = [];
+  const rest: BadgeRef[] = [];
+  for (const family of new Set(refs.map((r) => r.family))) {
+    const [best, ...lower] = byLevel.filter((r) => r.family === family);
+    top.push(best!);
+    rest.push(...lower);
+  }
+  return [...top, ...rest.sort((x, y) => y.level - x.level)];
+}

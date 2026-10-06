@@ -14,7 +14,11 @@ import { RecapStoryScreen } from '../../src/screens/RecapStoryScreen';
 import { ApiError } from '../../src/api/client';
 import { fetchRecap, markRecapOpened } from '../../src/api/recaps';
 import { resetUnwatchedRecap } from '../../src/lib/unwatchedRecap';
+import { achievementsFixture } from '../../jest-mocks/achievementsFixture';
+import { fetchAchievements } from '../../src/api/achievements';
+import { resetAchievements } from '../../src/lib/achievementsStore';
 
+jest.mock('../../src/api/achievements');
 jest.mock('expo-secure-store');
 jest.mock('../../src/lib/recapCapture', () => ({ captureToPng: jest.fn(), saveImage: jest.fn(), shareImage: jest.fn() }));
 let mockReduceMotion = false;
@@ -59,6 +63,8 @@ beforeEach(() => {
   jest.useFakeTimers();
   jest.clearAllMocks();
   resetUnwatchedRecap();
+  resetAchievements();
+  (fetchAchievements as jest.Mock).mockResolvedValue(null);
   mockParams = { recap: mockRecap };
   mockStack = { index: 0, routes: [{ name: 'RecapStory' }] };
   (markRecapOpened as jest.Mock).mockResolvedValue(undefined);
@@ -390,4 +396,32 @@ describe('the story is the recap', () => {
     expect(mockReplace).toHaveBeenCalledWith('Recap', { id: 'r-month' });
     expect(screen.queryByTestId('story')).toBeNull();
   });
+});
+
+it('frame 3 shows the badge levels earned that week, on screen and in the shared image', async () => {
+  (fetchAchievements as jest.Mock).mockResolvedValue(achievementsFixture({
+    SLEEP_GOAL: { level: 2, levels: [{ level: 2, value: 7, earnedOn: '2026-10-01' }] },
+    STEP_GOAL: { level: 1, levels: [{ level: 1, value: 3, earnedOn: '2026-10-06' }] },
+  }));
+  mockReduceMotion = true;
+  await open();
+  await act(async () => {});
+  tap(10000);
+  tap(10000);
+  expect(eyebrow()).toHaveTextContent('MY WEEK · 3 OF 3');
+  expect(screen.getByTestId('story-badges')).toHaveTextContent(/Sleep goal II/);
+  expect(screen.queryByTestId('story-badge-STEP_GOAL-1')).toBeNull();
+  expect(screen.getByTestId('story-export-badges')).toBeTruthy();
+});
+
+it('frame 3 has no badge card when the server has no badges (404) or the load fails', async () => {
+  mockReduceMotion = true;
+  await open();
+  await act(async () => {});
+  tap(10000);
+  tap(10000);
+  expect(eyebrow()).toHaveTextContent('MY WEEK · 3 OF 3');
+  expect(screen.queryByTestId('story-badges')).toBeNull();
+  expect(screen.queryByTestId('story-export-badges')).toBeNull();
+  expect(screen.getByTestId('story-story')).toBeTruthy();
 });

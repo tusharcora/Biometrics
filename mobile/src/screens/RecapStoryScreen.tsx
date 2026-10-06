@@ -26,6 +26,7 @@ import { showsEndActions, tapSide } from '../lib/storyViewer';
 import { openRecap } from '../lib/unwatchedRecap';
 import { coachEntryRoute, useCoachStatus } from '../lib/useCoachStatus';
 import { EXPORT_NOTICES, useRecapExport } from '../lib/useRecapExport';
+import { useEarnedBadges } from '../lib/useEarnedBadges';
 import { useStoryViewer } from '../lib/useStoryViewer';
 import { FONTS } from '../theme';
 
@@ -148,6 +149,8 @@ function StoryViewer({ recap, coachId, tint, includes }: { recap: Recap; coachId
   const atEnd = showsEndActions({ index, count: STORY_FRAME_COUNT });
   const { exportRef, busy, notice, save, share } = useRecapExport();
   const layout = exportLayout('story', PixelRatio.get());
+  // Levels earned in this week, read now: a level dated into the week after the recap was built still shows.
+  const badges = useEarnedBadges(recap.periodStart, recap.periodEnd);
 
   // The share sheet or the Photos prompt is up: the story waits under it.
   const { pause, resume } = viewer;
@@ -244,7 +247,7 @@ function StoryViewer({ recap, coachId, tint, includes }: { recap: Recap; coachId
             </View>
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
               <View style={{ width: frameW, height: frameH }}>
-                <WeeklyStoryFrame testID="story" recap={recap} coachId={coachId} includes={includes} scale={scale} index={index} showProgress={false} />
+                <WeeklyStoryFrame testID="story" recap={recap} coachId={coachId} includes={includes} scale={scale} index={index} showProgress={false} badges={badges} />
                 <Pressable
                   testID="story-viewer-tap"
                   style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0 }}
@@ -309,7 +312,7 @@ function StoryViewer({ recap, coachId, tint, includes }: { recap: Recap; coachId
           (none of the viewer's chrome or end actions). */}
       <View pointerEvents="none" style={{ position: 'absolute', left: -10000, top: 0 }}>
         <View ref={exportRef} collapsable={false} testID="story-export-view" style={{ width: layout.width, height: layout.height }}>
-          <WeeklyStoryFrame testID="story-export" recap={recap} coachId={coachId} includes={includes} scale={layout.scale} index={index} />
+          <WeeklyStoryFrame testID="story-export" recap={recap} coachId={coachId} includes={includes} scale={layout.scale} index={index} badges={badges} />
         </View>
       </View>
     </>

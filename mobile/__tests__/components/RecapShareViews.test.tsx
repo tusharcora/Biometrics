@@ -130,6 +130,54 @@ describe('WeeklyStoryFrame', () => {
     render(<WeeklyStoryView recap={WEEK} coachId="luna" includes={storyIncludes} scale={1} />);
     expect(screen.getByTestId('recap-story-eyebrow')).toHaveTextContent('MY WEEK · 2 OF 3');
   });
+
+  it('frame 3 lists the badge levels earned that week in a card, and leaves room for it', () => {
+    const badges = [{ family: 'SLEEP_GOAL' as const, level: 2 }, { family: 'STEADY_BEDTIME' as const, level: 1 }];
+    render(<WeeklyStoryFrame recap={WEEK} coachId="luna" includes={storyIncludes} scale={1} index={2} badges={badges} />);
+    expect(screen.getByTestId('recap-story-badges')).toHaveTextContent(/BADGES THIS WEEK/);
+    expect(screen.getByTestId('recap-story-badge-SLEEP_GOAL-2')).toHaveTextContent('Sleep goal II');
+    expect(screen.getByTestId('recap-story-badge-STEADY_BEDTIME-1')).toHaveTextContent('Bedtime I');
+    expect(screen.getByTestId('recap-story-badge-SLEEP_GOAL-2-icon').props.accessibilityLabel).toBe('Sleep goal streak, level II, Silver');
+    expect(screen.queryByTestId('recap-story-badges-more')).toBeNull();
+    expect(coachStoryFit(WEEK, storyIncludes, 2).box).toBeLessThan(coachStoryFit(WEEK, storyIncludes).box);
+  });
+
+  it('shows no badge card without badges that week, and never on frames 1 and 2', () => {
+    const first = render(<WeeklyStoryFrame recap={WEEK} coachId="luna" includes={storyIncludes} scale={1} index={2} badges={[]} />);
+    expect(screen.queryByTestId('recap-story-badges')).toBeNull();
+    first.unmount();
+    render(<WeeklyStoryFrame recap={WEEK} coachId="luna" includes={storyIncludes} scale={1} index={1} badges={[{ family: 'SLEEP_GOAL', level: 1 }]} />);
+    expect(screen.queryByTestId('recap-story-badges')).toBeNull();
+  });
+
+  it('leaves the card out when "Badges this week" is switched off, and gives the story its room back', () => {
+    const badges = [{ family: 'SLEEP_GOAL' as const, level: 2 }];
+    const off = { ...storyIncludes, badges: false };
+    render(<WeeklyStoryFrame recap={WEEK} coachId="luna" includes={off} scale={1} index={2} badges={badges} />);
+    expect(screen.queryByTestId('recap-story-badges')).toBeNull();
+    expect(coachStoryFit(WEEK, off, 0).box).toBe(coachStoryFit(WEEK, storyIncludes).box);
+  });
+
+  it('shows at most four badges, then a "+n" chip for the rest (ruling F4)', () => {
+    const badges = (['SLEEP_GOAL', 'STEADY_BEDTIME', 'STEP_GOAL', 'CHECK_IN', 'EVERY_DAY_LOGGED'] as const).map((family) => ({ family, level: 1 }));
+    render(<WeeklyStoryFrame recap={WEEK} coachId="luna" includes={storyIncludes} scale={1} index={2} badges={badges} />);
+    expect(screen.getByTestId('recap-story-badge-CHECK_IN-1')).toBeTruthy();
+    expect(screen.queryByTestId('recap-story-badge-EVERY_DAY_LOGGED-1')).toBeNull();
+    expect(screen.getByTestId('recap-story-badges-more')).toHaveTextContent('+1');
+    expect(screen.getByTestId('recap-story-badges-more').props.accessibilityLabel).toBe('1 more badge this week');
+  });
+
+  it('above four, shows the highest level of each family first and counts the lower ones in the chip', () => {
+    const badges = [
+      { family: 'SLEEP_GOAL' as const, level: 1 }, { family: 'SLEEP_GOAL' as const, level: 2 }, { family: 'SLEEP_GOAL' as const, level: 3 },
+      { family: 'STEADY_BEDTIME' as const, level: 1 }, { family: 'STEADY_BEDTIME' as const, level: 2 }, { family: 'STEP_GOAL' as const, level: 1 },
+    ];
+    render(<WeeklyStoryFrame recap={WEEK} coachId="luna" includes={storyIncludes} scale={1} index={2} badges={badges} />);
+    const shown = within(screen.getByTestId('recap-story-badges')).getAllByTestId(/^recap-story-badge-[A-Z_]+-\d$/).map((n) => n.props.testID);
+    expect(shown).toEqual(['recap-story-badge-SLEEP_GOAL-3', 'recap-story-badge-STEADY_BEDTIME-2', 'recap-story-badge-STEP_GOAL-1', 'recap-story-badge-SLEEP_GOAL-2']);
+    expect(screen.getByTestId('recap-story-badges-more')).toHaveTextContent('+2');
+    expect(screen.getByTestId('recap-story-badges-more').props.accessibilityLabel).toBe('2 more badges this week');
+  });
 });
 
 describe('YearPixelsView', () => {

@@ -10,7 +10,7 @@ const FULL = { nightsWithData: 25, avgSleepMinutes: 455, longestOnGoalStreak: 6,
 it('hides the switches of missing stats and a zero streak', () => {
   expect(availableIncludes('card', FULL)).toEqual(['avgSleep', 'streak', 'bestRecovery', 'steps', 'quote', 'coach']);
   expect(availableIncludes('card', { nightsWithData: 9, avgSleepMinutes: 400, longestOnGoalStreak: 0 })).toEqual(['avgSleep', 'quote', 'coach']);
-  expect(availableIncludes('story', { nightsWithData: 4 })).toEqual(['quote', 'coach']);
+  expect(availableIncludes('story', { nightsWithData: 4 })).toEqual(['quote', 'coach', 'badges']);
   expect(availableIncludes('year', null)).toEqual(['count', 'coach']);
 });
 
@@ -79,4 +79,11 @@ it('goes below 12 pt only when given a lower floor, and then fits a story far lo
   expect(fit.fontSize).toBeGreaterThanOrEqual(6);
   expect(fit.lines).toBe(quoteLines(story, fit.fontSize, 312));
   expect(fit.lines * fit.fontSize * QUOTE_LINE_HEIGHT).toBeLessThanOrEqual(282);
+});
+
+it('offers a "Badges this week" switch on the story, on by default', () => {
+  expect(INCLUDE_LABELS.badges).toBe('Badges this week');
+  expect(resolveIncludes('story', {}, { nightsWithData: 4 }).badges).toBe(true);
+  expect(resolveIncludes('story', { badges: false }, { nightsWithData: 4 }).badges).toBe(false);
+  expect(resolveIncludes('card', {}, FULL).badges).toBe(false);
 });

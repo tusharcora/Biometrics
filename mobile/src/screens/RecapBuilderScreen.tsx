@@ -18,6 +18,7 @@ import {
   FORMAT_LABELS, INCLUDE_LABELS, availableIncludes, exportLayout, previewScale, recapCoachId, resolveIncludes,
   type IncludeKey, type Includes, type ShareFormat,
 } from '../lib/recapShare';
+import { useEarnedBadges } from '../lib/useEarnedBadges';
 import { EXPORT_NOTICES, useRecapExport } from '../lib/useRecapExport';
 import { loadYearInPixels, type YearInPixels } from '../lib/yearPixels';
 
@@ -42,6 +43,8 @@ export function RecapBuilderScreen() {
   const [recapFailed, setRecapFailed] = useState(false);
   const [yearFailed, setYearFailed] = useState(false);
   const { exportRef, busy, notice, save, share } = useRecapExport();
+  // The week's badge levels for story frame 3 (an empty range until the recap loads).
+  const weekBadges = useEarnedBadges(recap?.periodStart ?? '', recap?.periodEnd ?? '');
 
   useEffect(() => {
     if (!params.id) return;
@@ -93,7 +96,7 @@ export function RecapBuilderScreen() {
     return format === 'card' ? (
       <RecapCardView testID={testID} recap={recap} coachId={coachId} includes={includes} scale={scale} />
     ) : (
-      <WeeklyStoryFrame testID={testID} recap={recap} coachId={coachId} includes={includes} scale={scale} index={frame} />
+      <WeeklyStoryFrame testID={testID} recap={recap} coachId={coachId} includes={includes} scale={scale} index={frame} badges={weekBadges} />
     );
   }
 
