@@ -74,7 +74,8 @@ export function RecapBuilderScreen() {
   const formats: ShareFormat[] = recap ? [recap.kind === 'MONTH' ? 'card' : 'story', 'year'] : [params.format];
   const stats = format === 'year' ? null : recap?.stats ?? null;
   const includes = resolveIncludes(format, prefs, stats);
-  const available = availableIncludes(format, stats);
+  // "Badges this week" only when the week has a level to show (none, unavailable or failed: no switch).
+  const available = availableIncludes(format, stats).filter((key) => key !== 'badges' || weekBadges.length > 0);
   const ready = format === 'year' ? year !== null : recap !== null;
   const layout = exportLayout(format, PixelRatio.get());
   const canExport = ready && prefsFormat === format && !busy;

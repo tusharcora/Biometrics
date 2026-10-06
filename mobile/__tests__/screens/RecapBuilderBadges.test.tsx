@@ -74,3 +74,19 @@ it('leaves the card out when no level was earned that week', async () => {
   await act(async () => {});
   expect(screen.queryByTestId('export-badges')).toBeNull();
 });
+
+it('offers the "Badges this week" switch only when the week has a badge level', async () => {
+  (fetchAchievements as jest.Mock).mockResolvedValue(achievementsFixture());
+  render(withCharacter(<RecapBuilderScreen />));
+  expect(await screen.findByTestId('builder-include-quote')).toBeTruthy();
+  await act(async () => {});
+  expect(screen.queryByTestId('builder-include-badges')).toBeNull();
+});
+
+it('does not offer the switch when badges are unavailable (a backend without them)', async () => {
+  (fetchAchievements as jest.Mock).mockResolvedValue(null);
+  render(withCharacter(<RecapBuilderScreen />));
+  expect(await screen.findByTestId('builder-include-quote')).toBeTruthy();
+  await act(async () => {});
+  expect(screen.queryByTestId('builder-include-badges')).toBeNull();
+});
