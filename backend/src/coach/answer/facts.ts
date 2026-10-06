@@ -440,7 +440,8 @@ export function buildRecapFactSheet(kind: RecapKind, stats: RecapStats, sleepGoa
     b.add({ id: 'recovery.avg_change', label: `Average recovery compared with last ${period}`, value: c.avgRecoveryDelta, unit: 'score', display: changeDisplay('score', c.avgRecoveryDelta, ['higher', 'lower'], '', period) });
   }
   const m = stats.milestones;
-  if (m?.streak) b.notes.push('Milestone: a long run of nights on goal in a row (see sleep.streak)');
+  // No streak-milestone note (achievements spec §5): the Sleep goal streak badge replaced it, and
+  // the coach's line must never mention a milestone the app doesn't show.
   if (m?.bestRecoveryWeek) {
     b.add(fact({ id: 'recovery.best_week', label: `Best week of recovery (week of ${monthDay(m.bestRecoveryWeek.weekStart)}), better than last month's best week`, unit: 'score', value: m.bestRecoveryWeek.avgRecovery, ...score(m.bestRecoveryWeek.avgRecovery) }));
   }
