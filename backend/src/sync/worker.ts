@@ -40,6 +40,7 @@ import {
 import { COACH_RETENTION_JOB } from '../coach/queue';
 import { getPushSender } from '../coach/config';
 import { BUDDY_NOTIFY_JOB, runBuddyNotifyJob } from '../buddies/notifyQueue';
+import { BUDDY_BADGE_JOB, runBuddyBadgeJob, type BuddyBadgeJobData } from '../buddies/badges';
 import type { BuddyNotice } from '../buddies/notify';
 import { defaultRecapDeps, runRecapJob } from '../recap/build';
 import { RECAP_BUILD_JOB, RECAP_SWEEP_JOB } from '../recap/queue';
@@ -419,6 +420,9 @@ export async function processSyncJob(job: Job): Promise<void> {
   } else if (job.name === BUDDY_NOTIFY_JOB) {
     // Not gated on COACH_ENABLED: buddy pushes are app-level, like the recap push.
     await runBuddyNotifyJob(job.data as BuddyNotice, { pushSender: getPushSender(), now: new Date() });
+  } else if (job.name === BUDDY_BADGE_JOB) {
+    // Not gated on COACH_ENABLED: buddy pushes are app-level, like the recap push.
+    await runBuddyBadgeJob(job.data as BuddyBadgeJobData, { pushSender: getPushSender(), now: new Date() });
   } else if (job.name === COACH_RETENTION_JOB) {
     // Not gated on COACH_ENABLED: expiry must keep running if the coach is switched off.
     await runCoachRetention({ telemetry: new LoggerCoachTelemetry() });
