@@ -3,6 +3,7 @@
 
 import { Router } from 'express';
 import { requireAuth } from '../auth/middleware';
+import { prisma } from '../db/client';
 import { RATE_LIMITS } from '../lib/rateLimit';
 import { createCode, getActiveCode, redeemCode } from './codes';
 import { BuddyError, UUID_RE, buddyRoute, limitOrThrow } from './errors';
@@ -11,6 +12,7 @@ import { checkDisplayName, checkHandle } from './identity';
 import { blockBuddy, blockFromRequest, listBlocked, requireBuddyId, setMuted, unblock, unpair } from './relations';
 import { acceptRequest, cancelRequest, declineRequest, listRequests, sendRequest } from './requests';
 import { confirmMoodNotice, getSharing, parseSharingPatch, recordSharingConsent, updateSharing } from './sharing';
+import { buildBuddyWeek } from './view';
 
 export const buddiesRouter = Router();
 
@@ -125,6 +127,15 @@ buddiesRouter.delete('/me/blocks/:userId', requireAuth, buddyRoute(async (req, r
 
 // ---- /me/buddies/:buddyId routes: keep these LAST. Any new GET /me/buddies/<word> route goes above,
 // ---- or this param route captures it and answers not_buddies.
+
+buddiesRouter.get('/me/buddies/:buddyId', requireAuth, buddyRoute(async (req, res) => {
+  const buddyId = requireBuddyId(String(req.params.buddyId), req.userId!);
+  const week = await buildBuddyWeek(req.userId!, buddyId, new Date());
+  // Opening the week is seeing what they sent: clears the list's unseen-sticker flag.
+  await prisma.sticker.updateMany({ where: { fromUserId: buddyId, toUserId: req.userId!, seenAt: null }, data: { seenAt: new Date() } });
+  res.set('Cache-Control', 'private, no-store');
+  res.json(week);
+}));
 
 buddiesRouter.delete('/me/buddies/:buddyId', requireAuth, buddyRoute(async (req, res) => {
   await unpair(req.userId!, requireBuddyId(String(req.params.buddyId), req.userId!), new Date());
