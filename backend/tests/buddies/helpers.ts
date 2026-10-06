@@ -3,6 +3,8 @@ import request from 'supertest';
 import { prisma } from '../../src/db/client';
 import { createApp } from '../../src/app';
 import type { GenericPushPayload, PushSender, PushTarget } from '../../src/coach/push';
+import { BUDDY_NOTIFY_JOB, runBuddyNotifyJob, type NotifyQueue } from '../../src/buddies/notifyQueue';
+import type { BuddyNotice } from '../../src/buddies/notify';
 import { testServer } from '../helpers/server';
 
 /** A user ready to pair: a unique hex handle (no reserved word can appear), a display name and the mood notice seen. */
@@ -48,4 +50,18 @@ export class RecordingSender implements PushSender {
 /** A supertest agent on a fresh 127.0.0.1 server (closed after the file). */
 export async function api() {
   return request(await testServer(createApp()));
+}
+
+/** Records buddy jobs instead of queueing them; drain() runs them as the worker would. */
+export class RecordingQueue implements NotifyQueue {
+  jobs: Array<{ name: string; data: BuddyNotice; opts: unknown }> = [];
+  async add(name: string, data: BuddyNotice, opts?: object) {
+    this.jobs.push({ name, data, opts });
+    return undefined;
+  }
+  async drain(sender: PushSender, now: Date = new Date('2026-10-07T12:00:00Z')): Promise<void> {
+    const jobs = this.jobs.filter((j) => j.name === BUDDY_NOTIFY_JOB);
+    this.jobs = [];
+    for (const job of jobs) await runBuddyNotifyJob(job.data, { pushSender: sender, now });
+  }
 }
