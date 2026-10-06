@@ -54,10 +54,16 @@ Levels are **never revoked**.
   `earnedOn` `@db.Date` (local date the run first reached the threshold; for monthly: the month's last day),
   `weekStart` `@db.Date` (Monday of earnedOn), `monthStart` `@db.Date` (1st of earnedOn's month), `createdAt`,
   `celebratedAt` nullable. `@@unique([userId, family, level])`, index `(userId, celebratedAt)`.
-- `User.achievementsSince` `@db.Date`, nullable. **Single definition:** the user's local date on launch day for
-  existing users — set by a one-off launch job that runs once at deploy (Redis once-marker, like the recap launch
-  backfill) — and the user's local date at sign-up for new users (set when the user row is created). Never changed.
-  The launch job also writes each existing user's starting `GoalChange` rows (below); sign-up writes them for new users.
+- `User.achievementsSince` `@db.Date`, nullable. **Single definition:**
+  - existing users: the user's local date on launch day, set by a one-off **launch job** at deploy (Redis once-marker,
+    like `RECAP_BACKFILL_MARKER` in `recap/backfill.ts`) that writes it **only where it is null** — a lost marker and
+    a rerun can never move anyone's start date;
+  - new users: left null at sign-up (the Better Auth row is created before the app reports the real time zone via
+    `PUT /me/timezone`) and set on the user's **first badge load** (`GET /me/achievements`) to their local date then.
+  Never changed once set. The starting `GoalChange` rows (below) are written at the same moment — by the launch job
+  for existing users, by the first badge load for new users (no Better Auth hook).
+  The launch job also sets `onTime` for check-ins already saved on launch day before the deploy (recomputed once from
+  `createdAt` with `habitDayFor` and the user's zone at launch), so launch day counts for them.
 - `HabitCheckIn.onTime` boolean, default false: set **when the row is written** by `POST /me/habits/check-ins` to
   `habitDay === habitDayFor(now, user.timezone)` (the app's 4am habit-day boundary, `habits/habitDay.ts`). Stored, never
   recomputed, so a later time-zone change can't rewrite history. Backdated check-ins save as before with `onTime = false`.
@@ -85,9 +91,11 @@ Levels are **never revoked**.
 - **Family start date** = max(`achievementsSince`, the day after the latest `GoalChange.effectiveOn` with
   `resetsStreak` for that family's kind) — a reset streak starts from the next night. Steps and check-in use
   `achievementsSince`. Monthly families count only months whose 1st is ≥ `achievementsSince`.
-- **Paused vs broken.** A run is consecutive qualifying dates. A date with no data for the family breaks a run only if
-  a later date has data, or the date is more than 2 days before today (local); otherwise the latest run is paused
-  (late sync never costs a streak). `current` = the latest run if it is unbroken, else 0.
+- **Paused vs broken (synced families only).** A run is consecutive qualifying dates. For Sleep goal, Steady bedtime
+  and Step goal — whose data arrives by sync — a date with no data breaks a run only if a later date has data, or the
+  date is more than 2 days before today (local); otherwise the latest run is paused (late sync never costs a streak).
+  **Check-ins never pause:** a check-in is never late, so a habit day without an on-time check-in breaks the
+  check-in streak as soon as that habit day is over. `current` = the latest run if it is unbroken, else 0.
 - **Today.** Steps: today never counts until it is over. Check-in: today counts as soon as a same-day check-in exists.
   Sleep families: a night counts once its rollup has arrived.
 - **Steady bedtime**: bedtime = the main session's start (the noon-anchored main session, as Recap's bedtime) in local
@@ -107,8 +115,8 @@ Levels are **never revoked**.
   (`updateSleepGoal`) clear that marker, so the next load re-evaluates at once. There are no queue triggers: nothing
   is pushed, so a badge only matters when the app shows it, and evaluating on load covers every way data arrives
   (sync fetch, backfill, catch-up, check-ins, recap rebuilds).
-- `achievementsSince` and the starting `GoalChange` rows are written by the launch job / at sign-up (§3), never by
-  the evaluator; an evaluation for a user with null `achievementsSince` (shouldn't happen) sets it to today and logs it.
+- For a user whose `achievementsSince` is null (a new user's first badge load — the normal path), the GET sets it to
+  the user's local date and writes the starting `GoalChange` rows before evaluating; nothing qualifies before it.
 - Logs: event names with ids, family and level only — never health values.
 - The recap fact sheet stops emitting the old streak-milestone note (`coach/answer/facts.ts`), so the AI line never
   mentions a milestone the app doesn't show. Other recap facts are unchanged; AI text never mentions badges.
@@ -153,6 +161,8 @@ Levels are **never revoked**.
   recap's on-goal count and the badge streak can differ.
 - **Accepted:** a user inactive at launch still starts on launch day (the launch job sets it), so days they missed
   simply don't qualify.
+- **Accepted:** a goal changed after midnight (e.g. at 1am before going to bed) applies from the following night,
+  not that one — it follows from "a change applies to nights that end after its date".
 - Coach-data deletion leaves achievements, goal changes and check-in flags untouched; account deletion removes them.
 - Old app versions: unaffected (new endpoints only). New app vs old backend: 404 → badge UI hidden, month tiles as before.
 - Reinstall / new device: celebration state is server-side, so nothing re-celebrates.
@@ -166,8 +176,9 @@ Levels are **never revoked**.
   milestones (rebuild gain/loss); fact sheet no longer emits the streak note.
 - Backend integration: evaluator idempotence and concurrency; GET evaluates inline with the 10-min bound, and a
   check-in or goal save clears it; `onTime` set at write (1am check-in → previous habit day, on time; backdated →
-  false); GoalChange written by `updateSleepGoal` (one row per day, last wins); launch job sets `achievementsSince`
-  and starting goals once; sign-up sets them; endpoints (shape, own rows only, celebrated); migration;
+  false); check-in streak breaks once a missed habit day is over (no pause); GoalChange written by `updateSleepGoal`
+  (one row per day, last wins); launch job sets `achievementsSince` and starting goals only where null (rerun is a
+  no-op) and backfills launch-day `onTime`; a new user's first GET sets them in their local zone; endpoints (shape, own rows only, celebrated); migration;
   USER_OWNED_MODELS includes Achievement and GoalChange; account-deletion cascade.
 - Mobile: Profile card (locked / levels / next-up / 404 hidden), Badges + detail screens, celebration queue order and
   marking, weekly story card (with/without), month tiles (progress, level-up mark, pre-start months), 404 fallback.
