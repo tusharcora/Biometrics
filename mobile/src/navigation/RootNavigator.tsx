@@ -34,6 +34,7 @@ import { YearInPixelsScreen } from '../screens/YearInPixelsScreen';
 import { BadgesScreen } from '../screens/BadgesScreen';
 import { BadgeDetailScreen } from '../screens/BadgeDetailScreen';
 import { CelebrationHost } from '../components/achievements/CelebrationHost';
+import { BuddiesStoreScope } from '../components/buddies/BuddiesStoreScope';
 import type { ShareFormat } from '../lib/recapShare';
 import { TabsNavigator, type TabParamList } from './TabsNavigator';
 import { syncTimezone } from '../lib/timezone';
@@ -230,6 +231,8 @@ export function RootNavigator() {
             </Stack.Navigator>
             {/* New badge levels, celebrated once (start, foreground, after a check-in). */}
             <CelebrationHost />
+            {/* The shared buddy list (start, foreground); forgotten on sign-out. */}
+            <BuddiesStoreScope />
           </SyncProvider>
         </ToastProvider>
       </NavigationContainer>

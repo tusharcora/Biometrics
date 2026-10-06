@@ -1,0 +1,57 @@
+import { activityLine, buddyErrorMessage, expiresIn, formatNumber, joinList, sharesSummary, stickerSentLine, weekdayLetter } from '../../src/lib/buddyCopy';
+
+const person = { id: 'p', handle: 'sam', displayName: 'Sam', coachId: 'pengu' };
+
+it('summarises what a buddy shares', () => {
+  expect(sharesSummary('Sam', [])).toBe('Sam shares mood only');
+  expect(sharesSummary('Sam', ['sleepScore'])).toBe('Sam shares mood and sleep score');
+  expect(sharesSummary('Sam', ['recovery', 'steps', 'streaks'])).toBe('Sam shares mood, recovery, steps and streaks & badges');
+  expect(joinList(['a', 'b'])).toBe('a and b');
+});
+
+it('words a sent sticker, a code expiry, and an error code', () => {
+  expect(stickerSentLine('REST_UP', 'Sam', 'Pengu')).toBe('Sent a Rest up to Sam. Pengu will pass it on.');
+  const now = Date.parse('2026-10-07T12:00:00Z');
+  expect(expiresIn('2026-10-08T11:30:00Z', now)).toBe('Expires in 23 h 30 min');
+  expect(expiresIn('2026-10-07T12:05:00Z', now)).toBe('Expires in 5 min');
+  expect(expiresIn('2026-10-07T11:00:00Z', now)).toBe('Expired');
+  expect(buddyErrorMessage('not_buddies')).toBe("You're no longer buddies.");
+  expect(buddyErrorMessage('code_invalid')).toBe("That code didn't work. Check it and try again.");
+  expect(buddyErrorMessage(null)).toBe('Something went wrong. Please try again.');
+});
+
+// Every code in backend/src/buddies/errors.ts (BUDDY_ERROR_STATUS) has its own words.
+const SERVER_CODES = [
+  'invalid_handle', 'invalid_display_name', 'setup_incomplete', 'handle_taken', 'rate_limited', 'try_later',
+  'handle_required', 'mood_notice_required', 'consent_required', 'stale_consent_version', 'invalid_settings',
+  'code_invalid', 'own_handle', 'not_found', 'blocked_by_you', 'too_many_pending', 'request_gone', 'not_buddies',
+  'sticker_limit', 'invalid_sticker', 'invalid_cursor',
+];
+
+it('words every server error code, and falls back for anything else', () => {
+  const generic = buddyErrorMessage(null);
+  for (const code of SERVER_CODES) expect([code, buddyErrorMessage(code)]).not.toEqual([code, generic]);
+  expect(buddyErrorMessage('something_new')).toBe(generic);
+  expect(buddyErrorMessage('toString')).toBe(generic);
+});
+
+it('words Activity from closed labels only', () => {
+  const base = { id: 'a', createdAt: '2026-10-07T12:00:00Z', seen: false, actor: person };
+  expect(activityLine({ ...base, kind: 'sticker', sticker: 'STAR' })).toBe('Sam sent you a Star');
+  expect(activityLine({ ...base, kind: 'request', requestId: 'r' })).toBe('Sam wants to be your buddy');
+  expect(activityLine({ ...base, kind: 'paired' })).toBe('You and Sam are now buddies');
+  expect(activityLine({ ...base, kind: 'badge', badge: { family: 'STEP_GOAL', level: 3 } })).toBe('Sam reached Step goal streak III');
+});
+
+it('labels days and shared numbers', () => {
+  expect(weekdayLetter('2026-10-05')).toBe('M');
+  expect(formatNumber('hoursSlept', 7.5)).toBe('7.5h');
+  expect(formatNumber('steps', 12345)).toBe('12,345');
+  expect(formatNumber('recovery', null)).toBe('–');
+});
+
+it('shows a missing number as absent, never as 0', () => {
+  expect(formatNumber('steps', undefined)).toBe('–');
+  expect(formatNumber('recovery', Number.NaN)).toBe('–');
+  expect(formatNumber('recovery', 0)).toBe('0');
+});
