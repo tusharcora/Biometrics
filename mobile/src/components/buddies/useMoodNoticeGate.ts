@@ -1,4 +1,4 @@
-import { useCallback, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { confirmMoodNotice } from '../../api/buddies';
 import type { MoodNoticeSheetProps } from './MoodNoticeSheet';
 
@@ -7,10 +7,11 @@ import type { MoodNoticeSheetProps } from './MoodNoticeSheet';
  * once the notice was confirmed, else holds it behind the sheet until the user confirms.
  */
 export function useMoodNoticeGate(initiallySeen: boolean): { run: (action: () => void) => void; sheet: MoodNoticeSheetProps } {
-  const [seen, setSeen] = useState(initiallySeen);
   const [pending, setPending] = useState<null | (() => void)>(null);
   const [failed, setFailed] = useState(false);
-  // The held action as of now (closing the sheet mid-confirm drops it), and a double tap confirms once.
+  // Refs, so a memoised `run` sees the confirm, closing the sheet (or leaving the screen) mid-confirm
+  // drops the held action, and a double tap confirms once.
+  const seen = useRef(initiallySeen);
   const pendingRef = useRef<null | (() => void)>(null);
   const confirming = useRef(false);
 
@@ -19,21 +20,29 @@ export function useMoodNoticeGate(initiallySeen: boolean): { run: (action: () =>
     setPending(() => action);
   }, []);
 
+  useEffect(
+    () => () => {
+      pendingRef.current = null;
+    },
+    [],
+  );
+
   const run = useCallback(
     (action: () => void) => {
-      if (seen) {
+      if (seen.current) {
         action();
         return;
       }
       setFailed(false);
       hold(action);
     },
-    [seen, hold],
+    [hold],
   );
 
   const confirm = useCallback(async () => {
     if (confirming.current) return;
     confirming.current = true;
+    setFailed(false);
     try {
       await confirmMoodNotice();
     } catch {
@@ -42,7 +51,7 @@ export function useMoodNoticeGate(initiallySeen: boolean): { run: (action: () =>
     } finally {
       confirming.current = false;
     }
-    setSeen(true);
+    seen.current = true;
     const action = pendingRef.current;
     hold(null);
     action?.();

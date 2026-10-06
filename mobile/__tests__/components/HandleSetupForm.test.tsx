@@ -50,3 +50,27 @@ it('the gate shows setup until a handle exists, then the content', async () => {
   await act(async () => fireEvent.press(screen.getByTestId('handle-setup-save')));
   expect(screen.getByTestId('gated')).toHaveTextContent('sam');
 });
+
+it('a double tap saves once and reports once', async () => {
+  const onSaved = jest.fn();
+  let finish!: (value: unknown) => void;
+  save.mockReturnValue(new Promise((resolve) => (finish = resolve)));
+  render(<HandleSetupForm identity={NEW} mode="setup" onSaved={onSaved} />);
+  fireEvent.changeText(screen.getByTestId('handle-input'), 'sam');
+  await act(async () => {
+    fireEvent.press(screen.getByTestId('handle-setup-save'));
+    fireEvent.press(screen.getByTestId('handle-setup-save'));
+  });
+  await act(async () => finish({ ...NEW, handle: 'sam', displayName: 'Sam' }));
+  expect(save).toHaveBeenCalledTimes(1);
+  expect(onSaved).toHaveBeenCalledTimes(1);
+});
+
+it('the gate shows an error with retry, then the content once loading works', async () => {
+  load.mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ ...NEW, handle: 'sam', displayName: 'Sam' });
+  render(<IdentityGate>{(identity) => <Text testID="gated">{identity.handle}</Text>}</IdentityGate>);
+  expect(await screen.findByTestId('buddy-identity-error')).toBeTruthy();
+  await act(async () => fireEvent.press(screen.getByTestId('buddy-identity-retry')));
+  expect(await screen.findByTestId('gated')).toHaveTextContent('sam');
+  expect(load).toHaveBeenCalledTimes(2);
+});

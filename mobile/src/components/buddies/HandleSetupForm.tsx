@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useRef, useState } from 'react';
 import { View } from 'react-native';
 import { buddyErrorCode, saveIdentity, type BuddyIdentity } from '../../api/buddies';
 import { buddyErrorMessage } from '../../lib/buddyCopy';
@@ -13,8 +13,11 @@ export function HandleSetupForm({ identity, mode, onSaved }: { identity: BuddyId
   const [name, setName] = useState(identity.displayName ?? identity.displayNamePrefill);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  // `busy` disables the button only after a re-render; a double tap in one frame saves once.
+  const saving = useRef(false);
 
   async function save() {
+    if (saving.current) return;
     const patch: { handle?: string; displayName?: string } = {};
     if (mode === 'setup' || handle !== identity.handle) patch.handle = handle;
     if (mode === 'setup' || name !== identity.displayName) patch.displayName = name;
@@ -22,6 +25,7 @@ export function HandleSetupForm({ identity, mode, onSaved }: { identity: BuddyId
       onSaved(identity);
       return;
     }
+    saving.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -29,6 +33,7 @@ export function HandleSetupForm({ identity, mode, onSaved }: { identity: BuddyId
     } catch (e) {
       setError(buddyErrorMessage(buddyErrorCode(e)));
     } finally {
+      saving.current = false;
       setBusy(false);
     }
   }
