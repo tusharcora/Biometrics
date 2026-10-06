@@ -25,7 +25,7 @@ const GLYPH = 32;
 export const LOCKED_OPACITY = 0.5;
 // The month recap's "LEVEL UP" mark: the accent, darkened to teal-700 in light mode so 10px text
 // clears 4.5:1 on the card (teal-600 alone is about 3.7:1).
-export const LEVEL_UP_COLOR = { light: 'rgb(15, 118, 110)', dark: COLORS.dark.accent } as const;
+export const LEVEL_UP_COLOR = { light: COLORS.light.statusAboveText, dark: COLORS.dark.accent } as const;
 
 type Px = [x: number, y: number, w: number, h: number];
 

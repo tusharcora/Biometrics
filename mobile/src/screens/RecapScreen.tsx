@@ -17,13 +17,14 @@ import { Card } from '../components/ui/card';
 import { SectionLabel } from '../components/ui/section-label';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
-import { getAchievementsSnapshot, refreshAchievements, useAchievements } from '../lib/achievementsStore';
+import { useAchievements } from '../lib/achievementsStore';
 import { levelsEarnedBetween, shortLevelTitle } from '../lib/badges';
 import { compareChanges, milestoneTiles, monthName } from '../lib/recapCopy';
 import { readIncludePrefs } from '../lib/recapPrefs';
 import { DESIGN_HEIGHT, DESIGN_WIDTH, previewScale, recapCoachId, resolveIncludes, type Includes } from '../lib/recapShare';
 import { changeColor } from '../lib/recapTheme';
 import { openRecap } from '../lib/unwatchedRecap';
+import { useRefreshAchievementsOnFocus } from '../lib/useRefreshAchievementsOnFocus';
 
 type State = { phase: 'loading' } | { phase: 'ready'; recap: Recap } | { phase: 'missing' } | { phase: 'error' };
 
@@ -154,12 +155,11 @@ function MonthBody({ recap, coachId, coachName, onShare }: { recap: Recap; coach
   const { colorScheme } = useColorScheme();
   const scheme = colorScheme === 'dark' ? 'dark' : 'light';
   const rows = compareChanges(recap.stats.comparison);
-  // Badges (achievements spec §6), read at view time. Until they load, and against a backend
-  // without them (404), the tiles stay exactly as before.
+  // Badges (achievements spec §6), read at view time and reloaded on mount and refocus, so the
+  // newest month's progress includes a level earned since they were last loaded. Until they load,
+  // and against a backend without them (404), the tiles stay exactly as before.
   const { state: badgeState } = useAchievements();
-  useEffect(() => {
-    if (getAchievementsSnapshot().state.status === 'idle') void refreshAchievements();
-  }, []);
+  useRefreshAchievementsOnFocus();
   // Only the newest month recap shows progress toward the next level; a failed lookup shows none.
   const [latest, setLatest] = useState(false);
   useEffect(() => {

@@ -4,7 +4,7 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import { achievementsFixture } from '../../jest-mocks/achievementsFixture';
 import { HIDDEN_OK, withCharacter } from '../../jest-mocks/characterContext';
 import { fetchAchievements } from '../../src/api/achievements';
-import { resetAchievements } from '../../src/lib/achievementsStore';
+import { refreshAchievements, resetAchievements } from '../../src/lib/achievementsStore';
 import { ApiError } from '../../src/api/client';
 import { fetchRecap, fetchRecaps, markRecapOpened, type Recap } from '../../src/api/recaps';
 import { resetUnwatchedRecap } from '../../src/lib/unwatchedRecap';
@@ -21,6 +21,7 @@ let mockParams: { id: string } = { id: 'r-month' };
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: mockNavigate, goBack: mockGoBack, canGoBack: () => mockCanGoBack }),
   useRoute: () => ({ params: mockParams }),
+  NavigationContext: require('react').createContext(undefined),
 }));
 
 const load = fetchRecap as jest.Mock;
@@ -252,4 +253,37 @@ it('keeps the four original tiles against a backend without badges (404)', async
   expect(screen.getByTestId('recap-milestones-streak').props.accessibilityLabel).toBe('6 nights on goal in a row, earned');
   expect(screen.queryByTestId('recap-milestones-everyDayLogged-progress')).toBeNull();
   expect(screen.queryByTestId('recap-month-badges')).toBeNull();
+});
+
+it('reloads badges already in the store when the month opens, so a level earned since shows up', async () => {
+  // Loaded earlier in the session, before this month's level.
+  (fetchAchievements as jest.Mock).mockResolvedValue(achievementsFixture({ EVERY_DAY_LOGGED: { level: 0, current: 0 } }, { since: '2026-08-15' }));
+  await act(async () => {
+    await refreshAchievements();
+  });
+  (fetchAchievements as jest.Mock).mockClear();
+  (fetchAchievements as jest.Mock).mockResolvedValue(achievementsFixture({
+    EVERY_DAY_LOGGED: { level: 1, current: 1, levels: [{ level: 1, value: 1, earnedOn: '2026-09-30' }] },
+  }, { since: '2026-08-15' }));
+  load.mockResolvedValue({ ...MONTH, stats: { ...MONTH.stats, milestones: { everyDayLogged: { days: 30 } } } });
+  render(withCharacter(<RecapScreen />));
+  expect(await screen.findByTestId('recap-milestones-everyDayLogged-levelup')).toHaveTextContent('LEVEL UP');
+  expect(screen.getByTestId('recap-milestones-everyDayLogged-progress')).toHaveTextContent('1 of 3 months for Silver');
+  expect(fetchAchievements).toHaveBeenCalledTimes(1);
+});
+
+it('shows no progress when the newest-month lookup fails, keeping the level-up mark and "Badges earned"', async () => {
+  (fetchRecaps as jest.Mock).mockRejectedValue(new Error('offline'));
+  (fetchAchievements as jest.Mock).mockResolvedValue(achievementsFixture({
+    SLEEP_GOAL: { level: 2, levels: [{ level: 2, value: 7, earnedOn: '2026-09-12' }] },
+    EVERY_DAY_LOGGED: { level: 1, current: 1, levels: [{ level: 1, value: 1, earnedOn: '2026-09-30' }] },
+  }, { since: '2026-08-15' }));
+  load.mockResolvedValue({ ...MONTH, stats: { ...MONTH.stats, milestones: { everyDayLogged: { days: 30 } } } });
+  render(withCharacter(<RecapScreen />));
+  expect(await screen.findByTestId('recap-milestones-everyDayLogged-levelup')).toHaveTextContent('LEVEL UP');
+  await act(async () => {});
+  expect(fetchRecaps).toHaveBeenCalledWith({ kind: 'MONTH', limit: 1 });
+  expect(screen.queryByTestId('recap-milestones-everyDayLogged-progress')).toBeNull();
+  expect(screen.queryByTestId('recap-milestones-steadiestMonth-progress')).toBeNull();
+  expect(screen.getByTestId('recap-month-badge-SLEEP_GOAL-2')).toBeTruthy();
 });

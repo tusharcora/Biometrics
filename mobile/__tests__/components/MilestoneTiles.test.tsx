@@ -7,6 +7,13 @@ import { LEVEL_UP_COLOR, MilestoneTiles } from '../../src/components/milestones/
 import type { MilestoneTile } from '../../src/lib/milestones';
 import { COLORS } from '../../src/theme';
 
+let mockScheme: 'light' | 'dark' = 'light';
+jest.mock('nativewind', () => ({ useColorScheme: () => ({ colorScheme: mockScheme }) }));
+
+beforeEach(() => {
+  mockScheme = 'light';
+});
+
 const TILES: MilestoneTile[] = [
   { key: 'streak', label: '6 nights on goal in a row', glyph: 'star', earned: true },
   { key: 'bestRecoveryWeek', label: 'Best recovery week', glyph: 'heart', earned: false },
@@ -68,8 +75,9 @@ it('shows badge progress and a level-up mark when a tile has them, and reads the
 });
 
 it.each(['light', 'dark'] as const)('draws "LEVEL UP" at 4.5:1 on the %s tile (the light teal accent is under it at this size)', (scheme) => {
+  mockScheme = scheme;
   render(<MilestoneTiles testID="tiles" tiles={[{ key: 'everyDayLogged', label: 'Every night logged', glyph: 'calendar', earned: true, levelUp: true }]} />);
   const color = (StyleSheet.flatten(screen.getByTestId('tiles-everyDayLogged-levelup').props.style).color ?? '') as string;
-  expect(color).toBe(LEVEL_UP_COLOR.light);
-  expect(contrast(hex(LEVEL_UP_COLOR[scheme]), hex(COLORS[scheme].card))).toBeGreaterThanOrEqual(4.5);
+  expect(color).toBe(LEVEL_UP_COLOR[scheme]);
+  expect(contrast(hex(color), hex(COLORS[scheme].card))).toBeGreaterThanOrEqual(4.5);
 });
