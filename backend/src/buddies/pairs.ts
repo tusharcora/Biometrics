@@ -32,6 +32,23 @@ export async function isBlockedEitherWay(a: string, b: string, db: Db = prisma):
   return (await db.buddyBlock.count({ where: { OR: [{ blockerId: a, blockedId: b }, { blockerId: b, blockedId: a }] } })) > 0;
 }
 
+/**
+ * Serialises pairing and blocking for one pair of people: a transaction-scoped advisory lock on the
+ * ordered ids. Every pairing transaction takes it before its block re-check (pairingBlockedTx) and
+ * block takes it first, so a block can never land between a pairing's check and its insert: one
+ * waits for the other, and block's unpair then removes a pair that won.
+ */
+export async function lockPairSlot(tx: Prisma.TransactionClient, a: string, b: string): Promise<void> {
+  const { userAId, userBId } = orderedPair(a, b);
+  await tx.$executeRaw`SELECT pg_advisory_xact_lock(hashtext(${userAId}), hashtext(${userBId}))`;
+}
+
+/** Inside a pairing transaction: take the pair lock, then re-check a block either way. */
+export async function pairingBlockedTx(tx: Prisma.TransactionClient, a: string, b: string): Promise<boolean> {
+  await lockPairSlot(tx, a, b);
+  return isBlockedEitherWay(a, b, tx);
+}
+
 export interface PairingUser {
   id: string;
   handle: string;

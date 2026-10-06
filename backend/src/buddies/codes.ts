@@ -7,7 +7,7 @@ import { randomInt } from 'crypto';
 import { prisma } from '../db/client';
 import { RATE_LIMITS } from '../lib/rateLimit';
 import { BuddyError, isUniqueViolation, limitOrThrow } from './errors';
-import { createPairTx, enqueuePaired, existingPairAfter, isBlockedEitherWay, requirePairingReady, type PairDeps, type PairResult } from './pairs';
+import { createPairTx, enqueuePaired, existingPairAfter, pairingBlockedTx, requirePairingReady, type PairDeps, type PairResult } from './pairs';
 
 export interface RedeemDeps extends PairDeps {
   /** Test seam: the pairing writes run inside the redeem transaction. */
@@ -107,7 +107,7 @@ export async function redeemCode(userId: string, raw: unknown, now: Date, deps: 
       const taken = await tx.buddyCode.updateMany({ where: { code, ownerId, usedAt: null, expiresAt: { gt: now } }, data: { usedAt: now, usedById: userId } });
       if (taken.count === 0) throw new BuddyError('code_invalid');
       // A block made since the lookup still wins.
-      if (await isBlockedEitherWay(userId, ownerId, tx)) throw new BuddyError('code_invalid');
+      if (await pairingBlockedTx(tx, userId, ownerId)) throw new BuddyError('code_invalid');
       return (deps.createPairTx ?? createPairTx)(tx, userId, ownerId, now);
     });
   } catch (err) {

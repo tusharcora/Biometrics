@@ -11,7 +11,7 @@ import { RATE_LIMITS } from '../lib/rateLimit';
 import { BuddyError, UUID_RE, isUniqueViolation, limitOrThrow } from './errors';
 import { checkHandle } from './identity';
 import { enqueueBuddyNotice } from './notifyQueue';
-import { createPairTx, enqueuePaired, existingPairAfter, findPair, isBlockedEitherWay, requirePairingReady, type PairDeps, type PairResult } from './pairs';
+import { createPairTx, enqueuePaired, existingPairAfter, findPair, isBlockedEitherWay, pairingBlockedTx, requirePairingReady, type PairDeps, type PairResult } from './pairs';
 import { PERSON_SELECT, toPerson, type PersonDTO } from './people';
 
 export const REQUEST_TTL_DAYS = 14;
@@ -96,7 +96,7 @@ async function lookupTarget(handle: string, fromId: string, now: Date): Promise<
 async function pairCrossed(a: string, b: string, now: Date, deps: PairDeps): Promise<boolean> {
   let result: PairResult | null;
   try {
-    result = await prisma.$transaction(async (tx) => ((await isBlockedEitherWay(a, b, tx)) ? null : createPairTx(tx, a, b, now)));
+    result = await prisma.$transaction(async (tx) => ((await pairingBlockedTx(tx, a, b)) ? null : createPairTx(tx, a, b, now)));
   } catch (err) {
     result = await existingPairAfter(err, a, b);
   }
@@ -213,7 +213,7 @@ export async function acceptRequest(userId: string, requestId: string, now: Date
   let result: PairResult | null;
   try {
     result = await prisma.$transaction(async (tx) => {
-      if (await isBlockedEitherWay(userId, buddyId, tx)) return null;
+      if (await pairingBlockedTx(tx, userId, buddyId)) return null;
       const won = await tx.buddyRequest.updateMany({ where: { id: row.id, ...recipientVisibleWhere(now) }, data: { status: 'ACCEPTED', respondedAt: now } });
       if (won.count === 0) return null;
       return createPairTx(tx, userId, buddyId, now);
