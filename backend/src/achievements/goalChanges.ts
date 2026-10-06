@@ -51,16 +51,20 @@ async function writeChange(
 ): Promise<void> {
   const loaded = await tx.goalChange.findMany({ where: { userId, kind } });
   const changes = goalChangesOf(loaded.map((r) => ({ ...r, effectiveOn: r.effectiveOn.toISOString().slice(0, 10) })), kind);
-  const earlier = changes.filter((c) => c.effectiveOn < today).at(-1);
-  const day = civilDateToUtcMidnight(today);
+  // A row can be dated after today (an earlier save from a time zone further east); the change goes
+  // on that latest day instead, so an older row never outranks this newer goal.
+  const latest = changes.at(-1)?.effectiveOn;
+  const date = latest !== undefined && latest > today ? latest : today;
+  const earlier = changes.filter((c) => c.effectiveOn < date).at(-1);
+  const day = civilDateToUtcMidnight(date);
   let previous: KindValue;
   if (earlier) {
     previous = valueOf(kind, earlier);
   } else {
-    const sameDay = changes.find((c) => c.effectiveOn === today);
+    const sameDay = changes.find((c) => c.effectiveOn === date);
     previous = sameDay ? valueOf(kind, sameDay) : stored;
     await tx.goalChange.createMany({
-      data: [{ userId, kind, ...previous, effectiveOn: civilDateToUtcMidnight(shiftDate(today, -1)), resetsStreak: false }],
+      data: [{ userId, kind, ...previous, effectiveOn: civilDateToUtcMidnight(shiftDate(date, -1)), resetsStreak: false }],
       skipDuplicates: true,
     });
   }

@@ -2,7 +2,7 @@ import { prisma } from '../../src/db/client';
 import { civilDateToUtcMidnight } from '../../src/biometrics/civilDate';
 import { connection } from '../../src/sync/queue';
 import {
-  EVALUATION_TTL_SECONDS, clearAchievementsMarker, evaluationVersion, markEvaluated, markerKey, readEvaluated, versionKey,
+  EVALUATION_TTL_SECONDS, MARKER_TIMEOUT_MS, clearAchievementsMarker, evaluationVersion, markEvaluated, markerKey, readEvaluated, versionKey,
 } from '../../src/achievements/marker';
 import * as goalChanges from '../../src/achievements/goalChanges';
 import { updateSleepGoal } from '../../src/users/goals';
@@ -67,6 +67,22 @@ describe('the evaluation marker', () => {
     try {
       expect(await readEvaluated(user.id)).toBeNull();
       expect(JSON.parse(String(log.mock.calls[0]![0]))).toEqual({ event: 'achievements.marker_read_failed', userId: user.id, error: 'Error' });
+    } finally {
+      mget.mockRestore();
+      log.mockRestore();
+    }
+  });
+
+  it('gives up on a Redis call that never answers (the connection queues while Redis is down)', async () => {
+    const user = await createUser();
+    const never = new Promise<never>(() => {});
+    const mget = jest.spyOn(connection, 'mget').mockReturnValueOnce(never as ReturnType<typeof connection.mget>);
+    const log = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const started = Date.now();
+      expect(await readEvaluated(user.id)).toBeNull();
+      expect(Date.now() - started).toBeGreaterThanOrEqual(MARKER_TIMEOUT_MS - 50);
+      expect(JSON.parse(String(log.mock.calls[0]![0]))).toEqual({ event: 'achievements.marker_read_failed', userId: user.id, error: 'TimeoutError' });
     } finally {
       mget.mockRestore();
       log.mockRestore();
@@ -176,6 +192,32 @@ describe('updateSleepGoal writes the goal history', () => {
     await evaluate(user.id, []);
     await updateSleepGoal(user.id, { wakeGoal: '07:00' }, NOW);
     expect(await readEvaluated(user.id)).toBeNull();
+  });
+
+  it('still saves and returns the goal when clearing the marker never answers', async () => {
+    const user = await createUser();
+    const hanging = { incr: () => hanging, expire: () => hanging, del: () => hanging, exec: () => new Promise(() => {}) };
+    const multi = jest.spyOn(connection, 'multi').mockReturnValueOnce(hanging as unknown as ReturnType<typeof connection.multi>);
+    const log = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      expect(await updateSleepGoal(user.id, { bedtimeGoal: '23:00' }, NOW)).toEqual({ sleepGoalMinutes: 480, bedtimeGoal: '23:00', wakeGoal: null });
+      expect(JSON.parse(String(log.mock.calls[0]![0]))).toEqual({ event: 'achievements.marker_clear_failed', userId: user.id, error: 'TimeoutError' });
+    } finally {
+      multi.mockRestore();
+      log.mockRestore();
+    }
+  });
+
+  it('puts a change on a later day already in the history (a save made further east), not before it', async () => {
+    const user = await createUser({ sleepGoalMinutes: 510 });
+    await prisma.goalChange.createMany({
+      data: [
+        { userId: user.id, kind: 'SLEEP_MINUTES', sleepMinutes: 480, effectiveOn: day('2026-10-05'), resetsStreak: false },
+        { userId: user.id, kind: 'SLEEP_MINUTES', sleepMinutes: 510, effectiveOn: day('2026-10-07'), resetsStreak: false },
+      ],
+    });
+    await updateSleepGoal(user.id, { sleepGoalMinutes: 450 }, NOW);
+    expect(await rows(user.id, 'SLEEP_MINUTES')).toEqual([['2026-10-05', 480, false], ['2026-10-07', 450, true]]);
   });
 
   it('returns null and writes nothing for an unknown user', async () => {
