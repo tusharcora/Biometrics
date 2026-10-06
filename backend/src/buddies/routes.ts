@@ -4,6 +4,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../auth/middleware';
 import { RATE_LIMITS } from '../lib/rateLimit';
+import { createCode, getActiveCode, redeemCode } from './codes';
 import { BuddyError, buddyRoute, limitOrThrow } from './errors';
 import { getIdentity, isHandleAvailable, updateIdentity } from './handles';
 import { checkDisplayName, checkHandle } from './identity';
@@ -62,4 +63,17 @@ buddiesRouter.put('/me/buddies/sharing', requireAuth, buddyRoute(async (req, res
 
 buddiesRouter.post('/me/buddies/sharing/consent', requireAuth, buddyRoute(async (req, res) => {
   res.json(await recordSharingConsent(req.userId!, (req.body as { version?: unknown } | undefined)?.version, new Date()));
+}));
+
+buddiesRouter.get('/me/buddies/code', requireAuth, buddyRoute(async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  res.json((await getActiveCode(req.userId!, new Date())) ?? { code: null });
+}));
+
+buddiesRouter.post('/me/buddies/code', requireAuth, buddyRoute(async (req, res) => {
+  res.json(await createCode(req.userId!, new Date()));
+}));
+
+buddiesRouter.post('/me/buddies/code/redeem', requireAuth, buddyRoute(async (req, res) => {
+  res.json(await redeemCode(req.userId!, (req.body as { code?: unknown } | undefined)?.code, new Date()));
 }));
