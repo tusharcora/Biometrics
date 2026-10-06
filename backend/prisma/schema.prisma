@@ -25,36 +25,51 @@ enum BiometricMetricType {
 // (spec 2026-09-23-better-auth-migration-design.md, decision 3); an unverified
 // sign-up can never attach to an existing account.
 model User {
-  id                 String              @id @default(uuid())
-  name               String
-  email              String              @unique
-  emailVerified      Boolean             @default(false)
-  image              String?
-  updatedAt          DateTime            @updatedAt
-  sessions           Session[]
-  accounts           Account[]
-  createdAt          DateTime            @default(now())
-  healthConnection   HealthConnection?
-  biometricRecords   BiometricRecord[]
-  sleepSessions      SleepSession[]
-  baselineSnapshots  BaselineSnapshot[]
-  dailyFeatures      UserDailyFeatures[]
-  dailyScores        DailyScore[]
-  scoreInputFlags    ScoreInputFlag[]
-  habitTypes         HabitType[]
-  habitLogs          HabitLog[]
-  habitCheckIns      HabitCheckIn[]
-  habitCorrelations  HabitCorrelation[]
-  coachConsents      CoachConsent[]
-  coachConversations CoachConversation[]
-  coachMessages      CoachMessage[]
-  coachMemories      CoachMemory[]
-  coachDigests       CoachDigest[]
-  coachDaySummaries  CoachDaySummary[]
-  pushTokens         PushToken[]
-  recaps             Recap[]
-  achievements       Achievement[]
-  goalChanges        GoalChange[]
+  id                    String              @id @default(uuid())
+  name                  String
+  email                 String              @unique
+  emailVerified         Boolean             @default(false)
+  image                 String?
+  updatedAt             DateTime            @updatedAt
+  sessions              Session[]
+  accounts              Account[]
+  createdAt             DateTime            @default(now())
+  healthConnection      HealthConnection?
+  biometricRecords      BiometricRecord[]
+  sleepSessions         SleepSession[]
+  baselineSnapshots     BaselineSnapshot[]
+  dailyFeatures         UserDailyFeatures[]
+  dailyScores           DailyScore[]
+  scoreInputFlags       ScoreInputFlag[]
+  habitTypes            HabitType[]
+  habitLogs             HabitLog[]
+  habitCheckIns         HabitCheckIn[]
+  habitCorrelations     HabitCorrelation[]
+  coachConsents         CoachConsent[]
+  coachConversations    CoachConversation[]
+  coachMessages         CoachMessage[]
+  coachMemories         CoachMemory[]
+  coachDigests          CoachDigest[]
+  coachDaySummaries     CoachDaySummary[]
+  pushTokens            PushToken[]
+  recaps                Recap[]
+  achievements          Achievement[]
+  goalChanges           GoalChange[]
+  buddyPairsA           BuddyPair[]         @relation("BuddyPairA")
+  buddyPairsB           BuddyPair[]         @relation("BuddyPairB")
+  buddyRequestsSent     BuddyRequest[]      @relation("BuddyRequestFrom")
+  buddyRequestsReceived BuddyRequest[]      @relation("BuddyRequestTo")
+  buddyCodesOwned       BuddyCode[]         @relation("BuddyCodeOwner")
+  buddyCodesUsed        BuddyCode[]         @relation("BuddyCodeUsedBy")
+  blocksMade            BuddyBlock[]        @relation("BuddyBlocker")
+  blocksReceived        BuddyBlock[]        @relation("BuddyBlocked")
+  mutesMade             BuddyMute[]         @relation("BuddyMuter")
+  mutesReceived         BuddyMute[]         @relation("BuddyMuted")
+  stickersSent          Sticker[]           @relation("StickerFrom")
+  stickersReceived      Sticker[]           @relation("StickerTo")
+  buddyActivityReceived BuddyActivity[]     @relation("BuddyActivityRecipient")
+  buddyActivityCaused   BuddyActivity[]     @relation("BuddyActivityActor")
+  handleHolds           HandleHold[]        @relation("HandleHoldOwner")
 
   // The coach persona the user picked in Settings (an id from
   // src/coach/personas). Null means the default persona.
@@ -85,6 +100,25 @@ model User {
   /// Achievements start date (spec 2026-10-06 §3): the user's local date on launch day (launch
   /// job) or on their first badge load. Only days/months from it count. Set once, never changed.
   achievementsSince DateTime? @db.Date
+
+  /// Buddies (spec 2026-10-06 buddies §2-§3). Unique, lowercase [a-z0-9_]{3,20}; null until set up.
+  handle                     String?   @unique
+  /// Sanitised, 1-30 code points; null until set up.
+  displayName                String?
+  /// Share switches: one set for all buddies, all off. Read through effectiveSharing (sharing.ts):
+  /// with a stale consent version every switch reads as off.
+  shareRecovery              Boolean   @default(false)
+  shareSleepScore            Boolean   @default(false)
+  shareHoursSlept            Boolean   @default(false)
+  shareSteps                 Boolean   @default(false)
+  shareStreaks               Boolean   @default(false)
+  buddySharingConsentVersion Int?
+  buddySharingConsentAt      DateTime?
+  /// The one-time "mood is always shared" notice; every pairing action needs it.
+  buddyMoodNoticeAt          DateTime?
+  notifyBuddyStickers        Boolean   @default(true)
+  notifyBuddyRequests        Boolean   @default(true)
+  notifyBuddyBadges          Boolean   @default(true)
 
   // IANA zone name (e.g. "America/Los_Angeles"), client-supplied. It defines
   // which local civil date a sleep session's end instant belongs to, so the
@@ -718,4 +752,147 @@ model GoalChange {
   createdAt    DateTime       @default(now())
 
   @@unique([userId, kind, effectiveOn])
+}
+
+// ---- Buddies (spec 2026-10-06 buddies §3) ----
+// Two-sided tables: no `userId` column, role-named user columns, every FK to User cascades
+// (BuddyCode.usedById and HandleHold.previousOwnerId set null). They stay outside
+// USER_OWNED_MODELS; tests/buddies/deletion.test.ts proves either side's deletion removes them.
+
+enum BuddyRequestStatus {
+  PENDING
+  ACCEPTED
+  DECLINED
+  CANCELLED
+  EXPIRED
+}
+
+enum StickerKind {
+  CHEER
+  HEART
+  REST_UP
+  STAR
+}
+
+enum BuddyActivityKind {
+  STICKER
+  REQUEST
+  PAIRED
+  BUDDY_BADGE
+}
+
+/// One pair, stored with userAId < userBId.
+model BuddyPair {
+  id             String   @id @default(uuid())
+  userAId        String
+  userA          User     @relation("BuddyPairA", fields: [userAId], references: [id], onDelete: Cascade)
+  userBId        String
+  userB          User     @relation("BuddyPairB", fields: [userBId], references: [id], onDelete: Cascade)
+  createdAt      DateTime @default(now())
+  /// Set at pairing, bumped by every sticker between the two: the buddy list's order.
+  lastActivityAt DateTime @default(now())
+
+  @@unique([userAId, userBId])
+  @@index([userAId, lastActivityAt, id])
+  @@index([userBId, lastActivityAt, id])
+}
+
+/// At most one PENDING row per ordered pair: a partial unique index in the migration
+/// ("BuddyRequest_one_pending_key"), which Prisma does not model. Keep it if a future
+/// `migrate dev` proposes dropping it.
+model BuddyRequest {
+  id          String             @id @default(uuid())
+  fromUserId  String
+  fromUser    User               @relation("BuddyRequestFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUserId    String
+  toUser      User               @relation("BuddyRequestTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  status      BuddyRequestStatus @default(PENDING)
+  /// Never shown to the recipient (swallowed after a decline, or blocked).
+  hidden      Boolean            @default(false)
+  createdAt   DateTime           @default(now())
+  respondedAt DateTime?
+  /// The sender cancelled a request the target had declined: gone for the sender, still DECLINED.
+  withdrawnAt DateTime?
+
+  @@index([fromUserId, status, createdAt])
+  @@index([toUserId, status, createdAt])
+}
+
+model BuddyCode {
+  code      String    @id
+  ownerId   String
+  owner     User      @relation("BuddyCodeOwner", fields: [ownerId], references: [id], onDelete: Cascade)
+  createdAt DateTime  @default(now())
+  expiresAt DateTime
+  usedAt    DateTime?
+  usedById  String?
+  usedBy    User?     @relation("BuddyCodeUsedBy", fields: [usedById], references: [id], onDelete: SetNull)
+
+  @@index([ownerId, expiresAt])
+  @@index([createdAt])
+}
+
+model BuddyBlock {
+  blockerId String
+  blocker   User     @relation("BuddyBlocker", fields: [blockerId], references: [id], onDelete: Cascade)
+  blockedId String
+  blocked   User     @relation("BuddyBlocked", fields: [blockedId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([blockerId, blockedId])
+  @@index([blockedId])
+}
+
+/// Never visible to the muted person.
+model BuddyMute {
+  muterId   String
+  muter     User     @relation("BuddyMuter", fields: [muterId], references: [id], onDelete: Cascade)
+  mutedId   String
+  muted     User     @relation("BuddyMuted", fields: [mutedId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([muterId, mutedId])
+  @@index([mutedId])
+}
+
+model Sticker {
+  id         String      @id @default(uuid())
+  fromUserId String
+  fromUser   User        @relation("StickerFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUserId   String
+  toUser     User        @relation("StickerTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  kind       StickerKind
+  sentAt     DateTime    @default(now())
+  seenAt     DateTime?
+
+  @@index([fromUserId, toUserId, sentAt])
+  @@index([toUserId, fromUserId, seenAt])
+}
+
+/// Ids only; the Activity DTOs are built at read time. Kept 90 days.
+model BuddyActivity {
+  id          String            @id @default(uuid())
+  recipientId String
+  recipient   User              @relation("BuddyActivityRecipient", fields: [recipientId], references: [id], onDelete: Cascade)
+  actorId     String
+  actor       User              @relation("BuddyActivityActor", fields: [actorId], references: [id], onDelete: Cascade)
+  kind        BuddyActivityKind
+  /// Sticker id / request id / BuddyPair id (PAIRED) / Achievement id (BUDDY_BADGE).
+  refId       String
+  createdAt   DateTime          @default(now())
+  seenAt      DateTime?
+
+  @@unique([recipientId, kind, refId])
+  @@index([recipientId, createdAt, id])
+  @@index([actorId])
+}
+
+/// A released handle, held 30 days as a keyed hash (HMAC-SHA-256), never the handle itself.
+model HandleHold {
+  handleHash      String   @id
+  previousOwnerId String?
+  previousOwner   User?    @relation("HandleHoldOwner", fields: [previousOwnerId], references: [id], onDelete: SetNull)
+  releasedAt      DateTime
+
+  @@index([previousOwnerId])
 }
