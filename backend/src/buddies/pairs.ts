@@ -55,7 +55,8 @@ export interface PairResult {
  * The pairing writes, inside the caller's transaction. The pair is inserted with ON CONFLICT DO NOTHING
  * (skipDuplicates), so an existing pair never aborts the transaction and a concurrent insert waits for
  * the other to commit. Only when new: every PENDING request between the two (either way, hidden or not)
- * becomes ACCEPTED, and both get a PAIRED Activity item with refId = pair id. Sends nothing.
+ * becomes ACCEPTED, every DECLINED one is withdrawn (gone for its sender), and both get a PAIRED
+ * Activity item with refId = pair id. Sends nothing.
  */
 export async function createPairTx(tx: Prisma.TransactionClient, a: string, b: string, now: Date): Promise<PairResult> {
   const inserted = await tx.buddyPair.createMany({ data: [{ ...orderedPair(a, b), createdAt: now, lastActivityAt: now }], skipDuplicates: true });
@@ -64,6 +65,11 @@ export async function createPairTx(tx: Prisma.TransactionClient, a: string, b: s
   await tx.buddyRequest.updateMany({
     where: { status: 'PENDING', OR: [{ fromUserId: a, toUserId: b }, { fromUserId: b, toUserId: a }] },
     data: { status: 'ACCEPTED', respondedAt: now },
+  });
+  // A declined request still reads "Pending" to its sender; once paired it must not sit next to the buddy.
+  await tx.buddyRequest.updateMany({
+    where: { status: 'DECLINED', withdrawnAt: null, OR: [{ fromUserId: a, toUserId: b }, { fromUserId: b, toUserId: a }] },
+    data: { withdrawnAt: now },
   });
   await tx.buddyActivity.createMany({
     data: [

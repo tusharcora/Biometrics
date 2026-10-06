@@ -813,6 +813,8 @@ model BuddyRequest {
   respondedAt DateTime?
   /// The sender cancelled a request the target had declined: gone for the sender, still DECLINED.
   withdrawnAt DateTime?
+  /// The target's handle when sent; the sender's outgoing list shows this, never the current handle.
+  toHandleAtSend String?
 
   @@index([fromUserId, status, createdAt])
   @@index([toUserId, status, createdAt])

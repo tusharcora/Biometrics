@@ -71,7 +71,9 @@ Models (relation names in brackets; every two-FK model names both relations):
 - `BuddyRequest` — `id`, `fromUserId`, `toUserId`, `status` (PENDING | ACCEPTED | DECLINED | CANCELLED | EXPIRED),
   `hidden` (default false: true for a request the recipient never sees — swallowed after a decline, or sent to /
   left with someone who blocked the sender, §4), `createdAt`, `respondedAt`, `withdrawnAt` (the sender cancelled a
-  request the target had already declined: it leaves the sender's view but stays DECLINED for the 30-day rule); at
+  request the target had already declined: it leaves the sender's view but stays DECLINED for the 30-day rule),
+  `toHandleAtSend` (nullable: the target's handle when sent; the sender's outgoing list shows this, never the
+  target's current handle); at
   most one PENDING per ordered pair; PENDING requests expire 14 days after `createdAt` (treated as EXPIRED on read
   and swept lazily). Relations `"BuddyRequestFrom"`, `"BuddyRequestTo"`.
 - `BuddyCode` — `code` (8 chars from `ABCDEFGHJKMNPQRSTUVWXYZ23456789`, unique), `ownerId`, `createdAt`, `expiresAt`
@@ -110,9 +112,11 @@ Models (relation names in brackets; every two-FK model names both relations):
 - **Pairing by request:** `POST` to an exact handle. Only an unknown or held handle → `not_found`. A handle you
   blocked → `{error: 'blocked_by_you'}` (unblock in Profile first; it tells you only what you did). Already buddies,
   or you already have a request to them that you see as pending → success no-op. Every other request to an existing
-  handle returns the **same success**, including when the target has blocked you. If the target already has a
-  PENDING, non-hidden request to you, the two are paired in one step (crossed requests); hidden requests never pair
-  anyone.
+  handle returns the **same success**, including when the target has blocked you. **Mutual ask (crossed
+  requests):** if the target has a request to you that they still see as pending (PENDING or DECLINED, hidden or
+  not, not withdrawn, sent less than 14 days ago), the two are paired in one step, in one transaction that
+  re-checks there is no block either way; across a block the send behaves as any other (a hidden row). Pairing by
+  any route withdraws (`withdrawnAt`) every DECLINED request between the two, so none still reads "Pending".
 - A unique-constraint error (P2002) on `BuddyPair` from a redeem or crossed-request race means the pair exists:
   **success**, not an error.
 - **Accept / decline / cancel:** only the recipient accepts/declines; only the sender cancels; double-tap is a no-op.
@@ -271,7 +275,7 @@ rule, and the header comment is updated to say so. Buddy kinds become **template
   highest-new-level-per-family selection; quiet hours (wrapping, non-wrapping, equal times, one goal
   missing → default); rate limiter + Redis failure/timeout (fail closed); code alphabet, normalisation, expiry.
 - Backend integration: code pairing (older codes expired on create, collision retry, 7-day sweep), request pairing,
-  crossed requests and P2002-as-success (hidden requests never cross-pair), decline/cancel/expiry and cancel of a
+  crossed requests and P2002-as-success (a mutual ask pairs even over a declined or hidden request, never across a block), decline/cancel/expiry and cancel of a
   declined request (`withdrawnAt`, swallow still applies), the sender's view identical across every §4 table state,
   swallowed requests (hidden row, success, no push, no Activity), requests to someone who blocked you (same success
   as a real one, hidden), `not_found` only for unknown/held handles, `blocked_by_you`, the 20-pending cap counting

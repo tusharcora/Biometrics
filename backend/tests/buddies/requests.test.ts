@@ -6,7 +6,8 @@ import * as rateLimit from '../../src/lib/rateLimit';
 import { migrateTestDb } from '../setupTestDb';
 import { authHeaderFor } from '../helpers/auth';
 import { handleHash } from '../../src/buddies/identity';
-import { recipientSees, sendRequest, senderSeesPending } from '../../src/buddies/requests';
+import { countRequests, recipientSees, sendRequest, senderPendingWhere, senderSeesPending } from '../../src/buddies/requests';
+import { createPair } from '../../src/buddies/pairs';
 import { RecordingQueue, RecordingSender, addToken, api, buddyUser, pairUp } from './helpers';
 
 beforeAll(() => migrateTestDb());
@@ -134,19 +135,74 @@ describe('POST /me/buddies/requests', () => {
     expect(await prisma.buddyActivity.count({ where: { recipientId: target.id } })).toBe(0);
   });
 
-  it('crossed requests pair at once; a hidden request never pairs anyone', async () => {
+  it('crossed requests pair at once', async () => {
     const me = await buddyUser();
     const target = await buddyUser();
     await prisma.buddyRequest.create({ data: { fromUserId: target.id, toUserId: me.id } });
     expect((await send(me.id, target.handle!)).body).toEqual({ ok: true });
     expect(await prisma.buddyPair.count({ where: { OR: [{ userAId: me.id }, { userBId: me.id }] } })).toBe(1);
     expect((await rowsBetween(target.id, me.id))[0]!.status).toBe('ACCEPTED');
+  });
 
-    const other = await buddyUser();
-    await prisma.buddyRequest.create({ data: { fromUserId: other.id, toUserId: me.id, hidden: true } });
-    await send(me.id, other.handle!);
-    expect(await prisma.buddyPair.count({ where: { OR: [{ userAId: other.id }, { userBId: other.id }] } })).toBe(0);
-    expect((await rowsBetween(me.id, other.id))[0]).toMatchObject({ status: 'PENDING', hidden: false });
+  it('a mutual ask pairs even when the first request was declined or swallowed, and leaves no outgoing row', async () => {
+    for (const first of ['declined', 'swallowed'] as const) {
+      const a = await buddyUser();
+      const x = await buddyUser();
+      await prisma.buddyRequest.create({
+        data: first === 'declined'
+          ? { fromUserId: a.id, toUserId: x.id, status: 'DECLINED', respondedAt: new Date() }
+          : { fromUserId: a.id, toUserId: x.id, hidden: true },
+      });
+      expect((await send(x.id, a.handle!)).body).toEqual({ ok: true });
+      expect([first, await prisma.buddyPair.count({ where: { OR: [{ userAId: a.id }, { userBId: a.id }] } })]).toEqual([first, 1]);
+      expect([first, (await lists(a.id)).outgoing, (await lists(x.id)).outgoing]).toEqual([first, [], []]);
+      expect(await rowsBetween(x.id, a.id)).toHaveLength(0);
+    }
+  });
+
+  it('a mutual ask across a block never pairs', async () => {
+    // a blocked x: x's request to a is stored hidden, no pair.
+    const a = await buddyUser();
+    const x = await buddyUser();
+    await prisma.buddyRequest.create({ data: { fromUserId: a.id, toUserId: x.id, status: 'DECLINED', respondedAt: new Date() } });
+    await prisma.buddyBlock.create({ data: { blockerId: a.id, blockedId: x.id } });
+    expect((await send(x.id, a.handle!)).body).toEqual({ ok: true });
+    expect(await prisma.buddyPair.count({ where: { OR: [{ userAId: a.id }, { userBId: a.id }] } })).toBe(0);
+    expect((await rowsBetween(x.id, a.id)).map((r) => [r.status, r.hidden])).toEqual([['PENDING', true]]);
+    // x blocked b: x's send answers blocked_by_you.
+    const b = await buddyUser();
+    await prisma.buddyRequest.create({ data: { fromUserId: b.id, toUserId: x.id } });
+    await prisma.buddyBlock.create({ data: { blockerId: x.id, blockedId: b.id } });
+    expect((await send(x.id, b.handle!)).body).toEqual({ error: 'blocked_by_you' });
+    expect(await prisma.buddyPair.count({ where: { OR: [{ userAId: b.id }, { userBId: b.id }] } })).toBe(0);
+  });
+
+  it('pairing by code or by accepting removes a declined request from the outgoing list', async () => {
+    const a = await buddyUser();
+    const x = await buddyUser();
+    await prisma.buddyRequest.create({ data: { fromUserId: a.id, toUserId: x.id, status: 'DECLINED', respondedAt: new Date() } });
+    const code = (await (await api()).post('/me/buddies/code').set(await authHeaderFor(x.id))).body.code;
+    expect((await (await api()).post('/me/buddies/code/redeem').set(await authHeaderFor(a.id)).send({ code })).status).toBe(200);
+    expect((await lists(a.id)).outgoing).toEqual([]);
+    expect(await prisma.buddyRequest.count({ where: { fromUserId: a.id, ...senderPendingWhere(new Date()) } })).toBe(0);
+
+    // Accepting pairs through createPair (the accept route is a later task); a declined row the other way goes too.
+    const b = await buddyUser();
+    const y = await buddyUser();
+    const asked = await prisma.buddyRequest.create({ data: { fromUserId: y.id, toUserId: b.id } });
+    await prisma.buddyRequest.create({ data: { fromUserId: b.id, toUserId: y.id, status: 'DECLINED', respondedAt: new Date() } });
+    await createPair(b.id, y.id, new Date(), { notifyQueue: queue });
+    expect((await prisma.buddyRequest.findUniqueOrThrow({ where: { id: asked.id } })).status).toBe('ACCEPTED');
+    expect([(await lists(b.id)).outgoing, (await lists(y.id)).outgoing]).toEqual([[], []]);
+  });
+
+  it('the outgoing list shows the handle as it was when sent', async () => {
+    const me = await buddyUser();
+    const target = await buddyUser();
+    const original = target.handle!;
+    await send(me.id, original);
+    await prisma.user.update({ where: { id: target.id }, data: { handle: `n${randomUUID().replace(/-/g, '').slice(0, 12)}` } });
+    expect((await lists(me.id)).outgoing.map((r: { toHandle: string }) => r.toHandle)).toEqual([original]);
   });
 
   it('concurrent identical sends store one PENDING row', async () => {
@@ -205,10 +261,12 @@ describe('POST /me/buddies/requests', () => {
 
   it('a real, a blocked-by-target and a swallowed send do the same database work', async () => {
     const counts: number[] = [];
-    for (const setup of ['real', 'blocked', 'swallowed'] as const) {
+    for (const setup of ['real', 'blocked', 'swallowed', 'blocked-crossed'] as const) {
       const me = await buddyUser();
       const target = await buddyUser();
-      if (setup === 'blocked') await prisma.buddyBlock.create({ data: { blockerId: target.id, blockedId: me.id } });
+      if (setup === 'blocked' || setup === 'blocked-crossed') await prisma.buddyBlock.create({ data: { blockerId: target.id, blockedId: me.id } });
+      // The target blocked me after I declined their request: their row still looks pending to them.
+      if (setup === 'blocked-crossed') await prisma.buddyRequest.create({ data: { fromUserId: target.id, toUserId: me.id, status: 'DECLINED', respondedAt: new Date() } });
       if (setup === 'swallowed') {
         await prisma.buddyRequest.create({
           data: { fromUserId: me.id, toUserId: target.id, status: 'DECLINED', createdAt: new Date(Date.now() - 21 * DAY), respondedAt: new Date(Date.now() - 20 * DAY) },
@@ -219,7 +277,7 @@ describe('POST /me/buddies/requests', () => {
     }
     expect(counts[0]).toBeGreaterThan(0);
     expect(new Set(counts).size).toBe(1);
-    expect(queue.jobs).toHaveLength(3);
+    expect(queue.jobs).toHaveLength(4);
   });
 
   it('a visible request from someone who blocked you never pairs: your request is stored hidden', async () => {
@@ -230,6 +288,8 @@ describe('POST /me/buddies/requests', () => {
     expect((await send(me.id, target.handle!)).body).toEqual({ ok: true });
     expect(await prisma.buddyPair.count({ where: { OR: [{ userAId: me.id }, { userBId: me.id }] } })).toBe(0);
     expect((await rowsBetween(me.id, target.id)).map((r) => [r.status, r.hidden])).toEqual([['PENDING', true]]);
+    expect((await lists(target.id)).incoming).toEqual([]);
+    expect((await lists(me.id)).outgoing).toHaveLength(1);
   });
 
   it('a hanging enqueue never hangs the route', async () => {
@@ -256,6 +316,16 @@ describe('GET /me/buddies/requests', () => {
     await lists(me.id);
     const rows = await prisma.buddyActivity.findMany({ where: { recipientId: me.id } });
     expect(rows.map((r) => [r.kind, r.actorId, r.refId, r.createdAt.toISOString()])).toEqual([['REQUEST', from.id, seen.id, seen.createdAt.toISOString()]]);
+  });
+
+  it('leaves out requests from people the viewer blocked, in the list, the count and the Activity backfill', async () => {
+    const me = await buddyUser();
+    const blocked = await buddyUser();
+    await prisma.buddyRequest.create({ data: { fromUserId: blocked.id, toUserId: me.id } });
+    await prisma.buddyBlock.create({ data: { blockerId: me.id, blockedId: blocked.id } });
+    expect((await lists(me.id)).incoming).toEqual([]);
+    expect((await countRequests(me.id, new Date())).incoming).toBe(0);
+    expect(await prisma.buddyActivity.count({ where: { recipientId: me.id } })).toBe(0);
   });
 
   it('drops requests 14 days after sending, and sweeps them to EXPIRED', async () => {

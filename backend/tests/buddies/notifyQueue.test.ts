@@ -64,6 +64,19 @@ describe('runBuddyNotifyJob', () => {
     expect(sender.calls).toHaveLength(1);
   });
 
+  it('drops a request job, writing nothing, when the recipient has blocked the sender since it was sent', async () => {
+    const from = await buddyUser();
+    const to = await buddyUser();
+    await addToken(to.id);
+    const sender = new RecordingSender();
+    const row = await prisma.buddyRequest.create({ data: { fromUserId: from.id, toUserId: to.id } });
+    await prisma.buddyBlock.create({ data: { blockerId: to.id, blockedId: from.id } });
+    const job = { kind: 'buddy_request' as const, recipientId: to.id, actorId: from.id, refId: row.id, slots: {} };
+    expect(await runBuddyNotifyJob(job, { pushSender: sender, now: NOON })).toBe('dropped');
+    expect(await prisma.buddyActivity.count({ where: { recipientId: to.id } })).toBe(0);
+    expect(sender.calls).toHaveLength(0);
+  });
+
   it('decides mute in the job: a muted sticker is not pushed', async () => {
     const sam = await buddyUser();
     const jo = await buddyUser();

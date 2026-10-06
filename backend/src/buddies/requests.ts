@@ -1,7 +1,9 @@
 // Buddy requests (spec 2026-10-06 buddies §4). Every state the sender can't be told about looks
 // exactly like an unanswered request that later expired: "pending" to the sender means PENDING or
 // DECLINED, not withdrawn, sent less than 14 days ago. Hidden rows (swallowed after a decline, or
-// to/from someone who blocked the sender) never reach the recipient, never push, never pair.
+// to/from someone who blocked the sender) never reach the recipient and never push. A mutual ask
+// pairs: sending to someone whose request to you they still see as pending (declined or hidden
+// included) pairs the two, unless either has blocked the other.
 
 import type { BuddyRequestStatus } from '@prisma/client';
 import { prisma } from '../db/client';
@@ -50,8 +52,16 @@ export async function expireStaleRequests(userId: string, now: Date): Promise<vo
   });
 }
 
-const visibleCrossed = (fromId: string, toId: string, now: Date) =>
-  prisma.buddyRequest.findFirst({ where: { fromUserId: fromId, toUserId: toId, ...recipientVisibleWhere(now) }, select: { id: true } });
+/** Incoming requests the viewer may see: visible, and not from someone the viewer has blocked. */
+const incomingWhere = (userId: string, now: Date) => ({
+  toUserId: userId,
+  ...recipientVisibleWhere(now),
+  fromUser: { blocksReceived: { none: { blockerId: userId } } },
+});
+
+/** The original sender's request that they still see as pending (any of the states that read "Pending"). */
+const crossedAsk = (fromId: string, toId: string, now: Date) =>
+  prisma.buddyRequest.findFirst({ where: { fromUserId: fromId, toUserId: toId, ...senderPendingWhere(now) }, select: { id: true } });
 
 interface TargetLookup {
   id: string;
@@ -112,8 +122,9 @@ export async function sendRequest(fromId: string, rawHandle: unknown, now: Date,
   const visible = await prisma.buddyRequest.findFirst({ where: { fromUserId: fromId, toUserId: target.id, ...senderPendingWhere(now) }, select: { id: true } });
   if (visible) return;
 
-  // Crossed: the target already asked me (a hidden request never counts; nor does one across a block).
-  if ((await visibleCrossed(target.id, fromId, now)) && !target.blocksMe && (await pairCrossed(fromId, target.id, now, deps))) return;
+  // Crossed: the target already asked me and still sees it as pending (declined or hidden included).
+  // Never across a block: the lookup's flag here, and a re-check inside the pairing transaction.
+  if ((await crossedAsk(target.id, fromId, now)) && !target.blocksMe && (await pairCrossed(fromId, target.id, now, deps))) return;
 
   await limitOrThrow(RATE_LIMITS.buddyRequest, fromId);
   const pending = await prisma.buddyRequest.count({ where: { fromUserId: fromId, ...senderPendingWhere(now) } });
@@ -122,7 +133,7 @@ export async function sendRequest(fromId: string, rawHandle: unknown, now: Date,
   const hidden = target.blocksMe || target.declinedMe;
   let row: { id: string };
   try {
-    row = await prisma.buddyRequest.create({ data: { fromUserId: fromId, toUserId: target.id, hidden, createdAt: now }, select: { id: true } });
+    row = await prisma.buddyRequest.create({ data: { fromUserId: fromId, toUserId: target.id, hidden, createdAt: now, toHandleAtSend: check.handle }, select: { id: true } });
   } catch (err) {
     // The partial unique index: a concurrent identical send already stored the PENDING row.
     if (isUniqueViolation(err)) return;
@@ -134,7 +145,7 @@ export async function sendRequest(fromId: string, rawHandle: unknown, now: Date,
   // Re-checked after our row is committed: of two simultaneous crossed sends, the later check
   // always sees the other's row, so exactly one pair comes out. The query runs either way; across a
   // block it never pairs.
-  if ((await visibleCrossed(target.id, fromId, now)) && !target.blocksMe && (await pairCrossed(fromId, target.id, now, deps))) return;
+  if ((await crossedAsk(target.id, fromId, now)) && !target.blocksMe && (await pairCrossed(fromId, target.id, now, deps))) return;
   // One job per send, hidden or not. The job drops a hidden request, and writes the REQUEST
   // Activity row and sends the push for a visible one. Never awaited past its bound.
   await enqueueBuddyNotice({ kind: 'buddy_request', recipientId: target.id, actorId: fromId, refId: row.id, slots: {} }, deps.notifyQueue ? { queue: deps.notifyQueue } : {});
@@ -152,14 +163,14 @@ export async function listRequests(userId: string, now: Date): Promise<{ incomin
   await expireStaleRequests(userId, now);
   const [incoming, outgoing] = await Promise.all([
     prisma.buddyRequest.findMany({
-      where: { toUserId: userId, ...recipientVisibleWhere(now) },
+      where: incomingWhere(userId, now),
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       select: { id: true, createdAt: true, fromUser: { select: PERSON_SELECT } },
     }),
     prisma.buddyRequest.findMany({
       where: { fromUserId: userId, ...senderPendingWhere(now) },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
-      select: { id: true, createdAt: true, toUser: { select: { handle: true } } },
+      select: { id: true, createdAt: true, toHandleAtSend: true },
     }),
   ]);
   if (incoming.length > 0) {
@@ -170,13 +181,13 @@ export async function listRequests(userId: string, now: Date): Promise<{ incomin
   }
   return {
     incoming: incoming.map((r) => ({ id: r.id, createdAt: r.createdAt.toISOString(), from: toPerson(r.fromUser) })),
-    outgoing: outgoing.map((r) => ({ id: r.id, createdAt: r.createdAt.toISOString(), toHandle: r.toUser.handle ?? '' })),
+    outgoing: outgoing.map((r) => ({ id: r.id, createdAt: r.createdAt.toISOString(), toHandle: r.toHandleAtSend ?? '' })),
   };
 }
 
 export async function countRequests(userId: string, now: Date): Promise<{ incoming: number; outgoing: number }> {
   const [incoming, outgoing] = await Promise.all([
-    prisma.buddyRequest.count({ where: { toUserId: userId, ...recipientVisibleWhere(now) } }),
+    prisma.buddyRequest.count({ where: incomingWhere(userId, now) }),
     prisma.buddyRequest.count({ where: { fromUserId: userId, ...senderPendingWhere(now) } }),
   ]);
   return { incoming, outgoing };

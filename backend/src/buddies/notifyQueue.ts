@@ -1,8 +1,8 @@
 // Buddy pushes never run inside a request (buddies spec §6). A route enqueues ONE 'buddyNotify'
 // job per would-be notification event — whatever the recipient's mute, settings or quiet hours,
 // and whether or not the request is hidden or swallowed — so the route's work and response time
-// never depend on them. The JOB decides: a buddy_request whose row is hidden or no longer PENDING
-// is dropped (only a visible request gets its REQUEST Activity row, written here); any other kind
+// never depend on them. The JOB decides: a buddy_request whose row is hidden or no longer PENDING,
+// or whose recipient has blocked the sender, is dropped (only a visible request gets its REQUEST Activity row, written here); any other kind
 // is dropped unless the pair is still live and neither side has blocked the other; the rest
 // goes through sendBuddyNotice (setting, mute, quiet hours, devices). The enqueue is bounded by
 // withTimeout: on a timeout or error it logs the event, ids and error class, and the caller carries on.
@@ -57,7 +57,15 @@ export type NotifyJobOutcome = NoticeOutcome | 'dropped';
 export async function runBuddyNotifyJob(data: BuddyNotice, deps: { pushSender: PushSender; now: Date }): Promise<NotifyJobOutcome> {
   if (data.kind === 'buddy_request') {
     const row = await prisma.buddyRequest.findFirst({
-      where: { id: data.refId, fromUserId: data.actorId, toUserId: data.recipientId, status: 'PENDING', hidden: false },
+      where: {
+        id: data.refId,
+        fromUserId: data.actorId,
+        toUserId: data.recipientId,
+        status: 'PENDING',
+        hidden: false,
+        // A block made while the send was in flight: the row may still be visible, but the blocker gets nothing.
+        fromUser: { blocksReceived: { none: { blockerId: data.recipientId } } },
+      },
       select: { id: true, createdAt: true },
     });
     // Swallowed, sent to someone who blocked the sender, or already answered: nothing, silently.
