@@ -9,6 +9,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { SettingsGroup, SettingsRow } from '../components/ui/settings-list';
 import { useOptionalAuth } from '../auth/AuthContext';
 import { AccountSection } from '../components/account-section';
+import { BadgesCard } from '../components/achievements/BadgesCard';
 import { CoachSettingsSection } from '../components/coach-settings-section';
 import { DeleteAccountSection } from '../components/delete-account-section';
 import { NotificationsSection } from '../components/notifications-section';
@@ -153,6 +154,12 @@ export function SettingsScreen() {
           <Text className="font-display text-display">Profile</Text>
           {email ? <Text className="text-sm text-muted-foreground">{email}</Text> : null}
         </View>
+
+        {/* Badges (spec 2026-10-06 §6): between the header and Health data; hidden on a 404. */}
+        <BadgesCard
+          onSeeAll={() => navigation?.navigate('Badges' as never)}
+          onOpen={(family) => (navigation as { navigate: (name: string, params: object) => void } | undefined)?.navigate('BadgeDetail', { family })}
+        />
 
         {/* Connecting is a task reachable from a tab, not a gate in front of the
             app: signing in lands on the dashboard whatever the status is. */}
