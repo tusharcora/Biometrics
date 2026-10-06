@@ -33,6 +33,7 @@ import { RecapsScreen } from '../screens/RecapsScreen';
 import { YearInPixelsScreen } from '../screens/YearInPixelsScreen';
 import { BadgesScreen } from '../screens/BadgesScreen';
 import { BadgeDetailScreen } from '../screens/BadgeDetailScreen';
+import { BuddyIdentityScreen } from '../screens/BuddyIdentityScreen';
 import { CelebrationHost } from '../components/achievements/CelebrationHost';
 import { BuddiesStoreScope } from '../components/buddies/BuddiesStoreScope';
 import type { ShareFormat } from '../lib/recapShare';
@@ -105,6 +106,16 @@ export type RootStackParamList = {
   Badges: undefined;
   // One badge: the big badge, current and best, the ladder of five levels.
   BadgeDetail: { family: AchievementFamily };
+  // Buddies (spec 2026-10-06 buddies §7). `tab` lets a request push open the requests tab.
+  Buddies: { tab?: 'buddies' | 'requests' | 'activity' } | undefined;
+  // Your code, enter a code, or ask by @handle; first-time handle setup if missing.
+  PairUp: undefined;
+  // One buddy's mood week, shared numbers and stickers; opened from the list and by buddy pushes.
+  BuddyWeek: { buddyId: string };
+  // Profile → Buddies: change your handle or display name.
+  BuddyIdentity: undefined;
+  // Profile → Buddies → Blocked people (unblock).
+  BlockedPeople: undefined;
 };
 
 export type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';
@@ -220,6 +231,7 @@ export function RootNavigator() {
               <Stack.Screen name="YearInPixels" component={YearInPixelsScreen} options={{ title: 'Year in pixels' }} />
               <Stack.Screen name="Badges" component={BadgesScreen} options={{ title: 'Badges' }} />
               <Stack.Screen name="BadgeDetail" component={BadgeDetailScreen} options={{ title: '' }} />
+              <Stack.Screen name="BuddyIdentity" component={BuddyIdentityScreen} options={{ title: 'Buddy name' }} />
               <Stack.Screen name="RecapBuilder" component={RecapBuilderScreen} options={{ title: 'Build your recap' }} />
               <Stack.Screen
                 name="MeetYourCoach"
