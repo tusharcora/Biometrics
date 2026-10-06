@@ -18,8 +18,8 @@
 - **Tier colours (verbatim):** Bronze `#D08A4E`, Silver `#CBD5E1`, Gold `#FACC15`, Diamond `#67E8F9`, Coach = the user's coach accent (`characterInfo(id).accent`). Locked ring `#3F3F46`.
 - **Awarding:** from the best value (every run since the family's start date); a level needs a single run of its length; `earnedOn` = the date that run first reached the threshold (monthly: the month's last day); `weekStart` = Monday of `earnedOn`; `monthStart` = 1st of its month. Levels are never revoked or updated. `@@unique([userId, family, level])` decides between concurrent evaluations.
 - **Start dates:** `User.achievementsSince` is written only where it is null (the launch job for existing users, the first `GET /me/achievements` for new users), as the user's local date then. Never changed once set. The starting `GoalChange` rows are written at the same moment with `createMany({ skipDuplicates: true })`, so an existing same-day row is never violated or overwritten.
-- **Goal history:** `GoalChange` is written by `updateSleepGoal` (`backend/src/users/goals.ts`) and by the starting-goal writer, nowhere else. A change applies to nights whose wake date is **after** its `effectiveOn`. `resetsStreak` compares with the goal in effect **before that day**. Only the last change of a day is kept.
-- **Check-ins:** `HabitCheckIn.onTime` is set once, when the row is written, to `habitDay === habitDayFor(now, user.timezone)`. Never recomputed, except the launch job's single false→true pass for check-ins whose `habitDay` is the launch habit day and whose `createdAt` falls inside that same habit day.
+- **Goal history:** `GoalChange` is written by `updateSleepGoal` (`backend/src/users/goals.ts`) — in ONE transaction with the goal update, the usual bedtime read before that transaction starts — and by the starting-goal writer, nowhere else. A change applies to nights whose wake date is **after** its `effectiveOn`. `resetsStreak` compares with the goal in effect **before that day**. Only the last change of a day is kept.
+- **Check-ins:** `HabitCheckIn.onTime` is set once, when the row is written, to `habitDay === habitDayFor(now, user.timezone)`. Never recomputed, except the launch job's single false→true pass, for every user, over check-ins saved before the deploy whose `habitDay` is the launch habit day and whose `createdAt` falls inside that same habit day. The launch instant is the achievements migration's `finished_at`, so a rerun computes the same launch day and changes nothing.
 - **Evaluation trigger:** on load only (`GET /me/achievements`), at most once per user per 10 minutes (Redis key `achievements:evaluated:<userId>`, TTL 600 s). `POST /me/habits/check-ins` and `updateSleepGoal` delete it. No queue triggers.
 - **No push notifications** for badges, ever. AI text never mentions badges; the recap fact sheet stops emitting the streak-milestone note.
 - **Logging:** event names with ids, family and level only — **never health values** (no minutes, steps, bedtimes, scores). Events: `console.info(JSON.stringify({ event, ... }))`. Failures: `console.error(JSON.stringify({ event, userId?, error: <Error class name> }))`. No bare `console.log` in new code.
@@ -27,7 +27,7 @@
 - **Commits:** plain messages, **no `Co-Authored-By` trailer and no mention of Claude or AI** in commits or PR text.
 - **Old backend:** a 404 from `GET /me/achievements` hides every badge UI; the month recap's tiles stay exactly as before (four tiles, no progress).
 - **Commands.** Node 24 lives at `/Users/tushar/.nvm/versions/node/v24.21.0/bin`; below, `N24` means `/Users/tushar/.nvm/versions/node/v24.21.0/bin/node`. `npx` resolves an older Node — do not use it.
-  - **Backend tests — ONLY this way:** `bash /Users/tushar/.claude/jobs/1d3d19da/tmp/achievements-backend-jest.sh <paths>` (test database + Redis db 1; the script exists — do not create or edit it). Paths are relative to `backend/`. With no paths it runs the whole suite.
+  - **Backend tests — ONLY this way:** `bash /Users/tushar/Documents/PROJECTS/Biometrics/.claude/worktrees/achievements/.superpowers/sdd/2026-10-06-achievements/backend-jest.sh <paths>` (test database + Redis db 1; the script exists — do not create or edit it). Paths are relative to `backend/`. With no paths it runs the whole suite.
   - **Mobile tests:** from `mobile/`: `N24 node_modules/.bin/jest <paths>`.
   - **Backend typecheck:** from `backend/`: `N24 node_modules/.bin/tsc --noEmit` — must be clean.
   - **Mobile typecheck:** from `mobile/`: `N24 node_modules/.bin/tsc --noEmit --types jest,node` — exactly the 12 known baseline errors, all in files this plan does not touch; no new ones.
@@ -39,7 +39,7 @@
 ## Review Focus
 
 1. **Users far from UTC (Pacific/Auckland, +13).** "Today" is the user's local date: at 2026-10-10T12:00Z it is already Oct 11 in Auckland, so Oct 10's steps are a finished day and count, while for a UTC user Oct 10 is still today and does not. A goal saved then is dated Oct 11, and a first badge load sets the start date to Oct 11. Pinned in Task 5 (GoalChange date), Task 7 (steps), Task 8 (first-load start date).
-2. **The 4 am habit day.** A check-in at 01:00 local belongs to the previous calendar date's habit day and is on time; a launch job running at 02:00 treats the evening before as launch day and flips only check-ins created inside that habit day. Pinned in Task 6 and Task 9.
+2. **The 4 am habit day.** A check-in at 01:00 local belongs to the previous calendar date's habit day and is on time; a launch at 02:00 treats the evening before as launch day and flips only check-ins saved before the launch inside that habit day, for every user (a user whose first badge load beat the job included). Pinned in Task 6 and Task 9.
 3. **A goal changed the same day.** Lowering then restoring the sleep goal on one day is no reset; a change made in the evening never re-judges the night that ended that morning; a change on the day a starting row was written still compares with the starting goal. Pinned in Task 3 (pure) and Task 5 (database).
 4. **A catch-up sync delivering a finished streak.** Seven on-goal nights followed by a short night arrive in one sync: levels I and II are both stored, dated the 3rd and the 7th night, `current` is 0 and `best` 7, and a second evaluation adds nothing. Pinned in Task 4 (pure) and Task 7 (database).
 5. **The new app against a backend without badges (404).** The Profile card, Badges screens and celebration stay hidden; the month recap keeps its four original tiles with no badge progress. Pinned in Task 12 (client and store), Task 14 (Profile) and Task 18 (month recap).
@@ -59,7 +59,7 @@
 - Create `backend/src/achievements/data.ts` — `loadAchievementInputs` (database reads).
 - Create `backend/src/achievements/evaluate.ts` — `evaluateAchievements`.
 - Create `backend/src/achievements/start.ts` — `writeStartingGoals`, `claimStartDate`, `ensureAchievementsStart`.
-- Create `backend/src/achievements/launch.ts` — `backfillLaunchDayOnTime`, `runAchievementsLaunchOnce`, `startAchievements`.
+- Create `backend/src/achievements/launch.ts` — `launchInstant`, `backfillLaunchDayOnTime`, `runAchievementsLaunchOnce`, `startAchievements`.
 - Create `backend/src/achievements/dto.ts`, `backend/src/achievements/routes.ts` — the two endpoints.
 - Create `backend/scripts/seedAchievements.ts` — dev-only sample levels.
 - Modify `backend/prisma/schema.prisma`, `backend/src/users/deletion.ts`, `backend/src/users/goals.ts`, `backend/src/habits/habitDay.ts`, `backend/src/habits/routes.ts`, `backend/src/coach/answer/facts.ts`, `backend/src/app.ts`, `backend/src/server.ts`, `backend/tests/users/ownedData.ts`.
@@ -162,7 +162,7 @@ it('coach-data deletion leaves achievements, goal changes and check-in flags alo
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `bash /Users/tushar/.claude/jobs/1d3d19da/tmp/achievements-backend-jest.sh tests/db/achievements.test.ts`
+Run: `bash /Users/tushar/Documents/PROJECTS/Biometrics/.claude/worktrees/achievements/.superpowers/sdd/2026-10-06-achievements/backend-jest.sh tests/db/achievements.test.ts`
 Expected: FAIL — TypeScript errors such as "Property 'achievement' does not exist on type 'PrismaClient'".
 
 - [ ] **Step 3: Edit the schema.** In `backend/prisma/schema.prisma`:
@@ -329,7 +329,7 @@ In `backend/tests/users/ownedData.ts`, inside `seedAllOwnedRows`, right after th
 
 - [ ] **Step 6: Run the tests and check the migration matches the schema**
 
-Run: `bash /Users/tushar/.claude/jobs/1d3d19da/tmp/achievements-backend-jest.sh tests/db/achievements.test.ts tests/users/deletion.test.ts`
+Run: `bash /Users/tushar/Documents/PROJECTS/Biometrics/.claude/worktrees/achievements/.superpowers/sdd/2026-10-06-achievements/backend-jest.sh tests/db/achievements.test.ts tests/users/deletion.test.ts`
 Expected: PASS. The coverage guard in `deletion.test.ts` passes only because both models are listed, and `deleteUserAccount` reports `Achievement: 1` and `GoalChange: 1`.
 
 Then, from `backend/` (the jest run above already applied the migration to the test database):
@@ -488,7 +488,7 @@ describe('earnedLevels', () => {
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `bash /Users/tushar/.claude/jobs/1d3d19da/tmp/achievements-backend-jest.sh tests/achievements/runs.test.ts`
+Run: `bash /Users/tushar/Documents/PROJECTS/Biometrics/.claude/worktrees/achievements/.superpowers/sdd/2026-10-06-achievements/backend-jest.sh tests/achievements/runs.test.ts`
 Expected: FAIL — "Cannot find module '../../src/achievements/catalogue'".
 
 - [ ] **Step 3: Write `backend/src/achievements/catalogue.ts`**
@@ -613,7 +613,7 @@ export function earnedLevels(runs: readonly Run[], thresholds: readonly number[]
 
 - [ ] **Step 5: Run the test to verify it passes**
 
-Run: `bash /Users/tushar/.claude/jobs/1d3d19da/tmp/achievements-backend-jest.sh tests/achievements/runs.test.ts`
+Run: `bash /Users/tushar/Documents/PROJECTS/Biometrics/.claude/worktrees/achievements/.superpowers/sdd/2026-10-06-achievements/backend-jest.sh tests/achievements/runs.test.ts`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -750,7 +750,7 @@ describe('resetsStreak', () => {
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `bash /Users/tushar/.claude/jobs/1d3d19da/tmp/achievements-backend-jest.sh tests/achievements/goalHistory.test.ts`
+Run: `bash /Users/tushar/Documents/PROJECTS/Biometrics/.claude/worktrees/achievements/.superpowers/sdd/2026-10-06-achievements/backend-jest.sh tests/achievements/goalHistory.test.ts`
 Expected: FAIL — "Cannot find module '../../src/achievements/goalHistory'".
 
 - [ ] **Step 3: Write `backend/src/achievements/goalHistory.ts`**
@@ -847,7 +847,7 @@ export function bedtimeGoalResets(previous: string | null, next: string | null, 
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `bash /Users/tushar/.claude/jobs/1d3d19da/tmp/achievements-backend-jest.sh tests/achievements/goalHistory.test.ts`
+Run: `bash /Users/tushar/Documents/PROJECTS/Biometrics/.claude/worktrees/achievements/.superpowers/sdd/2026-10-06-achievements/backend-jest.sh tests/achievements/goalHistory.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -1041,7 +1041,7 @@ describe('familyResults', () => {
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `bash /Users/tushar/.claude/jobs/1d3d19da/tmp/achievements-backend-jest.sh tests/achievements/families.test.ts`
+Run: `bash /Users/tushar/Documents/PROJECTS/Biometrics/.claude/worktrees/achievements/.superpowers/sdd/2026-10-06-achievements/backend-jest.sh tests/achievements/families.test.ts`
 Expected: FAIL — "Cannot find module '../../src/achievements/families'".
 
 - [ ] **Step 3: Write `backend/src/achievements/families.ts`**
@@ -1165,7 +1165,7 @@ export function familyResults(inp: StreakInputs, months: readonly MonthRecap[], 
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `bash /Users/tushar/.claude/jobs/1d3d19da/tmp/achievements-backend-jest.sh tests/achievements/families.test.ts`
+Run: `bash /Users/tushar/Documents/PROJECTS/Biometrics/.claude/worktrees/achievements/.superpowers/sdd/2026-10-06-achievements/backend-jest.sh tests/achievements/families.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -1199,8 +1199,10 @@ export function clearAchievementsMarker(userId: string): Promise<void>;
 export const USUAL_BEDTIME_LOOKBACK_DAYS = 60;
 export interface GoalsBefore { sleepGoalMinutes: number; bedtimeGoal: string | null; timezone: string }
 export interface GoalPatch { sleepGoalMinutes?: number; bedtimeGoal?: string | null }
+export interface GoalChangeContext { today: string; usualBedtime: number | null }
 export function usualBedtime(userId: string, timeZone: string, date: string): Promise<number | null>;
-export function recordGoalChanges(userId: string, before: GoalsBefore, patch: GoalPatch, now: Date): Promise<void>;
+export function needsUsualBedtime(before: GoalsBefore, patch: GoalPatch): boolean;
+export function recordGoalChanges(tx: Prisma.TransactionClient, userId: string, before: GoalsBefore, patch: GoalPatch, ctx: GoalChangeContext): Promise<void>;
 // users/goals.ts (changed signature; the existing call site passes two arguments and keeps working)
 export function updateSleepGoal(userId: string, patch: SleepGoalPatch, now?: Date): Promise<SleepGoal | null>;
 ```
@@ -1212,6 +1214,7 @@ import { prisma } from '../../src/db/client';
 import { civilDateToUtcMidnight } from '../../src/biometrics/civilDate';
 import { connection } from '../../src/sync/queue';
 import { EVALUATION_TTL_SECONDS, clearAchievementsMarker, markEvaluated, markerKey, readEvaluated } from '../../src/achievements/marker';
+import * as goalChanges from '../../src/achievements/goalChanges';
 import { updateSleepGoal } from '../../src/users/goals';
 import { migrateTestDb } from '../setupTestDb';
 import { createUser } from '../scoring/dbHelpers';
@@ -1339,12 +1342,45 @@ describe('updateSleepGoal writes the goal history', () => {
   it('returns null and writes nothing for an unknown user', async () => {
     expect(await updateSleepGoal('00000000-0000-4000-8000-000000000000', { sleepGoalMinutes: 450 }, NOW)).toBeNull();
   });
+
+  it('saves the goal and its history in one transaction: a failed GoalChange write saves neither', async () => {
+    const user = await createUser();
+    await markEvaluated(user.id, []);
+    const spy = jest.spyOn(goalChanges, 'recordGoalChanges').mockImplementationOnce(async (tx, userId) => {
+      // Part of the history is written, then the write fails: everything must roll back.
+      await tx.goalChange.create({ data: { userId, kind: 'SLEEP_MINUTES', sleepMinutes: 450, effectiveOn: day('2026-10-06'), resetsStreak: true } });
+      throw new Error('goal change write failed');
+    });
+    try {
+      await expect(updateSleepGoal(user.id, { sleepGoalMinutes: 450 }, NOW)).rejects.toThrow('goal change write failed');
+    } finally {
+      spy.mockRestore();
+    }
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).sleepGoalMinutes).toBe(480);
+    expect(await prisma.goalChange.count({ where: { userId: user.id } })).toBe(0);
+    // Nothing was saved, so the evaluation marker is left as it was.
+    expect(await readEvaluated(user.id)).toEqual([]);
+  });
+
+  it('reads the usual bedtime before the transaction starts', async () => {
+    const user = await createUser();
+    const usual = jest.spyOn(goalChanges, 'usualBedtime');
+    const transaction = jest.spyOn(prisma, '$transaction');
+    try {
+      await updateSleepGoal(user.id, { bedtimeGoal: '23:00' }, NOW);
+      expect(usual).toHaveBeenCalledTimes(1);
+      expect(usual.mock.invocationCallOrder[0]!).toBeLessThan(transaction.mock.invocationCallOrder[0]!);
+    } finally {
+      usual.mockRestore();
+      transaction.mockRestore();
+    }
+  });
 });
 ```
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `bash /Users/tushar/.claude/jobs/1d3d19da/tmp/achievements-backend-jest.sh tests/achievements/goalChanges.test.ts`
+Run: `bash /Users/tushar/Documents/PROJECTS/Biometrics/.claude/worktrees/achievements/.superpowers/sdd/2026-10-06-achievements/backend-jest.sh tests/achievements/goalChanges.test.ts`
 Expected: FAIL — "Cannot find module '../../src/achievements/marker'".
 
 - [ ] **Step 3: Write `backend/src/achievements/marker.ts`**
@@ -1397,16 +1433,17 @@ export async function clearAchievementsMarker(userId: string): Promise<void> {
 - [ ] **Step 4: Write `backend/src/achievements/goalChanges.ts`**
 
 ```ts
-// Goal history writer (spec 2026-10-06 §3). Called by updateSleepGoal and nowhere else. One row
-// per (user, kind, local day): a second change the same day overwrites that day's row.
-// resetsStreak compares the new value with the goal in effect BEFORE that day, so lowering and
-// restoring on the same day is no reset. When no row before today exists, the goal that was in
-// effect (the same-day starting row, else the stored value) is written first, dated the day
-// before, so a later change today still has that day-before goal to compare with.
+// Goal history writer (spec 2026-10-06 §3). Called by updateSleepGoal and nowhere else, inside the
+// same transaction as the goal update, so a goal is never saved without its history (or the other
+// way round). One row per (user, kind, local day): a second change the same day overwrites that
+// day's row. resetsStreak compares the new value with the goal in effect BEFORE that day, so
+// lowering and restoring on the same day is no reset. When no row before today exists, the goal
+// that was in effect (the same-day starting row, else the stored value) is written first, dated
+// the day before, so a later change today still has that day-before goal to compare with.
+// The usual bedtime is a read of up to 60 nights; the caller does it BEFORE the transaction.
 
-import type { GoalChangeKind } from '@prisma/client';
-import { civilDateToUtcMidnight, localCivilDateOrUtc } from '../biometrics/civilDate';
-import { prisma } from '../db/client';
+import type { GoalChangeKind, Prisma } from '@prisma/client';
+import { civilDateToUtcMidnight } from '../biometrics/civilDate';
 import { loadRecapData } from '../recap/data';
 import { shiftDate } from '../scoring/dates';
 import { bedtimeGoalResets, bedtimeSeries, sleepGoalResets, usualBedtimeBefore } from './goalHistory';
@@ -1415,6 +1452,8 @@ export const USUAL_BEDTIME_LOOKBACK_DAYS = 60;
 
 export interface GoalsBefore { sleepGoalMinutes: number; bedtimeGoal: string | null; timezone: string }
 export interface GoalPatch { sleepGoalMinutes?: number; bedtimeGoal?: string | null }
+/** Read before the transaction: the user's local date now and, when needed, their usual bedtime. */
+export interface GoalChangeContext { today: string; usualBedtime: number | null }
 
 interface KindValue { sleepMinutes: number | null; bedtime: string | null }
 
@@ -1424,42 +1463,53 @@ export async function usualBedtime(userId: string, timeZone: string, date: strin
   return usualBedtimeBefore(bedtimeSeries(data), date);
 }
 
+/** A bedtime goal is being set (not cleared) to a new value: the usual bedtime may decide resetsStreak. */
+export function needsUsualBedtime(before: GoalsBefore, patch: GoalPatch): boolean {
+  return patch.bedtimeGoal !== undefined && patch.bedtimeGoal !== null && patch.bedtimeGoal !== before.bedtimeGoal;
+}
+
 async function writeChange(
+  tx: Prisma.TransactionClient,
   userId: string,
   kind: GoalChangeKind,
   today: string,
   stored: KindValue,
   next: KindValue,
-  resets: (previous: KindValue) => boolean | Promise<boolean>,
+  resets: (previous: KindValue) => boolean,
 ): Promise<void> {
   const day = civilDateToUtcMidnight(today);
-  const earlier = await prisma.goalChange.findFirst({ where: { userId, kind, effectiveOn: { lt: day } }, orderBy: { effectiveOn: 'desc' } });
+  const earlier = await tx.goalChange.findFirst({ where: { userId, kind, effectiveOn: { lt: day } }, orderBy: { effectiveOn: 'desc' } });
   let previous: KindValue;
   if (earlier) {
     previous = { sleepMinutes: earlier.sleepMinutes, bedtime: earlier.bedtime };
   } else {
-    const sameDay = await prisma.goalChange.findUnique({ where: { userId_kind_effectiveOn: { userId, kind, effectiveOn: day } } });
+    const sameDay = await tx.goalChange.findUnique({ where: { userId_kind_effectiveOn: { userId, kind, effectiveOn: day } } });
     previous = sameDay ? { sleepMinutes: sameDay.sleepMinutes, bedtime: sameDay.bedtime } : stored;
-    await prisma.goalChange.createMany({
+    await tx.goalChange.createMany({
       data: [{ userId, kind, ...previous, effectiveOn: civilDateToUtcMidnight(shiftDate(today, -1)), resetsStreak: false }],
       skipDuplicates: true,
     });
   }
-  const resetsStreak = await resets(previous);
-  await prisma.goalChange.upsert({
+  const resetsStreak = resets(previous);
+  await tx.goalChange.upsert({
     where: { userId_kind_effectiveOn: { userId, kind, effectiveOn: day } },
     create: { userId, kind, ...next, effectiveOn: day, resetsStreak },
     update: { ...next, resetsStreak },
   });
 }
 
-/** Writes a row for each goal in `patch` whose value differs from `before`; the wake goal is not tracked. */
-export async function recordGoalChanges(userId: string, before: GoalsBefore, patch: GoalPatch, now: Date): Promise<void> {
-  const today = localCivilDateOrUtc(now, before.timezone);
+/** Writes, with `tx`, a row for each goal in `patch` whose value differs from `before`; the wake goal is not tracked. */
+export async function recordGoalChanges(
+  tx: Prisma.TransactionClient,
+  userId: string,
+  before: GoalsBefore,
+  patch: GoalPatch,
+  ctx: GoalChangeContext,
+): Promise<void> {
   const minutes = patch.sleepGoalMinutes;
   if (minutes !== undefined && minutes !== before.sleepGoalMinutes) {
     await writeChange(
-      userId, 'SLEEP_MINUTES', today,
+      tx, userId, 'SLEEP_MINUTES', ctx.today,
       { sleepMinutes: before.sleepGoalMinutes, bedtime: null },
       { sleepMinutes: minutes, bedtime: null },
       (previous) => sleepGoalResets(previous.sleepMinutes ?? before.sleepGoalMinutes, minutes),
@@ -1468,13 +1518,10 @@ export async function recordGoalChanges(userId: string, before: GoalsBefore, pat
   const bedtime = patch.bedtimeGoal;
   if (bedtime !== undefined && bedtime !== before.bedtimeGoal) {
     await writeChange(
-      userId, 'BEDTIME', today,
+      tx, userId, 'BEDTIME', ctx.today,
       { sleepMinutes: null, bedtime: before.bedtimeGoal },
       { sleepMinutes: null, bedtime },
-      async (previous) => {
-        const usual = previous.bedtime === null && bedtime !== null ? await usualBedtime(userId, before.timezone, today) : null;
-        return bedtimeGoalResets(previous.bedtime, bedtime, usual);
-      },
+      (previous) => bedtimeGoalResets(previous.bedtime, bedtime, previous.bedtime === null ? ctx.usualBedtime : null),
     );
   }
 }
@@ -1483,7 +1530,8 @@ export async function recordGoalChanges(userId: string, before: GoalsBefore, pat
 - [ ] **Step 5: Change `updateSleepGoal`** in `backend/src/users/goals.ts`. Add at the top, after the existing `prisma` import:
 
 ```ts
-import { recordGoalChanges } from '../achievements/goalChanges';
+import { localCivilDateOrUtc } from '../biometrics/civilDate';
+import { needsUsualBedtime, recordGoalChanges, usualBedtime } from '../achievements/goalChanges';
 import { clearAchievementsMarker } from '../achievements/marker';
 ```
 
@@ -1492,15 +1540,24 @@ Replace the whole `updateSleepGoal` function with:
 ```ts
 /**
  * Saves a patch from parseSleepGoalPatch and returns the saved goal; null when the user does not
- * exist. Also the single writer of GoalChange (achievements spec 2026-10-06 §3), and it clears the
- * badge evaluation marker so the next badge load re-evaluates.
+ * exist. Also the single writer of GoalChange (achievements spec 2026-10-06 §3): the goal update and
+ * its history are written in ONE transaction, so a failure saves neither. The usual bedtime (a read
+ * of up to 60 nights) is computed before the transaction starts, keeping the transaction short.
+ * A saved goal clears the badge evaluation marker so the next badge load re-evaluates.
  */
 export async function updateSleepGoal(userId: string, patch: SleepGoalPatch, now: Date = new Date()): Promise<SleepGoal | null> {
-  const before = await prisma.user.findUnique({ where: { id: userId }, select: { sleepGoalMinutes: true, bedtimeGoal: true, timezone: true } });
-  if (!before) return null;
-  const result = await prisma.user.updateMany({ where: { id: userId }, data: patch });
-  if (result.count === 0) return null;
-  await recordGoalChanges(userId, { ...before, sleepGoalMinutes: resolveSleepGoalMinutes(before.sleepGoalMinutes) }, patch, now);
+  const found = await prisma.user.findUnique({ where: { id: userId }, select: { sleepGoalMinutes: true, bedtimeGoal: true, timezone: true } });
+  if (!found) return null;
+  const before = { ...found, sleepGoalMinutes: resolveSleepGoalMinutes(found.sleepGoalMinutes) };
+  const today = localCivilDateOrUtc(now, before.timezone);
+  const usual = needsUsualBedtime(before, patch) ? await usualBedtime(userId, before.timezone, today) : null;
+  const saved = await prisma.$transaction(async (tx) => {
+    const result = await tx.user.updateMany({ where: { id: userId }, data: patch });
+    if (result.count === 0) return false;
+    await recordGoalChanges(tx, userId, before, patch, { today, usualBedtime: usual });
+    return true;
+  });
+  if (!saved) return null;
   await clearAchievementsMarker(userId);
   return getSleepGoal(userId);
 }
@@ -1508,7 +1565,7 @@ export async function updateSleepGoal(userId: string, patch: SleepGoalPatch, now
 
 - [ ] **Step 6: Run the tests to verify they pass**
 
-Run: `bash /Users/tushar/.claude/jobs/1d3d19da/tmp/achievements-backend-jest.sh tests/achievements/goalChanges.test.ts tests/users/sleepGoal.test.ts tests/users/goals.test.ts`
+Run: `bash /Users/tushar/Documents/PROJECTS/Biometrics/.claude/worktrees/achievements/.superpowers/sdd/2026-10-06-achievements/backend-jest.sh tests/achievements/goalChanges.test.ts tests/users/sleepGoal.test.ts tests/users/goals.test.ts`
 Expected: PASS (the existing `PUT /me/sleep/goal` tests are unchanged and still pass).
 
 - [ ] **Step 7: Commit**
@@ -1612,7 +1669,7 @@ describe('POST /me/habits/check-ins: on time', () => {
 
 - [ ] **Step 2: Run them to verify they fail**
 
-Run: `bash /Users/tushar/.claude/jobs/1d3d19da/tmp/achievements-backend-jest.sh tests/habits/habitDay.test.ts tests/habits/routes.test.ts`
+Run: `bash /Users/tushar/Documents/PROJECTS/Biometrics/.claude/worktrees/achievements/.superpowers/sdd/2026-10-06-achievements/backend-jest.sh tests/habits/habitDay.test.ts tests/habits/routes.test.ts`
 Expected: FAIL — `habitDayForOrUtc` is not exported; `onTime` is `false` for today's check-in; the marker is still there.
 
 - [ ] **Step 3: Add `habitDayForOrUtc`** to the end of `backend/src/habits/habitDay.ts`:
@@ -1666,7 +1723,7 @@ with:
 
 - [ ] **Step 5: Run the tests to verify they pass**
 
-Run: `bash /Users/tushar/.claude/jobs/1d3d19da/tmp/achievements-backend-jest.sh tests/habits/habitDay.test.ts tests/habits/routes.test.ts`
+Run: `bash /Users/tushar/Documents/PROJECTS/Biometrics/.claude/worktrees/achievements/.superpowers/sdd/2026-10-06-achievements/backend-jest.sh tests/habits/habitDay.test.ts tests/habits/routes.test.ts`
 Expected: PASS, including every existing check-in test.
 
 - [ ] **Step 6: Commit**
@@ -1864,7 +1921,7 @@ it('logs each new level once, with ids, family and level only', async () => {
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `bash /Users/tushar/.claude/jobs/1d3d19da/tmp/achievements-backend-jest.sh tests/achievements/evaluate.test.ts`
+Run: `bash /Users/tushar/Documents/PROJECTS/Biometrics/.claude/worktrees/achievements/.superpowers/sdd/2026-10-06-achievements/backend-jest.sh tests/achievements/evaluate.test.ts`
 Expected: FAIL — "Cannot find module '../../src/achievements/evaluate'".
 
 - [ ] **Step 3: Write `backend/src/achievements/data.ts`**
@@ -1986,7 +2043,7 @@ export async function evaluateAchievements(
 
 - [ ] **Step 5: Run the test to verify it passes**
 
-Run: `bash /Users/tushar/.claude/jobs/1d3d19da/tmp/achievements-backend-jest.sh tests/achievements/evaluate.test.ts`
+Run: `bash /Users/tushar/Documents/PROJECTS/Biometrics/.claude/worktrees/achievements/.superpowers/sdd/2026-10-06-achievements/backend-jest.sh tests/achievements/evaluate.test.ts`
 Expected: PASS.
 
 - [ ] **Step 6: Commit**
@@ -2092,7 +2149,7 @@ it('writeStartingGoals keeps a row already written for that day', async () => {
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `bash /Users/tushar/.claude/jobs/1d3d19da/tmp/achievements-backend-jest.sh tests/achievements/start.test.ts`
+Run: `bash /Users/tushar/Documents/PROJECTS/Biometrics/.claude/worktrees/achievements/.superpowers/sdd/2026-10-06-achievements/backend-jest.sh tests/achievements/start.test.ts`
 Expected: FAIL — "Cannot find module '../../src/achievements/start'".
 
 - [ ] **Step 3: Write `backend/src/achievements/start.ts`**
@@ -2152,7 +2209,7 @@ export async function ensureAchievementsStart(userId: string, now: Date): Promis
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `bash /Users/tushar/.claude/jobs/1d3d19da/tmp/achievements-backend-jest.sh tests/achievements/start.test.ts`
+Run: `bash /Users/tushar/Documents/PROJECTS/Biometrics/.claude/worktrees/achievements/.superpowers/sdd/2026-10-06-achievements/backend-jest.sh tests/achievements/start.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -2177,10 +2234,14 @@ git commit -m "feat(backend): set a new user's badge start date and starting goa
 
 ```ts
 export const ACHIEVEMENTS_LAUNCH_MARKER = 'achievements:launch:v1';
-export function backfillLaunchDayOnTime(userId: string, timeZone: string, now: Date): Promise<number>;
-export function runAchievementsLaunchOnce(deps?: { store?: MarkerStore; now?: Date; userIds?: string[] }): Promise<number>;
-export function startAchievements(deps?: { store?: MarkerStore; now?: Date; userIds?: string[] }): Promise<void>;
+export const ACHIEVEMENTS_MIGRATION = '20261006120000_achievements';
+export function launchInstant(): Promise<Date | null>;      // the migration's finished_at
+export function backfillLaunchDayOnTime(userId: string, timeZone: string, launchAt: Date): Promise<number>;
+export function runAchievementsLaunchOnce(deps?: { store?: MarkerStore; launchAt?: Date; userIds?: string[] }): Promise<number>;
+export function startAchievements(deps?: { store?: MarkerStore; launchAt?: Date; userIds?: string[] }): Promise<void>;
 ```
+
+The launch instant is the moment the achievements migration finished (`_prisma_migrations.finished_at`), not the time the job happens to run: a rerun after a lost marker therefore computes the same launch habit day. The job walks **every** user. It sets `achievementsSince` and the starting goals only where the start date is still null, and it runs the launch-day `onTime` fix for every user — including one whose first badge load already set the start date before the job ran. The fix only flips false→true, only for check-ins saved before the launch instant whose `habitDay` is the launch habit day and whose `createdAt` falls inside it, so a rerun changes nothing.
 
 - [ ] **Step 1: Write the failing test** `backend/tests/achievements/launch.test.ts`:
 
@@ -2189,7 +2250,7 @@ import { prisma } from '../../src/db/client';
 import { civilDateToUtcMidnight } from '../../src/biometrics/civilDate';
 import { connection } from '../../src/sync/queue';
 import type { MarkerStore } from '../../src/recap/backfill';
-import { ACHIEVEMENTS_LAUNCH_MARKER, runAchievementsLaunchOnce, startAchievements } from '../../src/achievements/launch';
+import { ACHIEVEMENTS_LAUNCH_MARKER, launchInstant, runAchievementsLaunchOnce, startAchievements } from '../../src/achievements/launch';
 import { migrateTestDb } from '../setupTestDb';
 import { createUser } from '../scoring/dbHelpers';
 
@@ -2210,21 +2271,21 @@ class MemoryStore implements MarkerStore {
 }
 
 const day = civilDateToUtcMidnight;
-// 02:00 UTC on Oct 7: the calendar date is Oct 7, but the habit day is still Oct 6.
-const NOW = new Date('2026-10-07T02:00:00Z');
+// Launched at 02:00 UTC on Oct 7: the calendar date is Oct 7, but the habit day is still Oct 6.
+const LAUNCH = new Date('2026-10-07T02:00:00Z');
 const sinceOf = async (id: string) => (await prisma.user.findUniqueOrThrow({ where: { id } })).achievementsSince?.toISOString().slice(0, 10) ?? null;
-const checkIn = (userId: string, habitDay: string, createdAt: string) =>
-  prisma.habitCheckIn.create({ data: { userId, habitDay: day(habitDay), createdAt: new Date(createdAt) } });
+const checkIn = (userId: string, habitDay: string, createdAt: string, onTime = false) =>
+  prisma.habitCheckIn.create({ data: { userId, habitDay: day(habitDay), createdAt: new Date(createdAt), onTime } });
 const onTimeOf = async (id: string) => (await prisma.habitCheckIn.findUniqueOrThrow({ where: { id } })).onTime;
 
-it("starts every user without a start date on their local launch date, with starting goals, and leaves a set one alone", async () => {
+it('starts every user without a start date on their local launch date, with starting goals, and leaves a set one alone', async () => {
   const auckland = await createUser({ timezone: 'Pacific/Auckland' });
   const utc = await createUser({ sleepGoalMinutes: 450 });
   const started = await createUser();
   await prisma.user.update({ where: { id: started.id }, data: { achievementsSince: day('2026-09-01') } });
   const store = new MemoryStore();
 
-  expect(await runAchievementsLaunchOnce({ store, now: NOW, userIds: [auckland.id, utc.id, started.id] })).toBe(2);
+  expect(await runAchievementsLaunchOnce({ store, launchAt: LAUNCH, userIds: [auckland.id, utc.id, started.id] })).toBe(2);
 
   expect(await sinceOf(auckland.id)).toBe('2026-10-07');
   expect(await sinceOf(utc.id)).toBe('2026-10-07');
@@ -2235,44 +2296,70 @@ it("starts every user without a start date on their local launch date, with star
     ['BEDTIME', '2026-10-07', null, null, false],
   ]);
   expect(await prisma.goalChange.count({ where: { userId: started.id } })).toBe(0);
-  expect(store.values.get(ACHIEVEMENTS_LAUNCH_MARKER)).toBe(NOW.toISOString());
+  expect(store.values.get(ACHIEVEMENTS_LAUNCH_MARKER)).toBe(LAUNCH.toISOString());
 });
 
-it('marks launch-day check-ins created inside that habit day as on time, and nothing else', async () => {
+it('marks check-ins saved before the launch, during the launch habit day, as on time, and nothing else', async () => {
   const evening = await createUser();
   const eveningRow = await checkIn(evening.id, '2026-10-06', '2026-10-06T21:00:00Z');
   const afterMidnight = await createUser();
   const afterMidnightRow = await checkIn(afterMidnight.id, '2026-10-06', '2026-10-07T01:30:00Z');
   const backdated = await createUser();
   const backdatedRow = await checkIn(backdated.id, '2026-10-05', '2026-10-06T21:00:00Z');
+  const afterLaunch = await createUser();
+  const afterLaunchRow = await checkIn(afterLaunch.id, '2026-10-06', '2026-10-07T03:00:00Z');
 
-  await runAchievementsLaunchOnce({ store: new MemoryStore(), now: NOW, userIds: [evening.id, afterMidnight.id, backdated.id] });
+  await runAchievementsLaunchOnce({ store: new MemoryStore(), launchAt: LAUNCH, userIds: [evening.id, afterMidnight.id, backdated.id, afterLaunch.id] });
 
   expect(await onTimeOf(eveningRow.id)).toBe(true);
   expect(await onTimeOf(afterMidnightRow.id)).toBe(true);
   expect(await onTimeOf(backdatedRow.id)).toBe(false);
+  // Saved after the launch: its flag was set at write time and is never recomputed.
+  expect(await onTimeOf(afterLaunchRow.id)).toBe(false);
 });
 
-it('a rerun after a lost marker moves no start date and recomputes no flag', async () => {
+it('fixes launch-day check-ins for a user whose first badge load already set the start date', async () => {
   const user = await createUser();
+  await prisma.user.update({ where: { id: user.id }, data: { achievementsSince: day('2026-10-07') } });
   const row = await checkIn(user.id, '2026-10-06', '2026-10-06T21:00:00Z');
-  await runAchievementsLaunchOnce({ store: new MemoryStore(), now: NOW, userIds: [user.id] });
-  // A flag set at write time is never recomputed: simulate one that must stay as stored.
-  await prisma.habitCheckIn.update({ where: { id: row.id }, data: { onTime: false } });
 
-  const again = await runAchievementsLaunchOnce({ store: new MemoryStore(), now: new Date('2026-10-20T12:00:00Z'), userIds: [user.id] });
+  expect(await runAchievementsLaunchOnce({ store: new MemoryStore(), launchAt: LAUNCH, userIds: [user.id] })).toBe(0);
 
-  expect(again).toBe(0);
+  expect(await onTimeOf(row.id)).toBe(true);
   expect(await sinceOf(user.id)).toBe('2026-10-07');
-  expect(await onTimeOf(row.id)).toBe(false);
-  expect(await prisma.goalChange.count({ where: { userId: user.id } })).toBe(2);
+  expect(await prisma.goalChange.count({ where: { userId: user.id } })).toBe(0);
+});
+
+it('a rerun after a lost marker moves no start date, writes no goal row and recomputes no flag', async () => {
+  const before = await createUser();
+  const beforeRow = await checkIn(before.id, '2026-10-06', '2026-10-06T21:00:00Z');
+  const after = await createUser();
+  const afterRow = await checkIn(after.id, '2026-10-06', '2026-10-07T03:00:00Z');
+  const ids = [before.id, after.id];
+  await runAchievementsLaunchOnce({ store: new MemoryStore(), launchAt: LAUNCH, userIds: ids });
+
+  expect(await runAchievementsLaunchOnce({ store: new MemoryStore(), launchAt: LAUNCH, userIds: ids })).toBe(0);
+
+  expect(await sinceOf(before.id)).toBe('2026-10-07');
+  expect(await onTimeOf(beforeRow.id)).toBe(true);
+  expect(await onTimeOf(afterRow.id)).toBe(false);
+  expect(await prisma.goalChange.count({ where: { userId: before.id } })).toBe(2);
+});
+
+it('takes the launch instant from the achievements migration by default', async () => {
+  const at = await launchInstant();
+  expect(at).toBeInstanceOf(Date);
+  const user = await createUser();
+  const store = new MemoryStore();
+  await runAchievementsLaunchOnce({ store, userIds: [user.id] });
+  expect(store.values.get(ACHIEVEMENTS_LAUNCH_MARKER)).toBe(at!.toISOString());
 });
 
 it('runs only once per marker', async () => {
   const user = await createUser();
   const store = new MemoryStore();
   store.values.set(ACHIEVEMENTS_LAUNCH_MARKER, '2026-10-01T00:00:00.000Z');
-  expect(await runAchievementsLaunchOnce({ store, now: NOW, userIds: [user.id] })).toBe(0);
+  expect(await runAchievementsLaunchOnce({ store, launchAt: LAUNCH, userIds: [user.id] })).toBe(0);
   expect(await sinceOf(user.id)).toBeNull();
 });
 
@@ -2282,7 +2369,7 @@ it('startAchievements logs a failure by error class, never throws, and leaves th
   const spy = jest.spyOn(prisma.user, 'findMany').mockRejectedValueOnce(new TypeError('db down'));
   const log = jest.spyOn(console, 'error').mockImplementation(() => {});
   try {
-    await expect(startAchievements({ store, now: NOW, userIds: [user.id] })).resolves.toBeUndefined();
+    await expect(startAchievements({ store, launchAt: LAUNCH, userIds: [user.id] })).resolves.toBeUndefined();
     expect(JSON.parse(String(log.mock.calls[0]![0]))).toEqual({ event: 'achievements.launch_failed', error: 'TypeError' });
   } finally {
     spy.mockRestore();
@@ -2294,18 +2381,21 @@ it('startAchievements logs a failure by error class, never throws, and leaves th
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `bash /Users/tushar/.claude/jobs/1d3d19da/tmp/achievements-backend-jest.sh tests/achievements/launch.test.ts`
+Run: `bash /Users/tushar/Documents/PROJECTS/Biometrics/.claude/worktrees/achievements/.superpowers/sdd/2026-10-06-achievements/backend-jest.sh tests/achievements/launch.test.ts`
 Expected: FAIL — "Cannot find module '../../src/achievements/launch'".
 
 - [ ] **Step 3: Write `backend/src/achievements/launch.ts`**
 
 ```ts
-// The one-off launch job (spec 2026-10-06 §3), like the recap backfill's once-marker. For every
-// user whose achievementsSince is still null it sets it to their local date at launch, writes the
-// starting goals, and marks the check-ins already saved during the launch habit day as on time.
-// Every write is "only where null / only false -> true", and a user whose start date is already
-// set is skipped entirely, so a lost marker and a rerun move no start date and recompute no flag.
-// The marker is set last: a crash part-way reruns safely on the next start.
+// The one-off launch job (spec 2026-10-06 §3), like the recap backfill's once-marker. The launch
+// instant is when the achievements migration finished, so every run — including a rerun after a
+// lost marker — uses the same launch day. For every user it:
+//   - sets achievementsSince to their local date at launch and writes the starting goals, only
+//     where the start date is still null;
+//   - marks the check-ins saved before the launch during the launch habit day as on time, whether
+//     or not this run set their start date (a first badge load may have got there first).
+// Every write is "only where null / only false -> true" on a fixed set of rows, so a rerun moves no
+// start date and recomputes no flag. The marker is set last: a crash part-way reruns safely.
 
 import { civilDateToUtcMidnight, localCivilDateOrUtc } from '../biometrics/civilDate';
 import { prisma } from '../db/client';
@@ -2315,18 +2405,28 @@ import { connection } from '../sync/queue';
 import { claimStartDate } from './start';
 
 export const ACHIEVEMENTS_LAUNCH_MARKER = 'achievements:launch:v1';
+export const ACHIEVEMENTS_MIGRATION = '20261006120000_achievements';
 const PAGE = 200;
 
-interface LaunchDeps { store?: MarkerStore; now?: Date; userIds?: string[] }
+interface LaunchDeps { store?: MarkerStore; launchAt?: Date; userIds?: string[] }
 
-async function* usersWithoutStart(userIds?: string[]) {
+/** When the achievements migration finished: the launch instant. Null if it is not recorded. */
+export async function launchInstant(): Promise<Date | null> {
+  const rows = await prisma.$queryRaw<Array<{ finished_at: Date | null }>>`
+    SELECT finished_at FROM _prisma_migrations
+    WHERE migration_name = ${ACHIEVEMENTS_MIGRATION} AND rolled_back_at IS NULL AND finished_at IS NOT NULL
+    ORDER BY finished_at DESC LIMIT 1`;
+  return rows[0]?.finished_at ?? null;
+}
+
+async function* allUsers(userIds?: string[]) {
   let after: string | null = null;
   for (;;) {
     const page = await prisma.user.findMany({
-      where: { achievementsSince: null, AND: [userIds ? { id: { in: userIds } } : {}, after ? { id: { gt: after } } : {}] },
+      where: { AND: [userIds ? { id: { in: userIds } } : {}, after ? { id: { gt: after } } : {}] },
       orderBy: { id: 'asc' },
       take: PAGE,
-      select: { id: true, timezone: true, sleepGoalMinutes: true, bedtimeGoal: true },
+      select: { id: true, timezone: true, sleepGoalMinutes: true, bedtimeGoal: true, achievementsSince: true },
     });
     yield* page;
     if (page.length < PAGE) return;
@@ -2335,13 +2435,14 @@ async function* usersWithoutStart(userIds?: string[]) {
 }
 
 /**
- * Check-ins saved before the deploy on the launch habit day: on time when their createdAt falls in
- * that same habit day (computed once, in the zone at launch). Only false -> true.
+ * Check-ins saved before the launch on the launch habit day: on time when their createdAt falls in
+ * that same habit day (computed in the zone at launch). Only false -> true; rows saved after the
+ * launch keep the flag set at write time.
  */
-export async function backfillLaunchDayOnTime(userId: string, timeZone: string, now: Date): Promise<number> {
-  const launchDay = habitDayForOrUtc(now, timeZone);
+export async function backfillLaunchDayOnTime(userId: string, timeZone: string, launchAt: Date): Promise<number> {
+  const launchDay = habitDayForOrUtc(launchAt, timeZone);
   const rows = await prisma.habitCheckIn.findMany({
-    where: { userId, habitDay: civilDateToUtcMidnight(launchDay), onTime: false },
+    where: { userId, habitDay: civilDateToUtcMidnight(launchDay), onTime: false, createdAt: { lt: launchAt } },
     select: { id: true, createdAt: true },
   });
   const ids = rows.filter((r) => habitDayForOrUtc(r.createdAt, timeZone) === launchDay).map((r) => r.id);
@@ -2349,16 +2450,16 @@ export async function backfillLaunchDayOnTime(userId: string, timeZone: string, 
   return (await prisma.habitCheckIn.updateMany({ where: { id: { in: ids }, onTime: false }, data: { onTime: true } })).count;
 }
 
-/** The number of users started by this run (0 when the marker says it already ran). */
-export async function runAchievementsLaunchOnce({ store = connection, now = new Date(), userIds }: LaunchDeps = {}): Promise<number> {
+/** The number of users whose start date this run set (0 when the marker says it already ran). */
+export async function runAchievementsLaunchOnce({ store = connection, launchAt, userIds }: LaunchDeps = {}): Promise<number> {
   if (await store.get(ACHIEVEMENTS_LAUNCH_MARKER)) return 0;
+  const at = launchAt ?? (await launchInstant()) ?? new Date();
   let started = 0;
-  for await (const user of usersWithoutStart(userIds)) {
-    if (!(await claimStartDate(user, localCivilDateOrUtc(now, user.timezone)))) continue;
-    await backfillLaunchDayOnTime(user.id, user.timezone, now);
-    started++;
+  for await (const user of allUsers(userIds)) {
+    if (user.achievementsSince === null && (await claimStartDate(user, localCivilDateOrUtc(at, user.timezone)))) started++;
+    await backfillLaunchDayOnTime(user.id, user.timezone, at);
   }
-  await store.set(ACHIEVEMENTS_LAUNCH_MARKER, now.toISOString());
+  await store.set(ACHIEVEMENTS_LAUNCH_MARKER, at.toISOString());
   return started;
 }
 
@@ -2389,7 +2490,7 @@ and in `startBackgroundWork`, right after the `startRecaps().catch(...)` line, a
 
 - [ ] **Step 5: Run the test and the backend typecheck**
 
-Run: `bash /Users/tushar/.claude/jobs/1d3d19da/tmp/achievements-backend-jest.sh tests/achievements/launch.test.ts`
+Run: `bash /Users/tushar/Documents/PROJECTS/Biometrics/.claude/worktrees/achievements/.superpowers/sdd/2026-10-06-achievements/backend-jest.sh tests/achievements/launch.test.ts`
 Expected: PASS.
 Run (from `backend/`): `N24 node_modules/.bin/tsc --noEmit`
 Expected: no output (clean).
@@ -2577,7 +2678,7 @@ it('rejects a celebrated body that is not a short list of ids', async () => {
 
 - [ ] **Step 2: Run them to verify they fail**
 
-Run: `bash /Users/tushar/.claude/jobs/1d3d19da/tmp/achievements-backend-jest.sh tests/achievements/dto.test.ts tests/achievements/routes.test.ts`
+Run: `bash /Users/tushar/Documents/PROJECTS/Biometrics/.claude/worktrees/achievements/.superpowers/sdd/2026-10-06-achievements/backend-jest.sh tests/achievements/dto.test.ts tests/achievements/routes.test.ts`
 Expected: FAIL — "Cannot find module '../../src/achievements/dto'" and 404s from the routes.
 
 - [ ] **Step 3: Write `backend/src/achievements/dto.ts`**
@@ -2696,7 +2797,7 @@ achievementsRouter.post('/me/achievements/celebrated', requireAuth, async (req: 
 
 - [ ] **Step 6: Run the tests to verify they pass**
 
-Run: `bash /Users/tushar/.claude/jobs/1d3d19da/tmp/achievements-backend-jest.sh tests/achievements/dto.test.ts tests/achievements/routes.test.ts`
+Run: `bash /Users/tushar/Documents/PROJECTS/Biometrics/.claude/worktrees/achievements/.superpowers/sdd/2026-10-06-achievements/backend-jest.sh tests/achievements/dto.test.ts tests/achievements/routes.test.ts`
 Expected: PASS.
 
 - [ ] **Step 7: Commit**
@@ -2730,7 +2831,7 @@ git commit -m "feat(backend): badge endpoints with a 10-minute evaluation bound 
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `bash /Users/tushar/.claude/jobs/1d3d19da/tmp/achievements-backend-jest.sh tests/recap/factSheet.test.ts`
+Run: `bash /Users/tushar/Documents/PROJECTS/Biometrics/.claude/worktrees/achievements/.superpowers/sdd/2026-10-06-achievements/backend-jest.sh tests/recap/factSheet.test.ts`
 Expected: FAIL — the notes contain "Milestone: a long run of nights on goal in a row (see sleep.streak)".
 
 - [ ] **Step 3: Delete the line** in `backend/src/coach/answer/facts.ts`:
@@ -2748,7 +2849,7 @@ and put this comment in its place:
 
 - [ ] **Step 4: Run the recap and coach answer suites**
 
-Run: `bash /Users/tushar/.claude/jobs/1d3d19da/tmp/achievements-backend-jest.sh tests/recap tests/coach/answerFacts.test.ts`
+Run: `bash /Users/tushar/Documents/PROJECTS/Biometrics/.claude/worktrees/achievements/.superpowers/sdd/2026-10-06-achievements/backend-jest.sh tests/recap tests/coach/answerFacts.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -4735,10 +4836,12 @@ git commit -m "feat(mobile): celebrate new badge levels once, with a shareable b
 
 **Files:**
 - Create: `mobile/src/lib/useEarnedBadges.ts`
+- Modify: `mobile/src/lib/recapShare.ts` (`IncludeKey`, `FORMAT_INCLUDES.story`, `INCLUDE_LABELS`, `ALL_KEYS`)
+- Modify: `mobile/src/lib/recapPrefs.ts` (`KEYS`)
 - Modify: `mobile/src/components/recap/WeeklyStoryView.tsx` (imports, constants, `WeeklyStoryFrameProps`, `WeeklyStoryFrame`, `coachStoryFit`, `CoachStoryBody`)
 - Modify: `mobile/src/screens/RecapStoryScreen.tsx` (`StoryViewer`: both `WeeklyStoryFrame` usages)
 - Modify: `mobile/src/screens/RecapBuilderScreen.tsx` (`renderView`'s `WeeklyStoryFrame`)
-- Test: `mobile/__tests__/components/RecapShareViews.test.tsx`, `mobile/__tests__/screens/RecapStoryScreen.test.tsx`, `mobile/__tests__/screens/RecapBuilderBadges.test.tsx`, `mobile/__tests__/screens/RecapBuilderScreen.test.tsx`
+- Test: `mobile/__tests__/lib/recapShare.test.ts`, `mobile/__tests__/components/RecapShareViews.test.tsx`, `mobile/__tests__/screens/RecapStoryScreen.test.tsx`, `mobile/__tests__/screens/RecapBuilderBadges.test.tsx`, `mobile/__tests__/screens/RecapBuilderScreen.test.tsx`
 
 **Interfaces:**
 - Consumes: Task 12 (`useAchievements`, `getAchievementsSnapshot`, `refreshAchievements`, `resetAchievements`, `levelsEarnedBetween`, `BadgeRef`, `shortLevelTitle`, fixture); Task 13 (`BadgeIcon`).
@@ -4747,6 +4850,9 @@ git commit -m "feat(mobile): celebrate new badge levels once, with a shareable b
 ```ts
 // lib/useEarnedBadges.ts
 export function useEarnedBadges(from: string, to: string, kind?: FamilyKind): BadgeRef[];
+// lib/recapShare.ts (extended)
+export type IncludeKey = 'avgSleep' | 'streak' | 'bestRecovery' | 'steps' | 'bestNight' | 'quote' | 'coach' | 'count' | 'badges';
+// FORMAT_INCLUDES.story = ['bestNight', 'quote', 'coach', 'badges']; INCLUDE_LABELS.badges = 'Badges this week'; on by default
 // components/recap/WeeklyStoryView.tsx
 export const BADGE_CARD_HEIGHT: number;                       // design units
 export interface WeeklyStoryFrameProps { /* existing props */ badges?: readonly BadgeRef[] }
@@ -4754,7 +4860,26 @@ export function coachStoryFit(recap: Pick<Recap, 'story' | 'line' | 'stats'>, in
 // testIDs on frame 3: `${testID}-badges`, `${testID}-badge-<FAMILY>-<level>`, `${testID}-badge-<FAMILY>-<level>-icon`
 ```
 
-- [ ] **Step 1: Write the failing tests.** In `mobile/__tests__/components/RecapShareViews.test.tsx`, inside `describe('WeeklyStoryFrame', ...)`, add:
+The card is controlled by a new **"Badges this week"** switch in Build your recap's Include list for the story format: on by default, stored with the other story choices (`recapInclude.story` in SecureStore), and respected by the in-app frame, the story viewer and the shared image alike (they all read the same `includes`).
+
+- [ ] **Step 1: Write the failing tests.** In `mobile/__tests__/lib/recapShare.test.ts`, change the story expectation in `'hides the switches of missing stats and a zero streak'` to:
+
+```ts
+  expect(availableIncludes('story', { nightsWithData: 4 })).toEqual(['quote', 'coach', 'badges']);
+```
+
+and append:
+
+```ts
+it('offers a "Badges this week" switch on the story, on by default', () => {
+  expect(INCLUDE_LABELS.badges).toBe('Badges this week');
+  expect(resolveIncludes('story', {}, { nightsWithData: 4 }).badges).toBe(true);
+  expect(resolveIncludes('story', { badges: false }, { nightsWithData: 4 }).badges).toBe(false);
+  expect(resolveIncludes('card', {}, FULL).badges).toBe(false);
+});
+```
+
+In `mobile/__tests__/components/RecapShareViews.test.tsx`, inside `describe('WeeklyStoryFrame', ...)`, add:
 
 ```tsx
   it('frame 3 lists the badge levels earned that week in a card, and leaves room for it', () => {
@@ -4773,6 +4898,14 @@ export function coachStoryFit(recap: Pick<Recap, 'story' | 'line' | 'stats'>, in
     first.unmount();
     render(<WeeklyStoryFrame recap={WEEK} coachId="luna" includes={storyIncludes} scale={1} index={1} badges={[{ family: 'SLEEP_GOAL', level: 1 }]} />);
     expect(screen.queryByTestId('recap-story-badges')).toBeNull();
+  });
+
+  it('leaves the card out when "Badges this week" is switched off, and gives the story its room back', () => {
+    const badges = [{ family: 'SLEEP_GOAL' as const, level: 2 }];
+    const off = { ...storyIncludes, badges: false };
+    render(<WeeklyStoryFrame recap={WEEK} coachId="luna" includes={off} scale={1} index={2} badges={badges} />);
+    expect(screen.queryByTestId('recap-story-badges')).toBeNull();
+    expect(coachStoryFit(WEEK, off, 0).box).toBe(coachStoryFit(WEEK, storyIncludes).box);
   });
 
   it('shows at most four badges', () => {
@@ -4827,7 +4960,7 @@ Create `mobile/__tests__/screens/RecapBuilderBadges.test.tsx`:
 ```tsx
 import React from 'react';
 import * as SecureStore from 'expo-secure-store';
-import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { withCharacter } from '../../jest-mocks/characterContext';
 import { achievementsFixture } from '../../jest-mocks/achievementsFixture';
 import { fetchAchievements } from '../../src/api/achievements';
@@ -4870,6 +5003,28 @@ it("puts the week's badge levels on story frame 3, in the preview and in the sha
   expect(within(screen.getByTestId('builder-preview')).getByTestId('preview-badges')).toBeTruthy();
 });
 
+it('has a "Badges this week" switch, on by default and remembered, that takes the card off the preview and the image', async () => {
+  const store: Record<string, string> = {};
+  (SecureStore.getItemAsync as jest.Mock).mockImplementation((k: string) => Promise.resolve(store[k] ?? null));
+  (SecureStore.setItemAsync as jest.Mock).mockImplementation((k: string, v: string) => {
+    store[k] = v;
+    return Promise.resolve();
+  });
+  (fetchAchievements as jest.Mock).mockResolvedValue(achievementsFixture({
+    SLEEP_GOAL: { level: 2, levels: [{ level: 2, value: 7, earnedOn: '2026-10-01' }] },
+  }));
+  render(withCharacter(<RecapBuilderScreen />));
+  expect(await screen.findByTestId('builder-include-badges')).toBeTruthy();
+  expect(screen.getByTestId('builder-include-badges').props.accessibilityLabel).toBe('Badges this week');
+  await waitFor(() => expect(screen.getByTestId('builder-include-badges').props.value).toBe(true));
+  fireEvent.press(screen.getByTestId('builder-frame-2'));
+  expect(await within(screen.getByTestId('builder-export')).findByTestId('export-badges')).toBeTruthy();
+  fireEvent(screen.getByTestId('builder-include-badges'), 'valueChange', false);
+  expect(within(screen.getByTestId('builder-export')).queryByTestId('export-badges')).toBeNull();
+  expect(within(screen.getByTestId('builder-preview')).queryByTestId('preview-badges')).toBeNull();
+  await waitFor(() => expect(JSON.parse(store['recapInclude.story']!)).toEqual({ badges: false }));
+});
+
 it('leaves the card out when no level was earned that week', async () => {
   (fetchAchievements as jest.Mock).mockResolvedValue(achievementsFixture());
   render(withCharacter(<RecapBuilderScreen />));
@@ -4884,6 +5039,8 @@ it('leaves the card out when no level was earned that week', async () => {
 
 Run (from `mobile/`): `N24 node_modules/.bin/jest __tests__/components/RecapShareViews.test.tsx __tests__/screens/RecapStoryScreen.test.tsx __tests__/screens/RecapBuilderBadges.test.tsx`
 Expected: FAIL — no `recap-story-badges` / `story-badges` / `export-badges`; `coachStoryFit` ignores a third argument.
+
+Also run `N24 node_modules/.bin/jest __tests__/lib/recapShare.test.ts` — FAIL: no `badges` include.
 
 - [ ] **Step 3: Write `mobile/src/lib/useEarnedBadges.ts`**
 
@@ -4907,7 +5064,37 @@ export function useEarnedBadges(from: string, to: string, kind?: FamilyKind): Ba
 }
 ```
 
-- [ ] **Step 4: Add the card to frame 3** in `mobile/src/components/recap/WeeklyStoryView.tsx`.
+- [ ] **Step 4a: Add the include switch.** In `mobile/src/lib/recapShare.ts`:
+
+```ts
+export type IncludeKey = 'avgSleep' | 'streak' | 'bestRecovery' | 'steps' | 'bestNight' | 'quote' | 'coach' | 'count' | 'badges';
+```
+
+change the story entry of `FORMAT_INCLUDES` to:
+
+```ts
+  story: ['bestNight', 'quote', 'coach', 'badges'],
+```
+
+add to `INCLUDE_LABELS` after `count: 'Nights on goal',`:
+
+```ts
+  badges: 'Badges this week',
+```
+
+and change `ALL_KEYS` to:
+
+```ts
+const ALL_KEYS: IncludeKey[] = ['avgSleep', 'streak', 'bestRecovery', 'steps', 'bestNight', 'quote', 'coach', 'count', 'badges'];
+```
+
+(`availableIncludes` needs no change: its `default` branch makes `badges` available for the story; `resolveIncludes` makes it on by default.) In `mobile/src/lib/recapPrefs.ts` change `KEYS` to:
+
+```ts
+const KEYS: IncludeKey[] = ['avgSleep', 'streak', 'bestRecovery', 'steps', 'bestNight', 'quote', 'coach', 'count', 'badges'];
+```
+
+- [ ] **Step 4b: Add the card to frame 3** in `mobile/src/components/recap/WeeklyStoryView.tsx`.
 
 Add imports:
 
@@ -4974,7 +5161,8 @@ function CoachStoryBody({ recap, coachId, includes, u, t, pixel, testID, badges 
   const name = characterInfo(coachId).name;
   const text = coachFrameText(recap);
   const stats = coachFrameStats(recap.stats);
-  const shown = badges.slice(0, STORY_BADGE_MAX);
+  // Switched off in Build your recap ("Badges this week"): no card here, in the viewer or the image.
+  const shown = includes.badges ? badges.slice(0, STORY_BADGE_MAX) : NO_BADGES;
   const fit = coachStoryFit(recap, includes, shown.length);
   return (
     <>
@@ -5053,14 +5241,14 @@ and in `renderView` change the story branch to:
 
 - [ ] **Step 6: Run the tests to verify they pass**
 
-Run (from `mobile/`): `N24 node_modules/.bin/jest __tests__/components/RecapShareViews.test.tsx __tests__/screens/RecapStoryScreen.test.tsx __tests__/screens/RecapBuilderBadges.test.tsx __tests__/screens/RecapBuilderScreen.test.tsx __tests__/screens/RecapScreen.test.tsx`
+Run (from `mobile/`): `N24 node_modules/.bin/jest __tests__/lib/recapShare.test.ts __tests__/components/RecapShareViews.test.tsx __tests__/screens/RecapStoryScreen.test.tsx __tests__/screens/RecapBuilderBadges.test.tsx __tests__/screens/RecapBuilderScreen.test.tsx __tests__/screens/RecapScreen.test.tsx`
 Expected: PASS (the existing frame-3 fit test still passes: with no badges `coachStoryFit` is unchanged).
 
 - [ ] **Step 7: Commit**
 
 ```bash
-git add mobile/src/lib/useEarnedBadges.ts mobile/src/components/recap/WeeklyStoryView.tsx mobile/src/screens/RecapStoryScreen.tsx mobile/src/screens/RecapBuilderScreen.tsx mobile/__tests__/components/RecapShareViews.test.tsx mobile/__tests__/screens/RecapStoryScreen.test.tsx mobile/__tests__/screens/RecapBuilderBadges.test.tsx mobile/__tests__/screens/RecapBuilderScreen.test.tsx
-git commit -m "feat(mobile): badges earned this week on the weekly story's third frame and its image"
+git add mobile/src/lib/useEarnedBadges.ts mobile/src/lib/recapShare.ts mobile/src/lib/recapPrefs.ts mobile/__tests__/lib/recapShare.test.ts mobile/src/components/recap/WeeklyStoryView.tsx mobile/src/screens/RecapStoryScreen.tsx mobile/src/screens/RecapBuilderScreen.tsx mobile/__tests__/components/RecapShareViews.test.tsx mobile/__tests__/screens/RecapStoryScreen.test.tsx mobile/__tests__/screens/RecapBuilderBadges.test.tsx mobile/__tests__/screens/RecapBuilderScreen.test.tsx
+git commit -m "feat(mobile): badges earned this week on the weekly story's third frame and its image, with an include switch"
 ```
 
 ---
@@ -5075,19 +5263,19 @@ git commit -m "feat(mobile): badges earned this week on the weekly story's third
 - Test: `mobile/__tests__/lib/recapCopy.test.ts`, `mobile/__tests__/components/MilestoneTiles.test.tsx`, `mobile/__tests__/screens/RecapScreen.test.tsx`
 
 **Interfaces:**
-- Consumes: Task 12 (`Achievements`, `AchievementFamily`, `countLabel`, `tierName`, `shortLevelTitle`, `levelsEarnedBetween`, `useAchievements`, `getAchievementsSnapshot`, `refreshAchievements`, `resetAchievements`, fixture); Task 13 (`BadgeIcon`).
+- Consumes: Task 12 (`Achievements`, `AchievementFamily`, `countLabel`, `tierName`, `shortLevelTitle`, `levelsEarnedBetween`, `useAchievements`, `getAchievementsSnapshot`, `refreshAchievements`, `resetAchievements`, fixture); Task 13 (`BadgeIcon`); `fetchRecaps` from `mobile/src/api/recaps.ts` (newest MONTH recap).
 - Produces:
 
 ```ts
 // lib/milestones.ts
 export interface MilestoneTile { key: string; label: string; glyph: MilestoneGlyph; earned: boolean; progress?: string; levelUp?: boolean }
 // lib/recapCopy.ts
-export interface MonthBadges { achievements: Achievements; periodStart: string; periodEnd: string }
+export interface MonthBadges { achievements: Achievements; periodStart: string; periodEnd: string; latest: boolean }
 export function milestoneTiles(m: RecapMilestones | undefined, badges?: MonthBadges): MilestoneTileContent[];
 // testIDs: `${testID}-${key}-progress`, `${testID}-${key}-levelup`, `recap-month-badges`, `recap-month-badge-<FAMILY>-<level>`
 ```
 
-`milestoneTiles(m)` without `badges` returns exactly the four tiles it does today (the old-backend path). With `badges` it returns the three monthly families; for a month on or after `achievements.since` each tile also carries `progress` and `levelUp`.
+`milestoneTiles(m)` without `badges` returns exactly the four tiles it does today (the old-backend path). With `badges` it returns the three monthly families. For a month on or after `achievements.since`, each tile carries `levelUp` (a level of that family earned in this month); only the **latest** month recap (`latest: true`, the newest MONTH recap) also carries `progress` ("n of N months for <level>"). Older months show only whether the milestone was hit and the level-up mark.
 
 - [ ] **Step 1: Write the failing tests.** In `mobile/__tests__/lib/recapCopy.test.ts` add `import { achievementsFixture } from '../../jest-mocks/achievementsFixture';` and append:
 
@@ -5097,7 +5285,7 @@ it('with badges, shows the three monthly families with progress toward the next 
     EVERY_DAY_LOGGED: { level: 1, current: 2, levels: [{ level: 1, value: 1, earnedOn: '2026-10-31' }] },
     BEST_RECOVERY_WEEK: { level: 5, current: 24 },
   });
-  const tiles = milestoneTiles({ everyDayLogged: { days: 31 }, streak: { nights: 9 } }, { achievements, periodStart: '2026-10-01', periodEnd: '2026-10-31' });
+  const tiles = milestoneTiles({ everyDayLogged: { days: 31 }, streak: { nights: 9 } }, { achievements, periodStart: '2026-10-01', periodEnd: '2026-10-31', latest: true });
   expect(tiles.map((t) => [t.key, t.earned, t.progress, t.levelUp])).toEqual([
     ['bestRecoveryWeek', false, 'Top level', false],
     ['everyDayLogged', true, '2 of 3 months for Silver', true],
@@ -5105,8 +5293,18 @@ it('with badges, shows the three monthly families with progress toward the next 
   ]);
 });
 
+it('shows an older month without progress: only whether it hit the milestone and the level-up mark', () => {
+  const achievements = achievementsFixture({ EVERY_DAY_LOGGED: { level: 2, current: 3, levels: [{ level: 1, value: 1, earnedOn: '2026-10-31' }, { level: 2, value: 3, earnedOn: '2026-12-31' }] } });
+  const tiles = milestoneTiles({ everyDayLogged: { days: 31 } }, { achievements, periodStart: '2026-10-01', periodEnd: '2026-10-31', latest: false });
+  expect(tiles.map((t) => [t.key, t.earned, t.progress, t.levelUp])).toEqual([
+    ['bestRecoveryWeek', false, undefined, false],
+    ['everyDayLogged', true, undefined, true],
+    ['steadiestMonth', false, undefined, false],
+  ]);
+});
+
 it('shows a month before the badge start date as three tiles without progress', () => {
-  const tiles = milestoneTiles({ everyDayLogged: { days: 30 } }, { achievements: achievementsFixture({}, { since: '2026-10-07' }), periodStart: '2026-10-01', periodEnd: '2026-10-31' });
+  const tiles = milestoneTiles({ everyDayLogged: { days: 30 } }, { achievements: achievementsFixture({}, { since: '2026-10-07' }), periodStart: '2026-10-01', periodEnd: '2026-10-31', latest: true });
   expect(tiles.map((t) => [t.key, t.earned, t.progress, t.levelUp])).toEqual([
     ['bestRecoveryWeek', false, undefined, undefined],
     ['everyDayLogged', true, undefined, undefined],
@@ -5146,11 +5344,13 @@ import { resetAchievements } from '../../src/lib/achievementsStore';
 jest.mock('../../src/api/achievements');
 ```
 
-add to the existing `beforeEach` (so every existing month test runs against "no badges" and keeps its four tiles):
+add `fetchRecaps` to the existing import from `'../../src/api/recaps'` (the file already automocks that module), and add to the existing `beforeEach` (so every existing month test runs against "no badges" and keeps its four tiles):
 
 ```tsx
   resetAchievements();
   (fetchAchievements as jest.Mock).mockResolvedValue(null);
+  // The newest month recap is this one unless a test says otherwise.
+  (fetchRecaps as jest.Mock).mockResolvedValue([{ id: 'r-month', kind: 'MONTH' }]);
 ```
 
 and append:
@@ -5170,6 +5370,22 @@ it("shows badge progress on the month's tiles, a level-up mark, and the streak b
   expect(screen.getByTestId('recap-month-badge-SLEEP_GOAL-2')).toHaveTextContent('Sleep goal II');
   expect(screen.queryByTestId('recap-month-badge-SLEEP_GOAL-1')).toBeNull();
   expect(screen.queryByTestId('recap-month-badge-EVERY_DAY_LOGGED-1')).toBeNull();
+  expect(fetchRecaps).toHaveBeenCalledWith({ kind: 'MONTH', limit: 1 });
+});
+
+it('shows an older month recap without progress, keeping its level-up mark and "Badges earned"', async () => {
+  (fetchRecaps as jest.Mock).mockResolvedValue([{ id: 'r-newer-month', kind: 'MONTH' }]);
+  (fetchAchievements as jest.Mock).mockResolvedValue(achievementsFixture({
+    SLEEP_GOAL: { level: 2, levels: [{ level: 2, value: 7, earnedOn: '2026-09-12' }] },
+    EVERY_DAY_LOGGED: { level: 1, current: 2, levels: [{ level: 1, value: 1, earnedOn: '2026-09-30' }] },
+  }, { since: '2026-08-15' }));
+  load.mockResolvedValue({ ...MONTH, stats: { ...MONTH.stats, milestones: { everyDayLogged: { days: 30 } } } });
+  render(withCharacter(<RecapScreen />));
+  expect(await screen.findByTestId('recap-milestones-everyDayLogged-levelup')).toHaveTextContent('LEVEL UP');
+  expect(screen.getByTestId('recap-milestones-everyDayLogged').props.accessibilityLabel).toBe('Every night logged, earned, level up');
+  expect(screen.queryByTestId('recap-milestones-everyDayLogged-progress')).toBeNull();
+  expect(screen.queryByTestId('recap-milestones-steadiestMonth-progress')).toBeNull();
+  expect(screen.getByTestId('recap-month-badge-SLEEP_GOAL-2')).toBeTruthy();
 });
 
 it('shows a month before the badge start date without progress, and no "Badges earned" section', async () => {
@@ -5222,7 +5438,13 @@ import { countLabel, tierName } from './badges';
 and replace the whole `milestoneTiles` function (keep `MilestoneKey` and `MilestoneTileContent` as they are) with:
 
 ```ts
-export interface MonthBadges { achievements: Achievements; periodStart: string; periodEnd: string }
+export interface MonthBadges {
+  achievements: Achievements;
+  periodStart: string;
+  periodEnd: string;
+  /** This is the newest month recap: only it shows progress toward the next level. */
+  latest: boolean;
+}
 
 const MONTHLY_FAMILY: Partial<Record<MilestoneKey, AchievementFamily>> = {
   bestRecoveryWeek: 'BEST_RECOVERY_WEEK',
@@ -5233,9 +5455,10 @@ const MONTHLY_FAMILY: Partial<Record<MilestoneKey, AchievementFamily>> = {
 /**
  * The month's milestones as tiles. Without badges (a backend older than them, or not loaded yet):
  * all four kinds, as before. With badges (achievements spec §6): the three monthly families only —
- * the Sleep goal streak badge replaced the streak tile — and, for a month on or after the badge
- * start date, each tile's progress toward its family's next level and whether a level was earned
- * in this month. A locked tile says what the milestone is, never how close the month came.
+ * the Sleep goal streak badge replaced the streak tile. For a month on or after the badge start
+ * date, each tile says whether a level of its family was earned in this month; only the newest
+ * month recap also shows progress toward the next level (an older month's progress would be
+ * today's, not that month's). A locked tile says what the milestone is, never how close the month came.
  */
 export function milestoneTiles(m: RecapMilestones | undefined, badges?: MonthBadges): MilestoneTileContent[] {
   const tiles: MilestoneTileContent[] = [
@@ -5245,13 +5468,14 @@ export function milestoneTiles(m: RecapMilestones | undefined, badges?: MonthBad
     { key: 'steadiestMonth', label: 'Steadiest bedtimes yet', glyph: 'moon', earned: !!m?.steadiestMonth },
   ];
   if (!badges) return tiles;
-  const { achievements, periodStart, periodEnd } = badges;
+  const { achievements, periodStart, periodEnd, latest } = badges;
   return tiles
     .filter((tile) => tile.key !== 'streak')
     .map((tile) => {
       const f = achievements.families.find((x) => x.family === MONTHLY_FAMILY[tile.key]);
       if (!f || periodStart < achievements.since) return tile;
       const levelUp = f.levels.some((l) => l.earnedOn >= periodStart && l.earnedOn <= periodEnd);
+      if (!latest) return { ...tile, levelUp };
       const progress = f.nextThreshold === null
         ? 'Top level'
         : `${Math.min(f.current, f.nextThreshold)} of ${countLabel(f.family, f.nextThreshold)} for ${tierName(f.level + 1)}`;
@@ -5289,7 +5513,7 @@ import { getAchievementsSnapshot, refreshAchievements, useAchievements } from '.
 import { levelsEarnedBetween, shortLevelTitle } from '../lib/badges';
 ```
 
-(`useEffect` is already imported from React). In `MonthBody`, after `const rows = compareChanges(recap.stats.comparison);` add:
+and add `fetchRecaps` to the existing import from `'../api/recaps'` (`useEffect` and `useState` are already imported from React). In `MonthBody`, after `const rows = compareChanges(recap.stats.comparison);` add:
 
 ```tsx
   // Badges (achievements spec §6), read at view time. Until they load, and against a backend
@@ -5298,8 +5522,24 @@ import { levelsEarnedBetween, shortLevelTitle } from '../lib/badges';
   useEffect(() => {
     if (getAchievementsSnapshot().state.status === 'idle') void refreshAchievements();
   }, []);
+  // Only the newest month recap shows progress toward the next level; a failed lookup shows none.
+  const [latest, setLatest] = useState(false);
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      try {
+        const [newest] = await fetchRecaps({ kind: 'MONTH', limit: 1 });
+        if (live) setLatest(newest?.id === recap.id);
+      } catch {
+        if (live) setLatest(false);
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [recap.id]);
   const achievements = badgeState.status === 'ready' ? badgeState.data : null;
-  const tiles = milestoneTiles(recap.stats.milestones, achievements ? { achievements, periodStart: recap.periodStart, periodEnd: recap.periodEnd } : undefined);
+  const tiles = milestoneTiles(recap.stats.milestones, achievements ? { achievements, periodStart: recap.periodStart, periodEnd: recap.periodEnd, latest } : undefined);
   const earnedThisMonth = levelsEarnedBetween(achievements, recap.periodStart, recap.periodEnd, 'streak');
 ```
 
@@ -5392,7 +5632,7 @@ it('refuses an unknown email', async () => {
 
 - [ ] **Step 2: Run it to verify it fails**
 
-Run: `bash /Users/tushar/.claude/jobs/1d3d19da/tmp/achievements-backend-jest.sh tests/scripts/seedAchievements.test.ts`
+Run: `bash /Users/tushar/Documents/PROJECTS/Biometrics/.claude/worktrees/achievements/.superpowers/sdd/2026-10-06-achievements/backend-jest.sh tests/scripts/seedAchievements.test.ts`
 Expected: FAIL — "Cannot find module '../../scripts/seedAchievements'".
 
 - [ ] **Step 3: Write `backend/scripts/seedAchievements.ts`**
@@ -5487,7 +5727,7 @@ if (require.main === module) {
 
 - [ ] **Step 4: Run the test to verify it passes**
 
-Run: `bash /Users/tushar/.claude/jobs/1d3d19da/tmp/achievements-backend-jest.sh tests/scripts/seedAchievements.test.ts`
+Run: `bash /Users/tushar/Documents/PROJECTS/Biometrics/.claude/worktrees/achievements/.superpowers/sdd/2026-10-06-achievements/backend-jest.sh tests/scripts/seedAchievements.test.ts`
 Expected: PASS.
 
 - [ ] **Step 5: Commit**
@@ -5510,7 +5750,7 @@ git commit -m "chore(backend): dev-only script that seeds sample badge levels"
 
 - [ ] **Step 1: Full backend suite**
 
-Run: `bash /Users/tushar/.claude/jobs/1d3d19da/tmp/achievements-backend-jest.sh`
+Run: `bash /Users/tushar/Documents/PROJECTS/Biometrics/.claude/worktrees/achievements/.superpowers/sdd/2026-10-06-achievements/backend-jest.sh`
 Expected: every suite PASS.
 
 - [ ] **Step 2: Backend typecheck**
@@ -5553,6 +5793,8 @@ Expected: the first three print nothing. The last prints only the `achievements.
 Run (from the worktree root): `git log --format=%B main..HEAD | grep -inE "co-authored|claude|anthropic|generated with"`
 Expected: no output.
 
+**Not part of this task:** the simulator pass — running `backend/scripts/seedAchievements.ts` against the dev database and walking through the badge art, the celebration and the share image on the simulator — is done by the controller after the final review, not by the Task 20 implementer.
+
 - [ ] **Step 8: Commit any fixes** (only if Steps 1–7 needed changes; each fix goes with its test):
 
 ```bash
@@ -5574,9 +5816,11 @@ These are binding for this plan; each is pinned by a test in the task named.
 6. **Monthly `current` (Task 4).** `current = best =` the qualifying month count.
 7. **The 10-minute marker holds the standings (Task 5, Task 10).** A load inside the window answers `current`/`best` from it without recomputing; a Redis read error evaluates instead of failing.
 8. **A repeat tap never updates `onTime` (Task 6).** Including a pre-deploy launch-day row: only the launch job flips those.
-9. **Month tile progress is the family's progress now (Task 18),** not as of that month. Tiles stay the original four until badges load and against a 404; with badges, months before the start date show three tiles without progress.
-10. **"Badges this week" (Task 17)** lists every family's levels dated in the week (up to four), has no include switch, and is in the shared frame.
+9. **Month tile progress shows only on the latest month recap (Task 18)** — the newest MONTH recap (`fetchRecaps({ kind: 'MONTH', limit: 1 })`) — as the family's progress now ("n of N months for <level>"). Older months show only whether the milestone was hit and the "Level up" mark for levels earned in that month. Tiles stay the original four until badges load and against a 404; months before the start date show three tiles with neither.
+10. **"Badges this week" (Task 17)** lists every family's levels dated in the week (up to four). It has its own switch in Build your recap's Include list (story format, on by default, stored in `recapInclude.story` with the other choices); the frame, the story viewer and the shared image all respect it.
 11. **Level V colours (Task 13)** come from the coach accent: fill = accent mixed 78% toward black, glyph = 45% toward white.
 12. **`POST /me/achievements/celebrated` (Task 10)** takes 1–50 UUIDs and answers `{ celebrated: n }`; anything else is 400 `invalid_ids`.
 13. **The coach line's "n more" (Task 12)** is the next threshold minus the threshold just reached (canvas: "16 more nights for Diamond").
 14. **The celebration's share image (Task 16)** is a 1080×1080 card through the recap export pipeline.
+15. **One transaction for a goal save (Task 5).** The goal update and its `GoalChange` rows are written in one Prisma transaction; the usual bedtime is read before it starts. A failed history write saves neither, and the evaluation marker is left alone.
+16. **The launch instant is the achievements migration's `finished_at` (Task 9).** The launch job walks every user: start dates and starting goals only where null, and the launch-day `onTime` fix (rows saved before the launch, false→true) for everyone, so a user whose first badge load beat the job still gets it, and a rerun changes nothing.
