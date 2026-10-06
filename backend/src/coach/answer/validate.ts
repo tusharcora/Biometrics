@@ -35,6 +35,17 @@
 //     "you/your" within a few words of the number, a time word ("last night",
 //     "today"), a user-only score (recovery, sleep score), or a phrase like
 //     "you slept"/"your HRV".
+//   * exactNumbers (recaps): exact integers, no hedges, no window exemptions,
+//     count units nights/days/times; durations ±1 minute. A night, day or
+//     time count needs its noun right after the number ("5 nights", "5 of 6
+//     nights", "5 straight nights"), and every number word is checked
+//     (zero, one, hundred, once, twice, a dozen, a couple (of), a pair (of),
+//     a single, a week/fortnight straight = 7/14 nights...; only a lone
+//     "a"/"an" and "one of" stay prose). Ordinals are counts too ("your 6th
+//     straight night", "fifth", "twenty-first"), except in a date ("Oct 9th",
+//     "9th October"). Known limit: a count matches
+//     per family, not per fact, so "on goal 6 nights" can match the
+//     nights-recorded fact.
 //   * Topics: medication and dosing (the crisis classifier's medication
 //     patterns), supplement recommendations and diagnoses are never shown.
 //
@@ -44,9 +55,8 @@
 
 import { classifyCrisis } from '../guardrails/crisis';
 import { AnswerCard, CardItem, deltaDisplayOf, statusOf } from './card';
-import { Fact, FactSheet, FactUnit, MEMORY_NOTE_PREFIX, SLEEP_NIGHTS_NOTE_PREFIX, USUAL_DAYS, comparisonDiff } from './facts';
+import { Fact, FactSheet, FactUnit, MEMORY_NOTE_PREFIX, SLEEP_NIGHTS_NOTE_PREFIX, SheetRoute, USUAL_DAYS, comparisonDiff } from './facts';
 import type { RawCard } from './parse';
-import type { AnswerRoute } from './route';
 
 /** `hedged` marks a number introduced by "about", "around", "~" and the like (HEDGE_RE). */
 export type NumberToken = ({ kind: 'plain'; value: number } | { kind: 'duration'; minutes: number }) & { hedged?: true };
@@ -56,8 +66,10 @@ const HEDGE_RE = /(?:\b(?:about|around|roughly|nearly|almost|close\s+to|just\s+(
 /** How far a hedged number may be from a fact value of its family (durations or plain numbers). */
 export const HEDGE_TOLERANCE = 0.1;
 
+/** Count units (spec 2026-10-04 §2): each its own family, separate from steps' `count`. */
+type CountFamily = 'nights' | 'days' | 'times';
 /** The kind of value a number is: durations, one per unit, or 'none' (a bare count from a note). */
-type Family = 'duration' | 'ms' | 'bpm' | 'percent' | 'count' | 'score' | 'none';
+type Family = 'duration' | 'ms' | 'bpm' | 'percent' | 'count' | 'score' | 'none' | CountFamily;
 export type Metric = 'recovery' | 'sleep_score' | 'hrv' | 'rhr' | 'sleep' | 'steps';
 
 const FAMILY_OF_UNIT: Record<FactUnit, Family> = {
@@ -68,12 +80,16 @@ const FAMILY_OF_UNIT: Record<FactUnit, Family> = {
   count: 'count',
   score: 'score',
   none: 'none',
+  nights: 'nights',
+  days: 'days',
+  times: 'times',
 };
 
 /** The sheet's averaging windows ("7-day average", "last 30 days") are not data. */
 const WINDOW_DAYS = `(?:7|${USUAL_DAYS})`;
 
-const EXEMPT_PATTERNS: RegExp[] = [
+/** Never data in any mode: list markers, times of day, dates, ordinals and the /100 scale. */
+const BASE_EXEMPT_PATTERNS: RegExp[] = [
   // A list marker at the start of a line: "1. Sleep earlier tonight."
   /^\s*\d{1,2}[.)]\s/gm,
   // A clock time with a meridiem; the lookahead stops "5 amazing" matching as "5 am".
@@ -82,17 +98,26 @@ const EXEMPT_PATTERNS: RegExp[] = [
   /\b(at|after|before|around|by|until|till|from|past)\s+([01]?\d|2[0-3]):[0-5]\d\b/gi,
   // A month name followed by a day and an optional year: "March 14", "Sep 26, 2026".
   /\b(Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Sept|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2}(st|nd|rd|th)?\b(,?\s+\d{4}\b)?/g,
-  // An ordinal: "the 14th".
-  /\b\d{1,2}(st|nd|rd|th)\b/g,
   // The score scale after a number: "26/100", "26 out of 100" (the 26 is still checked).
   /(?<=\d)\s*\/\s*100\b/g,
   /(?<=\d)\s+out\s+of\s+100\b/gi,
+];
+/**
+ * An ordinal: "the 14th", "9th October", "your 3rd best month". Under exactNumbers an ordinal
+ * before a count noun ("your 6th straight night") was already read as digits (ordinalsToDigits),
+ * so only the others stay exempt.
+ */
+const ORDINAL_EXEMPT_PATTERN = /\b\d{1,2}(st|nd|rd|th)\b/g;
+/** The sheet's averaging windows. Off under exactNumbers, where "a 7-night streak" is a claim. */
+const WINDOW_EXEMPT_PATTERNS: RegExp[] = [
   // The sheet's windows: "7-day average", "30-night", "the last 30 days", and the trend label's own
   // "over 30 days" (also "in/across/for the past 7 nights"), which the model echoes.
   new RegExp(String.raw`\b${WINDOW_DAYS}-(?:day|night)s?\b`, 'gi'),
   new RegExp(String.raw`\b(?:last|past)\s+${WINDOW_DAYS}\s+(?:days|nights)\b`, 'gi'),
   new RegExp(String.raw`\b(?:over|in|across|for)\s+(?:the\s+)?(?:(?:last|past)\s+)?${WINDOW_DAYS}\s+(?:days|nights)\b`, 'gi'),
 ];
+const EXEMPT_PATTERNS: RegExp[] = [...BASE_EXEMPT_PATTERNS, ORDINAL_EXEMPT_PATTERN, ...WINDOW_EXEMPT_PATTERNS];
+const EXACT_EXEMPT_PATTERNS: RegExp[] = [...BASE_EXEMPT_PATTERNS, ORDINAL_EXEMPT_PATTERN];
 
 /** A unit right after a plain number, which limits what the number may match. */
 const UNIT_AFTER: Array<[RegExp, Family]> = [
@@ -102,6 +127,24 @@ const UNIT_AFTER: Array<[RegExp, Family]> = [
   [/^\s*steps\b/i, 'count'],
   [/^\s*(?:points?\b|pts\b|\/\s*100\b|out\s+of\s+100\b)/i, 'score'],
 ];
+
+/**
+ * What may sit between a count and its noun: "5 of 6 nights", "5 out of 6 nights", "20 of
+ * October's 28 nights" (also "of the"/"of your"), and up to two
+ * of a closed set of adjectives ("5 straight nights", "3 late nights"). A closed set keeps
+ * "5 Friday nights", "6 a night" and "4 this time" from reading as counts.
+ */
+const COUNT_LEAD = String.raw`^\s*(?:(?:out\s+)?of\s+(?:(?:the|your|(?:January|February|March|April|May|June|July|August|September|October|November|December)['’]s)\s+)?\d+\s+)?(?:(?:straight|consecutive|full|good|great|solid|restful|better|short|shorter|long|longer|late|later|early|earlier|separate|different|whole|total)\s+){0,2}`;
+/** Count units after a number, recognised only with exactNumbers so chat and digest checks are unchanged. */
+const COUNT_UNIT_AFTER: Array<[RegExp, Family]> = [
+  [new RegExp(String.raw`${COUNT_LEAD}-?\s*nights?\b`, 'i'), 'nights'],
+  [new RegExp(String.raw`${COUNT_LEAD}-?\s*days?\b`, 'i'), 'days'],
+  [new RegExp(String.raw`${COUNT_LEAD}times?\b`, 'i'), 'times'],
+];
+/** The unit lookup under exactNumbers: the chat units first, then the counts. */
+const EXACT_UNIT_AFTER: Array<[RegExp, Family]> = [...UNIT_AFTER, ...COUNT_UNIT_AFTER];
+const COUNT_FAMILIES: ReadonlySet<Family> = new Set<Family>(['nights', 'days', 'times']);
+const isCountFamily = (f: Family | undefined): f is CountFamily => f !== undefined && COUNT_FAMILIES.has(f);
 
 const NUM = String.raw`(\d+(?:\.\d+)?)`;
 const HOURS = String.raw`(?:hours?|hrs?|h)`;
@@ -121,16 +164,81 @@ const PLAIN_RE = /\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?/g;
 
 const ONES = ['zero', 'one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen'];
 const TENS = ['twenty', 'thirty', 'forty', 'fifty', 'sixty', 'seventy', 'eighty', 'ninety'];
-/** A unit or metric word that turns a preceding number word into a number. */
-const UNIT_OR_METRIC_WORD = String.raw`(?:hours?|hrs?|minutes?|mins?|ms|milliseconds?|bpm|beats|percent|per\s+cent|points?|pts|steps|hrv|recovery|sleep|resting\s+heart)\b`;
+/** Unit or metric words that turn a preceding number word into a number. */
+const UNIT_OR_METRIC_WORDS = String.raw`hours?|hrs?|minutes?|mins?|ms|milliseconds?|bpm|beats|percent|per\s+cent|points?|pts|steps|hrv|recovery|sleep|resting\s+heart`;
+
 const WORD_NUMBER_RE = new RegExp(
-  String.raw`\b(?:(${TENS.join('|')})(?:[-\s]+(${ONES.slice(1, 10).join('|')}))?|(${ONES.join('|')})|(a))(?:\s+(hundred|thousand))?(?=\s+${UNIT_OR_METRIC_WORD})`,
+  String.raw`\b(?:(${TENS.join('|')})(?:[-\s]+(${ONES.slice(1, 10).join('|')}))?|(${ONES.join('|')})|(a))(?:\s+(hundred|thousand))?(?=\s+(?:${UNIT_OR_METRIC_WORDS})\b)`,
   'gi',
 );
 
+/**
+ * Under exactNumbers every number word is a checked number, whatever follows it (fail-safe beats
+ * prose: "Two things stood out" is rejected). Only "a"/"an" on their own and "one of" ("one of
+ * your best weeks") stay prose; "a"/"an" before a scale is 1 ("a hundred"). A tens word that
+ * leads an ordinal left as prose ("your twenty-third week") stays prose with it.
+ */
+const ORDINAL_ONES = ['first', 'second', 'third', 'fourth', 'fifth', 'sixth', 'seventh', 'eighth', 'ninth'];
+const ORDINAL_TEENS = ['tenth', 'eleventh', 'twelfth', 'thirteenth', 'fourteenth', 'fifteenth', 'sixteenth', 'seventeenth', 'eighteenth', 'nineteenth'];
+const ANY_NUMBER_WORD_RE = new RegExp(
+  String.raw`\b(?:(${TENS.join('|')})(?![-\s]+(?:${ORDINAL_ONES.join('|')})\b)(?:[-\s]+(${ONES.slice(1, 10).join('|')}))?|(${ONES.map((w) => (w === 'one' ? String.raw`one(?!\s+of\b)` : w)).join('|')})|(an?)(?=\s+(?:hundred|thousand)\b))(?:\s+(hundred|thousand))?\b`,
+  'gi',
+);
+/** Count words with no digit form, read before ANY_NUMBER_WORD_RE so their "a" is taken with them. */
+const COUNT_WORDS: Array<[RegExp, string]> = [
+  [/\bonce\b/gi, '1 time'],
+  [/\btwice\b/gi, '2 times'],
+  [/\bthrice\b/gi, '3 times'],
+  [/\b(?:an?\s+)?dozen\b/gi, '12'],
+  [/\ba\s+(?:couple|pair)(?:\s+of)?\b/gi, '2'],
+  [/\ba\s+single\b/gi, '1'],
+  [/\ba\s+(?:full\s+|whole\s+)?week\s+straight\b/gi, '7 nights'],
+  [/\ba\s+(?:full\s+|whole\s+)?fortnight\s+straight\b/gi, '14 nights'],
+];
+/** Ordinal words first..thirty-first, read before ANY_NUMBER_WORD_RE so "twenty-first" is not taken as "twenty". */
+const ORDINAL_WORD_RE = new RegExp(
+  String.raw`\b(?:(thirty)[-\s]+(first)|(?:(twenty)[-\s]+)?(${ORDINAL_ONES.join('|')})|(${ORDINAL_TEENS.join('|')})|(twentieth|thirtieth))\b`,
+  'gi',
+);
+/** A numeric ordinal's suffix: "6th" → "6", so "your 6th straight night" is a count of 6. */
+const NUMERIC_ORDINAL_RE = /\b(\d{1,2})(?:st|nd|rd|th)\b/gi;
+
+/** Whether a count noun phrase follows, as the count check reads it ("straight night", "nights on goal"). */
+const beforeCountNoun = (rest: string) => COUNT_UNIT_AFTER.some(([re]) => re.test(rest));
+
+/**
+ * An ordinal before a count noun is a count: "your fifth straight night" → "your 5 straight night",
+ * "6th night" → "6 night", "twenty-first night" → "21 night". Any other ordinal is left as written
+ * and stays prose ("a third of your nights", "your 3rd best month", "9th October", "Oct 9th").
+ */
+function ordinalsToDigits(text: string): string {
+  return text
+    .replace(ORDINAL_WORD_RE, (match: string, thirty?: string, thirtyOne?: string, twenty?: string, one?: string, teen?: string, round?: string, offset?: number) => {
+      if (!beforeCountNoun(text.slice(offset! + match.length))) return match;
+      if (thirty !== undefined && thirtyOne !== undefined) return '31';
+      if (one !== undefined) return String((twenty !== undefined ? 20 : 0) + ORDINAL_ONES.indexOf(one.toLowerCase()) + 1);
+      if (teen !== undefined) return String(10 + ORDINAL_TEENS.indexOf(teen.toLowerCase()));
+      return round!.toLowerCase() === 'twentieth' ? '20' : '30';
+    })
+    .replace(NUMERIC_ORDINAL_RE, (match: string, digits: string, offset: number, all: string) =>
+      beforeCountNoun(all.slice(offset + match.length)) ? digits : match,
+    );
+}
+/** A scale with no number word before it: "a perfect hundred", "the hundred mark". */
+const BARE_SCALE: Array<[RegExp, string]> = [
+  [/\bhundred\b/gi, '100'],
+  [/\bthousand\b/gi, '1000'],
+];
+
+/** Every number word read as digits, for exactNumbers. */
+function allWordsToDigits(text: string): string {
+  const counted = ordinalsToDigits(COUNT_WORDS.reduce((t, [re, digits]) => t.replace(re, digits), text));
+  return BARE_SCALE.reduce((t, [re, digits]) => t.replace(re, digits), wordsToDigits(counted, ANY_NUMBER_WORD_RE));
+}
+
 /** "seven hours" → "7 hours", "nine thousand steps" → "9000 steps"; number words elsewhere are left alone. */
-function wordsToDigits(text: string): string {
-  return text.replace(WORD_NUMBER_RE, (match, tens?: string, unit?: string, ones?: string, a?: string, scale?: string) => {
+function wordsToDigits(text: string, re: RegExp = WORD_NUMBER_RE): string {
+  return text.replace(re, (match, tens?: string, unit?: string, ones?: string, a?: string, scale?: string) => {
     if (a !== undefined && scale === undefined) return match;
     let n = a !== undefined ? 1 : tens !== undefined ? 20 + 10 * TENS.indexOf(tens.toLowerCase()) : ONES.indexOf(ones!.toLowerCase());
     if (unit !== undefined) n += ONES.indexOf(unit.toLowerCase());
@@ -149,13 +257,14 @@ interface Scanned {
 }
 
 /** Every number in `input` with its adjacent unit, in order, outside the exempt shapes. */
-function scanNumbers(input: string): Scanned[] {
-  const text = wordsToDigits(input);
+function scanNumbers(input: string, exact = false): Scanned[] {
+  const text = exact ? allWordsToDigits(input) : wordsToDigits(input);
   const masked = new Array<boolean>(text.length).fill(false);
   const free = (s: number, e: number) => masked.slice(s, e).every((m) => !m);
   const mask = (s: number, e: number) => masked.fill(true, s, e);
-  for (const re of EXEMPT_PATTERNS) for (const m of text.matchAll(re)) mask(m.index!, m.index! + m[0].length);
+  for (const re of exact ? EXACT_EXEMPT_PATTERNS : EXEMPT_PATTERNS) for (const m of text.matchAll(re)) mask(m.index!, m.index! + m[0].length);
 
+  const unitsAfter = exact ? EXACT_UNIT_AFTER : UNIT_AFTER;
   const found: Scanned[] = [];
   const scan = (re: RegExp, toTokens: (m: RegExpMatchArray) => NumberToken[]) => {
     for (const m of text.matchAll(re)) {
@@ -168,7 +277,7 @@ function scanNumbers(input: string): Scanned[] {
         const item: Scanned = { start: s + i, token: hedged ? { ...token, hedged: true } : token };
         if (token.kind === 'plain') {
           const after = text.slice(e);
-          const unit = UNIT_AFTER.find(([re]) => re.test(after));
+          const unit = unitsAfter.find(([re]) => re.test(after));
           if (unit) item.unit = unit[1];
         }
         found.push(item);
@@ -375,6 +484,27 @@ function isKnown(s: Scanned, allowed: Allowed[], named: ReadonlySet<Metric>, sen
   return candidates.some(({ value: a }) => Math.abs(token.value - a) <= tolerance(a));
 }
 
+/**
+ * exactNumbers candidates (spec 2026-10-04 §2). A duration or a number with a non-count unit is
+ * scoped as in chat. A number with a count unit ("5 nights", "a 4-night streak") matches only that
+ * family. A bare number matches only steps' counts, scoped by the sentence's metrics: a night, day
+ * or time count needs its noun right after the number (COUNT_UNIT_AFTER), never elsewhere in the
+ * sentence, so "Your steps averaged 31 a day" cannot borrow 31 days logged.
+ */
+function exactCandidates(s: Scanned, allowed: Allowed[], named: ReadonlySet<Metric>, sentence: string): Allowed[] {
+  if (s.unit !== undefined && isCountFamily(s.unit)) return allowed.filter((a) => !a.unnamedOnly && a.family === s.unit);
+  if (s.token.kind === 'duration' || s.unit !== undefined) return candidatesFor(s, allowed, named, sentence);
+  return candidatesFor({ ...s, unit: 'count' }, allowed, named, sentence);
+}
+
+/** Every integer equals a sheet value exactly, with no hedge tolerance; durations keep ±1 minute. */
+function isKnownExact(s: Scanned, allowed: Allowed[], named: ReadonlySet<Metric>, sentence: string): boolean {
+  const candidates = exactCandidates(s, allowed, named, sentence);
+  const { token } = s;
+  if (token.kind === 'duration') return candidates.some((a) => Math.abs(token.minutes - a.value) <= 1);
+  return candidates.some((a) => a.value === token.value);
+}
+
 const WEEKDAY = String.raw`(?:mon|tues|wednes|thurs|fri|satur|sun)day`;
 /** "night" as a time or window, or in a suggestion, rather than the night's sleep. */
 const NIGHT_NOT_SLEEP_RE = new RegExp(
@@ -453,15 +583,22 @@ export function isDisallowedTopic(sentence: string): boolean {
 
 export type SentenceVerdict = { ok: true } | { ok: false; reason: 'unknown_number' | 'disallowed_topic' };
 
-export function validateSentence(sentence: string, sheet: FactSheet): SentenceVerdict {
+export interface ValidateOptions {
+  /** Recaps only (spec 2026-10-04 §2). Off: chat and digest behaviour exactly as before. */
+  exactNumbers?: boolean;
+}
+
+export function validateSentence(sentence: string, sheet: FactSheet, options: ValidateOptions = {}): SentenceVerdict {
   if (isDisallowedTopic(sentence)) return { ok: false, reason: 'disallowed_topic' };
-  const scanned = scanNumbers(sentence);
+  const exact = options.exactNumbers === true;
+  const scanned = scanNumbers(sentence, exact);
   if (scanned.length === 0) return { ok: true };
   const allowed = allowedFor(sheet);
   const named = namedMetrics(sentence);
-  if (scanned.every((s) => isKnown(s, allowed, named, sentence))) return { ok: true };
+  const known = (s: Scanned) => (exact ? isKnownExact(s, allowed, named, sentence) : isKnown(s, allowed, named, sentence));
+  if (scanned.every(known)) return { ok: true };
   // General knowledge ("most adults need 7–9 hours") only on the general route, and never about the user.
-  if (sheet.route === 'general' && !isAboutUser(sentence)) return { ok: true };
+  if (!exact && sheet.route === 'general' && !isAboutUser(sentence)) return { ok: true };
   return { ok: false, reason: 'unknown_number' };
 }
 
@@ -478,11 +615,12 @@ const MAX_TIP_CHARS = 200;
  * Set by the app, never the model, which made up vague ones ("Wellness App
  * Data", "Sleep tracking data").
  */
-export const CARD_SOURCE: Record<AnswerRoute, string> = {
+export const CARD_SOURCE: Record<SheetRoute, string> = {
   today: 'Today',
   sleep: 'Last night and your past 7 nights',
   trends: 'Your last 30 days',
   general: 'Your profile',
+  recap: 'Your recap',
 };
 
 const isObject = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);

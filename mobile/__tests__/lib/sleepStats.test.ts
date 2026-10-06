@@ -1,6 +1,6 @@
 import type { SleepNight } from '../../src/api/sleep';
 import { sleepHeatLevel } from '../../src/lib/heatmap';
-import { clockAt, compareSleepToAverage, formatClock, formatDuration, nightClock, nightUtcOffset, sleepRangeStats } from '../../src/lib/sleepStats';
+import { clockAt, compareSleepToAverage, formatClock, formatDuration, formatTextDuration, nightClock, nightUtcOffset, sleepRangeStats } from '../../src/lib/sleepStats';
 
 function nights(entries: [string, number, string?][]): Map<string, SleepNight> {
   return new Map(
@@ -79,6 +79,11 @@ describe('formatting', () => {
   it('formats durations and clock times', () => {
     expect(formatDuration(467)).toBe('7h 47m');
     expect(formatDuration(480)).toBe('8h 00m');
+    // The coach's text style (backend durationDisplay), for the recap share images.
+    expect(formatTextDuration(425)).toBe('7h 5m');
+    expect(formatTextDuration(480)).toBe('8h 0m');
+    expect(formatTextDuration(45)).toBe('45m');
+    expect(formatTextDuration(424.6)).toBe('7h 5m');
     expect(formatClock('23:52')).toBe('11:52 pm');
     expect(formatClock('00:05')).toBe('12:05 am');
     expect(formatClock('12:00')).toBe('12:00 pm');

@@ -172,3 +172,97 @@ export function buildRegenerationNote(reasons: ReadonlyArray<'unknown_number' | 
   if (reasons.includes('empty')) lines.push('It was empty: reply with a short, helpful answer.');
   return lines.join(' ');
 }
+
+export const RECAP_LINE_MAX_WORDS = 30;
+
+export interface RecapPromptContext {
+  kind: 'WEEK' | 'MONTH';
+  /** "the week of Sep 28" or "September 2026". */
+  periodLabel: string;
+  sheet: FactSheet;
+}
+
+/**
+ * The recap's number and safety rules (spec 2026-10-04 §2); validate.ts enforces the numbers with exactNumbers,
+ * which converts every number word and wants a count noun right after its number, so the coach is told to write
+ * digits only. Comparison direction is not checked in code, so recapHeader states it in words.
+ */
+function recapRules(persona: CoachPersona): string[] {
+  return [
+    '- Every number you write must appear in the facts exactly as written there: no rounding, no "about" or',
+    '  "around", no new totals, averages or differences.',
+    '- Write every number as digits: no number words (not "five", "a couple of" or "once"),',
+    '  and no ordinals (not "fifth" or "5th").',
+    '- Write scores as "N/100" ("72/100", never a bare "72").',
+    '- Write counts as "N nights", "N days" or "N times", with the noun right after the number',
+    '  ("5 nights on goal", not "5 straight nights"); steps as "52,340 steps"; durations like "7h 12m".',
+    '- Name days by weekday ("Thursday") or as "Oct 9"; never write a date as plain numbers.',
+    '- Comparison facts state their direction ("more", "less", "higher", "lower"): keep that direction exactly; never reverse it.',
+    '- Speak to the user as "you". No medical claims, no diagnosis, no medication or supplement advice.',
+    '- If a fact is missing, do not mention it.',
+    '- Topics you must not discuss:',
+    ...disallowedTopics(persona).map((t) => `  - ${escapeField(t, 80)}`),
+  ];
+}
+
+/** Each comparison fact (`*_change`) restated with its direction in words, since the validator ignores direction. */
+function recapDirections(ctx: RecapPromptContext): string[] {
+  const changes = ctx.sheet.facts.filter((f) => f.id.endsWith('_change'));
+  if (changes.length === 0) return [];
+  const period = ctx.kind === 'WEEK' ? 'week' : 'month';
+  const direction = (value: number) =>
+    value > 0 ? 'went UP (a positive change)' : value < 0 ? 'went DOWN (a negative change)' : 'did not change';
+  return [
+    `Changes since last ${period} (the direction is fixed; never reverse it):`,
+    ...changes.map((f) => `- ${f.label}: ${direction(f.value)}: ${f.display}.`),
+    '',
+  ];
+}
+
+function recapHeader(persona: CoachPersona, ctx: RecapPromptContext): string[] {
+  return [
+    `You are ${escapeField(persona.name, 60)}, the user's coach in a wellness app, looking back at ${escapeField(ctx.periodLabel, 40)}.`,
+    `Your tone: ${escapeField(persona.tone)}`,
+    ...(persona.focus?.trim() ? [`Your coaching focus: ${escapeField(persona.focus)}`] : []),
+    '',
+    'Facts (the only source for anything about the user):',
+    'FACTS START',
+    renderFactSheet(ctx.sheet),
+    'FACTS END',
+    '',
+    ...recapDirections(ctx),
+  ];
+}
+
+/** The quote on a recap and its shareable image: 1–2 sentences, at most 30 words. */
+export function buildRecapLinePrompt(persona: CoachPersona, ctx: RecapPromptContext): string {
+  return [
+    ...recapHeader(persona, ctx),
+    `Write the one quote for this ${ctx.kind === 'WEEK' ? 'week' : 'month'}'s recap: 1 or 2 sentences, at most ${RECAP_LINE_MAX_WORDS} words,`,
+    'warm and specific to these facts, in your own voice. It may be shared as an image, so no question and no advice list.',
+    'Plain sentences only: no heading, no list, no code or card block.',
+    '',
+    'Rules:',
+    ...recapRules(persona),
+  ].join('\n');
+}
+
+/** The story's length: the persona's SENTENCE_RANGE clamped to the recap's 3 to 5 sentences ("2 to 3" becomes "3"). */
+function storySentenceRange(verbosity: CoachPersona['verbosity']): string {
+  const [low, high] = SENTENCE_RANGE[verbosity].split(' to ').map((n) => Math.min(5, Math.max(3, Number(n))));
+  return low === high ? `${low}` : `${low} to ${high}`;
+}
+
+/** The weekly paragraph that replaces the digest: built from the recap sheet only. */
+export function buildRecapStoryPrompt(persona: CoachPersona, ctx: RecapPromptContext): string {
+  return [
+    ...recapHeader(persona, ctx),
+    "Write the user's weekly recap. Say what stood out, the most likely why from these facts, and one small thing",
+    'to try next week, in words rather than new numbers.',
+    `Write ${storySentenceRange(persona.verbosity)} sentences in one paragraph.`,
+    'Plain conversational sentences: no heading, no list, no code or card block.',
+    '',
+    'Rules:',
+    ...recapRules(persona),
+  ].join('\n');
+}

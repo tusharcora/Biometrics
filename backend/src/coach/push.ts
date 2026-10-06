@@ -7,11 +7,18 @@
 // a third party this design does not want holding health data. The digest
 // itself is fetched in-app after the user opens it.
 //
+// DATA IS ID-ONLY. A payload may carry `data` only as { kind: 'recap', recapId: <uuid> }: a
+// fixed kind and an opaque id, never content (spec 2026-10-04 §2). The app fetches the recap
+// itself after the tap. The Expo sender re-validates data against that allowlist exactly as it
+// re-checks title and body.
+//
 // Structurally, nothing here can carry other text: sendGenericPush() takes a
 // kind (a closed union), not a string, and builds the payload by looking that
 // kind up. There is no parameter through which model output or a health value
 // could be interpolated. Any future proactive nudge (threshold-triggered or
-// daily check-in) must go through this same function.
+// daily check-in) must go through this same function, by way of
+// sendCoachPush() (coachPush.ts), which also checks the coach flag and consent.
+// The recap push (sendRecapPush below) builds its payload the same way.
 //
 // Two senders exist: the no-op default, and ExpoPushSender, selected with
 // PUSH_PROVIDER=expo (config.ts). The Expo sender re-checks every title and body
@@ -20,18 +27,40 @@
 
 import { prisma } from '../db/client';
 
-export type PushKind = 'weekly_digest' | 'insight';
+export type PushKind = 'weekly_digest' | 'insight' | 'monthly_recap';
+
+export interface RecapPushData {
+  kind: 'recap';
+  recapId: string;
+}
 
 export interface GenericPushPayload {
   kind: PushKind;
   title: string;
   body: string;
+  /** Id-only, recap kinds only (isAllowedPushData). */
+  data?: RecapPushData;
 }
 
 export const GENERIC_PUSH_PAYLOADS: Readonly<Record<PushKind, Readonly<{ title: string; body: string }>>> = Object.freeze({
   weekly_digest: Object.freeze({ title: 'Your weekly recap is ready', body: 'Open the app to read it.' }),
   insight: Object.freeze({ title: 'You have a new insight', body: 'Open the app to see it.' }),
+  monthly_recap: Object.freeze({ title: 'Your monthly recap is ready', body: 'Open the app to see it.' }),
 });
+
+export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/** The data allowlist: exactly the keys kind and recapId, kind 'recap', recapId a UUID. */
+export function isAllowedPushData(data: unknown): data is RecapPushData {
+  if (typeof data !== 'object' || data === null || Array.isArray(data)) return false;
+  const keys = Object.keys(data).sort();
+  if (keys.length !== 2 || keys[0] !== 'kind' || keys[1] !== 'recapId') return false;
+  const d = data as Record<string, unknown>;
+  return d.kind === 'recap' && typeof d.recapId === 'string' && UUID_RE.test(d.recapId);
+}
+
+export const RECAP_PUSH_KIND: Readonly<Record<'WEEK' | 'MONTH', PushKind>> = Object.freeze({ WEEK: 'weekly_digest', MONTH: 'monthly_recap' });
+const RECAP_KINDS_WITH_DATA: ReadonlySet<PushKind> = new Set(['weekly_digest', 'monthly_recap']);
 
 export function genericPushPayload(kind: PushKind): GenericPushPayload {
   // Own-property lookup: an unknown kind is a bug, never a fallthrough to some other text.
@@ -69,6 +98,23 @@ export async function sendGenericPush(sender: PushSender, userId: string, kind: 
   return rows.length;
 }
 
+/**
+ * The "recap ready" push (spec 2026-10-04 §2). App-level: it does not need the coach, only a
+ * registered device and User.recapPushEnabled. Returns how many devices it was handed to.
+ */
+export async function sendRecapPush(sender: PushSender, userId: string, recapKind: 'WEEK' | 'MONTH', recapId: string): Promise<number> {
+  if (!UUID_RE.test(recapId)) throw new Error('push_data_not_allowed');
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { recapPushEnabled: true } });
+  if (!user?.recapPushEnabled) return 0;
+  const rows = await prisma.pushToken.findMany({ where: { userId }, select: { token: true, platform: true } });
+  if (rows.length === 0) return 0;
+  await sender.send(
+    rows.map((r) => ({ token: r.token, platform: r.platform })),
+    { ...genericPushPayload(RECAP_PUSH_KIND[recapKind]), data: { kind: 'recap', recapId } },
+  );
+  return rows.length;
+}
+
 export const EXPO_PUSH_URL = 'https://exp.host/--/api/v2/push/send';
 export const EXPO_PUSH_CHUNK_SIZE = 100;
 const EXPO_REQUEST_TIMEOUT_MS = 15_000;
@@ -87,11 +133,14 @@ export function maskPushToken(token: string): string {
   return `${token.slice(0, 4)}…`;
 }
 
-/** Throws unless title and body are exactly the fixed strings for the payload's kind. */
+/** Throws unless title and body are exactly the fixed strings for the payload's kind, and any data is allowlisted. */
 function assertGenericPayload(payload: GenericPushPayload): void {
   if (!Object.prototype.hasOwnProperty.call(GENERIC_PUSH_PAYLOADS, payload?.kind)) throw new Error('push_text_not_generic');
   const fixed = GENERIC_PUSH_PAYLOADS[payload.kind];
   if (payload.title !== fixed.title || payload.body !== fixed.body) throw new Error('push_text_not_generic');
+  if (payload.data !== undefined && (!isAllowedPushData(payload.data) || !RECAP_KINDS_WITH_DATA.has(payload.kind))) {
+    throw new Error('push_data_not_allowed');
+  }
 }
 
 /** Logs the event and masked tokens only: never a full token, the access token, a provider message or any health data. */
@@ -113,7 +162,7 @@ export interface ExpoPushSenderOptions {
  * Delivers the generic push through the Expo push service. A failed request is
  * logged and skipped (never thrown), so one bad chunk neither loses the other
  * chunks' results nor fails the digest job. The only throw is the refusal of
- * non-generic text, which is a programming error.
+ * non-generic text or non-allowlisted data, which is a programming error.
  */
 export class ExpoPushSender implements PushSender {
   private readonly fetchFn: typeof fetch;
@@ -138,7 +187,8 @@ export class ExpoPushSender implements PushSender {
       title: payload.title,
       body: payload.body,
       sound: 'default',
-      data: { kind: payload.kind },
+      // Rebuilt from the validated fields, never spread.
+      data: payload.data ? { kind: payload.data.kind, recapId: payload.data.recapId } : { kind: payload.kind },
     }));
 
     let tickets: ExpoTicket[];

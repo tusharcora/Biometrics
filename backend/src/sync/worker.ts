@@ -37,9 +37,11 @@ import {
   RunHabitCorrelationsJobData,
 } from '../habits/queue';
 
-import { getCoachProvider, getPushSender } from '../coach/config';
-import { runWeeklyDigest } from '../coach/digest';
-import { COACH_RETENTION_JOB, COACH_WEEKLY_DIGEST_JOB } from '../coach/queue';
+import { COACH_RETENTION_JOB } from '../coach/queue';
+import { defaultRecapDeps, runRecapJob } from '../recap/build';
+import { RECAP_BUILD_JOB, RECAP_SWEEP_JOB } from '../recap/queue';
+import { runRecapSweep } from '../recap/sweep';
+import type { RecapJobData } from '../recap/types';
 import { refreshDaySummaryAfterScore } from '../coach/daySummaryJob';
 import { runCoachRetention } from '../coach/retention';
 import { LoggerCoachTelemetry } from '../coach/telemetry';
@@ -406,13 +408,11 @@ export async function processSyncJob(job: Job): Promise<void> {
   } else if (job.name === RUN_HABIT_CORRELATIONS_JOB) {
     const { userId, runKey } = job.data as RunHabitCorrelationsJobData;
     await runHabitCorrelations(userId, { runKey });
-  } else if (job.name === COACH_WEEKLY_DIGEST_JOB) {
-    // A no-op unless COACH_ENABLED; the provider and push sender are the configured slots.
-    await runWeeklyDigest({
-      provider: getCoachProvider(),
-      pushSender: getPushSender(),
-      telemetry: new LoggerCoachTelemetry(),
-    });
+  } else if (job.name === RECAP_SWEEP_JOB) {
+    await runRecapSweep();
+  } else if (job.name === RECAP_BUILD_JOB) {
+    // Not gated on COACH_ENABLED: recaps exist with the coach off (template text, app-level push).
+    await runRecapJob(job.data as RecapJobData, defaultRecapDeps());
   } else if (job.name === COACH_RETENTION_JOB) {
     // Not gated on COACH_ENABLED: expiry must keep running if the coach is switched off.
     await runCoachRetention({ telemetry: new LoggerCoachTelemetry() });

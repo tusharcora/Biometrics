@@ -707,8 +707,20 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
 
   router.get('/me/coach/digests/latest', requireAuth, requireEnabled, async (req: AuthedRequest, res) => {
     try {
+      const userId = req.userId!;
+      // Merged into the weekly recap (spec 2026-10-04 §2): the latest BUILT WEEK recap's story, in
+      // the same shape, falling back to the latest legacy CoachDigest when no recap has a story.
+      const recap = await prisma.recap.findFirst({
+        where: { userId, kind: 'WEEK', status: 'BUILT', story: { not: null } },
+        orderBy: { periodStart: 'desc' },
+        select: { id: true, story: true, builtAt: true },
+      });
+      if (recap?.story) {
+        res.json({ digest: { id: recap.id, text: recap.story, createdAt: recap.builtAt.toISOString() } });
+        return;
+      }
       const digest = await prisma.coachDigest.findFirst({
-        where: { userId: req.userId! },
+        where: { userId },
         orderBy: [{ weekStart: 'desc' }, { createdAt: 'desc' }],
       });
       res.json({
@@ -722,10 +734,11 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
 
   // ---- push tokens ------------------------------------------------------------
 
+  // App-level since the recap (spec 2026-10-04 §2): recap pushes reach users with the coach off.
   const isToken = (v: unknown): v is string =>
     typeof v === 'string' && v.length > 0 && v.length <= MAX_PUSH_TOKEN_CHARS && !/\s/.test(v);
 
-  router.post('/me/push-token', requireAuth, requireEnabled, async (req: AuthedRequest, res) => {
+  router.post('/me/push-token', requireAuth, async (req: AuthedRequest, res) => {
     const { token, platform } = (req.body ?? {}) as Record<string, unknown>;
     if (!isToken(token)) {
       res.status(400).json({ error: 'token must be a non-empty string without whitespace' });
@@ -768,7 +781,7 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
     }
   });
 
-  router.delete('/me/push-token', requireAuth, requireEnabled, async (req: AuthedRequest, res) => {
+  router.delete('/me/push-token', requireAuth, async (req: AuthedRequest, res) => {
     const token = (req.body ?? {}).token;
     if (!isToken(token)) {
       res.status(400).json({ error: 'token must be a non-empty string without whitespace' });

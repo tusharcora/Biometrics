@@ -1,14 +1,16 @@
 import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { act, render, waitFor } from '@testing-library/react-native';
 import { NavigationContext } from '@react-navigation/native';
 import { SettingsScreen } from '../../src/screens/SettingsScreen';
 import { fetchCoachStatus, type CoachStatusDTO } from '../../src/api/coach';
 import { getTimezoneState, listTimeZones } from '../../src/lib/timezone';
 import { getPushState, enablePush, disablePush } from '../../src/lib/pushRegistration';
+import { fetchNotificationSettings } from '../../src/api/notifications';
 
 jest.mock('../../src/lib/timezone');
 jest.mock('../../src/api/coach');
 jest.mock('../../src/lib/pushRegistration');
+jest.mock('../../src/api/notifications');
 
 const status: CoachStatusDTO = {
   enabled: true,
@@ -35,119 +37,32 @@ beforeEach(() => {
   (getPushState as jest.Mock).mockResolvedValue({ status: 'off' });
   (enablePush as jest.Mock).mockResolvedValue({ status: 'on' });
   (disablePush as jest.Mock).mockResolvedValue({ status: 'off' });
+  (fetchNotificationSettings as jest.Mock).mockResolvedValue({ recapPushEnabled: true });
 });
 
-describe('SettingsScreen: weekly recap notifications', () => {
-  it('shows the toggle, off, when the coach is enabled and consented', async () => {
-    const { findByTestId, getByText } = renderSettings();
-
-    const toggle = await findByTestId('push-toggle');
-    expect(getByText('Weekly recap notifications')).toBeTruthy();
-    expect(toggle.props.value).toBe(false);
-  });
-
-  it('shows the toggle on when push is registered', async () => {
-    (getPushState as jest.Mock).mockResolvedValue({ status: 'on' });
-    const { findByTestId } = renderSettings();
-
-    await waitFor(async () => expect((await findByTestId('push-toggle')).props.value).toBe(true));
-  });
-
-  it('is hidden, and never touches push, when the coach is disabled', async () => {
-    (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, enabled: false });
-    const { findByTestId, queryByTestId, queryByText } = renderSettings();
-
-    await findByTestId('timezone-value');
-    await waitFor(() => expect(fetchCoachStatus).toHaveBeenCalled());
-    expect(queryByTestId('push-toggle')).toBeNull();
-    expect(queryByText(/notifications/i)).toBeNull();
-    expect(getPushState).not.toHaveBeenCalled();
-    expect(enablePush).not.toHaveBeenCalled();
-  });
-
-  it('is hidden when the coach is enabled but not consented', async () => {
-    (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, consented: false });
+describe('SettingsScreen: Recap ready notifications', () => {
+  it('no longer has a push switch inside the coach section', async () => {
     const { findByTestId, queryByTestId } = renderSettings();
-
     await findByTestId('coach-settings');
     expect(queryByTestId('push-toggle')).toBeNull();
-    expect(getPushState).not.toHaveBeenCalled();
   });
 
-  it('never requests permission just from rendering', async () => {
-    const { findByTestId } = renderSettings();
-    await findByTestId('push-toggle');
+  it('shows the Recap ready switch with the coach off, and never prompts just from rendering', async () => {
+    (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, enabled: false });
+    const { findByTestId, queryByTestId } = renderSettings();
+    expect(await findByTestId('recap-ready-row')).toBeTruthy();
+    expect(queryByTestId('coach-settings')).toBeNull();
     expect(enablePush).not.toHaveBeenCalled();
   });
 
-  it('enables push when toggled on', async () => {
-    const { findByTestId } = renderSettings();
-
-    fireEvent(await findByTestId('push-toggle'), 'valueChange', true);
-
-    await waitFor(() => expect(enablePush).toHaveBeenCalledTimes(1));
-    await waitFor(async () => expect((await findByTestId('push-toggle')).props.value).toBe(true));
-  });
-
-  it('disables push when toggled off', async () => {
-    (getPushState as jest.Mock).mockResolvedValue({ status: 'on' });
-    const { findByTestId } = renderSettings();
-    await waitFor(async () => expect((await findByTestId('push-toggle')).props.value).toBe(true));
-
-    fireEvent(await findByTestId('push-toggle'), 'valueChange', false);
-
-    await waitFor(() => expect(disablePush).toHaveBeenCalledTimes(1));
-    await waitFor(async () => expect((await findByTestId('push-toggle')).props.value).toBe(false));
-  });
-
-  it('explains how to unblock notifications when permission is denied', async () => {
-    (enablePush as jest.Mock).mockResolvedValue({ status: 'denied' });
-    const { findByTestId, findByText } = renderSettings();
-
-    fireEvent(await findByTestId('push-toggle'), 'valueChange', true);
-
-    expect(await findByText('Notifications are blocked — enable them in system settings')).toBeTruthy();
-    expect((await findByTestId('push-toggle')).props.value).toBe(false);
-  });
-
-  it('shows the blocked message on load when the system already denied notifications', async () => {
-    (getPushState as jest.Mock).mockResolvedValue({ status: 'denied' });
-    const { findByText } = renderSettings();
-
-    expect(await findByText('Notifications are blocked — enable them in system settings')).toBeTruthy();
-  });
-
-  it("says notifications aren't available in this build", async () => {
+  it('hides the switch where notifications are unavailable', async () => {
     (getPushState as jest.Mock).mockResolvedValue({ status: 'unavailable', reason: 'no_project_id' });
-    const { findByText } = renderSettings();
-
-    expect(await findByText("Notifications aren't available in this build")).toBeTruthy();
-  });
-
-  it("switches to the unavailable message when enabling finds no push support", async () => {
-    (enablePush as jest.Mock).mockResolvedValue({ status: 'unavailable', reason: 'simulator' });
-    const { findByTestId, findByText } = renderSettings();
-
-    fireEvent(await findByTestId('push-toggle'), 'valueChange', true);
-
-    expect(await findByText("Notifications aren't available in this build")).toBeTruthy();
-    expect((await findByTestId('push-toggle')).props.value).toBe(false);
-  });
-
-  it('says so when registration failed', async () => {
-    (enablePush as jest.Mock).mockResolvedValue({ status: 'error', reason: 'offline' });
-    const { findByTestId, findByTestId: find, findByText } = renderSettings();
-
-    fireEvent(await findByTestId('push-toggle'), 'valueChange', true);
-
-    expect(await findByText(/could not be turned on/i)).toBeTruthy();
-    expect((await find('push-toggle')).props.value).toBe(false);
-  });
-
-  it('keeps the rest of the coach section working when the push state cannot be read', async () => {
-    (getPushState as jest.Mock).mockRejectedValue(new Error('boom'));
-    const { findByTestId } = renderSettings();
-
-    expect(await findByTestId('coach-memory-row')).toBeTruthy();
+    const { findByTestId, queryByTestId } = renderSettings();
+    await findByTestId('timezone-value');
+    await waitFor(() => expect(getPushState).toHaveBeenCalled());
+    await waitFor(() => expect(fetchNotificationSettings).toHaveBeenCalled());
+    // Let the section's reads settle, so a switch that wrongly renders would be on screen by now.
+    await act(async () => {});
+    expect(queryByTestId('recap-ready-row')).toBeNull();
   });
 });

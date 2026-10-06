@@ -6,10 +6,12 @@ import { fetchSleep, fetchSleepGoal, fetchSleepNight, fetchSleepRegularity, type
 import { fetchScoresWithBands } from '../../src/api/scores';
 import { addDays, todayCivil } from '../../src/lib/heatmap';
 import { readWindDown } from '../../src/lib/windDown';
+import { fetchRecaps } from '../../src/api/recaps';
 
 jest.mock('../../src/api/sleep');
 jest.mock('../../src/api/scores');
 jest.mock('../../src/lib/windDown');
+jest.mock('../../src/api/recaps', () => ({ fetchRecaps: jest.fn(() => Promise.resolve([])), markRecapOpened: jest.fn() }));
 
 const mockNavigate = jest.fn();
 // Screen events by name, so a test can fire focus/blur.
@@ -374,5 +376,27 @@ describe('SleepScreen', () => {
     expect(await screen.findByTestId('sleep-regularity-empty')).toHaveTextContent('Not enough nights yet. 4 more to go.');
     expect(fetchSleepNight).not.toHaveBeenCalled();
     expect(screen.getByTestId('sleep-goal-row')).toBeTruthy();
+  });
+
+  it('shows the story shelf at the top, in place of the old "Your recaps" row; See all opens the recaps', async () => {
+    (fetchRecaps as jest.Mock).mockResolvedValue([
+      { id: 'w1', kind: 'WEEK', periodStart: D(8), periodEnd: D(2), line: 'A week.', personaId: 'mochi', builtAt: '2026-10-05T09:00:00.000Z', openedAt: null },
+    ]);
+    renderScreen();
+    expect(await screen.findByTestId('recap-shelf')).toBeTruthy();
+    expect(screen.queryByTestId('sleep-recaps-row')).toBeNull();
+    fireEvent.press(screen.getByTestId('recap-shelf-see-all'));
+    expect(mockNavigate).toHaveBeenCalledWith('Recaps');
+    fireEvent.press(screen.getByTestId('recap-shelf-item-w1'));
+    expect(mockNavigate).toHaveBeenCalledWith('RecapStory', { id: 'w1' });
+  });
+
+  it('keeps Recaps · See all without recaps (no circles), so the recaps and Year in pixels stay reachable', async () => {
+    (fetchRecaps as jest.Mock).mockResolvedValue([]);
+    renderScreen();
+    expect(await screen.findByTestId('recap-shelf-empty')).toBeTruthy();
+    expect(screen.queryByTestId('recap-shelf-row')).toBeNull();
+    fireEvent.press(screen.getByTestId('recap-shelf-see-all'));
+    expect(mockNavigate).toHaveBeenCalledWith('Recaps');
   });
 });

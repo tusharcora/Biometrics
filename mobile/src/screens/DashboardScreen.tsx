@@ -18,6 +18,7 @@ import { ThemeToggle } from '../components/ui/theme-toggle';
 import { Reveal } from '../components/ui/reveal';
 import { HabitLogCard } from '../components/habit-log-card';
 import { CoachDigestCard } from '../components/coach-digest-card';
+import { StoryRing, useStoryRing } from '../components/recap/StoryRing';
 import { TomorrowCard } from '../components/tomorrow-card';
 import { RecoveryHero } from '../components/home/recovery-hero';
 import { SleepTile } from '../components/home/sleep-tile';
@@ -137,8 +138,12 @@ export function DashboardScreen() {
     navigation.navigate('MetricDetail', { metricType: type, records: seriesByMetric[type] });
   }
 
+  // An unwatched weekly recap rings the avatar in its coach's colour; a tap plays its story
+  // instead of opening Profile.
+  const ring = useStoryRing(scheme === 'dark' ? 'dark' : 'light', navigation);
   function openProfile() {
-    navigation.navigate('Tabs', { screen: 'Profile' });
+    if (ring) navigation.navigate(ring.destination.name, ring.destination.params);
+    else navigation.navigate('Tabs', { screen: 'Profile' });
   }
 
   const initial = session?.email?.trim().charAt(0).toUpperCase() ?? '';
@@ -146,16 +151,20 @@ export function DashboardScreen() {
     <Pressable
       testID="settings-button"
       accessibilityRole="button"
-      accessibilityLabel="Profile and settings"
+      accessibilityLabel={ring ? `Profile. ${ring.hint}` : 'Profile and settings'}
       onPress={openProfile}
       hitSlop={4}
-      className="h-11 w-11 items-center justify-center rounded-full border border-border bg-muted active:opacity-70"
+      className="active:opacity-70"
     >
-      {initial ? (
-        <Text className="text-base font-semibold">{initial}</Text>
-      ) : (
-        <Ionicons name="person-outline" size={18} color={colors.foreground} />
-      )}
+      <StoryRing testID="profile-story-ring" color={ring?.color ?? null} size={44} ringWidth={2.5} gap={2.5} dotSize={12} surface={colors.background}>
+        <View className={ring ? 'flex-1 items-center justify-center bg-muted' : 'flex-1 items-center justify-center rounded-full border border-border bg-muted'}>
+          {initial ? (
+            <Text className={ring ? 'text-sm font-semibold' : 'text-base font-semibold'}>{initial}</Text>
+          ) : (
+            <Ionicons name="person-outline" size={ring ? 16 : 18} color={colors.foreground} />
+          )}
+        </View>
+      </StoryRing>
     </Pressable>
   );
 
@@ -278,7 +287,9 @@ export function DashboardScreen() {
 
         <HabitLogCard />
 
-        {coachRoute === 'Coach' ? <CoachDigestCard /> : null}
+        {/* The digest is the newest week's recap: it plays that week's story, whose last frame
+            offers the full recap. */}
+        {coachRoute === 'Coach' ? <CoachDigestCard onOpenRecap={(id) => navigation.navigate('RecapStory', { id })} /> : null}
 
         {metricsWithData.length > 0 ? (
           <View className="gap-3">

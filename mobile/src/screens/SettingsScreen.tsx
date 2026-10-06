@@ -11,7 +11,9 @@ import { useOptionalAuth } from '../auth/AuthContext';
 import { AccountSection } from '../components/account-section';
 import { CoachSettingsSection } from '../components/coach-settings-section';
 import { DeleteAccountSection } from '../components/delete-account-section';
+import { NotificationsSection } from '../components/notifications-section';
 import { YourCoachRow } from '../components/your-coach-row';
+import { StoryRing, useStoryRing } from '../components/recap/StoryRing';
 import { COLORS, FONTS } from '../theme';
 import { useSync } from '../sync/SyncProvider';
 import { formatLastSynced } from '../sync/formatLastSynced';
@@ -40,6 +42,7 @@ export function SettingsScreen() {
   const [picking, setPicking] = useState(false);
   const [query, setQuery] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const ring = useStoryRing(scheme === 'dark' ? 'dark' : 'light', navigation ?? undefined);
 
   useEffect(() => {
     getTimezoneState().then(setState).catch(() => setState(null));
@@ -116,6 +119,11 @@ export function SettingsScreen() {
 
   const email = auth?.session?.email ?? null;
   const connected = connection === 'CONNECTED';
+  const avatarFace = email ? (
+    <Text className="font-display text-display-lg">{email.charAt(0).toUpperCase()}</Text>
+  ) : (
+    <Ionicons name="person-outline" size={30} color={colors.muted} />
+  );
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
@@ -124,13 +132,24 @@ export function SettingsScreen() {
         contentContainerStyle={{ gap: 24, paddingHorizontal: 20, paddingTop: 8, paddingBottom: clearance }}
       >
         <View className="items-center gap-2 pt-2">
-          <View className="h-20 w-20 items-center justify-center rounded-full border border-border bg-muted">
-            {email ? (
-              <Text className="font-display text-display-lg">{email.charAt(0).toUpperCase()}</Text>
-            ) : (
-              <Ionicons name="person-outline" size={30} color={colors.muted} />
-            )}
-          </View>
+          {ring ? (
+            // An unwatched recap: the avatar wears its coach's ring and plays it, as on Home.
+            <Pressable
+              testID="profile-avatar"
+              accessibilityRole="button"
+              accessibilityLabel={ring.hint}
+              onPress={() => (navigation as { navigate: (name: string, params: object) => void } | undefined)?.navigate(ring.destination.name, ring.destination.params)}
+              className="active:opacity-70"
+            >
+              <StoryRing testID="profile-avatar-ring" color={ring.color} size={80} ringWidth={3} gap={3} dotSize={16} surface={colors.background}>
+                <View className="flex-1 items-center justify-center bg-muted">{avatarFace}</View>
+              </StoryRing>
+            </Pressable>
+          ) : (
+            <View testID="profile-avatar" className="h-20 w-20 items-center justify-center rounded-full border border-border bg-muted">
+              {avatarFace}
+            </View>
+          )}
           <Text className="font-display text-display">Profile</Text>
           {email ? <Text className="text-sm text-muted-foreground">{email}</Text> : null}
         </View>
@@ -175,6 +194,7 @@ export function SettingsScreen() {
           ) : null}
         </SettingsGroup>
 
+        <NotificationsSection />
         <AccountSection />
         <YourCoachRow />
         <CoachSettingsSection />

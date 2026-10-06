@@ -8,6 +8,8 @@
 // comparison the model may want to state ("32 lower than usual") is
 // precomputed here.
 
+import { monthDay, weekdayName } from '../../recap/periods';
+import type { RecapKind, RecapStats } from '../../recap/types';
 import { shiftDate } from '../../scoring/dates';
 import { MAX_MEMORY_VALUE_CHARS, MemoryCategory, MemoryProposal, loadConfirmedMemories } from '../memory';
 import { cleanField, escapeField } from '../escape';
@@ -16,7 +18,18 @@ import { DailyScoreToolResult, getDailyScore } from '../tools/dailyScore';
 import { DailyMetricsToolResult, getDailyMetrics, getMetricHistory, MetricHistoryToolResult, MetricKey } from '../tools/metrics';
 import type { AnswerRoute } from './route';
 
-export type FactUnit = 'score' | 'ms' | 'bpm' | 'minutes' | 'count' | 'percent' | 'none';
+export type FactUnit = 'score' | 'ms' | 'bpm' | 'minutes' | 'count' | 'percent' | 'none' | 'nights' | 'days' | 'times';
+
+/** Chat routes, plus the recap sheet (spec 2026-10-04 §2), which has no general-knowledge allowance. */
+export type SheetRoute = AnswerRoute | 'recap';
+
+const COUNT_WORD: Record<'nights' | 'days' | 'times', string> = { nights: 'night', days: 'day', times: 'time' };
+
+/** "1 night", "5 nights": a count with its unit word, so a sentence about steps cannot borrow it. */
+export function countDisplay(unit: 'nights' | 'days' | 'times', n: number): string {
+  const v = Math.round(n);
+  return `${v} ${v === 1 ? COUNT_WORD[unit] : `${COUNT_WORD[unit]}s`}`;
+}
 
 export interface Fact {
   /** Stable, e.g. 'recovery.today', 'sleep.total', 'habit.caffeine.hrv'. */
@@ -36,7 +49,7 @@ export interface Fact {
 }
 
 export interface FactSheet {
-  route: AnswerRoute;
+  route: SheetRoute;
   facts: Fact[];
   /** Plain lines, e.g. 'No sleep recorded last night'. */
   notes: string[];
@@ -97,6 +110,10 @@ export function formatValue(unit: FactUnit, value: number): string {
       return Math.round(value).toLocaleString('en-US');
     case 'percent':
       return `${value}%`;
+    case 'nights':
+    case 'days':
+    case 'times':
+      return countDisplay(unit, value);
     default:
       return String(value);
   }
@@ -363,4 +380,71 @@ export async function buildFactSheet(userId: string, route: AnswerRoute, deps: F
   const [, memories] = await Promise.all([BUILDERS[route](userId, deps, b), deps.loadConfirmedMemories(userId)]);
   b.notes.push(...memoryNotes(memories));
   return { route, facts: b.facts, notes: b.notes };
+}
+
+const WEEKDAY_KEY = ['sun', 'mon', 'tue', 'wed', 'thu', 'fri', 'sat'];
+
+/** "28m more than last week", "5 points lower than last month", "the same as last week". */
+function changeDisplay(unit: 'minutes' | 'score', delta: number, words: [string, string], prefix: string, period: string): string {
+  if (delta === 0) return `${prefix}the same as last ${period}`.trim();
+  const size = unit === 'minutes' ? durationDisplay(Math.abs(delta)) : `${Math.abs(delta)} points`;
+  return `${prefix}${size} ${delta > 0 ? words[0] : words[1]} than last ${period}`;
+}
+
+/**
+ * The recap fact sheet (spec 2026-10-04 §2): exactly the section-1 numbers, every count with a
+ * count unit (nights, days, times, steps), dates only in labels (as weekdays or "Oct 9"), notes
+ * without digits. Validated with { exactNumbers: true }.
+ */
+export function buildRecapFactSheet(kind: RecapKind, stats: RecapStats, sleepGoalMinutes: number): FactSheet {
+  const b = new SheetBuilder();
+  const period = kind === 'WEEK' ? 'week' : 'month';
+  const dayLabel = (date: string) => (kind === 'WEEK' ? weekdayName(date) : monthDay(date));
+  const score = (value: number) => ({ display: `${Math.round(value)}/100` });
+
+  b.add(fact({ id: 'sleep.goal', label: 'Sleep goal', unit: 'minutes', value: sleepGoalMinutes }));
+  b.add(fact({ id: 'sleep.nights', label: `Nights with sleep recorded this ${period}`, unit: 'nights', value: stats.nightsWithData }));
+  b.add(fact({ id: 'sleep.avg', label: 'Average sleep a night', unit: 'minutes', value: stats.avgSleepMinutes }), `No sleep recorded this ${period}`);
+  b.add(fact({ id: 'sleep.on_goal', label: 'Nights at or above the sleep goal', unit: 'nights', value: stats.nightsOnGoal }));
+  b.add(fact({ id: 'sleep.streak', label: 'Most nights on goal in a row', unit: 'nights', value: stats.longestOnGoalStreak }));
+  if (stats.bestNight) {
+    b.add(fact({ id: 'sleep.best_night', label: `Best night (${dayLabel(stats.bestNight.date)})`, unit: 'minutes', value: stats.bestNight.minutesAsleep }));
+  }
+  if (stats.bestRecovery) {
+    b.add(fact({ id: 'recovery.best', label: `Best recovery (${dayLabel(stats.bestRecovery.date)})`, unit: 'score', value: stats.bestRecovery.score, ...score(stats.bestRecovery.score) }));
+  }
+  if (stats.avgRecovery !== undefined) b.add(fact({ id: 'recovery.avg', label: 'Average recovery', unit: 'score', value: stats.avgRecovery, ...score(stats.avgRecovery) }));
+  else b.notes.push(`No recovery scores this ${period}`);
+  if (stats.steps) {
+    b.add(fact({ id: 'steps.total', label: `Steps in total this ${period}`, unit: 'count', value: stats.steps.total }));
+    b.add(fact({ id: 'steps.daily_avg', label: 'Average steps a day (days with steps)', unit: 'count', value: stats.steps.dailyAverage }));
+  } else b.notes.push(`No steps recorded this ${period}`);
+  if (stats.earlierBedtimes) {
+    b.add(fact({ id: 'sleep.earlier_bedtimes', label: `Nights in bed earlier than last ${period}'s average bedtime`, unit: 'nights', value: stats.earlierBedtimes.nights }));
+    b.add(fact({ id: 'sleep.bedtime_nights', label: 'Nights with a bedtime', unit: 'nights', value: stats.earlierBedtimes.of }));
+  }
+  b.add(fact({ id: 'sleep.bedtime_spread', label: 'How much bedtimes varied (spread)', unit: 'minutes', value: stats.bedtimeSpreadMinutes }));
+  for (const e of stats.weekStrip ?? []) {
+    const key = WEEKDAY_KEY[new Date(`${e.date}T00:00:00Z`).getUTCDay()]!;
+    b.add(fact({ id: `sleep.night.${key}`, label: `Sleep on ${weekdayName(e.date)}`, unit: 'minutes', value: e.minutesAsleep, zeroIsMissing: true }));
+    if (e.recovery !== null) b.add(fact({ id: `recovery.day.${key}`, label: `Recovery on ${weekdayName(e.date)}`, unit: 'score', value: e.recovery, ...score(e.recovery) }));
+  }
+  const c = stats.comparison;
+  if (c?.avgSleepDelta !== undefined) {
+    b.add({ id: 'sleep.avg_change', label: `Average sleep compared with last ${period}`, value: c.avgSleepDelta, unit: 'minutes', display: changeDisplay('minutes', c.avgSleepDelta, ['more', 'less'], '', period) });
+  }
+  if (c?.bedtimeSpreadDelta !== undefined) {
+    b.add({ id: 'sleep.bedtime_spread_change', label: `Bedtime spread compared with last ${period}`, value: c.bedtimeSpreadDelta, unit: 'minutes', display: changeDisplay('minutes', c.bedtimeSpreadDelta, ['more', 'less'], 'bedtimes varied ', period) });
+  }
+  if (c?.avgRecoveryDelta !== undefined) {
+    b.add({ id: 'recovery.avg_change', label: `Average recovery compared with last ${period}`, value: c.avgRecoveryDelta, unit: 'score', display: changeDisplay('score', c.avgRecoveryDelta, ['higher', 'lower'], '', period) });
+  }
+  const m = stats.milestones;
+  if (m?.streak) b.notes.push('Milestone: a long run of nights on goal in a row (see sleep.streak)');
+  if (m?.bestRecoveryWeek) {
+    b.add(fact({ id: 'recovery.best_week', label: `Best week of recovery (week of ${monthDay(m.bestRecoveryWeek.weekStart)}), better than last month's best week`, unit: 'score', value: m.bestRecoveryWeek.avgRecovery, ...score(m.bestRecoveryWeek.avgRecovery) }));
+  }
+  if (m?.everyDayLogged) b.add(fact({ id: 'sleep.days_logged', label: 'Days this month with sleep logged (every day)', unit: 'days', value: m.everyDayLogged.days }));
+  if (m?.steadiestMonth) b.notes.push('Milestone: the steadiest bedtimes of any month so far (see sleep.bedtime_spread)');
+  return { route: 'recap', facts: b.facts, notes: b.notes };
 }

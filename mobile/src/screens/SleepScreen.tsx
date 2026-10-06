@@ -17,6 +17,7 @@ import {
 import { fetchScoresWithBands, type DailyScoreDTO, type ScoreBandsDTO } from '../api/scores';
 import { useCharacter } from '../characters/CharacterContext';
 import { characterInfo } from '../components/characters/registry';
+import { RecapShelf } from '../components/recap/RecapShelf';
 import { RegularityCard } from '../components/sleep/RegularityCard';
 import { SectionError, useSection, type Section } from '../components/sleep/Section';
 import { StageLegend, StageStrip } from '../components/sleep/StageStrip';
@@ -145,6 +146,10 @@ export function SleepScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
       <ScrollView contentContainerStyle={{ gap: 16, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32 }}>
+        {/* 0. The story shelf (weekly story placement, design D): every recap, newest first. Its
+            "Recaps · See all" header always shows, so Your recaps and Year in pixels stay reachable. */}
+        <RecapShelf navigation={navigation} />
+
         {/* 1. Score header */}
         {score.phase === 'loading' ? <Skeleton testID="sleep-score-loading" className="h-24 w-full rounded-card" /> : null}
         {score.phase === 'error' ? (
@@ -266,6 +271,7 @@ export function SleepScreen() {
             </Card>
           </Pressable>
         )}
+
       </ScrollView>
     </SafeAreaView>
   );

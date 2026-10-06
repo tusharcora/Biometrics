@@ -6,6 +6,8 @@ import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from 'nativewind';
 import { Character } from '../components/characters/Character';
+import { StoryRing, useStoryRing } from '../components/recap/StoryRing';
+import { readyCardTitle } from '../lib/recapCopy';
 import { Text } from '../components/ui/text';
 import { useCoachStatus } from '../lib/useCoachStatus';
 import { useKeyboardVisible } from '../lib/useKeyboardVisible';
@@ -45,6 +47,9 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
   const keyboardVisible = useKeyboardVisible();
   const { status, refresh } = useCoachStatus();
   const [innerWidth, setInnerWidth] = useState(0);
+  // An unwatched recap rings the Profile icon too (the same store as the Home avatar). A tap
+  // still opens Profile.
+  const ring = useStoryRing(scheme);
 
   const activeName = state.routes[state.index]?.name ?? 'Home';
   // The hub character always idles, on every tab (spec §1, Performance). It is
@@ -140,12 +145,15 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
             const focused = state.index === index;
             const isHub = route.name === HUB_TAB;
             const label = TAB_LABELS[route.name] ?? route.name;
+            const ringed = route.name === 'Profile' && ring !== null;
+            const icon = <Ionicons name={ICONS[route.name] ?? 'ellipse-outline'} size={ringed ? 16 : 22} color={focused ? colors.foreground : colors.muted} />;
             return (
               <Pressable
                 key={route.key}
                 testID={`tab-${route.name}`}
                 accessibilityRole="button"
-                accessibilityLabel={label}
+                // The tab still opens Profile, so it says what is ready, not what a tap plays.
+                accessibilityLabel={ringed ? `${label}. ${readyCardTitle(ring.recap)}` : label}
                 accessibilityState={{ selected: focused }}
                 onPress={() => press(route, focused)}
                 hitSlop={4}
@@ -156,7 +164,13 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
                   <Character testID="hub-character" mood="idle" size={HUB_CHARACTER_SIZE} dimmed={hubDimmed} />
                 ) : (
                   <View className="items-center" style={{ gap: 3 }}>
-                    <Ionicons name={ICONS[route.name] ?? 'ellipse-outline'} size={22} color={focused ? colors.foreground : colors.muted} />
+                    {ringed ? (
+                      <StoryRing testID="tab-Profile-story-ring" color={ring.color} size={26} ringWidth={2} gap={2} dotSize={9} surface={colors.card}>
+                        <View className="flex-1 items-center justify-center">{icon}</View>
+                      </StoryRing>
+                    ) : (
+                      icon
+                    )}
                     {focused ? (
                       <Text testID={`tab-label-${route.name}`} className="text-[10px] font-semibold" style={{ color: colors.foreground }}>
                         {label}

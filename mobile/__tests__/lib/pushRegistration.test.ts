@@ -275,24 +275,17 @@ describe('syncPushRegistration', () => {
     expect(Object.values(store)).toContain(TOKEN_A);
   });
 
-  it('does nothing unless the coach is enabled and consented', async () => {
+  it('re-registers a changed token with the coach off: tokens are app-level', async () => {
     await enablePush();
     api.mockClear();
-    getToken.mockClear();
     getToken.mockResolvedValue({ type: 'expo', data: TOKEN_B });
+    (fetchCoachStatus as jest.Mock).mockResolvedValue({ enabled: false, consented: false });
 
-    for (const status of [
-      { enabled: false, consented: false },
-      { enabled: true, consented: false },
-    ]) {
-      (fetchCoachStatus as jest.Mock).mockResolvedValue(status);
-      await syncPushRegistration();
-    }
-    (fetchCoachStatus as jest.Mock).mockRejectedValue(new Error('offline'));
     await syncPushRegistration();
 
-    expect(getToken).not.toHaveBeenCalled();
-    expect(api).not.toHaveBeenCalled();
+    expect(postCalls()).toHaveLength(1);
+    expect(JSON.parse(postCalls()[0]![1].body)).toEqual({ token: TOKEN_B, platform: 'ios' });
+    expect(fetchCoachStatus).not.toHaveBeenCalled();
   });
 
   it('never prompts for permission and skips when notifications were blocked', async () => {

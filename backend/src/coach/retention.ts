@@ -5,16 +5,21 @@
 //     empty. It does not depend on COACH_ENABLED: turning the coach off must
 //     never stop old transcripts from expiring.
 //   * deleteUserCoachData(): removes EVERYTHING the coach holds for one user
-//     (transcripts, conversations, memory, digests, day summaries, consent rows,
-//     push tokens).
+//     (transcripts, conversations, memory, digests, day summaries, consent rows
+//     and the coach-written recap text: stories removed, AI lines replaced by
+//     template lines; the numbers stay). Push tokens are app-level and stay.
 //     Account deletion (src/users/deletion.ts) deletes the same Coach* tables as
 //     part of its own single transaction, walking the shared USER_OWNED_MODELS
 //     list; this function remains for removing coach data on its own.
 //
 // Telemetry carries counts only.
 
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../db/client';
 import type { CoachTelemetry } from './telemetry';
+import { buildRecapFactSheet } from './answer/facts';
+import { templateLine } from '../recap/templates';
+import type { RecapStats } from '../recap/types';
 
 export const TRANSCRIPT_RETENTION_DAYS = 90;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -57,7 +62,8 @@ export interface UserDataDeletionSummary {
   digests: number;
   daySummaries: number;
   consents: number;
-  pushTokens: number;
+  /** Recaps whose coach-written text was cleared. */
+  recapTexts: number;
 }
 
 /** Hard-deletes all coach data for a user, atomically. Idempotent: a second call deletes nothing. */
@@ -70,7 +76,20 @@ export async function deleteUserCoachData(userId: string, telemetry?: CoachTelem
     const digests = await tx.coachDigest.deleteMany({ where: { userId } });
     const daySummaries = await tx.coachDaySummary.deleteMany({ where: { userId } });
     const consents = await tx.coachConsent.deleteMany({ where: { userId } });
-    const pushTokens = await tx.pushToken.deleteMany({ where: { userId } });
+    // Recap numbers are not coach data; the coach's words are (spec 2026-10-04 §2). No model call.
+    const recaps = await tx.recap.findMany({
+      where: { userId, OR: [{ story: { not: null } }, { lineSource: 'AI' }] },
+      select: { id: true, kind: true, stats: true, sleepGoalMinutes: true, lineSource: true },
+    });
+    for (const r of recaps) {
+      const data: Prisma.RecapUpdateInput = { story: null, storySource: null };
+      if (r.lineSource === 'AI' && r.stats !== null) {
+        const stats = r.stats as unknown as RecapStats;
+        data.line = templateLine(r.kind, stats, buildRecapFactSheet(r.kind, stats, r.sleepGoalMinutes));
+        data.lineSource = 'TEMPLATE';
+      }
+      await tx.recap.update({ where: { id: r.id }, data });
+    }
     return {
       messages: messages.count,
       conversations: conversations.count,
@@ -78,7 +97,7 @@ export async function deleteUserCoachData(userId: string, telemetry?: CoachTelem
       digests: digests.count,
       daySummaries: daySummaries.count,
       consents: consents.count,
-      pushTokens: pushTokens.count,
+      recapTexts: recaps.length,
     };
   });
   telemetry?.emit({ name: 'coach.user_data_deleted', userId, personaId: 'none', attributes: { ...summary } });

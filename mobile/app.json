@@ -28,7 +28,16 @@
     },
     "plugins": [
       "./plugins/with-ios-scene-delegate.js",
-      "expo-asset"
+      "expo-asset",
+      [
+        "expo-media-library",
+        {
+          "photosPermission": "Allow Biometrics to save your recap images to Photos.",
+          "savePhotosPermission": "Allow Biometrics to save your recap images to Photos.",
+          "isAccessMediaLocationEnabled": false,
+          "granularPermissions": []
+        }
+      ]
     ]
   }
 }

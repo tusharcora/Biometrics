@@ -52,6 +52,9 @@ export async function seedAllOwnedRows(
   await prisma.coachMemory.create({ data: { userId, category: 'PREFERENCE', value: 'seed memory' } });
   await prisma.coachDigest.create({ data: { userId, text: 'seed digest', personaId: 'default', weekStart: day } });
   await prisma.coachDaySummary.create({ data: { userId, date: day, text: 'seed summary', spans: [], source: 'TEMPLATE' } });
+  await prisma.recap.create({
+    data: { userId, kind: 'WEEK', periodStart: day, periodEnd: new Date('2026-09-07T00:00:00.000Z'), status: 'SKIPPED', sleepGoalMinutes: 480 },
+  });
   await prisma.coachConsent.create({ data: { userId, version: 'v-test' } });
   await prisma.pushToken.create({ data: { userId, token: `push-${uniq}`, platform: 'ios' } });
   await prisma.session.create({

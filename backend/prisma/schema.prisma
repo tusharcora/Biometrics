@@ -52,6 +52,7 @@ model User {
   coachDigests       CoachDigest[]
   coachDaySummaries  CoachDaySummary[]
   pushTokens         PushToken[]
+  recaps             Recap[]
 
   // The coach persona the user picked in Settings (an id from
   // src/coach/personas). Null means the default persona.
@@ -75,6 +76,9 @@ model User {
   /// Target bedtime and wake time, local "HH:MM"; null = not set. Display and reminder only, never scoring.
   bedtimeGoal String?
   wakeGoal    String?
+
+  /// "Recap ready" pushes (spec 2026-10-04 §2). App-level: independent of the coach.
+  recapPushEnabled Boolean @default(true)
 
   // IANA zone name (e.g. "America/Los_Angeles"), client-supplied. It defines
   // which local civil date a sleep session's end instant belongs to, so the
@@ -605,4 +609,51 @@ model PushToken {
   createdAt DateTime     @default(now())
 
   @@index([userId])
+}
+
+enum RecapKind {
+  WEEK
+  MONTH
+}
+
+enum RecapStatus {
+  BUILT
+  SKIPPED
+}
+
+enum RecapTextSource {
+  AI
+  TEMPLATE
+}
+
+/// A weekly or monthly recap (spec 2026-10-04 §2). SKIPPED marks a thin period so the hourly
+/// sweep does not rebuild it; only the late-data rule re-checks it.
+model Recap {
+  id               String           @id @default(uuid())
+  userId           String
+  user             User             @relation(fields: [userId], references: [id])
+  kind             RecapKind
+  periodStart      DateTime         @db.Date
+  periodEnd        DateTime         @db.Date
+  status           RecapStatus
+  /// The section-1 numbers; null when SKIPPED.
+  stats            Json?
+  /// The sleep goal at build time, used for every on-goal number; never changes afterwards.
+  sleepGoalMinutes Int
+  line             String?
+  lineSource       RecapTextSource?
+  /// The weekly paragraph (the merged digest); WEEK only.
+  story            String?
+  storySource      RecapTextSource?
+  personaId        String?
+  builtAt          DateTime         @default(now())
+  /// Set by the one allowed late-data rebuild.
+  rebuiltAt        DateTime?
+  openedAt         DateTime?
+  pushedAt         DateTime?
+  /// The late-data filter's mark: inputs stamped before it were already counted or compared. Null → builtAt.
+  inputsCheckedAt  DateTime?
+
+  @@unique([userId, kind, periodStart])
+  @@index([userId, status, periodEnd])
 }

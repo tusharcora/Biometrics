@@ -32,7 +32,12 @@ export type CoachEventName =
   | 'coach.answer_error'
   | 'coach.model_warm'
   | 'coach.hosted_fallback'
-  | 'coach.summary_failed';
+  | 'coach.summary_failed'
+  | 'recap.built'
+  | 'recap.skipped'
+  | 'recap.rebuilt'
+  | 'recap.push_sent'
+  | 'recap.push_failed';
 
 export type CoachEventAttributes = Record<string, string | number | boolean>;
 

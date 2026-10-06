@@ -39,6 +39,13 @@ describe('app.config.js', () => {
     expect(plugins).toEqual([...basePlugins, 'expo-notifications']);
   });
 
+  // The recap export only adds images (writeOnly), which on Android 13+ needs no READ_MEDIA_* grant;
+  // the plugin's default would declare photo, video and audio read access.
+  it('declares no Android media read permissions for expo-media-library', () => {
+    const entry = buildConfig().plugins.find((p: unknown) => Array.isArray(p) && p[0] === 'expo-media-library');
+    expect(entry[1].granularPermissions).toEqual([]);
+  });
+
   it('does not mutate the shared app.json content between calls', () => {
     process.env.EXPO_PUSH = '1';
     buildConfig();

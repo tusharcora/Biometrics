@@ -517,8 +517,7 @@ describe('push content is generic', () => {
     await expect(new NoopPushSender().send()).resolves.toBeUndefined();
   });
 
-  it('no code path in src/coach hands anything but sendGenericPush to a PushSender', () => {
-    const dir = path.join(__dirname, '../../src/coach');
+  it('only push.ts calls a PushSender; only coachPush.ts calls sendGenericPush, with literal coach kinds', () => {
     const files: string[] = [];
     const walk = (d: string) => {
       for (const e of fs.readdirSync(d, { withFileTypes: true })) {
@@ -526,15 +525,14 @@ describe('push content is generic', () => {
         else if (e.name.endsWith('.ts')) files.push(path.join(d, e.name));
       }
     };
-    walk(dir);
+    walk(path.join(__dirname, '../../src/coach'));
+    walk(path.join(__dirname, '../../src/recap'));
     const senderCalls = files.filter((f) => /(pushSender|sender)\.send\(/.test(fs.readFileSync(f, 'utf8')));
     expect(senderCalls.map((f) => path.basename(f))).toEqual(['push.ts']);
-    const usage = files.filter((f) => /sendGenericPush\(/.test(fs.readFileSync(f, 'utf8')) && !f.endsWith('push.ts'));
-    for (const f of usage) {
-      // Every call site passes a string-literal kind.
-      for (const m of fs.readFileSync(f, 'utf8').matchAll(/sendGenericPush\(([^)]*)\)/g)) {
-        expect(m[1]).toMatch(/,\s*'(weekly_digest|insight)'\s*$/);
-      }
+    const generic = files.filter((f) => /sendGenericPush\(/.test(fs.readFileSync(f, 'utf8')) && path.basename(f) !== 'push.ts');
+    expect(generic.map((f) => path.basename(f))).toEqual(['coachPush.ts']);
+    for (const f of files.filter((f) => !['push.ts', 'coachPush.ts'].includes(path.basename(f)))) {
+      for (const m of fs.readFileSync(f, 'utf8').matchAll(/sendCoachPush\(([^)]*)\)/g)) expect(m[1]).toMatch(/,\s*'(weekly_digest|insight)'\s*$/);
     }
   });
 });

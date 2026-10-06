@@ -76,6 +76,16 @@ export function formatDuration(minutes: number): string {
   return `${Math.floor(m / 60)}h ${String(m % 60).padStart(2, '0')}m`;
 }
 
+/**
+ * 425 -> "7h 5m", 45 -> "45m": the coach's text style (the backend's durationDisplay), so a recap
+ * share image reads the same as its line.
+ */
+export function formatTextDuration(minutes: number): string {
+  const m = Math.round(minutes);
+  const h = Math.floor(m / 60);
+  return h === 0 ? `${m % 60}m` : `${h}h ${m % 60}m`;
+}
+
 /** 25 -> "25m", 80 -> "1h 20m": short spans without the leading "0h". */
 export function formatShortDuration(minutes: number): string {
   const m = Math.round(minutes);

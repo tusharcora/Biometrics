@@ -8,10 +8,15 @@ import { authClient } from '../../src/auth/authClient';
 import { setBaseUrl } from '../../src/api/client';
 import { fetchCoachStatus } from '../../src/api/coach';
 import { clearTimezoneState, getTimezoneState, listTimeZones } from '../../src/lib/timezone';
+import { fetchNotificationSettings } from '../../src/api/notifications';
 
 jest.mock('expo-secure-store');
 jest.mock('../../src/lib/timezone');
 jest.mock('../../src/api/coach');
+// Settings also reads the notification settings; keep that off the fetch mock these tests count.
+jest.mock('../../src/api/notifications');
+// ...and the newest recap, for the avatar's story ring.
+jest.mock('../../src/api/recaps');
 
 const fetchMock = jest.fn();
 (global as any).fetch = fetchMock;
@@ -69,6 +74,7 @@ beforeEach(() => {
   (listTimeZones as jest.Mock).mockReturnValue([]);
   (clearTimezoneState as jest.Mock).mockResolvedValue(undefined);
   (fetchCoachStatus as jest.Mock).mockResolvedValue({ enabled: false });
+  (fetchNotificationSettings as jest.Mock).mockResolvedValue({ recapPushEnabled: true });
   (SecureStore.setItemAsync as jest.Mock).mockResolvedValue(undefined);
   (SecureStore.deleteItemAsync as jest.Mock).mockResolvedValue(undefined);
   current = signedIn;

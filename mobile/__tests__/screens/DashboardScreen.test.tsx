@@ -5,6 +5,8 @@ import { DashboardScreen, greetingFor } from '../../src/screens/DashboardScreen'
 import { apiFetch } from '../../src/api/client';
 import { useAuth } from '../../src/auth/AuthContext';
 import { READY } from '../../jest-mocks/forecastFixture';
+import { StyleSheet } from 'react-native';
+import { storyRingColor } from '../../src/lib/recapTheme';
 
 jest.mock('../../src/api/client');
 jest.mock('../../src/auth/AuthContext');
@@ -27,8 +29,10 @@ function mockApi(options: {
   scoresError?: Error;
   habitsError?: Error;
   forecast?: unknown;
+  recaps?: unknown[];
 }) {
   (apiFetch as jest.Mock).mockImplementation((path: string) => {
+    if (path.startsWith('/me/recaps')) return Promise.resolve({ recaps: options.recaps ?? [] });
     if (path === '/me/forecast') {
       return Promise.resolve(options.forecast ?? { status: 'NOT_ENOUGH_DATA', reason: 'NO_HISTORY', daysOfHistory: 0 });
     }
@@ -567,6 +571,45 @@ describe('DashboardScreen', () => {
 
       await waitFor(() => expect(getByTestId('sleep-score-loading')).toBeTruthy());
     });
+  });
+});
+
+describe('DashboardScreen: story ring on the avatar', () => {
+  const steps = [{ id: '1', metricType: 'STEPS', value: 8000, recordedAt: '2026-09-01T00:00:00.000Z' }];
+  const week = { id: 'w1', kind: 'WEEK', periodStart: '2026-09-28', periodEnd: '2026-10-04', line: 'A steady week.', personaId: 'luna', builtAt: '2026-10-05T09:00:00.000Z', openedAt: null };
+  const ringOf = () => StyleSheet.flatten(screen.getByTestId('profile-story-ring').props.style);
+
+  it("rings the avatar in the unwatched recap's coach colour, with a dot, and a week plays its story", async () => {
+    mockApi({ records: steps, recaps: [week] });
+    render(withCharacter(<DashboardScreen />));
+    await waitFor(() => expect(screen.getByTestId('profile-story-ring-dot')).toBeTruthy());
+    const scheme = (ringOf().borderColor === storyRingColor('luna', 'dark') ? 'dark' : 'light') as 'light' | 'dark';
+    expect(ringOf()).toMatchObject({ borderColor: storyRingColor('luna', scheme) });
+    expect(StyleSheet.flatten(screen.getByTestId('profile-story-ring-dot').props.style)).toMatchObject({ backgroundColor: storyRingColor('luna', scheme) });
+    expect(screen.getByTestId('settings-button').props.accessibilityLabel).toBe('Profile. Your week is ready. Play your story');
+    // The old Home card is gone.
+    expect(screen.queryByTestId('recap-ready-card')).toBeNull();
+    fireEvent.press(screen.getByTestId('settings-button'));
+    expect(mockNavigate).toHaveBeenCalledWith('RecapStory', { id: 'w1' });
+  });
+
+  it('only a week rings the avatar: Home asks for weeks alone', async () => {
+    mockApi({ records: steps, recaps: [week] });
+    render(withCharacter(<DashboardScreen />));
+    await waitFor(() => expect(screen.getByTestId('profile-story-ring-dot')).toBeTruthy());
+    expect(apiFetch).toHaveBeenCalledWith('/me/recaps?kind=WEEK&limit=1');
+  });
+
+  it('without an unwatched recap the avatar has no ring and opens Profile as before', async () => {
+    mockApi({ records: steps, recaps: [{ ...week, openedAt: '2026-10-05T10:00:00.000Z' }] });
+    render(withCharacter(<DashboardScreen />));
+    await waitFor(() => expect(screen.getByTestId('settings-button')).toBeTruthy());
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith('/me/recaps?kind=WEEK&limit=1'));
+    expect(screen.queryByTestId('profile-story-ring-dot')).toBeNull();
+    expect(ringOf()).toMatchObject({ borderWidth: 0 });
+    expect(screen.getByTestId('settings-button').props.accessibilityLabel).toBe('Profile and settings');
+    fireEvent.press(screen.getByTestId('settings-button'));
+    expect(mockNavigate).toHaveBeenCalledWith('Tabs', { screen: 'Profile' });
   });
 });
 
