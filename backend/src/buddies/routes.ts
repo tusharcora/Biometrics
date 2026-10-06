@@ -13,6 +13,7 @@ import { listBuddies } from './list';
 import { blockBuddy, blockFromRequest, listBlocked, requireBuddyId, setMuted, unblock, unpair } from './relations';
 import { acceptRequest, cancelRequest, declineRequest, listRequests, sendRequest } from './requests';
 import { confirmMoodNotice, getSharing, parseSharingPatch, recordSharingConsent, updateSharing } from './sharing';
+import { sendSticker } from './stickers';
 import { buildBuddyWeek } from './view';
 
 export const buddiesRouter = Router();
@@ -165,4 +166,9 @@ buddiesRouter.put('/me/buddies/:buddyId/mute', requireAuth, buddyRoute(async (re
   const buddyId = requireBuddyId(raw, req.userId!);
   if (typeof muted !== 'boolean') throw new BuddyError('invalid_settings');
   res.json(await setMuted(req.userId!, buddyId, muted));
+}));
+
+buddiesRouter.post('/me/buddies/:buddyId/stickers', requireAuth, buddyRoute(async (req, res) => {
+  const buddyId = requireBuddyId(String(req.params.buddyId), req.userId!);
+  res.status(201).json(await sendSticker(req.userId!, buddyId, (req.body as { kind?: unknown } | undefined)?.kind, new Date()));
 }));
