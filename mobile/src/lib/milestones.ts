@@ -8,4 +8,8 @@ export interface MilestoneTile {
   label: string;
   glyph: MilestoneGlyph;
   earned: boolean;
+  /** Badge progress for a month on or after the badge start date: "2 of 3 months for Silver". */
+  progress?: string;
+  /** A level of this family was earned in this month. */
+  levelUp?: boolean;
 }

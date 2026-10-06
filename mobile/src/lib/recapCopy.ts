@@ -1,4 +1,6 @@
+import type { AchievementFamily, Achievements } from '../api/achievements';
 import type { RecapComparison, RecapKind, RecapMilestones, RecapStats } from '../api/recaps';
+import { countLabel, tierName } from './badges';
 import type { MilestoneTile } from './milestones';
 import { MONTH_LONG, MONTH_SHORT } from './heatmap';
 import { formatShortDuration, formatTextDuration } from './sleepStats';
@@ -103,15 +105,47 @@ export interface MilestoneTileContent extends MilestoneTile {
   key: MilestoneKey;
 }
 
+export interface MonthBadges {
+  achievements: Achievements;
+  periodStart: string;
+  periodEnd: string;
+  /** This is the newest month recap: only it shows progress toward the next level. */
+  latest: boolean;
+}
+
+const MONTHLY_FAMILY: Partial<Record<MilestoneKey, AchievementFamily>> = {
+  bestRecoveryWeek: 'BEST_RECOVERY_WEEK',
+  everyDayLogged: 'EVERY_DAY_LOGGED',
+  steadiestMonth: 'STEADIEST_MONTH',
+};
+
 /**
- * The month's milestones as tiles: all four kinds, always in this order, the ones not hit this
- * month locked. A locked tile says what the milestone is, never how close the month came.
+ * The month's milestones as tiles. Without badges (a backend older than them, or not loaded yet):
+ * all four kinds, as before. With badges (achievements spec §6): the three monthly families only —
+ * the Sleep goal streak badge replaced the streak tile. For a month on or after the badge start
+ * date, each tile says whether a level of its family was earned in this month; only the newest
+ * month recap also shows progress toward the next level (an older month's progress would be
+ * today's, not that month's). A locked tile says what the milestone is, never how close the month came.
  */
-export function milestoneTiles(m: RecapMilestones | undefined): MilestoneTileContent[] {
-  return [
+export function milestoneTiles(m: RecapMilestones | undefined, badges?: MonthBadges): MilestoneTileContent[] {
+  const tiles: MilestoneTileContent[] = [
     { key: 'streak', label: m?.streak ? `${plural(m.streak.nights, 'night')} on goal in a row` : 'Nights on goal in a row', glyph: 'star', earned: !!m?.streak },
     { key: 'bestRecoveryWeek', label: 'Best recovery week', glyph: 'heart', earned: !!m?.bestRecoveryWeek },
     { key: 'everyDayLogged', label: 'Every night logged', glyph: 'calendar', earned: !!m?.everyDayLogged },
     { key: 'steadiestMonth', label: 'Steadiest bedtimes yet', glyph: 'moon', earned: !!m?.steadiestMonth },
   ];
+  if (!badges) return tiles;
+  const { achievements, periodStart, periodEnd, latest } = badges;
+  return tiles
+    .filter((tile) => tile.key !== 'streak')
+    .map((tile) => {
+      const f = achievements.families.find((x) => x.family === MONTHLY_FAMILY[tile.key]);
+      if (!f || periodStart < achievements.since) return tile;
+      const levelUp = f.levels.some((l) => l.earnedOn >= periodStart && l.earnedOn <= periodEnd);
+      if (!latest) return { ...tile, levelUp };
+      const progress = f.nextThreshold === null
+        ? 'Top level'
+        : `${Math.min(f.current, f.nextThreshold)} of ${countLabel(f.family, f.nextThreshold)} for ${tierName(f.level + 1)}`;
+      return { ...tile, progress, levelUp };
+    });
 }
