@@ -71,7 +71,9 @@ buddiesRouter.get('/me/buddies/code', requireAuth, buddyRoute(async (req, res) =
 }));
 
 buddiesRouter.post('/me/buddies/code', requireAuth, buddyRoute(async (req, res) => {
-  res.json(await createCode(req.userId!, new Date()));
+  const made = await createCode(req.userId!, new Date());
+  res.set('Cache-Control', 'private, no-store');
+  res.json(made);
 }));
 
 buddiesRouter.post('/me/buddies/code/redeem', requireAuth, buddyRoute(async (req, res) => {

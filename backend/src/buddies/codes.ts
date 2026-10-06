@@ -1,12 +1,18 @@
 // Buddy codes (spec 2026-10-06 buddies §4): 8 characters without look-alikes, 24 h, one active per
 // owner, single use. Every failure of a redeem is the same code_invalid (unknown, expired, used,
-// own, blocked either way). Codes older than 7 days are swept when a new one is made.
+// own, blocked either way), reached through the same database work so timing can't tell them apart.
+// Codes older than 7 days are swept when a new one is made.
 
 import { randomInt } from 'crypto';
 import { prisma } from '../db/client';
 import { RATE_LIMITS } from '../lib/rateLimit';
 import { BuddyError, isUniqueViolation, limitOrThrow } from './errors';
-import { createPair, isBlockedEitherWay, requirePairingReady, type PairDeps } from './pairs';
+import { createPairTx, enqueuePaired, existingPairAfter, isBlockedEitherWay, requirePairingReady, type PairDeps, type PairResult } from './pairs';
+
+export interface RedeemDeps extends PairDeps {
+  /** Test seam: the pairing writes run inside the redeem transaction. */
+  createPairTx?: typeof createPairTx;
+}
 
 export const CODE_ALPHABET = 'ABCDEFGHJKMNPQRSTUVWXYZ23456789';
 export const CODE_LENGTH = 8;
@@ -26,7 +32,10 @@ export function normaliseCode(raw: unknown): string | null {
   return CODE_RE.test(code) ? code : null;
 }
 
-/** In one transaction: the owner's active codes expire now and the new one is inserted (retried on a collision). */
+/**
+ * In one transaction holding the owner's row lock (so concurrent creates leave one active code): the
+ * owner's active codes expire now and the new one is inserted. Retried on a code collision.
+ */
 export async function createCode(ownerId: string, now: Date, opts: { generate?: () => string } = {}): Promise<{ code: string; expiresAt: Date }> {
   await requirePairingReady(ownerId);
   await prisma.buddyCode.deleteMany({ where: { createdAt: { lt: new Date(now.getTime() - CODE_SWEEP_MS) } } });
@@ -34,10 +43,11 @@ export async function createCode(ownerId: string, now: Date, opts: { generate?: 
   for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
     const code = (opts.generate ?? generateCode)();
     try {
-      await prisma.$transaction([
-        prisma.buddyCode.updateMany({ where: { ownerId, usedAt: null, expiresAt: { gt: now } }, data: { expiresAt: now } }),
-        prisma.buddyCode.create({ data: { code, ownerId, createdAt: now, expiresAt } }),
-      ]);
+      await prisma.$transaction(async (tx) => {
+        await tx.$queryRaw`SELECT 1 FROM "User" WHERE "id" = ${ownerId} FOR UPDATE`;
+        await tx.buddyCode.updateMany({ where: { ownerId, usedAt: null, expiresAt: { gt: now } }, data: { expiresAt: now } });
+        await tx.buddyCode.create({ data: { code, ownerId, createdAt: now, expiresAt } });
+      });
       return { code, expiresAt };
     } catch (err) {
       if (!isUniqueViolation(err)) throw err;
@@ -54,17 +64,56 @@ export async function getActiveCode(ownerId: string, now: Date): Promise<{ code:
   });
 }
 
-/** The conditional update on usedAt IS NULL decides a concurrent redeem: one wins, the other gets code_invalid. */
-export async function redeemCode(userId: string, raw: unknown, now: Date, deps: PairDeps = {}): Promise<{ buddyId: string }> {
+interface CodeLookup {
+  ownerId: string;
+  usedAt: Date | null;
+  expiresAt: Date;
+  blocked: boolean;
+}
+
+/**
+ * The code row and a block either way, in one statement whatever the outcome: unknown, used, expired,
+ * own and blocked codes all cost exactly this query, so the response time doesn't reveal a block.
+ */
+async function lookupCode(code: string, userId: string): Promise<CodeLookup | null> {
+  const rows = await prisma.$queryRaw<CodeLookup[]>`
+    SELECT c."ownerId", c."usedAt", c."expiresAt",
+      EXISTS (
+        SELECT 1 FROM "BuddyBlock" b
+        WHERE (b."blockerId" = c."ownerId" AND b."blockedId" = ${userId})
+           OR (b."blockerId" = ${userId} AND b."blockedId" = c."ownerId")
+      ) AS "blocked"
+    FROM "BuddyCode" c
+    WHERE c."code" = ${code}`;
+  return rows[0] ?? null;
+}
+
+/**
+ * One transaction: the conditional update on usedAt IS NULL (one winner on a concurrent redeem; the
+ * other gets code_invalid), a block re-check, and the pairing writes. Any failure rolls the code back
+ * to unused. buddy_paired is enqueued only after commit and only for a new pair.
+ */
+export async function redeemCode(userId: string, raw: unknown, now: Date, deps: RedeemDeps = {}): Promise<{ buddyId: string }> {
   await requirePairingReady(userId);
   await limitOrThrow(RATE_LIMITS.codeRedeem, userId);
   const code = normaliseCode(raw);
   if (!code) throw new BuddyError('code_invalid');
-  const row = await prisma.buddyCode.findUnique({ where: { code } });
-  if (!row || row.usedAt || row.expiresAt <= now || row.ownerId === userId) throw new BuddyError('code_invalid');
-  if (await isBlockedEitherWay(userId, row.ownerId)) throw new BuddyError('code_invalid');
-  const taken = await prisma.buddyCode.updateMany({ where: { code, usedAt: null, expiresAt: { gt: now } }, data: { usedAt: now, usedById: userId } });
-  if (taken.count === 0) throw new BuddyError('code_invalid');
-  await createPair(userId, row.ownerId, now, deps);
-  return { buddyId: row.ownerId };
+  const row = await lookupCode(code, userId);
+  if (!row || row.usedAt || row.expiresAt <= now || row.ownerId === userId || row.blocked) throw new BuddyError('code_invalid');
+  const ownerId = row.ownerId;
+  let result: PairResult;
+  try {
+    result = await prisma.$transaction(async (tx) => {
+      const taken = await tx.buddyCode.updateMany({ where: { code, ownerId, usedAt: null, expiresAt: { gt: now } }, data: { usedAt: now, usedById: userId } });
+      if (taken.count === 0) throw new BuddyError('code_invalid');
+      // A block made since the lookup still wins.
+      if (await isBlockedEitherWay(userId, ownerId, tx)) throw new BuddyError('code_invalid');
+      return (deps.createPairTx ?? createPairTx)(tx, userId, ownerId, now);
+    });
+  } catch (err) {
+    if (err instanceof BuddyError) throw err;
+    result = await existingPairAfter(err, userId, ownerId);
+  }
+  if (result.created) await enqueuePaired(userId, ownerId, deps);
+  return { buddyId: ownerId };
 }

@@ -1,6 +1,6 @@
-// Pairs (spec 2026-10-06 buddies §3-§4). A pair is stored once, userAId < userBId. createPair is the
-// only writer: from a redeemed code, an accepted request, or crossed requests. A unique-constraint
-// error (P2002) on the pair means it already exists: success, not an error.
+// Pairs (spec 2026-10-06 buddies §3-§4). A pair is stored once, userAId < userBId. createPairTx is the
+// only writer (inside the caller's transaction; enqueuePaired after commit; createPair wraps both):
+// from a redeemed code, an accepted request, or crossed requests. An existing pair is success.
 
 import type { BuddyPair, Prisma } from '@prisma/client';
 import { prisma } from '../db/client';
@@ -28,8 +28,8 @@ export async function hasBlocked(blockerId: string, blockedId: string): Promise<
   return (await prisma.buddyBlock.findUnique({ where: { blockerId_blockedId: { blockerId, blockedId } } })) !== null;
 }
 
-export async function isBlockedEitherWay(a: string, b: string): Promise<boolean> {
-  return (await prisma.buddyBlock.count({ where: { OR: [{ blockerId: a, blockedId: b }, { blockerId: b, blockedId: a }] } })) > 0;
+export async function isBlockedEitherWay(a: string, b: string, db: Db = prisma): Promise<boolean> {
+  return (await db.buddyBlock.count({ where: { OR: [{ blockerId: a, blockedId: b }, { blockerId: b, blockedId: a }] } })) > 0;
 }
 
 export interface PairingUser {
@@ -46,32 +46,56 @@ export async function requirePairingReady(userId: string): Promise<PairingUser> 
   return { id: user.id, handle: user.handle, displayName: user.displayName };
 }
 
-export async function createPair(a: string, b: string, now: Date, deps: PairDeps = {}): Promise<{ pairId: string; created: boolean }> {
-  let pairId: string;
+export interface PairResult {
+  pairId: string;
+  created: boolean;
+}
+
+/**
+ * The pairing writes, inside the caller's transaction. The pair is inserted with ON CONFLICT DO NOTHING
+ * (skipDuplicates), so an existing pair never aborts the transaction and a concurrent insert waits for
+ * the other to commit. Only when new: every PENDING request between the two (either way, hidden or not)
+ * becomes ACCEPTED, and both get a PAIRED Activity item with refId = pair id. Sends nothing.
+ */
+export async function createPairTx(tx: Prisma.TransactionClient, a: string, b: string, now: Date): Promise<PairResult> {
+  const inserted = await tx.buddyPair.createMany({ data: [{ ...orderedPair(a, b), createdAt: now, lastActivityAt: now }], skipDuplicates: true });
+  const pair = await tx.buddyPair.findUniqueOrThrow({ where: { userAId_userBId: orderedPair(a, b) }, select: { id: true } });
+  if (inserted.count === 0) return { pairId: pair.id, created: false };
+  await tx.buddyRequest.updateMany({
+    where: { status: 'PENDING', OR: [{ fromUserId: a, toUserId: b }, { fromUserId: b, toUserId: a }] },
+    data: { status: 'ACCEPTED', respondedAt: now },
+  });
+  await tx.buddyActivity.createMany({
+    data: [
+      { recipientId: a, actorId: b, kind: 'PAIRED', refId: pair.id, createdAt: now },
+      { recipientId: b, actorId: a, kind: 'PAIRED', refId: pair.id, createdAt: now },
+    ],
+    skipDuplicates: true,
+  });
+  return { pairId: pair.id, created: true };
+}
+
+/** A P2002 on the pair (defensive: the insert skips duplicates) means it already exists: success. Anything else is rethrown. */
+export async function existingPairAfter(err: unknown, a: string, b: string): Promise<PairResult> {
+  if (!isUniqueViolation(err)) throw err;
+  const existing = await findPair(a, b);
+  if (!existing) throw err;
+  return { pairId: existing.id, created: false };
+}
+
+export async function createPair(a: string, b: string, now: Date, deps: PairDeps = {}): Promise<PairResult> {
+  let result: PairResult;
   try {
-    pairId = await prisma.$transaction(async (tx) => {
-      const pair = await tx.buddyPair.create({ data: { ...orderedPair(a, b), createdAt: now, lastActivityAt: now } });
-      // Any request still pending between the two (either way, hidden or not) is answered by the pairing.
-      await tx.buddyRequest.updateMany({
-        where: { status: 'PENDING', OR: [{ fromUserId: a, toUserId: b }, { fromUserId: b, toUserId: a }] },
-        data: { status: 'ACCEPTED', respondedAt: now },
-      });
-      await tx.buddyActivity.createMany({
-        data: [
-          { recipientId: a, actorId: b, kind: 'PAIRED', refId: pair.id, createdAt: now },
-          { recipientId: b, actorId: a, kind: 'PAIRED', refId: pair.id, createdAt: now },
-        ],
-        skipDuplicates: true,
-      });
-      return pair.id;
-    });
+    result = await prisma.$transaction((tx) => createPairTx(tx, a, b, now));
   } catch (err) {
-    if (!isUniqueViolation(err)) throw err;
-    const existing = await findPair(a, b);
-    if (!existing) throw err;
-    return { pairId: existing.id, created: false };
+    return existingPairAfter(err, a, b);
   }
-  // Enqueued, never sent here: the job decides mute and quiet hours (Global Constraints).
+  if (result.created) await enqueuePaired(a, b, deps);
+  return result;
+}
+
+/** After commit, for a new pair only: one buddy_paired job per side. Enqueued, never sent here: the job decides mute and quiet hours. */
+export async function enqueuePaired(a: string, b: string, deps: PairDeps = {}): Promise<void> {
   const people = await prisma.user.findMany({ where: { id: { in: [a, b] } }, select: { id: true, displayName: true, handle: true } });
   for (const recipient of people) {
     const other = people.find((p) => p.id !== recipient.id);
@@ -81,5 +105,4 @@ export async function createPair(a: string, b: string, now: Date, deps: PairDeps
       deps.notifyQueue ? { queue: deps.notifyQueue } : {},
     );
   }
-  return { pairId, created: true };
 }
