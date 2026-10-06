@@ -35,6 +35,7 @@ export function BadgesCard({ onSeeAll, onOpen }: BadgesCardProps) {
   const a = state.data;
   const next = nextUp(a);
   const ring = next ? tierColors(next.nextLevel, accent).ring : '';
+  const pct = next ? Math.round(Math.min(1, next.current / next.threshold) * 100) : 0;
   return (
     <Card testID="badges-card" className="gap-3.5">
       <View className="flex-row items-center justify-between">
@@ -80,11 +81,12 @@ export function BadgesCard({ onSeeAll, onOpen }: BadgesCardProps) {
             <View
               testID="badges-next-up-bar"
               style={{
-                width: `${Math.round(Math.min(1, next.current / next.threshold) * 100)}%`,
+                width: `${pct}%`,
                 height: 8,
                 backgroundColor: ring,
-                // Pale tiers (Silver, Diamond) barely show on the light track; a darker edge keeps the fill readable.
-                borderWidth: dark ? 0 : 1,
+                // Pale tiers (Silver, Diamond) barely show on the light track; a darker edge keeps the fill
+                // readable. None on an empty bar, where the edge alone would draw a 2 px sliver.
+                borderWidth: dark || pct === 0 ? 0 : 1,
                 borderColor: mixHex(ring, '#000000', 0.35),
               }}
             />

@@ -64,6 +64,12 @@ it('uses the dark palette for labels and drops the bar outline in dark mode', as
   expect(screen.getByTestId('badges-next-up-bar')).toHaveStyle({ borderWidth: 0 });
 });
 
+it('draws no outline on an empty bar in light mode (no sliver at 0%)', async () => {
+  load.mockResolvedValue(achievementsFixture());
+  render(withCharacter(<BadgesCard onSeeAll={jest.fn()} onOpen={jest.fn()} />));
+  expect(await screen.findByTestId('badges-next-up-bar')).toHaveStyle({ width: '0%', borderWidth: 0 });
+});
+
 it('has no next-up row when every family is at the top level', async () => {
   load.mockResolvedValue(achievementsFixture(Object.fromEntries(FAMILIES.map((f) => [f, { level: 5 }])) as Partial<Record<AchievementFamily, { level: number }>>));
   render(withCharacter(<BadgesCard onSeeAll={jest.fn()} onOpen={jest.fn()} />));
