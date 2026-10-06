@@ -139,12 +139,15 @@ Levels are **never revoked**.
     <unit> for <next level>" or "Top level!"), Share (existing pipeline, a 1080 px badge card) and "Nice!". Closing
     marks that family's new levels celebrated (lower levels of the same family too). Reduce motion: no confetti.
   - **Weekly recap**: story frame 3 gets a "Badges this week" card listing levels with `earnedOn` in the recap week
-    (hidden when none). Read at view time: a level dated into a week after that recap was opened appears the next
-    time it's viewed (badges are only ever added). The share image includes the card when present.
+    (hidden when none; up to 4 shown, highest level per family first, then a "+n" chip). Read at view time: a level
+    dated into a week after that recap was opened appears the next time it's viewed (badges are only ever added).
+    Build your recap gets a "Badges this week" include switch (default ON, saved with the other story choices); the
+    story frame, viewer and share image include the card when present and the switch is on.
   - **Month recap screen**: keeps the milestone tiles, now the 3 monthly families (the old 5-night streak tile is
-    dropped — Sleep goal streak covers it). Each tile shows whether that month hit the milestone; for months on or
-    after `achievementsSince` it also shows progress toward the family's next level ("2 of 3 months for Silver") and
-    a "Level up" mark when a level was earned in that month. Below the tiles, "Badges earned in <Month>" lists any
+    dropped — Sleep goal streak covers it). Each tile shows whether that month hit the milestone and, for months on or
+    after `achievementsSince`, a "Level up" mark when a level was earned in that month. Only the **newest** month
+    recap also shows progress toward the family's next level ("2 of 3 months for Silver") — progress is today's, so
+    showing it on older months would put January's count on October's tile. Below the tiles, "Badges earned in <Month>" lists any
     streak-family levels earned that month (hidden when none). Months before `achievementsSince` (including
     backfilled ones) show their milestone tiles as before, without badge progress.
   - Badge visuals per the canvas: pixel octagon, 12×12 glyph per family (moon, clock, sneaker, check, heart,
