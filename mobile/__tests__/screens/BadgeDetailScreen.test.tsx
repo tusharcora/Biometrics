@@ -9,6 +9,7 @@ import { tierColors, tierTextColor } from '../../src/lib/badgeArt';
 import { BadgeDetailScreen } from '../../src/screens/BadgeDetailScreen';
 
 jest.mock('../../src/api/achievements');
+jest.mock('../../src/lib/timezone', () => require('../../jest-mocks/timezoneSettled'));
 let mockParams: { family: string } | undefined = { family: 'SLEEP_GOAL' };
 let mockScheme: 'light' | 'dark' = 'light';
 jest.mock('nativewind', () => ({ useColorScheme: () => ({ colorScheme: mockScheme }) }));

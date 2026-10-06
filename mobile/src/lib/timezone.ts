@@ -7,6 +7,22 @@ const LAST_SYNCED_KEY = 'lastSyncedTimezone';
 const OVERRIDDEN_KEY = 'timezoneOverridden';
 const OVERRIDE_ZONE_KEY = 'timezoneOverrideZone';
 
+// Settles when this session's first syncTimezone does (sent, skipped or failed), so a first
+// badge load can wait for the server to know the zone: a new user's badge start date is claimed
+// in it (spec 2026-10-06 §5). Re-armed by clearTimezoneState on sign-out for the next account.
+let markSynced: () => void = () => {};
+let synced: Promise<void> = Promise.resolve();
+function armSynced(): void {
+  synced = new Promise<void>((resolve) => {
+    markSynced = resolve;
+  });
+}
+armSynced();
+
+export function timezoneSynced(): Promise<void> {
+  return synced;
+}
+
 export interface TimezoneState {
   timezone: string;
   overridden: boolean;
@@ -75,6 +91,8 @@ export async function syncTimezone(): Promise<void> {
     await SecureStore.setItemAsync(LAST_SYNCED_KEY, timezone);
   } catch (error) {
     console.warn('Time zone sync failed; will retry on next launch', error);
+  } finally {
+    markSynced();
   }
 }
 
@@ -88,6 +106,7 @@ export async function syncTimezone(): Promise<void> {
  * Called from sign-out, where a failure must not block signing out.
  */
 export async function clearTimezoneState(): Promise<void> {
+  armSynced();
   await Promise.all([
     SecureStore.deleteItemAsync(LAST_SYNCED_KEY).catch(() => undefined),
     SecureStore.deleteItemAsync(OVERRIDDEN_KEY).catch(() => undefined),

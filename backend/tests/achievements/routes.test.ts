@@ -43,6 +43,31 @@ it('starts a new user today on the first load and answers every family locked', 
   expect(await prisma.goalChange.count({ where: { userId: user.id } })).toBe(2);
 });
 
+it("starts a user whose zone was synced first on their own local date, not UTC's", async () => {
+  // 20:00 UTC on Oct 6 is already Oct 7 in Auckland (NZDT, UTC+13). The app waits for its sign-in
+  // time zone sync before the first badge load; pin only Date so Prisma and supertest keep real timers.
+  jest.useFakeTimers({
+    now: new Date('2026-10-06T20:00:00Z'),
+    doNotFake: ['hrtime', 'nextTick', 'performance', 'queueMicrotask', 'setImmediate', 'clearImmediate', 'setInterval', 'clearInterval', 'setTimeout', 'clearTimeout'],
+  });
+  try {
+    const user = await createUser();
+    const h = await authHeaderFor(user.id);
+    expect((await (await server()).put('/me/timezone').set(h).send({ timezone: 'Pacific/Auckland' })).status).toBe(200);
+    const res = await (await server()).get('/me/achievements').set(h);
+    expect(res.body.since).toBe('2026-10-07');
+    const after = await prisma.user.findUnique({ where: { id: user.id }, select: { achievementsSince: true } });
+    expect(after?.achievementsSince).toEqual(day('2026-10-07'));
+
+    // The same instant for a user still on the UTC default is Oct 6: the race this guards against.
+    const utc = await createUser();
+    const utcRes = await (await server()).get('/me/achievements').set(await authHeaderFor(utc.id));
+    expect(utcRes.body.since).toBe('2026-10-06');
+  } finally {
+    jest.useRealTimers();
+  }
+});
+
 it('evaluates inline at most once per 10 minutes, and a check-in clears the bound', async () => {
   const user = await startedUser();
   await seedNight(user.id, daysAgo(3), { minutes: 500 });

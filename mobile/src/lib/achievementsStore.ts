@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { fetchAchievements, markCelebrated, type Achievements, type UncelebratedLevel } from '../api/achievements';
+import { timezoneSynced } from './timezone';
 
 // One shared copy of GET /me/achievements (spec 2026-10-06 §6) for the Profile card, the Badges
 // screens, the celebration and the recap cards, like the story ring's store. A 404 (a backend
@@ -25,6 +26,24 @@ let inflight: Promise<void> | null = null;
 let rerun: Promise<void> | null = null;
 // Bumped on reset: a load that started before it never lands after it.
 let epoch = 0;
+// Whether this session's first load has started (it waits for the time zone sync).
+let started = false;
+
+/** The longest the first load waits for the time zone sync before fetching anyway. */
+export const TIMEZONE_WAIT_MS = 3000;
+
+/**
+ * A new user's first load claims their badge start date in the server's copy of their zone, which
+ * is UTC until the sign-in sync lands; both start together, so wait for it (capped).
+ */
+async function untilTimezoneSynced(): Promise<void> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  const cap = new Promise<void>((resolve) => {
+    timer = setTimeout(resolve, TIMEZONE_WAIT_MS);
+  });
+  await Promise.race([timezoneSynced(), cap]);
+  clearTimeout(timer);
+}
 
 function publish(next: Partial<AchievementsSnapshot>): void {
   snapshot = { ...snapshot, ...next };
@@ -64,7 +83,11 @@ export function refreshAchievements(options: RefreshOptions = {}): Promise<void>
 
 function load(): Promise<void> {
   const at = epoch;
+  const first = !started;
+  started = true;
   const run = (async () => {
+    if (first) await untilTimezoneSynced();
+    if (at !== epoch) return;
     let next: AchievementsState;
     try {
       const data = await fetchAchievements();
@@ -100,6 +123,7 @@ export async function celebrate(ids: readonly string[]): Promise<void> {
 /** Forgets everything (sign out; tests). */
 export function resetAchievements(): void {
   epoch++;
+  started = false;
   inflight = null;
   rerun = null;
   publish({ state: { status: 'idle' }, celebrated: new Set() });

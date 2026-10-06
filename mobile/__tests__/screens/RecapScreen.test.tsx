@@ -13,6 +13,7 @@ import { RecapScreen } from '../../src/screens/RecapScreen';
 
 jest.mock('../../src/api/recaps');
 jest.mock('../../src/api/achievements');
+jest.mock('../../src/lib/timezone', () => require('../../jest-mocks/timezoneSettled'));
 jest.mock('expo-secure-store');
 const mockNavigate = jest.fn();
 const mockGoBack = jest.fn();

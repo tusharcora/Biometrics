@@ -8,6 +8,7 @@ import { CelebrationHost, MODAL_DISMISS_MS } from '../../src/components/achievem
 import { resetAchievements } from '../../src/lib/achievementsStore';
 
 jest.mock('../../src/api/achievements');
+jest.mock('../../src/lib/timezone', () => require('../../jest-mocks/timezoneSettled'));
 jest.mock('../../src/lib/recapCapture', () => ({ captureToPng: jest.fn(), saveImage: jest.fn(), shareImage: jest.fn() }));
 // A fake signed-in container: the current route and its state events, driven by the tests.
 const mockNav = { ready: true, route: 'Tabs', listeners: new Set<() => void>() };

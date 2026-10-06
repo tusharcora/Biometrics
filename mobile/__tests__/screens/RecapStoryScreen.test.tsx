@@ -19,6 +19,7 @@ import { fetchAchievements } from '../../src/api/achievements';
 import { resetAchievements } from '../../src/lib/achievementsStore';
 
 jest.mock('../../src/api/achievements');
+jest.mock('../../src/lib/timezone', () => require('../../jest-mocks/timezoneSettled'));
 jest.mock('expo-secure-store');
 jest.mock('../../src/lib/recapCapture', () => ({ captureToPng: jest.fn(), saveImage: jest.fn(), shareImage: jest.fn() }));
 let mockReduceMotion = false;

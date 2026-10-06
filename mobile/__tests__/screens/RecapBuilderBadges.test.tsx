@@ -11,6 +11,7 @@ import { RecapBuilderScreen } from '../../src/screens/RecapBuilderScreen';
 jest.mock('../../src/api/recaps');
 jest.mock('../../src/api/sleep');
 jest.mock('../../src/api/achievements');
+jest.mock('../../src/lib/timezone', () => require('../../jest-mocks/timezoneSettled'));
 jest.mock('expo-secure-store');
 jest.mock('../../src/lib/recapCapture', () => ({ captureToPng: jest.fn(), saveImage: jest.fn(), shareImage: jest.fn() }));
 jest.mock('@react-navigation/native', () => ({ useNavigation: () => ({ navigate: jest.fn() }), useRoute: () => ({ params: { id: 'r-week', format: 'story' } }) }));

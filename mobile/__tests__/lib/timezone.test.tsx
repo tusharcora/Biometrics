@@ -5,6 +5,8 @@ import {
   clearTimezoneOverride,
   getTimezoneState,
   listTimeZones,
+  clearTimezoneState,
+  timezoneSynced,
 } from '../../src/lib/timezone';
 import { updateTimezone } from '../../src/api/client';
 
@@ -159,5 +161,30 @@ describe('listTimeZones', () => {
     } finally {
       (Intl as any).supportedValuesOf = original;
     }
+  });
+});
+
+describe('timezoneSynced', () => {
+  const flush = () => new Promise((r) => setImmediate(r));
+
+  it('stays pending until a sync settles (sign-in), then resolves', async () => {
+    // A sign-out re-arms it for the next account.
+    await clearTimezoneState();
+    let settled = false;
+    void timezoneSynced().then(() => { settled = true; });
+    await flush();
+    expect(settled).toBe(false);
+    await syncTimezone();
+    await flush();
+    expect(settled).toBe(true);
+  });
+
+  it('resolves when the sync fails too', async () => {
+    await clearTimezoneState();
+    (updateTimezone as jest.Mock).mockRejectedValue(new Error('offline'));
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    await syncTimezone();
+    await expect(timezoneSynced()).resolves.toBeUndefined();
+    warn.mockRestore();
   });
 });

@@ -9,6 +9,7 @@ import { mixHex } from '../../src/lib/badgeArt';
 import { COLORS } from '../../src/theme';
 
 jest.mock('../../src/api/achievements');
+jest.mock('../../src/lib/timezone', () => require('../../jest-mocks/timezoneSettled'));
 let mockScheme: 'light' | 'dark' = 'light';
 jest.mock('nativewind', () => ({ useColorScheme: () => ({ colorScheme: mockScheme }) }));
 const load = fetchAchievements as jest.Mock;

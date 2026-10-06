@@ -7,6 +7,7 @@ import { resetAchievements } from '../../src/lib/achievementsStore';
 
 jest.mock('../../src/api/habits');
 jest.mock('../../src/api/achievements');
+jest.mock('../../src/lib/timezone', () => require('../../jest-mocks/timezoneSettled'));
 
 const habitTypes = [
   { type: 'ALCOHOL', label: 'Alcohol', unit: 'drinks', exposureThreshold: 2, builtIn: true },

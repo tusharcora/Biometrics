@@ -8,6 +8,7 @@ import { resetAchievements } from '../../src/lib/achievementsStore';
 import { BadgesScreen } from '../../src/screens/BadgesScreen';
 
 jest.mock('../../src/api/achievements');
+jest.mock('../../src/lib/timezone', () => require('../../jest-mocks/timezoneSettled'));
 const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: mockNavigate }),

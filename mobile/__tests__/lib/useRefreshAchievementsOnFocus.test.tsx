@@ -7,6 +7,7 @@ import { resetAchievements } from '../../src/lib/achievementsStore';
 import { useRefreshAchievementsOnFocus } from '../../src/lib/useRefreshAchievementsOnFocus';
 
 jest.mock('../../src/api/achievements');
+jest.mock('../../src/lib/timezone', () => require('../../jest-mocks/timezoneSettled'));
 const load = fetchAchievements as jest.Mock;
 
 function Probe() {
