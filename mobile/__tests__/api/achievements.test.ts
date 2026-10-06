@@ -19,6 +19,23 @@ it('reads a 404 (a backend older than badges) as null, and rethrows any other fa
   await expect(fetchAchievements()).rejects.toThrow('boom');
 });
 
+it('drops families and new levels this app does not know (a newer backend)', async () => {
+  const known = { family: 'SLEEP_GOAL', kind: 'streak', level: 0, thresholds: [3, 7, 14, 30, 100], levels: [], current: 0, best: 0, nextThreshold: 3 };
+  api.mockResolvedValue({
+    since: '2026-10-01',
+    families: [known, { ...known, family: 'MEDITATION' }],
+    uncelebrated: [
+      { id: 'a1', family: 'SLEEP_GOAL', level: 1, value: 3, earnedOn: '2026-10-03' },
+      { id: 'a2', family: 'MEDITATION', level: 1, value: 3, earnedOn: '2026-10-03' },
+    ],
+  });
+  expect(await fetchAchievements()).toEqual({
+    since: '2026-10-01',
+    families: [known],
+    uncelebrated: [{ id: 'a1', family: 'SLEEP_GOAL', level: 1, value: 3, earnedOn: '2026-10-03' }],
+  });
+});
+
 it('throws on a body that is not badges', async () => {
   api.mockResolvedValue({ status: 'CONNECTED' });
   await expect(fetchAchievements()).rejects.toThrow('bad_achievements');

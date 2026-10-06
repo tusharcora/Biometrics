@@ -21,6 +21,8 @@ export interface AchievementsSnapshot {
 let snapshot: AchievementsSnapshot = { state: { status: 'idle' }, celebrated: new Set() };
 const listeners = new Set<() => void>();
 let inflight: Promise<void> | null = null;
+// The one extra request queued by fresh refreshes behind `inflight`.
+let rerun: Promise<void> | null = null;
 // Bumped on reset: a load that started before it never lands after it.
 let epoch = 0;
 
@@ -33,9 +35,34 @@ export function getAchievementsSnapshot(): AchievementsSnapshot {
   return snapshot;
 }
 
-/** Re-reads the badges. Calls made while one is running share it. A failure keeps what was there. */
-export function refreshAchievements(): Promise<void> {
-  if (inflight) return inflight;
+export interface RefreshOptions {
+  /**
+   * The answer must postdate this call (after a check-in or a goal save): a request already in
+   * flight may predate it, so one more runs after it. Fresh calls made meanwhile share that re-run.
+   */
+  fresh?: boolean;
+}
+
+/**
+ * Re-reads the badges. Calls made while one is running share it, unless `fresh`. A failure keeps
+ * what was there. Resolves once the answer has landed in the snapshot.
+ */
+export function refreshAchievements(options: RefreshOptions = {}): Promise<void> {
+  if (!inflight) return load();
+  if (!options.fresh) return inflight;
+  if (!rerun) {
+    const at = epoch;
+    // Any load started once the old one has finished postdates this call, so join it or start one.
+    const next = inflight.then(() => {
+      if (rerun === next) rerun = null;
+      return at === epoch ? refreshAchievements() : undefined;
+    });
+    rerun = next;
+  }
+  return rerun;
+}
+
+function load(): Promise<void> {
   const at = epoch;
   const run = (async () => {
     let next: AchievementsState;
@@ -61,6 +88,7 @@ export function pendingLevels(s: AchievementsSnapshot): UncelebratedLevel[] {
 
 /** Closes a celebration: hidden at once, then marked on the server (a failure is retried on a later start). */
 export async function celebrate(ids: readonly string[]): Promise<void> {
+  if (ids.length === 0) return;
   publish({ celebrated: new Set([...snapshot.celebrated, ...ids]) });
   try {
     await markCelebrated([...ids]);
@@ -73,6 +101,7 @@ export async function celebrate(ids: readonly string[]): Promise<void> {
 export function resetAchievements(): void {
   epoch++;
   inflight = null;
+  rerun = null;
   publish({ state: { status: 'idle' }, celebrated: new Set() });
 }
 

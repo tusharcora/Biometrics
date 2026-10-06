@@ -1,3 +1,4 @@
+import { FAMILY_ORDER } from '../lib/badges';
 import { apiFetch } from './client';
 
 // Badges (spec 2026-10-06 §6): awarded on the server; the app reads them and says which new levels
@@ -52,7 +53,13 @@ export async function fetchAchievements(): Promise<Achievements | null> {
   const families = body?.families;
   const uncelebrated = body?.uncelebrated;
   if (typeof since !== 'string' || !Array.isArray(families)) throw new Error('bad_achievements');
-  return { since, families, uncelebrated: Array.isArray(uncelebrated) ? uncelebrated : [] };
+  // A newer backend may add families this app has no names or art for: leave them out.
+  const known = (f: { family: AchievementFamily }) => FAMILY_ORDER.includes(f.family);
+  return {
+    since,
+    families: families.filter(known),
+    uncelebrated: Array.isArray(uncelebrated) ? uncelebrated.filter(known) : [],
+  };
 }
 
 /** Closing a celebration: these levels (the family's new ones) are never celebrated again. */

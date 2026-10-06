@@ -42,6 +42,9 @@ it('writes the celebration lines', () => {
   expect(coachLine('SLEEP_GOAL', 3, [3, 7, 14, 30, 100])).toBe('16 more nights for Diamond');
   expect(coachLine('STEADIEST_MONTH', 1, [1, 2, 4, 6, 12])).toBe('1 more month for Silver');
   expect(coachLine('CHECK_IN', 5, [7, 14, 30, 60, 180])).toBe('Top level!');
+  // No level yet: the whole first threshold is left, never "Top level!".
+  expect(coachLine('SLEEP_GOAL', 0, [3, 7, 14, 30, 100])).toBe('3 more nights for Bronze');
+  expect(coachLine('STEADIEST_MONTH', 0, [1, 2, 4, 6, 12])).toBe('1 more month for Bronze');
 });
 
 it('describes each rung of the ladder: earned with its date, the next one with what is left, the rest locked', () => {

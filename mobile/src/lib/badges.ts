@@ -117,10 +117,10 @@ export function valueLine(family: AchievementFamily, value: number): string {
   return VALUE_LINES[family](countLabel(family, value));
 }
 
-/** The coach's fixed line: "<n> more <unit> for <next level>", or "Top level!". */
+/** The coach's fixed line: "<n> more <unit> for <next level>", or "Top level!". Level 0 counts from 0 to Bronze. */
 export function coachLine(family: AchievementFamily, level: number, thresholds: readonly number[]): string {
-  const reached = thresholds[level - 1];
-  const next = thresholds[level];
+  const reached = level < 1 ? 0 : thresholds[level - 1];
+  const next = thresholds[Math.max(0, level)];
   if (level >= MAX_LEVEL || reached === undefined || next === undefined) return 'Top level!';
   const n = next - reached;
   return `${n} more ${unitWord(family, n)} for ${tierName(level + 1)}`;

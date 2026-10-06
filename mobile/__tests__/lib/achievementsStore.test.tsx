@@ -53,6 +53,44 @@ it('shares one request between overlapping refreshes', async () => {
   expect(getAchievementsSnapshot().state.status).toBe('ready');
 });
 
+it('a fresh refresh during an older request runs one more request after it, and lands its data', async () => {
+  let resolveOld!: (v: unknown) => void;
+  load.mockReturnValueOnce(new Promise((r) => { resolveOld = r; }));
+  const after = achievementsFixture({}, { uncelebrated: UNCELEBRATED });
+  load.mockResolvedValueOnce(after);
+  const old = refreshAchievements();
+  const fresh = refreshAchievements({ fresh: true });
+  const fresh2 = refreshAchievements({ fresh: true });
+  expect(load).toHaveBeenCalledTimes(1);
+  resolveOld(achievementsFixture());
+  await Promise.all([old, fresh, fresh2]);
+  expect(load).toHaveBeenCalledTimes(2);
+  expect(getAchievementsSnapshot().state).toEqual({ status: 'ready', data: after });
+});
+
+it('a fresh refresh with nothing in flight is a single request', async () => {
+  load.mockResolvedValue(achievementsFixture());
+  await refreshAchievements({ fresh: true });
+  expect(load).toHaveBeenCalledTimes(1);
+});
+
+it('a reset drops a fresh re-run that was waiting', async () => {
+  let resolveOld!: (v: unknown) => void;
+  load.mockReturnValueOnce(new Promise((r) => { resolveOld = r; }));
+  const old = refreshAchievements();
+  const fresh = refreshAchievements({ fresh: true });
+  resetAchievements();
+  resolveOld(achievementsFixture());
+  await Promise.all([old, fresh]);
+  expect(load).toHaveBeenCalledTimes(1);
+  expect(getAchievementsSnapshot().state).toEqual({ status: 'idle' });
+});
+
+it('celebrating nothing does not reach the server', async () => {
+  await celebrate([]);
+  expect(post).not.toHaveBeenCalled();
+});
+
 it('celebrating hides those levels at once and tells the server; a failed post still hides them this session', async () => {
   load.mockResolvedValue(achievementsFixture({}, { uncelebrated: UNCELEBRATED }));
   await refreshAchievements();
