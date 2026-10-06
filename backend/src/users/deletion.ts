@@ -18,6 +18,7 @@ import { prisma } from '../db/client';
 import { decryptToken } from '../crypto/tokenCipher';
 import { revokeHealthToken } from '../health/oauth';
 import { deleteUserSubscription } from '../health/subscriber';
+import { holdHandle } from '../buddies/holds';
 
 /**
  * Every model that carries a `userId`, in an FK-safe delete order: children
@@ -141,6 +142,16 @@ export async function deleteUserAccount(
     }
   } catch (err) {
     log(`Account deletion: could not read the Google Health connection for user ${userId}: ${describe(err)}`);
+  }
+
+  // A deleted account's handle is held for 30 days (buddies spec §2). Best effort: a failure here
+  // must not stop the deletion. previousOwnerId is nulled by the cascade when the User row goes.
+  // Only the error class is logged: a Prisma message can echo the handle.
+  try {
+    const owner = await prisma.user.findUnique({ where: { id: userId }, select: { handle: true } });
+    if (owner?.handle) await holdHandle(prisma, owner.handle, userId, new Date());
+  } catch (err) {
+    log(`Account deletion: could not hold the handle for user ${userId}: ${err instanceof Error ? err.name : 'unknown error'}`);
   }
 
   const counts = await deleteOwnedRows(prisma, { userId }, { id: userId });

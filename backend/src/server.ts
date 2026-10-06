@@ -13,6 +13,12 @@ import { scheduleDailyCoachRetention } from './coach/queue';
 import { startRecaps } from './recap/backfill';
 import { startAchievements } from './achievements/launch';
 import { coachSummaryQueue, startDaySummaryWorker } from './coach/daySummaryJob';
+import { assertHandleHoldSecret } from './buddies/identity';
+
+// Handle holds are keyed with HANDLE_HOLD_SECRET (buddies spec §2). Production must set it: the
+// BETTER_AUTH_SECRET fallback is for development only, and rotating the secret releases every held
+// handle. Throwing here stops the process before it binds the port.
+assertHandleHoldSecret();
 
 const port = Number(process.env.PORT ?? 3000);
 
