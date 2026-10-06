@@ -1,0 +1,110 @@
+import React, { useContext, useEffect } from 'react';
+import { ScrollView, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { NavigationContext, useRoute } from '@react-navigation/native';
+import type { AchievementFamily } from '../api/achievements';
+import { useCharacterOptional } from '../characters/CharacterContext';
+import { BadgeIcon } from '../components/achievements/BadgeIcon';
+import { characterInfo } from '../components/characters/registry';
+import { pixelFont } from '../components/coach/thinking/shared';
+import { Button } from '../components/ui/button';
+import { Card } from '../components/ui/card';
+import { Skeleton } from '../components/ui/skeleton';
+import { Text } from '../components/ui/text';
+import { refreshAchievements, useAchievements } from '../lib/achievementsStore';
+import { tierColors } from '../lib/badgeArt';
+import { FAMILY_NAMES, FAMILY_RULES, countLabel, ladderRow, numeral, tierName } from '../lib/badges';
+
+interface FocusSource {
+  addListener?: (event: 'focus', callback: () => void) => () => void;
+}
+
+// Badge detail (spec 2026-10-06 §6; canvas BadgeDetail.dc.html): the big badge, current and best
+// (one month count for a monthly family), and the ladder of five levels — earned with its date,
+// the next one with what is left, the rest locked. Opened from the Profile card or the Badges
+// screen; reloads on mount and focus like they do (in-flight refreshes coalesce in the store).
+export function BadgeDetailScreen() {
+  const { params } = useRoute<any>() as { params: { family: AchievementFamily } };
+  const focusSource = useContext(NavigationContext) as FocusSource | undefined;
+  const { state } = useAchievements();
+  const accent = characterInfo(useCharacterOptional()?.characterId).accent;
+
+  useEffect(() => {
+    void refreshAchievements();
+    return focusSource?.addListener?.('focus', () => void refreshAchievements());
+  }, [focusSource]);
+
+  const f = state.status === 'ready' ? state.data.families.find((x) => x.family === params.family) : undefined;
+  if (!f) {
+    return (
+      <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
+        <View style={{ padding: 20 }}>
+          {state.status === 'idle' ? (
+            <Skeleton testID="badge-detail-loading" className="h-64 w-full rounded-card" />
+          ) : state.status === 'error' ? (
+            <Card testID="badge-detail-error" className="gap-3">
+              <Text className="text-sm text-muted-foreground">This badge could not be loaded.</Text>
+              <Button testID="badge-detail-retry" variant="secondary" size="sm" onPress={() => void refreshAchievements()}>
+                Try again
+              </Button>
+            </Card>
+          ) : (
+            <Text testID="badge-detail-missing" className="text-base">This badge isn't available.</Text>
+          )}
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  const cards = f.kind === 'streak'
+    ? [
+        { key: 'current', label: 'CURRENT STREAK', value: countLabel(f.family, f.current) },
+        { key: 'best', label: 'BEST STREAK', value: countLabel(f.family, f.best) },
+      ]
+    : [{ key: 'current', label: 'MONTHS SO FAR', value: countLabel(f.family, f.current) }];
+  const keep = f.kind === 'streak' ? 'Levels stay yours even if a streak breaks.' : 'Levels are never taken away.';
+
+  return (
+    <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
+      <ScrollView contentContainerStyle={{ gap: 18, padding: 20 }}>
+        <View className="items-center gap-3">
+          <BadgeIcon family={f.family} level={f.level} size={140} pips={false} testID="badge-detail-icon" />
+          <Text testID="badge-detail-title" className="text-center" style={{ fontFamily: pixelFont(), fontSize: 22 }}>
+            {FAMILY_NAMES[f.family].toUpperCase()}
+          </Text>
+          <Text className="text-center text-sm text-muted-foreground" style={{ maxWidth: 290, lineHeight: 20 }}>
+            {`${FAMILY_RULES[f.family]}. ${keep}`}
+          </Text>
+        </View>
+        <View className="flex-row gap-2.5">
+          {cards.map((c) => (
+            <Card key={c.key} testID={`badge-detail-${c.key}`} className="flex-1 gap-1">
+              <Text className="text-muted-foreground" style={{ fontSize: 11, letterSpacing: 1.5 }}>{c.label}</Text>
+              <Text className="font-bold" style={{ fontSize: 28 }}>{c.value}</Text>
+            </Card>
+          ))}
+        </View>
+        <View>
+          {[1, 2, 3, 4, 5].map((level) => {
+            const row = ladderRow(f, level);
+            const threshold = f.thresholds[level - 1] ?? 0;
+            return (
+              <View key={level} testID={`badge-detail-level-${level}`} className="flex-row items-center gap-3.5 border-b border-border py-2">
+                <BadgeIcon family={f.family} level={row.earned ? level : 0} size={44} pips={false} testID={`badge-detail-level-${level}-icon`} />
+                <View className="flex-1 gap-0.5">
+                  <Text className="text-base font-semibold">{`Level ${numeral(level)} · ${tierName(level)} · ${countLabel(f.family, threshold)}`}</Text>
+                  <Text testID={`badge-detail-level-${level}-sub`} className="text-sm text-muted-foreground">{row.text}</Text>
+                </View>
+                {row.tag ? (
+                  <Text testID={`badge-detail-level-${level}-tag`} style={{ fontSize: 11, letterSpacing: 1, color: tierColors(level, accent).ring }}>
+                    {row.tag}
+                  </Text>
+                ) : null}
+              </View>
+            );
+          })}
+        </View>
+      </ScrollView>
+    </SafeAreaView>
+  );
+}

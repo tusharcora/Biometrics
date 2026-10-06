@@ -145,6 +145,16 @@ describe('RootNavigator', () => {
     expect(mockRegisteredScreens).toContain('ScoreDetail');
   });
 
+  it('registers the Badges and BadgeDetail routes', async () => {
+    signedIn(true);
+    (apiFetch as jest.Mock).mockResolvedValue({ status: 'CONNECTED', lastSyncedAt: null });
+
+    const { getByText } = render(<RootNavigator />);
+
+    await waitFor(() => expect(getByText('TABS_SCREEN')).toBeTruthy());
+    expect(mockRegisteredScreens).toEqual(expect.arrayContaining(['Badges', 'BadgeDetail']));
+  });
+
   it('registers the Patterns route', async () => {
     signedIn(true);
     (apiFetch as jest.Mock).mockResolvedValue({ status: 'CONNECTED', lastSyncedAt: null });
