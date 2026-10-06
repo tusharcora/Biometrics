@@ -55,8 +55,9 @@ export async function listBuddies(viewerId: string, cursorRaw: unknown, now: Dat
   ]);
   const unseenFrom = new Set(unseen.map((u) => u.fromUserId));
 
+  const usersById = new Map(users.map((u) => [u.id, u] as const));
   const buddies = ids.flatMap((id): BuddyRowDTO[] => {
-    const user = users.find((u) => u.id === id);
+    const user = usersById.get(id);
     if (!user) return [];
     const today = localCivilDateOrUtc(now, user.timezone);
     const byDate = new Map(scores.filter((s) => s.userId === id).map((s) => [key(s.date), s.score!] as const));

@@ -3,6 +3,8 @@ import { connection } from '../../src/sync/queue';
 import { migrateTestDb } from '../setupTestDb';
 import { authHeaderFor } from '../helpers/auth';
 import { BUDDY_SHARING_CONSENT_VERSION } from '../../src/buddies/sharing';
+import { blockBuddy, unpair } from '../../src/buddies/relations';
+import { STEPS_GOAL } from '../../src/coach/tools/metrics';
 import { listBuddies } from '../../src/buddies/list';
 import { encodeCursor, parseCursor } from '../../src/buddies/cursor';
 import { seedNight } from '../recap/helpers';
@@ -22,6 +24,9 @@ it('round-trips a cursor and refuses a malformed one', () => {
   expect(parseCursor(encodeCursor(c))).toEqual(c);
   expect(parseCursor(undefined)).toBeNull();
   for (const bad of ['nope', Buffer.from('["x","y"]').toString('base64url'), 42]) expect(() => parseCursor(bad)).toThrow('invalid_cursor');
+  const farPast = Buffer.from(JSON.stringify(['-010000-01-01T00:00:00.000Z', c.id])).toString('base64url');
+  const farFuture = Buffer.from(JSON.stringify(['+010000-01-01T00:00:00.000Z', c.id])).toString('base64url');
+  for (const bad of [farPast, farFuture]) expect(() => parseCursor(bad)).toThrow('invalid_cursor');
 });
 
 it('pages by (lastActivityAt, id) newest first, with ties broken by id', async () => {
@@ -54,20 +59,63 @@ it("fills each row's mood from batched reads in each buddy's zone, with no numbe
   await prisma.user.update({ where: { id: mover.id }, data: { shareSteps: true, shareStreaks: true, buddySharingConsentVersion: BUDDY_SHARING_CONSENT_VERSION } });
   await prisma.sticker.create({ data: { fromUserId: steady.id, toUserId: me.id, kind: 'HEART' } });
   const scoreReads = jest.spyOn(prisma.dailyScore, 'findMany');
+  const stepReads = jest.spyOn(prisma.biometricRecord, 'findMany');
+  const stickerReads = jest.spyOn(prisma.sticker, 'groupBy');
 
   const page = await listBuddies(me.id, undefined, NOW);
   expect(page.buddies.map((b) => [b.displayName, b.mood, b.moodLine, b.unseenSticker])).toEqual([
     ['Ben', 'good', 'Well rested · moved a lot yesterday', false],
     ['Ana', 'low', 'Running low today', true],
   ]);
-  expect(scoreReads).toHaveBeenCalledTimes(1);
-  scoreReads.mockRestore();
+  expect([scoreReads.mock.calls.length, stepReads.mock.calls.length, stickerReads.mock.calls.length]).toEqual([1, 1, 1]);
+  for (const spy of [scoreReads, stepReads, stickerReads]) spy.mockRestore();
   // Without ids and (hex) handles nothing numeric is left: no score, no steps, no streak.
   const json = JSON.stringify(page.buddies)
     .replace(/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}/gi, 'ID')
     .replace(/"handle":"[^"]*"/g, '"handle":"H"');
   expect(json).not.toMatch(/\d/);
   expect(json).not.toContain('streak');
+});
+
+it('says "moved a lot" only while steps are shared under the current consent', async () => {
+  const me = await buddyUser();
+  const hidden = await buddyUser({ displayName: 'Off' });
+  const stale = await buddyUser({ displayName: 'Stale' });
+  const shared = await buddyUser({ displayName: 'On' });
+  for (const [i, b] of [hidden, stale, shared].entries()) {
+    await pairUp(me.id, b.id, at(10 - i));
+    await seedNight(b.id, '2026-10-09', { minutes: 400, recovery: 90, steps: STEPS_GOAL + 5000 });
+  }
+  await prisma.user.update({ where: { id: hidden.id }, data: { shareSteps: false, buddySharingConsentVersion: BUDDY_SHARING_CONSENT_VERSION } });
+  await prisma.user.update({ where: { id: stale.id }, data: { shareSteps: true, buddySharingConsentVersion: BUDDY_SHARING_CONSENT_VERSION - 1 } });
+  await prisma.user.update({ where: { id: shared.id }, data: { shareSteps: true, buddySharingConsentVersion: BUDDY_SHARING_CONSENT_VERSION } });
+
+  const lines = Object.fromEntries((await listBuddies(me.id, undefined, NOW)).buddies.map((b) => [b.displayName, b.moodLine]));
+  expect(lines.Off).not.toContain('moved');
+  expect(lines.Stale).not.toContain('moved');
+  expect(lines.On).toContain('moved');
+});
+
+it('flags only unseen stickers a buddy sent to the viewer', async () => {
+  const me = await buddyUser();
+  const buddy = await buddyUser();
+  const third = await buddyUser();
+  await pairUp(me.id, buddy.id, at(1));
+  await prisma.sticker.create({ data: { fromUserId: me.id, toUserId: buddy.id, kind: 'HEART' } });
+  await prisma.sticker.create({ data: { fromUserId: buddy.id, toUserId: third.id, kind: 'HEART' } });
+  expect((await listBuddies(me.id, undefined, NOW)).buddies.map((b) => [b.id, b.unseenSticker])).toEqual([[buddy.id, false]]);
+});
+
+it('drops unpaired and blocked buddies from the list', async () => {
+  const me = await buddyUser();
+  const [stays, unpaired, blocked, blocker] = await Promise.all([buddyUser(), buddyUser(), buddyUser(), buddyUser()]);
+  for (const [i, b] of [stays, unpaired, blocked, blocker].entries()) await pairUp(me.id, b.id, at(10 - i));
+  const ids = async () => (await listBuddies(me.id, undefined, NOW)).buddies.map((b) => b.id);
+  expect(await ids()).toEqual([blocker.id, blocked.id, unpaired.id, stays.id]);
+  await unpair(me.id, unpaired.id, NOW);
+  await blockBuddy(me.id, blocked.id, NOW);
+  await blockBuddy(blocker.id, me.id, NOW);
+  expect(await ids()).toEqual([stays.id]);
 });
 
 it('GET /me/buddies answers the first page with request counts; a bad cursor is 400', async () => {
@@ -81,4 +129,7 @@ it('GET /me/buddies answers the first page with request counts; a bad cursor is 
   expect([bad.status, bad.body]).toEqual([400, { error: 'invalid_cursor' }]);
   const twice = await (await api()).get('/me/buddies?cursor=a&cursor=b').set(await authHeaderFor(me.id));
   expect([twice.status, twice.body]).toEqual([400, { error: 'invalid_cursor' }]);
+  const ancient = Buffer.from(JSON.stringify(['-010000-01-01T00:00:00.000Z', me.id])).toString('base64url');
+  const outOfRange = await (await api()).get('/me/buddies').query({ cursor: ancient }).set(await authHeaderFor(me.id));
+  expect([outOfRange.status, outOfRange.body]).toEqual([400, { error: 'invalid_cursor' }]);
 });
