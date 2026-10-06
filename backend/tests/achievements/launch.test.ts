@@ -30,11 +30,18 @@ const sinceOf = async (id: string) => (await prisma.user.findUniqueOrThrow({ whe
 const checkIn = (userId: string, habitDay: string, createdAt: string, onTime = false) =>
   prisma.habitCheckIn.create({ data: { userId, habitDay: day(habitDay), createdAt: new Date(createdAt), onTime } });
 const onTimeOf = async (id: string) => (await prisma.habitCheckIn.findUniqueOrThrow({ where: { id } })).onTime;
+// Users exist before the launch unless a test says otherwise: a fixed createdAt, so no test depends
+// on the wall clock (the DB default now() would pass LAUNCH once the real date does).
+const PRE_LAUNCH = new Date('2026-10-01T00:00:00Z');
+const preLaunchUser = async (over: Parameters<typeof createUser>[0] = {}) => {
+  const user = await createUser(over);
+  return prisma.user.update({ where: { id: user.id }, data: { createdAt: PRE_LAUNCH } });
+};
 
 it('starts every user without a start date on their local launch date, with starting goals, and leaves a set one alone', async () => {
-  const auckland = await createUser({ timezone: 'Pacific/Auckland' });
-  const utc = await createUser({ sleepGoalMinutes: 450 });
-  const started = await createUser();
+  const auckland = await preLaunchUser({ timezone: 'Pacific/Auckland' });
+  const utc = await preLaunchUser({ sleepGoalMinutes: 450 });
+  const started = await preLaunchUser();
   await prisma.user.update({ where: { id: started.id }, data: { achievementsSince: day('2026-09-01') } });
   const store = new MemoryStore();
 
@@ -53,13 +60,13 @@ it('starts every user without a start date on their local launch date, with star
 });
 
 it('marks check-ins saved before the launch, during the launch habit day, as on time, and nothing else', async () => {
-  const evening = await createUser();
+  const evening = await preLaunchUser();
   const eveningRow = await checkIn(evening.id, '2026-10-06', '2026-10-06T21:00:00Z');
-  const afterMidnight = await createUser();
+  const afterMidnight = await preLaunchUser();
   const afterMidnightRow = await checkIn(afterMidnight.id, '2026-10-06', '2026-10-07T01:30:00Z');
-  const backdated = await createUser();
+  const backdated = await preLaunchUser();
   const backdatedRow = await checkIn(backdated.id, '2026-10-05', '2026-10-06T21:00:00Z');
-  const afterLaunch = await createUser();
+  const afterLaunch = await preLaunchUser();
   const afterLaunchRow = await checkIn(afterLaunch.id, '2026-10-06', '2026-10-07T03:00:00Z');
 
   await runAchievementsLaunchOnce({ store: new MemoryStore(), launchAt: LAUNCH, userIds: [evening.id, afterMidnight.id, backdated.id, afterLaunch.id] });
@@ -72,7 +79,7 @@ it('marks check-ins saved before the launch, during the launch habit day, as on 
 });
 
 it('fixes launch-day check-ins for a user whose first badge load already set the start date', async () => {
-  const user = await createUser();
+  const user = await preLaunchUser();
   await prisma.user.update({ where: { id: user.id }, data: { achievementsSince: day('2026-10-07') } });
   const row = await checkIn(user.id, '2026-10-06', '2026-10-06T21:00:00Z');
 
@@ -84,9 +91,9 @@ it('fixes launch-day check-ins for a user whose first badge load already set the
 });
 
 it('a rerun after a lost marker moves no start date, writes no goal row and recomputes no flag', async () => {
-  const before = await createUser();
+  const before = await preLaunchUser();
   const beforeRow = await checkIn(before.id, '2026-10-06', '2026-10-06T21:00:00Z');
-  const after = await createUser();
+  const after = await preLaunchUser();
   const afterRow = await checkIn(after.id, '2026-10-06', '2026-10-07T03:00:00Z');
   const ids = [before.id, after.id];
   await runAchievementsLaunchOnce({ store: new MemoryStore(), launchAt: LAUNCH, userIds: ids });
@@ -102,14 +109,14 @@ it('a rerun after a lost marker moves no start date, writes no goal row and reco
 it('takes the launch instant from the achievements migration by default', async () => {
   const at = await launchInstant();
   expect(at).toBeInstanceOf(Date);
-  const user = await createUser();
+  const user = await preLaunchUser();
   const store = new MemoryStore();
   await runAchievementsLaunchOnce({ store, userIds: [user.id] });
   expect(store.values.get(ACHIEVEMENTS_LAUNCH_MARKER)).toBe(at!.toISOString());
 });
 
 it('runs only once per marker', async () => {
-  const user = await createUser();
+  const user = await preLaunchUser();
   const store = new MemoryStore();
   store.values.set(ACHIEVEMENTS_LAUNCH_MARKER, '2026-10-01T00:00:00.000Z');
   expect(await runAchievementsLaunchOnce({ store, launchAt: LAUNCH, userIds: [user.id] })).toBe(0);
@@ -117,7 +124,7 @@ it('runs only once per marker', async () => {
 });
 
 it('startAchievements logs a failure by error class, never throws, and leaves the marker unset', async () => {
-  const user = await createUser();
+  const user = await preLaunchUser();
   const store = new MemoryStore();
   const spy = jest.spyOn(prisma.user, 'findMany').mockRejectedValueOnce(new TypeError('db down'));
   const log = jest.spyOn(console, 'error').mockImplementation(() => {});
@@ -132,7 +139,7 @@ it('startAchievements logs a failure by error class, never throws, and leaves th
 });
 
 it('a rerun does not claim a user who signed up after the launch, but still runs their on-time fix', async () => {
-  const user = await createUser();
+  const user = await preLaunchUser();
   await prisma.user.update({ where: { id: user.id }, data: { createdAt: new Date('2026-10-07T03:00:00Z') } });
   // The fix is not filtered by signup time: a pre-launch launch-day row still flips.
   const row = await checkIn(user.id, '2026-10-06', '2026-10-06T21:00:00Z');
@@ -145,7 +152,7 @@ it('a rerun does not claim a user who signed up after the launch, but still runs
 });
 
 it('claims a user created exactly at the launch instant', async () => {
-  const user = await createUser();
+  const user = await preLaunchUser();
   await prisma.user.update({ where: { id: user.id }, data: { createdAt: LAUNCH } });
   expect(await runAchievementsLaunchOnce({ store: new MemoryStore(), launchAt: LAUNCH, userIds: [user.id] })).toBe(1);
   expect(await sinceOf(user.id)).toBe('2026-10-07');
