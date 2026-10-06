@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import type { HabitLog } from '@prisma/client';
+import { clearAchievementsMarker } from '../achievements/marker';
 import { requireAuth, AuthedRequest } from '../auth/middleware';
 import { civilDateToUtcMidnight } from '../biometrics/civilDate';
 import { prisma } from '../db/client';
@@ -211,12 +212,16 @@ habitsRouter.post('/me/habits/check-ins', requireAuth, async (req: AuthedRequest
   }
 
   const day = civilDateToUtcMidnight(habitDay);
-  // Idempotent: a second tap changes nothing.
+  // On time = made during its own habit day (achievements spec §3). Stored when the row is written
+  // and never recomputed: a second tap changes nothing, the flag included.
+  const onTime = habitDay === today;
   await prisma.habitCheckIn.upsert({
     where: { userId_habitDay: { userId, habitDay: day } },
     update: {},
-    create: { userId, habitDay: day },
+    create: { userId, habitDay: day, onTime },
   });
+  // A check-in can extend the check-in streak: the next badge load re-evaluates at once.
+  await clearAchievementsMarker(userId);
   res.status(201).json({ checkIn: { habitDay } });
 });
 
