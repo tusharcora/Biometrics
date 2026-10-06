@@ -9,6 +9,12 @@ import { seedNights } from '../recap/helpers';
 
 beforeAll(() => migrateTestDb());
 afterAll(() => prisma.$disconnect());
+// Every award logs achievements.awarded; keep the run quiet (the log test checks it with its own spy).
+let quietInfo: jest.SpyInstance;
+beforeEach(() => {
+  quietInfo = jest.spyOn(console, 'info').mockImplementation(() => {});
+});
+afterEach(() => quietInfo.mockRestore());
 
 const day = civilDateToUtcMidnight;
 const key = (d: Date) => d.toISOString().slice(0, 10);
@@ -126,6 +132,24 @@ it('counts months from BUILT recaps; a rebuild that gains a milestone awards, on
     ['STEADIEST_MONTH', 1, '2026-09-30'],
     ['STEADIEST_MONTH', 2, '2026-09-30'],
   ]);
+});
+
+it('judges steady bedtimes against the usual bedtime, using main sessions from the 60 days before the start date', async () => {
+  // No bedtime goal: each night is judged against the median of the 14 main-session bedtimes before
+  // it, once there are 7. Eight nights before the start date make the first nights after it count.
+  const user = await startedUser();
+  await seedNights(user.id, '2026-09-10', [500, 500, 500, 500, 500, 500, 500, 500], () => ({ bedtime: '22:30' }));
+  await seedNights(user.id, '2026-10-01', [500, 500, 500], (i) => ({ bedtime: ['22:40', '22:15', '22:30'][i] }));
+  // Without the nights before it, the same three nights have no usual bedtime yet and count for nothing.
+  const fresh = await startedUser();
+  await seedNights(fresh.id, '2026-10-01', [500, 500, 500], (i) => ({ bedtime: ['22:40', '22:15', '22:30'][i] }));
+
+  const results = await evaluateAchievements(user.id, NOW, ['STEADY_BEDTIME']);
+  await evaluateAchievements(fresh.id, NOW, ['STEADY_BEDTIME']);
+
+  expect(results?.find((r) => r.family === 'STEADY_BEDTIME')).toMatchObject({ best: 3 });
+  expect((await stored(user.id)).map((r) => [r.family, r.level, r.value, r.earnedOn])).toEqual([['STEADY_BEDTIME', 1, 3, '2026-10-03']]);
+  expect(await stored(fresh.id)).toEqual([]);
 });
 
 it('evaluates only the families asked for', async () => {
