@@ -9,6 +9,7 @@ import { createCode, getActiveCode, redeemCode } from './codes';
 import { BuddyError, UUID_RE, buddyRoute, limitOrThrow } from './errors';
 import { getIdentity, isHandleAvailable, updateIdentity } from './handles';
 import { checkDisplayName, checkHandle } from './identity';
+import { listBuddies } from './list';
 import { blockBuddy, blockFromRequest, listBlocked, requireBuddyId, setMuted, unblock, unpair } from './relations';
 import { acceptRequest, cancelRequest, declineRequest, listRequests, sendRequest } from './requests';
 import { confirmMoodNotice, getSharing, parseSharingPatch, recordSharingConsent, updateSharing } from './sharing';
@@ -123,6 +124,12 @@ buddiesRouter.delete('/me/blocks/:userId', requireAuth, buddyRoute(async (req, r
   const id = String(req.params.userId);
   if (UUID_RE.test(id)) await unblock(req.userId!, id);
   res.status(204).send();
+}));
+
+/** The buddy list. A bare 404 here is how the app knows the backend predates buddies. */
+buddiesRouter.get('/me/buddies', requireAuth, buddyRoute(async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  res.json(await listBuddies(req.userId!, req.query.cursor, new Date()));
 }));
 
 // ---- /me/buddies/:buddyId routes: keep these LAST. Any new GET /me/buddies/<word> route goes above,
