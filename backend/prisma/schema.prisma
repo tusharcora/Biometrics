@@ -53,6 +53,8 @@ model User {
   coachDaySummaries  CoachDaySummary[]
   pushTokens         PushToken[]
   recaps             Recap[]
+  achievements       Achievement[]
+  goalChanges        GoalChange[]
 
   // The coach persona the user picked in Settings (an id from
   // src/coach/personas). Null means the default persona.
@@ -79,6 +81,10 @@ model User {
 
   /// "Recap ready" pushes (spec 2026-10-04 §2). App-level: independent of the coach.
   recapPushEnabled Boolean @default(true)
+
+  /// Achievements start date (spec 2026-10-06 §3): the user's local date on launch day (launch
+  /// job) or on their first badge load. Only days/months from it count. Set once, never changed.
+  achievementsSince DateTime? @db.Date
 
   // IANA zone name (e.g. "America/Los_Angeles"), client-supplied. It defines
   // which local civil date a sleep session's end instant belongs to, so the
@@ -391,6 +397,9 @@ model HabitCheckIn {
   user      User     @relation(fields: [userId], references: [id])
   habitDay  DateTime @db.Date
   createdAt DateTime @default(now())
+  /// Made during its own habit day (04:00-local boundary). Set when the row is written, never
+  /// recomputed; only on-time check-ins count toward the check-in badge (spec 2026-10-06 §3).
+  onTime    Boolean  @default(false)
 
   @@unique([userId, habitDay])
 }
@@ -656,4 +665,57 @@ model Recap {
 
   @@unique([userId, kind, periodStart])
   @@index([userId, status, periodEnd])
+}
+
+enum AchievementFamily {
+  SLEEP_GOAL
+  STEADY_BEDTIME
+  STEP_GOAL
+  CHECK_IN
+  BEST_RECOVERY_WEEK
+  EVERY_DAY_LOGGED
+  STEADIEST_MONTH
+}
+
+/// One badge level a user earned (spec 2026-10-06 §3). Awarded once, never revoked or updated.
+model Achievement {
+  id           String            @id @default(uuid())
+  userId       String
+  user         User              @relation(fields: [userId], references: [id], onDelete: Cascade)
+  family       AchievementFamily
+  /// 1..5 (I Bronze .. V Coach); a CHECK constraint in the migration enforces the range.
+  level        Int
+  /// The threshold reached.
+  value        Int
+  /// Local date the run first reached the threshold; for a monthly family, the month's last day.
+  earnedOn     DateTime          @db.Date
+  weekStart    DateTime          @db.Date
+  monthStart   DateTime          @db.Date
+  createdAt    DateTime          @default(now())
+  celebratedAt DateTime?
+
+  @@unique([userId, family, level])
+  @@index([userId, celebratedAt])
+}
+
+enum GoalChangeKind {
+  SLEEP_MINUTES
+  BEDTIME
+}
+
+/// Sleep/bedtime goal history for the badge streaks (spec 2026-10-06 §3). Only the last change of
+/// a day is kept. A change applies to nights whose wake date is after effectiveOn.
+model GoalChange {
+  id           String         @id @default(uuid())
+  userId       String
+  user         User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  kind         GoalChangeKind
+  sleepMinutes Int?
+  /// "HH:MM"; null = no bedtime goal (cleared, or none at the start).
+  bedtime      String?
+  effectiveOn  DateTime       @db.Date
+  resetsStreak Boolean
+  createdAt    DateTime       @default(now())
+
+  @@unique([userId, kind, effectiveOn])
 }
