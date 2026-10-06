@@ -14,7 +14,7 @@ jest.mock('../../src/lib/pushRegistration');
 jest.mock('@react-navigation/native', () => ({
   NavigationContainer: ({ children }: any) => children,
   // RootNavigator hands the container a shared ref (navigation/navigationRef.ts).
-  createNavigationContainerRef: () => ({ isReady: () => false, navigate: () => undefined }),
+  createNavigationContainerRef: () => ({ isReady: () => false, navigate: () => undefined, addListener: () => () => undefined }),
   DefaultTheme: { dark: false, colors: {}, fonts: {} },
   DarkTheme: { dark: true, colors: {}, fonts: {} },
 }));

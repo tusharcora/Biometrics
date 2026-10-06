@@ -49,6 +49,24 @@ it('closes with "Nice!"', () => {
   expect(onDone).toHaveBeenCalledTimes(1);
 });
 
+it('closes once, however fast "Nice!" is pressed twice', () => {
+  const onDone = jest.fn();
+  render(withCharacter(<CelebrationModal celebration={GOLD} thresholds={THRESHOLDS} onDone={onDone} />));
+  fireEvent.press(screen.getByTestId('celebration-done'));
+  fireEvent.press(screen.getByTestId('celebration-done'));
+  expect(onDone).toHaveBeenCalledTimes(1);
+  expect(screen.getByTestId('celebration-done')).toBeDisabled();
+});
+
+it('says so when the share image could not be made', async () => {
+  (captureToPng as jest.Mock).mockRejectedValue(new Error('capture'));
+  render(withCharacter(<CelebrationModal celebration={GOLD} thresholds={THRESHOLDS} onDone={jest.fn()} />));
+  expect(screen.queryByTestId('celebration-notice')).toBeNull();
+  fireEvent.press(screen.getByTestId('celebration-share'));
+  expect(await screen.findByTestId('celebration-notice')).toHaveTextContent("The image couldn't be made. Please try again.");
+  expect(shareImage).not.toHaveBeenCalled();
+});
+
 it('shares a 1080 px badge card through the recap export pipeline', async () => {
   jest.spyOn(PixelRatio, 'get').mockReturnValue(3);
   (captureToPng as jest.Mock).mockResolvedValue('file:///cache/recap-1.png');
