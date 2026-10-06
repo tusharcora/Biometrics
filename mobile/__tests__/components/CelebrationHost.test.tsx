@@ -5,7 +5,7 @@ import { withCharacter } from '../../jest-mocks/characterContext';
 import { achievementsFixture } from '../../jest-mocks/achievementsFixture';
 import { fetchAchievements, markCelebrated } from '../../src/api/achievements';
 import { CelebrationHost, MODAL_DISMISS_MS } from '../../src/components/achievements/CelebrationHost';
-import { resetAchievements } from '../../src/lib/achievementsStore';
+import { refreshAchievements, resetAchievements } from '../../src/lib/achievementsStore';
 
 jest.mock('../../src/api/achievements');
 jest.mock('../../src/lib/timezone', () => require('../../jest-mocks/timezoneSettled'));
@@ -165,4 +165,23 @@ it('shows nothing against a backend without badges (404)', async () => {
   await waitFor(() => expect(load).toHaveBeenCalledTimes(1));
   await act(async () => {});
   expect(screen.queryByTestId('celebration-screen')).toBeNull();
+});
+
+it('keeps the family on screen until it is closed when a refresh brings a higher level for another one', async () => {
+  load.mockResolvedValue(achievementsFixture({ CHECK_IN: { level: 1 } }, {
+    uncelebrated: [{ id: 'c1', family: 'CHECK_IN', level: 1, value: 7, earnedOn: '2026-10-07' }],
+  }));
+  render(withCharacter(<CelebrationHost />));
+  expect(await screen.findByTestId('celebration-title')).toHaveTextContent('DAILY CHECK-IN I');
+
+  load.mockResolvedValue(TWO_FAMILIES);
+  await act(() => refreshAchievements());
+  expect(screen.getByTestId('celebration-title')).toHaveTextContent('DAILY CHECK-IN I');
+
+  fireEvent.press(screen.getByTestId('celebration-done'));
+  expect(post).toHaveBeenCalledWith(['c1']);
+  await waitFor(() => expect(screen.getByTestId('celebration-title')).toHaveTextContent('SLEEP GOAL STREAK II'));
+  fireEvent.press(screen.getByTestId('celebration-done'));
+  expect(post).toHaveBeenLastCalledWith(['s1', 's2']);
+  await waitFor(() => expect(screen.queryByTestId('celebration-title')).toBeNull());
 });

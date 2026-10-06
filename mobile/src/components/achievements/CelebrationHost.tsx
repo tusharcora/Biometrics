@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { celebrate, pendingLevels, refreshAchievements, resetAchievements, useAchievements } from '../../lib/achievementsStore';
-import { celebrationQueue } from '../../lib/celebrationQueue';
+import { celebrationQueue, type Celebration } from '../../lib/celebrationQueue';
 import { MODAL_ROUTES, navigationRef } from '../../navigation/navigationRef';
 import { CelebrationModal } from './CelebrationModal';
 
@@ -67,6 +67,9 @@ function useMustWait(): boolean {
 export function CelebrationHost() {
   const snapshot = useAchievements();
   const wait = useMustWait();
+  // The celebration on screen, kept until it is closed: a refresh meanwhile that brings a higher
+  // level for another family queues it behind this one instead of swapping it in under the user.
+  const shown = useRef<Celebration | null>(null);
 
   useEffect(() => {
     void refreshAchievements();
@@ -80,7 +83,11 @@ export function CelebrationHost() {
   }, []);
 
   if (wait || snapshot.state.status !== 'ready') return null;
-  const next = celebrationQueue(pendingLevels(snapshot))[0];
+  const pending = pendingLevels(snapshot);
+  // Closing hides its ids at once, which ends the pin.
+  const pinned = shown.current && pending.some((p) => shown.current!.ids.includes(p.id)) ? shown.current : null;
+  const next = pinned ?? celebrationQueue(pending)[0];
+  shown.current = next ?? null;
   if (!next) return null;
   const thresholds = snapshot.state.data.families.find((f) => f.family === next.family)?.thresholds ?? [];
   // Not keyed: the Modal stays presented and the next family swaps in inside it.
