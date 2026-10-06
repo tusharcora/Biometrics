@@ -2,7 +2,8 @@
 // job per would-be notification event — whatever the recipient's mute, settings or quiet hours,
 // and whether or not the request is hidden or swallowed — so the route's work and response time
 // never depend on them. The JOB decides: a buddy_request whose row is hidden or no longer PENDING
-// is dropped (only a visible request gets its REQUEST Activity row, written here); everything else
+// is dropped (only a visible request gets its REQUEST Activity row, written here); any other kind
+// is dropped unless the pair is still live and neither side has blocked the other; the rest
 // goes through sendBuddyNotice (setting, mute, quiet hours, devices). The enqueue is bounded by
 // withTimeout: on a timeout or error it logs the event, ids and error class, and the caller carries on.
 
@@ -14,7 +15,8 @@ import { sendBuddyNotice, type BuddyNotice, type NoticeOutcome } from './notify'
 
 export const BUDDY_NOTIFY_JOB = 'buddyNotify';
 export const NOTIFY_ENQUEUE_TIMEOUT_MS = 300;
-export const NOTIFY_JOB_OPTIONS = { removeOnComplete: true, removeOnFail: true, attempts: 2, backoff: { type: 'exponential', delay: 30_000 } } as const;
+// Best-effort: one attempt, no retry (a stalled job re-run may rarely double-send; accepted).
+export const NOTIFY_JOB_OPTIONS = { removeOnComplete: true, removeOnFail: true } as const;
 
 export interface NotifyQueue {
   add(name: string, data: BuddyNotice, opts?: object): Promise<unknown>;
@@ -64,6 +66,22 @@ export async function runBuddyNotifyJob(data: BuddyNotice, deps: { pushSender: P
       data: [{ recipientId: data.recipientId, actorId: data.actorId, kind: 'REQUEST', refId: row.id, createdAt: row.createdAt }],
       skipDuplicates: true,
     });
+  } else if (!(await stillBuddies(data.actorId, data.recipientId))) {
+    // Unpaired or blocked (either way) since the enqueue: a block deletes mutes, so without this
+    // check a sticker sent before the block would reach the person who just blocked its sender.
+    return 'dropped';
   }
   return sendBuddyNotice(deps.pushSender, data, deps.now);
+}
+
+async function stillBuddies(a: string, b: string): Promise<boolean> {
+  const [userAId, userBId] = a < b ? [a, b] : [b, a];
+  const [pair, block] = await Promise.all([
+    prisma.buddyPair.findUnique({ where: { userAId_userBId: { userAId, userBId } }, select: { id: true } }),
+    prisma.buddyBlock.findFirst({
+      where: { OR: [{ blockerId: a, blockedId: b }, { blockerId: b, blockedId: a }] },
+      select: { blockerId: true },
+    }),
+  ]);
+  return pair !== null && block === null;
 }

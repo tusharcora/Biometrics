@@ -6,11 +6,12 @@ import { setPushSender } from '../../src/coach/config';
 import { processSyncJob } from '../../src/sync/worker';
 import { migrateTestDb } from '../setupTestDb';
 import { BUDDY_NOTIFY_JOB, NOTIFY_JOB_OPTIONS, enqueueBuddyNotice, runBuddyNotifyJob } from '../../src/buddies/notifyQueue';
-import { RecordingQueue, RecordingSender, addToken, buddyUser } from './helpers';
+import { RecordingQueue, RecordingSender, addToken, buddyUser, pairUp } from './helpers';
 
 jest.mock('../../src/health/client');
 
 beforeAll(() => migrateTestDb());
+afterEach(() => setPushSender(null));
 afterAll(async () => {
   await prisma.$disconnect();
   await connection.quit();
@@ -23,6 +24,8 @@ it('enqueues exactly one buddyNotify job carrying the notice', async () => {
   const notice = { kind: 'buddy_paired' as const, recipientId: randomUUID(), actorId: randomUUID(), refId: randomUUID(), slots: { name: 'Sam' } };
   await enqueueBuddyNotice(notice, { queue });
   expect(queue.jobs).toEqual([{ name: BUDDY_NOTIFY_JOB, data: notice, opts: NOTIFY_JOB_OPTIONS }]);
+  // Best-effort: one attempt, no retry/backoff.
+  expect(NOTIFY_JOB_OPTIONS).toEqual({ removeOnComplete: true, removeOnFail: true });
 });
 
 it('a hanging or failing queue never holds the caller, and logs ids and the error class only', async () => {
@@ -65,6 +68,7 @@ describe('runBuddyNotifyJob', () => {
     const sam = await buddyUser();
     const jo = await buddyUser();
     await addToken(jo.id);
+    await pairUp(sam.id, jo.id);
     await prisma.buddyMute.create({ data: { muterId: jo.id, mutedId: sam.id } });
     const sender = new RecordingSender();
     const job = { kind: 'buddy_sticker' as const, recipientId: jo.id, actorId: sam.id, refId: sam.id, slots: { name: 'Sam', sticker: 'HEART' as const } };
@@ -72,16 +76,52 @@ describe('runBuddyNotifyJob', () => {
     expect(sender.calls).toHaveLength(0);
   });
 
+  it('drops a sticker, paired or badge job unless a live pair exists and neither side has blocked the other', async () => {
+    const sam = await buddyUser();
+    const jo = await buddyUser();
+    await addToken(jo.id);
+    const sender = new RecordingSender();
+    const run = (kind: 'buddy_sticker' | 'buddy_paired' | 'buddy_badge') => {
+      const slots = {
+        buddy_sticker: { name: 'Sam', sticker: 'STAR' as const },
+        buddy_paired: { name: 'Sam' },
+        buddy_badge: { name: 'Sam', family: 'SLEEP_GOAL' as const, level: 1 },
+      }[kind];
+      return runBuddyNotifyJob({ kind, recipientId: jo.id, actorId: sam.id, refId: randomUUID(), slots } as never, { pushSender: sender, now: NOON });
+    };
+
+    // Paired, then unpaired straight away, before the jobs run.
+    const pair = await pairUp(sam.id, jo.id);
+    await prisma.buddyPair.delete({ where: { id: pair.id } });
+    expect(await run('buddy_paired')).toBe('dropped');
+    expect(await run('buddy_sticker')).toBe('dropped');
+    expect(await run('buddy_badge')).toBe('dropped');
+
+    // Jo muted Sam, Sam sent a sticker, then Jo blocked Sam (which unpairs and deletes the mute) before the job ran.
+    await pairUp(sam.id, jo.id);
+    await prisma.buddyBlock.create({ data: { blockerId: jo.id, blockedId: sam.id } });
+    expect(await run('buddy_sticker')).toBe('dropped');
+    await prisma.buddyBlock.deleteMany({ where: { blockerId: jo.id } });
+    // A block in the other direction drops it too.
+    await prisma.buddyBlock.create({ data: { blockerId: sam.id, blockedId: jo.id } });
+    expect(await run('buddy_badge')).toBe('dropped');
+    await prisma.buddyBlock.deleteMany({ where: { blockerId: sam.id } });
+
+    expect(await run('buddy_sticker')).toBe('sent');
+    expect(sender.calls).toHaveLength(1);
+    expect(await prisma.buddyActivity.count({ where: { recipientId: jo.id } })).toBe(0);
+  });
+
   it('is dispatched by the sync worker with the configured sender', async () => {
     const sam = await buddyUser();
     const jo = await buddyUser();
     await addToken(jo.id);
+    await pairUp(sam.id, jo.id);
     // Equal bedtime and wake goals: no quiet hours, so the wall clock cannot matter here.
     await prisma.user.update({ where: { id: jo.id }, data: { bedtimeGoal: '03:00', wakeGoal: '03:00' } });
     const sender = new RecordingSender();
     setPushSender(sender);
     await processSyncJob({ name: BUDDY_NOTIFY_JOB, data: { kind: 'buddy_paired', recipientId: jo.id, actorId: sam.id, refId: sam.id, slots: { name: 'Sam' } } } as unknown as Job);
-    setPushSender(null);
     expect(sender.titles()).toEqual(['You and Sam are now buddies']);
   });
 });
