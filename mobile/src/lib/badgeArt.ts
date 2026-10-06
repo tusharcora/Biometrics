@@ -45,6 +45,16 @@ export function tierColors(level: number, coachAccent: string): TierColors {
   return l === 5 ? coachTier(coachAccent) : TIERS[l]!;
 }
 
+/**
+ * Small text in a tier's colour (the ladder's EARNED / NEXT). The pale rings (Silver, Gold, Diamond,
+ * light coach accents) vanish on the light page, so light mode darkens the ring by 55% toward black:
+ * every tier and coach accent then clears 4.5:1 on the light page and card. Dark mode keeps the ring.
+ */
+export function tierTextColor(level: number, coachAccent: string, dark: boolean): string {
+  const ring = tierColors(level, coachAccent).ring;
+  return dark ? ring : mixHex(ring, '#000000', 0.55);
+}
+
 /** [col, row] of every filled cell, row by row. */
 export function glyphCells(family: AchievementFamily): Array<[col: number, row: number]> {
   const cells: Array<[number, number]> = [];

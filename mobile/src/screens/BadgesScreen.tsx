@@ -1,7 +1,7 @@
-import React, { useContext, useEffect } from 'react';
+import React from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { NavigationContext, useNavigation } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { BadgeIcon } from '../components/achievements/BadgeIcon';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
@@ -9,24 +9,15 @@ import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { refreshAchievements, useAchievements } from '../lib/achievementsStore';
 import { FAMILY_NAMES, FAMILY_ORDER, FAMILY_RULES, familyStatus } from '../lib/badges';
-
-interface FocusSource {
-  addListener?: (event: 'focus', callback: () => void) => () => void;
-}
+import { useRefreshAchievementsOnFocus } from '../lib/useRefreshAchievementsOnFocus';
 
 // Profile → "See all" (spec 2026-10-06 §6; canvas Main.dc.html): every family at its level with
 // its rule and progress; a tap opens the badge's detail. Reloads on mount and each time it comes
 // back into focus (back from a detail, levels earned since), like the Profile card.
 export function BadgesScreen() {
   const navigation = useNavigation<any>();
-  const focusSource = useContext(NavigationContext) as FocusSource | undefined;
   const { state } = useAchievements();
-
-  useEffect(() => {
-    void refreshAchievements();
-    // In-flight refreshes coalesce in the store, so the focus right after mount costs nothing.
-    return focusSource?.addListener?.('focus', () => void refreshAchievements());
-  }, [focusSource]);
+  useRefreshAchievementsOnFocus();
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>

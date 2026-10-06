@@ -1,8 +1,8 @@
-import React, { useContext, useEffect } from 'react';
+import React from 'react';
 import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { NavigationContext, useRoute } from '@react-navigation/native';
-import type { AchievementFamily } from '../api/achievements';
+import { useRoute, type RouteProp } from '@react-navigation/native';
+import { useColorScheme } from 'nativewind';
 import { useCharacterOptional } from '../characters/CharacterContext';
 import { BadgeIcon } from '../components/achievements/BadgeIcon';
 import { characterInfo } from '../components/characters/registry';
@@ -12,29 +12,26 @@ import { Card } from '../components/ui/card';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { refreshAchievements, useAchievements } from '../lib/achievementsStore';
-import { tierColors } from '../lib/badgeArt';
+import { tierTextColor } from '../lib/badgeArt';
 import { FAMILY_NAMES, FAMILY_RULES, countLabel, ladderRow, numeral, tierName } from '../lib/badges';
+import { useRefreshAchievementsOnFocus } from '../lib/useRefreshAchievementsOnFocus';
+import type { RootStackParamList } from '../navigation/RootNavigator';
 
-interface FocusSource {
-  addListener?: (event: 'focus', callback: () => void) => () => void;
-}
+type BadgeDetailRoute = RouteProp<RootStackParamList, 'BadgeDetail'>;
 
 // Badge detail (spec 2026-10-06 §6; canvas BadgeDetail.dc.html): the big badge, current and best
 // (one month count for a monthly family), and the ladder of five levels — earned with its date,
 // the next one with what is left, the rest locked. Opened from the Profile card or the Badges
 // screen; reloads on mount and focus like they do (in-flight refreshes coalesce in the store).
 export function BadgeDetailScreen() {
-  const { params } = useRoute<any>() as { params: { family: AchievementFamily } };
-  const focusSource = useContext(NavigationContext) as FocusSource | undefined;
+  // A malformed deep link or a stale state restore may arrive without params: the missing state.
+  const family = (useRoute<BadgeDetailRoute>().params as BadgeDetailRoute['params'] | undefined)?.family;
   const { state } = useAchievements();
   const accent = characterInfo(useCharacterOptional()?.characterId).accent;
+  const dark = useColorScheme().colorScheme === 'dark';
+  useRefreshAchievementsOnFocus();
 
-  useEffect(() => {
-    void refreshAchievements();
-    return focusSource?.addListener?.('focus', () => void refreshAchievements());
-  }, [focusSource]);
-
-  const f = state.status === 'ready' ? state.data.families.find((x) => x.family === params.family) : undefined;
+  const f = state.status === 'ready' && family ? state.data.families.find((x) => x.family === family) : undefined;
   if (!f) {
     return (
       <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
@@ -69,7 +66,7 @@ export function BadgeDetailScreen() {
       <ScrollView contentContainerStyle={{ gap: 18, padding: 20 }}>
         <View className="items-center gap-3">
           <BadgeIcon family={f.family} level={f.level} size={140} pips={false} testID="badge-detail-icon" />
-          <Text testID="badge-detail-title" className="text-center" style={{ fontFamily: pixelFont(), fontSize: 22 }}>
+          <Text testID="badge-detail-title" accessibilityRole="header" className="text-center" style={{ fontFamily: pixelFont(), fontSize: 22 }}>
             {FAMILY_NAMES[f.family].toUpperCase()}
           </Text>
           <Text className="text-center text-sm text-muted-foreground" style={{ maxWidth: 290, lineHeight: 20 }}>
@@ -96,7 +93,7 @@ export function BadgeDetailScreen() {
                   <Text testID={`badge-detail-level-${level}-sub`} className="text-sm text-muted-foreground">{row.text}</Text>
                 </View>
                 {row.tag ? (
-                  <Text testID={`badge-detail-level-${level}-tag`} style={{ fontSize: 11, letterSpacing: 1, color: tierColors(level, accent).ring }}>
+                  <Text testID={`badge-detail-level-${level}-tag`} style={{ fontSize: 11, letterSpacing: 1, color: tierTextColor(level, accent, dark) }}>
                     {row.tag}
                   </Text>
                 ) : null}

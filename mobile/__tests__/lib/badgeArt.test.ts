@@ -1,5 +1,6 @@
-import { GLYPHS, LOCKED_PIP, TIERS, coachTier, glyphCells, mixHex, octagonPoints, tierColors } from '../../src/lib/badgeArt';
+import { GLYPHS, LOCKED_PIP, TIERS, coachTier, glyphCells, mixHex, octagonPoints, tierColors, tierTextColor } from '../../src/lib/badgeArt';
 import type { AchievementFamily } from '../../src/api/achievements';
+import { CHARACTERS } from '../../src/components/characters/registry';
 
 it('has the 12×12 design glyph for every family', () => {
   for (const rows of Object.values(GLYPHS)) {
@@ -24,6 +25,27 @@ it('uses the design tier colours up to Diamond and the coach accent for level V'
 it('mixes hex colours', () => {
   expect(mixHex('#000000', '#FFFFFF', 0.5)).toBe('#808080');
   expect(mixHex('#F9A8D4', '#000000', 0.78)).toBe('#37252F');
+});
+
+it('gives small tier-coloured text at least 4.5:1 on the light page and card, and the ring itself in dark mode', () => {
+  const channel = (hex: string, i: number) => {
+    const v = parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16) / 255;
+    return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+  };
+  const lum = (hex: string) => 0.2126 * channel(hex, 0) + 0.7152 * channel(hex, 1) + 0.0722 * channel(hex, 2);
+  const ratio = (a: string, b: string) => {
+    const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x) as [number, number];
+    return (hi + 0.05) / (lo + 0.05);
+  };
+  const accents = Object.values(CHARACTERS).map((c) => c.accent);
+  for (const accent of accents) {
+    for (const level of [1, 2, 3, 4, 5]) {
+      const text = tierTextColor(level, accent, false);
+      expect(ratio(text, '#F6F6F7')).toBeGreaterThanOrEqual(4.5);
+      expect(ratio(text, '#FFFFFF')).toBeGreaterThanOrEqual(4.5);
+      expect(tierTextColor(level, accent, true)).toBe(tierColors(level, accent).ring);
+    }
+  }
 });
 
 it('draws the octagon at 30% and 70% of each side, inset for the inner face', () => {

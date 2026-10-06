@@ -1,10 +1,10 @@
-import React, { useContext, useEffect } from 'react';
+import React from 'react';
 import { Pressable, View } from 'react-native';
-import { NavigationContext } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
 import type { AchievementFamily } from '../../api/achievements';
 import { useCharacterOptional } from '../../characters/CharacterContext';
-import { refreshAchievements, useAchievements } from '../../lib/achievementsStore';
+import { useAchievements } from '../../lib/achievementsStore';
+import { useRefreshAchievementsOnFocus } from '../../lib/useRefreshAchievementsOnFocus';
 import { mixHex, tierColors } from '../../lib/badgeArt';
 import { FAMILY_ORDER, FAMILY_SHORT, TOTAL_LEVELS, badgeLabel, countLabel, earnedCount, levelTitle, nextUp } from '../../lib/badges';
 import { COLORS } from '../../theme';
@@ -12,10 +12,6 @@ import { characterInfo } from '../characters/registry';
 import { Card } from '../ui/card';
 import { Text } from '../ui/text';
 import { BadgeIcon } from './BadgeIcon';
-
-interface FocusSource {
-  addListener?: (event: 'focus', callback: () => void) => () => void;
-}
 
 export interface BadgesCardProps {
   onSeeAll: () => void;
@@ -33,13 +29,7 @@ export function BadgesCard({ onSeeAll, onOpen }: BadgesCardProps) {
   const dark = colorScheme === 'dark';
   const colors = dark ? COLORS.dark : COLORS.light;
   const accent = characterInfo(useCharacterOptional()?.characterId).accent;
-  const navigation = useContext(NavigationContext) as FocusSource | undefined;
-
-  useEffect(() => {
-    void refreshAchievements();
-    // In-flight refreshes coalesce in the store, so a focus right after mount costs nothing.
-    return navigation?.addListener?.('focus', () => void refreshAchievements());
-  }, [navigation]);
+  useRefreshAchievementsOnFocus();
 
   if (state.status !== 'ready') return null;
   const a = state.data;
