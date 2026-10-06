@@ -37,9 +37,17 @@ const NOTICE_INK = '#FCA5A5';
 // Modal presented in the same commit another one starts dismissing is dropped.
 export function CelebrationModal({ celebration, thresholds, onDone }: CelebrationModalProps) {
   const reduceMotion = useReducedMotion();
+  const key = `${celebration.family}-${celebration.level}`;
+  // "Nice!" and the system back gesture (onRequestClose) close each family once between them.
+  const closedKey = useRef<string | null>(null);
+  const done = () => {
+    if (closedKey.current === key) return;
+    closedKey.current = key;
+    onDone();
+  };
   return (
-    <Modal visible transparent={false} animationType={reduceMotion ? 'none' : 'fade'} presentationStyle="fullScreen" onRequestClose={onDone}>
-      <CelebrationContent key={`${celebration.family}-${celebration.level}`} celebration={celebration} thresholds={thresholds} onDone={onDone} />
+    <Modal visible transparent={false} animationType={reduceMotion ? 'none' : 'fade'} presentationStyle="fullScreen" onRequestClose={done}>
+      <CelebrationContent key={key} celebration={celebration} thresholds={thresholds} onDone={done} />
     </Modal>
   );
 }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { PixelRatio } from 'react-native';
+import { Modal, PixelRatio } from 'react-native';
 import { fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { HIDDEN_OK, withCharacter } from '../../jest-mocks/characterContext';
 import { CelebrationModal } from '../../src/components/achievements/CelebrationModal';
@@ -56,6 +56,23 @@ it('closes once, however fast "Nice!" is pressed twice', () => {
   fireEvent.press(screen.getByTestId('celebration-done'));
   expect(onDone).toHaveBeenCalledTimes(1);
   expect(screen.getByTestId('celebration-done')).toBeDisabled();
+});
+
+it('closes once when the system back gesture follows "Nice!" (Android back)', () => {
+  const onDone = jest.fn();
+  render(withCharacter(<CelebrationModal celebration={GOLD} thresholds={THRESHOLDS} onDone={onDone} />));
+  fireEvent.press(screen.getByTestId('celebration-done'));
+  screen.UNSAFE_getByType(Modal).props.onRequestClose();
+  expect(onDone).toHaveBeenCalledTimes(1);
+});
+
+it('closes once when the system back gesture comes first', () => {
+  const onDone = jest.fn();
+  render(withCharacter(<CelebrationModal celebration={GOLD} thresholds={THRESHOLDS} onDone={onDone} />));
+  screen.UNSAFE_getByType(Modal).props.onRequestClose();
+  screen.UNSAFE_getByType(Modal).props.onRequestClose();
+  fireEvent.press(screen.getByTestId('celebration-done'));
+  expect(onDone).toHaveBeenCalledTimes(1);
 });
 
 it('says so when the share image could not be made', async () => {
