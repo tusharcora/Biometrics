@@ -76,16 +76,23 @@ it('a block that lands while a redeem is pairing waits for it and removes the pa
   const redeemer = await buddyUser();
   const code = (await (await api()).post('/me/buddies/code').set(await authHeaderFor(owner.id))).body.code as string;
   let blocking: Promise<void> | null = null;
+  let blockSettled = false;
+  let settledDuringPairing: boolean | null = null;
   const now = new Date();
   await redeemCode(redeemer.id, code, now, {
     // Inside the redeem transaction, after its block re-check: the owner blocks the redeemer now.
     createPairTx: async (tx, a, b, at) => {
-      blocking = block(owner.id, redeemer.id, now);
+      blocking = block(owner.id, redeemer.id, now).then(() => {
+        blockSettled = true;
+      });
       await new Promise((r) => setTimeout(r, 300));
+      // The block is still waiting on the pair lock this transaction holds.
+      settledDuringPairing = blockSettled;
       return createPairTx(tx, a, b, at);
     },
   });
   await blocking;
+  expect(settledDuringPairing).toBe(false);
   expect(await prisma.buddyBlock.count({ where: { blockerId: owner.id, blockedId: redeemer.id } })).toBe(1);
   expect(await prisma.buddyPair.count({ where: orderedPair(owner.id, redeemer.id) })).toBe(0);
   expect(await prisma.buddyActivity.count({ where: { OR: [{ recipientId: owner.id }, { recipientId: redeemer.id }] } })).toBe(0);
@@ -152,6 +159,52 @@ it('mute needs a buddy; unmute always works; the muted person is told nothing', 
   expect((await agent.put(`/me/buddies/${stranger.id}/mute`).set(await authHeaderFor(a.id)).send({ muted: true })).body).toEqual({ error: 'not_buddies' });
   expect((await agent.put(`/me/buddies/${b.id}/mute`).set(await authHeaderFor(a.id)).send({ muted: 'yes' })).body).toEqual({ error: 'invalid_settings' });
   expect((await agent.put(`/me/buddies/${b.id}/mute`).set(await authHeaderFor(a.id)).send({ muted: false })).body).toEqual({ muted: false });
+  // Unmuting any well-formed id never fails, even a stranger or oneself.
+  for (const id of [stranger.id, a.id]) {
+    const res = await agent.put(`/me/buddies/${id}/mute`).set(await authHeaderFor(a.id)).send({ muted: false });
+    expect([id, res.status, res.body]).toEqual([id, 200, { muted: false }]);
+  }
+});
+
+it('unpair of someone who is not a buddy writes nothing: their requests to me stay pending to them, Activity intact', async () => {
+  const me = await buddyUser();
+  const them = await buddyUser();
+  const pending = await prisma.buddyRequest.create({ data: { fromUserId: them.id, toUserId: me.id, toHandleAtSend: me.handle } });
+  const declined = await prisma.buddyRequest.create({
+    data: { fromUserId: them.id, toUserId: me.id, status: 'DECLINED', respondedAt: new Date(), toHandleAtSend: me.handle },
+  });
+  await prisma.buddyActivity.createMany({
+    data: [
+      { recipientId: me.id, actorId: them.id, kind: 'REQUEST', refId: pending.id },
+      { recipientId: them.id, actorId: me.id, kind: 'PAIRED', refId: pending.id },
+    ],
+  });
+  expect((await (await api()).delete(`/me/buddies/${them.id}`).set(await authHeaderFor(me.id))).status).toBe(204);
+  const outgoing = (await (await api()).get('/me/buddies/requests').set(await authHeaderFor(them.id))).body.outgoing as Array<{ id: string }>;
+  expect(outgoing.map((o) => o.id).sort()).toEqual([pending.id, declined.id].sort());
+  expect(await between(me.id, them.id)).toEqual({ pairs: 0, stickers: 0, activity: 2 });
+});
+
+it('block from a request row (not buddies) clears my Activity about them but never theirs about me', async () => {
+  const me = await buddyUser();
+  const them = await buddyUser();
+  const theirs = await prisma.buddyRequest.create({ data: { fromUserId: them.id, toUserId: me.id } });
+  const mine = await prisma.buddyRequest.create({ data: { fromUserId: me.id, toUserId: them.id, status: 'EXPIRED' } });
+  await prisma.buddyActivity.createMany({
+    data: [
+      { recipientId: me.id, actorId: them.id, kind: 'REQUEST', refId: theirs.id },
+      { recipientId: them.id, actorId: me.id, kind: 'REQUEST', refId: mine.id },
+    ],
+  });
+  await (await api()).post(`/me/buddies/requests/${theirs.id}/block`).set(await authHeaderFor(me.id));
+  expect(await prisma.buddyActivity.count({ where: { recipientId: me.id, actorId: them.id } })).toBe(0);
+  expect(await prisma.buddyActivity.count({ where: { recipientId: them.id, actorId: me.id } })).toBe(1);
+});
+
+it('the blocked list is never cached', async () => {
+  const me = await buddyUser();
+  const res = await (await api()).get('/me/blocks').set(await authHeaderFor(me.id));
+  expect([res.status, res.headers['cache-control']]).toEqual([200, 'private, no-store']);
 });
 
 it('block and mute on someone who is not a buddy, or a malformed id, answer 403 not_buddies', async () => {

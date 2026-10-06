@@ -1,7 +1,6 @@
 // Unpair, block, unblock and mute (spec 2026-10-06 buddies §4). All silent: the other person is told
 // nothing and nothing they can see changes shape (a blocked person's request stays "pending" to them).
 
-import type { Prisma } from '@prisma/client';
 import { prisma } from '../db/client';
 import { BuddyError, UUID_RE } from './errors';
 import { findPair, lockPairSlot, orderedPair } from './pairs';
@@ -15,18 +14,22 @@ export function requireBuddyId(raw: string, viewerId: string): string {
 
 const eitherWay = (a: string, b: string) => ({ OR: [{ fromUserId: a, toUserId: b }, { fromUserId: b, toUserId: a }] });
 
-async function removePairData(tx: Prisma.TransactionClient, a: string, b: string): Promise<void> {
-  await tx.buddyPair.deleteMany({ where: orderedPair(a, b) });
-  // Mutes go with the pair, both ways: a re-pair starts unmuted.
-  await tx.buddyMute.deleteMany({ where: { OR: [{ muterId: a, mutedId: b }, { muterId: b, mutedId: a }] } });
-  await tx.sticker.deleteMany({ where: eitherWay(a, b) });
-  await tx.buddyActivity.deleteMany({ where: { OR: [{ recipientId: a, actorId: b }, { recipientId: b, actorId: a }] } });
-}
+const mutesEitherWay = (a: string, b: string) => ({ OR: [{ muterId: a, mutedId: b }, { muterId: b, mutedId: a }] });
 
-/** Either side, silent and idempotent. Requests between the two close: PENDING → CANCELLED, DECLINED withdrawn. */
+/**
+ * Either side, silent and idempotent. Only when a pair was actually removed: stickers between the
+ * two, both users' Activity about each other and mutes both ways go, and requests between them close
+ * (PENDING → CANCELLED, DECLINED withdrawn). Without a pair nothing is written, so "unpairing" a
+ * non-buddy can never make their request to you vanish early.
+ */
 export async function unpair(userId: string, buddyId: string, now: Date): Promise<void> {
   await prisma.$transaction(async (tx) => {
-    await removePairData(tx, userId, buddyId);
+    const removed = await tx.buddyPair.deleteMany({ where: orderedPair(userId, buddyId) });
+    if (removed.count === 0) return;
+    // Mutes go with the pair, both ways: a re-pair starts unmuted.
+    await tx.buddyMute.deleteMany({ where: mutesEitherWay(userId, buddyId) });
+    await tx.sticker.deleteMany({ where: eitherWay(userId, buddyId) });
+    await tx.buddyActivity.deleteMany({ where: { OR: [{ recipientId: userId, actorId: buddyId }, { recipientId: buddyId, actorId: userId }] } });
     await tx.buddyRequest.updateMany({ where: { status: 'PENDING', ...eitherWay(userId, buddyId) }, data: { status: 'CANCELLED', respondedAt: now } });
     await tx.buddyRequest.updateMany({ where: { status: 'DECLINED', withdrawnAt: null, ...eitherWay(userId, buddyId) }, data: { withdrawnAt: now } });
   });
@@ -34,14 +37,23 @@ export async function unpair(userId: string, buddyId: string, now: Date): Promis
 
 /**
  * One transaction, under the pair lock (a pairing in flight finishes first and its pair is removed
- * here; one that starts later sees the block): unpair, the blocker's outgoing request cancelled
+ * here; one that starts later sees the block). If a pair is removed, the unpair data goes too:
+ * stickers between the two and the blocked person's Activity about the blocker. Always: the blocker's
+ * own Activity about them, mutes cleared both ways, the blocker's outgoing request cancelled
  * (PENDING → CANCELLED, DECLINED withdrawn), the blocked person's incoming PENDING hidden (it stays
- * "pending" to them), mutes cleared both ways, and the block stored. Idempotent.
+ * "pending" to them), and the block stored. Nothing the blocked person sees changes unless they were
+ * buddies. Idempotent.
  */
 export async function block(blockerId: string, blockedId: string, now: Date): Promise<void> {
   await prisma.$transaction(async (tx) => {
     await lockPairSlot(tx, blockerId, blockedId);
-    await removePairData(tx, blockerId, blockedId);
+    const removed = await tx.buddyPair.deleteMany({ where: orderedPair(blockerId, blockedId) });
+    if (removed.count > 0) {
+      await tx.sticker.deleteMany({ where: eitherWay(blockerId, blockedId) });
+      await tx.buddyActivity.deleteMany({ where: { recipientId: blockedId, actorId: blockerId } });
+    }
+    await tx.buddyActivity.deleteMany({ where: { recipientId: blockerId, actorId: blockedId } });
+    await tx.buddyMute.deleteMany({ where: mutesEitherWay(blockerId, blockedId) });
     await tx.buddyRequest.updateMany({ where: { fromUserId: blockerId, toUserId: blockedId, status: 'PENDING' }, data: { status: 'CANCELLED', respondedAt: now } });
     await tx.buddyRequest.updateMany({ where: { fromUserId: blockerId, toUserId: blockedId, status: 'DECLINED', withdrawnAt: null }, data: { withdrawnAt: now } });
     await tx.buddyRequest.updateMany({ where: { fromUserId: blockedId, toUserId: blockerId, status: 'PENDING' }, data: { hidden: true } });
@@ -78,7 +90,7 @@ export async function listBlocked(userId: string): Promise<BlockedPersonDTO[]> {
   return rows.map(({ blocked }) => ({ userId: blocked.id, handle: blocked.handle ?? '', displayName: blocked.displayName ?? blocked.handle ?? '' }));
 }
 
-/** Muting needs a pair (not_buddies); unmuting never fails. The muted person can't tell. */
+/** Muting needs a pair (not_buddies); unmuting never fails (any id; a no-op without a mute). The muted person can't tell. */
 export async function setMuted(muterId: string, mutedId: string, muted: boolean): Promise<{ muted: boolean }> {
   if (!muted) {
     await prisma.buddyMute.deleteMany({ where: { muterId, mutedId } });

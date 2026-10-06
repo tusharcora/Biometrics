@@ -113,6 +113,7 @@ buddiesRouter.post('/me/buddies/requests/:id/block', requireAuth, buddyRoute(asy
 }));
 
 buddiesRouter.get('/me/blocks', requireAuth, buddyRoute(async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
   res.json({ blocked: await listBlocked(req.userId!) });
 }));
 
@@ -136,8 +137,14 @@ buddiesRouter.post('/me/buddies/:buddyId/block', requireAuth, buddyRoute(async (
 }));
 
 buddiesRouter.put('/me/buddies/:buddyId/mute', requireAuth, buddyRoute(async (req, res) => {
-  const buddyId = requireBuddyId(String(req.params.buddyId), req.userId!);
+  const raw = String(req.params.buddyId);
   const muted = (req.body as { muted?: unknown } | undefined)?.muted;
+  // Unmuting never fails for a well-formed id (a stranger, oneself): nothing to undo is still a success.
+  if (muted === false && UUID_RE.test(raw)) {
+    res.json(await setMuted(req.userId!, raw, false));
+    return;
+  }
+  const buddyId = requireBuddyId(raw, req.userId!);
   if (typeof muted !== 'boolean') throw new BuddyError('invalid_settings');
   res.json(await setMuted(req.userId!, buddyId, muted));
 }));
