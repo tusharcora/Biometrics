@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../src/db/client';
 import { civilDateToUtcMidnight } from '../../src/biometrics/civilDate';
 import { connection } from '../../src/sync/queue';
@@ -128,4 +129,36 @@ it('startAchievements logs a failure by error class, never throws, and leaves th
     log.mockRestore();
   }
   expect(store.values.has(ACHIEVEMENTS_LAUNCH_MARKER)).toBe(false);
+});
+
+it('a rerun does not claim a user who signed up after the launch, but still runs their on-time fix', async () => {
+  const user = await createUser();
+  await prisma.user.update({ where: { id: user.id }, data: { createdAt: new Date('2026-10-07T03:00:00Z') } });
+  // The fix is not filtered by signup time: a pre-launch launch-day row still flips.
+  const row = await checkIn(user.id, '2026-10-06', '2026-10-06T21:00:00Z');
+
+  expect(await runAchievementsLaunchOnce({ store: new MemoryStore(), launchAt: LAUNCH, userIds: [user.id] })).toBe(0);
+
+  expect(await sinceOf(user.id)).toBeNull();
+  expect(await prisma.goalChange.count({ where: { userId: user.id } })).toBe(0);
+  expect(await onTimeOf(row.id)).toBe(true);
+});
+
+it('claims a user created exactly at the launch instant', async () => {
+  const user = await createUser();
+  await prisma.user.update({ where: { id: user.id }, data: { createdAt: LAUNCH } });
+  expect(await runAchievementsLaunchOnce({ store: new MemoryStore(), launchAt: LAUNCH, userIds: [user.id] })).toBe(1);
+  expect(await sinceOf(user.id)).toBe('2026-10-07');
+});
+
+it('launchInstant is null, not an error, when the migrations table is missing; other errors still throw', async () => {
+  // The shape Postgres + Prisma give for a raw query on a missing relation.
+  const missing = new Prisma.PrismaClientKnownRequestError('relation does not exist', { code: 'P2010', clientVersion: 'test', meta: { code: '42P01' } });
+  const spy = jest.spyOn(prisma, '$queryRaw').mockRejectedValueOnce(missing).mockRejectedValueOnce(new TypeError('db down'));
+  try {
+    await expect(launchInstant()).resolves.toBeNull();
+    await expect(launchInstant()).rejects.toThrow(TypeError);
+  } finally {
+    spy.mockRestore();
+  }
 });
