@@ -19,3 +19,12 @@ export function habitDayFor(loggedAt: Date, timeZone: string): string {
   const date = localCivilDate(loggedAt, timeZone);
   return localMinutes < HABIT_DAY_START_HOUR * 60 ? shiftDate(date, -1) : date;
 }
+
+/** habitDayFor, falling back to UTC for a zone Intl does not know (a bad stored value must not break a read). */
+export function habitDayForOrUtc(at: Date, timeZone: string): string {
+  try {
+    return habitDayFor(at, timeZone);
+  } catch {
+    return habitDayFor(at, 'UTC');
+  }
+}

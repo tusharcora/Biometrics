@@ -4,11 +4,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
 import { ApiError } from '../api/client';
-import { fetchRecap, type Recap } from '../api/recaps';
+import { fetchRecap, fetchRecaps, type Recap } from '../api/recaps';
 import { useCharacter } from '../characters/CharacterContext';
 import { Character } from '../components/characters/Character';
 import { characterInfo } from '../components/characters/registry';
 import type { CharacterId } from '../components/characters/types';
+import { BadgeIcon } from '../components/achievements/BadgeIcon';
 import { MilestoneTiles } from '../components/milestones/MilestoneTiles';
 import { WeeklyStoryView } from '../components/recap/WeeklyStoryView';
 import { Button } from '../components/ui/button';
@@ -16,11 +17,14 @@ import { Card } from '../components/ui/card';
 import { SectionLabel } from '../components/ui/section-label';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
+import { useAchievements } from '../lib/achievementsStore';
+import { levelsEarnedBetween, shortLevelTitle } from '../lib/badges';
 import { compareChanges, milestoneTiles, monthName } from '../lib/recapCopy';
 import { readIncludePrefs } from '../lib/recapPrefs';
 import { DESIGN_HEIGHT, DESIGN_WIDTH, previewScale, recapCoachId, resolveIncludes, type Includes } from '../lib/recapShare';
 import { changeColor } from '../lib/recapTheme';
 import { openRecap } from '../lib/unwatchedRecap';
+import { useRefreshAchievementsOnFocus } from '../lib/useRefreshAchievementsOnFocus';
 
 type State = { phase: 'loading' } | { phase: 'ready'; recap: Recap } | { phase: 'missing' } | { phase: 'error' };
 
@@ -151,6 +155,30 @@ function MonthBody({ recap, coachId, coachName, onShare }: { recap: Recap; coach
   const { colorScheme } = useColorScheme();
   const scheme = colorScheme === 'dark' ? 'dark' : 'light';
   const rows = compareChanges(recap.stats.comparison);
+  // Badges (achievements spec §6), read at view time and reloaded on mount and refocus, so the
+  // newest month's progress includes a level earned since they were last loaded. Until they load,
+  // and against a backend without them (404), the tiles stay exactly as before.
+  const { state: badgeState } = useAchievements();
+  useRefreshAchievementsOnFocus();
+  // Only the newest month recap shows progress toward the next level; a failed lookup shows none.
+  const [latest, setLatest] = useState(false);
+  useEffect(() => {
+    let live = true;
+    (async () => {
+      try {
+        const [newest] = await fetchRecaps({ kind: 'MONTH', limit: 1 });
+        if (live) setLatest(newest?.id === recap.id);
+      } catch {
+        if (live) setLatest(false);
+      }
+    })();
+    return () => {
+      live = false;
+    };
+  }, [recap.id]);
+  const achievements = badgeState.status === 'ready' ? badgeState.data : null;
+  const tiles = milestoneTiles(recap.stats.milestones, achievements ? { achievements, periodStart: recap.periodStart, periodEnd: recap.periodEnd, latest } : undefined);
+  const earnedThisMonth = levelsEarnedBetween(achievements, recap.periodStart, recap.periodEnd, 'streak');
   return (
     <View className="gap-4">
       <Text testID="recap-title" className="font-display text-display-lg">{`${monthName(recap.periodStart)} with ${coachName}`}</Text>
@@ -162,8 +190,21 @@ function MonthBody({ recap, coachId, coachName, onShare }: { recap: Recap; coach
       </Card>
       <View className="gap-2">
         <SectionLabel>Milestones</SectionLabel>
-        <MilestoneTiles testID="recap-milestones" tiles={milestoneTiles(recap.stats.milestones)} />
+        <MilestoneTiles testID="recap-milestones" tiles={tiles} />
       </View>
+      {earnedThisMonth.length > 0 ? (
+        <View testID="recap-month-badges" className="gap-2">
+          <SectionLabel>{`Badges earned in ${monthName(recap.periodStart)}`}</SectionLabel>
+          <Card className="flex-row flex-wrap" style={{ rowGap: 10 }}>
+            {earnedThisMonth.map((b) => (
+              <View key={`${b.family}-${b.level}`} testID={`recap-month-badge-${b.family}-${b.level}`} style={{ width: '25%', alignItems: 'center', gap: 6 }}>
+                <BadgeIcon family={b.family} level={b.level} size={54} testID={`recap-month-badge-${b.family}-${b.level}-icon`} />
+                <Text className="text-center text-xs">{shortLevelTitle(b.family, b.level)}</Text>
+              </View>
+            ))}
+          </Card>
+        </View>
+      ) : null}
       {rows.length > 0 ? (
         <View className="gap-2">
           <SectionLabel>Compared with last month</SectionLabel>

@@ -1,4 +1,7 @@
 import { prisma } from '../db/client';
+import { localCivilDateOrUtc } from '../biometrics/civilDate';
+import { needsUsualBedtime, recordGoalChanges, usualBedtime } from '../achievements/goalChanges';
+import { clearAchievementsMarker } from '../achievements/marker';
 
 /**
  * Mirrors the `@default(480)` on User.sleepGoalMinutes in schema.prisma (a
@@ -56,9 +59,26 @@ export async function getSleepGoal(userId: string): Promise<SleepGoal> {
   };
 }
 
-/** Saves a patch from parseSleepGoalPatch and returns the saved goal; null when the user does not exist. */
-export async function updateSleepGoal(userId: string, patch: SleepGoalPatch): Promise<SleepGoal | null> {
-  const result = await prisma.user.updateMany({ where: { id: userId }, data: patch });
-  if (result.count === 0) return null;
+/**
+ * Saves a patch from parseSleepGoalPatch and returns the saved goal; null when the user does not
+ * exist. Also the single writer of GoalChange (achievements spec 2026-10-06 §3): the goal update and
+ * its history are written in ONE transaction, so a failure saves neither. The usual bedtime (a read
+ * of up to 60 nights) is computed before the transaction starts, keeping the transaction short.
+ * A saved goal clears the badge evaluation marker so the next badge load re-evaluates.
+ */
+export async function updateSleepGoal(userId: string, patch: SleepGoalPatch, now: Date = new Date()): Promise<SleepGoal | null> {
+  const found = await prisma.user.findUnique({ where: { id: userId }, select: { sleepGoalMinutes: true, bedtimeGoal: true, timezone: true } });
+  if (!found) return null;
+  const before = { ...found, sleepGoalMinutes: resolveSleepGoalMinutes(found.sleepGoalMinutes) };
+  const today = localCivilDateOrUtc(now, before.timezone);
+  const usual = needsUsualBedtime(before, patch) ? await usualBedtime(userId, before.timezone, today) : null;
+  const saved = await prisma.$transaction(async (tx) => {
+    const result = await tx.user.updateMany({ where: { id: userId }, data: patch });
+    if (result.count === 0) return false;
+    await recordGoalChanges(tx, userId, before, patch, { today, usualBedtime: usual });
+    return true;
+  });
+  if (!saved) return null;
+  await clearAchievementsMarker(userId);
   return getSleepGoal(userId);
 }

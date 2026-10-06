@@ -3,9 +3,16 @@ import { StyleSheet } from 'react-native';
 import { render, screen } from '@testing-library/react-native';
 import { HIDDEN_OK } from '../../jest-mocks/characterContext';
 import { contrast } from '../../src/components/characters/palette';
-import { MilestoneTiles } from '../../src/components/milestones/MilestoneTiles';
+import { LEVEL_UP_COLOR, MilestoneTiles } from '../../src/components/milestones/MilestoneTiles';
 import type { MilestoneTile } from '../../src/lib/milestones';
 import { COLORS } from '../../src/theme';
+
+let mockScheme: 'light' | 'dark' = 'light';
+jest.mock('nativewind', () => ({ useColorScheme: () => ({ colorScheme: mockScheme }) }));
+
+beforeEach(() => {
+  mockScheme = 'light';
+});
 
 const TILES: MilestoneTile[] = [
   { key: 'streak', label: '6 nights on goal in a row', glyph: 'star', earned: true },
@@ -48,4 +55,29 @@ it('draws an earned tile at full strength with its glyph; a locked one dims only
 
 it.each(['light', 'dark'] as const)('keeps the muted label at 4.5:1 on the %s tile', (scheme) => {
   expect(contrast(hex(COLORS[scheme].muted), hex(COLORS[scheme].card))).toBeGreaterThanOrEqual(4.5);
+});
+
+it('shows badge progress and a level-up mark when a tile has them, and reads them out', () => {
+  render(
+    <MilestoneTiles
+      testID="tiles"
+      tiles={[
+        { key: 'everyDayLogged', label: 'Every night logged', glyph: 'calendar', earned: true, progress: '2 of 3 months for Silver', levelUp: true },
+        { key: 'steadiestMonth', label: 'Steadiest bedtimes yet', glyph: 'moon', earned: false, progress: '0 of 1 month for Bronze' },
+      ]}
+    />,
+  );
+  expect(screen.getByTestId('tiles-everyDayLogged-progress')).toHaveTextContent('2 of 3 months for Silver');
+  expect(screen.getByTestId('tiles-everyDayLogged-levelup')).toHaveTextContent('LEVEL UP');
+  expect(screen.getByTestId('tiles-everyDayLogged').props.accessibilityLabel).toBe('Every night logged, earned, level up, 2 of 3 months for Silver');
+  expect(screen.queryByTestId('tiles-steadiestMonth-levelup')).toBeNull();
+  expect(screen.getByTestId('tiles-steadiestMonth').props.accessibilityLabel).toBe('Steadiest bedtimes yet, locked, 0 of 1 month for Bronze');
+});
+
+it.each(['light', 'dark'] as const)('draws "LEVEL UP" at 4.5:1 on the %s tile (the light teal accent is under it at this size)', (scheme) => {
+  mockScheme = scheme;
+  render(<MilestoneTiles testID="tiles" tiles={[{ key: 'everyDayLogged', label: 'Every night logged', glyph: 'calendar', earned: true, levelUp: true }]} />);
+  const color = (StyleSheet.flatten(screen.getByTestId('tiles-everyDayLogged-levelup').props.style).color ?? '') as string;
+  expect(color).toBe(LEVEL_UP_COLOR[scheme]);
+  expect(contrast(hex(color), hex(COLORS[scheme].card))).toBeGreaterThanOrEqual(4.5);
 });

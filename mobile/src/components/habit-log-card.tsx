@@ -24,6 +24,7 @@ import {
   withCheckIn,
   withObserved,
 } from '../lib/habitDays';
+import { refreshAchievements } from '../lib/achievementsStore';
 
 type LoadState =
   | { status: 'loading' }
@@ -123,6 +124,9 @@ export function HabitLogCard() {
     try {
       const created = await createCheckIn(habitDay);
       setStatus(withCheckIn(habitStatus, created?.habitDay ?? habitDay ?? habitStatus.today));
+      // A check-in can complete a badge level: the host celebrates it straight away. Fresh, so a
+      // load already in flight (from before the save) is followed by one that sees it.
+      void refreshAchievements({ fresh: true });
     } catch {
       setFeedback({ kind: 'error', text: 'Could not check in. Try again.' });
     } finally {

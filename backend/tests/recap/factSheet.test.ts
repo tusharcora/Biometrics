@@ -57,6 +57,12 @@ describe('buildRecapFactSheet', () => {
     for (const note of month.notes) expect(note).not.toMatch(/\d/);
     expect(renderFactSheet(month)).toContain('[sleep.days_logged]');
   });
+
+  it('no longer notes the old streak milestone (badges replaced it), and keeps the streak number', () => {
+    const month = buildRecapFactSheet('MONTH', { nightsWithData: 28, longestOnGoalStreak: 9, milestones: { streak: { nights: 9 } } }, 480);
+    expect(month.notes.join('\n')).not.toMatch(/run of nights on goal/);
+    expect(month.facts.find((f) => f.id === 'sleep.streak')).toMatchObject({ value: 9 });
+  });
 });
 
 describe('templates', () => {

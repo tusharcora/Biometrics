@@ -5,6 +5,7 @@ import { NavigationContainer, DefaultTheme, DarkTheme, type NavigatorScreenParam
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { useAuth } from '../auth/AuthContext';
+import type { AchievementFamily } from '../api/achievements';
 import type { Recap } from '../api/recaps';
 import type { ScoreType } from '../api/scores';
 import { AuthNavigator } from './AuthNavigator';
@@ -30,6 +31,9 @@ import { RecapScreen } from '../screens/RecapScreen';
 import { RecapStoryScreen } from '../screens/RecapStoryScreen';
 import { RecapsScreen } from '../screens/RecapsScreen';
 import { YearInPixelsScreen } from '../screens/YearInPixelsScreen';
+import { BadgesScreen } from '../screens/BadgesScreen';
+import { BadgeDetailScreen } from '../screens/BadgeDetailScreen';
+import { CelebrationHost } from '../components/achievements/CelebrationHost';
 import type { ShareFormat } from '../lib/recapShare';
 import { TabsNavigator, type TabParamList } from './TabsNavigator';
 import { syncTimezone } from '../lib/timezone';
@@ -96,6 +100,10 @@ export type RootStackParamList = {
   // Build your recap: a recap's own format plus Year in pixels, or Year in pixels alone.
   RecapBuilder: { id?: string; format: ShareFormat };
   YearInPixels: undefined;
+  // Profile → Badges card "See all": every family at its level.
+  Badges: undefined;
+  // One badge: the big badge, current and best, the ladder of five levels.
+  BadgeDetail: { family: AchievementFamily };
 };
 
 export type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';
@@ -209,6 +217,8 @@ export function RootNavigator() {
               />
               <Stack.Screen name="Recaps" component={RecapsScreen} options={{ title: 'Your recaps' }} />
               <Stack.Screen name="YearInPixels" component={YearInPixelsScreen} options={{ title: 'Year in pixels' }} />
+              <Stack.Screen name="Badges" component={BadgesScreen} options={{ title: 'Badges' }} />
+              <Stack.Screen name="BadgeDetail" component={BadgeDetailScreen} options={{ title: '' }} />
               <Stack.Screen name="RecapBuilder" component={RecapBuilderScreen} options={{ title: 'Build your recap' }} />
               <Stack.Screen
                 name="MeetYourCoach"
@@ -218,6 +228,8 @@ export function RootNavigator() {
                 options={({ route }) => ({ headerShown: false, presentation: 'modal', gestureEnabled: route.params?.mode !== 'first' })}
               />
             </Stack.Navigator>
+            {/* New badge levels, celebrated once (start, foreground, after a check-in). */}
+            <CelebrationHost />
           </SyncProvider>
         </ToastProvider>
       </NavigationContainer>

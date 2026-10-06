@@ -37,6 +37,8 @@ jest.mock('@react-navigation/native-stack', () => ({
 jest.mock('../../src/navigation/AuthNavigator', () => ({ AuthNavigator: () => null }));
 // Pass-throughs: the sync provider fetches and listens to AppState itself.
 jest.mock('../../src/sync/SyncProvider', () => ({ SyncProvider: ({ children }: any) => children }));
+// The badge celebration listens to AppState too (its own suite covers it); this one records one listener.
+jest.mock('../../src/components/achievements/CelebrationHost', () => ({ CelebrationHost: () => null }));
 
 const stopListening = jest.fn();
 let appStateListener: ((state: string) => void) | undefined;

@@ -130,6 +130,54 @@ describe('WeeklyStoryFrame', () => {
     render(<WeeklyStoryView recap={WEEK} coachId="luna" includes={storyIncludes} scale={1} />);
     expect(screen.getByTestId('recap-story-eyebrow')).toHaveTextContent('MY WEEK · 2 OF 3');
   });
+
+  it('frame 3 lists the badge levels earned that week in a card, and leaves room for it', () => {
+    const badges = [{ family: 'SLEEP_GOAL' as const, level: 2 }, { family: 'STEADY_BEDTIME' as const, level: 1 }];
+    render(<WeeklyStoryFrame recap={WEEK} coachId="luna" includes={storyIncludes} scale={1} index={2} badges={badges} />);
+    expect(screen.getByTestId('recap-story-badges')).toHaveTextContent(/BADGES THIS WEEK/);
+    expect(screen.getByTestId('recap-story-badge-SLEEP_GOAL-2')).toHaveTextContent('Sleep goal II');
+    expect(screen.getByTestId('recap-story-badge-STEADY_BEDTIME-1')).toHaveTextContent('Bedtime I');
+    expect(screen.getByTestId('recap-story-badge-SLEEP_GOAL-2-icon').props.accessibilityLabel).toBe('Sleep goal streak, level II, Silver');
+    expect(screen.queryByTestId('recap-story-badges-more')).toBeNull();
+    expect(coachStoryFit(WEEK, storyIncludes, 2).box).toBeLessThan(coachStoryFit(WEEK, storyIncludes).box);
+  });
+
+  it('shows no badge card without badges that week, and never on frames 1 and 2', () => {
+    const first = render(<WeeklyStoryFrame recap={WEEK} coachId="luna" includes={storyIncludes} scale={1} index={2} badges={[]} />);
+    expect(screen.queryByTestId('recap-story-badges')).toBeNull();
+    first.unmount();
+    render(<WeeklyStoryFrame recap={WEEK} coachId="luna" includes={storyIncludes} scale={1} index={1} badges={[{ family: 'SLEEP_GOAL', level: 1 }]} />);
+    expect(screen.queryByTestId('recap-story-badges')).toBeNull();
+  });
+
+  it('leaves the card out when "Badges this week" is switched off, and gives the story its room back', () => {
+    const badges = [{ family: 'SLEEP_GOAL' as const, level: 2 }];
+    const off = { ...storyIncludes, badges: false };
+    render(<WeeklyStoryFrame recap={WEEK} coachId="luna" includes={off} scale={1} index={2} badges={badges} />);
+    expect(screen.queryByTestId('recap-story-badges')).toBeNull();
+    expect(coachStoryFit(WEEK, off, 0).box).toBe(coachStoryFit(WEEK, storyIncludes).box);
+  });
+
+  it('shows at most four badges, then a "+n" chip for the rest (ruling F4)', () => {
+    const badges = (['SLEEP_GOAL', 'STEADY_BEDTIME', 'STEP_GOAL', 'CHECK_IN', 'EVERY_DAY_LOGGED'] as const).map((family) => ({ family, level: 1 }));
+    render(<WeeklyStoryFrame recap={WEEK} coachId="luna" includes={storyIncludes} scale={1} index={2} badges={badges} />);
+    expect(screen.getByTestId('recap-story-badge-CHECK_IN-1')).toBeTruthy();
+    expect(screen.queryByTestId('recap-story-badge-EVERY_DAY_LOGGED-1')).toBeNull();
+    expect(screen.getByTestId('recap-story-badges-more')).toHaveTextContent('+1');
+    expect(screen.getByTestId('recap-story-badges-more').props.accessibilityLabel).toBe('1 more badge this week');
+  });
+
+  it('above four, shows the highest level of each family first and counts the lower ones in the chip', () => {
+    const badges = [
+      { family: 'SLEEP_GOAL' as const, level: 1 }, { family: 'SLEEP_GOAL' as const, level: 2 }, { family: 'SLEEP_GOAL' as const, level: 3 },
+      { family: 'STEADY_BEDTIME' as const, level: 1 }, { family: 'STEADY_BEDTIME' as const, level: 2 }, { family: 'STEP_GOAL' as const, level: 1 },
+    ];
+    render(<WeeklyStoryFrame recap={WEEK} coachId="luna" includes={storyIncludes} scale={1} index={2} badges={badges} />);
+    const shown = within(screen.getByTestId('recap-story-badges')).getAllByTestId(/^recap-story-badge-[A-Z_]+-\d$/).map((n) => n.props.testID);
+    expect(shown).toEqual(['recap-story-badge-SLEEP_GOAL-3', 'recap-story-badge-STEADY_BEDTIME-2', 'recap-story-badge-STEP_GOAL-1', 'recap-story-badge-SLEEP_GOAL-2']);
+    expect(screen.getByTestId('recap-story-badges-more')).toHaveTextContent('+2');
+    expect(screen.getByTestId('recap-story-badges-more').props.accessibilityLabel).toBe('2 more badges this week');
+  });
 });
 
 describe('YearPixelsView', () => {
@@ -221,5 +269,88 @@ describe('a 30-word quote', () => {
       expect(screen.getByTestId('recap-story-app')).toHaveTextContent('Biometrics');
       unmount();
     }
+  });
+});
+
+describe('frame 3 with badges: the story is never truncated', () => {
+  const FIVE = (['SLEEP_GOAL', 'STEADY_BEDTIME', 'STEP_GOAL', 'CHECK_IN', 'EVERY_DAY_LOGGED'] as const).map((family) => ({ family, level: 1 }));
+  const storyOf = (n: number) => Array.from({ length: n }, () => LONG).join(' ');
+
+  // At scale 2: the story is drawn at the fitted size, at least STORY_MIN (6), and its estimated wrap fits the box.
+  function expectStoryFits(recap: Recap, includes: typeof storyIncludes, count: number) {
+    const fit = coachStoryFit(recap, includes, count);
+    const text = screen.getByTestId('recap-story-story');
+    const { fontSize, lineHeight } = StyleSheet.flatten(text.props.style) as { fontSize: number; lineHeight: number };
+    expect(fontSize).toBe(fit.fontSize * 2);
+    expect(fit.fontSize).toBeGreaterThanOrEqual(6);
+    expect(quoteLines(recap.story!, fit.fontSize, 312) * lineHeight).toBeLessThanOrEqual(fit.box * 2);
+    expect(text.props.numberOfLines).toBeGreaterThanOrEqual(quoteLines(recap.story!, fit.fontSize, 312));
+    return fit;
+  }
+
+  it('keeps the longest story whole with five badges on, trading the full card for a compact one or a line', () => {
+    for (const includes of [storyIncludes, { ...storyIncludes, coach: false }]) {
+      const recap = { ...WEEK, story: storyOf(10) };
+      const { unmount } = render(<WeeklyStoryFrame recap={recap} coachId="luna" includes={includes} scale={2} index={2} badges={FIVE} />);
+      const fit = expectStoryFits(recap, includes, FIVE.length);
+      expect(screen.getByTestId('recap-story-badges')).toBeTruthy();
+      // With the coach drawn (the tightest frame) the full card no longer fits; without it, it may.
+      if (includes.coach) {
+        expect(['compact', 'line']).toContain(fit.badges);
+        expect(screen.queryByTestId('recap-story-badge-SLEEP_GOAL-1-title')).toBeNull();
+      }
+      expect(screen.getByTestId('recap-story-stat-spread')).toBeTruthy();
+      expect(screen.getByTestId('recap-story-app')).toHaveTextContent('Biometrics');
+      unmount();
+    }
+  });
+
+  it('gives a short story the full card, titles kept readable', () => {
+    const badges = [{ family: 'SLEEP_GOAL' as const, level: 2 }, { family: 'EVERY_DAY_LOGGED' as const, level: 3 }];
+    expect(coachStoryFit(WEEK, storyIncludes, badges.length).badges).toBe('full');
+    render(<WeeklyStoryFrame recap={WEEK} coachId="luna" includes={storyIncludes} scale={1} index={2} badges={badges} />);
+    const title = screen.getByTestId('recap-story-badge-EVERY_DAY_LOGGED-3-title');
+    expect(title).toHaveTextContent('Every day III');
+    expect(title.props.minimumFontScale).toBeGreaterThanOrEqual(0.85);
+    expect(screen.queryByTestId('recap-story-badges-line')).toBeNull();
+  });
+
+  it('steps down from the full card to a compact one to a line as the story grows, never the other way', () => {
+    const rank = { full: 0, compact: 1, line: 2 } as const;
+    const seen: (keyof typeof rank)[] = [];
+    for (let n = 1; n <= 16; n++) {
+      const recap = { ...WEEK, story: storyOf(n) };
+      const fit = coachStoryFit(recap, storyIncludes, FIVE.length);
+      const mode = fit.badges!;
+      if (seen.length > 0) expect(rank[mode]).toBeGreaterThanOrEqual(rank[seen[seen.length - 1]!]);
+      seen.push(mode);
+      const { unmount } = render(<WeeklyStoryFrame recap={recap} coachId="luna" includes={storyIncludes} scale={2} index={2} badges={FIVE} />);
+      if (fit.fontSize > 6 || mode !== 'line') expectStoryFits(recap, storyIncludes, FIVE.length);
+      if (mode === 'full') {
+        expect(screen.getByTestId('recap-story-badge-SLEEP_GOAL-1-title')).toBeTruthy();
+        expect(screen.getByTestId('recap-story-badges-more')).toHaveTextContent('+1');
+      } else if (mode === 'compact') {
+        expect(screen.getByTestId('recap-story-badge-SLEEP_GOAL-1-icon')).toBeTruthy();
+        expect(screen.queryByTestId('recap-story-badge-SLEEP_GOAL-1-title')).toBeNull();
+        expect(screen.getByTestId('recap-story-badges-more')).toHaveTextContent('+1');
+      } else {
+        expect(screen.getByTestId('recap-story-badges-line')).toHaveTextContent('5 badges this week');
+        expect(screen.queryByTestId('recap-story-badge-SLEEP_GOAL-1-icon')).toBeNull();
+      }
+      unmount();
+    }
+    expect(seen).toEqual(expect.arrayContaining(['full', 'compact', 'line']));
+  });
+
+  it('says "1 badge this week" on the line for a single badge', () => {
+    const recap = { ...WEEK, story: storyOf(16) };
+    expect(coachStoryFit(recap, storyIncludes, 1).badges).toBe('line');
+    render(<WeeklyStoryFrame recap={recap} coachId="luna" includes={storyIncludes} scale={1} index={2} badges={[{ family: 'SLEEP_GOAL', level: 2 }]} />);
+    expect(screen.getByTestId('recap-story-badges-line')).toHaveTextContent('1 badge this week');
+  });
+
+  it('reports no badge room without badges, the box unchanged', () => {
+    expect(coachStoryFit(WEEK, storyIncludes).badges).toBeNull();
+    expect(coachStoryFit(WEEK, storyIncludes, 0).box).toBe(coachStoryFit(WEEK, storyIncludes).box);
   });
 });

@@ -1,4 +1,4 @@
-import { habitDayFor } from '../../src/habits/habitDay';
+import { habitDayFor, habitDayForOrUtc } from '../../src/habits/habitDay';
 import { localCivilDate } from '../../src/biometrics/civilDate';
 import { HABIT_DAY_START_HOUR } from '../../src/habits/config';
 
@@ -47,5 +47,12 @@ describe('habitDayFor: the 04:00-local boundary', () => {
     for (const iso of ['2026-09-10T15:00:00Z', '2026-09-10T20:00:00Z', '2026-09-11T00:00:00Z']) {
       expect(habitDayFor(new Date(iso), 'America/New_York')).toBe(localCivilDate(new Date(iso), 'America/New_York'));
     }
+  });
+});
+
+describe('habitDayForOrUtc', () => {
+  it('is habitDayFor, falling back to UTC for a zone Intl does not know', () => {
+    expect(habitDayForOrUtc(new Date('2026-10-06T02:00:00Z'), 'Pacific/Auckland')).toBe('2026-10-06');
+    expect(habitDayForOrUtc(new Date('2026-10-06T02:00:00Z'), 'Not/AZone')).toBe('2026-10-05');
   });
 });

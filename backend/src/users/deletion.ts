@@ -42,6 +42,8 @@ export const USER_OWNED_MODELS = [
   'CoachDigest',
   'CoachDaySummary',
   'Recap',
+  'Achievement',
+  'GoalChange',
   'CoachConsent',
   'PushToken',
   'Session',

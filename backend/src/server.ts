@@ -11,6 +11,7 @@ import { scheduleCatchUpSweep } from './sync/catchUp';
 import { scheduleWeeklyHabitCorrelationSweep } from './habits/queue';
 import { scheduleDailyCoachRetention } from './coach/queue';
 import { startRecaps } from './recap/backfill';
+import { startAchievements } from './achievements/launch';
 import { coachSummaryQueue, startDaySummaryWorker } from './coach/daySummaryJob';
 
 const port = Number(process.env.PORT ?? 3000);
@@ -73,6 +74,9 @@ function startBackgroundWork(): void {
   // Recaps replace the weekly digest: retire its scheduler, enqueue the one-off launch backfill,
   // then register the hourly recap sweep, in that order (spec 2026-10-04 §2).
   startRecaps().catch((err) => console.error('Failed to start the recap sweep', err));
+  // Badges: the one-off launch job sets existing users' start dates (only where none is set) and
+  // marks launch-day check-ins on time (spec 2026-10-06 §3). Never throws; retried next start.
+  void startAchievements();
   // The daily 90-day transcript retention job (runs regardless of COACH_ENABLED).
   scheduleDailyCoachRetention().catch((err) =>
     console.error('Failed to schedule the daily coach retention job', err),

@@ -55,6 +55,10 @@ export async function seedAllOwnedRows(
   await prisma.recap.create({
     data: { userId, kind: 'WEEK', periodStart: day, periodEnd: new Date('2026-09-07T00:00:00.000Z'), status: 'SKIPPED', sleepGoalMinutes: 480 },
   });
+  await prisma.achievement.create({
+    data: { userId, family: 'SLEEP_GOAL', level: 1, value: 3, earnedOn: day, weekStart: new Date('2026-08-31T00:00:00.000Z'), monthStart: day },
+  });
+  await prisma.goalChange.create({ data: { userId, kind: 'SLEEP_MINUTES', sleepMinutes: 480, effectiveOn: day, resetsStreak: false } });
   await prisma.coachConsent.create({ data: { userId, version: 'v-test' } });
   await prisma.pushToken.create({ data: { userId, token: `push-${uniq}`, platform: 'ios' } });
   await prisma.session.create({

@@ -1,4 +1,5 @@
 import { cardStats, compareChanges, goalLabel, milestoneTiles, monthName, readyCardTitle, recapTitle, shortDate, signedChange, storyRingHint, weekdayName, weekRange } from '../../src/lib/recapCopy';
+import { achievementsFixture } from '../../jest-mocks/achievementsFixture';
 
 it('names periods and days', () => {
   expect(monthName('2026-09-01')).toBe('September');
@@ -69,4 +70,36 @@ it('signs a change and says whether it is better: more sleep, a smaller spread, 
 
 it('names a week by its first and last day', () => {
   expect(weekRange('2026-09-28', '2026-10-04')).toBe('Sep 28 – Oct 4');
+});
+
+it('with badges, shows the three monthly families with progress toward the next level and a level-up mark', () => {
+  const achievements = achievementsFixture({
+    EVERY_DAY_LOGGED: { level: 1, current: 2, levels: [{ level: 1, value: 1, earnedOn: '2026-10-31' }] },
+    BEST_RECOVERY_WEEK: { level: 5, current: 24 },
+  });
+  const tiles = milestoneTiles({ everyDayLogged: { days: 31 }, streak: { nights: 9 } }, { achievements, periodStart: '2026-10-01', periodEnd: '2026-10-31', latest: true });
+  expect(tiles.map((t) => [t.key, t.earned, t.progress, t.levelUp])).toEqual([
+    ['bestRecoveryWeek', false, 'Top level', false],
+    ['everyDayLogged', true, '2 of 3 months for Silver', true],
+    ['steadiestMonth', false, '0 of 1 month for Bronze', false],
+  ]);
+});
+
+it('shows an older month without progress: only whether it hit the milestone and the level-up mark', () => {
+  const achievements = achievementsFixture({ EVERY_DAY_LOGGED: { level: 2, current: 3, levels: [{ level: 1, value: 1, earnedOn: '2026-10-31' }, { level: 2, value: 3, earnedOn: '2026-12-31' }] } });
+  const tiles = milestoneTiles({ everyDayLogged: { days: 31 } }, { achievements, periodStart: '2026-10-01', periodEnd: '2026-10-31', latest: false });
+  expect(tiles.map((t) => [t.key, t.earned, t.progress, t.levelUp])).toEqual([
+    ['bestRecoveryWeek', false, undefined, false],
+    ['everyDayLogged', true, undefined, true],
+    ['steadiestMonth', false, undefined, false],
+  ]);
+});
+
+it('shows a month before the badge start date as three tiles without progress', () => {
+  const tiles = milestoneTiles({ everyDayLogged: { days: 30 } }, { achievements: achievementsFixture({}, { since: '2026-10-07' }), periodStart: '2026-10-01', periodEnd: '2026-10-31', latest: true });
+  expect(tiles.map((t) => [t.key, t.earned, t.progress, t.levelUp])).toEqual([
+    ['bestRecoveryWeek', false, undefined, undefined],
+    ['everyDayLogged', true, undefined, undefined],
+    ['steadiestMonth', false, undefined, undefined],
+  ]);
 });

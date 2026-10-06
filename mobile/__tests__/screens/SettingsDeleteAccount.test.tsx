@@ -17,6 +17,8 @@ jest.mock('../../src/api/coach');
 jest.mock('../../src/api/notifications');
 // ...and the newest recap, for the avatar's story ring.
 jest.mock('../../src/api/recaps');
+// ...and the badges, for the Badges card.
+jest.mock('../../src/api/achievements');
 
 const fetchMock = jest.fn();
 (global as any).fetch = fetchMock;

@@ -11,6 +11,7 @@ import {
 } from '../../src/lib/timezone';
 
 jest.mock('../../src/lib/timezone');
+jest.mock('../../src/api/achievements');
 
 beforeEach(() => {
   jest.clearAllMocks();

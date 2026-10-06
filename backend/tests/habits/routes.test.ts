@@ -8,6 +8,8 @@ import { habitDayFor } from '../../src/habits/habitDay';
 import { shiftDate } from '../../src/scoring/dates';
 import { authed, createUser } from './dbHelpers';
 import { testServer } from '../helpers/server';
+import { connection } from '../../src/sync/queue';
+import { evaluationVersion, markEvaluated, readEvaluated } from '../../src/achievements/marker';
 
 beforeAll(() => {
   migrateTestDb();
@@ -15,6 +17,7 @@ beforeAll(() => {
 });
 
 afterAll(async () => {
+  await connection.quit();
   await prisma.$disconnect();
 });
 
@@ -501,5 +504,62 @@ describe('GET /me/habits/patterns', () => {
     const res = await request(await testServer(app)).get('/me/habits/patterns').set(await authed(user.id));
     expect(res.body.patterns).toEqual([]);
     expect(res.body.notEnoughData).toEqual([{ habitType: 'ALCOHOL', exposedDays: 3, unexposedDays: 9, requiredEach: 8 }]);
+  });
+});
+
+/** An Etc/GMT zone whose wall clock reads `hour`:xx right now (Etc/GMT-N is UTC+N). */
+function zoneAtLocalHour(hour: number, now = new Date()): string {
+  let offset = (hour - now.getUTCHours() + 24) % 24;
+  if (offset > 14) offset -= 24;
+  return offset === 0 ? 'Etc/GMT' : offset > 0 ? `Etc/GMT-${offset}` : `Etc/GMT+${-offset}`;
+}
+
+describe('POST /me/habits/check-ins: on time', () => {
+  const onTimeOf = async (userId: string, habitDay: string) =>
+    (await prisma.habitCheckIn.findUniqueOrThrow({ where: { userId_habitDay: { userId, habitDay: civilDateToUtcMidnight(habitDay) } } })).onTime;
+
+  it("stores onTime for today's habit day and not for a backdated one", async () => {
+    const user = await createUser();
+    const h = await authed(user.id);
+    await request(await testServer(app)).post('/me/habits/check-ins').set(h).send({});
+    await request(await testServer(app)).post('/me/habits/check-ins').set(h).send({ habitDay: shiftDate(todayUtc(), -1) });
+    expect(await onTimeOf(user.id, todayUtc())).toBe(true);
+    expect(await onTimeOf(user.id, shiftDate(todayUtc(), -1))).toBe(false);
+  });
+
+  it('puts a 01:00 check-in on the previous calendar day, on time (the 4am habit day)', async () => {
+    const zone = zoneAtLocalHour(1);
+    const user = await createUser({ timezone: zone });
+    const now = new Date();
+    const res = await request(await testServer(app)).post('/me/habits/check-ins').set(await authed(user.id)).send({});
+    const habitToday = habitDayFor(now, zone);
+    expect(habitToday).toBe(shiftDate(localCivilDate(now, zone), -1));
+    expect(res.body.checkIn.habitDay).toBe(habitToday);
+    expect(await onTimeOf(user.id, habitToday)).toBe(true);
+  });
+
+  it('never rewrites a stored flag: a repeat tap on a backdated day leaves it false', async () => {
+    const user = await createUser();
+    const h = await authed(user.id);
+    const yesterday = shiftDate(todayUtc(), -1);
+    await request(await testServer(app)).post('/me/habits/check-ins').set(h).send({ habitDay: yesterday });
+    await request(await testServer(app)).post('/me/habits/check-ins').set(h).send({ habitDay: yesterday });
+    expect(await onTimeOf(user.id, yesterday)).toBe(false);
+  });
+
+  it('never rewrites a stored flag: a later tap on a day stored on time leaves it true', async () => {
+    const user = await createUser();
+    const yesterday = shiftDate(todayUtc(), -1);
+    await prisma.habitCheckIn.create({ data: { userId: user.id, habitDay: civilDateToUtcMidnight(yesterday), onTime: true } });
+    await request(await testServer(app)).post('/me/habits/check-ins').set(await authed(user.id)).send({ habitDay: yesterday });
+    expect(await onTimeOf(user.id, yesterday)).toBe(true);
+  });
+
+  it('clears the achievements marker so the next badge load re-evaluates', async () => {
+    const user = await createUser();
+    await markEvaluated(user.id, await evaluationVersion(user.id), []);
+    expect(await readEvaluated(user.id)).toEqual([]);
+    await request(await testServer(app)).post('/me/habits/check-ins').set(await authed(user.id)).send({});
+    expect(await readEvaluated(user.id)).toBeNull();
   });
 });

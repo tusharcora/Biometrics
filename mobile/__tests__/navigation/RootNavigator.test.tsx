@@ -15,7 +15,7 @@ jest.mock('../../src/lib/timezone');
 jest.mock('@react-navigation/native', () => ({
   NavigationContainer: ({ children }: any) => children,
   // RootNavigator hands the container a shared ref (navigation/navigationRef.ts).
-  createNavigationContainerRef: () => ({ isReady: () => false, navigate: () => undefined }),
+  createNavigationContainerRef: () => ({ isReady: () => false, navigate: () => undefined, addListener: () => () => undefined }),
   DefaultTheme: { dark: false, colors: {}, fonts: {} },
   DarkTheme: { dark: true, colors: {}, fonts: {} },
 }));
@@ -98,6 +98,16 @@ describe('RootNavigator', () => {
     expect(syncTimezone).toHaveBeenCalledTimes(1);
   });
 
+  it('checks for new badges to celebrate once signed in', async () => {
+    signedIn(true);
+    (apiFetch as jest.Mock).mockResolvedValue({ status: 'CONNECTED', lastSyncedAt: null });
+
+    const { getByText } = render(<RootNavigator />);
+
+    await waitFor(() => expect(getByText('TABS_SCREEN')).toBeTruthy());
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith('/me/achievements'));
+  });
+
   // The old navigator hardcoded the connect screen, so an already-connected
   // user had no route back to their dashboard.
   // Connecting Google Health used to be a gate: a user who had not connected,
@@ -143,6 +153,16 @@ describe('RootNavigator', () => {
 
     await waitFor(() => expect(getByText('TABS_SCREEN')).toBeTruthy());
     expect(mockRegisteredScreens).toContain('ScoreDetail');
+  });
+
+  it('registers the Badges and BadgeDetail routes', async () => {
+    signedIn(true);
+    (apiFetch as jest.Mock).mockResolvedValue({ status: 'CONNECTED', lastSyncedAt: null });
+
+    const { getByText } = render(<RootNavigator />);
+
+    await waitFor(() => expect(getByText('TABS_SCREEN')).toBeTruthy());
+    expect(mockRegisteredScreens).toEqual(expect.arrayContaining(['Badges', 'BadgeDetail']));
   });
 
   it('registers the Patterns route', async () => {

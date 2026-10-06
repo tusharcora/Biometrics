@@ -3,13 +3,14 @@ import { View } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import Svg, { Path, Rect } from 'react-native-svg';
 import type { MilestoneGlyph, MilestoneTile } from '../../lib/milestones';
-import { COLORS } from '../../theme';
+import { COLORS, FONTS } from '../../theme';
 import { Text } from '../ui/text';
 
 // Milestone tiles (recap restyle 2026-10-05: the month screen's "Milestones"). A standalone grid,
 // three to a row, so a later Achievements screen can reuse it: every milestone is shown; one not
 // earned has its lock dimmed (not the tile, so the label keeps its contrast), a muted label and no
-// progress count.
+// count of how close it came. With badges, a tile may add its family's progress toward the next
+// level and a "LEVEL UP" mark (achievements spec §6).
 
 export type { MilestoneGlyph, MilestoneTile } from '../../lib/milestones';
 
@@ -22,6 +23,9 @@ const COLUMNS = 3;
 const GAP = 10;
 const GLYPH = 32;
 export const LOCKED_OPACITY = 0.5;
+// The month recap's "LEVEL UP" mark: the accent, darkened to teal-700 in light mode so 10px text
+// clears 4.5:1 on the card (teal-600 alone is about 3.7:1).
+export const LEVEL_UP_COLOR = { light: COLORS.light.statusAboveText, dark: COLORS.dark.accent } as const;
 
 type Px = [x: number, y: number, w: number, h: number];
 
@@ -67,7 +71,7 @@ export function MilestoneTiles({ tiles, testID = 'milestone-tiles' }: MilestoneT
               key={tile.key}
               testID={`${testID}-${tile.key}`}
               accessible
-              accessibilityLabel={`${tile.label}, ${tile.earned ? 'earned' : 'locked'}`}
+              accessibilityLabel={`${tile.label}, ${tile.earned ? 'earned' : 'locked'}${tile.levelUp ? ', level up' : ''}${tile.progress ? `, ${tile.progress}` : ''}`}
               className="flex-1 items-center gap-1.5 rounded-2xl border border-border bg-card px-2 py-3"
             >
               <View
@@ -81,6 +85,16 @@ export function MilestoneTiles({ tiles, testID = 'milestone-tiles' }: MilestoneT
               <Text testID={`${testID}-${tile.key}-label`} className="text-center text-xs" style={{ color: tile.earned ? COLORS[scheme].foreground : COLORS[scheme].muted }}>
                 {tile.label}
               </Text>
+              {tile.progress ? (
+                <Text testID={`${testID}-${tile.key}-progress`} className="text-center" style={{ fontSize: 11, color: COLORS[scheme].muted }}>
+                  {tile.progress}
+                </Text>
+              ) : null}
+              {tile.levelUp ? (
+                <Text testID={`${testID}-${tile.key}-levelup`} style={{ fontSize: 10, letterSpacing: 0.6, fontFamily: FONTS.sansSemibold, color: LEVEL_UP_COLOR[scheme] }}>
+                  LEVEL UP
+                </Text>
+              ) : null}
             </View>
           ))}
           {/* Empty slots keep a short last row on the same columns. */}

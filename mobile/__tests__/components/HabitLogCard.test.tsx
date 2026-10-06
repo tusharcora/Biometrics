@@ -2,8 +2,12 @@ import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { HabitLogCard } from '../../src/components/habit-log-card';
 import { createCheckIn, fetchHabitConfig, fetchHabitStatus, logHabit } from '../../src/api/habits';
+import { fetchAchievements } from '../../src/api/achievements';
+import { resetAchievements } from '../../src/lib/achievementsStore';
 
 jest.mock('../../src/api/habits');
+jest.mock('../../src/api/achievements');
+jest.mock('../../src/lib/timezone', () => require('../../jest-mocks/timezoneSettled'));
 
 const habitTypes = [
   { type: 'ALCOHOL', label: 'Alcohol', unit: 'drinks', exposureThreshold: 2, builtIn: true },
@@ -216,5 +220,17 @@ describe('HabitLogCard', () => {
     fireEvent.press(getByTestId('habit-log-retry'));
 
     expect(await findByText('Anything to log today?')).toBeTruthy();
+  });
+
+  it('re-checks badges right after a check-in is saved, so a celebration can follow', async () => {
+    resetAchievements();
+    loadWith();
+    (createCheckIn as jest.Mock).mockResolvedValue({ habitDay: '2026-09-20' });
+    (fetchAchievements as jest.Mock).mockResolvedValue(null);
+    const { getByTestId, findByTestId } = render(<HabitLogCard />);
+    await findByTestId('nothing-today-button');
+    expect(fetchAchievements).not.toHaveBeenCalled();
+    fireEvent.press(getByTestId('nothing-today-button'));
+    await waitFor(() => expect(fetchAchievements).toHaveBeenCalledTimes(1));
   });
 });
