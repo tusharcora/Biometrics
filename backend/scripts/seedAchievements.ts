@@ -10,7 +10,7 @@
 // way the app does (claimStartDate: start date and starting goals together, only where unset), and
 // never dates a level before the start date. Idempotent: levels already there are skipped. Never
 // runs on import: the CLI entry point is guarded by require.main. On failure it logs only the
-// error's name.
+// error's name. It closes Prisma, the sync queue and its Redis connection before exiting.
 import type { AchievementFamily } from '@prisma/client';
 import { familyDef } from '../src/achievements/catalogue';
 import { claimStartDate } from '../src/achievements/start';
@@ -18,6 +18,7 @@ import { civilDateToUtcMidnight, localCivilDateOrUtc } from '../src/biometrics/c
 import { prisma } from '../src/db/client';
 import { lastCompletedPeriodStart, mondayOf, monthStartOf, periodEndOf } from '../src/recap/periods';
 import { shiftDate } from '../src/scoring/dates';
+import { connection, syncQueue } from '../src/sync/queue';
 
 type SeedEnv = { NODE_ENV?: string | undefined; DATABASE_URL?: string | undefined };
 
@@ -104,18 +105,32 @@ export async function seedAchievements({ email, now = new Date(), env = process.
   return { userId: user.id, created: result.count, skipped: levels.length - kept.length };
 }
 
-async function main() {
-  const email = parseEmail(process.argv);
+/** Runs a close step, swallowing its failure so it can never mask the seed's own result. */
+async function closeQuietly(close: () => Promise<unknown>): Promise<void> {
   try {
-    const { userId, created, skipped } = await seedAchievements({ email });
+    await close();
+  } catch {
+    // Nothing to do: the process is exiting anyway.
+  }
+}
+
+/**
+ * The CLI body. The import chain (claimStartDate -> goals -> marker) opens the shared Redis
+ * connection and BullMQ queue, so they are closed here too, or the process would never exit.
+ */
+export async function main(argv: string[]): Promise<void> {
+  try {
+    const { userId, created, skipped } = await seedAchievements({ email: parseEmail(argv) });
     console.info(JSON.stringify({ event: 'achievements.seeded', userId, created, skippedBeforeStart: skipped }));
   } finally {
-    await prisma.$disconnect();
+    await closeQuietly(() => prisma.$disconnect());
+    await closeQuietly(() => syncQueue.close());
+    await closeQuietly(() => connection.quit());
   }
 }
 
 if (require.main === module) {
-  main().catch((err) => {
+  main(process.argv).catch((err) => {
     // Only the error's name: messages can carry the email or connection details.
     console.error(JSON.stringify({ event: 'achievements.seed_failed', error: err instanceof Error ? err.name : 'Error' }));
     process.exit(1);

@@ -1,8 +1,16 @@
 import { prisma } from '../../src/db/client';
 import { lastCompletedPeriodStart } from '../../src/recap/periods';
-import { SAMPLE_LEVELS, assertDevDatabase, parseEmail, seedAchievements } from '../../scripts/seedAchievements';
+import { connection, syncQueue } from '../../src/sync/queue';
+import { SAMPLE_LEVELS, assertDevDatabase, main, parseEmail, seedAchievements } from '../../scripts/seedAchievements';
 import { migrateTestDb } from '../setupTestDb';
 import { createUser } from '../scoring/dbHelpers';
+
+// The seed path never touches Redis, but importing it opens the shared sync connection: stub it so the
+// CLI's closers can be checked.
+jest.mock('../../src/sync/queue', () => ({
+  connection: { quit: jest.fn().mockResolvedValue('OK') },
+  syncQueue: { close: jest.fn().mockResolvedValue(undefined) },
+}));
 
 beforeAll(() => migrateTestDb());
 afterAll(() => prisma.$disconnect());
@@ -100,4 +108,39 @@ it('skips levels that would fall before a start date already set, and leaves tha
 it('refuses an unknown email', async () => {
   await expect(seedAchievements({ email: 'nobody-here@example.com', now: NOW, env: LOCAL })).rejects.toThrow('No user');
   await expect(seedAchievements({ email: 'nobody-here@example.com', now: NOW, env: LOCAL })).rejects.toMatchObject({ name: 'SeedUnknownUser' });
+});
+
+describe('the CLI closes the database, the queue and the Redis connection', () => {
+  const quit = connection.quit as unknown as jest.Mock;
+  const close = syncQueue.close as unknown as jest.Mock;
+  let info: jest.SpyInstance;
+  beforeEach(() => {
+    quit.mockReset().mockResolvedValue('OK');
+    close.mockReset().mockResolvedValue(undefined);
+    info = jest.spyOn(console, 'info').mockImplementation(() => undefined);
+  });
+  afterEach(() => info.mockRestore());
+
+  it('after a seed that worked', async () => {
+    const user = await createUser();
+    await main(['--email', user.email]);
+    expect(info).toHaveBeenCalledWith(expect.stringContaining('"event":"achievements.seeded"'));
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(quit).toHaveBeenCalledTimes(1);
+  });
+
+  it('after a failure, still with the failure itself', async () => {
+    await expect(main([])).rejects.toMatchObject({ name: 'SeedUsageError' });
+    expect(close).toHaveBeenCalledTimes(1);
+    expect(quit).toHaveBeenCalledTimes(1);
+  });
+
+  it('when a closer fails, without hiding the result', async () => {
+    close.mockRejectedValue(new Error('queue close failed'));
+    quit.mockRejectedValue(new Error('quit failed'));
+    await expect(main(['--email', 'nobody-here@example.com'])).rejects.toMatchObject({ name: 'SeedUnknownUser' });
+    const user = await createUser();
+    await expect(main(['--email', user.email])).resolves.toBeUndefined();
+    expect(quit).toHaveBeenCalledTimes(2);
+  });
 });
