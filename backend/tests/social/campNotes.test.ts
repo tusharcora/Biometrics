@@ -7,6 +7,10 @@ import { CAMP_NOTE_MAX, checkCampNote, clearCampNote, noteIsLive, shareCampNote 
 import { saveCheckIn } from '../../src/social/checkins';
 import type { Circle } from '../../src/social/circle';
 import { api, buddyUser } from '../buddies/helpers';
+import http from 'http';
+import express from 'express';
+import request from 'supertest';
+import { lastErrorHandler } from '../../src/app';
 
 beforeAll(() => migrateTestDb());
 afterEach(() => jest.restoreAllMocks());
@@ -208,5 +212,30 @@ describe("the app's last error handler (fix round 1)", () => {
     const lines = logged();
     for (const line of lines) expect(line).not.toContain('secret campfire');
     expect(lines).toContain(JSON.stringify([JSON.stringify({ event: 'http.error', status: 500, type: 'Error' })]));
+  });
+
+  it('after headers are sent it logs the same line and destroys the response, never handing the error to Express', async () => {
+    const app = express();
+    app.get('/streaming', (_req, res, next) => {
+      res.write('partial');
+      next(new Error('secret campfire words in a message'));
+    });
+    app.use(lastErrorHandler);
+    const destroy = jest.spyOn(http.ServerResponse.prototype, 'destroy');
+    const logged = consoleCalls();
+    await expect(request(app).get('/streaming')).rejects.toThrow();
+    expect(destroy).toHaveBeenCalled();
+    const lines = logged();
+    for (const line of lines) expect(line).not.toContain('secret campfire');
+    expect(lines).toEqual([JSON.stringify([JSON.stringify({ event: 'http.error', status: 500, type: 'Error' })])]);
+  });
+
+  it('a started response is never passed to next', () => {
+    const res = { headersSent: true, destroy: jest.fn() } as unknown as express.Response;
+    const next = jest.fn();
+    jest.spyOn(console, 'error').mockImplementation(() => {});
+    lastErrorHandler(new Error('x'), {} as express.Request, res, next);
+    expect(next).not.toHaveBeenCalled();
+    expect(res.destroy).toHaveBeenCalledTimes(1);
   });
 });
