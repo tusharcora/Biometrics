@@ -131,6 +131,8 @@ export type RootStackParamList = {
   Highlights: undefined;
   // Social → one buddy's story today (or my own once I've checked in), opened from the stories row.
   SocialStory: { authorId: string };
+  // Social → the camp banner: the Campfire page (S2), pushed with no tab bar.
+  Campfire: undefined;
 };
 
 export type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';

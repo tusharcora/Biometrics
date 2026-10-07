@@ -1,6 +1,8 @@
 // Social tab home — V5 one scroll (spec 2026-10-07 social §4): camp banner → stories with my check-in → week
 // highlights → today timeline, and a floating Chats button (opens Buddies until S3). Unseen stickers are marked
-// seen once the screen has shown them, so the tab dot clears where they are read.
+// seen once the screen has shown them, so the tab dot clears where they are read. S2: the banner opens the Campfire
+// (only on a server that has one: it sends camp.night), and while my goodnight window is open (camp.goodnightOpen:
+// from min(20:00, my goal − 60 min) to 05:59) "Say goodnight" follows the timeline.
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
@@ -16,6 +18,7 @@ import { useTabBarClearance } from '../navigation/tabBarLayout';
 import { refreshSocial, useSocial } from '../lib/socialStore';
 import { CampBanner } from '../components/social/CampBanner';
 import { CheckInSheet } from '../components/social/CheckInSheet';
+import { GoodnightButton } from '../components/social/GoodnightButton';
 import { HighlightsCarousel } from '../components/social/HighlightsCarousel';
 import { StoriesRow } from '../components/social/StoriesRow';
 import { TimelineList } from '../components/social/TimelineList';
@@ -90,13 +93,18 @@ export function SocialScreen() {
         <View className="pt-2">
           <Text className="font-display text-display">Social</Text>
         </View>
-        <CampBanner checkedIn={home.camp.checkedIn} faces={home.camp.faces} />
+        <CampBanner camp={home.camp} onOpen={home.camp.night === undefined ? undefined : () => navigation.navigate('Campfire')} />
         <StoriesRow me={home.me} rings={home.stories} onCheckIn={() => setCheckingIn(true)}
           onOpenStory={(authorId) => navigation.navigate('SocialStory', { authorId })} onSeeAll={() => navigation.navigate('Buddies')} />
         {home.highlights ? <HighlightsCarousel highlights={home.highlights} onOpenAll={() => navigation.navigate('Highlights')} /> : null}
         <View className="gap-3">
           <SectionLabel>Today</SectionLabel>
           <TimelineList items={home.timeline} />
+          {/* The evening timeline offers goodnight while my window is open (spec §6.1, owner ruling Q1); an S1 server
+              sends neither field. */}
+          {home.camp.goodnightOpen === true && home.me.goodnight !== undefined ? (
+            <GoodnightButton testID="timeline-goodnight" goodnight={home.me.goodnight} onChanged={() => void refreshSocial()} />
+          ) : null}
         </View>
       </ScrollView>
       <PressableScale testID="social-chats" accessibilityRole="button" accessibilityLabel={chats > 0 ? `Chats, ${chats} new` : 'Chats'}
