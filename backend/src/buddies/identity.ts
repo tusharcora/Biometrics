@@ -48,7 +48,7 @@ export function sanitiseDisplayName(raw: string): string {
 }
 
 /** At least one letter, number, symbol or punctuation mark; the braille blank (U+2800, a symbol) does not count. */
-function hasVisibleCharacter(text: string): boolean {
+export function hasVisibleCharacter(text: string): boolean {
   return /[\p{L}\p{N}\p{S}\p{P}]/u.test(text.replace(/\u2800/g, ''));
 }
 

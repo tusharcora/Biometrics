@@ -4,6 +4,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../auth/middleware';
 import { buddyRoute } from '../buddies/errors';
+import { clearCampNote, shareCampNote } from './campNotes';
 import { getTodayCheckIn, saveCheckIn } from './checkins';
 import { sayGoodnight, undoGoodnight } from './goodnight';
 import { getWeeklyHighlights } from './highlights';
@@ -68,5 +69,15 @@ socialRouter.post('/me/camp/goodnight', requireAuth, buddyRoute(async (req, res)
 
 socialRouter.delete('/me/camp/goodnight', requireAuth, buddyRoute(async (req, res) => {
   await undoGoodnight(req.userId!, new Date());
+  res.status(204).end();
+}));
+
+socialRouter.put('/me/camp/note', requireAuth, buddyRoute(async (req, res) => {
+  res.json({ note: await shareCampNote(req.userId!, (req.body as { text?: unknown } | undefined)?.text, new Date()) });
+}));
+
+// Never rate-limited (review I1): removing your own note must work even while the limiter is down.
+socialRouter.delete('/me/camp/note', requireAuth, buddyRoute(async (req, res) => {
+  await clearCampNote(req.userId!);
   res.status(204).end();
 }));

@@ -32,6 +32,7 @@ export const BUDDY_ERROR_STATUS = {
   recap_not_found: 404,
   goodnight_closed: 409,
   undo_expired: 409,
+  invalid_note: 400,
 } as const;
 
 export type BuddyErrorCode = keyof typeof BUDDY_ERROR_STATUS;
