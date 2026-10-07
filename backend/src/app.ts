@@ -12,6 +12,7 @@ import { syncRouter } from './sync/routes';
 import { recapRouter } from './recap/routes';
 import { achievementsRouter } from './achievements/routes';
 import { buddiesRouter } from './buddies/routes';
+import { socialRouter } from './social/routes';
 
 export function createApp(options: { auth?: Auth } = {}): Express {
   const app = express();
@@ -37,5 +38,6 @@ export function createApp(options: { auth?: Auth } = {}): Express {
   app.use(recapRouter);
   app.use(achievementsRouter);
   app.use(buddiesRouter);
+  app.use(socialRouter);
   return app;
 }
