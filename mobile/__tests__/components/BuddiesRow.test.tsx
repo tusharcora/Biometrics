@@ -44,12 +44,11 @@ it('shows for a pending request alone', async () => {
   expect(await screen.findByTestId('home-buddies-row')).toBeTruthy();
 });
 
-it('shows each name under its sprite, a sprite tap opens Buddies, and the label holds no buddy data', async () => {
+it('a sprite tap opens Buddies, and the label holds no buddy data', async () => {
   load.mockResolvedValue({ buddies: [row(1), row(2)], nextCursor: null, incomingRequests: 0, outgoingRequests: 0 });
   const onOpen = jest.fn();
   render(<BuddiesRow onOpen={onOpen} />);
-  expect(await screen.findByTestId('home-buddy-b1-name')).toHaveTextContent('B1');
-  expect(screen.getByTestId('home-buddy-b2-dot')).toHaveStyle({ backgroundColor: '#86EFAC' });
+  expect(await screen.findByTestId('home-buddy-b2-dot')).toHaveStyle({ backgroundColor: '#86EFAC' });
   expect(screen.getByTestId('home-buddies-row').props.accessibilityLabel).toBe('Buddies, see all');
   fireEvent.press(screen.getByTestId('home-buddy-b2'));
   expect(onOpen).toHaveBeenCalledTimes(1);

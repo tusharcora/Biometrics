@@ -12,8 +12,7 @@ import { Text } from '../ui/text';
 const SHOWN = 5;
 
 // Home's Buddies row (spec 2026-10-06 buddies §7): hidden until there is a buddy or a pending
-// request; up to five coach sprites with mood dots and names, and "See all". The whole card
-// (a sprite included) opens Buddies.
+// request; up to five coach sprites with mood dots, and "See all".
 export function BuddiesRow({ onOpen }: { onOpen: () => void }) {
   const state = useBuddies();
   useRefreshBuddiesOnFocus();
@@ -30,10 +29,9 @@ export function BuddiesRow({ onOpen }: { onOpen: () => void }) {
         {buddies.length > 0 ? (
           <View className="flex-row gap-3">
             {buddies.slice(0, SHOWN).map((b) => (
-              <View key={b.id} testID={`home-buddy-${b.id}`} className="w-14 items-center">
+              <View key={b.id} testID={`home-buddy-${b.id}`} className="items-center">
                 <Character characterId={isCharacterId(b.coachId) ? b.coachId : DEFAULT_CHARACTER_ID} mood={b.mood === 'low' ? 'resting' : 'idle'} size={40} paused />
                 <View testID={`home-buddy-${b.id}-dot`} className="-mt-2 h-3 w-3 rounded-full border border-background" style={{ backgroundColor: MOOD_COLORS[b.mood] }} />
-                <Text testID={`home-buddy-${b.id}-name`} numberOfLines={1} className="mt-1 text-xs text-muted-foreground">{b.displayName}</Text>
               </View>
             ))}
           </View>
