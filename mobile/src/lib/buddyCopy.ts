@@ -99,6 +99,8 @@ const ERRORS: Record<string, string> = {
   invalid_settings: "Couldn't save that setting. Please try again.",
   invalid_sticker: "That sticker isn't available.",
   invalid_cursor: "Couldn't load more. Please refresh.",
+  invalid_checkin: 'Pick how you woke up.',
+  recap_not_found: "That recap can't be shared.",
 };
 
 export function buddyErrorMessage(code: string | null): string {
