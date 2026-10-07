@@ -62,8 +62,9 @@ export function stickerSentLine(kind: StickerKind, name: string, coachName: stri
   return `Sent a ${STICKER_LABEL[kind]} to ${name}. ${coachName} will pass it on.`;
 }
 
-export function shareMessage(code: string): string {
-  return `Be my buddy on Biometrics! My buddy code is ${code}. It works for 24 hours.`;
+/** A reused code has less than a day left, so the message says how long this one has. */
+export function shareMessage(code: string, expiresAt: string, now: number): string {
+  return `Be my buddy on Biometrics! My buddy code is ${code}. ${expiresIn(expiresAt, now)}.`;
 }
 
 export function expiresIn(expiresAt: string, now: number): string {
