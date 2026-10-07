@@ -2,17 +2,16 @@
 // oldest first. Closed kinds with typed fields (the app renders the copy) — never free text, never a health number.
 // Step goals only while the author shares steps; badges only while they share streaks (both via effectiveSharing).
 // A buddy's check-in is LOCKED (no mood) until the viewer has checked in for their own local today — the same lock
-// as story frames (spec §4.1); the viewer's own check-in is never locked. Badges follow the story frames' rule
-// (todaysTopBadges): no backfilled old runs, one item per multi-level jump.
+// as story frames (spec §4.1), read from the same preloaded circle; the viewer's own check-in is never locked.
+// Badges follow the story frames' rule (todaysTopBadges): no backfilled old runs, one item per multi-level jump.
 
 import type { AchievementFamily, CheckInMood, StickerKind } from '@prisma/client';
 import { civilDateToUtcMidnight, localCivilDateOrUtc } from '../biometrics/civilDate';
 import { prisma } from '../db/client';
-import { BuddyError } from '../buddies/errors';
 import type { PersonDTO } from '../buddies/people';
 import { shiftDate } from '../scoring/dates';
 import { todaysTopBadges } from './badges';
-import { buddyIdsOf, membersById, type Member } from './circle';
+import { loadCircle, type Circle, type Member } from './circle';
 
 type Base = { id: string; at: string; actor: PersonDTO; mine: boolean };
 export type TimelineItemDTO =
@@ -30,14 +29,12 @@ type Rest = DistributiveOmit<TimelineItemDTO, 'at' | 'actor' | 'mine'>;
 /** How far back any moment in the viewer's local today can lie (a local day is at most 25 h, with slack). */
 export const TODAY_WINDOW_MS = 30 * 60 * 60 * 1000;
 
-export async function buildTimeline(viewerId: string, now: Date, limit = 100): Promise<TimelineItemDTO[]> {
+export async function timelineFor(circle: Circle, now: Date, limit = 100): Promise<TimelineItemDTO[]> {
   if (limit <= 0) return [];
-  const buddyIds = await buddyIdsOf(viewerId);
+  const { viewer, members, today } = circle;
+  const viewerId = viewer.person.id;
+  const buddyIds = circle.buddies.map((b) => b.person.id);
   const ids = [viewerId, ...buddyIds];
-  const members = await membersById(ids);
-  const viewer = members.get(viewerId);
-  if (!viewer) throw new BuddyError('not_buddies');
-  const today = localCivilDateOrUtc(now, viewer.timezone);
   // Any author's local date at a moment in the viewer's today is within a day of it (UTC offsets span 26 h).
   const nearDates = [shiftDate(today, -1), today, shiftDate(today, 1)].map(civilDateToUtcMidnight);
   const since = new Date(now.getTime() - TODAY_WINDOW_MS);
@@ -45,8 +42,7 @@ export async function buildTimeline(viewerId: string, now: Date, limit = 100): P
   const stepIds = ids.filter((id) => visible(members.get(id), 'steps'));
   const streakIds = ids.filter((id) => visible(members.get(id), 'streaks'));
 
-  const [mine, checkIns, steps, badges, stickers, shares] = await Promise.all([
-    prisma.checkIn.findUnique({ where: { authorId_localDate: { authorId: viewerId, localDate: civilDateToUtcMidnight(today) } }, select: { authorId: true } }),
+  const [checkIns, steps, badges, stickers, shares] = await Promise.all([
     prisma.checkIn.findMany({ where: { authorId: { in: ids }, localDate: { in: nearDates }, createdAt: { gte: since } }, select: { id: true, authorId: true, mood: true, createdAt: true } }),
     prisma.stepGoalEvent.findMany({ where: { authorId: { in: stepIds }, at: { gte: since } }, select: { authorId: true, at: true } }),
     prisma.achievement.findMany({ where: { userId: { in: streakIds }, createdAt: { gte: since } }, select: { id: true, userId: true, family: true, level: true, earnedOn: true, createdAt: true } }),
@@ -57,7 +53,7 @@ export async function buildTimeline(viewerId: string, now: Date, limit = 100): P
     prisma.recapShare.findMany({ where: { sharerId: { in: ids }, createdAt: { gte: since } }, select: { id: true, sharerId: true, createdAt: true, recap: { select: { kind: true } } } }),
   ]);
 
-  const viewerCheckedIn = mine !== null;
+  const viewerCheckedIn = circle.checkIns.has(viewerId);
   const items: TimelineItemDTO[] = [];
   const push = (actorId: string, at: Date, rest: Rest) => {
     const actor = members.get(actorId);
@@ -85,4 +81,9 @@ export async function buildTimeline(viewerId: string, now: Date, limit = 100): P
   for (const r of shares) push(r.sharerId, r.createdAt, { id: `recap_share:${r.id}`, kind: 'recap_share', recapKind: r.recap.kind });
   items.sort((a, b) => a.at.localeCompare(b.at) || a.id.localeCompare(b.id));
   return items.slice(-limit);
+}
+
+export async function buildTimeline(viewerId: string, now: Date, limit = 100): Promise<TimelineItemDTO[]> {
+  if (limit <= 0) return [];
+  return timelineFor(await loadCircle(viewerId, now), now, limit);
 }

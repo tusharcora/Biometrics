@@ -15,7 +15,7 @@ export interface CheckInDTO {
 }
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
-const toDTO = (row: { mood: CheckInMood; localDate: Date; updatedAt: Date }): CheckInDTO => ({
+export const toCheckInDTO = (row: { mood: CheckInMood; localDate: Date; updatedAt: Date }): CheckInDTO => ({
   mood: row.mood,
   localDate: isoDate(row.localDate),
   updatedAt: row.updatedAt.toISOString(),
@@ -33,7 +33,7 @@ export async function getTodayCheckIn(userId: string, now: Date): Promise<CheckI
     where: { authorId_localDate: { authorId: userId, localDate: civilDateToUtcMidnight(today) } },
     select: { mood: true, localDate: true, updatedAt: true },
   });
-  return row ? toDTO(row) : null;
+  return row ? toCheckInDTO(row) : null;
 }
 
 export async function saveCheckIn(userId: string, mood: unknown, now: Date): Promise<CheckInDTO> {
@@ -46,5 +46,5 @@ export async function saveCheckIn(userId: string, mood: unknown, now: Date): Pro
     update: { mood: mood as CheckInMood },
     select: { mood: true, localDate: true, updatedAt: true },
   });
-  return toDTO(row);
+  return toCheckInDTO(row);
 }

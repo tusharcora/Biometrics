@@ -1,8 +1,8 @@
 // Stories (spec 2026-10-07 social §4.2). A story is the AUTHOR's local today: their check-in (locked for a viewer
 // who hasn't checked in today), badges earned today (only while they share streaks; the top new level per family)
 // and recaps they shared today (the headline line snapshotted when they shared it, period and coach — never the
-// stats JSON, never the live Recap.line). Built at read time with one query per source for the whole circle.
-// Rings: unseen first, then newest (plan ruling).
+// stats JSON, never the live Recap.line). Built at read time from the preloaded circle (whose check-ins also decide
+// the lock) plus one query per remaining source. Rings: unseen first, then newest (plan ruling).
 
 import type { AchievementFamily, CheckInMood } from '@prisma/client';
 import { civilDateToUtcMidnight, localCivilDateOrUtc } from '../biometrics/civilDate';
@@ -10,7 +10,7 @@ import { prisma } from '../db/client';
 import { BuddyError, UUID_RE } from '../buddies/errors';
 import type { PersonDTO } from '../buddies/people';
 import { todaysTopBadges } from './badges';
-import { buddyIdsOf, membersById, type Member } from './circle';
+import { buddyIdsOf, loadCircle, membersById, type Circle, type Member } from './circle';
 
 export type StoryFrameDTO =
   | { kind: 'checkin'; at: string; locked: true }
@@ -20,6 +20,7 @@ export type StoryFrameDTO =
 
 export interface StoryDTO { author: PersonDTO; localDate: string; frames: StoryFrameDTO[] }
 export interface StoryRingDTO { author: PersonDTO; unseen: boolean; locked: boolean; frameCount: number; latestAt: string }
+export interface StoryRings { rings: StoryRingDTO[]; checkedInBuddies: number; viewerCheckedIn: boolean; checkedInCoachIds: string[] }
 
 const LOOKBACK_MS = 48 * 60 * 60 * 1000;
 const iso = (d: Date) => d.toISOString();
@@ -32,16 +33,12 @@ function authorTodays(authors: Member[], now: Date): { todayOf: Map<string, stri
 }
 
 /** Each author's frames for their own local today. `unlocked` = the viewer may see check-in moods. */
-async function loadFrames(authors: Member[], now: Date, unlocked: (authorId: string) => boolean): Promise<Map<string, StoryFrameDTO[]>> {
+async function loadFrames(authors: Member[], circle: Circle, now: Date, unlocked: boolean): Promise<Map<string, StoryFrameDTO[]>> {
   const ids = authors.map((a) => a.person.id);
-  const { todayOf, dates } = authorTodays(authors, now);
+  const { todayOf } = authorTodays(authors, now);
   const since = new Date(now.getTime() - LOOKBACK_MS);
   const streakIds = authors.filter((a) => a.shares.streaks).map((a) => a.person.id);
-  const [checkIns, badges, shares] = await Promise.all([
-    prisma.checkIn.findMany({
-      where: { authorId: { in: ids }, localDate: { in: dates } },
-      select: { authorId: true, localDate: true, mood: true, createdAt: true },
-    }),
+  const [badges, shares] = await Promise.all([
     prisma.achievement.findMany({
       where: { userId: { in: streakIds }, createdAt: { gte: since } },
       select: { userId: true, family: true, level: true, earnedOn: true, createdAt: true },
@@ -54,9 +51,11 @@ async function loadFrames(authors: Member[], now: Date, unlocked: (authorId: str
   const byAuthor = new Map<string, Array<StoryFrameDTO>>(ids.map((id) => [id, []]));
   const coachOf = new Map(authors.map((a) => [a.person.id, a.person.coachId]));
   const tzOf = new Map(authors.map((a) => [a.person.id, a.timezone]));
-  for (const c of checkIns) {
-    if (isoDate(c.localDate) !== todayOf.get(c.authorId)) continue;
-    byAuthor.get(c.authorId)!.push(unlocked(c.authorId)
+  for (const id of ids) {
+    // The circle already holds each member's check-in for their own today.
+    const c = circle.checkIns.get(id);
+    if (!c) continue;
+    byAuthor.get(id)!.push(unlocked
       ? { kind: 'checkin', at: iso(c.createdAt), locked: false, mood: c.mood }
       : { kind: 'checkin', at: iso(c.createdAt), locked: true });
   }
@@ -77,30 +76,20 @@ async function loadFrames(authors: Member[], now: Date, unlocked: (authorId: str
   return byAuthor;
 }
 
-async function viewerCheckedInToday(viewer: Member, now: Date): Promise<boolean> {
-  const today = localCivilDateOrUtc(now, viewer.timezone);
-  const row = await prisma.checkIn.findUnique({
-    where: { authorId_localDate: { authorId: viewer.person.id, localDate: civilDateToUtcMidnight(today) } },
-    select: { authorId: true },
-  });
-  return row !== null;
-}
-
 const MAX_CAMP_FACES = 2;
 
-export async function loadStoryRings(viewerId: string, now: Date): Promise<{ rings: StoryRingDTO[]; checkedInBuddies: number; viewerCheckedIn: boolean; checkedInCoachIds: string[] }> {
-  const buddyIds = await buddyIdsOf(viewerId);
-  const members = await membersById([viewerId, ...buddyIds]);
-  const viewer = members.get(viewerId);
-  if (!viewer) throw new BuddyError('not_buddies');
-  const viewerCheckedIn = await viewerCheckedInToday(viewer, now);
-  const buddies = buddyIds.map((id) => members.get(id)).filter((m): m is Member => m !== undefined);
-  const frames = await loadFrames(buddies, now, () => viewerCheckedIn);
+export async function storyRingsFor(circle: Circle, now: Date): Promise<StoryRings> {
+  const viewerId = circle.viewer.person.id;
+  const viewerCheckedIn = circle.checkIns.has(viewerId);
+  const { buddies } = circle;
   const { todayOf, dates } = authorTodays(buddies, now);
-  const seen = await prisma.storySeen.findMany({
-    where: { viewerId, authorId: { in: buddies.map((b) => b.person.id) }, localDate: { in: dates } },
-    select: { authorId: true, localDate: true },
-  });
+  const [frames, seen] = await Promise.all([
+    loadFrames(buddies, circle, now, viewerCheckedIn),
+    prisma.storySeen.findMany({
+      where: { viewerId, authorId: { in: buddies.map((b) => b.person.id) }, localDate: { in: dates } },
+      select: { authorId: true, localDate: true },
+    }),
+  ]);
   const seenToday = new Set(seen.filter((s) => isoDate(s.localDate) === todayOf.get(s.authorId)).map((s) => s.authorId));
   const rings: StoryRingDTO[] = [];
   const checkIns: Array<{ coachId: string; at: string }> = [];
@@ -116,6 +105,10 @@ export async function loadStoryRings(viewerId: string, now: Date): Promise<{ rin
   return { rings, checkedInBuddies: checkIns.length, viewerCheckedIn, checkedInCoachIds: checkIns.slice(0, MAX_CAMP_FACES).map((c) => c.coachId) };
 }
 
+export async function loadStoryRings(viewerId: string, now: Date): Promise<StoryRings> {
+  return storyRingsFor(await loadCircle(viewerId, now), now);
+}
+
 async function requireAuthor(viewerId: string, authorId: string): Promise<{ viewer: Member; author: Member }> {
   if (!UUID_RE.test(authorId)) throw new BuddyError('not_buddies');
   if (authorId !== viewerId && !(await buddyIdsOf(viewerId)).includes(authorId)) throw new BuddyError('not_buddies');
@@ -127,9 +120,12 @@ async function requireAuthor(viewerId: string, authorId: string): Promise<{ view
 }
 
 export async function getStory(viewerId: string, authorId: string, now: Date): Promise<StoryDTO> {
-  const { viewer, author } = await requireAuthor(viewerId, authorId);
-  const unlocked = authorId === viewerId || (await viewerCheckedInToday(viewer, now));
-  const frames = await loadFrames([author], now, () => unlocked);
+  if (!UUID_RE.test(authorId)) throw new BuddyError('not_buddies');
+  const circle = await loadCircle(viewerId, now);
+  const author = circle.members.get(authorId);
+  if (!author) throw new BuddyError('not_buddies');
+  const unlocked = authorId === viewerId || circle.checkIns.has(viewerId);
+  const frames = await loadFrames([author], circle, now, unlocked);
   return { author: author.person, localDate: localCivilDateOrUtc(now, author.timezone), frames: frames.get(authorId) ?? [] };
 }
 
