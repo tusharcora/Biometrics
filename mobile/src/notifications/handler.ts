@@ -1,11 +1,13 @@
 import * as Notifications from 'expo-notifications';
 import { navigationRef } from '../navigation/navigationRef';
 import { WIND_DOWN_KIND } from '../lib/windDown';
+import { getSocialState, refreshSocial } from '../lib/socialStore';
 
 // What the app does with notifications while it runs: shows the wind-down reminder and buddy
 // pushes in the foreground, and opens the Sleep screen, a recap, the buddy requests or a buddy's
 // week when one is tapped (a recap opens the story viewer, which plays a week and hands a month
 // to its recap screen).
+// A buddy push that arrives while the app is open also re-reads Social (the tab dot and the home), once loaded.
 // Every native call here is best-effort: a build or simulator without the
 // notifications module must still start.
 
@@ -63,7 +65,13 @@ function buddyPushOf(notification: Notifications.Notification): { kind: BuddyPus
 export function installNotificationHandler(): void {
   try {
     Notifications.setNotificationHandler({
-      handleNotification: async (notification) => (isWindDown(notification) || buddyPushOf(notification) ? SHOW : HIDE),
+      handleNotification: async (notification) => {
+        const buddy = buddyPushOf(notification);
+        // A buddy push while the app is open means Social changed (a sticker, a request, a pairing, a badge): re-read
+        // it so the tab dot and the home are current. Only once the store has loaded: idle = signed out or not started.
+        if (buddy && getSocialState().status !== 'idle') void refreshSocial();
+        return isWindDown(notification) || buddy ? SHOW : HIDE;
+      },
     });
   } catch {
     // No native module: nothing would arrive to handle.
