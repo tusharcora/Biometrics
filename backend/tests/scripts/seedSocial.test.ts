@@ -3,6 +3,7 @@ import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
 import { SEED_CAMP_NOTE, seedSocial } from '../../scripts/seedSocial';
 import { getCamp } from '../../src/social/camp';
+import { checkCampNote } from '../../src/social/campNotes';
 import { pairUp } from '../buddies/helpers';
 
 jest.mock('../../src/sync/queue', () => ({ connection: { quit: jest.fn() }, syncQueue: { close: jest.fn(), add: jest.fn() } }));
@@ -78,4 +79,20 @@ it("seeds the buddy's camp: a note over an asleep coach, idempotently", async ()
   const camp = await getCamp(a.id, NOW);
   expect(camp.night).toBe(true);
   expect(camp.members.find((m) => m.person.id === b.id)).toMatchObject({ asleep: true, note: SEED_CAMP_NOTE });
+});
+
+it('the seed note is one the server itself would accept unchanged', () => {
+  expect(checkCampNote(SEED_CAMP_NOTE)).toBe(SEED_CAMP_NOTE);
+});
+
+it('a later re-run the same day keeps the note visible at that time', async () => {
+  const a = await prisma.user.create({ data: { email: `seed-a-${randomUUID()}@example.com`, name: 'A' } });
+  const b = await prisma.user.create({ data: { email: `seed-b-${randomUUID()}@example.com`, name: 'B' } });
+  await pairUp(a.id, b.id);
+  await seedSocial({ email: a.email, buddyEmail: b.email, now: NOW, env: LOCAL });
+  const later = new Date(NOW.getTime() + 3_600_000); // 21:00, the same evening
+  await seedSocial({ email: a.email, buddyEmail: b.email, now: later, env: LOCAL });
+  expect(await prisma.campNote.count({ where: { authorId: b.id } })).toBe(1);
+  expect(await prisma.checkIn.count({ where: { authorId: b.id } })).toBe(1);
+  expect((await getCamp(a.id, later)).members.find((m) => m.person.id === b.id)).toMatchObject({ note: SEED_CAMP_NOTE });
 });
