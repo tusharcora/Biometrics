@@ -13,7 +13,8 @@ import { DEFAULT_CHARACTER_ID, isCharacterId } from '../characters/types';
 import { Text } from '../ui/text';
 
 export function SocialStoryFrame({ frame, author, mine, onUnlock }: { frame: StoryFrame; author: Person; mine: boolean; onUnlock: () => void }) {
-  // A shared recap is drawn with the coach it was made with; every other frame with the author's coach.
+  // A recap frame carries a coachId, but it is the sharer's CURRENT coach (not snapshotted at share time), so in
+  // practice every frame is drawn with the author's coach as it is today.
   const coachId = frame.kind === 'recap' ? frame.coachId : author.coachId;
   const coach = isCharacterId(coachId) ? coachId : DEFAULT_CHARACTER_ID;
   const who = personName(author, mine);
