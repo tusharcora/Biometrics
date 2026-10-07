@@ -172,9 +172,16 @@ export function BuddyWeekScreen() {
             <View key={key} testID={`number-row-${key}`} className="gap-1">
               <Text className="text-xs text-muted-foreground">{NUMBER_LABELS[key]}</Text>
               <View className="flex-row justify-between">
-                {week.numbers[key]!.map((d, i) => (
-                  <Text key={d.date} testID={`number-${key}-${i}`} className="w-9 text-center text-xs">{formatNumber(key, d.value)}</Text>
-                ))}
+                {week.numbers[key]!.map((d, i) => {
+                  const shown = formatNumber(key, d.value);
+                  // The day is in the label: a screen reader otherwise reads seven bare numbers.
+                  const label = `${weekdayName(d.date)}: ${NUMBER_LABELS[key]}${shown === '–' ? ', no data' : ` ${shown}`}`;
+                  return (
+                    <Text key={d.date} testID={`number-${key}-${i}`} accessibilityLabel={label} className="w-9 text-center text-xs">
+                      {shown}
+                    </Text>
+                  );
+                })}
               </View>
             </View>
           ))}

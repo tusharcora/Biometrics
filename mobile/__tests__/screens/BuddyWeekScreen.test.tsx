@@ -57,6 +57,9 @@ it('shows the mood line, 7 tiles, only the shared rows, badge levels and the sha
   expect(screen.getByTestId('week-tile-0').props.accessibilityLabel).toBe('Sunday: well rested');
   expect(screen.getByTestId('week-tile-6').props.accessibilityLabel).toBe('Saturday: no data');
   expect(screen.getByTestId('number-row-sleepScore')).toHaveTextContent(/^Sleep score/);
+  // Each number names its day; a day without a reading says so, never 0.
+  expect(screen.getByTestId('number-sleepScore-0').props.accessibilityLabel).toBe('Sunday: Sleep score 80');
+  expect(screen.getByTestId('number-sleepScore-6').props.accessibilityLabel).toBe('Saturday: Sleep score, no data');
   expect(screen.queryByTestId('number-row-recovery')).toBeNull();
   expect(screen.queryByTestId('number-row-steps')).toBeNull();
   expect(screen.getByTestId('week-badges')).toHaveTextContent('Sleep goal streak II');

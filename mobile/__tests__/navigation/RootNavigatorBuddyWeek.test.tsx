@@ -120,3 +120,10 @@ it('gives each buddy their own BuddyWeek: a late answer for A never shows on B, 
   expect(await screen.findByTestId('buddy-week-line')).toHaveTextContent('Alex is well rested today');
   expect(fetchBuddyWeek).toHaveBeenLastCalledWith('A');
 });
+
+it("BuddyWeek's getId never throws on a route without params", () => {
+  const { getId } = buddyWeekDeclaration();
+  expect(getId({ params: { buddyId: 'A' } })).toBe('A');
+  expect(() => getId({ params: undefined })).not.toThrow();
+  expect(getId({ params: undefined })).toBeUndefined();
+});
