@@ -71,3 +71,45 @@ it("an unpaired buddy's goodnight and note leave my timeline", async () => {
   await prisma.buddyPair.deleteMany({ where: { OR: [{ userAId: sam!.id }, { userBId: sam!.id }] } });
   expect(await buildTimeline(me.id, NIGHT)).toEqual([]);
 });
+
+describe('an Auckland author, judged in her own zone (final wave)', () => {
+  const NZ = 'Pacific/Auckland'; // NZDT = UTC+13 in October
+
+  it("her note written in her night shows even though it is my Los Angeles morning; an LA buddy's note then does not", async () => {
+    const me = await buddyUser({ timezone: LA });
+    const ana = await buddyUser({ timezone: NZ });
+    const sam = await buddyUser({ timezone: LA });
+    await pairUp(me.id, ana.id);
+    await pairUp(me.id, sam.id);
+    const written = new Date('2026-10-07T15:00:00Z'); // Oct 8, 04:00 in Auckland (night); Oct 7, 08:00 in Los Angeles (day)
+    await prisma.campNote.create({ data: { authorId: ana.id, text: 'cannot sleep', createdAt: written, expiresAt: new Date('2026-10-07T17:00:00Z') } }); // her 06:00
+    await prisma.campNote.create({ data: { authorId: sam.id, text: 'morning all', createdAt: written, expiresAt: new Date('2026-10-08T13:00:00Z') } });
+    const items = await buildTimeline(me.id, new Date('2026-10-07T16:30:00Z')); // my 09:30
+    expect(items.filter((i) => i.kind === 'camp_note').map((i) => i.actor.id)).toEqual([ana.id]);
+  });
+
+  it("her 00:30 NZDT goodnight opens her new day's story; one at 22:00 stays in the day before", async () => {
+    const me = await buddyUser({ timezone: LA });
+    const ana = await buddyUser({ timezone: NZ });
+    const kai = await buddyUser({ timezone: NZ });
+    await pairUp(me.id, ana.id);
+    await pairUp(me.id, kai.id);
+    await prisma.goodnight.create({ data: { authorId: ana.id, localDate: day('2026-10-07'), at: new Date('2026-10-07T11:30:00Z'), onTime: true } }); // 00:30 Oct 8 NZDT
+    await prisma.goodnight.create({ data: { authorId: kai.id, localDate: day('2026-10-07'), at: new Date('2026-10-07T09:00:00Z'), onTime: true } }); // 22:00 Oct 7 NZDT
+    const oneAm = new Date('2026-10-07T12:00:00Z'); // Oct 8, 01:00 in Auckland; Oct 7, 05:00 in Los Angeles
+    expect((await getStory(me.id, ana.id, oneAm)).frames).toEqual([{ kind: 'goodnight', at: '2026-10-07T11:30:00.000Z', onTime: true }]);
+    expect((await getStory(me.id, kai.id, oneAm)).frames).toEqual([]);
+  });
+});
+
+it("a check-in and a goodnight while I haven't checked in: the ring is locked, yet the goodnight frame is not", async () => {
+  const { me, others: [sam] } = await camp(1);
+  await prisma.checkIn.create({ data: { authorId: sam!.id, localDate: day('2026-10-07'), mood: 'RESTED', createdAt: new Date('2026-10-08T03:00:00Z') } }); // 20:00
+  const at = new Date('2026-10-08T05:00:00Z'); // 22:00
+  await prisma.goodnight.create({ data: { authorId: sam!.id, localDate: day('2026-10-07'), at, onTime: true } });
+  expect((await loadStoryRings(me.id, NIGHT)).rings.map((r) => [r.author.id, r.locked, r.frameCount])).toEqual([[sam!.id, true, 2]]);
+  expect((await getStory(me.id, sam!.id, NIGHT)).frames).toEqual([
+    { kind: 'checkin', at: '2026-10-08T03:00:00.000Z', locked: true },
+    { kind: 'goodnight', at: at.toISOString(), onTime: true },
+  ]);
+});
