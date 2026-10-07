@@ -101,7 +101,7 @@ const ERRORS: Record<string, string> = {
   invalid_cursor: "Couldn't load more. Please refresh.",
   invalid_checkin: 'Pick how you woke up.',
   recap_not_found: "That recap can't be shared.",
-  goodnight_closed: "It's too early to say goodnight.",
+  goodnight_closed: 'Goodnight opens this evening.',
   undo_expired: "It's too late to undo that goodnight.",
 };
 
