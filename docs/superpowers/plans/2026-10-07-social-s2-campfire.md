@@ -106,6 +106,8 @@ PR #53) and its ledger `.superpowers/sdd/2026-10-07-social-s1/progress.md`.
     goodnight."; the evening timeline shows the same button under Today while the viewer's goodnight window is open
     (`camp.goodnightOpen` on `/me/social`). Every time on the Campfire is 12-hour ("asleep since 10:15 PM", the kicker
     "TUESDAY · 10:42 PM").
+  - Final-review ruling (I-1): "Who's here" carries the whole note for asleep members too ("asleep since 10:15 PM ·
+    on time · {note}"): their bubble is one truncated line, and this row is where a note is read in full (Q4).
   - Plan ruling: asleep = a goodnight for the member's current evening, or for last evening between 06:00 and 11:59
     local until they check in (spec: "said goodnight tonight and not yet checked in today").
   - Plan ruling: the camp banner reads "THE CAMP" + "{awake} awake · {asleep} asleep" at night (spec §4 item 1) and

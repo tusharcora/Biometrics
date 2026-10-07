@@ -206,13 +206,17 @@ export function campClock(iso: string): string {
   return validDate(d) ? twelveHour(d.getHours(), d.getMinutes()) : '';
 }
 
-/** "Who's here": "awake · {their whole note}" or "awake", or "asleep since 10:15 PM · on time". */
+/**
+ * "Who's here": "awake · {their whole note}" or "awake", or "asleep since 10:15 PM · on time · {their whole note}".
+ * An asleep coach keeps its bubble, which is cut to one line, so this row is where the whole note is read (ruling Q4).
+ */
 export function campStatus(m: CampMember): string {
+  const note = m.note ? ` · ${m.note}` : '';
   if (m.asleep) {
     const since = m.asleepSince ? campClock(m.asleepSince) : '';
-    return `asleep${since ? ` since ${since}` : ''}${m.onTime ? ' · on time' : ''}`;
+    return `asleep${since ? ` since ${since}` : ''}${m.onTime ? ' · on time' : ''}${note}`;
   }
-  return m.note ? `awake · ${m.note}` : 'awake';
+  return `awake${note}`;
 }
 
 export const goodnightSaidLine = (g: Goodnight) => (g.onTime ? 'Goodnight said, on time' : 'Goodnight said');

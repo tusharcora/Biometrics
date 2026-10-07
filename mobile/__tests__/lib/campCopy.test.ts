@@ -76,6 +76,9 @@ it("words the fire, who's here, the header kicker, a said goodnight and a note's
   expect(campClock(new Date(2026, 9, 8, 12, 0).toISOString())).toBe('12:00 PM');
   expect(campStatus(m({ asleep: true, asleepSince: since, onTime: true }))).toBe('asleep since 10:15 PM · on time');
   expect(campStatus(m({ asleep: true, asleepSince: since, onTime: false }))).toBe('asleep since 10:15 PM');
+  // An asleep member's whole note is read here: their bubble is cut to one line.
+  expect(campStatus(m({ asleep: true, asleepSince: since, onTime: true, note: 'bed soon, night all' }))).toBe('asleep since 10:15 PM · on time · bed soon, night all');
+  expect(campStatus(m({ asleep: true, asleepSince: since, onTime: false, note: 'bed soon, night all' }))).toBe('asleep since 10:15 PM · bed soon, night all');
   expect(campStatus(m({ note: 'bed soon' }))).toBe('awake · bed soon');
   expect(campStatus(m({}))).toBe('awake');
   expect(campKicker(new Date(2026, 9, 6, 22, 42))).toBe('TUESDAY · 10:42 PM');

@@ -74,6 +74,15 @@ it("a long note is one truncated line in the bubble and the whole note in Who's 
   expect(screen.getByTestId('camp-who-status-ben').props.numberOfLines).toBeUndefined();
 });
 
+it("an asleep member keeps their whole note in Who's here (their bubble is cut to a line)", async () => {
+  const long = 'bed soon, night all, big race at dawn!!!'; // 40 code points
+  (fetchCamp as jest.Mock).mockResolvedValue(camp({ members: [member('me', { mine: true }), member('sam', { asleep: true, asleepSince: '2026-10-08T05:15:00.000Z', onTime: true, note: long })] }));
+  renderScreen();
+  expect(await screen.findByTestId('camp-bubble-sam')).toHaveProp('numberOfLines', 1);
+  expect(screen.getByTestId('camp-who-status-sam')).toHaveTextContent(new RegExp(`^asleep since \\d{1,2}:\\d{2} (AM|PM) · on time · ${long}$`));
+  expect(screen.getByTestId('camp-who-status-sam').props.numberOfLines).toBeUndefined();
+});
+
 it('by day: sky, no moon, unlit logs, and goodnight waits for my own opening time', async () => {
   (fetchCamp as jest.Mock).mockResolvedValue(camp({ night: false, goodnightOpen: false, goodnightOpensAt: '20:00' }));
   renderScreen();
