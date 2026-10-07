@@ -5,6 +5,7 @@ import { authHeaderFor } from '../helpers/auth';
 import { setBuddyNotifyQueue } from '../../src/buddies/notifyQueue';
 import { sendSticker } from '../../src/buddies/stickers';
 import { listBuddies } from '../../src/buddies/list';
+import { blockBuddy } from '../../src/buddies/relations';
 import { RecordingQueue, RecordingSender, addToken, api, buddyUser, pairUp } from './helpers';
 
 beforeAll(() => migrateTestDb());
@@ -109,4 +110,53 @@ it("the daily limit is 5 per buddy and resets at the sender's local midnight", a
   await expect(sendSticker(me.id, buddy.id, 'CHEER', lateEvening)).rejects.toMatchObject({ code: 'sticker_limit' });
   const afterMidnight = new Date('2026-10-07T07:30:00Z'); // Oct 7, 00:30 in LA
   await expect(sendSticker(me.id, buddy.id, 'CHEER', afterMidnight)).resolves.toMatchObject({ id: expect.any(String) });
+});
+
+it('a sticker across a block (either direction) is 403 not_buddies, stores nothing and enqueues nothing', async () => {
+  for (const direction of ['mine', 'theirs'] as const) {
+    // Through the app: the block removed the pair.
+    const me = await buddyUser();
+    const buddy = await buddyUser();
+    await pairUp(me.id, buddy.id);
+    if (direction === 'mine') await blockBuddy(me.id, buddy.id, new Date());
+    else await blockBuddy(buddy.id, me.id, new Date());
+    // And a pair left next to a block (can't arise through the app): refused all the same.
+    const other = await buddyUser();
+    await pairUp(me.id, other.id);
+    await prisma.buddyBlock.create({ data: direction === 'mine' ? { blockerId: me.id, blockedId: other.id } : { blockerId: other.id, blockedId: me.id } });
+    for (const to of [buddy, other]) {
+      const res = await post(me.id, to.id, 'STAR');
+      expect([direction, res.status, res.body]).toEqual([direction, 403, { error: 'not_buddies' }]);
+    }
+    expect(await prisma.sticker.count({ where: { fromUserId: me.id } })).toBe(0);
+    expect(await prisma.buddyActivity.count({ where: { actorId: me.id, kind: 'STICKER' } })).toBe(0);
+    expect(queue.jobs).toEqual([]);
+  }
+});
+
+it('the sixth sticker of the day is 429 sticker_limit and stores nothing; the limit is per buddy', async () => {
+  const me = await buddyUser();
+  const buddy = await buddyUser();
+  const other = await buddyUser();
+  await pairUp(me.id, buddy.id);
+  await pairUp(me.id, other.id);
+  for (let i = 0; i < 5; i++) expect((await post(me.id, buddy.id, 'CHEER')).status).toBe(201);
+  const sixth = await post(me.id, buddy.id, 'CHEER');
+  expect([sixth.status, sixth.body]).toEqual([429, { error: 'sticker_limit' }]);
+  expect(await prisma.sticker.count({ where: { fromUserId: me.id, toUserId: buddy.id } })).toBe(5);
+  expect((await post(me.id, other.id, 'CHEER')).status).toBe(201);
+});
+
+it('a missing or non-object body is 400 invalid_sticker', async () => {
+  const me = await buddyUser();
+  const buddy = await buddyUser();
+  await pairUp(me.id, buddy.id);
+  const headers = await authHeaderFor(me.id);
+  const agent = await api();
+  for (const res of [
+    await agent.post(`/me/buddies/${buddy.id}/stickers`).set(headers),
+    await agent.post(`/me/buddies/${buddy.id}/stickers`).set(headers).send([]),
+    await agent.post(`/me/buddies/${buddy.id}/stickers`).set(headers).send(['STAR']),
+  ]) expect([res.status, res.body]).toEqual([400, { error: 'invalid_sticker' }]);
+  expect(await prisma.sticker.count({ where: { fromUserId: me.id } })).toBe(0);
 });

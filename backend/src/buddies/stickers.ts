@@ -10,7 +10,7 @@ import { prisma } from '../db/client';
 import { BuddyError } from './errors';
 import { pushName } from './notify';
 import { enqueueBuddyNotice } from './notifyQueue';
-import { orderedPair, type PairDeps } from './pairs';
+import { isBlockedEitherWay, orderedPair, type PairDeps } from './pairs';
 
 export const STICKER_KINDS: readonly StickerKind[] = ['CHEER', 'HEART', 'REST_UP', 'STAR'];
 export const STICKERS_PER_BUDDY_PER_DAY = 5;
@@ -29,13 +29,16 @@ export async function sendSticker(fromId: string, toId: string, kind: unknown, n
     throw new BuddyError('sticker_limit');
   }
   const id = await prisma.$transaction(async (tx) => {
+    // A block either way refuses like no pair (block removes the pair anyway; this covers a pair left
+    // beside a block). Read every time, so a block costs no extra work.
+    const blocked = await isBlockedEitherWay(fromId, toId, tx);
     const bumped = await tx.buddyPair.updateMany({ where: orderedPair(fromId, toId), data: { lastActivityAt: now } });
-    if (bumped.count === 0) throw new BuddyError('not_buddies');
+    if (bumped.count === 0 || blocked) throw new BuddyError('not_buddies');
     const sticker = await tx.sticker.create({ data: { fromUserId: fromId, toUserId: toId, kind: kind as StickerKind, sentAt: now }, select: { id: true } });
     await tx.buddyActivity.create({ data: { recipientId: toId, actorId: fromId, kind: 'STICKER', refId: sticker.id, createdAt: now } });
     return sticker.id;
   });
-  // Enqueued whether or not the buddy muted or blocked me: the job decides (Global Constraints).
+  // Enqueued whether or not the buddy muted me: the job decides (Global Constraints).
   await enqueueBuddyNotice(
     { kind: 'buddy_sticker', recipientId: toId, actorId: fromId, refId: fromId, slots: { name: pushName(me), sticker: kind as StickerKind } },
     deps.notifyQueue ? { queue: deps.notifyQueue } : {},
