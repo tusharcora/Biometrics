@@ -135,6 +135,20 @@ describe('POST /me/buddies/requests', () => {
     expect(await prisma.buddyActivity.count({ where: { recipientId: target.id } })).toBe(0);
   });
 
+  it('a decline that a later pairing superseded no longer swallows: after an unpair a new request is visible', async () => {
+    const me = await buddyUser();
+    const target = await buddyUser();
+    await prisma.buddyRequest.create({
+      data: { fromUserId: me.id, toUserId: target.id, status: 'DECLINED', createdAt: new Date(Date.now() - 3 * DAY), respondedAt: new Date(Date.now() - 2 * DAY) },
+    });
+    await createPair(me.id, target.id, new Date(Date.now() - DAY), { notifyQueue: queue });
+    expect((await (await api()).delete(`/me/buddies/${me.id}`).set(await authHeaderFor(target.id))).status).toBe(204);
+    queue.jobs = [];
+    expect((await send(me.id, target.handle!)).body).toEqual({ ok: true });
+    const fresh = (await rowsBetween(me.id, target.id)).find((r) => r.status === 'PENDING');
+    expect(fresh?.hidden).toBe(false);
+  });
+
   it('crossed requests pair at once', async () => {
     const me = await buddyUser();
     const target = await buddyUser();
