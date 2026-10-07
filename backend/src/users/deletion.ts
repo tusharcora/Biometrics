@@ -155,14 +155,16 @@ export async function deleteUserAccount(
     log(`Account deletion: could not hold the handle for user ${userId}: ${err instanceof Error ? err.name : 'unknown error'}`);
   }
 
-  // Week-highlight caches name people inside JSON, beyond any cascade (buddies/models.ts). Best effort: reads gate
-  // every cached actor against the live circle anyway. Only the error class is logged.
+  const counts = await deleteOwnedRows(prisma, { userId }, { id: userId });
+
+  // Week-highlight caches name people inside JSON, beyond any cascade (buddies/models.ts). After the rows are gone,
+  // so a buddy's rebuild racing this deletion can't cache the id again from rows that still existed. Best effort:
+  // reads gate every cached actor against the live circle anyway. Only the error class is logged.
   try {
     await purgeSocialJsonMentions(prisma, userId);
   } catch (err) {
     log(`Account deletion: could not purge social mentions for user ${userId}: ${err instanceof Error ? err.name : 'unknown error'}`);
   }
 
-  const counts = await deleteOwnedRows(prisma, { userId }, { id: userId });
   return { googleSubscriptionDeleted, googleTokenRevoked, counts };
 }
