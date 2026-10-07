@@ -30,7 +30,7 @@ import { Text } from '../components/ui/text';
 function useMarkStickersSeen(home: SocialHome | null, focused: boolean) {
   const marked = useRef<SocialHome | null>(null);
   useEffect(() => {
-    if (!home || !focused || home.unread.stickers === 0 || marked.current === home) return;
+    if (!home || !focused || (home.unread?.stickers ?? 0) === 0 || marked.current === home) return;
     marked.current = home;
     void markStickersSeen().then(() => refreshSocial(), () => undefined);
   }, [home, focused]);
@@ -82,7 +82,7 @@ export function SocialScreen() {
   }
 
   const { home } = state;
-  const chats = home.unread.requests + home.unread.stickers;
+  const chats = (home.unread?.requests ?? 0) + (home.unread?.stickers ?? 0);
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-background" testID="social-screen">
       <ScrollView contentContainerStyle={{ gap: 18, paddingHorizontal: 20, paddingBottom: clearance + 64 }}
@@ -100,7 +100,7 @@ export function SocialScreen() {
         </View>
       </ScrollView>
       <PressableScale testID="social-chats" accessibilityRole="button" accessibilityLabel={chats > 0 ? `Chats, ${chats} new` : 'Chats'}
-        onPress={() => (home.unread.requests > 0 ? navigation.navigate('Buddies', { tab: 'requests', open: Date.now() }) : navigation.navigate('Buddies'))}
+        onPress={() => ((home.unread?.requests ?? 0) > 0 ? navigation.navigate('Buddies', { tab: 'requests', open: Date.now() }) : navigation.navigate('Buddies'))}
         style={{ position: 'absolute', right: 20, bottom: clearance + 8 }}
         className="h-12 flex-row items-center gap-2 rounded-full bg-foreground px-4">
         <View testID="social-chats-icon"><Ionicons name="chatbubble-outline" size={18} color={colors.background} /></View>

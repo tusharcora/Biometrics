@@ -81,10 +81,15 @@ export function useSocial(): SocialState {
   return useSyncExternalStore(subscribe, getSocialState, getSocialState);
 }
 
-/** What the tab dot counts: incoming requests + unseen stickers (unread.chats is added in S3). 0 unless ready. */
+/**
+ * What the tab dot counts: incoming requests + unseen stickers (unread.chats is added in S3). 0 unless ready. A
+ * missing `unread` or field counts as 0: the tab bar is the app shell and must never throw on a server's shape.
+ */
 export function useSocialUnreadCount(): number {
   const s = useSocial();
-  return s.status === 'ready' ? s.home.unread.requests + s.home.unread.stickers : 0;
+  if (s.status !== 'ready') return 0;
+  const u = s.home.unread;
+  return (u?.requests ?? 0) + (u?.stickers ?? 0);
 }
 
 export function useSocialUnread(): boolean {

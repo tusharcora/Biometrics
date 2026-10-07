@@ -37,6 +37,17 @@ it('the unread flag and count cover requests and unseen stickers', async () => {
   expect(screen.getByTestId('dot')).toHaveTextContent('false:0');
 });
 
+it('the unread count tolerates a home without unread, or with fields missing', async () => {
+  function Probe() { return <Text testID="dot">{`${String(useSocialUnread())}:${useSocialUnreadCount()}`}</Text>; }
+  render(<Probe />);
+  fetchHome.mockResolvedValueOnce({ ...home(0, 0), unread: undefined });
+  await act(() => refreshSocial());
+  expect(screen.getByTestId('dot')).toHaveTextContent('false:0');
+  fetchHome.mockResolvedValueOnce({ ...home(0, 0), unread: { stickers: 2 } });
+  await act(() => refreshSocial());
+  expect(screen.getByTestId('dot')).toHaveTextContent('true:2');
+});
+
 it('a failed refresh while unavailable stays unavailable (an older backend keeps Social hidden)', async () => {
   fetchHome.mockResolvedValueOnce(null);
   await refreshSocial();
