@@ -4,6 +4,7 @@
 import { Router } from 'express';
 import { requireAuth } from '../auth/middleware';
 import { buddyRoute } from '../buddies/errors';
+import { getCamp } from './camp';
 import { clearCampNote, shareCampNote } from './campNotes';
 import { getTodayCheckIn, saveCheckIn } from './checkins';
 import { sayGoodnight, undoGoodnight } from './goodnight';
@@ -63,7 +64,12 @@ socialRouter.get('/me/social/highlights', requireAuth, buddyRoute(async (req, re
   res.json({ highlights: await getWeeklyHighlights(req.userId!, new Date()) });
 }));
 
-socialRouter.post('/me/camp/goodnight', requireAuth, buddyRoute(async (req, res) => {
+socialRouter.get('/me/camp', requireAuth, buddyRoute(async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  res.json(await getCamp(req.userId!, new Date()));
+}));
+
+socialRouter.post('/me/camp/goodnight',requireAuth, buddyRoute(async (req, res) => {
   res.json({ goodnight: await sayGoodnight(req.userId!, new Date()) });
 }));
 
