@@ -36,6 +36,17 @@ it('at night the camp counts awake and asleep, me.goodnight is mine for Undo, an
   expect(JSON.stringify(after)).not.toContain('secret words');
 });
 
+it("a stranger's goodnight never moves my camp's awake, asleep or members", async () => {
+  const me = await buddyUser({ timezone: LA });
+  const sam = await buddyUser({ timezone: LA });
+  const stranger = await buddyUser({ timezone: LA });
+  await pairUp(me.id, sam.id);
+  const before = (await getSocialHome(me.id, NIGHT)).camp;
+  expect(before).toMatchObject({ members: 2, awake: 2, asleep: 0 });
+  await prisma.goodnight.create({ data: { authorId: stranger.id, localDate: civilDateToUtcMidnight('2026-10-07'), at: new Date('2026-10-08T05:00:00Z'), onTime: true } });
+  expect((await getSocialHome(me.id, NIGHT)).camp).toEqual(before);
+});
+
 it('by day the camp is not night and everyone is awake', async () => {
   const me = await buddyUser({ timezone: LA });
   const day = new Date('2026-10-07T20:00:00Z'); // 13:00

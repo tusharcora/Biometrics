@@ -51,17 +51,17 @@ export async function getSocialHome(viewerId: string, now: Date): Promise<Social
     unseenTodayStickerIds(circle, now),
   ]);
   const mine = circle.checkIns.get(viewerId);
-  const camp = campSummaryFor(circle, now);
+  const summary = campSummaryFor(circle, now);
   return {
-    me: { person: circle.viewer.person, checkIn: mine ? toCheckInDTO(mine) : null, goodnight: camp.goodnight },
+    me: { person: circle.viewer.person, checkIn: mine ? toCheckInDTO(mine) : null, goodnight: summary.goodnight },
     camp: {
       checkedIn: rings.checkedInBuddies + (rings.viewerCheckedIn ? 1 : 0),
       members: circle.members.size,
       faces: rings.checkedInCoachIds,
-      night: camp.night,
-      awake: camp.awake,
-      asleep: camp.asleep,
-      goodnightOpen: camp.goodnightOpen,
+      night: summary.night,
+      awake: summary.awake,
+      asleep: summary.asleep,
+      goodnightOpen: summary.goodnightOpen,
     },
     stories: rings.rings,
     highlights,
