@@ -10,7 +10,7 @@
 
 import { prisma } from '../db/client';
 import { BuddyError, limitOrThrow } from '../buddies/errors';
-import { hasVisibleCharacter, sanitiseDisplayName } from '../buddies/identity';
+import { hasVisibleCharacter, isWellFormed, sanitiseDisplayName } from '../buddies/identity';
 import { RATE_LIMITS } from '../lib/rateLimit';
 import type { Circle } from './circle';
 import { nextSunrise } from './night';
@@ -21,7 +21,8 @@ export interface CampNoteDTO { text: string; createdAt: string; expiresAt: strin
 
 /** The text to store, or null when it is not a valid note. */
 export function checkCampNote(raw: unknown): string | null {
-  if (typeof raw !== 'string') return null;
+  // A lone surrogate is not text: Postgres cannot store it (a 500), so refuse it before sanitising and before the limiter.
+  if (typeof raw !== 'string' || !isWellFormed(raw)) return null;
   const text = sanitiseDisplayName(raw);
   const length = [...text].length;
   return length >= 1 && length <= CAMP_NOTE_MAX && hasVisibleCharacter(text) ? text : null;

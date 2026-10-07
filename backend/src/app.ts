@@ -1,4 +1,4 @@
-import express, { Express } from 'express';
+import express, { Express, type ErrorRequestHandler } from 'express';
 import { toNodeHandler } from 'better-auth/node';
 import { auth as defaultAuth, type Auth } from './auth/auth';
 import { healthRouter } from './health/routes';
@@ -39,5 +39,23 @@ export function createApp(options: { auth?: Auth } = {}): Express {
   app.use(achievementsRouter);
   app.use(buddiesRouter);
   app.use(socialRouter);
+  app.use(lastErrorHandler);
   return app;
 }
+
+// The last error handler. Express's default one prints err.stack, and a body-parser SyntaxError quotes part of the
+// request body, so free text (a camp note, a display name) could reach the logs. This one logs only the status and
+// the error's type (body-parser's err.type, e.g. entity.parse.failed, else err.name): never its message, stack,
+// body or anything from the request. Routes' own codes (BuddyError and the like) are answered before this runs.
+const lastErrorHandler: ErrorRequestHandler = (err, _req, res, next) => {
+  if (res.headersSent) {
+    next(err);
+    return;
+  }
+  const e = (err ?? {}) as { status?: unknown; statusCode?: unknown; type?: unknown; name?: unknown };
+  const raw = Number(e.status ?? e.statusCode ?? 500);
+  const status = Number.isInteger(raw) && raw >= 400 && raw <= 599 ? raw : 500;
+  const type = typeof e.type === 'string' ? e.type : typeof e.name === 'string' ? e.name : 'unknown';
+  console.error(JSON.stringify({ event: 'http.error', status, type }));
+  res.status(status).json({ error: status < 500 ? 'bad_request' : 'internal' });
+};

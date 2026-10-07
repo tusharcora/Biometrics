@@ -21,8 +21,8 @@ const NIGHT = new Date('2026-10-08T05:30:00Z'); // Oct 7, 22:30 in Los Angeles
 it('sanitises like a display name: NFC, controls and zero-widths out, trimmed, 1–40 code points, no reserved-word check', () => {
   expect(checkCampNote('  bed soon  ')).toBe('bed soon');
   expect(checkCampNote('night\nall')).toBe('nightall');
-  expect(checkCampNote('é')).toBe('é');
-  expect(checkCampNote('​ ‍')).toBeNull();
+  expect(checkCampNote('e\u0301')).toBe('\u00e9');
+  expect(checkCampNote('\u200b \u200d')).toBeNull();
   expect(checkCampNote('')).toBeNull();
   expect(checkCampNote(42)).toBeNull();
   expect(checkCampNote('x'.repeat(CAMP_NOTE_MAX))).toBe('x'.repeat(40));
@@ -135,4 +135,78 @@ it('routes: PUT shares (200 { note }), an invalid one is 400 invalid_note, DELET
   expect((await agent.delete('/me/camp/note').set(headers)).status).toBe(204);
   expect(await prisma.campNote.count({ where: { authorId: me.id } })).toBe(0);
   expect((await agent.put('/me/camp/note').send({ text: 'hi' })).status).toBe(401);
+});
+
+// Built at run time so no editor or tool can turn the lone surrogate into other bytes.
+const LONE_SURROGATE = String.fromCharCode(0xd800);
+
+it('refuses a lone surrogate before the limiter: the route answers 400 invalid_note, not a 500, and spends no token', async () => {
+  expect(checkCampNote(`hi${LONE_SURROGATE}`)).toBeNull();
+  expect(checkCampNote(`${String.fromCharCode(0xdc00)}hi`)).toBeNull();
+  const me = await buddyUser();
+  const spy = jest.spyOn(rateLimit, 'consumeRateLimit');
+  const res = await (await api()).put('/me/camp/note').set(await authHeaderFor(me.id)).send({ text: `hi${LONE_SURROGATE}` });
+  expect([res.status, res.body]).toEqual([400, { error: 'invalid_note' }]);
+  expect(spy).not.toHaveBeenCalled();
+  expect(await prisma.campNote.count({ where: { authorId: me.id } })).toBe(0);
+});
+
+it('a non-string text through the route is 400 invalid_note', async () => {
+  const me = await buddyUser();
+  const agent = await api();
+  const headers = await authHeaderFor(me.id);
+  for (const text of [['night all'], { text: 'night all' }, 42, null]) {
+    const res = await agent.put('/me/camp/note').set(headers).send({ text });
+    expect([res.status, res.body]).toEqual([400, { error: 'invalid_note' }]);
+  }
+  expect(await prisma.campNote.count({ where: { authorId: me.id } })).toBe(0);
+});
+
+it("a note written after midnight is cleared by that morning's first check-in", async () => {
+  const me = await buddyUser({ timezone: LA });
+  await shareCampNote(me.id, 'cannot sleep', new Date('2026-10-08T08:00:00Z')); // Oct 8, 01:00
+  await saveCheckIn(me.id, 'TIRED', new Date('2026-10-08T14:00:00Z')); // Oct 8, 07:00: the day's first check-in
+  expect(await prisma.campNote.count({ where: { authorId: me.id } })).toBe(0);
+});
+
+it("a note written after the day's check-in survives edits of it and is cleared by the next day's first check-in", async () => {
+  const me = await buddyUser({ timezone: LA });
+  await saveCheckIn(me.id, 'RESTED', new Date('2026-10-08T14:00:00Z')); // Oct 8, 07:00
+  await shareCampNote(me.id, 'night all', new Date('2026-10-09T06:00:00Z')); // Oct 8, 23:00
+  await saveCheckIn(me.id, 'OKAY', new Date('2026-10-09T06:30:00Z')); // Oct 8, 23:30: an edit of Oct 8's check-in
+  expect(await prisma.campNote.findMany({ where: { authorId: me.id }, select: { text: true } })).toEqual([{ text: 'night all' }]);
+  await saveCheckIn(me.id, 'RESTED', new Date('2026-10-09T14:00:00Z')); // Oct 9, 07:00: the next day's first check-in
+  expect(await prisma.campNote.count({ where: { authorId: me.id } })).toBe(0);
+});
+
+describe("the app's last error handler (fix round 1)", () => {
+  const consoleCalls = () => {
+    const spies = (['log', 'info', 'warn', 'error'] as const).map((m) => jest.spyOn(console, m).mockImplementation(() => {}));
+    return () => spies.flatMap((spy) => spy.mock.calls.map((call) => JSON.stringify(call)));
+  };
+
+  it('answers a malformed JSON body with 400 bad_request and logs only the status and type, never the body', async () => {
+    const me = await buddyUser();
+    const headers = await authHeaderFor(me.id);
+    const agent = await api();
+    const logged = consoleCalls();
+    const res = await agent.put('/me/camp/note').set(headers).set('Content-Type', 'application/json').send('{"text": "secret campfire words');
+    expect([res.status, res.body]).toEqual([400, { error: 'bad_request' }]);
+    const lines = logged();
+    for (const line of lines) expect(line).not.toContain('secret campfire');
+    expect(lines).toContain(JSON.stringify([JSON.stringify({ event: 'http.error', status: 400, type: 'entity.parse.failed' })]));
+  });
+
+  it('answers an unexpected error with 500 internal and never logs its message', async () => {
+    const me = await buddyUser();
+    const headers = await authHeaderFor(me.id);
+    const agent = await api();
+    jest.spyOn(prisma.campNote, 'upsert').mockRejectedValue(new Error('secret campfire words in a message'));
+    const logged = consoleCalls();
+    const res = await agent.put('/me/camp/note').set(headers).send({ text: 'hello' });
+    expect([res.status, res.body]).toEqual([500, { error: 'internal' }]);
+    const lines = logged();
+    for (const line of lines) expect(line).not.toContain('secret campfire');
+    expect(lines).toContain(JSON.stringify([JSON.stringify({ event: 'http.error', status: 500, type: 'Error' })]));
+  });
 });
