@@ -398,12 +398,14 @@ async function handleSleepStagesJob(data: SleepStagesBackfillJobData): Promise<v
 
 /**
  * The social sweep's clock: `job.data.now` when a test pins it (a valid ISO instant), else the real clock. The
- * scheduler sends `{}`. Not a second processSyncJob parameter: BullMQ passes the worker token there.
+ * scheduler sends `{}`. Not a second processSyncJob parameter: BullMQ passes the worker token there. A pinned
+ * clock is never later than now, so a job can't sweep live notes or current caches as if they were old.
  */
 function sweepClock(job: Job): Date {
   const pinned = (job.data as { now?: unknown } | undefined)?.now;
   const at = typeof pinned === 'string' ? new Date(pinned) : null;
-  return at && !Number.isNaN(at.getTime()) ? at : new Date();
+  const now = new Date();
+  return at && !Number.isNaN(at.getTime()) && at.getTime() < now.getTime() ? at : now;
 }
 
 export async function processSyncJob(job: Job): Promise<void> {
