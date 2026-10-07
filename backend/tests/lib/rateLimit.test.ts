@@ -26,6 +26,23 @@ it('allows `limit` calls per user per fixed window, then limits; the next window
   expect(await consumeRateLimit(limit, user, { now: NOW + 60_000 })).toBe('ok');
 });
 
+it('sets the window as the key TTL, so a counter never outlives its window', async () => {
+  const limit = tiny();
+  const user = randomUUID();
+  const now = Date.now();
+  await consumeRateLimit(limit, user, { now });
+  const ttl = await connection.ttl(`ratelimit:${limit.name}:${user}:${Math.floor(now / 1000 / limit.windowSeconds)}`);
+  expect(ttl).toBeGreaterThan(0);
+  expect(ttl).toBeLessThanOrEqual(limit.windowSeconds);
+});
+
+it('fails closed when the EXPIRE inside the transaction errors, not only the INCR', async () => {
+  const spy = jest.spyOn(console, 'error').mockImplementation(() => {});
+  const expireFails = { multi: () => ({ incr() { return this; }, expire() { return this; }, exec: async () => [[null, 1], [new Error('expire failed'), null]] }) };
+  expect(await consumeRateLimit(tiny(), randomUUID(), { redis: expireFails as never })).toBe('unavailable');
+  spy.mockRestore();
+});
+
 it('fails closed when Redis errors, and logs only the event, limit name, user id and error class', async () => {
   const lines: string[] = [];
   const spy = jest.spyOn(console, 'error').mockImplementation((line: unknown) => void lines.push(String(line)));

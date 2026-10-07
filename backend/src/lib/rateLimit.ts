@@ -48,9 +48,9 @@ export async function consumeRateLimit(
       'rate limit timeout',
     );
     if (!results) throw new Error('rate limit transaction aborted');
-    const [err, count] = results[0]!;
-    if (err) throw err;
-    return Number(count) > limit.limit ? 'limited' : 'ok';
+    // Both commands must succeed: a counter whose EXPIRE failed would never reset.
+    for (const [err] of results) if (err) throw err;
+    return Number(results[0]![1]) > limit.limit ? 'limited' : 'ok';
   } catch (err) {
     console.error(JSON.stringify({ event: 'ratelimit.unavailable', limit: limit.name, userId, error: err instanceof Error ? err.name : 'unknown' }));
     return 'unavailable';
