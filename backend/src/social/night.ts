@@ -126,6 +126,19 @@ export function campOnEvening(date: string, viewerId: string, pairedAt: Readonly
 /** One on-time goodnight: its author and its evening date. */
 export interface OnTimeNight { authorId: string; date: string }
 
+/**
+ * The on-time goodnights, each filed under the VIEWER's evening in which it was said (`eveningDate(at, viewerZone)`),
+ * not under its author's own evening date (fix ruling I-1). That is the night whose live fire showed it: an
+ * Auckland buddy's goodnight said during my Los Angeles night lights my tonight, never a night of mine that has ended
+ * or not begun. Late goodnights are dropped.
+ */
+export function onTimeNightsByViewerEvening(
+  goodnights: readonly { authorId: string; at: Date; onTime: boolean }[],
+  viewerZone: string,
+): OnTimeNight[] {
+  return goodnights.filter((g) => g.onTime).map((g) => ({ authorId: g.authorId, date: eveningDate(g.at, viewerZone) }));
+}
+
 /** Nights whose fire reached LIT_NIGHT_SEGMENTS, each judged against that night's camp (`campOn`); others' goodnights are ignored. */
 export function countLitNights(onTime: readonly OnTimeNight[], campOn: (date: string) => ReadonlySet<string>): number {
   const perNight = new Map<string, Set<string>>();

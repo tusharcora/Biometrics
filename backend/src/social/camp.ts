@@ -1,16 +1,17 @@
 // The Campfire page (spec 2026-10-07 social §6). Your camp = you + your current buddies (the preloaded circle; a
 // block deletes the pair, so an unpaired or blocked person — their coach, goodnight and camp note — is gone from
 // your camp on the next read, and you from theirs). Asleep = a goodnight for the member's current evening, or for
-// last evening between 06:00 and 11:59 local until they check in (plan ruling). Night or day (the scene, 19:00–05:59)
+// last evening between 06:00 and 11:59 local until they check in after it (plan ruling; fix ruling M-1). Night or day (the scene, 19:00–05:59)
 // follows the VIEWER's zone; my goodnight window (from min(20:00, my goal − 60 min) to 05:59) follows my zone and my
 // goal; each member's "tonight" follows their own zone. Tonight's fire = members in bed on time ÷ the live camp.
 // "Nights lit this week" judges each night against that night's camp — me plus the buddies paired by its 19:00 in my
 // zone — so a past night is frozen (owner ruling Q2); an unpaired or blocked ex-buddy is absent from past nights too
-// (ruling P5). Camp note text is user free text: returned only here, to the author and the author's current
+// (ruling P5). Each on-time goodnight counts for the viewer evening in which it was said, the night whose live
+// fire showed it, not its author's own evening date (fix ruling I-1: onTimeNightsByViewerEvening). Camp note text is user free text: returned only here, to the author and the author's current
 // buddies, and never logged. A note is shown only while noteIsLive: not expired, and not older than its author's
 // check-in today — that read-time check also covers a note shared while the check-in that clears it was being saved.
 
-import { civilDateToUtcMidnight, localCivilDateOrUtc } from '../biometrics/civilDate';
+import { localCivilDateOrUtc } from '../biometrics/civilDate';
 import { prisma } from '../db/client';
 import type { PersonDTO } from '../buddies/people';
 import { localHourOrUtc, mondayOf } from '../recap/periods';
@@ -19,7 +20,8 @@ import { noteIsLive } from './campNotes';
 import { loadCircle, type Circle, type GoodnightRow } from './circle';
 import { toGoodnightDTO, type GoodnightDTO } from './goodnight';
 import {
-  campOnEvening, countLitNights, eveningDate, fireSegments, goodnightOpensAt, isGoodnightOpen, isNight, NOON_HOUR, SUNRISE_HOUR,
+  campOnEvening, countLitNights, eveningDate, fireSegments, goodnightOpensAt, isGoodnightOpen, isNight, localInstant, NOON_HOUR,
+  onTimeNightsByViewerEvening, SUNRISE_HOUR,
 } from './night';
 
 export interface CampMemberDTO {
@@ -74,17 +76,19 @@ export function sleepStates(circle: Circle, now: Date): Map<string, SleepState> 
   for (const [id, m] of circle.members) {
     const tonight = byEvening.get(`${id}:${eveningDate(now, m.timezone)}`) ?? null;
     const hour = localHourOrUtc(now, m.timezone);
-    const morning = hour >= SUNRISE_HOUR && hour < NOON_HOUR && !circle.checkIns.has(id);
+    const morning = hour >= SUNRISE_HOUR && hour < NOON_HOUR;
     const lastNight = morning ? byEvening.get(`${id}:${shiftDate(localCivilDateOrUtc(now, m.timezone), -1)}`) ?? null : null;
-    const since = tonight ?? lastNight;
+    // Only a check-in after last night's goodnight wakes them: one at 01:00, then a goodnight at 02:00, still sleeps.
+    const checkIn = circle.checkIns.get(id);
+    const stillAsleep = lastNight !== null && (!checkIn || checkIn.createdAt.getTime() <= lastNight.at.getTime());
+    const since = tonight ?? (stillAsleep ? lastNight : null);
     states.set(id, { asleep: since !== null, since, tonight });
   }
   return states;
 }
 
-/** What the camp banner and the evening timeline need, from the circle alone (no query). */
-export function campSummaryFor(circle: Circle, now: Date): CampSummary {
-  const states = sleepStates(circle, now);
+/** What the camp banner and the evening timeline need, from the circle alone (no query). Pass `states` when they are already computed. */
+export function campSummaryFor(circle: Circle, now: Date, states: Map<string, SleepState> = sleepStates(circle, now)): CampSummary {
   const asleep = [...states.values()].filter((s) => s.asleep).length;
   const mine = states.get(circle.viewer.person.id)?.tonight ?? null;
   const { timezone } = circle.viewer;
@@ -108,8 +112,9 @@ export async function getCamp(viewerId: string, now: Date): Promise<CampDTO> {
     // Only the camp's own notes (me + current buddies): a stranger's or an ex-buddy's never leaves the database.
     prisma.campNote.findMany({ where: { authorId: { in: ids }, expiresAt: { gt: now } }, select: { authorId: true, text: true, createdAt: true, expiresAt: true } }),
     prisma.goodnight.findMany({
-      where: { authorId: { in: ids }, onTime: true, localDate: { gte: civilDateToUtcMidnight(weekStart), lte: civilDateToUtcMidnight(shiftDate(weekStart, 6)) } },
-      select: { authorId: true, localDate: true },
+      // Said in one of my evenings this week (Monday 06:00 in my zone up to now); a day of margin, filtered below.
+      where: { authorId: { in: ids }, onTime: true, at: { gte: localInstant(shiftDate(weekStart, -1), '06:00', circle.viewer.timezone), lte: now } },
+      select: { authorId: true, at: true, onTime: true },
     }),
   ]);
   const states = sleepStates(circle, now);
@@ -136,10 +141,9 @@ export async function getCamp(viewerId: string, now: Date): Promise<CampDTO> {
   const of = circle.members.size;
   // Each night of the week against that night's camp: me plus the buddies paired by its 19:00 (frozen past nights).
   const campOn = (date: string) => campOnEvening(date, viewerId, circle.pairedAt, circle.viewer.timezone);
-  const onTimeThisWeek = week
-    .map((g) => ({ authorId: g.authorId, date: isoDate(g.localDate) }))
-    .filter((g) => g.date <= tonightDate);
-  const summary = campSummaryFor(circle, now);
+  const onTimeThisWeek = onTimeNightsByViewerEvening(week, circle.viewer.timezone)
+    .filter((g) => g.date >= weekStart && g.date <= tonightDate);
+  const summary = campSummaryFor(circle, now, states);
   return {
     night: summary.night,
     members,

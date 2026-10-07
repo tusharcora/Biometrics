@@ -69,7 +69,7 @@ socialRouter.get('/me/camp', requireAuth, buddyRoute(async (req, res) => {
   res.json(await getCamp(req.userId!, new Date()));
 }));
 
-socialRouter.post('/me/camp/goodnight',requireAuth, buddyRoute(async (req, res) => {
+socialRouter.post('/me/camp/goodnight', requireAuth, buddyRoute(async (req, res) => {
   res.json({ goodnight: await sayGoodnight(req.userId!, new Date()) });
 }));
 

@@ -182,6 +182,55 @@ it("an unpaired or blocked buddy leaves my camp at once, and I leave theirs; a d
   expect((await getCamp(me.id, NIGHT)).members.map((m) => m.person.id)).toEqual([me.id]);
 });
 
+it("files each on-time goodnight under the viewer's evening it was said in, so tonight's lit fire is tonight's lit night", async () => {
+  const me = await buddyUser({ timezone: LA });
+  const ana = await buddyUser({ timezone: 'Pacific/Auckland' });
+  const kai = await buddyUser({ timezone: 'Pacific/Auckland' });
+  for (const u of [ana, kai]) await pairUp(me.id, u.id, BEFORE);
+  await gn(me.id, '2026-10-07', NIGHT); // my Wed 22:30
+  // Their Thu 22:00 NZDT (their evening of Oct 8) is my Thu 02:00: my evening of Oct 7.
+  for (const u of [ana, kai]) await gn(u.id, '2026-10-08', new Date('2026-10-08T09:00:00Z'));
+  const camp = await getCamp(me.id, new Date('2026-10-08T09:30:00Z')); // my 02:30
+  expect(camp.fire).toEqual({ lit: 3, of: 3, segments: 5 });
+  expect(camp.nightsLitThisWeek).toBe(1);
+  // My next evening (Thu Oct 8, 22:30): nobody has said goodnight in it; their Oct 8 goodnights stay on my Oct 7.
+  const nextEvening = await getCamp(me.id, new Date('2026-10-09T05:30:00Z'));
+  expect(nextEvening.fire.lit).toBe(0);
+  expect(nextEvening.nightsLitThisWeek).toBe(1);
+});
+
+it('a goodnight after an early check-in keeps the coach asleep into the morning', async () => {
+  const me = await buddyUser({ timezone: LA });
+  const sam = await buddyUser({ timezone: LA });
+  await pairUp(me.id, sam.id);
+  // Checked in at 01:00 on Oct 8, then said goodnight at 02:00 (the evening of Oct 7).
+  await prisma.checkIn.create({ data: { authorId: sam.id, localDate: civilDateToUtcMidnight('2026-10-08'), mood: 'RESTED', createdAt: new Date('2026-10-08T08:00:00Z') } });
+  await gn(sam.id, '2026-10-07', new Date('2026-10-08T09:00:00Z'));
+  const six = new Date('2026-10-08T13:00:00Z'); // Oct 8, 06:00
+  expect((await getCamp(me.id, six)).members.find((m) => m.person.id === sam.id)).toMatchObject({ asleep: true, asleepSince: '2026-10-08T09:00:00.000Z' });
+});
+
+it("a buddy paired before 19:00 tonight is in tonight's camp; one paired after it is not", async () => {
+  // Tonight, on time: the new buddy and one old buddy. With the new buddy in the camp: 2 of 4, 3 segments, lit.
+  // Left out: only the old buddy counts, 1 of 3, 2 segments, unlit.
+  const nightWith = async (pairedAt: Date) => {
+    const me = await buddyUser({ timezone: LA });
+    const a = await buddyUser({ timezone: LA });
+    const b = await buddyUser({ timezone: LA });
+    const c = await buddyUser({ timezone: LA });
+    for (const u of [a, b]) await pairUp(me.id, u.id, BEFORE);
+    await pairUp(me.id, c.id, pairedAt);
+    for (const u of [a, c]) await gn(u.id, '2026-10-07', new Date('2026-10-08T05:00:00Z'));
+    return getCamp(me.id, NIGHT);
+  };
+  const before = await nightWith(new Date('2026-10-08T01:30:00Z')); // 18:30
+  expect(before.fire).toEqual({ lit: 2, of: 4, segments: 3 });
+  expect(before.nightsLitThisWeek).toBe(1);
+  const after = await nightWith(new Date('2026-10-08T02:30:00Z')); // 19:30
+  expect(after.fire).toEqual({ lit: 2, of: 4, segments: 3 }); // the live fire counts everyone here now
+  expect(after.nightsLitThisWeek).toBe(0);
+});
+
 it('GET /me/camp is never cached, has the documented shape, and needs a session', async () => {
   const me = await buddyUser();
   const agent = await api();

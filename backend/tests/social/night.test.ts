@@ -1,6 +1,6 @@
 import {
   campOnEvening, countLitNights, eveningDate, fireSegments, goodnightOpensAt, isGoodnightOpen, isNight, isOnTime,
-  localInstant, nextSunrise, zoneOrUtc,
+  localInstant, nextSunrise, onTimeNightsByViewerEvening, zoneOrUtc,
 } from '../../src/social/night';
 
 // Pure functions, but run through the backend helper like every backend suite (its globalSetup needs the test DB).
@@ -96,4 +96,18 @@ it("counts the nights whose fire reached 3 segments, each with that night's camp
   expect(countLitNights([...gn('2026-10-05', 'me', 'a', 'b'), ...gn('2026-10-06', 'a')], four)).toBe(1);
   // A night's on-time count is per person: a duplicate row never counts twice.
   expect(countLitNights(gn('2026-10-05', 'a', 'a', 'a'), four)).toBe(0);
+});
+
+it("files on-time goodnights under the viewer's evening they were said in, never the author's own date", () => {
+  const rows = [
+    { authorId: 'me', at: at('2026-10-08T05:30:00Z'), onTime: true }, // my Wed 22:30
+    { authorId: 'ana', at: at('2026-10-08T09:00:00Z'), onTime: true }, // her Thu 22:00 NZDT (her Oct 8), my Thu 02:00
+    { authorId: 'kai', at: at('2026-10-08T09:10:00Z'), onTime: false }, // late: never part of a lit night
+    { authorId: 'hal', at: at('2026-10-08T15:00:00Z'), onTime: true }, // his 05:00 HST (his Oct 7), my Thu 08:00
+  ];
+  expect(onTimeNightsByViewerEvening(rows, LA)).toEqual([
+    { authorId: 'me', date: '2026-10-07' },
+    { authorId: 'ana', date: '2026-10-07' },
+    { authorId: 'hal', date: '2026-10-08' },
+  ]);
 });
