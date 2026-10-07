@@ -15,7 +15,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { buddyErrorCode } from '../api/buddies';
-import { clearCampNote, fetchCamp, saveCampNote, type Camp, type CampMember } from '../api/social';
+import { clearCampNote, fetchCamp, saveCampNote, type Camp, type CampMember, type CampNote } from '../api/social';
 import { Character } from '../components/characters/Character';
 import { DEFAULT_CHARACTER_ID, isCharacterId } from '../components/characters/types';
 import { pixelFont } from '../components/coach/thinking/shared';
@@ -158,13 +158,25 @@ export function CampfireScreen() {
     };
   }, []);
 
+  // My last shared note, from the server's answer: Clear stays offered even if the re-read after sharing fails.
+  const [shared, setShared] = useState<CampNote | null>(null);
+  // Each load's number: only the latest one may write, so an older answer never overwrites a newer one.
+  const loads = useRef(0);
+
   const load = useCallback(async () => {
+    const n = ++loads.current;
     try {
       const camp = await fetchCamp();
-      if (mounted.current) setState(camp ? { status: 'ready', camp } : { status: 'unavailable' });
+      if (!mounted.current || n !== loads.current) return;
+      setState(camp ? { status: 'ready', camp } : { status: 'unavailable' });
+      setShared(null);
     } catch {
-      // A failed re-read keeps the camp already on screen.
-      if (mounted.current) setState((s) => (s.status === 'ready' ? s : { status: 'error' }));
+      if (!mounted.current || n !== loads.current) return;
+      // A failed re-read keeps the camp already on screen, but not buddies' notes: someone unpaired or blocked
+      // since may still be in it. Their notes come back with the next good read.
+      setState((s) => (s.status === 'ready'
+        ? { status: 'ready', camp: { ...s.camp, members: s.camp.members.map((m) => (m.mine ? m : { ...m, note: null })) } }
+        : { status: 'error' }));
     }
   }, []);
   useFocusEffect(useCallback(() => {
@@ -177,7 +189,7 @@ export function CampfireScreen() {
     void refreshSocial();
   }, [load]);
 
-  async function run(action: () => Promise<unknown>, after?: () => void) {
+  async function run(action: () => Promise<unknown>, after?: () => void, failed?: () => void) {
     if (sending.current) return;
     sending.current = true;
     setBusy(true);
@@ -187,7 +199,10 @@ export function CampfireScreen() {
       if (mounted.current) after?.();
       changed();
     } catch (e) {
-      if (mounted.current) setMessage(buddyErrorMessage(buddyErrorCode(e)));
+      if (mounted.current) {
+        failed?.();
+        setMessage(buddyErrorMessage(buddyErrorCode(e)));
+      }
     } finally {
       sending.current = false;
       if (mounted.current) setBusy(false);
@@ -223,6 +238,16 @@ export function CampfireScreen() {
   const more = camp.members.length - seated.length;
   const length = noteLength(draft);
   const canShare = !busy && length > 0 && length <= CAMP_NOTE_MAX;
+  // The draft empties as it is sent and comes back if the server refuses it (unless I've typed again since).
+  const share = () => {
+    const sent = draft;
+    setDraft('');
+    void run(
+      async () => setShared((await saveCampNote(sent)).note),
+      undefined,
+      () => setDraft((d) => (d === '' ? sent : d)),
+    );
+  };
 
   return (
     <SafeAreaView edges={['top']} testID="campfire" className="flex-1 bg-background">
@@ -269,12 +294,13 @@ export function CampfireScreen() {
               <TextInput ref={input} testID="camp-note-input" accessibilityLabel="Your camp note" value={draft} onChangeText={setDraft}
                 placeholder="Say something to the camp..." placeholderTextColor="#9B9DA6" autoCorrect={false}
                 className="h-10 flex-1 rounded-tile border border-border bg-card px-3 text-base text-foreground" />
-              <Button testID="camp-note-share" accessibilityRole="button" accessibilityLabel="Share your camp note" size="sm" disabled={!canShare} onPress={() => void run(() => saveCampNote(draft), () => setDraft(''))}>Share</Button>
+              <Button testID="camp-note-share" accessibilityRole="button" accessibilityLabel="Share your camp note" size="sm" disabled={!canShare} onPress={share}>Share</Button>
             </View>
             <View className="flex-row items-center justify-between">
               <Text className="text-xs text-muted-foreground">Shows above your coach until sunrise</Text>
-              {mine?.note ? (
-                <Button testID="camp-note-clear" accessibilityRole="button" accessibilityLabel="Clear your camp note" variant="secondary" size="sm" disabled={busy} onPress={() => void run(clearCampNote)}>Clear note</Button>
+              {mine?.note || shared ? (
+                <Button testID="camp-note-clear" accessibilityRole="button" accessibilityLabel="Clear your camp note" variant="secondary" size="sm" disabled={busy}
+                  onPress={() => void run(clearCampNote, () => setShared(null))}>Clear note</Button>
               ) : null}
             </View>
             {message ? <Text testID="camp-message" className="text-sm text-destructive">{message}</Text> : null}

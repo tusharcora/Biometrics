@@ -20,8 +20,11 @@ const mockGoBack = jest.fn();
 jest.mock('@react-navigation/native', () => ({
   ...jest.requireActual('@react-navigation/native'),
   useNavigation: () => ({ navigate: mockNavigate, goBack: mockGoBack }),
-  useFocusEffect: (cb: () => void) => { const React = require('react'); React.useEffect(cb, []); },
+  // Runs on mount like a first focus; mockRefocus() runs the latest callback again, as a later focus would.
+  useFocusEffect: (cb: () => void) => { mockFocus.current = cb; const React = require('react'); React.useEffect(cb, []); },
 }));
+const mockFocus: { current: (() => void) | null } = { current: null };
+const mockRefocus = () => mockFocus.current?.();
 const metrics = { frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 0, left: 0, right: 0, bottom: 0 } };
 const renderScreen = () => render(<SafeAreaProvider initialMetrics={metrics}><CampfireScreen /></SafeAreaProvider>);
 const person = (id: string) => ({ id, handle: id, displayName: id.toUpperCase(), coachId: 'mochi' });
@@ -149,6 +152,79 @@ it('shares a note with a live count, refuses one over 40, and clears mine', asyn
   expect(clearCampNote).toHaveBeenCalledTimes(1);
 });
 
+it('Share counts code points: exactly 40 enables it, whitespace alone never does, an emoji is one', async () => {
+  (fetchCamp as jest.Mock).mockResolvedValue(camp());
+  renderScreen();
+  const input = await screen.findByTestId('camp-note-input');
+  fireEvent.changeText(input, 'x'.repeat(40));
+  expect(screen.getByTestId('camp-note-count')).toHaveTextContent('40/40');
+  expect(screen.getByTestId('camp-note-share')).not.toBeDisabled();
+  fireEvent.changeText(input, '   \n\t ');
+  expect(screen.getByTestId('camp-note-count')).toHaveTextContent('0/40');
+  expect(screen.getByTestId('camp-note-share')).toBeDisabled();
+  fireEvent.changeText(input, '🔥🌙 night');
+  expect(screen.getByTestId('camp-note-count')).toHaveTextContent('8/40');
+  fireEvent.changeText(input, `${'x'.repeat(38)}🔥🌙`); // 40 code points, 42 UTF-16 units
+  expect(screen.getByTestId('camp-note-count')).toHaveTextContent('40/40');
+  expect(screen.getByTestId('camp-note-share')).not.toBeDisabled();
+});
+
+it('a double tap on Share sends once; the draft empties as it is sent', async () => {
+  let resolve!: (v: unknown) => void;
+  (fetchCamp as jest.Mock).mockResolvedValue(camp());
+  (saveCampNote as jest.Mock).mockReturnValue(new Promise((r) => { resolve = r; }));
+  renderScreen();
+  fireEvent.changeText(await screen.findByTestId('camp-note-input'), 'night all');
+  act(() => {
+    fireEvent.press(screen.getByTestId('camp-note-share'));
+    fireEvent.press(screen.getByTestId('camp-note-share'));
+  });
+  expect(screen.getByTestId('camp-note-input')).toHaveProp('value', '');
+  await act(async () => resolve({ note: { text: 'night all', createdAt: '', expiresAt: '' } }));
+  expect(saveCampNote).toHaveBeenCalledTimes(1);
+  expect(saveCampNote).toHaveBeenCalledWith('night all');
+});
+
+it('offers Clear from the share answer even when the re-read after sharing fails', async () => {
+  (fetchCamp as jest.Mock).mockResolvedValueOnce(camp()).mockRejectedValue(new Error('offline'));
+  (saveCampNote as jest.Mock).mockResolvedValue({ note: { text: 'night all', createdAt: '', expiresAt: '' } });
+  (clearCampNote as jest.Mock).mockResolvedValue(undefined);
+  renderScreen();
+  fireEvent.changeText(await screen.findByTestId('camp-note-input'), 'night all');
+  expect(screen.queryByTestId('camp-note-clear')).toBeNull();
+  await act(async () => fireEvent.press(screen.getByTestId('camp-note-share')));
+  expect(fetchCamp).toHaveBeenCalledTimes(2);
+  await act(async () => fireEvent.press(screen.getByTestId('camp-note-clear')));
+  expect(clearCampNote).toHaveBeenCalledTimes(1);
+  expect(screen.queryByTestId('camp-note-clear')).toBeNull();
+});
+
+it('a refocus re-reads the camp; if that read fails, buddies keep their seats but not their notes until a good read', async () => {
+  (fetchCamp as jest.Mock).mockResolvedValueOnce(camp()).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(camp());
+  renderScreen();
+  expect(await screen.findByTestId('camp-bubble-sam')).toHaveTextContent('on time tonight');
+  await act(async () => mockRefocus());
+  expect(fetchCamp).toHaveBeenCalledTimes(2);
+  expect(screen.getByTestId('camp-coach-sam')).toBeTruthy();
+  expect(screen.queryByTestId('camp-bubble-sam')).toBeNull();
+  expect(screen.queryByTestId('camp-bubble-ben')).toBeNull();
+  expect(screen.getByTestId('camp-who-status-ben')).toHaveTextContent(/^awake$/);
+  await act(async () => mockRefocus());
+  expect(screen.getByTestId('camp-bubble-sam')).toHaveTextContent('on time tonight');
+});
+
+it('an older read that lands after a newer one never overwrites it', async () => {
+  let resolveOld!: (v: Camp) => void;
+  (fetchCamp as jest.Mock)
+    .mockReturnValueOnce(new Promise((r) => { resolveOld = r; }))
+    .mockResolvedValueOnce(camp({ nightsLitThisWeek: 4 }));
+  renderScreen();
+  await act(async () => mockRefocus());
+  expect(screen.getByTestId('camp-nights-lit')).toHaveTextContent('Nights lit this week: 4');
+  await act(async () => resolveOld(camp({ nightsLitThisWeek: 1 })));
+  expect(screen.getByTestId('camp-nights-lit')).toHaveTextContent('Nights lit this week: 4');
+});
+
 it("shows the server's reason when a note is refused, keeping the draft", async () => {
   (fetchCamp as jest.Mock).mockResolvedValue(camp());
   (saveCampNote as jest.Mock).mockRejectedValue(new ApiError(429, 'x', 'rate_limited'));
@@ -170,9 +246,11 @@ it('says goodnight, then offers Undo while it is fresh', async () => {
   await act(async () => fireEvent.press(say));
   expect(sayGoodnight).toHaveBeenCalledTimes(1);
   expect(await screen.findByTestId('camp-goodnight-said')).toHaveTextContent('Goodnight said, on time');
+  expect(refreshSocial).toHaveBeenCalled();
+  (refreshSocial as jest.Mock).mockClear();
   await act(async () => fireEvent.press(screen.getByTestId('camp-goodnight-undo')));
   expect(undoGoodnight).toHaveBeenCalledTimes(1);
-  expect(refreshSocial).toHaveBeenCalled();
+  expect(refreshSocial).toHaveBeenCalledTimes(1);
 });
 
 it("a buddy's coach opens their week and mine does not navigate; +N past eight; Message camp opens Buddies; back goes back", async () => {
