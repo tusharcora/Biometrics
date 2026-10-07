@@ -37,6 +37,7 @@ import { BuddyIdentityScreen } from '../screens/BuddyIdentityScreen';
 import { PairUpScreen } from '../screens/PairUpScreen';
 import { BuddiesScreen } from '../screens/BuddiesScreen';
 import { BuddyWeekScreen } from '../screens/BuddyWeekScreen';
+import { BlockedPeopleScreen } from '../screens/BlockedPeopleScreen';
 import { CelebrationHost } from '../components/achievements/CelebrationHost';
 import { BuddiesStoreScope } from '../components/buddies/BuddiesStoreScope';
 import type { ShareFormat } from '../lib/recapShare';
@@ -237,6 +238,7 @@ export function RootNavigator() {
               <Stack.Screen name="BuddyIdentity" component={BuddyIdentityScreen} options={{ title: 'Buddy name' }} />
               <Stack.Screen name="Buddies" component={BuddiesScreen} options={{ title: 'Buddies' }} />
               <Stack.Screen name="PairUp" component={PairUpScreen} options={{ title: 'Add a buddy' }} />
+              <Stack.Screen name="BlockedPeople" component={BlockedPeopleScreen} options={{ title: 'Blocked people' }} />
               {/* One instance per buddy: navigating to another buddy's week (a push tap) opens a new
                   screen instead of swapping the params under the current one. */}
               <Stack.Screen name="BuddyWeek" component={BuddyWeekScreen} getId={({ params }) => params.buddyId} options={{ title: '' }} />
