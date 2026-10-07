@@ -5,20 +5,25 @@
 // window as the today timeline, so it counts only stickers Social shows. Those are marked seen by the Social screen
 // once it has shown them (POST /me/social/stickers/seen), so the dot clears where the cause is read. Older unseen
 // stickers stay unseen and keep their Buddies-side "new" marker until that buddy's week is opened.
+// S2: the camp banner also says whether it is night in the viewer's zone and who is awake or asleep; `me`
+// carries my goodnight for tonight (the evening timeline's Undo) and `camp.goodnightOpen` says whether my own
+// goodnight window is open (min(20:00, my goal − 60 min) to 05:59) — all from the circle, no extra query.
 
 import { localCivilDateOrUtc } from '../biometrics/civilDate';
 import { prisma } from '../db/client';
 import { countRequests } from '../buddies/requests';
 import type { PersonDTO } from '../buddies/people';
+import { campSummaryFor } from './camp';
 import { toCheckInDTO, type CheckInDTO } from './checkins';
 import { loadCircle, type Circle } from './circle';
+import type { GoodnightDTO } from './goodnight';
 import { weeklyHighlightsFor, type HighlightsDTO } from './highlights';
 import { storyRingsFor, type StoryRingDTO } from './stories';
 import { timelineFor, TODAY_WINDOW_MS, type TimelineItemDTO } from './timeline';
 
 export interface SocialHomeDTO {
-  me: { person: PersonDTO; checkIn: CheckInDTO | null };
-  camp: { checkedIn: number; members: number; faces: string[] };
+  me: { person: PersonDTO; checkIn: CheckInDTO | null; goodnight: GoodnightDTO | null };
+  camp: { checkedIn: number; members: number; faces: string[]; night: boolean; awake: number; asleep: number; goodnightOpen: boolean };
   stories: StoryRingDTO[];
   highlights: HighlightsDTO | null;
   timeline: TimelineItemDTO[];
@@ -46,12 +51,17 @@ export async function getSocialHome(viewerId: string, now: Date): Promise<Social
     unseenTodayStickerIds(circle, now),
   ]);
   const mine = circle.checkIns.get(viewerId);
+  const camp = campSummaryFor(circle, now);
   return {
-    me: { person: circle.viewer.person, checkIn: mine ? toCheckInDTO(mine) : null },
+    me: { person: circle.viewer.person, checkIn: mine ? toCheckInDTO(mine) : null, goodnight: camp.goodnight },
     camp: {
       checkedIn: rings.checkedInBuddies + (rings.viewerCheckedIn ? 1 : 0),
       members: circle.members.size,
       faces: rings.checkedInCoachIds,
+      night: camp.night,
+      awake: camp.awake,
+      asleep: camp.asleep,
+      goodnightOpen: camp.goodnightOpen,
     },
     stories: rings.rings,
     highlights,
