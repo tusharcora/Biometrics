@@ -20,6 +20,7 @@ import { HabitLogCard } from '../components/habit-log-card';
 import { CoachDigestCard } from '../components/coach-digest-card';
 import { StoryRing, useStoryRing } from '../components/recap/StoryRing';
 import { TomorrowCard } from '../components/tomorrow-card';
+import { BuddiesRow } from '../components/home/BuddiesRow';
 import { RecoveryHero } from '../components/home/recovery-hero';
 import { SleepTile } from '../components/home/sleep-tile';
 import { CoachTile } from '../components/home/coach-tile';
@@ -284,6 +285,8 @@ export function DashboardScreen() {
         </View>
 
         <TomorrowCard state={forecastState} onPress={() => navigation.navigate('Forecast')} />
+
+        <BuddiesRow onOpen={() => navigation.navigate('Buddies')} />
 
         <HabitLogCard />
 
