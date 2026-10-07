@@ -24,6 +24,7 @@ import { connection } from '../../src/sync/queue';
 import { migrateTestDb } from '../setupTestDb';
 import { civilDateToUtcMidnight } from '../../src/biometrics/civilDate';
 import { shiftDate } from '../../src/scoring/dates';
+import { BUDDY_SHARING_CONSENT_VERSION } from '../../src/buddies/sharing';
 import * as circle from '../../src/social/circle';
 import * as checkins from '../../src/social/checkins';
 import { getWeeklyHighlights } from '../../src/social/highlights';
@@ -68,7 +69,7 @@ it('builds the whole home from one preloaded circle, in at most 16 queries, with
   mockQueries.count = 0;
   const home = await getSocialHome(me.id, NOW);
 
-  // S1 read ~26: loadCircle 4 + rings 3 + timeline 5 + cached highlights 1 + requests 2 + stickers 1.
+  // S1 measured 27. Now: loadCircle 4 + rings 3 + timeline 5 + cached highlights 1 + requests 2 + stickers 1 = 16.
   expect(mockQueries.count).toBeLessThanOrEqual(16);
   expect(loads).toHaveBeenCalledTimes(1);
   for (const spy of rederived) expect(spy).not.toHaveBeenCalled();
@@ -92,18 +93,40 @@ it('the circle carries when each buddy paired with me, and my own bedtime goal o
   expect(JSON.stringify(c.buddies)).not.toContain('21:00'); // a buddy's goal is never kept
 });
 
-it('a quiet week is rebuilt for a day after it turns final, then cached empty, so later reads cost one query', async () => {
-  // Week 2026-09-28 turns final Mon 2026-10-05 14:00 UTC; the empty build is cached from Tue 2026-10-06 14:00 UTC.
-  const early = await person('Early');
-  expect(await getWeeklyHighlights(early.id, new Date('2026-10-06T13:59:00Z'))).toBeNull();
-  expect(await prisma.weeklyHighlights.count({ where: { viewerId: early.id } })).toBe(0);
+const HOUR = 60 * 60 * 1000;
+const later = (ms: number) => new Date(NOW.getTime() + ms);
 
+it('a quiet week is cached empty for an hour, so a read within it costs five queries, and rebuilt after', async () => {
   const quiet = await person('Quiet');
   expect(await getWeeklyHighlights(quiet.id, NOW)).toBeNull();
-  const cached = await prisma.weeklyHighlights.findMany({ where: { viewerId: quiet.id }, select: { weekStart: true, items: true } });
-  expect(cached.map((r) => [r.weekStart.toISOString().slice(0, 10), r.items])).toEqual([[WEEK, []]]);
+  const cached = () => prisma.weeklyHighlights.findMany({ where: { viewerId: quiet.id }, select: { weekStart: true, items: true, builtAt: true } });
+  expect((await cached()).map((r) => [r.weekStart.toISOString().slice(0, 10), r.items, r.builtAt])).toEqual([[WEEK, [], NOW]]);
   mockQueries.count = 0;
-  expect(await getWeeklyHighlights(quiet.id, NOW)).toBeNull();
+  expect(await getWeeklyHighlights(quiet.id, later(HOUR - 1))).toBeNull();
   // loadCircle 4 + the cached row 1: no rebuild.
   expect(mockQueries.count).toBe(5);
+  // An hour on, the empty row is rebuilt and, still empty, stored again with the new build time.
+  expect(await getWeeklyHighlights(quiet.id, later(HOUR))).toBeNull();
+  expect((await cached()).map((r) => [r.items, r.builtAt])).toEqual([[[], later(HOUR)]]);
+});
+
+it('a badge evaluated after a quiet week was cached, back-dated into that week, shows once the empty row expires', async () => {
+  const me = await person('Me');
+  const sam = await person('Sam');
+  await prisma.user.update({ where: { id: sam.id }, data: { shareStreaks: true, buddySharingConsentVersion: BUDDY_SHARING_CONSENT_VERSION } });
+  await pair(me.id, sam.id);
+  expect(await getWeeklyHighlights(me.id, NOW)).toBeNull(); // cached empty
+  // Sam opens Achievements later: the badge is inserted now with earnedOn inside the cached week.
+  await prisma.achievement.create({
+    data: { userId: sam.id, family: 'STEP_GOAL', level: 2, value: 7, earnedOn: civilDateToUtcMidnight(shiftDate(WEEK, 3)), weekStart: civilDateToUtcMidnight(WEEK), monthStart: civilDateToUtcMidnight('2026-09-01') },
+  });
+  expect(await getWeeklyHighlights(me.id, later(HOUR - 1))).toBeNull(); // the empty row is still fresh
+  const shown = await getWeeklyHighlights(me.id, later(HOUR + 1));
+  expect(shown!.items.map((i) => [i.type, i.actor.id])).toEqual([['top_story', sam.id]]);
+  expect(shown!.items[0]).toMatchObject({ reason: 'badge', family: 'STEP_GOAL', level: 2 });
+  // Now non-empty, the row is frozen: a later streaks switch-off gates it at read time, the row stays.
+  await prisma.user.update({ where: { id: sam.id }, data: { shareStreaks: false } });
+  expect(await getWeeklyHighlights(me.id, later(3 * HOUR))).toBeNull();
+  const rows = await prisma.weeklyHighlights.findMany({ where: { viewerId: me.id }, select: { builtAt: true } });
+  expect(rows.map((r) => r.builtAt)).toEqual([later(HOUR + 1)]);
 });

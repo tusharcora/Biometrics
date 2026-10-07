@@ -83,21 +83,19 @@ it('a buddy who turns streaks on after the build appears on the next read', asyn
   expect(later!.items.map((i) => [i.type, i.actor.id])).toEqual([['top_story', sam.id]]);
 });
 
-it('a comeback needs consecutive days, and a week with nothing is not stored in its first day as final', async () => {
+it('a comeback needs consecutive days, and a week with nothing is cached empty for an hour', async () => {
   const me = await buddyUser();
   const zed = await buddyUser({ displayName: 'Zed' });
   await pairUp(me.id, zed.id);
-  // Tue 2026-10-06 10:00 UTC: the week turned final at Mon 14:00 UTC, and an empty build is cached only from Tue 14:00.
-  const firstDay = new Date('2026-10-06T10:00:00Z');
   // Tired Mon, Tired Tue, nothing Wed, Rested Thu: not a comeback.
   await prisma.checkIn.create({ data: { authorId: zed.id, localDate: day(0), mood: 'TIRED' } });
   await prisma.checkIn.create({ data: { authorId: zed.id, localDate: day(1), mood: 'TIRED' } });
   await prisma.checkIn.create({ data: { authorId: zed.id, localDate: day(3), mood: 'RESTED' } });
-  expect(await getWeeklyHighlights(me.id, firstDay)).toBeNull();
-  expect(await prisma.weeklyHighlights.count({ where: { viewerId: me.id } })).toBe(0);
-  // Rebuilt on the next read: a late check-in that completes the run now counts.
+  expect(await getWeeklyHighlights(me.id, NOW)).toBeNull();
+  expect(await prisma.weeklyHighlights.count({ where: { viewerId: me.id } })).toBe(1);
+  // Rebuilt once the empty row is an hour old: a row that completes the run now counts.
   await prisma.checkIn.create({ data: { authorId: zed.id, localDate: day(2), mood: 'TIRED' } });
-  expect((await getWeeklyHighlights(me.id, firstDay))!.items.map((i) => i.type)).toEqual(['comeback']);
+  expect((await getWeeklyHighlights(me.id, new Date(NOW.getTime() + 60 * 60 * 1000)))!.items.map((i) => i.type)).toEqual(['comeback']);
 });
 
 it('waits until Monday 14:00 UTC: an Auckland Monday-morning read serves the week before', async () => {

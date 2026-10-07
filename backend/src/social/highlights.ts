@@ -3,9 +3,10 @@
 // has finished its Sunday; before that the previous week is served. The cache holds UNGATED candidates — every
 // member's best badge, whoever shares streaks — and every read gates them again: an actor who is no longer a buddy
 // drops out, and a badge item needs its actor to share streaks now (the viewer is exempt). A build with no
-// candidates is rebuilt on every read for the first 24 h after the week turns final (late check-ins still land),
-// then cached empty, so a quiet circle stops paying the build queries on every read (S2 owner ruling; S1 never
-// stored an empty week). Closed item types, no health numbers:
+// candidates is cached empty for an hour, then rebuilt: badges are evaluated later (when their owner opens
+// Achievements) with a back-dated earnedOn, so a quiet week can still gain one; once a build has items the row is
+// frozen (S2 controller ruling; S1 never stored an empty week, and rebuilt it on every read). Closed item types, no
+// health numbers:
 // the only counts are the viewer's own stickers sent and received (never stickers between two of their buddies).
 // "Joined" and "first badge" items (spec §7 `also`) are deferred to S2.
 
@@ -41,8 +42,8 @@ export function highlightsReadyAt(weekStart: string): Date {
   return new Date(civilDateToUtcMidnight(shiftDate(weekStart, 6)).getTime() + READY_AFTER_SUNDAY_MS);
 }
 
-/** A quiet week is rebuilt on each read for this long after it turns final, then cached empty. */
-export const EMPTY_WEEK_SETTLE_MS = 24 * 60 * 60 * 1000;
+/** How long an EMPTY cached week is reused before it is rebuilt (a late-evaluated badge may land in it). */
+export const EMPTY_WEEK_TTL_MS = 60 * 60 * 1000;
 
 /** The newest week that is final for a viewer in `timeZone`: their last completed week, or the one before it until Monday 14:00 UTC. */
 export function highlightsWeekFor(timeZone: string, now: Date): string {
@@ -140,19 +141,22 @@ export async function weeklyHighlightsFor(circle: Circle, now: Date): Promise<Hi
   const viewerId = circle.viewer.person.id;
   const weekStart = highlightsWeekFor(circle.viewer.timezone, now);
   const memberIds = [viewerId, ...circle.buddies.map((b) => b.person.id)];
-  const key = { viewerId_weekStart: { viewerId, weekStart: civilDateToUtcMidnight(weekStart) } };
-  let row = await prisma.weeklyHighlights.findUnique({ where: key, select: { items: true } });
-  if (!row) {
+  const weekDate = civilDateToUtcMidnight(weekStart);
+  const key = { viewerId_weekStart: { viewerId, weekStart: weekDate } };
+  let row = await prisma.weeklyHighlights.findUnique({ where: key, select: { items: true, builtAt: true } });
+  // A non-empty row is frozen. An empty one is reused for an hour, then rebuilt: badges are evaluated later with a
+  // back-dated earnedOn, so a quiet week can still gain an item.
+  const expired = row !== null && (row.items as unknown[]).length === 0 && now.getTime() - row.builtAt.getTime() >= EMPTY_WEEK_TTL_MS;
+  if (!row || expired) {
     const candidates = await buildHighlightCandidates(viewerId, memberIds, weekStart);
-    // A quiet week is rebuilt on each read for its first 24 h as final (late rows still land), then cached empty so
-    // later reads cost one query instead of the whole build.
-    const settled = now.getTime() >= highlightsReadyAt(weekStart).getTime() + EMPTY_WEEK_SETTLE_MS;
-    if (candidates.length === 0 && !settled) return null;
-    await prisma.weeklyHighlights.createMany({
-      data: [{ viewerId, weekStart: civilDateToUtcMidnight(weekStart), items: candidates as unknown as Prisma.InputJsonValue }],
-      skipDuplicates: true,
-    });
-    row = await prisma.weeklyHighlights.findUniqueOrThrow({ where: key, select: { items: true } });
+    const items = candidates as unknown as Prisma.InputJsonValue;
+    if (row) {
+      // Only the empty row read above: a concurrent rebuild that already replaced it wins.
+      await prisma.weeklyHighlights.updateMany({ where: { viewerId, weekStart: weekDate, builtAt: row.builtAt }, data: { items, builtAt: now } });
+    } else {
+      await prisma.weeklyHighlights.createMany({ data: [{ viewerId, weekStart: weekDate, items, builtAt: now }], skipDuplicates: true });
+    }
+    row = await prisma.weeklyHighlights.findUniqueOrThrow({ where: key, select: { items: true, builtAt: true } });
   }
   const items = visibleItems(row.items as unknown as HighlightItem[], viewerId, circle.members);
   return items.length > 0 ? { weekStart, weekEnd: shiftDate(weekStart, 6), items } : null;
