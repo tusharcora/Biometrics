@@ -37,11 +37,11 @@ const SHARE_WORDS: Record<ShareKey, string> = { recovery: 'recovery', sleepScore
  */
 export const SHARING_CONSENT_VERSION = 1;
 export const SHARING_CONSENT_LINES: readonly string[] = [
-  'Every buddy will see what you turn on, for the last 7 days:',
-  'Recovery score: your daily score.',
-  'Sleep score: your daily score.',
-  'Hours slept: how long you slept each night.',
-  'Steps: your daily steps, and whether you moved a lot yesterday.',
+  'Every buddy will see what you turn on:',
+  'Recovery score: your daily score for the last 7 days.',
+  'Sleep score: your daily score for the last 7 days.',
+  'Hours slept: how long you slept each night, for the last 7 days.',
+  'Steps: your daily steps for the last 7 days, and whether you moved a lot yesterday.',
   'Streaks & badges: your sleep streak and badge levels. Buddies may get a notification with your name when you reach a badge level.',
   'Your mood and coach are always shared. You can turn any of these off at any time.',
 ];
@@ -71,7 +71,8 @@ export function expiresIn(expiresAt: string, now: number): string {
   if (!(ms > 0)) return 'Expired';
   const minutes = Math.ceil(ms / 60_000);
   const hours = Math.floor(minutes / 60);
-  return hours > 0 ? `Expires in ${hours} h ${minutes % 60} min` : `Expires in ${minutes} min`;
+  if (hours === 0) return `Expires in ${minutes} min`;
+  return minutes % 60 === 0 ? `Expires in ${hours} h` : `Expires in ${hours} h ${minutes % 60} min`;
 }
 
 // One line per code in backend/src/buddies/errors.ts (BUDDY_ERROR_STATUS); anything else is the fallback.
@@ -84,7 +85,7 @@ const ERRORS: Record<string, string> = {
   rate_limited: 'Too many tries. Please try again later.',
   try_later: "Couldn't do that right now. Try again in a minute.",
   not_buddies: "You're no longer buddies.",
-  sticker_limit: "That's 5 stickers today. Try again tomorrow.",
+  sticker_limit: "That's 5 stickers to this buddy today. Try again tomorrow.",
   handle_taken: 'That handle is taken.',
   invalid_handle: 'Use 3-20 letters, numbers or _ (no reserved words).',
   invalid_display_name: 'Use 1-30 characters (no reserved words).',

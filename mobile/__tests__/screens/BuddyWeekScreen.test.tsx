@@ -89,7 +89,7 @@ it('sends a sticker and says who will pass it on; the daily limit and an unpaire
   expect(sendSticker).toHaveBeenCalledWith('b1', 'STAR');
   expect(screen.getByTestId('buddy-week-note')).toHaveTextContent('Sent a Star to Sam. Pengu will pass it on.');
   await act(async () => fireEvent.press(screen.getByTestId('sticker-HEART')));
-  expect(screen.getByTestId('buddy-week-note')).toHaveTextContent("That's 5 stickers today. Try again tomorrow.");
+  expect(screen.getByTestId('buddy-week-note')).toHaveTextContent("That's 5 stickers to this buddy today. Try again tomorrow.");
   // Unpaired or blocked meanwhile: the week goes away and nothing is offered any more.
   await act(async () => fireEvent.press(screen.getByTestId('sticker-CHEER')));
   expect(screen.getByTestId('buddy-week-gone')).toHaveTextContent("You're no longer buddies.");

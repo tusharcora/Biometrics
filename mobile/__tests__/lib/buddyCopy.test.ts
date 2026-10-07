@@ -1,4 +1,6 @@
-import { activityLine, buddyErrorMessage, expiresIn, formatNumber, joinList, sharesSummary, stickerSentLine, weekdayLetter } from '../../src/lib/buddyCopy';
+import { readFileSync } from 'fs';
+import { join } from 'path';
+import { SHARING_CONSENT_LINES, activityLine, buddyErrorMessage, expiresIn, formatNumber, joinList, sharesSummary, stickerSentLine, weekdayLetter } from '../../src/lib/buddyCopy';
 
 const person = { id: 'p', handle: 'sam', displayName: 'Sam', coachId: 'pengu' };
 
@@ -20,17 +22,30 @@ it('words a sent sticker, a code expiry, and an error code', () => {
   expect(buddyErrorMessage(null)).toBe('Something went wrong. Please try again.');
 });
 
-// Every code in backend/src/buddies/errors.ts (BUDDY_ERROR_STATUS) has its own words.
-const SERVER_CODES = [
-  'invalid_handle', 'invalid_display_name', 'setup_incomplete', 'handle_taken', 'rate_limited', 'try_later',
-  'handle_required', 'mood_notice_required', 'consent_required', 'stale_consent_version', 'invalid_settings',
-  'code_invalid', 'own_handle', 'not_found', 'blocked_by_you', 'too_many_pending', 'request_gone', 'not_buddies',
-  'sticker_limit', 'invalid_sticker', 'invalid_cursor',
-];
+it('says a code expiring on the hour in whole hours', () => {
+  const now = Date.parse('2026-10-07T12:00:00Z');
+  expect(expiresIn('2026-10-07T13:00:00Z', now)).toBe('Expires in 1 h');
+  expect(expiresIn('2026-10-08T12:00:00Z', now)).toBe('Expires in 24 h');
+  expect(expiresIn('2026-10-07T13:00:01Z', now)).toBe('Expires in 1 h 1 min');
+});
+
+it('says the sticker limit is per buddy', () => {
+  expect(buddyErrorMessage('sticker_limit')).toMatch(/this buddy/);
+});
+
+// Every code in the server's BUDDY_ERROR_STATUS has its own words. The codes are read from the
+// backend source as text (never imported), so a code added there fails here until it is worded.
+function serverCodes(): string[] {
+  const source = readFileSync(join(__dirname, '../../../backend/src/buddies/errors.ts'), 'utf8');
+  const table = /BUDDY_ERROR_STATUS = \{([^}]*)\}/.exec(source)?.[1] ?? '';
+  return [...table.matchAll(/^\s*([a-z_]+):\s*\d{3},?\s*$/gm)].map((m) => m[1]!);
+}
 
 it('words every server error code, and falls back for anything else', () => {
   const generic = buddyErrorMessage(null);
-  for (const code of SERVER_CODES) expect([code, buddyErrorMessage(code)]).not.toEqual([code, generic]);
+  const codes = serverCodes();
+  expect(codes.length).toBeGreaterThanOrEqual(21);
+  for (const code of codes) expect([code, buddyErrorMessage(code)]).not.toEqual([code, generic]);
   expect(buddyErrorMessage('something_new')).toBe(generic);
   expect(buddyErrorMessage('toString')).toBe(generic);
 });
@@ -41,6 +56,14 @@ it('words Activity from closed labels only', () => {
   expect(activityLine({ ...base, kind: 'request', requestId: 'r' })).toBe('Sam wants to be your buddy');
   expect(activityLine({ ...base, kind: 'paired' })).toBe('You and Sam are now buddies');
   expect(activityLine({ ...base, kind: 'badge', badge: { family: 'STEP_GOAL', level: 3 } })).toBe('Sam reached Step goal streak III');
+});
+
+it('puts the 7-day window on the numbers only, not on streaks and badge levels', () => {
+  const [intro, ...rest] = SHARING_CONSENT_LINES;
+  expect(intro).not.toMatch(/7 days/);
+  const line = (start: string) => rest.find((l) => l.startsWith(start)) ?? '';
+  for (const start of ['Recovery score:', 'Sleep score:', 'Hours slept:', 'Steps:']) expect(line(start)).toMatch(/last 7 days/);
+  expect(line('Streaks & badges:')).not.toMatch(/7 days/);
 });
 
 it('labels days and shared numbers', () => {

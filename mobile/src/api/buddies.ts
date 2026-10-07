@@ -105,28 +105,28 @@ export async function sendBuddyRequest(handle: string): Promise<void> {
   await apiFetch<unknown>('/me/buddies/requests', send('POST', { handle }));
 }
 export const fetchRequests = () => apiFetch<{ incoming: IncomingRequest[]; outgoing: OutgoingRequest[] }>('/me/buddies/requests');
-export const acceptRequest = (id: string) => apiFetch<{ ok: true; buddyId: string }>(`/me/buddies/requests/${id}/accept`, send('POST'));
+export const acceptRequest = (id: string) => apiFetch<{ ok: true; buddyId: string }>(`/me/buddies/requests/${encodeURIComponent(id)}/accept`, send('POST'));
 export async function declineRequest(id: string): Promise<void> {
-  await apiFetch<unknown>(`/me/buddies/requests/${id}/decline`, send('POST'));
+  await apiFetch<unknown>(`/me/buddies/requests/${encodeURIComponent(id)}/decline`, send('POST'));
 }
 export async function cancelRequest(id: string): Promise<void> {
-  await apiFetch<unknown>(`/me/buddies/requests/${id}/cancel`, send('POST'));
+  await apiFetch<unknown>(`/me/buddies/requests/${encodeURIComponent(id)}/cancel`, send('POST'));
 }
 export async function blockFromRequest(id: string): Promise<void> {
-  await apiFetch<unknown>(`/me/buddies/requests/${id}/block`, send('POST'));
+  await apiFetch<unknown>(`/me/buddies/requests/${encodeURIComponent(id)}/block`, send('POST'));
 }
 
-export const fetchBuddyWeek = (buddyId: string) => apiFetch<BuddyWeek>(`/me/buddies/${buddyId}`);
+export const fetchBuddyWeek = (buddyId: string) => apiFetch<BuddyWeek>(`/me/buddies/${encodeURIComponent(buddyId)}`);
 /** 204 on success. */
 export async function unpair(buddyId: string): Promise<void> {
-  await apiFetch<unknown>(`/me/buddies/${buddyId}`, send('DELETE'));
+  await apiFetch<unknown>(`/me/buddies/${encodeURIComponent(buddyId)}`, send('DELETE'));
 }
 export async function blockBuddy(buddyId: string): Promise<void> {
-  await apiFetch<unknown>(`/me/buddies/${buddyId}/block`, send('POST'));
+  await apiFetch<unknown>(`/me/buddies/${encodeURIComponent(buddyId)}/block`, send('POST'));
 }
-export const setMuted = (buddyId: string, muted: boolean) => apiFetch<{ muted: boolean }>(`/me/buddies/${buddyId}/mute`, send('PUT', { muted }));
+export const setMuted = (buddyId: string, muted: boolean) => apiFetch<{ muted: boolean }>(`/me/buddies/${encodeURIComponent(buddyId)}/mute`, send('PUT', { muted }));
 /** 201 with the new sticker's id. */
-export const sendSticker = (buddyId: string, kind: StickerKind) => apiFetch<{ id: string }>(`/me/buddies/${buddyId}/stickers`, send('POST', { kind }));
+export const sendSticker = (buddyId: string, kind: StickerKind) => apiFetch<{ id: string }>(`/me/buddies/${encodeURIComponent(buddyId)}/stickers`, send('POST', { kind }));
 
 export const fetchActivity = (cursor?: string | null) => apiFetch<ActivityPage>(withCursor('/me/buddies/activity', cursor));
 export async function markActivitySeen(): Promise<void> {
@@ -138,5 +138,5 @@ export async function fetchBlocked(): Promise<BlockedPerson[]> {
 }
 /** 204 on success. */
 export async function unblock(userId: string): Promise<void> {
-  await apiFetch<unknown>(`/me/blocks/${userId}`, send('DELETE'));
+  await apiFetch<unknown>(`/me/blocks/${encodeURIComponent(userId)}`, send('DELETE'));
 }
