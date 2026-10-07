@@ -4,7 +4,8 @@ FROM node:24-slim AS build
 # TOKEN_ENCRYPTION_KEY, GOOGLE_HEALTH_CLIENT_ID, GOOGLE_HEALTH_CLIENT_SECRET,
 # GOOGLE_HEALTH_REDIRECT_URI, GOOGLE_HEALTH_WEBHOOK_SECRET, GOOGLE_CLOUD_PROJECT_NUMBER,
 # GOOGLE_APPLICATION_CREDENTIALS (path to a mounted service account key file),
-# GOOGLE_CLIENT_ID, APPLE_BUNDLE_ID.
+# GOOGLE_CLIENT_ID, APPLE_BUNDLE_ID, HANDLE_HOLD_SECRET (production refuses to boot without it).
+# Rotating HANDLE_HOLD_SECRET releases every held buddy handle.
 WORKDIR /app
 RUN apt-get update -y && apt-get install -y openssl && rm -rf /var/lib/apt/lists/*
 COPY package*.json ./
