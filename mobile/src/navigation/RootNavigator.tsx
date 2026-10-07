@@ -128,6 +128,8 @@ export type RootStackParamList = {
   BlockedPeople: undefined;
   // Social → last week's highlights in full (the carousel's "All").
   Highlights: undefined;
+  // Social → one buddy's story today (or my own once I've checked in), opened from the stories row.
+  SocialStory: { authorId: string };
 };
 
 export type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';
