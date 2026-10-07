@@ -34,7 +34,9 @@ export function normaliseCode(raw: unknown): string | null {
 
 /**
  * In one transaction holding the owner's row lock (so concurrent creates leave one active code): the
- * owner's active codes expire now and the new one is inserted. Retried on a code collision.
+ * owner's active codes expire now and the new one is inserted. Retried on a code collision. The lock
+ * is FOR NO KEY UPDATE: it still serialises creates, but doesn't conflict with the key-share lock a
+ * concurrent redeem's BuddyPair foreign-key check takes on this row, so the two can't wait on each other.
  */
 export async function createCode(ownerId: string, now: Date, opts: { generate?: () => string } = {}): Promise<{ code: string; expiresAt: Date }> {
   await requirePairingReady(ownerId);
@@ -44,7 +46,7 @@ export async function createCode(ownerId: string, now: Date, opts: { generate?: 
     const code = (opts.generate ?? generateCode)();
     try {
       await prisma.$transaction(async (tx) => {
-        await tx.$queryRaw`SELECT 1 FROM "User" WHERE "id" = ${ownerId} FOR UPDATE`;
+        await tx.$queryRaw`SELECT 1 FROM "User" WHERE "id" = ${ownerId} FOR NO KEY UPDATE`;
         await tx.buddyCode.updateMany({ where: { ownerId, usedAt: null, expiresAt: { gt: now } }, data: { expiresAt: now } });
         await tx.buddyCode.create({ data: { code, ownerId, createdAt: now, expiresAt } });
       });

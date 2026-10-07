@@ -39,11 +39,14 @@ export async function isHandleAvailable(userId: string, handle: string, now: Dat
  * Saves a validated patch. The first setup needs both fields. A new handle: an active hold by
  * someone else → taken; a lapsed hold, or the owner's own, is deleted; the old handle is held.
  * After the update the hold is read again: a claim that waited on the owner moving away (the
- * unique index lock) now sees the hold that move committed, and is taken too.
+ * unique index lock) now sees the hold that move committed, and is taken too. The user's row is
+ * locked first (FOR NO KEY UPDATE), so two changes of one account run one after the other and the
+ * second holds the handle the first one set.
  */
 export async function updateIdentity(userId: string, patch: { handle?: string; displayName?: string }, now: Date): Promise<BuddyIdentity> {
   try {
     await prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 FROM "User" WHERE "id" = ${userId} FOR NO KEY UPDATE`;
       const user = await tx.user.findUnique({ where: { id: userId }, select: { handle: true } });
       if (!user) throw new BuddyError('not_found');
       if (!user.handle && (patch.handle === undefined || patch.displayName === undefined)) throw new BuddyError('setup_incomplete');

@@ -219,6 +219,29 @@ describe('code routes', () => {
     expect(await prisma.buddyCode.count({ where: { ownerId: owner.id, usedAt: null, expiresAt: { gt: now } } })).toBe(1);
   });
 
+  it("a new code doesn't wait on a key-share lock of the owner's row (a concurrent redeem's pair insert)", async () => {
+    const owner = await buddyUser();
+    let release!: () => void;
+    const held = new Promise<void>((r) => (release = r));
+    let locked!: () => void;
+    const isLocked = new Promise<void>((r) => (locked = r));
+    // What the BuddyPair foreign-key check takes on the owner's User row while a redeem inserts the pair.
+    const holder = prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`SELECT 1 FROM "User" WHERE "id" = ${owner.id} FOR KEY SHARE`;
+      locked();
+      await held;
+    });
+    await isLocked;
+    const creating = createCode(owner.id, new Date()).then(() => 'created');
+    try {
+      expect(await Promise.race([creating, new Promise((r) => setTimeout(() => r('waited'), 1500))])).toBe('created');
+    } finally {
+      release();
+      await holder;
+      await creating;
+    }
+  });
+
   it('answers a new code with Cache-Control private, no-store', async () => {
     const owner = await buddyUser();
     const res = await (await api()).post('/me/buddies/code').set(await authHeaderFor(owner.id));

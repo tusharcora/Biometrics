@@ -5,6 +5,7 @@ import { migrateTestDb } from '../setupTestDb';
 import { authHeaderFor } from '../helpers/auth';
 import { deleteUserAccount } from '../../src/users/deletion';
 import { handleHash } from '../../src/buddies/identity';
+import { updateIdentity } from '../../src/buddies/handles';
 import * as rateLimit from '../../src/lib/rateLimit';
 import { api, buddyUser } from './helpers';
 
@@ -99,6 +100,30 @@ it('a claim racing the owner moving away from the handle is taken (User unique o
   ]);
   expect(move.status).toBe(200);
   expect([claim.status, claim.body]).toEqual([409, { error: 'handle_taken' }]);
+});
+
+it('a handle change waits for a concurrent change of the same account, then holds the handle that change set', async () => {
+  const sam = await buddyUser();
+  const first = uniq();
+  const second = uniq();
+  let release!: () => void;
+  const held = new Promise<void>((r) => (release = r));
+  let locked!: () => void;
+  const isLocked = new Promise<void>((r) => (locked = r));
+  const holder = prisma.$transaction(async (tx) => {
+    await tx.user.update({ where: { id: sam.id }, data: { handle: first } });
+    locked();
+    await held;
+  });
+  await isLocked;
+  const change = updateIdentity(sam.id, { handle: second }, new Date());
+  await new Promise((r) => setTimeout(r, 300));
+  release();
+  await holder;
+  expect((await change).handle).toBe(second);
+  // Without the row lock the change would read the handle from before `first` and never hold `first`.
+  const hold = await prisma.handleHold.findUnique({ where: { handleHash: handleHash(first) } });
+  expect(hold?.previousOwnerId).toBe(sam.id);
 });
 
 it("a deleted account's handle is held for 30 days", async () => {
