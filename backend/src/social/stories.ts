@@ -3,6 +3,7 @@
 // and recaps they shared today (the headline line snapshotted when they shared it, period and coach — never the
 // stats JSON, never the live Recap.line). Built at read time from the preloaded circle (whose check-ins also decide
 // the lock) plus one query per remaining source. Rings: unseen first, then newest (plan ruling).
+// A goodnight (S2) is a frame of the author's local date of the moment it was said, never locked.
 
 import type { AchievementFamily, CheckInMood } from '@prisma/client';
 import { civilDateToUtcMidnight, localCivilDateOrUtc } from '../biometrics/civilDate';
@@ -16,7 +17,8 @@ export type StoryFrameDTO =
   | { kind: 'checkin'; at: string; locked: true }
   | { kind: 'checkin'; at: string; locked: false; mood: CheckInMood }
   | { kind: 'badge'; at: string; family: AchievementFamily; level: number }
-  | { kind: 'recap'; at: string; recapId: string; recapKind: 'WEEK' | 'MONTH'; periodStart: string; periodEnd: string; line: string; coachId: string };
+  | { kind: 'recap'; at: string; recapId: string; recapKind: 'WEEK' | 'MONTH'; periodStart: string; periodEnd: string; line: string; coachId: string }
+  | { kind: 'goodnight'; at: string; onTime: boolean };
 
 export interface StoryDTO { author: PersonDTO; localDate: string; frames: StoryFrameDTO[] }
 export interface StoryRingDTO { author: PersonDTO; unseen: boolean; locked: boolean; frameCount: number; latestAt: string }
@@ -71,6 +73,12 @@ async function loadFrames(authors: Member[], circle: Circle, now: Date, unlocked
       kind: 'recap', at: iso(s.createdAt), recapId: s.recap.id, recapKind: s.recap.kind,
       periodStart: isoDate(s.recap.periodStart), periodEnd: isoDate(s.recap.periodEnd), line: s.line, coachId: coachOf.get(s.sharerId)!,
     });
+  }
+  for (const g of circle.goodnights) {
+    // By the local date of the moment it was said: a 00:30 goodnight opens the new day's story.
+    const today = todayOf.get(g.authorId);
+    if (today === undefined || localCivilDateOrUtc(g.at, tzOf.get(g.authorId)!) !== today) continue;
+    byAuthor.get(g.authorId)!.push({ kind: 'goodnight', at: iso(g.at), onTime: g.onTime });
   }
   for (const frames of byAuthor.values()) frames.sort((a, b) => a.at.localeCompare(b.at));
   return byAuthor;

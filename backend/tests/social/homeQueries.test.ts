@@ -47,7 +47,7 @@ const person = (name: string) =>
 const pair = (a: string, b: string, createdAt = new Date()) =>
   prisma.buddyPair.create({ data: { ...(a < b ? { userAId: a, userBId: b } : { userAId: b, userBId: a }), createdAt } });
 
-it('builds the whole home from one preloaded circle, in at most 16 queries, with one lock decision', async () => {
+it('builds the whole home from one preloaded circle, in at most 17 queries, with one lock decision', async () => {
   const me = await person('Me');
   const sam = await person('Sam');
   const ana = await person('Ana');
@@ -69,8 +69,8 @@ it('builds the whole home from one preloaded circle, in at most 16 queries, with
   mockQueries.count = 0;
   const home = await getSocialHome(me.id, NOW);
 
-  // S1 measured 27. Now: loadCircle 4 + rings 3 + timeline 5 + cached highlights 1 + requests 2 + stickers 1 = 16.
-  expect(mockQueries.count).toBeLessThanOrEqual(16);
+  // S1 measured 27. Now: loadCircle 4 + rings 3 + timeline 6 (camp notes since S2) + cached highlights 1 + requests 2 + stickers 1 = 17.
+  expect(mockQueries.count).toBeLessThanOrEqual(17);
   expect(loads).toHaveBeenCalledTimes(1);
   for (const spy of rederived) expect(spy).not.toHaveBeenCalled();
   // One lock decision everywhere: I haven't checked in, so Sam's ring and Sam's timeline check-in are both locked.
