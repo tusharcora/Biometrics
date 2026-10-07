@@ -34,6 +34,7 @@ import { YearInPixelsScreen } from '../screens/YearInPixelsScreen';
 import { BadgesScreen } from '../screens/BadgesScreen';
 import { BadgeDetailScreen } from '../screens/BadgeDetailScreen';
 import { BuddyIdentityScreen } from '../screens/BuddyIdentityScreen';
+import { PairUpScreen } from '../screens/PairUpScreen';
 import { CelebrationHost } from '../components/achievements/CelebrationHost';
 import { BuddiesStoreScope } from '../components/buddies/BuddiesStoreScope';
 import type { ShareFormat } from '../lib/recapShare';
@@ -232,6 +233,7 @@ export function RootNavigator() {
               <Stack.Screen name="Badges" component={BadgesScreen} options={{ title: 'Badges' }} />
               <Stack.Screen name="BadgeDetail" component={BadgeDetailScreen} options={{ title: '' }} />
               <Stack.Screen name="BuddyIdentity" component={BuddyIdentityScreen} options={{ title: 'Buddy name' }} />
+              <Stack.Screen name="PairUp" component={PairUpScreen} options={{ title: 'Add a buddy' }} />
               <Stack.Screen name="RecapBuilder" component={RecapBuilderScreen} options={{ title: 'Build your recap' }} />
               <Stack.Screen
                 name="MeetYourCoach"

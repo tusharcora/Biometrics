@@ -1,0 +1,129 @@
+import React from 'react';
+import { Share } from 'react-native';
+import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { confirmMoodNotice, createCode, fetchCode, fetchIdentity, redeemCode, sendBuddyRequest } from '../../src/api/buddies';
+import { refreshBuddies } from '../../src/lib/buddiesStore';
+import { PairUpScreen } from '../../src/screens/PairUpScreen';
+
+jest.mock('../../src/api/buddies', () => ({
+  ...jest.requireActual('../../src/api/buddies'),
+  fetchIdentity: jest.fn(),
+  fetchCode: jest.fn(),
+  createCode: jest.fn(),
+  redeemCode: jest.fn(),
+  sendBuddyRequest: jest.fn(),
+  confirmMoodNotice: jest.fn(),
+}));
+jest.mock('../../src/lib/buddiesStore', () => ({ refreshBuddies: jest.fn() }));
+const mockReplace = jest.fn();
+jest.mock('@react-navigation/native', () => ({ useNavigation: () => ({ replace: mockReplace, navigate: jest.fn() }) }));
+
+const READY = { handle: 'me', displayName: 'Me', displayNamePrefill: '', moodNoticeSeen: true };
+const CODE = { code: 'ABCD2345', expiresAt: new Date(Date.now() + 3 * 3600_000).toISOString() };
+
+beforeEach(() => {
+  jest.clearAllMocks();
+  (fetchIdentity as jest.Mock).mockResolvedValue(READY);
+  (fetchCode as jest.Mock).mockResolvedValue(null);
+  (createCode as jest.Mock).mockResolvedValue(CODE);
+  (confirmMoodNotice as jest.Mock).mockResolvedValue(undefined);
+});
+
+it('asks for a handle first when there is none', async () => {
+  (fetchIdentity as jest.Mock).mockResolvedValue({ ...READY, handle: null });
+  render(<PairUpScreen />);
+  expect(await screen.findByTestId('handle-setup')).toBeTruthy();
+});
+
+it('shows the mood notice before the first pairing action, then makes the code and shares it', async () => {
+  (fetchIdentity as jest.Mock).mockResolvedValue({ ...READY, moodNoticeSeen: false });
+  const share = jest.spyOn(Share, 'share').mockResolvedValue({ action: 'sharedAction' } as never);
+  render(<PairUpScreen />);
+  fireEvent.press(await screen.findByTestId('pair-share-or-create'));
+  expect(await screen.findByTestId('mood-notice')).toBeTruthy();
+  expect(createCode).not.toHaveBeenCalled();
+  await act(async () => fireEvent.press(screen.getByTestId('mood-notice-confirm')));
+  await waitFor(() => expect(share).toHaveBeenCalledWith({ message: expect.stringContaining('ABCD2345') }));
+  expect(screen.getByTestId('pair-code')).toHaveTextContent('ABCD2345');
+  expect(screen.getByTestId('pair-code-expiry')).toHaveTextContent(/Expires in (2|3) h/);
+});
+
+it('holds a redeem behind the mood notice until it is confirmed', async () => {
+  (fetchIdentity as jest.Mock).mockResolvedValue({ ...READY, moodNoticeSeen: false });
+  (redeemCode as jest.Mock).mockResolvedValue({ buddyId: 'b1' });
+  render(<PairUpScreen />);
+  fireEvent.changeText(await screen.findByTestId('pair-code-input'), 'ABCD2345');
+  fireEvent.press(screen.getByTestId('pair-redeem'));
+  expect(await screen.findByTestId('mood-notice')).toBeTruthy();
+  expect(redeemCode).not.toHaveBeenCalled();
+  await act(async () => fireEvent.press(screen.getByTestId('mood-notice-confirm')));
+  await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('BuddyWeek', { buddyId: 'b1' }));
+  expect(redeemCode).toHaveBeenCalledTimes(1);
+});
+
+it("redeems a friend's code and opens their week", async () => {
+  (redeemCode as jest.Mock).mockResolvedValue({ buddyId: 'b1' });
+  render(<PairUpScreen />);
+  fireEvent.changeText(await screen.findByTestId('pair-code-input'), 'abcd-2345');
+  await act(async () => fireEvent.press(screen.getByTestId('pair-redeem')));
+  expect(redeemCode).toHaveBeenCalledWith('abcd-2345');
+  expect(refreshBuddies).toHaveBeenCalled();
+  expect(mockReplace).toHaveBeenCalledWith('BuddyWeek', { buddyId: 'b1' });
+});
+
+it('redeems once on a double tap in one frame, and frees the button after a failure', async () => {
+  let fail: (e: unknown) => void = () => undefined;
+  (redeemCode as jest.Mock).mockImplementation(() => new Promise((_, reject) => (fail = reject)));
+  render(<PairUpScreen />);
+  fireEvent.changeText(await screen.findByTestId('pair-code-input'), 'ABCD2345');
+  const button = screen.getByTestId('pair-redeem');
+  act(() => {
+    fireEvent.press(button);
+    fireEvent.press(button);
+  });
+  expect(redeemCode).toHaveBeenCalledTimes(1);
+  await act(async () => fail(Object.assign(new Error('x'), { status: 400, code: 'code_invalid' })));
+  (redeemCode as jest.Mock).mockResolvedValue({ buddyId: 'b2' });
+  await act(async () => fireEvent.press(screen.getByTestId('pair-redeem')));
+  expect(redeemCode).toHaveBeenCalledTimes(2);
+  expect(mockReplace).toHaveBeenCalledWith('BuddyWeek', { buddyId: 'b2' });
+});
+
+it('sends a request once on a double tap in one frame', async () => {
+  let done: () => void = () => undefined;
+  (sendBuddyRequest as jest.Mock).mockImplementation(() => new Promise<void>((resolve) => (done = resolve)));
+  render(<PairUpScreen />);
+  fireEvent.changeText(await screen.findByTestId('pair-handle-input'), 'sam');
+  const button = screen.getByTestId('pair-request');
+  act(() => {
+    fireEvent.press(button);
+    fireEvent.press(button);
+  });
+  expect(sendBuddyRequest).toHaveBeenCalledTimes(1);
+  await act(async () => done());
+  expect(screen.getByTestId('pair-message')).toHaveTextContent('Request sent to @sam.');
+});
+
+it('says an invalid code plainly, and confirms a sent request the same way whatever happened to it', async () => {
+  (redeemCode as jest.Mock).mockRejectedValue(Object.assign(new Error('x'), { status: 400, code: 'code_invalid' }));
+  (sendBuddyRequest as jest.Mock).mockResolvedValue(undefined);
+  render(<PairUpScreen />);
+  fireEvent.changeText(await screen.findByTestId('pair-code-input'), 'nope');
+  await act(async () => fireEvent.press(screen.getByTestId('pair-redeem')));
+  expect(screen.getByTestId('pair-message')).toHaveTextContent("That code didn't work. Check it and try again.");
+  expect(refreshBuddies).not.toHaveBeenCalled();
+  fireEvent.changeText(screen.getByTestId('pair-handle-input'), '@Sam_R');
+  await act(async () => fireEvent.press(screen.getByTestId('pair-request')));
+  expect(sendBuddyRequest).toHaveBeenCalledWith('@Sam_R');
+  expect(screen.getByTestId('pair-message')).toHaveTextContent('Request sent to @sam_r.');
+  expect(refreshBuddies).toHaveBeenCalledTimes(1);
+});
+
+it('shows a rate limit through the shared copy without retrying', async () => {
+  (sendBuddyRequest as jest.Mock).mockRejectedValue(Object.assign(new Error('x'), { status: 429, code: 'rate_limited' }));
+  render(<PairUpScreen />);
+  fireEvent.changeText(await screen.findByTestId('pair-handle-input'), 'sam');
+  await act(async () => fireEvent.press(screen.getByTestId('pair-request')));
+  expect(screen.getByTestId('pair-message')).toHaveTextContent('Too many tries. Please try again later.');
+  expect(sendBuddyRequest).toHaveBeenCalledTimes(1);
+});
