@@ -73,8 +73,7 @@ export interface PairResult {
  * (skipDuplicates), so an existing pair never aborts the transaction and a concurrent insert waits for
  * the other to commit. Only when new: every PENDING request between the two (either way, hidden or not)
  * becomes ACCEPTED, every DECLINED one is withdrawn and closed (gone for its sender, and its 30-day
- * swallow ends), and both get a PAIRED
- * Activity item with refId = pair id. Sends nothing.
+ * swallow ends), and both get a PAIRED Activity item with refId = pair id. Sends nothing.
  */
 export async function createPairTx(tx: Prisma.TransactionClient, a: string, b: string, now: Date): Promise<PairResult> {
   const inserted = await tx.buddyPair.createMany({ data: [{ ...orderedPair(a, b), createdAt: now, lastActivityAt: now }], skipDuplicates: true });
