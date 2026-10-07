@@ -1,18 +1,21 @@
 // "Share with buddies" on a recap (spec 2026-10-07 social §4.2): an explicit per-recap action by its owner. The
 // story frame built from it shows the headline line as the owner previewed it (it may hold their own numbers — the
 // explicit share is consent for that line), period and coach — never the stats JSON (plan ruling). A recap without
-// a line has nothing to show, so it cannot be shared.
+// a line has nothing to show, so it cannot be shared. The client sends the line it previewed; if the recap's line
+// has changed since (e.g. a late rebuild), the share is refused rather than publishing a line the user never saw.
 
 import { civilDateToUtcMidnight } from '../biometrics/civilDate';
 import { prisma } from '../db/client';
 import { BuddyError, UUID_RE } from '../buddies/errors';
 import { todayFor } from './checkins';
 
-export async function shareRecap(userId: string, recapId: unknown, now: Date): Promise<{ shared: true }> {
+export async function shareRecap(userId: string, recapId: unknown, previewed: unknown, now: Date): Promise<{ shared: true }> {
   if (typeof recapId !== 'string' || !UUID_RE.test(recapId)) throw new BuddyError('recap_not_found');
+  if (typeof previewed !== 'string' || !previewed.trim()) throw new BuddyError('recap_not_found');
   const recap = await prisma.recap.findFirst({ where: { id: recapId, userId, status: 'BUILT' }, select: { id: true, line: true } });
   const line = recap?.line?.trim();
-  if (!recap || !line) throw new BuddyError('recap_not_found');
+  // Consent covers only the previewed text: a mismatch stores nothing.
+  if (!recap || !line || line !== previewed.trim()) throw new BuddyError('recap_not_found');
   const { today } = await todayFor(userId, now);
   // The line is snapshotted: data deletion or a late rebuild may rewrite Recap.line (possibly with numbers) after
   // the share, and buddies must only ever see what was previewed. A re-share keeps the first snapshot.

@@ -32,7 +32,8 @@ socialRouter.put('/me/social/checkin', requireAuth, buddyRoute(async (req, res) 
 }));
 
 socialRouter.post('/me/social/recap-shares', requireAuth, buddyRoute(async (req, res) => {
-  res.json(await shareRecap(req.userId!, (req.body as { recapId?: unknown } | undefined)?.recapId, new Date()));
+  const body = req.body as { recapId?: unknown; line?: unknown } | undefined;
+  res.json(await shareRecap(req.userId!, body?.recapId, body?.line, new Date()));
 }));
 
 socialRouter.get('/me/social/recap-shares/:recapId', requireAuth, buddyRoute(async (req, res) => {

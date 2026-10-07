@@ -108,7 +108,7 @@ it('a recap frame shows the line as shared, even if the recap line is rewritten 
   const recap = await prisma.recap.create({
     data: { userId: ana.id, kind: 'WEEK', periodStart: day('2026-09-28'), periodEnd: day('2026-10-04'), status: 'BUILT', sleepGoalMinutes: 480, line: 'A steadier week', lineSource: 'TEMPLATE' },
   });
-  await shareRecap(ana.id, recap.id, NOW);
+  await shareRecap(ana.id, recap.id, 'A steadier week', NOW);
   await prisma.recap.update({ where: { id: recap.id }, data: { line: 'You slept 6h 02m a night on average.' } });
   const frames = (await getStory(me.id, ana.id, NOW)).frames;
   expect(frames).toEqual([expect.objectContaining({ kind: 'recap', line: 'A steadier week' })]);
@@ -150,7 +150,7 @@ it("excludes the author's yesterday recap share and badge", async () => {
   const recap = await prisma.recap.create({
     data: { userId: ana.id, kind: 'WEEK', periodStart: day('2026-09-28'), periodEnd: day('2026-10-04'), status: 'BUILT', sleepGoalMinutes: 480, line: 'A steadier week', lineSource: 'TEMPLATE' },
   });
-  await shareRecap(ana.id, recap.id, yesterday);
+  await shareRecap(ana.id, recap.id, 'A steadier week', yesterday);
   await badge(ana.id, yesterday, { earnedOn: '2026-10-06' });
   expect((await getStory(me.id, ana.id, yesterday)).frames.map((f) => f.kind).sort()).toEqual(['badge', 'recap']);
   expect((await getStory(me.id, ana.id, NOW)).frames).toEqual([]);
