@@ -6,6 +6,7 @@ import { requireAuth } from '../auth/middleware';
 import { buddyRoute } from '../buddies/errors';
 import { getTodayCheckIn, saveCheckIn } from './checkins';
 import { isRecapShared, shareRecap, unshareRecap } from './recapShares';
+import { getStory, markStorySeen } from './stories';
 
 export const socialRouter = Router();
 
@@ -29,5 +30,15 @@ socialRouter.get('/me/social/recap-shares/:recapId', requireAuth, buddyRoute(asy
 
 socialRouter.delete('/me/social/recap-shares/:recapId', requireAuth, buddyRoute(async (req, res) => {
   await unshareRecap(req.userId!, String(req.params.recapId));
+  res.status(204).end();
+}));
+
+socialRouter.get('/me/social/stories/:authorId', requireAuth, buddyRoute(async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  res.json(await getStory(req.userId!, String(req.params.authorId), new Date()));
+}));
+
+socialRouter.post('/me/social/stories/:authorId/seen', requireAuth, buddyRoute(async (req, res) => {
+  await markStorySeen(req.userId!, String(req.params.authorId), new Date());
   res.status(204).end();
 }));
