@@ -210,6 +210,30 @@ it('a goodnight after an early check-in keeps the coach asleep into the morning'
   expect((await getCamp(me.id, six)).members.find((m) => m.person.id === sam.id)).toMatchObject({ asleep: true, asleepSince: '2026-10-08T09:00:00.000Z' });
 });
 
+it("a check-in after tonight's goodnight wakes the coach before 06:00; one before it does not (fix M-7)", async () => {
+  const me = await buddyUser({ timezone: LA });
+  const sam = await buddyUser({ timezone: LA });
+  const ben = await buddyUser({ timezone: LA });
+  await pairUp(me.id, sam.id, BEFORE);
+  await pairUp(me.id, ben.id, BEFORE);
+  // Sam: goodnight at 23:00 on Oct 7, then a check-in at 02:00 on Oct 8 (his new day, still the evening of Oct 7).
+  await gn(sam.id, '2026-10-07', new Date('2026-10-08T06:00:00Z'));
+  // Ben: a check-in at 01:00 on Oct 8, then a goodnight at 02:00.
+  await prisma.checkIn.create({ data: { authorId: ben.id, localDate: civilDateToUtcMidnight('2026-10-08'), mood: 'RESTED', createdAt: new Date('2026-10-08T08:00:00Z') } });
+  await gn(ben.id, '2026-10-07', new Date('2026-10-08T09:00:00Z'));
+  const at = (camp: Awaited<ReturnType<typeof getCamp>>, id: string) => camp.members.find((m) => m.person.id === id)!;
+  const oneThirty = new Date('2026-10-08T08:30:00Z'); // Oct 8, 01:30
+  expect(at(await getCamp(me.id, oneThirty), sam.id)).toMatchObject({ asleep: true, asleepSince: '2026-10-08T06:00:00.000Z' });
+  await prisma.checkIn.create({ data: { authorId: sam.id, localDate: civilDateToUtcMidnight('2026-10-08'), mood: 'RESTED', createdAt: new Date('2026-10-08T09:00:00Z') } });
+  const twoThirty = new Date('2026-10-08T09:30:00Z'); // Oct 8, 02:30
+  const camp = await getCamp(me.id, twoThirty);
+  expect(at(camp, sam.id)).toMatchObject({ asleep: false, asleepSince: null, onTime: null });
+  expect(at(camp, ben.id)).toMatchObject({ asleep: true, asleepSince: '2026-10-08T09:00:00.000Z' });
+  // Sam's on-time goodnight still feeds tonight's fire; the banner agrees with the page.
+  expect(camp.fire.lit).toBe(2);
+  expect(campSummaryFor(await loadCircle(me.id, twoThirty), twoThirty)).toMatchObject({ awake: 2, asleep: 1 });
+});
+
 it("a buddy paired before 19:00 tonight is in tonight's camp; one paired after it is not", async () => {
   // Tonight, on time: the new buddy and one old buddy. With the new buddy in the camp: 2 of 4, 3 segments, lit.
   // Left out: only the old buddy counts, 1 of 3, 2 segments, unlit.

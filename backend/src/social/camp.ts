@@ -1,7 +1,8 @@
 // The Campfire page (spec 2026-10-07 social §6). Your camp = you + your current buddies (the preloaded circle; a
 // block deletes the pair, so an unpaired or blocked person — their coach, goodnight and camp note — is gone from
 // your camp on the next read, and you from theirs). Asleep = a goodnight for the member's current evening, or for
-// last evening between 06:00 and 11:59 local until they check in after it (plan ruling; fix ruling M-1). Night or day (the scene, 19:00–05:59)
+// last evening between 06:00 and 11:59 local, either one until they check in after it (plan ruling; fix rulings M-1,
+// M-7). Night or day (the scene, 19:00–05:59)
 // follows the VIEWER's zone; my goodnight window (from min(20:00, my goal − 60 min) to 05:59) follows my zone and my
 // goal; each member's "tonight" follows their own zone. Tonight's fire = members in bed on time ÷ the live camp.
 // "Nights lit this week" judges each night against that night's camp — me plus the buddies paired by its 19:00 in my
@@ -78,10 +79,12 @@ export function sleepStates(circle: Circle, now: Date): Map<string, SleepState> 
     const hour = localHourOrUtc(now, m.timezone);
     const morning = hour >= SUNRISE_HOUR && hour < NOON_HOUR;
     const lastNight = morning ? byEvening.get(`${id}:${shiftDate(localCivilDateOrUtc(now, m.timezone), -1)}`) ?? null : null;
-    // Only a check-in after last night's goodnight wakes them: one at 01:00, then a goodnight at 02:00, still sleeps.
+    // Only a check-in after the goodnight wakes them: one at 01:00, then a goodnight at 02:00, still sleeps; a
+    // goodnight at 23:00, then a check-in at 02:00 (their new day), is awake. The same test for tonight and last night
+    // (fix rulings M-1, M-7). `tonight` itself stays: it is their goodnight for the fire either way.
     const checkIn = circle.checkIns.get(id);
-    const stillAsleep = lastNight !== null && (!checkIn || checkIn.createdAt.getTime() <= lastNight.at.getTime());
-    const since = tonight ?? (stillAsleep ? lastNight : null);
+    const sleepsThrough = (g: GoodnightRow | null) => g !== null && (!checkIn || checkIn.createdAt.getTime() <= g.at.getTime());
+    const since = tonight ? (sleepsThrough(tonight) ? tonight : null) : sleepsThrough(lastNight) ? lastNight : null;
     states.set(id, { asleep: since !== null, since, tonight });
   }
   return states;
