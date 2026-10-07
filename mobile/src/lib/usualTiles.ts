@@ -1,6 +1,6 @@
 // Activity's "Against your usual · 30d" tiles (spec 2026-10-07 social §3): Resting HR, Sleep, HRV and Recovery.
 // Same maths as the Metrics cards: the latest reading and the 30-day change (trendSummary + changeText). Recovery
-// comes from the daily scores (fetchScores(30, 'RECOVERY')), mapped to tile records here — it is not a MetricType.
+// comes from the daily scores (fetchScores(60, 'RECOVERY'): 60 days, so the 30-day change has its earlier window), mapped to tile records here — it is not a MetricType.
 
 import type { DailyScoreDTO } from '../api/scores';
 import { METRIC_CONFIG } from '../theme';
@@ -19,10 +19,15 @@ export interface UsualTile {
   /** The latest reading's civil date (Recovery opens that day's score). */
   latestDate: string | null;
   delta: string | null;
+  /** The whole series, oldest first (what MetricDetail is opened with). */
   series: TileRecord[];
+  /** Only the readings in the 30-day window, for the sparkline. */
+  points: TileRecord[];
 }
 
 const DAYS = 30;
+// Half-width tiles: the full "Resting Heart Rate" would truncate.
+const SHORT_LABELS: Partial<Record<TileMetric, string>> = { RESTING_HR: 'Resting HR' };
 const RECOVERY = { label: 'Recovery', format: (v: number) => String(Math.round(v)), color: { light: 'rgb(79, 70, 229)', dark: 'rgb(129, 140, 248)' } };
 
 /** Recovery scores (newest first from the server) as tile records, oldest first; a null score is no reading. */
@@ -42,12 +47,13 @@ export function usualTiles(records: MetricRecord[], recovery: TileRecord[], toda
     const last = summary ? summary.points[summary.points.length - 1]! : null;
     return {
       type,
-      label: config.label,
+      label: SHORT_LABELS[type] ?? config.label,
       color: config.color,
       latest: summary ? config.format(summary.latest) : null,
       latestDate: last ? last.recordedAt.slice(0, 10) : null,
       delta: summary ? changeText(summary.changePercent, DAYS) : null,
       series,
+      points: summary ? (summary.points as unknown as TileRecord[]) : [],
     };
   });
 }

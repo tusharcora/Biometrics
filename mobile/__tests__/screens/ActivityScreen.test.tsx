@@ -202,7 +202,7 @@ describe('ActivityScreen', () => {
 });
 
 describe('ActivityScreen: against your usual', () => {
-  it('shows the usual tiles under the heat map, with 30 days of Recovery', async () => {
+  it('shows the usual tiles under the heat map, with 60 days of Recovery (a 30-day change needs the 30 before)', async () => {
     (fetchActivity as jest.Mock).mockResolvedValue({ days: [], earliestDate: '2025-01-01' });
     (apiFetch as jest.Mock).mockResolvedValue([{ id: 'h', metricType: 'HRV', value: 61, recordedAt: `${todayCivil()}T00:00:00.000Z` }]);
     (fetchScores as jest.Mock).mockResolvedValue([
@@ -214,7 +214,7 @@ describe('ActivityScreen: against your usual', () => {
     expect(await findByTestId('usual-tiles')).toBeTruthy();
     expect(getByTestId('heatmap-stats')).toBeTruthy();
     expect(apiFetch).toHaveBeenCalledWith('/me/biometrics');
-    expect(fetchScores).toHaveBeenCalledWith(30, 'RECOVERY');
+    expect(fetchScores).toHaveBeenCalledWith(60, 'RECOVERY');
     expect(getByTestId('usual-tile-RECOVERY')).toHaveTextContent(/71/);
   });
 
@@ -226,6 +226,20 @@ describe('ActivityScreen: against your usual', () => {
 
     expect(await findByTestId('heatmap-stats')).toBeTruthy();
     expect(queryByTestId('usual-tiles')).toBeNull();
+    expect(queryByTestId('activity-error')).toBeNull();
+  });
+
+  it('stays ready with the heat map and the metric tiles when the Recovery read fails', async () => {
+    (fetchActivity as jest.Mock).mockResolvedValue({ days: [], earliestDate: '2025-01-01' });
+    (apiFetch as jest.Mock).mockResolvedValue([{ id: 'h', metricType: 'HRV', value: 61, recordedAt: `${todayCivil()}T00:00:00.000Z` }]);
+    (fetchScores as jest.Mock).mockRejectedValue(new Error('offline'));
+
+    const { findByTestId, getByTestId, queryByTestId } = render(<ActivityScreen />);
+
+    expect(await findByTestId('usual-tiles')).toBeTruthy();
+    expect(getByTestId('heatmap-stats')).toBeTruthy();
+    expect(getByTestId('usual-tile-HRV')).toHaveTextContent(/61/);
+    expect(getByTestId('usual-tile-RECOVERY')).toHaveTextContent(/—/);
     expect(queryByTestId('activity-error')).toBeNull();
   });
 });

@@ -20,6 +20,8 @@ jest.mock('@react-navigation/native', () => ({
   DarkTheme: { dark: true, colors: {}, fonts: {} },
 }));
 const mockRegisteredScreens: string[] = [];
+// Each registered route's component, by name.
+const mockScreenComponents: Record<string, unknown> = {};
 jest.mock('@react-navigation/native-stack', () => {
   const ReactLib = require('react');
   return {
@@ -27,6 +29,7 @@ jest.mock('@react-navigation/native-stack', () => {
       Navigator: ({ initialRouteName, children }: any) => {
         const screens = ReactLib.Children.toArray(children);
         mockRegisteredScreens.splice(0, mockRegisteredScreens.length, ...screens.map((child: any) => child.props.name));
+        screens.forEach((child: any) => (mockScreenComponents[child.props.name] = child.props.component));
         const match = screens.find((child: any) => child.props.name === initialRouteName);
         return match ? ReactLib.createElement(match.props.component) : null;
       },
@@ -183,5 +186,15 @@ describe('RootNavigator', () => {
 
     await waitFor(() => expect(getByText('TABS_SCREEN')).toBeTruthy());
     expect(mockRegisteredScreens).toContain('Tabs');
+  });
+
+  it('registers the Trends route as the Metrics screen', async () => {
+    signedIn(true);
+    (apiFetch as jest.Mock).mockResolvedValue({ status: 'CONNECTED', lastSyncedAt: null });
+
+    const { getByText } = render(<RootNavigator />);
+
+    await waitFor(() => expect(getByText('TABS_SCREEN')).toBeTruthy());
+    expect(mockScreenComponents.Trends).toBe(require('../../src/screens/MetricsScreen').MetricsScreen);
   });
 });

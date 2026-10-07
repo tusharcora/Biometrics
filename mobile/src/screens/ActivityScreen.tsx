@@ -54,13 +54,14 @@ export function ActivityScreen() {
     // the Steps page working and puts a retry on the Sleep page instead.
     // The sleep goal is waited for too, so the sleep colours never draw against
     // 8h and then jump; without it they use 8h.
-    // The metrics and 30 days of Recovery scores (for the usual tiles) fail on their own too.
+    // The metrics and Recovery scores (for the usual tiles) fail on their own too. 60 days of
+    // scores, so the tiles' 30-day change has the 30 days before it to compare against.
     const [stepsRes, sleepRes, goalRes, metricsRes, recoveryRes] = await Promise.allSettled([
       fetchActivity(from, to),
       fetchSleep(from, to),
       fetchSleepGoal(),
       apiFetch<MetricRecord[]>('/me/biometrics'),
-      fetchScores(30, 'RECOVERY'),
+      fetchScores(60, 'RECOVERY'),
     ]);
     if (id !== requestId.current) return;
     if (metricsRes.status === 'fulfilled') setRecords(metricsRes.value ?? []);

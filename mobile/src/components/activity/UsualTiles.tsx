@@ -49,7 +49,7 @@ export function UsualTiles({ records, recovery, today }: { records: MetricRecord
             key={tile.type}
             testID={`usual-tile-${tile.type}`}
             accessibilityRole="button"
-            accessibilityLabel={`${tile.label} against your usual`}
+            accessibilityLabel={`${tile.label}, ${tile.latest ?? 'no reading'}${tile.delta ? `, ${tile.delta}` : ''}`}
             className="w-[48%]"
             onPress={() => open(tile)}
           >
@@ -63,7 +63,7 @@ export function UsualTiles({ records, recovery, today }: { records: MetricRecord
               <Text className="text-numeral-sm font-semibold" style={{ fontVariant: ['tabular-nums'] }}>
                 {tile.latest ?? '—'}
               </Text>
-              <TrendLine data={tile.series.slice(-30).map((r) => r.value)} color={tile.color[scheme]} height={28} />
+              <TrendLine data={tile.points.map((r) => r.value)} color={tile.color[scheme]} height={28} />
               {tile.delta ? (
                 <Text className="text-xs text-muted-foreground" numberOfLines={1}>
                   {tile.delta}
