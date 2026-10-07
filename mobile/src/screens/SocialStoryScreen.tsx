@@ -83,8 +83,8 @@ export function SocialStoryScreen() {
 
 function Viewer({ story, mineHint, onClose }: { story: Story; mineHint: boolean; onClose: () => void }) {
   const social = useSocial();
-  // The route says so for my own story; the store agrees once it has loaded.
-  const mine = mineHint || (social.status === 'ready' && social.home.me.person.id === story.author.id);
+  // Once the store has loaded it decides; until then the route's hint does.
+  const mine = social.status === 'ready' ? social.home.me.person.id === story.author.id : mineHint;
   const myMood = social.status === 'ready' ? social.home.me.checkIn?.mood ?? null : null;
   const reduceMotion = useReducedMotion();
   const [checkingIn, setCheckingIn] = useState(false);

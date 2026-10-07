@@ -5,8 +5,9 @@ import { fetchStory } from '../../src/api/social';
 import { SocialStoryScreen } from '../../src/screens/SocialStoryScreen';
 
 jest.mock('../../src/api/social', () => ({ ...jest.requireActual('../../src/api/social'), fetchStory: jest.fn(), markStorySeen: jest.fn().mockResolvedValue(undefined) }));
-// The Social home has not loaded yet: the viewer cannot tell from the store whose story this is.
-jest.mock('../../src/lib/socialStore', () => ({ refreshSocial: jest.fn(), useSocial: () => ({ status: 'idle' }) }));
+// By default the Social home has not loaded yet: the viewer cannot tell from the store whose story this is.
+let mockSocial: unknown = { status: 'idle' };
+jest.mock('../../src/lib/socialStore', () => ({ refreshSocial: jest.fn(), useSocial: () => mockSocial }));
 const mockGoBack = jest.fn();
 let mockParams: { authorId: string; mine?: boolean } = { authorId: 'me', mine: true };
 jest.mock('@react-navigation/native', () => ({
@@ -23,6 +24,26 @@ beforeEach(() => {
   jest.clearAllMocks();
   (fetchStory as jest.Mock).mockReset();
   mockParams = { authorId: 'me', mine: true };
+  mockSocial = { status: 'idle' };
+});
+
+it('once the Social home has loaded, it decides whose story this is, over the route hint', async () => {
+  mockParams = { authorId: 'sam', mine: true };
+  mockSocial = { status: 'ready', home: { me: { person: { id: 'me' }, checkIn: null } } };
+  (fetchStory as jest.Mock).mockResolvedValueOnce({ author: sam, localDate: '2026-10-07', frames: [{ kind: 'goodnight', at, onTime: true }] });
+  renderScreen();
+  expect(await screen.findByTestId('story-goodnight')).toHaveTextContent(/Sam said goodnight/);
+  expect(screen.getByTestId('social-story-name')).toHaveTextContent('Sam');
+  expect(screen.getByTestId('story-reply-CHEER')).toBeTruthy();
+});
+
+it("a buddy's goodnight frame is never locked: no Check in, though I haven't checked in", async () => {
+  mockParams = { authorId: 'sam' };
+  mockSocial = { status: 'ready', home: { me: { person: { id: 'me' }, checkIn: null } } };
+  (fetchStory as jest.Mock).mockResolvedValueOnce({ author: sam, localDate: '2026-10-07', frames: [{ kind: 'goodnight', at, onTime: true }] });
+  renderScreen();
+  expect(await screen.findByTestId('story-goodnight')).toBeTruthy();
+  expect(screen.queryByTestId('story-unlock')).toBeNull();
 });
 
 it('plays my goodnight frame as mine, with no replies, even before the Social home has loaded', async () => {

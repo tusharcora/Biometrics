@@ -54,7 +54,7 @@ export function SocialStoryFrame({ frame, author, mine, onUnlock }: { frame: Sto
       {frame.kind === 'goodnight' ? (
         <View testID="story-goodnight" pointerEvents="none" className="items-center gap-2">
           <Text className="text-xs font-semibold uppercase tracking-widest text-white/70">{`${who} said goodnight`}</Text>
-          <Text className="font-display text-display text-white">{frame.onTime ? 'On time' : 'Off to bed'}</Text>
+          <Text className="text-center font-display text-display text-white">{frame.onTime ? 'On time' : 'Off to bed'}</Text>
         </View>
       ) : null}
     </View>
