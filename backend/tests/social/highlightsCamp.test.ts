@@ -4,7 +4,9 @@ import { migrateTestDb } from '../setupTestDb';
 import { civilDateToUtcMidnight } from '../../src/biometrics/civilDate';
 import { shiftDate } from '../../src/scoring/dates';
 import { BUDDY_SHARING_CONSENT_VERSION } from '../../src/buddies/sharing';
-import { getWeeklyHighlights } from '../../src/social/highlights';
+import { block, unpair } from '../../src/buddies/relations';
+import { getCamp } from '../../src/social/camp';
+import { getWeeklyHighlights, highlightsReadyFor } from '../../src/social/highlights';
 import { buddyUser, pairUp } from '../buddies/helpers';
 
 beforeAll(() => migrateTestDb());
@@ -136,4 +138,87 @@ it("'joined' follows the viewer's civil week, not UTC's (ruling P4)", async () =
   await pairUp(me.id, sam.id, new Date('2026-09-27T12:00:00Z')); // Mon 28 Sep 01:00 in Auckland: that week
   await pairUp(me.id, ben.id, new Date('2026-10-04T12:00:00Z')); // Mon 5 Oct 01:00 in Auckland: the next week
   expect(pairs((await getWeeklyHighlights(me.id, NOW))!.items)).toEqual([['joined', sam.id]]);
+});
+
+it("a week is final for a Honolulu viewer only when their Sunday evening ends, so the frozen fire matches the camp's", async () => {
+  const me = await buddyUser({ timezone: 'Pacific/Honolulu' }); // HST, UTC−10
+  const mei = await buddyUser({ timezone: 'Asia/Shanghai' }); // UTC+8
+  await pairUp(me.id, mei.id, BEFORE);
+  // 22:30 in Shanghai on Thu 1 Oct and Mon 5 Oct: 04:30 in Honolulu, my Wednesday and Sunday evenings (1 of 2, lit).
+  for (const date of ['2026-10-01', '2026-10-05']) {
+    await prisma.goodnight.create({ data: { authorId: mei.id, localDate: civilDateToUtcMidnight(date), at: new Date(`${date}T14:30:00Z`), onTime: true } });
+  }
+  expect(highlightsReadyFor(WEEK, 'Pacific/Honolulu').toISOString()).toBe('2026-10-05T16:00:00.000Z');
+  // At the end of my Sunday the camp showed two lit nights.
+  expect((await getCamp(me.id, new Date('2026-10-05T15:59:00Z'))).nightsLitThisWeek).toBe(2);
+  // Monday 14:10 UTC is 04:10 on my Monday, still my Sunday evening: the previous week is served, this one not built.
+  expect(await getWeeklyHighlights(me.id, new Date('2026-10-05T14:10:00Z'))).toBeNull();
+  expect(await prisma.weeklyHighlights.count({ where: { viewerId: me.id, weekStart: civilDateToUtcMidnight(WEEK) } })).toBe(0);
+  const h = await getWeeklyHighlights(me.id, new Date('2026-10-05T16:30:00Z'));
+  expect(h!.weekStart).toBe(WEEK);
+  expect(pairs(h!.items)).toEqual([['campfire', me.id]]);
+  expect(h!.items[0]).toMatchObject({ nights: 2 });
+});
+
+it('readiness stays Monday 14:00 UTC for viewers whose Monday 06:00 comes earlier (UTC, Los Angeles)', () => {
+  expect(highlightsReadyFor(WEEK, 'UTC').toISOString()).toBe('2026-10-05T14:00:00.000Z');
+  expect(highlightsReadyFor(WEEK, 'America/Los_Angeles').toISOString()).toBe('2026-10-05T14:00:00.000Z');
+  expect(highlightsReadyFor(WEEK, 'Not/AZone').toISOString()).toBe('2026-10-05T14:00:00.000Z');
+});
+
+it("campfire nights are the viewer's evenings: Monday 05:59 belongs to the Sunday before, Sunday 23:59 to the week", async () => {
+  const LA = 'America/Los_Angeles'; // PDT, UTC−7
+  const me = await buddyUser({ timezone: LA });
+  const ana = await buddyUser({ timezone: LA });
+  await pairUp(me.id, ana.id, BEFORE);
+  const said = (at: string, evening: string) =>
+    prisma.goodnight.create({ data: { authorId: ana.id, localDate: civilDateToUtcMidnight(evening), at: new Date(at), onTime: true } });
+  await said('2026-09-28T12:59:00Z', '2026-09-27'); // Mon 28 Sep 05:59: Sunday 27's evening, outside the week
+  await said('2026-10-01T05:00:00Z', '2026-09-30'); // Wed 30 Sep 22:00
+  await said('2026-10-05T06:59:00Z', '2026-10-04'); // Sun 4 Oct 23:59
+  const h = await getWeeklyHighlights(me.id, NOW);
+  expect(pairs(h!.items)).toEqual([['campfire', me.id]]);
+  expect(h!.items[0]).toMatchObject({ nights: 2 });
+});
+
+it('at most three "joined" items', async () => {
+  const me = await buddyUser();
+  for (let i = 1; i <= 4; i++) await pairUp(me.id, (await buddyUser()).id, noon(i));
+  const h = await getWeeklyHighlights(me.id, NOW);
+  expect(h!.items.map((i) => i.type)).toEqual(['joined', 'joined', 'joined']);
+});
+
+it('at most three "first badge" items', async () => {
+  const me = await buddyUser();
+  const sam = await buddyUser();
+  await pairUp(me.id, sam.id, BEFORE);
+  await prisma.user.update({ where: { id: sam.id }, data: sharesStreaks });
+  await badge(sam.id, 'STEP_GOAL', 3, 2); // the top story
+  for (let i = 0; i < 4; i++) {
+    const u = await buddyUser();
+    await pairUp(me.id, u.id, BEFORE);
+    await prisma.user.update({ where: { id: u.id }, data: sharesStreaks });
+    await badge(u.id, 'SLEEP_GOAL', 1, 3);
+  }
+  const h = await getWeeklyHighlights(me.id, NOW);
+  expect(h!.items.map((i) => i.type)).toEqual(['top_story', 'first_badge', 'first_badge', 'first_badge']);
+});
+
+it('a "first badge" drops out at read time once its person is unpaired or blocked', async () => {
+  const me = await buddyUser();
+  const sam = await buddyUser();
+  const ben = await buddyUser();
+  const zoe = await buddyUser();
+  for (const u of [sam, ben, zoe]) {
+    await pairUp(me.id, u.id, BEFORE);
+    await prisma.user.update({ where: { id: u.id }, data: sharesStreaks });
+  }
+  await badge(sam.id, 'STEP_GOAL', 3, 2); // the top story
+  await badge(ben.id, 'SLEEP_GOAL', 1, 3);
+  await badge(zoe.id, 'SLEEP_GOAL', 1, 4);
+  expect(pairs((await getWeeklyHighlights(me.id, NOW))!.items).sort())
+    .toEqual([['first_badge', ben.id], ['first_badge', zoe.id], ['top_story', sam.id]].sort());
+  await unpair(me.id, ben.id, NOW);
+  await block(me.id, zoe.id, NOW);
+  expect(pairs((await getWeeklyHighlights(me.id, NOW))!.items)).toEqual([['top_story', sam.id]]);
 });

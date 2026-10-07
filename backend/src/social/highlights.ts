@@ -1,6 +1,7 @@
 // Week highlights (spec 2026-10-07 social §7): one Monday–Sunday week of the viewer's circle, built on the first
 // read after the week is FINAL and cached (plan ruling). Final = Monday 14:00 UTC, when every zone (down to UTC−12)
-// has finished its Sunday; before that the previous week is served. The cache holds UNGATED candidates — every
+// has finished its Sunday, or, if later, the viewer's own Monday 06:00, when their Sunday evening (the campfire's last
+// night) ends (fix ruling, Task 9: Honolulu's is 16:00 UTC); before that the previous week is served. The cache holds UNGATED candidates — every
 // member's best badge, whoever shares streaks — and every read gates them again: an actor who is no longer a buddy
 // drops out, and a badge item needs its actor to share streaks now (the viewer is exempt). A build with no
 // candidates is cached empty for an hour, then rebuilt: badges are evaluated later (when their owner opens
@@ -14,8 +15,11 @@
 // as GET /me/camp counts them), "joined the camp" (a current buddy who paired with the viewer during the week, by the
 // viewer's civil dates; an unpaired or blocked ex-buddy is absent, ruling P5) and "first badge" (a member's first-ever
 // badge earned that week, gated by streaks like every badge item, and not repeated when that person's badge is the top
-// story). "Joined" and "first badge" show 3 each at most. Weeks cached before S2 keep their S1 items. Known cost: a
-// badge evaluated after a non-empty week was cached (a back-dated first badge) misses that week, as the S1 top story does.
+// story). "Joined" and "first badge" show 3 each at most. Weeks cached before S2 keep their S1 items. Known costs,
+// accepted: a badge evaluated after a non-empty week was cached (a back-dated first badge) misses that week, as the S1
+// top story does; a frozen campfire count keeps an ex-buddy's past nights (it is the viewer's own camp count and
+// reveals nothing new); a buddy paired midweek can be the top story from goodnights said before the pairing, as S1's
+// top stories count a week's check-ins and badges from before it.
 
 import type { AchievementFamily, CheckInMood, Prisma } from '@prisma/client';
 import { civilDateToUtcMidnight, localCivilDateOrUtc } from '../biometrics/civilDate';
@@ -53,17 +57,27 @@ const READY_AFTER_SUNDAY_MS = (24 + 14) * 60 * 60 * 1000;
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 
+/** Monday 14:00 UTC after the week: every zone has finished its Sunday. */
 export function highlightsReadyAt(weekStart: string): Date {
   return new Date(civilDateToUtcMidnight(shiftDate(weekStart, 6)).getTime() + READY_AFTER_SUNDAY_MS);
+}
+
+/**
+ * When the week is final for a viewer in `timeZone`: Monday 14:00 UTC, or the viewer's Monday 06:00 if later — their
+ * Sunday evening (whose goodnights the campfire counts) runs until then. Later only west of UTC−8 (Honolulu: 16:00 UTC).
+ */
+export function highlightsReadyFor(weekStart: string, timeZone: string): Date {
+  const sundayEveningEnds = localInstant(shiftDate(weekStart, 7), '06:00', timeZone);
+  return new Date(Math.max(highlightsReadyAt(weekStart).getTime(), sundayEveningEnds.getTime()));
 }
 
 /** How long an EMPTY cached week is reused before it is rebuilt (a late-evaluated badge may land in it). */
 export const EMPTY_WEEK_TTL_MS = 60 * 60 * 1000;
 
-/** The newest week that is final for a viewer in `timeZone`: their last completed week, or the one before it until Monday 14:00 UTC. */
+/** The newest week that is final for a viewer in `timeZone`: their last completed week, or the one before it until highlightsReadyFor. */
 export function highlightsWeekFor(timeZone: string, now: Date): string {
   const latest = lastCompletedPeriodStart('WEEK', localCivilDateOrUtc(now, timeZone));
-  return now.getTime() >= highlightsReadyAt(latest).getTime() ? latest : shiftDate(latest, -7);
+  return now.getTime() >= highlightsReadyFor(latest, timeZone).getTime() ? latest : shiftDate(latest, -7);
 }
 
 function topBy(counts: Map<string, number>, min: number): [string, number] | null {
