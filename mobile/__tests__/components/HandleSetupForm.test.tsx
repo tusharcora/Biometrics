@@ -20,7 +20,7 @@ it('prefills the display name and saves both fields on first setup', async () =>
   fireEvent.changeText(screen.getByTestId('handle-input'), '@Sam_R');
   await act(async () => fireEvent.press(screen.getByTestId('handle-setup-save')));
   expect(save).toHaveBeenCalledWith({ handle: '@Sam_R', displayName: 'Sam' });
-  expect(onSaved).toHaveBeenCalledWith(expect.objectContaining({ handle: 'sam_r' }));
+  expect(onSaved).toHaveBeenCalledWith(expect.objectContaining({ handle: 'sam_r' }), true);
 });
 
 it('starts empty when there is no prefill, and shows the server reason on failure', async () => {
@@ -39,6 +39,41 @@ it('in edit mode sends only what changed', async () => {
   fireEvent.changeText(screen.getByTestId('display-name-input'), 'Sammy');
   await act(async () => fireEvent.press(screen.getByTestId('handle-setup-save')));
   expect(save).toHaveBeenCalledWith({ displayName: 'Sammy' });
+});
+
+it('in edit mode compares as the server stores it: "@Sam " and " Sam " are no change', async () => {
+  const onSaved = jest.fn();
+  const SAM = { ...NEW, handle: 'sam', displayName: 'Sam' };
+  render(<HandleSetupForm identity={SAM} mode="edit" onSaved={onSaved} />);
+  fireEvent.changeText(screen.getByTestId('handle-input'), ' @Sam ');
+  fireEvent.changeText(screen.getByTestId('display-name-input'), ' Sam ');
+  await act(async () => fireEvent.press(screen.getByTestId('handle-setup-save')));
+  expect(save).not.toHaveBeenCalled();
+  expect(onSaved).toHaveBeenCalledWith(SAM, false);
+});
+
+it('reports whether anything was saved', async () => {
+  const onSaved = jest.fn();
+  save.mockResolvedValue({ ...NEW, handle: 'sam2', displayName: 'Sam' });
+  render(<HandleSetupForm identity={{ ...NEW, handle: 'sam', displayName: 'Sam' }} mode="edit" onSaved={onSaved} />);
+  fireEvent.changeText(screen.getByTestId('handle-input'), '@Sam2');
+  await act(async () => fireEvent.press(screen.getByTestId('handle-setup-save')));
+  expect(save).toHaveBeenCalledWith({ handle: '@Sam2' });
+  expect(onSaved).toHaveBeenCalledWith(expect.objectContaining({ handle: 'sam2' }), true);
+});
+
+it('a failed save can be retried: the retry calls saveIdentity again', async () => {
+  const onSaved = jest.fn();
+  save.mockRejectedValueOnce(Object.assign(new Error('x'), { status: 503, code: 'try_later' })).mockResolvedValueOnce({ ...NEW, handle: 'sam', displayName: 'Sam' });
+  render(<HandleSetupForm identity={NEW} mode="setup" onSaved={onSaved} />);
+  fireEvent.changeText(screen.getByTestId('handle-input'), 'sam');
+  await act(async () => fireEvent.press(screen.getByTestId('handle-setup-save')));
+  expect(screen.getByTestId('handle-setup-error')).toBeTruthy();
+  expect(onSaved).not.toHaveBeenCalled();
+  await act(async () => fireEvent.press(screen.getByTestId('handle-setup-save')));
+  expect(save).toHaveBeenCalledTimes(2);
+  expect(onSaved).toHaveBeenCalledTimes(1);
+  expect(screen.queryByTestId('handle-setup-error')).toBeNull();
 });
 
 it('the gate shows setup until a handle exists, then the content', async () => {

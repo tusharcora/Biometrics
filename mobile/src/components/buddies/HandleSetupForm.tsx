@@ -6,9 +6,20 @@ import { Button } from '../ui/button';
 import { Text } from '../ui/text';
 import { TextField } from '../ui/text-field';
 
+// What the server compares against (backend identity.ts): a handle trimmed, one leading @ dropped,
+// lowercased; a display name trimmed. Only for deciding what changed; the raw text is what is sent.
+const sameHandle = (input: string, saved: string | null) => {
+  const trimmed = input.trim();
+  return (trimmed.startsWith('@') ? trimmed.slice(1) : trimmed).toLowerCase() === saved;
+};
+const sameName = (input: string, saved: string | null) => input.trim() === saved;
+
 // The @handle and display name (spec 2026-10-06 buddies §2). The server validates and normalises
-// (one leading @, lowercase); this form shows its reason when it refuses.
-export function HandleSetupForm({ identity, mode, onSaved }: { identity: BuddyIdentity; mode: 'setup' | 'edit'; onSaved: (next: BuddyIdentity) => void }) {
+// (one leading @, lowercase); this form shows its reason when it refuses. onSaved's `changed` is
+// false when an edit had nothing to save (nothing was sent).
+export function HandleSetupForm({
+  identity, mode, onSaved,
+}: { identity: BuddyIdentity; mode: 'setup' | 'edit'; onSaved: (next: BuddyIdentity, changed: boolean) => void }) {
   const [handle, setHandle] = useState(identity.handle ?? '');
   const [name, setName] = useState(identity.displayName ?? identity.displayNamePrefill);
   const [error, setError] = useState<string | null>(null);
@@ -19,17 +30,17 @@ export function HandleSetupForm({ identity, mode, onSaved }: { identity: BuddyId
   async function save() {
     if (saving.current) return;
     const patch: { handle?: string; displayName?: string } = {};
-    if (mode === 'setup' || handle !== identity.handle) patch.handle = handle;
-    if (mode === 'setup' || name !== identity.displayName) patch.displayName = name;
+    if (mode === 'setup' || !sameHandle(handle, identity.handle)) patch.handle = handle;
+    if (mode === 'setup' || !sameName(name, identity.displayName)) patch.displayName = name;
     if (Object.keys(patch).length === 0) {
-      onSaved(identity);
+      onSaved(identity, false);
       return;
     }
     saving.current = true;
     setBusy(true);
     setError(null);
     try {
-      onSaved(await saveIdentity(patch));
+      onSaved(await saveIdentity(patch), true);
     } catch (e) {
       setError(buddyErrorMessage(buddyErrorCode(e)));
     } finally {
