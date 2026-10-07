@@ -286,7 +286,7 @@ export function DashboardScreen() {
 
         <TomorrowCard state={forecastState} onPress={() => navigation.navigate('Forecast')} />
 
-        <BuddiesRow onOpen={() => navigation.navigate('Buddies')} />
+        <BuddiesRow onOpen={() => navigation.navigate('Tabs', { screen: 'Social' })} />
 
         <HabitLogCard />
 
@@ -313,7 +313,7 @@ export function DashboardScreen() {
             <Text className="text-base leading-snug">{insight}</Text>
           </Card>
         ) : null}
-        {/* Per-metric trends and the Patterns entry live on the Metrics tab. */}
+        {/* Per-metric trends and the Patterns entry live on the Trends screen (Activity's "All trends"). */}
       </ScrollView>
     </SafeAreaView>
   );

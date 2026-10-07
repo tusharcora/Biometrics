@@ -17,6 +17,7 @@ import {
   MOOD_COLORS, MOOD_WORDS, NUMBER_LABELS, STICKERS, TILE_COLORS, buddyErrorMessage, formatNumber, sharesSummary, stickerSentLine, weekdayLetter, weekdayName,
 } from '../lib/buddyCopy';
 import { refreshBuddies } from '../lib/buddiesStore';
+import { refreshSocial } from '../lib/socialStore';
 
 type WeekState = { status: 'loading' } | { status: 'ready'; week: BuddyWeek } | { status: 'gone' } | { status: 'error' };
 
@@ -55,6 +56,7 @@ export function BuddyWeekScreen() {
       if (isGone(e)) {
         setState({ status: 'gone' });
         void refreshBuddies();
+        void refreshSocial();
       } else {
         setState({ status: 'error' });
       }
@@ -79,6 +81,7 @@ export function BuddyWeekScreen() {
         if (buddyErrorCode(e) === 'not_buddies') {
           setState({ status: 'gone' });
           void refreshBuddies();
+          void refreshSocial();
         } else {
           setNote({ text: buddyErrorMessage(buddyErrorCode(e)), error: true });
         }
@@ -136,6 +139,7 @@ export function BuddyWeekScreen() {
           perform(async () => {
             await fn();
             void refreshBuddies();
+            void refreshSocial();
             if (mounted.current) navigation.goBack();
           }),
       },

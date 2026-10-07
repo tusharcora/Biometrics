@@ -21,13 +21,12 @@ const needsConsent = (error: unknown) => {
   return code === 'consent_required' || code === 'stale_consent_version';
 };
 
-// Profile → Buddies (spec 2026-10-06 buddies §7): a row into the Buddies screen (the way in before
-// there is a buddy or a request; Pair up is reached from there), your handle and name, "Shared with buddies" (five
-// global switches, all off; turning one on without current consent asks for it first, and the switch
-// is saved only after the server accepts it; turning one off never asks), and blocked people. A
-// switch shows what the server last confirmed, never a value it has not saved. Hidden on an older
-// backend. Nothing here is logged.
-export function BuddiesProfileSection({ onNavigate }: { onNavigate: (route: 'Buddies' | 'BuddyIdentity' | 'BlockedPeople') => void }) {
+// Profile → Buddies (spec 2026-10-06 buddies §7; the Social tab is now the way into buddies): your
+// handle and name, "Shared with buddies" (five global switches, all off; turning one on without
+// current consent asks for it first, and the switch is saved only after the server accepts it;
+// turning one off never asks), and blocked people. A switch shows what the server last confirmed,
+// never a value it has not saved. Hidden on an older backend. Nothing here is logged.
+export function BuddiesProfileSection({ onNavigate }: { onNavigate: (route: 'BuddyIdentity' | 'BlockedPeople') => void }) {
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === 'dark' ? COLORS.dark : COLORS.light;
   const store = useBuddies();
@@ -176,14 +175,6 @@ export function BuddiesProfileSection({ onNavigate }: { onNavigate: (route: 'Bud
   return (
     <>
       <SettingsGroup testID="buddies-settings" label="Buddies">
-        <SettingsRow
-          testID="buddies-row"
-          icon="people-outline"
-          tint={colors.accent}
-          title="Buddies"
-          subtitle="Your buddies, requests and activity"
-          onPress={() => onNavigate('Buddies')}
-        />
         <SettingsRow
           testID="buddy-identity-row"
           icon="person-circle-outline"

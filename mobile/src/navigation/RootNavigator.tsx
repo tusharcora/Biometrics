@@ -68,11 +68,11 @@ const DARK_NAV_THEME: Theme = {
 };
 
 export type RootStackParamList = {
-  // The five-tab shell (Home, Activity, Coach, Metrics, Profile).
+  // The five-tab shell (Home, Activity, Coach, Social, Profile).
   Tabs: NavigatorScreenParams<TabParamList> | undefined;
   ConnectHealth: undefined;
   // `records` is the metric's whole series; `range` is the window to open on
-  // (the Metrics tab passes its current one; default 30 days).
+  // (the Trends screen passes its current one; default 30 days).
   MetricDetail: { metricType: MetricRecord['metricType']; records: MetricRecord[]; range?: TrendRange };
   ScoreDetail: { date: string; type?: ScoreType }; // type defaults to RECOVERY
   Forecast: undefined;

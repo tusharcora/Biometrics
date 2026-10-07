@@ -8,6 +8,7 @@ import { useColorScheme } from 'nativewind';
 import { Character } from '../components/characters/Character';
 import { StoryRing, useStoryRing } from '../components/recap/StoryRing';
 import { readyCardTitle } from '../lib/recapCopy';
+import { useSocialUnreadCount } from '../lib/socialStore';
 import { Text } from '../components/ui/text';
 import { useCoachStatus } from '../lib/useCoachStatus';
 import { useKeyboardVisible } from '../lib/useKeyboardVisible';
@@ -34,7 +35,7 @@ const HUB_CHARACTER_SIZE = 52;
 const ICONS: Record<string, keyof typeof Ionicons.glyphMap> = {
   Home: 'home-outline',
   Activity: 'calendar-outline',
-  Metrics: 'stats-chart-outline',
+  Social: 'people-outline',
   Profile: 'person-outline',
 };
 
@@ -50,6 +51,8 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
   // An unwatched recap rings the Profile icon too (the same store as the Home avatar). A tap
   // still opens Profile.
   const ring = useStoryRing(scheme);
+  // Incoming requests + unseen stickers; 0 until the Social home has loaded (and on an older backend).
+  const socialUnread = useSocialUnreadCount();
 
   const activeName = state.routes[state.index]?.name ?? 'Home';
   // The hub character always idles, on every tab (spec §1, Performance). It is
@@ -146,6 +149,7 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
             const isHub = route.name === HUB_TAB;
             const label = TAB_LABELS[route.name] ?? route.name;
             const ringed = route.name === 'Profile' && ring !== null;
+            const dotted = route.name === 'Social' && socialUnread > 0;
             const icon = <Ionicons name={ICONS[route.name] ?? 'ellipse-outline'} size={ringed ? 16 : 22} color={focused ? colors.foreground : colors.muted} />;
             return (
               <Pressable
@@ -153,7 +157,7 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
                 testID={`tab-${route.name}`}
                 accessibilityRole="button"
                 // The tab still opens Profile, so it says what is ready, not what a tap plays.
-                accessibilityLabel={ringed ? `${label}. ${readyCardTitle(ring.recap)}` : label}
+                accessibilityLabel={ringed ? `${label}. ${readyCardTitle(ring.recap)}` : dotted ? `${label}, ${socialUnread} new` : label}
                 accessibilityState={{ selected: focused }}
                 onPress={() => press(route, focused)}
                 hitSlop={4}
@@ -168,6 +172,16 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
                       <StoryRing testID="tab-Profile-story-ring" color={ring.color} size={26} ringWidth={2} gap={2} dotSize={9} surface={colors.card}>
                         <View className="flex-1 items-center justify-center">{icon}</View>
                       </StoryRing>
+                    ) : dotted ? (
+                      // The border is the bar's colour, so the dot is cut out of the icon.
+                      <View>
+                        {icon}
+                        <View
+                          testID="tab-Social-dot"
+                          pointerEvents="none"
+                          style={{ position: 'absolute', top: -2, right: -2, width: 8, height: 8, borderRadius: 4, backgroundColor: colors.accent, borderWidth: 1.5, borderColor: colors.card }}
+                        />
+                      </View>
                     ) : (
                       icon
                     )}

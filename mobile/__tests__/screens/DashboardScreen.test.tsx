@@ -30,11 +30,12 @@ function mockApi(options: {
   habitsError?: Error;
   forecast?: unknown;
   recaps?: unknown[];
+  buddies?: unknown;
 }) {
   (apiFetch as jest.Mock).mockImplementation((path: string) => {
     if (path.startsWith('/me/recaps')) return Promise.resolve({ recaps: options.recaps ?? [] });
     // No buddies and no requests: Home's buddies row stays hidden.
-    if (path.startsWith('/me/buddies')) return Promise.resolve({ buddies: [], nextCursor: null, incomingRequests: 0, outgoingRequests: 0 });
+    if (path.startsWith('/me/buddies')) return Promise.resolve(options.buddies ?? { buddies: [], nextCursor: null, incomingRequests: 0, outgoingRequests: 0 });
     if (path === '/me/forecast') {
       return Promise.resolve(options.forecast ?? { status: 'NOT_ENOUGH_DATA', reason: 'NO_HISTORY', daysOfHistory: 0 });
     }
@@ -118,6 +119,18 @@ describe('DashboardScreen', () => {
     expect(queryByTestId('home-buddies-row')).toBeNull();
   });
 
+  it('opens the Social tab from the buddies row', async () => {
+    mockApi({
+      records: [{ id: '1', metricType: 'STEPS', value: 9000, recordedAt: '2026-09-01T00:00:00.000Z' }],
+      buddies: { buddies: [], nextCursor: null, incomingRequests: 1, outgoingRequests: 0 },
+    });
+
+    render(<DashboardScreen />);
+
+    fireEvent.press(await screen.findByTestId('home-buddies-row'));
+    expect(mockNavigate).toHaveBeenCalledWith('Tabs', { screen: 'Social' });
+  });
+
   it('renders rings, an insight, and trend charts for every real metric', async () => {
     mockApi({
       records: [
@@ -168,7 +181,7 @@ describe('DashboardScreen', () => {
     expect(mockNavigate).toHaveBeenCalledWith('MetricDetail', { metricType: 'STEPS', records: stepsRecords });
   });
 
-  // Trends and the Patterns entry moved to the Metrics tab (spec 2.2).
+  // Trends and the Patterns entry moved off Home (spec 2.2); they live on the Trends screen now.
   it('no longer shows the trend list or the Patterns entry', async () => {
     mockApi({ records: [{ id: '1', metricType: 'STEPS', value: 8000, recordedAt: '2026-09-01T00:00:00.000Z' }] });
 

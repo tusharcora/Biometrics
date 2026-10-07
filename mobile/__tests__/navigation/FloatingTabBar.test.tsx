@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, render, fireEvent, within } from '@testing-library/react-native';
+import { act, render, fireEvent, screen, within } from '@testing-library/react-native';
 import { fetchRecaps } from '../../src/api/recaps';
 import { storyRingColor } from '../../src/lib/recapTheme';
 import { openRecap } from '../../src/lib/unwatchedRecap';
@@ -17,6 +17,8 @@ jest.mock('nativewind', () => ({ useColorScheme: () => ({ colorScheme: mockSchem
 jest.mock('../../src/lib/useCoachStatus', () => ({ useCoachStatus: jest.fn() }));
 jest.mock('../../src/lib/useKeyboardVisible', () => ({ useKeyboardVisible: jest.fn() }));
 jest.mock('../../src/api/recaps', () => ({ fetchRecaps: jest.fn(), markRecapOpened: jest.fn() }));
+let mockUnread = 0;
+jest.mock('../../src/lib/socialStore', () => ({ useSocialUnreadCount: () => mockUnread }));
 
 const METRICS = { frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 47, left: 0, right: 0, bottom: 34 } };
 // The bar is hidden from the accessibility tree while the keyboard is open, so
@@ -66,6 +68,7 @@ function bar(props: ReturnType<typeof makeProps>) {
 beforeEach(() => {
   jest.clearAllMocks();
   mockScheme = 'dark';
+  mockUnread = 0;
   (useKeyboardVisible as jest.Mock).mockReturnValue(false);
   (fetchRecaps as jest.Mock).mockResolvedValue([]);
   setCoach(enabledStatus);
@@ -109,7 +112,7 @@ describe('FloatingTabBar', () => {
   it('renders five labelled tabs, with the coach character in the middle', () => {
     const { getByLabelText, getByTestId } = render(bar(makeProps()));
 
-    for (const label of ['Home', 'Activity', 'AI coach', 'Metrics', 'Profile']) expect(getByLabelText(label)).toBeTruthy();
+    for (const label of ['Home', 'Activity', 'AI coach', 'Social', 'Profile']) expect(getByLabelText(label)).toBeTruthy();
     expect(getByTestId('tab-Coach')).toContainElement(getByTestId('hub-character', HIDDEN_OK));
   });
 
@@ -117,7 +120,19 @@ describe('FloatingTabBar', () => {
     const { getByTestId, queryByTestId } = render(bar(makeProps(1)));
 
     expect(getByTestId('tab-label-Activity')).toHaveTextContent('Activity');
-    for (const name of ['Home', 'Metrics', 'Profile']) expect(queryByTestId(`tab-label-${name}`)).toBeNull();
+    for (const name of ['Home', 'Social', 'Profile']) expect(queryByTestId(`tab-label-${name}`)).toBeNull();
+  });
+
+  it('shows a dot on Social when something is unread, and says how many; hides it otherwise', async () => {
+    mockUnread = 3;
+    const utils = render(bar(makeProps()));
+    await act(async () => {});
+    expect(screen.getByTestId('tab-Social-dot')).toHaveStyle({ width: 8, height: 8 });
+    expect(screen.getByTestId('tab-Social')).toHaveProp('accessibilityLabel', 'Social, 3 new');
+    mockUnread = 0;
+    utils.rerender(bar(makeProps()));
+    expect(screen.queryByTestId('tab-Social-dot')).toBeNull();
+    expect(screen.getByTestId('tab-Social')).toHaveProp('accessibilityLabel', 'Social');
   });
 
   it('is a solid rounded rectangle, not a pill', () => {
@@ -131,7 +146,7 @@ describe('FloatingTabBar', () => {
   it('marks only the focused tab selected', () => {
     const { getByTestId } = render(bar(makeProps(3)));
 
-    expect(getByTestId('tab-Metrics').props.accessibilityState).toEqual({ selected: true });
+    expect(getByTestId('tab-Social').props.accessibilityState).toEqual({ selected: true });
     expect(getByTestId('tab-Home').props.accessibilityState).toEqual({ selected: false });
   });
 
@@ -159,7 +174,7 @@ describe('FloatingTabBar', () => {
     const props = makeProps(0, true);
     const { getByTestId } = render(bar(props));
 
-    fireEvent.press(getByTestId('tab-Metrics'));
+    fireEvent.press(getByTestId('tab-Social'));
 
     expect((props as unknown as { navigation: { navigate: jest.Mock } }).navigation.navigate).not.toHaveBeenCalled();
   });

@@ -43,11 +43,10 @@ it('shows the buddy name and opens edit and the blocked list', async () => {
   expect(onNavigate.mock.calls).toEqual([['BuddyIdentity'], ['BlockedPeople']]);
 });
 
-it('opens the Buddies screen from the top row', async () => {
-  const onNavigate = jest.fn();
-  render(<BuddiesProfileSection onNavigate={onNavigate} />);
-  fireEvent.press(await screen.findByTestId('buddies-row'));
-  expect(onNavigate.mock.calls).toEqual([['Buddies']]);
+it('has no Buddies row: the Social tab is the way in now', async () => {
+  render(<BuddiesProfileSection onNavigate={jest.fn()} />);
+  expect(await screen.findByTestId('buddy-identity-row')).toBeTruthy();
+  expect(screen.queryByTestId('buddies-row')).toBeNull();
 });
 
 it('re-reads identity and sharing on focus, not on every buddies refresh', async () => {

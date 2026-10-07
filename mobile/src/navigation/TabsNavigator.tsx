@@ -5,7 +5,7 @@ import { DashboardScreen } from '../screens/DashboardScreen';
 import { CoachScreen } from '../screens/CoachScreen';
 import { SettingsScreen } from '../screens/SettingsScreen';
 import { ActivityScreen } from '../screens/ActivityScreen';
-import { MetricsScreen } from '../screens/MetricsScreen';
+import { SocialScreen } from '../screens/SocialScreen';
 import { COLORS } from '../theme';
 import { FloatingTabBar } from './FloatingTabBar';
 
@@ -14,7 +14,7 @@ export type TabParamList = {
   Activity: undefined;
   // `prefill` seeds the chat input (never sent automatically).
   Coach: { prefill?: string } | undefined;
-  Metrics: undefined;
+  Social: undefined;
   Profile: undefined;
 };
 
@@ -39,7 +39,7 @@ export function TabsNavigator() {
       <Tab.Screen name="Home" component={DashboardScreen} options={{ headerShown: false }} />
       <Tab.Screen name="Activity" component={ActivityScreen} options={{ headerShown: false }} />
       <Tab.Screen name="Coach" component={CoachScreen} options={{ title: 'AI Coach', headerShown: false }} />
-      <Tab.Screen name="Metrics" component={MetricsScreen} options={{ headerShown: false }} />
+      <Tab.Screen name="Social" component={SocialScreen} options={{ headerShown: false }} />
       <Tab.Screen name="Profile" component={SettingsScreen} options={{ title: 'Profile', headerShown: false }} />
     </Tab.Navigator>
   );

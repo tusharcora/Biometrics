@@ -14,7 +14,7 @@ import {
 
 describe('tab order', () => {
   it('puts the coach in the centre of five slots', () => {
-    expect(TAB_ORDER).toEqual(['Home', 'Activity', 'Coach', 'Metrics', 'Profile']);
+    expect(TAB_ORDER).toEqual(['Home', 'Activity', 'Coach', 'Social', 'Profile']);
     expect(TAB_ORDER.indexOf(HUB_TAB)).toBe(2);
   });
 });
@@ -33,7 +33,7 @@ describe('slotCenterX', () => {
 
 describe('activeIndicatorTarget', () => {
   it('shows the line on an icon tab', () => {
-    expect(activeIndicatorTarget('Metrics')).toEqual({ index: 3, visible: true });
+    expect(activeIndicatorTarget('Social')).toEqual({ index: 3, visible: true });
   });
 
   it('hides the line on the coach tab, which has the character instead', () => {
