@@ -38,6 +38,7 @@ import { BuddyIdentityScreen } from '../screens/BuddyIdentityScreen';
 import { PairUpScreen } from '../screens/PairUpScreen';
 import { BuddiesScreen } from '../screens/BuddiesScreen';
 import { BuddyWeekScreen } from '../screens/BuddyWeekScreen';
+import { HighlightsScreen } from '../screens/HighlightsScreen';
 import { BlockedPeopleScreen } from '../screens/BlockedPeopleScreen';
 import { CelebrationHost } from '../components/achievements/CelebrationHost';
 import { BuddiesStoreScope } from '../components/buddies/BuddiesStoreScope';
@@ -125,6 +126,8 @@ export type RootStackParamList = {
   BuddyIdentity: undefined;
   // Profile → Buddies → Blocked people (unblock).
   BlockedPeople: undefined;
+  // Social → last week's highlights in full (the carousel's "All").
+  Highlights: undefined;
 };
 
 export type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';
@@ -246,6 +249,7 @@ export function RootNavigator() {
               <Stack.Screen name="Buddies" component={BuddiesScreen} options={{ title: 'Buddies' }} />
               <Stack.Screen name="PairUp" component={PairUpScreen} options={{ title: 'Add a buddy' }} />
               <Stack.Screen name="BlockedPeople" component={BlockedPeopleScreen} options={{ title: 'Blocked people' }} />
+              <Stack.Screen name="Highlights" component={HighlightsScreen} options={{ title: 'Highlights' }} />
               {/* One instance per buddy: navigating to another buddy's week (a push tap) opens a new
                   screen instead of swapping the params under the current one. */}
               <Stack.Screen name="BuddyWeek" component={BuddyWeekScreen} getId={({ params }) => params?.buddyId} options={{ title: '' }} />

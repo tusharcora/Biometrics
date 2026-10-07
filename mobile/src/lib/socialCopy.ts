@@ -16,6 +16,15 @@ const MOOD_WORD: Record<CheckInMood, string> = { RESTED: 'rested', OKAY: 'okay',
 /** "You" for me; otherwise the display name, or "@handle" when it is unset (''). */
 export const personName = (p: Person, mine: boolean) => (mine ? 'You' : p.displayName || `@${p.handle}`);
 
+// The kinds and types this app knows. A newer server adds more (goodnight, camp notes, campfire, "also"); lists
+// skip what they don't know instead of crashing on it.
+const TIMELINE_KINDS: ReadonlySet<string> = new Set<TimelineItem['kind']>(['checkin', 'step_goal', 'badge', 'sticker', 'recap_share']);
+const HIGHLIGHT_TYPES: ReadonlySet<string> = new Set<HighlightItem['type']>([
+  'top_story', 'most_cheered_you', 'comeback', 'checked_in_every_day', 'most_stickers_sent',
+]);
+export const knownTimelineItems = (items: readonly TimelineItem[]) => items.filter((i) => TIMELINE_KINDS.has(i.kind));
+export const knownHighlights = (items: readonly HighlightItem[]) => items.filter((i) => HIGHLIGHT_TYPES.has(i.type));
+
 /** A timeline line as the bold name and the muted rest; every line starts with its actor. */
 export function timelineParts(item: TimelineItem): { name: string; rest: string } {
   const name = personName(item.actor, item.mine);
