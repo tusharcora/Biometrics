@@ -2,12 +2,16 @@
 // oldest first. Closed kinds with typed fields (the app renders the copy) — never free text, never a health number.
 // Step goals only while the author shares steps; badges only while they share streaks (both via effectiveSharing).
 // A buddy's check-in is LOCKED (no mood) until the viewer has checked in for their own local today — the same lock
-// as story frames (spec §4.1); the viewer's own check-in is never locked.
+// as story frames (spec §4.1); the viewer's own check-in is never locked. Badges follow the story frames' rule
+// (todaysTopBadges): no backfilled old runs, one item per multi-level jump.
 
 import type { AchievementFamily, CheckInMood, StickerKind } from '@prisma/client';
 import { civilDateToUtcMidnight, localCivilDateOrUtc } from '../biometrics/civilDate';
 import { prisma } from '../db/client';
+import { BuddyError } from '../buddies/errors';
 import type { PersonDTO } from '../buddies/people';
+import { shiftDate } from '../scoring/dates';
+import { todaysTopBadges } from './badges';
 import { buddyIdsOf, membersById, type Member } from './circle';
 
 type Base = { id: string; at: string; actor: PersonDTO; mine: boolean };
@@ -26,11 +30,15 @@ type Rest = DistributiveOmit<TimelineItemDTO, 'at' | 'actor' | 'mine'>;
 const WINDOW_MS = 30 * 60 * 60 * 1000;
 
 export async function buildTimeline(viewerId: string, now: Date, limit = 100): Promise<TimelineItemDTO[]> {
+  if (limit <= 0) return [];
   const buddyIds = await buddyIdsOf(viewerId);
   const ids = [viewerId, ...buddyIds];
   const members = await membersById(ids);
-  const viewer = members.get(viewerId)!;
+  const viewer = members.get(viewerId);
+  if (!viewer) throw new BuddyError('not_buddies');
   const today = localCivilDateOrUtc(now, viewer.timezone);
+  // Any author's local date at a moment in the viewer's today is within a day of it (UTC offsets span 26 h).
+  const nearDates = [shiftDate(today, -1), today, shiftDate(today, 1)].map(civilDateToUtcMidnight);
   const since = new Date(now.getTime() - WINDOW_MS);
   const visible = (m: Member | undefined, key: 'steps' | 'streaks') => m !== undefined && (m.person.id === viewerId || m.shares[key]);
   const stepIds = ids.filter((id) => visible(members.get(id), 'steps'));
@@ -38,9 +46,9 @@ export async function buildTimeline(viewerId: string, now: Date, limit = 100): P
 
   const [mine, checkIns, steps, badges, stickers, shares] = await Promise.all([
     prisma.checkIn.findUnique({ where: { authorId_localDate: { authorId: viewerId, localDate: civilDateToUtcMidnight(today) } }, select: { authorId: true } }),
-    prisma.checkIn.findMany({ where: { authorId: { in: ids }, createdAt: { gte: since } }, select: { id: true, authorId: true, mood: true, createdAt: true } }),
-    prisma.stepGoalEvent.findMany({ where: { authorId: { in: stepIds }, at: { gte: since } }, select: { authorId: true, localDate: true, at: true } }),
-    prisma.achievement.findMany({ where: { userId: { in: streakIds }, createdAt: { gte: since } }, select: { id: true, userId: true, family: true, level: true, createdAt: true } }),
+    prisma.checkIn.findMany({ where: { authorId: { in: ids }, localDate: { in: nearDates }, createdAt: { gte: since } }, select: { id: true, authorId: true, mood: true, createdAt: true } }),
+    prisma.stepGoalEvent.findMany({ where: { authorId: { in: stepIds }, at: { gte: since } }, select: { authorId: true, at: true } }),
+    prisma.achievement.findMany({ where: { userId: { in: streakIds }, createdAt: { gte: since } }, select: { id: true, userId: true, family: true, level: true, earnedOn: true, createdAt: true } }),
     prisma.sticker.findMany({
       where: { sentAt: { gte: since }, OR: [{ toUserId: viewerId, fromUserId: { in: buddyIds } }, { fromUserId: viewerId, toUserId: { in: buddyIds } }] },
       select: { id: true, fromUserId: true, toUserId: true, kind: true, sentAt: true },
@@ -62,8 +70,13 @@ export async function buildTimeline(viewerId: string, now: Date, limit = 100): P
       ? { id, kind: 'checkin', locked: false, mood: c.mood }
       : { id, kind: 'checkin', locked: true });
   }
-  for (const s of steps) push(s.authorId, s.at, { id: `step_goal:${s.authorId}:${s.localDate.toISOString().slice(0, 10)}`, kind: 'step_goal' });
-  for (const b of badges) push(b.userId, b.createdAt, { id: `badge:${b.id}`, kind: 'badge', badge: { family: b.family, level: b.level } });
+  // Opaque step-goal id: the author's local date next to `at` would reveal their UTC offset.
+  for (const s of steps) push(s.authorId, s.at, { id: `step_goal:${s.authorId}:${s.at.getTime()}`, kind: 'step_goal' });
+  const authorOf = (id: string) => {
+    const m = members.get(id);
+    return m && { today: localCivilDateOrUtc(now, m.timezone), timezone: m.timezone };
+  };
+  for (const b of todaysTopBadges(badges, authorOf)) push(b.userId, b.createdAt, { id: `badge:${b.id}`, kind: 'badge', badge: { family: b.family, level: b.level } });
   for (const s of stickers) {
     const to = members.get(s.toUserId);
     if (to) push(s.fromUserId, s.sentAt, { id: `sticker:${s.id}`, kind: 'sticker', sticker: s.kind, to: to.person });

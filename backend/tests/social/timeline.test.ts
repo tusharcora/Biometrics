@@ -125,8 +125,53 @@ it('shows badges while the author shares streaks, recap shares by kind only, and
   expect(items[0]).toMatchObject({ badge: { family: 'STEP_GOAL', level: 2 } });
   expect(items[1]).toMatchObject({ recapKind: 'WEEK' });
   expect(items[2]).toMatchObject({ to: { id: ana.id } });
-  expect(JSON.stringify(items)).not.toMatch(/431|steadier/);
+  expect(JSON.stringify(items)).not.toMatch(/steadier|avgSleep/); // not a bare '431': random uuids can contain it
 
   await prisma.user.update({ where: { id: sam.id }, data: { shareStreaks: false } });
   expect((await buildTimeline(me.id, NOW)).map((i) => i.kind)).toEqual(['recap_share', 'sticker']);
+});
+
+const badge = (userId: string, family: 'STEP_GOAL' | 'SLEEP_GOAL', level: number, earnedOn: string, createdAt: Date) =>
+  prisma.achievement.create({ data: { userId, family, level, value: level * 3, earnedOn: civilDateToUtcMidnight(earnedOn), weekStart: civilDateToUtcMidnight('2026-10-05'), monthStart: civilDateToUtcMidnight('2026-10-01'), createdAt } });
+
+it("lists badges by the stories' rule: no backfilled old runs, one item per multi-level jump, hidden on stale consent", async () => {
+  const me = await buddyUser();
+  const sam = await buddyUser();
+  await pairUp(me.id, sam.id);
+  await prisma.user.update({ where: { id: sam.id }, data: { shareStreaks: true, buddySharingConsentVersion: BUDDY_SHARING_CONSENT_VERSION } });
+  await badge(sam.id, 'SLEEP_GOAL', 4, '2026-09-30', ago(20)); // backfill: awarded today for a run that ended a week ago
+  await badge(sam.id, 'STEP_GOAL', 2, '2026-10-07', ago(5));
+  await badge(sam.id, 'STEP_GOAL', 3, '2026-10-07', ago(5));
+  const items = await buildTimeline(me.id, NOW);
+  expect(items).toEqual([expect.objectContaining({ kind: 'badge', badge: { family: 'STEP_GOAL', level: 3 } })]);
+  await prisma.user.update({ where: { id: sam.id }, data: { buddySharingConsentVersion: BUDDY_SHARING_CONSENT_VERSION - 1 } });
+  expect(await buildTimeline(me.id, NOW)).toEqual([]);
+});
+
+it('drops a sticker after unpair, keeps the newest under a small limit, and uses an opaque step-goal id', async () => {
+  const me = await buddyUser({ timezone: 'America/Los_Angeles' });
+  const sam = await buddyUser({ timezone: 'America/Los_Angeles' });
+  const ana = await buddyUser({ timezone: 'America/Los_Angeles' });
+  await pairUp(me.id, sam.id);
+  await pairUp(me.id, ana.id);
+  await prisma.user.update({ where: { id: ana.id }, data: { shareSteps: true, buddySharingConsentVersion: BUDDY_SHARING_CONSENT_VERSION } });
+  await saveCheckIn(me.id, 'RESTED', ago(300));
+  await prisma.sticker.create({ data: { fromUserId: sam.id, toUserId: me.id, kind: 'HEART', sentAt: ago(200) } });
+  const goalAt = ago(100);
+  await prisma.stepGoalEvent.create({ data: { authorId: ana.id, localDate: civilDateToUtcMidnight('2026-10-07'), at: goalAt } });
+  await saveCheckIn(ana.id, 'OKAY', ago(50));
+
+  expect((await buildTimeline(me.id, NOW)).map((i) => i.kind)).toEqual(['checkin', 'sticker', 'step_goal', 'checkin']);
+  const newest = await buildTimeline(me.id, NOW, 2);
+  expect(newest.map((i) => [i.kind, i.actor.id])).toEqual([['step_goal', ana.id], ['checkin', ana.id]]);
+  expect(newest[0]!.id).toBe(`step_goal:${ana.id}:${goalAt.getTime()}`);
+  expect(await buildTimeline(me.id, NOW, 0)).toEqual([]);
+  expect(await buildTimeline(me.id, NOW, -3)).toEqual([]);
+
+  await prisma.buddyPair.deleteMany({ where: { OR: [{ userAId: sam.id }, { userBId: sam.id }] } });
+  expect((await buildTimeline(me.id, NOW)).map((i) => i.kind)).toEqual(['checkin', 'step_goal', 'checkin']);
+});
+
+it('answers not_buddies when the viewer row is missing', async () => {
+  await expect(buildTimeline('00000000-0000-4000-8000-000000000000', NOW)).rejects.toMatchObject({ code: 'not_buddies' });
 });

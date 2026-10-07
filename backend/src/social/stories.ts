@@ -9,7 +9,7 @@ import { civilDateToUtcMidnight, localCivilDateOrUtc } from '../biometrics/civil
 import { prisma } from '../db/client';
 import { BuddyError, UUID_RE } from '../buddies/errors';
 import type { PersonDTO } from '../buddies/people';
-import { shiftDate } from '../scoring/dates';
+import { todaysTopBadges } from './badges';
 import { buddyIdsOf, membersById, type Member } from './circle';
 
 export type StoryFrameDTO =
@@ -60,17 +60,8 @@ async function loadFrames(authors: Member[], now: Date, unlocked: (authorId: str
       ? { kind: 'checkin', at: iso(c.createdAt), locked: false, mood: c.mood }
       : { kind: 'checkin', at: iso(c.createdAt), locked: true });
   }
-  // A badge is today's news when it was awarded in the author's today for a run that ended today or yesterday (a
-  // backfill awarding an old run is not); a jump of several levels at once shows only the top one.
-  const topBadge = new Map<string, (typeof badges)[number]>();
-  for (const b of badges) {
-    const today = todayOf.get(b.userId)!;
-    if (localCivilDateOrUtc(b.createdAt, tzOf.get(b.userId)!) !== today) continue;
-    if (isoDate(b.earnedOn) !== today && isoDate(b.earnedOn) !== shiftDate(today, -1)) continue;
-    const key = `${b.userId}:${b.family}`;
-    if ((topBadge.get(key)?.level ?? 0) < b.level) topBadge.set(key, b);
-  }
-  for (const b of topBadge.values()) {
+  const authorOf = (id: string) => (todayOf.has(id) ? { today: todayOf.get(id)!, timezone: tzOf.get(id)! } : undefined);
+  for (const b of todaysTopBadges(badges, authorOf)) {
     byAuthor.get(b.userId)!.push({ kind: 'badge', at: iso(b.createdAt), family: b.family, level: b.level });
   }
   for (const s of shares) {
