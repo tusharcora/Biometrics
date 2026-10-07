@@ -30,10 +30,23 @@ export interface ActivityItemDTO {
 
 export interface ActivityPageDTO { items: ActivityItemDTO[]; nextCursor: string | null; unseen: number }
 
+/** Never from someone the recipient blocked (a backfill can race the block); badges only while shared. */
 const visible = (recipientId: string): Prisma.BuddyActivityWhereInput => ({
   recipientId,
+  actor: { blocksReceived: { none: { blockerId: recipientId } } },
   OR: [{ kind: { not: 'BUDDY_BADGE' } }, { kind: 'BUDDY_BADGE', actor: SHARES_STREAKS_WHERE }],
 });
+
+/** Unseen rows that would render: a sticker or badge row counts only while its sticker or badge exists. */
+async function countUnseen(userId: string): Promise<number> {
+  const rows = await prisma.buddyActivity.findMany({ where: { ...visible(userId), seenAt: null }, select: { kind: true, refId: true } });
+  const refsOf = (kind: string) => rows.filter((r) => r.kind === kind).map((r) => r.refId);
+  const [stickers, badges] = await Promise.all([
+    prisma.sticker.count({ where: { id: { in: refsOf('STICKER') } } }),
+    prisma.achievement.count({ where: { id: { in: refsOf('BUDDY_BADGE') } } }),
+  ]);
+  return rows.filter((r) => r.kind !== 'STICKER' && r.kind !== 'BUDDY_BADGE').length + stickers + badges;
+}
 
 export async function listActivity(userId: string, cursorRaw: unknown, now: Date, pageSize = ACTIVITY_PAGE_SIZE): Promise<ActivityPageDTO> {
   const cursor = parseCursor(cursorRaw);
@@ -51,7 +64,7 @@ export async function listActivity(userId: string, cursorRaw: unknown, now: Date
   const [stickers, badges, unseen] = await Promise.all([
     prisma.sticker.findMany({ where: { id: { in: refs('STICKER') } }, select: { id: true, kind: true } }),
     prisma.achievement.findMany({ where: { id: { in: refs('BUDDY_BADGE') } }, select: { id: true, family: true, level: true } }),
-    prisma.buddyActivity.count({ where: { ...visible(userId), seenAt: null } }),
+    countUnseen(userId),
   ]);
   const items = page.flatMap((row): ActivityItemDTO[] => {
     const base = { id: row.id, createdAt: row.createdAt.toISOString(), seen: row.seenAt !== null, actor: toPerson(row.actor) };

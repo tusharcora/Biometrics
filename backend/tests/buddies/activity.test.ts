@@ -60,7 +60,59 @@ it("hides badge rows once the earner stops sharing streaks (or their consent goe
   expect((await listActivity(me.id, undefined, NOW)).items).toEqual([]);
   await prisma.user.update({ where: { id: sam.id }, data: { shareStreaks: true, buddySharingConsentVersion: BUDDY_SHARING_CONSENT_VERSION - 1 } });
   const page = await listActivity(me.id, undefined, NOW);
-  expect([page.items, page.unseen]).toEqual([[], 1]);
+  // The dangling sticker row is no item and no unseen count either.
+  expect([page.items, page.unseen]).toEqual([[], 0]);
+});
+
+it('the unseen count ignores sticker and badge rows whose sticker or badge is gone', async () => {
+  const me = await buddyUser();
+  const sam = await buddyUser();
+  const pair = await pairUp(me.id, sam.id);
+  await prisma.user.update({ where: { id: sam.id }, data: { shareStreaks: true, buddySharingConsentVersion: BUDDY_SHARING_CONSENT_VERSION } });
+  await badgeFrom(sam.id, me.id);
+  await prisma.buddyActivity.createMany({
+    data: [
+      { recipientId: me.id, actorId: sam.id, kind: 'PAIRED', refId: pair.id, createdAt: NOW },
+      { recipientId: me.id, actorId: sam.id, kind: 'STICKER', refId: randomUUID(), createdAt: NOW },
+      { recipientId: me.id, actorId: sam.id, kind: 'BUDDY_BADGE', refId: randomUUID(), createdAt: NOW },
+    ],
+  });
+  const page = await listActivity(me.id, undefined, NOW);
+  expect([page.items.map((i) => i.kind).sort(), page.unseen]).toEqual([['badge', 'paired'], 2]);
+});
+
+it("excludes rows from someone the recipient blocked (a backfill racing the block), items and unseen count alike", async () => {
+  const me = await buddyUser();
+  const sam = await buddyUser();
+  const ana = await buddyUser();
+  await prisma.buddyActivity.createMany({
+    data: [
+      { recipientId: me.id, actorId: sam.id, kind: 'REQUEST', refId: randomUUID(), createdAt: NOW },
+      { recipientId: me.id, actorId: ana.id, kind: 'REQUEST', refId: randomUUID(), createdAt: NOW },
+    ],
+  });
+  await prisma.buddyBlock.create({ data: { blockerId: me.id, blockedId: sam.id } });
+  // A block the other way hides nothing from me: only my own blocks filter my Activity.
+  await prisma.buddyBlock.create({ data: { blockerId: ana.id, blockedId: me.id } });
+  const page = await listActivity(me.id, undefined, NOW);
+  expect([page.items.map((i) => i.actor.id), page.unseen]).toEqual([[ana.id], 1]);
+});
+
+it('a page that drops a dangling item still carries the cursor to the next page', async () => {
+  const me = await buddyUser();
+  const sam = await buddyUser();
+  await prisma.buddyActivity.createMany({
+    data: [
+      { recipientId: me.id, actorId: sam.id, kind: 'PAIRED', refId: randomUUID(), createdAt: new Date(NOW.getTime() - 1000) },
+      { recipientId: me.id, actorId: sam.id, kind: 'STICKER', refId: randomUUID(), createdAt: new Date(NOW.getTime() - 2000) },
+      { recipientId: me.id, actorId: sam.id, kind: 'PAIRED', refId: randomUUID(), createdAt: new Date(NOW.getTime() - 3000) },
+    ],
+  });
+  const first = await listActivity(me.id, undefined, NOW, 2);
+  expect(first.items).toHaveLength(1);
+  expect(first.nextCursor).not.toBeNull();
+  const second = await listActivity(me.id, first.nextCursor, NOW, 2);
+  expect([second.items.map((i) => i.kind), second.nextCursor]).toEqual([['paired'], null]);
 });
 
 it('keeps 90 days (older rows are swept on read) and pages 30 at a time', async () => {
