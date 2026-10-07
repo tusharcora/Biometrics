@@ -12,7 +12,7 @@ import { prisma } from '../db/client';
 import { withTimeout } from '../lib/withTimeout';
 import { syncQueue } from '../sync/queue';
 import { pushName, sendBuddyNotice } from './notify';
-import { SHARING_SELECT, effectiveSharing } from './sharing';
+import { BUDDY_SHARING_CONSENT_VERSION, SHARING_SELECT, effectiveSharing } from './sharing';
 
 export const BUDDY_BADGE_JOB = 'buddyBadge';
 /** All of one call's enqueues together give up after this long: GET /me/achievements must never wait on Redis. */
@@ -88,10 +88,22 @@ export async function announceBuddyBadges(
  * (unpair takes no pair-slot lock, so the advisory lock would not serialise with it; the row lock
  * does). A pair whose removal is in flight makes this wait, and once that commits the row is skipped;
  * a removal that starts after waits for this commit, and its Activity delete then sees these rows.
- * Either way no badge row outlives an unpair or block. Returns the recipients whose row is new.
+ * Either way no badge row outlives an unpair or block. The earner's sharing is read again first, with
+ * their User row FOR SHARE: a switch-off that committed after the job's first read writes nothing
+ * (and so pushes nothing), and one that starts now waits for this commit.
+ *
+ * The pair rows are locked one by one (ordered by id); an account deletion's cascade deletes them in
+ * its own order, so the two can deadlock. Postgres then aborts one of them, and both are safe to
+ * retry: this job is retried by BullMQ (attempts) and its writes dedupe, and account deletion can be
+ * repeated. Returns the recipients whose row is new.
  */
 async function writeBadgeRows(earnerId: string, achievementId: string, now: Date): Promise<string[]> {
   return prisma.$transaction(async (tx) => {
+    const [earner] = await tx.$queryRaw<Array<{ shares: boolean }>>`
+      SELECT ("shareStreaks" AND "buddySharingConsentVersion" = ${BUDDY_SHARING_CONSENT_VERSION}) AS "shares"
+      FROM "User" WHERE "id" = ${earnerId}
+      FOR SHARE`;
+    if (!earner?.shares) return [];
     const pairs = await tx.$queryRaw<Array<{ userAId: string; userBId: string }>>`
       SELECT p."userAId", p."userBId" FROM "BuddyPair" p
       WHERE (p."userAId" = ${earnerId} OR p."userBId" = ${earnerId})

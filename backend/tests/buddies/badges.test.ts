@@ -144,6 +144,24 @@ describe('runBuddyBadgeJob', () => {
     expect(sender.calls).toHaveLength(1);
   });
 
+  it('re-reads sharing inside the write: switched off after the job started, it writes and pushes nothing', async () => {
+    const { sam, ach } = await setup();
+    const sender = new RecordingSender();
+    // The job's first read saw sharing on; the switch goes off before its transaction.
+    const original = prisma.achievement.findFirst.bind(prisma.achievement);
+    jest.spyOn(prisma.achievement, 'findFirst').mockImplementationOnce((async (args: never) => {
+      await prisma.user.update({ where: { id: sam.id }, data: { shareStreaks: false } });
+      return original(args);
+    }) as never);
+    try {
+      expect(await runBuddyBadgeJob({ earnerId: sam.id, achievementId: ach.id }, { pushSender: sender, now: NOW })).toBe(0);
+    } finally {
+      jest.restoreAllMocks();
+    }
+    expect(await prisma.buddyActivity.count({ where: { actorId: sam.id } })).toBe(0);
+    expect(sender.calls).toEqual([]);
+  });
+
   it('does nothing once the earner stops sharing', async () => {
     const { sam, ach } = await setup();
     await prisma.user.update({ where: { id: sam.id }, data: { shareStreaks: false } });
@@ -188,8 +206,10 @@ describe('runBuddyBadgeJob', () => {
     const gate = new Promise<void>((resolve) => (release = resolve));
     let inside!: () => void;
     const started = new Promise<void>((resolve) => (inside = resolve));
+    let unpairPid = 0;
     // unpair's writes, done but not yet committed, while the job runs.
     const unpairing = prisma.$transaction(async (tx) => {
+      unpairPid = (await tx.$queryRaw<Array<{ pid: number }>>`SELECT pg_backend_pid() AS pid`)[0]!.pid;
       await lockPairSlot(tx, sam.id, ana.id);
       await tx.buddyPair.deleteMany({ where: orderedPair(sam.id, ana.id) });
       await tx.buddyActivity.deleteMany({ where: { OR: [{ recipientId: sam.id, actorId: ana.id }, { recipientId: ana.id, actorId: sam.id }] } });
@@ -201,9 +221,11 @@ describe('runBuddyBadgeJob', () => {
     const job = runBuddyBadgeJob({ earnerId: sam.id, achievementId: ach.id }, { pushSender: new RecordingSender(), now: NOW }).finally(() => {
       done = true;
     });
-    // Let the job run until it finishes or waits on a lock, then commit the unpair.
+    // Let the job run until it finishes or waits on the unpair's locks (only waits that unpair's
+    // backend blocks count, never some other session's), then commit the unpair.
     for (let i = 0; i < 40 && !done; i++) {
-      const [lock] = await prisma.$queryRaw<Array<{ waiting: bigint }>>`SELECT count(*) AS waiting FROM pg_locks WHERE NOT granted`;
+      const [lock] = await prisma.$queryRaw<Array<{ waiting: bigint }>>`
+        SELECT count(*) AS waiting FROM pg_locks l WHERE NOT l.granted AND ${unpairPid}::int = ANY(pg_blocking_pids(l.pid))`;
       if (lock && lock.waiting > 0n) break;
       await new Promise((r) => setTimeout(r, 50));
     }

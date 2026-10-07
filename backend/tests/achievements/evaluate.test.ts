@@ -5,10 +5,15 @@ import { evaluateAchievements } from '../../src/achievements/evaluate';
 import { shiftDate } from '../../src/scoring/dates';
 import { migrateTestDb } from '../setupTestDb';
 import { createUser } from '../scoring/dbHelpers';
+import { connection } from '../../src/sync/queue';
 import { seedNights } from '../recap/helpers';
 
 beforeAll(() => migrateTestDb());
-afterAll(() => prisma.$disconnect());
+afterAll(async () => {
+  await prisma.$disconnect();
+  // evaluate.ts imports the badge announcer, which opens the shared Redis connection.
+  await connection.quit();
+});
 // Every award logs achievements.awarded; keep the run quiet (the log test checks it with its own spy).
 let quietInfo: jest.SpyInstance;
 beforeEach(() => {

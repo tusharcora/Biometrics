@@ -24,6 +24,10 @@ const mutesEitherWay = (a: string, b: string) => ({ OR: [{ muterId: a, mutedId: 
  */
 export async function unpair(userId: string, buddyId: string, now: Date): Promise<void> {
   await prisma.$transaction(async (tx) => {
+    // The pair is deleted BEFORE the Activity rows, and must stay first: the badge job reads the pair
+    // FOR SHARE before writing BUDDY_BADGE rows (badges.ts writeBadgeRows), so either it waits for
+    // this commit and skips the pair, or this delete waits for the job and the Activity delete below
+    // then sees its rows.
     const removed = await tx.buddyPair.deleteMany({ where: orderedPair(userId, buddyId) });
     if (removed.count === 0) return;
     // Mutes go with the pair, both ways: a re-pair starts unmuted.
@@ -47,6 +51,7 @@ export async function unpair(userId: string, buddyId: string, now: Date): Promis
 export async function block(blockerId: string, blockedId: string, now: Date): Promise<void> {
   await prisma.$transaction(async (tx) => {
     await lockPairSlot(tx, blockerId, blockedId);
+    // As in unpair: the pair goes BEFORE any Activity row, so a badge job in flight can't leave a row behind.
     const removed = await tx.buddyPair.deleteMany({ where: orderedPair(blockerId, blockedId) });
     if (removed.count > 0) {
       await tx.sticker.deleteMany({ where: eitherWay(blockerId, blockedId) });
