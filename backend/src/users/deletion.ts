@@ -19,6 +19,7 @@ import { decryptToken } from '../crypto/tokenCipher';
 import { revokeHealthToken } from '../health/oauth';
 import { deleteUserSubscription } from '../health/subscriber';
 import { holdHandle } from '../buddies/holds';
+import { purgeSocialJsonMentions } from '../buddies/models';
 
 /**
  * Every model that carries a `userId`, in an FK-safe delete order: children
@@ -152,6 +153,14 @@ export async function deleteUserAccount(
     if (owner?.handle) await holdHandle(prisma, owner.handle, userId, new Date());
   } catch (err) {
     log(`Account deletion: could not hold the handle for user ${userId}: ${err instanceof Error ? err.name : 'unknown error'}`);
+  }
+
+  // Week-highlight caches name people inside JSON, beyond any cascade (buddies/models.ts). Best effort: reads gate
+  // every cached actor against the live circle anyway. Only the error class is logged.
+  try {
+    await purgeSocialJsonMentions(prisma, userId);
+  } catch (err) {
+    log(`Account deletion: could not purge social mentions for user ${userId}: ${err instanceof Error ? err.name : 'unknown error'}`);
   }
 
   const counts = await deleteOwnedRows(prisma, { userId }, { id: userId });

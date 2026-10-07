@@ -50,6 +50,7 @@ import { refreshDaySummaryAfterScore } from '../coach/daySummaryJob';
 import { runCoachRetention } from '../coach/retention';
 import { LoggerCoachTelemetry } from '../coach/telemetry';
 import { recordStepGoal } from '../social/stepGoal';
+import { runSocialSweep } from '../social/sweep';
 
 const ALL_METRIC_TYPES: BiometricMetricType[] = ['HRV', 'RESTING_HR', 'SLEEP', 'STEPS'];
 const SYNC_WORKER_CONCURRENCY = 5;
@@ -395,6 +396,16 @@ async function handleSleepStagesJob(data: SleepStagesBackfillJobData): Promise<v
   await runSleepHistoryPass(conn, () => ({ sleepStagesBackfilledAt: new Date() }));
 }
 
+/**
+ * The social sweep's clock: `job.data.now` when a test pins it (a valid ISO instant), else the real clock. The
+ * scheduler sends `{}`. Not a second processSyncJob parameter: BullMQ passes the worker token there.
+ */
+function sweepClock(job: Job): Date {
+  const pinned = (job.data as { now?: unknown } | undefined)?.now;
+  const at = typeof pinned === 'string' ? new Date(pinned) : null;
+  return at && !Number.isNaN(at.getTime()) ? at : new Date();
+}
+
 export async function processSyncJob(job: Job): Promise<void> {
   if (job.name === 'fetch') {
     await handleFetchJob(job.data as FetchJobData);
@@ -426,6 +437,12 @@ export async function processSyncJob(job: Job): Promise<void> {
     const { userId, runKey } = job.data as RunHabitCorrelationsJobData;
     await runHabitCorrelations(userId, { runKey });
   } else if (job.name === RECAP_SWEEP_JOB) {
+    // The hourly tick also runs the social sweep (expired camp notes, old highlight caches). It goes first and never
+    // throws, so a social failure cannot stop recaps. Counts and the error's name only.
+    await runSocialSweep(sweepClock(job)).then(
+      (r) => console.info(JSON.stringify({ event: 'social.sweep', ...r })),
+      (err: unknown) => console.error(JSON.stringify({ event: 'social.sweep_failed', error: err instanceof Error ? err.name : 'unknown' })),
+    );
     await runRecapSweep();
   } else if (job.name === RECAP_BUILD_JOB) {
     // Not gated on COACH_ENABLED: recaps exist with the coach off (template text, app-level push).

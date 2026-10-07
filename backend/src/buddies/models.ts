@@ -3,6 +3,8 @@
 // database cascades instead, and tests/buddies/deletion.test.ts introspects the schema against
 // this list so a future social table must be added here (and to that test's seed).
 
+import type { PrismaClient } from '@prisma/client';
+
 export const SOCIAL_MODELS = [
   'BuddyPair',
   'BuddyRequest',
@@ -44,3 +46,13 @@ export const SOCIAL_USER_COLUMNS: Readonly<Record<SocialModel, readonly string[]
 
 /** `Model.column` pairs whose foreign key sets null instead of cascading. */
 export const SET_NULL_COLUMNS: ReadonlySet<string> = new Set(['BuddyCode.usedById', 'HandleHold.previousOwnerId']);
+
+/**
+ * Week-highlight caches (WeeklyHighlights.items) name people by id inside JSON, which no foreign key can cascade.
+ * On account deletion every cache naming the user is deleted; the next read rebuilds it from rows that no longer
+ * include them. Reads also gate every cached actor against the live circle, so a deleted id never surfaces even if
+ * this purge fails. Returns the number of caches deleted.
+ */
+export async function purgeSocialJsonMentions(db: Pick<PrismaClient, '$executeRaw'>, userId: string): Promise<number> {
+  return db.$executeRaw`DELETE FROM "WeeklyHighlights" WHERE "items" @> ${JSON.stringify([{ actorId: userId }])}::jsonb`;
+}
