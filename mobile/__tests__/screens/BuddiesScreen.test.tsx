@@ -2,7 +2,7 @@ import React from 'react';
 import { Alert } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import {
-  acceptRequest, blockFromRequest, confirmMoodNotice, declineRequest, fetchActivity, fetchBuddyPage, fetchIdentity, fetchRequests, markActivitySeen,
+  acceptRequest, blockFromRequest, cancelRequest, confirmMoodNotice, declineRequest, fetchActivity, fetchBuddyPage, fetchIdentity, fetchRequests, markActivitySeen,
 } from '../../src/api/buddies';
 import { resetBuddies } from '../../src/lib/buddiesStore';
 import { BuddiesScreen } from '../../src/screens/BuddiesScreen';
@@ -22,8 +22,19 @@ jest.mock('../../src/api/buddies', () => ({
 }));
 const mockNavigate = jest.fn();
 let mockParams: { tab?: string } | undefined;
+// The screen's focus listeners (a stable navigation object, as in the app).
+let mockFocusListeners: Array<() => void> = [];
+const mockNavigation = {
+  navigate: mockNavigate,
+  addListener: (_event: string, cb: () => void) => {
+    mockFocusListeners.push(cb);
+    return () => {
+      mockFocusListeners = mockFocusListeners.filter((l) => l !== cb);
+    };
+  },
+};
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ navigate: mockNavigate }),
+  useNavigation: () => mockNavigation,
   useRoute: () => ({ params: mockParams }),
   NavigationContext: require('react').createContext(undefined),
 }));
@@ -37,6 +48,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   resetBuddies();
   mockParams = undefined;
+  mockFocusListeners = [];
   (fetchIdentity as jest.Mock).mockResolvedValue({ handle: 'me', displayName: 'Me', displayNamePrefill: '', moodNoticeSeen: true });
   (fetchActivity as jest.Mock).mockResolvedValue(ACTIVITY);
   (fetchRequests as jest.Mock).mockResolvedValue({ incoming: [], outgoing: [] });
@@ -165,18 +177,102 @@ it('marks the Activity tab with a dot until it is opened, then marks everything 
   expect(markActivitySeen).toHaveBeenCalledTimes(1);
 });
 
+const REQUEST_ACTIVITY = {
+  items: [{ id: 'a2', kind: 'request', requestId: 'r1', createdAt: '2026-10-07T12:00:00Z', seen: true, actor: person('u1', 'Ana') }],
+  nextCursor: null,
+  unseen: 0,
+};
+const ONE_INCOMING = { incoming: [{ id: 'r1', createdAt: '', from: person('u1', 'Ana') }], outgoing: [] };
+
 it('shows a request in Activity without a status or an Accept button, and opens Requests from it', async () => {
   (fetchBuddyPage as jest.Mock).mockResolvedValue(EMPTY_PAGE);
-  (fetchActivity as jest.Mock).mockResolvedValue({
-    items: [{ id: 'a2', kind: 'request', requestId: 'r1', createdAt: '2026-10-07T12:00:00Z', seen: true, actor: person('u1', 'Ana') }],
-    nextCursor: null,
-    unseen: 0,
-  });
+  (fetchActivity as jest.Mock).mockResolvedValue(REQUEST_ACTIVITY);
+  (fetchRequests as jest.Mock).mockResolvedValue(ONE_INCOMING);
   mockParams = { tab: 'activity' };
   render(<BuddiesScreen />);
   expect(await screen.findByTestId('activity-a2')).toHaveTextContent('Ana wants to be your buddy');
   expect(screen.queryByText('Accept')).toBeNull();
   expect(markActivitySeen).not.toHaveBeenCalled();
   fireEvent.press(screen.getByTestId('activity-a2'));
-  expect(mockNavigate).toHaveBeenCalledWith('Buddies', { tab: 'requests' });
+  expect(await screen.findByTestId('requests-list')).toBeTruthy();
+  expect(await screen.findByTestId('request-in-r1')).toBeTruthy();
+  expect(mockNavigate).not.toHaveBeenCalled();
+});
+
+it('opens Requests from an Activity request item even when the screen was opened on Requests', async () => {
+  (fetchBuddyPage as jest.Mock).mockResolvedValue(EMPTY_PAGE);
+  (fetchActivity as jest.Mock).mockResolvedValue(REQUEST_ACTIVITY);
+  (fetchRequests as jest.Mock).mockResolvedValue(ONE_INCOMING);
+  mockParams = { tab: 'requests' };
+  render(<BuddiesScreen />);
+  expect(await screen.findByTestId('request-in-r1')).toBeTruthy();
+  await act(async () => fireEvent.press(screen.getByTestId('buddies-tabs-activity')));
+  fireEvent.press(await screen.findByTestId('activity-a2'));
+  expect(await screen.findByTestId('request-in-r1')).toBeTruthy();
+  expect(screen.queryByTestId('activity-list')).toBeNull();
+});
+
+it('selects the tab a changed route param names (a request push while the screen is open)', async () => {
+  (fetchBuddyPage as jest.Mock).mockResolvedValue(EMPTY_PAGE);
+  (fetchRequests as jest.Mock).mockResolvedValue(ONE_INCOMING);
+  const view = render(<BuddiesScreen />);
+  expect(await screen.findByTestId('buddies-empty')).toBeTruthy();
+  mockParams = { tab: 'requests' };
+  view.rerender(<BuddiesScreen />);
+  expect(await screen.findByTestId('request-in-r1')).toBeTruthy();
+});
+
+it('re-reads the Activity count on focus', async () => {
+  (fetchBuddyPage as jest.Mock).mockResolvedValue(EMPTY_PAGE);
+  render(<BuddiesScreen />);
+  expect(await screen.findByText('Activity')).toBeTruthy();
+  (fetchActivity as jest.Mock).mockResolvedValue({ ...ACTIVITY, unseen: 2 });
+  await act(async () => mockFocusListeners.forEach((l) => l()));
+  expect(await screen.findByText('Activity •')).toBeTruthy();
+});
+
+it('keeps a cleared Activity dot cleared when a slower count read lands after it', async () => {
+  (fetchBuddyPage as jest.Mock).mockResolvedValue(EMPTY_PAGE);
+  let landCount: (v: unknown) => void = () => undefined;
+  // Child effects run first: the Activity tab's read answers at once, the screen's count read is held.
+  (fetchActivity as jest.Mock)
+    .mockResolvedValueOnce({ items: [], nextCursor: null, unseen: 1 })
+    .mockReturnValueOnce(new Promise((r) => (landCount = r)));
+  (markActivitySeen as jest.Mock).mockResolvedValue(undefined);
+  mockParams = { tab: 'activity' };
+  render(<BuddiesScreen />);
+  await waitFor(() => expect(markActivitySeen).toHaveBeenCalled());
+  await act(async () => landCount({ items: [], nextCursor: null, unseen: 1 }));
+  expect(screen.getByText('Activity')).toBeTruthy();
+  expect(screen.queryByText('Activity •')).toBeNull();
+});
+
+it('leaves Block usable after the confirm is cancelled', async () => {
+  (fetchBuddyPage as jest.Mock).mockResolvedValue(EMPTY_PAGE);
+  (fetchRequests as jest.Mock).mockResolvedValue(ONE_INCOMING);
+  let choose: 'cancel' | 'destructive' = 'cancel';
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation((_t, _m, buttons) => buttons?.find((b) => b.style === choose)?.onPress?.());
+  mockParams = { tab: 'requests' };
+  render(<BuddiesScreen />);
+  const block = await screen.findByTestId('request-block-r1');
+  await act(async () => fireEvent.press(block));
+  expect(blockFromRequest).not.toHaveBeenCalled();
+  choose = 'destructive';
+  await act(async () => fireEvent.press(screen.getByTestId('request-block-r1')));
+  expect(alert).toHaveBeenCalledTimes(2);
+  await waitFor(() => expect(blockFromRequest).toHaveBeenCalledWith('r1'));
+  alert.mockRestore();
+});
+
+it('shows the error for a failed answer and re-reads the requests', async () => {
+  (fetchBuddyPage as jest.Mock).mockResolvedValue(EMPTY_PAGE);
+  (fetchRequests as jest.Mock).mockResolvedValue({ incoming: [], outgoing: [{ id: 'r3', createdAt: '', toHandle: 'cy' }] });
+  (cancelRequest as jest.Mock).mockRejectedValue(Object.assign(new Error('x'), { code: 'not_found_or_answered' }));
+  mockParams = { tab: 'requests' };
+  render(<BuddiesScreen />);
+  await screen.findByTestId('request-out-r3');
+  expect(fetchRequests).toHaveBeenCalledTimes(1);
+  await act(async () => fireEvent.press(screen.getByTestId('request-cancel-r3')));
+  expect(await screen.findByTestId('requests-message')).toBeTruthy();
+  expect(fetchRequests).toHaveBeenCalledTimes(2);
 });

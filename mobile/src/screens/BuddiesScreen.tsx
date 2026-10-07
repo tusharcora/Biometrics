@@ -20,7 +20,7 @@ import { refreshBuddies, useBuddies } from '../lib/buddiesStore';
 import { useRefreshBuddiesOnFocus } from '../lib/useRefreshBuddiesOnFocus';
 
 type Tab = 'buddies' | 'requests' | 'activity';
-type Nav = { navigate: (name: string, params?: object) => void };
+type Nav = { navigate: (name: string, params?: object) => void; addListener?: (event: 'focus', callback: () => void) => () => void };
 type Gate = ReturnType<typeof useMoodNoticeGate>;
 type RequestItem = { kind: 'in'; request: IncomingRequest } | { kind: 'out'; request: OutgoingRequest };
 
@@ -49,19 +49,27 @@ function BuddiesBody({ identity, navigation, initialTab }: { identity: BuddyIden
   useRefreshBuddiesOnFocus();
   const gate = useMoodNoticeGate(identity.moodNoticeSeen);
   const [unseen, setUnseen] = useState(0);
-  // Set once Activity marked everything seen, so a slower count read can't bring the dot back.
-  const cleared = useRef(false);
-  useEffect(() => {
+  // Bumped each time Activity marks everything seen: a count read that started before it is dropped,
+  // so a slower read can't bring the dot back.
+  const cleared = useRef(0);
+  const readUnseen = useCallback(() => {
+    const at = cleared.current;
     fetchActivity()
       .then((page) => {
-        if (!cleared.current) setUnseen(page.unseen);
+        if (at === cleared.current) setUnseen(page.unseen);
       })
       .catch(() => undefined);
   }, []);
+  // On mount and each time the screen comes back into focus.
+  useEffect(() => {
+    readUnseen();
+    return navigation.addListener?.('focus', readUnseen);
+  }, [navigation, readUnseen]);
   const onSeen = useCallback(() => {
-    cleared.current = true;
+    cleared.current++;
     setUnseen(0);
   }, []);
+  const openRequests = useCallback(() => setTab('requests'), []);
   const options = [
     { value: 'buddies' as const, label: 'Buddies' },
     { value: 'requests' as const, label: 'Requests' },
@@ -73,7 +81,7 @@ function BuddiesBody({ identity, navigation, initialTab }: { identity: BuddyIden
       <SegmentedControl testID="buddies-tabs" options={options} value={tab} onChange={setTab} />
       {tab === 'buddies' ? <BuddyListTab navigation={navigation} /> : null}
       {tab === 'requests' ? <RequestsTab gate={gate} navigation={navigation} /> : null}
-      {tab === 'activity' ? <ActivityTab navigation={navigation} onSeen={onSeen} /> : null}
+      {tab === 'activity' ? <ActivityTab navigation={navigation} onSeen={onSeen} onOpenRequests={openRequests} /> : null}
       <MoodNoticeSheet {...gate.sheet} />
     </View>
   );
@@ -253,11 +261,18 @@ function RequestsTab({ gate, navigation }: { gate: Gate; navigation: Nav }) {
   );
 }
 
-function ActivityTab({ navigation, onSeen }: { navigation: Nav; onSeen: () => void }) {
+function ActivityTab({ navigation, onSeen, onOpenRequests }: { navigation: Nav; onSeen: () => void; onOpenRequests: () => void }) {
   const [items, setItems] = useState<ActivityItem[] | null>(null);
   const [cursor, setCursor] = useState<string | null>(null);
   const [failed, setFailed] = useState(false);
   const loadingMore = useRef(false);
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   // Loaded, and marked seen, once per visit to the tab.
   useEffect(() => {
@@ -293,6 +308,7 @@ function ActivityTab({ navigation, onSeen }: { navigation: Nav; onSeen: () => vo
     loadingMore.current = true;
     try {
       const page = await fetchActivity(cursor);
+      if (!mounted.current) return;
       setItems((prev) => uniqueById([...(prev ?? []), ...page.items]));
       setCursor(page.nextCursor);
     } catch {
@@ -301,10 +317,10 @@ function ActivityTab({ navigation, onSeen }: { navigation: Nav; onSeen: () => vo
       loadingMore.current = false;
     }
   }
-  // A request item carries no status, so it only leads to the Requests tab (which shows what is
-  // still pending); it never offers an answer itself.
-  const open = (item: ActivityItem) =>
-    item.kind === 'request' ? navigation.navigate('Buddies', { tab: 'requests' }) : navigation.navigate('BuddyWeek', { buddyId: item.actor.id });
+  // A request item carries no status, so it only switches to the Requests tab (which shows what is
+  // still pending); it never offers an answer itself. In-screen: navigating to this same route with
+  // the tab param it already has would do nothing.
+  const open = (item: ActivityItem) => (item.kind === 'request' ? onOpenRequests() : navigation.navigate('BuddyWeek', { buddyId: item.actor.id }));
 
   if (failed) return <Text testID="activity-error" className="py-8 text-center text-muted-foreground">Couldn't load Activity.</Text>;
   if (items === null) return <ActivityIndicator testID="activity-loading" />;
