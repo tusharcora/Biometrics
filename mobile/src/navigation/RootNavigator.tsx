@@ -40,6 +40,7 @@ import { PairUpScreen } from '../screens/PairUpScreen';
 import { BuddiesScreen } from '../screens/BuddiesScreen';
 import { BuddyWeekScreen } from '../screens/BuddyWeekScreen';
 import { HighlightsScreen } from '../screens/HighlightsScreen';
+import { CampfireScreen } from '../screens/CampfireScreen';
 import { BlockedPeopleScreen } from '../screens/BlockedPeopleScreen';
 import { CelebrationHost } from '../components/achievements/CelebrationHost';
 import { BuddiesStoreScope } from '../components/buddies/BuddiesStoreScope';
@@ -255,6 +256,8 @@ export function RootNavigator() {
               <Stack.Screen name="PairUp" component={PairUpScreen} options={{ title: 'Add a buddy' }} />
               <Stack.Screen name="BlockedPeople" component={BlockedPeopleScreen} options={{ title: 'Blocked people' }} />
               <Stack.Screen name="Highlights" component={HighlightsScreen} options={{ title: 'Highlights' }} />
+              {/* The Campfire (S2): its own header over the scene, no tab bar. */}
+              <Stack.Screen name="Campfire" component={CampfireScreen} options={{ headerShown: false }} />
               <Stack.Screen
                 name="SocialStory"
                 component={SocialStoryScreen}
