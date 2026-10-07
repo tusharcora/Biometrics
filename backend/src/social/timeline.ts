@@ -27,7 +27,8 @@ export type TimelineItemDTO =
 type DistributiveOmit<T, K extends PropertyKey> = T extends unknown ? Omit<T, K> : never;
 type Rest = DistributiveOmit<TimelineItemDTO, 'at' | 'actor' | 'mine'>;
 
-const WINDOW_MS = 30 * 60 * 60 * 1000;
+/** How far back any moment in the viewer's local today can lie (a local day is at most 25 h, with slack). */
+export const TODAY_WINDOW_MS = 30 * 60 * 60 * 1000;
 
 export async function buildTimeline(viewerId: string, now: Date, limit = 100): Promise<TimelineItemDTO[]> {
   if (limit <= 0) return [];
@@ -39,7 +40,7 @@ export async function buildTimeline(viewerId: string, now: Date, limit = 100): P
   const today = localCivilDateOrUtc(now, viewer.timezone);
   // Any author's local date at a moment in the viewer's today is within a day of it (UTC offsets span 26 h).
   const nearDates = [shiftDate(today, -1), today, shiftDate(today, 1)].map(civilDateToUtcMidnight);
-  const since = new Date(now.getTime() - WINDOW_MS);
+  const since = new Date(now.getTime() - TODAY_WINDOW_MS);
   const visible = (m: Member | undefined, key: 'steps' | 'streaks') => m !== undefined && (m.person.id === viewerId || m.shares[key]);
   const stepIds = ids.filter((id) => visible(members.get(id), 'steps'));
   const streakIds = ids.filter((id) => visible(members.get(id), 'streaks'));
