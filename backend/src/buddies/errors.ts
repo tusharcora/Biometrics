@@ -30,6 +30,8 @@ export const BUDDY_ERROR_STATUS = {
   invalid_cursor: 400,
   invalid_checkin: 400,
   recap_not_found: 404,
+  goodnight_closed: 409,
+  undo_expired: 409,
 } as const;
 
 export type BuddyErrorCode = keyof typeof BUDDY_ERROR_STATUS;
