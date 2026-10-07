@@ -29,6 +29,13 @@ it('round-trips a cursor and refuses a malformed one', () => {
   for (const bad of [farPast, farFuture]) expect(() => parseCursor(bad)).toThrow('invalid_cursor');
 });
 
+it('accepts cursor dates from 1970 through 9999 exactly, and refuses 1969 and 10000', () => {
+  const id = '0b5e3f9e-1b2c-4d5e-8f90-123456789abc';
+  const raw = (iso: string) => Buffer.from(JSON.stringify([iso, id])).toString('base64url');
+  for (const iso of ['1970-01-01T00:00:00.000Z', '9999-12-31T23:59:59.999Z']) expect(parseCursor(raw(iso))).toEqual({ at: new Date(iso), id });
+  for (const iso of ['1969-12-31T23:59:59.999Z', '+010000-01-01T00:00:00.000Z']) expect(() => parseCursor(raw(iso))).toThrow('invalid_cursor');
+});
+
 it('pages by (lastActivityAt, id) newest first, with ties broken by id', async () => {
   const me = await buddyUser();
   const buddies = await Promise.all(Array.from({ length: 5 }, () => buddyUser()));
