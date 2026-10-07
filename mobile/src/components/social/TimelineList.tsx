@@ -12,7 +12,9 @@ import { refreshSocial } from '../../lib/socialStore';
 import { PressableScale } from '../ui/pressable-scale';
 import { Text } from '../ui/text';
 
-const DOT: Record<TimelineItem['kind'], string> = { checkin: '#93C5FD', step_goal: '#FB923C', badge: '#FCD34D', sticker: '#F9A8D4', recap_share: '#A5B4FC' };
+const DOT: Record<TimelineItem['kind'], string> = {
+  checkin: '#93C5FD', step_goal: '#FB923C', badge: '#FCD34D', sticker: '#F9A8D4', recap_share: '#A5B4FC', goodnight: '#A78BFA', camp_note: '#C7D2FE',
+};
 const LABEL = { cheer: 'Cheer', rest_up: 'Rest up' } as const;
 const KIND = { cheer: 'CHEER', rest_up: 'REST_UP' } as const;
 /** Time column (w-11 = 44) + gap (12) + half the 10 px dot − half the 2 px line. */
