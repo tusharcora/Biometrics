@@ -41,6 +41,8 @@ jest.mock('../../src/sync/SyncProvider', () => ({ SyncProvider: ({ children }: a
 jest.mock('../../src/components/achievements/CelebrationHost', () => ({ CelebrationHost: () => null }));
 // So does the shared buddies store scope.
 jest.mock('../../src/components/buddies/BuddiesStoreScope', () => ({ BuddiesStoreScope: () => null }));
+// And the shared Social store scope.
+jest.mock('../../src/components/social/SocialStoreScope', () => ({ SocialStoreScope: () => null }));
 
 const stopListening = jest.fn();
 let appStateListener: ((state: string) => void) | undefined;

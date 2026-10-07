@@ -3,6 +3,7 @@ import { Alert } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { blockBuddy, fetchBuddyWeek, sendSticker, setMuted, unpair } from '../../src/api/buddies';
 import { refreshBuddies } from '../../src/lib/buddiesStore';
+import { refreshSocial } from '../../src/lib/socialStore';
 import { BuddyWeekScreen } from '../../src/screens/BuddyWeekScreen';
 
 jest.mock('../../src/api/buddies', () => ({
@@ -14,6 +15,7 @@ jest.mock('../../src/api/buddies', () => ({
   blockBuddy: jest.fn(),
 }));
 jest.mock('../../src/lib/buddiesStore', () => ({ refreshBuddies: jest.fn() }));
+jest.mock('../../src/lib/socialStore', () => ({ refreshSocial: jest.fn() }));
 const mockGoBack = jest.fn();
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ goBack: mockGoBack, setOptions: jest.fn() }),
@@ -100,6 +102,7 @@ it('sends a sticker and says who will pass it on; the daily limit and an unpaire
   expect(screen.queryByTestId('buddy-unpair')).toBeNull();
   expect(screen.queryByTestId('number-row-sleepScore')).toBeNull();
   expect(refreshBuddies).toHaveBeenCalled();
+  expect(refreshSocial).toHaveBeenCalled();
 });
 
 it('sends once for a double tap in one frame', async () => {
@@ -150,6 +153,7 @@ it('mutes silently, and unpairs after a confirmation', async () => {
   await act(async () => fireEvent.press(screen.getByTestId('buddy-unpair')));
   await waitFor(() => expect(unpair).toHaveBeenCalledWith('b1'));
   expect(refreshBuddies).toHaveBeenCalled();
+  expect(refreshSocial).toHaveBeenCalled();
   expect(mockGoBack).toHaveBeenCalled();
   alert.mockRestore();
 });
@@ -175,6 +179,7 @@ it('blocks after a confirmation; cancelling does nothing', async () => {
   await act(async () => fireEvent.press(screen.getByTestId('buddy-block')));
   expect(blockBuddy).toHaveBeenCalledWith('b1');
   expect(refreshBuddies).toHaveBeenCalled();
+  expect(refreshSocial).toHaveBeenCalled();
   expect(mockGoBack).toHaveBeenCalledTimes(1);
   alert.mockRestore();
 });

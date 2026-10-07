@@ -1,0 +1,113 @@
+// Social tab home — V5 one scroll (spec 2026-10-07 social §4): camp banner → stories with my check-in → week
+// highlights → today timeline, and a floating Chats button (opens Buddies until S3). Unseen stickers are marked
+// seen once the screen has shown them, so the tab dot clears where they are read.
+
+import React, { useCallback, useEffect, useRef, useState } from 'react';
+import { RefreshControl, ScrollView, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
+import { useFocusEffect, useIsFocused, useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useColorScheme } from 'nativewind';
+import { markStickersSeen, type SocialHome } from '../api/social';
+import { COLORS } from '../theme';
+import type { RootStackParamList } from '../navigation/RootNavigator';
+import { useTabBarClearance } from '../navigation/tabBarLayout';
+import { refreshSocial, useSocial } from '../lib/socialStore';
+import { CampBanner } from '../components/social/CampBanner';
+import { CheckInSheet } from '../components/social/CheckInSheet';
+import { HighlightsCarousel } from '../components/social/HighlightsCarousel';
+import { StoriesRow } from '../components/social/StoriesRow';
+import { TimelineList } from '../components/social/TimelineList';
+import { Button } from '../components/ui/button';
+import { Card } from '../components/ui/card';
+import { PressableScale } from '../components/ui/pressable-scale';
+import { SectionLabel } from '../components/ui/section-label';
+import { Skeleton } from '../components/ui/skeleton';
+import { Text } from '../components/ui/text';
+
+/** Marks unseen stickers seen once per loaded home that shows some, while the screen is focused. */
+function useMarkStickersSeen(home: SocialHome | null, focused: boolean) {
+  const marked = useRef<SocialHome | null>(null);
+  useEffect(() => {
+    if (!home || !focused || (home.unread?.stickers ?? 0) === 0 || marked.current === home) return;
+    marked.current = home;
+    void markStickersSeen().then(() => refreshSocial(), () => undefined);
+  }, [home, focused]);
+}
+
+export function SocialScreen() {
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
+  const clearance = useTabBarClearance();
+  const focused = useIsFocused();
+  const { colorScheme } = useColorScheme();
+  const colors = COLORS[colorScheme === 'light' ? 'light' : 'dark'];
+  const state = useSocial();
+  const [checkingIn, setCheckingIn] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
+
+  useFocusEffect(useCallback(() => { void refreshSocial(); }, []));
+  useMarkStickersSeen(state.status === 'ready' ? state.home : null, focused);
+
+  const pull = async () => {
+    setRefreshing(true);
+    await refreshSocial();
+    setRefreshing(false);
+  };
+
+  if (state.status === 'unavailable') {
+    return (
+      <SafeAreaView edges={['top']} className="flex-1 bg-background px-5 pt-4" testID="social-screen">
+        <Card testID="social-unavailable" className="gap-3">
+          <Text className="font-semibold">Social isn't available yet</Text>
+          <Text className="text-sm text-muted-foreground">Your buddies are still here.</Text>
+          <Button testID="social-open-buddies" onPress={() => navigation.navigate('Buddies')}>Open Buddies</Button>
+        </Card>
+      </SafeAreaView>
+    );
+  }
+  if (state.status !== 'ready') {
+    return (
+      <SafeAreaView edges={['top']} className="flex-1 bg-background px-5 pt-4" testID="social-screen">
+        {state.status === 'error' ? (
+          <Card testID="social-error" className="gap-3">
+            <Text className="text-sm">Couldn't load your circle.</Text>
+            <Button testID="social-retry" variant="secondary" onPress={() => void refreshSocial()}>Try again</Button>
+          </Card>
+        ) : (
+          <Skeleton testID="social-loading" className="h-40 w-full rounded-card" />
+        )}
+      </SafeAreaView>
+    );
+  }
+
+  const { home } = state;
+  const chats = (home.unread?.requests ?? 0) + (home.unread?.stickers ?? 0);
+  return (
+    <SafeAreaView edges={['top']} className="flex-1 bg-background" testID="social-screen">
+      <ScrollView contentContainerStyle={{ gap: 18, paddingHorizontal: 20, paddingBottom: clearance + 64 }}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void pull()} />}>
+        <View className="pt-2">
+          <Text className="font-display text-display">Social</Text>
+        </View>
+        <CampBanner checkedIn={home.camp.checkedIn} faces={home.camp.faces} />
+        <StoriesRow me={home.me} rings={home.stories} onCheckIn={() => setCheckingIn(true)}
+          onOpenStory={(authorId) => navigation.navigate('SocialStory', { authorId })} onSeeAll={() => navigation.navigate('Buddies')} />
+        {home.highlights ? <HighlightsCarousel highlights={home.highlights} onOpenAll={() => navigation.navigate('Highlights')} /> : null}
+        <View className="gap-3">
+          <SectionLabel>Today</SectionLabel>
+          <TimelineList items={home.timeline} />
+        </View>
+      </ScrollView>
+      <PressableScale testID="social-chats" accessibilityRole="button" accessibilityLabel={chats > 0 ? `Chats, ${chats} new` : 'Chats'}
+        onPress={() => ((home.unread?.requests ?? 0) > 0 ? navigation.navigate('Buddies', { tab: 'requests', open: Date.now() }) : navigation.navigate('Buddies'))}
+        style={{ position: 'absolute', right: 20, bottom: clearance + 8 }}
+        className="h-12 flex-row items-center gap-2 rounded-full bg-foreground px-4">
+        <View testID="social-chats-icon"><Ionicons name="chatbubble-outline" size={18} color={colors.background} /></View>
+        <Text className="font-semibold text-background">Chats</Text>
+        {chats > 0 ? <Text testID="social-chats-count" className="min-w-5 rounded-full bg-accent px-1.5 text-center text-xs font-bold text-background">{chats}</Text> : null}
+      </PressableScale>
+      <CheckInSheet visible={checkingIn} current={home.me.checkIn?.mood ?? null} onClose={() => setCheckingIn(false)} />
+    </SafeAreaView>
+  );
+}

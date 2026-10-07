@@ -28,6 +28,8 @@ export const BUDDY_ERROR_STATUS = {
   sticker_limit: 429,
   invalid_sticker: 400,
   invalid_cursor: 400,
+  invalid_checkin: 400,
+  recap_not_found: 404,
 } as const;
 
 export type BuddyErrorCode = keyof typeof BUDDY_ERROR_STATUS;

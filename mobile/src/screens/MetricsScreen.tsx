@@ -178,7 +178,7 @@ export function MetricsScreen() {
       >
         <View className="gap-1">
           <SectionLabel>Against your usual range</SectionLabel>
-          <Text className="font-display text-display-lg">Metrics</Text>
+          <Text className="font-display text-display-lg">Trends</Text>
         </View>
 
         <SegmentedControl testID="metrics-range" options={RANGE_OPTIONS} value={range} onChange={setRange} />

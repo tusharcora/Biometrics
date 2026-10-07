@@ -117,6 +117,16 @@ describe('MetricsScreen', () => {
     expect(mockNavigate).toHaveBeenCalledWith('Patterns');
   });
 
+  it('renders as the Trends route, titled Trends, with its trend cards', async () => {
+    (apiFetch as jest.Mock).mockResolvedValue(records);
+
+    // Pushed from Activity's "All trends": the screen reads no route params.
+    const { findByTestId, getByText } = render(<MetricsScreen {...({ route: { key: 'Trends-1', name: 'Trends' } } as object)} />);
+
+    expect(await findByTestId('trend-latest-STEPS')).toHaveTextContent('11,000');
+    expect(getByText('Trends')).toBeTruthy();
+  });
+
   it('explains an empty account', async () => {
     (apiFetch as jest.Mock).mockResolvedValue([]);
 

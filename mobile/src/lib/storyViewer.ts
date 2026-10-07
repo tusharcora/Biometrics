@@ -13,7 +13,7 @@ export const STORY_FRAME_MS = 5000;
 export const EXPIRE_GRACE_MS = 150;
 
 /** Why the story is paused; it runs only when there is none. */
-export type PauseReason = 'hold' | 'drag' | 'share' | 'background' | 'screenReader' | 'chrome';
+export type PauseReason = 'hold' | 'drag' | 'share' | 'background' | 'screenReader' | 'chrome' | 'sheet';
 
 export interface ViewerState {
   index: number;

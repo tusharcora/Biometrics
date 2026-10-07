@@ -1,0 +1,31 @@
+import React from 'react';
+import { fireEvent, render, screen } from '@testing-library/react-native';
+import { UsualTiles } from '../../src/components/activity/UsualTiles';
+
+const mockNavigate = jest.fn();
+jest.mock('@react-navigation/native', () => ({ ...jest.requireActual('@react-navigation/native'), useNavigation: () => ({ navigate: mockNavigate }) }));
+beforeEach(() => mockNavigate.mockReset());
+
+it('opens a metric, the Recovery score, Patterns and All trends', () => {
+  const records = [{ id: 'h', metricType: 'HRV' as const, value: 61, recordedAt: '2026-10-06T00:00:00.000Z' }];
+  const recovery = [{ id: 'r', metricType: 'RECOVERY' as const, value: 71, recordedAt: '2026-10-06T00:00:00.000Z' }];
+  render(<UsualTiles records={records} recovery={recovery} today="2026-10-07" />);
+  expect(screen.getByTestId('usual-tile-HRV-dot')).toBeTruthy();
+  // A screen reader hears the value and the change, not just the name.
+  expect(screen.getByTestId('usual-tile-HRV').props.accessibilityLabel).toBe('HRV, 61.0 ms, No readings from the 30 days before');
+  expect(screen.getByTestId('usual-tile-SLEEP').props.accessibilityLabel).toBe('Sleep, no reading');
+  fireEvent.press(screen.getByTestId('usual-tile-HRV'));
+  expect(mockNavigate).toHaveBeenLastCalledWith('MetricDetail', { metricType: 'HRV', records, range: '30d' });
+  fireEvent.press(screen.getByTestId('usual-tile-RECOVERY'));
+  expect(mockNavigate).toHaveBeenLastCalledWith('ScoreDetail', { date: '2026-10-06', type: 'RECOVERY' });
+  fireEvent.press(screen.getByTestId('usual-patterns'));
+  expect(mockNavigate).toHaveBeenLastCalledWith('Patterns');
+  fireEvent.press(screen.getByTestId('all-trends'));
+  expect(mockNavigate).toHaveBeenLastCalledWith('Trends');
+});
+
+it('a Recovery tile without a score opens nothing', () => {
+  render(<UsualTiles records={[]} recovery={[]} today="2026-10-07" />);
+  fireEvent.press(screen.getByTestId('usual-tile-RECOVERY'));
+  expect(mockNavigate).not.toHaveBeenCalled();
+});

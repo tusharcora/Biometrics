@@ -11,6 +11,7 @@ import { characterInfo } from '../components/characters/registry';
 import type { CharacterId } from '../components/characters/types';
 import { BadgeIcon } from '../components/achievements/BadgeIcon';
 import { MilestoneTiles } from '../components/milestones/MilestoneTiles';
+import { ShareWithBuddiesButton } from '../components/recap/ShareWithBuddiesButton';
 import { WeeklyStoryView } from '../components/recap/WeeklyStoryView';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
@@ -144,6 +145,7 @@ export function RecapScreen() {
             <Button testID="recap-make-share" onPress={() => navigation.navigate('RecapBuilder', { id: state.recap.id, format: 'story' })}>
               Make a shareable recap
             </Button>
+            <ShareWithBuddiesButton recapId={state.recap.id} line={state.recap.line} />
           </View>
         ) : null}
       </ScrollView>
@@ -227,6 +229,7 @@ function MonthBody({ recap, coachId, coachName, onShare }: { recap: Recap; coach
       <Button testID="recap-make-share" onPress={onShare}>
         Make a shareable recap
       </Button>
+      <ShareWithBuddiesButton recapId={recap.id} line={recap.line} />
     </View>
   );
 }

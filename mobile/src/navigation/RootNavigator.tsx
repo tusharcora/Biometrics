@@ -11,6 +11,7 @@ import type { ScoreType } from '../api/scores';
 import { AuthNavigator } from './AuthNavigator';
 import { ConnectHealthScreen } from '../screens/ConnectHealthScreen';
 import { MetricDetailScreen } from '../screens/MetricDetailScreen';
+import { MetricsScreen } from '../screens/MetricsScreen';
 import { ScoreDetailScreen } from '../screens/ScoreDetailScreen';
 import { ForecastScreen } from '../screens/ForecastScreen';
 import { FORECAST_COPY } from '../lib/forecastCopy';
@@ -30,6 +31,7 @@ import { RecapBuilderScreen } from '../screens/RecapBuilderScreen';
 import { RecapScreen } from '../screens/RecapScreen';
 import { RecapStoryScreen } from '../screens/RecapStoryScreen';
 import { RecapsScreen } from '../screens/RecapsScreen';
+import { SocialStoryScreen } from '../screens/SocialStoryScreen';
 import { YearInPixelsScreen } from '../screens/YearInPixelsScreen';
 import { BadgesScreen } from '../screens/BadgesScreen';
 import { BadgeDetailScreen } from '../screens/BadgeDetailScreen';
@@ -37,9 +39,11 @@ import { BuddyIdentityScreen } from '../screens/BuddyIdentityScreen';
 import { PairUpScreen } from '../screens/PairUpScreen';
 import { BuddiesScreen } from '../screens/BuddiesScreen';
 import { BuddyWeekScreen } from '../screens/BuddyWeekScreen';
+import { HighlightsScreen } from '../screens/HighlightsScreen';
 import { BlockedPeopleScreen } from '../screens/BlockedPeopleScreen';
 import { CelebrationHost } from '../components/achievements/CelebrationHost';
 import { BuddiesStoreScope } from '../components/buddies/BuddiesStoreScope';
+import { SocialStoreScope } from '../components/social/SocialStoreScope';
 import type { ShareFormat } from '../lib/recapShare';
 import { TabsNavigator, type TabParamList } from './TabsNavigator';
 import { syncTimezone } from '../lib/timezone';
@@ -64,15 +68,17 @@ const DARK_NAV_THEME: Theme = {
 };
 
 export type RootStackParamList = {
-  // The five-tab shell (Home, Activity, Coach, Metrics, Profile).
+  // The five-tab shell (Home, Activity, Coach, Social, Profile).
   Tabs: NavigatorScreenParams<TabParamList> | undefined;
   ConnectHealth: undefined;
   // `records` is the metric's whole series; `range` is the window to open on
-  // (the Metrics tab passes its current one; default 30 days).
+  // (the Trends screen passes its current one; default 30 days).
   MetricDetail: { metricType: MetricRecord['metricType']; records: MetricRecord[]; range?: TrendRange };
   ScoreDetail: { date: string; type?: ScoreType }; // type defaults to RECOVERY
   Forecast: undefined;
   Patterns: undefined;
+  // Every metric's trend card (the old Metrics tab), opened from Activity's "All trends".
+  Trends: undefined;
   // Pushed over the tabs. `prefill` is carried through the consent screen.
   CoachConsent: { prefill?: string } | undefined;
   // Reached from Settings -> Coach Memory, which only draws when consented.
@@ -121,6 +127,10 @@ export type RootStackParamList = {
   BuddyIdentity: undefined;
   // Profile → Buddies → Blocked people (unblock).
   BlockedPeople: undefined;
+  // Social → last week's highlights in full (the carousel's "All").
+  Highlights: undefined;
+  // Social → one buddy's story today (or my own once I've checked in), opened from the stories row.
+  SocialStory: { authorId: string };
 };
 
 export type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';
@@ -216,6 +226,7 @@ export function RootNavigator() {
               <Stack.Screen name="ScoreDetail" component={ScoreDetailScreen} options={{ title: 'Score' }} />
               <Stack.Screen name="Forecast" component={ForecastScreen} options={{ title: FORECAST_COPY.title }} />
               <Stack.Screen name="Patterns" component={PatternsScreen} options={{ title: 'Patterns' }} />
+              <Stack.Screen name="Trends" component={MetricsScreen} options={{ title: '' }} />
               <Stack.Screen name="CoachConsent" component={CoachConsentScreen} options={{ title: 'AI Coach' }} />
               <Stack.Screen name="CoachMemory" component={CoachMemoryScreen} options={{ title: 'Coach Memory' }} />
               <Stack.Screen name="ThinkingStyle" component={ThinkingStyleScreen} options={{ title: 'Thinking style' }} />
@@ -241,6 +252,13 @@ export function RootNavigator() {
               <Stack.Screen name="Buddies" component={BuddiesScreen} options={{ title: 'Buddies' }} />
               <Stack.Screen name="PairUp" component={PairUpScreen} options={{ title: 'Add a buddy' }} />
               <Stack.Screen name="BlockedPeople" component={BlockedPeopleScreen} options={{ title: 'Blocked people' }} />
+              <Stack.Screen name="Highlights" component={HighlightsScreen} options={{ title: 'Highlights' }} />
+              <Stack.Screen
+                name="SocialStory"
+                component={SocialStoryScreen}
+                // Full screen like the recap story: Close (or running past the end) closes it.
+                options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }}
+              />
               {/* One instance per buddy: navigating to another buddy's week (a push tap) opens a new
                   screen instead of swapping the params under the current one. */}
               <Stack.Screen name="BuddyWeek" component={BuddyWeekScreen} getId={({ params }) => params?.buddyId} options={{ title: '' }} />
@@ -257,6 +275,8 @@ export function RootNavigator() {
             <CelebrationHost />
             {/* The shared buddy list (start, foreground); forgotten on sign-out. */}
             <BuddiesStoreScope />
+            {/* The shared Social home and its tab dot (start, foreground); forgotten on sign-out. */}
+            <SocialStoreScope />
           </SyncProvider>
         </ToastProvider>
       </NavigationContainer>

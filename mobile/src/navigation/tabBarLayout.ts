@@ -1,7 +1,7 @@
 import { useContext } from 'react';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 
-export const TAB_ORDER = ['Home', 'Activity', 'Coach', 'Metrics', 'Profile'] as const;
+export const TAB_ORDER = ['Home', 'Activity', 'Coach', 'Social', 'Profile'] as const;
 export type TabName = (typeof TAB_ORDER)[number];
 
 // The centre slot holds the coach character instead of an icon.
@@ -11,7 +11,7 @@ export const TAB_LABELS: Record<string, string> = {
   Home: 'Home',
   Activity: 'Activity',
   Coach: 'AI coach',
-  Metrics: 'Metrics',
+  Social: 'Social',
   Profile: 'Profile',
 };
 

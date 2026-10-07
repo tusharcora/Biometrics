@@ -59,20 +59,20 @@ describe('cardDestination', () => {
   it('opens the score a driver belongs to', () => {
     expect(cardDestination(card('factor.sleep_debt'), '2026-09-30')).toEqual({ name: 'ScoreDetail', params: { date: '2026-09-30', type: 'RECOVERY' } });
     expect(cardDestination(card('factor.circadian_consistency'), '2026-09-30')).toEqual({ name: 'ScoreDetail', params: { date: '2026-09-30', type: 'SLEEP' } });
-    expect(cardDestination(card('factor.mystery'), '2026-09-30')).toEqual({ name: 'Tabs', params: { screen: 'Metrics' } });
+    expect(cardDestination(card('factor.mystery'), '2026-09-30')).toEqual({ name: 'Trends', params: undefined });
   });
 
-  it('opens the Metrics tab instead of a score detail when there is no date', () => {
-    expect(cardDestination(card('recovery.today'), '')).toEqual({ name: 'Tabs', params: { screen: 'Metrics' } });
-    expect(cardDestination(card('sleep.total'), '')).toEqual({ name: 'Tabs', params: { screen: 'Metrics' } });
+  it('opens Trends instead of a score detail when there is no date', () => {
+    expect(cardDestination(card('recovery.today'), '')).toEqual({ name: 'Trends', params: undefined });
+    expect(cardDestination(card('sleep.total'), '')).toEqual({ name: 'Trends', params: undefined });
     expect(cardDestination(card('habit.walk'), '')).toEqual({ name: 'Patterns', params: undefined });
   });
 
-  it('opens Patterns for habits and the Metrics tab for HRV, resting HR and anything else', () => {
+  it('opens Patterns for habits and Trends for HRV, resting HR and anything else', () => {
     expect(cardDestination(card('habit.walk'), '2026-09-30')).toEqual({ name: 'Patterns', params: undefined });
-    expect(cardDestination(card('hrv.today'), '2026-09-30')).toEqual({ name: 'Tabs', params: { screen: 'Metrics' } });
-    expect(cardDestination(card('rhr.today'), '2026-09-30')).toEqual({ name: 'Tabs', params: { screen: 'Metrics' } });
-    expect(cardDestination(card('steps.today'), '2026-09-30')).toEqual({ name: 'Tabs', params: { screen: 'Metrics' } });
-    expect(cardDestination(card('goal.steps'), '2026-09-30')).toEqual({ name: 'Tabs', params: { screen: 'Metrics' } });
+    expect(cardDestination(card('hrv.today'), '2026-09-30')).toEqual({ name: 'Trends', params: undefined });
+    expect(cardDestination(card('rhr.today'), '2026-09-30')).toEqual({ name: 'Trends', params: undefined });
+    expect(cardDestination(card('steps.today'), '2026-09-30')).toEqual({ name: 'Trends', params: undefined });
+    expect(cardDestination(card('goal.steps'), '2026-09-30')).toEqual({ name: 'Trends', params: undefined });
   });
 });

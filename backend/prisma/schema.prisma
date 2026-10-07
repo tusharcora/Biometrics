@@ -70,6 +70,12 @@ model User {
   buddyActivityReceived BuddyActivity[]     @relation("BuddyActivityRecipient")
   buddyActivityCaused   BuddyActivity[]     @relation("BuddyActivityActor")
   handleHolds           HandleHold[]        @relation("HandleHoldOwner")
+  checkIns              CheckIn[]           @relation("CheckInAuthor")
+  storiesSeen           StorySeen[]         @relation("StorySeenViewer")
+  storySeenBy           StorySeen[]         @relation("StorySeenAuthor")
+  recapShares           RecapShare[]        @relation("RecapShareSharer")
+  stepGoalEvents        StepGoalEvent[]     @relation("StepGoalAuthor")
+  weeklyHighlights      WeeklyHighlights[]  @relation("WeeklyHighlightsViewer")
 
   // The coach persona the user picked in Settings (an id from
   // src/coach/personas). Null means the default persona.
@@ -696,6 +702,7 @@ model Recap {
   pushedAt         DateTime?
   /// The late-data filter's mark: inputs stamped before it were already counted or compared. Null → builtAt.
   inputsCheckedAt  DateTime?
+  shares           RecapShare[]
 
   @@unique([userId, kind, periodStart])
   @@index([userId, status, periodEnd])
@@ -897,4 +904,77 @@ model HandleHold {
   releasedAt      DateTime
 
   @@index([previousOwnerId])
+}
+
+// ---- Social tab S1 (spec docs/superpowers/specs/2026-10-07-social-tab-design.md §4–§7) ----
+// Role-named owner columns (no `userId`), every User FK cascades — the Buddies convention.
+
+enum CheckInMood {
+  RESTED
+  OKAY
+  TIRED
+}
+
+/// One self-reported morning check-in per author per local day; always shared with buddies (spec §4.1).
+model CheckIn {
+  id        String      @id @default(uuid())
+  authorId  String
+  author    User        @relation("CheckInAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  localDate DateTime    @db.Date
+  mood      CheckInMood
+  createdAt DateTime    @default(now())
+  updatedAt DateTime    @updatedAt
+
+  @@unique([authorId, localDate])
+  @@index([localDate])
+}
+
+/// The viewer reached the end of the author's story for that author-local day (spec §4.2).
+model StorySeen {
+  viewerId  String
+  viewer    User     @relation("StorySeenViewer", fields: [viewerId], references: [id], onDelete: Cascade)
+  authorId  String
+  author    User     @relation("StorySeenAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  localDate DateTime @db.Date
+  seenAt    DateTime @default(now())
+
+  @@id([viewerId, authorId, localDate])
+}
+
+/// The sharer explicitly shared one of their recaps with their buddies (spec §4.2 recap frame).
+model RecapShare {
+  id        String   @id @default(uuid())
+  sharerId  String
+  sharer    User     @relation("RecapShareSharer", fields: [sharerId], references: [id], onDelete: Cascade)
+  recapId   String
+  recap     Recap    @relation(fields: [recapId], references: [id], onDelete: Cascade)
+  /// The recap's headline as the sharer previewed it, trimmed. Frames read this, never the live Recap.line.
+  line      String   @default("")
+  localDate DateTime @db.Date
+  createdAt DateTime @default(now())
+
+  @@unique([sharerId, recapId])
+  @@index([sharerId, localDate])
+}
+
+/// The first sync of a local day that put the author's steps at or above STEPS_GOAL. No number stored (spec §5).
+model StepGoalEvent {
+  authorId  String
+  author    User     @relation("StepGoalAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  localDate DateTime @db.Date
+  at        DateTime @default(now())
+
+  @@id([authorId, localDate])
+  @@index([at])
+}
+
+/// Cached week highlights for one viewer's circle, built on first read after the week ends (spec §7, plan ruling).
+model WeeklyHighlights {
+  viewerId  String
+  viewer    User     @relation("WeeklyHighlightsViewer", fields: [viewerId], references: [id], onDelete: Cascade)
+  weekStart DateTime @db.Date
+  items     Json
+  builtAt   DateTime @default(now())
+
+  @@id([viewerId, weekStart])
 }

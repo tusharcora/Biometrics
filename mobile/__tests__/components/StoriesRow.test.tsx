@@ -1,0 +1,47 @@
+import React from 'react';
+import { fireEvent, render, screen } from '@testing-library/react-native';
+import { StoriesRow } from '../../src/components/social/StoriesRow';
+
+const person = (id: string) => ({ id, handle: id, displayName: id.toUpperCase(), coachId: 'mochi' });
+
+it('starts with my check-in, then buddies (locked ones show a lock), then See all', () => {
+  const onCheckIn = jest.fn();
+  const onOpenStory = jest.fn();
+  const onSeeAll = jest.fn();
+  render(
+    <StoriesRow
+      me={{ person: person('me'), checkIn: null }}
+      rings={[{ author: person('sam'), unseen: true, locked: true, frameCount: 2, latestAt: '' }, { author: person('ana'), unseen: false, locked: false, frameCount: 1, latestAt: '' }]}
+      onCheckIn={onCheckIn} onOpenStory={onOpenStory} onSeeAll={onSeeAll}
+    />,
+  );
+  expect(screen.getByTestId('story-me-plus')).toBeTruthy();
+  fireEvent.press(screen.getByTestId('story-me'));
+  expect(onCheckIn).toHaveBeenCalled();
+  expect(screen.getByTestId('story-sam-lock')).toBeTruthy();
+  expect(screen.queryByTestId('story-ana-lock')).toBeNull();
+  fireEvent.press(screen.getByTestId('story-ana'));
+  expect(onOpenStory).toHaveBeenCalledWith('ana');
+  fireEvent.press(screen.getByTestId('stories-see-all'));
+  expect(onSeeAll).toHaveBeenCalled();
+});
+
+it('after checking in, my ring opens my own story', () => {
+  const onOpenStory = jest.fn();
+  render(<StoriesRow me={{ person: person('me'), checkIn: { mood: 'RESTED', localDate: '2026-10-07', updatedAt: '' } }} rings={[]} onCheckIn={jest.fn()} onOpenStory={onOpenStory} onSeeAll={jest.fn()} />);
+  expect(screen.queryByTestId('story-me-plus')).toBeNull();
+  fireEvent.press(screen.getByTestId('story-me'));
+  expect(onOpenStory).toHaveBeenCalledWith('me');
+});
+
+it('names a buddy by @handle when their display name is unset', () => {
+  render(
+    <StoriesRow
+      me={{ person: person('me'), checkIn: null }}
+      rings={[{ author: { ...person('kai'), displayName: '' }, unseen: true, locked: false, frameCount: 1, latestAt: '' }]}
+      onCheckIn={jest.fn()} onOpenStory={jest.fn()} onSeeAll={jest.fn()}
+    />,
+  );
+  expect(screen.getByText('@kai')).toBeTruthy();
+  expect(screen.getByLabelText("@kai's story, new")).toBeTruthy();
+});

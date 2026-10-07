@@ -18,6 +18,7 @@ import { Text } from '../components/ui/text';
 import { activityLine, buddyErrorMessage } from '../lib/buddyCopy';
 import { refreshBuddies, useBuddies } from '../lib/buddiesStore';
 import { offerPushAfterPairing } from '../lib/buddyPushOffer';
+import { refreshSocial } from '../lib/socialStore';
 import { useRefreshBuddiesOnFocus } from '../lib/useRefreshBuddiesOnFocus';
 
 type Tab = 'buddies' | 'requests' | 'activity';
@@ -196,6 +197,7 @@ function RequestsTab({ gate, navigation }: { gate: Gate; navigation: Nav }) {
         try {
           await fn();
           void refreshBuddies();
+          void refreshSocial();
         } catch (e) {
           if (live.current) setMessage(buddyErrorMessage(buddyErrorCode(e)));
         }

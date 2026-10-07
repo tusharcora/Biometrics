@@ -1,0 +1,101 @@
+/// <reference types="node" />
+// Dev only: gives the demo account something to see on Social (spec 2026-10-07 social S1). The buddy
+// checks in TIRED and passes their step goal today; if the buddy already checked in today, that mood is
+// OVERWRITTEN with TIRED. Their newest built recap with a non-blank line (if any) is shared, with that
+// line as the previewed one. The demo account itself is left unchecked-in so the walkthrough shows the
+// lock lifting. Run seedBuddies first: the two accounts must already be buddies.
+//
+//   DATABASE_URL=<local dev database> node node_modules/.bin/ts-node --project tsconfig.evals.json scripts/seedSocial.ts --email demo@example.com --buddy-email buddy@example.com
+//
+// Refuses NODE_ENV=production and any non-local DATABASE_URL (assertDevDatabase, as the badge seed),
+// an unknown email and two accounts that aren't buddies, before writing anything. Idempotent: the
+// check-in is upserted, the step goal and the share are created once. Nothing is queued. Never runs
+// on import. On failure it logs only the error's name.
+import { civilDateToUtcMidnight } from '../src/biometrics/civilDate';
+import { orderedPair } from '../src/buddies/pairs';
+import { STEPS_GOAL } from '../src/coach/tools/metrics';
+import { prisma } from '../src/db/client';
+import { saveCheckIn, todayFor } from '../src/social/checkins';
+import { shareRecap } from '../src/social/recapShares';
+import { recordStepGoal } from '../src/social/stepGoal';
+import { connection, syncQueue } from '../src/sync/queue';
+import { assertDevDatabase } from './seedAchievements';
+
+type SeedEnv = { NODE_ENV?: string | undefined; DATABASE_URL?: string | undefined };
+
+function seedError(name: string, message: string): Error {
+  const err = new Error(message);
+  err.name = name;
+  return err;
+}
+
+export function parseArgs(argv: string[]): { email: string; buddyEmail: string } {
+  const value = (flag: string) => {
+    const i = argv.indexOf(flag);
+    return i >= 0 ? argv[i + 1] : undefined;
+  };
+  const email = value('--email');
+  const buddyEmail = value('--buddy-email');
+  if (!email || !buddyEmail) throw seedError('SeedUsageError', 'Usage: seedSocial --email <demo email> --buddy-email <buddy email> (env needs DATABASE_URL)');
+  return { email, buddyEmail };
+}
+
+async function findUserId(email: string): Promise<string> {
+  const user = await prisma.user.findUnique({ where: { email }, select: { id: true } });
+  if (!user) throw seedError('SeedUnknownUser', 'No user with that email');
+  return user.id;
+}
+
+export async function seedSocial({ email, buddyEmail, now = new Date(), env = process.env }: { email: string; buddyEmail: string; now?: Date; env?: SeedEnv }): Promise<{ buddyCheckedIn: boolean; stepGoal: boolean; recapShared: boolean }> {
+  assertDevDatabase(env);
+  const userId = await findUserId(email);
+  const buddyId = await findUserId(buddyEmail);
+  // The same account twice has no pair either, so this also refuses it.
+  if (!(await prisma.buddyPair.findUnique({ where: { userAId_userBId: orderedPair(userId, buddyId) } }))) {
+    throw seedError('SeedNotBuddies', 'The two accounts are not buddies (run seedBuddies first)');
+  }
+  await saveCheckIn(buddyId, 'TIRED', now);
+  // A rollup point for the buddy's local today, past the goal: recordStepGoal stores the day only.
+  const { today } = await todayFor(buddyId, now);
+  await recordStepGoal(buddyId, [{ recordedAt: civilDateToUtcMidnight(today), value: STEPS_GOAL + 1500 }], now);
+  // shareRecap refuses a recap without a line (the line is what buddies see), so pick one that has it;
+  // its stored line is what the owner would have previewed. A blank (empty or whitespace-only) line counts
+  // as none: Prisma can't filter on trim, so the newest non-blank one is picked here, before shareRecap
+  // could throw after the writes above.
+  const candidates = await prisma.recap.findMany({
+    where: { userId: buddyId, status: 'BUILT', line: { not: null } },
+    orderBy: { periodStart: 'desc' },
+    select: { id: true, line: true },
+  });
+  const recap = candidates.find((r) => r.line !== null && r.line.trim() !== '') ?? null;
+  if (recap) await shareRecap(buddyId, recap.id, recap.line, now);
+  return { buddyCheckedIn: true, stepGoal: true, recapShared: recap !== null };
+}
+
+async function closeQuietly(close: () => Promise<unknown>): Promise<void> {
+  try {
+    await close();
+  } catch {
+    // The process is exiting anyway.
+  }
+}
+
+/** The CLI body. Its imports open the shared Redis connection and queue, so they are closed here too. */
+export async function main(argv: string[]): Promise<void> {
+  try {
+    const result = await seedSocial(parseArgs(argv));
+    console.info(JSON.stringify({ event: 'social.seeded', ...result }));
+  } finally {
+    await closeQuietly(() => prisma.$disconnect());
+    await closeQuietly(() => syncQueue.close());
+    await closeQuietly(() => connection.quit());
+  }
+}
+
+if (require.main === module) {
+  main(process.argv).catch((err) => {
+    // Only the error's name: messages can carry an email or connection details.
+    console.error(JSON.stringify({ event: 'social.seed_failed', error: err instanceof Error ? err.name : 'Error' }));
+    process.exit(1);
+  });
+}

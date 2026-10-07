@@ -1,0 +1,55 @@
+// One frame of a social story (spec 2026-10-07 social §4.2): a check-in (locked until I check in), a badge, or a
+// shared recap's headline line exactly as its owner previewed and shared it — never the recap's stats JSON.
+
+import React from 'react';
+import { View } from 'react-native';
+import type { Person } from '../../api/buddies';
+import type { StoryFrame } from '../../api/social';
+import { levelTitle } from '../../lib/badges';
+import { recapTitle } from '../../lib/recapCopy';
+import { CHECKIN_OPTIONS, personName } from '../../lib/socialCopy';
+import { Character } from '../characters/Character';
+import { DEFAULT_CHARACTER_ID, isCharacterId } from '../characters/types';
+import { Text } from '../ui/text';
+
+export function SocialStoryFrame({ frame, author, mine, onUnlock }: { frame: StoryFrame; author: Person; mine: boolean; onUnlock: () => void }) {
+  // A recap frame carries a coachId, but it is the sharer's CURRENT coach (not snapshotted at share time), so in
+  // practice every frame is drawn with the author's coach as it is today.
+  const coachId = frame.kind === 'recap' ? frame.coachId : author.coachId;
+  const coach = isCharacterId(coachId) ? coachId : DEFAULT_CHARACTER_ID;
+  const who = personName(author, mine);
+  // Drawn over the viewer's tap areas: only the Check in button takes touches, the rest pass through to them.
+  return (
+    <View pointerEvents="box-none" className="flex-1 items-center justify-center gap-5 px-8">
+      <View pointerEvents="none">
+        <Character characterId={coach} mood="idle" size={96} />
+      </View>
+      {frame.kind === 'checkin' && frame.locked ? (
+        <View testID="story-locked" pointerEvents="box-none" className="items-center gap-3">
+          <View pointerEvents="none">
+            <Text className="text-center text-lg font-semibold text-white">{`Check in to see how ${who} woke up`}</Text>
+          </View>
+          <Text testID="story-unlock" accessibilityRole="button" onPress={onUnlock} className="rounded-full bg-white px-5 py-2 font-semibold text-black">Check in</Text>
+        </View>
+      ) : null}
+      {frame.kind === 'checkin' && !frame.locked ? (
+        <View pointerEvents="none" className="items-center gap-2">
+          <Text className="text-xs font-semibold uppercase tracking-widest text-white/70">{`${who} woke up`}</Text>
+          <Text className="font-display text-display text-white">{CHECKIN_OPTIONS.find((o) => o.mood === frame.mood)?.label ?? ''}</Text>
+        </View>
+      ) : null}
+      {frame.kind === 'badge' ? (
+        <View pointerEvents="none" className="items-center gap-2">
+          <Text className="text-xs font-semibold uppercase tracking-widest text-white/70">New badge</Text>
+          <Text className="text-center font-display text-display text-white">{levelTitle(frame.family, frame.level)}</Text>
+        </View>
+      ) : null}
+      {frame.kind === 'recap' ? (
+        <View pointerEvents="none" className="items-center gap-2">
+          <Text className="text-xs font-semibold uppercase tracking-widest text-white/70">{`${frame.recapKind === 'WEEK' ? 'Weekly recap' : 'Monthly recap'} · ${recapTitle({ kind: frame.recapKind, periodStart: frame.periodStart })}`}</Text>
+          <Text className="text-center font-display text-display text-white">{frame.line}</Text>
+        </View>
+      ) : null}
+    </View>
+  );
+}

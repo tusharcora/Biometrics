@@ -5,10 +5,12 @@ import {
   acceptRequest, blockFromRequest, cancelRequest, confirmMoodNotice, declineRequest, fetchActivity, fetchBuddyPage, fetchIdentity, fetchRequests, markActivitySeen,
 } from '../../src/api/buddies';
 import { resetBuddies } from '../../src/lib/buddiesStore';
+import { refreshSocial } from '../../src/lib/socialStore';
 import { offerPushAfterPairing } from '../../src/lib/buddyPushOffer';
 import { BuddiesScreen } from '../../src/screens/BuddiesScreen';
 
 // Never settles: the accept must navigate without waiting on the push offer.
+jest.mock('../../src/lib/socialStore', () => ({ refreshSocial: jest.fn() }));
 jest.mock('../../src/lib/buddyPushOffer', () => ({ offerPushAfterPairing: jest.fn(() => new Promise(() => undefined)) }));
 
 jest.mock('../../src/api/buddies', () => ({
@@ -108,11 +110,14 @@ it('answers requests: accept opens the week, decline is quiet, block asks first;
   await act(async () => fireEvent.press(screen.getByTestId('request-accept-r1')));
   expect(acceptRequest).toHaveBeenCalledWith('r1');
   expect(mockNavigate).toHaveBeenCalledWith('BuddyWeek', { buddyId: 'u1' });
+  expect(refreshSocial).toHaveBeenCalledTimes(1);
   await act(async () => fireEvent.press(screen.getByTestId('request-decline-r2')));
   expect(declineRequest).toHaveBeenCalledWith('r2');
+  expect(refreshSocial).toHaveBeenCalledTimes(2);
   await act(async () => fireEvent.press(screen.getByTestId('request-block-r2')));
   expect(alert).toHaveBeenCalled();
   await waitFor(() => expect(blockFromRequest).toHaveBeenCalledWith('r2'));
+  await waitFor(() => expect(refreshSocial).toHaveBeenCalledTimes(3));
   alert.mockRestore();
 });
 
