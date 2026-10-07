@@ -41,6 +41,7 @@ import { BuddyWeekScreen } from '../screens/BuddyWeekScreen';
 import { BlockedPeopleScreen } from '../screens/BlockedPeopleScreen';
 import { CelebrationHost } from '../components/achievements/CelebrationHost';
 import { BuddiesStoreScope } from '../components/buddies/BuddiesStoreScope';
+import { SocialStoreScope } from '../components/social/SocialStoreScope';
 import type { ShareFormat } from '../lib/recapShare';
 import { TabsNavigator, type TabParamList } from './TabsNavigator';
 import { syncTimezone } from '../lib/timezone';
@@ -261,6 +262,8 @@ export function RootNavigator() {
             <CelebrationHost />
             {/* The shared buddy list (start, foreground); forgotten on sign-out. */}
             <BuddiesStoreScope />
+            {/* The shared Social home and its tab dot (start, foreground); forgotten on sign-out. */}
+            <SocialStoreScope />
           </SyncProvider>
         </ToastProvider>
       </NavigationContainer>

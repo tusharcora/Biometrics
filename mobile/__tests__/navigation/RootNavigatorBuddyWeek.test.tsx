@@ -49,6 +49,7 @@ jest.mock('../../src/navigation/TabsNavigator', () => ({ TabsNavigator: () => nu
 jest.mock('../../src/sync/SyncProvider', () => ({ SyncProvider: ({ children }: any) => children }));
 jest.mock('../../src/components/achievements/CelebrationHost', () => ({ CelebrationHost: () => null }));
 jest.mock('../../src/components/buddies/BuddiesStoreScope', () => ({ BuddiesStoreScope: () => null }));
+jest.mock('../../src/components/social/SocialStoreScope', () => ({ SocialStoreScope: () => null }));
 
 const nav = jest.requireActual('@react-navigation/native');
 
