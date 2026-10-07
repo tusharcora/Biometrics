@@ -77,7 +77,9 @@ export async function markStorySeen(authorId: string): Promise<void> {
 export async function markStickersSeen(): Promise<void> {
   await apiFetch<void>('/me/social/stickers/seen', send('POST'));
 }
-export const shareRecap = (recapId: string) => apiFetch<{ shared: true }>('/me/social/recap-shares', send('POST', { recapId }));
+// `line` is the text the user previewed; the server refuses the share if the recap's line has changed since.
+export const shareRecap = (recapId: string, line: string) =>
+  apiFetch<{ shared: true }>('/me/social/recap-shares', send('POST', { recapId, line }));
 export async function unshareRecap(recapId: string): Promise<void> {
   await apiFetch<void>(`/me/social/recap-shares/${id(recapId)}`, send('DELETE'));
 }

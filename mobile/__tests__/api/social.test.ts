@@ -31,8 +31,8 @@ it('writes with JSON bodies and escapes ids in paths', async () => {
   expect(api).toHaveBeenLastCalledWith('/me/social/stories/a%2F1/seen', expect.objectContaining({ method: 'POST' }));
   await markStickersSeen();
   expect(api).toHaveBeenLastCalledWith('/me/social/stickers/seen', expect.objectContaining({ method: 'POST' }));
-  await shareRecap('r1');
-  expect(api).toHaveBeenLastCalledWith('/me/social/recap-shares', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ recapId: 'r1' }) });
+  await shareRecap('r1', 'A steadier week');
+  expect(api).toHaveBeenLastCalledWith('/me/social/recap-shares', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ recapId: 'r1', line: 'A steadier week' }) });
   await unshareRecap('r/1');
   expect(api).toHaveBeenLastCalledWith('/me/social/recap-shares/r%2F1', expect.objectContaining({ method: 'DELETE' }));
 });

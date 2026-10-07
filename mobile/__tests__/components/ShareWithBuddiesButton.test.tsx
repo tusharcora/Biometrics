@@ -76,7 +76,7 @@ it('shares once on a double tap of Share, then undoes', async () => {
     fireEvent.press(screen.getByTestId('recap-share-buddies-confirm'));
   });
   expect(shareRecap).toHaveBeenCalledTimes(1);
-  expect(shareRecap).toHaveBeenCalledWith('r1');
+  expect(shareRecap).toHaveBeenCalledWith('r1', LINE);
   expect(refreshSocial).toHaveBeenCalledTimes(1);
   expect(screen.getByTestId('recap-share-buddies')).toHaveTextContent(/Shared with buddies · Undo/);
   await act(async () => fireEvent.press(screen.getByTestId('recap-share-buddies')));
@@ -101,5 +101,36 @@ it('a failed share shows the buddy error and stays unshared', async () => {
   await act(async () => fireEvent.press(screen.getByTestId('recap-share-buddies-confirm')));
   expect(screen.getByTestId('recap-share-buddies-message')).toHaveTextContent("That recap can't be shared.");
   expect(screen.getByTestId('recap-share-buddies')).toHaveTextContent('Share with buddies');
+  expect(refreshSocial).not.toHaveBeenCalled();
+});
+
+it('previews and sends the trimmed line; reopening the sheet clears a stale error', async () => {
+  withBuddies(1);
+  (shareRecap as jest.Mock).mockRejectedValueOnce(Object.assign(new Error('x'), { code: 'recap_not_found' }));
+  render(<ShareWithBuddiesButton recapId="r1" line={`  ${LINE}\n`} />);
+  fireEvent.press(await screen.findByTestId('recap-share-buddies'));
+  // Raw children, not the whitespace-normalizing matcher: the preview itself must be the trimmed line.
+  expect(screen.getByTestId('recap-share-buddies-preview').props.children).toBe(`Your buddies will see: ${LINE}`);
+  await act(async () => fireEvent.press(screen.getByTestId('recap-share-buddies-confirm')));
+  expect(shareRecap).toHaveBeenLastCalledWith('r1', LINE);
+  expect(screen.getByTestId('recap-share-buddies-message')).toBeTruthy();
+  fireEvent.press(screen.getByTestId('recap-share-buddies'));
+  expect(screen.queryByTestId('recap-share-buddies-message')).toBeNull();
+  await act(async () => fireEvent.press(screen.getByTestId('recap-share-buddies-confirm')));
+  expect(shareRecap).toHaveBeenCalledTimes(2);
+  expect(shareRecap).toHaveBeenLastCalledWith('r1', LINE);
+  expect(screen.getByTestId('recap-share-buddies')).toHaveTextContent(/Shared with buddies · Undo/);
+});
+
+it('a failed unshare shows the buddy error and stays shared', async () => {
+  withBuddies(1);
+  (fetchRecapShared as jest.Mock).mockResolvedValue(true);
+  (unshareRecap as jest.Mock).mockRejectedValue(Object.assign(new Error('x'), { code: 'recap_not_found' }));
+  render(<ShareWithBuddiesButton recapId="r1" line={LINE} />);
+  const button = await screen.findByTestId('recap-share-buddies');
+  await act(async () => fireEvent.press(button));
+  expect(unshareRecap).toHaveBeenCalledWith('r1');
+  expect(screen.getByTestId('recap-share-buddies-message')).toHaveTextContent("That recap can't be shared.");
+  expect(screen.getByTestId('recap-share-buddies')).toHaveTextContent(/Shared with buddies · Undo/);
   expect(refreshSocial).not.toHaveBeenCalled();
 });

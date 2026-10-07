@@ -1,6 +1,7 @@
 // "Share with buddies" (spec 2026-10-07 social §4.2; plan ruling): an explicit, undoable share of this recap's
 // headline line to today's story. The line can hold the user's own numbers, so sharing first previews it exactly
-// ("Your buddies will see: …"); Share is consent for that line, and nothing is shared without it. Hidden until the
+// ("Your buddies will see: …"); Share is consent for that line, and nothing is shared without it. The previewed line
+// is sent with the share, so the server refuses it if the recap's line changed in between. Hidden until the
 // user has a buddy, for a recap without a line, on a server without recap shares, and until the server's shared
 // state is known (a failed lookup keeps it hidden: never a guessed "not shared").
 
@@ -45,7 +46,13 @@ export function ShareWithBuddiesButton({ recapId, line }: { recapId: string; lin
     };
   }, [recapId]);
 
-  if (buddies.status !== 'ready' || buddies.page.buddies.length === 0 || !line.trim() || shared === null) return null;
+  const previewed = line.trim();
+  if (buddies.status !== 'ready' || buddies.page.buddies.length === 0 || !previewed || shared === null) return null;
+
+  function openSheet() {
+    setMessage(null);
+    setConfirming(true);
+  }
 
   async function run(fn: () => Promise<unknown>, next: boolean) {
     if (busy.current) return;
@@ -68,7 +75,7 @@ export function ShareWithBuddiesButton({ recapId, line }: { recapId: string; lin
       <Button
         testID="recap-share-buddies"
         variant="secondary"
-        onPress={() => (shared ? void run(() => unshareRecap(recapId), false) : setConfirming(true))}
+        onPress={() => (shared ? void run(() => unshareRecap(recapId), false) : openSheet())}
       >
         {shared ? 'Shared with buddies · Undo' : 'Share with buddies'}
       </Button>
@@ -76,13 +83,13 @@ export function ShareWithBuddiesButton({ recapId, line }: { recapId: string; lin
       <Sheet visible={confirming} onClose={() => setConfirming(false)} testID="recap-share-buddies-sheet">
         <View className="gap-4">
           <Text className="font-display text-display-sm">Share with buddies?</Text>
-          <Text testID="recap-share-buddies-preview" className="text-sm">{`Your buddies will see: ${line}`}</Text>
+          <Text testID="recap-share-buddies-preview" className="text-sm">{`Your buddies will see: ${previewed}`}</Text>
           <Text className="text-sm text-muted-foreground">It shows in today's story with this recap's dates — none of its other numbers. You can undo it.</Text>
           <View className="flex-row gap-2">
             <Button testID="recap-share-buddies-cancel" variant="secondary" className="flex-1" onPress={() => setConfirming(false)}>
               Cancel
             </Button>
-            <Button testID="recap-share-buddies-confirm" className="flex-1" onPress={() => void run(() => shareRecap(recapId), true)}>
+            <Button testID="recap-share-buddies-confirm" className="flex-1" onPress={() => void run(() => shareRecap(recapId, previewed), true)}>
               Share
             </Button>
           </View>
