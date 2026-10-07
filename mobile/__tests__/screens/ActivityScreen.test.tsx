@@ -5,9 +5,13 @@ import { ActivityHeatmap } from '../../src/components/activity-heatmap';
 import { fetchActivity } from '../../src/api/activity';
 import { fetchSleep, fetchSleepGoal } from '../../src/api/sleep';
 import { fetchRange, todayCivil } from '../../src/lib/heatmap';
+import { apiFetch } from '../../src/api/client';
+import { fetchScores } from '../../src/api/scores';
 
 jest.mock('../../src/api/activity');
 jest.mock('../../src/api/sleep');
+jest.mock('../../src/api/client');
+jest.mock('../../src/api/scores');
 
 const mockNavigate = jest.fn();
 // Screen events by name, so a test can fire focus/blur.
@@ -27,6 +31,8 @@ beforeEach(() => {
   jest.clearAllMocks();
   (fetchSleep as jest.Mock).mockResolvedValue({ nights: [], earliestDate: null });
   (fetchSleepGoal as jest.Mock).mockResolvedValue({ sleepGoalMinutes: 480, bedtimeGoal: null, wakeGoal: null });
+  (apiFetch as jest.Mock).mockResolvedValue([]);
+  (fetchScores as jest.Mock).mockResolvedValue([]);
 });
 
 describe('ActivityScreen: sleep', () => {
@@ -192,5 +198,34 @@ describe('ActivityScreen', () => {
 
     expect(await findByTestId('heatmap-history-note')).toHaveTextContent('Your step history is still syncing.');
     await waitFor(() => expect(fetchActivity).toHaveBeenCalledTimes(2));
+  });
+});
+
+describe('ActivityScreen: against your usual', () => {
+  it('shows the usual tiles under the heat map, with 30 days of Recovery', async () => {
+    (fetchActivity as jest.Mock).mockResolvedValue({ days: [], earliestDate: '2025-01-01' });
+    (apiFetch as jest.Mock).mockResolvedValue([{ id: 'h', metricType: 'HRV', value: 61, recordedAt: `${todayCivil()}T00:00:00.000Z` }]);
+    (fetchScores as jest.Mock).mockResolvedValue([
+      { date: todayCivil(), type: 'RECOVERY', score: 71, confidenceLevel: 'HIGH', algorithmVersion: 'v1', factors: [], coldStart: [] },
+    ]);
+
+    const { findByTestId, getByTestId } = render(<ActivityScreen />);
+
+    expect(await findByTestId('usual-tiles')).toBeTruthy();
+    expect(getByTestId('heatmap-stats')).toBeTruthy();
+    expect(apiFetch).toHaveBeenCalledWith('/me/biometrics');
+    expect(fetchScores).toHaveBeenCalledWith(30, 'RECOVERY');
+    expect(getByTestId('usual-tile-RECOVERY')).toHaveTextContent(/71/);
+  });
+
+  it('still shows the heat map without the tiles when the metrics read fails', async () => {
+    (fetchActivity as jest.Mock).mockResolvedValue({ days: [], earliestDate: '2025-01-01' });
+    (apiFetch as jest.Mock).mockRejectedValue(new Error('offline'));
+
+    const { findByTestId, queryByTestId } = render(<ActivityScreen />);
+
+    expect(await findByTestId('heatmap-stats')).toBeTruthy();
+    expect(queryByTestId('usual-tiles')).toBeNull();
+    expect(queryByTestId('activity-error')).toBeNull();
   });
 });

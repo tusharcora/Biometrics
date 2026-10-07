@@ -309,7 +309,7 @@ export function CoachScreen() {
     [overrideSafety],
   );
 
-  // Without a summary there is no day to open; cardDestination then opens the Metrics tab.
+  // Without a summary there is no day to open; cardDestination then opens the Trends screen.
   const cardDate = today?.date ?? '';
   const openSource = useCallback(
     (card: AnswerCardDTO) => {

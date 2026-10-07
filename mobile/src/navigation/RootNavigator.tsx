@@ -11,6 +11,7 @@ import type { ScoreType } from '../api/scores';
 import { AuthNavigator } from './AuthNavigator';
 import { ConnectHealthScreen } from '../screens/ConnectHealthScreen';
 import { MetricDetailScreen } from '../screens/MetricDetailScreen';
+import { MetricsScreen } from '../screens/MetricsScreen';
 import { ScoreDetailScreen } from '../screens/ScoreDetailScreen';
 import { ForecastScreen } from '../screens/ForecastScreen';
 import { FORECAST_COPY } from '../lib/forecastCopy';
@@ -73,6 +74,8 @@ export type RootStackParamList = {
   ScoreDetail: { date: string; type?: ScoreType }; // type defaults to RECOVERY
   Forecast: undefined;
   Patterns: undefined;
+  // Every metric's trend card (the old Metrics tab), opened from Activity's "All trends".
+  Trends: undefined;
   // Pushed over the tabs. `prefill` is carried through the consent screen.
   CoachConsent: { prefill?: string } | undefined;
   // Reached from Settings -> Coach Memory, which only draws when consented.
@@ -216,6 +219,7 @@ export function RootNavigator() {
               <Stack.Screen name="ScoreDetail" component={ScoreDetailScreen} options={{ title: 'Score' }} />
               <Stack.Screen name="Forecast" component={ForecastScreen} options={{ title: FORECAST_COPY.title }} />
               <Stack.Screen name="Patterns" component={PatternsScreen} options={{ title: 'Patterns' }} />
+              <Stack.Screen name="Trends" component={MetricsScreen} options={{ title: '' }} />
               <Stack.Screen name="CoachConsent" component={CoachConsentScreen} options={{ title: 'AI Coach' }} />
               <Stack.Screen name="CoachMemory" component={CoachMemoryScreen} options={{ title: 'Coach Memory' }} />
               <Stack.Screen name="ThinkingStyle" component={ThinkingStyleScreen} options={{ title: 'Thinking style' }} />

@@ -4,13 +4,18 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
 import { fetchActivity } from '../api/activity';
+import { apiFetch } from '../api/client';
+import { fetchScores } from '../api/scores';
 import { fetchSleep, fetchSleepGoal } from '../api/sleep';
 import { ActivityHeatmap, type SleepState } from '../components/activity-heatmap';
+import { UsualTiles } from '../components/activity/UsualTiles';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { SectionLabel } from '../components/ui/section-label';
 import { Text } from '../components/ui/text';
 import { fetchRange, todayCivil } from '../lib/heatmap';
+import type { MetricRecord } from '../lib/metricInsights';
+import { recoveryRecords, type TileRecord } from '../lib/usualTiles';
 import { useSync } from '../sync/SyncProvider';
 import { useTabBarClearance } from '../navigation/tabBarLayout';
 import { COLORS } from '../theme';
@@ -30,6 +35,10 @@ export function ActivityScreen() {
   const colors = colorScheme === 'light' ? COLORS.light : COLORS.dark;
   const [state, setState] = useState<LoadState>({ phase: 'loading' });
   const [refreshing, setRefreshing] = useState(false);
+  // The "against your usual" tiles. Null until the metrics read lands; a failed
+  // read keeps what is on screen (or no tiles) and never makes the screen an error.
+  const [records, setRecords] = useState<MetricRecord[] | null>(null);
+  const [recovery, setRecovery] = useState<TileRecord[]>([]);
   // Only the latest request may land: a slow first load must not overwrite a
   // pull-to-refresh that finished after it.
   const requestId = useRef(0);
@@ -45,8 +54,17 @@ export function ActivityScreen() {
     // the Steps page working and puts a retry on the Sleep page instead.
     // The sleep goal is waited for too, so the sleep colours never draw against
     // 8h and then jump; without it they use 8h.
-    const [stepsRes, sleepRes, goalRes] = await Promise.allSettled([fetchActivity(from, to), fetchSleep(from, to), fetchSleepGoal()]);
+    // The metrics and 30 days of Recovery scores (for the usual tiles) fail on their own too.
+    const [stepsRes, sleepRes, goalRes, metricsRes, recoveryRes] = await Promise.allSettled([
+      fetchActivity(from, to),
+      fetchSleep(from, to),
+      fetchSleepGoal(),
+      apiFetch<MetricRecord[]>('/me/biometrics'),
+      fetchScores(30, 'RECOVERY'),
+    ]);
     if (id !== requestId.current) return;
+    if (metricsRes.status === 'fulfilled') setRecords(metricsRes.value ?? []);
+    if (recoveryRes.status === 'fulfilled') setRecovery(recoveryRecords(recoveryRes.value ?? []));
     if (stepsRes.status === 'rejected') {
       setState((prev) => (prev.phase === 'ready' ? prev : { phase: 'error' }));
       return;
@@ -160,6 +178,8 @@ export function ActivityScreen() {
             }}
           />
         ) : null}
+
+        {state.phase === 'ready' && records ? <UsualTiles records={records} recovery={recovery} today={state.today} /> : null}
       </ScrollView>
     </SafeAreaView>
   );
