@@ -1,4 +1,5 @@
 import React from 'react';
+import { NavigationContext } from '@react-navigation/native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { consentToSharing, fetchBuddyPage, fetchIdentity, fetchSharing, saveSharing } from '../../src/api/buddies';
 import { BuddiesProfileSection } from '../../src/components/buddies/BuddiesProfileSection';
@@ -40,6 +41,72 @@ it('shows the buddy name and opens edit and the blocked list', async () => {
   fireEvent.press(screen.getByTestId('buddy-identity-row'));
   fireEvent.press(screen.getByTestId('blocked-people-row'));
   expect(onNavigate.mock.calls).toEqual([['BuddyIdentity'], ['BlockedPeople']]);
+});
+
+it('opens the Buddies screen from the top row', async () => {
+  const onNavigate = jest.fn();
+  render(<BuddiesProfileSection onNavigate={onNavigate} />);
+  fireEvent.press(await screen.findByTestId('buddies-row'));
+  expect(onNavigate.mock.calls).toEqual([['Buddies']]);
+});
+
+it('re-reads identity and sharing on focus, not on every buddies refresh', async () => {
+  const focus = new Set<() => void>();
+  const navigation = { addListener: (_: 'focus', cb: () => void) => (focus.add(cb), () => focus.delete(cb)) };
+  render(
+    <NavigationContext.Provider value={navigation as never}>
+      <BuddiesProfileSection onNavigate={jest.fn()} />
+    </NavigationContext.Provider>,
+  );
+  expect(await screen.findByText('Sam')).toBeTruthy();
+  expect(fetchIdentity).toHaveBeenCalledTimes(1);
+  expect(fetchSharing).toHaveBeenCalledTimes(1);
+  // Another screen refreshes the shared list (a new page object): no extra reads here.
+  (fetchBuddyPage as jest.Mock).mockResolvedValue({ ...PAGE, incomingRequests: 1 });
+  await act(async () => { await refreshBuddies(); });
+  expect(fetchIdentity).toHaveBeenCalledTimes(1);
+  expect(fetchSharing).toHaveBeenCalledTimes(1);
+  // Back from editing the buddy name: the new name shows.
+  (fetchIdentity as jest.Mock).mockResolvedValue({ handle: 'sam', displayName: 'Sammy', displayNamePrefill: '', moodNoticeSeen: true });
+  await act(async () => focus.forEach((cb) => cb()));
+  expect(await screen.findByText('Sammy')).toBeTruthy();
+  expect(fetchIdentity).toHaveBeenCalledTimes(2);
+  expect(fetchSharing).toHaveBeenCalledTimes(2);
+});
+
+it('consent accepted but the save fails: the switch stays off, the sheet closes, and it explains', async () => {
+  (consentToSharing as jest.Mock).mockResolvedValue({ consentVersion: 1, consented: true, ...OFF });
+  (saveSharing as jest.Mock).mockRejectedValue(coded('try_later'));
+  render(<BuddiesProfileSection onNavigate={jest.fn()} />);
+  fireEvent(await screen.findByTestId('share-toggle-steps'), 'valueChange', true);
+  await act(async () => fireEvent.press(await screen.findByTestId('sharing-consent-agree')));
+  expect(saveSharing).toHaveBeenCalledWith({ steps: true });
+  expect(screen.queryByTestId('sharing-consent')).toBeNull();
+  expect(screen.getByTestId('share-toggle-steps').props.value).toBe(false);
+  expect(screen.getByTestId('share-toggle-steps').props.disabled).toBe(false);
+  expect(screen.getByText("Couldn't do that right now. Try again in a minute.")).toBeTruthy();
+});
+
+it('a consent refused for a newer server version drops the pending switch: a later reload never reopens the sheet', async () => {
+  const focus = new Set<() => void>();
+  const navigation = { addListener: (_: 'focus', cb: () => void) => (focus.add(cb), () => focus.delete(cb)) };
+  (consentToSharing as jest.Mock).mockRejectedValue(coded('stale_consent_version'));
+  render(
+    <NavigationContext.Provider value={navigation as never}>
+      <BuddiesProfileSection onNavigate={jest.fn()} />
+    </NavigationContext.Provider>,
+  );
+  fireEvent(await screen.findByTestId('share-toggle-steps'), 'valueChange', true);
+  (fetchSharing as jest.Mock).mockResolvedValue({ consentVersion: 2, consented: false, ...OFF });
+  await act(async () => fireEvent.press(await screen.findByTestId('sharing-consent-agree')));
+  await waitFor(() => expect(screen.getByTestId('share-toggle-steps').props.disabled).toBe(true));
+  expect(screen.queryByTestId('sharing-consent')).toBeNull();
+  // The server goes back to the app's version (e.g. a rollback): the old ask must not come back.
+  (fetchSharing as jest.Mock).mockResolvedValue({ consentVersion: 1, consented: false, ...OFF });
+  await act(async () => focus.forEach((cb) => cb()));
+  await waitFor(() => expect(screen.getByTestId('share-toggle-steps').props.disabled).toBe(false));
+  expect(screen.queryByTestId('sharing-consent')).toBeNull();
+  expect(saveSharing).not.toHaveBeenCalled();
 });
 
 it('the first switch turned on asks for consent, then saves; turning one off never asks', async () => {

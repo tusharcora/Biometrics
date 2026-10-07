@@ -21,16 +21,17 @@ const needsConsent = (error: unknown) => {
   return code === 'consent_required' || code === 'stale_consent_version';
 };
 
-// Profile → Buddies (spec 2026-10-06 buddies §7): your handle and name, "Shared with buddies" (five
+// Profile → Buddies (spec 2026-10-06 buddies §7): a row into the Buddies screen (the way in before
+// there is a buddy or a request; Pair up is reached from there), your handle and name, "Shared with buddies" (five
 // global switches, all off; turning one on without current consent asks for it first, and the switch
 // is saved only after the server accepts it; turning one off never asks), and blocked people. A
 // switch shows what the server last confirmed, never a value it has not saved. Hidden on an older
 // backend. Nothing here is logged.
-export function BuddiesProfileSection({ onNavigate }: { onNavigate: (route: 'BuddyIdentity' | 'BlockedPeople') => void }) {
+export function BuddiesProfileSection({ onNavigate }: { onNavigate: (route: 'Buddies' | 'BuddyIdentity' | 'BlockedPeople') => void }) {
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === 'dark' ? COLORS.dark : COLORS.light;
   const store = useBuddies();
-  useRefreshBuddiesOnFocus();
+  const focuses = useRefreshBuddiesOnFocus();
   const [identity, setIdentity] = useState<BuddyIdentity | null>(null);
   const [sharing, setSharing] = useState<SharingSettings | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
@@ -73,8 +74,9 @@ export function BuddiesProfileSection({ onNavigate }: { onNavigate: (route: 'Bud
     return () => {
       live = false;
     };
-    // `store` changes on every refresh (e.g. after editing the buddy name): reload with it.
-  }, [available, store]);
+    // Re-read when buddies become available and on each return to this screen (e.g. after editing
+    // the buddy name), not on every refresh of the shared list.
+  }, [available, focuses]);
 
   if (!available) return null;
   const supported = sharing !== null && sharing.consentVersion === SHARING_CONSENT_VERSION;
@@ -94,12 +96,15 @@ export function BuddiesProfileSection({ onNavigate }: { onNavigate: (route: 'Bud
     setConsentFor(null);
   }
 
-  // Re-reads the switches after a consent refusal: a newer server version locks them here.
+  // Re-reads the switches after a consent refusal: a newer server version locks them here and drops
+  // the pending switch, so a later reload never reopens an ask the person did not just make.
   function reloadSharing() {
     const at = writes.current;
     fetchSharing()
       .then((s) => {
-        if (mounted.current && writes.current === at) setSharing(s);
+        if (!mounted.current || writes.current !== at) return;
+        setSharing(s);
+        if (s.consentVersion !== SHARING_CONSENT_VERSION) closeConsent();
       })
       .catch(() => {});
   }
@@ -171,6 +176,14 @@ export function BuddiesProfileSection({ onNavigate }: { onNavigate: (route: 'Bud
   return (
     <>
       <SettingsGroup testID="buddies-settings" label="Buddies">
+        <SettingsRow
+          testID="buddies-row"
+          icon="people-outline"
+          tint={colors.accent}
+          title="Buddies"
+          subtitle="Your buddies, requests and activity"
+          onPress={() => onNavigate('Buddies')}
+        />
         <SettingsRow
           testID="buddy-identity-row"
           icon="person-circle-outline"
