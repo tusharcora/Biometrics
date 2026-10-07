@@ -263,6 +263,8 @@ it('goes back to Requests when a request push re-sends the same tab with a new o
   mockParams = { tab: 'requests', open: 2 };
   view.rerender(<BuddiesScreen />);
   expect(await screen.findByTestId('request-in-r1')).toBeTruthy();
+  // The empty Activity list renders activity-empty, not activity-list: check the one that was shown.
+  expect(screen.queryByTestId('activity-empty')).toBeNull();
   expect(screen.queryByTestId('activity-list')).toBeNull();
 });
 
@@ -289,6 +291,19 @@ it('keeps a cleared Activity dot cleared when a slower count read lands after it
   await act(async () => landCount({ items: [], nextCursor: null, unseen: 1 }));
   expect(screen.getByText('Activity')).toBeTruthy();
   expect(screen.queryByText('Activity •')).toBeNull();
+});
+
+it('a count read started after a clear can show the dot again (something new arrived)', async () => {
+  (fetchBuddyPage as jest.Mock).mockResolvedValue(EMPTY_PAGE);
+  (fetchActivity as jest.Mock).mockResolvedValue({ items: [], nextCursor: null, unseen: 1 });
+  (markActivitySeen as jest.Mock).mockResolvedValue(undefined);
+  mockParams = { tab: 'activity' };
+  render(<BuddiesScreen />);
+  await waitFor(() => expect(markActivitySeen).toHaveBeenCalled());
+  await waitFor(() => expect(screen.queryByText('Activity •')).toBeNull());
+  (fetchActivity as jest.Mock).mockResolvedValue({ items: [], nextCursor: null, unseen: 1 });
+  await act(async () => mockFocusListeners.forEach((l) => l()));
+  expect(await screen.findByText('Activity •')).toBeTruthy();
 });
 
 it('leaves Block usable after the confirm is cancelled', async () => {

@@ -146,9 +146,10 @@ export function RootNavigator() {
   }, [session]);
 
   useEffect(() => {
-    // A tapped wind-down reminder opens Sleep: the one that launched the app
-    // (once the signed-in navigator is ready; never while signed out) and any
-    // tapped while it runs.
+    // A tapped notification opens its screen (a wind-down reminder Sleep, a
+    // recap its story, a buddy push the requests or that buddy's week): the one
+    // that launched the app (once the signed-in navigator is ready; never while
+    // signed out) and any tapped while it runs.
     const launch = new AbortController();
     void routeInitialNotification(launch.signal);
     const stopListening = listenForNotificationTaps();
