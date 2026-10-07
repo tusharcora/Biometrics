@@ -116,7 +116,8 @@ Models (relation names in brackets; every two-FK model names both relations):
   requests):** if the target has a request to you that they still see as pending (PENDING or DECLINED, hidden or
   not, not withdrawn, sent less than 14 days ago), the two are paired in one step, in one transaction that
   re-checks there is no block either way; across a block the send behaves as any other (a hidden row). Pairing by
-  any route withdraws (`withdrawnAt`) every DECLINED request between the two, so none still reads "Pending".
+  any route withdraws every DECLINED request between the two (`withdrawnAt` set and status CANCELLED, so a
+  pairing-withdrawn row is told apart from the sender's own cancel), so none still reads "Pending".
 - A unique-constraint error (P2002) on `BuddyPair` from a redeem or crossed-request race means the pair exists:
   **success**, not an error.
 - **Accept / decline / cancel:** only the recipient accepts/declines; only the sender cancels; double-tap is a no-op.
