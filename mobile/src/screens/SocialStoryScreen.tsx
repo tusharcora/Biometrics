@@ -9,22 +9,19 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { StatusBar } from 'expo-status-bar';
 import { useReducedMotion } from 'react-native-reanimated';
 import { buddyErrorCode, sendSticker, type StickerKind } from '../api/buddies';
-import { fetchStory, markStorySeen, type Story, type StoryFrame } from '../api/social';
+import { fetchStory, markStorySeen, type Story } from '../api/social';
 import { ViewerProgress } from '../components/recap/ViewerProgress';
 import { CheckInSheet } from '../components/social/CheckInSheet';
 import { SocialStoryFrame } from '../components/social/SocialStoryFrame';
 import { Text } from '../components/ui/text';
 import { buddyErrorMessage, STICKERS } from '../lib/buddyCopy';
-import { personName } from '../lib/socialCopy';
+import { knownStoryFrames, personName } from '../lib/socialCopy';
 import { refreshSocial, useSocial } from '../lib/socialStore';
 import { useStoryViewer } from '../lib/useStoryViewer';
 
 const GROUND = '#0F1230';
 
 type Loaded = { phase: 'loading' } | { phase: 'ready'; story: Story } | { phase: 'gone' } | { phase: 'error' };
-
-// The frame kinds this app knows: a newer server's extra kinds are skipped, not drawn blank.
-const FRAME_KINDS: ReadonlySet<string> = new Set<StoryFrame['kind']>(['checkin', 'badge', 'recap']);
 
 export function SocialStoryScreen() {
   const navigation = useNavigation();
@@ -44,7 +41,8 @@ export function SocialStoryScreen() {
     setLoaded({ phase: 'loading' });
     try {
       const story = await fetchStory(authorId);
-      const frames = story.frames.filter((f) => FRAME_KINDS.has(f.kind));
+      // Frames this app can't draw (a newer server's kind or value) are skipped, not drawn blank or mislabelled.
+      const frames = knownStoryFrames(story.frames);
       // Nothing left to play (it emptied since the ring was drawn): not available, never an endless loader.
       if (live()) setLoaded(frames.length > 0 ? { phase: 'ready', story: { ...story, frames } } : { phase: 'gone' });
     } catch (e) {

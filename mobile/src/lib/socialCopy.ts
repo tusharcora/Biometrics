@@ -1,6 +1,6 @@
 import type { Person } from '../api/buddies';
-import type { CheckInMood, HighlightItem, TimelineItem } from '../api/social';
-import { levelTitle } from './badges';
+import type { CheckInMood, HighlightItem, StoryFrame, TimelineItem } from '../api/social';
+import { FAMILY_NAMES, levelTitle, MAX_LEVEL } from './badges';
 import { STICKER_LABEL } from './buddyCopy';
 
 // Social copy (spec 2026-10-07 social §5, §7). Fixed templates over typed fields: no free text, no health numbers
@@ -17,13 +17,52 @@ const MOOD_WORD: Record<CheckInMood, string> = { RESTED: 'rested', OKAY: 'okay',
 export const personName = (p: Person, mine: boolean) => (mine ? 'You' : p.displayName || `@${p.handle}`);
 
 // The kinds and types this app knows. A newer server adds more (goodnight, camp notes, campfire, "also"); lists
-// skip what they don't know instead of crashing on it.
+// skip what they don't know instead of crashing on it. The same goes for an unknown value inside a known kind (a
+// top story for an on-time goodnight, a new sticker, badge family or recap kind): skipped, never worded as
+// something it isn't ("checked in every day", "a undefined", "undefined II", "monthly").
 const TIMELINE_KINDS: ReadonlySet<string> = new Set<TimelineItem['kind']>(['checkin', 'step_goal', 'badge', 'sticker', 'recap_share']);
 const HIGHLIGHT_TYPES: ReadonlySet<string> = new Set<HighlightItem['type']>([
   'top_story', 'most_cheered_you', 'comeback', 'checked_in_every_day', 'most_stickers_sent',
 ]);
-export const knownTimelineItems = (items: readonly TimelineItem[]) => items.filter((i) => TIMELINE_KINDS.has(i.kind));
-export const knownHighlights = (items: readonly HighlightItem[]) => items.filter((i) => HIGHLIGHT_TYPES.has(i.type));
+const TOP_STORY_REASONS: ReadonlySet<string> = new Set(['badge', 'checked_in_every_day']);
+const STORY_FRAME_KINDS: ReadonlySet<string> = new Set<StoryFrame['kind']>(['checkin', 'badge', 'recap']);
+const RECAP_KINDS: ReadonlySet<string> = new Set(['WEEK', 'MONTH']);
+const has = (table: object, key: unknown) => typeof key === 'string' && Object.prototype.hasOwnProperty.call(table, key);
+const knownMood = (mood: unknown) => has(MOOD_WORD, mood);
+const knownBadge = (family: unknown, level: unknown) =>
+  has(FAMILY_NAMES, family) && Number.isInteger(level) && (level as number) >= 1 && (level as number) <= MAX_LEVEL;
+
+function isKnownTimelineItem(i: TimelineItem): boolean {
+  if (!TIMELINE_KINDS.has(i.kind)) return false;
+  switch (i.kind) {
+    case 'checkin': return i.locked || knownMood(i.mood);
+    case 'badge': return knownBadge(i.badge?.family, i.badge?.level);
+    case 'sticker': return has(STICKER_LABEL, i.sticker);
+    case 'recap_share': return RECAP_KINDS.has(i.recapKind);
+    default: return true;
+  }
+}
+
+function isKnownHighlight(i: HighlightItem): boolean {
+  if (!HIGHLIGHT_TYPES.has(i.type)) return false;
+  if (i.type !== 'top_story') return true;
+  if (!TOP_STORY_REASONS.has(i.reason)) return false;
+  return i.reason !== 'badge' || knownBadge(i.family, i.level);
+}
+
+function isKnownStoryFrame(f: StoryFrame): boolean {
+  if (!STORY_FRAME_KINDS.has(f.kind)) return false;
+  switch (f.kind) {
+    case 'checkin': return f.locked || knownMood(f.mood);
+    case 'badge': return knownBadge(f.family, f.level);
+    case 'recap': return RECAP_KINDS.has(f.recapKind);
+    default: return true;
+  }
+}
+
+export const knownTimelineItems = (items: readonly TimelineItem[]) => items.filter(isKnownTimelineItem);
+export const knownHighlights = (items: readonly HighlightItem[]) => items.filter(isKnownHighlight);
+export const knownStoryFrames = (frames: readonly StoryFrame[]) => frames.filter(isKnownStoryFrame);
 
 /** A timeline line as the bold name and the muted rest; every line starts with its actor. */
 export function timelineParts(item: TimelineItem): { name: string; rest: string } {

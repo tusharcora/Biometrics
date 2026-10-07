@@ -1,8 +1,8 @@
 import {
-  CHECKIN_OPTIONS, clockTime, highlightKicker, highlightKickerColor, highlightLine, highlightsTitle, isoWeekNumber, personName, timelineAction,
-  timelineLine, timelineParts,
+  CHECKIN_OPTIONS, clockTime, highlightKicker, highlightKickerColor, highlightLine, highlightsTitle, isoWeekNumber, knownHighlights, knownStoryFrames,
+  knownTimelineItems, personName, timelineAction, timelineLine, timelineParts,
 } from '../../src/lib/socialCopy';
-import type { HighlightItem, TimelineItem } from '../../src/api/social';
+import type { HighlightItem, StoryFrame, TimelineItem } from '../../src/api/social';
 
 const sam = { id: 's', handle: 'sam', displayName: 'Sam', coachId: 'mochi' };
 const me = { id: 'm', handle: 'me', displayName: 'Me', coachId: 'mochi' };
@@ -86,4 +86,42 @@ it('names the week by its ISO week number', () => {
 it('shows a local clock time with padded minutes', () => {
   expect(clockTime(new Date(2026, 9, 7, 8, 5).toISOString())).toBe('8:05');
   expect(clockTime(new Date(2026, 9, 7, 23, 40).toISOString())).toBe('23:40');
+});
+
+it('skips items of a known kind carrying a value this app does not know (a newer server), instead of miswording them', () => {
+  const odd = <T,>(v: unknown) => v as T;
+  const timeline: TimelineItem[] = [
+    { ...base, id: 'ok', kind: 'checkin', locked: false, mood: 'RESTED' },
+    { ...base, id: 'lock', kind: 'checkin', locked: true },
+    odd<TimelineItem>({ ...base, id: 'mood', kind: 'checkin', locked: false, mood: 'SLEEPY' }),
+    odd<TimelineItem>({ ...base, id: 'fam', kind: 'badge', badge: { family: 'GOODNIGHT', level: 2 } }),
+    odd<TimelineItem>({ ...base, id: 'lvl', kind: 'badge', badge: { family: 'SLEEP_GOAL', level: 9 } }),
+    odd<TimelineItem>({ ...base, id: 'stk', kind: 'sticker', sticker: 'WAVE', to: me }),
+    odd<TimelineItem>({ ...base, id: 'rec', kind: 'recap_share', recapKind: 'YEAR' }),
+    { ...base, id: 'goal', kind: 'step_goal' },
+  ];
+  expect(knownTimelineItems(timeline).map((i) => i.id)).toEqual(['ok', 'lock', 'goal']);
+
+  const highlights: HighlightItem[] = [
+    { type: 'top_story', reason: 'checked_in_every_day', actor: sam, mine: false },
+    { type: 'top_story', reason: 'badge', family: 'STEP_GOAL', level: 3, actor: sam, mine: false },
+    // An S2 goodnight top story must not read as "Sam checked in every day".
+    odd<HighlightItem>({ type: 'top_story', reason: 'goodnight_every_night', actor: sam, mine: false }),
+    odd<HighlightItem>({ type: 'top_story', reason: 'badge', family: 'GOODNIGHT', level: 1, actor: sam, mine: false }),
+    { type: 'comeback', actor: sam, mine: false },
+  ];
+  expect(knownHighlights(highlights).map(highlightLine)).toEqual([
+    'Sam checked in every day', 'Sam reached Step goal streak III', 'Sam bounced back to rested',
+  ]);
+
+  const at = '2026-10-07T08:00:00.000Z';
+  const frames: StoryFrame[] = [
+    { kind: 'checkin', at, locked: true },
+    odd<StoryFrame>({ kind: 'checkin', at, locked: false, mood: 'SLEEPY' }),
+    { kind: 'badge', at, family: 'CHECK_IN', level: 1 },
+    odd<StoryFrame>({ kind: 'badge', at, family: 'GOODNIGHT', level: 1 }),
+    odd<StoryFrame>({ kind: 'recap', at, recapId: 'r', recapKind: 'YEAR', periodStart: '2026-01-01', periodEnd: '2026-12-31', line: 'A year', coachId: 'mochi' }),
+    odd<StoryFrame>({ kind: 'goodnight', at }),
+  ];
+  expect(knownStoryFrames(frames).map((f) => f.kind)).toEqual(['checkin', 'badge']);
 });
