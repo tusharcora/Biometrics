@@ -5,6 +5,7 @@ import { Router } from 'express';
 import { requireAuth } from '../auth/middleware';
 import { buddyRoute } from '../buddies/errors';
 import { getTodayCheckIn, saveCheckIn } from './checkins';
+import { getWeeklyHighlights } from './highlights';
 import { isRecapShared, shareRecap, unshareRecap } from './recapShares';
 import { getStory, markStorySeen } from './stories';
 
@@ -41,4 +42,9 @@ socialRouter.get('/me/social/stories/:authorId', requireAuth, buddyRoute(async (
 socialRouter.post('/me/social/stories/:authorId/seen', requireAuth, buddyRoute(async (req, res) => {
   await markStorySeen(req.userId!, String(req.params.authorId), new Date());
   res.status(204).end();
+}));
+
+socialRouter.get('/me/social/highlights', requireAuth, buddyRoute(async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  res.json({ highlights: await getWeeklyHighlights(req.userId!, new Date()) });
 }));
