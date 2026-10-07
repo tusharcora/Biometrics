@@ -89,7 +89,12 @@ function offsetMs(instant: number, zone: string): number {
   return Date.parse(`${localCivilDateOrUtc(minute, zone)}T${localClockTime(minute, null, zone)}:00Z`) - minute.getTime();
 }
 
-/** The instant of a wall-clock time on a civil date in a zone. The offset is read again at the first guess, so a DST change in between is honoured. */
+/**
+ * The instant of a wall-clock time on a civil date in a zone. The offset is read again at the first guess, so a DST
+ * change in between is honoured. Limit: a target at or near a DST change (a skipped or repeated hour, e.g. 00:00 in
+ * a zone that changes at midnight) can land an hour off. Only 06:00 and 19:00 are asked for, which no zone's change
+ * reaches, so those are safe; don't use it at midnight.
+ */
 export function localInstant(date: string, hhmm: string, timeZone: string): Date {
   const zone = zoneOrUtc(timeZone);
   const wall = Date.parse(`${date}T${hhmm}:00Z`);

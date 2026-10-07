@@ -57,6 +57,43 @@ it('on time = at or before the bedtime goal + 15 min, or 23:00 with no goal, acr
   expect(isOnTime(at('2026-10-08T05:45:00Z'), LA, 'nonsense')).toBe(true); // a bad goal reads as none: 22:45 <= 23:00
 });
 
+describe('edges (final wave)', () => {
+  const NZ = 'Pacific/Auckland'; // NZDT = UTC+13 in October
+
+  it("an Auckland evening turns at her own 06:00", () => {
+    expect(eveningDate(at('2026-10-07T16:59:00Z'), NZ)).toBe('2026-10-07'); // 05:59 Oct 8 NZDT
+    expect(eveningDate(at('2026-10-07T17:00:00Z'), NZ)).toBe('2026-10-08'); // 06:00 Oct 8 NZDT
+  });
+
+  it('with no goal, 23:00 is on time and 23:01 is not', () => {
+    expect(isOnTime(at('2026-10-08T06:00:00Z'), LA, null)).toBe(true); // 23:00
+    expect(isOnTime(at('2026-10-08T06:01:00Z'), LA, null)).toBe(false); // 23:01
+  });
+
+  it('localInstant honours DST: LA spring-forward evening, NZ spring-forward morning', () => {
+    expect(localInstant('2026-03-08', '19:00', LA).toISOString()).toBe('2026-03-09T02:00:00.000Z'); // 19:00 PDT
+    expect(localInstant('2026-09-27', '06:00', NZ).toISOString()).toBe('2026-09-26T17:00:00.000Z'); // 06:00 NZDT
+  });
+
+  it('an 18:00 goal: on time through 18:15, late from 18:16 and after midnight', () => {
+    expect(isOnTime(at('2026-10-08T01:15:00Z'), LA, '18:00')).toBe(true); // 18:15
+    expect(isOnTime(at('2026-10-08T01:16:00Z'), LA, '18:00')).toBe(false); // 18:16
+    expect(isOnTime(at('2026-10-08T09:00:00Z'), LA, '18:00')).toBe(false); // 02:00
+  });
+
+  it('the noon pivot: an 11:59 goal is after midnight (opens 20:00), a 12:00 goal is that day (opens 11:00)', () => {
+    expect(goodnightOpensAt('11:59')).toBe('20:00');
+    expect(goodnightOpensAt('12:00')).toBe('11:00');
+    expect(isGoodnightOpen(at('2026-10-07T17:59:00Z'), LA, '12:00')).toBe(false); // 10:59
+    expect(isGoodnightOpen(at('2026-10-07T18:00:00Z'), LA, '12:00')).toBe(true); // 11:00
+    expect(isGoodnightOpen(at('2026-10-07T18:00:00Z'), LA, '11:59')).toBe(false); // 11:00
+  });
+
+  it('seconds never make a goodnight late: 22:45:59 against a 22:30 goal is on time', () => {
+    expect(isOnTime(at('2026-10-08T05:45:59Z'), LA, '22:30')).toBe(true);
+  });
+});
+
 it('a camp note clears at the next 06:00 in its zone, DST included', () => {
   expect(nextSunrise(at('2026-10-08T05:30:00Z'), LA).toISOString()).toBe('2026-10-08T13:00:00.000Z'); // 22:30 → 06:00 PDT
   expect(nextSunrise(at('2026-10-08T10:00:00Z'), LA).toISOString()).toBe('2026-10-08T13:00:00.000Z'); // 03:00 → that morning
