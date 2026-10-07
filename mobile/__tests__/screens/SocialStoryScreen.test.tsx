@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, userEvent } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ApiError } from '../../src/api/client';
 import { fetchStory, markStorySeen } from '../../src/api/social';
@@ -137,4 +137,50 @@ it('a bare 404 is gone too', async () => {
   (fetchStory as jest.Mock).mockRejectedValueOnce(new ApiError(404, 'Not found'));
   renderScreen();
   expect(await screen.findByTestId('social-story-gone')).toBeTruthy();
+});
+
+it('a long hold only pauses: letting go does not step, nor close on the last frame', async () => {
+  (fetchStory as jest.Mock).mockResolvedValueOnce({ author: sam, localDate: '2026-10-07', frames: [
+    { kind: 'checkin', at: '2026-10-07T14:00:00.000Z', locked: false, mood: 'OKAY' },
+    { kind: 'badge', at: '2026-10-07T15:00:00.000Z', family: 'SLEEP_GOAL', level: 1 },
+  ] });
+  // A real press through Pressability (grant, hold, release), not a direct onLongPress call.
+  const user = userEvent.setup();
+  renderScreen();
+  await screen.findByTestId('story-frame-0');
+  expect(screen.getByTestId('social-story-next')).toHaveProp('accessibilityLabel', 'Next');
+  await user.longPress(screen.getByTestId('social-story-next'), { duration: 400 });
+  expect(screen.getByTestId('story-frame-0')).toBeTruthy();
+  await user.press(screen.getByTestId('social-story-next'));
+  expect(screen.getByTestId('story-frame-1')).toBeTruthy();
+  await user.longPress(screen.getByTestId('social-story-prev'), { duration: 400 });
+  expect(screen.getByTestId('story-frame-1')).toBeTruthy();
+  // The last frame's Next closes, and says so.
+  expect(screen.getByTestId('social-story-next')).toHaveProp('accessibilityLabel', 'Close story');
+  expect(screen.getByTestId('social-story-next')).toHaveProp('accessibilityRole', 'button');
+  await user.longPress(screen.getByTestId('social-story-next'), { duration: 400 });
+  expect(screen.getByTestId('story-frame-1')).toBeTruthy();
+  expect(mockGoBack).not.toHaveBeenCalled();
+});
+
+it('a failed sticker reply shows why', async () => {
+  (fetchStory as jest.Mock).mockResolvedValueOnce({ author: sam, localDate: '2026-10-07', frames: [{ kind: 'checkin', at: '2026-10-07T14:00:00.000Z', locked: false, mood: 'OKAY' }] });
+  (sendSticker as jest.Mock).mockRejectedValueOnce(new ApiError(429, 'x', 'sticker_limit'));
+  renderScreen();
+  await screen.findByTestId('story-frame-0');
+  await act(async () => fireEvent.press(screen.getByTestId('story-reply-CHEER')));
+  expect(screen.getByTestId('story-message')).toHaveTextContent("That's 5 stickers to this buddy today. Try again tomorrow.");
+});
+
+it('a fast double tap sends one sticker', async () => {
+  (fetchStory as jest.Mock).mockResolvedValueOnce({ author: sam, localDate: '2026-10-07', frames: [{ kind: 'checkin', at: '2026-10-07T14:00:00.000Z', locked: false, mood: 'OKAY' }] });
+  let finish: (v: unknown) => void = () => undefined;
+  (sendSticker as jest.Mock).mockReturnValueOnce(new Promise((res) => { finish = res; }));
+  renderScreen();
+  await screen.findByTestId('story-frame-0');
+  fireEvent.press(screen.getByTestId('story-reply-CHEER'));
+  fireEvent.press(screen.getByTestId('story-reply-CHEER'));
+  expect(sendSticker).toHaveBeenCalledTimes(1);
+  await act(async () => finish({ id: 's' }));
+  expect(screen.getByTestId('story-message')).toHaveTextContent('Sent');
 });

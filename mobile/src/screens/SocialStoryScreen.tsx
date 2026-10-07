@@ -31,6 +31,14 @@ export function SocialStoryScreen() {
   const { authorId } = (useRoute().params ?? {}) as { authorId: string };
   const [loaded, setLoaded] = useState<Loaded>({ phase: 'loading' });
   const leave = useCallback(() => navigation.goBack(), [navigation]);
+  // Retry is not tied to an effect: it checks this, so a load that lands after leaving sets nothing.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
 
   const load = useCallback(async (live: () => boolean) => {
     setLoaded({ phase: 'loading' });
@@ -64,7 +72,7 @@ export function SocialStoryScreen() {
         {loaded.phase === 'error' ? (
           <>
             <Text className="text-center text-white">Couldn't load this story</Text>
-            <Text testID="social-story-retry" accessibilityRole="button" onPress={() => void load(() => true)} className="rounded-full bg-white px-5 py-2 font-semibold text-black">Retry</Text>
+            <Text testID="social-story-retry" accessibilityRole="button" onPress={() => void load(() => mounted.current)} className="rounded-full bg-white px-5 py-2 font-semibold text-black">Retry</Text>
           </>
         ) : null}
         <Text testID="social-story-close" accessibilityRole="button" onPress={leave} className="font-semibold text-white">Close</Text>
@@ -83,6 +91,14 @@ function Viewer({ story, onClose }: { story: Story; onClose: () => void }) {
   // The ref guards a double tap before the re-render.
   const sending = useRef(false);
   const seen = useRef(false);
+  // A sticker reply can land after the viewer closed: no message then.
+  const mounted = useRef(true);
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+    };
+  }, []);
   const viewer = useStoryViewer({ count: story.frames.length, autoAdvance: !reduceMotion, onClose });
   const { pause, resume, close } = viewer;
   const last = story.frames.length - 1;
@@ -129,9 +145,9 @@ function Viewer({ story, onClose }: { story: Story; onClose: () => void }) {
     setMessage(null);
     try {
       await sendSticker(story.author.id, kind);
-      setMessage('Sent');
+      if (mounted.current) setMessage('Sent');
     } catch (e) {
-      setMessage(buddyErrorMessage(buddyErrorCode(e)));
+      if (mounted.current) setMessage(buddyErrorMessage(buddyErrorCode(e)));
     } finally {
       sending.current = false;
     }
@@ -162,18 +178,27 @@ function Viewer({ story, onClose }: { story: Story; onClose: () => void }) {
       <View testID={`story-frame-${viewer.index}`} className="flex-1">
         <Pressable
           testID="social-story-prev"
+          accessibilityRole="button"
           accessibilityLabel="Previous"
           onPress={viewer.prev}
           onPressIn={() => pause('hold')}
           onPressOut={() => resume('hold')}
+          // A long hold only pauses: letting go does not also step.
+          delayLongPress={250}
+          onLongPress={() => undefined}
           style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: '30%' }}
         />
         <Pressable
           testID="social-story-next"
-          accessibilityLabel="Next"
+          accessibilityRole="button"
+          // On the last frame Next closes: say so.
+          accessibilityLabel={viewer.index === last ? 'Close story' : 'Next'}
           onPress={viewer.next}
           onPressIn={() => pause('hold')}
           onPressOut={() => resume('hold')}
+          // A long hold only pauses: letting go does not also step.
+          delayLongPress={250}
+          onLongPress={() => undefined}
           style={{ position: 'absolute', right: 0, top: 0, bottom: 0, width: '70%' }}
         />
         {/* Over the tap areas, letting taps through: the locked frame's Check in button stays reachable. */}
