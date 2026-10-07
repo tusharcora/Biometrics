@@ -76,6 +76,8 @@ model User {
   recapShares           RecapShare[]        @relation("RecapShareSharer")
   stepGoalEvents        StepGoalEvent[]     @relation("StepGoalAuthor")
   weeklyHighlights      WeeklyHighlights[]  @relation("WeeklyHighlightsViewer")
+  goodnights            Goodnight[]         @relation("GoodnightAuthor")
+  campNote              CampNote?           @relation("CampNoteAuthor")
 
   // The coach persona the user picked in Settings (an id from
   // src/coach/personas). Null means the default persona.
@@ -977,4 +979,35 @@ model WeeklyHighlights {
   builtAt   DateTime @default(now())
 
   @@id([viewerId, weekStart])
+  @@index([weekStart])
+}
+
+// ---- Social tab S2: Campfire (spec docs/superpowers/specs/2026-10-07-social-tab-design.md §6) ----
+
+/// "Say goodnight": one per author per evening. `localDate` is the evening's date — a goodnight said between 00:00 and
+/// 05:59 local belongs to the previous date (spec §6.1). Self-reported and always shared with buddies, like CheckIn.
+model Goodnight {
+  id        String   @id @default(uuid())
+  authorId  String
+  author    User     @relation("GoodnightAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  localDate DateTime @db.Date
+  at        DateTime
+  /// at <= bedtime goal + 15 min, or <= 23:00 local with no goal (spec §6.1), judged when it was said.
+  onTime    Boolean
+
+  @@unique([authorId, localDate])
+  @@index([at])
+}
+
+/// A camp note (spec §6.3): one per author, 1-40 code points of user free text. Never logged, never to the coach;
+/// only GET /me/camp returns it, to the author and their current buddies. Clears at expiresAt (the next 06:00 in the
+/// author's zone) or at the author's next check-in.
+model CampNote {
+  authorId  String   @id
+  author    User     @relation("CampNoteAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  text      String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([expiresAt])
 }

@@ -46,6 +46,9 @@ async function seedSocial(a: string, b: string) {
     await prisma.recapShare.create({ data: { sharerId: me, recapId: recap.id, localDate: today } });
     await prisma.stepGoalEvent.create({ data: { authorId: me, localDate: today } });
     await prisma.weeklyHighlights.create({ data: { viewerId: me, weekStart: week, items: [] } });
+    // Social S2 tables (Campfire).
+    await prisma.goodnight.create({ data: { authorId: me, localDate: today, at: new Date('2026-10-07T22:00:00Z'), onTime: true } });
+    await prisma.campNote.create({ data: { authorId: me, text: 'bed soon', expiresAt: new Date('2026-10-08T06:00:00Z') } });
   }
   return { aCode: aCode.code, bCode: bCode.code };
 }
