@@ -1,6 +1,8 @@
 // "Say goodnight" (spec 2026-10-07 social §6.1), on the Campfire page and under the evening timeline. Once said:
 // "Goodnight said" (", on time" when it was), with Undo until the server's `undoUntil` — the button disappears by
 // itself when it passes. `onChanged` re-reads whatever shows the goodnight. A refusal shows the server's reason in words.
+// What the server answered to a say or an undo is kept here until the `goodnight` prop changes, so the button is right
+// even if that re-read fails.
 
 import React, { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
@@ -11,9 +13,11 @@ import { goodnightSaidLine } from '../../lib/socialCopy';
 import { Button } from '../ui/button';
 import { Text } from '../ui/text';
 
-export function GoodnightButton({ goodnight, onChanged, testID = 'goodnight' }: { goodnight: Goodnight | null; onChanged: () => void; testID?: string }) {
+export function GoodnightButton({ goodnight: fromProps, onChanged, testID = 'goodnight' }: { goodnight: Goodnight | null; onChanged: () => void; testID?: string }) {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
+  // The server's answer to my last say (its goodnight) or undo (null); undefined = none, so the prop shows.
+  const [answered, setAnswered] = useState<Goodnight | null | undefined>(undefined);
   // Bumped when the undo window closes, only to re-render; the check below reads the clock itself, so a goodnight
   // that arrives after mount (said, or refreshed) is never judged against a stale time.
   const [, setTick] = useState(0);
@@ -26,7 +30,13 @@ export function GoodnightButton({ goodnight, onChanged, testID = 'goodnight' }: 
       mounted.current = false;
     };
   }, []);
+  // A new goodnight from the parent (a re-read) replaces my local answer and any old message.
+  useEffect(() => {
+    setAnswered(undefined);
+    setMessage(null);
+  }, [fromProps]);
 
+  const goodnight = answered === undefined ? fromProps : answered;
   // The server's deadline (capped at the next 06:00), never computed from `at`; an unreadable one offers no Undo.
   const parsed = goodnight ? Date.parse(goodnight.undoUntil) : NaN;
   const undoUntil = Number.isNaN(parsed) ? 0 : parsed;
@@ -38,13 +48,14 @@ export function GoodnightButton({ goodnight, onChanged, testID = 'goodnight' }: 
     return () => clearTimeout(timer);
   }, [undoUntil]);
 
-  async function run(action: () => Promise<unknown>) {
+  async function run(action: () => Promise<Goodnight | null>) {
     if (sending.current) return;
     sending.current = true;
     setBusy(true);
     setMessage(null);
     try {
-      await action();
+      const result = await action();
+      if (mounted.current) setAnswered(result);
       onChanged();
     } catch (e) {
       if (mounted.current) setMessage(buddyErrorMessage(buddyErrorCode(e)));
@@ -60,13 +71,19 @@ export function GoodnightButton({ goodnight, onChanged, testID = 'goodnight' }: 
         <View className="flex-row items-center justify-between gap-2">
           <Text testID={`${testID}-said`} className="text-sm font-semibold">{goodnightSaidLine(goodnight)}</Text>
           {undoUntil > Date.now() ? (
-            <Button testID={`${testID}-undo`} variant="secondary" size="sm" disabled={busy} onPress={() => void run(undoGoodnight)}>Undo</Button>
+            <Button testID={`${testID}-undo`} accessibilityRole="button" accessibilityLabel="Undo goodnight" variant="secondary" size="sm" disabled={busy}
+              onPress={() => void run(async () => {
+                await undoGoodnight();
+                return null;
+              })}>
+              Undo
+            </Button>
           ) : null}
         </View>
       ) : (
-        <Button testID={`${testID}-say`} disabled={busy} onPress={() => void run(sayGoodnight)}>Say goodnight</Button>
+        <Button testID={`${testID}-say`} accessibilityRole="button" disabled={busy} onPress={() => void run(async () => (await sayGoodnight()).goodnight)}>Say goodnight</Button>
       )}
-      {message ? <Text testID={`${testID}-message`} className="text-sm text-destructive">{message}</Text> : null}
+      {message ? <Text testID={`${testID}-message`} accessibilityLiveRegion="polite" className="text-sm text-destructive">{message}</Text> : null}
     </View>
   );
 }

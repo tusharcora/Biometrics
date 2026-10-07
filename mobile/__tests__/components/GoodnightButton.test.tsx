@@ -69,6 +69,44 @@ it('undoes, and says why when the server refuses', async () => {
   expect(screen.getByTestId('goodnight-message')).toHaveTextContent("It's too late to undo that goodnight.");
 });
 
+it('names its buttons for screen readers and announces a refusal politely', async () => {
+  (sayGoodnight as jest.Mock).mockRejectedValueOnce(new ApiError(409, 'x', 'goodnight_closed'));
+  const { rerender } = render(<GoodnightButton goodnight={null} onChanged={jest.fn()} />);
+  expect(screen.getByTestId('goodnight-say')).toHaveProp('accessibilityRole', 'button');
+  await act(async () => fireEvent.press(screen.getByTestId('goodnight-say')));
+  expect(screen.getByTestId('goodnight-message')).toHaveProp('accessibilityLiveRegion', 'polite');
+  rerender(<GoodnightButton goodnight={said(600_000)} onChanged={jest.fn()} />);
+  expect(screen.getByTestId('goodnight-undo')).toHaveProp('accessibilityRole', 'button');
+  expect(screen.getByTestId('goodnight-undo')).toHaveProp('accessibilityLabel', 'Undo goodnight');
+});
+
+it('keeps "Goodnight said" from the server\'s answer when the re-read fails, until the parent has a new goodnight', async () => {
+  const mine = said(600_000, true);
+  (sayGoodnight as jest.Mock).mockResolvedValue({ goodnight: mine });
+  (undoGoodnight as jest.Mock).mockResolvedValue(undefined);
+  // The parent's re-read failed: it still passes no goodnight.
+  const { rerender } = render(<GoodnightButton goodnight={null} onChanged={jest.fn()} />);
+  await act(async () => fireEvent.press(screen.getByTestId('goodnight-say')));
+  expect(screen.getByTestId('goodnight-said')).toHaveTextContent('Goodnight said, on time');
+  expect(screen.getByTestId('goodnight-undo')).toBeTruthy();
+  // Undo's answer is kept the same way: Say comes back though the parent still has nothing new.
+  await act(async () => fireEvent.press(screen.getByTestId('goodnight-undo')));
+  expect(screen.getByTestId('goodnight-say')).toBeTruthy();
+  // A new goodnight from the parent wins over the local answer.
+  const other = said(600_000, false);
+  rerender(<GoodnightButton goodnight={other} onChanged={jest.fn()} />);
+  expect(screen.getByTestId('goodnight-said')).toHaveTextContent(/^Goodnight said$/);
+});
+
+it('clears an old message when the goodnight changes', async () => {
+  (sayGoodnight as jest.Mock).mockRejectedValueOnce(new ApiError(409, 'x', 'goodnight_closed'));
+  const { rerender } = render(<GoodnightButton goodnight={null} onChanged={jest.fn()} />);
+  await act(async () => fireEvent.press(screen.getByTestId('goodnight-say')));
+  expect(screen.getByTestId('goodnight-message')).toBeTruthy();
+  rerender(<GoodnightButton goodnight={said(600_000)} onChanged={jest.fn()} />);
+  expect(screen.queryByTestId('goodnight-message')).toBeNull();
+});
+
 it('a tap the server refuses as too early says so', async () => {
   (sayGoodnight as jest.Mock).mockRejectedValueOnce(new ApiError(409, 'x', 'goodnight_closed'));
   render(<GoodnightButton goodnight={null} onChanged={jest.fn()} testID="timeline-goodnight" />);
