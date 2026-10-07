@@ -36,3 +36,70 @@ it('the unread flag and count cover requests and unseen stickers', async () => {
   await act(() => refreshSocial());
   expect(screen.getByTestId('dot')).toHaveTextContent('false:0');
 });
+
+it('a failed refresh while unavailable stays unavailable (an older backend keeps Social hidden)', async () => {
+  fetchHome.mockResolvedValueOnce(null);
+  await refreshSocial();
+  fetchHome.mockRejectedValueOnce(new Error('offline'));
+  await refreshSocial();
+  expect(getSocialState()).toEqual({ status: 'unavailable' });
+});
+
+it('a refresh during an in-flight load reloads once after it, and callers wait for that reload', async () => {
+  let resolveFirst!: (h: unknown) => void;
+  fetchHome.mockReturnValueOnce(new Promise((r) => { resolveFirst = r; })).mockResolvedValueOnce(home(2, 0));
+  const first = refreshSocial();
+  // Two calls while the first runs: one extra load, not two.
+  const second = refreshSocial();
+  const third = refreshSocial();
+  resolveFirst(home(0, 0));
+  await Promise.all([first, second, third]);
+  expect(fetchHome).toHaveBeenCalledTimes(2);
+  expect(getSocialState()).toEqual({ status: 'ready', home: home(2, 0) });
+  // Settled: the next refresh starts a fresh single load.
+  fetchHome.mockResolvedValueOnce(home(0, 0));
+  await refreshSocial();
+  expect(fetchHome).toHaveBeenCalledTimes(3);
+});
+
+it('a load that started before a reset never lands after it', async () => {
+  let resolve!: (h: unknown) => void;
+  fetchHome.mockReturnValue(new Promise((r) => { resolve = r; }));
+  const pending = refreshSocial();
+  resetSocial();
+  resolve(home(1, 0));
+  await pending;
+  expect(getSocialState()).toEqual({ status: 'idle' });
+});
+
+it('a reset during an in-flight load drops the pending reload too', async () => {
+  let resolve!: (h: unknown) => void;
+  fetchHome.mockReturnValueOnce(new Promise((r) => { resolve = r; }));
+  const pending = refreshSocial();
+  void refreshSocial();
+  resetSocial();
+  resolve(home(1, 0));
+  await pending;
+  expect(fetchHome).toHaveBeenCalledTimes(1);
+  expect(getSocialState()).toEqual({ status: 'idle' });
+});
+
+it('a stale load settling after a reset does not free the newer load (one load at a time)', async () => {
+  let resolveStale!: (h: unknown) => void;
+  let resolveNewer!: (h: unknown) => void;
+  fetchHome
+    .mockReturnValueOnce(new Promise((r) => { resolveStale = r; }))
+    .mockReturnValueOnce(new Promise((r) => { resolveNewer = r; }))
+    .mockResolvedValue(home(0, 0));
+  const stale = refreshSocial();
+  resetSocial();
+  const newer = refreshSocial();
+  resolveStale(home(1, 0));
+  await stale;
+  await Promise.resolve();
+  // The newer load is still running: this joins it instead of starting a second one.
+  void refreshSocial();
+  expect(fetchHome).toHaveBeenCalledTimes(2);
+  resolveNewer(home(0, 0));
+  await newer;
+});

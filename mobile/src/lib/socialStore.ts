@@ -33,7 +33,7 @@ export function getSocialState(): SocialState {
 
 /**
  * Re-reads the home. A call made while one runs marks it dirty, so exactly one more load follows it and every
- * caller's promise settles after that. A failure keeps a ready home.
+ * caller's promise settles after that. A failure keeps a ready home (or 'unavailable').
  */
 export function refreshSocial(): Promise<void> {
   if (inflight) {
@@ -49,7 +49,8 @@ export function refreshSocial(): Promise<void> {
         const home = await fetchSocialHome();
         next = home ? { status: 'ready', home } : { status: 'unavailable' };
       } catch {
-        next = state.status === 'ready' ? state : { status: 'error' };
+        // Unlike buddiesStore, 'unavailable' also survives a failure: an older backend keeps Social hidden offline.
+        next = state.status === 'ready' || state.status === 'unavailable' ? state : { status: 'error' };
       }
       if (at !== epoch) return;
       publish(next);
