@@ -106,10 +106,13 @@ async function pairCrossed(a: string, b: string, now: Date, deps: PairDeps): Pro
 
 /**
  * POST to an exact handle. Only unknown/held/malformed handles answer not_found; a handle you
- * blocked answers blocked_by_you; everything else is the same success.
+ * blocked answers blocked_by_you; everything else is the same success. Every call spends the daily
+ * request bucket before the handle is looked at, so each answer costs the same and probing which
+ * handles exist stops at the daily limit.
  */
 export async function sendRequest(fromId: string, rawHandle: unknown, now: Date, deps: PairDeps = {}): Promise<void> {
   const me = await requirePairingReady(fromId);
+  await limitOrThrow(RATE_LIMITS.buddyRequest, fromId);
   const check = checkHandle(rawHandle);
   if (!check.ok) throw new BuddyError('not_found');
   if (check.handle === me.handle) throw new BuddyError('own_handle');
@@ -126,7 +129,6 @@ export async function sendRequest(fromId: string, rawHandle: unknown, now: Date,
   // Never across a block: the lookup's flag here, and a re-check inside the pairing transaction.
   if ((await crossedAsk(target.id, fromId, now)) && !target.blocksMe && (await pairCrossed(fromId, target.id, now, deps))) return;
 
-  await limitOrThrow(RATE_LIMITS.buddyRequest, fromId);
   const pending = await prisma.buddyRequest.count({ where: { fromUserId: fromId, ...senderPendingWhere(now) } });
   if (pending >= MAX_PENDING_OUTGOING) throw new BuddyError('too_many_pending');
 

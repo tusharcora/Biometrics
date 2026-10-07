@@ -240,6 +240,15 @@ describe('POST /me/buddies/requests', () => {
     expect(spy).toHaveBeenCalledWith(rateLimit.RATE_LIMITS.buddyRequest, me.id);
   });
 
+  it('every send spends the daily bucket before the lookup, so probing unknown handles stops at 50', async () => {
+    const me = await buddyUser();
+    // One fixed clock for every call: the 50 sends and the 51st land in the same daily window.
+    jest.spyOn(Date, 'now').mockReturnValue(Date.now());
+    for (let i = 0; i < 50; i++) await expect(sendRequest(me.id, `nobody${randomUUID().slice(0, 8)}`, new Date())).rejects.toMatchObject({ code: 'not_found' });
+    const res = await send(me.id, `nobody${randomUUID().slice(0, 8)}`);
+    expect([res.status, res.body]).toEqual([429, { error: 'rate_limited' }]);
+  });
+
   it('a swallowed request and a real one run the same route path: one job of the same shape each', async () => {
     const swallower = await buddyUser();
     const real = await buddyUser();
