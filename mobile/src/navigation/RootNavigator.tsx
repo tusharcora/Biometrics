@@ -130,8 +130,9 @@ export type RootStackParamList = {
   BlockedPeople: undefined;
   // Social → last week's highlights in full (the carousel's "All").
   Highlights: undefined;
-  // Social → one buddy's story today (or my own once I've checked in), opened from the stories row.
-  SocialStory: { authorId: string };
+  // Social → one buddy's story today (or my own once I've checked in), opened from the stories row. `mine` is set for
+  // my own story, so the viewer knows it before the Social home has loaded.
+  SocialStory: { authorId: string; mine?: boolean };
   // Social → the camp banner: the Campfire page (S2), pushed with no tab bar.
   Campfire: undefined;
 };

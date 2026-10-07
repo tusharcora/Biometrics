@@ -96,3 +96,12 @@ it('an S1 server (no camp.night, no me.goodnight): the static banner, and nothin
   expect(mockNavigate).not.toHaveBeenCalled();
   expect(screen.queryByTestId('timeline-goodnight-say')).toBeNull();
 });
+
+it('my own ring opens my story marked as mine', async () => {
+  (fetchSocialHome as jest.Mock).mockResolvedValue(home({
+    me: { person: person('me'), checkIn: { mood: 'RESTED', localDate: '2026-10-07', updatedAt: '2026-10-07T08:00:00.000Z' }, goodnight: null },
+  }));
+  renderScreen();
+  fireEvent.press(await screen.findByTestId('story-me'));
+  expect(mockNavigate).toHaveBeenLastCalledWith('SocialStory', { authorId: 'me', mine: true });
+});

@@ -95,7 +95,7 @@ export function SocialScreen() {
         </View>
         <CampBanner camp={home.camp} onOpen={home.camp.night === undefined ? undefined : () => navigation.navigate('Campfire')} />
         <StoriesRow me={home.me} rings={home.stories} onCheckIn={() => setCheckingIn(true)}
-          onOpenStory={(authorId) => navigation.navigate('SocialStory', { authorId })} onSeeAll={() => navigation.navigate('Buddies')} />
+          onOpenStory={(authorId) => navigation.navigate('SocialStory', authorId === home.me.person.id ? { authorId, mine: true } : { authorId })} onSeeAll={() => navigation.navigate('Buddies')} />
         {home.highlights ? <HighlightsCarousel highlights={home.highlights} onOpenAll={() => navigation.navigate('Highlights')} /> : null}
         <View className="gap-3">
           <SectionLabel>Today</SectionLabel>

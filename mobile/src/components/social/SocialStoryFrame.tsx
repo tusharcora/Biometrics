@@ -1,5 +1,6 @@
-// One frame of a social story (spec 2026-10-07 social §4.2): a check-in (locked until I check in), a badge, or a
-// shared recap's headline line exactly as its owner previewed and shared it — never the recap's stats JSON.
+// One frame of a social story (spec 2026-10-07 social §4.2): a check-in (locked until I check in), a badge, a
+// shared recap's headline line exactly as its owner previewed and shared it — never the recap's stats JSON — or a
+// goodnight (S2: "{name} said goodnight", on time or off to bed, the coach resting).
 
 import React from 'react';
 import { View } from 'react-native';
@@ -22,7 +23,7 @@ export function SocialStoryFrame({ frame, author, mine, onUnlock }: { frame: Sto
   return (
     <View pointerEvents="box-none" className="flex-1 items-center justify-center gap-5 px-8">
       <View pointerEvents="none">
-        <Character characterId={coach} mood="idle" size={96} />
+        <Character characterId={coach} mood={frame.kind === 'goodnight' ? 'resting' : 'idle'} size={96} />
       </View>
       {frame.kind === 'checkin' && frame.locked ? (
         <View testID="story-locked" pointerEvents="box-none" className="items-center gap-3">
@@ -48,6 +49,12 @@ export function SocialStoryFrame({ frame, author, mine, onUnlock }: { frame: Sto
         <View pointerEvents="none" className="items-center gap-2">
           <Text className="text-xs font-semibold uppercase tracking-widest text-white/70">{`${frame.recapKind === 'WEEK' ? 'Weekly recap' : 'Monthly recap'} · ${recapTitle({ kind: frame.recapKind, periodStart: frame.periodStart })}`}</Text>
           <Text className="text-center font-display text-display text-white">{frame.line}</Text>
+        </View>
+      ) : null}
+      {frame.kind === 'goodnight' ? (
+        <View testID="story-goodnight" pointerEvents="none" className="items-center gap-2">
+          <Text className="text-xs font-semibold uppercase tracking-widest text-white/70">{`${who} said goodnight`}</Text>
+          <Text className="font-display text-display text-white">{frame.onTime ? 'On time' : 'Off to bed'}</Text>
         </View>
       ) : null}
     </View>
