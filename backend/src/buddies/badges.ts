@@ -15,7 +15,7 @@ import { pushName, sendBuddyNotice } from './notify';
 import { SHARING_SELECT, effectiveSharing } from './sharing';
 
 export const BUDDY_BADGE_JOB = 'buddyBadge';
-/** Each enqueue gives up after this long: GET /me/achievements must never wait on Redis. */
+/** All of one call's enqueues together give up after this long: GET /me/achievements must never wait on Redis. */
 export const BADGE_ENQUEUE_TIMEOUT_MS = 300;
 
 export interface BuddyBadgeJobData { earnerId: string; achievementId: string }
@@ -48,23 +48,37 @@ export async function announceBuddyBadges(
     return;
   }
   const queue = opts.queue ?? syncQueue;
-  for (const row of highestNewPerFamily(rows)) {
-    try {
-      await withTimeout(
-        queue.add(BUDDY_BADGE_JOB, { earnerId, achievementId: row.id } satisfies BuddyBadgeJobData, {
-          // BullMQ rejects ':' in a custom id.
-          jobId: `${BUDDY_BADGE_JOB}-${row.id}`,
-          removeOnComplete: true,
-          removeOnFail: true,
-          attempts: 3,
-          backoff: { type: 'exponential', delay: 30_000 },
-        }),
-        opts.timeoutMs ?? BADGE_ENQUEUE_TIMEOUT_MS,
-        'buddy badge enqueue timeout',
-      );
-    } catch (err) {
-      console.error(JSON.stringify({ event: 'buddies.badge_enqueue_failed', userId: earnerId, achievementId: row.id, error: err instanceof Error ? err.name : 'unknown' }));
-    }
+  const logFailed = (achievementId: string, err: unknown) =>
+    console.error(JSON.stringify({ event: 'buddies.badge_enqueue_failed', userId: earnerId, achievementId, error: err instanceof Error ? err.name : 'unknown' }));
+  // Every family's enqueue starts at once and they share ONE bound, so the caller waits at most
+  // about BADGE_ENQUEUE_TIMEOUT_MS in total. Each failure is logged once: as it fails, or as timed
+  // out when the bound fires first.
+  const top = highestNewPerFamily(rows);
+  const settled = new Set<string>();
+  let timedOut = false;
+  const enqueues = top.map((row) =>
+    queue
+      .add(BUDDY_BADGE_JOB, { earnerId, achievementId: row.id } satisfies BuddyBadgeJobData, {
+        // BullMQ rejects ':' in a custom id.
+        jobId: `${BUDDY_BADGE_JOB}-${row.id}`,
+        removeOnComplete: true,
+        removeOnFail: true,
+        attempts: 3,
+        backoff: { type: 'exponential', delay: 30_000 },
+      })
+      .then(
+        () => void settled.add(row.id),
+        (err: unknown) => {
+          settled.add(row.id);
+          if (!timedOut) logFailed(row.id, err);
+        },
+      ),
+  );
+  try {
+    await withTimeout(Promise.allSettled(enqueues), opts.timeoutMs ?? BADGE_ENQUEUE_TIMEOUT_MS, 'buddy badge enqueue timeout');
+  } catch (err) {
+    timedOut = true;
+    for (const row of top) if (!settled.has(row.id)) logFailed(row.id, err);
   }
 }
 

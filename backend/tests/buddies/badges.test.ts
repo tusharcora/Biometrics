@@ -81,6 +81,24 @@ it('an enqueue failure loses the announcement but keeps the badge, and logs ids 
   expect(JSON.parse(lines[0]!)).toEqual({ event: 'buddies.badge_enqueue_failed', userId: user.id, achievementId: expect.any(String), error: 'Error' });
 });
 
+it('enqueues every family at once under one overall bound, and logs each one that did not make it (ids only)', async () => {
+  const user = await earner();
+  const rows = (['SLEEP_GOAL', 'STEP_GOAL', 'CHECK_IN'] as const).map((family, i) => ({ id: `6a1f9f1e-0000-4000-8000-00000000001${i}`, family, level: 1 }));
+  const queue = { add: jest.fn(() => new Promise(() => {})) };
+  const lines: string[] = [];
+  const spy = jest.spyOn(console, 'error').mockImplementation((l: unknown) => void lines.push(String(l)));
+  const started = Date.now();
+  await announceBuddyBadges(user.id, rows, { queue: queue as never, timeoutMs: 200 });
+  const elapsed = Date.now() - started;
+  spy.mockRestore();
+  // One bound for all three, not one each in turn (that would be 600 ms).
+  expect(elapsed).toBeLessThan(400);
+  expect(queue.add).toHaveBeenCalledTimes(3);
+  expect(lines.map((l) => JSON.parse(l)).sort((a, b) => a.achievementId.localeCompare(b.achievementId))).toEqual(
+    rows.map((r) => ({ event: 'buddies.badge_enqueue_failed', userId: user.id, achievementId: r.id, error: 'TimeoutError' })),
+  );
+});
+
 it('a hanging queue.add never hangs GET /me/achievements; the badge is still stored', async () => {
   const user = await earner();
   const today = new Date().toISOString().slice(0, 10);
