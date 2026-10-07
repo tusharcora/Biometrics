@@ -248,7 +248,10 @@ export async function weeklyHighlightsFor(circle: Circle, now: Date): Promise<Hi
     } else {
       await prisma.weeklyHighlights.createMany({ data: [{ viewerId, weekStart: weekDate, items, builtAt: now }], skipDuplicates: true });
     }
-    row = await prisma.weeklyHighlights.findUniqueOrThrow({ where: key, select: { items: true, builtAt: true } });
+    // Re-read the winner. An account-deletion purge of a row naming the deleted buddy can remove it in between:
+    // that read has no highlights, never a 500 for the whole home; the next read rebuilds.
+    row = await prisma.weeklyHighlights.findUnique({ where: key, select: { items: true, builtAt: true } });
+    if (!row) return null;
   }
   const items = visibleItems(row.items as unknown as HighlightItem[], viewerId, circle.members);
   return items.length > 0 ? { weekStart, weekEnd: shiftDate(weekStart, 6), items } : null;

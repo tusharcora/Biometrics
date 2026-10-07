@@ -70,6 +70,24 @@ it("builds last week's highlights for my circle, gated at read time and cached",
   expect(await prisma.weeklyHighlights.count({ where: { viewerId: me.id } })).toBe(1);
 });
 
+it('a cache row purged between its write and the re-read is no highlights for that read, never a throw', async () => {
+  const { me } = await circle();
+  const createMany = prisma.weeklyHighlights.createMany.bind(prisma.weeklyHighlights);
+  // An account-deletion purge (purgeSocialJsonMentions) lands right after the write.
+  const spy = jest.spyOn(prisma.weeklyHighlights, 'createMany').mockImplementation((async (args: Parameters<typeof createMany>[0]) => {
+    const result = await createMany(args);
+    await prisma.weeklyHighlights.deleteMany({ where: { viewerId: me.id } });
+    return result;
+  }) as never);
+  try {
+    expect(await getWeeklyHighlights(me.id, NOW)).toBeNull();
+  } finally {
+    spy.mockRestore();
+  }
+  // The next read rebuilds.
+  expect((await getWeeklyHighlights(me.id, NOW))!.items.length).toBeGreaterThan(0);
+});
+
 it('a buddy who turns streaks on after the build appears on the next read', async () => {
   const me = await buddyUser();
   const sam = await buddyUser({ displayName: 'Sam' });
