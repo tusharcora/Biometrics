@@ -52,6 +52,8 @@ it('words the camp highlights, and skips a campfire without a real count', () =>
   expect(items.map(highlightKickerColor)).toEqual(['#A5B4FC', '#A5B4FC', '#FB923C', null, null, null]);
   expect(knownHighlights([
     odd<HighlightItem>({ type: 'campfire', nights: 0, actor: me, mine: true }),
+    // The server's minimum is 2: never "The fire was lit 1 nights".
+    odd<HighlightItem>({ type: 'campfire', nights: 1, actor: me, mine: true }),
     odd<HighlightItem>({ type: 'campfire', actor: me, mine: true }),
     odd<HighlightItem>({ type: 'campfire', nights: 2.5, actor: me, mine: true }),
     odd<HighlightItem>({ type: 'campfire', nights: '5', actor: me, mine: true }),
@@ -84,6 +86,20 @@ it("words the fire, who's here, the header kicker, a said goodnight and a note's
   expect(goodnightSaidLine({ localDate: '2026-10-07', at: since, onTime: true, undoUntil: since })).toBe('Goodnight said, on time');
   expect(goodnightSaidLine({ localDate: '2026-10-07', at: since, onTime: false, undoUntil: since })).toBe('Goodnight said');
   expect(noteLength('  🔥hi ')).toBe(3);
+});
+
+it('keeps the lowest real campfire count', () => {
+  const two = { type: 'campfire', nights: 2, actor: me, mine: true } as HighlightItem;
+  expect(knownHighlights([two]).map(highlightLine)).toEqual(['The fire was lit 2 nights']);
+});
+
+it('says nothing, never "NaN", for a time that is not one', () => {
+  for (const bad of ['', 'soon', '8pm', '24:00', '20:60', '20:5', ':30', '20:00:00']) expect(goodnightOpensLine(bad)).toBe('');
+  expect(goodnightOpensLine('0:00')).toBe('You can say goodnight from 12:00 AM');
+  for (const bad of ['', 'not a time', '2026-13-45T99:99:00Z']) expect(campClock(bad)).toBe('');
+  expect(campKicker(new Date('nope'))).toBe('');
+  const m: CampMember = { person: sam, mine: false, asleep: true, asleepSince: 'garbage', onTime: true, note: null };
+  expect(campStatus(m)).toBe('asleep · on time');
 });
 
 it('never counts a note shorter than the server will (P11)', () => {

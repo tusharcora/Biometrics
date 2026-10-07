@@ -49,7 +49,8 @@ function isKnownTimelineItem(i: TimelineItem): boolean {
 
 function isKnownHighlight(i: HighlightItem): boolean {
   if (!HIGHLIGHT_TYPES.has(i.type)) return false;
-  if (i.type === 'campfire') return Number.isInteger(i.nights) && i.nights > 0;
+  // The server sends a campfire only for 2+ lit nights: never word "1 nights" or a count it wouldn't send.
+  if (i.type === 'campfire') return Number.isInteger(i.nights) && i.nights >= 2;
   if (i.type !== 'top_story') return true;
   if (!TOP_STORY_REASONS.has(i.reason)) return false;
   return i.reason !== 'badge' || knownBadge(i.family, i.level);
@@ -179,7 +180,8 @@ export const CAMP_NOTE_MAX = 40;
 /**
  * A draft's length for the counter: code points of the NFC, trimmed draft. It may over-count (the server also strips
  * format and control characters) but never under-counts: NFC can turn one code point into two (U+2ADC), so the
- * counter normalises as the server does.
+ * counter normalises as the server does. The branch without `normalize` is only defensive (every runtime the app ships
+ * on has it); there, a character that expands under NFC is under-counted.
  */
 export function noteLength(draft: string): number {
   const text = typeof draft.normalize === 'function' ? draft.normalize('NFC') : draft;
@@ -196,30 +198,39 @@ export const fireLine = (fire: Camp['fire']) => `${fire.lit} of ${fire.of} in be
 
 // Every time on the Campfire is 12-hour (owner ruling): "10:15 PM".
 const twelveHour = (hour: number, minute: number) => `${hour % 12 || 12}:${String(minute).padStart(2, '0')} ${hour < 12 ? 'AM' : 'PM'}`;
+const validDate = (d: Date) => !Number.isNaN(d.getTime());
 
-/** "10:15 PM": a moment on the phone's clock, for the Campfire. */
+/** "10:15 PM": a moment on the phone's clock, for the Campfire; '' for a time that isn't one (never "NaN"). */
 export function campClock(iso: string): string {
   const d = new Date(iso);
-  return twelveHour(d.getHours(), d.getMinutes());
+  return validDate(d) ? twelveHour(d.getHours(), d.getMinutes()) : '';
 }
 
 /** "Who's here": "awake · {their whole note}" or "awake", or "asleep since 10:15 PM · on time". */
 export function campStatus(m: CampMember): string {
-  if (m.asleep) return `asleep${m.asleepSince ? ` since ${campClock(m.asleepSince)}` : ''}${m.onTime ? ' · on time' : ''}`;
+  if (m.asleep) {
+    const since = m.asleepSince ? campClock(m.asleepSince) : '';
+    return `asleep${since ? ` since ${since}` : ''}${m.onTime ? ' · on time' : ''}`;
+  }
   return m.note ? `awake · ${m.note}` : 'awake';
 }
 
 export const goodnightSaidLine = (g: Goodnight) => (g.onTime ? 'Goodnight said, on time' : 'Goodnight said');
 
-/** "You can say goodnight from 8:00 PM", from my window's opening ("HH:MM", my clock). */
+/** "You can say goodnight from 8:00 PM", from my window's opening ("HH:MM", my clock); '' (no line) if it isn't one. */
 export function goodnightOpensLine(opensAt: string): string {
-  const [hour, minute] = opensAt.split(':').map(Number) as [number, number];
+  const match = /^(\d{1,2}):(\d{2})$/.exec(typeof opensAt === 'string' ? opensAt : '');
+  if (!match) return '';
+  const hour = Number(match[1]);
+  const minute = Number(match[2]);
+  if (hour > 23 || minute > 59) return '';
   return `You can say goodnight from ${twelveHour(hour, minute)}`;
 }
 
 const WEEKDAYS = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'] as const;
 
-/** "TUESDAY · 10:42 PM": the Campfire header's kicker, on the phone's clock. */
+/** "TUESDAY · 10:42 PM": the Campfire header's kicker, on the phone's clock; '' for an invalid date. */
 export function campKicker(now: Date): string {
+  if (!validDate(now)) return '';
   return `${WEEKDAYS[now.getDay()]} · ${twelveHour(now.getHours(), now.getMinutes())}`;
 }

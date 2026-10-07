@@ -17,6 +17,13 @@ it('reads the camp; only a bare 404 means a server without the Campfire', async 
   await expect(fetchCamp()).rejects.toThrow('forbidden');
 });
 
+it('throws a 404 that carries an error code; only a bare 404 is an older server', async () => {
+  api.mockRejectedValueOnce(Object.assign(new Error('coded'), { status: 404, code: 'not_buddies' }));
+  await expect(fetchCamp()).rejects.toThrow('coded');
+  api.mockRejectedValueOnce(Object.assign(new Error('bare'), { status: 404 }));
+  expect(await fetchCamp()).toBeNull();
+});
+
 it('says and undoes goodnight, and shares and clears a note', async () => {
   api.mockResolvedValue({});
   await sayGoodnight();

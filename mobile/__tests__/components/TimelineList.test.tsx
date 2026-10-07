@@ -68,11 +68,18 @@ it('shows the server message when a sticker fails, and an empty state', async ()
 });
 
 it('skips items of a kind it does not know (a newer server)', () => {
-  const goodnight = { id: 'g1', kind: 'goodnight', at: '2026-10-07T21:00:00.000Z', actor: sam, mine: false } as unknown as TimelineItem;
-  const { rerender } = render(<TimelineList items={[goodnight, locked]} />);
+  const chat = { id: 'g1', kind: 'chat', at: '2026-10-07T21:00:00.000Z', actor: sam, mine: false } as unknown as TimelineItem;
+  const { rerender } = render(<TimelineList items={[chat, locked]} />);
   expect(screen.queryByTestId('timeline-g1')).toBeNull();
   expect(screen.getByTestId('timeline-c3')).toBeTruthy();
   expect(screen.queryByTestId('timeline-connector')).toBeNull(); // only one row is shown
-  rerender(<TimelineList items={[goodnight]} />);
+  rerender(<TimelineList items={[chat]} />);
+  expect(screen.getByTestId('timeline-empty')).toBeTruthy();
+});
+
+it('skips a goodnight without its on-time flag', () => {
+  const goodnight = { id: 'g2', kind: 'goodnight', at: '2026-10-07T21:00:00.000Z', actor: sam, mine: false } as unknown as TimelineItem;
+  render(<TimelineList items={[goodnight]} />);
+  expect(screen.queryByTestId('timeline-g2')).toBeNull();
   expect(screen.getByTestId('timeline-empty')).toBeTruthy();
 });

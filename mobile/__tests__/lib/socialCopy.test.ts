@@ -125,3 +125,11 @@ it('skips items of a known kind carrying a value this app does not know (a newer
   ];
   expect(knownStoryFrames(frames).map((f) => f.kind)).toEqual(['checkin', 'badge']);
 });
+
+it('skips items and frames of a kind this app does not know (a newer server)', () => {
+  const odd = <T,>(v: unknown) => v as T;
+  const at = '2026-10-07T08:00:00.000Z';
+  expect(knownTimelineItems([odd<TimelineItem>({ ...base, id: 'chat', kind: 'chat' }), { ...base, id: 'goal', kind: 'step_goal' }]).map((i) => i.id))
+    .toEqual(['goal']);
+  expect(knownStoryFrames([odd<StoryFrame>({ kind: 'chat', at }), { kind: 'checkin', at, locked: true }]).map((f) => f.kind)).toEqual(['checkin']);
+});
