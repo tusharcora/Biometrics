@@ -53,8 +53,12 @@ PR #53) and its ledger `.superpowers/sdd/2026-10-07-social-s1/progress.md`.
   hands the `Circle` to every helper; no helper re-derives buddies, members, the viewer's day or the check-in lock.
 - **Days and clocks:** a check-in and a story belong to the **author's** local day; the timeline is the **viewer's**
   local day; a goodnight belongs to its **evening** (`eveningDate`: one said 00:00–05:59 local belongs to the previous
-  date); the scene's night/day follows the **viewer's** zone (night = 19:00–05:59); each member's "tonight" follows
-  their **own** zone; a camp note clears at the next **06:00 in its author's zone**; a week is Monday–Sunday.
+  date); the scene's night/day follows the **viewer's** zone (night = 19:00–05:59: `isNight`, the stars, the banner's
+  night line); the "Say goodnight" **button** has its own window in the **author's** zone, from
+  `min(20:00, bedtime goal − 60 min)` (20:00 with no goal) to 05:59 (`isGoodnightOpen`); each member's "tonight"
+  follows their **own** zone; a camp note clears at the next **06:00 in its author's zone**; a week is Monday–Sunday;
+  a past night's fire is **frozen** — it counts the viewer and only the buddies paired with the viewer by that
+  evening's 19:00 in the viewer's zone (`campOnEvening`, from `BuddyPair.createdAt` loaded with the circle).
 - **Routes:** the Campfire routes are the spec's paths (§6.4): `GET /me/camp`, `POST|DELETE /me/camp/goodnight`,
   `PUT|DELETE /me/camp/note`, on `socialRouter`. GETs set `Cache-Control: private, no-store`. Errors use `BuddyError`
   / `buddyRoute`; every new code goes into `BUDDY_ERROR_STATUS` **and** gets its words in `mobile/src/lib/buddyCopy.ts`
@@ -76,30 +80,49 @@ PR #53) and its ledger `.superpowers/sdd/2026-10-07-social-s1/progress.md`.
     a day at or after it — `saveCheckIn` deletes notes written at or before that day's first check-in, and reads hide
     them too — whichever is first. Expired rows are hidden at read time and deleted by the hourly social sweep.
   - Plan ruling: one note per author; Share replaces it (new text, new `createdAt`, new expiry); Clear deletes it.
+    The share upsert sets `createdAt` to `now` on update too, on purpose: the clear-on-check-in rule compares the
+    note's `createdAt` with the day's first check-in, so a replaced note must carry its own time.
+  - Plan ruling (owner, Q3): a note keeps the rule above — it lasts until the next 06:00 or its author's first
+    check-in, whichever is first.
   - Plan ruling: a note is visible to its author and the author's current buddies only, only on the Campfire page.
     Unpair or block hides it from that person at once (the row is the author's and still shows to their other
     buddies); account deletion deletes it.
-  - Plan ruling: moderation in S2 = sanitise, trim, reject empty or invisible-only, cap at 40, and 20 note changes
-    (share or clear) per hour per author through the Buddies limiter, failing closed (`rate_limited` / `try_later`).
-    Reporting a camp note is S3 (`POST /me/reports`, spec §8.5/§9).
-  - Plan ruling: "Say goodnight" is open only during the author's local night, 19:00–05:59 (`goodnight_closed`, 409,
-    outside it); a second goodnight the same evening returns the first one unchanged; `DELETE` undoes the latest
-    goodnight within 10 minutes of its `at` (`undo_expired`, 409, after that; nothing to undo → 204). `onTime` is
-    judged at minute resolution: at or before the bedtime goal + 15 min, or 23:00 with no goal; a goal before 12:00
-    counts as after midnight.
+  - Plan ruling: moderation in S2 = sanitise, trim, reject empty or invisible-only, cap at 40, and 20 shares per hour
+    per author through the Buddies limiter, failing closed (`rate_limited` / `try_later`). Clearing your own note
+    (`clearCampNote`, `DELETE /me/camp/note`) is never rate-limited and never fails closed: removing it always works.
+    URLs and @handles are allowed in a note in S2 (no link or mention filter). Reporting a camp note is S3
+    (`POST /me/reports`, spec §8.5/§9).
+  - Plan ruling (owner, Q1): "Say goodnight" opens at `min(20:00, bedtime goal − 60 min)` in the author's zone (20:00
+    with no goal; a goal before 12:00 counts as after midnight, so it opens at 20:00) and closes at 05:59;
+    `goodnight_closed` (409) outside that window. The night scene (`isNight`, stars, the banner's night line) stays
+    19:00–05:59; only the button's window moves. A second goodnight the same evening returns the first one unchanged;
+    `DELETE` undoes only the goodnight of the current evening (`localDate = eveningDate(now)`, never yesterday's)
+    within 10 minutes of its `at` (`undo_expired`, 409, after that; nothing to undo → 204). `onTime` is judged at
+    minute resolution: at or before the bedtime goal + 15 min, or 23:00 with no goal; a goal before 12:00 counts as
+    after midnight.
   - Plan ruling: goodnight copy — the button reads "Say goodnight"; once said, "Goodnight said" (", on time" when it
-    was) with "Undo" for its 10 minutes; by day the Campfire shows "You can say goodnight from 7 pm."; the evening
-    timeline shows the same button under Today while it is night in the viewer's zone.
+    was) with "Undo" for its 10 minutes; outside the window the Campfire shows "You can say goodnight from {h:mm a}"
+    with the viewer's own opening time (e.g. "8:00 PM", "5:00 PM"), and a refused tap says "It's too early to say
+    goodnight."; the evening timeline shows the same button under Today while the viewer's goodnight window is open
+    (`camp.goodnightOpen` on `/me/social`). Every time on the Campfire is 12-hour ("asleep since 10:15 PM", the kicker
+    "TUESDAY · 10:42 PM").
   - Plan ruling: asleep = a goodnight for the member's current evening, or for last evening between 06:00 and 11:59
     local until they check in (spec: "said goodnight tonight and not yet checked in today").
   - Plan ruling: the camp banner reads "THE CAMP" + "{awake} awake · {asleep} asleep" at night (spec §4 item 1) and
     "{n} checked in" by day (S1); it opens the Campfire only when the server sends `camp.night` (an S2 server).
   - Plan ruling: `GET /me/camp` members carry `person` (the S1 DTO idiom) plus `mine`, `asleep`, `asleepSince`,
     `onTime`, `note` — instead of the spec's flat `id / displayName / coachId` — and the body adds `goodnight` (mine
-    tonight, for Undo). Members are me first, then buddies by latest activity (check-in, goodnight or note); the app
-    seats the first 8 around the fire and shows "+N" for the rest; "Who's here" lists everyone.
+    tonight, for Undo) and `goodnightOpen` / `goodnightOpensAt` (my own window, "HH:MM" local). Members are me first,
+    then buddies by latest activity (check-in, goodnight or note); the app seats the first 8 around the fire (a fixed,
+    tested layout with no overlap in the 340-px scene) and shows "+N" for the rest; "Who's here" lists everyone.
+  - Plan ruling (owner, Q4): the bubble over a coach is one truncated line; the "Who's here" row shows the full note
+    (no line limit).
   - Plan ruling: the fire card copy is "The fire grows as your circle gets to bed by their goal. Keep it lit." (the
     canvas' camp-badge promise is dropped, spec §6.2) plus "Nights lit this week: N".
+  - Plan ruling (owner, Q2): tonight's fire is live (the current camp). "Nights lit this week" and the `campfire`
+    highlight count each night with that night's camp: the viewer, plus the buddies whose `BuddyPair.createdAt` is at
+    or before that evening's 19:00 in the viewer's zone; only their on-time goodnights count. Pairing today never
+    unlights Monday.
   - Plan ruling: timeline `goodnight` items ("Sam said goodnight, on time") for everyone, no one-tap action;
     `camp_note` items ("Ben left a camp note", never the text) only for a live note written during its author's night
     (19:00–05:59 author-local) — the spec's "(night only)".
@@ -110,8 +133,12 @@ PR #53) and its ledger `.superpowers/sdd/2026-10-07-social-s1/progress.md`.
     `first_badge` (a member's first-ever badge earned that week; gated by streaks like every badge; not repeated when
     that person's badge is the top story); `joined` and `first_badge` capped at 3 each. Weeks cached before S2 keep
     their S1 items.
+  - Plan ruling (amends S1's "never persist an empty week"): a week with no candidates is rebuilt on every read only
+    until 24 h after it turned final (`highlightsReadyAt + 24 h`); from then on it is cached empty, so a quiet circle
+    stops paying the ~6 build queries on every read.
   - Plan ruling: retention — `runSocialSweep` deletes week-highlight caches whose `weekStart` is more than 4 weeks old
-    and expired camp notes; it runs on the existing hourly recap-sweep tick (no new scheduler). Account deletion
+    and expired camp notes; it runs on the existing hourly recap-sweep tick (no new scheduler), whose job may pin the
+    sweep's clock with `data.now` (tests only; no test runs the sweep on the real clock). Account deletion
     deletes every highlight cache whose JSON names the user (`purgeSocialJsonMentions`, registered with the social
     tables in `buddies/models.ts`); reads keep gating every cached actor against the live circle.
   - Plan ruling: a buddy push that arrives while the app is open refreshes the Social store, only once the store has
@@ -123,18 +150,24 @@ PR #53) and its ledger `.superpowers/sdd/2026-10-07-social-s1/progress.md`.
 ## Review Focus
 
 1. **Midnight, sunrise and zones:** a goodnight at 00:30 belongs to the evening before; a coach is asleep by its
-   owner's clock (an Auckland buddy's 18:30 is not night while it is 22:30 in Los Angeles); a note posted at 22:30 in
+   owner's clock (an Auckland buddy's 18:30 is not night while it is 22:30 in Los Angeles); Ana (Auckland) says
+   goodnight at her 22:00 NZDT (2026-10-08T09:00Z): at my Los Angeles 02:30 (night) she is asleep with `onTime`
+   judged by her own goal, at my 13:00 (her 09:00) she is still asleep, and at my 16:00 (her noon) she is awake; at my
+   05:30 the camp is still `night: true` while her tonight is already the next evening; a note posted at 22:30 in
    Los Angeles clears at 06:00 Los Angeles time, on a DST change too. Tests: Task 2 (clock), Task 4 (goodnight),
    Task 6 (camp), Task 7 (story frame).
 2. **Unpair, block or account deletion during the evening:** the ex-buddy's coach, bubble, goodnight and camp-note
    timeline item vanish on the next read both ways; deletion removes their `Goodnight`/`CampNote` rows and every
-   highlight cache naming them. Tests: Task 6, Task 7, Task 10.
+   highlight cache naming them; a buddy paired today never changes a past night's fire. Tests: Task 6, Task 7,
+   Task 9, Task 10.
 3. **Hostile or odd note text:** whitespace only, zero-width characters, newlines, 41 code points, 40 emoji, a
    reserved word — trimmed/sanitised/refused as the sanitiser says, and the text never reaches a log line, `/me/social`
    or the timeline. Tests: Task 5, Task 7, Task 8.
-4. **Goodnight edges:** 18:59 is closed and 19:00 open; a second tap keeps the first; undo at exactly 10 minutes
-   works and one millisecond later is `undo_expired`; a check-in in the morning wakes the coach, noon does too.
-   Tests: Task 4, Task 6.
+4. **Goodnight edges:** with no goal 19:30 is closed (though the scene is night) and 20:00 open; an 18:00 goal opens
+   at 17:00 and 18:05 is on time; a 23:00 goal opens at 20:00; 05:59 is open and 06:00 closed; a second tap keeps the
+   first; undo at exactly 10 minutes works and one millisecond later is `undo_expired`; undo after 06:00 never
+   removes last night's goodnight; a check-in in the morning wakes the coach, noon does too. Tests: Task 2, Task 4,
+   Task 6.
 5. **Old server / new app and the reverse:** no `camp.night` → static banner and no goodnight row; `GET /me/camp` bare
    404 → "not open yet"; a goodnight frame without `onTime` and an unknown highlight value are skipped. Tests: Task 11,
    Task 12, Task 13.
@@ -151,8 +184,10 @@ Backend (`backend/`):
 - Modify `src/buddies/errors.ts` — `goodnight_closed`, `undo_expired`, `invalid_note`.
 - Modify `src/buddies/identity.ts` — export `hasVisibleCharacter`.
 - Modify `src/lib/rateLimit.ts` — `RATE_LIMITS.campNote`.
-- Create `src/social/night.ts` — pure clock: night window, evening date, on-time, next sunrise, fire segments, lit nights.
-- Modify `src/social/circle.ts` — `Circle`, `loadCircle`, `todayCheckInsOf`, `recentGoodnightsOf`, `GoodnightRow`.
+- Create `src/social/night.ts` — pure clock: night scene, goodnight window, evening date, on-time, next sunrise, fire
+  segments, each evening's camp, lit nights.
+- Modify `src/social/circle.ts` — `Circle` (with `pairedAt` and `viewerBedtimeGoal`), `loadCircle`, `buddyPairsOf`,
+  `todayCheckInsOf`, `recentGoodnightsOf`, `GoodnightRow`.
 - Modify `src/social/checkins.ts` — export `toCheckInDTO`; a check-in clears older camp notes.
 - Modify `src/social/stories.ts`, `src/social/timeline.ts`, `src/social/highlights.ts`, `src/social/home.ts` — take the
   circle; goodnight frames; goodnight / camp-note items; S2 highlight items; banner summary and `me.goodnight`.
@@ -166,7 +201,8 @@ Backend (`backend/`):
 - Modify `scripts/seedSocial.ts` — the buddy's camp note and goodnight.
 - Tests: create `tests/social/{helpers,campfireSchema,night,homeQueries,goodnight,campNotes,camp,campTimeline,homeCamp,highlightsCamp,retention}.test.ts`
   (`helpers.ts` is not a test); modify `tests/buddies/deletion.test.ts`, `tests/social/home.test.ts`,
-  `tests/scripts/seedSocial.test.ts`.
+  `tests/social/highlights.test.ts` (one S1 test's clock, Task 3), `tests/recap/worker.test.ts` (mocks the social
+  sweep, Task 10), `tests/scripts/seedSocial.test.ts`.
 
 Mobile (`mobile/`):
 - Modify `src/api/social.ts` — S2 types; `fetchCamp`, `sayGoodnight`, `undoGoodnight`, `saveCampNote`, `clearCampNote`.
@@ -425,11 +461,17 @@ git commit -m "feat(social): goodnight and camp note tables"
 **Interfaces:**
 - Consumes: `isValidTimeZone`, `localCivilDateOrUtc`, `localClockTime` (`src/biometrics/civilDate.ts`);
   `localHourOrUtc` (`src/recap/periods.ts`); `shiftDate` (`src/scoring/dates.ts`).
-- Produces (`night.ts`): `NIGHT_START_HOUR = 19`, `SUNRISE_HOUR = 6`, `FIRE_SEGMENTS = 5`, `LIT_NIGHT_SEGMENTS = 3`,
-  `zoneOrUtc(tz): string`, `isNight(at: Date, tz): boolean`, `eveningDate(at: Date, tz): string` (YYYY-MM-DD),
-  `isOnTime(at: Date, tz, bedtimeGoal: string | null): boolean`, `localInstant(date: string, hhmm: string, tz): Date`,
-  `nextSunrise(now: Date, tz): Date`, `fireSegments(lit: number, of: number): number`,
-  `countLitNights(onTimeDates: readonly string[], campSize: number): number`.
+- Produces (`night.ts`): `NIGHT_START_HOUR = 19`, `SUNRISE_HOUR = 6`, `NOON_HOUR = 12`,
+  `GOODNIGHT_OPEN_MINUTES = 1200` (20:00), `GOODNIGHT_LEAD_MINUTES = 60`, `FIRE_SEGMENTS = 5`, `LIT_NIGHT_SEGMENTS = 3`,
+  `zoneOrUtc(tz): string`, `isNight(at: Date, tz): boolean` (the scene, 19:00–05:59),
+  `goodnightOpensAt(bedtimeGoal: string | null): string` ("HH:MM", `min(20:00, goal − 60 min)`),
+  `isGoodnightOpen(at: Date, tz, bedtimeGoal: string | null): boolean` (the button, opening time–05:59),
+  `eveningDate(at: Date, tz): string` (YYYY-MM-DD), `isOnTime(at: Date, tz, bedtimeGoal: string | null): boolean`,
+  `localInstant(date: string, hhmm: string, tz): Date`, `nextSunrise(now: Date, tz): Date`,
+  `fireSegments(lit: number, of: number): number`,
+  `campOnEvening(date: string, viewerId: string, pairedAt: ReadonlyMap<string, Date>, tz): Set<string>`,
+  `interface OnTimeNight { authorId: string; date: string }`,
+  `countLitNights(onTime: readonly OnTimeNight[], campOn: (date: string) => ReadonlySet<string>): number`.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -437,7 +479,8 @@ git commit -m "feat(social): goodnight and camp note tables"
 
 ```ts
 import {
-  countLitNights, eveningDate, fireSegments, isNight, isOnTime, localInstant, nextSunrise, zoneOrUtc,
+  campOnEvening, countLitNights, eveningDate, fireSegments, goodnightOpensAt, isGoodnightOpen, isNight, isOnTime,
+  localInstant, nextSunrise, zoneOrUtc,
 } from '../../src/social/night';
 
 // Pure functions, but run through the backend helper like every backend suite (its globalSetup needs the test DB).
@@ -452,6 +495,27 @@ it('night is 19:00–05:59 in the given zone; an unknown zone reads as UTC', () 
   expect(isNight(at('2026-10-07T12:00:00Z'), 'Not/AZone')).toBe(false);
   expect(isNight(at('2026-10-07T20:00:00Z'), 'Not/AZone')).toBe(true);
   expect([zoneOrUtc(LA), zoneOrUtc('Not/AZone')]).toEqual([LA, 'UTC']);
+});
+
+it('"Say goodnight" opens at min(20:00, goal − 60 min) and closes at 05:59; the scene keeps 19:00', () => {
+  expect(goodnightOpensAt(null)).toBe('20:00');
+  expect(goodnightOpensAt('18:00')).toBe('17:00');
+  expect(goodnightOpensAt('20:30')).toBe('19:30');
+  expect(goodnightOpensAt('23:00')).toBe('20:00');
+  expect(goodnightOpensAt('00:30')).toBe('20:00'); // a goal before noon is after midnight
+  expect(goodnightOpensAt('12:00')).toBe('11:00'); // the earliest possible opening
+  expect(goodnightOpensAt('nonsense')).toBe('20:00'); // a bad goal reads as none
+  // An 18:00 goal opens at 17:00 (LA, PDT).
+  expect(isGoodnightOpen(at('2026-10-07T23:59:00Z'), LA, '18:00')).toBe(false); // 16:59
+  expect(isGoodnightOpen(at('2026-10-08T00:00:00Z'), LA, '18:00')).toBe(true); // 17:00
+  // No goal: 19:30 is night for the scene, but goodnight waits for 20:00.
+  expect(isNight(at('2026-10-08T02:30:00Z'), LA)).toBe(true); // 19:30
+  expect(isGoodnightOpen(at('2026-10-08T02:30:00Z'), LA, null)).toBe(false); // 19:30
+  expect(isGoodnightOpen(at('2026-10-08T03:00:00Z'), LA, null)).toBe(true); // 20:00
+  // A 23:00 goal opens at 20:00 like no goal; every window closes at 06:00.
+  expect(isGoodnightOpen(at('2026-10-08T02:59:00Z'), LA, '23:00')).toBe(false); // 19:59
+  expect(isGoodnightOpen(at('2026-10-08T12:59:00Z'), LA, '23:00')).toBe(true); // 05:59
+  expect(isGoodnightOpen(at('2026-10-08T13:00:00Z'), LA, '18:00')).toBe(false); // 06:00
 });
 
 it('a goodnight between 00:00 and 05:59 belongs to the evening before', () => {
@@ -489,10 +553,29 @@ it('the fire has five segments by the share of the camp in bed on time', () => {
   expect(fireSegments(3, 0)).toBe(0);
 });
 
-it('counts the nights whose fire reached 3 segments', () => {
+it("an evening's camp is the viewer and the buddies paired by its 19:00 in the viewer's zone", () => {
+  // LA Mon Oct 5, 19:00 PDT = 2026-10-06T02:00Z.
+  const pairedAt = new Map([['a', at('2026-10-06T01:59:00Z')], ['b', at('2026-10-06T02:00:00Z')], ['c', at('2026-10-06T02:01:00Z')]]);
+  expect([...campOnEvening('2026-10-05', 'me', pairedAt, LA)].sort()).toEqual(['a', 'b', 'me']);
+  expect([...campOnEvening('2026-10-06', 'me', pairedAt, LA)].sort()).toEqual(['a', 'b', 'c', 'me']);
+  expect([...campOnEvening('2026-10-04', 'me', pairedAt, LA)]).toEqual(['me']); // the viewer always counts
+});
+
+it("counts the nights whose fire reached 3 segments, each with that night's camp", () => {
+  const four = () => new Set(['me', 'a', 'b', 'c']);
+  const gn = (date: string, ...ids: string[]) => ids.map((authorId) => ({ authorId, date }));
   // A camp of 4: Mon 3 on time (4 segments), Tue 1 (2), Wed 2 (3).
-  expect(countLitNights(['2026-10-05', '2026-10-05', '2026-10-05', '2026-10-06', '2026-10-07', '2026-10-07'], 4)).toBe(2);
-  expect(countLitNights([], 4)).toBe(0);
+  const week = [...gn('2026-10-05', 'me', 'a', 'b'), ...gn('2026-10-06', 'a'), ...gn('2026-10-07', 'a', 'c')];
+  expect(countLitNights(week, four)).toBe(2);
+  expect(countLitNights([], four)).toBe(0);
+  // Monday and Tuesday's camp was me + a (b and c paired on Wednesday): Monday is 2 of 2 (b's goodnight that night is
+  // ignored) and Tuesday is a alone, 1 of 2 (3 segments, lit). Counted against all four, Tuesday would be 1 of 4
+  // (2 segments, unlit).
+  const campOn = (date: string) => (date === '2026-10-05' || date === '2026-10-06' ? new Set(['me', 'a']) : four());
+  expect(countLitNights([...gn('2026-10-05', 'me', 'a', 'b'), ...gn('2026-10-06', 'a')], campOn)).toBe(2);
+  expect(countLitNights([...gn('2026-10-05', 'me', 'a', 'b'), ...gn('2026-10-06', 'a')], four)).toBe(1);
+  // A night's on-time count is per person: a duplicate row never counts twice.
+  expect(countLitNights(gn('2026-10-05', 'a', 'a', 'a'), four)).toBe(0);
 });
 ```
 
@@ -506,11 +589,14 @@ Expected: FAIL — "Cannot find module '../../src/social/night'".
 `backend/src/social/night.ts`:
 
 ```ts
-// The camp's clock (spec 2026-10-07 social §6). Night is 19:00–05:59 local. A goodnight said between 00:00 and 05:59
-// belongs to the previous evening. On time = at or before the bedtime goal + 15 min, or 23:00 local with no goal; a
-// goal before noon is after midnight. A camp note clears at the next 06:00 in its author's zone. The fire has five
-// segments by the share of the camp in bed on time; a night is "lit" at three. Pure functions, no I/O. An unknown
-// zone reads as UTC everywhere, as localCivilDateOrUtc does.
+// The camp's clock (spec 2026-10-07 social §6). The night SCENE is 19:00–05:59 local (stars, the banner's night
+// line). The "Say goodnight" BUTTON has its own window (owner ruling Q1): from min(20:00, bedtime goal − 60 min) —
+// 20:00 with no goal — to 05:59 in the author's zone. A goodnight said between 00:00 and 05:59 belongs to the previous
+// evening. On time = at or before the bedtime goal + 15 min, or 23:00 local with no goal; a goal before noon is after
+// midnight. A camp note clears at the next 06:00 in its author's zone. The fire has five segments by the share of the
+// camp in bed on time; a night is "lit" at three, and a past night is frozen: its camp is the viewer plus the buddies
+// paired by that evening's 19:00 (owner ruling Q2). Pure functions, no I/O. An unknown zone reads as UTC everywhere,
+// as localCivilDateOrUtc does.
 
 import { isValidTimeZone, localCivilDateOrUtc, localClockTime } from '../biometrics/civilDate';
 import { localHourOrUtc } from '../recap/periods';
@@ -518,6 +604,12 @@ import { shiftDate } from '../scoring/dates';
 
 export const NIGHT_START_HOUR = 19;
 export const SUNRISE_HOUR = 6;
+/** A bedtime goal before noon is after midnight; a coach asleep last night wakes by noon. */
+export const NOON_HOUR = 12;
+/** "Say goodnight" opens at 20:00 at the latest… */
+export const GOODNIGHT_OPEN_MINUTES = 20 * 60;
+/** …or this long before an earlier bedtime goal. */
+export const GOODNIGHT_LEAD_MINUTES = 60;
 export const ON_TIME_GRACE_MINUTES = 15;
 /** 23:00, the on-time line when no bedtime goal is set (spec §6.1). */
 export const DEFAULT_ON_TIME_MINUTES = 23 * 60;
@@ -546,13 +638,40 @@ function eveningMinutes(hour: number, minute: number, nextDayBefore: number): nu
   return hour * 60 + minute + (hour < nextDayBefore ? MINUTES_PER_DAY : 0);
 }
 
-export function isOnTime(at: Date, timeZone: string, bedtimeGoal: string | null): boolean {
-  const [hour, minute] = localClockTime(at, null, zoneOrUtc(timeZone)).split(':').map(Number) as [number, number];
-  const atMinutes = eveningMinutes(hour, minute, SUNRISE_HOUR);
+/** The local wall clock at an instant, as [hour, minute]. */
+function clockOf(at: Date, timeZone: string): [number, number] {
+  return localClockTime(at, null, zoneOrUtc(timeZone)).split(':').map(Number) as [number, number];
+}
+
+/** A bedtime goal ("HH:MM") in evening minutes — a goal before noon is after midnight (00:30 → 24:30) — or null for none or a bad one. */
+function goalMinutes(bedtimeGoal: string | null): number | null {
   const goal = bedtimeGoal ? HHMM_RE.exec(bedtimeGoal) : null;
-  if (!goal) return atMinutes <= DEFAULT_ON_TIME_MINUTES;
-  // A goal before noon is after midnight: 00:30 is 24:30 of the evening.
-  return atMinutes <= eveningMinutes(Number(goal[1]), Number(goal[2]), 12) + ON_TIME_GRACE_MINUTES;
+  return goal ? eveningMinutes(Number(goal[1]), Number(goal[2]), NOON_HOUR) : null;
+}
+
+const pad2 = (n: number) => String(n).padStart(2, '0');
+
+/** When "Say goodnight" opens, "HH:MM" local: min(20:00, goal − 60 min); 20:00 with no goal. Never before 11:00 (a 12:00 goal). */
+export function goodnightOpensAt(bedtimeGoal: string | null): string {
+  const goal = goalMinutes(bedtimeGoal);
+  const opens = goal === null ? GOODNIGHT_OPEN_MINUTES : Math.min(GOODNIGHT_OPEN_MINUTES, goal - GOODNIGHT_LEAD_MINUTES);
+  return `${pad2(Math.floor(opens / 60))}:${pad2(opens % 60)}`;
+}
+
+/** Whether "Say goodnight" is open in the author's zone: from goodnightOpensAt until 05:59. */
+export function isGoodnightOpen(at: Date, timeZone: string, bedtimeGoal: string | null): boolean {
+  const [hour, minute] = clockOf(at, timeZone);
+  if (hour < SUNRISE_HOUR) return true;
+  const [openHour, openMinute] = goodnightOpensAt(bedtimeGoal).split(':').map(Number) as [number, number];
+  return hour * 60 + minute >= openHour * 60 + openMinute;
+}
+
+export function isOnTime(at: Date, timeZone: string, bedtimeGoal: string | null): boolean {
+  const [hour, minute] = clockOf(at, timeZone);
+  const atMinutes = eveningMinutes(hour, minute, SUNRISE_HOUR);
+  const goal = goalMinutes(bedtimeGoal);
+  if (goal === null) return atMinutes <= DEFAULT_ON_TIME_MINUTES;
+  return atMinutes <= goal + ON_TIME_GRACE_MINUTES;
 }
 
 /** The zone's offset from UTC at an instant, in ms (whole minutes). */
@@ -582,11 +701,32 @@ export function fireSegments(lit: number, of: number): number {
   return Math.min(FIRE_SEGMENTS, Math.ceil((lit * FIRE_SEGMENTS) / of));
 }
 
-/** Nights whose fire reached LIT_NIGHT_SEGMENTS, from one evening date per on-time goodnight. */
-export function countLitNights(onTimeDates: readonly string[], campSize: number): number {
-  const perNight = new Map<string, number>();
-  for (const date of onTimeDates) perNight.set(date, (perNight.get(date) ?? 0) + 1);
-  return [...perNight.values()].filter((n) => fireSegments(n, campSize) >= LIT_NIGHT_SEGMENTS).length;
+/**
+ * Who counts toward an evening's fire (owner ruling Q2): the viewer always, and each buddy whose pair with the viewer
+ * was made at or before that evening's 19:00 in the viewer's zone. So a past night is frozen: pairing today never
+ * changes Monday.
+ */
+export function campOnEvening(date: string, viewerId: string, pairedAt: ReadonlyMap<string, Date>, timeZone: string): Set<string> {
+  const evening = localInstant(date, `${pad2(NIGHT_START_HOUR)}:00`, timeZone).getTime();
+  const camp = new Set([viewerId]);
+  for (const [id, at] of pairedAt) if (at.getTime() <= evening) camp.add(id);
+  return camp;
+}
+
+/** One on-time goodnight: its author and its evening date. */
+export interface OnTimeNight { authorId: string; date: string }
+
+/** Nights whose fire reached LIT_NIGHT_SEGMENTS, each judged against that night's camp (`campOn`); others' goodnights are ignored. */
+export function countLitNights(onTime: readonly OnTimeNight[], campOn: (date: string) => ReadonlySet<string>): number {
+  const perNight = new Map<string, Set<string>>();
+  for (const g of onTime) perNight.set(g.date, (perNight.get(g.date) ?? new Set<string>()).add(g.authorId));
+  let lit = 0;
+  for (const [date, authors] of perNight) {
+    const camp = campOn(date);
+    const inBed = [...authors].filter((id) => camp.has(id)).length;
+    if (fireSegments(inBed, camp.size) >= LIT_NIGHT_SEGMENTS) lit += 1;
+  }
+  return lit;
 }
 ```
 
@@ -599,7 +739,7 @@ Expected: PASS.
 
 ```bash
 git add backend/src/social/night.ts backend/tests/social/night.test.ts
-git commit -m "feat(social): the camp's clock: night, evening date, on time, sunrise and fire segments"
+git commit -m "feat(social): the camp's clock: night, goodnight window, evening date, on time, sunrise and fire"
 ```
 
 ---
@@ -608,18 +748,24 @@ git commit -m "feat(social): the camp's clock: night, evening date, on time, sun
 **Files:**
 - Modify: `backend/src/social/circle.ts`, `backend/src/social/stories.ts`, `backend/src/social/timeline.ts`,
   `backend/src/social/highlights.ts`, `backend/src/social/home.ts`, `backend/src/social/checkins.ts`
-- Test: create `backend/tests/social/homeQueries.test.ts`; the S1 suites `tests/social/{stories,timeline,highlights,home,checkins}.test.ts` must stay green unchanged
+- Test: create `backend/tests/social/homeQueries.test.ts`; modify one S1 test in `backend/tests/social/highlights.test.ts`
+  (its clock only, for the owner's empty-week ruling); every other S1 suite `tests/social/{stories,timeline,highlights,home,checkins}.test.ts`
+  must stay green unchanged, and no S1 DTO changes shape
 
 **Interfaces:**
-- Consumes: the `Goodnight` model (Task 1); S1 `buddyIdsOf`, `membersById`, `Member`, `MEMBER_SELECT`.
+- Consumes: the `Goodnight` model (Task 1); S1 `buddyIdsOf`, `membersById`, `Member`, `MEMBER_SELECT`, `toPerson`,
+  `effectiveSharing`; S1 `highlightsReadyAt`, `buildHighlightCandidates(viewerId, memberIds, weekStart)` (unchanged here).
 - Produces (`circle.ts`):
   - `interface TodayCheckIn { authorId: string; mood: CheckInMood; localDate: Date; createdAt: Date; updatedAt: Date }`
   - `interface GoodnightRow { id: string; authorId: string; localDate: Date; at: Date; onTime: boolean }`,
     `GOODNIGHT_SELECT`, `RECENT_GOODNIGHT_MS = 48 h`
-  - `interface Circle { viewer: Member; buddies: Member[]; members: Map<string, Member>; today: string; checkIns: Map<string, TodayCheckIn>; goodnights: GoodnightRow[] }`
-    (`members` = viewer + buddies; `checkIns` = each member's check-in for their OWN local today; `goodnights` = the
-    members' goodnights with `at` in the last 48 h)
-  - `loadCircle(viewerId, now): Promise<Circle>` (4 queries; a missing viewer → `BuddyError('not_buddies')`),
+  - `interface Circle { viewer: Member; viewerBedtimeGoal: string | null; buddies: Member[]; members: Map<string, Member>; pairedAt: Map<string, Date>; today: string; checkIns: Map<string, TodayCheckIn>; goodnights: GoodnightRow[] }`
+    (`members` = viewer + buddies; `pairedAt` = each current buddy's `BuddyPair.createdAt` (owner ruling Q2: Tasks 6
+    and 9 freeze past nights with it); `viewerBedtimeGoal` = the viewer's own goal, for the goodnight window (Tasks 6
+    and 8) — buddies' goals are never kept; `checkIns` = each member's check-in for their OWN local today;
+    `goodnights` = the members' goodnights with `at` in the last 48 h)
+  - `buddyPairsOf(userId): Promise<Map<string, Date>>` (buddy id → pair `createdAt`; `buddyIdsOf` = its keys),
+    `loadCircle(viewerId, now): Promise<Circle>` (4 queries; a missing viewer → `BuddyError('not_buddies')`),
     `todayCheckInsOf(members: Member[], now): Promise<Map<string, TodayCheckIn>>`, `recentGoodnightsOf(ids: string[], now): Promise<GoodnightRow[]>`.
 - Produces (helpers that take the circle; the S1 names stay as thin wrappers so S1 tests and routes keep working):
   - `stories.ts`: `interface StoryRings { rings; checkedInBuddies; viewerCheckedIn; checkedInCoachIds }`,
@@ -627,7 +773,10 @@ git commit -m "feat(social): the camp's clock: night, evening date, on time, sun
     `getStory` reads the circle.
   - `timeline.ts`: `timelineFor(circle, now, limit = 100)`; `buildTimeline(viewerId, now, limit)` wraps it.
   - `highlights.ts`: `highlightsWeekFor(timeZone, now): string`, `weeklyHighlightsFor(circle, now)`;
-    `getWeeklyHighlights(viewerId, now)` wraps it. (`highlightsWeek(viewerId, now)` is removed; nothing else used it.)
+    `getWeeklyHighlights(viewerId, now)` wraps it. `highlightsWeek(viewerId, now)` is removed: its only caller was
+    `getWeeklyHighlights` (`highlights.ts:137`), which now uses `highlightsWeekFor`. `EMPTY_WEEK_SETTLE_MS = 24 h`: a
+    week with no candidates is cached empty once `now ≥ highlightsReadyAt(week) + 24 h` (owner ruling, amending S1's
+    "never persist an empty week"); before that it is rebuilt on every read.
   - `checkins.ts`: `toCheckInDTO(row: { mood; localDate; updatedAt }): CheckInDTO` (exported; was the private `toDTO`).
   - `home.ts`: `getSocialHome` and `markStickersSeen` load the circle once.
 
@@ -664,6 +813,7 @@ import { civilDateToUtcMidnight } from '../../src/biometrics/civilDate';
 import { shiftDate } from '../../src/scoring/dates';
 import * as circle from '../../src/social/circle';
 import * as checkins from '../../src/social/checkins';
+import { getWeeklyHighlights } from '../../src/social/highlights';
 import { getSocialHome } from '../../src/social/home';
 
 beforeAll(() => migrateTestDb());
@@ -680,7 +830,8 @@ const person = (name: string) =>
   prisma.user.create({
     data: { email: `q-${randomUUID()}@example.com`, name, handle: `q${randomUUID().replace(/-/g, '').slice(0, 12)}`, displayName: name, buddyMoodNoticeAt: new Date() },
   });
-const pair = (a: string, b: string) => prisma.buddyPair.create({ data: a < b ? { userAId: a, userBId: b } : { userAId: b, userBId: a } });
+const pair = (a: string, b: string, createdAt = new Date()) =>
+  prisma.buddyPair.create({ data: { ...(a < b ? { userAId: a, userBId: b } : { userAId: b, userBId: a }), createdAt } });
 
 it('builds the whole home from one preloaded circle, in at most 16 queries, with one lock decision', async () => {
   const me = await person('Me');
@@ -714,6 +865,35 @@ it('builds the whole home from one preloaded circle, in at most 16 queries, with
   expect(home.timeline.map((i) => ('locked' in i ? i.locked : null))).toEqual([true]);
   expect(home.highlights).not.toBeNull();
 });
+
+it('the circle carries when each buddy paired with me, and my own bedtime goal only', async () => {
+  const me = await person('Me');
+  const sam = await person('Sam');
+  await prisma.user.update({ where: { id: me.id }, data: { bedtimeGoal: '22:30' } });
+  await prisma.user.update({ where: { id: sam.id }, data: { bedtimeGoal: '21:00' } });
+  const pairedAt = new Date('2026-10-05T12:00:00Z');
+  await pair(me.id, sam.id, pairedAt);
+  const c = await circle.loadCircle(me.id, NOW);
+  expect([...c.pairedAt]).toEqual([[sam.id, pairedAt]]);
+  expect(c.viewerBedtimeGoal).toBe('22:30');
+  expect(JSON.stringify(c.buddies)).not.toContain('21:00'); // a buddy's goal is never kept
+});
+
+it('a quiet week is rebuilt for a day after it turns final, then cached empty, so later reads cost one query', async () => {
+  // Week 2026-09-28 turns final Mon 2026-10-05 14:00 UTC; the empty build is cached from Tue 2026-10-06 14:00 UTC.
+  const early = await person('Early');
+  expect(await getWeeklyHighlights(early.id, new Date('2026-10-06T13:59:00Z'))).toBeNull();
+  expect(await prisma.weeklyHighlights.count({ where: { viewerId: early.id } })).toBe(0);
+
+  const quiet = await person('Quiet');
+  expect(await getWeeklyHighlights(quiet.id, NOW)).toBeNull();
+  const cached = await prisma.weeklyHighlights.findMany({ where: { viewerId: quiet.id }, select: { weekStart: true, items: true } });
+  expect(cached.map((r) => [r.weekStart.toISOString().slice(0, 10), r.items])).toEqual([[WEEK, []]]);
+  mockQueries.count = 0;
+  expect(await getWeeklyHighlights(quiet.id, NOW)).toBeNull();
+  // loadCircle 4 + the cached row 1: no rebuild.
+  expect(mockQueries.count).toBe(5);
+});
 ```
 
 - [ ] **Step 2: Run it to see it fail**
@@ -729,7 +909,9 @@ Replace `backend/src/social/circle.ts` with:
 // Your circle = you + your current buddies (live BuddyPair rows; a block deletes the pair, so blocked people drop
 // out on their own). Sharing switches are read only through effectiveSharing (switch on AND current consent).
 // A Social read loads the circle ONCE (loadCircle) and hands it to every helper, so the rings, the timeline, the
-// highlights, the camp and `me` all see the same buddies, switches, check-ins (the lock) and goodnights.
+// highlights, the camp and `me` all see the same buddies, switches, check-ins (the lock) and goodnights. It also
+// carries when each buddy paired with the viewer (a past night's fire counts only buddies paired by that evening) and
+// the viewer's own bedtime goal (the goodnight window); buddies' bedtime goals are never kept.
 
 import type { CheckInMood } from '@prisma/client';
 import { civilDateToUtcMidnight, localCivilDateOrUtc } from '../biometrics/civilDate';
@@ -754,10 +936,14 @@ export const RECENT_GOODNIGHT_MS = 48 * 60 * 60 * 1000;
 
 export interface Circle {
   viewer: Member;
+  /** The viewer's own bedtime goal ("HH:MM"), for the goodnight window. Only the viewer's is ever kept. */
+  viewerBedtimeGoal: string | null;
   /** Current buddies that still exist. */
   buddies: Member[];
   /** The viewer and the buddies, by id. */
   members: Map<string, Member>;
+  /** Each current buddy's BuddyPair.createdAt: when they joined the viewer's camp. */
+  pairedAt: Map<string, Date>;
   /** The viewer's local today. */
   today: string;
   /** Each member's check-in for their OWN local today; the viewer's decides the check-in lock. */
@@ -767,24 +953,33 @@ export interface Circle {
 }
 
 /**
- * Every current buddy's id. Unbounded on purpose: Buddies has no buddy cap, and circles are small, so every
- * Social read loads the whole circle (a cap or paging would come with growth).
+ * Every current buddy's id, with when the pair was made. Unbounded on purpose: Buddies has no buddy cap, and
+ * circles are small, so every Social read loads the whole circle (a cap or paging would come with growth).
  */
-export async function buddyIdsOf(userId: string): Promise<string[]> {
+export async function buddyPairsOf(userId: string): Promise<Map<string, Date>> {
   const pairs = await prisma.buddyPair.findMany({
     where: { OR: [{ userAId: userId }, { userBId: userId }] },
-    select: { userAId: true, userBId: true },
+    select: { userAId: true, userBId: true, createdAt: true },
   });
-  return pairs.map((p) => (p.userAId === userId ? p.userBId : p.userAId));
+  return new Map(pairs.map((p) => [p.userAId === userId ? p.userBId : p.userAId, p.createdAt]));
+}
+
+/** Every current buddy's id (see buddyPairsOf). */
+export async function buddyIdsOf(userId: string): Promise<string[]> {
+  return [...(await buddyPairsOf(userId)).keys()];
+}
+
+type MemberRow = Parameters<typeof toPerson>[0] & Parameters<typeof effectiveSharing>[0] & { id: string; timezone: string };
+
+function toMember(u: MemberRow): Member {
+  const s = effectiveSharing(u);
+  return { person: toPerson(u), timezone: u.timezone, shares: { steps: s.steps, streaks: s.streaks } };
 }
 
 export async function membersById(ids: string[]): Promise<Map<string, Member>> {
   if (ids.length === 0) return new Map();
   const users = await prisma.user.findMany({ where: { id: { in: ids } }, select: MEMBER_SELECT });
-  return new Map(users.map((u) => {
-    const s = effectiveSharing(u);
-    return [u.id, { person: toPerson(u), timezone: u.timezone, shares: { steps: s.steps, streaks: s.streaks } }];
-  }));
+  return new Map(users.map((u) => [u.id, toMember(u)]));
 }
 
 /** Each member's check-in for their own local today (one query for the circle). */
@@ -806,17 +1001,28 @@ export async function recentGoodnightsOf(ids: string[], now: Date): Promise<Good
 
 /** The viewer's circle for one read. A viewer row that is gone answers not_buddies (never a 500). */
 export async function loadCircle(viewerId: string, now: Date): Promise<Circle> {
-  const buddyIds = await buddyIdsOf(viewerId);
-  const members = await membersById([viewerId, ...buddyIds]);
+  const paired = await buddyPairsOf(viewerId);
+  // One users query; bedtimeGoal rides along for the viewer's goodnight window and is dropped for everyone else.
+  const users = await prisma.user.findMany({
+    where: { id: { in: [viewerId, ...paired.keys()] } },
+    select: { ...MEMBER_SELECT, bedtimeGoal: true },
+  });
+  const members = new Map(users.map((u) => [u.id, toMember(u)]));
   const viewer = members.get(viewerId);
   if (!viewer) throw new BuddyError('not_buddies');
-  const buddies = buddyIds.map((id) => members.get(id)).filter((m): m is Member => m !== undefined);
+  const viewerBedtimeGoal = users.find((u) => u.id === viewerId)?.bedtimeGoal ?? null;
+  const buddies = [...paired.keys()].map((id) => members.get(id)).filter((m): m is Member => m !== undefined);
+  // Only buddies that still exist.
+  const pairedAt = new Map([...paired].filter(([id]) => members.has(id)));
   const everyone = [viewer, ...buddies];
   const [checkIns, goodnights] = await Promise.all([
     todayCheckInsOf(everyone, now),
     recentGoodnightsOf(everyone.map((m) => m.person.id), now),
   ]);
-  return { viewer, buddies, members, today: localCivilDateOrUtc(now, viewer.timezone), checkIns, goodnights };
+  return {
+    viewer, viewerBedtimeGoal, buddies, members, pairedAt,
+    today: localCivilDateOrUtc(now, viewer.timezone), checkIns, goodnights,
+  };
 }
 ```
 
@@ -1077,8 +1283,24 @@ export async function buildTimeline(viewerId: string, now: Date, limit = 100): P
 
 - [ ] **Step 7: Highlights read the circle**
 
-In `backend/src/social/highlights.ts`, replace the import block (from `import type { AchievementFamily …` through
-`import { buddyIdsOf, membersById, type Member } from './circle';`) with:
+In `backend/src/social/highlights.ts`, replace the header comment's lines 5–6
+
+```ts
+// drops out, and a badge item needs its actor to share streaks now (the viewer is exempt). A build with no
+// candidates is never stored, so a quiet week is rebuilt on the next read. Closed item types, no health numbers:
+```
+
+with
+
+```ts
+// drops out, and a badge item needs its actor to share streaks now (the viewer is exempt). A build with no
+// candidates is rebuilt on every read for the first 24 h after the week turns final (late check-ins still land),
+// then cached empty, so a quiet circle stops paying the build queries on every read (S2 owner ruling; S1 never
+// stored an empty week). Closed item types, no health numbers:
+```
+
+Replace the import block (from
+`import type { AchievementFamily …` through `import { buddyIdsOf, membersById, type Member } from './circle';`) with:
 
 ```ts
 import type { AchievementFamily, CheckInMood, Prisma } from '@prisma/client';
@@ -1090,9 +1312,13 @@ import { shiftDate } from '../scoring/dates';
 import { loadCircle, type Circle, type Member } from './circle';
 ```
 
-Replace the whole `highlightsWeek` function (its doc comment included) with:
+Replace the whole `highlightsWeek` function (its doc comment included; its only caller was `getWeeklyHighlights`,
+`highlights.ts:137`, which is replaced below) with:
 
 ```ts
+/** A quiet week is rebuilt on each read for this long after it turns final, then cached empty. */
+export const EMPTY_WEEK_SETTLE_MS = 24 * 60 * 60 * 1000;
+
 /** The newest week that is final for a viewer in `timeZone`: their last completed week, or the one before it until Monday 14:00 UTC. */
 export function highlightsWeekFor(timeZone: string, now: Date): string {
   const latest = lastCompletedPeriodStart('WEEK', localCivilDateOrUtc(now, timeZone));
@@ -1111,7 +1337,10 @@ export async function weeklyHighlightsFor(circle: Circle, now: Date): Promise<Hi
   let row = await prisma.weeklyHighlights.findUnique({ where: key, select: { items: true } });
   if (!row) {
     const candidates = await buildHighlightCandidates(viewerId, memberIds, weekStart);
-    if (candidates.length === 0) return null; // never cache an empty week: the next read rebuilds it
+    // A quiet week is rebuilt on each read for its first 24 h as final (late rows still land), then cached empty so
+    // later reads cost one query instead of the whole build.
+    const settled = now.getTime() >= highlightsReadyAt(weekStart).getTime() + EMPTY_WEEK_SETTLE_MS;
+    if (candidates.length === 0 && !settled) return null;
     await prisma.weeklyHighlights.createMany({
       data: [{ viewerId, weekStart: civilDateToUtcMidnight(weekStart), items: candidates as unknown as Prisma.InputJsonValue }],
       skipDuplicates: true,
@@ -1127,7 +1356,32 @@ export async function getWeeklyHighlights(viewerId: string, now: Date): Promise<
 }
 ```
 
-(`visibleItems` keeps its `members: Map<string, Member>` parameter; `buildHighlightCandidates` is unchanged.)
+(`visibleItems` keeps its `members: Map<string, Member>` parameter; `buildHighlightCandidates` is unchanged here —
+Task 9 changes it to take the circle.)
+
+In `backend/tests/social/highlights.test.ts` (S1), the comeback test read at `NOW`, which is now more than 24 h after
+week 2026-09-28 turned final, so its quiet first read would be cached. Move that test's two reads into the first day
+(this is the only S1 test edit in S2). Replace the whole test
+`it('a comeback needs consecutive days, and a week with nothing is never stored', …)` with:
+
+```ts
+it('a comeback needs consecutive days, and a week with nothing is not stored in its first day as final', async () => {
+  const me = await buddyUser();
+  const zed = await buddyUser({ displayName: 'Zed' });
+  await pairUp(me.id, zed.id);
+  // Tue 2026-10-06 10:00 UTC: the week turned final at Mon 14:00 UTC, and an empty build is cached only from Tue 14:00.
+  const firstDay = new Date('2026-10-06T10:00:00Z');
+  // Tired Mon, Tired Tue, nothing Wed, Rested Thu: not a comeback.
+  await prisma.checkIn.create({ data: { authorId: zed.id, localDate: day(0), mood: 'TIRED' } });
+  await prisma.checkIn.create({ data: { authorId: zed.id, localDate: day(1), mood: 'TIRED' } });
+  await prisma.checkIn.create({ data: { authorId: zed.id, localDate: day(3), mood: 'RESTED' } });
+  expect(await getWeeklyHighlights(me.id, firstDay)).toBeNull();
+  expect(await prisma.weeklyHighlights.count({ where: { viewerId: me.id } })).toBe(0);
+  // Rebuilt on the next read: a late check-in that completes the run now counts.
+  await prisma.checkIn.create({ data: { authorId: zed.id, localDate: day(2), mood: 'TIRED' } });
+  expect((await getWeeklyHighlights(me.id, firstDay))!.items.map((i) => i.type)).toEqual(['comeback']);
+});
+```
 
 - [ ] **Step 8: The home loads the circle once**
 
@@ -1208,13 +1462,14 @@ export async function markStickersSeen(viewerId: string, now: Date): Promise<num
 - [ ] **Step 9: Run the new test and every S1 social suite**
 
 Run: `bash .superpowers/sdd/2026-10-07-social-s2-campfire/backend-jest.sh tests/social`
-Expected: PASS (including `homeQueries.test.ts`; the S1 suites unchanged).
+Expected: PASS (including `homeQueries.test.ts`; the S1 suites unchanged apart from the comeback test's clock above).
+Run: `git diff --stat b3cd4cf -- backend/tests/social` — Expected: only `highlights.test.ts` among the S1 files.
 Run (from `backend/`): `PATH=/Users/tushar/.nvm/versions/node/v24.21.0/bin:$PATH node node_modules/.bin/tsc --noEmit` — Expected: no output.
 
 - [ ] **Step 10: Commit**
 
 ```bash
-git add backend/src/social backend/tests/social/homeQueries.test.ts
+git add backend/src/social backend/tests/social/homeQueries.test.ts backend/tests/social/highlights.test.ts
 git commit -m "refactor(social): load the circle once per read and share it across rings, timeline, highlights and me"
 ```
 
@@ -1228,13 +1483,16 @@ git commit -m "refactor(social): load the circle once per read and share it acro
 - Test: `backend/tests/social/goodnight.test.ts`; rerun `mobile/__tests__/lib/buddyCopy.test.ts`
 
 **Interfaces:**
-- Consumes: `eveningDate`, `isNight`, `isOnTime`, `zoneOrUtc` (Task 2); `GOODNIGHT_SELECT`, `GoodnightRow`,
-  `RECENT_GOODNIGHT_MS` (Task 3).
+- Consumes: `eveningDate`, `isGoodnightOpen`, `isOnTime`, `zoneOrUtc` (Task 2); `GOODNIGHT_SELECT`, `GoodnightRow`
+  (Task 3).
 - Produces:
   - `goodnight.ts`: `GOODNIGHT_UNDO_MS = 600_000`, `interface GoodnightDTO { localDate: string; at: string; onTime: boolean; undoUntil: string }`,
     `toGoodnightDTO(row: Pick<GoodnightRow, 'localDate' | 'at' | 'onTime'>): GoodnightDTO`,
-    `sayGoodnight(userId, now): Promise<GoodnightDTO>`, `undoGoodnight(userId, now): Promise<void>`.
-  - Error codes `goodnight_closed: 409`, `undo_expired: 409` (and their mobile words).
+    `sayGoodnight(userId, now): Promise<GoodnightDTO>` (open from `min(20:00, goal − 60 min)` to 05:59 in the
+    author's zone), `undoGoodnight(userId, now): Promise<void>` (only the goodnight whose `localDate` is
+    `eveningDate(now)`; never yesterday's).
+  - Error codes `goodnight_closed: 409`, `undo_expired: 409` (and their mobile words: "It's too early to say
+    goodnight." / "It's too late to undo that goodnight.").
   - Routes `POST /me/camp/goodnight` → `{ goodnight: GoodnightDTO }`; `DELETE /me/camp/goodnight` → 204.
   - `tests/social/helpers.ts`: `zoneAtLocalHour(hour: number, now?: Date): string`.
 
@@ -1297,13 +1555,21 @@ it('is late after goal + 15 min, uses 23:00 without a goal, and a goodnight afte
   expect((await sayGoodnight((await withGoal('00:30')).id, at('2026-10-08T07:40:00Z'))).onTime).toBe(true); // 00:40
 });
 
-it('is only open at night: 18:59 is closed, 19:00 and 05:59 are open, 06:00 is closed', async () => {
-  await expect(sayGoodnight((await withGoal(null)).id, at('2026-10-08T01:59:00Z'))).rejects.toMatchObject({ code: 'goodnight_closed' });
-  await expect(sayGoodnight((await withGoal(null)).id, at('2026-10-08T02:00:00Z'))).resolves.toMatchObject({ localDate: '2026-10-07' });
-  await expect(sayGoodnight((await withGoal(null)).id, at('2026-10-08T12:59:00Z'))).resolves.toMatchObject({ localDate: '2026-10-07' });
+it('with no goal it opens at 20:00 (19:30 is closed though the scene is night) and closes at 06:00', async () => {
+  await expect(sayGoodnight((await withGoal(null)).id, at('2026-10-08T02:30:00Z'))).rejects.toMatchObject({ code: 'goodnight_closed' }); // 19:30
+  await expect(sayGoodnight((await withGoal(null)).id, at('2026-10-08T03:00:00Z'))).resolves.toMatchObject({ localDate: '2026-10-07' }); // 20:00
+  await expect(sayGoodnight((await withGoal(null)).id, at('2026-10-08T12:59:00Z'))).resolves.toMatchObject({ localDate: '2026-10-07' }); // 05:59
   const closed = await withGoal(null);
-  await expect(sayGoodnight(closed.id, at('2026-10-08T13:00:00Z'))).rejects.toMatchObject({ code: 'goodnight_closed' });
+  await expect(sayGoodnight(closed.id, at('2026-10-08T13:00:00Z'))).rejects.toMatchObject({ code: 'goodnight_closed' }); // 06:00
   expect(await prisma.goodnight.count({ where: { authorId: closed.id } })).toBe(0);
+});
+
+it('opens an hour before an earlier goal: an 18:00 goal opens at 17:00 and 18:05 is on time; a 23:00 goal opens at 20:00', async () => {
+  await expect(sayGoodnight((await withGoal('18:00')).id, at('2026-10-07T23:59:00Z'))).rejects.toMatchObject({ code: 'goodnight_closed' }); // 16:59
+  await expect(sayGoodnight((await withGoal('18:00')).id, at('2026-10-08T00:00:00Z'))).resolves.toMatchObject({ localDate: '2026-10-07', onTime: true }); // 17:00
+  expect(await sayGoodnight((await withGoal('18:00')).id, at('2026-10-08T01:05:00Z'))).toMatchObject({ localDate: '2026-10-07', onTime: true }); // 18:05
+  await expect(sayGoodnight((await withGoal('23:00')).id, at('2026-10-08T02:59:00Z'))).rejects.toMatchObject({ code: 'goodnight_closed' }); // 19:59
+  await expect(sayGoodnight((await withGoal('23:00')).id, at('2026-10-08T03:00:00Z'))).resolves.toMatchObject({ onTime: true }); // 20:00
 });
 
 it('undo within 10 minutes deletes it; a millisecond later is undo_expired; nothing to undo is fine', async () => {
@@ -1316,6 +1582,14 @@ it('undo within 10 minutes deletes it; a millisecond later is undo_expired; noth
   await expect(undoGoodnight(me.id, new Date(said.getTime() + 10 * 60_000 + 1))).rejects.toMatchObject({ code: 'undo_expired' });
   expect(await prisma.goodnight.count({ where: { authorId: me.id } })).toBe(1);
   await expect(undoGoodnight((await withGoal(null)).id, said)).resolves.toBeUndefined();
+});
+
+it("undo after 06:00 never removes last night's goodnight, even inside its 10 minutes", async () => {
+  const me = await withGoal(null);
+  await sayGoodnight(me.id, at('2026-10-08T12:55:00Z')); // 05:55 Oct 8: the evening of Oct 7
+  // 06:01 Oct 8: the current evening is Oct 8, which has no goodnight, so there is nothing to undo.
+  await expect(undoGoodnight(me.id, at('2026-10-08T13:01:00Z'))).resolves.toBeUndefined();
+  expect(await prisma.goodnight.count({ where: { authorId: me.id } })).toBe(1);
 });
 
 it('routes: POST answers the goodnight (the same one twice), DELETE undoes with 204; by day it is 409 goodnight_closed', async () => {
@@ -1352,9 +1626,12 @@ In `backend/src/buddies/errors.ts`, after `recap_not_found: 404,` add:
 In `mobile/src/lib/buddyCopy.ts`, in the `ERRORS` table after `recap_not_found: "That recap can't be shared.",` add:
 
 ```ts
-  goodnight_closed: 'You can say goodnight from 7 pm.',
+  goodnight_closed: "It's too early to say goodnight.",
   undo_expired: "It's too late to undo that goodnight.",
 ```
+
+(The Campfire itself names the viewer's own opening time — "You can say goodnight from 8:00 PM" — from
+`GET /me/camp`, Task 13; this table has no time to show.)
 
 - [ ] **Step 4: Write `goodnight.ts`**
 
@@ -1362,15 +1639,16 @@ In `mobile/src/lib/buddyCopy.ts`, in the `ERRORS` table after `recap_not_found: 
 
 ```ts
 // "Say goodnight" (spec 2026-10-07 social §6.1): one Goodnight per author per evening (one said between 00:00 and
-// 05:59 local belongs to the previous date), only during the author's local night, 19:00–05:59 (plan ruling), on
-// time when it is at or before the bedtime goal + 15 min (23:00 with no goal), undoable for 10 minutes. Always
-// shared with buddies, like the check-in: self-reported, no number. No push (spec §10).
+// 05:59 local belongs to the previous date), open from min(20:00, bedtime goal − 60 min) to 05:59 in the author's
+// zone (owner ruling Q1; the night scene keeps 19:00), on time when it is at or before the bedtime goal + 15 min
+// (23:00 with no goal), undoable for 10 minutes — only tonight's, never last night's. Always shared with buddies,
+// like the check-in: self-reported, no number. No push (spec §10).
 
 import { civilDateToUtcMidnight } from '../biometrics/civilDate';
 import { prisma } from '../db/client';
 import { BuddyError } from '../buddies/errors';
-import { GOODNIGHT_SELECT, RECENT_GOODNIGHT_MS, type GoodnightRow } from './circle';
-import { eveningDate, isNight, isOnTime, zoneOrUtc } from './night';
+import { GOODNIGHT_SELECT, type GoodnightRow } from './circle';
+import { eveningDate, isGoodnightOpen, isOnTime, zoneOrUtc } from './night';
 
 export const GOODNIGHT_UNDO_MS = 10 * 60 * 1000;
 
@@ -1389,7 +1667,7 @@ export async function sayGoodnight(userId: string, now: Date): Promise<Goodnight
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { timezone: true, bedtimeGoal: true } });
   if (!user) throw new BuddyError('not_buddies');
   const zone = zoneOrUtc(user.timezone);
-  if (!isNight(now, zone)) throw new BuddyError('goodnight_closed');
+  if (!isGoodnightOpen(now, zone, user.bedtimeGoal)) throw new BuddyError('goodnight_closed');
   const localDate = civilDateToUtcMidnight(eveningDate(now, zone));
   // A second tap the same evening keeps the first goodnight: its time and its on-time verdict.
   await prisma.goodnight.createMany({
@@ -1400,16 +1678,22 @@ export async function sayGoodnight(userId: string, now: Date): Promise<Goodnight
   return toGoodnightDTO(row);
 }
 
-/** Undoes my latest goodnight within 10 minutes of it; later → undo_expired; none in the last two days → nothing to do. */
+/**
+ * Undoes my goodnight for the current evening (localDate = eveningDate(now)) within 10 minutes of it; later →
+ * undo_expired. Never yesterday's: after 06:00 the evening has moved on, so last night's goodnight is not undone
+ * even inside its 10 minutes. None for this evening → nothing to do.
+ */
 export async function undoGoodnight(userId: string, now: Date): Promise<void> {
-  const latest = await prisma.goodnight.findFirst({
-    where: { authorId: userId, at: { gte: new Date(now.getTime() - RECENT_GOODNIGHT_MS), lte: now } },
-    orderBy: { at: 'desc' },
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: { timezone: true } });
+  if (!user) return;
+  const localDate = civilDateToUtcMidnight(eveningDate(now, zoneOrUtc(user.timezone)));
+  const tonight = await prisma.goodnight.findUnique({
+    where: { authorId_localDate: { authorId: userId, localDate } },
     select: { id: true, at: true },
   });
-  if (!latest) return;
-  if (now.getTime() - latest.at.getTime() > GOODNIGHT_UNDO_MS) throw new BuddyError('undo_expired');
-  await prisma.goodnight.deleteMany({ where: { id: latest.id } });
+  if (!tonight) return;
+  if (now.getTime() - tonight.at.getTime() > GOODNIGHT_UNDO_MS) throw new BuddyError('undo_expired');
+  await prisma.goodnight.deleteMany({ where: { id: tonight.id } });
 }
 ```
 
@@ -1446,7 +1730,7 @@ Expected: PASS (every server code has words).
 
 ```bash
 git add backend/src/social/goodnight.ts backend/src/social/routes.ts backend/src/buddies/errors.ts backend/tests/social/helpers.ts backend/tests/social/goodnight.test.ts mobile/src/lib/buddyCopy.ts
-git commit -m "feat(social): say goodnight at night, judged on time, with a 10-minute undo"
+git commit -m "feat(social): say goodnight from 20:00 or an hour before the goal, judged on time, with a 10-minute undo"
 ```
 
 ---
@@ -1466,8 +1750,10 @@ git commit -m "feat(social): say goodnight at night, judged on time, with a 10-m
 - Produces:
   - `campNotes.ts`: `CAMP_NOTE_MAX = 40`, `interface CampNoteDTO { text: string; createdAt: string; expiresAt: string }`,
     `checkCampNote(raw: unknown): string | null`, `noteIsLive(note: { authorId: string; createdAt: Date; expiresAt: Date }, circle: Circle, now: Date): boolean`,
-    `shareCampNote(userId, raw: unknown, now): Promise<CampNoteDTO>`, `clearCampNote(userId): Promise<void>`.
-  - `RATE_LIMITS.campNote = { name: 'camp_note', limit: 20, windowSeconds: 3600 }`.
+    `shareCampNote(userId, raw: unknown, now): Promise<CampNoteDTO>` (rate-limited, fails closed; the upsert sets
+    `createdAt = now` on replace too, on purpose), `clearCampNote(userId): Promise<void>` (never rate-limited, never
+    fails closed: removing your own note always works).
+  - `RATE_LIMITS.campNote = { name: 'camp_note', limit: 20, windowSeconds: 3600 }` — spent by shares only.
   - Error code `invalid_note: 400` (mobile words: "Notes are 1 to 40 characters.").
   - `saveCheckIn` also deletes the author's camp notes written at or before that day's first check-in.
   - Routes `PUT /me/camp/note { text }` → `{ note: CampNoteDTO }`; `DELETE /me/camp/note` → 204.
@@ -1508,6 +1794,8 @@ it('sanitises like a display name: NFC, controls and zero-widths out, trimmed, 1
   expect(checkCampNote('🔥'.repeat(40))).toBe('🔥'.repeat(40)); // code points, not UTF-16 units
   expect(checkCampNote('🔥'.repeat(41))).toBeNull();
   expect(checkCampNote('admin says night')).toBe('admin says night');
+  // No link or mention filter in S2 (reports arrive in S3).
+  expect(checkCampNote('see example.com @sam')).toBe('see example.com @sam');
 });
 
 it('keeps one note per author that clears at the next 06:00 in their zone; sharing again replaces it; clear removes it', async () => {
@@ -1539,21 +1827,41 @@ it("the author's first check-in of the day clears a note written before it; a no
   expect(await prisma.campNote.findMany({ where: { authorId: me.id }, select: { text: true } })).toEqual([{ text: 'coffee first' }]);
 });
 
-it('spends the 20-an-hour bucket on every change, failing closed', async () => {
+it('spends the 20-an-hour bucket on sharing only, failing closed', async () => {
   const me = await buddyUser();
   const spy = jest.spyOn(rateLimit, 'consumeRateLimit').mockResolvedValueOnce('limited').mockResolvedValueOnce('unavailable');
   await expect(shareCampNote(me.id, 'hi', NIGHT)).rejects.toMatchObject({ code: 'rate_limited' });
-  await expect(clearCampNote(me.id)).rejects.toMatchObject({ code: 'try_later' });
+  await expect(shareCampNote(me.id, 'hi', NIGHT)).rejects.toMatchObject({ code: 'try_later' });
+  expect(spy).toHaveBeenCalledTimes(2);
   expect(spy).toHaveBeenCalledWith(rateLimit.RATE_LIMITS.campNote, me.id);
   expect(rateLimit.RATE_LIMITS.campNote).toEqual({ name: 'camp_note', limit: 20, windowSeconds: 3600 });
+  expect(await prisma.campNote.count({ where: { authorId: me.id } })).toBe(0);
 });
 
-it('the 21st change in an hour is rate_limited', async () => {
+it('clearing my own note never touches the bucket, and works while the limiter is down or spent', async () => {
+  const me = await buddyUser();
+  await prisma.campNote.create({ data: { authorId: me.id, text: 'mine', expiresAt: new Date('2026-10-08T13:00:00Z') } });
+  const spy = jest.spyOn(rateLimit, 'consumeRateLimit').mockRejectedValue(new Error('redis down'));
+  await expect(clearCampNote(me.id)).resolves.toBeUndefined();
+  expect(spy).not.toHaveBeenCalled();
+  expect(await prisma.campNote.count({ where: { authorId: me.id } })).toBe(0);
+  // Through the route too, with the bucket spent.
+  spy.mockResolvedValue('limited');
+  await prisma.campNote.create({ data: { authorId: me.id, text: 'again', expiresAt: new Date('2026-10-08T13:00:00Z') } });
+  const res = await (await api()).delete('/me/camp/note').set(await authHeaderFor(me.id));
+  expect(res.status).toBe(204);
+  expect(spy).not.toHaveBeenCalled();
+  expect(await prisma.campNote.count({ where: { authorId: me.id } })).toBe(0);
+});
+
+it('the 21st share in an hour is rate_limited, and clearing still works', async () => {
   const me = await buddyUser();
   // One fixed clock for every call: all 21 land in the same hourly window.
   jest.spyOn(Date, 'now').mockReturnValue(Date.now());
   for (let i = 0; i < 20; i++) await shareCampNote(me.id, `note ${i}`, NIGHT);
   await expect(shareCampNote(me.id, 'one more', NIGHT)).rejects.toMatchObject({ code: 'rate_limited' });
+  await clearCampNote(me.id);
+  expect(await prisma.campNote.count({ where: { authorId: me.id } })).toBe(0);
 });
 
 it('never logs the note text', async () => {
@@ -1622,7 +1930,8 @@ export function hasVisibleCharacter(text: string): boolean {
 // trimmed; no reserved-word check), 1–40 code points with something visible. Sharing replaces the note. It clears
 // at the next 06:00 in the author's zone or at their first check-in of a day at or after it, whichever is first
 // (saveCheckIn deletes it; reads hide it too); expired rows are hidden at read time and deleted by the social sweep.
-// 20 changes (share or clear) an hour per author, failing closed. No push.
+// 20 shares an hour per author, failing closed; clearing your own note is never limited and never fails closed.
+// URLs and @handles are allowed in S2; reporting a note arrives in S3. No push.
 // The text is user free text: never logged (not even its length), never sent to the coach, and never part of
 // /me/social, the timeline, story frames or highlights. Only GET /me/camp returns it (camp.ts).
 
@@ -1662,14 +1971,16 @@ export async function shareCampNote(userId: string, raw: unknown, now: Date): Pr
   const row = await prisma.campNote.upsert({
     where: { authorId: userId },
     create: { authorId: userId, text, createdAt: now, expiresAt },
+    // createdAt is overwritten with `now` on purpose: a replaced note is a new note, and the clear-on-check-in rule
+    // (saveCheckIn, noteIsLive) compares createdAt with the day's first check-in.
     update: { text, createdAt: now, expiresAt },
     select: { text: true, createdAt: true, expiresAt: true },
   });
   return { text: row.text, createdAt: row.createdAt.toISOString(), expiresAt: row.expiresAt.toISOString() };
 }
 
+/** Removing your own note always works: no rate limit, so a limiter outage never keeps words up. */
 export async function clearCampNote(userId: string): Promise<void> {
-  await limitOrThrow(RATE_LIMITS.campNote, userId);
   await prisma.campNote.deleteMany({ where: { authorId: userId } });
 }
 ```
@@ -1714,6 +2025,8 @@ socialRouter.delete('/me/camp/note', requireAuth, buddyRoute(async (req, res) =>
 
 Run: `bash .superpowers/sdd/2026-10-07-social-s2-campfire/backend-jest.sh tests/social/campNotes.test.ts tests/social/checkins.test.ts tests/buddies/identity.test.ts`
 Expected: PASS.
+Run: `grep -rn "console\.\|log(" backend/src backend/scripts | grep -in "note\|text\|body"` — Expected: no hit logs a
+camp note, a `text` field or a request body anywhere in the backend (not only `src/social`); read any hit to confirm.
 Run (from `mobile/`): `PATH=/Users/tushar/.nvm/versions/node/v24.21.0/bin:$PATH node node_modules/.bin/jest --forceExit __tests__/lib/buddyCopy.test.ts`
 Expected: PASS.
 
@@ -1721,7 +2034,7 @@ Expected: PASS.
 
 ```bash
 git add backend/src/social/campNotes.ts backend/src/social/checkins.ts backend/src/social/routes.ts backend/src/buddies/identity.ts backend/src/buddies/errors.ts backend/src/lib/rateLimit.ts backend/tests/social/campNotes.test.ts mobile/src/lib/buddyCopy.ts
-git commit -m "feat(social): camp notes: sanitised, 40 characters, until sunrise or the next check-in, rate limited"
+git commit -m "feat(social): camp notes: sanitised, 40 characters, until sunrise or the next check-in, shares rate limited"
 ```
 
 ---
@@ -1734,15 +2047,19 @@ git commit -m "feat(social): camp notes: sanitised, 40 characters, until sunrise
 - Test: `backend/tests/social/camp.test.ts`
 
 **Interfaces:**
-- Consumes: `loadCircle`, `Circle`, `GoodnightRow` (Task 3); `toGoodnightDTO`, `GoodnightDTO`, `sayGoodnight` (Task 4);
-  `noteIsLive` (Task 5); `countLitNights`, `eveningDate`, `fireSegments`, `isNight`, `SUNRISE_HOUR` (Task 2);
-  `mondayOf`, `localHourOrUtc` (`src/recap/periods.ts`); `unpair`, `block` (`src/buddies/relations.ts`).
+- Consumes: `loadCircle`, `Circle` (incl. `pairedAt`, `viewerBedtimeGoal`), `GoodnightRow` (Task 3); `toGoodnightDTO`,
+  `GoodnightDTO`, `sayGoodnight` (Task 4); `noteIsLive` (Task 5); `campOnEvening`, `countLitNights`, `eveningDate`,
+  `fireSegments`, `goodnightOpensAt`, `isGoodnightOpen`, `isNight`, `NOON_HOUR`, `SUNRISE_HOUR` (Task 2); `mondayOf`,
+  `localHourOrUtc` (`src/recap/periods.ts`); `unpair`, `block` (`src/buddies/relations.ts`).
 - Produces (`camp.ts`):
   - `interface CampMemberDTO { person: PersonDTO; mine: boolean; asleep: boolean; asleepSince: string | null; onTime: boolean | null; note: string | null }`
-  - `interface CampDTO { night: boolean; members: CampMemberDTO[]; fire: { lit: number; of: number; segments: number }; nightsLitThisWeek: number; goodnight: GoodnightDTO | null }`
+  - `interface CampDTO { night: boolean; members: CampMemberDTO[]; fire: { lit: number; of: number; segments: number }; nightsLitThisWeek: number; goodnight: GoodnightDTO | null; goodnightOpen: boolean; goodnightOpensAt: string }`
+    (`night` = the scene, 19:00–05:59 in my zone; `goodnightOpen` / `goodnightOpensAt` = my own goodnight window,
+    "HH:MM" local; `fire` = tonight's live camp; `nightsLitThisWeek` = each night against that night's camp,
+    `campOnEvening`)
   - `interface SleepState { asleep: boolean; since: GoodnightRow | null; tonight: GoodnightRow | null }`,
     `sleepStates(circle, now): Map<string, SleepState>` (pure)
-  - `interface CampSummary { night: boolean; awake: number; asleep: number; goodnight: GoodnightDTO | null }`,
+  - `interface CampSummary { night: boolean; awake: number; asleep: number; goodnight: GoodnightDTO | null; goodnightOpen: boolean; goodnightOpensAt: string }`,
     `campSummaryFor(circle, now): CampSummary` (pure; Task 8 puts it on `/me/social`)
   - `getCamp(viewerId, now): Promise<CampDTO>`; route `GET /me/camp` (no-store).
 
@@ -1774,6 +2091,8 @@ afterAll(async () => {
 const LA = 'America/Los_Angeles'; // PDT, UTC−7
 const NIGHT = new Date('2026-10-08T05:30:00Z'); // Wed Oct 7, 22:30 in Los Angeles (Thu 18:30 in Auckland)
 const SUNRISE = new Date('2026-10-08T13:00:00Z');
+/** Pairs made long before this week: they count on every night of it. */
+const BEFORE = new Date('2026-09-01T00:00:00Z');
 const noop = { deleteSubscription: async () => {}, revokeToken: async () => {}, log: () => {} };
 const gn = (authorId: string, localDate: string, at: Date, onTime = true) =>
   prisma.goodnight.create({ data: { authorId, localDate: civilDateToUtcMidnight(localDate), at, onTime } });
@@ -1807,7 +2126,54 @@ it("shows me first, then buddies by latest activity, asleep or awake, with their
   const json = JSON.stringify(camp);
   expect(json).not.toContain('not for you');
   expect(json).not.toContain('old news');
-  expect(campSummaryFor(await loadCircle(me.id, NIGHT), NIGHT)).toEqual({ night: true, awake: 3, asleep: 1, goodnight: null });
+  expect(camp.goodnightOpen).toBe(true);
+  expect(camp.goodnightOpensAt).toBe('20:00');
+  expect(campSummaryFor(await loadCircle(me.id, NIGHT), NIGHT)).toEqual({
+    night: true, awake: 3, asleep: 1, goodnight: null, goodnightOpen: true, goodnightOpensAt: '20:00',
+  });
+});
+
+it('my goodnight window follows my own goal: open at 17:30 with an 18:00 goal while the scene is still day', async () => {
+  const me = await buddyUser({ timezone: LA });
+  await prisma.user.update({ where: { id: me.id }, data: { bedtimeGoal: '18:00' } });
+  const other = await buddyUser({ timezone: LA });
+  const halfFive = new Date('2026-10-08T00:30:00Z'); // Oct 7, 17:30
+  expect(await getCamp(me.id, halfFive)).toMatchObject({ night: false, goodnightOpen: true, goodnightOpensAt: '17:00' });
+  expect(await getCamp(other.id, halfFive)).toMatchObject({ night: false, goodnightOpen: false, goodnightOpensAt: '20:00' });
+  // No goal at 19:30: the scene is night, the window is not open yet.
+  expect(await getCamp(other.id, new Date('2026-10-08T02:30:00Z'))).toMatchObject({ night: true, goodnightOpen: false });
+});
+
+it('an Auckland buddy sleeps by her own clock and is judged by her own goal while I am in Los Angeles', async () => {
+  const me = await buddyUser({ timezone: LA });
+  const ana = await buddyUser({ timezone: 'Pacific/Auckland' });
+  await prisma.user.update({ where: { id: ana.id }, data: { bedtimeGoal: '21:30' } });
+  await pairUp(me.id, ana.id, BEFORE);
+  // Her 22:00 NZDT on Thu Oct 8 (2026-10-08T09:00Z; my Thu 02:00): late by her 21:30 goal, though on time by 23:00.
+  const said = await sayGoodnight(ana.id, new Date('2026-10-08T09:00:00Z'));
+  expect([said.localDate, said.onTime]).toEqual(['2026-10-08', false]);
+  const anaAt = async (now: Date) => (await getCamp(me.id, now)).members.find((m) => m.person.id === ana.id)!;
+  // My 02:30, night: she is asleep, and her flag is the one her goal gave.
+  const myNight = new Date('2026-10-08T09:30:00Z');
+  expect((await getCamp(me.id, myNight)).night).toBe(true);
+  expect(await anaAt(myNight)).toMatchObject({ asleep: true, asleepSince: '2026-10-08T09:00:00.000Z', onTime: false });
+  // My 13:00 is her Fri 09:00: still her morning, not checked in, so still asleep.
+  expect(await anaAt(new Date('2026-10-08T20:00:00Z'))).toMatchObject({ asleep: true });
+  // My 16:00 is her noon: awake.
+  expect(await anaAt(new Date('2026-10-08T23:00:00Z'))).toMatchObject({ asleep: false, asleepSince: null, onTime: null });
+});
+
+it("at my 05:30 it is still my night, while an Auckland buddy's tonight is already the next evening", async () => {
+  const me = await buddyUser({ timezone: LA });
+  const ana = await buddyUser({ timezone: 'Pacific/Auckland' });
+  await pairUp(me.id, ana.id, BEFORE);
+  await gn(ana.id, '2026-10-08', new Date('2026-10-08T09:00:00Z')); // her Thu 22:00, on time
+  const dawn = new Date('2026-10-08T12:30:00Z'); // my Thu 05:30 (the evening of Oct 7); her Fri 01:30 (the evening of Oct 8)
+  const camp = await getCamp(me.id, dawn);
+  expect(camp.night).toBe(true);
+  expect(camp.members.find((m) => m.person.id === ana.id)).toMatchObject({ asleep: true, onTime: true });
+  // Her own tonight (Oct 8) lights tonight's fire, though my evening is still Oct 7.
+  expect(camp.fire).toEqual({ lit: 1, of: 2, segments: 3 });
 });
 
 it('my own goodnight comes back for Undo and puts my coach to sleep', async () => {
@@ -1835,21 +2201,30 @@ it('a coach stays asleep into the morning until its owner checks in or it is noo
   expect(await samAt(morning)).toMatchObject({ asleep: false, note: null });
 });
 
-it("counts this week's nights whose fire reached 3 segments (Mon–Sun of my evening)", async () => {
+it("counts this week's nights whose fire reached 3 segments (Mon–Sun of my evening); pairing today never unlights Monday", async () => {
   const me = await buddyUser({ timezone: LA });
   const a = await buddyUser({ timezone: LA });
   const b = await buddyUser({ timezone: LA });
   const c = await buddyUser({ timezone: LA });
-  for (const u of [a, b, c]) await pairUp(me.id, u.id);
-  // A camp of 4. Mon Oct 5: 3 on time (4 segments). Tue: 1 on time, 1 late (2). Wed, tonight: 2 (3). Sun Oct 4: another week.
-  for (const u of [me, a, b]) await gn(u.id, '2026-10-05', new Date('2026-10-06T05:00:00Z'));
+  for (const u of [a, b, c]) await pairUp(me.id, u.id, BEFORE);
+  // A camp of 4. Mon Oct 5: 2 on time (3 segments, lit). Tue: 1 on time, 1 late (2). Wed, tonight: 3 (4, lit).
+  // Sun Oct 4: another week.
+  for (const u of [me, a]) await gn(u.id, '2026-10-05', new Date('2026-10-06T05:00:00Z'));
   await gn(a.id, '2026-10-06', new Date('2026-10-07T05:00:00Z'));
   await gn(b.id, '2026-10-06', new Date('2026-10-07T05:10:00Z'), false);
-  for (const u of [a, c]) await gn(u.id, '2026-10-07', new Date('2026-10-08T05:00:00Z'));
+  for (const u of [a, b, c]) await gn(u.id, '2026-10-07', new Date('2026-10-08T05:00:00Z'));
   for (const u of [me, a, b, c]) await gn(u.id, '2026-10-04', new Date('2026-10-05T05:00:00Z'));
-  const camp = await getCamp(me.id, NIGHT);
-  expect(camp.nightsLitThisWeek).toBe(2);
-  expect(camp.fire).toEqual({ lit: 2, of: 4, segments: 3 });
+  const before = await getCamp(me.id, NIGHT);
+  expect(before.nightsLitThisWeek).toBe(2);
+  expect(before.fire).toEqual({ lit: 3, of: 4, segments: 4 });
+
+  // Two buddies pair with me tonight at 22:30, after this evening's 19:00. Tonight's fire is live and grows its camp
+  // to 6; past nights are frozen: Monday stays 2 of 4 (counted against 6 it would be 2 segments, unlit) and tonight's
+  // lit night is judged against its 19:00 camp of 4.
+  for (let i = 0; i < 2; i++) await pairUp(me.id, (await buddyUser({ timezone: LA })).id, NIGHT);
+  const after = await getCamp(me.id, NIGHT);
+  expect(after.fire).toEqual({ lit: 3, of: 6, segments: 3 });
+  expect(after.nightsLitThisWeek).toBe(2);
 });
 
 it("an unpaired or blocked buddy leaves my camp at once, and I leave theirs; a deleted account takes its note", async () => {
@@ -1882,7 +2257,7 @@ it('GET /me/camp is never cached, has the documented shape, and needs a session'
   const agent = await api();
   const res = await agent.get('/me/camp').set(await authHeaderFor(me.id));
   expect([res.status, res.headers['cache-control']]).toEqual([200, 'private, no-store']);
-  expect(Object.keys(res.body).sort()).toEqual(['fire', 'goodnight', 'members', 'night', 'nightsLitThisWeek']);
+  expect(Object.keys(res.body).sort()).toEqual(['fire', 'goodnight', 'goodnightOpen', 'goodnightOpensAt', 'members', 'night', 'nightsLitThisWeek']);
   expect(Object.keys(res.body.members[0]).sort()).toEqual(['asleep', 'asleepSince', 'mine', 'note', 'onTime', 'person']);
   expect((await agent.get('/me/camp')).status).toBe(401);
 });
@@ -1901,9 +2276,12 @@ Expected: FAIL — "Cannot find module '../../src/social/camp'".
 // The Campfire page (spec 2026-10-07 social §6). Your camp = you + your current buddies (the preloaded circle; a
 // block deletes the pair, so an unpaired or blocked person — their coach, goodnight and camp note — is gone from
 // your camp on the next read, and you from theirs). Asleep = a goodnight for the member's current evening, or for
-// last evening between 06:00 and 11:59 local until they check in (plan ruling). Night or day follows the VIEWER's
-// zone; each member's "tonight" follows their own. Tonight's fire = members in bed on time ÷ camp size. Camp note
-// text is user free text: returned only here, to the author and the author's current buddies, and never logged.
+// last evening between 06:00 and 11:59 local until they check in (plan ruling). Night or day (the scene, 19:00–05:59)
+// follows the VIEWER's zone; my goodnight window (from min(20:00, my goal − 60 min) to 05:59) follows my zone and my
+// goal; each member's "tonight" follows their own zone. Tonight's fire = members in bed on time ÷ the live camp.
+// "Nights lit this week" judges each night against that night's camp — me plus the buddies paired by its 19:00 in my
+// zone — so a past night is frozen (owner ruling Q2). Camp note text is user free text: returned only here, to the
+// author and the author's current buddies, and never logged.
 
 import { civilDateToUtcMidnight, localCivilDateOrUtc } from '../biometrics/civilDate';
 import { prisma } from '../db/client';
@@ -1913,7 +2291,9 @@ import { shiftDate } from '../scoring/dates';
 import { noteIsLive } from './campNotes';
 import { loadCircle, type Circle, type GoodnightRow } from './circle';
 import { toGoodnightDTO, type GoodnightDTO } from './goodnight';
-import { countLitNights, eveningDate, fireSegments, isNight, SUNRISE_HOUR } from './night';
+import {
+  campOnEvening, countLitNights, eveningDate, fireSegments, goodnightOpensAt, isGoodnightOpen, isNight, NOON_HOUR, SUNRISE_HOUR,
+} from './night';
 
 export interface CampMemberDTO {
   person: PersonDTO;
@@ -1935,6 +2315,10 @@ export interface CampDTO {
   nightsLitThisWeek: number;
   /** My goodnight for tonight (the app offers Undo while it is fresh). */
   goodnight: GoodnightDTO | null;
+  /** Whether my "Say goodnight" window is open now (my zone, my goal). */
+  goodnightOpen: boolean;
+  /** When my window opens, "HH:MM" local: min(20:00, my goal − 60 min). */
+  goodnightOpensAt: string;
 }
 
 export interface SleepState {
@@ -1945,9 +2329,15 @@ export interface SleepState {
   tonight: GoodnightRow | null;
 }
 
-export interface CampSummary { night: boolean; awake: number; asleep: number; goodnight: GoodnightDTO | null }
+export interface CampSummary {
+  night: boolean;
+  awake: number;
+  asleep: number;
+  goodnight: GoodnightDTO | null;
+  goodnightOpen: boolean;
+  goodnightOpensAt: string;
+}
 
-const NOON_HOUR = 12;
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 
 /** Each member's sleep, from the circle's goodnights and check-ins. Pure. */
@@ -1970,7 +2360,15 @@ export function campSummaryFor(circle: Circle, now: Date): CampSummary {
   const states = sleepStates(circle, now);
   const asleep = [...states.values()].filter((s) => s.asleep).length;
   const mine = states.get(circle.viewer.person.id)?.tonight ?? null;
-  return { night: isNight(now, circle.viewer.timezone), awake: states.size - asleep, asleep, goodnight: mine ? toGoodnightDTO(mine) : null };
+  const { timezone } = circle.viewer;
+  return {
+    night: isNight(now, timezone),
+    awake: states.size - asleep,
+    asleep,
+    goodnight: mine ? toGoodnightDTO(mine) : null,
+    goodnightOpen: isGoodnightOpen(now, timezone, circle.viewerBedtimeGoal),
+    goodnightOpensAt: goodnightOpensAt(circle.viewerBedtimeGoal),
+  };
 }
 
 export async function getCamp(viewerId: string, now: Date): Promise<CampDTO> {
@@ -1982,7 +2380,7 @@ export async function getCamp(viewerId: string, now: Date): Promise<CampDTO> {
     prisma.campNote.findMany({ where: { authorId: { in: ids }, expiresAt: { gt: now } }, select: { authorId: true, text: true, createdAt: true, expiresAt: true } }),
     prisma.goodnight.findMany({
       where: { authorId: { in: ids }, onTime: true, localDate: { gte: civilDateToUtcMidnight(weekStart), lte: civilDateToUtcMidnight(shiftDate(weekStart, 6)) } },
-      select: { localDate: true },
+      select: { authorId: true, localDate: true },
     }),
   ]);
   const states = sleepStates(circle, now);
@@ -2004,15 +2402,23 @@ export async function getCamp(viewerId: string, now: Date): Promise<CampDTO> {
       note: noteOf.get(m.person.id)?.text ?? null,
     };
   });
+  // Tonight's fire is the live camp: everyone here now.
   const lit = [...states.values()].filter((s) => s.tonight?.onTime === true).length;
   const of = circle.members.size;
-  const mine = states.get(viewerId)?.tonight ?? null;
+  // Each night of the week against that night's camp: me plus the buddies paired by its 19:00 (frozen past nights).
+  const campOn = (date: string) => campOnEvening(date, viewerId, circle.pairedAt, circle.viewer.timezone);
+  const onTimeThisWeek = week
+    .map((g) => ({ authorId: g.authorId, date: isoDate(g.localDate) }))
+    .filter((g) => g.date <= tonightDate);
+  const summary = campSummaryFor(circle, now);
   return {
-    night: isNight(now, circle.viewer.timezone),
+    night: summary.night,
     members,
     fire: { lit, of, segments: fireSegments(lit, of) },
-    nightsLitThisWeek: countLitNights(week.map((g) => isoDate(g.localDate)).filter((d) => d <= tonightDate), of),
-    goodnight: mine ? toGoodnightDTO(mine) : null,
+    nightsLitThisWeek: countLitNights(onTimeThisWeek, campOn),
+    goodnight: summary.goodnight,
+    goodnightOpen: summary.goodnightOpen,
+    goodnightOpensAt: summary.goodnightOpensAt,
   };
 }
 ```
@@ -2037,7 +2443,7 @@ Expected: PASS.
 
 ```bash
 git add backend/src/social/camp.ts backend/src/social/routes.ts backend/tests/social/camp.test.ts
-git commit -m "feat(social): the camp view: who's here, asleep or awake, notes, tonight's fire and nights lit"
+git commit -m "feat(social): the camp view: who's here, asleep or awake, notes, tonight's fire, nights lit and my goodnight window"
 ```
 
 ---
@@ -2251,7 +2657,9 @@ git commit -m "feat(social): goodnight story frames and goodnight and camp-note 
 **Interfaces:**
 - Consumes: `campSummaryFor` (Task 6); `GoodnightDTO`, `sayGoodnight` (Task 4).
 - Produces: `SocialHomeDTO.me = { person; checkIn; goodnight: GoodnightDTO | null }` and
-  `SocialHomeDTO.camp = { checkedIn; members; faces; night: boolean; awake: number; asleep: number }` (no extra query).
+  `SocialHomeDTO.camp = { checkedIn; members; faces; night: boolean; awake: number; asleep: number; goodnightOpen: boolean }`
+  (no extra query; `night` = the scene in my zone, 19:00–05:59, for the banner; `goodnightOpen` = my own goodnight
+  window, for the evening timeline's button, Task 12).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2287,7 +2695,7 @@ it('at night the camp counts awake and asleep, me.goodnight is mine for Undo, an
   await prisma.campNote.create({ data: { authorId: sam.id, text: 'secret words', createdAt: new Date('2026-10-08T05:05:00Z'), expiresAt: new Date('2026-10-08T13:00:00Z') } });
 
   const before = await getSocialHome(me.id, NIGHT);
-  expect(before.camp).toEqual({ checkedIn: 1, members: 3, faces: [expect.any(String)], night: true, awake: 2, asleep: 1 });
+  expect(before.camp).toEqual({ checkedIn: 1, members: 3, faces: [expect.any(String)], night: true, awake: 2, asleep: 1, goodnightOpen: true });
   expect(before.me.goodnight).toBeNull();
   const said = await sayGoodnight(me.id, NIGHT);
   const after = await getSocialHome(me.id, NIGHT);
@@ -2299,7 +2707,15 @@ it('at night the camp counts awake and asleep, me.goodnight is mine for Undo, an
 it('by day the camp is not night and everyone is awake', async () => {
   const me = await buddyUser({ timezone: LA });
   const day = new Date('2026-10-07T20:00:00Z'); // 13:00
-  expect((await getSocialHome(me.id, day)).camp).toEqual({ checkedIn: 0, members: 1, faces: [], night: false, awake: 1, asleep: 0 });
+  expect((await getSocialHome(me.id, day)).camp).toEqual({ checkedIn: 0, members: 1, faces: [], night: false, awake: 1, asleep: 0, goodnightOpen: false });
+});
+
+it('the goodnight window is mine: open at 17:30 with an 18:00 goal though not night, closed at 19:30 with no goal though night', async () => {
+  const early = await buddyUser({ timezone: LA });
+  await prisma.user.update({ where: { id: early.id }, data: { bedtimeGoal: '18:00' } });
+  expect((await getSocialHome(early.id, new Date('2026-10-08T00:30:00Z'))).camp).toMatchObject({ night: false, goodnightOpen: true }); // 17:30
+  const late = await buddyUser({ timezone: LA });
+  expect((await getSocialHome(late.id, new Date('2026-10-08T02:30:00Z'))).camp).toMatchObject({ night: true, goodnightOpen: false }); // 19:30
 });
 ```
 
@@ -2308,7 +2724,10 @@ it('by day the camp is not night and everyone is awake', async () => {
 
 ```ts
   expect(res.body.me).toEqual({ person: expect.objectContaining({ id: me.id, displayName: 'Me' }), checkIn: null, goodnight: null });
-  expect(res.body.camp).toEqual({ checkedIn: 1, members: 3, faces: [res.body.stories[0].author.coachId], night: expect.any(Boolean), awake: 3, asleep: 0 });
+  expect(res.body.camp).toEqual({
+    checkedIn: 1, members: 3, faces: [res.body.stories[0].author.coachId],
+    night: expect.any(Boolean), awake: 3, asleep: 0, goodnightOpen: expect.any(Boolean),
+  });
 ```
 
 (these replace the two lines `expect(res.body.me).toEqual({ person: …, checkIn: null });` and
@@ -2317,14 +2736,15 @@ it('by day the camp is not night and everyone is awake', async () => {
 - [ ] **Step 2: Run them to see them fail**
 
 Run: `bash .superpowers/sdd/2026-10-07-social-s2-campfire/backend-jest.sh tests/social/homeCamp.test.ts tests/social/home.test.ts`
-Expected: FAIL — `camp` has no `night` / `awake` / `asleep`, `me` has no `goodnight`.
+Expected: FAIL — `camp` has no `night` / `awake` / `asleep` / `goodnightOpen`, `me` has no `goodnight`.
 
 - [ ] **Step 3: Put the summary on the home**
 
 In `backend/src/social/home.ts`:
 
-Add to the header comment: `// S2: the camp banner also says whether it is night in the viewer's zone and who is awake or asleep, and \`me\`
-// carries my goodnight for tonight (the evening timeline's Undo) — all from the circle, no extra query.`
+Add to the header comment: `// S2: the camp banner also says whether it is night in the viewer's zone and who is awake or asleep; \`me\`
+// carries my goodnight for tonight (the evening timeline's Undo) and \`camp.goodnightOpen\` says whether my own
+// goodnight window is open (min(20:00, my goal − 60 min) to 05:59) — all from the circle, no extra query.`
 
 Add the imports:
 
@@ -2337,7 +2757,7 @@ Change the interface's two lines to:
 
 ```ts
   me: { person: PersonDTO; checkIn: CheckInDTO | null; goodnight: GoodnightDTO | null };
-  camp: { checkedIn: number; members: number; faces: string[]; night: boolean; awake: number; asleep: number };
+  camp: { checkedIn: number; members: number; faces: string[]; night: boolean; awake: number; asleep: number; goodnightOpen: boolean };
 ```
 
 In `getSocialHome`, after `const mine = circle.checkIns.get(viewerId);` add `const camp = campSummaryFor(circle, now);`
@@ -2352,6 +2772,7 @@ and change the returned `me` and `camp` to:
       night: camp.night,
       awake: camp.awake,
       asleep: camp.asleep,
+      goodnightOpen: camp.goodnightOpen,
     },
 ```
 
@@ -2364,7 +2785,7 @@ Expected: PASS (the query ceiling of 17 holds: the summary reads only the circle
 
 ```bash
 git add backend/src/social/home.ts backend/tests/social/homeCamp.test.ts backend/tests/social/home.test.ts
-git commit -m "feat(social): the Social home says night or day, who is awake or asleep, and my goodnight"
+git commit -m "feat(social): the Social home says night or day, who is awake or asleep, my goodnight and its window"
 ```
 
 ---
@@ -2376,12 +2797,18 @@ git commit -m "feat(social): the Social home says night or day, who is awake or 
 - Test: `backend/tests/social/highlightsCamp.test.ts`; the S1 `tests/social/highlights.test.ts` must stay green unchanged
 
 **Interfaces:**
-- Consumes: `countLitNights` (Task 2); `Circle`, `loadCircle` (Task 3); the `Goodnight` and `BuddyPair` tables.
+- Consumes: `campOnEvening`, `countLitNights` (Task 2); `Circle` (incl. `pairedAt`), `loadCircle` (Task 3); the
+  `Goodnight` table; `EMPTY_WEEK_SETTLE_MS`, `weeklyHighlightsFor` (Task 3).
 - Produces: `HighlightItem` gains `{ type: 'top_story'; reason: 'on_time_every_night'; actorId }`,
   `{ type: 'campfire'; actorId; nights: number }` (actor = the viewer), `{ type: 'joined'; actorId }`,
   `{ type: 'first_badge'; actorId }`; `HighlightItemDTO` follows (`actor`, `mine` instead of `actorId`).
+  `buildHighlightCandidates(circle: Circle, weekStart: string)` (was `(viewerId, memberIds, weekStart)`; its only
+  caller is `weeklyHighlightsFor`): `joined` comes from `circle.pairedAt` (no query), and `campfire` counts each night
+  against that night's camp (`campOnEvening`: the viewer plus the buddies paired by its 19:00 in the viewer's zone).
   Candidate order: badge top stories, on-time top story, every-day top story, most cheered, comeback, campfire,
   every-day (≤ 3 shown), joined (≤ 3), first badge (≤ 3), most stickers sent.
+- Known cost, accepted: a `first_badge` evaluated late (a badge backfilled after the week was cached) misses that
+  already-cached week, the same as the S1 top story — the cache is built once.
 
 - [ ] **Step 1: Write the failing test**
 
@@ -2429,7 +2856,7 @@ it('an on-time goodnight every night is a top story, and two or more lit nights 
   expect(h!.items[1]).toMatchObject({ nights: 7, mine: true });
 });
 
-it('one lit night is no campfire, and a quiet week is still not stored', async () => {
+it('one lit night is no campfire; the quiet week waits a day as final, then is cached empty', async () => {
   const me = await buddyUser();
   const ana = await buddyUser();
   const ben = await buddyUser();
@@ -2439,8 +2866,25 @@ it('one lit night is no campfire, and a quiet week is still not stored', async (
   await goodnight(ana.id, 0);
   await goodnight(ben.id, 0);
   await goodnight(ana.id, 1);
-  expect(await getWeeklyHighlights(me.id, NOW)).toBeNull();
+  expect(await getWeeklyHighlights(me.id, new Date('2026-10-06T10:00:00Z'))).toBeNull(); // its first day as final
   expect(await prisma.weeklyHighlights.count({ where: { viewerId: me.id } })).toBe(0);
+  expect(await getWeeklyHighlights(me.id, NOW)).toBeNull();
+  expect(await prisma.weeklyHighlights.count({ where: { viewerId: me.id } })).toBe(1);
+});
+
+it('a buddy who paired midweek counts toward the fire only from that evening on', async () => {
+  const me = await buddyUser();
+  const ana = await buddyUser({ displayName: 'Ana' });
+  const ben = await buddyUser({ displayName: 'Ben' });
+  await pairUp(me.id, ana.id, BEFORE);
+  await pairUp(me.id, ben.id, noon(3)); // Thursday noon, before Thursday's 19:00
+  // Mon–Wed: Ana alone of {me, Ana} (1 of 2: 3 segments, lit). Thu–Sun: Ana and Ben of three (2 of 3: 4, lit).
+  // Counted against all three, Mon–Wed would be 1 of 3 (2 segments, unlit): 4 nights, not 7.
+  for (let i = 0; i < 7; i++) await goodnight(ana.id, i);
+  for (let i = 3; i < 7; i++) await goodnight(ben.id, i);
+  const h = await getWeeklyHighlights(me.id, NOW);
+  expect(pairs(h!.items)).toEqual([['top_story', ana.id], ['campfire', me.id], ['joined', ben.id]]);
+  expect(h!.items[1]).toMatchObject({ nights: 7 });
 });
 
 it('a buddy who paired with me that week "joined the camp"; one from before does not, and one unpaired since drops out', async () => {
@@ -2501,12 +2945,19 @@ Replace the header comment's last line (`// "Joined" and "first badge" items (sp
 
 ```ts
 // S2 adds the camp's items: an on-time goodnight every night (a top story, no streak gate), the campfire ("the fire
-// was lit N nights", N >= 2 — a count of the circle's own goodnights), "joined the camp" (a buddy who paired with
-// the viewer that week) and "first badge" (a member's first-ever badge earned that week, gated by streaks like every
-// badge item, and not repeated when that person's badge is the top story). Weeks cached before S2 keep their items.
+// was lit N nights", N >= 2 — a count of the circle's own goodnights, each night judged against that night's camp:
+// the viewer plus the buddies paired by its 19:00 in the viewer's zone), "joined the camp" (a buddy who paired with
+// the viewer that week, from the circle's pairing times) and "first badge" (a member's first-ever badge earned that
+// week, gated by streaks like every badge item, and not repeated when that person's badge is the top story). Weeks
+// cached before S2 keep their items; a badge backfilled after a week was cached misses it, as the S1 top story does.
 ```
 
-Add `import { countLitNights } from './night';` to the imports.
+Add `import { campOnEvening, countLitNights } from './night';` to the imports.
+
+In `weeklyHighlightsFor` (Task 3), replace
+`const candidates = await buildHighlightCandidates(viewerId, memberIds, weekStart);` with
+`const candidates = await buildHighlightCandidates(circle, weekStart);`, and delete the now-unused line
+`const memberIds = [viewerId, ...circle.buddies.map((b) => b.person.id)];`.
 
 Replace `export type HighlightItem = …;` with:
 
@@ -2539,12 +2990,14 @@ Replace the whole `buildHighlightCandidates` function with:
 
 ```ts
 /** Ungated candidates in display order: every top-story candidate first (best first), then the other items. */
-export async function buildHighlightCandidates(viewerId: string, memberIds: string[], weekStart: string): Promise<HighlightItem[]> {
+export async function buildHighlightCandidates(circle: Circle, weekStart: string): Promise<HighlightItem[]> {
+  const viewerId = circle.viewer.person.id;
+  const buddyIds = circle.buddies.map((b) => b.person.id);
+  const memberIds = [viewerId, ...buddyIds];
   const from = civilDateToUtcMidnight(weekStart);
   const to = civilDateToUtcMidnight(shiftDate(weekStart, 6));
   const end = civilDateToUtcMidnight(shiftDate(weekStart, 7));
-  const buddyIds = memberIds.filter((id) => id !== viewerId);
-  const [checkIns, badges, stickers, goodnights, joinedPairs, firstEarned] = await Promise.all([
+  const [checkIns, badges, stickers, goodnights, firstEarned] = await Promise.all([
     prisma.checkIn.findMany({ where: { authorId: { in: memberIds }, localDate: { gte: from, lte: to } }, select: { authorId: true, localDate: true, mood: true } }),
     prisma.achievement.findMany({
       where: { userId: { in: memberIds }, earnedOn: { gte: from, lte: to } },
@@ -2557,11 +3010,6 @@ export async function buildHighlightCandidates(viewerId: string, memberIds: stri
       select: { fromUserId: true, toUserId: true },
     }),
     prisma.goodnight.findMany({ where: { authorId: { in: memberIds }, onTime: true, localDate: { gte: from, lte: to } }, select: { authorId: true, localDate: true } }),
-    // Pairs with the viewer made that week: those buddies "joined the camp".
-    prisma.buddyPair.findMany({
-      where: { createdAt: { gte: from, lt: end }, OR: [{ userAId: viewerId, userBId: { in: buddyIds } }, { userBId: viewerId, userAId: { in: buddyIds } }] },
-      select: { userAId: true, userBId: true },
-    }),
     // Each member's first-ever badge date.
     prisma.achievement.groupBy({ by: ['userId'], where: { userId: { in: memberIds } }, _min: { earnedOn: true } }),
   ]);
@@ -2587,8 +3035,17 @@ export async function buildHighlightCandidates(viewerId: string, memberIds: stri
     onTimeNights.set(g.authorId, nights);
   }
   const onTimeEveryNight = [...onTimeNights.entries()].filter(([, nights]) => nights.size === 7).map(([id]) => id).sort();
-  const litNights = countLitNights(goodnights.map((g) => isoDate(g.localDate)), memberIds.length);
-  const joined = joinedPairs.map((p) => (p.userAId === viewerId ? p.userBId : p.userAId)).sort();
+  // Each night against that night's camp: a buddy who paired midweek counts from that evening on, and pairing after
+  // the week never changes it (owner ruling Q2).
+  const litNights = countLitNights(
+    goodnights.map((g) => ({ authorId: g.authorId, date: isoDate(g.localDate) })),
+    (date) => campOnEvening(date, viewerId, circle.pairedAt, circle.viewer.timezone),
+  );
+  // Buddies whose pair with the viewer was made that week "joined the camp" (the circle carries the pairing times).
+  const joined = [...circle.pairedAt]
+    .filter(([, at]) => at.getTime() >= from.getTime() && at.getTime() < end.getTime())
+    .map(([id]) => id)
+    .sort();
   const firstBadges = firstEarned
     .filter((f) => f._min.earnedOn !== null && f._min.earnedOn >= from && f._min.earnedOn <= to)
     .map((f) => f.userId)
@@ -2674,16 +3131,23 @@ git commit -m "feat(social): camp highlights: on time every night, campfire, joi
 
 **Files:**
 - Create: `backend/src/social/sweep.ts`
-- Modify: `backend/src/sync/worker.ts`, `backend/src/buddies/models.ts`, `backend/src/users/deletion.ts`
-- Test: `backend/tests/social/retention.test.ts`; rerun `tests/coach/retention.test.ts`, `tests/users/deletion.test.ts`, `tests/buddies/deletion.test.ts`
+- Modify: `backend/src/sync/worker.ts`, `backend/src/buddies/models.ts`, `backend/src/users/deletion.ts`,
+  `backend/tests/recap/worker.test.ts` (mock the social sweep)
+- Test: `backend/tests/social/retention.test.ts`; rerun `tests/recap/worker.test.ts`, `tests/coach/retention.test.ts`, `tests/users/deletion.test.ts`, `tests/buddies/deletion.test.ts`
 
 **Interfaces:**
 - Consumes: `RECAP_SWEEP_JOB` (`src/recap/queue.ts`), `runRecapSweep` (`src/recap/sweep.ts`), `processSyncJob`
   (`src/sync/worker.ts`); `getWeeklyHighlights` (Task 3).
 - Produces:
   - `sweep.ts`: `HIGHLIGHTS_RETENTION_WEEKS = 4`, `runSocialSweep(now): Promise<{ notes: number; highlights: number }>`.
-  - The `RECAP_SWEEP_JOB` branch of `processSyncJob` runs `runSocialSweep` first (never throws; logs counts or the
-    error's name), then `runRecapSweep()`.
+  - The `RECAP_SWEEP_JOB` branch of `processSyncJob` runs `runSocialSweep(sweepClock(job))` first (never throws;
+    logs counts or the error's name), then `runRecapSweep()`. `sweepClock(job)` = `job.data.now` when it is a valid
+    ISO instant (tests pin the clock this way; the scheduler sends `{}`), else the real clock. `processSyncJob` keeps
+    its one-argument signature (BullMQ passes a token as the second).
+- Test isolation (the backend suites share one database): no test runs the sweep on the real clock. The retention
+  tests use a far-past clock (`2025-02-10T12:00Z`) and far-past fixtures (weeks `2025-01-06` and `2025-01-13`, notes
+  expiring in February 2025), which no other suite writes, and assert only on their own rows; the S1
+  `tests/recap/worker.test.ts`, which runs the same tick, mocks `runSocialSweep`.
   - `buddies/models.ts`: `purgeSocialJsonMentions(db: Pick<PrismaClient, '$executeRaw'>, userId: string): Promise<number>`;
     `deleteUserAccount` calls it (best effort) before deleting the rows.
 
@@ -2717,33 +3181,43 @@ afterAll(async () => {
   await connection.quit();
 });
 
-const NOW = new Date('2026-10-07T20:00:00Z');
+// The suites share one database, so the sweep never runs on the real clock here: a far-past clock with far-past
+// fixtures reaches only this file's rows (other suites' notes expire, and their weeks start, in 2026).
+const SWEEP_NOW = new Date('2025-02-10T12:00:00Z'); // cutoff = 2025-02-10 − 28 days = 2025-01-13
+const OLD_WEEK = '2025-01-06'; // before the cutoff: deleted
+const KEPT_WEEK = '2025-01-13'; // the cutoff itself: kept
+// For the read-time gate below (not a sweep): the week 2026-09-28 is final at this moment.
+const READ_NOW = new Date('2026-10-07T20:00:00Z');
 const day = (d: string) => civilDateToUtcMidnight(d);
 const noop = { deleteSubscription: async () => {}, revokeToken: async () => {}, log: () => {} };
+const weeksOf = async (viewerId: string) =>
+  (await prisma.weeklyHighlights.findMany({ where: { viewerId }, select: { weekStart: true } })).map((r) => r.weekStart.toISOString().slice(0, 10)).sort();
 
 it('deletes expired camp notes and highlight caches older than 4 weeks, and keeps the rest', async () => {
   expect(HIGHLIGHTS_RETENTION_WEEKS).toBe(4);
   const a = await buddyUser();
   const b = await buddyUser();
-  await prisma.campNote.create({ data: { authorId: a.id, text: 'gone', expiresAt: new Date('2026-10-07T13:00:00Z') } });
-  await prisma.campNote.create({ data: { authorId: b.id, text: 'live', expiresAt: new Date('2026-10-08T13:00:00Z') } });
-  await prisma.weeklyHighlights.create({ data: { viewerId: a.id, weekStart: day('2026-09-07'), items: [] } }); // before 2026-09-09: old
-  await prisma.weeklyHighlights.create({ data: { viewerId: a.id, weekStart: day('2026-09-14'), items: [] } });
-  const result = await runSocialSweep(NOW);
-  // Other suites share the database, so only lower bounds on the counts.
+  await prisma.campNote.create({ data: { authorId: a.id, text: 'gone', expiresAt: new Date('2025-02-10T06:00:00Z') } });
+  await prisma.campNote.create({ data: { authorId: b.id, text: 'live', expiresAt: new Date('2025-02-11T06:00:00Z') } });
+  await prisma.weeklyHighlights.create({ data: { viewerId: a.id, weekStart: day(OLD_WEEK), items: [] } });
+  await prisma.weeklyHighlights.create({ data: { viewerId: a.id, weekStart: day(KEPT_WEEK), items: [] } });
+  const result = await runSocialSweep(SWEEP_NOW);
+  // Assert on this file's own rows; the counts include at least them.
   expect(result.notes).toBeGreaterThanOrEqual(1);
   expect(result.highlights).toBeGreaterThanOrEqual(1);
   expect(await prisma.campNote.findMany({ where: { authorId: { in: [a.id, b.id] } }, select: { text: true } })).toEqual([{ text: 'live' }]);
-  expect((await prisma.weeklyHighlights.findMany({ where: { viewerId: a.id }, select: { weekStart: true } })).map((r) => r.weekStart.toISOString().slice(0, 10))).toEqual(['2026-09-14']);
+  expect(await weeksOf(a.id)).toEqual([KEPT_WEEK]);
 });
 
-it('the hourly recap-sweep tick runs the social sweep too, logging counts only', async () => {
+it('the hourly recap-sweep tick runs the social sweep too, on the clock the job pins, logging counts only', async () => {
   const a = await buddyUser();
-  await prisma.campNote.create({ data: { authorId: a.id, text: 'private words', expiresAt: new Date(Date.now() - 60_000) } });
+  await prisma.campNote.create({ data: { authorId: a.id, text: 'private words', expiresAt: new Date('2025-02-10T06:00:00Z') } });
+  await prisma.weeklyHighlights.create({ data: { viewerId: a.id, weekStart: day(OLD_WEEK), items: [] } });
   const info = jest.spyOn(console, 'info').mockImplementation(() => {});
-  await processSyncJob({ name: RECAP_SWEEP_JOB, data: {} } as unknown as Job);
+  await processSyncJob({ name: RECAP_SWEEP_JOB, data: { now: SWEEP_NOW.toISOString() } } as unknown as Job);
   expect(runRecapSweep).toHaveBeenCalled();
   expect(await prisma.campNote.count({ where: { authorId: a.id } })).toBe(0);
+  expect(await weeksOf(a.id)).toEqual([]);
   const lines = info.mock.calls.map((c) => String(c[0]));
   expect(lines.some((l) => l.includes('"event":"social.sweep"'))).toBe(true);
   expect(lines.join('\n')).not.toContain('private words');
@@ -2764,9 +3238,20 @@ it("deleting an account deletes the highlight caches that name it; a cached id t
   await prisma.weeklyHighlights.create({
     data: { viewerId: b.id, weekStart: day('2026-09-28'), items: [{ type: 'comeback', actorId: randomUUID() }, { type: 'checked_in_every_day', actorId: c.id }] },
   });
-  expect((await getWeeklyHighlights(b.id, NOW))!.items.map((i) => i.actor.id)).toEqual([c.id]);
+  expect((await getWeeklyHighlights(b.id, READ_NOW))!.items.map((i) => i.actor.id)).toEqual([c.id]);
 });
 ```
+
+`backend/tests/recap/worker.test.ts` (S1) runs the same tick, which would now sweep the shared database on the real
+clock. After its two existing `jest.mock(…)` lines add:
+
+```ts
+// The social sweep (S2) shares this tick; it is tested in tests/social/retention.test.ts on a pinned clock.
+jest.mock('../../src/social/sweep', () => ({ runSocialSweep: jest.fn(async () => ({ notes: 0, highlights: 0 })) }));
+```
+
+add `import { runSocialSweep } from '../../src/social/sweep';` to its imports, and after
+`expect(runRecapSweep).toHaveBeenCalledTimes(1);` add `expect(runSocialSweep).toHaveBeenCalledTimes(1);`.
 
 - [ ] **Step 2: Run it to see it fail**
 
@@ -2797,7 +3282,21 @@ export async function runSocialSweep(now: Date): Promise<{ notes: number; highli
 ```
 
 In `backend/src/sync/worker.ts`, add `import { runSocialSweep } from '../social/sweep';` after the `recordStepGoal`
-import, and replace
+import; just above `export async function processSyncJob(job: Job): Promise<void> {` add:
+
+```ts
+/**
+ * The social sweep's clock: `job.data.now` when a test pins it (a valid ISO instant), else the real clock. The
+ * scheduler sends `{}`. Not a second processSyncJob parameter: BullMQ passes the worker token there.
+ */
+function sweepClock(job: Job): Date {
+  const pinned = (job.data as { now?: unknown } | undefined)?.now;
+  const at = typeof pinned === 'string' ? new Date(pinned) : null;
+  return at && !Number.isNaN(at.getTime()) ? at : new Date();
+}
+```
+
+and replace
 
 ```ts
   } else if (job.name === RECAP_SWEEP_JOB) {
@@ -2810,7 +3309,7 @@ with
   } else if (job.name === RECAP_SWEEP_JOB) {
     // The hourly tick also runs the social sweep (expired camp notes, old highlight caches). It goes first and never
     // throws, so a social failure cannot stop recaps. Counts and the error's name only.
-    await runSocialSweep(new Date()).then(
+    await runSocialSweep(sweepClock(job)).then(
       (r) => console.info(JSON.stringify({ event: 'social.sweep', ...r })),
       (err: unknown) => console.error(JSON.stringify({ event: 'social.sweep_failed', error: err instanceof Error ? err.name : 'unknown' })),
     );
@@ -2850,13 +3349,15 @@ before `const counts = await deleteOwnedRows(prisma, { userId }, { id: userId })
 
 - [ ] **Step 5: Run the tests**
 
-Run: `bash .superpowers/sdd/2026-10-07-social-s2-campfire/backend-jest.sh tests/social/retention.test.ts tests/coach/retention.test.ts tests/users/deletion.test.ts tests/buddies/deletion.test.ts`
+Run: `bash .superpowers/sdd/2026-10-07-social-s2-campfire/backend-jest.sh tests/social/retention.test.ts tests/recap/worker.test.ts tests/coach/retention.test.ts tests/users/deletion.test.ts tests/buddies/deletion.test.ts`
 Expected: PASS.
+Run: `grep -rn "runSocialSweep(\|RECAP_SWEEP_JOB, data" backend/tests` — Expected: every call passes `SWEEP_NOW` or a
+`data.now`, or sits in a file that mocks `../../src/social/sweep` (no sweep on the real clock).
 
 - [ ] **Step 6: Commit**
 
 ```bash
-git add backend/src/social/sweep.ts backend/src/sync/worker.ts backend/src/buddies/models.ts backend/src/users/deletion.ts backend/tests/social/retention.test.ts
+git add backend/src/social/sweep.ts backend/src/sync/worker.ts backend/src/buddies/models.ts backend/src/users/deletion.ts backend/tests/social/retention.test.ts backend/tests/recap/worker.test.ts
 git commit -m "feat(social): sweep expired camp notes and old highlight caches hourly; purge deleted ids from caches"
 ```
 
@@ -2872,17 +3373,21 @@ git commit -m "feat(social): sweep expired camp notes and old highlight caches h
 
 **Interfaces:**
 - Consumes: the backend DTOs of Tasks 4–9 (`GoodnightDTO`, `CampDTO`, `CampMemberDTO`, `CampNoteDTO`, the new
-  timeline / frame / highlight variants, `SocialHomeDTO.me.goodnight`, `camp.night|awake|asleep`).
+  timeline / frame / highlight variants, `SocialHomeDTO.me.goodnight`, `camp.night|awake|asleep|goodnightOpen`,
+  `CampDTO.goodnightOpen|goodnightOpensAt`).
 - Produces:
-  - `api/social.ts`: types `Goodnight`, `CampMember`, `Camp`, `CampNote`; `StoryFrame`, `TimelineItem`, `HighlightItem`
-    gain the S2 variants; `SocialHome.me.goodnight?: Goodnight | null`, `SocialHome.camp.night?: boolean`,
-    `awake?: number`, `asleep?: number` (optional: an S1 server sends none); `fetchCamp(): Promise<Camp | null>`
-    (null = bare 404), `sayGoodnight(): Promise<{ goodnight: Goodnight }>`, `undoGoodnight(): Promise<void>`,
-    `saveCampNote(text: string): Promise<{ note: CampNote }>`, `clearCampNote(): Promise<void>`.
+  - `api/social.ts`: types `Goodnight`, `CampMember`, `Camp` (with `goodnightOpen: boolean; goodnightOpensAt: string`),
+    `CampNote`; `StoryFrame`, `TimelineItem`, `HighlightItem` gain the S2 variants; `SocialHome.me.goodnight?: Goodnight | null`,
+    `SocialHome.camp.night?: boolean`, `awake?: number`, `asleep?: number`, `goodnightOpen?: boolean` (optional: an S1
+    server sends none); `fetchCamp(): Promise<Camp | null>` (null = bare 404), `sayGoodnight(): Promise<{ goodnight: Goodnight }>`,
+    `undoGoodnight(): Promise<void>`, `saveCampNote(text: string): Promise<{ note: CampNote }>`, `clearCampNote(): Promise<void>`.
   - `socialCopy.ts`: `CAMP_NOTE_MAX = 40`, `noteLength(draft): number`, `campBannerLine(camp: SocialHome['camp']): string`,
-    `fireLine(fire: Camp['fire']): string`, `campStatus(m: CampMember): string`, `goodnightSaidLine(g: Goodnight): string`,
-    `campKicker(now: Date): string`; the known-kind lists, `timelineParts`, `timelineAction`, `highlightKicker`,
-    `highlightKickerColor`, `highlightLine` cover the S2 kinds.
+    `fireLine(fire: Camp['fire']): string`, `campClock(iso: string): string` ("10:15 PM", the phone's clock),
+    `campStatus(m: CampMember): string` ("asleep since 10:15 PM · on time"), `goodnightSaidLine(g: Goodnight): string`,
+    `goodnightOpensLine(opensAt: string): string` ("You can say goodnight from 8:00 PM"), `campKicker(now: Date): string`
+    ("TUESDAY · 10:42 PM"): every time on the Campfire is 12-hour. The known-kind lists, `timelineParts`,
+    `timelineAction`, `highlightKicker`, `highlightKickerColor`, `highlightLine` cover the S2 kinds. (`clockTime`,
+    the S1 timeline's time, is unchanged.)
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -2925,8 +3430,9 @@ it('says and undoes goodnight, and shares and clears a note', async () => {
 
 ```ts
 import {
-  campBannerLine, campKicker, campStatus, clockTime, fireLine, goodnightSaidLine, highlightKicker, highlightKickerColor,
-  highlightLine, knownHighlights, knownStoryFrames, knownTimelineItems, noteLength, timelineAction, timelineLine,
+  campBannerLine, campClock, campKicker, campStatus, fireLine, goodnightOpensLine, goodnightSaidLine, highlightKicker,
+  highlightKickerColor, highlightLine, knownHighlights, knownStoryFrames, knownTimelineItems, noteLength, timelineAction,
+  timelineLine,
 } from '../../src/lib/socialCopy';
 import type { CampMember, HighlightItem, StoryFrame, TimelineItem } from '../../src/api/social';
 
@@ -2987,16 +3493,23 @@ it('words the camp banner by night and by day, and for an older server', () => {
   expect(campBannerLine({ checkedIn: 1, members: 5, faces: [], night: true, awake: 3, asleep: 2 })).toBe('3 awake · 2 asleep');
 });
 
-it("words the fire, who's here, the header kicker, a said goodnight and a note's length", () => {
+it("words the fire, who's here, the header kicker, a said goodnight and a note's length — every time in 12-hour", () => {
   expect(fireLine({ lit: 3, of: 5, segments: 3 })).toBe('3 of 5 in bed on time');
   const m = (over: Partial<CampMember>): CampMember => ({ person: sam, mine: false, asleep: false, asleepSince: null, onTime: null, note: null, ...over });
+  // Built on the phone's own clock, so the words don't depend on the test machine's zone.
   const since = new Date(2026, 9, 7, 22, 15).toISOString();
-  expect(campStatus(m({ asleep: true, asleepSince: since, onTime: true }))).toBe(`asleep since ${clockTime(since)} · on time`);
-  expect(campStatus(m({ asleep: true, asleepSince: since, onTime: false }))).toBe('asleep since 22:15');
+  expect(campClock(since)).toBe('10:15 PM');
+  expect(campClock(new Date(2026, 9, 8, 0, 5).toISOString())).toBe('12:05 AM');
+  expect(campClock(new Date(2026, 9, 8, 12, 0).toISOString())).toBe('12:00 PM');
+  expect(campStatus(m({ asleep: true, asleepSince: since, onTime: true }))).toBe('asleep since 10:15 PM · on time');
+  expect(campStatus(m({ asleep: true, asleepSince: since, onTime: false }))).toBe('asleep since 10:15 PM');
   expect(campStatus(m({ note: 'bed soon' }))).toBe('awake · bed soon');
   expect(campStatus(m({}))).toBe('awake');
   expect(campKicker(new Date(2026, 9, 6, 22, 42))).toBe('TUESDAY · 10:42 PM');
   expect(campKicker(new Date(2026, 9, 7, 0, 5))).toBe('WEDNESDAY · 12:05 AM');
+  expect(goodnightOpensLine('20:00')).toBe('You can say goodnight from 8:00 PM');
+  expect(goodnightOpensLine('17:00')).toBe('You can say goodnight from 5:00 PM');
+  expect(goodnightOpensLine('11:30')).toBe('You can say goodnight from 11:30 AM');
   expect(goodnightSaidLine({ localDate: '2026-10-07', at: since, onTime: true, undoUntil: since })).toBe('Goodnight said, on time');
   expect(goodnightSaidLine({ localDate: '2026-10-07', at: since, onTime: false, undoUntil: since })).toBe('Goodnight said');
   expect(noteLength('  🔥hi ')).toBe(3);
@@ -3006,7 +3519,7 @@ it("words the fire, who's here, the header kicker, a said goodnight and a note's
 - [ ] **Step 2: Run them to see them fail**
 
 Run (from `mobile/`): `PATH=/Users/tushar/.nvm/versions/node/v24.21.0/bin:$PATH node node_modules/.bin/jest --forceExit __tests__/api/camp.test.ts __tests__/lib/campCopy.test.ts`
-Expected: FAIL — `fetchCamp` / `campBannerLine` are not exported.
+Expected: FAIL — `fetchCamp` / `campBannerLine` / `campClock` / `goodnightOpensLine` are not exported.
 
 - [ ] **Step 3: The API client**
 
@@ -3072,10 +3585,11 @@ export interface SocialHome {
   /** `goodnight` arrives with S2: my goodnight tonight, or null; undefined from an S1 server. */
   me: { person: Person; checkIn: CheckIn | null; goodnight?: Goodnight | null };
   /**
-   * `faces`: coach ids of up to two buddies who checked in today, newest first. `night`, `awake` and `asleep` arrive
-   * with S2; an S1 server sends none, and the banner then stays a static strip.
+   * `faces`: coach ids of up to two buddies who checked in today, newest first. `night` (the scene, 19:00–05:59 in my
+   * zone), `awake`, `asleep` and `goodnightOpen` (my own goodnight window: from min(20:00, my goal − 60 min) to 05:59)
+   * arrive with S2; an S1 server sends none, and the banner then stays a static strip with no goodnight row.
    */
-  camp: { checkedIn: number; members: number; faces: string[]; night?: boolean; awake?: number; asleep?: number };
+  camp: { checkedIn: number; members: number; faces: string[]; night?: boolean; awake?: number; asleep?: number; goodnightOpen?: boolean };
   stories: StoryRing[];
   highlights: Highlights | null;
   timeline: TimelineItem[];
@@ -3086,6 +3600,7 @@ export interface SocialHome {
 /** One person at the camp. `note` is their camp note: a buddy's free text, shown on the Campfire page only. */
 export interface CampMember { person: Person; mine: boolean; asleep: boolean; asleepSince: string | null; onTime: boolean | null; note: string | null }
 export interface Camp {
+  /** The scene: night 19:00–05:59 in my zone. */
   night: boolean;
   /** Me first, then buddies by latest activity. */
   members: CampMember[];
@@ -3093,6 +3608,10 @@ export interface Camp {
   nightsLitThisWeek: number;
   /** My goodnight tonight, or null. */
   goodnight: Goodnight | null;
+  /** Whether my "Say goodnight" window is open now. */
+  goodnightOpen: boolean;
+  /** When it opens, "HH:MM" on my clock: min(20:00, my goal − 60 min). */
+  goodnightOpensAt: string;
 }
 export interface CampNote { text: string; createdAt: string; expiresAt: string }
 
@@ -3357,20 +3876,34 @@ export function campBannerLine(camp: SocialHome['camp']): string {
 
 export const fireLine = (fire: Camp['fire']) => `${fire.lit} of ${fire.of} in bed on time`;
 
-/** "Who's here": "awake · {their note}" or "awake", or "asleep since 22:15 · on time". */
+// Every time on the Campfire is 12-hour (owner ruling): "10:15 PM".
+const twelveHour = (hour: number, minute: number) => `${hour % 12 || 12}:${String(minute).padStart(2, '0')} ${hour < 12 ? 'AM' : 'PM'}`;
+
+/** "10:15 PM": a moment on the phone's clock, for the Campfire. */
+export function campClock(iso: string): string {
+  const d = new Date(iso);
+  return twelveHour(d.getHours(), d.getMinutes());
+}
+
+/** "Who's here": "awake · {their whole note}" or "awake", or "asleep since 10:15 PM · on time". */
 export function campStatus(m: CampMember): string {
-  if (m.asleep) return `asleep${m.asleepSince ? ` since ${clockTime(m.asleepSince)}` : ''}${m.onTime ? ' · on time' : ''}`;
+  if (m.asleep) return `asleep${m.asleepSince ? ` since ${campClock(m.asleepSince)}` : ''}${m.onTime ? ' · on time' : ''}`;
   return m.note ? `awake · ${m.note}` : 'awake';
 }
 
 export const goodnightSaidLine = (g: Goodnight) => (g.onTime ? 'Goodnight said, on time' : 'Goodnight said');
 
+/** "You can say goodnight from 8:00 PM", from my window's opening ("HH:MM", my clock). */
+export function goodnightOpensLine(opensAt: string): string {
+  const [hour, minute] = opensAt.split(':').map(Number) as [number, number];
+  return `You can say goodnight from ${twelveHour(hour, minute)}`;
+}
+
 const WEEKDAYS = ['SUNDAY', 'MONDAY', 'TUESDAY', 'WEDNESDAY', 'THURSDAY', 'FRIDAY', 'SATURDAY'] as const;
 
 /** "TUESDAY · 10:42 PM": the Campfire header's kicker, on the phone's clock. */
 export function campKicker(now: Date): string {
-  const hour = now.getHours();
-  return `${WEEKDAYS[now.getDay()]} · ${hour % 12 || 12}:${String(now.getMinutes()).padStart(2, '0')} ${hour < 12 ? 'AM' : 'PM'}`;
+  return `${WEEKDAYS[now.getDay()]} · ${twelveHour(now.getHours(), now.getMinutes())}`;
 }
 ```
 
@@ -3417,8 +3950,9 @@ git commit -m "feat(social-app): camp API and copy: goodnight, camp notes, camp 
   - `GoodnightButton({ goodnight: Goodnight | null; onChanged: () => void; testID?: string })` — testIDs
     `<testID>-say`, `<testID>-said`, `<testID>-undo`, `<testID>-message` (default testID `goodnight`).
   - `RootStackParamList.Campfire: undefined` (the screen is registered in Task 13).
-  - SocialScreen: the banner opens `Campfire` when `home.camp.night !== undefined`; under Today, while
-    `home.camp.night === true` and `home.me.goodnight !== undefined`, a `GoodnightButton` with testID `timeline-goodnight`.
+  - SocialScreen: the banner opens `Campfire` when `home.camp.night !== undefined`; under Today, while my goodnight
+    window is open (`home.camp.goodnightOpen === true`, owner ruling Q1 — not the scene's `night`) and
+    `home.me.goodnight !== undefined`, a `GoodnightButton` with testID `timeline-goodnight`.
 
 - [ ] **Step 1: Write the failing tests**
 
@@ -3507,11 +4041,11 @@ it('undoes, and says why when the server refuses', async () => {
   expect(screen.getByTestId('goodnight-message')).toHaveTextContent("It's too late to undo that goodnight.");
 });
 
-it('a closed goodnight (by day) says when it opens', async () => {
+it('a tap the server refuses as too early says so', async () => {
   (sayGoodnight as jest.Mock).mockRejectedValueOnce(new ApiError(409, 'x', 'goodnight_closed'));
   render(<GoodnightButton goodnight={null} onChanged={jest.fn()} testID="timeline-goodnight" />);
   await act(async () => fireEvent.press(screen.getByTestId('timeline-goodnight-say')));
-  expect(screen.getByTestId('timeline-goodnight-message')).toHaveTextContent('You can say goodnight from 7 pm.');
+  expect(screen.getByTestId('timeline-goodnight-message')).toHaveTextContent("It's too early to say goodnight.");
 });
 ```
 
@@ -3543,7 +4077,7 @@ const renderScreen = () => render(<SafeAreaProvider initialMetrics={metrics}><So
 const person = (id: string) => ({ id, handle: id, displayName: id.toUpperCase(), coachId: 'mochi' });
 const home = (over: Partial<SocialHome> = {}): SocialHome => ({
   me: { person: person('me'), checkIn: null, goodnight: null },
-  camp: { checkedIn: 1, members: 3, faces: [], night: true, awake: 3, asleep: 0 },
+  camp: { checkedIn: 1, members: 3, faces: [], night: true, awake: 3, asleep: 0, goodnightOpen: true },
   stories: [],
   highlights: null,
   timeline: [],
@@ -3567,12 +4101,26 @@ it('an S2 server at night: the banner opens the Campfire, and the evening timeli
 });
 
 it('by day: no goodnight in the timeline, and the banner still opens the camp', async () => {
-  (fetchSocialHome as jest.Mock).mockResolvedValue(home({ camp: { checkedIn: 2, members: 3, faces: [], night: false, awake: 3, asleep: 0 } }));
+  (fetchSocialHome as jest.Mock).mockResolvedValue(home({ camp: { checkedIn: 2, members: 3, faces: [], night: false, awake: 3, asleep: 0, goodnightOpen: false } }));
   renderScreen();
   expect(await screen.findByTestId('camp-banner-line')).toHaveTextContent('2 checked in');
   expect(screen.queryByTestId('timeline-goodnight-say')).toBeNull();
   fireEvent.press(screen.getByTestId('camp-banner'));
   expect(mockNavigate).toHaveBeenLastCalledWith('Campfire');
+});
+
+it('the goodnight row follows my window, not the scene: 17:30 with an 18:00 goal is still day, yet open', async () => {
+  (fetchSocialHome as jest.Mock).mockResolvedValue(home({ camp: { checkedIn: 2, members: 3, faces: [], night: false, awake: 3, asleep: 0, goodnightOpen: true } }));
+  renderScreen();
+  expect(await screen.findByTestId('camp-banner-line')).toHaveTextContent('2 checked in');
+  expect(screen.getByTestId('timeline-goodnight-say')).toBeTruthy();
+});
+
+it('the goodnight row follows my window, not the scene: 19:30 with no goal is night, yet closed until 20:00', async () => {
+  (fetchSocialHome as jest.Mock).mockResolvedValue(home({ camp: { checkedIn: 2, members: 3, faces: [], night: true, awake: 3, asleep: 0, goodnightOpen: false } }));
+  renderScreen();
+  expect(await screen.findByTestId('camp-banner-line')).toHaveTextContent('3 awake · 0 asleep');
+  expect(screen.queryByTestId('timeline-goodnight-say')).toBeNull();
 });
 
 it('an S1 server (no camp.night, no me.goodnight): the static banner, and nothing offers goodnight', async () => {
@@ -3741,7 +4289,8 @@ Change the header comment to:
 // Social tab home — V5 one scroll (spec 2026-10-07 social §4): camp banner → stories with my check-in → week
 // highlights → today timeline, and a floating Chats button (opens Buddies until S3). Unseen stickers are marked
 // seen once the screen has shown them, so the tab dot clears where they are read. S2: the banner opens the Campfire
-// (only on a server that has one: it sends camp.night), and at night "Say goodnight" follows the timeline.
+// (only on a server that has one: it sends camp.night), and while my goodnight window is open (camp.goodnightOpen:
+// from min(20:00, my goal − 60 min) to 05:59) "Say goodnight" follows the timeline.
 ```
 
 Add `import { GoodnightButton } from '../components/social/GoodnightButton';` after the `CampBanner` import.
@@ -3767,8 +4316,9 @@ with
         <View className="gap-3">
           <SectionLabel>Today</SectionLabel>
           <TimelineList items={home.timeline} />
-          {/* The evening timeline offers goodnight (spec §6.1); an S1 server sends neither field. */}
-          {home.camp.night === true && home.me.goodnight !== undefined ? (
+          {/* The evening timeline offers goodnight while my window is open (spec §6.1, owner ruling Q1); an S1 server
+              sends neither field. */}
+          {home.camp.goodnightOpen === true && home.me.goodnight !== undefined ? (
             <GoodnightButton testID="timeline-goodnight" goodnight={home.me.goodnight} onChanged={() => void refreshSocial()} />
           ) : null}
         </View>
@@ -3784,7 +4334,7 @@ Run: `PATH=/Users/tushar/.nvm/versions/node/v24.21.0/bin:$PATH node node_modules
 
 ```bash
 git add mobile/src/components/social/CampBanner.tsx mobile/src/components/social/GoodnightButton.tsx mobile/src/screens/SocialScreen.tsx mobile/src/navigation/RootNavigator.tsx mobile/__tests__/components/CampBanner.test.tsx mobile/__tests__/components/GoodnightButton.test.tsx mobile/__tests__/screens/SocialScreenCampfire.test.tsx
-git commit -m "feat(social-app): the camp banner opens the Campfire and the evening timeline offers goodnight"
+git commit -m "feat(social-app): the camp banner opens the Campfire and the timeline offers goodnight while my window is open"
 ```
 
 ---
@@ -3797,15 +4347,20 @@ git commit -m "feat(social-app): the camp banner opens the Campfire and the even
 - Test: `mobile/__tests__/screens/CampfireScreen.test.tsx`
 
 **Interfaces:**
-- Consumes: `fetchCamp`, `saveCampNote`, `clearCampNote`, `Camp`, `CampMember` (Task 11); `CAMP_NOTE_MAX`, `noteLength`,
-  `campKicker`, `campStatus`, `fireLine`, `personName` (Task 11); `GoodnightButton` (Task 12); `refreshSocial`;
-  routes `BuddyWeek`, `Buddies`.
-- Produces: `CampfireScreen` registered as the `Campfire` route (`headerShown: false`). testIDs: `campfire`,
-  `camp-loading|camp-unavailable|camp-error`, `camp-retry`, `camp-back`, `camp-scene-night|camp-scene-day`,
-  `camp-fire-lit|camp-fire-unlit`, `camp-coach-<id>`, `camp-bubble-<id>`, `camp-bubble-add`, `camp-zz-<id>`, `camp-more`,
-  `camp-note-input`, `camp-note-count`, `camp-note-share`, `camp-note-clear`, `camp-message`, `camp-fire-line`,
-  `camp-fire-segment-<0..4>`, `camp-nights-lit`, `camp-goodnight-*` (GoodnightButton), `camp-goodnight-later`,
-  `camp-message-camp`, `camp-who-<id>`.
+- Consumes: `fetchCamp`, `saveCampNote`, `clearCampNote`, `Camp` (incl. `goodnightOpen`, `goodnightOpensAt`),
+  `CampMember` (Task 11); `CAMP_NOTE_MAX`, `noteLength`, `campKicker`, `campStatus`, `fireLine`, `goodnightOpensLine`,
+  `personName` (Task 11); `GoodnightButton` (Task 12); `refreshSocial`; routes `BuddyWeek`, `Buddies`.
+- Produces: `CampfireScreen` registered as the `Campfire` route (`headerShown: false`). Exported layout constants
+  and helpers (pure, tested): `SCENE_HEIGHT = 340`, `SCENE_HEADER_HEIGHT = 60`, `COACH_W = 76`, `COACH_H = 104`,
+  `FIRE_W = 50`, `FIRE_H = 48`, `interface Box { left: number; top: number; width: number; height: number }`,
+  `seatBoxes(width: number): Box[]` (8 seats), `fireBox(width: number): Box`. testIDs: `campfire`,
+  `camp-loading|camp-unavailable|camp-error`, `camp-retry`, `camp-back`, `camp-scene-night|camp-scene-day`, `camp-moon`
+  (night only), `camp-fire-lit|camp-fire-unlit`, `camp-coach-<id>`, `camp-bubble-<id>` (one truncated line),
+  `camp-bubble-add`, `camp-zz-<id>`, `camp-more`, `camp-note-input`, `camp-note-count`, `camp-note-share`,
+  `camp-note-clear`, `camp-message`, `camp-fire-line`, `camp-fire-segment-<0..4>`, `camp-nights-lit`,
+  `camp-goodnight-*` (GoodnightButton, while `camp.goodnightOpen`), `camp-goodnight-later` (otherwise:
+  "You can say goodnight from {h:mm a}" with my own opening time), `camp-message-camp`, `camp-who-<id>`,
+  `camp-who-status-<id>` (the full status and note, no line limit).
 
 - [ ] **Step 1: Write the failing test**
 
@@ -3818,7 +4373,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ApiError } from '../../src/api/client';
 import { clearCampNote, fetchCamp, saveCampNote, sayGoodnight, undoGoodnight, type Camp, type CampMember } from '../../src/api/social';
 import { refreshSocial } from '../../src/lib/socialStore';
-import { CampfireScreen } from '../../src/screens/CampfireScreen';
+import { CampfireScreen, fireBox, SCENE_HEADER_HEIGHT, SCENE_HEIGHT, seatBoxes, type Box } from '../../src/screens/CampfireScreen';
 
 jest.mock('../../src/api/social', () => ({
   ...jest.requireActual('../../src/api/social'),
@@ -3850,15 +4405,18 @@ const camp = (over: Partial<Camp> = {}): Camp => ({
   fire: { lit: 3, of: 5, segments: 3 },
   nightsLitThisWeek: 2,
   goodnight: null,
+  goodnightOpen: true,
+  goodnightOpensAt: '20:00',
   ...over,
 });
 
 beforeEach(() => jest.clearAllMocks());
 
-it('draws the night camp: bubbles over coaches, my dashed add-note bubble, asleep coaches with z z, the lit fire and the card', async () => {
+it('draws the night camp: moon, bubbles over coaches, my dashed add-note bubble, asleep coaches with z z, the lit fire and the card', async () => {
   (fetchCamp as jest.Mock).mockResolvedValue(camp());
   renderScreen();
   expect(await screen.findByTestId('camp-scene-night')).toBeTruthy();
+  expect(screen.getByTestId('camp-moon')).toBeTruthy();
   expect(screen.getByTestId('camp-fire-lit')).toBeTruthy();
   expect(screen.getByTestId('camp-bubble-sam')).toHaveTextContent('on time tonight');
   expect(screen.getByTestId('camp-bubble-add')).toHaveTextContent('+ Add a note');
@@ -3868,20 +4426,66 @@ it('draws the night camp: bubbles over coaches, my dashed add-note bubble, aslee
   expect(screen.getByTestId('camp-fire-segment-2')).toHaveStyle({ backgroundColor: '#F97316' });
   expect(screen.getByTestId('camp-fire-segment-3')).toHaveStyle({ backgroundColor: '#2E323B' });
   expect(screen.getByTestId('camp-nights-lit')).toHaveTextContent('Nights lit this week: 2');
-  expect(screen.getByTestId('camp-who-sam')).toHaveTextContent(/SAM asleep since \d{1,2}:\d{2} · on time/);
+  // 12-hour times on the Campfire.
+  expect(screen.getByTestId('camp-who-sam')).toHaveTextContent(/SAM asleep since \d{1,2}:\d{2} (AM|PM) · on time/);
   expect(screen.getByTestId('camp-who-ben')).toHaveTextContent('BEN awake · bed soon');
   expect(screen.getByTestId('camp-who-me')).toHaveTextContent('You awake');
   expect(screen.getByTestId('camp-goodnight-say')).toBeTruthy();
   expect(screen.queryByTestId('camp-more')).toBeNull();
 });
 
-it('by day: sky, unlit logs, and goodnight waits for the evening', async () => {
-  (fetchCamp as jest.Mock).mockResolvedValue(camp({ night: false }));
+it("a long note is one truncated line in the bubble and the whole note in Who's here", async () => {
+  const long = 'heading to bed early, big race at dawn!!'; // 40 code points
+  (fetchCamp as jest.Mock).mockResolvedValue(camp({ members: [member('me', { mine: true }), member('ben', { note: long })] }));
+  renderScreen();
+  expect(await screen.findByTestId('camp-bubble-ben')).toHaveProp('numberOfLines', 1);
+  expect(screen.getByTestId('camp-who-status-ben')).toHaveTextContent(`awake · ${long}`);
+  expect(screen.getByTestId('camp-who-status-ben').props.numberOfLines).toBeUndefined();
+});
+
+it('by day: sky, no moon, unlit logs, and goodnight waits for my own opening time', async () => {
+  (fetchCamp as jest.Mock).mockResolvedValue(camp({ night: false, goodnightOpen: false, goodnightOpensAt: '20:00' }));
   renderScreen();
   expect(await screen.findByTestId('camp-scene-day')).toBeTruthy();
+  expect(screen.queryByTestId('camp-moon')).toBeNull();
   expect(screen.getByTestId('camp-fire-unlit')).toBeTruthy();
-  expect(screen.getByTestId('camp-goodnight-later')).toHaveTextContent('You can say goodnight from 7 pm.');
+  expect(screen.getByTestId('camp-goodnight-later')).toHaveTextContent('You can say goodnight from 8:00 PM');
   expect(screen.queryByTestId('camp-goodnight-say')).toBeNull();
+});
+
+it('an early goal opens goodnight before the night scene: 17:30 is still day, yet I can say it', async () => {
+  (fetchCamp as jest.Mock).mockResolvedValue(camp({ night: false, goodnightOpen: true, goodnightOpensAt: '17:00' }));
+  renderScreen();
+  expect(await screen.findByTestId('camp-scene-day')).toBeTruthy();
+  expect(screen.getByTestId('camp-goodnight-say')).toBeTruthy();
+  expect(screen.queryByTestId('camp-goodnight-later')).toBeNull();
+});
+
+it('at 19:30 with no goal the scene is night but goodnight waits for 8:00 PM', async () => {
+  (fetchCamp as jest.Mock).mockResolvedValue(camp({ night: true, goodnightOpen: false, goodnightOpensAt: '20:00' }));
+  renderScreen();
+  expect(await screen.findByTestId('camp-scene-night')).toBeTruthy();
+  expect(screen.getByTestId('camp-goodnight-later')).toHaveTextContent('You can say goodnight from 8:00 PM');
+  expect(screen.queryByTestId('camp-goodnight-say')).toBeNull();
+});
+
+it('seats eight coaches around the fire with no overlap inside the 340-px scene, on every phone width', () => {
+  const overlaps = (a: Box, b: Box) =>
+    a.left < b.left + b.width && b.left < a.left + a.width && a.top < b.top + b.height && b.top < a.top + a.height;
+  expect(SCENE_HEIGHT).toBe(340);
+  for (const width of [375, 390, 393, 430]) {
+    const seats = seatBoxes(width);
+    const fire = fireBox(width);
+    expect(seats).toHaveLength(8);
+    seats.forEach((a, i) => {
+      expect(a.left).toBeGreaterThanOrEqual(0);
+      expect(a.left + a.width).toBeLessThanOrEqual(width);
+      expect(a.top).toBeGreaterThanOrEqual(SCENE_HEADER_HEIGHT); // below the back button and title
+      expect(a.top + a.height).toBeLessThanOrEqual(SCENE_HEIGHT);
+      expect(overlaps(a, fire)).toBe(false);
+      for (const b of seats.slice(i + 1)) expect(overlaps(a, b)).toBe(false);
+    });
+  }
 });
 
 it('shares a note with a live count, refuses one over 40, and clears mine', async () => {
@@ -3972,11 +4576,13 @@ Expected: FAIL — "Cannot find module '../../src/screens/CampfireScreen'".
 ```tsx
 // The Campfire page (spec 2026-10-07 social §6, design V5Campfire), pushed from the camp banner. The scene: me and up
 // to 7 buddies around the fire (the server's order: me, then latest activity) and "+N" for the rest; night (stars, a
-// lit fire once anyone is in bed on time) or day (sky, unlit logs) by my clock; asleep coaches rest with "z z"; a
-// camp note shows in a bubble over its coach (mine: a dashed "+ Add a note" when I have none). Below: my note
-// composer (live count, Share, Clear note), the fire strength card, Say goodnight (night only) / Message camp, and
-// "Who's here". A buddy's coach opens their week and "Message camp" opens Buddies until chats arrive in S3. An older
-// server (bare 404) says the camp isn't open yet. Camp notes are buddies' free text: shown here only, never logged.
+// moon, a lit fire once anyone is in bed on time) or day (sky, unlit logs) by my clock; asleep coaches rest with
+// "z z"; a camp note shows in a one-line bubble over its coach (mine: a dashed "+ Add a note" when I have none).
+// Below: my note composer (live count, Share, Clear note), the fire strength card, Say goodnight (while my own window
+// is open: from min(20:00, my goal − 60 min) to 05:59; otherwise "You can say goodnight from 8:00 PM") / Message
+// camp, and "Who's here" with each whole note. Every time here is 12-hour. A buddy's coach opens their week and
+// "Message camp" opens Buddies until chats arrive in S3. An older server (bare 404) says the camp isn't open yet.
+// Camp notes are buddies' free text: shown here only, never logged.
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { ScrollView, TextInput, useWindowDimensions, View } from 'react-native';
@@ -3997,29 +4603,71 @@ import { SectionLabel } from '../components/ui/section-label';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { buddyErrorMessage } from '../lib/buddyCopy';
-import { CAMP_NOTE_MAX, campKicker, campStatus, fireLine, noteLength, personName } from '../lib/socialCopy';
+import {
+  CAMP_NOTE_MAX, campKicker, campStatus, fireLine, goodnightOpensLine, noteLength, personName,
+} from '../lib/socialCopy';
 import { refreshSocial } from '../lib/socialStore';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type State = { status: 'loading' } | { status: 'ready'; camp: Camp } | { status: 'unavailable' } | { status: 'error' };
 
-const SCENE_HEIGHT = 340;
+export const SCENE_HEIGHT = 340;
+/** The back button and the kicker + title (10 px + a 32-px display line) sit in this band at the scene's top. */
+export const SCENE_HEADER_HEIGHT = 60;
+/** One coach's slot: bubble (≤ 24) + "z z" (12) + coach (44) + name (16) + three 2-px gaps = 102, rounded up. */
+export const COACH_W = 76;
+export const COACH_H = 104;
+/** The fire: four 10-px flame rows over 8-px logs, as wide as the logs. */
+export const FIRE_W = 50;
+export const FIRE_H = 48;
 const NIGHT_SKY = '#0F1230';
 const NIGHT_GROUND = '#161B3D';
 const DAY_SKY = '#8EC5EE';
 const DAY_GROUND = '#5B7F3A';
+const MOON = '#FDE68A';
 const SEGMENT_ON = '#F97316';
 const SEGMENT_OFF = '#2E323B';
-/** Seats around the fire: [0] is mine, then up to 7 buddies. x = share of the width, y = px from the scene's top. */
+
+export interface Box { left: number; top: number; width: number; height: number }
+
+/**
+ * Seats around the fire: [0] is mine, then up to 7 buddies. `dx` = the slot's centre from the scene's centre (px),
+ * `top` = px from the scene's top. Three bands, centred so the layout is the same on every phone:
+ *   back  (top 64–168):  dx ±50        → x spans c−88…c−12 and c+12…c+88
+ *   sides (top 128–232): dx ±130       → x spans c−168…c−92 and c+92…c+168 (clear of the back pair by 4 px)
+ *   front (top 236–340): dx ±50, ±130  → the same four columns, 4 px below the side seats
+ * The fire sits at c−25…c+25, top 182–230: below the back pair (168), above the front row (236), and 67 px inside
+ * the side seats. Width needed: 2 × 168 = 336 ≤ 375, the narrowest supported phone. The test checks every pair.
+ */
 const SEATS = [
-  { x: 0.06, y: 196 }, { x: 0.2, y: 250 }, { x: 0.56, y: 250 }, { x: 0.72, y: 180 },
-  { x: 0.38, y: 132 }, { x: 0.02, y: 110 }, { x: 0.76, y: 96 }, { x: 0.42, y: 52 },
+  { dx: -50, top: 236 }, { dx: 50, top: 236 }, { dx: -130, top: 128 }, { dx: 130, top: 128 },
+  { dx: -50, top: 64 }, { dx: 50, top: 64 }, { dx: -130, top: 236 }, { dx: 130, top: 236 },
 ] as const;
+const FIRE_TOP = 182;
+
+export function seatBoxes(width: number): Box[] {
+  return SEATS.map((s) => ({ left: width / 2 + s.dx - COACH_W / 2, top: s.top, width: COACH_W, height: COACH_H }));
+}
+
+export function fireBox(width: number): Box {
+  return { left: width / 2 - FIRE_W / 2, top: FIRE_TOP, width: FIRE_W, height: FIRE_H };
+}
+
 const STARS = [[0.08, 30], [0.28, 18], [0.5, 40], [0.69, 14], [0.9, 70], [0.16, 80], [0.6, 76], [0.36, 100], [0.06, 130], [0.84, 124]] as const;
+
+/** A pixel crescent: a pale disc with a sky-coloured disc over its upper right (per the canvas). */
+function Moon() {
+  return (
+    <View testID="camp-moon" style={{ position: 'absolute', top: 14, right: 20, width: 22, height: 22 }}>
+      <View style={{ position: 'absolute', width: 22, height: 22, borderRadius: 11, backgroundColor: MOON }} />
+      <View style={{ position: 'absolute', left: 7, top: -3, width: 20, height: 20, borderRadius: 10, backgroundColor: NIGHT_SKY }} />
+    </View>
+  );
+}
 
 function Fire({ lit }: { lit: boolean }) {
   return (
-    <View testID={lit ? 'camp-fire-lit' : 'camp-fire-unlit'} style={{ alignItems: 'center' }}>
+    <View testID={lit ? 'camp-fire-lit' : 'camp-fire-unlit'} style={{ width: FIRE_W, height: FIRE_H, alignItems: 'center', justifyContent: 'flex-end' }}>
       {lit ? (
         <>
           <View style={{ width: 10, height: 10, backgroundColor: '#FEF3C7' }} />
@@ -4038,13 +4686,16 @@ function Coach({ member, onPress }: { member: CampMember; onPress: () => void })
   const name = personName(member.person, member.mine);
   return (
     <PressableScale testID={`camp-coach-${id}`} accessibilityRole="button" accessibilityLabel={member.mine ? 'Your camp note' : `${name}'s week`}
-      onPress={onPress} style={{ width: 76, alignItems: 'center', gap: 2 }}>
+      onPress={onPress} style={{ width: COACH_W, height: COACH_H, alignItems: 'center', justifyContent: 'flex-end', gap: 2 }}>
       {member.note ? (
-        <Text testID={`camp-bubble-${id}`} numberOfLines={1} className="max-w-[132px] rounded-[10px] bg-white px-2 py-1 text-[11px] font-semibold text-black">
+        // One truncated line, no wider than the seat, so bubbles never cross; "Who's here" shows the whole note.
+        <Text testID={`camp-bubble-${id}`} numberOfLines={1} style={{ maxWidth: COACH_W }}
+          className="rounded-[10px] bg-white px-2 py-1 text-[11px] font-semibold text-black">
           {member.note}
         </Text>
       ) : member.mine ? (
-        <Text testID="camp-bubble-add" className="rounded-[10px] border border-dashed border-[#6366F1] px-2 py-1 text-[11px] font-semibold text-[#C7D2FE]">
+        <Text testID="camp-bubble-add" numberOfLines={1} style={{ maxWidth: COACH_W }}
+          className="rounded-[10px] border border-dashed border-[#6366F1] px-2 py-1 text-[11px] font-semibold text-[#C7D2FE]">
           + Add a note
         </Text>
       ) : null}
@@ -4141,7 +4792,9 @@ export function CampfireScreen() {
 
   const { camp } = state;
   const mine = camp.members.find((m) => m.mine) ?? null;
-  const seated = camp.members.slice(0, SEATS.length);
+  const seats = seatBoxes(width);
+  const fire = fireBox(width);
+  const seated = camp.members.slice(0, seats.length);
   const more = camp.members.length - seated.length;
   const length = noteLength(draft);
   const canShare = !busy && length > 0 && length <= CAMP_NOTE_MAX;
@@ -4154,24 +4807,26 @@ export function CampfireScreen() {
           {camp.night
             ? STARS.map(([x, y], i) => <View key={i} style={{ position: 'absolute', left: x * width, top: y, width: 3, height: 3, backgroundColor: '#C7D2FE' }} />)
             : null}
+          {camp.night ? <Moon /> : null}
           <View style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 110, backgroundColor: camp.night ? NIGHT_GROUND : DAY_GROUND }} />
-          <View className="flex-row items-center gap-3 px-4 pt-3">
+          <View className="flex-row items-center gap-3 px-4" style={{ height: SCENE_HEADER_HEIGHT }}>
             <BackButton onPress={() => navigation.goBack()} />
             <View>
               <Text className="text-[10px] text-[#A5B4FC]" style={{ fontFamily: pixelFont() }}>{campKicker(new Date())}</Text>
               <Text className="font-display text-display text-white">The camp</Text>
             </View>
           </View>
-          <View style={{ position: 'absolute', left: width / 2 - 25, top: 256 }}>
+          <View style={{ position: 'absolute', left: fire.left, top: fire.top }}>
             <Fire lit={camp.night && camp.fire.segments > 0} />
           </View>
           {seated.map((m, i) => (
-            <View key={m.person.id} style={{ position: 'absolute', left: SEATS[i]!.x * width, top: SEATS[i]!.y }}>
+            <View key={m.person.id} style={{ position: 'absolute', left: seats[i]!.left, top: seats[i]!.top }}>
               <Coach member={m} onPress={() => (m.mine ? input.current?.focus() : navigation.navigate('BuddyWeek', { buddyId: m.person.id }))} />
             </View>
           ))}
           {more > 0 ? (
-            <Text testID="camp-more" style={{ position: 'absolute', right: 16, bottom: 12 }} className="rounded-full bg-black/40 px-3 py-1 text-xs font-semibold text-white">
+            // Under the moon, right of the back-right seat and above the side seat: clear of every coach.
+            <Text testID="camp-more" style={{ position: 'absolute', right: 16, top: 42 }} className="rounded-full bg-black/40 px-3 py-1 text-xs font-semibold text-white">
               {`+${more}`}
             </Text>
           ) : null}
@@ -4216,10 +4871,11 @@ export function CampfireScreen() {
 
           <View className="flex-row items-start gap-2">
             <View className="flex-1">
-              {camp.night ? (
+              {/* My own window (owner ruling Q1), not the scene's night: an 18:00 goal opens it at 17:00. */}
+              {camp.goodnightOpen ? (
                 <GoodnightButton testID="camp-goodnight" goodnight={camp.goodnight} onChanged={changed} />
               ) : (
-                <Text testID="camp-goodnight-later" className="text-sm text-muted-foreground">You can say goodnight from 7 pm.</Text>
+                <Text testID="camp-goodnight-later" className="text-sm text-muted-foreground">{goodnightOpensLine(camp.goodnightOpensAt)}</Text>
               )}
             </View>
             <Button testID="camp-message-camp" variant="secondary" onPress={() => navigation.navigate('Buddies')}>Message camp</Button>
@@ -4229,9 +4885,11 @@ export function CampfireScreen() {
           {camp.members.map((m) => (
             <View key={m.person.id} testID={`camp-who-${m.person.id}`} className="flex-row items-center gap-3">
               <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: m.asleep ? '#A78BFA' : '#86EFAC' }} />
+              {/* No line limit: "Who's here" is where a whole note is read (the bubble is one truncated line). */}
               <Text className="flex-1 text-sm">
                 <Text className="font-semibold">{personName(m.person, m.mine)}</Text>
-                <Text className="text-muted-foreground">{` ${campStatus(m)}`}</Text>
+                {' '}
+                <Text testID={`camp-who-status-${m.person.id}`} className="text-muted-foreground">{campStatus(m)}</Text>
               </Text>
             </View>
           ))}
@@ -4262,7 +4920,7 @@ Run: `PATH=/Users/tushar/.nvm/versions/node/v24.21.0/bin:$PATH node node_modules
 
 ```bash
 git add mobile/src/screens/CampfireScreen.tsx mobile/src/navigation/RootNavigator.tsx mobile/__tests__/screens/CampfireScreen.test.tsx
-git commit -m "feat(social-app): the Campfire page: scene, note bubbles and composer, fire strength, goodnight, who's here"
+git commit -m "feat(social-app): the Campfire page: scene with moon and fixed seats, note bubbles and composer, fire strength, goodnight, who's here"
 ```
 
 ---
@@ -4727,8 +5385,10 @@ Run: `PATH=/Users/tushar/.nvm/versions/node/v24.21.0/bin:$PATH node node_modules
 
 - [ ] **Step 4: Privacy audit**
 
-- `grep -rn "console\." backend/src/social backend/scripts/seedSocial.ts` — every hit is `JSON.stringify({ event, …ids|counts, error: err.name })`;
-  none passes a note, a `text` field or a request body.
+- `grep -rn "console\.\|log(" backend/src backend/scripts` — read every hit in or
+  reaching `src/social`, `src/buddies`, `src/sync/worker.ts`, `src/users/deletion.ts` and `scripts/seedSocial.ts`:
+  each is `JSON.stringify({ event, …ids|counts, error: err.name })` or an id-only message; none passes a note, a
+  `text` field or a request body (the whole backend, not only `src/social`).
 - `grep -n "social.sweep" backend/src/sync/worker.ts` — the two lines log `{ event, notes, highlights }` or `{ event, error }` only.
 - `grep -n "text: true" backend/src/social/*.ts` — only `camp.ts` (the Campfire view) selects note text.
 - `grep -rln "social/" backend/src/coach backend/src/recap` — no output (nothing social reaches the coach; the recap
@@ -4749,7 +5409,9 @@ for the demo pair, and walk: Social tab → camp banner ("N awake · N asleep" a
 with "z z" and the "bed soon, night all" bubble, my dashed "+ Add a note") → share a note (count, 40 limit) → clear it →
 Say goodnight → Undo → Say goodnight again → back to Social (banner counts, the timeline's "said goodnight" row and
 the Today goodnight button) → my story ring (goodnight frame, no replies) → Highlights (camp items appear only once a
-week with goodnights is final). By day: the sky, unlit logs and "You can say goodnight from 7 pm."
+week with goodnights is final). By day: the sky, unlit logs and "You can say goodnight from 8:00 PM" (or an hour
+before the demo account's bedtime goal when that is earlier than 21:00). At night: the moon, and eight seats with no
+overlap when the circle is that big.
 
 ---
 
@@ -4758,27 +5420,48 @@ week with goodnights is final). By day: the sky, unlit logs and "You can say goo
 - Spec coverage (S2, §12 "goodnight, scene, fire strength, camp notes, Who's here"): goodnight §6.1 → Tasks 2, 4, 12,
   13; scene + day/night + asleep/awake §6.1 → Tasks 6, 13; fire strength + nights lit §6.2 → Tasks 2, 6, 13; camp
   notes §6.3 (sanitiser, 1–40, one per user, bubble, composer with count/Share/Clear, expiry at 06:00 author-zone or
-  check-in, sweep, 20/h, no push) → Tasks 1, 5, 6, 10, 13; "Who's here" + Say goodnight / Message camp §6.4 → Tasks
-  6, 13; API §6.4 → Tasks 4, 5, 6; banner night copy §4 item 1 → Tasks 8, 12; `goodnight` story frames §4.2 → Tasks
-  7, 14; timeline goodnights + camp notes "(night only)", no text §5 → Tasks 7, 11; highlights `campfire`, `top_story`
-  on-time goodnights, `also` joined + first badge §7 → Tasks 9, 11; privacy §9 (note text never logged, never to the
-  coach, unpair/block hide, deletion cascades) → Global Constraints, Tasks 1, 5, 6, 7, 8, 10, 17; testing §13
-  (goodnight onTime with/without goal, grace, midnight; fire segments; camp-note sanitising, length, expiry, check-in
-  clears; camp members and fire; share/clear/expiry/hidden after unpair/block; rate limits fail closed; deletion
-  cascades; mobile Campfire day/night, asleep/awake, bubbles, composer, goodnight undo) → Tasks 2, 4, 5, 6, 10, 12, 13.
+  check-in, sweep, 20 shares/h, no push) → Tasks 1, 5, 6, 10, 13; "Who's here" + Say goodnight / Message camp §6.4 →
+  Tasks 6, 13; API §6.4 → Tasks 4, 5, 6; banner night copy §4 item 1 → Tasks 8, 12; `goodnight` story frames §4.2 →
+  Tasks 7, 14; timeline goodnights + camp notes "(night only)", no text §5 → Tasks 7, 11; highlights `campfire`,
+  `top_story` on-time goodnights, `also` joined + first badge §7 → Tasks 9, 11; privacy §9 (note text never logged,
+  never to the coach, unpair/block hide, deletion cascades) → Global Constraints, Tasks 1, 5, 6, 7, 8, 10, 17; testing
+  §13 (goodnight onTime with/without goal, grace, midnight; fire segments; camp-note sanitising, length, expiry,
+  check-in clears; camp members and fire; share/clear/expiry/hidden after unpair/block; share rate limit fails closed,
+  clear never limited; deletion cascades; mobile Campfire day/night, asleep/awake, bubbles, composer, goodnight undo)
+  → Tasks 2, 4, 5, 6, 10, 12, 13.
+- Owner decisions of plan review 1 (binding), where they landed:
+  - Q1 goodnight window `min(20:00, goal − 60 min)`–05:59, scene still 19:00, copy "You can say goodnight from
+    {h:mm a}", the timeline button on the window, `goodnight_closed` outside it → Global Constraints, Review Focus 4,
+    Task 2 (`goodnightOpensAt`, `isGoodnightOpen`), Task 3 (`Circle.viewerBedtimeGoal`), Task 4 (route + tests:
+    18:00 goal opens 17:00 and 18:05 is on time; no goal 19:30 closed, 20:00 open; 23:00 goal opens 20:00), Task 6
+    (`goodnightOpen` / `goodnightOpensAt` on `GET /me/camp`), Task 8 (`camp.goodnightOpen` on `/me/social`), Tasks 11–13.
+  - Q2 frozen fire nights → Task 2 (`campOnEvening`, `countLitNights` per night), Task 3 (`Circle.pairedAt`), Task 6
+    (nights lit; pairing tonight never unlights Monday), Task 9 (campfire highlight; a buddy paired midweek counts from
+    that evening).
+  - Q3 notes unchanged; Q4 the whole note in "Who's here" → Task 13.
 - S1 deferrals: (a) one preloaded circle, ~26 → ≤ 17 queries with a counting test (S1's parts are 15 of them; the
   goodnight read is shared and the camp-note read is the timeline's) → Tasks 3, 7; (b) highlight retention on the
   hourly recap-sweep tick, deleted ids purged on account deletion and filtered at read time → Task 10; (c) foreground
   buddy push → Task 15; (d) my story while the store isn't ready, and the empty-story copy → Task 14 (both cheap).
+- S1 rulings S2 amends, each by the owner: an empty highlights week is cached once it has been final for 24 h (Task 3,
+  which edits one S1 test's clock — the only S1 test edit besides the shape lines of `home.test.ts`, Task 8, and the
+  sweep mock in `tests/recap/worker.test.ts`, Task 10).
 - Not in S2 (spec §11/§12): group chat ("Message camp" opens Buddies), DMs (a coach opens the buddy's week), camp-note
-  reports (S3 `POST /me/reports`), the camp badge, live sleep detection.
-- Type consistency checked across tasks: `Circle` / `GoodnightRow` / `TodayCheckIn` (Task 3) are what Tasks 4–9 use;
-  `GoodnightDTO` (Task 4) = mobile `Goodnight` (Task 11); `CampDTO` / `CampMemberDTO` (Task 6) = mobile `Camp` /
-  `CampMember`; `CampNoteDTO` = `CampNote`; the backend timeline / frame / highlight unions (Tasks 7, 9) = the mobile
-  unions (Task 11); `SocialHomeDTO.me.goodnight` and `camp.night|awake|asleep` (Task 8) are optional on mobile for S1
+  reports (S3 `POST /me/reports`; URLs and @handles are allowed in S2 notes), the camp badge, live sleep detection.
+- Type consistency checked across tasks: `Circle` (with `pairedAt`, `viewerBedtimeGoal`) / `GoodnightRow` /
+  `TodayCheckIn` (Task 3) are what Tasks 4–9 use; `countLitNights(onTime, campOn)` (Task 2) is called the same way in
+  Tasks 6 and 9; `buildHighlightCandidates(circle, weekStart)` (Task 9) is called by `weeklyHighlightsFor` (Task 3, its
+  call line changed in Task 9); `GoodnightDTO` (Task 4) = mobile `Goodnight` (Task 11); `CampDTO` / `CampMemberDTO`
+  (Task 6, with `goodnightOpen` / `goodnightOpensAt`) = mobile `Camp` / `CampMember`; `CampNoteDTO` = `CampNote`; the
+  backend timeline / frame / highlight unions (Tasks 7, 9) = the mobile unions (Task 11);
+  `SocialHomeDTO.me.goodnight` and `camp.night|awake|asleep|goodnightOpen` (Task 8) are optional on mobile for S1
   servers; testIDs used by the Task 12–14 tests are the ones the components render.
-- Review Focus lines each have a test: zones and midnight (Tasks 2, 4, 6, 7), unpair/block/deletion (Tasks 6, 7, 10),
-  odd note text and no-logging (Tasks 5, 7, 8), goodnight edges (Tasks 4, 6), old/new pairs (Tasks 11, 12, 13).
+- Review Focus lines each have a test: zones and midnight, incl. Auckland's goodnight seen from Los Angeles (Tasks 2,
+  4, 6, 7), unpair/block/deletion and frozen nights (Tasks 6, 7, 9, 10), odd note text and no-logging (Tasks 5, 7, 8),
+  goodnight edges incl. the goal-based window and undo after 06:00 (Tasks 2, 4, 6), old/new pairs (Tasks 11, 12, 13).
 - Known costs, accepted: `/me/social` reads the circle's last 48 h of goodnights on every load (small rows, indexed
-  by `at`); weeks cached before S2 keep S1 items until the next week; the scene's seat positions are a fixed layout
-  to tune at the walkthrough.
+  by `at`); weeks cached before S2 keep S1 items until the next week; a `first_badge` (or a badge top story, as in S1)
+  for a badge backfilled after its week was cached misses that week; a quiet week is rebuilt on every read for its
+  first 24 h as final; the scene's seats are a fixed layout (tested free of overlap from 375 to 430 px wide; it needs
+  336 px, so a narrower screen would clip the outer seats) whose bubbles are one line as wide as a seat; tonight's fire counts the live
+  camp, so a buddy paired after 19:00 grows tonight's fire but not tonight's "lit night".
