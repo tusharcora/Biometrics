@@ -1,13 +1,15 @@
 // Stories (spec 2026-10-07 social §4.2). A story is the AUTHOR's local today: their check-in (locked for a viewer
-// who hasn't checked in today), badges earned today (only while they share streaks) and recaps they shared today
-// (the headline line they previewed, period and coach — never the stats JSON). Built at read time with one query
-// per source for the whole circle. Rings: unseen first, then newest (plan ruling).
+// who hasn't checked in today), badges earned today (only while they share streaks; the top new level per family)
+// and recaps they shared today (the headline line snapshotted when they shared it, period and coach — never the
+// stats JSON, never the live Recap.line). Built at read time with one query per source for the whole circle.
+// Rings: unseen first, then newest (plan ruling).
 
 import type { AchievementFamily, CheckInMood } from '@prisma/client';
 import { civilDateToUtcMidnight, localCivilDateOrUtc } from '../biometrics/civilDate';
 import { prisma } from '../db/client';
 import { BuddyError, UUID_RE } from '../buddies/errors';
 import type { PersonDTO } from '../buddies/people';
+import { shiftDate } from '../scoring/dates';
 import { buddyIdsOf, membersById, type Member } from './circle';
 
 export type StoryFrameDTO =
@@ -23,24 +25,30 @@ const LOOKBACK_MS = 48 * 60 * 60 * 1000;
 const iso = (d: Date) => d.toISOString();
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
 
+/** Each author's local today, and the distinct dates among them (for `localDate in` filters). */
+function authorTodays(authors: Member[], now: Date): { todayOf: Map<string, string>; dates: Date[] } {
+  const todayOf = new Map(authors.map((a) => [a.person.id, localCivilDateOrUtc(now, a.timezone)]));
+  return { todayOf, dates: [...new Set(todayOf.values())].map(civilDateToUtcMidnight) };
+}
+
 /** Each author's frames for their own local today. `unlocked` = the viewer may see check-in moods. */
 async function loadFrames(authors: Member[], now: Date, unlocked: (authorId: string) => boolean): Promise<Map<string, StoryFrameDTO[]>> {
   const ids = authors.map((a) => a.person.id);
-  const todayOf = new Map(authors.map((a) => [a.person.id, localCivilDateOrUtc(now, a.timezone)]));
+  const { todayOf, dates } = authorTodays(authors, now);
   const since = new Date(now.getTime() - LOOKBACK_MS);
   const streakIds = authors.filter((a) => a.shares.streaks).map((a) => a.person.id);
   const [checkIns, badges, shares] = await Promise.all([
     prisma.checkIn.findMany({
-      where: { authorId: { in: ids }, localDate: { in: [...new Set(todayOf.values())].map(civilDateToUtcMidnight) } },
+      where: { authorId: { in: ids }, localDate: { in: dates } },
       select: { authorId: true, localDate: true, mood: true, createdAt: true },
     }),
     prisma.achievement.findMany({
       where: { userId: { in: streakIds }, createdAt: { gte: since } },
-      select: { userId: true, family: true, level: true, createdAt: true },
+      select: { userId: true, family: true, level: true, earnedOn: true, createdAt: true },
     }),
     prisma.recapShare.findMany({
       where: { sharerId: { in: ids }, createdAt: { gte: since } },
-      select: { sharerId: true, localDate: true, createdAt: true, recap: { select: { id: true, kind: true, periodStart: true, periodEnd: true, line: true } } },
+      select: { sharerId: true, localDate: true, line: true, createdAt: true, recap: { select: { id: true, kind: true, periodStart: true, periodEnd: true } } },
     }),
   ]);
   const byAuthor = new Map<string, Array<StoryFrameDTO>>(ids.map((id) => [id, []]));
@@ -52,16 +60,26 @@ async function loadFrames(authors: Member[], now: Date, unlocked: (authorId: str
       ? { kind: 'checkin', at: iso(c.createdAt), locked: false, mood: c.mood }
       : { kind: 'checkin', at: iso(c.createdAt), locked: true });
   }
+  // A badge is today's news when it was awarded in the author's today for a run that ended today or yesterday (a
+  // backfill awarding an old run is not); a jump of several levels at once shows only the top one.
+  const topBadge = new Map<string, (typeof badges)[number]>();
   for (const b of badges) {
-    if (localCivilDateOrUtc(b.createdAt, tzOf.get(b.userId)!) !== todayOf.get(b.userId)) continue;
+    const today = todayOf.get(b.userId)!;
+    if (localCivilDateOrUtc(b.createdAt, tzOf.get(b.userId)!) !== today) continue;
+    if (isoDate(b.earnedOn) !== today && isoDate(b.earnedOn) !== shiftDate(today, -1)) continue;
+    const key = `${b.userId}:${b.family}`;
+    if ((topBadge.get(key)?.level ?? 0) < b.level) topBadge.set(key, b);
+  }
+  for (const b of topBadge.values()) {
     byAuthor.get(b.userId)!.push({ kind: 'badge', at: iso(b.createdAt), family: b.family, level: b.level });
   }
   for (const s of shares) {
-    // shareRecap refuses a recap without a line; skip one anyway (Recap.line is nullable) rather than send null.
-    if (isoDate(s.localDate) !== todayOf.get(s.sharerId) || !s.recap.line) continue;
+    // The line snapshotted at share time, never the live Recap.line (deletion or a rebuild may rewrite that).
+    // shareRecap refuses an empty line; skip one anyway (rows from before the snapshot column default to '').
+    if (isoDate(s.localDate) !== todayOf.get(s.sharerId) || !s.line) continue;
     byAuthor.get(s.sharerId)!.push({
       kind: 'recap', at: iso(s.createdAt), recapId: s.recap.id, recapKind: s.recap.kind,
-      periodStart: isoDate(s.recap.periodStart), periodEnd: isoDate(s.recap.periodEnd), line: s.recap.line, coachId: coachOf.get(s.sharerId)!,
+      periodStart: isoDate(s.recap.periodStart), periodEnd: isoDate(s.recap.periodEnd), line: s.line, coachId: coachOf.get(s.sharerId)!,
     });
   }
   for (const frames of byAuthor.values()) frames.sort((a, b) => a.at.localeCompare(b.at));
@@ -82,14 +100,17 @@ const MAX_CAMP_FACES = 2;
 export async function loadStoryRings(viewerId: string, now: Date): Promise<{ rings: StoryRingDTO[]; checkedInBuddies: number; viewerCheckedIn: boolean; checkedInCoachIds: string[] }> {
   const buddyIds = await buddyIdsOf(viewerId);
   const members = await membersById([viewerId, ...buddyIds]);
-  const viewer = members.get(viewerId)!;
+  const viewer = members.get(viewerId);
+  if (!viewer) throw new BuddyError('not_buddies');
   const viewerCheckedIn = await viewerCheckedInToday(viewer, now);
   const buddies = buddyIds.map((id) => members.get(id)).filter((m): m is Member => m !== undefined);
   const frames = await loadFrames(buddies, now, () => viewerCheckedIn);
-  const seen = await prisma.storySeen.findMany({ where: { viewerId, authorId: { in: buddyIds } }, select: { authorId: true, localDate: true } });
-  const seenToday = new Set(seen
-    .filter((s) => isoDate(s.localDate) === localCivilDateOrUtc(now, members.get(s.authorId)?.timezone ?? 'UTC'))
-    .map((s) => s.authorId));
+  const { todayOf, dates } = authorTodays(buddies, now);
+  const seen = await prisma.storySeen.findMany({
+    where: { viewerId, authorId: { in: buddies.map((b) => b.person.id) }, localDate: { in: dates } },
+    select: { authorId: true, localDate: true },
+  });
+  const seenToday = new Set(seen.filter((s) => isoDate(s.localDate) === todayOf.get(s.authorId)).map((s) => s.authorId));
   const rings: StoryRingDTO[] = [];
   const checkIns: Array<{ coachId: string; at: string }> = [];
   for (const b of buddies) {

@@ -948,6 +948,8 @@ model RecapShare {
   sharer    User     @relation("RecapShareSharer", fields: [sharerId], references: [id], onDelete: Cascade)
   recapId   String
   recap     Recap    @relation(fields: [recapId], references: [id], onDelete: Cascade)
+  /// The recap's headline as the sharer previewed it, trimmed. Frames read this, never the live Recap.line.
+  line      String   @default("")
   localDate DateTime @db.Date
   createdAt DateTime @default(now())
 

@@ -11,10 +11,13 @@ import { todayFor } from './checkins';
 export async function shareRecap(userId: string, recapId: unknown, now: Date): Promise<{ shared: true }> {
   if (typeof recapId !== 'string' || !UUID_RE.test(recapId)) throw new BuddyError('recap_not_found');
   const recap = await prisma.recap.findFirst({ where: { id: recapId, userId, status: 'BUILT' }, select: { id: true, line: true } });
-  if (!recap || !recap.line) throw new BuddyError('recap_not_found');
+  const line = recap?.line?.trim();
+  if (!recap || !line) throw new BuddyError('recap_not_found');
   const { today } = await todayFor(userId, now);
+  // The line is snapshotted: data deletion or a late rebuild may rewrite Recap.line (possibly with numbers) after
+  // the share, and buddies must only ever see what was previewed. A re-share keeps the first snapshot.
   await prisma.recapShare.createMany({
-    data: [{ sharerId: userId, recapId, localDate: civilDateToUtcMidnight(today), createdAt: now }],
+    data: [{ sharerId: userId, recapId, line, localDate: civilDateToUtcMidnight(today), createdAt: now }],
     skipDuplicates: true,
   });
   return { shared: true };

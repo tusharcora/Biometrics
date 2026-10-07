@@ -30,6 +30,7 @@ it('shares only your own built recap with a line, idempotently, reports it, and 
   const theirs = await recap(other.id);
   const skipped = await recap(me.id, { status: 'SKIPPED', start: '2026-09-21' });
   const noLine = await recap(me.id, { start: '2026-09-14', line: null });
+  const blank = await recap(me.id, { start: '2026-09-07', line: '   ' });
   const agent = await api();
   const headers = await authHeaderFor(me.id);
   const before = await agent.get(`/me/social/recap-shares/${mine.id}`).set(headers);
@@ -37,9 +38,14 @@ it('shares only your own built recap with a line, idempotently, reports it, and 
   expect((await agent.post('/me/social/recap-shares').set(headers).send({ recapId: mine.id })).body).toEqual({ shared: true });
   expect((await agent.post('/me/social/recap-shares').set(headers).send({ recapId: mine.id })).body).toEqual({ shared: true });
   expect(await prisma.recapShare.count({ where: { sharerId: me.id } })).toBe(1);
+  // The line is snapshotted at share time (a later rewrite never reaches buddies); a re-share keeps the first one.
+  await prisma.recap.update({ where: { id: mine.id }, data: { line: 'Rewritten later' } });
+  expect((await agent.post('/me/social/recap-shares').set(headers).send({ recapId: mine.id })).body).toEqual({ shared: true });
+  expect((await prisma.recapShare.findFirstOrThrow({ where: { sharerId: me.id }, select: { line: true } })).line)
+    .toBe('You slept 7h 12m a night on average.');
   expect((await agent.get(`/me/social/recap-shares/${mine.id}`).set(headers)).body).toEqual({ shared: true });
   // The share is consent for the line exactly as previewed; a recap without a line has nothing to share.
-  for (const id of [theirs.id, skipped.id, noLine.id, 'not-a-uuid']) {
+  for (const id of [theirs.id, skipped.id, noLine.id, blank.id, 'not-a-uuid']) {
     const res = await agent.post('/me/social/recap-shares').set(headers).send({ recapId: id });
     expect([res.status, res.body]).toEqual([404, { error: 'recap_not_found' }]);
   }
