@@ -19,8 +19,10 @@
 //
 // Structurally, nothing here can carry other text: sendGenericPush() takes a
 // kind (a closed union), not a string, and builds the payload by looking that
-// kind up. There is no parameter through which model output or a health value
-// could be interpolated. Any future proactive nudge (threshold-triggered or
+// kind up. Buddy payloads are built only by buddyPushPayload(), which renders the
+// kind's template from typed slots (a name that passes isPushName, a sticker or
+// badge label from a closed table) and attaches id-only data. There is no
+// parameter through which model output or a health value could be interpolated. Any future proactive nudge (threshold-triggered or
 // daily check-in) must go through this same function, by way of
 // sendCoachPush() (coachPush.ts), which also checks the coach flag and consent.
 // The recap push (sendRecapPush below) builds its payload the same way.
@@ -32,7 +34,7 @@
 
 import { prisma } from '../db/client';
 import type { AchievementFamily, StickerKind } from '@prisma/client';
-import { DISPLAY_NAME_MAX, sanitiseDisplayName } from '../buddies/identity';
+import { checkDisplayName } from '../buddies/identity';
 
 export type PushKind = 'weekly_digest' | 'insight' | 'monthly_recap';
 export type BuddyPushKind = 'buddy_sticker' | 'buddy_request' | 'buddy_paired' | 'buddy_badge';
@@ -117,11 +119,14 @@ export function badgeLabel(family: unknown, level: unknown): string {
   return `${BADGE_FAMILY_LABELS[family as AchievementFamily]} ${LEVEL_NUMERALS[(level as number) - 1]}`;
 }
 
-/** A display name exactly as sanitiseDisplayName leaves it, 1-30 code points. */
+/**
+ * A name that would be saved exactly as it is: checkDisplayName accepts it (1-30 code points, a visible
+ * character, no reserved word) and sanitising leaves it unchanged. Names may contain digits: they are
+ * user-chosen text, never a health value.
+ */
 export function isPushName(name: unknown): name is string {
-  if (typeof name !== 'string') return false;
-  const length = [...name].length;
-  return length >= 1 && length <= DISPLAY_NAME_MAX && sanitiseDisplayName(name) === name;
+  const check = checkDisplayName(name);
+  return check.ok && check.displayName === name;
 }
 
 const BUDDY_BODIES: Readonly<Record<BuddyPushKind, string>> = Object.freeze({

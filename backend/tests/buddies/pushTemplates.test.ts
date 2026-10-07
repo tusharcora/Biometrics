@@ -41,6 +41,10 @@ it('badge labels cover all 7 families and 5 levels, and contain no digit', () =>
 it('a name slot must be already sanitised and 1-30 code points', () => {
   expect(isPushName('Sam 🌙')).toBe(true);
   for (const bad of ['', ' Sam', 'Sam\n', 'S‮am', 'a'.repeat(31), 42, null]) expect(isPushName(bad)).toBe(false);
+  // The same rules as a saved display name: a reserved word or no visible character is refused.
+  for (const bad of ['the admin', 'Biometrics Team', '\u2800']) expect([bad, isPushName(bad)]).toEqual([bad, false]);
+  // Names are user-chosen text, not health values: digits are allowed (and handles, the fallback, pass).
+  for (const ok of ['Sam 2', 'u1a2b3c4d5e6', 'sam_99']) expect([ok, isPushName(ok)]).toEqual([ok, true]);
   expect(() => renderBuddyPush('buddy_paired', { name: 'Sam​' })).toThrow('push_slot_invalid');
   expect(() => renderBuddyPush('buddy_sticker', { name: 'Sam', sticker: 'KISS' as never })).toThrow('push_slot_invalid');
   expect(() => renderBuddyPush('buddy_paired', { name: 'Sam', score: 81 } as never)).toThrow('push_slot_invalid');
