@@ -37,3 +37,30 @@ it("shares the buddy's newest built recap that has a line, with that line", asyn
   const shares = await prisma.recapShare.findMany({ where: { sharerId: b.id }, select: { recapId: true, line: true } });
   expect(shares).toEqual([{ recapId: older.id, line: 'An older week.' }]);
 });
+
+it('passes over recaps whose line is blank, instead of failing after the check-in is written', async () => {
+  const a = await prisma.user.create({ data: { email: `seed-a-${randomUUID()}@example.com`, name: 'A' } });
+  const b = await prisma.user.create({ data: { email: `seed-b-${randomUUID()}@example.com`, name: 'B' } });
+  await pairUp(a.id, b.id);
+  const recap = (periodStart: string, line: string) =>
+    prisma.recap.create({
+      data: { userId: b.id, kind: 'WEEK', periodStart: new Date(periodStart), periodEnd: new Date(periodStart), status: 'BUILT', sleepGoalMinutes: 480, line },
+    });
+  const older = await recap('2026-09-14', 'A real line.');
+  await recap('2026-09-21', '');
+  await recap('2026-09-28', '   ');
+  expect(await seedSocial({ email: a.email, buddyEmail: b.email, now: NOW, env: LOCAL })).toEqual({ buddyCheckedIn: true, stepGoal: true, recapShared: true });
+  const shares = await prisma.recapShare.findMany({ where: { sharerId: b.id }, select: { recapId: true, line: true } });
+  expect(shares).toEqual([{ recapId: older.id, line: 'A real line.' }]);
+});
+
+it('shares nothing when every line is blank, and still seeds the rest', async () => {
+  const a = await prisma.user.create({ data: { email: `seed-a-${randomUUID()}@example.com`, name: 'A' } });
+  const b = await prisma.user.create({ data: { email: `seed-b-${randomUUID()}@example.com`, name: 'B' } });
+  await pairUp(a.id, b.id);
+  await prisma.recap.create({
+    data: { userId: b.id, kind: 'WEEK', periodStart: new Date('2026-09-28'), periodEnd: new Date('2026-09-28'), status: 'BUILT', sleepGoalMinutes: 480, line: ' \n ' },
+  });
+  expect(await seedSocial({ email: a.email, buddyEmail: b.email, now: NOW, env: LOCAL })).toEqual({ buddyCheckedIn: true, stepGoal: true, recapShared: false });
+  expect(await prisma.recapShare.count({ where: { sharerId: b.id } })).toBe(0);
+});

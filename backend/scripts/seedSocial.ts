@@ -1,8 +1,9 @@
 /// <reference types="node" />
 // Dev only: gives the demo account something to see on Social (spec 2026-10-07 social S1). The buddy
-// checks in TIRED and passes their step goal today; their newest built recap with a line (if any) is
-// shared, with that line as the previewed one. The demo account itself is left unchecked-in so the
-// walkthrough shows the lock lifting. Run seedBuddies first: the two accounts must already be buddies.
+// checks in TIRED and passes their step goal today; if the buddy already checked in today, that mood is
+// OVERWRITTEN with TIRED. Their newest built recap with a non-blank line (if any) is shared, with that
+// line as the previewed one. The demo account itself is left unchecked-in so the walkthrough shows the
+// lock lifting. Run seedBuddies first: the two accounts must already be buddies.
 //
 //   DATABASE_URL=<local dev database> node node_modules/.bin/ts-node --project tsconfig.evals.json scripts/seedSocial.ts --email demo@example.com --buddy-email buddy@example.com
 //
@@ -58,12 +59,15 @@ export async function seedSocial({ email, buddyEmail, now = new Date(), env = pr
   const { today } = await todayFor(buddyId, now);
   await recordStepGoal(buddyId, [{ recordedAt: civilDateToUtcMidnight(today), value: STEPS_GOAL + 1500 }], now);
   // shareRecap refuses a recap without a line (the line is what buddies see), so pick one that has it;
-  // its stored line is what the owner would have previewed.
-  const recap = await prisma.recap.findFirst({
+  // its stored line is what the owner would have previewed. A blank (empty or whitespace-only) line counts
+  // as none: Prisma can't filter on trim, so the newest non-blank one is picked here, before shareRecap
+  // could throw after the writes above.
+  const candidates = await prisma.recap.findMany({
     where: { userId: buddyId, status: 'BUILT', line: { not: null } },
     orderBy: { periodStart: 'desc' },
     select: { id: true, line: true },
   });
+  const recap = candidates.find((r) => r.line !== null && r.line.trim() !== '') ?? null;
   if (recap) await shareRecap(buddyId, recap.id, recap.line, now);
   return { buddyCheckedIn: true, stepGoal: true, recapShared: recap !== null };
 }
