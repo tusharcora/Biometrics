@@ -1,45 +1,76 @@
 // Push notifications for the coach (spec section 6).
 //
-// PUSH CONTENT IS GENERIC. The title and body are fixed strings chosen from the
-// small server-side table below by a KIND. They are never model-generated and
-// never contain a score, factor, habit name or any number, because push text is
-// visible on the lock screen and passes through the OS push provider (APNs/FCM),
-// a third party this design does not want holding health data. The digest
-// itself is fetched in-app after the user opens it.
+// PUSH CONTENT IS GENERIC. For the coach and recap kinds the title and body are fixed strings
+// chosen from the small server-side table below by a KIND. They are never model-generated and
+// never contain a score, factor, habit name or any number, because push text is visible on the
+// lock screen and passes through the OS push provider (APNs/FCM), a third party this design does
+// not want holding health data. The digest itself is fetched in-app after the user opens it.
 //
-// DATA IS ID-ONLY. A payload may carry `data` only as { kind: 'recap', recapId: <uuid> }: a
-// fixed kind and an opaque id, never content (spec 2026-10-04 §2). The app fetches the recap
-// itself after the tap. The Expo sender re-validates data against that allowlist exactly as it
-// re-checks title and body.
+// BUDDY KINDS ARE TEMPLATES WITH TYPED SLOTS (buddies spec 2026-10-06 §6, which amends the rule
+// above for these kinds only). Their text may contain a buddy's sanitised display name and a
+// closed sticker or badge-level label, never a number, score or other health value, never model
+// output. The Expo sender re-renders the expected text from the template and the slots and throws
+// unless the payload matches exactly, so the closed-table guarantee still holds.
+//
+// DATA IS ID-ONLY. A payload may carry `data` only as { kind: 'recap', recapId: <uuid> } on a recap
+// kind, or { kind: <the buddy kind>, refId: <uuid> } on a buddy kind: a fixed kind and an opaque id,
+// never content. The Expo sender re-validates data against that allowlist exactly as it re-checks
+// title and body.
 //
 // Structurally, nothing here can carry other text: sendGenericPush() takes a
 // kind (a closed union), not a string, and builds the payload by looking that
-// kind up. There is no parameter through which model output or a health value
-// could be interpolated. Any future proactive nudge (threshold-triggered or
+// kind up. Buddy payloads are built only by buddyPushPayload(), which renders the
+// kind's template from typed slots (a name that passes isPushName, a sticker or
+// badge label from a closed table) and attaches id-only data. There is no
+// parameter through which model output or a health value could be interpolated. Any future proactive nudge (threshold-triggered or
 // daily check-in) must go through this same function, by way of
 // sendCoachPush() (coachPush.ts), which also checks the coach flag and consent.
 // The recap push (sendRecapPush below) builds its payload the same way.
 //
 // Two senders exist: the no-op default, and ExpoPushSender, selected with
 // PUSH_PROVIDER=expo (config.ts). The Expo sender re-checks every title and body
-// against the fixed table before it builds a request, so even a future caller
+// against the fixed table (or a buddy kind's re-rendered template) before it builds a request, so even a future caller
 // that bypassed sendGenericPush() could not put other text on the wire.
 
 import { prisma } from '../db/client';
+import type { AchievementFamily, StickerKind } from '@prisma/client';
+import { checkDisplayName } from '../buddies/identity';
 
 export type PushKind = 'weekly_digest' | 'insight' | 'monthly_recap';
+export type BuddyPushKind = 'buddy_sticker' | 'buddy_request' | 'buddy_paired' | 'buddy_badge';
+export const BUDDY_PUSH_KINDS: readonly BuddyPushKind[] = ['buddy_sticker', 'buddy_request', 'buddy_paired', 'buddy_badge'];
+export type AnyPushKind = PushKind | BuddyPushKind;
+
+export const isBuddyPushKind = (kind: unknown): kind is BuddyPushKind => (BUDDY_PUSH_KINDS as readonly unknown[]).includes(kind);
 
 export interface RecapPushData {
   kind: 'recap';
   recapId: string;
 }
 
+/** refId: the actor's user id (sticker, paired, badge) or the request id (request). */
+export interface BuddyPushData {
+  kind: BuddyPushKind;
+  refId: string;
+}
+
+export type PushData = RecapPushData | BuddyPushData;
+
+export interface BuddyPushSlots {
+  buddy_sticker: { name: string; sticker: StickerKind };
+  buddy_request: Record<string, never>;
+  buddy_paired: { name: string };
+  buddy_badge: { name: string; family: AchievementFamily; level: number };
+}
+
 export interface GenericPushPayload {
-  kind: PushKind;
+  kind: AnyPushKind;
   title: string;
   body: string;
-  /** Id-only, recap kinds only (isAllowedPushData). */
-  data?: RecapPushData;
+  /** Id-only (isAllowedPushData): recap kinds may carry recap data, buddy kinds must carry their own. */
+  data?: PushData;
+  /** Buddy kinds only: the typed slots the sender re-renders the text from. Never put on the wire. */
+  slots?: BuddyPushSlots[BuddyPushKind];
 }
 
 export const GENERIC_PUSH_PAYLOADS: Readonly<Record<PushKind, Readonly<{ title: string; body: string }>>> = Object.freeze({
@@ -50,13 +81,93 @@ export const GENERIC_PUSH_PAYLOADS: Readonly<Record<PushKind, Readonly<{ title: 
 
 export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
-/** The data allowlist: exactly the keys kind and recapId, kind 'recap', recapId a UUID. */
-export function isAllowedPushData(data: unknown): data is RecapPushData {
+const own = (table: object, key: unknown): boolean => typeof key === 'string' && Object.prototype.hasOwnProperty.call(table, key);
+
+/** The data allowlist: exactly { kind: 'recap', recapId: uuid } or { kind: <buddy kind>, refId: uuid }. */
+export function isAllowedPushData(data: unknown): data is PushData {
   if (typeof data !== 'object' || data === null || Array.isArray(data)) return false;
   const keys = Object.keys(data).sort();
-  if (keys.length !== 2 || keys[0] !== 'kind' || keys[1] !== 'recapId') return false;
+  if (keys.length !== 2 || keys[0] !== 'kind') return false;
   const d = data as Record<string, unknown>;
-  return d.kind === 'recap' && typeof d.recapId === 'string' && UUID_RE.test(d.recapId);
+  if (d.kind === 'recap') return keys[1] === 'recapId' && typeof d.recapId === 'string' && UUID_RE.test(d.recapId);
+  if (isBuddyPushKind(d.kind)) return keys[1] === 'refId' && typeof d.refId === 'string' && UUID_RE.test(d.refId);
+  return false;
+}
+
+export const STICKER_LABELS: Readonly<Record<StickerKind, string>> = Object.freeze({ CHEER: 'Cheer', HEART: 'Heart', REST_UP: 'Rest up', STAR: 'Star' });
+
+/** Family names as the app shows them (mobile src/lib/badges.ts FAMILY_NAMES). */
+export const BADGE_FAMILY_LABELS: Readonly<Record<AchievementFamily, string>> = Object.freeze({
+  SLEEP_GOAL: 'Sleep goal streak',
+  STEADY_BEDTIME: 'Steady bedtime',
+  STEP_GOAL: 'Step goal streak',
+  CHECK_IN: 'Daily check-in',
+  BEST_RECOVERY_WEEK: 'Best recovery week',
+  EVERY_DAY_LOGGED: 'Every day logged',
+  STEADIEST_MONTH: 'Steadiest month',
+});
+
+export const LEVEL_NUMERALS = ['I', 'II', 'III', 'IV', 'V'] as const;
+
+function slotInvalid(): never {
+  throw new Error('push_slot_invalid');
+}
+
+/** "Sleep goal streak II": a level, never a value. */
+export function badgeLabel(family: unknown, level: unknown): string {
+  if (!own(BADGE_FAMILY_LABELS, family) || typeof level !== 'number' || !Number.isInteger(level) || level < 1 || level > 5) slotInvalid();
+  return `${BADGE_FAMILY_LABELS[family as AchievementFamily]} ${LEVEL_NUMERALS[(level as number) - 1]}`;
+}
+
+/**
+ * A name that would be saved exactly as it is: checkDisplayName accepts it (1-30 code points, a visible
+ * character, no reserved word) and sanitising leaves it unchanged. Names may contain digits: they are
+ * user-chosen text, never a health value.
+ */
+export function isPushName(name: unknown): name is string {
+  const check = checkDisplayName(name);
+  return check.ok && check.displayName === name;
+}
+
+const BUDDY_BODIES: Readonly<Record<BuddyPushKind, string>> = Object.freeze({
+  buddy_sticker: 'Open the app to send one back.',
+  buddy_request: 'Open the app to see who.',
+  buddy_paired: 'Open the app to say hi.',
+  buddy_badge: 'Open the app to cheer them on.',
+});
+
+/** The text of a buddy push from its template and typed slots; any other slot shape throws. */
+export function renderBuddyPush<K extends BuddyPushKind>(kind: K, slots: BuddyPushSlots[K]): { title: string; body: string } {
+  if (!slots || typeof slots !== 'object' || Array.isArray(slots)) slotInvalid();
+  const s = slots as unknown as Record<string, unknown>;
+  const keys = Object.keys(s).sort().join(',');
+  const name = (): string => {
+    const n = s.name;
+    return isPushName(n) ? n : slotInvalid();
+  };
+  const body = BUDDY_BODIES[kind];
+  switch (kind as BuddyPushKind) {
+    case 'buddy_sticker':
+      if (keys !== 'name,sticker' || !own(STICKER_LABELS, s.sticker)) slotInvalid();
+      return { title: `${name()} sent you a ${STICKER_LABELS[s.sticker as StickerKind]}`, body };
+    case 'buddy_request':
+      if (keys !== '') slotInvalid();
+      return { title: 'Someone wants to be your buddy', body };
+    case 'buddy_paired':
+      if (keys !== 'name') slotInvalid();
+      return { title: `You and ${name()} are now buddies`, body };
+    case 'buddy_badge':
+      if (keys !== 'family,level,name') slotInvalid();
+      return { title: `${name()} reached ${badgeLabel(s.family, s.level)}`, body };
+    default:
+      return slotInvalid();
+  }
+}
+
+/** The only way to build a buddy payload: rendered text, the slots, and id-only data. */
+export function buddyPushPayload<K extends BuddyPushKind>(kind: K, slots: BuddyPushSlots[K], refId: string): GenericPushPayload {
+  if (!UUID_RE.test(refId)) throw new Error('push_data_not_allowed');
+  return { kind, ...renderBuddyPush(kind, slots), data: { kind, refId }, slots };
 }
 
 export const RECAP_PUSH_KIND: Readonly<Record<'WEEK' | 'MONTH', PushKind>> = Object.freeze({ WEEK: 'weekly_digest', MONTH: 'monthly_recap' });
@@ -133,12 +244,27 @@ export function maskPushToken(token: string): string {
   return `${token.slice(0, 4)}…`;
 }
 
-/** Throws unless title and body are exactly the fixed strings for the payload's kind, and any data is allowlisted. */
+/** Throws unless the text is exactly what the kind's table entry or template gives, and any data is allowlisted for that kind. */
 function assertGenericPayload(payload: GenericPushPayload): void {
-  if (!Object.prototype.hasOwnProperty.call(GENERIC_PUSH_PAYLOADS, payload?.kind)) throw new Error('push_text_not_generic');
-  const fixed = GENERIC_PUSH_PAYLOADS[payload.kind];
+  const kind = payload?.kind;
+  if (isBuddyPushKind(kind)) {
+    let expected: { title: string; body: string };
+    try {
+      expected = renderBuddyPush(kind, payload.slots as never);
+    } catch {
+      throw new Error('push_text_not_generic');
+    }
+    if (payload.title !== expected.title || payload.body !== expected.body) throw new Error('push_text_not_generic');
+    if (!isAllowedPushData(payload.data) || payload.data.kind !== kind) throw new Error('push_data_not_allowed');
+    return;
+  }
+  if (!Object.prototype.hasOwnProperty.call(GENERIC_PUSH_PAYLOADS, kind)) throw new Error('push_text_not_generic');
+  const fixed = GENERIC_PUSH_PAYLOADS[kind as PushKind];
   if (payload.title !== fixed.title || payload.body !== fixed.body) throw new Error('push_text_not_generic');
-  if (payload.data !== undefined && (!isAllowedPushData(payload.data) || !RECAP_KINDS_WITH_DATA.has(payload.kind))) {
+  if (
+    payload.data !== undefined &&
+    (!isAllowedPushData(payload.data) || payload.data.kind !== 'recap' || !RECAP_KINDS_WITH_DATA.has(kind as PushKind))
+  ) {
     throw new Error('push_data_not_allowed');
   }
 }
@@ -187,8 +313,12 @@ export class ExpoPushSender implements PushSender {
       title: payload.title,
       body: payload.body,
       sound: 'default',
-      // Rebuilt from the validated fields, never spread.
-      data: payload.data ? { kind: payload.data.kind, recapId: payload.data.recapId } : { kind: payload.kind },
+      // Rebuilt from the validated fields, never spread; slots never leave the server.
+      data: payload.data === undefined
+        ? { kind: payload.kind }
+        : payload.data.kind === 'recap'
+          ? { kind: payload.data.kind, recapId: payload.data.recapId }
+          : { kind: payload.data.kind, refId: payload.data.refId },
     }));
 
     let tickets: ExpoTicket[];

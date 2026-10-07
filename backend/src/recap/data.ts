@@ -16,8 +16,10 @@ function bounds(from: string, to: string): { gte: Date; lt: Date } {
   return { gte: civilDateToUtcMidnight(from), lt: new Date(civilDateToUtcMidnight(to).getTime() + DAY_MS) };
 }
 
-export async function loadRecapData(userId: string, timeZone: string, from: string, to: string): Promise<RecapData> {
+/** `bedtimes: false` skips the sleep-session read for a caller that never uses `bedtime`. */
+export async function loadRecapData(userId: string, timeZone: string, from: string, to: string, opts: { bedtimes?: boolean } = {}): Promise<RecapData> {
   const { gte, lt } = bounds(from, to);
+  const withBedtimes = opts.bedtimes ?? true;
   const [records, scores, sessions] = await Promise.all([
     prisma.biometricRecord.findMany({
       where: { userId, metricType: { in: ['SLEEP', 'STEPS'] }, recordedAt: { gte, lt } },
@@ -25,10 +27,12 @@ export async function loadRecapData(userId: string, timeZone: string, from: stri
     }),
     prisma.dailyScore.findMany({ where: { userId, date: { gte, lt } }, select: { date: true, type: true, score: true } }),
     // A local date spans at most [D - 14h, D + 1d + 12h) in UTC: a day of margin each side.
-    prisma.sleepSession.findMany({
-      where: { userId, endTime: { gte: new Date(gte.getTime() - DAY_MS), lt: new Date(lt.getTime() + DAY_MS) } },
-      select: { startTime: true, endTime: true, minutesAsleep: true, startUtcOffsetSeconds: true, endUtcOffsetSeconds: true },
-    }),
+    withBedtimes
+      ? prisma.sleepSession.findMany({
+          where: { userId, endTime: { gte: new Date(gte.getTime() - DAY_MS), lt: new Date(lt.getTime() + DAY_MS) } },
+          select: { startTime: true, endTime: true, minutesAsleep: true, startUtcOffsetSeconds: true, endUtcOffsetSeconds: true },
+        })
+      : [],
   ]);
   const data: RecapData = new Map();
   const at = (date: string): DayData => {

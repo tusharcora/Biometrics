@@ -19,6 +19,8 @@ jest.mock('../../src/api/notifications');
 jest.mock('../../src/api/recaps');
 // ...and the badges, for the Badges card.
 jest.mock('../../src/api/achievements');
+// ...and the buddies, for the Buddies section.
+jest.mock('../../src/api/buddies');
 
 const fetchMock = jest.fn();
 (global as any).fetch = fetchMock;

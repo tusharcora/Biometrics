@@ -14,6 +14,7 @@
 
 import { connection } from '../sync/queue';
 import type { FamilyStanding } from './families';
+import { withTimeout } from '../lib/withTimeout';
 
 export const EVALUATION_TTL_SECONDS = 10 * 60;
 /**
@@ -37,25 +38,12 @@ function logFailure(event: string, userId: string, err: unknown): void {
   console.error(JSON.stringify({ event, userId, error: err instanceof Error ? err.name : 'unknown' }));
 }
 
-function withTimeout<T>(p: Promise<T>): Promise<T> {
-  let timer: NodeJS.Timeout | undefined;
-  const timeout = new Promise<never>((_, reject) => {
-    timer = setTimeout(() => {
-      const err = new Error('redis marker timeout');
-      err.name = 'TimeoutError';
-      reject(err);
-    }, MARKER_TIMEOUT_MS);
-    timer.unref();
-  });
-  return Promise.race([p, timeout]).finally(() => clearTimeout(timer));
-}
-
 const parseVersion = (raw: string | null): number => (raw === null ? 0 : Number(raw));
 
 /** The user's current version (0 before any save); null when Redis could not be read. Read it before evaluating. */
 export async function evaluationVersion(userId: string): Promise<number | null> {
   try {
-    return parseVersion(await withTimeout(connection.get(versionKey(userId))));
+    return parseVersion(await withTimeout(connection.get(versionKey(userId)), MARKER_TIMEOUT_MS, 'redis marker timeout'));
   } catch (err) {
     logFailure('achievements.version_read_failed', userId, err);
     return null;
@@ -65,7 +53,7 @@ export async function evaluationVersion(userId: string): Promise<number | null> 
 /** The standings of an evaluation made at the current version, within the last 10 minutes; else null. */
 export async function readEvaluated(userId: string): Promise<FamilyStanding[] | null> {
   try {
-    const [raw, version] = await withTimeout(connection.mget(markerKey(userId), versionKey(userId)));
+    const [raw, version] = await withTimeout(connection.mget(markerKey(userId), versionKey(userId)), MARKER_TIMEOUT_MS, 'redis marker timeout');
     if (raw === null || raw === undefined) return null;
     const marker = JSON.parse(raw) as Marker;
     return marker.version === parseVersion(version ?? null) ? marker.standings : null;
@@ -80,7 +68,7 @@ export async function markEvaluated(userId: string, version: number | null, stan
   if (version === null) return;
   try {
     const marker: Marker = { version, standings: [...standings] };
-    await withTimeout(connection.set(markerKey(userId), JSON.stringify(marker), 'EX', EVALUATION_TTL_SECONDS));
+    await withTimeout(connection.set(markerKey(userId), JSON.stringify(marker), 'EX', EVALUATION_TTL_SECONDS), MARKER_TIMEOUT_MS, 'redis marker timeout');
   } catch (err) {
     logFailure('achievements.marker_write_failed', userId, err);
   }
@@ -91,6 +79,8 @@ export async function clearAchievementsMarker(userId: string): Promise<void> {
   try {
     const results = await withTimeout(
       connection.multi().incr(versionKey(userId)).expire(versionKey(userId), VERSION_TTL_SECONDS).del(markerKey(userId)).exec(),
+      MARKER_TIMEOUT_MS,
+      'redis marker timeout',
     );
     const failed = results?.find(([err]) => err !== null)?.[0];
     if (failed) throw failed;

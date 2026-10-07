@@ -12,6 +12,7 @@ import { AccountSection } from '../components/account-section';
 import { BadgesCard } from '../components/achievements/BadgesCard';
 import { CoachSettingsSection } from '../components/coach-settings-section';
 import { DeleteAccountSection } from '../components/delete-account-section';
+import { BuddiesProfileSection } from '../components/buddies/BuddiesProfileSection';
 import { NotificationsSection } from '../components/notifications-section';
 import { YourCoachRow } from '../components/your-coach-row';
 import { StoryRing, useStoryRing } from '../components/recap/StoryRing';
@@ -202,6 +203,7 @@ export function SettingsScreen() {
         </SettingsGroup>
 
         <NotificationsSection />
+        <BuddiesProfileSection onNavigate={(route) => navigation?.navigate(route as never)} />
         <AccountSection />
         <YourCoachRow />
         <CoachSettingsSection />

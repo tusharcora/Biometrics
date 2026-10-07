@@ -39,6 +39,8 @@ jest.mock('../../src/navigation/AuthNavigator', () => ({ AuthNavigator: () => nu
 jest.mock('../../src/sync/SyncProvider', () => ({ SyncProvider: ({ children }: any) => children }));
 // The badge celebration listens to AppState too (its own suite covers it); this one records one listener.
 jest.mock('../../src/components/achievements/CelebrationHost', () => ({ CelebrationHost: () => null }));
+// So does the shared buddies store scope.
+jest.mock('../../src/components/buddies/BuddiesStoreScope', () => ({ BuddiesStoreScope: () => null }));
 
 const stopListening = jest.fn();
 let appStateListener: ((state: string) => void) | undefined;

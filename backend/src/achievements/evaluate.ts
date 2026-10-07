@@ -10,12 +10,19 @@ import { mondayOf, monthStartOf } from '../recap/periods';
 import { ALL_FAMILIES } from './catalogue';
 import { loadAchievementInputs } from './data';
 import { familyResults, type FamilyResult } from './families';
+import { announceBuddyBadges, highestNewPerFamily, type AwardedRow } from '../buddies/badges';
+
+export interface EvaluateOptions {
+  /** Told about the rows this evaluation truly inserted (buddies spec §6). Default: announceBuddyBadges. */
+  announce?: (userId: string, rows: AwardedRow[]) => Promise<void>;
+}
 
 /** Each asked family's current, best and reachable levels; null when the user has no start date. */
 export async function evaluateAchievements(
   userId: string,
   now: Date,
   families: readonly AchievementFamily[] = ALL_FAMILIES,
+  opts: EvaluateOptions = {},
 ): Promise<FamilyResult[] | null> {
   const loaded = await loadAchievementInputs(userId, now);
   if (!loaded) return null;
@@ -25,7 +32,9 @@ export async function evaluateAchievements(
   const have = new Set(stored.map((s) => `${s.family}:${s.level}`));
   const fresh = results.flatMap((r) => r.reached.filter((l) => !have.has(`${r.family}:${l.level}`)).map((l) => ({ family: r.family, ...l })));
   if (fresh.length > 0) {
-    await prisma.achievement.createMany({
+    // createManyAndReturn + skipDuplicates returns only the rows THIS call inserted, so a concurrent
+    // evaluation that lost the race announces nothing.
+    const created = await prisma.achievement.createManyAndReturn({
       data: fresh.map((l) => ({
         userId,
         family: l.family,
@@ -36,9 +45,12 @@ export async function evaluateAchievements(
         monthStart: civilDateToUtcMidnight(monthStartOf(l.earnedOn)),
       })),
       skipDuplicates: true,
+      select: { id: true, family: true, level: true },
     });
     // Ids, family and level only: never the health values behind them.
-    for (const l of fresh) console.info(JSON.stringify({ event: 'achievements.awarded', userId, family: l.family, level: l.level }));
+    for (const l of created) console.info(JSON.stringify({ event: 'achievements.awarded', userId, family: l.family, level: l.level }));
+    // Only each family's highest new level is announced: a multi-level jump is one push, not several.
+    if (created.length > 0) await (opts.announce ?? announceBuddyBadges)(userId, highestNewPerFamily(created));
   }
   return results;
 }

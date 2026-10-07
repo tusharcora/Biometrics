@@ -97,9 +97,9 @@ describe('/me/notifications', () => {
   it('reads the default and saves a partial boolean patch', async () => {
     const user = await createUser();
     const headers = await authHeaderFor(user.id);
-    expect((await (await server()).get('/me/notifications').set(headers)).body).toEqual({ recapPushEnabled: true });
+    expect((await (await server()).get('/me/notifications').set(headers)).body).toMatchObject({ recapPushEnabled: true });
     const res = await (await server()).put('/me/notifications').set(headers).send({ recapPushEnabled: false });
-    expect(res.body).toEqual({ recapPushEnabled: false });
+    expect(res.body).toMatchObject({ recapPushEnabled: false });
     expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).recapPushEnabled).toBe(false);
   });
 

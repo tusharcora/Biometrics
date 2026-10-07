@@ -221,3 +221,103 @@ describe('recap pushes', () => {
     expect(await handle(notification({ kind: RECAP_PUSH_KIND, recapId: RECAP_ID }))).toEqual({ shouldShowBanner: false, shouldShowList: false, shouldPlaySound: false, shouldSetBadge: false });
   });
 });
+
+describe('buddy pushes', () => {
+  const ID = '6a1f9f1e-0000-4000-8000-000000000001';
+  const SHOWN = { shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false };
+  const HIDDEN = { shouldShowBanner: false, shouldShowList: false, shouldPlaySound: false, shouldSetBadge: false };
+  // `open` changes on every request tap, so Buddies switches to Requests even when its route
+  // already has tab 'requests' (T20/T24 ruling).
+  const REQUESTS = { tab: 'requests', open: expect.any(Number) };
+  const handle = () => {
+    installNotificationHandler();
+    return N.setNotificationHandler.mock.calls.at(-1)![0]!.handleNotification;
+  };
+
+  it('show as a banner while the app is open; recap pushes still do not', async () => {
+    for (const kind of ['buddy_sticker', 'buddy_request', 'buddy_paired', 'buddy_badge']) {
+      expect(await handle()(notification({ kind, refId: ID }))).toEqual(SHOWN);
+    }
+    expect(await handle()(notification({ kind: RECAP_PUSH_KIND, recapId: ID }))).toEqual(HIDDEN);
+    expect(await handle()(notification({ kind: 'buddy_sticker', refId: 'nope' }))).toEqual(HIDDEN);
+  });
+
+  it("a tap opens the requests tab for a request, and the actor's week for anything else", async () => {
+    N.getLastNotificationResponseAsync.mockResolvedValue(response({ kind: 'buddy_request', refId: ID }));
+    await routeInitialNotification();
+    expect(ref.navigate).toHaveBeenLastCalledWith('Buddies', REQUESTS, { pop: true });
+    for (const kind of ['buddy_sticker', 'buddy_paired', 'buddy_badge']) {
+      N.getLastNotificationResponseAsync.mockResolvedValue(response({ kind, refId: ID }));
+      await routeInitialNotification();
+      expect(ref.navigate).toHaveBeenLastCalledWith('BuddyWeek', { buddyId: ID }, { pop: true });
+    }
+  });
+
+  it('ignores a buddy push with a malformed or missing refId', async () => {
+    for (const data of [{ kind: 'buddy_badge', refId: 'x' }, { kind: 'buddy_badge' }]) {
+      N.getLastNotificationResponseAsync.mockResolvedValue(response(data));
+      await routeInitialNotification();
+    }
+    expect(ref.navigate).not.toHaveBeenCalled();
+  });
+
+  it('ignores other kinds and non-uuid ids, and never routes by any other field', async () => {
+    const OTHER = '6a1f9f1e-0000-4000-8000-000000000002';
+    for (const data of [
+      { kind: 'buddy_mute', refId: ID },
+      { kind: 'BUDDY_STICKER', refId: ID },
+      { kind: 'buddy_sticker', refId: 42 },
+      { kind: 'buddy_sticker', refId: `${ID} ` },
+      { kind: 'buddy_sticker', buddyId: OTHER },
+    ]) {
+      N.getLastNotificationResponseAsync.mockResolvedValue(response(data));
+      await routeInitialNotification();
+    }
+    expect(ref.navigate).not.toHaveBeenCalled();
+    N.getLastNotificationResponseAsync.mockResolvedValue(response({ kind: 'buddy_sticker', refId: ID, buddyId: OTHER, tab: 'activity' }));
+    await routeInitialNotification();
+    expect(ref.navigate).toHaveBeenCalledTimes(1);
+    expect(ref.navigate).toHaveBeenCalledWith('BuddyWeek', { buddyId: ID }, { pop: true });
+  });
+
+  it('sends a fresh open value on every request tap, so a repeat still lands on Requests', async () => {
+    jest.useFakeTimers();
+    N.getLastNotificationResponseAsync.mockResolvedValue(response({ kind: 'buddy_request', refId: ID }));
+    await routeInitialNotification();
+    await jest.advanceTimersByTimeAsync(5);
+    await routeInitialNotification();
+    const [first, second] = ref.navigate.mock.calls.map((c) => c[1].open);
+    expect(typeof first).toBe('number');
+    expect(second).not.toEqual(first);
+  });
+
+  it('cold start: waits for the signed-in navigator first', async () => {
+    jest.useFakeTimers();
+    ref.isReady.mockReturnValue(false);
+    N.getLastNotificationResponseAsync.mockResolvedValue(response({ kind: 'buddy_sticker', refId: ID }));
+    const done = routeInitialNotification();
+    await jest.advanceTimersByTimeAsync(300);
+    expect(ref.navigate).not.toHaveBeenCalled();
+    ref.isReady.mockReturnValue(true);
+    await jest.advanceTimersByTimeAsync(100);
+    await done;
+    expect(ref.navigate).toHaveBeenCalledWith('BuddyWeek', { buddyId: ID }, { pop: true });
+    expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('warm start: a tap while the app runs opens the same places', async () => {
+    N.addNotificationResponseReceivedListener.mockReturnValue({ remove: jest.fn() } as never);
+    const unsubscribe = listenForNotificationTaps();
+    const listener = N.addNotificationResponseReceivedListener.mock.calls[0]![0];
+    listener(response({ kind: 'buddy_paired', refId: ID }));
+    await Promise.resolve();
+    expect(ref.navigate).toHaveBeenLastCalledWith('BuddyWeek', { buddyId: ID }, { pop: true });
+    listener(response({ kind: 'buddy_request', refId: ID }));
+    await Promise.resolve();
+    expect(ref.navigate).toHaveBeenLastCalledWith('Buddies', REQUESTS, { pop: true });
+    listener(response({ kind: 'buddy_badge', refId: 'x' }));
+    await Promise.resolve();
+    expect(ref.navigate).toHaveBeenCalledTimes(2);
+    unsubscribe();
+  });
+});

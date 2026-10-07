@@ -5,7 +5,7 @@ import { recomputeAllSleepRollups } from '../biometrics/repository';
 import { enqueueScoreCompute } from '../scoring/queue';
 import { prisma } from '../db/client';
 import { deleteUserAccount } from './deletion';
-import { parseNotificationSettingsPatch } from './notifications';
+import { NOTIFICATION_SELECT, parseNotificationSettingsPatch } from './notifications';
 
 export const usersRouter = Router();
 
@@ -49,15 +49,15 @@ usersRouter.put('/me/timezone', requireAuth, async (req: AuthedRequest, res) => 
 });
 
 usersRouter.get('/me/notifications', requireAuth, async (req: AuthedRequest, res) => {
-  const user = await prisma.user.findUnique({ where: { id: req.userId! }, select: { recapPushEnabled: true } });
+  const user = await prisma.user.findUnique({ where: { id: req.userId! }, select: NOTIFICATION_SELECT });
   if (!user) {
     res.status(404).json({ error: 'User not found' });
     return;
   }
-  res.json({ recapPushEnabled: user.recapPushEnabled });
+  res.json(user);
 });
 
-/** Partial: { recapPushEnabled: boolean }. Anything else is 400 invalid_settings. */
+/** Partial: any of NOTIFICATION_KEYS with boolean values. Anything else is 400 invalid_settings. */
 usersRouter.put('/me/notifications', requireAuth, async (req: AuthedRequest, res) => {
   const patch = parseNotificationSettingsPatch(req.body);
   if (!patch) {
@@ -69,8 +69,8 @@ usersRouter.put('/me/notifications', requireAuth, async (req: AuthedRequest, res
     res.status(404).json({ error: 'User not found' });
     return;
   }
-  const user = await prisma.user.findUniqueOrThrow({ where: { id: req.userId! }, select: { recapPushEnabled: true } });
-  res.json({ recapPushEnabled: user.recapPushEnabled });
+  const user = await prisma.user.findUniqueOrThrow({ where: { id: req.userId! }, select: NOTIFICATION_SELECT });
+  res.json(user);
 });
 
 /**

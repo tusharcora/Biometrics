@@ -33,6 +33,8 @@ function mockApi(options: {
 }) {
   (apiFetch as jest.Mock).mockImplementation((path: string) => {
     if (path.startsWith('/me/recaps')) return Promise.resolve({ recaps: options.recaps ?? [] });
+    // No buddies and no requests: Home's buddies row stays hidden.
+    if (path.startsWith('/me/buddies')) return Promise.resolve({ buddies: [], nextCursor: null, incomingRequests: 0, outgoingRequests: 0 });
     if (path === '/me/forecast') {
       return Promise.resolve(options.forecast ?? { status: 'NOT_ENOUGH_DATA', reason: 'NO_HISTORY', daysOfHistory: 0 });
     }
@@ -104,6 +106,16 @@ describe('DashboardScreen', () => {
       expect(getAllByText(/Steps/).length).toBeGreaterThan(0);
       expect(getAllByText(/9,000/).length).toBeGreaterThan(0);
     });
+  });
+
+  it('keeps the buddies row hidden with no buddies and no requests', async () => {
+    mockApi({ records: [{ id: '1', metricType: 'STEPS', value: 9000, recordedAt: '2026-09-01T00:00:00.000Z' }] });
+
+    const { getAllByText, queryByTestId } = render(<DashboardScreen />);
+
+    await waitFor(() => expect(getAllByText(/9,000/).length).toBeGreaterThan(0));
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith('/me/buddies'));
+    expect(queryByTestId('home-buddies-row')).toBeNull();
   });
 
   it('renders rings, an insight, and trend charts for every real metric', async () => {

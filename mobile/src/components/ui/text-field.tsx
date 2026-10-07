@@ -12,6 +12,7 @@ export interface TextFieldProps {
   secure?: boolean;
   keyboardType?: 'default' | 'email-address';
   autoComplete?: 'email' | 'password' | 'new-password' | 'name';
+  autoCapitalize?: 'none' | 'words' | 'sentences' | 'characters';
 }
 
 const TEXT_CONTENT_TYPE = {
@@ -22,7 +23,7 @@ const TEXT_CONTENT_TYPE = {
   none: 'none',
 } as const;
 
-export function TextField({ label, testID, value, onChangeText, secure, keyboardType = 'default', autoComplete }: TextFieldProps) {
+export function TextField({ label, testID, value, onChangeText, secure, keyboardType = 'default', autoComplete, autoCapitalize }: TextFieldProps) {
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === 'dark' ? COLORS.dark : COLORS.light;
   return (
@@ -34,7 +35,7 @@ export function TextField({ label, testID, value, onChangeText, secure, keyboard
         onChangeText={onChangeText}
         secureTextEntry={secure}
         keyboardType={keyboardType}
-        autoCapitalize={keyboardType === 'email-address' || secure ? 'none' : 'words'}
+        autoCapitalize={autoCapitalize ?? (keyboardType === 'email-address' || secure ? 'none' : 'words')}
         autoCorrect={false}
         autoComplete={autoComplete}
         // iOS AutoFill (and the Passwords app) key off textContentType, not

@@ -33,7 +33,13 @@ import { RecapsScreen } from '../screens/RecapsScreen';
 import { YearInPixelsScreen } from '../screens/YearInPixelsScreen';
 import { BadgesScreen } from '../screens/BadgesScreen';
 import { BadgeDetailScreen } from '../screens/BadgeDetailScreen';
+import { BuddyIdentityScreen } from '../screens/BuddyIdentityScreen';
+import { PairUpScreen } from '../screens/PairUpScreen';
+import { BuddiesScreen } from '../screens/BuddiesScreen';
+import { BuddyWeekScreen } from '../screens/BuddyWeekScreen';
+import { BlockedPeopleScreen } from '../screens/BlockedPeopleScreen';
 import { CelebrationHost } from '../components/achievements/CelebrationHost';
+import { BuddiesStoreScope } from '../components/buddies/BuddiesStoreScope';
 import type { ShareFormat } from '../lib/recapShare';
 import { TabsNavigator, type TabParamList } from './TabsNavigator';
 import { syncTimezone } from '../lib/timezone';
@@ -104,6 +110,17 @@ export type RootStackParamList = {
   Badges: undefined;
   // One badge: the big badge, current and best, the ladder of five levels.
   BadgeDetail: { family: AchievementFamily };
+  // Buddies (spec 2026-10-06 buddies §7). `tab` lets a request push open the requests tab; a new
+  // `open` (a push sends Date.now()) re-selects it when the route already has that tab.
+  Buddies: { tab?: 'buddies' | 'requests' | 'activity'; open?: number } | undefined;
+  // Your code, enter a code, or ask by @handle; first-time handle setup if missing.
+  PairUp: undefined;
+  // One buddy's mood week, shared numbers and stickers; opened from the list and by buddy pushes.
+  BuddyWeek: { buddyId: string };
+  // Profile → Buddies: change your handle or display name.
+  BuddyIdentity: undefined;
+  // Profile → Buddies → Blocked people (unblock).
+  BlockedPeople: undefined;
 };
 
 export type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';
@@ -129,9 +146,10 @@ export function RootNavigator() {
   }, [session]);
 
   useEffect(() => {
-    // A tapped wind-down reminder opens Sleep: the one that launched the app
-    // (once the signed-in navigator is ready; never while signed out) and any
-    // tapped while it runs.
+    // A tapped notification opens its screen (a wind-down reminder Sleep, a
+    // recap its story, a buddy push the requests or that buddy's week): the one
+    // that launched the app (once the signed-in navigator is ready; never while
+    // signed out) and any tapped while it runs.
     const launch = new AbortController();
     void routeInitialNotification(launch.signal);
     const stopListening = listenForNotificationTaps();
@@ -219,6 +237,13 @@ export function RootNavigator() {
               <Stack.Screen name="YearInPixels" component={YearInPixelsScreen} options={{ title: 'Year in pixels' }} />
               <Stack.Screen name="Badges" component={BadgesScreen} options={{ title: 'Badges' }} />
               <Stack.Screen name="BadgeDetail" component={BadgeDetailScreen} options={{ title: '' }} />
+              <Stack.Screen name="BuddyIdentity" component={BuddyIdentityScreen} options={{ title: 'Buddy name' }} />
+              <Stack.Screen name="Buddies" component={BuddiesScreen} options={{ title: 'Buddies' }} />
+              <Stack.Screen name="PairUp" component={PairUpScreen} options={{ title: 'Add a buddy' }} />
+              <Stack.Screen name="BlockedPeople" component={BlockedPeopleScreen} options={{ title: 'Blocked people' }} />
+              {/* One instance per buddy: navigating to another buddy's week (a push tap) opens a new
+                  screen instead of swapping the params under the current one. */}
+              <Stack.Screen name="BuddyWeek" component={BuddyWeekScreen} getId={({ params }) => params?.buddyId} options={{ title: '' }} />
               <Stack.Screen name="RecapBuilder" component={RecapBuilderScreen} options={{ title: 'Build your recap' }} />
               <Stack.Screen
                 name="MeetYourCoach"
@@ -230,6 +255,8 @@ export function RootNavigator() {
             </Stack.Navigator>
             {/* New badge levels, celebrated once (start, foreground, after a check-in). */}
             <CelebrationHost />
+            {/* The shared buddy list (start, foreground); forgotten on sign-out. */}
+            <BuddiesStoreScope />
           </SyncProvider>
         </ToastProvider>
       </NavigationContainer>

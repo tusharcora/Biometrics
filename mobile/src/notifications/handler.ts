@@ -2,9 +2,10 @@ import * as Notifications from 'expo-notifications';
 import { navigationRef } from '../navigation/navigationRef';
 import { WIND_DOWN_KIND } from '../lib/windDown';
 
-// What the app does with notifications while it runs: shows the wind-down
-// reminder in the foreground and opens the Sleep screen, or a recap, when one
-// is tapped (the story viewer, which plays a week and hands a month to its recap screen).
+// What the app does with notifications while it runs: shows the wind-down reminder and buddy
+// pushes in the foreground, and opens the Sleep screen, a recap, the buddy requests or a buddy's
+// week when one is tapped (a recap opens the story viewer, which plays a week and hands a month
+// to its recap screen).
 // Every native call here is best-effort: a build or simulator without the
 // notifications module must still start.
 
@@ -47,11 +48,22 @@ function recapIdOf(notification: Notifications.Notification): string | null {
   return data?.kind === RECAP_PUSH_KIND && typeof data.recapId === 'string' && UUID_RE.test(data.recapId) ? data.recapId : null;
 }
 
+/** Buddy pushes (spec 2026-10-06 buddies §6): id-only data { kind, refId: <uuid> }. */
+export const BUDDY_PUSH_KINDS = ['buddy_sticker', 'buddy_request', 'buddy_paired', 'buddy_badge'] as const;
+type BuddyPushKind = (typeof BUDDY_PUSH_KINDS)[number];
+
+function buddyPushOf(notification: Notifications.Notification): { kind: BuddyPushKind; refId: string } | null {
+  const data = dataOf(notification);
+  const kind = data?.kind;
+  if (!(BUDDY_PUSH_KINDS as readonly unknown[]).includes(kind)) return null;
+  return typeof data?.refId === 'string' && UUID_RE.test(data.refId) ? { kind: kind as BuddyPushKind, refId: data.refId } : null;
+}
+
 // Call once, at module load (App.tsx).
 export function installNotificationHandler(): void {
   try {
     Notifications.setNotificationHandler({
-      handleNotification: async (notification) => (isWindDown(notification) ? SHOW : HIDE),
+      handleNotification: async (notification) => (isWindDown(notification) || buddyPushOf(notification) ? SHOW : HIDE),
     });
   } catch {
     // No native module: nothing would arrive to handle.
@@ -70,6 +82,15 @@ export function installNotificationHandler(): void {
  */
 function routeFor(notification: Notifications.Notification): (() => void) | null {
   if (isWindDown(notification)) return () => navigationRef.navigate('Sleep', undefined, { pop: true });
+  const buddy = buddyPushOf(notification);
+  if (buddy) {
+    // refId is the request id for a request (opens the requests), else the actor's user id (their
+    // week); nothing else in the data is used. `open` is new on every tap: Buddies re-selects its
+    // tab when it changes, so a Buddies screen already on Requests but switched away goes back.
+    return buddy.kind === 'buddy_request'
+      ? () => navigationRef.navigate('Buddies', { tab: 'requests', open: Date.now() }, { pop: true })
+      : () => navigationRef.navigate('BuddyWeek', { buddyId: buddy.refId }, { pop: true });
+  }
   const recapId = recapIdOf(notification);
   return recapId ? () => navigationRef.navigate('RecapStory', { id: recapId }, { pop: true }) : null;
 }

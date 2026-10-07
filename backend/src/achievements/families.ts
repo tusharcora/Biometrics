@@ -42,7 +42,7 @@ export interface FamilyResult extends FamilyStanding { reached: EarnedLevel[] }
 
 const datesFrom = (from: string, to: string): string[] => (from <= to ? dateRange(from, to) : []);
 
-export function sleepGoalDays(inp: StreakInputs): MarkedDay[] {
+export function sleepGoalDays(inp: Pick<StreakInputs, 'today' | 'since' | 'data' | 'sleepChanges' | 'currentSleepGoal'>): MarkedDay[] {
   const changes = goalChangesOf(inp.sleepChanges, 'SLEEP_MINUTES');
   return datesFrom(familyStartDate(inp.since, changes), inp.today).map((date): MarkedDay => {
     const minutes = inp.data.get(date)?.sleepMinutes;

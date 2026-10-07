@@ -4,6 +4,7 @@ import { fetchNotificationSettings, saveNotificationSettings } from '../../src/a
 
 jest.mock('../../src/api/client');
 const api = apiFetch as jest.Mock;
+const ALL_ON = { recapPushEnabled: true, notifyBuddyStickers: true, notifyBuddyRequests: true, notifyBuddyBadges: true };
 
 beforeEach(() => api.mockReset());
 
@@ -35,7 +36,7 @@ it('reads one recap and marks it opened with its own POST', async () => {
 
 it('reads and saves the notification settings', async () => {
   api.mockResolvedValue({ recapPushEnabled: true });
-  expect(await fetchNotificationSettings()).toEqual({ recapPushEnabled: true });
+  expect(await fetchNotificationSettings()).toEqual(ALL_ON);
   expect(api).toHaveBeenLastCalledWith('/me/notifications');
   await saveNotificationSettings({ recapPushEnabled: false });
   expect(api).toHaveBeenLastCalledWith('/me/notifications', {
@@ -47,7 +48,7 @@ it('reads and saves the notification settings', async () => {
 
 it('defaults the recap push to on when an older server has no settings (404), and rethrows any other failure', async () => {
   api.mockRejectedValue(Object.assign(new Error('nope'), { status: 404 }));
-  expect(await fetchNotificationSettings()).toEqual({ recapPushEnabled: true });
+  expect(await fetchNotificationSettings()).toEqual(ALL_ON);
   api.mockRejectedValue(Object.assign(new Error('boom'), { status: 500 }));
   await expect(fetchNotificationSettings()).rejects.toThrow('boom');
 });
@@ -55,8 +56,15 @@ it('defaults the recap push to on when an older server has no settings (404), an
 it('defaults the recap push to on when the body has no boolean for it', async () => {
   for (const body of [undefined, {}, { recapPushEnabled: 'false' }, { recapPushEnabled: null }]) {
     api.mockResolvedValue(body);
-    expect(await fetchNotificationSettings()).toEqual({ recapPushEnabled: true });
+    expect(await fetchNotificationSettings()).toEqual(ALL_ON);
   }
   api.mockResolvedValue({ recapPushEnabled: false, extra: 1 });
-  expect(await fetchNotificationSettings()).toEqual({ recapPushEnabled: false });
+  expect(await fetchNotificationSettings()).toEqual({ ...ALL_ON, recapPushEnabled: false });
+  api.mockResolvedValue({ ...ALL_ON, notifyBuddyRequests: false, notifyBuddyBadges: 'no' });
+  expect(await fetchNotificationSettings()).toEqual({ ...ALL_ON, notifyBuddyRequests: false });
+});
+
+it('fills a key a save response does not carry with the server default (on)', async () => {
+  api.mockResolvedValue({ recapPushEnabled: false });
+  expect(await saveNotificationSettings({ recapPushEnabled: false })).toEqual({ ...ALL_ON, recapPushEnabled: false });
 });
