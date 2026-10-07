@@ -110,8 +110,9 @@ export type RootStackParamList = {
   Badges: undefined;
   // One badge: the big badge, current and best, the ladder of five levels.
   BadgeDetail: { family: AchievementFamily };
-  // Buddies (spec 2026-10-06 buddies §7). `tab` lets a request push open the requests tab.
-  Buddies: { tab?: 'buddies' | 'requests' | 'activity' } | undefined;
+  // Buddies (spec 2026-10-06 buddies §7). `tab` lets a request push open the requests tab; a new
+  // `open` (a push sends Date.now()) re-selects it when the route already has that tab.
+  Buddies: { tab?: 'buddies' | 'requests' | 'activity'; open?: number } | undefined;
   // Your code, enter a code, or ask by @handle; first-time handle setup if missing.
   PairUp: undefined;
   // One buddy's mood week, shared numbers and stickers; opened from the list and by buddy pushes.

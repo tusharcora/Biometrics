@@ -34,18 +34,21 @@ function uniqueById<T extends { id: string }>(rows: readonly T[]): T[] {
 // / block) and Activity with an unseen dot. The header line is fixed text, never model output.
 export function BuddiesScreen() {
   const navigation = useNavigation() as unknown as Nav;
-  const route = useRoute() as { params?: { tab?: Tab } };
+  const route = useRoute() as { params?: { tab?: Tab; open?: number } };
   return (
     <SafeAreaView edges={['bottom']} className="flex-1 bg-background">
-      <IdentityGate>{(identity) => <BuddiesBody identity={identity} navigation={navigation} initialTab={route.params?.tab ?? 'buddies'} />}</IdentityGate>
+      <IdentityGate>
+        {(identity) => <BuddiesBody identity={identity} navigation={navigation} initialTab={route.params?.tab ?? 'buddies'} openedAt={route.params?.open} />}
+      </IdentityGate>
     </SafeAreaView>
   );
 }
 
-function BuddiesBody({ identity, navigation, initialTab }: { identity: BuddyIdentity; navigation: Nav; initialTab: Tab }) {
+function BuddiesBody({ identity, navigation, initialTab, openedAt }: { identity: BuddyIdentity; navigation: Nav; initialTab: Tab; openedAt?: number }) {
   const [tab, setTab] = useState<Tab>(initialTab);
-  // A request push tapped while this screen is open changes the param.
-  useEffect(() => setTab(initialTab), [initialTab]);
+  // A request push tapped while this screen is open changes the params; its new `open` re-selects
+  // the tab even when `tab` is the one the screen already has.
+  useEffect(() => setTab(initialTab), [initialTab, openedAt]);
   useRefreshBuddiesOnFocus();
   const gate = useMoodNoticeGate(identity.moodNoticeSeen);
   const [unseen, setUnseen] = useState(0);

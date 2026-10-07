@@ -21,7 +21,7 @@ jest.mock('../../src/api/buddies', () => ({
   confirmMoodNotice: jest.fn(),
 }));
 const mockNavigate = jest.fn();
-let mockParams: { tab?: string } | undefined;
+let mockParams: { tab?: string; open?: number } | undefined;
 // The screen's focus listeners (a stable navigation object, as in the app).
 let mockFocusListeners: Array<() => void> = [];
 const mockNavigation = {
@@ -220,6 +220,20 @@ it('selects the tab a changed route param names (a request push while the screen
   mockParams = { tab: 'requests' };
   view.rerender(<BuddiesScreen />);
   expect(await screen.findByTestId('request-in-r1')).toBeTruthy();
+});
+
+it('goes back to Requests when a request push re-sends the same tab with a new open value', async () => {
+  (fetchBuddyPage as jest.Mock).mockResolvedValue(EMPTY_PAGE);
+  (fetchRequests as jest.Mock).mockResolvedValue(ONE_INCOMING);
+  mockParams = { tab: 'requests', open: 1 };
+  const view = render(<BuddiesScreen />);
+  expect(await screen.findByTestId('request-in-r1')).toBeTruthy();
+  await act(async () => fireEvent.press(screen.getByTestId('buddies-tabs-activity')));
+  expect(await screen.findByTestId('activity-empty')).toBeTruthy();
+  mockParams = { tab: 'requests', open: 2 };
+  view.rerender(<BuddiesScreen />);
+  expect(await screen.findByTestId('request-in-r1')).toBeTruthy();
+  expect(screen.queryByTestId('activity-list')).toBeNull();
 });
 
 it('re-reads the Activity count on focus', async () => {
