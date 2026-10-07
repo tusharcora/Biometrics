@@ -74,15 +74,21 @@ export async function getSharing(userId: string): Promise<SharingDTO | null> {
   return row ? toDTO(row) : null;
 }
 
-/** Turning a switch on needs current consent (consent_required); turning one off never does. */
+/**
+ * Turning a switch on needs current consent (consent_required); turning one off never does. The
+ * consent check is part of the UPDATE's WHERE, so consent that changes meanwhile can't let a switch on.
+ */
 export async function updateSharing(userId: string, patch: Partial<Sharing>): Promise<SharingDTO> {
+  const enabling = Object.values(patch).some((v) => v === true);
+  const data = Object.fromEntries(Object.entries(patch).map(([key, value]) => [SHARE_COLUMNS[key as ShareKey], value]));
+  const done = await prisma.user.updateMany({
+    where: { id: userId, ...(enabling ? { buddySharingConsentVersion: BUDDY_SHARING_CONSENT_VERSION } : {}) },
+    data,
+  });
   const row = await prisma.user.findUnique({ where: { id: userId }, select: SHARING_SELECT });
   if (!row) throw new BuddyError('not_found');
-  const enabling = Object.values(patch).some((v) => v === true);
-  if (enabling && row.buddySharingConsentVersion !== BUDDY_SHARING_CONSENT_VERSION) throw new BuddyError('consent_required');
-  const data = Object.fromEntries(Object.entries(patch).map(([key, value]) => [SHARE_COLUMNS[key as ShareKey], value]));
-  const saved = await prisma.user.update({ where: { id: userId }, data, select: SHARING_SELECT });
-  return toDTO(saved);
+  if (done.count === 0) throw new BuddyError('consent_required');
+  return toDTO(row);
 }
 
 /** The app sends the version of the text it showed; anything but the current one is refused. */

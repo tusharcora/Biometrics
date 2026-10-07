@@ -63,6 +63,7 @@ buddiesRouter.post('/me/buddies/mood-notice', requireAuth, buddyRoute(async (req
 buddiesRouter.get('/me/buddies/sharing', requireAuth, buddyRoute(async (req, res) => {
   const sharing = await getSharing(req.userId!);
   if (!sharing) throw new BuddyError('not_found');
+  res.set('Cache-Control', 'private, no-store');
   res.json(sharing);
 }));
 

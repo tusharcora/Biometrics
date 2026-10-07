@@ -2,7 +2,7 @@ import { prisma } from '../../src/db/client';
 import { connection } from '../../src/sync/queue';
 import { migrateTestDb } from '../setupTestDb';
 import { authHeaderFor } from '../helpers/auth';
-import { BUDDY_SHARING_CONSENT_VERSION, effectiveSharing, parseSharingPatch } from '../../src/buddies/sharing';
+import { BUDDY_SHARING_CONSENT_VERSION, effectiveSharing, parseSharingPatch, updateSharing } from '../../src/buddies/sharing';
 import { api, buddyUser } from './helpers';
 
 beforeAll(() => migrateTestDb());
@@ -62,6 +62,26 @@ describe('routes', () => {
     expect((await agent.put('/me/buddies/sharing').set(headers).send({ streaks: false })).status).toBe(200);
     await agent.post('/me/buddies/sharing/consent').set(headers).send({ version: BUDDY_SHARING_CONSENT_VERSION });
     expect((await agent.get('/me/buddies/sharing').set(headers)).body).toEqual({ consentVersion: BUDDY_SHARING_CONSENT_VERSION, consented: true, ...ALL_OFF, steps: true });
+  });
+
+  it('the consent gate is part of the write: consent gone by the time of the update leaves the switch off', async () => {
+    const user = await buddyUser();
+    // Stale consent in the database, while an earlier read (say, before a version bump landed) still saw it current.
+    await prisma.user.update({ where: { id: user.id }, data: { buddySharingConsentVersion: BUDDY_SHARING_CONSENT_VERSION - 1 } });
+    const consentedRead = { ...row(), shareSteps: false };
+    jest.spyOn(prisma.user, 'findUnique').mockResolvedValueOnce(consentedRead as never);
+    try {
+      await expect(updateSharing(user.id, { steps: true })).rejects.toMatchObject({ code: 'consent_required' });
+    } finally {
+      jest.restoreAllMocks();
+    }
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).shareSteps).toBe(false);
+  });
+
+  it('answers GET sharing with Cache-Control private, no-store', async () => {
+    const user = await buddyUser();
+    const res = await (await api()).get('/me/buddies/sharing').set(await authHeaderFor(user.id));
+    expect([res.status, res.headers['cache-control']]).toEqual([200, 'private, no-store']);
   });
 
   it('records the mood notice once', async () => {
