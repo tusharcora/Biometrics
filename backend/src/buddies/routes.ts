@@ -30,7 +30,9 @@ buddiesRouter.get('/me/handle/availability', requireAuth, buddyRoute(async (req,
   await limitOrThrow(RATE_LIMITS.handle, req.userId!);
   const check = checkHandle(req.query.handle);
   if (!check.ok) throw new BuddyError('invalid_handle', { problem: check.problem });
-  res.json({ handle: check.handle, available: await isHandleAvailable(req.userId!, check.handle, new Date()) });
+  const available = await isHandleAvailable(req.userId!, check.handle, new Date());
+  res.set('Cache-Control', 'private, no-store');
+  res.json({ handle: check.handle, available });
 }));
 
 buddiesRouter.put('/me/handle', requireAuth, buddyRoute(async (req, res) => {
@@ -48,7 +50,9 @@ buddiesRouter.put('/me/handle', requireAuth, buddyRoute(async (req, res) => {
     patch.displayName = check.displayName;
   }
   if (Object.keys(patch).length === 0) throw new BuddyError('setup_incomplete');
-  res.json(await updateIdentity(req.userId!, patch, new Date()));
+  const identity = await updateIdentity(req.userId!, patch, new Date());
+  res.set('Cache-Control', 'private, no-store');
+  res.json(identity);
 }));
 
 buddiesRouter.post('/me/buddies/mood-notice', requireAuth, buddyRoute(async (req, res) => {

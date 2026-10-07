@@ -77,6 +77,8 @@ it('a changed handle is held 30 days as a keyed hash: others cannot claim it, it
   expect([taken.status, taken.body]).toEqual([409, { error: 'handle_taken' }]);
   expect((await (await api()).get('/me/handle/availability').query({ handle: old }).set(await authHeaderFor(other.id))).body.available).toBe(false);
 
+  expect((await (await api()).get('/me/handle/availability').query({ handle: old }).set(await authHeaderFor(sam.id))).body).toEqual({ handle: old, available: true });
+
   const back = await (await api()).put('/me/handle').set(await authHeaderFor(sam.id)).send({ handle: old });
   expect(back.status).toBe(200);
   expect(await prisma.handleHold.findUnique({ where: { handleHash: handleHash(old) } })).toBeNull();
@@ -137,6 +139,8 @@ it("a deleted account's handle is held for 30 days", async () => {
 });
 
 it('limits availability checks and handle saves to 30 a minute together', async () => {
+  // One fixed clock: all 31 calls land in the same one-minute window, whenever the test runs.
+  jest.spyOn(Date, 'now').mockReturnValue(Date.now());
   const user = await buddyUser();
   const headers = await authHeaderFor(user.id);
   const agent = await api();
@@ -150,4 +154,24 @@ it('fails closed with try_later when the limiter cannot reach Redis', async () =
   const user = await buddyUser();
   const res = await (await api()).get('/me/handle/availability').query({ handle: uniq() }).set(await authHeaderFor(user.id));
   expect([res.status, res.body]).toEqual([503, { error: 'try_later' }]);
+});
+
+it('identity routes need a session', async () => {
+  const agent = await api();
+  for (const res of [
+    await agent.get('/me/buddies/me'),
+    await agent.get('/me/handle/availability').query({ handle: uniq() }),
+    await agent.put('/me/handle').send({ handle: uniq(), displayName: 'Sam' }),
+  ]) expect(res.status).toBe(401);
+});
+
+it('answers identity reads and saves with Cache-Control private, no-store', async () => {
+  const user = await buddyUser();
+  const headers = await authHeaderFor(user.id);
+  const agent = await api();
+  for (const res of [
+    await agent.get('/me/buddies/me').set(headers),
+    await agent.get('/me/handle/availability').query({ handle: uniq() }).set(headers),
+    await agent.put('/me/handle').set(headers).send({ displayName: 'Sam' }),
+  ]) expect([res.status, res.headers['cache-control']]).toEqual([200, 'private, no-store']);
 });
