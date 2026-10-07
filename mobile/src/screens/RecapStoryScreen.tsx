@@ -5,14 +5,15 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { StatusBar } from 'expo-status-bar';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
-import Animated, { runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring, type SharedValue } from 'react-native-reanimated';
+import Animated, { runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from 'react-native-reanimated';
 import { ApiError } from '../api/client';
 import { fetchRecap, type Recap } from '../api/recaps';
 import { useCharacter } from '../characters/CharacterContext';
 import { Character } from '../components/characters/Character';
 import { hexAlpha } from '../components/characters/palette';
 import { characterInfo } from '../components/characters/registry';
-import { STORY_FRAME_COUNT, STORY_PROGRESS_HEIGHT, WeeklyStoryFrame, type StoryFrameIndex } from '../components/recap/WeeklyStoryView';
+import { ViewerProgress } from '../components/recap/ViewerProgress';
+import { STORY_FRAME_COUNT, WeeklyStoryFrame, type StoryFrameIndex } from '../components/recap/WeeklyStoryView';
 import { PressableScale } from '../components/ui/pressable-scale';
 import { Text } from '../components/ui/text';
 import { navigateToCoachEntry } from '../navigation/coachNavigation';
@@ -232,7 +233,7 @@ function StoryViewer({ recap, coachId, tint, includes }: { recap: Recap; coachId
         <GestureDetector gesture={swipe}>
           <Animated.View style={[{ flex: 1 }, dragStyle]}>
             <View style={{ height: TOP_CHROME_HEIGHT, paddingHorizontal: SIDE, paddingTop: 8, gap: 6 }}>
-              <ViewerProgress tint={tint} index={index} progress={viewer.progress} />
+              <ViewerProgress count={STORY_FRAME_COUNT} index={index} progress={viewer.progress} track={tint.track} fill={tint.text} />
               <View testID="story-viewer-header" className="flex-row items-center" style={{ gap: 10, height: 44 }}>
                 <View testID="story-viewer-coach" style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.3)', alignItems: 'center', justifyContent: 'center' }}>
                   <Character characterId={coachId} mood="idle" size={28} />
@@ -379,20 +380,5 @@ function PillButton({ testID, label, tint, primary = false, onPress, onPressIn, 
         {label}
       </Text>
     </PressableScale>
-  );
-}
-
-/** The viewer's own bar above the header: past frames full, the current one filling. */
-function ViewerProgress({ tint, index, progress }: { tint: RecapTint; index: number; progress: SharedValue<number> }) {
-  const fill = useAnimatedStyle(() => ({ width: `${Math.max(0, Math.min(1, progress.value)) * 100}%` }));
-  return (
-    <View testID="story-viewer-progress" style={{ flexDirection: 'row', gap: 4, height: STORY_PROGRESS_HEIGHT }}>
-      {Array.from({ length: STORY_FRAME_COUNT }, (_, i) => (
-        <View key={i} style={{ flex: 1, borderRadius: 2, backgroundColor: tint.track, overflow: 'hidden' }}>
-          {i < index ? <View style={{ width: '100%', height: '100%', backgroundColor: tint.text }} /> : null}
-          {i === index ? <Animated.View style={[{ height: '100%', backgroundColor: tint.text }, fill]} /> : null}
-        </View>
-      ))}
-    </View>
   );
 }

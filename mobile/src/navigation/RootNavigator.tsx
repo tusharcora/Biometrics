@@ -31,6 +31,7 @@ import { RecapBuilderScreen } from '../screens/RecapBuilderScreen';
 import { RecapScreen } from '../screens/RecapScreen';
 import { RecapStoryScreen } from '../screens/RecapStoryScreen';
 import { RecapsScreen } from '../screens/RecapsScreen';
+import { SocialStoryScreen } from '../screens/SocialStoryScreen';
 import { YearInPixelsScreen } from '../screens/YearInPixelsScreen';
 import { BadgesScreen } from '../screens/BadgesScreen';
 import { BadgeDetailScreen } from '../screens/BadgeDetailScreen';
@@ -252,6 +253,12 @@ export function RootNavigator() {
               <Stack.Screen name="PairUp" component={PairUpScreen} options={{ title: 'Add a buddy' }} />
               <Stack.Screen name="BlockedPeople" component={BlockedPeopleScreen} options={{ title: 'Blocked people' }} />
               <Stack.Screen name="Highlights" component={HighlightsScreen} options={{ title: 'Highlights' }} />
+              <Stack.Screen
+                name="SocialStory"
+                component={SocialStoryScreen}
+                // Full screen like the recap story: Close (or running past the end) closes it.
+                options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }}
+              />
               {/* One instance per buddy: navigating to another buddy's week (a push tap) opens a new
                   screen instead of swapping the params under the current one. */}
               <Stack.Screen name="BuddyWeek" component={BuddyWeekScreen} getId={({ params }) => params?.buddyId} options={{ title: '' }} />
