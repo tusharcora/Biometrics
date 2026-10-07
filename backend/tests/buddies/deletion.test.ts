@@ -25,7 +25,7 @@ async function seedSocial(a: string, b: string) {
   await prisma.buddyRequest.create({ data: { fromUserId: a, toUserId: b, status: 'ACCEPTED' } });
   await prisma.buddyRequest.create({ data: { fromUserId: b, toUserId: a, status: 'CANCELLED' } });
   const later = new Date(Date.now() + 86_400_000);
-  await prisma.buddyCode.create({ data: { code: randomUUID().slice(0, 8).toUpperCase(), ownerId: a, expiresAt: later, usedAt: new Date(), usedById: b } });
+  const aCode = await prisma.buddyCode.create({ data: { code: randomUUID().slice(0, 8).toUpperCase(), ownerId: a, expiresAt: later, usedAt: new Date(), usedById: b } });
   const bCode = await prisma.buddyCode.create({ data: { code: randomUUID().slice(0, 8).toUpperCase(), ownerId: b, expiresAt: later, usedAt: new Date(), usedById: a } });
   await prisma.buddyBlock.create({ data: { blockerId: a, blockedId: b } });
   await prisma.buddyMute.create({ data: { muterId: b, mutedId: a } });
@@ -34,7 +34,7 @@ async function seedSocial(a: string, b: string) {
   await prisma.buddyActivity.create({ data: { recipientId: b, actorId: a, kind: 'STICKER', refId: s1.id } });
   await prisma.buddyActivity.create({ data: { recipientId: a, actorId: b, kind: 'PAIRED', refId: pair.id } });
   await prisma.handleHold.create({ data: { handleHash: randomUUID(), previousOwnerId: a, releasedAt: new Date() } });
-  return { bCode: bCode.code };
+  return { aCode: aCode.code, bCode: bCode.code };
 }
 
 /** Rows of `model` whose role column (any of them) holds `userId`. */
@@ -70,28 +70,30 @@ describe('social tables stay outside the USER_OWNED_MODELS guard', () => {
   });
 });
 
-describe.each(['first', 'second'] as const)('deleting the %s user of a pair', (side) => {
+describe.each(['userAId', 'userBId'] as const)('deleting the user in BuddyPair.%s', (column) => {
   it('removes every social row that names them, nulls usedById, and leaves a bystander alone', async () => {
     const a = await newUser();
     const b = await newUser();
     const c = await newUser();
     const d = await newUser();
-    const { bCode } = await seedSocial(a.id, b.id);
+    const { aCode, bCode } = await seedSocial(a.id, b.id);
     // A bystander pair that shares nothing with a or b.
     await seedSocial(c.id, d.id);
-    const [doomed, survivor] = side === 'first' ? [a, b] : [b, a];
+    const pair = await prisma.buddyPair.findFirstOrThrow({ where: { OR: [{ userAId: a.id }, { userBId: a.id }] } });
+    // Chosen by column, not by creation order, so each run covers both cascades whatever the ids.
+    const doomedId = pair[column];
+    const survivorId = doomedId === a.id ? b.id : a.id;
     const bystanderBefore = await Promise.all(SOCIAL_MODELS.map((m) => rowsFor(m, c.id)));
 
-    await deleteUserAccount(doomed.id, noop);
+    await deleteUserAccount(doomedId, noop);
 
-    for (const model of SOCIAL_MODELS) expect([model, await rowsFor(model, doomed.id)]).toEqual([model, 0]);
+    expect(await prisma.buddyPair.findUnique({ where: { id: pair.id } })).toBeNull();
+    for (const model of SOCIAL_MODELS) expect([model, await rowsFor(model, doomedId)]).toEqual([model, 0]);
     expect(await Promise.all(SOCIAL_MODELS.map((m) => rowsFor(m, c.id)))).toEqual(bystanderBefore);
-    expect(await prisma.user.findUnique({ where: { id: survivor.id } })).not.toBeNull();
-    if (side === 'first') {
-      // b's code was redeemed by a: the code survives with usedById nulled, not cascaded.
-      const code = await prisma.buddyCode.findUniqueOrThrow({ where: { code: bCode } });
-      expect([code.ownerId, code.usedById]).toEqual([b.id, null]);
-    }
+    expect(await prisma.user.findUnique({ where: { id: survivorId } })).not.toBeNull();
+    // The survivor's code that the deleted user redeemed survives with usedById nulled, not cascaded.
+    const code = await prisma.buddyCode.findUniqueOrThrow({ where: { code: doomedId === a.id ? bCode : aCode } });
+    expect([code.ownerId, code.usedById]).toEqual([survivorId, null]);
   });
 });
 
@@ -111,4 +113,14 @@ it('allows at most one PENDING request per ordered pair (partial unique index)',
   await expect(prisma.buddyRequest.create({ data: { fromUserId: a.id, toUserId: b.id } })).rejects.toMatchObject({ code: 'P2002' });
   await prisma.buddyRequest.create({ data: { fromUserId: b.id, toUserId: a.id } });
   await prisma.buddyRequest.create({ data: { fromUserId: a.id, toUserId: b.id, status: 'DECLINED' } });
+});
+
+it('refuses a BuddyPair stored out of order or with one user twice (CHECK userAId < userBId)', async () => {
+  const a = await newUser();
+  const b = await newUser();
+  const [lo, hi] = a.id < b.id ? [a.id, b.id] : [b.id, a.id];
+  await expect(prisma.buddyPair.create({ data: { userAId: hi, userBId: lo } })).rejects.toThrow(/BuddyPair_ordered_check/);
+  await expect(prisma.buddyPair.create({ data: { userAId: lo, userBId: lo } })).rejects.toThrow(/BuddyPair_ordered_check/);
+  expect(await prisma.buddyPair.count({ where: { OR: [{ userAId: lo }, { userBId: lo }] } })).toBe(0);
+  await prisma.buddyPair.create({ data: { userAId: lo, userBId: hi } });
 });
