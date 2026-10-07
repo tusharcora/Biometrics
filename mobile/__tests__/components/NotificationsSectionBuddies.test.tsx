@@ -56,7 +56,9 @@ it('a double flip saves once; a failed save keeps the last saved value and expla
   await act(async () => reject(new Error('boom')));
   expect(screen.getByTestId('buddy-stickers-toggle').props.value).toBe(true);
   expect(screen.getByTestId('buddy-stickers-toggle').props.disabled).toBe(false);
-  expect(screen.getByTestId('recap-ready-message').props.children).toBe('Your notification setting could not be saved. Please try again.');
+  // Its own testID: a buddy save failure is not the recap's message.
+  expect(screen.getByTestId('buddy-notify-message').props.children).toBe('Your notification setting could not be saved. Please try again.');
+  expect(screen.queryByTestId('recap-ready-message')).toBeNull();
 });
 
 it('turning a buddy switch on registers this device first', async () => {

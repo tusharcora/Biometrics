@@ -138,7 +138,7 @@ export function NotificationsSection() {
         : null}
       {message ? (
         <Text
-          testID="recap-ready-message"
+          testID={failed !== null && failed !== 'recapPushEnabled' ? 'buddy-notify-message' : 'recap-ready-message'}
           className={isError ? 'px-4 pb-3 text-sm text-destructive' : 'px-4 pb-3 text-xs text-muted-foreground'}
         >
           {message}
