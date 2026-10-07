@@ -34,6 +34,19 @@ async function seedSocial(a: string, b: string) {
   await prisma.buddyActivity.create({ data: { recipientId: b, actorId: a, kind: 'STICKER', refId: s1.id } });
   await prisma.buddyActivity.create({ data: { recipientId: a, actorId: b, kind: 'PAIRED', refId: pair.id } });
   await prisma.handleHold.create({ data: { handleHash: randomUUID(), previousOwnerId: a, releasedAt: new Date() } });
+  // Social tab S1 tables (spec 2026-10-07 social). Each user owns a recap so both sharer roles are covered.
+  const today = new Date('2026-10-07T00:00:00Z');
+  const week = new Date('2026-09-28T00:00:00Z');
+  for (const [me, other] of [[a, b], [b, a]] as const) {
+    const recap = await prisma.recap.create({
+      data: { userId: me, kind: 'WEEK', periodStart: week, periodEnd: new Date('2026-10-04T00:00:00Z'), status: 'BUILT', sleepGoalMinutes: 480, line: 'A steadier week', lineSource: 'TEMPLATE' },
+    });
+    await prisma.checkIn.create({ data: { authorId: me, localDate: today, mood: 'RESTED' } });
+    await prisma.storySeen.create({ data: { viewerId: me, authorId: other, localDate: today } });
+    await prisma.recapShare.create({ data: { sharerId: me, recapId: recap.id, localDate: today } });
+    await prisma.stepGoalEvent.create({ data: { authorId: me, localDate: today } });
+    await prisma.weeklyHighlights.create({ data: { viewerId: me, weekStart: week, items: [] } });
+  }
   return { aCode: aCode.code, bCode: bCode.code };
 }
 
