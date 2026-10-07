@@ -17,6 +17,7 @@ import { SegmentedControl } from '../components/ui/segmented-control';
 import { Text } from '../components/ui/text';
 import { activityLine, buddyErrorMessage } from '../lib/buddyCopy';
 import { refreshBuddies, useBuddies } from '../lib/buddiesStore';
+import { offerPushAfterPairing } from '../lib/buddyPushOffer';
 import { useRefreshBuddiesOnFocus } from '../lib/useRefreshBuddiesOnFocus';
 
 type Tab = 'buddies' | 'requests' | 'activity';
@@ -212,6 +213,8 @@ function RequestsTab({ gate, navigation }: { gate: Gate; navigation: Nav }) {
       perform(async () => {
         const { buddyId } = await acceptRequest(id);
         navigation.navigate('BuddyWeek', { buddyId });
+        // After the navigation, never awaited: the first pairing on this device offers notifications once.
+        void offerPushAfterPairing();
       }),
     );
   const block = (r: IncomingRequest) => {

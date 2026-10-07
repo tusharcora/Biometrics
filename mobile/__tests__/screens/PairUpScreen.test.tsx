@@ -3,6 +3,7 @@ import { Share } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { confirmMoodNotice, createCode, fetchCode, fetchIdentity, redeemCode, sendBuddyRequest } from '../../src/api/buddies';
 import { refreshBuddies } from '../../src/lib/buddiesStore';
+import { offerPushAfterPairing } from '../../src/lib/buddyPushOffer';
 import { PairUpScreen } from '../../src/screens/PairUpScreen';
 
 jest.mock('../../src/api/buddies', () => ({
@@ -15,6 +16,8 @@ jest.mock('../../src/api/buddies', () => ({
   confirmMoodNotice: jest.fn(),
 }));
 jest.mock('../../src/lib/buddiesStore', () => ({ refreshBuddies: jest.fn() }));
+// Never settles: the pairing must navigate without waiting on the push offer.
+jest.mock('../../src/lib/buddyPushOffer', () => ({ offerPushAfterPairing: jest.fn(() => new Promise(() => undefined)) }));
 const mockReplace = jest.fn();
 jest.mock('@react-navigation/native', () => ({ useNavigation: () => ({ replace: mockReplace, navigate: jest.fn() }) }));
 
@@ -117,6 +120,28 @@ it('says an invalid code plainly, and confirms a sent request the same way whate
   expect(sendBuddyRequest).toHaveBeenCalledWith('@Sam_R');
   expect(screen.getByTestId('pair-message')).toHaveTextContent('Request sent to @sam_r.');
   expect(refreshBuddies).toHaveBeenCalledTimes(1);
+});
+
+it('offers buddy notifications after a successful redeem only, without holding up the navigation', async () => {
+  (redeemCode as jest.Mock).mockRejectedValueOnce(Object.assign(new Error('x'), { status: 400, code: 'code_invalid' }));
+  render(<PairUpScreen />);
+  fireEvent.changeText(await screen.findByTestId('pair-code-input'), 'ABCD2345');
+  await act(async () => fireEvent.press(screen.getByTestId('pair-redeem')));
+  expect(offerPushAfterPairing).not.toHaveBeenCalled();
+  (redeemCode as jest.Mock).mockResolvedValueOnce({ buddyId: 'b1' });
+  await act(async () => fireEvent.press(screen.getByTestId('pair-redeem')));
+  expect(mockReplace).toHaveBeenCalledWith('BuddyWeek', { buddyId: 'b1' });
+  expect(offerPushAfterPairing).toHaveBeenCalledTimes(1);
+  // The pending offer doesn't hold the buttons either.
+  expect(screen.getByTestId('pair-redeem').props.accessibilityState?.disabled).toBeFalsy();
+});
+
+it('a sent request never offers notifications (it pairs no one here)', async () => {
+  (sendBuddyRequest as jest.Mock).mockResolvedValue(undefined);
+  render(<PairUpScreen />);
+  fireEvent.changeText(await screen.findByTestId('pair-handle-input'), 'sam');
+  await act(async () => fireEvent.press(screen.getByTestId('pair-request')));
+  expect(offerPushAfterPairing).not.toHaveBeenCalled();
 });
 
 it('shows a rate limit through the shared copy without retrying', async () => {

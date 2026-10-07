@@ -13,6 +13,7 @@ import { Text } from '../components/ui/text';
 import { TextField } from '../components/ui/text-field';
 import { buddyErrorMessage, expiresIn, shareMessage } from '../lib/buddyCopy';
 import { refreshBuddies } from '../lib/buddiesStore';
+import { offerPushAfterPairing } from '../lib/buddyPushOffer';
 
 type Nav = { replace: (name: string, params?: object) => void };
 type Code = { code: string; expiresAt: string };
@@ -85,6 +86,8 @@ function PairUpBody({ identity, navigation }: { identity: BuddyIdentity; navigat
       const { buddyId } = await redeemCode(entered);
       void refreshBuddies();
       navigation.replace('BuddyWeek', { buddyId });
+      // After the navigation, never awaited: the first pairing on this device offers notifications once.
+      void offerPushAfterPairing();
     });
   const request = () =>
     act(async () => {

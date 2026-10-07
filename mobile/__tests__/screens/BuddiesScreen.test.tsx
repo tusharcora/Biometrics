@@ -5,7 +5,11 @@ import {
   acceptRequest, blockFromRequest, cancelRequest, confirmMoodNotice, declineRequest, fetchActivity, fetchBuddyPage, fetchIdentity, fetchRequests, markActivitySeen,
 } from '../../src/api/buddies';
 import { resetBuddies } from '../../src/lib/buddiesStore';
+import { offerPushAfterPairing } from '../../src/lib/buddyPushOffer';
 import { BuddiesScreen } from '../../src/screens/BuddiesScreen';
+
+// Never settles: the accept must navigate without waiting on the push offer.
+jest.mock('../../src/lib/buddyPushOffer', () => ({ offerPushAfterPairing: jest.fn(() => new Promise(() => undefined)) }));
 
 jest.mock('../../src/api/buddies', () => ({
   ...jest.requireActual('../../src/api/buddies'),
@@ -110,6 +114,32 @@ it('answers requests: accept opens the week, decline is quiet, block asks first;
   expect(alert).toHaveBeenCalled();
   await waitFor(() => expect(blockFromRequest).toHaveBeenCalledWith('r2'));
   alert.mockRestore();
+});
+
+it('offers buddy notifications after an accept that went through only, without holding up the navigation', async () => {
+  (fetchBuddyPage as jest.Mock).mockResolvedValue(EMPTY_PAGE);
+  (fetchRequests as jest.Mock).mockResolvedValue({ incoming: [{ id: 'r1', createdAt: '', from: person('u1', 'Ana') }], outgoing: [] });
+  (acceptRequest as jest.Mock).mockRejectedValueOnce(Object.assign(new Error('x'), { status: 404, code: 'request_gone' }));
+  mockParams = { tab: 'requests' };
+  render(<BuddiesScreen />);
+  const accept = await screen.findByTestId('request-accept-r1');
+  await act(async () => fireEvent.press(accept));
+  expect(await screen.findByTestId('requests-message')).toBeTruthy();
+  expect(offerPushAfterPairing).not.toHaveBeenCalled();
+  (acceptRequest as jest.Mock).mockResolvedValueOnce({ ok: true, buddyId: 'u1' });
+  await act(async () => fireEvent.press(screen.getByTestId('request-accept-r1')));
+  await waitFor(() => expect(mockNavigate).toHaveBeenCalledWith('BuddyWeek', { buddyId: 'u1' }));
+  expect(offerPushAfterPairing).toHaveBeenCalledTimes(1);
+});
+
+it('an empty list still offers "Add a buddy", which opens Pair up', async () => {
+  (fetchBuddyPage as jest.Mock).mockResolvedValue(EMPTY_PAGE);
+  render(<BuddiesScreen />);
+  expect(await screen.findByTestId('buddies-empty')).toBeTruthy();
+  const add = screen.getByTestId('buddies-add');
+  expect(add).toHaveTextContent('Add a buddy');
+  fireEvent.press(add);
+  expect(mockNavigate).toHaveBeenCalledWith('PairUp');
 });
 
 it('accepts once on a double tap and refreshes the shared list after it', async () => {
