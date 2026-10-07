@@ -49,6 +49,7 @@ import type { RecapJobData } from '../recap/types';
 import { refreshDaySummaryAfterScore } from '../coach/daySummaryJob';
 import { runCoachRetention } from '../coach/retention';
 import { LoggerCoachTelemetry } from '../coach/telemetry';
+import { recordStepGoal } from '../social/stepGoal';
 
 const ALL_METRIC_TYPES: BiometricMetricType[] = ['HRV', 'RESTING_HR', 'SLEEP', 'STEPS'];
 const SYNC_WORKER_CONCURRENCY = 5;
@@ -216,6 +217,12 @@ async function handleFetchJob(data: FetchJobData): Promise<void> {
     } else {
       const points = await session.fetch(data.metricType, data.date, end);
       await upsertBiometricRecords(data.userId, data.metricType, points);
+      if (data.metricType === 'STEPS') {
+        // Social timeline event; a failure never fails the sync (logged with ids only).
+        await recordStepGoal(data.userId, points, new Date()).catch((err: unknown) =>
+          console.error(JSON.stringify({ event: 'social.step_goal_failed', userId: data.userId, error: err instanceof Error ? err.name : 'unknown' })),
+        );
+      }
       if (SCORE_INPUT_METRICS.has(data.metricType)) await requestScores(data.userId, points.map(civilDateOf));
     }
     await prisma.healthConnection.update({
@@ -258,6 +265,12 @@ export async function syncWindow(userId: string, startDate: string, endDate: str
       }
       const points = await session.fetch(metricType, startDate, endDate);
       await upsertBiometricRecords(userId, metricType, points);
+      if (metricType === 'STEPS') {
+        // Social timeline event; a failure never fails the sync (logged with ids only).
+        await recordStepGoal(userId, points, new Date()).catch((err: unknown) =>
+          console.error(JSON.stringify({ event: 'social.step_goal_failed', userId, error: err instanceof Error ? err.name : 'unknown' })),
+        );
+      }
       if (SCORE_INPUT_METRICS.has(metricType)) scoreDates.push(...points.map(civilDateOf));
     }
     await requestScores(userId, scoreDates);
