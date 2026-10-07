@@ -176,6 +176,50 @@ it('blocks after a confirmation; cancelling does nothing', async () => {
   alert.mockRestore();
 });
 
+it.each([
+  ['mute', () => (setMuted as jest.Mock).mockRejectedValue(coded('not_buddies'))],
+  ['unpair', () => (unpair as jest.Mock).mockRejectedValue(coded('not_buddies'))],
+  ['block', () => (blockBuddy as jest.Mock).mockRejectedValue(coded('not_buddies'))],
+])('a not_buddies answer to %s shows the gone state and offers nothing more', async (action, refuse) => {
+  refuse();
+  const alert = pressDestructive();
+  render(<BuddyWeekScreen />);
+  await pressOnceShown(`buddy-${action}`);
+  expect(screen.getByTestId('buddy-week-gone')).toHaveTextContent("You're no longer buddies.");
+  for (const id of ['buddy-mute', 'buddy-unpair', 'buddy-block', 'sticker-STAR', 'buddy-week-line']) expect(screen.queryByTestId(id)).toBeNull();
+  expect(mockGoBack).not.toHaveBeenCalled();
+  alert.mockRestore();
+});
+
+it('disables Mute, Unpair and Block while a sticker is on its way', async () => {
+  const send = deferred<{ id: string }>();
+  (sendSticker as jest.Mock).mockReturnValue(send.promise);
+  const alert = pressDestructive();
+  render(<BuddyWeekScreen />);
+  await pressOnceShown('sticker-STAR');
+  for (const id of ['buddy-mute', 'buddy-unpair', 'buddy-block', 'sticker-HEART']) expect(screen.getByTestId(id)).toBeDisabled();
+  await act(async () => {
+    fireEvent.press(screen.getByTestId('buddy-mute'));
+    fireEvent.press(screen.getByTestId('buddy-unpair'));
+    fireEvent.press(screen.getByTestId('buddy-block'));
+  });
+  expect(setMuted).not.toHaveBeenCalled();
+  expect(alert).not.toHaveBeenCalled();
+  expect(unpair).not.toHaveBeenCalled();
+  expect(blockBuddy).not.toHaveBeenCalled();
+  await act(async () => send.resolve({ id: 's1' }));
+  for (const id of ['buddy-mute', 'buddy-unpair', 'buddy-block']) expect(screen.getByTestId(id)).not.toBeDisabled();
+  alert.mockRestore();
+});
+
+it('shows no note after a successful mute', async () => {
+  (setMuted as jest.Mock).mockResolvedValue({ muted: true });
+  render(<BuddyWeekScreen />);
+  await pressOnceShown('buddy-mute');
+  expect(screen.getByTestId('buddy-mute')).toHaveTextContent('Unmute');
+  expect(screen.queryByTestId('buddy-week-note')).toBeNull();
+});
+
 it('does not navigate when an unpair finishes after the screen is gone', async () => {
   const done = deferred<void>();
   (unpair as jest.Mock).mockReturnValue(done.promise);

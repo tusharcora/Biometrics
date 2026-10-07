@@ -237,7 +237,9 @@ export function RootNavigator() {
               <Stack.Screen name="BuddyIdentity" component={BuddyIdentityScreen} options={{ title: 'Buddy name' }} />
               <Stack.Screen name="Buddies" component={BuddiesScreen} options={{ title: 'Buddies' }} />
               <Stack.Screen name="PairUp" component={PairUpScreen} options={{ title: 'Add a buddy' }} />
-              <Stack.Screen name="BuddyWeek" component={BuddyWeekScreen} options={{ title: '' }} />
+              {/* One instance per buddy: navigating to another buddy's week (a push tap) opens a new
+                  screen instead of swapping the params under the current one. */}
+              <Stack.Screen name="BuddyWeek" component={BuddyWeekScreen} getId={({ params }) => params.buddyId} options={{ title: '' }} />
               <Stack.Screen name="RecapBuilder" component={RecapBuilderScreen} options={{ title: 'Build your recap' }} />
               <Stack.Screen
                 name="MeetYourCoach"
