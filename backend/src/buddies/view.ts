@@ -40,7 +40,7 @@ export async function buildBuddyWeek(viewerId: string, buddyId: string, now: Dat
   const sharing = effectiveSharing(buddy);
   const today = localCivilDateOrUtc(now, buddy.timezone);
   const dates = Array.from({ length: 7 }, (_, i) => shiftDate(today, i - 6));
-  const data = await loadRecapData(buddyId, buddy.timezone, dates[0]!, today);
+  const data = await loadRecapData(buddyId, buddy.timezone, dates[0]!, today, { bedtimes: false });
 
   const recovery = new Map<string, number>();
   for (const [date, day] of data) if (day.recovery !== undefined) recovery.set(date, day.recovery);
@@ -72,9 +72,10 @@ export async function buildBuddyWeek(viewerId: string, buddyId: string, now: Dat
     numbers,
   };
   if (sharing.streaks) {
-    const rows = await prisma.achievement.findMany({ where: { userId: buddyId }, select: { family: true, level: true } });
+    const top = await prisma.achievement.groupBy({ by: ['family'], where: { userId: buddyId }, _max: { level: true } });
+    const levels = new Map(top.map((r) => [r.family, r._max.level ?? 0]));
     week.badges = FAMILIES.flatMap((def) => {
-      const level = rows.filter((r) => r.family === def.family).reduce((m, r) => Math.max(m, r.level), 0);
+      const level = levels.get(def.family) ?? 0;
       return level > 0 ? [{ family: def.family, level }] : [];
     });
   }

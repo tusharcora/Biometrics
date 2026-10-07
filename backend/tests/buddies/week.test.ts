@@ -82,6 +82,25 @@ it('streaks on: the streak clause (≥ 3 nights) and badge levels, only on the w
   expect(week.shares).toEqual(['streaks']);
 });
 
+it('reads no sleep sessions, and badge levels in one grouped query', async () => {
+  const { viewer, buddy } = await buddyWithWeek({ shareStreaks: true });
+  await prisma.achievement.create({
+    data: { userId: buddy.id, family: 'SLEEP_GOAL', level: 1, value: 3, earnedOn: civilDateToUtcMidnight('2026-10-03'), weekStart: civilDateToUtcMidnight('2026-09-28'), monthStart: civilDateToUtcMidnight('2026-10-01') },
+  });
+  const sessions = jest.spyOn(prisma.sleepSession, 'findMany');
+  const rows = jest.spyOn(prisma.achievement, 'findMany');
+  const grouped = jest.spyOn(prisma.achievement, 'groupBy');
+  try {
+    const week = await buildBuddyWeek(viewer.id, buddy.id, NOW);
+    expect(week.badges).toEqual([{ family: 'SLEEP_GOAL', level: 2 }]);
+    expect(sessions).not.toHaveBeenCalled();
+    expect(rows).not.toHaveBeenCalled();
+    expect(grouped).toHaveBeenCalledTimes(1);
+  } finally {
+    jest.restoreAllMocks();
+  }
+});
+
 it('a stale consent version reads every switch as off', async () => {
   const { viewer, buddy } = await buddyWithWeek(
     { shareRecovery: true, shareSleepScore: true, shareHoursSlept: true, shareSteps: true, shareStreaks: true },

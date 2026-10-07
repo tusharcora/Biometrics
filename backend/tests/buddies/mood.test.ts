@@ -1,7 +1,7 @@
 import { prisma } from '../../src/db/client';
 import { migrateTestDb } from '../setupTestDb';
 import { civilDateToUtcMidnight } from '../../src/biometrics/civilDate';
-import { currentSleepStreak, moodFromScore, moodLine, todayMood } from '../../src/buddies/mood';
+import { STREAK_LOOKBACK_DAYS, currentSleepStreak, moodFromScore, moodLine, todayMood } from '../../src/buddies/mood';
 import { getLiveConfig } from '../../src/scoring/configs';
 import { seedNights } from '../recap/helpers';
 import { buddyUser } from './helpers';
@@ -51,6 +51,33 @@ describe('currentSleepStreak (write-free)', () => {
     for (const spy of writes) expect(spy).not.toHaveBeenCalled();
     expect(await prisma.achievement.count({ where: { userId: user.id } })).toBe(0);
     writes.forEach((s) => s.mockRestore());
+  });
+
+  it('reads only SLEEP rollups (bounded to STREAK_LOOKBACK_DAYS) and sleep goal changes', async () => {
+    const user = await buddyUser();
+    await prisma.user.update({ where: { id: user.id }, data: { achievementsSince: civilDateToUtcMidnight('2024-01-01') } });
+    await seedNights(user.id, '2026-10-05', [500, 500, 500, 500, 500, 500]);
+    const unused = [prisma.sleepSession, prisma.dailyScore, prisma.habitCheckIn, prisma.recap].map((d) => jest.spyOn(d, 'findMany'));
+    const records = jest.spyOn(prisma.biometricRecord, 'findMany');
+    try {
+      expect(await currentSleepStreak(user.id, NOW)).toBe(6);
+      for (const spy of unused) expect(spy).not.toHaveBeenCalled();
+      expect(records).toHaveBeenCalledTimes(1);
+      const where = (records.mock.calls[0]![0] as { where: { metricType: unknown; recordedAt: { gte: Date } } }).where;
+      expect(where.metricType).toBe('SLEEP');
+      expect(where.recordedAt.gte.getTime()).toBe(civilDateToUtcMidnight('2026-10-10').getTime() - STREAK_LOOKBACK_DAYS * 86_400_000);
+    } finally {
+      jest.restoreAllMocks();
+    }
+  });
+
+  it('starts after a sleep goal change that reset the streak', async () => {
+    const user = await buddyUser();
+    await prisma.user.update({ where: { id: user.id }, data: { achievementsSince: civilDateToUtcMidnight('2026-10-01') } });
+    await seedNights(user.id, '2026-10-05', [500, 500, 500, 500, 500, 500]);
+    await prisma.goalChange.create({ data: { userId: user.id, kind: 'SLEEP_MINUTES', sleepMinutes: 480, effectiveOn: civilDateToUtcMidnight('2026-10-07'), resetsStreak: true } });
+    // The run starts on the 8th: the 8th, 9th and 10th.
+    expect(await currentSleepStreak(user.id, NOW)).toBe(3);
   });
 
   it('is null (no streak, not 0) without an achievements start date', async () => {
