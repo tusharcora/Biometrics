@@ -11,14 +11,32 @@ beforeEach(() => {
   resetBuddies();
 });
 
-it('loads the first page once for callers that overlap, and publishes it to hooks', async () => {
+it('publishes the first page to hooks', async () => {
   load.mockResolvedValue(PAGE);
   const { result } = renderHook(() => useBuddies());
   await act(async () => {
-    await Promise.all([refreshBuddies(), refreshBuddies()]);
+    await refreshBuddies();
   });
   expect(load).toHaveBeenCalledTimes(1);
   expect(result.current).toEqual({ status: 'ready', page: PAGE });
+});
+
+it('a refresh during an in-flight load reloads once after it, and callers wait for that reload', async () => {
+  const NEWER = { ...PAGE, incomingRequests: 1 };
+  let resolveFirst!: (page: unknown) => void;
+  load.mockReturnValueOnce(new Promise((r) => { resolveFirst = r; })).mockResolvedValueOnce(NEWER);
+  const first = refreshBuddies();
+  // Two calls while the first runs (e.g. right after an accept): one extra load, not two.
+  const second = refreshBuddies();
+  const third = refreshBuddies();
+  resolveFirst(PAGE);
+  await Promise.all([first, second, third]);
+  expect(load).toHaveBeenCalledTimes(2);
+  expect(getBuddiesState()).toEqual({ status: 'ready', page: NEWER });
+  // Settled: the next refresh starts a fresh single load.
+  load.mockResolvedValueOnce(PAGE);
+  await refreshBuddies();
+  expect(load).toHaveBeenCalledTimes(3);
 });
 
 it('a bare 404 is unavailable; a failure keeps the last good page, or is an error', async () => {
@@ -43,5 +61,17 @@ it('a load that started before a reset never lands after it', async () => {
   resetBuddies();
   resolve(PAGE);
   await pending;
+  expect(getBuddiesState()).toEqual({ status: 'idle' });
+});
+
+it('a reset during an in-flight load drops the pending reload too', async () => {
+  let resolve!: (page: unknown) => void;
+  load.mockReturnValueOnce(new Promise((r) => { resolve = r; }));
+  const pending = refreshBuddies();
+  void refreshBuddies();
+  resetBuddies();
+  resolve(PAGE);
+  await pending;
+  expect(load).toHaveBeenCalledTimes(1);
   expect(getBuddiesState()).toEqual({ status: 'idle' });
 });
