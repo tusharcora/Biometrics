@@ -6,10 +6,21 @@ import { requireAuth } from '../auth/middleware';
 import { buddyRoute } from '../buddies/errors';
 import { getTodayCheckIn, saveCheckIn } from './checkins';
 import { getWeeklyHighlights } from './highlights';
+import { getSocialHome, markStickersSeen } from './home';
 import { isRecapShared, shareRecap, unshareRecap } from './recapShares';
 import { getStory, markStorySeen } from './stories';
 
 export const socialRouter = Router();
+
+socialRouter.get('/me/social', requireAuth, buddyRoute(async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  res.json(await getSocialHome(req.userId!, new Date()));
+}));
+
+socialRouter.post('/me/social/stickers/seen', requireAuth, buddyRoute(async (req, res) => {
+  await markStickersSeen(req.userId!, new Date());
+  res.status(204).end();
+}));
 
 socialRouter.get('/me/social/checkin', requireAuth, buddyRoute(async (req, res) => {
   res.set('Cache-Control', 'private, no-store');
