@@ -3,9 +3,12 @@
 // sends one sticker from the second, so the simulator pass sees the Home row, the list, a buddy's
 // week and Activity.
 //
-//   DATABASE_URL=<local dev database> node node_modules/.bin/ts-node --project tsconfig.evals.json scripts/seedBuddies.ts --email demo@example.com --buddy-email buddy@example.com
+//   DATABASE_URL=<local dev database> HANDLE_HOLD_SECRET=<the server's> node node_modules/.bin/ts-node --project tsconfig.evals.json scripts/seedBuddies.ts --email demo@example.com --buddy-email buddy@example.com
 //
-// Refuses NODE_ENV=production and any non-local DATABASE_URL (assertDevDatabase, as the badge seed).
+// ts-node loads no .env: set the same handle-hold key the dev server uses (its HANDLE_HOLD_SECRET, or
+// BETTER_AUTH_SECRET when it has none), or held handles won't match.
+// Refuses NODE_ENV=production and any non-local DATABASE_URL (assertDevDatabase, as the badge seed),
+// and the same account twice or two accounts with a block either way, before writing anything.
 // Gives each account a handle (dev_<8, 12 or 16 hex of its id>, the first one free and not held for
 // someone else, claimed through updateIdentity like the app does) and a display name only where
 // missing, marks the mood notice, pairs them and sends a Cheer (skipped once today's limit is
@@ -36,7 +39,12 @@ export function parseArgs(argv: string[]): { email: string; buddyEmail: string }
   };
   const email = value('--email');
   const buddyEmail = value('--buddy-email');
-  if (!email || !buddyEmail) throw seedError('SeedUsageError', 'Usage: seedBuddies --email <email> --buddy-email <email>');
+  if (!email || !buddyEmail) {
+    throw seedError(
+      'SeedUsageError',
+      "Usage: HANDLE_HOLD_SECRET=<the server's> seedBuddies --email <email> --buddy-email <email> (or BETTER_AUTH_SECRET=<the server's> when the server has no HANDLE_HOLD_SECRET)",
+    );
+  }
   return { email, buddyEmail };
 }
 
@@ -60,9 +68,15 @@ async function claimHandle(userId: string, displayName: string, now: Date): Prom
   throw seedError('SeedHandleUnavailable', 'No generated handle is free');
 }
 
-async function ready(email: string, fallbackName: string, now: Date): Promise<string> {
+interface SeedUser { id: string; handle: string | null; displayName: string | null; buddyMoodNoticeAt: Date | null }
+
+async function findUser(email: string): Promise<SeedUser> {
   const user = await prisma.user.findUnique({ where: { email }, select: { id: true, handle: true, displayName: true, buddyMoodNoticeAt: true } });
   if (!user) throw seedError('SeedUnknownUser', 'No user with that email');
+  return user;
+}
+
+async function ready(user: SeedUser, fallbackName: string, now: Date): Promise<string> {
   // Whatever the owner already chose is kept.
   if (!user.handle) await claimHandle(user.id, user.displayName ?? fallbackName, now);
   else if (!user.displayName) await updateIdentity(user.id, { displayName: fallbackName }, now);
@@ -72,10 +86,13 @@ async function ready(email: string, fallbackName: string, now: Date): Promise<st
 
 export async function seedBuddies({ email, buddyEmail, now = new Date(), env = process.env }: { email: string; buddyEmail: string; now?: Date; env?: SeedEnv }) {
   assertDevDatabase(env);
-  const userId = await ready(email, 'Demo', now);
-  const buddyId = await ready(buddyEmail, 'Dev buddy', now);
-  if (userId === buddyId) throw seedError('SeedUsageError', 'Usage: the two emails must be different accounts');
-  if (await isBlockedEitherWay(userId, buddyId)) throw seedError('SeedBlockedPair', 'One account has blocked the other');
+  const user = await findUser(email);
+  const buddy = await findUser(buddyEmail);
+  // Both refusals come before any identity write.
+  if (user.id === buddy.id) throw seedError('SeedUsageError', 'Usage: the two emails must be different accounts');
+  if (await isBlockedEitherWay(user.id, buddy.id)) throw seedError('SeedBlockedPair', 'One account has blocked the other');
+  const userId = await ready(user, 'Demo', now);
+  const buddyId = await ready(buddy, 'Dev buddy', now);
   // A queue that drops everything: the seed never queues pushes.
   const notifyQueue: NotifyQueue = { add: async () => undefined };
   const { created } = await createPair(userId, buddyId, now, { notifyQueue });
