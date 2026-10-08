@@ -2,9 +2,11 @@ import React from 'react';
 import { AppState } from 'react-native';
 import { render } from '@testing-library/react-native';
 import { SocialStoreScope } from '../../src/components/social/SocialStoreScope';
+import { pingPresence } from '../../src/api/chats';
 import { refreshSocial, resetSocial } from '../../src/lib/socialStore';
 
 jest.mock('../../src/lib/socialStore', () => ({ refreshSocial: jest.fn(() => Promise.resolve()), resetSocial: jest.fn() }));
+jest.mock('../../src/api/chats', () => ({ pingPresence: jest.fn(() => Promise.resolve()) }));
 const refresh = refreshSocial as jest.Mock;
 const reset = resetSocial as jest.Mock;
 
@@ -42,4 +44,12 @@ it('forgets the Social home and stops listening on unmount (sign out)', () => {
   unmount();
   expect(remove).toHaveBeenCalledTimes(1);
   expect(reset).toHaveBeenCalledTimes(1);
+});
+
+it('tells the server I am active on start and on each return to the foreground', () => {
+  render(<SocialStoreScope />);
+  expect(pingPresence).toHaveBeenCalledTimes(1);
+  onAppState!('background');
+  onAppState!('active');
+  expect(pingPresence).toHaveBeenCalledTimes(2);
 });

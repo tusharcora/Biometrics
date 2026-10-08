@@ -2,11 +2,11 @@ import React from 'react';
 import { Text } from 'react-native';
 import { act, render, screen } from '@testing-library/react-native';
 import { fetchSocialHome } from '../../src/api/social';
-import { getSocialState, refreshSocial, resetSocial, useSocialUnread, useSocialUnreadCount } from '../../src/lib/socialStore';
+import { chatsBadgeCount, getSocialState, refreshSocial, resetSocial, useChatsAvailable, useSocialUnread, useSocialUnreadCount } from '../../src/lib/socialStore';
 
 jest.mock('../../src/api/social', () => ({ fetchSocialHome: jest.fn() }));
 const fetchHome = fetchSocialHome as jest.Mock;
-const home = (requests: number, stickers: number) => ({ me: {}, camp: { checkedIn: 0, members: 1, faces: [] }, stories: [], highlights: null, timeline: [], unread: { requests, stickers } });
+const home = (requests: number, stickers: number, chats?: number) => ({ me: {}, camp: { checkedIn: 0, members: 1, faces: [] }, stories: [], highlights: null, timeline: [], unread: chats === undefined ? { requests, stickers } : { requests, stickers, chats } });
 beforeEach(() => { fetchHome.mockReset(); resetSocial(); });
 
 it('is unavailable on an older server, and keeps the last good home after an error', async () => {
@@ -113,4 +113,21 @@ it('a stale load settling after a reset does not free the newer load (one load a
   expect(fetchHome).toHaveBeenCalledTimes(2);
   resolveNewer(home(0, 0));
   await newer;
+});
+
+it('counts unread chats in the dot, and knows whether the server has Chats', async () => {
+  function Probe() { return <Text testID="dot">{`${useSocialUnreadCount()}:${String(useChatsAvailable())}`}</Text>; }
+  render(<Probe />);
+  expect(screen.getByTestId('dot')).toHaveTextContent('0:null');
+  fetchHome.mockResolvedValueOnce(home(1, 0, 2));
+  await act(() => refreshSocial());
+  expect(screen.getByTestId('dot')).toHaveTextContent('3:true');
+  fetchHome.mockResolvedValueOnce(home(1, 0)); // an S2 server: no chats
+  await act(() => refreshSocial());
+  expect(screen.getByTestId('dot')).toHaveTextContent('1:false');
+  fetchHome.mockResolvedValueOnce(null);
+  await act(() => refreshSocial());
+  expect(screen.getByTestId('dot')).toHaveTextContent('0:false');
+  expect(chatsBadgeCount({ requests: 2, stickers: 5, chats: 3 })).toBe(5);
+  expect(chatsBadgeCount(undefined)).toBe(0);
 });

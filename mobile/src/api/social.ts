@@ -69,7 +69,7 @@ export interface SocialHome {
   stories: StoryRing[];
   highlights: Highlights | null;
   timeline: TimelineItem[];
-  /** `chats` arrives with S3 (DMs); the tab dot reads requests + stickers until then. */
+  /** `chats` (S3): conversations with an unread message; an S2 server sends none, which is how the app knows Chats is missing. */
   unread: { requests: number; stickers: number; chats?: number };
 }
 
