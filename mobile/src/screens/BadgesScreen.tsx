@@ -32,7 +32,7 @@ export function BadgesScreen() {
         {state.status === 'error' ? (
           <Card testID="badges-error" className="gap-3">
             <Text className="text-sm text-muted-foreground">Your badges could not be loaded.</Text>
-            <Button testID="badges-retry" variant="outline" size="sm" onPress={() => void refreshAchievements()}>
+            <Button testID="badges-retry" variant="secondary" size="sm" onPress={() => void refreshAchievements()}>
               Try again
             </Button>
           </Card>

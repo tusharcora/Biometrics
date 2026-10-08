@@ -98,7 +98,7 @@ export function RecapScreen() {
             <Card testID="recap-missing">
               <Text className="text-base">This recap isn't available.</Text>
             </Card>
-            <Button testID="recap-missing-back" variant="outline" size="sm" onPress={leave}>
+            <Button testID="recap-missing-back" variant="secondary" size="sm" onPress={leave}>
               Go back
             </Button>
           </View>
@@ -106,7 +106,7 @@ export function RecapScreen() {
         {state.phase === 'error' ? (
           <Card testID="recap-error" className="gap-3">
             <Text className="text-sm text-muted-foreground">Your recap could not be loaded.</Text>
-            <Button testID="recap-retry" variant="outline" size="sm" onPress={() => void load()}>
+            <Button testID="recap-retry" variant="secondary" size="sm" onPress={() => void load()}>
               Try again
             </Button>
           </Card>

@@ -9,6 +9,7 @@ import { useColorScheme } from 'nativewind';
 import type { RootStackParamList } from '../../navigation/RootNavigator';
 import type { MetricRecord } from '../../lib/metricInsights';
 import { usualTiles, type TileRecord, type UsualTile } from '../../lib/usualTiles';
+import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { PressableScale } from '../ui/pressable-scale';
 import { SectionLabel } from '../ui/section-label';
@@ -35,12 +36,12 @@ export function UsualTiles({ records, recovery, today }: { records: MetricRecord
       <View className="flex-row items-center justify-between">
         <SectionLabel>Against your usual · 30d</SectionLabel>
         <View className="flex-row items-center gap-4">
-          <PressableScale testID="usual-patterns" accessibilityRole="link" onPress={() => navigation.navigate('Patterns')}>
-            <Text className="text-sm font-semibold text-accent">Patterns</Text>
-          </PressableScale>
-          <PressableScale testID="all-trends" accessibilityRole="link" onPress={() => navigation.navigate('Trends')}>
-            <Text className="text-sm font-semibold text-accent">All trends</Text>
-          </PressableScale>
+          <Button testID="usual-patterns" variant="link" size="sm" accessibilityRole="link" onPress={() => navigation.navigate('Patterns')}>
+            Patterns
+          </Button>
+          <Button testID="all-trends" variant="link" size="sm" accessibilityRole="link" onPress={() => navigation.navigate('Trends')}>
+            All trends
+          </Button>
         </View>
       </View>
       <View className="flex-row flex-wrap gap-3">

@@ -68,7 +68,7 @@ export function RecapsScreen() {
         {state.phase === 'error' ? (
           <Card testID="recaps-error" className="gap-3">
             <Text className="text-sm text-muted-foreground">Your recaps could not be loaded.</Text>
-            <Button testID="recaps-retry" variant="outline" size="sm" onPress={() => void load()}>
+            <Button testID="recaps-retry" variant="secondary" size="sm" onPress={() => void load()}>
               Try again
             </Button>
           </Card>

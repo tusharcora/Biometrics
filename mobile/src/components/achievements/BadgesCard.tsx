@@ -9,6 +9,7 @@ import { mixHex, tierColors } from '../../lib/badgeArt';
 import { FAMILY_ORDER, FAMILY_SHORT, TOTAL_LEVELS, badgeLabel, countLabel, earnedCount, levelTitle, nextUp } from '../../lib/badges';
 import { COLORS } from '../../theme';
 import { characterInfo } from '../characters/registry';
+import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { Text } from '../ui/text';
 import { BadgeIcon } from './BadgeIcon';
@@ -42,9 +43,9 @@ export function BadgesCard({ onSeeAll, onOpen }: BadgesCardProps) {
         <Text testID="badges-count" className="text-xs font-medium text-muted-foreground" style={{ letterSpacing: 2 }}>
           {`BADGES · ${earnedCount(a)} OF ${TOTAL_LEVELS}`}
         </Text>
-        <Pressable testID="badges-see-all" accessibilityRole="button" accessibilityLabel="See all badges" hitSlop={10} onPress={onSeeAll}>
-          <Text className="text-sm font-semibold text-accent">See all</Text>
-        </Pressable>
+        <Button testID="badges-see-all" variant="link" size="sm" accessibilityLabel="See all badges" onPress={onSeeAll}>
+          See all
+        </Button>
       </View>
       <View className="flex-row flex-wrap" style={{ rowGap: 14 }}>
         {FAMILY_ORDER.map((family) => {
