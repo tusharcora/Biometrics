@@ -9,7 +9,7 @@ import { prisma } from '../db/client';
 import { BuddyError } from '../buddies/errors';
 import { findPair, isBlockedEitherWay, orderedPair } from '../buddies/pairs';
 import { PERSON_SELECT } from '../buddies/people';
-import type { CardDTO } from './types';
+import type { StoredCard } from './types';
 
 type Tx = Prisma.TransactionClient;
 type Db = Tx | PrismaClient;
@@ -59,7 +59,7 @@ export interface NewMessage {
   kind: MessageKind;
   text?: string | null;
   sticker?: StickerKind | null;
-  card?: CardDTO | null;
+  card?: StoredCard | null;
   replyToMessageId?: string | null;
   now: Date;
 }

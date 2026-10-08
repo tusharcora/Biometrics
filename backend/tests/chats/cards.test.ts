@@ -5,8 +5,9 @@ import { civilDateToUtcMidnight } from '../../src/biometrics/civilDate';
 import { BUDDY_SHARING_CONSENT_VERSION } from '../../src/buddies/sharing';
 import { setBuddyNotifyQueue } from '../../src/buddies/notifyQueue';
 import { buildCard, parseCardRequest } from '../../src/chats/cards';
-import { sendMessage } from '../../src/chats/messages';
+import { loadMessageDTO, sendMessage } from '../../src/chats/messages';
 import { shareCampNote } from '../../src/social/campNotes';
+import { unshareRecap } from '../../src/social/recapShares';
 import { saveCheckIn } from '../../src/social/checkins';
 import { RecordingQueue, buddyUser, pairUp } from '../buddies/helpers';
 
@@ -64,7 +65,7 @@ it('a badge frame is quoted only while its author shares streaks; a goodnight fr
   await prisma.achievement.create({
     data: { userId: sam.id, family: 'SLEEP_GOAL', level: 2, value: 7, earnedOn: day('2026-10-07'), weekStart: day('2026-10-05'), monthStart: day('2026-10-01'), createdAt: badgeAt },
   });
-  expect(await buildCard(me.id, sam.id, { type: 'story_frame', at: badgeAt.toISOString() }, NOW)).toEqual({ type: 'badge', family: 'SLEEP_GOAL', level: 2 });
+  expect(await buildCard(me.id, sam.id, { type: 'story_frame', at: badgeAt.toISOString() }, NOW)).toEqual({ type: 'badge', authorId: sam.id, family: 'SLEEP_GOAL', level: 2 });
   await prisma.user.update({ where: { id: sam.id }, data: { shareStreaks: false } });
   await expect(buildCard(me.id, sam.id, { type: 'story_frame', at: badgeAt.toISOString() }, NOW)).rejects.toMatchObject({ code: 'card_unavailable' });
   const goodnightAt = hoursAgo(1);
@@ -147,4 +148,78 @@ it('never logs the quoted note or the reply text (tripwire)', async () => {
   await sendMessage(me.id, sam.id, { kind: 'CARD', card: { type: 'note' }, text: 'secret reply words' }, NOW);
   await expect(sendMessage(me.id, sam.id, { kind: 'CARD', card: { type: 'camp_note' }, text: 'secret reply words' }, NOW)).rejects.toMatchObject({ code: 'card_unavailable' });
   for (const spy of spies) for (const call of spy.mock.calls) expect(JSON.stringify(call)).not.toMatch(/secret (note|reply)/);
+});
+
+// Fix round 1: a stored snapshot serves a number only while it is still shared (spec §9), at every read.
+it("a badge card serves its level only while its author shares streaks now; the ids it stores never reach the client", async () => {
+  const { me, sam } = await buddies();
+  await prisma.user.update({ where: { id: sam.id }, data: sharesStreaks });
+  const badgeAt = hoursAgo(2);
+  await prisma.achievement.create({
+    data: { userId: sam.id, family: 'SLEEP_GOAL', level: 3, value: 14, earnedOn: day('2026-10-07'), weekStart: day('2026-10-05'), monthStart: day('2026-10-01'), createdAt: badgeAt },
+  });
+  const sent = await sendMessage(me.id, sam.id, { kind: 'CARD', card: { type: 'story_frame', at: badgeAt.toISOString() } }, NOW);
+  expect(sent.card).toEqual({ type: 'badge', available: true, family: 'SLEEP_GOAL', level: 3 });
+  expect(JSON.stringify(sent)).not.toContain(`"authorId"`);
+  await prisma.user.update({ where: { id: sam.id }, data: { shareStreaks: false } });
+  for (const viewer of [me.id, sam.id]) {
+    expect((await loadMessageDTO(sent.id, viewer)).card).toEqual({ type: 'badge', available: false, family: 'SLEEP_GOAL' });
+  }
+  // A consent bump reads as off too (effectiveSharing), then on again once they share.
+  await prisma.user.update({ where: { id: sam.id }, data: { shareStreaks: true, buddySharingConsentVersion: null } });
+  expect((await loadMessageDTO(sent.id, me.id)).card).toMatchObject({ available: false });
+  await prisma.user.update({ where: { id: sam.id }, data: sharesStreaks });
+  expect((await loadMessageDTO(sent.id, me.id)).card).toEqual({ type: 'badge', available: true, family: 'SLEEP_GOAL', level: 3 });
+});
+
+it('a recap card serves its line only while the recap is still shared', async () => {
+  const { me, sam } = await buddies();
+  const recap = await prisma.recap.create({
+    data: { userId: sam.id, kind: 'WEEK', periodStart: day('2026-09-28'), periodEnd: day('2026-10-04'), status: 'BUILT', sleepGoalMinutes: 480, line: 'Slept 7h 12m a night', lineSource: 'TEMPLATE', stats: {} },
+  });
+  const sharedAt = hoursAgo(3);
+  await prisma.recapShare.create({ data: { sharerId: sam.id, recapId: recap.id, line: 'Slept 7h 12m a night', localDate: day('2026-10-07'), createdAt: sharedAt } });
+  const sent = await sendMessage(me.id, sam.id, { kind: 'CARD', card: { type: 'story_frame', at: sharedAt.toISOString() } }, NOW);
+  const period = { recapKind: 'WEEK', periodStart: '2026-09-28', periodEnd: '2026-10-04' };
+  expect(sent.card).toEqual({ type: 'recap', available: true, ...period, line: 'Slept 7h 12m a night' });
+  expect(JSON.stringify(sent)).not.toMatch(/"(authorId|refId)"/);
+  expect(await prisma.message.findUniqueOrThrow({ where: { id: sent.id } })).toMatchObject({ card: { authorId: sam.id, refId: recap.id } });
+  await unshareRecap(sam.id, recap.id);
+  const read = await loadMessageDTO(sent.id, me.id);
+  expect(read.card).toEqual({ type: 'recap', available: false, ...period });
+  expect(JSON.stringify(read)).not.toContain('7h 12m');
+});
+
+it('my "+" check-in card shows my mood to a buddy who has not checked in yet (an explicit share: no lock)', async () => {
+  const { me, sam } = await buddies();
+  await saveCheckIn(me.id, 'TIRED', hoursAgo(12));
+  const sent = await sendMessage(me.id, sam.id, { kind: 'CARD', card: { type: 'my_checkin' } }, NOW);
+  expect((await loadMessageDTO(sent.id, sam.id)).card).toEqual({ type: 'checkin', available: true, about: 'sender', localDate: '2026-10-07', mood: 'TIRED' });
+});
+
+it("a frame is only ever the recipient's own today: not a third buddy's, not mine, not yesterday's", async () => {
+  const { me, sam } = await buddies();
+  const carl = await buddyUser();
+  await pairUp(me.id, carl.id);
+  await pairUp(sam.id, carl.id);
+  const at = hoursAgo(5);
+  await saveCheckIn(carl.id, 'RESTED', at);
+  await saveCheckIn(me.id, 'OKAY', at);
+  await expect(buildCard(me.id, sam.id, { type: 'story_frame', at: at.toISOString() }, NOW)).rejects.toMatchObject({ code: 'card_unavailable' });
+  const yesterday = hoursAgo(26); // 18:00 the day before, for these UTC users
+  await saveCheckIn(sam.id, 'TIRED', yesterday);
+  await expect(buildCard(me.id, sam.id, { type: 'story_frame', at: yesterday.toISOString() }, NOW)).rejects.toMatchObject({ code: 'card_unavailable' });
+});
+
+it('a check-in frame still locked for me is stored and served with no mood, to both of us', async () => {
+  const { me, sam } = await buddies();
+  const at = hoursAgo(4);
+  await saveCheckIn(sam.id, 'RESTED', at);
+  const sent = await sendMessage(me.id, sam.id, { kind: 'CARD', card: { type: 'story_frame', at: at.toISOString() }, text: 'how come?' }, NOW);
+  const locked = { type: 'checkin', available: true, about: 'recipient', localDate: '2026-10-07', mood: null };
+  expect(sent.card).toEqual(locked);
+  expect((await prisma.message.findUniqueOrThrow({ where: { id: sent.id } })).card).toEqual({ type: 'checkin', about: 'recipient', localDate: '2026-10-07', mood: null });
+  await saveCheckIn(me.id, 'OKAY', hoursAgo(1)); // unlocking later does not rewrite the snapshot
+  expect((await loadMessageDTO(sent.id, sam.id)).card).toEqual(locked);
+  expect(JSON.stringify(await loadMessageDTO(sent.id, me.id))).not.toContain('RESTED');
 });

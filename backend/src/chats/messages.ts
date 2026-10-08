@@ -11,10 +11,10 @@ import { BuddyError, UUID_RE, limitOrThrow } from '../buddies/errors';
 import type { PairDeps } from '../buddies/pairs';
 import { sendSticker } from '../buddies/stickers';
 import { RATE_LIMITS } from '../lib/rateLimit';
-import { buildCard, parseCardRequest, type CardRequest } from './cards';
+import { buildCard, gateCard, loadCardGate, parseCardRequest, type CardGate, type CardRequest } from './cards';
 import { requireLivePairTx, writeMessageTx } from './conversations';
 import { checkMessageText, previewText } from './text';
-import { cardTypeOf, type CardDTO, type MessageDTO } from './types';
+import { cardTypeOf, type MessageDTO, type StoredCard } from './types';
 
 export const MESSAGE_SELECT = {
   id: true,
@@ -30,7 +30,8 @@ export const MESSAGE_SELECT = {
 
 export type MessageRow = Prisma.MessageGetPayload<{ select: typeof MESSAGE_SELECT }>;
 
-export function toMessageDTO(row: MessageRow, viewerId: string): MessageDTO {
+/** `gate`: from loadCardGate over the rows' cards (one per page), so a card serves only what is still shared now. */
+export function toMessageDTO(row: MessageRow, viewerId: string, gate: CardGate): MessageDTO {
   const r = row.replyTo;
   return {
     id: row.id,
@@ -38,7 +39,7 @@ export function toMessageDTO(row: MessageRow, viewerId: string): MessageDTO {
     kind: row.kind,
     text: row.text,
     sticker: row.sticker,
-    card: (row.card as unknown as CardDTO | null) ?? null,
+    card: gateCard(row.card, gate),
     replyTo: r === null
       ? null
       : r.deletedAt !== null
@@ -51,7 +52,8 @@ export function toMessageDTO(row: MessageRow, viewerId: string): MessageDTO {
 
 /** A send passes its transaction: read after the commit, a racing unpair could already have deleted the message. */
 export async function loadMessageDTO(id: string, viewerId: string, db: Prisma.TransactionClient | PrismaClient = prisma): Promise<MessageDTO> {
-  return toMessageDTO(await db.message.findUniqueOrThrow({ where: { id }, select: MESSAGE_SELECT }), viewerId);
+  const row = await db.message.findUniqueOrThrow({ where: { id }, select: MESSAGE_SELECT });
+  return toMessageDTO(row, viewerId, await loadCardGate([row.card], db));
 }
 
 /** Absent → null; anything but a uuid → message_gone (it can't name a message). */
@@ -95,7 +97,7 @@ export async function sendMessage(senderId: string, buddyId: string, body: unkno
   await limitOrThrow(RATE_LIMITS.message, senderId);
   await limitOrThrow(RATE_LIMITS.messageDay, senderId);
   // After the limiter (probing spends a token) and before the transaction (it only reads; the tx re-checks the pair).
-  const card: CardDTO | null = cardRequest ? await buildCard(senderId, buddyId, cardRequest, now) : null;
+  const card: StoredCard | null = cardRequest ? await buildCard(senderId, buddyId, cardRequest, now) : null;
   // The returned message is read inside the transaction (an unpair waits on the pair lock, then deletes it).
   return prisma.$transaction(async (tx) => {
     await requireLivePairTx(tx, senderId, buddyId, now);
