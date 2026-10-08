@@ -74,7 +74,7 @@ function useScreenReader(): boolean {
   return on;
 }
 
-/** Peek: the fire's strength, always in view. */
+/** Peek: the fire's strength, always in view (by day, last night's). */
 function FireMeter({ camp }: { camp: Camp }) {
   const more = fireMoreLine(camp.fire, camp.night);
   return (
