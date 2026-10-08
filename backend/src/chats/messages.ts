@@ -11,6 +11,7 @@ import { BuddyError, UUID_RE, limitOrThrow } from '../buddies/errors';
 import type { PairDeps } from '../buddies/pairs';
 import { sendSticker } from '../buddies/stickers';
 import { RATE_LIMITS } from '../lib/rateLimit';
+import { buildCard, parseCardRequest, type CardRequest } from './cards';
 import { requireLivePairTx, writeMessageTx } from './conversations';
 import { checkMessageText, previewText } from './text';
 import { cardTypeOf, type CardDTO, type MessageDTO } from './types';
@@ -74,16 +75,31 @@ export async function sendMessage(senderId: string, buddyId: string, body: unkno
     });
     return message;
   }
-  if (b.kind !== 'TEXT') throw new BuddyError('invalid_message');
-  const text = checkMessageText(b.text);
-  if (text === null) throw new BuddyError('invalid_message');
-  const card: CardDTO | null = null;
+  let kind: MessageKind;
+  let text: string | null;
+  let cardRequest: CardRequest | null = null;
+  if (b.kind === 'TEXT') {
+    kind = 'TEXT';
+    text = checkMessageText(b.text);
+    if (text === null) throw new BuddyError('invalid_message');
+  } else if (b.kind === 'CARD') {
+    kind = 'CARD';
+    cardRequest = parseCardRequest(b.card);
+    // A card's reply text is optional; when sent it must be valid (whitespace only is refused: the app sends none).
+    const hasText = b.text !== undefined && b.text !== null;
+    text = hasText ? checkMessageText(b.text) : null;
+    if (cardRequest === null || (hasText && text === null)) throw new BuddyError('invalid_message');
+  } else {
+    throw new BuddyError('invalid_message');
+  }
   await limitOrThrow(RATE_LIMITS.message, senderId);
   await limitOrThrow(RATE_LIMITS.messageDay, senderId);
+  // After the limiter (probing spends a token) and before the transaction (it only reads; the tx re-checks the pair).
+  const card: CardDTO | null = cardRequest ? await buildCard(senderId, buddyId, cardRequest, now) : null;
   // The returned message is read inside the transaction (an unpair waits on the pair lock, then deletes it).
   return prisma.$transaction(async (tx) => {
     await requireLivePairTx(tx, senderId, buddyId, now);
-    const messageId = await writeMessageTx(tx, { senderId, recipientId: buddyId, kind: b.kind as MessageKind, text, card, replyToMessageId, now });
+    const messageId = await writeMessageTx(tx, { senderId, recipientId: buddyId, kind, text, card, replyToMessageId, now });
     return loadMessageDTO(messageId, senderId, tx);
   });
 }
