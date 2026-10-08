@@ -55,10 +55,12 @@ export interface CampNoteCardProps {
   message: string | null;
   buddies: number;
   coachId: CharacterId;
+  /** The composer's input top and Share bottom, in the card. */
+  onComposerLayout?: (box: { top: number; bottom: number }) => void;
 }
 
 export function CampNoteCard({
-  inputRef, draft, onDraft, length, canShare, onShare, live, editing, onEdit, onCancel, onClear, busy, message, buddies, coachId,
+  inputRef, draft, onDraft, length, canShare, onShare, live, editing, onEdit, onCancel, onClear, busy, message, buddies, coachId, onComposerLayout,
 }: CampNoteCardProps) {
   const [focused, setFocused] = useState(false);
   const drafting = !live || editing;
@@ -86,7 +88,8 @@ export function CampNoteCard({
       </View>
 
       {drafting ? (
-        <View className="gap-2.5">
+        <View testID="camp-note-composer" className="gap-2.5"
+          onLayout={(e) => onComposerLayout?.({ top: e.nativeEvent.layout.y, bottom: e.nativeEvent.layout.y + e.nativeEvent.layout.height })}>
           <View>
             <TextInput ref={inputRef} testID="camp-note-input" accessibilityLabel="Your camp note" value={draft} onChangeText={onDraft}
               placeholder="Say something to the camp…" placeholderTextColor="#6B6E78" autoCorrect={false} multiline numberOfLines={2}
@@ -96,14 +99,17 @@ export function CampNoteCard({
               className="bg-background/70 text-base text-foreground" />
             <CountRing length={length} />
           </View>
-          <View className="flex-row flex-wrap gap-2">
-            {CAMP_NOTE_CHIPS.map((chip, i) => (
-              <PressableScale key={chip} testID={`camp-chip-${i}`} accessibilityRole="button" accessibilityLabel={`Use "${chip}"`} onPress={() => onDraft(chip)}
-                className="h-[34px] justify-center rounded-full border border-border bg-foreground/5 px-3">
-                <Text className="text-[13px]">{chip}</Text>
-              </PressableScale>
-            ))}
-          </View>
+          {/* Starting points: once there's a draft they'd only replace it, and the room is Share's above the keyboard. */}
+          {draft === '' ? (
+            <View className="flex-row flex-wrap gap-2">
+              {CAMP_NOTE_CHIPS.map((chip, i) => (
+                <PressableScale key={chip} testID={`camp-chip-${i}`} accessibilityRole="button" accessibilityLabel={`Use "${chip}"`} onPress={() => onDraft(chip)}
+                  className="h-[34px] justify-center rounded-full border border-border bg-foreground/5 px-3">
+                  <Text className="text-[13px]">{chip}</Text>
+                </PressableScale>
+              ))}
+            </View>
+          ) : null}
           <View className="flex-row gap-2.5">
             <Button testID="camp-note-share" accessibilityRole="button" accessibilityLabel="Share your camp note" disabled={!canShare} onPress={onShare}
               className="h-[54px] flex-1 flex-row gap-2.5 rounded-[18px] px-3 py-0">

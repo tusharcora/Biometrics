@@ -112,6 +112,9 @@ export function CampfireScreen() {
   const [message, setMessage] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [focused, setFocused] = useState(true);
+  // Where the note card sits in the panel's scroll content, and its composer within the card: kept above the keyboard.
+  const [cardY, setCardY] = useState(0);
+  const [composer, setComposer] = useState<{ top: number; bottom: number } | null>(null);
   const input = useRef<TextInput>(null);
   // `busy` disables the buttons only after a re-render; a double tap in one frame sends once.
   const sending = useRef(false);
@@ -294,10 +297,12 @@ export function CampfireScreen() {
       </Animated.View>
 
       <CampPanel stops={stops} stop={stop} top={top} moveTo={moveTo} height={height} bottomInset={insets.bottom} screenReader={screenReader}
-        reduced={reduced} header={<FireMeter camp={camp} />}>
-        <CampNoteCard inputRef={input} draft={draft} onDraft={setDraft} length={length} canShare={canShare} onShare={share} live={live}
-          editing={editing} onEdit={edit} onCancel={cancelEdit} onClear={clear} busy={busy} message={message} buddies={camp.members.filter((m) => !m.mine).length}
-          coachId={mine && isCharacterId(mine.person.coachId) ? mine.person.coachId : DEFAULT_CHARACTER_ID} />
+        reduced={reduced} reveal={composer ? { top: cardY + composer.top, bottom: cardY + composer.bottom } : null} header={<FireMeter camp={camp} />}>
+        <View testID="camp-note-slot" onLayout={(e) => setCardY(e.nativeEvent.layout.y)}>
+          <CampNoteCard inputRef={input} draft={draft} onDraft={setDraft} length={length} canShare={canShare} onShare={share} live={live}
+            editing={editing} onEdit={edit} onCancel={cancelEdit} onClear={clear} busy={busy} message={message} buddies={camp.members.filter((m) => !m.mine).length}
+            coachId={mine && isCharacterId(mine.person.coachId) ? mine.person.coachId : DEFAULT_CHARACTER_ID} onComposerLayout={setComposer} />
+        </View>
 
         {/* My own window (owner ruling Q1), not the scene's night: an 18:00 goal opens it at 17:00. */}
         {camp.goodnightOpen ? (

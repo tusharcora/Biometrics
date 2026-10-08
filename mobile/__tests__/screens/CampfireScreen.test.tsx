@@ -1,5 +1,5 @@
 import React from 'react';
-import { AccessibilityInfo, TextInput } from 'react-native';
+import { AccessibilityInfo, Keyboard, ScrollView, TextInput } from 'react-native';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
@@ -468,4 +468,44 @@ it('Cancel leaves an edit without sending: the live note stays', async () => {
   await act(async () => mockRefocus());
   expect(screen.getByTestId('camp-note-input')).toBeTruthy();
   expect(screen.queryByTestId('camp-note-cancel')).toBeNull();
+});
+
+it('with the keyboard up, the panel scrolls and brings the composer (and Share) into view', async () => {
+  const handlers: Record<string, (e: { endCoordinates: { height: number }; duration: number }) => void> = {};
+  const listen = jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, cb: (e: never) => void) => {
+    handlers[event] = cb;
+    return { remove: jest.fn() };
+  }) as never);
+  (fetchCamp as jest.Mock).mockResolvedValue(camp());
+  renderScreen();
+  await screen.findByTestId('camp-note-input');
+  const layout = (testID: string, y: number, height: number) =>
+    fireEvent(screen.getByTestId(testID), 'layout', { nativeEvent: { layout: { x: 0, y, width: 390, height } } });
+  layout('camp-panel-header', 0, 110);
+  layout('camp-note-slot', 14, 500);
+  layout('camp-note-composer', 120, 300);
+  fireEvent.changeText(screen.getByTestId('camp-note-input'), 'night all');
+  const scrollTo = screen.UNSAFE_getByType(ScrollView).instance.scrollTo as jest.Mock;
+  scrollTo.mockClear();
+  expect(screen.getByTestId('camp-panel-scroll')).toHaveProp('scrollEnabled', false);
+  const show = handlers.keyboardWillShow ?? handlers.keyboardDidShow;
+  act(() => show!({ endCoordinates: { height: 336 }, duration: 250 }));
+  expect(screen.getByTestId('camp-panel-scroll')).toHaveProp('scrollEnabled', true);
+  expect(scrollTo).toHaveBeenCalled();
+  expect(scrollTo.mock.calls.at(-1)![0].y).toBeGreaterThan(0);
+  // Typing removes the chips: the composer shrinks and is revealed again.
+  layout('camp-note-composer', 120, 140);
+  const hide = handlers.keyboardWillHide ?? handlers.keyboardDidHide;
+  act(() => hide!({ endCoordinates: { height: 0 }, duration: 250 }));
+  expect(screen.getByTestId('camp-panel-scroll')).toHaveProp('scrollEnabled', false);
+  listen.mockRestore();
+});
+
+it('the chips are starting points: they show while the draft is empty', async () => {
+  (fetchCamp as jest.Mock).mockResolvedValue(camp());
+  renderScreen();
+  fireEvent.changeText(await screen.findByTestId('camp-note-input'), 'night');
+  expect(screen.queryByTestId('camp-chip-0')).toBeNull();
+  fireEvent.changeText(screen.getByTestId('camp-note-input'), '');
+  expect(screen.getByTestId('camp-chip-0')).toBeTruthy();
 });

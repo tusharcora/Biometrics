@@ -91,13 +91,27 @@ export function useCampPanel(stops: CampStops, reduced: boolean) {
   return { stop, moveTo, top };
 }
 
-/** The keyboard's height, following it in and out (at once with Reduce Motion). */
-function useKeyboardHeight(reduced: boolean): SharedValue<number> {
+/**
+ * Where to scroll the panel so the composer clears the keyboard: Share's bottom (and 12 px) at the bottom of what's
+ * visible, but never so far that the input's top goes under the header. `top` / `bottom` are the composer's input top
+ * and Share bottom in the scroll content; `stopTop` is the panel's stop, `header` the handle and fire block above the
+ * scroll view.
+ */
+export function revealScrollY(o: { height: number; keyboard: number; stopTop: number; full: number; header: number; top: number; bottom: number }): number {
+  const viewportTop = Math.max(o.full, o.stopTop - o.keyboard) + o.header;
+  const visible = o.height - o.keyboard - viewportTop;
+  return Math.max(0, Math.min(o.bottom + 12 - visible, o.top - 8));
+}
+
+/** The keyboard's height: as state (it is up or not), and as a shared value that follows it in and out. */
+function useKeyboard(reduced: boolean): { up: number; lift: SharedValue<number> } {
+  const [up, setUp] = useState(0);
   const height = useSharedValue(0);
   useEffect(() => {
     // iOS says where the keyboard is headed before it moves; Android only once it has.
     const ios = Platform.OS === 'ios';
     const to = (h: number, duration: number) => {
+      setUp(h);
       height.value = reduced ? h : withTiming(h, { duration: duration || 250 });
     };
     const show = Keyboard.addListener(ios ? 'keyboardWillShow' : 'keyboardDidShow', (e) => to(e.endCoordinates.height, e.duration));
@@ -107,7 +121,7 @@ function useKeyboardHeight(reduced: boolean): SharedValue<number> {
       hide.remove();
     };
   }, [height, reduced]);
-  return height;
+  return { up, lift: height };
 }
 
 interface CampPanelProps {
@@ -120,6 +134,8 @@ interface CampPanelProps {
   /** A screen reader is on: the panel scrolls at every stop, so all of it can be reached. */
   screenReader: boolean;
   reduced: boolean;
+  /** The composer's input top and Share bottom in the scroll content, kept in view above the keyboard. */
+  reveal: { top: number; bottom: number } | null;
   /** Always in view (Peek's content): it and the handle are where the panel is dragged from. */
   header: React.ReactNode;
   children: React.ReactNode;
@@ -145,15 +161,24 @@ const DARK_TOKENS = vars({
 });
 const colors = COLORS.dark;
 
-export function CampPanel({ stops, stop, top, moveTo, height, bottomInset, screenReader, reduced, header, children }: CampPanelProps) {
-  const keyboard = useKeyboardHeight(reduced);
+export function CampPanel({ stops, stop, top, moveTo, height, bottomInset, screenReader, reduced, reveal, header, children }: CampPanelProps) {
+  const keyboard = useKeyboard(reduced);
   const scroll = useRef<ScrollView>(null);
   const start = useSharedValue(0);
+  const [headerH, setHeaderH] = useState(0);
 
-  // A lower stop shows the top of the content.
+  // A lower stop shows the top of the content (once the keyboard is down).
   useEffect(() => {
-    if (stop !== 'full') scroll.current?.scrollTo({ y: 0, animated: !reduced });
-  }, [stop, reduced]);
+    if (stop !== 'full' && !keyboard.up) scroll.current?.scrollTo({ y: 0, animated: !reduced });
+  }, [stop, reduced, keyboard.up]);
+
+  // With the keyboard up (it lifts the panel at most to Full), scroll the composer into what's left in view: on a
+  // short phone Share would otherwise sit under the keyboard. Again whenever the composer's size changes.
+  useEffect(() => {
+    if (!keyboard.up || !reveal) return;
+    const y = revealScrollY({ height, keyboard: keyboard.up, stopTop: stops[stop], full: stops.full, header: headerH, top: reveal.top, bottom: reveal.bottom });
+    scroll.current?.scrollTo({ y, animated: !reduced });
+  }, [keyboard.up, reveal?.top, reveal?.bottom, headerH, height, stop, stops, reduced]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Built once per size: not on every render (a keystroke in the note re-renders the panel).
   const drag = useMemo(() => Gesture.Pan()
@@ -172,7 +197,7 @@ export function CampPanel({ stops, stop, top, moveTo, height, bottomInset, scree
 
   // The keyboard lifts the panel by its height, up to Full.
   const panelStyle = useAnimatedStyle(() => ({
-    transform: [{ translateY: Math.max(stops.full, top.value - keyboard.value) }],
+    transform: [{ translateY: Math.max(stops.full, top.value - keyboard.lift.value) }],
   }));
 
   const onAction = (e: AccessibilityActionEvent) => {
@@ -189,7 +214,7 @@ export function CampPanel({ stops, stop, top, moveTo, height, bottomInset, scree
         style={{ flex: 1, borderWidth: 1, borderColor: colors.hairline }}>
         <View style={[DARK_TOKENS, { flex: 1 }]}>
           <GestureDetector gesture={drag}>
-            <View>
+            <View testID="camp-panel-header" onLayout={(e) => setHeaderH(e.nativeEvent.layout.height)}>
               <Pressable testID="camp-panel-handle" accessibilityRole="adjustable" accessibilityLabel={`Camp details, ${STOP_LABEL[stop]}`}
                 accessibilityHint={stop === 'full' ? 'Shows less' : 'Shows more'}
                 accessibilityActions={[{ name: 'activate' }, { name: 'increment' }, { name: 'decrement' }]} onAccessibilityAction={onAction}
@@ -199,7 +224,7 @@ export function CampPanel({ stops, stop, top, moveTo, height, bottomInset, scree
               <View className="px-5">{header}</View>
             </View>
           </GestureDetector>
-          <ScrollView ref={scroll} testID="camp-panel-scroll" scrollEnabled={stop === 'full' || screenReader} keyboardShouldPersistTaps="handled"
+          <ScrollView ref={scroll} testID="camp-panel-scroll" scrollEnabled={stop === 'full' || screenReader || keyboard.up > 0} keyboardShouldPersistTaps="handled"
             showsVerticalScrollIndicator={stop === 'full'}
             contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 14, paddingBottom: stops[stop] - stops.full + PANEL_RADIUS * 2 + bottomInset + 24, gap: 14 }}>
             {children}

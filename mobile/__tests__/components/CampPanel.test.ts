@@ -1,4 +1,4 @@
-import { nextStop, panelStops, snapStop, stepStop } from '../../src/components/social/CampPanel';
+import { nextStop, panelStops, revealScrollY, snapStop, stepStop } from '../../src/components/social/CampPanel';
 import { PEEK_RESERVE } from '../../src/components/social/campSceneGeometry';
 
 it('rests at Peek above the home indicator, Half 40% down and Full 11% down', () => {
@@ -39,4 +39,15 @@ it('steps: the handle goes up and wraps from Full to Peek; increment and decreme
   expect([nextStop('peek'), nextStop('half'), nextStop('full')]).toEqual(['half', 'full', 'peek']);
   expect([stepStop('peek', 1), stepStop('half', 1), stepStop('full', 1)]).toEqual(['half', 'full', 'full']);
   expect([stepStop('peek', -1), stepStop('half', -1), stepStop('full', -1)]).toEqual(['peek', 'peek', 'half']);
+});
+
+it('scrolls the composer above the keyboard on a short phone: Share in view, the input never under the header', () => {
+  // 667 tall, keyboard 336, at Half (lifted to Full, 73), a 110-px handle and fire block: 148 px left in view.
+  const base = { height: 667, keyboard: 336, stopTop: 267, full: 73, header: 110 };
+  // Input at 150, Share's bottom at 270 (no chips): Share's bottom + 12 at the view's bottom.
+  expect(revealScrollY({ ...base, top: 150, bottom: 270 })).toBe(270 + 12 - 148);
+  // A taller composer (chips showing) keeps the input in view instead.
+  expect(revealScrollY({ ...base, top: 120, bottom: 360 })).toBe(112);
+  // Room to spare: no scroll.
+  expect(revealScrollY({ ...base, keyboard: 0, stopTop: 93, top: 120, bottom: 260 })).toBe(0);
 });
