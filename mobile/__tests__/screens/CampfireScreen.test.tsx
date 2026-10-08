@@ -471,8 +471,9 @@ it('Cancel leaves an edit without sending: the live note stays', async () => {
 });
 
 it('with the keyboard up, the panel scrolls and brings the composer (and Share) into view', async () => {
-  const handlers: Record<string, (e: { endCoordinates: { height: number }; duration: number }) => void> = {};
-  const listen = jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, cb: (e: never) => void) => {
+  type KeyboardEvent = { endCoordinates: { height: number }; duration: number };
+  const handlers: Record<string, (e: KeyboardEvent) => void> = {};
+  const listen = jest.spyOn(Keyboard, 'addListener').mockImplementation(((event: string, cb: (e: KeyboardEvent) => void) => {
     handlers[event] = cb;
     return { remove: jest.fn() };
   }) as never);

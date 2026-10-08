@@ -111,7 +111,7 @@ function Spark({ x, delay, t }: { x: number; delay: number; t: SharedValue<numbe
     const k = stepIndex(t.value, 2.4, 14, delay);
     return { opacity: k === 0 ? 0 : 1 - k / 14, transform: [{ translateY: -8 * k }] };
   });
-  return <Animated.View style={[{ position: 'absolute', left: x, top: 8, width: PX, height: PX, backgroundColor: '#FDBA74' }, style]} />;
+  return <Animated.View testID={`camp-spark-${x}`} style={[{ position: 'absolute', left: x, top: 8, width: PX, height: PX, backgroundColor: '#FDBA74' }, style]} />;
 }
 
 /** The fire: lit at night once anyone is in bed on time (two flame frames and sparks), else the logs (and ash by day). */
