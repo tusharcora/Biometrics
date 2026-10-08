@@ -48,14 +48,21 @@ export function sanitiseDisplayName(raw: string): string {
 }
 
 /** At least one letter, number, symbol or punctuation mark; the braille blank (U+2800, a symbol) does not count. */
-function hasVisibleCharacter(text: string): boolean {
+export function hasVisibleCharacter(text: string): boolean {
   return /[\p{L}\p{N}\p{S}\p{P}]/u.test(text.replace(/\u2800/g, ''));
+}
+
+/** String.prototype.isWellFormed (ES2024; this tsconfig's lib is ES2022): false when the text holds a lone surrogate. */
+export function isWellFormed(text: string): boolean {
+  return !/\p{Cs}/u.test(text);
 }
 
 export type DisplayNameProblem = 'empty' | 'length' | 'reserved';
 
 export function checkDisplayName(raw: unknown): { ok: true; displayName: string } | { ok: false; problem: DisplayNameProblem } {
   if (typeof raw !== 'string') return { ok: false, problem: 'empty' };
+  // A lone surrogate is not text: Postgres cannot store it (a 500), so refuse it before sanitising.
+  if (!isWellFormed(raw)) return { ok: false, problem: 'empty' };
   const displayName = sanitiseDisplayName(raw);
   const length = [...displayName].length;
   if (length === 0 || !hasVisibleCharacter(displayName)) return { ok: false, problem: 'empty' };

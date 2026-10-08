@@ -17,6 +17,7 @@ export const RATE_LIMITS = {
   codeRedeem: { name: 'code_redeem', limit: 10, windowSeconds: 60 * 60 },
   buddyRequest: { name: 'buddy_request', limit: 50, windowSeconds: 24 * 60 * 60 },
   handle: { name: 'handle', limit: 30, windowSeconds: 60 },
+  campNote: { name: 'camp_note', limit: 20, windowSeconds: 60 * 60 },
 } as const satisfies Record<string, RateLimit>;
 
 export type RateLimitResult = 'ok' | 'limited' | 'unavailable';

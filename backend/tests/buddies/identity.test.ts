@@ -53,6 +53,9 @@ describe('display names', () => {
     expect(checkDisplayName('a'.repeat(31))).toEqual({ ok: false, problem: 'length' });
     for (const bad of ['biometrics fan', 'the admin', 'Team Lead', 'Sup port', 'MODERATOR']) expect(checkDisplayName(bad)).toEqual({ ok: false, problem: 'reserved' });
     expect(checkDisplayName(7)).toEqual({ ok: false, problem: 'empty' });
+    // A lone surrogate cannot be stored (Postgres refuses it): refused before sanitising.
+    expect(checkDisplayName(`Sam${String.fromCharCode(0xd800)}`)).toEqual({ ok: false, problem: 'empty' });
+    expect(checkDisplayName(`${String.fromCharCode(0xdc00)}Sam`)).toEqual({ ok: false, problem: 'empty' });
   });
 
   it('removes default-ignorable code points, so they cannot split a reserved word', () => {

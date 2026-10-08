@@ -1,6 +1,7 @@
 // Social story viewer (spec 2026-10-07 social §4.2): the recap story engine (useStoryViewer + ViewerProgress) over
 // a buddy's frames for their day. Reaching the last frame marks it seen (once) and refreshes Social; running past
 // the end closes. Replies are stickers until chats arrive in S3; my own story has none.
+// A story with no frames left says so ("Nothing in this story yet."); "isn't available anymore" is for one that is gone.
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, AppState, Pressable, View } from 'react-native';
@@ -21,11 +22,11 @@ import { useStoryViewer } from '../lib/useStoryViewer';
 
 const GROUND = '#0F1230';
 
-type Loaded = { phase: 'loading' } | { phase: 'ready'; story: Story } | { phase: 'gone' } | { phase: 'error' };
+type Loaded = { phase: 'loading' } | { phase: 'ready'; story: Story } | { phase: 'empty' } | { phase: 'gone' } | { phase: 'error' };
 
 export function SocialStoryScreen() {
   const navigation = useNavigation();
-  const { authorId } = (useRoute().params ?? {}) as { authorId: string };
+  const { authorId, mine: mineParam } = (useRoute().params ?? {}) as { authorId: string; mine?: boolean };
   const [loaded, setLoaded] = useState<Loaded>({ phase: 'loading' });
   const leave = useCallback(() => navigation.goBack(), [navigation]);
   // Retry is not tied to an effect: it checks this, so a load that lands after leaving sets nothing.
@@ -43,8 +44,8 @@ export function SocialStoryScreen() {
       const story = await fetchStory(authorId);
       // Frames this app can't draw (a newer server's kind or value) are skipped, not drawn blank or mislabelled.
       const frames = knownStoryFrames(story.frames);
-      // Nothing left to play (it emptied since the ring was drawn): not available, never an endless loader.
-      if (live()) setLoaded(frames.length > 0 ? { phase: 'ready', story: { ...story, frames } } : { phase: 'gone' });
+      // Nothing left to play (it emptied since the ring was drawn): say so, never an endless loader.
+      if (live()) setLoaded(frames.length > 0 ? { phase: 'ready', story: { ...story, frames } } : { phase: 'empty' });
     } catch (e) {
       // No longer buddies (or no such person): gone. Anything else (offline, 5xx): retryable.
       const code = buddyErrorCode(e);
@@ -60,13 +61,14 @@ export function SocialStoryScreen() {
     };
   }, [load]);
 
-  if (loaded.phase === 'ready') return <Viewer story={loaded.story} onClose={leave} />;
+  if (loaded.phase === 'ready') return <Viewer story={loaded.story} mineHint={mineParam === true} onClose={leave} />;
   return (
     <SafeAreaView testID={`social-story-${loaded.phase}`} style={{ flex: 1, backgroundColor: GROUND }}>
       <StatusBar style="light" />
       <View className="flex-1 items-center justify-center gap-4 px-8">
         {loaded.phase === 'loading' ? <ActivityIndicator color="#FFFFFF" /> : null}
         {loaded.phase === 'gone' ? <Text className="text-center text-white">This story isn't available anymore.</Text> : null}
+        {loaded.phase === 'empty' ? <Text className="text-center text-white">Nothing in this story yet.</Text> : null}
         {loaded.phase === 'error' ? (
           <>
             <Text className="text-center text-white">Couldn't load this story</Text>
@@ -79,9 +81,10 @@ export function SocialStoryScreen() {
   );
 }
 
-function Viewer({ story, onClose }: { story: Story; onClose: () => void }) {
+function Viewer({ story, mineHint, onClose }: { story: Story; mineHint: boolean; onClose: () => void }) {
   const social = useSocial();
-  const mine = social.status === 'ready' && social.home.me.person.id === story.author.id;
+  // Once the store has loaded it decides; until then the route's hint does.
+  const mine = social.status === 'ready' ? social.home.me.person.id === story.author.id : mineHint;
   const myMood = social.status === 'ready' ? social.home.me.checkIn?.mood ?? null : null;
   const reduceMotion = useReducedMotion();
   const [checkingIn, setCheckingIn] = useState(false);

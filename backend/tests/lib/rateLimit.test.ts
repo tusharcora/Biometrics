@@ -13,6 +13,7 @@ it('has the spec limits', () => {
     codeRedeem: { name: 'code_redeem', limit: 10, windowSeconds: 3600 },
     buddyRequest: { name: 'buddy_request', limit: 50, windowSeconds: 86400 },
     handle: { name: 'handle', limit: 30, windowSeconds: 60 },
+    campNote: { name: 'camp_note', limit: 20, windowSeconds: 3600 },
   });
 });
 

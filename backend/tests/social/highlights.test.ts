@@ -70,6 +70,24 @@ it("builds last week's highlights for my circle, gated at read time and cached",
   expect(await prisma.weeklyHighlights.count({ where: { viewerId: me.id } })).toBe(1);
 });
 
+it('a cache row purged between its write and the re-read is no highlights for that read, never a throw', async () => {
+  const { me } = await circle();
+  const createMany = prisma.weeklyHighlights.createMany.bind(prisma.weeklyHighlights);
+  // An account-deletion purge (purgeSocialJsonMentions) lands right after the write.
+  const spy = jest.spyOn(prisma.weeklyHighlights, 'createMany').mockImplementation((async (args: Parameters<typeof createMany>[0]) => {
+    const result = await createMany(args);
+    await prisma.weeklyHighlights.deleteMany({ where: { viewerId: me.id } });
+    return result;
+  }) as never);
+  try {
+    expect(await getWeeklyHighlights(me.id, NOW)).toBeNull();
+  } finally {
+    spy.mockRestore();
+  }
+  // The next read rebuilds.
+  expect((await getWeeklyHighlights(me.id, NOW))!.items.length).toBeGreaterThan(0);
+});
+
 it('a buddy who turns streaks on after the build appears on the next read', async () => {
   const me = await buddyUser();
   const sam = await buddyUser({ displayName: 'Sam' });
@@ -83,7 +101,7 @@ it('a buddy who turns streaks on after the build appears on the next read', asyn
   expect(later!.items.map((i) => [i.type, i.actor.id])).toEqual([['top_story', sam.id]]);
 });
 
-it('a comeback needs consecutive days, and a week with nothing is never stored', async () => {
+it('a comeback needs consecutive days, and a week with nothing is cached empty for an hour', async () => {
   const me = await buddyUser();
   const zed = await buddyUser({ displayName: 'Zed' });
   await pairUp(me.id, zed.id);
@@ -92,10 +110,10 @@ it('a comeback needs consecutive days, and a week with nothing is never stored',
   await prisma.checkIn.create({ data: { authorId: zed.id, localDate: day(1), mood: 'TIRED' } });
   await prisma.checkIn.create({ data: { authorId: zed.id, localDate: day(3), mood: 'RESTED' } });
   expect(await getWeeklyHighlights(me.id, NOW)).toBeNull();
-  expect(await prisma.weeklyHighlights.count({ where: { viewerId: me.id } })).toBe(0);
-  // Rebuilt on the next read: a late check-in that completes the run now counts.
+  expect(await prisma.weeklyHighlights.count({ where: { viewerId: me.id } })).toBe(1);
+  // Rebuilt once the empty row is an hour old: a row that completes the run now counts.
   await prisma.checkIn.create({ data: { authorId: zed.id, localDate: day(2), mood: 'TIRED' } });
-  expect((await getWeeklyHighlights(me.id, NOW))!.items.map((i) => i.type)).toEqual(['comeback']);
+  expect((await getWeeklyHighlights(me.id, new Date(NOW.getTime() + 60 * 60 * 1000)))!.items.map((i) => i.type)).toEqual(['comeback']);
 });
 
 it('waits until Monday 14:00 UTC: an Auckland Monday-morning read serves the week before', async () => {

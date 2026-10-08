@@ -1,7 +1,9 @@
-// The social tables (Buddies spec §3 and Social tab S1). None has a `userId`, so the
+// The social tables (Buddies spec §3, Social tab S1 and S2). None has a `userId`, so the
 // USER_OWNED_MODELS guard (tests/users/deletion.test.ts) does not see them; they rely on
 // database cascades instead, and tests/buddies/deletion.test.ts introspects the schema against
 // this list so a future social table must be added here (and to that test's seed).
+
+import type { PrismaClient } from '@prisma/client';
 
 export const SOCIAL_MODELS = [
   'BuddyPair',
@@ -17,6 +19,8 @@ export const SOCIAL_MODELS = [
   'RecapShare',
   'StepGoalEvent',
   'WeeklyHighlights',
+  'Goodnight',
+  'CampNote',
 ] as const;
 
 export type SocialModel = (typeof SOCIAL_MODELS)[number];
@@ -36,7 +40,19 @@ export const SOCIAL_USER_COLUMNS: Readonly<Record<SocialModel, readonly string[]
   RecapShare: ['sharerId'],
   StepGoalEvent: ['authorId'],
   WeeklyHighlights: ['viewerId'],
+  Goodnight: ['authorId'],
+  CampNote: ['authorId'],
 };
 
 /** `Model.column` pairs whose foreign key sets null instead of cascading. */
 export const SET_NULL_COLUMNS: ReadonlySet<string> = new Set(['BuddyCode.usedById', 'HandleHold.previousOwnerId']);
+
+/**
+ * Week-highlight caches (WeeklyHighlights.items) name people by id inside JSON, which no foreign key can cascade.
+ * On account deletion every cache naming the user is deleted; the next read rebuilds it from rows that no longer
+ * include them. Reads also gate every cached actor against the live circle, so a deleted id never surfaces even if
+ * this purge fails. Returns the number of caches deleted.
+ */
+export async function purgeSocialJsonMentions(db: Pick<PrismaClient, '$executeRaw'>, userId: string): Promise<number> {
+  return db.$executeRaw`DELETE FROM "WeeklyHighlights" WHERE "items" @> ${JSON.stringify([{ actorId: userId }])}::jsonb`;
+}

@@ -1,10 +1,13 @@
-// Social tab routes (spec 2026-10-07 social). Every path is /me/social…, so nothing collides with the Buddies
-// `/me/buddies/:buddyId` routes. GETs are never cached.
+// Social tab routes (spec 2026-10-07 social). Every path is /me/social… or the Campfire's /me/camp… (spec §6.4), so
+// nothing collides with the Buddies `/me/buddies/:buddyId` routes. GETs are never cached.
 
 import { Router } from 'express';
 import { requireAuth } from '../auth/middleware';
 import { buddyRoute } from '../buddies/errors';
+import { getCamp } from './camp';
+import { clearCampNote, shareCampNote } from './campNotes';
 import { getTodayCheckIn, saveCheckIn } from './checkins';
+import { sayGoodnight, undoGoodnight } from './goodnight';
 import { getWeeklyHighlights } from './highlights';
 import { getSocialHome, markStickersSeen } from './home';
 import { isRecapShared, shareRecap, unshareRecap } from './recapShares';
@@ -59,4 +62,28 @@ socialRouter.post('/me/social/stories/:authorId/seen', requireAuth, buddyRoute(a
 socialRouter.get('/me/social/highlights', requireAuth, buddyRoute(async (req, res) => {
   res.set('Cache-Control', 'private, no-store');
   res.json({ highlights: await getWeeklyHighlights(req.userId!, new Date()) });
+}));
+
+socialRouter.get('/me/camp', requireAuth, buddyRoute(async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  res.json(await getCamp(req.userId!, new Date()));
+}));
+
+socialRouter.post('/me/camp/goodnight', requireAuth, buddyRoute(async (req, res) => {
+  res.json({ goodnight: await sayGoodnight(req.userId!, new Date()) });
+}));
+
+socialRouter.delete('/me/camp/goodnight', requireAuth, buddyRoute(async (req, res) => {
+  await undoGoodnight(req.userId!, new Date());
+  res.status(204).end();
+}));
+
+socialRouter.put('/me/camp/note', requireAuth, buddyRoute(async (req, res) => {
+  res.json({ note: await shareCampNote(req.userId!, (req.body as { text?: unknown } | undefined)?.text, new Date()) });
+}));
+
+// Never rate-limited (review I1): removing your own note must work even while the limiter is down.
+socialRouter.delete('/me/camp/note', requireAuth, buddyRoute(async (req, res) => {
+  await clearCampNote(req.userId!);
+  res.status(204).end();
 }));

@@ -23,8 +23,11 @@ it('returns the whole Social home in one call, never cached', async () => {
   const res = await (await api()).get('/me/social').set(await authHeaderFor(me.id));
   expect([res.status, res.headers['cache-control']]).toEqual([200, 'private, no-store']);
   expect(Object.keys(res.body).sort()).toEqual(['camp', 'highlights', 'me', 'stories', 'timeline', 'unread']);
-  expect(res.body.me).toEqual({ person: expect.objectContaining({ id: me.id, displayName: 'Me' }), checkIn: null });
-  expect(res.body.camp).toEqual({ checkedIn: 1, members: 3, faces: [res.body.stories[0].author.coachId] });
+  expect(res.body.me).toEqual({ person: expect.objectContaining({ id: me.id, displayName: 'Me' }), checkIn: null, goodnight: null });
+  expect(res.body.camp).toEqual({
+    checkedIn: 1, members: 3, faces: [res.body.stories[0].author.coachId],
+    night: expect.any(Boolean), awake: 3, asleep: 0, goodnightOpen: expect.any(Boolean),
+  });
   expect(res.body.stories.map((r: { author: { id: string }; locked: boolean }) => [r.author.id, r.locked])).toEqual([[sam.id, true]]);
   expect(res.body.unread).toEqual({ requests: 0, stickers: 1 });
   expect(res.body.timeline.map((i: { kind: string }) => i.kind)).toEqual(['checkin', 'sticker']);

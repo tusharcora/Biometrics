@@ -1,5 +1,6 @@
 // Morning check-in (spec 2026-10-07 social §4.1): Rested / Okay / Tired, one per author per LOCAL day, editable
 // until local midnight, always shared with buddies (self-reported, no number).
+// Checking in also clears the author's older camp note (spec §6.3).
 
 import type { CheckInMood } from '@prisma/client';
 import { civilDateToUtcMidnight, localCivilDateOrUtc } from '../biometrics/civilDate';
@@ -15,7 +16,7 @@ export interface CheckInDTO {
 }
 
 const isoDate = (d: Date) => d.toISOString().slice(0, 10);
-const toDTO = (row: { mood: CheckInMood; localDate: Date; updatedAt: Date }): CheckInDTO => ({
+export const toCheckInDTO = (row: { mood: CheckInMood; localDate: Date; updatedAt: Date }): CheckInDTO => ({
   mood: row.mood,
   localDate: isoDate(row.localDate),
   updatedAt: row.updatedAt.toISOString(),
@@ -33,7 +34,7 @@ export async function getTodayCheckIn(userId: string, now: Date): Promise<CheckI
     where: { authorId_localDate: { authorId: userId, localDate: civilDateToUtcMidnight(today) } },
     select: { mood: true, localDate: true, updatedAt: true },
   });
-  return row ? toDTO(row) : null;
+  return row ? toCheckInDTO(row) : null;
 }
 
 export async function saveCheckIn(userId: string, mood: unknown, now: Date): Promise<CheckInDTO> {
@@ -44,7 +45,10 @@ export async function saveCheckIn(userId: string, mood: unknown, now: Date): Pro
     where: { authorId_localDate: { authorId: userId, localDate } },
     create: { authorId: userId, localDate, mood: mood as CheckInMood, createdAt: now },
     update: { mood: mood as CheckInMood },
-    select: { mood: true, localDate: true, updatedAt: true },
+    select: { mood: true, localDate: true, createdAt: true, updatedAt: true },
   });
-  return toDTO(row);
+  // A camp note clears when its author checks in (spec §6.3): notes written at or before the day's first check-in
+  // go; one written after it survives later edits of that check-in.
+  await prisma.campNote.deleteMany({ where: { authorId: userId, createdAt: { lte: row.createdAt } } });
+  return toCheckInDTO(row);
 }

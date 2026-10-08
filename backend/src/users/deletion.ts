@@ -19,6 +19,7 @@ import { decryptToken } from '../crypto/tokenCipher';
 import { revokeHealthToken } from '../health/oauth';
 import { deleteUserSubscription } from '../health/subscriber';
 import { holdHandle } from '../buddies/holds';
+import { purgeSocialJsonMentions } from '../buddies/models';
 
 /**
  * Every model that carries a `userId`, in an FK-safe delete order: children
@@ -155,5 +156,15 @@ export async function deleteUserAccount(
   }
 
   const counts = await deleteOwnedRows(prisma, { userId }, { id: userId });
+
+  // Week-highlight caches name people inside JSON, beyond any cascade (buddies/models.ts). After the rows are gone,
+  // so a buddy's rebuild racing this deletion can't cache the id again from rows that still existed. Best effort:
+  // reads gate every cached actor against the live circle anyway. Only the error class is logged.
+  try {
+    await purgeSocialJsonMentions(prisma, userId);
+  } catch (err) {
+    log(`Account deletion: could not purge social mentions for user ${userId}: ${err instanceof Error ? err.name : 'unknown error'}`);
+  }
+
   return { googleSubscriptionDeleted, googleTokenRevoked, counts };
 }

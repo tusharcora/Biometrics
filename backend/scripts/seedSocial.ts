@@ -1,15 +1,16 @@
 /// <reference types="node" />
-// Dev only: gives the demo account something to see on Social (spec 2026-10-07 social S1). The buddy
+// Dev only: gives the demo account something to see on Social (spec 2026-10-07 social S1 + S2). The buddy
 // checks in TIRED and passes their step goal today; if the buddy already checked in today, that mood is
 // OVERWRITTEN with TIRED. Their newest built recap with a non-blank line (if any) is shared, with that
-// line as the previewed one. The demo account itself is left unchecked-in so the walkthrough shows the
-// lock lifting. Run seedBuddies first: the two accounts must already be buddies.
+// line as the previewed one. For the Campfire (S2) the buddy gets a camp note and a goodnight for their current
+// evening, so the camp shows an asleep coach with a bubble. The demo account itself is left unchecked-in so the
+// walkthrough shows the lock lifting. Run seedBuddies first: the two accounts must already be buddies.
 //
 //   DATABASE_URL=<local dev database> node node_modules/.bin/ts-node --project tsconfig.evals.json scripts/seedSocial.ts --email demo@example.com --buddy-email buddy@example.com
 //
 // Refuses NODE_ENV=production and any non-local DATABASE_URL (assertDevDatabase, as the badge seed),
 // an unknown email and two accounts that aren't buddies, before writing anything. Idempotent: the
-// check-in is upserted, the step goal and the share are created once. Nothing is queued. Never runs
+// check-in, the camp note and the goodnight are upserted, the step goal and the share are created once. Nothing is queued. Never runs
 // on import. On failure it logs only the error's name.
 import { civilDateToUtcMidnight } from '../src/biometrics/civilDate';
 import { orderedPair } from '../src/buddies/pairs';
@@ -18,8 +19,12 @@ import { prisma } from '../src/db/client';
 import { saveCheckIn, todayFor } from '../src/social/checkins';
 import { shareRecap } from '../src/social/recapShares';
 import { recordStepGoal } from '../src/social/stepGoal';
+import { eveningDate, isOnTime, nextSunrise } from '../src/social/night';
 import { connection, syncQueue } from '../src/sync/queue';
 import { assertDevDatabase } from './seedAchievements';
+
+/** The buddy's camp note in the walkthrough (the canvas' line). */
+export const SEED_CAMP_NOTE = 'bed soon, night all';
 
 type SeedEnv = { NODE_ENV?: string | undefined; DATABASE_URL?: string | undefined };
 
@@ -46,7 +51,7 @@ async function findUserId(email: string): Promise<string> {
   return user.id;
 }
 
-export async function seedSocial({ email, buddyEmail, now = new Date(), env = process.env }: { email: string; buddyEmail: string; now?: Date; env?: SeedEnv }): Promise<{ buddyCheckedIn: boolean; stepGoal: boolean; recapShared: boolean }> {
+export async function seedSocial({ email, buddyEmail, now = new Date(), env = process.env }: { email: string; buddyEmail: string; now?: Date; env?: SeedEnv }): Promise<{ buddyCheckedIn: boolean; stepGoal: boolean; recapShared: boolean; campNote: boolean; goodnight: boolean }> {
   assertDevDatabase(env);
   const userId = await findUserId(email);
   const buddyId = await findUserId(buddyEmail);
@@ -69,7 +74,19 @@ export async function seedSocial({ email, buddyEmail, now = new Date(), env = pr
   });
   const recap = candidates.find((r) => r.line !== null && r.line.trim() !== '') ?? null;
   if (recap) await shareRecap(buddyId, recap.id, recap.line, now);
-  return { buddyCheckedIn: true, stepGoal: true, recapShared: recap !== null };
+  // The buddy's camp, written directly: the goodnight route only opens at night and the walkthrough runs whenever.
+  // The note is stamped a second after `now`, so the check-in above (stamped at or before `now`) does not clear it.
+  const buddy = await prisma.user.findUniqueOrThrow({ where: { id: buddyId }, select: { timezone: true, bedtimeGoal: true } });
+  const noteAt = new Date(now.getTime() + 1000);
+  const note = { text: SEED_CAMP_NOTE, createdAt: noteAt, expiresAt: nextSunrise(noteAt, buddy.timezone) };
+  await prisma.campNote.upsert({ where: { authorId: buddyId }, create: { authorId: buddyId, ...note }, update: note });
+  const evening = civilDateToUtcMidnight(eveningDate(now, buddy.timezone));
+  await prisma.goodnight.upsert({
+    where: { authorId_localDate: { authorId: buddyId, localDate: evening } },
+    create: { authorId: buddyId, localDate: evening, at: now, onTime: isOnTime(now, buddy.timezone, buddy.bedtimeGoal) },
+    update: {},
+  });
+  return { buddyCheckedIn: true, stepGoal: true, recapShared: recap !== null, campNote: true, goodnight: true };
 }
 
 async function closeQuietly(close: () => Promise<unknown>): Promise<void> {

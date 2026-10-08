@@ -110,10 +110,10 @@ it('my own story has no reply row; a buddy who is gone closes politely', async (
   expect(mockGoBack).toHaveBeenCalled();
 });
 
-it('a story with no frames is not available, never an endless loader', async () => {
+it('a story with no frames says there is nothing in it yet, never an endless loader', async () => {
   (fetchStory as jest.Mock).mockResolvedValueOnce({ author: sam, localDate: '2026-10-07', frames: [] });
   renderScreen();
-  expect(await screen.findByTestId('social-story-gone')).toHaveTextContent(/isn't available/);
+  expect(await screen.findByTestId('social-story-empty')).toHaveTextContent(/Nothing in this story yet/);
   expect(screen.queryByTestId('social-story-loading')).toBeNull();
   expect(markStorySeen).not.toHaveBeenCalled();
   fireEvent.press(screen.getByTestId('social-story-close'));

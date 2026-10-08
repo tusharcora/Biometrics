@@ -101,6 +101,9 @@ const ERRORS: Record<string, string> = {
   invalid_cursor: "Couldn't load more. Please refresh.",
   invalid_checkin: 'Pick how you woke up.',
   recap_not_found: "That recap can't be shared.",
+  goodnight_closed: 'Goodnight opens this evening.',
+  undo_expired: "It's too late to undo that goodnight.",
+  invalid_note: 'Notes are 1 to 40 characters.',
 };
 
 export function buddyErrorMessage(code: string | null): string {

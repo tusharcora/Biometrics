@@ -40,6 +40,7 @@ import { PairUpScreen } from '../screens/PairUpScreen';
 import { BuddiesScreen } from '../screens/BuddiesScreen';
 import { BuddyWeekScreen } from '../screens/BuddyWeekScreen';
 import { HighlightsScreen } from '../screens/HighlightsScreen';
+import { CampfireScreen } from '../screens/CampfireScreen';
 import { BlockedPeopleScreen } from '../screens/BlockedPeopleScreen';
 import { CelebrationHost } from '../components/achievements/CelebrationHost';
 import { BuddiesStoreScope } from '../components/buddies/BuddiesStoreScope';
@@ -129,8 +130,11 @@ export type RootStackParamList = {
   BlockedPeople: undefined;
   // Social → last week's highlights in full (the carousel's "All").
   Highlights: undefined;
-  // Social → one buddy's story today (or my own once I've checked in), opened from the stories row.
-  SocialStory: { authorId: string };
+  // Social → one buddy's story today (or my own once I've checked in), opened from the stories row. `mine` is set for
+  // my own story, so the viewer knows it before the Social home has loaded.
+  SocialStory: { authorId: string; mine?: boolean };
+  // Social → the camp banner: the Campfire page (S2), pushed with no tab bar.
+  Campfire: undefined;
 };
 
 export type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';
@@ -253,6 +257,8 @@ export function RootNavigator() {
               <Stack.Screen name="PairUp" component={PairUpScreen} options={{ title: 'Add a buddy' }} />
               <Stack.Screen name="BlockedPeople" component={BlockedPeopleScreen} options={{ title: 'Blocked people' }} />
               <Stack.Screen name="Highlights" component={HighlightsScreen} options={{ title: 'Highlights' }} />
+              {/* The Campfire (S2): its own header over the scene, no tab bar. */}
+              <Stack.Screen name="Campfire" component={CampfireScreen} options={{ headerShown: false }} />
               <Stack.Screen
                 name="SocialStory"
                 component={SocialStoryScreen}
