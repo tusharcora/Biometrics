@@ -7,14 +7,17 @@
 
 import type { MessageKind, Prisma, PrismaClient } from '@prisma/client';
 import { prisma } from '../db/client';
+import { encodeCursor, keysetBefore, parseCursor } from '../buddies/cursor';
 import { BuddyError, UUID_RE, limitOrThrow } from '../buddies/errors';
 import type { PairDeps } from '../buddies/pairs';
+import { toPerson } from '../buddies/people';
 import { sendSticker } from '../buddies/stickers';
 import { RATE_LIMITS } from '../lib/rateLimit';
 import { buildCard, gateCard, loadCardGate, parseCardRequest, type CardGate, type CardRequest } from './cards';
-import { requireLivePairTx, writeMessageTx } from './conversations';
+import { findConversationId, moveRead, requireChatPeople, requireLivePairTx, writeMessageTx } from './conversations';
+import { activeAtFor, touchPresence } from './presence';
 import { checkMessageText, previewText } from './text';
-import { cardTypeOf, type MessageDTO, type StoredCard } from './types';
+import { cardTypeOf, type MessageDTO, type StoredCard, type ThreadDTO } from './types';
 
 export const MESSAGE_SELECT = {
   id: true,
@@ -75,6 +78,7 @@ export async function sendMessage(senderId: string, buddyId: string, body: unkno
       replyToMessageId,
       readMessageTx: (tx, messageId) => loadMessageDTO(messageId, senderId, tx),
     });
+    await touchPresence(senderId, now);
     return message;
   }
   let kind: MessageKind;
@@ -99,9 +103,57 @@ export async function sendMessage(senderId: string, buddyId: string, body: unkno
   // After the limiter (probing spends a token) and before the transaction (it only reads; the tx re-checks the pair).
   const card: StoredCard | null = cardRequest ? await buildCard(senderId, buddyId, cardRequest, now) : null;
   // The returned message is read inside the transaction (an unpair waits on the pair lock, then deletes it).
-  return prisma.$transaction(async (tx) => {
+  const message = await prisma.$transaction(async (tx) => {
     await requireLivePairTx(tx, senderId, buddyId, now);
     const messageId = await writeMessageTx(tx, { senderId, recipientId: buddyId, kind, text, card, replyToMessageId, now });
     return loadMessageDTO(messageId, senderId, tx);
   });
+  await touchPresence(senderId, now);
+  return message;
+}
+
+export const THREAD_PAGE_SIZE = 50;
+
+/**
+ * One page of the thread, oldest first: the newest page without `before` (what the app polls every 5 s), else the page
+ * before that cursor. Unsent messages are never returned. A pair with no conversation yet is an empty thread. "Seen"
+ * and activity status follow the reciprocal settings. Every card on the page goes through one card gate, so it serves
+ * only what is still shared now. Reading touches the reader's presence.
+ */
+export async function listThread(viewerId: string, buddyId: string, beforeRaw: unknown, now: Date, pageSize = THREAD_PAGE_SIZE): Promise<ThreadDTO> {
+  const before = parseCursor(beforeRaw);
+  const { viewer, buddy } = await requireChatPeople(viewerId, buddyId);
+  await touchPresence(viewerId, now);
+  const activeAt = activeAtFor(viewer, buddy, now);
+  const conversationId = await findConversationId(viewerId, buddyId);
+  if (!conversationId) return { buddy: toPerson(buddy), messages: [], nextBefore: null, seenAt: null, activeAt };
+  const [rows, read] = await Promise.all([
+    prisma.message.findMany({
+      where: { AND: [{ conversationId, deletedAt: null }, ...(before ? [keysetBefore('createdAt', before)] : [])] },
+      orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+      take: pageSize + 1,
+      select: MESSAGE_SELECT,
+    }),
+    viewer.chatReadReceipts && buddy.chatReadReceipts
+      ? prisma.conversationRead.findUnique({ where: { conversationId_readerId: { conversationId, readerId: buddyId } }, select: { lastReadAt: true } })
+      : Promise.resolve(null),
+  ]);
+  const page = rows.slice(0, pageSize);
+  const oldest = page[page.length - 1];
+  const gate = await loadCardGate(page.map((row) => row.card));
+  return {
+    buddy: toPerson(buddy),
+    messages: page.reverse().map((row) => toMessageDTO(row, viewerId, gate)),
+    nextBefore: rows.length > pageSize && oldest ? encodeCursor({ at: oldest.createdAt, id: oldest.id }) : null,
+    seenAt: read ? read.lastReadAt.toISOString() : null,
+    activeAt,
+  };
+}
+
+/** The thread is open: my read moves to now (never back), and that buddy's unseen stickers to me are seen. */
+export async function markRead(viewerId: string, buddyId: string, now: Date): Promise<void> {
+  await requireChatPeople(viewerId, buddyId);
+  const conversationId = await findConversationId(viewerId, buddyId);
+  if (conversationId) await moveRead(prisma, conversationId, viewerId, now);
+  await prisma.sticker.updateMany({ where: { fromUserId: buddyId, toUserId: viewerId, seenAt: null }, data: { seenAt: now } });
 }
