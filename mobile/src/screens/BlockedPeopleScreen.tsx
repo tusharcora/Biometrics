@@ -81,7 +81,7 @@ export function BlockedPeopleScreen() {
             <Button
               testID={`unblock-${item.userId}`}
               size="sm"
-              variant="outline"
+              variant="secondary"
               disabled={busyId !== null}
               onPress={() => void lift(item.userId)}
             >

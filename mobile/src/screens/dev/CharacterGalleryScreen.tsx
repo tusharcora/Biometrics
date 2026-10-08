@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
-import { Pressable, ScrollView, Text, View } from 'react-native';
+import { ScrollView, Text, View } from 'react-native';
+import { Button } from '../../components/ui/button';
 import { Character } from '../../components/characters/Character';
 import { CHARACTERS } from '../../components/characters/registry';
 import { THINKING_ATTACHMENT_NAMES, THINKING_ATTACHMENTS, THINKING_TEXT_NAMES, THINKING_TEXTS } from '../../components/characters/thinking';
@@ -27,17 +28,19 @@ export function CharacterGalleryScreen() {
   const foreground = dark ? '#f5f5f4' : '#1c1917';
   const heading = { color: foreground, fontSize: 16, fontWeight: '700' as const };
   const caption = { color: foreground, fontSize: 11 };
+  // The gallery ignores the app theme, so its buttons take the gallery's own text colour.
+  const buttonText = dark ? 'text-[#f5f5f4]' : 'text-[#1c1917]';
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: background }} contentContainerStyle={{ padding: 24, paddingTop: 72, gap: 28 }}>
       <Text style={{ color: foreground, fontSize: 20, fontWeight: '700' }}>Character gallery</Text>
       <View style={{ flexDirection: 'row', gap: 16 }}>
-        <Pressable testID="gallery-theme" onPress={() => setDark(!dark)}>
-          <Text style={{ color: foreground }}>Background: {dark ? 'dark' : 'light'}</Text>
-        </Pressable>
-        <Pressable testID="gallery-pause" onPress={() => setPaused(!paused)}>
-          <Text style={{ color: foreground }}>{paused ? 'Resume' : 'Pause'}</Text>
-        </Pressable>
+        <Button testID="gallery-theme" variant="ghost" size="sm" textClassName={buttonText} onPress={() => setDark(!dark)}>
+          {`Background: ${dark ? 'dark' : 'light'}`}
+        </Button>
+        <Button testID="gallery-pause" variant="ghost" size="sm" textClassName={buttonText} onPress={() => setPaused(!paused)}>
+          {paused ? 'Resume' : 'Pause'}
+        </Button>
       </View>
 
       {CHARACTER_IDS.map((id) => (

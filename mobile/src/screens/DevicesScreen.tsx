@@ -4,7 +4,6 @@ import { useColorScheme } from 'nativewind';
 import { authClient } from '../auth/authClient';
 import { unwrap, messageFor } from '../auth/authErrors';
 import { COLORS } from '../theme';
-import { cn } from '../lib/utils';
 import { Text } from '../components/ui/text';
 import { Button } from '../components/ui/button';
 import { Badge } from '../components/ui/badge';
@@ -89,7 +88,6 @@ export function DevicesScreen() {
                       testID={`revoke-${s.id}`}
                       variant="destructive"
                       size="sm"
-                      className={cn(busy ? 'opacity-40' : '')}
                       disabled={busy}
                       // Better Auth revokes another device's session by its token.
                       onPress={() => act(() => unwrap(authClient.revokeSession({ token: s.token })))}
