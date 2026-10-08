@@ -1,9 +1,10 @@
 // The Chats inbox (spec 2026-10-07 social §8.1): one row per conversation with a current buddy and a live message,
-// newest first, 30 a page by (lastMessageAt desc, id desc). A row: the buddy, the newest LIVE message (an unsent one is
-// skipped: unsend leaves lastMessageAt where it was, so the line, its "You:" side and the unread count all come from the
-// messages themselves; a text is one line of at most 80 code points — it is the viewer's own conversation; a card is
-// named by its type only, never its contents, and the app words stickers and cards), how many of their live messages I
-// haven't read, and their activity status (reciprocal). Unread never depends on read receipts. The teal story ring is
+// newest first, 30 a page by (lastLiveMessageAt desc, id desc). Everything follows the newest LIVE message, never
+// lastMessageAt (which an unsend leaves where it was): an unsent message is "shown as nothing", so it neither lifts a
+// row, nor shows in the line, nor reaches a cursor. A row: the buddy, the newest live message (its "You:" side; a text
+// is one line of at most 80 code points — it is the viewer's own conversation; a card is named by its type only, never
+// its contents, and the app words stickers and cards), how many of their live messages I haven't read, and their
+// activity status (reciprocal). Unread never depends on read receipts. The teal story ring is
 // read by the app from the Social home it already has, so the inbox does no story work. `requests` counts incoming
 // buddy requests for "Requests (N)". unreadChatsCount feeds /me/social unread.chats: conversations with at least one
 // unread message from a CURRENT buddy. Message text is user free text: nothing here logs.
@@ -25,40 +26,43 @@ export interface LastMessageDTO { mine: boolean; kind: MessageKind; text: string
 export interface ChatRowDTO { buddy: PersonDTO; lastMessage: LastMessageDTO; unread: number; activeAt: string | null }
 export interface ChatsPageDTO { chats: ChatRowDTO[]; nextCursor: string | null; requests: number }
 
-interface ConversationRow { id: string; userAId: string; userBId: string; lastMessageAt: Date }
+interface ConversationRow { id: string; userAId: string; userBId: string; lastLiveMessageAt: Date }
 interface LatestRow { conversationId: string; senderId: string; kind: MessageKind; text: string | null; sticker: StickerKind | null; card: unknown; createdAt: Date }
 
 /**
- * One page of the viewer's conversations: the pair must still exist (an unpair or block deletes the conversation in the
- * same transaction, so this is a guard, as in unreadChatsCount) and at least one message must be live.
- * The order is the conversation's lastMessageAt, not its newest live message's time: lastMessageAt is the indexed
- * keyset column (ordering by live time would aggregate every message of every conversation on each page), and a
- * conversation then moves only when someone sends, never back down when a message is taken back. The cost: after an
- * unsend, a row's shown time can be older than the row below it.
+ * One page of the viewer's conversations by (lastLiveMessageAt desc, id desc), on its indexes: the pair must still exist
+ * (an unpair or block deletes the conversation in the same transaction, so this is a guard, as in unreadChatsCount),
+ * and a conversation whose messages are all unsent (lastLiveMessageAt null) is not listed.
  */
 function pageOfConversations(viewerId: string, cursor: { at: Date; id: string } | null, take: number): Promise<ConversationRow[]> {
   // The cursor's time is passed as UTC text, so the session time zone never shifts it against timestamp(3) columns.
   const after = cursor
-    ? Prisma.sql`AND (c."lastMessageAt", c."id") < (${cursor.at.toISOString()}::timestamptz AT TIME ZONE 'UTC', ${cursor.id})`
+    ? Prisma.sql`AND (c."lastLiveMessageAt", c."id") < (${cursor.at.toISOString()}::timestamptz AT TIME ZONE 'UTC', ${cursor.id})`
     : Prisma.empty;
   return prisma.$queryRaw<ConversationRow[]>`
-    SELECT c."id", c."userAId", c."userBId", c."lastMessageAt"
+    SELECT c."id", c."userAId", c."userBId", c."lastLiveMessageAt"
     FROM "Conversation" c
     WHERE (c."userAId" = ${viewerId} OR c."userBId" = ${viewerId})
+      AND c."lastLiveMessageAt" IS NOT NULL
       AND EXISTS (SELECT 1 FROM "BuddyPair" p WHERE p."userAId" = c."userAId" AND p."userBId" = c."userBId")
-      AND EXISTS (SELECT 1 FROM "Message" m WHERE m."conversationId" = c."id" AND m."deletedAt" IS NULL)
       ${after}
-    ORDER BY c."lastMessageAt" DESC, c."id" DESC
+    ORDER BY c."lastLiveMessageAt" DESC, c."id" DESC
     LIMIT ${take}`;
 }
 
-/** Each conversation's newest live message: one query for the page. */
+/** Each conversation's newest live message: one query for the page, one (conversationId, createdAt, id) index walk each. */
 async function latestMessages(ids: string[]): Promise<Map<string, LatestRow>> {
   const rows = await prisma.$queryRaw<LatestRow[]>`
-    SELECT DISTINCT ON (m."conversationId") m."conversationId", m."senderId", m."kind", m."text", m."sticker", m."card", m."createdAt"
-    FROM "Message" m
-    WHERE m."conversationId" IN (${Prisma.join(ids)}) AND m."deletedAt" IS NULL
-    ORDER BY m."conversationId", m."createdAt" DESC, m."id" DESC`;
+    SELECT l.*
+    FROM "Conversation" c
+    CROSS JOIN LATERAL (
+      SELECT m."conversationId", m."senderId", m."kind", m."text", m."sticker", m."card", m."createdAt"
+      FROM "Message" m
+      WHERE m."conversationId" = c."id" AND m."deletedAt" IS NULL
+      ORDER BY m."createdAt" DESC, m."id" DESC
+      LIMIT 1
+    ) l
+    WHERE c."id" IN (${Prisma.join(ids)})`;
   return new Map(rows.map((r) => [r.conversationId, r]));
 }
 
@@ -115,12 +119,15 @@ export async function listChats(viewerId: string, cursorRaw: unknown, now: Date,
   const lastRow = page[page.length - 1]!;
   return {
     chats,
-    nextCursor: conversations.length > pageSize ? encodeCursor({ at: lastRow.lastMessageAt, id: lastRow.id }) : null,
+    nextCursor: conversations.length > pageSize ? encodeCursor({ at: lastRow.lastLiveMessageAt, id: lastRow.id }) : null,
     requests: requests.incoming,
   };
 }
 
-/** Conversations with at least one unread live message from a current buddy (the pair row must still exist). One query. */
+/**
+ * Conversations with at least one unread live message from a current buddy (the pair row must still exist). One query.
+ * Consistent with the inbox: such a conversation has a live message, so it is a listed row with unread > 0.
+ */
 export async function unreadChatsCount(viewerId: string): Promise<number> {
   const rows = await prisma.$queryRaw<Array<{ count: number }>>`
     SELECT COUNT(DISTINCT m."conversationId")::int AS "count"

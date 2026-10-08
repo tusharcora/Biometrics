@@ -75,10 +75,11 @@ export interface NewMessage {
  */
 export async function writeMessageTx(tx: Tx, m: NewMessage): Promise<string> {
   const pair = orderedPair(m.senderId, m.recipientId);
-  const made = await tx.conversation.createMany({ data: [{ ...pair, createdAt: m.now, lastMessageAt: m.now }], skipDuplicates: true });
+  const made = await tx.conversation.createMany({ data: [{ ...pair, createdAt: m.now, lastMessageAt: m.now, lastLiveMessageAt: m.now }], skipDuplicates: true });
   const current = await tx.conversation.findUniqueOrThrow({ where: { userAId_userBId: pair }, select: { id: true, lastMessageAt: true } });
   const at = made.count > 0 ? m.now : new Date(Math.max(m.now.getTime(), current.lastMessageAt.getTime() + 1));
-  const conversation = await tx.conversation.update({ where: { id: current.id }, data: { lastMessageAt: at }, select: { id: true } });
+  // The new message is the newest live one too (the inbox order); an unsend recomputes it (messages.ts).
+  const conversation = await tx.conversation.update({ where: { id: current.id }, data: { lastMessageAt: at, lastLiveMessageAt: at }, select: { id: true } });
   if (m.replyToMessageId) {
     const target = await tx.message.findFirst({ where: { id: m.replyToMessageId, conversationId: conversation.id, deletedAt: null }, select: { id: true } });
     if (!target) throw new BuddyError('message_gone');

@@ -1,10 +1,11 @@
 // The Social home in one call (spec 2026-10-07 social §4). One preloaded circle feeds every part (rings, timeline,
 // highlights, `me`), so they agree on buddies, switches and the check-in lock. The camp banner: who in your circle
 // checked in today, plus up to two of their coach faces. Unread counts feed the Social tab's dot: incoming buddy
-// requests, unseen stickers from current buddies sent in the viewer's local today, and (S3) conversations with an unread message — the same
-// window as the today timeline, so it counts only stickers Social shows. Those are marked seen by the Social screen
-// once it has shown them (POST /me/social/stickers/seen), so the dot clears where the cause is read. Older unseen
-// stickers stay unseen and keep their Buddies-side "new" marker until that buddy's week is opened.
+// requests; unseen stickers from current buddies sent in the viewer's local today (the same window as the today
+// timeline, so it counts only stickers Social shows); and (S3) conversations with an unread message from a current
+// buddy (chats/inbox.ts). The stickers are marked seen by the Social screen once it has shown them
+// (POST /me/social/stickers/seen), so the dot clears where the cause is read. Older unseen stickers stay unseen and
+// keep their Buddies-side "new" marker until that buddy's week is opened.
 // S2: the camp banner also says whether it is night in the viewer's zone and who is awake or asleep; `me`
 // carries my goodnight for tonight (the evening timeline's Undo) and `camp.goodnightOpen` says whether my own
 // goodnight window is open (min(20:00, my goal − 60 min) to 05:59) — all from the circle, no extra query.

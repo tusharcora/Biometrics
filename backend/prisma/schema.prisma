@@ -1055,19 +1055,24 @@ enum ReportReason {
 /// One per buddy pair, stored once with userAId < userBId (like BuddyPair), made by the first message. Unpair and block
 /// delete it (messages, reactions and reads cascade).
 model Conversation {
-  id            String             @id @default(uuid())
-  userAId       String
-  userA         User               @relation("ConversationA", fields: [userAId], references: [id], onDelete: Cascade)
-  userBId       String
-  userB         User               @relation("ConversationB", fields: [userBId], references: [id], onDelete: Cascade)
-  createdAt     DateTime           @default(now())
-  lastMessageAt DateTime           @default(now())
-  messages      Message[]
-  reads         ConversationRead[]
+  id                String             @id @default(uuid())
+  userAId           String
+  userA             User               @relation("ConversationA", fields: [userAId], references: [id], onDelete: Cascade)
+  userBId           String
+  userB             User               @relation("ConversationB", fields: [userBId], references: [id], onDelete: Cascade)
+  createdAt         DateTime           @default(now())
+  lastMessageAt     DateTime           @default(now())
+  /// The newest LIVE message's time (the inbox order and cursor); null when every message is unsent. Set by each send,
+  /// recomputed by an unsend. lastMessageAt never goes back (it stamps sends), so it can hold an unsent message's time.
+  lastLiveMessageAt DateTime?
+  messages          Message[]
+  reads             ConversationRead[]
 
   @@unique([userAId, userBId])
   @@index([userAId, lastMessageAt, id])
   @@index([userBId, lastMessageAt, id])
+  @@index([userAId, lastLiveMessageAt, id])
+  @@index([userBId, lastLiveMessageAt, id])
 }
 
 /// A DM. text is user free text (TEXT, or a CARD's reply): never logged, never to the coach. card is the server's

@@ -240,7 +240,7 @@ export async function clearReaction(viewerId: string, buddyId: string, messageId
 
 /**
  * The sender takes a message back (spec §8.2, "shown as nothing"): one transaction sets deletedAt, clears its text,
- * sticker and card, and deletes its reactions; reads skip it from then on and a reply to it reads as gone. A sticker's
+ * sticker and card, deletes its reactions and recomputes the conversation's lastLiveMessageAt; reads skip it from then on and a reply to it reads as gone. A sticker's
  * Buddies row stays (plan ruling: it still counts toward the day's 5). Never limited; a repeat is fine. Someone else's
  * message, or none, is message_gone. Racing an unpair, the update finds nothing to change: never a 500.
  */
@@ -252,8 +252,17 @@ export async function unsendMessage(viewerId: string, buddyId: string, messageId
     : null;
   if (!row) throw new BuddyError('message_gone');
   if (row.deletedAt) return;
-  await prisma.$transaction([
-    prisma.message.updateMany({ where: { id: messageId, deletedAt: null }, data: { deletedAt: now, text: null, sticker: null, card: Prisma.DbNull } }),
-    prisma.messageReaction.deleteMany({ where: { messageId } }),
-  ]);
+  await prisma.$transaction(async (tx) => {
+    // The conversation row first: the same order as a send (pair, conversation, message) and an unpair's cascade
+    // (pair, conversation, messages), so neither can deadlock with this; a send waits, and the recompute below (a new
+    // statement, so a fresh snapshot) sees every committed message. Gone under an unpair: nothing below changes a row.
+    await tx.$queryRaw`SELECT 1 FROM "Conversation" WHERE "id" = ${conversationId} FOR NO KEY UPDATE`;
+    await tx.message.updateMany({ where: { id: messageId, deletedAt: null }, data: { deletedAt: now, text: null, sticker: null, card: Prisma.DbNull } });
+    await tx.messageReaction.deleteMany({ where: { messageId } });
+    // The inbox orders by the newest LIVE message: an unsent one must neither hold a row up nor reach a cursor.
+    await tx.$executeRaw`
+      UPDATE "Conversation" SET "lastLiveMessageAt" =
+        (SELECT MAX(m."createdAt") FROM "Message" m WHERE m."conversationId" = ${conversationId} AND m."deletedAt" IS NULL)
+      WHERE "id" = ${conversationId}`;
+  });
 }

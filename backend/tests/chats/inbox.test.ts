@@ -4,7 +4,8 @@ import { migrateTestDb } from '../setupTestDb';
 import { authHeaderFor } from '../helpers/auth';
 import { orderedPair } from '../../src/buddies/pairs';
 import { setBuddyNotifyQueue } from '../../src/buddies/notifyQueue';
-import { listChats, unreadChatsCount } from '../../src/chats/inbox';
+import { CHATS_PAGE_SIZE, listChats, unreadChatsCount } from '../../src/chats/inbox';
+import { findConversationId } from '../../src/chats/conversations';
 import { markRead, sendMessage, unsendMessage } from '../../src/chats/messages';
 import { saveCheckIn } from '../../src/social/checkins';
 import { getSocialHome } from '../../src/social/home';
@@ -20,6 +21,9 @@ afterEach(() => setBuddyNotifyQueue(null));
 
 const NOW = new Date('2026-10-08T18:00:00Z');
 const at = (min: number) => new Date(NOW.getTime() + min * 60_000);
+
+/** The (time, id) a cursor carries: it must only ever be a live message's time. */
+const cursorOf = (c: string | null) => (c === null ? null : (JSON.parse(Buffer.from(c, 'base64url').toString('utf8')) as [string, string]));
 
 async function circleOf(n: number) {
   const me = await buddyUser({ displayName: 'Ana' });
@@ -52,6 +56,19 @@ it('lists conversations newest first, 30 a page by default, each with its last m
   // A text is one line of at most 80 code points.
   expect(second.chats[0]!.lastMessage.text).toBe(`rough night lol ${'x'.repeat(64)}…`); // 16 + 64 = 80
   expect(first.requests).toBe(0);
+  expect(CHATS_PAGE_SIZE).toBe(30);
+});
+
+it('pages conversations whose newest live messages share a time by id, newest id first', async () => {
+  const { me, buddies: [sam, ben] } = await circleOf(2);
+  await sendMessage(sam!.id, me.id, { kind: 'TEXT', text: 'a' }, at(1));
+  await sendMessage(ben!.id, me.id, { kind: 'TEXT', text: 'b' }, at(1));
+  const ids = [[sam!.id, (await findConversationId(me.id, sam!.id))!], [ben!.id, (await findConversationId(me.id, ben!.id))!]]
+    .sort((x, y) => (x[1]! < y[1]! ? 1 : -1));
+  const first = await listChats(me.id, undefined, at(2), 1);
+  expect([first.chats.map((c) => c.buddy.id), cursorOf(first.nextCursor)]).toEqual([[ids[0]![0]], [at(1).toISOString(), ids[0]![1]]]);
+  const second = await listChats(me.id, first.nextCursor, at(2), 1);
+  expect([second.chats.map((c) => c.buddy.id), second.nextCursor]).toEqual([[ids[1]![0]], null]);
 });
 
 it('counts only their unread messages; reading clears it; an all-unsent conversation is not listed', async () => {
@@ -68,24 +85,36 @@ it('counts only their unread messages; reading clears it; an all-unsent conversa
 });
 
 it('unsending the last message falls back to the previous live one, and the unread state follows it', async () => {
-  const { me, buddies: [sam, ben] } = await circleOf(2);
+  const { me, buddies: [sam, ben, cy] } = await circleOf(3);
+  await sendMessage(cy!.id, me.id, { kind: 'TEXT', text: 'cy here' }, at(0.5));
   await sendMessage(sam!.id, me.id, { kind: 'TEXT', text: 'one' }, at(1));
   await sendMessage(me.id, sam!.id, { kind: 'TEXT', text: 'mine' }, at(2));
   const two = await sendMessage(sam!.id, me.id, { kind: 'TEXT', text: 'two' }, at(3));
   await sendMessage(ben!.id, me.id, { kind: 'TEXT', text: 'ben here' }, at(3.5));
   const three = await sendMessage(sam!.id, me.id, { kind: 'TEXT', text: 'three' }, at(4));
   const samRow = async () => (await listChats(me.id, undefined, at(10))).chats.find((c) => c.buddy.id === sam!.id)!;
+  const order = async () => (await listChats(me.id, undefined, at(10))).chats.map((c) => c.buddy.id);
+  // A page that ends on Sam's row: its cursor carries Sam's newest LIVE time, never an unsent one.
+  const samCursor = async () => {
+    const page = await listChats(me.id, undefined, at(10), 2);
+    expect(page.chats[1]!.buddy.id).toBe(sam!.id);
+    return cursorOf(page.nextCursor)![0];
+  };
   expect(await samRow()).toMatchObject({ lastMessage: { mine: false, text: 'three', at: at(4).toISOString() }, unread: 2 });
-  // Their newest unsent: the line shows the one before it, and the unread count drops with it.
+  expect(await order()).toEqual([sam!.id, ben!.id, cy!.id]);
+  // Their newest unsent: the line shows the one before it, and the unread count drops with it. The row moves to where
+  // its newest live message puts it, below Ben's newer one: an unsend never lifts or pins a row.
   await unsendMessage(sam!.id, me.id, three.id, at(5));
   expect(await samRow()).toMatchObject({ lastMessage: { mine: false, text: 'two', at: at(3).toISOString() }, unread: 1 });
-  expect(await unreadChatsCount(me.id)).toBe(2); // Sam's "two" and Ben's message
+  expect(await order()).toEqual([ben!.id, sam!.id, cy!.id]);
+  expect(await samCursor()).toBe(at(3).toISOString());
+  expect(await unreadChatsCount(me.id)).toBe(3); // Sam's "two", Ben's and Cy's messages
   // Their only unread unsent: my own message is the last line again ("You:"), nothing unread from Sam.
   await unsendMessage(sam!.id, me.id, two.id, at(6));
   expect(await samRow()).toMatchObject({ lastMessage: { mine: true, kind: 'TEXT', text: 'mine', at: at(2).toISOString() }, unread: 0 });
-  expect(await unreadChatsCount(me.id)).toBe(1); // Ben's only
-  // An unsend does not reorder the inbox (ordered by the conversation's lastMessageAt): Sam stays above Ben's at(3.5).
-  expect((await listChats(me.id, undefined, at(10))).chats.map((c) => c.buddy.id)).toEqual([sam!.id, ben!.id]);
+  expect(await unreadChatsCount(me.id)).toBe(2); // Ben's and Cy's
+  expect(await order()).toEqual([ben!.id, sam!.id, cy!.id]);
+  expect(await samCursor()).toBe(at(2).toISOString());
 });
 
 it("the last line skips unsent messages and names a card's type; activity status is reciprocal", async () => {
@@ -98,6 +127,10 @@ it("the last line skips unsent messages and names a card's type; activity status
   expect(row.lastMessage).toEqual({ mine: false, kind: 'CARD', text: null, sticker: null, cardType: 'checkin', at: at(1).toISOString() });
   expect(row.activeAt).toBe(at(2).toISOString()); // my last send touched my presence
   await prisma.user.update({ where: { id: me.id }, data: { chatActivityStatus: false } });
+  expect((await listChats(sam!.id, undefined, at(4))).chats[0]!.activeAt).toBeNull();
+  // The viewer's own switch off hides the buddy's too.
+  await prisma.user.update({ where: { id: me.id }, data: { chatActivityStatus: true } });
+  await prisma.user.update({ where: { id: sam!.id }, data: { chatActivityStatus: false } });
   expect((await listChats(sam!.id, undefined, at(4))).chats[0]!.activeAt).toBeNull();
 });
 
