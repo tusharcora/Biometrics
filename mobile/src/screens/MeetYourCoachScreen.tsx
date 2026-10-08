@@ -174,7 +174,7 @@ export function MeetYourCoachScreen() {
               {error}
             </Text>
           ) : null}
-          <Button testID="meet-choose" disabled={saving} onPress={() => void choose(selected)}>
+          <Button testID="meet-choose" size="lg" disabled={saving} onPress={() => void choose(selected)}>
             {`Choose ${CHARACTERS[selected].name}`}
           </Button>
         </View>

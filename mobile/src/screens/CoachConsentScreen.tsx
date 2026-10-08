@@ -100,7 +100,7 @@ export function CoachConsentScreen() {
         <View className="flex-1 items-center justify-center gap-4 px-8">
           <Character testID="coach-consent-character" mood="idle" size={48} paused={!focused} />
           <Text className="text-center text-muted-foreground">Something went wrong loading this screen.</Text>
-          <Button testID="coach-consent-retry" variant="ghost" onPress={() => void load()}>
+          <Button testID="coach-consent-retry" variant="secondary" onPress={() => void load()}>
             Try again
           </Button>
         </View>
@@ -163,10 +163,10 @@ export function CoachConsentScreen() {
         ) : null}
 
         <View className="gap-2">
-          <Button testID="coach-consent-agree" disabled={submitting} onPress={() => void agree(coach.consent.version)}>
+          <Button testID="coach-consent-agree" size="lg" disabled={submitting} onPress={() => void agree(coach.consent.version)}>
             I agree
           </Button>
-          <Button testID="coach-consent-decline" variant="ghost" disabled={submitting} onPress={() => navigation.goBack()}>
+          <Button testID="coach-consent-decline" variant="outline" size="lg" disabled={submitting} onPress={() => navigation.goBack()}>
             Not now
           </Button>
         </View>

@@ -95,7 +95,7 @@ export function HostedConsentScreen() {
             {state.status === 'error' ? 'Something went wrong loading this screen.' : "Claude isn't available right now. Your coach keeps answering on-device."}
           </Text>
           {state.status === 'error' ? (
-            <Button testID="hosted-consent-retry" variant="ghost" className="min-h-[44px]" onPress={() => void load()}>
+            <Button testID="hosted-consent-retry" variant="secondary" onPress={() => void load()}>
               Try again
             </Button>
           ) : null}
@@ -150,10 +150,10 @@ export function HostedConsentScreen() {
         ) : null}
 
         <View className="gap-2">
-          <Button testID="hosted-consent-agree" disabled={submitting} onPress={() => void agree(hosted)}>
+          <Button testID="hosted-consent-agree" size="lg" disabled={submitting} onPress={() => void agree(hosted)}>
             Use Claude
           </Button>
-          <Button testID="hosted-consent-decline" variant="ghost" className="min-h-[44px]" disabled={submitting} onPress={() => navigation.goBack()}>
+          <Button testID="hosted-consent-decline" variant="outline" size="lg" disabled={submitting} onPress={() => navigation.goBack()}>
             Not now
           </Button>
         </View>
