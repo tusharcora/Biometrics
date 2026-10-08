@@ -4,7 +4,7 @@ import { useColorScheme } from 'nativewind';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from './ui/text';
 import { Card } from './ui/card';
-import { Button } from './ui/button';
+import { Button, buttonIconSize } from './ui/button';
 import { Skeleton } from './ui/skeleton';
 import { COLORS, FONTS } from '../theme';
 import {
@@ -75,7 +75,7 @@ export function HabitLogCard() {
     return (
       <Card testID="habit-log-unavailable" className="items-start gap-2">
         <Text className="text-sm text-muted-foreground">Habits are unavailable right now.</Text>
-        <Button testID="habit-log-retry" variant="ghost" size="sm" onPress={() => setAttempt((n) => n + 1)}>
+        <Button testID="habit-log-retry" variant="secondary" size="sm" onPress={() => setAttempt((n) => n + 1)}>
           Try again
         </Button>
       </Card>
@@ -159,16 +159,15 @@ export function HabitLogCard() {
           </View>
 
           <View className="flex-row items-center gap-3">
-            <Pressable
+            <Button
               testID="habit-decrement"
-              accessibilityRole="button"
+              variant="outline"
+              size="icon"
               accessibilityLabel="Decrease"
               onPress={() => setValueText(stepValue(valueText, -1, stepSize(selected)))}
-              hitSlop={8}
-              className="h-10 w-10 items-center justify-center rounded-full border border-border bg-muted active:opacity-70"
             >
-              <Ionicons name="remove" size={18} color={colors.foreground} />
-            </Pressable>
+              <Ionicons name="remove" size={buttonIconSize('icon')} color={colors.foreground} />
+            </Button>
             <TextInput
               testID="habit-value-input"
               value={valueText}
@@ -180,16 +179,15 @@ export function HabitLogCard() {
               style={{ color: colors.foreground, fontFamily: FONTS.sansSemibold, fontVariant: ['tabular-nums'] }}
               className="h-10 w-20 rounded-full border border-border bg-muted px-3 text-center text-base"
             />
-            <Pressable
+            <Button
               testID="habit-increment"
-              accessibilityRole="button"
+              variant="outline"
+              size="icon"
               accessibilityLabel="Increase"
               onPress={() => setValueText(stepValue(valueText, 1, stepSize(selected)))}
-              hitSlop={8}
-              className="h-10 w-10 items-center justify-center rounded-full border border-border bg-muted active:opacity-70"
             >
-              <Ionicons name="add" size={18} color={colors.foreground} />
-            </Pressable>
+              <Ionicons name="add" size={buttonIconSize('icon')} color={colors.foreground} />
+            </Button>
             <Text className="flex-1 text-sm text-muted-foreground">{selected.unit}</Text>
           </View>
 
@@ -197,7 +195,6 @@ export function HabitLogCard() {
             <Text className="flex-1 text-xs text-muted-foreground">Enter 0 to log that you had none.</Text>
             <Button
               testID="habit-log-submit"
-              variant={canLog ? 'default' : 'outline'}
               size="sm"
               disabled={!canLog}
               onPress={submitLog}

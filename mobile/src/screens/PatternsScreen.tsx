@@ -71,7 +71,7 @@ export function PatternsScreen() {
             <Ionicons name="cloud-offline-outline" size={22} color={colors.muted} />
           </View>
           <Text className="text-center text-muted-foreground">Patterns are unavailable right now.</Text>
-          <Button testID="patterns-retry" variant="ghost" size="sm" onPress={() => setAttempt((n) => n + 1)}>
+          <Button testID="patterns-retry" variant="secondary" size="sm" onPress={() => setAttempt((n) => n + 1)}>
             Try again
           </Button>
         </View>

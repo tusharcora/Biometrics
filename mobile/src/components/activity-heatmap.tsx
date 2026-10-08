@@ -31,7 +31,7 @@ import {
 } from '../lib/heatmap';
 import { formatClock, formatDuration, sleepRangeStats, type SleepByDate } from '../lib/sleepStats';
 import { DayDetail, NightDetail } from './activity-sheets';
-import { Button } from './ui/button';
+import { Button, buttonIconSize } from './ui/button';
 import { Card } from './ui/card';
 import { SectionLabel } from './ui/section-label';
 import { SegmentedControl } from './ui/segmented-control';
@@ -295,31 +295,29 @@ function HeatmapCard({
     <Card className="gap-3">
       {view === 'month' ? (
         <View className="flex-row items-center justify-between">
-          <Pressable
+          <Button
             testID={`${p}heatmap-prev-month`}
-            accessibilityRole="button"
+            variant="ghost"
+            size="icon-sm"
             accessibilityLabel="Previous month"
             disabled={monthCursor <= firstMonth}
             onPress={() => onMonthCursor(shiftMonth(monthCursor, -1))}
-            hitSlop={10}
-            className={monthCursor <= firstMonth ? 'opacity-30' : 'active:opacity-60'}
           >
-            <Ionicons name="chevron-back" size={20} color={palette.foreground} />
-          </Pressable>
+            <Ionicons name="chevron-back" size={buttonIconSize('icon-sm')} color={palette.foreground} />
+          </Button>
           <Text testID={`${p}heatmap-title`} className="text-base font-semibold">
             {monthTitle(monthCursor)}
           </Text>
-          <Pressable
+          <Button
             testID={`${p}heatmap-next-month`}
-            accessibilityRole="button"
+            variant="ghost"
+            size="icon-sm"
             accessibilityLabel="Next month"
             disabled={monthCursor >= lastMonth}
             onPress={() => onMonthCursor(shiftMonth(monthCursor, 1))}
-            hitSlop={10}
-            className={monthCursor >= lastMonth ? 'opacity-30' : 'active:opacity-60'}
           >
-            <Ionicons name="chevron-forward" size={20} color={palette.foreground} />
-          </Pressable>
+            <Ionicons name="chevron-forward" size={buttonIconSize('icon-sm')} color={palette.foreground} />
+          </Button>
         </View>
       ) : (
         <View testID={`${p}heatmap-metric`} className="flex-row items-center justify-between">
@@ -509,7 +507,7 @@ export function ActivityHeatmap({ steps, earliestDate, today, sleep, onRetrySlee
       <Card testID="sleep-error" className="items-center gap-3 py-10">
         <Text className="text-center text-muted-foreground">Your sleep could not be loaded.</Text>
         {onRetrySleep ? (
-          <Button testID="sleep-retry" onPress={onRetrySleep}>
+          <Button testID="sleep-retry" variant="secondary" onPress={onRetrySleep}>
             Try again
           </Button>
         ) : null}
@@ -600,16 +598,17 @@ export function ActivityHeatmap({ steps, earliestDate, today, sleep, onRetrySlee
         </View>
         {subtitle ? <Text className="text-sm text-muted-foreground">{subtitle}</Text> : null}
         {onOpenSleepDetails && (view !== 'month' || page === 'sleep') ? (
-          <Pressable
+          <Button
             testID="activity-sleep-details"
+            variant="link"
+            size="sm"
             accessibilityRole="link"
-            hitSlop={8}
+            className="self-start"
+            iconEnd={<Ionicons name="chevron-forward" size={buttonIconSize('sm')} color={palette.foreground} />}
             onPress={onOpenSleepDetails}
-            className="flex-row items-center gap-1 self-start py-1 active:opacity-70"
           >
-            <Text className="text-sm font-semibold text-accent">Sleep details</Text>
-            <Ionicons name="chevron-forward" size={14} color={palette.accent} />
-          </Pressable>
+            Sleep details
+          </Button>
         ) : null}
       </View>
 

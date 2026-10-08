@@ -154,6 +154,7 @@ export function ActivityScreen() {
             <Text className="text-center text-muted-foreground">Your activity could not be loaded.</Text>
             <Button
               testID="activity-retry"
+              variant="secondary"
               onPress={() => {
                 setState({ phase: 'loading' });
                 load();

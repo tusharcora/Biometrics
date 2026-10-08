@@ -1,11 +1,8 @@
 import React, { useEffect, useState } from 'react';
-import { ActivityIndicator, Pressable } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { useColorScheme } from 'nativewind';
 import { useSync } from '../sync/SyncProvider';
 import { formatLastSynced } from '../sync/formatLastSynced';
-import { Text } from './ui/text';
-import { COLORS } from '../theme';
+import { Button } from './ui/button';
 
 function useMinuteClock(): Date {
   const [now, setNow] = useState(() => new Date());
@@ -17,40 +14,42 @@ function useMinuteClock(): Date {
 }
 
 // Under the "Today" title: whether the data is current, and a tap to sync now.
+// A quiet link: muted (or destructive) text rather than the link's foreground.
 export function SyncStatusLine() {
   const { state, lastSyncedAt, connection, syncNow } = useSync();
   const navigation = useNavigation<any>();
   const now = useMinuteClock();
-  const { colorScheme } = useColorScheme();
-  const colors = colorScheme === 'dark' ? COLORS.dark : COLORS.light;
 
   if (connection === 'DISCONNECTED') {
     return (
-      <Pressable
+      <Button
         testID="sync-status-line"
-        accessibilityRole="button"
+        variant="link"
+        size="xs"
         accessibilityLabel="Google Health is disconnected. Reconnect."
         onPress={() => navigation.navigate('ConnectHealth')}
-        className="active:opacity-60"
+        className="self-start"
+        textClassName="text-destructive"
       >
-        <Text className="text-xs text-destructive">Google Health disconnected · Reconnect</Text>
-      </Pressable>
+        Google Health disconnected · Reconnect
+      </Button>
     );
   }
   if (connection !== 'CONNECTED' || state === 'unknown') return null;
 
   if (state === 'syncing') {
     return (
-      <Pressable
+      <Button
         testID="sync-status-line"
-        accessibilityRole="button"
+        variant="link"
+        size="xs"
         accessibilityLabel="Syncing with Google Health"
-        disabled
-        className="flex-row items-center gap-1.5"
+        loading
+        className="self-start"
+        textClassName="text-muted-foreground no-underline"
       >
-        <ActivityIndicator size="small" color={colors.muted} />
-        <Text className="text-xs text-muted-foreground">Syncing with Google Health…</Text>
-      </Pressable>
+        Syncing with Google Health…
+      </Button>
     );
   }
 
@@ -61,14 +60,16 @@ export function SyncStatusLine() {
         ? formatLastSynced(lastSyncedAt, now)
         : 'Not synced yet · Tap to sync';
   return (
-    <Pressable
+    <Button
       testID="sync-status-line"
-      accessibilityRole="button"
+      variant="link"
+      size="xs"
       accessibilityLabel={`${text}. Double tap to sync now.`}
       onPress={() => void syncNow('manual')}
-      className="active:opacity-60"
+      className="self-start"
+      textClassName={state === 'failed' ? 'text-destructive' : 'text-muted-foreground'}
     >
-      <Text className={`text-xs ${state === 'failed' ? 'text-destructive' : 'text-muted-foreground'}`}>{text}</Text>
-    </Pressable>
+      {text}
+    </Button>
   );
 }

@@ -32,7 +32,7 @@ export function RegularityCard({ state, coachName, onRetry }: { state: Regularit
     return (
       <Card testID="sleep-regularity-error" className="items-center gap-3 py-6">
         <Text className="text-center text-sm text-muted-foreground">Sleep regularity could not be loaded.</Text>
-        <Button testID="sleep-regularity-retry" variant="outline" size="sm" onPress={onRetry}>
+        <Button testID="sleep-regularity-retry" variant="secondary" size="sm" onPress={onRetry}>
           Try again
         </Button>
       </Card>
