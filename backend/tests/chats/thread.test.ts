@@ -241,3 +241,16 @@ it('a badge card in a page serves its level only while its author still shares s
     expect(await cardOf(viewer, buddy)).toEqual({ type: 'badge', available: false, family: 'SLEEP_GOAL' });
   }
 });
+
+// Final review M4: a send is stamped max(now, lastMessageAt + 1 ms), and another instance's clock may run ahead, so
+// a message can carry a time just after the reader's now. Reading the thread must still cover it.
+it('marking read covers a live message stamped just after my now', async () => {
+  const { me, sam } = await buddies();
+  const ahead = await sendMessage(sam.id, me.id, { kind: 'TEXT', text: 'hi' }, new Date(NOW.getTime() + 5));
+  await markRead(me.id, sam.id, NOW);
+  const read = await prisma.conversationRead.findFirstOrThrow({ where: { readerId: me.id } });
+  expect(read.lastReadAt.toISOString()).toBe(ahead.createdAt);
+  // Never back: a later read at an earlier now leaves it.
+  await markRead(me.id, sam.id, new Date(NOW.getTime() - 60_000));
+  expect((await prisma.conversationRead.findFirstOrThrow({ where: { readerId: me.id } })).lastReadAt.toISOString()).toBe(ahead.createdAt);
+});

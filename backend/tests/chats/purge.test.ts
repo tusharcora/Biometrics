@@ -12,6 +12,7 @@ import { getCamp } from '../../src/social/camp';
 import { loadStoryRings } from '../../src/social/stories';
 import { runSocialSweep } from '../../src/social/sweep';
 import { buildTimeline } from '../../src/social/timeline';
+import { deleteUserAccount } from '../../src/users/deletion';
 import { RecordingQueue, buddyUser, pairUp } from '../buddies/helpers';
 
 jest.mock('../../src/health/client');
@@ -22,7 +23,10 @@ afterAll(async () => {
   await connection.quit();
 });
 beforeEach(() => setBuddyNotifyQueue(new RecordingQueue()));
-afterEach(() => setBuddyNotifyQueue(null));
+afterEach(() => {
+  setBuddyNotifyQueue(null);
+  jest.restoreAllMocks();
+});
 
 const NOW = new Date('2026-10-08T18:00:00Z');
 const DAY = 24 * 60 * 60 * 1000;
@@ -173,4 +177,73 @@ it('the sweep deletes expired Chats notes and reports older than 90 days, and ke
   expect(result.reports).toBeGreaterThanOrEqual(1);
   expect(await prisma.statusNote.findMany({ where: { authorId: { in: [a.id, b.id] } }, select: { text: true } })).toEqual([{ text: 'live' }]);
   expect((await prisma.report.findMany({ where: { id: { in: [old.id, recent.id] } }, select: { id: true } })).map((r) => r.id)).toEqual([recent.id]);
+});
+
+// Gated races (final review M1, M9/T11): the next transaction pauses at `model.method` and starts `racer` there, then
+// goes on once the racer is waiting on a lock of this database (or after 3 s), so the two overlap the same way every run.
+type Delegates = Record<string, Record<string, (...args: unknown[]) => unknown>>;
+async function racerWaiting(): Promise<void> {
+  for (let i = 0; i < 150; i++) {
+    const [row] = await prisma.$queryRaw<Array<{ n: number }>>`
+      SELECT count(*)::int AS n FROM pg_stat_activity WHERE datname = current_database() AND wait_event_type = 'Lock'`;
+    if (row && row.n > 0) return;
+    await new Promise((r) => setTimeout(r, 20));
+  }
+}
+function gateNextTransaction(model: string, method: string, racer: () => Promise<unknown>): () => Promise<PromiseSettledResult<unknown>> {
+  let raced: Promise<PromiseSettledResult<unknown>> | null = null;
+  const real = prisma.$transaction.bind(prisma) as (fn: (tx: unknown) => Promise<unknown>, opts?: unknown) => Promise<unknown>;
+  jest.spyOn(prisma, '$transaction').mockImplementationOnce(((fn: (tx: unknown) => Promise<unknown>, opts?: unknown) =>
+    real((tx) => {
+      const delegates = tx as Delegates;
+      const gated = new Proxy(delegates[model]!, {
+        get: (target, key) => {
+          const value = target[key as string];
+          if (key !== method || typeof value !== 'function') return typeof value === 'function' ? value.bind(target) : value;
+          return async (...args: unknown[]) => {
+            if (!raced) {
+              raced = racer().then((value) => ({ status: 'fulfilled' as const, value }), (reason: unknown) => ({ status: 'rejected' as const, reason }));
+              await racerWaiting();
+            }
+            return value.apply(target, args);
+          };
+        },
+      });
+      return fn(new Proxy(delegates, { get: (target, key) => (key === model ? gated : (target as Record<string | symbol, unknown>)[key]) }));
+    }, opts)) as never);
+  return () => raced ?? Promise.resolve({ status: 'fulfilled', value: undefined });
+}
+const quiet = { deleteSubscription: async () => {}, revokeToken: async () => {}, log: () => {} };
+
+// M1: block stores the BuddyBlock row (its foreign keys hold both User rows FOR KEY SHARE) right after the pair lock,
+// before any row lock, so an account deletion that starts mid-block waits for it instead of deadlocking (40P01).
+it('an account deletion that starts mid-block waits for the block: both finish, nothing is left behind', async () => {
+  const { me, sam, conversationId } = await talking();
+  const raced = gateNextTransaction('conversation', 'deleteMany', () => deleteUserAccount(me.id, quiet));
+  await expect(block(sam.id, me.id, NOW)).resolves.toBeUndefined();
+  expect((await raced()).status).toBe('fulfilled');
+  expect(await prisma.user.count({ where: { id: me.id } })).toBe(0);
+  expect(await chatRows(conversationId)).toEqual({ conversations: 0, messages: 0, reads: 0 });
+  expect(await prisma.buddyBlock.count({ where: { OR: [{ blockerId: me.id }, { blockedId: me.id }] } })).toBe(0);
+  expect(await prisma.buddyPair.count({ where: orderedPair(me.id, sam.id) })).toBe(0);
+});
+
+it('blocking an account already deleted ends quietly and stores nothing', async () => {
+  const { me, sam } = await talking();
+  await deleteUserAccount(me.id, quiet);
+  await expect(block(sam.id, me.id, NOW)).resolves.toBeUndefined();
+  expect(await prisma.buddyBlock.count({ where: { blockerId: sam.id } })).toBe(0);
+});
+
+// M9 (T11): the send holds the pair lock with its message written; a block arriving then waits, and its delete takes
+// the new message with the conversation. The send still answers what it stored.
+it('a block that arrives while a send holds the pair waits, then deletes the conversation with the new message', async () => {
+  const { me, sam, conversationId } = await talking();
+  const raced = gateNextTransaction('message', 'findUniqueOrThrow', () => block(sam.id, me.id, NOW));
+  const sent = await sendMessage(me.id, sam.id, { kind: 'TEXT', text: 'just in time' }, NOW);
+  expect(sent).toMatchObject({ mine: true, text: 'just in time' });
+  expect((await raced()).status).toBe('fulfilled');
+  expect(await chatRows(conversationId)).toEqual({ conversations: 0, messages: 0, reads: 0 });
+  expect(await prisma.message.count({ where: { id: sent.id } })).toBe(0);
+  expect(await prisma.buddyBlock.count({ where: { blockerId: sam.id, blockedId: me.id } })).toBe(1);
 });

@@ -5,6 +5,7 @@ import { migrateTestDb } from '../setupTestDb';
 import { authHeaderFor } from '../helpers/auth';
 import { setBuddyNotifyQueue } from '../../src/buddies/notifyQueue';
 import { clearReaction, listThread, markRead, sendMessage, setReaction, unsendMessage } from '../../src/chats/messages';
+import { saveCheckIn } from '../../src/social/checkins';
 import { RecordingQueue, api, buddyUser, pairUp } from '../buddies/helpers';
 
 beforeAll(() => migrateTestDb());
@@ -173,4 +174,32 @@ it('a reaction racing an unsend never outlives it', async () => {
     if (reacted.status === 'rejected') expect(reacted.reason).toMatchObject({ code: 'message_gone' });
     expect(await prisma.messageReaction.count({ where: { messageId: mine.id } })).toBe(0);
   }
+});
+
+// Final review M5: two reactions stamped in the same millisecond keep one order between reads (by reactor), so the
+// badges never swap places from one poll to the next.
+it('reactions in the same millisecond keep a stable order, by reactor', async () => {
+  const { me, sam, theirs } = await chat();
+  const [first, second] = [me, sam].sort((a, b) => (a.id < b.id ? -1 : 1)) as [typeof me, typeof me];
+  const other = (u: typeof me) => (u.id === me.id ? sam.id : me.id);
+  // The later reactor in id order reacts first, so insertion order is the reverse of the expected order.
+  await setReaction(second.id, other(second), theirs.id, 'STAR', at(2));
+  const { reactions } = await setReaction(first.id, other(first), theirs.id, 'HEART', at(2));
+  expect(reactions.map((r) => r.kind)).toEqual(['HEART', 'STAR']);
+  const thread = await listThread(me.id, sam.id, undefined, at(3));
+  expect(thread.messages.find((m) => m.id === theirs.id)!.reactions.map((r) => r.kind)).toEqual(['HEART', 'STAR']);
+});
+
+it('unsending a card or a sticker message clears its card and its sticker', async () => {
+  const { me, sam } = await chat();
+  await saveCheckIn(me.id, 'RESTED', at(-60));
+  const card = await sendMessage(me.id, sam.id, { kind: 'CARD', card: { type: 'my_checkin' }, text: 'look' }, at(2));
+  const sticker = await sendMessage(me.id, sam.id, { kind: 'STICKER', sticker: 'STAR' }, at(3));
+  expect([card.card, sticker.sticker]).toEqual([expect.objectContaining({ type: 'checkin' }), 'STAR']);
+  for (const id of [card.id, sticker.id]) await unsendMessage(me.id, sam.id, id, at(4));
+  const rows = await prisma.message.findMany({ where: { id: { in: [card.id, sticker.id] } }, select: { kind: true, text: true, sticker: true, card: true, deletedAt: true } });
+  expect(rows.map((r) => [r.kind, r.text, r.sticker, r.card, r.deletedAt?.toISOString()]).sort()).toEqual([
+    ['CARD', null, null, null, at(4).toISOString()],
+    ['STICKER', null, null, null, at(4).toISOString()],
+  ]);
 });

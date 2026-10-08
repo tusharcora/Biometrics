@@ -47,16 +47,30 @@ export async function unpair(userId: string, buddyId: string, now: Date): Promis
 
 /**
  * One transaction, under the pair lock (a pairing in flight finishes first and its pair is removed
- * here; one that starts later sees the block). If a pair is removed, the unpair data goes too:
- * stickers between the two and the blocked person's Activity about the blocker. Always: the blocker's
- * own Activity about them, mutes cleared both ways, the blocker's outgoing request cancelled
- * (PENDING → CANCELLED, DECLINED withdrawn), the blocked person's incoming PENDING hidden (it stays
- * "pending" to them), and the block stored. Nothing the blocked person sees changes unless they were
- * buddies. The conversation between them goes either way, pair or not. Idempotent.
+ * here; one that starts later sees the block). The block is stored first, right after the pair lock:
+ * its foreign keys hold both User rows FOR KEY SHARE before any row lock is taken, so an account
+ * deletion (User row first, then its cascades) waits for the whole block instead of deadlocking with
+ * it; an account already gone (P2003) leaves nothing to block, so that ends quietly. If a pair is
+ * removed, the unpair data goes too: stickers between the two and the blocked person's Activity about
+ * the blocker. Always: the blocker's own Activity about them, mutes cleared both ways, the blocker's
+ * outgoing request cancelled (PENDING → CANCELLED, DECLINED withdrawn) and the blocked person's
+ * incoming PENDING hidden (it stays "pending" to them). Nothing the blocked person sees changes unless
+ * they were buddies. The conversation between them goes either way, pair or not. Idempotent.
  */
 export async function block(blockerId: string, blockedId: string, now: Date): Promise<void> {
+  try {
+    await blockTx(blockerId, blockedId, now);
+  } catch (err) {
+    // Only the BuddyBlock insert can hit a missing foreign key: the rest deletes or updates.
+    if ((err as { code?: unknown } | null)?.code === 'P2003') return;
+    throw err;
+  }
+}
+
+async function blockTx(blockerId: string, blockedId: string, now: Date): Promise<void> {
   await prisma.$transaction(async (tx) => {
     await lockPairSlot(tx, blockerId, blockedId);
+    await tx.buddyBlock.createMany({ data: [{ blockerId, blockedId, createdAt: now }], skipDuplicates: true });
     // As in unpair: the pair goes BEFORE any Activity row, so a badge job in flight can't leave a row behind.
     const removed = await tx.buddyPair.deleteMany({ where: orderedPair(blockerId, blockedId) });
     if (removed.count > 0) {
@@ -70,7 +84,6 @@ export async function block(blockerId: string, blockedId: string, now: Date): Pr
     await tx.buddyRequest.updateMany({ where: { fromUserId: blockerId, toUserId: blockedId, status: 'PENDING' }, data: { status: 'CANCELLED', respondedAt: now } });
     await tx.buddyRequest.updateMany({ where: { fromUserId: blockerId, toUserId: blockedId, status: 'DECLINED', withdrawnAt: null }, data: { withdrawnAt: now } });
     await tx.buddyRequest.updateMany({ where: { fromUserId: blockedId, toUserId: blockerId, status: 'PENDING' }, data: { hidden: true } });
-    await tx.buddyBlock.createMany({ data: [{ blockerId, blockedId, createdAt: now }], skipDuplicates: true });
   });
 }
 

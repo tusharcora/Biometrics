@@ -30,7 +30,8 @@ export const MESSAGE_SELECT = {
   card: true,
   createdAt: true,
   replyTo: { select: { id: true, senderId: true, kind: true, text: true, sticker: true, card: true, deletedAt: true } },
-  reactions: { select: { reactorId: true, kind: true }, orderBy: { createdAt: 'asc' } },
+  // reactorId breaks a same-millisecond tie, so badges keep their order between polls.
+  reactions: { select: { reactorId: true, kind: true }, orderBy: [{ createdAt: 'asc' }, { reactorId: 'asc' }] },
 } satisfies Prisma.MessageSelect;
 
 export type MessageRow = Prisma.MessageGetPayload<{ select: typeof MESSAGE_SELECT }>;
@@ -68,12 +69,22 @@ function parseReplyTo(raw: unknown): string | null {
   return raw;
 }
 
-/** After commit, one dm_message job per TEXT or CARD message, whatever the recipient's settings (the job decides). It carries the message id and the sender's name, never the text. */
-async function enqueueDmNotice(senderId: string, recipientId: string, messageId: string, deps: PairDeps): Promise<void> {
-  const me = await prisma.user.findUnique({ where: { id: senderId }, select: { displayName: true, handle: true } });
-  if (!me) return;
+/**
+ * After the commit the message exists, so the send answers it whatever happens next: a failure here (a pool timeout,
+ * a failover) is logged by class and ids only, never as a 500 the app would retry into a duplicate message.
+ */
+async function afterSend(messageId: string, work: () => Promise<void>): Promise<void> {
+  try {
+    await work();
+  } catch (err) {
+    console.error(JSON.stringify({ event: 'chats.after_send_failed', messageId, error: err instanceof Error ? err.name : 'unknown' }));
+  }
+}
+
+/** After commit, one dm_message job per TEXT or CARD message, whatever the recipient's settings (the job decides). It carries the message id and the sender's name (read before the write), never the text. */
+async function enqueueDmNotice(senderId: string, senderName: string, recipientId: string, messageId: string, deps: PairDeps): Promise<void> {
   await enqueueBuddyNotice(
-    { kind: 'dm_message', recipientId, actorId: senderId, refId: messageId, slots: { name: pushName(me) } },
+    { kind: 'dm_message', recipientId, actorId: senderId, refId: messageId, slots: { name: senderName } },
     deps.notifyQueue ? { queue: deps.notifyQueue } : {},
   );
 }
@@ -90,7 +101,7 @@ export async function sendMessage(senderId: string, buddyId: string, body: unkno
       replyToMessageId,
       readMessageTx: (tx, messageId) => loadMessageDTO(messageId, senderId, tx),
     });
-    await touchPresence(senderId, now);
+    await afterSend(message.id, () => touchPresence(senderId, now));
     return message;
   }
   let kind: MessageKind;
@@ -114,14 +125,19 @@ export async function sendMessage(senderId: string, buddyId: string, body: unkno
   await limitOrThrow(RATE_LIMITS.messageDay, senderId);
   // After the limiter (probing spends a token) and before the transaction (it only reads; the tx re-checks the pair).
   const card: StoredCard | null = cardRequest ? await buildCard(senderId, buddyId, cardRequest, now) : null;
+  // The push names the sender: read before the write, so nothing that can fail runs between the commit and the answer.
+  const me = await prisma.user.findUnique({ where: { id: senderId }, select: { displayName: true, handle: true } });
+  if (!me) throw new BuddyError('not_buddies');
   // The returned message is read inside the transaction (an unpair waits on the pair lock, then deletes it).
   const message = await prisma.$transaction(async (tx) => {
     await requireLivePairTx(tx, senderId, buddyId, now);
     const messageId = await writeMessageTx(tx, { senderId, recipientId: buddyId, kind, text, card, replyToMessageId, now });
     return loadMessageDTO(messageId, senderId, tx);
   });
-  await enqueueDmNotice(senderId, buddyId, message.id, deps);
-  await touchPresence(senderId, now);
+  await afterSend(message.id, async () => {
+    await enqueueDmNotice(senderId, pushName(me), buddyId, message.id, deps);
+    await touchPresence(senderId, now);
+  });
   return message;
 }
 
@@ -192,15 +208,18 @@ function isGoneRace(err: unknown): boolean {
 }
 
 /**
- * The thread is open: my read moves to now (never back), and that buddy's unseen stickers to me are seen. A racing
- * unpair or block that deletes the conversation leaves nothing to mark, so that ends quietly rather than as a 500.
+ * The thread is open: my read moves to now (never back), and that buddy's unseen stickers to me are seen. A message
+ * can be stamped just after now (a send waiting on the pair lock lands at lastMessageAt + 1 ms; another instance's
+ * clock may run ahead), so the read moves to the newest live message when that is later. A racing unpair or block
+ * that deletes the conversation leaves nothing to mark, so that ends quietly rather than as a 500.
  */
 export async function markRead(viewerId: string, buddyId: string, now: Date): Promise<void> {
   await requireChatPeople(viewerId, buddyId);
   const conversationId = await findConversationId(viewerId, buddyId);
   if (conversationId) {
     try {
-      await moveRead(prisma, conversationId, viewerId, now);
+      const newest = await newestLiveMessage(conversationId);
+      await moveRead(prisma, conversationId, viewerId, newest && newest.createdAt > now ? newest.createdAt : now);
     } catch (err) {
       if (!isGoneRace(err)) throw err;
       return;
@@ -233,7 +252,7 @@ export async function setReaction(viewerId: string, buddyId: string, messageId: 
       const reaction = { kind: kind as StickerKind, createdAt: now };
       const created = await tx.messageReaction.createMany({ data: [{ messageId, reactorId: viewerId, ...reaction }], skipDuplicates: true });
       if (created.count === 0) await tx.messageReaction.updateMany({ where: { messageId, reactorId: viewerId }, data: reaction });
-      const rows = await tx.messageReaction.findMany({ where: { messageId }, orderBy: { createdAt: 'asc' }, select: { reactorId: true, kind: true } });
+      const rows = await tx.messageReaction.findMany({ where: { messageId }, orderBy: [{ createdAt: 'asc' }, { reactorId: 'asc' }], select: { reactorId: true, kind: true } });
       return { reactions: rows.map((r) => ({ kind: r.kind, mine: r.reactorId === viewerId })) };
     });
   } catch (err) {
