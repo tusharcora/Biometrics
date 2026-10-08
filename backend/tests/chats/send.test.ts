@@ -200,12 +200,11 @@ it('an unpair that lands between the limiter and the write answers not_buddies a
 it('an unpair right after the send commits still answers the sent message, text or sticker', async () => {
   const { me, sam } = await buddies();
   const realTransaction = prisma.$transaction.bind(prisma) as (...args: unknown[]) => Promise<unknown>;
-  // The unpair (and the conversation delete a later task adds to it) lands the moment the send's transaction commits.
+  // The unpair (which deletes the conversation too) lands the moment the send's transaction commits.
   const unpairOnCommit = () =>
     jest.spyOn(prisma, '$transaction').mockImplementationOnce((async (...args: unknown[]) => {
       const out = await realTransaction(...args);
       await unpair(sam.id, me.id, NOW);
-      await prisma.conversation.deleteMany({ where: orderedPair(me.id, sam.id) });
       return out;
     }) as never);
   unpairOnCommit();

@@ -1,5 +1,7 @@
 // Unpair, block, unblock and mute (spec 2026-10-06 buddies §4). All silent: the other person is told
 // nothing and nothing they can see changes shape (a blocked person's request stays "pending" to them).
+// S3 (spec 2026-10-07 social §9): unpair and block also delete the pair's conversation for both people (its messages,
+// reactions and reads cascade); reports keep their own excerpt and stay.
 
 import { prisma } from '../db/client';
 import { BuddyError, UUID_RE } from './errors';
@@ -18,8 +20,8 @@ const mutesEitherWay = (a: string, b: string) => ({ OR: [{ muterId: a, mutedId: 
 
 /**
  * Either side, silent and idempotent. Only when a pair was actually removed: stickers between the
- * two, both users' Activity about each other and mutes both ways go, and requests between them close
- * (PENDING → CANCELLED, DECLINED withdrawn). Without a pair nothing is written, so "unpairing" a
+ * two, their conversation, both users' Activity about each other and mutes both ways go, and requests
+ * between them close (PENDING → CANCELLED, DECLINED withdrawn). Without a pair nothing is written, so "unpairing" a
  * non-buddy can never make their request to you vanish early.
  */
 export async function unpair(userId: string, buddyId: string, now: Date): Promise<void> {
@@ -32,6 +34,10 @@ export async function unpair(userId: string, buddyId: string, now: Date): Promis
     if (removed.count === 0) return;
     // Mutes go with the pair, both ways: a re-pair starts unmuted.
     await tx.buddyMute.deleteMany({ where: mutesEitherWay(userId, buddyId) });
+    // The conversation goes with the pair, for both people (a send in flight committed first: it is in here too).
+    // After the pair, never before: a send locks the pair row and then the conversation, so the same order here
+    // makes one wait for the other instead of deadlocking.
+    await tx.conversation.deleteMany({ where: orderedPair(userId, buddyId) });
     await tx.sticker.deleteMany({ where: eitherWay(userId, buddyId) });
     await tx.buddyActivity.deleteMany({ where: { OR: [{ recipientId: userId, actorId: buddyId }, { recipientId: buddyId, actorId: userId }] } });
     await tx.buddyRequest.updateMany({ where: { status: 'PENDING', ...eitherWay(userId, buddyId) }, data: { status: 'CANCELLED', respondedAt: now } });
@@ -46,7 +52,7 @@ export async function unpair(userId: string, buddyId: string, now: Date): Promis
  * own Activity about them, mutes cleared both ways, the blocker's outgoing request cancelled
  * (PENDING → CANCELLED, DECLINED withdrawn), the blocked person's incoming PENDING hidden (it stays
  * "pending" to them), and the block stored. Nothing the blocked person sees changes unless they were
- * buddies. Idempotent.
+ * buddies. The conversation between them goes either way, pair or not. Idempotent.
  */
 export async function block(blockerId: string, blockedId: string, now: Date): Promise<void> {
   await prisma.$transaction(async (tx) => {
@@ -57,6 +63,8 @@ export async function block(blockerId: string, blockedId: string, now: Date): Pr
       await tx.sticker.deleteMany({ where: eitherWay(blockerId, blockedId) });
       await tx.buddyActivity.deleteMany({ where: { recipientId: blockedId, actorId: blockerId } });
     }
+    // Chats: the conversation goes, pair or not — nothing is left to read back. After the pair (send's lock order).
+    await tx.conversation.deleteMany({ where: orderedPair(blockerId, blockedId) });
     await tx.buddyActivity.deleteMany({ where: { recipientId: blockerId, actorId: blockedId } });
     await tx.buddyMute.deleteMany({ where: mutesEitherWay(blockerId, blockedId) });
     await tx.buddyRequest.updateMany({ where: { fromUserId: blockerId, toUserId: blockedId, status: 'PENDING' }, data: { status: 'CANCELLED', respondedAt: now } });

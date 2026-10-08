@@ -439,8 +439,8 @@ export async function processSyncJob(job: Job): Promise<void> {
     const { userId, runKey } = job.data as RunHabitCorrelationsJobData;
     await runHabitCorrelations(userId, { runKey });
   } else if (job.name === RECAP_SWEEP_JOB) {
-    // The hourly tick also runs the social sweep (expired camp notes, old highlight caches). It goes first and never
-    // throws, so a social failure cannot stop recaps. Counts and the error's name only.
+    // The hourly tick also runs the social sweep (expired camp and Chats notes, old highlight caches, old reports). It
+    // goes first and never throws, so a social failure cannot stop recaps. Counts and the error's name only.
     await runSocialSweep(sweepClock(job)).then(
       (r) => console.info(JSON.stringify({ event: 'social.sweep', ...r })),
       (err: unknown) => console.error(JSON.stringify({ event: 'social.sweep_failed', error: err instanceof Error ? err.name : 'unknown' })),

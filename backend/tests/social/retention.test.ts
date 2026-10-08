@@ -53,16 +53,22 @@ it('deletes expired camp notes and highlight caches older than 4 weeks, and keep
 
 it('the hourly recap-sweep tick runs the social sweep too, on the clock the job pins, logging counts only', async () => {
   const a = await buddyUser();
+  const b = await buddyUser();
   await prisma.campNote.create({ data: { authorId: a.id, text: 'private words', expiresAt: new Date('2025-02-10T06:00:00Z') } });
+  await prisma.statusNote.create({ data: { authorId: a.id, text: 'private chats words', createdAt: new Date('2025-02-09T06:00:00Z'), expiresAt: new Date('2025-02-10T06:00:00Z') } });
+  await prisma.report.create({ data: { reporterId: b.id, reportedUserId: a.id, targetType: 'STATUS_NOTE', targetId: a.id, reason: 'SPAM', excerpt: 'reported words', createdAt: new Date('2024-11-01T00:00:00Z') } });
   await prisma.weeklyHighlights.create({ data: { viewerId: a.id, weekStart: day(OLD_WEEK), items: [] } });
   const info = jest.spyOn(console, 'info').mockImplementation(() => {});
   await processSyncJob({ name: RECAP_SWEEP_JOB, data: { now: SWEEP_NOW.toISOString() } } as unknown as Job);
   expect(runRecapSweep).toHaveBeenCalled();
   expect(await prisma.campNote.count({ where: { authorId: a.id } })).toBe(0);
   expect(await weeksOf(a.id)).toEqual([]);
+  expect(await prisma.statusNote.count({ where: { authorId: a.id } })).toBe(0);
+  expect(await prisma.report.count({ where: { reportedUserId: a.id } })).toBe(0);
   const lines = info.mock.calls.map((c) => String(c[0]));
-  expect(lines.some((l) => l.includes('"event":"social.sweep"'))).toBe(true);
-  expect(lines.join('\n')).not.toContain('private words');
+  const sweep = lines.find((l) => l.includes('"event":"social.sweep"'));
+  expect(Object.keys(JSON.parse(sweep!)).sort()).toEqual(['event', 'highlights', 'notes', 'reports', 'statusNotes']);
+  expect(lines.join('\n')).not.toMatch(/private words|private chats words|reported words/);
 });
 
 it("deleting an account deletes the highlight caches that name it; a cached id that isn't a buddy never surfaces", async () => {

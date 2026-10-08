@@ -9,7 +9,7 @@ import { runSocialSweep } from '../../src/social/sweep';
 jest.mock('../../src/recap/sweep', () => ({ runRecapSweep: jest.fn(async () => ({ usersChecked: 0, jobsEnqueued: 0, failed: 0 })) }));
 jest.mock('../../src/recap/build', () => ({ runRecapJob: jest.fn(async () => 'built'), defaultRecapDeps: jest.fn(() => ({ marker: 'deps' })) }));
 // The social sweep (S2) shares this tick; it is tested in tests/social/retention.test.ts on a pinned clock.
-jest.mock('../../src/social/sweep', () => ({ runSocialSweep: jest.fn(async () => ({ notes: 0, highlights: 0 })) }));
+jest.mock('../../src/social/sweep', () => ({ runSocialSweep: jest.fn(async () => ({ notes: 0, highlights: 0, statusNotes: 0, reports: 0 })) }));
 
 afterAll(async () => {
   await syncQueue.close();
