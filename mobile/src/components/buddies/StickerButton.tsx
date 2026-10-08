@@ -23,7 +23,7 @@ export function StickerButton({ kind, label, icon, disabled, onPress }: {
       accessibilityLabel={`Send a ${label}`}
       disabled={disabled}
       onPress={onPress}
-      className="h-auto flex-1 flex-col gap-1 py-3"
+      className="h-auto flex-1 flex-col gap-[4px] py-[12px]"
     >
       <Ionicons name={icon} size={26} color={colors.accent} />
       <Text numberOfLines={1} className={buttonTextVariants({ variant: 'outline', size: 'xs' })}>{label}</Text>
