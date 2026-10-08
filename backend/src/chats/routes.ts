@@ -10,6 +10,7 @@ import { listChats } from './inbox';
 import { clearReaction, listThread, markRead, sendMessage, setReaction, unsendMessage } from './messages';
 import { clearStatusNote, getNotes, shareStatusNote } from './notes';
 import { getChatSettings, parseChatSettingsPatch, touchPresence, updateChatSettings } from './presence';
+import { fileReport } from './reports';
 
 export const chatsRouter = Router();
 
@@ -83,5 +84,12 @@ chatsRouter.put('/me/notes', requireAuth, buddyRoute(async (req, res) => {
 // Never rate-limited: removing your own note must work even while the limiter is down.
 chatsRouter.delete('/me/notes', requireAuth, buddyRoute(async (req, res) => {
   await clearStatusNote(req.userId!);
+  res.status(204).end();
+}));
+
+// Reports: write-only (no route reads them) and never told to the reported person. The target names no buddy in the
+// path, so anything the reporter cannot see now is report_target_gone (the same answer for a stranger's item).
+chatsRouter.post('/me/reports', requireAuth, buddyRoute(async (req, res) => {
+  await fileReport(req.userId!, req.body, new Date());
   res.status(204).end();
 }));
