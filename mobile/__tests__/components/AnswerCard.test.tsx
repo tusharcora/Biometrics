@@ -221,6 +221,19 @@ describe('FollowUpChips', () => {
     expect(onAsk).not.toHaveBeenCalled();
   });
 
+  it('lets a long question wrap instead of truncating it', () => {
+    const question = "What's been moving my resting heart rate lately?";
+    const { getByTestId } = render(<FollowUpChips questions={[question]} onAsk={() => {}} />);
+
+    const label = getByTestId('follow-up-0-label');
+    expect(label.props.children).toBe(question);
+    expect(label.props.numberOfLines).toBeUndefined();
+    // The chip grows with its lines: no fixed 32px height, exact px padding.
+    const classes = String(getByTestId('follow-up-0').props.className).split(' ');
+    expect(classes).toEqual(expect.arrayContaining(['h-auto', 'min-h-[32px]', 'py-[6px]', 'max-w-full']));
+    expect(classes).not.toContain('h-[32px]');
+  });
+
   it('renders nothing when there are no follow-ups', () => {
     const { queryByTestId } = render(<FollowUpChips questions={[]} onAsk={() => {}} />);
 
