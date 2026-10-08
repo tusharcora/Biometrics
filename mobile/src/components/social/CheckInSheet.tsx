@@ -39,9 +39,10 @@ export function CheckInSheet({ visible, current, onClose }: { visible: boolean; 
       <View className="gap-4">
         <Text className="font-display text-display-sm">How did you wake up?</Text>
         <Text testID="checkin-notice" className="text-sm text-muted-foreground">Your buddies will see this. You can change it until midnight.</Text>
+        {/* A one-tap pick: today's mood is the filled button, the others are outlined. */}
         <View className="flex-row gap-2">
           {CHECKIN_OPTIONS.map((o) => (
-            <Button key={o.mood} testID={`checkin-${o.mood}`} variant={current === o.mood ? 'default' : 'outline'} accessibilityRole="button" accessibilityState={{ selected: current === o.mood }} disabled={busy} className="flex-1" onPress={() => void choose(o.mood)}>
+            <Button key={o.mood} testID={`checkin-${o.mood}`} variant={current === o.mood ? 'default' : 'outline'} size="lg" accessibilityState={{ selected: current === o.mood }} disabled={busy} className="flex-1" onPress={() => void choose(o.mood)}>
               {o.label}
             </Button>
           ))}

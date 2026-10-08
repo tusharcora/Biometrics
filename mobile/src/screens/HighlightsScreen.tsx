@@ -5,7 +5,6 @@ import { buddyErrorCode, sendSticker } from '../api/buddies';
 import { fetchHighlights, type HighlightItem, type Highlights } from '../api/social';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
-import { PressableScale } from '../components/ui/pressable-scale';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { buddyErrorMessage } from '../lib/buddyCopy';
@@ -77,7 +76,7 @@ export function HighlightsScreen() {
     return (
       <SafeAreaView className="flex-1 items-center justify-center gap-3 bg-background p-6">
         <Text testID="highlights-error" className="text-muted-foreground">Couldn't load the highlights.</Text>
-        <Button testID="highlights-retry" variant="outline" onPress={() => void load()}>Try again</Button>
+        <Button testID="highlights-retry" variant="secondary" onPress={() => void load()}>Try again</Button>
       </SafeAreaView>
     );
   }
@@ -113,10 +112,9 @@ export function HighlightsScreen() {
                 <Text className="font-semibold">{highlightLine(item)}</Text>
               </View>
               {item.mine ? null : (
-                <PressableScale testID={`highlights-item-${index}-cheer`} accessibilityRole="button" disabled={busy} onPress={() => void cheer(item)}
-                  className="h-8 justify-center rounded-full border border-border px-3">
-                  <Text className="text-xs">Cheer</Text>
-                </PressableScale>
+                <Button testID={`highlights-item-${index}-cheer`} variant="outline" size="xs" disabled={busy} onPress={() => void cheer(item)}>
+                  Cheer
+                </Button>
               )}
             </Card>
           );

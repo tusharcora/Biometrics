@@ -22,9 +22,8 @@ import { GoodnightButton } from '../components/social/GoodnightButton';
 import { HighlightsCarousel } from '../components/social/HighlightsCarousel';
 import { StoriesRow } from '../components/social/StoriesRow';
 import { TimelineList } from '../components/social/TimelineList';
-import { Button } from '../components/ui/button';
+import { Button, buttonIconSize, buttonTextVariants } from '../components/ui/button';
 import { Card } from '../components/ui/card';
-import { PressableScale } from '../components/ui/pressable-scale';
 import { SectionLabel } from '../components/ui/section-label';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
@@ -75,7 +74,7 @@ export function SocialScreen() {
         {state.status === 'error' ? (
           <Card testID="social-error" className="gap-3">
             <Text className="text-sm">Couldn't load your circle.</Text>
-            <Button testID="social-retry" variant="outline" onPress={() => void refreshSocial()}>Try again</Button>
+            <Button testID="social-retry" variant="secondary" onPress={() => void refreshSocial()}>Try again</Button>
           </Card>
         ) : (
           <Skeleton testID="social-loading" className="h-40 w-full rounded-card" />
@@ -107,14 +106,15 @@ export function SocialScreen() {
           ) : null}
         </View>
       </ScrollView>
-      <PressableScale testID="social-chats" accessibilityRole="button" accessibilityLabel={chats > 0 ? `Chats, ${chats} new` : 'Chats'}
+      {/* The floating Chats pill: custom children so the icon and the count keep their own testIDs. */}
+      <Button testID="social-chats" size="lg" accessibilityLabel={chats > 0 ? `Chats, ${chats} new` : 'Chats'}
         onPress={() => ((home.unread?.requests ?? 0) > 0 ? navigation.navigate('Buddies', { tab: 'requests', open: Date.now() }) : navigation.navigate('Buddies'))}
         style={{ position: 'absolute', right: 20, bottom: clearance + 8 }}
-        className="h-12 flex-row items-center gap-2 rounded-full bg-foreground px-4">
-        <View testID="social-chats-icon"><Ionicons name="chatbubble-outline" size={18} color={colors.background} /></View>
-        <Text className="font-semibold text-background">Chats</Text>
+        className="rounded-full"
+        iconStart={<View testID="social-chats-icon"><Ionicons name="chatbubble-outline" size={buttonIconSize('lg')} color={colors.background} /></View>}>
+        <Text className={buttonTextVariants({ size: 'lg' })}>Chats</Text>
         {chats > 0 ? <Text testID="social-chats-count" className="min-w-5 rounded-full bg-accent px-1.5 text-center text-xs font-bold text-background">{chats}</Text> : null}
-      </PressableScale>
+      </Button>
       <CheckInSheet visible={checkingIn} current={home.me.checkIn?.mood ?? null} onClose={() => setCheckingIn(false)} />
     </SafeAreaView>
   );

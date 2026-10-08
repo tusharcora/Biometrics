@@ -9,7 +9,7 @@ import type { TimelineItem } from '../../api/social';
 import { buddyErrorMessage } from '../../lib/buddyCopy';
 import { clockTime, knownTimelineItems, timelineAction, timelineParts } from '../../lib/socialCopy';
 import { refreshSocial } from '../../lib/socialStore';
-import { PressableScale } from '../ui/pressable-scale';
+import { Button } from '../ui/button';
 import { Text } from '../ui/text';
 
 const DOT: Record<TimelineItem['kind'], string> = {
@@ -73,10 +73,9 @@ export function TimelineList({ items }: { items: TimelineItem[] }) {
                 <Text className="text-muted-foreground"> {rest}</Text>
               </Text>
               {action ? (
-                <PressableScale testID={`timeline-${item.id}-action`} accessibilityRole="button" disabled={busy} onPress={() => void act(item, action)}
-                  className="h-8 justify-center rounded-full border border-border px-3">
-                  <Text className="text-xs">{LABEL[action]}</Text>
-                </PressableScale>
+                <Button testID={`timeline-${item.id}-action`} variant="outline" size="xs" disabled={busy} onPress={() => void act(item, action)}>
+                  {LABEL[action]}
+                </Button>
               ) : null}
             </View>
           );
