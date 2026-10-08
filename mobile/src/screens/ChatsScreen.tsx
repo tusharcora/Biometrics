@@ -63,7 +63,8 @@ export function ChatsScreen() {
   const load = useCallback(async () => {
     const at = ++seq.current;
     try {
-      const [chats, nextNotes] = await Promise.all([fetchChats(), fetchNotes().catch(() => null)]);
+      // A failed notes read keeps the notes already shown (`undefined`); an older server's null clears them.
+      const [chats, nextNotes] = await Promise.all([fetchChats(), fetchNotes().catch(() => undefined)]);
       if (at !== seq.current) return;
       if (chats === null) {
         setPhase('unavailable');
@@ -72,7 +73,7 @@ export function ChatsScreen() {
       setPage(chats);
       setMore([]);
       setCursor(chats.nextCursor);
-      setNotes(nextNotes);
+      if (nextNotes !== undefined) setNotes(nextNotes);
       setPhase('ready');
     } catch {
       if (at === seq.current) setPhase((p) => (p === 'ready' ? p : 'error'));

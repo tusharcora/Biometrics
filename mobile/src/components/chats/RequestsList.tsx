@@ -27,7 +27,7 @@ function fromLine(r: IncomingRequest, now: number): string {
 }
 
 // Buddy requests (spec 2026-10-06 buddies §4; spec 2026-10-07 social §8.1: they live in Chats › Requests; the
-// owner-approved Requests board): incoming ones as cards (their coach, name, @handle and age, a "more" menu that
+// owner-approved Requests board): incoming ones as cards (their coach, name, @handle and age, a "…" button that
 // blocks, then Decline / Accept side by side), and mine still pending. Moved from the Buddies screen; accepting hands
 // the new buddy's id to `onAccepted` (Chats opens their thread, Buddies their week).
 export function RequestsList({ gate, onAccepted }: { gate: Gate; onAccepted: (buddyId: string) => void }) {
@@ -91,7 +91,7 @@ export function RequestsList({ gate, onAccepted }: { gate: Gate; onAccepted: (bu
         void offerPushAfterPairing();
       }),
     );
-  // The card's "more" menu: its one option is Block, confirmed in the same alert.
+  // The card's "…" button (the board's ellipsis) blocks: it is labelled Block and asks first.
   const block = (r: IncomingRequest) => {
     if (inFlight.current) return;
     Alert.alert(`Block ${r.from.displayName}?`, "They won't be told. You can unblock them in Profile.", [
@@ -130,7 +130,7 @@ export function RequestsList({ gate, onAccepted }: { gate: Gate; onAccepted: (bu
                 testID={`request-block-${item.request.id}`}
                 variant="ghost"
                 size="icon-sm"
-                accessibilityLabel={`More options for ${item.request.from.displayName}`}
+                accessibilityLabel={`Block ${item.request.from.displayName}`}
                 disabled={busy}
                 onPress={() => block(item.request)}
               >

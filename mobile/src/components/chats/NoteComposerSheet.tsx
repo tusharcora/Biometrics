@@ -19,11 +19,15 @@ export function NoteComposerSheet({ visible, current, onClose, onSaved }: { visi
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const inFlight = useRef(false);
+  // Start from my live note each time the sheet opens, and only then: the inbox re-reads (a foreground push, a Cheer)
+  // hand a new `current` object while it is open, and that must not wipe what I am typing.
+  const currentRef = useRef(current);
+  currentRef.current = current;
   useEffect(() => {
     if (!visible) return;
-    setDraft(current?.text ?? '');
+    setDraft(currentRef.current?.text ?? '');
     setError(null);
-  }, [visible, current]);
+  }, [visible]);
   const length = noteLength(draft);
   const run = async (fn: () => Promise<unknown>) => {
     if (inFlight.current) return;

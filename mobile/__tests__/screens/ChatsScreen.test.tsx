@@ -127,6 +127,39 @@ it('a note over 60 can not be shared; my live note can be cleared', async () => 
   expect(screen.getByTestId('note-share')).toBeDisabled();
   await act(async () => fireEvent.press(screen.getByTestId('note-clear')));
   expect(clearStatusNote).toHaveBeenCalled();
+  expect(screen.queryByTestId('note-composer')).toBeNull();
+  expect(fetchNotes).toHaveBeenCalledTimes(2); // the inbox re-reads after clearing
+});
+
+it('a refused note shows why and keeps the sheet open', async () => {
+  (saveStatusNote as jest.Mock).mockRejectedValueOnce(new ApiError(400, 'x', 'invalid_note'));
+  renderScreen();
+  fireEvent.press(await screen.findByTestId('note-mine'));
+  fireEvent.changeText(screen.getByTestId('note-input'), 'early night');
+  await act(async () => fireEvent.press(screen.getByTestId('note-share')));
+  expect(screen.getByTestId('note-error')).toBeTruthy();
+  expect(screen.getByTestId('note-composer')).toBeTruthy();
+  expect(screen.getByTestId('note-input').props.value).toBe('early night');
+});
+
+it('a reload while composing keeps my draft', async () => {
+  // Every read returns a fresh `mine` object, as the server does.
+  (fetchNotes as jest.Mock).mockImplementation(async () => ({ mine: { text: 'gym at 6', createdAt: ago(5), expiresAt: ago(-60) }, buddies: [] }));
+  renderScreen();
+  fireEvent.press(await screen.findByTestId('note-mine'));
+  fireEvent.changeText(screen.getByTestId('note-input'), 'gym at 7 now');
+  await act(async () => fireEvent.press(screen.getByTestId('chat-row-ben-cheer'))); // a Cheer re-reads the inbox
+  expect(fetchNotes).toHaveBeenCalledTimes(2);
+  expect(screen.getByTestId('note-input').props.value).toBe('gym at 7 now');
+});
+
+it('a failed notes read keeps the notes already shown', async () => {
+  renderScreen();
+  expect(await screen.findByTestId('note-ana')).toBeTruthy();
+  (fetchNotes as jest.Mock).mockRejectedValueOnce(new Error('offline'));
+  await act(async () => fireEvent.press(screen.getByTestId('chat-row-ben-cheer'))); // a Cheer re-reads the inbox
+  expect(fetchNotes).toHaveBeenCalledTimes(2);
+  expect(screen.getByTestId('note-ana')).toHaveTextContent('day 6 streak!');
 });
 
 it('New message picks a buddy and opens the thread', async () => {
