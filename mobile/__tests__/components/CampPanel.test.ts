@@ -10,16 +10,29 @@ it('rests at Peek above the home indicator, Half 40% down and Full 11% down', ()
   expect(panelStops(932, { top: 59, bottom: 60 }).peek).toBe(932 - PEEK_RESERVE);
 });
 
-it('snaps a drag to the nearest stop, carried by its velocity, never in between', () => {
-  const stops = panelStops(844, { top: 47, bottom: 34 });
+it('a slow release snaps to the nearest stop, never in between', () => {
+  const stops = panelStops(844, { top: 47, bottom: 34 }); // peek 704, half 338, full 93
   expect(snapStop(stops, 690, 0)).toBe('peek');
   expect(snapStop(stops, 360, 0)).toBe('half');
   expect(snapStop(stops, 120, 0)).toBe('full');
-  // A fling up from near Peek reaches Half; a hard one, Full.
-  expect(snapStop(stops, 640, -1200)).toBe('half');
-  expect(snapStop(stops, 400, -2400)).toBe('full');
-  // A fling down from Full past Half lands at Peek.
-  expect(snapStop(stops, 150, 3000)).toBe('peek');
+  expect(snapStop(stops, 500, -400)).toBe('half');
+  expect(snapStop(stops, 540, 400)).toBe('peek');
+  // Exactly at the flick speed is still slow.
+  expect(snapStop(stops, 680, -500)).toBe('peek');
+});
+
+it('a flick (over 500 px/s) moves one stop in its direction, however short the drag', () => {
+  const stops = panelStops(844, { top: 47, bottom: 34 });
+  // A short flick up from Peek reaches Half, not Full; from Half, Full.
+  expect(snapStop(stops, 690, -501)).toBe('half');
+  expect(snapStop(stops, 690, -4000)).toBe('half');
+  expect(snapStop(stops, 330, -900)).toBe('full');
+  // Down: one stop below where the panel is.
+  expect(snapStop(stops, 100, 900)).toBe('half');
+  expect(snapStop(stops, 345, 900)).toBe('peek');
+  // Past the end it stays at the end.
+  expect(snapStop(stops, 93, -900)).toBe('full');
+  expect(snapStop(stops, 704, 900)).toBe('peek');
 });
 
 it('steps: the handle goes up and wraps from Full to Peek; increment and decrement stop at the ends', () => {

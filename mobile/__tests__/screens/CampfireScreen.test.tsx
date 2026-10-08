@@ -1,6 +1,8 @@
 import React from 'react';
 import { AccessibilityInfo, TextInput } from 'react-native';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { State } from 'react-native-gesture-handler';
+import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ApiError } from '../../src/api/client';
 import { clearCampNote, fetchCamp, saveCampNote, sayGoodnight, undoGoodnight, type Camp, type CampMember } from '../../src/api/social';
@@ -363,6 +365,8 @@ it('the handle is adjustable: increment goes up a stop, decrement down, stopping
   renderScreen();
   await screen.findByTestId('campfire');
   expect(handle()).toHaveProp('accessibilityRole', 'adjustable');
+  // The state is read once, in the label.
+  expect(handle().props.accessibilityValue?.text).toBeUndefined();
   const act11y = (actionName: string) => fireEvent(handle(), 'accessibilityAction', { nativeEvent: { actionName } });
   act11y('decrement');
   expect(handle()).toHaveProp('accessibilityLabel', 'Camp details, peek');
@@ -384,7 +388,7 @@ it('a quick-pick chip fills the draft', async () => {
 });
 
 it('with a screen reader on, starts at Half and the panel scrolls at every stop', async () => {
-  const reader = jest.spyOn(AccessibilityInfo, 'isScreenReaderEnabled').mockResolvedValue(true);
+  jest.spyOn(AccessibilityInfo, 'isScreenReaderEnabled').mockResolvedValueOnce(true);
   (fetchCamp as jest.Mock).mockResolvedValue(camp());
   renderScreen();
   await screen.findByTestId('campfire');
@@ -392,5 +396,29 @@ it('with a screen reader on, starts at Half and the panel scrolls at every stop'
   expect(screen.getByTestId('camp-panel-scroll')).toHaveProp('scrollEnabled', true);
   fireEvent(handle(), 'accessibilityAction', { nativeEvent: { actionName: 'decrement' } });
   expect(screen.getByTestId('camp-panel-scroll')).toHaveProp('scrollEnabled', true);
-  reader.mockRestore();
 });
+
+it('a drag snaps to a stop: a slow drag to the nearest, a flick one stop its way', async () => {
+  (fetchCamp as jest.Mock).mockResolvedValue(camp());
+  renderScreen();
+  await screen.findByTestId('campfire');
+  // runOnJS hands the snap back to the JS thread a tick later; the spring then settles before the next drag.
+  const drag = (translationY: number, velocityY: number) => act(async () => {
+    fireGestureHandler(getByGestureTestId('camp-panel-drag'), [
+      { state: State.BEGAN }, { state: State.ACTIVE, translationY }, { state: State.END, translationY, velocityY },
+    ]);
+    await new Promise((r) => setTimeout(r, 1200));
+  });
+  // Jest's window is 1334 tall, no insets: peek 1228, half 534, full 147. Up 500 slowly ends nearer Half.
+  await drag(-500, -100);
+  expect(handle()).toHaveProp('accessibilityLabel', 'Camp details, half open');
+  // A short flick up goes one stop: Full.
+  await drag(-20, -900);
+  expect(handle()).toHaveProp('accessibilityLabel', 'Camp details, fully open');
+  // A short slow drag down stays at Full.
+  await drag(40, 50);
+  expect(handle()).toHaveProp('accessibilityLabel', 'Camp details, fully open');
+  // A flick down goes one stop: Half, not Peek.
+  await drag(30, 1500);
+  expect(handle()).toHaveProp('accessibilityLabel', 'Camp details, half open');
+}, 15000);

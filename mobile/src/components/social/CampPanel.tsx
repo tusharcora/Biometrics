@@ -4,7 +4,7 @@
 // handle steps up a stop (Full goes back to Peek), and screen readers get increment / decrement on it. The keyboard
 // lifts the panel so the composer stays in view. Same material, radius and spring as the app's Sheet.
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Keyboard, Platform, Pressable, ScrollView, View, type AccessibilityActionEvent } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
@@ -22,8 +22,6 @@ export const STOP_LABEL: Record<CampStop, string> = { peek: 'peek', half: 'half 
 const PANEL_RADIUS = 38;
 /** The handle row and the fire's strength: what Peek shows above the home indicator. */
 export const PEEK_CONTENT = 106;
-/** How far ahead (s) a fling's velocity carries the panel before it picks the nearest stop. */
-const FLING_S = 0.15;
 
 /**
  * Each stop's panel top, in px from the screen's top. Peek: the handle and the fire above the home indicator (never
@@ -37,13 +35,28 @@ export function panelStops(height: number, insets: { top: number; bottom: number
   };
 }
 
-/** The stop a drag released at `y` with velocity `vy` (px/s, down is positive) settles on: the nearest to where it's headed. */
+/** A release faster than this (px/s) is a flick: it moves one stop that way, however short the drag. */
+export const FLICK_VELOCITY = 500;
+
+/**
+ * The stop a drag released at `y` with velocity `vy` (px/s, down is positive) settles on. A flick goes to the next
+ * stop past `y` in its direction (or stays at the end); a slower release goes to the nearest stop.
+ */
 export function snapStop(stops: CampStops, y: number, vy: number): CampStop {
   'worklet';
-  const ahead = y + vy * FLING_S;
+  const all = ['peek', 'half', 'full'] as const;
+  if (vy < -FLICK_VELOCITY || vy > FLICK_VELOCITY) {
+    const up = vy < 0;
+    let next: CampStop | null = null;
+    for (const s of all) {
+      const past = up ? stops[s] < y - 1 : stops[s] > y + 1;
+      if (past && (next === null || Math.abs(stops[s] - y) < Math.abs(stops[next] - y))) next = s;
+    }
+    return next ?? (up ? 'full' : 'peek');
+  }
   let best: CampStop = 'peek';
-  for (const s of ['peek', 'half', 'full'] as const) {
-    if (Math.abs(stops[s] - ahead) < Math.abs(stops[best] - ahead)) best = s;
+  for (const s of all) {
+    if (Math.abs(stops[s] - y) < Math.abs(stops[best] - y)) best = s;
   }
   return best;
 }
@@ -63,10 +76,11 @@ export function useCampPanel(stops: CampStops, reduced: boolean) {
   const top = useSharedValue(stops.peek);
   const latest = useRef({ stops, reduced });
   latest.current = { stops, reduced };
-  const moveTo = useCallback((next: CampStop) => {
+  // `velocity`: a drag's release speed (px/s), so the spring carries on from it.
+  const moveTo = useCallback((next: CampStop, velocity = 0) => {
     setStop(next);
     const y = latest.current.stops[next];
-    top.value = latest.current.reduced ? y : withSpring(y, MOTION.spring.settle);
+    top.value = latest.current.reduced ? y : withSpring(y, { ...MOTION.spring.settle, velocity });
   }, [top]);
   // A new screen size (rotation, split view) moves the panel to its stop's new top.
   useEffect(() => {
@@ -99,7 +113,7 @@ interface CampPanelProps {
   stops: CampStops;
   stop: CampStop;
   top: SharedValue<number>;
-  moveTo: (stop: CampStop) => void;
+  moveTo: (stop: CampStop, velocity?: number) => void;
   height: number;
   bottomInset: number;
   /** A screen reader is on: the panel scrolls at every stop, so all of it can be reached. */
@@ -123,7 +137,8 @@ export function CampPanel({ stops, stop, top, moveTo, height, bottomInset, scree
     if (stop !== 'full') scroll.current?.scrollTo({ y: 0, animated: !reduced });
   }, [stop, reduced]);
 
-  const drag = Gesture.Pan()
+  // Built once per size: not on every render (a keystroke in the note re-renders the panel).
+  const drag = useMemo(() => Gesture.Pan()
     .withTestId('camp-panel-drag')
     .activeOffsetY([-8, 8])
     .onStart(() => {
@@ -133,8 +148,9 @@ export function CampPanel({ stops, stop, top, moveTo, height, bottomInset, scree
       top.value = Math.min(stops.peek, Math.max(stops.full, start.value + e.translationY));
     })
     .onEnd((e) => {
-      runOnJS(moveTo)(snapStop(stops, top.value, e.velocityY));
-    });
+      const y = Math.min(stops.peek, Math.max(stops.full, start.value + e.translationY));
+      runOnJS(moveTo)(snapStop(stops, y, e.velocityY), e.velocityY);
+    }), [stops, moveTo, top, start]);
 
   // The keyboard lifts the panel by its height, up to Full.
   const panelStyle = useAnimatedStyle(() => ({
@@ -156,7 +172,7 @@ export function CampPanel({ stops, stop, top, moveTo, height, bottomInset, scree
         <GestureDetector gesture={drag}>
           <View>
             <Pressable testID="camp-panel-handle" accessibilityRole="adjustable" accessibilityLabel={`Camp details, ${STOP_LABEL[stop]}`}
-              accessibilityHint={stop === 'full' ? 'Shows less' : 'Shows more'} accessibilityValue={{ text: STOP_LABEL[stop] }}
+              accessibilityHint={stop === 'full' ? 'Shows less' : 'Shows more'}
               accessibilityActions={[{ name: 'activate' }, { name: 'increment' }, { name: 'decrement' }]} onAccessibilityAction={onAction}
               onPress={() => moveTo(nextStop(stop))} className="h-[30px] items-center justify-center">
               <View className="h-1 w-10 rounded-full bg-muted-foreground/40" />
