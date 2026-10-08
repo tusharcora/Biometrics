@@ -1,30 +1,24 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, FlatList, Pressable, View } from 'react-native';
+import { ActivityIndicator, FlatList, Pressable, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import {
-  acceptRequest, blockFromRequest, buddyErrorCode, cancelRequest, declineRequest, fetchActivity, fetchBuddyPage, fetchRequests, markActivitySeen,
-  type ActivityItem, type BuddyIdentity, type BuddyRow, type IncomingRequest, type OutgoingRequest,
-} from '../api/buddies';
+import { fetchActivity, fetchBuddyPage, markActivitySeen, type ActivityItem, type BuddyIdentity, type BuddyRow } from '../api/buddies';
 import { BuddyListRow } from '../components/buddies/BuddyListRow';
 import { IdentityGate } from '../components/buddies/IdentityGate';
 import { MoodNoticeSheet } from '../components/buddies/MoodNoticeSheet';
 import { useMoodNoticeGate } from '../components/buddies/useMoodNoticeGate';
+import { RequestsList } from '../components/chats/RequestsList';
 import { Character } from '../components/characters/Character';
 import { DEFAULT_CHARACTER_ID, isCharacterId } from '../components/characters/types';
 import { Button } from '../components/ui/button';
 import { SegmentedControl } from '../components/ui/segmented-control';
 import { Text } from '../components/ui/text';
-import { activityLine, buddyErrorMessage } from '../lib/buddyCopy';
+import { activityLine } from '../lib/buddyCopy';
 import { refreshBuddies, useBuddies } from '../lib/buddiesStore';
-import { offerPushAfterPairing } from '../lib/buddyPushOffer';
-import { refreshSocial } from '../lib/socialStore';
 import { useRefreshBuddiesOnFocus } from '../lib/useRefreshBuddiesOnFocus';
 
 type Tab = 'buddies' | 'requests' | 'activity';
 type Nav = { navigate: (name: string, params?: object) => void; addListener?: (event: 'focus', callback: () => void) => () => void };
-type Gate = ReturnType<typeof useMoodNoticeGate>;
-type RequestItem = { kind: 'in'; request: IncomingRequest } | { kind: 'out'; request: OutgoingRequest };
 
 /** Rows in order, each id once (a page boundary can repeat a row). */
 function uniqueById<T extends { id: string }>(rows: readonly T[]): T[] {
@@ -85,7 +79,7 @@ function BuddiesBody({ identity, navigation, initialTab, openedAt }: { identity:
       <Text className="text-sm text-muted-foreground">You see their coach's mood, never their numbers unless they share them.</Text>
       <SegmentedControl testID="buddies-tabs" options={options} value={tab} onChange={setTab} />
       {tab === 'buddies' ? <BuddyListTab navigation={navigation} /> : null}
-      {tab === 'requests' ? <RequestsTab gate={gate} navigation={navigation} /> : null}
+      {tab === 'requests' ? <RequestsList gate={gate} onAccepted={(buddyId) => navigation.navigate('BuddyWeek', { buddyId })} /> : null}
       {tab === 'activity' ? <ActivityTab navigation={navigation} onSeen={onSeen} onOpenRequests={openRequests} /> : null}
       <MoodNoticeSheet {...gate.sheet} />
     </View>
@@ -155,115 +149,6 @@ function BuddyListTab({ navigation }: { navigation: Nav }) {
           {loading ? <ActivityIndicator /> : null}
           <Button testID="buddies-add" size="lg" onPress={() => navigation.navigate('PairUp')}>Add a buddy</Button>
         </View>
-      }
-    />
-  );
-}
-
-function RequestsTab({ gate, navigation }: { gate: Gate; navigation: Nav }) {
-  const [lists, setLists] = useState<{ incoming: IncomingRequest[]; outgoing: OutgoingRequest[] } | null | 'error'>(null);
-  const [message, setMessage] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  // `busy` disables the buttons only after a re-render; a double tap in one frame calls the API once.
-  const inFlight = useRef(false);
-  const live = useRef(true);
-  useEffect(() => {
-    live.current = true;
-    return () => {
-      live.current = false;
-    };
-  }, []);
-  const load = useCallback(async () => {
-    try {
-      const next = await fetchRequests();
-      if (live.current) setLists(next);
-    } catch {
-      if (live.current) setLists('error');
-    }
-  }, []);
-  useEffect(() => {
-    void load();
-  }, [load]);
-
-  // One answer at a time. The lists are re-read either way (a refused answer may mean the request
-  // is gone); the shared buddies refresh after an answer that went through.
-  function perform(fn: () => Promise<unknown>) {
-    if (inFlight.current) return;
-    inFlight.current = true;
-    setBusy(true);
-    setMessage(null);
-    void (async () => {
-      try {
-        try {
-          await fn();
-          void refreshBuddies();
-          void refreshSocial();
-        } catch (e) {
-          if (live.current) setMessage(buddyErrorMessage(buddyErrorCode(e)));
-        }
-        await load();
-      } finally {
-        inFlight.current = false;
-        if (live.current) setBusy(false);
-      }
-    })();
-  }
-  // Accepting pairs, so it waits for the one-time mood notice; the guard sits inside the held
-  // action, so "Not now" leaves nothing taken.
-  const accept = (id: string) =>
-    gate.run(() =>
-      perform(async () => {
-        const { buddyId } = await acceptRequest(id);
-        navigation.navigate('BuddyWeek', { buddyId });
-        // After the navigation, never awaited: the first pairing on this device offers notifications once.
-        void offerPushAfterPairing();
-      }),
-    );
-  const block = (r: IncomingRequest) => {
-    if (inFlight.current) return;
-    Alert.alert(`Block ${r.from.displayName}?`, "They won't be told. You can unblock them in Profile.", [
-      { text: 'Cancel', style: 'cancel' },
-      { text: 'Block', style: 'destructive', onPress: () => perform(() => blockFromRequest(r.id)) },
-    ]);
-  };
-
-  if (lists === null) return <ActivityIndicator testID="requests-loading" />;
-  if (lists === 'error') return <Text testID="requests-error" className="py-8 text-center text-muted-foreground">Couldn't load requests.</Text>;
-  const items: RequestItem[] = [
-    ...lists.incoming.map((request) => ({ kind: 'in' as const, request })),
-    ...lists.outgoing.map((request) => ({ kind: 'out' as const, request })),
-  ];
-  return (
-    <FlatList
-      testID="requests-list"
-      data={items}
-      keyExtractor={(i) => `${i.kind}-${i.request.id}`}
-      contentContainerStyle={{ gap: 12, paddingBottom: 24 }}
-      ListHeaderComponent={message ? <Text testID="requests-message" className="text-sm text-destructive">{message}</Text> : null}
-      ListEmptyComponent={<Text testID="requests-empty" className="py-8 text-center text-muted-foreground">No requests right now.</Text>}
-      renderItem={({ item }) =>
-        item.kind === 'in' ? (
-          <View testID={`request-in-${item.request.id}`} className="gap-2 rounded-card border border-border bg-card p-3">
-            <View className="flex-row items-center gap-3">
-              <Character characterId={isCharacterId(item.request.from.coachId) ? item.request.from.coachId : DEFAULT_CHARACTER_ID} mood="idle" size={40} paused />
-              <View className="flex-1">
-                <Text className="font-semibold">{item.request.from.displayName}</Text>
-                <Text className="text-sm text-muted-foreground">@{item.request.from.handle} wants to be your buddy</Text>
-              </View>
-            </View>
-            <View className="flex-row gap-2">
-              <Button testID={`request-accept-${item.request.id}`} size="sm" disabled={busy} onPress={() => accept(item.request.id)}>Accept</Button>
-              <Button testID={`request-decline-${item.request.id}`} size="sm" variant="outline" disabled={busy} onPress={() => perform(() => declineRequest(item.request.id))}>Decline</Button>
-              <Button testID={`request-block-${item.request.id}`} size="sm" variant="destructive" disabled={busy} onPress={() => block(item.request)}>Block</Button>
-            </View>
-          </View>
-        ) : (
-          <View testID={`request-out-${item.request.id}`} className="flex-row items-center justify-between rounded-card border border-border bg-card p-3">
-            {/* The handle as typed when sent; an older request has none, so it reads neutrally. */}
-            <Text className="flex-1">{item.request.toHandle ? `@${item.request.toHandle} · Pending` : 'Pending request'}</Text>
-            <Button testID={`request-cancel-${item.request.id}`} size="sm" variant="ghost" disabled={busy} onPress={() => perform(() => cancelRequest(item.request.id))}>Cancel</Button>
-          </View>
-        )
       }
     />
   );

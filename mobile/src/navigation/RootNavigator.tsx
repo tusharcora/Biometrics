@@ -43,6 +43,8 @@ import { BuddyWeekScreen } from '../screens/BuddyWeekScreen';
 import { HighlightsScreen } from '../screens/HighlightsScreen';
 import { CampfireScreen } from '../screens/CampfireScreen';
 import { ChatThreadScreen } from '../screens/ChatThreadScreen';
+import { ChatsScreen } from '../screens/ChatsScreen';
+import { ChatRequestsScreen } from '../screens/ChatRequestsScreen';
 import { BlockedPeopleScreen } from '../screens/BlockedPeopleScreen';
 import { CelebrationHost } from '../components/achievements/CelebrationHost';
 import { BuddiesStoreScope } from '../components/buddies/BuddiesStoreScope';
@@ -137,6 +139,9 @@ export type RootStackParamList = {
   SocialStory: { authorId: string; mine?: boolean };
   // Social → the camp banner: the Campfire page (S2), pushed with no tab bar.
   Campfire: undefined;
+  // Chats (S3): the inbox (Social's Chats button) and Chats › Requests (buddy requests moved from Buddies).
+  Chats: undefined;
+  ChatRequests: undefined;
   // Chats (S3): one buddy's thread. `quote` stages a story frame, a note or a camp note to send with the next text.
   ChatThread: { buddyId: string; quote?: ChatQuote };
 };
@@ -263,6 +268,10 @@ export function RootNavigator() {
               <Stack.Screen name="Highlights" component={HighlightsScreen} options={{ title: 'Highlights' }} />
               {/* The Campfire (S2): its own header over the scene, no tab bar. */}
               <Stack.Screen name="Campfire" component={CampfireScreen} options={{ headerShown: false }} />
+              {/* Chats (S3): the inbox, from Social's Chats button; its own header (back, my @handle, New message). */}
+              <Stack.Screen name="Chats" component={ChatsScreen} options={{ headerShown: false }} />
+              {/* The owner-approved Requests board draws its own header (back + "Requests"). */}
+              <Stack.Screen name="ChatRequests" component={ChatRequestsScreen} options={{ headerShown: false, title: 'Requests' }} />
               {/* Chats (S3): its own header (coach, active line, info); one screen per buddy, like BuddyWeek. */}
               <Stack.Screen name="ChatThread" component={ChatThreadScreen} getId={({ params }) => params?.buddyId} options={{ headerShown: false }} />
               <Stack.Screen

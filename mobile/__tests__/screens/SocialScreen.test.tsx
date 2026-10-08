@@ -92,3 +92,11 @@ it('an older server shows the fallback card; a failure with nothing loaded shows
   await act(async () => fireEvent.press(screen.getByTestId('social-retry')));
   expect(await screen.findByTestId('stories-row')).toBeTruthy();
 });
+
+it('on a server with chats, the Chats button opens Chats and counts unread chats plus requests', async () => {
+  (fetchSocialHome as jest.Mock).mockResolvedValue({ ...home, unread: { requests: 2, stickers: 1, chats: 3 } });
+  renderScreen();
+  expect(await screen.findByTestId('social-chats-count')).toHaveTextContent('5');
+  fireEvent.press(screen.getByTestId('social-chats'));
+  expect(mockNavigate).toHaveBeenLastCalledWith('Chats');
+});
