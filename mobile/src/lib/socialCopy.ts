@@ -238,3 +238,47 @@ export function campKicker(now: Date): string {
   if (!validDate(now)) return '';
   return `${WEEKDAYS[now.getDay()]} · ${twelveHour(now.getHours(), now.getMinutes())}`;
 }
+
+/** The Campfire scene's kicker: "TUESDAY NIGHT", or "TUESDAY" by day; '' for an invalid date. */
+export function campSceneKicker(now: Date, night: boolean): string {
+  if (!validDate(now)) return '';
+  return `${WEEKDAYS[now.getDay()]}${night ? ' NIGHT' : ''}`;
+}
+
+/**
+ * The scene's headline, from the camp's own members: "4 asleep · 6 by the fire" at night. The camp has no checked-in
+ * count, so by day it is "6 awake · 0 asleep".
+ */
+export function campHeadline(camp: Pick<Camp, 'night' | 'members'>): string {
+  const asleep = camp.members.filter((m) => m.asleep).length;
+  const awake = camp.members.length - asleep;
+  return camp.night ? `${asleep} asleep · ${awake} by the fire` : `${awake} awake · ${asleep} asleep`;
+}
+
+/** The fire's count on the panel: "3/5" at night, "Out" by day. */
+export const fireCountLabel = (fire: Camp['fire'], night: boolean) => (night ? `${fire.segments}/5` : 'Out');
+
+/** "2 more on time lights it fully"; '' (no line) when the fire is full or by day. */
+export function fireMoreLine(fire: Camp['fire'], night: boolean): string {
+  const more = 5 - fire.segments;
+  if (!night || !Number.isInteger(more) || more <= 0) return '';
+  return `${more} more on time lights it fully`;
+}
+
+/** "Lit 2 nights" (this week). */
+export const nightsLitLine = (nights: number) => `Lit ${nights} ${nights === 1 ? 'night' : 'nights'}`;
+
+/** Who sees my camp note: "Seen by your 9 buddies"; '' with no buddies. */
+export function noteAudienceLine(buddies: number): string {
+  if (buddies <= 0) return '';
+  return `Seen by your ${buddies} ${buddies === 1 ? 'buddy' : 'buddies'}`;
+}
+
+/** The live note's badge: "Live until 6:00 AM", or "Live" without a readable expiry. */
+export function noteLiveLine(expiresAt: string | null | undefined): string {
+  const until = expiresAt ? campClock(expiresAt) : '';
+  return until ? `Live until ${until}` : 'Live';
+}
+
+/** One tap fills the draft with one of these. */
+export const CAMP_NOTE_CHIPS = ['gn camp', 'early start tmrw', 'long day, bed soon', 'who is still up?'] as const;

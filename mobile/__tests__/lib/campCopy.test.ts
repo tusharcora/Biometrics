@@ -1,5 +1,6 @@
 import {
-  campBannerLine, campClock, campKicker, campStatus, fireLine, goodnightOpensLine, goodnightSaidLine, highlightKicker,
+  campBannerLine, campClock, campHeadline, campKicker, campSceneKicker, campStatus, fireCountLabel, fireLine, fireMoreLine,
+  nightsLitLine, noteAudienceLine, noteLiveLine, goodnightOpensLine, goodnightSaidLine, highlightKicker,
   highlightKickerColor, highlightLine, knownHighlights, knownStoryFrames, knownTimelineItems, noteLength, timelineAction,
   timelineLine,
 } from '../../src/lib/socialCopy';
@@ -110,4 +111,27 @@ it('never counts a note shorter than the server will (P11)', () => {
   expect(noteLength('⫝̸')).toBe(2);
   // A format character the server strips is still counted: over-counting is allowed, under-counting is not.
   expect(noteLength('a​b')).toBe(3);
+});
+
+it("words the Campfire's scene headline and panel from the camp's own data", () => {
+  const m = (asleep: boolean): CampMember => ({ person: sam, mine: false, asleep, asleepSince: null, onTime: null, note: null });
+  expect(campSceneKicker(new Date(2026, 9, 6, 22, 42), true)).toBe('TUESDAY NIGHT');
+  expect(campSceneKicker(new Date(2026, 9, 6, 12, 0), false)).toBe('TUESDAY');
+  expect(campSceneKicker(new Date('nope'), true)).toBe('');
+  expect(campHeadline({ night: true, members: [m(true), m(false), m(false)] })).toBe('1 asleep · 2 by the fire');
+  expect(campHeadline({ night: false, members: [m(false), m(false)] })).toBe('2 awake · 0 asleep');
+  const fire = (segments: number) => ({ lit: segments, of: 5, segments });
+  expect(fireCountLabel(fire(3), true)).toBe('3/5');
+  expect(fireCountLabel(fire(3), false)).toBe('Out');
+  expect(fireMoreLine(fire(3), true)).toBe('2 more on time lights it fully');
+  expect(fireMoreLine(fire(5), true)).toBe('');
+  expect(fireMoreLine(fire(3), false)).toBe('');
+  expect(nightsLitLine(2)).toBe('Lit 2 nights');
+  expect(nightsLitLine(1)).toBe('Lit 1 night');
+  expect(noteAudienceLine(9)).toBe('Seen by your 9 buddies');
+  expect(noteAudienceLine(1)).toBe('Seen by your 1 buddy');
+  expect(noteAudienceLine(0)).toBe('');
+  expect(noteLiveLine(new Date(2026, 9, 8, 6, 0).toISOString())).toBe('Live until 6:00 AM');
+  expect(noteLiveLine('')).toBe('Live');
+  expect(noteLiveLine(null)).toBe('Live');
 });

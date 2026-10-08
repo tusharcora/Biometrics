@@ -1,10 +1,12 @@
 import React from 'react';
+import { AccessibilityInfo, TextInput } from 'react-native';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ApiError } from '../../src/api/client';
 import { clearCampNote, fetchCamp, saveCampNote, sayGoodnight, undoGoodnight, type Camp, type CampMember } from '../../src/api/social';
 import { refreshSocial } from '../../src/lib/socialStore';
-import { CampfireScreen, fireBox, SCENE_HEADER_HEIGHT, SCENE_HEIGHT, seatBoxes, type Box } from '../../src/screens/CampfireScreen';
+import { fireBox, PEEK_RESERVE, seatBoxes, TOP_CHROME, type Box } from '../../src/components/social/campSceneGeometry';
+import { CampfireScreen } from '../../src/screens/CampfireScreen';
 
 jest.mock('../../src/api/social', () => ({
   ...jest.requireActual('../../src/api/social'),
@@ -46,20 +48,22 @@ const camp = (over: Partial<Camp> = {}): Camp => ({
 
 beforeEach(() => jest.clearAllMocks());
 
-it('draws the night camp: moon, bubbles over coaches, my dashed add-note bubble, asleep coaches with z z, the lit fire and the card', async () => {
+it('draws the night camp: moon, bubbles over coaches, my add-note bubble, asleep coaches with z z, the lit fire and the panel', async () => {
   (fetchCamp as jest.Mock).mockResolvedValue(camp());
   renderScreen();
   expect(await screen.findByTestId('camp-scene-night')).toBeTruthy();
   expect(screen.getByTestId('camp-moon')).toBeTruthy();
   expect(screen.getByTestId('camp-fire-lit')).toBeTruthy();
   expect(screen.getByTestId('camp-bubble-sam')).toHaveTextContent('on time tonight');
-  expect(screen.getByTestId('camp-bubble-add')).toHaveTextContent('+ Add a note');
-  expect(screen.getByTestId('camp-zz-sam')).toHaveTextContent('z z');
-  expect(screen.getByTestId('camp-zz-ben')).not.toHaveTextContent('z z');
-  expect(screen.getByTestId('camp-fire-line')).toHaveTextContent('3 of 5 in bed on time');
+  expect(screen.getByTestId('camp-bubble-add')).toHaveTextContent('+ ADD A NOTE');
+  expect(screen.getByTestId('camp-zz-sam')).toHaveTextContent('zz');
+  expect(screen.queryByTestId('camp-zz-ben')).toBeNull();
+  expect(screen.getByTestId('camp-headline')).toHaveTextContent('1 asleep · 2 by the fire');
+  expect(screen.getByTestId('camp-fire-count')).toHaveTextContent('3/5');
+  expect(screen.getByTestId('camp-fire-line')).toHaveTextContent('2 more on time lights it fully');
   expect(screen.getByTestId('camp-fire-segment-2')).toHaveStyle({ backgroundColor: '#F97316' });
   expect(screen.getByTestId('camp-fire-segment-3')).toHaveStyle({ backgroundColor: '#2E323B' });
-  expect(screen.getByTestId('camp-nights-lit')).toHaveTextContent('Nights lit this week: 2');
+  expect(screen.getByTestId('camp-nights-lit')).toHaveTextContent('Lit 2 nights');
   // 12-hour times on the Campfire.
   expect(screen.getByTestId('camp-who-sam')).toHaveTextContent(/SAM asleep since \d{1,2}:\d{2} (AM|PM) · on time/);
   expect(screen.getByTestId('camp-who-ben')).toHaveTextContent('BEN awake · bed soon');
@@ -92,6 +96,9 @@ it('by day: sky, no moon, unlit logs, and goodnight waits for my own opening tim
   expect(await screen.findByTestId('camp-scene-day')).toBeTruthy();
   expect(screen.queryByTestId('camp-moon')).toBeNull();
   expect(screen.getByTestId('camp-fire-unlit')).toBeTruthy();
+  expect(screen.getByTestId('camp-fire-count')).toHaveTextContent('Out');
+  expect(screen.queryByTestId('camp-fire-line')).toBeNull();
+  expect(screen.getByTestId('camp-headline')).toHaveTextContent('2 awake · 1 asleep');
   expect(screen.getByTestId('camp-goodnight-later')).toHaveTextContent('You can say goodnight from 8:00 PM');
   expect(screen.queryByTestId('camp-goodnight-say')).toBeNull();
 });
@@ -112,22 +119,23 @@ it('at 19:30 with no goal the scene is night but goodnight waits for 8:00 PM', a
   expect(screen.queryByTestId('camp-goodnight-say')).toBeNull();
 });
 
-it('seats eight coaches around the fire with no overlap inside the 340-px scene, on every phone width', () => {
+it('seats eight coaches in the ring with no overlap, on the ground and above the Peek panel, on every phone size', () => {
   const overlaps = (a: Box, b: Box) =>
     a.left < b.left + b.width && b.left < a.left + a.width && a.top < b.top + b.height && b.top < a.top + a.height;
-  expect(SCENE_HEIGHT).toBe(340);
-  for (const width of [375, 390, 393, 430]) {
-    const seats = seatBoxes(width);
-    const fire = fireBox(width);
-    expect(seats).toHaveLength(8);
-    seats.forEach((a, i) => {
-      expect(a.left).toBeGreaterThanOrEqual(0);
-      expect(a.left + a.width).toBeLessThanOrEqual(width);
-      expect(a.top).toBeGreaterThanOrEqual(SCENE_HEADER_HEIGHT); // below the back button and title
-      expect(a.top + a.height).toBeLessThanOrEqual(SCENE_HEIGHT);
-      expect(overlaps(a, fire)).toBe(false);
-      for (const b of seats.slice(i + 1)) expect(overlaps(a, b)).toBe(false);
-    });
+  for (const width of [375, 390, 393, 402, 414, 428, 430]) {
+    for (const height of [667, 736, 812, 844, 852, 874, 896, 926, 932]) {
+      const seats = seatBoxes(width, height);
+      const fire = fireBox(width, height);
+      expect(seats).toHaveLength(8);
+      seats.forEach((a, i) => {
+        expect(a.left).toBeGreaterThanOrEqual(0);
+        expect(a.left + a.width).toBeLessThanOrEqual(width);
+        expect(a.top).toBeGreaterThanOrEqual(TOP_CHROME); // below the pills, kicker and headline
+        expect(a.top + a.height).toBeLessThanOrEqual(height - PEEK_RESERVE); // above the Peek panel
+        expect(overlaps(a, fire)).toBe(false);
+        for (const b of seats.slice(i + 1)) expect(overlaps(a, b)).toBe(false);
+      });
+    }
   }
 });
 
@@ -139,15 +147,22 @@ it('shares a note with a live count, refuses one over 40, and clears mine', asyn
   await screen.findByTestId('camp-note-input');
   expect(screen.getByTestId('camp-note-share')).toBeDisabled();
   fireEvent.changeText(screen.getByTestId('camp-note-input'), 'x'.repeat(41));
-  expect(screen.getByTestId('camp-note-count')).toHaveTextContent('41/40');
+  // The ring counts what's left; its label says what's used.
+  expect(screen.getByTestId('camp-note-count')).toHaveTextContent('-1');
+  expect(screen.getByTestId('camp-note-count')).toHaveProp('accessibilityLabel', '41 of 40 characters');
   expect(screen.getByTestId('camp-note-share')).toBeDisabled();
   fireEvent.changeText(screen.getByTestId('camp-note-input'), ' night all ');
-  expect(screen.getByTestId('camp-note-count')).toHaveTextContent('9/40');
+  expect(screen.getByTestId('camp-note-count')).toHaveTextContent('31');
+  expect(screen.getByTestId('camp-note-count')).toHaveProp('accessibilityLabel', '9 of 40 characters');
   await act(async () => fireEvent.press(screen.getByTestId('camp-note-share')));
   expect(saveCampNote).toHaveBeenCalledWith(' night all ');
-  expect(screen.getByTestId('camp-note-input')).toHaveProp('value', '');
   expect(refreshSocial).toHaveBeenCalled();
   expect(await screen.findByTestId('camp-bubble-me')).toHaveTextContent('night all');
+  // Live: Edit note and Clear instead of the composer; Edit puts the note back in the draft.
+  expect(screen.queryByTestId('camp-note-input')).toBeNull();
+  expect(screen.getByTestId('camp-note-live')).toHaveTextContent('Live');
+  fireEvent.press(screen.getByTestId('camp-note-edit'));
+  expect(screen.getByTestId('camp-note-input')).toHaveProp('value', 'night all');
   await act(async () => fireEvent.press(screen.getByTestId('camp-note-clear')));
   expect(clearCampNote).toHaveBeenCalledTimes(1);
 });
@@ -157,15 +172,15 @@ it('Share counts code points: exactly 40 enables it, whitespace alone never does
   renderScreen();
   const input = await screen.findByTestId('camp-note-input');
   fireEvent.changeText(input, 'x'.repeat(40));
-  expect(screen.getByTestId('camp-note-count')).toHaveTextContent('40/40');
+  expect(screen.getByTestId('camp-note-count')).toHaveProp('accessibilityLabel', '40 of 40 characters');
   expect(screen.getByTestId('camp-note-share')).not.toBeDisabled();
   fireEvent.changeText(input, '   \n\t ');
-  expect(screen.getByTestId('camp-note-count')).toHaveTextContent('0/40');
+  expect(screen.getByTestId('camp-note-count')).toHaveProp('accessibilityLabel', '0 of 40 characters');
   expect(screen.getByTestId('camp-note-share')).toBeDisabled();
   fireEvent.changeText(input, '🔥🌙 night');
-  expect(screen.getByTestId('camp-note-count')).toHaveTextContent('8/40');
+  expect(screen.getByTestId('camp-note-count')).toHaveProp('accessibilityLabel', '8 of 40 characters');
   fireEvent.changeText(input, `${'x'.repeat(38)}🔥🌙`); // 40 code points, 42 UTF-16 units
-  expect(screen.getByTestId('camp-note-count')).toHaveTextContent('40/40');
+  expect(screen.getByTestId('camp-note-count')).toHaveProp('accessibilityLabel', '40 of 40 characters');
   expect(screen.getByTestId('camp-note-share')).not.toBeDisabled();
 });
 
@@ -220,9 +235,9 @@ it('an older read that lands after a newer one never overwrites it', async () =>
     .mockResolvedValueOnce(camp({ nightsLitThisWeek: 4 }));
   renderScreen();
   await act(async () => mockRefocus());
-  expect(screen.getByTestId('camp-nights-lit')).toHaveTextContent('Nights lit this week: 4');
+  expect(screen.getByTestId('camp-nights-lit')).toHaveTextContent('Lit 4 nights');
   await act(async () => resolveOld(camp({ nightsLitThisWeek: 1 })));
-  expect(screen.getByTestId('camp-nights-lit')).toHaveTextContent('Nights lit this week: 4');
+  expect(screen.getByTestId('camp-nights-lit')).toHaveTextContent('Lit 4 nights');
 });
 
 it("shows the server's reason when a note is refused, keeping the draft", async () => {
@@ -262,7 +277,8 @@ it("a buddy's coach opens their week and mine does not navigate; +N past eight; 
   mockNavigate.mockClear();
   fireEvent.press(screen.getByTestId('camp-coach-me'));
   expect(mockNavigate).not.toHaveBeenCalled();
-  expect(screen.getByTestId('camp-more')).toHaveTextContent('+2');
+  expect(screen.getByTestId('camp-more')).toHaveTextContent('+2 here');
+  expect(screen.getByTestId('camp-more')).toHaveProp('accessibilityLabel', '2 more at the camp');
   expect(screen.queryByTestId('camp-coach-h')).toBeNull();
   expect(screen.getByTestId('camp-who-i')).toBeTruthy();
   fireEvent.press(screen.getByTestId('camp-message-camp'));
@@ -294,4 +310,75 @@ it('names the moon, the fire, the seats, the composer and the fire strength for 
   expect(screen.getByTestId('camp-note-input')).toHaveProp('accessibilityLabel', 'Your camp note');
   expect(screen.getByTestId('camp-note-share')).toHaveProp('accessibilityRole', 'button');
   expect(screen.getByTestId('camp-fire-strength')).toHaveProp('accessibilityValue', { min: 0, max: 5, now: 3 });
+});
+
+const handle = () => screen.getByTestId('camp-panel-handle');
+
+it('starts at Peek; the handle steps Peek → Half → Full → Peek', async () => {
+  (fetchCamp as jest.Mock).mockResolvedValue(camp());
+  renderScreen();
+  await screen.findByTestId('campfire');
+  expect(handle()).toHaveProp('accessibilityLabel', 'Camp details, peek');
+  expect(handle()).toHaveProp('accessibilityHint', 'Shows more');
+  // Every stop's content is in the one scroll view, whatever the stop.
+  expect(screen.getByTestId('camp-panel-scroll')).toHaveProp('scrollEnabled', false);
+  expect(screen.getByTestId('camp-note-input')).toBeTruthy();
+  expect(screen.getByTestId('camp-message-camp')).toBeTruthy();
+  fireEvent.press(handle());
+  expect(handle()).toHaveProp('accessibilityLabel', 'Camp details, half open');
+  fireEvent.press(handle());
+  expect(handle()).toHaveProp('accessibilityLabel', 'Camp details, fully open');
+  expect(handle()).toHaveProp('accessibilityHint', 'Shows less');
+  expect(screen.getByTestId('camp-panel-scroll')).toHaveProp('scrollEnabled', true);
+  fireEvent.press(handle());
+  expect(handle()).toHaveProp('accessibilityLabel', 'Camp details, peek');
+});
+
+it('tapping my coach opens Half and focuses the note input', async () => {
+  (fetchCamp as jest.Mock).mockResolvedValue(camp());
+  renderScreen();
+  await screen.findByTestId('camp-coach-me');
+  const focus = screen.UNSAFE_getByType(TextInput).instance.focus as jest.Mock;
+  focus.mockClear();
+  fireEvent.press(screen.getByTestId('camp-coach-me'));
+  expect(handle()).toHaveProp('accessibilityLabel', 'Camp details, half open');
+  expect(focus).toHaveBeenCalledTimes(1);
+  expect(mockNavigate).not.toHaveBeenCalled();
+});
+
+it('the handle is adjustable: increment goes up a stop, decrement down, stopping at either end', async () => {
+  (fetchCamp as jest.Mock).mockResolvedValue(camp());
+  renderScreen();
+  await screen.findByTestId('campfire');
+  expect(handle()).toHaveProp('accessibilityRole', 'adjustable');
+  const act11y = (actionName: string) => fireEvent(handle(), 'accessibilityAction', { nativeEvent: { actionName } });
+  act11y('decrement');
+  expect(handle()).toHaveProp('accessibilityLabel', 'Camp details, peek');
+  act11y('increment');
+  expect(handle()).toHaveProp('accessibilityLabel', 'Camp details, half open');
+  act11y('increment');
+  act11y('increment');
+  expect(handle()).toHaveProp('accessibilityLabel', 'Camp details, fully open');
+  act11y('decrement');
+  expect(handle()).toHaveProp('accessibilityLabel', 'Camp details, half open');
+});
+
+it('a quick-pick chip fills the draft', async () => {
+  (fetchCamp as jest.Mock).mockResolvedValue(camp());
+  renderScreen();
+  fireEvent.press(await screen.findByTestId('camp-chip-1'));
+  expect(screen.getByTestId('camp-note-input')).toHaveProp('value', 'early start tmrw');
+  expect(screen.getByTestId('camp-note-share')).not.toBeDisabled();
+});
+
+it('with a screen reader on, starts at Half and the panel scrolls at every stop', async () => {
+  const reader = jest.spyOn(AccessibilityInfo, 'isScreenReaderEnabled').mockResolvedValue(true);
+  (fetchCamp as jest.Mock).mockResolvedValue(camp());
+  renderScreen();
+  await screen.findByTestId('campfire');
+  expect(handle()).toHaveProp('accessibilityLabel', 'Camp details, half open');
+  expect(screen.getByTestId('camp-panel-scroll')).toHaveProp('scrollEnabled', true);
+  fireEvent(handle(), 'accessibilityAction', { nativeEvent: { actionName: 'decrement' } });
+  expect(screen.getByTestId('camp-panel-scroll')).toHaveProp('scrollEnabled', true);
+  reader.mockRestore();
 });
