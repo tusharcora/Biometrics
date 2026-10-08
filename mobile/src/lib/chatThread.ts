@@ -22,7 +22,8 @@ export function pollWindow(w: ThreadWindow, page: Thread): ThreadWindow {
   // Nothing visible any more (all unsent): nothing older is either.
   if (!start) return { older: [], newest: [], cursor: null };
   const carried = w.newest.filter((m) => byTime(m, start) < 0);
-  const older = uniqueSorted([...w.older, ...carried]);
+  // The carried copy first: it is the newer read (reactions, a card gated since), so it wins over an older page's copy.
+  const older = uniqueSorted([...carried, ...w.older]);
   // Once older messages are held, older pages continue from where they stopped; until then, from the newest page.
   return { older, newest: page.messages, cursor: w.older.length > 0 || carried.length > 0 ? w.cursor : page.nextBefore };
 }

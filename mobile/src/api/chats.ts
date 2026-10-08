@@ -103,9 +103,9 @@ export const sendText = (buddyId: string, text: string, replyToMessageId?: strin
   apiFetch<{ message: Message }>(messagesPath(buddyId), send('POST', { kind: 'TEXT', text, ...reply(replyToMessageId) }));
 export const sendStickerMessage = (buddyId: string, sticker: StickerKind, replyToMessageId?: string | null) =>
   apiFetch<{ message: Message }>(messagesPath(buddyId), send('POST', { kind: 'STICKER', sticker, ...reply(replyToMessageId) }));
-/** An empty text is not sent (the server refuses a whitespace-only reply). */
+/** A blank or whitespace-only text is left out (the server refuses one, so the card goes without a reply). */
 export const sendCard = (buddyId: string, card: CardRequest, text?: string, replyToMessageId?: string | null) =>
-  apiFetch<{ message: Message }>(messagesPath(buddyId), send('POST', { kind: 'CARD', card, ...(text ? { text } : {}), ...reply(replyToMessageId) }));
+  apiFetch<{ message: Message }>(messagesPath(buddyId), send('POST', { kind: 'CARD', card, ...(text?.trim() ? { text } : {}), ...reply(replyToMessageId) }));
 
 // The writes below answer 204.
 export async function unsendMessage(buddyId: string, messageId: string): Promise<void> {

@@ -40,6 +40,36 @@ it('without older pages, the cursor follows the newest page; an empty page empti
   expect(threadMessages(w)).toEqual([]);
 });
 
+it('a message carried out of the window keeps its newest look, not the stale older-page copy', () => {
+  let w = firstWindow(page([3, 4, 5], 'c3'));
+  w = olderWindow(w, page([1, 2], null));
+  w = pollWindow(w, page([1, 2, 3], null)); // m4 and m5 unsent: the page reaches back over the older pages
+  const hearted = page([1, 2, 3], null);
+  hearted.messages[1] = m(2, { reactions: [{ kind: 'HEART', mine: false }] });
+  w = pollWindow(w, hearted);
+  w = pollWindow(w, page([6, 7, 8], 'c6'));
+  expect(ids(threadMessages(w))).toEqual(['m1', 'm2', 'm3', 'm6', 'm7', 'm8']);
+  expect(threadMessages(w).find((x) => x.id === 'm2')!.reactions).toEqual([{ kind: 'HEART', mine: false }]);
+});
+
+it('a card gated since it was first loaded stays gated when it slides out of the window', () => {
+  const shared = (n: number) => m(n, { kind: 'CARD', text: null, card: { type: 'badge', available: true, family: 'SLEEP_GOAL', level: 3 } });
+  const gated = (n: number) => m(n, { kind: 'CARD', text: null, card: { type: 'badge', available: false, family: 'SLEEP_GOAL' } });
+  let w = firstWindow({ ...page([], 'c3'), messages: [m(3), m(4), m(5)] });
+  w = olderWindow(w, { ...page([], null), messages: [m(1), shared(2)] });
+  w = pollWindow(w, { ...page([], null), messages: [m(1), shared(2), m(3)] }); // m4, m5 unsent
+  w = pollWindow(w, { ...page([], null), messages: [m(1), gated(2), m(3)] }); // the author stopped sharing streaks
+  w = pollWindow(w, page([6, 7, 8], 'c6'));
+  expect(threadMessages(w).find((x) => x.id === 'm2')!.card).toEqual({ type: 'badge', available: false, family: 'SLEEP_GOAL' });
+});
+
+it('an unsend that moves the page start back over older pages shows each message once, and never the unsent one', () => {
+  let w = firstWindow(page([4, 5, 6], 'c4'));
+  w = olderWindow(w, page([1, 2, 3], null));
+  w = pollWindow(w, page([1, 2, 4], null)); // m3, m5 and m6 unsent
+  expect(ids(threadMessages(w))).toEqual(['m1', 'm2', 'm4']);
+});
+
 it('adds a sent message, swaps reactions and drops an unsent one in place', () => {
   let w = firstWindow(page([1, 2], null));
   w = withSent(w, m(3));

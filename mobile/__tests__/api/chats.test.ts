@@ -49,6 +49,8 @@ it('sends text, stickers and cards with JSON bodies, a reply id only when there 
   });
   await sendCard('b1', { type: 'my_checkin' });
   expect(api).toHaveBeenLastCalledWith('/me/chats/b1/messages', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ kind: 'CARD', card: { type: 'my_checkin' } }) });
+  await sendCard('b1', { type: 'my_checkin' }, ' \n ');
+  expect(api).toHaveBeenLastCalledWith('/me/chats/b1/messages', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ kind: 'CARD', card: { type: 'my_checkin' } }) });
 });
 
 it('unsends, reacts, reads, shares notes, reports and saves settings on the right paths', async () => {
