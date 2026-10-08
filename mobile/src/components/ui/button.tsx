@@ -32,35 +32,6 @@ export type ButtonTextSize = 'default' | 'xs' | 'sm' | 'lg';
 export type ButtonIconSize = 'icon' | 'icon-xs' | 'icon-sm' | 'icon-lg';
 export type ButtonSize = ButtonTextSize | ButtonIconSize;
 
-/**
- * TEMPORARY: the pre-shadcn variant names, still used by screens that later
- * migration tasks move over. Each resolves to its shadcn equivalent.
- * Task 6 of the shadcn button migration removes these aliases.
- */
-const LEGACY_VARIANTS = {
-  /** @deprecated Use `variant="default"` (or omit it). Removed in Task 6 of the shadcn button migration. */
-  primary: 'default',
-  /**
-   * @deprecated The old bordered `secondary` is now `outline`; until Task 6 of the shadcn button migration,
-   * `variant="secondary"` still means `outline`. After Task 6 it is the shadcn `secondary` fill.
-   */
-  secondary: 'outline',
-  /** @deprecated Kept for the migration: maps to the shadcn `ghost`. Removed as an alias in Task 6. */
-  ghost: 'ghost',
-  /** @deprecated Kept for the migration: maps to the shadcn `destructive`. Removed as an alias in Task 6. */
-  destructive: 'destructive',
-} as const satisfies Record<string, ButtonVariant>;
-
-/** @deprecated Old variant names; see LEGACY_VARIANTS. Task 6 of the shadcn button migration removes them. */
-export type LegacyButtonVariant = keyof typeof LEGACY_VARIANTS;
-
-// Task 6: drop the LEGACY_VARIANTS lookup and pass `variant` straight through.
-export function resolveVariant(variant: ButtonVariant | LegacyButtonVariant | null | undefined): ButtonVariant {
-  if (!variant) return 'default';
-  if (variant in LEGACY_VARIANTS) return LEGACY_VARIANTS[variant as LegacyButtonVariant];
-  return variant as ButtonVariant;
-}
-
 export const buttonVariants = cva(
   'shrink-0 flex-row items-center justify-center gap-[6px] rounded-[8px] border border-transparent active:opacity-90',
   {
@@ -185,8 +156,7 @@ const GROUP_CLASSES: Record<GroupPosition, string> = {
 };
 
 type ButtonBaseProps = Omit<PressableProps, 'style' | 'children'> & {
-  /** @deprecated names (primary, the old secondary) still resolve until Task 6; see LEGACY_VARIANTS. */
-  variant?: ButtonVariant | LegacyButtonVariant | null;
+  variant?: ButtonVariant | null;
   className?: string;
   style?: StyleProp<ViewStyle>;
   /** A string is wrapped in a Text with the variant's label classes; anything else renders as-is. */
@@ -231,7 +201,7 @@ export function Button({
   onLayout,
   ...props
 }: ButtonProps) {
-  const variant = resolveVariant(variantProp);
+  const variant: ButtonVariant = variantProp ?? 'default';
   const size: ButtonSize = sizeProp ?? 'default';
   const isIconSize = size.startsWith('icon');
   const isDisabled = !!disabled || !!accessibilityState?.disabled || loading;

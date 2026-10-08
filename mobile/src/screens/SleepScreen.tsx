@@ -215,7 +215,7 @@ export function SleepScreen() {
             {detail?.phase === 'error' ? (
               <View className="flex-row items-center justify-between gap-3">
                 <Text className="flex-1 text-sm text-muted-foreground">Stages could not be loaded.</Text>
-                <Button testID="sleep-last-night-retry" variant="secondary" size="sm" onPress={loadDetail}>
+                <Button testID="sleep-last-night-retry" variant="outline" size="sm" onPress={loadDetail}>
                   Try again
                 </Button>
               </View>

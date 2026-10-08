@@ -106,7 +106,7 @@ export function BuddyWeekScreen() {
     return (
       <SafeAreaView className="flex-1 items-center justify-center gap-3 bg-background p-6">
         <Text testID="buddy-week-error" className="text-muted-foreground">Couldn't load this week.</Text>
-        <Button testID="buddy-week-retry" variant="secondary" onPress={() => void load()}>Try again</Button>
+        <Button testID="buddy-week-retry" variant="outline" onPress={() => void load()}>Try again</Button>
       </SafeAreaView>
     );
   }
@@ -213,7 +213,7 @@ export function BuddyWeekScreen() {
         </Text>
 
         <View className="flex-row justify-center gap-2">
-          <Button testID="buddy-mute" size="sm" variant="secondary" disabled={busy} onPress={toggleMute}>{week.muted ? 'Unmute' : 'Mute'}</Button>
+          <Button testID="buddy-mute" size="sm" variant="outline" disabled={busy} onPress={toggleMute}>{week.muted ? 'Unmute' : 'Mute'}</Button>
           <Button testID="buddy-unpair" size="sm" variant="ghost" disabled={busy} onPress={() => confirm(`Unpair from ${week.buddy.displayName}?`, 'Unpair', () => unpair(buddyId))}>Unpair</Button>
           <Button testID="buddy-block" size="sm" variant="destructive" disabled={busy} onPress={() => confirm(`Block ${week.buddy.displayName}?`, 'Block', () => blockBuddy(buddyId))}>Block</Button>
         </View>

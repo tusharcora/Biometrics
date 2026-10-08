@@ -197,11 +197,10 @@ export function HabitLogCard() {
             <Text className="flex-1 text-xs text-muted-foreground">Enter 0 to log that you had none.</Text>
             <Button
               testID="habit-log-submit"
-              variant={canLog ? 'primary' : 'secondary'}
+              variant={canLog ? 'default' : 'outline'}
               size="sm"
               disabled={!canLog}
               onPress={submitLog}
-              className={canLog ? '' : 'opacity-50'}
             >
               {parsed === 0 ? 'Log none' : parsed === null || Number.isNaN(parsed) ? 'Log' : `Log ${parsed} ${selected.unit}`}
             </Button>
@@ -221,7 +220,7 @@ export function HabitLogCard() {
           <Text className="flex-1 text-sm text-muted-foreground">You’ve checked in for today.</Text>
         </View>
       ) : (
-        <Button testID="nothing-today-button" variant="secondary" size="sm" className="self-start" disabled={busy} onPress={() => checkIn()}>
+        <Button testID="nothing-today-button" variant="outline" size="sm" className="self-start" disabled={busy} onPress={() => checkIn()}>
           Nothing today
         </Button>
       )}

@@ -43,7 +43,7 @@ export function SectionError({ testID, message, onRetry }: { testID: string; mes
   return (
     <Card className="items-center gap-3 py-6">
       <Text className="text-center text-sm text-muted-foreground">{message}</Text>
-      <Button testID={testID} variant="secondary" size="sm" onPress={onRetry}>
+      <Button testID={testID} variant="outline" size="sm" onPress={onRetry}>
         Try again
       </Button>
     </Card>

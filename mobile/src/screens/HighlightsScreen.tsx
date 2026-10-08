@@ -77,7 +77,7 @@ export function HighlightsScreen() {
     return (
       <SafeAreaView className="flex-1 items-center justify-center gap-3 bg-background p-6">
         <Text testID="highlights-error" className="text-muted-foreground">Couldn't load the highlights.</Text>
-        <Button testID="highlights-retry" variant="secondary" onPress={() => void load()}>Try again</Button>
+        <Button testID="highlights-retry" variant="outline" onPress={() => void load()}>Try again</Button>
       </SafeAreaView>
     );
   }

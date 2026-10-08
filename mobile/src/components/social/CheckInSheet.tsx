@@ -41,7 +41,7 @@ export function CheckInSheet({ visible, current, onClose }: { visible: boolean; 
         <Text testID="checkin-notice" className="text-sm text-muted-foreground">Your buddies will see this. You can change it until midnight.</Text>
         <View className="flex-row gap-2">
           {CHECKIN_OPTIONS.map((o) => (
-            <Button key={o.mood} testID={`checkin-${o.mood}`} variant={current === o.mood ? 'primary' : 'secondary'} disabled={busy} className="flex-1" onPress={() => void choose(o.mood)}>
+            <Button key={o.mood} testID={`checkin-${o.mood}`} variant={current === o.mood ? 'default' : 'outline'} accessibilityRole="button" accessibilityState={{ selected: current === o.mood }} disabled={busy} className="flex-1" onPress={() => void choose(o.mood)}>
               {o.label}
             </Button>
           ))}

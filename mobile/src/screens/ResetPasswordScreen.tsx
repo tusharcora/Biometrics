@@ -71,7 +71,7 @@ export function ResetPasswordScreen({ navigation, route }: Props) {
             </Button>
           ) : null}
           {error === EXPIRED ? (
-            <Button variant={token ? 'ghost' : 'primary'} className={token ? '' : 'mt-2 w-full py-4'} onPress={() => navigation.navigate('ForgotPassword')}>
+            <Button variant={token ? 'ghost' : 'default'} className={token ? '' : 'mt-2 w-full py-4'} onPress={() => navigation.navigate('ForgotPassword')}>
               Send a new link
             </Button>
           ) : null}

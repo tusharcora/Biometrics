@@ -75,7 +75,7 @@ export function SocialScreen() {
         {state.status === 'error' ? (
           <Card testID="social-error" className="gap-3">
             <Text className="text-sm">Couldn't load your circle.</Text>
-            <Button testID="social-retry" variant="secondary" onPress={() => void refreshSocial()}>Try again</Button>
+            <Button testID="social-retry" variant="outline" onPress={() => void refreshSocial()}>Try again</Button>
           </Card>
         ) : (
           <Skeleton testID="social-loading" className="h-40 w-full rounded-card" />

@@ -113,7 +113,7 @@ export function SignInScreen({ navigation, route }: Props) {
           {testAccount ? (
             <Button
               testID="dev-test-account-button"
-              variant="secondary"
+              variant="outline"
               className="w-full border-dashed"
               disabled={busy}
               onPress={() => {

@@ -142,7 +142,7 @@ export function RecapBuilderScreen() {
           </Text>
         ) : null}
         {notice === 'denied' ? (
-          <Button testID="builder-open-settings" variant="secondary" size="sm" onPress={() => void Linking.openSettings()}>
+          <Button testID="builder-open-settings" variant="outline" size="sm" onPress={() => void Linking.openSettings()}>
             Open Settings
           </Button>
         ) : null}
@@ -152,14 +152,14 @@ export function RecapBuilderScreen() {
               {loadError}
             </Text>
             {format === 'year' ? (
-              <Button testID="builder-retry" variant="secondary" size="sm" onPress={() => setYearFailed(false)}>
+              <Button testID="builder-retry" variant="outline" size="sm" onPress={() => setYearFailed(false)}>
                 Try again
               </Button>
             ) : null}
           </View>
         ) : null}
         <View className="flex-row gap-3">
-          <Button testID="builder-save" className="flex-1" variant="secondary" disabled={!canExport} onPress={() => void save()}>
+          <Button testID="builder-save" className="flex-1" variant="outline" disabled={!canExport} onPress={() => void save()}>
             Save image
           </Button>
           <Button testID="builder-share" className="flex-1" disabled={!canExport} onPress={() => void share()}>

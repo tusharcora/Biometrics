@@ -33,7 +33,7 @@ export function IdentityGate({ children }: { children: (identity: BuddyIdentity)
     return (
       <View testID="buddy-identity-error" className="flex-1 items-center justify-center gap-3 p-6">
         <Text className="text-muted-foreground">Couldn't load buddies.</Text>
-        <Button testID="buddy-identity-retry" variant="secondary" onPress={() => void load()}>Try again</Button>
+        <Button testID="buddy-identity-retry" variant="outline" onPress={() => void load()}>Try again</Button>
       </View>
     );
   }

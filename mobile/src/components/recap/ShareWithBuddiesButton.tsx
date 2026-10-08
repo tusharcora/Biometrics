@@ -74,7 +74,7 @@ export function ShareWithBuddiesButton({ recapId, line }: { recapId: string; lin
     <View className="gap-1">
       <Button
         testID="recap-share-buddies"
-        variant="secondary"
+        variant="outline"
         onPress={() => (shared ? void run(() => unshareRecap(recapId), false) : openSheet())}
       >
         {shared ? 'Shared with buddies · Undo' : 'Share with buddies'}
@@ -86,7 +86,7 @@ export function ShareWithBuddiesButton({ recapId, line }: { recapId: string; lin
           <Text testID="recap-share-buddies-preview" className="text-sm">{`Your buddies will see: ${previewed}`}</Text>
           <Text className="text-sm text-muted-foreground">It shows in today's story with this recap's dates — none of its other numbers. You can undo it.</Text>
           <View className="flex-row gap-2">
-            <Button testID="recap-share-buddies-cancel" variant="secondary" className="flex-1" onPress={() => setConfirming(false)}>
+            <Button testID="recap-share-buddies-cancel" variant="outline" className="flex-1" onPress={() => setConfirming(false)}>
               Cancel
             </Button>
             <Button testID="recap-share-buddies-confirm" className="flex-1" onPress={() => void run(() => shareRecap(recapId, previewed), true)}>

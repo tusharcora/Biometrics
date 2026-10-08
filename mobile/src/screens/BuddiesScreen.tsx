@@ -116,7 +116,7 @@ function BuddyListTab({ navigation }: { navigation: Nav }) {
     return (
       <View testID="buddies-error" className="items-center gap-3 py-8">
         <Text className="text-muted-foreground">Couldn't load your buddies.</Text>
-        <Button variant="secondary" onPress={() => void refreshBuddies()}>Try again</Button>
+        <Button variant="outline" onPress={() => void refreshBuddies()}>Try again</Button>
       </View>
     );
   }
@@ -253,7 +253,7 @@ function RequestsTab({ gate, navigation }: { gate: Gate; navigation: Nav }) {
             </View>
             <View className="flex-row gap-2">
               <Button testID={`request-accept-${item.request.id}`} size="sm" disabled={busy} onPress={() => accept(item.request.id)}>Accept</Button>
-              <Button testID={`request-decline-${item.request.id}`} size="sm" variant="secondary" disabled={busy} onPress={() => perform(() => declineRequest(item.request.id))}>Decline</Button>
+              <Button testID={`request-decline-${item.request.id}`} size="sm" variant="outline" disabled={busy} onPress={() => perform(() => declineRequest(item.request.id))}>Decline</Button>
               <Button testID={`request-block-${item.request.id}`} size="sm" variant="destructive" disabled={busy} onPress={() => block(item.request)}>Block</Button>
             </View>
           </View>

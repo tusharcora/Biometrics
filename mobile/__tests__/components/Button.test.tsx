@@ -10,7 +10,6 @@ import {
   buttonVariants,
   hitSlopFor,
   pressNudge,
-  resolveVariant,
   type ButtonSize,
   type ButtonVariant,
 } from '../../src/components/ui/button';
@@ -130,28 +129,30 @@ describe('buttonTextVariants', () => {
   });
 });
 
-describe('deprecated variant aliases (removed in Task 6)', () => {
-  it.each([
-    ['primary', 'default'],
-    ['secondary', 'outline'],
-    ['ghost', 'ghost'],
-    ['destructive', 'destructive'],
-  ] as const)('%s resolves to %s', (legacy, current) => {
-    expect(resolveVariant(legacy)).toBe(current);
+describe('variant names', () => {
+  it('defaults to the default variant', () => {
+    const { getByTestId } = render(<Button testID="b">Go</Button>);
+    expect(classesOf(getByTestId('b'))).toContain('bg-foreground');
   });
 
-  it('treats a missing variant as default', () => {
-    expect(resolveVariant(undefined)).toBe('default');
-    expect(resolveVariant(null)).toBe('default');
-  });
-
-  it('renders the old secondary as outline for now', () => {
+  it('renders secondary as the shadcn secondary fill, not outline', () => {
     const { getByTestId } = render(
       <Button testID="b" variant="secondary">
         Go
       </Button>,
     );
-    expect(classesOf(getByTestId('b'))).toContain('border-border');
+    expect(classesOf(getByTestId('b'))).toContain('bg-secondary');
+    expect(classesOf(getByTestId('b'))).not.toContain('border-border');
+  });
+
+  // Type-only: never called. The pre-shadcn name `primary` is gone; tsc fails
+  // (an unused @ts-expect-error) if it is ever accepted again.
+  function oldNamesAreGone() {
+    // @ts-expect-error `primary` was removed: use the default variant
+    return <Button variant="primary">Go</Button>;
+  }
+  it('has the type-only old-name check compiled in', () => {
+    expect(typeof oldNamesAreGone).toBe('function');
   });
 });
 
