@@ -104,6 +104,13 @@ const ERRORS: Record<string, string> = {
   goodnight_closed: 'Goodnight opens this evening.',
   undo_expired: "It's too late to undo that goodnight.",
   invalid_note: 'Notes are 1 to 40 characters.',
+  invalid_message: 'Messages are 1 to 1,000 characters.',
+  message_gone: 'That message is no longer there.',
+  invalid_reaction: "That reaction isn't available.",
+  card_unavailable: "That can't be shared anymore.",
+  invalid_status_note: 'Notes are 1 to 60 characters.',
+  invalid_report: 'Pick a reason to report.',
+  report_target_gone: "That's no longer there to report.",
 };
 
 export function buddyErrorMessage(code: string | null): string {
