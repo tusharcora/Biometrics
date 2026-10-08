@@ -1,6 +1,6 @@
 // "Your camp note" on the Campfire panel (redesign 2026-10-07). A preview of my coach with the bubble as the camp will
 // see it; then, while drafting, the input with a ring counter of characters left, quick-pick chips and Share; or, once
-// my note is live, Edit note (the text back in the draft) and Clear. Clear is offered whenever a note of mine is live.
+// my note is live, Edit note (the text back in the draft, with Cancel to leave it as it was) and Clear. Clear is offered whenever a note of mine is live.
 // The note's text is free text: shown, never logged.
 
 import React, { useState } from 'react';
@@ -48,6 +48,8 @@ export interface CampNoteCardProps {
   /** Editing a live note: the composer shows instead of Edit / Clear. */
   editing: boolean;
   onEdit: () => void;
+  /** Leaves the edit, keeping the live note as it is. */
+  onCancel: () => void;
   onClear: () => void;
   busy: boolean;
   message: string | null;
@@ -56,7 +58,7 @@ export interface CampNoteCardProps {
 }
 
 export function CampNoteCard({
-  inputRef, draft, onDraft, length, canShare, onShare, live, editing, onEdit, onClear, busy, message, buddies, coachId,
+  inputRef, draft, onDraft, length, canShare, onShare, live, editing, onEdit, onCancel, onClear, busy, message, buddies, coachId,
 }: CampNoteCardProps) {
   const [focused, setFocused] = useState(false);
   const drafting = !live || editing;
@@ -102,11 +104,17 @@ export function CampNoteCard({
               </PressableScale>
             ))}
           </View>
-          <Button testID="camp-note-share" accessibilityRole="button" accessibilityLabel="Share your camp note" disabled={!canShare} onPress={onShare}
-            className="h-[54px] flex-row gap-2.5 rounded-[18px] py-0">
-            <Ionicons name="send" size={16} color="#04211D" />
-            <Text className="text-base font-bold text-[#04211D]">Share with the camp</Text>
-          </Button>
+          <View className="flex-row gap-2.5">
+            <Button testID="camp-note-share" accessibilityRole="button" accessibilityLabel="Share your camp note" disabled={!canShare} onPress={onShare}
+              className="h-[54px] flex-1 flex-row gap-2.5 rounded-[18px] px-3 py-0">
+              <Ionicons name="send" size={16} color="#04211D" />
+              <Text numberOfLines={1} className="text-base font-bold text-[#04211D]">Share with the camp</Text>
+            </Button>
+            {live ? (
+              <Button testID="camp-note-cancel" accessibilityRole="button" accessibilityLabel="Cancel editing your camp note" variant="secondary"
+                disabled={busy} onPress={onCancel} className="h-[54px] rounded-[18px] py-0">Cancel</Button>
+            ) : null}
+          </View>
           {live ? (
             <Button testID="camp-note-clear" accessibilityRole="button" accessibilityLabel="Clear your camp note" variant="destructive" size="sm"
               disabled={busy} onPress={onClear} className="self-center">Clear note</Button>

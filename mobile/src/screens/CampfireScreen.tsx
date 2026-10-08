@@ -134,7 +134,9 @@ export function CampfireScreen() {
       const camp = await fetchCamp();
       if (!mounted.current || n !== loads.current) return;
       setState(camp ? { status: 'ready', camp } : { status: 'unavailable' });
-      setShared(null);
+      // The camp's note carries no expiry: keep the share answer (its "Live until") while it is still my note.
+      const mineNote = camp?.members.find((m) => m.mine)?.note ?? null;
+      setShared((s) => (s && mineNote === s.text ? s : null));
     } catch {
       if (!mounted.current || n !== loads.current) return;
       // A failed re-read keeps the camp already on screen, but not buddies' notes: someone unpaired or blocked
@@ -259,6 +261,11 @@ export function CampfireScreen() {
     setEditing(true);
     setTimeout(() => input.current?.focus(), 0);
   };
+  // Leaves the edit: the live note stays as it was, nothing is sent.
+  const cancelEdit = () => {
+    setEditing(false);
+    setDraft('');
+  };
   const clear = () => void run(clearCampNote, () => {
     setShared(null);
     setEditing(false);
@@ -289,7 +296,7 @@ export function CampfireScreen() {
       <CampPanel stops={stops} stop={stop} top={top} moveTo={moveTo} height={height} bottomInset={insets.bottom} screenReader={screenReader}
         reduced={reduced} header={<FireMeter camp={camp} />}>
         <CampNoteCard inputRef={input} draft={draft} onDraft={setDraft} length={length} canShare={canShare} onShare={share} live={live}
-          editing={editing} onEdit={edit} onClear={clear} busy={busy} message={message} buddies={camp.members.filter((m) => !m.mine).length}
+          editing={editing} onEdit={edit} onCancel={cancelEdit} onClear={clear} busy={busy} message={message} buddies={camp.members.filter((m) => !m.mine).length}
           coachId={mine && isCharacterId(mine.person.coachId) ? mine.person.coachId : DEFAULT_CHARACTER_ID} />
 
         {/* My own window (owner ruling Q1), not the scene's night: an 18:00 goal opens it at 17:00. */}

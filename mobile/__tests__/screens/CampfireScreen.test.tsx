@@ -436,3 +436,36 @@ it('the panel is dark glass even when the app is light', async () => {
   expect(screen.UNSAFE_getByType(GlassSurface).props.scheme).toBe('dark');
   colorScheme.set('system');
 });
+
+it('keeps "Live until" from the share answer after the re-read, while that is still my note', async () => {
+  const expiresAt = new Date(2026, 9, 8, 6, 0).toISOString();
+  (fetchCamp as jest.Mock).mockResolvedValueOnce(camp()).mockResolvedValue(camp({ members: [member('me', { mine: true, note: 'night all' })] }));
+  (saveCampNote as jest.Mock).mockResolvedValue({ note: { text: 'night all', createdAt: '', expiresAt } });
+  renderScreen();
+  fireEvent.changeText(await screen.findByTestId('camp-note-input'), 'night all');
+  await act(async () => fireEvent.press(screen.getByTestId('camp-note-share')));
+  expect(fetchCamp).toHaveBeenCalledTimes(2);
+  expect(await screen.findByTestId('camp-bubble-me')).toHaveTextContent('night all');
+  expect(screen.getByTestId('camp-note-live')).toHaveTextContent('Live until 6:00 AM');
+  // A later read with a different note of mine (changed elsewhere) drops the old expiry.
+  (fetchCamp as jest.Mock).mockResolvedValue(camp({ members: [member('me', { mine: true, note: 'other' })] }));
+  await act(async () => mockRefocus());
+  expect(screen.getByTestId('camp-note-live')).toHaveTextContent(/^Live$/);
+});
+
+it('Cancel leaves an edit without sending: the live note stays', async () => {
+  (fetchCamp as jest.Mock).mockResolvedValue(camp({ members: [member('me', { mine: true, note: 'night all' })] }));
+  renderScreen();
+  fireEvent.press(await screen.findByTestId('camp-note-edit'));
+  fireEvent.changeText(screen.getByTestId('camp-note-input'), 'changed my mind');
+  fireEvent.press(screen.getByTestId('camp-note-cancel'));
+  expect(saveCampNote).not.toHaveBeenCalled();
+  expect(screen.queryByTestId('camp-note-input')).toBeNull();
+  expect(screen.getByTestId('camp-note-edit')).toBeTruthy();
+  expect(screen.getByTestId('camp-bubble-me')).toHaveTextContent('night all');
+  // A fresh composer has no Cancel: there's nothing to go back to.
+  (fetchCamp as jest.Mock).mockResolvedValue(camp());
+  await act(async () => mockRefocus());
+  expect(screen.getByTestId('camp-note-input')).toBeTruthy();
+  expect(screen.queryByTestId('camp-note-cancel')).toBeNull();
+});
