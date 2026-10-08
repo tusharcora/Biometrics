@@ -7,7 +7,7 @@ import { setBuddyNotifyQueue } from '../../src/buddies/notifyQueue';
 import { BUDDY_SHARING_CONSENT_VERSION } from '../../src/buddies/sharing';
 import { civilDateToUtcMidnight } from '../../src/biometrics/civilDate';
 import { listThread, markRead, sendMessage } from '../../src/chats/messages';
-import { activeAtFor, touchPresence } from '../../src/chats/presence';
+import { activeAtFor, touchPresence, updateChatSettings } from '../../src/chats/presence';
 import { RecordingQueue, api, buddyUser, pairUp } from '../buddies/helpers';
 
 beforeAll(() => migrateTestDb());
@@ -59,29 +59,114 @@ it('a pair with no messages yet reads as an empty thread; a bad cursor is invali
   await expect(listThread(me.id, sam.id, 'not-a-cursor', NOW)).rejects.toMatchObject({ code: 'invalid_cursor' });
 });
 
-it('"Seen" is the buddy\'s last read, sent only while both have read receipts on', async () => {
+// Fix round 1: "Seen" is my newest message's time once the buddy read it, never their read time (that moves on every
+// open and poll, so it would show when they are in the thread even with activity status off).
+it('"Seen" is the time of my newest message once the buddy has read it, and only while it is the thread\'s newest', async () => {
+  const { me, sam } = await buddies();
+  const seen = async (now: Date, before?: string) => (await listThread(me.id, sam.id, before, now)).seenAt;
+  await sendMessage(me.id, sam.id, { kind: 'TEXT', text: 'early night?' }, NOW);
+  expect(await seen(at(1))).toBeNull();
+  await markRead(sam.id, me.id, at(2));
+  expect(await seen(at(3))).toBe(NOW.toISOString());
+  // Re-reading later with nothing new changes nothing: their read time never shows.
+  await markRead(sam.id, me.id, at(30));
+  expect(await seen(at(31))).toBe(NOW.toISOString());
+  // A newer message of mine is unseen until their read reaches it.
+  const second = await sendMessage(me.id, sam.id, { kind: 'TEXT', text: 'or a film?' }, at(32));
+  expect(await seen(at(33))).toBeNull();
+  await markRead(sam.id, me.id, at(34));
+  expect(await seen(at(35))).toBe(second.createdAt);
+  // Their reply after it: my newest is no longer the thread's newest.
+  const reply = await sendMessage(sam.id, me.id, { kind: 'TEXT', text: 'film' }, at(36));
+  expect(await seen(at(37))).toBeNull();
+  // Unsent, the reply no longer counts: my message is the newest live one again.
+  await prisma.message.update({ where: { id: reply.id }, data: { deletedAt: at(38), text: null } });
+  expect(await seen(at(39))).toBe(second.createdAt);
+  // An older page answers for the whole thread, not for its own rows.
+  const conversationId = (await prisma.message.findUniqueOrThrow({ where: { id: second.id } })).conversationId;
+  await prisma.message.createMany({ data: Array.from({ length: 50 }, (_, i) => ({ conversationId, senderId: sam.id, kind: 'TEXT' as const, text: `old${i}`, createdAt: at(-100 + i) })) });
+  const newest = await listThread(me.id, sam.id, undefined, at(40));
+  expect(newest.nextBefore).toEqual(expect.any(String));
+  expect(await seen(at(40), newest.nextBefore!)).toBe(second.createdAt);
+});
+
+it('"Seen" is reciprocal: either person turning read receipts off (through the settings route) hides it', async () => {
   const { me, sam } = await buddies();
   await sendMessage(me.id, sam.id, { kind: 'TEXT', text: 'early night?' }, NOW);
-  expect((await listThread(me.id, sam.id, undefined, at(1))).seenAt).toBeNull();
   await markRead(sam.id, me.id, at(2));
-  expect((await listThread(me.id, sam.id, undefined, at(3))).seenAt).toBe(at(2).toISOString());
-  // Never backwards: an older read lands late.
-  await markRead(sam.id, me.id, at(1));
-  expect((await listThread(me.id, sam.id, undefined, at(3))).seenAt).toBe(at(2).toISOString());
-  // Either person off hides it both ways (reciprocal).
+  const agent = await api();
+  const seen = async () => (await listThread(me.id, sam.id, undefined, at(3))).seenAt;
+  expect(await seen()).toBe(NOW.toISOString());
   for (const who of [sam.id, me.id]) {
-    await prisma.user.update({ where: { id: who }, data: { chatReadReceipts: false } });
-    expect([who, (await listThread(me.id, sam.id, undefined, at(3))).seenAt]).toEqual([who, null]);
-    await prisma.user.update({ where: { id: who }, data: { chatReadReceipts: true } });
+    const headers = await authHeaderFor(who);
+    const off = await agent.put('/me/chats/settings').set(headers).send({ readReceipts: false });
+    expect([off.status, off.headers['cache-control'], off.body]).toEqual([200, 'private, no-store', { readReceipts: false, activityStatus: true }]);
+    expect([who, await seen()]).toEqual([who, null]);
+    await agent.put('/me/chats/settings').set(headers).send({ readReceipts: true });
   }
-  expect((await listThread(me.id, sam.id, undefined, at(3))).seenAt).toBe(at(2).toISOString());
+  expect(await seen()).toBe(NOW.toISOString());
+});
+
+it('read receipts off never touch unread: my read still moves, and the buddy\'s read is not mine to change', async () => {
+  const { me, sam } = await buddies();
+  const agent = await api();
+  await agent.put('/me/chats/settings').set(await authHeaderFor(me.id)).send({ readReceipts: false });
+  await sendMessage(sam.id, me.id, { kind: 'TEXT', text: 'hi' }, NOW);
+  await sendMessage(me.id, sam.id, { kind: 'TEXT', text: 'hey' }, at(1));
+  await markRead(me.id, sam.id, at(5));
+  const reads = await prisma.conversationRead.findMany({ select: { readerId: true, lastReadAt: true }, where: { readerId: { in: [me.id, sam.id] } } });
+  const readOf = (id: string) => reads.find((r) => r.readerId === id)?.lastReadAt.toISOString();
+  // Mine moved to now; Sam's stays at his own send, so my message still counts as unread for him.
+  expect([readOf(me.id), readOf(sam.id)]).toEqual([at(5).toISOString(), NOW.toISOString()]);
+});
+
+it('showing activity status is reciprocal through the settings route', async () => {
+  const { me, sam } = await buddies();
+  await touchPresence(sam.id, NOW);
+  const agent = await api();
+  const active = async () => (await listThread(me.id, sam.id, undefined, at(5))).activeAt;
+  expect(await active()).toBe(NOW.toISOString());
+  for (const who of [sam.id, me.id]) {
+    const headers = await authHeaderFor(who);
+    expect((await agent.put('/me/chats/settings').set(headers).send({ activityStatus: false })).body).toEqual({ readReceipts: true, activityStatus: false });
+    expect([who, await active()]).toEqual([who, null]);
+    await agent.put('/me/chats/settings').set(headers).send({ activityStatus: true });
+  }
+  expect(await active()).toBe(NOW.toISOString());
+});
+
+it('updating the settings of a missing account is a coded refusal', async () => {
+  await expect(updateChatSettings('00000000-0000-4000-8000-000000000000', { readReceipts: false })).rejects.toMatchObject({ code: 'not_buddies' });
+});
+
+it('marking read while an unpair deletes the conversation ends quietly', async () => {
+  const { me, sam } = await buddies();
+  await sendMessage(sam.id, me.id, { kind: 'TEXT', text: 'hi' }, NOW);
+  // The conversation is found, then deleted (as an unpair does) before the read is written.
+  const real = prisma.conversation.findUnique.bind(prisma.conversation);
+  const spy = jest.spyOn(prisma.conversation, 'findUnique').mockImplementationOnce(((args: Parameters<typeof real>[0]) =>
+    real(args).then(async (row) => {
+      await prisma.conversation.deleteMany({ where: orderedPair(me.id, sam.id) });
+      return row;
+    })) as unknown as typeof prisma.conversation.findUnique);
+  try {
+    await expect(markRead(me.id, sam.id, at(1))).resolves.toBeUndefined();
+  } finally {
+    spy.mockRestore();
+  }
+  expect(await prisma.conversationRead.count({ where: { readerId: me.id } })).toBe(0);
 });
 
 it('reading moves my read and marks their stickers seen, even before any message', async () => {
   const { me, sam } = await buddies();
+  const kim = await buddyUser({ displayName: 'Kim' });
+  await pairUp(me.id, kim.id);
   await prisma.sticker.create({ data: { fromUserId: sam.id, toUserId: me.id, kind: 'CHEER', sentAt: NOW } });
+  await prisma.sticker.create({ data: { fromUserId: kim.id, toUserId: me.id, kind: 'CHEER', sentAt: NOW } });
   await markRead(me.id, sam.id, at(1));
-  expect(await prisma.sticker.count({ where: { toUserId: me.id, seenAt: null } })).toBe(0);
+  // Sam's sticker is seen; another buddy's stays unseen until their thread is read.
+  const unseen = await prisma.sticker.findMany({ where: { toUserId: me.id, seenAt: null }, select: { fromUserId: true } });
+  expect(unseen).toEqual([{ fromUserId: kim.id }]);
   await sendMessage(sam.id, me.id, { kind: 'TEXT', text: 'hi' }, at(2));
   await markRead(me.id, sam.id, at(3));
   const read = await prisma.conversationRead.findFirstOrThrow({ where: { readerId: me.id } });

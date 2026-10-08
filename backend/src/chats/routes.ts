@@ -24,6 +24,7 @@ chatsRouter.get('/me/chats/settings', requireAuth, buddyRoute(async (req, res) =
 chatsRouter.put('/me/chats/settings', requireAuth, buddyRoute(async (req, res) => {
   const patch = parseChatSettingsPatch(req.body);
   if (!patch) throw new BuddyError('invalid_settings');
+  res.set('Cache-Control', 'private, no-store');
   res.json(await updateChatSettings(req.userId!, patch));
 }));
 

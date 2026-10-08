@@ -62,7 +62,10 @@ export interface ThreadDTO {
   messages: MessageDTO[];
   /** The cursor for the page before this one, or null at the start of the conversation. */
   nextBefore: string | null;
-  /** When the buddy last read this conversation; only while both have read receipts on. */
+  /**
+   * "Seen": the time of the thread's newest live message when it is mine and the buddy has read up to it; only while
+   * both have read receipts on, else null. Never the buddy's read time itself (that would reveal when they open it).
+   */
   seenAt: string | null;
   /** When the buddy was last active (within 24 h); only while both show activity status. */
   activeAt: string | null;

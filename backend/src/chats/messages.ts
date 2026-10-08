@@ -127,17 +127,21 @@ export async function listThread(viewerId: string, buddyId: string, beforeRaw: u
   const activeAt = activeAtFor(viewer, buddy, now);
   const conversationId = await findConversationId(viewerId, buddyId);
   if (!conversationId) return { buddy: toPerson(buddy), messages: [], nextBefore: null, seenAt: null, activeAt };
-  const [rows, read] = await Promise.all([
+  const receipts = viewer.chatReadReceipts && buddy.chatReadReceipts;
+  const [rows, newestElsewhere, read] = await Promise.all([
     prisma.message.findMany({
       where: { AND: [{ conversationId, deletedAt: null }, ...(before ? [keysetBefore('createdAt', before)] : [])] },
       orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
       take: pageSize + 1,
       select: MESSAGE_SELECT,
     }),
-    viewer.chatReadReceipts && buddy.chatReadReceipts
+    // An older page does not hold the thread's newest message; the newest page does (its first row).
+    receipts && before ? newestLiveMessage(conversationId) : Promise.resolve(null),
+    receipts
       ? prisma.conversationRead.findUnique({ where: { conversationId_readerId: { conversationId, readerId: buddyId } }, select: { lastReadAt: true } })
       : Promise.resolve(null),
   ]);
+  const newest = before ? newestElsewhere : (rows[0] ?? null);
   const page = rows.slice(0, pageSize);
   const oldest = page[page.length - 1];
   const gate = await loadCardGate(page.map((row) => row.card));
@@ -145,15 +149,49 @@ export async function listThread(viewerId: string, buddyId: string, beforeRaw: u
     buddy: toPerson(buddy),
     messages: page.reverse().map((row) => toMessageDTO(row, viewerId, gate)),
     nextBefore: rows.length > pageSize && oldest ? encodeCursor({ at: oldest.createdAt, id: oldest.id }) : null,
-    seenAt: read ? read.lastReadAt.toISOString() : null,
+    seenAt: seenAtFor(viewerId, newest, read),
     activeAt,
   };
 }
 
-/** The thread is open: my read moves to now (never back), and that buddy's unseen stickers to me are seen. */
+function newestLiveMessage(conversationId: string): Promise<{ senderId: string; createdAt: Date } | null> {
+  return prisma.message.findFirst({
+    where: { conversationId, deletedAt: null },
+    orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+    select: { senderId: true, createdAt: true },
+  });
+}
+
+/**
+ * "Seen" is the time of the thread's newest live message, only when it is mine and the buddy's read has reached it
+ * (`read` is null unless both have read receipts on). The buddy's lastReadAt itself is never sent: it moves on every
+ * open and poll, so it would show when they are in the thread even with activity status off.
+ */
+function seenAtFor(viewerId: string, newest: { senderId: string; createdAt: Date } | null, read: { lastReadAt: Date } | null): string | null {
+  if (!newest || !read || newest.senderId !== viewerId || read.lastReadAt < newest.createdAt) return null;
+  return newest.createdAt.toISOString();
+}
+
+/** A conversation an unpair or block deleted mid-call (no FK target, no row): there is nothing left to mark. */
+function isGoneRace(err: unknown): boolean {
+  const code = (err as { code?: unknown } | null)?.code;
+  return code === 'P2003' || code === 'P2025';
+}
+
+/**
+ * The thread is open: my read moves to now (never back), and that buddy's unseen stickers to me are seen. A racing
+ * unpair or block that deletes the conversation leaves nothing to mark, so that ends quietly rather than as a 500.
+ */
 export async function markRead(viewerId: string, buddyId: string, now: Date): Promise<void> {
   await requireChatPeople(viewerId, buddyId);
   const conversationId = await findConversationId(viewerId, buddyId);
-  if (conversationId) await moveRead(prisma, conversationId, viewerId, now);
+  if (conversationId) {
+    try {
+      await moveRead(prisma, conversationId, viewerId, now);
+    } catch (err) {
+      if (!isGoneRace(err)) throw err;
+      return;
+    }
+  }
   await prisma.sticker.updateMany({ where: { fromUserId: buddyId, toUserId: viewerId, seenAt: null }, data: { seenAt: now } });
 }

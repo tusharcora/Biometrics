@@ -53,6 +53,10 @@ export async function getChatSettings(userId: string): Promise<ChatSettingsDTO> 
 
 export async function updateChatSettings(userId: string, patch: Partial<ChatSettingsDTO>): Promise<ChatSettingsDTO> {
   const data = Object.fromEntries(Object.entries(patch).map(([key, value]) => [COLUMNS[key as keyof ChatSettingsDTO], value]));
-  const user = await prisma.user.update({ where: { id: userId }, data, select: SELECT });
+  // A missing account is a coded refusal, never a raw P2025.
+  const updated = await prisma.user.updateMany({ where: { id: userId }, data });
+  if (updated.count === 0) throw new BuddyError('not_buddies');
+  const user = await prisma.user.findUnique({ where: { id: userId }, select: SELECT });
+  if (!user) throw new BuddyError('not_buddies');
   return toDTO(user);
 }
