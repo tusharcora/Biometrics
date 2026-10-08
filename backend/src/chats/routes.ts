@@ -6,7 +6,7 @@ import { Router } from 'express';
 import { requireAuth } from '../auth/middleware';
 import { BuddyError, buddyRoute } from '../buddies/errors';
 import { requireBuddyId } from '../buddies/relations';
-import { listThread, markRead, sendMessage } from './messages';
+import { clearReaction, listThread, markRead, sendMessage, setReaction, unsendMessage } from './messages';
 import { getChatSettings, parseChatSettingsPatch, touchPresence, updateChatSettings } from './presence';
 
 export const chatsRouter = Router();
@@ -42,5 +42,22 @@ chatsRouter.get('/me/chats/:buddyId/messages', requireAuth, buddyRoute(async (re
 
 chatsRouter.post('/me/chats/:buddyId/read', requireAuth, buddyRoute(async (req, res) => {
   await markRead(req.userId!, requireBuddyId(String(req.params.buddyId), req.userId!), new Date());
+  res.status(204).end();
+}));
+
+// Never rate-limited (a delete never fails closed).
+chatsRouter.delete('/me/chats/:buddyId/messages/:messageId', requireAuth, buddyRoute(async (req, res) => {
+  await unsendMessage(req.userId!, requireBuddyId(String(req.params.buddyId), req.userId!), String(req.params.messageId), new Date());
+  res.status(204).end();
+}));
+
+chatsRouter.put('/me/chats/:buddyId/messages/:messageId/reaction', requireAuth, buddyRoute(async (req, res) => {
+  const buddyId = requireBuddyId(String(req.params.buddyId), req.userId!);
+  res.json(await setReaction(req.userId!, buddyId, String(req.params.messageId), (req.body as { kind?: unknown } | undefined)?.kind, new Date()));
+}));
+
+// Never rate-limited (a delete never fails closed).
+chatsRouter.delete('/me/chats/:buddyId/messages/:messageId/reaction', requireAuth, buddyRoute(async (req, res) => {
+  await clearReaction(req.userId!, requireBuddyId(String(req.params.buddyId), req.userId!), String(req.params.messageId));
   res.status(204).end();
 }));

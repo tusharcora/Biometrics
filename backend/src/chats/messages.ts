@@ -5,19 +5,19 @@
 // that checks the pair, writes and reads back the message it returns (after the commit a racing unpair could already
 // have deleted it). Text is user free text: never logged, never sent to the coach.
 
-import type { MessageKind, Prisma, PrismaClient } from '@prisma/client';
+import { Prisma, type MessageKind, type PrismaClient, type StickerKind } from '@prisma/client';
 import { prisma } from '../db/client';
 import { encodeCursor, keysetBefore, parseCursor } from '../buddies/cursor';
 import { BuddyError, UUID_RE, limitOrThrow } from '../buddies/errors';
 import type { PairDeps } from '../buddies/pairs';
 import { toPerson } from '../buddies/people';
-import { sendSticker } from '../buddies/stickers';
+import { STICKER_KINDS, sendSticker } from '../buddies/stickers';
 import { RATE_LIMITS } from '../lib/rateLimit';
 import { buildCard, gateCard, loadCardGate, parseCardRequest, type CardGate, type CardRequest } from './cards';
 import { findConversationId, moveRead, requireChatPeople, requireLivePairTx, writeMessageTx } from './conversations';
 import { activeAtFor, touchPresence } from './presence';
 import { checkMessageText, previewText } from './text';
-import { cardTypeOf, type MessageDTO, type StoredCard, type ThreadDTO } from './types';
+import { cardTypeOf, type MessageDTO, type ReactionDTO, type StoredCard, type ThreadDTO } from './types';
 
 export const MESSAGE_SELECT = {
   id: true,
@@ -194,4 +194,66 @@ export async function markRead(viewerId: string, buddyId: string, now: Date): Pr
     }
   }
   await prisma.sticker.updateMany({ where: { fromUserId: buddyId, toUserId: viewerId, seenAt: null }, data: { seenAt: now } });
+}
+
+/**
+ * One reaction per person per message (spec §8.2), one of the four sticker kinds: setting another replaces mine.
+ * Either person may react to any live message of the pair's conversation. The order: the kind (before the limiter, so
+ * a malformed body spends nothing), the limiter (fails closed), the pair (a non-buddy is not_buddies whatever the
+ * message id), then the message. The write holds the message row FOR SHARE: an unsend (which updates the row) either
+ * waits and then deletes this reaction with the rest, or goes first and this finds the message gone; an unpair's
+ * conversation delete waits the same way. A reactor account deleted mid-write (FK) is not_buddies, never a 500.
+ */
+export async function setReaction(viewerId: string, buddyId: string, messageId: string, kind: unknown, now: Date): Promise<{ reactions: ReactionDTO[] }> {
+  if (!(STICKER_KINDS as readonly unknown[]).includes(kind)) throw new BuddyError('invalid_reaction');
+  await limitOrThrow(RATE_LIMITS.reaction, viewerId);
+  await requireChatPeople(viewerId, buddyId);
+  const conversationId = UUID_RE.test(messageId) ? await findConversationId(viewerId, buddyId) : null;
+  if (!conversationId) throw new BuddyError('message_gone');
+  try {
+    return await prisma.$transaction(async (tx) => {
+      const live = await tx.$queryRaw<Array<{ id: string }>>`
+        SELECT "id" FROM "Message"
+        WHERE "id" = ${messageId} AND "conversationId" = ${conversationId} AND "deletedAt" IS NULL
+        FOR SHARE`;
+      if (live.length === 0) throw new BuddyError('message_gone');
+      const reaction = { kind: kind as StickerKind, createdAt: now };
+      const created = await tx.messageReaction.createMany({ data: [{ messageId, reactorId: viewerId, ...reaction }], skipDuplicates: true });
+      if (created.count === 0) await tx.messageReaction.updateMany({ where: { messageId, reactorId: viewerId }, data: reaction });
+      const rows = await tx.messageReaction.findMany({ where: { messageId }, orderBy: { createdAt: 'asc' }, select: { reactorId: true, kind: true } });
+      return { reactions: rows.map((r) => ({ kind: r.kind, mine: r.reactorId === viewerId })) };
+    });
+  } catch (err) {
+    if (isGoneRace(err)) throw new BuddyError('not_buddies');
+    throw err;
+  }
+}
+
+/** Removing my reaction is never limited and never fails for a buddy: nothing to remove is fine. */
+export async function clearReaction(viewerId: string, buddyId: string, messageId: string): Promise<void> {
+  await requireChatPeople(viewerId, buddyId);
+  const conversationId = UUID_RE.test(messageId) ? await findConversationId(viewerId, buddyId) : null;
+  if (!conversationId) return;
+  // Scoped to this pair's conversation: another buddy's thread is never touched through this one.
+  await prisma.messageReaction.deleteMany({ where: { messageId, reactorId: viewerId, message: { conversationId } } });
+}
+
+/**
+ * The sender takes a message back (spec §8.2, "shown as nothing"): one transaction sets deletedAt, clears its text,
+ * sticker and card, and deletes its reactions; reads skip it from then on and a reply to it reads as gone. A sticker's
+ * Buddies row stays (plan ruling: it still counts toward the day's 5). Never limited; a repeat is fine. Someone else's
+ * message, or none, is message_gone. Racing an unpair, the update finds nothing to change: never a 500.
+ */
+export async function unsendMessage(viewerId: string, buddyId: string, messageId: string, now: Date): Promise<void> {
+  await requireChatPeople(viewerId, buddyId);
+  const conversationId = UUID_RE.test(messageId) ? await findConversationId(viewerId, buddyId) : null;
+  const row = conversationId
+    ? await prisma.message.findFirst({ where: { id: messageId, conversationId, senderId: viewerId }, select: { deletedAt: true } })
+    : null;
+  if (!row) throw new BuddyError('message_gone');
+  if (row.deletedAt) return;
+  await prisma.$transaction([
+    prisma.message.updateMany({ where: { id: messageId, deletedAt: null }, data: { deletedAt: now, text: null, sticker: null, card: Prisma.DbNull } }),
+    prisma.messageReaction.deleteMany({ where: { messageId } }),
+  ]);
 }
