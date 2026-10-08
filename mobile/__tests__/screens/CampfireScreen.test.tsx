@@ -7,6 +7,8 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ApiError } from '../../src/api/client';
 import { clearCampNote, fetchCamp, saveCampNote, sayGoodnight, undoGoodnight, type Camp, type CampMember } from '../../src/api/social';
 import { refreshSocial } from '../../src/lib/socialStore';
+import { fileReport } from '../../src/api/chats';
+import { blockBuddy } from '../../src/api/buddies';
 import { chromeBottom, fireBox, PEEK_RESERVE, seatBoxes, type Box } from '../../src/components/social/campSceneGeometry';
 import { CampfireScreen } from '../../src/screens/CampfireScreen';
 import { GlassSurface } from '../../src/components/ui/glass-surface';
@@ -19,7 +21,10 @@ jest.mock('../../src/api/social', () => ({
   sayGoodnight: jest.fn(),
   undoGoodnight: jest.fn(),
 }));
-jest.mock('../../src/lib/socialStore', () => ({ refreshSocial: jest.fn() }));
+let mockChats: boolean | null = true;
+jest.mock('../../src/lib/socialStore', () => ({ refreshSocial: jest.fn(), useChatsAvailable: () => mockChats }));
+jest.mock('../../src/api/chats', () => ({ ...jest.requireActual('../../src/api/chats'), fileReport: jest.fn(() => Promise.resolve()) }));
+jest.mock('../../src/api/buddies', () => ({ ...jest.requireActual('../../src/api/buddies'), blockBuddy: jest.fn(() => Promise.resolve()) }));
 const mockNavigate = jest.fn();
 const mockGoBack = jest.fn();
 jest.mock('@react-navigation/native', () => ({
@@ -49,7 +54,7 @@ const camp = (over: Partial<Camp> = {}): Camp => ({
   ...over,
 });
 
-beforeEach(() => jest.clearAllMocks());
+beforeEach(() => { jest.clearAllMocks(); mockChats = true; });
 
 it('draws the night camp: moon, bubbles over coaches, my add-note bubble, asleep coaches with z z, the lit fire and the panel', async () => {
   (fetchCamp as jest.Mock).mockResolvedValue(camp());
@@ -69,7 +74,8 @@ it('draws the night camp: moon, bubbles over coaches, my add-note bubble, asleep
   expect(screen.getByTestId('camp-nights-lit')).toHaveTextContent('Lit 2 nights');
   // 12-hour times on the Campfire.
   expect(screen.getByTestId('camp-who-sam')).toHaveTextContent(/SAM asleep since \d{1,2}:\d{2} (AM|PM) · on time/);
-  expect(screen.getByTestId('camp-who-ben')).toHaveTextContent('BEN awake · bed soon');
+  // A buddy's note row ends in its "Report note" link.
+  expect(screen.getByTestId('camp-who-ben')).toHaveTextContent('BEN awake · bed soonReport note');
   expect(screen.getByTestId('camp-who-me')).toHaveTextContent('You awake');
   expect(screen.getByTestId('camp-goodnight-say')).toBeTruthy();
   expect(screen.queryByTestId('camp-more')).toBeNull();
@@ -286,12 +292,12 @@ it('says goodnight, then offers Undo while it is fresh', async () => {
   expect(refreshSocial).toHaveBeenCalledTimes(1);
 });
 
-it("a buddy's coach opens their week and mine does not navigate; +N past eight; Message camp opens Buddies; back goes back", async () => {
+it("a buddy's coach opens their thread and mine does not navigate; +N past eight; Message camp opens Chats; back goes back", async () => {
   const many = [member('me', { mine: true }), ...['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i'].map((id) => member(id))];
   (fetchCamp as jest.Mock).mockResolvedValue(camp({ members: many }));
   renderScreen();
   fireEvent.press(await screen.findByTestId('camp-coach-a'));
-  expect(mockNavigate).toHaveBeenLastCalledWith('BuddyWeek', { buddyId: 'a' });
+  expect(mockNavigate).toHaveBeenLastCalledWith('ChatThread', { buddyId: 'a' });
   mockNavigate.mockClear();
   fireEvent.press(screen.getByTestId('camp-coach-me'));
   expect(mockNavigate).not.toHaveBeenCalled();
@@ -300,7 +306,7 @@ it("a buddy's coach opens their week and mine does not navigate; +N past eight; 
   expect(screen.queryByTestId('camp-coach-h')).toBeNull();
   expect(screen.getByTestId('camp-who-i')).toBeTruthy();
   fireEvent.press(screen.getByTestId('camp-message-camp'));
-  expect(mockNavigate).toHaveBeenLastCalledWith('Buddies');
+  expect(mockNavigate).toHaveBeenLastCalledWith('Chats');
   // Over the scene the back pill matches "+N here": 40 px (lg), a pill.
   expect(String(screen.getByTestId('camp-back').props.className).split(' ')).toEqual(expect.arrayContaining(['h-[40px]', 'rounded-full']));
   fireEvent.press(screen.getByTestId('camp-back'));
@@ -511,4 +517,59 @@ it('the chips are starting points: they show while the draft is empty', async ()
   expect(screen.queryByTestId('camp-chip-0')).toBeNull();
   fireEvent.changeText(screen.getByTestId('camp-note-input'), '');
   expect(screen.getByTestId('camp-chip-0')).toBeTruthy();
+});
+
+it("a buddy's coach with a camp note opens their thread with the note staged", async () => {
+  (fetchCamp as jest.Mock).mockResolvedValue(camp());
+  renderScreen();
+  fireEvent.press(await screen.findByTestId('camp-coach-ben'));
+  expect(mockNavigate).toHaveBeenLastCalledWith('ChatThread', { buddyId: 'ben', quote: { request: { type: 'camp_note' }, label: "BEN's camp note" } });
+});
+
+it('on a server without chats, a coach opens their week and Message camp opens Buddies; no Report link', async () => {
+  mockChats = false;
+  (fetchCamp as jest.Mock).mockResolvedValue(camp());
+  renderScreen();
+  fireEvent.press(await screen.findByTestId('camp-coach-ben'));
+  expect(mockNavigate).toHaveBeenLastCalledWith('BuddyWeek', { buddyId: 'ben' });
+  fireEvent.press(screen.getByTestId('camp-message-camp'));
+  expect(mockNavigate).toHaveBeenLastCalledWith('Buddies');
+  expect(screen.queryByTestId('camp-report-ben')).toBeNull();
+});
+
+it("reports a buddy's camp note from Who's here; a ticked Also block blocks them too, with no second confirm", async () => {
+  (fetchCamp as jest.Mock).mockResolvedValue(camp());
+  renderScreen();
+  expect(await screen.findByTestId('camp-report-ben')).toBeTruthy();
+  expect(screen.queryByTestId('camp-report-me')).toBeNull();
+  fireEvent.press(screen.getByTestId('camp-report-ben'));
+  fireEvent.press(screen.getByTestId('report-other'));
+  expect(fileReport).not.toHaveBeenCalled(); // a reason is a choice, not a filing
+  fireEvent.press(screen.getByTestId('report-block'));
+  await act(async () => fireEvent.press(screen.getByTestId('report-submit')));
+  expect(fileReport).toHaveBeenCalledWith('camp_note', 'ben', 'other');
+  expect(blockBuddy).toHaveBeenCalledWith('ben');
+  expect(refreshSocial).toHaveBeenCalled();
+});
+
+it('without the block box ticked, Report files the camp note and blocks no one', async () => {
+  (fetchCamp as jest.Mock).mockResolvedValue(camp());
+  renderScreen();
+  fireEvent.press(await screen.findByTestId('camp-report-ben'));
+  await act(async () => fireEvent.press(screen.getByTestId('report-submit')));
+  expect(fileReport).toHaveBeenCalledWith('camp_note', 'ben', 'spam');
+  expect(blockBuddy).not.toHaveBeenCalled();
+  expect(refreshSocial).not.toHaveBeenCalled();
+});
+
+it('a block that fails after the report says so and changes nothing', async () => {
+  (fetchCamp as jest.Mock).mockResolvedValue(camp());
+  (blockBuddy as jest.Mock).mockRejectedValueOnce(new Error('offline'));
+  renderScreen();
+  fireEvent.press(await screen.findByTestId('camp-report-ben'));
+  fireEvent.press(screen.getByTestId('report-block'));
+  await act(async () => fireEvent.press(screen.getByTestId('report-submit')));
+  expect(blockBuddy).toHaveBeenCalledWith('ben');
+  expect(refreshSocial).not.toHaveBeenCalled();
+  expect(screen.getByTestId('camp-message')).toHaveTextContent('Something went wrong. Please try again.');
 });

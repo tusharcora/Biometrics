@@ -12,7 +12,7 @@ jest.mock('react-native-reanimated', () => {
   return { __esModule: true, ...actual, default: actual.default, useReducedMotion: jest.fn(() => false) };
 });
 jest.mock('../../src/api/social', () => ({ ...jest.requireActual('../../src/api/social'), fetchCamp: jest.fn() }));
-jest.mock('../../src/lib/socialStore', () => ({ refreshSocial: jest.fn() }));
+jest.mock('../../src/lib/socialStore', () => ({ refreshSocial: jest.fn(), useChatsAvailable: () => true }));
 const mockFocus: { cleanup: (() => void) | void; cb: (() => (() => void) | void) | null } = { cleanup: undefined, cb: null };
 jest.mock('@react-navigation/native', () => ({
   ...jest.requireActual('@react-navigation/native'),
