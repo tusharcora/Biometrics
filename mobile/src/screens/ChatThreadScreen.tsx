@@ -9,7 +9,7 @@
 // buddy's free text: never logged.
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Alert, AppState, FlatList, KeyboardAvoidingView, Platform, View } from 'react-native';
+import { ActivityIndicator, AppState, FlatList, KeyboardAvoidingView, Platform, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
@@ -67,6 +67,11 @@ export function ChatThreadScreen() {
   const sendingRef = useRef(false);
   const mounted = useRef(true);
   const seq = useRef(0);
+  // Bumped by each send, unsend or reaction that lands: an older page fetched before one is dropped (it could bring back
+  // a message just unsent).
+  const writes = useRef(0);
+  // Set while the screen is focused: a read that answers after leaving or going to the background marks nothing read.
+  const focused = useRef(false);
   const loaded = useRef(false);
   const lastTheirs = useRef<string | null | undefined>(undefined);
   const loadingOlder = useRef(false);
@@ -101,11 +106,17 @@ export function ChatThreadScreen() {
     setWin((w) => (w === null ? firstWindow(page) : pollWindow(w, page)));
     setPhase('ready');
     loaded.current = true;
-    // Opening reads the thread; after that, only a new message from them does.
+    // Opening reads the thread; after that, only a new message from them does. Only while I'm looking (focused, app
+    // active): otherwise the next read in view marks it. A failed mark is tried again by the next read.
     const theirs = [...page.messages].reverse().find((m) => !m.mine)?.id ?? null;
-    if (theirs !== lastTheirs.current) {
+    if (theirs !== lastTheirs.current && focused.current && AppState.currentState === 'active') {
       lastTheirs.current = theirs;
-      void markChatRead(buddyId).then(() => refreshSocial(), () => undefined);
+      void markChatRead(buddyId).then(
+        () => refreshSocial(),
+        () => {
+          if (lastTheirs.current === theirs) lastTheirs.current = undefined;
+        },
+      );
     }
   }, [buddyId]);
 
@@ -130,6 +141,7 @@ export function ChatThreadScreen() {
     const start = () => {
       if (timer.current === null && !halted.current) timer.current = setInterval(() => void load(), POLL_MS);
     };
+    focused.current = true;
     void load();
     start();
     const sub = AppState.addEventListener('change', (s) => {
@@ -141,6 +153,7 @@ export function ChatThreadScreen() {
       }
     });
     return () => {
+      focused.current = false;
       stopPolling();
       sub.remove();
     };
@@ -148,12 +161,14 @@ export function ChatThreadScreen() {
 
   const loadOlder = async () => {
     const cursor = win?.cursor;
-    if (!cursor || loadingOlder.current) return;
+    if (!cursor || loadingOlder.current || halted.current) return;
     loadingOlder.current = true;
+    const at = writes.current;
     try {
-      // An older page's seenAt and activeAt are ignored: only the newest page's are current.
+      // An older page's seenAt and activeAt are ignored: only the newest page's are current. One that left before a
+      // send, unsend or reaction landed is dropped; the next scroll to the top reads it again.
       const page = await fetchThread(buddyId, cursor);
-      if (page && mounted.current) setWin((w) => (w ? olderWindow(w, page) : w));
+      if (page && mounted.current && !halted.current && at === writes.current) setWin((w) => (w ? olderWindow(w, page) : w));
     } catch {
       // The next scroll to the top tries again.
     } finally {
@@ -170,6 +185,7 @@ export function ChatThreadScreen() {
       const result = await fn();
       // Drop any read already on its way: it was answered before this change.
       seq.current++;
+      writes.current++;
       return result;
     } catch (e) {
       const code = buddyErrorCode(e);
@@ -232,27 +248,20 @@ export function ChatThreadScreen() {
     });
   };
   const name = buddy ? personName(buddy, false) : '';
+  // "Also block {name}" was ticked in the report sheet and the report is filed: the tick is the confirmation (the
+  // owner-approved Report board has no second dialog).
   const blockToo = () => {
     setReporting(null);
-    Alert.alert(`Block ${name}?`, "They won't be told. You can unblock them in Profile.", [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Block',
-        style: 'destructive',
-        onPress: () => {
-          void blockBuddy(buddyId).then(
-            () => {
-              void refreshSocial();
-              void refreshBuddies();
-              if (mounted.current) navigation.goBack();
-            },
-            (e: unknown) => {
-              if (mounted.current) setError(buddyErrorMessage(buddyErrorCode(e)));
-            },
-          );
-        },
+    void blockBuddy(buddyId).then(
+      () => {
+        void refreshSocial();
+        void refreshBuddies();
+        if (mounted.current) navigation.goBack();
       },
-    ]);
+      (e: unknown) => {
+        if (mounted.current) setError(buddyErrorMessage(buddyErrorCode(e)));
+      },
+    );
   };
 
   // Header icon buttons on a bare header: outline icon-lg, as the Coach header (plan ruling P3).

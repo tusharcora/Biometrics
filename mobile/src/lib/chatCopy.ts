@@ -17,7 +17,7 @@ export const MESSAGE_MAX = 1000;
 export const POLL_MS = 5000;
 export const REPORT_REASONS: ReadonlyArray<{ reason: ReportReason; label: string }> = [
   { reason: 'spam', label: 'Spam' },
-  { reason: 'harassment', label: 'Harassment or bullying' },
+  { reason: 'harassment', label: 'Harassment' },
   { reason: 'other', label: 'Something else' },
 ];
 

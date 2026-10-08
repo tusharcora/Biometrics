@@ -52,6 +52,8 @@ beforeEach(() => {
   for (const fn of [fetchThread, sendText, sendStickerMessage, sendCard, setReaction]) (fn as jest.Mock).mockReset();
   mockParams = { buddyId: 'ben' };
   mockHome = CHECKED_IN;
+  // The jest AppState has no state of its own: the app is in the foreground unless a test says otherwise.
+  AppState.currentState = 'active';
 });
 // A failing fake-timer test must not leave its clock to the next one.
 afterEach(() => jest.useRealTimers());
@@ -174,16 +176,59 @@ it('a long press opens the actions: react, reply, unsend mine, report theirs, th
   await act(async () => fireEvent.press(screen.getByTestId('message-unsend')));
   expect(unsendMessage).toHaveBeenCalledWith('ben', 'm1');
   expect(screen.queryByTestId('message-m1')).toBeNull();
+  // Report (theirs only): the owner-approved sheet. Spam is picked and block unticked to start with.
   fireEvent(screen.getByTestId('message-t1'), 'longPress');
   fireEvent.press(screen.getByTestId('message-report'));
-  await act(async () => fireEvent.press(screen.getByTestId('report-spam')));
-  expect(fileReport).toHaveBeenCalledWith('message', 't1', 'spam');
-  expect(screen.getByTestId('report-done')).toBeTruthy();
-  await act(async () => fireEvent.press(screen.getByTestId('report-block')));
-  expect(alert).toHaveBeenCalled();
+  expect(screen.getByTestId('report-spam')).toBeChecked();
+  expect(screen.getByTestId('report-block')).not.toBeChecked();
+  fireEvent.press(screen.getByTestId('report-harassment'));
+  fireEvent.press(screen.getByTestId('report-block'));
+  expect(screen.getByTestId('report-harassment')).toBeChecked();
+  expect(screen.getByTestId('report-spam')).not.toBeChecked();
+  expect(screen.getByTestId('report-block')).toBeChecked();
+  await act(async () => fireEvent.press(screen.getByTestId('report-submit')));
+  expect(fileReport).toHaveBeenCalledWith('message', 't1', 'harassment');
+  // Ticked: blocked once the report is filed (no second dialog), then back out of the thread.
+  expect(alert).not.toHaveBeenCalled();
   expect(blockBuddy).toHaveBeenCalledWith('ben');
+  expect((blockBuddy as jest.Mock).mock.invocationCallOrder[0]).toBeGreaterThan((fileReport as jest.Mock).mock.invocationCallOrder[0]!);
   expect(mockGoBack).toHaveBeenCalled();
   alert.mockRestore();
+});
+
+it('the report sheet: Cancel files nothing; Report without the tick files the picked reason and does not block', async () => {
+  (fetchThread as jest.Mock).mockResolvedValue(thread([msg('t1', { text: 'rough night lol' })]));
+  renderScreen();
+  fireEvent(await screen.findByTestId('message-t1'), 'longPress');
+  fireEvent.press(screen.getByTestId('message-report'));
+  expect(screen.getByTestId('report-sheet')).toHaveTextContent(/Report message.*Ben won't be told\. Reports are kept for review\..*Spam.*Harassment.*Something else.*Also block Ben/);
+  fireEvent.press(screen.getByTestId('report-other'));
+  fireEvent.press(screen.getByTestId('report-cancel'));
+  expect(screen.queryByTestId('report-sheet')).toBeNull();
+  expect(fileReport).not.toHaveBeenCalled();
+  // Opened again: it starts fresh (Spam picked).
+  fireEvent(screen.getByTestId('message-t1'), 'longPress');
+  fireEvent.press(screen.getByTestId('message-report'));
+  expect(screen.getByTestId('report-spam')).toBeChecked();
+  fireEvent.press(screen.getByTestId('report-other'));
+  await act(async () => fireEvent.press(screen.getByTestId('report-submit')));
+  expect(fileReport).toHaveBeenCalledWith('message', 't1', 'other');
+  expect(screen.queryByTestId('report-sheet')).toBeNull();
+  expect(blockBuddy).not.toHaveBeenCalled();
+  expect(mockGoBack).not.toHaveBeenCalled();
+});
+
+it('a report that fails says why and blocks no one, even when ticked', async () => {
+  (fetchThread as jest.Mock).mockResolvedValue(thread([msg('t1')]));
+  (fileReport as jest.Mock).mockRejectedValueOnce(new ApiError(404, 'x', 'report_target_gone'));
+  renderScreen();
+  fireEvent(await screen.findByTestId('message-t1'), 'longPress');
+  fireEvent.press(screen.getByTestId('message-report'));
+  fireEvent.press(screen.getByTestId('report-block'));
+  await act(async () => fireEvent.press(screen.getByTestId('report-submit')));
+  expect(screen.getByTestId('report-error')).toBeTruthy();
+  expect(screen.getByTestId('report-sheet')).toBeTruthy();
+  expect(blockBuddy).not.toHaveBeenCalled();
 });
 
 it('re-reads the newest page every 5 seconds: a new message shows and is marked read; then "no longer buddies"', async () => {
@@ -305,6 +350,81 @@ it('a card its author no longer shares says so; a reply to an unsent message say
   renderScreen();
   expect(await screen.findByTestId('message-b1-card')).toHaveTextContent(/No longer shared/);
   expect(screen.getByTestId('message-r1-reply')).toHaveTextContent('Message unsent');
+});
+
+it('a read that answers after the app went to the background marks nothing read; back in view, it does', async () => {
+  jest.useFakeTimers();
+  let onChange: ((s: string) => void) | undefined;
+  jest.spyOn(AppState, 'addEventListener').mockImplementationOnce((_type, fn) => {
+    onChange = fn as (s: string) => void;
+    return { remove: jest.fn() } as never;
+  });
+  let answerPoll: (t: Thread) => void = () => undefined;
+  const withNew = thread([msg('t1'), msg('t2', { text: 'you up?', createdAt: T(9, 5) })]);
+  (fetchThread as jest.Mock)
+    .mockResolvedValueOnce(thread([msg('t1')]))
+    .mockImplementationOnce(() => new Promise<Thread>((resolve) => { answerPoll = resolve; }))
+    .mockResolvedValue(withNew);
+  renderScreen();
+  expect(await screen.findByTestId('message-t1')).toBeTruthy();
+  expect(markChatRead).toHaveBeenCalledTimes(1);
+  await act(async () => { jest.advanceTimersByTime(5000); });
+  AppState.currentState = 'background';
+  await act(async () => onChange!('background'));
+  await act(async () => answerPoll(withNew));
+  expect(screen.getByTestId('message-t2-text')).toHaveTextContent('you up?');
+  expect(markChatRead).toHaveBeenCalledTimes(1);
+  AppState.currentState = 'active';
+  await act(async () => onChange!('active'));
+  expect(markChatRead).toHaveBeenCalledTimes(2);
+});
+
+it('a failed mark-read is tried again by the next read', async () => {
+  jest.useFakeTimers();
+  (fetchThread as jest.Mock).mockResolvedValue(thread([msg('t1')]));
+  (markChatRead as jest.Mock).mockRejectedValueOnce(new Error('offline'));
+  renderScreen();
+  expect(await screen.findByTestId('message-t1')).toBeTruthy();
+  expect(markChatRead).toHaveBeenCalledTimes(1);
+  await act(async () => { jest.advanceTimersByTime(5000); });
+  expect(markChatRead).toHaveBeenCalledTimes(2);
+  // That one went through: nothing new, nothing more to mark.
+  await act(async () => { jest.advanceTimersByTime(5000); });
+  expect(fetchThread).toHaveBeenCalledTimes(3);
+  expect(markChatRead).toHaveBeenCalledTimes(2);
+});
+
+it('an older page fetched before an unsend cannot bring the unsent message back', async () => {
+  let answerOlder: (t: Thread) => void = () => undefined;
+  (fetchThread as jest.Mock)
+    .mockResolvedValueOnce(thread([msg('m1', { mine: true, text: 'oops' }), msg('t2', { createdAt: T(9, 5) })], { nextBefore: 'c1' }))
+    .mockImplementationOnce(() => new Promise<Thread>((resolve) => { answerOlder = resolve; }))
+    .mockResolvedValueOnce(thread([msg('t0', { createdAt: T(8) })], { nextBefore: null }));
+  renderScreen();
+  expect(await screen.findByTestId('message-m1')).toBeTruthy();
+  await act(async () => fireEvent(screen.getByTestId('thread-list'), 'endReached'));
+  expect(fetchThread).toHaveBeenLastCalledWith('ben', 'c1');
+  fireEvent(screen.getByTestId('message-m1'), 'longPress');
+  await act(async () => fireEvent.press(screen.getByTestId('message-unsend')));
+  expect(screen.queryByTestId('message-m1')).toBeNull();
+  // The older page overlaps the window and still holds the message as it was before the unsend: dropped.
+  await act(async () => answerOlder(thread([msg('t0', { createdAt: T(8) }), msg('m1', { mine: true, text: 'oops' })], { nextBefore: null })));
+  expect(screen.queryByTestId('message-m1')).toBeNull();
+  // The next scroll to the top reads it again.
+  await act(async () => fireEvent(screen.getByTestId('thread-list'), 'endReached'));
+  expect(fetchThread).toHaveBeenCalledTimes(3);
+  expect(screen.getByTestId('message-t0')).toBeTruthy();
+  expect(screen.queryByTestId('message-m1')).toBeNull();
+});
+
+it('leaving the screen stops the poll', async () => {
+  jest.useFakeTimers();
+  (fetchThread as jest.Mock).mockResolvedValue(thread([msg('t1')]));
+  const view = renderScreen();
+  expect(await screen.findByTestId('message-t1')).toBeTruthy();
+  view.unmount();
+  await act(async () => { jest.advanceTimersByTime(20_000); });
+  expect(fetchThread).toHaveBeenCalledTimes(1);
 });
 
 it('a failed first load offers a retry; a message this app cannot draw is skipped', async () => {
