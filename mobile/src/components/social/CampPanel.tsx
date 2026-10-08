@@ -2,7 +2,8 @@
 // (adds the camp note and goodnight) and Full (adds "Who's here" and Message camp). The content is one scroll view;
 // a lower stop shows its top part. It snaps to the nearest stop by position and velocity, never in between; the
 // handle steps up a stop (Full goes back to Peek), and screen readers get increment / decrement on it. The keyboard
-// lifts the panel so the composer stays in view. Same material, radius and spring as the app's Sheet.
+// lifts the panel so the composer stays in view. Same material, radius and spring as the app's Sheet,
+// always in its dark scheme.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Keyboard, Platform, Pressable, ScrollView, View, type AccessibilityActionEvent } from 'react-native';
@@ -10,7 +11,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, {
   runOnJS, useAnimatedStyle, useSharedValue, withSpring, withTiming, type SharedValue,
 } from 'react-native-reanimated';
-import { useColorScheme } from 'nativewind';
+import { vars } from 'nativewind';
 import { COLORS, MOTION } from '../../theme';
 import { GlassSurface } from '../ui/glass-surface';
 import { PEEK_RESERVE } from './campSceneGeometry';
@@ -124,10 +125,27 @@ interface CampPanelProps {
   children: React.ReactNode;
 }
 
+/**
+ * The app's dark theme tokens (global.css), set on the panel's subtree: the owner approved dark glass over the pixel
+ * scene, so the panel and everything in it is dark even when the app is light.
+ */
+const DARK_TOKENS = vars({
+  '--color-background': '10 11 14',
+  '--color-foreground': '245 245 244',
+  '--color-muted': '28 31 38',
+  '--color-muted-foreground': '155 157 166',
+  '--color-card': '20 22 27',
+  '--color-card-foreground': '245 245 244',
+  '--color-border': '34 37 44',
+  '--color-accent': '45 212 191',
+  '--color-accent-foreground': '10 11 14',
+  '--color-destructive': '248 113 113',
+  '--color-surface-raised': '28 31 38',
+  '--color-hairline': '44 47 55',
+});
+const colors = COLORS.dark;
+
 export function CampPanel({ stops, stop, top, moveTo, height, bottomInset, screenReader, reduced, header, children }: CampPanelProps) {
-  const { colorScheme } = useColorScheme();
-  const scheme = colorScheme === 'light' ? 'light' : 'dark';
-  const colors = COLORS[scheme];
   const keyboard = useKeyboardHeight(reduced);
   const scroll = useRef<ScrollView>(null);
   const start = useSharedValue(0);
@@ -167,24 +185,26 @@ export function CampPanel({ stops, stop, top, moveTo, height, bottomInset, scree
   const panelHeight = height - stops.full + PANEL_RADIUS * 2;
   return (
     <Animated.View testID="camp-panel" style={[{ position: 'absolute', left: 0, right: 0, top: 0, height: panelHeight }, panelStyle]}>
-      <GlassSurface scheme={scheme} fallbackColor={colors.surfaceRaised} borderRadius={PANEL_RADIUS}
+      <GlassSurface scheme="dark" fallbackColor={colors.surfaceRaised} borderRadius={PANEL_RADIUS}
         style={{ flex: 1, borderWidth: 1, borderColor: colors.hairline }}>
-        <GestureDetector gesture={drag}>
-          <View>
-            <Pressable testID="camp-panel-handle" accessibilityRole="adjustable" accessibilityLabel={`Camp details, ${STOP_LABEL[stop]}`}
-              accessibilityHint={stop === 'full' ? 'Shows less' : 'Shows more'}
-              accessibilityActions={[{ name: 'activate' }, { name: 'increment' }, { name: 'decrement' }]} onAccessibilityAction={onAction}
-              onPress={() => moveTo(nextStop(stop))} className="h-[30px] items-center justify-center">
-              <View className="h-1 w-10 rounded-full bg-muted-foreground/40" />
-            </Pressable>
-            <View className="px-5">{header}</View>
-          </View>
-        </GestureDetector>
-        <ScrollView ref={scroll} testID="camp-panel-scroll" scrollEnabled={stop === 'full' || screenReader} keyboardShouldPersistTaps="handled"
-          showsVerticalScrollIndicator={stop === 'full'}
-          contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 14, paddingBottom: stops[stop] - stops.full + PANEL_RADIUS * 2 + bottomInset + 24, gap: 14 }}>
-          {children}
-        </ScrollView>
+        <View style={[DARK_TOKENS, { flex: 1 }]}>
+          <GestureDetector gesture={drag}>
+            <View>
+              <Pressable testID="camp-panel-handle" accessibilityRole="adjustable" accessibilityLabel={`Camp details, ${STOP_LABEL[stop]}`}
+                accessibilityHint={stop === 'full' ? 'Shows less' : 'Shows more'}
+                accessibilityActions={[{ name: 'activate' }, { name: 'increment' }, { name: 'decrement' }]} onAccessibilityAction={onAction}
+                onPress={() => moveTo(nextStop(stop))} className="h-[30px] items-center justify-center">
+                <View className="h-1 w-10 rounded-full bg-muted-foreground/40" />
+              </Pressable>
+              <View className="px-5">{header}</View>
+            </View>
+          </GestureDetector>
+          <ScrollView ref={scroll} testID="camp-panel-scroll" scrollEnabled={stop === 'full' || screenReader} keyboardShouldPersistTaps="handled"
+            showsVerticalScrollIndicator={stop === 'full'}
+            contentContainerStyle={{ paddingHorizontal: 20, paddingTop: 14, paddingBottom: stops[stop] - stops.full + PANEL_RADIUS * 2 + bottomInset + 24, gap: 14 }}>
+            {children}
+          </ScrollView>
+        </View>
       </GlassSurface>
     </Animated.View>
   );

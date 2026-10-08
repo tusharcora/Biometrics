@@ -9,6 +9,7 @@ import { clearCampNote, fetchCamp, saveCampNote, sayGoodnight, undoGoodnight, ty
 import { refreshSocial } from '../../src/lib/socialStore';
 import { chromeBottom, fireBox, PEEK_RESERVE, seatBoxes, type Box } from '../../src/components/social/campSceneGeometry';
 import { CampfireScreen } from '../../src/screens/CampfireScreen';
+import { GlassSurface } from '../../src/components/ui/glass-surface';
 
 jest.mock('../../src/api/social', () => ({
   ...jest.requireActual('../../src/api/social'),
@@ -422,3 +423,13 @@ it('a drag snaps to a stop: a slow drag to the nearest, a flick one stop its way
   await drag(30, 1500);
   expect(handle()).toHaveProp('accessibilityLabel', 'Camp details, half open');
 }, 15000);
+
+it('the panel is dark glass even when the app is light', async () => {
+  const { colorScheme } = require('nativewind');
+  colorScheme.set('light');
+  (fetchCamp as jest.Mock).mockResolvedValue(camp());
+  renderScreen();
+  await screen.findByTestId('campfire');
+  expect(screen.UNSAFE_getByType(GlassSurface).props.scheme).toBe('dark');
+  colorScheme.set('system');
+});

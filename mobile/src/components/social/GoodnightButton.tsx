@@ -2,12 +2,12 @@
 // "Goodnight said" (", on time" when it was), with Undo until the server's `undoUntil` — the button disappears by
 // itself when it passes. `onChanged` re-reads whatever shows the goodnight. A refusal shows the server's reason in words.
 // What the server answered to a say or an undo is kept here until the `goodnight` prop changes, so the button is right
-// even if that re-read fails. The Campfire's `camp` look is a larger indigo button with a moon.
+// even if that re-read fails. The Campfire's `camp` look is a larger indigo button with a moon,
+// on the Campfire's always-dark glass.
 
 import React, { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { useColorScheme } from 'nativewind';
 import { buddyErrorCode } from '../../api/buddies';
 import { sayGoodnight, undoGoodnight, type Goodnight } from '../../api/social';
 import { buddyErrorMessage } from '../../lib/buddyCopy';
@@ -18,7 +18,6 @@ import { Text } from '../ui/text';
 export function GoodnightButton({ goodnight: fromProps, onChanged, testID = 'goodnight', look = 'default' }: {
   goodnight: Goodnight | null; onChanged: () => void; testID?: string; look?: 'default' | 'camp';
 }) {
-  const { colorScheme } = useColorScheme();
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
   // The server's answer to my last say (its goodnight) or undo (null); undefined = none, so the prop shows.
@@ -89,8 +88,8 @@ export function GoodnightButton({ goodnight: fromProps, onChanged, testID = 'goo
         look === 'camp' ? (
           <Button testID={`${testID}-say`} accessibilityRole="button" disabled={busy} onPress={() => void run(async () => (await sayGoodnight()).goodnight)}
             className="h-14 flex-row gap-2.5 rounded-[18px] border border-[#A5B4FC]/35 bg-[#6366F1]/25 py-0">
-            <Ionicons name="moon" size={18} color={colorScheme === 'light' ? '#3730A3' : '#E0E7FF'} />
-            <Text className="text-base font-bold text-[#3730A3] dark:text-[#E0E7FF]">Say goodnight</Text>
+            <Ionicons name="moon" size={18} color="#E0E7FF" />
+            <Text className="text-base font-bold text-[#E0E7FF]">Say goodnight</Text>
           </Button>
         ) : (
           <Button testID={`${testID}-say`} accessibilityRole="button" disabled={busy} onPress={() => void run(async () => (await sayGoodnight()).goodnight)}>Say goodnight</Button>

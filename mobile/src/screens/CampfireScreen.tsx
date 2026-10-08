@@ -84,7 +84,7 @@ function FireMeter({ camp }: { camp: Camp }) {
           <Ionicons name="flame" size={16} color={camp.night ? SEGMENT_ON : '#6B6E78'} />
           <Text className="text-sm tracking-[1px]" style={{ fontFamily: pixelFont() }}>TONIGHT'S FIRE</Text>
         </View>
-        <Text testID="camp-fire-count" className="text-[13px] font-semibold text-[#EA580C] dark:text-[#FDBA74]">{fireCountLabel(camp.fire, camp.night)}</Text>
+        <Text testID="camp-fire-count" className="text-[13px] font-semibold text-[#FDBA74]">{fireCountLabel(camp.fire, camp.night)}</Text>
       </View>
       <View testID="camp-fire-strength" className="flex-row gap-[5px]" accessible accessibilityRole="progressbar" accessibilityLabel="Fire strength"
         accessibilityValue={{ min: 0, max: 5, now: camp.fire.segments }}>
