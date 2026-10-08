@@ -8,6 +8,7 @@ import { BuddyError, buddyRoute } from '../buddies/errors';
 import { requireBuddyId } from '../buddies/relations';
 import { listChats } from './inbox';
 import { clearReaction, listThread, markRead, sendMessage, setReaction, unsendMessage } from './messages';
+import { clearStatusNote, getNotes, shareStatusNote } from './notes';
 import { getChatSettings, parseChatSettingsPatch, touchPresence, updateChatSettings } from './presence';
 
 export const chatsRouter = Router();
@@ -67,4 +68,20 @@ chatsRouter.delete('/me/chats/:buddyId/messages/:messageId/reaction', requireAut
 chatsRouter.get('/me/chats', requireAuth, buddyRoute(async (req, res) => {
   res.set('Cache-Control', 'private, no-store');
   res.json(await listChats(req.userId!, req.query.cursor, new Date()));
+}));
+
+// Chats notes: my own and my current buddies' only, so there is no buddy in the path to refuse.
+chatsRouter.get('/me/notes', requireAuth, buddyRoute(async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  res.json(await getNotes(req.userId!, new Date()));
+}));
+
+chatsRouter.put('/me/notes', requireAuth, buddyRoute(async (req, res) => {
+  res.json({ note: await shareStatusNote(req.userId!, (req.body as { text?: unknown } | undefined)?.text, new Date()) });
+}));
+
+// Never rate-limited: removing your own note must work even while the limiter is down.
+chatsRouter.delete('/me/notes', requireAuth, buddyRoute(async (req, res) => {
+  await clearStatusNote(req.userId!);
+  res.status(204).end();
 }));
