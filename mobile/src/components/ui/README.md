@@ -2,7 +2,7 @@
 
 `button.tsx` is the app's one button. It is shadcn/ui's Base Button ([docs](https://ui.shadcn.com/docs/components/base/button), the base-vega style) ported to React Native and NativeWind: the same variants, sizes and classes, with hover replaced by the pressed state.
 
-Every button uses it. Do not hand-roll a button from `Pressable`, `PressableScale`, `TouchableOpacity` or `Text`. `__tests__/conventions/buttons.test.ts` fails if a file under `src` gives one of those the `button` role. A scene colour, like the indigo of Say goodnight, goes on the standard Button through `className`, `style` or `textClassName`. It never justifies a bespoke component.
+Every button uses it. Do not hand-roll a button from `Pressable`, `PressableScale`, `TouchableOpacity` or `Text`. The same goes for text links. `__tests__/conventions/buttons.test.ts` fails if a file under `src` gives one of those the `button` or `link` role, or a computed role (`accessibilityRole={role}`). A scene colour, like the indigo of Say goodnight, goes on the standard Button through `className`, `style` or `textClassName`. It never justifies a bespoke component.
 
 ```tsx
 import { Button } from '../components/ui/button';
@@ -17,12 +17,37 @@ import { Button } from '../components/ui/button';
 |---|---|---|
 | The main action on a screen, card or sheet | `default` | Neutral fill: near-black on light, white on dark |
 | A secondary action beside the main one | `outline` | Hairline border on the card colour |
-| A lone utility action (Retry, Try again, See more) | `secondary` | Soft grey fill |
+| A lone utility action (Try again, See more) | `secondary` | Soft grey fill |
 | A utility action in dense UI, toolbars, headers | `ghost` | No fill until pressed |
 | Delete, remove, unpair, block | `destructive` | Red text on a red tint |
-| Inline navigation text (See all, Open Settings, Why this score) | `link` | Underlined text, no height or side padding |
+| Inline navigation text (See all, Open Settings, Why this score), or a quiet inline text action (Edit, Undo, Reset) | `link` | Underlined text, no height or side padding |
 
-Teal is not a button colour. It stays for accents. Set `accessibilityRole="link"` on a `link` that navigates; the default role is `button`.
+Teal is not a button colour. It stays for accents.
+
+A `link` gets `accessibilityRole="link"` by default, every other variant `button`. A `link` that acts in place instead of navigating (Edit, Undo, Reset, sync now) passes `accessibilityRole="button"`.
+
+### Try again
+
+One rule for every retry:
+
+- **A full-screen error state** (the screen has nothing else to show): `variant="secondary"` at the default size, centred with the message.
+- **Everywhere else** (inside a Card, a sheet, a section or a column): `variant="secondary" size="sm"`, hugging its label. Never stretch it to full width: add `self-start` in a left-aligned card or column; a card that centres its content (`items-center`) centres it already.
+
+```tsx
+// Full-screen error
+<View className="flex-1 items-center justify-center gap-4 px-8">
+  <Text className="text-center text-muted-foreground">Patterns are unavailable right now.</Text>
+  <Button variant="secondary" onPress={retry}>Try again</Button>
+</View>
+
+// In a card
+<Card className="gap-3">
+  <Text className="text-sm text-muted-foreground">Your recaps could not be loaded.</Text>
+  <Button variant="secondary" size="sm" className="self-start" onPress={retry}>Try again</Button>
+</Card>
+```
+
+The story viewers are the exception: their retry sits on the story's own colour and follows the scene's buttons.
 
 ## Sizes
 
@@ -38,7 +63,7 @@ All sizes are `rounded-lg` (8 px). Use `rounded-full` through `className` only w
 
 Do not fight the size. Drop `py-*`, `h-*`, `min-h-[44px]`, `px-0` and a second `opacity-*`. Keep layout classes such as `flex-1`, `w-full`, `self-*` and margins.
 
-**Icon-only buttons need an `accessibilityLabel`.** The types require it for every `icon*` size. Use `ghost` in toolbars and headers, `outline` when the button stands alone.
+**Icon-only buttons need an `accessibilityLabel`.** The types require it for every `icon*` size. Use `ghost` in dense toolbars and sheet or story chrome (month arrows, Close), `outline` when the button stands alone or needs to read as a control on a bare header: the Coach header's menu and new-chat buttons are `outline icon-lg`. Steppers (− / +) are `outline icon-sm`.
 
 ```tsx
 <Button size="icon-sm" variant="ghost" accessibilityLabel="Next month" onPress={next}>
@@ -52,6 +77,7 @@ Do not fight the size. Drop `py-*`, `h-*`, `min-h-[44px]`, `px-0` and a second `
 - **`loading`**: shows a spinner in the icon-start slot, disables the button and marks it busy. The spinner takes the label colour, including a colour from `textClassName`; pass `spinnerColor` when a `style` override sets the colour.
 - **`disabled`**: dims to 50% and sets `accessibilityState.disabled`. Do not add your own opacity. Where a busy control must stay readable, such as the sync status line, override it with `className="opacity-100"`.
 - **Labels**: a string child becomes a `Text` with the variant's label classes. `textClassName` adds to it and `labelTestID` tags it. Any other child renders as-is.
+- **`numberOfLines`**: a string label is one line by default and truncates. Pass `numberOfLines={0}` to let it wrap, with `h-auto` and exact-px vertical padding so the button grows with it (the coach's follow-up chips: `h-auto min-h-[32px] py-[6px]`).
 - Everything else (`testID`, `onPress`, `style`, `hitSlop`, other `Pressable` props) passes through. `className` is merged last, so it wins.
 
 ## Touch target
@@ -80,7 +106,8 @@ For a choice between options, use `segmented-control`, not a ButtonGroup.
 
 `CampPanel` forces the dark tokens, but `dark:` classes follow the app's scheme, so in a light app an `outline` or `destructive` Button would take its light look on the dark panel. On the panel:
 
-- `secondary`, `default` and `ghost` need nothing. They use tokens only.
+- `secondary` and `default` need nothing. They use tokens only.
+- `ghost` draws the same at rest, but its pressed fill follows the app's scheme (`active:bg-muted` in a light app, `active:bg-muted/50` in a dark one). Add `active:bg-muted/50` if it must match exactly. There is no ghost on the panel today.
 - For `outline`, add `PANEL_OUTLINE` to `className`. For `destructive`, add `PANEL_DESTRUCTIVE`. Both come from `components/social/CampPanel`.
 
 ```tsx
@@ -99,7 +126,10 @@ These stay as `Pressable` / `PressableScale` and are listed in the guard test's 
 - Toggle and selection chips (habit type, check-in days)
 - Story rings and avatars, Campfire coach seats
 - Backdrops, tap zones and handles (the sheet backdrop, story prev/next zones)
+- An inline span inside a sentence (a metric word in the coach's Today sentence), which is a link in running text, not a standalone link
 
 One documented custom exception: ScoreDetailScreen's Ask Coach, a GlassSurface CTA with the coach character.
 
-If you add another, it must not be a button in the design sense. Add it to the allowlist with a one-line reason.
+One sanctioned size override: StickerButton's tall tile (an icon over a label) is an `outline` Button with `h-auto flex-col gap-[4px] py-[12px]`. Everywhere else, do not fight the size.
+
+If you add another, it must not be a button or a link in the design sense. Add it to the allowlist with its key (its testID, or `Component:testID` when the testID is passed in from props), how many times it occurs, and a one-line reason.
