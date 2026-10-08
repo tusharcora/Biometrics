@@ -15,7 +15,13 @@ beforeEach(() => jest.clearAllMocks());
 
 it('shows syncing progress', () => {
   set({ state: 'syncing' });
-  expect(render(<SyncStatusLine />).getByTestId('sync-status-line')).toHaveTextContent('Syncing with Google Health…');
+  const line = render(<SyncStatusLine />).getByTestId('sync-status-line');
+  expect(line).toHaveTextContent('Syncing with Google Health…');
+  expect(line).toBeDisabled();
+  // Busy but readable: the loading dim is overridden.
+  const classes = String(line.props.className).split(' ');
+  expect(classes).toContain('opacity-100');
+  expect(classes).not.toContain('opacity-50');
 });
 
 it('shows when it last synced, and syncs on tap', () => {

@@ -48,15 +48,16 @@ const SEGMENT_ON = '#F97316';
 const SEGMENT_OFF = '#2E323B';
 const PILL = { backgroundColor: 'rgba(20,22,27,0.55)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' } as const;
 
-/** Back to Social. Over the scene it wears the dark glass of "+N here" in either scheme; on the plain loading / error screen, the standard secondary pill. */
+/** Back to Social. Over the scene it wears the dark glass of "+N here" in either scheme, at its 40-px height (lg); on the plain loading / error screen, the standard secondary pill. */
 function BackPill({ onPress, scene = false }: { onPress: () => void; scene?: boolean }) {
   const { colorScheme } = useColorScheme();
   const colors = COLORS[colorScheme === 'light' ? 'light' : 'dark'];
+  const size = scene ? 'lg' : 'sm';
   return (
-    <Button testID="camp-back" accessibilityLabel="Back to Social" onPress={onPress} variant="secondary" size="sm"
+    <Button testID="camp-back" accessibilityLabel="Back to Social" onPress={onPress} variant="secondary" size={size}
       className={scene ? 'self-center rounded-full' : 'rounded-full'} style={scene ? PILL : undefined}
       textClassName={scene ? 'text-[#F5F5F4]' : undefined}
-      iconStart={<Ionicons name="chevron-back" size={buttonIconSize('sm')} color={scene ? '#F5F5F4' : colors.foreground} />}>
+      iconStart={<Ionicons name="chevron-back" size={buttonIconSize(size)} color={scene ? '#F5F5F4' : colors.foreground} />}>
       Social
     </Button>
   );

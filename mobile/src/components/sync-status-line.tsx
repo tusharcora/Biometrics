@@ -45,7 +45,8 @@ export function SyncStatusLine() {
         size="xs"
         accessibilityLabel="Syncing with Google Health"
         loading
-        className="self-start"
+        // A status, not a dead control: no 50% dim, so the line stays readable while it syncs.
+        className="self-start opacity-100"
         textClassName="text-muted-foreground no-underline"
       >
         Syncing with Google Health…
