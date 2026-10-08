@@ -116,7 +116,7 @@ function BuddyListTab({ navigation }: { navigation: Nav }) {
     return (
       <View testID="buddies-error" className="items-center gap-3 py-8">
         <Text className="text-muted-foreground">Couldn't load your buddies.</Text>
-        <Button variant="outline" onPress={() => void refreshBuddies()}>Try again</Button>
+        <Button variant="secondary" onPress={() => void refreshBuddies()}>Try again</Button>
       </View>
     );
   }
@@ -153,7 +153,7 @@ function BuddyListTab({ navigation }: { navigation: Nav }) {
       ListFooterComponent={
         <View className="gap-3 py-4">
           {loading ? <ActivityIndicator /> : null}
-          <Button testID="buddies-add" onPress={() => navigation.navigate('PairUp')}>Add a buddy</Button>
+          <Button testID="buddies-add" size="lg" onPress={() => navigation.navigate('PairUp')}>Add a buddy</Button>
         </View>
       }
     />

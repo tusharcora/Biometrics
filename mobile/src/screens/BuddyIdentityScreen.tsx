@@ -27,7 +27,7 @@ export function BuddyIdentityScreen() {
       ) : identity === 'error' ? (
         <View className="items-center gap-3 p-6">
           <Text testID="buddy-identity-screen-error" className="text-muted-foreground">Couldn't load your buddy name.</Text>
-          <Button testID="buddy-identity-screen-retry" variant="outline" onPress={load}>Try again</Button>
+          <Button testID="buddy-identity-screen-retry" variant="secondary" onPress={load}>Try again</Button>
         </View>
       ) : (
         <ScrollView contentContainerStyle={{ padding: 16 }} keyboardShouldPersistTaps="handled">
