@@ -311,11 +311,34 @@ describe('accessibility', () => {
 
   it('lets a caller override the role', () => {
     const { getByTestId } = render(
-      <Button testID="b" variant="link" accessibilityRole="link">
+      <Button testID="b" accessibilityRole="link">
         Terms
       </Button>,
     );
     expect(getByTestId('b').props.accessibilityRole).toBe('link');
+  });
+
+  it('defaults a link variant to the link role', () => {
+    const { getByRole } = render(<Button variant="link">Terms</Button>);
+    expect(getByRole('link', { name: 'Terms' })).toBeTruthy();
+  });
+
+  it('lets an inline text action on the link variant stay a button', () => {
+    const { getByTestId } = render(
+      <Button testID="b" variant="link" accessibilityRole="button">
+        Undo
+      </Button>,
+    );
+    expect(getByTestId('b').props.accessibilityRole).toBe('button');
+  });
+
+  it.each(['default', 'outline', 'secondary', 'ghost', 'destructive'] as const)('keeps the button role on %s', (variant) => {
+    const { getByTestId } = render(
+      <Button testID="b" variant={variant}>
+        Go
+      </Button>,
+    );
+    expect(getByTestId('b').props.accessibilityRole).toBe('button');
   });
 
   it('forwards accessibilityLabel on an icon button', () => {
@@ -427,6 +450,33 @@ describe('passthrough', () => {
   it('keeps the label to one line', () => {
     const { getByTestId } = render(<Button labelTestID="l">A long label</Button>);
     expect(getByTestId('l').props.numberOfLines).toBe(1);
+  });
+
+  it('takes a numberOfLines for the label', () => {
+    const { getByTestId } = render(
+      <Button labelTestID="l" numberOfLines={2}>
+        A long label
+      </Button>,
+    );
+    expect(getByTestId('l').props.numberOfLines).toBe(2);
+  });
+
+  it.each([0, undefined])('lets the label wrap with numberOfLines=%s', (lines) => {
+    const { getByTestId } = render(
+      <Button labelTestID="l" numberOfLines={lines}>
+        A long label that wraps
+      </Button>,
+    );
+    expect(getByTestId('l').props.numberOfLines).toBeUndefined();
+  });
+
+  it('does not forward numberOfLines to the Pressable', () => {
+    const { getByTestId } = render(
+      <Button testID="b" numberOfLines={0}>
+        Go
+      </Button>,
+    );
+    expect(getByTestId('b').props.numberOfLines).toBeUndefined();
   });
 
   it('puts labelTestID on the label Text', () => {

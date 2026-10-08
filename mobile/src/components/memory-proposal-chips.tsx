@@ -64,10 +64,10 @@ function MemoryProposalChip({ proposal }: { proposal: MemoryDTO }) {
         </Text>
       </View>
       <View className="flex-row gap-4 pl-6">
-        <Button testID={`memory-chip-edit-${proposal.id}`} variant="link" size="xs" onPress={() => setEditing(true)}>
+        <Button testID={`memory-chip-edit-${proposal.id}`} variant="link" size="xs" accessibilityRole="button" onPress={() => setEditing(true)}>
           Edit
         </Button>
-        <Button testID={`memory-chip-undo-${proposal.id}`} variant="link" size="xs" disabled={busy} onPress={() => void undo()}>
+        <Button testID={`memory-chip-undo-${proposal.id}`} variant="link" size="xs" accessibilityRole="button" disabled={busy} onPress={() => void undo()}>
           Undo
         </Button>
       </View>

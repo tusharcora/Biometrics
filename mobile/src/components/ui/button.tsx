@@ -173,35 +173,48 @@ type ButtonBaseProps = Omit<PressableProps, 'style' | 'children'> & {
   labelTestID?: string;
   /** The loading spinner's colour, when a style override changes the label colour. A textClassName colour is followed already. */
   spinnerColor?: string;
+  /**
+   * Line limit for a string label. Defaults to 1 (truncate with an ellipsis);
+   * pass 0 or undefined to let the label wrap, with `h-auto` and vertical
+   * padding on className so the button grows with it.
+   */
+  numberOfLines?: number;
 };
 
 // An icon-only button has no text for a screen reader, so it must be labelled.
 export type ButtonProps = ButtonBaseProps &
   ({ size: ButtonIconSize; accessibilityLabel: string } | { size?: ButtonTextSize | null; accessibilityLabel?: string });
 
-export function Button({
-  variant: variantProp,
-  size: sizeProp,
-  className,
-  style,
-  children,
-  iconStart,
-  iconEnd,
-  loading = false,
-  textClassName,
-  labelTestID,
-  spinnerColor,
-  disabled,
-  accessibilityRole = 'button',
-  accessibilityState,
-  hitSlop,
-  testID,
-  onPressIn,
-  onPressOut,
-  onLayout,
-  ...props
-}: ButtonProps) {
+export function Button(buttonProps: ButtonProps) {
+  const {
+    variant: variantProp,
+    size: sizeProp,
+    className,
+    style,
+    children,
+    iconStart,
+    iconEnd,
+    loading = false,
+    textClassName,
+    labelTestID,
+    spinnerColor,
+    numberOfLines: linesProp,
+    disabled,
+    accessibilityRole: roleProp,
+    accessibilityState,
+    hitSlop,
+    testID,
+    onPressIn,
+    onPressOut,
+    onLayout,
+    ...props
+  } = buttonProps;
   const variant: ButtonVariant = variantProp ?? 'default';
+  // A link reads as a link to a screen reader unless the caller says otherwise
+  // (an inline text *action* such as Undo passes accessibilityRole="button").
+  const accessibilityRole = roleProp ?? (variant === 'link' ? 'link' : 'button');
+  // An explicit numberOfLines (even undefined) is the caller's choice; only an absent one means one line.
+  const labelLines = 'numberOfLines' in buttonProps ? linesProp || undefined : 1;
   const size: ButtonSize = sizeProp ?? 'default';
   const isIconSize = size.startsWith('icon');
   const isDisabled = !!disabled || !!accessibilityState?.disabled || loading;
@@ -264,7 +277,7 @@ export function Button({
     >
       {startSlot}
       {typeof children === 'string' || typeof children === 'number' ? (
-        <Text testID={labelTestID} numberOfLines={1} className={cn(buttonTextVariants({ variant, size }), textClassName)}>
+        <Text testID={labelTestID} numberOfLines={labelLines} className={cn(buttonTextVariants({ variant, size }), textClassName)}>
           {children}
         </Text>
       ) : (

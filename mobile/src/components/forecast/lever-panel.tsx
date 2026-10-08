@@ -21,7 +21,7 @@ export function LeverPanel({ levers, values, onChange, onReset }: LeverPanelProp
     <View className="gap-2">
       <View className="flex-row items-center justify-between px-1">
         <SectionLabel>{FORECAST_COPY.planHeading}</SectionLabel>
-        <Button variant="link" size="sm" onPress={onReset}>
+        <Button variant="link" size="sm" accessibilityRole="button" onPress={onReset}>
           {FORECAST_COPY.reset}
         </Button>
       </View>

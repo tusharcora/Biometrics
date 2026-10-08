@@ -44,6 +44,7 @@ export function SyncStatusLine() {
         variant="link"
         size="xs"
         accessibilityLabel="Syncing with Google Health"
+        accessibilityRole="button"
         loading
         // A status, not a dead control: no 50% dim, so the line stays readable while it syncs.
         className="self-start opacity-100"
@@ -66,6 +67,8 @@ export function SyncStatusLine() {
       variant="link"
       size="xs"
       accessibilityLabel={`${text}. Double tap to sync now.`}
+      // An action (sync now), not navigation.
+      accessibilityRole="button"
       onPress={() => void syncNow('manual')}
       className="self-start"
       textClassName={state === 'failed' ? 'text-destructive' : 'text-muted-foreground'}

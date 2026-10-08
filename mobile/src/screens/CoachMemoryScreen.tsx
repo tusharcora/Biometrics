@@ -116,13 +116,14 @@ function MemoryRow({ entry, icon, onChange, onRemove }: MemoryRowProps) {
           </View>
         ) : (
           <View className="flex-row gap-5 pt-0.5">
-            <Button testID={`memory-edit-${entry.id}`} variant="link" size="xs" onPress={() => setEditing(true)}>
+            <Button testID={`memory-edit-${entry.id}`} variant="link" size="xs" accessibilityRole="button" onPress={() => setEditing(true)}>
               Edit
             </Button>
             <Button
               testID={`memory-delete-${entry.id}`}
               variant="link"
               size="xs"
+              accessibilityRole="button"
               textClassName="text-destructive"
               onPress={() => {
                 setDeleteError(false);
