@@ -11,6 +11,7 @@ import { recapTitle } from '../../lib/recapCopy';
 import { CHECKIN_OPTIONS, personName } from '../../lib/socialCopy';
 import { Character } from '../characters/Character';
 import { DEFAULT_CHARACTER_ID, isCharacterId } from '../characters/types';
+import { Button } from '../ui/button';
 import { Text } from '../ui/text';
 
 export function SocialStoryFrame({ frame, author, mine, onUnlock }: { frame: StoryFrame; author: Person; mine: boolean; onUnlock: () => void }) {
@@ -30,7 +31,8 @@ export function SocialStoryFrame({ frame, author, mine, onUnlock }: { frame: Sto
           <View pointerEvents="none">
             <Text className="text-center text-lg font-semibold text-white">{`Check in to see how ${who} woke up`}</Text>
           </View>
-          <Text testID="story-unlock" accessibilityRole="button" onPress={onUnlock} className="rounded-full bg-white px-5 py-2 font-semibold text-black">Check in</Text>
+          {/* White on the story's dark ground in either app scheme. */}
+          <Button testID="story-unlock" size="sm" onPress={onUnlock} className="bg-white" textClassName="text-black">Check in</Button>
         </View>
       ) : null}
       {frame.kind === 'checkin' && !frame.locked ? (
