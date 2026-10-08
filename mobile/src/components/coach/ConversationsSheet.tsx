@@ -139,7 +139,7 @@ export function ConversationsSheet({ visible, onClose, onOpen, onNewChat, onOpen
         ) : state.status === 'error' ? (
           <View testID="conversations-error" className="items-start gap-1 px-1">
             <Text className="text-sm text-muted-foreground">{"Couldn't load your past chats."}</Text>
-            <Button testID="conversations-retry" variant="ghost" size="sm" onPress={() => void load()}>
+            <Button testID="conversations-retry" variant="secondary" size="sm" className="self-start" onPress={() => void load()}>
               Try again
             </Button>
           </View>

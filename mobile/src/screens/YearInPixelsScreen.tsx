@@ -45,7 +45,7 @@ export function YearInPixelsScreen() {
         {state.phase === 'error' ? (
           <Card testID="year-error" className="w-full gap-3">
             <Text className="text-sm text-muted-foreground">Your year could not be loaded.</Text>
-            <Button testID="year-retry" variant="secondary" size="sm" onPress={() => void load()}>
+            <Button testID="year-retry" variant="secondary" size="sm" className="self-start" onPress={() => void load()}>
               Try again
             </Button>
           </Card>

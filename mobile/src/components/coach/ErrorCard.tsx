@@ -82,7 +82,7 @@ export function ErrorCard({ error, onRetry }: { error: CoachTurnError; onRetry: 
       {error.retryable ? (
         <Button
           testID="coach-retry-button"
-          variant="ghost"
+          variant="secondary"
           size="sm"
           className="self-start"
           disabled={waiting}

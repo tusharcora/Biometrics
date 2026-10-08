@@ -152,7 +152,7 @@ export function RecapBuilderScreen() {
               {loadError}
             </Text>
             {format === 'year' ? (
-              <Button testID="builder-retry" variant="secondary" size="sm" onPress={() => setYearFailed(false)}>
+              <Button testID="builder-retry" variant="secondary" size="sm" className="self-start" onPress={() => setYearFailed(false)}>
                 Try again
               </Button>
             ) : null}

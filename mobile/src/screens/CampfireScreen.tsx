@@ -241,7 +241,7 @@ export function CampfireScreen() {
         {state.status === 'error' ? (
           <Card className="mt-4 gap-3">
             <Text className="text-sm">Couldn't load the camp.</Text>
-            <Button testID="camp-retry" variant="secondary" className="self-start" onPress={() => void load()}>Try again</Button>
+            <Button testID="camp-retry" variant="secondary" size="sm" className="self-start" onPress={() => void load()}>Try again</Button>
           </Card>
         ) : null}
       </SafeAreaView>

@@ -507,7 +507,7 @@ export function ActivityHeatmap({ steps, earliestDate, today, sleep, onRetrySlee
       <Card testID="sleep-error" className="items-center gap-3 py-10">
         <Text className="text-center text-muted-foreground">Your sleep could not be loaded.</Text>
         {onRetrySleep ? (
-          <Button testID="sleep-retry" variant="secondary" onPress={onRetrySleep}>
+          <Button testID="sleep-retry" variant="secondary" size="sm" onPress={onRetrySleep}>
             Try again
           </Button>
         ) : null}
