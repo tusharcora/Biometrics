@@ -5,6 +5,8 @@
 // line as the previewed one. For the Campfire (S2) the buddy gets a camp note and a goodnight for their current
 // evening, so the camp shows an asleep coach with a bubble. The demo account itself is left unchecked-in so the
 // walkthrough shows the lock lifting. Run seedBuddies first: the two accounts must already be buddies.
+// For Chats (S3) the two accounts get a short conversation (mine, then the buddy's unread reply with a Heart on mine),
+// written once per pair, and the buddy a Chats note (upserted).
 //
 //   DATABASE_URL=<local dev database> node node_modules/.bin/ts-node --project tsconfig.evals.json scripts/seedSocial.ts --email demo@example.com --buddy-email buddy@example.com
 //
@@ -14,6 +16,8 @@
 // on import. On failure it logs only the error's name.
 import { civilDateToUtcMidnight } from '../src/biometrics/civilDate';
 import { orderedPair } from '../src/buddies/pairs';
+import { findConversationId, writeMessageTx } from '../src/chats/conversations';
+import { STATUS_NOTE_TTL_MS } from '../src/chats/notes';
 import { STEPS_GOAL } from '../src/coach/tools/metrics';
 import { prisma } from '../src/db/client';
 import { saveCheckIn, todayFor } from '../src/social/checkins';
@@ -25,6 +29,13 @@ import { assertDevDatabase } from './seedAchievements';
 
 /** The buddy's camp note in the walkthrough (the canvas' line). */
 export const SEED_CAMP_NOTE = 'bed soon, night all';
+/** The demo conversation (the V5 thread board's lines). */
+export const SEED_CHAT = {
+  mine: 'early night tonight? the camp is lighting the fire at 10:30',
+  theirs: 'rough night lol, the neighbours had a party',
+} as const;
+/** The buddy's Chats note (the V5 Chats board's line). */
+export const SEED_STATUS_NOTE = 'early night tonight';
 
 type SeedEnv = { NODE_ENV?: string | undefined; DATABASE_URL?: string | undefined };
 
@@ -51,7 +62,7 @@ async function findUserId(email: string): Promise<string> {
   return user.id;
 }
 
-export async function seedSocial({ email, buddyEmail, now = new Date(), env = process.env }: { email: string; buddyEmail: string; now?: Date; env?: SeedEnv }): Promise<{ buddyCheckedIn: boolean; stepGoal: boolean; recapShared: boolean; campNote: boolean; goodnight: boolean }> {
+export async function seedSocial({ email, buddyEmail, now = new Date(), env = process.env }: { email: string; buddyEmail: string; now?: Date; env?: SeedEnv }): Promise<{ buddyCheckedIn: boolean; stepGoal: boolean; recapShared: boolean; campNote: boolean; goodnight: boolean; chat: boolean; statusNote: boolean }> {
   assertDevDatabase(env);
   const userId = await findUserId(email);
   const buddyId = await findUserId(buddyEmail);
@@ -86,7 +97,20 @@ export async function seedSocial({ email, buddyEmail, now = new Date(), env = pr
     create: { authorId: buddyId, localDate: evening, at: now, onTime: isOnTime(now, buddy.timezone, buddy.bedtimeGoal) },
     update: {},
   });
-  return { buddyCheckedIn: true, stepGoal: true, recapShared: recap !== null, campNote: true, goodnight: true };
+  // The demo chat, written directly (no limiter, no push): mine 30 minutes ago, the buddy's reply 20 minutes ago with a
+  // Heart on mine, so the demo account has one unread conversation. Once per pair: a re-run finds the reply and stops.
+  const chat = await prisma.$transaction(async (tx) => {
+    const existing = await findConversationId(userId, buddyId, tx);
+    if (existing && (await tx.message.count({ where: { conversationId: existing, text: SEED_CHAT.theirs } })) > 0) return false;
+    const mine = await writeMessageTx(tx, { senderId: userId, recipientId: buddyId, kind: 'TEXT', text: SEED_CHAT.mine, now: new Date(now.getTime() - 30 * 60_000) });
+    const theirsAt = new Date(now.getTime() - 20 * 60_000);
+    await writeMessageTx(tx, { senderId: buddyId, recipientId: userId, kind: 'TEXT', text: SEED_CHAT.theirs, now: theirsAt });
+    await tx.messageReaction.createMany({ data: [{ messageId: mine, reactorId: buddyId, kind: 'HEART', createdAt: theirsAt }], skipDuplicates: true });
+    return true;
+  });
+  const statusNote = { text: SEED_STATUS_NOTE, createdAt: now, expiresAt: new Date(now.getTime() + STATUS_NOTE_TTL_MS) };
+  await prisma.statusNote.upsert({ where: { authorId: buddyId }, create: { authorId: buddyId, ...statusNote }, update: statusNote });
+  return { buddyCheckedIn: true, stepGoal: true, recapShared: recap !== null, campNote: true, goodnight: true, chat, statusNote: true };
 }
 
 async function closeQuietly(close: () => Promise<unknown>): Promise<void> {
