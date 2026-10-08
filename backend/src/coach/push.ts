@@ -12,6 +12,10 @@
 // output. The Expo sender re-renders the expected text from the template and the slots and throws
 // unless the payload matches exactly, so the closed-table guarantee still holds.
 //
+// DM_MESSAGE (spec 2026-10-07 social §10) amends the rule above for one kind: with the RECIPIENT's previews on, its body
+// is the sender's own message on one line (at most 80 code points plus "…", checked by isPushPreview), the only free
+// text a push may ever carry; never a health value, never model output. Without previews it is a fixed template.
+//
 // DATA IS ID-ONLY. A payload may carry `data` only as { kind: 'recap', recapId: <uuid> } on a recap
 // kind, or { kind: <the buddy kind>, refId: <uuid> } on a buddy kind: a fixed kind and an opaque id,
 // never content. The Expo sender re-validates data against that allowlist exactly as it re-checks
@@ -37,8 +41,8 @@ import type { AchievementFamily, StickerKind } from '@prisma/client';
 import { checkDisplayName } from '../buddies/identity';
 
 export type PushKind = 'weekly_digest' | 'insight' | 'monthly_recap';
-export type BuddyPushKind = 'buddy_sticker' | 'buddy_request' | 'buddy_paired' | 'buddy_badge';
-export const BUDDY_PUSH_KINDS: readonly BuddyPushKind[] = ['buddy_sticker', 'buddy_request', 'buddy_paired', 'buddy_badge'];
+export type BuddyPushKind = 'buddy_sticker' | 'buddy_request' | 'buddy_paired' | 'buddy_badge' | 'dm_message';
+export const BUDDY_PUSH_KINDS: readonly BuddyPushKind[] = ['buddy_sticker', 'buddy_request', 'buddy_paired', 'buddy_badge', 'dm_message'];
 export type AnyPushKind = PushKind | BuddyPushKind;
 
 export const isBuddyPushKind = (kind: unknown): kind is BuddyPushKind => (BUDDY_PUSH_KINDS as readonly unknown[]).includes(kind);
@@ -48,7 +52,7 @@ export interface RecapPushData {
   recapId: string;
 }
 
-/** refId: the actor's user id (sticker, paired, badge) or the request id (request). */
+/** refId: the actor's user id (sticker, paired, badge, dm_message) or the request id (request). */
 export interface BuddyPushData {
   kind: BuddyPushKind;
   refId: string;
@@ -61,6 +65,7 @@ export interface BuddyPushSlots {
   buddy_request: Record<string, never>;
   buddy_paired: { name: string };
   buddy_badge: { name: string; family: AchievementFamily; level: number };
+  dm_message: { name: string; preview?: string };
 }
 
 export interface GenericPushPayload {
@@ -129,11 +134,24 @@ export function isPushName(name: unknown): name is string {
   return check.ok && check.displayName === name;
 }
 
+/**
+ * A dm_message preview: one trimmed line, no control or format characters, 1-80 code points, or 81 ending in "…".
+ * The one exception is what message sanitising keeps inside emoji (chats/text.ts): the zero-width joiner and the tag
+ * characters of a subdivision flag, so a joined emoji in the text never makes the push fail.
+ */
+export function isPushPreview(text: unknown): text is string {
+  if (typeof text !== 'string' || text.length === 0 || text !== text.trim()) return false;
+  if (/(?![\u200D\u{E0020}-\u{E007F}])[\p{Cc}\p{Cf}\p{Cs}\u2028\u2029]/u.test(text)) return false;
+  const length = [...text].length;
+  return length <= 80 || (length === 81 && text.endsWith('…'));
+}
+
 const BUDDY_BODIES: Readonly<Record<BuddyPushKind, string>> = Object.freeze({
   buddy_sticker: 'Open the app to send one back.',
   buddy_request: 'Open the app to see who.',
   buddy_paired: 'Open the app to say hi.',
   buddy_badge: 'Open the app to cheer them on.',
+  dm_message: 'Open the app to read it.',
 });
 
 /** The text of a buddy push from its template and typed slots; any other slot shape throws. */
@@ -159,6 +177,10 @@ export function renderBuddyPush<K extends BuddyPushKind>(kind: K, slots: BuddyPu
     case 'buddy_badge':
       if (keys !== 'family,level,name') slotInvalid();
       return { title: `${name()} reached ${badgeLabel(s.family, s.level)}`, body };
+    case 'dm_message':
+      if (keys === 'name') return { title: `${name()} sent you a message`, body };
+      if (keys === 'name,preview' && isPushPreview(s.preview)) return { title: name(), body: s.preview };
+      return slotInvalid();
     default:
       return slotInvalid();
   }

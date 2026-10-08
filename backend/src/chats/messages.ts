@@ -9,6 +9,8 @@ import { Prisma, type MessageKind, type PrismaClient, type StickerKind } from '@
 import { prisma } from '../db/client';
 import { encodeCursor, keysetBefore, parseCursor } from '../buddies/cursor';
 import { BuddyError, UUID_RE, limitOrThrow } from '../buddies/errors';
+import { pushName } from '../buddies/notify';
+import { enqueueBuddyNotice } from '../buddies/notifyQueue';
 import type { PairDeps } from '../buddies/pairs';
 import { toPerson } from '../buddies/people';
 import { STICKER_KINDS, sendSticker } from '../buddies/stickers';
@@ -66,6 +68,16 @@ function parseReplyTo(raw: unknown): string | null {
   return raw;
 }
 
+/** After commit, one dm_message job per TEXT or CARD message, whatever the recipient's settings (the job decides). It carries the message id and the sender's name, never the text. */
+async function enqueueDmNotice(senderId: string, recipientId: string, messageId: string, deps: PairDeps): Promise<void> {
+  const me = await prisma.user.findUnique({ where: { id: senderId }, select: { displayName: true, handle: true } });
+  if (!me) return;
+  await enqueueBuddyNotice(
+    { kind: 'dm_message', recipientId, actorId: senderId, refId: messageId, slots: { name: pushName(me) } },
+    deps.notifyQueue ? { queue: deps.notifyQueue } : {},
+  );
+}
+
 /**
  * Body: { kind: 'TEXT', text } | { kind: 'STICKER', sticker } | { kind: 'CARD', card, text? }, each with an optional
  * replyToMessageId. Returns the stored message as the sender sees it.
@@ -108,6 +120,7 @@ export async function sendMessage(senderId: string, buddyId: string, body: unkno
     const messageId = await writeMessageTx(tx, { senderId, recipientId: buddyId, kind, text, card, replyToMessageId, now });
     return loadMessageDTO(messageId, senderId, tx);
   });
+  await enqueueDmNotice(senderId, buddyId, message.id, deps);
   await touchPresence(senderId, now);
   return message;
 }

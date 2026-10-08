@@ -12,6 +12,7 @@ import { prisma } from '../db/client';
 import { withTimeout } from '../lib/withTimeout';
 import { syncQueue } from '../sync/queue';
 import { sendBuddyNotice, type BuddyNotice, type NoticeOutcome } from './notify';
+import { runDmNotice } from '../chats/dmPush';
 
 export const BUDDY_NOTIFY_JOB = 'buddyNotify';
 export const NOTIFY_ENQUEUE_TIMEOUT_MS = 300;
@@ -79,6 +80,8 @@ export async function runBuddyNotifyJob(data: BuddyNotice, deps: { pushSender: P
     // check a sticker sent before the block would reach the person who just blocked its sender.
     return 'dropped';
   }
+  // dm_message (S3): its refId is the message id; the job reads the message (and, with previews on, its text) now.
+  if (data.kind === 'dm_message') return runDmNotice(data, deps);
   return sendBuddyNotice(deps.pushSender, data, deps.now);
 }
 
