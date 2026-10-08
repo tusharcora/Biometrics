@@ -50,6 +50,15 @@ async function seedSocial(a: string, b: string) {
     await prisma.goodnight.create({ data: { authorId: me, localDate: today, at: new Date('2026-10-07T22:00:00Z'), onTime: true } });
     await prisma.campNote.create({ data: { authorId: me, text: 'bed soon', expiresAt: new Date('2026-10-08T06:00:00Z') } });
   }
+  // Social S3 tables (Chats).
+  const conversation = await prisma.conversation.create({ data: { userAId: lo, userBId: hi } });
+  for (const [me, other] of [[a, b], [b, a]] as const) {
+    const message = await prisma.message.create({ data: { conversationId: conversation.id, senderId: me, kind: 'TEXT', text: 'hi' } });
+    await prisma.messageReaction.create({ data: { messageId: message.id, reactorId: other, kind: 'HEART' } });
+    await prisma.conversationRead.create({ data: { conversationId: conversation.id, readerId: me, lastReadAt: new Date() } });
+    await prisma.statusNote.create({ data: { authorId: me, text: 'early night', expiresAt: later } });
+    await prisma.report.create({ data: { reporterId: me, reportedUserId: other, targetType: 'MESSAGE', targetId: message.id, reason: 'SPAM' } });
+  }
   return { aCode: aCode.code, bCode: bCode.code };
 }
 
