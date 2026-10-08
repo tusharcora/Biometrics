@@ -1,10 +1,10 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from 'nativewind';
 import { listConversations, type CoachConversationSummaryDTO } from '../../api/coach';
 import { COLORS } from '../../theme';
-import { Button } from '../ui/button';
+import { Button, buttonIconSize } from '../ui/button';
 import { SettingsGroup, SettingsRow } from '../ui/settings-list';
 import { Sheet } from '../ui/sheet';
 import { Skeleton } from '../ui/skeleton';
@@ -114,15 +114,9 @@ export function ConversationsSheet({ visible, onClose, onOpen, onNewChat, onOpen
       <View className="gap-5 pb-2">
         <View className="flex-row items-center justify-between">
           <Text className="px-1 font-display text-display-sm">Conversations</Text>
-          <Pressable
-            testID="conversations-close"
-            accessibilityRole="button"
-            accessibilityLabel="Close"
-            onPress={onClose}
-            className="h-11 w-11 items-center justify-center rounded-full active:bg-muted"
-          >
-            <Ionicons name="close" size={22} color={colors.muted} />
-          </Pressable>
+          <Button testID="conversations-close" variant="ghost" size="icon-lg" accessibilityLabel="Close" onPress={onClose}>
+            <Ionicons name="close" size={buttonIconSize('icon-lg')} color={colors.muted} />
+          </Button>
         </View>
 
         <SettingsGroup>
@@ -145,7 +139,7 @@ export function ConversationsSheet({ visible, onClose, onOpen, onNewChat, onOpen
         ) : state.status === 'error' ? (
           <View testID="conversations-error" className="items-start gap-1 px-1">
             <Text className="text-sm text-muted-foreground">{"Couldn't load your past chats."}</Text>
-            <Button testID="conversations-retry" variant="ghost" size="sm" className="min-h-[44px] px-0" onPress={() => void load()}>
+            <Button testID="conversations-retry" variant="ghost" size="sm" onPress={() => void load()}>
               Try again
             </Button>
           </View>
@@ -190,7 +184,6 @@ export function ConversationsSheet({ visible, onClose, onOpen, onNewChat, onOpen
                   testID="conversations-more"
                   variant="ghost"
                   size="sm"
-                  className="min-h-[44px] px-0"
                   disabled={state.more === 'loading'}
                   onPress={() => void loadMore()}
                 >
