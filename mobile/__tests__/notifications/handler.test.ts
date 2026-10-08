@@ -235,21 +235,21 @@ describe('buddy pushes', () => {
   };
 
   it('show as a banner while the app is open; recap pushes still do not', async () => {
-    for (const kind of ['buddy_sticker', 'buddy_request', 'buddy_paired', 'buddy_badge']) {
+    for (const kind of ['buddy_sticker', 'buddy_request', 'buddy_paired', 'buddy_badge', 'dm_message']) {
       expect(await handle()(notification({ kind, refId: ID }))).toEqual(SHOWN);
     }
     expect(await handle()(notification({ kind: RECAP_PUSH_KIND, recapId: ID }))).toEqual(HIDDEN);
     expect(await handle()(notification({ kind: 'buddy_sticker', refId: 'nope' }))).toEqual(HIDDEN);
   });
 
-  it("a tap opens the requests tab for a request, and the actor's week for anything else", async () => {
+  it("a tap opens the requests for a request, and the actor's thread for anything else", async () => {
     N.getLastNotificationResponseAsync.mockResolvedValue(response({ kind: 'buddy_request', refId: ID }));
     await routeInitialNotification();
     expect(ref.navigate).toHaveBeenLastCalledWith('Buddies', REQUESTS, { pop: true });
-    for (const kind of ['buddy_sticker', 'buddy_paired', 'buddy_badge']) {
+    for (const kind of ['buddy_sticker', 'buddy_paired', 'buddy_badge', 'dm_message']) {
       N.getLastNotificationResponseAsync.mockResolvedValue(response({ kind, refId: ID }));
       await routeInitialNotification();
-      expect(ref.navigate).toHaveBeenLastCalledWith('BuddyWeek', { buddyId: ID }, { pop: true });
+      expect(ref.navigate).toHaveBeenLastCalledWith('ChatThread', { buddyId: ID }, { pop: true });
     }
   });
 
@@ -277,7 +277,7 @@ describe('buddy pushes', () => {
     N.getLastNotificationResponseAsync.mockResolvedValue(response({ kind: 'buddy_sticker', refId: ID, buddyId: OTHER, tab: 'activity' }));
     await routeInitialNotification();
     expect(ref.navigate).toHaveBeenCalledTimes(1);
-    expect(ref.navigate).toHaveBeenCalledWith('BuddyWeek', { buddyId: ID }, { pop: true });
+    expect(ref.navigate).toHaveBeenCalledWith('ChatThread', { buddyId: ID }, { pop: true });
   });
 
   it('sends a fresh open value on every request tap, so a repeat still lands on Requests', async () => {
@@ -301,7 +301,7 @@ describe('buddy pushes', () => {
     ref.isReady.mockReturnValue(true);
     await jest.advanceTimersByTimeAsync(100);
     await done;
-    expect(ref.navigate).toHaveBeenCalledWith('BuddyWeek', { buddyId: ID }, { pop: true });
+    expect(ref.navigate).toHaveBeenCalledWith('ChatThread', { buddyId: ID }, { pop: true });
     expect(jest.getTimerCount()).toBe(0);
   });
 
@@ -311,7 +311,7 @@ describe('buddy pushes', () => {
     const listener = N.addNotificationResponseReceivedListener.mock.calls[0]![0];
     listener(response({ kind: 'buddy_paired', refId: ID }));
     await Promise.resolve();
-    expect(ref.navigate).toHaveBeenLastCalledWith('BuddyWeek', { buddyId: ID }, { pop: true });
+    expect(ref.navigate).toHaveBeenLastCalledWith('ChatThread', { buddyId: ID }, { pop: true });
     listener(response({ kind: 'buddy_request', refId: ID }));
     await Promise.resolve();
     expect(ref.navigate).toHaveBeenLastCalledWith('Buddies', REQUESTS, { pop: true });

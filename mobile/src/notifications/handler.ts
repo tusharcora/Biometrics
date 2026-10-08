@@ -4,8 +4,8 @@ import { WIND_DOWN_KIND } from '../lib/windDown';
 import { getSocialState, refreshSocial } from '../lib/socialStore';
 
 // What the app does with notifications while it runs: shows the wind-down reminder and buddy
-// pushes in the foreground, and opens the Sleep screen, a recap, the buddy requests or a buddy's
-// week when one is tapped (a recap opens the story viewer, which plays a week and hands a month
+// pushes in the foreground, and opens the Sleep screen, a recap, the buddy requests or a buddy's chat thread
+// when one is tapped (a recap opens the story viewer, which plays a week and hands a month
 // to its recap screen).
 // A buddy push that arrives while the app is open also re-reads Social (the tab dot and the home), once loaded.
 // Every native call here is best-effort: a build or simulator without the
@@ -51,7 +51,7 @@ function recapIdOf(notification: Notifications.Notification): string | null {
 }
 
 /** Buddy pushes (spec 2026-10-06 buddies §6): id-only data { kind, refId: <uuid> }. */
-export const BUDDY_PUSH_KINDS = ['buddy_sticker', 'buddy_request', 'buddy_paired', 'buddy_badge'] as const;
+export const BUDDY_PUSH_KINDS = ['buddy_sticker', 'buddy_request', 'buddy_paired', 'buddy_badge', 'dm_message'] as const;
 type BuddyPushKind = (typeof BUDDY_PUSH_KINDS)[number];
 
 function buddyPushOf(notification: Notifications.Notification): { kind: BuddyPushKind; refId: string } | null {
@@ -92,12 +92,13 @@ function routeFor(notification: Notifications.Notification): (() => void) | null
   if (isWindDown(notification)) return () => navigationRef.navigate('Sleep', undefined, { pop: true });
   const buddy = buddyPushOf(notification);
   if (buddy) {
-    // refId is the request id for a request (opens the requests), else the actor's user id (their
-    // week); nothing else in the data is used. `open` is new on every tap: Buddies re-selects its
-    // tab when it changes, so a Buddies screen already on Requests but switched away goes back.
+    // refId is the request id for a request (opens the requests), else the actor's user id: a message, sticker, pairing
+    // or badge opens their thread (spec 2026-10-07 social §2; their week is one tap from its header; on a server without
+    // chats the thread offers the week). Nothing else in the data is used. `open` is new on every request tap: Buddies
+    // re-selects its tab when it changes.
     return buddy.kind === 'buddy_request'
       ? () => navigationRef.navigate('Buddies', { tab: 'requests', open: Date.now() }, { pop: true })
-      : () => navigationRef.navigate('BuddyWeek', { buddyId: buddy.refId }, { pop: true });
+      : () => navigationRef.navigate('ChatThread', { buddyId: buddy.refId }, { pop: true });
   }
   const recapId = recapIdOf(notification);
   return recapId ? () => navigationRef.navigate('RecapStory', { id: recapId }, { pop: true }) : null;

@@ -8,6 +8,7 @@ import { useAuth } from '../auth/AuthContext';
 import type { AchievementFamily } from '../api/achievements';
 import type { Recap } from '../api/recaps';
 import type { ScoreType } from '../api/scores';
+import type { ChatQuote } from '../api/chats';
 import { AuthNavigator } from './AuthNavigator';
 import { ConnectHealthScreen } from '../screens/ConnectHealthScreen';
 import { MetricDetailScreen } from '../screens/MetricDetailScreen';
@@ -41,6 +42,7 @@ import { BuddiesScreen } from '../screens/BuddiesScreen';
 import { BuddyWeekScreen } from '../screens/BuddyWeekScreen';
 import { HighlightsScreen } from '../screens/HighlightsScreen';
 import { CampfireScreen } from '../screens/CampfireScreen';
+import { ChatThreadScreen } from '../screens/ChatThreadScreen';
 import { BlockedPeopleScreen } from '../screens/BlockedPeopleScreen';
 import { CelebrationHost } from '../components/achievements/CelebrationHost';
 import { BuddiesStoreScope } from '../components/buddies/BuddiesStoreScope';
@@ -135,6 +137,8 @@ export type RootStackParamList = {
   SocialStory: { authorId: string; mine?: boolean };
   // Social → the camp banner: the Campfire page (S2), pushed with no tab bar.
   Campfire: undefined;
+  // Chats (S3): one buddy's thread. `quote` stages a story frame, a note or a camp note to send with the next text.
+  ChatThread: { buddyId: string; quote?: ChatQuote };
 };
 
 export type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';
@@ -259,6 +263,8 @@ export function RootNavigator() {
               <Stack.Screen name="Highlights" component={HighlightsScreen} options={{ title: 'Highlights' }} />
               {/* The Campfire (S2): its own header over the scene, no tab bar. */}
               <Stack.Screen name="Campfire" component={CampfireScreen} options={{ headerShown: false }} />
+              {/* Chats (S3): its own header (coach, active line, info); one screen per buddy, like BuddyWeek. */}
+              <Stack.Screen name="ChatThread" component={ChatThreadScreen} getId={({ params }) => params?.buddyId} options={{ headerShown: false }} />
               <Stack.Screen
                 name="SocialStory"
                 component={SocialStoryScreen}
