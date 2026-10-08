@@ -17,6 +17,8 @@ export function shouldDismiss(dy: number, vy: number): boolean {
 interface SheetProps {
   visible: boolean;
   onClose: () => void;
+  /** False while the sheet must stay up (a request in flight): a backdrop tap, the Android back button or a drag does nothing. */
+  dismissible?: boolean;
   children: React.ReactNode;
   testID?: string;
 }
@@ -28,8 +30,8 @@ interface SheetProps {
 // that flips `visible` off directly just makes it disappear, without the exit
 // animation. If that happens mid-exit, the pending `onClose` still fires once
 // when the exit timer ends; the timer is cleared only when the sheet is shown
-// again or unmounts.)
-export function Sheet({ visible, onClose, children, testID = 'sheet' }: SheetProps) {
+// again or unmounts.) While `dismissible` is false, none of the three closes it.
+export function Sheet({ visible, onClose, dismissible = true, children, testID = 'sheet' }: SheetProps) {
   const { height } = useWindowDimensions();
   const { colorScheme } = useColorScheme();
   const scheme = colorScheme === 'light' ? 'light' : 'dark';
@@ -63,7 +65,7 @@ export function Sheet({ visible, onClose, children, testID = 'sheet' }: SheetPro
   useEffect(() => clearCloseTimer, [clearCloseTimer]);
 
   const dismiss = useCallback(() => {
-    if (closing.current) return;
+    if (closing.current || !dismissible) return;
     closing.current = true;
     if (reduced) {
       onClose();
@@ -74,7 +76,7 @@ export function Sheet({ visible, onClose, children, testID = 'sheet' }: SheetPro
       closeTimer.current = null;
       onClose();
     }, MOTION.duration.normal);
-  }, [height, onClose, reduced, translateY]);
+  }, [dismissible, height, onClose, reduced, translateY]);
 
   const pan = useMemo(
     () =>
@@ -84,11 +86,11 @@ export function Sheet({ visible, onClose, children, testID = 'sheet' }: SheetPro
           translateY.value = Math.max(0, g.dy);
         },
         onPanResponderRelease: (_e, g) => {
-          if (shouldDismiss(g.dy, g.vy)) dismiss();
+          if (dismissible && shouldDismiss(g.dy, g.vy)) dismiss();
           else translateY.value = withSpring(0, MOTION.spring.settle);
         },
       }),
-    [dismiss, translateY],
+    [dismiss, dismissible, translateY],
   );
 
   const sheetStyle = useAnimatedStyle(() => ({ transform: [{ translateY: translateY.value }] }));

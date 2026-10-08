@@ -9,7 +9,8 @@ import { ChatAvatar } from './ChatAvatar';
 // The Chats notes row (spec §8.1; the owner-approved Inbox board): my avatar first ("Share a note" in an outlined
 // bubble, or my note), then each buddy's live note in a bubble over their avatar (a teal ring while their story is
 // unseen). Tapping a buddy's note opens their thread with it quoted; a long press reports it. The avatars are not
-// buttons (allowlisted); the name under each sits outside the press target, whose label already says it.
+// buttons (allowlisted); the name under each sits outside the press target, whose label already says it. A note that
+// expired while the inbox is open is hidden here, before the next read drops it.
 function Bubble({ text, prompt }: { text: string; prompt: boolean }) {
   return (
     <View className={`min-h-[26px] max-w-[72px] justify-center rounded-xl px-2 py-1 ${prompt ? 'border border-border' : 'bg-secondary'}`}>
@@ -18,16 +19,22 @@ function Bubble({ text, prompt }: { text: string; prompt: boolean }) {
   );
 }
 
-export function NotesRow({ me, mine, buddies, ringed, onMine, onOpen, onReport }: {
+const live = (note: { expiresAt: string }, now: number) => Date.parse(note.expiresAt) > now;
+
+export function NotesRow({ me, mine: mineNote, buddies: buddyNotes, ringed, now = Date.now(), onMine, onOpen, onReport }: {
   me: Person;
   mine: StatusNote | null;
   buddies: BuddyNote[];
   /** Buddies with an unseen story: their avatar wears the teal ring. */
   ringed?: ReadonlySet<string>;
+  /** The render's clock (ms); notes expiring at or before it are hidden. */
+  now?: number;
   onMine: () => void;
   onOpen: (note: BuddyNote) => void;
   onReport: (note: BuddyNote) => void;
 }) {
+  const mine = mineNote && live(mineNote, now) ? mineNote : null;
+  const buddies = buddyNotes.filter((n) => live(n, now));
   return (
     <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 14 }}>
       <View className="w-[68px] items-center gap-1">

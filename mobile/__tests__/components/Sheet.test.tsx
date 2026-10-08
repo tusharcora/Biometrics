@@ -58,6 +58,27 @@ describe('Sheet', () => {
     expect(onClose).toHaveBeenCalledTimes(1);
   });
 
+  it('ignores a backdrop tap while not dismissible, and closes on one once it is again', () => {
+    const onClose = jest.fn();
+    const sheet = (dismissible: boolean) => (
+      <Sheet visible onClose={onClose} dismissible={dismissible}>
+        <Text>details</Text>
+      </Sheet>
+    );
+    const { getByTestId, rerender } = render(sheet(false));
+    fireEvent.press(getByTestId('sheet-backdrop'));
+    act(() => {
+      jest.advanceTimersByTime(MOTION.duration.normal + 10);
+    });
+    expect(onClose).not.toHaveBeenCalled();
+    rerender(sheet(true));
+    fireEvent.press(getByTestId('sheet-backdrop'));
+    act(() => {
+      jest.advanceTimersByTime(MOTION.duration.normal + 10);
+    });
+    expect(onClose).toHaveBeenCalledTimes(1);
+  });
+
   it('does not call onClose if the sheet is unmounted during the exit animation', () => {
     const onClose = jest.fn();
     const { getByTestId, unmount } = render(

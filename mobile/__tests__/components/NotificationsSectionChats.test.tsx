@@ -53,3 +53,12 @@ it('leaves them out on a server without chats', async () => {
   expect(await screen.findByTestId('buddy-stickers-toggle')).toBeTruthy();
   expect(screen.queryByTestId('chat-messages-toggle')).toBeNull();
 });
+
+// Final review: the two message rows wear a chat icon; the buddy rows keep the people icon.
+it('the message rows wear a chat icon', async () => {
+  render(<NotificationsSection />);
+  await screen.findByTestId('chat-messages-toggle');
+  const iconOf = (id: string) => screen.getByTestId(`${id}-row`).findAll((n) => typeof n.props.name === 'string' && /-outline$/.test(n.props.name))[0]?.props.name;
+  expect([iconOf('chat-messages'), iconOf('chat-previews')]).toEqual(['chatbubble-outline', 'chatbubble-outline']);
+  expect(iconOf('buddy-stickers')).toBe('people-outline');
+});

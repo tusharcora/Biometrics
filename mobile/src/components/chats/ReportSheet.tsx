@@ -83,7 +83,8 @@ export function ReportSheet({ target, name, onClose, onBlock }: {
 
   const what = target?.type === 'message' ? 'message' : target?.type === 'camp_note' ? 'camp note' : 'note';
   return (
-    <Sheet visible={target !== null} onClose={onClose} testID="report-sheet">
+    // In flight, the sheet stays up: closed mid-report, a ticked block would still run once the report is filed.
+    <Sheet visible={target !== null} onClose={onClose} dismissible={!busy} testID="report-sheet">
       <View className="gap-1.5 pb-2">
         <Text className="text-xl font-bold">{`Report ${what}`}</Text>
         <Text className="mb-1.5 text-sm text-muted-foreground">{`${name} won't be told. Reports are kept for review.`}</Text>
@@ -93,6 +94,7 @@ export function ReportSheet({ target, name, onClose, onBlock }: {
               key={r.reason}
               testID={`report-${r.reason}`}
               accessibilityRole="radio"
+              accessibilityLabel={r.label}
               accessibilityState={{ checked: reason === r.reason, disabled: busy }}
               disabled={busy}
               onPress={() => setReason(r.reason)}
@@ -106,6 +108,7 @@ export function ReportSheet({ target, name, onClose, onBlock }: {
         <Pressable
           testID="report-block"
           accessibilityRole="checkbox"
+          accessibilityLabel={`Also block ${name}`}
           accessibilityState={{ checked: block, disabled: busy }}
           disabled={busy}
           onPress={() => setBlock((b) => !b)}

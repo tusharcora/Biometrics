@@ -19,7 +19,22 @@ jest.mock('../../src/api/chats', () => ({
 jest.mock('../../src/api/buddies', () => ({ ...jest.requireActual('../../src/api/buddies'), blockBuddy: jest.fn(() => Promise.resolve()) }));
 const person = (id: string, name = id.toUpperCase()) => ({ id, handle: id, displayName: name, coachId: 'mochi' });
 const mockHome = { me: { person: person('tushar'), checkIn: null }, stories: [{ author: person('ben'), unseen: true }], unread: { requests: 2, stickers: 0, chats: 1 } };
-jest.mock('../../src/lib/socialStore', () => ({ refreshSocial: jest.fn(), useSocial: () => ({ status: 'ready', home: mockHome }) }));
+// As the real store: a refresh publishes a new home object, which the inbox reads again on.
+const mockSocial = { home: mockHome as object, listeners: new Set<() => void>() };
+jest.mock('../../src/lib/socialStore', () => ({
+  refreshSocial: jest.fn(async () => {
+    mockSocial.home = { ...mockSocial.home };
+    mockSocial.listeners.forEach((l) => l());
+  }),
+  useSocial: () => {
+    const { useSyncExternalStore } = require('react');
+    const home = useSyncExternalStore(
+      (l: () => void) => { mockSocial.listeners.add(l); return () => mockSocial.listeners.delete(l); },
+      () => mockSocial.home,
+    );
+    return { status: 'ready', home };
+  },
+}));
 const mockBuddies = { status: 'ready', page: { buddies: [{ ...person('ana', 'Ana'), mood: 'good', moodLine: '', unseenSticker: false }], nextCursor: null, incomingRequests: 0, outgoingRequests: 0 } };
 jest.mock('../../src/lib/buddiesStore', () => ({ useBuddies: () => mockBuddies, refreshBuddies: jest.fn() }));
 const mockNavigate = jest.fn();
@@ -67,7 +82,7 @@ it('lists conversations with their line, unread weight, story ring and active do
   await act(async () => fireEvent.press(screen.getByTestId('chat-row-sam-cheer')));
   expect(sendStickerMessage).toHaveBeenCalledWith('sam', 'CHEER');
   expect(screen.getByTestId('chats-message')).toHaveTextContent('Sent a Cheer');
-  expect(fetchChats).toHaveBeenCalledTimes(2); // re-read after the sticker
+  expect(fetchChats).toHaveBeenCalledTimes(2); // re-read once after the sticker (the Social home changed)
 });
 
 it('a refused Cheer says why', async () => {
@@ -106,7 +121,7 @@ it('notes: share mine with a count, open a buddy\'s note as a quote, report one'
   expect(blockBuddy).not.toHaveBeenCalled();
 });
 
-it('reporting a note with "Also block" ticked blocks its author and re-reads', async () => {
+it('reporting a note with "Also block" ticked blocks its author, says so and re-reads', async () => {
   renderScreen();
   fireEvent(await screen.findByTestId('note-ana'), 'longPress');
   fireEvent.press(screen.getByTestId('report-block'));
@@ -114,6 +129,7 @@ it('reporting a note with "Also block" ticked blocks its author and re-reads', a
   expect(fileReport).toHaveBeenCalledWith('status_note', 'ana', 'spam');
   expect(blockBuddy).toHaveBeenCalledWith('ana');
   expect(refreshBuddies).toHaveBeenCalled();
+  expect(screen.getByTestId('chats-message')).toHaveTextContent('Blocked Ana');
   expect(fetchChats).toHaveBeenCalledTimes(2);
 });
 
@@ -188,4 +204,19 @@ it('an older server says Chats is not here yet and offers Buddies; a failure off
   const target = await screen.findByTestId('chats-retry');
   await act(async () => fireEvent.press(target));
   expect(await screen.findByTestId('chat-row-ben')).toBeTruthy();
+});
+
+// Final review M8: a note that expired while the inbox is open is no longer shown, mine or a buddy's.
+it('expired notes are hidden at render', async () => {
+  (fetchNotes as jest.Mock).mockResolvedValue({
+    mine: { text: 'gym at 6', createdAt: ago(60 * 24), expiresAt: ago(1) },
+    buddies: [
+      { person: person('ana', 'Ana'), text: 'day 6 streak!', createdAt: ago(60), expiresAt: ago(-60) },
+      { person: person('kim', 'Kim'), text: 'old news', createdAt: ago(60 * 24), expiresAt: ago(0) },
+    ],
+  });
+  renderScreen();
+  expect(await screen.findByTestId('note-ana')).toHaveTextContent('day 6 streak!');
+  expect(screen.queryByTestId('note-kim')).toBeNull();
+  expect(screen.getByTestId('note-mine')).toHaveTextContent('Share a note');
 });
