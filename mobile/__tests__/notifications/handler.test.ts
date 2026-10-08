@@ -226,9 +226,6 @@ describe('buddy pushes', () => {
   const ID = '6a1f9f1e-0000-4000-8000-000000000001';
   const SHOWN = { shouldShowBanner: true, shouldShowList: true, shouldPlaySound: true, shouldSetBadge: false };
   const HIDDEN = { shouldShowBanner: false, shouldShowList: false, shouldPlaySound: false, shouldSetBadge: false };
-  // `open` changes on every request tap, so Buddies switches to Requests even when its route
-  // already has tab 'requests' (T20/T24 ruling).
-  const REQUESTS = { tab: 'requests', open: expect.any(Number) };
   const handle = () => {
     installNotificationHandler();
     return N.setNotificationHandler.mock.calls.at(-1)![0]!.handleNotification;
@@ -245,7 +242,7 @@ describe('buddy pushes', () => {
   it("a tap opens the requests for a request, and the actor's thread for anything else", async () => {
     N.getLastNotificationResponseAsync.mockResolvedValue(response({ kind: 'buddy_request', refId: ID }));
     await routeInitialNotification();
-    expect(ref.navigate).toHaveBeenLastCalledWith('Buddies', REQUESTS, { pop: true });
+    expect(ref.navigate).toHaveBeenLastCalledWith('ChatRequests', undefined, { pop: true });
     for (const kind of ['buddy_sticker', 'buddy_paired', 'buddy_badge', 'dm_message']) {
       N.getLastNotificationResponseAsync.mockResolvedValue(response({ kind, refId: ID }));
       await routeInitialNotification();
@@ -280,15 +277,11 @@ describe('buddy pushes', () => {
     expect(ref.navigate).toHaveBeenCalledWith('ChatThread', { buddyId: ID }, { pop: true });
   });
 
-  it('sends a fresh open value on every request tap, so a repeat still lands on Requests', async () => {
-    jest.useFakeTimers();
+  it('a repeat request tap lands on Chats › Requests again', async () => {
     N.getLastNotificationResponseAsync.mockResolvedValue(response({ kind: 'buddy_request', refId: ID }));
     await routeInitialNotification();
-    await jest.advanceTimersByTimeAsync(5);
     await routeInitialNotification();
-    const [first, second] = ref.navigate.mock.calls.map((c) => c[1].open);
-    expect(typeof first).toBe('number');
-    expect(second).not.toEqual(first);
+    expect(ref.navigate.mock.calls).toEqual([['ChatRequests', undefined, { pop: true }], ['ChatRequests', undefined, { pop: true }]]);
   });
 
   it('cold start: waits for the signed-in navigator first', async () => {
@@ -314,7 +307,7 @@ describe('buddy pushes', () => {
     expect(ref.navigate).toHaveBeenLastCalledWith('ChatThread', { buddyId: ID }, { pop: true });
     listener(response({ kind: 'buddy_request', refId: ID }));
     await Promise.resolve();
-    expect(ref.navigate).toHaveBeenLastCalledWith('Buddies', REQUESTS, { pop: true });
+    expect(ref.navigate).toHaveBeenLastCalledWith('ChatRequests', undefined, { pop: true });
     listener(response({ kind: 'buddy_badge', refId: 'x' }));
     await Promise.resolve();
     expect(ref.navigate).toHaveBeenCalledTimes(2);

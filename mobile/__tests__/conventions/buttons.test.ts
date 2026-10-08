@@ -47,7 +47,6 @@ const ALLOWED: Exception[] = [
   { file: 'components/buddies/BuddyListRow.tsx', key: 'buddy-row-${row.id}', count: 1, reason: 'a buddy list row that opens the buddy' },
   { file: 'components/chats/ChatRow.tsx', key: 'chat-row-${row.buddy.id}', count: 1, reason: 'a conversation row that opens the thread' },
   { file: 'components/chats/NewChatSheet.tsx', key: 'new-chat-${row.id}', count: 1, reason: 'a buddy row in the new-message picker' },
-  { file: 'screens/BuddiesScreen.tsx', key: 'activity-${item.id}', count: 1, reason: 'an activity feed row that opens the item' },
   { file: 'screens/BadgesScreen.tsx', key: 'badges-row-${family}', count: 1, reason: 'a badge family row that opens its detail' },
   { file: 'screens/CoachScreen.tsx', key: 'coach-suggestion-${index}', count: 1, reason: 'a suggested-question row in the empty chat' },
   { file: 'components/coach/PromptBar.tsx', key: 'coach-command-${command.key}', count: 1, reason: 'a row of the slash-command menu' },

@@ -121,9 +121,8 @@ export type RootStackParamList = {
   Badges: undefined;
   // One badge: the big badge, current and best, the ladder of five levels.
   BadgeDetail: { family: AchievementFamily };
-  // Buddies (spec 2026-10-06 buddies §7). `tab` lets a request push open the requests tab; a new
-  // `open` (a push sends Date.now()) re-selects it when the route already has that tab.
-  Buddies: { tab?: 'buddies' | 'requests' | 'activity'; open?: number } | undefined;
+  // All buddies (spec 2026-10-07 social §2): the paged list, from the stories row's "See all". Requests live in Chats.
+  Buddies: undefined;
   // Your code, enter a code, or ask by @handle; first-time handle setup if missing.
   PairUp: undefined;
   // One buddy's mood week, shared numbers and stickers; opened from the list and by buddy pushes.
@@ -262,7 +261,7 @@ export function RootNavigator() {
               <Stack.Screen name="Badges" component={BadgesScreen} options={{ title: 'Badges' }} />
               <Stack.Screen name="BadgeDetail" component={BadgeDetailScreen} options={{ title: '' }} />
               <Stack.Screen name="BuddyIdentity" component={BuddyIdentityScreen} options={{ title: 'Buddy name' }} />
-              <Stack.Screen name="Buddies" component={BuddiesScreen} options={{ title: 'Buddies' }} />
+              <Stack.Screen name="Buddies" component={BuddiesScreen} options={{ title: 'All buddies' }} />
               <Stack.Screen name="PairUp" component={PairUpScreen} options={{ title: 'Add a buddy' }} />
               <Stack.Screen name="BlockedPeople" component={BlockedPeopleScreen} options={{ title: 'Blocked people' }} />
               <Stack.Screen name="Highlights" component={HighlightsScreen} options={{ title: 'Highlights' }} />

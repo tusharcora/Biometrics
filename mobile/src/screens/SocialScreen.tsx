@@ -85,12 +85,12 @@ export function SocialScreen() {
 
   const { home } = state;
   // S3: an S3 server sends unread.chats; then the button opens Chats and counts unread chats + requests. An older server
-  // keeps the S2 button (requests + stickers, opening Buddies).
+  // keeps the S2 button (requests + stickers): it opens Chats › Requests while requests wait, else All buddies.
   const chatsOn = typeof home.unread?.chats === 'number';
   const chats = chatsOn ? chatsBadgeCount(home.unread) : (home.unread?.requests ?? 0) + (home.unread?.stickers ?? 0);
   const openChats = () => {
     if (chatsOn) navigation.navigate('Chats');
-    else if ((home.unread?.requests ?? 0) > 0) navigation.navigate('Buddies', { tab: 'requests', open: Date.now() });
+    else if ((home.unread?.requests ?? 0) > 0) navigation.navigate('ChatRequests');
     else navigation.navigate('Buddies');
   };
   return (

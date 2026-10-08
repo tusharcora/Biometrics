@@ -92,12 +92,11 @@ function routeFor(notification: Notifications.Notification): (() => void) | null
   if (isWindDown(notification)) return () => navigationRef.navigate('Sleep', undefined, { pop: true });
   const buddy = buddyPushOf(notification);
   if (buddy) {
-    // refId is the request id for a request (opens the requests), else the actor's user id: a message, sticker, pairing
-    // or badge opens their thread (spec 2026-10-07 social §2; their week is one tap from its header; on a server without
-    // chats the thread offers the week). Nothing else in the data is used. `open` is new on every request tap: Buddies
-    // re-selects its tab when it changes.
+    // refId is the request id for a request (Chats › Requests), else the actor's user id: a message, sticker, pairing or
+    // badge opens their thread (spec 2026-10-07 social §2; their week is one tap from its header; on a server without
+    // chats the thread offers the week). Nothing else in the data is used.
     return buddy.kind === 'buddy_request'
-      ? () => navigationRef.navigate('Buddies', { tab: 'requests', open: Date.now() }, { pop: true })
+      ? () => navigationRef.navigate('ChatRequests', undefined, { pop: true })
       : () => navigationRef.navigate('ChatThread', { buddyId: buddy.refId }, { pop: true });
   }
   const recapId = recapIdOf(notification);

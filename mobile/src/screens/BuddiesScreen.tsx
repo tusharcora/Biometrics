@@ -1,24 +1,16 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, Pressable, View } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { ActivityIndicator, FlatList, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useRoute } from '@react-navigation/native';
-import { fetchActivity, fetchBuddyPage, markActivitySeen, type ActivityItem, type BuddyIdentity, type BuddyRow } from '../api/buddies';
+import { useNavigation } from '@react-navigation/native';
+import { fetchBuddyPage, type BuddyRow } from '../api/buddies';
 import { BuddyListRow } from '../components/buddies/BuddyListRow';
 import { IdentityGate } from '../components/buddies/IdentityGate';
-import { MoodNoticeSheet } from '../components/buddies/MoodNoticeSheet';
-import { useMoodNoticeGate } from '../components/buddies/useMoodNoticeGate';
-import { RequestsList } from '../components/chats/RequestsList';
-import { Character } from '../components/characters/Character';
-import { DEFAULT_CHARACTER_ID, isCharacterId } from '../components/characters/types';
 import { Button } from '../components/ui/button';
-import { SegmentedControl } from '../components/ui/segmented-control';
 import { Text } from '../components/ui/text';
-import { activityLine } from '../lib/buddyCopy';
 import { refreshBuddies, useBuddies } from '../lib/buddiesStore';
 import { useRefreshBuddiesOnFocus } from '../lib/useRefreshBuddiesOnFocus';
 
-type Tab = 'buddies' | 'requests' | 'activity';
-type Nav = { navigate: (name: string, params?: object) => void; addListener?: (event: 'focus', callback: () => void) => () => void };
+type Nav = { navigate: (name: string, params?: object) => void };
 
 /** Rows in order, each id once (a page boundary can repeat a row). */
 function uniqueById<T extends { id: string }>(rows: readonly T[]): T[] {
@@ -26,67 +18,28 @@ function uniqueById<T extends { id: string }>(rows: readonly T[]): T[] {
   return rows.filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)));
 }
 
-// Buddies (spec 2026-10-06 buddies §7, design 2): the paged list, pending requests (accept / decline
-// / block) and Activity with an unseen dot. The header line is fixed text, never model output.
+// All buddies (spec 2026-10-07 social §2): the paged buddy list, reached from the stories row's "See all". Its Requests
+// tab moved to Chats › Requests and its Activity tab gave way to the Social timeline (S3). The header line is fixed text.
 export function BuddiesScreen() {
   const navigation = useNavigation() as unknown as Nav;
-  const route = useRoute() as { params?: { tab?: Tab; open?: number } };
   return (
     <SafeAreaView edges={['bottom']} className="flex-1 bg-background">
-      <IdentityGate>
-        {(identity) => <BuddiesBody identity={identity} navigation={navigation} initialTab={route.params?.tab ?? 'buddies'} openedAt={route.params?.open} />}
-      </IdentityGate>
+      <IdentityGate>{() => <BuddiesBody navigation={navigation} />}</IdentityGate>
     </SafeAreaView>
   );
 }
 
-function BuddiesBody({ identity, navigation, initialTab, openedAt }: { identity: BuddyIdentity; navigation: Nav; initialTab: Tab; openedAt?: number }) {
-  const [tab, setTab] = useState<Tab>(initialTab);
-  // A request push tapped while this screen is open changes the params; its new `open` re-selects
-  // the tab even when `tab` is the one the screen already has.
-  useEffect(() => setTab(initialTab), [initialTab, openedAt]);
+function BuddiesBody({ navigation }: { navigation: Nav }) {
   useRefreshBuddiesOnFocus();
-  const gate = useMoodNoticeGate(identity.moodNoticeSeen);
-  const [unseen, setUnseen] = useState(0);
-  // Bumped each time Activity marks everything seen: a count read that started before it is dropped,
-  // so a slower read can't bring the dot back.
-  const cleared = useRef(0);
-  const readUnseen = useCallback(() => {
-    const at = cleared.current;
-    fetchActivity()
-      .then((page) => {
-        if (at === cleared.current) setUnseen(page.unseen);
-      })
-      .catch(() => undefined);
-  }, []);
-  // On mount and each time the screen comes back into focus.
-  useEffect(() => {
-    readUnseen();
-    return navigation.addListener?.('focus', readUnseen);
-  }, [navigation, readUnseen]);
-  const onSeen = useCallback(() => {
-    cleared.current++;
-    setUnseen(0);
-  }, []);
-  const openRequests = useCallback(() => setTab('requests'), []);
-  const options = [
-    { value: 'buddies' as const, label: 'Buddies' },
-    { value: 'requests' as const, label: 'Requests' },
-    { value: 'activity' as const, label: unseen > 0 ? 'Activity •' : 'Activity' },
-  ];
   return (
     <View className="flex-1 gap-3 px-4 pt-3">
       <Text className="text-sm text-muted-foreground">You see their coach's mood, never their numbers unless they share them.</Text>
-      <SegmentedControl testID="buddies-tabs" options={options} value={tab} onChange={setTab} />
-      {tab === 'buddies' ? <BuddyListTab navigation={navigation} /> : null}
-      {tab === 'requests' ? <RequestsList gate={gate} onAccepted={(buddyId) => navigation.navigate('BuddyWeek', { buddyId })} /> : null}
-      {tab === 'activity' ? <ActivityTab navigation={navigation} onSeen={onSeen} onOpenRequests={openRequests} /> : null}
-      <MoodNoticeSheet {...gate.sheet} />
+      <BuddyList navigation={navigation} />
     </View>
   );
 }
 
-function BuddyListTab({ navigation }: { navigation: Nav }) {
+function BuddyList({ navigation }: { navigation: Nav }) {
   const store = useBuddies();
   const first = store.status === 'ready' ? store.page : null;
   const [more, setMore] = useState<BuddyRow[]>([]);
@@ -150,87 +103,6 @@ function BuddyListTab({ navigation }: { navigation: Nav }) {
           <Button testID="buddies-add" size="lg" onPress={() => navigation.navigate('PairUp')}>Add a buddy</Button>
         </View>
       }
-    />
-  );
-}
-
-function ActivityTab({ navigation, onSeen, onOpenRequests }: { navigation: Nav; onSeen: () => void; onOpenRequests: () => void }) {
-  const [items, setItems] = useState<ActivityItem[] | null>(null);
-  const [cursor, setCursor] = useState<string | null>(null);
-  const [failed, setFailed] = useState(false);
-  const loadingMore = useRef(false);
-  const mounted = useRef(true);
-  useEffect(() => {
-    mounted.current = true;
-    return () => {
-      mounted.current = false;
-    };
-  }, []);
-
-  // Loaded, and marked seen, once per visit to the tab.
-  useEffect(() => {
-    let live = true;
-    void (async () => {
-      let page;
-      try {
-        page = await fetchActivity();
-      } catch {
-        if (live) setFailed(true);
-        return;
-      }
-      if (!live) return;
-      setItems(page.items);
-      setCursor(page.nextCursor);
-      if (page.unseen > 0) {
-        try {
-          await markActivitySeen();
-          onSeen();
-        } catch {
-          // The dot stays; the next visit tries again.
-        }
-      }
-    })();
-    return () => {
-      live = false;
-    };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
-
-  async function loadMore() {
-    if (!cursor || loadingMore.current) return;
-    loadingMore.current = true;
-    try {
-      const page = await fetchActivity(cursor);
-      if (!mounted.current) return;
-      setItems((prev) => uniqueById([...(prev ?? []), ...page.items]));
-      setCursor(page.nextCursor);
-    } catch {
-      // Keep what is shown.
-    } finally {
-      loadingMore.current = false;
-    }
-  }
-  // A request item carries no status, so it only switches to the Requests tab (which shows what is
-  // still pending); it never offers an answer itself. In-screen: navigating to this same route with
-  // the tab param it already has would do nothing.
-  const open = (item: ActivityItem) => (item.kind === 'request' ? onOpenRequests() : navigation.navigate('BuddyWeek', { buddyId: item.actor.id }));
-
-  if (failed) return <Text testID="activity-error" className="py-8 text-center text-muted-foreground">Couldn't load Activity.</Text>;
-  if (items === null) return <ActivityIndicator testID="activity-loading" />;
-  return (
-    <FlatList
-      testID="activity-list"
-      data={items}
-      keyExtractor={(i) => i.id}
-      onEndReached={() => void loadMore()}
-      ListEmptyComponent={<Text testID="activity-empty" className="py-8 text-center text-muted-foreground">Nothing yet.</Text>}
-      renderItem={({ item }) => (
-        <Pressable testID={`activity-${item.id}`} onPress={() => open(item)} accessibilityRole="button" className="flex-row items-center gap-3 py-2 active:opacity-70">
-          <Character characterId={isCharacterId(item.actor.coachId) ? item.actor.coachId : DEFAULT_CHARACTER_ID} mood="idle" size={36} paused />
-          <Text className="flex-1">{activityLine(item)}</Text>
-          {!item.seen ? <View testID={`activity-${item.id}-unseen`} className="h-2.5 w-2.5 rounded-full bg-accent" /> : null}
-        </Pressable>
-      )}
     />
   );
 }

@@ -51,7 +51,7 @@ it('renders every section in V5 order and routes each action', async () => {
   fireEvent.press(screen.getByTestId('story-sam'));
   expect(mockNavigate).toHaveBeenLastCalledWith('SocialStory', { authorId: 'sam' });
   fireEvent.press(screen.getByTestId('social-chats'));
-  expect(mockNavigate).toHaveBeenLastCalledWith('Buddies', { tab: 'requests', open: expect.any(Number) });
+  expect(mockNavigate).toHaveBeenLastCalledWith('ChatRequests'); // an S2 server: no chats, but requests wait
   fireEvent.press(screen.getByTestId('stories-see-all'));
   expect(mockNavigate).toHaveBeenLastCalledWith('Buddies');
   fireEvent.press(screen.getByTestId('story-me'));
