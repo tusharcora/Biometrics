@@ -24,7 +24,7 @@ import { pixelFont } from '../components/coach/thinking/shared';
 import { CampNoteCard } from '../components/social/CampNoteCard';
 import { CampPanel, panelStops, useCampPanel } from '../components/social/CampPanel';
 import { CampScene } from '../components/social/CampScene';
-import { campScene } from '../components/social/campSceneGeometry';
+import { campScene, CHROME } from '../components/social/campSceneGeometry';
 import { GoodnightButton } from '../components/social/GoodnightButton';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
@@ -178,8 +178,8 @@ export function CampfireScreen() {
   }
 
   const night = state.status === 'ready' ? state.camp.night : true;
-  // The scene's geometry, once per screen size (and night or day).
-  const geo = useMemo(() => campScene(width, height, night), [width, height, night]);
+  // The scene's geometry, once per screen size (and night or day); the ring stays below the floating chrome.
+  const geo = useMemo(() => campScene(width, height, night, insets.top), [width, height, night, insets.top]);
   const stops = useMemo(() => panelStops(height, insets), [height, insets]);
   const { stop, moveTo, top } = useCampPanel(stops, reduced);
   // Opening the camp with a screen reader on starts at Half.
@@ -271,7 +271,7 @@ export function CampfireScreen() {
       </Animated.View>
       <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, backgroundColor: '#000' }, dimStyle]} />
 
-      <View pointerEvents="box-none" style={{ position: 'absolute', top: insets.top + 8, left: 16, right: 16, flexDirection: 'row', justifyContent: 'space-between' }}>
+      <View pointerEvents="box-none" style={{ position: 'absolute', top: insets.top + CHROME.pillsTop, height: CHROME.pillsHeight, left: 16, right: 16, flexDirection: 'row', justifyContent: 'space-between' }}>
         <BackPill onPress={() => navigation.goBack()} />
         {more > 0 ? (
           <View testID="camp-more" accessible accessibilityLabel={`${more} more at the camp`} className="h-10 flex-row items-center gap-1.5 rounded-full px-3.5" style={PILL}>
@@ -280,9 +280,10 @@ export function CampfireScreen() {
           </View>
         ) : null}
       </View>
-      <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: insets.top + 62, left: 20, right: 20, gap: 2 }, headStyle]}>
-        <Text style={{ fontFamily: pixelFont(), fontSize: 12, letterSpacing: 1, color: camp.night ? '#A5B4FC' : '#1E3A5F' }}>{campSceneKicker(new Date(), camp.night)}</Text>
-        <Text testID="camp-headline" className="text-[22px] font-bold" style={{ color: camp.night ? '#F5F5F4' : '#0F1E33' }}>{campHeadline(camp)}</Text>
+      <Animated.View pointerEvents="none" style={[{ position: 'absolute', top: insets.top + CHROME.headlineTop, height: CHROME.headlineHeight, left: 20, right: 20, gap: 2 }, headStyle]}>
+        {/* Fixed line heights and one line each, so the chrome ends where the scene's geometry expects it to. */}
+        <Text numberOfLines={1} style={{ fontFamily: pixelFont(), fontSize: 12, lineHeight: 16, letterSpacing: 1, color: camp.night ? '#A5B4FC' : '#1E3A5F' }}>{campSceneKicker(new Date(), camp.night)}</Text>
+        <Text testID="camp-headline" numberOfLines={1} className="text-[22px] font-bold" style={{ lineHeight: 28, color: camp.night ? '#F5F5F4' : '#0F1E33' }}>{campHeadline(camp)}</Text>
       </Animated.View>
 
       <CampPanel stops={stops} stop={stop} top={top} moveTo={moveTo} height={height} bottomInset={insets.bottom} screenReader={screenReader}

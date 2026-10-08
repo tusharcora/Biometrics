@@ -1,13 +1,18 @@
 // The Campfire's pixel scene (design: PixelScene, owner-approved 2026-10-07) as plain geometry. Everything sits on a
-// 4-px grid. `campScene(width, height, night)` is pure and is computed once per screen size; CampScene draws it. The
+// 4-px grid. `campScene(width, height, night, topInset)` is pure and is computed once per screen size; CampScene draws it. The
 // mockup is 390 × 844: x positions scale with the width, the sky's features with the sky's height, and the ring of
 // seats is fixed in shape and centred in the ground between the horizon and the panel's Peek top.
 
 export const PX = 4;
 /** The room the panel takes at Peek (its tallest, with a 34-px home indicator): nothing on the ground goes below it. */
 export const PEEK_RESERVE = 140;
-/** The floating chrome (pills, kicker and headline) on the tallest top inset: the horizon is always below it. */
-export const TOP_CHROME = 160;
+/**
+ * The floating chrome, in px below the safe-area top: the pills (8 down, 40 tall), then the kicker (16-px line), a
+ * 2-px gap and the one-line headline (28-px line) from 62 down. The screen lays them out from these numbers.
+ */
+export const CHROME = { pillsTop: 8, pillsHeight: 40, headlineTop: 62, headlineHeight: 48 } as const;
+/** Where the floating chrome ends, for a top inset: the horizon (so every seat and bubble) is never above it. */
+export const chromeBottom = (topInset: number) => topInset + CHROME.headlineTop + CHROME.headlineHeight;
 
 /** One seat's slot: bubble, coach, log and name. */
 export const SEAT_W = 76;
@@ -165,20 +170,21 @@ function seat(row: SeatRow, footX: number, footY: number, cx: number): Seat {
 
 /**
  * The ground band (horizon to the Peek top) is at least the ring plus 16 px, or 38% of the screen (the mockup's 320
- * of 844), whichever is more; the ring is centred in it. A short phone gets a short sky, a tall one a tall sky.
+ * of 844), whichever is more; the ring is centred in it. A short phone gets a short sky, a tall one a tall sky. The
+ * horizon never rises above the floating chrome (`chromeBottom(topInset)`); if it had to, the band shrinks instead.
  */
-export function campScene(width: number, height: number, night: boolean): CampSceneGeometry {
+export function campScene(width: number, height: number, night: boolean, topInset: number): CampSceneGeometry {
   const C = night ? NIGHT : DAY;
   const peekTop = height - PEEK_RESERVE;
-  const band = Math.max(RING_SPAN + 16, Math.round(height * 0.38));
-  const horizon = snap(peekTop - band);
+  const horizon = Math.max(snap(peekTop - Math.max(RING_SPAN + 16, Math.round(height * 0.38))), Math.ceil(chromeBottom(topInset) / PX) * PX);
+  const band = peekTop - horizon;
   const kx = width / 390;
   const ky = horizon / 384;
   const sx = (x: number) => snap(x * kx);
   const sy = (y: number) => snap(y * ky);
 
   const cx = snap(width / 2);
-  const cy = snap(horizon + (band - RING_SPAN) / 2 + RING_ABOVE);
+  const cy = snap(horizon + Math.max(0, band - RING_SPAN) / 2 + RING_ABOVE);
   const rx = snap(Math.min(148, Math.max(128, width * 0.34)));
   const inner = snap(rx * 0.3);
   const outer = inner + Math.max(SEAT_W, snap(rx * 0.6));
@@ -363,10 +369,10 @@ export function campScene(width: number, height: number, night: boolean): CampSc
   };
 }
 
-/** The eight seats' slots for a screen size (the same night or day). */
-export const seatBoxes = (width: number, height: number): Seat[] => campScene(width, height, true).seats;
-/** The fire's box for a screen size. */
-export const fireBox = (width: number, height: number): Box => campScene(width, height, true).fire;
+/** The eight seats' slots for a screen size and top inset (the same night or day). */
+export const seatBoxes = (width: number, height: number, topInset: number): Seat[] => campScene(width, height, true, topInset).seats;
+/** The fire's box for a screen size and top inset. */
+export const fireBox = (width: number, height: number, topInset: number): Box => campScene(width, height, true, topInset).fire;
 
 /** Every rect a layer list draws, parsed back from its paths: for tests and the View count. */
 export function pathRects(layers: readonly PathLayer[]): Rect[] {

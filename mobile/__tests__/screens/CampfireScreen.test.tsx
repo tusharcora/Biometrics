@@ -5,7 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ApiError } from '../../src/api/client';
 import { clearCampNote, fetchCamp, saveCampNote, sayGoodnight, undoGoodnight, type Camp, type CampMember } from '../../src/api/social';
 import { refreshSocial } from '../../src/lib/socialStore';
-import { fireBox, PEEK_RESERVE, seatBoxes, TOP_CHROME, type Box } from '../../src/components/social/campSceneGeometry';
+import { chromeBottom, fireBox, PEEK_RESERVE, seatBoxes, type Box } from '../../src/components/social/campSceneGeometry';
 import { CampfireScreen } from '../../src/screens/CampfireScreen';
 
 jest.mock('../../src/api/social', () => ({
@@ -119,24 +119,36 @@ it('at 19:30 with no goal the scene is night but goodnight waits for 8:00 PM', a
   expect(screen.queryByTestId('camp-goodnight-say')).toBeNull();
 });
 
-it('seats eight coaches in the ring with no overlap, on the ground and above the Peek panel, on every phone size', () => {
+it('seats eight coaches in the ring with no overlap, below the top chrome and above the Peek panel, on every phone size', () => {
   const overlaps = (a: Box, b: Box) =>
     a.left < b.left + b.width && b.left < a.left + a.width && a.top < b.top + b.height && b.top < a.top + a.height;
   for (const width of [375, 390, 393, 402, 414, 428, 430]) {
     for (const height of [667, 736, 812, 844, 852, 874, 896, 926, 932]) {
-      const seats = seatBoxes(width, height);
-      const fire = fireBox(width, height);
-      expect(seats).toHaveLength(8);
-      seats.forEach((a, i) => {
-        expect(a.left).toBeGreaterThanOrEqual(0);
-        expect(a.left + a.width).toBeLessThanOrEqual(width);
-        expect(a.top).toBeGreaterThanOrEqual(TOP_CHROME); // below the pills, kicker and headline
-        expect(a.top + a.height).toBeLessThanOrEqual(height - PEEK_RESERVE); // above the Peek panel
-        expect(overlaps(a, fire)).toBe(false);
-        for (const b of seats.slice(i + 1)) expect(overlaps(a, b)).toBe(false);
-      });
+      for (const inset of [20, 47, 59]) {
+        const seats = seatBoxes(width, height, inset);
+        const fire = fireBox(width, height, inset);
+        expect(seats).toHaveLength(8);
+        seats.forEach((a, i) => {
+          expect(a.left).toBeGreaterThanOrEqual(0);
+          expect(a.left + a.width).toBeLessThanOrEqual(width);
+          // A seat's box starts at its bubble: no bubble or coach under the pills, kicker or headline.
+          expect(a.top).toBeGreaterThanOrEqual(chromeBottom(inset));
+          expect(a.top + a.height).toBeLessThanOrEqual(height - PEEK_RESERVE); // above the Peek panel
+          expect(overlaps(a, fire)).toBe(false);
+          for (const b of seats.slice(i + 1)) expect(overlaps(a, b)).toBe(false);
+        });
+      }
     }
   }
+});
+
+it('the chrome clearance is real: a taller top inset pushes the ring down, and a too-short screen would break it', () => {
+  // 667 with a 20-pt inset leaves 60 px between the chrome and the seats; a 140-pt inset leaves none.
+  expect(seatBoxes(375, 667, 20)[4]!.top - chromeBottom(20)).toBeGreaterThan(0);
+  const deep = seatBoxes(375, 667, 140);
+  expect(Math.min(...deep.map((s) => s.top))).toBeGreaterThanOrEqual(chromeBottom(140));
+  // ...which squeezes the ring past the Peek panel: the check above is what keeps this from happening on real phones.
+  expect(Math.max(...deep.map((s) => s.top + s.height))).toBeGreaterThan(667 - PEEK_RESERVE);
 });
 
 it('shares a note with a live count, refuses one over 40, and clears mine', async () => {
