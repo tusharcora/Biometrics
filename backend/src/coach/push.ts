@@ -136,7 +136,7 @@ export function isPushName(name: unknown): name is string {
 
 /**
  * A dm_message preview: one trimmed line, no control or format characters, 1-80 code points, or 81 ending in "…".
- * The one exception is what message sanitising keeps inside emoji (chats/text.ts): the zero-width joiner and the tag
+ * The one exception is what message sanitising keeps inside emoji (text.ts in the chats module): the zero-width joiner and the tag
  * characters of a subdivision flag, so a joined emoji in the text never makes the push fail.
  */
 export function isPushPreview(text: unknown): text is string {
