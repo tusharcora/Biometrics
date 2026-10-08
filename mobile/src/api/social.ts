@@ -120,9 +120,10 @@ export async function fetchSocialHome(): Promise<SocialHome | null> {
 
 export const saveCheckIn = (mood: CheckInMood) => apiFetch<{ checkIn: CheckIn }>('/me/social/checkin', send('PUT', { mood }));
 export const fetchStory = (authorId: string) => apiFetch<Story>(`/me/social/stories/${id(authorId)}`);
-// The seen routes answer 204.
-export async function markStorySeen(authorId: string): Promise<void> {
-  await apiFetch<void>(`/me/social/stories/${id(authorId)}/seen`, send('POST'));
+// The seen routes answer 204. `through` is the time of the newest frame I reached (S3): a frame added after it lights
+// the ring again.
+export async function markStorySeen(authorId: string, through?: string): Promise<void> {
+  await apiFetch<void>(`/me/social/stories/${id(authorId)}/seen`, send('POST', through === undefined ? undefined : { through }));
 }
 export async function markStickersSeen(): Promise<void> {
   await apiFetch<void>('/me/social/stickers/seen', send('POST'));

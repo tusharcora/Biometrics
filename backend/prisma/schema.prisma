@@ -939,6 +939,9 @@ model StorySeen {
   author    User     @relation("StorySeenAuthor", fields: [authorId], references: [id], onDelete: Cascade)
   localDate DateTime @db.Date
   seenAt    DateTime @default(now())
+  /// The newest frame the viewer reached (S3): a frame after it lights the ring again. Null on rows from before
+  /// S3, which count up to seenAt.
+  lastFrameAt DateTime?
 
   @@id([viewerId, authorId, localDate])
 }

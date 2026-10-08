@@ -4,6 +4,8 @@
 // stats JSON, never the live Recap.line). Built at read time from the preloaded circle (whose check-ins also decide
 // the lock) plus one query per remaining source. Rings: unseen first, then newest (plan ruling).
 // A goodnight (S2) is a frame of the author's local date of the moment it was said, never locked.
+// Seen (S3, the S2 deferral) is "up to the newest frame the viewer reached" (StorySeen.lastFrameAt; seenAt on older
+// rows), so a frame added later the same day — an evening goodnight after a morning view — lights the ring again.
 
 import type { AchievementFamily, CheckInMood } from '@prisma/client';
 import { civilDateToUtcMidnight, localCivilDateOrUtc } from '../biometrics/civilDate';
@@ -95,10 +97,14 @@ export async function storyRingsFor(circle: Circle, now: Date): Promise<StoryRin
     loadFrames(buddies, circle, now, viewerCheckedIn),
     prisma.storySeen.findMany({
       where: { viewerId, authorId: { in: buddies.map((b) => b.person.id) }, localDate: { in: dates } },
-      select: { authorId: true, localDate: true },
+      select: { authorId: true, localDate: true, seenAt: true, lastFrameAt: true },
     }),
   ]);
-  const seenToday = new Set(seen.filter((s) => isoDate(s.localDate) === todayOf.get(s.authorId)).map((s) => s.authorId));
+  // How far into each author's story today I have watched (ms). A row from before S3 has no lastFrameAt: its seenAt
+  // stands in, which is what the per-day model meant.
+  const seenThrough = new Map(
+    seen.filter((s) => isoDate(s.localDate) === todayOf.get(s.authorId)).map((s) => [s.authorId, (s.lastFrameAt ?? s.seenAt).getTime()] as const),
+  );
   const rings: StoryRingDTO[] = [];
   const checkIns: Array<{ coachId: string; at: string }> = [];
   for (const b of buddies) {
@@ -106,7 +112,9 @@ export async function storyRingsFor(circle: Circle, now: Date): Promise<StoryRin
     if (list.length === 0) continue;
     const checkIn = list.find((f) => f.kind === 'checkin');
     if (checkIn) checkIns.push({ coachId: b.person.coachId, at: checkIn.at });
-    rings.push({ author: b.person, unseen: !seenToday.has(b.person.id), locked: checkIn !== undefined && !viewerCheckedIn, frameCount: list.length, latestAt: list[list.length - 1]!.at });
+    const latestAt = list[list.length - 1]!.at;
+    const through = seenThrough.get(b.person.id);
+    rings.push({ author: b.person, unseen: through === undefined || Date.parse(latestAt) > through, locked: checkIn !== undefined && !viewerCheckedIn, frameCount: list.length, latestAt });
   }
   rings.sort((a, b) => Number(b.unseen) - Number(a.unseen) || b.latestAt.localeCompare(a.latestAt));
   checkIns.sort((a, b) => b.at.localeCompare(a.at));
@@ -137,8 +145,20 @@ export async function getStory(viewerId: string, authorId: string, now: Date): P
   return { author: author.person, localDate: localCivilDateOrUtc(now, author.timezone), frames: frames.get(authorId) ?? [] };
 }
 
-export async function markStorySeen(viewerId: string, authorId: string, now: Date): Promise<void> {
+/**
+ * Seen up to `rawThrough`, the time of the newest frame the viewer reached. A missing or unreadable value (an S1/S2
+ * app) means now; a future one is clamped to now. One row per viewer, author and author-day; lastFrameAt never moves
+ * back (two open viewers can race), and a pre-S3 row whose seenAt is already later is left alone.
+ */
+export async function markStorySeen(viewerId: string, authorId: string, now: Date, rawThrough?: unknown): Promise<void> {
   const { author } = await requireAuthor(viewerId, authorId);
   const localDate = civilDateToUtcMidnight(localCivilDateOrUtc(now, author.timezone));
-  await prisma.storySeen.createMany({ data: [{ viewerId, authorId, localDate, seenAt: now }], skipDuplicates: true });
+  const parsed = typeof rawThrough === 'string' ? new Date(rawThrough) : null;
+  const through = parsed && !Number.isNaN(parsed.getTime()) && parsed.getTime() <= now.getTime() ? parsed : now;
+  const created = await prisma.storySeen.createMany({ data: [{ viewerId, authorId, localDate, seenAt: now, lastFrameAt: through }], skipDuplicates: true });
+  if (created.count > 0) return;
+  await prisma.storySeen.updateMany({
+    where: { viewerId, authorId, localDate, OR: [{ lastFrameAt: { lt: through } }, { lastFrameAt: null, seenAt: { lt: through } }] },
+    data: { seenAt: now, lastFrameAt: through },
+  });
 }

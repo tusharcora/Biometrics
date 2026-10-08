@@ -54,8 +54,9 @@ socialRouter.get('/me/social/stories/:authorId', requireAuth, buddyRoute(async (
   res.json(await getStory(req.userId!, String(req.params.authorId), new Date()));
 }));
 
+// Body { through }: the newest frame's time the viewer reached (S3). An older app sends none.
 socialRouter.post('/me/social/stories/:authorId/seen', requireAuth, buddyRoute(async (req, res) => {
-  await markStorySeen(req.userId!, String(req.params.authorId), new Date());
+  await markStorySeen(req.userId!, String(req.params.authorId), new Date(), (req.body as { through?: unknown } | undefined)?.through);
   res.status(204).end();
 }));
 

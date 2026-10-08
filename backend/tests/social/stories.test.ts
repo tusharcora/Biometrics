@@ -191,3 +191,65 @@ it('a valid uuid with no user and a missing viewer are not_buddies; seen route i
   const strangerSeen = await agent.post(`/me/social/stories/${randomUUID()}/seen`).set(headers);
   expect([strangerSeen.status, strangerSeen.body]).toEqual([403, { error: 'not_buddies' }]);
 });
+
+it('a later frame lights a seen ring again: seen means the newest frame reached, not the whole day (S2 deferral)', async () => {
+  const me = await buddyUser();
+  const sam = await buddyUser(); // UTC: NOW is 20:00 on 2026-10-07 for Sam
+  await pairUp(me.id, sam.id);
+  const checkInAt = new Date(NOW.getTime() - 4 * 3_600_000); // 16:00
+  await saveCheckIn(sam.id, 'RESTED', checkInAt);
+  await markStorySeen(me.id, sam.id, new Date(NOW.getTime() - 3 * 3_600_000), checkInAt.toISOString());
+  const ring = async () => (await loadStoryRings(me.id, NOW)).rings.map((r) => [r.unseen, r.frameCount]);
+  expect(await ring()).toEqual([[false, 1]]);
+  // An evening goodnight after I watched: a new frame, so the ring lights again.
+  const goodnightAt = new Date(NOW.getTime() - 3_600_000); // 19:00
+  await prisma.goodnight.create({ data: { authorId: sam.id, localDate: day('2026-10-07'), at: goodnightAt, onTime: true } });
+  expect(await ring()).toEqual([[true, 2]]);
+  // Watching through the goodnight clears it; an older "through" (a second viewer racing) never moves it back.
+  await markStorySeen(me.id, sam.id, NOW, goodnightAt.toISOString());
+  await markStorySeen(me.id, sam.id, NOW, checkInAt.toISOString());
+  expect(await ring()).toEqual([[false, 2]]);
+  const row = await prisma.storySeen.findUniqueOrThrow({ where: { viewerId_authorId_localDate: { viewerId: me.id, authorId: sam.id, localDate: day('2026-10-07') } } });
+  expect(row.lastFrameAt?.toISOString()).toBe(goodnightAt.toISOString());
+});
+
+it('an app that sends no "through" (S1/S2) is seen up to now; a future or unreadable one is clamped to now', async () => {
+  const me = await buddyUser();
+  const sam = await buddyUser();
+  await pairUp(me.id, sam.id);
+  await saveCheckIn(sam.id, 'RESTED', new Date(NOW.getTime() - 3_600_000));
+  await markStorySeen(me.id, sam.id, NOW);
+  expect((await loadStoryRings(me.id, NOW)).rings.map((r) => r.unseen)).toEqual([false]);
+  for (const through of ['2099-01-01T00:00:00.000Z', 'not a date', 42, null]) {
+    await prisma.storySeen.deleteMany({ where: { viewerId: me.id } });
+    await markStorySeen(me.id, sam.id, NOW, through);
+    const row = await prisma.storySeen.findFirstOrThrow({ where: { viewerId: me.id } });
+    expect([through, row.lastFrameAt?.toISOString()]).toEqual([through, NOW.toISOString()]);
+  }
+});
+
+it('a seen row from before S3 (no lastFrameAt) counts up to its seenAt, so a later frame still lights the ring', async () => {
+  const me = await buddyUser();
+  const sam = await buddyUser();
+  await pairUp(me.id, sam.id);
+  await saveCheckIn(sam.id, 'RESTED', new Date(NOW.getTime() - 4 * 3_600_000));
+  await prisma.storySeen.create({ data: { viewerId: me.id, authorId: sam.id, localDate: day('2026-10-07'), seenAt: new Date(NOW.getTime() - 3 * 3_600_000) } });
+  const unseen = async () => (await loadStoryRings(me.id, NOW)).rings.map((r) => r.unseen);
+  expect(await unseen()).toEqual([false]);
+  await prisma.goodnight.create({ data: { authorId: sam.id, localDate: day('2026-10-07'), at: new Date(NOW.getTime() - 3_600_000), onTime: false } });
+  expect(await unseen()).toEqual([true]);
+  await markStorySeen(me.id, sam.id, NOW); // an S2 app, no through
+  expect(await unseen()).toEqual([false]);
+});
+
+it('the seen route takes { through } and answers 204', async () => {
+  const me = await buddyUser();
+  const sam = await buddyUser();
+  await pairUp(me.id, sam.id);
+  const at = new Date(Date.now() - 60_000);
+  await saveCheckIn(sam.id, 'RESTED', at);
+  const res = await (await api()).post(`/me/social/stories/${sam.id}/seen`).set(await authHeaderFor(me.id)).send({ through: at.toISOString() });
+  expect(res.status).toBe(204);
+  const row = await prisma.storySeen.findFirstOrThrow({ where: { viewerId: me.id, authorId: sam.id } });
+  expect(row.lastFrameAt?.toISOString()).toBe(at.toISOString());
+});

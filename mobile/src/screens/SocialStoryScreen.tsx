@@ -114,13 +114,13 @@ function Viewer({ story, mineHint, onClose }: { story: Story; mineHint: boolean;
   useEffect(() => {
     if (viewer.index === last && !seen.current) {
       seen.current = true;
-      void markStorySeen(story.author.id)
+      void markStorySeen(story.author.id, story.frames[last]?.at)
         .catch(() => undefined)
         .finally(() => {
           void refreshSocial();
         });
     }
-  }, [viewer.index, last, story.author.id]);
+  }, [viewer.index, last, story.author.id, story.frames]);
 
   // Past the last frame there are no end actions here: it closes.
   useEffect(() => {
