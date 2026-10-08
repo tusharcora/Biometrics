@@ -106,7 +106,7 @@ export function ConnectHealthScreen() {
             {error}
           </Text>
         ) : null}
-        <Button testID="connect-health-button" className="w-full py-4" onPress={handleConnect} disabled={busy}>
+        <Button testID="connect-health-button" size="lg" className="w-full" onPress={handleConnect} disabled={busy}>
           {busy ? 'Waiting for Google…' : 'Connect Google Health'}
         </Button>
         <Text className="text-center text-xs text-muted-foreground">You'll finish on Google's sign-in page</Text>

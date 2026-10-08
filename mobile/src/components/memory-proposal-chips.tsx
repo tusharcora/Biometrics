@@ -1,11 +1,12 @@
 import React, { useState } from 'react';
-import { View, Pressable } from 'react-native';
+import { View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from 'nativewind';
 import { CoachMemoryNotFoundError, deleteCoachMemory, type MemoryDTO } from '../api/coach';
 import { MEMORY_ERROR_TEXT } from '../lib/coachMemory';
 import { COLORS } from '../theme';
 import { Text } from './ui/text';
+import { Button } from './ui/button';
 import { MemoryEditForm } from './memory-edit-form';
 
 function MemoryProposalChip({ proposal }: { proposal: MemoryDTO }) {
@@ -63,12 +64,12 @@ function MemoryProposalChip({ proposal }: { proposal: MemoryDTO }) {
         </Text>
       </View>
       <View className="flex-row gap-4 pl-6">
-        <Pressable testID={`memory-chip-edit-${proposal.id}`} accessibilityRole="button" hitSlop={8} onPress={() => setEditing(true)} className="active:opacity-70">
-          <Text className="text-sm font-semibold text-coach">Edit</Text>
-        </Pressable>
-        <Pressable testID={`memory-chip-undo-${proposal.id}`} accessibilityRole="button" hitSlop={8} disabled={busy} onPress={() => void undo()} className="active:opacity-70">
-          <Text className="text-sm font-semibold text-coach">Undo</Text>
-        </Pressable>
+        <Button testID={`memory-chip-edit-${proposal.id}`} variant="link" size="xs" accessibilityRole="button" onPress={() => setEditing(true)}>
+          Edit
+        </Button>
+        <Button testID={`memory-chip-undo-${proposal.id}`} variant="link" size="xs" accessibilityRole="button" disabled={busy} onPress={() => void undo()}>
+          Undo
+        </Button>
       </View>
       {undoError ? (
         <Text testID={`memory-chip-error-${proposal.id}`} className="pl-6 text-xs text-destructive">

@@ -153,7 +153,7 @@ function BuddyListTab({ navigation }: { navigation: Nav }) {
       ListFooterComponent={
         <View className="gap-3 py-4">
           {loading ? <ActivityIndicator /> : null}
-          <Button testID="buddies-add" onPress={() => navigation.navigate('PairUp')}>Add a buddy</Button>
+          <Button testID="buddies-add" size="lg" onPress={() => navigation.navigate('PairUp')}>Add a buddy</Button>
         </View>
       }
     />
@@ -253,7 +253,7 @@ function RequestsTab({ gate, navigation }: { gate: Gate; navigation: Nav }) {
             </View>
             <View className="flex-row gap-2">
               <Button testID={`request-accept-${item.request.id}`} size="sm" disabled={busy} onPress={() => accept(item.request.id)}>Accept</Button>
-              <Button testID={`request-decline-${item.request.id}`} size="sm" variant="secondary" disabled={busy} onPress={() => perform(() => declineRequest(item.request.id))}>Decline</Button>
+              <Button testID={`request-decline-${item.request.id}`} size="sm" variant="outline" disabled={busy} onPress={() => perform(() => declineRequest(item.request.id))}>Decline</Button>
               <Button testID={`request-block-${item.request.id}`} size="sm" variant="destructive" disabled={busy} onPress={() => block(item.request)}>Block</Button>
             </View>
           </View>

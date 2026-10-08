@@ -11,6 +11,7 @@ import { recapDestination, useWatchedRecaps } from '../../lib/unwatchedRecap';
 import { COLORS, FONTS } from '../../theme';
 import { DEFAULT_CHARACTER_ID } from '../characters/types';
 import { pixelFont } from '../coach/thinking/shared';
+import { Button } from '../ui/button';
 import { SectionLabel } from '../ui/section-label';
 import { Text } from '../ui/text';
 
@@ -68,9 +69,9 @@ export function RecapShelf({ navigation }: { navigation: Navigator }) {
     <View testID="recap-shelf" className="gap-2.5">
       <View className="flex-row items-baseline justify-between">
         <SectionLabel testID="recap-shelf-title">Recaps</SectionLabel>
-        <Pressable testID="recap-shelf-see-all" accessibilityRole="button" accessibilityLabel="See all recaps" hitSlop={8} onPress={() => navigation.navigate('Recaps')} className="active:opacity-70">
-          <Text className="text-sm font-semibold text-accent">See all</Text>
-        </Pressable>
+        <Button testID="recap-shelf-see-all" variant="link" size="sm" accessibilityLabel="See all recaps" onPress={() => navigation.navigate('Recaps')}>
+          See all
+        </Button>
       </View>
       {recaps !== null && recaps.length === 0 ? (
         <Text testID="recap-shelf-empty" className="text-sm text-muted-foreground">

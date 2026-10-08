@@ -50,14 +50,14 @@ export function ForgotPasswordScreen({ navigation }: Props) {
           )}
         </Animated.View>
         {sent ? (
-          <Button className="w-full py-4" onPress={() => navigation.popTo('SignIn')}>
+          <Button size="lg" className="w-full" onPress={() => navigation.popTo('SignIn')}>
             Back to sign in
           </Button>
         ) : (
           <View className="gap-3">
             <TextField label="Email" testID="email-input" value={email} onChangeText={setEmail} keyboardType="email-address" autoComplete="email" />
             {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
-            <Button testID="send-reset-button" className="mt-2 w-full py-4" onPress={submit} disabled={busy || !email.trim()}>
+            <Button testID="send-reset-button" size="lg" className="mt-2 w-full" onPress={submit} disabled={busy || !email.trim()}>
               Send reset link
             </Button>
           </View>

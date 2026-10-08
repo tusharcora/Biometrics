@@ -6,6 +6,7 @@ import type { SleepNight } from '../api/sleep';
 import { compareToAverage, formatDayTitle } from '../lib/heatmap';
 import { compareSleepToAverage, formatClock, formatDuration } from '../lib/sleepStats';
 import { COLORS, METRIC_CONFIG } from '../theme';
+import { Button, buttonIconSize } from './ui/button';
 import { Ring } from './ui/ring';
 import { Text } from './ui/text';
 
@@ -198,16 +199,16 @@ export function NightDetail({ date, night, goal, average, stepsLink, onOpenFull 
       ) : null}
 
       {night && onOpenFull ? (
-        <Pressable
+        <Button
           testID="night-open-full"
-          accessibilityRole="button"
-          hitSlop={8}
+          variant="link"
+          size="sm"
+          className="self-start"
+          iconEnd={<Ionicons name="chevron-forward" size={buttonIconSize('sm')} color={palette.foreground} />}
           onPress={onOpenFull}
-          className="flex-row items-center gap-1 self-start py-1 active:opacity-70"
         >
-          <Text className="text-sm font-semibold text-accent">Open full night</Text>
-          <Ionicons name="chevron-forward" size={14} color={palette.accent} />
-        </Pressable>
+          Open full night
+        </Button>
       ) : null}
     </View>
   );

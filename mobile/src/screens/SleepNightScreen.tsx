@@ -121,7 +121,7 @@ function NightBody({ night, coachName, onAsk }: { night: SleepNightDetail; coach
       ) : null}
 
       {onAsk ? (
-        <Button testID="night-ask-coach" variant="secondary" onPress={onAsk}>
+        <Button testID="night-ask-coach" variant="outline" size="lg" onPress={onAsk}>
           {`Ask ${coachName} about this night`}
         </Button>
       ) : null}

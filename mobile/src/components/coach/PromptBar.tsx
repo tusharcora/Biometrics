@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from 'react';
-import { Pressable, TextInput, View, type NativeSyntheticEvent, type TextInputContentSizeChangeEventData } from 'react-native';
+import { TextInput, View, type NativeSyntheticEvent, type TextInputContentSizeChangeEventData } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import Animated, { useAnimatedProps, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 import Svg, { Polygon } from 'react-native-svg';
 import { Text } from '../ui/text';
 import { PressableScale } from '../ui/pressable-scale';
+import { Button } from '../ui/button';
 import { COLORS, FONTS, MOTION } from '../../theme';
 
 const AnimatedPolygon = Animated.createAnimatedComponent(Polygon);
@@ -187,41 +188,43 @@ export function PromptBar({
           }}
         />
 
-        <PressableScale
+        <Button
           testID="coach-send-button"
-          accessibilityRole="button"
+          size="icon"
           accessibilityLabel={controlLabel}
-          accessibilityState={{ disabled: !canSend && !canStop }}
           disabled={!canSend && !canStop}
           onPress={() => {
             if (canStop) onStop!();
             else if (canSend) onSend();
           }}
-          // 44 x 40: a full-height touch target inside the bar.
+          // The fill follows sendColors, and a running turn stays at full
+          // opacity even when it cannot be stopped, so it still reads as live.
           style={{ backgroundColor: send.background, opacity: canSend || busy ? 1 : 0.5 }}
-          className="ml-2 h-10 w-11 items-center justify-center rounded-xl"
+          className="ml-2"
         >
           <View testID="coach-send-glyph" accessibilityLabel={controlLabel}>
             <Svg width={22} height={22} viewBox="0 0 24 24">
               <AnimatedPolygon animatedProps={glyphProps} fill={send.glyph} />
             </Svg>
           </View>
-        </PressableScale>
+        </Button>
       </View>
 
       {/* The shortcuts live behind "/"; with the field empty, a quiet hint says
           so and is itself a way in. */}
       {value === '' && !busy ? (
-        <Pressable
+        <Button
           testID="coach-commands-button"
-          accessibilityRole="button"
+          variant="ghost"
+          size="xs"
           accessibilityLabel="Prompt shortcuts"
           onPress={() => onChangeText('/')}
-          hitSlop={8}
-          className="self-start pl-4 active:opacity-60"
+          // The xs padding plus this margin lines the hint up with the field's text.
+          className="ml-2 self-start"
+          textClassName="text-muted-foreground"
         >
-          <Text className="text-xs text-muted-foreground">Type / for shortcuts</Text>
-        </Pressable>
+          Type / for shortcuts
+        </Button>
       ) : null}
     </View>
   );

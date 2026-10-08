@@ -95,7 +95,7 @@ export function MetricsScreen() {
     body = (
       <View testID="metrics-error" className="items-center gap-3 py-12">
         <Text className="text-center text-muted-foreground">Your metrics could not be loaded.</Text>
-        <Button testID="metrics-retry" onPress={() => load()}>
+        <Button testID="metrics-retry" variant="secondary" onPress={() => load()}>
           Try again
         </Button>
       </View>

@@ -131,9 +131,19 @@ describe('AnswerCard', () => {
   it('shows the ranked effect brighter than the source line', () => {
     const { getByTestId } = render(<AnswerCard card={ranked} />);
 
-    // The source line keeps the muted token; the effect uses the text token at 80%.
+    // The plain source line (nowhere to open) keeps the muted token; the effect uses the text token at 80%.
     expect(String(getByTestId('answer-rank-effect-1').props.className)).toContain('text-foreground/80');
     expect(String(getByTestId('answer-source').props.className)).toContain('text-muted-foreground');
+  });
+
+  it('draws an openable source as a standard link Button with a chevron', () => {
+    const { getByTestId } = render(<AnswerCard card={ranked} onOpenSource={() => {}} />);
+
+    // The shadcn link look (foreground, underlined), not a hand-rolled muted line.
+    const label = getByTestId('answer-source-label');
+    expect(label.props.children).toBe('Habit correlations · last 90 days');
+    expect(String(label.props.className).split(' ')).toEqual(expect.arrayContaining(['text-foreground', 'underline']));
+    expect(String(getByTestId('answer-source').props.className).split(' ')).toEqual(expect.arrayContaining(['h-auto', 'px-0', 'self-start']));
   });
 
   it('reads each tile to a screen reader in words', () => {
@@ -188,8 +198,10 @@ describe('AnswerCard', () => {
 
     expect(queryByTestId('answer-tip')).toBeNull();
     const source = getByTestId('answer-source');
-    expect(source).toHaveTextContent('Habit correlations · last 90 days ›');
+    // The chevron is the Button's iconEnd now, not a › in the label.
+    expect(getByTestId('answer-source-label').props.children).toBe('Habit correlations · last 90 days');
     expect(source.props.accessibilityRole).toBe('link');
+    expect(source.props.accessibilityLabel).toBe('Habit correlations · last 90 days');
     fireEvent.press(source);
     expect(onOpenSource).toHaveBeenCalledTimes(1);
   });
@@ -219,6 +231,19 @@ describe('FollowUpChips', () => {
     fireEvent.press(getByTestId('follow-up-0'));
 
     expect(onAsk).not.toHaveBeenCalled();
+  });
+
+  it('lets a long question wrap instead of truncating it', () => {
+    const question = "What's been moving my resting heart rate lately?";
+    const { getByTestId } = render(<FollowUpChips questions={[question]} onAsk={() => {}} />);
+
+    const label = getByTestId('follow-up-0-label');
+    expect(label.props.children).toBe(question);
+    expect(label.props.numberOfLines).toBeUndefined();
+    // The chip grows with its lines: no fixed 32px height, exact px padding.
+    const classes = String(getByTestId('follow-up-0').props.className).split(' ');
+    expect(classes).toEqual(expect.arrayContaining(['h-auto', 'min-h-[32px]', 'py-[6px]', 'max-w-full']));
+    expect(classes).not.toContain('h-[32px]');
   });
 
   it('renders nothing when there are no follow-ups', () => {

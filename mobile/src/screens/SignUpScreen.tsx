@@ -63,7 +63,7 @@ export function SignUpScreen({ navigation }: Props) {
           <AuthHeader title="Check your inbox">
             We sent a link to {sentTo}. Open it on this phone to confirm your email, then sign in.
           </AuthHeader>
-          <Button testID="back-to-sign-in" className="w-full py-4" onPress={() => navigation.popTo('SignIn')}>
+          <Button testID="back-to-sign-in" size="lg" className="w-full" onPress={() => navigation.popTo('SignIn')}>
             Back to sign in
           </Button>
         </ScrollView>
@@ -82,7 +82,8 @@ export function SignUpScreen({ navigation }: Props) {
           {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
           <Button
             testID="sign-up-button"
-            className="mt-2 w-full py-4"
+            size="lg"
+            className="mt-2 w-full"
             onPress={submit}
             disabled={busy || !name.trim() || !email.trim() || !password}
           >

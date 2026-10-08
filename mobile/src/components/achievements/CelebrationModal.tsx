@@ -1,5 +1,5 @@
 import React, { useContext, useRef, useState } from 'react';
-import { Modal, PixelRatio, Pressable, ScrollView, StyleSheet, useWindowDimensions, View, type DimensionValue } from 'react-native';
+import { Modal, PixelRatio, ScrollView, StyleSheet, useWindowDimensions, View, type DimensionValue } from 'react-native';
 import { initialWindowMetrics, SafeAreaInsetsContext, type EdgeInsets } from 'react-native-safe-area-context';
 import { useReducedMotion } from 'react-native-reanimated';
 import { useCharacterOptional } from '../../characters/CharacterContext';
@@ -13,6 +13,7 @@ import { hexAlpha } from '../characters/palette';
 import { characterInfo } from '../characters/registry';
 import { DEFAULT_CHARACTER_ID } from '../characters/types';
 import { pixelFont } from '../coach/thinking/shared';
+import { Button, buttonTextVariants } from '../ui/button';
 import { Text } from '../ui/text';
 import { BadgeIcon } from './BadgeIcon';
 import { BadgeShareCard, badgeShareLayout } from './BadgeShareCard';
@@ -157,26 +158,26 @@ function CelebrationContent({ celebration, thresholds, onDone }: CelebrationModa
           </Text>
         ) : null}
         <View style={{ flexDirection: 'row', gap: 10 }}>
-          <Pressable
+          {/* Standard Buttons tinted for the badge's dark ground, which holds in
+              either app theme: the tint and label colours come through style. */}
+          <Button
             testID="celebration-share"
-            accessibilityRole="button"
-            accessibilityState={{ disabled: busy }}
+            variant="outline"
+            size="lg"
             disabled={busy}
             onPress={() => void share()}
-            style={{ flex: 1, height: 52, borderRadius: 26, borderWidth: 1, borderColor: hexAlpha(t.ring, 0.5), alignItems: 'center', justifyContent: 'center', opacity: busy ? 0.5 : 1 }}
+            className="flex-1"
+            style={{ borderColor: hexAlpha(t.ring, 0.5), backgroundColor: 'transparent' }}
           >
-            <Text style={{ fontFamily: FONTS.sansSemibold, fontSize: 16, color: INK }}>Share</Text>
-          </Pressable>
-          <Pressable
-            testID="celebration-done"
-            accessibilityRole="button"
-            accessibilityState={{ disabled: closing }}
-            disabled={closing}
-            onPress={close}
-            style={{ flex: 1, height: 52, borderRadius: 26, backgroundColor: t.ring, alignItems: 'center', justifyContent: 'center' }}
-          >
-            <Text style={{ fontFamily: FONTS.sansBold, fontSize: 16, color: ground }}>Nice!</Text>
-          </Pressable>
+            <Text className={buttonTextVariants({ variant: 'outline', size: 'lg' })} style={{ color: INK }}>
+              Share
+            </Text>
+          </Button>
+          <Button testID="celebration-done" size="lg" disabled={closing} onPress={close} className="flex-1" style={{ backgroundColor: t.ring }}>
+            <Text className={buttonTextVariants({ size: 'lg' })} style={{ color: ground }}>
+              Nice!
+            </Text>
+          </Button>
         </View>
       </View>
       {/* The export view: off screen at a fixed size, the only thing captured. */}

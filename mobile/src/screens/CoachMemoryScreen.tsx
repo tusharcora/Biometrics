@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { View, ScrollView, Pressable } from 'react-native';
+import { View, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useColorScheme } from 'nativewind';
 import { Ionicons } from '@expo/vector-icons';
@@ -106,7 +106,7 @@ function MemoryRow({ entry, icon, onChange, onRemove }: MemoryRowProps) {
           <View className="mt-1 gap-2 rounded-tile bg-muted px-3 py-2.5">
             <Text className="text-sm font-medium">Delete this memory?</Text>
             <View className="flex-row justify-end gap-2">
-              <Button testID={`memory-cancel-delete-${entry.id}`} variant="ghost" size="sm" disabled={busy} onPress={() => setConfirming(false)}>
+              <Button testID={`memory-cancel-delete-${entry.id}`} variant="outline" size="sm" disabled={busy} onPress={() => setConfirming(false)}>
                 Cancel
               </Button>
               <Button testID={`memory-confirm-delete-${entry.id}`} variant="destructive" size="sm" disabled={busy} onPress={() => void confirmDelete()}>
@@ -116,21 +116,22 @@ function MemoryRow({ entry, icon, onChange, onRemove }: MemoryRowProps) {
           </View>
         ) : (
           <View className="flex-row gap-5 pt-0.5">
-            <Pressable testID={`memory-edit-${entry.id}`} accessibilityRole="button" hitSlop={8} onPress={() => setEditing(true)} className="active:opacity-70">
-              <Text className="text-sm font-semibold text-coach">Edit</Text>
-            </Pressable>
-            <Pressable
+            <Button testID={`memory-edit-${entry.id}`} variant="link" size="xs" accessibilityRole="button" onPress={() => setEditing(true)}>
+              Edit
+            </Button>
+            <Button
               testID={`memory-delete-${entry.id}`}
+              variant="link"
+              size="xs"
               accessibilityRole="button"
-              hitSlop={8}
+              textClassName="text-destructive"
               onPress={() => {
                 setDeleteError(false);
                 setConfirming(true);
               }}
-              className="active:opacity-70"
             >
-              <Text className="text-sm font-semibold text-destructive">Delete</Text>
-            </Pressable>
+              Delete
+            </Button>
           </View>
         )}
       </View>
@@ -204,7 +205,7 @@ export function CoachMemoryScreen() {
           <Text testID="coach-memory-error" className="text-center text-muted-foreground">
             Your coach memory could not be loaded.
           </Text>
-          <Button testID="coach-memory-retry" variant="ghost" onPress={() => setAttempt((n) => n + 1)}>
+          <Button testID="coach-memory-retry" variant="secondary" onPress={() => setAttempt((n) => n + 1)}>
             Try again
           </Button>
         </View>

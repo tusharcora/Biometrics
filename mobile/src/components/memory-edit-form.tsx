@@ -77,7 +77,7 @@ export function MemoryEditForm({ id, initialValue, testIDPrefix, onSaved, onCanc
         </Text>
       ) : null}
       <View className="flex-row items-center justify-end gap-2">
-        <Button testID={`${testIDPrefix}-cancel-${id}`} variant="ghost" size="sm" disabled={busy} onPress={onCancel}>
+        <Button testID={`${testIDPrefix}-cancel-${id}`} variant="outline" size="sm" disabled={busy} onPress={onCancel}>
           Cancel
         </Button>
         <Button testID={`${testIDPrefix}-save-${id}`} size="sm" disabled={busy} onPress={() => void save()}>

@@ -66,12 +66,12 @@ export function ResetPasswordScreen({ navigation, route }: Props) {
           ) : null}
           {error ? <Text className={error === EXPIRED ? 'text-center text-base text-muted-foreground' : 'text-sm text-destructive'}>{error}</Text> : null}
           {token ? (
-            <Button testID="reset-password-button" className="mt-2 w-full py-4" onPress={submit} disabled={busy || !password}>
+            <Button testID="reset-password-button" size="lg" className="mt-2 w-full" onPress={submit} disabled={busy || !password}>
               Save password
             </Button>
           ) : null}
           {error === EXPIRED ? (
-            <Button variant={token ? 'ghost' : 'primary'} className={token ? '' : 'mt-2 w-full py-4'} onPress={() => navigation.navigate('ForgotPassword')}>
+            <Button variant={token ? 'ghost' : 'default'} size={token ? 'default' : 'lg'} className={token ? undefined : 'mt-2 w-full'} onPress={() => navigation.navigate('ForgotPassword')}>
               Send a new link
             </Button>
           ) : null}

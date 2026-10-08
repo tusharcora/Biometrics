@@ -7,7 +7,6 @@ import { authClient } from '../auth/authClient';
 import { unwrap, messageFor } from '../auth/authErrors';
 import { useGoogleIdToken } from '../auth/useGoogleIdToken';
 import { COLORS } from '../theme';
-import { cn } from '../lib/utils';
 import { Text } from '../components/ui/text';
 import { Button } from '../components/ui/button';
 import { SettingsGroup, SettingsRow } from '../components/ui/settings-list';
@@ -98,7 +97,6 @@ export function SignInMethodsScreen() {
                   testID={`unlink-${account.providerId}-button`}
                   variant="destructive"
                   size="sm"
-                  className={cn(busy || onlyOne ? 'opacity-40' : '')}
                   disabled={busy || onlyOne}
                   // /unlink-account matches `accountId` against the account row's own id.
                   onPress={() => act(() => unwrap(authClient.unlinkAccount({ accountId: account.id })))}

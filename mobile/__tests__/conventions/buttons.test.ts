@@ -1,0 +1,295 @@
+import fs from 'fs';
+import path from 'path';
+
+// The button standard (src/components/ui/README.md): every button and text
+// link is components/ui/button. This guard reads every file under src as text
+// and fails on a hand-rolled one: a raw Pressable / PressableScale / Touchable*
+// / Text that says it is a button or a link (accessibilityRole="button" |
+// "link", or role=), or whose role is computed (accessibilityRole={x}), which
+// could be either.
+//
+// The only raw pressables allowed are the ones that are not buttons in the
+// design sense (rows, navigating cards, tabs, toggle chips, story rings, tap
+// zones, an inline span in a sentence) plus one documented custom CTA. Each is
+// listed below by file and key, with how many times it occurs and why. The key
+// is the element's testID; a testID passed in from props (testID={testID}) is
+// keyed by its enclosing component instead (`RecapRow:testID`), so it is
+// unique. The count makes a second raw button that reuses a key fail too. A
+// new entry needs the same: if it is a button or a link, use <Button>.
+
+const SRC = path.join(__dirname, '../../src');
+const BUTTON_FILE = 'components/ui/button.tsx';
+
+const RAW_TAGS = [
+  'Pressable',
+  'PressableScale',
+  'AnimatedPressable',
+  'Animated.Pressable',
+  'TouchableOpacity',
+  'TouchableHighlight',
+  'TouchableWithoutFeedback',
+  'Text',
+  'Animated.Text',
+];
+const TAG_START = new RegExp(`<(${RAW_TAGS.map((t) => t.replace('.', '\\.')).join('|')})(?=[\\s/>])`, 'g');
+// accessibilityRole="button", role='link', accessibilityRole={'button'}, role={"link"}.
+const BUTTON_ROLE = /\b(?:accessibilityRole|role)\s*=\s*(?:\{\s*)?(['"`])(?:button|link)\1/;
+// accessibilityRole={role}, role={a ? 'button' : undefined}: anything in braces but a lone string literal.
+const COMPUTED_ROLE = /\b(?:accessibilityRole|role)\s*=\s*\{(?!\s*(['"`])[^'"`]*\1\s*\})/;
+const TEST_ID = /\btestID\s*=\s*(?:"([^"]*)"|'([^']*)'|\{\s*`([^`]*)`\s*\}|\{\s*([^}]*?)\s*\})/;
+
+type Exception = { file: string; key: string; count: number; reason: string };
+
+// prettier-ignore
+const ALLOWED: Exception[] = [
+  // List and settings rows
+  { file: 'components/ui/settings-list.tsx', key: 'SettingsRow:testID', count: 1, reason: 'the settings row primitive (its caller sets a button, link or radio role)' },
+  { file: 'components/buddies/BuddyListRow.tsx', key: 'buddy-row-${row.id}', count: 1, reason: 'a buddy list row that opens the buddy' },
+  { file: 'screens/BuddiesScreen.tsx', key: 'activity-${item.id}', count: 1, reason: 'an activity feed row that opens the item' },
+  { file: 'screens/BadgesScreen.tsx', key: 'badges-row-${family}', count: 1, reason: 'a badge family row that opens its detail' },
+  { file: 'screens/CoachScreen.tsx', key: 'coach-suggestion-${index}', count: 1, reason: 'a suggested-question row in the empty chat' },
+  { file: 'components/coach/PromptBar.tsx', key: 'coach-command-${command.key}', count: 1, reason: 'a row of the slash-command menu' },
+  { file: 'screens/SleepScreen.tsx', key: 'sleep-goal-row', count: 1, reason: 'the bedtime goal settings row (a card that navigates)' },
+  // Cards and tiles that navigate
+  { file: 'screens/RecapsScreen.tsx', key: 'RecapRow:testID', count: 1, reason: 'RecapRow, a recap card that opens the recap' },
+  { file: 'screens/RecapsScreen.tsx', key: 'recaps-year', count: 1, reason: 'the Year in Pixels card' },
+  { file: 'screens/RecapScreen.tsx', key: 'recap-story-preview', count: 1, reason: 'the story preview card that opens the story viewer' },
+  { file: 'screens/MetricsScreen.tsx', key: 'trend-card-${type}', count: 1, reason: 'a metric trend card that opens its detail' },
+  { file: 'screens/MetricsScreen.tsx', key: 'patterns-button', count: 1, reason: 'the Patterns card' },
+  { file: 'screens/MeetYourCoachScreen.tsx', key: 'meet-tile-${id}', count: 1, reason: 'a coach tile in the picker grid' },
+  { file: 'components/tomorrow-card.tsx', key: 'tomorrow-card', count: 1, reason: 'the forecast card that opens Tomorrow' },
+  { file: 'components/coach-digest-card.tsx', key: 'coach-digest-card', count: 1, reason: 'the digest card that opens the coach' },
+  { file: 'components/home/recovery-hero.tsx', key: 'recovery-score-card', count: 1, reason: 'the home hero score card that opens its detail' },
+  { file: 'components/home/coach-tile.tsx', key: 'coach-entry-button', count: 1, reason: 'the home coach tile' },
+  { file: 'components/home/metric-tile.tsx', key: 'metric-card-${type}', count: 1, reason: 'a home metric tile' },
+  { file: 'components/home/sleep-tile.tsx', key: 'sleep-score-unavailable', count: 1, reason: 'the home sleep tile (no data state)' },
+  { file: 'components/home/sleep-tile.tsx', key: 'sleep-score-empty', count: 1, reason: 'the home sleep tile (empty state)' },
+  { file: 'components/home/sleep-tile.tsx', key: 'sleep-score-card', count: 1, reason: 'the home sleep tile' },
+  { file: 'components/home/BuddiesRow.tsx', key: 'home-buddies-row', count: 1, reason: 'the home buddies strip that opens Buddies' },
+  { file: 'components/recap/RecapShelf.tsx', key: 'recap-shelf-item-${item.id}', count: 1, reason: 'a recap card on the shelf' },
+  { file: 'components/achievements/BadgesCard.tsx', key: 'badges-card-${family}', count: 1, reason: 'a badge tile on the home card' },
+  { file: 'components/activity/UsualTiles.tsx', key: 'usual-tile-${tile.type}', count: 1, reason: 'a usual-range tile that opens the metric' },
+  { file: 'components/activity-sheets.tsx', key: 'LinkTile:testID', count: 1, reason: 'LinkTile, a tile that opens a detail sheet' },
+  { file: 'components/sleep/WindowChart.tsx', key: 'sleep-window-bar-${bar.date}', count: 1, reason: 'a chart bar that opens its night' },
+  { file: 'components/coach/TodayBar.tsx', key: 'today-bar-${bar.metric}', count: 1, reason: 'a metric bar that asks the coach about it' },
+  { file: 'components/social/CampBanner.tsx', key: 'camp-banner', count: 1, reason: 'the camp banner strip that opens the Campfire' },
+  // Tabs
+  { file: 'navigation/FloatingTabBar.tsx', key: 'tab-${route.name}', count: 1, reason: 'a tab bar item' },
+  // Story rings, avatars and scene characters
+  { file: 'components/social/StoriesRow.tsx', key: 'story-me', count: 1, reason: 'my story ring' },
+  { file: 'components/social/StoriesRow.tsx', key: 'story-${r.author.id}', count: 1, reason: "a buddy's story ring" },
+  { file: 'screens/DashboardScreen.tsx', key: 'settings-button', count: 1, reason: 'the profile avatar (with its story ring)' },
+  { file: 'screens/SettingsScreen.tsx', key: 'profile-avatar', count: 1, reason: 'the profile avatar wearing a recap ring' },
+  { file: 'components/social/CampScene.tsx', key: 'camp-coach-${id}', count: 1, reason: 'a coach seat in the Campfire scene' },
+  // Toggle and selection chips
+  { file: 'components/habit-log-card.tsx', key: 'habit-type-${habit.type}', count: 1, reason: 'a habit type toggle chip' },
+  { file: 'components/habit-log-card.tsx', key: 'checkin-day-${day.habitDay}', count: 1, reason: 'a check-in day toggle cell' },
+  // Inline spans inside a sentence
+  { file: 'components/coach/CoachToday.tsx', key: 'today-span-${metric}', count: 1, reason: 'a metric word inside the coach sentence that asks about it' },
+  // Backdrops and tap zones
+  { file: 'components/ui/sheet.tsx', key: '${testID}-backdrop', count: 1, reason: 'the sheet backdrop (tap to dismiss)' },
+  { file: 'screens/SocialStoryScreen.tsx', key: 'social-story-prev', count: 1, reason: 'the left story tap zone' },
+  { file: 'screens/SocialStoryScreen.tsx', key: 'social-story-next', count: 1, reason: 'the right story tap zone' },
+  // The documented custom exception
+  { file: 'screens/ScoreDetailScreen.tsx', key: 'ask-coach-button', count: 1, reason: 'Ask Coach, a GlassSurface CTA with the character (kept custom by plan)' },
+];
+
+type Found = { file: string; line: number; tag: string; key: string };
+
+function sourceFiles(dir: string): string[] {
+  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) return sourceFiles(full);
+    return /\.(tsx?|jsx?)$/.test(entry.name) ? [full] : [];
+  });
+}
+
+/**
+ * The attribute text of the JSX opening tag that starts at `from`: up to its
+ * closing `>` at brace depth 0. Comments are left out, so an apostrophe in a
+ * `// another device's` comment between props cannot open a quote, and a role
+ * that is only mentioned in a comment does not count.
+ */
+function openingTag(source: string, from: number): string {
+  let depth = 0;
+  let quote: string | null = null;
+  let out = '';
+  for (let i = from; i < source.length; i++) {
+    const c = source[i];
+    if (quote) {
+      if (c === quote && source[i - 1] !== '\\') quote = null;
+    } else if (c === '/' && source[i + 1] === '/') {
+      const end = source.indexOf('\n', i);
+      i = (end === -1 ? source.length : end) - 1;
+      continue;
+    } else if (c === '/' && source[i + 1] === '*') {
+      const end = source.indexOf('*/', i + 2);
+      i = (end === -1 ? source.length : end + 2) - 1;
+      continue;
+    } else if (c === '{') depth++;
+    else if (c === '}') depth--;
+    // Strings are tracked inside braces too, so a '}' or '//' in one (a URL) is just text.
+    else if (c === '"' || c === "'" || c === '`') quote = c;
+    else if (depth === 0 && c === '>') return out + c;
+    out += c;
+  }
+  return out;
+}
+
+/** The function component around `at`: the last `function X(` or `const X = (` before it. */
+function enclosingComponent(source: string, at: number): string {
+  const names = [...source.slice(0, at).matchAll(/(?:function\s+([A-Z]\w*)\s*\(|const\s+([A-Z]\w*)\s*=\s*(?:React\.memo\()?\()/g)];
+  const last = names[names.length - 1];
+  return last ? (last[1] ?? last[2]) : '?';
+}
+
+/** Every raw pressable / Text in `source` that claims the button or link role, or computes its role. */
+function findHandRolledButtons(file: string, source: string): Found[] {
+  const found: Found[] = [];
+  for (const match of source.matchAll(TAG_START)) {
+    const tag = openingTag(source, match.index!);
+    if (!BUTTON_ROLE.test(tag) && !COMPUTED_ROLE.test(tag)) continue;
+    const id = tag.match(TEST_ID);
+    // A literal or template testID names the element; a passed-in one (testID={testID}) does not, so its component does.
+    const literal = id ? (id[1] ?? id[2] ?? id[3]) : undefined;
+    const key = literal ?? `${enclosingComponent(source, match.index!)}:${id?.[4] ?? ''}`;
+    found.push({ file, line: source.slice(0, match.index).split('\n').length, tag: match[1], key });
+  }
+  return found;
+}
+
+/**
+ * Every way `found` breaks the allowlist: a site with no entry, and an entry
+ * that matches a different number of sites than its count (more: a new raw
+ * button reusing its key; fewer: stale).
+ */
+function violations(found: Found[], allowed: Exception[]): string[] {
+  const out: string[] = [];
+  for (const f of found) {
+    if (!allowed.some((a) => a.file === f.file && a.key === f.key)) {
+      out.push(`src/${f.file}:${f.line} <${f.tag} ${f.key}> is a hand-rolled button or link`);
+    }
+  }
+  for (const a of allowed) {
+    const n = found.filter((f) => f.file === a.file && f.key === a.key).length;
+    if (n !== a.count) out.push(`src/${a.file} ${a.key}: expected ${a.count}, found ${n}`);
+  }
+  return out;
+}
+
+function scan(): Found[] {
+  return sourceFiles(SRC)
+    .map((full) => path.relative(SRC, full).split(path.sep).join('/'))
+    .filter((file) => file !== BUTTON_FILE)
+    .flatMap((file) => findHandRolledButtons(file, fs.readFileSync(path.join(SRC, file), 'utf8')));
+}
+
+describe('button convention', () => {
+  const found = scan();
+
+  it('has no hand-rolled buttons or links: use <Button> from components/ui/button', () => {
+    expect(violations(found, ALLOWED)).toEqual([]);
+  });
+
+  it('gives every allowlist entry a unique key, a count and a reason', () => {
+    const keys = ALLOWED.map((a) => `${a.file} ${a.key}`);
+    expect(new Set(keys).size).toBe(keys.length);
+    for (const a of ALLOWED) {
+      expect(a.reason.trim()).not.toBe('');
+      expect(a.count).toBeGreaterThan(0);
+      // A bare `testID` (or one with no component found) is not a key: it would cover any raw button in the file.
+      expect(a.key).not.toMatch(/^(\?:|:)?testID$/);
+    }
+  });
+
+  it('catches the button role in every form, on every raw tag', () => {
+    const cases = [
+      '<Pressable accessibilityRole="button" onPress={go}>',
+      "<PressableScale testID=\"x\" role='button'>",
+      '<TouchableOpacity accessibilityRole={"button"} />',
+      '<TouchableHighlight onPress={() => go(a > b)} accessibilityRole="button">',
+      '<Text onPress={go} accessibilityRole={`button`}>Go</Text>',
+    ];
+    for (const snippet of cases) expect(findHandRolledButtons('x.tsx', snippet)).toHaveLength(1);
+    // Other literal roles, other tags and the role on a prop name that only contains it are fine.
+    expect(findHandRolledButtons('x.tsx', '<Pressable accessibilityRole="radio" onPress={go}>')).toHaveLength(0);
+    expect(findHandRolledButtons('x.tsx', "<Pressable accessibilityRole={'tab'} onPress={go}>")).toHaveLength(0);
+    expect(findHandRolledButtons('x.tsx', '<Button accessibilityRole="button" />')).toHaveLength(0);
+    expect(findHandRolledButtons('x.tsx', '<TextInput accessibilityRole="button" />')).toHaveLength(0);
+    expect(findHandRolledButtons('x.tsx', '<View role="group" />')).toHaveLength(0);
+  });
+
+  it('fails on a hand-rolled link', () => {
+    const cases = [
+      '<Pressable accessibilityRole="link" onPress={go}>',
+      "<Text onPress={go} role='link'>Terms</Text>",
+      '<TouchableOpacity accessibilityRole={"link"} />',
+    ];
+    for (const snippet of cases) {
+      const hits = findHandRolledButtons('x.tsx', snippet);
+      expect(hits).toHaveLength(1);
+      expect(violations(hits, [])).toHaveLength(1);
+    }
+    // The standard link is fine.
+    expect(findHandRolledButtons('x.tsx', '<Button variant="link" accessibilityRole="link" />')).toHaveLength(0);
+  });
+
+  it('fails on a computed role', () => {
+    const cases = [
+      '<Pressable accessibilityRole={role} onPress={go}>',
+      '<Text onPress={go} role={linky ? "link" : "button"}>Go</Text>',
+      '<TouchableOpacity accessibilityRole={ROLES.cta} />',
+    ];
+    for (const snippet of cases) {
+      const hits = findHandRolledButtons('x.tsx', snippet);
+      expect(hits).toHaveLength(1);
+      expect(violations(hits, [])).toHaveLength(1);
+    }
+  });
+
+  it('fails when a new raw button reuses an allowlisted key', () => {
+    const entry: Exception = { file: 'x.tsx', key: 'row-${id}', count: 1, reason: 'a row' };
+    const one = 'function List() {\n  return <Pressable testID={`row-${id}`} accessibilityRole="button" />;\n}\n';
+    expect(violations(findHandRolledButtons('x.tsx', one), [entry])).toEqual([]);
+    // The same key again: a second raw button slipping in under the first one's entry.
+    const two = one + 'function Other() {\n  return <Pressable testID={`row-${id}`} accessibilityRole="button" />;\n}\n';
+    expect(violations(findHandRolledButtons('x.tsx', two), [entry])).toEqual(['src/x.tsx row-${id}: expected 1, found 2']);
+    // A passed-in testID is keyed by its component, so another component's raw button is not covered.
+    const passed: Exception = { file: 'x.tsx', key: 'Row:testID', count: 1, reason: 'a row' };
+    const rows =
+      'function Row({ testID }) {\n  return <Pressable testID={testID} accessibilityRole="button" />;\n}\n' +
+      'function Tile({ testID }) {\n  return <Pressable testID={testID} accessibilityRole="button" />;\n}\n';
+    expect(violations(findHandRolledButtons('x.tsx', rows), [passed])).toEqual([
+      'src/x.tsx:5 <Pressable Tile:testID> is a hand-rolled button or link',
+    ]);
+  });
+
+  it('flags a stale entry', () => {
+    const entry: Exception = { file: 'x.tsx', key: 'gone', count: 1, reason: 'removed' };
+    expect(violations([], [entry])).toEqual(['src/x.tsx gone: expected 1, found 0']);
+  });
+
+  it('reads the key in each form', () => {
+    expect(findHandRolledButtons('x.tsx', '<Pressable testID={`row-${id}`} accessibilityRole="button">')[0].key).toBe('row-${id}');
+    expect(findHandRolledButtons('x.tsx', "<Pressable testID='a' accessibilityRole=\"button\">")[0].key).toBe('a');
+    const passed = 'function RecapRow() { return <Pressable testID={testID} accessibilityRole="button">; }';
+    expect(findHandRolledButtons('x.tsx', passed)[0].key).toBe('RecapRow:testID');
+  });
+
+  it('skips comments between props, so an apostrophe in one does not run the tag on', () => {
+    const source = [
+      '<Pressable',
+      "  // another device's session",
+      '  onPress={go}',
+      '>',
+      '  <Text>Not a button</Text>',
+      '</Pressable>',
+      "<Text accessibilityRole=\"button\" testID='after'>x</Text>",
+    ].join('\n');
+    expect(findHandRolledButtons('x.tsx', source).map((h) => [h.key, h.line])).toEqual([['after', 7]]);
+    // A role only mentioned in a comment is not a role.
+    expect(findHandRolledButtons('x.tsx', '<Pressable /* accessibilityRole="button" */ onPress={go}>')).toHaveLength(0);
+    // A // inside a string is not a comment.
+    expect(findHandRolledButtons('x.tsx', "<Pressable onPress={() => open('https://x.dev')} accessibilityRole=\"link\">")).toHaveLength(1);
+  });
+});

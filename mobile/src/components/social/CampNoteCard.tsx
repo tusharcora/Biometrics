@@ -9,10 +9,11 @@ import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
 import { Character } from '../characters/Character';
 import type { CharacterId } from '../characters/types';
-import { Button } from '../ui/button';
-import { PressableScale } from '../ui/pressable-scale';
+import { Button, buttonIconSize } from '../ui/button';
 import { Text } from '../ui/text';
 import { CAMP_NOTE_CHIPS, CAMP_NOTE_MAX, noteAudienceLine, noteLiveLine } from '../../lib/socialCopy';
+import { COLORS } from '../../theme';
+import { PANEL_DESTRUCTIVE, PANEL_OUTLINE } from './CampPanel';
 import { AddNoteBubble, PixelBubble } from './CampScene';
 
 const TEAL = '#2DD4BF';
@@ -103,35 +104,32 @@ export function CampNoteCard({
           {draft === '' ? (
             <View className="flex-row flex-wrap gap-2">
               {CAMP_NOTE_CHIPS.map((chip, i) => (
-                <PressableScale key={chip} testID={`camp-chip-${i}`} accessibilityRole="button" accessibilityLabel={`Use "${chip}"`} onPress={() => onDraft(chip)}
-                  className="h-[34px] justify-center rounded-full border border-border bg-foreground/5 px-3">
-                  <Text className="text-[13px]">{chip}</Text>
-                </PressableScale>
+                <Button key={chip} testID={`camp-chip-${i}`} accessibilityLabel={`Use "${chip}"`} onPress={() => onDraft(chip)}
+                  variant="outline" size="xs" className={`rounded-full ${PANEL_OUTLINE}`}>{chip}</Button>
               ))}
             </View>
           ) : null}
           <View className="flex-row gap-2.5">
-            <Button testID="camp-note-share" accessibilityRole="button" accessibilityLabel="Share your camp note" disabled={!canShare} onPress={onShare}
-              className="h-[54px] flex-1 flex-row gap-2.5 rounded-[18px] px-3 py-0">
-              <Ionicons name="send" size={16} color="#04211D" />
-              <Text numberOfLines={1} className="text-base font-bold text-[#04211D]">Share with the camp</Text>
+            <Button testID="camp-note-share" accessibilityLabel="Share your camp note" disabled={!canShare} onPress={onShare} size="lg" className="flex-1"
+              iconStart={<Ionicons name="send" size={buttonIconSize('lg')} color={COLORS.dark.background} />}>
+              Share with the camp
             </Button>
             {live ? (
-              <Button testID="camp-note-cancel" accessibilityRole="button" accessibilityLabel="Cancel editing your camp note" variant="secondary"
-                disabled={busy} onPress={onCancel} className="h-[54px] rounded-[18px] py-0">Cancel</Button>
+              <Button testID="camp-note-cancel" accessibilityLabel="Cancel editing your camp note" variant="secondary" size="lg"
+                disabled={busy} onPress={onCancel}>Cancel</Button>
             ) : null}
           </View>
           {live ? (
-            <Button testID="camp-note-clear" accessibilityRole="button" accessibilityLabel="Clear your camp note" variant="destructive" size="sm"
-              disabled={busy} onPress={onClear} className="self-center">Clear note</Button>
+            <Button testID="camp-note-clear" accessibilityLabel="Clear your camp note" variant="destructive" size="sm"
+              disabled={busy} onPress={onClear} className={`self-center ${PANEL_DESTRUCTIVE}`}>Clear note</Button>
           ) : null}
         </View>
       ) : (
         <View className="flex-row gap-2.5">
-          <Button testID="camp-note-edit" accessibilityRole="button" accessibilityLabel="Edit your camp note" variant="secondary" disabled={busy}
-            onPress={onEdit} className="h-12 flex-1 rounded-2xl py-0">Edit note</Button>
-          <Button testID="camp-note-clear" accessibilityRole="button" accessibilityLabel="Clear your camp note" variant="destructive" disabled={busy}
-            onPress={onClear} className="h-12 flex-1 rounded-2xl border border-destructive/35 bg-destructive/10 py-0">Clear</Button>
+          <Button testID="camp-note-edit" accessibilityLabel="Edit your camp note" variant="secondary" size="lg" disabled={busy}
+            onPress={onEdit} className="flex-1">Edit note</Button>
+          <Button testID="camp-note-clear" accessibilityLabel="Clear your camp note" variant="destructive" size="lg" disabled={busy}
+            onPress={onClear} className={`flex-1 ${PANEL_DESTRUCTIVE}`}>Clear</Button>
         </View>
       )}
       {message ? <Text testID="camp-message" accessibilityLiveRegion="polite" className="text-sm text-destructive">{message}</Text> : null}

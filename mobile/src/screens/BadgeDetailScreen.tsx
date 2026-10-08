@@ -41,7 +41,7 @@ export function BadgeDetailScreen() {
           ) : state.status === 'error' ? (
             <Card testID="badge-detail-error" className="gap-3">
               <Text className="text-sm text-muted-foreground">This badge could not be loaded.</Text>
-              <Button testID="badge-detail-retry" variant="secondary" size="sm" onPress={() => void refreshAchievements()}>
+              <Button testID="badge-detail-retry" variant="secondary" size="sm" className="self-start" onPress={() => void refreshAchievements()}>
                 Try again
               </Button>
             </Card>

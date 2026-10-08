@@ -12,7 +12,7 @@ import { buddyErrorCode } from '../../api/buddies';
 import { sayGoodnight, undoGoodnight, type Goodnight } from '../../api/social';
 import { buddyErrorMessage } from '../../lib/buddyCopy';
 import { goodnightSaidLine } from '../../lib/socialCopy';
-import { Button } from '../ui/button';
+import { Button, buttonIconSize } from '../ui/button';
 import { Text } from '../ui/text';
 
 export function GoodnightButton({ goodnight: fromProps, onChanged, testID = 'goodnight', look = 'default' }: {
@@ -75,7 +75,7 @@ export function GoodnightButton({ goodnight: fromProps, onChanged, testID = 'goo
         <View className="flex-row items-center justify-between gap-2">
           <Text testID={`${testID}-said`} className="text-sm font-semibold">{goodnightSaidLine(goodnight)}</Text>
           {undoUntil > Date.now() ? (
-            <Button testID={`${testID}-undo`} accessibilityRole="button" accessibilityLabel="Undo goodnight" variant="secondary" size="sm" disabled={busy}
+            <Button testID={`${testID}-undo`} accessibilityLabel="Undo goodnight" variant="secondary" size="sm" disabled={busy}
               onPress={() => void run(async () => {
                 await undoGoodnight();
                 return null;
@@ -86,13 +86,13 @@ export function GoodnightButton({ goodnight: fromProps, onChanged, testID = 'goo
         </View>
       ) : (
         look === 'camp' ? (
-          <Button testID={`${testID}-say`} accessibilityRole="button" disabled={busy} onPress={() => void run(async () => (await sayGoodnight()).goodnight)}
-            className="h-14 flex-row gap-2.5 rounded-[18px] border border-[#A5B4FC]/35 bg-[#6366F1]/25 py-0">
-            <Ionicons name="moon" size={18} color="#E0E7FF" />
-            <Text className="text-base font-bold text-[#E0E7FF]">Say goodnight</Text>
+          <Button testID={`${testID}-say`} size="lg" disabled={busy} onPress={() => void run(async () => (await sayGoodnight()).goodnight)}
+            className="border-[#A5B4FC]/35 bg-[#6366F1]/25 active:bg-[#6366F1]/35" textClassName="text-[#E0E7FF]"
+            iconStart={<Ionicons name="moon" size={buttonIconSize('lg')} color="#E0E7FF" />}>
+            Say goodnight
           </Button>
         ) : (
-          <Button testID={`${testID}-say`} accessibilityRole="button" disabled={busy} onPress={() => void run(async () => (await sayGoodnight()).goodnight)}>Say goodnight</Button>
+          <Button testID={`${testID}-say`} disabled={busy} onPress={() => void run(async () => (await sayGoodnight()).goodnight)}>Say goodnight</Button>
         )
       )}
       {message ? <Text testID={`${testID}-message`} accessibilityLiveRegion="polite" className="text-sm text-destructive">{message}</Text> : null}

@@ -14,6 +14,7 @@ import { fetchStory, markStorySeen, type Story } from '../api/social';
 import { ViewerProgress } from '../components/recap/ViewerProgress';
 import { CheckInSheet } from '../components/social/CheckInSheet';
 import { SocialStoryFrame } from '../components/social/SocialStoryFrame';
+import { Button } from '../components/ui/button';
 import { Text } from '../components/ui/text';
 import { buddyErrorMessage, STICKERS } from '../lib/buddyCopy';
 import { knownStoryFrames, personName } from '../lib/socialCopy';
@@ -21,6 +22,11 @@ import { refreshSocial, useSocial } from '../lib/socialStore';
 import { useStoryViewer } from '../lib/useStoryViewer';
 
 const GROUND = '#0F1230';
+// The story is dark in either app scheme, but the Button's tokens and `dark:` classes follow it: these pin the look
+// on the story's ground (white Retry / Check in, white-on-dark Close and replies).
+const ON_STORY_DEFAULT = 'bg-white';
+const ON_STORY_GHOST = 'active:bg-white/10 dark:active:bg-white/10';
+const ON_STORY_OUTLINE = 'border-white/30 bg-transparent active:bg-white/10 dark:border-white/30 dark:bg-transparent dark:active:bg-white/10';
 
 type Loaded = { phase: 'loading' } | { phase: 'ready'; story: Story } | { phase: 'empty' } | { phase: 'gone' } | { phase: 'error' };
 
@@ -72,10 +78,10 @@ export function SocialStoryScreen() {
         {loaded.phase === 'error' ? (
           <>
             <Text className="text-center text-white">Couldn't load this story</Text>
-            <Text testID="social-story-retry" accessibilityRole="button" onPress={() => void load(() => mounted.current)} className="rounded-full bg-white px-5 py-2 font-semibold text-black">Retry</Text>
+            <Button testID="social-story-retry" size="sm" onPress={() => void load(() => mounted.current)} className={ON_STORY_DEFAULT} textClassName="text-black">Retry</Button>
           </>
         ) : null}
-        <Text testID="social-story-close" accessibilityRole="button" onPress={leave} className="font-semibold text-white">Close</Text>
+        <Button testID="social-story-close" variant="ghost" size="sm" onPress={leave} className={ON_STORY_GHOST} textClassName="text-white">Close</Button>
       </View>
     </SafeAreaView>
   );
@@ -174,7 +180,7 @@ function Viewer({ story, mineHint, onClose }: { story: Story; mineHint: boolean;
       </View>
       <View className="flex-row items-center justify-between px-4 py-2">
         <Text testID="social-story-name" numberOfLines={1} className="flex-1 font-semibold text-white">{personName(story.author, mine)}</Text>
-        <Text testID="social-story-close" accessibilityRole="button" onPress={close} className="text-white">Close</Text>
+        <Button testID="social-story-close" variant="ghost" size="sm" onPress={close} className={ON_STORY_GHOST} textClassName="text-white">Close</Button>
       </View>
       <View testID={`story-frame-${viewer.index}`} className="flex-1">
         <Pressable
@@ -211,15 +217,17 @@ function Viewer({ story, mineHint, onClose }: { story: Story; mineHint: boolean;
         <View className="gap-2 px-4 pb-4">
           <View className="flex-row gap-2">
             {STICKERS.map((s) => (
-              <Text
+              <Button
                 key={s.kind}
                 testID={`story-reply-${s.kind}`}
-                accessibilityRole="button"
+                variant="outline"
+                size="sm"
                 onPress={() => void reply(s.kind)}
-                className="flex-1 rounded-full border border-white/30 py-2 text-center text-sm text-white"
+                className={`flex-1 rounded-full ${ON_STORY_OUTLINE}`}
+                textClassName="text-white"
               >
                 {s.label}
-              </Text>
+              </Button>
             ))}
           </View>
           {message ? <Text testID="story-message" className="text-center text-sm text-white/80">{message}</Text> : null}

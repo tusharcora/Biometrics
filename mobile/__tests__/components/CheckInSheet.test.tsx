@@ -34,3 +34,10 @@ it('shows an error and stays open when saving fails', async () => {
   expect(screen.getByTestId('checkin-message')).toBeTruthy();
   expect(onClose).not.toHaveBeenCalled();
 });
+
+it("marks today's mood as the selected, filled option", () => {
+  render(<CheckInSheet visible current="OKAY" onClose={jest.fn()} />);
+  expect(screen.getByTestId('checkin-OKAY').props.accessibilityState).toMatchObject({ selected: true, disabled: false });
+  expect(screen.getByTestId('checkin-RESTED').props.accessibilityState).toMatchObject({ selected: false });
+  expect(screen.getByTestId('checkin-OKAY').props.accessibilityRole).toBe('button');
+});

@@ -56,7 +56,7 @@ export function HandleSetupForm({
       <TextField label="Handle" testID="handle-input" value={handle} onChangeText={setHandle} autoCapitalize="none" />
       <TextField label="Display name" testID="display-name-input" value={name} onChangeText={setName} />
       {error ? <Text testID="handle-setup-error" className="text-sm text-destructive">{error}</Text> : null}
-      <Button testID="handle-setup-save" disabled={busy || !handle.trim() || !name.trim()} onPress={() => void save()}>
+      <Button testID="handle-setup-save" size="lg" disabled={busy || !handle.trim() || !name.trim()} onPress={() => void save()}>
         {mode === 'setup' ? 'Continue' : 'Save'}
       </Button>
     </View>

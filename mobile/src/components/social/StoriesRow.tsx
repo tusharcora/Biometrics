@@ -10,6 +10,7 @@ import type { CheckIn, StoryRing } from '../../api/social';
 import { Character } from '../characters/Character';
 import { DEFAULT_CHARACTER_ID, isCharacterId } from '../characters/types';
 import { CHECKIN_OPTIONS, personName } from '../../lib/socialCopy';
+import { Button } from '../ui/button';
 import { PressableScale } from '../ui/pressable-scale';
 import { Text } from '../ui/text';
 
@@ -65,9 +66,9 @@ export function StoriesRow({ me, rings, onCheckIn, onOpenStory, onSeeAll }: {
           </PressableScale>
         );
       })}
-      <PressableScale testID="stories-see-all" accessibilityRole="button" onPress={onSeeAll} className="items-center justify-center px-2">
-        <Text className="text-sm font-semibold text-accent">See all</Text>
-      </PressableScale>
+      <Button testID="stories-see-all" variant="link" size="sm" accessibilityRole="link" onPress={onSeeAll} className="mx-2 self-center">
+        See all
+      </Button>
     </ScrollView>
   );
 }

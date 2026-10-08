@@ -107,13 +107,12 @@ export function DeleteAccountSection() {
       <Button
         testID="delete-account-confirm"
         variant="destructive"
-        className={confirmed && !busy ? 'border border-destructive' : 'border border-destructive opacity-40'}
         disabled={!confirmed || busy}
         onPress={() => void confirmDelete()}
       >
         Permanently delete my account
       </Button>
-      <Button testID="delete-account-cancel" variant="ghost" disabled={busy} onPress={close}>
+      <Button testID="delete-account-cancel" variant="outline" disabled={busy} onPress={close}>
         Cancel
       </Button>
     </Card>

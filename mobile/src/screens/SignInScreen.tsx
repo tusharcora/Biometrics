@@ -9,7 +9,7 @@ import { useGoogleIdToken } from '../auth/useGoogleIdToken';
 import { AuthError, messageFor } from '../auth/authErrors';
 import type { AuthStackParamList } from '../navigation/AuthNavigator';
 import { Text } from '../components/ui/text';
-import { Button } from '../components/ui/button';
+import { Button, buttonIconSize } from '../components/ui/button';
 import { TextField } from '../components/ui/text-field';
 import { GoogleMark, OnboardingHero } from '../components/onboarding-hero';
 import { Ionicons } from '@expo/vector-icons';
@@ -86,22 +86,26 @@ export function SignInScreen({ navigation, route }: Props) {
         </Animated.View>
         {notice ? <Text className="text-center text-sm text-foreground">{notice}</Text> : null}
         <Animated.View entering={FadeInDown.delay(120).duration(450)} className="gap-3">
-          <Button testID="apple-sign-in-button" className="w-full bg-foreground py-4" onPress={handleApple} disabled={busy}>
-            <View className="flex-row items-center gap-2">
-              <Ionicons name="logo-apple" size={19} color={colors.background} />
-              <Text className="text-base font-semibold text-background">Sign in with Apple</Text>
-            </View>
+          <Button
+            testID="apple-sign-in-button"
+            size="lg"
+            className="w-full"
+            iconStart={<Ionicons name="logo-apple" size={buttonIconSize('lg')} color={colors.background} />}
+            onPress={handleApple}
+            disabled={busy}
+          >
+            Sign in with Apple
           </Button>
           <Button
             testID="google-sign-in-button"
-            className="w-full border border-border bg-card py-4"
+            variant="outline"
+            size="lg"
+            className="w-full"
+            iconStart={<GoogleMark size={buttonIconSize('lg')} />}
             onPress={() => google.prompt()}
             disabled={busy || !google.ready}
           >
-            <View className="flex-row items-center gap-2">
-              <GoogleMark />
-              <Text className="text-base font-semibold">Sign in with Google</Text>
-            </View>
+            Sign in with Google
           </Button>
         </Animated.View>
         <View className="flex-row items-center gap-3">
@@ -113,7 +117,7 @@ export function SignInScreen({ navigation, route }: Props) {
           {testAccount ? (
             <Button
               testID="dev-test-account-button"
-              variant="secondary"
+              variant="outline"
               className="w-full border-dashed"
               disabled={busy}
               onPress={() => {
@@ -137,15 +141,15 @@ export function SignInScreen({ navigation, route }: Props) {
               Resend confirmation email
             </Button>
           ) : null}
-          <Button testID="email-sign-in-button" className="w-full" onPress={() => run(() => signInWithEmail(email, password))} disabled={busy || !email || !password}>
+          <Button testID="email-sign-in-button" size="lg" className="w-full" onPress={() => run(() => signInWithEmail(email, password))} disabled={busy || !email || !password}>
             Sign in
           </Button>
-          <View className="flex-row justify-center">
-            <Button testID="forgot-password-link" variant="ghost" size="sm" onPress={() => navigation.navigate('ForgotPassword')}>
+          <View className="flex-row justify-center gap-6 pt-1">
+            <Button testID="forgot-password-link" variant="link" size="sm" onPress={() => navigation.navigate('ForgotPassword')}>
               Forgot password?
             </Button>
-            <Button testID="create-account-link" variant="ghost" size="sm" onPress={() => navigation.navigate('SignUp')}>
-              <Text className="text-base font-semibold text-accent">Create an account</Text>
+            <Button testID="create-account-link" variant="link" size="sm" onPress={() => navigation.navigate('SignUp')}>
+              Create an account
             </Button>
           </View>
         </View>

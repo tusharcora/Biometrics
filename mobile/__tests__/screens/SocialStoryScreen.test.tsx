@@ -5,6 +5,7 @@ import { ApiError } from '../../src/api/client';
 import { fetchStory, markStorySeen } from '../../src/api/social';
 import { sendSticker } from '../../src/api/buddies';
 import { refreshSocial } from '../../src/lib/socialStore';
+import { cn } from '../../src/lib/utils';
 import { SocialStoryScreen } from '../../src/screens/SocialStoryScreen';
 
 jest.mock('../../src/api/social', () => ({ ...jest.requireActual('../../src/api/social'), fetchStory: jest.fn(), markStorySeen: jest.fn().mockResolvedValue(undefined) }));
@@ -183,4 +184,34 @@ it('a fast double tap sends one sticker', async () => {
   expect(sendSticker).toHaveBeenCalledTimes(1);
   await act(async () => finish({ id: 's' }));
   expect(screen.getByTestId('story-message')).toHaveTextContent('Sent');
+});
+
+// The story is dark in either app scheme; a Button's `dark:` classes follow the app's. The classes that apply in a
+// scheme are the `dark:` ones only in dark, where they win over their light twins: the same set either way.
+function inScheme(className: string, scheme: 'light' | 'dark'): string[] {
+  const all = className.split(/\s+/).filter(Boolean);
+  const dark = scheme === 'dark' ? all.filter((c) => c.startsWith('dark:')).map((c) => c.slice('dark:'.length)) : [];
+  return cn(...all.filter((c) => !c.startsWith('dark:')), ...dark).split(' ').sort();
+}
+const expectSameInBothSchemes = (testID: string) => {
+  const classes = String(screen.getByTestId(testID).props.className ?? '');
+  expect(inScheme(classes, 'light')).toEqual(inScheme(classes, 'dark'));
+};
+
+it("the viewer's Buttons keep their on-story look in both schemes: white Retry, white-label Close and replies", async () => {
+  (fetchStory as jest.Mock)
+    .mockRejectedValueOnce(new Error('offline'))
+    .mockResolvedValueOnce({ author: sam, localDate: '2026-10-07', frames: [{ kind: 'checkin', at: '2026-10-07T14:00:00.000Z', locked: false, mood: 'OKAY' }] });
+  renderScreen();
+  await screen.findByTestId('social-story-error');
+  expectSameInBothSchemes('social-story-retry');
+  expect(String(screen.getByTestId('social-story-retry').props.className)).toContain('bg-white');
+  expect(String(screen.getByText('Retry').props.className)).toContain('text-black');
+  expectSameInBothSchemes('social-story-close');
+  expect(String(screen.getByText('Close').props.className)).toContain('text-white');
+  await act(async () => fireEvent.press(screen.getByTestId('social-story-retry')));
+  await screen.findByTestId('story-frame-0');
+  expectSameInBothSchemes('social-story-close');
+  expectSameInBothSchemes('story-reply-CHEER');
+  expect(String(screen.getByTestId('story-reply-CHEER').props.className).split(' ')).toEqual(expect.arrayContaining(['rounded-full', 'border-white/30', 'flex-1']));
 });

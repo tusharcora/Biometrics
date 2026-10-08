@@ -5,7 +5,6 @@ import { buddyErrorCode, sendSticker } from '../api/buddies';
 import { fetchHighlights, type HighlightItem, type Highlights } from '../api/social';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
-import { PressableScale } from '../components/ui/pressable-scale';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { buddyErrorMessage } from '../lib/buddyCopy';
@@ -113,10 +112,9 @@ export function HighlightsScreen() {
                 <Text className="font-semibold">{highlightLine(item)}</Text>
               </View>
               {item.mine ? null : (
-                <PressableScale testID={`highlights-item-${index}-cheer`} accessibilityRole="button" disabled={busy} onPress={() => void cheer(item)}
-                  className="h-8 justify-center rounded-full border border-border px-3">
-                  <Text className="text-xs">Cheer</Text>
-                </PressableScale>
+                <Button testID={`highlights-item-${index}-cheer`} variant="outline" size="xs" disabled={busy} onPress={() => void cheer(item)}>
+                  Cheer
+                </Button>
               )}
             </Card>
           );

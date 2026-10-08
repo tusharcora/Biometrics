@@ -98,7 +98,19 @@ describe('design tokens (new semantic colors)', () => {
     ['today-tick', 'todayTick'],
     ['tip', 'tip'],
     ['tip-foreground', 'tipForeground'],
+    // shadcn buttons: the secondary fill and its label.
+    ['secondary', 'secondary'],
+    ['secondary-foreground', 'secondaryForeground'],
   ];
+
+  it.each(['secondary', 'secondary-foreground'])('%s has a tailwind colour entry backed by its CSS variable', (name) => {
+    expect(tailwind.theme.extend.colors[name]).toBe(`rgb(var(--color-${name}) / <alpha-value>)`);
+  });
+
+  // shadcn's `input` (dark outline border and fill) is an alias of the hairline colour, not its own variable.
+  it('maps the input colour onto the hairline variable', () => {
+    expect(tailwind.theme.extend.colors.input).toBe('rgb(var(--color-hairline) / <alpha-value>)');
+  });
 
   it.each(NEW_TOKENS)('--color-%s is identical in global.css and COLORS.%s (light and dark)', (cssName, key) => {
     expect((COLORS.light as Record<string, string>)[key]).toBe(readVar(lightBlock, cssName));

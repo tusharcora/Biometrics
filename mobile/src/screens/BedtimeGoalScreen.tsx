@@ -1,12 +1,12 @@
 import React, { useCallback, useEffect, useState } from 'react';
-import { Linking, Pressable, ScrollView, Switch, View } from 'react-native';
+import { Linking, ScrollView, Switch, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useColorScheme } from 'nativewind';
 import { Ionicons } from '@expo/vector-icons';
 import { fetchSleepGoal, saveSleepGoal, type SleepGoal } from '../api/sleep';
 import { useCharacter } from '../characters/CharacterContext';
 import { characterInfo } from '../components/characters/registry';
-import { Button } from '../components/ui/button';
+import { Button, buttonIconSize } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { SectionLabel } from '../components/ui/section-label';
 import { SegmentedControl } from '../components/ui/segmented-control';
@@ -146,7 +146,7 @@ export function BedtimeGoalScreen() {
       <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
         <View className="flex-1 items-center justify-center gap-3 p-6">
           <Text className="text-center text-muted-foreground">Your bedtime goal could not be loaded.</Text>
-          <Button testID="goal-load-retry" onPress={load}>
+          <Button testID="goal-load-retry" variant="secondary" onPress={load}>
             Try again
           </Button>
         </View>
@@ -248,7 +248,7 @@ export function BedtimeGoalScreen() {
         </View>
 
         <View className="gap-2">
-          <Button testID="goal-save" onPress={save} disabled={!canSave}>
+          <Button testID="goal-save" size="lg" onPress={save} disabled={!canSave}>
             {saving ? 'Saving…' : 'Save'}
           </Button>
           {saveFailed ? (
@@ -290,9 +290,9 @@ export function BedtimeGoalScreen() {
         {reminderNote === 'denied' ? (
           <View className="gap-1 px-4">
             <Text testID="winddown-denied" className="text-xs text-muted-foreground">Notifications are off for Biometrics. Turn them on in Settings.</Text>
-            <Pressable testID="winddown-settings" accessibilityRole="link" onPress={() => void Linking.openSettings()}>
-              <Text className="text-xs font-semibold text-accent">Open Settings</Text>
-            </Pressable>
+            <Button testID="winddown-settings" variant="link" size="xs" accessibilityRole="link" className="self-start" onPress={() => void Linking.openSettings()}>
+              Open Settings
+            </Button>
           </View>
         ) : null}
         {reminderNote === 'error' ? (
@@ -320,18 +320,9 @@ function Stepper({ id, label, value, onMinus, onPlus, minusDisabled, plusDisable
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === 'light' ? COLORS.light : COLORS.dark;
   const button = (testID: string, icon: 'remove' | 'add', onPress: () => void, disabled: boolean | undefined, a11y: string) => (
-    <Pressable
-      testID={testID}
-      accessibilityRole="button"
-      accessibilityLabel={a11y}
-      accessibilityState={{ disabled: !!disabled }}
-      disabled={disabled}
-      onPress={onPress}
-      hitSlop={6}
-      className={`h-9 w-9 items-center justify-center rounded-full bg-muted active:opacity-70 ${disabled ? 'opacity-40' : ''}`}
-    >
-      <Ionicons name={icon} size={18} color={colors.foreground} />
-    </Pressable>
+    <Button testID={testID} variant="outline" size="icon-sm" accessibilityLabel={a11y} disabled={disabled} onPress={onPress}>
+      <Ionicons name={icon} size={buttonIconSize('icon-sm')} color={colors.foreground} />
+    </Button>
   );
   return (
     <View className="flex-row items-center gap-3">

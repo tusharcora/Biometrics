@@ -14,7 +14,7 @@ import { hexAlpha } from '../components/characters/palette';
 import { characterInfo } from '../components/characters/registry';
 import { ViewerProgress } from '../components/recap/ViewerProgress';
 import { STORY_FRAME_COUNT, WeeklyStoryFrame, type StoryFrameIndex } from '../components/recap/WeeklyStoryView';
-import { PressableScale } from '../components/ui/pressable-scale';
+import { Button, buttonIconSize, buttonTextVariants, type ButtonVariant } from '../components/ui/button';
 import { Text } from '../components/ui/text';
 import { navigateToCoachEntry } from '../navigation/coachNavigation';
 import { weekRange } from '../lib/recapCopy';
@@ -29,6 +29,7 @@ import { coachEntryRoute, useCoachStatus } from '../lib/useCoachStatus';
 import { EXPORT_NOTICES, useRecapExport } from '../lib/useRecapExport';
 import { useEarnedBadges } from '../lib/useEarnedBadges';
 import { useStoryViewer } from '../lib/useStoryViewer';
+import { cn } from '../lib/utils';
 import { FONTS } from '../theme';
 
 /** A drag down past this (points), or flung faster than CLOSE_VELOCITY, closes the viewer. */
@@ -36,8 +37,8 @@ const CLOSE_DISTANCE = 120;
 const CLOSE_VELOCITY = 1000;
 /** Above the frame: the progress bar and the coach header (design E). */
 const TOP_CHROME_HEIGHT = 8 + 3 + 6 + 44 + 6;
-/** Under the frame: room for the end actions (the tallest bottom content) or the reply bar. */
-const BOTTOM_HEIGHT = 12 + 52 + 10 + 48 + 8;
+/** Under the frame: room for the end actions (the tallest bottom content: two lg rows) or the reply bar. */
+const BOTTOM_HEIGHT = 12 + 40 + 10 + 40 + 8;
 const SIDE = 16;
 
 type Params = { recap: Recap } | { id: string };
@@ -111,20 +112,26 @@ export function RecapStoryScreen() {
       ) : (
         <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
           <View style={{ alignItems: 'flex-end', paddingHorizontal: SIDE - 4 }}>
-            <IconButton testID="story-viewer-close" icon="close" label="Close story" tint={tint} onPress={leave} />
+            <Button testID="story-viewer-close" variant="ghost" size="icon-lg" accessibilityLabel="Close story" className={ON_GROUND_GHOST} onPress={leave}>
+              <Ionicons name="close" size={buttonIconSize('icon-lg')} color={tint.text} />
+            </Button>
           </View>
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: 16, paddingHorizontal: 32 }}>
             {loaded.phase === 'loading' || (recap && !prefs) ? <ActivityIndicator testID="story-viewer-loading" color={tint.text} /> : null}
             {loaded.phase === 'missing' ? (
               <>
                 <Text testID="story-viewer-missing" className="text-center text-base" style={{ color: tint.text }}>This recap isn't available.</Text>
-                <PillButton testID="story-viewer-missing-back" label="Go back" tint={tint} onPress={leave} />
+                <Button testID="story-viewer-missing-back" variant="outline" size="lg" style={outlineOn(tint)} onPress={leave}>
+                  <TintLabel testID="story-viewer-missing-back-label" color={tint.text}>Go back</TintLabel>
+                </Button>
               </>
             ) : null}
             {loaded.phase === 'error' ? (
               <>
                 <Text testID="story-viewer-error" className="text-center text-base" style={{ color: tint.text }}>Your recap could not be loaded.</Text>
-                <PillButton testID="story-viewer-retry" label="Try again" tint={tint} onPress={() => void load()} />
+                <Button testID="story-viewer-retry" variant="outline" size="lg" style={outlineOn(tint)} onPress={() => void load()}>
+                  <TintLabel testID="story-viewer-retry-label" color={tint.text}>Try again</TintLabel>
+                </Button>
               </>
             ) : null}
           </View>
@@ -242,8 +249,13 @@ function StoryViewer({ recap, coachId, tint, includes }: { recap: Recap; coachId
                   <Text testID="story-viewer-title" numberOfLines={1} style={{ fontFamily: FONTS.sansSemibold, fontSize: 14, color: tint.text }}>{`${coachName} · Your week`}</Text>
                   <Text testID="story-viewer-range" numberOfLines={1} style={{ fontSize: 12, color: tint.soft }}>{weekRange(recap.periodStart, recap.periodEnd)}</Text>
                 </View>
-                <IconButton testID="story-viewer-share" icon="share-outline" label="Share this frame" tint={tint} disabled={!canExport} onPress={() => void share()} {...holdChrome} />
-                <IconButton testID="story-viewer-close" icon="close" label="Close story" tint={tint} onPress={viewer.close} />
+                <Button testID="story-viewer-share" variant="ghost" size="icon-lg" accessibilityLabel="Share this frame" className={ON_GROUND_GHOST}
+                  disabled={!canExport} onPress={() => void share()} {...holdChrome}>
+                  <Ionicons name="share-outline" size={buttonIconSize('icon-lg')} color={tint.text} />
+                </Button>
+                <Button testID="story-viewer-close" variant="ghost" size="icon-lg" accessibilityLabel="Close story" className={ON_GROUND_GHOST} onPress={viewer.close}>
+                  <Ionicons name="close" size={buttonIconSize('icon-lg')} color={tint.text} />
+                </Button>
               </View>
             </View>
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
@@ -274,37 +286,49 @@ function StoryViewer({ recap, coachId, tint, includes }: { recap: Recap; coachId
                 {EXPORT_NOTICES[notice]}
               </Text>
               {notice === 'denied' ? (
-                <Pressable testID="story-viewer-open-settings" accessibilityRole="button" onPress={() => void Linking.openSettings()}>
-                  <Text className="text-sm font-semibold" style={{ color: tint.text }}>Open Settings</Text>
-                </Pressable>
+                <Button testID="story-viewer-open-settings" variant="link" size="sm" accessibilityRole="link" onPress={() => void Linking.openSettings()}>
+                  <TintLabel testID="story-viewer-open-settings-label" color={tint.text} variant="link" size="sm">Open Settings</TintLabel>
+                </Button>
               ) : null}
             </View>
           ) : null}
           {atEnd ? (
             <View testID="story-end-actions" style={{ gap: 10 }}>
-              <PillButton testID="story-end-full-recap" label="See full recap" tint={tint} primary onPress={fullRecap} {...holdChrome} />
+              <Button testID="story-end-full-recap" size="lg" style={{ backgroundColor: tint.accent }} onPress={fullRecap} {...holdChrome}>
+                <TintLabel testID="story-end-full-recap-label" color={tint.ground} variant="default">See full recap</TintLabel>
+              </Button>
               <View className="flex-row" style={{ gap: 10 }}>
-                <PillButton testID="story-end-share" label="Share this week" tint={tint} onPress={shareWeek} {...holdChrome} />
-                <PillButton testID="story-end-again" label="Watch again" tint={tint} onPress={viewer.restart} {...holdChrome} />
+                <Button testID="story-end-share" variant="outline" size="lg" className="flex-1" style={outlineOn(tint, tint.accent, 0.4)} onPress={shareWeek} {...holdChrome}>
+                  <TintLabel testID="story-end-share-label" color={tint.text}>Share this week</TintLabel>
+                </Button>
+                <Button testID="story-end-again" variant="outline" size="lg" className="flex-1" style={outlineOn(tint, tint.accent, 0.4)} onPress={viewer.restart} {...holdChrome}>
+                  <TintLabel testID="story-end-again-label" color={tint.text}>Watch again</TintLabel>
+                </Button>
               </View>
             </View>
           ) : (
             <View testID="story-viewer-reply" className="flex-row items-center" style={{ gap: 10 }}>
               {canAsk ? (
-                <Pressable
+                // Looks like a reply field, so the label sits at the start.
+                <Button
                   testID="story-viewer-ask"
-                  accessibilityRole="button"
+                  variant="outline"
+                  size="lg"
                   accessibilityHint="Opens the chat with a question about this week, for you to edit and send"
                   onPress={ask}
                   {...holdChrome}
-                  style={{ flex: 1, height: 48, borderRadius: 24, borderWidth: 1, borderColor: hexAlpha(tint.text, 0.45), justifyContent: 'center', paddingHorizontal: 18 }}
+                  className="flex-1 justify-start"
+                  style={outlineOn(tint)}
                 >
-                  <Text numberOfLines={1} style={{ fontSize: 14, color: tint.soft }}>{`Ask ${askName} about your week…`}</Text>
-                </Pressable>
+                  <TintLabel color={tint.soft} className="shrink font-normal">{`Ask ${askName} about your week…`}</TintLabel>
+                </Button>
               ) : (
                 <View style={{ flex: 1 }} />
               )}
-              <IconButton testID="story-viewer-save" icon="download-outline" label="Save image" tint={tint} outlined disabled={!canExport} onPress={() => void save()} {...holdChrome} />
+              <Button testID="story-viewer-save" variant="outline" size="icon-lg" accessibilityLabel="Save image" style={outlineOn(tint)}
+                disabled={!canExport} onPress={() => void save()} {...holdChrome}>
+                <Ionicons name="download-outline" size={buttonIconSize('icon-lg')} color={tint.text} />
+              </Button>
             </View>
           )}
         </View>
@@ -320,65 +344,24 @@ function StoryViewer({ recap, coachId, tint, includes }: { recap: Recap; coachId
   );
 }
 
-interface ChromePress {
-  onPressIn?: () => void;
-  onPressOut?: () => void;
+// The viewer sits on the coach's ground, dark in both app themes, so its Buttons take their colours from the tint
+// (style, since the values are runtime) rather than the app's tokens.
+
+/** A ghost Button's pressed fill on the ground; the variant's own follows the app's scheme. */
+const ON_GROUND_GHOST = 'active:bg-white/10 dark:active:bg-white/10';
+
+/** An outline Button on the ground: a hairline of `color` (the tint's text by default) over no fill. */
+function outlineOn(tint: RecapTint, color: string = tint.text, alpha = 0.45) {
+  return { backgroundColor: 'transparent', borderColor: hexAlpha(color, alpha) };
 }
 
-/** A 44 pt icon button on the coach's ground (Share, Close), or a 48 pt outlined circle (Save). */
-function IconButton({ testID, icon, label, tint, outlined = false, disabled = false, onPress, onPressIn, onPressOut }: { testID: string; icon: React.ComponentProps<typeof Ionicons>['name']; label: string; tint: RecapTint; outlined?: boolean; disabled?: boolean; onPress: () => void } & ChromePress) {
-  const size = outlined ? 48 : 44;
+/** A Button label in a tint colour. */
+function TintLabel({ testID, color, variant = 'outline', size = 'lg', className, children }: {
+  testID?: string; color: string; variant?: ButtonVariant; size?: 'sm' | 'lg'; className?: string; children: string;
+}) {
   return (
-    <Pressable
-      testID={testID}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      accessibilityState={{ disabled }}
-      disabled={disabled}
-      hitSlop={outlined ? 0 : 4}
-      onPress={onPress}
-      onPressIn={onPressIn}
-      onPressOut={onPressOut}
-      style={{
-        width: size,
-        height: size,
-        borderRadius: size / 2,
-        alignItems: 'center',
-        justifyContent: 'center',
-        borderWidth: outlined ? 1 : 0,
-        borderColor: hexAlpha(tint.text, 0.45),
-        opacity: disabled ? 0.5 : 1,
-      }}
-    >
-      <Ionicons name={icon} size={outlined ? 20 : 22} color={tint.text} />
-    </Pressable>
-  );
-}
-
-/** The end actions' buttons (design B): the accent-filled "See full recap", outlined pills for the rest. */
-function PillButton({ testID, label, tint, primary = false, onPress, onPressIn, onPressOut }: { testID: string; label: string; tint: RecapTint; primary?: boolean; onPress: () => void } & ChromePress) {
-  return (
-    <PressableScale
-      testID={testID}
-      accessibilityRole="button"
-      onPress={onPress}
-      onPressIn={onPressIn}
-      onPressOut={onPressOut}
-      style={{
-        flex: primary ? undefined : 1,
-        height: primary ? 52 : 48,
-        borderRadius: 999,
-        alignItems: 'center',
-        justifyContent: 'center',
-        paddingHorizontal: 18,
-        borderWidth: primary ? 0 : 1,
-        backgroundColor: primary ? tint.accent : 'transparent',
-        borderColor: hexAlpha(tint.accent, 0.4),
-      }}
-    >
-      <Text testID={`${testID}-label`} style={{ fontFamily: primary ? FONTS.sansBold : FONTS.sansSemibold, fontSize: primary ? 16 : 15, color: primary ? tint.ground : tint.text }}>
-        {label}
-      </Text>
-    </PressableScale>
+    <Text testID={testID} numberOfLines={1} className={cn(buttonTextVariants({ variant, size }), className)} style={{ color }}>
+      {children}
+    </Text>
   );
 }

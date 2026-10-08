@@ -6,7 +6,7 @@ import React from 'react';
 import { ScrollView, View } from 'react-native';
 import type { Highlights } from '../../api/social';
 import { highlightKicker, highlightKickerColor, highlightLine, highlightsTitle, knownHighlights } from '../../lib/socialCopy';
-import { PressableScale } from '../ui/pressable-scale';
+import { Button } from '../ui/button';
 import { SectionLabel } from '../ui/section-label';
 import { Text } from '../ui/text';
 
@@ -17,9 +17,9 @@ export function HighlightsCarousel({ highlights, onOpenAll }: { highlights: High
     <View testID="highlights-carousel" className="gap-3">
       <View className="flex-row items-center justify-between">
         <View testID="highlights-title"><SectionLabel>{highlightsTitle(highlights.weekStart)}</SectionLabel></View>
-        <PressableScale testID="highlights-all" accessibilityRole="link" onPress={onOpenAll}>
-          <Text className="text-sm font-semibold text-accent">All</Text>
-        </PressableScale>
+        <Button testID="highlights-all" variant="link" size="sm" accessibilityRole="link" onPress={onOpenAll}>
+          All
+        </Button>
       </View>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 10 }}>
         {items.map((item, index) => {

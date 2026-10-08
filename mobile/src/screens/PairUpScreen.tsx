@@ -146,12 +146,12 @@ function PairUpBody({ identity, navigation }: { identity: BuddyIdentity; navigat
 
       <Card className="gap-3 p-4">
         <TextField label="Enter a friend's code" testID="pair-code-input" value={entered} onChangeText={setEntered} autoCapitalize="characters" />
-        <Button testID="pair-redeem" variant="secondary" disabled={busy || !entered.trim()} onPress={pair}>Pair up</Button>
+        <Button testID="pair-redeem" variant="outline" disabled={busy || !entered.trim()} onPress={pair}>Pair up</Button>
       </Card>
 
       <Card className="gap-3 p-4">
         <TextField label="Or ask by @handle" testID="pair-handle-input" value={handle} onChangeText={setHandle} autoCapitalize="none" />
-        <Button testID="pair-request" variant="secondary" disabled={busy || !handle.trim()} onPress={request}>Send request</Button>
+        <Button testID="pair-request" variant="outline" disabled={busy || !handle.trim()} onPress={request}>Send request</Button>
       </Card>
 
       {message ? (

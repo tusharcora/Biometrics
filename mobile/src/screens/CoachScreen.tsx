@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, View, ScrollView, KeyboardAvoidingView, Platform, Pressable, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { AccessibilityInfo, View, ScrollView, KeyboardAvoidingView, Platform, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
@@ -15,7 +15,7 @@ import {
   type TodaySummaryDTO,
 } from '../api/coach';
 import { Text } from '../components/ui/text';
-import { Button } from '../components/ui/button';
+import { Button, buttonIconSize } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { PromptBar } from '../components/coach/PromptBar';
 import { ThinkingRow } from '../components/coach/thinking/ThinkingRow';
@@ -374,26 +374,18 @@ export function CoachScreen() {
       </View>
       {ready ? (
         <View className="flex-row gap-2">
-          <Pressable
+          <Button
             testID="coach-conversations-button"
-            accessibilityRole="button"
+            variant="outline"
+            size="icon-lg"
             accessibilityLabel="Conversations and coach memory"
             onPress={() => setSheetOpen(true)}
-            hitSlop={4}
-            className="h-11 w-11 items-center justify-center rounded-full border border-border bg-muted active:opacity-70"
           >
-            <Ionicons name="menu-outline" size={20} color={colors.foreground} />
-          </Pressable>
-          <Pressable
-            testID="coach-new-chat-button"
-            accessibilityRole="button"
-            accessibilityLabel="New chat"
-            onPress={startNewChat}
-            hitSlop={4}
-            className="h-11 w-11 items-center justify-center rounded-full border border-border bg-muted active:opacity-70"
-          >
-            <Ionicons name="create-outline" size={18} color={colors.foreground} />
-          </Pressable>
+            <Ionicons name="menu-outline" size={buttonIconSize('icon-lg')} color={colors.foreground} />
+          </Button>
+          <Button testID="coach-new-chat-button" variant="outline" size="icon-lg" accessibilityLabel="New chat" onPress={startNewChat}>
+            <Ionicons name="create-outline" size={buttonIconSize('icon-lg')} color={colors.foreground} />
+          </Button>
         </View>
       ) : null}
     </View>

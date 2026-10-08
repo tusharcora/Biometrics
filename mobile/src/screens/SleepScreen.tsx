@@ -22,7 +22,7 @@ import { RegularityCard } from '../components/sleep/RegularityCard';
 import { SectionError, useSection, type Section } from '../components/sleep/Section';
 import { StageLegend, StageStrip } from '../components/sleep/StageStrip';
 import { WindowChart } from '../components/sleep/WindowChart';
-import { Button } from '../components/ui/button';
+import { Button, buttonIconSize } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { ScoreRing } from '../components/ui/score-ring';
 import { SectionLabel } from '../components/ui/section-label';
@@ -161,16 +161,16 @@ export function SleepScreen() {
             <View className="flex-1 gap-1">
               <SectionLabel>Sleep Score</SectionLabel>
               {score.data.score ? (
-                <Pressable
+                <Button
                   testID="sleep-why-score"
-                  accessibilityRole="button"
-                  hitSlop={8}
+                  variant="link"
+                  size="sm"
+                  className="self-start"
+                  iconEnd={<Ionicons name="chevron-forward" size={buttonIconSize('sm')} color={colors.foreground} />}
                   onPress={() => navigation.navigate('ScoreDetail', { date: score.data.score!.date, type: 'SLEEP' })}
-                  className="flex-row items-center gap-1 self-start py-1 active:opacity-70"
                 >
-                  <Text className="text-sm font-semibold text-accent">Why this score</Text>
-                  <Ionicons name="chevron-forward" size={14} color={colors.accent} />
-                </Pressable>
+                  Why this score
+                </Button>
               ) : (
                 <Text className="text-sm text-muted-foreground">Your Sleep Score will appear once a night of sleep has been recorded.</Text>
               )}
@@ -231,14 +231,15 @@ export function SleepScreen() {
                 <StageLegend />
               </View>
             ) : null}
-            <Pressable
-              accessibilityRole="button"
+            <Button
+              variant="link"
+              size="sm"
+              className="self-start"
+              iconEnd={<Ionicons name="chevron-forward" size={buttonIconSize('sm')} color={colors.foreground} />}
               onPress={() => openNight(lastNight.date)}
-              className="flex-row items-center gap-1 self-start py-1 active:opacity-70"
             >
-              <Text className="text-sm font-semibold text-accent">See the whole night</Text>
-              <Ionicons name="chevron-forward" size={14} color={colors.accent} />
-            </Pressable>
+              See the whole night
+            </Button>
           </Card>
         ) : null}
 
