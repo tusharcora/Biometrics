@@ -12,6 +12,8 @@ module.exports = {
         card: 'rgb(var(--color-card) / <alpha-value>)',
         'card-foreground': 'rgb(var(--color-card-foreground) / <alpha-value>)',
         border: 'rgb(var(--color-border) / <alpha-value>)',
+        // shadcn's `input` (the dark outline button's border and fill): the hairline colour.
+        input: 'rgb(var(--color-hairline) / <alpha-value>)',
         secondary: 'rgb(var(--color-secondary) / <alpha-value>)',
         'secondary-foreground': 'rgb(var(--color-secondary-foreground) / <alpha-value>)',
         accent: 'rgb(var(--color-accent) / <alpha-value>)',

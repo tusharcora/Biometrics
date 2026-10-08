@@ -25,7 +25,7 @@ jest.mock('react-native-reanimated', () => {
 const classesOf = (el: { props: { className?: string } }) => String(el.props.className ?? '').split(/\s+/);
 
 describe('buttonVariants', () => {
-  const BASE = ['flex-row', 'items-center', 'justify-center', 'gap-1.5', 'rounded-lg', 'border', 'border-transparent', 'active:opacity-90'];
+  const BASE = ['flex-row', 'items-center', 'justify-center', 'gap-[6px]', 'rounded-[8px]', 'border', 'border-transparent', 'active:opacity-90'];
 
   it('carries the shadcn base classes', () => {
     const classes = buttonVariants().split(' ');
@@ -34,8 +34,8 @@ describe('buttonVariants', () => {
 
   it.each<[ButtonVariant, string[]]>([
     ['default', ['bg-foreground']],
-    ['outline', ['border-border', 'bg-background', 'shadow-sm', 'active:bg-muted', 'dark:border-hairline', 'dark:bg-hairline/30', 'dark:shadow-none']],
-    ['secondary', ['bg-secondary']],
+    ['outline', ['border-border', 'bg-card', 'active:bg-muted', 'dark:border-input', 'dark:bg-input/30', 'dark:active:bg-input/50']],
+    ['secondary', ['bg-secondary', 'active:bg-secondary/80']],
     ['ghost', ['active:bg-muted', 'dark:active:bg-muted/50']],
     ['destructive', ['bg-destructive/10', 'dark:bg-destructive/20', 'active:bg-destructive/20']],
     ['link', ['h-auto', 'px-0']],
@@ -52,7 +52,7 @@ describe('buttonVariants', () => {
       </Button>,
     );
     expect(classesOf(getByTestId('b'))).toEqual(expect.arrayContaining(['h-auto', 'px-0']));
-    expect(classesOf(getByTestId('b'))).not.toContain('h-9');
+    expect(classesOf(getByTestId('b'))).not.toContain('h-[36px]');
   });
 
   it('keeps the border transparent except on outline', () => {
@@ -61,14 +61,14 @@ describe('buttonVariants', () => {
   });
 
   it.each<[ButtonSize, string[]]>([
-    ['xs', ['h-6', 'px-2', 'gap-1']],
-    ['sm', ['h-8', 'px-2.5', 'gap-1']],
-    ['default', ['h-9', 'px-2.5', 'gap-1.5']],
-    ['lg', ['h-10', 'px-3', 'gap-1.5']],
-    ['icon', ['size-9']],
-    ['icon-xs', ['size-6']],
-    ['icon-sm', ['size-8']],
-    ['icon-lg', ['size-10']],
+    ['xs', ['h-[24px]', 'px-[8px]', 'gap-[4px]']],
+    ['sm', ['h-[32px]', 'px-[10px]', 'gap-[4px]']],
+    ['default', ['h-[36px]', 'px-[10px]', 'gap-[6px]']],
+    ['lg', ['h-[40px]', 'px-[12px]', 'gap-[6px]']],
+    ['icon', ['size-[36px]']],
+    ['icon-xs', ['size-[24px]']],
+    ['icon-sm', ['size-[32px]']],
+    ['icon-lg', ['size-[40px]']],
   ])('%s size', (size, expected) => {
     const { getByTestId } = render(
       <Button testID="b" size={size} accessibilityLabel="Add">
@@ -77,7 +77,7 @@ describe('buttonVariants', () => {
     );
     const classes = classesOf(getByTestId('b'));
     for (const c of expected) expect(classes).toContain(c);
-    expect(classes).toContain('rounded-lg');
+    expect(classes).toContain('rounded-[8px]');
   });
 });
 
@@ -101,14 +101,14 @@ describe('buttonTextVariants', () => {
         Remove
       </Button>,
     );
-    expect(classesOf(getByTestId('label'))).toEqual(expect.arrayContaining(['font-medium', 'text-destructive', 'text-[13px]']));
+    expect(classesOf(getByTestId('label'))).toEqual(expect.arrayContaining(['font-medium', 'text-destructive', 'text-[13px]', 'leading-[18px]']));
   });
 
   it.each<[ButtonSize, string]>([
-    ['xs', 'text-xs'],
+    ['xs', 'text-[12px]'],
     ['sm', 'text-[13px]'],
-    ['default', 'text-sm'],
-    ['lg', 'text-sm'],
+    ['default', 'text-[14px]'],
+    ['lg', 'text-[14px]'],
   ])('%s label size', (size, expected) => {
     expect(buttonTextVariants({ size }).split(' ')).toContain(expected);
   });
@@ -183,17 +183,17 @@ describe('children', () => {
       .filter((key) => key === 'start' || key === 'Send' || key === 'end');
     expect(order).toEqual(['start', 'Send', 'end']);
     const classes = classesOf(button);
-    expect(classes).toContain('pl-2');
-    expect(classes).toContain('pr-2');
+    expect(classes).toContain('pl-[8px]');
+    expect(classes).toContain('pr-[8px]');
   });
 
-  it('tightens by size: pl-1.5 on sm', () => {
+  it('tightens by size: pl-[6px] on sm', () => {
     const { getByTestId } = render(
       <Button testID="b" size="sm" iconStart={<View />}>
         Send
       </Button>,
     );
-    expect(classesOf(getByTestId('b'))).toContain('pl-1.5');
+    expect(classesOf(getByTestId('b'))).toContain('pl-[6px]');
   });
 
   it('sizes icons like shadcn: 12 on xs sizes, 16 elsewhere', () => {
@@ -223,6 +223,27 @@ describe('loading', () => {
     expect(onPress).not.toHaveBeenCalled();
   });
 
+  it('colours the spinner like a textClassName colour override', () => {
+    const { getByTestId } = render(
+      <Button testID="b" loading textClassName="text-accent text-[16px]">
+        Saving
+      </Button>,
+    );
+    const classes = classesOf(getByTestId('b-spinner'));
+    expect(classes).toContain('text-accent');
+    expect(classes).not.toContain('text-background');
+    expect(classes).not.toContain('text-[16px]');
+  });
+
+  it('takes an explicit spinnerColor', () => {
+    const { getByTestId } = render(
+      <Button testID="b" loading spinnerColor="rgb(1, 2, 3)">
+        Saving
+      </Button>,
+    );
+    expect(getByTestId('b-spinner').props.color).toBe('rgb(1, 2, 3)');
+  });
+
   it('is not busy when idle', () => {
     const { getByTestId } = render(<Button testID="b">Save</Button>);
     expect(getByTestId('b').props.accessibilityState?.busy).toBeUndefined();
@@ -242,6 +263,19 @@ describe('disabled', () => {
     expect(button.props.accessibilityState).toEqual(expect.objectContaining({ disabled: true }));
     expect(classesOf(button)).toContain('opacity-50');
     fireEvent.press(button);
+    expect(onPress).not.toHaveBeenCalled();
+  });
+
+  it('treats accessibilityState.disabled as disabled', () => {
+    const onPress = jest.fn();
+    const { getByTestId } = render(
+      <Button testID="b" accessibilityState={{ disabled: true }} onPress={onPress}>
+        Save
+      </Button>,
+    );
+    expect(getByTestId('b')).toBeDisabled();
+    expect(classesOf(getByTestId('b'))).toContain('opacity-50');
+    fireEvent.press(getByTestId('b'));
     expect(onPress).not.toHaveBeenCalled();
   });
 
@@ -349,6 +383,16 @@ describe('hitSlop', () => {
     expect(getByTestId('b').props.hitSlop).toEqual({ top: 10, bottom: 10, left: 6, right: 6 });
   });
 
+  it('keeps a caller hitSlop through layout', () => {
+    const { getByTestId } = render(
+      <Button testID="b" size="xs" hitSlop={8}>
+        OK
+      </Button>,
+    );
+    fireEvent(getByTestId('b'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 30, height: 24 } } });
+    expect(getByTestId('b').props.hitSlop).toBe(8);
+  });
+
   it('lets a caller override hitSlop', () => {
     const { getByTestId } = render(
       <Button testID="b" size="icon-xs" accessibilityLabel="Add" hitSlop={20}>
@@ -379,6 +423,11 @@ describe('passthrough', () => {
     expect(onLayout).toHaveBeenCalledTimes(1);
   });
 
+  it('keeps the label to one line', () => {
+    const { getByTestId } = render(<Button labelTestID="l">A long label</Button>);
+    expect(getByTestId('l').props.numberOfLines).toBe(1);
+  });
+
   it('puts labelTestID on the label Text', () => {
     const { getByTestId } = render(
       <Button testID="b" labelTestID="b-label">
@@ -397,7 +446,7 @@ describe('passthrough', () => {
     const classes = classesOf(getByTestId('b'));
     expect(classes).toContain('w-full');
     expect(classes).toContain('rounded-full');
-    expect(classes).not.toContain('rounded-lg');
+    expect(classes).not.toContain('rounded-[8px]');
   });
 
   it('still calls onPressIn and onPressOut', () => {
@@ -435,11 +484,11 @@ describe('ButtonGroup', () => {
     const first = classesOf(getByTestId('day'));
     const middle = classesOf(getByTestId('week'));
     const last = classesOf(getByTestId('more'));
-    expect(first).toEqual(expect.arrayContaining(['rounded-lg', 'rounded-r-none']));
+    expect(first).toEqual(expect.arrayContaining(['rounded-[8px]', 'rounded-r-none']));
     expect(first).not.toContain('-ml-px');
     expect(middle).toEqual(expect.arrayContaining(['rounded-none', '-ml-px']));
-    expect(middle).not.toContain('rounded-lg');
-    expect(last).toEqual(expect.arrayContaining(['rounded-lg', 'rounded-l-none', '-ml-px']));
+    expect(middle).not.toContain('rounded-[8px]');
+    expect(last).toEqual(expect.arrayContaining(['rounded-[8px]', 'rounded-l-none', '-ml-px']));
   });
 
   it('leaves a lone button rounded', () => {
@@ -449,13 +498,53 @@ describe('ButtonGroup', () => {
       </ButtonGroup>,
     );
     const classes = classesOf(getByTestId('only'));
-    expect(classes).toContain('rounded-lg');
+    expect(classes).toContain('rounded-[8px]');
     expect(classes).not.toContain('rounded-r-none');
   });
 
   it('does not affect buttons outside a group', () => {
     const { getByTestId } = render(<Button testID="b">Go</Button>);
-    expect(classesOf(getByTestId('b')).some((c) => c.includes('rounded-') && c !== 'rounded-lg')).toBe(false);
+    expect(classesOf(getByTestId('b')).some((c) => c.includes('rounded-') && c !== 'rounded-[8px]')).toBe(false);
+  });
+
+  it('counts each child of a Fragment as its own position', () => {
+    const { getByTestId } = render(
+      <ButtonGroup>
+        <>
+          <Button testID="a">A</Button>
+          <Button testID="b">B</Button>
+        </>
+        <Button testID="c">C</Button>
+      </ButtonGroup>,
+    );
+    expect(classesOf(getByTestId('a'))).toContain('rounded-r-none');
+    expect(classesOf(getByTestId('b'))).toEqual(expect.arrayContaining(['rounded-none', '-ml-px']));
+    expect(classesOf(getByTestId('c'))).toContain('rounded-l-none');
+  });
+
+  it('draws a 1-px border line between filled buttons with separator', () => {
+    const { getByTestId } = render(
+      <ButtonGroup separator>
+        <Button testID="cheer" variant="secondary">
+          Cheer
+        </Button>
+        <Button testID="more" variant="secondary" size="icon" accessibilityLabel="More stickers">
+          <View />
+        </Button>
+      </ButtonGroup>,
+    );
+    expect(classesOf(getByTestId('cheer'))).not.toContain('border-l-border');
+    expect(classesOf(getByTestId('more'))).toEqual(expect.arrayContaining(['border-l', 'border-l-border']));
+  });
+
+  it('has no separator by default', () => {
+    const { getByTestId } = render(
+      <ButtonGroup>
+        <Button testID="a">A</Button>
+        <Button testID="b">B</Button>
+      </ButtonGroup>,
+    );
+    expect(classesOf(getByTestId('b'))).not.toContain('border-l-border');
   });
 });
 
