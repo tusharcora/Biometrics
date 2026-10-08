@@ -34,19 +34,6 @@ export interface BuddyWeek {
   /** Only when they share streaks & badges. */
   badges?: Array<{ family: AchievementFamily; level: number }>;
 }
-export type ActivityKind = 'sticker' | 'request' | 'paired' | 'badge';
-export interface ActivityItem {
-  id: string;
-  kind: ActivityKind;
-  createdAt: string;
-  seen: boolean;
-  actor: Person;
-  sticker?: StickerKind;
-  badge?: { family: AchievementFamily; level: number };
-  /** A request item carries no status: pending, declined, cancelled and blocked all look the same. */
-  requestId?: string;
-}
-export interface ActivityPage { items: ActivityItem[]; nextCursor: string | null; unseen: number }
 export interface BlockedPerson { userId: string; handle: string; displayName: string }
 
 /** The server's error code (ApiError.code), or null. */
@@ -127,11 +114,6 @@ export async function blockBuddy(buddyId: string): Promise<void> {
 export const setMuted = (buddyId: string, muted: boolean) => apiFetch<{ muted: boolean }>(`/me/buddies/${encodeURIComponent(buddyId)}/mute`, send('PUT', { muted }));
 /** 201 with the new sticker's id. */
 export const sendSticker = (buddyId: string, kind: StickerKind) => apiFetch<{ id: string }>(`/me/buddies/${encodeURIComponent(buddyId)}/stickers`, send('POST', { kind }));
-
-export const fetchActivity = (cursor?: string | null) => apiFetch<ActivityPage>(withCursor('/me/buddies/activity', cursor));
-export async function markActivitySeen(): Promise<void> {
-  await apiFetch<unknown>('/me/buddies/activity/seen', send('POST'));
-}
 
 export async function fetchBlocked(): Promise<BlockedPerson[]> {
   return (await apiFetch<{ blocked: BlockedPerson[] }>('/me/blocks')).blocked;

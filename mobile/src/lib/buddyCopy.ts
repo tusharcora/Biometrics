@@ -1,6 +1,5 @@
 import type { Ionicons } from '@expo/vector-icons';
-import type { ActivityItem, Mood, NumberKey, ShareKey, StickerKind } from '../api/buddies';
-import { FAMILY_NAMES, numeral } from './badges';
+import type { Mood, NumberKey, ShareKey, StickerKind } from '../api/buddies';
 
 // Every buddy string the app shows (spec 2026-10-06 buddies §5-§7). Fixed text only: nothing here is
 // model output, and a number appears only when the buddy shared it.
@@ -115,21 +114,6 @@ const ERRORS: Record<string, string> = {
 
 export function buddyErrorMessage(code: string | null): string {
   return code !== null && Object.prototype.hasOwnProperty.call(ERRORS, code) ? ERRORS[code]! : 'Something went wrong. Please try again.';
-}
-
-/** A request item reads the same whatever became of the request (the server sends no status). */
-export function activityLine(item: ActivityItem): string {
-  const name = item.actor.displayName;
-  switch (item.kind) {
-    case 'sticker':
-      return `${name} sent you a ${item.sticker ? STICKER_LABEL[item.sticker] : 'sticker'}`;
-    case 'request':
-      return `${name} wants to be your buddy`;
-    case 'paired':
-      return `You and ${name} are now buddies`;
-    case 'badge':
-      return item.badge ? `${name} reached ${FAMILY_NAMES[item.badge.family]} ${numeral(item.badge.level)}` : `${name} reached a new badge`;
-  }
 }
 
 const dayOf = (date: string) => new Date(`${date}T12:00:00Z`).getUTCDay();
