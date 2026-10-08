@@ -320,7 +320,7 @@ function Stepper({ id, label, value, onMinus, onPlus, minusDisabled, plusDisable
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === 'light' ? COLORS.light : COLORS.dark;
   const button = (testID: string, icon: 'remove' | 'add', onPress: () => void, disabled: boolean | undefined, a11y: string) => (
-    <Button testID={testID} variant="secondary" size="icon-sm" accessibilityLabel={a11y} disabled={disabled} onPress={onPress}>
+    <Button testID={testID} variant="outline" size="icon-sm" accessibilityLabel={a11y} disabled={disabled} onPress={onPress}>
       <Ionicons name={icon} size={buttonIconSize('icon-sm')} color={colors.foreground} />
     </Button>
   );

@@ -162,11 +162,11 @@ export function HabitLogCard() {
             <Button
               testID="habit-decrement"
               variant="outline"
-              size="icon"
+              size="icon-sm"
               accessibilityLabel="Decrease"
               onPress={() => setValueText(stepValue(valueText, -1, stepSize(selected)))}
             >
-              <Ionicons name="remove" size={buttonIconSize('icon')} color={colors.foreground} />
+              <Ionicons name="remove" size={buttonIconSize('icon-sm')} color={colors.foreground} />
             </Button>
             <TextInput
               testID="habit-value-input"
@@ -182,11 +182,11 @@ export function HabitLogCard() {
             <Button
               testID="habit-increment"
               variant="outline"
-              size="icon"
+              size="icon-sm"
               accessibilityLabel="Increase"
               onPress={() => setValueText(stepValue(valueText, 1, stepSize(selected)))}
             >
-              <Ionicons name="add" size={buttonIconSize('icon')} color={colors.foreground} />
+              <Ionicons name="add" size={buttonIconSize('icon-sm')} color={colors.foreground} />
             </Button>
             <Text className="flex-1 text-sm text-muted-foreground">{selected.unit}</Text>
           </View>
