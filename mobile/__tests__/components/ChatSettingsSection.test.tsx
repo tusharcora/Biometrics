@@ -30,6 +30,23 @@ it('shows both switches as the server has them and saves each on its own; a fail
   expect(screen.getByTestId('chat-settings-message')).toHaveTextContent('Your chat setting could not be saved. Please try again.');
 });
 
+it('each switch saves its own field: activity status sends activityStatus, read receipts sends readReceipts', async () => {
+  (fetchChatSettings as jest.Mock).mockResolvedValue({ readReceipts: true, activityStatus: true });
+  (saveChatSettings as jest.Mock)
+    .mockResolvedValueOnce({ readReceipts: true, activityStatus: false })
+    .mockResolvedValueOnce({ readReceipts: false, activityStatus: false });
+  render(<ChatSettingsSection />);
+  const activity = await screen.findByTestId('chat-activity-toggle');
+  await act(async () => fireEvent(activity, 'valueChange', false));
+  expect(saveChatSettings).toHaveBeenLastCalledWith({ activityStatus: false });
+  expect(screen.getByTestId('chat-activity-toggle').props.value).toBe(false);
+  expect(screen.getByTestId('chat-read-receipts-toggle').props.value).toBe(true);
+  await act(async () => fireEvent(screen.getByTestId('chat-read-receipts-toggle'), 'valueChange', false));
+  expect(saveChatSettings).toHaveBeenLastCalledWith({ readReceipts: false });
+  expect(screen.getByTestId('chat-read-receipts-toggle').props.value).toBe(false);
+  expect(screen.queryByTestId('chat-settings-message')).toBeNull();
+});
+
 it('is hidden on a server without chats', async () => {
   (fetchChatSettings as jest.Mock).mockResolvedValue(null);
   render(<ChatSettingsSection />);

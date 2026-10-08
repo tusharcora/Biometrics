@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { fetchStory } from '../../src/api/social';
+import { fetchStory, markStorySeen } from '../../src/api/social';
 import { SocialStoryScreen } from '../../src/screens/SocialStoryScreen';
 
 jest.mock('../../src/api/social', () => ({ ...jest.requireActual('../../src/api/social'), fetchStory: jest.fn(), markStorySeen: jest.fn().mockResolvedValue(undefined) }));
@@ -44,6 +44,25 @@ it("Message closes the story and opens Sam's thread with the frame staged", asyn
     quote: { request: { type: 'story_frame', at: '2026-10-07T14:00:00.000Z' }, label: "Sam's check-in" },
   });
   expect(screen.getByTestId('story-reply-CHEER')).toBeTruthy(); // the sticker replies stay
+});
+
+it('Message stops the story and runs once: a double tap and the frame running out add no second navigation or close', async () => {
+  (fetchStory as jest.Mock).mockResolvedValue(story('sam'));
+  jest.useFakeTimers();
+  try {
+    renderScreen();
+    const button = await screen.findByTestId('story-message-button');
+    expect(markStorySeen).toHaveBeenCalledTimes(1); // the one frame is the last: seen on open
+    await act(async () => fireEvent.press(button));
+    await act(async () => fireEvent.press(button));
+    // Well past the frame's time: the last frame would have ended and closed the viewer.
+    await act(async () => jest.advanceTimersByTime(8000));
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+    expect(mockGoBack).toHaveBeenCalledTimes(1);
+    expect(markStorySeen).toHaveBeenCalledTimes(1);
+  } finally {
+    jest.useRealTimers();
+  }
 });
 
 it('no Message button on my own story, or on a server without chats', async () => {

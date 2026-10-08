@@ -36,6 +36,17 @@ it('adds Messages (on) and Message previews (off) on a server with chats', async
   expect(saveNotificationSettings).toHaveBeenCalledWith({ showMessagePreviews: true });
 });
 
+it('Messages saves notifyDirectMessages and Message previews saves showMessagePreviews', async () => {
+  render(<NotificationsSection />);
+  const messages = await screen.findByTestId('chat-messages-toggle');
+  await act(async () => fireEvent(messages, 'valueChange', false));
+  expect(saveNotificationSettings).toHaveBeenLastCalledWith({ notifyDirectMessages: false });
+  expect(screen.getByTestId('chat-messages-toggle').props.value).toBe(false);
+  await act(async () => fireEvent(screen.getByTestId('chat-previews-toggle'), 'valueChange', true));
+  expect(saveNotificationSettings).toHaveBeenLastCalledWith({ showMessagePreviews: true });
+  expect(saveNotificationSettings).toHaveBeenCalledTimes(2);
+});
+
 it('leaves them out on a server without chats', async () => {
   mockChats = false;
   render(<NotificationsSection />);

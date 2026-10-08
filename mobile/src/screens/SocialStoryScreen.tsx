@@ -121,13 +121,25 @@ function Viewer({ story, mineHint, onClose, onMessage }: { story: Story; mineHin
       mounted.current = false;
     };
   }, []);
-  const viewer = useStoryViewer({ count: story.frames.length, autoAdvance: !reduceMotion, onClose });
+  // Set once Message has left for the thread: the story stops, and nothing here closes, navigates or marks it seen
+  // again while the viewer is dismissed (a double tap, or the last frame running out underneath).
+  const leaving = useRef(false);
+  const closeOnce = useCallback(() => {
+    if (!leaving.current) onClose();
+  }, [onClose]);
+  const viewer = useStoryViewer({ count: story.frames.length, autoAdvance: !reduceMotion, onClose: closeOnce });
   const { pause, resume, close } = viewer;
   const last = story.frames.length - 1;
+  const openChat = (frame: StoryFrame) => {
+    if (leaving.current) return;
+    leaving.current = true;
+    pause('leaving');
+    onMessage(story, frame);
+  };
 
   // Seen = the viewer reached the last frame (spec §4.2), once per open, even if they close right there.
   useEffect(() => {
-    if (viewer.index === last && !seen.current) {
+    if (viewer.index === last && !seen.current && !leaving.current) {
       seen.current = true;
       void markStorySeen(story.author.id, story.frames[last]?.at)
         .catch(() => undefined)
@@ -247,7 +259,7 @@ function Viewer({ story, mineHint, onClose, onMessage }: { story: Story; mineHin
           </View>
           {message ? <Text testID="story-message" className="text-center text-sm text-white/80">{message}</Text> : null}
           {chatsOn ? (
-            <Button testID="story-message-button" variant="outline" size="sm" onPress={() => onMessage(story, frame)} className={`rounded-full ${ON_STORY_OUTLINE}`}
+            <Button testID="story-message-button" variant="outline" size="sm" onPress={() => openChat(frame)} className={`rounded-full ${ON_STORY_OUTLINE}`}
               textClassName="text-white" iconStart={<Ionicons name="chatbubble-outline" size={buttonIconSize('sm')} color="#FFFFFF" />}>
               {`Message ${personName(story.author, false)}`}
             </Button>

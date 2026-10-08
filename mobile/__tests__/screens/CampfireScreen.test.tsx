@@ -74,8 +74,10 @@ it('draws the night camp: moon, bubbles over coaches, my add-note bubble, asleep
   expect(screen.getByTestId('camp-nights-lit')).toHaveTextContent('Lit 2 nights');
   // 12-hour times on the Campfire.
   expect(screen.getByTestId('camp-who-sam')).toHaveTextContent(/SAM asleep since \d{1,2}:\d{2} (AM|PM) · on time/);
-  // A buddy's note row ends in its "Report note" link.
-  expect(screen.getByTestId('camp-who-ben')).toHaveTextContent('BEN awake · bed soonReport note');
+  expect(screen.getByTestId('camp-who-status-ben')).toHaveTextContent('awake · bed soon');
+  expect(screen.getByTestId('camp-who-ben')).toHaveTextContent(/^BEN awake · bed soon/);
+  // A buddy's note row carries its "Report note" link.
+  expect(screen.getByTestId('camp-report-ben')).toHaveTextContent('Report note');
   expect(screen.getByTestId('camp-who-me')).toHaveTextContent('You awake');
   expect(screen.getByTestId('camp-goodnight-say')).toBeTruthy();
   expect(screen.queryByTestId('camp-more')).toBeNull();
