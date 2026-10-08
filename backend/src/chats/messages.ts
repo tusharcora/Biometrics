@@ -72,7 +72,7 @@ export async function sendMessage(senderId: string, buddyId: string, body: unkno
       replyToMessageId,
       readMessageTx: (tx, messageId) => loadMessageDTO(messageId, senderId, tx),
     });
-    return message!;
+    return message;
   }
   if (b.kind !== 'TEXT') throw new BuddyError('invalid_message');
   const text = checkMessageText(b.text);

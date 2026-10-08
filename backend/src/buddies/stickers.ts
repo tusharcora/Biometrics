@@ -23,15 +23,32 @@ const TWO_DAYS_MS = 48 * 60 * 60 * 1000;
 
 /**
  * `opts.readMessageTx` reads the new STICKER message inside the send's transaction (chats/messages.ts): read after
- * the commit, an unpair landing in between would already have deleted it.
+ * the commit, an unpair landing in between would already have deleted it. Given it, `message` is that read.
  */
+type ReadMessageTx = (tx: Prisma.TransactionClient, messageId: string) => Promise<MessageDTO>;
+export function sendSticker(
+  fromId: string,
+  toId: string,
+  kind: unknown,
+  now: Date,
+  deps: PairDeps,
+  opts: { replyToMessageId?: string | null; readMessageTx: ReadMessageTx },
+): Promise<{ id: string; messageId: string; message: MessageDTO }>;
+export function sendSticker(
+  fromId: string,
+  toId: string,
+  kind: unknown,
+  now: Date,
+  deps?: PairDeps,
+  opts?: { replyToMessageId?: string | null },
+): Promise<{ id: string; messageId: string }>;
 export async function sendSticker(
   fromId: string,
   toId: string,
   kind: unknown,
   now: Date,
   deps: PairDeps = {},
-  opts: { replyToMessageId?: string | null; readMessageTx?: (tx: Prisma.TransactionClient, messageId: string) => Promise<MessageDTO> } = {},
+  opts: { replyToMessageId?: string | null; readMessageTx?: ReadMessageTx } = {},
 ): Promise<{ id: string; messageId: string; message: MessageDTO | null }> {
   if (!(STICKER_KINDS as readonly unknown[]).includes(kind)) throw new BuddyError('invalid_sticker');
   const me = await prisma.user.findUnique({ where: { id: fromId }, select: { timezone: true, displayName: true, handle: true } });

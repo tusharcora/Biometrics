@@ -164,6 +164,23 @@ it('never logs the text (tripwire)', async () => {
   for (const spy of spies) for (const call of spy.mock.calls) expect(JSON.stringify(call)).not.toContain('secret chat');
 });
 
+it('a send that commits after a later one is stamped after it: no stamp goes back, no message hides behind a read', async () => {
+  const { me, sam } = await buddies();
+  const t1 = new Date(NOW.getTime() + 1_000);
+  const t2 = new Date(NOW.getTime() + 2_000);
+  // Sam's request arrived first (t1) but waited on the pair lock; mine (t2) committed before it.
+  const mine = await sendMessage(me.id, sam.id, { kind: 'TEXT', text: 'first to commit' }, t2);
+  const theirs = await sendMessage(sam.id, me.id, { kind: 'STICKER', sticker: 'HEART' }, t1);
+  expect(new Date(theirs.createdAt).getTime()).toBeGreaterThan(new Date(mine.createdAt).getTime());
+  const conversation = await prisma.conversation.findUniqueOrThrow({ where: { userAId_userBId: orderedPair(me.id, sam.id) } });
+  expect(conversation.lastMessageAt.toISOString()).toBe(theirs.createdAt);
+  const myRead = await prisma.conversationRead.findFirstOrThrow({ where: { conversationId: conversation.id, readerId: me.id } });
+  const samRead = await prisma.conversationRead.findFirstOrThrow({ where: { conversationId: conversation.id, readerId: sam.id } });
+  // Unread for me (after my read mark); Sam's own read covers it.
+  expect(new Date(theirs.createdAt).getTime()).toBeGreaterThan(myRead.lastReadAt.getTime());
+  expect(samRead.lastReadAt.toISOString()).toBe(theirs.createdAt);
+});
+
 // Ruling P1: the message a send returns is read inside its transaction, so an unpair racing the send answers
 // not_buddies (it landed first) or the sent message (it landed after), never a Prisma P2025 or a 500.
 it('an unpair that lands between the limiter and the write answers not_buddies and stores nothing', async () => {

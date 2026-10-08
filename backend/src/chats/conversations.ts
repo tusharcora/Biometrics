@@ -68,11 +68,17 @@ export interface NewMessage {
  * Inside the caller's transaction, after its pair check: the pair's conversation (made on first use; a concurrent
  * first message waits on the insert), its lastMessageAt bumped, the reply target checked (a live message of this
  * conversation, else message_gone), the message stored, and the sender's own read moved to it. Returns the id.
+ * Sends commit in pair-lock order, not in `now` order, so the stamp is max(now, lastMessageAt + 1 ms): a send that
+ * waited on the lock still lands after the newest message, so lastMessageAt never goes back and a message never
+ * hides behind the other person's read mark (a hidden unread, a false "Seen"). The read below runs under the pair
+ * lock the caller's check took, so no other send moves lastMessageAt until this transaction ends.
  */
 export async function writeMessageTx(tx: Tx, m: NewMessage): Promise<string> {
   const pair = orderedPair(m.senderId, m.recipientId);
-  await tx.conversation.createMany({ data: [{ ...pair, createdAt: m.now, lastMessageAt: m.now }], skipDuplicates: true });
-  const conversation = await tx.conversation.update({ where: { userAId_userBId: pair }, data: { lastMessageAt: m.now }, select: { id: true } });
+  const made = await tx.conversation.createMany({ data: [{ ...pair, createdAt: m.now, lastMessageAt: m.now }], skipDuplicates: true });
+  const current = await tx.conversation.findUniqueOrThrow({ where: { userAId_userBId: pair }, select: { id: true, lastMessageAt: true } });
+  const at = made.count > 0 ? m.now : new Date(Math.max(m.now.getTime(), current.lastMessageAt.getTime() + 1));
+  const conversation = await tx.conversation.update({ where: { id: current.id }, data: { lastMessageAt: at }, select: { id: true } });
   if (m.replyToMessageId) {
     const target = await tx.message.findFirst({ where: { id: m.replyToMessageId, conversationId: conversation.id, deletedAt: null }, select: { id: true } });
     if (!target) throw new BuddyError('message_gone');
@@ -86,10 +92,10 @@ export async function writeMessageTx(tx: Tx, m: NewMessage): Promise<string> {
       sticker: m.sticker ?? null,
       ...(m.card ? { card: m.card as unknown as Prisma.InputJsonValue } : {}),
       replyToMessageId: m.replyToMessageId ?? null,
-      createdAt: m.now,
+      createdAt: at,
     },
     select: { id: true },
   });
-  await moveRead(tx, conversation.id, m.senderId, m.now);
+  await moveRead(tx, conversation.id, m.senderId, at);
   return message.id;
 }
