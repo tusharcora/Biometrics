@@ -62,6 +62,9 @@ export const COLORS = {
     background: 'rgb(246, 246, 247)',
     foreground: 'rgb(17, 18, 22)',
     border: 'rgb(228, 228, 233)',
+    // The shadcn `secondary` button fill (a step off the page) and its label.
+    secondary: 'rgb(235, 235, 239)',
+    secondaryForeground: 'rgb(17, 18, 22)',
     muted: 'rgb(98, 100, 110)',
     accent: 'rgb(13, 148, 136)',
     card: 'rgb(255, 255, 255)',
@@ -138,6 +141,8 @@ export const COLORS = {
     background: 'rgb(10, 11, 14)',
     foreground: 'rgb(245, 245, 244)',
     border: 'rgb(34, 37, 44)',
+    secondary: 'rgb(28, 31, 38)',
+    secondaryForeground: 'rgb(245, 245, 244)',
     muted: 'rgb(155, 157, 166)',
     accent: 'rgb(45, 212, 191)',
     card: 'rgb(20, 22, 27)',
@@ -228,6 +233,9 @@ export const MOTION = {
   // A pressed control settles at `scale`; with reduced motion it only dims to
   // `reducedOpacity` instead of changing size.
   press: { scale: 0.96, reducedOpacity: 0.7 },
+  // A pressed ui/button nudges down `translateY` px (shadcn's active:translate-y-px)
+  // over `duration` ms; with reduced motion it only dims (its active:opacity class).
+  buttonPress: { translateY: 1, duration: 80 },
   // Delay between consecutive staggered entrances, in ms.
   stagger: 70,
 };

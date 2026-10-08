@@ -12,6 +12,8 @@ module.exports = {
         card: 'rgb(var(--color-card) / <alpha-value>)',
         'card-foreground': 'rgb(var(--color-card-foreground) / <alpha-value>)',
         border: 'rgb(var(--color-border) / <alpha-value>)',
+        secondary: 'rgb(var(--color-secondary) / <alpha-value>)',
+        'secondary-foreground': 'rgb(var(--color-secondary-foreground) / <alpha-value>)',
         accent: 'rgb(var(--color-accent) / <alpha-value>)',
         'accent-foreground': 'rgb(var(--color-accent-foreground) / <alpha-value>)',
         destructive: 'rgb(var(--color-destructive) / <alpha-value>)',
