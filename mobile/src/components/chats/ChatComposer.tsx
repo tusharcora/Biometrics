@@ -64,7 +64,6 @@ export function ChatComposer(p: ComposerProps) {
             testID={`composer-sticker-${s.kind}`}
             variant="outline"
             size="sm"
-            className="rounded-full"
             accessibilityLabel={`Send a ${s.label} sticker`}
             iconStart={<Ionicons name={s.icon} size={buttonIconSize('sm')} color={colors.foreground} />}
             disabled={p.disabled}

@@ -35,10 +35,10 @@ it('the check is real: a plain outline and destructive differ between the scheme
 });
 
 describe('CampNoteCard on the panel', () => {
-  it('drafting: the chips (outline xs pills) and Share look the same in both schemes', () => {
+  it('drafting: the chips (outline xs buttons) and Share look the same in both schemes', () => {
     render(<CampNoteCard {...card({})} />);
     expectSchemeProof('camp-chip-0');
-    expect(classesOf('camp-chip-0').split(' ')).toEqual(expect.arrayContaining(['rounded-full', 'h-[24px]', 'border-input', 'bg-input/30']));
+    expect(classesOf('camp-chip-0').split(' ')).toEqual(expect.arrayContaining(['rounded-[8px]', 'h-[24px]', 'border-input', 'bg-input/30']));
     expectSchemeProof('camp-note-share');
     // The standard default lg: no bespoke height, radius or ink.
     expect(classesOf('camp-note-share').split(' ')).toEqual(expect.arrayContaining(['bg-foreground', 'h-[40px]', 'rounded-[8px]', 'flex-1']));

@@ -144,16 +144,16 @@ export function HabitLogCard() {
             {habitTypes.map((habit) => {
               const active = habit.type === selected.type;
               return (
-                <Pressable
+                <Button
                   key={habit.type}
                   testID={`habit-type-${habit.type}`}
-                  accessibilityRole="button"
+                  variant={active ? 'default' : 'outline'}
+                  size="sm"
                   accessibilityState={{ selected: active }}
                   onPress={() => chooseType(habit.type)}
-                  className={`rounded-full border px-3.5 py-2 active:opacity-80 ${active ? 'border-accent/50 bg-accent/15' : 'border-border bg-muted'}`}
                 >
-                  <Text className={`text-sm ${active ? 'font-semibold text-accent' : 'font-medium'}`}>{habit.label}</Text>
-                </Pressable>
+                  {habit.label}
+                </Button>
               );
             })}
           </View>
@@ -237,11 +237,12 @@ export function HabitLogCard() {
                 className="items-center gap-1 active:opacity-70"
               >
                 <Text className="text-[10px] text-muted-foreground">{weekdayInitial(day.habitDay)}</Text>
+                {/* The icon-sm button box: filled like a default Button once checked in, outlined before. */}
                 <View
-                  className={`h-8 w-8 items-center justify-center rounded-full border ${day.done ? 'border-accent/50 bg-accent/15' : 'border-border bg-muted'}`}
+                  className={`h-[32px] w-[32px] items-center justify-center rounded-[8px] border ${day.done ? 'border-transparent bg-foreground' : 'border-border bg-card dark:border-input dark:bg-input/30'}`}
                 >
                   {day.done ? (
-                    <Ionicons name="checkmark" size={14} color={colors.accent} />
+                    <Ionicons name="checkmark" size={14} color={colors.background} />
                   ) : (
                     <Text className="text-xs text-muted-foreground">{dayOfMonth(day.habitDay)}</Text>
                   )}

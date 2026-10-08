@@ -85,7 +85,6 @@ const ALLOWED: Exception[] = [
   { file: 'screens/SettingsScreen.tsx', key: 'profile-avatar', count: 1, reason: 'the profile avatar wearing a recap ring' },
   { file: 'components/social/CampScene.tsx', key: 'camp-coach-${id}', count: 1, reason: 'a coach seat in the Campfire scene' },
   // Toggle and selection chips
-  { file: 'components/habit-log-card.tsx', key: 'habit-type-${habit.type}', count: 1, reason: 'a habit type toggle chip' },
   { file: 'components/habit-log-card.tsx', key: 'checkin-day-${day.habitDay}', count: 1, reason: 'a check-in day toggle cell' },
   // Inline spans inside a sentence
   { file: 'components/coach/CoachToday.tsx', key: 'today-span-${metric}', count: 1, reason: 'a metric word inside the coach sentence that asks about it' },

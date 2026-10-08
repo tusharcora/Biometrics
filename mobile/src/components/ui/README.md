@@ -59,7 +59,7 @@ The story viewers are the exception: their retry sits on the story's own colour 
 | `lg` | 40 | Full-width CTAs: `size="lg" className="w-full"` |
 | `icon-xs` / `icon-sm` / `icon` / `icon-lg` | 24 / 32 / 36 / 40, square | Icon-only buttons |
 
-All sizes are `rounded-lg` (8 px). Use `rounded-full` through `className` only where a pill is meant: chips, a pill floating over a scene, the Chats FAB.
+All sizes are `rounded-lg` (8 px), and so is every button and selectable option in the app: no `rounded-full` pills, not for chips, not over a scene, not for the Chats button. A selectable chip is a Button too, `default` when selected and `outline` when not, with `accessibilityState={{ selected }}`. The guard in `__tests__/conventions/buttons.test.ts` fails on a pill.
 
 Do not fight the size. Drop `py-*`, `h-*`, `min-h-[44px]`, `px-0` and a second `opacity-*`. Keep layout classes such as `flex-1`, `w-full`, `self-*` and margins.
 
@@ -111,10 +111,10 @@ For a choice between options, use `segmented-control`, not a ButtonGroup.
 - For `outline`, add `PANEL_OUTLINE` to `className`. For `destructive`, add `PANEL_DESTRUCTIVE`. Both come from `components/social/CampPanel`.
 
 ```tsx
-<Button variant="outline" size="xs" className={`rounded-full ${PANEL_OUTLINE}`}>{chip}</Button>
+<Button variant="outline" size="xs" className={PANEL_OUTLINE}>{chip}</Button>
 ```
 
-Over the scene itself (outside the panel), a floating pill keeps its dark-glass `style` on a `secondary` Button, like the back pill.
+Over the scene itself (outside the panel), a floating button keeps its dark-glass `style` on a `secondary` Button, like the back button.
 
 ## What is not a Button
 
@@ -123,12 +123,12 @@ These stay as `Pressable` / `PressableScale` and are listed in the guard test's 
 - List and settings rows (`settings-list`, BuddyListRow, the command menu)
 - Cards and tiles that navigate (home tiles, recap cards, metric cards, the camp banner)
 - Tabs (the tab bar, page tabs) and the segmented control
-- Toggle and selection chips (habit type, check-in days)
+- The check-in day cells (a weekday initial over an `icon-sm`-sized, 8-px-cornered box)
 - Story rings and avatars, Campfire coach seats
 - Backdrops, tap zones and handles (the sheet backdrop, story prev/next zones)
 - An inline span inside a sentence (a metric word in the coach's Today sentence), which is a link in running text, not a standalone link
 
-One documented custom exception: ScoreDetailScreen's Ask Coach, a GlassSurface CTA with the coach character.
+One documented custom exception: ScoreDetailScreen's Ask Coach, a GlassSurface CTA with the coach character, drawn with the same 8-px corners.
 
 One sanctioned size override: StickerButton's tall tile (an icon over a label) is an `outline` Button with `h-auto flex-col gap-[4px] py-[12px]`. Everywhere else, do not fight the size.
 

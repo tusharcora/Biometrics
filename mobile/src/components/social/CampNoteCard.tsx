@@ -105,7 +105,7 @@ export function CampNoteCard({
             <View className="flex-row flex-wrap gap-2">
               {CAMP_NOTE_CHIPS.map((chip, i) => (
                 <Button key={chip} testID={`camp-chip-${i}`} accessibilityLabel={`Use "${chip}"`} onPress={() => onDraft(chip)}
-                  variant="outline" size="xs" className={`rounded-full ${PANEL_OUTLINE}`}>{chip}</Button>
+                  variant="outline" size="xs" className={PANEL_OUTLINE}>{chip}</Button>
               ))}
             </View>
           ) : null}
