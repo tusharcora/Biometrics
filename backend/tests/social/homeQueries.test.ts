@@ -70,6 +70,7 @@ it('builds the whole home from one preloaded circle, in at most 17 queries, with
   const home = await getSocialHome(me.id, NOW);
 
   // S1 measured 27. Now: loadCircle 4 + rings 3 + timeline 6 (camp notes since S2) + cached highlights 1 + requests 2 + stickers 1 = 17.
+  // S3's unread chats is one raw query ($queryRaw), which this model-level counter does not see: it adds nothing here.
   expect(mockQueries.count).toBeLessThanOrEqual(17);
   expect(loads).toHaveBeenCalledTimes(1);
   for (const spy of rederived) expect(spy).not.toHaveBeenCalled();

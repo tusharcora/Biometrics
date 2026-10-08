@@ -6,6 +6,7 @@ import { Router } from 'express';
 import { requireAuth } from '../auth/middleware';
 import { BuddyError, buddyRoute } from '../buddies/errors';
 import { requireBuddyId } from '../buddies/relations';
+import { listChats } from './inbox';
 import { clearReaction, listThread, markRead, sendMessage, setReaction, unsendMessage } from './messages';
 import { getChatSettings, parseChatSettingsPatch, touchPresence, updateChatSettings } from './presence';
 
@@ -60,4 +61,10 @@ chatsRouter.put('/me/chats/:buddyId/messages/:messageId/reaction', requireAuth, 
 chatsRouter.delete('/me/chats/:buddyId/messages/:messageId/reaction', requireAuth, buddyRoute(async (req, res) => {
   await clearReaction(req.userId!, requireBuddyId(String(req.params.buddyId), req.userId!), String(req.params.messageId));
   res.status(204).end();
+}));
+
+// The inbox: no buddy in the path, so there is no one to refuse; the list itself holds current buddies only.
+chatsRouter.get('/me/chats', requireAuth, buddyRoute(async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  res.json(await listChats(req.userId!, req.query.cursor, new Date()));
 }));
