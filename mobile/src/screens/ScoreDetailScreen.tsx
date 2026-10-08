@@ -220,7 +220,7 @@ export function ScoreDetailScreen() {
             <GlassSurface
               scheme={scheme === 'light' ? 'light' : 'dark'}
               fallbackColor={colors.surfaceRaised}
-              borderRadius={30}
+              borderRadius={8}
               style={{ height: 60, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 10, borderWidth: 1, borderColor: colors.hairline }}
             >
               <Character testID="ask-coach-character" mood="idle" size={40} paused={!focused} />

@@ -213,5 +213,5 @@ it("the viewer's Buttons keep their on-story look in both schemes: white Retry, 
   await screen.findByTestId('story-frame-0');
   expectSameInBothSchemes('social-story-close');
   expectSameInBothSchemes('story-reply-CHEER');
-  expect(String(screen.getByTestId('story-reply-CHEER').props.className).split(' ')).toEqual(expect.arrayContaining(['rounded-full', 'border-white/30', 'flex-1']));
+  expect(String(screen.getByTestId('story-reply-CHEER').props.className).split(' ')).toEqual(expect.arrayContaining(['rounded-[8px]', 'border-white/30', 'flex-1']));
 });

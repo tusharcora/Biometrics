@@ -114,11 +114,10 @@ export function SocialScreen() {
           ) : null}
         </View>
       </ScrollView>
-      {/* The floating Chats pill: custom children so the icon and the count keep their own testIDs. */}
+      {/* The floating Chats button: custom children so the icon and the count keep their own testIDs. */}
       <Button testID="social-chats" size="lg" accessibilityLabel={chats > 0 ? `Chats, ${chats} new` : 'Chats'}
         onPress={openChats}
         style={{ position: 'absolute', right: 20, bottom: clearance + 8 }}
-        className="rounded-full"
         iconStart={<View testID="social-chats-icon"><Ionicons name="chatbubble-outline" size={buttonIconSize('lg')} color={colors.background} /></View>}>
         <Text className={buttonTextVariants({ size: 'lg' })}>Chats</Text>
         {chats > 0 ? <Text testID="social-chats-count" className="min-w-5 rounded-full bg-accent px-1.5 text-center text-xs font-bold text-background">{chats}</Text> : null}
