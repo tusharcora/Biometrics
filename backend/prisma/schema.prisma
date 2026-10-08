@@ -1066,8 +1066,8 @@ model Conversation {
   reads         ConversationRead[]
 
   @@unique([userAId, userBId])
-  @@index([userAId, lastMessageAt])
-  @@index([userBId, lastMessageAt])
+  @@index([userAId, lastMessageAt, id])
+  @@index([userBId, lastMessageAt, id])
 }
 
 /// A DM. text is user free text (TEXT, or a CARD's reply): never logged, never to the coach. card is the server's
@@ -1090,6 +1090,9 @@ model Message {
   reactions        MessageReaction[]
 
   @@index([conversationId, createdAt, id])
+  // The reply self-FK sets null on delete, so deleting a conversation looks up replies per deleted message.
+  @@index([replyToMessageId])
+  @@index([senderId])
 }
 
 /// One reaction per person per message: one of the four sticker kinds.
@@ -1142,5 +1145,6 @@ model Report {
   createdAt      DateTime     @default(now())
 
   @@unique([reporterId, targetType, targetId])
+  @@index([reportedUserId])
   @@index([createdAt])
 }

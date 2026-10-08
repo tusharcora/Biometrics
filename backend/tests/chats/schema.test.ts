@@ -61,10 +61,13 @@ it('a reply survives its original being deleted (SetNull); deleting the conversa
   expect((await prisma.message.findUniqueOrThrow({ where: { id: reply.id } })).replyToMessageId).toBeNull();
   await prisma.messageReaction.create({ data: { messageId: reply.id, reactorId: a.id, kind: 'CHEER' } });
   await prisma.conversationRead.create({ data: { conversationId: conversation.id, readerId: a.id, lastReadAt: new Date() } });
+  // A report keeps its excerpt and outlives the conversation (unpair / block leave the evidence).
+  await prisma.report.create({ data: { reporterId: a.id, reportedUserId: b.id, targetType: 'MESSAGE', targetId: reply.id, reason: 'HARASSMENT', excerpt: 'yo' } });
   await prisma.conversation.delete({ where: { id: conversation.id } });
   expect(await prisma.message.count({ where: { conversationId: conversation.id } })).toBe(0);
   expect(await prisma.messageReaction.count({ where: { messageId: reply.id } })).toBe(0);
   expect(await prisma.conversationRead.count({ where: { conversationId: conversation.id } })).toBe(0);
+  expect(await prisma.report.count({ where: { targetType: 'MESSAGE', targetId: reply.id } })).toBe(1);
 });
 
 it("deleting an account removes the pair's conversation and everything chat about them, on both sides", async () => {
