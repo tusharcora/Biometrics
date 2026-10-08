@@ -186,5 +186,6 @@ buddiesRouter.put('/me/buddies/:buddyId/mute', requireAuth, buddyRoute(async (re
 
 buddiesRouter.post('/me/buddies/:buddyId/stickers', requireAuth, buddyRoute(async (req, res) => {
   const buddyId = requireBuddyId(String(req.params.buddyId), req.userId!);
-  res.status(201).json(await sendSticker(req.userId!, buddyId, (req.body as { kind?: unknown } | undefined)?.kind, new Date()));
+  const { id } = await sendSticker(req.userId!, buddyId, (req.body as { kind?: unknown } | undefined)?.kind, new Date());
+  res.status(201).json({ id });
 }));

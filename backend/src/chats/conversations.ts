@@ -1,0 +1,95 @@
+// The pair's conversation (spec 2026-10-07 social §8.2): stored once with userAId < userBId (like BuddyPair), made by
+// the first message. writeMessageTx is the ONLY writer of messages — chat sends and every sticker send
+// (buddies/stickers.ts) — and runs inside the caller's transaction after its pair check: that check updates the pair
+// row (locking it), so an unpair or block waits for the send and then deletes the conversation, new message included
+// (relations.ts). Message text is user free text: nothing here logs.
+
+import type { MessageKind, Prisma, PrismaClient, StickerKind } from '@prisma/client';
+import { prisma } from '../db/client';
+import { BuddyError } from '../buddies/errors';
+import { findPair, isBlockedEitherWay, orderedPair } from '../buddies/pairs';
+import { PERSON_SELECT } from '../buddies/people';
+import type { CardDTO } from './types';
+
+type Tx = Prisma.TransactionClient;
+type Db = Tx | PrismaClient;
+
+/** A chat route's view of a person: who they are, and the settings the reciprocal rules read. */
+export const CHAT_PERSON_SELECT = { ...PERSON_SELECT, chatReadReceipts: true, chatActivityStatus: true, lastActiveAt: true } as const;
+export type ChatPerson = Prisma.UserGetPayload<{ select: typeof CHAT_PERSON_SELECT }>;
+
+/**
+ * Both people of a chat route, or not_buddies: no pair, a block either way, or a missing account. The same three reads
+ * run every time, so a block costs no extra work.
+ */
+export async function requireChatPeople(viewerId: string, buddyId: string): Promise<{ viewer: ChatPerson; buddy: ChatPerson }> {
+  const [pair, blocked, users] = await Promise.all([
+    findPair(viewerId, buddyId),
+    isBlockedEitherWay(viewerId, buddyId),
+    prisma.user.findMany({ where: { id: { in: [viewerId, buddyId] } }, select: CHAT_PERSON_SELECT }),
+  ]);
+  const viewer = users.find((u) => u.id === viewerId);
+  const buddy = users.find((u) => u.id === buddyId);
+  if (!pair || blocked || !viewer || !buddy) throw new BuddyError('not_buddies');
+  return { viewer, buddy };
+}
+
+/** Inside a send's transaction: no pair, or a block either way, is not_buddies. Bumps (and locks) the pair row. */
+export async function requireLivePairTx(tx: Tx, senderId: string, recipientId: string, now: Date): Promise<void> {
+  const blocked = await isBlockedEitherWay(senderId, recipientId, tx);
+  const bumped = await tx.buddyPair.updateMany({ where: orderedPair(senderId, recipientId), data: { lastActivityAt: now } });
+  if (bumped.count === 0 || blocked) throw new BuddyError('not_buddies');
+}
+
+export async function findConversationId(a: string, b: string, db: Db = prisma): Promise<string | null> {
+  const row = await db.conversation.findUnique({ where: { userAId_userBId: orderedPair(a, b) }, select: { id: true } });
+  return row?.id ?? null;
+}
+
+/** Moves a reader's lastReadAt forward, never back; safe when two calls race. */
+export async function moveRead(db: Db, conversationId: string, readerId: string, at: Date): Promise<void> {
+  const created = await db.conversationRead.createMany({ data: [{ conversationId, readerId, lastReadAt: at }], skipDuplicates: true });
+  if (created.count > 0) return;
+  await db.conversationRead.updateMany({ where: { conversationId, readerId, lastReadAt: { lt: at } }, data: { lastReadAt: at } });
+}
+
+export interface NewMessage {
+  senderId: string;
+  recipientId: string;
+  kind: MessageKind;
+  text?: string | null;
+  sticker?: StickerKind | null;
+  card?: CardDTO | null;
+  replyToMessageId?: string | null;
+  now: Date;
+}
+
+/**
+ * Inside the caller's transaction, after its pair check: the pair's conversation (made on first use; a concurrent
+ * first message waits on the insert), its lastMessageAt bumped, the reply target checked (a live message of this
+ * conversation, else message_gone), the message stored, and the sender's own read moved to it. Returns the id.
+ */
+export async function writeMessageTx(tx: Tx, m: NewMessage): Promise<string> {
+  const pair = orderedPair(m.senderId, m.recipientId);
+  await tx.conversation.createMany({ data: [{ ...pair, createdAt: m.now, lastMessageAt: m.now }], skipDuplicates: true });
+  const conversation = await tx.conversation.update({ where: { userAId_userBId: pair }, data: { lastMessageAt: m.now }, select: { id: true } });
+  if (m.replyToMessageId) {
+    const target = await tx.message.findFirst({ where: { id: m.replyToMessageId, conversationId: conversation.id, deletedAt: null }, select: { id: true } });
+    if (!target) throw new BuddyError('message_gone');
+  }
+  const message = await tx.message.create({
+    data: {
+      conversationId: conversation.id,
+      senderId: m.senderId,
+      kind: m.kind,
+      text: m.text ?? null,
+      sticker: m.sticker ?? null,
+      ...(m.card ? { card: m.card as unknown as Prisma.InputJsonValue } : {}),
+      replyToMessageId: m.replyToMessageId ?? null,
+      createdAt: m.now,
+    },
+    select: { id: true },
+  });
+  await moveRead(tx, conversation.id, m.senderId, m.now);
+  return message.id;
+}

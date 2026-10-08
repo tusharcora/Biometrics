@@ -1,0 +1,89 @@
+// Messages (spec 2026-10-07 social §8.2): TEXT, STICKER (through the Buddies sticker, so its 5-a-day limit, unseen
+// flag and buddy_sticker push stay in one place) and CARD. Only buddies; every refusal for a non-buddy is not_buddies.
+// The order is: the body's shape (invalid_* before the limiter, so a malformed body spends nothing), the limiter
+// (before the pair, like stickers: it counts only the sender's own sends and reveals nothing), then one transaction
+// that checks the pair, writes and reads back the message it returns (after the commit a racing unpair could already
+// have deleted it). Text is user free text: never logged, never sent to the coach.
+
+import type { MessageKind, Prisma, PrismaClient } from '@prisma/client';
+import { prisma } from '../db/client';
+import { BuddyError, UUID_RE, limitOrThrow } from '../buddies/errors';
+import type { PairDeps } from '../buddies/pairs';
+import { sendSticker } from '../buddies/stickers';
+import { RATE_LIMITS } from '../lib/rateLimit';
+import { requireLivePairTx, writeMessageTx } from './conversations';
+import { checkMessageText, previewText } from './text';
+import { cardTypeOf, type CardDTO, type MessageDTO } from './types';
+
+export const MESSAGE_SELECT = {
+  id: true,
+  senderId: true,
+  kind: true,
+  text: true,
+  sticker: true,
+  card: true,
+  createdAt: true,
+  replyTo: { select: { id: true, senderId: true, kind: true, text: true, sticker: true, card: true, deletedAt: true } },
+  reactions: { select: { reactorId: true, kind: true }, orderBy: { createdAt: 'asc' } },
+} satisfies Prisma.MessageSelect;
+
+export type MessageRow = Prisma.MessageGetPayload<{ select: typeof MESSAGE_SELECT }>;
+
+export function toMessageDTO(row: MessageRow, viewerId: string): MessageDTO {
+  const r = row.replyTo;
+  return {
+    id: row.id,
+    mine: row.senderId === viewerId,
+    kind: row.kind,
+    text: row.text,
+    sticker: row.sticker,
+    card: (row.card as unknown as CardDTO | null) ?? null,
+    replyTo: r === null
+      ? null
+      : r.deletedAt !== null
+        ? { id: r.id, gone: true }
+        : { id: r.id, gone: false, mine: r.senderId === viewerId, kind: r.kind, text: r.text === null ? null : previewText(r.text), sticker: r.sticker, cardType: cardTypeOf(r.card) },
+    reactions: row.reactions.map((x) => ({ kind: x.kind, mine: x.reactorId === viewerId })),
+    createdAt: row.createdAt.toISOString(),
+  };
+}
+
+/** A send passes its transaction: read after the commit, a racing unpair could already have deleted the message. */
+export async function loadMessageDTO(id: string, viewerId: string, db: Prisma.TransactionClient | PrismaClient = prisma): Promise<MessageDTO> {
+  return toMessageDTO(await db.message.findUniqueOrThrow({ where: { id }, select: MESSAGE_SELECT }), viewerId);
+}
+
+/** Absent → null; anything but a uuid → message_gone (it can't name a message). */
+function parseReplyTo(raw: unknown): string | null {
+  if (raw === undefined || raw === null) return null;
+  if (typeof raw !== 'string' || !UUID_RE.test(raw)) throw new BuddyError('message_gone');
+  return raw;
+}
+
+/**
+ * Body: { kind: 'TEXT', text } | { kind: 'STICKER', sticker } | { kind: 'CARD', card, text? }, each with an optional
+ * replyToMessageId. Returns the stored message as the sender sees it.
+ */
+export async function sendMessage(senderId: string, buddyId: string, body: unknown, now: Date, deps: PairDeps = {}): Promise<MessageDTO> {
+  const b = (body && typeof body === 'object' && !Array.isArray(body) ? body : {}) as Record<string, unknown>;
+  const replyToMessageId = parseReplyTo(b.replyToMessageId);
+  if (b.kind === 'STICKER') {
+    const { message } = await sendSticker(senderId, buddyId, b.sticker, now, deps, {
+      replyToMessageId,
+      readMessageTx: (tx, messageId) => loadMessageDTO(messageId, senderId, tx),
+    });
+    return message!;
+  }
+  if (b.kind !== 'TEXT') throw new BuddyError('invalid_message');
+  const text = checkMessageText(b.text);
+  if (text === null) throw new BuddyError('invalid_message');
+  const card: CardDTO | null = null;
+  await limitOrThrow(RATE_LIMITS.message, senderId);
+  await limitOrThrow(RATE_LIMITS.messageDay, senderId);
+  // The returned message is read inside the transaction (an unpair waits on the pair lock, then deletes it).
+  return prisma.$transaction(async (tx) => {
+    await requireLivePairTx(tx, senderId, buddyId, now);
+    const messageId = await writeMessageTx(tx, { senderId, recipientId: buddyId, kind: b.kind as MessageKind, text, card, replyToMessageId, now });
+    return loadMessageDTO(messageId, senderId, tx);
+  });
+}
