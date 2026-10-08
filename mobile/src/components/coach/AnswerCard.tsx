@@ -1,9 +1,11 @@
 import React from 'react';
-import { Pressable, View } from 'react-native';
+import { View } from 'react-native';
+import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from 'nativewind';
 import type { AnswerCardDTO, AnswerCardItemDTO } from '../../api/coach';
 import { spokenUnits } from '../../lib/spokenUnits';
 import { COLORS } from '../../theme';
+import { Button, buttonIconSize } from '../ui/button';
 import { Text } from '../ui/text';
 
 const RANK_BAR_MAX = 70;
@@ -15,9 +17,6 @@ const RANK_BAR_MAX = 70;
 const TILE_GUTTER = 6;
 const TILE_CELL = { width: '33.3333%', padding: TILE_GUTTER / 2 } as const;
 const TILE_ROW = { margin: -TILE_GUTTER / 2 } as const;
-
-// Stretches the small source line's touch area to 44pt (16pt line + 2 × 14).
-const SOURCE_HIT_SLOP = { top: 14, bottom: 14, left: 8, right: 8 };
 
 type Palette = (typeof COLORS)['light'];
 
@@ -139,17 +138,19 @@ export function AnswerCard({ card, onOpenSource }: { card: AnswerCardDTO; onOpen
       ) : null}
       {card.source ? (
         onOpenSource ? (
-          <Pressable
+          <Button
             testID="answer-source"
-            accessibilityRole="link"
+            labelTestID="answer-source-label"
+            variant="link"
+            size="sm"
             accessibilityLabel={card.source}
             accessibilityHint="Opens the data behind this answer"
+            className="self-start"
+            iconEnd={<Ionicons name="chevron-forward" size={buttonIconSize('sm')} color={colors.foreground} />}
             onPress={onOpenSource}
-            hitSlop={SOURCE_HIT_SLOP}
-            className="self-start active:opacity-70"
           >
-            <Text className="text-xs text-muted-foreground">{`${card.source} ›`}</Text>
-          </Pressable>
+            {card.source}
+          </Button>
         ) : (
           <Text testID="answer-source" className="text-xs text-muted-foreground">
             {card.source}
