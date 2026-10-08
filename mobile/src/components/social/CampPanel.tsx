@@ -163,6 +163,14 @@ const DARK_TOKENS = vars({
 });
 const colors = COLORS.dark;
 
+/**
+ * Button overrides for the panel. Its tokens are always dark, but a Button's `dark:` classes follow the app's scheme,
+ * so in a light app an outline or destructive Button would take its light look on dark tokens. These pin the dark
+ * look in both schemes (secondary, default and ghost need nothing: they use tokens only).
+ */
+export const PANEL_OUTLINE = 'border-input bg-input/30 active:bg-input/50';
+export const PANEL_DESTRUCTIVE = 'bg-destructive/20 active:bg-destructive/30';
+
 export function CampPanel({ stops, stop, top, moveTo, height, bottomInset, screenReader, reduced, reveal, header, children }: CampPanelProps) {
   const keyboard = useKeyboard(reduced);
   const scroll = useRef<ScrollView>(null);

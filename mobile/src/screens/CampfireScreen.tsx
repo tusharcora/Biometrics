@@ -14,6 +14,7 @@ import { AccessibilityInfo, TextInput, useWindowDimensions, View } from 'react-n
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useFocusEffect, useNavigation } from '@react-navigation/native';
+import { useColorScheme } from 'nativewind';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Animated, { Extrapolation, interpolate, useAnimatedStyle, useReducedMotion } from 'react-native-reanimated';
 import { buddyErrorCode } from '../api/buddies';
@@ -26,9 +27,8 @@ import { CampPanel, panelStops, useCampPanel } from '../components/social/CampPa
 import { CampScene } from '../components/social/CampScene';
 import { campScene, CHROME } from '../components/social/campSceneGeometry';
 import { GoodnightButton } from '../components/social/GoodnightButton';
-import { Button } from '../components/ui/button';
+import { Button, buttonIconSize } from '../components/ui/button';
 import { Card } from '../components/ui/card';
-import { PressableScale } from '../components/ui/pressable-scale';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { buddyErrorMessage } from '../lib/buddyCopy';
@@ -38,6 +38,7 @@ import {
 } from '../lib/socialCopy';
 import { refreshSocial } from '../lib/socialStore';
 import type { RootStackParamList } from '../navigation/RootNavigator';
+import { COLORS } from '../theme';
 
 type State = { status: 'loading' } | { status: 'ready'; camp: Camp } | { status: 'unavailable' } | { status: 'error' };
 
@@ -47,13 +48,17 @@ const SEGMENT_ON = '#F97316';
 const SEGMENT_OFF = '#2E323B';
 const PILL = { backgroundColor: 'rgba(20,22,27,0.55)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.12)' } as const;
 
-function BackPill({ onPress }: { onPress: () => void }) {
+/** Back to Social. Over the scene it wears the dark glass of "+N here" in either scheme; on the plain loading / error screen, the standard secondary pill. */
+function BackPill({ onPress, scene = false }: { onPress: () => void; scene?: boolean }) {
+  const { colorScheme } = useColorScheme();
+  const colors = COLORS[colorScheme === 'light' ? 'light' : 'dark'];
   return (
-    <PressableScale testID="camp-back" accessibilityRole="button" accessibilityLabel="Back to Social" onPress={onPress}
-      className="h-10 flex-row items-center gap-1 rounded-full pl-2.5 pr-3.5" style={PILL}>
-      <Ionicons name="chevron-back" size={16} color="#F5F5F4" />
-      <Text className="text-sm font-medium text-[#F5F5F4]">Social</Text>
-    </PressableScale>
+    <Button testID="camp-back" accessibilityLabel="Back to Social" onPress={onPress} variant="secondary" size="sm"
+      className={scene ? 'self-center rounded-full' : 'rounded-full'} style={scene ? PILL : undefined}
+      textClassName={scene ? 'text-[#F5F5F4]' : undefined}
+      iconStart={<Ionicons name="chevron-back" size={buttonIconSize('sm')} color={scene ? '#F5F5F4' : colors.foreground} />}>
+      Social
+    </Button>
   );
 }
 
@@ -235,7 +240,7 @@ export function CampfireScreen() {
         {state.status === 'error' ? (
           <Card className="mt-4 gap-3">
             <Text className="text-sm">Couldn't load the camp.</Text>
-            <Button testID="camp-retry" accessibilityRole="button" variant="outline" onPress={() => void load()}>Try again</Button>
+            <Button testID="camp-retry" variant="secondary" className="self-start" onPress={() => void load()}>Try again</Button>
           </Card>
         ) : null}
       </SafeAreaView>
@@ -282,7 +287,7 @@ export function CampfireScreen() {
       <Animated.View pointerEvents="none" style={[{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, backgroundColor: '#000' }, dimStyle]} />
 
       <View pointerEvents="box-none" style={{ position: 'absolute', top: insets.top + CHROME.pillsTop, height: CHROME.pillsHeight, left: 16, right: 16, flexDirection: 'row', justifyContent: 'space-between' }}>
-        <BackPill onPress={() => navigation.goBack()} />
+        <BackPill scene onPress={() => navigation.goBack()} />
         {more > 0 ? (
           <View testID="camp-more" accessible accessibilityLabel={`${more} more at the camp`} className="h-10 flex-row items-center gap-1.5 rounded-full px-3.5" style={PILL}>
             <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: '#2DD4BF' }} />
@@ -327,8 +332,7 @@ export function CampfireScreen() {
             </Text>
           </View>
         ))}
-        <Button testID="camp-message-camp" accessibilityRole="button" variant="secondary" onPress={() => navigation.navigate('Buddies')}
-          className="h-12 rounded-2xl py-0">Message camp</Button>
+        <Button testID="camp-message-camp" variant="secondary" size="lg" onPress={() => navigation.navigate('Buddies')}>Message camp</Button>
       </CampPanel>
     </View>
   );
