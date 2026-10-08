@@ -122,7 +122,7 @@ it("words the Campfire's scene headline and panel from the camp's own data", () 
   expect(campHeadline({ night: false, members: [m(false), m(false)] })).toBe('2 awake · 0 asleep');
   const fire = (segments: number) => ({ lit: segments, of: 5, segments });
   expect(fireCountLabel(fire(3), true)).toBe('3/5');
-  expect(fireCountLabel(fire(3), false)).toBe('3/5 last night');
+  expect(fireCountLabel(fire(3), false)).toBe('3/5 tonight');
   expect(fireMoreLine(fire(3), true)).toBe('2 more on time lights it fully');
   expect(fireMoreLine(fire(5), true)).toBe('');
   expect(fireMoreLine(fire(3), false)).toBe('');

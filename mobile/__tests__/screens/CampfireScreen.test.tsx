@@ -99,8 +99,8 @@ it('by day: sky, no moon, unlit logs, and goodnight waits for my own opening tim
   expect(await screen.findByTestId('camp-scene-day')).toBeTruthy();
   expect(screen.queryByTestId('camp-moon')).toBeNull();
   expect(screen.getByTestId('camp-fire-unlit')).toBeTruthy();
-  // By day the bar is last night's fire, and says so; nothing reads "Out" beside lit segments.
-  expect(screen.getByTestId('camp-fire-count')).toHaveTextContent('3/5 last night');
+  // By day the bar is tonight's fire (goodnights count from the evening), and says so; nothing reads "Out".
+  expect(screen.getByTestId('camp-fire-count')).toHaveTextContent('3/5 tonight');
   expect(screen.getByTestId('camp-fire-segment-2')).toHaveStyle({ backgroundColor: '#F97316' });
   expect(screen.queryByText(/Out/)).toBeNull();
   expect(screen.queryByTestId('camp-fire-line')).toBeNull();

@@ -255,8 +255,8 @@ export function campHeadline(camp: Pick<Camp, 'night' | 'members'>): string {
   return camp.night ? `${asleep} asleep · ${awake} by the fire` : `${awake} awake · ${asleep} asleep`;
 }
 
-/** The fire's count on the panel: "3/5" at night; by day the bar shows last night's fire, "3/5 last night". */
-export const fireCountLabel = (fire: Camp['fire'], night: boolean) => `${fire.segments}/5${night ? '' : ' last night'}`;
+/** The fire's count on the panel: "3/5" at night; by day the bar is still tonight's fire (goodnights count from the evening), "0/5 tonight". */
+export const fireCountLabel = (fire: Camp['fire'], night: boolean) => `${fire.segments}/5${night ? '' : ' tonight'}`;
 
 /** "2 more on time lights it fully"; '' (no line) when the fire is full or by day. */
 export function fireMoreLine(fire: Camp['fire'], night: boolean): string {
