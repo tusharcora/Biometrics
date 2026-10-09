@@ -81,7 +81,7 @@ export type RootStackParamList = {
   // `records` is the metric's whole series; `range` is the window to open on
   // (the Trends screen passes its current one; default 30 days).
   MetricDetail: { metricType: MetricRecord['metricType']; records: MetricRecord[]; range?: TrendRange };
-  ScoreDetail: { date: string; type?: ScoreType }; // type defaults to RECOVERY
+  ScoreDetail: { date: string; type?: ScoreType }; // serves SLEEP; RECOVERY or an omitted type redirects to Recovery
   Recovery: { date?: string } | undefined; // date (YYYY-MM-DD) defaults to today
   Forecast: undefined;
   Patterns: undefined;

@@ -116,10 +116,8 @@ describe('RecoveryScreen: READY', () => {
     renderScreen();
     const hero = await screen.findByTestId('recovery-hero');
 
-    const label = RECOVERY_COPY.heroA11y(68, 'Good', 'Mostly clear', ' · +6 vs yesterday · High confidence');
-    expect(label).toBe('Recovery 68, Good, mostly clear. · +6 vs yesterday · High confidence');
     expect(hero.props.accessible).toBe(true);
-    expect(hero.props.accessibilityLabel).toBe(label);
+    expect(hero.props.accessibilityLabel).toBe('Recovery 68, Good, mostly clear. Up 6 from yesterday. High confidence.');
   });
 
   it('shows the date and update time under the title', async () => {
@@ -303,6 +301,16 @@ describe('RecoveryScreen: Last 7 days', () => {
     fireEvent.press(await screen.findByTestId('recovery-day-2026-10-05'));
     expect(mockNavigation.push).toHaveBeenCalledWith('Recovery', { date: '2026-10-05' });
   });
+
+  it('the viewed day (the last column) is still read, but pressing it pushes nothing', async () => {
+    renderScreen();
+    const col = await screen.findByTestId('recovery-day-2026-10-08');
+
+    expect(col.props.accessibilityRole).toBe('button');
+    expect(col.props.accessibilityLabel).toBe('Thursday 8 October, 68, Good');
+    fireEvent.press(col);
+    expect(mockNavigation.push).not.toHaveBeenCalled();
+  });
 });
 
 describe('RecoveryScreen: sleep debt', () => {
@@ -367,6 +375,26 @@ describe('RecoveryScreen: sleep debt', () => {
     const tile = await screen.findByTestId('recovery-sleep-debt');
 
     expect(within(tile).getAllByTestId(/^debt-block-\d+$/, HIDDEN_OK)).toHaveLength(16);
+  });
+
+  it('reads a factor of exactly −0.5 as Fog · −1 in the drag colour (word and number agree)', async () => {
+    const base = makePage();
+    const factors = base.score!.factors.map((f) => (f.factor === 'SLEEP_DEBT' ? { ...f, points: -0.5 } : f));
+    pageFetch.mockResolvedValue(makePage({ score: { ...base.score!, factors } }));
+    renderScreen();
+    const tile = await screen.findByTestId('recovery-sleep-debt');
+
+    expect(within(tile).getByText('Fog · −1')).toHaveStyle({ color: COLORS.light.scorePoor });
+  });
+
+  it('reads a factor under 0.5 as Calm · 0 in the muted colour', async () => {
+    const base = makePage();
+    const factors = base.score!.factors.map((f) => (f.factor === 'SLEEP_DEBT' ? { ...f, points: 0.49 } : f));
+    pageFetch.mockResolvedValue(makePage({ score: { ...base.score!, factors } }));
+    renderScreen();
+    const tile = await screen.findByTestId('recovery-sleep-debt');
+
+    expect(within(tile).getByText('Calm · 0')).toHaveStyle({ color: COLORS.light.muted });
   });
 
   it('hides the factor word when the sleep-debt factor is excluded', async () => {
@@ -517,11 +545,22 @@ describe('RecoveryScreen: month calendar', () => {
     expect(ring).toHaveStyle({ borderWidth: 2, borderColor: COLORS.light.foreground, padding: 2, borderRadius: 10 });
   });
 
-  it('bolds today when viewing another day', async () => {
-    jest.useFakeTimers({ now: new Date(2026, 9, 8, 12), advanceTimers: true });
+  it('the ringed cell is still read, but pressing it pushes nothing', async () => {
+    renderScreen();
+    const cell = await screen.findByTestId('recovery-cal-2026-10-08');
+
+    expect(cell.props.accessibilityRole).toBe('button');
+    expect(cell.props.accessibilityLabel).toBe('Thursday 8 October, 68, Good');
+    fireEvent.press(cell);
+    expect(mockNavigation.push).not.toHaveBeenCalled();
+  });
+
+  it("bolds today when viewing another day, taking today from the server, not the device clock", async () => {
+    // The device clock is already in November (travelling east of the stored zone); the server says 8 Oct.
+    jest.useFakeTimers({ now: new Date(2026, 10, 2, 12), advanceTimers: true });
     try {
       mockParams = { date: '2026-10-02' };
-      pageFetch.mockResolvedValue(makePage({ date: '2026-10-02', isToday: false }));
+      pageFetch.mockResolvedValue(makePage({ date: '2026-10-02', isToday: false, today: '2026-10-08' }));
       renderScreen();
       const ring = await screen.findByTestId('recovery-cal-selected');
 
@@ -529,6 +568,7 @@ describe('RecoveryScreen: month calendar', () => {
       expect(cls(within(screen.getByTestId('recovery-cal-2026-10-08')).getByText('68'))).toContain('font-bold');
       expect(cls(within(screen.getByTestId('recovery-cal-2026-10-07')).getByText('62'))).not.toContain('font-bold');
       expect(screen.queryByTestId('recovery-cal-2026-10-09')).toBeNull();
+      expect(screen.getByLabelText('Next month')).toBeDisabled();
     } finally {
       jest.useRealTimers();
     }

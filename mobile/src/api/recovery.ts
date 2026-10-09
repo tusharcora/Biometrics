@@ -13,7 +13,7 @@ export type RecoveryTomorrowDTO =
   | { status: 'UNAVAILABLE' }
   | { status: 'READY'; date: string; chips: ForecastChipDTO[]; trackRecord: { hits: number; days: number; withinPoints: number } };
 export interface RecoveryPageDTO {
-  date: string; isToday: boolean; state: RecoveryState; bands: ScoreBandsDTO; updatedAt: string | null;
+  date: string; today: string; isToday: boolean; state: RecoveryState; bands: ScoreBandsDTO; updatedAt: string | null;
   score: DailyScoreDTO | null; previous: { date: string; score: number } | null; baselines: BaselineDTO[];
   weights: { HRV: number; RHR: number; SLEEP_DEBT: number };
   outlook: RecoveryDayDTO[]; sleepDebt: SleepDebtDTO | null; lastNight: LastNightDTO | null;

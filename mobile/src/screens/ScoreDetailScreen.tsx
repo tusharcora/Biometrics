@@ -64,15 +64,15 @@ export function ScoreDetailScreen() {
   const redirecting = type !== 'SLEEP';
 
   useEffect(() => {
-    if (type !== 'SLEEP') navigation.replace('Recovery', { date });
-  }, [navigation, type, date]);
+    if (redirecting) navigation.replace('Recovery', { date });
+  }, [navigation, redirecting, date]);
 
   React.useLayoutEffect(() => {
     navigation.setOptions({ title: scoreTypeLabel(type) });
   }, [navigation, type]);
 
   useEffect(() => {
-    if (type !== 'SLEEP') return;
+    if (redirecting) return;
     let cancelled = false;
     setState({ status: 'loading' });
     (async () => {
@@ -87,7 +87,7 @@ export function ScoreDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [date, type]);
+  }, [date, type, redirecting]);
 
   const detail = state.status === 'ready' ? state.detail : null;
   const factors = useMemo(() => (detail ? sortFactorsByImpact(detail.score.factors) : []), [detail]);

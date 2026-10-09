@@ -28,10 +28,10 @@ export function RecoveryHero({ page }: { page: RecoveryPageDTO }) {
     line = (
       <>
         <Text className="text-caption" style={{ color: colors[scoreBand(s, page.bands)] }}>{hl.band}</Text>
-        {hl.delta} · <Text className="text-caption text-muted-foreground" style={low ? { color: colors.scoreFair } : undefined}>{hl.confidence}</Text>
+        {hl.lead}<Text className="text-caption text-muted-foreground" style={low ? { color: colors.scoreFair } : undefined}>{hl.confidence}</Text>
       </>
     );
-    label = RECOVERY_COPY.heroA11y(s, hl.band, VERDICT[kind], hl.rest);
+    label = RECOVERY_COPY.heroA11y(s, hl.band, VERDICT[kind], hl.spoken);
   } else if (page.state === 'BUILDING' && cold) {
     const b = buildingCopy(cold);
     numeral = b.numeral;

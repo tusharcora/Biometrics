@@ -4,13 +4,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from 'nativewind';
 import type { RecoveryPageDTO } from '../../api/recovery';
 import { COLORS } from '../../theme';
-import { debtBlocks, debtClearCopy, formatMinutes, RECOVERY_COPY } from '../../lib/recoveryCopy';
+import { debtBlocks, debtClearCopy, debtFactor, formatMinutes, RECOVERY_COPY } from '../../lib/recoveryCopy';
 import { Card } from '../ui/card';
 import { SectionLabel } from '../ui/section-label';
 import { Text } from '../ui/text';
-
-const NEGLIGIBLE_POINTS = 0.5;
-const signedPoints = (p: number) => { const n = Math.round(p); return n > 0 ? `+${n}` : n < 0 ? `−${Math.abs(n)}` : '0'; };
 
 // The wide bento tile (spec §3.6): the rolling 14-night debt drawn as 30-minute blocks.
 export function SleepDebtTile({ page }: { page: RecoveryPageDTO }) {
@@ -18,11 +15,8 @@ export function SleepDebtTile({ page }: { page: RecoveryPageDTO }) {
   const colors = colorScheme === 'dark' ? COLORS.dark : COLORS.light;
   const debt = page.sleepDebt;
   const factor = page.score?.factors.find((f) => f.factor === 'SLEEP_DEBT');
-  const shown = factor && !factor.excluded ? factor : null;
-  const tone = !shown ? colors.muted
-    : shown.points <= -NEGLIGIBLE_POINTS ? colors.scorePoor
-    : shown.points >= NEGLIGIBLE_POINTS ? colors.scoreGood
-    : colors.muted;
+  const shown = factor && !factor.excluded ? debtFactor(factor.points) : null;
+  const tone = shown?.tone === 'drag' ? colors.scorePoor : shown?.tone === 'lift' ? colors.scoreGood : colors.muted;
 
   return (
     <Card testID="recovery-sleep-debt" className="gap-2">
@@ -33,7 +27,7 @@ export function SleepDebtTile({ page }: { page: RecoveryPageDTO }) {
         </View>
         {shown ? (
           <Text className="text-caption font-semibold tabular-nums" style={{ color: tone }}>
-            {`${RECOVERY_COPY.debtWord(shown.points)} · ${signedPoints(shown.points)}`}
+            {shown.text}
           </Text>
         ) : null}
       </View>

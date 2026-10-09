@@ -24,7 +24,6 @@ export function useRecoveryPage(date?: string) {
   // The mount effect already loads, so the first focus (the mount itself) is skipped.
   const focusedOnce = useRef(false);
   const { dataVersion } = useSync();
-  const isToday = date === undefined;
 
   const putMonth = useCallback((m: string, v: MonthLoad) => {
     setMonths((s) => {
@@ -59,8 +58,9 @@ export function useRecoveryPage(date?: string) {
   }, [load, dataVersion]);
   useFocusEffect(useCallback(() => {
     if (!focusedOnce.current) { focusedOnce.current = true; return; }
-    if (isToday) void load();
-  }, [isToday, load]));
+    // Today either by omission or by the loaded page (Home passes today's date explicitly).
+    if (date === undefined || loadedRef.current?.page.isToday) void load();
+  }, [date, load]));
 
   const loadMonth = useCallback((m: string) => {
     if (monthsRef.current[m]?.status === 'ready' || inflight.current.has(m)) return;

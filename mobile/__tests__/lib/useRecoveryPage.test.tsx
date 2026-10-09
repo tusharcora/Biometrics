@@ -72,8 +72,18 @@ describe('useRecoveryPage', () => {
     expect(result.current.state).toBe('ready');
   });
 
-  it('does not refetch a past day on focus', async () => {
+  it('refetches on focus when an explicit date turns out to be today (Home passes a date)', async () => {
     pageFetch.mockResolvedValue(PAGE);
+    const { result } = renderHook(() => useRecoveryPage('2026-10-08'));
+    await waitFor(() => expect(result.current.state).toBe('ready'));
+    expect(pageFetch).toHaveBeenCalledTimes(1);
+    refocus();
+    await waitFor(() => expect(pageFetch).toHaveBeenCalledTimes(2));
+    expect(pageFetch).toHaveBeenLastCalledWith('2026-10-08');
+  });
+
+  it('does not refetch a past day on focus', async () => {
+    pageFetch.mockResolvedValue({ ...PAGE, date: '2026-10-02', isToday: false });
     const { result } = renderHook(() => useRecoveryPage('2026-10-02'));
     await waitFor(() => expect(result.current.state).toBe('ready'));
     refocus();

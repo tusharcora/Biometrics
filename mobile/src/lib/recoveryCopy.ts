@@ -52,20 +52,30 @@ export function headerSubtitle(date: string, updatedAt: string | null, isToday: 
 
 const CONFIDENCE: Record<ConfidenceLevel, string> = { HIGH: 'High confidence', MEDIUM: 'Medium confidence', LOW: 'Low confidence' };
 const signed = (n: number) => (n > 0 ? `+${n}` : `−${Math.abs(n)}`);
+const weekdayLong = (date: string) => WEEKDAYS_LONG[local(date).getDay()]!;
 
-// `rest` is `delta + ' · ' + confidence`; `delta` and `confidence` are also returned on their own
-// so a component can colour the confidence word without re-deriving or inlining copy.
-export function heroLine(p: { score: number; bands: ScoreBandsDTO; date: string; previous: { date: string; score: number } | null; confidence: ConfidenceLevel }): { band: string; rest: string; delta: string; confidence: string } {
+// The visible line is `band + lead + confidence` (`rest` is `lead + confidence`); the parts are returned on their
+// own so a component can colour the band and confidence words without re-deriving or inlining copy.
+// `spoken` is the same line for a screen reader (spec §7): "Up 6 from yesterday. High confidence."
+export function heroLine(p: { score: number; bands: ScoreBandsDTO; date: string; previous: { date: string; score: number } | null; confidence: ConfidenceLevel }): { band: string; rest: string; lead: string; delta: string; confidence: string; spoken: string } {
   const band = BAND_WORD[scoreBand(p.score, p.bands)];
   let delta = '';
+  let spokenDelta = '';
   if (p.previous) {
     const gap = daysBetween(p.previous.date, p.date);
     const d = Math.round(p.score) - Math.round(p.previous.score);
-    if (gap === 1) delta = d === 0 ? ' · same as yesterday' : ` · ${signed(d)} vs yesterday`;
-    else if (gap > 1 && gap <= 7) delta = d === 0 ? ` · same as ${weekdayShort(p.previous.date)}` : ` · ${signed(d)} vs ${weekdayShort(p.previous.date)}`;
+    const said = d === 0 ? 'Same as' : `${d > 0 ? 'Up' : 'Down'} ${Math.abs(d)} from`;
+    if (gap === 1) {
+      delta = d === 0 ? ' · same as yesterday' : ` · ${signed(d)} vs yesterday`;
+      spokenDelta = `${said} yesterday. `;
+    } else if (gap > 1 && gap <= 7) {
+      delta = d === 0 ? ` · same as ${weekdayShort(p.previous.date)}` : ` · ${signed(d)} vs ${weekdayShort(p.previous.date)}`;
+      spokenDelta = `${said} ${weekdayLong(p.previous.date)}. `;
+    }
   }
   const confidence = CONFIDENCE[p.confidence];
-  return { band, rest: `${delta} · ${confidence}`, delta, confidence };
+  const lead = `${delta} · `;
+  return { band, rest: `${lead}${confidence}`, lead, delta, confidence, spoken: `${spokenDelta}${confidence}.` };
 }
 
 const NEGLIGIBLE_POINTS = 0.5;
@@ -118,6 +128,15 @@ export function debtBlocks(debt: number, usualHigh: number | null): Array<'full'
   return Array.from({ length: n }, (_, i) => (i < full ? 'full' : i < full + partial ? 'partial' : 'empty'));
 }
 
+// Points rounded half away from zero, so a factor at exactly ±0.5 shows ±1, never "Fog · 0": the word, the tone
+// and the number all come from this one rounded value (|n| >= 1 exactly when |points| >= NEGLIGIBLE_POINTS).
+export function debtFactor(points: number): { tone: 'drag' | 'lift' | 'calm'; text: string } {
+  const n = Math.sign(points) * Math.round(Math.abs(points));
+  const tone = n < 0 ? 'drag' : n > 0 ? 'lift' : 'calm';
+  const word = tone === 'drag' ? 'Fog' : tone === 'lift' ? 'Clear' : 'Calm';
+  return { tone, text: `${word} · ${n === 0 ? '0' : signed(n)}` };
+}
+
 export function debtClearCopy(nights: number | null, goalMinutes: number): string {
   if (nights === null) return '';
   if (nights === 0) return "You're within your usual.";
@@ -167,7 +186,6 @@ export const RECOVERY_COPY = {
   debtOwed: (usualHigh: number | null) => (usualHigh === null ? 'owed' : `owed · usual under ${formatMinutes(usualHigh)}`),
   debtCaption: (clear: string) => (clear ? `Each block is 30 min. ${clear}` : 'Each block is 30 min.'),
   debtNone: 'No sleep data in the last 14 nights',
-  debtWord: (points: number) => (points <= -0.5 ? 'Fog' : points >= 0.5 ? 'Clear' : 'Calm'),
   lastNight: 'Last night',
   lastNightA11y: (duration: string) => `Last night, ${duration}. Opens the night.`,
   lastNightCaption: (deep: number, rem: number) => `Deep ${formatMinutes(deep)} · REM ${formatMinutes(rem)}`,
@@ -193,5 +211,5 @@ export const RECOVERY_COPY = {
   buildingLine: 'Your forecast is charging up',
   cellLabel: (date: string, score: number | null, band: string | null) =>
     score === null ? `${formatDayLong(date)}, No reading` : `${formatDayLong(date)}, ${Math.round(score)}, ${band}`,
-  heroA11y: (score: number, band: string, verdict: string, line: string) => `Recovery ${Math.round(score)}, ${band}, ${verdict.toLowerCase()}.${line}`,
+  heroA11y: (score: number, band: string, verdict: string, spoken: string) => `Recovery ${Math.round(score)}, ${band}, ${verdict.toLowerCase()}. ${spoken}`,
 } as const;

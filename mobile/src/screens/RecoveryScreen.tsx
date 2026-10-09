@@ -28,13 +28,6 @@ import { useRecoveryPage } from '../lib/useRecoveryPage';
 import { navigateToCoachEntry } from '../navigation/coachNavigation';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
-// Today as a civil date: the page's own date when it is today, else the device-local date from components.
-function todayOf(page: { isToday: boolean; date: string }): string {
-  if (page.isToday) return page.date;
-  const n = new Date();
-  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
-}
-
 // The Recovery page (spec §3): header, weather hero, summary, then the sections in spec order.
 // `date` is a civil YYYY-MM-DD; without it the page shows today.
 export function RecoveryScreen() {
@@ -88,6 +81,8 @@ export function RecoveryScreen() {
   }
 
   const past = !page.isToday;
+  // The viewed day is already on screen: pressing it (the strip's last column, the ringed cell) does nothing.
+  const openDay = (d: string) => { if (d !== page.date) navigation.push('Recovery', { date: d }); };
   const cold = page.score ? pickColdStartProgress(page.score.coldStart) : null;
   const summary =
     page.state === 'READY' && page.score ? buildRecoverySummary(page.score, past)
@@ -103,7 +98,7 @@ export function RecoveryScreen() {
             <Text className="text-body">{summary}</Text>
           </Card>
         ) : null}
-        <LastSevenDays page={page} onOpenDay={(d) => navigation.push('Recovery', { date: d })} />
+        <LastSevenDays page={page} onOpenDay={openDay} />
         <View className="gap-[10px]">
           <SectionLabel>{RECOVERY_COPY.sleepAndStreak}</SectionLabel>
           <SleepDebtTile page={page} />
@@ -118,8 +113,8 @@ export function RecoveryScreen() {
           load={month(viewMonth ?? page.month.month)}
           onPage={(m) => { setViewMonth(m); loadMonth(m); }}
           onRetry={(m) => loadMonth(m)}
-          onOpenDay={(d) => navigation.push('Recovery', { date: d })}
-          today={todayOf(page)}
+          onOpenDay={openDay}
+          today={page.today}
         />
         {page.isToday && page.tomorrow ? (
           <TomorrowForecastCard

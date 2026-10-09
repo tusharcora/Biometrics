@@ -1,6 +1,7 @@
 import {
   weatherFor, VERDICT, formatDayShort, weekdayShort, formatMinutes, formatGoal, headerSubtitle, heroLine, buildRecoverySummary,
-  buildingCopy, noDataLine, debtBlockCount, debtBlocks, debtClearCopy, monthCaption, monthTitle, initialChip,
+  buildingCopy, noDataLine, debtBlockCount, debtBlocks, debtClearCopy, monthCaption, monthTitle, initialChip, debtFactor,
+  RECOVERY_COPY,
 } from '../../src/lib/recoveryCopy';
 import { recoveryQuestion } from '../../src/lib/coachPrompts';
 import type { DailyScoreDTO, FactorDTO } from '../../src/api/scores';
@@ -49,7 +50,8 @@ describe('heroLine', () => {
   const base = { score: 68, bands: BANDS, date: '2026-10-08', confidence: 'HIGH' as const };
   it('vs yesterday, vs a weekday within 7 days, dropped when older', () => {
     expect(heroLine({ ...base, previous: { date: '2026-10-07', score: 62 } })).toEqual({
-      band: 'Good', rest: ' · +6 vs yesterday · High confidence', delta: ' · +6 vs yesterday', confidence: 'High confidence',
+      band: 'Good', rest: ' · +6 vs yesterday · High confidence', delta: ' · +6 vs yesterday', lead: ' · +6 vs yesterday · ',
+      confidence: 'High confidence', spoken: 'Up 6 from yesterday. High confidence.',
     });
     expect(heroLine({ ...base, previous: { date: '2026-10-05', score: 70 } }).rest).toBe(' · −2 vs Mon · High confidence');
     expect(heroLine({ ...base, previous: { date: '2026-09-20', score: 70 } }).rest).toBe(' · High confidence');
@@ -70,6 +72,30 @@ describe('heroLine', () => {
   });
   it('Low band word, never Poor', () => {
     expect(heroLine({ ...base, score: 20, previous: null }).band).toBe('Low');
+  });
+  it('lead is the visible text between the band word and the confidence word', () => {
+    const hl = heroLine({ ...base, previous: { date: '2026-10-05', score: 70 } });
+    expect(hl.lead).toBe(' · −2 vs Mon · ');
+    expect(`${hl.lead}${hl.confidence}`).toBe(hl.rest);
+    expect(heroLine({ ...base, previous: null }).lead).toBe(' · ');
+  });
+  it('spoken: the delta in words, sentences, no middle dots or minus signs (spec §7)', () => {
+    const spoken = (previous: { date: string; score: number } | null, extra: Partial<Omit<typeof base, 'confidence'>> & { confidence?: 'HIGH' | 'MEDIUM' | 'LOW' } = {}) =>
+      heroLine({ ...base, ...extra, previous }).spoken;
+    expect(spoken({ date: '2026-10-07', score: 62 })).toBe('Up 6 from yesterday. High confidence.');
+    expect(spoken({ date: '2026-10-07', score: 70 })).toBe('Down 2 from yesterday. High confidence.');
+    expect(spoken({ date: '2026-10-07', score: 67.6 }, { score: 68.4 })).toBe('Same as yesterday. High confidence.');
+    expect(spoken({ date: '2026-10-05', score: 70 })).toBe('Down 2 from Monday. High confidence.');
+    expect(spoken({ date: '2026-10-05', score: 60 }, { confidence: 'LOW' })).toBe('Up 8 from Monday. Low confidence.');
+    expect(spoken({ date: '2026-10-05', score: 68 })).toBe('Same as Monday. High confidence.');
+    expect(spoken({ date: '2026-09-20', score: 70 })).toBe('High confidence.');
+    expect(spoken(null, { confidence: 'MEDIUM' })).toBe('Medium confidence.');
+  });
+  it('heroA11y reads as the spec §7 example', () => {
+    const hl = heroLine({ ...base, previous: { date: '2026-10-07', score: 62 } });
+    const label = RECOVERY_COPY.heroA11y(68, hl.band, 'Mostly clear', hl.spoken);
+    expect(label).toBe('Recovery 68, Good, mostly clear. Up 6 from yesterday. High confidence.');
+    expect(label).not.toMatch(/[·−]/);
   });
 });
 
@@ -106,6 +132,16 @@ describe('building and no data', () => {
 });
 
 describe('sleep debt', () => {
+  it('debtFactor: the word, tone and signed number agree, rounding half away from zero', () => {
+    expect(debtFactor(-0.5)).toEqual({ tone: 'drag', text: 'Fog · −1' });
+    expect(debtFactor(-0.49)).toEqual({ tone: 'calm', text: 'Calm · 0' });
+    expect(debtFactor(0.49)).toEqual({ tone: 'calm', text: 'Calm · 0' });
+    expect(debtFactor(0.5)).toEqual({ tone: 'lift', text: 'Clear · +1' });
+    expect(debtFactor(-5)).toEqual({ tone: 'drag', text: 'Fog · −5' });
+    expect(debtFactor(2.4)).toEqual({ tone: 'lift', text: 'Clear · +2' });
+    expect(debtFactor(0)).toEqual({ tone: 'calm', text: 'Calm · 0' });
+  });
+
   it('block count is clamped to 8..16', () => {
     expect(debtBlockCount(190, 125)).toBe(8);
     expect(debtBlockCount(0, null)).toBe(8);

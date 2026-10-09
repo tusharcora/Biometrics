@@ -5,6 +5,7 @@ import type { RecoveryPageDTO } from '../src/api/recovery';
 export function makePage(over: Partial<RecoveryPageDTO> = {}): RecoveryPageDTO {
   return {
     date: '2026-10-08',
+    today: '2026-10-08',
     isToday: true,
     state: 'READY',
     bands: { excellent: 75, good: 55, fair: 40 },
