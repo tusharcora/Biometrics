@@ -6,7 +6,7 @@ import { fetchRecoveryPage, type RecoveryPageDTO } from '../../src/api/recovery'
 import type { CoachStatusDTO } from '../../src/api/coach';
 import { debtBlocks, RECOVERY_COPY } from '../../src/lib/recoveryCopy';
 import { COLORS } from '../../src/theme';
-import { makePage } from '../fixtures/recoveryPage';
+import { makePage } from '../../jest-mocks/recoveryPageFixture';
 
 jest.mock('../../src/api/recovery');
 jest.mock('../../src/api/coach');

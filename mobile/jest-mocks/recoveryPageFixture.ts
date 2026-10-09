@@ -1,4 +1,4 @@
-import type { RecoveryPageDTO } from '../../src/api/recovery';
+import type { RecoveryPageDTO } from '../src/api/recovery';
 
 // Synthetic values only. The default is a READY page for Thu 8 Oct 2026, viewed as today.
 // Tasks 7–9 reuse it; pass overrides for the state under test.
