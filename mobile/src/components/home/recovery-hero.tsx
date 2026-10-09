@@ -11,6 +11,7 @@ import { ConfidenceBadge } from '../ui/confidence-badge';
 import { Glow } from '../ui/glow';
 import { PressableScale } from '../ui/pressable-scale';
 import { ScoreRing } from '../ui/score-ring';
+import { SectionLabel } from '../ui/section-label';
 import { Skeleton } from '../ui/skeleton';
 import { Text } from '../ui/text';
 
@@ -40,7 +41,7 @@ export function RecoveryHero({
   if (failed) {
     return (
       <Card testID="recovery-score-unavailable">
-        <Text className="text-sm text-muted-foreground">Recovery Score is unavailable right now.</Text>
+        <Text className="text-caption text-muted-foreground">Recovery Score is unavailable right now.</Text>
       </Card>
     );
   }
@@ -52,7 +53,7 @@ export function RecoveryHero({
   if (score === null) {
     return (
       <Card testID="recovery-score-empty">
-        <Text className="text-sm text-muted-foreground">Your Recovery Score will appear once it has been calculated.</Text>
+        <Text className="text-caption text-muted-foreground">Your Recovery Score will appear once it has been calculated.</Text>
       </Card>
     );
   }
@@ -80,7 +81,7 @@ export function RecoveryHero({
             bands={bands}
             size={RING}
             strokeWidth={16}
-            numeralClassName="text-numeral-xl"
+            numeralClassName="text-score"
             label="Recovery Score"
           />
         )}
@@ -88,16 +89,16 @@ export function RecoveryHero({
 
       {cold ? (
         <View className="items-center gap-1 px-6">
-          <Text className="text-eyebrow font-semibold uppercase text-muted-foreground">Recovery Score</Text>
-          <Text className="font-display text-display-sm text-center">Building your baseline</Text>
+          <SectionLabel>Recovery Score</SectionLabel>
+          <Text className="text-heading text-center">Building your baseline</Text>
         </View>
       ) : (
         <View className="items-center gap-3 px-4">
-          {verdict ? <Text className="font-display text-display-sm text-center">{verdict}</Text> : null}
+          {verdict ? <Text className="text-heading text-center">{verdict}</Text> : null}
           <View className="flex-row items-center gap-2">
             <ConfidenceBadge level={score.confidenceLevel} />
             <View className="flex-row items-center gap-0.5">
-              <Text className="text-xs font-medium text-muted-foreground">What moved it</Text>
+              <Text className="text-caption font-medium text-muted-foreground">What moved it</Text>
               <Ionicons name="chevron-forward" size={12} color={colors.muted} />
             </View>
           </View>

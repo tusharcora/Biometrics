@@ -53,7 +53,7 @@ export function RegularityCard({ state, coachName, onRetry }: { state: Regularit
         </Text>
       ) : (
         <View className="flex-row items-center gap-4">
-          <ScoreRing score={data.score} size={64} strokeWidth={7} numeralClassName="text-lg" />
+          <ScoreRing score={data.score} size={64} strokeWidth={7} numeralClassName="text-headline" />
           <View className="flex-1 gap-1">
             {data.bedtimeSpreadMinutes !== null ? (
               <Text testID="sleep-regularity-bedtime-spread" className="text-sm">

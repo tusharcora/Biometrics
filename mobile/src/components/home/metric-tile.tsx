@@ -40,7 +40,7 @@ export function MetricTile({ type, series, onPress }: { type: MetricType; series
       <Card className="flex-1 gap-2">
         <View className="flex-row items-center gap-1.5">
           <Ionicons name={config.icon as any} size={14} color={color} />
-          <Text className="flex-1 text-sm font-medium" style={{ color }}>
+          <Text className="flex-1 text-caption font-medium" style={{ color }}>
             {config.label}
           </Text>
         </View>
@@ -49,8 +49,7 @@ export function MetricTile({ type, series, onPress }: { type: MetricType; series
           format={config.format}
           numberOfLines={1}
           adjustsFontSizeToFit
-          className="text-numeral font-bold"
-          style={{ fontVariant: ['tabular-nums'] }}
+          className="text-display tabular-nums"
         />
         {percent !== undefined ? (
           <View className="my-2.5 h-1.5 overflow-hidden rounded-full" style={{ backgroundColor: withAlpha(color, 0.16) }}>
@@ -59,7 +58,7 @@ export function MetricTile({ type, series, onPress }: { type: MetricType; series
         ) : (
           <TrendLine data={series.slice(-SPARK_POINTS).map((r) => r.value)} color={color} height={26} />
         )}
-        {caption ? <Text className="text-xs text-muted-foreground">{caption}</Text> : null}
+        {caption ? <Text className="text-caption text-muted-foreground">{caption}</Text> : null}
       </Card>
     </PressableScale>
   );

@@ -20,10 +20,9 @@ export function ContributionBars({ items }: { items: ContributionBarItem[] }) {
         return (
           <Animated.View key={item.key} layout={LinearTransition.duration(220)} testID={`contribution-${item.key}`} className="gap-1.5">
             <View className="flex-row items-center justify-between">
-              <Text className="text-sm font-medium">{item.label}</Text>
+              <Text className="text-caption font-medium">{item.label}</Text>
               <Text
-                className={`text-sm font-semibold ${positive ? 'text-score-excellent' : 'text-score-poor'}`}
-                style={{ fontVariant: ['tabular-nums'] }}
+                className={`text-caption font-semibold tabular-nums ${positive ? 'text-score-excellent' : 'text-score-poor'}`}
               >
                 {positive ? '+' : '−'}
                 {Math.abs(item.points).toFixed(1)}

@@ -24,7 +24,7 @@ export function BuddiesRow({ onOpen }: { onOpen: () => void }) {
       <Card className="gap-3 p-4">
         <View className="flex-row items-center justify-between">
           <SectionLabel>Buddies</SectionLabel>
-          <Text className="text-sm text-muted-foreground">See all</Text>
+          <Text className="text-caption text-muted-foreground">See all</Text>
         </View>
         {buddies.length > 0 ? (
           <View className="flex-row gap-3">
@@ -37,7 +37,7 @@ export function BuddiesRow({ onOpen }: { onOpen: () => void }) {
           </View>
         ) : null}
         {incomingRequests > 0 ? (
-          <Text testID="home-buddies-requests" className="text-sm text-muted-foreground">
+          <Text testID="home-buddies-requests" className="text-caption text-muted-foreground">
             {incomingRequests === 1 ? '1 buddy request' : `${incomingRequests} buddy requests`}
           </Text>
         ) : null}

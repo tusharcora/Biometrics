@@ -12,6 +12,7 @@ import { Card } from '../components/ui/card';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { SectionLabel } from '../components/ui/section-label';
+import { PageTitle } from '../components/ui/page-title';
 import { Character } from '../components/characters/Character';
 import { useScreenFocused } from '../characters/useScreenFocused';
 import { ThemeToggle } from '../components/ui/theme-toggle';
@@ -160,7 +161,7 @@ export function DashboardScreen() {
       <StoryRing testID="profile-story-ring" color={ring?.color ?? null} size={44} ringWidth={2.5} gap={2.5} dotSize={12} surface={colors.background}>
         <View className={ring ? 'flex-1 items-center justify-center bg-muted' : 'flex-1 items-center justify-center rounded-full border border-border bg-muted'}>
           {initial ? (
-            <Text className={ring ? 'text-sm font-semibold' : 'text-base font-semibold'}>{initial}</Text>
+            <Text className={ring ? 'text-caption font-semibold' : 'text-body font-semibold'}>{initial}</Text>
           ) : (
             <Ionicons name="person-outline" size={ring ? 16 : 18} color={colors.foreground} />
           )}
@@ -180,8 +181,8 @@ export function DashboardScreen() {
         </View>
         <View className="flex-1 items-center justify-center gap-4 px-8">
           <Character testID="dashboard-fallback-character" mood="idle" size={56} glow paused={!focused} />
-          <Text className="font-display text-display text-center">{title}</Text>
-          <Text className="text-center text-base text-muted-foreground">{body}</Text>
+          <PageTitle className="text-center">{title}</PageTitle>
+          <Text className="text-center text-body text-muted-foreground">{body}</Text>
           {action}
           <Button testID="sign-out-button" variant="ghost" size="sm" onPress={() => signOut()}>
             Sign Out
@@ -255,7 +256,7 @@ export function DashboardScreen() {
             <SectionLabel>
               {today.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
             </SectionLabel>
-            <Text className="font-display text-display-lg">{greetingFor(today)}</Text>
+            <Text className="text-display">{greetingFor(today)}</Text>
             <SyncStatusLine />
           </View>
           <View className="flex-row items-center gap-3 pb-1">
@@ -310,7 +311,7 @@ export function DashboardScreen() {
         {insight ? (
           <Card className="gap-1.5">
             <SectionLabel>Worth knowing</SectionLabel>
-            <Text className="text-base leading-snug">{insight}</Text>
+            <Text className="text-body">{insight}</Text>
           </Card>
         ) : null}
         {/* Per-metric trends and the Patterns entry live on the Trends screen (Activity's "All trends"). */}

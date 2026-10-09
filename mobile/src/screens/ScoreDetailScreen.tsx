@@ -148,7 +148,7 @@ export function ScoreDetailScreen() {
                 size={RING}
                 strokeWidth={16}
                 bands={detail.bands}
-                numeralClassName="text-numeral-xl"
+                numeralClassName="text-score"
                 label={formatScoreDate(score.date)}
               />
             )}
@@ -157,15 +157,15 @@ export function ScoreDetailScreen() {
             <ConfidenceBadge level={score.confidenceLevel} />
             {band ? (
               <View className="rounded-full px-2.5 py-1" style={{ backgroundColor: withAlpha(tone, 0.14) }}>
-                <Text className="text-xs font-medium" style={{ color: tone }}>
+                <Text className="text-caption font-medium" style={{ color: tone }}>
                   {BAND_LABEL[band]}
                 </Text>
               </View>
             ) : null}
           </View>
           <View className="gap-2 px-2">
-            {verdict ? <Text className="font-display text-display text-center">{verdict}</Text> : null}
-            <Text testID="score-headline" className="text-center text-sm leading-5 text-muted-foreground">
+            {verdict ? <Text className="text-heading text-center">{verdict}</Text> : null}
+            <Text testID="score-headline" className="text-center text-caption text-muted-foreground">
               {buildScoreHeadline(score)}
             </Text>
           </View>
@@ -189,7 +189,7 @@ export function ScoreDetailScreen() {
               {score.coldStart.map((entry) => (
                 <View key={entry.metric} className="flex-row items-center gap-3">
                   <BaselineProgressRing daysCollected={entry.daysCollected} daysRequired={entry.daysRequired} size={28} strokeWidth={4} showLabel={false} />
-                  <Text className="flex-1 text-sm">{`${entry.daysCollected}/${entry.daysRequired} days of ${metricName(entry.metric)}`}</Text>
+                  <Text className="flex-1 text-body">{`${entry.daysCollected}/${entry.daysRequired} days of ${metricName(entry.metric)}`}</Text>
                 </View>
               ))}
             </Card>
@@ -201,7 +201,7 @@ export function ScoreDetailScreen() {
             <SectionLabel className="px-1">Baselines used</SectionLabel>
             <View className="overflow-hidden rounded-card border border-border bg-card">
               {baselines.map((baseline, i) => (
-                <Text key={baseline.metric} className={`px-4 py-3.5 text-sm ${i > 0 ? 'border-t border-border' : ''}`}>
+                <Text key={baseline.metric} className={`px-4 py-3.5 text-body ${i > 0 ? 'border-t border-border' : ''}`}>
                   {buildBaselineSentence(baseline)}
                 </Text>
               ))}
@@ -224,7 +224,7 @@ export function ScoreDetailScreen() {
               style={{ height: 60, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 10, borderWidth: 1, borderColor: colors.hairline }}
             >
               <Character testID="ask-coach-character" mood="idle" size={40} paused={!focused} />
-              <Text className="flex-1 text-base font-semibold">Ask Coach about this</Text>
+              <Text className="flex-1 text-body font-semibold">Ask Coach about this</Text>
               <Ionicons name="chevron-forward" size={18} color={colors.muted} style={{ marginRight: 8 }} />
             </GlassSurface>
           </PressableScale>

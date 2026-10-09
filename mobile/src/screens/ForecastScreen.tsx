@@ -29,7 +29,7 @@ export function ForecastScreen() {
     return (
       <View className="flex-1 bg-background px-5 pt-6">
         <Card testID="forecast-error">
-          <Text className="text-sm text-muted-foreground">{FORECAST_COPY.loadError}</Text>
+          <Text className="text-caption text-muted-foreground">{FORECAST_COPY.loadError}</Text>
         </Card>
       </View>
     );
@@ -48,7 +48,7 @@ export function ForecastScreen() {
     return (
       <View className="flex-1 bg-background px-5 pt-6">
         <Card>
-          <Text className="text-sm leading-5">
+          <Text className="text-body">
             {forecast.reason === 'NO_HISTORY' ? FORECAST_COPY.unlocksAfter(forecast.daysOfHistory) : FORECAST_COPY.lowConfidence}
           </Text>
         </Card>
@@ -79,7 +79,7 @@ function ReadyForecast({ forecast }: { forecast: ReadyForecastDTO }) {
       <View className="gap-2">
         <SectionLabel className="px-1">{FORECAST_COPY.whyHeading}</SectionLabel>
         <Card className="gap-5 py-5">
-          <Text className="text-xs text-muted-foreground">{FORECAST_COPY.effectOrder}</Text>
+          <Text className="text-caption text-muted-foreground">{FORECAST_COPY.effectOrder}</Text>
           <ContributionBars
             items={cell.contributions.map((c) => ({ key: c.key, points: c.points, label: contributionLabel(c.key, forecast, values) }))}
           />
@@ -89,14 +89,14 @@ function ReadyForecast({ forecast }: { forecast: ReadyForecastDTO }) {
       <View className="gap-2">
         <SectionLabel className="px-1">{FORECAST_COPY.trackRecordHeading}</SectionLabel>
         <Card className="gap-4">
-          <Text className="text-sm font-medium" style={{ fontVariant: ['tabular-nums'] }}>
+          <Text className="text-caption font-medium tabular-nums">
             {FORECAST_COPY.trackRecord(withinPoints, hits, days)}
           </Text>
           <TrackRecordChart series={series} actualColor={withAlpha(colors.muted, 0.6)} forecastColor={colors.accent} />
         </Card>
       </View>
 
-      <Text className="px-4 text-center text-xs leading-4 text-muted-foreground">{FORECAST_COPY.disclaimer}</Text>
+      <Text className="px-4 text-center text-caption text-muted-foreground">{FORECAST_COPY.disclaimer}</Text>
     </ScrollView>
   );
 }

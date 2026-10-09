@@ -103,8 +103,8 @@ export function PatternsScreen() {
             <View className="h-10 w-10 items-center justify-center rounded-[12px]" style={{ backgroundColor: withAlpha(colors.accent, 0.14) }}>
               <Ionicons name="sparkles-outline" size={19} color={colors.accent} />
             </View>
-            <Text className="font-display text-display-sm">No patterns yet</Text>
-            <Text className="text-sm text-muted-foreground">
+            <Text className="text-heading">No patterns yet</Text>
+            <Text className="text-caption text-muted-foreground">
               A pattern only appears once it holds up in two weekly checks in a row, so the earliest you can see one is about two weeks
               after you start logging. Patterns are comparisons within your own data, not medical claims.
             </Text>
@@ -120,7 +120,7 @@ export function PatternsScreen() {
                 const have = Math.min(unexposedShort ? item.unexposedDays : item.exposedDays, item.requiredEach);
                 return (
                   <View key={item.habitType} testID={`not-enough-data-${item.habitType}`} className="gap-2.5">
-                    <Text className="text-sm">{buildNotEnoughDataLine(item, labelFor(item.habitType))}</Text>
+                    <Text className="text-body">{buildNotEnoughDataLine(item, labelFor(item.habitType))}</Text>
                     <View
                       testID={`not-enough-data-progress-${item.habitType}`}
                       accessibilityRole="progressbar"

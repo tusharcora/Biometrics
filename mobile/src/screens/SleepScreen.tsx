@@ -157,7 +157,7 @@ export function SleepScreen() {
         ) : null}
         {score.phase === 'ready' ? (
           <Card testID="sleep-score-header" className="flex-row items-center gap-4">
-            <ScoreRing score={score.data.score?.score ?? null} bands={score.data.bands} size={64} strokeWidth={7} numeralClassName="text-lg" />
+            <ScoreRing score={score.data.score?.score ?? null} bands={score.data.bands} size={64} strokeWidth={7} numeralClassName="text-headline" />
             <View className="flex-1 gap-1">
               <SectionLabel>Sleep Score</SectionLabel>
               {score.data.score ? (

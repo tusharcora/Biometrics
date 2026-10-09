@@ -14,6 +14,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { RangeChart } from '../components/ui/range-chart';
 import { SectionLabel } from '../components/ui/section-label';
+import { PageTitle } from '../components/ui/page-title';
 import { rangeSentence, usualRange } from '../lib/usualRange';
 import { todayCivil } from '../lib/heatmap';
 import type { MetricRecord } from '../lib/metricInsights';
@@ -103,7 +104,7 @@ export function MetricsScreen() {
   } else if (records.length === 0) {
     body = (
       <Card testID="metrics-empty">
-        <Text className="text-sm text-muted-foreground">Trends appear here once your Google Health data has synced.</Text>
+        <Text className="text-caption text-muted-foreground">Trends appear here once your Google Health data has synced.</Text>
       </Card>
     );
   } else {
@@ -124,12 +125,12 @@ export function MetricsScreen() {
                 <View className="flex-1 gap-1">
                   <View className="flex-row items-center gap-1.5">
                     <Ionicons name={config.icon as any} size={14} color={color} />
-                    <Text className="text-sm font-medium" style={{ color }}>
+                    <Text className="text-caption font-medium" style={{ color }}>
                       {config.label}
                     </Text>
                   </View>
                   {summary ? (
-                    <Text testID={`trend-latest-${type}`} className="text-numeral font-bold" style={{ fontVariant: ['tabular-nums'] }}>
+                    <Text testID={`trend-latest-${type}`} className="text-display tabular-nums">
                       {config.format(summary.latest)}
                     </Text>
                   ) : null}
@@ -140,26 +141,26 @@ export function MetricsScreen() {
               {summary ? (
                 <>
                   {usual ? (
-                    <Text testID={`trend-position-${type}`} className="text-sm text-muted-foreground">
+                    <Text testID={`trend-position-${type}`} className="text-caption text-muted-foreground">
                       {rangeSentence(summary.latest, usual, config.format)}
                     </Text>
                   ) : null}
                   {summary.points.length >= 2 ? (
                     <RangeChart compact points={summary.points} range={usual} color={color} format={config.format} height={72} />
                   ) : (
-                    <Text className="py-6 text-center text-xs text-muted-foreground">One reading in this range so far</Text>
+                    <Text className="py-6 text-center text-caption text-muted-foreground">One reading in this range so far</Text>
                   )}
                   <View className="flex-row justify-between gap-3">
-                    <Text testID={`trend-average-${type}`} className="text-xs text-muted-foreground">
+                    <Text testID={`trend-average-${type}`} className="text-caption text-muted-foreground">
                       {`Avg ${config.format(summary.average)}`}
                     </Text>
-                    <Text testID={`trend-change-${type}`} className="flex-1 text-right text-xs text-muted-foreground">
+                    <Text testID={`trend-change-${type}`} className="flex-1 text-right text-caption text-muted-foreground">
                       {changeText(summary.changePercent, days)}
                     </Text>
                   </View>
                 </>
               ) : (
-                <Text testID={`trend-empty-${type}`} className="text-sm text-muted-foreground">
+                <Text testID={`trend-empty-${type}`} className="text-caption text-muted-foreground">
                   {`No ${config.label.toLowerCase()} readings in the last ${days} days.`}
                 </Text>
               )}
@@ -178,7 +179,7 @@ export function MetricsScreen() {
       >
         <View className="gap-1">
           <SectionLabel>Against your usual range</SectionLabel>
-          <Text className="font-display text-display-lg">Trends</Text>
+          <PageTitle>Trends</PageTitle>
         </View>
 
         <SegmentedControl testID="metrics-range" options={RANGE_OPTIONS} value={range} onChange={setRange} />
@@ -189,8 +190,8 @@ export function MetricsScreen() {
               <Ionicons name="git-compare-outline" size={18} color={colors.accent} />
             </View>
             <View className="flex-1 gap-0.5">
-              <Text className="text-base font-semibold">Patterns</Text>
-              <Text className="text-xs text-muted-foreground">How your habits line up with your recovery</Text>
+              <Text className="text-body font-semibold">Patterns</Text>
+              <Text className="text-caption text-muted-foreground">How your habits line up with your recovery</Text>
             </View>
             <Ionicons name="chevron-forward" size={18} color={colors.muted} />
           </Card>
