@@ -8,7 +8,9 @@ import { FONTS } from '../../theme';
 // resolved to a family here instead, in this order:
 //   1. the pixel tokens (text-page-title, text-label) and font-pixel: Silkscreen,
 //      which has one weight, so a weight class beside them is ignored;
-//   2. a weight class, strongest first, so "font-bold" beats a stray "font-medium";
+//   2. a weight class, strongest first, so "font-bold" beats a stray "font-medium",
+//      and an explicit font-normal or font-sans last, so "text-display
+//      font-normal" draws Geist Regular rather than the token's weight;
 //   3. the token's own weight (spec §2: display 700; score, number, heading,
 //      headline 600; fine 500);
 //   4. Geist Regular.
@@ -18,6 +20,7 @@ const WEIGHT_FAMILIES: Array<[RegExp, string]> = [
   [/(^|\s)font-bold(\s|$)/, FONTS.sansBold],
   [/(^|\s)font-semibold(\s|$)/, FONTS.sansSemibold],
   [/(^|\s)font-medium(\s|$)/, FONTS.sansMedium],
+  [/(^|\s)font-(normal|sans)(\s|$)/, FONTS.sans],
 ];
 const TOKEN_FAMILIES: Array<[RegExp, string]> = [
   [/(^|\s)text-display(\s|$)/, FONTS.sansBold],

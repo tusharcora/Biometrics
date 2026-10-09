@@ -30,6 +30,8 @@ it('sets the app name in the pixel page-title face at 28, announced in its own c
   expect(name).toHaveTextContent('BIOMETRICS');
   expect(StyleSheet.flatten(name.props.style).fontFamily).toBe(FONTS.pixel);
   expect(String(name.props.className).split(' ')).toEqual(expect.arrayContaining(['font-pixel', 'text-[28px]']));
+  // The 28 replaces the token (its 20/26 line height would otherwise win).
+  expect(String(name.props.className).split(' ')).not.toContain('text-page-title');
 });
 
 it('passes the Apple identity token and full name', async () => {

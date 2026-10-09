@@ -1,4 +1,5 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import { MetricDetailScreen, readingDate } from '../../src/screens/MetricDetailScreen';
 import { addDays } from '../../src/lib/heatmap';
@@ -49,6 +50,19 @@ describe('MetricDetailScreen', () => {
     // Recent readings list, most recent first.
     expect(getByText(readingDate(records[1]))).toBeTruthy();
     expect(getByText(readingDate(records[0]))).toBeTruthy();
+  });
+
+  it('draws the big latest value with tabular figures', async () => {
+    mockParams = { metricType: 'STEPS', records: [{ id: '1', metricType: 'STEPS', value: 12000, recordedAt: '2026-09-02T00:00:00.000Z' }] };
+
+    const { getAllByText } = render(<MetricDetailScreen />);
+
+    await waitFor(() => {
+      expect(getAllByText(/12,000/).length).toBeGreaterThan(0);
+    });
+    const big = getAllByText(/12,000/).filter((el) => String(el.props.className).split(' ').includes('text-number'));
+    expect(big).toHaveLength(1);
+    expect(StyleSheet.flatten(big[0].props.style).fontVariant).toEqual(['tabular-nums']);
   });
 
   it('formats a reading date from its civil date, not shifted by timezone', () => {

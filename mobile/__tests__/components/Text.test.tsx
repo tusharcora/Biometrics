@@ -33,6 +33,14 @@ describe('fontFamilyFor', () => {
     expect(fontFamilyFor('text-display font-medium')).toBe(FONTS.sansMedium);
   });
 
+  it('lets an explicit font-normal or font-sans set a token in Geist Regular, below any stronger weight', () => {
+    expect(fontFamilyFor('text-display font-normal')).toBe(FONTS.sans);
+    expect(fontFamilyFor('text-headline font-sans')).toBe(FONTS.sans);
+    expect(fontFamilyFor('text-fine font-normal')).toBe(FONTS.sans);
+    expect(fontFamilyFor('text-body font-normal font-semibold')).toBe(FONTS.sansSemibold);
+    expect(fontFamilyFor('text-label font-sans')).toBe(FONTS.pixel);
+  });
+
   it('does not read a colour that starts with a token name as that token', () => {
     expect(fontFamilyFor('text-score-excellent')).toBe(FONTS.sans);
   });
