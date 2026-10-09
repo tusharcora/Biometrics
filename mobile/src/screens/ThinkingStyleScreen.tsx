@@ -65,7 +65,7 @@ export function ThinkingStyleScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
       <ScrollView contentContainerStyle={{ gap: 16, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 32 }}>
-        <Text className="text-sm text-muted-foreground">What your coach shows while it works on a reply.</Text>
+        <Text className="text-caption text-muted-foreground">What your coach shows while it works on a reply.</Text>
 
         <View className="h-[150px] items-center justify-center rounded-card border border-border bg-card">
           {/* The attachment rises above the 96 pt slot; leave it room at the top. */}
@@ -95,7 +95,7 @@ export function ThinkingStyleScreen() {
                   >
                     {/* Only the selected tile animates (performance). */}
                     <Character mood="thinking" size={TILE_SPRITE} attachment={id} paused={!isSelected || still} />
-                    <Text className={cn('text-[11px]', isSelected ? 'font-semibold' : '')} numberOfLines={1}>
+                    <Text className={cn('text-caption', isSelected ? 'font-semibold' : '')} numberOfLines={1}>
                       {name}
                     </Text>
                   </Pressable>
@@ -106,11 +106,11 @@ export function ThinkingStyleScreen() {
         </View>
 
         {error ? (
-          <Text testID="thinking-style-error" className="text-sm text-destructive">
+          <Text testID="thinking-style-error" className="text-caption text-destructive">
             {error}
           </Text>
         ) : (
-          <Text className="text-xs text-muted-foreground">{THINKING_ATTACHMENT_NAMES[selected].blurb}</Text>
+          <Text className="text-caption text-muted-foreground">{THINKING_ATTACHMENT_NAMES[selected].blurb}</Text>
         )}
       </ScrollView>
     </SafeAreaView>

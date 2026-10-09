@@ -71,10 +71,10 @@ function Tile({ item, colors }: { item: AnswerCardItemDTO; colors: Palette }) {
       accessibilityLabel={`${item.label} ${item.display}${spoken ? `, ${spoken}` : ''}`}
       className="flex-1 rounded-tile bg-muted px-2.5 py-2"
     >
-      <Text testID={`answer-tile-value-${item.factId}`} className="text-base font-bold" style={{ color: valueColor }}>
+      <Text testID={`answer-tile-value-${item.factId}`} className="text-body font-bold tabular-nums" style={{ color: valueColor }}>
         {item.display}
       </Text>
-      <Text testID={`answer-tile-caption-${item.factId}`} className="text-[11px] text-muted-foreground">{words ? `${item.label} · ${words}` : item.label}</Text>
+      <Text testID={`answer-tile-caption-${item.factId}`} className="text-caption text-muted-foreground">{words ? `${item.label} · ${words}` : item.label}</Text>
     </View>
   );
 }
@@ -89,10 +89,10 @@ function RankedRow({ item, rank, largest, colors }: { item: AnswerCardItemDTO; r
       accessibilityLabel={`${rank}. ${item.label}, ${item.display}`}
       className={`flex-row items-center gap-2 py-1.5 ${rank > 1 ? 'border-t border-border' : ''}`}
     >
-      <Text className="w-4 text-sm text-muted-foreground">{rank}</Text>
-      <Text className="shrink text-sm">{item.label}</Text>
+      <Text className="w-4 text-caption text-muted-foreground tabular-nums">{rank}</Text>
+      <Text className="shrink text-body">{item.label}</Text>
       <View testID={`answer-rank-bar-${rank}`} className="h-1.5 rounded-full" style={{ width, backgroundColor: color }} />
-      <Text testID={`answer-rank-effect-${rank}`} className="ml-auto text-xs text-foreground/80" numberOfLines={1}>
+      <Text testID={`answer-rank-effect-${rank}`} className="ml-auto text-caption text-foreground/80" numberOfLines={1}>
         {item.display}
       </Text>
     </View>
@@ -112,7 +112,7 @@ export function AnswerCard({ card, onOpenSource }: { card: AnswerCardDTO; onOpen
 
   return (
     <View testID="answer-card" className="gap-2 rounded-card border border-border bg-card p-3.5">
-      <Text className="text-base font-semibold">{card.headline}</Text>
+      <Text className="text-body font-semibold">{card.headline}</Text>
       {card.tiles ? (
         <View testID="answer-tiles" className="flex-row flex-wrap" style={TILE_ROW}>
           {card.tiles.map((item, index) => (
@@ -131,7 +131,7 @@ export function AnswerCard({ card, onOpenSource }: { card: AnswerCardDTO; onOpen
       ) : null}
       {tip ? (
         <View testID="answer-tip" className="rounded-tile px-3 py-2" style={{ backgroundColor: colors.tip }}>
-          <Text className="text-sm" style={{ color: colors.tipForeground }}>
+          <Text className="text-body" style={{ color: colors.tipForeground }}>
             {tip}
           </Text>
         </View>
@@ -152,7 +152,7 @@ export function AnswerCard({ card, onOpenSource }: { card: AnswerCardDTO; onOpen
             {card.source}
           </Button>
         ) : (
-          <Text testID="answer-source" className="text-xs text-muted-foreground">
+          <Text testID="answer-source" className="text-caption text-muted-foreground">
             {card.source}
           </Text>
         )

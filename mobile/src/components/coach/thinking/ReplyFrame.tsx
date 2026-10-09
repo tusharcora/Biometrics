@@ -4,7 +4,7 @@ import { Character } from '../../characters/Character';
 import type { ThinkingTextId } from '../../characters/thinking';
 import type { CharacterId } from '../../characters/types';
 import { useScreenFocused } from '../../../characters/useScreenFocused';
-import { DialogBox, dialogTextStyle } from './Dialog';
+import { DialogBox, DIALOG_TEXT_CLASS, dialogTextStyle } from './Dialog';
 import { BubbleName, PLACEHOLDER_BOTTOM, PLACEHOLDER_WIDTH, PlaceholderBubble } from './Placeholder';
 
 /** The styles whose thinking frame the streaming answer then flows into (spec §5 B, I). */
@@ -15,9 +15,14 @@ export function isReplyFrameStyle(style: ThinkingTextId | null | undefined): sty
   return (REPLY_FRAME_STYLES as readonly string[]).includes(style ?? '');
 }
 
-/** The answer text's style inside the frame: the pixel font in the dialog box, unchanged in the bubble. */
+/** The answer text's inline style inside the frame: the dialog box's light ink, unchanged in the bubble. */
 export function replyFrameTextStyle(style: ReplyFrameStyle): TextStyle | undefined {
   return style === 'dialog' ? dialogTextStyle() : undefined;
+}
+
+/** The streaming answer's type class in a reply frame: the dialog box's pixel text; otherwise none (the row's text-body). */
+export function replyFrameTextClass(style: ReplyFrameStyle): string | undefined {
+  return style === 'dialog' ? DIALOG_TEXT_CLASS : undefined;
 }
 
 // The in-progress answer, inside the same bubble (B) or RPG box (I) the

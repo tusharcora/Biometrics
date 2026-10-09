@@ -1,8 +1,4 @@
-import { Platform } from 'react-native';
 import { darkenHex, mixHex } from './sprites/compose';
-
-// No mono face is bundled; the system one matches the mockups' ui-monospace.
-export const MONO = Platform.select({ ios: 'Menlo', default: 'monospace' });
 
 /** '#RRGGBB' at an alpha, as '#RRGGBBAA'. */
 export function hexAlpha(hex: string, alpha: number): string {

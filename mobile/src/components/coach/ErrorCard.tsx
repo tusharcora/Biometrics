@@ -76,7 +76,7 @@ export function ErrorCard({ error, onRetry }: { error: CoachTurnError; onRetry: 
 
   return (
     <View accessibilityRole="alert" className="gap-1 rounded-tile border border-dashed border-border px-3.5 py-3">
-      <Text testID="coach-error" accessibilityLiveRegion="polite" className="text-sm text-muted-foreground">
+      <Text testID="coach-error" accessibilityLiveRegion="polite" className="text-caption text-muted-foreground">
         {copy}
       </Text>
       {error.retryable ? (

@@ -1,6 +1,6 @@
 import React from 'react';
 import { AccessibilityInfo, ScrollView, StyleSheet } from 'react-native';
-import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, act, within } from '@testing-library/react-native';
 import { CoachScreen } from '../../src/screens/CoachScreen';
 import { useKeyboardVisible } from '../../src/lib/useKeyboardVisible';
 import { FLOATING_BAR_HEIGHT, FLOATING_BAR_MARGIN } from '../../src/navigation/tabBarLayout';
@@ -25,6 +25,8 @@ import { withCharacter } from '../../jest-mocks/characterContext';
 import type { ThinkingTextId } from '../../src/components/characters/thinking';
 import { GENERAL_QUESTIONS, suggestedQuestions } from '../../src/lib/coachToday';
 import { followUpsFor } from '../../src/lib/coachAnswers';
+import { DIALOG_INK, DIALOG_TEXT_CLASS } from '../../src/components/coach/thinking/Dialog';
+import { FONTS } from '../../src/theme';
 
 jest.mock('../../src/api/coach', () => ({
   ...jest.requireActual('../../src/api/coach'),
@@ -685,6 +687,10 @@ describe('CoachScreen: streamed answers', () => {
 
     expect(utils.queryByTestId('coach-thinking')).toBeNull();
     expect(utils.getByTestId('reply-frame-dialog')).toHaveTextContent(/Mostly clear skies\./);
+    // The answer keeps the box's pixel text and light ink, not the row's Geist body.
+    const streamed = within(utils.getByTestId('reply-frame-dialog')).getByText(/Mostly clear skies\./);
+    expect(String(streamed.props.className).split(' ')).toEqual(expect.arrayContaining(DIALOG_TEXT_CLASS.split(' ')));
+    expect(StyleSheet.flatten(streamed.props.style)).toEqual(expect.objectContaining({ fontFamily: FONTS.pixel, color: DIALOG_INK }));
     expect(utils.queryByTestId('chat-bubble-assistant')).toBeNull();
 
     await live.finish(doneEvent());
@@ -722,7 +728,7 @@ describe('CoachScreen: streamed answers', () => {
   it('marks the page title and the empty-chat prompt as headers', async () => {
     const utils = await openChat();
 
-    const headers = utils.getAllByRole('header').map((h) => h.props.children);
+    const headers = utils.getAllByRole('header').map((h) => h.props.accessibilityLabel ?? h.props.children);
     expect(headers).toEqual(expect.arrayContaining(['Coach', 'What would you like to know?']));
   });
 

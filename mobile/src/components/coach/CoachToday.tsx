@@ -57,7 +57,7 @@ export const CoachToday = memo(function CoachToday({ summary, loading, onAsk }: 
 
   if (!summary.hasData) {
     return (
-      <Text testID="coach-today-empty" className="font-display text-display-sm text-muted-foreground">
+      <Text testID="coach-today-empty" className="text-heading text-muted-foreground">
         {TODAY_EMPTY}
       </Text>
     );
@@ -70,9 +70,9 @@ export const CoachToday = memo(function CoachToday({ summary, loading, onAsk }: 
   return (
     <View testID="coach-today" className="gap-3">
       {sentence ? (
-        <Text testID="coach-today-sentence" className="font-display text-display-sm">
+        <Text testID="coach-today-sentence" className="text-heading">
           {sentence.spans.map((span, index) => {
-            if (!span.metric) return <Text key={index} className="font-display text-display-sm">{span.text}</Text>;
+            if (!span.metric) return <Text key={index} className="text-heading">{span.text}</Text>;
             const metric = span.metric;
             const bar = bars.find((b) => b.metric === metric);
             // Text, so the text-safe status colours (R40), like the bar values.
@@ -84,7 +84,7 @@ export const CoachToday = memo(function CoachToday({ summary, loading, onAsk }: 
                 accessibilityRole="link"
                 accessibilityHint="Asks your coach about it"
                 onPress={() => onAsk(spanQuestion(metric, bars))}
-                className="font-display text-display-sm"
+                className="text-heading"
                 style={{
                   textDecorationLine: 'underline',
                   textDecorationStyle: 'dotted',
@@ -104,7 +104,7 @@ export const CoachToday = memo(function CoachToday({ summary, loading, onAsk }: 
           ))}
         </View>
       ) : null}
-      <Text testID="coach-today-footnote" className="text-xs text-muted-foreground">
+      <Text testID="coach-today-footnote" className="text-caption text-muted-foreground">
         {TODAY_FOOTNOTE}
       </Text>
     </View>

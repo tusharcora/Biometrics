@@ -74,7 +74,7 @@ export function CoachSettingsSection() {
         />
       </SettingsGroup>
       {revokeError ? (
-        <Text testID="coach-revoke-error" className="-mt-4 px-4 text-sm text-destructive">
+        <Text testID="coach-revoke-error" className="-mt-4 px-4 text-caption text-destructive">
           The AI Coach could not be turned off. Please try again.
         </Text>
       ) : null}

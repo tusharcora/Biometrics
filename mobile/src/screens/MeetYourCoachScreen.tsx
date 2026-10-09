@@ -11,6 +11,7 @@ import { CHARACTER_IDS, DEFAULT_CHARACTER_ID, type CharacterId } from '../compon
 import type { CoachStatusDTO } from '../api/coach';
 import { Button } from '../components/ui/button';
 import { Sheet } from '../components/ui/sheet';
+import { SectionLabel } from '../components/ui/section-label';
 import { Text } from '../components/ui/text';
 import { useToast } from '../components/ui/toast';
 import { cn } from '../lib/utils';
@@ -114,7 +115,7 @@ export function MeetYourCoachScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top', 'bottom']}>
       <View className="flex-row items-center justify-between px-5 pt-2">
-        <Text className="text-eyebrow font-semibold uppercase text-muted-foreground">Meet your coach</Text>
+        <SectionLabel>Meet your coach</SectionLabel>
         {mode === 'first' ? (
           <Button testID="meet-skip" variant="ghost" size="sm" disabled={saving} onPress={() => void choose(DEFAULT_CHARACTER_ID)}>
             Skip
@@ -148,7 +149,7 @@ export function MeetYourCoachScreen() {
                 >
                   {/* Only the selected tile animates (spec §9 performance). */}
                   <Character characterId={id} mood="idle" size={TILE_SPRITE} paused={!isSelected || sheetOpen} attachment={null} />
-                  <Text className="text-[11px] font-semibold" numberOfLines={1}>
+                  <Text className="text-caption font-semibold" numberOfLines={1}>
                     {c.name}
                   </Text>
                 </Pressable>
@@ -170,7 +171,7 @@ export function MeetYourCoachScreen() {
             nameRef={nameRef}
           />
           {error ? (
-            <Text testID="meet-error" className="text-center text-sm text-destructive">
+            <Text testID="meet-error" className="text-center text-caption text-destructive">
               {error}
             </Text>
           ) : null}

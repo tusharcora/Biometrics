@@ -4,6 +4,7 @@ import { CoachCard } from '../../src/components/characters/CoachCard';
 import { CHARACTERS } from '../../src/components/characters/registry';
 import type { CharacterId } from '../../src/components/characters/types';
 import { characterLabel } from '../../jest-mocks/characterContext';
+import { FONTS } from '../../src/theme';
 
 let mockScheme: 'light' | 'dark' = 'light';
 jest.mock('nativewind', () => ({
@@ -82,4 +83,11 @@ it('dark mode lightens accents that are too dim on the dark chip, and keeps ones
   mockScheme = 'dark';
   expect(focusColor(render(<CoachCard characterId="cap" />))).not.toBe(CHARACTERS.cap.accent);
   expect(focusColor(render(<CoachCard characterId="luna" />))).toBe(CHARACTERS.luna.accent);
+});
+
+it('sets the number in the pixel label face, not a system mono, and the name as a Geist heading', () => {
+  const s = render(<CoachCard characterId="mochi" paused testID="card" />);
+  expect(StyleSheet.flatten(s.getByText('No.01').props.style).fontFamily).toBe(FONTS.pixel);
+  expect(String(s.getByText('No.01').props.className).split(' ')).toContain('text-label');
+  expect(StyleSheet.flatten(s.getByRole('header', { name: 'Mochi' }).props.style).fontFamily).toBe(FONTS.sansSemibold);
 });

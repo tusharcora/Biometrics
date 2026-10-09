@@ -20,10 +20,10 @@ export function Steps(props: ThinkingStyleProps) {
     <View className="gap-[3px] pb-1.5">
       {steps.map((step) => (
         <View key={step.id} testID={`thinking-step-${step.id}-${step.done ? 'done' : 'active'}`} className="flex-row items-center gap-[7px]">
-          <Text className="w-3 text-center text-[12.5px]" style={{ color: text }}>
+          <Text className="w-3 text-center text-caption" style={{ color: text }}>
             {step.done ? '✓' : spinner}
           </Text>
-          <Text className={step.done ? 'shrink text-[12.5px] text-muted-foreground' : 'shrink text-[12.5px] text-foreground'}>{step.label}</Text>
+          <Text className={step.done ? 'shrink text-caption text-muted-foreground' : 'shrink text-caption text-foreground'}>{step.label}</Text>
         </View>
       ))}
     </View>

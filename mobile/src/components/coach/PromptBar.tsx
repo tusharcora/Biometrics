@@ -148,8 +148,8 @@ export function PromptBar({
               onPress={() => onChangeText(command.prompt)}
               className="px-4 py-3 active:opacity-70"
             >
-              <Text className="text-sm font-semibold">/{command.key}</Text>
-              <Text className="text-xs text-muted-foreground">{command.label}</Text>
+              <Text className="text-body font-semibold">/{command.key}</Text>
+              <Text className="text-caption text-muted-foreground">{command.label}</Text>
             </PressableScale>
           ))}
         </View>

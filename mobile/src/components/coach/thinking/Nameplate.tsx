@@ -12,10 +12,10 @@ export function Nameplate({ characterId, paused, coach }: ThinkingStyleProps & {
     <View className="items-center gap-0.5">
       {coach}
       <View className="rounded-full px-[7px] py-0.5" style={{ backgroundColor: hexAlpha(accent, 0.16) }}>
-        <Text className="text-[10.5px] font-semibold" style={{ color: text }}>
+        <Text className="text-caption font-semibold" style={{ color: text }}>
           {`${name} · thinking`}
           {'.'.repeat(dots)}
-          <Text className="text-[10.5px] font-semibold" style={{ color: 'transparent' }}>
+          <Text className="text-caption font-semibold" style={{ color: 'transparent' }}>
             {'.'.repeat(3 - dots)}
           </Text>
         </Text>

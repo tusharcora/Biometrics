@@ -67,13 +67,12 @@ export function MemoryEditForm({ id, initialValue, testIDPrefix, onSaved, onCanc
       />
       <Text
         testID={`${testIDPrefix}-counter-${id}`}
-        className="self-end text-xs text-muted-foreground"
-        style={{ fontVariant: ['tabular-nums'] }}
+        className="self-end text-caption text-muted-foreground tabular-nums"
       >
         {`${value.length}/${MEMORY_MAX_LENGTH}`}
       </Text>
       {error ? (
-        <Text testID={`${testIDPrefix}-error-${id}`} className="text-sm text-destructive">
+        <Text testID={`${testIDPrefix}-error-${id}`} className="text-caption text-destructive">
           {error}
         </Text>
       ) : null}

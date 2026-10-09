@@ -29,7 +29,7 @@ export function PlaceholderBubble({ children, style, testID }: { children: React
 export function BubbleName({ characterId }: { characterId: CharacterId }) {
   const { name, text } = useCoachVoice(characterId);
   return (
-    <Text className="mb-1 text-[11.5px] font-semibold" style={{ color: text }}>
+    <Text className="mb-1 text-caption font-semibold" style={{ color: text }}>
       {name}
     </Text>
   );
@@ -58,8 +58,8 @@ export function Placeholder({ characterId, paused }: ThinkingStyleProps) {
 
   return (
     <PlaceholderBubble style={{ width: PLACEHOLDER_WIDTH, marginBottom: PLACEHOLDER_BOTTOM }}>
-      <Text className="text-[11.5px] text-muted-foreground">
-        <Text className="text-[11.5px] font-semibold" style={{ color: text }}>
+      <Text className="text-caption text-muted-foreground">
+        <Text className="text-caption font-semibold" style={{ color: text }}>
           {name}
         </Text>
         {` is ${line}…`}

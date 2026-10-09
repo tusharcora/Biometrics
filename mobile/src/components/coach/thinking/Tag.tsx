@@ -1,7 +1,7 @@
 import React from 'react';
 import { View } from 'react-native';
 import { Text } from '../../ui/text';
-import { hexAlpha, pixelFont, useCoachVoice, useElapsed } from './shared';
+import { hexAlpha, useCoachVoice, useElapsed } from './shared';
 import type { ThinkingStyleProps } from './types';
 import { useThinkingLine } from './useThinkingLine';
 
@@ -20,9 +20,9 @@ export function Tag({ characterId, paused }: ThinkingStyleProps) {
         style={{ backgroundColor: hexAlpha(accent, 0.1), borderWidth: 2, borderColor: hexAlpha(accent, 0.35) }}
       >
         <View style={{ width: 8, height: 8, backgroundColor: accent, opacity: blockOn ? 1 : 0 }} />
-        <Text style={{ fontFamily: pixelFont(), fontSize: 12, letterSpacing: 0.5, color: text }}>THINKING</Text>
+        <Text className="text-label" style={{ color: text }}>THINKING</Text>
       </View>
-      <Text className="text-xs text-muted-foreground">{`${name} is ${line}…`}</Text>
+      <Text className="text-caption text-muted-foreground">{`${name} is ${line}…`}</Text>
     </View>
   );
 }

@@ -112,12 +112,15 @@ describe('TodayBar', () => {
     expect(colours('dark')).toEqual([d.statusBelowText, d.statusAboveText, d.foreground, d.foreground]);
   });
 
-  it('sets the value at 12px bold and the usual smaller in the dimmer usual colour', () => {
+  it('sets the value in caption bold tabular figures and the usual in caption, in the dimmer usual colour', () => {
     const { getByTestId } = render(<TodayBar bar={recovery} onPress={() => {}} />);
+    const classes = (id: string) => String(getByTestId(id).props.className).split(' ');
 
-    expect(style(getByTestId('today-bar-value-recovery')).fontSize).toBe(12);
-    expect(style(getByTestId('today-bar-usual-recovery')).fontSize).toBe(10.5);
+    expect(classes('today-bar-value-recovery')).toEqual(expect.arrayContaining(['text-caption', 'font-bold', 'tabular-nums']));
+    expect(classes('today-bar-usual-recovery')).toEqual(expect.arrayContaining(['text-caption', 'tabular-nums']));
     expect(style(getByTestId('today-bar-usual-recovery')).color).toBe(COLORS.light.todayUsual);
+    // One line: a value that does not fit truncates rather than wrapping the row.
+    expect(getByTestId('today-bar-text-recovery').props.numberOfLines).toBe(1);
   });
 
   // R42: the value keeps its unit; the usual is a bare number (durations keep h/m),
@@ -154,12 +157,13 @@ describe('TodayBar', () => {
     expect(bareUsual({ unit: 'score', usualDisplay: null })).toBeNull();
   });
 
-  // Measured in Geist (12px bold value, 10.5px usual): "10h 48m / 7h 13m" 94.6pt is the
-  // widest; "103.4 ms / 98.7" 83.1pt, "103 bpm / 98" 73.1pt, "100 / 100" 50.3pt.
-  it('gives every row the same 96pt value column, wide enough for the longest value', () => {
+  // Measured in Geist at the type scale's 13px bold value / 13px usual, tabular figures:
+  // "10h 48m / 7h 13m" 114.0pt is the widest; "103.4 ms / 98.7" 96.8pt, "103 bpm / 98"
+  // 84.0pt, "100 / 100" 60.9pt; so the column is 116.
+  it('gives every row the same 116pt value column, wide enough for the longest value', () => {
     for (const bar of [recovery, sleep, hrv, rhr]) {
       const { getByTestId, unmount } = render(<TodayBar bar={bar} onPress={() => {}} />);
-      expect(style(getByTestId(`today-bar-text-${bar.metric}`)).width).toBe(96);
+      expect(style(getByTestId(`today-bar-text-${bar.metric}`)).width).toBe(116);
       unmount();
     }
   });
@@ -277,7 +281,7 @@ describe('CoachToday', () => {
     expect(getByTestId('coach-today-loading')).toBeTruthy();
     expect(queryByTestId('coach-today-sentence')).toBeNull();
     // The same value column as a real row, so the tracks keep their length when data arrives.
-    expect(style(getByTestId('today-bar-skeleton-value-0')).width).toBe(96);
+    expect(style(getByTestId('today-bar-skeleton-value-0')).width).toBe(116);
   });
 
   it('keeps showing the last summary while it refreshes', () => {

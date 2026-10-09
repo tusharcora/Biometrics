@@ -28,7 +28,7 @@ export function Typewriter({ characterId, paused }: ThinkingStyleProps) {
   const caretOn = Math.floor(elapsed / 500) % 2 === 0;
   return (
     <View className="flex-row items-center pb-3">
-      <Text testID="thinking-typewriter-text" className="shrink text-[13.5px] font-semibold" style={{ color: text }}>
+      <Text testID="thinking-typewriter-text" className="shrink text-caption font-semibold" style={{ color: text }}>
         {shown}
       </Text>
       <View style={{ width: 2, height: 14, marginLeft: 1, backgroundColor: accent, opacity: caretOn ? 1 : 0 }} />

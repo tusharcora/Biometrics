@@ -18,12 +18,12 @@ const TICK_HEIGHT = 14;
 const ROW_HEIGHT = 36;
 const HIT_SLOP = { top: 3, bottom: 3, left: 4, right: 4 };
 // The label and value columns. The value column fits the longest text,
-// measured with the bundled Geist fonts (12px bold value, 10.5px usual):
-// "10h 48m / 7h 13m" 94.6pt, "103.4 ms / 98.7" 83.1pt, "103 bpm / 98" 73.1pt,
-// "100 / 100" 50.3pt; so every track stays the same length. The loading
-// skeleton (CoachToday) uses the same widths.
+// measured with the bundled Geist fonts (13px bold value, 13px usual, both
+// tabular): "10h 48m / 7h 13m" 114.0pt, "103.4 ms / 98.7" 96.8pt,
+// "103 bpm / 98" 84.0pt, "100 / 100" 60.9pt; so every track stays the same
+// length. The loading skeleton (CoachToday) uses the same widths.
 export const BAR_LABEL_WIDTH = 58;
-export const BAR_VALUE_WIDTH = 96;
+export const BAR_VALUE_WIDTH = 116;
 
 // Words follow the number, not the status (resting HR above usual is "below").
 function direction(bar: TodayBarDTO): string | null {
@@ -76,7 +76,7 @@ export const TodayBar = memo(function TodayBar({ bar, onPress }: TodayBarProps) 
       className="flex-row items-center gap-2 active:opacity-70"
       style={{ minHeight: ROW_HEIGHT }}
     >
-      <Text className="text-xs text-muted-foreground" style={{ width: BAR_LABEL_WIDTH }} numberOfLines={1}>
+      <Text className="text-fine text-muted-foreground" style={{ width: BAR_LABEL_WIDTH }} numberOfLines={1}>
         {bar.label}
       </Text>
       <View className="flex-1 justify-center" style={{ height: TICK_HEIGHT }}>
@@ -100,11 +100,11 @@ export const TodayBar = memo(function TodayBar({ bar, onPress }: TodayBarProps) 
         ) : null}
       </View>
       <Text testID={`today-bar-text-${bar.metric}`} className="text-right" style={{ width: BAR_VALUE_WIDTH }} numberOfLines={1} maxFontSizeMultiplier={MAX_FONT_SCALE}>
-        <Text testID={`today-bar-value-${bar.metric}`} maxFontSizeMultiplier={MAX_FONT_SCALE} className="font-bold" style={{ fontSize: 12, color: valueColor }}>
+        <Text testID={`today-bar-value-${bar.metric}`} maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-caption font-bold tabular-nums" style={{ color: valueColor }}>
           {bar.display}
         </Text>
         {usual ? (
-          <Text testID={`today-bar-usual-${bar.metric}`} maxFontSizeMultiplier={MAX_FONT_SCALE} style={{ fontSize: 10.5, color: colors.todayUsual }}>
+          <Text testID={`today-bar-usual-${bar.metric}`} maxFontSizeMultiplier={MAX_FONT_SCALE} className="text-caption tabular-nums" style={{ color: colors.todayUsual }}>
             {` / ${usual}`}
           </Text>
         ) : null}

@@ -3,7 +3,8 @@ import { StyleSheet, Text } from 'react-native';
 import { render, act } from '@testing-library/react-native';
 import { ThinkingRow } from '../../src/components/coach/thinking/ThinkingRow';
 import { ReplyFrame, REPLY_FRAME_STYLES } from '../../src/components/coach/thinking/ReplyFrame';
-import { SILKSCREEN } from '../../src/components/coach/thinking/shared';
+import { SILKSCREEN, pixelFont } from '../../src/components/coach/thinking/shared';
+import { DIALOG_TEXT_CLASS } from '../../src/components/coach/thinking/Dialog';
 import { FONTS } from '../../src/theme';
 import { THINKING_TEXTS } from '../../src/components/characters/thinking';
 import { characterLabel } from '../../jest-mocks/characterContext';
@@ -152,10 +153,18 @@ it('tag shows a pixel-font THINKING tag over the personality line', () => {
   expect(s.getByText(/Boba is stirring the pearls/)).toBeTruthy();
 });
 
-it('tag falls back to Geist, never a mono face, if Silkscreen did not load', () => {
+it('pixelFont falls back to Geist, never a mono face, if Silkscreen did not load', () => {
   mockFontLoaded = false;
-  const s = render(<ThinkingRow style="tag" characterId="boba" steps={[]} paused testID="row" />);
-  expect(flatStyle(s.getByText('THINKING').props.style).fontFamily).toBe(FONTS.sans);
+  expect(pixelFont()).toBe(FONTS.sans);
+  mockFontLoaded = true;
+  expect(pixelFont()).toBe(SILKSCREEN);
+});
+
+it('dialog types its line in the pixel label face on an 18-pt line', () => {
+  const s = render(<ThinkingRow style="dialog" characterId="pengu" steps={[]} paused testID="row" />);
+  const line = s.getByText(/…$/);
+  expect(String(line.props.className).split(' ')).toEqual(expect.arrayContaining(DIALOG_TEXT_CLASS.split(' ')));
+  expect(flatStyle(line.props.style).fontFamily).toBe(SILKSCREEN);
 });
 
 it('shimmer counts the seconds since it appeared', () => {

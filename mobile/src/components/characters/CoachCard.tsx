@@ -5,7 +5,7 @@ import Svg, { Circle, Defs, LinearGradient, Pattern, Rect, Stop } from 'react-na
 import { Text } from '../ui/text';
 import { Character } from './Character';
 import { CHARACTERS } from './registry';
-import { CHIP_ALPHA, MONO, PANEL_ALPHA, chipTextColor, hexAlpha } from './palette';
+import { CHIP_ALPHA, PANEL_ALPHA, chipTextColor, hexAlpha } from './palette';
 import type { CharacterId } from './types';
 
 const ART_HEIGHT = 176;
@@ -73,14 +73,9 @@ export function CoachCard({ characterId, tagline, greeting, paused = false, test
           className="absolute left-1/2 rounded-full"
           style={{ bottom: 22, width: 96, height: 10, marginLeft: -48, backgroundColor: 'rgba(0,0,0,0.28)' }}
         />
-        <Text
-          className="absolute left-3.5 top-3 text-[11px] text-muted-foreground"
-          style={{ fontFamily: MONO, fontWeight: '600', letterSpacing: 0.44 }}
-        >
-          {number}
-        </Text>
+        <Text className="absolute left-3.5 top-3 text-label text-muted-foreground">{number}</Text>
         <View className="absolute right-3 top-2.5 rounded-full px-2.5 py-1" style={{ backgroundColor: hexAlpha(c.accent, CHIP_ALPHA) }}>
-          <Text testID="coach-card-focus" className="text-[11px] font-semibold" style={{ color: chipText }}>
+          <Text testID="coach-card-focus" className="text-label uppercase" style={{ color: chipText }}>
             {c.focus}
           </Text>
         </View>
@@ -89,10 +84,10 @@ export function CoachCard({ characterId, tagline, greeting, paused = false, test
         </View>
       </View>
       <View className="gap-2 px-4 pb-4 pt-3.5">
-        <Text ref={nameRef} accessibilityRole="header" className="text-xl font-bold" style={{ letterSpacing: -0.2 }}>
+        <Text ref={nameRef} accessibilityRole="header" className="text-heading">
           {c.name}
         </Text>
-        <Text testID={taglineTestID} className="text-[13px] leading-[18px] text-muted-foreground" style={{ minHeight: 36 }}>
+        <Text testID={taglineTestID} className="text-caption text-muted-foreground" style={{ minHeight: 36 }}>
           {tagline ?? c.tagline}
         </Text>
         <View className="mt-1.5 rounded-[14px] border border-border bg-muted px-3 py-2.5">
@@ -102,7 +97,7 @@ export function CoachCard({ characterId, tagline, greeting, paused = false, test
             className="absolute border-l border-t border-border bg-muted"
             style={{ top: -6, left: 22, width: 10, height: 10, transform: [{ rotate: '45deg' }] }}
           />
-          <Text testID={greetingTestID} className="text-[13px] leading-[18px]">{greeting ?? c.greeting}</Text>
+          <Text testID={greetingTestID} className="text-caption">{greeting ?? c.greeting}</Text>
         </View>
       </View>
     </View>
