@@ -253,3 +253,35 @@ it('the seen route takes { through } and answers 204', async () => {
   const row = await prisma.storySeen.findFirstOrThrow({ where: { viewerId: me.id, authorId: sam.id } });
   expect(row.lastFrameAt?.toISOString()).toBe(at.toISOString());
 });
+
+// Final review M9 (T1): two open viewers racing (the first seen of the day for both) leave one row at the later frame.
+it('two seen calls at once leave one row, at the later frame', async () => {
+  const me = await buddyUser();
+  const sam = await buddyUser();
+  await pairUp(me.id, sam.id);
+  const early = new Date(NOW.getTime() - 4 * 3_600_000);
+  const late = new Date(NOW.getTime() - 3_600_000);
+  await saveCheckIn(sam.id, 'RESTED', early);
+  await prisma.goodnight.create({ data: { authorId: sam.id, localDate: day('2026-10-07'), at: late, onTime: true } });
+  await Promise.all([markStorySeen(me.id, sam.id, NOW, early.toISOString()), markStorySeen(me.id, sam.id, NOW, late.toISOString())]);
+  const rows = await prisma.storySeen.findMany({ where: { viewerId: me.id, authorId: sam.id } });
+  expect(rows.map((r) => r.lastFrameAt?.toISOString())).toEqual([late.toISOString()]);
+  expect((await loadStoryRings(me.id, NOW)).rings.map((r) => r.unseen)).toEqual([false]);
+});
+
+// T1: a ring that a later frame lights again sorts with the unseen ones, ahead of a seen ring.
+it('a re-lit ring sorts with the unseen rings, newest first', async () => {
+  const me = await buddyUser();
+  const a = await buddyUser();
+  const b = await buddyUser();
+  for (const u of [a, b]) await pairUp(me.id, u.id);
+  const checkInAt = new Date(NOW.getTime() - 5 * 3_600_000);
+  await saveCheckIn(a.id, 'OKAY', checkInAt);
+  await saveCheckIn(b.id, 'OKAY', new Date(NOW.getTime() - 2 * 3_600_000));
+  await markStorySeen(me.id, a.id, NOW, checkInAt.toISOString());
+  await markStorySeen(me.id, b.id, NOW);
+  const order = async () => (await loadStoryRings(me.id, NOW)).rings.map((r) => [r.author.id, r.unseen]);
+  expect(await order()).toEqual([[b.id, false], [a.id, false]]);
+  await prisma.goodnight.create({ data: { authorId: a.id, localDate: day('2026-10-07'), at: new Date(NOW.getTime() - 3_600_000), onTime: true } });
+  expect(await order()).toEqual([[a.id, true], [b.id, false]]);
+});

@@ -231,6 +231,42 @@ it('a report that fails says why and blocks no one, even when ticked', async () 
   expect(blockBuddy).not.toHaveBeenCalled();
 });
 
+// Final review M2: while a report is in flight the sheet can't be dismissed (backdrop, Android back, drag), so a
+// ticked block can never run after the person closed the sheet; the flow then completes as usual.
+it('a report in flight ignores a dismissal; once filed, the ticked block runs as usual', async () => {
+  (fetchThread as jest.Mock).mockResolvedValue(thread([msg('t1')]));
+  let file: () => void = () => undefined;
+  (fileReport as jest.Mock).mockImplementationOnce(() => new Promise<void>((resolve) => { file = resolve; }));
+  renderScreen();
+  fireEvent(await screen.findByTestId('message-t1'), 'longPress');
+  fireEvent.press(screen.getByTestId('message-report'));
+  // The rows are named for screen readers by their text.
+  expect(screen.getByLabelText('Harassment')).toBe(screen.getByTestId('report-harassment'));
+  fireEvent.press(screen.getByLabelText('Also block Ben'));
+  fireEvent.press(screen.getByTestId('report-submit'));
+  fireEvent.press(screen.getByTestId('report-sheet-backdrop'));
+  await act(async () => { await new Promise((r) => setTimeout(r, 400)); });
+  expect(screen.getByTestId('report-sheet')).toBeTruthy();
+  expect(blockBuddy).not.toHaveBeenCalled();
+  await act(async () => file());
+  expect(blockBuddy).toHaveBeenCalledWith('ben');
+  expect(mockGoBack).toHaveBeenCalled();
+});
+
+// Final review M3: a push or a navigate to the open thread without a quote keeps the one I staged.
+it('opening the thread again without a quote keeps the staged one; a new quote replaces it', async () => {
+  mockParams = { buddyId: 'ben', quote: { request: { type: 'note' }, label: "Ben's note" } };
+  (fetchThread as jest.Mock).mockResolvedValue(thread([]));
+  const view = renderScreen();
+  expect(await screen.findByTestId('composer-quote')).toHaveTextContent("Replying to Ben's note");
+  mockParams = { buddyId: 'ben' };
+  view.rerender(<SafeAreaProvider initialMetrics={metrics}><ChatThreadScreen /></SafeAreaProvider>);
+  expect(screen.getByTestId('composer-quote')).toHaveTextContent("Replying to Ben's note");
+  mockParams = { buddyId: 'ben', quote: { request: { type: 'camp_note' }, label: "Ben's camp note" } };
+  view.rerender(<SafeAreaProvider initialMetrics={metrics}><ChatThreadScreen /></SafeAreaProvider>);
+  expect(screen.getByTestId('composer-quote')).toHaveTextContent("Replying to Ben's camp note");
+});
+
 it('re-reads the newest page every 5 seconds: a new message shows and is marked read; then "no longer buddies"', async () => {
   jest.useFakeTimers();
   (fetchThread as jest.Mock)

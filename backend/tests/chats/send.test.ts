@@ -4,7 +4,9 @@ import * as rateLimit from '../../src/lib/rateLimit';
 import { migrateTestDb } from '../setupTestDb';
 import { authHeaderFor } from '../helpers/auth';
 import { orderedPair } from '../../src/buddies/pairs';
+import * as notifyQueue from '../../src/buddies/notifyQueue';
 import { setBuddyNotifyQueue } from '../../src/buddies/notifyQueue';
+import * as presence from '../../src/chats/presence';
 import { blockBuddy, unpair } from '../../src/buddies/relations';
 import { sendMessage } from '../../src/chats/messages';
 import { RecordingQueue, api, buddyUser, pairUp } from '../buddies/helpers';
@@ -216,4 +218,39 @@ it('an unpair right after the send commits still answers the sent message, text 
   const sticker = await post(me.id, sam.id, { kind: 'STICKER', sticker: 'HEART' });
   expect([sticker.status, sticker.body.message]).toEqual([201, expect.objectContaining({ mine: true, kind: 'STICKER', sticker: 'HEART' })]);
   expect(await prisma.message.count({ where: { id: sticker.body.message.id } })).toBe(0);
+});
+
+// Final review I1: once the message is committed, the send answers it. A failure after the commit (the push enqueue,
+// touching presence) is logged by class only; a 500 there would make the app resend and store the message twice.
+it('a failure after the commit still answers the stored message, once, text or sticker, and logs ids and a class only', async () => {
+  const { me, sam } = await buddies();
+  const errors = jest.spyOn(console, 'error').mockImplementation(() => {});
+  const failure = Object.assign(new Error('pool timeout'), { name: 'PrismaClientInitializationError' });
+  jest.spyOn(presence, 'touchPresence').mockRejectedValue(failure);
+  const text = await post(me.id, sam.id, { kind: 'TEXT', text: 'secret after commit' });
+  expect([text.status, text.body.message?.text]).toEqual([201, 'secret after commit']);
+  const sticker = await post(me.id, sam.id, { kind: 'STICKER', sticker: 'HEART' });
+  expect([sticker.status, sticker.body.message?.sticker]).toEqual([201, 'HEART']);
+  jest.spyOn(notifyQueue, 'enqueueBuddyNotice').mockRejectedValueOnce(failure);
+  const again = await post(me.id, sam.id, { kind: 'TEXT', text: 'second secret' });
+  expect(again.status).toBe(201);
+  expect(await prisma.message.count({ where: { senderId: me.id } })).toBe(3);
+  const logged = errors.mock.calls.map((call) => JSON.parse(String(call[0])) as Record<string, unknown>);
+  expect(logged).toEqual([
+    { event: 'chats.after_send_failed', messageId: text.body.message.id, error: 'PrismaClientInitializationError' },
+    { event: 'chats.after_send_failed', messageId: sticker.body.message.id, error: 'PrismaClientInitializationError' },
+    { event: 'chats.after_send_failed', messageId: again.body.message.id, error: 'PrismaClientInitializationError' },
+  ]);
+  for (const call of errors.mock.calls) expect(JSON.stringify(call)).not.toMatch(/secret|Ana|Sam/);
+});
+
+it("the sender's name for the push is read before the write: a failed read stores nothing, so a retry can't duplicate", async () => {
+  const { me, sam } = await buddies();
+  jest.spyOn(console, 'error').mockImplementation(() => {});
+  const real = prisma.user.findUnique.bind(prisma.user);
+  jest.spyOn(prisma.user, 'findUnique').mockImplementation(((args: Parameters<typeof real>[0]) =>
+    args.where.id === me.id && args.select && 'handle' in args.select ? Promise.reject(new Error('pool timeout')) : real(args)) as never);
+  const res = await post(me.id, sam.id, { kind: 'TEXT', text: 'hi' });
+  expect(res.status).toBe(500);
+  expect(await prisma.message.count({ where: { senderId: me.id } })).toBe(0);
 });

@@ -53,3 +53,15 @@ it('is hidden on a server without chats', async () => {
   await act(async () => undefined);
   expect(screen.queryByTestId('chat-settings')).toBeNull();
 });
+
+// Final review M7: a failed read (offline) offers a retry instead of hiding the group for the whole visit.
+it('a failed read says so with Try again, which reads again', async () => {
+  (fetchChatSettings as jest.Mock).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce({ readReceipts: true, activityStatus: false });
+  render(<ChatSettingsSection />);
+  expect(await screen.findByTestId('chat-settings-load-error')).toHaveTextContent("Your chat settings couldn't be loaded.");
+  expect(screen.queryByTestId('chat-read-receipts-toggle')).toBeNull();
+  await act(async () => fireEvent.press(screen.getByTestId('chat-settings-retry')));
+  expect(fetchChatSettings).toHaveBeenCalledTimes(2);
+  expect(screen.getByTestId('chat-activity-toggle').props.value).toBe(false);
+  expect(screen.queryByTestId('chat-settings-load-error')).toBeNull();
+});

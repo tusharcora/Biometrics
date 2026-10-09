@@ -116,7 +116,7 @@ export function ChatsScreen() {
       .then(
         () => {
           setMessage('Sent a Cheer');
-          void load();
+          // The new Social home re-reads the inbox (the effect above): no second read here.
           void refreshSocial();
         },
         (e: unknown) => setMessage(buddyErrorMessage(buddyErrorCode(e))),
@@ -128,14 +128,15 @@ export function ChatsScreen() {
   };
 
   // A note report with "Also block" ticked: the report is filed, then its author is blocked. No second confirm (the
-  // checkbox is explicit; Task 14 ruling), as in the thread.
+  // checkbox is explicit; Task 14 ruling), as in the thread. The new Social home re-reads the inbox.
   const blockNoteAuthor = () => {
     const note = reportNote;
     setReportNote(null);
     if (!note) return;
+    setMessage(null);
     void blockBuddy(note.person.id).then(
       () => {
-        void load();
+        setMessage(`Blocked ${personName(note.person, false)}`);
         void refreshSocial();
         void refreshBuddies();
       },
@@ -218,6 +219,7 @@ export function ChatsScreen() {
                 mine={notes?.mine ?? null}
                 buddies={notes?.buddies ?? []}
                 ringed={unseenStory}
+                now={now}
                 onMine={() => setComposing(true)}
                 onOpen={(n) => navigation.navigate('ChatThread', { buddyId: n.person.id, quote: { request: { type: 'note' }, label: noteQuoteLabel(personName(n.person, false)) } })}
                 onReport={setReportNote}

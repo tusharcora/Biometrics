@@ -85,8 +85,11 @@ export function ChatThreadScreen() {
       mounted.current = false;
     };
   }, []);
-  // Opened again from a story, a note or the camp: the new quote replaces the staged one.
-  useEffect(() => setQuote(route.params.quote ?? null), [route.params.quote]);
+  // Opened again from a story, a note or the camp: the new quote replaces the staged one. Opened again without one (a
+  // push for this thread, a plain navigate) keeps it.
+  useEffect(() => {
+    if (route.params.quote) setQuote(route.params.quote);
+  }, [route.params.quote]);
 
   const stopPolling = useCallback(() => {
     if (timer.current !== null) clearInterval(timer.current);

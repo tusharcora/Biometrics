@@ -128,7 +128,7 @@ export function NotificationsSection() {
             <SettingsRow
               key={key}
               testID={`${id}-row`}
-              icon="people-outline"
+              icon={CHAT_ROWS.some(([chatKey]) => chatKey === key) ? 'chatbubble-outline' : 'people-outline'}
               tint={colors.accent}
               title={title}
               subtitle={subtitle}

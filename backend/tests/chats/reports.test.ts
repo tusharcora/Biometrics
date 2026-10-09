@@ -227,3 +227,13 @@ it('route: 204, 400 invalid_report, 404 report_target_gone, auth required', asyn
   expect([gone.status, gone.body]).toEqual([404, { error: 'report_target_gone' }]);
   expect((await agent.post('/me/reports').send({ targetType: 'message', targetId: message.id, reason: 'spam' })).status).toBe(401);
 });
+
+// Final review M9 (T10): a buddy's message in a conversation I am not part of is not mine to report.
+it("a buddy's message to someone else is report_target_gone", async () => {
+  const { me, sam } = await buddies();
+  const kim = await buddyUser();
+  await pairUp(sam.id, kim.id);
+  const elsewhere = await sendMessage(sam.id, kim.id, { kind: 'TEXT', text: 'not for you' }, NOW);
+  await expect(fileReport(me.id, { targetType: 'message', targetId: elsewhere.id, reason: 'spam' }, NOW)).rejects.toMatchObject({ code: 'report_target_gone' });
+  expect(await prisma.report.count({ where: { reporterId: me.id } })).toBe(0);
+});
