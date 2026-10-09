@@ -34,7 +34,7 @@ The board predates A4. Where they differ, the implementation uses these tokens. 
 | Verdict "Mostly clear" | Instrument Serif 30 | `text-display` (28) Geist 600. The serif is banned |
 | Hero line "Good · +6 vs yesterday · High confidence" | 14 muted | `text-caption` muted, band word in band colour |
 | Summary paragraph | 14/20 | `text-body` on a `bg-card` tile, `rounded-tile` |
-| Eyebrows ("What moved it", "7-day outlook", …) | 11 caps 600 | `SectionLabel` (pixel 11) |
+| Eyebrows ("What moved it", "Last 7 days", …) | 11 caps 600 | `SectionLabel` (pixel 11) |
 | Factor value "58 ms" | 15 | `text-headline` value, `text-caption` unit |
 | Factor points "+14" | 13 / 600 teal | `text-caption` semibold, tone colour |
 | Range caption "Usual 49–55 ms · warm front" | 12 | `text-fine`, muted |
@@ -69,7 +69,7 @@ backend's "Poor" (`configs/v1.ts:23-24`).
 |---|---|---|---|
 | Excellent (≥ 75) | Excellent | **Clear skies** | Sun with four rays (board outlook "Sat", forecast icon) |
 | Good (55–74) | Good | **Mostly clear** | Sun behind cloud (board hero 28×20; outlook "Fri") |
-| Fair (40–54) | Fair | **Cloudy** | Grey cloud (board "Thu" art, see Q1) |
+| Fair (40–54) | Fair | **Cloudy** | Grey cloud, no rain drops (decision 1) |
 | Low (< 40) | Low | **Stormy** | Dark cloud with lightning (board outlook "Mon") |
 | Building (score null, cold start) | — | **Learning your weather** | Sun outline in dotted grey (new, same grid) |
 | No data for D | — | **No reading** | Empty sky: grey dashes (new, same grid) |
@@ -170,13 +170,13 @@ backend's "Poor" (`configs/v1.ts:23-24`).
   - *All excluded / no data*: the card is hidden.
 - **Units.** Debt is shown as `Hh MMm` (`3h 10m`). HRV and RHR are whole numbers. The usual low is floored at 0.
 
-### 3.5 7-day outlook
+### 3.5 Last 7 days
 
-- **Content.** `SectionLabel` "7-day outlook". There are 7 columns, oldest to newest, ending at D. Each column has the
+- **Content.** `SectionLabel` "Last 7 days". There are 7 columns, oldest to newest, ending at D. Each column has the
   weekday (`text-fine`), a small weather icon (22) and the score (`text-caption`). The last column reads "Today" (or the
   weekday of D on a past day) and gets a `bg-muted` 8 px rounded highlight (board: `background: rgb(28,31,38)`).
 - **Naming.** The board's strip is the **trailing** week (Thu…Today match the calendar's 2–8 Oct), not a future
-  forecast. This is built as drawn; see Q3.
+  forecast, so the owner renamed it "Last 7 days" (decision 3, 2026-10-09).
 - **Data.** `outlook[]` (7 entries, `score` or null).
 - **States.** A day with no row or a null score shows the no-reading icon, dimmed, and "—". Tapping a column pushes that
   day's Recovery (same as the calendar).
@@ -199,7 +199,7 @@ are Last night and Clear streak.
   - 2–14: "{Two…} nights at your {goal} goal clear the fog."
   - null: nothing.
 
-  `{goal}` is the goal in hours ("8h", or "7h 30m" when it isn't whole). The number is a word up to ten. See Q2: the
+  `{goal}` is the goal in hours ("8h", or "7h 30m" when it isn't whole). The number is a word up to ten. Owner-approved (decision 2): the
   engine's debt is a floored rolling sum (`scoring/features.ts:10-27`), so a long night does **not** repay debt. Debt
   clears as deficit nights leave the 14-night window. `nightsToClear` is therefore the number of future nights at goal
   until the rolling sum is ≤ the usual high.
@@ -580,14 +580,13 @@ named target for the combined Sleep page work to repoint.
   `tsc --noEmit --types jest,node` stays at the **12-error baseline** (as recorded for S3). No task adds an error.
 - **Privacy.** Recovery values are never logged, cached server-side or sent anywhere but the owner's client.
 
-## 11. Open questions for the owner
+## 11. Owner decisions (2026-10-09)
 
-1. **Fair icon and word.** The board's Fair art is a grey cloud **with rain drops**, but the word is "Cloudy". Should
-   the drops be dropped (spec default: plain cloud), or should Fair be called "Showers"?
-2. **Sleep-debt copy.** The engine's debt is a rolling 14-night shortfall. A long night does not pay it back; nights at
-   goal let old deficits roll off. Is "Two nights at your 8h goal clear the fog" (spec default) fine in place of the
-   board's "Two 8h nights clear the fog"?
-3. **"7-day outlook" label.** The strip shows the **past** week ending today (as drawn). Should the label stay, or
-   change to "Last 7 days"?
-4. **Past days and the forecast.** On a past day the Tomorrow card is hidden (spec default). The alternative is to show
-   "Forecast was {x} · came in at {y}" from the track record when that day has one.
+1. **Fair icon and word.** Fair is a plain grey cloud with no rain drops, named "Cloudy". Rain and storm art is used
+   only for Low.
+2. **Sleep-debt copy.** "Two nights at your 8h goal clear the fog". The engine's debt is a rolling 14-night shortfall
+   that long nights do not pay back.
+3. **Strip label.** The strip is labelled "Last 7 days", because it shows the past week.
+4. **Past days and the forecast.** On a past day the Tomorrow card is hidden (the spec default, kept).
+5. **Recaps shelf.** Today the shelf is the only entry to Recaps, and it lives on the Sleep page. It moves to Home when
+   the Sleep pages merge. That is part of the separate Sleep page work.
