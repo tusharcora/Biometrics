@@ -231,15 +231,18 @@ describe('metric colours', () => {
 describe('type tokens', () => {
   const tailwind = require('../../tailwind.config.js');
 
-  it('registers the sans and display families under the names App.tsx loads', () => {
+  it('registers the sans, pixel and display families under the names App.tsx loads', () => {
     expect(tailwind.theme.extend.fontFamily.sans).toEqual([FONTS.sans]);
+    expect(tailwind.theme.extend.fontFamily.pixel).toEqual([FONTS.pixel]);
     expect(tailwind.theme.extend.fontFamily.display).toEqual([FONTS.display]);
   });
 
-  it('loads every family in FONTS in App.tsx', () => {
+  it('loads every family in FONTS in the one awaited useFonts call in App.tsx', () => {
     const app = fs.readFileSync(path.join(__dirname, '../../App.tsx'), 'utf8');
+    const calls = app.match(/useFonts\(\{[\s\S]*?\}\)/g) ?? [];
+    expect(calls).toHaveLength(1);
     for (const family of Object.values(FONTS)) {
-      expect(app).toContain(`  ${family},`);
+      expect(calls[0]).toMatch(new RegExp(`\\b${family}\\b\\s*[,:]`));
     }
   });
 });

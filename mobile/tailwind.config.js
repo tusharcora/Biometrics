@@ -64,22 +64,34 @@ module.exports = {
         'tip-foreground': 'rgb(var(--color-tip-foreground) / <alpha-value>)',
       },
       // Family names must match FONTS in src/theme.ts (the expo-font keys).
-      // ui/text.tsx swaps `sans` for the matching weight's family.
+      // ui/text.tsx resolves the class list to one of these per Text.
       fontFamily: {
         sans: ['Geist_400Regular'],
+        pixel: ['Silkscreen'],
+        // The serif, until its last call site moves (type-system plan, Task 11).
         display: ['InstrumentSerif_400Regular'],
       },
-      // The type scale. Everything a screen needs is one of these, rather
-      // than a one-off text-[13px]: eyebrow (small caps section labels),
-      // the numeral sizes for scores and metrics, and the serif display sizes.
+      // The type scale (docs/superpowers/specs/2026-10-08-type-system-design.md §2).
+      // Every size is px: NativeWind's native rem is 14, so a rem class would
+      // draw 12.5% small. ui/text.tsx gives each token its weight and face.
       fontSize: {
+        score: ['72px', { lineHeight: '72px', letterSpacing: '-3px' }],
+        number: ['40px', { lineHeight: '44px', letterSpacing: '-1.5px' }],
+        display: ['28px', { lineHeight: '32px', letterSpacing: '-0.4px' }],
+        heading: ['22px', { lineHeight: '27px', letterSpacing: '-0.2px' }],
+        headline: ['17px', { lineHeight: '22px' }],
+        body: ['15px', { lineHeight: '21px' }],
+        caption: ['13px', { lineHeight: '18px' }],
+        fine: ['11px', { lineHeight: '14px' }],
+        'page-title': ['20px', { lineHeight: '26px', letterSpacing: '1px' }],
+        label: ['11px', { lineHeight: '14px', letterSpacing: '1px' }],
+        // The old keys, until their last call site moves (type-system plan, Task 11).
         eyebrow: ['11px', { lineHeight: '14px', letterSpacing: '1.4px' }],
         'numeral-sm': ['22px', { lineHeight: '26px', letterSpacing: '-0.5px' }],
         numeral: ['30px', { lineHeight: '34px', letterSpacing: '-1px' }],
         'numeral-lg': ['48px', { lineHeight: '52px', letterSpacing: '-1.8px' }],
         'numeral-xl': ['80px', { lineHeight: '84px', letterSpacing: '-3px' }],
         'display-sm': ['22px', { lineHeight: '28px' }],
-        display: ['28px', { lineHeight: '32px' }],
         'display-lg': ['38px', { lineHeight: '42px' }],
       },
       borderRadius: {

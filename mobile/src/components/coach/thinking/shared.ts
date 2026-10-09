@@ -1,21 +1,23 @@
 import { useRef } from 'react';
 import { isLoaded } from 'expo-font';
 import { useColorScheme } from 'nativewind';
-import { MONO, chipTextColor } from '../../characters/palette';
+import { chipTextColor } from '../../characters/palette';
 import { CHARACTERS } from '../../characters/registry';
 import type { CharacterId } from '../../characters/types';
 import { useSpriteClock } from '../../characters/useSpriteClock';
+import { FONTS } from '../../../theme';
 
-// The pixel face used by the tag (C) and dialog (I) styles (spec §5). App.tsx
-// loads it without blocking start-up; until it is in, the system mono stands in.
+// The pixel face, for the few inline styles that still name it (the Campfire
+// scene and the share cards). App.tsx waits for it with Geist before anything
+// draws, so it is in; Geist stands in only if the font failed to load.
 export const SILKSCREEN = 'Silkscreen';
-export { MONO, hexAlpha } from '../../characters/palette';
+export { hexAlpha } from '../../characters/palette';
 
 export function pixelFont(): string {
   try {
-    return isLoaded(SILKSCREEN) ? SILKSCREEN : MONO;
+    return isLoaded(SILKSCREEN) ? SILKSCREEN : FONTS.sans;
   } catch {
-    return MONO;
+    return FONTS.sans;
   }
 }
 

@@ -1,17 +1,10 @@
-// Compiles the Button's classes the way NativeWind does on device (tailwind
-// with the project config, then react-native-css-interop at inlineRem 14) and
-// checks the native styles. Class-string tests can't catch a rem-based class
-// drawing 12.5% small, or a colour class that also sets a border width.
-import * as fs from 'fs';
-import * as path from 'path';
+// Compiles the Button's classes the way NativeWind does on device (see
+// jest-mocks/compileClass) and checks the native styles. Class-string tests
+// can't catch a rem-based class drawing 12.5% small, or a colour class that
+// also sets a border width.
 import { buttonTextVariants, buttonVariants, type ButtonSize, type ButtonVariant } from '../../src/components/ui/button';
 import { cn } from '../../src/lib/utils';
-
-process.env.NATIVEWIND_OS = 'ios';
-const postcss = require('postcss');
-const tailwind = require('tailwindcss');
-const { cssToReactNativeRuntime } = require('react-native-css-interop/dist/css-to-rn');
-const projectConfig = require('../../tailwind.config.js');
+import { compile, setsProperty, staticStyle, type Rules } from '../../jest-mocks/compileClass';
 
 const VARIANTS: ButtonVariant[] = ['default', 'outline', 'secondary', 'ghost', 'destructive', 'link'];
 const SIZES: ButtonSize[] = ['xs', 'sm', 'default', 'lg', 'icon', 'icon-xs', 'icon-sm', 'icon-lg'];
@@ -27,32 +20,6 @@ function allClasses(): string[] {
     }
   }
   return [...set].filter(Boolean);
-}
-
-type Rules = Map<string, any>;
-
-async function compile(classes: string[], inlineRem: number): Promise<Rules> {
-  const css = fs.readFileSync(path.join(__dirname, '../../global.css'), 'utf8');
-  const result = await postcss([tailwind({ ...projectConfig, content: [{ raw: classes.join(' ') }] })]).process(css, { from: undefined });
-  const out = cssToReactNativeRuntime(result.css, { inlineRem });
-  return out.rules instanceof Map ? out.rules : new Map(Array.isArray(out.rules) ? out.rules : Object.entries(out.rules ?? {}));
-}
-
-// A class's declarations, each either [{ height: 36 }] (static) or [value, 'prop'] (runtime, e.g. a CSS var).
-function declarations(rules: Rules, cls: string): any[][] {
-  const rule = rules.get(cls);
-  if (!rule) throw new Error(`${cls} did not compile`);
-  return rule.n.flatMap((n: any) => n.d);
-}
-
-const isStatic = (d: any[]) => d.length === 1 && d[0] && typeof d[0] === 'object' && !Array.isArray(d[0]);
-
-function staticStyle(rules: Rules, cls: string): Record<string, unknown> {
-  return Object.assign({}, ...declarations(rules, cls).filter(isStatic).map((d) => d[0]));
-}
-
-function setsProperty(rules: Rules, cls: string, prop: string): boolean {
-  return declarations(rules, cls).some((d) => (isStatic(d) ? prop in d[0] : d[1] === prop));
 }
 
 describe('Button classes compiled for native', () => {

@@ -3,7 +3,7 @@ import { type TextProps } from 'react-native';
 import Animated, { Easing, useAnimatedStyle, useSharedValue, withTiming } from 'react-native-reanimated';
 import { cn } from '../../lib/utils';
 import { MOTION } from '../../theme';
-import { fontFamilyFor } from './text';
+import { textStyleFor } from './text';
 
 interface StreamingTextProps extends TextProps {
   text: string;
@@ -36,7 +36,7 @@ export function StreamingText({ text, className, duration = MOTION.duration.norm
   const animatedStyle = useAnimatedStyle(() => ({ opacity: opacity.value }));
 
   return (
-    <Animated.Text className={cn('text-foreground', className)} style={[{ fontFamily: fontFamilyFor(className) }, style, animatedStyle]} {...props}>
+    <Animated.Text className={cn('text-foreground', className)} style={[textStyleFor(className), style, animatedStyle]} {...props}>
       {text}
     </Animated.Text>
   );

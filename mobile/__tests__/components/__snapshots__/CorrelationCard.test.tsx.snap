@@ -9,11 +9,11 @@ exports[`CorrelationCard matches its snapshot for a negative lag-1 pattern 1`] =
     className="flex-row items-center justify-between gap-2"
   >
     <Text
-      className="text-eyebrow font-semibold uppercase text-muted-foreground flex-1"
+      className="text-label uppercase text-muted-foreground flex-1"
       style={
         [
           {
-            "fontFamily": "Geist_600SemiBold",
+            "fontFamily": "Silkscreen",
           },
           undefined,
         ]
@@ -374,11 +374,11 @@ exports[`CorrelationCard matches its snapshot for a positive lag-3 small-sample 
     className="flex-row items-center justify-between gap-2"
   >
     <Text
-      className="text-eyebrow font-semibold uppercase text-muted-foreground flex-1"
+      className="text-label uppercase text-muted-foreground flex-1"
       style={
         [
           {
-            "fontFamily": "Geist_600SemiBold",
+            "fontFamily": "Silkscreen",
           },
           undefined,
         ]

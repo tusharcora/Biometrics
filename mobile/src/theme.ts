@@ -195,19 +195,25 @@ export const COLORS = {
   },
 };
 
-// Loaded once in App.tsx (expo-font). React Native picks a face by family
-// name rather than by weight, so each weight is its own family; ui/text.tsx
-// maps the font-medium/semibold/bold classes onto these. Geist carries the UI
-// and the big tabular numerals; Instrument Serif is the editorial voice
-// (greetings, verdicts, the coach's digest) and is only used at display sizes.
+// Loaded once in App.tsx (expo-font), all before the splash screen hides.
+// React Native picks a face by family name rather than by weight, so each
+// weight is its own family; ui/text.tsx maps the classes onto these. Geist is
+// everything you read; Silkscreen (pixel) is page titles and small labels.
 export const FONTS = {
   sans: 'Geist_400Regular',
   sansMedium: 'Geist_500Medium',
   sansSemibold: 'Geist_600SemiBold',
   sansBold: 'Geist_700Bold',
   sansExtrabold: 'Geist_800ExtraBold',
+  pixel: 'Silkscreen',
+  // The serif, until its last call site moves (type-system plan, Task 11).
   display: 'InstrumentSerif_400Regular',
 } as const;
+
+// The type tokens: the fontSize keys in tailwind.config.js (text-score …
+// text-label). lib/utils registers them with tailwind-merge, and Button keeps
+// them off its spinner's colour.
+export const TYPE_TOKENS = ['score', 'number', 'display', 'heading', 'headline', 'body', 'caption', 'fine', 'page-title', 'label'] as const;
 
 // Duration/easing constants for score-transition animations, so no component
 // inlines its own. Easings are cubic-bezier control points (not Reanimated

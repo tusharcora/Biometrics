@@ -3,7 +3,8 @@ import { StyleSheet, Text } from 'react-native';
 import { render, act } from '@testing-library/react-native';
 import { ThinkingRow } from '../../src/components/coach/thinking/ThinkingRow';
 import { ReplyFrame, REPLY_FRAME_STYLES } from '../../src/components/coach/thinking/ReplyFrame';
-import { MONO, SILKSCREEN } from '../../src/components/coach/thinking/shared';
+import { SILKSCREEN } from '../../src/components/coach/thinking/shared';
+import { FONTS } from '../../src/theme';
 import { THINKING_TEXTS } from '../../src/components/characters/thinking';
 import { characterLabel } from '../../jest-mocks/characterContext';
 
@@ -151,10 +152,10 @@ it('tag shows a pixel-font THINKING tag over the personality line', () => {
   expect(s.getByText(/Boba is stirring the pearls/)).toBeTruthy();
 });
 
-it('tag falls back to the system mono face until Silkscreen has loaded', () => {
+it('tag falls back to Geist, never a mono face, if Silkscreen did not load', () => {
   mockFontLoaded = false;
   const s = render(<ThinkingRow style="tag" characterId="boba" steps={[]} paused testID="row" />);
-  expect(flatStyle(s.getByText('THINKING').props.style).fontFamily).toBe(MONO);
+  expect(flatStyle(s.getByText('THINKING').props.style).fontFamily).toBe(FONTS.sans);
 });
 
 it('shimmer counts the seconds since it appeared', () => {
