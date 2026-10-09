@@ -105,19 +105,19 @@ export function MomentsCard({
             {ring.map((r) => (r.d ? <Path key={r.type} d={r.d} fill={palette[STAGE_TOKEN[r.type]]} /> : null))}
           </Svg>
           <View pointerEvents="none" className="absolute inset-0 items-center justify-center">
-            <Text className="font-display text-display-sm">{formatDuration(minutesAsleep)}</Text>
-            <Text className="text-[11px] text-muted-foreground">asleep</Text>
+            <Text className="text-heading tabular-nums">{formatDuration(minutesAsleep)}</Text>
+            <Text className="text-caption text-muted-foreground">asleep</Text>
           </View>
         </View>
         <View className="flex-1 gap-2">
           {MIX.map((m) => (
             <View key={m.type} className="flex-row items-center gap-2">
               <View style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: palette[STAGE_TOKEN[m.type]] }} />
-              <Text className="flex-1 text-[13px]">{m.label}</Text>
-              <Text className="text-[13px] text-muted-foreground" style={{ fontVariant: ['tabular-nums'] }}>
+              <Text className="flex-1 text-caption">{m.label}</Text>
+              <Text className="text-caption text-muted-foreground tabular-nums">
                 {formatShortDuration(minutes[m.type])}
               </Text>
-              <Text className="w-9 text-right text-[13px]" style={{ fontVariant: ['tabular-nums'] }}>
+              <Text className="w-9 text-right text-caption tabular-nums">
                 {`${pct(m.type)}%`}
               </Text>
             </View>
@@ -129,10 +129,10 @@ export function MomentsCard({
         <View key={m.title} testID="moment-row" className="flex-row items-center gap-3 border-t border-border pt-3">
           <View style={{ width: 4, height: 32, borderRadius: 2, backgroundColor: palette[STAGE_TOKEN[m.type]] }} />
           <View className="flex-1 gap-px">
-            <Text className="text-sm font-medium">{m.title}</Text>
-            <Text className="text-xs text-muted-foreground">{m.detail}</Text>
+            <Text className="text-body font-medium">{m.title}</Text>
+            <Text className="text-caption text-muted-foreground">{m.detail}</Text>
           </View>
-          <Text className="font-display text-display-sm">{m.value}</Text>
+          <Text className="text-heading tabular-nums">{m.value}</Text>
         </View>
       ))}
     </Card>

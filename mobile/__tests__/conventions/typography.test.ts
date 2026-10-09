@@ -62,21 +62,6 @@ const EXEMPT: Exception[] = [
 
 // prettier-ignore
 const PENDING: Exception[] = [
-  // Task 5
-  { file: 'screens/ActivityScreen.tsx', count: 2, reason: 'not migrated yet (Task 5)' },
-  { file: 'components/activity-heatmap.tsx', count: 15, reason: 'not migrated yet (Task 5)' },
-  { file: 'components/activity-sheets.tsx', count: 20, reason: 'not migrated yet (Task 5)' },
-  { file: 'components/activity/UsualTiles.tsx', count: 3, reason: 'not migrated yet (Task 5)' },
-  { file: 'screens/SleepScreen.tsx', count: 6, reason: 'not migrated yet (Task 5)' },
-  { file: 'screens/SleepNightScreen.tsx', count: 11, reason: 'not migrated yet (Task 5)' },
-  { file: 'screens/BedtimeGoalScreen.tsx', count: 9, reason: 'not migrated yet (Task 5)' },
-  { file: 'components/sleep/MomentsCard.tsx', count: 10, reason: 'not migrated yet (Task 5)' },
-  { file: 'components/sleep/RegularityCard.tsx', count: 6, reason: 'not migrated yet (Task 5)' },
-  { file: 'components/sleep/Section.tsx', count: 1, reason: 'not migrated yet (Task 5)' },
-  { file: 'components/sleep/SleepCyclesCard.tsx', count: 7, reason: 'not migrated yet (Task 5)' },
-  { file: 'components/sleep/StageLanes.tsx', count: 5, reason: 'not migrated yet (Task 5)' },
-  { file: 'components/sleep/StageStrip.tsx', count: 1, reason: 'not migrated yet (Task 5)' },
-  { file: 'components/sleep/WindowChart.tsx', count: 3, reason: 'not migrated yet (Task 5)' },
   // Task 6
   { file: 'components/coach-digest-card.tsx', count: 9, reason: 'not migrated yet (Task 6)' },
   { file: 'components/coach/CoachToday.tsx', count: 9, reason: 'not migrated yet (Task 6)' },

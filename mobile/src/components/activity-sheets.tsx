@@ -35,8 +35,8 @@ function LinkTile({ testID, icon, color, label, value, onPress }: LinkTileProps)
         <Ionicons name={icon} size={17} color={color} />
       </View>
       <View className="flex-1">
-        <Text className="text-xs text-muted-foreground">{label}</Text>
-        <Text className="text-lg font-bold" style={{ fontVariant: ['tabular-nums'] }}>
+        <Text className="text-caption text-muted-foreground">{label}</Text>
+        <Text className="text-headline tabular-nums" numberOfLines={1} adjustsFontSizeToFit>
           {value}
         </Text>
       </View>
@@ -60,21 +60,21 @@ export function DayDetail({ date, steps, goal, average, sleepLink }: DayDetailPr
   const comparison = steps === null ? null : compareToAverage(steps, average);
   return (
     <View testID="day-detail" className="gap-2 pb-2">
-      <Text className="text-sm text-muted-foreground">{formatDayTitle(date)}</Text>
+      <Text className="text-caption text-muted-foreground">{formatDayTitle(date)}</Text>
       {steps === null ? (
-        <Text testID="day-detail-empty" className="text-base">
+        <Text testID="day-detail-empty" className="text-body">
           No steps were recorded for this day.
         </Text>
       ) : (
         <>
-          <Text testID="day-detail-steps" className="text-numeral-lg font-bold" style={{ fontVariant: ['tabular-nums'] }}>
+          <Text testID="day-detail-steps" className="text-number" numberOfLines={1} adjustsFontSizeToFit>
             {`${formatSteps(steps)} steps`}
           </Text>
-          <Text testID="day-detail-goal" className="text-base">
+          <Text testID="day-detail-goal" className="text-body">
             {`${Math.round((steps / goal) * 100)}% of your ${formatSteps(goal)}-step goal`}
           </Text>
           {comparison ? (
-            <Text testID="day-detail-comparison" className="text-sm text-muted-foreground">
+            <Text testID="day-detail-comparison" className="text-caption text-muted-foreground">
               {comparison}
             </Text>
           ) : null}
@@ -106,7 +106,7 @@ export function InBedShare({ minutesAsleep, minutesInBed, testID }: { minutesAsl
       <View className="h-2.5 overflow-hidden rounded-full" style={{ backgroundColor: palette.sleepHeat1 }}>
         <View className="h-full rounded-full" style={{ width: `${share * 100}%`, backgroundColor: palette.metricSleep }} />
       </View>
-      <Text testID={testID} className="text-xs text-muted-foreground">
+      <Text testID={testID} className="text-caption text-muted-foreground">
         {`${formatDuration(minutesInBed)} in bed · ${Math.round(share * 100)}% of it asleep`}
       </Text>
     </>
@@ -129,20 +129,20 @@ export function NightDetail({ date, night, goal, average, stepsLink, onOpenFull 
   const comparison = night ? compareSleepToAverage(night.minutesAsleep, average) : null;
   return (
     <View testID="night-detail" className="gap-2 pb-2">
-      <Text testID="night-detail-title" className="text-sm text-muted-foreground">{`Night ending ${formatDayTitle(date)}`}</Text>
+      <Text testID="night-detail-title" className="text-caption text-muted-foreground">{`Night ending ${formatDayTitle(date)}`}</Text>
       {night === null ? (
-        <Text testID="night-detail-empty" className="text-base">
+        <Text testID="night-detail-empty" className="text-body">
           No sleep was recorded for this night.
         </Text>
       ) : (
         <>
           <View className="flex-row items-baseline gap-2">
-            <Text testID="night-detail-asleep" className="text-numeral-lg font-bold" style={{ fontVariant: ['tabular-nums'] }}>
+            <Text testID="night-detail-asleep" className="text-number">
               {formatDuration(night.minutesAsleep)}
             </Text>
-            <Text className="text-base text-muted-foreground">asleep</Text>
+            <Text className="text-body text-muted-foreground">asleep</Text>
           </View>
-          <Text testID="night-detail-goal" className="text-base">
+          <Text testID="night-detail-goal" className="text-body">
             {`${Math.round((night.minutesAsleep / goal) * 100)}% of your ${METRIC_CONFIG.SLEEP.goalLabel}`}
           </Text>
 
@@ -150,14 +150,14 @@ export function NightDetail({ date, night, goal, average, stepsLink, onOpenFull 
             <View testID="night-detail-window" className="mt-2 gap-2 rounded-tile bg-muted p-3.5">
               <View className="flex-row justify-between">
                 <View className="gap-0.5">
-                  <Text className="text-[11px] text-muted-foreground">Bedtime</Text>
-                  <Text testID="night-detail-bedtime" className="text-sm font-semibold" style={{ fontVariant: ['tabular-nums'] }}>
+                  <Text className="text-caption text-muted-foreground">Bedtime</Text>
+                  <Text testID="night-detail-bedtime" className="text-body font-semibold tabular-nums">
                     {formatClock(night.bedtime)}
                   </Text>
                 </View>
                 <View className="items-end gap-0.5">
-                  <Text className="text-[11px] text-muted-foreground">Woke</Text>
-                  <Text testID="night-detail-wake" className="text-sm font-semibold" style={{ fontVariant: ['tabular-nums'] }}>
+                  <Text className="text-caption text-muted-foreground">Woke</Text>
+                  <Text testID="night-detail-wake" className="text-body font-semibold tabular-nums">
                     {formatClock(night.wakeTime)}
                   </Text>
                 </View>
@@ -175,8 +175,8 @@ export function NightDetail({ date, night, goal, average, stepsLink, onOpenFull 
           <View testID="night-detail-score" className="flex-1 flex-row items-center gap-2.5 rounded-tile bg-muted px-3 py-3">
             <Ring size={36} strokeWidth={5} color={palette.metricSleep} trackColor={palette.sleepHeat1} percent={night.sleepScore / 100} />
             <View>
-              <Text className="text-xs text-muted-foreground">Sleep score</Text>
-              <Text className="text-lg font-bold" style={{ fontVariant: ['tabular-nums'] }}>
+              <Text className="text-caption text-muted-foreground">Sleep score</Text>
+              <Text className="text-headline tabular-nums">
                 {String(night.sleepScore)}
               </Text>
             </View>
@@ -193,7 +193,7 @@ export function NightDetail({ date, night, goal, average, stepsLink, onOpenFull 
       </View>
 
       {comparison ? (
-        <Text testID="night-detail-comparison" className="text-sm text-muted-foreground">
+        <Text testID="night-detail-comparison" className="text-caption text-muted-foreground">
           {comparison}
         </Text>
       ) : null}

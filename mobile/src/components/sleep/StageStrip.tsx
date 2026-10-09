@@ -95,7 +95,7 @@ export function StageLegend() {
       {STAGE_ORDER.map((s) => (
         <View key={s.type} className="flex-row items-center gap-1.5">
           <View style={{ width: 8, height: 8, borderRadius: 2, backgroundColor: palette[STAGE_TOKEN[s.type]] }} />
-          <Text className="text-xs text-muted-foreground">{s.label}</Text>
+          <Text className="text-fine text-muted-foreground">{s.label}</Text>
         </View>
       ))}
     </View>

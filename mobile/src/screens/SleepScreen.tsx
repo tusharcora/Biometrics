@@ -172,7 +172,7 @@ export function SleepScreen() {
                   Why this score
                 </Button>
               ) : (
-                <Text className="text-sm text-muted-foreground">Your Sleep Score will appear once a night of sleep has been recorded.</Text>
+                <Text className="text-caption text-muted-foreground">Your Sleep Score will appear once a night of sleep has been recorded.</Text>
               )}
             </View>
           </Card>
@@ -196,7 +196,7 @@ export function SleepScreen() {
               onPressNight={openNight}
             />
             {nights.data.backfillPending ? (
-              <Text testID="sleep-older-nights" className="text-xs text-muted-foreground">
+              <Text testID="sleep-older-nights" className="text-caption text-muted-foreground">
                 Reading older nights…
               </Text>
             ) : null}
@@ -210,11 +210,11 @@ export function SleepScreen() {
         {lastNight ? (
           <Card testID="sleep-last-night" className="gap-3">
             <SectionLabel>Last night</SectionLabel>
-            <Text className="font-display text-display">{formatDuration(lastNight.minutesAsleep)}</Text>
+            <Text className="text-display tabular-nums">{formatDuration(lastNight.minutesAsleep)}</Text>
             {detail?.phase === 'loading' ? <Skeleton className="h-4 w-full rounded-full" /> : null}
             {detail?.phase === 'error' ? (
               <View className="flex-row items-center justify-between gap-3">
-                <Text className="flex-1 text-sm text-muted-foreground">Stages could not be loaded.</Text>
+                <Text className="flex-1 text-caption text-muted-foreground">Stages could not be loaded.</Text>
                 <Button testID="sleep-last-night-retry" variant="secondary" size="sm" onPress={loadDetail}>
                   Try again
                 </Button>
@@ -259,11 +259,11 @@ export function SleepScreen() {
                 {goal.phase === 'loading' ? (
                   <Skeleton className="h-5 w-40 rounded-full" />
                 ) : (
-                  <Text className="text-base font-semibold">{goalLine(goal.data)}</Text>
+                  <Text className="text-body font-semibold">{goalLine(goal.data)}</Text>
                 )}
                 {/* The reminder needs a bedtime, so it is only mentioned once one is set. */}
                 {goal.phase === 'ready' && goal.data.bedtimeGoal && reminder ? (
-                  <Text testID="sleep-goal-reminder" className="text-sm text-muted-foreground">
+                  <Text testID="sleep-goal-reminder" className="text-caption text-muted-foreground">
                     {reminder.enabled ? `Reminder ${reminder.leadMinutes} min before bed` : 'Reminder off'}
                   </Text>
                 ) : null}

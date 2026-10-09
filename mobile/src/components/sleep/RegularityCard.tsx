@@ -31,7 +31,7 @@ export function RegularityCard({ state, coachName, onRetry }: { state: Regularit
   if (state.phase === 'error') {
     return (
       <Card testID="sleep-regularity-error" className="items-center gap-3 py-6">
-        <Text className="text-center text-sm text-muted-foreground">Sleep regularity could not be loaded.</Text>
+        <Text className="text-center text-caption text-muted-foreground">Sleep regularity could not be loaded.</Text>
         <Button testID="sleep-regularity-retry" variant="secondary" size="sm" onPress={onRetry}>
           Try again
         </Button>
@@ -48,7 +48,7 @@ export function RegularityCard({ state, coachName, onRetry }: { state: Regularit
     <Card testID="sleep-regularity" className="gap-3">
       <SectionLabel>Sleep regularity</SectionLabel>
       {data.score === null ? (
-        <Text testID="sleep-regularity-empty" className="text-base">
+        <Text testID="sleep-regularity-empty" className="text-body">
           {`Not enough nights yet. ${nightsToGo(data.days, data.nights)} more to go.`}
         </Text>
       ) : (
@@ -56,12 +56,12 @@ export function RegularityCard({ state, coachName, onRetry }: { state: Regularit
           <ScoreRing score={data.score} size={64} strokeWidth={7} numeralClassName="text-headline" />
           <View className="flex-1 gap-1">
             {data.bedtimeSpreadMinutes !== null ? (
-              <Text testID="sleep-regularity-bedtime-spread" className="text-sm">
+              <Text testID="sleep-regularity-bedtime-spread" className="text-body">
                 {`Bedtime ±${Math.round(data.bedtimeSpreadMinutes)} min`}
               </Text>
             ) : null}
             {data.wakeSpreadMinutes !== null ? (
-              <Text testID="sleep-regularity-wake-spread" className="text-sm">
+              <Text testID="sleep-regularity-wake-spread" className="text-body">
                 {`Wake time ±${Math.round(data.wakeSpreadMinutes)} min`}
               </Text>
             ) : null}
@@ -101,10 +101,10 @@ export function RegularityCard({ state, coachName, onRetry }: { state: Regularit
           })}
         </View>
       ) : null}
-      <Text className="text-xs text-muted-foreground">
+      <Text className="text-caption text-muted-foreground">
         {`Bedtime and wake time over the last ${data.days} nights. Your Sleep score's Bedtime consistency uses bedtime over 14 nights.`}
       </Text>
-      {line ? <Text testID="sleep-regularity-coach" className="text-sm">{line}</Text> : null}
+      {line ? <Text testID="sleep-regularity-coach" className="text-body">{line}</Text> : null}
     </Card>
   );
 }

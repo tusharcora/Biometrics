@@ -47,24 +47,24 @@ export function SleepCyclesCard({ stages, clock }: { stages: StageSegment[]; clo
     <Card testID="cycles-card" className="gap-3.5">
       <View className="flex-row items-baseline justify-between">
         <SectionLabel>{cycles.length > 0 ? `${cycles.length} sleep ${cycles.length === 1 ? 'cycle' : 'cycles'}` : 'Sleep cycles'}</SectionLabel>
-        {averageMinutes !== null ? <Text className="text-xs text-muted-foreground">{`avg ${formatShortDuration(averageMinutes)}`}</Text> : null}
+        {averageMinutes !== null ? <Text className="text-caption text-muted-foreground">{`avg ${formatShortDuration(averageMinutes)}`}</Text> : null}
       </View>
 
       {cycles.length === 0 ? (
-        <Text className="text-sm text-muted-foreground">Not enough REM sleep to split this night into cycles.</Text>
+        <Text className="text-caption text-muted-foreground">Not enough REM sleep to split this night into cycles.</Text>
       ) : null}
 
       {cycles.map((c) => (
         <View key={c.n} testID="cycle-row" className="flex-row items-start gap-3">
           <View className="h-6 w-6 items-center justify-center rounded-full bg-muted">
-            <Text className="text-xs font-semibold">{String(c.n)}</Text>
+            <Text className="text-caption font-semibold">{String(c.n)}</Text>
           </View>
           <View className="flex-1 gap-1.5">
             <View className="flex-row items-baseline justify-between">
-              <Text className="text-sm font-medium" style={{ fontVariant: ['tabular-nums'] }}>
+              <Text className="text-body font-medium tabular-nums">
                 {formatShortDuration(c.minutes)}
               </Text>
-              <Text className="text-xs text-muted-foreground" style={{ fontVariant: ['tabular-nums'] }}>
+              <Text className="text-caption text-muted-foreground tabular-nums">
                 {formatClock(clock.at(c.start))}
               </Text>
             </View>
@@ -84,14 +84,14 @@ export function SleepCyclesCard({ stages, clock }: { stages: StageSegment[]; clo
                 />
               ))}
             </View>
-            <Text className="text-xs text-muted-foreground">
+            <Text className="text-caption text-muted-foreground">
               {`Deep ${formatShortDuration(c.stageMinutes.DEEP)} · REM ${formatShortDuration(c.stageMinutes.REM)} · Light ${formatShortDuration(c.stageMinutes.LIGHT)}`}
             </Text>
           </View>
         </View>
       ))}
 
-      {footer ? <Text className="text-xs text-muted-foreground">{footer}</Text> : null}
+      {footer ? <Text className="text-caption text-muted-foreground">{footer}</Text> : null}
     </Card>
   );
 }

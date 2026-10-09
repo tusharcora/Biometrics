@@ -224,7 +224,7 @@ export function BedtimeGoalScreen() {
               onMinus={() => setDraft((d) => ({ ...d, wake: shiftClock(d.wake, -STEP), timesTouched: true }))}
               onPlus={() => setDraft((d) => ({ ...d, wake: shiftClock(d.wake, STEP), timesTouched: true }))}
             />
-            <Text testID="goal-window-line" className="text-sm" style={{ color: short ? colors.scoreFair : colors.muted }}>
+            <Text testID="goal-window-line" className="text-caption" style={{ color: short ? colors.scoreFair : colors.muted }}>
               {sameTimes
                 ? "Bedtime and wake time can't be the same."
                 : `That's ${formatGoalDuration(windowMinutes)} in bed. Your goal is ${formatGoalDuration(draft.sleep)} asleep.`}
@@ -252,7 +252,7 @@ export function BedtimeGoalScreen() {
             {saving ? 'Saving…' : 'Save'}
           </Button>
           {saveFailed ? (
-            <Text testID="goal-error" className="px-1 text-center text-sm text-destructive">
+            <Text testID="goal-error" className="px-1 text-center text-caption text-destructive">
               Your goal couldn't be saved. Check your connection and try again.
             </Text>
           ) : null}
@@ -277,11 +277,11 @@ export function BedtimeGoalScreen() {
             }
           />
           <View className="gap-3 px-4 py-3">
-            <Text className="text-sm text-muted-foreground">Before bedtime</Text>
+            <Text className="text-caption text-muted-foreground">Before bedtime</Text>
             <SegmentedControl testID="winddown-lead" options={LEAD_OPTIONS} value={`${lead}`} onChange={changeLead} />
             <View className="rounded-xl bg-muted px-3 py-2.5">
-              <Text testID="winddown-preview" className="text-sm">
-                <Text className="text-sm font-semibold">{`${coachName}: `}</Text>
+              <Text testID="winddown-preview" className="text-body">
+                <Text className="text-body font-semibold">{`${coachName}: `}</Text>
                 {`Wind-down time. Bed in ${lead} min.`}
               </Text>
             </View>
@@ -289,14 +289,14 @@ export function BedtimeGoalScreen() {
         </SettingsGroup>
         {reminderNote === 'denied' ? (
           <View className="gap-1 px-4">
-            <Text testID="winddown-denied" className="text-xs text-muted-foreground">Notifications are off for Biometrics. Turn them on in Settings.</Text>
+            <Text testID="winddown-denied" className="text-caption text-muted-foreground">Notifications are off for Biometrics. Turn them on in Settings.</Text>
             <Button testID="winddown-settings" variant="link" size="xs" accessibilityRole="link" className="self-start" onPress={() => void Linking.openSettings()}>
               Open Settings
             </Button>
           </View>
         ) : null}
         {reminderNote === 'error' ? (
-          <Text testID="winddown-error" className="px-4 text-sm text-destructive">
+          <Text testID="winddown-error" className="px-4 text-caption text-destructive">
             Couldn't set the reminder. Try again.
           </Text>
         ) : null}
@@ -326,9 +326,9 @@ function Stepper({ id, label, value, onMinus, onPlus, minusDisabled, plusDisable
   );
   return (
     <View className="flex-row items-center gap-3">
-      <Text className="flex-1 text-base">{label}</Text>
+      <Text className="flex-1 text-body">{label}</Text>
       {button(`${id}-minus`, 'remove', onMinus, minusDisabled, `${label}, minus 15 minutes`)}
-      <Text testID={`${id}-value`} className="min-w-[84px] text-center text-base font-semibold" style={{ fontVariant: ['tabular-nums'] }}>
+      <Text testID={`${id}-value`} className="min-w-[84px] text-center text-body font-semibold tabular-nums">
         {value}
       </Text>
       {button(`${id}-plus`, 'add', onPlus, plusDisabled, `${label}, plus 15 minutes`)}

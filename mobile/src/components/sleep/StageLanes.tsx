@@ -75,17 +75,17 @@ export function StageLanes({ stages, clock }: { stages: StageSegment[]; clock: N
             <View key={type} testID={`stage-lane-${type}`} style={{ height: LANE_ROW, justifyContent: 'center' }}>
               <View className="flex-row items-center gap-1.5">
                 <View style={{ width: 7, height: 7, borderRadius: 2, backgroundColor: colour(type) }} />
-                <Text className="text-[13px] font-semibold" style={{ color: palette[LABEL_TOKEN[type]] }}>
+                <Text className="text-caption font-semibold" style={{ color: palette[LABEL_TOKEN[type]] }}>
                   {STAGE_ORDER.find((s) => s.type === type)!.label}
                 </Text>
               </View>
-              <Text className="pl-[13px] text-xs text-muted-foreground" style={{ fontVariant: ['tabular-nums'] }}>
+              <Text className="pl-[13px] text-caption text-muted-foreground tabular-nums">
                 {formatShortDuration(layout.minutes[type])}
               </Text>
             </View>
           ))}
           <View style={{ height: PILL_ROW, justifyContent: 'center' }}>
-            <Text className="text-[13px] font-medium">Cycles</Text>
+            <Text className="text-caption font-medium">Cycles</Text>
           </View>
         </View>
 
@@ -191,7 +191,7 @@ export function StageLanes({ stages, clock }: { stages: StageSegment[]; clock: N
                 style={{ position: 'absolute', left: p.left, top: 6, width: p.width, height: 22 }}
               >
                 <View className="flex-1 items-center justify-center rounded-full bg-muted">
-                  <Text className="text-xs font-medium">{String(p.n)}</Text>
+                  <Text className="text-fine">{String(p.n)}</Text>
                 </View>
               </Animated.View>
             ))}
@@ -201,7 +201,7 @@ export function StageLanes({ stages, clock }: { stages: StageSegment[]; clock: N
 
       <View testID="stage-lanes-axis" className="flex-row justify-between" style={{ marginLeft: GUTTER }}>
         {axis.map((label, i) => (
-          <Text key={i} className="text-xs text-muted-foreground" style={{ fontVariant: ['tabular-nums'] }}>
+          <Text key={i} className="text-fine text-muted-foreground tabular-nums">
             {label}
           </Text>
         ))}

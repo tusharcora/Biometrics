@@ -10,6 +10,7 @@ import { fetchSleep, fetchSleepGoal } from '../api/sleep';
 import { ActivityHeatmap, type SleepState } from '../components/activity-heatmap';
 import { UsualTiles } from '../components/activity/UsualTiles';
 import { Button } from '../components/ui/button';
+import { PageTitle } from '../components/ui/page-title';
 import { Skeleton } from '../components/ui/skeleton';
 import { SectionLabel } from '../components/ui/section-label';
 import { Text } from '../components/ui/text';
@@ -137,7 +138,7 @@ export function ActivityScreen() {
         {state.phase !== 'ready' ? (
           <View className="gap-1">
             <SectionLabel>Steps & sleep</SectionLabel>
-            <Text className="font-display text-display-lg">Activity</Text>
+            <PageTitle>Activity</PageTitle>
           </View>
         ) : null}
 
