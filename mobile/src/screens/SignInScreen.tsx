@@ -9,6 +9,7 @@ import { useGoogleIdToken } from '../auth/useGoogleIdToken';
 import { AuthError, messageFor } from '../auth/authErrors';
 import type { AuthStackParamList } from '../navigation/AuthNavigator';
 import { Text } from '../components/ui/text';
+import { PageTitle } from '../components/ui/page-title';
 import { Button, buttonIconSize } from '../components/ui/button';
 import { TextField } from '../components/ui/text-field';
 import { GoogleMark, OnboardingHero } from '../components/onboarding-hero';
@@ -81,10 +82,10 @@ export function SignInScreen({ navigation, route }: Props) {
       <ScrollView contentContainerClassName="flex-grow justify-center gap-8 px-6 py-8" keyboardShouldPersistTaps="handled">
         <Animated.View entering={FadeInDown.duration(450)} className="items-center gap-3">
           <OnboardingHero />
-          <Text className="font-display text-[56px] leading-[60px]">Biometrics</Text>
-          <Text className="text-base text-muted-foreground">Your health data, unified.</Text>
+          <PageTitle className="text-[28px] leading-[34px] tracking-[1px]">Biometrics</PageTitle>
+          <Text className="text-body text-muted-foreground">Your health data, unified.</Text>
         </Animated.View>
-        {notice ? <Text className="text-center text-sm text-foreground">{notice}</Text> : null}
+        {notice ? <Text className="text-center text-caption text-foreground">{notice}</Text> : null}
         <Animated.View entering={FadeInDown.delay(120).duration(450)} className="gap-3">
           <Button
             testID="apple-sign-in-button"
@@ -110,7 +111,7 @@ export function SignInScreen({ navigation, route }: Props) {
         </Animated.View>
         <View className="flex-row items-center gap-3">
           <View className="h-px flex-1 bg-border" />
-          <Text className="text-xs text-muted-foreground">or with email</Text>
+          <Text className="text-caption text-muted-foreground">or with email</Text>
           <View className="h-px flex-1 bg-border" />
         </View>
         <View className="gap-3">
@@ -131,7 +132,7 @@ export function SignInScreen({ navigation, route }: Props) {
           ) : null}
           <TextField label="Email" testID="email-input" value={email} onChangeText={setEmail} keyboardType="email-address" autoComplete="email" />
           <TextField label="Password" testID="password-input" value={password} onChangeText={setPassword} secure autoComplete="password" />
-          {error ? <Text testID="sign-in-error" className="text-sm text-destructive">{error}</Text> : null}
+          {error ? <Text testID="sign-in-error" className="text-caption text-destructive">{error}</Text> : null}
           {unverified ? (
             <Button
               testID="resend-verification-button"

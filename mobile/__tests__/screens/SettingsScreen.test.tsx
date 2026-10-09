@@ -23,9 +23,10 @@ beforeEach(() => {
 
 describe('SettingsScreen time zone', () => {
   it('shows the current zone and hides "Use device time zone" while following the device', async () => {
-    const { getByTestId, queryByTestId } = render(<SettingsScreen />);
+    const { getByTestId, queryByTestId, getByRole } = render(<SettingsScreen />);
 
     await waitFor(() => expect(getByTestId('timezone-value')).toHaveTextContent('America/Los_Angeles'));
+    expect(getByRole('header', { name: 'Profile' })).toHaveTextContent('PROFILE');
     expect(queryByTestId('use-device-timezone-button')).toBeNull();
   });
 

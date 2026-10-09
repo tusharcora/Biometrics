@@ -7,6 +7,7 @@ import * as WebBrowser from 'expo-web-browser';
 import { useNavigation } from '@react-navigation/native';
 import { apiFetch } from '../api/client';
 import { Text } from '../components/ui/text';
+import { PageTitle } from '../components/ui/page-title';
 import { Button } from '../components/ui/button';
 import { Character } from '../components/characters/Character';
 import { useScreenFocused } from '../characters/useScreenFocused';
@@ -79,8 +80,8 @@ export function ConnectHealthScreen() {
         </View>
 
         <View className="items-center gap-2 px-2">
-          <Text className="font-display text-display-lg text-center">Connect your Google Health</Text>
-          <Text className="text-center text-base text-muted-foreground">
+          <PageTitle className="text-center">Connect your Google Health</PageTitle>
+          <Text className="text-center text-body text-muted-foreground">
             We'll sync your steps, sleep, resting heart rate, and HRV automatically.
           </Text>
         </View>
@@ -94,7 +95,7 @@ export function ConnectHealthScreen() {
 
         <View className="flex-row gap-3 rounded-tile border border-border bg-muted/50 px-4 py-3.5">
           <Ionicons name="lock-closed-outline" size={17} color={colors.muted} style={{ marginTop: 1 }} />
-          <Text className="flex-1 text-sm text-muted-foreground">
+          <Text className="flex-1 text-caption text-muted-foreground">
             We only read your data and never write to Google Health. You can revoke access anytime from your Google Account.
           </Text>
         </View>
@@ -102,14 +103,14 @@ export function ConnectHealthScreen() {
 
       <View className="gap-2 px-5 pb-2">
         {error ? (
-          <Text testID="connect-health-error" className="text-center text-sm text-destructive">
+          <Text testID="connect-health-error" className="text-center text-caption text-destructive">
             {error}
           </Text>
         ) : null}
         <Button testID="connect-health-button" size="lg" className="w-full" onPress={handleConnect} disabled={busy}>
           {busy ? 'Waiting for Google…' : 'Connect Google Health'}
         </Button>
-        <Text className="text-center text-xs text-muted-foreground">You'll finish on Google's sign-in page</Text>
+        <Text className="text-center text-caption text-muted-foreground">You'll finish on Google's sign-in page</Text>
       </View>
     </SafeAreaView>
   );

@@ -80,7 +80,7 @@ export function SignInMethodsScreen() {
 
   return (
     <ScrollView className="bg-background" contentContainerStyle={{ gap: 24, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 32 }}>
-      <Text className="px-4 text-sm text-muted-foreground">
+      <Text className="px-4 text-caption text-muted-foreground">
         You can sign in with any of these. Linking only works for an account that uses the same email.
       </Text>
       {accounts && accounts.length > 0 ? (
@@ -109,7 +109,7 @@ export function SignInMethodsScreen() {
         </SettingsGroup>
       ) : null}
       {accounts && accounts.length === 0 ? (
-        <Text className="px-4 text-xs text-muted-foreground">You need at least one way to sign in.</Text>
+        <Text className="px-4 text-caption text-muted-foreground">You need at least one way to sign in.</Text>
       ) : null}
       {unlinked.length > 0 ? (
         <SettingsGroup label="Add a method">
@@ -126,7 +126,7 @@ export function SignInMethodsScreen() {
           ))}
         </SettingsGroup>
       ) : null}
-      {error ? <Text className="px-4 text-sm text-destructive">{error}</Text> : null}
+      {error ? <Text className="px-4 text-caption text-destructive">{error}</Text> : null}
     </ScrollView>
   );
 }

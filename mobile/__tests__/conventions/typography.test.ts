@@ -60,23 +60,11 @@ const EXEMPT: Exception[] = [
   { file: 'components/ui/text.tsx', count: 3, reason: 'the Text primitive sets fontFamily from the class list (and reads font-display until Task 11)' },
   { file: 'components/ui/input-style.ts', count: 4, reason: 'the shared input styles: Geist at the body size (spec §3)' },
   { file: 'navigation/headerStyle.tsx', count: 4, reason: 'native headers sit outside NativeWind: Silkscreen 15 (spec §3); the style and its return type, which HeaderTitle draws with' },
+  { file: 'screens/SignInScreen.tsx', count: 1, reason: 'the app name in the page-title face at 28, a one-off size (spec §4)' },
 ];
 
 // prettier-ignore
-const PENDING: Exception[] = [
-  // Task 10
-  { file: 'screens/SettingsScreen.tsx', count: 5, reason: 'not migrated yet (Task 10)' },
-  { file: 'screens/SignInScreen.tsx', count: 6, reason: 'not migrated yet (Task 10)' },
-  { file: 'screens/SignUpScreen.tsx', count: 4, reason: 'not migrated yet (Task 10)' },
-  { file: 'screens/ForgotPasswordScreen.tsx', count: 5, reason: 'not migrated yet (Task 10)' },
-  { file: 'screens/ResetPasswordScreen.tsx', count: 5, reason: 'not migrated yet (Task 10)' },
-  { file: 'screens/SignInMethodsScreen.tsx', count: 3, reason: 'not migrated yet (Task 10)' },
-  { file: 'screens/DevicesScreen.tsx', count: 1, reason: 'not migrated yet (Task 10)' },
-  { file: 'screens/ConnectHealthScreen.tsx', count: 6, reason: 'not migrated yet (Task 10)' },
-  { file: 'components/notifications-section.tsx', count: 2, reason: 'not migrated yet (Task 10)' },
-  { file: 'components/delete-account-section.tsx', count: 5, reason: 'not migrated yet (Task 10)' },
-  { file: 'screens/dev/CharacterGalleryScreen.tsx', count: 3, reason: 'not migrated yet (Task 10)' },
-];
+const PENDING: Exception[] = [];
 
 const ALLOWED = [...EXEMPT, ...PENDING];
 
