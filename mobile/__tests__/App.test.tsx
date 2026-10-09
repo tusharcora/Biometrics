@@ -46,6 +46,15 @@ beforeEach(() => {
 });
 
 describe('App', () => {
+  it('still renders the app if a font fails to load, so the splash never hangs', () => {
+    (authClient.useSession as jest.Mock).mockReturnValue({ data: null, isPending: false, error: null });
+    mockUseFonts.mockImplementation(() => [false, new Error('x')]);
+
+    const { toJSON } = render(<App />);
+
+    expect(toJSON()).not.toBeNull();
+  });
+
   it('waits for Silkscreen with Geist before anything draws', () => {
     (authClient.useSession as jest.Mock).mockReturnValue({ data: null, isPending: false, error: null });
     mockUseFonts.mockImplementation(() => [false, null]);

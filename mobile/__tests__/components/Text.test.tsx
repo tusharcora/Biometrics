@@ -79,6 +79,12 @@ describe('SectionLabel', () => {
     expect(flat(label).fontFamily).toBe(FONTS.pixel);
   });
 
+  it('stays pixel when a caller size replaces text-label', () => {
+    const label = render(<SectionLabel className="text-caption">Today</SectionLabel>).getByText('Today');
+    expect(classes(label)).not.toContain('text-label');
+    expect(flat(label).fontFamily).toBe(FONTS.pixel);
+  });
+
   it('keeps scaling with the system text size', () => {
     const label = render(<SectionLabel>Today</SectionLabel>).getByText('Today');
     expect(label.props.allowFontScaling).not.toBe(false);

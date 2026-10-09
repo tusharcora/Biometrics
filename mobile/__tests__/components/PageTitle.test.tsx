@@ -40,6 +40,16 @@ it('keeps scaling with the system text size', () => {
   expect(screen.getByTestId('t').props.maxFontSizeMultiplier).toBeUndefined();
 });
 
+it('stays pixel when a caller size replaces text-page-title', () => {
+  render(
+    <PageTitle testID="t" className="text-[28px]">
+      Biometrics
+    </PageTitle>,
+  );
+  expect(String(screen.getByTestId('t').props.className).split(' ')).not.toContain('text-page-title');
+  expect(family('t')).toBe(FONTS.pixel);
+});
+
 it('keeps the pixel face under a one-off size (the sign-in app name)', () => {
   render(
     <PageTitle testID="t" className="font-pixel text-[28px] leading-[34px] tracking-[1px]">
