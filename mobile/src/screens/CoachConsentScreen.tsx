@@ -126,7 +126,7 @@ export function CoachConsentScreen() {
       <ScrollView contentContainerStyle={{ gap: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32 }}>
         <View className="items-start gap-4">
           <Character testID="coach-consent-character" mood="idle" size={56} glow paused={!focused} />
-          <Text className="text-display">Before you use the AI Coach</Text>
+          <Text className="text-display" accessibilityRole="header">Before you use the AI Coach</Text>
         </View>
 
         {textChanged ? (

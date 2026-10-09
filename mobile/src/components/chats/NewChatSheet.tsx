@@ -14,7 +14,7 @@ export function NewChatSheet({ visible, onClose, onPick, onAdd }: { visible: boo
   return (
     <Sheet visible={visible} onClose={onClose} testID="new-chat">
       <View className="gap-2 pb-2">
-        <Text className="text-headline">New message</Text>
+        <Text className="text-heading">New message</Text>
         {rows.length === 0 ? (
           <>
             <Text className="text-caption text-muted-foreground">No buddies yet.</Text>

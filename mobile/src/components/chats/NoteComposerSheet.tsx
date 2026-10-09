@@ -48,7 +48,7 @@ export function NoteComposerSheet({ visible, current, onClose, onSaved }: { visi
   return (
     <Sheet visible={visible} onClose={onClose} testID="note-composer">
       <View className="gap-3 pb-2">
-        <Text className="text-headline">Share a note</Text>
+        <Text className="text-heading">Share a note</Text>
         <Text className="text-caption text-muted-foreground">Your buddies see it over your avatar in Chats for 24 hours.</Text>
         <TextInput
           testID="note-input"
