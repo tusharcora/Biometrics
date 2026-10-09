@@ -26,11 +26,11 @@ export function HighlightsCarousel({ highlights, onOpenAll }: { highlights: High
           const color = highlightKickerColor(item);
           return (
             <View key={index} testID={`highlight-${index}`} className={`gap-1 rounded-tile border p-3 ${index === 0 ? 'w-56 border-coach bg-coach/20' : 'w-40 border-border bg-card'}`}>
-              <Text testID={`highlight-${index}-kicker`} className={`text-[10px] font-semibold uppercase tracking-widest ${color ? '' : 'text-muted-foreground'}`}
+              <Text testID={`highlight-${index}-kicker`} className={`text-label uppercase ${color ? '' : 'text-muted-foreground'}`}
                 style={color ? { color } : undefined}>
                 {highlightKicker(item)}
               </Text>
-              <Text className={index === 0 ? 'font-display text-display-sm' : 'text-sm font-semibold'}>{highlightLine(item)}</Text>
+              <Text className={index === 0 ? 'text-heading' : 'text-body font-semibold'}>{highlightLine(item)}</Text>
             </View>
           );
         })}

@@ -257,7 +257,7 @@ function Viewer({ story, mineHint, onClose, onMessage }: { story: Story; mineHin
               </Button>
             ))}
           </View>
-          {message ? <Text testID="story-message" className="text-center text-sm text-white/80">{message}</Text> : null}
+          {message ? <Text testID="story-message" className="text-center text-caption text-white/80">{message}</Text> : null}
           {chatsOn ? (
             <Button testID="story-message-button" variant="outline" size="sm" onPress={() => openChat(frame)} className={ON_STORY_OUTLINE}
               textClassName="text-white" iconStart={<Ionicons name="chatbubble-outline" size={buttonIconSize('sm')} color="#FFFFFF" />}>

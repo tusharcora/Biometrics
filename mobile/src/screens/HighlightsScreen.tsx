@@ -5,6 +5,7 @@ import { buddyErrorCode, sendSticker } from '../api/buddies';
 import { fetchHighlights, type HighlightItem, type Highlights } from '../api/social';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
+import { PageTitle } from '../components/ui/page-title';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { buddyErrorMessage } from '../lib/buddyCopy';
@@ -97,15 +98,15 @@ export function HighlightsScreen() {
     <SafeAreaView edges={['bottom']} className="flex-1 bg-background">
       <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
         <View className="gap-1">
-          <Text testID="highlights-heading" className="font-display text-display">{highlightsTitle(highlights.weekStart)}</Text>
-          <Text className="text-sm text-muted-foreground">{weekRange(highlights.weekStart, highlights.weekEnd)}</Text>
+          <PageTitle testID="highlights-heading">{highlightsTitle(highlights.weekStart)}</PageTitle>
+          <Text className="text-caption text-muted-foreground">{weekRange(highlights.weekStart, highlights.weekEnd)}</Text>
         </View>
         {items.map((item, index) => {
           const color = highlightKickerColor(item);
           return (
             <Card key={index} testID={`highlights-item-${index}`} className="flex-row items-center gap-3">
               <View className="flex-1 gap-1">
-                <Text className={`text-[10px] font-semibold uppercase tracking-widest ${color ? '' : 'text-muted-foreground'}`}
+                <Text className={`text-label uppercase ${color ? '' : 'text-muted-foreground'}`}
                   style={color ? { color } : undefined}>
                   {highlightKicker(item)}
                 </Text>
@@ -119,7 +120,7 @@ export function HighlightsScreen() {
             </Card>
           );
         })}
-        {message ? <Text testID="highlights-message" className="text-sm text-destructive">{message}</Text> : null}
+        {message ? <Text testID="highlights-message" className="text-caption text-destructive">{message}</Text> : null}
       </ScrollView>
     </SafeAreaView>
   );

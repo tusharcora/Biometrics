@@ -240,3 +240,20 @@ it('does not navigate when an unpair finishes after the screen is gone', async (
   expect(mockGoBack).not.toHaveBeenCalled();
   alert.mockRestore();
 });
+
+it('wraps a long buddy name in the pixel title instead of clipping it, and reads it in its own case', async () => {
+  const long = 'Alexandria Montgomery-Vasquez';
+  (fetchBuddyWeek as jest.Mock).mockResolvedValue({ ...WEEK, buddy: { ...WEEK.buddy, displayName: long } });
+  render(<BuddyWeekScreen />);
+  const title = await screen.findByTestId('buddy-week-name');
+  expect(title).toHaveTextContent(long.toUpperCase());
+  expect(title.props.numberOfLines).toBeUndefined();
+  expect(screen.getByRole('header', { name: long })).toBeTruthy();
+});
+
+it('keeps the numbers grid in tabular figures that fit its 36-pt cells', async () => {
+  (fetchBuddyWeek as jest.Mock).mockResolvedValue({ ...WEEK, shares: ['steps'], numbers: { steps: dates.map((date) => ({ date, value: 12345 })) } });
+  render(<BuddyWeekScreen />);
+  const cell = await screen.findByTestId('number-steps-0');
+  expect(String(cell.props.className).split(' ')).toEqual(expect.arrayContaining(['w-9', 'text-fine', 'tabular-nums']));
+});

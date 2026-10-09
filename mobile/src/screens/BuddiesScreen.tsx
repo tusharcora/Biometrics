@@ -33,7 +33,7 @@ function BuddiesBody({ navigation }: { navigation: Nav }) {
   useRefreshBuddiesOnFocus();
   return (
     <View className="flex-1 gap-3 px-4 pt-3">
-      <Text className="text-sm text-muted-foreground">You see their coach's mood, never their numbers unless they share them.</Text>
+      <Text className="text-caption text-muted-foreground">You see their coach's mood, never their numbers unless they share them.</Text>
       <BuddyList navigation={navigation} />
     </View>
   );

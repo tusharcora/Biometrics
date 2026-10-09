@@ -52,7 +52,7 @@ export function TimelineList({ items }: { items: TimelineItem[] }) {
   }
 
   if (rows.length === 0) {
-    return <Text testID="timeline-empty" className="text-sm text-muted-foreground">Nothing yet today. Check in to get things going.</Text>;
+    return <Text testID="timeline-empty" className="text-caption text-muted-foreground">Nothing yet today. Check in to get things going.</Text>;
   }
   return (
     <View testID="timeline" className="gap-3">
@@ -66,9 +66,9 @@ export function TimelineList({ items }: { items: TimelineItem[] }) {
           const { name, rest } = timelineParts(item);
           return (
             <View key={item.id} testID={`timeline-${item.id}`} className="flex-row items-center gap-3" style={{ minHeight: ROW_HEIGHT }}>
-              <Text className="w-11 text-right text-xs text-muted-foreground">{clockTime(item.at)}</Text>
+              <Text className="w-11 text-right text-caption text-muted-foreground tabular-nums">{clockTime(item.at)}</Text>
               <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: DOT[item.kind] }} />
-              <Text className="flex-1 text-sm">
+              <Text className="flex-1 text-body">
                 <Text testID={`timeline-${item.id}-name`} className="font-semibold">{name}</Text>
                 <Text className="text-muted-foreground"> {rest}</Text>
               </Text>
@@ -81,7 +81,7 @@ export function TimelineList({ items }: { items: TimelineItem[] }) {
           );
         })}
       </View>
-      {message ? <Text testID="timeline-message" className="text-sm text-destructive">{message}</Text> : null}
+      {message ? <Text testID="timeline-message" className="text-caption text-destructive">{message}</Text> : null}
     </View>
   );
 }

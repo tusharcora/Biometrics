@@ -19,9 +19,9 @@ export function SharingConsentSheet({ visible, busy = false, onAgree, onClose }:
   return (
     <Sheet visible={visible} onClose={onClose} testID="sharing-consent-sheet">
       <View testID="sharing-consent" className="gap-3 p-4">
-        <Text className="font-display text-display-sm">Share with buddies?</Text>
+        <Text className="text-heading">Share with buddies?</Text>
         {SHARING_CONSENT_LINES.map((line) => (
-          <Text key={line} className="text-sm text-muted-foreground">{line}</Text>
+          <Text key={line} className="text-body text-muted-foreground">{line}</Text>
         ))}
         <Button testID="sharing-consent-agree" size="lg" disabled={busy} onPress={onAgree}>I agree</Button>
         <Button testID="sharing-consent-cancel" variant="outline" size="lg" disabled={busy} onPress={onClose}>Not now</Button>

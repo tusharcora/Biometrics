@@ -51,11 +51,11 @@ export function HandleSetupForm({
 
   return (
     <View testID="handle-setup" className="gap-4">
-      <Text className="font-display text-display">{mode === 'setup' ? 'Pick your buddy name' : 'Your buddy name'}</Text>
-      <Text className="text-sm text-muted-foreground">Friends find you by your exact @handle. Your email is never shown.</Text>
+      <Text className="text-display">{mode === 'setup' ? 'Pick your buddy name' : 'Your buddy name'}</Text>
+      <Text className="text-caption text-muted-foreground">Friends find you by your exact @handle. Your email is never shown.</Text>
       <TextField label="Handle" testID="handle-input" value={handle} onChangeText={setHandle} autoCapitalize="none" />
       <TextField label="Display name" testID="display-name-input" value={name} onChangeText={setName} />
-      {error ? <Text testID="handle-setup-error" className="text-sm text-destructive">{error}</Text> : null}
+      {error ? <Text testID="handle-setup-error" className="text-caption text-destructive">{error}</Text> : null}
       <Button testID="handle-setup-save" size="lg" disabled={busy || !handle.trim() || !name.trim()} onPress={() => void save()}>
         {mode === 'setup' ? 'Continue' : 'Save'}
       </Button>

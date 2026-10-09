@@ -16,9 +16,9 @@ export function MoodNoticeSheet({ visible, failed, onConfirm, onClose }: MoodNot
   return (
     <Sheet visible={visible} onClose={onClose} testID="mood-notice-sheet">
       <View testID="mood-notice" className="gap-4 p-4">
-        <Text className="font-display text-display-sm">Your mood is shared</Text>
+        <Text className="text-heading">Your mood is shared</Text>
         <Text className="text-muted-foreground">{MOOD_NOTICE_TEXT}</Text>
-        {failed ? <Text testID="mood-notice-failed" className="text-sm text-destructive">Couldn't save that. Please try again.</Text> : null}
+        {failed ? <Text testID="mood-notice-failed" className="text-caption text-destructive">Couldn't save that. Please try again.</Text> : null}
         <Button testID="mood-notice-confirm" size="lg" onPress={onConfirm}>Got it</Button>
         <Button testID="mood-notice-cancel" variant="outline" size="lg" onPress={onClose}>Not now</Button>
       </View>

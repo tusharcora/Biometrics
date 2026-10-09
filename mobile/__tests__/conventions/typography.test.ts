@@ -46,6 +46,7 @@ const EXEMPT: Exception[] = [
   { file: 'components/social/CampScene.tsx', count: 11, reason: 'the Campfire scene: labels, z-z-z, note bubbles and kicker at their own pixel sizes (spec §6)' },
   { file: 'components/social/CampBanner.tsx', count: 3, reason: 'the camp banner: THE CAMP in pixel 10 over its line (spec §6)' },
   { file: 'components/social/CampNoteCard.tsx', count: 7, reason: 'the Campfire note card keeps its panel text as it is (spec §6); only its input took inputTextStyle (spec §3)' },
+  { file: 'screens/CampfireScreen.tsx', count: 13, reason: 'the Campfire scene chrome and panel text keep their sizes (spec §6); only its two panel labels became SectionLabels' },
   // Share cards (spec §5): images scaled by u() / a(), so their sizes stay inline; Geist and pixel only.
   { file: 'components/recap/WeeklyStoryView.tsx', count: 39, reason: 'the weekly story share card, sized in card units (spec §5)' },
   { file: 'components/recap/RecapCardView.tsx', count: 14, reason: 'the monthly recap share card, sized in card units (spec §5)' },
@@ -62,25 +63,6 @@ const EXEMPT: Exception[] = [
 
 // prettier-ignore
 const PENDING: Exception[] = [
-  // Task 7
-  { file: 'screens/SocialScreen.tsx', count: 4, reason: 'not migrated yet (Task 7)' },
-  { file: 'screens/SocialStoryScreen.tsx', count: 1, reason: 'not migrated yet (Task 7)' },
-  { file: 'components/social/SocialStoryFrame.tsx', count: 9, reason: 'not migrated yet (Task 7)' },
-  { file: 'components/social/StoriesRow.tsx', count: 2, reason: 'not migrated yet (Task 7)' },
-  { file: 'components/social/TimelineList.tsx', count: 4, reason: 'not migrated yet (Task 7)' },
-  { file: 'components/social/CheckInSheet.tsx', count: 4, reason: 'not migrated yet (Task 7)' },
-  { file: 'components/social/GoodnightButton.tsx', count: 2, reason: 'not migrated yet (Task 7)' },
-  { file: 'components/social/HighlightsCarousel.tsx', count: 4, reason: 'not migrated yet (Task 7)' },
-  { file: 'screens/HighlightsScreen.tsx', count: 4, reason: 'not migrated yet (Task 7)' },
-  { file: 'screens/CampfireScreen.tsx', count: 16, reason: 'not migrated yet (Task 7)' },
-  { file: 'components/buddies/BuddyListRow.tsx', count: 1, reason: 'not migrated yet (Task 7)' },
-  { file: 'components/buddies/HandleSetupForm.tsx', count: 3, reason: 'not migrated yet (Task 7)' },
-  { file: 'components/buddies/MoodNoticeSheet.tsx', count: 3, reason: 'not migrated yet (Task 7)' },
-  { file: 'components/buddies/SharingConsentSheet.tsx', count: 3, reason: 'not migrated yet (Task 7)' },
-  { file: 'screens/BuddiesScreen.tsx', count: 1, reason: 'not migrated yet (Task 7)' },
-  { file: 'screens/BuddyWeekScreen.tsx', count: 9, reason: 'not migrated yet (Task 7)' },
-  { file: 'screens/PairUpScreen.tsx', count: 7, reason: 'not migrated yet (Task 7)' },
-  { file: 'screens/BlockedPeopleScreen.tsx', count: 2, reason: 'not migrated yet (Task 7)' },
   // Task 8
   { file: 'components/chats/ChatComposer.tsx', count: 3, reason: 'not migrated yet (Task 8)' },
   { file: 'components/chats/ChatRow.tsx', count: 4, reason: 'not migrated yet (Task 8)' },

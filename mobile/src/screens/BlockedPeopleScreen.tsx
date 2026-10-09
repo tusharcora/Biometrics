@@ -70,13 +70,13 @@ export function BlockedPeopleScreen() {
         contentContainerStyle={{ padding: 16, gap: 8 }}
         data={people}
         keyExtractor={(p) => p.userId}
-        ListHeaderComponent={error ? <Text testID="blocked-error" className="pb-2 text-sm text-destructive">{error}</Text> : null}
+        ListHeaderComponent={error ? <Text testID="blocked-error" className="pb-2 text-caption text-destructive">{error}</Text> : null}
         ListEmptyComponent={<Text testID="blocked-empty" className="py-8 text-center text-muted-foreground">You haven't blocked anyone.</Text>}
         renderItem={({ item }) => (
           <View className="flex-row items-center justify-between rounded-card border border-border bg-card p-3">
             <View className="flex-1 pr-3">
               <Text className="font-semibold">{item.displayName}</Text>
-              <Text className="text-sm text-muted-foreground">@{item.handle}</Text>
+              <Text className="text-caption text-muted-foreground">@{item.handle}</Text>
             </View>
             <Button
               testID={`unblock-${item.userId}`}

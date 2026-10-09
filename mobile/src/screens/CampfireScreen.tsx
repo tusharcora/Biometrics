@@ -31,6 +31,7 @@ import { campScene, CHROME } from '../components/social/campSceneGeometry';
 import { GoodnightButton } from '../components/social/GoodnightButton';
 import { Button, buttonIconSize } from '../components/ui/button';
 import { Card } from '../components/ui/card';
+import { SectionLabel } from '../components/ui/section-label';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { buddyErrorMessage } from '../lib/buddyCopy';
@@ -91,7 +92,7 @@ function FireMeter({ camp }: { camp: Camp }) {
       <View className="flex-row items-center justify-between">
         <View className="flex-row items-center gap-2">
           <Ionicons name="flame" size={16} color={camp.night ? SEGMENT_ON : '#6B6E78'} />
-          <Text className="text-sm tracking-[1px]" style={{ fontFamily: pixelFont() }}>TONIGHT'S FIRE</Text>
+          <SectionLabel className="text-foreground">TONIGHT'S FIRE</SectionLabel>
         </View>
         <Text testID="camp-fire-count" className="text-[13px] font-semibold text-[#FDBA74]">{fireCountLabel(camp.fire, camp.night)}</Text>
       </View>
@@ -349,7 +350,7 @@ export function CampfireScreen() {
         )}
 
         <View className="mt-1 h-px bg-border" />
-        <Text className="text-xs font-semibold tracking-[0.8px] text-muted-foreground">{`WHO'S HERE · ${camp.members.length}`}</Text>
+        <SectionLabel>{`WHO'S HERE · ${camp.members.length}`}</SectionLabel>
         {camp.members.map((m) => (
           <View key={m.person.id} testID={`camp-who-${m.person.id}`} className="flex-row items-start gap-3">
             <Character characterId={isCharacterId(m.person.coachId) ? m.person.coachId : DEFAULT_CHARACTER_ID} mood={m.asleep ? 'resting' : 'idle'} size={32} paused />

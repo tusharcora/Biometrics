@@ -9,6 +9,7 @@ import { useMoodNoticeGate } from '../components/buddies/useMoodNoticeGate';
 import { Character } from '../components/characters/Character';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
+import { PageTitle } from '../components/ui/page-title';
 import { Text } from '../components/ui/text';
 import { TextField } from '../components/ui/text-field';
 import { buddyErrorMessage, expiresIn, shareMessage } from '../lib/buddyCopy';
@@ -127,18 +128,18 @@ function PairUpBody({ identity, navigation }: { identity: BuddyIdentity; navigat
     <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }} keyboardShouldPersistTaps="handled">
       <View className="items-center gap-2">
         <Character mood="idle" size={72} />
-        <Text className="font-display text-display">Pair up with a friend</Text>
-        <Text className="text-center text-sm text-muted-foreground">
+        <PageTitle>Pair up with a friend</PageTitle>
+        <Text className="text-center text-caption text-muted-foreground">
           Buddies always see your coach's mood. Your numbers stay private unless you share them in Profile.
         </Text>
       </View>
 
       <Card className="gap-3 p-4">
-        <Text className="text-sm text-muted-foreground">Your buddy code</Text>
+        <Text className="text-caption text-muted-foreground">Your buddy code</Text>
         {active ? (
           <>
-            <Text testID="pair-code" className="text-3xl font-semibold tracking-widest">{active.code}</Text>
-            <Text testID="pair-code-expiry" className="text-xs text-muted-foreground">{expiresIn(active.expiresAt, now)}</Text>
+            <Text testID="pair-code" className="text-display font-semibold tracking-widest tabular-nums">{active.code}</Text>
+            <Text testID="pair-code-expiry" className="text-caption text-muted-foreground">{expiresIn(active.expiresAt, now)}</Text>
           </>
         ) : null}
         <Button testID="pair-share-or-create" disabled={busy} onPress={shareCode}>Share my code</Button>
@@ -155,7 +156,7 @@ function PairUpBody({ identity, navigation }: { identity: BuddyIdentity; navigat
       </Card>
 
       {message ? (
-        <Text testID="pair-message" className={message.error ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}>{message.text}</Text>
+        <Text testID="pair-message" className={message.error ? 'text-caption text-destructive' : 'text-caption text-muted-foreground'}>{message.text}</Text>
       ) : null}
       <MoodNoticeSheet {...gate.sheet} />
     </ScrollView>

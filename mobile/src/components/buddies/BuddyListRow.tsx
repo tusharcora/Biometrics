@@ -18,7 +18,7 @@ export function BuddyListRow({ row, onPress }: { row: BuddyRow; onPress: () => v
       <Character characterId={isCharacterId(row.coachId) ? row.coachId : DEFAULT_CHARACTER_ID} mood={row.mood === 'low' ? 'resting' : 'idle'} size={48} paused />
       <View className="flex-1">
         <Text className="font-semibold">{row.displayName}</Text>
-        <Text testID={`buddy-row-${row.id}-mood`} className="text-sm" style={{ color: MOOD_COLORS[row.mood] }}>{row.moodLine}</Text>
+        <Text testID={`buddy-row-${row.id}-mood`} className="text-caption" style={{ color: MOOD_COLORS[row.mood] }}>{row.moodLine}</Text>
       </View>
       {row.unseenSticker ? <View testID={`buddy-row-${row.id}-unseen`} className="h-2.5 w-2.5 rounded-full bg-accent" /> : null}
     </Pressable>

@@ -73,7 +73,7 @@ export function GoodnightButton({ goodnight: fromProps, onChanged, testID = 'goo
     <View className="gap-2">
       {goodnight ? (
         <View className="flex-row items-center justify-between gap-2">
-          <Text testID={`${testID}-said`} className="text-sm font-semibold">{goodnightSaidLine(goodnight)}</Text>
+          <Text testID={`${testID}-said`} className="text-body font-semibold">{goodnightSaidLine(goodnight)}</Text>
           {undoUntil > Date.now() ? (
             <Button testID={`${testID}-undo`} accessibilityLabel="Undo goodnight" variant="secondary" size="sm" disabled={busy}
               onPress={() => void run(async () => {
@@ -95,7 +95,7 @@ export function GoodnightButton({ goodnight: fromProps, onChanged, testID = 'goo
           <Button testID={`${testID}-say`} disabled={busy} onPress={() => void run(async () => (await sayGoodnight()).goodnight)}>Say goodnight</Button>
         )
       )}
-      {message ? <Text testID={`${testID}-message`} accessibilityLiveRegion="polite" className="text-sm text-destructive">{message}</Text> : null}
+      {message ? <Text testID={`${testID}-message`} accessibilityLiveRegion="polite" className="text-caption text-destructive">{message}</Text> : null}
     </View>
   );
 }

@@ -24,6 +24,7 @@ import { StoriesRow } from '../components/social/StoriesRow';
 import { TimelineList } from '../components/social/TimelineList';
 import { Button, buttonIconSize, buttonTextVariants } from '../components/ui/button';
 import { Card } from '../components/ui/card';
+import { PageTitle } from '../components/ui/page-title';
 import { SectionLabel } from '../components/ui/section-label';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
@@ -62,7 +63,7 @@ export function SocialScreen() {
       <SafeAreaView edges={['top']} className="flex-1 bg-background px-5 pt-4" testID="social-screen">
         <Card testID="social-unavailable" className="gap-3">
           <Text className="font-semibold">Social isn't available yet</Text>
-          <Text className="text-sm text-muted-foreground">Your buddies are still here.</Text>
+          <Text className="text-caption text-muted-foreground">Your buddies are still here.</Text>
           <Button testID="social-open-buddies" onPress={() => navigation.navigate('Buddies')}>Open Buddies</Button>
         </Card>
       </SafeAreaView>
@@ -73,7 +74,7 @@ export function SocialScreen() {
       <SafeAreaView edges={['top']} className="flex-1 bg-background px-5 pt-4" testID="social-screen">
         {state.status === 'error' ? (
           <Card testID="social-error" className="gap-3">
-            <Text className="text-sm">Couldn't load your circle.</Text>
+            <Text className="text-body">Couldn't load your circle.</Text>
             <Button testID="social-retry" variant="secondary" size="sm" className="self-start" onPress={() => void refreshSocial()}>Try again</Button>
           </Card>
         ) : (
@@ -98,7 +99,7 @@ export function SocialScreen() {
       <ScrollView contentContainerStyle={{ gap: 18, paddingHorizontal: 20, paddingBottom: clearance + 64 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => void pull()} />}>
         <View className="pt-2">
-          <Text className="font-display text-display">Social</Text>
+          <PageTitle>Social</PageTitle>
         </View>
         <CampBanner camp={home.camp} onOpen={home.camp.night === undefined ? undefined : () => navigation.navigate('Campfire')} />
         <StoriesRow me={home.me} rings={home.stories} onCheckIn={() => setCheckingIn(true)}
@@ -120,7 +121,7 @@ export function SocialScreen() {
         style={{ position: 'absolute', right: 20, bottom: clearance + 8 }}
         iconStart={<View testID="social-chats-icon"><Ionicons name="chatbubble-outline" size={buttonIconSize('lg')} color={colors.background} /></View>}>
         <Text className={buttonTextVariants({ size: 'lg' })}>Chats</Text>
-        {chats > 0 ? <Text testID="social-chats-count" className="min-w-5 rounded-full bg-accent px-1.5 text-center text-xs font-bold text-background">{chats}</Text> : null}
+        {chats > 0 ? <Text testID="social-chats-count" className="min-w-5 rounded-full bg-accent px-1.5 text-center text-caption font-bold tabular-nums text-background">{chats}</Text> : null}
       </Button>
       <CheckInSheet visible={checkingIn} current={home.me.checkIn?.mood ?? null} onClose={() => setCheckingIn(false)} />
     </SafeAreaView>
