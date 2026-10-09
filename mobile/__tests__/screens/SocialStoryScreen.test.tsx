@@ -41,7 +41,7 @@ it('plays a locked check-in and a badge, replies with a sticker, and marks the s
   await act(async () => fireEvent.press(screen.getByTestId('social-story-next')));
   expect(screen.getByTestId('story-frame-1')).toHaveTextContent(/Sleep goal streak II/);
   // Reaching the last frame is enough: seen now, even if they close here.
-  expect(markStorySeen).toHaveBeenCalledWith('sam');
+  expect(markStorySeen).toHaveBeenCalledWith('sam', '2026-10-07T15:00:00.000Z');
   expect(mockGoBack).not.toHaveBeenCalled();
   await act(async () => fireEvent.press(screen.getByTestId('social-story-prev')));
   await act(async () => fireEvent.press(screen.getByTestId('social-story-next')));

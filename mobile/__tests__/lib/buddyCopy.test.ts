@@ -1,8 +1,6 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { SHARING_CONSENT_LINES, activityLine, buddyErrorMessage, expiresIn, formatNumber, joinList, sharesSummary, stickerSentLine, weekdayLetter } from '../../src/lib/buddyCopy';
-
-const person = { id: 'p', handle: 'sam', displayName: 'Sam', coachId: 'pengu' };
+import { SHARING_CONSENT_LINES, buddyErrorMessage, expiresIn, formatNumber, joinList, sharesSummary, stickerSentLine, weekdayLetter } from '../../src/lib/buddyCopy';
 
 it('summarises what a buddy shares', () => {
   expect(sharesSummary('Sam', [])).toBe('Sam shares mood only');
@@ -48,14 +46,6 @@ it('words every server error code, and falls back for anything else', () => {
   for (const code of codes) expect([code, buddyErrorMessage(code)]).not.toEqual([code, generic]);
   expect(buddyErrorMessage('something_new')).toBe(generic);
   expect(buddyErrorMessage('toString')).toBe(generic);
-});
-
-it('words Activity from closed labels only', () => {
-  const base = { id: 'a', createdAt: '2026-10-07T12:00:00Z', seen: false, actor: person };
-  expect(activityLine({ ...base, kind: 'sticker', sticker: 'STAR' })).toBe('Sam sent you a Star');
-  expect(activityLine({ ...base, kind: 'request', requestId: 'r' })).toBe('Sam wants to be your buddy');
-  expect(activityLine({ ...base, kind: 'paired' })).toBe('You and Sam are now buddies');
-  expect(activityLine({ ...base, kind: 'badge', badge: { family: 'STEP_GOAL', level: 3 } })).toBe('Sam reached Step goal streak III');
 });
 
 it('puts the 7-day window on the numbers only, not on streaks and badge levels', () => {

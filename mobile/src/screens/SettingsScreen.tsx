@@ -13,6 +13,7 @@ import { BadgesCard } from '../components/achievements/BadgesCard';
 import { CoachSettingsSection } from '../components/coach-settings-section';
 import { DeleteAccountSection } from '../components/delete-account-section';
 import { BuddiesProfileSection } from '../components/buddies/BuddiesProfileSection';
+import { ChatSettingsSection } from '../components/chats/ChatSettingsSection';
 import { NotificationsSection } from '../components/notifications-section';
 import { YourCoachRow } from '../components/your-coach-row';
 import { StoryRing, useStoryRing } from '../components/recap/StoryRing';
@@ -204,6 +205,7 @@ export function SettingsScreen() {
 
         <NotificationsSection />
         <BuddiesProfileSection onNavigate={(route) => navigation?.navigate(route as never)} />
+        <ChatSettingsSection />
         <AccountSection />
         <YourCoachRow />
         <CoachSettingsSection />

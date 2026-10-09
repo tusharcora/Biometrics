@@ -69,7 +69,7 @@ export interface SocialHome {
   stories: StoryRing[];
   highlights: Highlights | null;
   timeline: TimelineItem[];
-  /** `chats` arrives with S3 (DMs); the tab dot reads requests + stickers until then. */
+  /** `chats` (S3): conversations with an unread message; an S2 server sends none, which is how the app knows Chats is missing. */
   unread: { requests: number; stickers: number; chats?: number };
 }
 
@@ -120,9 +120,10 @@ export async function fetchSocialHome(): Promise<SocialHome | null> {
 
 export const saveCheckIn = (mood: CheckInMood) => apiFetch<{ checkIn: CheckIn }>('/me/social/checkin', send('PUT', { mood }));
 export const fetchStory = (authorId: string) => apiFetch<Story>(`/me/social/stories/${id(authorId)}`);
-// The seen routes answer 204.
-export async function markStorySeen(authorId: string): Promise<void> {
-  await apiFetch<void>(`/me/social/stories/${id(authorId)}/seen`, send('POST'));
+// The seen routes answer 204. `through` is the time of the newest frame I reached (S3): a frame added after it lights
+// the ring again.
+export async function markStorySeen(authorId: string, through?: string): Promise<void> {
+  await apiFetch<void>(`/me/social/stories/${id(authorId)}/seen`, send('POST', through === undefined ? undefined : { through }));
 }
 export async function markStickersSeen(): Promise<void> {
   await apiFetch<void>('/me/social/stickers/seen', send('POST'));

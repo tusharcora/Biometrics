@@ -14,6 +14,11 @@ it('has the spec limits', () => {
     buddyRequest: { name: 'buddy_request', limit: 50, windowSeconds: 86400 },
     handle: { name: 'handle', limit: 30, windowSeconds: 60 },
     campNote: { name: 'camp_note', limit: 20, windowSeconds: 3600 },
+    message: { name: 'message', limit: 30, windowSeconds: 60 },
+    messageDay: { name: 'message_day', limit: 500, windowSeconds: 86400 },
+    statusNote: { name: 'status_note', limit: 20, windowSeconds: 3600 },
+    reaction: { name: 'reaction', limit: 60, windowSeconds: 60 },
+    report: { name: 'report', limit: 20, windowSeconds: 3600 },
   });
 });
 

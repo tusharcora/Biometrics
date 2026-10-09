@@ -3,6 +3,7 @@ import { Switch } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import { fetchNotificationSettings, saveNotificationSettings, type NotificationKey, type NotificationSettings } from '../api/notifications';
 import { useBuddies } from '../lib/buddiesStore';
+import { useChatsAvailable } from '../lib/socialStore';
 import { enablePush, getPushState, type PushState } from '../lib/pushRegistration';
 import { COLORS } from '../theme';
 import { Text } from './ui/text';
@@ -20,12 +21,19 @@ const BUDDY_ROWS = [
   ['notifyBuddyBadges', 'buddy-badges', 'Buddy streaks & badges', 'When a buddy who shares them reaches a badge level'],
 ] as const;
 
+// Chats (spec 2026-10-07 social §10), on a server with chats: message pushes (on) and their previews (off by default).
+const CHAT_ROWS = [
+  ['notifyDirectMessages', 'chat-messages', 'Messages', 'When a buddy sends you a message'],
+  ['showMessagePreviews', 'chat-previews', 'Message previews', 'Show the message text in the notification'],
+] as const;
+
 // The app-level "Recap ready" switch (spec 2026-10-04 §2), shown whenever this device can show
 // notifications, with the coach on or off. On: register this device (enablePush, the only place
 // that may prompt; a denied permission is never re-prompted), then save recapPushEnabled. Off:
 // save the setting only; the device stays registered. Hidden only when push is unavailable on
 // load; if turning it on finds no push support, the section stays and says so. With buddies on
-// the server (spec 2026-10-06 buddies §6), three buddy switches follow, saved the same way.
+// the server (spec 2026-10-06 buddies §6), three buddy switches follow, saved the same way; with chats on the server
+// too, the two message switches after them.
 export function NotificationsSection() {
   const { colorScheme: scheme } = useColorScheme();
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
@@ -40,6 +48,7 @@ export function NotificationsSection() {
   // The key whose save failed, if any.
   const [failed, setFailed] = useState<NotificationKey | null>(null);
   const buddies = useBuddies();
+  const chats = useChatsAvailable();
 
   useEffect(() => {
     let cancelled = false;
@@ -115,11 +124,11 @@ export function NotificationsSection() {
         }
       />
       {buddies.status === 'ready'
-        ? BUDDY_ROWS.map(([key, id, title, subtitle]) => (
+        ? [...BUDDY_ROWS, ...(chats === true ? CHAT_ROWS : [])].map(([key, id, title, subtitle]) => (
             <SettingsRow
               key={key}
               testID={`${id}-row`}
-              icon="people-outline"
+              icon={CHAT_ROWS.some(([chatKey]) => chatKey === key) ? 'chatbubble-outline' : 'people-outline'}
               tint={colors.accent}
               title={title}
               subtitle={subtitle}

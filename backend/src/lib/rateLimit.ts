@@ -18,6 +18,12 @@ export const RATE_LIMITS = {
   buddyRequest: { name: 'buddy_request', limit: 50, windowSeconds: 24 * 60 * 60 },
   handle: { name: 'handle', limit: 30, windowSeconds: 60 },
   campNote: { name: 'camp_note', limit: 20, windowSeconds: 60 * 60 },
+  // Chats (spec 2026-10-07 social §9). Text and card messages spend both message buckets; stickers keep their own limit.
+  message: { name: 'message', limit: 30, windowSeconds: 60 },
+  messageDay: { name: 'message_day', limit: 500, windowSeconds: 24 * 60 * 60 },
+  statusNote: { name: 'status_note', limit: 20, windowSeconds: 60 * 60 },
+  reaction: { name: 'reaction', limit: 60, windowSeconds: 60 },
+  report: { name: 'report', limit: 20, windowSeconds: 60 * 60 },
 } as const satisfies Record<string, RateLimit>;
 
 export type RateLimitResult = 'ok' | 'limited' | 'unavailable';

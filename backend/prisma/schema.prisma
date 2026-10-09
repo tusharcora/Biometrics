@@ -78,6 +78,14 @@ model User {
   weeklyHighlights      WeeklyHighlights[]  @relation("WeeklyHighlightsViewer")
   goodnights            Goodnight[]         @relation("GoodnightAuthor")
   campNote              CampNote?           @relation("CampNoteAuthor")
+  conversationsA        Conversation[]      @relation("ConversationA")
+  conversationsB        Conversation[]      @relation("ConversationB")
+  messagesSent          Message[]           @relation("MessageSender")
+  messageReactions      MessageReaction[]   @relation("MessageReactor")
+  conversationReads     ConversationRead[]  @relation("ConversationReader")
+  statusNote            StatusNote?         @relation("StatusNoteAuthor")
+  reportsMade           Report[]            @relation("ReportReporter")
+  reportsAgainst        Report[]            @relation("ReportReported")
 
   // The coach persona the user picked in Settings (an id from
   // src/coach/personas). Null means the default persona.
@@ -127,6 +135,15 @@ model User {
   notifyBuddyStickers        Boolean   @default(true)
   notifyBuddyRequests        Boolean   @default(true)
   notifyBuddyBadges          Boolean   @default(true)
+  /// Chats (spec 2026-10-07 social §8.4): touched at most once a minute (presence). Shown to a buddy only while both
+  /// have chatActivityStatus on.
+  lastActiveAt               DateTime?
+  /// Reciprocal (spec §8.2, §8.4): off → you neither send nor see "Seen" / activity status.
+  chatReadReceipts           Boolean   @default(true)
+  chatActivityStatus         Boolean   @default(true)
+  /// dm_message pushes (spec §10); previews (the message text in the push) are off by default.
+  notifyDirectMessages       Boolean   @default(true)
+  showMessagePreviews        Boolean   @default(false)
 
   // IANA zone name (e.g. "America/Los_Angeles"), client-supplied. It defines
   // which local civil date a sleep session's end instant belongs to, so the
@@ -939,6 +956,9 @@ model StorySeen {
   author    User     @relation("StorySeenAuthor", fields: [authorId], references: [id], onDelete: Cascade)
   localDate DateTime @db.Date
   seenAt    DateTime @default(now())
+  /// The newest frame the viewer reached (S3): a frame after it lights the ring again. Null on rows from before
+  /// S3, which count up to seenAt.
+  lastFrameAt DateTime?
 
   @@id([viewerId, authorId, localDate])
 }
@@ -1010,4 +1030,126 @@ model CampNote {
   expiresAt DateTime
 
   @@index([expiresAt])
+}
+
+// ---- Social tab S3: Chats (spec docs/superpowers/specs/2026-10-07-social-tab-design.md §8, §9) ----
+
+enum MessageKind {
+  TEXT
+  STICKER
+  CARD
+}
+
+enum ReportTarget {
+  MESSAGE
+  STATUS_NOTE
+  CAMP_NOTE
+}
+
+enum ReportReason {
+  SPAM
+  HARASSMENT
+  OTHER
+}
+
+/// One per buddy pair, stored once with userAId < userBId (like BuddyPair), made by the first message. Unpair and block
+/// delete it (messages, reactions and reads cascade).
+model Conversation {
+  id                String             @id @default(uuid())
+  userAId           String
+  userA             User               @relation("ConversationA", fields: [userAId], references: [id], onDelete: Cascade)
+  userBId           String
+  userB             User               @relation("ConversationB", fields: [userBId], references: [id], onDelete: Cascade)
+  createdAt         DateTime           @default(now())
+  lastMessageAt     DateTime           @default(now())
+  /// The newest LIVE message's time (the inbox order and cursor); null when every message is unsent. Set by each send,
+  /// recomputed by an unsend. lastMessageAt never goes back (it stamps sends), so it can hold an unsent message's time.
+  lastLiveMessageAt DateTime?
+  messages          Message[]
+  reads             ConversationRead[]
+
+  @@unique([userAId, userBId])
+  @@index([userAId, lastMessageAt, id])
+  @@index([userBId, lastMessageAt, id])
+  @@index([userAId, lastLiveMessageAt, id])
+  @@index([userBId, lastLiveMessageAt, id])
+}
+
+/// A DM. text is user free text (TEXT, or a CARD's reply): never logged, never to the coach. card is the server's
+/// snapshot of a quoted item (src/chats/cards.ts). Unsend sets deletedAt and clears text, sticker and card.
+model Message {
+  id               String            @id @default(uuid())
+  conversationId   String
+  conversation     Conversation      @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  senderId         String
+  sender           User              @relation("MessageSender", fields: [senderId], references: [id], onDelete: Cascade)
+  kind             MessageKind
+  text             String?
+  sticker          StickerKind?
+  card             Json?
+  replyToMessageId String?
+  replyTo          Message?          @relation("MessageReply", fields: [replyToMessageId], references: [id], onDelete: SetNull)
+  replies          Message[]         @relation("MessageReply")
+  createdAt        DateTime          @default(now())
+  deletedAt        DateTime?
+  reactions        MessageReaction[]
+
+  @@index([conversationId, createdAt, id])
+  // The reply self-FK sets null on delete, so deleting a conversation looks up replies per deleted message.
+  @@index([replyToMessageId])
+  @@index([senderId])
+}
+
+/// One reaction per person per message: one of the four sticker kinds.
+model MessageReaction {
+  messageId String
+  message   Message     @relation(fields: [messageId], references: [id], onDelete: Cascade)
+  reactorId String
+  reactor   User        @relation("MessageReactor", fields: [reactorId], references: [id], onDelete: Cascade)
+  kind      StickerKind
+  createdAt DateTime    @default(now())
+
+  @@id([messageId, reactorId])
+}
+
+/// How far each person has read a conversation ("Seen", unread counts).
+model ConversationRead {
+  conversationId String
+  conversation   Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  readerId       String
+  reader         User         @relation("ConversationReader", fields: [readerId], references: [id], onDelete: Cascade)
+  lastReadAt     DateTime
+
+  @@id([conversationId, readerId])
+}
+
+/// A Chats note (spec §8.1): one per author, 1-60 code points of user free text, live 24 h. Never logged.
+model StatusNote {
+  authorId  String   @id
+  author    User     @relation("StatusNoteAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  text      String
+  createdAt DateTime @default(now())
+  expiresAt DateTime
+
+  @@index([expiresAt])
+}
+
+/// A report (spec §9). excerpt: the reported text at report time, so the report outlives an unpair or block. No route
+/// reads reports; kept 90 days (social sweep). The reported person is never told.
+model Report {
+  id             String       @id @default(uuid())
+  reporterId     String
+  reporter       User         @relation("ReportReporter", fields: [reporterId], references: [id], onDelete: Cascade)
+  reportedUserId String
+  reportedUser   User         @relation("ReportReported", fields: [reportedUserId], references: [id], onDelete: Cascade)
+  targetType     ReportTarget
+  /// A message id, or for a note its author's id.
+  targetId       String
+  reason         ReportReason
+  excerpt        String?
+  createdAt      DateTime     @default(now())
+
+  @@unique([reporterId, targetType, targetId])
+  @@index([reportedUserId])
+  @@index([createdAt])
 }

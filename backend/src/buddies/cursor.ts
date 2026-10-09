@@ -1,4 +1,4 @@
-// Keyset cursors for the buddy list and Activity: (timestamp, id), newest first.
+// Keyset cursors for the buddy list, Activity and chats: (timestamp, id), newest first.
 
 import { BuddyError, UUID_RE } from './errors';
 
@@ -23,6 +23,6 @@ export function parseCursor(raw: unknown): Cursor | null {
 }
 
 /** Rows strictly after the cursor in (field desc, id desc) order. */
-export function keysetBefore(field: 'lastActivityAt' | 'createdAt', c: Cursor) {
+export function keysetBefore(field: 'lastActivityAt' | 'createdAt' | 'lastMessageAt', c: Cursor) {
   return { OR: [{ [field]: { lt: c.at } }, { [field]: c.at, id: { lt: c.id } }] };
 }

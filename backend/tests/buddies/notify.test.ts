@@ -108,8 +108,12 @@ describe('/me/notifications buddy keys', () => {
     const agent = await api();
     expect((await agent.get('/me/notifications').set(headers)).body).toEqual({
       recapPushEnabled: true, notifyBuddyStickers: true, notifyBuddyRequests: true, notifyBuddyBadges: true,
+      notifyDirectMessages: true, showMessagePreviews: false,
     });
-    const res = await agent.put('/me/notifications').set(headers).send({ notifyBuddyRequests: false });
-    expect(res.body).toEqual({ recapPushEnabled: true, notifyBuddyStickers: true, notifyBuddyRequests: false, notifyBuddyBadges: true });
+    const res = await agent.put('/me/notifications').set(headers).send({ notifyBuddyRequests: false, showMessagePreviews: true });
+    expect(res.body).toEqual({
+      recapPushEnabled: true, notifyBuddyStickers: true, notifyBuddyRequests: false, notifyBuddyBadges: true,
+      notifyDirectMessages: true, showMessagePreviews: true,
+    });
   });
 });

@@ -8,6 +8,7 @@ import { useAuth } from '../auth/AuthContext';
 import type { AchievementFamily } from '../api/achievements';
 import type { Recap } from '../api/recaps';
 import type { ScoreType } from '../api/scores';
+import type { ChatQuote } from '../api/chats';
 import { AuthNavigator } from './AuthNavigator';
 import { ConnectHealthScreen } from '../screens/ConnectHealthScreen';
 import { MetricDetailScreen } from '../screens/MetricDetailScreen';
@@ -41,6 +42,9 @@ import { BuddiesScreen } from '../screens/BuddiesScreen';
 import { BuddyWeekScreen } from '../screens/BuddyWeekScreen';
 import { HighlightsScreen } from '../screens/HighlightsScreen';
 import { CampfireScreen } from '../screens/CampfireScreen';
+import { ChatThreadScreen } from '../screens/ChatThreadScreen';
+import { ChatsScreen } from '../screens/ChatsScreen';
+import { ChatRequestsScreen } from '../screens/ChatRequestsScreen';
 import { BlockedPeopleScreen } from '../screens/BlockedPeopleScreen';
 import { CelebrationHost } from '../components/achievements/CelebrationHost';
 import { BuddiesStoreScope } from '../components/buddies/BuddiesStoreScope';
@@ -117,9 +121,8 @@ export type RootStackParamList = {
   Badges: undefined;
   // One badge: the big badge, current and best, the ladder of five levels.
   BadgeDetail: { family: AchievementFamily };
-  // Buddies (spec 2026-10-06 buddies §7). `tab` lets a request push open the requests tab; a new
-  // `open` (a push sends Date.now()) re-selects it when the route already has that tab.
-  Buddies: { tab?: 'buddies' | 'requests' | 'activity'; open?: number } | undefined;
+  // All buddies (spec 2026-10-07 social §2): the paged list, from the stories row's "See all". Requests live in Chats.
+  Buddies: undefined;
   // Your code, enter a code, or ask by @handle; first-time handle setup if missing.
   PairUp: undefined;
   // One buddy's mood week, shared numbers and stickers; opened from the list and by buddy pushes.
@@ -135,6 +138,11 @@ export type RootStackParamList = {
   SocialStory: { authorId: string; mine?: boolean };
   // Social → the camp banner: the Campfire page (S2), pushed with no tab bar.
   Campfire: undefined;
+  // Chats (S3): the inbox (Social's Chats button) and Chats › Requests (buddy requests moved from Buddies).
+  Chats: undefined;
+  ChatRequests: undefined;
+  // Chats (S3): one buddy's thread. `quote` stages a story frame, a note or a camp note to send with the next text.
+  ChatThread: { buddyId: string; quote?: ChatQuote };
 };
 
 export type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';
@@ -253,12 +261,18 @@ export function RootNavigator() {
               <Stack.Screen name="Badges" component={BadgesScreen} options={{ title: 'Badges' }} />
               <Stack.Screen name="BadgeDetail" component={BadgeDetailScreen} options={{ title: '' }} />
               <Stack.Screen name="BuddyIdentity" component={BuddyIdentityScreen} options={{ title: 'Buddy name' }} />
-              <Stack.Screen name="Buddies" component={BuddiesScreen} options={{ title: 'Buddies' }} />
+              <Stack.Screen name="Buddies" component={BuddiesScreen} options={{ title: 'All buddies' }} />
               <Stack.Screen name="PairUp" component={PairUpScreen} options={{ title: 'Add a buddy' }} />
               <Stack.Screen name="BlockedPeople" component={BlockedPeopleScreen} options={{ title: 'Blocked people' }} />
               <Stack.Screen name="Highlights" component={HighlightsScreen} options={{ title: 'Highlights' }} />
               {/* The Campfire (S2): its own header over the scene, no tab bar. */}
               <Stack.Screen name="Campfire" component={CampfireScreen} options={{ headerShown: false }} />
+              {/* Chats (S3): the inbox, from Social's Chats button; its own header (back, my @handle, New message). */}
+              <Stack.Screen name="Chats" component={ChatsScreen} options={{ headerShown: false }} />
+              {/* The owner-approved Requests board draws its own header (back + "Requests"). */}
+              <Stack.Screen name="ChatRequests" component={ChatRequestsScreen} options={{ headerShown: false, title: 'Requests' }} />
+              {/* Chats (S3): its own header (coach, active line, info); one screen per buddy, like BuddyWeek. */}
+              <Stack.Screen name="ChatThread" component={ChatThreadScreen} getId={({ params }) => params?.buddyId} options={{ headerShown: false }} />
               <Stack.Screen
                 name="SocialStory"
                 component={SocialStoryScreen}

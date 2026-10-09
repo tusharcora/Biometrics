@@ -51,7 +51,7 @@ it('renders every section in V5 order and routes each action', async () => {
   fireEvent.press(screen.getByTestId('story-sam'));
   expect(mockNavigate).toHaveBeenLastCalledWith('SocialStory', { authorId: 'sam' });
   fireEvent.press(screen.getByTestId('social-chats'));
-  expect(mockNavigate).toHaveBeenLastCalledWith('Buddies', { tab: 'requests', open: expect.any(Number) });
+  expect(mockNavigate).toHaveBeenLastCalledWith('ChatRequests'); // an S2 server: no chats, but requests wait
   fireEvent.press(screen.getByTestId('stories-see-all'));
   expect(mockNavigate).toHaveBeenLastCalledWith('Buddies');
   fireEvent.press(screen.getByTestId('story-me'));
@@ -91,4 +91,12 @@ it('an older server shows the fallback card; a failure with nothing loaded shows
   expect(await screen.findByTestId('social-error')).toBeTruthy();
   await act(async () => fireEvent.press(screen.getByTestId('social-retry')));
   expect(await screen.findByTestId('stories-row')).toBeTruthy();
+});
+
+it('on a server with chats, the Chats button opens Chats and counts unread chats plus requests', async () => {
+  (fetchSocialHome as jest.Mock).mockResolvedValue({ ...home, unread: { requests: 2, stickers: 1, chats: 3 } });
+  renderScreen();
+  expect(await screen.findByTestId('social-chats-count')).toHaveTextContent('5');
+  fireEvent.press(screen.getByTestId('social-chats'));
+  expect(mockNavigate).toHaveBeenLastCalledWith('Chats');
 });

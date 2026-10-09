@@ -29,6 +29,8 @@ it('writes with JSON bodies and escapes ids in paths', async () => {
   expect(api).toHaveBeenLastCalledWith('/me/social/stories/a%2Fb');
   await markStorySeen('a/1');
   expect(api).toHaveBeenLastCalledWith('/me/social/stories/a%2F1/seen', expect.objectContaining({ method: 'POST' }));
+  await markStorySeen('a/1', '2026-10-07T15:00:00.000Z');
+  expect(api).toHaveBeenLastCalledWith('/me/social/stories/a%2F1/seen', { method: 'POST', headers: JSON_HEADERS, body: JSON.stringify({ through: '2026-10-07T15:00:00.000Z' }) });
   await markStickersSeen();
   expect(api).toHaveBeenLastCalledWith('/me/social/stickers/seen', expect.objectContaining({ method: 'POST' }));
   await shareRecap('r1', 'A steadier week');

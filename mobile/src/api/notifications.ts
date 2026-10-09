@@ -1,23 +1,35 @@
 import { apiFetch } from './client';
 
-// App-level notification settings (spec 2026-10-04 §2; buddy keys: spec 2026-10-06 buddies §6),
-// independent of the coach.
+// App-level notification settings (spec 2026-10-04 §2; buddy keys: spec 2026-10-06 buddies §6; message keys: spec
+// 2026-10-07 social §10), independent of the coach.
 export interface NotificationSettings {
   recapPushEnabled: boolean;
   notifyBuddyStickers: boolean;
   notifyBuddyRequests: boolean;
   notifyBuddyBadges: boolean;
+  /** dm_message pushes (default on). */
+  notifyDirectMessages: boolean;
+  /** The message text in a dm_message push (default off). */
+  showMessagePreviews: boolean;
 }
 
 export type NotificationKey = keyof NotificationSettings;
-const KEYS: readonly NotificationKey[] = ['recapPushEnabled', 'notifyBuddyStickers', 'notifyBuddyRequests', 'notifyBuddyBadges'];
+
+// The server's defaults, used for any key without a boolean (an older server knows fewer keys). Previews are off.
+const DEFAULTS: NotificationSettings = {
+  recapPushEnabled: true,
+  notifyBuddyStickers: true,
+  notifyBuddyRequests: true,
+  notifyBuddyBadges: true,
+  notifyDirectMessages: true,
+  showMessagePreviews: false,
+};
+const KEYS = Object.keys(DEFAULTS) as NotificationKey[];
 
 type RawSettings = Partial<Record<NotificationKey, unknown>> | undefined;
 
-// The server's default (on) for any key without a boolean: an older server knows only
-// recapPushEnabled (or has no settings yet).
 function withDefaults(res: RawSettings): NotificationSettings {
-  return Object.fromEntries(KEYS.map((key) => [key, typeof res?.[key] === 'boolean' ? res[key] : true])) as unknown as NotificationSettings;
+  return Object.fromEntries(KEYS.map((key) => [key, typeof res?.[key] === 'boolean' ? res[key] : DEFAULTS[key]])) as unknown as NotificationSettings;
 }
 
 // A 404 from a server older than this endpoint reads as every default. Any other failure throws.

@@ -33,6 +33,13 @@ export const BUDDY_ERROR_STATUS = {
   goodnight_closed: 409,
   undo_expired: 409,
   invalid_note: 400,
+  invalid_message: 400,
+  message_gone: 404,
+  invalid_reaction: 400,
+  card_unavailable: 409,
+  invalid_status_note: 400,
+  invalid_report: 400,
+  report_target_gone: 404,
 } as const;
 
 export type BuddyErrorCode = keyof typeof BUDDY_ERROR_STATUS;

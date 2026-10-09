@@ -5,8 +5,9 @@
 // with drifting "z"s; a camp note shows in a one-line bubble over its coach (mine: "+ ADD A NOTE" when I have none).
 // The panel: at Peek the fire's strength; at Half my camp note and Say goodnight (while my own window is open: from
 // min(20:00, my goal − 60 min) to 05:59; otherwise "You can say goodnight from 8:00 PM"); at Full "Who's here" with
-// each whole note, and Message camp. Every time here is 12-hour. A buddy's coach opens their week; mine opens Half at
-// the note. "Message camp" opens Buddies until chats arrive in S3. An older server (bare 404) says the camp isn't open
+// each whole note (a buddy's with "Report note"), and Message camp. Every time here is 12-hour. A buddy's coach opens
+// their chat (their camp note staged), mine opens Half at the note; "Message camp" opens Chats — on a server without
+// chats (S2), the week and Buddies instead. An older server (bare 404) says the camp isn't open
 // yet. Camp notes are buddies' free text: shown here only, never logged.
 
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -17,7 +18,7 @@ import { useFocusEffect, useNavigation } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Animated, { Extrapolation, interpolate, useAnimatedStyle, useReducedMotion } from 'react-native-reanimated';
-import { buddyErrorCode } from '../api/buddies';
+import { blockBuddy, buddyErrorCode } from '../api/buddies';
 import { clearCampNote, fetchCamp, saveCampNote, type Camp, type CampMember, type CampNote } from '../api/social';
 import { Character } from '../components/characters/Character';
 import { DEFAULT_CHARACTER_ID, isCharacterId } from '../components/characters/types';
@@ -25,6 +26,7 @@ import { pixelFont } from '../components/coach/thinking/shared';
 import { CampNoteCard } from '../components/social/CampNoteCard';
 import { CampPanel, panelStops, useCampPanel } from '../components/social/CampPanel';
 import { CampScene } from '../components/social/CampScene';
+import { ReportSheet } from '../components/chats/ReportSheet';
 import { campScene, CHROME } from '../components/social/campSceneGeometry';
 import { GoodnightButton } from '../components/social/GoodnightButton';
 import { Button, buttonIconSize } from '../components/ui/button';
@@ -32,11 +34,12 @@ import { Card } from '../components/ui/card';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { buddyErrorMessage } from '../lib/buddyCopy';
+import { campNoteQuoteLabel } from '../lib/chatCopy';
 import {
   CAMP_NOTE_MAX, campHeadline, campSceneKicker, campStatus, fireCountLabel, fireMoreLine, goodnightOpensLine, nightsLitLine,
   noteLength, personName,
 } from '../lib/socialCopy';
-import { refreshSocial } from '../lib/socialStore';
+import { refreshSocial, useChatsAvailable } from '../lib/socialStore';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { COLORS } from '../theme';
 
@@ -118,6 +121,9 @@ export function CampfireScreen() {
   const [message, setMessage] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
   const [focused, setFocused] = useState(true);
+  const chats = useChatsAvailable();
+  // The buddy whose camp note is being reported.
+  const [reportMember, setReportMember] = useState<CampMember | null>(null);
   // Where the note card sits in the panel's scroll content, and its composer within the card: kept above the keyboard.
   const [cardY, setCardY] = useState(0);
   const [composer, setComposer] = useState<{ top: number; bottom: number } | null>(null);
@@ -217,13 +223,20 @@ export function CampfireScreen() {
   const drafting = useRef(true);
   const onCoachPress = useCallback((m: CampMember) => {
     if (!m.mine) {
-      navigation.navigate('BuddyWeek', { buddyId: m.person.id });
+      // Their chat, with their camp note staged (spec §6.1, §8.3); their week on a server without chats.
+      if (chats === true) {
+        navigation.navigate('ChatThread', m.note
+          ? { buddyId: m.person.id, quote: { request: { type: 'camp_note' }, label: campNoteQuoteLabel(personName(m.person, false)) } }
+          : { buddyId: m.person.id });
+      } else {
+        navigation.navigate('BuddyWeek', { buddyId: m.person.id });
+      }
       return;
     }
     // Mine: up to Half, at the note.
     moveTo('half');
     if (drafting.current) input.current?.focus();
-  }, [navigation, moveTo]);
+  }, [navigation, moveTo, chats]);
 
   if (state.status !== 'ready') {
     return (
@@ -279,6 +292,21 @@ export function CampfireScreen() {
     setShared(null);
     setEditing(false);
   });
+  // The report is filed and "Also block" was ticked: block them now (no second confirm, owner ruling T14).
+  const blockReported = () => {
+    const m = reportMember;
+    setReportMember(null);
+    if (!m) return;
+    void blockBuddy(m.person.id).then(
+      () => {
+        void load();
+        void refreshSocial();
+      },
+      (e: unknown) => {
+        if (mounted.current) setMessage(buddyErrorMessage(buddyErrorCode(e)));
+      },
+    );
+  };
 
   return (
     <View testID="campfire" style={{ flex: 1, backgroundColor: geo.sky }}>
@@ -325,16 +353,29 @@ export function CampfireScreen() {
         {camp.members.map((m) => (
           <View key={m.person.id} testID={`camp-who-${m.person.id}`} className="flex-row items-start gap-3">
             <Character characterId={isCharacterId(m.person.coachId) ? m.person.coachId : DEFAULT_CHARACTER_ID} mood={m.asleep ? 'resting' : 'idle'} size={32} paused />
-            {/* No line limit: "Who's here" is where a whole note is read (the bubble is one truncated line). */}
-            <Text className="flex-1 text-[15px] leading-5">
-              <Text className="font-semibold">{personName(m.person, m.mine)}</Text>
-              {' '}
-              <Text testID={`camp-who-status-${m.person.id}`} className="text-[13px] text-muted-foreground">{campStatus(m)}</Text>
-            </Text>
+            <View className="flex-1 gap-1">
+              {/* No line limit: "Who's here" is where a whole note is read (the bubble is one truncated line). */}
+              <Text className="text-[15px] leading-5">
+                <Text className="font-semibold">{personName(m.person, m.mine)}</Text>
+                {' '}
+                <Text testID={`camp-who-status-${m.person.id}`} className="text-[13px] text-muted-foreground">{campStatus(m)}</Text>
+              </Text>
+              {chats === true && !m.mine && m.note ? (
+                <Button testID={`camp-report-${m.person.id}`} variant="link" accessibilityRole="button" className="self-start"
+                  textClassName="text-xs text-muted-foreground" onPress={() => setReportMember(m)}>Report note</Button>
+              ) : null}
+            </View>
           </View>
         ))}
-        <Button testID="camp-message-camp" variant="secondary" size="lg" onPress={() => navigation.navigate('Buddies')}>Message camp</Button>
+        {/* Group chat is out of scope (spec §11): Message camp opens Chats; Buddies on a server without chats. */}
+        <Button testID="camp-message-camp" variant="secondary" size="lg" onPress={() => (chats === true ? navigation.navigate('Chats') : navigation.navigate('Buddies'))}>Message camp</Button>
       </CampPanel>
+      <ReportSheet
+        target={reportMember ? { type: 'camp_note', id: reportMember.person.id } : null}
+        name={reportMember ? personName(reportMember.person, false) : ''}
+        onClose={() => setReportMember(null)}
+        onBlock={blockReported}
+      />
     </View>
   );
 }

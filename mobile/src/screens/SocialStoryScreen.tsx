@@ -1,25 +1,30 @@
 // Social story viewer (spec 2026-10-07 social §4.2): the recap story engine (useStoryViewer + ViewerProgress) over
 // a buddy's frames for their day. Reaching the last frame marks it seen (once) and refreshes Social; running past
-// the end closes. Replies are stickers until chats arrive in S3; my own story has none.
+// the end closes. Replies are stickers, and (S3, on a server with chats) "Message" opens the thread with the frame
+// staged; my own story has neither.
 // A story with no frames left says so ("Nothing in this story yet."); "isn't available anymore" is for one that is gone.
 
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, AppState, Pressable, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { Ionicons } from '@expo/vector-icons';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { StatusBar } from 'expo-status-bar';
 import { useReducedMotion } from 'react-native-reanimated';
 import { buddyErrorCode, sendSticker, type StickerKind } from '../api/buddies';
-import { fetchStory, markStorySeen, type Story } from '../api/social';
+import { fetchStory, markStorySeen, type Story, type StoryFrame } from '../api/social';
 import { ViewerProgress } from '../components/recap/ViewerProgress';
 import { CheckInSheet } from '../components/social/CheckInSheet';
 import { SocialStoryFrame } from '../components/social/SocialStoryFrame';
-import { Button } from '../components/ui/button';
+import { Button, buttonIconSize } from '../components/ui/button';
 import { Text } from '../components/ui/text';
 import { buddyErrorMessage, STICKERS } from '../lib/buddyCopy';
+import { frameQuoteLabel } from '../lib/chatCopy';
 import { knownStoryFrames, personName } from '../lib/socialCopy';
 import { refreshSocial, useSocial } from '../lib/socialStore';
 import { useStoryViewer } from '../lib/useStoryViewer';
+import type { RootStackParamList } from '../navigation/RootNavigator';
 
 const GROUND = '#0F1230';
 // The story is dark in either app scheme, but the Button's tokens and `dark:` classes follow it: these pin the look
@@ -31,10 +36,18 @@ const ON_STORY_OUTLINE = 'border-white/30 bg-transparent active:bg-white/10 dark
 type Loaded = { phase: 'loading' } | { phase: 'ready'; story: Story } | { phase: 'empty' } | { phase: 'gone' } | { phase: 'error' };
 
 export function SocialStoryScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const { authorId, mine: mineParam } = (useRoute().params ?? {}) as { authorId: string; mine?: boolean };
   const [loaded, setLoaded] = useState<Loaded>({ phase: 'loading' });
   const leave = useCallback(() => navigation.goBack(), [navigation]);
+  // Close the viewer, then open their thread with this frame staged as the quote (spec §4.2, §8.3).
+  const openThread = useCallback((story: Story, frame: StoryFrame) => {
+    navigation.goBack();
+    navigation.navigate('ChatThread', {
+      buddyId: story.author.id,
+      quote: { request: { type: 'story_frame', at: frame.at }, label: frameQuoteLabel(frame.kind, personName(story.author, false)) },
+    });
+  }, [navigation]);
   // Retry is not tied to an effect: it checks this, so a load that lands after leaving sets nothing.
   const mounted = useRef(true);
   useEffect(() => {
@@ -67,7 +80,7 @@ export function SocialStoryScreen() {
     };
   }, [load]);
 
-  if (loaded.phase === 'ready') return <Viewer story={loaded.story} mineHint={mineParam === true} onClose={leave} />;
+  if (loaded.phase === 'ready') return <Viewer story={loaded.story} mineHint={mineParam === true} onClose={leave} onMessage={openThread} />;
   return (
     <SafeAreaView testID={`social-story-${loaded.phase}`} style={{ flex: 1, backgroundColor: GROUND }}>
       <StatusBar style="light" />
@@ -87,11 +100,13 @@ export function SocialStoryScreen() {
   );
 }
 
-function Viewer({ story, mineHint, onClose }: { story: Story; mineHint: boolean; onClose: () => void }) {
+function Viewer({ story, mineHint, onClose, onMessage }: { story: Story; mineHint: boolean; onClose: () => void; onMessage: (story: Story, frame: StoryFrame) => void }) {
   const social = useSocial();
   // Once the store has loaded it decides; until then the route's hint does.
   const mine = social.status === 'ready' ? social.home.me.person.id === story.author.id : mineHint;
   const myMood = social.status === 'ready' ? social.home.me.checkIn?.mood ?? null : null;
+  // A server with chats sends unread.chats (S3); without it there is no thread to open.
+  const chatsOn = social.status === 'ready' && typeof social.home.unread?.chats === 'number';
   const reduceMotion = useReducedMotion();
   const [checkingIn, setCheckingIn] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -106,21 +121,33 @@ function Viewer({ story, mineHint, onClose }: { story: Story; mineHint: boolean;
       mounted.current = false;
     };
   }, []);
-  const viewer = useStoryViewer({ count: story.frames.length, autoAdvance: !reduceMotion, onClose });
+  // Set once Message has left for the thread: the story stops, and nothing here closes, navigates or marks it seen
+  // again while the viewer is dismissed (a double tap, or the last frame running out underneath).
+  const leaving = useRef(false);
+  const closeOnce = useCallback(() => {
+    if (!leaving.current) onClose();
+  }, [onClose]);
+  const viewer = useStoryViewer({ count: story.frames.length, autoAdvance: !reduceMotion, onClose: closeOnce });
   const { pause, resume, close } = viewer;
   const last = story.frames.length - 1;
+  const openChat = (frame: StoryFrame) => {
+    if (leaving.current) return;
+    leaving.current = true;
+    pause('leaving');
+    onMessage(story, frame);
+  };
 
   // Seen = the viewer reached the last frame (spec §4.2), once per open, even if they close right there.
   useEffect(() => {
-    if (viewer.index === last && !seen.current) {
+    if (viewer.index === last && !seen.current && !leaving.current) {
       seen.current = true;
-      void markStorySeen(story.author.id)
+      void markStorySeen(story.author.id, story.frames[last]?.at)
         .catch(() => undefined)
         .finally(() => {
           void refreshSocial();
         });
     }
-  }, [viewer.index, last, story.author.id]);
+  }, [viewer.index, last, story.author.id, story.frames]);
 
   // Past the last frame there are no end actions here: it closes.
   useEffect(() => {
@@ -231,6 +258,12 @@ function Viewer({ story, mineHint, onClose }: { story: Story; mineHint: boolean;
             ))}
           </View>
           {message ? <Text testID="story-message" className="text-center text-sm text-white/80">{message}</Text> : null}
+          {chatsOn ? (
+            <Button testID="story-message-button" variant="outline" size="sm" onPress={() => openChat(frame)} className={`rounded-full ${ON_STORY_OUTLINE}`}
+              textClassName="text-white" iconStart={<Ionicons name="chatbubble-outline" size={buttonIconSize('sm')} color="#FFFFFF" />}>
+              {`Message ${personName(story.author, false)}`}
+            </Button>
+          ) : null}
         </View>
       )}
       <CheckInSheet visible={checkingIn} current={myMood} onClose={closeSheet} />

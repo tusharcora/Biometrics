@@ -1,5 +1,5 @@
 // Social tab home — V5 one scroll (spec 2026-10-07 social §4): camp banner → stories with my check-in → week
-// highlights → today timeline, and a floating Chats button (opens Buddies until S3). Unseen stickers are marked
+// highlights → today timeline, and a floating Chats button (Chats on a server with chats, S3; else Buddies). Unseen stickers are marked
 // seen once the screen has shown them, so the tab dot clears where they are read. S2: the banner opens the Campfire
 // (only on a server that has one: it sends camp.night), and while my goodnight window is open (camp.goodnightOpen:
 // from min(20:00, my goal − 60 min) to 05:59) "Say goodnight" follows the timeline.
@@ -15,7 +15,7 @@ import { markStickersSeen, type SocialHome } from '../api/social';
 import { COLORS } from '../theme';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { useTabBarClearance } from '../navigation/tabBarLayout';
-import { refreshSocial, useSocial } from '../lib/socialStore';
+import { chatsBadgeCount, refreshSocial, useSocial } from '../lib/socialStore';
 import { CampBanner } from '../components/social/CampBanner';
 import { CheckInSheet } from '../components/social/CheckInSheet';
 import { GoodnightButton } from '../components/social/GoodnightButton';
@@ -84,7 +84,15 @@ export function SocialScreen() {
   }
 
   const { home } = state;
-  const chats = (home.unread?.requests ?? 0) + (home.unread?.stickers ?? 0);
+  // S3: an S3 server sends unread.chats; then the button opens Chats and counts unread chats + requests. An older server
+  // keeps the S2 button (requests + stickers): it opens Chats › Requests while requests wait, else All buddies.
+  const chatsOn = typeof home.unread?.chats === 'number';
+  const chats = chatsOn ? chatsBadgeCount(home.unread) : (home.unread?.requests ?? 0) + (home.unread?.stickers ?? 0);
+  const openChats = () => {
+    if (chatsOn) navigation.navigate('Chats');
+    else if ((home.unread?.requests ?? 0) > 0) navigation.navigate('ChatRequests');
+    else navigation.navigate('Buddies');
+  };
   return (
     <SafeAreaView edges={['top']} className="flex-1 bg-background" testID="social-screen">
       <ScrollView contentContainerStyle={{ gap: 18, paddingHorizontal: 20, paddingBottom: clearance + 64 }}
@@ -108,7 +116,7 @@ export function SocialScreen() {
       </ScrollView>
       {/* The floating Chats pill: custom children so the icon and the count keep their own testIDs. */}
       <Button testID="social-chats" size="lg" accessibilityLabel={chats > 0 ? `Chats, ${chats} new` : 'Chats'}
-        onPress={() => ((home.unread?.requests ?? 0) > 0 ? navigation.navigate('Buddies', { tab: 'requests', open: Date.now() }) : navigation.navigate('Buddies'))}
+        onPress={openChats}
         style={{ position: 'absolute', right: 20, bottom: clearance + 8 }}
         className="rounded-full"
         iconStart={<View testID="social-chats-icon"><Ionicons name="chatbubble-outline" size={buttonIconSize('lg')} color={colors.background} /></View>}>

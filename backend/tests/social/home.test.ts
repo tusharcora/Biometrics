@@ -29,7 +29,7 @@ it('returns the whole Social home in one call, never cached', async () => {
     night: expect.any(Boolean), awake: 3, asleep: 0, goodnightOpen: expect.any(Boolean),
   });
   expect(res.body.stories.map((r: { author: { id: string }; locked: boolean }) => [r.author.id, r.locked])).toEqual([[sam.id, true]]);
-  expect(res.body.unread).toEqual({ requests: 0, stickers: 1 });
+  expect(res.body.unread).toEqual({ requests: 0, stickers: 1, chats: 0 });
   expect(res.body.timeline.map((i: { kind: string }) => i.kind)).toEqual(['checkin', 'sticker']);
   // I haven't checked in: Sam's check-in is in the timeline, locked, with no mood on the wire.
   expect(res.body.timeline[0]).toMatchObject({ kind: 'checkin', locked: true, actor: { id: sam.id } });
@@ -50,10 +50,10 @@ it('marks unseen stickers from current buddies seen, so the unread count drops',
   await prisma.sticker.create({ data: { fromUserId: ana.id, toUserId: me.id, kind: 'REST_UP' } });
   const agent = await api();
   const headers = await authHeaderFor(me.id);
-  expect((await agent.get('/me/social').set(headers)).body.unread).toEqual({ requests: 0, stickers: 1 });
+  expect((await agent.get('/me/social').set(headers)).body.unread).toEqual({ requests: 0, stickers: 1, chats: 0 });
   const seen = await agent.post('/me/social/stickers/seen').set(headers);
   expect(seen.status).toBe(204);
-  expect((await agent.get('/me/social').set(headers)).body.unread).toEqual({ requests: 0, stickers: 0 });
+  expect((await agent.get('/me/social').set(headers)).body.unread).toEqual({ requests: 0, stickers: 0, chats: 0 });
   expect((await agent.post('/me/social/stickers/seen')).status).toBe(401);
 });
 
