@@ -14,6 +14,7 @@ import { ConnectHealthScreen } from '../screens/ConnectHealthScreen';
 import { MetricDetailScreen } from '../screens/MetricDetailScreen';
 import { MetricsScreen } from '../screens/MetricsScreen';
 import { ScoreDetailScreen } from '../screens/ScoreDetailScreen';
+import { RecoveryScreen } from '../screens/RecoveryScreen';
 import { ForecastScreen } from '../screens/ForecastScreen';
 import { FORECAST_COPY } from '../lib/forecastCopy';
 import { PatternsScreen } from '../screens/PatternsScreen';
@@ -81,6 +82,7 @@ export type RootStackParamList = {
   // (the Trends screen passes its current one; default 30 days).
   MetricDetail: { metricType: MetricRecord['metricType']; records: MetricRecord[]; range?: TrendRange };
   ScoreDetail: { date: string; type?: ScoreType }; // type defaults to RECOVERY
+  Recovery: { date?: string } | undefined; // date (YYYY-MM-DD) defaults to today
   Forecast: undefined;
   Patterns: undefined;
   // Every metric's trend card (the old Metrics tab), opened from Activity's "All trends".
@@ -238,6 +240,7 @@ export function RootNavigator() {
               <Stack.Screen name="ConnectHealth" component={ConnectHealthScreen} options={{ title: '' }} />
               <Stack.Screen name="MetricDetail" component={MetricDetailScreen} options={{ title: '' }} />
               <Stack.Screen name="ScoreDetail" component={ScoreDetailScreen} options={{ title: 'Score' }} />
+              <Stack.Screen name="Recovery" component={RecoveryScreen} options={{ headerShown: false }} />
               <Stack.Screen name="Forecast" component={ForecastScreen} options={{ title: FORECAST_COPY.title }} />
               <Stack.Screen name="Patterns" component={PatternsScreen} options={{ title: 'Patterns' }} />
               <Stack.Screen name="Trends" component={MetricsScreen} options={{ title: '' }} />
