@@ -56,10 +56,10 @@ describe('Button classes compiled for native', () => {
   });
 
   it.each<[ButtonSize, number, number]>([
-    ['xs', 12, 16],
+    ['xs', 11, 14],
     ['sm', 13, 18],
-    ['default', 14, 20],
-    ['lg', 14, 20],
+    ['default', 15, 21],
+    ['lg', 15, 21],
   ])('%s label is %dpx on a %dpx line', (size, fontSize, lineHeight) => {
     const style = Object.assign({}, ...buttonTextVariants({ size }).split(' ').map((c) => staticStyle(rules14, c)));
     expect(style).toEqual(expect.objectContaining({ fontSize, lineHeight }));

@@ -56,7 +56,8 @@ import { syncPushRegistration } from '../lib/pushRegistration';
 import { rescheduleWindDown } from '../lib/windDown';
 import { listenForNotificationTaps, routeInitialNotification } from '../notifications/handler';
 import { navigationRef } from './navigationRef';
-import { COLORS, FONTS } from '../theme';
+import { headerTitleStyle } from './headerStyle';
+import { COLORS } from '../theme';
 import { ToastProvider } from '../components/ui/toast';
 import { SyncProvider } from '../sync/SyncProvider';
 import type { MetricRecord } from '../lib/metricInsights';
@@ -226,7 +227,7 @@ export function RootNavigator() {
               screenOptions={{
                 headerShadowVisible: false,
                 headerStyle: { backgroundColor: colors.background },
-                headerTitleStyle: { color: colors.foreground, fontFamily: FONTS.sansSemibold },
+                headerTitleStyle: headerTitleStyle(colors.foreground),
                 headerTintColor: colors.foreground,
                 // A bare chevron: the parent route's name ("Tabs") is not a place.
                 headerBackButtonDisplayMode: 'minimal',
@@ -235,20 +236,20 @@ export function RootNavigator() {
               <Stack.Screen name="Tabs" component={TabsNavigator} options={{ headerShown: false }} />
               <Stack.Screen name="ConnectHealth" component={ConnectHealthScreen} options={{ title: '' }} />
               <Stack.Screen name="MetricDetail" component={MetricDetailScreen} options={{ title: '' }} />
-              <Stack.Screen name="ScoreDetail" component={ScoreDetailScreen} options={{ title: 'Score' }} />
-              <Stack.Screen name="Forecast" component={ForecastScreen} options={{ title: FORECAST_COPY.title }} />
-              <Stack.Screen name="Patterns" component={PatternsScreen} options={{ title: 'Patterns' }} />
+              <Stack.Screen name="ScoreDetail" component={ScoreDetailScreen} options={{ title: 'SCORE' }} />
+              <Stack.Screen name="Forecast" component={ForecastScreen} options={{ title: FORECAST_COPY.title.toUpperCase() }} />
+              <Stack.Screen name="Patterns" component={PatternsScreen} options={{ title: 'PATTERNS' }} />
               <Stack.Screen name="Trends" component={MetricsScreen} options={{ title: '' }} />
-              <Stack.Screen name="CoachConsent" component={CoachConsentScreen} options={{ title: 'AI Coach' }} />
-              <Stack.Screen name="CoachMemory" component={CoachMemoryScreen} options={{ title: 'Coach Memory' }} />
-              <Stack.Screen name="ThinkingStyle" component={ThinkingStyleScreen} options={{ title: 'Thinking style' }} />
-              <Stack.Screen name="ThinkingText" component={ThinkingTextScreen} options={{ title: 'Thinking text' }} />
-              <Stack.Screen name="HostedConsent" component={HostedConsentScreen} options={{ title: 'AI engine' }} />
-              <Stack.Screen name="SignInMethods" component={SignInMethodsScreen} options={{ title: 'Sign-in methods' }} />
-              <Stack.Screen name="Devices" component={DevicesScreen} options={{ title: 'Devices' }} />
-              <Stack.Screen name="Sleep" component={SleepScreen} options={{ title: 'Sleep' }} />
+              <Stack.Screen name="CoachConsent" component={CoachConsentScreen} options={{ title: 'AI COACH' }} />
+              <Stack.Screen name="CoachMemory" component={CoachMemoryScreen} options={{ title: 'COACH MEMORY' }} />
+              <Stack.Screen name="ThinkingStyle" component={ThinkingStyleScreen} options={{ title: 'THINKING STYLE' }} />
+              <Stack.Screen name="ThinkingText" component={ThinkingTextScreen} options={{ title: 'THINKING TEXT' }} />
+              <Stack.Screen name="HostedConsent" component={HostedConsentScreen} options={{ title: 'AI ENGINE' }} />
+              <Stack.Screen name="SignInMethods" component={SignInMethodsScreen} options={{ title: 'SIGN-IN METHODS' }} />
+              <Stack.Screen name="Devices" component={DevicesScreen} options={{ title: 'DEVICES' }} />
+              <Stack.Screen name="Sleep" component={SleepScreen} options={{ title: 'SLEEP' }} />
               <Stack.Screen name="SleepNight" component={SleepNightScreen} options={{ title: '' }} />
-              <Stack.Screen name="BedtimeGoal" component={BedtimeGoalScreen} options={{ title: 'Bedtime goal' }} />
+              <Stack.Screen name="BedtimeGoal" component={BedtimeGoalScreen} options={{ title: 'BEDTIME GOAL' }} />
               <Stack.Screen name="Recap" component={RecapScreen} options={{ title: '' }} />
               <Stack.Screen
                 name="RecapStory"
@@ -256,21 +257,21 @@ export function RootNavigator() {
                 // Full screen with no system swipe: the viewer's own swipe down closes it.
                 options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }}
               />
-              <Stack.Screen name="Recaps" component={RecapsScreen} options={{ title: 'Your recaps' }} />
-              <Stack.Screen name="YearInPixels" component={YearInPixelsScreen} options={{ title: 'Year in pixels' }} />
-              <Stack.Screen name="Badges" component={BadgesScreen} options={{ title: 'Badges' }} />
+              <Stack.Screen name="Recaps" component={RecapsScreen} options={{ title: 'YOUR RECAPS' }} />
+              <Stack.Screen name="YearInPixels" component={YearInPixelsScreen} options={{ title: 'YEAR IN PIXELS' }} />
+              <Stack.Screen name="Badges" component={BadgesScreen} options={{ title: 'BADGES' }} />
               <Stack.Screen name="BadgeDetail" component={BadgeDetailScreen} options={{ title: '' }} />
-              <Stack.Screen name="BuddyIdentity" component={BuddyIdentityScreen} options={{ title: 'Buddy name' }} />
-              <Stack.Screen name="Buddies" component={BuddiesScreen} options={{ title: 'All buddies' }} />
-              <Stack.Screen name="PairUp" component={PairUpScreen} options={{ title: 'Add a buddy' }} />
-              <Stack.Screen name="BlockedPeople" component={BlockedPeopleScreen} options={{ title: 'Blocked people' }} />
-              <Stack.Screen name="Highlights" component={HighlightsScreen} options={{ title: 'Highlights' }} />
+              <Stack.Screen name="BuddyIdentity" component={BuddyIdentityScreen} options={{ title: 'BUDDY NAME' }} />
+              <Stack.Screen name="Buddies" component={BuddiesScreen} options={{ title: 'ALL BUDDIES' }} />
+              <Stack.Screen name="PairUp" component={PairUpScreen} options={{ title: 'ADD A BUDDY' }} />
+              <Stack.Screen name="BlockedPeople" component={BlockedPeopleScreen} options={{ title: 'BLOCKED PEOPLE' }} />
+              <Stack.Screen name="Highlights" component={HighlightsScreen} options={{ title: 'HIGHLIGHTS' }} />
               {/* The Campfire (S2): its own header over the scene, no tab bar. */}
               <Stack.Screen name="Campfire" component={CampfireScreen} options={{ headerShown: false }} />
               {/* Chats (S3): the inbox, from Social's Chats button; its own header (back, my @handle, New message). */}
               <Stack.Screen name="Chats" component={ChatsScreen} options={{ headerShown: false }} />
               {/* The owner-approved Requests board draws its own header (back + "Requests"). */}
-              <Stack.Screen name="ChatRequests" component={ChatRequestsScreen} options={{ headerShown: false, title: 'Requests' }} />
+              <Stack.Screen name="ChatRequests" component={ChatRequestsScreen} options={{ headerShown: false, title: 'REQUESTS' }} />
               {/* Chats (S3): its own header (coach, active line, info); one screen per buddy, like BuddyWeek. */}
               <Stack.Screen name="ChatThread" component={ChatThreadScreen} getId={({ params }) => params?.buddyId} options={{ headerShown: false }} />
               <Stack.Screen
@@ -282,7 +283,7 @@ export function RootNavigator() {
               {/* One instance per buddy: navigating to another buddy's week (a push tap) opens a new
                   screen instead of swapping the params under the current one. */}
               <Stack.Screen name="BuddyWeek" component={BuddyWeekScreen} getId={({ params }) => params?.buddyId} options={{ title: '' }} />
-              <Stack.Screen name="RecapBuilder" component={RecapBuilderScreen} options={{ title: 'Build your recap' }} />
+              <Stack.Screen name="RecapBuilder" component={RecapBuilderScreen} options={{ title: 'BUILD YOUR RECAP' }} />
               <Stack.Screen
                 name="MeetYourCoach"
                 component={MeetYourCoachScreen}

@@ -186,7 +186,7 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
                       icon
                     )}
                     {focused ? (
-                      <Text testID={`tab-label-${route.name}`} className="text-[10px] font-semibold" style={{ color: colors.foreground }}>
+                      <Text testID={`tab-label-${route.name}`} className="text-fine font-semibold" style={{ color: colors.foreground }}>
                         {label}
                       </Text>
                     ) : null}

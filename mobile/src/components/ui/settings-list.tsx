@@ -21,7 +21,7 @@ export function SettingsGroup({ label, footer, children, testID }: { label?: str
           </View>
         ))}
       </View>
-      {footer ? <Text className="px-4 text-xs text-muted-foreground">{footer}</Text> : null}
+      {footer ? <Text className="px-4 text-caption text-muted-foreground">{footer}</Text> : null}
     </View>
   );
 }
@@ -81,9 +81,9 @@ export function SettingsRow({
         </View>
       ) : null)}
       <View className="flex-1 gap-0.5">
-        <Text className={cn('text-base', destructive ? 'text-destructive' : '', selected ? 'font-semibold' : '')}>{title}</Text>
+        <Text className={cn('text-body', destructive ? 'text-destructive' : '', selected ? 'font-semibold' : '')}>{title}</Text>
         {subtitle ? (
-          <Text testID={subtitleTestID} className="text-xs text-muted-foreground">
+          <Text testID={subtitleTestID} className="text-caption text-muted-foreground">
             {subtitle}
           </Text>
         ) : null}
@@ -91,7 +91,7 @@ export function SettingsRow({
       {trailing ?? (
         <>
           {value ? (
-            <Text testID={valueTestID} className="max-w-[55%] text-right text-sm text-muted-foreground" numberOfLines={1}>
+            <Text testID={valueTestID} className="max-w-[55%] text-right text-caption text-muted-foreground" numberOfLines={1}>
               {value}
             </Text>
           ) : null}

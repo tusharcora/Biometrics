@@ -8,6 +8,7 @@ import { MESSAGE_MAX, noteLength } from '../../lib/chatCopy';
 import { COLORS } from '../../theme';
 import { Button, buttonIconSize } from '../ui/button';
 import { Text } from '../ui/text';
+import { inputTextStyle } from '../ui/input-style';
 
 // The thread's composer (V5 thread board): a staged quote or reply (each removable), the quick-sticker chips, "+" to
 // share my check-in today, the "Message…" input and Send. The draft is trimmed, empties as it is sent and comes back if
@@ -85,7 +86,8 @@ export function ChatComposer(p: ComposerProps) {
           multiline
           value={draft}
           onChangeText={setDraft}
-          className="max-h-28 min-h-[36px] flex-1 rounded-[18px] bg-secondary px-3.5 py-2 text-[15px] text-foreground"
+          style={inputTextStyle}
+          className="max-h-28 min-h-[36px] flex-1 rounded-[18px] bg-secondary px-3.5 py-2 text-foreground"
         />
         <Button testID="composer-send" size="icon" accessibilityLabel="Send" disabled={!canSend} onPress={() => void send()}>
           <Ionicons name="arrow-up" size={buttonIconSize('icon')} color={colors.background} />

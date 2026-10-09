@@ -4,6 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useColorScheme } from 'nativewind';
 import { NavigationContext } from '@react-navigation/native';
 import { Text } from '../components/ui/text';
+import { inputTextStyle } from '../components/ui/input-style';
 import { Button } from '../components/ui/button';
 import { Ionicons } from '@expo/vector-icons';
 import { SettingsGroup, SettingsRow } from '../components/ui/settings-list';
@@ -17,7 +18,7 @@ import { ChatSettingsSection } from '../components/chats/ChatSettingsSection';
 import { NotificationsSection } from '../components/notifications-section';
 import { YourCoachRow } from '../components/your-coach-row';
 import { StoryRing, useStoryRing } from '../components/recap/StoryRing';
-import { COLORS, FONTS } from '../theme';
+import { COLORS } from '../theme';
 import { useSync } from '../sync/SyncProvider';
 import { formatLastSynced } from '../sync/formatLastSynced';
 import { useTabBarClearance } from '../navigation/tabBarLayout';
@@ -93,7 +94,7 @@ export function SettingsScreen() {
               placeholderTextColor={colors.muted}
               autoCapitalize="none"
               autoCorrect={false}
-              style={{ color: colors.foreground, fontFamily: FONTS.sans }}
+              style={[inputTextStyle, { color: colors.foreground }]}
               className="rounded-tile border border-border bg-card px-4 py-3"
             />
             {error ? <Text className="text-sm text-destructive">{error}</Text> : null}

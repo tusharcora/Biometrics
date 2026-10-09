@@ -174,8 +174,8 @@ export function RangeChart({
               style={{ position: 'absolute', top: 0, left: tooltipLeft, width: tooltipWidth }}
               className="items-center rounded-tile border border-border bg-surface-raised px-2.5 py-1.5"
             >
-              <Text className="text-xs text-muted-foreground">{shortDate(tooltip)}</Text>
-              <Text className="text-sm font-bold" style={{ fontVariant: ['tabular-nums'] }}>
+              <Text className="text-caption text-muted-foreground">{shortDate(tooltip)}</Text>
+              <Text className="text-body font-bold tabular-nums">
                 {format(tooltip.value)}
               </Text>
             </View>
@@ -183,10 +183,10 @@ export function RangeChart({
           {!compact && range && width > 0 ? (
             <>
               <View pointerEvents="none" className="absolute left-0 rounded-full bg-card px-1.5" style={{ top: bandTop - 8 }}>
-                <Text className="text-[10px] text-muted-foreground">{format(range.high)}</Text>
+                <Text className="text-fine text-muted-foreground">{format(range.high)}</Text>
               </View>
               <View pointerEvents="none" className="absolute left-0 rounded-full bg-card px-1.5" style={{ top: bandBottom - 8 }}>
-                <Text className="text-[10px] text-muted-foreground">{format(range.low)}</Text>
+                <Text className="text-fine text-muted-foreground">{format(range.low)}</Text>
               </View>
             </>
           ) : null}
@@ -195,9 +195,9 @@ export function RangeChart({
 
       {!compact && count > 1 ? (
         <View className="flex-row justify-between px-1">
-          <Text className="text-[11px] text-muted-foreground">{shortDate(points[0])}</Text>
-          <Text className="text-[11px] text-muted-foreground">{shortDate(points[Math.floor((count - 1) / 2)])}</Text>
-          <Text className="text-[11px] text-muted-foreground">{shortDate(points[count - 1])}</Text>
+          <Text className="text-fine text-muted-foreground">{shortDate(points[0])}</Text>
+          <Text className="text-fine text-muted-foreground">{shortDate(points[Math.floor((count - 1) / 2)])}</Text>
+          <Text className="text-fine text-muted-foreground">{shortDate(points[count - 1])}</Text>
         </View>
       ) : null}
 
@@ -206,13 +206,13 @@ export function RangeChart({
           {range ? (
             <View className="flex-row items-center gap-1.5">
               <View className="h-2 w-3.5 rounded-sm" style={{ backgroundColor: withAlpha(color, 0.3) }} />
-              <Text className="text-xs text-muted-foreground">{`Usual range · ${formatRange(range.low, range.high, format)}`}</Text>
+              <Text className="text-fine text-muted-foreground">{`Usual range · ${formatRange(range.low, range.high, format)}`}</Text>
             </View>
           ) : null}
           {range ? (
             <View className="flex-row items-center gap-1.5">
               <View className="h-2 w-2 rounded-full" style={{ backgroundColor: color }} />
-              <Text className="text-xs text-muted-foreground">Outside it</Text>
+              <Text className="text-fine text-muted-foreground">Outside it</Text>
             </View>
           ) : null}
         </View>

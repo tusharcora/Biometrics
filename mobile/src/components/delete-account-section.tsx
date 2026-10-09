@@ -4,9 +4,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from 'nativewind';
 import { ApiError, deleteAccount } from '../api/client';
 import { useOptionalAuth } from '../auth/AuthContext';
-import { COLORS, FONTS } from '../theme';
+import { COLORS } from '../theme';
 import { SettingsGroup, SettingsRow } from './ui/settings-list';
 import { Text } from './ui/text';
+import { inputTextStyle } from './ui/input-style';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 
@@ -90,7 +91,7 @@ export function DeleteAccountSection() {
         placeholderTextColor={colors.muted}
         autoCapitalize="none"
         autoCorrect={false}
-        style={{ color: colors.foreground, fontFamily: FONTS.sans }}
+        style={[inputTextStyle, { color: colors.foreground }]}
         className="rounded-tile border border-border bg-card px-4 py-3"
       />
       {error ? (

@@ -100,14 +100,14 @@ describe('buttonTextVariants', () => {
         Remove
       </Button>,
     );
-    expect(classesOf(getByTestId('label'))).toEqual(expect.arrayContaining(['font-medium', 'text-destructive', 'text-[13px]', 'leading-[18px]']));
+    expect(classesOf(getByTestId('label'))).toEqual(expect.arrayContaining(['font-medium', 'text-destructive', 'text-caption']));
   });
 
   it.each<[ButtonSize, string]>([
-    ['xs', 'text-[12px]'],
-    ['sm', 'text-[13px]'],
-    ['default', 'text-[14px]'],
-    ['lg', 'text-[14px]'],
+    ['xs', 'text-fine'],
+    ['sm', 'text-caption'],
+    ['default', 'text-body'],
+    ['lg', 'text-body'],
   ])('%s label size', (size, expected) => {
     expect(buttonTextVariants({ size }).split(' ')).toContain(expected);
   });
@@ -226,14 +226,15 @@ describe('loading', () => {
 
   it('colours the spinner like a textClassName colour override', () => {
     const { getByTestId } = render(
-      <Button testID="b" loading textClassName="text-accent text-[16px]">
+      <Button testID="b" loading textClassName="text-[16px] text-caption text-score-good">
         Saving
       </Button>,
     );
     const classes = classesOf(getByTestId('b-spinner'));
-    expect(classes).toContain('text-accent');
     expect(classes).not.toContain('text-background');
     expect(classes).not.toContain('text-[16px]');
+    expect(classes).not.toContain('text-caption');
+    expect(classes).toContain('text-score-good');
   });
 
   it('takes an explicit spinnerColor', () => {
@@ -393,7 +394,7 @@ describe('hitSlop', () => {
   });
 
   it('treats a link as one line of text', () => {
-    expect(hitSlopFor('default', 'link')).toEqual({ top: 12, bottom: 12, left: 0, right: 0 });
+    expect(hitSlopFor('default', 'link')).toEqual({ top: 11.5, bottom: 11.5, left: 0, right: 0 });
   });
 
   it('applies the computed slop and recomputes after layout', () => {

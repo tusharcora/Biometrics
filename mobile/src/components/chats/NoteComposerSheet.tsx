@@ -9,6 +9,7 @@ import { COLORS } from '../../theme';
 import { Button } from '../ui/button';
 import { Sheet } from '../ui/sheet';
 import { Text } from '../ui/text';
+import { inputTextStyle } from '../ui/input-style';
 
 // My Chats note (spec §8.1): up to 60 characters over my avatar for 24 hours. Share replaces it; Clear removes it.
 // The note is my free text: never logged.
@@ -56,7 +57,8 @@ export function NoteComposerSheet({ visible, current, onClose, onSaved }: { visi
           onChangeText={setDraft}
           placeholder="early night tonight"
           placeholderTextColor={colors.muted}
-          className="h-11 rounded-xl bg-secondary px-3 text-[15px] text-foreground"
+          style={inputTextStyle}
+          className="h-11 rounded-xl bg-secondary px-3 text-foreground"
         />
         <Text testID="note-count" className={length > STATUS_NOTE_MAX ? 'self-end text-xs text-destructive' : 'self-end text-xs text-muted-foreground'}>{`${length}/${STATUS_NOTE_MAX}`}</Text>
         {/* Stacked full-width sheet buttons: size lg (plan ruling P4). */}

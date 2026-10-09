@@ -64,7 +64,7 @@ export function BaselineProgressRing({ daysCollected, daysRequired, size = 84, s
         })}
       </Svg>
       {showLabel ? (
-        <CountUp value={collected} format={(v) => `${Math.round(v)}/${required} days`} className="text-xs font-semibold" />
+        <CountUp value={collected} format={(v) => `${Math.round(v)}/${required} days`} className="text-caption font-semibold tabular-nums" />
       ) : null}
     </View>
   );

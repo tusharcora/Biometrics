@@ -1,11 +1,13 @@
 import React from 'react';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ApiError } from '../../src/api/client';
 import { clearStatusNote, fetchChats, fetchNotes, fileReport, saveStatusNote, sendStickerMessage, type ChatRow, type ChatsPage } from '../../src/api/chats';
 import { blockBuddy } from '../../src/api/buddies';
 import { refreshBuddies } from '../../src/lib/buddiesStore';
 import { ChatsScreen } from '../../src/screens/ChatsScreen';
+import { FONTS } from '../../src/theme';
 
 jest.mock('../../src/api/chats', () => ({
   ...jest.requireActual('../../src/api/chats'),
@@ -96,6 +98,9 @@ it('a refused Cheer says why', async () => {
 it('search filters conversations by name or handle', async () => {
   renderScreen();
   fireEvent.changeText(await screen.findByTestId('chats-search'), 'SA');
+  // The fourth fontless input (spec §3): Geist at the body size, placeholder included.
+  expect(screen.getByTestId('chats-search').props.placeholder).toBe('Search');
+  expect(StyleSheet.flatten(screen.getByTestId('chats-search').props.style)).toEqual(expect.objectContaining({ fontFamily: FONTS.sans, fontSize: 15 }));
   expect(screen.queryByTestId('chat-row-ben')).toBeNull();
   expect(screen.getByTestId('chat-row-sam')).toBeTruthy();
   fireEvent.changeText(screen.getByTestId('chats-search'), 'nobody');

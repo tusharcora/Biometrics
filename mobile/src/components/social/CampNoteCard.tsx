@@ -11,6 +11,7 @@ import { Character } from '../characters/Character';
 import type { CharacterId } from '../characters/types';
 import { Button, buttonIconSize } from '../ui/button';
 import { Text } from '../ui/text';
+import { inputTextStyle } from '../ui/input-style';
 import { CAMP_NOTE_CHIPS, CAMP_NOTE_MAX, noteAudienceLine, noteLiveLine } from '../../lib/socialCopy';
 import { COLORS } from '../../theme';
 import { PANEL_DESTRUCTIVE, PANEL_OUTLINE } from './CampPanel';
@@ -95,9 +96,9 @@ export function CampNoteCard({
             <TextInput ref={inputRef} testID="camp-note-input" accessibilityLabel="Your camp note" value={draft} onChangeText={onDraft}
               placeholder="Say something to the camp…" placeholderTextColor="#6B6E78" autoCorrect={false} multiline numberOfLines={2}
               onFocus={() => setFocused(true)} onBlur={() => setFocused(false)}
-              style={{ height: 76, paddingTop: 12, paddingBottom: 12, paddingLeft: 14, paddingRight: 52, borderRadius: 16, borderWidth: 1.5,
-                borderColor: focused ? TEAL : 'rgba(155,157,166,0.3)', textAlignVertical: 'top' }}
-              className="bg-background/70 text-base text-foreground" />
+              style={[inputTextStyle, { height: 76, paddingTop: 12, paddingBottom: 12, paddingLeft: 14, paddingRight: 52, borderRadius: 16, borderWidth: 1.5,
+                borderColor: focused ? TEAL : 'rgba(155,157,166,0.3)', textAlignVertical: 'top' }]}
+              className="bg-background/70 text-foreground" />
             <CountRing length={length} />
           </View>
           {/* Starting points: once there's a draft they'd only replace it, and the room is Share's above the keyboard. */}

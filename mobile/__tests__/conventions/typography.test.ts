@@ -45,6 +45,7 @@ const EXEMPT: Exception[] = [
   // The Campfire scene (spec §6): its Silkscreen sizes (8–14), letter-spacing and Geist text render exactly as before.
   { file: 'components/social/CampScene.tsx', count: 11, reason: 'the Campfire scene: labels, z-z-z, note bubbles and kicker at their own pixel sizes (spec §6)' },
   { file: 'components/social/CampBanner.tsx', count: 3, reason: 'the camp banner: THE CAMP in pixel 10 over its line (spec §6)' },
+  { file: 'components/social/CampNoteCard.tsx', count: 7, reason: 'the Campfire note card keeps its panel text as it is (spec §6); only its input took inputTextStyle (spec §3)' },
   // Share cards (spec §5): images scaled by u() / a(), so their sizes stay inline; Geist and pixel only.
   { file: 'components/recap/WeeklyStoryView.tsx', count: 39, reason: 'the weekly story share card, sized in card units (spec §5)' },
   { file: 'components/recap/RecapCardView.tsx', count: 14, reason: 'the monthly recap share card, sized in card units (spec §5)' },
@@ -56,25 +57,11 @@ const EXEMPT: Exception[] = [
   // The primitives that turn tokens into styles.
   { file: 'components/ui/text.tsx', count: 3, reason: 'the Text primitive sets fontFamily from the class list (and reads font-display until Task 11)' },
   { file: 'components/ui/input-style.ts', count: 4, reason: 'the shared input styles: Geist at the body size (spec §3)' },
+  { file: 'navigation/headerStyle.ts', count: 4, reason: 'native headers sit outside NativeWind: Silkscreen 15 (spec §3); the style and its return type' },
 ];
 
 // prettier-ignore
 const PENDING: Exception[] = [
-  // Task 3
-  { file: 'components/ui/button.tsx', count: 3, reason: 'not migrated yet (Task 3)' },
-  { file: 'components/ui/text-field.tsx', count: 4, reason: 'not migrated yet (Task 3)' },
-  { file: 'components/ui/badge.tsx', count: 1, reason: 'not migrated yet (Task 3)' },
-  { file: 'components/ui/settings-list.tsx', count: 4, reason: 'not migrated yet (Task 3)' },
-  { file: 'components/ui/segmented-control.tsx', count: 1, reason: 'not migrated yet (Task 3)' },
-  { file: 'components/ui/toast.tsx', count: 1, reason: 'not migrated yet (Task 3)' },
-  { file: 'components/ui/chat-bubble.tsx', count: 2, reason: 'not migrated yet (Task 3)' },
-  { file: 'components/ui/baseline-progress-ring.tsx', count: 1, reason: 'not migrated yet (Task 3)' },
-  { file: 'components/ui/factor-bar.tsx', count: 5, reason: 'not migrated yet (Task 3)' },
-  { file: 'components/ui/range-chart.tsx', count: 9, reason: 'not migrated yet (Task 3)' },
-  { file: 'components/ui/correlation-card.tsx', count: 7, reason: 'not migrated yet (Task 3)' },
-  { file: 'navigation/FloatingTabBar.tsx', count: 1, reason: 'not migrated yet (Task 3)' },
-  { file: 'navigation/RootNavigator.tsx', count: 1, reason: 'not migrated yet (Task 3)' },
-  { file: 'components/social/CampNoteCard.tsx', count: 9, reason: 'not migrated yet (Task 3)' },
   // Task 4
   { file: 'components/ui/score-ring.tsx', count: 3, reason: 'not migrated yet (Task 4)' },
   { file: 'screens/DashboardScreen.tsx', count: 7, reason: 'not migrated yet (Task 4)' },
@@ -84,7 +71,7 @@ const PENDING: Exception[] = [
   { file: 'components/home/coach-tile.tsx', count: 2, reason: 'not migrated yet (Task 4)' },
   { file: 'components/home/BuddiesRow.tsx', count: 2, reason: 'not migrated yet (Task 4)' },
   { file: 'components/tomorrow-card.tsx', count: 5, reason: 'not migrated yet (Task 4)' },
-  { file: 'components/habit-log-card.tsx', count: 12, reason: 'not migrated yet (Task 4)' },
+  { file: 'components/habit-log-card.tsx', count: 9, reason: 'not migrated yet (Task 4)' },
   { file: 'screens/ScoreDetailScreen.tsx', count: 7, reason: 'not migrated yet (Task 4)' },
   { file: 'screens/ForecastScreen.tsx', count: 5, reason: 'not migrated yet (Task 4)' },
   { file: 'components/forecast/forecast-hero.tsx', count: 3, reason: 'not migrated yet (Task 4)' },
@@ -117,7 +104,7 @@ const PENDING: Exception[] = [
   { file: 'components/coach/CoachMessageRow.tsx', count: 6, reason: 'not migrated yet (Task 6)' },
   { file: 'components/coach/ConversationsSheet.tsx', count: 6, reason: 'not migrated yet (Task 6)' },
   { file: 'components/coach/ErrorCard.tsx', count: 1, reason: 'not migrated yet (Task 6)' },
-  { file: 'components/coach/PromptBar.tsx', count: 5, reason: 'not migrated yet (Task 6)' },
+  { file: 'components/coach/PromptBar.tsx', count: 2, reason: 'not migrated yet (Task 6)' },
   { file: 'components/coach/thinking/Bouncy.tsx', count: 2, reason: 'not migrated yet (Task 6)' },
   { file: 'components/coach/thinking/Dialog.tsx', count: 5, reason: 'not migrated yet (Task 6)' },
   { file: 'components/coach/thinking/Lines.tsx', count: 4, reason: 'not migrated yet (Task 6)' },
@@ -136,7 +123,7 @@ const PENDING: Exception[] = [
   { file: 'screens/MeetYourCoachScreen.tsx', count: 3, reason: 'not migrated yet (Task 6)' },
   { file: 'screens/ThinkingStyleScreen.tsx', count: 4, reason: 'not migrated yet (Task 6)' },
   { file: 'screens/ThinkingTextScreen.tsx', count: 5, reason: 'not migrated yet (Task 6)' },
-  { file: 'components/memory-edit-form.tsx', count: 5, reason: 'not migrated yet (Task 6)' },
+  { file: 'components/memory-edit-form.tsx', count: 2, reason: 'not migrated yet (Task 6)' },
   { file: 'components/memory-proposal-chips.tsx', count: 2, reason: 'not migrated yet (Task 6)' },
   { file: 'components/coach-settings-section.tsx', count: 1, reason: 'not migrated yet (Task 6)' },
   { file: 'components/ai-engine-row.tsx', count: 3, reason: 'not migrated yet (Task 6)' },
@@ -160,16 +147,16 @@ const PENDING: Exception[] = [
   { file: 'screens/PairUpScreen.tsx', count: 7, reason: 'not migrated yet (Task 7)' },
   { file: 'screens/BlockedPeopleScreen.tsx', count: 2, reason: 'not migrated yet (Task 7)' },
   // Task 8
-  { file: 'components/chats/ChatComposer.tsx', count: 5, reason: 'not migrated yet (Task 8)' },
+  { file: 'components/chats/ChatComposer.tsx', count: 3, reason: 'not migrated yet (Task 8)' },
   { file: 'components/chats/ChatRow.tsx', count: 4, reason: 'not migrated yet (Task 8)' },
   { file: 'components/chats/ChatSettingsSection.tsx', count: 2, reason: 'not migrated yet (Task 8)' },
   { file: 'components/chats/MessageBubble.tsx', count: 10, reason: 'not migrated yet (Task 8)' },
   { file: 'components/chats/NewChatSheet.tsx', count: 3, reason: 'not migrated yet (Task 8)' },
-  { file: 'components/chats/NoteComposerSheet.tsx', count: 7, reason: 'not migrated yet (Task 8)' },
+  { file: 'components/chats/NoteComposerSheet.tsx', count: 5, reason: 'not migrated yet (Task 8)' },
   { file: 'components/chats/NotesRow.tsx', count: 3, reason: 'not migrated yet (Task 8)' },
   { file: 'components/chats/ReportSheet.tsx', count: 5, reason: 'not migrated yet (Task 8)' },
   { file: 'components/chats/RequestsList.tsx', count: 4, reason: 'not migrated yet (Task 8)' },
-  { file: 'screens/ChatsScreen.tsx', count: 6, reason: 'not migrated yet (Task 8)' },
+  { file: 'screens/ChatsScreen.tsx', count: 4, reason: 'not migrated yet (Task 8)' },
   { file: 'screens/ChatThreadScreen.tsx', count: 5, reason: 'not migrated yet (Task 8)' },
   { file: 'screens/ChatRequestsScreen.tsx', count: 2, reason: 'not migrated yet (Task 8)' },
   // Task 9
@@ -185,7 +172,7 @@ const PENDING: Exception[] = [
   { file: 'screens/BadgesScreen.tsx', count: 6, reason: 'not migrated yet (Task 9)' },
   { file: 'screens/BadgeDetailScreen.tsx', count: 10, reason: 'not migrated yet (Task 9)' },
   // Task 10
-  { file: 'screens/SettingsScreen.tsx', count: 7, reason: 'not migrated yet (Task 10)' },
+  { file: 'screens/SettingsScreen.tsx', count: 5, reason: 'not migrated yet (Task 10)' },
   { file: 'screens/SignInScreen.tsx', count: 6, reason: 'not migrated yet (Task 10)' },
   { file: 'screens/SignUpScreen.tsx', count: 4, reason: 'not migrated yet (Task 10)' },
   { file: 'screens/ForgotPasswordScreen.tsx', count: 5, reason: 'not migrated yet (Task 10)' },
@@ -194,7 +181,7 @@ const PENDING: Exception[] = [
   { file: 'screens/DevicesScreen.tsx', count: 1, reason: 'not migrated yet (Task 10)' },
   { file: 'screens/ConnectHealthScreen.tsx', count: 6, reason: 'not migrated yet (Task 10)' },
   { file: 'components/notifications-section.tsx', count: 2, reason: 'not migrated yet (Task 10)' },
-  { file: 'components/delete-account-section.tsx', count: 7, reason: 'not migrated yet (Task 10)' },
+  { file: 'components/delete-account-section.tsx', count: 5, reason: 'not migrated yet (Task 10)' },
   { file: 'screens/dev/CharacterGalleryScreen.tsx', count: 3, reason: 'not migrated yet (Task 10)' },
 ];
 

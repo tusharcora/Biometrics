@@ -68,7 +68,7 @@ export function SegmentedControl<T extends string>({ options, value, onChange, t
               onPress={() => onChange(option.value)}
               className="flex-1 items-center py-2"
             >
-              <Text className={cn('text-sm font-medium', selected ? 'text-foreground' : 'text-muted-foreground')}>{option.label}</Text>
+              <Text className={cn('text-caption font-medium', selected ? 'text-foreground' : 'text-muted-foreground')}>{option.label}</Text>
             </Pressable>
           );
         })}

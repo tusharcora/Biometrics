@@ -22,6 +22,7 @@ import { ReportSheet } from '../components/chats/ReportSheet';
 import { Button, buttonIconSize } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Text } from '../components/ui/text';
+import { inputTextStyle } from '../components/ui/input-style';
 import { buddyErrorMessage } from '../lib/buddyCopy';
 import { refreshBuddies } from '../lib/buddiesStore';
 import { noteQuoteLabel } from '../lib/chatCopy';
@@ -210,7 +211,8 @@ export function ChatsScreen() {
                 placeholderTextColor={colors.muted}
                 value={query}
                 onChangeText={setQuery}
-                className="flex-1 text-[15px] text-foreground"
+                style={inputTextStyle}
+                className="flex-1 text-foreground"
               />
             </View>
             {home ? (

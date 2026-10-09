@@ -3,10 +3,11 @@ import { View, Pressable, TextInput } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from './ui/text';
+import { inputNumberStyle } from './ui/input-style';
 import { Card } from './ui/card';
 import { Button, buttonIconSize } from './ui/button';
 import { Skeleton } from './ui/skeleton';
-import { COLORS, FONTS } from '../theme';
+import { COLORS } from '../theme';
 import {
   createCheckIn,
   fetchHabitConfig,
@@ -176,8 +177,8 @@ export function HabitLogCard() {
               placeholderTextColor={colors.muted}
               keyboardType="decimal-pad"
               accessibilityLabel={`${selected.label} amount in ${selected.unit}`}
-              style={{ color: colors.foreground, fontFamily: FONTS.sansSemibold, fontVariant: ['tabular-nums'] }}
-              className="h-10 w-20 rounded-full border border-border bg-muted px-3 text-center text-base"
+              style={[inputNumberStyle, { color: colors.foreground }]}
+              className="h-10 w-20 rounded-full border border-border bg-muted px-3 text-center"
             />
             <Button
               testID="habit-increment"

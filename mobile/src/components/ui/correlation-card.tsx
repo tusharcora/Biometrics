@@ -120,15 +120,15 @@ export function CorrelationCard({ pattern, habitLabel }: CorrelationCardProps) {
           same number the sentence below states, just set as the headline. */}
       <View className="flex-row items-end gap-2">
         <Ionicons name={lower ? 'arrow-down' : 'arrow-up'} size={22} color={colors.muted} style={{ marginBottom: 5 }} />
-        <Text className="text-numeral font-semibold" style={{ fontVariant: ['tabular-nums'] }}>
+        <Text className="text-display tabular-nums">
           {`${formatNumber(Math.abs(pattern.effectSizePercent))}%`}
         </Text>
-        <Text className="mb-1 flex-1 text-sm text-muted-foreground" numberOfLines={1}>
+        <Text className="mb-1 flex-1 text-caption text-muted-foreground" numberOfLines={1}>
           {`${factor} · ${lagPhrase(pattern.lagDays).toLowerCase()}`}
         </Text>
       </View>
 
-      <Text testID="pattern-sentence" className="text-base leading-6">
+      <Text testID="pattern-sentence" className="text-body">
         {buildPatternSentence(pattern)}
       </Text>
 
@@ -136,22 +136,22 @@ export function CorrelationCard({ pattern, habitLabel }: CorrelationCardProps) {
         <View className="gap-2">
           {/* Neutral line, accent only on the days that matter (the habit days). */}
           <PatternSparkline points={points} lineColor={withAlpha(colors.muted, 0.6)} exposedColor={colors.accent} restColor={colors.border} />
-          <Text testID="pattern-sparkline-caption" className="text-xs text-muted-foreground">
+          <Text testID="pattern-sparkline-caption" className="text-caption text-muted-foreground">
             {`Line: your ${factor} ${lagPhrase(pattern.lagDays).toLowerCase()} each day. Tall ticks: days you logged ${formatNumber(pattern.exposureThreshold)}+ ${pattern.exposureUnit}.`}
           </Text>
         </View>
       ) : null}
 
       <View className="gap-2 border-t border-border pt-4">
-        <Text className="text-sm text-muted-foreground">{buildComparisonSentence(pattern)}</Text>
+        <Text className="text-caption text-muted-foreground">{buildComparisonSentence(pattern)}</Text>
         <View className="flex-row items-start gap-2">
           <Ionicons name="information-circle-outline" size={15} color={colors.muted} style={{ marginTop: 1 }} />
           <View className="flex-1 gap-1">
-            <Text testID="pattern-caveat" className="text-xs text-muted-foreground">
+            <Text testID="pattern-caveat" className="text-caption text-muted-foreground">
               {buildSampleCaveat(pattern.sampleSize)}
             </Text>
             {isSmallSample(pattern.sampleSize) ? (
-              <Text testID="pattern-small-sample" className="text-xs font-medium text-score-fair">
+              <Text testID="pattern-small-sample" className="text-caption font-medium text-score-fair">
                 Small sample: treat this as tentative until more days are logged.
               </Text>
             ) : null}

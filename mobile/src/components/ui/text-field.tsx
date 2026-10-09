@@ -2,7 +2,8 @@ import React from 'react';
 import { TextInput, View } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import { Text } from './text';
-import { COLORS, FONTS } from '../../theme';
+import { COLORS } from '../../theme';
+import { inputTextStyle } from './input-style';
 
 export interface TextFieldProps {
   label: string;
@@ -28,7 +29,7 @@ export function TextField({ label, testID, value, onChangeText, secure, keyboard
   const colors = colorScheme === 'dark' ? COLORS.dark : COLORS.light;
   return (
     <View className="gap-1">
-      <Text className="text-sm text-muted-foreground">{label}</Text>
+      <Text className="text-caption text-muted-foreground">{label}</Text>
       <TextInput
         testID={testID}
         value={value}
@@ -42,8 +43,8 @@ export function TextField({ label, testID, value, onChangeText, secure, keyboard
         // autoComplete, to offer a saved login above the keyboard.
         textContentType={TEXT_CONTENT_TYPE[autoComplete ?? 'none']}
         placeholderTextColor={colors.muted}
-        style={{ fontFamily: FONTS.sans }}
-        className="rounded-tile border border-border bg-card px-4 py-3 text-base text-foreground"
+        style={inputTextStyle}
+        className="rounded-tile border border-border bg-card px-4 py-3 text-foreground"
       />
     </View>
   );
