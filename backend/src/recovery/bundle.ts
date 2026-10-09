@@ -8,6 +8,7 @@ import { getLiveConfig, SCORE_CONFIGS, type ScoreConfig } from '../scoring/confi
 import { isCivilDate, shiftDate } from '../scoring/dates';
 import { loadScoreDetail } from '../scoring/detail';
 import { toBaselineDTOs, toDailyScoreDTO } from '../scoring/dto';
+import { nightlyDeficits } from '../scoring/features';
 import { getSleepGoalMinutes } from '../users/goals';
 import type { RecoveryCalendarDTO, RecoveryDayDTO, RecoveryPageDTO, RecoveryTomorrowDTO, SleepDebtDTO } from './dto';
 import { buildMonth, buildOutlook } from './month';
@@ -52,11 +53,9 @@ async function sleepDebtFor(userId: string, date: string, cfg: ScoreConfig, goal
   if (!features || features.sleepDebtRolling14d === null) return null;
   const goal = goalFromRow ?? goalNow;
   const usual = snap ? usualDebtRange(snap) : null;
-  const asleep = new Map(nights.map((n) => [n.recordedAt.toISOString().slice(0, 10), n.value]));
-  const deficits = Array.from({ length: window }, (_, i) => {
-    const v = asleep.get(shiftDate(date, i - (window - 1)));
-    return v === undefined ? 0 : Math.max(0, goal - v);
-  });
+  // The same per-night rule the stored sleepDebtRolling14d sums (scoring/features.ts).
+  const sleep = nights.map((n) => ({ date: n.recordedAt.toISOString().slice(0, 10), value: n.value }));
+  const deficits = nightlyDeficits(sleep, date, goal, cfg);
   return {
     minutes: Math.round(features.sleepDebtRolling14d),
     windowNights: window,
@@ -125,6 +124,7 @@ export async function buildRecoveryPage(userId: string, dateParam: string, now =
       : null,
     streak: computeStreak(upto, date, bands.good, isToday),
     month: buildMonth(rows, month, bands),
+    // The earliest scored date in all history (it may fall after a past D); the client uses it only to bound calendar paging.
     firstScoredDate: rows.find((r) => r.score !== null)?.date ?? null,
     tomorrow,
   };

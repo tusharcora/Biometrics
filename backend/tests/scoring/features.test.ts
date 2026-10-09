@@ -1,4 +1,5 @@
 import {
+  nightlyDeficits,
   sleepDebtRolling,
   buildSleepDebtSeries,
   baselineDeviationPct,
@@ -42,6 +43,16 @@ describe('Stage 2: sleepDebtRolling14d', () => {
     const sleep = series('2026-08-14', [420]);
     expect(sleepDebtRolling(sleep, '2026-08-14', 420, cfg)).toBe(0);
     expect(sleepDebtRolling(sleep, '2026-08-14', 540, cfg)).toBe(120);
+  });
+});
+
+describe('Stage 2: nightlyDeficits', () => {
+  it('lists the window oldest first, a missing night 0, and sums to sleepDebtRolling', () => {
+    // 08-01 is outside the window ending 08-15; 08-03 is missing; 08-05 is a long night.
+    const sleep = series('2026-08-01', [0, 400, 480, 300, 600, ...Array(10).fill(470)]).filter((n) => n.date !== '2026-08-03');
+    const d = nightlyDeficits(sleep, '2026-08-15', 480, cfg);
+    expect(d).toEqual([80, 0, 180, 0, ...Array(10).fill(10)]);
+    expect(d.reduce((s, v) => s + v, 0)).toBe(sleepDebtRolling(sleep, '2026-08-15', 480, cfg));
   });
 });
 

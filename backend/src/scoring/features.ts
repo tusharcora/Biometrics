@@ -3,27 +3,34 @@
 
 import { sessionEndCivilDate, sessionStartMinutesSinceLocalNoon } from '../biometrics/civilDate';
 import { pickMainSession } from '../biometrics/mainSession';
-import { shiftDate } from './dates';
+import { daysBetween, shiftDate } from './dates';
 import type { ScoreConfig } from './configs/v1';
 import type { DailyPoint, SleepSessionInput } from './types';
 
 /**
- * sleepDebtRolling14d = sum of max(0, sleepGoalMinutes - minutesAsleep) over
- * the window ending on `date` (inclusive). Each night is floored at 0, so a long
- * night does not pay back another night's deficit: it is a rolling deficit, not
- * a net balance.
+ * The window's nights D-(w-1)..D, oldest first, each max(0, sleepGoalMinutes -
+ * minutesAsleep). Each night is floored at 0, so a long night does not pay back
+ * another night's deficit: it is a rolling deficit, not a net balance.
  *
  * A night with no record contributes 0: absence of data is not evidence of a
  * full-goal deficit. (The caller flags that day's factor as imputed instead, so
- * confidence reflects it.)
+ * confidence reflects it.) The Recovery page reads these per night too.
  */
-export function sleepDebtRolling(sleep: DailyPoint[], date: string, goalMinutes: number, cfg: ScoreConfig): number {
-  const from = shiftDate(date, -(cfg.sleepDebtWindowDays - 1));
-  let debt = 0;
+export function nightlyDeficits(sleep: DailyPoint[], date: string, goalMinutes: number, cfg: ScoreConfig): number[] {
+  const window = cfg.sleepDebtWindowDays;
+  const from = shiftDate(date, -(window - 1));
+  const out = new Array<number>(window).fill(0);
   for (const night of sleep) {
-    if (night.date >= from && night.date <= date) debt += Math.max(0, goalMinutes - night.value);
+    if (night.date < from || night.date > date) continue;
+    const i = daysBetween(from, night.date);
+    out[i] = out[i]! + Math.max(0, goalMinutes - night.value);
   }
-  return debt;
+  return out;
+}
+
+/** sleepDebtRolling14d = the sum of nightlyDeficits over the window ending on `date` (inclusive). */
+export function sleepDebtRolling(sleep: DailyPoint[], date: string, goalMinutes: number, cfg: ScoreConfig): number {
+  return nightlyDeficits(sleep, date, goalMinutes, cfg).reduce((sum, v) => sum + v, 0);
 }
 
 /**

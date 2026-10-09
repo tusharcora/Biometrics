@@ -8,6 +8,8 @@ import { createUser, day } from '../scoring/dbHelpers';
 import { localCivilDate } from '../../src/biometrics/civilDate';
 import { shiftDate } from '../../src/scoring/dates';
 import * as forecastEngine from '../../src/forecast/engine';
+import { getLiveConfig } from '../../src/scoring/configs';
+import { nightlyDeficits } from '../../src/scoring/features';
 
 beforeAll(() => {
   migrateTestDb();
@@ -80,23 +82,31 @@ describe('GET /me/recovery/:date', () => {
     const user = await createUser();
     await put(user.id, localCivilDate(new Date(), 'UTC'), 60);
     jest.spyOn(forecastEngine, 'buildForecast').mockImplementation(() => { throw new Error('boom'); });
+    const err = jest.spyOn(console, 'error').mockImplementation(() => {});
     const res = await get(user.id, '/me/recovery/today');
     expect(res.status).toBe(200);
     expect(res.body.tomorrow).toEqual({ status: 'UNAVAILABLE' });
+    expect(err).toHaveBeenCalledTimes(1);
+    expect(err.mock.calls[0]).toHaveLength(1);
+    expect(JSON.parse(err.mock.calls[0]![0] as string)).toEqual({ event: 'recovery_error', route: 'tomorrow', error: 'Error' });
   });
 
   it('sleep debt: minutes, goal, usual and nightsToClear from features, snapshot and nights', async () => {
     const user = await createUser({ sleepGoalMinutes: 480 });
     const today = localCivilDate(new Date(), 'UTC');
     await put(user.id, today, 60);
-    await prisma.userDailyFeatures.create({ data: { userId: user.id, date: day(today), algorithmVersion: 'v3', sleepDebtRolling14d: 190 } });
+    await prisma.userDailyFeatures.create({ data: { userId: user.id, date: day(today), algorithmVersion: 'v3', sleepDebtRolling14d: 180 } });
     await prisma.baselineSnapshot.create({ data: { userId: user.id, metric: 'SLEEP_DEBT', date: day(today), ewma: 100, spread: 25, mad: 17, daysOfHistory: 30, algorithmVersion: 'v3' } });
     // Two 90-minute-short nights at the old end of the window, the rest on goal.
-    for (let i = 0; i < 14; i++) {
-      await prisma.biometricRecord.create({ data: { userId: user.id, metricType: 'SLEEP', recordedAt: day(shiftDate(today, i - 13)), value: i < 2 ? 390 : 480 } });
+    const nights = Array.from({ length: 14 }, (_, i) => ({ date: shiftDate(today, i - 13), value: i < 2 ? 390 : 480 }));
+    for (const n of nights) {
+      await prisma.biometricRecord.create({ data: { userId: user.id, metricType: 'SLEEP', recordedAt: day(n.date), value: n.value } });
     }
     const { sleepDebt } = (await get(user.id, '/me/recovery/today')).body;
-    expect(sleepDebt).toMatchObject({ minutes: 190, windowNights: 14, goalMinutes: 480, usualLowMinutes: 75, usualHighMinutes: 125, nightsToClear: 1 });
+    // The deficits nightsToClear walks are the ones the stored minutes sum.
+    const deficits = nightlyDeficits(nights, today, 480, getLiveConfig());
+    expect(deficits.reduce((s, v) => s + v, 0)).toBe(sleepDebt.minutes);
+    expect(sleepDebt).toMatchObject({ minutes: 180, windowNights: 14, goalMinutes: 480, usualLowMinutes: 75, usualHighMinutes: 125, nightsToClear: 1 });
   });
 
   it('400 on a malformed or future date', async () => {
