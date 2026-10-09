@@ -1,5 +1,6 @@
 import fs from 'fs';
 import path from 'path';
+import { openingTag, sourceFiles } from '../../jest-mocks/sourceScan';
 
 // The button standard (src/components/ui/README.md): every button and text
 // link is components/ui/button. This guard reads every file under src as text
@@ -97,46 +98,6 @@ const ALLOWED: Exception[] = [
 ];
 
 type Found = { file: string; line: number; tag: string; key: string };
-
-function sourceFiles(dir: string): string[] {
-  return fs.readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {
-    const full = path.join(dir, entry.name);
-    if (entry.isDirectory()) return sourceFiles(full);
-    return /\.(tsx?|jsx?)$/.test(entry.name) ? [full] : [];
-  });
-}
-
-/**
- * The attribute text of the JSX opening tag that starts at `from`: up to its
- * closing `>` at brace depth 0. Comments are left out, so an apostrophe in a
- * `// another device's` comment between props cannot open a quote, and a role
- * that is only mentioned in a comment does not count.
- */
-function openingTag(source: string, from: number): string {
-  let depth = 0;
-  let quote: string | null = null;
-  let out = '';
-  for (let i = from; i < source.length; i++) {
-    const c = source[i];
-    if (quote) {
-      if (c === quote && source[i - 1] !== '\\') quote = null;
-    } else if (c === '/' && source[i + 1] === '/') {
-      const end = source.indexOf('\n', i);
-      i = (end === -1 ? source.length : end) - 1;
-      continue;
-    } else if (c === '/' && source[i + 1] === '*') {
-      const end = source.indexOf('*/', i + 2);
-      i = (end === -1 ? source.length : end + 2) - 1;
-      continue;
-    } else if (c === '{') depth++;
-    else if (c === '}') depth--;
-    // Strings are tracked inside braces too, so a '}' or '//' in one (a URL) is just text.
-    else if (c === '"' || c === "'" || c === '`') quote = c;
-    else if (depth === 0 && c === '>') return out + c;
-    out += c;
-  }
-  return out;
-}
 
 /** The function component around `at`: the last `function X(` or `const X = (` before it. */
 function enclosingComponent(source: string, at: number): string {
