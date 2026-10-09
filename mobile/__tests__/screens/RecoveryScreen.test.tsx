@@ -4,7 +4,7 @@ import { withCharacter } from '../../jest-mocks/characterContext';
 import { RecoveryScreen } from '../../src/screens/RecoveryScreen';
 import { fetchRecoveryPage, type RecoveryPageDTO } from '../../src/api/recovery';
 import type { CoachStatusDTO } from '../../src/api/coach';
-import { RECOVERY_COPY } from '../../src/lib/recoveryCopy';
+import { debtBlocks, RECOVERY_COPY } from '../../src/lib/recoveryCopy';
 import { COLORS } from '../../src/theme';
 import { makePage } from '../fixtures/recoveryPage';
 
@@ -37,6 +37,8 @@ const STATUS: CoachStatusDTO = {
 };
 
 const pageFetch = fetchRecoveryPage as jest.Mock;
+// Debt blocks and streak squares are hidden from screen readers; the text beside them carries the meaning.
+const HIDDEN_OK = { includeHiddenElements: true } as const;
 
 function renderScreen(status: CoachStatusDTO | null = STATUS) {
   return render(withCharacter(<RecoveryScreen />, { characterId: 'mochi', status }));
@@ -194,6 +196,23 @@ describe('RecoveryScreen: building and no data', () => {
     )).toBeTruthy();
   });
 
+  it('keeps the building verdict when cold start has no progress to show', async () => {
+    const base = makePage();
+    pageFetch.mockResolvedValue(makePage({
+      state: 'BUILDING',
+      previous: null,
+      score: { ...base.score!, score: null, factors: [], coldStart: [] },
+    }));
+    renderScreen();
+    const hero = await screen.findByTestId('recovery-hero');
+
+    expect(RECOVERY_COPY.buildingLine).toBe('Your forecast is charging up');
+    expect(within(hero).getByText('Learning your weather')).toBeTruthy();
+    expect(within(hero).getByText('Your forecast is charging up')).toBeTruthy();
+    expect(within(hero).queryByText("Waiting for last night's data")).toBeNull();
+    expect(screen.queryByTestId('recovery-summary')).toBeNull();
+  });
+
   it('shows No reading today, with no summary', async () => {
     pageFetch.mockResolvedValue(makePage({ state: 'NO_DATA', score: null, previous: null, updatedAt: null }));
     renderScreen();
@@ -234,5 +253,202 @@ describe('RecoveryScreen: Ask bar', () => {
     await screen.findByTestId('recovery-hero');
 
     expect(screen.queryByTestId('ask-coach-button')).toBeNull();
+  });
+});
+
+describe('RecoveryScreen: Last 7 days', () => {
+  const BANDS: Record<string, string | null> = {
+    '2026-10-02': 'Good', '2026-10-03': 'Excellent', '2026-10-04': 'Fair', '2026-10-05': 'Low', '2026-10-06': null, '2026-10-07': 'Good', '2026-10-08': 'Good',
+  };
+
+  it('shows 7 columns ending at Today, each labelled for a screen reader', async () => {
+    renderScreen();
+    const strip = await screen.findByTestId('recovery-last-seven');
+
+    expect(within(strip).getByText('Last 7 days')).toBeTruthy();
+    expect(within(strip).getAllByRole('button')).toHaveLength(7);
+    expect(within(screen.getByTestId('recovery-day-2026-10-08')).getByText('Today')).toBeTruthy();
+    expect(within(screen.getByTestId('recovery-day-2026-10-02')).getByText('Fri')).toBeTruthy();
+    expect(within(screen.getByTestId('recovery-day-2026-10-02')).getByText('58')).toBeTruthy();
+    for (const day of makePage().outlook) {
+      expect(screen.getByTestId(`recovery-day-${day.date}`).props.accessibilityLabel).toBe(RECOVERY_COPY.cellLabel(day.date, day.score, BANDS[day.date]!));
+    }
+    expect(screen.getByTestId('recovery-day-2026-10-08').props.accessibilityLabel).toBe('Thursday 8 October, 68, Good');
+  });
+
+  it('reads the weekday instead of Today on a past day', async () => {
+    mockParams = { date: '2026-10-08' };
+    pageFetch.mockResolvedValue(makePage({ isToday: false }));
+    renderScreen();
+    const last = await screen.findByTestId('recovery-day-2026-10-08');
+
+    expect(within(last).getByText('Thu')).toBeTruthy();
+    expect(within(last).queryByText('Today')).toBeNull();
+  });
+
+  it('shows a dash for a day without a score, and Low scores in the Low colour', async () => {
+    renderScreen();
+    const empty = await screen.findByTestId('recovery-day-2026-10-06');
+
+    expect(within(empty).getByText('—')).toBeTruthy();
+    expect(empty.props.accessibilityLabel).toBe('Tuesday 6 October, No reading');
+    expect(within(screen.getByTestId('recovery-day-2026-10-05')).getByText('36')).toHaveStyle({ color: COLORS.light.scorePoor });
+    expect(within(screen.getByTestId('recovery-day-2026-10-04')).getByText('49')).not.toHaveStyle({ color: COLORS.light.scorePoor });
+  });
+
+  it("pushes that day's Recovery when a column is pressed", async () => {
+    renderScreen();
+
+    fireEvent.press(await screen.findByTestId('recovery-day-2026-10-05'));
+    expect(mockNavigation.push).toHaveBeenCalledWith('Recovery', { date: '2026-10-05' });
+  });
+});
+
+describe('RecoveryScreen: sleep debt', () => {
+  it('shows the debt, the factor word and points, the usual and the clear copy', async () => {
+    renderScreen();
+    const tile = await screen.findByTestId('recovery-sleep-debt');
+
+    expect(screen.getByText('Sleep and streak')).toBeTruthy();
+    expect(within(tile).getByText('Sleep debt · 14 nights')).toBeTruthy();
+    expect(within(tile).getByText('Fog · −5')).toHaveStyle({ color: COLORS.light.scorePoor });
+    expect(within(tile).getByText('3h 10m')).toBeTruthy();
+    expect(within(tile).getByText('owed · usual under 2h 05m')).toBeTruthy();
+    expect(within(tile).getByText('Each block is 30 min. Two nights at your 8h goal clear the fog.')).toBeTruthy();
+  });
+
+  it('draws a 30-minute block row with a partial last block', async () => {
+    renderScreen();
+    const tile = await screen.findByTestId('recovery-sleep-debt');
+
+    expect(debtBlocks(190, 125)).toEqual(['full', 'full', 'full', 'full', 'full', 'full', 'partial', 'empty']);
+    for (let i = 0; i < 6; i++) {
+      expect(within(tile).getByTestId(`debt-block-${i}`, HIDDEN_OK)).toHaveStyle({ backgroundColor: COLORS.light.scorePoor, height: 16, borderRadius: 3 });
+    }
+    expect(within(tile).getByTestId('debt-block-6', HIDDEN_OK)).toHaveStyle({ backgroundColor: COLORS.light.scorePoor, opacity: 0.45 });
+    expect(within(tile).getByTestId('debt-block-7', HIDDEN_OK)).not.toHaveStyle({ backgroundColor: COLORS.light.scorePoor });
+    expect(within(tile).queryByTestId('debt-block-8', HIDDEN_OK)).toBeNull();
+  });
+
+  it('fills blocks in the muted colour when the debt is within the usual', async () => {
+    const base = makePage();
+    pageFetch.mockResolvedValue(makePage({ sleepDebt: { ...base.sleepDebt!, minutes: 90, nightsToClear: 0 } }));
+    renderScreen();
+    const tile = await screen.findByTestId('recovery-sleep-debt');
+
+    expect(within(tile).getByTestId('debt-block-0', HIDDEN_OK)).toHaveStyle({ backgroundColor: COLORS.light.muted });
+    expect(within(tile).getByText("Each block is 30 min. You're within your usual.")).toBeTruthy();
+  });
+
+  it('shows the no-data line without a features row', async () => {
+    pageFetch.mockResolvedValue(makePage({ sleepDebt: null }));
+    renderScreen();
+    const tile = await screen.findByTestId('recovery-sleep-debt');
+
+    expect(within(tile).getByText('No sleep data in the last 14 nights')).toBeTruthy();
+    expect(within(tile).queryByTestId('debt-block-0', HIDDEN_OK)).toBeNull();
+  });
+
+  it('shows plain "owed" with no clear copy in cold start', async () => {
+    const base = makePage();
+    pageFetch.mockResolvedValue(makePage({ sleepDebt: { ...base.sleepDebt!, usualLowMinutes: null, usualHighMinutes: null, nightsToClear: null } }));
+    renderScreen();
+    const tile = await screen.findByTestId('recovery-sleep-debt');
+
+    expect(within(tile).getByText('owed')).toBeTruthy();
+    expect(within(tile).getByText('Each block is 30 min.')).toBeTruthy();
+  });
+
+  it('caps a large debt at 16 blocks', async () => {
+    const base = makePage();
+    pageFetch.mockResolvedValue(makePage({ sleepDebt: { ...base.sleepDebt!, minutes: 2000 } }));
+    renderScreen();
+    const tile = await screen.findByTestId('recovery-sleep-debt');
+
+    expect(within(tile).getAllByTestId(/^debt-block-\d+$/, HIDDEN_OK)).toHaveLength(16);
+  });
+
+  it('hides the factor word when the sleep-debt factor is excluded', async () => {
+    const base = makePage();
+    const factors = base.score!.factors.map((f) => (f.factor === 'SLEEP_DEBT' ? { ...f, excluded: true } : f));
+    pageFetch.mockResolvedValue(makePage({ score: { ...base.score!, factors } }));
+    renderScreen();
+    const tile = await screen.findByTestId('recovery-sleep-debt');
+
+    expect(within(tile).queryByText(/^Fog/)).toBeNull();
+    expect(within(tile).getByText('3h 10m')).toBeTruthy();
+  });
+});
+
+describe('RecoveryScreen: Last night', () => {
+  it('shows the duration and the stage caption, and opens the night', async () => {
+    renderScreen();
+    const tile = await screen.findByTestId('recovery-last-night');
+
+    expect(within(tile).getByText('Last night')).toBeTruthy();
+    expect(within(tile).getByText('6h 48m')).toBeTruthy();
+    expect(within(tile).getByText('Deep 1h 22m · REM 1h 31m')).toBeTruthy();
+    expect(tile.props.accessibilityLabel).toBe('Last night, 6h 48m. Opens the night.');
+    expect(within(tile).getByTestId('last-night-bar-DEEP')).toHaveStyle({ flex: 82, backgroundColor: COLORS.light.sleepDeep });
+    expect(within(tile).getByTestId('last-night-bar-AWAKE')).toHaveStyle({ flex: 31, backgroundColor: COLORS.light.sleepAwake });
+
+    fireEvent.press(tile);
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('SleepNight', { date: '2026-10-08' });
+  });
+
+  it('draws one solid bar without stages', async () => {
+    const base = makePage();
+    pageFetch.mockResolvedValue(makePage({ lastNight: { ...base.lastNight!, stages: null } }));
+    renderScreen();
+    const tile = await screen.findByTestId('recovery-last-night');
+
+    expect(within(tile).getByText('No stage data')).toBeTruthy();
+    expect(within(tile).getByTestId('last-night-bar-solid')).toBeTruthy();
+    expect(within(tile).queryByTestId('last-night-bar-DEEP')).toBeNull();
+  });
+
+  it('is not pressable without a night', async () => {
+    pageFetch.mockResolvedValue(makePage({ lastNight: null }));
+    renderScreen();
+    const card = await screen.findByTestId('last-night-card');
+
+    expect(within(card).getByText('No sleep recorded')).toBeTruthy();
+    expect(within(card).getByText('—')).toBeTruthy();
+    expect(screen.queryByTestId('recovery-last-night')).toBeNull();
+  });
+});
+
+describe('RecoveryScreen: Clear streak', () => {
+  it('shows the run, the best run and the last 4 days as band squares', async () => {
+    renderScreen();
+    const tile = await screen.findByTestId('recovery-streak');
+
+    expect(within(tile).getByText('Clear streak')).toBeTruthy();
+    expect(within(tile).getByText('2')).toBeTruthy();
+    expect(within(tile).getByText('days')).toBeTruthy();
+    expect(within(tile).getByText('Good or better · best run 5')).toBeTruthy();
+    expect(within(tile).getByTestId('streak-square-0', HIDDEN_OK)).toHaveStyle({ backgroundColor: COLORS.light.scorePoor, width: 14, height: 14, borderRadius: 4 });
+    expect(within(tile).getByTestId('streak-square-1', HIDDEN_OK)).not.toHaveStyle({ backgroundColor: COLORS.light.scorePoor });
+    expect(within(tile).getByTestId('streak-square-2', HIDDEN_OK)).toHaveStyle({ backgroundColor: COLORS.light.scoreGood });
+    expect(within(tile).getByTestId('streak-square-3', HIDDEN_OK)).toHaveStyle({ backgroundColor: COLORS.light.scoreGood });
+    expect(within(tile).queryByTestId('streak-square-4', HIDDEN_OK)).toBeNull();
+  });
+
+  it('says "day" for a run of one', async () => {
+    pageFetch.mockResolvedValue(makePage({ streak: { current: 1, best: 5 } }));
+    renderScreen();
+    const tile = await screen.findByTestId('recovery-streak');
+
+    expect(within(tile).getByText('day')).toBeTruthy();
+  });
+
+  it('explains the streak when there is no history', async () => {
+    const base = makePage();
+    pageFetch.mockResolvedValue(makePage({ streak: { current: 0, best: 0 }, outlook: base.outlook.map((d) => ({ ...d, score: null })) }));
+    renderScreen();
+    const tile = await screen.findByTestId('recovery-streak');
+
+    expect(within(tile).getByText('0')).toBeTruthy();
+    expect(within(tile).getByText('Good or better days in a row')).toBeTruthy();
   });
 });

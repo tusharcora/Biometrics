@@ -168,6 +168,7 @@ export const RECOVERY_COPY = {
   debtNone: 'No sleep data in the last 14 nights',
   debtWord: (points: number) => (points <= -0.5 ? 'Fog' : points >= 0.5 ? 'Clear' : 'Calm'),
   lastNight: 'Last night',
+  lastNightA11y: (duration: string) => `Last night, ${duration}. Opens the night.`,
   lastNightCaption: (deep: number, rem: number) => `Deep ${formatMinutes(deep)} · REM ${formatMinutes(rem)}`,
   noStages: 'No stage data',
   noSleep: 'No sleep recorded',
@@ -187,6 +188,8 @@ export const RECOVERY_COPY = {
   askToday: (coach: string) => `Ask ${coach} about today`,
   askPast: (coach: string) => `Ask ${coach} about this day`,
   noReading: 'No reading',
+  // BUILDING with no cold-start progress to count down from.
+  buildingLine: 'Your forecast is charging up',
   cellLabel: (date: string, score: number | null, band: string | null) =>
     score === null ? `${formatDayLong(date)}, No reading` : `${formatDayLong(date)}, ${Math.round(score)}, ${band}`,
   heroA11y: (score: number, band: string, verdict: string, line: string) => `Recovery ${Math.round(score)}, ${band}, ${verdict.toLowerCase()}.${line}`,

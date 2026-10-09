@@ -38,6 +38,10 @@ export function RecoveryHero({ page }: { page: RecoveryPageDTO }) {
     numeralClass = 'text-number';
     line = b.line;
     label = `${VERDICT[kind]}. ${b.line}`;
+  } else if (page.state === 'BUILDING') {
+    // No cold-start progress to count down from: keep the building verdict.
+    line = RECOVERY_COPY.buildingLine;
+    label = `${VERDICT[kind]}. ${RECOVERY_COPY.buildingLine}`;
   } else {
     line = noDataLine(page.isToday);
     label = `${VERDICT[kind]}. ${noDataLine(page.isToday)}`;

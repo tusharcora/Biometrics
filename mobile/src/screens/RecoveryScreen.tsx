@@ -9,8 +9,13 @@ import { AskCoachBar } from '../components/coach/AskCoachBar';
 import { RecoveryHeader } from '../components/recovery/RecoveryHeader';
 import { RecoveryHero } from '../components/recovery/RecoveryHero';
 import { RecoveryInfoSheet } from '../components/recovery/RecoveryInfoSheet';
+import { LastNightTile } from '../components/recovery/LastNightTile';
+import { LastSevenDays } from '../components/recovery/LastSevenDays';
+import { SleepDebtTile } from '../components/recovery/SleepDebtTile';
+import { StreakTile } from '../components/recovery/StreakTile';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
+import { SectionLabel } from '../components/ui/section-label';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { recoveryQuestion } from '../lib/coachPrompts';
@@ -83,11 +88,20 @@ export function RecoveryScreen() {
         {header}
         <RecoveryHero page={page} />
         {summary ? (
-          <Card testID="recovery-summary">
+          <Card testID="recovery-summary" className="rounded-tile">
             <Text className="text-body">{summary}</Text>
           </Card>
         ) : null}
-        {/* Task 7: <LastSevenDays/> and the bento. Task 8: <RecoveryCalendar/>. Task 9: <TomorrowForecastCard/>. */}
+        <LastSevenDays page={page} onOpenDay={(d) => navigation.push('Recovery', { date: d })} />
+        <View className="gap-[10px]">
+          <SectionLabel>{RECOVERY_COPY.sleepAndStreak}</SectionLabel>
+          <SleepDebtTile page={page} />
+          <View className="flex-row gap-[10px]">
+            <LastNightTile page={page} navigation={navigation} className="flex-1" />
+            <StreakTile page={page} className="flex-1" />
+          </View>
+        </View>
+        {/* Task 8: <RecoveryCalendar/>. Task 9: <TomorrowForecastCard/>. */}
       </ScrollView>
       {coachRoute ? (
         <AskCoachBar

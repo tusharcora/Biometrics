@@ -37,7 +37,7 @@ export function makePage(over: Partial<RecoveryPageDTO> = {}): RecoveryPageDTO {
       { date: '2026-10-08', score: 68 },
     ],
     sleepDebt: { minutes: 190, windowNights: 14, goalMinutes: 480, usualLowMinutes: 75, usualHighMinutes: 125, nightsToClear: 2 },
-    lastNight: { date: '2026-10-08', minutesAsleep: 408, stages: { deep: 72, rem: 95, light: 210, awake: 31 } },
+    lastNight: { date: '2026-10-08', minutesAsleep: 408, stages: { deep: 82, rem: 91, light: 235, awake: 31 } },
     streak: { current: 2, best: 5 },
     month: {
       month: '2026-10',
