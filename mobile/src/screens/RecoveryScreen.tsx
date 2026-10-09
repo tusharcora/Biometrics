@@ -14,6 +14,7 @@ import { LastNightTile } from '../components/recovery/LastNightTile';
 import { LastSevenDays } from '../components/recovery/LastSevenDays';
 import { SleepDebtTile } from '../components/recovery/SleepDebtTile';
 import { StreakTile } from '../components/recovery/StreakTile';
+import { TomorrowForecastCard } from '../components/recovery/TomorrowForecastCard';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { SectionLabel } from '../components/ui/section-label';
@@ -120,7 +121,14 @@ export function RecoveryScreen() {
           onOpenDay={(d) => navigation.push('Recovery', { date: d })}
           today={todayOf(page)}
         />
-        {/* Task 9: <TomorrowForecastCard/>. */}
+        {page.isToday && page.tomorrow ? (
+          <TomorrowForecastCard
+            tomorrow={page.tomorrow}
+            bands={page.bands}
+            goalMinutes={page.sleepDebt?.goalMinutes}
+            onMoreLevers={() => navigation.navigate('Forecast')}
+          />
+        ) : null}
       </ScrollView>
       {coachRoute ? (
         <AskCoachBar

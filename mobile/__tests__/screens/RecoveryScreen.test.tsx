@@ -5,6 +5,7 @@ import { RecoveryScreen } from '../../src/screens/RecoveryScreen';
 import { fetchRecoveryMonth, fetchRecoveryPage, type RecoveryCalendarDTO, type RecoveryPageDTO } from '../../src/api/recovery';
 import type { CoachStatusDTO } from '../../src/api/coach';
 import { debtBlocks, RECOVERY_COPY } from '../../src/lib/recoveryCopy';
+import { FORECAST_COPY } from '../../src/lib/forecastCopy';
 import { COLORS } from '../../src/theme';
 import { makePage } from '../../jest-mocks/recoveryPageFixture';
 
@@ -601,5 +602,120 @@ describe('RecoveryScreen: month calendar', () => {
       expect(cell.props.accessibilityLabel).toMatch(/, No reading$/);
       expect(within(cell).getByText(String(d))).toBeTruthy();
     }
+  });
+});
+
+describe("RecoveryScreen: tomorrow's forecast", () => {
+  const card = () => screen.findByTestId('recovery-tomorrow');
+  const ready = makePage().tomorrow as Extract<RecoveryPageDTO['tomorrow'], { status: 'READY' }>;
+
+  it('selects the goal chip and shows its band, caption and track record', async () => {
+    renderScreen();
+    const c = await card();
+
+    expect(within(c).getByText("Tomorrow's forecast")).toBeTruthy();
+    expect(within(c).getByTestId('recovery-chip-8').props.accessibilityState).toEqual({ checked: true });
+    expect(within(c).getByTestId('recovery-chip-6').props.accessibilityState).toEqual({ checked: false });
+    expect(within(c).getByText('70–78')).toBeTruthy();
+    expect(within(c).getByText('if you sleep 8h tonight')).toBeTruthy();
+    expect(within(c).getByText('right 9 of last 12')).toBeTruthy();
+    // The group stays non-accessible so each radio remains focusable on its own.
+    expect(within(c).getByLabelText('Sleep tonight').props.accessibilityRole).toBe('radiogroup');
+  });
+
+  it('starts on the chip nearest the sleep goal', async () => {
+    pageFetch.mockResolvedValue(makePage({ sleepDebt: { ...makePage().sleepDebt!, goalMinutes: 410 } }));
+    renderScreen();
+    const c = await card();
+
+    expect(within(c).getByTestId('recovery-chip-7').props.accessibilityState).toEqual({ checked: true });
+    expect(within(c).getByText('64–72')).toBeTruthy();
+  });
+
+  it('switches chips locally, without a new fetch', async () => {
+    renderScreen();
+    const c = await card();
+    const calls = pageFetch.mock.calls.length;
+
+    fireEvent.press(within(c).getByTestId('recovery-chip-6'));
+
+    expect(within(c).getByTestId('recovery-chip-6').props.accessibilityState).toEqual({ checked: true });
+    expect(within(c).getByTestId('recovery-chip-8').props.accessibilityState).toEqual({ checked: false });
+    expect(within(c).getByText('56–66')).toBeTruthy();
+    expect(within(c).getByText('if you sleep 6h tonight')).toBeTruthy();
+    expect(within(c).queryByText('70–78')).toBeNull();
+    expect(pageFetch).toHaveBeenCalledTimes(calls);
+  });
+
+  it('labels each chip with its hours and predicted score', async () => {
+    renderScreen();
+    const c = await card();
+
+    expect(within(c).getByTestId('recovery-chip-6').props.accessibilityLabel).toBe('6 hours, predicted 61');
+    expect(within(c).getByRole('radio', { name: '9 hours, predicted 76' })).toBeTruthy();
+  });
+
+  it('hides the track record under 5 days', async () => {
+    pageFetch.mockResolvedValue(makePage({ tomorrow: { ...ready, trackRecord: { hits: 3, days: 4, withinPoints: 3 } } }));
+    renderScreen();
+    const c = await card();
+
+    expect(within(c).queryByText(/right \d+ of last/)).toBeNull();
+    expect(within(c).getByText('70–78')).toBeTruthy();
+  });
+
+  it('opens the Forecast screen from More levers', async () => {
+    renderScreen();
+    const c = await card();
+
+    fireEvent.press(within(c).getByText('More levers'));
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('Forecast');
+  });
+
+  it('shows the unlock progress without history, with no chips or More levers', async () => {
+    pageFetch.mockResolvedValue(makePage({ tomorrow: { status: 'NOT_ENOUGH_DATA', reason: 'NO_HISTORY', daysOfHistory: 9 } }));
+    renderScreen();
+    const c = await card();
+
+    expect(within(c).getByText("Tomorrow's forecast")).toBeTruthy();
+    expect(within(c).getByText('Forecast unlocks after 21 days of data (9/21)')).toBeTruthy();
+    expect(within(c).queryByRole('radio')).toBeNull();
+    expect(within(c).queryByText('More levers')).toBeNull();
+  });
+
+  it('explains a low-confidence today', async () => {
+    pageFetch.mockResolvedValue(makePage({ tomorrow: { status: 'NOT_ENOUGH_DATA', reason: 'LOW_CONFIDENCE_TODAY', daysOfHistory: 40 } }));
+    renderScreen();
+    const c = await card();
+
+    expect(within(c).getByText(FORECAST_COPY.lowConfidence)).toBeTruthy();
+    expect(within(c).queryByRole('radio')).toBeNull();
+    expect(within(c).queryByText('More levers')).toBeNull();
+  });
+
+  it('says when the forecast is unavailable', async () => {
+    pageFetch.mockResolvedValue(makePage({ tomorrow: { status: 'UNAVAILABLE' } }));
+    renderScreen();
+    const c = await card();
+
+    expect(within(c).getByText(FORECAST_COPY.unavailable)).toBeTruthy();
+    expect(within(c).queryByRole('radio')).toBeNull();
+    expect(within(c).queryByText('More levers')).toBeNull();
+  });
+
+  it('shows no card for a past day', async () => {
+    pageFetch.mockResolvedValue(makePage({ date: '2026-10-02', isToday: false }));
+    renderScreen();
+    await screen.findByTestId('recovery-calendar');
+
+    expect(screen.queryByTestId('recovery-tomorrow')).toBeNull();
+  });
+
+  it('shows no card when the bundle has no tomorrow', async () => {
+    pageFetch.mockResolvedValue(makePage({ tomorrow: null }));
+    renderScreen();
+    await screen.findByTestId('recovery-calendar');
+
+    expect(screen.queryByTestId('recovery-tomorrow')).toBeNull();
   });
 });
