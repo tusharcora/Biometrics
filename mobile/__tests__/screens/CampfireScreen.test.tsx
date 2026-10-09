@@ -309,8 +309,8 @@ it("a buddy's coach opens their thread and mine does not navigate; +N past eight
   expect(screen.getByTestId('camp-who-i')).toBeTruthy();
   fireEvent.press(screen.getByTestId('camp-message-camp'));
   expect(mockNavigate).toHaveBeenLastCalledWith('Chats');
-  // Over the scene the back pill matches "+N here": 40 px (lg), a pill.
-  expect(String(screen.getByTestId('camp-back').props.className).split(' ')).toEqual(expect.arrayContaining(['h-[40px]', 'rounded-full']));
+  // Over the scene the back button matches "+N here" in height: 40 px (lg), with the standard 8-px corners.
+  expect(String(screen.getByTestId('camp-back').props.className).split(' ')).toEqual(expect.arrayContaining(['h-[40px]', 'rounded-[8px]']));
   fireEvent.press(screen.getByTestId('camp-back'));
   expect(mockGoBack).toHaveBeenCalled();
 });

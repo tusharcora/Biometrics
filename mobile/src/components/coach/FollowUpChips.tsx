@@ -23,7 +23,7 @@ export function FollowUpChips({ questions, onAsk, disabled = false }: { question
           disabled={disabled}
           onPress={() => onAsk(question)}
           numberOfLines={0}
-          className="h-auto min-h-[32px] max-w-full rounded-full py-[6px]"
+          className="h-auto min-h-[32px] max-w-full py-[6px]"
           textClassName="shrink text-center"
           labelTestID={`follow-up-${index}-label`}
         >

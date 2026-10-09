@@ -85,7 +85,6 @@ const ALLOWED: Exception[] = [
   { file: 'screens/SettingsScreen.tsx', key: 'profile-avatar', count: 1, reason: 'the profile avatar wearing a recap ring' },
   { file: 'components/social/CampScene.tsx', key: 'camp-coach-${id}', count: 1, reason: 'a coach seat in the Campfire scene' },
   // Toggle and selection chips
-  { file: 'components/habit-log-card.tsx', key: 'habit-type-${habit.type}', count: 1, reason: 'a habit type toggle chip' },
   { file: 'components/habit-log-card.tsx', key: 'checkin-day-${day.habitDay}', count: 1, reason: 'a check-in day toggle cell' },
   // Inline spans inside a sentence
   { file: 'components/coach/CoachToday.tsx', key: 'today-span-${metric}', count: 1, reason: 'a metric word inside the coach sentence that asks about it' },
@@ -185,6 +184,48 @@ function scan(): Found[] {
     .map((full) => path.relative(SRC, full).split(path.sep).join('/'))
     .filter((file) => file !== BUTTON_FILE)
     .flatMap((file) => findHandRolledButtons(file, fs.readFileSync(path.join(SRC, file), 'utf8')));
+}
+
+// The button shape: every button and selectable option has Button's 8-px
+// corners (rounded-lg), never a pill. This second scan fails on a <Button>, or
+// a raw pressable (a Text only when it has onPress), whose own tag draws a pill:
+// rounded-full, an arbitrary rounded-[20px] or more, or a literal borderRadius
+// of 20 or more. Round things that are not controls (avatars, dots, badges,
+// tracks) are not pressables, so they are not scanned. An exception needs a
+// testID key, a count and a reason, as above.
+const PILL_TAG_START = new RegExp(`<(${['Button', ...RAW_TAGS].map((t) => t.replace('.', '\\.')).join('|')})(?=[\\s/>])`, 'g');
+const TEXT_TAGS = new Set(['Text', 'Animated.Text']);
+const PILL = /\brounded-(?:full|\[(?:[2-9]\d|\d{3,})(?:px)?\])(?![\w-])|\bborderRadius\s*(?::|=)\s*\{?\s*(?:[2-9]\d|\d{3,})\b/;
+const PRESS = /\bon(?:Press|LongPress|PressIn|PressOut)\s*=/;
+
+// prettier-ignore
+const ALLOWED_PILLS: Exception[] = [];
+
+/** Every Button or raw pressable in `source` whose opening tag draws a pill. */
+function findPills(file: string, source: string): Found[] {
+  const found: Found[] = [];
+  for (const match of source.matchAll(PILL_TAG_START)) {
+    const tag = openingTag(source, match.index!);
+    if (!PILL.test(tag)) continue;
+    if (TEXT_TAGS.has(match[1]) && !PRESS.test(tag)) continue;
+    const id = tag.match(TEST_ID);
+    const literal = id ? (id[1] ?? id[2] ?? id[3]) : undefined;
+    const key = literal ?? `${enclosingComponent(source, match.index!)}:${id?.[4] ?? ''}`;
+    found.push({ file, line: source.slice(0, match.index).split('\n').length, tag: match[1], key });
+  }
+  return found;
+}
+
+/** Like violations(), worded for the pill shape. */
+function pillViolations(found: Found[], allowed: Exception[]): string[] {
+  return violations(found, allowed).map((v) => v.replace('is a hand-rolled button or link', 'is pill-shaped: drop the rounded-full, Button is rounded-lg'));
+}
+
+function scanPills(): Found[] {
+  return sourceFiles(SRC)
+    .map((full) => path.relative(SRC, full).split(path.sep).join('/'))
+    .filter((file) => file !== BUTTON_FILE)
+    .flatMap((file) => findPills(file, fs.readFileSync(path.join(SRC, file), 'utf8')));
 }
 
 describe('button convention', () => {
@@ -294,5 +335,62 @@ describe('button convention', () => {
     expect(findHandRolledButtons('x.tsx', '<Pressable /* accessibilityRole="button" */ onPress={go}>')).toHaveLength(0);
     // A // inside a string is not a comment.
     expect(findHandRolledButtons('x.tsx', "<Pressable onPress={() => open('https://x.dev')} accessibilityRole=\"link\">")).toHaveLength(1);
+  });
+});
+
+describe('button shape convention', () => {
+  it('has no pill-shaped buttons or selectable options: Button and its rounded-lg corners', () => {
+    expect(pillViolations(scanPills(), ALLOWED_PILLS)).toEqual([]);
+  });
+
+  it('gives every pill allowlist entry a unique key, a count and a reason', () => {
+    const keys = ALLOWED_PILLS.map((a) => `${a.file} ${a.key}`);
+    expect(new Set(keys).size).toBe(keys.length);
+    for (const a of ALLOWED_PILLS) {
+      expect(a.reason.trim()).not.toBe('');
+      expect(a.count).toBeGreaterThan(0);
+      expect(a.key).not.toMatch(/^(\?:|:)?testID$/);
+    }
+  });
+
+  it('catches a pill on a Button and on every raw pressable', () => {
+    const cases = [
+      '<Button testID="b" variant="outline" className="rounded-full">',
+      '<Button testID="b" className={`flex-1 rounded-full ${ON_STORY}`}>',
+      "<Button testID=\"b\" className={scene ? 'self-center rounded-full' : 'rounded-full'}>",
+      '<Pressable testID="p" accessibilityRole="radio" className="rounded-full border px-3">',
+      '<PressableScale testID="p" className="h-10 rounded-[999px]">',
+      '<TouchableOpacity testID="t" style={{ height: 40, borderRadius: 20 }}>',
+      '<Text testID="x" onPress={go} className="rounded-full px-2">Go</Text>',
+    ];
+    for (const snippet of cases) {
+      const hits = findPills('x.tsx', snippet);
+      expect(hits).toHaveLength(1);
+      expect(pillViolations(hits, [])).toEqual([expect.stringContaining('is pill-shaped')]);
+    }
+  });
+
+  it('leaves the standard shape and round things that are not controls alone', () => {
+    const fine = [
+      '<Button testID="b" variant="outline" size="sm">',
+      '<Button testID="b" className="rounded-lg">',
+      '<Pressable testID="p" className="rounded-[8px] border">',
+      '<Pressable testID="p" className="rounded-2xl border bg-card">',
+      '<Pressable testID="p" style={{ borderRadius: 8 }}>',
+      // A badge or a label is a Text without onPress; an avatar or a dot is a View.
+      '<Text testID="count" className="min-w-5 rounded-full bg-accent">3</Text>',
+      '<View testID="dot" className="h-2 w-2 rounded-full" />',
+      '<Pressable testID="p" /* className="rounded-full" */ onPress={go}>',
+      '<Pressable testID="p" className="rounded-full-ish">',
+    ];
+    for (const snippet of fine) expect(findPills('x.tsx', snippet)).toHaveLength(0);
+  });
+
+  it('fails a second pill that reuses an allowlisted key, and a stale entry', () => {
+    const entry: Exception = { file: 'x.tsx', key: 'seat-${id}', count: 1, reason: 'a seat in the scene drawing' };
+    const one = '<Pressable testID={`seat-${id}`} className="rounded-full" />\n';
+    expect(pillViolations(findPills('x.tsx', one), [entry])).toEqual([]);
+    expect(pillViolations(findPills('x.tsx', one + one), [entry])).toEqual(['src/x.tsx seat-${id}: expected 1, found 2']);
+    expect(pillViolations([], [entry])).toEqual(['src/x.tsx seat-${id}: expected 1, found 0']);
   });
 });

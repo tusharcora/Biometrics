@@ -250,7 +250,7 @@ function Viewer({ story, mineHint, onClose, onMessage }: { story: Story; mineHin
                 variant="outline"
                 size="sm"
                 onPress={() => void reply(s.kind)}
-                className={`flex-1 rounded-full ${ON_STORY_OUTLINE}`}
+                className={`flex-1 ${ON_STORY_OUTLINE}`}
                 textClassName="text-white"
               >
                 {s.label}
@@ -259,7 +259,7 @@ function Viewer({ story, mineHint, onClose, onMessage }: { story: Story; mineHin
           </View>
           {message ? <Text testID="story-message" className="text-center text-sm text-white/80">{message}</Text> : null}
           {chatsOn ? (
-            <Button testID="story-message-button" variant="outline" size="sm" onPress={() => openChat(frame)} className={`rounded-full ${ON_STORY_OUTLINE}`}
+            <Button testID="story-message-button" variant="outline" size="sm" onPress={() => openChat(frame)} className={ON_STORY_OUTLINE}
               textClassName="text-white" iconStart={<Ionicons name="chatbubble-outline" size={buttonIconSize('sm')} color="#FFFFFF" />}>
               {`Message ${personName(story.author, false)}`}
             </Button>
