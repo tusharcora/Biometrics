@@ -30,7 +30,6 @@ import { EXPORT_NOTICES, useRecapExport } from '../lib/useRecapExport';
 import { useEarnedBadges } from '../lib/useEarnedBadges';
 import { useStoryViewer } from '../lib/useStoryViewer';
 import { cn } from '../lib/utils';
-import { FONTS } from '../theme';
 
 /** A drag down past this (points), or flung faster than CLOSE_VELOCITY, closes the viewer. */
 const CLOSE_DISTANCE = 120;
@@ -120,7 +119,7 @@ export function RecapStoryScreen() {
             {loaded.phase === 'loading' || (recap && !prefs) ? <ActivityIndicator testID="story-viewer-loading" color={tint.text} /> : null}
             {loaded.phase === 'missing' ? (
               <>
-                <Text testID="story-viewer-missing" className="text-center text-base" style={{ color: tint.text }}>This recap isn't available.</Text>
+                <Text testID="story-viewer-missing" className="text-center text-body" style={{ color: tint.text }}>This recap isn't available.</Text>
                 <Button testID="story-viewer-missing-back" variant="outline" size="lg" style={outlineOn(tint)} onPress={leave}>
                   <TintLabel testID="story-viewer-missing-back-label" color={tint.text}>Go back</TintLabel>
                 </Button>
@@ -128,7 +127,7 @@ export function RecapStoryScreen() {
             ) : null}
             {loaded.phase === 'error' ? (
               <>
-                <Text testID="story-viewer-error" className="text-center text-base" style={{ color: tint.text }}>Your recap could not be loaded.</Text>
+                <Text testID="story-viewer-error" className="text-center text-body" style={{ color: tint.text }}>Your recap could not be loaded.</Text>
                 <Button testID="story-viewer-retry" variant="outline" size="lg" style={outlineOn(tint)} onPress={() => void load()}>
                   <TintLabel testID="story-viewer-retry-label" color={tint.text}>Try again</TintLabel>
                 </Button>
@@ -246,8 +245,8 @@ function StoryViewer({ recap, coachId, tint, includes }: { recap: Recap; coachId
                   <Character characterId={coachId} mood="idle" size={28} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text testID="story-viewer-title" numberOfLines={1} style={{ fontFamily: FONTS.sansSemibold, fontSize: 14, color: tint.text }}>{`${coachName} · Your week`}</Text>
-                  <Text testID="story-viewer-range" numberOfLines={1} style={{ fontSize: 12, color: tint.soft }}>{weekRange(recap.periodStart, recap.periodEnd)}</Text>
+                  <Text testID="story-viewer-title" numberOfLines={1} className="text-body font-semibold" style={{ color: tint.text }}>{`${coachName} · Your week`}</Text>
+                  <Text testID="story-viewer-range" numberOfLines={1} className="text-caption" style={{ color: tint.soft }}>{weekRange(recap.periodStart, recap.periodEnd)}</Text>
                 </View>
                 <Button testID="story-viewer-share" variant="ghost" size="icon-lg" accessibilityLabel="Share this frame" className={ON_GROUND_GHOST}
                   disabled={!canExport} onPress={() => void share()} {...holdChrome}>
@@ -282,7 +281,7 @@ function StoryViewer({ recap, coachId, tint, includes }: { recap: Recap; coachId
         <View style={{ height: BOTTOM_HEIGHT, paddingHorizontal: SIDE, paddingTop: 12, paddingBottom: 8, justifyContent: 'flex-end', gap: 10 }}>
           {notice ? (
             <View className="flex-row items-center justify-center gap-3">
-              <Text testID="story-viewer-notice" className="text-center text-sm" style={{ color: notice === 'saved' ? tint.soft : '#FCA5A5' }}>
+              <Text testID="story-viewer-notice" className="text-center text-caption" style={{ color: notice === 'saved' ? tint.soft : '#FCA5A5' }}>
                 {EXPORT_NOTICES[notice]}
               </Text>
               {notice === 'denied' ? (

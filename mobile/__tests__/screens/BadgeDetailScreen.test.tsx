@@ -81,6 +81,7 @@ it('marks the pixel title as the header', async () => {
   load.mockResolvedValue(ladder());
   render(withCharacter(<BadgeDetailScreen />));
   expect((await screen.findByTestId('badge-detail-title')).props.accessibilityRole).toBe('header');
+  expect(screen.getByRole('header', { name: 'Sleep goal streak' })).toBeTruthy();
 });
 
 it('writes the ladder tags in a readable tier colour in light mode and the ring colour in dark mode', async () => {

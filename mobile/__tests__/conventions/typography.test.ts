@@ -51,6 +51,7 @@ const EXEMPT: Exception[] = [
   { file: 'components/recap/WeeklyStoryView.tsx', count: 39, reason: 'the weekly story share card, sized in card units (spec §5)' },
   { file: 'components/recap/RecapCardView.tsx', count: 14, reason: 'the monthly recap share card, sized in card units (spec §5)' },
   { file: 'components/recap/YearPixelsView.tsx', count: 16, reason: 'the Year in Pixels share card, sized in card units (spec §5)' },
+  { file: 'components/recap/RecapShelf.tsx', count: 4, reason: "the recap shelf's cover tiles: a pixel badge and a title drawn with the tile (spec §5)" },
   { file: 'components/achievements/BadgeShareCard.tsx', count: 6, reason: 'the badge share card, sized in card units (spec §5)' },
   { file: 'components/achievements/CelebrationModal.tsx', count: 10, reason: 'the badge celebration, drawn like the share card (spec §5)' },
   { file: 'lib/recapShare.ts', count: 2, reason: "the share cards' quote fitting: fontSize is a number it computes, not a style" },
@@ -63,18 +64,6 @@ const EXEMPT: Exception[] = [
 
 // prettier-ignore
 const PENDING: Exception[] = [
-  // Task 9
-  { file: 'components/recap/RecapShelf.tsx', count: 5, reason: 'not migrated yet (Task 9)' },
-  { file: 'components/recap/ShareWithBuddiesButton.tsx', count: 5, reason: 'not migrated yet (Task 9)' },
-  { file: 'screens/RecapScreen.tsx', count: 11, reason: 'not migrated yet (Task 9)' },
-  { file: 'screens/RecapsScreen.tsx', count: 6, reason: 'not migrated yet (Task 9)' },
-  { file: 'screens/RecapStoryScreen.tsx', count: 6, reason: 'not migrated yet (Task 9)' },
-  { file: 'screens/RecapBuilderScreen.tsx', count: 6, reason: 'not migrated yet (Task 9)' },
-  { file: 'screens/YearInPixelsScreen.tsx', count: 1, reason: 'not migrated yet (Task 9)' },
-  { file: 'components/achievements/BadgesCard.tsx', count: 5, reason: 'not migrated yet (Task 9)' },
-  { file: 'components/milestones/MilestoneTiles.tsx', count: 4, reason: 'not migrated yet (Task 9)' },
-  { file: 'screens/BadgesScreen.tsx', count: 6, reason: 'not migrated yet (Task 9)' },
-  { file: 'screens/BadgeDetailScreen.tsx', count: 10, reason: 'not migrated yet (Task 9)' },
   // Task 10
   { file: 'screens/SettingsScreen.tsx', count: 5, reason: 'not migrated yet (Task 10)' },
   { file: 'screens/SignInScreen.tsx', count: 6, reason: 'not migrated yet (Task 10)' },

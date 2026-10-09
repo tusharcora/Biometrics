@@ -55,7 +55,8 @@ beforeEach(() => {
 
 it('shows a month with its coach in the quote card, every milestone (unearned ones locked) and signed changes for the comparisons present', async () => {
   render(withCharacter(<RecapScreen />));
-  expect(await screen.findByTestId('recap-title')).toHaveTextContent('September with Mochi');
+  expect(await screen.findByTestId('recap-title')).toHaveTextContent('SEPTEMBER WITH MOCHI');
+  expect(screen.getByRole('header', { name: 'September with Mochi' })).toBeTruthy();
   expect(screen.getByTestId('recap-line')).toHaveTextContent('“Six nights in a row on goal, lovely.”');
   expect(screen.getByTestId('recap-line-coach', HIDDEN_OK)).toBeTruthy();
   expect(screen.getByTestId('recap-milestones-streak').props.accessibilityLabel).toBe('6 nights on goal in a row, earned');
@@ -96,7 +97,7 @@ it('shows a week as its story card with the paragraph under it', async () => {
   mockParams = { id: 'r-week' };
   load.mockResolvedValue(WEEK);
   render(withCharacter(<RecapScreen />));
-  expect(await screen.findByTestId('recap-title')).toHaveTextContent('Your week with Mochi');
+  expect(await screen.findByTestId('recap-title')).toHaveTextContent('YOUR WEEK WITH MOCHI');
   expect(screen.getByTestId('recap-story-preview')).toBeTruthy();
   expect(screen.getByTestId('recap-story-text')).toHaveTextContent('You hit your goal on 5 nights this week.');
   fireEvent.press(screen.getByTestId('recap-make-share'));
@@ -128,20 +129,20 @@ it('opens the story viewer from the preview and from "View story"', async () => 
 it("names the recap's own coach after a coach switch, not the current one (ruling S6)", async () => {
   load.mockResolvedValue({ ...MONTH, personaId: 'luna' });
   const { unmount } = render(withCharacter(<RecapScreen />, { characterId: 'mochi' }));
-  expect(await screen.findByTestId('recap-title')).toHaveTextContent('September with Luna');
+  expect(await screen.findByTestId('recap-title')).toHaveTextContent('SEPTEMBER WITH LUNA');
   unmount();
 
   mockParams = { id: 'r-week' };
   load.mockResolvedValue({ ...WEEK, personaId: 'luna' });
   render(withCharacter(<RecapScreen />, { characterId: 'mochi' }));
-  expect(await screen.findByTestId('recap-title')).toHaveTextContent('Your week with Luna');
+  expect(await screen.findByTestId('recap-title')).toHaveTextContent('YOUR WEEK WITH LUNA');
   expect(screen.getByTestId('recap-story-title')).toHaveTextContent('How Luna saw my week');
 });
 
 it('falls back to the current coach when the recap has no coach we know', async () => {
   load.mockResolvedValue({ ...MONTH, personaId: null });
   render(withCharacter(<RecapScreen />, { characterId: 'boba' }));
-  expect(await screen.findByTestId('recap-title')).toHaveTextContent('September with Boba');
+  expect(await screen.findByTestId('recap-title')).toHaveTextContent('SEPTEMBER WITH BOBA');
 });
 
 it('marks the recap opened once, when it is shown', async () => {
@@ -159,7 +160,7 @@ it('keeps the recap on screen when marking it opened fails', async () => {
   render(withCharacter(<RecapScreen />));
   await screen.findByTestId('recap-title');
   await waitFor(() => expect(opened).toHaveBeenCalledTimes(1));
-  expect(screen.getByTestId('recap-title')).toHaveTextContent('September with Mochi');
+  expect(screen.getByTestId('recap-title')).toHaveTextContent('SEPTEMBER WITH MOCHI');
   expect(screen.queryByTestId('recap-error')).toBeNull();
 });
 
@@ -197,10 +198,10 @@ it('shows the new recap, never a stale one, when a push re-opens this screen wit
   // The push lands while the first recap is still loading: same screen, new params.
   mockParams = { id: 'r-week' };
   rerender(withCharacter(<RecapScreen />));
-  expect(await screen.findByTestId('recap-title')).toHaveTextContent('Your week with Mochi');
+  expect(await screen.findByTestId('recap-title')).toHaveTextContent('YOUR WEEK WITH MOCHI');
   // The first recap's answer arrives late and is dropped.
   await act(async () => resolveMonth(MONTH));
-  expect(screen.getByTestId('recap-title')).toHaveTextContent('Your week with Mochi');
+  expect(screen.getByTestId('recap-title')).toHaveTextContent('YOUR WEEK WITH MOCHI');
   await waitFor(() => expect(opened).toHaveBeenCalledWith('r-week'));
   expect(opened).not.toHaveBeenCalledWith('r-month');
 });

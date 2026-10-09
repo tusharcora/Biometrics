@@ -74,7 +74,7 @@ export function RecapShelf({ navigation }: { navigation: Navigator }) {
         </Button>
       </View>
       {recaps !== null && recaps.length === 0 ? (
-        <Text testID="recap-shelf-empty" className="text-sm text-muted-foreground">
+        <Text testID="recap-shelf-empty" className="text-caption text-muted-foreground">
           Your first recap arrives after your first full week of sleep.
         </Text>
       ) : null}
