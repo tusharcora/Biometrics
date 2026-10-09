@@ -2,7 +2,7 @@ import React from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { withCharacter } from '../../jest-mocks/characterContext';
 import { RecoveryScreen } from '../../src/screens/RecoveryScreen';
-import { fetchRecoveryPage, type RecoveryPageDTO } from '../../src/api/recovery';
+import { fetchRecoveryMonth, fetchRecoveryPage, type RecoveryCalendarDTO, type RecoveryPageDTO } from '../../src/api/recovery';
 import type { CoachStatusDTO } from '../../src/api/coach';
 import { debtBlocks, RECOVERY_COPY } from '../../src/lib/recoveryCopy';
 import { COLORS } from '../../src/theme';
@@ -450,5 +450,154 @@ describe('RecoveryScreen: Clear streak', () => {
 
     expect(within(tile).getByText('0')).toBeTruthy();
     expect(within(tile).getByText('Good or better days in a row')).toBeTruthy();
+  });
+});
+
+describe('RecoveryScreen: month calendar', () => {
+  const monthFetch = fetchRecoveryMonth as jest.Mock;
+  const base = makePage();
+  const SEPTEMBER: RecoveryCalendarDTO = {
+    month: { month: '2026-09', days: [{ date: '2026-09-14', score: 80 }], average: 80, counts: { excellent: 1, good: 0, fair: 0, low: 0 } },
+    bands: base.bands,
+  };
+  const withMonth = (over: Partial<RecoveryPageDTO['month']>, page: Partial<RecoveryPageDTO> = {}) =>
+    makePage({ ...page, month: { ...base.month, ...over } });
+  const cls = (el: { props: { className?: unknown } }) => String(el.props.className).split(' ');
+
+  it('shows the month title, the rounded average and the caption', async () => {
+    pageFetch.mockResolvedValue(withMonth({ average: 63.6 }));
+    renderScreen();
+    const cal = await screen.findByTestId('recovery-calendar');
+
+    expect(within(cal).getByText('October')).toBeTruthy();
+    expect(cls(within(cal).getByText('64'))).toContain('text-number');
+    expect(within(cal).getByText('month average · 1 Excellent, 1 Low')).toBeTruthy();
+    expect(within(cal).getByText('Tap a day to see its conditions.')).toBeTruthy();
+  });
+
+  it('shows a scored day with its score and label, and opens it', async () => {
+    pageFetch.mockResolvedValue(withMonth({ days: base.month.days.map((d) => (d.date === '2026-10-03' ? { ...d, score: 61 } : d)) }));
+    renderScreen();
+    const cell = await screen.findByTestId('recovery-cal-2026-10-03');
+
+    expect(within(cell).getByText('61')).toBeTruthy();
+    expect(cell.props.accessibilityLabel).toBe('Saturday 3 October, 61, Good');
+    fireEvent.press(cell);
+    expect(mockNavigation.push).toHaveBeenCalledWith('Recovery', { date: '2026-10-03' });
+  });
+
+  it('draws a future day as its date number, not pressable', async () => {
+    renderScreen();
+    const cal = await screen.findByTestId('recovery-calendar');
+
+    expect(within(cal).queryByTestId('recovery-cal-2026-10-20')).toBeNull();
+    expect(within(cal).getByText('20')).toBeTruthy();
+    expect(screen.getByTestId('recovery-cal-2026-10-08')).toBeTruthy();
+  });
+
+  it('opens a past day with no row (the no-data state)', async () => {
+    pageFetch.mockResolvedValue(withMonth({ days: base.month.days.filter((d) => d.date !== '2026-10-04') }));
+    renderScreen();
+    const cell = await screen.findByTestId('recovery-cal-2026-10-04');
+
+    expect(within(cell).getByText('4')).toBeTruthy();
+    expect(cell.props.accessibilityLabel).toBe('Sunday 4 October, No reading');
+    fireEvent.press(cell);
+    expect(mockNavigation.push).toHaveBeenCalledWith('Recovery', { date: '2026-10-04' });
+  });
+
+  it('rings the viewed day', async () => {
+    renderScreen();
+    const ring = await screen.findByTestId('recovery-cal-selected');
+
+    expect(within(ring).getByTestId('recovery-cal-2026-10-08')).toBeTruthy();
+    expect(ring).toHaveStyle({ borderWidth: 2, borderColor: COLORS.light.foreground, padding: 2, borderRadius: 10 });
+  });
+
+  it('bolds today when viewing another day', async () => {
+    jest.useFakeTimers({ now: new Date(2026, 9, 8, 12), advanceTimers: true });
+    try {
+      mockParams = { date: '2026-10-02' };
+      pageFetch.mockResolvedValue(makePage({ date: '2026-10-02', isToday: false }));
+      renderScreen();
+      const ring = await screen.findByTestId('recovery-cal-selected');
+
+      expect(within(ring).getByTestId('recovery-cal-2026-10-02')).toBeTruthy();
+      expect(cls(within(screen.getByTestId('recovery-cal-2026-10-08')).getByText('68'))).toContain('font-bold');
+      expect(cls(within(screen.getByTestId('recovery-cal-2026-10-07')).getByText('62'))).not.toContain('font-bold');
+      expect(screen.queryByTestId('recovery-cal-2026-10-09')).toBeNull();
+    } finally {
+      jest.useRealTimers();
+    }
+  });
+
+  it('pages back, with a skeleton until the month loads, and forward from the cache', async () => {
+    const req = pending<RecoveryCalendarDTO>();
+    monthFetch.mockReturnValue(req.promise);
+    renderScreen();
+    await screen.findByTestId('recovery-calendar');
+
+    expect(screen.getByLabelText('Next month')).toBeDisabled();
+    fireEvent.press(screen.getByLabelText('Previous month'));
+    expect(monthFetch).toHaveBeenCalledWith('2026-09');
+    expect(screen.getByTestId('recovery-cal-loading')).toBeTruthy();
+    expect(screen.queryByTestId('recovery-cal-2026-10-08')).toBeNull();
+
+    req.resolve(SEPTEMBER);
+    expect(await screen.findByText('September')).toBeTruthy();
+    expect(screen.queryByTestId('recovery-cal-loading')).toBeNull();
+    expect(within(screen.getByTestId('recovery-cal-2026-09-14')).getByText('80')).toBeTruthy();
+
+    fireEvent.press(screen.getByLabelText('Next month'));
+    expect(screen.getByText('October')).toBeTruthy();
+    expect(screen.getByTestId('recovery-cal-2026-10-08')).toBeTruthy();
+    expect(monthFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("disables Previous at firstScoredDate's month", async () => {
+    pageFetch.mockResolvedValue(makePage({ firstScoredDate: '2026-10-02' }));
+    renderScreen();
+    await screen.findByTestId('recovery-calendar');
+
+    expect(screen.getByLabelText('Previous month')).toBeDisabled();
+    expect(screen.getByLabelText('Next month')).toBeDisabled();
+  });
+
+  it('pages back across a year and titles the month with its year', async () => {
+    monthFetch.mockResolvedValue({ ...SEPTEMBER, month: { month: '2025-12', days: [], average: null, counts: { excellent: 0, good: 0, fair: 0, low: 0 } } });
+    pageFetch.mockResolvedValue(withMonth({ month: '2026-01', days: [{ date: '2026-01-15', score: 68 }] }, { date: '2026-01-15', firstScoredDate: '2025-06-01' }));
+    renderScreen();
+    await screen.findByText('January');
+
+    fireEvent.press(screen.getByLabelText('Previous month'));
+    expect(monthFetch).toHaveBeenCalledWith('2025-12');
+    expect(await screen.findByText('December 2025')).toBeTruthy();
+  });
+
+  it('shows the month error with Retry, which fetches again', async () => {
+    monthFetch.mockRejectedValueOnce(new Error('boom')).mockResolvedValueOnce(SEPTEMBER);
+    renderScreen();
+    await screen.findByTestId('recovery-calendar');
+
+    fireEvent.press(screen.getByLabelText('Previous month'));
+    expect(await screen.findByText("Couldn't load September.")).toBeTruthy();
+    fireEvent.press(screen.getByText('Retry'));
+    expect(monthFetch).toHaveBeenCalledTimes(2);
+    expect(await screen.findByTestId('recovery-cal-2026-09-14')).toBeTruthy();
+    expect(screen.queryByText("Couldn't load September.")).toBeNull();
+  });
+
+  it('shows no average and only unscored cells for an empty month', async () => {
+    pageFetch.mockResolvedValue(withMonth({ days: [], average: null, counts: { excellent: 0, good: 0, fair: 0, low: 0 } }));
+    renderScreen();
+    const cal = await screen.findByTestId('recovery-calendar');
+
+    expect(within(cal).queryByText(/month average/)).toBeNull();
+    expect(within(cal).getByText('Tap a day to see its conditions.')).toBeTruthy();
+    for (let d = 1; d <= 8; d++) {
+      const cell = screen.getByTestId(`recovery-cal-2026-10-0${d}`);
+      expect(cell.props.accessibilityLabel).toMatch(/, No reading$/);
+      expect(within(cell).getByText(String(d))).toBeTruthy();
+    }
   });
 });

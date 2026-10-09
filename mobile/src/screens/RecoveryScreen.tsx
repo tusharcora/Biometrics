@@ -6,6 +6,7 @@ import { useCharacter } from '../characters/CharacterContext';
 import { useScreenFocused } from '../characters/useScreenFocused';
 import { characterInfo } from '../components/characters/registry';
 import { AskCoachBar } from '../components/coach/AskCoachBar';
+import { RecoveryCalendar } from '../components/recovery/RecoveryCalendar';
 import { RecoveryHeader } from '../components/recovery/RecoveryHeader';
 import { RecoveryHero } from '../components/recovery/RecoveryHero';
 import { RecoveryInfoSheet } from '../components/recovery/RecoveryInfoSheet';
@@ -26,6 +27,13 @@ import { useRecoveryPage } from '../lib/useRecoveryPage';
 import { navigateToCoachEntry } from '../navigation/coachNavigation';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
+// Today as a civil date: the page's own date when it is today, else the device-local date from components.
+function todayOf(page: { isToday: boolean; date: string }): string {
+  if (page.isToday) return page.date;
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`;
+}
+
 // The Recovery page (spec §3): header, weather hero, summary, then the sections in spec order.
 // `date` is a civil YYYY-MM-DD; without it the page shows today.
 export function RecoveryScreen() {
@@ -33,8 +41,10 @@ export function RecoveryScreen() {
   const date = useRoute<RouteProp<RootStackParamList, 'Recovery'>>().params?.date;
   // Context, not the hook: tests render screens without a provider.
   const insets = useContext(SafeAreaInsetsContext);
-  const { state, page, errorKind, reload } = useRecoveryPage(date);
+  const { state, page, errorKind, reload, month, loadMonth } = useRecoveryPage(date);
   const [info, setInfo] = useState(false);
+  // The calendar's month; null shows D's month.
+  const [viewMonth, setViewMonth] = useState<string | null>(null);
   const { status: coachStatus } = useCoachStatus(navigation);
   const coachRoute = coachEntryRoute(coachStatus);
   const focused = useScreenFocused();
@@ -101,7 +111,16 @@ export function RecoveryScreen() {
             <StreakTile page={page} className="flex-1" />
           </View>
         </View>
-        {/* Task 8: <RecoveryCalendar/>. Task 9: <TomorrowForecastCard/>. */}
+        <RecoveryCalendar
+          page={page}
+          viewMonth={viewMonth ?? page.month.month}
+          load={month(viewMonth ?? page.month.month)}
+          onPage={(m) => { setViewMonth(m); loadMonth(m); }}
+          onRetry={(m) => loadMonth(m)}
+          onOpenDay={(d) => navigation.push('Recovery', { date: d })}
+          today={todayOf(page)}
+        />
+        {/* Task 9: <TomorrowForecastCard/>. */}
       </ScrollView>
       {coachRoute ? (
         <AskCoachBar

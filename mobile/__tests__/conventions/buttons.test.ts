@@ -77,6 +77,7 @@ const ALLOWED: Exception[] = [
   { file: 'components/social/CampBanner.tsx', key: 'camp-banner', count: 1, reason: 'the camp banner strip that opens the Campfire' },
   { file: 'components/recovery/LastSevenDays.tsx', key: 'recovery-day-${day.date}', count: 1, reason: 'a day column in the Last 7 days strip that opens that day' },
   { file: 'components/recovery/LastNightTile.tsx', key: 'recovery-last-night', count: 1, reason: 'the Last night tile that opens the night' },
+  { file: 'components/recovery/RecoveryCalendar.tsx', key: 'recovery-cal-${cell.date}', count: 1, reason: 'a calendar day that opens that day' },
   // Tabs
   { file: 'navigation/FloatingTabBar.tsx', key: 'tab-${route.name}', count: 1, reason: 'a tab bar item' },
   // Story rings, avatars and scene characters
