@@ -1,6 +1,6 @@
 import React from 'react';
 import { render } from '@testing-library/react-native';
-import { Rect } from 'react-native-svg';
+import Svg, { Rect } from 'react-native-svg';
 import { WeatherIcon } from '../../src/components/recovery/WeatherIcon';
 import { HERO_ART, SMALL_ART } from '../../src/lib/weatherArt';
 
@@ -18,6 +18,16 @@ describe('WeatherIcon', () => {
       expect(root.props.importantForAccessibility).toBe('no-hide-descendants');
       unmount();
     }
+  });
+  it('draws the hero at 5 pt per cell (140x100) and small icons at 22 by default', () => {
+    const hero = render(<WeatherIcon kind="clear" variant="hero" />);
+    expect(hero.UNSAFE_getByType(Svg).props).toMatchObject({ width: 140, height: 100, viewBox: '0 0 28 20' });
+    hero.unmount();
+    const small = render(<WeatherIcon kind="clear" variant="small" />);
+    expect(small.UNSAFE_getByType(Svg).props).toMatchObject({ width: 22, height: 22, viewBox: '0 0 11 11' });
+    small.unmount();
+    const forecast = render(<WeatherIcon kind="clear" variant="small" size={44} />);
+    expect(forecast.UNSAFE_getByType(Svg).props).toMatchObject({ width: 44, height: 44 });
   });
   it('every rect fits its grid', () => {
     for (const k of KINDS) {
