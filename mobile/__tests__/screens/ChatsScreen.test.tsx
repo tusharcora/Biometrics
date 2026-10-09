@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 import { StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ApiError } from '../../src/api/client';
@@ -70,7 +70,15 @@ beforeEach(() => {
 
 it('lists conversations with their line, unread weight, story ring and active dot; rows, Requests and Cheer work', async () => {
   renderScreen();
-  expect(await screen.findByTestId('chats-handle')).toHaveTextContent('@tushar');
+  expect(await screen.findByTestId('chats-handle')).toHaveTextContent('@TUSHAR');
+  // The header is the pixel page title: one line, announced in the handle's own case.
+  expect(screen.getByTestId('chats-handle').props.numberOfLines).toBe(1);
+  expect(screen.getByRole('header', { name: '@tushar' })).toBeTruthy();
+  // Crowded rows still fit: one line each for the name and the last message.
+  const line = screen.getByTestId('chat-row-ben-line');
+  expect(line.props.numberOfLines).toBe(1);
+  expect(String(line.props.className).split(' ')).toContain('text-caption');
+  expect(within(screen.getByTestId('chat-row-ben')).getByText('Ben').props.numberOfLines).toBe(1);
   expect(screen.getByTestId('chat-row-ben-line')).toHaveTextContent('rough night lol · 2m');
   expect(screen.getByTestId('chat-row-ben-unread')).toBeTruthy();
   expect(screen.getByTestId('chat-row-ben-avatar-active')).toBeTruthy();
@@ -85,6 +93,23 @@ it('lists conversations with their line, unread weight, story ring and active do
   expect(sendStickerMessage).toHaveBeenCalledWith('sam', 'CHEER');
   expect(screen.getByTestId('chats-message')).toHaveTextContent('Sent a Cheer');
   expect(fetchChats).toHaveBeenCalledTimes(2); // re-read once after the sticker (the Social home changed)
+});
+
+it('a long @handle in the pixel header truncates with an ellipsis between the buttons, never clips', async () => {
+  const long = 'a_very_long_handle_for_a_header';
+  mockSocial.home = { ...mockHome, me: { ...mockHome.me, person: person(long) } };
+  try {
+    renderScreen();
+    const title = await screen.findByTestId('chats-handle');
+    expect(title).toHaveTextContent(`@${long.toUpperCase()}`);
+    // One line that gives way (flex-1 between the two 40-px buttons) and ends in "…", not a hard cut.
+    expect(title.props.numberOfLines).toBe(1);
+    expect(title.props.ellipsizeMode ?? 'tail').toBe('tail');
+    expect(String(title.props.className).split(' ')).toEqual(expect.arrayContaining(['flex-1', 'font-pixel', 'text-page-title']));
+    expect(screen.getByRole('header', { name: `@${long}` })).toBeTruthy();
+  } finally {
+    mockSocial.home = mockHome;
+  }
 });
 
 it('a refused Cheer says why', async () => {

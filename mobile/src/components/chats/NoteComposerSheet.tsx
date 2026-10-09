@@ -48,8 +48,8 @@ export function NoteComposerSheet({ visible, current, onClose, onSaved }: { visi
   return (
     <Sheet visible={visible} onClose={onClose} testID="note-composer">
       <View className="gap-3 pb-2">
-        <Text className="text-base font-semibold">Share a note</Text>
-        <Text className="text-sm text-muted-foreground">Your buddies see it over your avatar in Chats for 24 hours.</Text>
+        <Text className="text-headline">Share a note</Text>
+        <Text className="text-caption text-muted-foreground">Your buddies see it over your avatar in Chats for 24 hours.</Text>
         <TextInput
           testID="note-input"
           accessibilityLabel="Your note"
@@ -60,11 +60,11 @@ export function NoteComposerSheet({ visible, current, onClose, onSaved }: { visi
           style={inputTextStyle}
           className="h-11 rounded-xl bg-secondary px-3 text-foreground"
         />
-        <Text testID="note-count" className={length > STATUS_NOTE_MAX ? 'self-end text-xs text-destructive' : 'self-end text-xs text-muted-foreground'}>{`${length}/${STATUS_NOTE_MAX}`}</Text>
+        <Text testID="note-count" className={length > STATUS_NOTE_MAX ? 'self-end text-caption text-destructive tabular-nums' : 'self-end text-caption text-muted-foreground tabular-nums'}>{`${length}/${STATUS_NOTE_MAX}`}</Text>
         {/* Stacked full-width sheet buttons: size lg (plan ruling P4). */}
         <Button testID="note-share" size="lg" className="w-full" loading={busy} disabled={length === 0 || length > STATUS_NOTE_MAX} onPress={() => void run(() => saveStatusNote(draft))}>Share</Button>
         {current ? <Button testID="note-clear" variant="destructive" size="lg" className="w-full" disabled={busy} onPress={() => void run(clearStatusNote)}>Clear note</Button> : null}
-        {error ? <Text testID="note-error" className="text-sm text-destructive">{error}</Text> : null}
+        {error ? <Text testID="note-error" className="text-caption text-destructive">{error}</Text> : null}
       </View>
     </Sheet>
   );

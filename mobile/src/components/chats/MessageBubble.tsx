@@ -22,12 +22,12 @@ const THEIR_CORNERS = { borderTopLeftRadius: 18, borderTopRightRadius: 18, borde
 function CardView({ card, mine, buddyName, testID }: { card: Card; mine: boolean; buddyName: string; testID: string }) {
   return (
     <View testID={testID} className={mine ? 'max-w-[250px] items-end gap-1' : 'max-w-[250px] items-start gap-1'}>
-      <Text className="px-1 text-[11px] text-muted-foreground">{cardCaption(card, mine, buddyName)}</Text>
+      <Text className="px-1 text-caption text-muted-foreground">{cardCaption(card, mine, buddyName)}</Text>
       <View className="w-[230px] gap-1.5 rounded-[14px] border border-border bg-card p-3">
-        <Text className="text-[10px] font-semibold tracking-[1.2px] text-muted-foreground">{cardKicker(card)}</Text>
+        <Text className="text-label uppercase text-muted-foreground">{cardKicker(card)}</Text>
         <View className="flex-row items-center gap-2">
           {card.type === 'checkin' && card.mood ? <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: moodColor(card.mood) }} /> : null}
-          <Text className={card.available ? 'flex-1 text-[14px] font-semibold' : 'flex-1 text-[14px] text-muted-foreground'}>{cardLine(card)}</Text>
+          <Text className={card.available ? 'flex-1 text-body font-semibold' : 'flex-1 text-body text-muted-foreground'}>{cardLine(card)}</Text>
         </View>
       </View>
     </View>
@@ -50,7 +50,7 @@ export function MessageBubble({ message: m, buddyName, onLongPress }: { message:
       className={m.mine ? 'max-w-[80%] items-end gap-1 self-end' : 'max-w-[80%] items-start gap-1 self-start'}
     >
       {m.replyTo ? (
-        <Text testID={`message-${m.id}-reply`} numberOfLines={1} className="px-1 text-[11px] text-muted-foreground">
+        <Text testID={`message-${m.id}-reply`} numberOfLines={1} className="px-1 text-caption text-muted-foreground">
           {replyLine(m.replyTo, buddyName)}
         </Text>
       ) : null}
@@ -58,12 +58,12 @@ export function MessageBubble({ message: m, buddyName, onLongPress }: { message:
       {m.kind === 'STICKER' && m.sticker ? (
         <View className="items-center gap-0.5 rounded-2xl border border-border bg-card px-3.5 py-2.5">
           <Ionicons name={stickerIcon(m.sticker)} size={28} color={colors.foreground} />
-          <Text testID={`message-${m.id}-sticker`} className="text-[11px] font-semibold text-muted-foreground">{stickerLine(m.sticker)}</Text>
+          <Text testID={`message-${m.id}-sticker`} className="text-caption font-semibold text-muted-foreground">{stickerLine(m.sticker)}</Text>
         </View>
       ) : null}
       {m.text ? (
         <View className={m.mine ? 'bg-accent px-3.5 py-2.5' : 'bg-secondary px-3.5 py-2.5'} style={m.mine ? MINE_CORNERS : THEIR_CORNERS}>
-          <Text testID={`message-${m.id}-text`} className={m.mine ? 'text-[15px] leading-5 text-accent-foreground' : 'text-[15px] leading-5 text-foreground'}>
+          <Text testID={`message-${m.id}-text`} className={m.mine ? 'text-body text-accent-foreground' : 'text-body text-foreground'}>
             {m.text}
           </Text>
         </View>
@@ -73,7 +73,7 @@ export function MessageBubble({ message: m, buddyName, onLongPress }: { message:
           {m.reactions.map((r, i) => (
             <Text
               key={`${r.kind}-${i}`}
-              className={r.mine ? 'overflow-hidden rounded-full border border-accent bg-secondary px-2 py-0.5 text-[11px]' : 'overflow-hidden rounded-full border border-border bg-secondary px-2 py-0.5 text-[11px]'}
+              className={r.mine ? 'overflow-hidden rounded-full border border-accent bg-secondary px-2 py-0.5 text-caption' : 'overflow-hidden rounded-full border border-border bg-secondary px-2 py-0.5 text-caption'}
             >
               {stickerLine(r.kind)}
             </Text>

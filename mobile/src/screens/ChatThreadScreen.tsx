@@ -310,8 +310,8 @@ export function ChatThreadScreen() {
           {back}
           <ChatAvatar person={buddy} size={40} ring={ringUnseen} active={active === 'Active now'} testID="thread-avatar" />
           <View className="flex-1 gap-px">
-            <Text testID="thread-name" numberOfLines={1} className="text-[15px] font-bold">{name}</Text>
-            <Text testID="thread-sub" numberOfLines={1} className="text-xs text-muted-foreground">{active ? `${active} · @${buddy.handle}` : `@${buddy.handle}`}</Text>
+            <Text testID="thread-name" numberOfLines={1} className="text-body font-bold">{name}</Text>
+            <Text testID="thread-sub" numberOfLines={1} className="text-caption text-muted-foreground">{active ? `${active} · @${buddy.handle}` : `@${buddy.handle}`}</Text>
           </View>
           <Button testID="thread-info" variant="outline" size="icon-lg" accessibilityLabel={`${name}'s week`} onPress={() => navigation.navigate('BuddyWeek', { buddyId })}>
             <Ionicons name="information-circle-outline" size={buttonIconSize('icon-lg')} color={colors.foreground} />
@@ -332,16 +332,16 @@ export function ChatThreadScreen() {
             contentContainerStyle={{ paddingHorizontal: 14, paddingVertical: 12, gap: 8 }}
             renderItem={({ item }) =>
               item.type === 'chip' ? (
-                <Text testID={item.key} className="my-1 self-center overflow-hidden rounded-[10px] bg-secondary px-2.5 py-0.5 text-[11px] text-muted-foreground">{item.label}</Text>
+                <Text testID={item.key} className="my-1 self-center overflow-hidden rounded-[10px] bg-secondary px-2.5 py-0.5 text-caption text-muted-foreground">{item.label}</Text>
               ) : item.type === 'seen' ? (
-                <Text testID="thread-seen" className="self-end px-1 text-[11px] text-muted-foreground">Seen</Text>
+                <Text testID="thread-seen" className="self-end px-1 text-caption text-muted-foreground">Seen</Text>
               ) : (
                 <MessageBubble message={item.message} buddyName={name} onLongPress={setSelected} />
               )
             }
           />
         )}
-        {error ? <Text testID="thread-error" className="px-4 pb-1 text-sm text-destructive">{error}</Text> : null}
+        {error ? <Text testID="thread-error" className="px-4 pb-1 text-caption text-destructive">{error}</Text> : null}
         <ChatComposer
           disabled={sending}
           quote={quote ? { label: quote.label } : null}

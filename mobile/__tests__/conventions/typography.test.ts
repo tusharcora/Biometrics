@@ -63,19 +63,6 @@ const EXEMPT: Exception[] = [
 
 // prettier-ignore
 const PENDING: Exception[] = [
-  // Task 8
-  { file: 'components/chats/ChatComposer.tsx', count: 3, reason: 'not migrated yet (Task 8)' },
-  { file: 'components/chats/ChatRow.tsx', count: 4, reason: 'not migrated yet (Task 8)' },
-  { file: 'components/chats/ChatSettingsSection.tsx', count: 2, reason: 'not migrated yet (Task 8)' },
-  { file: 'components/chats/MessageBubble.tsx', count: 10, reason: 'not migrated yet (Task 8)' },
-  { file: 'components/chats/NewChatSheet.tsx', count: 3, reason: 'not migrated yet (Task 8)' },
-  { file: 'components/chats/NoteComposerSheet.tsx', count: 5, reason: 'not migrated yet (Task 8)' },
-  { file: 'components/chats/NotesRow.tsx', count: 3, reason: 'not migrated yet (Task 8)' },
-  { file: 'components/chats/ReportSheet.tsx', count: 5, reason: 'not migrated yet (Task 8)' },
-  { file: 'components/chats/RequestsList.tsx', count: 4, reason: 'not migrated yet (Task 8)' },
-  { file: 'screens/ChatsScreen.tsx', count: 4, reason: 'not migrated yet (Task 8)' },
-  { file: 'screens/ChatThreadScreen.tsx', count: 5, reason: 'not migrated yet (Task 8)' },
-  { file: 'screens/ChatRequestsScreen.tsx', count: 2, reason: 'not migrated yet (Task 8)' },
   // Task 9
   { file: 'components/recap/RecapShelf.tsx', count: 5, reason: 'not migrated yet (Task 9)' },
   { file: 'components/recap/ShareWithBuddiesButton.tsx', count: 5, reason: 'not migrated yet (Task 9)' },

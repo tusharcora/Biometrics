@@ -86,8 +86,8 @@ export function ReportSheet({ target, name, onClose, onBlock }: {
     // In flight, the sheet stays up: closed mid-report, a ticked block would still run once the report is filed.
     <Sheet visible={target !== null} onClose={onClose} dismissible={!busy} testID="report-sheet">
       <View className="gap-1.5 pb-2">
-        <Text className="text-xl font-bold">{`Report ${what}`}</Text>
-        <Text className="mb-1.5 text-sm text-muted-foreground">{`${name} won't be told. Reports are kept for review.`}</Text>
+        <Text className="text-heading">{`Report ${what}`}</Text>
+        <Text className="mb-1.5 text-caption text-muted-foreground">{`${name} won't be told. Reports are kept for review.`}</Text>
         <View accessibilityRole="radiogroup" accessibilityLabel="Reason">
           {REPORT_REASONS.map((r) => (
             <Pressable
@@ -101,7 +101,7 @@ export function ReportSheet({ target, name, onClose, onBlock }: {
               className="min-h-[48px] flex-row items-center gap-3 px-1"
             >
               <Radio checked={reason === r.reason} color={colors.foreground} />
-              <Text className="text-[15px]">{r.label}</Text>
+              <Text className="text-body">{r.label}</Text>
             </Pressable>
           ))}
         </View>
@@ -115,9 +115,9 @@ export function ReportSheet({ target, name, onClose, onBlock }: {
           className="mt-1 min-h-[48px] flex-row items-center gap-3 border-t border-border px-1"
         >
           <Checkbox checked={block} color={DESTRUCTIVE[scheme]} border={colors.muted} />
-          <Text className="text-[15px]">{`Also block ${name}`}</Text>
+          <Text className="text-body">{`Also block ${name}`}</Text>
         </Pressable>
-        {error ? <Text testID="report-error" className="text-sm text-destructive">{error}</Text> : null}
+        {error ? <Text testID="report-error" className="text-caption text-destructive">{error}</Text> : null}
         <View className="mt-2.5 flex-row gap-2.5">
           <Button testID="report-cancel" variant="outline" size="lg" className="flex-1" disabled={busy} onPress={onClose}>Cancel</Button>
           <Button testID="report-submit" variant="destructive" size="lg" className="flex-1" loading={busy} onPress={() => void submit()}>Report</Button>

@@ -37,8 +37,8 @@ export function ChatRow({ row, ring, now, busy, onOpen, onCheer }: {
       >
         <ChatAvatar person={row.buddy} size={52} ring={ring} active={activeLine(row.activeAt, now) === 'Active now'} testID={`chat-row-${row.buddy.id}-avatar`} />
         <View className="flex-1 gap-0.5">
-          <Text numberOfLines={1} className={unread ? 'text-[15px] font-bold' : 'text-[15px] font-medium'}>{name}</Text>
-          <Text testID={`chat-row-${row.buddy.id}-line`} numberOfLines={1} className={unread ? 'text-[13.5px] font-semibold text-foreground' : 'text-[13.5px] text-muted-foreground'}>{line}</Text>
+          <Text numberOfLines={1} className={unread ? 'text-body font-bold' : 'text-body font-medium'}>{name}</Text>
+          <Text testID={`chat-row-${row.buddy.id}-line`} numberOfLines={1} className={unread ? 'text-caption font-semibold text-foreground' : 'text-caption text-muted-foreground'}>{line}</Text>
         </View>
         {unread ? <View testID={`chat-row-${row.buddy.id}-unread`} className="h-[9px] w-[9px] rounded-full bg-accent" /> : null}
       </Pressable>

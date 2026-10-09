@@ -15,6 +15,7 @@ import { MoodNoticeSheet } from '../components/buddies/MoodNoticeSheet';
 import { useMoodNoticeGate } from '../components/buddies/useMoodNoticeGate';
 import { RequestsList } from '../components/chats/RequestsList';
 import { Button, buttonIconSize } from '../components/ui/button';
+import { PageTitle } from '../components/ui/page-title';
 import { Text } from '../components/ui/text';
 import { useChatsAvailable } from '../lib/socialStore';
 import type { RootStackParamList } from '../navigation/RootNavigator';
@@ -24,7 +25,7 @@ function Body({ identity, onAccepted }: { identity: BuddyIdentity; onAccepted: (
   const gate = useMoodNoticeGate(identity.moodNoticeSeen);
   return (
     <View className="flex-1 gap-4">
-      <Text className="text-[13.5px] leading-[19px] text-muted-foreground">Only buddies can message you. Accept to pair up; they won't know if you decline.</Text>
+      <Text className="text-caption text-muted-foreground">Only buddies can message you. Accept to pair up; they won't know if you decline.</Text>
       <RequestsList gate={gate} onAccepted={onAccepted} />
       <MoodNoticeSheet {...gate.sheet} />
     </View>
@@ -44,7 +45,7 @@ export function ChatRequestsScreen() {
         <Button testID="chat-requests-back" variant="outline" size="icon-lg" accessibilityLabel="Back to chats" onPress={() => navigation.goBack()}>
           <Ionicons name="chevron-back" size={buttonIconSize('icon-lg')} color={colors.foreground} />
         </Button>
-        <Text accessibilityRole="header" className="text-[17px] font-bold">Requests</Text>
+        <PageTitle>Requests</PageTitle>
       </View>
       <View className="flex-1 px-4 pt-3">
         <IdentityGate>{(identity) => <Body identity={identity} onAccepted={onAccepted} />}</IdentityGate>
