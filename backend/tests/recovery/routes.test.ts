@@ -41,7 +41,7 @@ describe('GET /me/recovery/:date', () => {
     const res = await get(user.id, '/me/recovery/today');
     expect(res.status).toBe(200);
     expect(res.headers['cache-control']).toBe('private, no-store');
-    expect(res.body).toMatchObject({ date: today, isToday: true, state: 'READY', previous: { date: shiftDate(today, -1), score: 62 } });
+    expect(res.body).toMatchObject({ date: today, today, isToday: true, state: 'READY', previous: { date: shiftDate(today, -1), score: 62 } });
     expect(res.body.score.score).toBe(68);
     expect(typeof res.body.updatedAt).toBe('string');
     expect(res.body.weights).toEqual({ HRV: expect.any(Number), RHR: expect.any(Number), SLEEP_DEBT: expect.any(Number) });
@@ -76,6 +76,8 @@ describe('GET /me/recovery/:date', () => {
     await put(user.id, past, 50);
     const res = await get(user.id, `/me/recovery/${past}`);
     expect(res.body).toMatchObject({ isToday: false, tomorrow: null, state: 'READY' });
+    // The server's today (user timezone) rides along so the client never uses the device clock for paging.
+    expect(res.body.today).toBe(localCivilDate(new Date(), 'UTC'));
   });
 
   it('tomorrow is UNAVAILABLE when the forecast throws, and the page still loads', async () => {
@@ -107,6 +109,42 @@ describe('GET /me/recovery/:date', () => {
     const deficits = nightlyDeficits(nights, today, 480, getLiveConfig());
     expect(deficits.reduce((s, v) => s + v, 0)).toBe(sleepDebt.minutes);
     expect(sleepDebt).toMatchObject({ minutes: 180, windowNights: 14, goalMinutes: 480, usualLowMinutes: 75, usualHighMinutes: 125, nightsToClear: 1 });
+  });
+
+  it('sleep debt is null when the window has no SLEEP records, even with a features row', async () => {
+    const user = await createUser({ sleepGoalMinutes: 480 });
+    const today = localCivilDate(new Date(), 'UTC');
+    await put(user.id, today, 60);
+    await prisma.userDailyFeatures.create({ data: { userId: user.id, date: day(today), algorithmVersion: 'v3', sleepDebtRolling14d: 0 } });
+    await prisma.baselineSnapshot.create({ data: { userId: user.id, metric: 'SLEEP_DEBT', date: day(today), ewma: 100, spread: 25, mad: 17, daysOfHistory: 30, algorithmVersion: 'v3' } });
+    // A night just outside the window does not count.
+    await prisma.biometricRecord.create({ data: { userId: user.id, metricType: 'SLEEP', recordedAt: day(shiftDate(today, -14)), value: 300 } });
+    expect((await get(user.id, '/me/recovery/today')).body.sleepDebt).toBeNull();
+  });
+
+  it('nightsToClear is 0 when the rounded stored debt is within the rounded usual high', async () => {
+    const user = await createUser({ sleepGoalMinutes: 480 });
+    const today = localCivilDate(new Date(), 'UTC');
+    await put(user.id, today, 60);
+    // Stored 125.4 rounds to the usual high (125); the nights (re-synced since) still re-derive 180.
+    await prisma.userDailyFeatures.create({ data: { userId: user.id, date: day(today), algorithmVersion: 'v3', sleepDebtRolling14d: 125.4 } });
+    await prisma.baselineSnapshot.create({ data: { userId: user.id, metric: 'SLEEP_DEBT', date: day(today), ewma: 100, spread: 25, mad: 17, daysOfHistory: 30, algorithmVersion: 'v3' } });
+    for (let i = 0; i < 14; i++) {
+      await prisma.biometricRecord.create({ data: { userId: user.id, metricType: 'SLEEP', recordedAt: day(shiftDate(today, i - 13)), value: i < 2 ? 390 : 480 } });
+    }
+    const { sleepDebt } = (await get(user.id, '/me/recovery/today')).body;
+    expect(sleepDebt).toMatchObject({ minutes: 125, usualHighMinutes: 125, nightsToClear: 0 });
+  });
+
+  it('nightsToClear is at least 1 when the rounded stored debt is over the rounded usual high', async () => {
+    const user = await createUser({ sleepGoalMinutes: 480 });
+    const today = localCivilDate(new Date(), 'UTC');
+    await put(user.id, today, 60);
+    // Stored 126 is over the usual high (125); the nights (re-synced since) are all on goal.
+    await prisma.userDailyFeatures.create({ data: { userId: user.id, date: day(today), algorithmVersion: 'v3', sleepDebtRolling14d: 126 } });
+    await prisma.baselineSnapshot.create({ data: { userId: user.id, metric: 'SLEEP_DEBT', date: day(today), ewma: 100, spread: 25, mad: 17, daysOfHistory: 30, algorithmVersion: 'v3' } });
+    await prisma.biometricRecord.create({ data: { userId: user.id, metricType: 'SLEEP', recordedAt: day(today), value: 480 } });
+    expect((await get(user.id, '/me/recovery/today')).body.sleepDebt).toMatchObject({ minutes: 126, nightsToClear: 1 });
   });
 
   it('400 on a malformed or future date', async () => {

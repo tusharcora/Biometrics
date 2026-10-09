@@ -42,6 +42,7 @@ export type RecoveryTomorrowDTO =
 
 export interface RecoveryPageDTO {
   date: string;
+  today: string; // YYYY-MM-DD in the user's stored timezone; the client bounds calendar paging with it
   isToday: boolean;
   state: RecoveryState;
   bands: ScoreBands;

@@ -51,18 +51,24 @@ async function sleepDebtFor(userId: string, date: string, cfg: ScoreConfig, goal
     getSleepGoalMinutes(userId),
   ]);
   if (!features || features.sleepDebtRolling14d === null) return null;
+  // No SLEEP records in the window: the stored 0 means "no data", not "no debt" (the tile says so).
+  if (nights.length === 0) return null;
   const goal = goalFromRow ?? goalNow;
   const usual = snap ? usualDebtRange(snap) : null;
   // The same per-night rule the stored sleepDebtRolling14d sums (scoring/features.ts).
   const sleep = nights.map((n) => ({ date: n.recordedAt.toISOString().slice(0, 10), value: n.value }));
   const deficits = nightlyDeficits(sleep, date, goal, cfg);
+  const minutes = Math.round(features.sleepDebtRolling14d);
+  // Within the usual by the same rounded comparison the tile's fill makes, so the copy and colour agree
+  // (also when the nights were re-synced, or the goal changed, after the stored debt was computed).
+  const clear = (high: number) => (minutes <= Math.round(high) ? 0 : Math.max(1, nightsToClear(deficits, high)));
   return {
-    minutes: Math.round(features.sleepDebtRolling14d),
+    minutes,
     windowNights: window,
     goalMinutes: goal,
     usualLowMinutes: usual ? Math.round(usual.low) : null,
     usualHighMinutes: usual ? Math.round(usual.high) : null,
-    nightsToClear: usual ? nightsToClear(deficits, usual.high) : null,
+    nightsToClear: usual ? clear(usual.high) : null,
   };
 }
 
@@ -103,6 +109,7 @@ export async function buildRecoveryPage(userId: string, dateParam: string, now =
   const upto = rows.filter((r) => r.date <= date);
   return {
     date,
+    today,
     isToday,
     state: !row ? 'NO_DATA' : row.score === null ? 'BUILDING' : 'READY',
     bands,
