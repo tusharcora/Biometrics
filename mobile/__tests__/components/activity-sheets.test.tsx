@@ -1,7 +1,9 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { fireEvent, render } from '@testing-library/react-native';
 import { NightDetail } from '../../src/components/activity-sheets';
 import type { SleepNight } from '../../src/api/sleep';
+import { FONTS } from '../../src/theme';
 
 // Synthetic values only.
 const NIGHT: SleepNight = {
@@ -37,5 +39,19 @@ describe('NightDetail', () => {
     );
 
     expect(queryByTestId('night-open-full')).toBeNull();
+  });
+
+  it('sets the times in tabular figures and keeps the steps tile value to one shrinking line', () => {
+    const { getByTestId, getByText } = render(
+      <NightDetail date="2026-09-22" night={NIGHT} goal={480} average={null} stepsLink={STEPS_LINK} onOpenFull={jest.fn()} />,
+    );
+    for (const id of ['night-detail-bedtime', 'night-detail-wake']) {
+      expect(StyleSheet.flatten(getByTestId(id).props.style)).toEqual(expect.objectContaining({ fontFamily: FONTS.sansSemibold, fontVariant: ['tabular-nums'] }));
+    }
+    expect(StyleSheet.flatten(getByTestId('night-detail-asleep').props.style)).toEqual(expect.objectContaining({ fontVariant: ['tabular-nums'] }));
+    const steps = getByText('12,480');
+    expect(steps.props.numberOfLines).toBe(1);
+    expect(steps.props.adjustsFontSizeToFit).toBe(true);
+    expect(StyleSheet.flatten(steps.props.style).fontVariant).toEqual(['tabular-nums']);
   });
 });

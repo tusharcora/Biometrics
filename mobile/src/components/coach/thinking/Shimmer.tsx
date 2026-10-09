@@ -2,7 +2,7 @@ import React, { useEffect } from 'react';
 import { View } from 'react-native';
 import Animated, { cancelAnimation, Easing, interpolateColor, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { useColorScheme } from 'nativewind';
-import { Text, fontFamilyFor } from '../../ui/text';
+import { Text, textStyleFor } from '../../ui/text';
 import { COLORS } from '../../../theme';
 import { useCoachVoice, useElapsed } from './shared';
 import type { ThinkingStyleProps } from './types';
@@ -35,10 +35,10 @@ export function Shimmer({ characterId, paused }: ThinkingStyleProps) {
 
   return (
     <View className="flex-row items-baseline pb-3">
-      <Animated.Text className="text-sm font-semibold" style={[{ fontFamily: fontFamilyFor('font-semibold'), color: muted }, colorStyle]}>
+      <Animated.Text className="text-caption font-semibold" style={[textStyleFor('text-caption font-semibold'), { color: muted }, colorStyle]}>
         {`${name} is thinking`}
       </Animated.Text>
-      <Text testID="thinking-shimmer-seconds" className="ml-1.5 text-xs text-muted-foreground" style={{ fontVariant: ['tabular-nums'] }}>
+      <Text testID="thinking-shimmer-seconds" className="ml-1.5 text-caption text-muted-foreground tabular-nums">
         {`${Math.floor(elapsed / 1000)}s`}
       </Text>
     </View>

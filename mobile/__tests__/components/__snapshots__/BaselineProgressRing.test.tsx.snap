@@ -508,11 +508,14 @@ exports[`BaselineProgressRing matches its snapshot 1`] = `
     </RNSVGGroup>
   </RNSVGSvgView>
   <Text
-    className="text-foreground text-xs font-semibold"
+    className="text-foreground text-caption font-semibold tabular-nums"
     style={
       [
         {
           "fontFamily": "Geist_600SemiBold",
+          "fontVariant": [
+            "tabular-nums",
+          ],
         },
         undefined,
       ]

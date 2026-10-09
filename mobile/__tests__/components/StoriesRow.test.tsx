@@ -1,4 +1,5 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { StoriesRow } from '../../src/components/social/StoriesRow';
 
@@ -44,4 +45,19 @@ it('names a buddy by @handle when their display name is unset', () => {
   );
   expect(screen.getByText('@kai')).toBeTruthy();
   expect(screen.getByLabelText("@kai's story, new")).toBeTruthy();
+});
+
+it('keeps a long buddy name under its ring to one line', () => {
+  render(
+    <StoriesRow
+      me={{ person: person('me'), checkIn: null }}
+      rings={[{ author: { ...person('kai'), displayName: 'Bartholomew Featherstonehaugh' }, unseen: true, locked: false, frameCount: 1, latestAt: '' }]}
+      onCheckIn={jest.fn()} onOpenStory={jest.fn()} onSeeAll={jest.fn()}
+    />,
+  );
+  const name = screen.getByText(/Bartholomew/);
+  expect(name.props.numberOfLines).toBe(1);
+  expect(String(name.props.className).split(' ')).toContain('text-caption');
+  // Without a bound the long name widens its column instead of truncating.
+  expect(StyleSheet.flatten(name.props.style).maxWidth).toBe(64);
 });

@@ -3,7 +3,7 @@ import { View } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import Svg, { Path, Rect } from 'react-native-svg';
 import type { MilestoneGlyph, MilestoneTile } from '../../lib/milestones';
-import { COLORS, FONTS } from '../../theme';
+import { COLORS } from '../../theme';
 import { Text } from '../ui/text';
 
 // Milestone tiles (recap restyle 2026-10-05: the month screen's "Milestones"). A standalone grid,
@@ -82,16 +82,16 @@ export function MilestoneTiles({ tiles, testID = 'milestone-tiles' }: MilestoneT
               >
                 {tile.earned ? <Glyph glyph={tile.glyph} scheme={scheme} testID={`${testID}-${tile.key}-glyph`} /> : <Lock color={COLORS[scheme].muted} testID={`${testID}-${tile.key}-lock`} />}
               </View>
-              <Text testID={`${testID}-${tile.key}-label`} className="text-center text-xs" style={{ color: tile.earned ? COLORS[scheme].foreground : COLORS[scheme].muted }}>
+              <Text testID={`${testID}-${tile.key}-label`} className="text-center text-caption" style={{ color: tile.earned ? COLORS[scheme].foreground : COLORS[scheme].muted }}>
                 {tile.label}
               </Text>
               {tile.progress ? (
-                <Text testID={`${testID}-${tile.key}-progress`} className="text-center" style={{ fontSize: 11, color: COLORS[scheme].muted }}>
+                <Text testID={`${testID}-${tile.key}-progress`} className="text-center text-caption tabular-nums" style={{ color: COLORS[scheme].muted }}>
                   {tile.progress}
                 </Text>
               ) : null}
               {tile.levelUp ? (
-                <Text testID={`${testID}-${tile.key}-levelup`} style={{ fontSize: 10, letterSpacing: 0.6, fontFamily: FONTS.sansSemibold, color: LEVEL_UP_COLOR[scheme] }}>
+                <Text testID={`${testID}-${tile.key}-levelup`} className="text-label" style={{ color: LEVEL_UP_COLOR[scheme] }}>
                   LEVEL UP
                 </Text>
               ) : null}

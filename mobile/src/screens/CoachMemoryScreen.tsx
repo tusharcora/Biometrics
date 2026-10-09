@@ -88,23 +88,23 @@ function MemoryRow({ entry, icon, onChange, onRemove }: MemoryRowProps) {
         <Ionicons name={icon} size={17} color={colors.coach} />
       </View>
       <View className="flex-1 gap-1.5">
-        <Text className="text-base">{entry.value}</Text>
+        <Text className="text-body">{entry.value}</Text>
         {entry.status === 'PENDING' ? (
           <View className="flex-row items-center gap-1.5">
             <View className="h-1.5 w-1.5 rounded-full bg-coach" />
-            <Text testID={`memory-pending-${entry.id}`} className="flex-1 text-xs text-coach">
+            <Text testID={`memory-pending-${entry.id}`} className="flex-1 text-caption text-coach">
               {PENDING_MEMORY_TEXT}
             </Text>
           </View>
         ) : null}
         {deleteError ? (
-          <Text testID={`memory-error-${entry.id}`} className="text-sm text-destructive">
+          <Text testID={`memory-error-${entry.id}`} className="text-caption text-destructive">
             {MEMORY_ERROR_TEXT.generic}
           </Text>
         ) : null}
         {confirming ? (
           <View className="mt-1 gap-2 rounded-tile bg-muted px-3 py-2.5">
-            <Text className="text-sm font-medium">Delete this memory?</Text>
+            <Text className="text-body font-medium">Delete this memory?</Text>
             <View className="flex-row justify-end gap-2">
               <Button testID={`memory-cancel-delete-${entry.id}`} variant="outline" size="sm" disabled={busy} onPress={() => setConfirming(false)}>
                 Cancel
@@ -221,8 +221,8 @@ export function CoachMemoryScreen() {
         {groups.length === 0 ? (
           <Card testID="coach-memory-empty" className="items-start gap-3 p-5">
             <Character testID="coach-memory-character" mood="idle" size={40} glow paused={!focused} />
-            <Text className="font-display text-display-sm">Nothing remembered yet</Text>
-            <Text className="text-sm text-muted-foreground">
+            <Text className="text-heading">Nothing remembered yet</Text>
+            <Text className="text-caption text-muted-foreground">
               The coach only remembers your training goals, your schedule and your preferences, and never health or medical details.
               Anything it remembers will appear here, and you can change or delete it at any time.
             </Text>

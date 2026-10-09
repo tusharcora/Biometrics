@@ -22,12 +22,12 @@ function RecapRow({ recap, testID, onPress }: { recap: RecapSummary; testID: str
         <View className="flex-row items-center justify-between">
           <SectionLabel>{recapTitle(recap)}</SectionLabel>
           {recap.openedAt === null ? (
-            <Text testID={`recaps-new-${recap.id}`} className="text-xs font-semibold text-accent">
+            <Text testID={`recaps-new-${recap.id}`} className="text-label uppercase text-accent">
               New
             </Text>
           ) : null}
         </View>
-        <Text className="font-display text-display-sm" numberOfLines={2}>
+        <Text className="text-heading" numberOfLines={2}>
           {recap.line}
         </Text>
       </Card>
@@ -67,14 +67,14 @@ export function RecapsScreen() {
         {state.phase === 'loading' ? <Skeleton className="h-40 w-full rounded-card" /> : null}
         {state.phase === 'error' ? (
           <Card testID="recaps-error" className="gap-3">
-            <Text className="text-sm text-muted-foreground">Your recaps could not be loaded.</Text>
+            <Text className="text-caption text-muted-foreground">Your recaps could not be loaded.</Text>
             <Button testID="recaps-retry" variant="secondary" size="sm" className="self-start" onPress={() => void load()}>
               Try again
             </Button>
           </Card>
         ) : null}
         {state.phase === 'ready' && recaps.length === 0 ? (
-          <Text testID="recaps-empty" className="text-base text-muted-foreground">
+          <Text testID="recaps-empty" className="text-body text-muted-foreground">
             Your first recap arrives after your first full week of sleep.
           </Text>
         ) : null}
@@ -85,7 +85,7 @@ export function RecapsScreen() {
             <Card className="flex-row items-center gap-3">
               <View className="flex-1 gap-1">
                 <SectionLabel>Year in pixels</SectionLabel>
-                <Text className="text-base font-semibold">Every night of the year, one square each</Text>
+                <Text className="text-body font-semibold">Every night of the year, one square each</Text>
               </View>
               <Ionicons name="chevron-forward" size={18} color={colors.muted} />
             </Card>

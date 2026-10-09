@@ -1,4 +1,5 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { characterLabel, withCharacter } from '../../jest-mocks/characterContext';
 import { render, fireEvent } from '@testing-library/react-native';
 import { MetricTile, trendCaption } from '../../src/components/home/metric-tile';
@@ -6,6 +7,7 @@ import { RecoveryHero } from '../../src/components/home/recovery-hero';
 import { SleepTile } from '../../src/components/home/sleep-tile';
 import { CoachTile } from '../../src/components/home/coach-tile';
 import type { DailyScoreDTO, FactorDTO } from '../../src/api/scores';
+import { FONTS } from '../../src/theme';
 import type { MetricRecord } from '../../src/lib/metricInsights';
 
 function records(type: MetricRecord['metricType'], values: number[]): MetricRecord[] {
@@ -67,6 +69,15 @@ describe('MetricTile', () => {
     expect(getByText('20% above your average')).toBeTruthy();
   });
 
+  it('draws its number in tabular figures on one line that shrinks to fit', () => {
+    const { getByText } = render(<MetricTile type="STEPS" series={records('STEPS', [8000, 18400])} onPress={jest.fn()} />);
+    const value = getByText('18,400');
+    expect(StyleSheet.flatten(value.props.style)).toEqual(expect.objectContaining({ fontFamily: FONTS.sansBold, fontVariant: ['tabular-nums'] }));
+    expect(String(value.props.className).split(' ')).toEqual(expect.arrayContaining(['text-display', 'tabular-nums']));
+    expect(value.props.numberOfLines).toBe(1);
+    expect(value.props.adjustsFontSizeToFit).toBe(true);
+  });
+
   it('opens its detail when pressed', () => {
     const onPress = jest.fn();
     const { getByTestId } = render(<MetricTile type="HRV" series={records('HRV', [50, 60])} onPress={onPress} />);
@@ -82,6 +93,15 @@ describe('RecoveryHero', () => {
     expect(getByText('78')).toBeTruthy();
     expect(getByText('HRV is lifting it today.')).toBeTruthy();
     expect(getByTestId('confidence-badge')).toBeTruthy();
+  });
+
+  it('sets the score as text-score in tabular figures under a pixel label, and the verdict in Geist', () => {
+    const { getByText } = render(<RecoveryHero score={recovery} failed={false} onPress={jest.fn()} />);
+    const score = getByText('78');
+    expect(String(score.props.className).split(' ')).toEqual(expect.arrayContaining(['text-score', 'tabular-nums']));
+    expect(StyleSheet.flatten(score.props.style)).toEqual(expect.objectContaining({ fontFamily: FONTS.sansSemibold, fontVariant: ['tabular-nums'] }));
+    expect(StyleSheet.flatten(getByText('Recovery Score').props.style).fontFamily).toBe(FONTS.pixel);
+    expect(StyleSheet.flatten(getByText('HRV is lifting it today.').props.style).fontFamily).toBe(FONTS.sansSemibold);
   });
 
   it('opens the score it shows', () => {

@@ -18,7 +18,8 @@ it('lists every highlight of last week, or says the week was quiet', async () =>
   fetchMock.mockResolvedValueOnce({ weekStart: '2026-09-28', weekEnd: '2026-10-04', items: [{ type: 'comeback', actor: sam, mine: false }] });
   const { unmount } = render(<HighlightsScreen />);
   expect(await screen.findByText('Sam bounced back to rested')).toBeTruthy();
-  expect(screen.getByTestId('highlights-heading')).toHaveTextContent('Week 40 highlights');
+  expect(screen.getByTestId('highlights-heading')).toHaveTextContent('WEEK 40 HIGHLIGHTS');
+  expect(screen.getByRole('header', { name: 'Week 40 highlights' })).toBeTruthy();
   unmount();
   fetchMock.mockResolvedValueOnce(null);
   render(<HighlightsScreen />);

@@ -42,7 +42,7 @@ export function useSection<T>(key: string, load: () => Promise<T>, deps: unknown
 export function SectionError({ testID, message, onRetry }: { testID: string; message: string; onRetry: () => void }) {
   return (
     <Card className="items-center gap-3 py-6">
-      <Text className="text-center text-sm text-muted-foreground">{message}</Text>
+      <Text className="text-center text-caption text-muted-foreground">{message}</Text>
       <Button testID={testID} variant="secondary" size="sm" onPress={onRetry}>
         Try again
       </Button>

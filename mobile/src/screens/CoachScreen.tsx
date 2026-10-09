@@ -15,6 +15,7 @@ import {
   type TodaySummaryDTO,
 } from '../api/coach';
 import { Text } from '../components/ui/text';
+import { PageTitle } from '../components/ui/page-title';
 import { Button, buttonIconSize } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { PromptBar } from '../components/coach/PromptBar';
@@ -368,9 +369,7 @@ export function CoachScreen() {
         <View testID="coach-header-slot" style={{ width: HEADER_SLOT_WIDTH, alignItems: 'flex-start' }}>
           <Character testID="coach-header-character" mood={mood} size={HEADER_CHARACTER_SIZE} paused={!focused} />
         </View>
-        <Text accessibilityRole="header" className="font-display text-display">
-          Coach
-        </Text>
+        <PageTitle>Coach</PageTitle>
       </View>
       {ready ? (
         <View className="flex-row gap-2">
@@ -410,7 +409,7 @@ export function CoachScreen() {
         {header}
         <View testID="coach-needs-consent" className="flex-1 items-center justify-center gap-4 p-8">
           <Character mood="idle" size={56} glow paused={!focused} />
-          <Text className="text-center text-base text-muted-foreground">The coach needs your OK before it can look at your scores.</Text>
+          <Text className="text-center text-body text-muted-foreground">The coach needs your OK before it can look at your scores.</Text>
           <Button testID="coach-review-consent-button" onPress={() => navigation.navigate('CoachConsent', { prefill: lastPrefill.current })}>
             Review what is shared
           </Button>
@@ -425,7 +424,7 @@ export function CoachScreen() {
         {header}
         <View testID="coach-unavailable" className="flex-1 items-center justify-center gap-4 p-8">
           <Character mood="idle" size={56} paused={!focused} />
-          <Text className="text-center text-base text-muted-foreground">The AI Coach is not available right now.</Text>
+          <Text className="text-center text-body text-muted-foreground">The AI Coach is not available right now.</Text>
         </View>
       </SafeAreaView>
     );
@@ -451,13 +450,13 @@ export function CoachScreen() {
             onMomentumScrollEnd={followIfNearBottom}
           >
             {chatNote ? (
-              <Text testID={CHAT_NOTES[chatNote].testID} className="px-1 text-sm text-muted-foreground">
+              <Text testID={CHAT_NOTES[chatNote].testID} className="px-1 text-caption text-muted-foreground">
                 {CHAT_NOTES[chatNote].text}
               </Text>
             ) : null}
 
             {statusUnverified ? (
-              <Text testID="coach-status-unverified" className="px-1 text-sm text-muted-foreground">
+              <Text testID="coach-status-unverified" className="px-1 text-caption text-muted-foreground">
                 We couldn't check the coach just now. You can still send a message.
               </Text>
             ) : null}
@@ -465,7 +464,7 @@ export function CoachScreen() {
             <CoachToday summary={today} loading={todayLoading} onAsk={ask} />
             {/* The page's one disclaimer: CoachToday shows it beside its comparisons, the page otherwise. */}
             {!todayShowsFootnote(today) ? (
-              <Text testID="coach-today-footnote" className="text-xs text-muted-foreground">
+              <Text testID="coach-today-footnote" className="text-caption text-muted-foreground">
                 {TODAY_FOOTNOTE}
               </Text>
             ) : null}
@@ -474,10 +473,10 @@ export function CoachScreen() {
               <View testID="coach-empty" className="items-center gap-4 py-4">
                 <Character testID="coach-hero-character" mood={mood} size={64} paused={!focused} />
                 <View className="items-center gap-1 px-4">
-                  <Text accessibilityRole="header" className="text-center font-display text-display-sm">
+                  <Text accessibilityRole="header" className="text-center text-heading">
                     What would you like to know?
                   </Text>
-                  <Text className="text-center text-sm text-muted-foreground">Ask about your data, or anything health and fitness.</Text>
+                  <Text className="text-center text-caption text-muted-foreground">Ask about your data, or anything health and fitness.</Text>
                 </View>
                 <View className="w-full gap-2">
                   {suggestedQuestions(today).map((question, index) => (
@@ -488,7 +487,7 @@ export function CoachScreen() {
                       onPress={() => ask(question)}
                       className="flex-row items-center justify-between rounded-tile border border-border bg-card px-4 py-3.5"
                     >
-                      <Text className="shrink text-base">{question}</Text>
+                      <Text className="shrink text-body">{question}</Text>
                       <Ionicons name="arrow-up" size={16} color={colors.muted} />
                     </PressableScale>
                   ))}

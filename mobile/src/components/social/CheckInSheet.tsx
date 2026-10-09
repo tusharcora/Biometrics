@@ -37,8 +37,8 @@ export function CheckInSheet({ visible, current, onClose }: { visible: boolean; 
   return (
     <Sheet visible={visible} onClose={onClose} testID="checkin-sheet">
       <View className="gap-4">
-        <Text className="font-display text-display-sm">How did you wake up?</Text>
-        <Text testID="checkin-notice" className="text-sm text-muted-foreground">Your buddies will see this. You can change it until midnight.</Text>
+        <Text className="text-heading">How did you wake up?</Text>
+        <Text testID="checkin-notice" className="text-caption text-muted-foreground">Your buddies will see this. You can change it until midnight.</Text>
         {/* A one-tap pick: today's mood is the filled button, the others are outlined. */}
         <View className="flex-row gap-2">
           {CHECKIN_OPTIONS.map((o) => (
@@ -47,7 +47,7 @@ export function CheckInSheet({ visible, current, onClose }: { visible: boolean; 
             </Button>
           ))}
         </View>
-        {message ? <Text testID="checkin-message" className="text-sm text-destructive">{message}</Text> : null}
+        {message ? <Text testID="checkin-message" className="text-caption text-destructive">{message}</Text> : null}
       </View>
     </Sheet>
   );

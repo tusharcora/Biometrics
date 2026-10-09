@@ -57,16 +57,16 @@ export function UsualTiles({ records, recovery, today }: { records: MetricRecord
             <Card className="gap-1">
               <View className="flex-row items-center gap-1.5">
                 <View testID={`usual-tile-${tile.type}-dot`} style={{ width: 8, height: 8, borderRadius: 4, backgroundColor: tile.color[scheme] }} />
-                <Text className="text-xs text-muted-foreground" numberOfLines={1}>
+                <Text className="text-caption text-muted-foreground" numberOfLines={1}>
                   {tile.label}
                 </Text>
               </View>
-              <Text className="text-numeral-sm font-semibold" style={{ fontVariant: ['tabular-nums'] }}>
+              <Text className="text-heading tabular-nums" numberOfLines={1} adjustsFontSizeToFit>
                 {tile.latest ?? '—'}
               </Text>
               <TrendLine data={tile.points.map((r) => r.value)} color={tile.color[scheme]} height={28} />
               {tile.delta ? (
-                <Text className="text-xs text-muted-foreground" numberOfLines={1}>
+                <Text className="text-caption text-muted-foreground" numberOfLines={1}>
                   {tile.delta}
                 </Text>
               ) : null}

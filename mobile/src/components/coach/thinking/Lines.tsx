@@ -12,14 +12,14 @@ export function Lines({ characterId, paused }: ThinkingStyleProps) {
   const elapsed = useElapsed(paused);
   const dots = dotCount(elapsed);
   return (
-    <Text className="pb-3 text-[13.5px] text-muted-foreground">
-      <Text className="text-[13.5px] font-semibold" style={{ color: text }}>
+    <Text className="pb-3 text-caption text-muted-foreground">
+      <Text className="text-caption font-semibold" style={{ color: text }}>
         {name}
       </Text>
       {` is ${line}`}
       {/* Three dots always take their room, so the line never shifts as they tick. */}
-      <Text className="text-[13.5px] text-muted-foreground">{'.'.repeat(dots)}</Text>
-      <Text className="text-[13.5px]" style={{ color: 'transparent' }}>
+      <Text className="text-caption text-muted-foreground">{'.'.repeat(dots)}</Text>
+      <Text className="text-caption" style={{ color: 'transparent' }}>
         {'.'.repeat(3 - dots)}
       </Text>
     </Text>

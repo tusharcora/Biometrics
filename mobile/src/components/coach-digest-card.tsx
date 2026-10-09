@@ -64,7 +64,7 @@ export function CoachDigestCard({ onOpenRecap }: { onOpenRecap?: (recapId: strin
   if (state.status === 'error') {
     return (
       <Card testID="coach-digest-error">
-        <Text className="text-sm text-muted-foreground">Your weekly recap is unavailable right now.</Text>
+        <Text className="text-caption text-muted-foreground">Your weekly recap is unavailable right now.</Text>
       </Card>
     );
   }
@@ -83,14 +83,14 @@ export function CoachDigestCard({ onOpenRecap }: { onOpenRecap?: (recapId: strin
           <View className="flex-row items-center gap-2">
             <Character testID="coach-digest-character" mood={mood} size={18} paused={!focused} />
             <SectionLabel className="flex-1 text-coach">Your weekly recap</SectionLabel>
-            <Text testID="coach-digest-date" className="text-xs text-muted-foreground">
+            <Text testID="coach-digest-date" className="text-caption text-muted-foreground">
               {formatDigestDate(digest.createdAt)}
             </Text>
           </View>
-          <Text testID="coach-digest-preview" numberOfLines={3} className="font-display text-display-sm">
+          <Text testID="coach-digest-preview" numberOfLines={3} className="text-heading">
             {digest.text}
           </Text>
-          <Text className="text-sm font-semibold text-coach">Tap to read it all →</Text>
+          <Text className="text-caption font-semibold text-coach">Tap to read it all →</Text>
         </Card>
       </Pressable>
 
@@ -98,13 +98,13 @@ export function CoachDigestCard({ onOpenRecap }: { onOpenRecap?: (recapId: strin
         <SafeAreaView className="flex-1 bg-background">
           <ScrollView contentContainerStyle={{ gap: 12, padding: 16 }}>
             <View className="flex-row items-center justify-between">
-              <Text className="font-display text-display">Your weekly recap</Text>
-              <Text className="text-xs text-muted-foreground">{formatDigestDate(digest.createdAt)}</Text>
+              <Text className="text-heading">Your weekly recap</Text>
+              <Text className="text-caption text-muted-foreground">{formatDigestDate(digest.createdAt)}</Text>
             </View>
-            <Text testID="coach-digest-full" className="text-base">
+            <Text testID="coach-digest-full" className="text-body">
               {digest.text}
             </Text>
-            <Text testID="coach-digest-footnote" className="text-xs text-muted-foreground">
+            <Text testID="coach-digest-footnote" className="text-caption text-muted-foreground">
               {TODAY_FOOTNOTE}
             </Text>
           </ScrollView>

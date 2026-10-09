@@ -42,7 +42,7 @@ One rule for every retry:
 
 // In a card
 <Card className="gap-3">
-  <Text className="text-sm text-muted-foreground">Your recaps could not be loaded.</Text>
+  <Text className="text-caption text-muted-foreground">Your recaps could not be loaded.</Text>
   <Button variant="secondary" size="sm" className="self-start" onPress={retry}>Try again</Button>
 </Card>
 ```
@@ -51,13 +51,15 @@ The story viewers are the exception: their retry sits on the story's own colour 
 
 ## Sizes
 
-| Size | Height | Use |
-|---|---|---|
-| `xs` | 24 | Chips and tiny inline actions |
-| `sm` | 32 | Card actions, links next to titles |
-| `default` | 36 | Most buttons |
-| `lg` | 40 | Full-width CTAs: `size="lg" className="w-full"` |
-| `icon-xs` / `icon-sm` / `icon` / `icon-lg` | 24 / 32 / 36 / 40, square | Icon-only buttons |
+| Size | Height | Label | Use |
+|---|---|---|---|
+| `xs` | 24 | `text-fine` (11) | Chips and tiny inline actions |
+| `sm` | 32 | `text-caption` (13) | Card actions, links next to titles |
+| `default` | 36 | `text-body` (15) | Most buttons |
+| `lg` | 40 | `text-body` (15) | Full-width CTAs: `size="lg" className="w-full"` |
+| `icon-xs` / `icon-sm` / `icon` / `icon-lg` | 24 / 32 / 36 / 40, square | — | Icon-only buttons |
+
+Labels are Geist 500 on the type scale (docs/superpowers/specs/2026-10-08-type-system-design.md). Do not resize a label with `textClassName`: pick the button size.
 
 All sizes are `rounded-lg` (8 px), and so is every button and selectable option in the app: no `rounded-full` pills, not for chips, not over a scene, not for the Chats button. A selectable chip is a Button too, `default` when selected and `outline` when not, with `accessibilityState={{ selected }}`. The guard in `__tests__/conventions/buttons.test.ts` fails on a pill.
 

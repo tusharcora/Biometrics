@@ -6,6 +6,7 @@ import { useColorScheme } from 'nativewind';
 import { Ring } from './ring';
 import { CountUp } from './count-up';
 import { Text } from './text';
+import { SectionLabel } from './section-label';
 import { COLORS, MOTION } from '../../theme';
 import { scoreBand } from '../../lib/scoreInsights';
 import { pointsByFactor, staggerDelays } from '../../lib/scoreMotion';
@@ -133,10 +134,10 @@ interface ScoreRingProps {
   strokeWidth?: number;
   // Server-provided band thresholds; the defaults apply when absent.
   bands?: ScoreBandsDTO;
-  // Size class for the centre number, so a hero ring can carry a display
-  // numeral and a tile ring a small one. Defaults to the original text-2xl.
+  // The centre number's type token: text-score on a hero ring, text-headline
+  // on a small tile ring. Defaults to text-heading. The ring adds tabular-nums.
   numeralClassName?: string;
-  // Optional small-caps caption above the number (hero use).
+  // Optional pixel label (SectionLabel) above the number (hero use).
   label?: string;
 }
 
@@ -147,7 +148,7 @@ export function ScoreRing({
   size = 84,
   strokeWidth = 8,
   bands,
-  numeralClassName = 'text-2xl',
+  numeralClassName = 'text-heading',
   label,
 }: ScoreRingProps) {
   const { colorScheme: scheme } = useColorScheme();
@@ -156,13 +157,13 @@ export function ScoreRing({
 
   const numeral =
     score === null ? (
-      <Text className={`${numeralClassName} font-bold text-muted-foreground`}>{'—'}</Text>
+      <Text className={`${numeralClassName} text-muted-foreground`}>{'—'}</Text>
     ) : (
-      <CountUp value={score} format={(v) => String(Math.round(v))} className={`${numeralClassName} font-bold`} style={{ fontVariant: ['tabular-nums'] }} />
+      <CountUp value={score} format={(v) => String(Math.round(v))} className={`${numeralClassName} tabular-nums`} />
     );
   const center = label ? (
     <View className="items-center">
-      <Text className="text-eyebrow font-semibold uppercase text-muted-foreground">{label}</Text>
+      <SectionLabel>{label}</SectionLabel>
       {numeral}
     </View>
   ) : (

@@ -14,7 +14,7 @@ exports[`FactorBar matches its snapshot 1`] = `
       className="flex-row items-center gap-2"
     >
       <Text
-        className="text-foreground text-sm font-medium"
+        className="text-foreground text-body font-medium"
         style={
           [
             {
@@ -28,17 +28,16 @@ exports[`FactorBar matches its snapshot 1`] = `
       </Text>
     </View>
     <Text
-      className="text-foreground text-sm font-semibold"
+      className="text-foreground text-body font-semibold tabular-nums"
       style={
         [
           {
             "fontFamily": "Geist_600SemiBold",
-          },
-          {
             "fontVariant": [
               "tabular-nums",
             ],
           },
+          undefined,
         ]
       }
     >
@@ -97,7 +96,7 @@ exports[`FactorBar matches its snapshot: sleep duration below goal 1`] = `
       className="flex-row items-center gap-2"
     >
       <Text
-        className="text-foreground text-sm font-medium"
+        className="text-foreground text-body font-medium"
         style={
           [
             {
@@ -111,17 +110,16 @@ exports[`FactorBar matches its snapshot: sleep duration below goal 1`] = `
       </Text>
     </View>
     <Text
-      className="text-foreground text-sm font-semibold"
+      className="text-foreground text-body font-semibold tabular-nums"
       style={
         [
           {
             "fontFamily": "Geist_600SemiBold",
-          },
-          {
             "fontVariant": [
               "tabular-nums",
             ],
           },
+          undefined,
         ]
       }
     >

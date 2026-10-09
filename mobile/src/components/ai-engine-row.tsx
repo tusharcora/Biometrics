@@ -135,17 +135,17 @@ export function AiEngineRow({ status, onChange, onChooseHosted }: AiEngineRowPro
         ) : null}
       </SettingsGroup>
       {hostedGone ? (
-        <Text testID="ai-engine-unavailable" className="px-4 text-sm text-muted-foreground">
+        <Text testID="ai-engine-unavailable" className="px-4 text-caption text-muted-foreground">
           {"Claude isn't available on this server right now. Your coach answers on-device."}
         </Text>
       ) : null}
       {failed ? (
-        <Text testID="ai-engine-error" className="px-4 text-sm text-destructive">
+        <Text testID="ai-engine-error" className="px-4 text-caption text-destructive">
           {"Couldn't switch the AI engine. Please try again."}
         </Text>
       ) : null}
       {withdrawFailed ? (
-        <Text testID="ai-engine-withdraw-error" className="px-4 text-sm text-destructive">
+        <Text testID="ai-engine-withdraw-error" className="px-4 text-caption text-destructive">
           {"Couldn't withdraw your Claude consent. Please try again."}
         </Text>
       ) : null}

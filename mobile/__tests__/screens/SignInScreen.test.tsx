@@ -1,10 +1,12 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { characterLabel, withCharacter } from '../../jest-mocks/characterContext';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { SignInScreen } from '../../src/screens/SignInScreen';
 import { useAuth } from '../../src/auth/AuthContext';
 import { AuthError } from '../../src/auth/authErrors';
+import { FONTS } from '../../src/theme';
 
 jest.mock('../../src/auth/AuthContext', () => ({ useAuth: jest.fn() }));
 jest.mock('../../src/auth/useGoogleIdToken', () => ({ useGoogleIdToken: () => ({ prompt: jest.fn(), ready: true }) }));
@@ -19,6 +21,17 @@ const auth = () => ({
   signInWithGoogle: jest.fn(),
   signInWithEmail: jest.fn().mockResolvedValue(undefined),
   resendVerification: jest.fn().mockResolvedValue(undefined),
+});
+
+it('sets the app name in the pixel page-title face at 28, announced in its own case', () => {
+  (useAuth as jest.Mock).mockReturnValue(auth());
+  const { getByRole } = render(<SignInScreen navigation={navigation} route={{ params: undefined } as any} />);
+  const name = getByRole('header', { name: 'Biometrics' });
+  expect(name).toHaveTextContent('BIOMETRICS');
+  expect(StyleSheet.flatten(name.props.style).fontFamily).toBe(FONTS.pixel);
+  expect(String(name.props.className).split(' ')).toEqual(expect.arrayContaining(['font-pixel', 'text-[28px]']));
+  // The 28 replaces the token (its 20/26 line height would otherwise win).
+  expect(String(name.props.className).split(' ')).not.toContain('text-page-title');
 });
 
 it('passes the Apple identity token and full name', async () => {

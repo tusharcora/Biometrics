@@ -3,8 +3,9 @@ import { View, TextInput } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import { CoachMemoryNotFoundError, CoachMemoryValidationError, updateCoachMemory, type MemoryDTO } from '../api/coach';
 import { MEMORY_ERROR_TEXT, MEMORY_MAX_LENGTH, validateMemoryText } from '../lib/coachMemory';
-import { COLORS, FONTS } from '../theme';
+import { COLORS } from '../theme';
 import { Text } from './ui/text';
+import { inputTextStyle } from './ui/input-style';
 import { Button } from './ui/button';
 
 interface MemoryEditFormProps {
@@ -61,18 +62,17 @@ export function MemoryEditForm({ id, initialValue, testIDPrefix, onSaved, onCanc
         autoFocus
         editable={!busy}
         placeholderTextColor={colors.muted}
-        style={{ color: colors.foreground, fontFamily: FONTS.sans, minHeight: 64, textAlignVertical: 'top' }}
-        className="rounded-tile border border-border bg-background px-3.5 py-3 text-base"
+        style={[inputTextStyle, { color: colors.foreground, minHeight: 64, textAlignVertical: 'top' }]}
+        className="rounded-tile border border-border bg-background px-3.5 py-3"
       />
       <Text
         testID={`${testIDPrefix}-counter-${id}`}
-        className="self-end text-xs text-muted-foreground"
-        style={{ fontVariant: ['tabular-nums'] }}
+        className="self-end text-caption text-muted-foreground tabular-nums"
       >
         {`${value.length}/${MEMORY_MAX_LENGTH}`}
       </Text>
       {error ? (
-        <Text testID={`${testIDPrefix}-error-${id}`} className="text-sm text-destructive">
+        <Text testID={`${testIDPrefix}-error-${id}`} className="text-caption text-destructive">
           {error}
         </Text>
       ) : null}

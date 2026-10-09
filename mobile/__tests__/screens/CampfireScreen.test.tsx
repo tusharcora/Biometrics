@@ -1,5 +1,5 @@
 import React from 'react';
-import { AccessibilityInfo, Keyboard, ScrollView, TextInput } from 'react-native';
+import { AccessibilityInfo, Keyboard, ScrollView, StyleSheet, TextInput } from 'react-native';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
@@ -12,6 +12,7 @@ import { blockBuddy } from '../../src/api/buddies';
 import { chromeBottom, fireBox, PEEK_RESERVE, seatBoxes, type Box } from '../../src/components/social/campSceneGeometry';
 import { CampfireScreen } from '../../src/screens/CampfireScreen';
 import { GlassSurface } from '../../src/components/ui/glass-surface';
+import { FONTS } from '../../src/theme';
 
 jest.mock('../../src/api/social', () => ({
   ...jest.requireActual('../../src/api/social'),
@@ -68,6 +69,12 @@ it('draws the night camp: moon, bubbles over coaches, my add-note bubble, asleep
   expect(screen.queryByTestId('camp-zz-ben')).toBeNull();
   expect(screen.getByTestId('camp-headline')).toHaveTextContent('1 asleep · 2 by the fire');
   expect(screen.getByTestId('camp-fire-count')).toHaveTextContent('3/5');
+  // The panel's two section labels are pixel SectionLabels (owner ruling, spec §6); the scene is untouched.
+  for (const label of ["TONIGHT'S FIRE", /^WHO'S HERE · \d+$/]) {
+    const el = screen.getByText(label);
+    expect(String(el.props.className).split(' ')).toEqual(expect.arrayContaining(['text-label', 'uppercase']));
+    expect(StyleSheet.flatten(el.props.style).fontFamily).toBe(FONTS.pixel);
+  }
   expect(screen.getByTestId('camp-fire-line')).toHaveTextContent('2 more on time lights it fully');
   expect(screen.getByTestId('camp-fire-segment-2')).toHaveStyle({ backgroundColor: '#F97316' });
   expect(screen.getByTestId('camp-fire-segment-3')).toHaveStyle({ backgroundColor: '#2E323B' });

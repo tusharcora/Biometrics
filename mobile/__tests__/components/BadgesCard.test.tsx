@@ -1,4 +1,5 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { withCharacter } from '../../jest-mocks/characterContext';
 import { achievementsFixture } from '../../jest-mocks/achievementsFixture';
@@ -6,7 +7,7 @@ import { fetchAchievements, type AchievementFamily } from '../../src/api/achieve
 import { BadgesCard } from '../../src/components/achievements/BadgesCard';
 import { resetAchievements } from '../../src/lib/achievementsStore';
 import { mixHex } from '../../src/lib/badgeArt';
-import { COLORS } from '../../src/theme';
+import { COLORS, FONTS } from '../../src/theme';
 
 jest.mock('../../src/api/achievements');
 jest.mock('../../src/lib/timezone', () => require('../../jest-mocks/timezoneSettled'));
@@ -52,6 +53,18 @@ it('shows the seven badges at their levels, the count out of 35 and the family c
   expect(onSeeAll).toHaveBeenCalledTimes(1);
   fireEvent.press(screen.getByTestId('badges-card-CHECK_IN'));
   expect(onOpen).toHaveBeenCalledWith('CHECK_IN');
+});
+
+it('keeps the tile names to one line under their icons, and sets the count as the pixel label', async () => {
+  load.mockResolvedValue(CANVAS);
+  render(withCharacter(<BadgesCard onSeeAll={jest.fn()} onOpen={jest.fn()} />));
+  const count = await screen.findByTestId('badges-count');
+  expect(StyleSheet.flatten(count.props.style).fontFamily).toBe(FONTS.pixel);
+  for (const f of FAMILIES) {
+    const label = screen.getByTestId(`badges-card-${f}-label`);
+    expect(label.props.numberOfLines).toBe(1);
+    expect(String(label.props.className).split(' ')).toContain('text-caption');
+  }
 });
 
 it('uses the dark palette for labels and drops the bar outline in dark mode', async () => {

@@ -34,8 +34,8 @@ export function usualLine(minutesAsleep: number, usual: number | null): string |
 function NumberRow({ label, value }: { label: string; value: string }) {
   return (
     <View className="flex-row items-baseline justify-between gap-3">
-      <Text className="text-sm text-muted-foreground">{label}</Text>
-      <Text className="text-sm font-semibold" style={{ fontVariant: ['tabular-nums'] }}>
+      <Text className="text-caption text-muted-foreground">{label}</Text>
+      <Text className="text-body font-semibold tabular-nums">
         {value}
       </Text>
     </View>
@@ -50,11 +50,11 @@ function NightHeadline({ night }: { night: SleepNightDetail }) {
   return (
     <View className="gap-0.5">
       <View className="flex-row items-baseline gap-2">
-        <Text className="font-display text-display">{formatDuration(night.minutesAsleep)}</Text>
-        <Text className="text-base text-muted-foreground">main sleep</Text>
+        <Text className="text-display tabular-nums">{formatDuration(night.minutesAsleep)}</Text>
+        <Text className="text-body text-muted-foreground">main sleep</Text>
       </View>
       {napMinutes > 0 ? (
-        <Text testID="night-with-naps" className="text-sm text-muted-foreground" style={{ fontVariant: ['tabular-nums'] }}>
+        <Text testID="night-with-naps" className="text-caption text-muted-foreground tabular-nums">
           {`${formatDuration(night.minutesAsleep + napMinutes)} with naps`}
         </Text>
       ) : null}
@@ -84,10 +84,10 @@ function NightBody({ night, coachName, onAsk }: { night: SleepNightDetail; coach
       ) : night.minutesInBed > 0 ? (
         <Card className="gap-2">
           <View className="flex-row justify-between">
-            <Text className="text-sm font-semibold" style={{ fontVariant: ['tabular-nums'] }}>
+            <Text className="text-body font-semibold tabular-nums">
               {formatClock(night.bedtime)}
             </Text>
-            <Text className="text-sm font-semibold" style={{ fontVariant: ['tabular-nums'] }}>
+            <Text className="text-body font-semibold tabular-nums">
               {formatClock(night.wakeTime)}
             </Text>
           </View>
@@ -106,14 +106,14 @@ function NightBody({ night, coachName, onAsk }: { night: SleepNightDetail; coach
           <NumberRow label="Time after waking" value={formatShortDuration(night.minutesAfterWakeUp)} />
         ) : null}
         {night.sleepScore !== null ? <NumberRow label="Sleep score" value={String(night.sleepScore)} /> : null}
-        {usual ? <Text className="text-sm text-muted-foreground">{usual}</Text> : null}
+        {usual ? <Text className="text-caption text-muted-foreground">{usual}</Text> : null}
       </Card>
 
       {naps.length > 0 ? (
         <Card testID="night-naps" className="gap-2">
           <SectionLabel>Naps</SectionLabel>
           {naps.map((n) => (
-            <Text key={n.start} className="text-sm">
+            <Text key={n.start} className="text-body">
               {`Nap · ${formatShortDuration(n.minutesAsleep)}`}
             </Text>
           ))}
@@ -161,7 +161,7 @@ export function SleepNightScreen() {
     <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
       <ScrollView contentContainerStyle={{ gap: 16, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32 }}>
         <View testID="night-header" className="gap-1">
-          <Text className="text-sm text-muted-foreground">{formatLongDay(date)}</Text>
+          <Text className="text-caption text-muted-foreground">{formatLongDay(date)}</Text>
           {night.phase === 'ready' && night.data ? <NightHeadline night={night.data} /> : null}
         </View>
 
@@ -169,7 +169,7 @@ export function SleepNightScreen() {
         {night.phase === 'error' ? <SectionError testID="night-retry" message="This night could not be loaded." onRetry={reload} /> : null}
         {night.phase === 'ready' && night.data === null ? (
           <Card>
-            <Text testID="night-empty" className="text-center text-sm text-muted-foreground">
+            <Text testID="night-empty" className="text-center text-caption text-muted-foreground">
               No sleep recorded for this night.
             </Text>
           </Card>

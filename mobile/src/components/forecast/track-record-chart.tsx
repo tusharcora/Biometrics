@@ -45,9 +45,9 @@ export function TrackRecordChart({ series, height = 112, actualColor, forecastCo
 
       {count > 1 ? (
         <View className="flex-row justify-between px-1">
-          <Text className="text-[11px] text-muted-foreground">{shortDate(series[0].date)}</Text>
-          <Text className="text-[11px] text-muted-foreground">{shortDate(series[Math.floor((count - 1) / 2)].date)}</Text>
-          <Text className="text-[11px] text-muted-foreground">{shortDate(series[count - 1].date)}</Text>
+          <Text className="text-fine text-muted-foreground">{shortDate(series[0].date)}</Text>
+          <Text className="text-fine text-muted-foreground">{shortDate(series[Math.floor((count - 1) / 2)].date)}</Text>
+          <Text className="text-fine text-muted-foreground">{shortDate(series[count - 1].date)}</Text>
         </View>
       ) : null}
 
@@ -55,11 +55,11 @@ export function TrackRecordChart({ series, height = 112, actualColor, forecastCo
         <View className="flex-row flex-wrap items-center gap-x-4 gap-y-1 px-1">
           <View className="flex-row items-center gap-1.5">
             <View className="h-0.5 w-3.5 rounded-full" style={{ backgroundColor: actualColor }} />
-            <Text className="text-xs text-muted-foreground">{FORECAST_COPY.legendActual}</Text>
+            <Text className="text-fine text-muted-foreground">{FORECAST_COPY.legendActual}</Text>
           </View>
           <View className="flex-row items-center gap-1.5">
             <View className="h-2 w-2 rounded-full" style={{ backgroundColor: forecastColor }} />
-            <Text className="text-xs text-muted-foreground">{FORECAST_COPY.legendForecast}</Text>
+            <Text className="text-fine text-muted-foreground">{FORECAST_COPY.legendForecast}</Text>
           </View>
         </View>
       ) : null}

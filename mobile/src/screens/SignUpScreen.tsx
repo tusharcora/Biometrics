@@ -8,6 +8,7 @@ import { messageFor } from '../auth/authErrors';
 import { MIN_PASSWORD_LENGTH } from '../auth/passwordPolicy';
 import type { AuthStackParamList } from '../navigation/AuthNavigator';
 import { Text } from '../components/ui/text';
+import { PageTitle } from '../components/ui/page-title';
 import { Button } from '../components/ui/button';
 import { TextField } from '../components/ui/text-field';
 import { Character } from '../components/characters/Character';
@@ -16,14 +17,14 @@ import { useScreenFocused } from '../characters/useScreenFocused';
 type Props = NativeStackScreenProps<AuthStackParamList, 'SignUp'>;
 
 // A lighter take on Sign in's hero: a small Mochi (signed-out screens always
-// show Mochi), a serif title and one muted line above the form.
+// show Mochi), a pixel page title and one muted line above the form.
 function AuthHeader({ title, children }: { title: string; children: React.ReactNode }) {
   const focused = useScreenFocused();
   return (
     <Animated.View entering={FadeInDown.duration(450)} className="items-center gap-3">
       <Character testID="auth-character" characterId="mochi" mood="idle" size={56} glow paused={!focused} />
-      <Text className="text-center font-display text-display-lg">{title}</Text>
-      <Text className="text-center text-base text-muted-foreground">{children}</Text>
+      <PageTitle className="text-center">{title}</PageTitle>
+      <Text className="text-center text-body text-muted-foreground">{children}</Text>
     </Animated.View>
   );
 }
@@ -79,7 +80,7 @@ export function SignUpScreen({ navigation }: Props) {
           <TextField label="Name" testID="name-input" value={name} onChangeText={setName} autoComplete="name" />
           <TextField label="Email" testID="email-input" value={email} onChangeText={setEmail} keyboardType="email-address" autoComplete="email" />
           <TextField label="Password" testID="password-input" value={password} onChangeText={setPassword} secure autoComplete="new-password" />
-          {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
+          {error ? <Text className="text-caption text-destructive">{error}</Text> : null}
           <Button
             testID="sign-up-button"
             size="lg"

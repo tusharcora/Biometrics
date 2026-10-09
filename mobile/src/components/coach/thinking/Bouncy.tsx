@@ -17,12 +17,12 @@ export function Bouncy({ characterId, paused }: ThinkingStyleProps) {
   const hopping = paused ? -1 : Math.floor(elapsed / HOP_MS) % BEATS;
   return (
     <View testID="thinking-bouncy" accessible accessibilityRole="text" accessibilityLabel={`${name} is thinking`} className="flex-row items-end pb-3">
-      <Text className="text-sm text-muted-foreground">{`${name} is `}</Text>
+      <Text className="text-caption text-muted-foreground">{`${name} is `}</Text>
       <View testID="thinking-bouncy-letters" className="flex-row" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
         {Array.from(WORD).map((letter, index) => (
           <Text
             key={index}
-            className="text-sm font-semibold"
+            className="text-caption font-semibold"
             style={{ color: text, transform: [{ translateY: index === hopping ? -2 : 0 }] }}
           >
             {letter}

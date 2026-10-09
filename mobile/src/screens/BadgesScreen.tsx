@@ -22,16 +22,16 @@ export function BadgesScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
       <ScrollView contentContainerStyle={{ gap: 12, padding: 20 }}>
-        <Text className="text-sm text-muted-foreground">Seven families, five levels each. Levels are never taken away.</Text>
+        <Text className="text-caption text-muted-foreground">Seven families, five levels each. Levels are never taken away.</Text>
         {state.status === 'idle' ? <Skeleton testID="badges-loading" className="h-64 w-full rounded-card" /> : null}
         {state.status === 'unavailable' ? (
           <Card testID="badges-unavailable">
-            <Text className="text-base">Badges aren't available yet.</Text>
+            <Text className="text-body">Badges aren't available yet.</Text>
           </Card>
         ) : null}
         {state.status === 'error' ? (
           <Card testID="badges-error" className="gap-3">
-            <Text className="text-sm text-muted-foreground">Your badges could not be loaded.</Text>
+            <Text className="text-caption text-muted-foreground">Your badges could not be loaded.</Text>
             <Button testID="badges-retry" variant="secondary" size="sm" className="self-start" onPress={() => void refreshAchievements()}>
               Try again
             </Button>
@@ -52,9 +52,9 @@ export function BadgesScreen() {
                 >
                   <BadgeIcon family={family} level={f.level} size={68} testID={`badges-row-${family}-icon`} />
                   <View className="flex-1 gap-1">
-                    <Text className="text-base font-semibold">{FAMILY_NAMES[family]}</Text>
-                    <Text className="text-sm text-muted-foreground">{FAMILY_RULES[family]}</Text>
-                    <Text testID={`badges-row-${family}-status`} className="text-xs text-muted-foreground">{familyStatus(f)}</Text>
+                    <Text className="text-body font-semibold">{FAMILY_NAMES[family]}</Text>
+                    <Text className="text-caption text-muted-foreground">{FAMILY_RULES[family]}</Text>
+                    <Text testID={`badges-row-${family}-status`} className="text-caption text-muted-foreground">{familyStatus(f)}</Text>
                   </View>
                 </Pressable>
               );

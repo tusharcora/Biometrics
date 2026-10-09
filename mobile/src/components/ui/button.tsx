@@ -14,7 +14,7 @@ import {
 import Animated, { useAnimatedStyle, useReducedMotion, useSharedValue, withTiming } from 'react-native-reanimated';
 import { cva } from 'class-variance-authority';
 import { cn } from '../../lib/utils';
-import { MOTION } from '../../theme';
+import { MOTION, TYPE_TOKENS } from '../../theme';
 import { Text } from './text';
 
 // The app's standard button: shadcn/ui's Base Button (base-vega) ported to
@@ -78,21 +78,23 @@ const TEXT_COLOR: Record<ButtonVariant, string> = {
   link: 'text-foreground underline',
 };
 
-const TEXT_14 = 'text-[14px] leading-[20px]';
-const TEXT_12 = 'text-[12px] leading-[16px]';
+// The label sizes are type tokens (spec §3): text-body on default, lg and the
+// icon sizes, text-caption on sm, text-fine on xs; all Geist 500.
+const TEXT_BODY = 'text-body';
+const TEXT_FINE = 'text-fine';
 
 export const buttonTextVariants = cva('font-medium', {
   variants: {
     variant: TEXT_COLOR,
     size: {
-      default: TEXT_14,
-      xs: TEXT_12,
-      sm: 'text-[13px] leading-[18px]',
-      lg: TEXT_14,
-      icon: TEXT_14,
-      'icon-xs': TEXT_12,
-      'icon-sm': TEXT_14,
-      'icon-lg': TEXT_14,
+      default: TEXT_BODY,
+      xs: TEXT_FINE,
+      sm: 'text-caption',
+      lg: TEXT_BODY,
+      icon: TEXT_BODY,
+      'icon-xs': TEXT_FINE,
+      'icon-sm': TEXT_BODY,
+      'icon-lg': TEXT_BODY,
     },
   },
   defaultVariants: { variant: 'default', size: 'default' },
@@ -105,7 +107,7 @@ export function buttonIconSize(size: ButtonSize = 'default'): number {
 
 // The drawn height of each size in px (and width, for the square icon sizes),
 // matching the px classes above. A link has no fixed height: one line of its
-// 14/20 label.
+// text-body label (15/21).
 const SIZE_PX: Record<ButtonSize, { height: number; width?: number }> = {
   xs: { height: 24 },
   sm: { height: 32 },
@@ -116,7 +118,7 @@ const SIZE_PX: Record<ButtonSize, { height: number; width?: number }> = {
   icon: { height: 36, width: 36 },
   'icon-lg': { height: 40, width: 40 },
 };
-const LINK_HEIGHT = 20;
+const LINK_HEIGHT = 21;
 
 export const MIN_TOUCH_TARGET = 44;
 
@@ -288,10 +290,14 @@ export function Button(buttonProps: ButtonProps) {
   );
 }
 
+// The size classes a textClassName can carry: stock, arbitrary, and the type
+// tokens matched whole, so a colour such as text-score-good stays a colour.
+const SIZE_CLASS = new RegExp(`^text-(?:\\[\\d|(?:xs|sm|base|lg|xl|\\dxl|${TYPE_TOKENS.join('|')})$)`);
+
 // Only the colour classes of a textClassName, so the spinner follows a label
 // colour override without picking up font sizes.
 function spinnerClass(variant: ButtonVariant, textClassName?: string): string {
-  const colours = (textClassName ?? '').split(/\s+/).filter((c) => /^text-/.test(c) && !/^text-(\[\d|xs|sm|base|lg|xl|\dxl)/.test(c));
+  const colours = (textClassName ?? '').split(/\s+/).filter((c) => /^text-/.test(c) && !SIZE_CLASS.test(c));
   return cn(TEXT_COLOR[variant], colours);
 }
 

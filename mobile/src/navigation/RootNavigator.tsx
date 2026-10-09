@@ -56,7 +56,8 @@ import { syncPushRegistration } from '../lib/pushRegistration';
 import { rescheduleWindDown } from '../lib/windDown';
 import { listenForNotificationTaps, routeInitialNotification } from '../notifications/handler';
 import { navigationRef } from './navigationRef';
-import { COLORS, FONTS } from '../theme';
+import { HeaderTitle, headerTitleStyle } from './headerStyle';
+import { COLORS } from '../theme';
 import { ToastProvider } from '../components/ui/toast';
 import { SyncProvider } from '../sync/SyncProvider';
 import type { MetricRecord } from '../lib/metricInsights';
@@ -226,7 +227,8 @@ export function RootNavigator() {
               screenOptions={{
                 headerShadowVisible: false,
                 headerStyle: { backgroundColor: colors.background },
-                headerTitleStyle: { color: colors.foreground, fontFamily: FONTS.sansSemibold },
+                headerTitleStyle: headerTitleStyle(colors.foreground),
+                headerTitle: (props) => <HeaderTitle {...props} />,
                 headerTintColor: colors.foreground,
                 // A bare chevron: the parent route's name ("Tabs") is not a place.
                 headerBackButtonDisplayMode: 'minimal',

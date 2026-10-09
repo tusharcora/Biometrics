@@ -9,11 +9,11 @@ exports[`CorrelationCard matches its snapshot for a negative lag-1 pattern 1`] =
     className="flex-row items-center justify-between gap-2"
   >
     <Text
-      className="text-eyebrow font-semibold uppercase text-muted-foreground flex-1"
+      className="font-pixel text-label uppercase text-muted-foreground flex-1"
       style={
         [
           {
-            "fontFamily": "Geist_600SemiBold",
+            "fontFamily": "Silkscreen",
           },
           undefined,
         ]
@@ -26,7 +26,7 @@ exports[`CorrelationCard matches its snapshot for a negative lag-1 pattern 1`] =
       testID="pattern-direction"
     >
       <Text
-        className="text-xs font-medium text-muted-foreground"
+        className="text-caption font-medium text-muted-foreground"
         style={
           [
             {
@@ -67,24 +67,23 @@ exports[`CorrelationCard matches its snapshot for a negative lag-1 pattern 1`] =
       
     </Text>
     <Text
-      className="text-foreground text-numeral font-semibold"
+      className="text-foreground text-display tabular-nums"
       style={
         [
           {
-            "fontFamily": "Geist_600SemiBold",
-          },
-          {
+            "fontFamily": "Geist_700Bold",
             "fontVariant": [
               "tabular-nums",
             ],
           },
+          undefined,
         ]
       }
     >
       14%
     </Text>
     <Text
-      className="mb-1 flex-1 text-sm text-muted-foreground"
+      className="mb-1 flex-1 text-caption text-muted-foreground"
       numberOfLines={1}
       style={
         [
@@ -99,7 +98,7 @@ exports[`CorrelationCard matches its snapshot for a negative lag-1 pattern 1`] =
     </Text>
   </View>
   <Text
-    className="text-foreground text-base leading-6"
+    className="text-foreground text-body"
     style={
       [
         {
@@ -286,7 +285,7 @@ exports[`CorrelationCard matches its snapshot for a negative lag-1 pattern 1`] =
       </RNSVGSvgView>
     </View>
     <Text
-      className="text-xs text-muted-foreground"
+      className="text-caption text-muted-foreground"
       style={
         [
           {
@@ -304,7 +303,7 @@ exports[`CorrelationCard matches its snapshot for a negative lag-1 pattern 1`] =
     className="gap-2 border-t border-border pt-4"
   >
     <Text
-      className="text-sm text-muted-foreground"
+      className="text-caption text-muted-foreground"
       style={
         [
           {
@@ -346,7 +345,7 @@ exports[`CorrelationCard matches its snapshot for a negative lag-1 pattern 1`] =
         className="flex-1 gap-1"
       >
         <Text
-          className="text-xs text-muted-foreground"
+          className="text-caption text-muted-foreground"
           style={
             [
               {
@@ -374,11 +373,11 @@ exports[`CorrelationCard matches its snapshot for a positive lag-3 small-sample 
     className="flex-row items-center justify-between gap-2"
   >
     <Text
-      className="text-eyebrow font-semibold uppercase text-muted-foreground flex-1"
+      className="font-pixel text-label uppercase text-muted-foreground flex-1"
       style={
         [
           {
-            "fontFamily": "Geist_600SemiBold",
+            "fontFamily": "Silkscreen",
           },
           undefined,
         ]
@@ -391,7 +390,7 @@ exports[`CorrelationCard matches its snapshot for a positive lag-3 small-sample 
       testID="pattern-direction"
     >
       <Text
-        className="text-xs font-medium text-muted-foreground"
+        className="text-caption font-medium text-muted-foreground"
         style={
           [
             {
@@ -432,24 +431,23 @@ exports[`CorrelationCard matches its snapshot for a positive lag-3 small-sample 
       
     </Text>
     <Text
-      className="text-foreground text-numeral font-semibold"
+      className="text-foreground text-display tabular-nums"
       style={
         [
           {
-            "fontFamily": "Geist_600SemiBold",
-          },
-          {
+            "fontFamily": "Geist_700Bold",
             "fontVariant": [
               "tabular-nums",
             ],
           },
+          undefined,
         ]
       }
     >
       5.5%
     </Text>
     <Text
-      className="mb-1 flex-1 text-sm text-muted-foreground"
+      className="mb-1 flex-1 text-caption text-muted-foreground"
       numberOfLines={1}
       style={
         [
@@ -464,7 +462,7 @@ exports[`CorrelationCard matches its snapshot for a positive lag-3 small-sample 
     </Text>
   </View>
   <Text
-    className="text-foreground text-base leading-6"
+    className="text-foreground text-body"
     style={
       [
         {
@@ -651,7 +649,7 @@ exports[`CorrelationCard matches its snapshot for a positive lag-3 small-sample 
       </RNSVGSvgView>
     </View>
     <Text
-      className="text-xs text-muted-foreground"
+      className="text-caption text-muted-foreground"
       style={
         [
           {
@@ -669,7 +667,7 @@ exports[`CorrelationCard matches its snapshot for a positive lag-3 small-sample 
     className="gap-2 border-t border-border pt-4"
   >
     <Text
-      className="text-sm text-muted-foreground"
+      className="text-caption text-muted-foreground"
       style={
         [
           {
@@ -711,7 +709,7 @@ exports[`CorrelationCard matches its snapshot for a positive lag-3 small-sample 
         className="flex-1 gap-1"
       >
         <Text
-          className="text-xs text-muted-foreground"
+          className="text-caption text-muted-foreground"
           style={
             [
               {
@@ -725,7 +723,7 @@ exports[`CorrelationCard matches its snapshot for a positive lag-3 small-sample 
           Based on 8 observations. The more days you log, the more reliable a pattern is.
         </Text>
         <Text
-          className="text-xs font-medium text-score-fair"
+          className="text-caption font-medium text-score-fair"
           style={
             [
               {

@@ -118,18 +118,18 @@ export function RecapBuilderScreen() {
         <View testID="builder-preview" className="items-center">
           {ready ? renderView(previewScale(format, width - 40, 460), 'preview') : <Skeleton className="h-72 w-full rounded-card" />}
         </View>
-        <Text testID="builder-privacy" className="text-center text-xs text-muted-foreground">
+        <Text testID="builder-privacy" className="text-center text-caption text-muted-foreground">
           Only you see this until you share
         </Text>
         {available.length > 0 ? (
           <View className="gap-2">
-            <Text testID="builder-include-label" className="text-sm font-semibold">
+            <Text testID="builder-include-label" className="text-body font-semibold">
               Include
             </Text>
             <Card className="gap-1">
               {available.map((key) => (
                 <View key={key} className="flex-row items-center justify-between py-2">
-                  <Text className="text-base">{INCLUDE_LABELS[key]}</Text>
+                  <Text className="text-body">{INCLUDE_LABELS[key]}</Text>
                   <Switch testID={`builder-include-${key}`} accessibilityLabel={INCLUDE_LABELS[key]} value={includes[key]} onValueChange={(v) => toggle(key, v)} />
                 </View>
               ))}
@@ -137,7 +137,7 @@ export function RecapBuilderScreen() {
           </View>
         ) : null}
         {notice ? (
-          <Text testID="builder-notice" className={notice === 'saved' ? 'text-sm text-muted-foreground' : 'text-sm text-destructive'}>
+          <Text testID="builder-notice" className={notice === 'saved' ? 'text-caption text-muted-foreground' : 'text-caption text-destructive'}>
             {EXPORT_NOTICES[notice]}
           </Text>
         ) : null}
@@ -148,7 +148,7 @@ export function RecapBuilderScreen() {
         ) : null}
         {loadError ? (
           <View className="gap-2">
-            <Text testID="builder-load-error" className="text-sm text-destructive">
+            <Text testID="builder-load-error" className="text-caption text-destructive">
               {loadError}
             </Text>
             {format === 'year' ? (

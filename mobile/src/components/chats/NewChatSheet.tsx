@@ -14,10 +14,10 @@ export function NewChatSheet({ visible, onClose, onPick, onAdd }: { visible: boo
   return (
     <Sheet visible={visible} onClose={onClose} testID="new-chat">
       <View className="gap-2 pb-2">
-        <Text className="text-base font-semibold">New message</Text>
+        <Text className="text-heading">New message</Text>
         {rows.length === 0 ? (
           <>
-            <Text className="text-sm text-muted-foreground">No buddies yet.</Text>
+            <Text className="text-caption text-muted-foreground">No buddies yet.</Text>
             <Button testID="new-chat-add" size="lg" className="w-full" onPress={onAdd}>Add a buddy</Button>
           </>
         ) : (
@@ -34,7 +34,7 @@ export function NewChatSheet({ visible, onClose, onPick, onAdd }: { visible: boo
                 <ChatAvatar person={row} size={40} />
                 <View className="flex-1">
                   <Text numberOfLines={1} className="font-semibold">{row.displayName}</Text>
-                  <Text numberOfLines={1} className="text-sm text-muted-foreground">@{row.handle}</Text>
+                  <Text numberOfLines={1} className="text-caption text-muted-foreground">@{row.handle}</Text>
                 </View>
               </Pressable>
             ))}

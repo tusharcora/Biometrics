@@ -8,6 +8,7 @@ import { MESSAGE_MAX, noteLength } from '../../lib/chatCopy';
 import { COLORS } from '../../theme';
 import { Button, buttonIconSize } from '../ui/button';
 import { Text } from '../ui/text';
+import { inputTextStyle } from '../ui/input-style';
 
 // The thread's composer (V5 thread board): a staged quote or reply (each removable), the quick-sticker chips, "+" to
 // share my check-in today, the "Message…" input and Send. The draft is trimmed, empties as it is sent and comes back if
@@ -32,7 +33,7 @@ export interface ComposerProps {
 function Staged({ testID, label, clearLabel, onClear, color }: { testID: string; label: string; clearLabel: string; onClear: () => void; color: string }) {
   return (
     <View className="flex-row items-center gap-2 rounded-xl bg-secondary px-3 py-1.5">
-      <Text testID={testID} numberOfLines={1} className="flex-1 text-xs text-muted-foreground">{`Replying to ${label}`}</Text>
+      <Text testID={testID} numberOfLines={1} className="flex-1 text-caption text-muted-foreground">{`Replying to ${label}`}</Text>
       <Button testID={`${testID}-clear`} variant="ghost" size="icon-xs" accessibilityLabel={clearLabel} onPress={onClear}>
         <Ionicons name="close" size={buttonIconSize('icon-xs')} color={color} />
       </Button>
@@ -85,14 +86,15 @@ export function ChatComposer(p: ComposerProps) {
           multiline
           value={draft}
           onChangeText={setDraft}
-          className="max-h-28 min-h-[36px] flex-1 rounded-[18px] bg-secondary px-3.5 py-2 text-[15px] text-foreground"
+          style={inputTextStyle}
+          className="max-h-28 min-h-[36px] flex-1 rounded-[18px] bg-secondary px-3.5 py-2 text-foreground"
         />
         <Button testID="composer-send" size="icon" accessibilityLabel="Send" disabled={!canSend} onPress={() => void send()}>
           <Ionicons name="arrow-up" size={buttonIconSize('icon')} color={colors.background} />
         </Button>
       </View>
       {length >= COUNT_FROM ? (
-        <Text testID="composer-count" className={length > MESSAGE_MAX ? 'self-end text-xs text-destructive' : 'self-end text-xs text-muted-foreground'}>{`${length}/${MESSAGE_MAX}`}</Text>
+        <Text testID="composer-count" className={length > MESSAGE_MAX ? 'self-end text-caption text-destructive tabular-nums' : 'self-end text-caption text-muted-foreground tabular-nums'}>{`${length}/${MESSAGE_MAX}`}</Text>
       ) : null}
     </View>
   );

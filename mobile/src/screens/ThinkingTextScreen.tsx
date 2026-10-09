@@ -74,12 +74,12 @@ export function ThinkingTextScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
       <ScrollView contentContainerStyle={{ gap: 16, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 32 }}>
-        <Text className="text-sm text-muted-foreground">How the chat shows your coach is working on a reply.</Text>
+        <Text className="text-caption text-muted-foreground">How the chat shows your coach is working on a reply.</Text>
 
         {/* Chat-like: the user's question, then the pending row under it. */}
         <View className="min-h-[150px] justify-end gap-4 rounded-card border border-border bg-card p-4">
           <View className="max-w-[80%] self-end rounded-2xl bg-muted px-3.5 py-2">
-            <Text className="text-sm">How did I sleep?</Text>
+            <Text className="text-body">How did I sleep?</Text>
           </View>
           <ThinkingRow testID="thinking-preview" style={selected} characterId={characterId} steps={steps} paused={still} />
         </View>
@@ -100,8 +100,8 @@ export function ThinkingTextScreen() {
               >
                 <View className="flex-row items-center gap-3">
                   <View className="flex-1 gap-0.5">
-                    <Text className={cn('text-base', isSelected ? 'font-semibold' : '')}>{name}</Text>
-                    <Text className="text-xs text-muted-foreground">{blurb}</Text>
+                    <Text className={cn('text-body', isSelected ? 'font-semibold' : '')}>{name}</Text>
+                    <Text className="text-caption text-muted-foreground">{blurb}</Text>
                   </View>
                   {isSelected ? <Ionicons name="checkmark" size={18} color={colors.foreground} /> : <View className="w-[18px]" />}
                 </View>
@@ -120,7 +120,7 @@ export function ThinkingTextScreen() {
           })}
         </SettingsGroup>
         {error ? (
-          <Text testID="thinking-text-error" className="px-4 text-sm text-destructive">
+          <Text testID="thinking-text-error" className="px-4 text-caption text-destructive">
             {error}
           </Text>
         ) : null}

@@ -4,6 +4,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useColorScheme } from 'nativewind';
 import { NavigationContext } from '@react-navigation/native';
 import { Text } from '../components/ui/text';
+import { PageTitle } from '../components/ui/page-title';
+import { inputTextStyle } from '../components/ui/input-style';
 import { Button } from '../components/ui/button';
 import { Ionicons } from '@expo/vector-icons';
 import { SettingsGroup, SettingsRow } from '../components/ui/settings-list';
@@ -17,7 +19,7 @@ import { ChatSettingsSection } from '../components/chats/ChatSettingsSection';
 import { NotificationsSection } from '../components/notifications-section';
 import { YourCoachRow } from '../components/your-coach-row';
 import { StoryRing, useStoryRing } from '../components/recap/StoryRing';
-import { COLORS, FONTS } from '../theme';
+import { COLORS } from '../theme';
 import { useSync } from '../sync/SyncProvider';
 import { formatLastSynced } from '../sync/formatLastSynced';
 import { useTabBarClearance } from '../navigation/tabBarLayout';
@@ -93,10 +95,10 @@ export function SettingsScreen() {
               placeholderTextColor={colors.muted}
               autoCapitalize="none"
               autoCorrect={false}
-              style={{ color: colors.foreground, fontFamily: FONTS.sans }}
+              style={[inputTextStyle, { color: colors.foreground }]}
               className="rounded-tile border border-border bg-card px-4 py-3"
             />
-            {error ? <Text className="text-sm text-destructive">{error}</Text> : null}
+            {error ? <Text className="text-caption text-destructive">{error}</Text> : null}
           </View>
           <FlatList
             data={matches}
@@ -123,7 +125,7 @@ export function SettingsScreen() {
   const email = auth?.session?.email ?? null;
   const connected = connection === 'CONNECTED';
   const avatarFace = email ? (
-    <Text className="font-display text-display-lg">{email.charAt(0).toUpperCase()}</Text>
+    <Text className="text-display">{email.charAt(0).toUpperCase()}</Text>
   ) : (
     <Ionicons name="person-outline" size={30} color={colors.muted} />
   );
@@ -153,8 +155,8 @@ export function SettingsScreen() {
               {avatarFace}
             </View>
           )}
-          <Text className="font-display text-display">Profile</Text>
-          {email ? <Text className="text-sm text-muted-foreground">{email}</Text> : null}
+          <PageTitle>Profile</PageTitle>
+          {email ? <Text className="text-caption text-muted-foreground">{email}</Text> : null}
         </View>
 
         {/* Badges (spec 2026-10-06 §6): between the header and Health data; hidden on a 404. */}

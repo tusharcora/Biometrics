@@ -3,6 +3,7 @@ import { View } from 'react-native';
 import type { AnswerCardDTO, CoachMessageSource } from '../../api/coach';
 import type { CoachChatMessage } from '../../lib/useCoachConversation';
 import { followUpsFor } from '../../lib/coachAnswers';
+import { cn } from '../../lib/utils';
 import { Text } from '../ui/text';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
@@ -10,7 +11,7 @@ import { ChatBubble } from '../ui/chat-bubble';
 import { StreamingText } from '../ui/streaming-text';
 import { useCharacterOptional } from '../../characters/CharacterContext';
 import { characterInfo } from '../characters/registry';
-import { ReplyFrame, isReplyFrameStyle, replyFrameTextStyle } from './thinking/ReplyFrame';
+import { ReplyFrame, isReplyFrameStyle, replyFrameTextClass, replyFrameTextStyle } from './thinking/ReplyFrame';
 import { MemoryProposalChips } from '../memory-proposal-chips';
 import { AnswerCard } from './AnswerCard';
 import { FollowUpChips } from './FollowUpChips';
@@ -46,7 +47,7 @@ export const CoachMessageRow = memo(function CoachMessageRow({
     return (
       <View className="gap-1">
         {message.failed ? (
-          <Text testID={`coach-message-failed-${message.id}`} className="self-end text-xs text-destructive">
+          <Text testID={`coach-message-failed-${message.id}`} className="self-end text-caption text-destructive">
             Not sent
           </Text>
         ) : null}
@@ -65,16 +66,16 @@ export const CoachMessageRow = memo(function CoachMessageRow({
     <View className="gap-2">
       {message.text && frame ? (
         <ReplyFrame style={frame} characterId={characterInfo(characterCtx?.characterId).id}>
-          <StreamingText text={message.text} animate={false} className="text-base leading-6" style={replyFrameTextStyle(frame)} />
+          <StreamingText text={message.text} animate={false} className={cn('text-body', replyFrameTextClass(frame))} style={replyFrameTextStyle(frame)} />
         </ReplyFrame>
       ) : message.text ? (
         <ChatBubble role="assistant" text={message.text} source={message.source as CoachMessageSource} animate={false}>
           {safety ? (
             <View className="gap-3">
               <Card testID="coach-safety-resources" className="gap-1 border-accent/40 bg-accent/10">
-                <Text className="text-sm font-semibold">Support is available</Text>
+                <Text className="text-body font-semibold">Support is available</Text>
                 {safety.resources.map((resource) => (
-                  <Text key={resource} className="text-sm">
+                  <Text key={resource} className="text-body">
                     {resource}
                   </Text>
                 ))}
@@ -90,12 +91,12 @@ export const CoachMessageRow = memo(function CoachMessageRow({
       ) : null}
       {card ? <AnswerCard card={card} onOpenSource={() => onOpenSource(card)} /> : null}
       {message.state === 'stopped' ? (
-        <Text testID={`coach-stopped-${message.id}`} className="text-xs text-muted-foreground">
+        <Text testID={`coach-stopped-${message.id}`} className="text-caption text-muted-foreground">
           Stopped
         </Text>
       ) : null}
       {message.answeredLocally ? (
-        <Text testID={`coach-local-note-${message.id}`} className="text-xs text-muted-foreground">
+        <Text testID={`coach-local-note-${message.id}`} className="text-caption text-muted-foreground">
           Answered by the on-device model
         </Text>
       ) : null}

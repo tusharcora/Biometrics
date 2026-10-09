@@ -1,9 +1,10 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { fireEvent, render, within } from '@testing-library/react-native';
 import { Circle, Rect } from 'react-native-svg';
 import { ActivityHeatmap, type SleepState } from '../../src/components/activity-heatmap';
 import type { SleepNight } from '../../src/api/sleep';
-import { COLORS } from '../../src/theme';
+import { COLORS, FONTS } from '../../src/theme';
 
 const TODAY = '2026-09-22';
 
@@ -185,15 +186,15 @@ describe('ActivityHeatmap', () => {
     it('opens on the Steps page and switches pages with the page dots', () => {
       const { getByTestId } = renderHeatmap([]);
 
-      expect(getByTestId('activity-title')).toHaveTextContent('Steps');
+      expect(getByTestId('activity-title')).toHaveTextContent('STEPS');
       expect(getByTestId('activity-page-steps').props.accessibilityState).toEqual({ selected: true });
 
       fireEvent.press(getByTestId('activity-page-sleep'));
-      expect(getByTestId('activity-title')).toHaveTextContent('Sleep');
+      expect(getByTestId('activity-title')).toHaveTextContent('SLEEP');
       expect(getByTestId('activity-page-sleep').props.accessibilityState).toEqual({ selected: true });
 
       fireEvent.press(getByTestId('activity-page-steps'));
-      expect(getByTestId('activity-title')).toHaveTextContent('Steps');
+      expect(getByTestId('activity-title')).toHaveTextContent('STEPS');
     });
 
     it('follows a swipe that settles on the Sleep page', () => {
@@ -206,7 +207,7 @@ describe('ActivityHeatmap', () => {
       expect(pager.props.snapToOffsets).toEqual([0, 312]);
       fireEvent(pager, 'momentumScrollEnd', { nativeEvent: { contentOffset: { x: 312, y: 0 } } });
 
-      expect(getByTestId('activity-title')).toHaveTextContent('Sleep');
+      expect(getByTestId('activity-title')).toHaveTextContent('SLEEP');
     });
 
     it('keeps both pages on the same month', () => {
@@ -303,11 +304,11 @@ describe('ActivityHeatmap', () => {
       fireEvent.press(getByTestId('day-detail-sleep-link'));
       expect(queryByTestId('day-detail')).toBeNull();
       expect(getByTestId('night-detail-asleep')).toHaveTextContent('7h 47m');
-      expect(getByTestId('activity-title')).toHaveTextContent('Sleep');
+      expect(getByTestId('activity-title')).toHaveTextContent('SLEEP');
 
       fireEvent.press(getByTestId('night-detail-steps-link'));
       expect(getByTestId('day-detail-steps')).toHaveTextContent('12,000 steps');
-      expect(getByTestId('activity-title')).toHaveTextContent('Steps');
+      expect(getByTestId('activity-title')).toHaveTextContent('STEPS');
     });
 
     it('stacks steps above sleep in the year view, without page dots', () => {
@@ -315,7 +316,7 @@ describe('ActivityHeatmap', () => {
 
       fireEvent.press(getByTestId('heatmap-view-year'));
 
-      expect(getByTestId('activity-title')).toHaveTextContent('Steps & sleep');
+      expect(getByTestId('activity-title')).toHaveTextContent('STEPS & SLEEP');
       expect(queryByTestId('activity-page-sleep')).toBeNull();
       expect(queryByTestId('activity-pager')).toBeNull();
       expect(getByTestId('heatmap-metric')).toHaveTextContent(/Steps/);
@@ -383,5 +384,25 @@ describe('ActivityHeatmap', () => {
       expect(getByTestId('day-detail-steps')).toBeTruthy();
       expect(queryByTestId('day-detail-sleep-link')).toBeNull();
     });
+  });
+
+  it('keeps the stat numbers tabular on one line that shrinks to fit', () => {
+    const { getByTestId } = renderHeatmap([['2026-09-19', 1234567]]);
+    const total = getByTestId('stat-total');
+    expect(StyleSheet.flatten(total.props.style)).toEqual(expect.objectContaining({ fontFamily: FONTS.sansSemibold, fontVariant: ['tabular-nums'] }));
+    expect(total.props.numberOfLines).toBe(1);
+    expect(total.props.adjustsFontSizeToFit).toBe(true);
+  });
+
+  it('lets a stat label wrap and keeps the values of a row on one baseline at the bottom', () => {
+    const { getByTestId, getByText } = renderHeatmap([['2026-09-19', 1234567]]);
+    expect(String(getByTestId('stat-average-tile').props.className).split(' ')).toContain('justify-between');
+    expect(getByText('Daily average').props.numberOfLines).toBeUndefined();
+  });
+
+  it('reads the page title to a screen reader in its own case', () => {
+    // As at line 188: with no sleep loaded the title is the Steps page's.
+    const { getByRole } = renderHeatmap([]);
+    expect(getByRole('header', { name: 'Steps' })).toHaveTextContent('STEPS');
   });
 });

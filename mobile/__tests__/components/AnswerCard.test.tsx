@@ -83,10 +83,10 @@ describe('AnswerCard', () => {
     expect(getByTestId('answer-tile-recovery.today').props.accessibilityLabel).toBe('recovery 46, 12 points below usual');
   });
 
-  it('sets tile captions at 11px', () => {
+  it('sets tile captions as text-caption', () => {
     const { getByTestId } = render(<AnswerCard card={tiles} />);
 
-    expect(String(getByTestId('answer-tile-caption-sleep.total').props.className)).toContain('text-[11px]');
+    expect(String(getByTestId('answer-tile-caption-sleep.total').props.className)).toContain('text-caption');
   });
 
   it('says nothing about usual when there is no usual and the value is not near it', () => {

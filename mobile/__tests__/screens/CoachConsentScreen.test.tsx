@@ -49,6 +49,12 @@ describe('CoachConsentScreen', () => {
     }
   });
 
+  it('announces its heading as a header, like the hosted consent screen', async () => {
+    const { findByRole } = render(<CoachConsentScreen />);
+
+    expect(await findByRole('header', { name: 'Before you use the AI Coach' })).toBeTruthy();
+  });
+
   it('says plainly that declining changes nothing else in the app', async () => {
     const { findByTestId } = render(<CoachConsentScreen />);
 

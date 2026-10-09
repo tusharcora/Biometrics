@@ -15,6 +15,7 @@ import { ShareWithBuddiesButton } from '../components/recap/ShareWithBuddiesButt
 import { WeeklyStoryView } from '../components/recap/WeeklyStoryView';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
+import { PageTitle } from '../components/ui/page-title';
 import { SectionLabel } from '../components/ui/section-label';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
@@ -96,7 +97,7 @@ export function RecapScreen() {
         {state.phase === 'missing' ? (
           <View className="gap-3">
             <Card testID="recap-missing">
-              <Text className="text-base">This recap isn't available.</Text>
+              <Text className="text-body">This recap isn't available.</Text>
             </Card>
             <Button testID="recap-missing-back" variant="secondary" size="sm" className="self-start" onPress={leave}>
               Go back
@@ -105,7 +106,7 @@ export function RecapScreen() {
         ) : null}
         {state.phase === 'error' ? (
           <Card testID="recap-error" className="gap-3">
-            <Text className="text-sm text-muted-foreground">Your recap could not be loaded.</Text>
+            <Text className="text-caption text-muted-foreground">Your recap could not be loaded.</Text>
             <Button testID="recap-retry" variant="secondary" size="sm" className="self-start" onPress={() => void load()}>
               Try again
             </Button>
@@ -116,7 +117,7 @@ export function RecapScreen() {
         ) : null}
         {state.phase === 'ready' && state.recap.kind === 'WEEK' ? (
           <View className="gap-4">
-            <Text testID="recap-title" className="font-display text-display-lg">{`Your week with ${coachName}`}</Text>
+            <PageTitle testID="recap-title">{`Your week with ${coachName}`}</PageTitle>
             {/* The preview opens the full-screen story viewer, like the button under it. */}
             <Pressable
               testID="recap-story-preview"
@@ -139,7 +140,7 @@ export function RecapScreen() {
             </Button>
             {state.recap.story ? (
               <Card>
-                <Text testID="recap-story-text" className="text-base leading-snug">{state.recap.story}</Text>
+                <Text testID="recap-story-text" className="text-body">{state.recap.story}</Text>
               </Card>
             ) : null}
             <Button testID="recap-make-share" onPress={() => navigation.navigate('RecapBuilder', { id: state.recap.id, format: 'story' })}>
@@ -183,12 +184,12 @@ function MonthBody({ recap, coachId, coachName, onShare }: { recap: Recap; coach
   const earnedThisMonth = levelsEarnedBetween(achievements, recap.periodStart, recap.periodEnd, 'streak');
   return (
     <View className="gap-4">
-      <Text testID="recap-title" className="font-display text-display-lg">{`${monthName(recap.periodStart)} with ${coachName}`}</Text>
+      <PageTitle testID="recap-title">{`${monthName(recap.periodStart)} with ${coachName}`}</PageTitle>
       <Card className="flex-row items-center gap-3.5">
         <View testID="recap-line-coach">
           <Character characterId={coachId} mood="idle" size={72} />
         </View>
-        <Text testID="recap-line" className="flex-1 text-base leading-snug">{`“${recap.line}”`}</Text>
+        <Text testID="recap-line" className="flex-1 text-body">{`“${recap.line}”`}</Text>
       </Card>
       <View className="gap-2">
         <SectionLabel>Milestones</SectionLabel>
@@ -201,7 +202,7 @@ function MonthBody({ recap, coachId, coachName, onShare }: { recap: Recap; coach
             {earnedThisMonth.map((b) => (
               <View key={`${b.family}-${b.level}`} testID={`recap-month-badge-${b.family}-${b.level}`} style={{ width: '25%', alignItems: 'center', gap: 6 }}>
                 <BadgeIcon family={b.family} level={b.level} size={54} testID={`recap-month-badge-${b.family}-${b.level}-icon`} />
-                <Text className="text-center text-xs">{shortLevelTitle(b.family, b.level)}</Text>
+                <Text className="text-center text-caption">{shortLevelTitle(b.family, b.level)}</Text>
               </View>
             ))}
           </Card>
@@ -217,8 +218,8 @@ function MonthBody({ recap, coachId, coachName, onShare }: { recap: Recap; coach
                 testID={`recap-compare-${row.key}`}
                 className={i < rows.length - 1 ? 'min-h-11 flex-row items-center justify-between border-b border-border' : 'min-h-11 flex-row items-center justify-between'}
               >
-                <Text className="text-base">{row.label}</Text>
-                <Text testID={`recap-compare-${row.key}-change`} className="text-base font-semibold" style={{ color: changeColor(row.tone, scheme) }}>
+                <Text className="text-body">{row.label}</Text>
+                <Text testID={`recap-compare-${row.key}-change`} className="text-body font-semibold tabular-nums" style={{ color: changeColor(row.tone, scheme) }}>
                   {row.text}
                 </Text>
               </View>

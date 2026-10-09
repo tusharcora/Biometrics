@@ -33,6 +33,7 @@ import { formatClock, formatDuration, sleepRangeStats, type SleepByDate } from '
 import { DayDetail, NightDetail } from './activity-sheets';
 import { Button, buttonIconSize } from './ui/button';
 import { Card } from './ui/card';
+import { PageTitle } from './ui/page-title';
 import { SectionLabel } from './ui/section-label';
 import { SegmentedControl } from './ui/segmented-control';
 import { Sheet } from './ui/sheet';
@@ -173,9 +174,10 @@ function groupCells(grid: HeatGrid, view: HeatmapView): HeatCell[][] {
 
 function Stat({ label, value, testID }: { label: string; value: string; testID: string }) {
   return (
-    <View className="w-[31%] grow gap-1 rounded-tile border border-border bg-card px-3 py-3">
-      <Text className="text-xs text-muted-foreground">{label}</Text>
-      <Text testID={testID} className="text-numeral-sm font-bold" numberOfLines={1} adjustsFontSizeToFit style={{ fontVariant: ['tabular-nums'] }}>
+    // A label may wrap to two lines; the values of a row still line up along the bottom.
+    <View testID={`${testID}-tile`} className="w-[31%] grow justify-between gap-1 rounded-tile border border-border bg-card px-3 py-3">
+      <Text className="text-caption text-muted-foreground">{label}</Text>
+      <Text testID={testID} className="text-heading tabular-nums" numberOfLines={1} adjustsFontSizeToFit>
         {value}
       </Text>
     </View>
@@ -257,7 +259,7 @@ function HeatmapCard({
           {labels.map((l) => (
             <Text
               key={`${l.col}-${l.label}`}
-              className="absolute text-[10px] text-muted-foreground"
+              className="absolute text-fine text-muted-foreground"
               style={{ left: l.col * geometry.bin, top: 0 }}
             >
               {l.label}
@@ -305,7 +307,7 @@ function HeatmapCard({
           >
             <Ionicons name="chevron-back" size={buttonIconSize('icon-sm')} color={palette.foreground} />
           </Button>
-          <Text testID={`${p}heatmap-title`} className="text-base font-semibold">
+          <Text testID={`${p}heatmap-title`} className="text-body font-semibold">
             {monthTitle(monthCursor)}
           </Text>
           <Button
@@ -325,10 +327,10 @@ function HeatmapCard({
             <View className="h-7 w-7 items-center justify-center rounded-full" style={{ backgroundColor: levelColor(1, palette, spec) }}>
               <Ionicons name={spec.icon} size={15} color={spec.accent(palette)} />
             </View>
-            <Text className="text-base font-semibold">{spec.label}</Text>
+            <Text className="text-body font-semibold">{spec.label}</Text>
           </View>
           {summary ? (
-            <Text className="text-sm text-muted-foreground" style={{ fontVariant: ['tabular-nums'] }}>
+            <Text className="text-caption text-muted-foreground tabular-nums">
               {summary}
             </Text>
           ) : null}
@@ -341,7 +343,7 @@ function HeatmapCard({
             <View className="items-center gap-1">
               <View className="flex-row" style={{ width: geometry.width }}>
                 {WEEKDAY_INITIALS.map((d, i) => (
-                  <Text key={i} className="text-center text-[11px] text-muted-foreground" style={{ width: geometry.bin }}>
+                  <Text key={i} className="text-center text-fine text-muted-foreground" style={{ width: geometry.bin }}>
                     {d}
                   </Text>
                 ))}
@@ -365,17 +367,17 @@ function HeatmapCard({
       <View testID={`${p}heatmap-legend`} className="flex-row items-center justify-end gap-1.5">
         <View className="mr-auto flex-row items-center gap-1.5">
           <View style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: palette.heatEmpty, borderWidth: 1, borderColor: palette.hairline }} />
-          <Text className="text-[11px] text-muted-foreground">No data</Text>
+          <Text className="text-fine text-muted-foreground">No data</Text>
         </View>
-        <Text className="text-[11px] text-muted-foreground">Less</Text>
+        <Text className="text-fine text-muted-foreground">Less</Text>
         {([0, 1, 2, 3, 4] as HeatLevel[]).map((level) => (
           <View key={level} style={{ width: 10, height: 10, borderRadius: 3, backgroundColor: levelColor(level, palette, spec) }} />
         ))}
-        <Text className="text-[11px] text-muted-foreground">More</Text>
+        <Text className="text-fine text-muted-foreground">More</Text>
       </View>
 
       {note ? (
-        <Text testID={`${p}heatmap-history-note`} className="text-xs text-muted-foreground">
+        <Text testID={`${p}heatmap-history-note`} className="text-caption text-muted-foreground">
           {note}
         </Text>
       ) : null}
@@ -570,9 +572,7 @@ export function ActivityHeatmap({ steps, earliestDate, today, sleep, onRetrySlee
         <View className="flex-row items-end justify-between">
           <View className="gap-1">
             <SectionLabel>Activity</SectionLabel>
-            <Text testID="activity-title" className="font-display text-display-lg">
-              {title}
-            </Text>
+            <PageTitle testID="activity-title">{title}</PageTitle>
           </View>
           {view === 'month' ? (
             <View accessibilityRole="tablist" className="flex-row items-center pb-2">
@@ -596,7 +596,7 @@ export function ActivityHeatmap({ steps, earliestDate, today, sleep, onRetrySlee
             </View>
           ) : null}
         </View>
-        {subtitle ? <Text className="text-sm text-muted-foreground">{subtitle}</Text> : null}
+        {subtitle ? <Text className="text-caption text-muted-foreground">{subtitle}</Text> : null}
         {onOpenSleepDetails && (view !== 'month' || page === 'sleep') ? (
           <Button
             testID="activity-sleep-details"
@@ -637,7 +637,7 @@ export function ActivityHeatmap({ steps, earliestDate, today, sleep, onRetrySlee
         </View>
       ) : (
         <View className="gap-4">
-          <Text testID="heatmap-title" className="text-base font-semibold">
+          <Text testID="heatmap-title" className="text-body font-semibold">
             {view === 'year' ? 'Last 12 months' : `${today.slice(0, 4)} year to date`}
           </Text>
           {stepsCard}

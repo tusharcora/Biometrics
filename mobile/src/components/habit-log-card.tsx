@@ -3,10 +3,11 @@ import { View, Pressable, TextInput } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import { Ionicons } from '@expo/vector-icons';
 import { Text } from './ui/text';
+import { inputNumberStyle } from './ui/input-style';
 import { Card } from './ui/card';
 import { Button, buttonIconSize } from './ui/button';
 import { Skeleton } from './ui/skeleton';
-import { COLORS, FONTS } from '../theme';
+import { COLORS } from '../theme';
 import {
   createCheckIn,
   fetchHabitConfig,
@@ -74,7 +75,7 @@ export function HabitLogCard() {
   if (state.status === 'error') {
     return (
       <Card testID="habit-log-unavailable" className="items-start gap-2">
-        <Text className="text-sm text-muted-foreground">Habits are unavailable right now.</Text>
+        <Text className="text-caption text-muted-foreground">Habits are unavailable right now.</Text>
         <Button testID="habit-log-retry" variant="secondary" size="sm" onPress={() => setAttempt((n) => n + 1)}>
           Try again
         </Button>
@@ -136,7 +137,7 @@ export function HabitLogCard() {
 
   return (
     <Card testID="habit-log-card" className="gap-3.5">
-      <Text className="text-base font-semibold">Anything to log today?</Text>
+      <Text className="text-body font-semibold">Anything to log today?</Text>
 
       {selected ? (
         <View className="gap-3">
@@ -176,8 +177,8 @@ export function HabitLogCard() {
               placeholderTextColor={colors.muted}
               keyboardType="decimal-pad"
               accessibilityLabel={`${selected.label} amount in ${selected.unit}`}
-              style={{ color: colors.foreground, fontFamily: FONTS.sansSemibold, fontVariant: ['tabular-nums'] }}
-              className="h-10 w-20 rounded-full border border-border bg-muted px-3 text-center text-base"
+              style={[inputNumberStyle, { color: colors.foreground }]}
+              className="h-10 w-20 rounded-full border border-border bg-muted px-3 text-center"
             />
             <Button
               testID="habit-increment"
@@ -188,11 +189,11 @@ export function HabitLogCard() {
             >
               <Ionicons name="add" size={buttonIconSize('icon-sm')} color={colors.foreground} />
             </Button>
-            <Text className="flex-1 text-sm text-muted-foreground">{selected.unit}</Text>
+            <Text className="flex-1 text-caption text-muted-foreground">{selected.unit}</Text>
           </View>
 
           <View className="flex-row items-center gap-3">
-            <Text className="flex-1 text-xs text-muted-foreground">Enter 0 to log that you had none.</Text>
+            <Text className="flex-1 text-caption text-muted-foreground">Enter 0 to log that you had none.</Text>
             <Button
               testID="habit-log-submit"
               size="sm"
@@ -206,7 +207,7 @@ export function HabitLogCard() {
       ) : null}
 
       {feedback ? (
-        <Text testID="habit-log-feedback" className={`text-sm ${feedback.kind === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}>
+        <Text testID="habit-log-feedback" className={`text-caption ${feedback.kind === 'error' ? 'text-destructive' : 'text-muted-foreground'}`}>
           {feedback.text}
         </Text>
       ) : null}
@@ -214,7 +215,7 @@ export function HabitLogCard() {
       {checkedInToday ? (
         <View testID="checked-in-today" className="flex-row items-center gap-2">
           <Ionicons name="checkmark-circle" size={18} color={colors.scoreExcellent} />
-          <Text className="flex-1 text-sm text-muted-foreground">You’ve checked in for today.</Text>
+          <Text className="flex-1 text-caption text-muted-foreground">You’ve checked in for today.</Text>
         </View>
       ) : (
         <Button testID="nothing-today-button" variant="outline" size="sm" className="self-start" disabled={busy} onPress={() => checkIn()}>
@@ -224,7 +225,7 @@ export function HabitLogCard() {
 
       {strip.length > 0 ? (
         <View className="gap-2">
-          <Text className="text-xs text-muted-foreground">Missed a day? Tap it to check in.</Text>
+          <Text className="text-caption text-muted-foreground">Missed a day? Tap it to check in.</Text>
           <View className="flex-row justify-between">
             {strip.map((day) => (
               <Pressable
@@ -236,7 +237,7 @@ export function HabitLogCard() {
                 onPress={() => checkIn(day.habitDay)}
                 className="items-center gap-1 active:opacity-70"
               >
-                <Text className="text-[10px] text-muted-foreground">{weekdayInitial(day.habitDay)}</Text>
+                <Text className="text-fine text-muted-foreground">{weekdayInitial(day.habitDay)}</Text>
                 {/* The icon-sm button box: filled like a default Button once checked in, outlined before. */}
                 <View
                   className={`h-[32px] w-[32px] items-center justify-center rounded-[8px] border ${day.done ? 'border-transparent bg-foreground' : 'border-border bg-card dark:border-input dark:bg-input/30'}`}
@@ -244,7 +245,7 @@ export function HabitLogCard() {
                   {day.done ? (
                     <Ionicons name="checkmark" size={14} color={colors.background} />
                   ) : (
-                    <Text className="text-xs text-muted-foreground">{dayOfMonth(day.habitDay)}</Text>
+                    <Text className="text-caption text-muted-foreground tabular-nums">{dayOfMonth(day.habitDay)}</Text>
                   )}
                 </View>
               </Pressable>

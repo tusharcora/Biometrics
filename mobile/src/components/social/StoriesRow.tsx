@@ -46,7 +46,7 @@ export function StoriesRow({ me, rings, onCheckIn, onOpenStory, onSeeAll }: {
             </View>
           )}
         </View>
-        <Text className="text-xs text-muted-foreground">{me.checkIn ? 'You' : 'Check in'}</Text>
+        <Text className="text-caption text-muted-foreground">{me.checkIn ? 'You' : 'Check in'}</Text>
       </PressableScale>
       {rings.map((r) => {
         const name = personName(r.author, false);
@@ -62,7 +62,7 @@ export function StoriesRow({ me, rings, onCheckIn, onOpenStory, onSeeAll }: {
                 </View>
               ) : null}
             </View>
-            <Text className="text-xs text-muted-foreground" numberOfLines={1}>{name}</Text>
+            <Text className="text-caption text-muted-foreground" numberOfLines={1} style={{ maxWidth: 64 }}>{name}</Text>
           </PressableScale>
         );
       })}

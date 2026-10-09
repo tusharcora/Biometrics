@@ -15,7 +15,7 @@ const badgeVariants = cva('self-start rounded-full px-2.5 py-1', {
   defaultVariants: { variant: 'muted' },
 });
 
-const textVariants = cva('text-xs font-medium', {
+const textVariants = cva('text-caption font-medium', {
   variants: {
     variant: {
       accent: 'text-accent',

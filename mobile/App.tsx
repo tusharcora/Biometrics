@@ -6,7 +6,6 @@ import { Geist_500Medium } from '@expo-google-fonts/geist/500Medium';
 import { Geist_600SemiBold } from '@expo-google-fonts/geist/600SemiBold';
 import { Geist_700Bold } from '@expo-google-fonts/geist/700Bold';
 import { Geist_800ExtraBold } from '@expo-google-fonts/geist/800ExtraBold';
-import { InstrumentSerif_400Regular } from '@expo-google-fonts/instrument-serif/400Regular';
 import { AuthProvider } from './src/auth/AuthContext';
 import { CharacterProvider } from './src/characters/CharacterProvider';
 import { RootNavigator } from './src/navigation/RootNavigator';
@@ -26,19 +25,17 @@ setBaseUrl(API_BASE_URL);
 
 export default function App() {
   // Keys are the family names in FONTS (src/theme.ts). The splash screen stays
-  // up until they load; a load error still renders the app on system fonts
-  // rather than a blank screen.
+  // up until they all load, Silkscreen with them, so no pixel title or label
+  // ever draws in a stand-in face; a load error still renders the app on
+  // system fonts rather than a blank screen.
   const [fontsLoaded, fontError] = useFonts({
     Geist_400Regular,
     Geist_500Medium,
     Geist_600SemiBold,
     Geist_700Bold,
     Geist_800ExtraBold,
-    InstrumentSerif_400Regular,
+    Silkscreen: require('./assets/fonts/Silkscreen-Regular.ttf'),
   });
-  // The pixel face for two thinking-text styles (spec §5). Not waited on: those
-  // styles use the system mono until it is in.
-  useFonts({ Silkscreen: require('./assets/fonts/Silkscreen-Regular.ttf') });
   if (!fontsLoaded && !fontError) return null;
 
   // Dev-only: every character in every mood. EXPO_PUBLIC_CHARACTER_GALLERY=1

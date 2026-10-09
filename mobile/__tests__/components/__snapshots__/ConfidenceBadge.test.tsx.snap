@@ -7,7 +7,7 @@ exports[`ConfidenceBadge matches its snapshot for HIGH 1`] = `
   testID="confidence-badge"
 >
   <Text
-    className="text-xs font-medium text-accent"
+    className="text-caption font-medium text-accent"
     style={
       [
         {
@@ -29,7 +29,7 @@ exports[`ConfidenceBadge matches its snapshot for LOW 1`] = `
   testID="confidence-badge"
 >
   <Text
-    className="text-xs font-medium text-destructive"
+    className="text-caption font-medium text-destructive"
     style={
       [
         {
@@ -51,7 +51,7 @@ exports[`ConfidenceBadge matches its snapshot for MEDIUM 1`] = `
   testID="confidence-badge"
 >
   <Text
-    className="text-xs font-medium text-muted-foreground"
+    className="text-caption font-medium text-muted-foreground"
     style={
       [
         {

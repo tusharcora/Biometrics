@@ -6,7 +6,8 @@ import Svg, { Polygon } from 'react-native-svg';
 import { Text } from '../ui/text';
 import { PressableScale } from '../ui/pressable-scale';
 import { Button } from '../ui/button';
-import { COLORS, FONTS, MOTION } from '../../theme';
+import { inputTextStyle } from '../ui/input-style';
+import { COLORS, MOTION } from '../../theme';
 
 const AnimatedPolygon = Animated.createAnimatedComponent(Polygon);
 
@@ -147,8 +148,8 @@ export function PromptBar({
               onPress={() => onChangeText(command.prompt)}
               className="px-4 py-3 active:opacity-70"
             >
-              <Text className="text-sm font-semibold">/{command.key}</Text>
-              <Text className="text-xs text-muted-foreground">{command.label}</Text>
+              <Text className="text-body font-semibold">/{command.key}</Text>
+              <Text className="text-caption text-muted-foreground">{command.label}</Text>
             </PressableScale>
           ))}
         </View>
@@ -172,11 +173,9 @@ export function PromptBar({
           placeholderTextColor={colors.muted}
           multiline
           editable={!busy}
-          style={{
+          style={[inputTextStyle, {
             flex: 1,
             color: colors.foreground,
-            fontFamily: FONTS.sans,
-            fontSize: 16,
             height,
             lineHeight: LINE_HEIGHT,
             // iOS pads a multiline field's content by default, which made one
@@ -185,7 +184,7 @@ export function PromptBar({
             paddingBottom: 0,
             marginVertical: 9,
             textAlignVertical: 'top',
-          }}
+          }]}
         />
 
         <Button

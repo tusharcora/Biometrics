@@ -1,9 +1,11 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { render, waitFor } from '@testing-library/react-native';
 import { RootNavigator } from '../../src/navigation/RootNavigator';
 import { apiFetch } from '../../src/api/client';
 import { useAuth } from '../../src/auth/AuthContext';
 import { syncTimezone } from '../../src/lib/timezone';
+import { FONTS } from '../../src/theme';
 
 jest.mock('../../src/api/client');
 jest.mock('../../src/auth/AuthContext');
@@ -22,11 +24,14 @@ jest.mock('@react-navigation/native', () => ({
 const mockRegisteredScreens: string[] = [];
 // Each registered route's component, by name.
 const mockScreenComponents: Record<string, unknown> = {};
+// The last navigator's screenOptions, for its header.
+const mockStack: { screenOptions?: any } = {};
 jest.mock('@react-navigation/native-stack', () => {
   const ReactLib = require('react');
   return {
     createNativeStackNavigator: () => ({
-      Navigator: ({ initialRouteName, children }: any) => {
+      Navigator: ({ initialRouteName, children, screenOptions }: any) => {
+        mockStack.screenOptions = screenOptions;
         const screens = ReactLib.Children.toArray(children);
         mockRegisteredScreens.splice(0, mockRegisteredScreens.length, ...screens.map((child: any) => child.props.name));
         screens.forEach((child: any) => (mockScreenComponents[child.props.name] = child.props.component));
@@ -89,6 +94,21 @@ describe('RootNavigator', () => {
 
     expect(getByTestId('root-navigator-loading')).toBeTruthy();
     expect(queryByText('SIGN_IN_SCREEN')).toBeNull();
+  });
+
+  it('draws every stack header title in pixel caps, read out as written', async () => {
+    signedIn(true);
+    (apiFetch as jest.Mock).mockResolvedValue({ status: 'CONNECTED', lastSyncedAt: null });
+
+    const { getByText } = render(<RootNavigator />);
+
+    await waitFor(() => expect(getByText('TABS_SCREEN')).toBeTruthy());
+    // A title set with setOptions (ScoreDetail, MetricDetail) goes through the same renderer.
+    const title = render(mockStack.screenOptions.headerTitle({ children: 'Sign-in methods', tintColor: 'rgb(1, 2, 3)' }));
+    const text = title.getByText('SIGN-IN METHODS');
+    expect(text.props.accessibilityRole).toBe('header');
+    expect(text.props.accessibilityLabel).toBe('Sign-in methods');
+    expect(StyleSheet.flatten(text.props.style)).toEqual({ color: 'rgb(1, 2, 3)', fontFamily: FONTS.pixel, fontSize: 15 });
   });
 
   it('syncs the time zone once on launch when authenticated', async () => {

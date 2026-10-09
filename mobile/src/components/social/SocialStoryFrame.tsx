@@ -29,7 +29,7 @@ export function SocialStoryFrame({ frame, author, mine, onUnlock }: { frame: Sto
       {frame.kind === 'checkin' && frame.locked ? (
         <View testID="story-locked" pointerEvents="box-none" className="items-center gap-3">
           <View pointerEvents="none">
-            <Text className="text-center text-lg font-semibold text-white">{`Check in to see how ${who} woke up`}</Text>
+            <Text className="text-center text-headline text-white">{`Check in to see how ${who} woke up`}</Text>
           </View>
           {/* White on the story's dark ground in either app scheme. */}
           <Button testID="story-unlock" size="sm" onPress={onUnlock} className="bg-white" textClassName="text-black">Check in</Button>
@@ -37,26 +37,26 @@ export function SocialStoryFrame({ frame, author, mine, onUnlock }: { frame: Sto
       ) : null}
       {frame.kind === 'checkin' && !frame.locked ? (
         <View pointerEvents="none" className="items-center gap-2">
-          <Text className="text-xs font-semibold uppercase tracking-widest text-white/70">{`${who} woke up`}</Text>
-          <Text className="font-display text-display text-white">{CHECKIN_OPTIONS.find((o) => o.mood === frame.mood)?.label ?? ''}</Text>
+          <Text className="text-label uppercase text-white/70">{`${who} woke up`}</Text>
+          <Text className="text-heading text-white">{CHECKIN_OPTIONS.find((o) => o.mood === frame.mood)?.label ?? ''}</Text>
         </View>
       ) : null}
       {frame.kind === 'badge' ? (
         <View pointerEvents="none" className="items-center gap-2">
-          <Text className="text-xs font-semibold uppercase tracking-widest text-white/70">New badge</Text>
-          <Text className="text-center font-display text-display text-white">{levelTitle(frame.family, frame.level)}</Text>
+          <Text className="text-label uppercase text-white/70">New badge</Text>
+          <Text className="text-center text-heading text-white">{levelTitle(frame.family, frame.level)}</Text>
         </View>
       ) : null}
       {frame.kind === 'recap' ? (
         <View pointerEvents="none" className="items-center gap-2">
-          <Text className="text-xs font-semibold uppercase tracking-widest text-white/70">{`${frame.recapKind === 'WEEK' ? 'Weekly recap' : 'Monthly recap'} · ${recapTitle({ kind: frame.recapKind, periodStart: frame.periodStart })}`}</Text>
-          <Text className="text-center font-display text-display text-white">{frame.line}</Text>
+          <Text className="text-label uppercase text-white/70">{`${frame.recapKind === 'WEEK' ? 'Weekly recap' : 'Monthly recap'} · ${recapTitle({ kind: frame.recapKind, periodStart: frame.periodStart })}`}</Text>
+          <Text className="text-center text-heading text-white">{frame.line}</Text>
         </View>
       ) : null}
       {frame.kind === 'goodnight' ? (
         <View testID="story-goodnight" pointerEvents="none" className="items-center gap-2">
-          <Text className="text-xs font-semibold uppercase tracking-widest text-white/70">{`${who} said goodnight`}</Text>
-          <Text className="text-center font-display text-display text-white">{frame.onTime ? 'On time' : 'Off to bed'}</Text>
+          <Text className="text-label uppercase text-white/70">{`${who} said goodnight`}</Text>
+          <Text className="text-center text-heading text-white">{frame.onTime ? 'On time' : 'Off to bed'}</Text>
         </View>
       ) : null}
     </View>

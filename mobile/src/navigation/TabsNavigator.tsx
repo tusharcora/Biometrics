@@ -8,6 +8,7 @@ import { ActivityScreen } from '../screens/ActivityScreen';
 import { SocialScreen } from '../screens/SocialScreen';
 import { COLORS } from '../theme';
 import { FloatingTabBar } from './FloatingTabBar';
+import { HeaderTitle, headerTitleStyle } from './headerStyle';
 
 export type TabParamList = {
   Home: undefined;
@@ -31,7 +32,8 @@ export function TabsNavigator() {
       screenOptions={{
         headerShadowVisible: false,
         headerStyle: { backgroundColor: colors.background },
-        headerTitleStyle: { color: colors.foreground, fontWeight: '600' },
+        headerTitleStyle: headerTitleStyle(colors.foreground),
+        headerTitle: (props) => <HeaderTitle {...props} />,
         headerTintColor: colors.foreground,
         sceneStyle: { backgroundColor: colors.background },
       }}

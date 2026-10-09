@@ -134,3 +134,8 @@ it('shows the error for a failed answer and re-reads the requests', async () => 
   expect(await screen.findByTestId('requests-message')).toBeTruthy();
   expect(fetchRequests).toHaveBeenCalledTimes(2);
 });
+
+it('titles the board with the pixel page title', async () => {
+  render(<ChatRequestsScreen />);
+  expect(await screen.findByRole('header', { name: 'Requests' })).toHaveTextContent('REQUESTS');
+});

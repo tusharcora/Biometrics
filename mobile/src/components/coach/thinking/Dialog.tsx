@@ -3,7 +3,7 @@ import { View, type TextStyle } from 'react-native';
 import { Text } from '../../ui/text';
 import { CHARACTERS } from '../../characters/registry';
 import type { CharacterId } from '../../characters/types';
-import { pixelFont, useCoachVoice, useElapsed } from './shared';
+import { useCoachVoice, useElapsed } from './shared';
 import type { ThinkingStyleProps } from './types';
 
 // The box is the same in light and dark mode, like a game's text window.
@@ -13,9 +13,12 @@ const DIALOG_GAP = '#0B0C0F';
 const LINE_MS = 2600;
 const TYPE_MS = 55;
 
-/** The text inside the box: pixel font, light ink. */
+/** The text inside the box: the pixel label face on an 18-pt line (it wraps), in light ink. */
+export const DIALOG_TEXT_CLASS = 'text-label leading-[18px]';
+
+/** The ink for DIALOG_TEXT_CLASS: the box is dark in both themes. */
 export function dialogTextStyle(): TextStyle {
-  return { fontFamily: pixelFont(), fontSize: 12, lineHeight: 18, color: DIALOG_INK };
+  return { color: DIALOG_INK };
 }
 
 /**
@@ -29,7 +32,7 @@ export function DialogBox({ characterId, children, footer, testID }: { character
     <View testID={testID} style={{ marginTop: 12, marginBottom: 2, borderWidth: 2, borderColor: accent, borderRadius: 8, padding: 3, backgroundColor: DIALOG_GAP }}>
       <View style={{ borderWidth: 3, borderColor: DIALOG_INK, borderRadius: 4, backgroundColor: DIALOG_FILL, paddingTop: 14, paddingHorizontal: 12, paddingBottom: 10, minHeight: 62 }}>
         <View style={{ position: 'absolute', top: -13, left: 10, backgroundColor: accent, borderRadius: 2, paddingHorizontal: 7, paddingVertical: 1 }}>
-          <Text testID="thinking-dialog-tab" style={{ fontFamily: pixelFont(), fontSize: 11, color: DIALOG_GAP }}>
+          <Text testID="thinking-dialog-tab" className="text-label" style={{ color: DIALOG_GAP }}>
             {name}
           </Text>
         </View>
@@ -53,10 +56,10 @@ export function Dialog({ characterId, paused }: ThinkingStyleProps) {
     <DialogBox
       characterId={characterId}
       footer={
-        <Text style={{ position: 'absolute', right: 8, bottom: 4, fontSize: 10, color: accent, transform: [{ translateY: hop ? 2 : 0 }] }}>▼</Text>
+        <Text className="text-fine" style={{ position: 'absolute', right: 8, bottom: 4, color: accent, transform: [{ translateY: hop ? 2 : 0 }] }}>▼</Text>
       }
     >
-      <Text style={dialogTextStyle()}>{shown}</Text>
+      <Text className={DIALOG_TEXT_CLASS} style={dialogTextStyle()}>{shown}</Text>
     </DialogBox>
   );
 }

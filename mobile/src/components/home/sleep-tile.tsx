@@ -34,7 +34,7 @@ export function SleepTile({
     return (
       <PressableScale testID="sleep-score-unavailable" accessibilityRole="button" onPress={() => onPress(null)} className="flex-1">
         <Card className="flex-1">
-          <Text className="text-sm text-muted-foreground">Sleep Score is unavailable right now.</Text>
+          <Text className="text-caption text-muted-foreground">Sleep Score is unavailable right now.</Text>
         </Card>
       </PressableScale>
     );
@@ -48,7 +48,7 @@ export function SleepTile({
     return (
       <PressableScale testID="sleep-score-empty" accessibilityRole="button" onPress={() => onPress(null)} className="flex-1">
         <Card className="flex-1">
-          <Text className="text-sm text-muted-foreground">Your Sleep Score will appear once a night of sleep has been recorded.</Text>
+          <Text className="text-caption text-muted-foreground">Your Sleep Score will appear once a night of sleep has been recorded.</Text>
         </Card>
       </PressableScale>
     );
@@ -69,17 +69,17 @@ export function SleepTile({
               showLabel={false}
             />
           ) : (
-            <ScoreRing score={score.score} factors={score.factors} bands={bands} size={52} strokeWidth={6} numeralClassName="text-base" />
+            <ScoreRing score={score.score} factors={score.factors} bands={bands} size={52} strokeWidth={6} numeralClassName="text-headline" />
           )}
           <View className="flex-1 gap-0.5">
             <SectionLabel>Sleep Score</SectionLabel>
-            {cold ? <Text className="text-sm font-semibold">{baselineLabel(cold.daysCollected, cold.daysRequired)}</Text> : null}
+            {cold ? <Text className="text-caption font-semibold">{baselineLabel(cold.daysCollected, cold.daysRequired)}</Text> : null}
           </View>
         </View>
         {score.score !== null ? (
           <ConfidenceBadge level={score.confidenceLevel} />
         ) : (
-          <Text className="text-xs text-muted-foreground">Building your baseline</Text>
+          <Text className="text-caption text-muted-foreground">Building your baseline</Text>
         )}
       </Card>
     </PressableScale>

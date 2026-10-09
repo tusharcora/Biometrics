@@ -32,9 +32,9 @@ export function ChatBubble({ role, text, animate = true, children }: ChatBubbleP
         className={cn('gap-3', isUser ? 'max-w-[82%] rounded-[20px] rounded-br-md bg-accent px-4 py-2.5' : 'w-full py-1')}
       >
         {isUser ? (
-          <Text className="text-base text-accent-foreground">{text}</Text>
+          <Text className="text-body text-accent-foreground">{text}</Text>
         ) : (
-          <StreamingText text={text} animate={animate} className="text-base leading-6" />
+          <StreamingText text={text} animate={animate} className="text-body" />
         )}
         {children}
       </View>

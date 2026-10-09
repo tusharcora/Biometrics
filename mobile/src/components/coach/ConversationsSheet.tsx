@@ -113,7 +113,7 @@ export function ConversationsSheet({ visible, onClose, onOpen, onNewChat, onOpen
     <Sheet visible={visible} onClose={onClose} testID="conversations-sheet">
       <View className="gap-5 pb-2">
         <View className="flex-row items-center justify-between">
-          <Text className="px-1 font-display text-display-sm">Conversations</Text>
+          <Text className="px-1 text-heading">Conversations</Text>
           <Button testID="conversations-close" variant="ghost" size="icon-lg" accessibilityLabel="Close" onPress={onClose}>
             <Ionicons name="close" size={buttonIconSize('icon-lg')} color={colors.muted} />
           </Button>
@@ -138,13 +138,13 @@ export function ConversationsSheet({ visible, onClose, onOpen, onNewChat, onOpen
           </View>
         ) : state.status === 'error' ? (
           <View testID="conversations-error" className="items-start gap-1 px-1">
-            <Text className="text-sm text-muted-foreground">{"Couldn't load your past chats."}</Text>
+            <Text className="text-caption text-muted-foreground">{"Couldn't load your past chats."}</Text>
             <Button testID="conversations-retry" variant="secondary" size="sm" className="self-start" onPress={() => void load()}>
               Try again
             </Button>
           </View>
         ) : state.conversations.length === 0 ? (
-          <Text testID="conversations-empty" className="px-1 text-sm text-muted-foreground">
+          <Text testID="conversations-empty" className="px-1 text-caption text-muted-foreground">
             No past chats yet.
           </Text>
         ) : (
@@ -161,7 +161,7 @@ export function ConversationsSheet({ visible, onClose, onOpen, onNewChat, onOpen
                     // opens here, it doesn't drill into another screen.
                     trailing={
                       when ? (
-                        <Text className="text-right text-sm text-muted-foreground" numberOfLines={1}>
+                        <Text className="text-right text-caption text-muted-foreground" numberOfLines={1}>
                           {when}
                         </Text>
                       ) : null
@@ -176,7 +176,7 @@ export function ConversationsSheet({ visible, onClose, onOpen, onNewChat, onOpen
             {state.hasMore ? (
               <View className="items-start gap-1 px-1 pt-2">
                 {state.more === 'error' ? (
-                  <Text testID="conversations-more-error" className="text-sm text-muted-foreground">
+                  <Text testID="conversations-more-error" className="text-caption text-muted-foreground">
                     {"Couldn't load older chats."}
                   </Text>
                 ) : null}

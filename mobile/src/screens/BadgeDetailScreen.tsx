@@ -6,9 +6,10 @@ import { useColorScheme } from 'nativewind';
 import { useCharacterOptional } from '../characters/CharacterContext';
 import { BadgeIcon } from '../components/achievements/BadgeIcon';
 import { characterInfo } from '../components/characters/registry';
-import { pixelFont } from '../components/coach/thinking/shared';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
+import { PageTitle } from '../components/ui/page-title';
+import { SectionLabel } from '../components/ui/section-label';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { refreshAchievements, useAchievements } from '../lib/achievementsStore';
@@ -40,13 +41,13 @@ export function BadgeDetailScreen() {
             <Skeleton testID="badge-detail-loading" className="h-64 w-full rounded-card" />
           ) : state.status === 'error' ? (
             <Card testID="badge-detail-error" className="gap-3">
-              <Text className="text-sm text-muted-foreground">This badge could not be loaded.</Text>
+              <Text className="text-caption text-muted-foreground">This badge could not be loaded.</Text>
               <Button testID="badge-detail-retry" variant="secondary" size="sm" className="self-start" onPress={() => void refreshAchievements()}>
                 Try again
               </Button>
             </Card>
           ) : (
-            <Text testID="badge-detail-missing" className="text-base">This badge isn't available.</Text>
+            <Text testID="badge-detail-missing" className="text-body">This badge isn't available.</Text>
           )}
         </View>
       </SafeAreaView>
@@ -66,18 +67,16 @@ export function BadgeDetailScreen() {
       <ScrollView contentContainerStyle={{ gap: 18, padding: 20 }}>
         <View className="items-center gap-3">
           <BadgeIcon family={f.family} level={f.level} size={140} pips={false} testID="badge-detail-icon" />
-          <Text testID="badge-detail-title" accessibilityRole="header" className="text-center" style={{ fontFamily: pixelFont(), fontSize: 22 }}>
-            {FAMILY_NAMES[f.family].toUpperCase()}
-          </Text>
-          <Text className="text-center text-sm text-muted-foreground" style={{ maxWidth: 290, lineHeight: 20 }}>
+          <PageTitle testID="badge-detail-title" className="text-center">{FAMILY_NAMES[f.family]}</PageTitle>
+          <Text className="text-center text-caption text-muted-foreground" style={{ maxWidth: 290 }}>
             {`${FAMILY_RULES[f.family]}. ${keep}`}
           </Text>
         </View>
         <View className="flex-row gap-2.5">
           {cards.map((c) => (
             <Card key={c.key} testID={`badge-detail-${c.key}`} className="flex-1 gap-1">
-              <Text className="text-muted-foreground" style={{ fontSize: 11, letterSpacing: 1.5 }}>{c.label}</Text>
-              <Text className="font-bold" style={{ fontSize: 28 }}>{c.value}</Text>
+              <SectionLabel>{c.label}</SectionLabel>
+              <Text className="text-display tabular-nums">{c.value}</Text>
             </Card>
           ))}
         </View>
@@ -89,11 +88,11 @@ export function BadgeDetailScreen() {
               <View key={level} testID={`badge-detail-level-${level}`} className="flex-row items-center gap-3.5 border-b border-border py-2">
                 <BadgeIcon family={f.family} level={row.earned ? level : 0} size={44} pips={false} testID={`badge-detail-level-${level}-icon`} />
                 <View className="flex-1 gap-0.5">
-                  <Text className="text-base font-semibold">{`Level ${numeral(level)} · ${tierName(level)} · ${countLabel(f.family, threshold)}`}</Text>
-                  <Text testID={`badge-detail-level-${level}-sub`} className="text-sm text-muted-foreground">{row.text}</Text>
+                  <Text className="text-body font-semibold">{`Level ${numeral(level)} · ${tierName(level)} · ${countLabel(f.family, threshold)}`}</Text>
+                  <Text testID={`badge-detail-level-${level}-sub`} className="text-caption text-muted-foreground">{row.text}</Text>
                 </View>
                 {row.tag ? (
-                  <Text testID={`badge-detail-level-${level}-tag`} style={{ fontSize: 11, letterSpacing: 1, color: tierTextColor(level, accent, dark) }}>
+                  <Text testID={`badge-detail-level-${level}-tag`} className="text-label" style={{ color: tierTextColor(level, accent, dark) }}>
                     {row.tag}
                   </Text>
                 ) : null}

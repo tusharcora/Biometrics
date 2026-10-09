@@ -60,7 +60,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
               size={16}
               color={toast.tone === 'success' ? colors.scoreExcellent : colors.scorePoor}
             />
-            <Text className="text-sm font-medium">{toast.text}</Text>
+            <Text className="text-body font-medium">{toast.text}</Text>
           </Animated.View>
         </SafeAreaView>
       ) : null}

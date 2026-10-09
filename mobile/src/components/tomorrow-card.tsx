@@ -15,7 +15,7 @@ export function TomorrowCard({ state, onPress }: { state: ForecastState; onPress
   if (state.status === 'error') {
     return (
       <Card testID="tomorrow-unavailable">
-        <Text className="text-sm text-muted-foreground">{FORECAST_COPY.unavailable}</Text>
+        <Text className="text-caption text-muted-foreground">{FORECAST_COPY.unavailable}</Text>
       </Card>
     );
   }
@@ -33,7 +33,7 @@ export function TomorrowCard({ state, onPress }: { state: ForecastState; onPress
         />
         <View className="flex-1 gap-1">
           <SectionLabel>{FORECAST_COPY.title}</SectionLabel>
-          <Text className="text-sm text-muted-foreground">
+          <Text className="text-caption text-muted-foreground">
             {forecast.reason === 'NO_HISTORY' ? FORECAST_COPY.unlocksAfter(forecast.daysOfHistory) : FORECAST_COPY.lowConfidence}
           </Text>
         </View>
@@ -44,13 +44,13 @@ export function TomorrowCard({ state, onPress }: { state: ForecastState; onPress
   return (
     <Pressable testID="tomorrow-card" onPress={onPress} accessibilityRole="button" className="active:opacity-80">
       <Card className="flex-row items-center gap-4">
-        <ScoreRing score={cell.score} size={64} strokeWidth={7} numeralClassName="text-lg" />
+        <ScoreRing score={cell.score} size={64} strokeWidth={7} numeralClassName="text-headline" />
         <View className="flex-1 gap-1.5">
           <SectionLabel>{FORECAST_COPY.title}</SectionLabel>
-          <Text className="text-base font-semibold">{FORECAST_COPY.band(cell.band[0], cell.band[1])}</Text>
+          <Text className="text-body font-semibold tabular-nums">{FORECAST_COPY.band(cell.band[0], cell.band[1])}</Text>
           <ConfidenceBadge level={cell.confidence} />
         </View>
-        <Text className="text-sm font-semibold text-accent">{FORECAST_COPY.planCta}</Text>
+        <Text className="text-caption font-semibold text-accent">{FORECAST_COPY.planCta}</Text>
       </Card>
     </Pressable>
   );

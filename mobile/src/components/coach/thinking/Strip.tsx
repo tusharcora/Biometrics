@@ -37,8 +37,8 @@ export function Strip({ characterId, paused }: ThinkingStyleProps) {
       <View style={{ height: 3, backgroundColor: hexAlpha(accent, 0.16) }} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
         <Animated.View style={[{ height: 3, width: `${BAR * 100}%`, backgroundColor: accent }, barStyle]} />
       </View>
-      <Text className="px-3 py-[9px] text-[13px] text-muted-foreground">
-        <Text className="text-[13px] font-semibold" style={{ color: text }}>
+      <Text className="px-3 py-[9px] text-caption text-muted-foreground">
+        <Text className="text-caption font-semibold" style={{ color: text }}>
           {name}
         </Text>
         {` is ${line}…`}

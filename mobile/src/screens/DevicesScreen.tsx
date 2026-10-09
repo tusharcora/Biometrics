@@ -113,7 +113,7 @@ export function DevicesScreen() {
           />
         </SettingsGroup>
       ) : null}
-      {error ? <Text className="px-4 text-sm text-destructive">{error}</Text> : null}
+      {error ? <Text className="px-4 text-caption text-destructive">{error}</Text> : null}
     </ScrollView>
   );
 }

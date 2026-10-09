@@ -112,7 +112,7 @@ export function HostedConsentScreen() {
       <ScrollView contentContainerStyle={{ gap: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32 }}>
         <View className="items-start gap-4">
           <Character mood="idle" size={56} glow paused={!focused} />
-          <Text accessibilityRole="header" className="font-display text-display">
+          <Text accessibilityRole="header" className="text-display">
             Answer with Claude
           </Text>
         </View>
@@ -120,12 +120,12 @@ export function HostedConsentScreen() {
         {textChanged ? (
           <View testID="hosted-consent-updated-note" className="flex-row items-start gap-2.5 rounded-tile border border-coach/25 bg-coach/10 px-4 py-3">
             <Ionicons name="refresh-outline" size={16} color={colors.coach} style={{ marginTop: 1 }} />
-            <Text className="flex-1 text-sm">This has changed since you last looked. Please read it again before you decide.</Text>
+            <Text className="flex-1 text-body">This has changed since you last looked. Please read it again before you decide.</Text>
           </View>
         ) : null}
 
         <Card className="gap-3 p-5">
-          <Text testID="hosted-consent-summary" className="text-base leading-6">
+          <Text testID="hosted-consent-summary" className="text-body">
             {consent.summary}
           </Text>
         </Card>
@@ -144,7 +144,7 @@ export function HostedConsentScreen() {
         ) : null}
 
         {error ? (
-          <Text testID="hosted-consent-error" className="text-sm text-destructive">
+          <Text testID="hosted-consent-error" className="text-caption text-destructive">
             We could not save your choice. Please try again.
           </Text>
         ) : null}

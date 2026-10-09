@@ -4,9 +4,10 @@ import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from 'nativewind';
 import { ApiError, deleteAccount } from '../api/client';
 import { useOptionalAuth } from '../auth/AuthContext';
-import { COLORS, FONTS } from '../theme';
+import { COLORS } from '../theme';
 import { SettingsGroup, SettingsRow } from './ui/settings-list';
 import { Text } from './ui/text';
+import { inputTextStyle } from './ui/input-style';
 import { Card } from './ui/card';
 import { Button } from './ui/button';
 
@@ -72,13 +73,13 @@ export function DeleteAccountSection() {
     <Card testID="delete-account-section" className="gap-3 border-destructive/40">
       <View className="flex-row items-center gap-2">
         <Ionicons name="warning-outline" size={18} color={colors.scorePoor} />
-        <Text className="text-base font-semibold text-destructive">Delete your account?</Text>
+        <Text className="text-body font-semibold text-destructive">Delete your account?</Text>
       </View>
-      <Text testID="delete-account-warning" className="text-sm text-muted-foreground">
+      <Text testID="delete-account-warning" className="text-caption text-muted-foreground">
         This permanently deletes your synced health data, scores, habit logs, coach data and memory, and your Google
         Health connection. This cannot be undone.
       </Text>
-      <Text className="text-sm">
+      <Text className="text-body">
         Type <Text className="font-semibold">{CONFIRM_WORD}</Text> to confirm.
       </Text>
       <TextInput
@@ -90,18 +91,18 @@ export function DeleteAccountSection() {
         placeholderTextColor={colors.muted}
         autoCapitalize="none"
         autoCorrect={false}
-        style={{ color: colors.foreground, fontFamily: FONTS.sans }}
+        style={[inputTextStyle, { color: colors.foreground }]}
         className="rounded-tile border border-border bg-card px-4 py-3"
       />
       {error ? (
-        <Text testID="delete-account-error" className="text-sm text-destructive">
+        <Text testID="delete-account-error" className="text-caption text-destructive">
           {error}
         </Text>
       ) : null}
       {busy ? (
         <View testID="delete-account-progress" className="flex-row items-center justify-center gap-2">
           <ActivityIndicator color={colors.muted} />
-          <Text className="text-sm text-muted-foreground">Deleting your account…</Text>
+          <Text className="text-caption text-muted-foreground">Deleting your account…</Text>
         </View>
       ) : null}
       <Button

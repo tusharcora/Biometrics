@@ -34,9 +34,10 @@ export function LeverPanel({ levers, values, onChange, onReset }: LeverPanelProp
           const tone = muted ? 'text-muted-foreground' : 'text-foreground';
           return (
             <View key={lever.key} className="gap-1.5">
-              <View className="flex-row items-center justify-between">
-                <Text className={`text-sm font-medium ${tone}`}>{lever.label}</Text>
-                <Text className={`text-sm font-semibold ${tone}`} style={{ fontVariant: ['tabular-nums'] }}>
+              {/* The label takes the room and wraps, so a long custom habit name never pushes the value off the card. */}
+              <View className="flex-row items-center justify-between gap-3">
+                <Text className={`flex-1 text-body font-medium ${tone}`}>{lever.label}</Text>
+                <Text className={`text-body font-semibold tabular-nums ${tone}`}>
                   {format(value)}
                 </Text>
               </View>
@@ -52,8 +53,8 @@ export function LeverPanel({ levers, values, onChange, onReset }: LeverPanelProp
                 accessibilityLabel={lever.label}
                 formatValue={format}
               />
-              {lever.effect === 'NONE_YET' ? <Text className="text-xs text-muted-foreground">{FORECAST_COPY.noneYet}</Text> : null}
-              {lever.effect === 'NOT_MODELLED' ? <Text className="text-xs text-muted-foreground">{FORECAST_COPY.notModelled}</Text> : null}
+              {lever.effect === 'NONE_YET' ? <Text className="text-caption text-muted-foreground">{FORECAST_COPY.noneYet}</Text> : null}
+              {lever.effect === 'NOT_MODELLED' ? <Text className="text-caption text-muted-foreground">{FORECAST_COPY.notModelled}</Text> : null}
             </View>
           );
         })}

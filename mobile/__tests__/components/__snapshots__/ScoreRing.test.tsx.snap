@@ -116,17 +116,16 @@ exports[`ScoreRing matches its snapshot: plain 1`] = `
         </RNSVGGroup>
       </RNSVGSvgView>
       <Text
-        className="text-foreground text-2xl font-bold"
+        className="text-foreground text-heading tabular-nums"
         style={
           [
             {
-              "fontFamily": "Geist_700Bold",
-            },
-            {
+              "fontFamily": "Geist_600SemiBold",
               "fontVariant": [
                 "tabular-nums",
               ],
             },
+            undefined,
           ]
         }
       >
@@ -220,11 +219,11 @@ exports[`ScoreRing matches its snapshot: segmented, cold start 1`] = `
       </RNSVGGroup>
     </RNSVGSvgView>
     <Text
-      className="text-2xl font-bold text-muted-foreground"
+      className="text-heading text-muted-foreground"
       style={
         [
           {
-            "fontFamily": "Geist_700Bold",
+            "fontFamily": "Geist_600SemiBold",
           },
           undefined,
         ]
@@ -415,17 +414,16 @@ exports[`ScoreRing matches its snapshot: segmented, mixed factors 1`] = `
       </RNSVGGroup>
     </RNSVGSvgView>
     <Text
-      className="text-foreground text-2xl font-bold"
+      className="text-foreground text-heading tabular-nums"
       style={
         [
           {
-            "fontFamily": "Geist_700Bold",
-          },
-          {
+            "fontFamily": "Geist_600SemiBold",
             "fontVariant": [
               "tabular-nums",
             ],
           },
+          undefined,
         ]
       }
     >

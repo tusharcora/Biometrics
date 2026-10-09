@@ -15,7 +15,9 @@ import {
 jest.mock('../global.css', () => ({}));
 // The dev gallery draws real Skia art; it is not under test here.
 jest.mock('../src/screens/dev/CharacterGalleryScreen', () => ({ CharacterGalleryScreen: () => null }));
-jest.mock('expo-font', () => ({ useFonts: () => [true, null] }));
+// App's one useFonts call: the test reads the families it asks for and decides whether they are in.
+const mockUseFonts = jest.fn((_families: Record<string, unknown>) => [true, null] as [boolean, Error | null]);
+jest.mock('expo-font', () => ({ useFonts: (families: Record<string, unknown>) => mockUseFonts(families) }));
 jest.mock('expo-secure-store');
 // AuthContext imports push registration, whose expo-notifications import warns under jest.
 jest.mock('../src/lib/pushRegistration', () => ({ disablePush: jest.fn(async () => undefined) }));
@@ -34,6 +36,7 @@ jest.mock('../src/navigation/RootNavigator', () => {
 });
 
 beforeEach(() => {
+  mockUseFonts.mockImplementation(() => [true, null]);
   jest.clearAllMocks();
   (readCachedCharacter as jest.Mock).mockResolvedValue(null);
   (writeCachedCharacter as jest.Mock).mockResolvedValue(undefined);
@@ -43,6 +46,30 @@ beforeEach(() => {
 });
 
 describe('App', () => {
+  it('still renders the app if a font fails to load, so the splash never hangs', () => {
+    (authClient.useSession as jest.Mock).mockReturnValue({ data: null, isPending: false, error: null });
+    mockUseFonts.mockImplementation(() => [false, new Error('x')]);
+
+    const { toJSON } = render(<App />);
+
+    expect(toJSON()).not.toBeNull();
+  });
+
+  it('waits for Silkscreen with Geist before anything draws', () => {
+    (authClient.useSession as jest.Mock).mockReturnValue({ data: null, isPending: false, error: null });
+    mockUseFonts.mockImplementation(() => [false, null]);
+
+    const { toJSON } = render(<App />);
+
+    // The splash stays up: no frame of the app (and so no pixel title) draws in a stand-in face.
+    expect(toJSON()).toBeNull();
+    expect(mockUseFonts).toHaveBeenCalled();
+    // Every call is the awaited one: Silkscreen is not loaded on the side any more.
+    for (const [families] of mockUseFonts.mock.calls) {
+      expect(Object.keys(families)).toEqual(expect.arrayContaining(['Geist_400Regular', 'Geist_600SemiBold', 'Silkscreen']));
+    }
+  });
+
   it('mounts CharacterProvider inside AuthProvider, around the navigator', async () => {
     (authClient.useSession as jest.Mock).mockReturnValue({ data: { user: { id: 'u1', email: 'u1@example.com' } }, isPending: false, error: null });
     (fetchCoachStatus as jest.Mock).mockResolvedValue({

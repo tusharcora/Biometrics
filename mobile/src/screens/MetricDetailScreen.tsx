@@ -80,18 +80,17 @@ export function MetricDetailScreen() {
             <View className="gap-1.5">
               <SectionLabel style={{ color }}>{shown ? readingDate(shown) : 'Latest'}</SectionLabel>
               {shown ? (
-                <Text className="text-numeral-lg font-bold" style={{ fontVariant: ['tabular-nums'] }}>
+                <Text className="text-number">
                   {config.format(shown.value)}
                 </Text>
               ) : (
                 <CountUp
                   value={stats.latest}
                   format={config.format}
-                  className="text-numeral-lg font-bold"
-                  style={{ fontVariant: ['tabular-nums'] }}
+                  className="text-number"
                 />
               )}
-              <Text testID="metric-range-context" className="text-base text-muted-foreground">
+              <Text testID="metric-range-context" className="text-body text-muted-foreground">
                 {context}
               </Text>
             </View>
@@ -118,8 +117,8 @@ export function MetricDetailScreen() {
                 { label: 'High', value: stats.max },
               ].map((cell, i) => (
                 <View key={cell.label} className={`flex-1 gap-1 px-4 py-3.5 ${i > 0 ? 'border-l border-border' : ''}`}>
-                  <Text className="text-xs text-muted-foreground">{cell.label}</Text>
-                  <Text className="text-base font-bold" numberOfLines={1} adjustsFontSizeToFit style={{ fontVariant: ['tabular-nums'] }}>
+                  <Text className="text-caption text-muted-foreground">{cell.label}</Text>
+                  <Text className="text-headline tabular-nums" numberOfLines={1} adjustsFontSizeToFit>
                     {config.format(cell.value)}
                   </Text>
                 </View>
@@ -130,7 +129,7 @@ export function MetricDetailScreen() {
               <Card className="gap-2">
                 <SectionLabel>Insights</SectionLabel>
                 {sentences.map((sentence, i) => (
-                  <Text key={i} className={i === 0 ? 'font-display text-display-sm' : 'text-sm text-muted-foreground'}>
+                  <Text key={i} className={i === 0 ? 'text-heading' : 'text-caption text-muted-foreground'}>
                     {sentence}
                   </Text>
                 ))}
@@ -147,7 +146,7 @@ export function MetricDetailScreen() {
             }`}
           >
             <Text className="text-muted-foreground">{readingDate(item)}</Text>
-            <Text className="font-semibold" style={{ fontVariant: ['tabular-nums'] }}>
+            <Text className="font-semibold tabular-nums">
               {config.format(item.value)}
             </Text>
           </View>

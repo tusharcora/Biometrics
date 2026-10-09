@@ -28,9 +28,9 @@ function fill(getByTestId: (id: string) => any) {
 it('shows "check your inbox" after sign-up (new or existing email look the same)', async () => {
   const signUpWithEmail = jest.fn().mockResolvedValue(undefined);
   (useAuth as jest.Mock).mockReturnValue({ signUpWithEmail });
-  const { getByTestId, findByText } = render(<SignUpScreen navigation={navigation} route={{} as any} />);
+  const { getByTestId, findByRole } = render(<SignUpScreen navigation={navigation} route={{} as any} />);
   fill(getByTestId);
-  await findByText(/Check your inbox/);
+  await findByRole('header', { name: 'Check your inbox' });
   expect(signUpWithEmail).toHaveBeenCalledWith({ name: 'Pat', email: 'pat@example.com', password: 'pw123456' });
 });
 

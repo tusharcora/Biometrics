@@ -42,22 +42,22 @@ export function FactorBar({ factor, scale }: FactorBarProps) {
     >
       <View className="flex-row items-center justify-between">
         <View className="flex-row items-center gap-2">
-          <Text className="text-sm font-medium">{factor.label}</Text>
+          <Text className="text-body font-medium">{factor.label}</Text>
           {factor.imputed && !factor.excluded ? (
-            <Text className="text-[10px] text-muted-foreground">estimated</Text>
+            <Text className="text-caption text-muted-foreground">estimated</Text>
           ) : null}
         </View>
         {factor.excluded ? (
-          <Text className="text-xs text-muted-foreground">Building baseline</Text>
+          <Text className="text-caption text-muted-foreground">Building baseline</Text>
         ) : (
-          <Text className="text-sm font-semibold" style={{ fontVariant: ['tabular-nums'] }}>
+          <Text className="text-body font-semibold tabular-nums">
             {pointsText}
           </Text>
         )}
       </View>
       {/* The sleep factors carry the goal they were scored against; older scores don't, and never get a guess. */}
       {factor.goalMinutes != null ? (
-        <Text testID={`factor-goal-${factor.factor}`} className="-mt-1 text-xs text-muted-foreground">
+        <Text testID={`factor-goal-${factor.factor}`} className="-mt-1 text-caption text-muted-foreground">
           {`vs your goal of ${formatGoalDuration(factor.goalMinutes)}`}
         </Text>
       ) : null}

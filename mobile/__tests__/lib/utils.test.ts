@@ -1,16 +1,22 @@
 import { cn, mixWithWhite, withAlpha } from '../../src/lib/utils';
 
 describe('cn', () => {
-  it('keeps a custom font size alongside a text colour', () => {
-    expect(cn('text-foreground', 'text-eyebrow text-muted-foreground')).toBe('text-eyebrow text-muted-foreground');
+  it('keeps a type token alongside a text colour', () => {
+    expect(cn('text-foreground', 'text-caption text-muted-foreground')).toBe('text-caption text-muted-foreground');
+    expect(cn('text-label uppercase text-muted-foreground', 'text-foreground')).toBe('text-label uppercase text-foreground');
   });
 
-  it('lets a later custom font size replace an earlier one', () => {
-    expect(cn('text-2xl', 'text-numeral-xl')).toBe('text-numeral-xl');
+  it('lets a later type token replace an earlier one, and a one-off size replace a token', () => {
+    expect(cn('text-heading', 'text-score')).toBe('text-score');
+    expect(cn('text-page-title', 'text-[28px]')).toBe('text-[28px]');
   });
 
-  it('treats font-display as a family, so it survives a weight class', () => {
-    expect(cn('font-display', 'font-bold')).toBe('font-display font-bold');
+  it('does not read the score colours as the score size', () => {
+    expect(cn('text-score', 'text-score-good')).toBe('text-score text-score-good');
+  });
+
+  it('treats font-pixel as a family, so it survives a weight class', () => {
+    expect(cn('font-pixel', 'font-bold')).toBe('font-pixel font-bold');
   });
 
   it('merges the custom radii with stock ones', () => {

@@ -59,7 +59,7 @@ function MemoryProposalChip({ proposal }: { proposal: MemoryDTO }) {
     <View className="max-w-[90%] gap-2 rounded-tile border border-coach/25 bg-coach/10 px-3.5 py-3">
       <View className="flex-row items-start gap-2">
         <Ionicons name="bulb-outline" size={15} color={colors.coach} style={{ marginTop: 1 }} />
-        <Text testID={`memory-chip-${proposal.id}`} className="shrink text-sm">
+        <Text testID={`memory-chip-${proposal.id}`} className="shrink text-body">
           {`I'll remember: ${value}`}
         </Text>
       </View>
@@ -72,7 +72,7 @@ function MemoryProposalChip({ proposal }: { proposal: MemoryDTO }) {
         </Button>
       </View>
       {undoError ? (
-        <Text testID={`memory-chip-error-${proposal.id}`} className="pl-6 text-xs text-destructive">
+        <Text testID={`memory-chip-error-${proposal.id}`} className="pl-6 text-caption text-destructive">
           {MEMORY_ERROR_TEXT.generic}
         </Text>
       ) : null}

@@ -40,7 +40,7 @@ export function WindowChart({
   if (layout.bars.length === 0) {
     return (
       <View testID="sleep-window-chart" className="items-center justify-center" style={{ height: CHART_HEIGHT }}>
-        <Text testID="sleep-window-empty" className="text-center text-sm text-muted-foreground">
+        <Text testID="sleep-window-empty" className="text-center text-caption text-muted-foreground">
           {nights.length === 0 ? 'No sleep synced yet.' : 'No bedtimes recorded in this range.'}
         </Text>
       </View>
@@ -57,8 +57,8 @@ export function WindowChart({
           {layout.ticks.map((t) => (
             <Text
               key={t.label}
-              className="text-xs text-muted-foreground"
-              style={{ position: 'absolute', left: 0, top: Math.min(CHART_HEIGHT - 14, Math.max(0, y(t.at) - 7)), fontVariant: ['tabular-nums'] }}
+              className="text-fine text-muted-foreground tabular-nums"
+              style={{ position: 'absolute', left: 0, top: Math.min(CHART_HEIGHT - 14, Math.max(0, y(t.at) - 7)) }}
             >
               {t.label}
             </Text>
@@ -133,7 +133,7 @@ export function WindowChart({
       </View>
       <View className="flex-row" style={{ paddingLeft: TICK_COLUMN }} importantForAccessibility="no-hide-descendants" accessibilityElementsHidden>
         {dates.map((d) => (
-          <Text key={d} className="flex-1 text-center text-xs text-muted-foreground">
+          <Text key={d} className="flex-1 text-center text-fine text-muted-foreground">
             {WEEKDAY_INITIAL[dayOfWeek(d)]}
           </Text>
         ))}

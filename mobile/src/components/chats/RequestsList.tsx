@@ -113,7 +113,7 @@ export function RequestsList({ gate, onAccepted }: { gate: Gate; onAccepted: (bu
       data={items}
       keyExtractor={(i) => `${i.kind}-${i.request.id}`}
       contentContainerStyle={{ gap: 10, paddingBottom: 24 }}
-      ListHeaderComponent={message ? <Text testID="requests-message" className="text-sm text-destructive">{message}</Text> : null}
+      ListHeaderComponent={message ? <Text testID="requests-message" className="text-caption text-destructive">{message}</Text> : null}
       ListEmptyComponent={<Text testID="requests-empty" className="py-8 text-center text-muted-foreground">No requests right now.</Text>}
       renderItem={({ item }) =>
         item.kind === 'in' ? (
@@ -123,8 +123,8 @@ export function RequestsList({ gate, onAccepted }: { gate: Gate; onAccepted: (bu
                 <Character characterId={isCharacterId(item.request.from.coachId) ? item.request.from.coachId : DEFAULT_CHARACTER_ID} mood="idle" size={28} paused />
               </View>
               <View className="flex-1">
-                <Text numberOfLines={1} className="text-[15px] font-semibold">{item.request.from.displayName}</Text>
-                <Text numberOfLines={1} className="text-[13px] text-muted-foreground">{fromLine(item.request, now)}</Text>
+                <Text numberOfLines={1} className="text-body font-semibold">{item.request.from.displayName}</Text>
+                <Text numberOfLines={1} className="text-caption text-muted-foreground">{fromLine(item.request, now)}</Text>
               </View>
               <Button
                 testID={`request-block-${item.request.id}`}
@@ -145,7 +145,7 @@ export function RequestsList({ gate, onAccepted }: { gate: Gate; onAccepted: (bu
         ) : (
           <View testID={`request-out-${item.request.id}`} className="flex-row items-center justify-between rounded-[18px] border border-border bg-card p-3.5">
             {/* The handle as typed when sent; an older request has none, so it reads neutrally. */}
-            <Text className="flex-1 text-[15px]">{item.request.toHandle ? `@${item.request.toHandle} · Pending` : 'Pending request'}</Text>
+            <Text className="flex-1 text-body">{item.request.toHandle ? `@${item.request.toHandle} · Pending` : 'Pending request'}</Text>
             <Button testID={`request-cancel-${item.request.id}`} size="sm" variant="ghost" disabled={busy} onPress={() => perform(() => cancelRequest(item.request.id))}>Cancel</Button>
           </View>
         )

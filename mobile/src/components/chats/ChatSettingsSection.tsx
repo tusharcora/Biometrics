@@ -49,7 +49,7 @@ export function ChatSettingsSection() {
   if (available && !settings && loadFailed) {
     return (
       <View testID="chat-settings" className="items-start gap-2 px-4">
-        <Text testID="chat-settings-load-error" className="text-sm text-muted-foreground">{LOAD_FAILED}</Text>
+        <Text testID="chat-settings-load-error" className="text-caption text-muted-foreground">{LOAD_FAILED}</Text>
         <Button testID="chat-settings-retry" variant="secondary" size="sm" onPress={() => setAttempt((n) => n + 1)}>Try again</Button>
       </View>
     );
@@ -92,7 +92,7 @@ export function ChatSettingsSection() {
         {row('readReceipts', 'chat-read-receipts', 'Read receipts', "Show \"Seen\" when you've read a chat. Off, you won't see theirs either.", 'checkmark-done-outline')}
         {row('activityStatus', 'chat-activity', 'Show activity status', "Let buddies see when you were last active. Off, you won't see theirs either.", 'radio-button-on-outline')}
       </SettingsGroup>
-      {failed ? <Text testID="chat-settings-message" className="px-4 text-sm text-destructive">{FAILED}</Text> : null}
+      {failed ? <Text testID="chat-settings-message" className="px-4 text-caption text-destructive">{FAILED}</Text> : null}
     </View>
   );
 }

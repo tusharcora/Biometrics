@@ -19,8 +19,8 @@ export function CoachTile({ needsConsent, onPress }: { needsConsent: boolean; on
       <Card className="flex-1 justify-between gap-3 border-coach/25 bg-coach/10">
         <Character testID="coach-tile-character" mood={mood} size={40} glow paused={!focused} />
         <View className="gap-0.5">
-          <Text className="text-base font-semibold">Ask Coach</Text>
-          <Text className="text-xs text-muted-foreground">{needsConsent ? 'See what’s shared first' : 'About today'}</Text>
+          <Text className="text-body font-semibold">Ask Coach</Text>
+          <Text className="text-caption text-muted-foreground">{needsConsent ? 'See what’s shared first' : 'About today'}</Text>
         </View>
       </Card>
     </PressableScale>

@@ -22,6 +22,8 @@ import { ReportSheet } from '../components/chats/ReportSheet';
 import { Button, buttonIconSize } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Text } from '../components/ui/text';
+import { inputTextStyle } from '../components/ui/input-style';
+import { PageTitle } from '../components/ui/page-title';
 import { buddyErrorMessage } from '../lib/buddyCopy';
 import { refreshBuddies } from '../lib/buddiesStore';
 import { noteQuoteLabel } from '../lib/chatCopy';
@@ -151,7 +153,7 @@ export function ChatsScreen() {
       <Button testID="chats-back" variant="outline" size="icon-lg" accessibilityLabel="Back to Social" onPress={() => navigation.goBack()}>
         <Ionicons name="chevron-back" size={buttonIconSize('icon-lg')} color={colors.foreground} />
       </Button>
-      <Text testID="chats-handle" numberOfLines={1} className="flex-1 text-center text-[17px] font-bold">{home ? `@${home.me.person.handle}` : 'Chats'}</Text>
+      <PageTitle testID="chats-handle" numberOfLines={1} ellipsizeMode="tail" className="flex-1 text-center">{home ? `@${home.me.person.handle}` : 'Chats'}</PageTitle>
       {ready ? (
         <Button testID="chats-new" variant="outline" size="icon-lg" accessibilityLabel="New message" onPress={() => setPicking(true)}>
           <Ionicons name="create-outline" size={buttonIconSize('icon-lg')} color={colors.foreground} />
@@ -170,7 +172,7 @@ export function ChatsScreen() {
         {phase === 'unavailable' ? (
           <Card className="m-4 gap-3">
             <Text className="font-semibold">Chats aren't available yet</Text>
-            <Text className="text-sm text-muted-foreground">Your buddies are still here.</Text>
+            <Text className="text-caption text-muted-foreground">Your buddies are still here.</Text>
             <Button testID="chats-open-buddies" onPress={() => navigation.navigate('Buddies')}>Open Buddies</Button>
           </Card>
         ) : null}
@@ -210,7 +212,8 @@ export function ChatsScreen() {
                 placeholderTextColor={colors.muted}
                 value={query}
                 onChangeText={setQuery}
-                className="flex-1 text-[15px] text-foreground"
+                style={inputTextStyle}
+                className="flex-1 text-foreground"
               />
             </View>
             {home ? (
@@ -226,12 +229,12 @@ export function ChatsScreen() {
               />
             ) : null}
             <View className="flex-row items-center justify-between pt-2">
-              <Text className="text-base font-bold">Messages</Text>
+              <Text className="text-headline">Messages</Text>
               <Button testID="chats-requests" variant="link" onPress={() => navigation.navigate('ChatRequests')}>
                 {page.requests > 0 ? `Requests (${page.requests})` : 'Requests'}
               </Button>
             </View>
-            {message ? <Text testID="chats-message" className="text-sm text-muted-foreground">{message}</Text> : null}
+            {message ? <Text testID="chats-message" className="text-caption text-muted-foreground">{message}</Text> : null}
           </View>
         }
         ListEmptyComponent={

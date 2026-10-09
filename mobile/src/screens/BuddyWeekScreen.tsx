@@ -11,6 +11,7 @@ import { characterInfo } from '../components/characters/registry';
 import { DEFAULT_CHARACTER_ID, isCharacterId } from '../components/characters/types';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
+import { PageTitle } from '../components/ui/page-title';
 import { Text } from '../components/ui/text';
 import { FAMILY_NAMES, numeral } from '../lib/badges';
 import {
@@ -151,8 +152,8 @@ export function BuddyWeekScreen() {
       <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
         <View className="items-center gap-1">
           <Character characterId={coachId} mood={week.mood === 'low' ? 'resting' : 'idle'} size={96} />
-          <Text className="font-display text-display">{week.buddy.displayName}</Text>
-          <Text className="text-sm text-muted-foreground">@{week.buddy.handle} · Coach: {coachName}</Text>
+          <PageTitle testID="buddy-week-name">{week.buddy.displayName}</PageTitle>
+          <Text className="text-caption text-muted-foreground">@{week.buddy.handle} · Coach: {coachName}</Text>
           <Text testID="buddy-week-line" className="text-center" style={{ color: MOOD_COLORS[week.mood] }}>{week.moodLine}</Text>
         </View>
 
@@ -168,20 +169,20 @@ export function BuddyWeekScreen() {
                   className="h-9 w-9 rounded-lg border border-border"
                   style={{ backgroundColor: TILE_COLORS[tile.mood] }}
                 />
-                <Text className="text-xs text-muted-foreground">{weekdayLetter(tile.date)}</Text>
+                <Text className="text-fine text-muted-foreground">{weekdayLetter(tile.date)}</Text>
               </View>
             ))}
           </View>
           {rows.map((key) => (
             <View key={key} testID={`number-row-${key}`} className="gap-1">
-              <Text className="text-xs text-muted-foreground">{NUMBER_LABELS[key]}</Text>
+              <Text className="text-caption text-muted-foreground">{NUMBER_LABELS[key]}</Text>
               <View className="flex-row justify-between">
                 {week.numbers[key]!.map((d, i) => {
                   const shown = formatNumber(key, d.value);
                   // The day is in the label: a screen reader otherwise reads seven bare numbers.
                   const label = `${weekdayName(d.date)}: ${NUMBER_LABELS[key]}${shown === '–' ? ', no data' : ` ${shown}`}`;
                   return (
-                    <Text key={d.date} testID={`number-${key}-${i}`} accessibilityLabel={label} className="w-9 text-center text-xs">
+                    <Text key={d.date} testID={`number-${key}-${i}`} accessibilityLabel={label} className="w-9 text-center text-fine tabular-nums">
                       {shown}
                     </Text>
                   );
@@ -192,7 +193,7 @@ export function BuddyWeekScreen() {
           {badges.length > 0 ? (
             <View testID="week-badges" className="flex-row flex-wrap gap-2">
               {badges.map((b) => (
-                <Text key={b.family} className="rounded-full bg-muted px-3 py-1 text-xs">{`${FAMILY_NAMES[b.family]} ${numeral(b.level)}`}</Text>
+                <Text key={b.family} className="rounded-full bg-muted px-3 py-1 text-caption">{`${FAMILY_NAMES[b.family]} ${numeral(b.level)}`}</Text>
               ))}
             </View>
           ) : null}
@@ -205,10 +206,10 @@ export function BuddyWeekScreen() {
               <StickerButton key={s.kind} kind={s.kind} label={s.label} icon={s.icon} disabled={busy} onPress={() => sticker(s.kind)} />
             ))}
           </View>
-          {note ? <Text testID="buddy-week-note" className={note.error ? 'text-sm text-destructive' : 'text-sm text-muted-foreground'}>{note.text}</Text> : null}
+          {note ? <Text testID="buddy-week-note" className={note.error ? 'text-caption text-destructive' : 'text-caption text-muted-foreground'}>{note.text}</Text> : null}
         </View>
 
-        <Text testID="buddy-week-summary" className="text-center text-sm text-muted-foreground">
+        <Text testID="buddy-week-summary" className="text-center text-caption text-muted-foreground">
           {sharesSummary(week.buddy.displayName, week.shares)}
         </Text>
 

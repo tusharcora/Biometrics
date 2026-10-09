@@ -126,20 +126,20 @@ export function CoachConsentScreen() {
       <ScrollView contentContainerStyle={{ gap: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32 }}>
         <View className="items-start gap-4">
           <Character testID="coach-consent-character" mood="idle" size={56} glow paused={!focused} />
-          <Text className="font-display text-display">Before you use the AI Coach</Text>
+          <Text className="text-display" accessibilityRole="header">Before you use the AI Coach</Text>
         </View>
 
         {textChanged ? (
           <View testID="coach-consent-updated-note" className="flex-row items-start gap-2.5 rounded-tile border border-coach/25 bg-coach/10 px-4 py-3">
             <Ionicons name="refresh-outline" size={16} color={colors.coach} style={{ marginTop: 1 }} />
-            <Text className="flex-1 text-sm">
+            <Text className="flex-1 text-body">
               This has changed since you last looked. Please read it again before you decide.
             </Text>
           </View>
         ) : null}
 
         <Card className="gap-3 p-5">
-          <Text className="text-base leading-6">{coach.consent.summary}</Text>
+          <Text className="text-body">{coach.consent.summary}</Text>
         </Card>
 
         <SettingsGroup label="What is sent when you ask something">
@@ -150,14 +150,14 @@ export function CoachConsentScreen() {
 
         <View className="flex-row items-start gap-2.5 px-1">
           <Ionicons name="shield-checkmark-outline" size={16} color={colors.muted} style={{ marginTop: 2 }} />
-          <Text testID="coach-consent-decline-note" className="flex-1 text-sm text-muted-foreground">
+          <Text testID="coach-consent-decline-note" className="flex-1 text-caption text-muted-foreground">
             Choosing not to turn on the AI Coach changes nothing else in the app. Your scores, habits and patterns all keep
             working exactly as they do now. You can turn it off again at any time in Settings.
           </Text>
         </View>
 
         {error ? (
-          <Text testID="coach-consent-error" className="text-sm text-destructive">
+          <Text testID="coach-consent-error" className="text-caption text-destructive">
             {error}
           </Text>
         ) : null}

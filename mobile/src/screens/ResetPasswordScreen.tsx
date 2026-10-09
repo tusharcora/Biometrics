@@ -8,6 +8,7 @@ import { messageFor } from '../auth/authErrors';
 import { MIN_PASSWORD_LENGTH } from '../auth/passwordPolicy';
 import type { AuthStackParamList } from '../navigation/AuthNavigator';
 import { Text } from '../components/ui/text';
+import { PageTitle } from '../components/ui/page-title';
 import { Button } from '../components/ui/button';
 import { TextField } from '../components/ui/text-field';
 import { Character } from '../components/characters/Character';
@@ -57,14 +58,14 @@ export function ResetPasswordScreen({ navigation, route }: Props) {
       <ScrollView contentContainerClassName="flex-grow justify-center gap-8 px-6 py-8" keyboardShouldPersistTaps="handled">
         <Animated.View entering={FadeInDown.duration(450)} className="items-center gap-3">
           <Character testID="auth-character" characterId="mochi" mood="idle" size={56} glow paused={!focused} />
-          <Text className="text-center font-display text-display-lg">Choose a new password</Text>
-          {token ? <Text className="text-center text-base text-muted-foreground">{`Use at least ${MIN_PASSWORD_LENGTH} characters.`}</Text> : null}
+          <PageTitle className="text-center">Choose a new password</PageTitle>
+          {token ? <Text className="text-center text-body text-muted-foreground">{`Use at least ${MIN_PASSWORD_LENGTH} characters.`}</Text> : null}
         </Animated.View>
         <View className="gap-3">
           {token ? (
             <TextField label="New password" testID="password-input" value={password} onChangeText={setPassword} secure autoComplete="new-password" />
           ) : null}
-          {error ? <Text className={error === EXPIRED ? 'text-center text-base text-muted-foreground' : 'text-sm text-destructive'}>{error}</Text> : null}
+          {error ? <Text className={error === EXPIRED ? 'text-center text-body text-muted-foreground' : 'text-caption text-destructive'}>{error}</Text> : null}
           {token ? (
             <Button testID="reset-password-button" size="lg" className="mt-2 w-full" onPress={submit} disabled={busy || !password}>
               Save password
