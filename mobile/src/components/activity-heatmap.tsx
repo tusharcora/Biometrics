@@ -174,7 +174,8 @@ function groupCells(grid: HeatGrid, view: HeatmapView): HeatCell[][] {
 
 function Stat({ label, value, testID }: { label: string; value: string; testID: string }) {
   return (
-    <View className="w-[31%] grow gap-1 rounded-tile border border-border bg-card px-3 py-3">
+    // A label may wrap to two lines; the values of a row still line up along the bottom.
+    <View testID={`${testID}-tile`} className="w-[31%] grow justify-between gap-1 rounded-tile border border-border bg-card px-3 py-3">
       <Text className="text-caption text-muted-foreground">{label}</Text>
       <Text testID={testID} className="text-heading tabular-nums" numberOfLines={1} adjustsFontSizeToFit>
         {value}

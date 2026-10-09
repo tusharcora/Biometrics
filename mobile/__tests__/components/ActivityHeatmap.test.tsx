@@ -394,6 +394,12 @@ describe('ActivityHeatmap', () => {
     expect(total.props.adjustsFontSizeToFit).toBe(true);
   });
 
+  it('lets a stat label wrap and keeps the values of a row on one baseline at the bottom', () => {
+    const { getByTestId, getByText } = renderHeatmap([['2026-09-19', 1234567]]);
+    expect(String(getByTestId('stat-average-tile').props.className).split(' ')).toContain('justify-between');
+    expect(getByText('Daily average').props.numberOfLines).toBeUndefined();
+  });
+
   it('reads the page title to a screen reader in its own case', () => {
     // As at line 188: with no sleep loaded the title is the Steps page's.
     const { getByRole } = renderHeatmap([]);

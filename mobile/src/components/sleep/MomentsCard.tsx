@@ -17,6 +17,9 @@ const SIZE = 112;
 const C = SIZE / 2;
 const R_OUTER = 54;
 const R_INNER = 42;
+// The centre duration's widest line: the hole's chord at the text's edge,
+// so a long night ("10h 59m") shrinks rather than running onto the band.
+const HOLE_TEXT = 76;
 const GAP = 0.05;
 
 const MIX: { type: Exclude<StageType, 'AWAKE'>; label: string; spoken: string }[] = [
@@ -105,7 +108,9 @@ export function MomentsCard({
             {ring.map((r) => (r.d ? <Path key={r.type} d={r.d} fill={palette[STAGE_TOKEN[r.type]]} /> : null))}
           </Svg>
           <View pointerEvents="none" className="absolute inset-0 items-center justify-center">
-            <Text className="text-heading tabular-nums">{formatDuration(minutesAsleep)}</Text>
+            <Text className="text-heading tabular-nums" numberOfLines={1} adjustsFontSizeToFit style={{ maxWidth: HOLE_TEXT }}>
+              {formatDuration(minutesAsleep)}
+            </Text>
             <Text className="text-caption text-muted-foreground">asleep</Text>
           </View>
         </View>

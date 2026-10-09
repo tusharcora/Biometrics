@@ -1,4 +1,5 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { render, screen } from '@testing-library/react-native';
 import { MOCKUP_CLOCK, MOCKUP_SEGMENTS, seg } from '../../jest-mocks/sleepNightFixture';
 import { nightClock } from '../../src/lib/sleepStats';
@@ -26,6 +27,16 @@ describe('MomentsCard', () => {
     expect(card).toHaveTextContent(/7h 30m\s*asleep/);
     // The slices and rows stay shares of the stage sums.
     expect(card).toHaveTextContent(/Deep\s*1h 30m\s*20%/);
+  });
+
+  it('shrinks a long night to fit inside the ring\'s hole, on one line', () => {
+    render(<MomentsCard stages={MOCKUP_SEGMENTS} clock={MOCKUP_CLOCK} minutesToFallAsleep={null} minutesAsleep={659} />);
+
+    const centre = screen.getByText('10h 59m');
+    expect(centre.props.numberOfLines).toBe(1);
+    expect(centre.props.adjustsFontSizeToFit).toBe(true);
+    // The hole is 84 across: the value must stay inside it, clear of the band.
+    expect(StyleSheet.flatten(centre.props.style).maxWidth).toBeLessThanOrEqual(80);
   });
 
   it('lists the night\'s highlights in order', () => {
