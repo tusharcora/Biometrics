@@ -92,8 +92,20 @@ responses carry; on the client that is `scoreBand()` (`mobile/src/lib/scoreInsig
 ### 3.1 Header
 
 - **Content.** Left: back, `Button variant="outline" size="icon-lg"`, chevron, `accessibilityLabel="Back"`. Centre:
-  `PageTitle` "Sleep". Right: bedtime goal, the same button style with an alarm-clock icon,
-  `accessibilityLabel="Bedtime goal"`, navigating to `BedtimeGoal`.
+  `PageTitle` "Sleep". Right, in order:
+  - info, the same button style, `accessibilityLabel="How the score works"`, opening the info sheet (decision 7);
+  - bedtime goal, the same button style with an alarm-clock icon, `accessibilityLabel="Bedtime goal"`, navigating to
+    `BedtimeGoal`.
+- **Info sheet** (decision 7). It mirrors Recovery §3.1: a `Sheet` titled "How the score works" with:
+  - `SLEEP_SCORE_FRAMING` (`scoreInsights.ts:6`);
+  - the sleep weights (duration / efficiency / consistency, read from the score row's config through the SLEEP score
+    DTO's factor weights, not hard-coded);
+  - the "Baselines used" sentences from `buildBaselineSentence`, filtered as `ScoreDetailScreen` does today (no SLEEP
+    duration baseline);
+  - the band ranges with their verdict words.
+
+  It replaces the only remaining home of that content once `ScoreDetail` SLEEP redirects, and it works with the coach
+  turned off.
 - **Native header.** Hidden for this route (`headerShown: false`), as on Recovery, because the board's header has its
   own buttons. Safe-area top inset applies.
 - No subtitle (the board has none; the night's date is in the summary eyebrow).
@@ -104,8 +116,8 @@ responses carry; on the client that is `scoreBand()` (`mobile/src/lib/scoreInsig
   verdict (`text-heading`), and the hero line `"{Band} · {±N} vs {yesterday|Mon|…} · {High|Medium|Low} confidence"`.
 - **Data.** The SLEEP score for D from `GET /me/scores/:D?type=SLEEP` (`score`, `confidenceLevel`, `previous`, `bands`).
   This is the one sleep-score read on the page (§4.4).
-- **Verdict by band.** The board shows "Restful night" (Excellent) and the earlier draft "Short night" (Low). The rest is
-  a reasoned default (open question 2):
+- **Verdict by band** (decision 6). The band comes from `scoreBand(score, bands)`, the same live thresholds Recovery
+  uses, so the two heroes never disagree about which band a score is in.
 
   | Band (live) | Band word | Verdict |
   |---|---|---|
@@ -113,9 +125,11 @@ responses carry; on the client that is `scoreBand()` (`mobile/src/lib/scoreInsig
   | Good | Good | **Solid night** |
   | Fair | Fair | **Restless night** |
   | Low | Low | **Rough night** |
-  | Fair or Low, and main sleep ≥ 60 min under the goal | (band) | **Short night** (overrides the two above) |
+  | Any band, when main sleep is ≥ 60 min under the goal | (band) | **Short night** (overrides all four) |
 
-  The visible word for `scorePoor` is "Low", as on Recovery.
+  "Short night" is a quantity override only: it depends on minutes under the goal, never on the band, so a short but
+  solid night still reads "Short night". The band word in the hero line still shows the real band. The visible word
+  for `scorePoor` is "Low", as on Recovery.
 - **Delta wording.** Same rule as Recovery §3.2: if D is today and `previous.date === D − 1`, "vs yesterday"; if
   `previous` is within 7 days of D, "vs {weekday short}"; otherwise the delta part is dropped. Δ = `round(score) −
   round(previous.score)` with a real minus sign. Δ = 0 reads "same as yesterday" / "same as {Mon}".
@@ -200,6 +214,9 @@ responses carry; on the client that is `scoreBand()` (`mobile/src/lib/scoreInsig
   the board).
 - "Time to fall asleep" also appears in Moments ("Fell asleep in 12m"). Both are on the approved board and read the
   same field, so they cannot disagree.
+- **Steps that day** (decision 8). Under the rows, a `Button variant="link" size="sm"` reading "Steps that day ›"
+  opens the Activity tab on D's steps, the same target the removed Activity night sheet linked to. It is hidden when
+  the Activity tab cannot open a date.
 - **States.** Shown whenever the night exists, with or without stages.
 
 ### 3.9 Bedtime to wake
@@ -453,7 +470,7 @@ and the Activity Sleep page" (`:104`) are updated.
 - **Where.** In `DashboardScreen`, after `HabitLogCard` and directly above `CoachDigestCard`
   (`DashboardScreen.tsx:292-296`), so the recap shelf and the weekly digest sit together. It renders for every user,
   whether or not the coach is on, so Recaps is always reachable from Home. This position is a reasoned default
-  (open question 1).
+  (decision 5; mockup first).
 - **Unchanged behaviour.** Same component, same props (`navigation`), the "Recaps · See all" header always shows, and
   it reloads on focus and on return to the foreground. Home's avatar story ring (`useStoryRing`) is unchanged.
 - The component comment ("The story shelf at the top of Sleep", `RecapShelf.tsx:27`) and the typography exemption's
@@ -548,7 +565,7 @@ both Recovery and Sleep land are removed in the later ScoreDetail clean-up, not 
 ## 9. Out of scope
 
 - **Scoring:** the Sleep score's factors, the duration factor's use of the day total, bands and baselines are unchanged.
-- A per-factor "why" for the Sleep score ("What moved it" is removed, decision 2) and an info sheet (open question 3).
+- A per-factor "why" for the Sleep score ("What moved it" is removed, decision 2) (the info sheet is in scope, decision 7).
 - The earlier draft's Recovery link line ("Monday's short night pulled your Tuesday recovery down to 38").
 - Regularity for an arbitrary anchor date; the 30-night regularity window on this page.
 - Deleting the `ScoreDetail` route and its now-unused components (after both pages land).
@@ -631,16 +648,20 @@ both Recovery and Sleep land are removed in the later ScoreDetail clean-up, not 
 3. **The Recaps shelf moves to Home.** It was the only entry to Recaps and lived on the Sleep screen. It now sits on
    Home (§5.2), so Recaps stays reachable after the Sleep screen is rebuilt.
 4. **Mockup draft 2 approved** as the page's layout and section order (§3).
+5. **Recaps shelf on Home:** after the Habit log, directly above the coach digest card, shown for everyone. It is a
+   "look back" item and belongs with the digest. **A one-board mockup is shown to the owner before it is built**
+   (mockup-first rule).
+6. **Hero verdicts:** Restful / Solid / Restless / Rough night by `scoreBand`, with "Short night" as a quantity-only
+   override at ≥ 60 min under the goal on any band (§3.2).
+7. **Info sheet added**, mirroring Recovery's (§3.1). "Ask Axo covers why" fails when the coach is off
+   (`coachEntryRoute` is null, so the bar is hidden), and without the sheet the "Baselines used" sentences and the
+   sleep weights would have no home.
+8. **Activity night sheet removed.** A sleep cell opens `Sleep { date }`. The sheet's "Steps that day" moves onto the
+   page's night section (§3.8) as a small `Button variant="link" size="sm"` "Steps that day ›" that opens Activity for
+   that date, so nothing the sheet offered is lost.
 
-## 13. Open questions
+## 13. Notes for the build and the PR
 
-1. **Recaps shelf position on Home.** Default: after the Habit log, directly above the coach digest card, shown for
-   everyone. Needs a one-board mockup under the mockup-first rule.
-2. **Hero verdict words.** The board only shows "Restful night" (Excellent) and the earlier draft "Short night".
-   Default: Good "Solid night", Fair "Restless night", Low "Rough night", with "Short night" when main sleep is an hour
-   or more under the goal on a Fair or Low night.
-3. **Sleep score explanation.** With "What moved it" and `ScoreDetail` SLEEP gone, the factor breakdown and "Baselines
-   used" are no longer shown anywhere. Default: no info button (the board has none; the Ask bar covers "why"). The owner
-   may want an info sheet like Recovery's.
-4. **Activity night sheet.** Default: the sheet is removed and a sleep cell opens the page, which drops the sheet's
-   "Steps that day" cross-link. Alternative: keep a slimmed sheet with "Open night" and the steps link.
+- **The "usual" fix changes a visible number.** `/me/sleep/night/:date` `usualMinutesAsleep` (`sleepNight.ts:110`)
+  moves from day totals (naps included) to main-session minutes (§4.3). The "vs your usual" line users already see will
+  shift for anyone who naps. The PR description must call this out as an intentional correction, not a regression.

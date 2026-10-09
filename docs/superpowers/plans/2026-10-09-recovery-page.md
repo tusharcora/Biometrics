@@ -92,9 +92,9 @@ accessibility, §9 for tests and §11 for the owner decisions.
    `ScoreDetailCoachEntry.test.tsx`) that prefills carry no numbers, so the coach fetches real values and never
    trusts a stale copy. The plan keeps that rule:
    - "Why is my recovery where it is today?"
-   - "Why was my recovery what it was on Thu 2 Oct?"
+   - "Why was my recovery what it was on Fri 2 Oct?"
    - "When will my recovery score be ready?"
-   - "Why don't I have a recovery score today?" / "…for Thu 2 Oct?"
+   - "Why don't I have a recovery score today?" / "…for Fri 2 Oct?"
 
    The date stays, because it names the day rather than copying a value. *Owner may overturn; only `recoveryQuestion`
    changes.*
@@ -105,8 +105,12 @@ accessibility, §9 for tests and §11 for the owner decisions.
 5. **Track record:** hits are counted over the last 12 series points using the **full** series' `withinPoints`, so
    "±N" agrees with the Forecast screen. With fewer than 5 points it is hidden on the client.
 6. **New hero weather art** (Excellent, Fair, Low, building and no-reading) is drawn on the 28×20 grid in Task 4.
-   **Gate:** the controller publishes it as a canvas strip, and the owner approves it before Task 6 merges any screen
-   that shows it (spec §3.0, mockup-first rule).
+   **Gate:** the controller publishes it as a canvas strip, and the owner approves it before the Task 11 draft PR
+   opens (spec §3.0, mockup-first rule). `weatherArt.ts` is data, so Tasks 6–9 build on the drafted rects, and an
+   owner edit is a one-file fix commit.
+7. **Known cost:** `history()` reads every RECOVERY row up to the end of D's month on each page view (best streak needs
+   all of it). That is a few hundred rows per year, the same kind of cost as `buddyIdsOf`. Revisit with a stored best
+   run if it shows up in latency.
 
 ## Review Focus
 
@@ -115,8 +119,9 @@ accessibility, §9 for tests and §11 for the owner decisions.
      and keeps the streak from yesterday.
    - Pinned in Task 2 (bundle NO_DATA today) and Task 1 (streak).
 2. **A user in a far-from-UTC timezone near midnight:**
-   - Expected: `today` resolves to their local civil date, and a request for their "tomorrow" in UTC terms is a 400.
-   - Pinned in Task 2 (Pacific/Kiritimati user).
+   - Expected: `today` resolves to their local civil date, and a request for their "tomorrow" is a 400 even when it is
+     UTC's today.
+   - Pinned in Task 2 by the Pacific/Kiritimati user (east) and the Etc/GMT+12 user (west).
 3. **Calendar paging at the edges:**
    - Expected: Prev is disabled at `firstScoredDate`'s month and Next at the current month, January paging back
      crosses the year, and a month with no rows renders all-muted cells with no average.
@@ -143,7 +148,13 @@ accessibility, §9 for tests and §11 for the owner decisions.
   `.superpowers/sdd/2026-10-09-recovery-page/backend-jest.sh`. Its `cd` already targets this worktree's `backend/`.
 - [ ] **Step 3:** From `mobile/`, run the typecheck and save the error lines to
   `.superpowers/sdd/2026-10-09-recovery-page/tsc-baseline.txt`. Confirm the count is 12.
-- [ ] **Step 4:** Write the six plan rulings above into the ledger as `Ruling: … — why — cost` lines.
+- [ ] **Step 4:** Write the seven plan rulings above into the ledger as `Ruling: … — why — cost` lines.
+- [ ] **Step 5:** Record the execution order in the ledger:
+  - subagent-driven (owner choice, 2026-10-09);
+  - Task 1 (backend helpers) and Task 3 (mobile copy) may run in parallel;
+  - Task 2 follows Task 1;
+  - Tasks 4 and 5 follow Task 3;
+  - Tasks 6 → 7 → 8 → 9 → 10 run strictly in order, because they share `RecoveryScreen.tsx` and its test file.
 
 ---
 
@@ -654,6 +665,14 @@ describe('GET /me/recovery/:date', () => {
     expect((await get(user.id, `/me/recovery/${shiftDate(localCivilDate(new Date(), 'UTC'), 2)}`)).status).toBe(400);
   });
 
+  it("a user west of UTC: UTC's today is their tomorrow, so it is a 400", async () => {
+    const user = await createUser({ timezone: 'Etc/GMT+12' }); // UTC-12: their today is UTC's yesterday (or same day only after 12:00 UTC)
+    const theirToday = localCivilDate(new Date(), 'Etc/GMT+12');
+    expect((await get(user.id, `/me/recovery/${shiftDate(theirToday, 1)}`)).status).toBe(400);
+    expect((await get(user.id, `/me/recovery/${theirToday}`)).status).toBe(200);
+    expect((await get(user.id, '/me/recovery/today')).body.date).toBe(theirToday);
+  });
+
   it('never logs recovery values', async () => {
     const spy = jest.spyOn(console, 'log');
     const err = jest.spyOn(console, 'error');
@@ -662,6 +681,7 @@ describe('GET /me/recovery/:date', () => {
     await get(user.id, '/me/recovery/today');
     const logged = [...spy.mock.calls, ...err.mock.calls].flat().map(String).join(' ');
     expect(logged).not.toMatch(/68/);
+    expect(logged).not.toContain(localCivilDate(new Date(), 'UTC'));
   });
 });
 
@@ -741,12 +761,12 @@ export async function loadScoreDetail(userId: string, date: string, type: ScoreT
 ```ts
 // backend/src/recovery/bundle.ts
 // GET /me/recovery/:date in one round of reads (spec §4.2, minus decision 6's factor detail).
-import { civilDateToUtcMidnight, localCivilDate } from '../biometrics/civilDate';
+import { civilDateToUtcMidnight, localCivilDateOrUtc } from '../biometrics/civilDate';
 import { getSleepNight } from '../biometrics/sleepNight';
 import { prisma } from '../db/client';
 import { buildForecast } from '../forecast/engine';
 import { loadForecastData } from '../forecast/load';
-import { getLiveConfig, SCORE_CONFIGS } from '../scoring/configs';
+import { getLiveConfig, SCORE_CONFIGS, type ScoreConfig } from '../scoring/configs';
 import { isCivilDate, shiftDate } from '../scoring/dates';
 import { loadScoreDetail } from '../scoring/detail';
 import { toBaselineDTOs, toDailyScoreDTO } from '../scoring/dto';
@@ -767,7 +787,8 @@ function endOfMonth(month: string): string {
 
 async function userToday(userId: string, now: Date): Promise<string> {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { timezone: true } });
-  return localCivilDate(now, user?.timezone ?? 'UTC');
+  // OrUtc: a stored zone that no longer resolves falls back to UTC instead of throwing (as the social module does).
+  return localCivilDateOrUtc(now, user?.timezone ?? 'UTC');
 }
 
 async function history(userId: string, through: string): Promise<RecoveryDayDTO[]> {
@@ -779,8 +800,8 @@ async function history(userId: string, through: string): Promise<RecoveryDayDTO[
   return rows.map((r) => ({ date: r.date.toISOString().slice(0, 10), score: r.score === null ? null : round1(r.score) }));
 }
 
-async function sleepDebtFor(userId: string, date: string, goalFromRow: number | undefined, snap: { ewma: number | null; spread: number | null; mad: number | null; daysOfHistory: number; algorithmVersion: string } | undefined): Promise<SleepDebtDTO | null> {
-  const cfg = getLiveConfig();
+// `cfg` is the row's config (live when there is no row), the same one the goal and weights come from.
+async function sleepDebtFor(userId: string, date: string, cfg: ScoreConfig, goalFromRow: number | undefined, snap: { ewma: number | null; spread: number | null; mad: number | null; daysOfHistory: number; algorithmVersion: string } | undefined): Promise<SleepDebtDTO | null> {
   const window = cfg.sleepDebtWindowDays;
   const [features, nights, goalNow] = await Promise.all([
     prisma.userDailyFeatures.findUnique({ where: { userId_date: { userId, date: civilDateToUtcMidnight(date) } }, select: { sleepDebtRolling14d: true } }),
@@ -830,15 +851,17 @@ export async function buildRecoveryPage(userId: string, dateParam: string, now =
   const stored = (row?.factors ?? []) as Array<{ factor: string; goalMinutes?: number }>;
   const debtGoal = stored.find((f) => f.factor === 'SLEEP_DEBT')?.goalMinutes;
   const debtSnap = snapshots.find((s) => s.metric === 'SLEEP_DEBT');
+  const cfg = (row && SCORE_CONFIGS[row.algorithmVersion]) || getLiveConfig();
 
+  // history() reads every RECOVERY row up to the end of D's month (best streak needs all of it). A few hundred
+  // rows per year; a known cost, recorded in the ledger.
   const [rows, sleepDebt, night, tomorrow] = await Promise.all([
     history(userId, endOfMonth(month)),
-    sleepDebtFor(userId, date, debtGoal, debtSnap),
+    sleepDebtFor(userId, date, cfg, debtGoal, debtSnap),
     getSleepNight(userId, date),
     isToday ? tomorrowFor(userId, now) : Promise.resolve(null),
   ]);
 
-  const cfg = (row && SCORE_CONFIGS[row.algorithmVersion]) || getLiveConfig();
   const bands = getLiveConfig().scoreBands;
   const upto = rows.filter((r) => r.date <= date);
   return {
@@ -949,8 +972,8 @@ git commit -m "feat(recovery): GET /me/recovery/:date bundle and month calendar 
   - `type WeatherKey = 'clear' | 'mostlyClear' | 'cloudy' | 'stormy' | 'building' | 'none'`
   - `weatherFor(score: number | null, state: RecoveryState, bands: ScoreBandsDTO): WeatherKey`
   - `BAND_WORD: Record<ScoreBand, string>` and `VERDICT: Record<WeatherKey, string>`
-  - `formatDayShort(date: string): string`, giving "Wed 8 Oct"
-  - `weekdayShort(date: string): string`, giving "Wed"
+  - `formatDayShort(date: string): string`, giving "Thu 8 Oct"
+  - `weekdayShort(date: string): string`, giving "Thu"
   - `formatMinutes(min: number): string`, giving "3h 10m", "45m" or "8h"
   - `formatGoal(min: number): string`, giving "8h" or "7h 30m"
   - `headerSubtitle(date: string, updatedAt: string | null, isToday: boolean): string`
@@ -973,7 +996,7 @@ git commit -m "feat(recovery): GET /me/recovery/:date bundle and month calendar 
 
 ```ts
 import {
-  weatherFor, VERDICT, formatDayShort, formatMinutes, formatGoal, headerSubtitle, heroLine, buildRecoverySummary,
+  weatherFor, VERDICT, formatDayShort, weekdayShort, formatMinutes, formatGoal, headerSubtitle, heroLine, buildRecoverySummary,
   buildingCopy, noDataLine, debtBlockCount, debtBlocks, debtClearCopy, monthCaption, monthTitle, initialChip,
 } from '../../src/lib/recoveryCopy';
 import { recoveryQuestion } from '../../src/lib/coachPrompts';
@@ -995,7 +1018,7 @@ describe('weather', () => {
 
 describe('formatting', () => {
   it('formats days, minutes and goals', () => {
-    expect(formatDayShort('2026-10-08')).toBe('Wed 8 Oct');
+    expect(formatDayShort('2026-10-08')).toBe('Thu 8 Oct');
     expect(formatMinutes(190)).toBe('3h 10m');
     expect(formatMinutes(45)).toBe('45m');
     expect(formatMinutes(480)).toBe('8h');
@@ -1003,10 +1026,16 @@ describe('formatting', () => {
     expect(formatGoal(480)).toBe('8h');
     expect(formatGoal(450)).toBe('7h 30m');
   });
+  it('reads civil dates by components, never as UTC instants (1 Oct 2026 is a Thursday)', () => {
+    // new Date('2026-10-08') is UTC midnight: west of UTC it is still the 7th (Wed). Never parse that way.
+    expect(weekdayShort('2026-10-08')).toBe('Thu');
+    expect(weekdayShort('2026-10-01')).toBe('Thu');
+    expect(weekdayShort('2026-10-05')).toBe('Mon');
+  });
   it('header subtitle: updated time today, date alone on a past day or without a row', () => {
-    expect(headerSubtitle('2026-10-08', '2026-10-08T07:12:00', true)).toMatch(/^Wed 8 Oct · updated 7:12\s?AM$/);
-    expect(headerSubtitle('2026-10-02', '2026-10-02T07:12:00', false)).toBe('Thu 2 Oct');
-    expect(headerSubtitle('2026-10-08', null, true)).toBe('Wed 8 Oct');
+    expect(headerSubtitle('2026-10-08', '2026-10-08T07:12:00', true)).toMatch(/^Thu 8 Oct · updated 7:12\s?AM$/);
+    expect(headerSubtitle('2026-10-02', '2026-10-02T07:12:00', false)).toBe('Fri 2 Oct');
+    expect(headerSubtitle('2026-10-08', null, true)).toBe('Thu 8 Oct');
   });
 });
 
@@ -1014,7 +1043,7 @@ describe('heroLine', () => {
   const base = { score: 68, bands: BANDS, date: '2026-10-08', confidence: 'HIGH' as const };
   it('vs yesterday, vs a weekday within 7 days, dropped when older', () => {
     expect(heroLine({ ...base, previous: { date: '2026-10-07', score: 62 } })).toEqual({ band: 'Good', rest: ' · +6 vs yesterday · High confidence' });
-    expect(heroLine({ ...base, previous: { date: '2026-10-05', score: 70 } }).rest).toBe(' · −2 vs Sun · High confidence');
+    expect(heroLine({ ...base, previous: { date: '2026-10-05', score: 70 } }).rest).toBe(' · −2 vs Mon · High confidence');
     expect(heroLine({ ...base, previous: { date: '2026-09-20', score: 70 } }).rest).toBe(' · High confidence');
     expect(heroLine({ ...base, previous: null }).rest).toBe(' · High confidence');
   });
@@ -1098,10 +1127,10 @@ describe('chips and coach', () => {
   });
   it('recovery questions carry no numbers', () => {
     expect(recoveryQuestion({ state: 'READY', isToday: true, date: '2026-10-08' })).toBe('Why is my recovery where it is today?');
-    expect(recoveryQuestion({ state: 'READY', isToday: false, date: '2026-10-02' })).toBe('Why was my recovery what it was on Thu 2 Oct?');
+    expect(recoveryQuestion({ state: 'READY', isToday: false, date: '2026-10-02' })).toBe('Why was my recovery what it was on Fri 2 Oct?');
     expect(recoveryQuestion({ state: 'BUILDING', isToday: true, date: '2026-10-08' })).toBe('When will my recovery score be ready?');
     expect(recoveryQuestion({ state: 'NO_DATA', isToday: true, date: '2026-10-08' })).toBe("Why don't I have a recovery score today?");
-    expect(recoveryQuestion({ state: 'NO_DATA', isToday: false, date: '2026-10-02' })).toBe("Why don't I have a recovery score for Thu 2 Oct?");
+    expect(recoveryQuestion({ state: 'NO_DATA', isToday: false, date: '2026-10-02' })).toBe("Why don't I have a recovery score for Fri 2 Oct?");
   });
 });
 ```
@@ -1195,6 +1224,8 @@ export const formatDayShort = (date: string) => { const dt = local(date); return
 export const formatDayLong = (date: string) => { const dt = local(date); return `${WEEKDAYS_LONG[dt.getDay()]} ${dt.getDate()} ${MONTHS_LONG[dt.getMonth()]}`; };
 const daysBetween = (a: string, b: string) => Math.round((local(b).getTime() - local(a).getTime()) / 86_400_000);
 
+// Durations pad minutes ("2h 05m", a column of values lines up); goals don't ("7h 30m", read in a sentence).
+// Intentional (spec §3.6): do not unify formatMinutes and formatGoal.
 export function formatMinutes(min: number): string {
   const m = Math.max(0, Math.round(min));
   const h = Math.floor(m / 60);
@@ -1435,7 +1466,9 @@ export function useRecoveryPage(date?: string) {
   imports. Use the same path.
 
 - [ ] **Step 4: Run the tests and confirm they pass.** Run the same two test files plus
-  `__tests__/lib/coachPrompts*` if it exists. Then run the mobile typecheck; the count must still be 12.
+  `__tests__/lib/coachPrompts*` if it exists. Run `recoveryCopy.test.ts` once more under each of
+  `TZ=Pacific/Auckland` and `TZ=America/Los_Angeles`, prefixed to the jest command; it must pass under both. Then run
+  the mobile typecheck; the count must still be 12.
 
 - [ ] **Step 5: Commit.**
 
@@ -1601,8 +1634,8 @@ git commit -m "feat(mobile): pixel weather art and WeatherIcon"
   `https://claude.ai/artifact/9v7waTGZ6abQfJQak2injD` with the Artifact tool (`url` plus `root` set to the canvas
   folder).
 - [ ] **Step 2:** Ask the owner to approve it. Edits come back as rect changes to `weatherArt.ts`, made in a fix commit
-  by the Task 4 implementer. Record `Ruling: weather art approved — <date>` in the ledger. Tasks 5 and 6 may run
-  meanwhile, but **Task 6 is not marked complete before this gate.**
+  by the Task 4 implementer. Record `Ruling: weather art approved — <date>` in the ledger. Tasks 5–10 do **not**
+  wait for this gate; **the Task 11 draft PR does.**
 
 ---
 
@@ -1736,14 +1769,14 @@ git commit -m "refactor(mobile): extract AskCoachBar; add openNight helper"
        is "A warm front in your HRV is lifting you today. Sleep-debt fog lingers; an early night clears it.";
      - the hero accessibility label is "Recovery 68, Good, mostly clear. · +6 vs yesterday · High confidence". The
        spec's spoken form is approximate; assert whatever `RECOVERY_COPY.heroA11y` produces;
-     - the header subtitle matches `/Wed 8 Oct · updated/`;
+     - the header subtitle matches `/Thu 8 Oct · updated/`;
      - Back calls `goBack`;
      - the info button opens the sheet, which shows "weighted 45 / 35 / 20" and the four band lines;
      - BUILDING (state, score.score null, coldStart HRV 9/14) shows "Day 9 of 14" and "Learning your weather", with the
        building summary;
      - NO_DATA today shows "No reading" and "Waiting for last night's data", and there is no `recovery-summary`;
      - LOW confidence: the line ends "Low confidence", and the summary has the rough-read sentence;
-     - past day (`isToday: false`, route param date): the header shows "Thu 2 Oct" with no "updated", and the summary
+     - past day (`isToday: false`, route param date): the header shows "Fri 2 Oct" with no "updated", and the summary
        is in the past tense;
      - the Ask bar label is "Ask Mochi about today" (or the mocked character's name) and becomes "…about this day" on
        a past day. A press navigates to `Tabs` → Coach with `prefill` "Why is my recovery where it is today?";
@@ -2283,5 +2316,5 @@ git commit -m "feat(mobile): Home, Activity and coach open the Recovery page; Sc
   Repeat in light mode, and at the largest text size, checking the pixel title and that calendar cells do not wrap.
   Also do the PR #58 quick check (handoff §8): pixel titles at large text, the Chats notes row, Coach Today bars, and
   the Campfire unchanged.
-- [ ] **Step 5:** Open a draft PR from `feature/recovery-page` with no attribution footer, linking the spec and the
-  plan. Merge only when the owner says "merge".
+- [ ] **Step 5:** Confirm that the ledger records the Task 4b art approval; if not, stop and ask the owner. Then open
+  a draft PR from `feature/recovery-page` with no attribution footer, linking the spec and the plan. Merge only when the owner says "merge".
