@@ -57,7 +57,7 @@ const EXEMPT: Exception[] = [
   // The primitives that turn tokens into styles.
   { file: 'components/ui/text.tsx', count: 3, reason: 'the Text primitive sets fontFamily from the class list (and reads font-display until Task 11)' },
   { file: 'components/ui/input-style.ts', count: 4, reason: 'the shared input styles: Geist at the body size (spec §3)' },
-  { file: 'navigation/headerStyle.ts', count: 4, reason: 'native headers sit outside NativeWind: Silkscreen 15 (spec §3); the style and its return type' },
+  { file: 'navigation/headerStyle.tsx', count: 4, reason: 'native headers sit outside NativeWind: Silkscreen 15 (spec §3); the style and its return type, which HeaderTitle draws with' },
 ];
 
 // prettier-ignore
