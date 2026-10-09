@@ -34,8 +34,9 @@ export function LeverPanel({ levers, values, onChange, onReset }: LeverPanelProp
           const tone = muted ? 'text-muted-foreground' : 'text-foreground';
           return (
             <View key={lever.key} className="gap-1.5">
-              <View className="flex-row items-center justify-between">
-                <Text className={`text-body font-medium ${tone}`}>{lever.label}</Text>
+              {/* The label takes the room and wraps, so a long custom habit name never pushes the value off the card. */}
+              <View className="flex-row items-center justify-between gap-3">
+                <Text className={`flex-1 text-body font-medium ${tone}`}>{lever.label}</Text>
                 <Text className={`text-body font-semibold tabular-nums ${tone}`}>
                   {format(value)}
                 </Text>
