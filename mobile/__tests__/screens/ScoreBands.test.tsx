@@ -26,9 +26,9 @@ jest.mock('../../src/api/scores', () => ({
   fetchScoreDetail: jest.fn(),
 }));
 
-const mockParams: unknown = { date: '2026-09-19', type: 'RECOVERY' };
+const mockParams: unknown = { date: '2026-09-19', type: 'SLEEP' };
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ navigate: jest.fn(), setOptions: jest.fn() }),
+  useNavigation: () => ({ navigate: jest.fn(), setOptions: jest.fn(), replace: jest.fn() }),
   useRoute: () => ({ params: mockParams }),
 }));
 
@@ -98,7 +98,12 @@ describe('Dashboard score bands', () => {
 });
 
 describe('ScoreDetail score bands', () => {
-  const detail = (bands?: ScoreDetailDTO['bands']): ScoreDetailDTO => ({ score: recovery as never, baselines: [], previous: null, bands });
+  const sleep = {
+    ...recovery,
+    type: 'SLEEP',
+    factors: [{ factor: 'SLEEP_EFFICIENCY', label: 'Sleep efficiency', z: 1.2, weight: 0.35, contribution: 0.42, points: 8.2, imputed: false, excluded: false }],
+  };
+  const detail = (bands?: ScoreDetailDTO['bands']): ScoreDetailDTO => ({ score: sleep as never, baselines: [], previous: null, bands });
 
   it('picks a different band when the server sends different thresholds', async () => {
     (fetchScoreDetail as jest.Mock).mockResolvedValue(detail(SERVER_BANDS));

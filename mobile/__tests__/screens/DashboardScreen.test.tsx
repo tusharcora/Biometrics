@@ -399,15 +399,19 @@ describe('DashboardScreen', () => {
       expect(apiFetch).toHaveBeenCalledWith('/me/scores?days=7');
     });
 
-    it('opens the score detail screen for that day when pressed', async () => {
+    it('opens the Recovery page for that day when pressed', async () => {
       mockApi({ records: steps, scores: [recovery] });
 
       const { getByTestId } = render(<DashboardScreen />);
 
       await waitFor(() => expect(getByTestId('recovery-score-card')).toBeTruthy());
-      fireEvent.press(getByTestId('recovery-score-card'));
+      const card = getByTestId('recovery-score-card');
+      expect(card.props.accessibilityHint).toBe('Opens your Recovery page');
+      expect(within(card).getByText('Open Recovery')).toBeTruthy();
+      fireEvent.press(card);
 
-      expect(mockNavigate).toHaveBeenCalledWith('ScoreDetail', { date: '2026-09-19', type: 'RECOVERY' });
+      expect(mockNavigate).toHaveBeenCalledWith('Recovery', { date: '2026-09-19' });
+      expect(mockNavigate).not.toHaveBeenCalledWith('ScoreDetail', expect.anything());
     });
 
     it('shows the baseline progress ring instead of a score when the score is null', async () => {

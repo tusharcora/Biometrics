@@ -50,20 +50,21 @@ describe('followUpsFor', () => {
 });
 
 describe('cardDestination', () => {
-  it('opens the score detail for recovery and sleep, on the given day', () => {
-    expect(cardDestination(card('recovery.today'), '2026-09-30')).toEqual({ name: 'ScoreDetail', params: { date: '2026-09-30', type: 'RECOVERY' } });
+  it('opens the Recovery page for recovery and the score detail for sleep, on the given day', () => {
+    expect(cardDestination(card('recovery.today'), '2026-09-30')).toEqual({ name: 'Recovery', params: { date: '2026-09-30' } });
     expect(cardDestination(card('sleep.total'), '2026-09-30')).toEqual({ name: 'ScoreDetail', params: { date: '2026-09-30', type: 'SLEEP' } });
     expect(cardDestination(card('sleep_score.today'), '2026-09-30')).toEqual({ name: 'ScoreDetail', params: { date: '2026-09-30', type: 'SLEEP' } });
   });
 
   it('opens the score a driver belongs to', () => {
-    expect(cardDestination(card('factor.sleep_debt'), '2026-09-30')).toEqual({ name: 'ScoreDetail', params: { date: '2026-09-30', type: 'RECOVERY' } });
+    expect(cardDestination(card('factor.sleep_debt'), '2026-09-30')).toEqual({ name: 'Recovery', params: { date: '2026-09-30' } });
     expect(cardDestination(card('factor.circadian_consistency'), '2026-09-30')).toEqual({ name: 'ScoreDetail', params: { date: '2026-09-30', type: 'SLEEP' } });
     expect(cardDestination(card('factor.mystery'), '2026-09-30')).toEqual({ name: 'Trends', params: undefined });
   });
 
-  it('opens Trends instead of a score detail when there is no date', () => {
-    expect(cardDestination(card('recovery.today'), '')).toEqual({ name: 'Trends', params: undefined });
+  // The Recovery page opens on today without a date; a score detail needs a day.
+  it('opens Recovery on today, and Trends instead of a score detail, when there is no date', () => {
+    expect(cardDestination(card('recovery.today'), '')).toEqual({ name: 'Recovery', params: undefined });
     expect(cardDestination(card('sleep.total'), '')).toEqual({ name: 'Trends', params: undefined });
     expect(cardDestination(card('habit.walk'), '')).toEqual({ name: 'Patterns', params: undefined });
   });

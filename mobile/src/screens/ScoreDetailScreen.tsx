@@ -60,12 +60,19 @@ export function ScoreDetailScreen() {
   const { status: coachStatus } = useCoachStatus(navigation);
   const coachRoute = coachEntryRoute(coachStatus);
   const focused = useScreenFocused();
+  // RECOVERY has its own page; this screen serves SLEEP only.
+  const redirecting = type !== 'SLEEP';
+
+  useEffect(() => {
+    if (type !== 'SLEEP') navigation.replace('Recovery', { date });
+  }, [navigation, type, date]);
 
   React.useLayoutEffect(() => {
     navigation.setOptions({ title: scoreTypeLabel(type) });
   }, [navigation, type]);
 
   useEffect(() => {
+    if (type !== 'SLEEP') return;
     let cancelled = false;
     setState({ status: 'loading' });
     (async () => {
@@ -85,6 +92,8 @@ export function ScoreDetailScreen() {
   const detail = state.status === 'ready' ? state.detail : null;
   const factors = useMemo(() => (detail ? sortFactorsByImpact(detail.score.factors) : []), [detail]);
   const scale = useMemo(() => factorBarScale(factors), [factors]);
+
+  if (redirecting) return null;
 
   if (state.status === 'loading') {
     return (

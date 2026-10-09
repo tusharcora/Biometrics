@@ -3,6 +3,7 @@ import { View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from 'nativewind';
 import type { DailyScoreDTO, ScoreBandsDTO } from '../../api/scores';
+import { RECOVERY_COPY } from '../../lib/recoveryCopy';
 import { buildScoreVerdict, pickColdStartProgress, scoreBand } from '../../lib/scoreInsights';
 import { COLORS } from '../../theme';
 import { BaselineProgressRing } from '../ui/baseline-progress-ring';
@@ -66,7 +67,7 @@ export function RecoveryHero({
     <PressableScale
       testID="recovery-score-card"
       accessibilityRole="button"
-      accessibilityHint="Shows what moved your Recovery Score"
+      accessibilityHint="Opens your Recovery page"
       onPress={() => onPress(score)}
       className="items-center gap-4 pt-2"
     >
@@ -98,7 +99,7 @@ export function RecoveryHero({
           <View className="flex-row items-center gap-2">
             <ConfidenceBadge level={score.confidenceLevel} />
             <View className="flex-row items-center gap-0.5">
-              <Text className="text-caption font-medium text-muted-foreground">What moved it</Text>
+              <Text className="text-caption font-medium text-muted-foreground">{RECOVERY_COPY.openFromHome}</Text>
               <Ionicons name="chevron-forward" size={12} color={colors.muted} />
             </View>
           </View>

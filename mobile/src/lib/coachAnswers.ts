@@ -58,6 +58,7 @@ export function followUpsFor(card: AnswerCardDTO | undefined, previousQuestion?:
 
 export type CardDestination =
   | { name: 'ScoreDetail'; params: { date: string; type: ScoreType } }
+  | { name: 'Recovery'; params: { date?: string } | undefined }
   | { name: 'Patterns'; params: undefined }
   | { name: 'Trends'; params: undefined };
 
@@ -67,10 +68,11 @@ const TRENDS_SCREEN: CardDestination = { name: 'Trends', params: undefined };
 // resting HR have no stack screen that loads itself (MetricDetail needs the
 // series passed in), so they open the Trends screen. A score detail needs a
 // day; without one (the today summary failed to load) it is the Trends screen.
+// The Recovery page opens on today without a day.
 export function cardDestination(card: AnswerCardDTO, date: string): CardDestination {
   switch (firstArea(card)) {
     case 'recovery':
-      return date ? { name: 'ScoreDetail', params: { date, type: 'RECOVERY' } } : TRENDS_SCREEN;
+      return { name: 'Recovery', params: date ? { date } : undefined };
     case 'sleep':
       return date ? { name: 'ScoreDetail', params: { date, type: 'SLEEP' } } : TRENDS_SCREEN;
     case 'habit':

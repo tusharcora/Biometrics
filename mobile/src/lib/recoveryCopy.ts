@@ -148,6 +148,7 @@ export function initialChip(goalMinutes: number | undefined): 6 | 7 | 8 | 9 {
 
 export const RECOVERY_COPY = {
   title: 'Recovery',
+  openFromHome: 'Open Recovery',
   back: 'Back',
   info: 'How the score works',
   infoTitle: 'How the score works',

@@ -24,8 +24,8 @@ export function UsualTiles({ records, recovery, today }: { records: MetricRecord
 
   const open = (tile: UsualTile) => {
     if (tile.type === 'RECOVERY') {
-      // Without a score there is no day to open.
-      if (tile.latestDate) navigation.navigate('ScoreDetail', { date: tile.latestDate, type: 'RECOVERY' });
+      // Without a score the Recovery page opens on today.
+      navigation.navigate('Recovery', tile.latestDate ? { date: tile.latestDate } : undefined);
       return;
     }
     navigation.navigate('MetricDetail', { metricType: tile.type, records: tile.series as MetricRecord[], range: '30d' });
