@@ -67,7 +67,7 @@ export function RecoveryCalendar({ page, viewMonth, load, onPage, onRetry, onOpe
       </View>
     );
     const body = future ? (
-      <View accessible={false}>{box}</View>
+      <View accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">{box}</View>
     ) : (
       <PressableScale
         testID={`recovery-cal-${cell.date}`}

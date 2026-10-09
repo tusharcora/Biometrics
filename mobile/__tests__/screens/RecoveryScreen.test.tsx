@@ -491,7 +491,9 @@ describe('RecoveryScreen: month calendar', () => {
     const cal = await screen.findByTestId('recovery-calendar');
 
     expect(within(cal).queryByTestId('recovery-cal-2026-10-20')).toBeNull();
-    expect(within(cal).getByText('20')).toBeTruthy();
+    // Hidden from screen readers: found only when hidden elements are included.
+    expect(within(cal).queryByText('20')).toBeNull();
+    expect(within(cal).getByText('20', HIDDEN_OK)).toBeTruthy();
     expect(screen.getByTestId('recovery-cal-2026-10-08')).toBeTruthy();
   });
 
