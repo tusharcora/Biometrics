@@ -9,13 +9,15 @@ import { openingTag, sourceFiles } from '../../jest-mocks/sourceScan';
 // ui/text, and every TextInput takes the shared input style. This guard reads
 // every file under src as text, comments included (so name a token in a
 // comment, never a banned class), and fails on:
-//   - an arbitrary size: text-[13px]
+//   - an arbitrary size: text-[13px], text-[.8rem], text-[length:13px] (an
+//     arbitrary colour, text-[#…], text-[rgb(…)] or text-[var(…)], is fine)
 //   - a stock size: text-xs, sm, base, lg, xl, 2xl … 9xl (NativeWind's rem is
 //     14, so these draw 12.5% small, and they are not the scale)
 //   - an old token: text-eyebrow, text-numeral*, text-display-sm, text-display-lg
 //   - the serif: font-display
-//   - an inline fontFamily: or fontSize:
-//   - a <TextInput> whose own tag does not use inputTextStyle or inputNumberStyle
+//   - an inline fontFamily: or fontSize:, quoted keys included
+//   - a <TextInput> or <Animated.TextInput> whose own tag does not use
+//     inputTextStyle or inputNumberStyle
 //
 // EXEMPT lists the files that keep some of these for good, with how many and
 // why. PENDING lists the files the migration has not reached yet; each
@@ -27,14 +29,14 @@ const SRC = path.join(__dirname, '../../src');
 type Rule = { id: string; pattern: RegExp; fix: string };
 
 const RULES: Rule[] = [
-  { id: 'arbitrary size', pattern: /(?<![\w-])text-\[\d[^\]]*\]/g, fix: 'use a type token (text-body, text-caption, …)' },
+  { id: 'arbitrary size', pattern: /(?<![\w-])text-\[(?!#|rgba?\(|var\()[^\]]*\]/g, fix: 'use a type token (text-body, text-caption, …)' },
   { id: 'stock size', pattern: /(?<![\w-])text-(?:xs|sm|base|lg|xl|[2-9]xl)(?![\w-])/g, fix: 'use a type token (text-body, text-caption, …)' },
   { id: 'old token', pattern: /(?<![\w-])text-(?:eyebrow|numeral(?:-sm|-lg|-xl)?|display-(?:sm|lg))(?![\w-])/g, fix: 'see the migration map (spec §4)' },
   { id: 'serif', pattern: /(?<![\w-])font-display(?![\w-])/g, fix: 'the serif is gone: PageTitle, text-heading or text-display' },
-  { id: 'inline font', pattern: /\bfont(?:Family|Size)\s*:/g, fix: 'use a type token on a ui/text Text' },
+  { id: 'inline font', pattern: /(?<!\w)['"]?font(?:Family|Size)['"]?\s*:/g, fix: 'use a type token on a ui/text Text' },
 ];
-// A JSX TextInput tag, not a type argument such as useRef<TextInput>.
-const INPUT_START = /(?<![\w.])<TextInput(?=[\s/>])/g;
+// A JSX TextInput tag (Animated's too), not a type argument such as useRef<TextInput>.
+const INPUT_START = /(?<![\w.])<(?:Animated\.)?TextInput(?=[\s/>])/g;
 const INPUT_STYLE = /\binput(?:Text|Number)Style\b/;
 
 type Hit = { file: string; line: number; rule: string; text: string };
@@ -170,6 +172,15 @@ describe('typography convention', () => {
     for (const cls of fine) expect(findViolations('x.tsx', `<Text className="${cls}">x</Text>`)).toEqual([]);
   });
 
+  it('catches an arbitrary size that does not start with a digit, but not an arbitrary colour', () => {
+    for (const cls of ['text-[.8rem]', 'text-[length:13px]', 'text-[calc(1rem+2px)]', 'md:text-[.9em]']) {
+      expect(findViolations('x.tsx', `<Text className="${cls}">x</Text>`).map((h) => h.rule)).toEqual(['arbitrary size']);
+    }
+    for (const cls of ['text-[#A5B4FC]', 'text-[rgb(1,2,3)]', 'text-[rgba(1,2,3,0.5)]', 'text-[var(--muted)]']) {
+      expect(findViolations('x.tsx', `<Text className="${cls}">x</Text>`)).toEqual([]);
+    }
+  });
+
   it('catches the old tokens and the serif', () => {
     for (const cls of ['text-eyebrow', 'text-numeral', 'text-numeral-sm', 'text-numeral-lg', 'text-numeral-xl', 'text-display-sm', 'text-display-lg', 'font-display']) {
       expect(findViolations('x.tsx', `<Text className="${cls}">x</Text>`)).toHaveLength(1);
@@ -182,12 +193,25 @@ describe('typography convention', () => {
     expect(findViolations('x.tsx', "<Text style={{ fontWeight: '600', fontVariant: ['tabular-nums'], letterSpacing: 1 }}>x</Text>")).toEqual([]);
   });
 
+  it('catches a quoted fontSize or fontFamily key, once each', () => {
+    expect(findViolations('x.tsx', "const s = { 'fontSize': 12 };").map((h) => h.rule)).toEqual(['inline font']);
+    expect(findViolations('x.tsx', 'const s = { "fontSize": 12 };').map((h) => h.rule)).toEqual(['inline font']);
+    expect(findViolations('x.tsx', "const s = { 'fontFamily': FONTS.sans };").map((h) => h.rule)).toEqual(['inline font']);
+    expect(findViolations('x.tsx', 'const s = { "fontFamily": "Menlo", fontSize: 9 };').map((h) => h.rule)).toEqual(['inline font', 'inline font']);
+  });
+
   it('catches a TextInput without the shared input style, and only a JSX tag', () => {
     expect(findViolations('x.tsx', '<TextInput value={v} className="flex-1" />').map((h) => h.rule)).toEqual(['input']);
     expect(findViolations('x.tsx', '<TextInput /* inputTextStyle */ value={v} />').map((h) => h.rule)).toEqual(['input']);
     expect(findViolations('x.tsx', '<TextInput value={v} style={[inputTextStyle, { height: 40 }]} />')).toEqual([]);
     expect(findViolations('x.tsx', '<TextInput\n  value={v}\n  style={inputNumberStyle}\n/>')).toEqual([]);
     expect(findViolations('x.tsx', 'const input = useRef<TextInput>(null); type P = React.RefObject<TextInput | null>;')).toEqual([]);
+  });
+
+  it('catches an Animated.TextInput without the shared input style', () => {
+    expect(findViolations('x.tsx', '<Animated.TextInput value={v} style={animatedStyle} />').map((h) => h.rule)).toEqual(['input']);
+    expect(findViolations('x.tsx', '<Animated.TextInput value={v} style={[inputTextStyle, animatedStyle]} />')).toEqual([]);
+    expect(findViolations('x.tsx', 'const r = useRef<Animated.TextInput>(null);')).toEqual([]);
   });
 
   it('flags a stale entry', () => {
