@@ -8,13 +8,11 @@ import { FONTS } from '../../theme';
 // resolved to a family here instead, in this order:
 //   1. the pixel tokens (text-page-title, text-label) and font-pixel: Silkscreen,
 //      which has one weight, so a weight class beside them is ignored;
-//   2. the serif opt-in, font-display, until its last call site moves;
-//   3. a weight class, strongest first, so "font-bold" beats a stray "font-medium";
-//   4. the token's own weight (spec §2: display 700; score, number, heading,
+//   2. a weight class, strongest first, so "font-bold" beats a stray "font-medium";
+//   3. the token's own weight (spec §2: display 700; score, number, heading,
 //      headline 600; fine 500);
-//   5. Geist Regular.
+//   4. Geist Regular.
 const PIXEL = /(^|\s)(font-pixel|text-page-title|text-label)(\s|$)/;
-const SERIF = /(^|\s)font-display(\s|$)/;
 const WEIGHT_FAMILIES: Array<[RegExp, string]> = [
   [/(^|\s)font-(extrabold|black)(\s|$)/, FONTS.sansExtrabold],
   [/(^|\s)font-bold(\s|$)/, FONTS.sansBold],
@@ -33,7 +31,6 @@ const TABULAR = /(^|\s)(text-score|text-number|tabular-nums)(\s|$)/;
 export function fontFamilyFor(className?: string): string {
   if (!className) return FONTS.sans;
   if (PIXEL.test(className)) return FONTS.pixel;
-  if (SERIF.test(className)) return FONTS.display;
   for (const [pattern, family] of WEIGHT_FAMILIES) {
     if (pattern.test(className)) return family;
   }

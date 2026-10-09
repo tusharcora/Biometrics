@@ -57,7 +57,7 @@ const EXEMPT: Exception[] = [
   { file: 'lib/recapShare.ts', count: 2, reason: "the share cards' quote fitting: fontSize is a number it computes, not a style" },
   // SVG <Text> sized in chart units would be exempt too (spec §5); there is none today: the charts draw their labels with ui/text.
   // The primitives that turn tokens into styles.
-  { file: 'components/ui/text.tsx', count: 3, reason: 'the Text primitive sets fontFamily from the class list (and reads font-display until Task 11)' },
+  { file: 'components/ui/text.tsx', count: 1, reason: 'the Text primitive sets fontFamily from the class list' },
   { file: 'components/ui/input-style.ts', count: 4, reason: 'the shared input styles: Geist at the body size (spec §3)' },
   { file: 'navigation/headerStyle.tsx', count: 4, reason: 'native headers sit outside NativeWind: Silkscreen 15 (spec §3); the style and its return type, which HeaderTitle draws with' },
   { file: 'screens/SignInScreen.tsx', count: 1, reason: 'the app name in the page-title face at 28, a one-off size (spec §4)' },
@@ -110,6 +110,29 @@ function scan(): Hit[] {
 const entriesFor = (file: string) => ALLOWED.filter((a) => a.file === file);
 
 describe('typography convention', () => {
+  it('has nothing left to migrate: only the permanent exemptions remain', () => {
+    expect(PENDING).toEqual([]);
+    expect(EXEMPT.map((a) => a.file).sort()).toEqual(
+      [
+        'components/achievements/BadgeShareCard.tsx',
+        'components/achievements/CelebrationModal.tsx',
+        'components/recap/RecapCardView.tsx',
+        'components/recap/RecapShelf.tsx',
+        'components/recap/WeeklyStoryView.tsx',
+        'components/recap/YearPixelsView.tsx',
+        'components/social/CampBanner.tsx',
+        'components/social/CampNoteCard.tsx',
+        'components/social/CampScene.tsx',
+        'components/ui/input-style.ts',
+        'components/ui/text.tsx',
+        'lib/recapShare.ts',
+        'navigation/headerStyle.tsx',
+        'screens/CampfireScreen.tsx',
+        'screens/SignInScreen.tsx',
+      ].sort(),
+    );
+  });
+
   it('uses the type scale everywhere outside the listed files', () => {
     expect(violations(scan(), ALLOWED)).toEqual([]);
   });

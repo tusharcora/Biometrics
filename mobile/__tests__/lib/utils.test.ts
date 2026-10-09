@@ -19,14 +19,6 @@ describe('cn', () => {
     expect(cn('font-pixel', 'font-bold')).toBe('font-pixel font-bold');
   });
 
-  it('lets a later custom font size replace an earlier one', () => {
-    expect(cn('text-2xl', 'text-numeral-xl')).toBe('text-numeral-xl');
-  });
-
-  it('treats font-display as a family, so it survives a weight class', () => {
-    expect(cn('font-display', 'font-bold')).toBe('font-display font-bold');
-  });
-
   it('merges the custom radii with stock ones', () => {
     expect(cn('rounded-xl', 'rounded-card')).toBe('rounded-card');
   });

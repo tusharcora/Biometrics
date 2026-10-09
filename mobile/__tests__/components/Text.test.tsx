@@ -37,10 +37,10 @@ describe('fontFamilyFor', () => {
     expect(fontFamilyFor('text-score-excellent')).toBe(FONTS.sans);
   });
 
-  it('keeps the plain, weight and serif behaviour', () => {
+  it('keeps the plain and weight behaviour, and has no serif', () => {
     expect(fontFamilyFor(undefined)).toBe(FONTS.sans);
     expect(fontFamilyFor('font-bold font-medium')).toBe(FONTS.sansBold);
-    expect(fontFamilyFor('font-display text-display-lg')).toBe(FONTS.display);
+    expect(fontFamilyFor('font-display')).toBe(FONTS.sans);
   });
 });
 

@@ -1,6 +1,6 @@
 import * as fs from 'fs';
 import * as path from 'path';
-import { COLORS, FONTS, METRIC_CONFIG, METRIC_ORDER, MOTION, type MetricType } from '../../src/theme';
+import { COLORS, FONTS, METRIC_CONFIG, METRIC_ORDER, MOTION, TYPE_TOKENS, type MetricType } from '../../src/theme';
 
 const SCORE_KEYS = ['scoreExcellent', 'scoreGood', 'scoreFair', 'scorePoor'] as const;
 const CSS_NAMES: Record<(typeof SCORE_KEYS)[number], string> = {
@@ -231,10 +231,14 @@ describe('metric colours', () => {
 describe('type tokens', () => {
   const tailwind = require('../../tailwind.config.js');
 
-  it('registers the sans, pixel and display families under the names App.tsx loads', () => {
+  it('registers the sans and pixel families, and no serif', () => {
     expect(tailwind.theme.extend.fontFamily.sans).toEqual([FONTS.sans]);
     expect(tailwind.theme.extend.fontFamily.pixel).toEqual([FONTS.pixel]);
-    expect(tailwind.theme.extend.fontFamily.display).toEqual([FONTS.display]);
+    expect(Object.keys(tailwind.theme.extend.fontFamily)).toEqual(['sans', 'pixel']);
+  });
+
+  it('has exactly the type scale as font sizes: no old keys left', () => {
+    expect(Object.keys(tailwind.theme.extend.fontSize)).toEqual([...TYPE_TOKENS]);
   });
 
   it('loads every family in FONTS in the one awaited useFonts call in App.tsx', () => {

@@ -9,8 +9,8 @@ import { TYPE_TOKENS } from '../theme';
 const twMerge = extendTailwindMerge({
   extend: {
     classGroups: {
-      'font-size': [{ text: [...TYPE_TOKENS, 'eyebrow', 'numeral-sm', 'numeral', 'numeral-lg', 'numeral-xl', 'display-sm', 'display-lg'] }],
-      'font-family': [{ font: ['sans', 'pixel', 'display'] }],
+      'font-size': [{ text: [...TYPE_TOKENS] }],
+      'font-family': [{ font: ['sans', 'pixel'] }],
       rounded: [{ rounded: ['tile', 'card'] }],
     },
   },

@@ -68,8 +68,6 @@ module.exports = {
       fontFamily: {
         sans: ['Geist_400Regular'],
         pixel: ['Silkscreen'],
-        // The serif, until its last call site moves (type-system plan, Task 11).
-        display: ['InstrumentSerif_400Regular'],
       },
       // The type scale (docs/superpowers/specs/2026-10-08-type-system-design.md §2).
       // Every size is px: NativeWind's native rem is 14, so a rem class would
@@ -85,14 +83,6 @@ module.exports = {
         fine: ['11px', { lineHeight: '14px' }],
         'page-title': ['20px', { lineHeight: '26px', letterSpacing: '1px' }],
         label: ['11px', { lineHeight: '14px', letterSpacing: '1px' }],
-        // The old keys, until their last call site moves (type-system plan, Task 11).
-        eyebrow: ['11px', { lineHeight: '14px', letterSpacing: '1.4px' }],
-        'numeral-sm': ['22px', { lineHeight: '26px', letterSpacing: '-0.5px' }],
-        numeral: ['30px', { lineHeight: '34px', letterSpacing: '-1px' }],
-        'numeral-lg': ['48px', { lineHeight: '52px', letterSpacing: '-1.8px' }],
-        'numeral-xl': ['80px', { lineHeight: '84px', letterSpacing: '-3px' }],
-        'display-sm': ['22px', { lineHeight: '28px' }],
-        'display-lg': ['38px', { lineHeight: '42px' }],
       },
       borderRadius: {
         tile: '18px',

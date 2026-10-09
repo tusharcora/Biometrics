@@ -6,7 +6,6 @@ import { Geist_500Medium } from '@expo-google-fonts/geist/500Medium';
 import { Geist_600SemiBold } from '@expo-google-fonts/geist/600SemiBold';
 import { Geist_700Bold } from '@expo-google-fonts/geist/700Bold';
 import { Geist_800ExtraBold } from '@expo-google-fonts/geist/800ExtraBold';
-import { InstrumentSerif_400Regular } from '@expo-google-fonts/instrument-serif/400Regular';
 import { AuthProvider } from './src/auth/AuthContext';
 import { CharacterProvider } from './src/characters/CharacterProvider';
 import { RootNavigator } from './src/navigation/RootNavigator';
@@ -35,7 +34,6 @@ export default function App() {
     Geist_600SemiBold,
     Geist_700Bold,
     Geist_800ExtraBold,
-    InstrumentSerif_400Regular,
     Silkscreen: require('./assets/fonts/Silkscreen-Regular.ttf'),
   });
   if (!fontsLoaded && !fontError) return null;

@@ -206,8 +206,6 @@ export const FONTS = {
   sansBold: 'Geist_700Bold',
   sansExtrabold: 'Geist_800ExtraBold',
   pixel: 'Silkscreen',
-  // The serif, until its last call site moves (type-system plan, Task 11).
-  display: 'InstrumentSerif_400Regular',
 } as const;
 
 // The type tokens: the fontSize keys in tailwind.config.js (text-score …
