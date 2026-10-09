@@ -104,7 +104,7 @@ it('a long @handle in the pixel header truncates with an ellipsis between the bu
     expect(title).toHaveTextContent(`@${long.toUpperCase()}`);
     // One line that gives way (flex-1 between the two 40-px buttons) and ends in "…", not a hard cut.
     expect(title.props.numberOfLines).toBe(1);
-    expect(title.props.ellipsizeMode ?? 'tail').toBe('tail');
+    expect(title.props.ellipsizeMode).toBe('tail');
     expect(String(title.props.className).split(' ')).toEqual(expect.arrayContaining(['flex-1', 'font-pixel', 'text-page-title']));
     expect(screen.getByRole('header', { name: `@${long}` })).toBeTruthy();
   } finally {

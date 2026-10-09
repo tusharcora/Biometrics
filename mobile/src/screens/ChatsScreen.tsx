@@ -153,7 +153,7 @@ export function ChatsScreen() {
       <Button testID="chats-back" variant="outline" size="icon-lg" accessibilityLabel="Back to Social" onPress={() => navigation.goBack()}>
         <Ionicons name="chevron-back" size={buttonIconSize('icon-lg')} color={colors.foreground} />
       </Button>
-      <PageTitle testID="chats-handle" numberOfLines={1} className="flex-1 text-center">{home ? `@${home.me.person.handle}` : 'Chats'}</PageTitle>
+      <PageTitle testID="chats-handle" numberOfLines={1} ellipsizeMode="tail" className="flex-1 text-center">{home ? `@${home.me.person.handle}` : 'Chats'}</PageTitle>
       {ready ? (
         <Button testID="chats-new" variant="outline" size="icon-lg" accessibilityLabel="New message" onPress={() => setPicking(true)}>
           <Ionicons name="create-outline" size={buttonIconSize('icon-lg')} color={colors.foreground} />
