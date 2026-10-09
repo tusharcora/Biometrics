@@ -5,53 +5,79 @@ import { useSync } from '../sync/SyncProvider';
 
 export type MonthLoad = { status: 'loading' | 'error' | 'ready'; data?: RecoveryMonthDTO };
 
+type Loaded = { key: string; page: RecoveryPageDTO };
+
 // Loads the bundle for `date` (undefined = today). Today refetches on focus and after a sync,
 // because scores land after the morning sync. Months are cached by YYYY-MM for calendar paging.
+// As in useSection (components/sleep/Section.tsx): only the latest request lands, the loading
+// state shows only while there is no page for this date, and a failed refresh keeps the page.
 export function useRecoveryPage(date?: string) {
+  const key = date ?? 'today';
   const [state, setState] = useState<'loading' | 'error' | 'ready'>('loading');
-  const [page, setPage] = useState<RecoveryPageDTO | null>(null);
+  const [loaded, setLoaded] = useState<Loaded | null>(null);
   const [errorKind, setErrorKind] = useState<'future' | 'other' | null>(null);
   const [months, setMonths] = useState<Record<string, MonthLoad>>({});
+  const loadedRef = useRef<Loaded | null>(null);
+  const monthsRef = useRef(months);
+  const requestId = useRef(0);
   const inflight = useRef(new Set<string>());
   // The mount effect already loads, so the first focus (the mount itself) is skipped.
   const focusedOnce = useRef(false);
   const { dataVersion } = useSync();
   const isToday = date === undefined;
 
-  const load = useCallback(async (quiet: boolean) => {
-    if (!quiet) setState('loading');
+  const putMonth = useCallback((m: string, v: MonthLoad) => {
+    setMonths((s) => {
+      const next = { ...s, [m]: v };
+      monthsRef.current = next;
+      return next;
+    });
+  }, []);
+
+  const load = useCallback(async () => {
+    const id = ++requestId.current;
+    const hasPage = () => loadedRef.current?.key === key;
+    if (!hasPage()) setState('loading');
     try {
-      const p = await fetchRecoveryPage(date ?? 'today');
-      setPage(p);
-      setMonths((m) => ({ ...m, [p.month.month]: { status: 'ready', data: p.month } }));
+      const p = await fetchRecoveryPage(key);
+      if (id !== requestId.current) return;
+      loadedRef.current = { key, page: p };
+      setLoaded(loadedRef.current);
+      putMonth(p.month.month, { status: 'ready', data: p.month });
       setState('ready');
       setErrorKind(null);
     } catch (e) {
-      if (quiet) return;
+      if (id !== requestId.current || hasPage()) return;
       setErrorKind((e as { status?: number } | null)?.status === 400 ? 'future' : 'other');
       setState('error');
     }
-  }, [date]);
+  }, [key, putMonth]);
 
-  useEffect(() => { void load(false); }, [load, dataVersion]);
+  useEffect(() => {
+    void load();
+    return () => { requestId.current++; };
+  }, [load, dataVersion]);
   useFocusEffect(useCallback(() => {
     if (!focusedOnce.current) { focusedOnce.current = true; return; }
-    if (isToday) void load(true);
+    if (isToday) void load();
   }, [isToday, load]));
 
   const loadMonth = useCallback((m: string) => {
-    if (months[m]?.status === 'ready' || inflight.current.has(m)) return;
+    if (monthsRef.current[m]?.status === 'ready' || inflight.current.has(m)) return;
     inflight.current.add(m);
-    setMonths((s) => ({ ...s, [m]: { status: 'loading' } }));
+    putMonth(m, { status: 'loading' });
     fetchRecoveryMonth(m)
-      .then((r) => setMonths((s) => ({ ...s, [m]: { status: 'ready', data: r.month } })))
-      .catch(() => setMonths((s) => ({ ...s, [m]: { status: 'error' } })))
+      .then((r) => putMonth(m, { status: 'ready', data: r.month }))
+      .catch(() => putMonth(m, { status: 'error' }))
       .finally(() => inflight.current.delete(m));
-  }, [months]);
+  }, [putMonth]);
 
+  // Before the effect runs for a new date, never show the old date's page under it.
+  const page = loaded?.key === key ? loaded.page : null;
   return {
-    state, page, errorKind,
-    reload: () => void load(false),
+    state: state === 'ready' && !page ? 'loading' : state,
+    page, errorKind,
+    reload: () => void load(),
     month: (m: string): MonthLoad => months[m] ?? { status: 'loading' },
     loadMonth,
   };

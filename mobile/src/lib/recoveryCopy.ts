@@ -41,7 +41,7 @@ export function formatMinutes(min: number): string {
   if (h === 0) return `${r}m`;
   return r === 0 ? `${h}h` : `${h}h ${String(r).padStart(2, '0')}m`;
 }
-export const formatGoal = (min: number) => { const h = Math.floor(min / 60); const r = Math.round(min % 60); return r === 0 ? `${h}h` : `${h}h ${r}m`; };
+export const formatGoal = (min: number) => { const m = Math.round(min); const h = Math.floor(m / 60); const r = m % 60; return r === 0 ? `${h}h` : `${h}h ${r}m`; };
 
 export function headerSubtitle(date: string, updatedAt: string | null, isToday: boolean): string {
   const day = formatDayShort(date);
@@ -53,7 +53,9 @@ export function headerSubtitle(date: string, updatedAt: string | null, isToday: 
 const CONFIDENCE: Record<ConfidenceLevel, string> = { HIGH: 'High confidence', MEDIUM: 'Medium confidence', LOW: 'Low confidence' };
 const signed = (n: number) => (n > 0 ? `+${n}` : `−${Math.abs(n)}`);
 
-export function heroLine(p: { score: number; bands: ScoreBandsDTO; date: string; previous: { date: string; score: number } | null; confidence: ConfidenceLevel }): { band: string; rest: string } {
+// `rest` is `delta + ' · ' + confidence`; `delta` and `confidence` are also returned on their own
+// so a component can colour the confidence word without re-deriving or inlining copy.
+export function heroLine(p: { score: number; bands: ScoreBandsDTO; date: string; previous: { date: string; score: number } | null; confidence: ConfidenceLevel }): { band: string; rest: string; delta: string; confidence: string } {
   const band = BAND_WORD[scoreBand(p.score, p.bands)];
   let delta = '';
   if (p.previous) {
@@ -62,7 +64,8 @@ export function heroLine(p: { score: number; bands: ScoreBandsDTO; date: string;
     if (gap === 1) delta = d === 0 ? ' · same as yesterday' : ` · ${signed(d)} vs yesterday`;
     else if (gap > 1 && gap <= 7) delta = d === 0 ? ` · same as ${weekdayShort(p.previous.date)}` : ` · ${signed(d)} vs ${weekdayShort(p.previous.date)}`;
   }
-  return { band, rest: `${delta} · ${CONFIDENCE[p.confidence]}` };
+  const confidence = CONFIDENCE[p.confidence];
+  return { band, rest: `${delta} · ${confidence}`, delta, confidence };
 }
 
 const NEGLIGIBLE_POINTS = 0.5;

@@ -29,6 +29,9 @@ describe('formatting', () => {
     expect(formatGoal(480)).toBe('8h');
     expect(formatGoal(450)).toBe('7h 30m');
   });
+  it('formatGoal rounds before splitting, never "7h 60m"', () => {
+    expect(formatGoal(479.6)).toBe('8h');
+  });
   it('reads civil dates by components, never as UTC instants (1 Oct 2026 is a Thursday)', () => {
     // new Date('2026-10-08') is UTC midnight: west of UTC it is still the 7th (Wed). Never parse that way.
     expect(weekdayShort('2026-10-08')).toBe('Thu');
@@ -45,13 +48,25 @@ describe('formatting', () => {
 describe('heroLine', () => {
   const base = { score: 68, bands: BANDS, date: '2026-10-08', confidence: 'HIGH' as const };
   it('vs yesterday, vs a weekday within 7 days, dropped when older', () => {
-    expect(heroLine({ ...base, previous: { date: '2026-10-07', score: 62 } })).toEqual({ band: 'Good', rest: ' · +6 vs yesterday · High confidence' });
+    expect(heroLine({ ...base, previous: { date: '2026-10-07', score: 62 } })).toEqual({
+      band: 'Good', rest: ' · +6 vs yesterday · High confidence', delta: ' · +6 vs yesterday', confidence: 'High confidence',
+    });
     expect(heroLine({ ...base, previous: { date: '2026-10-05', score: 70 } }).rest).toBe(' · −2 vs Mon · High confidence');
     expect(heroLine({ ...base, previous: { date: '2026-09-20', score: 70 } }).rest).toBe(' · High confidence');
     expect(heroLine({ ...base, previous: null }).rest).toBe(' · High confidence');
   });
   it('zero delta reads same as yesterday; rounds before subtracting', () => {
     expect(heroLine({ ...base, score: 68.4, previous: { date: '2026-10-07', score: 67.6 } }).rest).toBe(' · same as yesterday · High confidence');
+  });
+  it('returns delta and confidence separately; rest is delta + " · " + confidence', () => {
+    const low = heroLine({ ...base, confidence: 'LOW', previous: { date: '2026-10-05', score: 70 } });
+    expect(low.delta).toBe(' · −2 vs Mon');
+    expect(low.confidence).toBe('Low confidence');
+    expect(low.rest).toBe(`${low.delta} · ${low.confidence}`);
+    const none = heroLine({ ...base, confidence: 'MEDIUM', previous: null });
+    expect(none.delta).toBe('');
+    expect(none.confidence).toBe('Medium confidence');
+    expect(none.rest).toBe(' · Medium confidence');
   });
   it('Low band word, never Poor', () => {
     expect(heroLine({ ...base, score: 20, previous: null }).band).toBe('Low');
