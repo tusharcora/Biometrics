@@ -94,22 +94,43 @@ describe('buildMonth / buildOutlook', () => {
 
 describe('tomorrowFrom', () => {
   const cell = (sleepHours: number, exposed: string[], score: number) => ({ sleepHours, exposed, score, band: [score - 4, score + 4] as [number, number], confidence: 'HIGH' as const, contributions: [] });
-  const ready = (series: Array<{ forecast: number; actual: number }>): ForecastResponse => ({
+  type Lever = Extract<ForecastResponse, { status: 'READY' }>['levers'][number];
+  const ready = (
+    series: Array<{ forecast: number; actual: number }>,
+    habits: Record<string, number> = { ALCOHOL: 0 },
+    extra: { levers: Lever[]; exposed: string[] } | null = null,
+  ): ForecastResponse => ({
     status: 'READY',
     date: '2026-10-09',
     algorithmVersion: 'v3',
-    defaults: { sleepHours: 7.5, habits: { ALCOHOL: 0 } },
+    defaults: { sleepHours: 7.5, habits },
     levers: [
       { key: 'SLEEP', label: 'Sleep', unit: 'h', min: 4, max: 10, step: 0.5, effect: 'CONFIRMED' },
       { key: 'ALCOHOL', label: 'Alcohol', unit: 'drinks', min: 0, max: 5, step: 1, threshold: 1, effect: 'CONFIRMED' },
+      ...(extra?.levers ?? []),
     ],
-    grid: [6, 6.5, 7, 7.5, 8, 8.5, 9].flatMap((h) => [cell(h, [], 50 + h), cell(h, ['ALCOHOL'], 40 + h)]),
+    grid: [6, 6.5, 7, 7.5, 8, 8.5, 9].flatMap((h) => [
+      cell(h, [], 50 + h),
+      cell(h, ['ALCOHOL'], 40 + h),
+      ...(extra ? [cell(h, extra.exposed, 30 + h)] : []),
+    ]),
     trackRecord: { withinPoints: 3, hits: 0, days: series.length, series: series.map((s, i) => ({ date: `2026-09-${String(i + 1).padStart(2, '0')}`, ...s })) },
   });
 
   it('takes the 6/7/8/9 h cells at the default habit exposure', () => {
     const t = tomorrowFrom(ready([]));
     expect(t).toMatchObject({ status: 'READY', date: '2026-10-09' });
+    if (t.status !== 'READY') throw new Error();
+    expect(t.chips.map((c) => [c.sleepHours, c.score])).toEqual([[6, 56], [7, 57], [8, 58], [9, 59]]);
+  });
+  it('a confirmed habit at or above its threshold by default picks the exposed cells', () => {
+    const t = tomorrowFrom(ready([], { ALCOHOL: 2 }));
+    if (t.status !== 'READY') throw new Error();
+    expect(t.chips.map((c) => [c.sleepHours, c.score])).toEqual([[6, 46], [7, 47], [8, 48], [9, 49]]);
+  });
+  it('a habit without a confirmed effect never counts toward the exposure', () => {
+    const caffeine: Lever = { key: 'CAFFEINE', label: 'Caffeine', unit: 'cups', min: 0, max: 5, step: 1, threshold: 1, effect: 'NONE_YET' };
+    const t = tomorrowFrom(ready([], { ALCOHOL: 0, CAFFEINE: 3 }, { levers: [caffeine], exposed: ['CAFFEINE'] }));
     if (t.status !== 'READY') throw new Error();
     expect(t.chips.map((c) => [c.sleepHours, c.score])).toEqual([[6, 56], [7, 57], [8, 58], [9, 59]]);
   });

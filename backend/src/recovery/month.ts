@@ -9,6 +9,7 @@ export function buildMonth(rows: RecoveryDayDTO[], month: string, bands: ScoreBa
   const days = rows.filter((r) => r.date.startsWith(`${month}-`)).sort((a, b) => (a.date < b.date ? -1 : 1));
   const scored = days.map((r) => r.score).filter((s): s is number => s !== null);
   const counts = { excellent: 0, good: 0, fair: 0, low: 0 };
+  // Same band ladder as mobile/src/lib/scoreInsights.ts scoreBand; keep the two in step.
   for (const s of scored) {
     if (s >= bands.excellent) counts.excellent++;
     else if (s >= bands.good) counts.good++;
