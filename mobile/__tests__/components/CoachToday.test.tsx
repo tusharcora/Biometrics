@@ -159,11 +159,11 @@ describe('TodayBar', () => {
 
   // Measured in Geist at the type scale's 13px bold value / 13px usual, tabular figures:
   // "10h 48m / 7h 13m" 114.0pt is the widest; "103.4 ms / 98.7" 96.8pt, "103 bpm / 98"
-  // 84.0pt, "100 / 100" 60.9pt; so the column is 116.
-  it('gives every row the same 116pt value column, wide enough for the longest value', () => {
+  // 84.0pt, "100 / 100" 60.9pt; so the column is 120.
+  it('gives every row the same 120pt value column, wide enough for the longest value', () => {
     for (const bar of [recovery, sleep, hrv, rhr]) {
       const { getByTestId, unmount } = render(<TodayBar bar={bar} onPress={() => {}} />);
-      expect(style(getByTestId(`today-bar-text-${bar.metric}`)).width).toBe(116);
+      expect(style(getByTestId(`today-bar-text-${bar.metric}`)).width).toBe(120);
       unmount();
     }
   });
@@ -281,7 +281,7 @@ describe('CoachToday', () => {
     expect(getByTestId('coach-today-loading')).toBeTruthy();
     expect(queryByTestId('coach-today-sentence')).toBeNull();
     // The same value column as a real row, so the tracks keep their length when data arrives.
-    expect(style(getByTestId('today-bar-skeleton-value-0')).width).toBe(116);
+    expect(style(getByTestId('today-bar-skeleton-value-0')).width).toBe(120);
   });
 
   it('keeps showing the last summary while it refreshes', () => {

@@ -21,9 +21,11 @@ const HIT_SLOP = { top: 3, bottom: 3, left: 4, right: 4 };
 // measured with the bundled Geist fonts (13px bold value, 13px usual, both
 // tabular): "10h 48m / 7h 13m" 114.0pt, "103.4 ms / 98.7" 96.8pt,
 // "103 bpm / 98" 84.0pt, "100 / 100" 60.9pt; so every track stays the same
-// length. The loading skeleton (CoachToday) uses the same widths.
+// length. 120 leaves room for an 11h night or a 10h usual (about 7pt more)
+// and for CoreText drawing up to ~1pt wider than that measure. The loading
+// skeleton (CoachToday) uses the same widths.
 export const BAR_LABEL_WIDTH = 58;
-export const BAR_VALUE_WIDTH = 116;
+export const BAR_VALUE_WIDTH = 120;
 
 // Words follow the number, not the status (resting HR above usual is "below").
 function direction(bar: TodayBarDTO): string | null {
