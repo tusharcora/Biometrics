@@ -94,7 +94,7 @@ const ALLOWED: Exception[] = [
   { file: 'screens/SocialStoryScreen.tsx', key: 'social-story-prev', count: 1, reason: 'the left story tap zone' },
   { file: 'screens/SocialStoryScreen.tsx', key: 'social-story-next', count: 1, reason: 'the right story tap zone' },
   // The documented custom exception
-  { file: 'screens/ScoreDetailScreen.tsx', key: 'ask-coach-button', count: 1, reason: 'Ask Coach, a GlassSurface CTA with the character (kept custom by plan)' },
+  { file: 'components/coach/AskCoachBar.tsx', key: 'ask-coach-button', count: 1, reason: 'Ask {coach}, a GlassSurface CTA with the character (the one documented custom CTA)' },
 ];
 
 type Found = { file: string; line: number; tag: string; key: string };
