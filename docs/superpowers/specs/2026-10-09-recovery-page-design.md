@@ -34,7 +34,7 @@ The board predates A4. Where they differ, the implementation uses these tokens. 
 | Verdict "Mostly clear" | Instrument Serif 30 | `text-display` (28) Geist 600. The serif is banned |
 | Hero line "Good · +6 vs yesterday · High confidence" | 14 muted | `text-caption` muted, band word in band colour |
 | Summary paragraph | 14/20 | `text-body` on a `bg-card` tile, `rounded-tile` |
-| Eyebrows ("What moved it", "Last 7 days", …) | 11 caps 600 | `SectionLabel` (pixel 11) |
+| Eyebrows ("Last 7 days", "Sleep and streak", …) | 11 caps 600 | `SectionLabel` (pixel 11) |
 | Factor value "58 ms" | 15 | `text-headline` value, `text-caption` unit |
 | Factor points "+14" | 13 / 600 teal | `text-caption` semibold, tone colour |
 | Range caption "Usual 49–55 ms · warm front" | 12 | `text-fine`, muted |
@@ -134,41 +134,6 @@ backend's "Poor" (`configs/v1.ts:23-24`).
   template has `present` and `past` forms.
 - **States.** Building: "We need {N − n} more days of {metricName} to read your weather. Keep wearing your watch to
   bed." No data: the tile is hidden.
-
-### 3.4 "What moved it" card
-
-- **Content.** `SectionLabel` "What moved it", with "points from 50" (`text-fine`, muted) on the right. There are three
-  rows in fixed order: HRV, Resting HR, Sleep debt (the engine's order, `scoring/dto.ts:87-90`, not sorted by impact,
-  so the card's shape is stable). Each row has:
-  - the label (`FactorDTO.label`, `dto.ts:51-58`), today's value plus unit, and whole points on the right (tone colour:
-    teal `rgb(45,212,191)` for a lift as on the board, the Low colour for a drag, muted for |pts| < 0.5);
-  - a **range bar**, 8 px track. The domain is usual centre ±3σ, which matches the v3 z clamp of ±3
-    (`configs/v3.ts:35`). The shaded band is centre ±1σ (the "usual"). A 14 px dot sits at `position = clamp(z, −3, 3)`.
-    The axis is numeric: low on the left, high on the right, for every factor. The dot is coloured by lift or drag;
-  - a caption, for example `"Usual 49–55 ms · warm front"`, `"Usual 53–57 bpm · lower is better · calm"`,
-    `"Usual 1h 20m–2h 05m · less is better · fog"`.
-- **Whole points.** Points are rounded with largest-remainder so the three integers sum to `round(score) − 50`. This is
-  the pure `wholePoints(factors, score)` in `recoveryCopy.ts`. Excluded factors are 0. The engine guarantees points sum
-  to score − 50 (`scoring/types.ts:92`).
-- **Factor weather words.** These come from the sign of points, with |pts| < 0.5 counting as neutral:
-
-  | Factor | Lift | Neutral | Drag |
-  |---|---|---|---|
-  | HRV | warm front | steady | cold front |
-  | Resting HR | calm | steady | gusty |
-  | Sleep debt | clear air | light haze | fog |
-
-- **Data source** (all new; see §4). There is a raw value per factor (HRV ms and RHR bpm from that day's
-  `BiometricRecord`, debt minutes from `UserDailyFeatures.sleepDebtRolling14d`, `schema.prisma:343`). The usual range
-  is in the factor's unit (`BaselineSnapshot` ewma ± floored spread, `schema.prisma:316-332`). The position is the
-  stored clamped `z`.
-- **States.**
-  - *Imputed* (`FactorDTO.imputed`, `scoring/pipeline.ts:138-142,164`): the value shows "—". The dot sits at the centre,
-    hollow. The caption is "Not recorded · estimated from your usual".
-  - *Excluded* (cold start): there is no bar. The row shows a small `BaselineProgressRing` plus
-    "Still building · {n} of {N} days", reusing the ScoreDetail pattern (`ScoreDetailScreen.tsx:185-196`).
-  - *All excluded / no data*: the card is hidden.
-- **Units.** Debt is shown as `Hh MMm` (`3h 10m`). HRV and RHR are whole numbers. The usual low is floored at 0.
 
 ### 3.5 Last 7 days
 
@@ -305,7 +270,7 @@ Shown **only when D is today**; on past days it is hidden (Q4).
 | Section | Exists today | Missing |
 |---|---|---|
 | Hero | `GET /me/scores/:date` gives score, confidence, `previous`, bands (`scoring/routes.ts:62-98`) | `updatedAt`. Also a 200 for a day with no row (today it is a 404, `routes.ts:77-80`) |
-| What moved it | factor `z`, `points`, `imputed`, `excluded`, `coldStart`; baselines `ewma`/`spread` (`scoring/dto.ts:10-46`) | Raw HRV / RHR values and debt minutes for D. The usual low/high in the factor's unit with the **floored** spread the z used (`scoring/baseline.ts:64`, not exported). The snapshot `spread` is unfloored, so a range built from it could disagree with the dot |
+| ~~What moved it~~ (removed, decision 6; only summary points + debt needed) | factor `z`, `points`, `imputed`, `excluded`, `coldStart`; baselines `ewma`/`spread` (`scoring/dto.ts:10-46`) | Raw HRV / RHR values and debt minutes for D. The usual low/high in the factor's unit with the **floored** spread the z used (`scoring/baseline.ts:64`, not exported). The snapshot `spread` is unfloored, so a range built from it could disagree with the dot |
 | Outlook | `GET /me/scores?days=7&type=RECOVERY` (today only) | Anchoring at an arbitrary D (the window is always "last N days from today", `routes.ts:39-40`) |
 | Sleep debt | `UserDailyFeatures.sleepDebtRolling14d`, not exposed anywhere | Minutes, usual, goal, `nightsToClear` |
 | Last night | `GET /me/sleep/night/:date` (`biometrics/routes.ts:51-63`) | Nothing new; included in the bundle to save a round trip |
@@ -467,7 +432,7 @@ Undefined `date` means today (it fetches `today`).
 
 | Entry point | Today | After |
 |---|---|---|
-| Home hero tap | `ScoreDetail { date, type: 'RECOVERY' }` (`DashboardScreen.tsx:272`) | `Recovery { date }`. The hero's `accessibilityHint` becomes "Opens your Recovery page" (`recovery-hero.tsx:69`) and "What moved it ›" becomes "See conditions ›" (`:101`) |
+| Home hero tap | `ScoreDetail { date, type: 'RECOVERY' }` (`DashboardScreen.tsx:272`) | `Recovery { date }`. The hero's `accessibilityHint` becomes "Opens your Recovery page" (`recovery-hero.tsx:69`) and "What moved it ›" becomes "Open Recovery ›" (`:101`) |
 | Activity › Usual tiles › Recovery | `ScoreDetail { latestDate, RECOVERY }` (`UsualTiles.tsx:28`) | `Recovery { date: latestDate }`, or `Recovery` (today) when there is no latest date, instead of doing nothing |
 | Coach answer card source line, area `recovery` | `ScoreDetail` or Trends (`lib/coachAnswers.ts:60,72-73`) | `{ name: 'Recovery', params: { date } }`, falling back to `Recovery` (today) instead of Trends |
 | Calendar / outlook day tap | — | `navigation.push('Recovery', { date })` (push, so back returns to the previous day) |
@@ -590,3 +555,8 @@ named target for the combined Sleep page work to repoint.
 4. **Past days and the forecast.** On a past day the Tomorrow card is hidden (the spec default, kept).
 5. **Recaps shelf.** Today the shelf is the only entry to Recaps, and it lives on the Sleep page. It moves to Home when
    the Sleep pages merge. That is part of the separate Sleep page work.
+6. **No "What moved it" card.** The owner removed the "What moved it" card from the Recovery page, and from the
+   Sleep page mockup, on 2026-10-09. Section 3.4 is deleted. The per-factor HRV/RHR raw values and usual ranges in
+   §4.1/§4.2 are no longer needed for display. Keep only what the remaining sections use: factor `points`/`imputed`
+   for the one-line summary (§3.3), and debt minutes plus the usual for the sleep-debt tile (§3.6). The plan trims
+   `RecoveryFactorDetailDTO` accordingly. Section numbers after 3.3 are unchanged, so references elsewhere stay valid.
