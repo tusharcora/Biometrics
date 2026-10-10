@@ -1,4 +1,6 @@
+import { DEFAULT_SCORE_BANDS } from '../lib/scoreInsights';
 import { apiFetch } from './client';
+import type { ScoreBandsDTO } from './scores';
 
 export type StageType = 'AWAKE' | 'LIGHT' | 'DEEP' | 'REM';
 
@@ -20,6 +22,11 @@ export interface SleepNight {
   stageMinutes: { deep: number; light: number; rem: number; awake: number } | null;
   // Whether the main session has a DEEP, LIGHT or REM stage (AWAKE alone is not stages).
   hasStages: boolean;
+  // The main session's minutes asleep: the page's one night duration (minutesAsleep stays the day total, naps
+  // included, which scoring reads). fetchSleep always fills it; optional so older fixtures still type-check.
+  mainMinutesAsleep?: number | null;
+  // The main session is a daytime nap (server rule): the date has no night.
+  mainIsNap?: boolean;
 }
 
 export interface SleepActivityDTO {
@@ -28,6 +35,10 @@ export interface SleepActivityDTO {
   earliestDate: string | null;
   // True while older nights still wait for their one-off stage backfill.
   stagesBackfillPending: boolean;
+  // The live score bands for colouring sleepScore; fetchSleep defaults an older server's to DEFAULT_SCORE_BANDS.
+  bands?: ScoreBandsDTO;
+  // The user's local today from the server; null from an older server (the device clock is used then).
+  today?: string | null;
 }
 
 // GET /me/sleep/night/:date -- one night in full (404 when there is none).
@@ -53,8 +64,10 @@ export interface SleepNightDetail {
   // Every other session ending that date.
   naps: { start: string; end: string; minutesAsleep: number }[];
   sleepScore: number | null;
-  // Mean minutes asleep over the 30 nights before; null unless 7 or more have data.
+  // Mean main-session minutes asleep over the 30 nights before; null unless 7 or more have one.
   usualMinutesAsleep: number | null;
+  // The main session is a daytime nap (server rule): the date has no night.
+  mainIsNap?: boolean;
 }
 
 export interface SleepRegularity {
@@ -80,7 +93,8 @@ export interface SleepGoal {
 }
 
 // Nightly sleep for an inclusive civil-date range (the server caps it at 400 days).
-// An older server has no stage fields, so they default to "no stages".
+// An older server has no stage fields, so they default to "no stages"; nor the one-page fields, which default to the
+// day total, no nap, the default bands and no server today.
 export async function fetchSleep(from: string, to: string): Promise<SleepActivityDTO> {
   const res = await apiFetch<SleepActivityDTO>(`/me/sleep?from=${from}&to=${to}`);
   return {
@@ -90,15 +104,25 @@ export async function fetchSleep(from: string, to: string): Promise<SleepActivit
       minutesAwake: n.minutesAwake ?? null,
       stageMinutes: n.stageMinutes ?? null,
       hasStages: n.hasStages === true,
+      // No main session (or an older server): the day total is the only figure there is.
+      mainMinutesAsleep: n.mainMinutesAsleep ?? n.minutesAsleep,
+      mainIsNap: n.mainIsNap === true,
     })),
     stagesBackfillPending: res.stagesBackfillPending === true,
+    bands: res.bands ?? DEFAULT_SCORE_BANDS,
+    today: res.today ?? null,
   };
 }
 
-// An older server sends no session offsets, so they default to unknown.
+// An older server sends no session offsets, so they default to unknown, nor the nap flag, which defaults to false.
 export async function fetchSleepNight(date: string): Promise<SleepNightDetail> {
   const res = await apiFetch<SleepNightDetail>(`/me/sleep/night/${encodeURIComponent(date)}`);
-  return { ...res, startUtcOffsetSeconds: res.startUtcOffsetSeconds ?? null, endUtcOffsetSeconds: res.endUtcOffsetSeconds ?? null };
+  return {
+    ...res,
+    startUtcOffsetSeconds: res.startUtcOffsetSeconds ?? null,
+    endUtcOffsetSeconds: res.endUtcOffsetSeconds ?? null,
+    mainIsNap: res.mainIsNap === true,
+  };
 }
 
 export function fetchSleepRegularity(days: 7 | 30): Promise<SleepRegularity> {

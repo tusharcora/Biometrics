@@ -158,3 +158,23 @@ export function compareSleepToAverage(minutes: number, average: number | null): 
   if (Math.abs(diff) < 5) return 'In line with your average for this range.';
   return `${formatDuration(Math.abs(diff)).replace(/^0h /, '')} ${diff > 0 ? 'more' : 'less'} than your average for this range.`;
 }
+
+/** A night's one duration (spec §4.4): the main session's minutes asleep, or the day total from an older server. */
+export function mainMinutes(n: SleepNight): number {
+  return n.mainMinutesAsleep ?? n.minutesAsleep;
+}
+
+/** A date whose main session is a daytime nap has no night (server rule, read from the flag). */
+export function isNapOnly(n: SleepNight): boolean {
+  return n.mainIsNap === true;
+}
+
+/**
+ * Nights by date for the calendars and their stats: minutesAsleep is main sleep and nap-only dates are dropped, so a
+ * night has one number, and one existence, across the app (plan ruling 5).
+ */
+export function mainSleepByDate(nights: Iterable<SleepNight>): SleepByDate {
+  const out = new Map<string, SleepNight>();
+  for (const n of nights) if (!isNapOnly(n)) out.set(n.date, { ...n, minutesAsleep: mainMinutes(n) });
+  return out;
+}

@@ -52,25 +52,30 @@ export function headerSubtitle(date: string, updatedAt: string | null, isToday: 
 
 const CONFIDENCE: Record<ConfidenceLevel, string> = { HIGH: 'High confidence', MEDIUM: 'Medium confidence', LOW: 'Low confidence' };
 const signed = (n: number) => (n > 0 ? `+${n}` : `−${Math.abs(n)}`);
-const weekdayLong = (date: string) => WEEKDAYS_LONG[local(date).getDay()]!;
+/** "Thursday" for screen-reader labels. */
+export const weekdayLong = (date: string) => WEEKDAYS_LONG[local(date).getDay()]!;
 
 // The visible line is `band + lead + confidence` (`rest` is `lead + confidence`); the parts are returned on their
 // own so a component can colour the band and confidence words without re-deriving or inlining copy.
 // `spoken` is the same line for a screen reader (spec §7): "Up 6 from yesterday. High confidence."
-export function heroLine(p: { score: number; bands: ScoreBandsDTO; date: string; previous: { date: string; score: number } | null; confidence: ConfidenceLevel }): { band: string; rest: string; lead: string; delta: string; confidence: string; spoken: string } {
+// `namesYesterday` (default true) reads a one-day gap as "yesterday"; false names its weekday instead (the Sleep page
+// says "yesterday" only when the day shown is today).
+export function heroLine(p: {
+  score: number; bands?: ScoreBandsDTO | null; date: string; previous: { date: string; score: number } | null; confidence: ConfidenceLevel;
+  namesYesterday?: boolean;
+}): { band: string; rest: string; lead: string; delta: string; confidence: string; spoken: string } {
   const band = BAND_WORD[scoreBand(p.score, p.bands)];
   let delta = '';
   let spokenDelta = '';
   if (p.previous) {
     const gap = daysBetween(p.previous.date, p.date);
-    const d = Math.round(p.score) - Math.round(p.previous.score);
-    const said = d === 0 ? 'Same as' : `${d > 0 ? 'Up' : 'Down'} ${Math.abs(d)} from`;
-    if (gap === 1) {
-      delta = d === 0 ? ' · same as yesterday' : ` · ${signed(d)} vs yesterday`;
-      spokenDelta = `${said} yesterday. `;
-    } else if (gap > 1 && gap <= 7) {
-      delta = d === 0 ? ` · same as ${weekdayShort(p.previous.date)}` : ` · ${signed(d)} vs ${weekdayShort(p.previous.date)}`;
-      spokenDelta = `${said} ${weekdayLong(p.previous.date)}. `;
+    if (gap >= 1 && gap <= 7) {
+      const d = Math.round(p.score) - Math.round(p.previous.score);
+      const said = d === 0 ? 'Same as' : `${d > 0 ? 'Up' : 'Down'} ${Math.abs(d)} from`;
+      const yesterday = gap === 1 && p.namesYesterday !== false;
+      const shown = yesterday ? 'yesterday' : weekdayShort(p.previous.date);
+      delta = d === 0 ? ` · same as ${shown}` : ` · ${signed(d)} vs ${shown}`;
+      spokenDelta = `${said} ${yesterday ? 'yesterday' : weekdayLong(p.previous.date)}. `;
     }
   }
   const confidence = CONFIDENCE[p.confidence];
