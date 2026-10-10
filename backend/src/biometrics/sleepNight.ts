@@ -10,7 +10,7 @@ const USUAL_WINDOW_NIGHTS = 30;
 const USUAL_MIN_NIGHTS = 7;
 
 type StageType = 'AWAKE' | 'LIGHT' | 'DEEP' | 'REM';
-type HistorySession = { startTime: Date; endTime: Date; endUtcOffsetSeconds: number | null; minutesAsleep: number };
+type HistorySession = { startTime: Date; endTime: Date; startUtcOffsetSeconds: number | null; endUtcOffsetSeconds: number | null; minutesAsleep: number };
 type StageTotal = { minutes: number; count: number };
 
 export interface SleepNightDetailDTO {
@@ -45,7 +45,8 @@ export interface SleepNightDetailDTO {
 
 /**
  * Mean main-session minutes asleep over the 30 nights before `date`, by the same main-session rule as everything else;
- * null unless 7 or more of them have a main session (spec §4.3). Naps never count, so a nap day cannot raise it.
+ * null unless 7 or more of them have a main session that is a night (spec §4.3). Naps never count, so a nap day cannot
+ * raise it.
  */
 export function usualMainMinutes(sessions: HistorySession[], date: string, timeZone: string): number | null {
   const first = shiftDate(date, -USUAL_WINDOW_NIGHTS);
@@ -55,7 +56,11 @@ export function usualMainMinutes(sessions: HistorySession[], date: string, timeZ
     if (d < first || d >= date) continue;
     byDate.set(d, [...(byDate.get(d) ?? []), s]);
   }
-  const mains = [...byDate.values()].map((own) => pickMainSession(own)).filter((m): m is HistorySession => m !== null);
+  // A nap-only date (its main session is a daytime nap) is not a night anywhere, so it counts toward neither the mean
+  // nor the minimum.
+  const mains = [...byDate.values()]
+    .map((own) => pickMainSession(own))
+    .filter((m): m is HistorySession => m !== null && !isDaytimeNap(m, timeZone));
   if (mains.length < USUAL_MIN_NIGHTS) return null;
   return Math.round(mains.reduce((sum, m) => sum + m.minutesAsleep, 0) / mains.length);
 }
@@ -85,7 +90,7 @@ export async function getSleepNight(userId: string, date: string): Promise<Sleep
     // of margin each side holds them all; usualMainMinutes keeps only the right civil dates.
     prisma.sleepSession.findMany({
       where: { userId, endTime: { gte: new Date(day.getTime() - (USUAL_WINDOW_NIGHTS + 1) * DAY_MS), lt: new Date(day.getTime() + DAY_MS) } },
-      select: { startTime: true, endTime: true, endUtcOffsetSeconds: true, minutesAsleep: true },
+      select: { startTime: true, endTime: true, startUtcOffsetSeconds: true, endUtcOffsetSeconds: true, minutesAsleep: true },
     }),
   ]);
   const timeZone = user?.timezone ?? 'UTC';

@@ -181,6 +181,24 @@ describe('GET /me/sleep/night/:date', () => {
       expect((await getNight(user.id, '2026-09-30')).body.usualMinutesAsleep).toBe(400);
     });
 
+    it('skips a nap-only date: it is not a night, for the mean or the 7-night minimum', async () => {
+      const user = await createUser('night-usual-nap-only');
+      // A nap-only date inside the window: 13:00-14:00 UTC on 09-15, 50 min asleep.
+      const napOnly: SleepSessionPoint = {
+        startTime: at('2026-09-15T13:00:00Z'), endTime: at('2026-09-15T14:00:00Z'), minutesAsleep: 50,
+        startUtcOffsetSeconds: 0, endUtcOffsetSeconds: 0,
+      };
+      await storeSleepSessions(user.id, [...[400, 410, 420, 430, 440, 450].map((m, i) => nightEnding(before(i), m)), napOnly, TONIGHT]);
+
+      // 6 real nights and a nap-only date: still under the 7-night minimum.
+      expect((await getNight(user.id, '2026-09-30')).body.usualMinutesAsleep).toBeNull();
+
+      await storeSleepSessions(user.id, [nightEnding(before(6), 401)]);
+
+      // (400+410+420+430+440+450+401) / 7 = 421.57; counting the nap would give (2951 + 50) / 8 = 375.
+      expect((await getNight(user.id, '2026-09-30')).body.usualMinutesAsleep).toBe(422);
+    });
+
     it('ignores SLEEP rollups with no sessions behind them', async () => {
       const user = await createUser('night-usual-rollups');
       await prisma.biometricRecord.createMany({
