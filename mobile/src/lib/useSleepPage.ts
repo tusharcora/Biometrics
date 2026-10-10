@@ -80,12 +80,13 @@ export function useSleepPage(param?: string): SleepPage {
   const range = windowRange(anchor, today);
 
   const [fresh, reloadWindow] = useSection<SleepActivityDTO>(`${range.from}..${range.to}`, () => fetchSleep(range.from, range.to), [dataVersion]);
-  // Ruling F16: with no date param a new window key (the server's today moving the week) refetches quietly; the last
-  // nights stay on screen until the new ones land, and a failed refetch keeps them.
-  const lastWindow = useRef<SleepActivityDTO | null>(null);
-  if (fresh.phase === 'ready') lastWindow.current = fresh.data;
-  const win: Section<SleepActivityDTO> =
-    fresh.phase !== 'ready' && param === undefined && lastWindow.current ? { phase: 'ready', data: lastWindow.current } : fresh;
+  // Ruling F16 (and Task 3 I-2): after the first data, a new window key on the same page (the server's today moving the
+  // week) refetches quietly, with or without a date param; the last nights stay on screen until the new ones land, and
+  // a failed refetch keeps them. A new param is a different page, so it shows loading.
+  const lastWindow = useRef<{ param: string | undefined; range: { from: string; to: string }; data: SleepActivityDTO } | null>(null);
+  if (fresh.phase === 'ready') lastWindow.current = { param, range, data: fresh.data };
+  const stale = fresh.phase !== 'ready' && lastWindow.current?.param === param ? lastWindow.current : null;
+  const win: Section<SleepActivityDTO> = stale ? { phase: 'ready', data: stale.data } : fresh;
   const [regularity, reloadRegularity] = useSection<SleepRegularity>('regularity', () => fetchSleepRegularity(REGULARITY_DAYS), [dataVersion]);
   const [goal, reloadGoal] = useSection<SleepGoal>('goal', () => fetchSleepGoal(), [dataVersion]);
   // The wind-down reminder lives on the device; read alongside the goal.
@@ -140,9 +141,15 @@ export function useSleepPage(param?: string): SleepPage {
     return () => { nightRequest.current++; };
   }, [date, fetchNight]);
 
-  // Months the window does not cover, cached by YYYY-MM for paging.
+  // The latest render's values, for the stable callbacks below (the focus handler, months, retries).
+  const latest = useRef({ date, anchor, today, range, reloadWindow, reloadRegularity, reloadGoal, loadReminder, fetchNight });
+  latest.current = { date, anchor, today, range, reloadWindow, reloadRegularity, reloadGoal, loadReminder, fetchNight };
+
+  // Months the window does not cover, cached by YYYY-MM for paging. Each month keeps its latest request id: only that
+  // request lands, so an answer started before a sync never lands as fresh.
   const [months, setMonths] = useState<Record<string, MonthLoad>>({});
   const monthsRef = useRef(months);
+  const monthRequest = useRef(new Map<string, number>());
   const inflight = useRef(new Set<string>());
   const putMonth = useCallback((m: string, v: MonthLoad) => {
     setMonths((s) => {
@@ -152,24 +159,35 @@ export function useSleepPage(param?: string): SleepPage {
     });
   }, []);
 
-  // A sync clears both caches and refreshes the shown night quietly (the sections refresh through their deps).
+  // Fetches a month. Quiet (a sync): the month's data stays while it loads, and a failure keeps it.
+  const fetchMonth = useCallback((m: string, quiet: boolean) => {
+    const id = (monthRequest.current.get(m) ?? 0) + 1;
+    monthRequest.current.set(m, id);
+    inflight.current.add(m);
+    if (!quiet) putMonth(m, { status: 'loading' });
+    const span = monthSpan(m, latest.current.today);
+    const current = () => monthRequest.current.get(m) === id;
+    fetchSleep(span.from, span.to).then(
+      (res) => { if (current()) putMonth(m, { status: 'ready', nights: res.nights }); },
+      () => { if (current() && !(quiet && monthsRef.current[m]?.status === 'ready')) putMonth(m, { status: 'error' }); },
+    ).finally(() => { if (current()) inflight.current.delete(m); });
+  }, [putMonth]);
+
+  // A sync clears the night cache and refreshes the shown night and every loaded or requested month quietly (the
+  // sections refresh through their deps).
   const seenVersion = useRef(dataVersion);
   useEffect(() => {
     if (seenVersion.current === dataVersion) return;
     seenVersion.current = dataVersion;
     const keep = date === null ? undefined : cache.current.get(date);
     cache.current.clear();
-    monthsRef.current = {};
-    setMonths({});
+    for (const m of Object.keys(monthsRef.current)) fetchMonth(m, true);
     if (date !== null) {
       if (keep) cache.current.set(date, keep);
       fetchNight(date, true);
     }
-  }, [dataVersion, date, fetchNight]);
+  }, [dataVersion, date, fetchNight, fetchMonth]);
 
-  // Stable focus handler: everything it needs is read from this ref.
-  const latest = useRef({ date, anchor, today, range, reloadWindow, reloadRegularity, reloadGoal, loadReminder, fetchNight });
-  latest.current = { date, anchor, today, range, reloadWindow, reloadRegularity, reloadGoal, loadReminder, fetchNight };
   const focusedOnce = useRef(false);
   useFocusEffect(useCallback(() => {
     // The mount already loads everything: the first focus is the mount itself.
@@ -188,24 +206,32 @@ export function useSleepPage(param?: string): SleepPage {
 
   const loadMonth = useCallback((m: string) => {
     const { today: t, range: r } = latest.current;
-    const span = monthSpan(m, t);
-    if (covers(r, span) || monthsRef.current[m]?.status === 'ready' || inflight.current.has(m)) return;
-    inflight.current.add(m);
-    putMonth(m, { status: 'loading' });
-    fetchSleep(span.from, span.to)
-      .then((res) => putMonth(m, { status: 'ready', nights: res.nights }))
-      .catch(() => putMonth(m, { status: 'error' }))
-      .finally(() => inflight.current.delete(m));
-  }, [putMonth]);
+    if (covers(r, monthSpan(m, t)) || monthsRef.current[m]?.status === 'ready' || inflight.current.has(m)) return;
+    fetchMonth(m, false);
+  }, [fetchMonth]);
 
   const month = (m: string): MonthLoad => {
     const span = monthSpan(m, today);
     if (covers(range, span)) {
-      if (win.phase === 'ready') return { status: 'ready', nights: win.data.nights.filter((n) => n.date >= span.from && n.date <= span.to) };
-      return { status: win.phase === 'error' ? 'error' : 'loading' };
+      const pick = (data: SleepActivityDTO): MonthLoad => ({ status: 'ready', nights: data.nights.filter((n) => n.date >= span.from && n.date <= span.to) });
+      if (fresh.phase === 'ready') return pick(fresh.data);
+      // During a quiet refetch the shown nights were fetched for the previous range: serve the month only if that range
+      // covered it, never as ready-and-empty.
+      if (stale) return covers(stale.range, span) ? pick(stale.data) : months[m] ?? { status: 'loading' };
+      return { status: fresh.phase === 'error' ? 'error' : 'loading' };
     }
     return months[m] ?? { status: 'loading' };
   };
+
+  // Stable identities, so a consumer can put them in effect deps.
+  const reloadNight = useCallback(() => {
+    const { date: d, fetchNight: f } = latest.current;
+    if (d !== null) f(d, true);
+  }, []);
+  const retryMonth = useCallback((m: string) => {
+    const { today: t, range: r, reloadWindow: rw } = latest.current;
+    if (covers(r, monthSpan(m, t))) rw(); else loadMonth(m);
+  }, [loadMonth]);
 
   const night: NightLoad = date !== null && shown?.date === date ? shown.load : { status: 'loading' };
   const bands = (night.status === 'ready' ? night.data.score?.bands : undefined) ?? (win.phase === 'ready' ? win.data.bands : undefined);
@@ -217,9 +243,9 @@ export function useSleepPage(param?: string): SleepPage {
     goal, reloadGoal,
     reminder,
     night,
-    reloadNight: () => { if (date !== null) fetchNight(date, true); },
+    reloadNight,
     bands,
     month, loadMonth,
-    retryMonth: (m: string) => (covers(range, monthSpan(m, today)) ? reloadWindow() : loadMonth(m)),
+    retryMonth,
   };
 }
