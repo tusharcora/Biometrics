@@ -8,6 +8,8 @@ import { syncPushRegistration } from '../../src/lib/pushRegistration';
 
 jest.mock('../../src/api/client');
 jest.mock('../../src/auth/AuthContext');
+// Home's Recaps shelf fetches on mount; keep it inert.
+jest.mock('../../src/api/recaps', () => ({ fetchRecaps: jest.fn(() => Promise.resolve([])), markRecapOpened: jest.fn() }));
 jest.mock('../../src/lib/timezone');
 jest.mock('../../src/lib/pushRegistration');
 

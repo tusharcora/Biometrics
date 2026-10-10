@@ -181,6 +181,34 @@ describe('DashboardScreen', () => {
     expect(mockNavigate).toHaveBeenCalledWith('MetricDetail', { metricType: 'STEPS', records: stepsRecords });
   });
 
+  it('the SLEEP metric tile opens the Sleep page; other tiles still open their detail', async () => {
+    const steps = [{ id: '1', metricType: 'STEPS', value: 9000, recordedAt: '2026-09-01T00:00:00.000Z' }];
+    const sleepRecords = [
+      { id: 's1', metricType: 'SLEEP', value: 420, recordedAt: '2026-09-01T00:00:00.000Z' },
+      { id: 's2', metricType: 'SLEEP', value: 450, recordedAt: '2026-09-02T00:00:00.000Z' },
+    ];
+    mockApi({ records: [...steps, ...sleepRecords], scores: [] });
+    const { findByTestId, getByTestId } = render(<DashboardScreen />);
+    fireEvent.press(await findByTestId('metric-card-SLEEP'));
+    expect(mockNavigate).toHaveBeenCalledWith('Sleep', undefined);
+    expect(mockNavigate).not.toHaveBeenCalledWith('MetricDetail', expect.objectContaining({ metricType: 'SLEEP' }));
+    fireEvent.press(getByTestId('metric-card-STEPS'));
+    expect(mockNavigate).toHaveBeenCalledWith('MetricDetail', expect.objectContaining({ metricType: 'STEPS' }));
+  });
+
+  // The coach is off in this file, so there is no digest here; DashboardDigest.test checks the shelf
+  // sits above it when the coach is on.
+  it('shows the Recaps shelf after the habit log, for everyone (coach off here)', async () => {
+    mockApi({ records: [{ id: '1', metricType: 'STEPS', value: 9000, recordedAt: '2026-09-01T00:00:00.000Z' }] });
+    const { findByTestId, toJSON } = render(<DashboardScreen />);
+    await findByTestId('recap-shelf');
+    const tree = JSON.stringify(toJSON());
+    const habitLog = tree.indexOf('habit-log');
+    expect(habitLog).toBeGreaterThanOrEqual(0);
+    expect(habitLog).toBeLessThan(tree.indexOf('recap-shelf'));
+    expect(tree.indexOf('coach-digest')).toBe(-1);
+  });
+
   // Trends and the Patterns entry moved off Home (spec 2.2); they live on the Trends screen now.
   it('no longer shows the trend list or the Patterns entry', async () => {
     mockApi({ records: [{ id: '1', metricType: 'STEPS', value: 8000, recordedAt: '2026-09-01T00:00:00.000Z' }] });
@@ -511,16 +539,13 @@ describe('DashboardScreen', () => {
       expect(tree.indexOf('recovery-score-card')).toBeLessThan(tree.indexOf('sleep-score-card'));
     });
 
-    it('opens the Sleep screen when pressed', async () => {
+    it('opens the Sleep page on the tile night, so tile and hero agree', async () => {
       mockApi({ records: steps, scores: [recovery, sleep] });
-
       const { getByTestId } = render(<DashboardScreen />);
-
       await waitFor(() => expect(getByTestId('sleep-score-card')).toBeTruthy());
       fireEvent.press(getByTestId('sleep-score-card'));
-
-      expect(mockNavigate).toHaveBeenCalledWith('Sleep');
-      expect(mockNavigate).not.toHaveBeenCalledWith('ScoreDetail', expect.objectContaining({ type: 'SLEEP' }));
+      expect(mockNavigate).toHaveBeenCalledWith('Sleep', { date: sleep.date });
+      expect(mockNavigate).not.toHaveBeenCalledWith('ScoreDetail', expect.anything());
     });
 
     it('shows the cold-start ring, and no score ring or badge, when the Sleep Score is null', async () => {
@@ -552,7 +577,7 @@ describe('DashboardScreen', () => {
       expect(getByTestId('recovery-score-card')).toBeTruthy();
     });
 
-    it('still opens the Sleep screen when there is no Sleep Score yet', async () => {
+    it('still opens the Sleep page, on its default night, when there is no Sleep Score yet', async () => {
       mockApi({ records: steps, scores: [recovery] });
 
       const { getByTestId } = render(<DashboardScreen />);
@@ -563,7 +588,7 @@ describe('DashboardScreen', () => {
       mockNavigate.mockClear();
       fireEvent.press(getByTestId('sleep-score-empty'));
 
-      expect(mockNavigate.mock.calls).toEqual([['Sleep']]);
+      expect(mockNavigate.mock.calls).toEqual([['Sleep', undefined]]);
     });
 
     it('degrades to an inline message when the scores request fails, keeping the metric cards', async () => {
@@ -576,7 +601,7 @@ describe('DashboardScreen', () => {
       expect(getByTestId('metric-card-STEPS')).toBeTruthy();
     });
 
-    it('still opens the Sleep screen when the scores request fails', async () => {
+    it('still opens the Sleep page, on its default night, when the scores request fails', async () => {
       mockApi({ records: steps, scoresError: new Error('boom') });
 
       const { getByTestId } = render(<DashboardScreen />);
@@ -586,7 +611,7 @@ describe('DashboardScreen', () => {
       mockNavigate.mockClear();
       fireEvent.press(getByTestId('sleep-score-unavailable'));
 
-      expect(mockNavigate.mock.calls).toEqual([['Sleep']]);
+      expect(mockNavigate.mock.calls).toEqual([['Sleep', undefined]]);
     });
 
     it('shows a skeleton while scores load', async () => {
