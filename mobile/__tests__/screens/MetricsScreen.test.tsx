@@ -92,6 +92,22 @@ describe('MetricsScreen', () => {
     });
   });
 
+  // Sleep has its own page (spec §5.1); the other metrics keep MetricDetail.
+  it('opens the Sleep page from the sleep card, and MetricDetail from another', async () => {
+    const sleep = { id: 'sl-1', metricType: 'SLEEP', value: 432, recordedAt: daysAgo(1) };
+    (apiFetch as jest.Mock).mockResolvedValue([...records, sleep]);
+
+    const { findByTestId, getByTestId } = render(<MetricsScreen />);
+    await findByTestId('trend-latest-SLEEP');
+    fireEvent.press(getByTestId('trend-card-SLEEP'));
+
+    expect(mockNavigate).toHaveBeenCalledTimes(1);
+    expect(mockNavigate).toHaveBeenCalledWith('Sleep', undefined);
+
+    fireEvent.press(getByTestId('trend-card-STEPS'));
+    expect(mockNavigate).toHaveBeenLastCalledWith('MetricDetail', expect.objectContaining({ metricType: 'STEPS' }));
+  });
+
   it('places the latest reading against the usual range once there are enough readings', async () => {
     const hrv = [44, 46, 48, 50, 52, 54, 56, 70].map((value, i) => ({
       id: `hrv-${i}`,

@@ -5,11 +5,14 @@ import { MetricDetailScreen, readingDate } from '../../src/screens/MetricDetailS
 import { addDays } from '../../src/lib/heatmap';
 
 const mockSetOptions = jest.fn();
+const mockReplace = jest.fn();
+// One object across renders, as React Navigation gives, so effects keyed on it run once.
+const mockNavigation = { setOptions: mockSetOptions, replace: mockReplace };
 let mockParams: unknown;
 
 jest.mock('@react-navigation/native', () => ({
   useRoute: () => ({ params: mockParams }),
-  useNavigation: () => ({ setOptions: mockSetOptions }),
+  useNavigation: () => mockNavigation,
 }));
 
 beforeEach(() => {
@@ -117,5 +120,25 @@ describe('MetricDetailScreen', () => {
 
     fireEvent.press(getByTestId('metric-detail-range-90d'));
     expect(queryByText(readingDate(records[records.length - 8]))).toBeTruthy();
+  });
+
+  // Sleep has its own page (spec §5.1 #16); HRV, resting HR and steps keep this screen.
+  it('replaces itself with the Sleep page for SLEEP and renders nothing', () => {
+    mockParams = { metricType: 'SLEEP', records: [{ id: '1', metricType: 'SLEEP', value: 432, recordedAt: '2026-09-01T00:00:00.000Z' }] };
+
+    const { toJSON } = render(<MetricDetailScreen />);
+
+    expect(mockReplace).toHaveBeenCalledTimes(1);
+    expect(mockReplace).toHaveBeenCalledWith('Sleep');
+    expect(toJSON()).toBeNull();
+  });
+
+  it('stays on this screen for HRV', () => {
+    mockParams = { metricType: 'HRV', records: hrvSeries([44, 46, 48, 50, 52, 54, 56, 70]) };
+
+    const { getByTestId } = render(<MetricDetailScreen />);
+
+    expect(getByTestId('metric-range-context')).toBeTruthy();
+    expect(mockReplace).not.toHaveBeenCalled();
   });
 });

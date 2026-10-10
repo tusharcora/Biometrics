@@ -1,4 +1,4 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, FlatList, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation, type RouteProp } from '@react-navigation/native';
@@ -52,6 +52,12 @@ export function MetricDetailScreen() {
   React.useLayoutEffect(() => {
     navigation.setOptions({ title: config.label });
   }, [navigation, config.label]);
+
+  // Sleep has its own page (spec §5.1 #16); HRV, resting HR and steps keep this screen.
+  useEffect(() => {
+    if (metricType === 'SLEEP') navigation.replace('Sleep');
+  }, [navigation, metricType]);
+  if (metricType === 'SLEEP') return null;
 
   if (!stats) {
     return (

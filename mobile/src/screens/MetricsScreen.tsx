@@ -15,6 +15,7 @@ import { Text } from '../components/ui/text';
 import { RangeChart } from '../components/ui/range-chart';
 import { SectionLabel } from '../components/ui/section-label';
 import { PageTitle } from '../components/ui/page-title';
+import { openSleep } from '../navigation/sleepNavigation';
 import { rangeSentence, usualRange } from '../lib/usualRange';
 import { todayCivil } from '../lib/heatmap';
 import type { MetricRecord } from '../lib/metricInsights';
@@ -81,7 +82,8 @@ export function MetricsScreen() {
   );
 
   function openDetail(type: MetricType, series: MetricRecord[]) {
-    navigation.navigate('MetricDetail', { metricType: type, records: series, range });
+    if (type === 'SLEEP') openSleep(navigation);
+    else navigation.navigate('MetricDetail', { metricType: type, records: series, range });
   }
   let body: React.ReactNode;
   if (records === null && !failed) {

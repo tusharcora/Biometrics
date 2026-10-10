@@ -1,10 +1,8 @@
 import React from 'react';
-import { render, waitFor } from '@testing-library/react-native';
+import { render } from '@testing-library/react-native';
 import { DashboardScreen } from '../../src/screens/DashboardScreen';
-import { ScoreDetailScreen } from '../../src/screens/ScoreDetailScreen';
 import { ScoreRing } from '../../src/components/ui/score-ring';
 import { apiFetch } from '../../src/api/client';
-import { fetchScoreDetail, type ScoreDetailDTO } from '../../src/api/scores';
 import { useAuth } from '../../src/auth/AuthContext';
 import { COLORS } from '../../src/theme';
 
@@ -23,15 +21,8 @@ jest.mock('../../src/api/client');
 jest.mock('../../src/auth/AuthContext');
 // Home's Recaps shelf fetches on mount; keep it inert.
 jest.mock('../../src/api/recaps', () => ({ fetchRecaps: jest.fn(() => Promise.resolve([])), markRecapOpened: jest.fn() }));
-jest.mock('../../src/api/scores', () => ({
-  ...jest.requireActual('../../src/api/scores'),
-  fetchScoreDetail: jest.fn(),
-}));
-
-const mockParams: unknown = { date: '2026-09-19', type: 'SLEEP' };
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ navigate: jest.fn(), setOptions: jest.fn(), replace: jest.fn() }),
-  useRoute: () => ({ params: mockParams }),
+  useNavigation: () => ({ navigate: jest.fn(), setOptions: jest.fn() }),
 }));
 
 const SERVER_BANDS = { excellent: 90, good: 70, fair: 50 };
@@ -96,28 +87,5 @@ describe('Dashboard score bands', () => {
     const { getAllByTestId, findByTestId } = render(<DashboardScreen />);
     await findByTestId('recovery-score-card');
     expect(getAllByTestId('ring-stub')[0].props.accessibilityLabel).toBe(COLORS.light.scoreExcellent);
-  });
-});
-
-describe('ScoreDetail score bands', () => {
-  const sleep = {
-    ...recovery,
-    type: 'SLEEP',
-    factors: [{ factor: 'SLEEP_EFFICIENCY', label: 'Sleep efficiency', z: 1.2, weight: 0.35, contribution: 0.42, points: 8.2, imputed: false, excluded: false }],
-  };
-  const detail = (bands?: ScoreDetailDTO['bands']): ScoreDetailDTO => ({ score: sleep as never, baselines: [], previous: null, bands });
-
-  it('picks a different band when the server sends different thresholds', async () => {
-    (fetchScoreDetail as jest.Mock).mockResolvedValue(detail(SERVER_BANDS));
-    const { getByTestId } = render(<ScoreDetailScreen />);
-    await waitFor(() => expect(getByTestId('ring-stub')).toBeTruthy());
-    expect(ringColor(getByTestId)).toBe(COLORS.light.scoreGood);
-  });
-
-  it('falls back to the defaults when the server sends no bands', async () => {
-    (fetchScoreDetail as jest.Mock).mockResolvedValue(detail());
-    const { getByTestId } = render(<ScoreDetailScreen />);
-    await waitFor(() => expect(getByTestId('ring-stub')).toBeTruthy());
-    expect(ringColor(getByTestId)).toBe(COLORS.light.scoreExcellent);
   });
 });

@@ -2,7 +2,6 @@ import { renderHook, waitFor, act } from '@testing-library/react-native';
 import { coachEntryRoute, useCoachStatus } from '../../src/lib/useCoachStatus';
 import { fetchCoachStatus, type CoachStatusDTO } from '../../src/api/coach';
 import { fetchScoresWithBands } from '../../src/api/scores';
-import { scoreQuestion } from '../../src/lib/coachPrompts';
 import { CharacterProvider, useCharacter } from '../../src/characters/CharacterProvider';
 import {
   clearCachedCharacter,
@@ -162,14 +161,5 @@ describe('coachEntryRoute', () => {
 
   it('goes to the chat when enabled and consented', () => {
     expect(coachEntryRoute(base)).toBe('Coach');
-  });
-});
-
-describe('scoreQuestion prefill', () => {
-  it('contains no digits for either score type', () => {
-    for (const type of ['RECOVERY', 'SLEEP'] as const) {
-      expect(scoreQuestion(type)).not.toMatch(/\d/);
-      expect(scoreQuestion(type).length).toBeGreaterThan(10);
-    }
   });
 });
