@@ -422,7 +422,7 @@ describe('RecoveryScreen: Last night', () => {
     expect(within(tile).getByTestId('last-night-bar-AWAKE')).toHaveStyle({ flex: 31, backgroundColor: COLORS.light.sleepAwake });
 
     fireEvent.press(tile);
-    expect(mockNavigation.navigate).toHaveBeenCalledWith('SleepNight', { date: '2026-10-08' });
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('Sleep', { date: '2026-10-08' });
   });
 
   it('draws one solid bar without stages', async () => {

@@ -1,402 +1,322 @@
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { withCharacter } from '../../jest-mocks/characterContext';
+import { GOAL, REGULARITY, REMINDER, TODAY, makeDetail, makeNight, makeScore, makeWindow } from '../../jest-mocks/sleepPageFixture';
 import { SleepScreen } from '../../src/screens/SleepScreen';
-import { fetchSleep, fetchSleepGoal, fetchSleepNight, fetchSleepRegularity, type SleepNight } from '../../src/api/sleep';
-import { fetchScoresWithBands } from '../../src/api/scores';
-import { addDays, todayCivil } from '../../src/lib/heatmap';
+import { fetchSleep, fetchSleepGoal, fetchSleepNight, fetchSleepRegularity } from '../../src/api/sleep';
+import { fetchScoreDetail } from '../../src/api/scores';
 import { readWindDown } from '../../src/lib/windDown';
-import { fetchRecaps } from '../../src/api/recaps';
+import { SLEEP_SCORE_FRAMING } from '../../src/lib/scoreInsights';
+import { COLORS } from '../../src/theme';
+import type { CoachStatusDTO } from '../../src/api/coach';
 
 jest.mock('../../src/api/sleep');
 jest.mock('../../src/api/scores');
+jest.mock('../../src/api/coach');
 jest.mock('../../src/lib/windDown');
 jest.mock('../../src/api/recaps', () => ({ fetchRecaps: jest.fn(() => Promise.resolve([])), markRecapOpened: jest.fn() }));
+jest.mock('../../src/lib/heatmap', () => ({ ...jest.requireActual('../../src/lib/heatmap'), todayCivil: () => '2026-10-08' }));
+let mockSyncState = 'idle';
+jest.mock('../../src/sync/SyncProvider', () => ({ useSync: () => ({ dataVersion: 0, state: mockSyncState }) }));
 
-const mockNavigate = jest.fn();
-// Screen events by name, so a test can fire focus/blur.
-const mockListeners: Record<string, () => void> = {};
+const mockNavigation = {
+  navigate: jest.fn(), push: jest.fn(), goBack: jest.fn(), setOptions: jest.fn(), setParams: jest.fn(), replace: jest.fn(),
+  addListener: () => () => {},
+};
+let mockParams: { date?: string } | undefined;
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({
-    navigate: mockNavigate,
-    addListener: (event: string, fn: () => void) => {
-      mockListeners[event] = fn;
-      return () => delete mockListeners[event];
-    },
-  }),
+  useRoute: () => ({ params: mockParams }),
+  useNavigation: () => mockNavigation,
+  useFocusEffect: () => {},
 }));
 
-const TODAY = todayCivil();
-const D = (back: number) => addDays(TODAY, -back);
+const STATUS: CoachStatusDTO = {
+  enabled: true, consented: true, consent: { version: 'v1', summary: 's', dataItems: ['x'] }, personaId: 'mochi', personaChosen: true, personas: [],
+};
+const sleepFetch = fetchSleep as jest.Mock;
+const nightFetch = fetchSleepNight as jest.Mock;
+const scoreFetch = fetchScoreDetail as jest.Mock;
+const SPOKEN_FORBIDDEN = /[·−]/;
+const notFound = () => Object.assign(new Error('not found'), { status: 404 });
 
-function night(date: string, extra: Partial<SleepNight> = {}): SleepNight {
-  return {
-    date,
-    minutesAsleep: 420,
-    minutesInBed: 460,
-    bedtime: '23:10',
-    wakeTime: '07:00',
-    sleepScore: 70,
-    minutesAwake: 30,
-    stageMinutes: null,
-    hasStages: false,
-    ...extra,
-  };
+function renderScreen(status: CoachStatusDTO | null = STATUS) {
+  return render(withCharacter(<SleepScreen />, { characterId: 'mochi', status }));
 }
-
-const NIGHTS = [
-  night(D(3), { bedtime: null, wakeTime: null }),
-  night(D(2), { bedtime: '22:40', wakeTime: '06:30' }),
-  night(D(1)),
-  night(D(0), { hasStages: true, stageMinutes: { deep: 60, light: 240, rem: 90, awake: 30 } }),
-];
-
-const REGULARITY = {
-  days: 7,
-  nights: 6,
-  score: 80,
-  bedtimeSpreadMinutes: 20,
-  wakeSpreadMinutes: 15,
-  averageBedtime: '23:00',
-  averageWake: '07:00',
-  drift: [
-    { date: D(2), bedtimeOffsetMinutes: -20 },
-    { date: D(1), bedtimeOffsetMinutes: 10 },
-    { date: D(0), bedtimeOffsetMinutes: 45 },
-  ],
-};
-
-const DETAIL = {
-  date: D(0),
-  bedtime: '23:10',
-  wakeTime: '07:00',
-  minutesAsleep: 420,
-  minutesInBed: 470,
-  minutesAwake: 30,
-  minutesToFallAsleep: 10,
-  minutesAfterWakeUp: 5,
-  hasStages: true,
-  stages: [
-    { type: 'LIGHT', start: '2026-10-02T23:10:00.000Z', end: '2026-10-03T01:10:00.000Z' },
-    { type: 'DEEP', start: '2026-10-03T01:10:00.000Z', end: '2026-10-03T02:10:00.000Z' },
-    { type: 'REM', start: '2026-10-03T02:10:00.000Z', end: '2026-10-03T03:40:00.000Z' },
-    { type: 'AWAKE', start: '2026-10-03T03:40:00.000Z', end: '2026-10-03T04:10:00.000Z' },
-  ],
-  stageTotals: {
-    deep: { minutes: 60, count: 1 },
-    light: { minutes: 120, count: 1 },
-    rem: { minutes: 90, count: 1 },
-    awake: { minutes: 30, count: 1 },
-  },
-  naps: [],
-  sleepScore: 70,
-  usualMinutesAsleep: null,
-};
-
-const SCORE = {
-  date: TODAY,
-  type: 'SLEEP',
-  score: 72,
-  confidenceLevel: 'HIGH',
-  algorithmVersion: '1',
-  factors: [],
-  coldStart: [],
-};
+const hero = () => screen.findByTestId('sleep-hero');
 
 beforeEach(() => {
   jest.clearAllMocks();
-  (fetchSleep as jest.Mock).mockResolvedValue({ nights: NIGHTS, earliestDate: D(30), stagesBackfillPending: false });
+  mockParams = undefined;
+  mockSyncState = 'idle';
+  sleepFetch.mockResolvedValue(makeWindow());
+  nightFetch.mockImplementation((d: string) => Promise.resolve(makeDetail(d)));
+  scoreFetch.mockImplementation((d: string) => Promise.resolve(makeScore(d)));
   (fetchSleepRegularity as jest.Mock).mockResolvedValue(REGULARITY);
-  (fetchSleepGoal as jest.Mock).mockResolvedValue({ sleepGoalMinutes: 480, bedtimeGoal: null, wakeGoal: null });
-  (readWindDown as jest.Mock).mockResolvedValue({ enabled: false, leadMinutes: 30, bedtimeGoal: null, coachName: 'Mochi', notificationId: null });
-  (fetchSleepNight as jest.Mock).mockResolvedValue(DETAIL);
-  (fetchScoresWithBands as jest.Mock).mockResolvedValue({ scores: [SCORE] });
+  (fetchSleepGoal as jest.Mock).mockResolvedValue(GOAL);
+  (readWindDown as jest.Mock).mockResolvedValue(REMINDER);
+});
+afterEach(async () => { await act(async () => {}); });
+
+describe('SleepScreen: header and states', () => {
+  it('shows the header and the loading skeleton before the nights land', async () => {
+    sleepFetch.mockReturnValue(new Promise(() => {}));
+    renderScreen();
+    expect(screen.getByTestId('sleep-loading')).toBeTruthy();
+    expect(screen.getByRole('header', { name: 'Sleep' })).toBeTruthy();
+    expect(screen.getByTestId('sleep-back')).toBeTruthy();
+    // The goal and regularity still land while the nights hang; the page stays on its skeleton.
+    await act(async () => {});
+    expect(screen.getByTestId('sleep-loading')).toBeTruthy();
+  });
+
+  it('back, bedtime goal and info buttons', async () => {
+    renderScreen();
+    await hero();
+    fireEvent.press(screen.getByTestId('sleep-back'));
+    expect(mockNavigation.goBack).toHaveBeenCalled();
+    fireEvent.press(screen.getByTestId('sleep-goal-button'));
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('BedtimeGoal');
+    expect(screen.getByTestId('sleep-goal-button').props.accessibilityLabel).toBe('Bedtime goal');
+  });
+
+  it('the info sheet: framing, the weights this night used, baselines without SLEEP, the bands', async () => {
+    renderScreen();
+    await hero();
+    fireEvent.press(screen.getByTestId('sleep-info'));
+    const sheet = await screen.findByTestId('sleep-info-sheet');
+    expect(within(sheet).getByText(SLEEP_SCORE_FRAMING)).toBeTruthy();
+    expect(within(sheet).getByText('This night weighted sleep duration 50, sleep efficiency 30, bedtime consistency 20.')).toBeTruthy();
+    // The SLEEP_EFFICIENCY baseline sentence is listed; the SLEEP baseline is filtered out (plan ruling F2).
+    expect(within(sheet).getByText('Your sleep efficiency baseline: 92% ± 2%, based on your last 28 days.')).toBeTruthy();
+    expect(within(sheet).queryByText(/Your sleep baseline/)).toBeNull();
+    expect(within(sheet).getByText('Rough night · Low · under 40')).toBeTruthy();
+    expect(within(sheet).getByText('Short night · 1h or more under your goal, on any band')).toBeTruthy();
+  });
+
+  it('does not carry the Recaps shelf (it moved to Home)', async () => {
+    renderScreen();
+    await hero();
+    expect(screen.queryByTestId('recap-shelf')).toBeNull();
+  });
 });
 
-// Let every section's request settle inside act before the screen unmounts.
-afterEach(async () => {
-  await act(async () => {});
+describe('SleepScreen: hero', () => {
+  it('opens on the newest night: score, verdict, line, one spoken element', async () => {
+    renderScreen();
+    const h = await hero();
+    expect(within(h).getByText('78')).toBeTruthy();
+    expect(within(h).getByText('Restful night')).toBeTruthy();
+    expect(h.props.accessibilityLabel).toBe('Sleep score 78, Excellent, restful night. Up 6 from yesterday. High confidence.');
+    expect(h.props.accessibilityLabel).not.toMatch(SPOKEN_FORBIDDEN);
+    expect(scoreFetch).toHaveBeenCalledWith(TODAY, 'SLEEP');
+  });
+
+  it('a past night: Short night overrides the band, the band word stays, the delta names the weekday', async () => {
+    mockParams = { date: '2026-10-05' };
+    nightFetch.mockResolvedValue(makeDetail('2026-10-05', { minutesAsleep: 302 }));
+    scoreFetch.mockResolvedValue(makeScore('2026-10-05', { score: 35 }, { date: '2026-10-04', score: 81 }));
+    renderScreen();
+    const h = await hero();
+    await waitFor(() => expect(within(h).getByText('Short night')).toBeTruthy());
+    expect(h.props.accessibilityLabel).toBe('Sleep score 35, Low, short night. Down 46 from Sunday. High confidence.');
+  });
+
+  it('Short night on a Good score keeps the band word Good', async () => {
+    mockParams = { date: TODAY };
+    nightFetch.mockResolvedValue(makeDetail(TODAY, { minutesAsleep: 410 }));
+    scoreFetch.mockResolvedValue(makeScore(TODAY, { score: 66 }));
+    renderScreen();
+    const h = await hero();
+    await waitFor(() => expect(within(h).getByText('Short night')).toBeTruthy());
+    expect(within(h).getByText('Good')).toBeTruthy();
+  });
+
+  it('building: nights counted, the moon dimmed', async () => {
+    scoreFetch.mockResolvedValue(makeScore(TODAY, { score: null, coldStart: [{ metric: 'SLEEP_EFFICIENCY', daysCollected: 9, daysRequired: 14 }] }));
+    renderScreen();
+    const h = await hero();
+    await waitFor(() => expect(within(h).getByText('Night 9 of 14')).toBeTruthy());
+    expect(within(h).getByText('Learning your sleep')).toBeTruthy();
+    expect(within(h).getByText('5 nights to go')).toBeTruthy();
+    expect(screen.getByTestId('sleep-hero-moon', { includeHiddenElements: true }).props.style).toMatchObject({ opacity: 0.4 });
+  });
+
+  it('a night with no score yet: on its way for last night, none for an older night', async () => {
+    scoreFetch.mockResolvedValue(null);
+    renderScreen();
+    expect(within(await hero()).getByText('Score on its way')).toBeTruthy();
+    expect(screen.getByText('It appears a few minutes after your watch syncs')).toBeTruthy();
+  });
+
+  it('no night today: waiting, the summary says so, the ask is about missing data', async () => {
+    mockParams = { date: TODAY };
+    sleepFetch.mockResolvedValue(makeWindow({ nights: makeWindow().nights.filter((n) => n.date !== TODAY) }));
+    scoreFetch.mockResolvedValue(null);
+    nightFetch.mockRejectedValue(notFound());
+    renderScreen();
+    const h = await hero();
+    await waitFor(() => expect(within(h).getByText('No sleep recorded')).toBeTruthy());
+    expect(within(h).getByText("Waiting for last night's data")).toBeTruthy();
+    expect(screen.getByText('No sleep recorded for this night.')).toBeTruthy();
+    expect(await screen.findByText("Last night isn't in yet.")).toBeTruthy();
+    fireEvent.press(screen.getByTestId('ask-coach-button'));
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('Tabs', { screen: 'Coach', params: { prefill: "Why don't I have sleep data for last night?" } }, { pop: true });
+  });
+
+  it('nap-only: no night in the hero, the nap in the summary', async () => {
+    mockParams = { date: '2026-10-07' };
+    nightFetch.mockResolvedValue(makeDetail('2026-10-07', { mainIsNap: true, minutesAsleep: 20, bedtime: '14:10', wakeTime: '14:35', hasStages: false, stages: [] }));
+    renderScreen();
+    const h = await hero();
+    await waitFor(() => expect(within(h).getByText('Only a nap was recorded')).toBeTruthy());
+    expect(screen.getByText('Only a nap: 20m at 2:10 pm')).toBeTruthy();
+  });
+
+  it('low confidence ends the line in the Fair colour', async () => {
+    scoreFetch.mockResolvedValue(makeScore(TODAY, { confidenceLevel: 'LOW' }));
+    renderScreen();
+    // Tests render in the light scheme (as RecoveryScreen.test.tsx:162 does).
+    expect(await screen.findByText('Low confidence')).toHaveStyle({ color: COLORS.light.scoreFair });
+  });
+
+  it('a night error is one retry card in place of the hero, the summary and the night cards', async () => {
+    scoreFetch.mockRejectedValueOnce(Object.assign(new Error('boom'), { status: 500 }));
+    renderScreen();
+    expect(await screen.findByText('This night could not be loaded.')).toBeTruthy();
+    expect(screen.queryByTestId('sleep-hero')).toBeNull();
+    expect(screen.queryByTestId('sleep-summary')).toBeNull();
+    fireEvent.press(screen.getByTestId('sleep-night-retry'));
+    expect(await hero()).toBeTruthy();
+  });
 });
 
-function renderScreen() {
-  return render(withCharacter(<SleepScreen />, { characterId: 'luna' }));
-}
-
-describe('SleepScreen', () => {
-  it('fetches the last week of nights and draws a bar per night with times', async () => {
+describe('SleepScreen: picker', () => {
+  it('seven nights oldest first, Last for today, h:mm, dashes and spoken tabs', async () => {
     renderScreen();
-
-    await waitFor(() => expect(screen.getByTestId('sleep-window-chart')).toBeTruthy());
-    expect(fetchSleep).toHaveBeenCalledWith(D(6), TODAY);
-    expect(screen.getByTestId(`sleep-window-bar-${D(2)}`)).toBeTruthy();
-    expect(screen.getByTestId(`sleep-window-bar-${D(1)}`)).toBeTruthy();
-    expect(screen.getByTestId(`sleep-window-bar-${D(0)}`)).toBeTruthy();
-    // A night without times is a gap.
-    expect(screen.queryByTestId(`sleep-window-bar-${D(3)}`)).toBeNull();
-    expect(screen.getByTestId(`sleep-window-bar-${D(2)}`).props.accessibilityLabel).toMatch(/: 10:40 pm to 6:30 am$/);
+    await hero();
+    const dates = ['2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05', '2026-10-06', '2026-10-07', TODAY];
+    for (const d of dates) expect(screen.getByTestId(`sleep-night-${d}`)).toBeTruthy();
+    const last = screen.getByTestId(`sleep-night-${TODAY}`);
+    expect(within(last).getByText('Last')).toBeTruthy();
+    expect(within(last).getByText('7:12')).toBeTruthy();
+    expect(last.props.accessibilityRole).toBe('tab');
+    expect(last.props.accessibilityState).toMatchObject({ selected: true });
+    expect(last.props.accessibilityLabel).toBe('Thursday, last night, 7 hours 12 minutes, Excellent');
+    const tue = screen.getByTestId('sleep-night-2026-10-06');
+    expect(within(tue).getByText('—')).toBeTruthy();
+    expect(tue.props.accessibilityLabel).toBe('Tuesday, no sleep recorded');
+    // Wed 7 Oct shows main sleep (418), not the day total with its nap (438).
+    expect(within(screen.getByTestId('sleep-night-2026-10-07')).getByText('6:58')).toBeTruthy();
+    for (const d of dates) expect(screen.getByTestId(`sleep-night-${d}`).props.accessibilityLabel).not.toMatch(SPOKEN_FORBIDDEN);
   });
 
-  it('opens a night when its bar is tapped', async () => {
+  it('a tap selects that night through the route; the selected night is a no-op', async () => {
     renderScreen();
-
-    fireEvent.press(await screen.findByTestId(`sleep-window-bar-${D(1)}`));
-
-    expect(mockNavigate).toHaveBeenCalledWith('SleepNight', { date: D(1) });
+    await hero();
+    fireEvent.press(screen.getByTestId('sleep-night-2026-10-05'));
+    expect(mockNavigation.setParams).toHaveBeenCalledWith({ date: '2026-10-05' });
+    mockNavigation.setParams.mockClear();
+    fireEvent.press(screen.getByTestId(`sleep-night-${TODAY}`));
+    expect(mockNavigation.setParams).not.toHaveBeenCalled();
+    expect(mockNavigation.push).not.toHaveBeenCalled();
   });
 
-  it('refetches two weeks from the range toggle', async () => {
+  it('an empty past night is still tappable', async () => {
     renderScreen();
-    await screen.findByTestId('sleep-window-chart');
-
-    fireEvent.press(screen.getByTestId('sleep-range-two-weeks'));
-
-    await waitFor(() => expect(fetchSleep).toHaveBeenLastCalledWith(D(13), TODAY));
-    fireEvent.press(screen.getByTestId('sleep-range-week'));
-    await waitFor(() => expect(fetchSleep).toHaveBeenLastCalledWith(D(6), TODAY));
-    await screen.findByTestId('stage-strip');
+    await hero();
+    fireEvent.press(screen.getByTestId('sleep-night-2026-10-06'));
+    expect(mockNavigation.setParams).toHaveBeenCalledWith({ date: '2026-10-06' });
   });
 
-  it('shows a retry, not the old week, when switching to two weeks fails', async () => {
+  it('syncing and backfill captions', async () => {
+    mockSyncState = 'syncing';
+    sleepFetch.mockResolvedValue(makeWindow({ nights: makeWindow().nights.filter((n) => n.date !== TODAY), stagesBackfillPending: true }));
     renderScreen();
-    await screen.findByTestId(`sleep-window-bar-${D(0)}`);
-
-    (fetchSleep as jest.Mock).mockRejectedValueOnce(new Error('offline'));
-    fireEvent.press(screen.getByTestId('sleep-range-two-weeks'));
-
-    const retry = await screen.findByTestId('sleep-window-retry');
-    expect(screen.queryByTestId('sleep-window-chart')).toBeNull();
-    expect(screen.getByTestId('sleep-range-two-weeks').props.accessibilityState).toMatchObject({ selected: true });
-
-    (fetchSleep as jest.Mock).mockResolvedValue({ nights: [...NIGHTS, night(D(10))], earliestDate: D(30), stagesBackfillPending: false });
-    fireEvent.press(retry);
-    // The toggle and the chart agree: a night ten days back has a column.
-    expect(await screen.findByTestId(`sleep-window-bar-${D(10)}`)).toBeTruthy();
-    expect(fetchSleep).toHaveBeenLastCalledWith(D(13), TODAY);
+    expect(await screen.findByText("Last night isn't in yet. Syncing…")).toBeTruthy();
+    expect(screen.getByText('Reading older nights…')).toBeTruthy();
   });
 
-  it('keeps last night when a later sync refresh fails', async () => {
-    const syncModule = require('../../src/sync/SyncProvider');
-    const state = { state: 'idle', lastSyncedAt: null, connection: 'CONNECTED', dataVersion: 0, syncNow: jest.fn() };
-    const spy = jest.spyOn(syncModule, 'useSync').mockReturnValue(state);
-    const utils = renderScreen();
-    await screen.findByTestId(`sleep-window-bar-${D(0)}`);
-
-    (fetchSleep as jest.Mock).mockRejectedValueOnce(new Error('offline'));
-    spy.mockReturnValue({ ...state, dataVersion: 1 });
-    utils.rerender(withCharacter(<SleepScreen />, { characterId: 'luna' }));
-
-    await waitFor(() => expect(fetchSleep).toHaveBeenCalledTimes(2));
-    expect(screen.getByTestId(`sleep-window-bar-${D(0)}`)).toBeTruthy();
-    expect(screen.queryByTestId('sleep-window-retry')).toBeNull();
-    spy.mockRestore();
-  });
-
-  it('shows whichever goal time is set when only one is', async () => {
-    (fetchSleepGoal as jest.Mock).mockResolvedValue({ sleepGoalMinutes: 480, bedtimeGoal: '23:00', wakeGoal: null });
+  it('a nights error has its own retry while the hero still renders', async () => {
+    mockParams = { date: TODAY };
+    sleepFetch.mockRejectedValueOnce(new Error('offline'));
     renderScreen();
-
-    await waitFor(() => expect(screen.getByTestId('sleep-goal-row')).toHaveTextContent(/Bed 11:00 pm · wake not set/));
+    expect(await screen.findByText('Your nights could not be loaded.')).toBeTruthy();
+    expect(await hero()).toBeTruthy();
+    fireEvent.press(screen.getByTestId('sleep-window-retry'));
+    await waitFor(() => expect(sleepFetch).toHaveBeenCalledTimes(2));
+    expect(await screen.findByTestId(`sleep-night-${TODAY}`)).toBeTruthy();
   });
+});
 
-  it('retries last night after a failure', async () => {
-    (fetchSleepNight as jest.Mock).mockRejectedValueOnce(new Error('offline'));
+describe('SleepScreen: summary', () => {
+  it('eyebrow, main sleep, caption and line, read as one element', async () => {
     renderScreen();
-
-    fireEvent.press(await screen.findByTestId('sleep-last-night-retry'));
-
-    expect(await screen.findByTestId('stage-strip')).toBeTruthy();
-    expect(fetchSleepNight).toHaveBeenCalledTimes(2);
+    // The goal part needs the goal section, which may land after the night.
+    await screen.findByText('11:10 pm → 6:52 am · +12m vs your usual · 48m short of your 8h goal');
+    const s = screen.getByTestId('sleep-summary');
+    expect(within(s).getByText('Last night · Thu 8 Oct')).toBeTruthy();
+    expect(within(s).getByText('7h 12m')).toBeTruthy();
+    expect(within(s).getByText('asleep')).toBeTruthy();
+    expect(within(s).getByText('11:10 pm → 6:52 am · +12m vs your usual · 48m short of your 8h goal')).toBeTruthy();
+    expect(s.props.accessibilityLabel).toBe('Night ending Thursday 8 October. 7 hours 12 minutes asleep. 11:10 pm to 6:52 am. 12 minutes more than usual. 48 minutes short of your 8 hour goal.');
   });
 
-  it('lets only the latest last-night request land', async () => {
-    const syncModule = require('../../src/sync/SyncProvider');
-    const state = { state: 'idle', lastSyncedAt: null, connection: 'CONNECTED', dataVersion: 0, syncNow: jest.fn() };
-    const spy = jest.spyOn(syncModule, 'useSync').mockReturnValue(state);
-    let resolveFirst: (v: unknown) => void = () => {};
-    (fetchSleepNight as jest.Mock).mockReturnValueOnce(new Promise((r) => (resolveFirst = r))).mockResolvedValue(DETAIL);
-    const utils = renderScreen();
-    await waitFor(() => expect(fetchSleepNight).toHaveBeenCalledTimes(1));
-
-    // A sync starts a newer request, which answers first.
-    spy.mockReturnValue({ ...state, dataVersion: 1 });
-    utils.rerender(withCharacter(<SleepScreen />, { characterId: 'luna' }));
-    const label = (await screen.findByTestId('stage-strip')).props.accessibilityLabel;
-
-    // The older one resolves late with other stages; it must not replace the newer answer.
-    await act(async () => {
-      resolveFirst({ ...DETAIL, stages: [DETAIL.stages[0]] });
-    });
-    expect(screen.getByTestId('stage-strip').props.accessibilityLabel).toBe(label);
-    spy.mockRestore();
-  });
-
-  it('shows the sleep regularity card with its caption and the coach line', async () => {
+  it('naps beside the night', async () => {
+    nightFetch.mockResolvedValue(makeDetail(TODAY, { naps: [{ start: '2026-10-08T18:10:00.000Z', end: '2026-10-08T18:35:00.000Z', minutesAsleep: 20 }] }));
     renderScreen();
-
-    const card = await screen.findByTestId('sleep-regularity');
-    expect(fetchSleepRegularity).toHaveBeenCalledWith(7);
-    expect(within(card).getByText('Sleep regularity')).toBeTruthy();
-    expect(
-      within(card).getByText(
-        "Bedtime and wake time over the last 7 nights. Your Sleep score's Bedtime consistency uses bedtime over 14 nights.",
-      ),
-    ).toBeTruthy();
-    expect(within(card).getByText('Luna: Steady nights. Keep the rhythm.')).toBeTruthy();
-    expect(within(card).queryByText(/consistency$/i)).toBeNull();
+    expect(await screen.findByText('main sleep · 7h 32m with a nap')).toBeTruthy();
   });
 
-  it('counts down the nights still needed when there is no regularity score', async () => {
-    (fetchSleepRegularity as jest.Mock).mockResolvedValue({
-      ...REGULARITY,
-      nights: 1,
-      score: null,
-      bedtimeSpreadMinutes: null,
-      wakeSpreadMinutes: null,
-    });
-    renderScreen();
-
-    const empty = await screen.findByTestId('sleep-regularity-empty');
-    expect(empty).toHaveTextContent('Not enough nights yet. 3 more to go.');
+  it('swaps to the newly selected night when the route param changes', async () => {
+    const { rerender } = renderScreen();
+    await screen.findByText('Last night · Thu 8 Oct');
+    mockParams = { date: '2026-10-05' };
+    rerender(withCharacter(<SleepScreen />, { characterId: 'mochi', status: STATUS }));
+    expect(await screen.findByText('Mon 5 Oct')).toBeTruthy();
+    expect(nightFetch).toHaveBeenCalledWith('2026-10-05');
   });
+});
 
-  it('shows the score header and opens the score detail from "Why this score"', async () => {
+describe('SleepScreen: goal row and Ask bar', () => {
+  it('the goal row reads the board line and opens BedtimeGoal', async () => {
     renderScreen();
-
-    await screen.findByTestId('sleep-score-header');
-    fireEvent.press(screen.getByTestId('sleep-why-score'));
-
-    expect(mockNavigate).toHaveBeenCalledWith('ScoreDetail', { date: TODAY, type: 'SLEEP' });
-  });
-
-  it('offers to set a bedtime goal and opens the goal screen', async () => {
-    renderScreen();
-
-    const row = await screen.findByTestId('sleep-goal-row');
-    await waitFor(() => expect(row).toHaveTextContent(/Set a bedtime goal/));
+    expect(await screen.findByText('Bed 10:45 pm · Wake 6:45 am · 8h · Reminder 30 min before')).toBeTruthy();
+    const row = screen.getByTestId('sleep-goal-row');
+    expect(row.props.accessibilityLabel).toBe('Bedtime goal. Bed 10:45 pm, Wake 6:45 am, 8 hours, Reminder 30 min before.');
     fireEvent.press(row);
-
-    expect(mockNavigate).toHaveBeenCalledWith('BedtimeGoal');
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('BedtimeGoal');
   });
 
-  it('shows the goal times when a goal is set', async () => {
-    (fetchSleepGoal as jest.Mock).mockResolvedValue({ sleepGoalMinutes: 480, bedtimeGoal: '22:30', wakeGoal: '06:45' });
+  it('a goal error has its own retry', async () => {
+    (fetchSleepGoal as jest.Mock).mockRejectedValueOnce(new Error('offline'));
     renderScreen();
-
-    await waitFor(() => expect(screen.getByTestId('sleep-goal-row')).toHaveTextContent(/10:30 pm to 6:45 am/));
-    await waitFor(() => expect(screen.getByTestId('sleep-goal-reminder')).toHaveTextContent('Reminder off'));
+    fireEvent.press(await screen.findByTestId('sleep-goal-retry'));
+    expect(await screen.findByTestId('sleep-goal-row')).toBeTruthy();
   });
 
-  it('shows the reminder lead when the wind-down reminder is on', async () => {
-    (fetchSleepGoal as jest.Mock).mockResolvedValue({ sleepGoalMinutes: 480, bedtimeGoal: '23:00', wakeGoal: '07:00' });
-    (readWindDown as jest.Mock).mockResolvedValue({ enabled: true, leadMinutes: 45, bedtimeGoal: '23:00', coachName: 'Mochi', notificationId: 'n1' });
+  it('asks about last night, and about this night on a past one', async () => {
     renderScreen();
-
-    await waitFor(() => expect(screen.getByTestId('sleep-goal-reminder')).toHaveTextContent('Reminder 45 min before bed'));
+    const bar = await screen.findByTestId('ask-coach-button');
+    expect(bar.props.accessibilityLabel).toBe('Ask Mochi about last night');
+    fireEvent.press(bar);
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('Tabs', { screen: 'Coach', params: { prefill: 'How was my sleep last night?' } }, { pop: true });
   });
 
-  it('says nothing about a reminder while no bedtime is set', async () => {
+  it('a past night asks about this night', async () => {
+    mockParams = { date: '2026-10-05' };
     renderScreen();
-
-    await waitFor(() => expect(screen.getByTestId('sleep-goal-row')).toHaveTextContent(/Set a bedtime goal/));
-    expect(screen.queryByTestId('sleep-goal-reminder')).toBeNull();
+    await screen.findByTestId(`sleep-night-${TODAY}`);
+    const bar = await screen.findByTestId('ask-coach-button');
+    expect(bar.props.accessibilityLabel).toBe('Ask Mochi about this night');
+    fireEvent.press(bar);
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('Tabs', { screen: 'Coach', params: { prefill: 'How was my sleep on Monday 5 October?' } }, { pop: true });
   });
 
-  it('re-reads the goal and the reminder on coming back from the goal screen', async () => {
-    (fetchSleepGoal as jest.Mock).mockResolvedValue({ sleepGoalMinutes: 480, bedtimeGoal: '23:00', wakeGoal: '07:00' });
-    renderScreen();
-    await waitFor(() => expect(screen.getByTestId('sleep-goal-reminder')).toHaveTextContent('Reminder off'));
-    // The first focus (on open) loads nothing extra.
-    await act(async () => mockListeners.focus?.());
-    expect(fetchSleepGoal).toHaveBeenCalledTimes(1);
-
-    (fetchSleepGoal as jest.Mock).mockResolvedValue({ sleepGoalMinutes: 480, bedtimeGoal: '22:30', wakeGoal: '07:00' });
-    (readWindDown as jest.Mock).mockResolvedValue({ enabled: true, leadMinutes: 15, bedtimeGoal: '22:30', coachName: 'Mochi', notificationId: 'n1' });
-    await act(async () => mockListeners.blur?.());
-    await act(async () => mockListeners.focus?.());
-
-    await waitFor(() => expect(screen.getByTestId('sleep-goal-row')).toHaveTextContent(/10:30 pm to 7:00 am/));
-    expect(screen.getByTestId('sleep-goal-reminder')).toHaveTextContent('Reminder 15 min before bed');
-  });
-
-  it('shows last night with a stage strip and opens the whole night', async () => {
-    renderScreen();
-
-    const card = await screen.findByTestId('sleep-last-night');
-    await waitFor(() => expect(fetchSleepNight).toHaveBeenCalledWith(D(0)));
-    const strip = await within(card).findByTestId('stage-strip');
-    expect(strip.props.accessibilityLabel).toBe('Sleep stages: 60 min deep, 90 min REM, 120 min light, 30 min awake');
-    // A legend names the colours, so the strip never relies on colour alone.
-    expect(within(card).getByText('Deep')).toBeTruthy();
-    fireEvent.press(within(card).getByText('See the whole night'));
-
-    expect(mockNavigate).toHaveBeenCalledWith('SleepNight', { date: D(0) });
-  });
-
-  it('says "Reading older nights…" only while the stage backfill is pending', async () => {
-    (fetchSleep as jest.Mock).mockResolvedValue({ nights: NIGHTS, earliestDate: D(30), stagesBackfillPending: true });
-    const { unmount } = renderScreen();
-    expect(await screen.findByTestId('sleep-older-nights')).toHaveTextContent('Reading older nights…');
-    unmount();
-
-    (fetchSleep as jest.Mock).mockResolvedValue({ nights: NIGHTS, earliestDate: D(30), stagesBackfillPending: false });
-    renderScreen();
-    await screen.findByTestId('sleep-window-chart');
-    expect(screen.queryByTestId('sleep-older-nights')).toBeNull();
-  });
-
-  it('puts a retry on the regularity card only when it fails', async () => {
-    (fetchSleepRegularity as jest.Mock).mockRejectedValueOnce(new Error('offline'));
-    renderScreen();
-
-    const retry = await screen.findByTestId('sleep-regularity-retry');
-    expect(screen.getByTestId('sleep-window-chart')).toBeTruthy();
-    expect(screen.queryByTestId('sleep-window-retry')).toBeNull();
-
-    fireEvent.press(retry);
-    expect(await screen.findByTestId('sleep-regularity')).toBeTruthy();
-    expect(fetchSleepRegularity).toHaveBeenCalledTimes(2);
-  });
-
-  it('copes with no nights at all', async () => {
-    (fetchSleep as jest.Mock).mockResolvedValue({ nights: [], earliestDate: null, stagesBackfillPending: false });
-    (fetchSleepRegularity as jest.Mock).mockResolvedValue({
-      days: 7,
-      nights: 0,
-      score: null,
-      bedtimeSpreadMinutes: null,
-      wakeSpreadMinutes: null,
-      averageBedtime: null,
-      averageWake: null,
-      drift: [],
-    });
-    (fetchScoresWithBands as jest.Mock).mockResolvedValue({ scores: [] });
-    renderScreen();
-
-    expect(await screen.findByText('No sleep synced yet.')).toBeTruthy();
-    expect(await screen.findByTestId('sleep-regularity-empty')).toHaveTextContent('Not enough nights yet. 4 more to go.');
-    expect(fetchSleepNight).not.toHaveBeenCalled();
-    expect(screen.getByTestId('sleep-goal-row')).toBeTruthy();
-  });
-
-  it('shows the story shelf at the top, in place of the old "Your recaps" row; See all opens the recaps', async () => {
-    (fetchRecaps as jest.Mock).mockResolvedValue([
-      { id: 'w1', kind: 'WEEK', periodStart: D(8), periodEnd: D(2), line: 'A week.', personaId: 'mochi', builtAt: '2026-10-05T09:00:00.000Z', openedAt: null },
-    ]);
-    renderScreen();
-    expect(await screen.findByTestId('recap-shelf')).toBeTruthy();
-    expect(screen.queryByTestId('sleep-recaps-row')).toBeNull();
-    fireEvent.press(screen.getByTestId('recap-shelf-see-all'));
-    expect(mockNavigate).toHaveBeenCalledWith('Recaps');
-    fireEvent.press(screen.getByTestId('recap-shelf-item-w1'));
-    expect(mockNavigate).toHaveBeenCalledWith('RecapStory', { id: 'w1' });
-  });
-
-  it('keeps Recaps · See all without recaps (no circles), so the recaps and Year in pixels stay reachable', async () => {
-    (fetchRecaps as jest.Mock).mockResolvedValue([]);
-    renderScreen();
-    expect(await screen.findByTestId('recap-shelf-empty')).toBeTruthy();
-    expect(screen.queryByTestId('recap-shelf-row')).toBeNull();
-    fireEvent.press(screen.getByTestId('recap-shelf-see-all'));
-    expect(mockNavigate).toHaveBeenCalledWith('Recaps');
+  it('the Ask bar is hidden when the coach is off; the info sheet still works', async () => {
+    renderScreen({ ...STATUS, enabled: false });
+    await hero();
+    expect(screen.queryByTestId('ask-coach-button')).toBeNull();
+    fireEvent.press(screen.getByTestId('sleep-info'));
+    expect(await screen.findByTestId('sleep-info-sheet')).toBeTruthy();
   });
 });

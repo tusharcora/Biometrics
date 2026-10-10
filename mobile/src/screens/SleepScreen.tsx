@@ -1,279 +1,108 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
-import { useColorScheme } from 'nativewind';
-import { Ionicons } from '@expo/vector-icons';
-import {
-  fetchSleep,
-  fetchSleepGoal,
-  fetchSleepNight,
-  fetchSleepRegularity,
-  type SleepGoal,
-  type SleepNight,
-  type SleepNightDetail,
-  type SleepRegularity,
-} from '../api/sleep';
-import { fetchScoresWithBands, type DailyScoreDTO, type ScoreBandsDTO } from '../api/scores';
+import React, { useContext, useRef, useState } from 'react';
+import { ScrollView, View } from 'react-native';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { useCharacter } from '../characters/CharacterContext';
+import { useScreenFocused } from '../characters/useScreenFocused';
 import { characterInfo } from '../components/characters/registry';
-import { RecapShelf } from '../components/recap/RecapShelf';
-import { RegularityCard } from '../components/sleep/RegularityCard';
-import { SectionError, useSection, type Section } from '../components/sleep/Section';
-import { StageLegend, StageStrip } from '../components/sleep/StageStrip';
-import { WindowChart } from '../components/sleep/WindowChart';
-import { Button, buttonIconSize } from '../components/ui/button';
-import { Card } from '../components/ui/card';
-import { ScoreRing } from '../components/ui/score-ring';
-import { SectionLabel } from '../components/ui/section-label';
-import { SegmentedControl } from '../components/ui/segmented-control';
+import { AskCoachBar } from '../components/coach/AskCoachBar';
+import { BedtimeGoalRow } from '../components/sleep/BedtimeGoalRow';
+import { NightPicker } from '../components/sleep/NightPicker';
+import { NightSummary } from '../components/sleep/NightSummary';
+import { SectionError } from '../components/sleep/Section';
+import { SleepHeader } from '../components/sleep/SleepHeader';
+import { SleepHero } from '../components/sleep/SleepHero';
+import { SleepInfoSheet } from '../components/sleep/SleepInfoSheet';
 import { Skeleton } from '../components/ui/skeleton';
-import { Text } from '../components/ui/text';
-import { addDays, todayCivil } from '../lib/heatmap';
-import { formatClock, formatDuration } from '../lib/sleepStats';
-import { readWindDown, type WindDownSettings } from '../lib/windDown';
+import { sleepQuestion } from '../lib/coachPrompts';
+import { askLabel, SLEEP_COPY } from '../lib/sleepCopy';
+import { coachEntryRoute, useCoachStatus } from '../lib/useCoachStatus';
+import { useSleepPage } from '../lib/useSleepPage';
+import { navigateToCoachEntry } from '../navigation/coachNavigation';
+import type { RootStackParamList } from '../navigation/RootNavigator';
 import { useSync } from '../sync/SyncProvider';
-import { COLORS } from '../theme';
 
-type Range = 'week' | 'two-weeks';
-const RANGE_OPTIONS: { value: Range; label: string }[] = [
-  { value: 'week', label: 'Week' },
-  { value: 'two-weeks', label: 'Two weeks' },
-];
-const RANGE_DAYS: Record<Range, number> = { week: 7, 'two-weeks': 14 };
-// This screen's regularity window (the endpoint also offers 30).
-const REGULARITY_DAYS = 7;
-
-type NightsData = { dates: string[]; nights: SleepNight[]; backfillPending: boolean };
-type ScoreData = { score: DailyScoreDTO | null; bands?: ScoreBandsDTO };
-
-// Every civil date from `from` to `to`, oldest first.
-function datesBetween(from: string, to: string): string[] {
-  const out: string[] = [];
-  for (let d = from; d <= to; d = addDays(d, 1)) out.push(d);
-  return out;
-}
-
-/** "10:30 pm to 6:45 am", one side alone when only one is set, or the prompt to set one. */
-export function goalLine(goal: SleepGoal): string {
-  const { bedtimeGoal: bed, wakeGoal: wake } = goal;
-  if (bed && wake) return `${formatClock(bed)} to ${formatClock(wake)}`;
-  if (bed) return `Bed ${formatClock(bed)} · wake not set`;
-  if (wake) return `Bedtime not set · wake ${formatClock(wake)}`;
-  return 'Set a bedtime goal';
-}
-
+// The one Sleep page (spec 2026-10-09 §3): one night in full under a 7-night picker, then the trends, the goal and
+// Ask. The route param is the single source of truth for the night, so back leaves the page in one step.
 export function SleepScreen() {
   const navigation = useNavigation<any>();
-  const { colorScheme } = useColorScheme();
-  const colors = colorScheme === 'light' ? COLORS.light : COLORS.dark;
+  const param = useRoute<RouteProp<RootStackParamList, 'Sleep'>>().params?.date;
+  // Context, not the hook: tests render screens without a provider.
+  const insets = useContext(SafeAreaInsetsContext);
+  const page = useSleepPage(param);
+  const { state: syncState } = useSync();
+  const scroll = useRef<ScrollView>(null);
+  const [info, setInfo] = useState(false);
+  const { status: coachStatus } = useCoachStatus(navigation);
+  const coachRoute = coachEntryRoute(coachStatus);
+  const focused = useScreenFocused();
   const { characterId } = useCharacter();
   const coachName = characterInfo(characterId).name;
-  // Bumped after each successful sync with Google Health, so the data reloads.
-  const { dataVersion } = useSync();
-  const [range, setRange] = useState<Range>('week');
 
-  const [score, reloadScore] = useSection<ScoreData>('score', async () => {
-    // The same source as the Home sleep tile: the newest Sleep Score.
-    const { scores, bands } = await fetchScoresWithBands(7, 'SLEEP');
-    return { score: scores[0] ?? null, bands };
-  }, [dataVersion]);
+  // Tapping the night already shown does nothing (no params churn, no scroll).
+  const select = (d: string) => {
+    if (d !== page.date) navigation.setParams({ date: d });
+  };
+  const scrollTop = () => scroll.current?.scrollTo?.({ y: 0, animated: true });
+  const pad = { paddingTop: (insets?.top ?? 0) + 8, paddingHorizontal: 16 };
+  const header = <SleepHeader onBack={() => navigation.goBack()} onInfo={() => setInfo(true)} onGoal={() => navigation.navigate('BedtimeGoal')} />;
+  const bundle = page.night.status === 'ready' ? page.night.data : null;
+  const sheet = <SleepInfoSheet visible={info} onClose={() => setInfo(false)} detail={bundle?.score ?? null} bands={page.bands} />;
 
-  const [nights, reloadNights] = useSection<NightsData>(range, async () => {
-    const to = todayCivil();
-    const from = addDays(to, -(RANGE_DAYS[range] - 1));
-    const res = await fetchSleep(from, to);
-    return { dates: datesBetween(from, to), nights: res.nights, backfillPending: res.stagesBackfillPending };
-  }, [dataVersion]);
-
-  const [regularity, reloadRegularity] = useSection<SleepRegularity>('regularity', () => fetchSleepRegularity(REGULARITY_DAYS), [dataVersion]);
-  const [goal, reloadGoal] = useSection<SleepGoal>('goal', () => fetchSleepGoal(), [dataVersion]);
-  // The wind-down reminder lives on the device; read alongside the goal.
-  const [reminder, setReminder] = useState<WindDownSettings | null>(null);
-  const loadReminder = useCallback(() => {
-    readWindDown().then(setReminder, () => undefined);
-  }, []);
-  useEffect(loadReminder, [loadReminder]);
-  // Coming back from the goal screen re-reads the goal and the reminder; the
-  // first focus (opening the screen) is already covered by the loads above.
-  const blurred = useRef(false);
-  useEffect(() => {
-    const offBlur = navigation.addListener?.('blur', () => {
-      blurred.current = true;
-    });
-    const offFocus = navigation.addListener?.('focus', () => {
-      if (!blurred.current) return;
-      blurred.current = false;
-      reloadGoal();
-      loadReminder();
-    });
-    return () => {
-      offBlur?.();
-      offFocus?.();
-    };
-  }, [navigation, reloadGoal, loadReminder]);
-
-  // Last night is the newest night on record; its stages come from the one-night endpoint.
-  const lastNight = useMemo(() => {
-    if (nights.phase !== 'ready' || nights.data.nights.length === 0) return null;
-    return [...nights.data.nights].sort((a, b) => b.date.localeCompare(a.date))[0]!;
-  }, [nights]);
-  const lastNightDate = lastNight?.hasStages ? lastNight.date : null;
-  const [detail, setDetail] = useState<Section<SleepNightDetail> | null>(null);
-  // Only the latest request lands, so a retry or an older date can't overwrite a newer one.
-  const detailRequest = useRef(0);
-  const loadDetail = useCallback(() => {
-    const id = ++detailRequest.current;
-    if (!lastNightDate) {
-      setDetail(null);
-      return;
-    }
-    setDetail({ phase: 'loading' });
-    fetchSleepNight(lastNightDate).then(
-      (data) => id === detailRequest.current && setDetail({ phase: 'ready', data }),
-      () => id === detailRequest.current && setDetail({ phase: 'error' }),
+  if (page.date === null) {
+    return (
+      <View className="flex-1 bg-background" style={pad}>
+        {header}
+        <View testID="sleep-loading" className="items-center gap-3.5 pt-4">
+          <Skeleton className="h-[200px] w-[125px] rounded-card" />
+          <Skeleton className="h-[60px] w-full rounded-lg" />
+          <Skeleton className="h-20 w-full rounded-card" />
+          <Skeleton className="h-64 w-full rounded-card" />
+        </View>
+        {sheet}
+      </View>
     );
-  }, [lastNightDate]);
-  useEffect(() => {
-    loadDetail();
-    return () => {
-      detailRequest.current++;
-    };
-  }, [loadDetail, dataVersion]);
+  }
 
-  const openNight = (date: string) => navigation.navigate('SleepNight', { date });
+  const date = page.date;
+  const isLastNight = date === page.today;
+  const hasNight = bundle ? bundle.night !== null && !bundle.night.mainIsNap : true;
+  const goalMinutes = page.goal.phase === 'ready' ? page.goal.data.sleepGoalMinutes : null;
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
-      <ScrollView contentContainerStyle={{ gap: 16, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32 }}>
-        {/* 0. The story shelf (weekly story placement, design D): every recap, newest first. Its
-            "Recaps · See all" header always shows, so Your recaps and Year in pixels stay reachable. */}
-        <RecapShelf navigation={navigation} />
-
-        {/* 1. Score header */}
-        {score.phase === 'loading' ? <Skeleton testID="sleep-score-loading" className="h-24 w-full rounded-card" /> : null}
-        {score.phase === 'error' ? (
-          <SectionError testID="sleep-score-retry" message="Your Sleep Score could not be loaded." onRetry={reloadScore} />
-        ) : null}
-        {score.phase === 'ready' ? (
-          <Card testID="sleep-score-header" className="flex-row items-center gap-4">
-            <ScoreRing score={score.data.score?.score ?? null} bands={score.data.bands} size={64} strokeWidth={7} numeralClassName="text-headline" />
-            <View className="flex-1 gap-1">
-              <SectionLabel>Sleep Score</SectionLabel>
-              {score.data.score ? (
-                <Button
-                  testID="sleep-why-score"
-                  variant="link"
-                  size="sm"
-                  className="self-start"
-                  iconEnd={<Ionicons name="chevron-forward" size={buttonIconSize('sm')} color={colors.foreground} />}
-                  onPress={() => navigation.navigate('ScoreDetail', { date: score.data.score!.date, type: 'SLEEP' })}
-                >
-                  Why this score
-                </Button>
-              ) : (
-                <Text className="text-caption text-muted-foreground">Your Sleep Score will appear once a night of sleep has been recorded.</Text>
-              )}
-            </View>
-          </Card>
-        ) : null}
-
-        {/* 2. Range toggle */}
-        <SegmentedControl testID="sleep-range" options={RANGE_OPTIONS} value={range} onChange={setRange} />
-
-        {/* 3. Window chart */}
-        {nights.phase === 'loading' ? <Skeleton testID="sleep-window-loading" className="h-64 w-full rounded-card" /> : null}
-        {nights.phase === 'error' ? (
-          <SectionError testID="sleep-window-retry" message="Your nights could not be loaded." onRetry={reloadNights} />
-        ) : null}
-        {nights.phase === 'ready' ? (
-          <Card className="gap-3">
-            <SectionLabel>Bedtime to wake</SectionLabel>
-            <WindowChart
-              dates={nights.data.dates}
-              nights={nights.data.nights}
-              goal={goal.phase === 'ready' ? goal.data : null}
-              onPressNight={openNight}
-            />
-            {nights.data.backfillPending ? (
-              <Text testID="sleep-older-nights" className="text-caption text-muted-foreground">
-                Reading older nights…
-              </Text>
-            ) : null}
-          </Card>
-        ) : null}
-
-        {/* 4. Sleep regularity */}
-        <RegularityCard state={regularity} coachName={coachName} onRetry={reloadRegularity} />
-
-        {/* 5. Last night */}
-        {lastNight ? (
-          <Card testID="sleep-last-night" className="gap-3">
-            <SectionLabel>Last night</SectionLabel>
-            <Text className="text-display tabular-nums">{formatDuration(lastNight.minutesAsleep)}</Text>
-            {detail?.phase === 'loading' ? <Skeleton className="h-4 w-full rounded-full" /> : null}
-            {detail?.phase === 'error' ? (
-              <View className="flex-row items-center justify-between gap-3">
-                <Text className="flex-1 text-caption text-muted-foreground">Stages could not be loaded.</Text>
-                <Button testID="sleep-last-night-retry" variant="secondary" size="sm" onPress={loadDetail}>
-                  Try again
-                </Button>
-              </View>
-            ) : null}
-            {detail?.phase === 'ready' && detail.data.hasStages && detail.data.stages.length > 0 ? (
-              <View className="gap-2">
-                <StageStrip
-                  stages={detail.data.stages}
-                  start={detail.data.stages[0]!.start}
-                  end={detail.data.stages[detail.data.stages.length - 1]!.end}
-                  height={14}
-                />
-                <StageLegend />
-              </View>
-            ) : null}
-            <Button
-              variant="link"
-              size="sm"
-              className="self-start"
-              iconEnd={<Ionicons name="chevron-forward" size={buttonIconSize('sm')} color={colors.foreground} />}
-              onPress={() => openNight(lastNight.date)}
-            >
-              See the whole night
-            </Button>
-          </Card>
-        ) : null}
-
-        {/* 6. Bedtime goal */}
-        {goal.phase === 'error' ? (
-          <SectionError testID="sleep-goal-retry" message="Your bedtime goal could not be loaded." onRetry={reloadGoal} />
+    <View className="flex-1 bg-background">
+      <ScrollView ref={scroll} contentContainerStyle={{ ...pad, gap: 14, paddingBottom: coachRoute ? 120 : 32 }}>
+        {header}
+        {page.night.status === 'error' ? (
+          <SectionError testID="sleep-night-retry" message={SLEEP_COPY.nightError} onRetry={page.reloadNight} />
         ) : (
-          <Pressable
-            testID="sleep-goal-row"
-            accessibilityRole="button"
-            onPress={() => navigation.navigate('BedtimeGoal')}
-            className="active:opacity-70"
-          >
-            <Card className="flex-row items-center gap-3">
-              <View className="flex-1 gap-1">
-                <SectionLabel>Bedtime goal</SectionLabel>
-                {goal.phase === 'loading' ? (
-                  <Skeleton className="h-5 w-40 rounded-full" />
-                ) : (
-                  <Text className="text-body font-semibold">{goalLine(goal.data)}</Text>
-                )}
-                {/* The reminder needs a bedtime, so it is only mentioned once one is set. */}
-                {goal.phase === 'ready' && goal.data.bedtimeGoal && reminder ? (
-                  <Text testID="sleep-goal-reminder" className="text-caption text-muted-foreground">
-                    {reminder.enabled ? `Reminder ${reminder.leadMinutes} min before bed` : 'Reminder off'}
-                  </Text>
-                ) : null}
-              </View>
-              <Ionicons name="chevron-forward" size={18} color={colors.muted} />
-            </Card>
-          </Pressable>
+          <SleepHero date={date} today={page.today} load={page.night} goalMinutes={goalMinutes} bands={page.bands} />
         )}
-
+        <NightPicker
+          anchor={page.anchor}
+          today={page.today}
+          date={date}
+          window={page.window}
+          syncing={syncState === 'syncing'}
+          onSelect={select}
+          onRetry={page.reloadWindow}
+        />
+        {bundle ? (
+          <NightSummary date={date} today={page.today} night={bundle.night} goalMinutes={goalMinutes} />
+        ) : page.night.status === 'loading' ? (
+          <Skeleton testID="sleep-summary-loading" className="h-20 w-full rounded-card" />
+        ) : null}
+        {/* Task 6: <NightCards/>. Task 8: <BedtimeToWakeCard/>, <RegularityCard/>. Task 9: <SleepMonthCard/>. */}
+        <BedtimeGoalRow goal={page.goal} reminder={page.reminder} onPress={() => navigation.navigate('BedtimeGoal')} onRetry={page.reloadGoal} />
       </ScrollView>
-    </SafeAreaView>
+      {coachRoute ? (
+        <AskCoachBar
+          label={askLabel(coachName, isLastNight)}
+          focused={focused}
+          onPress={() => navigateToCoachEntry(navigation, coachRoute, sleepQuestion(date, isLastNight, hasNight))}
+        />
+      ) : null}
+      {sheet}
+    </View>
   );
 }

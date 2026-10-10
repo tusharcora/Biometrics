@@ -51,7 +51,7 @@ const ALLOWED: Exception[] = [
   { file: 'screens/BadgesScreen.tsx', key: 'badges-row-${family}', count: 1, reason: 'a badge family row that opens its detail' },
   { file: 'screens/CoachScreen.tsx', key: 'coach-suggestion-${index}', count: 1, reason: 'a suggested-question row in the empty chat' },
   { file: 'components/coach/PromptBar.tsx', key: 'coach-command-${command.key}', count: 1, reason: 'a row of the slash-command menu' },
-  { file: 'screens/SleepScreen.tsx', key: 'sleep-goal-row', count: 1, reason: 'the bedtime goal settings row (a card that navigates)' },
+  { file: 'components/sleep/BedtimeGoalRow.tsx', key: 'sleep-goal-row', count: 1, reason: 'the bedtime goal row on the Sleep page (a card that navigates)' },
   // Cards and tiles that navigate
   { file: 'screens/RecapsScreen.tsx', key: 'RecapRow:testID', count: 1, reason: 'RecapRow, a recap card that opens the recap' },
   { file: 'screens/RecapsScreen.tsx', key: 'recaps-year', count: 1, reason: 'the Year in Pixels card' },
