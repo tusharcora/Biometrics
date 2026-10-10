@@ -46,7 +46,7 @@ biometricsRouter.get('/me/sleep', requireAuth, async (req: AuthedRequest, res) =
 /**
  * One night in full for the night screen (:date is the night-END civil date):
  * the main session's times, stage timeline and totals, the naps, that day's
- * Sleep Score and the usual minutes asleep. 404 when no session ends that date.
+ * Sleep Score and the usual main-session minutes asleep. 404 when no session ends that date.
  */
 biometricsRouter.get('/me/sleep/night/:date', requireAuth, async (req: AuthedRequest, res) => {
   const { date } = req.params;

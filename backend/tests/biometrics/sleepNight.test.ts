@@ -89,6 +89,7 @@ describe('GET /me/sleep/night/:date', () => {
       naps: [{ start: '2026-09-20T14:00:00.000Z', end: '2026-09-20T14:30:00.000Z', minutesAsleep: 25 }],
       sleepScore: 72,
       usualMinutesAsleep: null,
+      mainIsNap: false,
     });
   });
 
@@ -139,45 +140,82 @@ describe('GET /me/sleep/night/:date', () => {
   });
 
   describe('usualMinutesAsleep', () => {
-    async function seedPreviousNights(userId: string, minutes: number[]) {
-      // Nights ending 2026-09-29, 09-28, ... (all inside the 30 nights before 09-30).
-      await prisma.biometricRecord.createMany({
-        data: minutes.map((value, i) => ({
-          userId, metricType: 'SLEEP' as const, value,
-          recordedAt: new Date(Date.UTC(2026, 8, 29 - i)),
-        })),
-      });
+    // A main session ending 07:00 UTC on `date`, 8 hours long.
+    function nightEnding(date: string, minutesAsleep: number): SleepSessionPoint {
+      const end = at(`${date}T07:00:00Z`);
+      return { startTime: new Date(end.getTime() - 8 * 3600_000), endTime: end, minutesAsleep, startUtcOffsetSeconds: 0, endUtcOffsetSeconds: 0 };
     }
+    // Nights ending 2026-09-29, 09-28, ... (all inside the 30 nights before 09-30).
+    const before = (i: number) => `2026-09-${String(29 - i).padStart(2, '0')}`;
+    const TONIGHT = nightEnding('2026-09-30', 300);
 
-    const TONIGHT: SleepSessionPoint = {
-      startTime: at('2026-09-29T23:00:00Z'), endTime: at('2026-09-30T07:00:00Z'), minutesAsleep: 300,
-      startUtcOffsetSeconds: 0, endUtcOffsetSeconds: 0,
-    };
-
-    it('is null when only 6 of the previous 30 nights have data', async () => {
+    it('is null when only 6 of the previous 30 nights have a main session', async () => {
       const user = await createUser('night-usual-6');
-      await seedPreviousNights(user.id, [400, 410, 420, 430, 440, 450]);
-      await storeSleepSessions(user.id, [TONIGHT]);
+      await storeSleepSessions(user.id, [...[400, 410, 420, 430, 440, 450].map((m, i) => nightEnding(before(i), m)), TONIGHT]);
 
-      const res = await getNight(user.id, '2026-09-30');
-
-      expect(res.body.usualMinutesAsleep).toBeNull();
+      expect((await getNight(user.id, '2026-09-30')).body.usualMinutesAsleep).toBeNull();
     });
 
-    it('is the rounded mean of the previous nights once 7 have data, excluding tonight and older nights', async () => {
+    it('is the rounded mean of the previous main sessions once 7 have one, excluding tonight and older nights', async () => {
       const user = await createUser('night-usual-7');
-      await seedPreviousNights(user.id, [400, 410, 420, 430, 440, 450, 401]);
-      // 31 nights back: outside the window.
-      await prisma.biometricRecord.create({
-        data: { userId: user.id, metricType: 'SLEEP', value: 10, recordedAt: at('2026-08-30') },
-      });
-      await storeSleepSessions(user.id, [TONIGHT]);
-
-      const res = await getNight(user.id, '2026-09-30');
+      await storeSleepSessions(user.id, [
+        ...[400, 410, 420, 430, 440, 450, 401].map((m, i) => nightEnding(before(i), m)),
+        // 31 nights back: outside the window.
+        nightEnding('2026-08-30', 10),
+        TONIGHT,
+      ]);
 
       // (400+410+420+430+440+450+401) / 7 = 421.57
-      expect(res.body.usualMinutesAsleep).toBe(422);
+      expect((await getNight(user.id, '2026-09-30')).body.usualMinutesAsleep).toBe(422);
     });
+
+    it('averages main sessions only: a nap in the window does not raise it', async () => {
+      const user = await createUser('night-usual-nap');
+      await storeSleepSessions(user.id, [
+        ...Array.from({ length: 7 }, (_, i) => nightEnding(before(i), 400)),
+        { startTime: at('2026-09-29T14:00:00Z'), endTime: at('2026-09-29T15:00:00Z'), minutesAsleep: 55, startUtcOffsetSeconds: 0, endUtcOffsetSeconds: 0 },
+        TONIGHT,
+      ]);
+
+      // The old rule (SLEEP rollups, naps included) gave round(455 + 6 * 400) / 7 = 408.
+      expect((await getNight(user.id, '2026-09-30')).body.usualMinutesAsleep).toBe(400);
+    });
+
+    it('ignores SLEEP rollups with no sessions behind them', async () => {
+      const user = await createUser('night-usual-rollups');
+      await prisma.biometricRecord.createMany({
+        data: Array.from({ length: 7 }, (_, i) => ({ userId: user.id, metricType: 'SLEEP' as const, value: 400, recordedAt: new Date(Date.UTC(2026, 8, 29 - i)) })),
+      });
+      await storeSleepSessions(user.id, [TONIGHT]);
+
+      expect((await getNight(user.id, '2026-09-30')).body.usualMinutesAsleep).toBeNull();
+    });
+  });
+
+  it('flags a date whose main session is a daytime nap', async () => {
+    const user = await createUser('night-nap-only');
+    await storeSleepSessions(user.id, [{
+      startTime: at('2026-09-24T14:10:00Z'), endTime: at('2026-09-24T14:35:00Z'), minutesAsleep: 20,
+      startUtcOffsetSeconds: 0, endUtcOffsetSeconds: 0,
+    }]);
+
+    const res = await getNight(user.id, '2026-09-24');
+
+    expect(res.status).toBe(200);
+    expect(res.body).toMatchObject({ minutesAsleep: 20, bedtime: '14:10', mainIsNap: true, naps: [] });
+  });
+
+  it('never logs sleep values or dates', async () => {
+    const user = await createUser('night-logs');
+    await storeSleepSessions(user.id, [NIGHT, NAP]);
+    const spies = (['log', 'info', 'warn', 'error'] as const).map((level) => jest.spyOn(console, level));
+
+    await getNight(user.id, '2026-09-20');
+
+    const logged = spies.flatMap((spy) => spy.mock.calls).flat().map(String).join(' ');
+    expect(logged).not.toMatch(/\b420\b/);
+    expect(logged).not.toContain('2026-09-20');
+    spies.forEach((spy) => spy.mockRestore());
   });
 
   it('returns 404 for a date with no session', async () => {

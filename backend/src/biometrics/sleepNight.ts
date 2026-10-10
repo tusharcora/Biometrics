@@ -1,6 +1,7 @@
 import { prisma } from '../db/client';
 import { civilDateToUtcMidnight, localClockTime, sessionEndCivilDate } from './civilDate';
-import { pickMainSession } from './mainSession';
+import { shiftDate } from '../scoring/dates';
+import { isDaytimeNap, pickMainSession } from './mainSession';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
 // "Usual" is the mean over the 30 nights before this one, and only once at
@@ -9,6 +10,7 @@ const USUAL_WINDOW_NIGHTS = 30;
 const USUAL_MIN_NIGHTS = 7;
 
 type StageType = 'AWAKE' | 'LIGHT' | 'DEEP' | 'REM';
+type HistorySession = { startTime: Date; endTime: Date; endUtcOffsetSeconds: number | null; minutesAsleep: number };
 type StageTotal = { minutes: number; count: number };
 
 export interface SleepNightDetailDTO {
@@ -35,8 +37,27 @@ export interface SleepNightDetailDTO {
   /** Every other session ending that date. */
   naps: { start: string; end: string; minutesAsleep: number }[];
   sleepScore: number | null;
-  /** Mean minutes asleep over the 30 nights before this date; null unless 7 or more have data. */
+  /** Mean main-session minutes asleep over the 30 nights before this date; null unless 7 or more have one. */
   usualMinutesAsleep: number | null;
+  /** The main session is a daytime nap: the date has no night. */
+  mainIsNap: boolean;
+}
+
+/**
+ * Mean main-session minutes asleep over the 30 nights before `date`, by the same main-session rule as everything else;
+ * null unless 7 or more of them have a main session (spec §4.3). Naps never count, so a nap day cannot raise it.
+ */
+export function usualMainMinutes(sessions: HistorySession[], date: string, timeZone: string): number | null {
+  const first = shiftDate(date, -USUAL_WINDOW_NIGHTS);
+  const byDate = new Map<string, HistorySession[]>();
+  for (const s of sessions) {
+    const d = sessionEndCivilDate(s, timeZone);
+    if (d < first || d >= date) continue;
+    byDate.set(d, [...(byDate.get(d) ?? []), s]);
+  }
+  const mains = [...byDate.values()].map((own) => pickMainSession(own)).filter((m): m is HistorySession => m !== null);
+  if (mains.length < USUAL_MIN_NIGHTS) return null;
+  return Math.round(mains.reduce((sum, m) => sum + m.minutesAsleep, 0) / mains.length);
 }
 
 /**
@@ -47,7 +68,7 @@ export interface SleepNightDetailDTO {
 export async function getSleepNight(userId: string, date: string): Promise<SleepNightDetailDTO | null> {
   const day = civilDateToUtcMidnight(date);
 
-  const [user, sessions, score, previous] = await Promise.all([
+  const [user, sessions, score, history] = await Promise.all([
     prisma.user.findUnique({ where: { id: userId }, select: { timezone: true } }),
     // A local date spans at most [D - 14h, D + 1d + 12h) in UTC, so a day of
     // margin each side holds every session ending on it.
@@ -60,12 +81,11 @@ export async function getSleepNight(userId: string, date: string): Promise<Sleep
       where: { userId_date_type: { userId, date: day, type: 'SLEEP' } },
       select: { score: true },
     }),
-    prisma.biometricRecord.findMany({
-      where: {
-        userId, metricType: 'SLEEP',
-        recordedAt: { gte: new Date(day.getTime() - USUAL_WINDOW_NIGHTS * DAY_MS), lt: day },
-      },
-      select: { value: true },
+    // Sessions ending in the 30 nights before D. A local date spans at most [D - 14h, D + 1d + 12h) in UTC, so a day
+    // of margin each side holds them all; usualMainMinutes keeps only the right civil dates.
+    prisma.sleepSession.findMany({
+      where: { userId, endTime: { gte: new Date(day.getTime() - (USUAL_WINDOW_NIGHTS + 1) * DAY_MS), lt: new Date(day.getTime() + DAY_MS) } },
+      select: { startTime: true, endTime: true, endUtcOffsetSeconds: true, minutesAsleep: true },
     }),
   ]);
   const timeZone = user?.timezone ?? 'UTC';
@@ -107,8 +127,7 @@ export async function getSleepNight(userId: string, date: string): Promise<Sleep
       .filter((s) => s !== main)
       .map((s) => ({ start: s.startTime.toISOString(), end: s.endTime.toISOString(), minutesAsleep: s.minutesAsleep })),
     sleepScore: score?.score == null ? null : Math.round(score.score),
-    usualMinutesAsleep: previous.length >= USUAL_MIN_NIGHTS
-      ? Math.round(previous.reduce((sum, r) => sum + r.value, 0) / previous.length)
-      : null,
+    usualMinutesAsleep: usualMainMinutes(history, date, timeZone),
+    mainIsNap: isDaytimeNap(main, timeZone),
   };
 }
