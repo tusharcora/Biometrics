@@ -29,4 +29,10 @@ export const FORECAST_COPY = {
   reset: 'Reset',
   whyHeading: 'Why',
   trackRecordHeading: 'Track record',
+  rightOfLast: (hits: number, days: number) => `right ${hits} of last ${days}`,
+  ifYouSleep: (h: number) => `if you sleep ${h}h tonight`,
+  moreLevers: 'More levers',
+  sleepTonight: 'Sleep tonight',
+  chipHours: (h: number) => `${h}h`,
+  chipLabel: (h: number, score: number) => `${h} hours, predicted ${Math.round(score)}`,
 } as const;

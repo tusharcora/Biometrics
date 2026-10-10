@@ -61,7 +61,7 @@ export function computeBaseline(history: DailyPoint[], cfg: ScoreConfig): Baseli
  * and, when `metric` has one, its absolute floor in the metric's own units
  * (ScoreConfig.spreadFloors).
  */
-function flooredSpread(
+export function flooredSpread(
   baseline: Extract<Baseline, { coldStart: false }>,
   cfg: ScoreConfig,
   metric?: BaselineMetric,

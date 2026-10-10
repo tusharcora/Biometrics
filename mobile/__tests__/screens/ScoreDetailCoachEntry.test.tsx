@@ -9,20 +9,21 @@ jest.mock('../../src/api/scores');
 jest.mock('../../src/api/coach');
 
 const mockNavigate = jest.fn();
+const mockReplace = jest.fn();
 let mockParams: unknown;
 jest.mock('@react-navigation/native', () => ({
   useRoute: () => ({ params: mockParams }),
-  useNavigation: () => ({ setOptions: jest.fn(), navigate: mockNavigate }),
+  useNavigation: () => ({ setOptions: jest.fn(), navigate: mockNavigate, replace: mockReplace }),
 }));
 
 const detail: ScoreDetailDTO = {
   score: {
     date: '2026-09-19',
-    type: 'RECOVERY',
+    type: 'SLEEP',
     score: 78,
     confidenceLevel: 'MEDIUM',
     algorithmVersion: 'v1',
-    factors: [{ factor: 'HRV', label: 'HRV', z: 1.2, weight: 0.45, contribution: 0.54, points: 8.2, imputed: false, excluded: false }],
+    factors: [{ factor: 'SLEEP_EFFICIENCY', label: 'Sleep efficiency', z: 1.2, weight: 0.35, contribution: 0.42, points: 8.2, imputed: false, excluded: false }],
     coldStart: [],
   },
   baselines: [],
@@ -40,7 +41,7 @@ const status: CoachStatusDTO = {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  mockParams = { date: '2026-09-19', type: 'RECOVERY' };
+  mockParams = { date: '2026-09-19', type: 'SLEEP' };
   (fetchScoreDetail as jest.Mock).mockResolvedValue(detail);
   (fetchCoachStatus as jest.Mock).mockResolvedValue(status);
 });
@@ -57,23 +58,11 @@ describe('ScoreDetailScreen: Ask about this', () => {
     // pop: reuse the existing Tabs route rather than pushing a second one over this screen.
     expect(options).toEqual({ pop: true });
     expect(args.screen).toBe('Coach');
-    expect(args.params.prefill).toMatch(/why did my score change today/i);
+    expect(args.params.prefill).toMatch(/why did my sleep score change today/i);
     expect(args.params.prefill).not.toMatch(/\d/);
     // Neither the score (78) nor the date leaks into the prompt.
     expect(args.params.prefill).not.toContain('78');
     expect(args.params.prefill).not.toContain('2026');
-  });
-
-  it('asks about sleep on the Sleep Score, still without numbers', async () => {
-    mockParams = { date: '2026-09-19', type: 'SLEEP' };
-    (fetchScoreDetail as jest.Mock).mockResolvedValue({ ...detail, score: { ...detail.score, type: 'SLEEP' } });
-    const { findByTestId } = render(<ScoreDetailScreen />);
-
-    fireEvent.press(await findByTestId('ask-coach-button'));
-
-    const [, args] = mockNavigate.mock.calls[0];
-    expect(args.params.prefill).toMatch(/sleep/i);
-    expect(args.params.prefill).not.toMatch(/\d/);
   });
 
   it('goes through the consent flow when the coach is enabled but not consented', async () => {

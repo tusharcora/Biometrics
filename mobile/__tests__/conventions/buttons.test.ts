@@ -75,6 +75,9 @@ const ALLOWED: Exception[] = [
   { file: 'components/sleep/WindowChart.tsx', key: 'sleep-window-bar-${bar.date}', count: 1, reason: 'a chart bar that opens its night' },
   { file: 'components/coach/TodayBar.tsx', key: 'today-bar-${bar.metric}', count: 1, reason: 'a metric bar that asks the coach about it' },
   { file: 'components/social/CampBanner.tsx', key: 'camp-banner', count: 1, reason: 'the camp banner strip that opens the Campfire' },
+  { file: 'components/recovery/LastSevenDays.tsx', key: 'recovery-day-${day.date}', count: 1, reason: 'a day column in the Last 7 days strip that opens that day' },
+  { file: 'components/recovery/LastNightTile.tsx', key: 'recovery-last-night', count: 1, reason: 'the Last night tile that opens the night' },
+  { file: 'components/recovery/RecoveryCalendar.tsx', key: 'recovery-cal-${cell.date}', count: 1, reason: 'a calendar day that opens that day' },
   // Tabs
   { file: 'navigation/FloatingTabBar.tsx', key: 'tab-${route.name}', count: 1, reason: 'a tab bar item' },
   // Story rings, avatars and scene characters
@@ -94,7 +97,7 @@ const ALLOWED: Exception[] = [
   { file: 'screens/SocialStoryScreen.tsx', key: 'social-story-prev', count: 1, reason: 'the left story tap zone' },
   { file: 'screens/SocialStoryScreen.tsx', key: 'social-story-next', count: 1, reason: 'the right story tap zone' },
   // The documented custom exception
-  { file: 'screens/ScoreDetailScreen.tsx', key: 'ask-coach-button', count: 1, reason: 'Ask Coach, a GlassSurface CTA with the character (kept custom by plan)' },
+  { file: 'components/coach/AskCoachBar.tsx', key: 'ask-coach-button', count: 1, reason: 'Ask {coach}, a GlassSurface CTA with the character (the one documented custom CTA)' },
 ];
 
 type Found = { file: string; line: number; tag: string; key: string };

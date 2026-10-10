@@ -1,9 +1,8 @@
-import React, { useContext, useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View, ScrollView } from 'react-native';
-import { SafeAreaInsetsContext, SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute, useNavigation, type RouteProp } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
-import { Ionicons } from '@expo/vector-icons';
 import { fetchScoreDetail, type ScoreDetailDTO } from '../api/scores';
 import { Text } from '../components/ui/text';
 import { Card } from '../components/ui/card';
@@ -15,10 +14,8 @@ import { FactorBar, factorBarScale } from '../components/ui/factor-bar';
 import { COLORS } from '../theme';
 import { withAlpha } from '../lib/utils';
 import { Glow } from '../components/ui/glow';
-import { GlassSurface } from '../components/ui/glass-surface';
-import { PressableScale } from '../components/ui/pressable-scale';
 import { SectionLabel } from '../components/ui/section-label';
-import { Character } from '../components/characters/Character';
+import { AskCoachBar } from '../components/coach/AskCoachBar';
 import { useScreenFocused } from '../characters/useScreenFocused';
 import { coachEntryRoute, useCoachStatus } from '../lib/useCoachStatus';
 import { navigateToCoachEntry } from '../navigation/coachNavigation';
@@ -63,14 +60,19 @@ export function ScoreDetailScreen() {
   const { status: coachStatus } = useCoachStatus(navigation);
   const coachRoute = coachEntryRoute(coachStatus);
   const focused = useScreenFocused();
-  // Context, not the hook: tests render this screen without a provider.
-  const insets = useContext(SafeAreaInsetsContext);
+  // RECOVERY has its own page; this screen serves SLEEP only.
+  const redirecting = type !== 'SLEEP';
+
+  useEffect(() => {
+    if (redirecting) navigation.replace('Recovery', { date });
+  }, [navigation, redirecting, date]);
 
   React.useLayoutEffect(() => {
     navigation.setOptions({ title: scoreTypeLabel(type) });
   }, [navigation, type]);
 
   useEffect(() => {
+    if (redirecting) return;
     let cancelled = false;
     setState({ status: 'loading' });
     (async () => {
@@ -85,11 +87,13 @@ export function ScoreDetailScreen() {
     return () => {
       cancelled = true;
     };
-  }, [date, type]);
+  }, [date, type, redirecting]);
 
   const detail = state.status === 'ready' ? state.detail : null;
   const factors = useMemo(() => (detail ? sortFactorsByImpact(detail.score.factors) : []), [detail]);
   const scale = useMemo(() => factorBarScale(factors), [factors]);
+
+  if (redirecting) return null;
 
   if (state.status === 'loading') {
     return (
@@ -211,24 +215,11 @@ export function ScoreDetailScreen() {
       </ScrollView>
 
       {coachRoute ? (
-        <View className="absolute bottom-0 left-0 right-0 px-5" style={{ paddingBottom: Math.max(insets?.bottom ?? 0, 16) }} pointerEvents="box-none">
-          <PressableScale
-            testID="ask-coach-button"
-            accessibilityRole="button"
-            onPress={() => navigateToCoachEntry(navigation, coachRoute, scoreQuestion(score.type))}
-          >
-            <GlassSurface
-              scheme={scheme === 'light' ? 'light' : 'dark'}
-              fallbackColor={colors.surfaceRaised}
-              borderRadius={8}
-              style={{ height: 60, flexDirection: 'row', alignItems: 'center', gap: 12, paddingHorizontal: 10, borderWidth: 1, borderColor: colors.hairline }}
-            >
-              <Character testID="ask-coach-character" mood="idle" size={40} paused={!focused} />
-              <Text className="flex-1 text-body font-semibold">Ask Coach about this</Text>
-              <Ionicons name="chevron-forward" size={18} color={colors.muted} style={{ marginRight: 8 }} />
-            </GlassSurface>
-          </PressableScale>
-        </View>
+        <AskCoachBar
+          label="Ask Coach about this"
+          focused={focused}
+          onPress={() => navigateToCoachEntry(navigation, coachRoute, scoreQuestion(score.type))}
+        />
       ) : null}
     </SafeAreaView>
   );

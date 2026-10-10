@@ -269,7 +269,7 @@ export function DashboardScreen() {
           score={recovery}
           bands={bands}
           failed={scoresFailed}
-          onPress={(score) => navigation.navigate('ScoreDetail', { date: score.date, type: 'RECOVERY' })}
+          onPress={(score) => navigation.navigate('Recovery', { date: score.date })}
         />
 
         <View className="flex-row gap-3">

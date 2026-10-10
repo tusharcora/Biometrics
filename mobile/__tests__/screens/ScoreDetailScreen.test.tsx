@@ -6,11 +6,14 @@ import { fetchScoreDetail, type ScoreDetailDTO } from '../../src/api/scores';
 jest.mock('../../src/api/scores');
 
 const mockSetOptions = jest.fn();
+const mockReplace = jest.fn();
+// One object across renders, as React Navigation gives, so effects keyed on it run once.
+const mockNavigation = { setOptions: mockSetOptions, replace: mockReplace };
 let mockParams: unknown;
 
 jest.mock('@react-navigation/native', () => ({
   useRoute: () => ({ params: mockParams }),
-  useNavigation: () => ({ setOptions: mockSetOptions }),
+  useNavigation: () => mockNavigation,
 }));
 
 const detail: ScoreDetailDTO = {
@@ -40,117 +43,41 @@ beforeEach(() => {
 });
 
 describe('ScoreDetailScreen', () => {
-  it('requests the score for the route date and type', async () => {
-    (fetchScoreDetail as jest.Mock).mockResolvedValue(detail);
+  // RECOVERY has its own page; ScoreDetail only serves SLEEP and hands anything else to Recovery.
+  describe('Recovery redirect', () => {
+    it('replaces itself with Recovery for type RECOVERY, without fetching the score', async () => {
+      (fetchScoreDetail as jest.Mock).mockResolvedValue(detail);
 
-    render(<ScoreDetailScreen />);
+      const { toJSON } = render(<ScoreDetailScreen />);
 
-    await waitFor(() => expect(fetchScoreDetail).toHaveBeenCalledWith('2026-09-19', 'RECOVERY'));
-  });
-
-  it('renders, top to bottom: ring, confidence badge, headline, factor bars, baselines', async () => {
-    (fetchScoreDetail as jest.Mock).mockResolvedValue(detail);
-
-    const { getByTestId, getByText, toJSON } = render(<ScoreDetailScreen />);
-
-    await waitFor(() => expect(getByTestId('score-ring')).toBeTruthy());
-    expect(getByText('78')).toBeTruthy();
-    expect(getByTestId('confidence-badge')).toBeTruthy();
-    expect(getByText(/HRV is the biggest lift on your Recovery Score today \(\+8\.2 pts\)\./)).toBeTruthy();
-    expect(getByText(/not a medical assessment/)).toBeTruthy();
-    expect(getByText('Your HRV baseline: 42 ms ± 6 ms, based on your last 30 days.')).toBeTruthy();
-
-    // Vertical order in the rendered tree.
-    const tree = JSON.stringify(toJSON());
-    const order = ['"score-ring"', '"confidence-badge"', 'biggest lift', '"factor-bar-HRV"', 'HRV baseline'].map((needle) => tree.indexOf(needle));
-    expect(order.every((i) => i >= 0)).toBe(true);
-    expect([...order].sort((a, b) => a - b)).toEqual(order);
-  });
-
-  it('lists every factor, signed, sorted by |points| descending', async () => {
-    (fetchScoreDetail as jest.Mock).mockResolvedValue(detail);
-
-    const { getAllByTestId } = render(<ScoreDetailScreen />);
-
-    await waitFor(() => expect(getAllByTestId(/^factor-bar-(HRV|RHR|SLEEP_DEBT)$/)).toHaveLength(3));
-    const ids = getAllByTestId(/^factor-bar-(HRV|RHR|SLEEP_DEBT)$/).map((node) => node.props.testID);
-    expect(ids).toEqual(['factor-bar-HRV', 'factor-bar-RHR', 'factor-bar-SLEEP_DEBT']);
-  });
-
-  it('labels the RESTING_HR factor and its baseline as resting heart rate, never a daily minimum', async () => {
-    (fetchScoreDetail as jest.Mock).mockResolvedValue(detail);
-
-    const { getByText, queryByText } = render(<ScoreDetailScreen />);
-
-    await waitFor(() => expect(getByText('Resting HR')).toBeTruthy());
-    expect(getByText(/Your resting heart rate baseline: 52 bpm ± 3 bpm/)).toBeTruthy();
-    expect(queryByText(/daily minimum/i)).toBeNull();
-  });
-
-  it('shows the baseline-progress state instead of a score ring on a cold-start day', async () => {
-    (fetchScoreDetail as jest.Mock).mockResolvedValue({
-      score: {
-        ...detail.score,
-        score: null,
-        confidenceLevel: 'LOW',
-        factors: detail.score.factors.map((f) => ({ ...f, z: null, points: 0, contribution: 0, excluded: true })),
-        coldStart: [
-          { metric: 'HRV', daysCollected: 9, daysRequired: 14 },
-          { metric: 'RESTING_HR', daysCollected: 3, daysRequired: 14 },
-        ],
-      },
-      baselines: [],
-      previous: null,
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('Recovery', { date: '2026-09-19' }));
+      expect(mockReplace).toHaveBeenCalledTimes(1);
+      expect(fetchScoreDetail).not.toHaveBeenCalled();
+      expect(toJSON()).toBeNull();
     });
 
-    const { getByTestId, getByText, queryByTestId } = render(<ScoreDetailScreen />);
+    it('replaces itself with Recovery when the route has no type, without fetching the score', async () => {
+      mockParams = { date: '2026-09-19' };
+      (fetchScoreDetail as jest.Mock).mockResolvedValue(detail);
 
-    await waitFor(() => expect(getByTestId('baseline-progress-ring')).toBeTruthy());
-    expect(getByText('9/14 days')).toBeTruthy();
-    expect(queryByTestId('score-ring')).toBeNull();
-    expect(getByText(/isn’t ready yet/)).toBeTruthy();
-  });
+      const { toJSON } = render(<ScoreDetailScreen />);
 
-  it('shows a loading state while the score is being fetched', () => {
-    (fetchScoreDetail as jest.Mock).mockReturnValue(new Promise(() => {}));
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith('Recovery', { date: '2026-09-19' }));
+      expect(mockReplace).toHaveBeenCalledTimes(1);
+      expect(fetchScoreDetail).not.toHaveBeenCalled();
+      expect(toJSON()).toBeNull();
+    });
 
-    const { getByTestId } = render(<ScoreDetailScreen />);
+    it('stays on the score detail for type SLEEP', async () => {
+      mockParams = { date: '2026-09-19', type: 'SLEEP' };
+      (fetchScoreDetail as jest.Mock).mockResolvedValue({ ...detail, score: { ...detail.score, type: 'SLEEP' } });
 
-    expect(getByTestId('score-detail-loading')).toBeTruthy();
-  });
+      const { findByTestId } = render(<ScoreDetailScreen />);
 
-  it('shows an empty state when there is no score for that day', async () => {
-    (fetchScoreDetail as jest.Mock).mockResolvedValue(null);
-
-    const { getByText } = render(<ScoreDetailScreen />);
-
-    await waitFor(() => expect(getByText(/No score for this day yet/i)).toBeTruthy());
-  });
-
-  it('shows an error state when the fetch fails', async () => {
-    (fetchScoreDetail as jest.Mock).mockRejectedValue(new Error('network error'));
-
-    const { getByText } = render(<ScoreDetailScreen />);
-
-    await waitFor(() => expect(getByText(/Something went wrong/i)).toBeTruthy());
-  });
-
-  it('sets the header title from the score type', async () => {
-    (fetchScoreDetail as jest.Mock).mockResolvedValue(detail);
-
-    render(<ScoreDetailScreen />);
-
-    expect(mockSetOptions).toHaveBeenCalledWith({ title: 'Recovery Score' });
-  });
-
-  it('defaults to RECOVERY when the route has no type param', async () => {
-    mockParams = { date: '2026-09-19' };
-    (fetchScoreDetail as jest.Mock).mockResolvedValue(detail);
-
-    render(<ScoreDetailScreen />);
-
-    await waitFor(() => expect(fetchScoreDetail).toHaveBeenCalledWith('2026-09-19', 'RECOVERY'));
-    expect(mockSetOptions).toHaveBeenCalledWith({ title: 'Recovery Score' });
+      expect(await findByTestId('score-ring')).toBeTruthy();
+      expect(fetchScoreDetail).toHaveBeenCalledWith('2026-09-19', 'SLEEP');
+      expect(mockReplace).not.toHaveBeenCalled();
+    });
   });
 
   describe('Sleep Score (type=SLEEP)', () => {
@@ -304,7 +231,8 @@ describe('ScoreDetailScreen', () => {
   });
 
   it('shows no goal text when the factor carries no goal', async () => {
-    (fetchScoreDetail as jest.Mock).mockResolvedValue(detail);
+    mockParams = { date: '2026-09-19', type: 'SLEEP' };
+    (fetchScoreDetail as jest.Mock).mockResolvedValue({ ...detail, score: { ...detail.score, type: 'SLEEP' } });
 
     const { findByTestId, queryByText } = render(<ScoreDetailScreen />);
 

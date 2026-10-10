@@ -4,6 +4,7 @@ import { localCivilDate, civilDateToUtcMidnight } from '../biometrics/civilDate'
 import { prisma } from '../db/client';
 import { getLiveConfig } from './configs';
 import { isCivilDate, shiftDate } from './dates';
+import { loadScoreDetail } from './detail';
 import { BASELINE_METRICS, ScoreType, toBaselineDTOs, toDailyScoreDTO } from './dto';
 
 export const scoresRouter = Router();
@@ -71,28 +72,10 @@ scoresRouter.get('/me/scores/:date', requireAuth, async (req: AuthedRequest, res
     return;
   }
 
-  const userId = req.userId!;
-  const day = civilDateToUtcMidnight(date);
-  const row = await prisma.dailyScore.findUnique({ where: { userId_date_type: { userId, date: day, type } } });
+  const { row, snapshots, previous } = await loadScoreDetail(req.userId!, date, type);
   if (!row) {
     res.status(404).json({ error: `No ${type} score for ${date}` });
     return;
   }
-
-  const snapshots = await prisma.baselineSnapshot.findMany({
-    where: { userId, date: day, metric: { in: BASELINE_METRICS } },
-  });
-  // The last day with an actual score (a cold-start day has none), so the
-  // client can show "+4 vs yesterday" without a second round trip.
-  const prev = await prisma.dailyScore.findFirst({
-    where: { userId, type, date: { lt: day }, score: { not: null } },
-    orderBy: { date: 'desc' },
-  });
-
-  res.json({
-    score: toDailyScoreDTO(row, snapshots),
-    baselines: toBaselineDTOs(snapshots, type),
-    previous: prev && prev.score !== null ? { date: prev.date.toISOString().slice(0, 10), score: Math.round(prev.score * 10) / 10 } : null,
-    bands: getLiveConfig().scoreBands,
-  });
+  res.json({ score: toDailyScoreDTO(row, snapshots), baselines: toBaselineDTOs(snapshots, type), previous, bands: getLiveConfig().scoreBands });
 });
