@@ -7,9 +7,11 @@ import { useScreenFocused } from '../characters/useScreenFocused';
 import { characterInfo } from '../components/characters/registry';
 import { AskCoachBar } from '../components/coach/AskCoachBar';
 import { BedtimeGoalRow } from '../components/sleep/BedtimeGoalRow';
+import { BedtimeToWakeCard, type SleepRange } from '../components/sleep/BedtimeToWakeCard';
 import { NightCards } from '../components/sleep/NightCards';
 import { NightPicker } from '../components/sleep/NightPicker';
 import { NightSummary } from '../components/sleep/NightSummary';
+import { RegularityCard } from '../components/sleep/RegularityCard';
 import { SectionError } from '../components/sleep/Section';
 import { SleepHeader } from '../components/sleep/SleepHeader';
 import { SleepHero } from '../components/sleep/SleepHero';
@@ -34,6 +36,7 @@ export function SleepScreen() {
   const { state: syncState } = useSync();
   const scroll = useRef<ScrollView>(null);
   const [info, setInfo] = useState(false);
+  const [range, setRange] = useState<SleepRange>('week');
   const { status: coachStatus } = useCoachStatus(navigation);
   const coachRoute = coachEntryRoute(coachStatus);
   const focused = useScreenFocused();
@@ -97,7 +100,19 @@ export function SleepScreen() {
           // pop: back on the tab navigator rather than a second Tabs pushed over this page (ruling F3).
           <NightCards night={bundle.night} onStepsThatDay={() => navigation.navigate('Tabs', { screen: 'Activity', params: { date } }, { pop: true })} />
         ) : null}
-        {/* Task 8: <BedtimeToWakeCard/>, <RegularityCard/>. Task 9: <SleepMonthCard/>. */}
+        {page.window.phase === 'ready' ? (
+          <BedtimeToWakeCard
+            anchor={page.anchor}
+            date={date}
+            nights={page.window.data.nights}
+            goal={page.goal.phase === 'ready' ? page.goal.data : null}
+            range={range}
+            onRange={setRange}
+            onSelect={select}
+          />
+        ) : null}
+        <RegularityCard state={page.regularity} onRetry={page.reloadRegularity} />
+        {/* Task 9: <SleepMonthCard/>. */}
         <BedtimeGoalRow goal={page.goal} reminder={page.reminder} onPress={() => navigation.navigate('BedtimeGoal')} onRetry={page.reloadGoal} />
       </ScrollView>
       {coachRoute ? (

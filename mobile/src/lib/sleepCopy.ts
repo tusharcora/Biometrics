@@ -110,7 +110,7 @@ export function formatHm(minutes: number): string {
   return `${Math.floor(m / 60)}:${String(m % 60).padStart(2, '0')}`;
 }
 
-// The same thresholds the old regularityLine used (spec §3.10). "Regularity", never "consistency".
+// The same 75 / 50 thresholds as the old regularity coach lines (spec §3.10). "Regularity", never "consistency".
 export const regularityWord = (score: number) => (score >= 75 ? 'Very regular' : score >= 50 ? 'Fairly regular' : 'Irregular');
 
 export function spreadLine(bedtime: number | null, wake: number | null): string | null {

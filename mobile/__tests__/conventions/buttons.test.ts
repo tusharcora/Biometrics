@@ -72,7 +72,7 @@ const ALLOWED: Exception[] = [
   { file: 'components/achievements/BadgesCard.tsx', key: 'badges-card-${family}', count: 1, reason: 'a badge tile on the home card' },
   { file: 'components/activity/UsualTiles.tsx', key: 'usual-tile-${tile.type}', count: 1, reason: 'a usual-range tile that opens the metric' },
   { file: 'components/activity-sheets.tsx', key: 'LinkTile:testID', count: 1, reason: 'LinkTile, a tile that opens a detail sheet' },
-  { file: 'components/sleep/WindowChart.tsx', key: 'sleep-window-bar-${bar.date}', count: 1, reason: 'a chart bar that opens its night' },
+  { file: 'components/sleep/WindowChart.tsx', key: 'sleep-window-bar-${bar.date}', count: 1, reason: 'a chart bar that selects its night' },
   { file: 'components/coach/TodayBar.tsx', key: 'today-bar-${bar.metric}', count: 1, reason: 'a metric bar that asks the coach about it' },
   { file: 'components/social/CampBanner.tsx', key: 'camp-banner', count: 1, reason: 'the camp banner strip that opens the Campfire' },
   { file: 'components/recovery/LastSevenDays.tsx', key: 'recovery-day-${day.date}', count: 1, reason: 'a day column in the Last 7 days strip that opens that day' },

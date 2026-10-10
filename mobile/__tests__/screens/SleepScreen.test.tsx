@@ -7,6 +7,7 @@ import { fetchSleep, fetchSleepGoal, fetchSleepNight, fetchSleepRegularity } fro
 import { fetchScoreDetail } from '../../src/api/scores';
 import { readWindDown } from '../../src/lib/windDown';
 import { SLEEP_SCORE_FRAMING } from '../../src/lib/scoreInsights';
+import { regularityA11y } from '../../src/lib/sleepCopy';
 import { COLORS } from '../../src/theme';
 import type { CoachStatusDTO } from '../../src/api/coach';
 
@@ -419,5 +420,138 @@ describe('SleepScreen: the night in full', () => {
     const tree = JSON.stringify(toJSON());
     expect(tree.indexOf('sleep-summary')).toBeLessThan(tree.indexOf('sleep-stages-card'));
     expect(tree.indexOf('sleep-night-numbers')).toBeLessThan(tree.indexOf('sleep-goal-row'));
+  });
+});
+
+describe('SleepScreen: bedtime to wake', () => {
+  const WEEK = ['2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05', '2026-10-07', TODAY];
+  const chart = () => waitFor(() => expect(screen.getByTestId(`sleep-window-bar-${TODAY}`)).toBeTruthy());
+
+  it('a bar per night in the week, D selected and ringed, the goal band with dashed edges, no averages', async () => {
+    renderScreen();
+    const card = await screen.findByTestId('sleep-window-card');
+    expect(within(card).getByText('Bedtime to wake')).toBeTruthy();
+    const range = within(card).getByTestId('sleep-range');
+    expect(within(range).getByText('Week')).toBeTruthy();
+    expect(within(range).getByText('2 weeks')).toBeTruthy();
+    await chart();
+    for (const d of WEEK) expect(screen.getByTestId(`sleep-window-bar-${d}`)).toBeTruthy();
+    expect(screen.queryByTestId('sleep-window-bar-2026-10-06')).toBeNull();
+    const d = screen.getByTestId(`sleep-window-bar-${TODAY}`);
+    expect(within(d).getByTestId('sleep-window-selected')).toBeTruthy();
+    expect(d.props.accessibilityLabel).toBe('Thursday: 11:08 pm to 6:40 am, selected');
+    expect(d.props.accessibilityState).toMatchObject({ selected: true });
+    const mon = screen.getByTestId('sleep-window-bar-2026-10-05');
+    expect(mon.props.accessibilityLabel).toBe('Monday: 12:50 am to 6:10 am');
+    expect(within(mon).queryByTestId('sleep-window-selected')).toBeNull();
+    expect(screen.getAllByTestId('sleep-window-selected')).toHaveLength(1);
+    expect(screen.queryByTestId('sleep-window-avg-bedtime')).toBeNull();
+    expect(screen.queryByTestId('sleep-window-avg-wake')).toBeNull();
+    expect(screen.getByTestId('sleep-window-goal-band')).toBeTruthy();
+    expect(screen.getByTestId('sleep-window-goal-top')).toBeTruthy();
+    expect(screen.getByTestId('sleep-window-goal-bottom')).toBeTruthy();
+    expect(screen.getByTestId(`sleep-window-initial-${TODAY}`, { includeHiddenElements: true })).toHaveStyle({ color: COLORS.light.foreground });
+    expect(screen.getByTestId('sleep-window-initial-2026-10-07', { includeHiddenElements: true })).not.toHaveStyle({ color: COLORS.light.foreground });
+  });
+
+  it('axis ticks read on the app clock (formatClock), not 24-hour (ruling F18)', async () => {
+    renderScreen();
+    await chart();
+    for (const t of ['9:00 pm', '12:00 am', '3:00 am', '6:00 am', '9:00 am']) {
+      expect(screen.getByText(t, { includeHiddenElements: true })).toBeTruthy();
+    }
+    expect(screen.queryByText('21:00', { includeHiddenElements: true })).toBeNull();
+    expect(screen.queryByText('00:00', { includeHiddenElements: true })).toBeNull();
+  });
+
+  it('a bar tap selects that night; the selected bar is a no-op', async () => {
+    renderScreen();
+    await chart();
+    fireEvent.press(screen.getByTestId('sleep-window-bar-2026-10-04'));
+    expect(mockNavigation.setParams).toHaveBeenCalledWith({ date: '2026-10-04' });
+    mockNavigation.setParams.mockClear();
+    fireEvent.press(screen.getByTestId(`sleep-window-bar-${TODAY}`));
+    expect(mockNavigation.setParams).not.toHaveBeenCalled();
+    expect(mockNavigation.navigate).not.toHaveBeenCalled();
+    expect(mockNavigation.push).not.toHaveBeenCalled();
+  });
+
+  it('2 weeks shows fourteen days without a refetch', async () => {
+    renderScreen();
+    await chart();
+    fireEvent.press(screen.getByText('2 weeks'));
+    const initials = screen.getAllByTestId(/^sleep-window-initial-/, { includeHiddenElements: true });
+    expect(initials).toHaveLength(14);
+    expect(initials[0]!.props.testID).toBe('sleep-window-initial-2026-09-25');
+    expect(initials[13]!.props.testID).toBe(`sleep-window-initial-${TODAY}`);
+    expect(sleepFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('a nap-only date is a gap, not a bar (plan ruling 5)', async () => {
+    sleepFetch.mockResolvedValue(makeWindow({ nights: [...makeWindow().nights, makeNight('2026-10-06', { mainIsNap: true, bedtime: '14:10', wakeTime: '14:35' })] }));
+    renderScreen();
+    await chart();
+    expect(screen.queryByTestId('sleep-window-bar-2026-10-06')).toBeNull();
+  });
+
+  it('no nights: the chart says so', async () => {
+    sleepFetch.mockResolvedValue(makeWindow({ nights: [] }));
+    renderScreen();
+    const card = await screen.findByTestId('sleep-window-card');
+    expect(within(card).getByText('No sleep synced yet.')).toBeTruthy();
+  });
+
+  it('an old night anchors the week on itself and selects its bar', async () => {
+    mockParams = { date: '2026-09-10' };
+    sleepFetch.mockResolvedValue(makeWindow({
+      nights: ['2026-09-04', '2026-09-05', '2026-09-06', '2026-09-07', '2026-09-08', '2026-09-09', '2026-09-10'].map((d) => makeNight(d)),
+    }));
+    renderScreen();
+    await waitFor(() => expect(screen.getByTestId('sleep-window-bar-2026-09-10')).toBeTruthy());
+    for (const d of ['2026-09-04', '2026-09-07', '2026-09-10']) expect(screen.getByTestId(`sleep-night-${d}`)).toBeTruthy();
+    expect(screen.queryByTestId('sleep-night-2026-09-03')).toBeNull();
+    expect(screen.queryByTestId('sleep-night-2026-09-11')).toBeNull();
+    expect(within(screen.getByTestId('sleep-window-bar-2026-09-10')).getByTestId('sleep-window-selected')).toBeTruthy();
+  });
+});
+
+describe('SleepScreen: regularity', () => {
+  it('the compact card: label, word and spreads, one spoken element, no drift strip or coach line', async () => {
+    renderScreen();
+    const card = await screen.findByTestId('sleep-regularity');
+    expect(within(card).getByText('Regularity · 7 nights')).toBeTruthy();
+    expect(within(card).getByText('Fairly regular')).toBeTruthy();
+    expect(within(card).getByText('Bedtime ±24m · Wake ±18m')).toBeTruthy();
+    expect(card.props.accessibilityLabel).toBe(regularityA11y(74, 'Fairly regular', 24, 18));
+    expect(card.props.accessibilityLabel).not.toMatch(SPOKEN_FORBIDDEN);
+    expect(screen.queryByTestId('sleep-drift-strip')).toBeNull();
+    expect(screen.queryByTestId('sleep-regularity-coach')).toBeNull();
+  });
+
+  it('too few nights: how many more to go', async () => {
+    (fetchSleepRegularity as jest.Mock).mockResolvedValue({ ...REGULARITY, nights: 2, score: null, bedtimeSpreadMinutes: null, wakeSpreadMinutes: null });
+    renderScreen();
+    expect(await screen.findByText('Not enough nights yet. 2 more to go.')).toBeTruthy();
+  });
+
+  it('an error has its own retry', async () => {
+    (fetchSleepRegularity as jest.Mock).mockRejectedValueOnce(new Error('offline'));
+    renderScreen();
+    expect(await screen.findByText('Sleep regularity could not be loaded.')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('sleep-regularity-retry'));
+    expect(await screen.findByTestId('sleep-regularity')).toBeTruthy();
+    expect(fetchSleepRegularity).toHaveBeenCalledTimes(2);
+  });
+
+  it('the night cards, then bedtime to wake, regularity and the goal row', async () => {
+    const { toJSON } = renderScreen();
+    await screen.findByTestId('sleep-night-numbers');
+    await screen.findByTestId('sleep-window-card');
+    await screen.findByTestId('sleep-regularity');
+    await screen.findByTestId('sleep-goal-row');
+    const tree = JSON.stringify(toJSON());
+    expect(tree.indexOf('sleep-night-numbers')).toBeLessThan(tree.indexOf('sleep-window-card'));
+    expect(tree.indexOf('sleep-window-card')).toBeLessThan(tree.indexOf('"sleep-regularity"'));
+    expect(tree.indexOf('"sleep-regularity"')).toBeLessThan(tree.indexOf('sleep-goal-row'));
   });
 });
