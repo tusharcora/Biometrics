@@ -1,4 +1,5 @@
 import React from 'react';
+import { ScrollView } from 'react-native';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { withCharacter } from '../../jest-mocks/characterContext';
 import { GOAL, REGULARITY, REMINDER, TODAY, makeDetail, makeNight, makeScore, makeWindow } from '../../jest-mocks/sleepPageFixture';
@@ -464,16 +465,48 @@ describe('SleepScreen: bedtime to wake', () => {
     expect(screen.queryByText('00:00', { includeHiddenElements: true })).toBeNull();
   });
 
-  it('a bar tap selects that night; the selected bar is a no-op', async () => {
+  it('a bar tap selects that night and scrolls to the top; the selected bar is a complete no-op (ruling I-2)', async () => {
+    const scrollTo = jest.spyOn(ScrollView.prototype as unknown as { scrollTo: (o: object) => void }, 'scrollTo');
+    try {
+      renderScreen();
+      await chart();
+      scrollTo.mockClear();
+      fireEvent.press(screen.getByTestId('sleep-window-bar-2026-10-04'));
+      expect(mockNavigation.setParams).toHaveBeenCalledWith({ date: '2026-10-04' });
+      expect(scrollTo).toHaveBeenCalledTimes(1);
+      expect(scrollTo).toHaveBeenCalledWith({ y: 0, animated: true });
+      mockNavigation.setParams.mockClear();
+      scrollTo.mockClear();
+      fireEvent.press(screen.getByTestId(`sleep-window-bar-${TODAY}`));
+      expect(mockNavigation.setParams).not.toHaveBeenCalled();
+      expect(scrollTo).not.toHaveBeenCalled();
+      expect(mockNavigation.navigate).not.toHaveBeenCalled();
+      expect(mockNavigation.push).not.toHaveBeenCalled();
+    } finally {
+      scrollTo.mockRestore();
+    }
+  });
+
+  it('nights outside the visible range set neither the axis nor the empty state (ruling I-1)', async () => {
+    // 20 Sep is in the page fetch but outside both the week and 2 weeks; its 6 pm bedtime would stretch the axis.
+    const outlier = makeNight('2026-09-20', { bedtime: '18:00', wakeTime: '11:30' });
+    sleepFetch.mockResolvedValue(makeWindow({ nights: [outlier, ...makeWindow().nights] }));
     renderScreen();
     await chart();
-    fireEvent.press(screen.getByTestId('sleep-window-bar-2026-10-04'));
-    expect(mockNavigation.setParams).toHaveBeenCalledWith({ date: '2026-10-04' });
-    mockNavigation.setParams.mockClear();
-    fireEvent.press(screen.getByTestId(`sleep-window-bar-${TODAY}`));
-    expect(mockNavigation.setParams).not.toHaveBeenCalled();
-    expect(mockNavigation.navigate).not.toHaveBeenCalled();
-    expect(mockNavigation.push).not.toHaveBeenCalled();
+    expect(screen.getByText('9:00 pm', { includeHiddenElements: true })).toBeTruthy();
+    expect(screen.queryByText('6:00 pm', { includeHiddenElements: true })).toBeNull();
+    expect(screen.queryByText('12:00 pm', { includeHiddenElements: true })).toBeNull();
+    fireEvent.press(screen.getByText('2 weeks'));
+    expect(screen.queryByText('6:00 pm', { includeHiddenElements: true })).toBeNull();
+  });
+
+  it('no nights in the visible range: the empty text, though older nights were fetched', async () => {
+    mockParams = { date: TODAY };
+    sleepFetch.mockResolvedValue(makeWindow({ nights: [makeNight('2026-09-20'), makeNight('2026-09-21')] }));
+    renderScreen();
+    const card = await screen.findByTestId('sleep-window-card');
+    expect(within(card).getByText('No sleep synced yet.')).toBeTruthy();
+    expect(within(card).queryByTestId(/^sleep-window-bar-/)).toBeNull();
   });
 
   it('2 weeks shows fourteen days without a refetch', async () => {

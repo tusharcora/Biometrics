@@ -18,6 +18,10 @@ export function BedtimeToWakeCard({ anchor, date, nights, goal, range, onRange, 
 }) {
   const days = range === 'week' ? 7 : 14;
   const dates = Array.from({ length: days }, (_, i) => addDays(anchor, i - (days - 1)));
+  // Only the visible range: the page-scoped fetch reaches further back, and those nights must not set the axis or
+  // the empty state.
+  const visible = new Set(dates);
+  const shown = nights.filter((n) => visible.has(n.date) && !isNapOnly(n));
   return (
     <Card testID="sleep-window-card" className="gap-3">
       <View className="flex-row items-center justify-between gap-3">
@@ -31,7 +35,7 @@ export function BedtimeToWakeCard({ anchor, date, nights, goal, range, onRange, 
           />
         </View>
       </View>
-      <WindowChart dates={dates} nights={nights.filter((n) => !isNapOnly(n))} goal={goal} selectedDate={date} onPressNight={onSelect} />
+      <WindowChart dates={dates} nights={shown} goal={goal} selectedDate={date} onPressNight={onSelect} />
     </Card>
   );
 }

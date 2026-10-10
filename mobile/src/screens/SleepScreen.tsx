@@ -48,6 +48,13 @@ export function SleepScreen() {
     if (d !== page.date) navigation.setParams({ date: d });
   };
   const scrollTop = () => scroll.current?.scrollTo?.({ y: 0, animated: true });
+  // A tap below the night (chart bars, month cells): select it and scroll up to the content it changed. The night
+  // already shown stays a no-op, with no scroll either.
+  const selectFromBelow = (d: string) => {
+    if (d === page.date) return;
+    select(d);
+    scrollTop();
+  };
   const pad = { paddingTop: (insets?.top ?? 0) + 8, paddingHorizontal: 16 };
   const header = <SleepHeader onBack={() => navigation.goBack()} onInfo={() => setInfo(true)} onGoal={() => navigation.navigate('BedtimeGoal')} />;
   const bundle = page.night.status === 'ready' ? page.night.data : null;
@@ -108,7 +115,7 @@ export function SleepScreen() {
             goal={page.goal.phase === 'ready' ? page.goal.data : null}
             range={range}
             onRange={setRange}
-            onSelect={select}
+            onSelect={selectFromBelow}
           />
         ) : null}
         <RegularityCard state={page.regularity} onRetry={page.reloadRegularity} />
