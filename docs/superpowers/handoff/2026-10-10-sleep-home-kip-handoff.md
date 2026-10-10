@@ -73,10 +73,21 @@ Worktree: `/Users/tushar/Documents/PROJECTS/Biometrics/.claude/worktrees/social-
   - under 50: determined;
   - a night under 6h: sleepy with coffee (this overrides the recovery state);
   - the first 7 days: curious.
+- **DECIDED (owner approved on 2026-10-10): direction F.**
+  - **Layout:** A1's top-third scene with a tappable cottage: the bed opens Sleep, the wall calendar Tomorrow, the
+    sky and sun Recovery, and the mailbox Recaps. Small tap tags. The user's KIP plus up to 2 buddy KIPs, with an
+    "ALL 4" link. A1's compact Today tiles below, then the rest of Home.
+  - **The scene reacts to the Recovery weather,** using the Recovery page bands. The canvas row "F · weather states"
+    has:
+    - F1 · Clear skies: bright, a big sun, a meadow of flowers, birds, a butterfly, KIP cheering;
+    - F2 · Mostly clear: brightened at the owner's request, but below F1;
+    - F3 · Cloudy, with flowers still in bud;
+    - F4 · Stormy, with no flowers;
+    - F5 · Short-night override: sleepy KIP with coffee;
+    - F6 · Night, after 9 pm, with the window lit.
+  - **The scene is built as 7 layers,** each state a swap; see the note on the canvas.
 - **Next steps:**
-  1. The owner picks a direction or a mix.
-  2. Iterate on the canvas.
-  3. Write the specs (KIP system first, then Home), with owner approval of each.
+  1. Write the specs (KIP system first, then Home F), with owner approval of each.
   4. Plan, then build. The owner has chosen subagent-driven builds with an opus reviewer each time.
 
 ## Process the owner expects
