@@ -12,7 +12,8 @@ import { HeaderTitle, headerTitleStyle } from './headerStyle';
 
 export type TabParamList = {
   Home: undefined;
-  Activity: undefined;
+  // `date` opens that day's steps sheet once (the Sleep page's Steps that day).
+  Activity: { date?: string } | undefined;
   // `prefill` seeds the chat input (never sent automatically).
   Coach: { prefill?: string } | undefined;
   Social: undefined;

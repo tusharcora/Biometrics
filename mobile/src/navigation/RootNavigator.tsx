@@ -27,7 +27,6 @@ import { MeetYourCoachScreen } from '../screens/MeetYourCoachScreen';
 import { ThinkingStyleScreen } from '../screens/ThinkingStyleScreen';
 import { ThinkingTextScreen } from '../screens/ThinkingTextScreen';
 import { SleepScreen } from '../screens/SleepScreen';
-import { SleepNightScreen } from '../screens/SleepNightScreen';
 import { BedtimeGoalScreen } from '../screens/BedtimeGoalScreen';
 import { RecapBuilderScreen } from '../screens/RecapBuilderScreen';
 import { RecapScreen } from '../screens/RecapScreen';
@@ -105,8 +104,6 @@ export type RootStackParamList = {
   MeetYourCoach: { mode: 'first' | 'switch' };
   // The one Sleep page (spec 2026-10-09); date is the night-end civil date, else the default night.
   Sleep: { date?: string } | undefined;
-  // One night in full; `date` is the civil date the night ended on.
-  SleepNight: { date: string };
   BedtimeGoal: undefined;
   // Home → "Your recaps": the latest month, latest week, older ones and Year in pixels.
   Recaps: undefined;
@@ -252,7 +249,6 @@ export function RootNavigator() {
               <Stack.Screen name="SignInMethods" component={SignInMethodsScreen} options={{ title: 'Sign-in methods' }} />
               <Stack.Screen name="Devices" component={DevicesScreen} options={{ title: 'Devices' }} />
               <Stack.Screen name="Sleep" component={SleepScreen} options={{ headerShown: false }} />
-              <Stack.Screen name="SleepNight" component={SleepNightScreen} options={{ title: '' }} />
               <Stack.Screen name="BedtimeGoal" component={BedtimeGoalScreen} options={{ title: 'Bedtime goal' }} />
               <Stack.Screen name="Recap" component={RecapScreen} options={{ title: '' }} />
               <Stack.Screen

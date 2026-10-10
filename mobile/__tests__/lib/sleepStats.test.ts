@@ -1,7 +1,7 @@
 import type { SleepNight } from '../../src/api/sleep';
 import { sleepHeatLevel } from '../../src/lib/heatmap';
 import {
-  clockAt, compareSleepToAverage, formatClock, formatDuration, formatTextDuration, isNapOnly, mainMinutes, mainSleepByDate, nightClock, nightUtcOffset,
+  clockAt, formatClock, formatDuration, formatTextDuration, isNapOnly, mainMinutes, mainSleepByDate, nightClock, nightUtcOffset,
   sleepRangeStats,
 } from '../../src/lib/sleepStats';
 import { makeNight } from '../../jest-mocks/sleepPageFixture';
@@ -91,13 +91,6 @@ describe('formatting', () => {
     expect(formatClock('23:52')).toBe('11:52 pm');
     expect(formatClock('00:05')).toBe('12:05 am');
     expect(formatClock('12:00')).toBe('12:00 pm');
-  });
-
-  it('compares a night to the average', () => {
-    expect(compareSleepToAverage(467, 443)).toBe('24m more than your average for this range.');
-    expect(compareSleepToAverage(380, 480)).toBe('1h 40m less than your average for this range.');
-    expect(compareSleepToAverage(452, 450)).toBe('In line with your average for this range.');
-    expect(compareSleepToAverage(452, null)).toBeNull();
   });
 });
 

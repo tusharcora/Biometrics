@@ -18,17 +18,22 @@ const mockNavigate = jest.fn();
 const mockListeners: Record<string, () => void> = {};
 const mockNavigation = {
   navigate: mockNavigate,
+  setParams: jest.fn(),
   addListener: (event: string, fn: () => void) => {
     mockListeners[event] = fn;
     return () => delete mockListeners[event];
   },
 };
+// The Activity tab's route params (a date handed in by the Sleep page).
+let mockRouteParams: { date?: string } | undefined;
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => mockNavigation,
+  useRoute: () => ({ params: mockRouteParams }),
 }));
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockRouteParams = undefined;
   (fetchSleep as jest.Mock).mockResolvedValue({ nights: [], earliestDate: null });
   (fetchSleepGoal as jest.Mock).mockResolvedValue({ sleepGoalMinutes: 480, bedtimeGoal: null, wakeGoal: null });
   (apiFetch as jest.Mock).mockResolvedValue([]);
@@ -73,9 +78,9 @@ describe('ActivityScreen: sleep', () => {
     fireEvent.press(await findByTestId('activity-page-sleep'));
     fireEvent.press(getByTestId('activity-sleep-details'));
 
-    expect(mockNavigate).toHaveBeenCalledWith('Sleep');
+    expect(mockNavigate).toHaveBeenCalledWith('Sleep', undefined);
   });
-  it('opens one night in full from the night sheet', async () => {
+  it('opens a night on the Sleep page', async () => {
     (fetchActivity as jest.Mock).mockResolvedValue({ days: [], earliestDate: '2025-01-01' });
 
     const { findByTestId, UNSAFE_getByType } = render(<ActivityScreen />);
@@ -83,7 +88,15 @@ describe('ActivityScreen: sleep', () => {
 
     act(() => UNSAFE_getByType(ActivityHeatmap).props.onOpenNight('2026-10-01'));
 
-    expect(mockNavigate).toHaveBeenCalledWith('SleepNight', { date: '2026-10-01' });
+    expect(mockNavigate).toHaveBeenCalledWith('Sleep', { date: '2026-10-01' });
+  });
+
+  it('a date param opens that day on the steps page, then clears the param', async () => {
+    mockRouteParams = { date: '2026-10-01' };
+    (fetchActivity as jest.Mock).mockResolvedValue({ days: [{ date: '2026-10-01', steps: 7000 }], earliestDate: '2025-01-01' });
+    const { findByTestId } = render(<ActivityScreen />);
+    expect(await findByTestId('day-detail-steps')).toHaveTextContent('7,000 steps');
+    expect(mockNavigation.setParams).toHaveBeenCalledWith({ date: undefined });
   });
 });
 
