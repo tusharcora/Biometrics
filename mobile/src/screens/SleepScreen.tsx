@@ -1,4 +1,4 @@
-import React, { useContext, useRef, useState } from 'react';
+import React, { useContext, useEffect, useRef, useState } from 'react';
 import { ScrollView, View } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
@@ -16,9 +16,11 @@ import { SectionError } from '../components/sleep/Section';
 import { SleepHeader } from '../components/sleep/SleepHeader';
 import { SleepHero } from '../components/sleep/SleepHero';
 import { SleepInfoSheet } from '../components/sleep/SleepInfoSheet';
+import { SleepMonthCard } from '../components/sleep/SleepMonthCard';
 import { Skeleton } from '../components/ui/skeleton';
 import { sleepQuestion } from '../lib/coachPrompts';
 import { askLabel, SLEEP_COPY } from '../lib/sleepCopy';
+import { DEFAULT_SLEEP_GOAL_MINUTES } from '../lib/sleepStats';
 import { coachEntryRoute, useCoachStatus } from '../lib/useCoachStatus';
 import { useSleepPage } from '../lib/useSleepPage';
 import { navigateToCoachEntry } from '../navigation/coachNavigation';
@@ -55,6 +57,12 @@ export function SleepScreen() {
     select(d);
     scrollTop();
   };
+  // The month card opens on D's month; a newly selected night brings it back there.
+  const [viewMonth, setViewMonth] = useState<string | null>(null);
+  useEffect(() => { setViewMonth(null); }, [page.date]);
+  const shownMonth = viewMonth ?? (page.date ?? page.today).slice(0, 7);
+  const { loadMonth } = page;
+  useEffect(() => { loadMonth(shownMonth); }, [shownMonth, page.anchor, loadMonth]);
   const pad = { paddingTop: (insets?.top ?? 0) + 8, paddingHorizontal: 16 };
   const header = <SleepHeader onBack={() => navigation.goBack()} onInfo={() => setInfo(true)} onGoal={() => navigation.navigate('BedtimeGoal')} />;
   const bundle = page.night.status === 'ready' ? page.night.data : null;
@@ -119,7 +127,17 @@ export function SleepScreen() {
           />
         ) : null}
         <RegularityCard state={page.regularity} onRetry={page.reloadRegularity} />
-        {/* Task 9: <SleepMonthCard/>. */}
+        <SleepMonthCard
+          viewMonth={shownMonth}
+          today={page.today}
+          date={date}
+          load={page.month(shownMonth)}
+          goalMinutes={goalMinutes ?? DEFAULT_SLEEP_GOAL_MINUTES}
+          earliestDate={page.window.phase === 'ready' ? page.window.data.earliestDate : null}
+          onPage={setViewMonth}
+          onRetry={page.retryMonth}
+          onSelect={selectFromBelow}
+        />
         <BedtimeGoalRow goal={page.goal} reminder={page.reminder} onPress={() => navigation.navigate('BedtimeGoal')} onRetry={page.reloadGoal} />
       </ScrollView>
       {coachRoute ? (

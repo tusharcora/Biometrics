@@ -6,6 +6,9 @@ import { addDays } from './heatmap';
 
 export type SleepByDate = ReadonlyMap<string, SleepNight>;
 
+/** Minutes asleep the sleep colours and stats aim at until the saved goal is read (Activity tab and Sleep page). */
+export const DEFAULT_SLEEP_GOAL_MINUTES = 480;
+
 export interface SleepRangeStats {
   nights: number;
   // Average over nights that HAVE a record, like the steps average.

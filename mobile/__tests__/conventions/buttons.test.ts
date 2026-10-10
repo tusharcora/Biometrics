@@ -67,6 +67,7 @@ const ALLOWED: Exception[] = [
   { file: 'components/home/sleep-tile.tsx', key: 'sleep-score-unavailable', count: 1, reason: 'the home sleep tile (no data state)' },
   { file: 'components/home/sleep-tile.tsx', key: 'sleep-score-empty', count: 1, reason: 'the home sleep tile (empty state)' },
   { file: 'components/home/sleep-tile.tsx', key: 'sleep-score-card', count: 1, reason: 'the home sleep tile' },
+  { file: 'components/sleep/SleepMonthCard.tsx', key: 'sleep-month-day-${d}', count: 1, reason: 'a past day in the Sleep month that selects that night' },
   { file: 'components/home/BuddiesRow.tsx', key: 'home-buddies-row', count: 1, reason: 'the home buddies strip that opens Buddies' },
   { file: 'components/recap/RecapShelf.tsx', key: 'recap-shelf-item-${item.id}', count: 1, reason: 'a recap card on the shelf' },
   { file: 'components/achievements/BadgesCard.tsx', key: 'badges-card-${family}', count: 1, reason: 'a badge tile on the home card' },

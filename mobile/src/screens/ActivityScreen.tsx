@@ -16,6 +16,7 @@ import { SectionLabel } from '../components/ui/section-label';
 import { Text } from '../components/ui/text';
 import { fetchRange, todayCivil } from '../lib/heatmap';
 import type { MetricRecord } from '../lib/metricInsights';
+import { DEFAULT_SLEEP_GOAL_MINUTES } from '../lib/sleepStats';
 import { recoveryRecords, type TileRecord } from '../lib/usualTiles';
 import { useSync } from '../sync/SyncProvider';
 import { openNight, openSleep } from '../navigation/sleepNavigation';
@@ -27,9 +28,6 @@ type LoadState =
   | { phase: 'loading' }
   | { phase: 'error' }
   | { phase: 'ready'; steps: Map<string, number>; earliestDate: string | null; today: string; sleep: SleepState; sleepGoal: number };
-
-// Minutes asleep the sleep colours aim at when the saved goal can't be read.
-const DEFAULT_SLEEP_GOAL = 480;
 
 export function ActivityScreen() {
   const navigation = useNavigation<any>();
@@ -87,7 +85,7 @@ export function ActivityScreen() {
           : // A failed refresh keeps the goal already in use.
             prev.phase === 'ready'
             ? prev.sleepGoal
-            : DEFAULT_SLEEP_GOAL,
+            : DEFAULT_SLEEP_GOAL_MINUTES,
       sleep:
         sleepRes.status === 'fulfilled'
           ? { phase: 'ready', nights: new Map(sleepRes.value.nights.map((n) => [n.date, n])), earliestDate: sleepRes.value.earliestDate }

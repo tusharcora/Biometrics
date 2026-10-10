@@ -216,8 +216,8 @@ export function useSleepPage(param?: string): SleepPage {
       const pick = (data: SleepActivityDTO): MonthLoad => ({ status: 'ready', nights: data.nights.filter((n) => n.date >= span.from && n.date <= span.to) });
       if (fresh.phase === 'ready') return pick(fresh.data);
       // During a quiet refetch the shown nights were fetched for the previous range: serve the month only if that range
-      // covered it, never as ready-and-empty.
-      if (stale) return covers(stale.range, span) ? pick(stale.data) : months[m] ?? { status: 'loading' };
+      // covered it, never as ready-and-empty; once that refetch fails, an uncovered month is an error so it can retry.
+      if (stale) return covers(stale.range, span) ? pick(stale.data) : months[m] ?? { status: fresh.phase === 'error' ? 'error' : 'loading' };
       return { status: fresh.phase === 'error' ? 'error' : 'loading' };
     }
     return months[m] ?? { status: 'loading' };

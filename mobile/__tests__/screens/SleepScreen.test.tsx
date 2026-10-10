@@ -1,5 +1,5 @@
 import React from 'react';
-import { ScrollView } from 'react-native';
+import { ScrollView, View } from 'react-native';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { withCharacter } from '../../jest-mocks/characterContext';
 import { GOAL, REGULARITY, REMINDER, TODAY, makeDetail, makeNight, makeScore, makeWindow } from '../../jest-mocks/sleepPageFixture';
@@ -9,6 +9,7 @@ import { fetchScoreDetail } from '../../src/api/scores';
 import { readWindDown } from '../../src/lib/windDown';
 import { SLEEP_SCORE_FRAMING } from '../../src/lib/scoreInsights';
 import { regularityA11y } from '../../src/lib/sleepCopy';
+import { formatClock, formatDuration, mainSleepByDate, sleepRangeStats } from '../../src/lib/sleepStats';
 import { COLORS } from '../../src/theme';
 import type { CoachStatusDTO } from '../../src/api/coach';
 
@@ -586,5 +587,211 @@ describe('SleepScreen: regularity', () => {
     expect(tree.indexOf('sleep-night-numbers')).toBeLessThan(tree.indexOf('sleep-window-card'));
     expect(tree.indexOf('sleep-window-card')).toBeLessThan(tree.indexOf('"sleep-regularity"'));
     expect(tree.indexOf('"sleep-regularity"')).toBeLessThan(tree.indexOf('sleep-goal-row'));
+  });
+});
+
+describe('SleepScreen: month', () => {
+  const month = () => screen.findByTestId('sleep-month');
+  const statText = (id: string) => within(screen.getByTestId(id)).getAllByText(/./)[0]!.props.children;
+  const WEEK = ['2026-10-02', '2026-10-03', '2026-10-04', '2026-10-05', '2026-10-06', '2026-10-07', TODAY];
+  // Main sleep of the six fixture nights (7 Oct is 418, not its 438 day total).
+  const OCT_MAIN = [401, 440, 514, 302, 418, 432];
+  const pressedSept = () => sleepFetch.mock.calls.filter(([from]) => from === '2026-09-01');
+
+  it("opens on D's month, Monday first: blanks for Mon 28 Sep to Wed 30 Sep, then Thursday 1 October", async () => {
+    renderScreen();
+    const card = await month();
+    expect(within(card).getByTestId('sleep-month-title').props.children).toBe('October');
+    expect(within(card).getAllByText(/^[MTWFS]$/, { includeHiddenElements: true }).map((t) => t.props.children)).toEqual(['M', 'T', 'W', 'T', 'F', 'S', 'S']);
+    const cells = within(card).getAllByTestId(/^sleep-month-(day|future)-/, { includeHiddenElements: true });
+    expect(cells).toHaveLength(31);
+    expect(cells[0]!.props.testID).toBe('sleep-month-day-2026-10-01');
+    // The grid's columns after the 7 header columns: three empty ones, then 1 October.
+    const columns = within(card).UNSAFE_getAllByType(View).filter((v) => (v.props.style as { width?: string } | undefined)?.width === '14.2857%');
+    expect(columns).toHaveLength(7 + 3 + 31);
+    for (const c of columns.slice(7, 10)) expect(within(c).queryAllByTestId(/^sleep-month-/, { includeHiddenElements: true })).toHaveLength(0);
+    expect(within(columns[10]!).getByTestId('sleep-month-day-2026-10-01')).toBeTruthy();
+  });
+
+  it('cells: main sleep as h:mm, a day number for no night, spoken labels', async () => {
+    renderScreen();
+    await month();
+    const fri = screen.getByTestId('sleep-month-day-2026-10-02');
+    expect(within(fri).getByText('6:41')).toBeTruthy();
+    expect(fri.props.accessibilityLabel).toBe('Friday 2 October, 6 hours 41 minutes');
+    expect(fri.props.accessibilityRole).toBe('button');
+    const tue = screen.getByTestId('sleep-month-day-2026-10-06');
+    expect(within(tue).getByText('6')).toBeTruthy();
+    expect(tue.props.accessibilityLabel).toBe('Tuesday 6 October, no sleep recorded');
+    expect(within(screen.getByTestId('sleep-month-day-2026-10-07')).getByText('6:58')).toBeTruthy();
+    for (const d of WEEK) expect(screen.getByTestId(`sleep-month-day-${d}`).props.accessibilityLabel).not.toMatch(SPOKEN_FORBIDDEN);
+  });
+
+  it('D is ringed and marked selected', async () => {
+    renderScreen();
+    await month();
+    expect(within(screen.getByTestId('sleep-month-selected')).getByTestId(`sleep-month-day-${TODAY}`)).toBeTruthy();
+    expect(screen.getByTestId(`sleep-month-day-${TODAY}`).props.accessibilityState).toMatchObject({ selected: true });
+    expect(screen.getByTestId('sleep-month-day-2026-10-07').props.accessibilityState).toMatchObject({ selected: false });
+  });
+
+  it('future days are muted, not focusable and hidden from screen readers', async () => {
+    renderScreen();
+    await month();
+    expect(screen.queryByTestId('sleep-month-future-2026-10-20')).toBeNull();
+    const future = screen.getByTestId('sleep-month-future-2026-10-20', { includeHiddenElements: true });
+    expect(future.props.accessibilityElementsHidden).toBe(true);
+    expect(future.props.importantForAccessibility).toBe('no-hide-descendants');
+    expect(screen.queryByTestId('sleep-month-day-2026-10-20', { includeHiddenElements: true })).toBeNull();
+  });
+
+  it('stats on main sleep: average, nights at goal, average bedtime, longest', async () => {
+    renderScreen();
+    await month();
+    await waitFor(() => expect(statText('sleep-stat-at-goal')).toBe('1 of 6'));
+    expect(statText('sleep-stat-average')).toBe(formatDuration(OCT_MAIN.reduce((a, b) => a + b, 0) / 6));
+    expect(statText('sleep-stat-average')).toBe('6h 58m');
+    const stats = sleepRangeStats(mainSleepByDate(makeWindow().nights), '2026-10-01', '2026-10-31', TODAY, 480);
+    expect(statText('sleep-stat-bedtime')).toBe(formatClock(stats.averageBedtime!));
+    expect(statText('sleep-stat-longest')).toBe('8h 34m');
+    const card = screen.getByTestId('sleep-month');
+    for (const label of ['Average asleep', 'Nights at goal', 'Average bedtime', 'Longest night']) expect(within(card).getByText(label)).toBeTruthy();
+  });
+
+  it('a nap-only date is a gap in the grid and left out of the stats (plan ruling 5)', async () => {
+    sleepFetch.mockResolvedValue(makeWindow({
+      nights: [...makeWindow().nights, makeNight('2026-10-06', { mainIsNap: true, minutesAsleep: 45, mainMinutesAsleep: 45 })],
+    }));
+    renderScreen();
+    await month();
+    await waitFor(() => expect(statText('sleep-stat-at-goal')).toBe('1 of 6'));
+    expect(statText('sleep-stat-average')).toBe('6h 58m');
+    expect(statText('sleep-stat-longest')).toBe('8h 34m');
+    const tue = screen.getByTestId('sleep-month-day-2026-10-06');
+    expect(within(tue).getByText('6')).toBeTruthy();
+    expect(tue.props.accessibilityLabel).toBe('Tuesday 6 October, no sleep recorded');
+  });
+
+  it('a past cell selects its night and scrolls to the top; D is a complete no-op', async () => {
+    const scrollTo = jest.spyOn(ScrollView.prototype as unknown as { scrollTo: (o: object) => void }, 'scrollTo');
+    try {
+      renderScreen();
+      await month();
+      scrollTo.mockClear();
+      fireEvent.press(screen.getByTestId('sleep-month-day-2026-10-03'));
+      expect(mockNavigation.setParams).toHaveBeenCalledWith({ date: '2026-10-03' });
+      expect(scrollTo).toHaveBeenCalledWith({ y: 0, animated: true });
+      mockNavigation.setParams.mockClear();
+      scrollTo.mockClear();
+      fireEvent.press(screen.getByTestId(`sleep-month-day-${TODAY}`));
+      expect(mockNavigation.setParams).not.toHaveBeenCalled();
+      expect(scrollTo).not.toHaveBeenCalled();
+      expect(mockNavigation.navigate).not.toHaveBeenCalled();
+      expect(mockNavigation.push).not.toHaveBeenCalled();
+    } finally {
+      scrollTo.mockRestore();
+    }
+  });
+
+  it('paging: Next stops at this month; Previous loads September behind a skeleton', async () => {
+    let resolveSept!: (v: ReturnType<typeof makeWindow>) => void;
+    const sept = new Promise<ReturnType<typeof makeWindow>>((r) => { resolveSept = r; });
+    sleepFetch.mockImplementation((from: string) => (from === '2026-09-01' ? sept : Promise.resolve(makeWindow())));
+    renderScreen();
+    await month();
+    expect(screen.getByLabelText('Next month')).toBeDisabled();
+    expect(screen.getByLabelText('Previous month')).not.toBeDisabled();
+    fireEvent.press(screen.getByLabelText('Previous month'));
+    await waitFor(() => expect(sleepFetch).toHaveBeenCalledWith('2026-09-01', '2026-09-30'));
+    expect(screen.getByTestId('sleep-month-loading')).toBeTruthy();
+    await act(async () => { resolveSept(makeWindow({ nights: [makeNight('2026-09-12', { minutesAsleep: 400, mainMinutesAsleep: 400 })] })); });
+    expect(screen.queryByTestId('sleep-month-loading')).toBeNull();
+    expect(screen.getByTestId('sleep-month-title').props.children).toBe('September');
+    expect(within(screen.getByTestId('sleep-month-day-2026-09-12')).getByText('6:40')).toBeTruthy();
+    expect(screen.getByLabelText('Next month')).not.toBeDisabled();
+    expect(statText('sleep-stat-at-goal')).toBe('0 of 1');
+  });
+
+  it('Previous stops at the month of the earliest night', async () => {
+    sleepFetch.mockResolvedValue(makeWindow({ earliestDate: '2026-10-02' }));
+    renderScreen();
+    await month();
+    expect(screen.getByLabelText('Previous month')).toBeDisabled();
+    expect(screen.getByLabelText('Next month')).toBeDisabled();
+  });
+
+  it('paging back from January asks for December of the year before and names its year', async () => {
+    mockParams = { date: '2026-01-05' };
+    sleepFetch.mockResolvedValue(makeWindow({ earliestDate: '2025-01-01', nights: [] }));
+    renderScreen();
+    await month();
+    expect(sleepFetch).toHaveBeenCalledWith('2025-12-23', '2026-01-31');
+    expect(screen.getByTestId('sleep-month-title').props.children).toBe('January');
+    fireEvent.press(screen.getByLabelText('Previous month'));
+    await waitFor(() => expect(sleepFetch).toHaveBeenLastCalledWith('2025-12-01', '2025-12-31'));
+    await waitFor(() => expect(screen.getByTestId('sleep-month-title').props.children).toBe('December 2025'));
+    expect(await screen.findByTestId('sleep-month-day-2025-12-31')).toBeTruthy();
+  });
+
+  it('cold start: no nights anywhere, the page still stands (spec §6)', async () => {
+    sleepFetch.mockResolvedValue(makeWindow({ nights: [], earliestDate: null }));
+    scoreFetch.mockResolvedValue(null);
+    nightFetch.mockRejectedValue(notFound());
+    renderScreen();
+    const h = await hero();
+    await waitFor(() => expect(within(h).getByText('No sleep recorded')).toBeTruthy());
+    for (const d of WEEK) expect(within(screen.getByTestId(`sleep-night-${d}`)).getByText('—')).toBeTruthy();
+    expect(within(await screen.findByTestId('sleep-window-card')).getByText('No sleep synced yet.')).toBeTruthy();
+    const card = await month();
+    // Only muted day numbers: no h:mm anywhere in the grid.
+    expect(within(card).queryAllByText(/^\d+:\d\d$/)).toHaveLength(0);
+    expect(within(screen.getByTestId(`sleep-month-day-${TODAY}`)).getByText('8')).toBeTruthy();
+    for (const id of ['sleep-stat-average', 'sleep-stat-at-goal', 'sleep-stat-bedtime', 'sleep-stat-longest']) expect(statText(id)).toBe('—');
+    expect(screen.getByLabelText('Previous month')).toBeDisabled();
+    expect(await screen.findByTestId('sleep-goal-row')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('ask-coach-button'));
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('Tabs', { screen: 'Coach', params: { prefill: "Why don't I have sleep data for last night?" } }, { pop: true });
+  });
+
+  it('a month that fails has its own retry, which refetches it', async () => {
+    sleepFetch.mockImplementation((from: string) => (from === '2026-09-01' ? Promise.reject(new Error('offline')) : Promise.resolve(makeWindow())));
+    renderScreen();
+    await month();
+    fireEvent.press(screen.getByLabelText('Previous month'));
+    expect(await screen.findByText("Couldn't load September.")).toBeTruthy();
+    sleepFetch.mockResolvedValue(makeWindow({ nights: [makeNight('2026-09-12')] }));
+    fireEvent.press(screen.getByText('Retry'));
+    await waitFor(() => expect(pressedSept()).toHaveLength(2));
+    expect(await screen.findByTestId('sleep-month-day-2026-09-12')).toBeTruthy();
+    expect(screen.queryByText("Couldn't load September.")).toBeNull();
+  });
+
+  it("a night picked in the picker brings the month back to D's month", async () => {
+    const view = renderScreen();
+    await month();
+    fireEvent.press(screen.getByLabelText('Previous month'));
+    await waitFor(() => expect(screen.getByTestId('sleep-month-title').props.children).toBe('September'));
+    mockParams = { date: '2026-10-05' };
+    view.rerender(withCharacter(<SleepScreen />, { characterId: 'mochi', status: STATUS }));
+    await waitFor(() => expect(screen.getByTestId('sleep-month-title').props.children).toBe('October'));
+  });
+
+  it('large text: every cell label stays on one line', async () => {
+    renderScreen();
+    await month();
+    const cells = screen.getAllByTestId(/^sleep-month-(day|future)-/, { includeHiddenElements: true });
+    for (const c of cells) {
+      for (const t of within(c).getAllByText(/./, { includeHiddenElements: true })) expect(t.props.numberOfLines).toBe(1);
+    }
+  });
+
+  it('sits after regularity and before the goal row', async () => {
+    const { toJSON } = renderScreen();
+    await screen.findByTestId('sleep-regularity');
+    await month();
+    await screen.findByTestId('sleep-goal-row');
+    const tree = JSON.stringify(toJSON());
+    expect(tree.indexOf('"sleep-regularity"')).toBeLessThan(tree.indexOf('"sleep-month"'));
+    expect(tree.indexOf('"sleep-month"')).toBeLessThan(tree.indexOf('sleep-goal-row'));
   });
 });

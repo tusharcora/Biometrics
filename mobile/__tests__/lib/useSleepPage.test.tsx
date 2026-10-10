@@ -302,6 +302,21 @@ describe('useSleepPage', () => {
     expect(result.current.month('2026-11')).toEqual({ status: 'ready', nights: [makeNight('2026-11-01')] });
   });
 
+  it('a failed quiet refetch leaves a newly covered month in error, not loading, and its retry refetches the window', async () => {
+    sleepFetch.mockResolvedValueOnce(makeWindow({ today: '2026-11-01' })).mockRejectedValueOnce(new Error('offline'));
+    const { result } = renderHook(() => useSleepPage());
+    await waitFor(() => expect(sleepFetch).toHaveBeenLastCalledWith('2026-10-19', '2026-11-01'));
+    await flush();
+    // The old nights stay on screen, but they never covered November and no month cache holds it.
+    expect(result.current.window.phase).toBe('ready');
+    expect(result.current.month('2026-11').status).toBe('error');
+    sleepFetch.mockResolvedValueOnce(makeWindow({ today: '2026-11-01', nights: [makeNight('2026-11-01')] }));
+    act(() => { result.current.retryMonth('2026-11'); });
+    expect(sleepFetch).toHaveBeenCalledTimes(3);
+    expect(sleepFetch).toHaveBeenLastCalledWith('2026-10-19', '2026-11-01');
+    await waitFor(() => expect(result.current.month('2026-11')).toEqual({ status: 'ready', nights: [makeNight('2026-11-01')] }));
+  });
+
   it('a sync refetches a paged-to month quietly: it stays ready and takes the new nights (Task 3 I-1)', async () => {
     const september = (nights: string[]) => makeWindow({ nights: nights.map((d) => makeNight(d)) });
     sleepFetch.mockImplementation((from: string) => Promise.resolve(from === '2026-09-01' ? september(['2026-09-12']) : makeWindow()));
