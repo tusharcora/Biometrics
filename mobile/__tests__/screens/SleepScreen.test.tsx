@@ -41,6 +41,11 @@ const nightFetch = fetchSleepNight as jest.Mock;
 const scoreFetch = fetchScoreDetail as jest.Mock;
 const SPOKEN_FORBIDDEN = /[·−]/;
 const notFound = () => Object.assign(new Error('not found'), { status: 404 });
+function deferredGoal() {
+  let resolve!: (v: typeof GOAL) => void;
+  (fetchSleepGoal as jest.Mock).mockReturnValue(new Promise<typeof GOAL>((r) => { resolve = r; }));
+  return { resolve: (v: typeof GOAL) => resolve(v) };
+}
 
 function renderScreen(status: CoachStatusDTO | null = STATUS) {
   return render(withCharacter(<SleepScreen />, { characterId: 'mochi', status }));
@@ -142,6 +147,52 @@ describe('SleepScreen: hero', () => {
     expect(within(h).getByText('Learning your sleep')).toBeTruthy();
     expect(within(h).getByText('5 nights to go')).toBeTruthy();
     expect(screen.getByTestId('sleep-hero-moon', { includeHiddenElements: true }).props.style).toMatchObject({ opacity: 0.4 });
+    // The visible count is read out too (Task 5 M2).
+    expect(h.props.accessibilityLabel).toBe('Learning your sleep. Night 9 of 14. 5 nights to go.');
+    expect(h.props.accessibilityLabel).not.toMatch(SPOKEN_FORBIDDEN);
+  });
+
+  it("a score just under a band edge bands on its rounded numeral, on this night's own bands (final review I-2)", async () => {
+    // 79.6 shows as 80: with the night's bands (excellent 80) that is Excellent, as the picker dash and the info
+    // sheet say, never Good on the unrounded value. The window's bands (excellent 75) must not be used.
+    scoreFetch.mockResolvedValue({ ...makeScore(TODAY, { score: 79.6 }), bands: { excellent: 80, good: 60, fair: 45 } });
+    renderScreen();
+    const h = await hero();
+    await waitFor(() => expect(within(h).getByText('80')).toBeTruthy());
+    expect(within(h).getByText('Restful night')).toBeTruthy();
+    expect(within(h).getByText('Excellent')).toHaveStyle({ color: COLORS.light.scoreExcellent });
+    expect(h.props.accessibilityLabel).toMatch(/^Sleep score 80, Excellent, restful night\./);
+  });
+
+  it('59.6 shows as 60 and is Good on bands with good 60, not Fair (final review I-2)', async () => {
+    scoreFetch.mockResolvedValue({ ...makeScore(TODAY, { score: 59.6 }), bands: { excellent: 80, good: 60, fair: 45 } });
+    renderScreen();
+    const h = await hero();
+    await waitFor(() => expect(within(h).getByText('60')).toBeTruthy());
+    expect(within(h).getByText('Solid night')).toBeTruthy();
+    expect(within(h).getByText('Good')).toHaveStyle({ color: COLORS.light.scoreGood });
+    expect(h.props.accessibilityLabel).toMatch(/^Sleep score 60, Good, solid night\./);
+  });
+
+  it('holds the hero on its skeleton until the goal is known, so the verdict never flips (Task 5 M1)', async () => {
+    const goal = deferredGoal();
+    nightFetch.mockResolvedValue(makeDetail(TODAY, { minutesAsleep: 410 }));
+    scoreFetch.mockResolvedValue(makeScore(TODAY, { score: 66 }));
+    renderScreen();
+    await screen.findByTestId('sleep-summary');
+    expect(screen.getByTestId('sleep-hero-loading')).toBeTruthy();
+    expect(screen.queryByText('Solid night')).toBeNull();
+    await act(async () => { goal.resolve(GOAL); });
+    expect(within(await hero()).getByText('Short night')).toBeTruthy();
+  });
+
+  it('a goal error falls back to the default goal, so Short night still shows (Task 5 M1)', async () => {
+    (fetchSleepGoal as jest.Mock).mockRejectedValue(new Error('offline'));
+    nightFetch.mockResolvedValue(makeDetail(TODAY, { minutesAsleep: 410 }));
+    scoreFetch.mockResolvedValue(makeScore(TODAY, { score: 66 }));
+    renderScreen();
+    await screen.findByTestId('sleep-goal-retry');
+    expect(within(await hero()).getByText('Short night')).toBeTruthy();
   });
 
   it('a night with no score yet: on its way for last night, none for an older night', async () => {
@@ -268,6 +319,40 @@ describe('SleepScreen: summary', () => {
     nightFetch.mockResolvedValue(makeDetail(TODAY, { naps: [{ start: '2026-10-08T18:10:00.000Z', end: '2026-10-08T18:35:00.000Z', minutesAsleep: 20 }] }));
     renderScreen();
     expect(await screen.findByText('main sleep · 7h 32m with a nap')).toBeTruthy();
+  });
+
+  it('no night: one spoken element, no "·" (final review I-4)', async () => {
+    mockParams = { date: TODAY };
+    scoreFetch.mockResolvedValue(null);
+    nightFetch.mockRejectedValue(notFound());
+    renderScreen();
+    await screen.findByText('No sleep recorded for this night.');
+    const s = screen.getByTestId('sleep-summary');
+    expect(s.props.accessible).toBe(true);
+    expect(s.props.accessibilityLabel).toBe('Night ending Thursday 8 October. No sleep recorded for this night.');
+    expect(s.props.accessibilityLabel).not.toMatch(SPOKEN_FORBIDDEN);
+  });
+
+  it('nap only: one spoken element with the nap in words (final review I-4)', async () => {
+    mockParams = { date: TODAY };
+    nightFetch.mockResolvedValue(makeDetail(TODAY, { mainIsNap: true, minutesAsleep: 20, bedtime: '14:10', wakeTime: '14:35', hasStages: false, stages: [] }));
+    renderScreen();
+    await screen.findByText('Only a nap: 20m at 2:10 pm');
+    const s = screen.getByTestId('sleep-summary');
+    expect(s.props.accessible).toBe(true);
+    expect(s.props.accessibilityLabel).toBe('Night ending Thursday 8 October. Only a nap, 20 minutes at 2:10 pm.');
+    expect(s.props.accessibilityLabel).not.toMatch(SPOKEN_FORBIDDEN);
+  });
+
+  it('while a new night loads, the night cards hold a skeleton (Task 6 M4)', async () => {
+    const { rerender } = renderScreen();
+    await screen.findByTestId('sleep-night-numbers');
+    nightFetch.mockReturnValue(new Promise(() => {}));
+    mockParams = { date: '2026-10-05' };
+    rerender(withCharacter(<SleepScreen />, { characterId: 'mochi', status: STATUS }));
+    expect(await screen.findByTestId('sleep-night-cards-loading')).toBeTruthy();
+    expect(screen.getByTestId('sleep-summary-loading')).toBeTruthy();
+    expect(screen.queryByTestId('sleep-night-numbers')).toBeNull();
   });
 
   it('swaps to the newly selected night when the route param changes', async () => {
@@ -501,12 +586,24 @@ describe('SleepScreen: bedtime to wake', () => {
     expect(screen.queryByText('6:00 pm', { includeHiddenElements: true })).toBeNull();
   });
 
-  it('no nights in the visible range: the empty text, though older nights were fetched', async () => {
+  it('no nights in the visible range, though older nights were fetched: the range text (final review I-1)', async () => {
     mockParams = { date: TODAY };
     sleepFetch.mockResolvedValue(makeWindow({ nights: [makeNight('2026-09-20'), makeNight('2026-09-21')] }));
     renderScreen();
     const card = await screen.findByTestId('sleep-window-card');
-    expect(within(card).getByText('No sleep synced yet.')).toBeTruthy();
+    expect(within(card).getByText('No bedtimes recorded in this range.')).toBeTruthy();
+    expect(within(card).queryByText('No sleep synced yet.')).toBeNull();
+    expect(within(card).queryByTestId(/^sleep-window-bar-/)).toBeNull();
+  });
+
+  it('a range of naps only is the range text, not "No sleep synced yet." (final review I-1)', async () => {
+    mockParams = { date: TODAY };
+    sleepFetch.mockResolvedValue(makeWindow({
+      nights: ['2026-10-04', '2026-10-07'].map((d) => makeNight(d, { mainIsNap: true, bedtime: '14:10', wakeTime: '14:35' })),
+    }));
+    renderScreen();
+    const card = await screen.findByTestId('sleep-window-card');
+    expect(within(card).getByText('No bedtimes recorded in this range.')).toBeTruthy();
     expect(within(card).queryByTestId(/^sleep-window-bar-/)).toBeNull();
   });
 
@@ -528,8 +625,8 @@ describe('SleepScreen: bedtime to wake', () => {
     expect(screen.queryByTestId('sleep-window-bar-2026-10-06')).toBeNull();
   });
 
-  it('no nights: the chart says so', async () => {
-    sleepFetch.mockResolvedValue(makeWindow({ nights: [] }));
+  it('no sleep ever synced: the chart says so', async () => {
+    sleepFetch.mockResolvedValue(makeWindow({ nights: [], earliestDate: null }));
     renderScreen();
     const card = await screen.findByTestId('sleep-window-card');
     expect(within(card).getByText('No sleep synced yet.')).toBeTruthy();
@@ -546,6 +643,25 @@ describe('SleepScreen: bedtime to wake', () => {
     expect(screen.queryByTestId('sleep-night-2026-09-03')).toBeNull();
     expect(screen.queryByTestId('sleep-night-2026-09-11')).toBeNull();
     expect(within(screen.getByTestId('sleep-window-bar-2026-09-10')).getByTestId('sleep-window-selected')).toBeTruthy();
+  });
+
+  it('on an old night, a picker tap within the month keeps the picker, chart and month on screen with no refetch (final review I-3)', async () => {
+    mockParams = { date: '2026-09-10' };
+    sleepFetch.mockResolvedValue(makeWindow({
+      nights: ['2026-09-04', '2026-09-05', '2026-09-06', '2026-09-07', '2026-09-08', '2026-09-09', '2026-09-10'].map((d) => makeNight(d)),
+    }));
+    const { rerender } = renderScreen();
+    await waitFor(() => expect(screen.getByTestId('sleep-window-bar-2026-09-10')).toBeTruthy());
+    await screen.findByTestId('sleep-month');
+    fireEvent.press(screen.getByTestId('sleep-night-2026-09-07'));
+    expect(mockNavigation.setParams).toHaveBeenCalledWith({ date: '2026-09-07' });
+    mockParams = { date: '2026-09-07' };
+    rerender(withCharacter(<SleepScreen />, { characterId: 'mochi', status: STATUS }));
+    expect(screen.queryByTestId('sleep-picker-loading')).toBeNull();
+    expect(screen.getByTestId('sleep-window-card')).toBeTruthy();
+    expect(screen.getByTestId('sleep-month')).toBeTruthy();
+    await waitFor(() => expect(within(screen.getByTestId('sleep-window-bar-2026-09-07')).getByTestId('sleep-window-selected')).toBeTruthy());
+    expect(sleepFetch).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -566,6 +682,11 @@ describe('SleepScreen: regularity', () => {
     (fetchSleepRegularity as jest.Mock).mockResolvedValue({ ...REGULARITY, nights: 2, score: null, bedtimeSpreadMinutes: null, wakeSpreadMinutes: null });
     renderScreen();
     expect(await screen.findByText('Not enough nights yet. 2 more to go.')).toBeTruthy();
+    // One spoken element without the label's "·" (final review I-4).
+    const card = screen.getByTestId('sleep-regularity');
+    expect(card.props.accessible).toBe(true);
+    expect(card.props.accessibilityLabel).toBe('Regularity, 7 nights. Not enough nights yet. 2 more to go.');
+    expect(card.props.accessibilityLabel).not.toMatch(SPOKEN_FORBIDDEN);
   });
 
   it('an error has its own retry', async () => {
@@ -725,7 +846,7 @@ describe('SleepScreen: month', () => {
     sleepFetch.mockResolvedValue(makeWindow({ earliestDate: '2025-01-01', nights: [] }));
     renderScreen();
     await month();
-    expect(sleepFetch).toHaveBeenCalledWith('2025-12-23', '2026-01-31');
+    expect(sleepFetch).toHaveBeenCalledWith('2025-12-19', '2026-01-31');
     expect(screen.getByTestId('sleep-month-title').props.children).toBe('January');
     fireEvent.press(screen.getByLabelText('Previous month'));
     await waitFor(() => expect(sleepFetch).toHaveBeenLastCalledWith('2025-12-01', '2025-12-31'));

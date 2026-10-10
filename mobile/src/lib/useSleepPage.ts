@@ -55,9 +55,13 @@ export function anchorFor(date: string, today: string): string {
   return date >= addDays(today, -6) ? today : date;
 }
 
-/** Plan ruling 6: keyed by the anchor only, so a tap inside the week never refetches it. */
+/**
+ * Plan ruling 6: keyed by the anchor's month only, so a tap inside the week never refetches it. Starting 13 days
+ * before the month (always on or before A − 13) keeps the key the same for every anchor in one month, so a tap to
+ * another old night in that month never refetches either (final review I-3).
+ */
 export function windowRange(anchor: string, today: string): { from: string; to: string } {
-  return { from: minDate(addDays(anchor, -13), monthStart(anchor)), to: minDate(today, monthEnd(anchor)) };
+  return { from: addDays(monthStart(anchor), -13), to: minDate(today, monthEnd(anchor)) };
 }
 
 export function monthSpan(month: string, today: string): { from: string; to: string } {

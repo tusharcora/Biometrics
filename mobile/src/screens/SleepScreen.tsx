@@ -87,6 +87,10 @@ export function SleepScreen() {
   const isLastNight = date === page.today;
   const hasNight = bundle ? bundle.night !== null && !bundle.night.mainIsNap : true;
   const goalMinutes = page.goal.phase === 'ready' ? page.goal.data.sleepGoalMinutes : null;
+  // The verdict depends on the goal (Short night), so the hero waits for it rather than flipping once it lands; a
+  // failed goal reads as the default goal, as the month card does (Task 5 M1).
+  const heroLoad = page.goal.phase === 'loading' ? { status: 'loading' as const } : page.night;
+  const heroGoal = goalMinutes ?? DEFAULT_SLEEP_GOAL_MINUTES;
 
   return (
     <View className="flex-1 bg-background">
@@ -95,7 +99,7 @@ export function SleepScreen() {
         {page.night.status === 'error' ? (
           <SectionError testID="sleep-night-retry" message={SLEEP_COPY.nightError} onRetry={page.reloadNight} />
         ) : (
-          <SleepHero date={date} today={page.today} load={page.night} goalMinutes={goalMinutes} bands={page.bands} />
+          <SleepHero date={date} today={page.today} load={heroLoad} goalMinutes={heroGoal} bands={page.bands} />
         )}
         <NightPicker
           anchor={page.anchor}
@@ -109,7 +113,11 @@ export function SleepScreen() {
         {bundle ? (
           <NightSummary date={date} today={page.today} night={bundle.night} goalMinutes={goalMinutes} />
         ) : page.night.status === 'loading' ? (
-          <Skeleton testID="sleep-summary-loading" className="h-20 w-full rounded-card" />
+          <>
+            <Skeleton testID="sleep-summary-loading" className="h-20 w-full rounded-card" />
+            {/* The night cards hold their place while a night loads, so the page does not jump (spec §6). */}
+            <Skeleton testID="sleep-night-cards-loading" className="h-64 w-full rounded-card" />
+          </>
         ) : null}
         {bundle?.night ? (
           // pop: back on the tab navigator rather than a second Tabs pushed over this page (ruling F3).
@@ -120,6 +128,7 @@ export function SleepScreen() {
             anchor={page.anchor}
             date={date}
             nights={page.window.data.nights}
+            hasSleep={page.window.data.earliestDate !== null}
             goal={page.goal.phase === 'ready' ? page.goal.data : null}
             range={range}
             onRange={setRange}

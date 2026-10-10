@@ -2,7 +2,7 @@ import React from 'react';
 import { View } from 'react-native';
 import type { SleepRegularity } from '../../api/sleep';
 import { nightsToGo } from '../../lib/regularityCopy';
-import { regularityA11y, regularityWord, SLEEP_COPY, spreadLine } from '../../lib/sleepCopy';
+import { regularityA11y, regularityPendingA11y, regularityWord, SLEEP_COPY, spreadLine } from '../../lib/sleepCopy';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { ScoreRing } from '../ui/score-ring';
@@ -26,10 +26,11 @@ export function RegularityCard({ state, onRetry }: { state: RegularityState; onR
   }
   const { data } = state;
   if (data.score === null) {
+    const toGo = nightsToGo(data.days, data.nights);
     return (
-      <Card testID="sleep-regularity" className="gap-2">
+      <Card testID="sleep-regularity" accessible accessibilityLabel={regularityPendingA11y(toGo)} className="gap-2">
         <SectionLabel>{SLEEP_COPY.regularityLabel}</SectionLabel>
-        <Text testID="sleep-regularity-empty" className="text-body">{SLEEP_COPY.notEnoughNights(nightsToGo(data.days, data.nights))}</Text>
+        <Text testID="sleep-regularity-empty" className="text-body">{SLEEP_COPY.notEnoughNights(toGo)}</Text>
       </Card>
     );
   }

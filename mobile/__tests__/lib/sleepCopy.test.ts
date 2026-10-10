@@ -1,6 +1,7 @@
 import {
   askLabel, buildingHero, durationCaption, formatHm, goalPart, goalRowA11y, goalRowLine, heroA11y, infoBands, infoWeights,
-  monthCellLabel, nightEyebrow, noNightHero, noScoreHero, pickerCellLabel, pickerWeekday, regularityA11y, regularityWord,
+  monthCellLabel, napOnlySummaryA11y, nightEyebrow, noNightHero, noNightSummaryA11y, noScoreHero, pickerCellLabel, pickerWeekday,
+  regularityA11y, regularityPendingA11y, regularityWord,
   SLEEP_COPY, sleepHeroLine, sleepVerdict, spreadLine, summaryA11y, summaryLine, usualPart,
 } from '../../src/lib/sleepCopy';
 import { sleepQuestion } from '../../src/lib/coachPrompts';
@@ -66,9 +67,20 @@ describe('hero line', () => {
 
 describe('hero states', () => {
   it('building counts nights', () => {
-    expect(buildingHero({ metric: 'SLEEP_EFFICIENCY', daysCollected: 9, daysRequired: 14 })).toEqual({ numeral: 'Night 9 of 14', verdict: 'Learning your sleep', line: '5 nights to go' });
+    expect(buildingHero({ metric: 'SLEEP_EFFICIENCY', daysCollected: 9, daysRequired: 14 })).toEqual({
+      numeral: 'Night 9 of 14', verdict: 'Learning your sleep', line: '5 nights to go', spoken: 'Learning your sleep. Night 9 of 14. 5 nights to go.',
+    });
     expect(buildingHero({ metric: 'SLEEP_EFFICIENCY', daysCollected: 13, daysRequired: 14 }).line).toBe('1 night to go');
-    expect(buildingHero(null)).toEqual({ numeral: '—', verdict: 'Learning your sleep', line: null });
+    expect(buildingHero(null)).toEqual({ numeral: '—', verdict: 'Learning your sleep', line: null, spoken: 'Learning your sleep' });
+  });
+  it('the no-night, nap-only and too-few-nights labels read without "·" or unit letters (final review I-4)', () => {
+    const labels = [noNightSummaryA11y(TODAY), napOnlySummaryA11y(TODAY, 20, '14:10'), regularityPendingA11y(2)];
+    expect(labels).toEqual([
+      'Night ending Thursday 8 October. No sleep recorded for this night.',
+      'Night ending Thursday 8 October. Only a nap, 20 minutes at 2:10 pm.',
+      'Regularity, 7 nights. Not enough nights yet. 2 more to go.',
+    ]);
+    for (const l of labels) expect(l).not.toMatch(SPOKEN_FORBIDDEN);
   });
   it('no score yet: on its way for today and yesterday, else none', () => {
     expect(noScoreHero(TODAY, TODAY)).toEqual({ verdict: 'Score on its way', line: 'It appears a few minutes after your watch syncs' });
@@ -189,6 +201,7 @@ describe('info sheet', () => {
       'Short night · 1h or more under your goal, on any band',
     ]);
     expect(infoBands(undefined)[0]).toBe('Restful night · Excellent · 75 and up');
+    expect(infoBands(null)[0]).toBe('Restful night · Excellent · 75 and up');
   });
 });
 

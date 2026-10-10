@@ -4,8 +4,9 @@ import { shiftDate } from '../scoring/dates';
 import { isDaytimeNap, pickMainSession } from './mainSession';
 
 const DAY_MS = 24 * 60 * 60 * 1000;
-// "Usual" is the mean over the 30 nights before this one, and only once at
-// least 7 of them have data: fewer is too thin to call anything usual.
+// "Usual" is the mean main sleep over the 30 nights before this one, and only
+// once at least 7 of them have a main session that is not a daytime nap: fewer
+// is too thin to call anything usual.
 const USUAL_WINDOW_NIGHTS = 30;
 const USUAL_MIN_NIGHTS = 7;
 

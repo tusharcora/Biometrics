@@ -1,7 +1,7 @@
 import React from 'react';
 import { View } from 'react-native';
 import type { SleepNightDetail } from '../../api/sleep';
-import { durationCaption, nightEyebrow, SLEEP_COPY, summaryA11y, summaryLine } from '../../lib/sleepCopy';
+import { durationCaption, napOnlySummaryA11y, nightEyebrow, noNightSummaryA11y, SLEEP_COPY, summaryA11y, summaryLine } from '../../lib/sleepCopy';
 import { formatDuration } from '../../lib/sleepStats';
 import { SectionLabel } from '../ui/section-label';
 import { Text } from '../ui/text';
@@ -11,7 +11,7 @@ export function NightSummary({ date, today, night, goalMinutes }: { date: string
   const eyebrow = <SectionLabel>{nightEyebrow(date, today)}</SectionLabel>;
   if (!night) {
     return (
-      <View testID="sleep-summary" className="gap-1 px-1 pt-1">
+      <View testID="sleep-summary" accessible accessibilityLabel={noNightSummaryA11y(date)} className="gap-1 px-1 pt-1">
         {eyebrow}
         <Text className="text-body text-muted-foreground">{SLEEP_COPY.noSleepForNight}</Text>
       </View>
@@ -19,7 +19,7 @@ export function NightSummary({ date, today, night, goalMinutes }: { date: string
   }
   if (night.mainIsNap) {
     return (
-      <View testID="sleep-summary" className="gap-1 px-1 pt-1">
+      <View testID="sleep-summary" accessible accessibilityLabel={napOnlySummaryA11y(date, night.minutesAsleep, night.bedtime)} className="gap-1 px-1 pt-1">
         {eyebrow}
         <Text className="text-body text-muted-foreground">{SLEEP_COPY.onlyNap(night.minutesAsleep, night.bedtime)}</Text>
       </View>

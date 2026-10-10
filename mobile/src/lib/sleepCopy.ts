@@ -41,10 +41,12 @@ export function sleepHeroLine(p: {
 export const heroA11y = (score: number, band: string, verdict: string, spokenLine: string) =>
   `Sleep score ${Math.round(score)}, ${band}, ${verdict.toLowerCase()}. ${spokenLine}`;
 
-export function buildingHero(cold: ColdStartDTO | null): { numeral: string; verdict: string; line: string | null } {
-  if (!cold) return { numeral: '—', verdict: 'Learning your sleep', line: null };
+export function buildingHero(cold: ColdStartDTO | null): { numeral: string; verdict: string; line: string | null; spoken: string } {
+  if (!cold) return { numeral: '—', verdict: 'Learning your sleep', line: null, spoken: 'Learning your sleep' };
   const left = Math.max(0, cold.daysRequired - cold.daysCollected);
-  return { numeral: `Night ${cold.daysCollected} of ${cold.daysRequired}`, verdict: 'Learning your sleep', line: `${left} ${left === 1 ? 'night' : 'nights'} to go` };
+  const numeral = `Night ${cold.daysCollected} of ${cold.daysRequired}`;
+  const line = `${left} ${left === 1 ? 'night' : 'nights'} to go`;
+  return { numeral, verdict: 'Learning your sleep', line, spoken: `Learning your sleep. ${numeral}. ${line}.` };
 }
 
 /** A night with no score row: on its way for today and yesterday (the score lands after the sync). */
@@ -104,6 +106,11 @@ export function summaryA11y(p: { date: string; mainMinutes: number; bedtime: str
   return bits.join(' ');
 }
 
+/** The summary when D has no night, or only a nap, read as one element (no "·" and no unit letters). */
+export const noNightSummaryA11y = (date: string) => `Night ending ${formatDayLong(date)}. ${SLEEP_COPY.noSleepForNight}`;
+export const napOnlySummaryA11y = (date: string, minutes: number, at: string) =>
+  `Night ending ${formatDayLong(date)}. Only a nap, ${spoken(minutes)} at ${formatClock(at)}.`;
+
 /** 432 -> "7:12": picker and month cells. */
 export function formatHm(minutes: number): string {
   const m = Math.max(0, Math.round(minutes));
@@ -117,6 +124,9 @@ export function spreadLine(bedtime: number | null, wake: number | null): string 
   const bits = [bedtime === null ? null : `Bedtime ±${Math.round(bedtime)}m`, wake === null ? null : `Wake ±${Math.round(wake)}m`].filter(Boolean);
   return bits.length ? bits.join(' · ') : null;
 }
+
+/** The card before there are enough nights for a score (the visible label carries a "·"). */
+export const regularityPendingA11y = (nightsToGo: number) => `${SLEEP_COPY.regularityLabel.replace(' · ', ', ')}. ${SLEEP_COPY.notEnoughNights(nightsToGo)}`;
 
 export function regularityA11y(score: number, word: string, bedtime: number | null, wake: number | null): string {
   let out = `Regularity ${Math.round(score)}, ${word.toLowerCase()}.`;
@@ -161,7 +171,7 @@ export function infoWeights(factors: FactorDTO[]): string | null {
   return `This night weighted ${used.map((f) => `${f.label.toLowerCase()} ${Math.round(f.weight * 100)}`).join(', ')}.`;
 }
 
-export function infoBands(bands: ScoreBandsDTO | undefined): string[] {
+export function infoBands(bands?: ScoreBandsDTO | null): string[] {
   const b = bands ?? DEFAULT_SCORE_BANDS;
   return [
     `Restful night · Excellent · ${b.excellent} and up`,
@@ -202,6 +212,10 @@ export const SLEEP_COPY = {
   rangeWeek: 'Week',
   rangeTwoWeeks: '2 weeks',
   selectedSuffix: ', selected',
+  // The chart with no bars: nothing has ever synced, or this range has no main nights (naps only count as none).
+  windowEmptyNoSleep: 'No sleep synced yet.',
+  windowEmptyRange: 'No bedtimes recorded in this range.',
+  weekdayInitial: ['S', 'M', 'T', 'W', 'T', 'F', 'S'],
   regularityLabel: 'Regularity · 7 nights',
   notEnoughNights: (n: number) => `Not enough nights yet. ${n} more to go.`,
   prevMonth: 'Previous month',

@@ -62,10 +62,19 @@ describe('pure rules (spec §3.0)', () => {
     expect(anchorFor('2026-10-02', TODAY)).toBe(TODAY);
     expect(anchorFor('2026-10-01', TODAY)).toBe('2026-10-01');
   });
-  it('the window covers two weeks back and the whole anchor month, never past today', () => {
-    expect(windowRange(TODAY, TODAY)).toEqual({ from: '2026-09-25', to: TODAY });
-    expect(windowRange('2026-10-28', '2026-10-28')).toEqual({ from: '2026-10-01', to: '2026-10-28' });
-    expect(windowRange('2026-09-10', TODAY)).toEqual({ from: '2026-08-28', to: '2026-09-30' });
+  it('the window covers the whole anchor month and two weeks before it, never past today', () => {
+    expect(windowRange(TODAY, TODAY)).toEqual({ from: '2026-09-18', to: TODAY });
+    expect(windowRange('2026-10-28', '2026-10-28')).toEqual({ from: '2026-09-18', to: '2026-10-28' });
+    expect(windowRange('2026-09-10', TODAY)).toEqual({ from: '2026-08-19', to: '2026-09-30' });
+  });
+  it('the window is the same for every anchor in one month (final review I-3)', () => {
+    for (const a of ['2026-09-01', '2026-09-07', '2026-09-13', '2026-09-30']) {
+      expect(windowRange(a, TODAY)).toEqual({ from: '2026-08-19', to: '2026-09-30' });
+    }
+    // An old night early in this month shares the current week's window.
+    expect(windowRange('2026-10-01', TODAY)).toEqual(windowRange(TODAY, TODAY));
+  });
+  it('month spans', () => {
     expect(monthSpan('2026-10', TODAY)).toEqual({ from: '2026-10-01', to: TODAY });
     expect(monthSpan('2026-02', TODAY)).toEqual({ from: '2026-02-01', to: '2026-02-28' });
   });
@@ -78,7 +87,7 @@ describe('useSleepPage', () => {
     expect(result.current.anchor).toBe(TODAY);
     await waitFor(() => expect(result.current.night.status).toBe('ready'));
     expect(sleepFetch).toHaveBeenCalledTimes(1);
-    expect(sleepFetch).toHaveBeenCalledWith('2026-09-25', TODAY);
+    expect(sleepFetch).toHaveBeenCalledWith('2026-09-18', TODAY);
     expect(scoreFetch).toHaveBeenCalledWith('2026-10-05', 'SLEEP');
     expect(nightFetch).toHaveBeenCalledWith('2026-10-05');
     expect(regularityFetch).toHaveBeenCalledWith(7);
@@ -112,7 +121,7 @@ describe('useSleepPage', () => {
     const { result } = renderHook(() => useSleepPage('2026-09-10'));
     expect(result.current.anchor).toBe('2026-09-10');
     await flush();
-    expect(sleepFetch).toHaveBeenCalledWith('2026-08-28', '2026-09-30');
+    expect(sleepFetch).toHaveBeenCalledWith('2026-08-19', '2026-09-30');
   });
 
   it('reads a 404 night as no night while the score may still be there', async () => {
@@ -224,7 +233,7 @@ describe('useSleepPage', () => {
     sleepFetch.mockResolvedValue(makeWindow({ today: '2026-10-09' }));
     const { result } = renderHook(() => useSleepPage());
     await waitFor(() => expect(result.current.today).toBe('2026-10-09'));
-    await waitFor(() => expect(sleepFetch).toHaveBeenLastCalledWith('2026-09-26', '2026-10-09'));
+    await waitFor(() => expect(sleepFetch).toHaveBeenLastCalledWith('2026-09-18', '2026-10-09'));
     expect(result.current.anchor).toBe('2026-10-09');
   });
 
@@ -237,7 +246,7 @@ describe('useSleepPage', () => {
       seen.push({ window: page.window.phase, date: page.date, night: page.night.status });
       return page;
     });
-    await waitFor(() => expect(sleepFetch).toHaveBeenLastCalledWith('2026-09-26', '2026-10-09'));
+    await waitFor(() => expect(sleepFetch).toHaveBeenLastCalledWith('2026-09-18', '2026-10-09'));
     await flush();
     // The refetch for the server's week is still in flight; the device-week nights stay on screen.
     expect(result.current.window.phase).toBe('ready');
@@ -271,8 +280,8 @@ describe('useSleepPage', () => {
       return page;
     });
     // The device guess clamps the param to 8 Oct; the server's today moves the week to end on the 9th.
-    expect(sleepFetch).toHaveBeenCalledWith('2026-09-25', TODAY);
-    await waitFor(() => expect(sleepFetch).toHaveBeenLastCalledWith('2026-09-26', '2026-10-09'));
+    expect(sleepFetch).toHaveBeenCalledWith('2026-09-18', TODAY);
+    await waitFor(() => expect(sleepFetch).toHaveBeenLastCalledWith('2026-09-18', '2026-10-09'));
     await flush();
     expect(result.current.window.phase).toBe('ready');
     expect(result.current.date).toBe('2026-10-09');
@@ -280,6 +289,22 @@ describe('useSleepPage', () => {
     const firstReady = seen.indexOf('ready');
     expect(firstReady).toBeGreaterThanOrEqual(0);
     expect(seen.slice(firstReady).every((p) => p === 'ready')).toBe(true);
+  });
+
+  it('a tap to another old night in the same month keeps the window: no loading, no refetch (final review I-3)', async () => {
+    const seen: string[] = [];
+    const { result, rerender } = renderHook(({ d }: { d: string }) => {
+      const page = useSleepPage(d);
+      seen.push(page.window.phase);
+      return page;
+    }, { initialProps: { d: '2026-09-10' } });
+    await waitFor(() => expect(result.current.window.phase).toBe('ready'));
+    seen.length = 0;
+    rerender({ d: '2026-09-07' });
+    await flush();
+    expect(result.current.anchor).toBe('2026-09-07');
+    expect(seen.every((p) => p === 'ready')).toBe(true);
+    expect(sleepFetch).toHaveBeenCalledTimes(1);
   });
 
   it('a new date param is a different page: an old night shows the window loading', async () => {

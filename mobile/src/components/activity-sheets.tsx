@@ -12,7 +12,7 @@ const formatSteps = METRIC_CONFIG.STEPS.format;
 
 interface LinkTileProps {
   testID: string;
-  icon: 'footsteps-outline' | 'moon-outline';
+  icon: 'moon-outline';
   color: string;
   label: string;
   value: string;

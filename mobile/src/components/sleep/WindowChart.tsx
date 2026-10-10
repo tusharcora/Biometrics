@@ -4,6 +4,7 @@ import Svg, { Line } from 'react-native-svg';
 import { useColorScheme } from 'nativewind';
 import type { SleepGoal, SleepNight } from '../../api/sleep';
 import { dayOfWeek } from '../../lib/heatmap';
+import { weekdayLong } from '../../lib/recoveryCopy';
 import { SLEEP_COPY } from '../../lib/sleepCopy';
 import { layoutSleepWindow } from '../../lib/sleepWindow';
 import { formatClock } from '../../lib/sleepStats';
@@ -14,15 +15,15 @@ import { Text } from '../ui/text';
 const CHART_HEIGHT = 220;
 // Wide enough for "12:00 am" at text-fine.
 const TICK_COLUMN = 52;
-const WEEKDAY_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-const WEEKDAY_INITIAL = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 // One bar per night from bedtime (top) to wake (bottom), a column per date in `dates` (ascending), so a night with
 // no data is a gap. The goal window is a faint band with dashed edges (the board); the selected night is ringed and
 // the others sit at 45% (spec §3.9, plan ruling 14). A bar press selects its night. Ticks read on the app's clock
-// (formatClock), like every other time on the page (spec §2.1, ruling F18).
-export function WindowChart({ dates, nights, goal, selectedDate, onPressNight }: {
-  dates: string[]; nights: SleepNight[]; goal: SleepGoal | null; selectedDate: string | null; onPressNight: (date: string) => void;
+// (formatClock), like every other time on the page (spec §2.1, ruling F18). With no bars it shows `emptyText`, which
+// the caller picks: only it knows whether the user has any sleep at all (final review I-1).
+export function WindowChart({ dates, nights, goal, selectedDate, emptyText, onPressNight }: {
+  dates: string[]; nights: SleepNight[]; goal: SleepGoal | null; selectedDate: string | null; emptyText: string;
+  onPressNight: (date: string) => void;
 }) {
   const { colorScheme } = useColorScheme();
   const palette = colorScheme === 'light' ? COLORS.light : COLORS.dark;
@@ -33,7 +34,7 @@ export function WindowChart({ dates, nights, goal, selectedDate, onPressNight }:
     return (
       <View testID="sleep-window-chart" className="items-center justify-center" style={{ height: CHART_HEIGHT }}>
         <Text testID="sleep-window-empty" className="text-center text-caption text-muted-foreground">
-          {nights.length === 0 ? 'No sleep synced yet.' : 'No bedtimes recorded in this range.'}
+          {emptyText}
         </Text>
       </View>
     );
@@ -82,7 +83,7 @@ export function WindowChart({ dates, nights, goal, selectedDate, onPressNight }:
                 testID={`sleep-window-bar-${bar.date}`}
                 accessibilityRole="button"
                 accessibilityState={{ selected }}
-                accessibilityLabel={`${WEEKDAY_LONG[dayOfWeek(bar.date)]}: ${formatClock(night.bedtime)} to ${formatClock(night.wakeTime)}${selected ? SLEEP_COPY.selectedSuffix : ''}`}
+                accessibilityLabel={`${weekdayLong(bar.date)}: ${formatClock(night.bedtime)} to ${formatClock(night.wakeTime)}${selected ? SLEEP_COPY.selectedSuffix : ''}`}
                 onPress={() => onPressNight(bar.date)}
                 style={{ position: 'absolute', left: `${(column / columns) * 100}%`, width: `${100 / columns}%`, top: y(bar.top), height: Math.max(4, y(bar.height)), alignItems: 'center' }}
               >
@@ -106,7 +107,7 @@ export function WindowChart({ dates, nights, goal, selectedDate, onPressNight }:
             // An explicit colour, so the selected initial is testable (className is not resolved in jest).
             style={d === selectedDate ? { color: palette.foreground } : undefined}
           >
-            {WEEKDAY_INITIAL[dayOfWeek(d)]}
+            {SLEEP_COPY.weekdayInitial[dayOfWeek(d)]}
           </Text>
         ))}
       </View>

@@ -41,25 +41,27 @@ export function SleepHero({ date, today, load, goalMinutes, bands }: {
     label = `${h.verdict}. ${h.line}`;
     dim = true;
   } else if (detail && s !== null) {
-    numeral = String(Math.round(s));
-    verdict = sleepVerdict({ score: s, bands: liveBands, mainMinutes: night?.minutesAsleep ?? null, goalMinutes });
-    const hl = sleepHeroLine({ score: s, bands: liveBands, date, today, previous: detail.previous, confidence: detail.score.confidenceLevel });
+    // Everything bands on the numeral shown, as the picker dash and the info sheet do (spec §4.4, final review I-2).
+    const r = Math.round(s);
+    numeral = String(r);
+    verdict = sleepVerdict({ score: r, bands: liveBands, mainMinutes: night?.minutesAsleep ?? null, goalMinutes });
+    const hl = sleepHeroLine({ score: r, bands: liveBands, date, today, previous: detail.previous, confidence: detail.score.confidenceLevel });
     const low = detail.score.confidenceLevel === 'LOW';
     line = (
       <>
-        <Text className="text-caption" style={{ color: colors[scoreBand(s, liveBands)] }}>{hl.band}</Text>
+        <Text className="text-caption" style={{ color: colors[scoreBand(r, liveBands)] }}>{hl.band}</Text>
         {hl.lead}
         <Text className="text-caption text-muted-foreground" style={low ? { color: colors.scoreFair } : undefined}>{hl.confidence}</Text>
       </>
     );
-    label = heroA11y(s, hl.band, verdict, hl.spoken);
+    label = heroA11y(r, hl.band, verdict, hl.spoken);
   } else if (detail) {
     const b = buildingHero(pickColdStartProgress(detail.score.coldStart));
     numeral = b.numeral;
     numeralClass = 'text-number';
     verdict = b.verdict;
     line = b.line;
-    label = b.line ? `${b.verdict}. ${b.line}` : b.verdict;
+    label = b.spoken;
     dim = true;
   } else {
     const h = noScoreHero(date, today);

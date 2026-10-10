@@ -12,8 +12,9 @@ import { WindowChart } from './WindowChart';
 export type SleepRange = 'week' | 'two-weeks';
 
 // Bedtime to wake over A-6..A or A-13..A (spec §3.9). Nap-only dates are not nights (plan ruling 5).
-export function BedtimeToWakeCard({ anchor, date, nights, goal, range, onRange, onSelect }: {
-  anchor: string; date: string; nights: SleepNight[]; goal: SleepGoal | null; range: SleepRange;
+// `hasSleep` is false only when nothing has ever synced (the window's earliestDate is null).
+export function BedtimeToWakeCard({ anchor, date, nights, hasSleep, goal, range, onRange, onSelect }: {
+  anchor: string; date: string; nights: SleepNight[]; hasSleep: boolean; goal: SleepGoal | null; range: SleepRange;
   onRange: (r: SleepRange) => void; onSelect: (date: string) => void;
 }) {
   const days = range === 'week' ? 7 : 14;
@@ -35,7 +36,14 @@ export function BedtimeToWakeCard({ anchor, date, nights, goal, range, onRange, 
           />
         </View>
       </View>
-      <WindowChart dates={dates} nights={shown} goal={goal} selectedDate={date} onPressNight={onSelect} />
+      <WindowChart
+        dates={dates}
+        nights={shown}
+        goal={goal}
+        selectedDate={date}
+        emptyText={hasSleep ? SLEEP_COPY.windowEmptyRange : SLEEP_COPY.windowEmptyNoSleep}
+        onPressNight={onSelect}
+      />
     </Card>
   );
 }
