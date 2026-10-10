@@ -5,8 +5,8 @@ import { useNavigation, useRoute, type RouteProp } from '@react-navigation/nativ
 import { ApiError } from '../api/client';
 import { fetchSleepNight, type SleepNightDetail } from '../api/sleep';
 import { useCharacter } from '../characters/CharacterContext';
-import { InBedShare } from '../components/activity-sheets';
 import { characterInfo } from '../components/characters/registry';
+import { InBedShare } from '../components/sleep/InBedShare';
 import { MomentsCard } from '../components/sleep/MomentsCard';
 import { SectionError, useSection } from '../components/sleep/Section';
 import { SleepCyclesCard } from '../components/sleep/SleepCyclesCard';

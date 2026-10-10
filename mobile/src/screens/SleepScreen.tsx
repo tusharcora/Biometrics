@@ -7,6 +7,7 @@ import { useScreenFocused } from '../characters/useScreenFocused';
 import { characterInfo } from '../components/characters/registry';
 import { AskCoachBar } from '../components/coach/AskCoachBar';
 import { BedtimeGoalRow } from '../components/sleep/BedtimeGoalRow';
+import { NightCards } from '../components/sleep/NightCards';
 import { NightPicker } from '../components/sleep/NightPicker';
 import { NightSummary } from '../components/sleep/NightSummary';
 import { SectionError } from '../components/sleep/Section';
@@ -92,7 +93,11 @@ export function SleepScreen() {
         ) : page.night.status === 'loading' ? (
           <Skeleton testID="sleep-summary-loading" className="h-20 w-full rounded-card" />
         ) : null}
-        {/* Task 6: <NightCards/>. Task 8: <BedtimeToWakeCard/>, <RegularityCard/>. Task 9: <SleepMonthCard/>. */}
+        {bundle?.night ? (
+          // pop: back on the tab navigator rather than a second Tabs pushed over this page (ruling F3).
+          <NightCards night={bundle.night} onStepsThatDay={() => navigation.navigate('Tabs', { screen: 'Activity', params: { date } }, { pop: true })} />
+        ) : null}
+        {/* Task 8: <BedtimeToWakeCard/>, <RegularityCard/>. Task 9: <SleepMonthCard/>. */}
         <BedtimeGoalRow goal={page.goal} reminder={page.reminder} onPress={() => navigation.navigate('BedtimeGoal')} onRetry={page.reloadGoal} />
       </ScrollView>
       {coachRoute ? (

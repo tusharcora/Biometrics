@@ -320,3 +320,104 @@ describe('SleepScreen: goal row and Ask bar', () => {
     expect(await screen.findByTestId('sleep-info-sheet')).toBeTruthy();
   });
 });
+
+describe('SleepScreen: the night in full', () => {
+  it('stage lanes, cycles and moments for a night with stages', async () => {
+    renderScreen();
+    const stages = await screen.findByTestId('sleep-stages-card');
+    expect(within(stages).getByText('Sleep stages')).toBeTruthy();
+    expect(within(stages).getByTestId('stage-lanes')).toBeTruthy();
+    expect(screen.getByTestId('cycles-card')).toBeTruthy();
+    expect(screen.getByTestId('moments-card')).toBeTruthy();
+  });
+
+  it('without stages: bedtime, wake and the in-bed share instead; no cycles or moments', async () => {
+    nightFetch.mockResolvedValue(makeDetail(TODAY, { hasStages: false, stages: [], stageTotals: null, minutesAsleep: 430, minutesInBed: 452 }));
+    renderScreen();
+    expect(await screen.findByTestId('sleep-in-bed-share')).toHaveTextContent('7h 32m in bed · 95% of it asleep');
+    expect(within(screen.getByTestId('sleep-stages-card')).getByText('11:10 pm')).toBeTruthy();
+    expect(screen.queryByTestId('cycles-card')).toBeNull();
+    expect(screen.queryByTestId('moments-card')).toBeNull();
+    expect(screen.getByTestId('sleep-night-numbers')).toBeTruthy();
+  });
+
+  it('no in-bed bar without stages when time in bed is zero', async () => {
+    nightFetch.mockResolvedValue(makeDetail(TODAY, { hasStages: false, stages: [], stageTotals: null, minutesInBed: 0 }));
+    renderScreen();
+    await screen.findByTestId('sleep-night-numbers');
+    expect(screen.queryByTestId('sleep-stages-card')).toBeNull();
+  });
+
+  it('The night: the rows in order, hairlines between, no Sleep score row', async () => {
+    renderScreen();
+    const card = await screen.findByTestId('sleep-night-numbers');
+    for (const [label, value] of [['Time in bed', '7h 32m'], ['Time awake', '14m'], ['Time to fall asleep', '12m'], ['After waking', '6m']]) {
+      expect(within(card).getByText(label!)).toBeTruthy();
+      expect(within(card).getByText(value!)).toBeTruthy();
+    }
+    expect(within(card).getByText('None')).toBeTruthy();
+    expect(within(card).queryByText('Sleep score')).toBeNull();
+  });
+
+  it('hides a null row', async () => {
+    nightFetch.mockResolvedValue(makeDetail(TODAY, { minutesAwake: null, minutesAfterWakeUp: null }));
+    renderScreen();
+    const card = await screen.findByTestId('sleep-night-numbers');
+    expect(within(card).queryByText('Time awake')).toBeNull();
+    expect(within(card).queryByText('After waking')).toBeNull();
+  });
+
+  it('naps on the night clock, newest last, zero-length dropped', async () => {
+    // The fixture night is New York in summer (UTC-4): 18:10Z is 2:10 pm, 21:00Z is 5:00 pm.
+    nightFetch.mockResolvedValue(makeDetail(TODAY, { naps: [
+      { start: '2026-10-08T21:00:00.000Z', end: '2026-10-08T21:15:00.000Z', minutesAsleep: 15 },
+      { start: '2026-10-08T18:10:00.000Z', end: '2026-10-08T18:35:00.000Z', minutesAsleep: 20 },
+      { start: '2026-10-08T19:00:00.000Z', end: '2026-10-08T19:00:00.000Z', minutesAsleep: 0 },
+    ] }));
+    renderScreen();
+    const naps = await screen.findByTestId('sleep-naps-row');
+    const lines = within(naps).getAllByText(/ at /).map((t) => t.props.children);
+    expect(lines).toEqual(['20m at 2:10 pm', '15m at 5:00 pm']);
+  });
+
+  it('nap-only: the summary names the nap, no stage cards; The night shows the nap row only', async () => {
+    mockParams = { date: '2026-10-07' };
+    nightFetch.mockResolvedValue(makeDetail('2026-10-07', { mainIsNap: true, minutesAsleep: 20, bedtime: '14:10', wakeTime: '14:35', hasStages: false, stages: [], stageTotals: null, minutesInBed: 25 }));
+    renderScreen();
+    const card = await screen.findByTestId('sleep-night-numbers');
+    expect(within(screen.getByTestId('sleep-summary')).getByText('Only a nap: 20m at 2:10 pm')).toBeTruthy();
+    expect(screen.queryByTestId('sleep-stages-card')).toBeNull();
+    expect(screen.queryByTestId('cycles-card')).toBeNull();
+    expect(screen.queryByTestId('moments-card')).toBeNull();
+    expect(within(card).queryByText('Time in bed')).toBeNull();
+    expect(within(card).getByText('20m at 2:10 pm')).toBeTruthy();
+  });
+
+  it('no night: no night cards at all', async () => {
+    mockParams = { date: '2026-10-06' };
+    nightFetch.mockRejectedValue(notFound());
+    scoreFetch.mockResolvedValue(null);
+    renderScreen();
+    await screen.findByText('No sleep recorded for this night.');
+    expect(screen.queryByTestId('sleep-night-numbers')).toBeNull();
+  });
+
+  it('Steps that day opens the Activity tab on that date, back on Tabs rather than a second Tabs (decision 8, ruling F3)', async () => {
+    mockParams = { date: '2026-10-05' };
+    renderScreen();
+    const link = await screen.findByTestId('sleep-steps-that-day');
+    // Not exact: the chevron icon renders a glyph into the link's text content.
+    expect(link).toHaveTextContent('Steps that day', { exact: false });
+    expect(link.props.accessibilityRole).toBe('link');
+    fireEvent.press(link);
+    expect(mockNavigation.navigate).toHaveBeenCalledWith('Tabs', { screen: 'Activity', params: { date: '2026-10-05' } }, { pop: true });
+  });
+
+  it('sits between the summary and the goal row', async () => {
+    const { toJSON } = renderScreen();
+    await screen.findByTestId('sleep-night-numbers');
+    const tree = JSON.stringify(toJSON());
+    expect(tree.indexOf('sleep-summary')).toBeLessThan(tree.indexOf('sleep-stages-card'));
+    expect(tree.indexOf('sleep-night-numbers')).toBeLessThan(tree.indexOf('sleep-goal-row'));
+  });
+});
