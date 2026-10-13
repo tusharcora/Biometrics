@@ -11,6 +11,7 @@ import { BuddyError, UUID_RE, buddyRoute, limitOrThrow } from './errors';
 import { getIdentity, isHandleAvailable, updateIdentity } from './handles';
 import { checkDisplayName, checkHandle } from './identity';
 import { listBuddies } from './list';
+import { getProfileStats } from './profile';
 import { blockBuddy, blockFromRequest, listBlocked, requireBuddyId, setMuted, unblock, unpair } from './relations';
 import { acceptRequest, cancelRequest, declineRequest, listRequests, sendRequest } from './requests';
 import { confirmMoodNotice, getSharing, parseSharingPatch, recordSharingConsent, updateSharing } from './sharing';
@@ -20,10 +21,10 @@ import { buildBuddyWeek } from './view';
 export const buddiesRouter = Router();
 
 buddiesRouter.get('/me/buddies/me', requireAuth, buddyRoute(async (req, res) => {
-  const identity = await getIdentity(req.userId!);
-  if (!identity) throw new BuddyError('not_found');
+  const [identity, stats] = await Promise.all([getIdentity(req.userId!), getProfileStats(req.userId!, new Date())]);
+  if (!identity || !stats) throw new BuddyError('not_found');
   res.set('Cache-Control', 'private, no-store');
-  res.json(identity);
+  res.json({ ...identity, ...stats });
 }));
 
 buddiesRouter.get('/me/handle/availability', requireAuth, buddyRoute(async (req, res) => {

@@ -6,6 +6,7 @@ import type { CheckInMood } from '@prisma/client';
 import { civilDateToUtcMidnight, localCivilDateOrUtc } from '../biometrics/civilDate';
 import { prisma } from '../db/client';
 import { BuddyError } from '../buddies/errors';
+import { shiftDate } from '../scoring/dates';
 
 export const CHECKIN_MOODS: readonly CheckInMood[] = ['RESTED', 'OKAY', 'TIRED'];
 
@@ -35,6 +36,27 @@ export async function getTodayCheckIn(userId: string, now: Date): Promise<CheckI
     select: { mood: true, localDate: true, updatedAt: true },
   });
   return row ? toCheckInDTO(row) : null;
+}
+
+/**
+ * The run of consecutive local days with a check-in, ending today; while today has none yet, the run ending
+ * yesterday still counts, so a streak only breaks once a whole day is missed.
+ */
+export async function checkInStreak(userId: string, now: Date): Promise<number> {
+  const { today } = await todayFor(userId, now);
+  const rows = await prisma.checkIn.findMany({
+    where: { authorId: userId, localDate: { lte: civilDateToUtcMidnight(today) } },
+    select: { localDate: true },
+    orderBy: { localDate: 'desc' },
+  });
+  const dates = new Set(rows.map((r) => isoDate(r.localDate)));
+  let cursor = dates.has(today) ? today : shiftDate(today, -1);
+  let streak = 0;
+  while (dates.has(cursor)) {
+    streak++;
+    cursor = shiftDate(cursor, -1);
+  }
+  return streak;
 }
 
 export async function saveCheckIn(userId: string, mood: unknown, now: Date): Promise<CheckInDTO> {
