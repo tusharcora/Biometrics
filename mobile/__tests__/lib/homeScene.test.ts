@@ -169,12 +169,30 @@ describe('layout', () => {
   });
 
   it('runs the sky and ground bands full width, with extra sky above (and stars at night)', () => {
-    const day = sceneBackdrop('clear', 430, 0);
+    const day = sceneBackdrop('clear', 430, 0, 20);
     expect(day[0]).toEqual([0, 0, 430, 60, '#2563B8']);
     expect(day.filter((r) => r[2] === 430)).toHaveLength(9);
-    const tall = sceneBackdrop('night', 430, 24);
+    const tall = sceneBackdrop('night', 430, 24, 20);
     expect(tall[0]).toEqual([0, 0, 430, 24, '#06080E']);
     expect(tall.filter((r) => r[2] === 3 && r[3] === 3)).toHaveLength(4);
-    expect(sceneBackdrop('clear', 430, 24).filter((r) => r[2] === 3)).toHaveLength(0);
+    expect(sceneBackdrop('clear', 430, 24, 20).filter((r) => r[2] === 3)).toHaveLength(0);
+  });
+
+  it('puts the backdrop stars on the grid\'s columns, inside the screen', () => {
+    for (const width of [360, 375, 430, 440]) {
+      const offsetX = sceneOffsetX(width);
+      const stars = sceneBackdrop('night', width, 120, offsetX).filter((r) => r[2] === 3 && r[3] === 3);
+      expect(stars.length).toBeGreaterThan(0);
+      for (const [x] of stars) {
+        expect((((x - offsetX) % 3) + 3) % 3).toBe(0);
+        expect(x).toBeGreaterThanOrEqual(0);
+        expect(x + 3).toBeLessThanOrEqual(width);
+      }
+    }
+  });
+
+  it('puts "ALL n →" on its own row below the name tags, inside the ground', () => {
+    expect(SCENE_SPOTS.all).toEqual({ right: 382, top: 278 });
+    expect(SCENE_SPOTS.all.top).toBeGreaterThanOrEqual(SCENE_SPOTS.nameTop + 14 + 8);
   });
 });

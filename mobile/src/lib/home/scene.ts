@@ -314,7 +314,8 @@ export const SCENE_SPOTS = {
   buddies: [{ cx: 142, scale: 3 }, { cx: 290, scale: 3 }],
   nameTop: GROUND_Y + 8,
   nameWidth: 72,
-  all: { right: 382, top: GROUND_Y + 8 },
+  /** A row below the name tags: on theirs, a long "n REQUESTS →" would cover the right buddy's name. */
+  all: { right: 382, top: GROUND_Y + 32 },
   tags: {
     sleep: { left: 8, top: 118 },
     tomorrow: { left: 52, top: 158 },
@@ -342,15 +343,17 @@ export function clampTagLeft(left: number, tagWidth: number, screenWidth: number
 
 /**
  * What sits behind the grid, in points, full screen width: the extra sky (with stars at night, at the board's
- * density), then the four sky bands and the four ground bands, flat, and the bottom row's dark line.
+ * density, on the grid's columns), then the four sky bands and the four ground bands, flat, and the bottom row's dark line.
  */
-export function sceneBackdrop(key: SceneKey, width: number, extra: number): PxRect[] {
+export function sceneBackdrop(key: SceneKey, width: number, extra: number, offsetX: number): PxRect[] {
   const s = STATES[key];
   const r: PxRect[] = [];
   if (extra > 0) {
     r.push([0, 0, width, extra, s.sky[0]]);
     const n = Math.round(((s.stars ?? 0) * extra) / ((GY - 20) * U));
-    for (let i = 0; i < n; i++) r.push([((i * 37 + 11) * U) % width, ((i * 23 + 5) * U) % extra, U, U, STAR_COLS[i % 3]!]);
+    const phase = ((offsetX % U) + U) % U;
+    const cols = Math.floor((width - phase) / U);
+    for (let i = 0; i < n; i++) r.push([phase + ((i * 37 + 11) % cols) * U, ((i * 23 + 5) * U) % extra, U, U, STAR_COLS[i % 3]!]);
   }
   const bh = Math.floor(GY / 4);
   for (let i = 0; i < 4; i++) r.push([0, extra + i * bh * U, width, (i === 3 ? GY - 3 * bh : bh) * U, s.sky[i]!]);

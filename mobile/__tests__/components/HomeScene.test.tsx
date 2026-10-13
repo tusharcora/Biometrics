@@ -77,6 +77,15 @@ describe('HomeScene tags', () => {
     expect(styleOf('home-tag-recovery')).toMatchObject({ left: 208, top: 146 });
     expect(styleOf('home-scene-me-spot')).toMatchObject({ left: 164, top: 191 });
   });
+
+  it('pulls RECAPS back on screen on a 360-point phone once measured', () => {
+    show({ width: 360 });
+    expect(styleOf('home-tag-recaps').left).toBe(281);
+    fireEvent(screen.getByTestId('home-tag-recaps'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 90, height: 26 } } });
+    const { left } = styleOf('home-tag-recaps');
+    expect(left).toBe(266);
+    expect(left + 90).toBeLessThanOrEqual(360 - 4);
+  });
 });
 
 describe('HomeScene art and KIPs', () => {
@@ -116,6 +125,7 @@ describe('HomeScene "ALL n →"', () => {
   it('counts every buddy and opens Social', () => {
     const { onOpen } = show({ buddies: { buddies: [buddy({})], total: 5, incomingRequests: 0 } });
     expect(within(screen.getByTestId('home-scene-all')).getByText('ALL 5 →')).toBeTruthy();
+    expect(screen.getByLabelText('All 5 buddies. Open Social')).toBeTruthy();
     fireEvent.press(screen.getByTestId('home-scene-all'));
     expect(onOpen).toHaveBeenCalledWith('buddies');
   });
@@ -123,9 +133,17 @@ describe('HomeScene "ALL n →"', () => {
   it('reads the requests instead when there are any', () => {
     show({ buddies: { buddies: [], total: 0, incomingRequests: 3 } });
     expect(within(screen.getByTestId('home-scene-all')).getByText('3 REQUESTS →')).toBeTruthy();
+    expect(screen.getByLabelText('3 buddy requests. Open Social')).toBeTruthy();
     screen.unmount();
     show({ buddies: { buddies: [], total: 2, incomingRequests: 1 } });
     expect(within(screen.getByTestId('home-scene-all')).getByText('1 REQUEST →')).toBeTruthy();
+    expect(screen.getByLabelText('1 buddy request. Open Social')).toBeTruthy();
+  });
+
+  it('sits on its own row below the name tags, right-aligned to the board\'s 382', () => {
+    show({ extra: 20, buddies: { buddies: [buddy({}), buddy({ id: 'b2' })], total: 2, incomingRequests: 3 } });
+    expect(styleOf('home-scene-all')).toMatchObject({ right: 8, top: 298 });
+    expect(styleOf('home-buddy-b2').top).toBe(274);
   });
 
   it('is hidden with no buddies and no requests, and on an older server', () => {

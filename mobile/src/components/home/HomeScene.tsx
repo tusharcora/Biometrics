@@ -91,7 +91,7 @@ function HotTag({ testID, left, top, screenWidth, keyText, keyColour, value, lab
 export function HomeScene({ scene, width, extra, myColour, buddies, readings, onOpen, onOpenBuddy }: HomeSceneProps) {
   const look = STATES[scene.key];
   const offsetX = sceneOffsetX(width);
-  const backdrop = useMemo(() => pxPaths(sceneBackdrop(scene.key, width, extra), 1), [scene.key, width, extra]);
+  const backdrop = useMemo(() => pxPaths(sceneBackdrop(scene.key, width, extra, offsetX), 1), [scene.key, width, extra, offsetX]);
   // One path per colour per layer: grouping across layers would paint a later layer's colour under an earlier one.
   const grid = useMemo(() => [laySky(look), layWeather(look), layGround(look), layObjects(look)].flatMap((layer) => pxPaths(layer, U)), [look]);
   const rain = useMemo(() => pxPaths(layRain(look), U), [look]);
