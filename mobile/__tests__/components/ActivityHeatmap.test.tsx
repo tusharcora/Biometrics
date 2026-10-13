@@ -214,19 +214,21 @@ describe('ActivityHeatmap: month stats', () => {
     expect(getByTestId('stat-active')).toHaveTextContent('1');
   });
 
-  it('draws the month stats beside what it is given', () => {
-    const { getByTestId } = renderHeatmap([], { beside: <RNText testID="beside">2026 so far</RNText> });
-    expect(within(getByTestId('month-stats-row')).getByTestId('beside')).toBeTruthy();
-    expect(within(getByTestId('month-stats-row')).getByTestId('heatmap-stats')).toBeTruthy();
+  it('follows a tab the page hands it, and reports a tab press', () => {
+    const onTab = jest.fn();
+    const { getByTestId } = renderHeatmap([], { tab: 'sleep', onTab });
+    expect(getByTestId('activity-tab-sleep').props.accessibilityState).toEqual(expect.objectContaining({ selected: true }));
+    fireEvent.press(getByTestId('activity-tab-recovery'));
+    expect(onTab).toHaveBeenCalledWith('recovery');
   });
 
-  it('keeps the stat numbers tabular on one line that shrinks to fit, two to a row', () => {
+  it('keeps the stat numbers tabular on one line that shrinks to fit, three to a row', () => {
     const { getByTestId } = renderHeatmap([['2026-09-19', 1234567]]);
     const total = getByTestId('stat-total');
     expect(StyleSheet.flatten(total.props.style)).toEqual(expect.objectContaining({ fontFamily: FONTS.sansSemibold, fontVariant: ['tabular-nums'] }));
     expect(total.props.numberOfLines).toBe(1);
     expect(total.props.adjustsFontSizeToFit).toBe(true);
-    expect(String(getByTestId('stat-total-tile').props.className)).toContain('w-[47%]');
+    expect(String(getByTestId('stat-total-tile').props.className)).toContain('w-[31%]');
   });
 });
 

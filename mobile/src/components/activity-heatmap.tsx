@@ -184,7 +184,7 @@ function groupCells(grid: HeatGrid, view: HeatmapView): HeatCell[][] {
 function Stat({ label, value, testID }: { label: string; value: string; testID: string }) {
   return (
     // A label may wrap to two lines; the values of a row still line up along the bottom.
-    <View testID={`${testID}-tile`} className="w-[47%] grow justify-between gap-0.5 rounded-tile border border-border bg-background px-2 py-2">
+    <View testID={`${testID}-tile`} className="w-[31%] grow justify-between gap-0.5 rounded-tile border border-border bg-background px-2 py-2">
       <Text className="text-caption text-muted-foreground">{label}</Text>
       <Text testID={testID} className="text-body font-semibold tabular-nums" numberOfLines={1} adjustsFontSizeToFit>
         {value}
@@ -392,15 +392,16 @@ export interface ActivityHeatmapProps {
   onOpenRecovery?: (date: string) => void;
   // The saved sleep goal in minutes; 8h when not given.
   sleepGoal?: number;
-  // Drawn beside the month stats ("2026 so far").
-  beside?: React.ReactNode;
+  // The tab, when the page shares it ("2026 so far" follows it); otherwise the calendar keeps its own.
+  tab?: CalendarTab;
+  onTab?: (tab: CalendarTab) => void;
   // A date to open on the steps tab, once (the Sleep page's "Steps that day").
   openDate?: string | null;
   onOpenedDate?: () => void;
 }
 
 // Activity's calendar (A-1): Steps, Sleep and Recovery tabs over one Month / Year / YTD calendar, then the
-// visible range's stats beside `beside`. A steps day opens its sheet, a night the Sleep page, a Recovery day Recovery.
+// visible range's stats. A steps day opens its sheet, a night the Sleep page, a Recovery day Recovery.
 export function ActivityHeatmap({
   steps,
   earliestDate,
@@ -412,7 +413,8 @@ export function ActivityHeatmap({
   onOpenNight,
   onOpenRecovery,
   sleepGoal,
-  beside,
+  tab: shownTab,
+  onTab,
   openDate,
   onOpenedDate,
 }: ActivityHeatmapProps) {
@@ -420,7 +422,9 @@ export function ActivityHeatmap({
   const palette = colorScheme === 'light' ? COLORS.light : COLORS.dark;
   const [view, setView] = useState<HeatmapView>('month');
   const [monthCursor, setMonthCursor] = useState(() => monthStart(today));
-  const [tab, setTab] = useState<CalendarTab>('steps');
+  const [ownTab, setOwnTab] = useState<CalendarTab>('steps');
+  const tab = shownTab ?? ownTab;
+  const setTab = onTab ?? setOwnTab;
   // The steps sheet's date; a night opens the Sleep page instead.
   const [selection, setSelection] = useState<string | null>(null);
 
@@ -611,12 +615,9 @@ export function ActivityHeatmap({
         {calendar}
       </Card>
 
-      <View testID="month-stats-row" className="flex-row items-stretch gap-3">
-        <Card testID="heatmap-stats" className="flex-1 flex-row flex-wrap content-start gap-2 p-3">
-          {stats}
-        </Card>
-        {beside}
-      </View>
+      <Card testID="heatmap-stats" className="flex-row flex-wrap content-start gap-2 p-3">
+        {stats}
+      </Card>
 
       <Sheet testID="day-sheet" visible={selection !== null} onClose={() => setSelection(null)}>
         {selection ? (

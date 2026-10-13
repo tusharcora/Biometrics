@@ -21,7 +21,6 @@ describe('YearGrid', () => {
     // 1 Jan to 13 Oct 2026 is 286 days; one more rect outlines today.
     expect(squares()).toHaveLength(287);
     expect(screen.getByTestId('year-grid').props.accessibilityLabel).toBe('Steps per day, January to October 2026');
-    expect(screen.getByText('2026 so far · steps per day')).toBeTruthy();
   });
 
   it('colours a day by its level and outlines today', () => {
@@ -48,10 +47,12 @@ describe('YearGrid', () => {
     expect(labels.map((l) => l.props.children)).toEqual(['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct']);
   });
 
-  it('shows a skeleton while its values load', () => {
-    render(<YearGrid metric="sleep" values={null} today={TODAY} goal={480} />);
+  it("uses the score colours for Recovery, banded by the user's bands", () => {
+    renderGrid({ metric: 'recovery', goal: 0, bands: { excellent: 80, good: 60, fair: 40 }, values: new Map([['2026-01-01', 85], ['2026-01-02', 30]]) });
 
-    expect(screen.getByTestId('year-grid-loading')).toBeTruthy();
-    expect(screen.queryByTestId('year-grid-canvas')).toBeNull();
+    const [first, second] = squares();
+    expect([COLORS.light.scoreExcellent, COLORS.dark.scoreExcellent]).toContain(first!.props.fill);
+    expect([COLORS.light.scorePoor, COLORS.dark.scorePoor]).toContain(second!.props.fill);
+    expect(screen.getByTestId('year-grid').props.accessibilityLabel).toBe('Recovery per day, January to October 2026');
   });
 });

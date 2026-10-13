@@ -10,13 +10,13 @@ import { BASELINE_METRICS, ScoreType, toBaselineDTOs, toDailyScoreDTO } from './
 export const scoresRouter = Router();
 
 export const DEFAULT_SCORE_DAYS = 30;
-export const MAX_SCORE_DAYS = 120;
+export const MAX_SCORE_DAYS = 400;
 
 function parseType(raw: unknown): ScoreType | null {
   return raw === 'RECOVERY' || raw === 'SLEEP' ? raw : null;
 }
 
-/** Newest first, over the last `days` local days (default 30, capped at 120). */
+/** Newest first, over the last `days` local days (default 30, capped at 400). */
 scoresRouter.get('/me/scores', requireAuth, async (req: AuthedRequest, res) => {
   let days = DEFAULT_SCORE_DAYS;
   if (req.query.days !== undefined) {

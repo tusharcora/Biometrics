@@ -12,6 +12,8 @@ const verdict = (weather: WeatherKey) => VERDICT[weather].toLowerCase();
 
 export type CalendarTab = 'steps' | 'sleep' | 'recovery';
 
+const PER_DAY: Record<CalendarTab, string> = { steps: 'Steps per day', sleep: 'Sleep per night', recovery: 'Recovery per day' };
+
 export const ACTIVITY_COPY = {
   title: 'Activity',
   kipLabel: 'Your KIP, waving',
@@ -79,15 +81,13 @@ export const ACTIVITY_COPY = {
   },
 
   year: {
-    label: (year: string) => `${year} so far`,
     total: 'Total',
     average: 'Daily avg',
     goalDays: 'Goal days',
     goalNights: 'Goal nights',
     error: 'Your year could not be loaded.',
-    gridTitle: (year: string, metric: 'steps' | 'sleep') => `${year} so far · ${metric === 'steps' ? 'steps per day' : 'sleep per night'}`,
-    gridLabel: (metric: 'steps' | 'sleep', today: string) =>
-      `${metric === 'steps' ? 'Steps per day' : 'Sleep per night'}, January to ${MONTH_LONG[Number(today.slice(5, 7)) - 1]} ${today.slice(0, 4)}`,
+    gridTitle: (year: string, metric: CalendarTab) => `${year} so far · ${PER_DAY[metric].toLowerCase()}`,
+    gridLabel: (metric: CalendarTab, today: string) => `${PER_DAY[metric]}, January to ${MONTH_LONG[Number(today.slice(5, 7)) - 1]} ${today.slice(0, 4)}`,
   },
 
   usual: { label: 'Against your usual · 30d', patterns: 'Patterns', allTrends: 'All trends', none: '—' },

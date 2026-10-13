@@ -4,7 +4,7 @@ import { ActivityScreen } from '../../src/screens/ActivityScreen';
 import { ActivityHeatmap } from '../../src/components/activity-heatmap';
 import { fetchActivity } from '../../src/api/activity';
 import { fetchSleep, fetchSleepGoal } from '../../src/api/sleep';
-import { addDays, fetchRange, todayCivil } from '../../src/lib/heatmap';
+import { addDays, daysBetween, fetchRange, todayCivil } from '../../src/lib/heatmap';
 import { apiFetch } from '../../src/api/client';
 import { fetchScoresWithBands } from '../../src/api/scores';
 
@@ -46,7 +46,7 @@ beforeEach(() => {
 });
 
 describe('ActivityScreen', () => {
-  it('reads steps and sleep over one range, plus the goal, the metrics and 120 days of Recovery', async () => {
+  it('reads steps and sleep over one range, plus the goal, the metrics and Recovery over the same range', async () => {
     const { findByTestId } = render(<ActivityScreen />);
     await findByTestId('this-week');
     const { from, to } = fetchRange(today());
@@ -54,28 +54,32 @@ describe('ActivityScreen', () => {
     expect(fetchSleep).toHaveBeenCalledWith(from, to);
     expect(fetchSleepGoal).toHaveBeenCalled();
     expect(apiFetch).toHaveBeenCalledWith('/me/biometrics');
-    expect(fetchScoresWithBands).toHaveBeenCalledWith(120, 'RECOVERY');
+    expect(fetchScoresWithBands).toHaveBeenCalledWith(daysBetween(from, to) + 1, 'RECOVERY');
   });
 
-  it('lays the page out as header, This week, calendar, month stats beside 2026 so far, the year grid, then the usual rows', async () => {
+  it('lays the page out as header, This week, calendar, month stats, 2026 so far, then the usual rows', async () => {
     const { findByTestId, getByTestId, UNSAFE_root } = render(<ActivityScreen />);
     await findByTestId('usual-tiles');
-    const order = ['activity-header', 'this-week', 'heatmap-canvas', 'heatmap-stats', 'year-so-far', 'year-grid-card', 'usual-tiles'];
+    const order = ['activity-header', 'this-week', 'heatmap-canvas', 'heatmap-stats', 'year-so-far', 'year-grid', 'usual-tiles'];
     // Depth-first, so a node's place in the list is its place on the page.
     const seen = UNSAFE_root.findAll((n) => typeof n.props.testID === 'string', { deep: true }).map((n) => n.props.testID as string);
     const at = order.map((id) => seen.indexOf(id));
     expect(at.every((i) => i >= 0)).toBe(true);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
-    expect(getByTestId('month-stats-row')).toBeTruthy();
   });
 
-  it("switches the year grid with 2026 so far's Steps / Sleep toggle", async () => {
-    const { findByTestId, getByTestId } = render(<ActivityScreen />);
+  it("switches 2026 so far with the calendar's Steps / Sleep / Recovery tabs", async () => {
+    (fetchScoresWithBands as jest.Mock).mockResolvedValue({ scores: [score(today(), 82)], bands: { excellent: 80, good: 60, fair: 40 } });
+    const { findByTestId, getByTestId, getByText } = render(<ActivityScreen />);
     expect(await findByTestId('year-grid')).toHaveProp('accessibilityLabel', expect.stringMatching(/^Steps per day/));
+    expect(getByText(/so far · steps per day$/)).toBeTruthy();
 
-    fireEvent.press(getByTestId('year-tab-sleep'));
+    fireEvent.press(getByTestId('activity-tab-sleep'));
     expect(getByTestId('year-grid')).toHaveProp('accessibilityLabel', expect.stringMatching(/^Sleep per night/));
-    expect(getByTestId('year-tab-sleep').props.accessibilityState).toEqual(expect.objectContaining({ selected: true }));
+
+    fireEvent.press(getByTestId('activity-tab-recovery'));
+    expect(getByTestId('year-grid')).toHaveProp('accessibilityLabel', expect.stringMatching(/^Recovery per day/));
+    expect(getByTestId('year-best')).toHaveTextContent('82');
   });
 
   it("sums the week in the header and fills today's row", async () => {

@@ -14,14 +14,13 @@ import { ActivityHeatmap, type RecoveryCalendarState, type SleepState } from '..
 import { ActivityHeader } from '../components/activity/ActivityHeader';
 import { ThisWeek } from '../components/activity/ThisWeek';
 import { UsualTiles } from '../components/activity/UsualTiles';
-import { YearGrid } from '../components/activity/YearGrid';
-import { YearSoFar, type YearSleep } from '../components/activity/YearSoFar';
+import { YearSoFar, type YearRecovery, type YearSleep } from '../components/activity/YearSoFar';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
-import { ACTIVITY_COPY } from '../lib/activityCopy';
+import { ACTIVITY_COPY, type CalendarTab } from '../lib/activityCopy';
 import { weekRows, weekSummary } from '../lib/activityWeek';
-import { addDays, fetchRange, todayCivil, type ValuesByDate } from '../lib/heatmap';
+import { addDays, daysBetween, fetchRange, todayCivil, type ValuesByDate } from '../lib/heatmap';
 import type { MetricRecord } from '../lib/metricInsights';
 import { DEFAULT_SCORE_BANDS } from '../lib/scoreInsights';
 import { DEFAULT_SLEEP_GOAL_MINUTES, mainSleepByDate } from '../lib/sleepStats';
@@ -45,8 +44,11 @@ type LoadState =
       recovery: RecoveryCalendarState;
     };
 
-// The most the scores endpoint serves; it also covers the usual rows' 30 days and the 30 before them.
-const RECOVERY_DAYS = 120;
+// Recovery is read over the same range as steps (this year for "2026 so far", a year back for the calendar);
+// it also covers the usual rows' 30 days and the 30 before them.
+function recoveryDays(today: string): number {
+  return daysBetween(fetchRange(today).from, today) + 1;
+}
 
 function recoveryScores(scores: DailyScoreDTO[]): ValuesByDate {
   return new Map(scores.filter((s) => s.score !== null).map((s) => [s.date, s.score as number]));
@@ -61,8 +63,8 @@ export function ActivityScreen() {
   const colors = colorScheme === 'light' ? COLORS.light : COLORS.dark;
   const [state, setState] = useState<LoadState>({ phase: 'loading' });
   const [refreshing, setRefreshing] = useState(false);
-  // "2026 so far": its toggle drives both the totals card and the year grid.
-  const [yearMetric, setYearMetric] = useState<'steps' | 'sleep'>('steps');
+  // The calendar's tab; "2026 so far" follows it.
+  const [tab, setTab] = useState<CalendarTab>('steps');
   // The "against your usual" rows. Null until the metrics read lands; a failed
   // read keeps what is on screen (or no rows) and never makes the screen an error.
   const [records, setRecords] = useState<MetricRecord[] | null>(null);
@@ -85,7 +87,7 @@ export function ActivityScreen() {
       fetchSleep(from, to),
       fetchSleepGoal(),
       apiFetch<MetricRecord[]>('/me/biometrics'),
-      fetchScoresWithBands(RECOVERY_DAYS, 'RECOVERY'),
+      fetchScoresWithBands(recoveryDays(today), 'RECOVERY'),
     ]);
     if (id !== requestId.current) return;
     if (metricsRes.status === 'fulfilled') setRecords(metricsRes.value ?? []);
@@ -117,7 +119,7 @@ export function ActivityScreen() {
                 phase: 'ready',
                 scores: recoveryScores(recoveryRes.value.scores),
                 bands: recoveryRes.value.bands ?? DEFAULT_SCORE_BANDS,
-                from: addDays(today, -(RECOVERY_DAYS - 1)),
+                from: addDays(today, -(recoveryDays(today) - 1)),
               }
             : kept?.recovery.phase === 'ready'
               ? kept.recovery
@@ -179,6 +181,7 @@ export function ActivityScreen() {
     [ready, sleepMinutes, recovery],
   );
   const yearSleep: YearSleep = !ready ? { phase: 'loading' } : sleepMinutes ? { phase: 'ready', minutes: sleepMinutes } : ready.sleep.phase === 'error' ? { phase: 'error' } : { phase: 'loading' };
+  const yearRecovery: YearRecovery = recovery ? { phase: 'ready', scores: recovery.scores, bands: recovery.bands } : ready?.recovery.phase === 'error' ? { phase: 'error' } : { phase: 'loading' };
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
@@ -232,27 +235,20 @@ export function ActivityScreen() {
               onOpenRecovery={(date) => navigation.navigate('Recovery', { date })}
               onRetrySleep={retry('sleep')}
               onRetryRecovery={retry('recovery')}
-              beside={
-                <YearSoFar
-                  steps={ready.steps}
-                  sleep={yearSleep}
-                  today={ready.today}
-                  stepGoal={METRIC_CONFIG.STEPS.goal ?? 10000}
-                  sleepGoal={ready.sleepGoal}
-                  onRetrySleep={retry('sleep')}
-                  metric={yearMetric}
-                  onMetric={setYearMetric}
-                />
-              }
+              tab={tab}
+              onTab={setTab}
             />
-            {yearMetric === 'sleep' && ready.sleep.phase === 'error' ? null : (
-              <YearGrid
-                metric={yearMetric}
-                values={yearMetric === 'steps' ? ready.steps : sleepMinutes}
-                today={ready.today}
-                goal={yearMetric === 'steps' ? (METRIC_CONFIG.STEPS.goal ?? 10000) : ready.sleepGoal}
-              />
-            )}
+            <YearSoFar
+              metric={tab}
+              steps={ready.steps}
+              sleep={yearSleep}
+              recovery={yearRecovery}
+              today={ready.today}
+              stepGoal={METRIC_CONFIG.STEPS.goal ?? 10000}
+              sleepGoal={ready.sleepGoal}
+              onRetrySleep={retry('sleep')}
+              onRetryRecovery={retry('recovery')}
+            />
             {records ? <UsualTiles records={records} recovery={usualRecovery} today={ready.today} /> : null}
           </>
         ) : null}

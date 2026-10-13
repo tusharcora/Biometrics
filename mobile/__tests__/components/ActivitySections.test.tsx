@@ -67,32 +67,63 @@ describe('ThisWeek', () => {
 describe('YearSoFar', () => {
   const steps = new Map([['2025-12-31', 99999], ['2026-01-05', 12000], ['2026-10-10', 6000]]);
   const minutes = new Map([['2026-01-05', 480], ['2026-10-10', 420]]);
+  const bands = { excellent: 80, good: 60, fair: 40 };
+  const scores = new Map([['2025-12-30', 99], ['2026-02-01', 85], ['2026-10-10', 55]]);
+  const props = {
+    steps,
+    sleep: { phase: 'ready', minutes } as const,
+    recovery: { phase: 'ready', scores, bands } as const,
+    today: TODAY,
+    stepGoal: 10000,
+    sleepGoal: 480,
+    onRetrySleep: jest.fn(),
+    onRetryRecovery: jest.fn(),
+  };
 
-  it("shows the year's step total, daily average and goal days", () => {
-    render(<YearSoFar steps={steps} sleep={{ phase: 'ready', minutes }} today={TODAY} stepGoal={10000} sleepGoal={480} onRetrySleep={jest.fn()} />);
+  it("shows the year's step total, daily average and goal days over the steps grid", () => {
+    render(<YearSoFar metric="steps" {...props} />);
 
-    expect(screen.getByText('2026 so far')).toBeTruthy();
+    expect(screen.getByText('2026 so far · steps per day')).toBeTruthy();
     expect(screen.getByTestId('year-total')).toHaveTextContent('18,000');
     expect(screen.getByTestId('year-average')).toHaveTextContent('9,000');
     expect(screen.getByTestId('year-goal')).toHaveTextContent('1');
+    expect(screen.getByTestId('year-grid').props.accessibilityLabel).toMatch(/^Steps per day/);
   });
 
-  it('switches to sleep: hours slept, nightly average, nights at goal', () => {
-    render(<YearSoFar steps={steps} sleep={{ phase: 'ready', minutes }} today={TODAY} stepGoal={10000} sleepGoal={480} onRetrySleep={jest.fn()} />);
-    fireEvent.press(screen.getByTestId('year-tab-sleep'));
+  it('shows sleep: hours slept, nightly average, nights at goal', () => {
+    render(<YearSoFar metric="sleep" {...props} />);
 
+    expect(screen.getByText('2026 so far · sleep per night')).toBeTruthy();
     expect(screen.getByTestId('year-total')).toHaveTextContent('15h');
     expect(screen.getByTestId('year-average')).toHaveTextContent('7h 30m');
     expect(screen.getByTestId('year-goal')).toHaveTextContent('1');
     expect(screen.getByText('Goal nights')).toBeTruthy();
   });
 
-  it('offers a retry on the sleep side when sleep failed', () => {
-    const retry = jest.fn();
-    render(<YearSoFar steps={steps} sleep={{ phase: 'error' }} today={TODAY} stepGoal={10000} sleepGoal={480} onRetrySleep={retry} />);
-    fireEvent.press(screen.getByTestId('year-tab-sleep'));
+  it("shows Recovery: this year's average, best day and days scored", () => {
+    render(<YearSoFar metric="recovery" {...props} />);
+
+    expect(screen.getByText('2026 so far · recovery per day')).toBeTruthy();
+    expect(screen.getByTestId('year-average')).toHaveTextContent('70');
+    expect(screen.getByTestId('year-best')).toHaveTextContent('85');
+    expect(screen.getByTestId('year-scored')).toHaveTextContent('2');
+    expect(screen.getByTestId('year-grid').props.accessibilityLabel).toMatch(/^Recovery per day/);
+  });
+
+  it('offers a retry when sleep or Recovery failed, and a skeleton while they load', () => {
+    const retrySleep = jest.fn();
+    const retryRecovery = jest.fn();
+    const { rerender } = render(<YearSoFar metric="sleep" {...props} sleep={{ phase: 'error' }} onRetrySleep={retrySleep} />);
     fireEvent.press(screen.getByTestId('year-sleep-retry'));
-    expect(retry).toHaveBeenCalled();
+    expect(retrySleep).toHaveBeenCalled();
+
+    rerender(<YearSoFar metric="recovery" {...props} recovery={{ phase: 'error' }} onRetryRecovery={retryRecovery} />);
+    fireEvent.press(screen.getByTestId('year-recovery-retry'));
+    expect(retryRecovery).toHaveBeenCalled();
+
+    rerender(<YearSoFar metric="recovery" {...props} recovery={{ phase: 'loading' }} />);
+    expect(screen.getByTestId('year-loading')).toBeTruthy();
+    expect(screen.queryByTestId('year-grid')).toBeNull();
   });
 });
 
