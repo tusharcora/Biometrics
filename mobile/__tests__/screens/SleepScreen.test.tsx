@@ -27,10 +27,11 @@ const mockNavigation = {
   addListener: () => () => {},
 };
 let mockParams: { date?: string } | undefined;
+let mockFocusCallback: (() => void) | null = null;
 jest.mock('@react-navigation/native', () => ({
   useRoute: () => ({ params: mockParams }),
   useNavigation: () => mockNavigation,
-  useFocusEffect: () => {},
+  useFocusEffect: (cb: () => void) => { mockFocusCallback = cb; },
 }));
 
 const STATUS: CoachStatusDTO = {
@@ -55,6 +56,7 @@ const hero = () => screen.findByTestId('sleep-hero');
 beforeEach(() => {
   jest.clearAllMocks();
   mockParams = undefined;
+  mockFocusCallback = null;
   mockSyncState = 'idle';
   sleepFetch.mockResolvedValue(makeWindow());
   nightFetch.mockImplementation((d: string) => Promise.resolve(makeDetail(d)));
@@ -193,6 +195,25 @@ describe('SleepScreen: hero', () => {
     renderScreen();
     await screen.findByTestId('sleep-goal-retry');
     expect(within(await hero()).getByText('Short night')).toBeTruthy();
+  });
+
+  it('a goal error, then a refocus, never shows the hero loading skeleton', async () => {
+    (fetchSleepGoal as jest.Mock).mockRejectedValue(new Error('offline'));
+    nightFetch.mockResolvedValue(makeDetail(TODAY, { minutesAsleep: 410 }));
+    scoreFetch.mockResolvedValue(makeScore(TODAY, { score: 66 }));
+    renderScreen();
+    await screen.findByTestId('sleep-goal-retry');
+    expect(within(await hero()).getByText('Short night')).toBeTruthy();
+    let resolveGoal!: (v: typeof GOAL) => void;
+    (fetchSleepGoal as jest.Mock).mockReturnValue(new Promise<typeof GOAL>((r) => { resolveGoal = r; }));
+    // The first focus is the mount itself and fetches nothing; the next one is the refocus.
+    await act(async () => { mockFocusCallback?.(); });
+    await act(async () => { mockFocusCallback?.(); });
+    expect(screen.queryByTestId('sleep-hero-loading')).toBeNull();
+    expect(within(screen.getByTestId('sleep-hero')).getByText('Short night')).toBeTruthy();
+    await act(async () => { resolveGoal(GOAL); });
+    expect(screen.queryByTestId('sleep-hero-loading')).toBeNull();
+    expect(within(screen.getByTestId('sleep-hero')).getByText('Short night')).toBeTruthy();
   });
 
   it('a night with no score yet: on its way for last night, none for an older night', async () => {
@@ -662,6 +683,26 @@ describe('SleepScreen: bedtime to wake', () => {
     expect(screen.getByTestId('sleep-month')).toBeTruthy();
     await waitFor(() => expect(within(screen.getByTestId('sleep-window-bar-2026-09-07')).getByTestId('sleep-window-selected')).toBeTruthy());
     expect(sleepFetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('on an old week, a cross-month tap keeps the picker and the chart mounted', async () => {
+    mockParams = { date: '2026-09-10' };
+    const nights = ['2026-08-28', '2026-09-04', '2026-09-05', '2026-09-06', '2026-09-07', '2026-09-08', '2026-09-09', '2026-09-10'].map((d) => makeNight(d));
+    sleepFetch.mockResolvedValue(makeWindow({ nights }));
+    const { rerender } = renderScreen();
+    await waitFor(() => expect(screen.getByTestId('sleep-window-bar-2026-09-10')).toBeTruthy());
+    fireEvent.press(screen.getByText('2 weeks'));
+    let resolveNext!: (v: ReturnType<typeof makeWindow>) => void;
+    sleepFetch.mockReturnValue(new Promise((r) => { resolveNext = r; }));
+    fireEvent.press(screen.getByTestId('sleep-window-bar-2026-08-28'));
+    expect(mockNavigation.setParams).toHaveBeenCalledWith({ date: '2026-08-28' });
+    mockParams = { date: '2026-08-28' };
+    rerender(withCharacter(<SleepScreen />, { characterId: 'mochi', status: STATUS }));
+    expect(screen.queryByTestId('sleep-picker-loading')).toBeNull();
+    expect(screen.getByTestId('sleep-window-card')).toBeTruthy();
+    await act(async () => { resolveNext(makeWindow({ nights })); });
+    expect(screen.queryByTestId('sleep-picker-loading')).toBeNull();
+    expect(screen.getByTestId('sleep-window-card')).toBeTruthy();
   });
 });
 

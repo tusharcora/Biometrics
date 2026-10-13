@@ -86,10 +86,18 @@ export function useSleepPage(param?: string): SleepPage {
   const [fresh, reloadWindow] = useSection<SleepActivityDTO>(`${range.from}..${range.to}`, () => fetchSleep(range.from, range.to), [dataVersion]);
   // Ruling F16 (and Task 3 I-2): after the first data, a new window key on the same page (the server's today moving the
   // week) refetches quietly, with or without a date param; the last nights stay on screen until the new ones land, and
-  // a failed refetch keeps them. A new param is a different page, so it shows loading.
+  // a failed refetch keeps them. A new param is a different page, so it shows loading, unless that anchor is already
+  // inside the previous window. A picker, chart or month tap into the previous month changes the fetch key, and this
+  // window starts 13 days before its month, so it already holds that anchor. Keep those nights up while the new
+  // window loads. (A−13..A of a previous-month anchor starts the day before this fetch, so a full-span cover never
+  // matches the tap that blanks the page.)
   const lastWindow = useRef<{ param: string | undefined; range: { from: string; to: string }; data: SleepActivityDTO } | null>(null);
   if (fresh.phase === 'ready') lastWindow.current = { param, range, data: fresh.data };
-  const stale = fresh.phase !== 'ready' && lastWindow.current?.param === param ? lastWindow.current : null;
+  const last = lastWindow.current;
+  const inLastWindow = last !== null && anchor >= last.range.from && anchor <= last.range.to;
+  const stale = fresh.phase !== 'ready' && last !== null && (last.param === param || (fresh.phase === 'loading' && inLastWindow))
+    ? last
+    : null;
   const win: Section<SleepActivityDTO> = stale ? { phase: 'ready', data: stale.data } : fresh;
   const [regularity, reloadRegularity] = useSection<SleepRegularity>('regularity', () => fetchSleepRegularity(REGULARITY_DAYS), [dataVersion]);
   const [goal, reloadGoal] = useSection<SleepGoal>('goal', () => fetchSleepGoal(), [dataVersion]);

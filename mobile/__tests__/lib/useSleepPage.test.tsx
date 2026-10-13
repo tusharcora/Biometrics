@@ -315,6 +315,28 @@ describe('useSleepPage', () => {
     await waitFor(() => expect(result.current.window.phase).toBe('ready'));
   });
 
+  it('an old-week cross-month tap keeps the window ready while the new month loads', async () => {
+    // 3 Sep's week includes 31 Aug. That week's nights are already in the September fetch.
+    const pending = deferred<ReturnType<typeof makeWindow>>();
+    sleepFetch.mockImplementation((from: string) => (from === '2026-08-19' ? Promise.resolve(makeWindow()) : pending.promise));
+    const seen: string[] = [];
+    const { result, rerender } = renderHook(({ d }: { d: string }) => {
+      const page = useSleepPage(d);
+      seen.push(page.window.phase);
+      return page;
+    }, { initialProps: { d: '2026-09-03' } });
+    await waitFor(() => expect(result.current.window.phase).toBe('ready'));
+    seen.length = 0;
+    rerender({ d: '2026-08-31' });
+    expect(result.current.anchor).toBe('2026-08-31');
+    expect(result.current.window.phase).toBe('ready');
+    expect(seen.every((p) => p === 'ready')).toBe(true);
+    expect(sleepFetch).toHaveBeenCalledWith('2026-07-19', '2026-08-31');
+    await act(async () => { pending.resolve(makeWindow({ nights: [makeNight('2026-08-31')] })); });
+    expect(result.current.window.phase).toBe('ready');
+    expect(result.current.window.phase === 'ready' && result.current.window.data.nights.map((n) => n.date)).toEqual(['2026-08-31']);
+  });
+
   it('during a quiet refetch, a month the shown nights do not cover is loading, never ready and empty', async () => {
     const second = deferred<ReturnType<typeof makeWindow>>();
     sleepFetch.mockResolvedValueOnce(makeWindow({ today: '2026-11-01' })).mockImplementationOnce(() => second.promise);
