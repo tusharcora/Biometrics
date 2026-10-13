@@ -12,7 +12,7 @@ export const SHARE_KEYS: readonly ShareKey[] = ['recovery', 'sleepScore', 'hours
 export type NumberKey = 'recovery' | 'sleepScore' | 'hoursSlept' | 'steps';
 export const NUMBER_KEYS: readonly NumberKey[] = ['recovery', 'sleepScore', 'hoursSlept', 'steps'];
 
-export interface Person { id: string; handle: string; displayName: string; coachId: string }
+export interface Person { id: string; handle: string; displayName: string; coachId: string; kipColour?: string }
 export interface BuddyRow extends Person { mood: Mood; moodLine: string; unseenSticker: boolean }
 export interface BuddyPage { buddies: BuddyRow[]; nextCursor: string | null; incomingRequests: number; outgoingRequests: number }
 export interface BuddyIdentity {
@@ -24,6 +24,7 @@ export interface BuddyIdentity {
   checkInStreak?: number;
   buddyCount?: number;
   joinedOn?: string;
+  kipColour?: string;
 }
 export type SharingSettings = Record<ShareKey, boolean> & { consentVersion: number; consented: boolean };
 export interface IncomingRequest { id: string; createdAt: string; from: Person }
@@ -51,7 +52,7 @@ export function buddyErrorCode(error: unknown): string | null {
   return typeof code === 'string' ? code : null;
 }
 
-const send = (method: string, body?: unknown): RequestInit => ({
+export const send = (method: string, body?: unknown): RequestInit => ({
   method,
   headers: { 'Content-Type': 'application/json' },
   ...(body === undefined ? {} : { body: JSON.stringify(body) }),
