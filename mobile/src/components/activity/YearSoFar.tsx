@@ -1,4 +1,5 @@
 // "2026 so far" (A-2), beside the month stats: the year's total, daily average and goal days, steps or sleep.
+// Its toggle also picks what the year grid under the row shows.
 
 import React, { useMemo, useState } from 'react';
 import { View } from 'react-native';
@@ -30,15 +31,20 @@ function Figure({ label, value, testID }: { label: string; value: string; testID
   );
 }
 
-export function YearSoFar({ steps, sleep, today, stepGoal, sleepGoal, onRetrySleep }: {
+export function YearSoFar({ steps, sleep, today, stepGoal, sleepGoal, onRetrySleep, metric: shown, onMetric }: {
   steps: ValuesByDate;
   sleep: YearSleep;
   today: string;
   stepGoal: number;
   sleepGoal: number;
   onRetrySleep: () => void;
+  /** Set by the page when the year grid follows the same toggle; otherwise the card keeps its own. */
+  metric?: Metric;
+  onMetric?: (metric: Metric) => void;
 }) {
-  const [metric, setMetric] = useState<Metric>('steps');
+  const [own, setOwn] = useState<Metric>('steps');
+  const metric = shown ?? own;
+  const setMetric = onMetric ?? setOwn;
   const stepYear = useMemo(() => yearSoFar(steps, today, stepGoal), [steps, today, stepGoal]);
   const sleepMinutes = sleep.phase === 'ready' ? sleep.minutes : null;
   const sleepYear = useMemo(() => (sleepMinutes ? yearSoFar(sleepMinutes, today, sleepGoal) : null), [sleepMinutes, today, sleepGoal]);

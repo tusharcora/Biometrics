@@ -57,16 +57,25 @@ describe('ActivityScreen', () => {
     expect(fetchScoresWithBands).toHaveBeenCalledWith(120, 'RECOVERY');
   });
 
-  it('lays the page out as header, This week, calendar, month stats beside 2026 so far, then the usual rows', async () => {
+  it('lays the page out as header, This week, calendar, month stats beside 2026 so far, the year grid, then the usual rows', async () => {
     const { findByTestId, getByTestId, UNSAFE_root } = render(<ActivityScreen />);
     await findByTestId('usual-tiles');
-    const order = ['activity-header', 'this-week', 'heatmap-canvas', 'heatmap-stats', 'year-so-far', 'usual-tiles'];
+    const order = ['activity-header', 'this-week', 'heatmap-canvas', 'heatmap-stats', 'year-so-far', 'year-grid-card', 'usual-tiles'];
     // Depth-first, so a node's place in the list is its place on the page.
     const seen = UNSAFE_root.findAll((n) => typeof n.props.testID === 'string', { deep: true }).map((n) => n.props.testID as string);
     const at = order.map((id) => seen.indexOf(id));
     expect(at.every((i) => i >= 0)).toBe(true);
     expect([...at].sort((a, b) => a - b)).toEqual(at);
     expect(getByTestId('month-stats-row')).toBeTruthy();
+  });
+
+  it("switches the year grid with 2026 so far's Steps / Sleep toggle", async () => {
+    const { findByTestId, getByTestId } = render(<ActivityScreen />);
+    expect(await findByTestId('year-grid')).toHaveProp('accessibilityLabel', expect.stringMatching(/^Steps per day/));
+
+    fireEvent.press(getByTestId('year-tab-sleep'));
+    expect(getByTestId('year-grid')).toHaveProp('accessibilityLabel', expect.stringMatching(/^Sleep per night/));
+    expect(getByTestId('year-tab-sleep').props.accessibilityState).toEqual(expect.objectContaining({ selected: true }));
   });
 
   it("sums the week in the header and fills today's row", async () => {

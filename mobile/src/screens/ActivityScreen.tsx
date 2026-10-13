@@ -14,6 +14,7 @@ import { ActivityHeatmap, type RecoveryCalendarState, type SleepState } from '..
 import { ActivityHeader } from '../components/activity/ActivityHeader';
 import { ThisWeek } from '../components/activity/ThisWeek';
 import { UsualTiles } from '../components/activity/UsualTiles';
+import { YearGrid } from '../components/activity/YearGrid';
 import { YearSoFar, type YearSleep } from '../components/activity/YearSoFar';
 import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
@@ -60,6 +61,8 @@ export function ActivityScreen() {
   const colors = colorScheme === 'light' ? COLORS.light : COLORS.dark;
   const [state, setState] = useState<LoadState>({ phase: 'loading' });
   const [refreshing, setRefreshing] = useState(false);
+  // "2026 so far": its toggle drives both the totals card and the year grid.
+  const [yearMetric, setYearMetric] = useState<'steps' | 'sleep'>('steps');
   // The "against your usual" rows. Null until the metrics read lands; a failed
   // read keeps what is on screen (or no rows) and never makes the screen an error.
   const [records, setRecords] = useState<MetricRecord[] | null>(null);
@@ -237,9 +240,19 @@ export function ActivityScreen() {
                   stepGoal={METRIC_CONFIG.STEPS.goal ?? 10000}
                   sleepGoal={ready.sleepGoal}
                   onRetrySleep={retry('sleep')}
+                  metric={yearMetric}
+                  onMetric={setYearMetric}
                 />
               }
             />
+            {yearMetric === 'sleep' && ready.sleep.phase === 'error' ? null : (
+              <YearGrid
+                metric={yearMetric}
+                values={yearMetric === 'steps' ? ready.steps : sleepMinutes}
+                today={ready.today}
+                goal={yearMetric === 'steps' ? (METRIC_CONFIG.STEPS.goal ?? 10000) : ready.sleepGoal}
+              />
+            )}
             {records ? <UsualTiles records={records} recovery={usualRecovery} today={ready.today} /> : null}
           </>
         ) : null}

@@ -47,7 +47,7 @@ The page is one scroll, in this order.
      - Recovery: Average, Best day, Best date, Days scored, Clear days and Stormy days. Clear and stormy are the top and bottom bands. These come from a new `recoveryStats` beside `rangeStats`.
    - **2026 so far** (A-2): Total, Daily avg and Goal days for the year, with its own Steps/Sleep toggle.
      - Sleep's Total is hours slept, and its Goal days are nights that met the sleep goal.
-     - The board's year grid is dropped (owner decision). The calendar's YTD view shows it.
+     - The board's year grid is restored (owner decision, revised): it sits full width under the "month stats | 2026 so far" row and follows that card's Steps / Sleep toggle.
 4. **Against your usual Â· 30d** (patterns): the current `UsualTiles`, restyled as A-2's rows. Each row has a colour dot, the name, a short change ("2 below", "+14 min", "steady") and the value. The rows have no sparkline. The Patterns and All trends links stay.
 
 States:
@@ -154,7 +154,7 @@ Older backends don't send these fields, so the app treats a missing field as "â€
 
 1. **Check-in streak:** counts the Social morning mood check-in, so it needs a new backend calculation.
 2. **Recovery tab:** yes, the calendar has Steps, Sleep and Recovery.
-3. **"2026 so far":** its year grid is dropped, and it keeps only its totals.
+3. **"2026 so far":** revised: its year grid is restored as a full-width card under the row, driven by the totals card's Steps / Sleep toggle.
 4. **This week taps** (spec review): the row opens the day, and a moon icon opens Sleep.
 5. **Recap entry:** the recap ring sits around KIP's photo on the passport.
 6. **Streak and buddies:** two more passport fields.

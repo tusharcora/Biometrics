@@ -1,6 +1,6 @@
 // Every new Activity string (spec 2026-10-13 §1). Components never inline copy.
 
-import { formatDayTitle, formatLongDay, MONTH_SHORT } from './heatmap';
+import { formatDayTitle, formatLongDay, MONTH_LONG, MONTH_SHORT } from './heatmap';
 import { VERDICT, type WeatherKey } from './recoveryCopy';
 import { formatDuration } from './sleepStats';
 import { METRIC_CONFIG } from '../theme';
@@ -85,6 +85,9 @@ export const ACTIVITY_COPY = {
     goalDays: 'Goal days',
     goalNights: 'Goal nights',
     error: 'Your year could not be loaded.',
+    gridTitle: (year: string, metric: 'steps' | 'sleep') => `${year} so far · ${metric === 'steps' ? 'steps per day' : 'sleep per night'}`,
+    gridLabel: (metric: 'steps' | 'sleep', today: string) =>
+      `${metric === 'steps' ? 'Steps per day' : 'Sleep per night'}, January to ${MONTH_LONG[Number(today.slice(5, 7)) - 1]} ${today.slice(0, 4)}`,
   },
 
   usual: { label: 'Against your usual · 30d', patterns: 'Patterns', allTrends: 'All trends', none: '—' },
