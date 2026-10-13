@@ -49,8 +49,72 @@ A Whoop/Bezel-style personal health app. Wearable data (steps, resting heart rat
 
 ---
 
+## Where we are (October 2026)
+
+Every feature goes through the same steps:
+1. a mockup on a design canvas, iterated with the owner;
+2. a written spec;
+3. a task-by-task plan;
+4. a subagent-driven build, with a review after each task, a final whole-branch review and one fix wave;
+5. a device walkthrough;
+6. a PR.
+
+The designs are versioned in [`docs/design/`](docs/design/README.md), and the specs and plans in `docs/superpowers/`.
+
+**Shipped (on `main`):**
+
+| PR | Feature |
+|---|---|
+| #44–#47 | Sleep on the Activity tab, the tab and chat bar redesign, pixel coaches |
+| #48, #50 | Sleep depth (stage lanes, cycles, bedtime goal); recaps and sharing |
+| #51, #52 | Achievements and badges; Buddies |
+| #53, #54, #56 | Social S1 (stories, check-ins), S2 Campfire, S3 Chats |
+| #55, #57, #58 | The shadcn button standard (no pills) and the A4 type system |
+| #59 | **Recovery page**: weather hero, last 7 days, sleep-debt and streak bento, month calendar, tomorrow's forecast |
+
+**Built, not merged:**
+
+- **One Sleep page** (`feature/sleep-page`). Every sleep screen is merged into one page with:
+  - a moon hero and a 7-night picker;
+  - the night inline (stages, cycles, moments, naps);
+  - bedtime-to-wake, regularity and a month heatmap.
+
+  The night's "usual" now counts main sleep only. All reviews are clean, and backend and mobile tests pass. The PR is
+  held until the Home redesign decides where the Recaps shelf goes.
+
+**In design:**
+
+- **KIP, the app's own mascot.** The design is final:
+  - a basic pixel block with GROUNDED lighting and pose-only arms;
+  - 22 animal skins for later;
+  - version 1 is the default KIP in coral, with 10 colours to choose from.
+- **Home redesign.** Direction **F** is approved: a pixel scene with your KIP and your buddies' KIPs, and a tappable
+  cottage (bed = Sleep, sky = Recovery, mailbox = Recaps, calendar = Tomorrow). The scene changes with today's recovery
+  weather: bright with flowers on clear days, stormy on low ones, starry at night.
+- **Settings, Activity and the Profile ID card.** Mockups are up (Settings S1 or the S2 category hub; Activity A-1 or
+  A-2; ID-1 to ID-3) and await the owner's picks.
+
+**Next steps, in order:**
+
+1. Pick the Settings, Activity and ID-card directions.
+2. **KIP character system**, as its own spec, plan and build: the in-app sprite engine, the per-user colour on the
+   account, the Profile colour picker, and buddies seeing your colour.
+3. **Home F**, built on KIP: the scene layers, the weather states and the tappable cottage. The Recaps shelf placement
+   from Home then unblocks the Sleep PR.
+4. Settings, Activity and the ID card, using the picked directions.
+5. Later roadmap: invites and outfits (D), group challenges (E), Apple Health (F).
+
+**Open decisions:**
+- The Sleep page bands on the rounded score, while Recovery bands on the one-decimal score. They should be made the
+  same.
+- Two small Sleep follow-ups are listed in the [handoff](https://github.com/tusharcora/Biometrics/blob/feature/sleep-page/docs/superpowers/handoff/2026-10-10-sleep-home-kip-handoff.md)
+  on `feature/sleep-page`.
+
+---
+
 ## Contents
 
+0. [Where we are](#where-we-are-october-2026)
 1. [System at a glance](#1-system-at-a-glance)
 2. [End-to-end data flow](#2-end-to-end-data-flow)
 3. [Repository layout](#3-repository-layout)
@@ -498,6 +562,7 @@ Backend Jest runs may not exit on their own because of an open Redis handle; use
 - **The coach's validator checks numbers, not reasoning.** The validator limits each number to the metric(s) the sentence names but does not judge direction words; the evals' direction and attribution checks catch what that scoping can miss.
 - **Push is built end-to-end but hasn't been delivered to a real device.** It needs a paid Apple team and an EAS build.
 - **The redesign's device card (spec §5) is not built yet.**
+- **For progress and next steps, see [Where we are](#where-we-are-october-2026).**
 
 ## 19. Design docs
 
@@ -514,6 +579,17 @@ Backend Jest runs may not exit on their own because of an open Redis handle; use
 | `specs/2026-09-29-companion-characters-design.md` | companion characters: eight selectable coaches, moods, Meet your coach (superseded by pixel coaches) |
 | `specs/2026-10-01-pixel-coaches-design.md` | pixel coaches: fifteen pixel-art coaches, grid + card picker, thinking style and thinking text settings, real progress steps |
 | `specs/2026-09-30-coach-redesign-design.md` | coach redesign: answer pipeline, fact sheet, validator, streaming, hosted engine, today summary |
+| `specs/2026-09-28-recovery-forecast-design.md` | tomorrow's recovery forecast and what-if levers |
+| `specs/2026-10-03-sleep-depth-design.md` | sleep depth: stage lanes, cycles, moments, bedtime goal |
+| `specs/2026-10-04-recap-design.md` | recaps and sharing |
+| `specs/2026-10-06-achievements-design.md` | achievements and badges |
+| `specs/2026-10-06-buddies-design.md` | buddies: pairing, sharing, stickers |
+| `specs/2026-10-07-social-tab-design.md` | Social tab: stories, Campfire, Chats |
+| `specs/2026-10-08-type-system-design.md` | A4 type system |
+| `specs/2026-10-09-recovery-page-design.md` | Recovery page (shipped, PR #59) |
+| `specs/2026-10-09-one-sleep-page-design.md` | one Sleep page (built on `feature/sleep-page`) |
+| `handoff/*` | session handoffs: current state and how to continue |
+| [`../design/`](docs/design/README.md) | design canvases (Recovery, Sleep, KIP, Home redesign, …) |
 | `plans/*` | task-by-task implementation plans |
 | `notes/slice0-live-checks.md` | live Google Health probe results |
 | `notes/local-model-coach-plan.md` | local LLM evaluation and the model choice |
