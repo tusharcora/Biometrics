@@ -1,6 +1,6 @@
 # Activity and Profile redesign
 
-Date: 2026-10-13 路 Branch: `feature/profile-activity` 路 Status: draft, waiting for the owner's check
+Date: 2026-10-13 路 Branch: `feature/profile-activity` 路 Status: owner's questions answered (搂5)
 
 The owner picked these boards (in `docs/design/home/project/`):
 
@@ -71,11 +71,12 @@ There is no KIP colour picker yet. The colour is fixed at coral, and the picker 
 
 ### Data
 
-**Check-in streak.** This is the `current` value of the **`CHECK_IN`** badge family from `/me/achievements`. It counts on-time **habit** check-ins ("everything for this day is logged") from the badge start date, so the card agrees with the check-in badge. No new backend calculation is needed.
-
-The other possible meaning is a streak of the Social tab's morning mood check-in. That one doesn't exist yet, and would need a new backend calculation.
-
-**Buddies and joined date.** `GET /me/buddies/me` gains two fields. Both are tested first (TDD) in `backend/tests/buddies`.
+`GET /me/buddies/me` gains three fields. Each is tested first (TDD) in `backend/tests`.
+- `checkInStreak`: the run of the Social tab's **morning mood check-ins** (`CheckIn` rows).
+  - It is counted on consecutive local days in the user's time zone, ending today.
+  - If today has no check-in yet, the run ends yesterday, so the streak stays alive until the day is over.
+  - A missed day resets it to 0.
+  - The calculation is a new function, `checkInStreak(userId, now)`, in `backend/src/social/checkins.ts`.
 - `buddyCount`: a count of the user's `BuddyPair` rows.
 - `joinedOn`: the date of `User.createdAt` in the user's time zone, as YYYY-MM-DD.
 
@@ -101,11 +102,19 @@ Older backends don't send these fields, so the app treats a missing field as "鈥
   - The passport fields, including fallbacks when the streak, buddies or joined date is missing.
   - Each category card opening its screen.
   - The existing Settings tests, still passing against the moved sections.
-- **Backend:** `buddyCount`, and `joinedOn` across a time zone date boundary.
+- **Backend:**
+  - The check-in streak in these cases:
+    - with today checked in;
+    - with today not yet checked in;
+    - after a gap;
+    - across a time zone date boundary;
+    - when another user's check-ins don't count.
+  - `buddyCount`.
+  - `joinedOn` across a time zone date boundary.
 - **Before each commit:** run the touched suites, the mobile typecheck (still at the baseline of 12) and the backend `tsc`.
 
-## 5. Questions for the owner
+## 5. Owner decisions (2026-10-13)
 
-1. **Check-in streak:** is it the habit check-in badge streak (as above), or the Social morning mood check-in?
-2. **Recovery tab:** should the calendar get the new Recovery tab, or keep Steps and Sleep only?
-3. **"2026 so far":** is it fine to drop its year grid because the calendar's YTD view shows the same thing?
+1. **Check-in streak:** counts the Social morning mood check-in, so it needs a new backend calculation.
+2. **Recovery tab:** yes, the calendar has Steps, Sleep and Recovery.
+3. **"2026 so far":** its year grid is dropped, and it keeps only its totals.
