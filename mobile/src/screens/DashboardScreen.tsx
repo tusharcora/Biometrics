@@ -31,6 +31,7 @@ import { COLORS, METRIC_ORDER, type MetricType } from '../theme';
 import { computeStats, buildHeadline, type MetricRecord } from '../lib/metricInsights';
 import { coachEntryRoute, useCoachStatus } from '../lib/useCoachStatus';
 import { useForecast } from '../lib/useForecast';
+import { useRecapShelf } from '../lib/recap/useRecapShelf';
 import { useSync } from '../sync/SyncProvider';
 import { SyncStatusLine } from '../components/sync-status-line';
 import { navigateToCoachEntry } from '../navigation/coachNavigation';
@@ -94,6 +95,7 @@ export function DashboardScreen() {
   // Bumped after each successful sync with Google Health, so the data reloads.
   const { dataVersion } = useSync();
   const forecastState = useForecast(dataVersion);
+  const shelf = useRecapShelf(navigation);
 
   useEffect(() => {
     apiFetch<MetricRecord[]>('/me/biometrics')
@@ -295,7 +297,7 @@ export function DashboardScreen() {
         <HabitLogCard />
 
         {/* Recaps (decision 5): with the weekly digest below, for every user, coach on or off. */}
-        <RecapShelf navigation={navigation} />
+        <RecapShelf navigation={navigation} shelf={shelf} />
 
         {/* The digest is the newest week's recap: it plays that week's story, whose last frame
             offers the full recap. */}

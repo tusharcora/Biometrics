@@ -1,13 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, Pressable, ScrollView, View } from 'react-native';
+import React from 'react';
+import { Pressable, ScrollView, View } from 'react-native';
 import { useColorScheme } from 'nativewind';
-import { fetchRecaps, type RecapSummary } from '../../api/recaps';
 import { useCharacterOptional } from '../../characters/CharacterContext';
-import { todayCivil } from '../../lib/heatmap';
-import { shelfItems } from '../../lib/recapShelf';
+import type { RecapShelfState } from '../../lib/recap/useRecapShelf';
 import { recapCoachId } from '../../lib/recapShare';
 import { recapTint, STORY_RING_NEUTRAL, storyRingColor } from '../../lib/recapTheme';
-import { recapDestination, useWatchedRecaps } from '../../lib/unwatchedRecap';
+import { recapDestination } from '../../lib/unwatchedRecap';
 import { COLORS, FONTS } from '../../theme';
 import { DEFAULT_CHARACTER_ID } from '../characters/types';
 import { pixelFont } from '../coach/thinking/shared';
@@ -16,53 +14,23 @@ import { SectionLabel } from '../ui/section-label';
 import { Text } from '../ui/text';
 
 const CIRCLE = 64;
-/** How many recaps the shelf shows (newest first); "See all" has the rest. */
-const SHELF_LIMIT = 30;
 
 interface Navigator {
   navigate: (name: string, params?: object) => void;
-  addListener?: (event: 'focus', callback: () => void) => () => void;
 }
 
 // The story shelf on Home, above the coach digest (weekly story placement, design D): "Recaps" with See all,
 // then a row of circles, newest first, each on its coach's ground. An unwatched recap wears its
 // coach's ring, a watched one a neutral ring. A week plays its story; a month opens its recap.
 // The header and See all always show (the way to Your recaps and Year in pixels); the circles
-// only once there are recaps, with a one-line hint when there are none yet.
-export function RecapShelf({ navigation }: { navigation: Navigator }) {
+// only once there are recaps, with a one-line hint when there are none yet. Home owns the fetch
+// (useRecapShelf), so the RECAPS tag and the shelf share it.
+export function RecapShelf({ navigation, shelf }: { navigation: Navigator; shelf: RecapShelfState }) {
   const { colorScheme } = useColorScheme();
   const scheme = colorScheme === 'dark' ? 'dark' : 'light';
   const colors = COLORS[scheme];
   const characterId = useCharacterOptional()?.characterId ?? DEFAULT_CHARACTER_ID;
-  const watched = useWatchedRecaps();
-  const [recaps, setRecaps] = useState<RecapSummary[] | null>(null);
-
-  // Only the latest load, while mounted, lands; a failed reload keeps what is shown.
-  const latest = useRef(0);
-  const load = useCallback(async () => {
-    const run = ++latest.current;
-    try {
-      const next = await fetchRecaps({ limit: SHELF_LIMIT });
-      if (run === latest.current) setRecaps(next);
-    } catch {
-      // Nothing new to show.
-    }
-  }, []);
-
-  useEffect(() => {
-    void load();
-    const off = navigation.addListener?.('focus', () => void load());
-    const appState = AppState.addEventListener('change', (state) => {
-      if (state === 'active') void load();
-    });
-    return () => {
-      latest.current++;
-      off?.();
-      appState.remove();
-    };
-  }, [navigation, load]);
-
-  const items = useMemo(() => shelfItems(recaps ?? [], todayCivil(), watched), [recaps, watched]);
+  const { recaps, items } = shelf;
   const pixel = pixelFont();
 
   return (

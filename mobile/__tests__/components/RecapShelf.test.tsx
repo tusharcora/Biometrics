@@ -5,6 +5,7 @@ import { withCharacter } from '../../jest-mocks/characterContext';
 import { fetchRecaps, type RecapSummary } from '../../src/api/recaps';
 import { RecapShelf } from '../../src/components/recap/RecapShelf';
 import { addDays, todayCivil } from '../../src/lib/heatmap';
+import { useRecapShelf } from '../../src/lib/recap/useRecapShelf';
 import { recapTint, STORY_RING_NEUTRAL, storyRingColor } from '../../src/lib/recapTheme';
 import { openRecap, resetUnwatchedRecap } from '../../src/lib/unwatchedRecap';
 
@@ -24,8 +25,12 @@ const recap = (over: Partial<RecapSummary>): RecapSummary => ({
 const WEEK = recap({ id: 'w-new' });
 const MONTH = recap({ id: 'm-sep', kind: 'MONTH', periodStart: '2026-09-01', periodEnd: '2026-09-30', personaId: 'luna', openedAt: 'x' });
 
+function Shelf() {
+  return <RecapShelf navigation={navigation} shelf={useRecapShelf(navigation)} />;
+}
+
 async function show() {
-  render(withCharacter(<RecapShelf navigation={navigation} />));
+  render(withCharacter(<Shelf />));
   await act(async () => {});
 }
 
