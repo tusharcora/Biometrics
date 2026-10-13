@@ -83,13 +83,17 @@ export async function fetchBuddyPage(cursor?: string | null): Promise<BuddyPage 
 
 export interface BuddyScene { buddies: BuddyRow[]; total: number; incomingRequests: number }
 
-/** Home's scene: up to two buddies by latest check-in. null only for a bare 404 (an older server: only you). */
+/**
+ * Home's scene: up to two buddies by latest check-in. null only for an older server (only you): a bare 404
+ * without buddies, or not_buddies from its /me/buddies/:buddyId route, which catches "scene" as an id.
+ */
 export async function fetchBuddyScene(): Promise<BuddyScene | null> {
   let body: Partial<BuddyScene> | undefined;
   try {
     body = await apiFetch<Partial<BuddyScene> | undefined>('/me/buddies/scene');
   } catch (error) {
-    if ((error as { status?: number } | null)?.status === 404 && buddyErrorCode(error) === null) return null;
+    const code = buddyErrorCode(error);
+    if ((error as { status?: number } | null)?.status === 404 && (code === null || code === 'not_buddies')) return null;
     throw error;
   }
   if (!body || !Array.isArray(body.buddies) || !isCount(body.total) || !isCount(body.incomingRequests)) throw new Error('bad_buddy_scene');
