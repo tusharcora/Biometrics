@@ -6,8 +6,7 @@ import {
   acceptRequest, blockFromRequest, buddyErrorCode, cancelRequest, declineRequest, fetchRequests, type IncomingRequest, type OutgoingRequest,
 } from '../../api/buddies';
 import type { useMoodNoticeGate } from '../buddies/useMoodNoticeGate';
-import { Character } from '../characters/Character';
-import { DEFAULT_CHARACTER_ID, isCharacterId } from '../characters/types';
+import { PersonKip } from '../kip/PersonKip';
 import { Button, buttonIconSize } from '../ui/button';
 import { Text } from '../ui/text';
 import { buddyErrorMessage } from '../../lib/buddyCopy';
@@ -120,7 +119,7 @@ export function RequestsList({ gate, onAccepted }: { gate: Gate; onAccepted: (bu
           <View testID={`request-in-${item.request.id}`} className="gap-3 rounded-[18px] border border-border bg-card p-3.5">
             <View className="flex-row items-center gap-3">
               <View className="h-11 w-11 items-center justify-center rounded-full bg-secondary">
-                <Character characterId={isCharacterId(item.request.from.coachId) ? item.request.from.coachId : DEFAULT_CHARACTER_ID} mood="idle" size={28} paused />
+                <PersonKip colour={item.request.from.kipColour} size={28} />
               </View>
               <View className="flex-1">
                 <Text numberOfLines={1} className="text-body font-semibold">{item.request.from.displayName}</Text>

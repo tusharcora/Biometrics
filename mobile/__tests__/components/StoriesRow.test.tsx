@@ -1,7 +1,9 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { fireEvent, render, screen, within } from '@testing-library/react-native';
+import { PersonKip } from '../../src/components/kip/PersonKip';
 import { StoriesRow } from '../../src/components/social/StoriesRow';
+import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
 
 const person = (id: string) => ({ id, handle: id, displayName: id.toUpperCase(), coachId: 'mochi' });
 
@@ -33,6 +35,23 @@ it('after checking in, my ring opens my own story', () => {
   expect(screen.queryByTestId('story-me-plus')).toBeNull();
   fireEvent.press(screen.getByTestId('story-me'));
   expect(onOpenStory).toHaveBeenCalledWith('me');
+});
+
+describe('people as their KIPs', () => {
+  afterEach(() => resetMyKipColour());
+
+  it("draws each ring's author in their colour, and my ring in my colour", () => {
+    setMyKipColour('ink');
+    render(
+      <StoriesRow
+        me={{ person: { ...person('me'), kipColour: 'lime' }, checkIn: null }}
+        rings={[{ author: { ...person('sam'), kipColour: 'sky' }, unseen: true, locked: false, frameCount: 1, latestAt: '' }]}
+        onCheckIn={jest.fn()} onOpenStory={jest.fn()} onSeeAll={jest.fn()}
+      />,
+    );
+    expect(within(screen.getByTestId('story-me')).UNSAFE_getByType(PersonKip).props).toMatchObject({ colour: 'ink', size: 34 });
+    expect(within(screen.getByTestId('story-sam')).UNSAFE_getByType(PersonKip).props).toMatchObject({ colour: 'sky', size: 34 });
+  });
 });
 
 it('names a buddy by @handle when their display name is unset', () => {

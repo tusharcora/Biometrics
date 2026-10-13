@@ -8,6 +8,7 @@ export const MOOD_COLORS: Record<Mood, string> = { good: '#86EFAC', ok: '#93C5FD
 export const TILE_COLORS: Record<Mood, string> = { good: '#7C93B8', ok: '#3B4A63', low: '#5A3A2A', none: 'transparent' };
 export const MOOD_WORDS: Record<Mood, string> = { good: 'well rested', ok: 'doing okay', low: 'running low', none: 'no data' };
 
+export const BUDDY_WEEK_COPY = { thisWeek: 'This week' } as const;
 export const STICKER_LABEL: Record<StickerKind, string> = { CHEER: 'Cheer', HEART: 'Heart', REST_UP: 'Rest up', STAR: 'Star' };
 export const STICKERS: ReadonlyArray<{ kind: StickerKind; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
   { kind: 'CHEER', label: 'Cheer', icon: 'megaphone-outline' },

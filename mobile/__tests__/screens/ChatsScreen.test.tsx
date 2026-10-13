@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ApiError } from '../../src/api/client';
 import { clearStatusNote, fetchChats, fetchNotes, fileReport, saveStatusNote, sendStickerMessage, type ChatRow, type ChatsPage } from '../../src/api/chats';
 import { blockBuddy } from '../../src/api/buddies';
+import { PersonKip } from '../../src/components/kip/PersonKip';
 import { refreshBuddies } from '../../src/lib/buddiesStore';
 import { ChatsScreen } from '../../src/screens/ChatsScreen';
 import { FONTS } from '../../src/theme';
@@ -55,7 +56,7 @@ const row = (id: string, name: string, over: Partial<ChatRow> = {}): ChatRow => 
 });
 const PAGE: ChatsPage = {
   chats: [
-    row('ben', 'Ben', { unread: 2, activeAt: ago(1) }),
+    row('ben', 'Ben', { buddy: { ...person('ben', 'Ben'), kipColour: 'cobalt' }, unread: 2, activeAt: ago(1) }),
     row('sam', 'Sam', { lastMessage: { mine: false, kind: 'STICKER', text: null, sticker: 'CHEER', cardType: null, at: ago(14) } }),
   ],
   nextCursor: null,
@@ -82,6 +83,7 @@ it('lists conversations with their line, unread weight, story ring and active do
   expect(screen.getByTestId('chat-row-ben-line')).toHaveTextContent('rough night lol · 2m');
   expect(screen.getByTestId('chat-row-ben-unread')).toBeTruthy();
   expect(screen.getByTestId('chat-row-ben-avatar-active')).toBeTruthy();
+  expect(within(screen.getByTestId('chat-row-ben-avatar')).UNSAFE_getByType(PersonKip).props).toMatchObject({ colour: 'cobalt', size: Math.round(48 * 0.62) });
   expect(screen.getByTestId('chat-row-sam-line')).toHaveTextContent('Sent a Cheer sticker · 14m');
   expect(screen.queryByTestId('chat-row-sam-unread')).toBeNull();
   expect(screen.getByTestId('chats-requests')).toHaveTextContent('Requests (2)');

@@ -1,7 +1,8 @@
 import React from 'react';
 import { Alert } from 'react-native';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { acceptRequest, blockFromRequest, cancelRequest, confirmMoodNotice, declineRequest, fetchIdentity, fetchRequests } from '../../src/api/buddies';
+import { PersonKip } from '../../src/components/kip/PersonKip';
 import { refreshBuddies } from '../../src/lib/buddiesStore';
 import { offerPushAfterPairing } from '../../src/lib/buddyPushOffer';
 import { refreshSocial } from '../../src/lib/socialStore';
@@ -52,6 +53,13 @@ it("answers requests in Chats: accept opens the new buddy's thread, decline is q
   expect(cancelRequest).toHaveBeenCalledWith('r3');
   expect(refreshSocial).toHaveBeenCalled();
   alert.mockRestore();
+});
+
+it('draws whoever sent a request as their KIP in their colour', async () => {
+  (fetchRequests as jest.Mock).mockResolvedValue({ incoming: [{ id: 'r1', createdAt: '', from: { ...person('u1', 'Ana'), kipColour: 'lilac' } }], outgoing: [] });
+  render(<ChatRequestsScreen />);
+  const row = await screen.findByTestId('request-in-r1');
+  expect(within(row).UNSAFE_getByType(PersonKip).props).toMatchObject({ colour: 'lilac', size: 28 });
 });
 
 it('on a server without chats, accepting opens the buddy\'s week', async () => {
