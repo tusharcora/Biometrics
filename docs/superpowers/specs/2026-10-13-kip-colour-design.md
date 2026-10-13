@@ -54,8 +54,8 @@ The colour is stored and sent by **name** (`'coral'`, `'cobalt'`, …), never by
 
 ### The picker (Profile)
 
-- **The card.** `ProfileCategory` gains `'kipColour'`. Its card comes **first** in the hub's settings grid, with the
-  `color-palette-outline` icon and the label "KIP colour". Its status line is the colour's name, for example "Coral".
+- **The card.** `ProfileCategory` gains `'kipColour'`. Its card comes **first** in the hub's settings grid, with a 10 × 10 pixel palette icon
+  in `lib/profileArt.ts` (like the other cards) and the label "KIP colour". Its status line is the colour's name, for example "Coral".
 - **The page.** The card opens `ProfileSection` with the `kipColour` section, laid out as on the Picker board:
   1. **Preview card:** the board's small scene with your KIP waving, large (scale 6).
      - In the top-left corner: the label "YOUR KIP" (`SectionLabel`), then the colour's name and hex, for example
@@ -107,8 +107,8 @@ These use `useMyKipColour()` in place of the hard-coded coral:
 - **Size and cropping.** `size` is the box in points. `PersonKip` crops the engine's 16 × 16 grid to the cells this
   variant actually draws (its bounding box). The scale is then the largest whole number of points per cell that
   fits that box in `size`, with a minimum of 1. It is drawn centred in the box.
-  - For example, at rest the body is 8 × 10 cells, so a 26-point slot draws at 2 points per cell (16 × 20) instead
-    of 1. That keeps the pixels crisp at small sizes, and centres the body in round avatars instead of leaving it low.
+  - For example, at rest the KIP with its ground shadow is 10 × 10 cells, so a 26-point slot draws at 2 points
+    per cell (20 × 20) instead of 1. That keeps the pixels crisp at small sizes, and centres the body in round avatars instead of leaving it low.
 - It is decorative and hidden from screen readers; the row around it carries the name.
 
 #### Where it replaces the coach character
