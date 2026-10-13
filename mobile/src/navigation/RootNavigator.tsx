@@ -38,6 +38,8 @@ import { YearInPixelsScreen } from '../screens/YearInPixelsScreen';
 import { BadgesScreen } from '../screens/BadgesScreen';
 import { BadgeDetailScreen } from '../screens/BadgeDetailScreen';
 import { BuddyIdentityScreen } from '../screens/BuddyIdentityScreen';
+import { ProfileSectionScreen } from '../screens/ProfileSectionScreen';
+import { PROFILE_COPY, type ProfileCategory } from '../lib/profileCopy';
 import { PairUpScreen } from '../screens/PairUpScreen';
 import { BuddiesScreen } from '../screens/BuddiesScreen';
 import { BuddyWeekScreen } from '../screens/BuddyWeekScreen';
@@ -132,6 +134,8 @@ export type RootStackParamList = {
   BuddyWeek: { buddyId: string };
   // Profile → Buddies: change your handle or display name.
   BuddyIdentity: undefined;
+  // Profile → one category card: the settings section it holds.
+  ProfileSection: { section: ProfileCategory };
   // Profile → Buddies → Blocked people (unblock).
   BlockedPeople: undefined;
   // Social → last week's highlights in full (the carousel's "All").
@@ -266,6 +270,11 @@ export function RootNavigator() {
               <Stack.Screen name="Badges" component={BadgesScreen} options={{ title: 'Badges' }} />
               <Stack.Screen name="BadgeDetail" component={BadgeDetailScreen} options={{ title: '' }} />
               <Stack.Screen name="BuddyIdentity" component={BuddyIdentityScreen} options={{ title: 'Buddy name' }} />
+              <Stack.Screen
+                name="ProfileSection"
+                component={ProfileSectionScreen}
+                options={({ route }) => ({ title: PROFILE_COPY.categories[route.params.section] })}
+              />
               <Stack.Screen name="Buddies" component={BuddiesScreen} options={{ title: 'All buddies' }} />
               <Stack.Screen name="PairUp" component={PairUpScreen} options={{ title: 'Add a buddy' }} />
               <Stack.Screen name="BlockedPeople" component={BlockedPeopleScreen} options={{ title: 'Blocked people' }} />

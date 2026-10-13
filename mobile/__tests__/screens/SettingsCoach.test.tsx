@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, fireEvent, waitFor, within } from '@testing-library/react-native';
 import { NavigationContext } from '@react-navigation/native';
-import { SettingsScreen } from '../../src/screens/SettingsScreen';
+import { ProfileSectionScreen } from '../../src/screens/ProfileSectionScreen';
 import { fetchCoachStatus, revokeCoachConsent, revokeHostedConsent, setCoachPersona, type CoachStatusDTO } from '../../src/api/coach';
 import { getTimezoneState, listTimeZones } from '../../src/lib/timezone';
 import { withCharacter } from '../../jest-mocks/characterContext';
@@ -24,7 +24,9 @@ const status: CoachStatusDTO = {
 const navigate = jest.fn();
 const screen = (
   <NavigationContext.Provider value={{ navigate } as any}>
-    <SettingsScreen />
+    {/* Profile's Your coach and AI Coach cards each open one of these. */}
+    <ProfileSectionScreen route={{ params: { section: 'coach' } }} />
+    <ProfileSectionScreen route={{ params: { section: 'aiCoach' } }} />
   </NavigationContext.Provider>
 );
 
@@ -57,7 +59,6 @@ describe('SettingsScreen: Your coach', () => {
     (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, enabled: false });
     const { findByTestId, queryByTestId } = renderSettings();
 
-    await findByTestId('timezone-value');
     await waitFor(() => expect(fetchCoachStatus).toHaveBeenCalled());
     expect(await findByTestId('your-coach-row')).toHaveTextContent(/Mochi/);
     expect(queryByTestId('coach-settings')).toBeNull();

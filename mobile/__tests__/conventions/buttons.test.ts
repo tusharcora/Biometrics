@@ -88,7 +88,9 @@ const ALLOWED: Exception[] = [
   { file: 'components/chats/NotesRow.tsx', key: 'note-mine', count: 1, reason: 'my avatar with my note bubble in the Chats notes row' },
   { file: 'components/chats/NotesRow.tsx', key: 'note-${n.person.id}', count: 1, reason: "a buddy's avatar with their note bubble" },
   { file: 'screens/DashboardScreen.tsx', key: 'settings-button', count: 1, reason: 'the profile avatar (with its story ring)' },
-  { file: 'screens/SettingsScreen.tsx', key: 'profile-avatar', count: 1, reason: 'the profile avatar wearing a recap ring' },
+  { file: 'components/profile/Passport.tsx', key: 'passport-recap', count: 1, reason: "the passport's KIP photo wearing a recap ring" },
+  { file: 'components/profile/Passport.tsx', key: 'passport-stamp-${s.family}', count: 1, reason: 'a badge stamp on the passport' },
+  { file: 'components/profile/CategoryGrid.tsx', key: 'profile-category-${category}', count: 1, reason: 'a Profile category card that opens its section' },
   { file: 'components/social/CampScene.tsx', key: 'camp-coach-${id}', count: 1, reason: 'a coach seat in the Campfire scene' },
   // Toggle and selection chips
   { file: 'components/habit-log-card.tsx', key: 'checkin-day-${day.habitDay}', count: 1, reason: 'a check-in day toggle cell' },

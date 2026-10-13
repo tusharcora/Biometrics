@@ -1,7 +1,8 @@
 import React from 'react';
 import { act, render, waitFor } from '@testing-library/react-native';
 import { NavigationContext } from '@react-navigation/native';
-import { SettingsScreen } from '../../src/screens/SettingsScreen';
+import { ProfileSectionScreen } from '../../src/screens/ProfileSectionScreen';
+import type { ProfileCategory } from '../../src/lib/profileCopy';
 import { fetchCoachStatus, type CoachStatusDTO } from '../../src/api/coach';
 import { getTimezoneState, listTimeZones } from '../../src/lib/timezone';
 import { getPushState, enablePush, disablePush } from '../../src/lib/pushRegistration';
@@ -21,10 +22,10 @@ const status: CoachStatusDTO = {
   personas: [{ id: 'kit', name: 'Kit', verbosity: 'terse', proactivity: 'threshold-triggered', tagline: null, greeting: null }],
 };
 
-function renderSettings() {
+function renderSettings(section: ProfileCategory = 'notifications') {
   return render(
     <NavigationContext.Provider value={{ navigate: jest.fn() } as any}>
-      <SettingsScreen />
+      <ProfileSectionScreen route={{ params: { section } }} />
     </NavigationContext.Provider>,
   );
 }
@@ -42,23 +43,21 @@ beforeEach(() => {
 
 describe('SettingsScreen: Recap ready notifications', () => {
   it('no longer has a push switch inside the coach section', async () => {
-    const { findByTestId, queryByTestId } = renderSettings();
+    const { findByTestId, queryByTestId } = renderSettings('aiCoach');
     await findByTestId('coach-settings');
     expect(queryByTestId('push-toggle')).toBeNull();
   });
 
   it('shows the Recap ready switch with the coach off, and never prompts just from rendering', async () => {
     (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, enabled: false });
-    const { findByTestId, queryByTestId } = renderSettings();
+    const { findByTestId } = renderSettings();
     expect(await findByTestId('recap-ready-row')).toBeTruthy();
-    expect(queryByTestId('coach-settings')).toBeNull();
     expect(enablePush).not.toHaveBeenCalled();
   });
 
   it('hides the switch where notifications are unavailable', async () => {
     (getPushState as jest.Mock).mockResolvedValue({ status: 'unavailable', reason: 'no_project_id' });
-    const { findByTestId, queryByTestId } = renderSettings();
-    await findByTestId('timezone-value');
+    const { queryByTestId } = renderSettings();
     await waitFor(() => expect(getPushState).toHaveBeenCalled());
     await waitFor(() => expect(fetchNotificationSettings).toHaveBeenCalled());
     // Let the section's reads settle, so a switch that wrongly renders would be on screen by now.

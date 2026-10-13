@@ -1,134 +1,68 @@
-import React, { useContext, useEffect, useMemo, useState } from 'react';
-import { View, Pressable, TextInput, FlatList, ScrollView } from 'react-native';
+import React, { useContext, useMemo } from 'react';
+import { ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useColorScheme } from 'nativewind';
 import { NavigationContext } from '@react-navigation/native';
-import { Text } from '../components/ui/text';
-import { PageTitle } from '../components/ui/page-title';
-import { inputTextStyle } from '../components/ui/input-style';
-import { Button } from '../components/ui/button';
-import { Ionicons } from '@expo/vector-icons';
-import { SettingsGroup, SettingsRow } from '../components/ui/settings-list';
 import { useOptionalAuth } from '../auth/AuthContext';
-import { AccountSection } from '../components/account-section';
+import { useCharacterOptional } from '../characters/CharacterContext';
 import { BadgesCard } from '../components/achievements/BadgesCard';
-import { CoachSettingsSection } from '../components/coach-settings-section';
+import { characterInfo } from '../components/characters/registry';
+import { DEFAULT_THINKING_ATTACHMENT, DEFAULT_THINKING_TEXT, THINKING_ATTACHMENT_NAMES, THINKING_TEXT_NAMES } from '../components/characters/thinking';
 import { DeleteAccountSection } from '../components/delete-account-section';
-import { BuddiesProfileSection } from '../components/buddies/BuddiesProfileSection';
-import { ChatSettingsSection } from '../components/chats/ChatSettingsSection';
-import { NotificationsSection } from '../components/notifications-section';
-import { YourCoachRow } from '../components/your-coach-row';
-import { StoryRing, useStoryRing } from '../components/recap/StoryRing';
-import { COLORS } from '../theme';
-import { useSync } from '../sync/SyncProvider';
-import { formatLastSynced } from '../sync/formatLastSynced';
+import { CategoryGrid } from '../components/profile/CategoryGrid';
+import { Passport } from '../components/profile/Passport';
+import { useStoryRing } from '../components/recap/StoryRing';
+import { Button } from '../components/ui/button';
+import { PageTitle } from '../components/ui/page-title';
+import { SectionLabel } from '../components/ui/section-label';
+import { Text } from '../components/ui/text';
+import { useAchievements } from '../lib/achievementsStore';
+import { useBuddies } from '../lib/buddiesStore';
+import { memberCode, passportStamps } from '../lib/passport';
+import { categoryCards, useProfileReads } from '../lib/profileHub';
+import { PROFILE_COPY } from '../lib/profileCopy';
+import { useChatsAvailable } from '../lib/socialStore';
+import { useCoachStatus } from '../lib/useCoachStatus';
 import { useTabBarClearance } from '../navigation/tabBarLayout';
-import {
-  clearTimezoneOverride,
-  getTimezoneState,
-  listTimeZones,
-  setTimezoneOverride,
-  type TimezoneState,
-} from '../lib/timezone';
+import { useSync } from '../sync/SyncProvider';
 
-const MAX_RESULTS = 60;
+type Navigate = { navigate: (name: string, params?: object) => void };
 
+// The Profile tab (spec 2026-10-13 §2, boards S2 and ID-2): the passport, the Badges card, a card per
+// settings category (each opens its section on ProfileSection), and Sign out beside Delete account.
 export function SettingsScreen() {
-  // Context rather than useNavigation(): this screen is also rendered in
-  // isolation (see useAuthOptional below for the same reason), and
+  // Context rather than useNavigation(): this screen is also rendered in isolation, and
   // useNavigation throws when there is no navigator above it.
   const navigation = useContext(NavigationContext);
-  const { state: syncState, lastSyncedAt, connection, syncNow } = useSync();
+  const go = (name: string, params?: object) => (navigation as Navigate | undefined)?.navigate(name, params);
+  const { lastSyncedAt, connection } = useSync();
   const clearance = useTabBarClearance();
   const auth = useOptionalAuth();
   const { colorScheme: scheme } = useColorScheme();
-  const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
-  const [state, setState] = useState<TimezoneState | null>(null);
-  const [picking, setPicking] = useState(false);
-  const [query, setQuery] = useState('');
-  const [error, setError] = useState<string | null>(null);
   const ring = useStoryRing(scheme === 'dark' ? 'dark' : 'light', navigation ?? undefined);
+  const { status: coachStatus } = useCoachStatus(navigation ?? undefined);
+  const character = useCharacterOptional();
+  const { state: badges } = useAchievements();
+  const buddiesAvailable = useBuddies().status === 'ready';
+  const chatsAvailable = useChatsAvailable() === true;
+  const reads = useProfileReads({ buddiesAvailable, chatsAvailable });
 
-  useEffect(() => {
-    getTimezoneState().then(setState).catch(() => setState(null));
-  }, []);
-
-  const zones = useMemo(() => (picking ? listTimeZones() : []), [picking]);
-  const matches = useMemo(() => {
-    const needle = query.trim().toLowerCase().replace(/ /g, '_');
-    const filtered = needle ? zones.filter((z) => z.toLowerCase().includes(needle)) : zones;
-    return filtered.slice(0, MAX_RESULTS);
-  }, [zones, query]);
-
-  async function choose(zone: string) {
-    setError(null);
-    try {
-      await setTimezoneOverride(zone);
-      setState(await getTimezoneState());
-      setPicking(false);
-      setQuery('');
-    } catch {
-      setError('That time zone could not be saved.');
-    }
-  }
-
-  async function useDevice() {
-    setError(null);
-    try {
-      await clearTimezoneOverride();
-      setState(await getTimezoneState());
-    } catch {
-      setError('Could not switch back to the device time zone.');
-    }
-  }
-
-  if (picking) {
-    return (
-      <SafeAreaView className="flex-1 bg-background">
-        <View testID="timezone-picker" className="flex-1" style={{ paddingBottom: clearance }}>
-          <View className="gap-3 p-4">
-            <TextInput
-              testID="timezone-search-input"
-              value={query}
-              onChangeText={setQuery}
-              placeholder="Search time zones"
-              placeholderTextColor={colors.muted}
-              autoCapitalize="none"
-              autoCorrect={false}
-              style={[inputTextStyle, { color: colors.foreground }]}
-              className="rounded-tile border border-border bg-card px-4 py-3"
-            />
-            {error ? <Text className="text-caption text-destructive">{error}</Text> : null}
-          </View>
-          <FlatList
-            data={matches}
-            keyExtractor={(zone) => zone}
-            keyboardShouldPersistTaps="handled"
-            contentContainerStyle={{ paddingHorizontal: 16, paddingBottom: 16 }}
-            ListEmptyComponent={<Text className="p-4 text-center text-muted-foreground">No matching time zones.</Text>}
-            renderItem={({ item }) => (
-              <Pressable testID={`timezone-option-${item}`} onPress={() => choose(item)} className="py-3 active:opacity-70">
-                <Text className={item === state?.timezone ? 'font-semibold' : ''}>{item}</Text>
-              </Pressable>
-            )}
-          />
-          <View className="items-center p-2">
-            <Button testID="timezone-cancel-button" variant="ghost" size="sm" onPress={() => setPicking(false)}>
-              Cancel
-            </Button>
-          </View>
-        </View>
-      </SafeAreaView>
-    );
-  }
-
-  const email = auth?.session?.email ?? null;
-  const connected = connection === 'CONNECTED';
-  const avatarFace = email ? (
-    <Text className="text-display">{email.charAt(0).toUpperCase()}</Text>
-  ) : (
-    <Ionicons name="person-outline" size={30} color={colors.muted} />
-  );
+  const info = characterInfo(character?.characterId);
+  const cards = categoryCards({
+    reads,
+    health: { connected: connection === 'CONNECTED', lastSyncedAt },
+    buddiesAvailable,
+    chatsAvailable,
+    coach: {
+      name: info.name,
+      style: THINKING_ATTACHMENT_NAMES[character?.thinkingAttachment ?? DEFAULT_THINKING_ATTACHMENT].name,
+      text: THINKING_TEXT_NAMES[character?.thinkingText ?? DEFAULT_THINKING_TEXT].name,
+    },
+    aiCoach: coachStatus ? { enabled: coachStatus.enabled, consented: coachStatus.consented } : null,
+    now: new Date(),
+  });
+  const stamps = useMemo(() => (badges.status === 'ready' ? passportStamps(badges.data.families) : []), [badges]);
+  const identity = reads.identity;
 
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['top']}>
@@ -136,82 +70,46 @@ export function SettingsScreen() {
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ gap: 24, paddingHorizontal: 20, paddingTop: 8, paddingBottom: clearance }}
       >
-        <View className="items-center gap-2 pt-2">
-          {ring ? (
-            // An unwatched recap: the avatar wears its coach's ring and plays it, as on Home.
-            <Pressable
-              testID="profile-avatar"
-              accessibilityRole="button"
-              accessibilityLabel={ring.hint}
-              onPress={() => (navigation as { navigate: (name: string, params: object) => void } | undefined)?.navigate(ring.destination.name, ring.destination.params)}
-              className="active:opacity-70"
-            >
-              <StoryRing testID="profile-avatar-ring" color={ring.color} size={80} ringWidth={3} gap={3} dotSize={16} surface={colors.background}>
-                <View className="flex-1 items-center justify-center bg-muted">{avatarFace}</View>
-              </StoryRing>
-            </Pressable>
-          ) : (
-            <View testID="profile-avatar" className="h-20 w-20 items-center justify-center rounded-full border border-border bg-muted">
-              {avatarFace}
-            </View>
-          )}
-          <PageTitle>Profile</PageTitle>
-          {email ? <Text className="text-caption text-muted-foreground">{email}</Text> : null}
+        <View className="pt-2">
+          <PageTitle>{PROFILE_COPY.title}</PageTitle>
         </View>
 
-        {/* Badges (spec 2026-10-06 §6): between the header and Health data; hidden on a 404. */}
-        <BadgesCard
-          onSeeAll={() => navigation?.navigate('Badges' as never)}
-          onOpen={(family) => (navigation as { navigate: (name: string, params: object) => void } | undefined)?.navigate('BadgeDetail', { family })}
+        <Passport
+          code={memberCode(auth?.session?.userId ?? '')}
+          name={identity?.displayName ?? null}
+          handle={identity?.handle ?? null}
+          home={reads.timezone?.timezone ?? null}
+          joinedOn={identity?.joinedOn ?? null}
+          checkInStreak={identity?.checkInStreak ?? null}
+          buddyCount={identity?.buddyCount ?? null}
+          stamps={stamps}
+          recap={ring ? { color: ring.color, hint: ring.hint, onPlay: () => go(ring.destination.name, ring.destination.params) } : null}
+          onEdit={() => go('BuddyIdentity')}
+          onOpenStamp={(family) => go('BadgeDetail', { family })}
         />
 
-        {/* Connecting is a task reachable from a tab, not a gate in front of the
-            app: signing in lands on the dashboard whatever the status is. */}
-        <SettingsGroup label="Health data">
-          <SettingsRow
-            testID="connect-health-row"
-            icon="heart"
-            tint={colors.metricHeart}
-            title="Google Health"
-            subtitle="Sync steps, sleep, heart rate and HRV"
-            value={connected ? 'Connected' : 'Connect'}
-            onPress={() => navigation?.navigate('ConnectHealth' as never)}
-          />
-          {connected ? (
-            <SettingsRow
-              testID="settings-sync-now"
-              icon="sync-outline"
-              title={syncState === 'syncing' ? 'Syncing…' : 'Sync now'}
-              subtitle={lastSyncedAt ? formatLastSynced(lastSyncedAt, new Date(), 'Last synced') : 'Not synced yet'}
-              subtitleTestID="settings-last-synced"
-              disabled={syncState === 'syncing'}
-              onPress={() => void syncNow('manual')}
-            />
-          ) : null}
-        </SettingsGroup>
+        <BadgesCard onSeeAll={() => go('Badges')} onOpen={(family) => go('BadgeDetail', { family })} />
 
-        <SettingsGroup label="Time zone" footer={error ?? undefined}>
-          <SettingsRow
-            testID="timezone-row"
-            icon="globe-outline"
-            tint={colors.metricHrv}
-            title={state?.overridden ? 'Custom time zone' : 'Device time zone'}
-            value={state ? state.timezone : '…'}
-            valueTestID="timezone-value"
-            onPress={() => setPicking(true)}
-          />
-          {state?.overridden ? (
-            <SettingsRow testID="use-device-timezone-button" icon="phone-portrait-outline" title="Use device time zone" onPress={useDevice} />
-          ) : null}
-        </SettingsGroup>
+        <CategoryGrid cards={cards} onOpen={(section) => go('ProfileSection', { section })} />
 
-        <NotificationsSection />
-        <BuddiesProfileSection onNavigate={(route) => navigation?.navigate(route as never)} />
-        <ChatSettingsSection />
-        <AccountSection />
-        <YourCoachRow />
-        <CoachSettingsSection />
-        <DeleteAccountSection />
+        <DeleteAccountSection
+          renderClosed={(openDelete) => (
+            <View testID="delete-account-section" className="gap-2">
+              <SectionLabel>{PROFILE_COPY.account.label}</SectionLabel>
+              <View className="flex-row gap-3">
+                {auth ? (
+                  <Button testID="sign-out-button" variant="outline" className="flex-1" onPress={() => auth.signOut()}>
+                    {PROFILE_COPY.account.signOut}
+                  </Button>
+                ) : null}
+                <Button testID="delete-account-open" variant="destructive" className="flex-1" onPress={openDelete}>
+                  {PROFILE_COPY.account.delete}
+                </Button>
+              </View>
+              <Text className="text-caption text-muted-foreground">{PROFILE_COPY.account.deleteNote}</Text>
+            </View>
+          )}
+        />
       </ScrollView>
     </SafeAreaView>
   );

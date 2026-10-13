@@ -16,12 +16,12 @@ beforeEach(() => {
   (getTimezoneState as jest.Mock).mockResolvedValue({ timezone: 'UTC', overridden: false });
 });
 
-it('shows the Badges card on Profile alongside Health data', async () => {
+it('shows the Badges card on Profile above the category cards', async () => {
   (fetchAchievements as jest.Mock).mockResolvedValue(achievementsFixture({ SLEEP_GOAL: { level: 1 } }));
   render(<SettingsScreen />);
   expect(await screen.findByTestId('badges-card')).toBeTruthy();
   expect(screen.getByTestId('badges-count')).toHaveTextContent('BADGES · 1 OF 35');
-  expect(screen.getByTestId('connect-health-row')).toBeTruthy();
+  expect(screen.getByTestId('profile-category-health')).toBeTruthy();
 });
 
 it('leaves the card out against a backend without badges (404)', async () => {
@@ -30,7 +30,7 @@ it('leaves the card out against a backend without badges (404)', async () => {
   await waitFor(() => expect(fetchAchievements).toHaveBeenCalled());
   await act(async () => {});
   expect(screen.queryByTestId('badges-card')).toBeNull();
-  expect(screen.getByTestId('connect-health-row')).toBeTruthy();
+  expect(screen.getByTestId('profile-category-health')).toBeTruthy();
 });
 
 it('refreshes the badges each time Profile comes back into focus', async () => {

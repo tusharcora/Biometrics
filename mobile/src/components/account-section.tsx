@@ -8,8 +8,9 @@ import { SettingsGroup, SettingsRow } from './ui/settings-list';
 // Settings -> Account. Uses the navigation context rather than useNavigation()
 // because Settings is also rendered without a navigator (see SettingsScreen),
 // and the optional auth hook for the same reason. Sign out lives here now that
-// Home no longer carries it in its header.
-export function AccountSection() {
+// Home no longer carries it in its header. Profile's Sign-in screen leaves the row out: the hub's
+// Account area carries Sign out there.
+export function AccountSection({ showSignOut = true }: { showSignOut?: boolean } = {}) {
   const navigation = useContext(NavigationContext);
   const auth = useOptionalAuth();
   const { colorScheme: scheme } = useColorScheme();
@@ -32,7 +33,7 @@ export function AccountSection() {
         subtitle="Where you are signed in"
         onPress={() => navigation?.navigate('Devices' as never)}
       />
-      {auth ? (
+      {auth && showSignOut ? (
         <SettingsRow testID="sign-out-button" icon="log-out-outline" tint={colors.muted} title="Sign out" onPress={() => auth.signOut()} />
       ) : null}
     </SettingsGroup>
