@@ -1,5 +1,7 @@
 import React from 'react';
-import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
+import Svg, { Rect } from 'react-native-svg';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { KipColourSection } from '../../src/components/profile/KipColourSection';
 import { saveKipColour } from '../../src/api/kip';
 import { getMyKipColour, resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
@@ -64,6 +66,45 @@ it('a failed save keeps the old colour and offers Try again', async () => {
   fireEvent.press(screen.getByText('Try again'));
   await waitFor(() => expect(getMyKipColour()).toBe('ink'));
   expect(screen.queryByTestId('kip-colour-error')).toBeNull();
+});
+
+it('clears the error when you pick another colour', async () => {
+  save.mockRejectedValueOnce(new Error('offline'));
+  render(<KipColourSection />);
+  fireEvent.press(screen.getByTestId('kip-swatch-ink'));
+  fireEvent.press(screen.getByTestId('kip-colour-save'));
+  expect(await screen.findByText("Your colour couldn't be saved.")).toBeTruthy();
+  expect(screen.getByTestId('kip-colour-error').props.accessibilityLiveRegion).toBe('polite');
+  fireEvent.press(screen.getByTestId('kip-swatch-lime'));
+  expect(screen.queryByTestId('kip-colour-error')).toBeNull();
+});
+
+const layout = (width: number) =>
+  fireEvent(screen.getByTestId('kip-colour-preview'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width, height: 192 } } });
+const SUN = ['#FDE68A', '#FCD34D', '#FBBF24', '#F59E0B'];
+
+it('widens the scene to fill its card and centres the KIP', () => {
+  render(<KipColourSection />);
+  layout(390);
+  const svg = within(screen.getByTestId('kip-colour-scene', { includeHiddenElements: true })).UNSAFE_getByType(Svg);
+  expect(svg.props.width).toBe(Math.ceil(390 / 3) * 3);
+  expect(svg.props.width).toBeGreaterThanOrEqual(390);
+  expect(StyleSheet.flatten(screen.getByTestId('kip-colour-hero').props.style).left).toBe(390 / 2 - 48);
+});
+
+it('keeps the sun inside a narrow card', () => {
+  render(<KipColourSection />);
+  layout(335);
+  const cols = Math.ceil(335 / 3);
+  const sun = within(screen.getByTestId('kip-colour-scene', { includeHiddenElements: true }))
+    .UNSAFE_getAllByType(Rect)
+    .filter((r) => SUN.includes(r.props.fill));
+  expect(sun.length).toBeGreaterThan(0);
+  for (const r of sun) {
+    expect(r.props.x).toBeGreaterThanOrEqual(0);
+    expect(r.props.x + r.props.width).toBeLessThanOrEqual(cols);
+  }
+  expect(Math.max(...sun.map((r) => r.props.x + r.props.width))).toBe(cols - 7);
 });
 
 it('Reset to coral only changes the selection', () => {
