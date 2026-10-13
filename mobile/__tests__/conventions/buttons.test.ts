@@ -64,6 +64,7 @@ const ALLOWED: Exception[] = [
   { file: 'components/home/HomeScene.tsx', key: 'HotTag:testID', count: 1, reason: 'a hot tag on the Home scene (SLEEP, TMRW, RECOVERY, RECAPS) that opens its page' },
   { file: 'components/home/HomeScene.tsx', key: 'home-buddy-${b.id}', count: 1, reason: "a buddy's name tag on the Home scene that opens their week" },
   { file: 'components/home/HomeScene.tsx', key: 'home-scene-all', count: 1, reason: 'the scene\'s "ALL n →" tag that opens Social' },
+  { file: 'components/home/TodayTiles.tsx', key: 'TodayTile:testID', count: 1, reason: 'a Home Today tile (Recovery, Sleep, Tomorrow) that opens its page' },
   { file: 'components/home/recovery-hero.tsx', key: 'recovery-score-card', count: 1, reason: 'the home hero score card that opens its detail' },
   { file: 'components/home/coach-tile.tsx', key: 'coach-entry-button', count: 1, reason: 'the home coach tile' },
   { file: 'components/home/metric-tile.tsx', key: 'metric-card-${type}', count: 1, reason: 'a home metric tile' },
