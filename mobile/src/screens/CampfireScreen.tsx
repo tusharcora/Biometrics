@@ -1,11 +1,11 @@
 // The Campfire page (spec 2026-10-07 social §6; redesign 2026-10-07: a full-screen pixel scene under a pull-up glass
 // panel), pushed from the camp banner. The scene fills the screen: me and up to 7 buddies on logs in a ring round the
 // fire (the server's order: me, then latest activity) and "+N here" for the rest; night (stars, constellations, a
-// moon, a lit fire once anyone is in bed on time) or day (sun, clouds, unlit logs) by my clock; asleep coaches bob
-// with drifting "z"s; a camp note shows in a one-line bubble over its coach (mine: "+ ADD A NOTE" when I have none).
+// moon, a lit fire once anyone is in bed on time) or day (sun, clouds, unlit logs) by my clock; asleep KIPs bob
+// with drifting "z"s; a camp note shows in a one-line bubble over its KIP (mine: "+ ADD A NOTE" when I have none).
 // The panel: at Peek the fire's strength; at Half my camp note and Say goodnight (while my own window is open: from
 // min(20:00, my goal − 60 min) to 05:59; otherwise "You can say goodnight from 8:00 PM"); at Full "Who's here" with
-// each whole note (a buddy's with "Report note"), and Message camp. Every time here is 12-hour. A buddy's coach opens
+// each whole note (a buddy's with "Report note"), and Message camp. Every time here is 12-hour. A buddy's KIP opens
 // their chat (their camp note staged), mine opens Half at the note; "Message camp" opens Chats — on a server without
 // chats (S2), the week and Buddies instead. An older server (bare 404) says the camp isn't open
 // yet. Camp notes are buddies' free text: shown here only, never logged.

@@ -1,4 +1,4 @@
-// A chat thread (spec 2026-10-07 social §8.2; V5 thread board): the header (their coach with a story ring and the
+// A chat thread (spec 2026-10-07 social §8.2; V5 thread board): the header (their KIP with a story ring and the
 // active dot, name, "Active now" / "Active 3h ago" and @handle, info → their week), day chips, bubbles, cards,
 // reactions, "Seen" and the composer (a staged quote or reply, quick stickers, "+" to share my check-in, "Message…").
 // No socket: while focused and the app is active it re-reads the newest page every 5 s (lib/chatThread keeps older pages

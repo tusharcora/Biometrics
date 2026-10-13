@@ -180,8 +180,8 @@ function Bob({ asleep, t, children }: { asleep: boolean; t: SharedValue<number>;
 }
 
 /**
- * One seat: the bubble (one line, never wider than the seat, so bubbles never cross), the real pixel coach on a
- * two-tone log, and its name. The Character has no tint, so there is no firelit rim (noted in the redesign report).
+ * One seat: the bubble (one line, never wider than the seat, so bubbles never cross), the person's KIP on a
+ * two-tone log, and their name. PersonKip has no tint, so there is no firelit rim (noted in the redesign report).
  */
 const SceneCoach = memo(function SceneCoach({ member, seat, night, t, onPress, myColour }: {
   member: CampMember; seat: Seat; night: boolean; t: SharedValue<number>; onPress: (member: CampMember) => void; myColour: string;

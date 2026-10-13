@@ -1,5 +1,5 @@
 // The camp banner (spec 2026-10-07 social §4, item 1): "THE CAMP" over "{awake} awake · {asleep} asleep" at night
-// (19:00–05:59 in my zone) or "{n} checked in" by day, a small fire, and up to two coach faces of buddies who checked
+// (19:00–05:59 in my zone) or "{n} checked in" by day, a small fire, and up to two KIPs of buddies who checked
 // in today. Tapping it opens the Campfire page (S2) — given `onOpen`, which the Social screen passes only when the
 // server has a Campfire (it sends `camp.night`); an S1 server keeps the static strip.
 
