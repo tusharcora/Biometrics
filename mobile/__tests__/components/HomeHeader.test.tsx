@@ -3,7 +3,10 @@ import { StyleSheet } from 'react-native';
 import { fireEvent, render, screen } from '@testing-library/react-native';
 import { HomeHeader, ProfileButton } from '../../src/components/home/HomeHeader';
 import { Kip } from '../../src/components/kip/Kip';
+import { StoryRing } from '../../src/components/recap/StoryRing';
 import { Button } from '../../src/components/ui/button';
+import { SectionLabel } from '../../src/components/ui/section-label';
+import { ThemeToggle } from '../../src/components/ui/theme-toggle';
 import { sceneState, STATES } from '../../src/lib/home/scene';
 
 jest.mock('@react-navigation/native', () => ({ useNavigation: () => ({ navigate: jest.fn() }) }));
@@ -19,9 +22,9 @@ beforeEach(() => {
 });
 afterEach(() => jest.restoreAllMocks());
 
-function show(onBottom = jest.fn(), onProfile = jest.fn()) {
+function show(onBottom = jest.fn(), onProfile = jest.fn(), now = NOW) {
   render(
-    <HomeHeader top={52} now={NOW} greeting="Good morning" scene={sceneState({ now: NOW, recovery: 'clear', night: null })}
+    <HomeHeader top={52} now={now} greeting="Good morning" scene={sceneState({ now, recovery: 'clear', night: null })}
       myColour="mint" ring={null} onProfile={onProfile} onBottom={onBottom} />,
   );
   return { onBottom, onProfile };
@@ -36,6 +39,8 @@ it('shows the date, the greeting, the sync line, the theme toggle and the Profil
   expect(screen.getByTestId('settings-button').props.accessibilityLabel).toBe('Profile and settings');
   expect(StyleSheet.flatten(screen.getByText('Good morning').props.style).color).toBe('#F5F5F4');
   expect(syncLineText()).toBe('text-[#E5E7EB]');
+  expect(screen.UNSAFE_getByType(SectionLabel).props.className).toBe('text-[#E5E7EB]');
+  expect(screen.UNSAFE_getByType(ThemeToggle).props.color).toBe('#F5F5F4');
 });
 
 it('sits at the top it is given and reports its bottom edge', () => {
@@ -51,7 +56,12 @@ it('draws your KIP in the Profile ring, on the sky\'s top colour, and opens Prof
   expect(k.props).toMatchObject({ colour: 'mint', scale: 2 });
   fireEvent.press(screen.getByTestId('settings-button'));
   expect(onProfile).toHaveBeenCalled();
-  expect(STATES.clear.sky[0]).toBe('#2563B8');
+  const ringSurface = () => screen.UNSAFE_getAllByType(StoryRing).find((n) => n.props.testID === 'profile-story-ring')!.props.surface;
+  expect(ringSurface()).toBe(STATES.clear.sky[0]);
+  screen.unmount();
+  show(jest.fn(), jest.fn(), new Date(2026, 9, 13, 22, 0));
+  expect(ringSurface()).toBe(STATES.night.sky[0]);
+  expect(STATES.night.sky[0]).not.toBe(STATES.clear.sky[0]);
 });
 
 it('speaks the recap ring\'s hint', () => {

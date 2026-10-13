@@ -14,14 +14,14 @@ function useMinuteClock(): Date {
 }
 
 // Under the "Today" title: whether the data is current, and a tap to sync now.
-// A quiet link: muted (or destructive) text rather than the link's foreground.
+// A quiet link: muted (or destructive) text rather than the link's foreground; `light` over Home's sky.
 export function SyncStatusLine({ light = false }: { light?: boolean } = {}) {
   const { state, lastSyncedAt, connection, syncNow } = useSync();
   const navigation = useNavigation<any>();
   const now = useMinuteClock();
   // Over Home's sky every line reads light, on any theme.
   const quiet = light ? 'text-[#E5E7EB]' : 'text-muted-foreground';
-  const alarm = light ? 'text-[#FCA5A5]' : 'text-destructive';
+  const alarm = light ? 'text-[#FEE2E2]' : 'text-destructive';
 
   if (connection === 'DISCONNECTED') {
     return (

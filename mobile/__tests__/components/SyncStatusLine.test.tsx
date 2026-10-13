@@ -69,6 +69,13 @@ it('reads light over the Home sky', () => {
   expect(line.props.textClassName).toBe('text-[#E5E7EB]');
 });
 
+it('reads its failure light over the Home sky too', () => {
+  set({ state: 'failed' });
+  render(<SyncStatusLine light />);
+  const line = screen.UNSAFE_getAllByType(Button).find((b) => b.props.testID === 'sync-status-line')!;
+  expect(line.props.textClassName).toBe('text-[#FEE2E2]');
+});
+
 it('keeps its muted text everywhere else', () => {
   set({});
   render(<SyncStatusLine />);
