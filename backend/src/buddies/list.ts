@@ -1,6 +1,7 @@
 // The buddy list (spec 2026-10-06 buddies §5): 30 a page by (lastActivityAt desc, id desc); each row
 // is a person, their mood and mood line (no streak here) and an unseen-sticker flag. Moods and
 // yesterday's steps come from ONE batched query each per page; steps only for buddies sharing them.
+// buddyRows is shared with the Home scene (scene.ts).
 
 import { civilDateToUtcMidnight, localCivilDateOrUtc } from '../biometrics/civilDate';
 import { STEPS_GOAL } from '../coach/tools/metrics';
@@ -41,6 +42,19 @@ export async function listBuddies(viewerId: string, cursorRaw: unknown, now: Dat
   const counts = await countRequests(viewerId, now);
   if (ids.length === 0) return { buddies: [], nextCursor: null, incomingRequests: counts.incoming, outgoingRequests: counts.outgoing };
 
+  const buddies = await buddyRows(viewerId, ids, now);
+  const last = page[page.length - 1]!;
+  return {
+    buddies,
+    nextCursor: pairs.length > pageSize ? encodeCursor({ at: last.lastActivityAt, id: last.id }) : null,
+    incomingRequests: counts.incoming,
+    outgoingRequests: counts.outgoing,
+  };
+}
+
+/** The rows for these buddies, in the order given. A user who no longer exists is skipped. */
+export async function buddyRows(viewerId: string, ids: string[], now: Date): Promise<BuddyRowDTO[]> {
+  if (ids.length === 0) return [];
   const users = await prisma.user.findMany({ where: { id: { in: ids } }, select: { ...PERSON_SELECT, ...SHARING_SELECT, timezone: true } });
   const sharesSteps = new Set(users.filter((u) => effectiveSharing(u).steps).map((u) => u.id));
   // Any zone's local today is UTC today ± 1, and its yesterday is within UTC today - 2.
@@ -56,7 +70,7 @@ export async function listBuddies(viewerId: string, cursorRaw: unknown, now: Dat
   const unseenFrom = new Set(unseen.map((u) => u.fromUserId));
 
   const usersById = new Map(users.map((u) => [u.id, u] as const));
-  const buddies = ids.flatMap((id): BuddyRowDTO[] => {
+  return ids.flatMap((id): BuddyRowDTO[] => {
     const user = usersById.get(id);
     if (!user) return [];
     const today = localCivilDateOrUtc(now, user.timezone);
@@ -66,11 +80,4 @@ export async function listBuddies(viewerId: string, cursorRaw: unknown, now: Dat
     const moved = sharesSteps.has(id) && steps.some((s) => s.userId === id && key(s.recordedAt) === yesterday && s.value >= STEPS_GOAL);
     return [{ ...toPerson(user), mood, moodLine: moodLine(mood, { movedALot: moved }), unseenSticker: unseenFrom.has(id) }];
   });
-  const last = page[page.length - 1]!;
-  return {
-    buddies,
-    nextCursor: pairs.length > pageSize ? encodeCursor({ at: last.lastActivityAt, id: last.id }) : null,
-    incomingRequests: counts.incoming,
-    outgoingRequests: counts.outgoing,
-  };
 }
