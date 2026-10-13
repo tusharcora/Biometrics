@@ -20,6 +20,7 @@ import { Reveal } from '../components/ui/reveal';
 import { HabitLogCard } from '../components/habit-log-card';
 import { CoachDigestCard } from '../components/coach-digest-card';
 import { StoryRing, useStoryRing } from '../components/recap/StoryRing';
+import { RecapShelf } from '../components/recap/RecapShelf';
 import { TomorrowCard } from '../components/tomorrow-card';
 import { BuddiesRow } from '../components/home/BuddiesRow';
 import { RecoveryHero } from '../components/home/recovery-hero';
@@ -33,6 +34,7 @@ import { useForecast } from '../lib/useForecast';
 import { useSync } from '../sync/SyncProvider';
 import { SyncStatusLine } from '../components/sync-status-line';
 import { navigateToCoachEntry } from '../navigation/coachNavigation';
+import { openSleep } from '../navigation/sleepNavigation';
 import { useTabBarClearance } from '../navigation/tabBarLayout';
 
 type ConnectionStatus = 'CONNECTED' | 'DISCONNECTED' | 'NOT_CONNECTED';
@@ -137,7 +139,9 @@ export function DashboardScreen() {
   const insight = useMemo(() => computeHeadlineInsight(records ?? []), [records]);
 
   function openDetail(type: MetricType) {
-    navigation.navigate('MetricDetail', { metricType: type, records: seriesByMetric[type] });
+    // Sleep has its own page; the tile's series is the day total that page shows as "with naps".
+    if (type === 'SLEEP') openSleep(navigation);
+    else navigation.navigate('MetricDetail', { metricType: type, records: seriesByMetric[type] });
   }
 
   // An unwatched weekly recap rings the avatar in its coach's colour; a tap plays its story
@@ -277,8 +281,7 @@ export function DashboardScreen() {
             score={sleep}
             bands={bands}
             failed={scoresFailed}
-            // The Sleep screen; its score header links on to the score detail.
-            onPress={() => navigation.navigate('Sleep')}
+            onPress={(score) => openSleep(navigation, score?.date)}
           />
           {coachRoute ? (
             <CoachTile needsConsent={coachRoute === 'CoachConsent'} onPress={() => navigateToCoachEntry(navigation, coachRoute)} />
@@ -290,6 +293,9 @@ export function DashboardScreen() {
         <BuddiesRow onOpen={() => navigation.navigate('Tabs', { screen: 'Social' })} />
 
         <HabitLogCard />
+
+        {/* Recaps (decision 5): with the weekly digest below, for every user, coach on or off. */}
+        <RecapShelf navigation={navigation} />
 
         {/* The digest is the newest week's recap: it plays that week's story, whose last frame
             offers the full recap. */}

@@ -310,7 +310,7 @@ export function CoachScreen() {
     [overrideSafety],
   );
 
-  // Without a summary there is no day to open; cardDestination then opens the Trends screen.
+  // Without a summary there is no day to open; cardDestination then opens each page on its default day.
   const cardDate = today?.date ?? '';
   const openSource = useCallback(
     (card: AnswerCardDTO) => {

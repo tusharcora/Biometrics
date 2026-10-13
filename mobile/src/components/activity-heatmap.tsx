@@ -29,8 +29,8 @@ import {
   type StepsByDate,
   type ValuesByDate,
 } from '../lib/heatmap';
-import { formatClock, formatDuration, sleepRangeStats, type SleepByDate } from '../lib/sleepStats';
-import { DayDetail, NightDetail } from './activity-sheets';
+import { formatClock, formatDuration, mainSleepByDate, sleepRangeStats, type SleepByDate } from '../lib/sleepStats';
+import { DayDetail } from './activity-sheets';
 import { Button, buttonIconSize } from './ui/button';
 import { Card } from './ui/card';
 import { PageTitle } from './ui/page-title';
@@ -393,22 +393,26 @@ export interface ActivityHeatmapProps {
   onRetrySleep?: () => void;
   // The Sleep screen; the link is drawn wherever the sleep header shows.
   onOpenSleepDetails?: () => void;
-  // One night in full, from the night sheet.
+  // A sleep cell, and the steps sheet's sleep link: the Sleep page on that night.
   onOpenNight?: (date: string) => void;
   // The saved sleep goal in minutes; 8h when not given.
   sleepGoal?: number;
+  // A date to open on the steps page, once.
+  openDate?: string | null;
+  onOpenedDate?: () => void;
 }
 
 // The Activity tab: Steps and Sleep. Month swipes between one page per metric;
-// Year and YTD stack both; tapping a day opens that metric's sheet.
-export function ActivityHeatmap({ steps, earliestDate, today, sleep, onRetrySleep, onOpenSleepDetails, onOpenNight, sleepGoal }: ActivityHeatmapProps) {
+// Year and YTD stack both; tapping a day opens its steps sheet, or its night on the Sleep page.
+export function ActivityHeatmap({ steps, earliestDate, today, sleep, onRetrySleep, onOpenSleepDetails, onOpenNight, sleepGoal, openDate, onOpenedDate }: ActivityHeatmapProps) {
   const { colorScheme } = useColorScheme();
   const palette = colorScheme === 'light' ? COLORS.light : COLORS.dark;
   const reduced = useReducedMotion();
   const [view, setView] = useState<HeatmapView>('month');
   const [monthCursor, setMonthCursor] = useState(() => monthStart(today));
   const [page, setPage] = useState<ActivityMetric>('steps');
-  const [selection, setSelection] = useState<{ metric: ActivityMetric; date: string } | null>(null);
+  // The steps sheet's date; a sleep cell opens the Sleep page instead.
+  const [selection, setSelection] = useState<string | null>(null);
   const [pagerWidth, setPagerWidth] = useState(0);
   const pagerRef = useRef<ScrollView>(null);
 
@@ -418,13 +422,15 @@ export function ActivityHeatmap({ steps, earliestDate, today, sleep, onRetrySlee
   const stepStats = useMemo(() => rangeStats(steps, range.start, range.end, today, STEPS_SPEC.goal), [steps, range.start, range.end, today]);
   const sleepSpec = useMemo<MetricSpec>(() => (sleepGoal ? { ...SLEEP_SPEC, goal: sleepGoal } : SLEEP_SPEC), [sleepGoal]);
   const nights = sleep.phase === 'ready' ? sleep.nights : null;
+  // The calendar shows main sleep and skips nap-only dates (plan ruling 5).
+  const mainNights = useMemo(() => (nights ? mainSleepByDate(nights.values()) : null), [nights]);
   const sleepValues = useMemo<ValuesByDate>(
-    () => new Map(nights ? [...nights].map(([date, n]) => [date, n.minutesAsleep] as const) : []),
-    [nights],
+    () => new Map(mainNights ? [...mainNights].map(([date, n]) => [date, n.minutesAsleep] as const) : []),
+    [mainNights],
   );
   const sleepStats = useMemo(
-    () => (nights ? sleepRangeStats(nights, range.start, range.end, today, sleepSpec.goal) : null),
-    [nights, range.start, range.end, today, sleepSpec.goal],
+    () => (mainNights ? sleepRangeStats(mainNights, range.start, range.end, today, sleepSpec.goal) : null),
+    [mainNights, range.start, range.end, today, sleepSpec.goal],
   );
 
   // The second page's offset: the steps card then peeks in from the left.
@@ -450,21 +456,24 @@ export function ActivityHeatmap({ steps, earliestDate, today, sleep, onRetrySlee
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [view, pagerWidth]);
 
-  function select(metric: ActivityMetric, date: string) {
-    setSelection({ metric, date });
-  }
-
-  // From one metric's sheet to the same day on the other: the month pager follows.
-  function crossTo(metric: ActivityMetric, date: string) {
-    setSelection({ metric, date });
-    if (view === 'month') goTo(metric);
-  }
-
   // The sheet is a Modal, which would stay above a pushed screen: close it first.
   function openNight(date: string) {
     setSelection(null);
     onOpenNight?.(date);
   }
+
+  // A date handed in from outside (the Sleep page's "Steps that day") opens that day's steps sheet once.
+  useEffect(() => {
+    if (!openDate) return;
+    setView('month');
+    setMonthCursor(monthStart(openDate));
+    setPage('steps');
+    pagerRef.current?.scrollTo?.({ x: 0, animated: false });
+    setSelection(openDate);
+    onOpenedDate?.();
+    // Only when a new date arrives.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openDate]);
 
   const stepsCard = (
     <HeatmapCard
@@ -475,8 +484,8 @@ export function ActivityHeatmap({ steps, earliestDate, today, sleep, onRetrySlee
       view={view}
       monthCursor={monthCursor}
       onMonthCursor={setMonthCursor}
-      selectedDate={selection?.metric === 'steps' ? selection.date : null}
-      onSelect={(date) => select('steps', date)}
+      selectedDate={selection}
+      onSelect={setSelection}
       accessibilityLabel={`Steps heat map for ${rangeLabel}: ${stepStats.activeDays} active days, ${stepStats.goalDays} at goal.`}
       summary={stepStats.average === null ? undefined : `${formatSteps(stepStats.average)} avg / day`}
     />
@@ -526,8 +535,8 @@ export function ActivityHeatmap({ steps, earliestDate, today, sleep, onRetrySlee
           view={view}
           monthCursor={monthCursor}
           onMonthCursor={setMonthCursor}
-          selectedDate={selection?.metric === 'sleep' ? selection.date : null}
-          onSelect={(date) => select('sleep', date)}
+          selectedDate={null}
+          onSelect={(date) => openNight(date)}
           accessibilityLabel={`Sleep heat map for ${rangeLabel}: ${sleepStats?.nights ?? 0} nights recorded, ${sleepStats?.goalNights ?? 0} at goal.`}
           summary={sleepStats?.averageMinutes == null ? undefined : `${formatDuration(sleepStats.averageMinutes)} avg / night`}
         />
@@ -647,22 +656,13 @@ export function ActivityHeatmap({ steps, earliestDate, today, sleep, onRetrySlee
       )}
 
       <Sheet testID="day-sheet" visible={selection !== null} onClose={() => setSelection(null)}>
-        {selection?.metric === 'steps' ? (
+        {selection ? (
           <DayDetail
-            date={selection.date}
-            steps={steps.get(selection.date) ?? null}
+            date={selection}
+            steps={steps.get(selection) ?? null}
             goal={STEPS_SPEC.goal}
             average={stepStats.average}
-            sleepLink={nights ? { night: nights.get(selection.date) ?? null, onPress: () => crossTo('sleep', selection.date) } : undefined}
-          />
-        ) : selection ? (
-          <NightDetail
-            date={selection.date}
-            night={nights?.get(selection.date) ?? null}
-            goal={sleepSpec.goal}
-            average={sleepStats?.averageMinutes ?? null}
-            stepsLink={{ steps: steps.get(selection.date) ?? null, onPress: () => crossTo('steps', selection.date) }}
-            onOpenFull={onOpenNight ? () => openNight(selection.date) : undefined}
+            sleepLink={nights ? { night: nights.get(selection) ?? null, onPress: () => openNight(selection) } : undefined}
           />
         ) : null}
       </Sheet>

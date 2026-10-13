@@ -32,6 +32,22 @@ it('a Recovery tile without a score opens the Recovery page on today', () => {
   expect(mockNavigate).toHaveBeenCalledWith('Recovery', undefined);
 });
 
+// Sleep has its own page (spec §5.1): the tile opens the night of its latest reading, else the default night.
+it('the Sleep tile opens the Sleep page on its latest night', () => {
+  const records = [{ id: 's', metricType: 'SLEEP' as const, value: 432, recordedAt: '2026-10-06T00:00:00.000Z' }];
+  render(<UsualTiles records={records} recovery={[]} today="2026-10-07" />);
+  fireEvent.press(screen.getByTestId('usual-tile-SLEEP'));
+  expect(mockNavigate).toHaveBeenCalledTimes(1);
+  expect(mockNavigate).toHaveBeenCalledWith('Sleep', { date: '2026-10-06' });
+});
+
+it('a Sleep tile without a reading opens the Sleep page on its default night', () => {
+  render(<UsualTiles records={[]} recovery={[]} today="2026-10-07" />);
+  fireEvent.press(screen.getByTestId('usual-tile-SLEEP'));
+  expect(mockNavigate).toHaveBeenCalledTimes(1);
+  expect(mockNavigate).toHaveBeenCalledWith('Sleep', undefined);
+});
+
 it('keeps each tile to its width: one-line label and change, a tabular value that shrinks to fit', () => {
   const records = [{ id: 'h', metricType: 'HRV' as const, value: 61, recordedAt: '2026-10-06T00:00:00.000Z' }];
   render(<UsualTiles records={records} recovery={[]} today="2026-10-07" />);

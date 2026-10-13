@@ -10,7 +10,7 @@ import { Text } from '../ui/text';
 import { Character } from '../characters/Character';
 
 // The one documented custom CTA (components/ui/README.md): a GlassSurface bar with the coach
-// character, 8 px corners, pinned above the safe area. Used by ScoreDetail and Recovery.
+// character, 8 px corners, pinned above the safe area. Used by Sleep and Recovery.
 export function AskCoachBar({ label, onPress, focused }: { label: string; onPress: () => void; focused: boolean }) {
   const { colorScheme: scheme } = useColorScheme();
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;

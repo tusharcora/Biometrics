@@ -8,6 +8,7 @@ import { fetchCoachStatus, type CoachStatusDTO } from '../../src/api/coach';
 jest.mock('../../src/api/client');
 jest.mock('../../src/auth/AuthContext');
 jest.mock('../../src/api/coach');
+jest.mock('../../src/api/recaps', () => ({ fetchRecaps: jest.fn(() => Promise.resolve([])), markRecapOpened: jest.fn() }));
 
 const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({

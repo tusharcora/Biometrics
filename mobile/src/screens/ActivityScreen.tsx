@@ -1,7 +1,7 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
 import { fetchActivity } from '../api/activity';
 import { apiFetch } from '../api/client';
@@ -16,9 +16,12 @@ import { SectionLabel } from '../components/ui/section-label';
 import { Text } from '../components/ui/text';
 import { fetchRange, todayCivil } from '../lib/heatmap';
 import type { MetricRecord } from '../lib/metricInsights';
+import { DEFAULT_SLEEP_GOAL_MINUTES } from '../lib/sleepStats';
 import { recoveryRecords, type TileRecord } from '../lib/usualTiles';
 import { useSync } from '../sync/SyncProvider';
+import { openNight, openSleep } from '../navigation/sleepNavigation';
 import { useTabBarClearance } from '../navigation/tabBarLayout';
+import type { TabParamList } from '../navigation/TabsNavigator';
 import { COLORS } from '../theme';
 
 type LoadState =
@@ -26,11 +29,10 @@ type LoadState =
   | { phase: 'error' }
   | { phase: 'ready'; steps: Map<string, number>; earliestDate: string | null; today: string; sleep: SleepState; sleepGoal: number };
 
-// Minutes asleep the sleep colours aim at when the saved goal can't be read.
-const DEFAULT_SLEEP_GOAL = 480;
-
 export function ActivityScreen() {
   const navigation = useNavigation<any>();
+  // A date handed in by the Sleep page's "Steps that day": opened once, then cleared.
+  const openDate = useRoute<RouteProp<TabParamList, 'Activity'>>().params?.date ?? null;
   const clearance = useTabBarClearance();
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === 'light' ? COLORS.light : COLORS.dark;
@@ -83,7 +85,7 @@ export function ActivityScreen() {
           : // A failed refresh keeps the goal already in use.
             prev.phase === 'ready'
             ? prev.sleepGoal
-            : DEFAULT_SLEEP_GOAL,
+            : DEFAULT_SLEEP_GOAL_MINUTES,
       sleep:
         sleepRes.status === 'fulfilled'
           ? { phase: 'ready', nights: new Map(sleepRes.value.nights.map((n) => [n.date, n])), earliestDate: sleepRes.value.earliestDate }
@@ -173,8 +175,10 @@ export function ActivityScreen() {
             today={state.today}
             sleep={state.sleep}
             sleepGoal={state.sleepGoal}
-            onOpenSleepDetails={() => navigation.navigate('Sleep')}
-            onOpenNight={(date) => navigation.navigate('SleepNight', { date })}
+            openDate={openDate}
+            onOpenedDate={() => navigation.setParams({ date: undefined })}
+            onOpenSleepDetails={() => openSleep(navigation)}
+            onOpenNight={(date) => openNight(navigation, date)}
             onRetrySleep={() => {
               setState((prev) => (prev.phase === 'ready' ? { ...prev, sleep: { phase: 'loading' } } : prev));
               load();
