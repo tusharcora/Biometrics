@@ -20,9 +20,6 @@ import { SectionLabel } from '../ui/section-label';
 import { Skeleton } from '../ui/skeleton';
 import { Text } from '../ui/text';
 
-// Under Home's scene (spec 2026-10-13 Home F §5): the "Today" row with the state's hint, three compact tiles
-// (Recovery, Sleep, Tomorrow) and "Ask Coach about today". Each tile loads and fails on its own.
-
 export type Read<T> = { status: 'loading' } | { status: 'failed' } | { status: 'ready'; value: T };
 export type TodayTileKey = 'recovery' | 'sleep' | 'tomorrow';
 
@@ -48,9 +45,15 @@ export function TodayHeader({ scene, bedtime }: { scene: SceneKey; bedtime: stri
   );
 }
 
-function TodayTile({ testID, label, onPress, children }: { testID: string; label: string; onPress: () => void; children: React.ReactNode }) {
+function TodayTile({ testID, label, accessibilityLabel, onPress, children }: {
+  testID: string;
+  label: string;
+  accessibilityLabel: string;
+  onPress: () => void;
+  children: React.ReactNode;
+}) {
   return (
-    <Pressable testID={testID} accessibilityRole="button" onPress={onPress} className="flex-1 active:opacity-80">
+    <Pressable testID={testID} accessibilityRole="button" accessibilityLabel={accessibilityLabel} onPress={onPress} className="flex-1 active:opacity-80">
       <Card className="flex-1 gap-[6px] rounded-tile p-[12px]">
         <SectionLabel>{label}</SectionLabel>
         {children}
@@ -83,10 +86,12 @@ function RecoveryTile({ read, bands, onPress }: { read: Read<DailyScoreDTO | nul
   const { colors } = useTones();
   if (read.status === 'loading') return <TileSkeleton testID="home-tile-recovery-loading" />;
   const score = read.status === 'ready' ? read.value : null;
-  const value = score && score.score !== null ? Math.round(score.score) : null;
+  const raw = score?.score ?? null;
+  const value = raw === null ? null : Math.round(raw);
   const weather = todayWeather(score, bands);
+  const verdict = read.status === 'failed' || weather === 'none' ? null : VERDICT[weather];
   return (
-    <TodayTile testID="home-tile-recovery" label={C.tiles.recovery} onPress={onPress}>
+    <TodayTile testID="home-tile-recovery" label={C.tiles.recovery} accessibilityLabel={C.tiles.recoveryLabel(value, verdict)} onPress={onPress}>
       <View className="flex-row items-center gap-[6px]">
         <WeatherIcon kind={weather} variant="small" size={22} />
         <Value testID="home-tile-recovery-value">{value === null ? C.none : String(value)}</Value>
@@ -95,7 +100,7 @@ function RecoveryTile({ read, bands, onPress }: { read: Read<DailyScoreDTO | nul
         testID="home-tile-recovery-line"
         className="text-caption font-semibold"
         numberOfLines={2}
-        style={{ color: value === null ? colors.muted : colors[scoreBand(value, bands)] }}
+        style={{ color: raw === null ? colors.muted : colors[scoreBand(raw, bands)] }}
       >
         {read.status === 'failed' ? C.none : VERDICT[weather]}
       </Text>
@@ -110,8 +115,9 @@ function SleepTile({ read, night, onPress }: { read: Read<DailyScoreDTO | null>;
   const last = night.status === 'ready' ? night.value : null;
   const duration = last ? formatMinutes(last.mainMinutesAsleep ?? last.minutesAsleep) : null;
   const short = isShortNight(last);
+  const line = duration ? (short ? C.tiles.short(duration) : duration) : null;
   return (
-    <TodayTile testID="home-tile-sleep" label={C.tiles.sleep} onPress={onPress}>
+    <TodayTile testID="home-tile-sleep" label={C.tiles.sleep} accessibilityLabel={C.tiles.sleepLabel(value, line)} onPress={onPress}>
       <View className="flex-row items-center gap-[6px]">
         <MoonIcon />
         <Value testID="home-tile-sleep-value">{value === null ? C.none : String(value)}</Value>
@@ -123,9 +129,9 @@ function SleepTile({ read, night, onPress }: { read: Read<DailyScoreDTO | null>;
           testID="home-tile-sleep-line"
           className="text-caption font-semibold"
           numberOfLines={2}
-          style={{ color: duration ? (short ? colors.scoreFair : lilac) : colors.muted }}
+          style={{ color: line ? (short ? colors.scoreFair : lilac) : colors.muted }}
         >
-          {duration ? (short ? C.tiles.short(duration) : duration) : C.none}
+          {line ?? C.none}
         </Text>
       )}
     </TodayTile>
@@ -143,7 +149,12 @@ function TomorrowTile({ state, bedtime, onPress }: { state: ForecastState; bedti
     line = bedtime ? C.tiles.bedBy(bedtime) : C.tiles.withSleep(forecast.defaults.sleepHours);
   }
   return (
-    <TodayTile testID="home-tile-tomorrow" label={C.tiles.tomorrow} onPress={onPress}>
+    <TodayTile
+      testID="home-tile-tomorrow"
+      label={C.tiles.tomorrow}
+      accessibilityLabel={C.tiles.tomorrowLabel(range, forecast?.status === 'READY' ? line : null)}
+      onPress={onPress}
+    >
       <View className="h-[22px] justify-center">
         <Value testID="home-tile-tomorrow-value">{range ? C.tags.range(range.low, range.high) : C.none}</Value>
       </View>
@@ -178,7 +189,6 @@ export function TodayTiles({ recovery, bands, sleepScore, night, tomorrow, bedti
   );
 }
 
-/** Replaces the coach tile: shown only with a coach route, as before. */
 export function AskCoachButton({ route, onPress }: { route: CoachEntryRoute | null; onPress: () => void }) {
   const { colors } = useTones();
   if (!route) return null;

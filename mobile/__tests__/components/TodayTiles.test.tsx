@@ -7,7 +7,12 @@ import { AskCoachButton, TodayHeader, TodayTiles, type Read } from '../../src/co
 import { READY } from '../../jest-mocks/forecastFixture';
 import { COLORS } from '../../src/theme';
 
-jest.mock('nativewind', () => ({ useColorScheme: () => ({ colorScheme: 'dark' }) }));
+let mockScheme: 'light' | 'dark' = 'dark';
+jest.mock('nativewind', () => ({ useColorScheme: () => ({ colorScheme: mockScheme }) }));
+
+beforeEach(() => {
+  mockScheme = 'dark';
+});
 
 const score = (type: 'RECOVERY' | 'SLEEP', value: number | null) =>
   ({ date: '2026-10-13', type, score: value, confidenceLevel: 'HIGH', algorithmVersion: 'v1', factors: [], coldStart: [] }) as DailyScoreDTO;
@@ -42,10 +47,42 @@ describe('TodayTiles', () => {
     }
   });
 
+  it('says what each tile shows and that it opens the page', () => {
+    show();
+    expect(screen.getByLabelText('Recovery 68, Mostly clear. Open Recovery')).toBeTruthy();
+    expect(screen.getByLabelText('Sleep 78, 7h 12m. Open Sleep')).toBeTruthy();
+    expect(screen.getByLabelText('Tomorrow likely 40 to 80. Bed by 23:00. Open Tomorrow')).toBeTruthy();
+    screen.unmount();
+    show({ recovery: ready(null), sleepScore: ready(null), night: ready(null), tomorrow: { status: 'error' } });
+    expect(screen.getByLabelText('Recovery, no reading yet. Open Recovery')).toBeTruthy();
+    expect(screen.getByLabelText('Sleep, no reading yet. Open Sleep')).toBeTruthy();
+    expect(screen.getByLabelText('Tomorrow, no reading yet. Open Tomorrow')).toBeTruthy();
+  });
+
+  it('bands the raw Recovery score, so a fractional edge score keeps colour and verdict together', () => {
+    show({ recovery: ready(score('RECOVERY', 69.6)), bands: { excellent: 85, good: 70, fair: 50 } });
+    expect(screen.getByTestId('home-tile-recovery-value')).toHaveTextContent('70');
+    expect(screen.getByTestId('home-tile-recovery-line')).toHaveTextContent('Cloudy');
+    expect(colour('home-tile-recovery-line')).toBe(COLORS.dark.scoreFair);
+  });
+
+  it('shows "No reading" when there is no Recovery score today', () => {
+    show({ recovery: ready(null) });
+    expect(screen.getByTestId('home-tile-recovery-value')).toHaveTextContent('—');
+    expect(screen.getByTestId('home-tile-recovery-line')).toHaveTextContent('No reading');
+    expect(colour('home-tile-recovery-line')).toBe(COLORS.dark.muted);
+  });
+
   it('marks a short night in amber', () => {
     show({ night: ready(night(310)) });
     expect(screen.getByTestId('home-tile-sleep-line')).toHaveTextContent('5h 10m · short');
     expect(colour('home-tile-sleep-line')).toBe(COLORS.dark.scoreFair);
+  });
+
+  it('draws the duration in the deeper violet on the light theme', () => {
+    mockScheme = 'light';
+    show();
+    expect(colour('home-tile-sleep-line')).toBe('#6D28D9');
   });
 
   it('reads the default sleep hours without a bedtime goal, and the unlock line without history', () => {
@@ -55,6 +92,15 @@ describe('TodayTiles', () => {
     show({ tomorrow: { status: 'loaded', forecast: { status: 'NOT_ENOUGH_DATA', reason: 'NO_HISTORY', daysOfHistory: 3 } as never } });
     expect(screen.getByTestId('home-tile-tomorrow-value')).toHaveTextContent('—');
     expect(screen.getByTestId('home-tile-tomorrow-line')).toHaveTextContent(/Forecast unlocks after/);
+  });
+
+  it('reads the low-confidence line, and no line when the forecast failed', () => {
+    show({ tomorrow: { status: 'loaded', forecast: { status: 'NOT_ENOUGH_DATA', reason: 'LOW_CONFIDENCE_TODAY', daysOfHistory: 30 } as never } });
+    expect(screen.getByTestId('home-tile-tomorrow-line')).toHaveTextContent(/isn’t confident enough to forecast/);
+    screen.unmount();
+    show({ tomorrow: { status: 'error' } });
+    expect(screen.getByTestId('home-tile-tomorrow-value')).toHaveTextContent('—');
+    expect(screen.queryByTestId('home-tile-tomorrow-line')).toBeNull();
   });
 
   it('shows a skeleton while a tile loads, and "—" when its read failed', () => {
@@ -81,6 +127,14 @@ describe('TodayHeader', () => {
     expect(screen.getByTestId('home-today-hint')).toHaveTextContent('Wind down · bed by 23:00');
     expect(colour('home-today-hint')).toBe('#C4B5FD');
     screen.unmount();
+    render(<TodayHeader scene="night" bedtime={null} />);
+    expect(screen.getByTestId('home-today-hint')).toHaveTextContent(/^Wind down$/);
+    screen.unmount();
+    mockScheme = 'light';
+    render(<TodayHeader scene="night" bedtime="23:00" />);
+    expect(colour('home-today-hint')).toBe('#6D28D9');
+    screen.unmount();
+    mockScheme = 'dark';
     render(<TodayHeader scene="short" bedtime={null} />);
     expect(screen.getByTestId('home-today-hint')).toHaveTextContent('Short night overrides KIP’s mood');
     expect(colour('home-today-hint')).toBe(COLORS.dark.scoreFair);
@@ -99,7 +153,8 @@ describe('AskCoachButton', () => {
     rerender(<AskCoachButton route="CoachConsent" onPress={onPress} />);
     expect(screen.getByText('Ask Coach · see what’s shared first')).toBeTruthy();
     rerender(<AskCoachButton route="Coach" onPress={onPress} />);
-    fireEvent.press(screen.getByText('Ask Coach about today'));
+    expect(screen.getByText('Ask Coach about today')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('coach-entry-button'));
     expect(onPress).toHaveBeenCalled();
   });
 });
