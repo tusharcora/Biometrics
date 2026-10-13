@@ -7,7 +7,7 @@ const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? o
 const onOff = (on: boolean) => (on ? 'on' : 'off');
 const PROVIDERS: Record<string, string> = { apple: 'Apple', google: 'Google', credential: 'Email' };
 
-export type ProfileCategory = 'health' | 'timezone' | 'notifications' | 'buddies' | 'chats' | 'coach' | 'aiCoach' | 'signIn';
+export type ProfileCategory = 'kipColour' | 'health' | 'timezone' | 'notifications' | 'buddies' | 'chats' | 'coach' | 'aiCoach' | 'signIn';
 
 export const PROFILE_COPY = {
   title: 'Profile',
@@ -30,6 +30,7 @@ export const PROFILE_COPY = {
   },
 
   categories: {
+    kipColour: 'KIP colour',
     health: 'Health data',
     timezone: 'Time zone',
     notifications: 'Notifications',
@@ -41,6 +42,7 @@ export const PROFILE_COPY = {
   } as Record<ProfileCategory, string>,
 
   status: {
+    kipColour: (name: string) => name,
     health: (connected: boolean, lastSyncedAt: string | null, now: Date) =>
       !connected ? 'Not connected' : lastSyncedAt ? `Google Health · ${formatLastSynced(lastSyncedAt, now, 'synced')}` : 'Google Health · not synced yet',
     timezone: (s: { timezone: string; overridden: boolean }) => `${s.overridden ? 'Custom' : 'Device'} · ${s.timezone}`,
@@ -62,5 +64,18 @@ export const PROFILE_COPY = {
     signOut: 'Sign out',
     delete: 'Delete account',
     deleteNote: 'Deleting removes your account and all the data stored for it.',
+  },
+
+  kipColour: {
+    yourKip: 'Your KIP',
+    picked: (name: string, hex: string) => `${name} · ${hex}`,
+    previewLabel: (name: string) => `Your KIP in ${name}`,
+    colour: 'Colour',
+    buddiesSee: 'Buddies see this colour',
+    groupLabel: 'KIP colour',
+    reset: 'Reset to coral',
+    save: 'Save colour',
+    failed: "Your colour couldn't be saved.",
+    retry: 'Try again',
   },
 };

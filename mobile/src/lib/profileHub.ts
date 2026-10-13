@@ -10,6 +10,8 @@ import { fetchNotificationSettings, type NotificationKey, type NotificationSetti
 import { authClient } from '../auth/authClient';
 import { unwrap } from '../auth/authErrors';
 import type { CategoryCard } from '../components/profile/CategoryGrid';
+import type { KipColour } from './kip/kipArt';
+import { kipColourName } from './kip/kipColour';
 import { getPushState } from './pushRegistration';
 import { PROFILE_COPY } from './profileCopy';
 import { getTimezoneState, type TimezoneState } from './timezone';
@@ -50,12 +52,14 @@ export interface HubInput {
   /** The AI Coach card shows only while the coach is enabled. */
   aiCoach: { enabled: boolean; consented: boolean } | null;
   now: Date;
+  kipColour: KipColour;
 }
 
 /** The cards in board order, leaving out the features this server or device doesn't have. */
 export function categoryCards(i: HubInput): CategoryCard[] {
   const r = i.reads;
   const cards: CategoryCard[] = [
+    { category: 'kipColour', status: S.kipColour(kipColourName(i.kipColour)) },
     { category: 'health', status: S.health(i.health.connected, i.health.lastSyncedAt, i.now) },
     { category: 'timezone', status: r.timezone ? S.timezone(r.timezone) : null },
   ];

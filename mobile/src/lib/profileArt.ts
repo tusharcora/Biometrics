@@ -10,6 +10,7 @@ const rects = (rows: Row[]): PixelRect[] => rows.map(([x, y, w, h, fill]) => ({ 
 export const CATEGORY_ICON_SIZE = 10;
 
 export const CATEGORY_ICONS: Record<ProfileCategory, PixelRect[]> = {
+  kipColour: rects([[2, 0, 6, 1, '#E5E7EB'], [1, 1, 8, 1, '#E5E7EB'], [0, 2, 10, 6, '#E5E7EB'], [1, 8, 4, 1, '#E5E7EB'], [6, 7, 3, 2, '#0A0B0E'], [2, 2, 2, 2, '#FB7185'], [5, 2, 2, 2, '#3B82F6'], [7, 4, 2, 2, '#FDE047'], [2, 5, 2, 2, '#6EE7B7']]),
   health: rects([[1, 1, 3, 1, '#F87171'], [6, 1, 3, 1, '#F87171'], [0, 2, 10, 3, '#F87171'], [1, 5, 8, 1, '#F87171'], [2, 6, 6, 1, '#EF4444'], [3, 7, 4, 1, '#EF4444'], [4, 8, 2, 1, '#DC2626'], [1, 2, 2, 1, '#FCA5A5']]),
   timezone: rects([[3, 0, 4, 1, '#60A5FA'], [1, 1, 8, 1, '#60A5FA'], [0, 2, 10, 6, '#60A5FA'], [1, 8, 8, 1, '#3B82F6'], [3, 9, 4, 1, '#3B82F6'], [2, 3, 3, 2, '#4ADE80'], [6, 5, 2, 2, '#4ADE80']]),
   notifications: rects([[4, 0, 2, 1, '#FBBF24'], [3, 1, 4, 1, '#FBBF24'], [2, 2, 6, 5, '#FBBF24'], [1, 7, 8, 1, '#F59E0B'], [4, 8, 2, 2, '#F59E0B'], [3, 2, 1, 3, '#FDE68A']]),
