@@ -1,11 +1,12 @@
-import React, { useEffect, useMemo, useState } from 'react';
-import { View, ScrollView, Pressable } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
+import { AppState, ScrollView, View, useWindowDimensions } from 'react-native';
+import { SafeAreaInsetsContext, SafeAreaView } from 'react-native-safe-area-context';
+import { StatusBar } from 'expo-status-bar';
 import { useNavigation } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
-import { Ionicons } from '@expo/vector-icons';
 import { apiFetch } from '../api/client';
-import { fetchScoresWithBands, type DailyScoreDTO, type ScoreBandsDTO } from '../api/scores';
+import { fetchScoresWithBands, type DailyScoreDTO, type ScoresResult } from '../api/scores';
+import { fetchSleep, fetchSleepGoal, type SleepNight } from '../api/sleep';
 import { useAuth } from '../auth/AuthContext';
 import { Text } from '../components/ui/text';
 import { Card } from '../components/ui/card';
@@ -19,21 +20,24 @@ import { ThemeToggle } from '../components/ui/theme-toggle';
 import { Reveal } from '../components/ui/reveal';
 import { HabitLogCard } from '../components/habit-log-card';
 import { CoachDigestCard } from '../components/coach-digest-card';
-import { StoryRing, useStoryRing } from '../components/recap/StoryRing';
+import { useStoryRing } from '../components/recap/StoryRing';
 import { RecapShelf } from '../components/recap/RecapShelf';
-import { TomorrowCard } from '../components/tomorrow-card';
-import { BuddiesRow } from '../components/home/BuddiesRow';
-import { RecoveryHero } from '../components/home/recovery-hero';
-import { SleepTile } from '../components/home/sleep-tile';
-import { CoachTile } from '../components/home/coach-tile';
+import { HomeHeader, ProfileButton } from '../components/home/HomeHeader';
+import { HomeScene, type SceneReadings, type SceneTarget } from '../components/home/HomeScene';
+import { AskCoachButton, TodayHeader, TodayTiles, type Read } from '../components/home/TodayTiles';
 import { MetricTile } from '../components/home/metric-tile';
 import { COLORS, METRIC_ORDER, type MetricType } from '../theme';
 import { computeStats, buildHeadline, type MetricRecord } from '../lib/metricInsights';
 import { coachEntryRoute, useCoachStatus } from '../lib/useCoachStatus';
 import { useForecast } from '../lib/useForecast';
+import { todayCivil } from '../lib/heatmap';
+import { forecastRange, nextSceneBoundary, sceneExtra, sceneState, todayScore, todayWeather } from '../lib/home/scene';
+import { useBuddyScene } from '../lib/home/useBuddyScene';
+import { useMyKipColour } from '../lib/kip/myKipColour';
 import { useRecapShelf } from '../lib/recap/useRecapShelf';
+import { formatMinutes } from '../lib/recoveryCopy';
+import { scoreBand } from '../lib/scoreInsights';
 import { useSync } from '../sync/SyncProvider';
-import { SyncStatusLine } from '../components/sync-status-line';
 import { navigateToCoachEntry } from '../navigation/coachNavigation';
 import { openSleep } from '../navigation/sleepNavigation';
 import { useTabBarClearance } from '../navigation/tabBarLayout';
@@ -70,24 +74,28 @@ export function greetingFor(date: Date): string {
   return 'Good evening';
 }
 
-// undefined while loading, null when no score of that type exists yet (for
-// Sleep: no night of sleep recorded).
-type ScoreState = DailyScoreDTO | null | undefined;
+const PAGE = { gap: 14, paddingHorizontal: 20 } as const;
 
+// Home F (spec 2026-10-13 Home F): the scene with the header over its sky, the Today row, three tiles and Ask
+// Coach, then the rest of Home unchanged. Every read fails on its own; the scene never blocks the page.
 export function DashboardScreen() {
   const navigation = useNavigation<any>();
   const clearance = useTabBarClearance();
-  const { signOut, session } = useAuth();
+  // Read without a provider in tests (the tab bar does the same).
+  const insets = useContext(SafeAreaInsetsContext);
+  const { width } = useWindowDimensions();
+  const { signOut } = useAuth();
   const { colorScheme: scheme } = useColorScheme();
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
   const [records, setRecords] = useState<MetricRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus | null>(null);
-  const [recovery, setRecovery] = useState<ScoreState>(undefined);
-  const [sleep, setSleep] = useState<ScoreState>(undefined);
-  const [scoresFailed, setScoresFailed] = useState(false);
-  // Undefined until loaded (and on an older server): scoreBand uses its defaults.
-  const [bands, setBands] = useState<ScoreBandsDTO | undefined>(undefined);
+  const [scores, setScores] = useState<Read<ScoresResult>>({ status: 'loading' });
+  const [night, setNight] = useState<Read<SleepNight | null>>({ status: 'loading' });
+  const [bedtime, setBedtime] = useState<string | null>(null);
+  const [now, setNow] = useState(() => new Date());
+  const [homeFocused, setHomeFocused] = useState(true);
+  const [headerBottom, setHeaderBottom] = useState(0);
   // Null until known, and null on failure: the coach entry simply isn't drawn.
   const { status: coachStatus } = useCoachStatus(navigation);
   const coachRoute = coachEntryRoute(coachStatus);
@@ -96,6 +104,11 @@ export function DashboardScreen() {
   const { dataVersion } = useSync();
   const forecastState = useForecast(dataVersion);
   const shelf = useRecapShelf(navigation);
+  const buddyScene = useBuddyScene(navigation);
+  const myColour = useMyKipColour();
+  const today = todayCivil(now);
+  const navRef = useRef(navigation);
+  navRef.current = navigation;
 
   useEffect(() => {
     apiFetch<MetricRecord[]>('/me/biometrics')
@@ -115,24 +128,52 @@ export function DashboardScreen() {
     // Independent of the metric cards: a scores failure must not take the rest
     // of the dashboard down with it.
     let cancelled = false;
-    (async () => {
-      try {
-        const { scores, bands: serverBands } = await fetchScoresWithBands(7);
-        // One request returns both types, newest first; each card is the most
-        // recent score of its type. No Sleep Score means no recorded sleep.
-        if (!cancelled) {
-          setBands(serverBands);
-          setRecovery(scores?.find((s) => s.type === 'RECOVERY') ?? null);
-          setSleep(scores?.find((s) => s.type === 'SLEEP') ?? null);
-        }
-      } catch {
-        if (!cancelled) setScoresFailed(true);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    fetchScoresWithBands(7)
+      .then((value) => { if (!cancelled) setScores({ status: 'ready', value }); })
+      .catch(() => { if (!cancelled) setScores({ status: 'failed' }); });
+    return () => { cancelled = true; };
   }, [dataVersion]);
+
+  useEffect(() => {
+    // Last night is dated by the morning you woke up: today. A failed read means "not short".
+    let cancelled = false;
+    fetchSleep(today, today)
+      .then((res) => { if (!cancelled) setNight({ status: 'ready', value: res.nights.find((n) => n.date === today) ?? null }); })
+      .catch(() => { if (!cancelled) setNight({ status: 'failed' }); });
+    return () => { cancelled = true; };
+  }, [dataVersion, today]);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchSleepGoal()
+      .then((goal) => { if (!cancelled) setBedtime(goal?.bedtimeGoal ?? null); })
+      .catch(() => { if (!cancelled) setBedtime(null); });
+    return () => { cancelled = true; };
+  }, [dataVersion]);
+
+  // The state follows the clock: again on focus, on return to the foreground, and at the next 05:00 or 21:00.
+  useEffect(() => {
+    const nav = navRef.current;
+    const offFocus = nav.addListener?.('focus', () => {
+      setHomeFocused(true);
+      setNow(new Date());
+    });
+    const offBlur = nav.addListener?.('blur', () => setHomeFocused(false));
+    const appState = AppState.addEventListener('change', (state) => {
+      if (state === 'active') setNow(new Date());
+    });
+    return () => {
+      offFocus?.();
+      offBlur?.();
+      appState.remove();
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!homeFocused) return;
+    const id = setTimeout(() => setNow(new Date()), nextSceneBoundary(now).getTime() - now.getTime());
+    return () => clearTimeout(id);
+  }, [homeFocused, now]);
 
   const seriesByMetric = useMemo(() => {
     const all = records ?? [];
@@ -154,27 +195,13 @@ export function DashboardScreen() {
     else navigation.navigate('Tabs', { screen: 'Profile' });
   }
 
-  const initial = session?.email?.trim().charAt(0).toUpperCase() ?? '';
-  const profileButton = (
-    <Pressable
-      testID="settings-button"
-      accessibilityRole="button"
-      accessibilityLabel={ring ? `Profile. ${ring.hint}` : 'Profile and settings'}
-      onPress={openProfile}
-      hitSlop={4}
-      className="active:opacity-70"
-    >
-      <StoryRing testID="profile-story-ring" color={ring?.color ?? null} size={44} ringWidth={2.5} gap={2.5} dotSize={12} surface={colors.background}>
-        <View className={ring ? 'flex-1 items-center justify-center bg-muted' : 'flex-1 items-center justify-center rounded-full border border-border bg-muted'}>
-          {initial ? (
-            <Text className={ring ? 'text-caption font-semibold' : 'text-body font-semibold'}>{initial}</Text>
-          ) : (
-            <Ionicons name="person-outline" size={ring ? 16 : 18} color={colors.foreground} />
-          )}
-        </View>
-      </StoryRing>
-    </Pressable>
-  );
+  function open(target: SceneTarget) {
+    if (target === 'recovery') navigation.navigate('Recovery', { date: today });
+    else if (target === 'sleep') openSleep(navigation);
+    else if (target === 'tomorrow') navigation.navigate('Forecast');
+    else if (target === 'recaps') navigation.navigate('Recaps');
+    else navigation.navigate('Tabs', { screen: 'Social' });
+  }
 
   // The fallback states can't reach anything else on Home, so they keep
   // sign-out right there; the full Home moves it to Profile.
@@ -183,7 +210,7 @@ export function DashboardScreen() {
       <SafeAreaView className="flex-1 bg-background">
         <View className="flex-row items-center justify-end gap-3 px-5 pt-2">
           <ThemeToggle color={colors.muted} />
-          {profileButton}
+          <ProfileButton ring={ring} surface={colors.background} colour={myColour} onPress={openProfile} />
         </View>
         <View className="flex-1 items-center justify-center gap-4 px-8">
           <Character testID="dashboard-fallback-character" mood="idle" size={56} glow paused={!focused} />
@@ -216,19 +243,20 @@ export function DashboardScreen() {
 
   if (records === null) {
     return (
-      <SafeAreaView className="flex-1 bg-background">
-        <View className="items-center gap-5 px-5 pt-16">
-          <Skeleton className="h-[216px] w-[216px] rounded-full" />
-          <View className="w-full flex-row gap-3">
-            <Skeleton className="h-32 flex-1 rounded-card" />
-            <Skeleton className="h-32 flex-1 rounded-card" />
+      <View testID="home-loading" className="flex-1 bg-background">
+        <Skeleton testID="home-loading-scene" className="h-[300px] w-full rounded-none" />
+        <View style={{ ...PAGE, paddingTop: 14 }}>
+          <View className="flex-row items-center justify-between">
+            <Skeleton className="h-[14px] w-[56px]" />
+            <Skeleton className="h-[14px] w-[140px]" />
           </View>
-          <View className="w-full flex-row gap-3">
-            <Skeleton className="h-36 flex-1 rounded-card" />
-            <Skeleton className="h-36 flex-1 rounded-card" />
+          <View className="flex-row gap-[8px]">
+            {[0, 1, 2].map((i) => (
+              <Skeleton key={i} testID="home-loading-tile" className="h-[96px] flex-1 rounded-tile" />
+            ))}
           </View>
         </View>
-      </SafeAreaView>
+      </View>
     );
   }
 
@@ -251,79 +279,99 @@ export function DashboardScreen() {
     });
   }
 
-  const today = new Date();
+  const allScores = scores.status === 'ready' ? scores.value.scores : null;
+  // Undefined until loaded (and on an older server): scoreBand uses its defaults.
+  const bands = scores.status === 'ready' ? scores.value.bands : undefined;
+  const recoveryScore = todayScore(allScores, 'RECOVERY', today);
+  const sleepScore = todayScore(allScores, 'SLEEP', today);
+  const lastNight = night.status === 'ready' ? night.value : null;
+  const weather = todayWeather(recoveryScore, bands);
+  const scene = sceneState({ now, recovery: weather, night: lastNight });
+  const asRead = (value: DailyScoreDTO | null): Read<DailyScoreDTO | null> => (scores.status === 'ready' ? { status: 'ready', value } : scores);
+  const readings: SceneReadings = {
+    sleep: {
+      score: sleepScore && sleepScore.score !== null ? Math.round(sleepScore.score) : null,
+      duration: lastNight ? formatMinutes(lastNight.mainMinutesAsleep ?? lastNight.minutesAsleep) : null,
+    },
+    tomorrow: forecastRange(forecastState),
+    recovery: recoveryScore && recoveryScore.score !== null
+      ? { score: Math.round(recoveryScore.score), weather, band: scoreBand(recoveryScore.score, bands) }
+      : null,
+    recapsNew: shelf.unwatchedCount,
+  };
   const metricsWithData = METRIC_ORDER.filter((type) => seriesByMetric[type].length > 0);
 
   return (
-    <SafeAreaView className="flex-1 bg-background" edges={['top']}>
-      <ScrollView contentContainerStyle={{ gap: 20, paddingHorizontal: 20, paddingTop: 8, paddingBottom: clearance }}>
-        <View className="flex-row items-end justify-between gap-3">
-          <View className="flex-1 gap-1">
-            <SectionLabel>
-              {today.toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' })}
-            </SectionLabel>
-            <Text className="text-display">{greetingFor(today)}</Text>
-            <SyncStatusLine />
-          </View>
-          <View className="flex-row items-center gap-3 pb-1">
-            <ThemeToggle color={colors.muted} />
-            {profileButton}
-          </View>
-        </View>
-
-        <RecoveryHero
-          score={recovery}
-          bands={bands}
-          failed={scoresFailed}
-          onPress={(score) => navigation.navigate('Recovery', { date: score.date })}
-        />
-
-        <View className="flex-row gap-3">
-          <SleepTile
-            score={sleep}
-            bands={bands}
-            failed={scoresFailed}
-            onPress={(score) => openSleep(navigation, score?.date)}
+    <View className="flex-1 bg-background">
+      {homeFocused ? <StatusBar style="light" /> : null}
+      <ScrollView contentContainerStyle={{ paddingBottom: clearance }}>
+        <View>
+          <HomeScene
+            scene={scene}
+            width={width}
+            extra={sceneExtra(headerBottom)}
+            myColour={myColour}
+            buddies={buddyScene}
+            readings={readings}
+            onOpen={open}
+            onOpenBuddy={(buddyId) => navigation.navigate('BuddyWeek', { buddyId })}
           />
-          {coachRoute ? (
-            <CoachTile needsConsent={coachRoute === 'CoachConsent'} onPress={() => navigateToCoachEntry(navigation, coachRoute)} />
-          ) : null}
+          <HomeHeader
+            top={(insets?.top ?? 0) + 8}
+            now={now}
+            greeting={greetingFor(now)}
+            scene={scene}
+            myColour={myColour}
+            ring={ring}
+            onProfile={openProfile}
+            onBottom={setHeaderBottom}
+          />
         </View>
 
-        <TomorrowCard state={forecastState} onPress={() => navigation.navigate('Forecast')} />
+        <View style={{ ...PAGE, paddingTop: 14 }}>
+          <TodayHeader scene={scene.key} bedtime={bedtime} />
+          <TodayTiles
+            recovery={asRead(recoveryScore)}
+            bands={bands}
+            sleepScore={asRead(sleepScore)}
+            night={night}
+            tomorrow={forecastState}
+            bedtime={bedtime}
+            onOpen={open}
+          />
+          <AskCoachButton route={coachRoute} onPress={() => coachRoute && navigateToCoachEntry(navigation, coachRoute)} />
 
-        <BuddiesRow onOpen={() => navigation.navigate('Tabs', { screen: 'Social' })} />
+          <HabitLogCard />
 
-        <HabitLogCard />
+          {/* Recaps (decision 5): with the weekly digest below, for every user, coach on or off. */}
+          <RecapShelf navigation={navigation} shelf={shelf} />
 
-        {/* Recaps (decision 5): with the weekly digest below, for every user, coach on or off. */}
-        <RecapShelf navigation={navigation} shelf={shelf} />
+          {/* The digest is the newest week's recap: it plays that week's story, whose last frame
+              offers the full recap. */}
+          {coachRoute === 'Coach' ? <CoachDigestCard onOpenRecap={(id) => navigation.navigate('RecapStory', { id })} /> : null}
 
-        {/* The digest is the newest week's recap: it plays that week's story, whose last frame
-            offers the full recap. */}
-        {coachRoute === 'Coach' ? <CoachDigestCard onOpenRecap={(id) => navigation.navigate('RecapStory', { id })} /> : null}
-
-        {metricsWithData.length > 0 ? (
-          <View className="gap-3">
-            <SectionLabel>Your metrics</SectionLabel>
-            <View className="flex-row flex-wrap gap-3">
-              {metricsWithData.map((type, index) => (
-                <Reveal key={type} index={index} className="w-[47%] grow">
-                  <MetricTile type={type} series={seriesByMetric[type]} onPress={() => openDetail(type)} />
-                </Reveal>
-              ))}
+          {metricsWithData.length > 0 ? (
+            <View className="gap-3">
+              <SectionLabel>Your metrics</SectionLabel>
+              <View className="flex-row flex-wrap gap-3">
+                {metricsWithData.map((type, index) => (
+                  <Reveal key={type} index={index} className="w-[47%] grow">
+                    <MetricTile type={type} series={seriesByMetric[type]} onPress={() => openDetail(type)} />
+                  </Reveal>
+                ))}
+              </View>
             </View>
-          </View>
-        ) : null}
+          ) : null}
 
-        {insight ? (
-          <Card className="gap-1.5">
-            <SectionLabel>Worth knowing</SectionLabel>
-            <Text className="text-body">{insight}</Text>
-          </Card>
-        ) : null}
-        {/* Per-metric trends and the Patterns entry live on the Trends screen (Activity's "All trends"). */}
+          {insight ? (
+            <Card className="gap-1.5">
+              <SectionLabel>Worth knowing</SectionLabel>
+              <Text className="text-body">{insight}</Text>
+            </Card>
+          ) : null}
+          {/* Per-metric trends and the Patterns entry live on the Trends screen (Activity's "All trends"). */}
+        </View>
       </ScrollView>
-    </SafeAreaView>
+    </View>
   );
 }

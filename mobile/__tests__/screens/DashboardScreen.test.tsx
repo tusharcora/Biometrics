@@ -1,21 +1,39 @@
 import React from 'react';
 import { characterLabel, withCharacter } from '../../jest-mocks/characterContext';
-import { render, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
+import { act, render, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 import { DashboardScreen, greetingFor } from '../../src/screens/DashboardScreen';
 import { apiFetch } from '../../src/api/client';
 import { useAuth } from '../../src/auth/AuthContext';
 import { READY } from '../../jest-mocks/forecastFixture';
-import { StyleSheet } from 'react-native';
+import { AppState, StyleSheet } from 'react-native';
+import { StatusBar } from 'expo-status-bar';
 import { storyRingColor } from '../../src/lib/recapTheme';
+import { HomeScene } from '../../src/components/home/HomeScene';
+import { Kip } from '../../src/components/kip/Kip';
+import { addDays, todayCivil } from '../../src/lib/heatmap';
 
 jest.mock('../../src/api/client');
 jest.mock('../../src/auth/AuthContext');
 
 const mockSignOut = jest.fn();
 const mockNavigate = jest.fn();
+const mockListeners: Record<string, Array<() => void>> = {};
+const mockNavigation = {
+  navigate: (...args: unknown[]) => mockNavigate(...args),
+  addListener: (event: string, fn: () => void) => {
+    (mockListeners[event] ??= []).push(fn);
+    return () => {
+      mockListeners[event] = (mockListeners[event] ?? []).filter((f) => f !== fn);
+    };
+  },
+};
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ navigate: mockNavigate }),
+  useNavigation: () => mockNavigation,
 }));
+
+function fire(event: 'focus' | 'blur') {
+  act(() => (mockListeners[event] ?? []).forEach((f) => f()));
+}
 
 /**
  * The screen calls /me/biometrics, /me/connection and /me/scores independently, so route
@@ -30,12 +48,23 @@ function mockApi(options: {
   habitsError?: Error;
   forecast?: unknown;
   recaps?: unknown[];
-  buddies?: unknown;
+  nights?: unknown[];
+  sleepError?: Error;
+  goal?: unknown;
+  buddyScene?: unknown;
 }) {
   (apiFetch as jest.Mock).mockImplementation((path: string) => {
+    if (path === '/me/buddies/scene') {
+      if (options.buddyScene instanceof Error) return Promise.reject(options.buddyScene);
+      return Promise.resolve(options.buddyScene ?? { buddies: [], total: 0, incomingRequests: 0 });
+    }
+    if (path === '/me/sleep/goal') return Promise.resolve(options.goal ?? { sleepGoalMinutes: 480, bedtimeGoal: null, wakeGoal: null });
+    if (path.startsWith('/me/sleep?')) {
+      if (options.sleepError) return Promise.reject(options.sleepError);
+      return Promise.resolve({ nights: options.nights ?? [], earliestDate: null, stagesBackfillPending: false });
+    }
     if (path.startsWith('/me/recaps')) return Promise.resolve({ recaps: options.recaps ?? [] });
-    // No buddies and no requests: Home's buddies row stays hidden.
-    if (path.startsWith('/me/buddies')) return Promise.resolve(options.buddies ?? { buddies: [], nextCursor: null, incomingRequests: 0, outgoingRequests: 0 });
+    if (path.startsWith('/me/buddies')) return Promise.resolve({ buddies: [], nextCursor: null, incomingRequests: 0, outgoingRequests: 0 });
     if (path === '/me/forecast') {
       return Promise.resolve(options.forecast ?? { status: 'NOT_ENOUGH_DATA', reason: 'NO_HISTORY', daysOfHistory: 0 });
     }
@@ -60,6 +89,7 @@ function mockApi(options: {
 
 beforeEach(() => {
   jest.clearAllMocks();
+  for (const k of Object.keys(mockListeners)) delete mockListeners[k];
   (useAuth as jest.Mock).mockReturnValue({
     session: { userId: 'u1', email: 'u1@example.com' },
     signInWithApple: jest.fn(),
@@ -69,13 +99,6 @@ beforeEach(() => {
 });
 
 describe('DashboardScreen', () => {
-  it('shows the Tomorrow card and opens the Forecast screen', async () => {
-    mockApi({ forecast: READY, records: [{ id: '1', metricType: 'STEPS', value: 9000, recordedAt: '2026-09-01T00:00:00.000Z' }] });
-    render(<DashboardScreen />);
-    fireEvent.press(await screen.findByTestId('tomorrow-card'));
-    expect(mockNavigate).toHaveBeenCalledWith('Forecast');
-  });
-
   it('reloads its data after a sync', async () => {
     mockApi({});
     const syncModule = require('../../src/sync/SyncProvider');
@@ -107,28 +130,6 @@ describe('DashboardScreen', () => {
       expect(getAllByText(/Steps/).length).toBeGreaterThan(0);
       expect(getAllByText(/9,000/).length).toBeGreaterThan(0);
     });
-  });
-
-  it('keeps the buddies row hidden with no buddies and no requests', async () => {
-    mockApi({ records: [{ id: '1', metricType: 'STEPS', value: 9000, recordedAt: '2026-09-01T00:00:00.000Z' }] });
-
-    const { getAllByText, queryByTestId } = render(<DashboardScreen />);
-
-    await waitFor(() => expect(getAllByText(/9,000/).length).toBeGreaterThan(0));
-    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith('/me/buddies'));
-    expect(queryByTestId('home-buddies-row')).toBeNull();
-  });
-
-  it('opens the Social tab from the buddies row', async () => {
-    mockApi({
-      records: [{ id: '1', metricType: 'STEPS', value: 9000, recordedAt: '2026-09-01T00:00:00.000Z' }],
-      buddies: { buddies: [], nextCursor: null, incomingRequests: 1, outgoingRequests: 0 },
-    });
-
-    render(<DashboardScreen />);
-
-    fireEvent.press(await screen.findByTestId('home-buddies-row'));
-    expect(mockNavigate).toHaveBeenCalledWith('Tabs', { screen: 'Social' });
   });
 
   it('renders rings, an insight, and trend charts for every real metric', async () => {
@@ -372,7 +373,7 @@ describe('DashboardScreen', () => {
   describe('habit logging and patterns', () => {
     const steps = [{ id: '1', metricType: 'STEPS', value: 9000, recordedAt: '2026-09-01T00:00:00.000Z' }];
 
-    it('shows the "Anything to log today?" card below the Recovery card', async () => {
+    it('shows the "Anything to log today?" card below the tiles', async () => {
       mockApi({ records: steps, scores: [] });
 
       const { getByText, getByTestId, toJSON } = render(<DashboardScreen />);
@@ -383,8 +384,8 @@ describe('DashboardScreen', () => {
       expect(apiFetch).toHaveBeenCalledWith('/me/habits/status?days=14');
 
       const tree = JSON.stringify(toJSON());
-      expect(tree.indexOf('Recovery Score will appear')).toBeGreaterThanOrEqual(0);
-      expect(tree.indexOf('Recovery Score will appear')).toBeLessThan(tree.indexOf('Anything to log today?'));
+      expect(tree.indexOf('home-tiles')).toBeGreaterThanOrEqual(0);
+      expect(tree.indexOf('home-tiles')).toBeLessThan(tree.indexOf('Anything to log today?'));
       expect(tree.indexOf('Anything to log today?')).toBeLessThan(tree.indexOf('metric-card-STEPS'));
     });
 
@@ -396,234 +397,6 @@ describe('DashboardScreen', () => {
       await waitFor(() => expect(getByText(/Habits are unavailable/i)).toBeTruthy());
       expect(getByTestId('habit-log-retry')).toBeTruthy();
       expect(getByTestId('metric-card-STEPS')).toBeTruthy();
-    });
-  });
-
-  describe('Recovery score card', () => {
-    const steps = [{ id: '1', metricType: 'STEPS', value: 9000, recordedAt: '2026-09-01T00:00:00.000Z' }];
-    const recovery = {
-      date: '2026-09-19',
-      type: 'RECOVERY',
-      score: 78,
-      confidenceLevel: 'HIGH',
-      algorithmVersion: 'v1',
-      factors: [
-        { factor: 'HRV', label: 'HRV', z: 1.2, weight: 0.45, contribution: 0.54, points: 8.2, imputed: false, excluded: false },
-      ],
-      coldStart: [],
-    };
-
-    it('shows the latest recovery score with its confidence at the top of the dashboard', async () => {
-      mockApi({ records: steps, scores: [{ ...recovery, type: 'SLEEP', score: 55 }, recovery] });
-
-      const { getByTestId, getByText } = render(<DashboardScreen />);
-
-      await waitFor(() => expect(getByTestId('recovery-score-card')).toBeTruthy());
-      // The SLEEP entry is a distractor for the Recovery card (it has its own card).
-      const card = within(getByTestId('recovery-score-card'));
-      expect(card.getByText('78')).toBeTruthy();
-      expect(getByText('Recovery Score')).toBeTruthy();
-      expect(card.getByTestId('confidence-badge')).toBeTruthy();
-      expect(apiFetch).toHaveBeenCalledWith('/me/scores?days=7');
-    });
-
-    it('opens the Recovery page for that day when pressed', async () => {
-      mockApi({ records: steps, scores: [recovery] });
-
-      const { getByTestId } = render(<DashboardScreen />);
-
-      await waitFor(() => expect(getByTestId('recovery-score-card')).toBeTruthy());
-      const card = getByTestId('recovery-score-card');
-      expect(card.props.accessibilityHint).toBe('Opens your Recovery page');
-      expect(within(card).getByText('Open Recovery')).toBeTruthy();
-      fireEvent.press(card);
-
-      expect(mockNavigate).toHaveBeenCalledWith('Recovery', { date: '2026-09-19' });
-      expect(mockNavigate).not.toHaveBeenCalledWith('ScoreDetail', expect.anything());
-    });
-
-    it('shows the baseline progress ring instead of a score when the score is null', async () => {
-      mockApi({
-        records: steps,
-        scores: [
-          {
-            ...recovery,
-            score: null,
-            confidenceLevel: 'LOW',
-            factors: [],
-            coldStart: [
-              { metric: 'HRV', daysCollected: 9, daysRequired: 14 },
-              { metric: 'RESTING_HR', daysCollected: 3, daysRequired: 14 },
-            ],
-          },
-        ],
-      });
-
-      const { findByTestId } = render(<DashboardScreen />);
-
-      // Scoped to the recovery card: the Tomorrow card draws its own progress ring.
-      const card = within(await findByTestId('recovery-score-card'));
-      expect(card.getByTestId('baseline-progress-ring')).toBeTruthy();
-      expect(card.getByText('9/14 days')).toBeTruthy();
-      expect(card.queryByTestId('score-ring')).toBeNull();
-      expect(card.queryByTestId('confidence-badge')).toBeNull();
-    });
-
-    it('says the score is not ready when none has been calculated yet, without breaking the metric cards', async () => {
-      mockApi({ records: steps, scores: [] });
-
-      const { getByText, getByTestId } = render(<DashboardScreen />);
-
-      await waitFor(() => expect(getByText(/Recovery Score will appear/i)).toBeTruthy());
-      expect(getByTestId('metric-card-STEPS')).toBeTruthy();
-    });
-
-    it('degrades to an inline message when the scores request fails, keeping the metric cards', async () => {
-      mockApi({ records: steps, scoresError: new Error('boom') });
-
-      const { getByText, getByTestId } = render(<DashboardScreen />);
-
-      await waitFor(() => expect(getByText(/Recovery Score is unavailable/i)).toBeTruthy());
-      expect(getByTestId('metric-card-STEPS')).toBeTruthy();
-    });
-  });
-
-  describe('Sleep score card', () => {
-    const steps = [{ id: '1', metricType: 'STEPS', value: 9000, recordedAt: '2026-09-01T00:00:00.000Z' }];
-    const recovery = {
-      date: '2026-09-19',
-      type: 'RECOVERY',
-      score: 78,
-      confidenceLevel: 'HIGH',
-      algorithmVersion: 'v1',
-      factors: [{ factor: 'HRV', label: 'HRV', z: 1.2, weight: 0.45, contribution: 0.54, points: 8.2, imputed: false, excluded: false }],
-      coldStart: [],
-    };
-    const sleep = {
-      date: '2026-09-19',
-      type: 'SLEEP',
-      score: 64,
-      confidenceLevel: 'MEDIUM',
-      algorithmVersion: 'v1',
-      factors: [
-        { factor: 'SLEEP_DURATION', label: 'Sleep duration', z: -0.5, weight: 0.45, contribution: -0.2, points: -3, imputed: false, excluded: false },
-        { factor: 'SLEEP_EFFICIENCY', label: 'Sleep efficiency', z: 0.7, weight: 0.35, contribution: 0.25, points: 4, imputed: false, excluded: false },
-        { factor: 'CIRCADIAN_CONSISTENCY', label: 'Bedtime consistency', z: null, weight: 0.2, contribution: 0, points: 0, imputed: false, excluded: true },
-      ],
-      coldStart: [{ metric: 'CIRCADIAN_CONSISTENCY', daysCollected: 9, daysRequired: 27 }],
-    };
-
-    it('shows the latest Sleep Score with a confidence badge, even with a factor still building', async () => {
-      mockApi({ records: steps, scores: [recovery, sleep] });
-
-      const { getByTestId } = render(<DashboardScreen />);
-
-      await waitFor(() => expect(getByTestId('sleep-score-card')).toBeTruthy());
-      const card = within(getByTestId('sleep-score-card'));
-      expect(card.getByText('Sleep Score')).toBeTruthy();
-      expect(card.getByText('64')).toBeTruthy();
-      expect(card.getByTestId('confidence-badge')).toBeTruthy();
-      expect(card.queryByTestId('baseline-progress-ring')).toBeNull();
-      // Recovery card is unaffected and both come from one request.
-      expect(within(getByTestId('recovery-score-card')).getByText('78')).toBeTruthy();
-      expect((apiFetch as jest.Mock).mock.calls.filter(([p]) => String(p).startsWith('/me/scores'))).toHaveLength(1);
-    });
-
-    it('renders the Sleep card below the Recovery card', async () => {
-      mockApi({ records: steps, scores: [recovery, sleep] });
-
-      const { getByTestId, toJSON } = render(<DashboardScreen />);
-
-      await waitFor(() => expect(getByTestId('sleep-score-card')).toBeTruthy());
-      const tree = JSON.stringify(toJSON());
-      expect(tree.indexOf('recovery-score-card')).toBeLessThan(tree.indexOf('sleep-score-card'));
-    });
-
-    it('opens the Sleep page on the tile night, so tile and hero agree', async () => {
-      mockApi({ records: steps, scores: [recovery, sleep] });
-      const { getByTestId } = render(<DashboardScreen />);
-      await waitFor(() => expect(getByTestId('sleep-score-card')).toBeTruthy());
-      fireEvent.press(getByTestId('sleep-score-card'));
-      expect(mockNavigate).toHaveBeenCalledWith('Sleep', { date: sleep.date });
-      expect(mockNavigate).not.toHaveBeenCalledWith('ScoreDetail', expect.anything());
-    });
-
-    it('shows the cold-start ring, and no score ring or badge, when the Sleep Score is null', async () => {
-      mockApi({
-        records: steps,
-        scores: [
-          recovery,
-          { ...sleep, score: null, confidenceLevel: 'LOW', coldStart: [{ metric: 'SLEEP', daysCollected: 4, daysRequired: 7 }] },
-        ],
-      });
-
-      const { getByTestId } = render(<DashboardScreen />);
-
-      await waitFor(() => expect(getByTestId('sleep-score-card')).toBeTruthy());
-      const card = within(getByTestId('sleep-score-card'));
-      expect(card.getByTestId('baseline-progress-ring')).toBeTruthy();
-      expect(card.getByText('4/7 days')).toBeTruthy();
-      expect(card.queryByTestId('score-ring')).toBeNull();
-      expect(card.queryByTestId('confidence-badge')).toBeNull();
-    });
-
-    it('explains there is no Sleep Score yet when no sleep was recorded, without a ring', async () => {
-      mockApi({ records: steps, scores: [recovery] });
-
-      const { getByTestId, getByText } = render(<DashboardScreen />);
-
-      await waitFor(() => expect(getByTestId('sleep-score-empty')).toBeTruthy());
-      expect(getByText(/Sleep Score will appear/i)).toBeTruthy();
-      expect(getByTestId('recovery-score-card')).toBeTruthy();
-    });
-
-    it('still opens the Sleep page, on its default night, when there is no Sleep Score yet', async () => {
-      mockApi({ records: steps, scores: [recovery] });
-
-      const { getByTestId } = render(<DashboardScreen />);
-
-      await waitFor(() => expect(getByTestId('sleep-score-empty')).toBeTruthy());
-      // A real button, not a press that bubbles up to SleepTile's own onPress prop.
-      expect(getByTestId('sleep-score-empty').props.accessibilityRole).toBe('button');
-      mockNavigate.mockClear();
-      fireEvent.press(getByTestId('sleep-score-empty'));
-
-      expect(mockNavigate.mock.calls).toEqual([['Sleep', undefined]]);
-    });
-
-    it('degrades to an inline message when the scores request fails, keeping the metric cards', async () => {
-      mockApi({ records: steps, scoresError: new Error('boom') });
-
-      const { getByText, getByTestId } = render(<DashboardScreen />);
-
-      await waitFor(() => expect(getByText(/Sleep Score is unavailable/i)).toBeTruthy());
-      expect(getByTestId('sleep-score-unavailable')).toBeTruthy();
-      expect(getByTestId('metric-card-STEPS')).toBeTruthy();
-    });
-
-    it('still opens the Sleep page, on its default night, when the scores request fails', async () => {
-      mockApi({ records: steps, scoresError: new Error('boom') });
-
-      const { getByTestId } = render(<DashboardScreen />);
-
-      await waitFor(() => expect(getByTestId('sleep-score-unavailable')).toBeTruthy());
-      expect(getByTestId('sleep-score-unavailable').props.accessibilityRole).toBe('button');
-      mockNavigate.mockClear();
-      fireEvent.press(getByTestId('sleep-score-unavailable'));
-
-      expect(mockNavigate.mock.calls).toEqual([['Sleep', undefined]]);
-    });
-
-    it('shows a skeleton while scores load', async () => {
-      mockApi({ records: steps });
-      const base = (apiFetch as jest.Mock).getMockImplementation()!;
-      (apiFetch as jest.Mock).mockImplementation((path: string) =>
-        path.startsWith('/me/scores') ? new Promise(() => {}) : base(path),
-      );
-
-      const { getByTestId } = render(<DashboardScreen />);
-
-      await waitFor(() => expect(getByTestId('sleep-score-loading')).toBeTruthy());
     });
   });
 });
@@ -673,5 +446,171 @@ describe('DashboardScreen: fallback character', () => {
     const utils = render(withCharacter(<DashboardScreen />, { characterId: 'avo' }));
 
     await waitFor(() => expect(characterLabel(utils, 'dashboard-fallback-character')).toBe('character:avo:idle:56:playing:none'));
+  });
+});
+
+describe('DashboardScreen: Home F', () => {
+  const steps = [{ id: '1', metricType: 'STEPS', value: 9000, recordedAt: '2026-09-01T00:00:00.000Z' }];
+  const score = (type: 'RECOVERY' | 'SLEEP', value: number | null, date: string) =>
+    ({ date, type, score: value, confidenceLevel: 'HIGH', algorithmVersion: 'v1', factors: [], coldStart: [] });
+  const night = (date: string, minutes: number) => ({
+    date, minutesAsleep: minutes, minutesInBed: null, bedtime: null, wakeTime: null, sleepScore: null, minutesAwake: null,
+    stageMinutes: null, hasStages: false, mainMinutesAsleep: minutes, mainIsNap: false,
+  });
+  const sceneKey = () => screen.UNSAFE_getByType(HomeScene).props.scene.key;
+  const FAKE: { doNotFake: Array<'nextTick' | 'setImmediate' | 'queueMicrotask'> } = { doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] };
+
+  afterEach(() => jest.useRealTimers());
+
+  it('draws the scene, its tags and the three tiles from the reads; the old cards are gone', async () => {
+    const today = todayCivil();
+    mockApi({
+      records: steps,
+      scores: [score('RECOVERY', 68, today), score('SLEEP', 78, today)],
+      nights: [night(today, 432)],
+      forecast: READY,
+      goal: { sleepGoalMinutes: 480, bedtimeGoal: '23:00', wakeGoal: null },
+    });
+    render(<DashboardScreen />);
+    expect(await screen.findByLabelText('Sky: recovery 68, mostly clear, Good. Open Recovery')).toBeTruthy();
+    expect(await screen.findByLabelText('Bed: sleep 78, 7h 12m. Open Sleep')).toBeTruthy();
+    expect(screen.getByLabelText('Calendar: tomorrow likely 40 to 80. Open Tomorrow')).toBeTruthy();
+    expect(screen.getByTestId('home-tile-recovery-value')).toHaveTextContent('68');
+    await waitFor(() => expect(screen.getByTestId('home-tile-tomorrow-line')).toHaveTextContent('Bed by 23:00'));
+    expect(apiFetch).toHaveBeenCalledWith(`/me/sleep?from=${today}&to=${today}`);
+    expect(apiFetch).toHaveBeenCalledWith('/me/sleep/goal');
+    expect(apiFetch).toHaveBeenCalledWith('/me/buddies/scene');
+    for (const gone of ['recovery-score-card', 'sleep-score-card', 'tomorrow-card', 'home-buddies-row', 'coach-tile-character']) {
+      expect(screen.queryByTestId(gone)).toBeNull();
+    }
+  });
+
+  it('puts the page in order: scene, Today, tiles, habit log, Recaps, metrics', async () => {
+    mockApi({ records: steps });
+    const { toJSON } = render(<DashboardScreen />);
+    await screen.findByTestId('recap-shelf');
+    const tree = JSON.stringify(toJSON());
+    const order = ['home-scene', 'home-today', 'home-tiles', 'habit-log', 'recap-shelf', 'metric-card-STEPS'].map((id) => tree.indexOf(id));
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
+  it('opens Recovery on today, Sleep, Forecast and Recaps from the tags and tiles', async () => {
+    const today = todayCivil();
+    mockApi({ records: steps, scores: [score('RECOVERY', 68, today)], forecast: READY });
+    render(<DashboardScreen />);
+    fireEvent.press(await screen.findByTestId('home-tag-recovery'));
+    expect(mockNavigate).toHaveBeenLastCalledWith('Recovery', { date: today });
+    fireEvent.press(await screen.findByTestId('home-tile-sleep'));
+    expect(mockNavigate).toHaveBeenLastCalledWith('Sleep', undefined);
+    fireEvent.press(screen.getByTestId('home-tag-tomorrow'));
+    expect(mockNavigate).toHaveBeenLastCalledWith('Forecast');
+    fireEvent.press(screen.getByTestId('home-tag-recaps'));
+    expect(mockNavigate).toHaveBeenLastCalledWith('Recaps');
+  });
+
+  it('puts the scene\'s buddies on the ground, and shows only you on an older server', async () => {
+    const buddy = { id: 'b1', handle: 'ava', displayName: 'Ava', coachId: 'mochi', kipColour: 'mint', mood: 'good', moodLine: 'Feeling great', unseenSticker: false };
+    mockApi({ records: steps, buddyScene: { buddies: [buddy], total: 3, incomingRequests: 0 } });
+    const first = render(<DashboardScreen />);
+    fireEvent.press(await screen.findByTestId('home-buddy-b1'));
+    expect(mockNavigate).toHaveBeenLastCalledWith('BuddyWeek', { buddyId: 'b1' });
+    fireEvent.press(screen.getByTestId('home-scene-all'));
+    expect(mockNavigate).toHaveBeenLastCalledWith('Tabs', { screen: 'Social' });
+    first.unmount();
+
+    mockApi({ records: steps, buddyScene: Object.assign(new Error('not found'), { status: 404 }) });
+    render(<DashboardScreen />);
+    await screen.findByTestId('home-scene');
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith('/me/buddies/scene'));
+    expect(screen.queryByTestId('home-scene-all')).toBeNull();
+    expect(screen.UNSAFE_getAllByType(Kip).filter((k) => String(k.props.testID).startsWith('home-scene-buddy-'))).toHaveLength(0);
+  });
+
+  it('counts unwatched recaps on the RECAPS tag from the shelf\'s own fetch', async () => {
+    const week = (id: string, end: string) => ({ id, kind: 'WEEK', periodStart: addDays(end, -6), periodEnd: end, line: 'x', personaId: 'luna', builtAt: '2026-10-05T09:00:00.000Z', openedAt: null });
+    mockApi({ records: steps, recaps: [week('w2', addDays(todayCivil(), -2)), week('w1', addDays(todayCivil(), -9))] });
+    render(withCharacter(<DashboardScreen />));
+    await waitFor(() => expect(screen.getByTestId('home-tag-recaps').props.accessibilityLabel).toBe('Mailbox: recaps, 2 new. Open Recaps'));
+    expect((apiFetch as jest.Mock).mock.calls.filter(([p]) => p === '/me/recaps?limit=30')).toHaveLength(1);
+  });
+
+  it('puts the theme toggle, the sync line and the Profile ring over the sky; the status bar is light while focused', async () => {
+    const syncModule = require('../../src/sync/SyncProvider');
+    const spy = jest.spyOn(syncModule, 'useSync').mockReturnValue({ state: 'idle', lastSyncedAt: null, connection: 'CONNECTED', dataVersion: 0, syncNow: jest.fn() });
+    mockApi({ records: steps });
+    render(<DashboardScreen />);
+    const header = await screen.findByTestId('home-header');
+    expect(within(header).getByTestId('theme-toggle-button')).toBeTruthy();
+    expect(within(header).getByTestId('sync-status-line')).toBeTruthy();
+    expect(within(header).getByTestId('settings-button')).toBeTruthy();
+    expect(screen.UNSAFE_getByType(StatusBar).props.style).toBe('light');
+    fire('blur');
+    expect(screen.UNSAFE_queryAllByType(StatusBar)).toHaveLength(0);
+    fire('focus');
+    expect(screen.UNSAFE_getByType(StatusBar).props.style).toBe('light');
+    spy.mockRestore();
+  });
+
+  it('a short night overrides the weather', async () => {
+    jest.useFakeTimers({ now: new Date(2026, 9, 13, 9, 0), ...FAKE });
+    mockApi({ records: steps, scores: [score('RECOVERY', 68, '2026-10-13')], nights: [night('2026-10-13', 310)] });
+    render(<DashboardScreen />);
+    await waitFor(() => expect(sceneKey()).toBe('short'));
+    expect(screen.getByTestId('home-today-hint')).toHaveTextContent('Short night overrides KIP’s mood');
+    expect(screen.getByTestId('home-tile-sleep-line')).toHaveTextContent('5h 10m · short');
+  });
+
+  it('recomputes the state at 21:00, on focus and on return to the foreground, with no timer while blurred', async () => {
+    jest.useFakeTimers({ now: new Date(2026, 9, 13, 20, 59, 30), ...FAKE });
+    const appHandlers: Array<(state: string) => void> = [];
+    // The preset's AppState.addEventListener is already a mock: spyOn returns it, and mockRestore would strip its
+    // implementation for every later test, so put the original back instead.
+    const preset: unknown = AppState.addEventListener;
+    const original = jest.isMockFunction(preset) ? preset.getMockImplementation() : undefined;
+    const appSpy = jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, handler) => {
+      appHandlers.push(handler as (state: string) => void);
+      return { remove: jest.fn() } as never;
+    });
+    mockApi({ records: steps });
+    render(<DashboardScreen />);
+    await screen.findByTestId('home-scene');
+    expect(sceneKey()).toBe('fallback');
+
+    act(() => jest.advanceTimersByTime(30_000));
+    expect(sceneKey()).toBe('night');
+
+    // Blurred: 05:00 passes with no timer running, until Home is focused again.
+    fire('blur');
+    act(() => jest.advanceTimersByTime(8 * 3_600_000 + 60_000));
+    expect(sceneKey()).toBe('night');
+    fire('focus');
+    expect(sceneKey()).toBe('fallback');
+
+    act(() => jest.setSystemTime(new Date(2026, 9, 14, 22, 0)));
+    act(() => appHandlers.forEach((h) => h('active')));
+    expect(sceneKey()).toBe('night');
+    if (original) appSpy.mockImplementation(original);
+    else appSpy.mockRestore();
+  });
+
+  it('reads the new day\'s night after midnight', async () => {
+    jest.useFakeTimers({ now: new Date(2026, 9, 13, 23, 50), ...FAKE });
+    mockApi({ records: steps });
+    render(<DashboardScreen />);
+    await screen.findByTestId('home-scene');
+    expect(apiFetch).toHaveBeenCalledWith('/me/sleep?from=2026-10-13&to=2026-10-13');
+    act(() => jest.setSystemTime(new Date(2026, 9, 14, 0, 30)));
+    fire('focus');
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith('/me/sleep?from=2026-10-14&to=2026-10-14'));
+  });
+
+  it('shows the scene-shaped skeleton while Home loads', () => {
+    mockApi({});
+    const base = (apiFetch as jest.Mock).getMockImplementation()!;
+    (apiFetch as jest.Mock).mockImplementation((path: string) => (path === '/me/biometrics' ? new Promise(() => {}) : base(path)));
+    render(<DashboardScreen />);
+    expect(screen.getByTestId('home-loading-scene')).toBeTruthy();
+    expect(screen.getAllByTestId('home-loading-tile')).toHaveLength(3);
   });
 });

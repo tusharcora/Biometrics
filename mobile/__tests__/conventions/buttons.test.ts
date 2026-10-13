@@ -92,7 +92,6 @@ const ALLOWED: Exception[] = [
   { file: 'components/social/StoriesRow.tsx', key: 'story-${r.author.id}', count: 1, reason: "a buddy's story ring" },
   { file: 'components/chats/NotesRow.tsx', key: 'note-mine', count: 1, reason: 'my avatar with my note bubble in the Chats notes row' },
   { file: 'components/chats/NotesRow.tsx', key: 'note-${n.person.id}', count: 1, reason: "a buddy's avatar with their note bubble" },
-  { file: 'screens/DashboardScreen.tsx', key: 'settings-button', count: 1, reason: 'the profile avatar (with its story ring)' },
   { file: 'components/home/HomeHeader.tsx', key: 'settings-button', count: 1, reason: 'the profile avatar (with its story ring) over the Home sky' },
   { file: 'components/profile/Passport.tsx', key: 'passport-recap', count: 1, reason: "the passport's KIP photo wearing a recap ring" },
   { file: 'components/profile/Passport.tsx', key: 'passport-stamp-${s.family}', count: 1, reason: 'a badge stamp on the passport' },
