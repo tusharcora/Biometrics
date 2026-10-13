@@ -24,7 +24,7 @@ export type StoryFrameDTO =
 
 export interface StoryDTO { author: PersonDTO; localDate: string; frames: StoryFrameDTO[] }
 export interface StoryRingDTO { author: PersonDTO; unseen: boolean; locked: boolean; frameCount: number; latestAt: string }
-export interface StoryRings { rings: StoryRingDTO[]; checkedInBuddies: number; viewerCheckedIn: boolean; checkedInCoachIds: string[] }
+export interface StoryRings { rings: StoryRingDTO[]; checkedInBuddies: number; viewerCheckedIn: boolean; checkedInCoachIds: string[]; checkedInKipColours: string[] }
 
 const LOOKBACK_MS = 48 * 60 * 60 * 1000;
 const iso = (d: Date) => d.toISOString();
@@ -106,19 +106,20 @@ export async function storyRingsFor(circle: Circle, now: Date): Promise<StoryRin
     seen.filter((s) => isoDate(s.localDate) === todayOf.get(s.authorId)).map((s) => [s.authorId, (s.lastFrameAt ?? s.seenAt).getTime()] as const),
   );
   const rings: StoryRingDTO[] = [];
-  const checkIns: Array<{ coachId: string; at: string }> = [];
+  const checkIns: Array<{ coachId: string; kipColour: string; at: string }> = [];
   for (const b of buddies) {
     const list = frames.get(b.person.id) ?? [];
     if (list.length === 0) continue;
     const checkIn = list.find((f) => f.kind === 'checkin');
-    if (checkIn) checkIns.push({ coachId: b.person.coachId, at: checkIn.at });
+    if (checkIn) checkIns.push({ coachId: b.person.coachId, kipColour: b.person.kipColour, at: checkIn.at });
     const latestAt = list[list.length - 1]!.at;
     const through = seenThrough.get(b.person.id);
     rings.push({ author: b.person, unseen: through === undefined || Date.parse(latestAt) > through, locked: checkIn !== undefined && !viewerCheckedIn, frameCount: list.length, latestAt });
   }
   rings.sort((a, b) => Number(b.unseen) - Number(a.unseen) || b.latestAt.localeCompare(a.latestAt));
   checkIns.sort((a, b) => b.at.localeCompare(a.at));
-  return { rings, checkedInBuddies: checkIns.length, viewerCheckedIn, checkedInCoachIds: checkIns.slice(0, MAX_CAMP_FACES).map((c) => c.coachId) };
+  const faces = checkIns.slice(0, MAX_CAMP_FACES);
+  return { rings, checkedInBuddies: checkIns.length, viewerCheckedIn, checkedInCoachIds: faces.map((c) => c.coachId), checkedInKipColours: faces.map((c) => c.kipColour) };
 }
 
 export async function loadStoryRings(viewerId: string, now: Date): Promise<StoryRings> {

@@ -2,6 +2,7 @@
 // HandleHold in ONE transaction; a unique-constraint race on either reads as handle_taken.
 
 import { prisma } from '../db/client';
+import { kipColourOf, type KipColourName } from '../kip/colours';
 import { BuddyError, isUniqueViolation } from './errors';
 import { holdActive, holdHandle } from './holds';
 import { displayNamePrefill, handleHash } from './identity';
@@ -11,12 +12,13 @@ export interface BuddyIdentity {
   displayName: string | null;
   displayNamePrefill: string;
   moodNoticeSeen: boolean;
+  kipColour: KipColourName;
 }
 
 export async function getIdentity(userId: string): Promise<BuddyIdentity | null> {
   const user = await prisma.user.findUnique({
     where: { id: userId },
-    select: { handle: true, displayName: true, name: true, email: true, buddyMoodNoticeAt: true },
+    select: { handle: true, displayName: true, name: true, email: true, buddyMoodNoticeAt: true, kipColour: true },
   });
   if (!user) return null;
   return {
@@ -24,6 +26,7 @@ export async function getIdentity(userId: string): Promise<BuddyIdentity | null>
     displayName: user.displayName,
     displayNamePrefill: displayNamePrefill(user),
     moodNoticeSeen: user.buddyMoodNoticeAt !== null,
+    kipColour: kipColourOf(user.kipColour),
   };
 }
 

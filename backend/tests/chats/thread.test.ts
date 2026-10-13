@@ -46,7 +46,7 @@ it('pages 50 at a time, oldest first on the wire, with a cursor for the page bef
   expect(newest.nextBefore).toEqual(expect.any(String));
   const older = await listThread(me.id, sam.id, newest.nextBefore, at(100));
   expect([older.messages.map((m) => m.text), older.nextBefore]).toEqual([['m0', 'm1'], null]);
-  expect(newest.buddy).toEqual({ id: sam.id, handle: sam.handle, displayName: 'Sam', coachId: expect.any(String) });
+  expect(newest.buddy).toEqual({ id: sam.id, handle: sam.handle, displayName: 'Sam', coachId: expect.any(String), kipColour: 'coral' });
   expect(newest.messages.find((m) => m.text === 'm2')!.mine).toBe(false);
   expect(newest.messages.find((m) => m.text === 'm3')!.mine).toBe(true);
 });
