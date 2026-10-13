@@ -7,6 +7,7 @@ import { clearStatusNote, fetchChats, fetchNotes, fileReport, saveStatusNote, se
 import { blockBuddy } from '../../src/api/buddies';
 import { PersonKip } from '../../src/components/kip/PersonKip';
 import { refreshBuddies } from '../../src/lib/buddiesStore';
+import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
 import { ChatsScreen } from '../../src/screens/ChatsScreen';
 import { FONTS } from '../../src/theme';
 
@@ -68,6 +69,8 @@ beforeEach(() => {
   (fetchChats as jest.Mock).mockResolvedValue(PAGE);
   (fetchNotes as jest.Mock).mockResolvedValue({ mine: null, buddies: [{ person: person('ana', 'Ana'), text: 'day 6 streak!', createdAt: ago(60), expiresAt: ago(-60) }] });
 });
+
+afterEach(() => resetMyKipColour());
 
 it('lists conversations with their line, unread weight, story ring and active dot; rows, Requests and Cheer work', async () => {
   renderScreen();
@@ -163,6 +166,18 @@ it('reporting a note with "Also block" ticked blocks its author, says so and re-
   expect(refreshBuddies).toHaveBeenCalled();
   expect(screen.getByTestId('chats-message')).toHaveTextContent('Blocked Ana');
   expect(fetchChats).toHaveBeenCalledTimes(2);
+});
+
+it('my note avatar is my KIP in my colour, not the one on my person record', async () => {
+  mockSocial.home = { ...mockHome, me: { ...mockHome.me, person: { ...person('tushar'), kipColour: 'lemon' } } };
+  act(() => setMyKipColour('sky'));
+  try {
+    renderScreen();
+    const avatar = await screen.findByTestId('note-avatar-me');
+    expect(within(avatar).UNSAFE_getByType(PersonKip).props.colour).toBe('sky');
+  } finally {
+    mockSocial.home = mockHome;
+  }
 });
 
 it('a note over 60 can not be shared; my live note can be cleared', async () => {

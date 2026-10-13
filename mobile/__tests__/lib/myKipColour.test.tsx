@@ -1,13 +1,19 @@
 import { act, renderHook } from '@testing-library/react-native';
 import { fetchIdentity } from '../../src/api/buddies';
 import { kipColourName, kipColourOf, KIP_COLOUR_ORDER } from '../../src/lib/kip/kipColour';
-import { getMyKipColour, loadMyKipColour, resetMyKipColour, setMyKipColour, useMyKipColour } from '../../src/lib/kip/myKipColour';
+import { saveKipColour } from '../../src/api/kip';
+import {
+  getMyKipColour, loadMyKipColour, myKipColourLoadFailed, resetMyKipColour, saveMyKipColour, setMyKipColour, useMyKipColour,
+} from '../../src/lib/kip/myKipColour';
 
 jest.mock('../../src/api/buddies', () => ({ fetchIdentity: jest.fn() }));
+jest.mock('../../src/api/kip', () => ({ saveKipColour: jest.fn() }));
 const identity = fetchIdentity as jest.Mock;
+const saveKip = saveKipColour as jest.Mock;
 
 beforeEach(() => {
   identity.mockReset();
+  saveKip.mockReset();
   resetMyKipColour();
 });
 
@@ -55,4 +61,52 @@ it('a load that started before a reset never lands after it', async () => {
   finish({ kipColour: 'mint' });
   await pending;
   expect(getMyKipColour()).toBe('coral');
+});
+
+it('a slow first read that lands after a save never overwrites it', async () => {
+  let finish!: (v: unknown) => void;
+  identity.mockReturnValue(new Promise((r) => { finish = r; }));
+  const pending = loadMyKipColour();
+  setMyKipColour('mint');
+  finish({ kipColour: 'coral' });
+  await pending;
+  expect(getMyKipColour()).toBe('mint');
+});
+
+it('a save stores the colour once the server takes it, and throws when it does not', async () => {
+  saveKip.mockResolvedValueOnce({ kipColour: 'lime' });
+  await saveMyKipColour('lime');
+  expect(saveKip).toHaveBeenCalledWith('lime');
+  expect(getMyKipColour()).toBe('lime');
+  saveKip.mockRejectedValueOnce(new Error('offline'));
+  await expect(saveMyKipColour('ink')).rejects.toThrow('offline');
+  expect(getMyKipColour()).toBe('lime');
+});
+
+it('a save that finishes after sign-out never lands in the next account', async () => {
+  let finish!: (v: unknown) => void;
+  saveKip.mockReturnValue(new Promise((r) => { finish = r; }));
+  const pending = saveMyKipColour('mint');
+  resetMyKipColour();
+  finish({ kipColour: 'mint' });
+  await pending;
+  expect(getMyKipColour()).toBe('coral');
+});
+
+it('remembers a failed read until a read, save or sign-out', async () => {
+  expect(myKipColourLoadFailed()).toBe(false);
+  identity.mockRejectedValueOnce(new Error('offline'));
+  await loadMyKipColour();
+  expect(myKipColourLoadFailed()).toBe(true);
+  identity.mockResolvedValueOnce({ kipColour: 'sky' });
+  await loadMyKipColour();
+  expect(myKipColourLoadFailed()).toBe(false);
+  identity.mockRejectedValueOnce(new Error('offline'));
+  await loadMyKipColour();
+  setMyKipColour('ink');
+  expect(myKipColourLoadFailed()).toBe(false);
+  identity.mockRejectedValueOnce(new Error('offline'));
+  await loadMyKipColour();
+  resetMyKipColour();
+  expect(myKipColourLoadFailed()).toBe(false);
 });

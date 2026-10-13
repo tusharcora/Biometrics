@@ -1,4 +1,5 @@
 import React from 'react';
+import { StyleSheet } from 'react-native';
 import { render } from '@testing-library/react-native';
 import Svg, { Rect } from 'react-native-svg';
 import { PersonKip, PERSON_POSE, personStateOf } from '../../src/components/kip/PersonKip';
@@ -36,15 +37,19 @@ describe('PersonKip', () => {
   });
 
   it.each([
-    [26, 2, 20],
-    [28, 2, 20],
-    [32, 3, 30],
-    [96, 9, 90],
-  ])('crops to the body so a %ipt slot draws at %i pt per cell (%i pt), centred', (size, scale, drawn) => {
+    [26, 2, 20, 3],
+    [28, 2, 20, 4],
+    [32, 3, 30, 1],
+    [35, 3, 30, 2],
+    [96, 9, 90, 3],
+  ])('crops to the body so a %ipt slot draws at %i pt per cell (%i pt), centred on whole points (%i)', (size, scale, drawn, offset) => {
     const { getByTestId, UNSAFE_getByType } = render(<PersonKip size={size} testID="p" />);
     const box = getByTestId('p', { includeHiddenElements: true });
-    expect(box.props.style).toMatchObject({ width: size, height: size, alignItems: 'center', justifyContent: 'center' });
-    expect(UNSAFE_getByType(Svg).props).toMatchObject({ width: drawn, height: drawn, viewBox: '3 6 10 10' });
+    expect(box.props.style).toEqual({ width: size, height: size });
+    const svg = UNSAFE_getByType(Svg);
+    expect(svg.props).toMatchObject({ width: drawn, height: drawn, viewBox: '3 6 10 10' });
+    expect(StyleSheet.flatten(svg.props.style)).toEqual({ position: 'absolute', left: offset, top: offset });
+    expect(Number.isInteger(offset)).toBe(true);
     expect(drawn / 10).toBe(scale);
   });
 

@@ -1,10 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import Svg, { Rect } from 'react-native-svg';
-import { saveKipColour } from '../../api/kip';
 import { KIP_COLOURS, type KipColour } from '../../lib/kip/kipArt';
 import { KIP_COLOUR_ORDER, kipColourName } from '../../lib/kip/kipColour';
-import { setMyKipColour, useMyKipColour } from '../../lib/kip/myKipColour';
+import { loadMyKipColour, myKipColourLoadFailed, saveMyKipColour, useMyKipColour } from '../../lib/kip/myKipColour';
 import { PROFILE_COPY } from '../../lib/profileCopy';
 import type { PixelRect } from '../../lib/weatherArt';
 import { Kip } from '../kip/Kip';
@@ -57,12 +56,16 @@ export function KipColourSection() {
   const picked = choice ?? saved;
   const name = kipColourName(picked);
 
+  // Coral is only your saved colour if the read worked.
+  useEffect(() => {
+    if (myKipColourLoadFailed()) void loadMyKipColour();
+  }, []);
+
   async function save() {
     setBusy(true);
     setFailed(false);
     try {
-      await saveKipColour(picked);
-      setMyKipColour(picked);
+      await saveMyKipColour(picked);
       setChoice(null);
     } catch {
       setFailed(true);

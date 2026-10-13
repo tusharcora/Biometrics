@@ -3,15 +3,34 @@ import { StyleSheet } from 'react-native';
 import Svg, { Rect } from 'react-native-svg';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { KipColourSection } from '../../src/components/profile/KipColourSection';
+import { fetchIdentity } from '../../src/api/buddies';
 import { saveKipColour } from '../../src/api/kip';
-import { getMyKipColour, resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
+import { getMyKipColour, loadMyKipColour, resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
 
 jest.mock('../../src/api/kip', () => ({ saveKipColour: jest.fn() }));
+jest.mock('../../src/api/buddies', () => ({ fetchIdentity: jest.fn() }));
 const save = saveKipColour as jest.Mock;
+const identity = fetchIdentity as jest.Mock;
 
 beforeEach(() => {
   save.mockReset();
+  identity.mockReset();
   resetMyKipColour();
+});
+
+it('reads your colour again on opening when the start-up read failed', async () => {
+  identity.mockRejectedValueOnce(new Error('offline'));
+  await loadMyKipColour();
+  identity.mockResolvedValueOnce({ kipColour: 'lime' });
+  render(<KipColourSection />);
+  await waitFor(() => expect(screen.getByTestId('kip-swatch-lime').props.accessibilityState).toMatchObject({ checked: true }));
+  expect(identity).toHaveBeenCalledTimes(2);
+  expect(screen.getByTestId('kip-colour-save').props.accessibilityState).toMatchObject({ disabled: true });
+});
+
+it('does not read again on opening when your colour loaded', () => {
+  render(<KipColourSection />);
+  expect(identity).not.toHaveBeenCalled();
 });
 
 it('shows your colour in the preview and as the checked radio among 10', () => {

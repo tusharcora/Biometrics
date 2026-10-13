@@ -29,15 +29,23 @@ export function PersonKip({ colour, state = 'none', size, testID }: {
   const art = useMemo(() => kipArt(variant), [variant]);
   const box = useMemo(() => kipBounds(variant), [variant]);
   const scale = Math.max(1, Math.floor(size / Math.max(box.w, box.h)));
+  const w = box.w * scale;
+  const h = box.h * scale;
+  // Whole-point offsets: flex centring splits an odd gap into half points and blurs the cells.
   return (
     <View
       testID={testID}
       accessible={false}
       accessibilityElementsHidden
       importantForAccessibility="no-hide-descendants"
-      style={{ width: size, height: size, alignItems: 'center', justifyContent: 'center' }}
+      style={{ width: size, height: size }}
     >
-      <Svg width={box.w * scale} height={box.h * scale} viewBox={`${box.x} ${box.y} ${box.w} ${box.h}`}>
+      <Svg
+        width={w}
+        height={h}
+        viewBox={`${box.x} ${box.y} ${box.w} ${box.h}`}
+        style={{ position: 'absolute', left: Math.floor((size - w) / 2), top: Math.floor((size - h) / 2) }}
+      >
         {art.map((p, i) => (
           <Rect key={i} x={p.x} y={p.y} width={p.w} height={p.h} fill={p.fill} />
         ))}
