@@ -14,6 +14,7 @@ beforeEach(() => {
 it('reads a missing or unknown name as coral, and names colours for people', () => {
   expect(kipColourOf('mint')).toBe('mint');
   expect(kipColourOf('teal')).toBe('coral');
+  expect(kipColourOf('toString')).toBe('coral');
   expect(kipColourOf(undefined)).toBe('coral');
   expect(KIP_COLOUR_ORDER).toEqual(['coral', 'cobalt', 'ink', 'lemon', 'lilac', 'lime', 'mint', 'sky', 'slate', 'snow']);
   expect(kipColourName('sky')).toBe('Sky');

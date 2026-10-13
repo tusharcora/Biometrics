@@ -5,7 +5,7 @@ export const KIP_COLOUR_ORDER = Object.keys(KIP_COLOURS) as KipColour[];
 
 /** A name from the server, or coral for a missing or unknown one (an older server, a newer colour). */
 export function kipColourOf(value: unknown): KipColour {
-  return typeof value === 'string' && value in KIP_COLOURS ? (value as KipColour) : DEFAULT_KIP_COLOUR;
+  return typeof value === 'string' && Object.prototype.hasOwnProperty.call(KIP_COLOURS, value) ? (value as KipColour) : DEFAULT_KIP_COLOUR;
 }
 
 /** "Coral", "Sky": the name people read. */

@@ -1,5 +1,5 @@
 import {
-  DEFAULT_KIP_COLOUR, KIP_COLOURS, KIP_GRID, KIP_MOODS, KIP_POSES, kipArt, kipGrid, kipRamp, type KipColour,
+  DEFAULT_KIP_COLOUR, KIP_COLOURS, KIP_GRID, KIP_MOODS, KIP_POSES, kipArt, kipBounds, kipGrid, kipRamp, type KipColour,
 } from '../../src/lib/kip/kipArt';
 
 // Reference values come from the approved board's engine (docs/design/character/project/Final.dc.html), run
@@ -131,5 +131,16 @@ describe('kipArt', () => {
     const fills = new Set(kipArt({ colour: 'ink' }).map((r) => r.fill));
     const r = kipRamp(KIP_COLOURS.ink);
     expect(fills).toEqual(new Set([r.body, r.shade, r.eyes, r.shadow]));
+  });
+});
+
+describe('kipBounds', () => {
+  it('is the box of painted cells: rest is 10 x 10 with its shadow, from column 3, row 6', () => {
+    expect(kipBounds({})).toEqual({ x: 3, y: 6, w: 10, h: 10 });
+  });
+
+  it('grows with arms (cheer) and held items (coffee)', () => {
+    expect(kipBounds({ pose: 'cheer', mood: 'proud' })).toEqual({ x: 2, y: 4, w: 12, h: 12 });
+    expect(kipBounds({ pose: 'coffee', mood: 'sleepy' })).toEqual({ x: 2, y: 7, w: 14, h: 9 });
   });
 });

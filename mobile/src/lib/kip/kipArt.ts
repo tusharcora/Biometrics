@@ -223,3 +223,13 @@ export function kipArt(variant: KipVariant): PixelRect[] {
   });
   return rects;
 }
+
+/** The smallest box holding every painted cell of this variant, in grid cells. */
+export function kipBounds(variant: KipVariant): { x: number; y: number; w: number; h: number } {
+  let minX = KIP_GRID, minY = KIP_GRID, maxX = -1, maxY = -1;
+  kipGrid(variant).forEach((row, y) => row.forEach((fill, x) => {
+    if (!fill) return;
+    minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
+  }));
+  return maxX < 0 ? { x: 0, y: 0, w: KIP_GRID, h: KIP_GRID } : { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+}
