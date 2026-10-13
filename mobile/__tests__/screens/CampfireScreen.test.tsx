@@ -1,6 +1,6 @@
 import React from 'react';
 import { AccessibilityInfo, Keyboard, ScrollView, StyleSheet, TextInput } from 'react-native';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 import { State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
@@ -11,6 +11,8 @@ import { fileReport } from '../../src/api/chats';
 import { blockBuddy } from '../../src/api/buddies';
 import { chromeBottom, fireBox, PEEK_RESERVE, seatBoxes, type Box } from '../../src/components/social/campSceneGeometry';
 import { CampfireScreen } from '../../src/screens/CampfireScreen';
+import { PersonKip } from '../../src/components/kip/PersonKip';
+import { getMyKipColour, resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
 import { GlassSurface } from '../../src/components/ui/glass-surface';
 import { FONTS } from '../../src/theme';
 
@@ -88,6 +90,47 @@ it('draws the night camp: moon, bubbles over coaches, my add-note bubble, asleep
   expect(screen.getByTestId('camp-who-me')).toHaveTextContent('You awake');
   expect(screen.getByTestId('camp-goodnight-say')).toBeTruthy();
   expect(screen.queryByTestId('camp-more')).toBeNull();
+});
+
+describe('people as their KIPs', () => {
+  afterEach(() => resetMyKipColour());
+
+  const coloured = () => camp({
+    members: [
+      member('me', { mine: true }),
+      { ...member('sam', { asleep: true, asleepSince: '2026-10-08T05:15:00.000Z', onTime: true }), person: { ...person('sam'), kipColour: 'mint' } },
+      { ...member('ben'), person: { ...person('ben'), kipColour: 'ink' } },
+    ],
+  });
+
+  it("draws each Who's here row in that member's colour, asleep members asleep, and me in my colour", async () => {
+    setMyKipColour('lemon');
+    (fetchCamp as jest.Mock).mockResolvedValue(coloured());
+    renderScreen();
+    await screen.findByTestId('camp-who-sam');
+    expect(within(screen.getByTestId('camp-who-me')).UNSAFE_getByType(PersonKip).props).toMatchObject({ colour: getMyKipColour(), state: 'none', size: 32 });
+    expect(within(screen.getByTestId('camp-who-sam')).UNSAFE_getByType(PersonKip).props).toMatchObject({ colour: 'mint', state: 'asleep', size: 32 });
+    expect(within(screen.getByTestId('camp-who-ben')).UNSAFE_getByType(PersonKip).props).toMatchObject({ colour: 'ink', state: 'none', size: 32 });
+  });
+
+  it('seats each member in the scene as their KIP, me in my colour', async () => {
+    setMyKipColour('lemon');
+    (fetchCamp as jest.Mock).mockResolvedValue(coloured());
+    renderScreen();
+    await screen.findByTestId('camp-coach-sam');
+    expect(within(screen.getByTestId('camp-coach-me')).UNSAFE_getByType(PersonKip).props).toMatchObject({ colour: 'lemon', state: 'none' });
+    expect(within(screen.getByTestId('camp-coach-sam')).UNSAFE_getByType(PersonKip).props).toMatchObject({ colour: 'mint', state: 'asleep' });
+    expect(within(screen.getByTestId('camp-coach-ben')).UNSAFE_getByType(PersonKip).props).toMatchObject({ colour: 'ink', state: 'none' });
+  });
+
+  it('my camp note previews over my KIP, and says it shows above my KIP', async () => {
+    setMyKipColour('lemon');
+    (fetchCamp as jest.Mock).mockResolvedValue(coloured());
+    renderScreen();
+    const slot = await screen.findByTestId('camp-note-slot');
+    expect(within(slot).UNSAFE_getByType(PersonKip).props).toMatchObject({ colour: 'lemon', size: 28 });
+    expect(within(slot).getByText('Shows above your KIP until 6 AM or your morning check-in.')).toBeTruthy();
+  });
 });
 
 it("a long note is one truncated line in the bubble and the whole note in Who's here", async () => {

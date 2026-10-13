@@ -6,15 +6,16 @@ import { buddyErrorCode, createCode, fetchCode, redeemCode, sendBuddyRequest, ty
 import { IdentityGate } from '../components/buddies/IdentityGate';
 import { MoodNoticeSheet } from '../components/buddies/MoodNoticeSheet';
 import { useMoodNoticeGate } from '../components/buddies/useMoodNoticeGate';
-import { Character } from '../components/characters/Character';
+import { PersonKip } from '../components/kip/PersonKip';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { PageTitle } from '../components/ui/page-title';
 import { Text } from '../components/ui/text';
 import { TextField } from '../components/ui/text-field';
-import { buddyErrorMessage, expiresIn, shareMessage } from '../lib/buddyCopy';
+import { buddyErrorMessage, expiresIn, PAIR_UP_COPY, shareMessage } from '../lib/buddyCopy';
 import { refreshBuddies } from '../lib/buddiesStore';
 import { offerPushAfterPairing } from '../lib/buddyPushOffer';
+import { useMyKipColour } from '../lib/kip/myKipColour';
 
 type Nav = { replace: (name: string, params?: object) => void };
 type Code = { code: string; expiresAt: string };
@@ -32,6 +33,7 @@ export function PairUpScreen() {
 
 function PairUpBody({ identity, navigation }: { identity: BuddyIdentity; navigation: Nav }) {
   const gate = useMoodNoticeGate(identity.moodNoticeSeen);
+  const myColour = useMyKipColour();
   const [code, setCode] = useState<Code | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [entered, setEntered] = useState('');
@@ -127,11 +129,9 @@ function PairUpBody({ identity, navigation }: { identity: BuddyIdentity; navigat
   return (
     <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }} keyboardShouldPersistTaps="handled">
       <View className="items-center gap-2">
-        <Character mood="idle" size={72} />
+        <PersonKip colour={myColour} size={72} />
         <PageTitle>Pair up with a friend</PageTitle>
-        <Text className="text-center text-caption text-muted-foreground">
-          Buddies always see your coach's mood. Your numbers stay private unless you share them in Profile.
-        </Text>
+        <Text className="text-center text-caption text-muted-foreground">{PAIR_UP_COPY.privacy}</Text>
       </View>
 
       <Card className="gap-3 p-4">

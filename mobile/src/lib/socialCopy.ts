@@ -280,5 +280,8 @@ export function noteLiveLine(expiresAt: string | null | undefined): string {
   return until ? `Live until ${until}` : 'Live';
 }
 
+/** Under the camp note composer. */
+export const CAMP_NOTE_HELPER = 'Shows above your KIP until 6 AM or your morning check-in.';
+
 /** One tap fills the draft with one of these. */
 export const CAMP_NOTE_CHIPS = ['gn camp', 'early start tmrw', 'long day, bed soon', 'who is still up?'] as const;

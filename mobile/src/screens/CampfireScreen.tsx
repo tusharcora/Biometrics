@@ -20,9 +20,8 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Animated, { Extrapolation, interpolate, useAnimatedStyle, useReducedMotion } from 'react-native-reanimated';
 import { blockBuddy, buddyErrorCode } from '../api/buddies';
 import { clearCampNote, fetchCamp, saveCampNote, type Camp, type CampMember, type CampNote } from '../api/social';
-import { Character } from '../components/characters/Character';
-import { DEFAULT_CHARACTER_ID, isCharacterId } from '../components/characters/types';
 import { pixelFont } from '../components/coach/thinking/shared';
+import { PersonKip } from '../components/kip/PersonKip';
 import { CampNoteCard } from '../components/social/CampNoteCard';
 import { CampPanel, panelStops, useCampPanel } from '../components/social/CampPanel';
 import { CampScene } from '../components/social/CampScene';
@@ -36,6 +35,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { buddyErrorMessage } from '../lib/buddyCopy';
 import { campNoteQuoteLabel } from '../lib/chatCopy';
+import { useMyKipColour } from '../lib/kip/myKipColour';
 import {
   CAMP_NOTE_MAX, campHeadline, campSceneKicker, campStatus, fireCountLabel, fireMoreLine, goodnightOpensLine, nightsLitLine,
   noteLength, personName,
@@ -116,6 +116,7 @@ export function CampfireScreen() {
   const insets = useSafeAreaInsets();
   const reduced = useReducedMotion();
   const screenReader = useScreenReader();
+  const myColour = useMyKipColour();
   const [state, setState] = useState<State>({ status: 'loading' });
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -336,7 +337,7 @@ export function CampfireScreen() {
         <View testID="camp-note-slot" onLayout={(e) => setCardY(e.nativeEvent.layout.y)}>
           <CampNoteCard inputRef={input} draft={draft} onDraft={setDraft} length={length} canShare={canShare} onShare={share} live={live}
             editing={editing} onEdit={edit} onCancel={cancelEdit} onClear={clear} busy={busy} message={message} buddies={camp.members.filter((m) => !m.mine).length}
-            coachId={mine && isCharacterId(mine.person.coachId) ? mine.person.coachId : DEFAULT_CHARACTER_ID} onComposerLayout={setComposer} />
+            kipColour={myColour} onComposerLayout={setComposer} />
         </View>
 
         {/* My own window (owner ruling Q1), not the scene's night: an 18:00 goal opens it at 17:00. */}
@@ -353,7 +354,7 @@ export function CampfireScreen() {
         <SectionLabel>{`WHO'S HERE · ${camp.members.length}`}</SectionLabel>
         {camp.members.map((m) => (
           <View key={m.person.id} testID={`camp-who-${m.person.id}`} className="flex-row items-start gap-3">
-            <Character characterId={isCharacterId(m.person.coachId) ? m.person.coachId : DEFAULT_CHARACTER_ID} mood={m.asleep ? 'resting' : 'idle'} size={32} paused />
+            <PersonKip colour={m.mine ? myColour : m.person.kipColour} state={m.asleep ? 'asleep' : 'none'} size={32} />
             <View className="flex-1 gap-1">
               {/* No line limit: "Who's here" is where a whole note is read (the bubble is one truncated line). */}
               <Text className="text-[15px] leading-5">

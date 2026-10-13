@@ -12,9 +12,9 @@ import Animated, {
 import Svg, { Path } from 'react-native-svg';
 import type { CampMember } from '../../api/social';
 import { personName } from '../../lib/socialCopy';
-import { Character } from '../characters/Character';
-import { DEFAULT_CHARACTER_ID, isCharacterId } from '../characters/types';
+import { useMyKipColour } from '../../lib/kip/myKipColour';
 import { pixelFont } from '../coach/thinking/shared';
+import { PersonKip } from '../kip/PersonKip';
 import { PressableScale } from '../ui/pressable-scale';
 import { Text } from '../ui/text';
 import {
@@ -183,8 +183,8 @@ function Bob({ asleep, t, children }: { asleep: boolean; t: SharedValue<number>;
  * One seat: the bubble (one line, never wider than the seat, so bubbles never cross), the real pixel coach on a
  * two-tone log, and its name. The Character has no tint, so there is no firelit rim (noted in the redesign report).
  */
-const SceneCoach = memo(function SceneCoach({ member, seat, night, t, onPress }: {
-  member: CampMember; seat: Seat; night: boolean; t: SharedValue<number>; onPress: (member: CampMember) => void;
+const SceneCoach = memo(function SceneCoach({ member, seat, night, t, onPress, myColour }: {
+  member: CampMember; seat: Seat; night: boolean; t: SharedValue<number>; onPress: (member: CampMember) => void; myColour: string;
 }) {
   const id = member.person.id;
   const name = personName(member.person, member.mine);
@@ -201,8 +201,7 @@ const SceneCoach = memo(function SceneCoach({ member, seat, night, t, onPress }:
       </View>
       <View style={{ position: 'absolute', left: (SEAT_W - seat.size) / 2, top: coachTop, width: seat.size, height: seat.size }}>
         <Bob asleep={member.asleep} t={t}>
-          <Character characterId={isCharacterId(member.person.coachId) ? member.person.coachId : DEFAULT_CHARACTER_ID}
-            mood={member.asleep ? 'resting' : 'idle'} size={seat.size} paused />
+          <PersonKip colour={member.mine ? myColour : member.person.kipColour} state={member.asleep ? 'asleep' : 'none'} size={seat.size} />
         </Bob>
         {member.asleep ? <Zz id={id} t={t} /> : null}
       </View>
@@ -230,6 +229,7 @@ export interface CampSceneProps {
 
 export const CampScene = memo(function CampScene({ geo, members, lit, still, onCoachPress }: CampSceneProps) {
   const t = useSceneClock(still);
+  const myColour = useMyKipColour();
   return (
     <View testID={geo.night ? 'camp-scene-night' : 'camp-scene-day'}
       style={{ position: 'absolute', left: 0, top: 0, width: geo.width, height: geo.height + GROUND_OVERHANG, backgroundColor: geo.sky }}>
@@ -243,7 +243,7 @@ export const CampScene = memo(function CampScene({ geo, members, lit, still, onC
       <Paths layers={geo.front} width={geo.width} height={geo.height} />
       <Fire geo={geo} lit={lit} t={t} still={still} />
       {members.map((m, i) => (
-        <SceneCoach key={m.person.id} member={m} seat={geo.seats[i]!} night={geo.night} t={t} onPress={onCoachPress} />
+        <SceneCoach key={m.person.id} member={m} seat={geo.seats[i]!} night={geo.night} t={t} onPress={onCoachPress} myColour={myColour} />
       ))}
     </View>
   );

@@ -26,7 +26,7 @@ const expectSchemeProof = (testID: string) => expect(inScheme(classesOf(testID),
 
 const card = (over: Partial<CampNoteCardProps>): CampNoteCardProps => ({
   inputRef: React.createRef<TextInput>(), draft: '', onDraft: jest.fn(), length: 0, canShare: false, onShare: jest.fn(), live: null,
-  editing: false, onEdit: jest.fn(), onCancel: jest.fn(), onClear: jest.fn(), busy: false, message: null, buddies: 2, coachId: 'mochi', ...over,
+  editing: false, onEdit: jest.fn(), onCancel: jest.fn(), onClear: jest.fn(), busy: false, message: null, buddies: 2, kipColour: 'coral', ...over,
 });
 const live = { text: 'Early night', expiresAt: null };
 
