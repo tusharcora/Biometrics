@@ -4,9 +4,9 @@ import { ActivityScreen } from '../../src/screens/ActivityScreen';
 import { ActivityHeatmap } from '../../src/components/activity-heatmap';
 import { fetchActivity } from '../../src/api/activity';
 import { fetchSleep, fetchSleepGoal } from '../../src/api/sleep';
-import { fetchRange, todayCivil } from '../../src/lib/heatmap';
+import { addDays, fetchRange, todayCivil } from '../../src/lib/heatmap';
 import { apiFetch } from '../../src/api/client';
-import { fetchScores } from '../../src/api/scores';
+import { fetchScoresWithBands } from '../../src/api/scores';
 
 jest.mock('../../src/api/activity');
 jest.mock('../../src/api/sleep');
@@ -24,137 +24,84 @@ const mockNavigation = {
   },
 };
 jest.mock('@react-navigation/native', () => ({
+  ...jest.requireActual('@react-navigation/native'),
   useNavigation: () => mockNavigation,
 }));
 
+const today = () => todayCivil();
+const night = (date: string, minutesAsleep: number) => ({ date, minutesAsleep, minutesInBed: 480, bedtime: '23:10', wakeTime: '07:10', sleepScore: 80 });
+const score = (date: string, value: number) => ({ date, type: 'RECOVERY', score: value, confidenceLevel: 'HIGH', algorithmVersion: 'v1', factors: [], coldStart: [] });
+
 beforeEach(() => {
   jest.clearAllMocks();
+  (fetchActivity as jest.Mock).mockResolvedValue({ days: [], earliestDate: '2025-01-01' });
   (fetchSleep as jest.Mock).mockResolvedValue({ nights: [], earliestDate: null });
   (fetchSleepGoal as jest.Mock).mockResolvedValue({ sleepGoalMinutes: 480, bedtimeGoal: null, wakeGoal: null });
   (apiFetch as jest.Mock).mockResolvedValue([]);
-  (fetchScores as jest.Mock).mockResolvedValue([]);
-});
-
-describe('ActivityScreen: sleep', () => {
-  it('fetches sleep over the same range as steps, alongside it', async () => {
-    (fetchActivity as jest.Mock).mockResolvedValue({ days: [], earliestDate: '2025-01-01' });
-    (fetchSleep as jest.Mock).mockResolvedValue({
-      nights: [{ date: todayCivil(), minutesAsleep: 452, minutesInBed: 480, bedtime: '23:10', wakeTime: '07:10', sleepScore: 80 }],
-      earliestDate: '2025-01-01',
-    });
-
-    const { findByTestId } = render(<ActivityScreen />);
-
-    expect(await findByTestId('sleep-stat-average')).toHaveTextContent('7h 32m');
-    const { from, to } = fetchRange(todayCivil());
-    expect(fetchSleep).toHaveBeenCalledWith(from, to);
-  });
-
-  it('keeps steps working when only sleep fails, and retries sleep from the Sleep page', async () => {
-    (fetchActivity as jest.Mock).mockResolvedValue({ days: [{ date: todayCivil(), steps: 4321 }], earliestDate: '2025-01-01' });
-    (fetchSleep as jest.Mock).mockRejectedValueOnce(new Error('offline'));
-
-    const { findByTestId, getByTestId } = render(<ActivityScreen />);
-
-    expect(await findByTestId('sleep-error')).toBeTruthy();
-    expect(getByTestId('stat-total')).toHaveTextContent('4,321');
-
-    fireEvent.press(getByTestId('sleep-retry'));
-
-    expect(await findByTestId('sleep-heatmap-stats')).toBeTruthy();
-    expect(fetchSleep).toHaveBeenCalledTimes(2);
-  });
-
-  it('opens the Sleep screen from the Sleep page header', async () => {
-    (fetchActivity as jest.Mock).mockResolvedValue({ days: [], earliestDate: '2025-01-01' });
-
-    const { findByTestId, getByTestId } = render(<ActivityScreen />);
-
-    fireEvent.press(await findByTestId('activity-page-sleep'));
-    fireEvent.press(getByTestId('activity-sleep-details'));
-
-    expect(mockNavigate).toHaveBeenCalledWith('Sleep');
-  });
-  it('opens one night in full from the night sheet', async () => {
-    (fetchActivity as jest.Mock).mockResolvedValue({ days: [], earliestDate: '2025-01-01' });
-
-    const { findByTestId, UNSAFE_getByType } = render(<ActivityScreen />);
-    await findByTestId('heatmap-stats');
-
-    act(() => UNSAFE_getByType(ActivityHeatmap).props.onOpenNight('2026-10-01'));
-
-    expect(mockNavigate).toHaveBeenCalledWith('SleepNight', { date: '2026-10-01' });
-  });
-});
-
-describe('ActivityScreen: sleep goal', () => {
-  // 452 min asleep: at goal against 420, short of 480.
-  const lastNight = () => ({
-    nights: [{ date: todayCivil(), minutesAsleep: 452, minutesInBed: 480, bedtime: '23:10', wakeTime: '07:10', sleepScore: 80 }],
-    earliestDate: '2025-01-01',
-  });
-
-  it('colours sleep against the saved goal', async () => {
-    (fetchActivity as jest.Mock).mockResolvedValue({ days: [], earliestDate: '2025-01-01' });
-    (fetchSleep as jest.Mock).mockResolvedValue(lastNight());
-    (fetchSleepGoal as jest.Mock).mockResolvedValue({ sleepGoalMinutes: 420, bedtimeGoal: null, wakeGoal: null });
-
-    const { findByTestId, UNSAFE_getByType } = render(<ActivityScreen />);
-
-    expect(await findByTestId('sleep-stat-goal')).toHaveTextContent('1');
-    expect(UNSAFE_getByType(ActivityHeatmap).props.sleepGoal).toBe(420);
-  });
-
-  it('falls back to 8h when the goal cannot be read', async () => {
-    (fetchActivity as jest.Mock).mockResolvedValue({ days: [], earliestDate: '2025-01-01' });
-    (fetchSleep as jest.Mock).mockResolvedValue(lastNight());
-    (fetchSleepGoal as jest.Mock).mockRejectedValue(new Error('offline'));
-
-    const { findByTestId, UNSAFE_getByType } = render(<ActivityScreen />);
-
-    expect(await findByTestId('sleep-stat-goal')).toHaveTextContent('0');
-    expect(UNSAFE_getByType(ActivityHeatmap).props.sleepGoal).toBe(480);
-  });
-
-  it('picks up a goal saved elsewhere on coming back to the tab', async () => {
-    (fetchActivity as jest.Mock).mockResolvedValue({ days: [], earliestDate: '2025-01-01' });
-    (fetchSleep as jest.Mock).mockResolvedValue(lastNight());
-
-    const { findByTestId, getByTestId, queryByTestId, UNSAFE_getByType } = render(<ActivityScreen />);
-    expect(await findByTestId('sleep-stat-goal')).toHaveTextContent('0');
-    // The first focus (opening the tab) loads nothing extra.
-    await act(async () => mockListeners.focus?.());
-    expect(fetchSleepGoal).toHaveBeenCalledTimes(1);
-
-    (fetchSleepGoal as jest.Mock).mockResolvedValue({ sleepGoalMinutes: 420, bedtimeGoal: '23:00', wakeGoal: '07:00' });
-    await act(async () => mockListeners.blur?.());
-    await act(async () => mockListeners.focus?.());
-
-    await waitFor(() => expect(getByTestId('sleep-stat-goal')).toHaveTextContent('1'));
-    expect(UNSAFE_getByType(ActivityHeatmap).props.sleepGoal).toBe(420);
-    // Re-read in place: the loading state never came back.
-    expect(queryByTestId('activity-loading')).toBeNull();
-  });
-
-  it('waits for the goal before drawing, so the colours never jump', async () => {
-    (fetchActivity as jest.Mock).mockResolvedValue({ days: [], earliestDate: '2025-01-01' });
-    (fetchSleep as jest.Mock).mockResolvedValue(lastNight());
-    let resolveGoal: (g: unknown) => void = () => {};
-    (fetchSleepGoal as jest.Mock).mockReturnValue(new Promise((r) => (resolveGoal = r)));
-
-    const { findByTestId, getByTestId, queryByTestId } = render(<ActivityScreen />);
-    await act(async () => {});
-
-    expect(getByTestId('activity-loading')).toBeTruthy();
-    expect(queryByTestId('sleep-stat-goal')).toBeNull();
-    await act(async () => resolveGoal({ sleepGoalMinutes: 420, bedtimeGoal: null, wakeGoal: null }));
-    expect(await findByTestId('sleep-stat-goal')).toHaveTextContent('1');
-  });
+  (fetchScoresWithBands as jest.Mock).mockResolvedValue({ scores: [], bands: { excellent: 80, good: 60, fair: 40 } });
 });
 
 describe('ActivityScreen', () => {
+  it('reads steps and sleep over one range, plus the goal, the metrics and 120 days of Recovery', async () => {
+    const { findByTestId } = render(<ActivityScreen />);
+    await findByTestId('this-week');
+    const { from, to } = fetchRange(today());
+    expect(fetchActivity).toHaveBeenCalledWith(from, to);
+    expect(fetchSleep).toHaveBeenCalledWith(from, to);
+    expect(fetchSleepGoal).toHaveBeenCalled();
+    expect(apiFetch).toHaveBeenCalledWith('/me/biometrics');
+    expect(fetchScoresWithBands).toHaveBeenCalledWith(120, 'RECOVERY');
+  });
+
+  it('lays the page out as header, This week, calendar, month stats beside 2026 so far, then the usual rows', async () => {
+    const { findByTestId, getByTestId, UNSAFE_root } = render(<ActivityScreen />);
+    await findByTestId('usual-tiles');
+    const order = ['activity-header', 'this-week', 'heatmap-canvas', 'heatmap-stats', 'year-so-far', 'usual-tiles'];
+    // Depth-first, so a node's place in the list is its place on the page.
+    const seen = UNSAFE_root.findAll((n) => typeof n.props.testID === 'string', { deep: true }).map((n) => n.props.testID as string);
+    const at = order.map((id) => seen.indexOf(id));
+    expect(at.every((i) => i >= 0)).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+    expect(getByTestId('month-stats-row')).toBeTruthy();
+  });
+
+  it("sums the week in the header and fills today's row", async () => {
+    (fetchActivity as jest.Mock).mockResolvedValue({ days: [{ date: today(), steps: 4321 }, { date: addDays(today(), -1), steps: 1000 }], earliestDate: '2025-01-01' });
+    (fetchSleep as jest.Mock).mockResolvedValue({ nights: [night(today(), 452)], earliestDate: '2025-01-01' });
+    (fetchScoresWithBands as jest.Mock).mockResolvedValue({ scores: [score(today(), 35)], bands: { excellent: 80, good: 60, fair: 40 } });
+
+    const { findByTestId, getByTestId } = render(<ActivityScreen />);
+
+    expect(await findByTestId('activity-summary')).toHaveTextContent('Last 7 days · 5,321 steps · 1 night');
+    expect(getByTestId(`week-recovery-${today()}`)).toHaveTextContent('35');
+    expect(getByTestId(`week-sleep-${today()}`)).toHaveTextContent('7h 32m');
+    expect(getByTestId(`week-steps-${today()}`)).toHaveTextContent('4,321');
+  });
+
+  it('opens Recovery from a day row and the night from its moon', async () => {
+    (fetchSleep as jest.Mock).mockResolvedValue({ nights: [night(today(), 452)], earliestDate: '2025-01-01' });
+    const { findByTestId, getByTestId, queryByTestId } = render(<ActivityScreen />);
+
+    fireEvent.press(await findByTestId(`week-row-${today()}`));
+    expect(mockNavigate).toHaveBeenLastCalledWith('Recovery', { date: today() });
+
+    fireEvent.press(getByTestId(`week-moon-${today()}`));
+    expect(mockNavigate).toHaveBeenLastCalledWith('SleepNight', { date: today() });
+    // No night recorded yesterday: no moon.
+    expect(queryByTestId(`week-moon-${addDays(today(), -1)}`)).toBeNull();
+  });
+
+  it('opens a Recovery day from the calendar and one night in full from the night sheet', async () => {
+    const { findByTestId, UNSAFE_getByType } = render(<ActivityScreen />);
+    await findByTestId('heatmap-stats');
+
+    act(() => UNSAFE_getByType(ActivityHeatmap).props.onOpenRecovery('2026-10-01'));
+    expect(mockNavigate).toHaveBeenLastCalledWith('Recovery', { date: '2026-10-01' });
+    act(() => UNSAFE_getByType(ActivityHeatmap).props.onOpenNight('2026-10-01'));
+    expect(mockNavigate).toHaveBeenLastCalledWith('SleepNight', { date: '2026-10-01' });
+  });
+
   it('syncs with Google Health on pull-to-refresh, then re-reads', async () => {
-    (fetchActivity as jest.Mock).mockResolvedValue({ days: [], earliestDate: null });
     const syncNow = jest.fn().mockResolvedValue(undefined);
     const syncModule = require('../../src/sync/SyncProvider');
     const spy = jest
@@ -174,52 +121,50 @@ describe('ActivityScreen', () => {
     spy.mockRestore();
   });
 
-  it('fetches the whole range every view needs in one request, then shows the heat map', async () => {
-    (fetchActivity as jest.Mock).mockResolvedValue({ days: [{ date: todayCivil(), steps: 4321 }], earliestDate: '2025-01-01' });
-
-    const { getByTestId, findByTestId, queryByTestId } = render(<ActivityScreen />);
-
-    expect(getByTestId('activity-loading')).toBeTruthy();
-    expect(await findByTestId('heatmap-stats')).toBeTruthy();
-    expect(queryByTestId('activity-loading')).toBeNull();
-    const { from, to } = fetchRange(todayCivil());
-    expect(fetchActivity).toHaveBeenCalledTimes(1);
-    expect(fetchActivity).toHaveBeenCalledWith(from, to);
-    expect(getByTestId('stat-total')).toHaveTextContent('4,321');
-  });
-
-  it('offers a retry when the request fails, and recovers', async () => {
+  it('offers a retry when steps fail, and recovers', async () => {
     (fetchActivity as jest.Mock).mockRejectedValueOnce(new Error('offline'));
-    (fetchActivity as jest.Mock).mockResolvedValueOnce({ days: [], earliestDate: null });
 
-    const { findByTestId } = render(<ActivityScreen />);
+    const { findByTestId, getByTestId } = render(<ActivityScreen />);
+    expect(getByTestId('activity-title')).toBeTruthy();
 
     fireEvent.press(await findByTestId('activity-retry'));
 
-    expect(await findByTestId('heatmap-history-note')).toHaveTextContent('Your step history is still syncing.');
+    expect(await findByTestId('this-week')).toBeTruthy();
     await waitFor(() => expect(fetchActivity).toHaveBeenCalledTimes(2));
   });
 });
 
-describe('ActivityScreen: against your usual', () => {
-  it('shows the usual tiles under the heat map, with 60 days of Recovery (a 30-day change needs the 30 before)', async () => {
-    (fetchActivity as jest.Mock).mockResolvedValue({ days: [], earliestDate: '2025-01-01' });
-    (apiFetch as jest.Mock).mockResolvedValue([{ id: 'h', metricType: 'HRV', value: 61, recordedAt: `${todayCivil()}T00:00:00.000Z` }]);
-    (fetchScores as jest.Mock).mockResolvedValue([
-      { date: todayCivil(), type: 'RECOVERY', score: 71, confidenceLevel: 'HIGH', algorithmVersion: 'v1', factors: [], coldStart: [] },
-    ]);
+describe('ActivityScreen: sections fail on their own', () => {
+  it('keeps steps working when sleep fails, and retries sleep from the Sleep tab', async () => {
+    (fetchActivity as jest.Mock).mockResolvedValue({ days: [{ date: today(), steps: 4321 }], earliestDate: '2025-01-01' });
+    (fetchSleep as jest.Mock).mockRejectedValueOnce(new Error('offline'));
 
     const { findByTestId, getByTestId } = render(<ActivityScreen />);
 
-    expect(await findByTestId('usual-tiles')).toBeTruthy();
-    expect(getByTestId('heatmap-stats')).toBeTruthy();
-    expect(apiFetch).toHaveBeenCalledWith('/me/biometrics');
-    expect(fetchScores).toHaveBeenCalledWith(60, 'RECOVERY');
-    expect(getByTestId('usual-tile-RECOVERY')).toHaveTextContent(/71/);
+    expect(await findByTestId('stat-total')).toHaveTextContent('4,321');
+    expect(getByTestId(`week-sleep-${today()}`)).toHaveTextContent('—');
+    fireEvent.press(getByTestId('activity-tab-sleep'));
+    fireEvent.press(getByTestId('sleep-retry'));
+
+    await waitFor(() => expect(fetchSleep).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(getByTestId('stat-average')).toBeTruthy());
   });
 
-  it('still shows the heat map without the tiles when the metrics read fails', async () => {
-    (fetchActivity as jest.Mock).mockResolvedValue({ days: [], earliestDate: '2025-01-01' });
+  it('keeps the page up when Recovery fails, and retries it from the Recovery tab', async () => {
+    (fetchScoresWithBands as jest.Mock).mockRejectedValueOnce(new Error('offline'));
+
+    const { findByTestId, getByTestId, queryByTestId } = render(<ActivityScreen />);
+
+    expect(await findByTestId('this-week')).toBeTruthy();
+    expect(queryByTestId('activity-error')).toBeNull();
+    fireEvent.press(getByTestId('activity-tab-recovery'));
+    fireEvent.press(getByTestId('recovery-retry'));
+
+    await waitFor(() => expect(fetchScoresWithBands).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(getByTestId('stat-scored')).toHaveTextContent('0'));
+  });
+
+  it('still shows the page without the usual rows when the metrics read fails', async () => {
     (apiFetch as jest.Mock).mockRejectedValue(new Error('offline'));
 
     const { findByTestId, queryByTestId } = render(<ActivityScreen />);
@@ -229,17 +174,56 @@ describe('ActivityScreen: against your usual', () => {
     expect(queryByTestId('activity-error')).toBeNull();
   });
 
-  it('stays ready with the heat map and the metric tiles when the Recovery read fails', async () => {
-    (fetchActivity as jest.Mock).mockResolvedValue({ days: [], earliestDate: '2025-01-01' });
-    (apiFetch as jest.Mock).mockResolvedValue([{ id: 'h', metricType: 'HRV', value: 61, recordedAt: `${todayCivil()}T00:00:00.000Z` }]);
-    (fetchScores as jest.Mock).mockRejectedValue(new Error('offline'));
+  it('feeds the usual Recovery row from the same Recovery read', async () => {
+    (apiFetch as jest.Mock).mockResolvedValue([{ id: 'h', metricType: 'HRV', value: 61, recordedAt: `${today()}T00:00:00.000Z` }]);
+    (fetchScoresWithBands as jest.Mock).mockResolvedValue({ scores: [score(today(), 71)], bands: { excellent: 80, good: 60, fair: 40 } });
+
+    const { findByTestId, getByTestId } = render(<ActivityScreen />);
+
+    expect(await findByTestId('usual-tile-RECOVERY')).toHaveTextContent(/71/);
+    expect(getByTestId('usual-tile-HRV')).toHaveTextContent(/61/);
+  });
+});
+
+describe('ActivityScreen: sleep goal', () => {
+  it('colours sleep against the saved goal, or 8h when it cannot be read', async () => {
+    (fetchSleepGoal as jest.Mock).mockResolvedValue({ sleepGoalMinutes: 420, bedtimeGoal: null, wakeGoal: null });
+    const first = render(<ActivityScreen />);
+    await first.findByTestId('heatmap-stats');
+    expect(first.UNSAFE_getByType(ActivityHeatmap).props.sleepGoal).toBe(420);
+    first.unmount();
+
+    (fetchSleepGoal as jest.Mock).mockRejectedValue(new Error('offline'));
+    const second = render(<ActivityScreen />);
+    await second.findByTestId('heatmap-stats');
+    expect(second.UNSAFE_getByType(ActivityHeatmap).props.sleepGoal).toBe(480);
+  });
+
+  it('picks up a goal saved elsewhere on coming back to the tab, in place', async () => {
+    const { findByTestId, queryByTestId, UNSAFE_getByType } = render(<ActivityScreen />);
+    await findByTestId('heatmap-stats');
+    // The first focus (opening the tab) loads nothing extra.
+    await act(async () => mockListeners.focus?.());
+    expect(fetchSleepGoal).toHaveBeenCalledTimes(1);
+
+    (fetchSleepGoal as jest.Mock).mockResolvedValue({ sleepGoalMinutes: 420, bedtimeGoal: '23:00', wakeGoal: '07:00' });
+    await act(async () => mockListeners.blur?.());
+    await act(async () => mockListeners.focus?.());
+
+    await waitFor(() => expect(UNSAFE_getByType(ActivityHeatmap).props.sleepGoal).toBe(420));
+    expect(queryByTestId('activity-loading')).toBeNull();
+  });
+
+  it('waits for the goal before drawing, so the colours never jump', async () => {
+    let resolveGoal: (g: unknown) => void = () => {};
+    (fetchSleepGoal as jest.Mock).mockReturnValue(new Promise((r) => (resolveGoal = r)));
 
     const { findByTestId, getByTestId, queryByTestId } = render(<ActivityScreen />);
+    await act(async () => {});
 
-    expect(await findByTestId('usual-tiles')).toBeTruthy();
-    expect(getByTestId('heatmap-stats')).toBeTruthy();
-    expect(getByTestId('usual-tile-HRV')).toHaveTextContent(/61/);
-    expect(getByTestId('usual-tile-RECOVERY')).toHaveTextContent(/—/);
-    expect(queryByTestId('activity-error')).toBeNull();
+    expect(getByTestId('activity-loading')).toBeTruthy();
+    expect(queryByTestId('heatmap-stats')).toBeNull();
+    await act(async () => resolveGoal({ sleepGoalMinutes: 420, bedtimeGoal: null, wakeGoal: null }));
+    expect(await findByTestId('heatmap-stats')).toBeTruthy();
   });
 });

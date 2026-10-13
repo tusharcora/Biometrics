@@ -32,7 +32,16 @@ it('a Recovery tile without a score opens the Recovery page on today', () => {
   expect(mockNavigate).toHaveBeenCalledWith('Recovery', undefined);
 });
 
-it('keeps each tile to its width: one-line label and change, a tabular value that shrinks to fit', () => {
+it('lists the four as rows in one card (A-2), without sparklines', () => {
+  render(<UsualTiles records={[]} recovery={[]} today="2026-10-07" />);
+  const list = screen.getByTestId('usual-rows');
+  for (const type of ['RESTING_HR', 'SLEEP', 'HRV', 'RECOVERY']) expect(screen.getByTestId(`usual-tile-${type}`)).toBeTruthy();
+  expect(String(screen.getByTestId('usual-tile-SLEEP').props.className)).toContain('flex-row');
+  expect(list).toBeTruthy();
+  expect(screen.UNSAFE_queryAllByType(require('../../src/components/ui/trend-line').TrendLine)).toHaveLength(0);
+});
+
+it('keeps each row to one line: label and change, a tabular value that shrinks to fit', () => {
   const records = [{ id: 'h', metricType: 'HRV' as const, value: 61, recordedAt: '2026-10-06T00:00:00.000Z' }];
   render(<UsualTiles records={records} recovery={[]} today="2026-10-07" />);
   expect(screen.getByText('HRV').props.numberOfLines).toBe(1);

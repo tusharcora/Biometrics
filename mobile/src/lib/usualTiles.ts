@@ -1,6 +1,6 @@
 // Activity's "Against your usual · 30d" tiles (spec 2026-10-07 social §3): Resting HR, Sleep, HRV and Recovery.
 // Same maths as the Metrics cards: the latest reading and the 30-day change (trendSummary + changeText). Recovery
-// comes from the daily scores (fetchScores(60, 'RECOVERY'): 60 days, so the 30-day change has its earlier window), mapped to tile records here — it is not a MetricType.
+// comes from the daily scores (at least 60 days, so the 30-day change has its earlier window), mapped to tile records here — it is not a MetricType.
 
 import type { DailyScoreDTO } from '../api/scores';
 import { METRIC_CONFIG } from '../theme';
