@@ -58,8 +58,8 @@ export function sharesSummary(name: string, shares: readonly ShareKey[]): string
   return shares.length === 0 ? `${name} shares mood only` : `${name} shares ${joinList(['mood', ...shares.map((s) => SHARE_WORDS[s])])}`;
 }
 
-export function stickerSentLine(kind: StickerKind, name: string, coachName: string): string {
-  return `Sent a ${STICKER_LABEL[kind]} to ${name}. ${coachName} will pass it on.`;
+export function stickerSentLine(kind: StickerKind, name: string): string {
+  return `Sent a ${STICKER_LABEL[kind]} to ${name}.`;
 }
 
 /** A reused code has less than a day left, so the message says how long this one has. */

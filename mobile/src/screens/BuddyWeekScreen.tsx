@@ -117,7 +117,7 @@ export function BuddyWeekScreen() {
   const sticker = (kind: StickerKind) =>
     perform(async () => {
       await sendSticker(buddyId, kind);
-      if (mounted.current) setNote({ text: stickerSentLine(kind, week.buddy.displayName, week.buddy.displayName), error: false });
+      if (mounted.current) setNote({ text: stickerSentLine(kind, week.buddy.displayName), error: false });
     });
   // Not optimistic: the label flips to what the server says, so a failure leaves it as it was.
   const toggleMute = () =>

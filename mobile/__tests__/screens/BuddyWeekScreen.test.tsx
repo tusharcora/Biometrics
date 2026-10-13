@@ -97,12 +97,12 @@ it('shows a day without a reading as a dash, never as 0, and no rows or badges t
   expect(screen.getByTestId('buddy-week-summary')).toHaveTextContent('Sam shares mood and steps');
 });
 
-it('sends a sticker and says who will pass it on; the daily limit and an unpaired buddy are explained', async () => {
+it('sends a sticker and says it was sent; the daily limit and an unpaired buddy are explained', async () => {
   (sendSticker as jest.Mock).mockResolvedValueOnce({ id: 's1' }).mockRejectedValueOnce(coded('sticker_limit', 429)).mockRejectedValueOnce(coded('not_buddies'));
   render(<BuddyWeekScreen />);
   await pressOnceShown('sticker-STAR');
   expect(sendSticker).toHaveBeenCalledWith('b1', 'STAR');
-  expect(screen.getByTestId('buddy-week-note')).toHaveTextContent('Sent a Star to Sam. Sam will pass it on.');
+  expect(screen.getByTestId('buddy-week-note')).toHaveTextContent(/^Sent a Star to Sam\.$/);
   await act(async () => fireEvent.press(screen.getByTestId('sticker-HEART')));
   expect(screen.getByTestId('buddy-week-note')).toHaveTextContent("That's 5 stickers to this buddy today. Try again tomorrow.");
   // Unpaired or blocked meanwhile: the week goes away and nothing is offered any more.
