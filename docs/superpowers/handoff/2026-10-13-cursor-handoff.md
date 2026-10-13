@@ -238,13 +238,13 @@ merged mockup that the owner approves before a spec. Nothing has been mocked up 
   passport: the **streak** (as ID-1 shows it, e.g. "12 DAY STREAK") and the **number of buddies** (e.g. "4 BUDDIES").
   The rest of ID-2 stays: KIP photo (tap to change colour), name, handle, home, joined date, badge stamps and the
   decorative code lines. The rest of S2 stays as well: the category rows, and sign out and delete account.
-  - Open: which streak? (The Activity streak, the check-in streak or the sleep streak.) Ask the owner.
+  - Decided: the **check-in streak**.
 - **Activity: A-2 (day almanac), plus A-1's month calendar and stats.** Keep A-2's "This week" day rows (recovery, sleep
   and steps, where the moon opens Sleep), its "2026 so far" block and the "Against your usual" patterns. Add A-1's
   pixel month calendar (Month, Year and YTD views, Steps, Sleep and Recovery tabs, the Less–More scale) and its
   month stats line ("October so far · 93,413 steps · 10 active days · 4 at goal · streak 2").
-  - Open: the order of the sections, and whether A-1's stats replace or sit beside "2026 so far". Settle this in the
-    mockup.
+  - Decided: A-1's month stats **sit beside** "2026 so far"; they do not replace it.
+  - Open: the order of the sections. Settle this in the mockup.
 
 This settles step 1 of the README's "Next steps". The order is now: KIP spec, Home F spec, then these three, each with
 mockup → spec → plan → build.
