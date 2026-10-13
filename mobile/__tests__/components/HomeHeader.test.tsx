@@ -38,7 +38,7 @@ it('shows the date, the greeting, the sync line, the theme toggle and the Profil
   expect(screen.getByTestId('theme-toggle-button')).toBeTruthy();
   expect(screen.getByTestId('settings-button').props.accessibilityLabel).toBe('Profile and settings');
   expect(StyleSheet.flatten(screen.getByText('Good morning').props.style).color).toBe('#F5F5F4');
-  expect(syncLineText()).toBe('text-[#E5E7EB]');
+  expect(syncLineText()).toBe('text-[#FFFFFF]');
   expect(screen.UNSAFE_getByType(SectionLabel).props.className).toBe('text-[#E5E7EB]');
   expect(screen.UNSAFE_getByType(ThemeToggle).props.color).toBe('#F5F5F4');
 });

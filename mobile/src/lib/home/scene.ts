@@ -257,13 +257,13 @@ export function sceneState({ now, recovery, night }: { now: Date; recovery: Weat
   return { key, ...SCENE_KIP[key] };
 }
 
-/** The next 05:00 or 21:00 after `now`, local time: when the state can next change on its own. */
+/** The next 00:00, 05:00 or 21:00 after `now`, local time: when the state or the day can next change on its own. */
 export function nextSceneBoundary(now: Date): Date {
   const on = (days: number, hour: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + days, hour, 0, 0, 0);
   const h = now.getHours();
   if (h < 5) return on(0, 5);
   if (h < 21) return on(0, 21);
-  return on(1, 5);
+  return on(1, 0);
 }
 
 /** The newest score of a type, only if it is dated today. */

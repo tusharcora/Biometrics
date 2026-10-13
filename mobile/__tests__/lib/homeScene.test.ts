@@ -44,12 +44,19 @@ describe('sceneState', () => {
     expect(isNightTime(new Date(2026, 9, 14, 5, 0))).toBe(false);
   });
 
-  it('sets the next timer at 05:00 or 21:00', () => {
+  it('sets the next timer at 00:00, 05:00 or 21:00', () => {
     expect(nextSceneBoundary(new Date(2026, 9, 13, 4, 10))).toEqual(new Date(2026, 9, 13, 5, 0));
+    expect(nextSceneBoundary(new Date(2026, 9, 13, 0, 10))).toEqual(new Date(2026, 9, 13, 5, 0));
     expect(nextSceneBoundary(new Date(2026, 9, 13, 5, 0))).toEqual(new Date(2026, 9, 13, 21, 0));
     expect(nextSceneBoundary(new Date(2026, 9, 13, 20, 59, 30))).toEqual(new Date(2026, 9, 13, 21, 0));
-    expect(nextSceneBoundary(new Date(2026, 9, 13, 21, 0))).toEqual(new Date(2026, 9, 14, 5, 0));
-    expect(nextSceneBoundary(new Date(2026, 9, 31, 23, 0))).toEqual(new Date(2026, 10, 1, 5, 0));
+    expect(nextSceneBoundary(new Date(2026, 9, 13, 21, 0))).toEqual(new Date(2026, 9, 14, 0, 0));
+    expect(nextSceneBoundary(new Date(2026, 9, 13, 21, 30))).toEqual(new Date(2026, 9, 14, 0, 0));
+    expect(nextSceneBoundary(new Date(2026, 9, 31, 23, 0))).toEqual(new Date(2026, 10, 1, 0, 0));
+  });
+
+  it('stays night across midnight until 05:00', () => {
+    expect(sceneState({ now: new Date(2026, 9, 14, 0, 0), recovery: 'clear', night: null }).key).toBe('night');
+    expect(sceneState({ now: new Date(2026, 9, 14, 4, 59), recovery: 'clear', night: null }).key).toBe('night');
   });
 });
 

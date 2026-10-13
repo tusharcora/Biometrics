@@ -18,8 +18,10 @@ jest.mock('../../src/auth/AuthContext');
 const mockSignOut = jest.fn();
 const mockNavigate = jest.fn();
 const mockListeners: Record<string, Array<() => void>> = {};
+let mockFocused = true;
 const mockNavigation = {
   navigate: (...args: unknown[]) => mockNavigate(...args),
+  isFocused: () => mockFocused,
   addListener: (event: string, fn: () => void) => {
     (mockListeners[event] ??= []).push(fn);
     return () => {
@@ -90,6 +92,7 @@ function mockApi(options: {
 beforeEach(() => {
   jest.clearAllMocks();
   for (const k of Object.keys(mockListeners)) delete mockListeners[k];
+  mockFocused = true;
   (useAuth as jest.Mock).mockReturnValue({
     session: { userId: 'u1', email: 'u1@example.com' },
     signInWithApple: jest.fn(),
@@ -459,8 +462,27 @@ describe('DashboardScreen: Home F', () => {
   });
   const sceneKey = () => screen.UNSAFE_getByType(HomeScene).props.scene.key;
   const FAKE: { doNotFake: Array<'nextTick' | 'setImmediate' | 'queueMicrotask'> } = { doNotFake: ['nextTick', 'setImmediate', 'queueMicrotask'] };
+  let restoreAppState: (() => void) | null = null;
 
-  afterEach(() => jest.useRealTimers());
+  // Records every AppState 'change' handler. The preset's AppState.addEventListener is already a mock: spyOn returns
+  // it, and mockRestore would strip its implementation for every later test, so the original goes back instead.
+  function captureAppState(): Array<(state: string) => void> {
+    const handlers: Array<(state: string) => void> = [];
+    const preset: unknown = AppState.addEventListener;
+    const original = jest.isMockFunction(preset) ? preset.getMockImplementation() : undefined;
+    const spy = jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, handler) => {
+      handlers.push(handler as (state: string) => void);
+      return { remove: jest.fn() } as never;
+    });
+    restoreAppState = () => (original ? spy.mockImplementation(original) : spy.mockRestore());
+    return handlers;
+  }
+
+  afterEach(() => {
+    jest.useRealTimers();
+    restoreAppState?.();
+    restoreAppState = null;
+  });
 
   it('draws the scene, its tags and the three tiles from the reads; the old cards are gone', async () => {
     const today = todayCivil();
@@ -563,15 +585,7 @@ describe('DashboardScreen: Home F', () => {
 
   it('recomputes the state at 21:00, on focus and on return to the foreground, with no timer while blurred', async () => {
     jest.useFakeTimers({ now: new Date(2026, 9, 13, 20, 59, 30), ...FAKE });
-    const appHandlers: Array<(state: string) => void> = [];
-    // The preset's AppState.addEventListener is already a mock: spyOn returns it, and mockRestore would strip its
-    // implementation for every later test, so put the original back instead.
-    const preset: unknown = AppState.addEventListener;
-    const original = jest.isMockFunction(preset) ? preset.getMockImplementation() : undefined;
-    const appSpy = jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, handler) => {
-      appHandlers.push(handler as (state: string) => void);
-      return { remove: jest.fn() } as never;
-    });
+    const appHandlers = captureAppState();
     mockApi({ records: steps });
     render(<DashboardScreen />);
     await screen.findByTestId('home-scene');
@@ -590,8 +604,59 @@ describe('DashboardScreen: Home F', () => {
     act(() => jest.setSystemTime(new Date(2026, 9, 14, 22, 0)));
     act(() => appHandlers.forEach((h) => h('active')));
     expect(sceneKey()).toBe('night');
-    if (original) appSpy.mockImplementation(original);
-    else appSpy.mockRestore();
+  });
+
+  it('rolls the day at midnight while Home stays focused, still at night', async () => {
+    jest.useFakeTimers({ now: new Date(2026, 9, 13, 23, 50), ...FAKE });
+    mockApi({ records: steps });
+    render(<DashboardScreen />);
+    await screen.findByTestId('home-scene');
+    act(() => jest.advanceTimersByTime(10 * 60_000));
+    await waitFor(() => expect(apiFetch).toHaveBeenCalledWith('/me/sleep?from=2026-10-14&to=2026-10-14'));
+    expect(sceneKey()).toBe('night');
+  });
+
+  it('follows the day change: refetches the scores and never shows yesterday\'s short night', async () => {
+    jest.useFakeTimers({ now: new Date(2026, 9, 13, 9, 0), ...FAKE });
+    const appHandlers = captureAppState();
+    mockApi({ records: steps, scores: [score('RECOVERY', 68, '2026-10-13')], nights: [night('2026-10-13', 310)] });
+    render(<DashboardScreen />);
+    await waitFor(() => expect(sceneKey()).toBe('short'));
+    const scoreReads = () => (apiFetch as jest.Mock).mock.calls.filter(([p]) => p === '/me/scores?days=7').length;
+    const before = scoreReads();
+
+    // Day 2's sleep read stays in flight: day 1's night must not stand in for it.
+    const base = (apiFetch as jest.Mock).getMockImplementation()!;
+    (apiFetch as jest.Mock).mockImplementation((path: string) => (path === '/me/sleep?from=2026-10-14&to=2026-10-14' ? new Promise(() => {}) : base(path)));
+    act(() => jest.setSystemTime(new Date(2026, 9, 14, 9, 0)));
+    act(() => appHandlers.forEach((h) => h('active')));
+
+    expect(sceneKey()).not.toBe('short');
+    expect(screen.queryByText('5h 10m · short')).toBeNull();
+    await waitFor(() => expect(scoreReads()).toBe(before + 1));
+    expect(apiFetch).toHaveBeenCalledWith('/me/sleep?from=2026-10-14&to=2026-10-14');
+    expect(sceneKey()).not.toBe('short');
+  });
+
+  it('keeps the scene, the tiles and the metrics when the scores and sleep reads fail', async () => {
+    jest.useFakeTimers({ now: new Date(2026, 9, 13, 10, 0), ...FAKE });
+    mockApi({ records: steps, scoresError: new Error('boom'), sleepError: new Error('boom') });
+    render(<DashboardScreen />);
+    await screen.findByTestId('home-tile-recovery');
+    expect(sceneKey()).toBe('fallback');
+    expect(screen.getByTestId('home-tile-sleep')).toBeTruthy();
+    expect(screen.getByTestId('home-tiles')).toBeTruthy();
+    expect(screen.getByTestId('metric-card-STEPS')).toBeTruthy();
+  });
+
+  it('leaves the status bar alone when Home mounts unfocused', async () => {
+    mockFocused = false;
+    mockApi({ records: steps });
+    render(<DashboardScreen />);
+    await screen.findByTestId('home-scene');
+    expect(screen.UNSAFE_queryAllByType(StatusBar)).toHaveLength(0);
+    fire('focus');
+    expect(screen.UNSAFE_getByType(StatusBar).props.style).toBe('light');
   });
 
   it('reads the new day\'s night after midnight', async () => {

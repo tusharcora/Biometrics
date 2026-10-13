@@ -94,7 +94,7 @@ export function DashboardScreen() {
   const [night, setNight] = useState<Read<SleepNight | null>>({ status: 'loading' });
   const [bedtime, setBedtime] = useState<string | null>(null);
   const [now, setNow] = useState(() => new Date());
-  const [homeFocused, setHomeFocused] = useState(true);
+  const [homeFocused, setHomeFocused] = useState<boolean>(() => navigation.isFocused?.() ?? true);
   const [headerBottom, setHeaderBottom] = useState(0);
   // Null until known, and null on failure: the coach entry simply isn't drawn.
   const { status: coachStatus } = useCoachStatus(navigation);
@@ -132,7 +132,7 @@ export function DashboardScreen() {
       .then((value) => { if (!cancelled) setScores({ status: 'ready', value }); })
       .catch(() => { if (!cancelled) setScores({ status: 'failed' }); });
     return () => { cancelled = true; };
-  }, [dataVersion]);
+  }, [dataVersion, today]);
 
   useEffect(() => {
     // Last night is dated by the morning you woke up: today. A failed read means "not short".
@@ -284,7 +284,9 @@ export function DashboardScreen() {
   const bands = scores.status === 'ready' ? scores.value.bands : undefined;
   const recoveryScore = todayScore(allScores, 'RECOVERY', today);
   const sleepScore = todayScore(allScores, 'SLEEP', today);
-  const lastNight = night.status === 'ready' ? night.value : null;
+  // While a new day's read is in flight, the old day's night must not stand in for it.
+  const todaysNight: Read<SleepNight | null> = night.status === 'ready' && night.value && night.value.date !== today ? { status: 'loading' } : night;
+  const lastNight = todaysNight.status === 'ready' ? todaysNight.value : null;
   const weather = todayWeather(recoveryScore, bands);
   const scene = sceneState({ now, recovery: weather, night: lastNight });
   const asRead = (value: DailyScoreDTO | null): Read<DailyScoreDTO | null> => (scores.status === 'ready' ? { status: 'ready', value } : scores);
@@ -334,7 +336,7 @@ export function DashboardScreen() {
             recovery={asRead(recoveryScore)}
             bands={bands}
             sleepScore={asRead(sleepScore)}
-            night={night}
+            night={todaysNight}
             tomorrow={forecastState}
             bedtime={bedtime}
             onOpen={open}

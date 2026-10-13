@@ -19,9 +19,9 @@ export function SyncStatusLine({ light = false }: { light?: boolean } = {}) {
   const { state, lastSyncedAt, connection, syncNow } = useSync();
   const navigation = useNavigation<any>();
   const now = useMinuteClock();
-  // Over Home's sky every line reads light, on any theme.
-  const quiet = light ? 'text-[#E5E7EB]' : 'text-muted-foreground';
-  const alarm = light ? 'text-[#FEE2E2]' : 'text-destructive';
+  // Over Home's sky every line reads white, on any theme: anything dimmer drops below 4.5:1 on the clear sky.
+  const quiet = light ? 'text-[#FFFFFF]' : 'text-muted-foreground';
+  const alarm = light ? 'text-[#FFFFFF]' : 'text-destructive';
 
   if (connection === 'DISCONNECTED') {
     return (
