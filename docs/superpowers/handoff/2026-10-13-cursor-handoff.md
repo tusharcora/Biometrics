@@ -176,3 +176,56 @@ Add a short section at the bottom of this file:
 - anything you were unsure about.
 
 Claude reads it on return.
+
+---
+
+## 7. Note from the interim agent (2026-10-13)
+
+### What I did
+| Task | Branch | Commit | State |
+|---|---|---|---|
+| A: the two Sleep follow-ups | `feature/sleep-page` | `757b954` | Pushed. **Sleep PR not opened**, as asked |
+| B: KIP drawing engine | `feature/kip-engine` (from `origin/main` `6d3160d`) | `4ec75cd` | Pushed. **Draft PR #61**, "KIP drawing engine (prep, not wired in)" |
+
+**A1, cross-month taps.** In `useSleepPage`, while the new window loads, the hook now keeps showing the last window's
+nights when the new anchor falls inside that window's range. It does this even when the date param changed. Before,
+the last window was reused only for the same param. The handoff suggested matching on the anchor's whole visible span
+(A−13..A). That never matches the case that blanks the page: for a previous-month anchor, A−13 is one day before the
+September window starts. So I matched on the anchor itself. The picker shows A−6..A, and the 2-week chart shows
+A−13..A, so for one load the chart can miss its oldest night until the new window lands. It never shows a skeleton. A
+failed load still shows the window's error with its retry. Tests: `useSleepPage.test.tsx` (3 Sep → 31 Aug stays
+`ready`, then takes the new nights) and `SleepScreen.test.tsx` (a chart-bar tap from 10 Sep to 28 Aug keeps the picker
+and the chart card mounted).
+
+**A2, hero skeleton flash on a goal error.** In `useSection` (`components/sleep/Section.tsx`, used only by
+`useSleepPage`), a reload from the error state now leaves the error up and refreshes quietly. Only a success replaces
+it. Before, the reload set the section to loading, and the hero waited on the goal and showed its skeleton. This also
+covers the regularity and window sections: a retry tap on any of them keeps its error card until the answer lands.
+Test: `SleepScreen.test.tsx` (goal in error, refocus, the goal refetch is pending, the hero never shows
+`sleep-hero-loading`, then the goal lands).
+
+**B, KIP engine.** `mobile/src/lib/kip/kipArt.ts` exports `KIP_COLOURS`, `DEFAULT_KIP_COLOUR`, `KIP_POSES`,
+`KIP_MOODS`, `kipRamp`, `kipGrid` and `kipArt`. `mobile/src/components/kip/Kip.tsx` takes `colour`, `pose`, `mood`
+and an integer `scale` (default 4 pt per cell). It is hidden from screen readers and has no `shapeRendering`. I
+ported the `build()` from `Final.dc.html`, which is newer than `scratch/kip-engine.js`: it moves held items with the
+hop. I ran it on the plain body (no skin). The only cosmetics are the two held items that the bottle and coffee poses
+need.
+
+### Test results
+- Mobile, `feature/sleep-page`: the full suite passes, 258 suites and 3028 tests (3025 before, plus 3 new). The
+  typecheck is at the 12-error baseline.
+- Mobile, `feature/kip-engine`: the new KIP tests, the convention guards and `WeatherIcon` pass (72 tests). The
+  typecheck is at 12.
+- I ran a one-off check without committing it: the port matches the board engine cell for cell for all 420 colour ×
+  pose × mood combinations.
+- I did not run the backend tests, because nothing in the backend changed. I did not sync to the simulator.
+
+### Things to check
+- **`main` moved.** PR #60 (`docs/design-status`) was merged, so `origin/main` is now `6d3160d`. I rebased nothing.
+  This note is on `docs/design-status` after the merge, so it is not on `main` yet.
+- **Left out of the KIP port:** the `breathe` and `blink` idle-loop frames, skins, outfits and ground colours. They
+  can come later from `Final.dc.html`.
+- **Local setup:** I added two worktrees, `.claude/worktrees/sleep-page` and `.claude/worktrees/kip-engine`. Their
+  `mobile/node_modules` is a symlink to `social-tab/mobile/node_modules`, which has the same lockfile, and
+  `mobile/node_modules` is in `.git/info/exclude`. Moving the Cursor workspace once briefly checked out the wrong
+  branch in those worktrees. I put both back, and nothing was lost.
