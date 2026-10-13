@@ -11,10 +11,15 @@ export const VERDICT: Record<WeatherKey, string> = {
   clear: 'Clear skies', mostlyClear: 'Mostly clear', cloudy: 'Cloudy', stormy: 'Stormy', building: 'Learning your weather', none: 'No reading',
 };
 
+/** A score's weather, by the Recovery page's bands (the user's, or the defaults). */
+export function weatherForScore(score: number, bands?: ScoreBandsDTO): WeatherKey {
+  return BAND_WEATHER[scoreBand(score, bands)];
+}
+
 export function weatherFor(score: number | null, state: RecoveryState, bands: ScoreBandsDTO): WeatherKey {
   if (state === 'NO_DATA') return 'none';
   if (score === null) return 'building';
-  return BAND_WEATHER[scoreBand(score, bands)];
+  return weatherForScore(score, bands);
 }
 
 const WEEKDAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
