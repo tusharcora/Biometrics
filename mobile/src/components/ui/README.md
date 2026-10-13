@@ -130,7 +130,7 @@ These stay as `Pressable` / `PressableScale` and are listed in the guard test's 
 - Backdrops, tap zones and handles (the sheet backdrop, story prev/next zones)
 - An inline span inside a sentence (a metric word in the coach's Today sentence), which is a link in running text, not a standalone link
 
-One documented custom exception: AskCoachBar (components/coach/AskCoachBar.tsx), used by ScoreDetail and Recovery, a GlassSurface CTA with the coach character, drawn with the same 8-px corners.
+One documented custom exception: AskCoachBar (components/coach/AskCoachBar.tsx), used by Sleep and Recovery, a GlassSurface CTA with the coach character, drawn with the same 8-px corners.
 
 One sanctioned size override: StickerButton's tall tile (an icon over a label) is an `outline` Button with `h-auto flex-col gap-[4px] py-[12px]`. Everywhere else, do not fight the size.
 

@@ -527,7 +527,7 @@ describe('CoachScreen: streamed answers', () => {
 
     fireEvent.press(await utils.findByTestId('answer-source'));
 
-    expect(mockNavigate).toHaveBeenCalledWith('ScoreDetail', { date: '2026-09-30', type: 'SLEEP' });
+    expect(mockNavigate).toHaveBeenCalledWith('Sleep', { date: '2026-09-30' });
   });
 
   it('shows the memory the coach proposed, and undo deletes it', async () => {

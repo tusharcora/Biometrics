@@ -279,7 +279,7 @@ export function formatDayTitle(date: string): string {
 
 const WEEKDAY_LONG = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 
-/** "Thursday 1 October": a night's title, and how a question to the coach names it. */
+/** "Thursday 1 October": how a This week row reads out its day. */
 export function formatLongDay(date: string): string {
   const d = toUtc(date);
   return `${WEEKDAY_LONG[d.getUTCDay()]} ${d.getUTCDate()} ${MONTH_LONG[d.getUTCMonth()]}`;

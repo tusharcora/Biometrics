@@ -1,6 +1,8 @@
 import { prisma } from '../db/client';
-import { civilDateToUtcMidnight, localClockTime, sessionEndCivilDate } from './civilDate';
-import { pickMainSession } from './mainSession';
+import { getLiveConfig } from '../scoring/configs';
+import type { ScoreBands } from '../scoring/configs/v1';
+import { civilDateToUtcMidnight, localCivilDateOrUtc, localClockTime, sessionEndCivilDate } from './civilDate';
+import { isDaytimeNap, pickMainSession } from './mainSession';
 
 // The heat map's widest view is a trailing year drawn as whole week columns
 // (up to 371 days); 400 leaves room for that without making this an unbounded
@@ -85,6 +87,10 @@ export interface SleepNightDTO {
   stageMinutes: { deep: number; light: number; rem: number; awake: number } | null;
   /** Whether the main session has a DEEP, LIGHT or REM stage: AWAKE alone is not stages. */
   hasStages: boolean;
+  /** The main session's minutes asleep (the page's one night duration); null with a rollup but no sessions. */
+  mainMinutesAsleep: number | null;
+  /** The main session is a daytime nap (isDaytimeNap): the date has no night. */
+  mainIsNap: boolean;
 }
 
 export interface SleepActivityDTO {
@@ -95,6 +101,10 @@ export interface SleepActivityDTO {
   // True while a connected account's older nights still wait for their
   // one-off stage backfill, so the client can say stages are on the way.
   stagesBackfillPending: boolean;
+  // The live score bands, so the client colours sleepScore the way the score routes do.
+  bands: ScoreBands;
+  // The user's local civil date, so the client's "today" follows the server, not the device clock.
+  today: string;
 }
 
 type SessionTimes = { startTime: Date; endTime: Date; minutesAsleep: number; startUtcOffsetSeconds: number | null; endUtcOffsetSeconds: number | null };
@@ -102,12 +112,12 @@ type SessionTimes = { startTime: Date; endTime: Date; minutesAsleep: number; sta
 const minutesBetween = (s: SessionTimes) => (s.endTime.getTime() - s.startTime.getTime()) / 60000;
 
 /**
- * Nightly sleep for an inclusive civil-date range: the Sleep page of the
- * activity heat map and its night sheet. Minutes asleep come from the SLEEP
+ * Nightly sleep for an inclusive civil-date range: the Sleep page, the
+ * Activity Sleep calendar and Home. Minutes asleep come from the SLEEP
  * rollup, so they always match what the Sleep Score saw; the times come from
  * the sessions behind it, bucketed onto dates exactly as the rollup is.
  */
-export async function getSleepForUser(userId: string, range: ActivityRange): Promise<SleepActivityDTO> {
+export async function getSleepForUser(userId: string, range: ActivityRange, now: Date = new Date()): Promise<SleepActivityDTO> {
   const gte = civilDateToUtcMidnight(range.from);
   const lt = new Date(civilDateToUtcMidnight(range.to).getTime() + DAY_MS);
 
@@ -166,9 +176,13 @@ export async function getSleepForUser(userId: string, range: ActivityRange): Pro
           ? { deep: main.deepMinutes ?? 0, light: main.lightMinutes ?? 0, rem: main.remMinutes ?? 0, awake: main.awakeMinutes ?? 0 }
           : null,
         hasStages: (main?.stages.length ?? 0) > 0,
+        mainMinutesAsleep: main ? main.minutesAsleep : null,
+        mainIsNap: main ? isDaytimeNap(main, timeZone) : false,
       };
     }),
     earliestDate: earliest ? earliest.recordedAt.toISOString().slice(0, 10) : null,
     stagesBackfillPending: conn?.status === 'CONNECTED' && conn.sleepStagesBackfilledAt === null,
+    bands: getLiveConfig().scoreBands,
+    today: localCivilDateOrUtc(now, timeZone),
   };
 }

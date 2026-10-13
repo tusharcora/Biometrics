@@ -6,6 +6,9 @@ import { addDays } from './heatmap';
 
 export type SleepByDate = ReadonlyMap<string, SleepNight>;
 
+/** Minutes asleep the sleep colours and stats aim at until the saved goal is read (Activity tab and Sleep page). */
+export const DEFAULT_SLEEP_GOAL_MINUTES = 480;
+
 export interface SleepRangeStats {
   nights: number;
   // Average over nights that HAVE a record, like the steps average.
@@ -151,10 +154,22 @@ export function nightClock(
   return { offset: startOffset, at: (iso) => clockAt(iso, Date.parse(iso) >= midpoint ? endOffset : startOffset) };
 }
 
-/** One line comparing a night to the visible range's average; null when there is nothing to compare. */
-export function compareSleepToAverage(minutes: number, average: number | null): string | null {
-  if (average === null || average <= 0) return null;
-  const diff = Math.round(minutes - average);
-  if (Math.abs(diff) < 5) return 'In line with your average for this range.';
-  return `${formatDuration(Math.abs(diff)).replace(/^0h /, '')} ${diff > 0 ? 'more' : 'less'} than your average for this range.`;
+/** A night's one duration (spec §4.4): the main session's minutes asleep, or the day total from an older server. */
+export function mainMinutes(n: SleepNight): number {
+  return n.mainMinutesAsleep ?? n.minutesAsleep;
+}
+
+/** A date whose main session is a daytime nap has no night (server rule, read from the flag). */
+export function isNapOnly(n: SleepNight): boolean {
+  return n.mainIsNap === true;
+}
+
+/**
+ * Nights by date for the calendars and their stats: minutesAsleep is main sleep and nap-only dates are dropped, so a
+ * night has one number, and one existence, across the app (plan ruling 5).
+ */
+export function mainSleepByDate(nights: Iterable<SleepNight>): SleepByDate {
+  const out = new Map<string, SleepNight>();
+  for (const n of nights) if (!isNapOnly(n)) out.set(n.date, { ...n, minutesAsleep: mainMinutes(n) });
+  return out;
 }

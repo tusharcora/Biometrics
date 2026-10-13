@@ -10,6 +10,7 @@ import type { RootStackParamList } from '../../navigation/RootNavigator';
 import { ACTIVITY_COPY } from '../../lib/activityCopy';
 import type { MetricRecord } from '../../lib/metricInsights';
 import { usualTiles, type TileRecord, type UsualTile } from '../../lib/usualTiles';
+import { openSleep } from '../../navigation/sleepNavigation';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { PressableScale } from '../ui/pressable-scale';
@@ -28,6 +29,10 @@ export function UsualTiles({ records, recovery, today }: { records: MetricRecord
     if (tile.type === 'RECOVERY') {
       // Without a score the Recovery page opens on today.
       navigation.navigate('Recovery', tile.latestDate ? { date: tile.latestDate } : undefined);
+      return;
+    }
+    if (tile.type === 'SLEEP') {
+      openSleep(navigation, tile.latestDate ?? undefined);
       return;
     }
     navigation.navigate('MetricDetail', { metricType: tile.type, records: tile.series as MetricRecord[], range: '30d' });

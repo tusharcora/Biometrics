@@ -10,6 +10,8 @@ export type Section<T> = { phase: 'loading' } | { phase: 'error' } | { phase: 'r
 // run lands. `key` names WHAT is loaded (e.g. the range): a new key shows the
 // loading state and, on failure, the error with its retry. `deps` only
 // refresh the same thing (a sync), so a failed refresh keeps what is on screen.
+// An error is what is on screen too: a retry, refocus or sync refreshes it
+// quietly and leaves the error up until a refresh succeeds.
 export function useSection<T>(key: string, load: () => Promise<T>, deps: unknown[]): [Section<T>, () => void] {
   const [state, setState] = useState<Section<T> & { key?: string }>({ phase: 'loading' });
   const requestId = useRef(0);
@@ -17,14 +19,14 @@ export function useSection<T>(key: string, load: () => Promise<T>, deps: unknown
   const run = useCallback(load, [key, ...deps]);
   const reload = useCallback(() => {
     const id = ++requestId.current;
-    const same = (prev: Section<T> & { key?: string }) => prev.phase === 'ready' && prev.key === key;
-    setState((prev) => (same(prev) ? prev : { phase: 'loading' }));
+    const keep = (prev: Section<T> & { key?: string }) => prev.key === key && (prev.phase === 'ready' || prev.phase === 'error');
+    setState((prev) => (keep(prev) ? prev : { phase: 'loading' }));
     run().then(
       (data) => {
         if (id === requestId.current) setState({ phase: 'ready', data, key });
       },
       () => {
-        if (id === requestId.current) setState((prev) => (same(prev) ? prev : { phase: 'error' }));
+        if (id === requestId.current) setState((prev) => (keep(prev) ? prev : { phase: 'error', key }));
       },
     );
   }, [run, key]);

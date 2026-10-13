@@ -6,6 +6,8 @@ import { migrateTestDb } from '../setupTestDb';
 import { authHeaderFor } from '../helpers/auth';
 import { testServer } from '../helpers/server';
 import { storeSleepSessions } from '../../src/biometrics/repository';
+import { getLiveConfig } from '../../src/scoring/configs';
+import { localCivilDate } from '../../src/biometrics/civilDate';
 
 beforeAll(() => {
   migrateTestDb();
@@ -192,6 +194,8 @@ describe('GET /me/sleep', () => {
 
   // A night stored without a summary or stages, as every pre-stages night is.
   const NO_DEPTH = { minutesAwake: null, stageMinutes: null, hasStages: false };
+  // The main session's minutes asleep, on a night (not a daytime nap).
+  const MAIN = (minutes: number) => ({ mainMinutesAsleep: minutes, mainIsNap: false });
 
   async function connect(userId: string, status: 'CONNECTED' | 'DISCONNECTED', sleepStagesBackfilledAt: Date | null) {
     await prisma.healthConnection.create({
@@ -221,7 +225,7 @@ describe('GET /me/sleep', () => {
 
     expect(res.status).toBe(200);
     expect(res.body.nights).toEqual([
-      { date: '2026-09-24', minutesAsleep: 467, minutesInBed: 486, bedtime: '23:52', wakeTime: '07:58', sleepScore: null, ...NO_DEPTH },
+      { date: '2026-09-24', minutesAsleep: 467, minutesInBed: 486, bedtime: '23:52', wakeTime: '07:58', sleepScore: null, ...NO_DEPTH, ...MAIN(467) },
     ]);
     expect(res.body.earliestDate).toBe('2026-09-24');
   });
@@ -235,7 +239,7 @@ describe('GET /me/sleep', () => {
     const res = await getSleep(user.id, { from: '2026-09-10', to: '2026-09-10' });
 
     expect(res.body.nights).toEqual([
-      { date: '2026-09-10', minutesAsleep: 430, minutesInBed: 465, bedtime: '22:30', wakeTime: '06:15', sleepScore: null, ...NO_DEPTH },
+      { date: '2026-09-10', minutesAsleep: 430, minutesInBed: 465, bedtime: '22:30', wakeTime: '06:15', sleepScore: null, ...NO_DEPTH, ...MAIN(430) },
     ]);
   });
 
@@ -247,7 +251,7 @@ describe('GET /me/sleep', () => {
     const res = await getSleep(user.id, { from: '2026-09-12', to: '2026-09-12' });
 
     expect(res.body.nights).toEqual([
-      { date: '2026-09-12', minutesAsleep: 455, minutesInBed: 490, bedtime: '23:30', wakeTime: '07:00', sleepScore: null, ...NO_DEPTH },
+      { date: '2026-09-12', minutesAsleep: 455, minutesInBed: 490, bedtime: '23:30', wakeTime: '07:00', sleepScore: null, ...NO_DEPTH, ...MAIN(420) },
     ]);
   });
 
@@ -260,7 +264,7 @@ describe('GET /me/sleep', () => {
     const res = await getSleep(user.id, { from: '2026-09-13', to: '2026-09-13' });
 
     expect(res.body.nights).toEqual([
-      { date: '2026-09-13', minutesAsleep: 405, minutesInBed: 510, bedtime: '03:30', wakeTime: '07:00', sleepScore: null, ...NO_DEPTH },
+      { date: '2026-09-13', minutesAsleep: 405, minutesInBed: 510, bedtime: '03:30', wakeTime: '07:00', sleepScore: null, ...NO_DEPTH, ...MAIN(205) },
     ]);
   });
 
@@ -298,7 +302,7 @@ describe('GET /me/sleep', () => {
     const res = await getSleep(user.id, { from: '2026-09-01', to: '2026-09-30' });
 
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ nights: [], earliestDate: null, stagesBackfillPending: false });
+    expect(res.body).toMatchObject({ nights: [], earliestDate: null, stagesBackfillPending: false });
   });
 
   it('reports the main session\'s stage minutes, minutes awake and that it has stages', async () => {
@@ -322,7 +326,7 @@ describe('GET /me/sleep', () => {
     expect(res.body.nights).toEqual([
       {
         date: '2026-09-17', minutesAsleep: 420, minutesInBed: 480, bedtime: '23:00', wakeTime: '07:00', sleepScore: null,
-        minutesAwake: 60, stageMinutes: { deep: 80, light: 240, rem: 100, awake: 60 }, hasStages: true,
+        minutesAwake: 60, stageMinutes: { deep: 80, light: 240, rem: 100, awake: 60 }, hasStages: true, ...MAIN(420),
       },
     ]);
   });
@@ -420,7 +424,55 @@ describe('GET /me/sleep', () => {
 
     const res = await getSleep(me.id, { from: '2026-09-01', to: '2026-09-30' });
 
-    expect(res.body).toEqual({ nights: [], earliestDate: null, stagesBackfillPending: false });
+    expect(res.body).toMatchObject({ nights: [], earliestDate: null, stagesBackfillPending: false });
+  });
+  it('adds the main session minutes beside the day total, and whether the main session is a daytime nap', async () => {
+    const user = await createUser('sleep-main-minutes');
+    await seedNight(user.id, '2026-09-11T23:30:00Z', '2026-09-12T07:00:00Z', 420);
+    await seedNight(user.id, '2026-09-12T14:00:00Z', '2026-09-12T14:40:00Z', 35);
+    // Only a nap on the 13th: 13:00-13:50 UTC, 45 min asleep.
+    await seedNight(user.id, '2026-09-13T13:00:00Z', '2026-09-13T13:50:00Z', 45);
+
+    const res = await getSleep(user.id, { from: '2026-09-12', to: '2026-09-13' });
+
+    expect(res.body.nights.map((n: { date: string; minutesAsleep: number; mainMinutesAsleep: number | null; mainIsNap: boolean }) =>
+      [n.date, n.minutesAsleep, n.mainMinutesAsleep, n.mainIsNap])).toEqual([
+      ['2026-09-12', 455, 420, false],
+      ['2026-09-13', 45, 45, true],
+    ]);
+  });
+
+  it('has a null main session for a SLEEP rollup with no sessions behind it', async () => {
+    const user = await createUser('sleep-rollup-only');
+    await prisma.biometricRecord.create({ data: { userId: user.id, metricType: 'SLEEP', value: 400, recordedAt: new Date('2026-09-14') } });
+
+    const res = await getSleep(user.id, { from: '2026-09-14', to: '2026-09-14' });
+
+    expect(res.body.nights[0]).toMatchObject({ minutesAsleep: 400, mainMinutesAsleep: null, mainIsNap: false });
+  });
+
+  it("sends the live score bands and the user's own today", async () => {
+    const user = await createUser('sleep-bands-today');
+    await prisma.user.update({ where: { id: user.id }, data: { timezone: 'Pacific/Kiritimati' } });
+
+    const res = await getSleep(user.id, { from: '2026-09-01', to: '2026-09-02' });
+
+    expect(res.body.bands).toEqual(getLiveConfig().scoreBands);
+    // UTC+14: often a day ahead of UTC.
+    expect(res.body.today).toBe(localCivilDate(new Date(), 'Pacific/Kiritimati'));
+  });
+
+  it('never logs sleep values or dates', async () => {
+    const user = await createUser('sleep-logs');
+    await seedNight(user.id, '2026-09-16T23:00:00Z', '2026-09-17T07:00:00Z', 437);
+    const spies = (['log', 'info', 'warn', 'error'] as const).map((level) => jest.spyOn(console, level));
+
+    await getSleep(user.id, { from: '2026-09-17', to: '2026-09-17' });
+
+    const logged = spies.flatMap((spy) => spy.mock.calls).flat().map(String).join(' ');
+    expect(logged).not.toMatch(/437/);
+    expect(logged).not.toContain('2026-09-17');
+    spies.forEach((spy) => spy.mockRestore());
   });
 });
 

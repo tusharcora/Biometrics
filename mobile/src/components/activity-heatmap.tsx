@@ -1,4 +1,4 @@
-import React, { memo, useMemo, useRef, useState } from 'react';
+import React, { memo, useEffect, useMemo, useRef, useState } from 'react';
 import { Pressable, ScrollView, View, type GestureResponderEvent } from 'react-native';
 import Animated, { FadeIn, useReducedMotion } from 'react-native-reanimated';
 import Svg, { Rect } from 'react-native-svg';
@@ -34,8 +34,8 @@ import {
 } from '../lib/heatmap';
 import { weatherFor, type WeatherKey } from '../lib/recoveryCopy';
 import { DEFAULT_SCORE_BANDS } from '../lib/scoreInsights';
-import { formatDuration, sleepRangeStats, type SleepByDate } from '../lib/sleepStats';
-import { DayDetail, NightDetail } from './activity-sheets';
+import { formatDuration, mainSleepByDate, type SleepByDate } from '../lib/sleepStats';
+import { DayDetail } from './activity-sheets';
 import { WeatherIcon } from './recovery/WeatherIcon';
 import { SectionError } from './sleep/Section';
 import { Button, buttonIconSize } from './ui/button';
@@ -386,7 +386,7 @@ export interface ActivityHeatmapProps {
   recovery: RecoveryCalendarState;
   onRetrySleep?: () => void;
   onRetryRecovery?: () => void;
-  // One night in full, from the night sheet.
+  // A sleep cell, and the steps sheet's sleep link: the Sleep page on that night.
   onOpenNight?: (date: string) => void;
   // A Recovery day: the Recovery page on that date.
   onOpenRecovery?: (date: string) => void;
@@ -394,10 +394,13 @@ export interface ActivityHeatmapProps {
   sleepGoal?: number;
   // Drawn beside the month stats ("2026 so far").
   beside?: React.ReactNode;
+  // A date to open on the steps tab, once (the Sleep page's "Steps that day").
+  openDate?: string | null;
+  onOpenedDate?: () => void;
 }
 
 // Activity's calendar (A-1): Steps, Sleep and Recovery tabs over one Month / Year / YTD calendar, then the
-// visible range's stats beside `beside`. Tapping a steps day or a night opens its sheet; a Recovery day opens Recovery.
+// visible range's stats beside `beside`. A steps day opens its sheet, a night the Sleep page, a Recovery day Recovery.
 export function ActivityHeatmap({
   steps,
   earliestDate,
@@ -410,13 +413,16 @@ export function ActivityHeatmap({
   onOpenRecovery,
   sleepGoal,
   beside,
+  openDate,
+  onOpenedDate,
 }: ActivityHeatmapProps) {
   const { colorScheme } = useColorScheme();
   const palette = colorScheme === 'light' ? COLORS.light : COLORS.dark;
   const [view, setView] = useState<HeatmapView>('month');
   const [monthCursor, setMonthCursor] = useState(() => monthStart(today));
   const [tab, setTab] = useState<CalendarTab>('steps');
-  const [selection, setSelection] = useState<{ metric: 'steps' | 'sleep'; date: string } | null>(null);
+  // The steps sheet's date; a night opens the Sleep page instead.
+  const [selection, setSelection] = useState<string | null>(null);
 
   const firstMonth = monthStart(yearStart(today));
   const lastMonth = monthStart(today);
@@ -426,9 +432,11 @@ export function ActivityHeatmap({
 
   const sleepSpec = useMemo<TabSpec>(() => (sleepGoal ? { ...SLEEP_SPEC, goal: sleepGoal } : SLEEP_SPEC), [sleepGoal]);
   const nights = sleep.phase === 'ready' ? sleep.nights : null;
+  // The calendar shows main sleep and skips nap-only dates (Sleep plan ruling 5).
+  const mainNights = useMemo(() => (nights ? mainSleepByDate(nights.values()) : null), [nights]);
   const sleepValues = useMemo<ValuesByDate>(
-    () => new Map(nights ? [...nights].map(([date, n]) => [date, n.minutesAsleep] as const) : []),
-    [nights],
+    () => new Map(mainNights ? [...mainNights].map(([date, n]) => [date, n.minutesAsleep] as const) : []),
+    [mainNights],
   );
   const recoveryData = recovery.phase === 'ready' ? { scores: recovery.scores, bands: recovery.bands } : null;
   const bands = recoveryData?.bands ?? DEFAULT_SCORE_BANDS;
@@ -439,32 +447,34 @@ export function ActivityHeatmap({
     () => (nights ? rangeStats(sleepValues, range.start, range.end, today, sleepSpec.goal) : null),
     [nights, sleepValues, range.start, range.end, today, sleepSpec.goal],
   );
-  // The sheets compare a night to the range's average, as before.
-  const nightAverage = useMemo(
-    () => (nights ? sleepRangeStats(nights, range.start, range.end, today, sleepSpec.goal).averageMinutes : null),
-    [nights, range.start, range.end, today, sleepSpec.goal],
-  );
   const recStats = useMemo(
     () => (recoveryData ? recoveryStats(recoveryData.scores, range.start, range.end, today, bands) : null),
     [recoveryData, range.start, range.end, today, bands],
   );
-
-  function select(date: string) {
-    if (tab === 'recovery') onOpenRecovery?.(date);
-    else setSelection({ metric: tab, date });
-  }
-
-  // From one sheet to the same day on the other: the tab follows.
-  function crossTo(metric: 'steps' | 'sleep', date: string) {
-    setSelection({ metric, date });
-    setTab(metric);
-  }
 
   // The sheet is a Modal, which would stay above a pushed screen: close it first.
   function openNight(date: string) {
     setSelection(null);
     onOpenNight?.(date);
   }
+
+  function select(date: string) {
+    if (tab === 'recovery') onOpenRecovery?.(date);
+    else if (tab === 'sleep') openNight(date);
+    else setSelection(date);
+  }
+
+  // A date handed in from outside opens that day's steps sheet once.
+  useEffect(() => {
+    if (!openDate) return;
+    setView('month');
+    setMonthCursor(monthStart(openDate));
+    setTab('steps');
+    setSelection(openDate);
+    onOpenedDate?.();
+    // Only when a new date arrives.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [openDate]);
 
   const none = COPY.stats.none;
   let calendar: React.ReactNode;
@@ -502,7 +512,7 @@ export function ActivityHeatmap({
         today={today}
         view={view}
         monthCursor={monthCursor}
-        selectedDate={selection && selection.metric === tab ? selection.date : null}
+        selectedDate={tab === 'steps' ? selection : null}
         onSelect={select}
         gridLabel={COPY.gridLabel(tab, rangeLabel)}
         note={note}
@@ -609,22 +619,13 @@ export function ActivityHeatmap({
       </View>
 
       <Sheet testID="day-sheet" visible={selection !== null} onClose={() => setSelection(null)}>
-        {selection?.metric === 'steps' ? (
+        {selection ? (
           <DayDetail
-            date={selection.date}
-            steps={steps.get(selection.date) ?? null}
+            date={selection}
+            steps={steps.get(selection) ?? null}
             goal={STEPS_SPEC.goal}
             average={stepStats.average}
-            sleepLink={nights ? { night: nights.get(selection.date) ?? null, onPress: () => crossTo('sleep', selection.date) } : undefined}
-          />
-        ) : selection ? (
-          <NightDetail
-            date={selection.date}
-            night={nights?.get(selection.date) ?? null}
-            goal={sleepSpec.goal}
-            average={nightAverage}
-            stepsLink={{ steps: steps.get(selection.date) ?? null, onPress: () => crossTo('steps', selection.date) }}
-            onOpenFull={onOpenNight ? () => openNight(selection.date) : undefined}
+            sleepLink={nights ? { night: nights.get(selection) ?? null, onPress: () => openNight(selection) } : undefined}
           />
         ) : null}
       </Sheet>

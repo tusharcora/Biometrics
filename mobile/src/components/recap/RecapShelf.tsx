@@ -24,7 +24,7 @@ interface Navigator {
   addListener?: (event: 'focus', callback: () => void) => () => void;
 }
 
-// The story shelf at the top of Sleep (weekly story placement, design D): "Recaps" with See all,
+// The story shelf on Home, above the coach digest (weekly story placement, design D): "Recaps" with See all,
 // then a row of circles, newest first, each on its coach's ground. An unwatched recap wears its
 // coach's ring, a watched one a neutral ring. A week plays its story; a month opens its recap.
 // The header and See all always show (the way to Your recaps and Year in pixels); the circles

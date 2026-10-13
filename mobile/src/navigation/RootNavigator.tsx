@@ -27,7 +27,6 @@ import { MeetYourCoachScreen } from '../screens/MeetYourCoachScreen';
 import { ThinkingStyleScreen } from '../screens/ThinkingStyleScreen';
 import { ThinkingTextScreen } from '../screens/ThinkingTextScreen';
 import { SleepScreen } from '../screens/SleepScreen';
-import { SleepNightScreen } from '../screens/SleepNightScreen';
 import { BedtimeGoalScreen } from '../screens/BedtimeGoalScreen';
 import { RecapBuilderScreen } from '../screens/RecapBuilderScreen';
 import { RecapScreen } from '../screens/RecapScreen';
@@ -83,7 +82,7 @@ export type RootStackParamList = {
   // `records` is the metric's whole series; `range` is the window to open on
   // (the Trends screen passes its current one; default 30 days).
   MetricDetail: { metricType: MetricRecord['metricType']; records: MetricRecord[]; range?: TrendRange };
-  ScoreDetail: { date: string; type?: ScoreType }; // serves SLEEP; RECOVERY or an omitted type redirects to Recovery
+  ScoreDetail: { date: string; type?: ScoreType }; // a redirect shim: SLEEP opens Sleep; RECOVERY or an omitted type opens Recovery
   Recovery: { date?: string } | undefined; // date (YYYY-MM-DD) defaults to today
   Forecast: undefined;
   Patterns: undefined;
@@ -105,18 +104,16 @@ export type RootStackParamList = {
   // The character picker. 'first' opens by itself on the first Coach-tab
   // visit (starts on Mochi, has Skip); 'switch' comes from Profile.
   MeetYourCoach: { mode: 'first' | 'switch' };
-  // Opened from the Home sleep card and the Activity Sleep page.
-  Sleep: undefined;
-  // One night in full; `date` is the civil date the night ended on.
-  SleepNight: { date: string };
+  // The one Sleep page (spec 2026-10-09); date is the night-end civil date, else the default night.
+  Sleep: { date?: string } | undefined;
   BedtimeGoal: undefined;
-  // Sleep → "Your recaps": the latest month, latest week, older ones and Year in pixels.
+  // Home → "Your recaps": the latest month, latest week, older ones and Year in pixels.
   Recaps: undefined;
   // One recap; from the list, a ringed avatar (a month), the shelf, the coach digest card, the
   // story viewer when a push turns out to be a month, or "See full recap" at the end of a story.
   Recap: { id: string };
   // A weekly recap's story, full screen (the viewer): with the recap from its recap screen, or by
-  // id from a recap push, a ringed avatar and the Sleep shelf (it loads the recap itself and
+  // id from a recap push, a ringed avatar and the Home shelf (it loads the recap itself and
   // hands a month to its recap screen).
   RecapStory: { recap: Recap } | { id: string };
   // Build your recap: a recap's own format plus Year in pixels, or Year in pixels alone.
@@ -255,8 +252,7 @@ export function RootNavigator() {
               <Stack.Screen name="HostedConsent" component={HostedConsentScreen} options={{ title: 'AI engine' }} />
               <Stack.Screen name="SignInMethods" component={SignInMethodsScreen} options={{ title: 'Sign-in methods' }} />
               <Stack.Screen name="Devices" component={DevicesScreen} options={{ title: 'Devices' }} />
-              <Stack.Screen name="Sleep" component={SleepScreen} options={{ title: 'Sleep' }} />
-              <Stack.Screen name="SleepNight" component={SleepNightScreen} options={{ title: '' }} />
+              <Stack.Screen name="Sleep" component={SleepScreen} options={{ headerShown: false }} />
               <Stack.Screen name="BedtimeGoal" component={BedtimeGoalScreen} options={{ title: 'Bedtime goal' }} />
               <Stack.Screen name="Recap" component={RecapScreen} options={{ title: '' }} />
               <Stack.Screen

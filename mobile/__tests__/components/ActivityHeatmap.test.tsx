@@ -129,33 +129,37 @@ describe('ActivityHeatmap: days and nights', () => {
     expect(getByTestId('day-detail-empty')).toHaveTextContent('No steps were recorded for this day.');
   });
 
-  it('opens the night sheet on the Sleep tab, and the full night from it', () => {
+  it('opens that night on the Sleep page from the Sleep tab, with no sheet', () => {
     const onOpenNight = jest.fn();
     const utils = renderHeatmap([], { sleep: sleepOf([nightOf('2026-09-22', 467, { sleepScore: 71 })]), onOpenNight });
 
     fireEvent.press(utils.getByTestId('activity-tab-sleep'));
     measure(utils);
     fireEvent.press(utils.getByTestId('activity-cal-2026-09-22'));
-    expect(utils.getByTestId('night-detail-asleep')).toHaveTextContent('7h 47m');
-
-    fireEvent.press(utils.getByTestId('night-open-full'));
     expect(onOpenNight).toHaveBeenCalledWith('2026-09-22');
-    // The sheet is a Modal: it closes so it can't sit above the pushed screen.
-    expect(utils.queryByTestId('night-detail')).toBeNull();
+    expect(utils.queryByTestId('day-detail')).toBeNull();
   });
 
-  it('jumps between the two sheets for the same day, and the tab follows', () => {
-    const { getByTestId, queryByTestId } = renderHeatmap([['2026-09-22', 12000]], { sleep: sleepOf([nightOf('2026-09-22', 467)]) });
+  it("the steps sheet's sleep link closes the sheet, then opens the night", () => {
+    const onOpenNight = jest.fn();
+    const { getByTestId, queryByTestId } = renderHeatmap([['2026-09-22', 12000]], { sleep: sleepOf([nightOf('2026-09-22', 467)]), onOpenNight });
 
     fireEvent.press(getByTestId('activity-cal-2026-09-22'));
+    expect(getByTestId('day-detail-sleep-link')).toHaveTextContent(/7h 47m/);
     fireEvent.press(getByTestId('day-detail-sleep-link'));
+    // The sheet is a Modal: it closes so it can't sit above the pushed screen.
     expect(queryByTestId('day-detail')).toBeNull();
-    expect(getByTestId('night-detail-asleep')).toHaveTextContent('7h 47m');
-    expect(getByTestId('activity-tab-sleep').props.accessibilityState).toEqual(expect.objectContaining({ selected: true }));
+    expect(onOpenNight).toHaveBeenCalledWith('2026-09-22');
+  });
 
-    fireEvent.press(getByTestId('night-detail-steps-link'));
-    expect(getByTestId('day-detail-steps')).toHaveTextContent('12,000 steps');
+  it('a date handed in opens its steps sheet once, on its month', () => {
+    const onOpenedDate = jest.fn();
+    const { getByTestId } = renderHeatmap([['2026-08-14', 9000]], { openDate: '2026-08-14', onOpenedDate });
+
+    expect(getByTestId('day-detail-steps')).toHaveTextContent('9,000 steps');
+    expect(getByTestId('heatmap-title')).toHaveTextContent('August 2026');
     expect(getByTestId('activity-tab-steps').props.accessibilityState).toEqual(expect.objectContaining({ selected: true }));
+    expect(onOpenedDate).toHaveBeenCalledTimes(1);
   });
 
   it('hides the sleep link on a steps day while sleep is unavailable', () => {
@@ -198,6 +202,16 @@ describe('ActivityHeatmap: month stats', () => {
     expect(getByTestId('stat-active')).toHaveTextContent('3');
     expect(getByTestId('stat-streak')).toHaveTextContent('3 nights');
     expect(getByTestId('stat-best')).toHaveTextContent('8h 20m');
+  });
+
+  it('counts main sleep on the Sleep tab and skips nap-only dates', () => {
+    const { getByTestId } = renderHeatmap([], {
+      sleep: sleepOf([nightOf('2026-09-21', 500, { mainMinutesAsleep: 467 }), nightOf('2026-09-22', 45, { mainMinutesAsleep: 45, mainIsNap: true })]),
+    });
+    fireEvent.press(getByTestId('activity-tab-sleep'));
+
+    expect(getByTestId('stat-average')).toHaveTextContent('7h 47m');
+    expect(getByTestId('stat-active')).toHaveTextContent('1');
   });
 
   it('draws the month stats beside what it is given', () => {

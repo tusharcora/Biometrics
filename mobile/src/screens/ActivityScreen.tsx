@@ -4,7 +4,7 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { RefreshControl, ScrollView, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
 import { fetchActivity } from '../api/activity';
 import { apiFetch } from '../api/client';
@@ -23,9 +23,12 @@ import { weekRows, weekSummary } from '../lib/activityWeek';
 import { addDays, fetchRange, todayCivil, type ValuesByDate } from '../lib/heatmap';
 import type { MetricRecord } from '../lib/metricInsights';
 import { DEFAULT_SCORE_BANDS } from '../lib/scoreInsights';
+import { DEFAULT_SLEEP_GOAL_MINUTES, mainSleepByDate } from '../lib/sleepStats';
 import { recoveryRecords, type TileRecord } from '../lib/usualTiles';
 import { useSync } from '../sync/SyncProvider';
+import { openNight } from '../navigation/sleepNavigation';
 import { useTabBarClearance } from '../navigation/tabBarLayout';
+import type { TabParamList } from '../navigation/TabsNavigator';
 import { COLORS, METRIC_CONFIG } from '../theme';
 
 type LoadState =
@@ -41,8 +44,6 @@ type LoadState =
       recovery: RecoveryCalendarState;
     };
 
-// Minutes asleep the sleep colours aim at when the saved goal can't be read.
-const DEFAULT_SLEEP_GOAL = 480;
 // The most the scores endpoint serves; it also covers the usual rows' 30 days and the 30 before them.
 const RECOVERY_DAYS = 120;
 
@@ -52,6 +53,8 @@ function recoveryScores(scores: DailyScoreDTO[]): ValuesByDate {
 
 export function ActivityScreen() {
   const navigation = useNavigation<any>();
+  // A date handed in by the Sleep page's "Steps that day": opened once, then cleared.
+  const openDate = useRoute<RouteProp<TabParamList, 'Activity'>>().params?.date ?? null;
   const clearance = useTabBarClearance();
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === 'light' ? COLORS.light : COLORS.dark;
@@ -97,7 +100,7 @@ export function ActivityScreen() {
         earliestDate: res.earliestDate,
         today,
         // A failed refresh keeps the goal already in use.
-        sleepGoal: goalRes.status === 'fulfilled' && goalRes.value?.sleepGoalMinutes > 0 ? goalRes.value.sleepGoalMinutes : (kept?.sleepGoal ?? DEFAULT_SLEEP_GOAL),
+        sleepGoal: goalRes.status === 'fulfilled' && goalRes.value?.sleepGoalMinutes > 0 ? goalRes.value.sleepGoalMinutes : (kept?.sleepGoal ?? DEFAULT_SLEEP_GOAL_MINUTES),
         // A failed refresh keeps the sleep and Recovery already on screen.
         sleep:
           sleepRes.status === 'fulfilled'
@@ -162,8 +165,9 @@ export function ActivityScreen() {
 
   const ready = state.phase === 'ready' ? state : null;
   const nights = ready?.sleep.phase === 'ready' ? ready.sleep.nights : null;
+  // Main sleep only, as on the calendar: nap-only dates are skipped.
   const sleepMinutes = useMemo<ValuesByDate | null>(
-    () => (nights ? new Map([...nights].map(([date, n]) => [date, n.minutesAsleep] as const)) : null),
+    () => (nights ? new Map([...mainSleepByDate(nights.values())].map(([date, n]) => [date, n.minutesAsleep] as const)) : null),
     [nights],
   );
   const recovery = ready?.recovery.phase === 'ready' ? ready.recovery : null;
@@ -210,7 +214,7 @@ export function ActivityScreen() {
             <ThisWeek
               rows={rows}
               onOpenDay={(date) => navigation.navigate('Recovery', { date })}
-              onOpenNight={(date) => navigation.navigate('SleepNight', { date })}
+              onOpenNight={(date) => openNight(navigation, date)}
             />
             <ActivityHeatmap
               steps={ready.steps}
@@ -219,7 +223,9 @@ export function ActivityScreen() {
               sleep={ready.sleep}
               recovery={ready.recovery}
               sleepGoal={ready.sleepGoal}
-              onOpenNight={(date) => navigation.navigate('SleepNight', { date })}
+              onOpenNight={(date) => openNight(navigation, date)}
+              openDate={openDate}
+              onOpenedDate={() => navigation.setParams({ date: undefined })}
               onOpenRecovery={(date) => navigation.navigate('Recovery', { date })}
               onRetrySleep={retry('sleep')}
               onRetryRecovery={retry('recovery')}

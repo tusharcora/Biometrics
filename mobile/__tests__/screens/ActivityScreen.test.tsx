@@ -16,8 +16,10 @@ jest.mock('../../src/api/scores');
 const mockNavigate = jest.fn();
 // Screen events by name, so a test can fire focus/blur.
 const mockListeners: Record<string, () => void> = {};
+let mockRouteParams: { date?: string } | undefined;
 const mockNavigation = {
   navigate: mockNavigate,
+  setParams: jest.fn(),
   addListener: (event: string, fn: () => void) => {
     mockListeners[event] = fn;
     return () => delete mockListeners[event];
@@ -26,6 +28,7 @@ const mockNavigation = {
 jest.mock('@react-navigation/native', () => ({
   ...jest.requireActual('@react-navigation/native'),
   useNavigation: () => mockNavigation,
+  useRoute: () => ({ params: mockRouteParams }),
 }));
 
 const today = () => todayCivil();
@@ -34,6 +37,7 @@ const score = (date: string, value: number) => ({ date, type: 'RECOVERY', score:
 
 beforeEach(() => {
   jest.clearAllMocks();
+  mockRouteParams = undefined;
   (fetchActivity as jest.Mock).mockResolvedValue({ days: [], earliestDate: '2025-01-01' });
   (fetchSleep as jest.Mock).mockResolvedValue({ nights: [], earliestDate: null });
   (fetchSleepGoal as jest.Mock).mockResolvedValue({ sleepGoalMinutes: 480, bedtimeGoal: null, wakeGoal: null });
@@ -86,19 +90,28 @@ describe('ActivityScreen', () => {
     expect(mockNavigate).toHaveBeenLastCalledWith('Recovery', { date: today() });
 
     fireEvent.press(getByTestId(`week-moon-${today()}`));
-    expect(mockNavigate).toHaveBeenLastCalledWith('SleepNight', { date: today() });
+    expect(mockNavigate).toHaveBeenLastCalledWith('Sleep', { date: today() });
     // No night recorded yesterday: no moon.
     expect(queryByTestId(`week-moon-${addDays(today(), -1)}`)).toBeNull();
   });
 
-  it('opens a Recovery day from the calendar and one night in full from the night sheet', async () => {
+  it('opens a Recovery day from the calendar, and a night on the Sleep page', async () => {
     const { findByTestId, UNSAFE_getByType } = render(<ActivityScreen />);
     await findByTestId('heatmap-stats');
 
     act(() => UNSAFE_getByType(ActivityHeatmap).props.onOpenRecovery('2026-10-01'));
     expect(mockNavigate).toHaveBeenLastCalledWith('Recovery', { date: '2026-10-01' });
     act(() => UNSAFE_getByType(ActivityHeatmap).props.onOpenNight('2026-10-01'));
-    expect(mockNavigate).toHaveBeenLastCalledWith('SleepNight', { date: '2026-10-01' });
+    expect(mockNavigate).toHaveBeenLastCalledWith('Sleep', { date: '2026-10-01' });
+  });
+
+  it("opens the steps sheet on a date handed in by the Sleep page's Steps that day, then clears it", async () => {
+    mockRouteParams = { date: today() };
+    (fetchActivity as jest.Mock).mockResolvedValue({ days: [{ date: today(), steps: 7000 }], earliestDate: '2025-01-01' });
+    const { findByTestId } = render(<ActivityScreen />);
+
+    expect(await findByTestId('day-detail-steps')).toHaveTextContent('7,000 steps');
+    expect(mockNavigation.setParams).toHaveBeenCalledWith({ date: undefined });
   });
 
   it('syncs with Google Health on pull-to-refresh, then re-reads', async () => {

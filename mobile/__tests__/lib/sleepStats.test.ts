@@ -1,6 +1,10 @@
 import type { SleepNight } from '../../src/api/sleep';
 import { sleepHeatLevel } from '../../src/lib/heatmap';
-import { clockAt, compareSleepToAverage, formatClock, formatDuration, formatTextDuration, nightClock, nightUtcOffset, sleepRangeStats } from '../../src/lib/sleepStats';
+import {
+  clockAt, formatClock, formatDuration, formatTextDuration, isNapOnly, mainMinutes, mainSleepByDate, nightClock, nightUtcOffset,
+  sleepRangeStats,
+} from '../../src/lib/sleepStats';
+import { makeNight } from '../../jest-mocks/sleepPageFixture';
 
 function nights(entries: [string, number, string?][]): Map<string, SleepNight> {
   return new Map(
@@ -88,13 +92,6 @@ describe('formatting', () => {
     expect(formatClock('00:05')).toBe('12:05 am');
     expect(formatClock('12:00')).toBe('12:00 pm');
   });
-
-  it('compares a night to the average', () => {
-    expect(compareSleepToAverage(467, 443)).toBe('24m more than your average for this range.');
-    expect(compareSleepToAverage(380, 480)).toBe('1h 40m less than your average for this range.');
-    expect(compareSleepToAverage(452, 450)).toBe('In line with your average for this range.');
-    expect(compareSleepToAverage(452, null)).toBeNull();
-  });
 });
 
 // Stage segments are UTC instants; the night's local clock comes from its
@@ -173,5 +170,23 @@ describe('nightClock', () => {
   it('reads UTC with neither offsets nor stages', () => {
     const clock = nightClock({ bedtime: '23:10', startUtcOffsetSeconds: null, endUtcOffsetSeconds: null }, []);
     expect(clock.offset).toBe(0);
+  });
+});
+
+describe('main sleep', () => {
+  it('reads the main session, falling back to the day total for an older server', () => {
+    expect(mainMinutes(makeNight('2026-10-07', { minutesAsleep: 438, mainMinutesAsleep: 418 }))).toBe(418);
+    expect(mainMinutes(makeNight('2026-10-07', { minutesAsleep: 438, mainMinutesAsleep: undefined }))).toBe(438);
+    expect(isNapOnly(makeNight('2026-10-07', { mainIsNap: true }))).toBe(true);
+    expect(isNapOnly(makeNight('2026-10-07', { mainIsNap: undefined }))).toBe(false);
+  });
+
+  it('keys nights by date with main-sleep minutes and drops nap-only dates', () => {
+    const byDate = mainSleepByDate([
+      makeNight('2026-10-06', { minutesAsleep: 455, mainMinutesAsleep: 420 }),
+      makeNight('2026-10-07', { minutesAsleep: 45, mainMinutesAsleep: 45, mainIsNap: true }),
+    ]);
+    expect([...byDate.keys()]).toEqual(['2026-10-06']);
+    expect(byDate.get('2026-10-06')!.minutesAsleep).toBe(420);
   });
 });

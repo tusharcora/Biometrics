@@ -35,6 +35,8 @@ beforeEach(() => {
       return Promise.resolve(path === '/me/habits/config' ? { habitTypes: [] } : { today: '2026-09-20', days: [] });
     }
     if (path.startsWith('/me/scores')) return Promise.resolve({ scores: [] });
+    // No recaps: the Home shelf and the avatar ring stay quiet (a test overrides this to match the digest).
+    if (path.startsWith('/me/recaps')) return Promise.resolve({ recaps: [] });
     return Promise.resolve([{ id: '1', metricType: 'STEPS', value: 9000, recordedAt: '2026-09-01T00:00:00.000Z' }]);
   });
   (fetchCoachStatus as jest.Mock).mockResolvedValue(status);
@@ -98,6 +100,28 @@ describe('DashboardScreen: weekly digest card', () => {
     await findByTestId('metric-card-STEPS');
     await waitFor(() => expect(fetchCoachStatus).toHaveBeenCalled());
     expect(fetchLatestDigest).not.toHaveBeenCalled();
+    expect(queryByTestId('coach-digest-card')).toBeNull();
+  });
+
+  it('shows the Recaps shelf after the habit log and directly above the digest', async () => {
+    const { findByTestId, toJSON } = render(<DashboardScreen />);
+    await findByTestId('coach-digest-card');
+    await findByTestId('recap-shelf');
+    const tree = JSON.stringify(toJSON());
+    const habitLog = tree.indexOf('habit-log');
+    const shelf = tree.indexOf('recap-shelf');
+    const digestCard = tree.indexOf('coach-digest-card');
+    expect(habitLog).toBeGreaterThanOrEqual(0);
+    expect(digestCard).toBeGreaterThanOrEqual(0);
+    expect(habitLog).toBeLessThan(shelf);
+    expect(shelf).toBeLessThan(digestCard);
+  });
+
+  it('still shows the Recaps shelf when the coach is off', async () => {
+    (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, enabled: false });
+    const { findByTestId, queryByTestId } = render(<DashboardScreen />);
+
+    expect(await findByTestId('recap-shelf')).toBeTruthy();
     expect(queryByTestId('coach-digest-card')).toBeNull();
   });
 
