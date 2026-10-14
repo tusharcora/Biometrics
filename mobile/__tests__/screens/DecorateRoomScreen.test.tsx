@@ -139,6 +139,10 @@ it('marks the hotspot of the slot being decorated as selected, and gives each a 
   expect(s.getByTestId('decorate-hotspot-art').props.accessibilityState).toMatchObject({ selected: false });
   fireEvent.press(s.getByTestId('decorate-hotspot-art'));
   expect(s.getByTestId('decorate-hotspot-art').props.accessibilityState).toMatchObject({ selected: true });
+  expect(s.getByTestId('decorate-hotspot-desk_item')).toHaveTextContent('+ ITEM');
+  expect(s.getByTestId('decorate-hotspot-desk_item').props.accessibilityLabel).toBe('Decorate the desk item');
+  expect(s.getByTestId('decorate-hotspot-wallpaper')).toHaveTextContent('+ WALL');
+  expect(s.getByTestId('decorate-hotspot-wallpaper').props.accessibilityLabel).toBe('Decorate the wallpaper');
   for (const tag of s.getAllByTestId(/^decorate-hotspot-/)) {
     const { hitSlop, style } = tag.props;
     const height = StyleSheet.flatten(style).height as number;

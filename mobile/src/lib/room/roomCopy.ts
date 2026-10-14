@@ -51,6 +51,13 @@ export const SLOT_TITLES: Readonly<Record<RoomSlot | WornSlot, string>> = {
   plant: 'Plant', lamp: 'Lamp', corner: 'Corner', rug: 'Rug', pet: 'Pet', head: 'Head', face: 'Face', neck: 'Neck', ears: 'Ears',
 };
 
+/** The short visible text of the decorate room's hotspot tags; each fits a 64-point tag in the pixel font. The spoken
+ * label keeps the whole slot name (hotspotLabel). */
+export const HOTSPOT_LABELS: Readonly<Record<RoomSlot, string>> = {
+  wallpaper: '+ WALL', floor: '+ FLOOR', art: '+ ART', window: '+ WINDOW', shelf: '+ SHELF', desk: '+ DESK', desk_item: '+ ITEM',
+  plant: '+ PLANT', lamp: '+ LAMP', corner: '+ CORNER', rug: '+ RUG', pet: '+ PET',
+};
+
 const FAMILY_NAMES: Record<AchievementFamilyName, string> = {
   SLEEP_GOAL: 'Sleep goal', STEADY_BEDTIME: 'Steady bedtime', STEP_GOAL: 'Step goal', CHECK_IN: 'Check-in',
   BEST_RECOVERY_WEEK: 'Best recovery week', EVERY_DAY_LOGGED: 'Every day logged', STEADIEST_MONTH: 'Steadiest month',
@@ -129,7 +136,7 @@ export const ROOM_COPY = {
   undoLabel: 'Undo the last change',
   tabs: { room: 'Room', kip: 'KIP', sets: 'Sets' },
   tabsLabel: 'Decorate',
-  hotspot: (slot: RoomSlot) => `+ ${SLOT_TITLES[slot].toUpperCase()}`,
+  hotspot: (slot: RoomSlot) => HOTSPOT_LABELS[slot],
   hotspotLabel: (slot: RoomSlot) => `Decorate the ${SLOT_NAMES[slot]}`,
   locked: 'LOCKED',
   none: 'None',

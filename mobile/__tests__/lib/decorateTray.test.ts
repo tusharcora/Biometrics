@@ -1,5 +1,6 @@
 import { initDecorate, decorateReducer } from '../../src/lib/room/decorate';
-import { hotspotHitSlop, hotspotPositions, hotspotTargets, HOTSPOT_CELLS, TAG_H, TAG_W, TOUCH_MIN } from '../../src/lib/room/hotspots';
+import { hotspotHitSlop, hotspotPositions, hotspotTargets, HOTSPOT_CELLS, HOTSPOT_MIN_FONT_SCALE, TAG_H, TAG_PAD_X, TAG_W, TOUCH_MIN } from '../../src/lib/room/hotspots';
+import { HOTSPOT_LABELS, ROOM_COPY, SLOT_TITLES } from '../../src/lib/room/roomCopy';
 import { infoLine, offeredItems, setCards, tilesFor, type TrayContext } from '../../src/lib/room/tray';
 import { EMPTY_WORN, STARTER_LOADOUT } from '../../src/lib/room/loadout';
 import { ROOM_SLOTS } from '../../src/lib/room/slots';
@@ -59,6 +60,29 @@ it('keeps every hotspot tag inside the visible crop at any phone width, none on 
     expect(new Set(ROOM_SLOTS.map((s) => `${at[s].left},${at[s].top}`)).size).toBe(12);
   }
   expect(Object.keys(HOTSPOT_CELLS).sort()).toEqual([...ROOM_SLOTS].sort());
+});
+
+// Silkscreen-Regular.ttf's advance widths (hmtx / unitsPerEm 1000), for the characters the tag labels may use.
+const SILKSCREEN_ADVANCE: Record<string, number> = {
+  A: 0.75, B: 0.75, C: 0.75, D: 0.75, E: 0.625, F: 0.625, G: 0.75, H: 0.75, I: 0.375, J: 0.75, K: 0.75, L: 0.625, M: 0.875,
+  N: 0.875, O: 0.75, P: 0.75, Q: 0.75, R: 0.75, S: 0.75, T: 0.625, U: 0.75, V: 0.875, W: 0.875, X: 0.875, Y: 0.875, Z: 0.625,
+  ' ': 0.5, '+': 0.875,
+};
+// text-label is 11 px with 1 px letter spacing (tailwind.config.js); the label may shrink to 0.8× and no further.
+const LABEL_PX = 11;
+const TRACKING_PX = 1;
+
+it('keeps every visible tag label readable inside its tag, and speaks the full slot name', () => {
+  const inner = TAG_W - 2 * TAG_PAD_X;
+  for (const slot of ROOM_SLOTS) {
+    const label = ROOM_COPY.hotspot(slot);
+    expect(label).toBe(HOTSPOT_LABELS[slot]);
+    // Worst case: the tracking does not shrink with the glyphs.
+    const width = [...label].reduce((w, c) => w + SILKSCREEN_ADVANCE[c]! * LABEL_PX * HOTSPOT_MIN_FONT_SCALE + TRACKING_PX, 0);
+    expect(width <= inner ? null : `${label} is ${width.toFixed(1)} pt in ${inner}`).toBeNull();
+    expect(ROOM_COPY.hotspotLabel(slot)).toBe(`Decorate the ${SLOT_TITLES[slot].toLowerCase()}`);
+  }
+  expect(HOTSPOT_MIN_FONT_SCALE).toBe(0.8);
 });
 
 it('gives every hotspot tag a touch target at least 44 pt tall inside the room, none overlapping another', () => {
