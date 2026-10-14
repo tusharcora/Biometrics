@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { NavigationContext } from '@react-navigation/native';
-import { SettingsScreen } from '../../src/screens/SettingsScreen';
+import { ProfileSectionScreen } from '../../src/screens/ProfileSectionScreen';
 import { fetchCoachStatus, type CoachStatusDTO } from '../../src/api/coach';
 import { getTimezoneState, listTimeZones } from '../../src/lib/timezone';
 
@@ -21,7 +21,7 @@ const navigate = jest.fn();
 function renderSettings() {
   return render(
     <NavigationContext.Provider value={{ navigate } as any}>
-      <SettingsScreen />
+      <ProfileSectionScreen route={{ params: { section: 'aiCoach' } }} />
     </NavigationContext.Provider>,
   );
 }
@@ -33,7 +33,7 @@ beforeEach(() => {
   (fetchCoachStatus as jest.Mock).mockResolvedValue(status);
 });
 
-describe('SettingsScreen: Coach Memory entry', () => {
+describe('Profile → AI Coach: Coach Memory entry', () => {
   it('has a Coach Memory row that opens the memory screen', async () => {
     const { findByTestId } = renderSettings();
 
@@ -46,9 +46,8 @@ describe('SettingsScreen: Coach Memory entry', () => {
 
   it('is absent when the coach is disabled', async () => {
     (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, enabled: false });
-    const { findByTestId, queryByTestId } = renderSettings();
+    const { queryByTestId } = renderSettings();
 
-    await findByTestId('timezone-value');
     await waitFor(() => expect(fetchCoachStatus).toHaveBeenCalled());
     expect(queryByTestId('coach-memory-row')).toBeNull();
   });

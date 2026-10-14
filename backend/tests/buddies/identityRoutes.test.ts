@@ -7,7 +7,8 @@ import { deleteUserAccount } from '../../src/users/deletion';
 import { handleHash } from '../../src/buddies/identity';
 import { updateIdentity } from '../../src/buddies/handles';
 import * as rateLimit from '../../src/lib/rateLimit';
-import { api, buddyUser } from './helpers';
+import { saveCheckIn } from '../../src/social/checkins';
+import { api, buddyUser, pairUp } from './helpers';
 
 jest.mock('../../src/health/client');
 
@@ -24,7 +25,22 @@ const noop = { deleteSubscription: async () => {}, revokeToken: async () => {}, 
 it('GET /me/buddies/me reports no identity yet, the prefill and the mood notice', async () => {
   const user = await buddyUser({ handle: null, displayName: null, name: 'Sam Rivera', notice: false });
   const res = await (await api()).get('/me/buddies/me').set(await authHeaderFor(user.id));
-  expect([res.status, res.body]).toEqual([200, { handle: null, displayName: null, displayNamePrefill: 'Sam', moodNoticeSeen: false }]);
+  expect(res.status).toBe(200);
+  expect(res.body).toMatchObject({ handle: null, displayName: null, displayNamePrefill: 'Sam', moodNoticeSeen: false, checkInStreak: 0, buddyCount: 0 });
+});
+
+it("GET /me/buddies/me adds the passport's check-in streak, buddy count and joined date", async () => {
+  const user = await buddyUser({ timezone: 'America/Los_Angeles' });
+  // 02:00 UTC on Mar 15 is still Mar 14 in Los Angeles.
+  await prisma.user.update({ where: { id: user.id }, data: { createdAt: new Date('2026-03-15T02:00:00Z') } });
+  for (const b of [await buddyUser(), await buddyUser()]) await pairUp(user.id, b.id);
+  await pairUp((await buddyUser()).id, (await buddyUser()).id);
+  await saveCheckIn(user.id, 'RESTED', new Date());
+
+  const res = await (await api()).get('/me/buddies/me').set(await authHeaderFor(user.id));
+
+  expect(res.body).toMatchObject({ checkInStreak: 1, buddyCount: 2, joinedOn: '2026-03-14' });
+  expect(res.headers['cache-control']).toBe('private, no-store');
 });
 
 it('first setup needs both fields, stores the handle lowercase without its @, and sanitises the name', async () => {

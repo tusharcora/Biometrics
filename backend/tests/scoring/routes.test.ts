@@ -100,15 +100,15 @@ describe('GET /me/scores', () => {
     expect(three.body.scores.map((s: any) => s.date)).toEqual([today, shiftDate(today, -2)]);
   });
 
-  it('caps days at 120', async () => {
+  it('caps days at 400', async () => {
     const user = await createUser();
     const today = localCivilDate(new Date(), 'UTC');
-    await putScore(user.id, shiftDate(today, -119), 60);
-    await putScore(user.id, shiftDate(today, -120), 60);
+    await putScore(user.id, shiftDate(today, -399), 60);
+    await putScore(user.id, shiftDate(today, -400), 60);
 
     const res = await request(await testServer(createApp())).get('/me/scores?days=9999').set(await authed(user.id));
 
-    expect(res.body.scores.map((s: any) => s.date)).toEqual([shiftDate(today, -119)]);
+    expect(res.body.scores.map((s: any) => s.date)).toEqual([shiftDate(today, -399)]);
   });
 
   it('rejects a non-numeric or non-positive days', async () => {

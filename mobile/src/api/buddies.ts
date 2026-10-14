@@ -15,7 +15,16 @@ export const NUMBER_KEYS: readonly NumberKey[] = ['recovery', 'sleepScore', 'hou
 export interface Person { id: string; handle: string; displayName: string; coachId: string }
 export interface BuddyRow extends Person { mood: Mood; moodLine: string; unseenSticker: boolean }
 export interface BuddyPage { buddies: BuddyRow[]; nextCursor: string | null; incomingRequests: number; outgoingRequests: number }
-export interface BuddyIdentity { handle: string | null; displayName: string | null; displayNamePrefill: string; moodNoticeSeen: boolean }
+export interface BuddyIdentity {
+  handle: string | null;
+  displayName: string | null;
+  displayNamePrefill: string;
+  moodNoticeSeen: boolean;
+  // GET only, for Profile's passport; an older server leaves them out.
+  checkInStreak?: number;
+  buddyCount?: number;
+  joinedOn?: string;
+}
 export type SharingSettings = Record<ShareKey, boolean> & { consentVersion: number; consented: boolean };
 export interface IncomingRequest { id: string; createdAt: string; from: Person }
 /** toHandle is the handle as typed when sent (never the person's current handle); '' for an older row. */

@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
-import { SettingsScreen } from '../../src/screens/SettingsScreen';
+import { ProfileSectionScreen } from '../../src/screens/ProfileSectionScreen';
 import { FLOATING_BAR_HEIGHT, FLOATING_BAR_MARGIN } from '../../src/navigation/tabBarLayout';
 import {
   getTimezoneState,
@@ -13,6 +13,8 @@ import {
 jest.mock('../../src/lib/timezone');
 jest.mock('../../src/api/achievements');
 
+const TimezoneScreen = () => <ProfileSectionScreen route={{ params: { section: 'timezone' } }} />;
+
 beforeEach(() => {
   jest.clearAllMocks();
   (getTimezoneState as jest.Mock).mockResolvedValue({ timezone: 'America/Los_Angeles', overridden: false });
@@ -21,17 +23,16 @@ beforeEach(() => {
   (clearTimezoneOverride as jest.Mock).mockResolvedValue(undefined);
 });
 
-describe('SettingsScreen time zone', () => {
+describe('Profile → Time zone', () => {
   it('shows the current zone and hides "Use device time zone" while following the device', async () => {
-    const { getByTestId, queryByTestId, getByRole } = render(<SettingsScreen />);
+    const { getByTestId, queryByTestId } = render(<TimezoneScreen />);
 
     await waitFor(() => expect(getByTestId('timezone-value')).toHaveTextContent('America/Los_Angeles'));
-    expect(getByRole('header', { name: 'Profile' })).toHaveTextContent('PROFILE');
     expect(queryByTestId('use-device-timezone-button')).toBeNull();
   });
 
   it('filters the list by search text and saves the chosen zone as an override', async () => {
-    const { getByTestId, queryByTestId } = render(<SettingsScreen />);
+    const { getByTestId, queryByTestId } = render(<TimezoneScreen />);
     await waitFor(() => expect(getByTestId('timezone-value')).toBeTruthy());
 
     fireEvent.press(getByTestId('timezone-row'));
@@ -49,7 +50,7 @@ describe('SettingsScreen time zone', () => {
 
   it('"Use device time zone" clears the override', async () => {
     (getTimezoneState as jest.Mock).mockResolvedValue({ timezone: 'Asia/Tokyo', overridden: true });
-    const { getByTestId, queryByTestId } = render(<SettingsScreen />);
+    const { getByTestId, queryByTestId } = render(<TimezoneScreen />);
     await waitFor(() => expect(getByTestId('use-device-timezone-button')).toBeTruthy());
 
     (getTimezoneState as jest.Mock).mockResolvedValue({ timezone: 'America/Los_Angeles', overridden: false });
@@ -61,7 +62,7 @@ describe('SettingsScreen time zone', () => {
   });
 
   it('keeps the time zone picker clear of the floating bar', async () => {
-    const { getByTestId } = render(<SettingsScreen />);
+    const { getByTestId } = render(<TimezoneScreen />);
     await waitFor(() => expect(getByTestId('timezone-value')).toBeTruthy());
 
     fireEvent.press(getByTestId('timezone-row'));

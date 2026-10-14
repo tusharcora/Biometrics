@@ -17,8 +17,9 @@ const CONFIRM_WORD = 'DELETE';
 // in-app way to delete an account). Tapping the entry opens an inline
 // confirmation; the destructive button stays disabled until the user types the
 // word exactly. On success the server has already killed the tokens, so the
-// session is cleared locally instead of calling the sign-out endpoint.
-export function DeleteAccountSection() {
+// session is cleared locally instead of calling the sign-out endpoint. `renderClosed` replaces the
+// closed entry (Profile draws it beside Sign out); it is handed the function that opens the confirm.
+export function DeleteAccountSection({ renderClosed }: { renderClosed?: (open: () => void) => React.ReactElement } = {}) {
   const auth = useOptionalAuth();
   const { colorScheme: scheme } = useColorScheme();
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
@@ -62,6 +63,7 @@ export function DeleteAccountSection() {
   }
 
   if (!open) {
+    if (renderClosed) return renderClosed(() => setOpen(true));
     return (
       <SettingsGroup testID="delete-account-section" footer="Permanently delete your account and all the data stored for it.">
         <SettingsRow testID="delete-account-open" icon="trash-outline" destructive title="Delete account…" onPress={() => setOpen(true)} />
