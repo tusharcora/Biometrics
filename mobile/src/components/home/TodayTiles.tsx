@@ -54,7 +54,7 @@ function TodayTile({ testID, label, accessibilityLabel, onPress, children }: {
 }) {
   return (
     <Pressable testID={testID} accessibilityRole="button" accessibilityLabel={accessibilityLabel} onPress={onPress} className="flex-1 active:opacity-80">
-      <Card className="flex-1 gap-[6px] rounded-tile p-[12px]">
+      <Card className="grow gap-[6px] rounded-tile p-[12px]">
         <SectionLabel>{label}</SectionLabel>
         {children}
       </Card>
