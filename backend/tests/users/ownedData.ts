@@ -2,6 +2,7 @@ import { randomUUID } from 'crypto';
 import { prisma } from '../../src/db/client';
 import { encryptToken } from '../../src/crypto/tokenCipher';
 import { USER_OWNED_MODELS, delegateFor, type OwnedCounts, type UserOwnedModel } from '../../src/users/deletion';
+import { EMPTY_WORN, STARTER_ROOM } from '../../src/cosmetics/catalogue';
 
 /** A user with the given email and no data. */
 export async function createUserWithEmail(email: string) {
@@ -59,6 +60,8 @@ export async function seedAllOwnedRows(
     data: { userId, family: 'SLEEP_GOAL', level: 1, value: 3, earnedOn: day, weekStart: new Date('2026-08-31T00:00:00.000Z'), monthStart: day },
   });
   await prisma.goalChange.create({ data: { userId, kind: 'SLEEP_MINUTES', sleepMinutes: 480, effectiveOn: day, resetsStreak: false } });
+  await prisma.cosmeticUnlock.create({ data: { userId, itemId: 'wall.stripes', source: 'family:STEADY_BEDTIME:1' } });
+  await prisma.cosmeticLoadout.create({ data: { userId, room: { ...STARTER_ROOM }, worn: { ...EMPTY_WORN }, version: 1 } });
   await prisma.coachConsent.create({ data: { userId, version: 'v-test' } });
   await prisma.pushToken.create({ data: { userId, token: `push-${uniq}`, platform: 'ios' } });
   await prisma.session.create({

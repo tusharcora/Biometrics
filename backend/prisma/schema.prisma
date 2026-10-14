@@ -54,6 +54,8 @@ model User {
   pushTokens            PushToken[]
   recaps                Recap[]
   achievements          Achievement[]
+  cosmeticUnlocks       CosmeticUnlock[]
+  cosmeticLoadout       CosmeticLoadout?
   goalChanges           GoalChange[]
   buddyPairsA           BuddyPair[]         @relation("BuddyPairA")
   buddyPairsB           BuddyPair[]         @relation("BuddyPairB")
@@ -758,6 +760,35 @@ model Achievement {
 
   @@unique([userId, family, level])
   @@index([userId, celebratedAt])
+}
+
+/// A room or worn item a user earned (spec 2026-10-14 KIP's room §2). Starter items are never rows. A row is never
+/// deleted except with the account (USER_OWNED_MODELS) or by the test-fixture purge.
+model CosmeticUnlock {
+  userId     String
+  user       User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// A catalogue item id; never a set id.
+  itemId     String
+  /// 'family:STEADY_BEDTIME:3', 'anyFamily:4', 'counter:recaps_read:8', 'set:cottage' or 'backfill'.
+  source     String
+  unlockedAt DateTime  @default(now())
+  seenAt     DateTime?
+
+  @@id([userId, itemId])
+  @@index([userId, seenAt])
+}
+
+/// What fills each slot. No row means the starter loadout.
+model CosmeticLoadout {
+  userId    String   @id
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// Record<RoomSlot, itemId | null>
+  room      Json
+  /// Record<WornSlot, itemId | null>
+  worn      Json
+  /// Optimistic concurrency: every save increments it.
+  version   Int      @default(0)
+  updatedAt DateTime @updatedAt
 }
 
 enum GoalChangeKind {
