@@ -10,6 +10,11 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "com.tusharcora.biometrics",
+      "icon": {
+        "light": "./assets/icon.png",
+        "dark": "./assets/icon-dark.png",
+        "tinted": "./assets/icon-tinted.png"
+      },
       "infoPlist": {
         "CFBundleDisplayName": "Biometrics"
       }
@@ -29,6 +34,15 @@
     "plugins": [
       "./plugins/with-ios-scene-delegate.js",
       "expo-asset",
+      [
+        "expo-splash-screen",
+        {
+          "image": "./assets/splash-icon.png",
+          "imageWidth": 128,
+          "resizeMode": "contain",
+          "backgroundColor": "#0A0B0E"
+        }
+      ],
       [
         "expo-media-library",
         {
