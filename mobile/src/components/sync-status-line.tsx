@@ -14,11 +14,14 @@ function useMinuteClock(): Date {
 }
 
 // Under the "Today" title: whether the data is current, and a tap to sync now.
-// A quiet link: muted (or destructive) text rather than the link's foreground.
-export function SyncStatusLine() {
+// A quiet link: muted (or destructive) text rather than the link's foreground; `light` over Home's sky.
+export function SyncStatusLine({ light = false }: { light?: boolean } = {}) {
   const { state, lastSyncedAt, connection, syncNow } = useSync();
   const navigation = useNavigation<any>();
   const now = useMinuteClock();
+  // Over Home's sky every line reads white, on any theme: anything dimmer drops below 4.5:1 on the clear sky.
+  const quiet = light ? 'text-[#FFFFFF]' : 'text-muted-foreground';
+  const alarm = light ? 'text-[#FFFFFF]' : 'text-destructive';
 
   if (connection === 'DISCONNECTED') {
     return (
@@ -29,7 +32,7 @@ export function SyncStatusLine() {
         accessibilityLabel="Google Health is disconnected. Reconnect."
         onPress={() => navigation.navigate('ConnectHealth')}
         className="self-start"
-        textClassName="text-destructive"
+        textClassName={alarm}
       >
         Google Health disconnected · Reconnect
       </Button>
@@ -48,7 +51,7 @@ export function SyncStatusLine() {
         loading
         // A status, not a dead control: no 50% dim, so the line stays readable while it syncs.
         className="self-start opacity-100"
-        textClassName="text-muted-foreground no-underline"
+        textClassName={`${quiet} no-underline`}
       >
         Syncing with Google Health…
       </Button>
@@ -71,7 +74,7 @@ export function SyncStatusLine() {
       accessibilityRole="button"
       onPress={() => void syncNow('manual')}
       className="self-start"
-      textClassName={state === 'failed' ? 'text-destructive' : 'text-muted-foreground'}
+      textClassName={state === 'failed' ? alarm : quiet}
     >
       {text}
     </Button>

@@ -84,7 +84,7 @@ describe('POST /me/buddies/requests', () => {
     expect(await prisma.buddyActivity.count({ where: { recipientId: target.id, actorId: me.id, kind: 'REQUEST', refId: row!.id } })).toBe(1);
     expect(sender.calls.map((c) => [c.payload.title, c.payload.data])).toEqual([['Someone wants to be your buddy', { kind: 'buddy_request', refId: row!.id }]]);
     expect((await lists(target.id)).incoming).toEqual([
-      { id: row!.id, createdAt: row!.createdAt.toISOString(), from: { id: me.id, handle: me.handle, displayName: 'Ana', coachId: expect.any(String) } },
+      { id: row!.id, createdAt: row!.createdAt.toISOString(), from: { id: me.id, handle: me.handle, displayName: 'Ana', coachId: expect.any(String), kipColour: 'coral' } },
     ]);
     expect((await lists(me.id)).outgoing).toEqual([{ id: row!.id, createdAt: row!.createdAt.toISOString(), toHandle: target.handle }]);
   });

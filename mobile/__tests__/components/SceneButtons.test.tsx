@@ -6,8 +6,10 @@ import { TextInput } from 'react-native';
 import { render, screen } from '@testing-library/react-native';
 import { CampNoteCard, type CampNoteCardProps } from '../../src/components/social/CampNoteCard';
 import { GoodnightButton } from '../../src/components/social/GoodnightButton';
+import { PersonKip } from '../../src/components/kip/PersonKip';
 import { SocialStoryFrame } from '../../src/components/social/SocialStoryFrame';
 import { Button } from '../../src/components/ui/button';
+import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
 import { cn } from '../../src/lib/utils';
 
 jest.mock('../../src/api/social', () => ({ ...jest.requireActual('../../src/api/social'), sayGoodnight: jest.fn(), undoGoodnight: jest.fn() }));
@@ -24,7 +26,7 @@ const expectSchemeProof = (testID: string) => expect(inScheme(classesOf(testID),
 
 const card = (over: Partial<CampNoteCardProps>): CampNoteCardProps => ({
   inputRef: React.createRef<TextInput>(), draft: '', onDraft: jest.fn(), length: 0, canShare: false, onShare: jest.fn(), live: null,
-  editing: false, onEdit: jest.fn(), onCancel: jest.fn(), onClear: jest.fn(), busy: false, message: null, buddies: 2, coachId: 'mochi', ...over,
+  editing: false, onEdit: jest.fn(), onCancel: jest.fn(), onClear: jest.fn(), busy: false, message: null, buddies: 2, kipColour: 'coral', ...over,
 });
 const live = { text: 'Early night', expiresAt: null };
 
@@ -72,10 +74,27 @@ it("the camp's Say goodnight is the standard lg Button in indigo, the same in bo
 });
 
 it("the story's Check in is white with dark text in both schemes, and the frame lets other taps through", () => {
-  const sam = { id: 'sam', handle: 'sam', displayName: 'Sam', coachId: 'mochi' };
+  const sam = { id: 'sam', handle: 'sam', displayName: 'Sam', coachId: 'mochi', kipColour: 'sky' };
   render(<SocialStoryFrame frame={{ kind: 'checkin', at: '2026-10-07T14:00:00.000Z', locked: true } as never} author={sam as never} mine={false} onUnlock={jest.fn()} />);
   expectSchemeProof('story-unlock');
   expect(classesOf('story-unlock').split(' ')).toEqual(expect.arrayContaining(['bg-white', 'h-[32px]']));
   expect(String(screen.getByText('Check in').props.className)).toContain('text-black');
   expect(screen.getByTestId('story-locked')).toHaveProp('pointerEvents', 'box-none');
+  expect(screen.UNSAFE_getByType(PersonKip).props).toMatchObject({ colour: 'sky', state: 'none', size: 96 });
+});
+
+describe('the story frame draws its author as their KIP', () => {
+  afterEach(() => resetMyKipColour());
+  const sam = { id: 'sam', handle: 'sam', displayName: 'Sam', coachId: 'mochi', kipColour: 'sky' };
+
+  it("a buddy's goodnight: their colour, asleep", () => {
+    render(<SocialStoryFrame frame={{ kind: 'goodnight', at: '2026-10-07T02:00:00.000Z', onTime: true }} author={sam} mine={false} onUnlock={jest.fn()} />);
+    expect(screen.UNSAFE_getByType(PersonKip).props).toMatchObject({ colour: 'sky', state: 'asleep', size: 96 });
+  });
+
+  it('my own frame: my colour, not the one on my person record', () => {
+    setMyKipColour('ink');
+    render(<SocialStoryFrame frame={{ kind: 'goodnight', at: '2026-10-07T02:00:00.000Z', onTime: true }} author={sam} mine onUnlock={jest.fn()} />);
+    expect(screen.UNSAFE_getByType(PersonKip).props).toMatchObject({ colour: 'ink', state: 'asleep' });
+  });
 });

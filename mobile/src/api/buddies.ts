@@ -12,7 +12,7 @@ export const SHARE_KEYS: readonly ShareKey[] = ['recovery', 'sleepScore', 'hours
 export type NumberKey = 'recovery' | 'sleepScore' | 'hoursSlept' | 'steps';
 export const NUMBER_KEYS: readonly NumberKey[] = ['recovery', 'sleepScore', 'hoursSlept', 'steps'];
 
-export interface Person { id: string; handle: string; displayName: string; coachId: string }
+export interface Person { id: string; handle: string; displayName: string; coachId: string; kipColour?: string }
 export interface BuddyRow extends Person { mood: Mood; moodLine: string; unseenSticker: boolean }
 export interface BuddyPage { buddies: BuddyRow[]; nextCursor: string | null; incomingRequests: number; outgoingRequests: number }
 export interface BuddyIdentity {
@@ -24,6 +24,7 @@ export interface BuddyIdentity {
   checkInStreak?: number;
   buddyCount?: number;
   joinedOn?: string;
+  kipColour?: string;
 }
 export type SharingSettings = Record<ShareKey, boolean> & { consentVersion: number; consented: boolean };
 export interface IncomingRequest { id: string; createdAt: string; from: Person }
@@ -51,7 +52,7 @@ export function buddyErrorCode(error: unknown): string | null {
   return typeof code === 'string' ? code : null;
 }
 
-const send = (method: string, body?: unknown): RequestInit => ({
+export const send = (method: string, body?: unknown): RequestInit => ({
   method,
   headers: { 'Content-Type': 'application/json' },
   ...(body === undefined ? {} : { body: JSON.stringify(body) }),
@@ -78,6 +79,25 @@ export async function fetchBuddyPage(cursor?: string | null): Promise<BuddyPage 
     incomingRequests: body.incomingRequests,
     outgoingRequests: body.outgoingRequests,
   };
+}
+
+export interface BuddyScene { buddies: BuddyRow[]; total: number; incomingRequests: number }
+
+/**
+ * Home's scene: up to two buddies by latest check-in. null only for an older server (only you): a bare 404
+ * without buddies, or not_buddies from its /me/buddies/:buddyId route, which catches "scene" as an id.
+ */
+export async function fetchBuddyScene(): Promise<BuddyScene | null> {
+  let body: Partial<BuddyScene> | undefined;
+  try {
+    body = await apiFetch<Partial<BuddyScene> | undefined>('/me/buddies/scene');
+  } catch (error) {
+    const code = buddyErrorCode(error);
+    if ((error as { status?: number } | null)?.status === 404 && (code === null || code === 'not_buddies')) return null;
+    throw error;
+  }
+  if (!body || !Array.isArray(body.buddies) || !isCount(body.total) || !isCount(body.incomingRequests)) throw new Error('bad_buddy_scene');
+  return { buddies: body.buddies, total: body.total, incomingRequests: body.incomingRequests };
 }
 
 export const fetchIdentity = () => apiFetch<BuddyIdentity>('/me/buddies/me');

@@ -1,8 +1,10 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { Rect } from 'react-native-svg';
 import { Passport, type PassportProps } from '../../src/components/profile/Passport';
 import { KIP_COLOURS } from '../../src/lib/kip/kipArt';
+import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
 
 const props = (over: Partial<PassportProps> = {}): PassportProps => ({
   code: 'KIP-7Q4M',
@@ -23,6 +25,10 @@ const props = (over: Partial<PassportProps> = {}): PassportProps => ({
 });
 
 describe('Passport', () => {
+  afterEach(() => {
+    act(() => resetMyKipColour());
+  });
+
   it('shows the number, the fields, the check-in streak and the buddy count', () => {
     render(<Passport {...props()} />);
 
@@ -51,6 +57,14 @@ describe('Passport', () => {
     expect(StyleSheet.flatten(screen.getByTestId('passport-photo').props.style).borderColor).toBe(KIP_COLOURS.coral);
     expect(screen.getByTestId('passport-kip', { includeHiddenElements: true })).toBeTruthy();
     expect(screen.queryByTestId('passport-recap')).toBeNull();
+  });
+
+  it('draws your KIP in your colour', () => {
+    act(() => setMyKipColour('cobalt'));
+    render(<Passport {...props()} />);
+
+    const kip = screen.getByTestId('passport-kip', { includeHiddenElements: true });
+    expect(kip.findAll((n) => n.type === Rect && n.props.fill === KIP_COLOURS.cobalt).length).toBeGreaterThan(0);
   });
 
   it('rings the photo in the recap colour and plays it on tap', () => {

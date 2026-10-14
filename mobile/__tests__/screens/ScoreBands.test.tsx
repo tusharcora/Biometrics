@@ -1,10 +1,12 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { render, screen } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import { DashboardScreen } from '../../src/screens/DashboardScreen';
 import { ScoreRing } from '../../src/components/ui/score-ring';
 import { apiFetch } from '../../src/api/client';
 import { useAuth } from '../../src/auth/AuthContext';
 import { COLORS } from '../../src/theme';
+import { todayCivil } from '../../src/lib/heatmap';
 
 // The band decides the ring colour; expose that colour so it can be asserted.
 jest.mock('../../src/components/ui/ring', () => {
@@ -26,8 +28,9 @@ jest.mock('@react-navigation/native', () => ({
 }));
 
 const SERVER_BANDS = { excellent: 90, good: 70, fair: 50 };
+// Home counts only today's Recovery score.
 const recovery = {
-  date: '2026-09-19',
+  date: todayCivil(),
   type: 'RECOVERY',
   score: 78,
   confidenceLevel: 'HIGH',
@@ -68,24 +71,26 @@ describe('ScoreRing bands', () => {
 });
 
 describe('Dashboard score bands', () => {
-  it('colours the ring with the default bands when the server sends the defaults', async () => {
+  const tileColour = () => StyleSheet.flatten(screen.getByTestId('home-tile-recovery-line').props.style).color;
+
+  it('colours the Recovery tile with the default bands when the server sends the defaults', async () => {
     mockDashboardApi({ scores: [recovery], bands: { excellent: 75, good: 55, fair: 40 } });
-    const { getAllByTestId, findByTestId } = render(<DashboardScreen />);
-    await findByTestId('recovery-score-card');
-    expect(getAllByTestId('ring-stub')[0].props.accessibilityLabel).toBe(COLORS.light.scoreExcellent);
+    render(<DashboardScreen />);
+    await screen.findByTestId('home-tile-recovery-line');
+    expect(tileColour()).toBe(COLORS.light.scoreExcellent);
   });
 
   it('picks a different band when the server sends different thresholds', async () => {
     mockDashboardApi({ scores: [recovery], bands: SERVER_BANDS });
-    const { getAllByTestId, findByTestId } = render(<DashboardScreen />);
-    await findByTestId('recovery-score-card');
-    expect(getAllByTestId('ring-stub')[0].props.accessibilityLabel).toBe(COLORS.light.scoreGood);
+    render(<DashboardScreen />);
+    await screen.findByTestId('home-tile-recovery-line');
+    expect(tileColour()).toBe(COLORS.light.scoreGood);
   });
 
   it('falls back to the defaults when the server sends no bands', async () => {
     mockDashboardApi({ scores: [recovery] });
-    const { getAllByTestId, findByTestId } = render(<DashboardScreen />);
-    await findByTestId('recovery-score-card');
-    expect(getAllByTestId('ring-stub')[0].props.accessibilityLabel).toBe(COLORS.light.scoreExcellent);
+    render(<DashboardScreen />);
+    await screen.findByTestId('home-tile-recovery-line');
+    expect(tileColour()).toBe(COLORS.light.scoreExcellent);
   });
 });

@@ -5,6 +5,7 @@ import { View } from 'react-native';
 import Svg, { Rect } from 'react-native-svg';
 import { ACTIVITY_COPY } from '../../lib/activityCopy';
 import { SKY_STRIP_HEIGHT, skyStrip } from '../../lib/activityWeek';
+import { useMyKipColour } from '../../lib/kip/myKipColour';
 import { Kip } from '../kip/Kip';
 import { PageTitle } from '../ui/page-title';
 import { Text } from '../ui/text';
@@ -13,6 +14,7 @@ import { Text } from '../ui/text';
 const CELL = 2;
 
 export function ActivityHeader({ summary }: { summary: { steps: number; nights: number } | null }) {
+  const kipColour = useMyKipColour();
   const [width, setWidth] = useState(0);
   const cols = Math.floor(width / CELL);
   return (
@@ -32,7 +34,7 @@ export function ActivityHeader({ summary }: { summary: { steps: number; nights: 
         </View>
       ) : null}
       <View className="absolute left-4" style={{ top: 18 }}>
-        <Kip testID="activity-kip" colour="coral" pose="wave" scale={3} />
+        <Kip testID="activity-kip" colour={kipColour} pose="wave" scale={3} />
       </View>
       <View className="absolute gap-0.5" style={{ left: 76, top: 14, right: 12 }}>
         <PageTitle testID="activity-title" className="text-white">

@@ -5,7 +5,9 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { ApiError } from '../../src/api/client';
 import { clearStatusNote, fetchChats, fetchNotes, fileReport, saveStatusNote, sendStickerMessage, type ChatRow, type ChatsPage } from '../../src/api/chats';
 import { blockBuddy } from '../../src/api/buddies';
+import { PersonKip } from '../../src/components/kip/PersonKip';
 import { refreshBuddies } from '../../src/lib/buddiesStore';
+import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
 import { ChatsScreen } from '../../src/screens/ChatsScreen';
 import { FONTS } from '../../src/theme';
 
@@ -55,7 +57,7 @@ const row = (id: string, name: string, over: Partial<ChatRow> = {}): ChatRow => 
 });
 const PAGE: ChatsPage = {
   chats: [
-    row('ben', 'Ben', { unread: 2, activeAt: ago(1) }),
+    row('ben', 'Ben', { buddy: { ...person('ben', 'Ben'), kipColour: 'cobalt' }, unread: 2, activeAt: ago(1) }),
     row('sam', 'Sam', { lastMessage: { mine: false, kind: 'STICKER', text: null, sticker: 'CHEER', cardType: null, at: ago(14) } }),
   ],
   nextCursor: null,
@@ -67,6 +69,8 @@ beforeEach(() => {
   (fetchChats as jest.Mock).mockResolvedValue(PAGE);
   (fetchNotes as jest.Mock).mockResolvedValue({ mine: null, buddies: [{ person: person('ana', 'Ana'), text: 'day 6 streak!', createdAt: ago(60), expiresAt: ago(-60) }] });
 });
+
+afterEach(() => resetMyKipColour());
 
 it('lists conversations with their line, unread weight, story ring and active dot; rows, Requests and Cheer work', async () => {
   renderScreen();
@@ -82,6 +86,7 @@ it('lists conversations with their line, unread weight, story ring and active do
   expect(screen.getByTestId('chat-row-ben-line')).toHaveTextContent('rough night lol · 2m');
   expect(screen.getByTestId('chat-row-ben-unread')).toBeTruthy();
   expect(screen.getByTestId('chat-row-ben-avatar-active')).toBeTruthy();
+  expect(within(screen.getByTestId('chat-row-ben-avatar')).UNSAFE_getByType(PersonKip).props).toMatchObject({ colour: 'cobalt', size: Math.round(48 * 0.62) });
   expect(screen.getByTestId('chat-row-sam-line')).toHaveTextContent('Sent a Cheer sticker · 14m');
   expect(screen.queryByTestId('chat-row-sam-unread')).toBeNull();
   expect(screen.getByTestId('chats-requests')).toHaveTextContent('Requests (2)');
@@ -161,6 +166,18 @@ it('reporting a note with "Also block" ticked blocks its author, says so and re-
   expect(refreshBuddies).toHaveBeenCalled();
   expect(screen.getByTestId('chats-message')).toHaveTextContent('Blocked Ana');
   expect(fetchChats).toHaveBeenCalledTimes(2);
+});
+
+it('my note avatar is my KIP in my colour, not the one on my person record', async () => {
+  mockSocial.home = { ...mockHome, me: { ...mockHome.me, person: { ...person('tushar'), kipColour: 'lemon' } } };
+  act(() => setMyKipColour('sky'));
+  try {
+    renderScreen();
+    const avatar = await screen.findByTestId('note-avatar-me');
+    expect(within(avatar).UNSAFE_getByType(PersonKip).props.colour).toBe('sky');
+  } finally {
+    mockSocial.home = mockHome;
+  }
 });
 
 it('a note over 60 can not be shared; my live note can be cleared', async () => {

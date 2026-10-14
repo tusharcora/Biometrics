@@ -1,4 +1,4 @@
-// "Your camp note" on the Campfire panel (redesign 2026-10-07). A preview of my coach with the bubble as the camp will
+// "Your camp note" on the Campfire panel (redesign 2026-10-07). A preview of my KIP with the bubble as the camp will
 // see it; then, while drafting, the input with a ring counter of characters left, quick-pick chips and Share; or, once
 // my note is live, Edit note (the text back in the draft, with Cancel to leave it as it was) and Clear. Clear is offered whenever a note of mine is live.
 // The note's text is free text: shown, never logged.
@@ -7,12 +7,11 @@ import React, { useState } from 'react';
 import { TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
-import { Character } from '../characters/Character';
-import type { CharacterId } from '../characters/types';
+import { PersonKip } from '../kip/PersonKip';
 import { Button, buttonIconSize } from '../ui/button';
 import { Text } from '../ui/text';
 import { inputTextStyle } from '../ui/input-style';
-import { CAMP_NOTE_CHIPS, CAMP_NOTE_MAX, noteAudienceLine, noteLiveLine } from '../../lib/socialCopy';
+import { CAMP_NOTE_CHIPS, CAMP_NOTE_HELPER, CAMP_NOTE_MAX, noteAudienceLine, noteLiveLine } from '../../lib/socialCopy';
 import { COLORS } from '../../theme';
 import { PANEL_DESTRUCTIVE, PANEL_OUTLINE } from './CampPanel';
 import { AddNoteBubble, PixelBubble } from './CampScene';
@@ -56,13 +55,13 @@ export interface CampNoteCardProps {
   busy: boolean;
   message: string | null;
   buddies: number;
-  coachId: CharacterId;
+  kipColour: string;
   /** The composer's input top and Share bottom, in the card. */
   onComposerLayout?: (box: { top: number; bottom: number }) => void;
 }
 
 export function CampNoteCard({
-  inputRef, draft, onDraft, length, canShare, onShare, live, editing, onEdit, onCancel, onClear, busy, message, buddies, coachId, onComposerLayout,
+  inputRef, draft, onDraft, length, canShare, onShare, live, editing, onEdit, onCancel, onClear, busy, message, buddies, kipColour, onComposerLayout,
 }: CampNoteCardProps) {
   const [focused, setFocused] = useState(false);
   const drafting = !live || editing;
@@ -82,7 +81,7 @@ export function CampNoteCard({
 
       <View className="flex-row items-end gap-2.5 rounded-[18px] p-3" style={{ backgroundColor: 'rgba(15,18,48,0.9)' }}
         accessible accessibilityLabel={preview ? `Preview: ${preview}` : 'Preview: no note yet'}>
-        <Character characterId={coachId} mood="idle" size={28} paused />
+        <PersonKip colour={kipColour} size={28} />
         <View className="flex-1 items-start">
           {preview ? <PixelBubble text={preview} maxWidth={200} /> : <AddNoteBubble maxWidth={200} />}
         </View>
@@ -134,7 +133,7 @@ export function CampNoteCard({
         </View>
       )}
       {message ? <Text testID="camp-message" accessibilityLiveRegion="polite" className="text-sm text-destructive">{message}</Text> : null}
-      <Text className="text-xs text-muted-foreground">Shows above your coach until 6 AM or your morning check-in.</Text>
+      <Text className="text-xs text-muted-foreground">{CAMP_NOTE_HELPER}</Text>
     </View>
   );
 }

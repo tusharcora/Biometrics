@@ -10,7 +10,7 @@ it('summarises what a buddy shares', () => {
 });
 
 it('words a sent sticker, a code expiry, and an error code', () => {
-  expect(stickerSentLine('REST_UP', 'Sam', 'Pengu')).toBe('Sent a Rest up to Sam. Pengu will pass it on.');
+  expect(stickerSentLine('REST_UP', 'Sam')).toBe('Sent a Rest up to Sam.');
   const now = Date.parse('2026-10-07T12:00:00Z');
   expect(expiresIn('2026-10-08T11:30:00Z', now)).toBe('Expires in 23 h 30 min');
   expect(expiresIn('2026-10-07T12:05:00Z', now)).toBe('Expires in 5 min');

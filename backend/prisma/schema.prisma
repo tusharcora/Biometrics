@@ -90,6 +90,8 @@ model User {
   // The coach persona the user picked in Settings (an id from
   // src/coach/personas). Null means the default persona.
   coachPersonaId          String?
+  /// The KIP mascot's colour, by name (backend/src/kip/colours.ts); buddies see it.
+  kipColour               String              @default("coral")
   /// Thinking attachment shown next to the coach while it works; null = default ('bulb').
   coachThinkingAttachment String?
   /// How the chat shows a reply is on its way; null = default ('steps').

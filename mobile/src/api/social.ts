@@ -64,8 +64,9 @@ export interface SocialHome {
    * zone), `awake`, `asleep` and `goodnightOpen` (my own goodnight window: from min(20:00, my goal − 60 min) to 05:59)
    * arrive with S2; an S1 server sends none, and the banner then stays a static strip with no goodnight row. The home
    * has no `goodnightOpensAt`: only the Campfire page (`Camp`) says when the window opens.
+   * `faceColours`: each face's KIP colour name, same order (older servers omit it).
    */
-  camp: { checkedIn: number; members: number; faces: string[]; night?: boolean; awake?: number; asleep?: number; goodnightOpen?: boolean };
+  camp: { checkedIn: number; members: number; faces: string[]; faceColours?: string[]; night?: boolean; awake?: number; asleep?: number; goodnightOpen?: boolean };
   stories: StoryRing[];
   highlights: Highlights | null;
   timeline: TimelineItem[];

@@ -2,6 +2,7 @@ import React from 'react';
 import { Alert } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { blockBuddy, fetchBuddyWeek, sendSticker, setMuted, unpair } from '../../src/api/buddies';
+import { PersonKip } from '../../src/components/kip/PersonKip';
 import { refreshBuddies } from '../../src/lib/buddiesStore';
 import { refreshSocial } from '../../src/lib/socialStore';
 import { BuddyWeekScreen } from '../../src/screens/BuddyWeekScreen';
@@ -24,7 +25,7 @@ jest.mock('@react-navigation/native', () => ({
 
 const dates = ['2026-10-04', '2026-10-05', '2026-10-06', '2026-10-07', '2026-10-08', '2026-10-09', '2026-10-10'];
 const WEEK = {
-  buddy: { id: 'b1', handle: 'sam', displayName: 'Sam', coachId: 'pengu' },
+  buddy: { id: 'b1', handle: 'sam', displayName: 'Sam', coachId: 'pengu', kipColour: 'sky' },
   mood: 'low',
   moodLine: 'Running low today · on a 4-night streak',
   muted: false,
@@ -55,7 +56,7 @@ beforeEach(() => {
 it('shows the mood line, 7 tiles, only the shared rows, badge levels and the sharing summary', async () => {
   render(<BuddyWeekScreen />);
   expect(await screen.findByTestId('buddy-week-line')).toHaveTextContent('Running low today · on a 4-night streak');
-  expect(screen.getByText("Pengu's week")).toBeTruthy();
+  expect(screen.getByText('This week')).toBeTruthy();
   expect(screen.getByTestId('week-tile-0').props.accessibilityLabel).toBe('Sunday: well rested');
   expect(screen.getByTestId('week-tile-6').props.accessibilityLabel).toBe('Saturday: no data');
   expect(screen.getByTestId('number-row-sleepScore')).toHaveTextContent(/^Sleep score/);
@@ -66,6 +67,15 @@ it('shows the mood line, 7 tiles, only the shared rows, badge levels and the sha
   expect(screen.queryByTestId('number-row-steps')).toBeNull();
   expect(screen.getByTestId('week-badges')).toHaveTextContent('Sleep goal streak II');
   expect(screen.getByTestId('buddy-week-summary')).toHaveTextContent('Sam shares mood, sleep score and streaks & badges');
+});
+
+it("shows the buddy as their KIP in their mood, and no coach naming", async () => {
+  render(<BuddyWeekScreen />);
+  await screen.findByTestId('buddy-week-line');
+  expect(screen.UNSAFE_getByType(PersonKip).props).toMatchObject({ colour: 'sky', state: 'low', size: 96 });
+  expect(screen.getByText('@sam')).toBeTruthy();
+  expect(screen.queryByText(/Coach:/)).toBeNull();
+  expect(screen.queryByText(/Pengu/)).toBeNull();
 });
 
 it('shows a day without a reading as a dash, never as 0, and no rows or badges the server did not send', async () => {
@@ -87,12 +97,12 @@ it('shows a day without a reading as a dash, never as 0, and no rows or badges t
   expect(screen.getByTestId('buddy-week-summary')).toHaveTextContent('Sam shares mood and steps');
 });
 
-it('sends a sticker and says who will pass it on; the daily limit and an unpaired buddy are explained', async () => {
+it('sends a sticker and says it was sent; the daily limit and an unpaired buddy are explained', async () => {
   (sendSticker as jest.Mock).mockResolvedValueOnce({ id: 's1' }).mockRejectedValueOnce(coded('sticker_limit', 429)).mockRejectedValueOnce(coded('not_buddies'));
   render(<BuddyWeekScreen />);
   await pressOnceShown('sticker-STAR');
   expect(sendSticker).toHaveBeenCalledWith('b1', 'STAR');
-  expect(screen.getByTestId('buddy-week-note')).toHaveTextContent('Sent a Star to Sam. Pengu will pass it on.');
+  expect(screen.getByTestId('buddy-week-note')).toHaveTextContent(/^Sent a Star to Sam\.$/);
   await act(async () => fireEvent.press(screen.getByTestId('sticker-HEART')));
   expect(screen.getByTestId('buddy-week-note')).toHaveTextContent("That's 5 stickers to this buddy today. Try again tomorrow.");
   // Unpaired or blocked meanwhile: the week goes away and nothing is offered any more.

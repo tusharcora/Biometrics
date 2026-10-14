@@ -117,6 +117,16 @@ describe('DashboardScreen: weekly digest card', () => {
     expect(shelf).toBeLessThan(digestCard);
   });
 
+  it('orders Home F: scene, Today, tiles, Ask Coach, habit log, Recaps, digest, metrics', async () => {
+    const { findByTestId, toJSON } = render(<DashboardScreen />);
+    await findByTestId('coach-digest-card');
+    const tree = JSON.stringify(toJSON());
+    const ids = ['home-scene', 'home-today', 'home-tiles', 'coach-entry-button', 'habit-log', 'recap-shelf', 'coach-digest-card', 'metric-card-STEPS'];
+    const order = ids.map((id) => tree.indexOf(id));
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+
   it('still shows the Recaps shelf when the coach is off', async () => {
     (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, enabled: false });
     const { findByTestId, queryByTestId } = render(<DashboardScreen />);

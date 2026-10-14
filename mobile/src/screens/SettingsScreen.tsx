@@ -18,6 +18,7 @@ import { SectionLabel } from '../components/ui/section-label';
 import { Text } from '../components/ui/text';
 import { useAchievements } from '../lib/achievementsStore';
 import { useBuddies } from '../lib/buddiesStore';
+import { useMyKipColour } from '../lib/kip/myKipColour';
 import { memberCode, passportStamps } from '../lib/passport';
 import { categoryCards, useProfileReads } from '../lib/profileHub';
 import { PROFILE_COPY } from '../lib/profileCopy';
@@ -46,6 +47,7 @@ export function SettingsScreen() {
   const buddiesAvailable = useBuddies().status === 'ready';
   const chatsAvailable = useChatsAvailable() === true;
   const reads = useProfileReads({ buddiesAvailable, chatsAvailable });
+  const kipColour = useMyKipColour();
 
   const info = characterInfo(character?.characterId);
   const cards = categoryCards({
@@ -60,6 +62,7 @@ export function SettingsScreen() {
     },
     aiCoach: coachStatus ? { enabled: coachStatus.enabled, consented: coachStatus.consented } : null,
     now: new Date(),
+    kipColour,
   });
   const stamps = useMemo(() => (badges.status === 'ready' ? passportStamps(badges.data.families) : []), [badges]);
   const identity = reads.identity;

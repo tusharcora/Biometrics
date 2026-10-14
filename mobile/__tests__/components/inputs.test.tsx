@@ -4,7 +4,6 @@ import { render, screen } from '@testing-library/react-native';
 import { ChatComposer } from '../../src/components/chats/ChatComposer';
 import { NoteComposerSheet } from '../../src/components/chats/NoteComposerSheet';
 import { CampNoteCard } from '../../src/components/social/CampNoteCard';
-import { DEFAULT_CHARACTER_ID } from '../../src/components/characters/types';
 import { FONTS } from '../../src/theme';
 
 jest.mock('../../src/api/chats');
@@ -14,7 +13,7 @@ const flat = (testID: string) => StyleSheet.flatten(screen.getByTestId(testID).p
 const mountCampNote = () =>
   render(
     <CampNoteCard inputRef={React.createRef()} draft="" onDraft={jest.fn()} length={0} canShare={false} onShare={jest.fn()} live={null}
-      editing={false} onEdit={jest.fn()} onCancel={jest.fn()} onClear={jest.fn()} busy={false} message={null} buddies={2} coachId={DEFAULT_CHARACTER_ID} />,
+      editing={false} onEdit={jest.fn()} onCancel={jest.fn()} onClear={jest.fn()} busy={false} message={null} buddies={2} kipColour="coral" />,
   );
 
 // iOS draws a placeholder in the input's own font, so an empty input showing

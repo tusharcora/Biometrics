@@ -1,10 +1,13 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
-import { fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { Rect } from 'react-native-svg';
 import { ActivityHeader } from '../../src/components/activity/ActivityHeader';
 import { ThisWeek } from '../../src/components/activity/ThisWeek';
 import { YearSoFar } from '../../src/components/activity/YearSoFar';
 import { weekRows } from '../../src/lib/activityWeek';
+import { KIP_COLOURS } from '../../src/lib/kip/kipArt';
+import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
 import { COLORS } from '../../src/theme';
 
 const TODAY = '2026-10-10';
@@ -128,6 +131,10 @@ describe('YearSoFar', () => {
 });
 
 describe('ActivityHeader', () => {
+  afterEach(() => {
+    act(() => resetMyKipColour());
+  });
+
   it('shows KIP waving, the title and the week summary', () => {
     render(<ActivityHeader summary={{ steps: 64947, nights: 7 }} />);
     expect(screen.getByTestId('activity-kip', { includeHiddenElements: true })).toBeTruthy();
@@ -140,5 +147,13 @@ describe('ActivityHeader', () => {
   it('leaves the summary out until the week is known', () => {
     render(<ActivityHeader summary={null} />);
     expect(screen.queryByTestId('activity-summary')).toBeNull();
+  });
+
+  it('draws your KIP in your colour', () => {
+    act(() => setMyKipColour('mint'));
+    render(<ActivityHeader summary={null} />);
+
+    const kip = screen.getByTestId('activity-kip', { includeHiddenElements: true });
+    expect(kip.findAll((n) => n.type === Rect && n.props.fill === KIP_COLOURS.mint).length).toBeGreaterThan(0);
   });
 });

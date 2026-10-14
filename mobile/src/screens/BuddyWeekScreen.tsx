@@ -6,16 +6,14 @@ import {
   NUMBER_KEYS, blockBuddy, buddyErrorCode, fetchBuddyWeek, sendSticker, setMuted, unpair, type BuddyWeek, type StickerKind,
 } from '../api/buddies';
 import { StickerButton } from '../components/buddies/StickerButton';
-import { Character } from '../components/characters/Character';
-import { characterInfo } from '../components/characters/registry';
-import { DEFAULT_CHARACTER_ID, isCharacterId } from '../components/characters/types';
+import { PersonKip, personStateOf } from '../components/kip/PersonKip';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { PageTitle } from '../components/ui/page-title';
 import { Text } from '../components/ui/text';
 import { FAMILY_NAMES, numeral } from '../lib/badges';
 import {
-  MOOD_COLORS, MOOD_WORDS, NUMBER_LABELS, STICKERS, TILE_COLORS, buddyErrorMessage, formatNumber, sharesSummary, stickerSentLine, weekdayLetter, weekdayName,
+  BUDDY_WEEK_COPY, MOOD_COLORS, MOOD_WORDS, NUMBER_LABELS, STICKERS, TILE_COLORS, buddyErrorMessage, formatNumber, sharesSummary, stickerSentLine, weekdayLetter, weekdayName,
 } from '../lib/buddyCopy';
 import { refreshBuddies } from '../lib/buddiesStore';
 import { refreshSocial } from '../lib/socialStore';
@@ -113,15 +111,13 @@ export function BuddyWeekScreen() {
   }
 
   const { week } = state;
-  const coachId = isCharacterId(week.buddy.coachId) ? week.buddy.coachId : DEFAULT_CHARACTER_ID;
-  const coachName = characterInfo(coachId).name;
   const rows = NUMBER_KEYS.filter((key) => Array.isArray(week.numbers?.[key]));
   const badges = (week.badges ?? []).filter((b) => hasOwn(FAMILY_NAMES, b.family) && numeral(b.level) !== '');
 
   const sticker = (kind: StickerKind) =>
     perform(async () => {
       await sendSticker(buddyId, kind);
-      if (mounted.current) setNote({ text: stickerSentLine(kind, week.buddy.displayName, coachName), error: false });
+      if (mounted.current) setNote({ text: stickerSentLine(kind, week.buddy.displayName), error: false });
     });
   // Not optimistic: the label flips to what the server says, so a failure leaves it as it was.
   const toggleMute = () =>
@@ -151,14 +147,14 @@ export function BuddyWeekScreen() {
     <SafeAreaView edges={['bottom']} className="flex-1 bg-background">
       <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
         <View className="items-center gap-1">
-          <Character characterId={coachId} mood={week.mood === 'low' ? 'resting' : 'idle'} size={96} />
+          <PersonKip colour={week.buddy.kipColour} state={personStateOf(week.mood)} size={96} />
           <PageTitle testID="buddy-week-name">{week.buddy.displayName}</PageTitle>
-          <Text className="text-caption text-muted-foreground">@{week.buddy.handle} · Coach: {coachName}</Text>
+          <Text className="text-caption text-muted-foreground">@{week.buddy.handle}</Text>
           <Text testID="buddy-week-line" className="text-center" style={{ color: MOOD_COLORS[week.mood] }}>{week.moodLine}</Text>
         </View>
 
         <Card className="gap-3 p-4">
-          <Text className="font-semibold">{coachName}'s week</Text>
+          <Text className="font-semibold">{BUDDY_WEEK_COPY.thisWeek}</Text>
           <View className="flex-row justify-between">
             {week.tiles.map((tile, i) => (
               <View key={tile.date} className="items-center gap-1">

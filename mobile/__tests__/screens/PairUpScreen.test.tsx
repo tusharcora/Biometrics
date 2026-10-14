@@ -5,6 +5,8 @@ import { confirmMoodNotice, createCode, fetchCode, fetchIdentity, redeemCode, se
 import { refreshBuddies } from '../../src/lib/buddiesStore';
 import { offerPushAfterPairing } from '../../src/lib/buddyPushOffer';
 import { PairUpScreen } from '../../src/screens/PairUpScreen';
+import { PersonKip } from '../../src/components/kip/PersonKip';
+import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
 
 jest.mock('../../src/api/buddies', () => ({
   ...jest.requireActual('../../src/api/buddies'),
@@ -142,6 +144,17 @@ it('a sent request never offers notifications (it pairs no one here)', async () 
   fireEvent.changeText(await screen.findByTestId('pair-handle-input'), 'sam');
   await act(async () => fireEvent.press(screen.getByTestId('pair-request')));
   expect(offerPushAfterPairing).not.toHaveBeenCalled();
+});
+
+describe('you as your KIP', () => {
+  afterEach(() => resetMyKipColour());
+
+  it("draws you in your colour and says buddies see your KIP's mood", async () => {
+    setMyKipColour('lemon');
+    render(<PairUpScreen />);
+    expect(await screen.findByText("Buddies always see your KIP's mood. Your numbers stay private unless you share them in Profile.")).toBeTruthy();
+    expect(screen.UNSAFE_getByType(PersonKip).props).toMatchObject({ colour: 'lemon', size: 72 });
+  });
 });
 
 describe('your code', () => {

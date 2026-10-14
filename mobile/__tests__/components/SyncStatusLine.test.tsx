@@ -1,6 +1,7 @@
 import React from 'react';
-import { fireEvent, render } from '@testing-library/react-native';
+import { fireEvent, render, screen } from '@testing-library/react-native';
 import { SyncStatusLine } from '../../src/components/sync-status-line';
+import { Button } from '../../src/components/ui/button';
 import { useSync } from '../../src/sync/SyncProvider';
 
 jest.mock('../../src/sync/SyncProvider', () => ({ useSync: jest.fn() }));
@@ -59,4 +60,25 @@ it('shows nothing when not connected or not yet known', () => {
   expect(render(<SyncStatusLine />).queryByTestId('sync-status-line')).toBeNull();
   set({ state: 'unknown', connection: null });
   expect(render(<SyncStatusLine />).queryByTestId('sync-status-line')).toBeNull();
+});
+
+it('reads light over the Home sky', () => {
+  set({});
+  render(<SyncStatusLine light />);
+  const line = screen.UNSAFE_getAllByType(Button).find((b) => b.props.testID === 'sync-status-line')!;
+  expect(line.props.textClassName).toBe('text-[#FFFFFF]');
+});
+
+it('reads its failure light over the Home sky too', () => {
+  set({ state: 'failed' });
+  render(<SyncStatusLine light />);
+  const line = screen.UNSAFE_getAllByType(Button).find((b) => b.props.testID === 'sync-status-line')!;
+  expect(line.props.textClassName).toBe('text-[#FFFFFF]');
+});
+
+it('keeps its muted text everywhere else', () => {
+  set({});
+  render(<SyncStatusLine />);
+  const line = screen.UNSAFE_getAllByType(Button).find((b) => b.props.testID === 'sync-status-line')!;
+  expect(line.props.textClassName).toBe('text-muted-foreground');
 });

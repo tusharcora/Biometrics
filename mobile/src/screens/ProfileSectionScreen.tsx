@@ -9,6 +9,7 @@ import { ChatSettingsSection } from '../components/chats/ChatSettingsSection';
 import { CoachSettingsSection } from '../components/coach-settings-section';
 import { NotificationsSection } from '../components/notifications-section';
 import { HealthDataSection } from '../components/profile/HealthDataSection';
+import { KipColourSection } from '../components/profile/KipColourSection';
 import { TimezoneSection } from '../components/profile/TimezoneSection';
 import { Text } from '../components/ui/text';
 import { YourCoachRow } from '../components/your-coach-row';
@@ -39,6 +40,7 @@ export function ProfileSectionScreen({ route }: { route: { params: { section: Pr
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ gap: 24, paddingHorizontal: 20, paddingTop: 16, paddingBottom: clearance }}
       >
+        {section === 'kipColour' ? <KipColourSection /> : null}
         {section === 'health' ? <HealthDataSection /> : null}
         {section === 'notifications' ? <NotificationsSection /> : null}
         {section === 'buddies' ? <BuddiesProfileSection onNavigate={(name) => navigation?.navigate(name as never)} /> : null}

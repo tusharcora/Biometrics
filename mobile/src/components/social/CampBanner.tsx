@@ -1,5 +1,5 @@
 // The camp banner (spec 2026-10-07 social §4, item 1): "THE CAMP" over "{awake} awake · {asleep} asleep" at night
-// (19:00–05:59 in my zone) or "{n} checked in" by day, a small fire, and up to two coach faces of buddies who checked
+// (19:00–05:59 in my zone) or "{n} checked in" by day, a small fire, and up to two KIPs of buddies who checked
 // in today. Tapping it opens the Campfire page (S2) — given `onOpen`, which the Social screen passes only when the
 // server has a Campfire (it sends `camp.night`); an S1 server keeps the static strip.
 
@@ -7,9 +7,8 @@ import React from 'react';
 import { View } from 'react-native';
 import type { SocialHome } from '../../api/social';
 import { campBannerLine } from '../../lib/socialCopy';
-import { Character } from '../characters/Character';
-import { DEFAULT_CHARACTER_ID, isCharacterId } from '../characters/types';
 import { pixelFont } from '../coach/thinking/shared';
+import { PersonKip } from '../kip/PersonKip';
 import { PressableScale } from '../ui/pressable-scale';
 import { Text } from '../ui/text';
 
@@ -29,11 +28,11 @@ export function CampBanner({ camp, onOpen }: { camp: SocialHome['camp']; onOpen?
         <Text testID="camp-banner-line" className="text-sm font-semibold text-white">{line}</Text>
       </View>
       <View className="flex-row">
-        {camp.faces.slice(0, 2).map((coachId, index) => (
+        {camp.faces.slice(0, 2).map((_, index) => (
           // The second face tucks under the first.
           <View key={index} testID={`camp-face-${index}`} style={index > 0 ? { marginLeft: -6 } : undefined}
             className="h-9 w-9 items-center justify-center rounded-full bg-[#1B2048]">
-            <Character characterId={isCharacterId(coachId) ? coachId : DEFAULT_CHARACTER_ID} mood="idle" size={26} paused />
+            <PersonKip colour={camp.faceColours?.[index]} size={26} />
           </View>
         ))}
       </View>

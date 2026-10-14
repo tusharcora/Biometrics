@@ -1,6 +1,6 @@
 // One frame of a social story (spec 2026-10-07 social §4.2): a check-in (locked until I check in), a badge, a
 // shared recap's headline line exactly as its owner previewed and shared it — never the recap's stats JSON — or a
-// goodnight (S2: "{name} said goodnight", on time or off to bed, the coach resting).
+// goodnight (S2: "{name} said goodnight", on time or off to bed, their KIP asleep).
 
 import React from 'react';
 import { View } from 'react-native';
@@ -8,23 +8,20 @@ import type { Person } from '../../api/buddies';
 import type { StoryFrame } from '../../api/social';
 import { levelTitle } from '../../lib/badges';
 import { recapTitle } from '../../lib/recapCopy';
+import { useMyKipColour } from '../../lib/kip/myKipColour';
 import { CHECKIN_OPTIONS, personName } from '../../lib/socialCopy';
-import { Character } from '../characters/Character';
-import { DEFAULT_CHARACTER_ID, isCharacterId } from '../characters/types';
+import { PersonKip } from '../kip/PersonKip';
 import { Button } from '../ui/button';
 import { Text } from '../ui/text';
 
 export function SocialStoryFrame({ frame, author, mine, onUnlock }: { frame: StoryFrame; author: Person; mine: boolean; onUnlock: () => void }) {
-  // A recap frame carries a coachId, but it is the sharer's CURRENT coach (not snapshotted at share time), so in
-  // practice every frame is drawn with the author's coach as it is today.
-  const coachId = frame.kind === 'recap' ? frame.coachId : author.coachId;
-  const coach = isCharacterId(coachId) ? coachId : DEFAULT_CHARACTER_ID;
+  const myColour = useMyKipColour();
   const who = personName(author, mine);
   // Drawn over the viewer's tap areas: only the Check in button takes touches, the rest pass through to them.
   return (
     <View pointerEvents="box-none" className="flex-1 items-center justify-center gap-5 px-8">
       <View pointerEvents="none">
-        <Character characterId={coach} mood={frame.kind === 'goodnight' ? 'resting' : 'idle'} size={96} />
+        <PersonKip colour={mine ? myColour : author.kipColour} state={frame.kind === 'goodnight' ? 'asleep' : 'none'} size={96} />
       </View>
       {frame.kind === 'checkin' && frame.locked ? (
         <View testID="story-locked" pointerEvents="box-none" className="items-center gap-3">

@@ -26,6 +26,7 @@ it('returns the whole Social home in one call, never cached', async () => {
   expect(res.body.me).toEqual({ person: expect.objectContaining({ id: me.id, displayName: 'Me' }), checkIn: null, goodnight: null });
   expect(res.body.camp).toEqual({
     checkedIn: 1, members: 3, faces: [res.body.stories[0].author.coachId],
+    faceColours: [res.body.stories[0].author.kipColour],
     night: expect.any(Boolean), awake: 3, asleep: 0, goodnightOpen: expect.any(Boolean),
   });
   expect(res.body.stories.map((r: { author: { id: string }; locked: boolean }) => [r.author.id, r.locked])).toEqual([[sam.id, true]]);
@@ -89,5 +90,5 @@ it("draws the day boundary in the viewer's zone, not UTC", async () => {
 it('works for someone with no buddies yet', async () => {
   const me = await buddyUser();
   const res = await (await api()).get('/me/social').set(await authHeaderFor(me.id));
-  expect(res.body).toMatchObject({ camp: { checkedIn: 0, members: 1, faces: [] }, stories: [], timeline: [], highlights: null, unread: { requests: 0, stickers: 0 } });
+  expect(res.body).toMatchObject({ camp: { checkedIn: 0, members: 1, faces: [], faceColours: [] }, stories: [], timeline: [], highlights: null, unread: { requests: 0, stickers: 0 } });
 });

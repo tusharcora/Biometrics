@@ -14,6 +14,7 @@ import { listBuddies } from './list';
 import { getProfileStats } from './profile';
 import { blockBuddy, blockFromRequest, listBlocked, requireBuddyId, setMuted, unblock, unpair } from './relations';
 import { acceptRequest, cancelRequest, declineRequest, listRequests, sendRequest } from './requests';
+import { buddyScene } from './scene';
 import { confirmMoodNotice, getSharing, parseSharingPatch, recordSharingConsent, updateSharing } from './sharing';
 import { sendSticker } from './stickers';
 import { buildBuddyWeek } from './view';
@@ -148,6 +149,12 @@ buddiesRouter.get('/me/buddies/activity', requireAuth, buddyRoute(async (req, re
 
 buddiesRouter.post('/me/buddies/activity/seen', requireAuth, buddyRoute(async (req, res) => {
   res.json({ seen: await markActivitySeen(req.userId!, new Date()) });
+}));
+
+/** Home's scene: up to two buddies by latest check-in, the buddy count and incoming requests. */
+buddiesRouter.get('/me/buddies/scene', requireAuth, buddyRoute(async (req, res) => {
+  res.set('Cache-Control', 'private, no-store');
+  res.json(await buddyScene(req.userId!, new Date()));
 }));
 
 // ---- /me/buddies/:buddyId routes: keep these LAST. Any new GET /me/buddies/<word> route goes above,
