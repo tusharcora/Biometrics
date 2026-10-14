@@ -7,7 +7,7 @@ import { Geist_600SemiBold } from '@expo-google-fonts/geist/600SemiBold';
 import { Geist_700Bold } from '@expo-google-fonts/geist/700Bold';
 import { Geist_800ExtraBold } from '@expo-google-fonts/geist/800ExtraBold';
 import { AuthProvider } from './src/auth/AuthContext';
-import { CharacterProvider } from './src/characters/CharacterProvider';
+import { CoachStatusProvider } from './src/lib/coachStatus/CoachStatusProvider';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { ThemeProvider } from './src/theme/ThemeProvider';
 import { applyDefaultThemeSync } from './src/theme/preference';
@@ -47,10 +47,10 @@ export default function App() {
     <ThemeProvider>
       <ThemedStatusBar />
       <AuthProvider>
-        {/* Inside AuthProvider: it follows the session (Mochi when signed out). */}
-        <CharacterProvider>
+        {/* Inside AuthProvider: it follows the session. */}
+        <CoachStatusProvider>
           <RootNavigator />
-        </CharacterProvider>
+        </CoachStatusProvider>
       </AuthProvider>
     </ThemeProvider>
   );

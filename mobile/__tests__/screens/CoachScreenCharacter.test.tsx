@@ -39,7 +39,7 @@ const status: CoachStatusDTO = {
 
 const SAFETY = { type: 'safety' as const, text: 'Support is available.', resources: ['Call 988'] };
 
-// The screen as the app mounts it: under CharacterProvider, inside a navigator
+// The screen under an explicit CharacterContext, inside a navigator
 // whose focus the test controls.
 function renderCoach({ recoveryBand = null, focused = true }: { recoveryBand?: ScoreBand | null; focused?: boolean } = {}) {
   const navigation = { isFocused: () => focused, addListener: () => () => undefined };
@@ -242,7 +242,7 @@ describe('CoachScreen: character', () => {
     errors.mockRestore();
   });
 
-  it('shows Mochi when rendered without a CharacterProvider', async () => {
+  it('shows Mochi when rendered without a CharacterContext', async () => {
     const utils = render(<CoachScreen />);
     await utils.findByTestId('coach-empty');
 

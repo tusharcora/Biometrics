@@ -1,8 +1,9 @@
-import { createContext, useContext } from 'react';
+import { createContext, useContext, useMemo } from 'react';
 import type { CoachStatusDTO } from '../api/coach';
 import type { ScoreBand } from '../lib/scoreInsights';
 import type { CharacterId } from '../components/characters/types';
-import type { ThinkingAttachmentId, ThinkingTextId } from '../components/characters/thinking';
+import { DEFAULT_THINKING_ATTACHMENT, type ThinkingAttachmentId, type ThinkingTextId } from '../components/characters/thinking';
+import { useCoachStatusContext } from '../lib/coachStatus/CoachStatusProvider';
 
 export interface CharacterContextValue {
   characterId: CharacterId;
@@ -25,13 +26,38 @@ export interface CharacterContextValue {
 
 export const CharacterContext = createContext<CharacterContextValue | null>(null);
 
-// For components that also render outside the provider (tests, the dev gallery).
+const noChoice = async () => {};
+
+// Ruling 1 (plan 2026-10-14-kip-coach): until Task 14 deletes it, an old caller with no CharacterContext.Provider
+// above it gets the coach status from CoachStatusProvider and Mochi as the look. Both contexts are always read,
+// so the hook order is stable.
 export function useCharacterOptional(): CharacterContextValue | null {
-  return useContext(CharacterContext);
+  const explicit = useContext(CharacterContext);
+  const coach = useCoachStatusContext();
+  // Memoised on the coach value, so a consumer's effect keyed on it does not rerun every render.
+  const fromCoach = useMemo<CharacterContextValue | null>(
+    () =>
+      coach && {
+        characterId: 'mochi',
+        personaChosen: true,
+        status: coach.status,
+        statusLoaded: coach.statusLoaded,
+        recoveryBand: null,
+        thinkingAttachment: DEFAULT_THINKING_ATTACHMENT,
+        thinkingText: coach.thinkingText,
+        refreshStatus: coach.refreshStatus,
+        chooseCharacter: noChoice,
+        chooseThinking: async ({ text }) => {
+          if (text) await coach.chooseThinkingText(text);
+        },
+      },
+    [coach],
+  );
+  return explicit ?? fromCoach;
 }
 
 export function useCharacter(): CharacterContextValue {
-  const value = useContext(CharacterContext);
-  if (!value) throw new Error('useCharacter must be used inside CharacterProvider');
+  const value = useCharacterOptional();
+  if (!value) throw new Error('useCharacter must be used inside CoachStatusProvider');
   return value;
 }

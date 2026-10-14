@@ -28,7 +28,8 @@ import { Character } from '../components/characters/Character';
 import { characterInfo } from '../components/characters/registry';
 import { STAGE_W } from '../components/characters/attachments/frames';
 import { SPRITE_SIZE } from '../components/characters/sprites/compose';
-import { DEFAULT_THINKING_TEXT } from '../components/characters/thinking';
+import { DEFAULT_THINKING_TEXT } from '../lib/thinkingText';
+import { useCoachStatusContext } from '../lib/coachStatus/CoachStatusProvider';
 import { useCharacterMood } from '../characters/useCharacterMood';
 import { useScreenFocused } from '../characters/useScreenFocused';
 import { PressableScale } from '../components/ui/pressable-scale';
@@ -79,7 +80,7 @@ export function CoachScreen() {
   const prefill = route?.params?.prefill;
   const characterCtx = useCharacterOptional();
   const { name } = characterInfo(characterCtx?.characterId);
-  const thinkingText = characterCtx?.thinkingText ?? DEFAULT_THINKING_TEXT;
+  const thinkingText = useCoachStatusContext()?.thinkingText ?? DEFAULT_THINKING_TEXT;
 
   const [phase, setPhase] = useState<Phase>('loading');
   const [input, setInput] = useState(prefill ?? '');

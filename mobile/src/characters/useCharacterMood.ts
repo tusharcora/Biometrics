@@ -4,7 +4,7 @@ import { useCharacterOptional } from './CharacterContext';
 import { ANSWERING_MS, characterMood } from './characterMood';
 
 // characterMood() for a component, with today's recovery band from
-// CharacterProvider (none outside it). While a reply is fresh it schedules one
+// CharacterContext (none outside it). While a reply is fresh it schedules one
 // re-render for the moment "answering" ends, so the mood falls back without a
 // per-frame clock. RN timers and Date.now() are different clocks, so the timer
 // can fire a hair early; the tick in the deps re-runs the effect after each

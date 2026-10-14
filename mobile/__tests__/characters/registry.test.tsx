@@ -93,7 +93,7 @@ describe('CharacterContext', () => {
   it('throws outside a provider for the required hook', () => {
     const errors = jest.spyOn(console, 'error').mockImplementation(() => undefined);
     try {
-      expect(() => renderHook(() => useCharacter())).toThrow('useCharacter must be used inside CharacterProvider');
+      expect(() => renderHook(() => useCharacter())).toThrow('useCharacter must be used inside CoachStatusProvider');
     } finally {
       errors.mockRestore();
     }

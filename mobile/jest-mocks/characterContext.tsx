@@ -1,12 +1,13 @@
-// Test helpers for components that read CharacterProvider. Kept out of
+// Test helpers for components that read CharacterContext. Kept out of
 // __tests__ so jest does not collect it as a suite (like forecastFixture.ts).
 import React from 'react';
 import { within, type render } from '@testing-library/react-native';
 import { CharacterContext, type CharacterContextValue } from '../src/characters/CharacterContext';
+import { HIDDEN_OK } from './coachStatus';
 
 // Characters are decorative and hidden from screen readers, so queries for
-// them must opt in to hidden elements.
-export const HIDDEN_OK = { includeHiddenElements: true } as const;
+// them must opt in to hidden elements. Defined in coachStatus.tsx (ruling H6).
+export { HIDDEN_OK };
 
 export function fakeCharacter(overrides: Partial<CharacterContextValue> = {}): CharacterContextValue {
   return {

@@ -30,7 +30,7 @@ const screen = (
   </NavigationContext.Provider>
 );
 
-// Without a CharacterProvider, useCoachStatus fetches its own copy (phase 4),
+// Without a CoachStatusProvider, useCoachStatus fetches its own copy (phase 4),
 // so these tests drive status through the fetchCoachStatus mock.
 function renderSettings() {
   return render(screen);

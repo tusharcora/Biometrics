@@ -1,4 +1,5 @@
-import { act, renderHook } from '@testing-library/react-native';
+import { act, renderHook, waitFor } from '@testing-library/react-native';
+import { markNetworkError } from '../../src/api/client';
 import {
   CoachConsentRequiredError,
   CoachDisabledError,
@@ -714,6 +715,37 @@ describe('useCoachConversation: progress steps', () => {
 
     await act(async () => result.current.newChat());
     expect(result.current.steps).toEqual([]);
+  });
+});
+
+describe('useCoachConversation: offline (spec §3.4)', () => {
+  it('a send that never reached the network is offline: the question leaves the thread, no error card kind is retryable', async () => {
+    stream.mockRejectedValueOnce(markNetworkError(new TypeError('Network request failed')));
+    const { result } = renderHook(() => useCoachConversation());
+    await act(async () => { result.current.send('How did I sleep?'); });
+    await waitFor(() => expect(result.current.streaming).toBe(false));
+    expect(result.current.error).toMatchObject({ kind: 'offline', retryable: false, request: { message: 'How did I sleep?' } });
+    expect(result.current.messages).toEqual([]);
+  });
+
+  it('Stop is never offline: the question stays and no error is set', async () => {
+    const live = openTurn();
+    const { result } = setup();
+    act(() => result.current.send('Hi'));
+
+    await act(async () => result.current.stop());
+
+    expect(live.signal.aborted).toBe(true);
+    expect(result.current.error).toBeNull();
+    expect(result.current.messages).toEqual([expect.objectContaining({ role: 'user', text: 'Hi' })]);
+    expect(result.current.messages[0]!.failed).toBeUndefined();
+  });
+
+  it('a dropped stream is never offline', async () => {
+    stream.mockRejectedValueOnce(new CoachStreamInterruptedError());
+    const { result } = renderHook(() => useCoachConversation());
+    await act(async () => { result.current.send('Hi'); });
+    await waitFor(() => expect(result.current.error?.kind).toBe('interrupted'));
   });
 });
 

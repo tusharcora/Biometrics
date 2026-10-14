@@ -18,7 +18,7 @@ afterEach(() => {
 });
 
 describe('useCharacterMood', () => {
-  it('is idle outside a CharacterProvider (no recovery band)', () => {
+  it('is idle outside a CharacterContext (no recovery band)', () => {
     const { result } = renderHook(() => useCharacterMood({ sending: false, answeredAt: null }));
 
     expect(result.current).toBe('idle');

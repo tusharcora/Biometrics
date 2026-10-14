@@ -1,19 +1,17 @@
 import { renderHook, waitFor, act } from '@testing-library/react-native';
 import { coachEntryRoute, useCoachStatus } from '../../src/lib/useCoachStatus';
 import { fetchCoachStatus, type CoachStatusDTO } from '../../src/api/coach';
-import { fetchScoresWithBands } from '../../src/api/scores';
-import { CharacterProvider, useCharacter } from '../../src/characters/CharacterProvider';
+import { markNetworkError } from '../../src/api/client';
+import { CoachStatusProvider, useCoachStatusContext } from '../../src/lib/coachStatus/CoachStatusProvider';
 import {
-  clearCachedCharacter,
-  readCachedCharacter,
-  readCachedThinking,
-  writeCachedCharacter,
-  writeCachedThinking,
-} from '../../src/characters/characterCache';
+  clearCachedThinking,
+  purgeCachedCharacter,
+  readCachedThinkingText,
+  writeCachedThinkingText,
+} from '../../src/lib/coachStatus/thinkingCache';
 
 jest.mock('../../src/api/coach');
-jest.mock('../../src/api/scores', () => ({ fetchScoresWithBands: jest.fn() }));
-jest.mock('../../src/characters/characterCache');
+jest.mock('../../src/lib/coachStatus/thinkingCache');
 jest.mock('../../src/auth/AuthContext', () => ({
   useOptionalAuth: () => ({ session: { userId: 'u1', email: 'u1@example.com' }, isPending: false }),
 }));
@@ -31,15 +29,13 @@ const base: CoachStatusDTO = {
 
 beforeEach(() => {
   jest.clearAllMocks();
-  (fetchScoresWithBands as jest.Mock).mockResolvedValue({ scores: [], bands: undefined });
-  (readCachedCharacter as jest.Mock).mockResolvedValue(null);
-  (writeCachedCharacter as jest.Mock).mockResolvedValue(undefined);
-  (clearCachedCharacter as jest.Mock).mockResolvedValue(undefined);
-  (readCachedThinking as jest.Mock).mockResolvedValue(null);
-  (writeCachedThinking as jest.Mock).mockResolvedValue(undefined);
+  (readCachedThinkingText as jest.Mock).mockResolvedValue(null);
+  (writeCachedThinkingText as jest.Mock).mockResolvedValue(undefined);
+  (clearCachedThinking as jest.Mock).mockResolvedValue(undefined);
+  (purgeCachedCharacter as jest.Mock).mockResolvedValue(undefined);
 });
 
-describe('useCoachStatus without a CharacterProvider (a screen rendered on its own)', () => {
+describe('useCoachStatus without a CoachStatusProvider (a screen rendered on its own)', () => {
   it('is null until the server answers, then exposes the status', async () => {
     (fetchCoachStatus as jest.Mock).mockResolvedValue(base);
     const { result } = renderHook(() => useCoachStatus());
@@ -87,13 +83,22 @@ describe('useCoachStatus without a CharacterProvider (a screen rendered on its o
     act(() => result.current.setStatus({ ...base, personaId: 'kit' }));
     expect(result.current.status?.personaId).toBe('kit');
   });
+
+  it('without a provider, a network failure sets offline and keeps the last status', async () => {
+    (fetchCoachStatus as jest.Mock).mockResolvedValueOnce(base);
+    const { result } = renderHook(() => useCoachStatus());
+    await waitFor(() => expect(result.current.status).toEqual(base));
+    (fetchCoachStatus as jest.Mock).mockRejectedValueOnce(markNetworkError(new TypeError('x')));
+    await act(() => result.current.refresh());
+    expect([result.current.offline, result.current.status]).toEqual([true, base]);
+  });
 });
 
-describe('useCoachStatus inside a CharacterProvider', () => {
+describe('useCoachStatus inside a CoachStatusProvider', () => {
   // Two callers on one screen, plus the provider itself, as in the app.
   function renderTwoCallers(navigation?: Parameters<typeof useCoachStatus>[0]) {
-    return renderHook(() => ({ a: useCoachStatus(navigation), b: useCoachStatus(), character: useCharacter() }), {
-      wrapper: CharacterProvider,
+    return renderHook(() => ({ a: useCoachStatus(navigation), b: useCoachStatus(), coach: useCoachStatusContext() }), {
+      wrapper: CoachStatusProvider,
     });
   }
 
@@ -136,15 +141,26 @@ describe('useCoachStatus inside a CharacterProvider', () => {
     await waitFor(() => expect(result.current.b.status?.enabled).toBe(false));
   });
 
-  it('setStatus replaces the shared status, and a new personaId becomes the character', async () => {
+  it('setStatus replaces the shared status for every caller, and its thinking text shows', async () => {
     (fetchCoachStatus as jest.Mock).mockResolvedValue(base);
     const { result } = renderTwoCallers();
     await waitFor(() => expect(result.current.a.status).toEqual(base));
 
-    act(() => result.current.a.setStatus({ ...base, personaId: 'boba', consented: false }));
+    act(() => result.current.a.setStatus({ ...base, consented: false, thinkingText: 'shimmer' }));
 
     expect(result.current.b.status?.consented).toBe(false);
-    expect(result.current.character.characterId).toBe('boba');
+    expect(result.current.coach?.thinkingText).toBe('shimmer');
+  });
+
+  it('shares offline: one caller going offline shows for every caller', async () => {
+    (fetchCoachStatus as jest.Mock).mockResolvedValue(base);
+    const { result } = renderTwoCallers();
+    await waitFor(() => expect(result.current.a.status).toEqual(base));
+    (fetchCoachStatus as jest.Mock).mockRejectedValueOnce(markNetworkError(new TypeError('x')));
+
+    await act(() => result.current.a.refresh());
+
+    expect([result.current.b.offline, result.current.b.status]).toEqual([true, base]);
   });
 });
 

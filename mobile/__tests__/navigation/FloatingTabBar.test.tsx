@@ -225,7 +225,7 @@ describe('FloatingTabBar', () => {
       expect(hub(utils).opacity).toBe(1);
     });
 
-    it("shows the user's character from CharacterProvider", () => {
+    it("shows the user's character from CharacterContext", () => {
       const utils = render(withCharacter(bar(makeProps(0)), { characterId: 'kit', recoveryBand: 'scorePoor' }));
 
       // Idle even on a poor recovery day: the tab bar ignores moods.

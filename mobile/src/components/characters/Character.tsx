@@ -13,7 +13,7 @@ import { DEFAULT_CHARACTER_ID, type CharacterId, type CharacterMood } from './ty
 export const DIMMED_OPACITY = 0.45;
 
 export interface CharacterProps {
-  /** Omitted → the user's current character (CharacterProvider), or Mochi outside it. */
+  /** Omitted → the character from CharacterContext (Mochi under CoachStatusProvider), or Mochi outside it. */
   characterId?: CharacterId;
   mood: CharacterMood;
   size: number;

@@ -21,7 +21,7 @@ import {
 } from '../../src/api/coach';
 import { streamCoachMessage } from '../../src/api/coachStream';
 import { answer, doneEvent, openTurn, scriptTurn } from '../../jest-mocks/coachStreamFake';
-import { withCharacter } from '../../jest-mocks/characterContext';
+import { withCoachStatus } from '../../jest-mocks/coachStatus';
 import type { ThinkingTextId } from '../../src/lib/thinkingText';
 import { GENERAL_QUESTIONS, suggestedQuestions } from '../../src/lib/coachToday';
 import { followUpsFor } from '../../src/lib/coachAnswers';
@@ -104,8 +104,8 @@ function deferred<T>() {
 }
 
 async function openChat(thinkingText?: ThinkingTextId) {
-  // No CharacterProvider by default (Mochi, the steps thinking text).
-  const utils = render(thinkingText ? withCharacter(<CoachScreen />, { thinkingText }) : <CoachScreen />);
+  // No CoachStatusProvider by default (the steps thinking text).
+  const utils = render(thinkingText ? withCoachStatus(<CoachScreen />, { thinkingText }) : <CoachScreen />);
   await utils.findByTestId('coach-input');
   return utils;
 }

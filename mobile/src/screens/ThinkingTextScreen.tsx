@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useColorScheme } from 'nativewind';
 import { useReducedMotion } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { useCharacterOptional } from '../characters/CharacterContext';
+import { useCoachStatusContext } from '../lib/coachStatus/CoachStatusProvider';
 import { DEFAULT_THINKING_TEXT, THINKING_TEXT_NAMES, THINKING_TEXTS, type ThinkingTextId } from '../lib/thinkingText';
 import { KIP_COPY } from '../lib/kipCopy';
 import { useScreenFocused } from '../lib/useScreenFocused';
@@ -40,8 +40,8 @@ function sampleSteps(phase: number): ThinkingStep[] {
 // its way (spec §5, §9). The preview is the Coach screen's pending row, with
 // KIP and the selected style.
 export function ThinkingTextScreen() {
-  const current = useCharacterOptional();
-  const selected = current?.thinkingText ?? DEFAULT_THINKING_TEXT;
+  const coach = useCoachStatusContext();
+  const selected = coach?.thinkingText ?? DEFAULT_THINKING_TEXT;
   const reduceMotion = useReducedMotion();
   const focused = useScreenFocused();
   const still = reduceMotion || !focused;
@@ -59,10 +59,10 @@ export function ThinkingTextScreen() {
   const steps = useMemo(() => sampleSteps(phase), [phase]);
 
   async function choose(id: ThinkingTextId) {
-    if (!current || id === selected) return;
+    if (!coach || id === selected) return;
     setError(null);
     try {
-      await current.chooseThinking({ text: id });
+      await coach.chooseThinkingText(id);
     } catch {
       setError(THINKING_TEXT_ERROR);
       // The line appears below the list, out of VoiceOver's focus: say it too.

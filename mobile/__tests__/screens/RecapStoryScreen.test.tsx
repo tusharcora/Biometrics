@@ -5,7 +5,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react-n
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
-import { withCharacter } from '../../jest-mocks/characterContext';
+import { withCoachStatus } from '../../jest-mocks/coachStatus';
 import type { Recap } from '../../src/api/recaps';
 import { captureToPng, saveImage, shareImage } from '../../src/lib/recapCapture';
 import { recapTint } from '../../src/lib/recapTheme';
@@ -50,10 +50,10 @@ const tap = (x: number) => fireEvent.press(screen.getByTestId('story-viewer-tap'
 
 const CONSENTED = { enabled: true, consented: true } as never;
 
-async function open(character: Parameters<typeof withCharacter>[1] = {}) {
+async function open(coach: Parameters<typeof withCoachStatus>[1] = {}) {
   render(
     <SafeAreaProvider initialMetrics={{ frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 47, left: 0, right: 0, bottom: 34 } }}>
-      {withCharacter(<RecapStoryScreen />, character)}
+      {withCoachStatus(<RecapStoryScreen />, coach)}
     </SafeAreaProvider>,
   );
   // The stored include choices load first; Share and Save wait for them.
@@ -205,7 +205,7 @@ it('draws no frame until the stored include choices have loaded, then starts fro
   (SecureStore.getItemAsync as jest.Mock).mockImplementation(() => new Promise((r) => (finish = r)));
   render(
     <SafeAreaProvider initialMetrics={{ frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 47, left: 0, right: 0, bottom: 34 } }}>
-      {withCharacter(<RecapStoryScreen />)}
+      {withCoachStatus(<RecapStoryScreen />)}
     </SafeAreaProvider>,
   );
   act(() => jest.advanceTimersByTime(STORY_FRAME_MS * 2));
@@ -252,7 +252,7 @@ describe('header and reply bar (design E)', () => {
   });
 
   it('asks the coach about the week: closes the viewer onto the chat with the question in the composer, not sent', async () => {
-    await open({ status: CONSENTED, characterId: 'mochi' });
+    await open({ status: CONSENTED });
     expect(screen.getByTestId('story-viewer-ask')).toHaveTextContent('Ask Mochi about your week…');
     fireEvent.press(screen.getByTestId('story-viewer-ask'));
     expect(mockNavigate).toHaveBeenCalledWith('Tabs', { screen: 'Coach', params: { prefill: 'What stood out in my week of Sep 28 – Oct 4?' } }, { pop: true });
@@ -333,7 +333,7 @@ describe('the story is the recap', () => {
     mockParams = { recap: { ...mockRecap, id: 'r-next', periodStart: '2026-10-05', periodEnd: '2026-10-11' } };
     screen.rerender(
       <SafeAreaProvider initialMetrics={{ frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 47, left: 0, right: 0, bottom: 34 } }}>
-        {withCharacter(<RecapStoryScreen />)}
+        {withCoachStatus(<RecapStoryScreen />)}
       </SafeAreaProvider>,
     );
     await act(async () => {});
@@ -349,7 +349,7 @@ describe('the story is the recap', () => {
     (fetchRecap as jest.Mock).mockResolvedValue({ ...mockRecap, id: 'r-next', periodStart: '2026-10-05', periodEnd: '2026-10-11' });
     screen.rerender(
       <SafeAreaProvider initialMetrics={{ frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 47, left: 0, right: 0, bottom: 34 } }}>
-        {withCharacter(<RecapStoryScreen />)}
+        {withCoachStatus(<RecapStoryScreen />)}
       </SafeAreaProvider>,
     );
     await act(async () => {});

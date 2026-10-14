@@ -7,6 +7,7 @@ import { THINKING_ATTACHMENTS } from '../../src/components/characters/thinking';
 import { KIP_COPY } from '../../src/lib/kipCopy';
 import { THINKING_TEXTS } from '../../src/lib/thinkingText';
 import { characterLabel, HIDDEN_OK, withCharacter } from '../../jest-mocks/characterContext';
+import { withCoachStatus } from '../../jest-mocks/coachStatus';
 
 // Synchronous icons: the real font load re-renders after these tests finish.
 jest.mock('@expo/vector-icons', () => require('../../jest-mocks/vectorIcons'));
@@ -76,8 +77,8 @@ describe('ThinkingStyleScreen', () => {
 
 describe('ThinkingTextScreen', () => {
   it('lists the five text styles with Steps selected by default and saves a choice', async () => {
-    const chooseThinking = jest.fn(async () => {});
-    const s = render(withCharacter(<ThinkingTextScreen />, { chooseThinking }));
+    const chooseThinkingText = jest.fn(async () => {});
+    const s = render(withCoachStatus(<ThinkingTextScreen />, { chooseThinkingText }));
     for (const id of THINKING_TEXTS) expect(s.getByTestId(`thinking-text-${id}`)).toBeTruthy();
     expect(s.getAllByTestId(/^thinking-text-[a-z]+$/)).toHaveLength(5);
     expect(s.queryByTestId('thinking-text-dialog')).toBeNull();
@@ -85,21 +86,21 @@ describe('ThinkingTextScreen', () => {
     expect(s.getByTestId('thinking-text-shimmer').props.accessibilityState).toMatchObject({ checked: false });
     expect(s.getByTestId('thinking-text-steps')).toHaveTextContent(/Steps/);
     await act(async () => fireEvent.press(s.getByTestId('thinking-text-shimmer')));
-    expect(chooseThinking).toHaveBeenCalledWith({ text: 'shimmer' });
+    expect(chooseThinkingText).toHaveBeenCalledWith('shimmer');
   });
 
   it("previews the chosen style with KIP, under KIP's intro line", () => {
-    const s = render(withCharacter(<ThinkingTextScreen />, { characterId: 'pengu', thinkingText: 'steps' }));
+    const s = render(withCoachStatus(<ThinkingTextScreen />, { thinkingText: 'steps' }));
     expect(within(s.getByTestId('thinking-preview', HIDDEN_OK)).getByTestId('thinking-kip-head', HIDDEN_OK)).toBeTruthy();
     expect(s.getByTestId('thinking-preview', HIDDEN_OK)).toHaveTextContent(/Looking at your sleep/);
     expect(s.getByText(KIP_COPY.thinkingTextIntro)).toBeTruthy();
   });
 
   it('shows an error and keeps the old choice when saving fails', async () => {
-    const chooseThinking = jest.fn(async () => {
+    const chooseThinkingText = jest.fn(async () => {
       throw new Error('offline');
     });
-    const s = render(withCharacter(<ThinkingTextScreen />, { chooseThinking }));
+    const s = render(withCoachStatus(<ThinkingTextScreen />, { chooseThinkingText }));
     const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {});
     await act(async () => fireEvent.press(s.getByTestId('thinking-text-typewriter')));
     expect(s.getByText(/couldn't be saved/i)).toBeTruthy();
@@ -109,7 +110,7 @@ describe('ThinkingTextScreen', () => {
   });
 
   it("previews each style in its own row, with KIP's head beside it", () => {
-    const s = render(withCharacter(<ThinkingTextScreen />, { thinkingText: 'shimmer' }));
+    const s = render(withCoachStatus(<ThinkingTextScreen />, { thinkingText: 'shimmer' }));
     for (const id of THINKING_TEXTS) {
       const row = s.getByTestId(`thinking-text-${id}`);
       const preview = within(row).getByTestId(`thinking-text-preview-${id}`, HIDDEN_OK);
@@ -130,12 +131,12 @@ describe('ThinkingTextScreen', () => {
 
   it('only the selected row moves: the others hold their first frame', () => {
     jest.useFakeTimers();
-    const s = render(withCharacter(<ThinkingTextScreen />, { thinkingText: 'typewriter' }));
+    const s = render(withCoachStatus(<ThinkingTextScreen />, { thinkingText: 'typewriter' }));
     act(() => jest.advanceTimersByTime(300));
     const typed = within(s.getByTestId('thinking-text-preview-typewriter', HIDDEN_OK)).getByTestId('thinking-typewriter-text', HIDDEN_OK);
     expect(typed.props.children).not.toBe('KIP is typing it up…');
     s.unmount();
-    const still = render(withCharacter(<ThinkingTextScreen />, { thinkingText: 'steps' }));
+    const still = render(withCoachStatus(<ThinkingTextScreen />, { thinkingText: 'steps' }));
     act(() => jest.advanceTimersByTime(300));
     expect(within(still.getByTestId('thinking-text-preview-typewriter', HIDDEN_OK)).getByTestId('thinking-typewriter-text', HIDDEN_OK)).toHaveTextContent('KIP is typing it up…');
     still.unmount();
@@ -143,7 +144,7 @@ describe('ThinkingTextScreen', () => {
   });
 
   it('reads each row as its name and blurb, with the preview hidden from screen readers', () => {
-    const s = render(withCharacter(<ThinkingTextScreen />));
+    const s = render(withCoachStatus(<ThinkingTextScreen />));
     const row = s.getByTestId('thinking-text-steps');
     expect(row.props.accessibilityLabel).toBe('Steps. The real steps, ticked off as they happen.');
     expect(s.getByTestId('thinking-text-preview-steps', HIDDEN_OK).props.accessibilityElementsHidden).toBe(true);
@@ -165,7 +166,7 @@ describe('Reduce Motion', () => {
 
   it('does not cycle the Thinking text sample steps', () => {
     mockReduceMotion = true;
-    const s = render(withCharacter(<ThinkingTextScreen />));
+    const s = render(withCoachStatus(<ThinkingTextScreen />));
     const preview = () => within(s.getByTestId('thinking-preview', HIDDEN_OK));
     expect(preview().getByTestId('thinking-step-route-active', HIDDEN_OK)).toBeTruthy();
     act(() => jest.advanceTimersByTime(3500));
@@ -175,7 +176,7 @@ describe('Reduce Motion', () => {
   });
 
   it('cycles them when motion is allowed', () => {
-    const s = render(withCharacter(<ThinkingTextScreen />));
+    const s = render(withCoachStatus(<ThinkingTextScreen />));
     act(() => jest.advanceTimersByTime(1000));
     expect(within(s.getByTestId('thinking-preview', HIDDEN_OK)).getByTestId('thinking-step-facts-active', HIDDEN_OK)).toBeTruthy();
     s.unmount();

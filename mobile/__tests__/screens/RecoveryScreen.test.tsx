@@ -1,6 +1,6 @@
 import React from 'react';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
-import { withCharacter } from '../../jest-mocks/characterContext';
+import { withCoachStatus } from '../../jest-mocks/coachStatus';
 import { RecoveryScreen } from '../../src/screens/RecoveryScreen';
 import { fetchRecoveryMonth, fetchRecoveryPage, type RecoveryCalendarDTO, type RecoveryPageDTO } from '../../src/api/recovery';
 import type { CoachStatusDTO } from '../../src/api/coach';
@@ -42,7 +42,7 @@ const pageFetch = fetchRecoveryPage as jest.Mock;
 const HIDDEN_OK = { includeHiddenElements: true } as const;
 
 function renderScreen(status: CoachStatusDTO | null = STATUS) {
-  return render(withCharacter(<RecoveryScreen />, { characterId: 'mochi', status }));
+  return render(withCoachStatus(<RecoveryScreen />, { status }));
 }
 
 function pending<T>() {

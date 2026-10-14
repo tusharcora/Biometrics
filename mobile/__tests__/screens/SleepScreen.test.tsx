@@ -1,7 +1,7 @@
 import React from 'react';
 import { ScrollView, View } from 'react-native';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
-import { withCharacter } from '../../jest-mocks/characterContext';
+import { withCoachStatus } from '../../jest-mocks/coachStatus';
 import { GOAL, REGULARITY, REMINDER, TODAY, makeDetail, makeNight, makeScore, makeWindow } from '../../jest-mocks/sleepPageFixture';
 import { SleepScreen } from '../../src/screens/SleepScreen';
 import { fetchSleep, fetchSleepGoal, fetchSleepNight, fetchSleepRegularity } from '../../src/api/sleep';
@@ -49,7 +49,7 @@ function deferredGoal() {
 }
 
 function renderScreen(status: CoachStatusDTO | null = STATUS) {
-  return render(withCharacter(<SleepScreen />, { characterId: 'mochi', status }));
+  return render(withCoachStatus(<SleepScreen />, { status }));
 }
 const hero = () => screen.findByTestId('sleep-hero');
 
@@ -370,7 +370,7 @@ describe('SleepScreen: summary', () => {
     await screen.findByTestId('sleep-night-numbers');
     nightFetch.mockReturnValue(new Promise(() => {}));
     mockParams = { date: '2026-10-05' };
-    rerender(withCharacter(<SleepScreen />, { characterId: 'mochi', status: STATUS }));
+    rerender(withCoachStatus(<SleepScreen />, { status: STATUS }));
     expect(await screen.findByTestId('sleep-night-cards-loading')).toBeTruthy();
     expect(screen.getByTestId('sleep-summary-loading')).toBeTruthy();
     expect(screen.queryByTestId('sleep-night-numbers')).toBeNull();
@@ -380,7 +380,7 @@ describe('SleepScreen: summary', () => {
     const { rerender } = renderScreen();
     await screen.findByText('Last night · Thu 8 Oct');
     mockParams = { date: '2026-10-05' };
-    rerender(withCharacter(<SleepScreen />, { characterId: 'mochi', status: STATUS }));
+    rerender(withCoachStatus(<SleepScreen />, { status: STATUS }));
     expect(await screen.findByText('Mon 5 Oct')).toBeTruthy();
     expect(nightFetch).toHaveBeenCalledWith('2026-10-05');
   });
@@ -677,7 +677,7 @@ describe('SleepScreen: bedtime to wake', () => {
     fireEvent.press(screen.getByTestId('sleep-night-2026-09-07'));
     expect(mockNavigation.setParams).toHaveBeenCalledWith({ date: '2026-09-07' });
     mockParams = { date: '2026-09-07' };
-    rerender(withCharacter(<SleepScreen />, { characterId: 'mochi', status: STATUS }));
+    rerender(withCoachStatus(<SleepScreen />, { status: STATUS }));
     expect(screen.queryByTestId('sleep-picker-loading')).toBeNull();
     expect(screen.getByTestId('sleep-window-card')).toBeTruthy();
     expect(screen.getByTestId('sleep-month')).toBeTruthy();
@@ -697,7 +697,7 @@ describe('SleepScreen: bedtime to wake', () => {
     fireEvent.press(screen.getByTestId('sleep-window-bar-2026-08-28'));
     expect(mockNavigation.setParams).toHaveBeenCalledWith({ date: '2026-08-28' });
     mockParams = { date: '2026-08-28' };
-    rerender(withCharacter(<SleepScreen />, { characterId: 'mochi', status: STATUS }));
+    rerender(withCoachStatus(<SleepScreen />, { status: STATUS }));
     expect(screen.queryByTestId('sleep-picker-loading')).toBeNull();
     expect(screen.getByTestId('sleep-window-card')).toBeTruthy();
     await act(async () => { resolveNext(makeWindow({ nights })); });
@@ -934,7 +934,7 @@ describe('SleepScreen: month', () => {
     fireEvent.press(screen.getByLabelText('Previous month'));
     await waitFor(() => expect(screen.getByTestId('sleep-month-title').props.children).toBe('September'));
     mockParams = { date: '2026-10-05' };
-    view.rerender(withCharacter(<SleepScreen />, { characterId: 'mochi', status: STATUS }));
+    view.rerender(withCoachStatus(<SleepScreen />, { status: STATUS }));
     await waitFor(() => expect(screen.getByTestId('sleep-month-title').props.children).toBe('October'));
   });
 
