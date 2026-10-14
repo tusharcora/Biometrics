@@ -15,11 +15,17 @@ import type { KipLook } from '../../lib/useKipTurn';
 import { COLORS } from '../../theme';
 
 export const COLLAPSED_HEIGHT = 60;
+/** The collapsed header's row: the 60-point header plus the thumbnail frame's room (its 66-point picture). */
+export const COLLAPSED_ROW_HEIGHT = COLLAPSED_HEIGHT + 12;
 export const FADE_PT = 24;
 
-/** 0 → 1 over the last 24 points before the card's bottom edge passes under the 60-point header (§3.5). */
-export function collapseProgress(scrollY: number, cardBottom: number): number {
-  const end = cardBottom - COLLAPSED_HEIGHT;
+/**
+ * 0 → 1 over the last 24 points before the card's bottom edge passes under the pinned header (§3.5). `covered` is
+ * how far the pinned header reaches down over the top of the scroll area: all 60 points when it pins over the scroll
+ * itself; on the KIP page, where it pins over the expanded header above the scroll, the overlap measured from layout.
+ */
+export function collapseProgress(scrollY: number, cardBottom: number, covered: number = COLLAPSED_HEIGHT): number {
+  const end = cardBottom - Math.max(0, covered);
   return Math.max(0, Math.min(1, (scrollY - (end - FADE_PT)) / FADE_PT));
 }
 
@@ -41,7 +47,7 @@ export function CollapsedKipHeader({ stage, look, statusLine, window, reduceMoti
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === 'dark' ? COLORS.dark : COLORS.light;
   return (
-    <View className="flex-row items-center gap-3 px-5" style={{ height: COLLAPSED_HEIGHT + 12 }}>
+    <View className="flex-row items-center gap-3 px-5" style={{ height: COLLAPSED_ROW_HEIGHT }}>
       <Pressable
         testID="kip-room-thumbnail"
         accessibilityRole="button"

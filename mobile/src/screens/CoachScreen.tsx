@@ -27,7 +27,7 @@ import { CoachMessageRow } from '../components/coach/CoachMessageRow';
 import { ErrorCard } from '../components/coach/ErrorCard';
 import { ConversationsSheet } from '../components/coach/ConversationsSheet';
 import { RoomCard } from '../components/coach/RoomCard';
-import { CollapsedKipHeader, collapseProgress } from '../components/coach/CollapsedKipHeader';
+import { COLLAPSED_ROW_HEIGHT, CollapsedKipHeader, collapseProgress } from '../components/coach/CollapsedKipHeader';
 import { KipStateCard } from '../components/coach/KipStateCard';
 import { DEFAULT_THINKING_TEXT } from '../lib/thinkingText';
 import { useCoachStatusContext } from '../lib/coachStatus/CoachStatusProvider';
@@ -162,22 +162,29 @@ export function CoachScreen() {
     };
   }, []);
 
-  // Collapse on scroll (spec §3.5): the card's bottom edge in the scroll content, the fade (0 → 1, a shared value)
-  // and whether the collapsed header is up, fading in or fully in (state, changed only at the thresholds). It takes
-  // taps only once fully in; until then they reach the expanded header under it.
+  // Collapse on scroll (spec §3.5): the card's bottom edge in the scroll content, the expanded header's height (the
+  // collapsed header pins over it, so only the rest of its row reaches down over the scroll), the fade (0 → 1, a
+  // shared value) and whether the collapsed header is up, fading in or fully in (state, changed only at the
+  // thresholds). It takes taps only once fully in; until then they reach the expanded header under it.
   const cardBottom = useRef<number | null>(null);
+  const headerHeight = useRef<number | null>(null);
+  const lastProgress = useRef(0);
   const fade = useSharedValue(0);
-  const [collapsed, setCollapsed] = useState<'hidden' | 'fading' | 'in'>('hidden');
+  const [collapsed, setCollapsed] = useState<CollapseState>('hidden');
   const trackCollapse = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-      if (cardBottom.current === null) return;
-      const progress = collapseProgress(e.nativeEvent.contentOffset.y, cardBottom.current);
+      if (cardBottom.current === null || headerHeight.current === null) return;
+      const progress = collapseProgress(e.nativeEvent.contentOffset.y, cardBottom.current, COLLAPSED_ROW_HEIGHT - headerHeight.current);
+      lastProgress.current = progress;
       fade.value = progress;
-      // Under Reduce Motion it switches at the threshold, with no fade.
-      setCollapsed(progress >= 1 ? 'in' : progress > 0 && !reduceMotion ? 'fading' : 'hidden');
+      setCollapsed(collapseState(progress, reduceMotion));
     },
     [fade, reduceMotion],
   );
+  // Reduce Motion switched on mid-fade: no half-faded header waits for the next scroll.
+  useEffect(() => {
+    setCollapsed(collapseState(lastProgress.current, reduceMotion));
+  }, [reduceMotion]);
 
   const conversation = useCoachConversation({
     preferredEngine: engine,
@@ -454,6 +461,7 @@ export function CoachScreen() {
       shrunkChosen.current = true;
       setShrunk(false);
       setCollapsed('hidden');
+      lastProgress.current = 0;
       void writeKipRoomShrunk(false);
     }
     scrollRef.current?.scrollTo({ y: 0, animated: true });
@@ -496,7 +504,16 @@ export function CoachScreen() {
   const header = shrunk ? (
     <View testID="kip-collapsed-header">{collapsedHeader}</View>
   ) : (
-    <View className="flex-row items-start justify-between px-5 pb-2 pt-1">
+    <View
+      testID="kip-header"
+      className="flex-row items-start justify-between px-5 pb-2 pt-1"
+      onLayout={(e) => {
+        headerHeight.current = e.nativeEvent.layout.height;
+      }}
+      // Under the collapsed header once it is fully in: screen readers get one set of header controls.
+      accessibilityElementsHidden={collapsed === 'in'}
+      importantForAccessibility={collapsed === 'in' ? 'no-hide-descendants' : 'auto'}
+    >
       <View className="shrink gap-0.5">
         <PageTitle>{KIP_COPY.pageTitle}</PageTitle>
         {/* One line at any text size (truncated), so the header never grows. */}
@@ -701,9 +718,17 @@ export function CoachScreen() {
   );
 }
 
+type CollapseState = 'hidden' | 'fading' | 'in';
+
+/** Under Reduce Motion the collapsed header switches at the threshold, with no fade. */
+function collapseState(progress: number, reduceMotion: boolean): CollapseState {
+  if (progress >= 1) return 'in';
+  return progress > 0 && !reduceMotion ? 'fading' : 'hidden';
+}
+
 // The pinned collapsed header, faded by the scroll (a shared value, so a scroll step never re-renders the page). It
 // mounts when the fade starts, so its first frame already has the current opacity. Under Reduce Motion it is only
-// mounted at the threshold, fully in.
+// mounted at the threshold, fully in. While fading in it is a picture only: no taps and no screen-reader focus.
 function CollapsedHeaderFade({ fade, reduceMotion, takesTaps, children }: {
   fade: SharedValue<number>;
   reduceMotion: boolean;
@@ -716,6 +741,8 @@ function CollapsedHeaderFade({ fade, reduceMotion, takesTaps, children }: {
       testID="kip-collapsed-header"
       className="absolute left-0 right-0 top-0 bg-background"
       pointerEvents={takesTaps ? 'auto' : 'none'}
+      accessibilityElementsHidden={!takesTaps}
+      importantForAccessibility={takesTaps ? 'auto' : 'no-hide-descendants'}
       style={style}
     >
       {children}

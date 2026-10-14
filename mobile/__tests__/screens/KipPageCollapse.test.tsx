@@ -11,6 +11,12 @@ jest.mock('expo-secure-store', () => ({ getItemAsync: jest.fn(), setItemAsync: j
 jest.mock('../../src/lib/kipRoomPrefs', () => ({ readKipRoomShrunk: jest.fn(), writeKipRoomShrunk: jest.fn() }));
 let mockReduceMotion = false;
 jest.spyOn(AccessibilityInfo, 'isReduceMotionEnabled').mockImplementation(() => Promise.resolve(mockReduceMotion));
+// The page's Reduce Motion listener, so a test can switch it on mid-fade.
+let reduceMotionChanged: ((on: boolean) => void) | null = null;
+jest.spyOn(AccessibilityInfo, 'addEventListener').mockImplementation(((event: string, cb: (on: boolean) => void) => {
+  if (event === 'reduceMotionChanged') reduceMotionChanged = cb;
+  return { remove: jest.fn() };
+}) as unknown as typeof AccessibilityInfo.addEventListener);
 
 const prefs = jest.requireMock('../../src/lib/kipRoomPrefs');
 const actualPrefs = jest.requireActual('../../src/lib/kipRoomPrefs');
@@ -22,48 +28,93 @@ const scrollTo = async (s: ReturnType<typeof render>, y: number) => {
     await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
   });
 };
-const layCard = (s: ReturnType<typeof render>) =>
+// The measured layouts: the card's bottom edge in the scroll content is 12 + 300 = 312; the expanded header above
+// the scroll is `headerHeight` tall (60 unless a test says otherwise).
+const layOut = (s: ReturnType<typeof render>, headerHeight = 60) => {
+  fireEvent(s.getByTestId('kip-header'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 375, height: headerHeight } } });
   fireEvent(s.getByTestId('kip-room-card'), 'layout', { nativeEvent: { layout: { x: 20, y: 12, width: 335, height: 300 } } });
+};
+const overlay = (s: ReturnType<typeof render>) => s.getByTestId('kip-collapsed-header', { includeHiddenElements: true });
 
 beforeEach(() => {
   mockReduceMotion = false;
+  reduceMotionChanged = null;
   prefs.readKipRoomShrunk.mockResolvedValue(false);
   prefs.writeKipRoomShrunk.mockResolvedValue(undefined);
   store.getItemAsync.mockResolvedValue(null);
   store.setItemAsync.mockResolvedValue(undefined);
 });
 
-// The card's bottom is 12 + 300 = 312 and the header is 60 tall: it is fully in at 252 and starts at 228.
-it('collapse: the header appears once the card\'s bottom (312) passes under it (60), fading over 24 points', async () => {
+// The collapsed row (72) pins over the 60-point expanded header, so it reaches 12 points down over the scroll: the
+// card's bottom edge (312) is under it at scroll 300, and the fade runs over the 24 points before, from 276.
+it('collapse: the header fades in over the last 24 points before the card\'s bottom edge passes under it', async () => {
   const s = await openChat();
-  layCard(s);
-  await scrollTo(s, 200);
+  layOut(s);
+  await scrollTo(s, 276);
+  expect(s.queryByTestId('kip-collapsed-header', { includeHiddenElements: true })).toBeNull();
+  await scrollTo(s, 288);
+  expect(overlay(s)).toHaveAnimatedStyle({ opacity: 0.5 });
+  // While fading it is a picture only: taps and the screen reader reach the expanded header under it.
+  expect(overlay(s).props.pointerEvents).toBe('none');
   expect(s.queryByTestId('kip-collapsed-header')).toBeNull();
-  await scrollTo(s, 240);
-  expect(s.getByTestId('kip-collapsed-header')).toHaveAnimatedStyle({ opacity: 0.5 });
-  // Taps reach the expanded header under it until it is fully in.
-  expect(s.getByTestId('kip-collapsed-header').props.pointerEvents).toBe('none');
-  await scrollTo(s, 260);
-  expect(s.getByTestId('kip-collapsed-header')).toHaveAnimatedStyle({ opacity: 1 });
-  expect(s.getByTestId('kip-collapsed-header').props.pointerEvents).toBe('auto');
+  expect(s.getAllByRole('header', { name: 'KIP' })).toHaveLength(1);
+  expect(s.getByTestId('coach-conversations-button')).toBeTruthy();
+  await scrollTo(s, 300);
+  expect(overlay(s)).toHaveAnimatedStyle({ opacity: 1 });
+  expect(overlay(s).props.pointerEvents).toBe('auto');
   expect(s.getByTestId('kip-collapsed-status')).toHaveTextContent('In the pocket room');
   await scrollTo(s, 100);
-  expect(s.queryByTestId('kip-collapsed-header')).toBeNull();
+  expect(s.queryByTestId('kip-collapsed-header', { includeHiddenElements: true })).toBeNull();
+});
+
+it('pins the threshold to the card\'s bottom edge from the measured layouts', async () => {
+  // A taller expanded header (large text): the row reaches 72 - 64 = 8 points over the scroll, so the card's bottom
+  // edge (312) reaches the row's bottom (72 on screen) at scroll 304: 64 + 312 - 304 = 72.
+  const s = await openChat();
+  layOut(s, 64);
+  await scrollTo(s, 303);
+  expect(overlay(s).props.pointerEvents).toBe('none');
+  expect(overlay(s)).toHaveAnimatedStyle({ opacity: 23 / 24 });
+  await scrollTo(s, 304);
+  expect(overlay(s).props.pointerEvents).toBe('auto');
+  expect(overlay(s)).toHaveAnimatedStyle({ opacity: 1 });
+});
+
+it('fully in, screen readers get one KIP header and one set of header buttons', async () => {
+  const s = await openChat();
+  layOut(s);
+  await scrollTo(s, 400);
+  expect(s.getAllByRole('header', { name: 'KIP' })).toHaveLength(1);
+  expect(s.getByTestId('kip-collapsed-header')).toBeTruthy();
+  expect(s.queryByTestId('coach-conversations-button')).toBeNull();
+  expect(s.getByTestId('kip-collapsed-conversations')).toBeTruthy();
+  expect(s.getByTestId('kip-header', { includeHiddenElements: true }).props.accessibilityElementsHidden).toBe(true);
 });
 
 it('under Reduce Motion the collapsed header switches at the threshold, with no fade', async () => {
   mockReduceMotion = true;
   const s = await openChat();
-  layCard(s);
-  await scrollTo(s, 240);
-  expect(s.queryByTestId('kip-collapsed-header')).toBeNull();
-  await scrollTo(s, 252);
-  expect(s.getByTestId('kip-collapsed-header')).toHaveAnimatedStyle({ opacity: 1 });
+  layOut(s);
+  await scrollTo(s, 299);
+  expect(s.queryByTestId('kip-collapsed-header', { includeHiddenElements: true })).toBeNull();
+  await scrollTo(s, 300);
+  expect(overlay(s)).toHaveAnimatedStyle({ opacity: 1 });
+});
+
+it('Reduce Motion switched on mid-fade drops the half-faded header at once; the threshold still switches it', async () => {
+  const s = await openChat();
+  layOut(s);
+  await scrollTo(s, 288);
+  expect(overlay(s)).toHaveAnimatedStyle({ opacity: 0.5 });
+  await act(async () => reduceMotionChanged?.(true));
+  expect(s.queryByTestId('kip-collapsed-header', { includeHiddenElements: true })).toBeNull();
+  await scrollTo(s, 300);
+  expect(overlay(s)).toHaveAnimatedStyle({ opacity: 1 });
 });
 
 it('the thumbnail scrolls back to the top', async () => {
   const s = await openChat();
-  layCard(s);
+  layOut(s);
   await scrollTo(s, 400);
   const spy = jest.spyOn(ScrollView.prototype as unknown as { scrollTo: (o: object) => void }, 'scrollTo');
   fireEvent.press(s.getByTestId('kip-room-thumbnail'));
