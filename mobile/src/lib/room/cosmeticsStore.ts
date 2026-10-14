@@ -48,16 +48,28 @@ export function getCosmetics(): Cosmetics | null {
   return cosmetics;
 }
 
+// The read in flight and the epoch it started in: loads started in the same epoch share it (sign-in starts two).
+let inflight: { at: number; read: Promise<Cosmetics | null> } | null = null;
+
 /** Reads the server (which also catches up on grants). Keeps what is shown when the read fails. */
-export async function loadCosmetics(): Promise<Cosmetics | null> {
+export function loadCosmetics(): Promise<Cosmetics | null> {
+  if (inflight && inflight.at === epoch) return inflight.read;
   const at = epoch;
-  try {
-    const dto = await fetchCosmetics();
-    if (at === epoch) publish(fromDTO(dto));
-  } catch {
-    // The next sign-in, foreground or KIP tab focus tries again.
-  }
-  return cosmetics;
+  const read = (async () => {
+    try {
+      const dto = await fetchCosmetics();
+      if (at === epoch) publish(fromDTO(dto));
+    } catch {
+      // The next sign-in, foreground or KIP tab focus tries again.
+    }
+    return cosmetics;
+  })();
+  inflight = { at, read };
+  // Attached first, so it runs before any caller resumes: a load started after this one lands reads afresh.
+  void read.then(() => {
+    if (inflight?.read === read) inflight = null;
+  });
+  return read;
 }
 
 /** PUT /me/cosmetics. Throws the ApiError (403 not_owned, 409 stale, …) for decorate mode to handle. */

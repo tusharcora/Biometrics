@@ -117,7 +117,36 @@ it('summarises the backfill once (Review Focus 2) and its Decorate opens decorat
   expect(s.getByText("New for KIP's room: Wood panel")).toBeTruthy();
 });
 
+describe('with a screen reader', () => {
+  const reader = (on: boolean) => jest.spyOn(AccessibilityInfo, 'isScreenReaderEnabled').mockResolvedValue(on);
+
+  it('stays until it is used or dismissed, with a hint for its action', async () => {
+    reader(true);
+    load.mockResolvedValue(cosmetics([{ itemId: 'wall.panel', source: 'counter:recaps_read:4' }]));
+    const s = render(<RoomToastHost />);
+    await act(async () => undefined);
+    const toast = s.getByTestId('room-toast');
+    expect(toast.props.accessibilityHint).toBe("Opens decorate mode for KIP's room");
+    act(() => { jest.advanceTimersByTime(ROOM_TOAST_MS * 10); });
+    expect(s.getByTestId('room-toast')).toBeTruthy();
+    fireEvent(s.getByTestId('room-toast'), 'accessibilityAction', { nativeEvent: { actionName: 'activate' } });
+    expect(navigationRef.navigate).toHaveBeenCalledWith('DecorateRoom', { tab: 'room', slot: 'wallpaper' });
+    expect(s.queryByTestId('room-toast')).toBeNull();
+  });
+
+  it('without one, goes after 6 s', async () => {
+    reader(false);
+    load.mockResolvedValue(cosmetics([{ itemId: 'wall.panel', source: 'counter:recaps_read:4' }]));
+    const s = render(<RoomToastHost />);
+    await act(async () => undefined);
+    expect(s.getByTestId('room-toast').props.accessibilityHint).toBe("Opens decorate mode for KIP's room");
+    act(() => { jest.advanceTimersByTime(ROOM_TOAST_MS); });
+    expect(s.queryByTestId('room-toast')).toBeNull();
+  });
+});
+
 it('announces the toast on iOS without the "·", and offers Decorate and Dismiss as actions', async () => {
+  jest.spyOn(AccessibilityInfo, 'isScreenReaderEnabled').mockResolvedValue(true);
   const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => undefined);
   load.mockResolvedValue(cosmetics([{ itemId: 'art.band', source: 'counter:buddy_cheers:10' }]));
   const s = render(<RoomToastHost />);

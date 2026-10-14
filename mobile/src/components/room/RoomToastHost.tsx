@@ -30,6 +30,8 @@ function held(): boolean {
 // signed-in navigator.
 export function RoomToastHost() {
   const [toast, setToast] = useState<RoomToast | null>(null);
+  // With a screen reader on the toast stays until it is used or dismissed: 6 s is too short to reach its actions.
+  const [stays, setStays] = useState(false);
   const busy = useRef(false);
   const mounted = useRef(true);
 
@@ -41,7 +43,10 @@ export function RoomToastHost() {
       if (!cosmetics || held() || !mounted.current) return;
       const { toast: next, toasted } = nextToast(cosmetics.fresh, await readToasted());
       await writeToasted(toasted);
-      if (next && mounted.current) {
+      if (!next) return;
+      const reader = await AccessibilityInfo.isScreenReaderEnabled().catch(() => false);
+      if (mounted.current) {
+        setStays(reader);
         setToast(next);
         AccessibilityInfo.announceForAccessibility(toastSpoken(next));
       }
@@ -72,10 +77,10 @@ export function RoomToastHost() {
   }, [check]);
 
   useEffect(() => {
-    if (!toast) return undefined;
+    if (!toast || stays) return undefined;
     const timer = setTimeout(() => setToast(null), ROOM_TOAST_MS);
     return () => clearTimeout(timer);
-  }, [toast]);
+  }, [toast, stays]);
 
   if (!toast) return null;
   const decorate = () => {
@@ -95,6 +100,7 @@ export function RoomToastHost() {
         testID="room-toast"
         accessible
         accessibilityLabel={toastSpoken(toast)}
+        accessibilityHint={ROOM_COPY.toastHint}
         accessibilityActions={[{ name: 'activate', label: ROOM_COPY.decorate }, { name: 'escape', label: ROOM_COPY.dismiss }]}
         onAccessibilityAction={onAction}
         className="mx-4 mt-2 flex-row items-center gap-3 rounded-lg border border-border bg-card px-4 py-3"

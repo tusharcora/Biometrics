@@ -216,11 +216,60 @@ describe("new pieces for KIP's room", () => {
     expect(mockNav.navigate).toHaveBeenCalledWith('DecorateRoom', { tab: 'room', slot: 'rug' });
   });
 
-  it('shows no room line before the cosmetics are loaded', async () => {
+  const COSMETICS = (fresh: Array<{ itemId: string; source: string }>, version = 1) => ({
+    catalogueVersion: 1, owned: fresh.map((f) => f.itemId), fresh, room: {}, worn: {}, version, counters: { recapsRead: 0, buddyCheers: 0 },
+  });
+
+  it('reads the cosmetics again for a badge earned mid-session, and the line fills in', async () => {
+    // The sign-in read: nothing new yet.
+    (fetchCosmetics as jest.Mock).mockResolvedValueOnce(COSMETICS([]));
+    await act(async () => { await loadCosmetics(); });
+    let answer!: (v: unknown) => void;
+    (fetchCosmetics as jest.Mock).mockReturnValueOnce(new Promise((r) => { answer = r; }));
     load.mockResolvedValue(SLEEP_I);
     render(<CelebrationHost />);
     await act(async () => {});
     expect(screen.getByTestId('celebration-title')).toBeTruthy();
     expect(screen.queryByTestId('celebration-room-line')).toBeNull();
+    expect(fetchCosmetics).toHaveBeenCalledTimes(2);
+
+    await act(async () => { answer(COSMETICS([{ itemId: 'rug.red', source: 'family:SLEEP_GOAL:1' }], 2)); });
+    expect(screen.getByTestId('celebration-room-line')).toHaveTextContent("New for KIP's room: Red rug");
+  });
+
+  it('with another family queued, opens decorate mode only once the last one closes and the Modal has gone', async () => {
+    (fetchCosmetics as jest.Mock).mockResolvedValue(COSMETICS([{ itemId: 'art.motto', source: 'family:SLEEP_GOAL:2' }]));
+    load.mockResolvedValue(TWO_FAMILIES);
+    render(<CelebrationHost />);
+    await act(async () => {});
+    expect(screen.getByTestId('celebration-title')).toHaveTextContent('SLEEP GOAL STREAK II');
+
+    fireEvent.press(screen.getByTestId('celebration-decorate'));
+    expect(post).toHaveBeenCalledWith(['s1', 's2']);
+    await act(async () => {});
+    expect(screen.getByTestId('celebration-title')).toHaveTextContent('DAILY CHECK-IN I');
+    act(() => jest.advanceTimersByTime(MODAL_DISMISS_MS * 5));
+    expect(mockNav.navigate).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('celebration-done'));
+    await act(async () => {});
+    expect(screen.queryByTestId('celebration-screen')).toBeNull();
+    act(() => jest.advanceTimersByTime(MODAL_DISMISS_MS - 1));
+    expect(mockNav.navigate).not.toHaveBeenCalled();
+    act(() => jest.advanceTimersByTime(1));
+    expect(mockNav.navigate).toHaveBeenCalledTimes(1);
+    expect(mockNav.navigate).toHaveBeenCalledWith('DecorateRoom', { tab: 'room', slot: 'art' });
+  });
+
+  it('forgets a pending Decorate on sign-out', async () => {
+    (fetchCosmetics as jest.Mock).mockResolvedValue(COSMETICS([{ itemId: 'rug.red', source: 'family:SLEEP_GOAL:1' }]));
+    load.mockResolvedValue(SLEEP_I);
+    const view = render(<CelebrationHost />);
+    await act(async () => {});
+    fireEvent.press(screen.getByTestId('celebration-decorate'));
+    await act(async () => {});
+    view.unmount();
+    act(() => jest.advanceTimersByTime(MODAL_DISMISS_MS));
+    expect(mockNav.navigate).not.toHaveBeenCalled();
   });
 });

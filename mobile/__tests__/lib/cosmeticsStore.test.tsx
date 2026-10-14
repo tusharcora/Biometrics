@@ -162,3 +162,43 @@ it('useCosmetics is null until the first read', () => {
   const { result } = renderHook(() => useCosmetics());
   expect(result.current).toBeNull();
 });
+
+it('two loads at once share one read (sign-in: MyKipScope and the room toast)', async () => {
+  const finish = deferredGet();
+  const a = loadCosmetics();
+  const b = loadCosmetics();
+  expect(get).toHaveBeenCalledTimes(1);
+  await act(async () => { finish(DTO); await Promise.all([a, b]); });
+  expect(await a).toBe(getCosmetics());
+  expect(await b).toBe(getCosmetics());
+  // Once it has landed, the next load reads again.
+  get.mockResolvedValueOnce(DTO);
+  await act(async () => { await loadCosmetics(); });
+  expect(get).toHaveBeenCalledTimes(2);
+});
+
+it('a load after a mutation starts a new read, and the shared read from before never lands', async () => {
+  get.mockResolvedValueOnce(DTO);
+  await act(async () => { await loadCosmetics(); });
+  const stale = deferredGet();
+  const before = loadCosmetics();
+  seen.mockResolvedValueOnce(undefined);
+  await act(async () => { await markCosmeticsSeen(['rug.red']); });
+  const fresh = deferredGet();
+  const after = loadCosmetics();
+  expect(get).toHaveBeenCalledTimes(3);
+  await act(async () => { stale(DTO); await before; });
+  expect(hasUnseen(getCosmetics()!)).toBe(false);
+  await act(async () => { fresh({ ...DTO, version: 4, fresh: [{ itemId: 'wall.dots', source: 'counter:recaps_read:2' }] }); await after; });
+  expect(getCosmetics()!.fresh.map((f) => f.itemId)).toEqual(['wall.dots']);
+});
+
+it('a load after sign-out starts a new read', async () => {
+  deferredGet();
+  void loadCosmetics();
+  act(() => resetCosmetics());
+  get.mockResolvedValueOnce(DTO);
+  await act(async () => { await loadCosmetics(); });
+  expect(get).toHaveBeenCalledTimes(2);
+  expect(getCosmetics()!.version).toBe(3);
+});

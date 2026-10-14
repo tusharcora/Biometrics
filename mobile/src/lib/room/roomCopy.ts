@@ -188,4 +188,5 @@ export const ROOM_COPY = {
   newFor: (name: string, more: number) => (more > 0 ? `New for KIP's room: ${name} and ${more} more` : `New for KIP's room: ${name}`),
   backfill: (n: number) => `Your badges unlocked ${n} things for KIP's room`,
   dismiss: 'Dismiss',
+  toastHint: "Opens decorate mode for KIP's room",
 } as const;
