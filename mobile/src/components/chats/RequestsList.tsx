@@ -7,6 +7,7 @@ import {
 } from '../../api/buddies';
 import type { useMoodNoticeGate } from '../buddies/useMoodNoticeGate';
 import { PersonKip } from '../kip/PersonKip';
+import { kipWornOf } from '../../lib/kip/wornArt';
 import { Button, buttonIconSize } from '../ui/button';
 import { Text } from '../ui/text';
 import { buddyErrorMessage } from '../../lib/buddyCopy';
@@ -119,7 +120,7 @@ export function RequestsList({ gate, onAccepted }: { gate: Gate; onAccepted: (bu
           <View testID={`request-in-${item.request.id}`} className="gap-3 rounded-[18px] border border-border bg-card p-3.5">
             <View className="flex-row items-center gap-3">
               <View className="h-11 w-11 items-center justify-center rounded-full bg-secondary">
-                <PersonKip colour={item.request.from.kipColour} size={28} />
+                <PersonKip colour={item.request.from.kipColour} worn={kipWornOf(item.request.from.kipWorn)} size={28} />
               </View>
               <View className="flex-1">
                 <Text numberOfLines={1} className="text-body font-semibold">{item.request.from.displayName}</Text>

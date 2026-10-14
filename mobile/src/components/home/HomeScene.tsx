@@ -9,6 +9,8 @@ import {
 import { HOME_COPY, sceneName } from '../../lib/homeCopy';
 import type { KipColour } from '../../lib/kip/kipArt';
 import { kipColourOf } from '../../lib/kip/kipColour';
+import { kipWornOf } from '../../lib/kip/wornArt';
+import type { KipWorn } from '../../lib/room/loadout';
 import type { WeatherKey } from '../../lib/recoveryCopy';
 import type { ScoreBand } from '../../lib/scoreInsights';
 import { COLORS } from '../../theme';
@@ -38,6 +40,8 @@ export interface HomeSceneProps {
   /** Extra sky above the grid (sceneExtra). */
   extra: number;
   myColour: KipColour;
+  /** What your KIP wears; buddies' KIPs wear theirs from the scene read (spec 2026-10-14 KIP's room §7). */
+  myWorn?: Partial<KipWorn>;
   /** null while loading, after a failed read and on an older server: only you. */
   buddies: BuddyScene | null;
   readings: SceneReadings;
@@ -67,7 +71,7 @@ function Paths({ paths }: { paths: { fill: string; d: string }[] }) {
   );
 }
 
-export function HomeScene({ scene, width, extra, myColour, buddies, readings, onOpen, onOpenBuddy, header }: HomeSceneProps) {
+export function HomeScene({ scene, width, extra, myColour, myWorn, buddies, readings, onOpen, onOpenBuddy, header }: HomeSceneProps) {
   const look = STATES[scene.key];
   const offsetX = sceneOffsetX(width);
   const backdrop = useMemo(() => pxPaths(sceneBackdrop(scene.key, width, extra, offsetX), 1), [scene.key, width, extra, offsetX]);
@@ -94,7 +98,7 @@ export function HomeScene({ scene, width, extra, myColour, buddies, readings, on
           <Paths paths={grid} />
         </Svg>
         <View testID="home-scene-me-spot" style={{ position: 'absolute', left: me.left, top: me.top }}>
-          <Kip testID="home-scene-me" colour={myColour} pose={scene.pose} mood={scene.mood} scale={SCENE_SPOTS.me.scale} />
+          <Kip testID="home-scene-me" colour={myColour} worn={myWorn} pose={scene.pose} mood={scene.mood} scale={SCENE_SPOTS.me.scale} />
         </View>
         {shown.map((b, i) => {
           const spot = SCENE_SPOTS.buddies[i]!;
@@ -102,7 +106,7 @@ export function HomeScene({ scene, width, extra, myColour, buddies, readings, on
           const { pose, mood } = PERSON_POSE[personStateOf(b.mood, night)];
           return (
             <View key={b.id} style={{ position: 'absolute', left: box.left, top: box.top }}>
-              <Kip testID={`home-scene-buddy-${b.id}`} colour={kipColourOf(b.kipColour)} pose={pose} mood={mood} scale={spot.scale} />
+              <Kip testID={`home-scene-buddy-${b.id}`} colour={kipColourOf(b.kipColour)} worn={kipWornOf(b.kipWorn)} pose={pose} mood={mood} scale={spot.scale} />
             </View>
           );
         })}

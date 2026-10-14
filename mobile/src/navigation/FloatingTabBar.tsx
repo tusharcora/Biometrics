@@ -12,7 +12,8 @@ import { useSocialUnreadCount } from '../lib/socialStore';
 import { Text } from '../components/ui/text';
 import { useCoachStatus } from '../lib/useCoachStatus';
 import { useKeyboardVisible } from '../lib/useKeyboardVisible';
-import { useMyKipColour } from '../lib/kip/myKip';
+import { useMyKip } from '../lib/kip/myKip';
+import { wornForSize } from '../lib/kip/wornArt';
 import { COLORS, MOTION } from '../theme';
 import {
   FLOATING_BAR_HEIGHT,
@@ -54,7 +55,7 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
   const ring = useStoryRing(scheme);
   // Incoming requests + unseen stickers; 0 until the Social home has loaded (and on an older backend).
   const socialUnread = useSocialUnreadCount();
-  const mine = useMyKipColour();
+  const { colour: mine, worn: myWorn } = useMyKip();
 
   const activeName = state.routes[state.index]?.name ?? 'Home';
   // The hub is your KIP resting, on every tab. It is only dimmed while the coach
@@ -167,7 +168,8 @@ export function FloatingTabBar({ state, navigation }: BottomTabBarProps) {
               >
                 {isHub ? (
                   <View style={{ opacity: hubDimmed ? HUB_DIMMED_OPACITY : 1 }}>
-                    <Kip testID="hub-character" colour={mine} pose="rest" mood="idle" scale={2} />
+                    {/* The hub counts as small (spec 2026-10-14 KIP's room §7): head and ears pieces only. */}
+                    <Kip testID="hub-character" colour={mine} worn={wornForSize(myWorn, 0)} pose="rest" mood="idle" scale={2} />
                   </View>
                 ) : (
                   <View className="items-center" style={{ gap: 3 }}>

@@ -3,6 +3,7 @@ import { Alert } from 'react-native';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { acceptRequest, blockFromRequest, cancelRequest, confirmMoodNotice, declineRequest, fetchIdentity, fetchRequests } from '../../src/api/buddies';
 import { PersonKip } from '../../src/components/kip/PersonKip';
+import { Rect } from 'react-native-svg';
 import { refreshBuddies } from '../../src/lib/buddiesStore';
 import { offerPushAfterPairing } from '../../src/lib/buddyPushOffer';
 import { refreshSocial } from '../../src/lib/socialStore';
@@ -60,6 +61,24 @@ it('draws whoever sent a request as their KIP in their colour', async () => {
   render(<ChatRequestsScreen />);
   const row = await screen.findByTestId('request-in-r1');
   expect(within(row).UNSAFE_getByType(PersonKip).props).toMatchObject({ colour: 'lilac', size: 28 });
+});
+
+it("dresses a request's KIP at 28 points in head pieces only; a piece this build cannot draw leaves it bare", async () => {
+  (fetchRequests as jest.Mock).mockResolvedValue({
+    incoming: [
+      { id: 'r1', createdAt: '', from: { ...person('u1', 'Ana'), kipColour: 'lilac', kipWorn: { head: 'out.cap', face: 'out.round', neck: null, ears: null } } },
+      { id: 'r2', createdAt: '', from: { ...person('u2', 'Ben'), kipColour: 'lilac', kipWorn: { head: 'out.unknown', face: null, neck: null, ears: null } } },
+    ],
+    outgoing: [],
+  });
+  render(<ChatRequestsScreen />);
+  const fills = (id: string) => within(screen.getByTestId(id)).UNSAFE_getAllByType(Rect).map((r) => r.props.fill);
+  await screen.findByTestId('request-in-r1');
+  expect(fills('request-in-r1')).toContain('#2563EB');
+  expect(fills('request-in-r1')).not.toContain('#FCD34D');
+  const ben = fills('request-in-r2');
+  const bare = render(<PersonKip colour="lilac" size={28} />).UNSAFE_getAllByType(Rect).map((r) => r.props.fill);
+  expect(ben).toEqual(bare);
 });
 
 it('on a server without chats, accepting opens the buddy\'s week', async () => {

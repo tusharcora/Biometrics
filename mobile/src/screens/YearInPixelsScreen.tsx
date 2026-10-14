@@ -8,7 +8,7 @@ import { Card } from '../components/ui/card';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { todayCivil } from '../lib/heatmap';
-import { useMyKipColour } from '../lib/kip/myKip';
+import { useMyKip } from '../lib/kip/myKip';
 import { DESIGN_WIDTH } from '../lib/recapShare';
 import { loadYearInPixels, type YearInPixels } from '../lib/yearPixels';
 
@@ -19,7 +19,7 @@ type State = { phase: 'loading' } | ({ phase: 'ready' } & YearInPixels) | { phas
 // with your KIP, tinted by its colour like its share image (recap restyle; KIP Coach §7.7).
 export function YearInPixelsScreen() {
   const navigation = useNavigation<any>();
-  const mine = useMyKipColour();
+  const { colour: mine, worn: myWorn } = useMyKip();
   const { width } = useWindowDimensions();
   // The user's local civil date, so tonight's square is never drawn as a past night.
   const today = todayCivil();
@@ -57,6 +57,7 @@ export function YearInPixelsScreen() {
               pixels={state.pixels}
               goalMinutes={state.goalMinutes}
               kipColour={mine}
+              kipWorn={myWorn}
               includes={{ count: true, coach: true }}
               scale={(width - 40) / DESIGN_WIDTH}
             />

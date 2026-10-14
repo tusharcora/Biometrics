@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useState } from 'react';
 import { View, type ViewProps } from 'react-native';
 import { Card } from '../ui/card';
 import { SectionLabel } from '../ui/section-label';
@@ -7,10 +7,11 @@ import { Text } from '../ui/text';
 import { HotTag } from '../home/HotTag';
 import { RoomView } from '../room/RoomView';
 import { HOME_COPY } from '../../lib/homeCopy';
-import { useMyKipColour } from '../../lib/kip/myKip';
+import { useMyKip } from '../../lib/kip/myKip';
 import { KIP_COPY } from '../../lib/kipCopy';
 import { hotTagLabel, roomLabel, type KipStage } from '../../lib/kipStage';
-import { EMPTY_WORN, STARTER_LOADOUT } from '../../lib/room/loadout';
+import { useMyRoom } from '../../lib/room/cosmeticsStore';
+import { drawableLoadout } from '../../lib/room/draw';
 import type { KipLook } from '../../lib/useKipTurn';
 import type { RoomWeather } from '../../lib/room/weather';
 import type { ScoreBand } from '../../lib/scoreInsights';
@@ -24,18 +25,22 @@ const WOOD_LINE = '#3A2D23';
 // inner width is measured, the height fixed at 200), a caption row with the RECOVERY hot tag, and an optional footer
 // ("Shrink room", passed in by the page). The frame is part of the picture, not a button. The tag keeps Home's
 // dark-palette colours in both themes, as on the scene. `look` is KIP mid-turn (useKipTurn); without it the stage's
-// pose and mood are drawn.
-export function RoomCard({ stage, look, window, recovery, reduceMotion, onOpenRecovery, footer, onLayout }: {
+// pose and mood are drawn. The room is your saved one (spec 2026-10-14 KIP's room §2), with KIP in what it wears;
+// `paused` stops its loops while decorate mode is open (ruling 17).
+export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, onOpenRecovery, footer, onLayout }: {
   stage: KipStage;
   look?: KipLook;
   window: { weather: RoomWeather; night: boolean };
   recovery: { score: number | null; band: ScoreBand | null };
   reduceMotion: boolean;
+  paused?: boolean;
   onOpenRecovery: () => void;
   footer?: React.ReactNode;
   onLayout?: ViewProps['onLayout'];
 }) {
-  const colour = useMyKipColour();
+  const me = useMyKip();
+  const stored = useMyRoom();
+  const loadout = useMemo(() => drawableLoadout(stored), [stored]);
   const [inner, setInner] = useState(0);
   return (
     <Card testID="kip-room-card" className="gap-3 p-3.5" onLayout={onLayout}>
@@ -51,11 +56,11 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, onOpenRe
             ) : inner > 0 ? (
               <RoomView
                 testID="kip-room"
-                loadout={STARTER_LOADOUT}
-                worn={EMPTY_WORN}
+                loadout={loadout}
+                worn={me.worn}
                 weather={window.weather}
                 night={window.night}
-                colour={colour}
+                colour={me.colour}
                 pose={look?.pose ?? stage.pose}
                 mood={look?.mood ?? stage.mood}
                 facing={look?.facing}
@@ -64,6 +69,7 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, onOpenRe
                 crop={{ width: inner, height: ROOM_FRAME_HEIGHT }}
                 cellPt={2}
                 reduceMotion={reduceMotion}
+                paused={paused}
                 accessibilityLabel={roomLabel(stage.id, window)}
               />
             ) : null}

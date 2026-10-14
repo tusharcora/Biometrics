@@ -35,7 +35,8 @@ import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { buddyErrorMessage } from '../lib/buddyCopy';
 import { campNoteQuoteLabel } from '../lib/chatCopy';
-import { useMyKipColour } from '../lib/kip/myKip';
+import { useMyKip } from '../lib/kip/myKip';
+import { kipWornOf } from '../lib/kip/wornArt';
 import {
   CAMP_NOTE_MAX, campHeadline, campSceneKicker, campStatus, fireCountLabel, fireMoreLine, goodnightOpensLine, nightsLitLine,
   noteLength, personName,
@@ -116,7 +117,7 @@ export function CampfireScreen() {
   const insets = useSafeAreaInsets();
   const reduced = useReducedMotion();
   const screenReader = useScreenReader();
-  const myColour = useMyKipColour();
+  const { colour: myColour, worn: myWorn } = useMyKip();
   const [state, setState] = useState<State>({ status: 'loading' });
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -337,7 +338,7 @@ export function CampfireScreen() {
         <View testID="camp-note-slot" onLayout={(e) => setCardY(e.nativeEvent.layout.y)}>
           <CampNoteCard inputRef={input} draft={draft} onDraft={setDraft} length={length} canShare={canShare} onShare={share} live={live}
             editing={editing} onEdit={edit} onCancel={cancelEdit} onClear={clear} busy={busy} message={message} buddies={camp.members.filter((m) => !m.mine).length}
-            kipColour={myColour} onComposerLayout={setComposer} />
+            kipColour={myColour} kipWorn={myWorn} onComposerLayout={setComposer} />
         </View>
 
         {/* My own window (owner ruling Q1), not the scene's night: an 18:00 goal opens it at 17:00. */}
@@ -354,7 +355,7 @@ export function CampfireScreen() {
         <SectionLabel>{`WHO'S HERE · ${camp.members.length}`}</SectionLabel>
         {camp.members.map((m) => (
           <View key={m.person.id} testID={`camp-who-${m.person.id}`} className="flex-row items-start gap-3">
-            <PersonKip colour={m.mine ? myColour : m.person.kipColour} state={m.asleep ? 'asleep' : 'none'} size={32} />
+            <PersonKip colour={m.mine ? myColour : m.person.kipColour} worn={m.mine ? myWorn : kipWornOf(m.person.kipWorn)} state={m.asleep ? 'asleep' : 'none'} size={32} />
             <View className="flex-1 gap-1">
               {/* No line limit: "Who's here" is where a whole note is read (the bubble is one truncated line). */}
               <Text className="text-[15px] leading-5">

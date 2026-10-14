@@ -6,7 +6,7 @@ import { badgeGround, LOCKED_PIP, tierColors, tierInk } from '../../lib/badgeArt
 import { coachLine, levelTitle, valueLine } from '../../lib/badges';
 import type { Celebration } from '../../lib/celebrationQueue';
 import { hexAlpha } from '../../lib/colour';
-import { useMyKipColour } from '../../lib/kip/myKip';
+import { useMyKip } from '../../lib/kip/myKip';
 import { EXPORT_NOTICES, useRecapExport } from '../../lib/useRecapExport';
 import { FONTS } from '../../theme';
 import { pixelFont } from '../coach/thinking/shared';
@@ -78,7 +78,7 @@ function useInsets(): EdgeInsets {
 /** One family's celebration: remounted per family, so its share and close state start afresh. */
 function CelebrationContent({ celebration, thresholds, onDone }: CelebrationModalProps) {
   const reduceMotion = useReducedMotion();
-  const mine = useMyKipColour();
+  const { colour: mine, worn: myWorn } = useMyKip();
   const { family, level, value } = celebration;
   const t = tierColors(level, mine);
   const ground = badgeGround(t.ring);
@@ -127,7 +127,7 @@ function CelebrationContent({ celebration, thresholds, onDone }: CelebrationModa
           <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
             <BadgeIcon testID="celebration-badge" family={family} level={level} size={badgeSize} pips={false} colour={mine} />
             <View testID="celebration-coach" style={{ marginLeft: -Math.round(coachSize * 0.47), marginBottom: -10 }}>
-              <Kip colour={mine} pose="cheer" mood="proud" scale={Math.max(1, Math.round(coachSize / 16))} />
+              <Kip colour={mine} worn={myWorn} pose="cheer" mood="proud" scale={Math.max(1, Math.round(coachSize / 16))} />
             </View>
           </View>
         </View>
@@ -143,7 +143,7 @@ function CelebrationContent({ celebration, thresholds, onDone }: CelebrationModa
           {valueLine(family, value)}
         </Text>
         <View style={{ alignSelf: 'stretch', flexDirection: 'row', gap: 12, alignItems: 'center', borderWidth: 1, borderColor: hexAlpha(ink.ring, 0.3), backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 18, paddingVertical: 14, paddingHorizontal: 16 }}>
-          <Kip colour={mine} pose="cheer" mood="proud" scale={2} />
+          <Kip colour={mine} worn={myWorn} pose="cheer" mood="proud" scale={2} />
           <Text testID="celebration-coach-line" style={{ flex: 1, fontFamily: FONTS.sans, fontSize: 15, lineHeight: 21, color: INK }}>
             {coachLine(family, level, thresholds)}
           </Text>

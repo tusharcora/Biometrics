@@ -1,6 +1,7 @@
 import React from 'react';
 import { Text, View } from 'react-native';
 import type { KipColour } from '../../lib/kip/kipArt';
+import type { KipWorn } from '../../lib/room/loadout';
 import { goalLabel } from '../../lib/recapCopy';
 import { APP_NAME, DESIGN_WIDTH, type Includes } from '../../lib/recapShare';
 import { recapTint, yearCell, YEAR_SCALE } from '../../lib/recapTheme';
@@ -24,6 +25,8 @@ export interface YearPixelsViewProps {
   pixels: YearPixels;
   goalMinutes: number;
   kipColour: KipColour;
+  /** What your KIP wears (spec 2026-10-14 KIP's room §7); bare when left out. */
+  kipWorn?: Partial<KipWorn>;
   includes: Pick<Includes, 'count' | 'coach'>;
   scale: number;
   testID?: string;
@@ -37,7 +40,7 @@ const LEVEL_LABEL: Record<PixelLevel, string> = { none: 'no data', short: 'short
  * square, nights still to come a faint fill. A plain
  * ground, no dots: the grid is the pattern (the year artboard has none).
  */
-export function YearPixelsView({ year, pixels, goalMinutes, kipColour, includes, scale, testID = 'year-pixels' }: YearPixelsViewProps) {
+export function YearPixelsView({ year, pixels, goalMinutes, kipColour, kipWorn, includes, scale, testID = 'year-pixels' }: YearPixelsViewProps) {
   const a = (n: number) => (n * scale * DESIGN_WIDTH) / ART;
   const t = recapTint(kipColour);
   const pixel = pixelFont();
@@ -51,7 +54,7 @@ export function YearPixelsView({ year, pixels, goalMinutes, kipColour, includes,
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: a(16), minHeight: a(SPRITE) }}>
         {includes.coach ? (
           <View testID={`${testID}-coach`}>
-            <Kip colour={kipColour} pose="rest" mood="idle" scale={Math.max(1, Math.round(a(SPRITE) / 16))} />
+            <Kip colour={kipColour} worn={kipWorn} pose="rest" mood="idle" scale={Math.max(1, Math.round(a(SPRITE) / 16))} />
           </View>
         ) : null}
         <View style={{ flex: 1, gap: a(4) }}>

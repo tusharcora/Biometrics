@@ -3,7 +3,7 @@ import { View } from 'react-native';
 import { listCoachMemory, revokeCoachConsent } from '../api/coach';
 import { useCoachStatusContext } from '../lib/coachStatus/CoachStatusProvider';
 import { kipColourName } from '../lib/kip/kipColour';
-import { useMyKipColour } from '../lib/kip/myKip';
+import { useMyKip } from '../lib/kip/myKip';
 import { KIP_COPY } from '../lib/kipCopy';
 import { spokenLine } from '../lib/kipStage';
 import { DEFAULT_THINKING_TEXT, THINKING_TEXT_NAMES } from '../lib/thinkingText';
@@ -23,7 +23,7 @@ export function KipSettingsSection() {
   // @react-navigation/native that have no NavigationContext.
   const navigation = useContext(ScreenNavigationContext);
   const go = (name: string, params?: object) => (params === undefined ? navigation?.navigate?.(name) : navigation?.navigate?.(name, params));
-  const colour = useMyKipColour();
+  const { colour: colour, worn: myWorn } = useMyKip();
   const thinking = useCoachStatusContext()?.thinkingText ?? DEFAULT_THINKING_TEXT;
   const { status, setStatus } = useCoachStatus(navigation ?? undefined);
   const consented = !!status?.enabled && status.consented;
@@ -77,7 +77,7 @@ export function KipSettingsSection() {
       <SettingsGroup label={KIP_COPY.settingsGroup} footer={footer}>
         <SettingsRow
           testID="kip-your-kip"
-          leading={<Kip testID="kip-your-kip-art" colour={colour} pose="wave" mood="idle" scale={2} />}
+          leading={<Kip testID="kip-your-kip-art" colour={colour} worn={myWorn} pose="wave" mood="idle" scale={2} />}
           title={KIP_COPY.settingsGroup}
           subtitle={yourKip}
           subtitleAccessibilityLabel={spokenLine(yourKip)}

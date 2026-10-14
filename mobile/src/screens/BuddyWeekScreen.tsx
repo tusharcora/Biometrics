@@ -7,6 +7,7 @@ import {
 } from '../api/buddies';
 import { StickerButton } from '../components/buddies/StickerButton';
 import { PersonKip, personStateOf } from '../components/kip/PersonKip';
+import { kipWornOf } from '../lib/kip/wornArt';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { PageTitle } from '../components/ui/page-title';
@@ -147,7 +148,7 @@ export function BuddyWeekScreen() {
     <SafeAreaView edges={['bottom']} className="flex-1 bg-background">
       <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }}>
         <View className="items-center gap-1">
-          <PersonKip colour={week.buddy.kipColour} state={personStateOf(week.mood)} size={96} />
+          <PersonKip colour={week.buddy.kipColour} worn={kipWornOf(week.buddy.kipWorn)} state={personStateOf(week.mood)} size={96} />
           <PageTitle testID="buddy-week-name">{week.buddy.displayName}</PageTitle>
           <Text className="text-caption text-muted-foreground">@{week.buddy.handle}</Text>
           <Text testID="buddy-week-line" className="text-center" style={{ color: MOOD_COLORS[week.mood] }}>{week.moodLine}</Text>

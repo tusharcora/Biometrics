@@ -11,7 +11,7 @@ import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { SettingsGroup, SettingsRow } from '../components/ui/settings-list';
 import { Kip } from '../components/kip/Kip';
-import { useMyKipColour } from '../lib/kip/myKip';
+import { useMyKip } from '../lib/kip/myKip';
 import { KIP_COPY } from '../lib/kipCopy';
 import { COLORS } from '../theme';
 import type { RootStackParamList } from '../navigation/RootNavigator';
@@ -42,7 +42,7 @@ export function CoachConsentScreen() {
   // Set once the server has rejected our version: the text on screen is then
   // the new one, and the user has to agree to it afresh.
   const [textChanged, setTextChanged] = useState(false);
-  const mine = useMyKipColour();
+  const { colour: mine, worn: myWorn } = useMyKip();
 
   const load = useCallback(async () => {
     setState({ status: 'loading' });
@@ -104,7 +104,7 @@ export function CoachConsentScreen() {
     return (
       <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
         <View className="flex-1 items-center justify-center gap-4 px-8">
-          <Kip testID="coach-consent-kip" colour={mine} pose="wave" mood="curious" scale={3} />
+          <Kip testID="coach-consent-kip" colour={mine} worn={myWorn} pose="wave" mood="curious" scale={3} />
           <Text className="text-center text-muted-foreground">Something went wrong loading this screen.</Text>
           <Button testID="coach-consent-retry" variant="secondary" onPress={() => void load()}>
             Try again
@@ -120,7 +120,7 @@ export function CoachConsentScreen() {
     return (
       <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
         <View testID="coach-consent-unavailable" className="flex-1 items-center justify-center gap-4 px-8">
-          <Kip testID="coach-consent-kip" colour={mine} pose="wave" mood="curious" scale={3} />
+          <Kip testID="coach-consent-kip" colour={mine} worn={myWorn} pose="wave" mood="curious" scale={3} />
           <Text className="text-center text-muted-foreground">{KIP_COPY.unavailable}</Text>
         </View>
       </SafeAreaView>
@@ -131,7 +131,7 @@ export function CoachConsentScreen() {
     <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
       <ScrollView contentContainerStyle={{ gap: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32 }}>
         <View testID={reviewing ? 'coach-consent-review' : undefined} className="items-start gap-4">
-          <Kip testID="coach-consent-kip" colour={mine} pose="wave" mood="curious" scale={3} />
+          <Kip testID="coach-consent-kip" colour={mine} worn={myWorn} pose="wave" mood="curious" scale={3} />
           {reviewing ? null : (
             <Text className="text-display" accessibilityRole="header">
               {KIP_COPY.consentHeadingFull}

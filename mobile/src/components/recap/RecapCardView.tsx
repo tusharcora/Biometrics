@@ -2,6 +2,7 @@ import React from 'react';
 import { Text, View } from 'react-native';
 import type { Recap } from '../../api/recaps';
 import type { KipColour } from '../../lib/kip/kipArt';
+import type { KipWorn } from '../../lib/room/loadout';
 import { KIP_NAME } from '../../lib/kipCopy';
 import { cardStats, monthName, RECAP_COPY } from '../../lib/recapCopy';
 import { APP_NAME, DESIGN_WIDTH, fitQuote, QUOTE_LINE_HEIGHT, QUOTE_MIN_FONT_SCALE, type Includes } from '../../lib/recapShare';
@@ -37,6 +38,8 @@ const FOOTER = 1 + 16 + 20;
 export interface RecapCardViewProps {
   recap: Recap;
   kipColour: KipColour;
+  /** What your KIP wears (spec 2026-10-14 KIP's room §7); bare when left out. */
+  kipWorn?: Partial<KipWorn>;
   includes: Includes;
   scale: number;
   testID?: string;
@@ -46,7 +49,7 @@ export interface RecapCardViewProps {
  * The monthly card (recap restyle, 1): 4:5, tinted by your KIP, a big KIP beside the
  * Silkscreen "KIP's month" title and the quote, up to four stat tiles and the footer.
  */
-export function RecapCardView({ recap, kipColour, includes, scale, testID = 'recap-card' }: RecapCardViewProps) {
+export function RecapCardView({ recap, kipColour, kipWorn, includes, scale, testID = 'recap-card' }: RecapCardViewProps) {
   const a = (n: number) => (n * scale * DESIGN_WIDTH) / ART_W;
   const t = recapTint(kipColour);
   const pixel = pixelFont();
@@ -76,7 +79,7 @@ export function RecapCardView({ recap, kipColour, includes, scale, testID = 'rec
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: a(HERO_GAP), flexShrink: 1, minHeight: 0 }}>
         {includes.coach ? (
           <View testID={`${testID}-coach`}>
-            <Kip colour={kipColour} pose="cheer" mood="proud" scale={Math.max(1, Math.round(a(SPRITE) / 16))} />
+            <Kip colour={kipColour} worn={kipWorn} pose="cheer" mood="proud" scale={Math.max(1, Math.round(a(SPRITE) / 16))} />
           </View>
         ) : null}
         <View style={{ flex: 1, gap: a(TITLE_GAP), flexShrink: 1, minHeight: 0 }}>

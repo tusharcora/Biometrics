@@ -16,7 +16,8 @@ import { Text } from '../components/ui/text';
 import { navigateToCoachEntry } from '../navigation/coachNavigation';
 import { hexAlpha } from '../lib/colour';
 import type { KipColour } from '../lib/kip/kipArt';
-import { useMyKipColour } from '../lib/kip/myKip';
+import { useMyKip } from '../lib/kip/myKip';
+import type { KipWorn } from '../lib/room/loadout';
 import { RECAP_COPY, weekRange } from '../lib/recapCopy';
 import { readIncludePrefs } from '../lib/recapPrefs';
 import { DESIGN_HEIGHT, DESIGN_WIDTH, exportLayout, resolveIncludes, type Includes } from '../lib/recapShare';
@@ -53,7 +54,7 @@ type Loaded = { phase: 'loading' } | { phase: 'ready'; recap: Recap } | { phase:
 export function RecapStoryScreen() {
   const { params } = useRoute<any>() as { params: Params };
   const navigation = useNavigation<any>();
-  const mine = useMyKipColour();
+  const { colour: mine, worn: myWorn } = useMyKip();
   const given = 'recap' in params ? params.recap : null;
   const id = given?.id ?? (params as { id: string }).id;
   const [loaded, setLoaded] = useState<Loaded>(given ? { phase: 'ready', recap: given } : { phase: 'loading' });
@@ -106,7 +107,7 @@ export function RecapStoryScreen() {
       {/* KIP's ground is dark in both themes: light status bar content while the viewer is up. */}
       <StatusBar style="light" />
       {recap?.kind === 'WEEK' && prefs ? (
-        <StoryViewer key={recap.id} recap={recap} kipColour={mine} tint={tint} includes={resolveIncludes('story', prefs, recap.stats)} />
+        <StoryViewer key={recap.id} recap={recap} kipColour={mine} kipWorn={myWorn} tint={tint} includes={resolveIncludes('story', prefs, recap.stats)} />
       ) : (
         <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
           <View style={{ alignItems: 'flex-end', paddingHorizontal: SIDE - 4 }}>
@@ -139,7 +140,7 @@ export function RecapStoryScreen() {
   );
 }
 
-function StoryViewer({ recap, kipColour, tint, includes }: { recap: Recap; kipColour: KipColour; tint: RecapTint; includes: Includes }) {
+function StoryViewer({ recap, kipColour, kipWorn, tint, includes }: { recap: Recap; kipColour: KipColour; kipWorn: KipWorn; tint: RecapTint; includes: Includes }) {
   const navigation = useNavigation<any>();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
@@ -237,7 +238,7 @@ function StoryViewer({ recap, kipColour, tint, includes }: { recap: Recap; kipCo
               <ViewerProgress count={STORY_FRAME_COUNT} index={index} progress={viewer.progress} track={tint.track} fill={tint.text} />
               <View testID="story-viewer-header" className="flex-row items-center" style={{ gap: 10, height: 44 }}>
                 <View testID="story-viewer-coach" style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.3)', alignItems: 'center', justifyContent: 'center' }}>
-                  <Kip testID="recap-kip" colour={kipColour} pose="rest" mood="idle" scale={2} />
+                  <Kip testID="recap-kip" colour={kipColour} worn={kipWorn} pose="rest" mood="idle" scale={2} />
                 </View>
                 <View style={{ flex: 1 }}>
                   <Text testID="story-viewer-title" accessibilityLabel={RECAP_COPY.storyViewerTitleSpoken} numberOfLines={1} className="text-body font-semibold" style={{ color: tint.text }}>{RECAP_COPY.storyViewerTitle}</Text>
@@ -254,7 +255,7 @@ function StoryViewer({ recap, kipColour, tint, includes }: { recap: Recap; kipCo
             </View>
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
               <View style={{ width: frameW, height: frameH }}>
-                <WeeklyStoryFrame testID="story" recap={recap} kipColour={kipColour} includes={includes} scale={scale} index={index} showProgress={false} badges={badges} />
+                <WeeklyStoryFrame testID="story" recap={recap} kipColour={kipColour} kipWorn={kipWorn} includes={includes} scale={scale} index={index} showProgress={false} badges={badges} />
                 <Pressable
                   testID="story-viewer-tap"
                   style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0 }}
@@ -332,7 +333,7 @@ function StoryViewer({ recap, kipColour, tint, includes }: { recap: Recap; kipCo
           (none of the viewer's chrome or end actions). */}
       <View pointerEvents="none" style={{ position: 'absolute', left: -10000, top: 0 }}>
         <View ref={exportRef} collapsable={false} testID="story-export-view" style={{ width: layout.width, height: layout.height }}>
-          <WeeklyStoryFrame testID="story-export" recap={recap} kipColour={kipColour} includes={includes} scale={layout.scale} index={index} badges={badges} />
+          <WeeklyStoryFrame testID="story-export" recap={recap} kipColour={kipColour} kipWorn={kipWorn} includes={includes} scale={layout.scale} index={index} badges={badges} />
         </View>
       </View>
     </>
