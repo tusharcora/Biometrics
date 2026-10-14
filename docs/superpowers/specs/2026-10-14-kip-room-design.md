@@ -65,7 +65,8 @@ Defaults accepted at spec review (2026-10-14):
   - Raising an unlock threshold never takes an item away from someone who already has it.
   - `COSMETICS_RELEASE` (starting `1`) says which art batch the app ships. The export to mobile and
     `grantCosmetics` include only items with `release <= COSMETICS_RELEASE`, so nobody owns an item the app cannot
-    draw. Bumping it at B2 grants the newly eligible items, announced with one summary toast (§4).
+    draw. Bumping it at B2 grants the newly eligible items, announced with one summary toast (§4): their rules were
+    met before `RELEASE_LAUNCHED_AT[2]`, so they are stored as `source: 'backfill'` (§3.1).
 - **`mobile/src/lib/room/catalogue.json`** is a generated copy of the ids, slots, flags, set membership and unlock
   rules (no art), written by `backend/scripts/export-cosmetics.ts`. A backend test fails when the copy is stale, so
   the two never drift. Display names and unlock lines live in `mobile/src/lib/room/roomCopy.ts`.
@@ -194,10 +195,13 @@ model CosmeticLoadout {
    call that loses the race announces nothing.
 4. Return the inserted `{ itemId, source }` rows.
 
-**The backfill is decided by time, not by which path runs first.** A constant `COSMETICS_LAUNCHED_AT` marks the
-release. A grant whose rule was already met before it (the qualifying `Achievement.createdAt`, or enough
-`Recap.openedAt` values, before the constant; a cheer count reached by stickers sent before it) is stored with
-`source: 'backfill'`, whichever hook makes the grant. Everything else gets its rule's source.
+**The backfill is decided by time, not by which path runs first.** A constant
+`RELEASE_LAUNCHED_AT: Record<1 | 2, Date>` marks when each art release shipped (release 2's date is set when
+`COSMETICS_RELEASE` is bumped). A grant of a `release: r` item whose rule was already met before
+`RELEASE_LAUNCHED_AT[r]` (the qualifying `Achievement.createdAt`, or enough `Recap.openedAt` values, before that
+date; a cheer count reached by stickers sent before it) is stored with `source: 'backfill'`, whichever hook makes the
+grant. Everything else gets its rule's source. Tests: a recap hook that runs before the first GET still marks old
+grants as backfill; a release-2 item whose rule was met before the bump, granted after it, is stored as backfill.
 
 It is called:
 
@@ -209,8 +213,8 @@ It is called:
 - **After a recap is opened:** in `POST /me/recaps/:id/opened` (`recap/routes.ts`), when its
   `updateMany({ where: { id, openedAt: null } })` returns `count === 1`.
 - **After a cheer is sent:** in the sticker route (`POST /me/buddies/:buddyId/stickers`), after a successful insert.
-- **On `GET /me/cosmetics`**, as a catch-up. On the first call for a user who already has badges (everyone at launch),
-  the rows it inserts are marked `source: 'backfill'` and are shown as one summary toast, not one per item (§4).
+- **On `GET /me/cosmetics`**, as a catch-up. Backfill marking follows the `RELEASE_LAUNCHED_AT` rule above; backfill
+  rows are shown as one summary toast, not one per item (§4).
 
 A failure in `grantCosmetics` is logged (without values) and never fails the request that triggered it; the next
 GET catches up.
@@ -220,7 +224,7 @@ GET catches up.
 Nothing tracks them as counters today. Both can be derived from existing rows, so no counter column is added:
 
 - **`recaps_read`:** the number of the user's `Recap` rows with `kind = WEEK` and `openedAt` not null. `openedAt` is
-  set once by `GET` of a recap (`recap/routes.ts`) and never cleared.
+  set once by `POST /me/recaps/:id/opened` (`recap/routes.ts`) and never cleared.
 - **`buddy_cheers`:** the number of `Sticker` rows the user sent (`fromUserId`), any kind, counting **at most one per
   buddy per local day**, so sending ten stickers in a row is one cheer. The day is
   `localCivilDateOrUtc(sentAt, User.timezone)` in the **sender's current** zone, as the sticker limit in
@@ -242,7 +246,9 @@ counter values for this.
 - **Otherwise** (a recap read, a cheer, the backfill): a toast on the next app foreground or KIP tab focus, "New for
   KIP's room: Light oak", with "Decorate". The backfill's toast reads "Your badges unlocked {n} things for KIP's room".
 - **The foreground toast shows each item once.** The app keeps the ids it has toasted on the device (SecureStore key
-  `kipToasted`, try/catch), so a toast never repeats before the items are marked seen.
+  `kipToasted`, try/catch), so a toast never repeats before the items are marked seen. An id is removed from the list
+  once it is marked seen, and backfill rows are never added (they get the one summary toast), so the list holds only
+  a few unseen ids and stays far below SecureStore's ~2 KB per-value limit.
 - **The source of "new"** is `seenAt`: unseen unlock rows are returned by `GET /me/cosmetics` as `fresh`, and
   `POST /me/cosmetics/seen { itemIds }` marks them. Opening decorate mode marks everything shown as seen. A small dot
   on the Decorate button shows while anything is unseen.
@@ -416,7 +422,7 @@ Art is the bulk of the work, so it ships in two batches.
   - `grantCosmetics`: each rule kind (family level, any family, each counter threshold, set → all pieces); idempotent;
     concurrent calls insert once; retired items and items above `COSMETICS_RELEASE` are not granted; returns
     `{ itemId, source }`.
-  - Backfill by time: a rule met before `COSMETICS_LAUNCHED_AT` is stored as `backfill` whichever path grants it,
+  - Backfill by time: a rule met before `RELEASE_LAUNCHED_AT[item.release]` is stored as `backfill` whichever path grants it,
     including the recap-opened hook running before the first `GET /me/cosmetics`; a rule met after it keeps its own
     source.
   - Counters: `recaps_read` counts only opened WEEK recaps; `buddy_cheers` counts at most one per buddy per local day.

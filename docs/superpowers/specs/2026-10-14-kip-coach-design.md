@@ -99,6 +99,9 @@ order, each with its tests:
    character. `App.tsx` mounts it in the same place. Every caller of `useCharacter`, `useCharacterOptional` or
    `useSetCoachStatus` moves:
    - `lib/useCoachStatus.ts` → the new provider;
+   - `useCharacterMood` (`components/coach-digest-card.tsx:8,32` and `CoachScreen.tsx:137`) → the digest card's
+     `KipHead` takes the day's mood from `useTodayScene`, and CoachScreen uses the §3.4 state table; both imports are
+     deleted with `characters/*`;
    - `CoachScreen.tsx` → `thinkingText` from the new provider; the character id and name go;
    - `RecoveryScreen.tsx` and `SleepScreen.tsx` (they read `characterId` only for the Ask bar's character and label)
      → nothing; the Ask KIP bar draws your KIP (§7.2);
@@ -289,7 +292,7 @@ The verdict word comes from the Recovery page's band copy (`recoveryCopy.ts`) in
 - The room card scrolls with the thread. A **collapsed header** (60 points tall plus the safe area) is pinned at the
   top of the page and appears once the card's bottom edge has scrolled under it.
 - **The collapsed header**, left to right (W7 "Collapsed · after scroll"):
-  - a **thumbnail** of the room, 96 × 60 points with a 3-point frame: the same room picture drawn at 1 point per
+  - a **thumbnail** of the room, 96 × 60 points inside a 3-point frame that sits outside it (102 × 66 overall): the same room picture drawn at 1 point per
     cell, cropped to `THUMB_BOX` (§3.2). It is a raw `Pressable` (`accessibilityRole="button"`, label "Expand KIP's room"),
     which needs a conventions entry. It scrolls to the top;
   - "KIP" in `text-page-title` (the pixel page title), and the collapsed status line (§3.3);
@@ -363,8 +366,9 @@ held item) into empty cells only; the body block, legs and eyes never change. Ey
   - KIP and the current loop frame are drawn over it each change;
   - one `Path` per colour per layer (as Home F's SVG scene), on whole points, with antialiasing off so edges stay
     crisp;
-  - it takes `crop` (inner width × height), `cellPt` (2, or 1 for the thumbnail), `pose`, `mood`, `bubble`,
-    `reduceMotion`.
+  - it takes `loadout` (the `RoomLoadout`; Spec A passes the starter loadout), `weather`, `night`, `colour`, `worn`
+    (Spec A passes all-null), `crop` (inner width × height), `cellPt` (2, or 1 for the thumbnail), `pose`, `mood`,
+    `bubble`, `reduceMotion`.
 - **Why slot-driven now:** the starter room is just a loadout of starter items. Spec B adds items to `items.ts`, a
   loadout and worn items from the server, and decorate mode's overlays (hotspot tags and the dashed "LOCKED" tag,
   drawn by its own screen over `RoomView`). The seat, the worn items and the memo keys are already in this spec's
@@ -525,8 +529,10 @@ The data paths behind those pictures change too:
 
 The art is the KIP engine's block on a 24-cell grid (one cell ≈ 43 px of the 1024 master), from
 `docs/design/app-icon/project/Main.dc.html` (A) and `Variants.dc.html`. Exported once by a script,
-**`mobile/scripts/build-icons.mjs`** (plain Node, like the old `port-sprites.mjs`; no TS runner is needed), which
-reads the KIP grid data and writes the PNGs with **`pngjs`**, a new devDependency. The icon can never drift from KIP.
+**`mobile/scripts/build-icons.mjs`**, run with `npx sucrase-node scripts/build-icons.mjs` (sucrase is already in
+`node_modules`, so it can import the TypeScript `lib/kip/kipArt.ts` grid directly; a `build:icons` npm script wraps
+it). It writes the PNGs with **`pngjs`**, a new devDependency. The icon test is a normal Jest test that imports the
+same pure grid-to-pixels function and checks sizes and file presence. The icon can never drift from KIP.
 
 | File | Size | Content |
 | --- | --- | --- |
