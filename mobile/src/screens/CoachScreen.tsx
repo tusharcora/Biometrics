@@ -522,7 +522,8 @@ export function CoachScreen() {
                   <Text className="text-center text-caption text-muted-foreground">{KIP_COPY.emptyBody}</Text>
                 </View>
                 <View className="w-full gap-2">
-                  {suggestedQuestions(today).map((question, index) => (
+                  {/* Three rows on first open (spec §3.4). */}
+                  {suggestedQuestions(today).slice(0, 3).map((question, index) => (
                     <PressableScale
                       key={question}
                       testID={`coach-suggestion-${index}`}

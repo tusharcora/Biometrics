@@ -323,7 +323,8 @@ describe('CoachScreen: today and suggestions', () => {
     expect(utils.getByText('Ask about your sleep, recovery or training, or anything health and fitness.')).toBeTruthy();
     expect(utils.getByTestId('coach-suggestion-0')).toHaveTextContent(/^Why is my recovery lower than usual today\?/);
     expect(utils.getByTestId('coach-suggestion-1')).toHaveTextContent(/^Why is my HRV lower than usual today\?/);
-    suggestedQuestions(today).forEach((question, i) => expect(utils.getByTestId(`coach-suggestion-${i}`)).toHaveTextContent(question, { exact: false }));
+    expect(utils.getAllByTestId(/^coach-suggestion-/)).toHaveLength(3);
+    suggestedQuestions(today).slice(0, 3).forEach((question, i) => expect(utils.getByTestId(`coach-suggestion-${i}`)).toHaveTextContent(question, { exact: false }));
   });
 
   it('asks about a bar when it is tapped, and a suggestion sends as-is leaving the field alone', async () => {

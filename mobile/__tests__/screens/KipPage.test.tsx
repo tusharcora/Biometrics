@@ -50,12 +50,13 @@ describe('the KIP page (W7)', () => {
     expect(s.getByTestId('kip-tag-recovery').props.accessibilityLabel).toBe('Recovery 48, cloudy day. Open Recovery');
   });
 
-  it('first open: KIP waves "HI!" and the thread says hello with the suggestions', async () => {
+  it('first open: KIP waves "HI!" and the thread says hello with three suggestions', async () => {
     const s = await openChat();
     expect(room(s)).toMatch(/^wave:idle:HI!:lines:/);
     expect(s.getByText("Hi, I'm KIP. What would you like to know?")).toBeTruthy();
     expect(s.getByText('Ask about your sleep, recovery or training, or anything health and fitness.')).toBeTruthy();
-    expect(s.getAllByTestId(/^coach-suggestion-/)).toHaveLength(suggestedQuestions(today).length);
+    expect(s.getAllByTestId(/^coach-suggestion-/)).toHaveLength(3);
+    suggestedQuestions(today).slice(0, 3).forEach((question, i) => expect(s.getByTestId(`coach-suggestion-${i}`)).toHaveTextContent(question, { exact: false }));
   });
 
   it('thinking → answering → done moves the pose type → point → the day\'s pose', async () => {
