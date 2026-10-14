@@ -6,6 +6,8 @@ import { Polygon } from 'react-native-svg';
 import { HIDDEN_OK } from '../../jest-mocks/coachStatus';
 import { kipArtFills, kipFills } from '../../jest-mocks/kipFixture';
 import { tierColors } from '../../src/lib/badgeArt';
+import { contrast } from '../../src/lib/colour';
+import { KIP_COLOURS, type KipColour } from '../../src/lib/kip/kipArt';
 import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
 import { CelebrationModal } from '../../src/components/achievements/CelebrationModal';
 import { captureToPng, shareImage } from '../../src/lib/recapCapture';
@@ -44,6 +46,26 @@ it("draws your KIP cheering, and a Legend badge (level V) in your KIP's colour",
   expect(kipFills(screen, 'celebration-coach')).toEqual(kipArtFills({ colour: 'lime', pose: 'cheer', mood: 'proud' }));
   expect(screen.getByTestId('celebration-badge').props.accessibilityLabel).toBe('Sleep goal streak, level V, Legend');
   expect(within(screen.getByTestId('celebration-badge')).UNSAFE_getAllByType(Polygon)[0]!.props.fill).toBe(tierColors(5, 'lime').ring);
+  resetMyKipColour();
+});
+
+it.each(Object.keys(KIP_COLOURS) as KipColour[])('%s: every level-V text, pip and the Nice! button read at 4.5:1 on the dark ground, the share card too', (colour) => {
+  setMyKipColour(colour);
+  render(<CelebrationModal celebration={{ ...GOLD, level: 5, value: 100 }} thresholds={THRESHOLDS} onDone={jest.fn()} />);
+  const ground = StyleSheet.flatten(screen.getByTestId('celebration-screen').props.style).backgroundColor as string;
+  const color = (id: string) => StyleSheet.flatten(screen.getByTestId(id, HIDDEN_OK).props.style).color as string;
+  const fill = (id: string) => StyleSheet.flatten(screen.getByTestId(id, HIDDEN_OK).props.style).backgroundColor as string;
+  expect(contrast(color('celebration-eyebrow'), ground)).toBeGreaterThanOrEqual(4.5);
+  expect(contrast(color('celebration-value'), ground)).toBeGreaterThanOrEqual(4.5);
+  for (const i of [1, 2, 3, 4, 5]) expect(contrast(fill(`celebration-pip-${i}`), ground)).toBeGreaterThanOrEqual(4.5);
+  expect(contrast(color('celebration-done-label'), fill('celebration-done'))).toBeGreaterThanOrEqual(4.5);
+  // The share card draws on the same ground.
+  const card = fill('badge-share-card');
+  expect(contrast(color('badge-share-app'), card)).toBeGreaterThanOrEqual(4.5);
+  expect(contrast(color('badge-share-value'), card)).toBeGreaterThanOrEqual(4.5);
+  for (const i of [1, 2, 3, 4, 5]) expect(contrast(fill(`badge-share-icon-pip-${i}`), card)).toBeGreaterThanOrEqual(4.5);
+  // The badge's ring art keeps the raw ramp.
+  expect(within(screen.getByTestId('celebration-badge')).UNSAFE_getAllByType(Polygon)[0]!.props.fill).toBe(KIP_COLOURS[colour]);
   resetMyKipColour();
 });
 

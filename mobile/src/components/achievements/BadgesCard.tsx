@@ -4,7 +4,7 @@ import { useColorScheme } from 'nativewind';
 import type { AchievementFamily } from '../../api/achievements';
 import { useAchievements } from '../../lib/achievementsStore';
 import { useRefreshAchievementsOnFocus } from '../../lib/useRefreshAchievementsOnFocus';
-import { mixHex, tierColors } from '../../lib/badgeArt';
+import { mixHex, TIER_SURFACE, tierInk } from '../../lib/badgeArt';
 import { FAMILY_ORDER, FAMILY_SHORT, TOTAL_LEVELS, badgeLabel, countLabel, earnedCount, levelTitle, nextUp } from '../../lib/badges';
 import { useMyKipColour } from '../../lib/kip/myKipColour';
 import { COLORS } from '../../theme';
@@ -34,7 +34,8 @@ export function BadgesCard({ onSeeAll, onOpen }: BadgesCardProps) {
   if (state.status !== 'ready') return null;
   const a = state.data;
   const next = nextUp(a);
-  const ring = next ? tierColors(next.nextLevel, mine).ring : '';
+  // The bar is a UI mark: level V's colour made readable on this theme's surface.
+  const ring = next ? tierInk(next.nextLevel, mine, TIER_SURFACE[dark ? 'dark' : 'light']).ring : '';
   const pct = next ? Math.round(Math.min(1, next.current / next.threshold) * 100) : 0;
   return (
     <Card testID="badges-card" className="gap-3.5">

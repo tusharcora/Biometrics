@@ -1,5 +1,5 @@
 import { recapTint, storyRingColor } from '../../src/lib/recapTheme';
-import { kipTier, tierColors, tierTextColor } from '../../src/lib/badgeArt';
+import { badgeGround, kipTier, TIER_SURFACE, tierColors, tierInk, tierTextColor } from '../../src/lib/badgeArt';
 import { TIER_NAMES, tierName } from '../../src/lib/badges';
 import { contrast, mixHex } from '../../src/lib/colour';
 import { KIP_COLOURS, kipRamp, type KipColour } from '../../src/lib/kip/kipArt';
@@ -33,6 +33,36 @@ describe('level V badges use the KIP ramp', () => {
 
   it('keeps small level-V text readable on the light page', () => {
     for (const colour of ALL) expect(contrast(tierTextColor(5, colour, false), '#FFFFFF')).toBeGreaterThanOrEqual(4.5);
+  });
+
+  it('keeps small level-V text readable on the dark page and card too (ink, slate are lifted)', () => {
+    for (const colour of ALL) {
+      for (const surface of ['#0A0B0E', '#14161B']) expect(contrast(tierTextColor(5, colour, true), surface)).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it.each(ALL)("%s: level-V text, pips and the Nice! fill read at 4.5:1 on the badge's dark ground; the ring art stays raw", (colour) => {
+    const t = tierColors(5, colour);
+    const ground = badgeGround(t.ring);
+    const ink = tierInk(5, colour, ground);
+    expect(contrast(ink.ring, ground)).toBeGreaterThanOrEqual(4.5);
+    expect(contrast(ink.glyph, ground)).toBeGreaterThanOrEqual(4.5);
+    expect(t.ring).toBe(KIP_COLOURS[colour]);
+  });
+
+  it.each(ALL)('%s: level-V pips and progress read at 4.5:1 on the app surfaces in both themes', (colour) => {
+    for (const scheme of ['light', 'dark'] as const) {
+      expect(contrast(tierInk(5, colour, TIER_SURFACE[scheme]).ring, TIER_SURFACE[scheme])).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  it('leaves levels 0 to IV exactly the canvas colours on any surface', () => {
+    for (const level of [0, 1, 2, 3, 4]) {
+      const { ring, glyph } = tierColors(level, 'ink');
+      expect(tierInk(level, 'ink', '#0B0B0F')).toEqual({ ring, glyph });
+    }
+    // A colour that already reads is kept as it is.
+    expect(tierInk(5, 'lemon', badgeGround(KIP_COLOURS.lemon)).ring).toBe(KIP_COLOURS.lemon);
   });
 
   it('calls level V "Legend" in copy; the level number is unchanged', () => {

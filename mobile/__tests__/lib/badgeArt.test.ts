@@ -27,7 +27,7 @@ it('mixes hex colours', () => {
   expect(mixHex('#F9A8D4', '#000000', 0.78)).toBe('#37252F');
 });
 
-it('gives small tier-coloured text at least 4.5:1 on the light page and card, and the ring itself in dark mode', () => {
+it('gives small tier-coloured text at least 4.5:1 on the light page and card, the ring itself in dark mode (level V lifted to read)', () => {
   const channel = (hex: string, i: number) => {
     const v = parseInt(hex.slice(1 + 2 * i, 3 + 2 * i), 16) / 255;
     return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
@@ -42,7 +42,9 @@ it('gives small tier-coloured text at least 4.5:1 on the light page and card, an
       const text = tierTextColor(level, colour, false);
       expect(ratio(text, '#F6F6F7')).toBeGreaterThanOrEqual(4.5);
       expect(ratio(text, '#FFFFFF')).toBeGreaterThanOrEqual(4.5);
-      expect(tierTextColor(level, colour, true)).toBe(tierColors(level, colour).ring);
+      // Dark mode keeps the ring for I to IV; level V's is lifted only as far as it must be to read.
+      if (level < 5) expect(tierTextColor(level, colour, true)).toBe(tierColors(level, colour).ring);
+      else expect(ratio(tierTextColor(level, colour, true), '#14161B')).toBeGreaterThanOrEqual(4.5);
     }
   }
 });

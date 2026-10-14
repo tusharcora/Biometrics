@@ -4,7 +4,9 @@ import { NavigationContext } from '@react-navigation/native';
 import { achievementsFixture } from '../../jest-mocks/achievementsFixture';
 import { fetchAchievements } from '../../src/api/achievements';
 import { resetAchievements } from '../../src/lib/achievementsStore';
+import { StyleSheet } from 'react-native';
 import { tierColors, tierTextColor } from '../../src/lib/badgeArt';
+import { contrast } from '../../src/lib/colour';
 import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
 import { BadgeDetailScreen } from '../../src/screens/BadgeDetailScreen';
 
@@ -108,6 +110,18 @@ it("writes the Legend (level V) tag in your KIP's colour", async () => {
   render(<BadgeDetailScreen />);
   expect(await screen.findByTestId('badge-detail-level-5-tag')).toHaveStyle({ color: tierTextColor(5, 'lime', false) });
   expect(screen.getByTestId('badge-detail-level-5')).toHaveTextContent('Level V · Legend', { exact: false });
+});
+
+it('keeps the Legend tag readable in dark mode for a dark KIP (ink)', async () => {
+  setMyKipColour('ink');
+  mockScheme = 'dark';
+  mockParams = { family: 'SLEEP_GOAL' };
+  load.mockResolvedValue(achievementsFixture({
+    SLEEP_GOAL: { level: 4, current: 40, best: 40, levels: [1, 2, 3, 4].map((level) => ({ level, value: [3, 7, 14, 30][level - 1]!, earnedOn: '2026-10-08' })) },
+  }));
+  render(<BadgeDetailScreen />);
+  const tag = StyleSheet.flatten((await screen.findByTestId('badge-detail-level-5-tag')).props.style).color as string;
+  for (const surface of ['#0A0B0E', '#14161B']) expect(contrast(tag, surface)).toBeGreaterThanOrEqual(4.5);
 });
 
 it('shows the missing state when opened without a family', async () => {
