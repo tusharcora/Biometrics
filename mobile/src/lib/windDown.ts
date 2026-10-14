@@ -22,7 +22,8 @@ export type WindDownSettings = {
   leadMinutes: WindDownLead;
   // "HH:MM", local time.
   bedtimeGoal: string | null;
-  // The notification's title.
+  // The notification's title. Always KIP when read back: a name stored before
+  // the coach cast was retired is never shown again.
   coachName: string;
   // The scheduled notification, so it can be cancelled before the next one.
   notificationId: string | null;
@@ -49,7 +50,7 @@ function parse(raw: string | null): WindDownSettings {
       enabled: value.enabled,
       leadMinutes: value.leadMinutes,
       bedtimeGoal: isHhMm(value.bedtimeGoal) ? value.bedtimeGoal : null,
-      coachName: typeof value.coachName === 'string' && value.coachName ? value.coachName : DEFAULTS.coachName,
+      coachName: KIP_NAME,
       notificationId: typeof value.notificationId === 'string' ? value.notificationId : null,
     };
   } catch {
@@ -167,6 +168,31 @@ export function rescheduleWindDown(): Promise<void> {
     const current = await readWindDown();
     if (current.enabled && current.bedtimeGoal) await scheduleBestEffort(current, current.bedtimeGoal);
   });
+}
+
+// Run once at launch: a reminder an older app scheduled carries a retired
+// coach's name as its title until it is scheduled again, so one that is on
+// and stored under another name is rescheduled as KIP. Never throws.
+export function resyncWindDownTitle(): Promise<void> {
+  return serial(async () => {
+    let raw: string | null;
+    try {
+      raw = await SecureStore.getItemAsync(STORAGE_KEY);
+    } catch {
+      return;
+    }
+    const current = parse(raw);
+    if (!current.enabled || !current.bedtimeGoal || storedName(raw) === KIP_NAME) return;
+    await scheduleBestEffort(current, current.bedtimeGoal);
+  });
+}
+
+function storedName(raw: string | null): unknown {
+  try {
+    return raw ? (JSON.parse(raw) as { coachName?: unknown }).coachName : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 // Session teardown (sign-out, account deletion): the reminder and its settings

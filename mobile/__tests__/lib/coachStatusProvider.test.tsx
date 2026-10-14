@@ -5,9 +5,11 @@ import { useCoachStatus } from '../../src/lib/useCoachStatus';
 import { fetchCoachStatus, setCoachThinking, type CoachStatusDTO } from '../../src/api/coach';
 import { ApiError, markNetworkError } from '../../src/api/client';
 import * as cache from '../../src/lib/coachStatus/thinkingCache';
+import { resyncWindDownTitle } from '../../src/lib/windDown';
 
 jest.mock('../../src/api/coach', () => ({ ...jest.requireActual('../../src/api/coach'), fetchCoachStatus: jest.fn(), setCoachThinking: jest.fn() }));
 jest.mock('../../src/lib/coachStatus/thinkingCache');
+jest.mock('../../src/lib/windDown', () => ({ resyncWindDownTitle: jest.fn() }));
 type MockAuth = { session: { userId: string } | null; isPending: boolean } | undefined;
 let mockAuth: MockAuth;
 jest.mock('../../src/auth/AuthContext', () => ({ useOptionalAuth: () => mockAuth }));
@@ -36,6 +38,7 @@ beforeEach(() => {
   mockAuth = signedIn();
   (cache.readCachedThinkingText as jest.Mock).mockResolvedValue(null);
   (cache.purgeCachedCharacter as jest.Mock).mockResolvedValue(undefined);
+  (resyncWindDownTitle as jest.Mock).mockResolvedValue(undefined);
 });
 
 it('shares one status read across every caller', async () => {
@@ -60,6 +63,17 @@ it('purges the retired characterId key once on first mount', async () => {
   rerender({});
   await act(async () => {});
   expect(cache.purgeCachedCharacter).toHaveBeenCalledTimes(1);
+});
+
+it('resyncs the wind-down title to KIP once on first mount, signed in or not', async () => {
+  mockAuth = signedOut;
+  const { rerender } = renderHook(() => useCoachStatusContext(), { wrapper });
+  await waitFor(() => expect(resyncWindDownTitle).toHaveBeenCalledTimes(1));
+  mockAuth = signedIn();
+  fetchStatus.mockResolvedValue(STATUS);
+  rerender({});
+  await act(async () => {});
+  expect(resyncWindDownTitle).toHaveBeenCalledTimes(1);
 });
 
 it('a network failure sets offline and keeps the last status; the next success clears it', async () => {

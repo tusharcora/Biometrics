@@ -3,6 +3,7 @@ import { fetchCoachStatus, setCoachThinking, type CoachStatusDTO } from '../../a
 import { isNetworkError } from '../../api/client';
 import { useOptionalAuth } from '../../auth/AuthContext';
 import { DEFAULT_THINKING_TEXT, isThinkingText, resolveThinkingText, type ThinkingTextId } from '../thinkingText';
+import { resyncWindDownTitle } from '../windDown';
 import { clearCachedThinking, purgeCachedCharacter, readCachedThinkingText, writeCachedThinkingText } from './thinkingCache';
 
 export interface CoachStatusValue {
@@ -63,7 +64,9 @@ export function CoachStatusProvider({ children }: { children: React.ReactNode })
   // The text on screen, kept in step with the state synchronously so a choice
   // made before the next render still sees the one it replaces.
   const thinkingRef = useRef<ThinkingTextId>(DEFAULT_THINKING_TEXT);
-  // Ruling H4: the retired characterId key is purged once per provider mount.
+  // Ruling H4: the retired characterId key is purged once per provider mount,
+  // and a wind-down reminder still titled with a retired coach's name is
+  // rescheduled as KIP.
   const purged = useRef(false);
 
   const showThinking = useCallback((next: ThinkingTextId) => {
@@ -118,6 +121,7 @@ export function CoachStatusProvider({ children }: { children: React.ReactNode })
     if (purged.current) return;
     purged.current = true;
     void purgeCachedCharacter();
+    void resyncWindDownTitle();
   }, []);
 
   useEffect(() => {

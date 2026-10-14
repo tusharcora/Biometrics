@@ -7,6 +7,7 @@ import {
   readWindDown,
   reminderTime,
   rescheduleWindDown,
+  resyncWindDownTitle,
   setWindDownLead,
 } from '../../src/lib/windDown';
 
@@ -120,8 +121,9 @@ it('setWindDownLead reschedules at bedtime minus the new lead', async () => {
   await enableWindDown(ON);
   await setWindDownLead(45);
   expect(N.cancelScheduledNotificationAsync).toHaveBeenCalledWith('n1');
+  // The stored name is never read back: the title is KIP from here on.
   expect(N.scheduleNotificationAsync).toHaveBeenLastCalledWith({
-    content: { title: 'Mochi', body: 'Wind-down time. Bed in 45 min.', data: { kind: 'wind-down' } },
+    content: { title: 'KIP', body: 'Wind-down time. Bed in 45 min.', data: { kind: 'wind-down' } },
     trigger: { type: 'daily', hour: 22, minute: 15 },
   });
   expect(stored()).toMatchObject({ enabled: true, leadMinutes: 45, notificationId: 'n2' });
@@ -173,4 +175,42 @@ it('clearWindDown never throws when the native side fails', async () => {
   N.cancelScheduledNotificationAsync.mockRejectedValueOnce(new Error('native'));
   (SecureStore.deleteItemAsync as jest.Mock).mockRejectedValueOnce(new Error('keychain'));
   await expect(clearWindDown()).resolves.toBeUndefined();
+});
+
+describe('retired coach names (the cast is gone; the reminder is from KIP)', () => {
+  const OLD = { enabled: true, leadMinutes: 30, bedtimeGoal: '23:00', coachName: 'Luna', notificationId: 'old1' };
+
+  it('reads a stored coach name back as KIP', async () => {
+    mockStore.set('windDown', JSON.stringify(OLD));
+    expect((await readWindDown()).coachName).toBe('KIP');
+  });
+
+  it('resync reschedules a reminder titled with a retired name as KIP', async () => {
+    mockStore.set('windDown', JSON.stringify(OLD));
+    await resyncWindDownTitle();
+    expect(N.cancelScheduledNotificationAsync).toHaveBeenCalledWith('old1');
+    expect(N.scheduleNotificationAsync).toHaveBeenCalledWith({
+      content: { title: 'KIP', body: 'Wind-down time. Bed in 30 min.', data: { kind: 'wind-down' } },
+      trigger: { type: 'daily', hour: 22, minute: 30 },
+    });
+    expect(stored()).toEqual({ ...OLD, coachName: 'KIP', notificationId: 'n1' });
+  });
+
+  it('resync leaves a KIP reminder, a reminder that is off, and an empty store alone', async () => {
+    await resyncWindDownTitle();
+    mockStore.set('windDown', JSON.stringify({ ...OLD, enabled: false, notificationId: null }));
+    await resyncWindDownTitle();
+    mockStore.set('windDown', JSON.stringify({ ...OLD, coachName: 'KIP' }));
+    await resyncWindDownTitle();
+    expect(N.scheduleNotificationAsync).not.toHaveBeenCalled();
+    expect(N.cancelScheduledNotificationAsync).not.toHaveBeenCalled();
+  });
+
+  it('resync never throws when the keychain or the native side fails', async () => {
+    (SecureStore.getItemAsync as jest.Mock).mockRejectedValueOnce(new Error('keychain'));
+    await expect(resyncWindDownTitle()).resolves.toBeUndefined();
+    mockStore.set('windDown', JSON.stringify(OLD));
+    N.scheduleNotificationAsync.mockRejectedValueOnce(new Error('native'));
+    await expect(resyncWindDownTitle()).resolves.toBeUndefined();
+  });
 });
