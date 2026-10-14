@@ -15,8 +15,9 @@ export const TAG_W = 64;
 export const TAG_H = 18;
 /** The tag's side padding: leaves 60 points for the label. */
 export const TAG_PAD_X = 2;
-/** The smallest a tag label may shrink to; every HOTSPOT_LABELS entry fits at this scale (decorateTray.test). */
-export const HOTSPOT_MIN_FONT_SCALE = 0.8;
+/** The smallest a tag label may shrink to; every HOTSPOT_LABELS entry fits at this scale with at least 2 points to
+ * spare (decorateTray.test). */
+export const HOTSPOT_MIN_FONT_SCALE = 0.75;
 /** The smallest touch target, in points (iOS's 44). */
 export const TOUCH_MIN = 44;
 

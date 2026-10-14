@@ -7,7 +7,7 @@ import { ROOM_SLOTS, type RoomSlot } from '../../lib/room/slots';
 
 // The 12 hotspot tags over the decorate room (spec §6.2, K4b), and the dashed LOCKED tag on a locked preview's slot.
 // Each tag is a raw Pressable: a label placed on the picture (one buttons-guard entry for the kind). A tag is a fixed
-// TAG_W wide so the spacing in hotspots.ts holds; its short label fits, shrinking to 0.8× at most under large text,
+// TAG_W wide so the spacing in hotspots.ts holds; its short label fits, shrinking to 0.75× at most under large text,
 // while the spoken label names the whole slot. Its hit slop makes it 44 points tall.
 export function HotspotLayer({ crop, selectedSlot, lockedSlot, onSelect }: {
   crop: { width: number; height: number };

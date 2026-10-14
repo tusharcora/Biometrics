@@ -1,3 +1,5 @@
+import fs from 'fs';
+import path from 'path';
 import { initDecorate, decorateReducer } from '../../src/lib/room/decorate';
 import { hotspotHitSlop, hotspotPositions, hotspotTargets, HOTSPOT_CELLS, HOTSPOT_MIN_FONT_SCALE, TAG_H, TAG_PAD_X, TAG_W, TOUCH_MIN } from '../../src/lib/room/hotspots';
 import { HOTSPOT_LABELS, ROOM_COPY, SLOT_TITLES } from '../../src/lib/room/roomCopy';
@@ -62,27 +64,68 @@ it('keeps every hotspot tag inside the visible crop at any phone width, none on 
   expect(Object.keys(HOTSPOT_CELLS).sort()).toEqual([...ROOM_SLOTS].sort());
 });
 
-// Silkscreen-Regular.ttf's advance widths (hmtx / unitsPerEm 1000), for the characters the tag labels may use.
+// Silkscreen-Regular.ttf's advance widths in em, for the characters the tag labels may use. The next test reads them
+// back out of the font file itself, so this table cannot drift from the shipped font.
 const SILKSCREEN_ADVANCE: Record<string, number> = {
   A: 0.75, B: 0.75, C: 0.75, D: 0.75, E: 0.625, F: 0.625, G: 0.75, H: 0.75, I: 0.375, J: 0.75, K: 0.75, L: 0.625, M: 0.875,
   N: 0.875, O: 0.75, P: 0.75, Q: 0.75, R: 0.75, S: 0.75, T: 0.625, U: 0.75, V: 0.875, W: 0.875, X: 0.875, Y: 0.875, Z: 0.625,
   ' ': 0.5, '+': 0.875,
 };
-// text-label is 11 px with 1 px letter spacing (tailwind.config.js); the label may shrink to 0.8× and no further.
+// text-label is 11 px with 1 px letter spacing (tailwind.config.js); the label may shrink to HOTSPOT_MIN_FONT_SCALE.
 const LABEL_PX = 11;
 const TRACKING_PX = 1;
+/** Room to spare in every tag, so iOS's rounding never turns a fit into an ellipsis. */
+const MIN_SLACK_PT = 2;
 
-it('keeps every visible tag label readable inside its tag, and speaks the full slot name', () => {
+/** Advance widths (em) of `chars` from a TrueType file: head.unitsPerEm, hhea.numberOfHMetrics, hmtx, cmap format 4. */
+function ttfAdvances(file: string, chars: string[]): Record<string, number> {
+  const b = fs.readFileSync(file);
+  const tables: Record<string, number> = {};
+  for (let i = 0, n = b.readUInt16BE(4); i < n; i++) tables[b.toString('latin1', 12 + 16 * i, 16 + 16 * i)] = b.readUInt32BE(20 + 16 * i);
+  const upm = b.readUInt16BE(tables.head! + 18);
+  const numHMetrics = b.readUInt16BE(tables.hhea! + 34);
+  const cmap = tables.cmap!;
+  let sub = -1;
+  for (let i = 0, n = b.readUInt16BE(cmap + 2); i < n; i++) {
+    const rec = cmap + 4 + 8 * i;
+    if (b.readUInt16BE(rec) === 3 && b.readUInt16BE(rec + 2) === 1) sub = cmap + b.readUInt32BE(rec + 4);
+  }
+  if (sub < 0 || b.readUInt16BE(sub) !== 4) throw new Error('no Windows Unicode cmap format 4');
+  const segs = b.readUInt16BE(sub + 6) / 2;
+  const ends = sub + 14, starts = ends + 2 * segs + 2, deltas = starts + 2 * segs, offsets = deltas + 2 * segs;
+  const glyphOf = (code: number): number => {
+    for (let s = 0; s < segs; s++) {
+      if (code > b.readUInt16BE(ends + 2 * s)) continue;
+      const start = b.readUInt16BE(starts + 2 * s);
+      if (code < start) return 0;
+      const delta = b.readInt16BE(deltas + 2 * s);
+      const ro = b.readUInt16BE(offsets + 2 * s);
+      if (ro === 0) return (code + delta) & 0xffff;
+      const g = b.readUInt16BE(offsets + 2 * s + ro + 2 * (code - start));
+      return g === 0 ? 0 : (g + delta) & 0xffff;
+    }
+    return 0;
+  };
+  const advance = (glyph: number) => b.readUInt16BE(tables.hmtx! + 4 * Math.min(glyph, numHMetrics - 1));
+  return Object.fromEntries(chars.map((c) => [c, advance(glyphOf(c.codePointAt(0)!)) / upm]));
+}
+
+it('takes the advance table from the shipped Silkscreen font', () => {
+  const font = path.join(__dirname, '../../assets/fonts/Silkscreen-Regular.ttf');
+  expect(ttfAdvances(font, Object.keys(SILKSCREEN_ADVANCE))).toEqual(SILKSCREEN_ADVANCE);
+});
+
+it('keeps every visible tag label readable inside its tag with room to spare, and speaks the full slot name', () => {
   const inner = TAG_W - 2 * TAG_PAD_X;
   for (const slot of ROOM_SLOTS) {
     const label = ROOM_COPY.hotspot(slot);
     expect(label).toBe(HOTSPOT_LABELS[slot]);
     // Worst case: the tracking does not shrink with the glyphs.
     const width = [...label].reduce((w, c) => w + SILKSCREEN_ADVANCE[c]! * LABEL_PX * HOTSPOT_MIN_FONT_SCALE + TRACKING_PX, 0);
-    expect(width <= inner ? null : `${label} is ${width.toFixed(1)} pt in ${inner}`).toBeNull();
+    expect(inner - width >= MIN_SLACK_PT ? null : `${label} is ${width.toFixed(1)} pt in ${inner}`).toBeNull();
     expect(ROOM_COPY.hotspotLabel(slot)).toBe(`Decorate the ${SLOT_TITLES[slot].toLowerCase()}`);
   }
-  expect(HOTSPOT_MIN_FONT_SCALE).toBe(0.8);
+  expect(HOTSPOT_MIN_FONT_SCALE).toBe(0.75);
 });
 
 it('gives every hotspot tag a touch target at least 44 pt tall inside the room, none overlapping another', () => {
