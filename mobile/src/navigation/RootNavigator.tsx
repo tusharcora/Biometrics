@@ -50,6 +50,7 @@ import { ChatsScreen } from '../screens/ChatsScreen';
 import { ChatRequestsScreen } from '../screens/ChatRequestsScreen';
 import { BlockedPeopleScreen } from '../screens/BlockedPeopleScreen';
 import { CelebrationHost } from '../components/achievements/CelebrationHost';
+import { RoomToastHost } from '../components/room/RoomToastHost';
 import { BuddiesStoreScope } from '../components/buddies/BuddiesStoreScope';
 import { MyKipScope } from '../components/kip/MyKipScope';
 import { SocialStoreScope } from '../components/social/SocialStoreScope';
@@ -302,6 +303,8 @@ export function RootNavigator() {
             </Stack.Navigator>
             {/* New badge levels, celebrated once (start, foreground, after a check-in). */}
             <CelebrationHost />
+            {/* New pieces for KIP's room (start, foreground, KIP tab focus); badge pieces are named by the celebration. */}
+            <RoomToastHost />
             {/* The shared buddy list (start, foreground); forgotten on sign-out. */}
             <BuddiesStoreScope />
             {/* Your KIP's colour (start); forgotten on sign-out. */}

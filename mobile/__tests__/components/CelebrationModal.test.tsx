@@ -187,3 +187,25 @@ it('shares a 1080 px badge card through the recap export pipeline', async () => 
   fireEvent.press(screen.getByTestId('celebration-share'));
   await waitFor(() => expect(shareImage).toHaveBeenCalledWith('file:///cache/recap-1.png'));
 });
+
+it("names the badge's new room pieces with a Decorate button for the first", () => {
+  const onDecorate = jest.fn();
+  render(<CelebrationModal celebration={GOLD} thresholds={THRESHOLDS} pieces={['rug.red', 'art.mountain']} onDecorate={onDecorate} onDone={jest.fn()} />);
+  expect(screen.getByTestId('celebration-room-line')).toHaveTextContent("New for KIP's room: Red rug and 1 more");
+  fireEvent.press(screen.getByTestId('celebration-decorate'));
+  expect(onDecorate).toHaveBeenCalledWith('rug.red');
+});
+
+it('speaks the room line without the "·" (ruling 19)', () => {
+  render(<CelebrationModal celebration={GOLD} thresholds={THRESHOLDS} pieces={['art.band']} onDecorate={jest.fn()} onDone={jest.fn()} />);
+  expect(screen.getByTestId('celebration-room-line')).toHaveTextContent("New for KIP's room: Band poster · “The Naps”");
+  expect(screen.getByTestId('celebration-room-line').props.accessibilityLabel).toBe("New for KIP's room: Band poster, “The Naps”");
+});
+
+it('shows no room line without new pieces', () => {
+  render(<CelebrationModal celebration={GOLD} thresholds={THRESHOLDS} onDone={jest.fn()} />);
+  expect(screen.queryByTestId('celebration-room-line')).toBeNull();
+  expect(screen.queryByTestId('celebration-decorate')).toBeNull();
+  screen.rerender(<CelebrationModal celebration={GOLD} thresholds={THRESHOLDS} pieces={[]} onDone={jest.fn()} />);
+  expect(screen.queryByTestId('celebration-room-line')).toBeNull();
+});

@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { celebrate, pendingLevels, refreshAchievements, resetAchievements, useAchievements } from '../../lib/achievementsStore';
 import { celebrationQueue, type Celebration } from '../../lib/celebrationQueue';
+import { decorateTarget, piecesForBadge } from '../../lib/room/announce';
+import { useCosmetics } from '../../lib/room/cosmeticsStore';
 import { MODAL_ROUTES, navigationRef } from '../../navigation/navigationRef';
 import { CelebrationModal } from './CelebrationModal';
 
@@ -70,6 +72,9 @@ export function CelebrationHost() {
   // The celebration on screen, kept until it is closed: a refresh meanwhile that brings a higher
   // level for another family queues it behind this one instead of swapping it in under the user.
   const shown = useRef<Celebration | null>(null);
+  const cosmetics = useCosmetics();
+  // Decorate's wait for the Modal to go; dropped on sign-out.
+  const toDecorate = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     void refreshAchievements();
@@ -79,6 +84,7 @@ export function CelebrationHost() {
     return () => {
       sub.remove();
       resetAchievements();
+      if (toDecorate.current) clearTimeout(toDecorate.current);
     };
   }, []);
 
@@ -90,6 +96,24 @@ export function CelebrationHost() {
   shown.current = next ?? null;
   if (!next) return null;
   const thresholds = snapshot.state.data.families.find((f) => f.family === next.family)?.thresholds ?? [];
+  // The unseen room pieces this badge brought, every level up to the one shown (ruling 10).
+  const pieces = cosmetics ? piecesForBadge(cosmetics.fresh, next.family, next.level) : [];
   // Not keyed: the Modal stays presented and the next family swaps in inside it.
-  return <CelebrationModal celebration={next} thresholds={thresholds} onDone={() => void celebrate(next.ids)} />;
+  return (
+    <CelebrationModal
+      celebration={next}
+      thresholds={thresholds}
+      pieces={pieces}
+      onDecorate={(itemId) => {
+        void celebrate(next.ids);
+        // Present the modal route only once the celebration's Modal has gone (MODAL_DISMISS_MS).
+        if (toDecorate.current) clearTimeout(toDecorate.current);
+        toDecorate.current = setTimeout(() => {
+          toDecorate.current = null;
+          navigationRef.navigate('DecorateRoom', decorateTarget(itemId));
+        }, MODAL_DISMISS_MS);
+      }}
+      onDone={() => void celebrate(next.ids)}
+    />
+  );
 }
