@@ -155,6 +155,15 @@ describe('runAnswer: a validated, streamed answer', () => {
     expect(sent[10]).toEqual({ role: 'user', content: 'why?' });
   });
 
+  it('labels every telemetry event personaId kip, whatever the stored id', async () => {
+    const { deps, telemetry } = setup([GOOD]);
+    const inp = await input();
+    await prisma.user.update({ where: { id: inp.userId }, data: { coachPersonaId: 'luna' } });
+    await collect(runAnswer(inp, deps));
+    expect(telemetry.events.length).toBeGreaterThan(0);
+    expect(telemetry.events.every((e) => e.personaId === 'kip')).toBe(true);
+  });
+
   it("names an existing conversation's own id on the status event", async () => {
     const { deps } = setup([['First.'], ['Second.']]);
     const inp = await input();

@@ -21,12 +21,12 @@ export interface ConsentText {
 export const COACH_CONSENT: ConsentText = {
   version: COACH_CONSENT_VERSION,
   summary:
-    'The coach uses an AI language model. When you send the coach a message, the items below are given to that model so ' +
+    'KIP uses an AI language model. When you send KIP a message, the items below are given to that model so ' +
     'it can answer, and only the items that message actually needs. Never sent: your sign-in or Google Health access ' +
     'tokens, or the free-text notes on your habit logs. The rest of the app works exactly the same if you decline, and ' +
     'you can withdraw this consent at any time.',
   dataItems: [
-    'The messages you type to the coach in the current conversation',
+    'The messages you type to KIP in the current conversation',
     'Your Recovery Score and Sleep Score values, and how confident each one is',
     'The per-factor breakdown behind each score (for example HRV, resting heart rate, sleep debt, sleep duration, sleep efficiency and bedtime consistency)',
     'Your daily readings: steps, resting heart rate, HRV and time asleep, for a given day or up to the last 90 days',
@@ -50,8 +50,8 @@ export const COACH_HOSTED_CONSENT: ConsentText = {
     "Anthropic doesn't use it to train models. You can switch back any time.",
   dataItems: [
     'The question you type and the recent messages of the current conversation',
-    'A short summary of the health numbers the answer needs: your scores and their usual values, last night’s sleep, HRV, resting heart rate, confirmed habit patterns, goals and what you asked the coach to remember',
-    'The same summary for the one-sentence recap of your day at the top of the Coach page',
+    'A short summary of the health numbers the answer needs: your scores and their usual values, last night’s sleep, HRV, resting heart rate, confirmed habit patterns, goals and what you asked KIP to remember',
+    'The same summary for the one-sentence recap of your day at the top of the KIP page',
     'We never add your name, email, account id, sign-in or Google Health tokens, or the notes on your habit logs. ' +
       'Anything you type yourself, including your name if you write it, is sent as part of the conversation',
   ],

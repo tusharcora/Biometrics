@@ -12,7 +12,7 @@ import { cleanLegacyText, LEGACY_DISCLAIMER } from './answer/history';
 import type { FactData } from './answer/facts';
 import { ANSWER_HISTORY_WINDOW, AnswerDeps, AnswerEvent, runAnswer } from './answer/pipeline';
 import { warmModel } from './answer/warm';
-import { clearTodaySummary, generateTodaySummary, getTodaySummary, summaryEngineDeps, TodayDeps } from './answer/today';
+import { generateTodaySummary, getTodaySummary, summaryEngineDeps, TodayDeps } from './answer/today';
 import type { MemoryDTO } from './memory';
 import { findPersona, listPersonas, resolvePersona } from './personas';
 import { isThinkingAttachment, isThinkingText, resolveThinkingAttachment, resolveThinkingText } from './thinking';
@@ -202,9 +202,8 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
           },
         },
         personaId: resolvePersona(storedPersonaId).id,
-        // False until the user picks a character (Skip picks Mochi), so the app shows its picker once.
-        // A stored id that is no longer live (a retired character the migration missed) re-opens it (R24).
-        personaChosen: storedPersonaId !== null && findPersona(storedPersonaId) !== undefined,
+        // Every app sees a chosen persona (spec 2026-10-14 §2): an old app never opens its picker.
+        personaChosen: true,
         personas: listPersonas().map((p) => ({
           id: p.id,
           name: p.name,
@@ -333,38 +332,20 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
     }
   });
 
-  // No requireEnabled: the character is also the app's look, so it can be chosen while the coach is off.
+  // Older apps still send a character id; every known id (an old build's picker, or its Skip, which sends 'hoot')
+  // saves KIP, and unknown ids stay 400 (spec 2026-10-14 §2). There is nobody to switch to, so today's sentence
+  // stands. No requireEnabled: an old app picks while the coach is off. Dropped in the cleanup release.
   router.put('/me/coach/persona', requireAuth, async (req: AuthedRequest, res) => {
-    const requested: unknown = req.body?.personaId;
-    // Any id any persona set ever had (an old build's picker, or its Skip, which sends 'hoot') saves KIP (v5);
-    // unknown ids stay 400.
-    const persona = findPersona(requested);
+    const persona = findPersona(req.body?.personaId);
     if (!persona) {
       res.status(400).json({ error: 'unknown_persona' });
       return;
     }
     try {
-      const userId = req.userId!;
-      const before = await prisma.user.findUnique({ where: { id: userId }, select: { coachPersonaId: true } });
-      const result = await prisma.user.updateMany({ where: { id: userId }, data: { coachPersonaId: persona.id } });
+      const result = await prisma.user.updateMany({ where: { id: req.userId! }, data: { coachPersonaId: persona.id } });
       if (result.count === 0) {
         res.status(404).json({ error: 'User not found' });
         return;
-      }
-      // Today's sentence was written in the old character's voice: drop it and write a new one in the
-      // background (forced, so a run already in flight in the old voice is never reused), and only for a
-      // user whose sentence may be written at all (the same gate GET /me/coach/today applies).
-      // The switch is already saved: a failure here is logged and the request still answers 200, so the
-      // app never shows a false error (and retries) for a character change that took effect.
-      if (before && resolvePersona(before.coachPersonaId).id !== persona.id) {
-        try {
-          await clearTodaySummary(userId, todayDeps);
-          if (isCoachEnabled() && (await hasCurrentConsent(userId, 'local'))) {
-            deps.background(() => generateTodaySummary(userId, { ...todayDeps, force: true }));
-          }
-        } catch (err) {
-          logFailure('persona_summary', err);
-        }
       }
       res.json({ personaId: persona.id });
     } catch (err) {

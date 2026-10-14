@@ -12,7 +12,7 @@ import { LoggerCoachTelemetry } from '../../src/coach/telemetry';
 import { ScriptedStreamProvider, StreamStep } from '../../src/coach/model/provider';
 import { getCoachProvider, resetCoachProviderFromEnv, resetHostedProviderFromEnv } from '../../src/coach/config';
 import { resetWarmState } from '../../src/coach/answer/warm';
-import { DEFAULT_PERSONA_ID, listPersonas } from '../../src/coach/personas';
+import { listPersonas } from '../../src/coach/personas';
 import { FakeClock, RecordingTelemetry, createUser, daysAgo, putScore, todayUtc } from './helpers';
 import { testServer } from '../helpers/server';
 
@@ -172,7 +172,7 @@ describe('GET /me/coach/status', () => {
       'thinkingAttachment',
       'thinkingText',
     ]);
-    expect(res.body).toMatchObject({ enabled: true, consented: false, personaId: 'kip', personaChosen: false });
+    expect(res.body).toMatchObject({ enabled: true, consented: false, personaId: 'kip', personaChosen: true });
     expect(Object.keys(res.body.consent).sort()).toEqual(['dataItems', 'summary', 'version']);
     expect(res.body.consent.version).toBe(COACH_CONSENT_VERSION);
     expect(Array.isArray(res.body.consent.dataItems)).toBe(true);
@@ -198,12 +198,20 @@ describe('GET /me/coach/status', () => {
     expect(res.body).toMatchObject({ personaId: chosen, personaChosen: true });
   });
 
-  // Ruling R24: a stored id that is not live re-opens the picker (defence in depth beside the migration).
-  it('an unknown stored id serves the default and does not count as chosen', async () => {
+  // Spec 2026-10-14 §2: every app sees a chosen persona, so an old build never opens its picker.
+  it('an unknown stored id still reads as KIP and counts as chosen', async () => {
     const user = await createUser();
     await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: 'retired-persona' } });
     const res = await request(await testServer(createApp())).get('/me/coach/status').set(await authed(user.id));
-    expect(res.body).toMatchObject({ personaId: DEFAULT_PERSONA_ID, personaChosen: false });
+    expect(res.body).toMatchObject({ personaId: 'kip', personaChosen: true });
+  });
+
+  it('tells every app that KIP is chosen, and still resolves the stored thinking attachment for old apps', async () => {
+    const user = await createUser();
+    await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: null, coachThinkingAttachment: 'gears' } });
+    const res = await request(await testServer(createApp())).get('/me/coach/status').set(await authed(user.id));
+    expect(res.body).toMatchObject({ personaId: 'kip', personaChosen: true, thinkingAttachment: 'gears' });
+    expect(res.body.personas).toEqual([expect.objectContaining({ id: 'kip', name: 'KIP' })]);
   });
 
   // v5: a legacy v1 id or an old character id is known, so it reads as KIP and counts as chosen.
@@ -228,7 +236,7 @@ describe('GET /me/coach/status', () => {
     expect(res.body.personas.map((p: { id: string }) => p.id)).toEqual(listPersonas().map((p) => p.id));
   });
 
-  it('a user row that is gone reads as the default and not chosen, rather than a 500', async () => {
+  it('a user row that is gone reads as KIP, rather than a 500', async () => {
     const user = await createUser();
     const headers = await authed(user.id);
     const realFindUnique = prisma.user.findUnique.bind(prisma.user);
@@ -239,7 +247,7 @@ describe('GET /me/coach/status', () => {
         args.select?.coachPersonaId ? Promise.resolve(null) : realFindUnique(args as never)) as never);
     const res = await request(await testServer(createApp())).get('/me/coach/status').set(headers);
     expect(res.status).toBe(200);
-    expect(res.body).toMatchObject({ personaId: DEFAULT_PERSONA_ID, personaChosen: false });
+    expect(res.body).toMatchObject({ personaId: 'kip', personaChosen: true });
   });
 
   it('consent text states which fields leave the device and what never does', async () => {
@@ -256,6 +264,15 @@ describe('GET /me/coach/status', () => {
     expect(text).toMatch(/steps, resting heart rate, HRV and time asleep/i);
     expect(text).toMatch(/habit log/i);
     expect(text).toMatch(/never sent[^.]*notes/i);
+    expect(text).toMatch(/When you send KIP a message/);
+  });
+
+  it('names KIP in the consent texts without bumping either version', async () => {
+    const { COACH_CONSENT, COACH_CONSENT_VERSION, COACH_HOSTED_CONSENT, COACH_HOSTED_CONSENT_VERSION } = require('../../src/coach/consent');
+    expect([COACH_CONSENT_VERSION, COACH_HOSTED_CONSENT_VERSION]).toEqual(['2', 'hosted-1']);
+    const all = [COACH_CONSENT.summary, ...COACH_CONSENT.dataItems, ...COACH_HOSTED_CONSENT.dataItems].join(' ');
+    expect(all).not.toMatch(/\bthe coach\b/i);
+    expect(all).toMatch(/KIP/);
   });
 });
 
@@ -327,59 +344,69 @@ describe('consent gate', () => {
 });
 
 describe('PUT /me/coach/persona', () => {
-  it('saves KIP for an old id, echoes it, and status reflects it', async () => {
+  // Older apps still send a character id; every known id saves KIP (spec 2026-10-14 §2).
+  it.each(['kip', 'mochi', 'luna', 'hoot', 'encouraging', 'direct', 'clinical'])('saves kip for the old id %s', async (personaId) => {
     const user = await createUser();
-    const headers = await authed(user.id);
-    const res = await request(await testServer(createApp())).put('/me/coach/persona').set(headers).send({ personaId: 'mochi' });
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({ personaId: 'kip' });
-    expect((await request(await testServer(createApp())).get('/me/coach/status').set(headers)).body).toMatchObject({ personaId: 'kip', personaChosen: true });
-    expect((await prisma.user.findUnique({ where: { id: user.id } }))?.coachPersonaId).toBe('kip');
+    const res = await request(await testServer(createApp())).put('/me/coach/persona').set(await authed(user.id)).send({ personaId });
+    expect([res.status, res.body]).toEqual([200, { personaId: 'kip' }]);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).coachPersonaId).toBe('kip');
   });
 
-  // v5 (spec 2026-10-14 §2): a v1 id from a very old app, or a v3 character an old build still offers (its Skip
-  // sends 'hoot'), saves KIP, so that build's picker does not reopen on every launch.
-  it.each(['encouraging', 'direct', 'clinical', 'hoot', 'pip', 'nimbus', 'ember', 'beep', 'doze', 'beat'])(
-    'an old id %s saves KIP (200)',
-    async (old) => {
-      const user = await createUser();
-      const res = await request(await testServer(createApp())).put('/me/coach/persona').set(await authed(user.id)).send({ personaId: old });
-      expect(res.status).toBe(200);
-      expect(res.body).toEqual({ personaId: 'kip' });
-      expect((await prisma.user.findUnique({ where: { id: user.id } }))?.coachPersonaId).toBe('kip');
-    },
-  );
+  it.each(['nobody', '', 3, null, 'pirate', ['hoot'], 'Hoot', 'toString', '__proto__'])('rejects junk (%p) with 400 unknown_persona', async (personaId) => {
+    const user = await createUser();
+    const res = await request(await testServer(createApp())).put('/me/coach/persona').set(await authed(user.id)).send({ personaId });
+    expect([res.status, res.body]).toEqual([400, { error: 'unknown_persona' }]);
+  });
+
+  it('rejects a body with no personaId with 400 unknown_persona', async () => {
+    const user = await createUser();
+    const res = await request(await testServer(createApp())).put('/me/coach/persona').set(await authed(user.id)).send({});
+    expect([res.status, res.body]).toEqual([400, { error: 'unknown_persona' }]);
+  });
+
+  it('never rebuilds the day summary (there is nobody to switch to)', async () => {
+    const user = await createUser();
+    const spy = jest.spyOn(require('../../src/coach/answer/today'), 'clearTodaySummary');
+    await request(await testServer(createApp())).put('/me/coach/persona').set(await authed(user.id)).send({ personaId: 'luna' });
+    expect(spy).not.toHaveBeenCalled();
+  });
+
+  // Plan Review Focus 1: an old app picks a character, switches, then reads status.
+  it('an old app that picks luna, then encouraging, always reads back KIP with its thinking attachment', async () => {
+    const user = await createUser();
+    const headers = await authed(user.id);
+    const app = await testServer(createApp());
+    expect((await request(app).put('/me/coach/thinking').set(headers).send({ attachment: 'gears' })).status).toBe(200);
+    for (const personaId of ['luna', 'encouraging']) {
+      const put = await request(app).put('/me/coach/persona').set(headers).send({ personaId });
+      expect([put.status, put.body]).toEqual([200, { personaId: 'kip' }]);
+      const status = await request(app).get('/me/coach/status').set(headers);
+      expect(status.status).toBe(200);
+      expect(status.body).toMatchObject({ personaId: 'kip', personaChosen: true, thinkingAttachment: 'gears' });
+      expect(status.body.personas).toHaveLength(1);
+    }
+  });
 
   it.each([['false'], [undefined]])('works while the coach is off (COACH_ENABLED=%j)', async (flag) => {
     if (flag === undefined) delete process.env.COACH_ENABLED;
     else process.env.COACH_ENABLED = flag;
-    const chosen = listPersonas()[0]!.id;
     const user = await createUser();
     const headers = await authed(user.id);
-    const res = await request(await testServer(createApp())).put('/me/coach/persona').set(headers).send({ personaId: chosen });
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({ personaId: chosen });
+    const res = await request(await testServer(createApp())).put('/me/coach/persona').set(headers).send({ personaId: 'mochi' });
+    expect([res.status, res.body]).toEqual([200, { personaId: 'kip' }]);
     expect((await request(await testServer(createApp())).get('/me/coach/status').set(headers)).body).toMatchObject({
       enabled: false,
-      personaId: chosen,
+      personaId: 'kip',
       personaChosen: true,
     });
   });
 
-  it.each([
-    [{ personaId: 'pirate' }],
-    [{}],
-    [{ personaId: 7 }],
-    [{ personaId: null }],
-    [{ personaId: ['hoot'] }],
-    [{ personaId: 'Hoot' }],
-    [{ personaId: 'toString' }],
-    [{ personaId: '__proto__' }],
-  ])('400 for an unknown persona %j', async (body) => {
+  it('404 when the user row is gone, rather than a 500', async () => {
     const user = await createUser();
-    const res = await request(await testServer(createApp())).put('/me/coach/persona').set(await authed(user.id)).send(body);
-    expect(res.status).toBe(400);
-    expect(res.body).toEqual({ error: 'unknown_persona' });
+    const headers = await authed(user.id);
+    jest.spyOn(prisma.user, 'updateMany').mockResolvedValue({ count: 0 });
+    const res = await request(await testServer(createApp())).put('/me/coach/persona').set(headers).send({ personaId: 'kip' });
+    expect([res.status, res.body]).toEqual([404, { error: 'User not found' }]);
   });
 
   it('a stored old id still answers as KIP on the next turn', async () => {

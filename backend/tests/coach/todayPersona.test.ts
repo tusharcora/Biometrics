@@ -67,10 +67,10 @@ function setup(today: { now?: () => Date } = {}) {
   return { app: a, requests, tasks };
 }
 
-async function userWithSummary(personaId: string | null, { consented = true } = {}) {
+async function userWithSummary(personaId: string | null) {
   const user = await createUser();
   if (personaId !== null) await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: personaId } });
-  if (consented) await prisma.coachConsent.create({ data: { userId: user.id, version: COACH_CONSENT_VERSION } });
+  await prisma.coachConsent.create({ data: { userId: user.id, version: COACH_CONSENT_VERSION } });
   await prisma.coachDaySummary.create({
     data: { userId: user.id, date: DAY, text: 'Old voice.', spans: [{ text: 'Old voice.' }], source: 'AI' },
   });
@@ -86,20 +86,16 @@ async function choose(app: express.Express, userId: string, personaId: string) {
     .send({ personaId });
 }
 
-// v5: every id resolves to KIP, so no switch changes the voice and today's sentence always stands.
-// (Task 4 of plan 2026-10-14-kip-coach removes the route's refresh path itself.)
+// Spec 2026-10-14 §2: there is nobody to switch to, so an old app's character pick never touches today's sentence.
 describe('PUT /me/coach/persona and the day summary', () => {
-  it.each([
-    ['an old switch between characters', 'mochi', 'kit'],
-    ['the same character again', 'kit', 'kit'],
-    ['a character when none was stored', null, 'mochi'],
-    ['a character when the stored id is retired', 'hoot', 'luna'],
-  ])('keeps the sentence and schedules nothing for %s', async (_label, stored, chosen) => {
-    const user = await userWithSummary(stored);
+  it('a stored summary survives an old app picking luna, unchanged', async () => {
+    const user = await userWithSummary('mochi');
+    const before = await rowOf(user.id);
     const { app, requests, tasks } = setup();
-    const res = await choose(app, user.id, chosen);
+    const res = await choose(app, user.id, 'luna');
     expect([res.status, res.body]).toEqual([200, { personaId: 'kip' }]);
-    expect(await rowOf(user.id)).toMatchObject({ text: 'Old voice.' });
+    const after = await rowOf(user.id);
+    expect(after).toMatchObject({ id: before!.id, createdAt: before!.createdAt, text: 'Old voice.' });
     expect(tasks).toHaveLength(0);
     expect(requests).toHaveLength(0);
   });
