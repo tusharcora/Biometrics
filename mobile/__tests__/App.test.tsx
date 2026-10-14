@@ -13,7 +13,7 @@ import {
 // App imports the NativeWind stylesheet, which jest cannot parse.
 jest.mock('../global.css', () => ({}));
 // The dev gallery draws real Skia art; it is not under test here.
-jest.mock('../src/screens/dev/CharacterGalleryScreen', () => ({ CharacterGalleryScreen: () => null }));
+jest.mock('../src/screens/dev/KipGalleryScreen', () => ({ KipGalleryScreen: () => null }));
 // App's one useFonts call: the test reads the families it asks for and decides whether they are in.
 const mockUseFonts = jest.fn((_families: Record<string, unknown>) => [true, null] as [boolean, Error | null]);
 jest.mock('expo-font', () => ({ useFonts: (families: Record<string, unknown>) => mockUseFonts(families) }));
