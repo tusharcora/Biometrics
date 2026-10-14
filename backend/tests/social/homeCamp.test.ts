@@ -27,7 +27,7 @@ it('at night the camp counts awake and asleep, me.goodnight is mine for Undo, an
   await prisma.campNote.create({ data: { authorId: sam.id, text: 'secret words', createdAt: new Date('2026-10-08T05:05:00Z'), expiresAt: new Date('2026-10-08T13:00:00Z') } });
 
   const before = await getSocialHome(me.id, NIGHT);
-  expect(before.camp).toEqual({ checkedIn: 1, members: 3, faces: [expect.any(String)], faceColours: ['coral'], night: true, awake: 2, asleep: 1, goodnightOpen: true });
+  expect(before.camp).toEqual({ checkedIn: 1, members: 3, faces: [expect.any(String)], faceColours: ['coral'], faceWorn: [{ head: null, face: null, neck: null, ears: null }], night: true, awake: 2, asleep: 1, goodnightOpen: true });
   expect(before.me.goodnight).toBeNull();
   const said = await sayGoodnight(me.id, NIGHT);
   const after = await getSocialHome(me.id, NIGHT);
@@ -50,7 +50,7 @@ it("a stranger's goodnight never moves my camp's awake, asleep or members", asyn
 it('by day the camp is not night and everyone is awake', async () => {
   const me = await buddyUser({ timezone: LA });
   const day = new Date('2026-10-07T20:00:00Z'); // 13:00
-  expect((await getSocialHome(me.id, day)).camp).toEqual({ checkedIn: 0, members: 1, faces: [], faceColours: [], night: false, awake: 1, asleep: 0, goodnightOpen: false });
+  expect((await getSocialHome(me.id, day)).camp).toEqual({ checkedIn: 0, members: 1, faces: [], faceColours: [], faceWorn: [], night: false, awake: 1, asleep: 0, goodnightOpen: false });
 });
 
 it('the goodnight window is mine: open at 17:30 with an 18:00 goal though not night, closed at 19:30 with no goal though night', async () => {

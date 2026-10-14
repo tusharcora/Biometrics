@@ -15,6 +15,7 @@ import { prisma } from '../db/client';
 import { countRequests } from '../buddies/requests';
 import { unreadChatsCount } from '../chats/inbox';
 import type { PersonDTO } from '../buddies/people';
+import type { KipWornDTO } from '../cosmetics/worn';
 import { campSummaryFor } from './camp';
 import { toCheckInDTO, type CheckInDTO } from './checkins';
 import { loadCircle, type Circle } from './circle';
@@ -25,7 +26,7 @@ import { timelineFor, TODAY_WINDOW_MS, type TimelineItemDTO } from './timeline';
 
 export interface SocialHomeDTO {
   me: { person: PersonDTO; checkIn: CheckInDTO | null; goodnight: GoodnightDTO | null };
-  camp: { checkedIn: number; members: number; faces: string[]; faceColours: string[]; night: boolean; awake: number; asleep: number; goodnightOpen: boolean };
+  camp: { checkedIn: number; members: number; faces: string[]; faceColours: string[]; faceWorn: KipWornDTO[]; night: boolean; awake: number; asleep: number; goodnightOpen: boolean };
   stories: StoryRingDTO[];
   highlights: HighlightsDTO | null;
   timeline: TimelineItemDTO[];
@@ -62,6 +63,7 @@ export async function getSocialHome(viewerId: string, now: Date): Promise<Social
       members: circle.members.size,
       faces: rings.checkedInCoachIds,
       faceColours: rings.checkedInKipColours,
+      faceWorn: rings.checkedInKipWorn,
       night: summary.night,
       awake: summary.awake,
       asleep: summary.asleep,
