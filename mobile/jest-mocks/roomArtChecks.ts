@@ -42,10 +42,11 @@ export function checkSlotArt(slot: RoomSlot, { sets = true }: { sets?: boolean }
       // Deterministic.
       expect(art.draw(ctx)).toEqual(layers);
     }
-    // Tinted items follow KIP's colour; others never do.
+    // Tinted items follow KIP's colour; others never do. A looping desk's screen takes KIP's colour as the accent of
+    // its dots and chart (Spec A), so it may follow it though it is not tinted; its idle lines do not.
     const coral = JSON.stringify(art.draw(CTX_DAY));
     const lime = JSON.stringify(art.draw(LIME));
-    expect({ ...tag, follows: coral !== lime }).toEqual({ ...tag, follows: !!item.tint || (slot === 'desk' && !!item.frames) });
+    if (!(slot === 'desk' && item.frames)) expect({ ...tag, follows: coral !== lime }).toEqual({ ...tag, follows: !!item.tint });
   }
   expect(catalogueItem('no.such')).toBeUndefined();
 }

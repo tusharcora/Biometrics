@@ -6,10 +6,8 @@ import { darkenHex, mixHex } from '../colour';
 import { FLOOR_Y, ROOM_H, ROOM_W, WALL_X0, WALL_X1 } from './grid';
 import { registerItems, type ItemArt, type MonitorScreen } from './items';
 import { bookRow, clipB, E, floorSeams, glow, gradV, leaf, poly, pot, px, R, shade, type Rects } from './paint';
-import { accentOn, shelfPlank, three, windowFrame } from './items/shared';
+import { accentOn, deskFurniture, shelfPlank, three, windowFrame } from './items/shared';
 
-const WOOD = { leg: '#7C5A3E', top: '#9A7350' };
-const CHAIR = '#3F4656';
 const BOOKS = ['#60A5FA', '#F87171', '#FDE047', '#475569', '#A78BFA', '#34D399'];
 
 /** The monitor's glass, inside its bezel: the loop frames draw the screen content here. */
@@ -123,21 +121,7 @@ const monitor: ItemArt = {
   frames: 3,
   draw: ({ night, ramp, screen }) => {
     const r: Rects = [];
-    // The desk (sets2.js `desk`).
-    shade(r, 88, 99, 30, 3, 0.12);
-    R(r, 64, 75, 3, 24, darkenHex(WOOD.leg, 0.85));
-    R(r, 109, 75, 3, 24, darkenHex(WOOD.leg, 0.85));
-    R(r, 62, 72, 52, 3, WOOD.top);
-    R(r, 62, 72, 52, 1, mixHex(WOOD.top, '#FFFFFF', 0.22));
-    R(r, 62, 75, 52, 2, WOOD.leg);
-    // KIP's chair, back on the right.
-    shade(r, 123, 96, 18, 2);
-    R(r, 136, 58, 3, 29, CHAIR);
-    R(r, 138, 58, 1, 29, mixHex(CHAIR, '#FFFFFF', 0.15));
-    R(r, 108, 84, 31, 3, CHAIR);
-    R(r, 108, 84, 31, 1, mixHex(CHAIR, '#FFFFFF', 0.15));
-    R(r, 110, 87, 2, 9, darkenHex(CHAIR, 0.8));
-    R(r, 134, 87, 2, 9, darkenHex(CHAIR, 0.8));
+    deskFurniture(r);
     // The monitor, its stand and the keyboard.
     R(r, 72, 48, 28, 18, '#1F2937');
     gradV(r, 73, 49, 26, 16, ['#0B1422', '#0F1A2A', '#132036']);

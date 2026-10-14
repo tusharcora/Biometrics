@@ -6,9 +6,10 @@ import type { KipRamp } from '../../kip/kipArt';
 import { tintOf } from '../../kip/wornArt';
 import { FLOOR_Y, ROOM_H, ROOM_W, WALL_X0, WALL_X1, type Box, type RoomRect } from '../grid';
 import type { SpriteRect } from '../icons';
-import type { ItemContext } from '../items';
+import type { ItemArt, ItemContext } from '../items';
 import type { ItemId } from '../loadout';
-import { clipB, poly, R, type Rects } from '../paint';
+import type { RoomSlot } from '../slots';
+import { clipB, poly, R, shade, type Rects } from '../paint';
 import { windowSky } from '../weather';
 
 export type { SpriteRect } from '../icons';
@@ -114,6 +115,48 @@ export function shelfPlank(r: Rects): void {
   R(r, 96, SHELF_TOP, 34, 1, '#7C5A3E');
   R(r, 99, SHELF_TOP + 2, 1, 2, '#3A2D23');
   R(r, 126, SHELF_TOP + 2, 1, 2, '#3A2D23');
+}
+
+const WOOD = { leg: '#7C5A3E', top: '#9A7350' };
+const CHAIR = '#3F4656';
+
+/** Spec A's desk (sets2.js `desk`) and KIP's chair, back on the right (starterItems `desk.monitor`). Every desk
+ *  piece draws it first, then what stands on it (the desk top is y 72). */
+export function deskFurniture(r: Rects): void {
+  // The desk.
+  shade(r, 88, 99, 30, 3, 0.12);
+  R(r, 64, 75, 3, 24, darkenHex(WOOD.leg, 0.85));
+  R(r, 109, 75, 3, 24, darkenHex(WOOD.leg, 0.85));
+  R(r, 62, 72, 52, 3, WOOD.top);
+  R(r, 62, 72, 52, 1, mixHex(WOOD.top, '#FFFFFF', 0.22));
+  R(r, 62, 75, 52, 2, WOOD.leg);
+  // KIP's chair, back on the right.
+  shade(r, 123, 96, 18, 2);
+  R(r, 136, 58, 3, 29, CHAIR);
+  R(r, 138, 58, 1, 29, mixHex(CHAIR, '#FFFFFF', 0.15));
+  R(r, 108, 84, 31, 3, CHAIR);
+  R(r, 108, 84, 31, 1, mixHex(CHAIR, '#FFFFFF', 0.15));
+  R(r, 110, 87, 2, 9, darkenHex(CHAIR, 0.8));
+  R(r, 134, 87, 2, 9, darkenHex(CHAIR, 0.8));
+}
+
+/** A board sprite standing on row `footY`, on a soft contact shadow as wide as the sprite (floor and desk pieces). */
+export function standing(r: Rects, rects: readonly SpriteRect[], x: number, y: number, footY: number, ramp: KipRamp): void {
+  const b = spriteBox(rects);
+  shade(r, x + b.x + b.w / 2, footY, b.w / 2 + 1, 1, 0.16);
+  sprite(r, rects, x, y, ramp);
+}
+
+/** A piece that is one board sprite standing on row `footY` (desk items, plants, corner pieces, the pet bed). */
+export function standingPiece(id: ItemId, slot: RoomSlot, rects: readonly SpriteRect[], x: number, y: number, footY: number, tint?: true): ItemArt {
+  return {
+    id, slot, ...(tint ? { tint } : {}),
+    draw: ({ ramp }) => {
+      const r: Rects = [];
+      standing(r, rects, x, y, footY, ramp);
+      return { base: r };
+    },
+  };
 }
 
 /** Items allowed to draw outside their slot's anchor, and why (ruling 3). */
