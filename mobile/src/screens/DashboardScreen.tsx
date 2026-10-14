@@ -1,12 +1,12 @@
-import React, { useContext, useEffect, useMemo, useRef, useState } from 'react';
-import { AppState, ScrollView, View, useWindowDimensions } from 'react-native';
+import React, { useContext, useEffect, useMemo, useState } from 'react';
+import { ScrollView, View, useWindowDimensions } from 'react-native';
 import { SafeAreaInsetsContext, SafeAreaView } from 'react-native-safe-area-context';
 import { StatusBar } from 'expo-status-bar';
 import { useNavigation } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
 import { apiFetch } from '../api/client';
-import { fetchScoresWithBands, type DailyScoreDTO, type ScoresResult } from '../api/scores';
-import { fetchSleep, fetchSleepGoal, type SleepNight } from '../api/sleep';
+import { type DailyScoreDTO } from '../api/scores';
+import { fetchSleepGoal } from '../api/sleep';
 import { useAuth } from '../auth/AuthContext';
 import { Text } from '../components/ui/text';
 import { Card } from '../components/ui/card';
@@ -30,9 +30,9 @@ import { COLORS, METRIC_ORDER, type MetricType } from '../theme';
 import { computeStats, buildHeadline, type MetricRecord } from '../lib/metricInsights';
 import { coachEntryRoute, useCoachStatus } from '../lib/useCoachStatus';
 import { useForecast } from '../lib/useForecast';
-import { todayCivil } from '../lib/heatmap';
-import { forecastRange, nextSceneBoundary, SCENE_H, sceneExtra, sceneState, todayScore, todayWeather } from '../lib/home/scene';
+import { forecastRange, SCENE_H, sceneExtra } from '../lib/home/scene';
 import { useBuddyScene } from '../lib/home/useBuddyScene';
+import { useTodayScene } from '../lib/home/useTodayScene';
 import { useMyKipColour } from '../lib/kip/myKipColour';
 import { useRecapShelf } from '../lib/recap/useRecapShelf';
 import { formatMinutes } from '../lib/recoveryCopy';
@@ -90,11 +90,7 @@ export function DashboardScreen() {
   const [records, setRecords] = useState<MetricRecord[] | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [connectionStatus, setConnectionStatus] = useState<ConnectionStatus | null>(null);
-  const [scores, setScores] = useState<Read<ScoresResult>>({ status: 'loading' });
-  const [night, setNight] = useState<Read<SleepNight | null>>({ status: 'loading' });
   const [bedtime, setBedtime] = useState<string | null>(null);
-  const [now, setNow] = useState(() => new Date());
-  const [homeFocused, setHomeFocused] = useState<boolean>(() => navigation.isFocused?.() ?? true);
   const [headerBottom, setHeaderBottom] = useState(0);
   const [pastScene, setPastScene] = useState(false);
   // Null until known, and null on failure: the coach entry simply isn't drawn.
@@ -107,9 +103,7 @@ export function DashboardScreen() {
   const shelf = useRecapShelf(navigation);
   const buddyScene = useBuddyScene(navigation);
   const myColour = useMyKipColour();
-  const today = todayCivil(now);
-  const navRef = useRef(navigation);
-  navRef.current = navigation;
+  const day = useTodayScene(navigation);
 
   useEffect(() => {
     apiFetch<MetricRecord[]>('/me/biometrics')
@@ -126,55 +120,12 @@ export function DashboardScreen() {
   }, [dataVersion]);
 
   useEffect(() => {
-    // Independent of the metric cards: a scores failure must not take the rest
-    // of the dashboard down with it.
-    let cancelled = false;
-    fetchScoresWithBands(7)
-      .then((value) => { if (!cancelled) setScores({ status: 'ready', value }); })
-      .catch(() => { if (!cancelled) setScores({ status: 'failed' }); });
-    return () => { cancelled = true; };
-  }, [dataVersion, today]);
-
-  useEffect(() => {
-    // Last night is dated by the morning you woke up: today. A failed read means "not short".
-    let cancelled = false;
-    fetchSleep(today, today)
-      .then((res) => { if (!cancelled) setNight({ status: 'ready', value: res.nights.find((n) => n.date === today) ?? null }); })
-      .catch(() => { if (!cancelled) setNight({ status: 'failed' }); });
-    return () => { cancelled = true; };
-  }, [dataVersion, today]);
-
-  useEffect(() => {
     let cancelled = false;
     fetchSleepGoal()
       .then((goal) => { if (!cancelled) setBedtime(goal?.bedtimeGoal ?? null); })
       .catch(() => { if (!cancelled) setBedtime(null); });
     return () => { cancelled = true; };
   }, [dataVersion]);
-
-  // The state and the greeting follow the clock: again on focus, on return to the foreground, and at the next boundary.
-  useEffect(() => {
-    const nav = navRef.current;
-    const offFocus = nav.addListener?.('focus', () => {
-      setHomeFocused(true);
-      setNow(new Date());
-    });
-    const offBlur = nav.addListener?.('blur', () => setHomeFocused(false));
-    const appState = AppState.addEventListener('change', (state) => {
-      if (state === 'active') setNow(new Date());
-    });
-    return () => {
-      offFocus?.();
-      offBlur?.();
-      appState.remove();
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!homeFocused) return;
-    const id = setTimeout(() => setNow(new Date()), nextSceneBoundary(now).getTime() - now.getTime());
-    return () => clearTimeout(id);
-  }, [homeFocused, now]);
 
   const seriesByMetric = useMemo(() => {
     const all = records ?? [];
@@ -197,7 +148,7 @@ export function DashboardScreen() {
   }
 
   function open(target: SceneTarget) {
-    if (target === 'recovery') navigation.navigate('Recovery', { date: today });
+    if (target === 'recovery') navigation.navigate('Recovery', { date: day.today });
     else if (target === 'sleep') openSleep(navigation);
     else if (target === 'tomorrow') navigation.navigate('Forecast');
     else if (target === 'recaps') navigation.navigate('Recaps');
@@ -280,25 +231,15 @@ export function DashboardScreen() {
     });
   }
 
-  const allScores = scores.status === 'ready' ? scores.value.scores : null;
-  // Undefined until loaded (and on an older server): scoreBand uses its defaults.
-  const bands = scores.status === 'ready' ? scores.value.bands : undefined;
-  const recoveryScore = todayScore(allScores, 'RECOVERY', today);
-  const sleepScore = todayScore(allScores, 'SLEEP', today);
-  // While a new day's read is in flight, the old day's night must not stand in for it.
-  const todaysNight: Read<SleepNight | null> = night.status === 'ready' && night.value && night.value.date !== today ? { status: 'loading' } : night;
-  const lastNight = todaysNight.status === 'ready' ? todaysNight.value : null;
-  const weather = todayWeather(recoveryScore, bands);
-  const scene = sceneState({ now, recovery: weather, night: lastNight });
-  const asRead = (value: DailyScoreDTO | null): Read<DailyScoreDTO | null> => (scores.status === 'ready' ? { status: 'ready', value } : scores);
+  const asRead = (value: DailyScoreDTO | null): Read<DailyScoreDTO | null> => (day.scores.status === 'ready' ? { status: 'ready', value } : day.scores);
   const readings: SceneReadings = {
     sleep: {
-      score: sleepScore && sleepScore.score !== null ? Math.round(sleepScore.score) : null,
-      duration: lastNight ? formatMinutes(lastNight.mainMinutesAsleep ?? lastNight.minutesAsleep) : null,
+      score: day.sleepScore && day.sleepScore.score !== null ? Math.round(day.sleepScore.score) : null,
+      duration: day.lastNight ? formatMinutes(day.lastNight.mainMinutesAsleep ?? day.lastNight.minutesAsleep) : null,
     },
     tomorrow: forecastRange(forecastState),
-    recovery: recoveryScore && recoveryScore.score !== null
-      ? { score: Math.round(recoveryScore.score), weather, band: scoreBand(recoveryScore.score, bands) }
+    recovery: day.recoveryScore && day.recoveryScore.score !== null
+      ? { score: Math.round(day.recoveryScore.score), weather: day.weather, band: scoreBand(day.recoveryScore.score, day.bands) }
       : null,
     recapsNew: shelf.unwatchedCount,
   };
@@ -310,7 +251,7 @@ export function DashboardScreen() {
 
   return (
     <View className="flex-1 bg-background">
-      {homeFocused ? <StatusBar style={pastScene && scheme !== 'dark' ? 'dark' : 'light'} /> : null}
+      {day.focused ? <StatusBar style={pastScene && scheme !== 'dark' ? 'dark' : 'light'} /> : null}
       <ScrollView
         testID="home-scroll"
         contentContainerStyle={{ paddingBottom: clearance }}
@@ -318,7 +259,7 @@ export function DashboardScreen() {
         onScroll={(e) => setPastScene(e.nativeEvent.contentOffset.y > sceneUnderClock)}
       >
         <HomeScene
-          scene={scene}
+          scene={day.scene}
           width={width}
           extra={extra}
           myColour={myColour}
@@ -330,9 +271,9 @@ export function DashboardScreen() {
             <HomeHeader
               top={insetTop + 8}
               extra={extra}
-              now={now}
-              greeting={greetingFor(now)}
-              scene={scene}
+              now={day.now}
+              greeting={greetingFor(day.now)}
+              scene={day.scene}
               myColour={myColour}
               ring={ring}
               onProfile={openProfile}
@@ -342,12 +283,12 @@ export function DashboardScreen() {
         />
 
         <View style={{ ...PAGE, paddingTop: 14 }}>
-          <TodayHeader scene={scene.key} bedtime={bedtime} />
+          <TodayHeader scene={day.scene.key} bedtime={bedtime} />
           <TodayTiles
-            recovery={asRead(recoveryScore)}
-            bands={bands}
-            sleepScore={asRead(sleepScore)}
-            night={todaysNight}
+            recovery={asRead(day.recoveryScore)}
+            bands={day.bands}
+            sleepScore={asRead(day.sleepScore)}
+            night={day.night}
             tomorrow={forecastState}
             bedtime={bedtime}
             onOpen={open}
