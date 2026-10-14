@@ -56,8 +56,10 @@ export function CoachStatusProvider({ children }: { children: React.ReactNode })
   // Set once the server (or a choice) has named this account's thinking text,
   // so the (slower) cache read cannot put an older one back.
   const thinkingKnown = useRef(false);
-  // Thinking saves still in flight: a status reply that may predate one leaves the text as it is.
+  // Thinking saves still in flight, and a counter bumped on every choice. A
+  // status reply that may predate a choice leaves the text as it is.
   const pendingThinking = useRef(0);
+  const thinkingSeq = useRef(0);
   // The text on screen, kept in step with the state synchronously so a choice
   // made before the next render still sees the one it replaces.
   const thinkingRef = useRef<ThinkingTextId>(DEFAULT_THINKING_TEXT);
@@ -69,27 +71,40 @@ export function CoachStatusProvider({ children }: { children: React.ReactNode })
     setThinkingText(next);
   }, []);
 
-  const setStatus = useCallback(
-    (next: CoachStatusDTO | null) => {
-      setStatusState(next);
-      if (next && pendingThinking.current === 0) {
-        const text = resolveThinkingText(next.thinkingText);
-        thinkingKnown.current = true;
-        showThinking(text);
-        void writeCachedThinkingText(text);
+  // keepThinking: a choice may be newer than this status, so the text on
+  // screen stays (and the status carries it, not the server's older one).
+  const applyStatus = useCallback(
+    (next: CoachStatusDTO | null, keepThinking: boolean = pendingThinking.current > 0) => {
+      if (!next) {
+        setStatusState(null);
+        return;
       }
+      if (keepThinking) {
+        setStatusState({ ...next, thinkingText: thinkingRef.current });
+        return;
+      }
+      const text = resolveThinkingText(next.thinkingText);
+      setStatusState(next);
+      thinkingKnown.current = true;
+      showThinking(text);
+      void writeCachedThinkingText(text);
     },
     [showThinking],
   );
+  const setStatus = useCallback((next: CoachStatusDTO | null) => applyStatus(next), [applyStatus]);
 
   const refreshStatus = useCallback(async () => {
     if (!signedIn.current) return;
     const started = epoch.current;
+    // The server may answer this GET before it applies a PUT still in flight,
+    // so a choice pending now, or made while it runs, can be missing from the reply.
+    const seqAtStart = thinkingSeq.current;
+    const pendingAtStart = pendingThinking.current > 0;
     try {
       const next = await fetchCoachStatus();
       if (epoch.current !== started) return;
       setOffline(false);
-      setStatus(next);
+      applyStatus(next, pendingAtStart || pendingThinking.current > 0 || thinkingSeq.current !== seqAtStart);
     } catch (err) {
       if (epoch.current !== started) return;
       // Offline keeps the last known status; any other failure is unknown, as before.
@@ -97,7 +112,7 @@ export function CoachStatusProvider({ children }: { children: React.ReactNode })
       else setStatusState(null);
     }
     setStatusLoaded(true);
-  }, [setStatus]);
+  }, [applyStatus]);
 
   useEffect(() => {
     if (purged.current) return;
@@ -140,6 +155,8 @@ export function CoachStatusProvider({ children }: { children: React.ReactNode })
       if (!isThinkingText(text)) throw new Error(`Unknown thinking text: ${String(text)}`);
       const started = epoch.current;
       const previous = thinkingRef.current;
+      thinkingSeq.current += 1;
+      const seq = thinkingSeq.current;
       pendingThinking.current += 1;
       thinkingKnown.current = true;
       showThinking(text);
@@ -149,7 +166,7 @@ export function CoachStatusProvider({ children }: { children: React.ReactNode })
         await setCoachThinking({ text });
       } catch (error) {
         // Put the previous text back, unless the account changed or a newer choice has since replaced this one.
-        if (epoch.current === started && thinkingRef.current === text) {
+        if (epoch.current === started && thinkingSeq.current === seq) {
           showThinking(previous);
           setStatusState((s) => (s ? { ...s, thinkingText: previous } : s));
           void writeCachedThinkingText(previous);

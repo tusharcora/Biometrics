@@ -9,10 +9,11 @@ import * as cache from '../../src/lib/coachStatus/thinkingCache';
 
 jest.mock('../../src/api/coach', () => ({ ...jest.requireActual('../../src/api/coach'), fetchCoachStatus: jest.fn(), setCoachThinking: jest.fn() }));
 jest.mock('../../src/lib/coachStatus/thinkingCache');
-let mockUserId: string | null = 'u1';
-jest.mock('../../src/auth/AuthContext', () => ({
-  useOptionalAuth: () => ({ session: mockUserId ? { userId: mockUserId } : null, isPending: false }),
-}));
+type MockAuth = { session: { userId: string } | null; isPending: boolean } | undefined;
+let mockAuth: MockAuth;
+jest.mock('../../src/auth/AuthContext', () => ({ useOptionalAuth: () => mockAuth }));
+const signedIn = (userId = 'u1'): MockAuth => ({ session: { userId }, isPending: false });
+const signedOut: MockAuth = { session: null, isPending: false };
 
 const fetchStatus = fetchCoachStatus as jest.Mock;
 const STATUS: CoachStatusDTO = {
@@ -21,10 +22,19 @@ const STATUS: CoachStatusDTO = {
 };
 const networkError = () => markNetworkError(new TypeError('Network request failed'));
 const wrapper = ({ children }: { children: React.ReactNode }) => <CoachStatusProvider>{children}</CoachStatusProvider>;
+const renderCoach = () => renderHook(() => useCoachStatusContext()!, { wrapper });
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
 
 beforeEach(() => {
   jest.resetAllMocks();
-  mockUserId = 'u1';
+  mockAuth = signedIn();
   (cache.readCachedThinkingText as jest.Mock).mockResolvedValue(null);
   (cache.purgeCachedCharacter as jest.Mock).mockResolvedValue(undefined);
 });
@@ -87,7 +97,7 @@ it('chooses a thinking text optimistically and reverts when the save fails', asy
 });
 
 it('signed out: nothing is fetched, the defaults show and the cache is cleared', async () => {
-  mockUserId = null;
+  mockAuth = signedOut;
   const { result } = renderHook(() => useCoachStatusContext(), { wrapper });
   await waitFor(() => expect(cache.clearCachedThinking).toHaveBeenCalled());
   expect(fetchStatus).not.toHaveBeenCalled();
@@ -99,4 +109,149 @@ it('the compatibility shim answers old callers from the new provider (ruling 1)'
   const { result } = renderHook(() => useCharacterOptional(), { wrapper });
   await waitFor(() => expect(result.current?.status).toEqual(STATUS));
   expect(result.current).toMatchObject({ characterId: 'mochi', personaChosen: true, recoveryBand: null, thinkingText: 'typewriter' });
+});
+
+describe('account and lifetime guards', () => {
+  it('ignores a status reply that lands after sign-out', async () => {
+    const reply = deferred<CoachStatusDTO>();
+    fetchStatus.mockReturnValue(reply.promise);
+    const { result, rerender } = renderCoach();
+    await waitFor(() => expect(fetchStatus).toHaveBeenCalled());
+
+    mockAuth = signedOut;
+    rerender({});
+    await act(async () => reply.resolve(STATUS));
+
+    expect(result.current.status).toBeNull();
+    expect(result.current.thinkingText).toBe('steps');
+    expect(cache.writeCachedThinkingText).not.toHaveBeenCalled();
+  });
+
+  it('ignores a status reply that lands after unmount', async () => {
+    const reply = deferred<CoachStatusDTO>();
+    fetchStatus.mockReturnValue(reply.promise);
+    const { unmount } = renderCoach();
+    await waitFor(() => expect(fetchStatus).toHaveBeenCalled());
+
+    unmount();
+    await act(async () => reply.resolve(STATUS));
+
+    expect(cache.writeCachedThinkingText).not.toHaveBeenCalled();
+  });
+
+  it("drops the previous account's late reply and loads the next account afresh after a switch", async () => {
+    const first = deferred<CoachStatusDTO>();
+    fetchStatus.mockReturnValueOnce(first.promise).mockResolvedValueOnce({ ...STATUS, thinkingText: 'shimmer' });
+    const { result, rerender } = renderCoach();
+    await waitFor(() => expect(fetchStatus).toHaveBeenCalledTimes(1));
+
+    mockAuth = signedIn('u2');
+    rerender({});
+    await waitFor(() => expect(result.current.thinkingText).toBe('shimmer'));
+    await act(async () => first.resolve(STATUS));
+
+    expect(result.current.thinkingText).toBe('shimmer');
+    expect(result.current.status?.thinkingText).toBe('shimmer');
+    expect(fetchStatus).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps the cache, and fetches or clears nothing, while the session is still loading on a cold start', async () => {
+    mockAuth = { session: null, isPending: true };
+    (cache.readCachedThinkingText as jest.Mock).mockResolvedValue('typewriter');
+    const { result } = renderCoach();
+
+    await waitFor(() => expect(result.current.thinkingText).toBe('typewriter'));
+    expect(cache.clearCachedThinking).not.toHaveBeenCalled();
+    expect(fetchStatus).not.toHaveBeenCalled();
+  });
+
+  it('treats no AuthProvider at all as signed out', async () => {
+    mockAuth = undefined;
+    const { result } = renderCoach();
+
+    await waitFor(() => expect(cache.clearCachedThinking).toHaveBeenCalled());
+    expect(result.current.thinkingText).toBe('steps');
+    expect(fetchStatus).not.toHaveBeenCalled();
+  });
+});
+
+describe('the cached thinking text', () => {
+  it('shows the cached text on a signed-in cold start, before the status arrives', async () => {
+    (cache.readCachedThinkingText as jest.Mock).mockResolvedValue('typewriter');
+    fetchStatus.mockReturnValue(new Promise(() => {}));
+    const { result } = renderCoach();
+
+    await waitFor(() => expect(result.current.thinkingText).toBe('typewriter'));
+  });
+
+  it("does not let a slow cache read replace the text the server already sent", async () => {
+    const cached = deferred<string | null>();
+    (cache.readCachedThinkingText as jest.Mock).mockReturnValue(cached.promise);
+    fetchStatus.mockResolvedValue({ ...STATUS, thinkingText: 'shimmer' });
+    const { result } = renderCoach();
+    await waitFor(() => expect(result.current.thinkingText).toBe('shimmer'));
+
+    await act(async () => cached.resolve('typewriter'));
+
+    expect(result.current.thinkingText).toBe('shimmer');
+  });
+});
+
+describe('chooseThinkingText guards', () => {
+  it('is not undone by a status fetch that started before the choice and lands after the save', async () => {
+    fetchStatus.mockResolvedValue(STATUS);
+    (setCoachThinking as jest.Mock).mockResolvedValue(undefined);
+    const { result } = renderCoach();
+    await waitFor(() => expect(result.current.statusLoaded).toBe(true));
+    const stale = deferred<CoachStatusDTO>();
+    fetchStatus.mockReturnValue(stale.promise);
+
+    let refreshing!: Promise<void>;
+    act(() => {
+      refreshing = result.current.refreshStatus();
+    });
+    await act(async () => {
+      await result.current.chooseThinkingText('lines');
+    });
+    (cache.writeCachedThinkingText as jest.Mock).mockClear();
+    await act(async () => {
+      stale.resolve(STATUS);
+      await refreshing;
+    });
+
+    expect(result.current.thinkingText).toBe('lines');
+    expect(result.current.status?.thinkingText).toBe('lines');
+    expect(cache.writeCachedThinkingText).not.toHaveBeenCalled();
+  });
+
+  it('rejects an unknown id without changing or saving anything', async () => {
+    fetchStatus.mockResolvedValue(STATUS);
+    const { result } = renderCoach();
+    await waitFor(() => expect(result.current.thinkingText).toBe('typewriter'));
+
+    let caught: unknown;
+    await act(async () => {
+      await result.current.chooseThinkingText('dialog' as never).catch((e: unknown) => {
+        caught = e;
+      });
+    });
+
+    expect(caught).toBeInstanceOf(Error);
+    expect(result.current.thinkingText).toBe('typewriter');
+    expect(setCoachThinking).not.toHaveBeenCalled();
+  });
+
+  it('does nothing while signed out', async () => {
+    mockAuth = signedOut;
+    const { result } = renderCoach();
+    await waitFor(() => expect(cache.clearCachedThinking).toHaveBeenCalled());
+
+    await act(async () => {
+      await result.current.chooseThinkingText('typewriter');
+    });
+
+    expect(result.current.thinkingText).toBe('steps');
+    expect(setCoachThinking).not.toHaveBeenCalled();
+    expect(cache.writeCachedThinkingText).not.toHaveBeenCalled();
+  });
 });

@@ -28,6 +28,11 @@ it('writes the text alone, so a cached attachment is dropped on the next write',
   expect(store.setItemAsync).toHaveBeenCalledWith('thinking', JSON.stringify({ text: 'lines' }));
 });
 
+it('swallows a keychain failure on write', async () => {
+  store.setItemAsync.mockRejectedValueOnce(new Error('locked'));
+  await expect(writeCachedThinkingText('lines')).resolves.toBeUndefined();
+});
+
 it('purges the retired characterId key and swallows a keychain failure', async () => {
   await purgeCachedCharacter();
   expect(store.deleteItemAsync).toHaveBeenCalledWith('characterId');
