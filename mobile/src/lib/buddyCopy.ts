@@ -1,5 +1,6 @@
 import type { Ionicons } from '@expo/vector-icons';
 import type { Mood, NumberKey, ShareKey, StickerKind } from '../api/buddies';
+import { KIP_NAME } from './kipCopy';
 
 // Every buddy string the app shows (spec 2026-10-06 buddies §5-§7). Fixed text only: nothing here is
 // model output, and a number appears only when the buddy shared it.
@@ -46,8 +47,13 @@ export const SHARING_CONSENT_LINES: readonly string[] = [
   'Hours slept: how long you slept each night, for the last 7 days.',
   'Steps: your daily steps for the last 7 days, and whether you moved a lot yesterday.',
   'Streaks & badges: your sleep streak and badge levels. Buddies may get a notification with your name when you reach a badge level.',
-  'Your mood and coach are always shared. You can turn any of these off at any time.',
+  // Renamed from "coach" (KIP Coach spec, Consent): wording only, so the version is not bumped.
+  `Your mood and ${KIP_NAME} are always shared. You can turn any of these off at any time.`,
 ];
+
+/** Over the buddy list, and under Profile's sharing switches: what buddies always see. */
+export const BUDDIES_INTRO = `You see their ${KIP_NAME}'s mood, never their numbers unless they share them.`;
+export const SHARING_FOOTER = `Buddies always see your mood and ${KIP_NAME}. Each number stays off until you turn it on.`;
 
 export const MOOD_NOTICE_TEXT =
   'Your mood comes from your recovery score. Every buddy always sees it (well rested, doing okay or running low) for today and the last 7 days. Your numbers stay private unless you share them in Profile.';

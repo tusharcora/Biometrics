@@ -18,6 +18,9 @@ export const KIP_COPY = {
   newChatLabel: 'New chat',
   promptPlaceholder: 'Ask KIP…',
   promptLabel: 'Message KIP',
+  // Screen-reader hints on what sends a question: a Today bar or underlined word, and a follow-up chip.
+  asksKipAboutIt: `Asks ${KIP_NAME} about it`,
+  asksKip: `Asks ${KIP_NAME}`,
   deskLabel: "KIP'S DESK",
   windowCaption: "Window shows today's Recovery",
   recoveryTag: 'RECOVERY',

@@ -222,6 +222,12 @@ describe('CoachToday', () => {
     expect(getByTestId('coach-today-footnote')).toHaveTextContent('Comparisons against your own readings, not medical advice.');
   });
 
+  it('hints that a bar or an underlined word asks KIP', () => {
+    const { getByTestId } = render(<CoachToday summary={summary} loading={false} onAsk={() => {}} />);
+    expect(getByTestId('today-bar-recovery').props.accessibilityHint).toBe('Asks KIP about it');
+    expect(getByTestId('today-span-recovery').props.accessibilityHint).toBe('Asks KIP about it');
+  });
+
   it('asks about a bar when it is tapped, worded by its status', () => {
     const onAsk = jest.fn();
     const { getByTestId } = render(<CoachToday summary={summary} loading={false} onAsk={onAsk} />);

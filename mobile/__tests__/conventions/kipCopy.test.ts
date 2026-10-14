@@ -38,8 +38,17 @@ it('reads literals, template pieces and JSX text, and skips comments', () => {
   expect(literals('x.tsx', text)).toEqual(['one', 'two ', ' three', "Don't four"]);
 });
 
-it('no user-facing string says "Coach"', () => {
-  const hits = FILES.flatMap((f) => literals(f).filter((s) => /\bCoach\b/.test(s) && !ALLOWED.has(s.trim())).map((s) => `${path.relative(SRC, f)}: ${s}`));
+/** A string that names the coach: "Coach" as a word, or "your / the / their / and coach" in any case. */
+const saysCoach = (s: string) => (/\bCoach\b/.test(s) && !ALLOWED.has(s.trim())) || /\b(your|the|their|and) coach\b/i.test(s);
+
+it('flags "Coach" and "your / the / their / and coach", but not route names or other words', () => {
+  const named = ['AI Coach', 'Asks your coach about it', 'What the coach sees', 'Your Coach', "their coach's mood", 'your mood and coach'];
+  expect(named.filter(saysCoach)).toEqual(named);
+  expect(['Coach', 'CoachMemory', 'coach-digest-card', 'Asks KIP', 'coaching'].filter(saysCoach)).toEqual([]);
+});
+
+it('no user-facing string says "Coach" or "your / the / their / and coach"', () => {
+  const hits = FILES.flatMap((f) => literals(f).filter(saysCoach).map((s) => `${path.relative(SRC, f)}: ${s}`));
   expect(hits).toEqual([]);
 });
 
