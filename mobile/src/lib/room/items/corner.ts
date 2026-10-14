@@ -3,7 +3,7 @@
 import { registerIcons, type SpriteRect } from '../icons';
 import { registerItems, type ItemArt } from '../items';
 import { glow, R, type Rects } from '../paint';
-import { rgbOf, sprite, standing, standingPiece, three } from './shared';
+import { rgbOf, sprite, standing, standingPiece, three, veiled } from './shared';
 
 const FLOOR_ROW = 95;
 
@@ -32,17 +32,17 @@ const floorlamp: ItemArt = {
 const BAG_AT = [2, 52] as const;
 const BAG_BODY: readonly SpriteRect[] = [[1, 4, 9, 30, '#B91C1C'], [1, 4, 2, 30, '#DC2626'], [2, 34, 7, 2, '#111827']];
 const BAG_FRAME: readonly SpriteRect[] = BAG.filter((rect) => !BAG_BODY.some((b) => b.every((v, i) => v === rect[i])));
-const bagFrames = three((k) => {
+const bagFrames = (night: boolean) => three((k) => {
   const f: Rects = [];
-  for (const [x, y, w, h, c] of BAG_BODY) R(f, BAG_AT[0] + x + [0, 1, 0][k]!, BAG_AT[1] + y, w, h, c);
+  for (const [x, y, w, h, c] of BAG_BODY) R(f, BAG_AT[0] + x + [0, 1, 0][k]!, BAG_AT[1] + y, w, h, veiled(c, night));
   return f;
 });
 const bag: ItemArt = {
   id: 'corner.bag', slot: 'corner', frames: 3,
-  draw: ({ ramp }) => {
+  draw: ({ ramp, night }) => {
     const r: Rects = [];
     standing(r, BAG_FRAME, BAG_AT[0], BAG_AT[1], FLOOR_ROW, ramp);
-    return { base: r, frames: bagFrames };
+    return { base: r, frames: bagFrames(night) };
   },
 };
 

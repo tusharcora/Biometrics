@@ -3,7 +3,7 @@
 import { registerIcons, type SpriteRect } from '../icons';
 import { registerItems, type ItemArt } from '../items';
 import { px, R, type Rects } from '../paint';
-import { shelfPlank, sprite, three } from './shared';
+import { shelfPlank, sprite, three, veiled } from './shared';
 
 /** The board's trophy (CatDesk.dc.html:75). */
 const trophy = (a: string, b: string, c: string): SpriteRect[] => [[0, 0, 6, 1, b], [0, 1, 6, 3, a], [-1, 1, 1, 2, a], [6, 1, 1, 2, a], [1, 4, 4, 1, c], [2, 5, 2, 2, c], [1, 7, 4, 1, c], [1, 1, 1, 2, b]];
@@ -29,32 +29,32 @@ function onPlank(id: string, rects: readonly SpriteRect[], x: number, y: number)
 
 // Snow globe: three flakes fall a cell a frame inside the glass (the board's three '#F8FAFC' flakes leave the base).
 const GLOBE_AT = [110, 21] as const;
-const globeFrames = three((k) => {
+const globeFrames = (night: boolean) => three((k) => {
   const f: Rects = [];
-  [[2, 2], [5, 1], [4, 4]].forEach(([x, y], i) => px(f, GLOBE_AT[0] + x!, GLOBE_AT[1] + 1 + ((y! + k + i) % 5), '#F8FAFC'));
+  [[2, 2], [5, 1], [4, 4]].forEach(([x, y], i) => px(f, GLOBE_AT[0] + x!, GLOBE_AT[1] + 1 + ((y! + k + i) % 5), veiled('#F8FAFC', night)));
   return f;
 });
 const globe: ItemArt = {
   id: 'shelf.globe', slot: 'shelf', frames: 3,
-  draw: ({ ramp }) => {
+  draw: ({ ramp, night }) => {
     const r: Rects = [];
     shelfPlank(r);
     sprite(r, GLOBE.filter(([, , , , c]) => c !== '#F8FAFC'), GLOBE_AT[0], GLOBE_AT[1], ramp);
-    return { base: r, frames: globeFrames };
+    return { base: r, frames: globeFrames(night) };
   },
 };
 
 // Lucky cat: the raised paw (the rect at x 7, y -1, 1 × 3) waves down and up. Its 9 rows below the ears end on the
 // plank at y 30.
 const CAT_AT = [110, 21] as const;
-const catFrames = three((k) => { const f: Rects = []; R(f, CAT_AT[0] + 7, CAT_AT[1] - 1 + [0, 1, 0][k]!, 1, k === 1 ? 2 : 3, '#F8FAFC'); return f; });
+const catFrames = (night: boolean) => three((k) => { const f: Rects = []; R(f, CAT_AT[0] + 7, CAT_AT[1] - 1 + [0, 1, 0][k]!, 1, k === 1 ? 2 : 3, veiled('#F8FAFC', night)); return f; });
 const luckycat: ItemArt = {
   id: 'shelf.luckycat', slot: 'shelf', frames: 3,
-  draw: ({ ramp }) => {
+  draw: ({ ramp, night }) => {
     const r: Rects = [];
     shelfPlank(r);
     sprite(r, LUCKY_CAT.filter(([x, y]) => !(x === 7 && y === -1)), CAT_AT[0], CAT_AT[1], ramp);
-    return { base: r, frames: catFrames };
+    return { base: r, frames: catFrames(night) };
   },
 };
 

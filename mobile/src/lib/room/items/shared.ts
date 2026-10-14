@@ -10,7 +10,7 @@ import type { ItemArt, ItemContext } from '../items';
 import type { ItemId } from '../loadout';
 import type { RoomSlot } from '../slots';
 import { clipB, poly, R, shade, type Rects } from '../paint';
-import { windowSky } from '../weather';
+import { NIGHT_VEIL_ALPHA, NIGHT_VEIL_RGB, windowSky } from '../weather';
 
 export type { SpriteRect } from '../icons';
 
@@ -34,6 +34,19 @@ export const accentOn = (body: string): string => {
   const lum = (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
   return lum < 0.42 ? '#F5F5F4' : body;
 };
+
+/**
+ * A loop-frame colour as the night veil leaves it. Loop frames draw above the light layer, so a piece that is not lit
+ * (a swinging bag, falling flakes, steam) dims its own frames at night; screens and glows stay as they are.
+ * Takes '#RRGGBB' or 'rgba(r,g,b,a)' (the alpha is kept).
+ */
+export function veiled(c: string, night: boolean): string {
+  if (!night) return c;
+  const m = /^rgba\((\d+),(\d+),(\d+),([\d.]+)\)$/.exec(c);
+  if (!m) return mixHex(c, NIGHT_VEIL_RGB, NIGHT_VEIL_ALPHA);
+  const hex = '#' + [m[1], m[2], m[3]].map((v) => Number(v).toString(16).padStart(2, '0')).join('');
+  return `rgba(${rgbOf(mixHex(hex, NIGHT_VEIL_RGB, NIGHT_VEIL_ALPHA))},${m[4]})`;
+}
 
 /** '#FDE047' → '253,224,71', for glow(). */
 export function rgbOf(hex: string): string {

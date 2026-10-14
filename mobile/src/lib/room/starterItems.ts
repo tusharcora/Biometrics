@@ -6,7 +6,7 @@ import { darkenHex, mixHex } from '../colour';
 import { FLOOR_Y, ROOM_H, ROOM_W, WALL_X0, WALL_X1 } from './grid';
 import { registerItems, type ItemArt, type MonitorScreen } from './items';
 import { bookRow, clipB, E, floorSeams, glow, gradV, leaf, poly, pot, px, R, shade, type Rects } from './paint';
-import { accentOn, deskFurniture, shelfPlank, three, windowFrame } from './items/shared';
+import { accentOn, deskFurniture, shelfPlank, three, veiled, windowFrame } from './items/shared';
 
 const BOOKS = ['#60A5FA', '#F87171', '#FDE047', '#475569', '#A78BFA', '#34D399'];
 
@@ -144,7 +144,7 @@ const mug: ItemArt = {
   slot: 'desk_item',
   tint: true,
   frames: 3,
-  draw: ({ ramp }) => {
+  draw: ({ ramp, night }) => {
     const r: Rects = [];
     shade(r, 106, 72, 4, 1, 0.2);
     R(r, 104, 66, 4, 6, ramp.body);
@@ -154,7 +154,7 @@ const mug: ItemArt = {
     // Steam: three wisps rising one cell a frame.
     const steam = three((k) => {
       const f: Rects = [];
-      [[105, 63], [106, 61], [105, 59]].forEach(([sx, sy], i) => px(f, sx! + ((i + k) % 2), sy! - k, 'rgba(241,245,249,0.45)'));
+      [[105, 63], [106, 61], [105, 59]].forEach(([sx, sy], i) => px(f, sx! + ((i + k) % 2), sy! - k, veiled('rgba(241,245,249,0.45)', night)));
       return f;
     });
     return { base: r, frames: steam };

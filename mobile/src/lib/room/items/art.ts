@@ -4,7 +4,7 @@ import { registerItems, type ItemArt } from '../items';
 import { registerIcons, type SpriteRect } from '../icons';
 import { glow, R, type Rects } from '../paint';
 import { SLOT_ANCHORS } from '../slots';
-import { artFrame, darkenHex, sprite, spriteBox, three } from './shared';
+import { artFrame, darkenHex, sprite, spriteBox, three, veiled } from './shared';
 
 // The board sprites, verbatim (CatWindow.dc.html:78-88).
 const CALENDAR: readonly SpriteRect[] = [[0, 0, 14, 16, '#F1F5F9'], [0, 0, 14, 4, '#DC2626'], [3, 1, 1, 2, '#1F2937'], [10, 1, 1, 2, '#1F2937'], [2, 6, 2, 2, '#94A3B8'], [5, 6, 2, 2, '#94A3B8'], [8, 6, 2, 2, '#94A3B8'], [11, 6, 2, 2, '#94A3B8'], [2, 9, 2, 2, '#94A3B8'], [5, 9, 2, 2, '#DC2626'], [8, 9, 2, 2, '#94A3B8'], [11, 9, 2, 2, '#94A3B8'], [2, 12, 2, 2, '#94A3B8'], [5, 12, 2, 2, '#94A3B8'], [8, 12, 2, 2, '#94A3B8']];
@@ -29,7 +29,7 @@ function originOf(rects: readonly SpriteRect[]): [number, number] {
 const CLOCK_FACE: readonly SpriteRect[] = CLOCK.filter(([, , , , c]) => c !== '#1F2937' && c !== '#DC2626');
 const clock: ItemArt = {
   id: 'art.clock', slot: 'art', frames: 3,
-  draw: ({ ramp }) => {
+  draw: ({ ramp, night }) => {
     const r: Rects = [];
     artFrame(r, CLOCK_FACE, ramp, ANCHOR);
     const [ox, oy] = originOf(CLOCK);
@@ -40,8 +40,8 @@ const clock: ItemArt = {
       frames: three((k) => {
         const f: Rects = [];
         const [x, y, w, h] = HANDS[k]!;
-        R(f, ox + x, oy + y, w, h, '#1F2937');
-        R(f, ox + 7, oy + 7, 1, 1, '#DC2626');
+        R(f, ox + x, oy + y, w, h, veiled('#1F2937', night));
+        R(f, ox + 7, oy + 7, 1, 1, veiled('#DC2626', night));
         return f;
       }),
     };

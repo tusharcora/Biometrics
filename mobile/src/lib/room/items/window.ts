@@ -4,7 +4,7 @@
 import { registerItems, type ItemArt } from '../items';
 import { registerIcons, type SpriteRect } from '../icons';
 import { glow, R, type Rects } from '../paint';
-import { rgbOf, sprite, three, windowFrame } from './shared';
+import { rgbOf, sprite, three, tintOf, veiled, windowFrame } from './shared';
 
 // The board sprites, verbatim (CatWindow.dc.html:76, 93-99).
 const WIN: readonly SpriteRect[] = [[0, 0, 34, 30, '#1E2430'], [2, 2, 30, 13, '#8592A6'], [2, 15, 30, 13, '#A3AEC0'], [4, 6, 14, 4, '#E5E7EB'], [16, 9, 15, 5, '#CBD5E1'], [22, 4, 6, 5, '#FCD34D'], [16, 2, 2, 26, '#1E2430'], [2, 14, 30, 1, '#1E2430'], [-2, 29, 38, 2, '#191E28']];
@@ -60,7 +60,11 @@ const chime: ItemArt = {
     sprite(r, CHIME_BAR, O[0], O[1], ctx.ramp);
     return {
       base: r,
-      frames: three((k) => { const f: Rects = []; sprite(f, CHIME_TUBES, O[0] + [0, 1, -1][k]!, O[1], ctx.ramp); return f; }),
+      frames: three((k) => {
+        const f: Rects = [];
+        sprite(f, CHIME_TUBES.map(([x, y, w, h, c]) => [x, y, w, h, veiled(tintOf(c, ctx.ramp), ctx.night)] as const), O[0] + [0, 1, -1][k]!, O[1], ctx.ramp);
+        return f;
+      }),
     };
   },
 };
