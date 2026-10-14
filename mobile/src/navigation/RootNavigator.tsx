@@ -30,6 +30,8 @@ import { BedtimeGoalScreen } from '../screens/BedtimeGoalScreen';
 import { RecapBuilderScreen } from '../screens/RecapBuilderScreen';
 import { RecapScreen } from '../screens/RecapScreen';
 import { RecapStoryScreen } from '../screens/RecapStoryScreen';
+import { DecorateRoomScreen } from '../screens/DecorateRoomScreen';
+import type { DecorateSlot, DecorateTab } from '../lib/room/decorate';
 import { RecapsScreen } from '../screens/RecapsScreen';
 import { SocialStoryScreen } from '../screens/SocialStoryScreen';
 import { YearInPixelsScreen } from '../screens/YearInPixelsScreen';
@@ -113,6 +115,8 @@ export type RootStackParamList = {
   // id from a recap push, a ringed avatar and the Home shelf (it loads the recap itself and
   // hands a month to its recap screen).
   RecapStory: { recap: Recap } | { id: string };
+  // Decorate mode (spec 2026-10-14 KIP's room §6), full screen: from the KIP page's Decorate, on a tab or a slot.
+  DecorateRoom: { tab?: DecorateTab; slot?: DecorateSlot } | undefined;
   // Build your recap: a recap's own format plus Year in pixels, or Year in pixels alone.
   RecapBuilder: { id?: string; format: ShareFormat };
   YearInPixels: undefined;
@@ -255,6 +259,12 @@ export function RootNavigator() {
                 name="RecapStory"
                 component={RecapStoryScreen}
                 // Full screen with no system swipe: the viewer's own swipe down closes it.
+                options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }}
+              />
+              <Stack.Screen
+                name="DecorateRoom"
+                component={DecorateRoomScreen}
+                // Full screen with no system swipe: Cancel (or Android back) asks first when something changed.
                 options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }}
               />
               <Stack.Screen name="Recaps" component={RecapsScreen} options={{ title: 'Your recaps' }} />

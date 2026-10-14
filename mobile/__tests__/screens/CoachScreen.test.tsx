@@ -24,6 +24,12 @@ import { answer, doneEvent, openTurn, scriptTurn } from '../../jest-mocks/coachS
 import { KIP_COPY } from '../../src/lib/kipCopy';
 import { GENERAL_QUESTIONS, suggestedQuestions } from '../../src/lib/coachToday';
 import { followUpsFor } from '../../src/lib/coachAnswers';
+import { fetchCosmetics } from '../../src/api/cosmetics';
+import { loadCosmetics, resetCosmetics } from '../../src/lib/room/cosmeticsStore';
+import { setDecorateOpen } from '../../src/lib/room/decorateOpen';
+import { EMPTY_WORN, STARTER_LOADOUT } from '../../src/lib/room/loadout';
+
+jest.mock('../../src/api/cosmetics', () => ({ ...jest.requireActual('../../src/api/cosmetics'), fetchCosmetics: jest.fn() }));
 
 // The mocks, `status`, `today` and the helpers live in jest-mocks/coachScreenHarness (shared with KipPage.test).
 const mockNavigate = mockNav.navigate;
@@ -877,5 +883,65 @@ describe('CoachScreen: tab bar clearance', () => {
     const { getByTestId } = await openChat();
 
     expect(StyleSheet.flatten(getByTestId('coach-clearance').props.style).paddingBottom).toBe(0);
+  });
+});
+
+describe("CoachScreen: decorate (spec 2026-10-14 KIP's room §4, §6.1)", () => {
+  const COSMETICS = {
+    catalogueVersion: 1, owned: ['rug.red'], room: { ...STARTER_LOADOUT }, worn: { ...EMPTY_WORN }, version: 1,
+    counters: { recapsRead: 0, buddyCheers: 0 },
+  };
+  async function withCosmetics(fresh: { itemId: string; source: string }[]) {
+    (fetchCosmetics as jest.Mock).mockResolvedValue({ ...COSMETICS, fresh });
+    await act(async () => {
+      await loadCosmetics();
+    });
+  }
+  afterEach(() => {
+    resetCosmetics();
+    act(() => setDecorateOpen(false));
+  });
+
+  it('puts Decorate first in the header row, labelled, and opens decorate mode', async () => {
+    const utils = await openChat();
+    const order = ['kip-decorate-button', 'coach-conversations-button', 'coach-new-chat-button'];
+    const seen = utils.getByTestId('kip-header').findAll((n) => order.includes(n.props.testID)).map((n) => n.props.testID as string);
+    expect(seen.filter((id, i) => seen.indexOf(id) === i)).toEqual(order);
+    expect(utils.getByTestId('kip-decorate-button').props.accessibilityLabel).toBe("Decorate KIP's room");
+    fireEvent.press(utils.getByTestId('kip-decorate-button'));
+    expect(mockNavigate).toHaveBeenCalledWith('DecorateRoom');
+  });
+
+  it("shows Decorate beside Shrink room in the room card's footer", async () => {
+    const utils = await openChat();
+    expect(utils.getByTestId('kip-room-decorate')).toHaveTextContent('Decorate');
+    // The two share a row: the nearest host view around Decorate holds Shrink room too, and nothing else of the card.
+    let row = utils.getByTestId('kip-room-decorate').parent;
+    while (row && (typeof row.type !== 'string' || row.props.testID === 'kip-room-decorate')) row = row.parent;
+    expect(row!.props.className).toContain('flex-row');
+    expect(row!.findAll((n) => n.props.testID === 'kip-shrink-room').length).toBeGreaterThan(0);
+    fireEvent.press(utils.getByTestId('kip-room-decorate'));
+    expect(mockNavigate).toHaveBeenCalledWith('DecorateRoom');
+  });
+
+  it('shows the dot and says so when there is something new to place, and none without', async () => {
+    await withCosmetics([{ itemId: 'rug.red', source: 'family:SLEEP_GOAL:1' }]);
+    const utils = await openChat();
+    expect(utils.getByTestId('kip-decorate-dot')).toBeTruthy();
+    expect(utils.getByTestId('kip-decorate-button').props.accessibilityLabel).toBe("Decorate KIP's room. New things to place");
+    expect(utils.getByTestId('kip-room-decorate').props.accessibilityLabel).toBe("Decorate KIP's room. New things to place");
+    utils.unmount();
+    await withCosmetics([]);
+    const plain = await openChat();
+    expect(plain.queryByTestId('kip-decorate-dot')).toBeNull();
+    expect(plain.getByTestId('kip-decorate-button').props.accessibilityLabel).toBe("Decorate KIP's room");
+  });
+
+  it("pauses the room's loops while decorate mode is open", async () => {
+    const utils = await openChat();
+    fireEvent(utils.getByTestId('kip-room-frame-inner'), 'layout', { nativeEvent: { layout: { width: 323, height: 200, x: 0, y: 0 } } });
+    expect(utils.getByTestId('kip-room').props.room as string).not.toMatch(/:paused$/);
+    act(() => setDecorateOpen(true));
+    expect(utils.getByTestId('kip-room').props.room as string).toMatch(/:paused$/);
   });
 });

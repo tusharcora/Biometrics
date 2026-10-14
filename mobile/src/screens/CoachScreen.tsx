@@ -33,6 +33,9 @@ import { DEFAULT_THINKING_TEXT } from '../lib/thinkingText';
 import { useCoachStatusContext } from '../lib/coachStatus/CoachStatusProvider';
 import { useTodayScene } from '../lib/home/useTodayScene';
 import { KIP_COPY } from '../lib/kipCopy';
+import { hasUnseen, useCosmetics } from '../lib/room/cosmeticsStore';
+import { useDecorateOpen } from '../lib/room/decorateOpen';
+import { ROOM_COPY } from '../lib/room/roomCopy';
 import { kipStage, kipStatusLine, spokenLine } from '../lib/kipStage';
 import { readKipRoomShrunk, writeKipRoomShrunk } from '../lib/kipRoomPrefs';
 import { useKipTurn } from '../lib/useKipTurn';
@@ -454,6 +457,12 @@ export function CoachScreen() {
   const look = useKipTurn(stage, reduceMotion);
   const statusLine = kipStatusLine(stage.id, day.recovery, false);
   const openRecovery = useCallback(() => navigation.navigate('Recovery', { date: day.today }), [navigation, day.today]);
+  // Decorate (spec 2026-10-14 KIP's room §4, §6.1): a dot while something new waits to be placed; the room's loops
+  // pause while decorate mode is open (ruling 17).
+  const unseen = hasUnseen(useCosmetics());
+  const decorating = useDecorateOpen();
+  const decorateLabel = unseen ? ROOM_COPY.decorateLabelNew : ROOM_COPY.decorateLabel;
+  const openDecorate = useCallback(() => navigation.navigate('DecorateRoom'), [navigation]);
 
   const shrink = useCallback(() => {
     shrunkChosen.current = true;
@@ -479,14 +488,20 @@ export function CoachScreen() {
       window={day.window}
       recovery={day.recovery}
       reduceMotion={reduceMotion}
+      paused={decorating}
       onOpenRecovery={openRecovery}
       onLayout={(e) => {
         cardBottom.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height;
       }}
       footer={
-        <Button testID="kip-shrink-room" variant="outline" className="w-full" onPress={shrink}>
-          {KIP_COPY.shrinkRoom}
-        </Button>
+        <View className="flex-row gap-2">
+          <Button testID="kip-room-decorate" variant="outline" className="flex-1" accessibilityLabel={decorateLabel} onPress={openDecorate}>
+            {ROOM_COPY.decorate}
+          </Button>
+          <Button testID="kip-shrink-room" variant="outline" className="flex-1" onPress={shrink}>
+            {KIP_COPY.shrinkRoom}
+          </Button>
+        </View>
       }
     />
   );
@@ -499,6 +514,7 @@ export function CoachScreen() {
       statusLine={kipStatusLine(stage.id, day.recovery, true)}
       window={day.window}
       reduceMotion={reduceMotion}
+      paused={decorating}
       onExpand={expand}
       onConversations={() => setSheetOpen(true)}
       onNewChat={startNewChat}
@@ -527,23 +543,29 @@ export function CoachScreen() {
           {statusLine}
         </Text>
       </View>
-      {ready ? (
-        <View className="flex-row gap-2">
-          {/* Spec B adds Decorate first in this row. */}
-          <Button
-            testID="coach-conversations-button"
-            variant="outline"
-            size="icon-lg"
-            accessibilityLabel={KIP_COPY.conversationsLabel}
-            onPress={() => setSheetOpen(true)}
-          >
-            <Ionicons name="menu-outline" size={buttonIconSize('icon-lg')} color={colors.foreground} />
-          </Button>
-          <Button testID="coach-new-chat-button" variant="outline" size="icon-lg" accessibilityLabel={KIP_COPY.newChatLabel} onPress={startNewChat}>
-            <Ionicons name="create-outline" size={buttonIconSize('icon-lg')} color={colors.foreground} />
-          </Button>
-        </View>
-      ) : null}
+      {/* Decorate is always there; Conversations and New chat wait for the coach to be ready. */}
+      <View className="flex-row gap-2">
+        <Button testID="kip-decorate-button" variant="outline" size="icon-lg" accessibilityLabel={decorateLabel} onPress={openDecorate}>
+          <Ionicons name="color-palette-outline" size={buttonIconSize('icon-lg')} color={colors.foreground} />
+          {unseen ? <View testID="kip-decorate-dot" pointerEvents="none" className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary" /> : null}
+        </Button>
+        {ready ? (
+          <>
+            <Button
+              testID="coach-conversations-button"
+              variant="outline"
+              size="icon-lg"
+              accessibilityLabel={KIP_COPY.conversationsLabel}
+              onPress={() => setSheetOpen(true)}
+            >
+              <Ionicons name="menu-outline" size={buttonIconSize('icon-lg')} color={colors.foreground} />
+            </Button>
+            <Button testID="coach-new-chat-button" variant="outline" size="icon-lg" accessibilityLabel={KIP_COPY.newChatLabel} onPress={startNewChat}>
+              <Ionicons name="create-outline" size={buttonIconSize('icon-lg')} color={colors.foreground} />
+            </Button>
+          </>
+        ) : null}
+      </View>
     </View>
   );
 
