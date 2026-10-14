@@ -64,5 +64,9 @@ export const HOME_COPY = {
       return `${head}${line ? `. ${line.replace(/\.$/, '')}` : ''}. Open Tomorrow`;
     },
   },
-  askCoach: (needsConsent: boolean) => (needsConsent ? 'Ask Coach · see what’s shared first' : 'Ask Coach about today'),
+  askKip: (needsConsent: boolean) => (needsConsent ? 'Ask KIP · see what’s shared first' : 'Ask KIP about today'),
+  /** askKip as spoken: no middle dot. */
+  askKipLabel: (needsConsent: boolean) => (needsConsent ? 'Ask KIP, see what’s shared first' : 'Ask KIP about today'),
+  kipNote: "KIP's note",
+  readItAll: 'Read it all →',
 } as const;

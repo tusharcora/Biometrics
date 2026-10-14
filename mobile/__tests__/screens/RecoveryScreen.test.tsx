@@ -8,6 +8,8 @@ import { debtBlocks, RECOVERY_COPY } from '../../src/lib/recoveryCopy';
 import { FORECAST_COPY } from '../../src/lib/forecastCopy';
 import { COLORS } from '../../src/theme';
 import { makePage } from '../../jest-mocks/recoveryPageFixture';
+import { Rect } from 'react-native-svg';
+import { kipHeadRects } from '../../src/components/kip/KipHead';
 
 jest.mock('../../src/api/recovery');
 jest.mock('../../src/api/coach');
@@ -228,9 +230,9 @@ describe('RecoveryScreen: building and no data', () => {
 describe('RecoveryScreen: Ask bar', () => {
   it("asks the coach about today with the recovery prefill", async () => {
     renderScreen();
-    const bar = await screen.findByTestId('ask-coach-button');
+    const bar = await screen.findByTestId('ask-kip-button');
 
-    expect(bar.props.accessibilityLabel).toBe('Ask Mochi about today');
+    expect(bar.props.accessibilityLabel).toBe('Ask KIP about today');
     fireEvent.press(bar);
     expect(mockNavigation.navigate).toHaveBeenCalledWith(
       'Tabs',
@@ -244,14 +246,35 @@ describe('RecoveryScreen: Ask bar', () => {
     pageFetch.mockResolvedValue(makePage({ date: '2026-10-02', isToday: false }));
     renderScreen();
 
-    expect((await screen.findByTestId('ask-coach-button')).props.accessibilityLabel).toBe('Ask Mochi about this day');
+    expect((await screen.findByTestId('ask-kip-button')).props.accessibilityLabel).toBe('Ask KIP about this day');
   });
 
   it('is hidden when the coach is disabled', async () => {
     renderScreen({ ...STATUS, enabled: false });
     await screen.findByTestId('recovery-hero');
 
-    expect(screen.queryByTestId('ask-coach-button')).toBeNull();
+    expect(screen.queryByTestId('ask-kip-button')).toBeNull();
+  });
+
+  // The day's mood, from the hero's weather (Home F's mapping): 68 is mostly clear (idle), 80 clear (proud).
+  const headFills = () =>
+    within(screen.getByTestId('ask-kip-head', { includeHiddenElements: true })).UNSAFE_getAllByType(Rect).map((r) => r.props.fill);
+
+  it("draws KIP's head in the day's mood", async () => {
+    renderScreen();
+    await screen.findByTestId('ask-kip-button');
+
+    expect(screen.getByTestId('ask-kip-head', { includeHiddenElements: true })).toBeTruthy();
+    expect(headFills()).toEqual(kipHeadRects({ mood: 'idle' }).map((r) => r.fill));
+  });
+
+  it('is proud on a clear day', async () => {
+    const page = makePage();
+    pageFetch.mockResolvedValue(makePage({ score: { ...page.score!, score: 80 } }));
+    renderScreen();
+    await screen.findByTestId('ask-kip-button');
+
+    expect(headFills()).toEqual(kipHeadRects({ mood: 'proud' }).map((r) => r.fill));
   });
 });
 

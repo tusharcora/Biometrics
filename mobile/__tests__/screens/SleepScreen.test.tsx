@@ -234,7 +234,7 @@ describe('SleepScreen: hero', () => {
     expect(within(h).getByText("Waiting for last night's data")).toBeTruthy();
     expect(screen.getByText('No sleep recorded for this night.')).toBeTruthy();
     expect(await screen.findByText("Last night isn't in yet.")).toBeTruthy();
-    fireEvent.press(screen.getByTestId('ask-coach-button'));
+    fireEvent.press(screen.getByTestId('ask-kip-button'));
     expect(mockNavigation.navigate).toHaveBeenCalledWith('Tabs', { screen: 'Coach', params: { prefill: "Why don't I have sleep data for last night?" } }, { pop: true });
   });
 
@@ -405,8 +405,8 @@ describe('SleepScreen: goal row and Ask bar', () => {
 
   it('asks about last night, and about this night on a past one', async () => {
     renderScreen();
-    const bar = await screen.findByTestId('ask-coach-button');
-    expect(bar.props.accessibilityLabel).toBe('Ask Mochi about last night');
+    const bar = await screen.findByTestId('ask-kip-button');
+    expect(bar.props.accessibilityLabel).toBe('Ask KIP about last night');
     fireEvent.press(bar);
     expect(mockNavigation.navigate).toHaveBeenCalledWith('Tabs', { screen: 'Coach', params: { prefill: 'How was my sleep last night?' } }, { pop: true });
   });
@@ -415,8 +415,8 @@ describe('SleepScreen: goal row and Ask bar', () => {
     mockParams = { date: '2026-10-05' };
     renderScreen();
     await screen.findByTestId(`sleep-night-${TODAY}`);
-    const bar = await screen.findByTestId('ask-coach-button');
-    expect(bar.props.accessibilityLabel).toBe('Ask Mochi about this night');
+    const bar = await screen.findByTestId('ask-kip-button');
+    expect(bar.props.accessibilityLabel).toBe('Ask KIP about this night');
     fireEvent.press(bar);
     expect(mockNavigation.navigate).toHaveBeenCalledWith('Tabs', { screen: 'Coach', params: { prefill: 'How was my sleep on Monday 5 October?' } }, { pop: true });
   });
@@ -424,7 +424,7 @@ describe('SleepScreen: goal row and Ask bar', () => {
   it('the Ask bar is hidden when the coach is off; the info sheet still works', async () => {
     renderScreen({ ...STATUS, enabled: false });
     await hero();
-    expect(screen.queryByTestId('ask-coach-button')).toBeNull();
+    expect(screen.queryByTestId('ask-kip-button')).toBeNull();
     fireEvent.press(screen.getByTestId('sleep-info'));
     expect(await screen.findByTestId('sleep-info-sheet')).toBeTruthy();
   });
@@ -911,7 +911,7 @@ describe('SleepScreen: month', () => {
     for (const id of ['sleep-stat-average', 'sleep-stat-at-goal', 'sleep-stat-bedtime', 'sleep-stat-longest']) expect(statText(id)).toBe('—');
     expect(screen.getByLabelText('Previous month')).toBeDisabled();
     expect(await screen.findByTestId('sleep-goal-row')).toBeTruthy();
-    fireEvent.press(screen.getByTestId('ask-coach-button'));
+    fireEvent.press(screen.getByTestId('ask-kip-button'));
     expect(mockNavigation.navigate).toHaveBeenCalledWith('Tabs', { screen: 'Coach', params: { prefill: "Why don't I have sleep data for last night?" } }, { pop: true });
   });
 

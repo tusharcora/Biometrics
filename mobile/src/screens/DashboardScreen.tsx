@@ -24,7 +24,7 @@ import { useStoryRing } from '../components/recap/StoryRing';
 import { RecapShelf } from '../components/recap/RecapShelf';
 import { HomeHeader, ProfileButton } from '../components/home/HomeHeader';
 import { HomeScene, type SceneReadings, type SceneTarget } from '../components/home/HomeScene';
-import { AskCoachButton, TodayHeader, TodayTiles, type Read } from '../components/home/TodayTiles';
+import { AskKipButton, TodayHeader, TodayTiles, type Read } from '../components/home/TodayTiles';
 import { MetricTile } from '../components/home/metric-tile';
 import { COLORS, METRIC_ORDER, type MetricType } from '../theme';
 import { computeStats, buildHeadline, type MetricRecord } from '../lib/metricInsights';
@@ -77,7 +77,7 @@ export function greetingFor(date: Date): string {
 const PAGE = { gap: 14, paddingHorizontal: 20 } as const;
 
 // Home F (spec 2026-10-13 Home F): the scene with the header over its sky, the Today row, three tiles and Ask
-// Coach, then the rest of Home unchanged. Every read fails on its own; the scene never blocks the page.
+// KIP, then the rest of Home unchanged. Every read fails on its own; the scene never blocks the page.
 export function DashboardScreen() {
   const navigation = useNavigation<any>();
   const clearance = useTabBarClearance();
@@ -293,7 +293,7 @@ export function DashboardScreen() {
             bedtime={bedtime}
             onOpen={open}
           />
-          <AskCoachButton route={coachRoute} onPress={() => coachRoute && navigateToCoachEntry(navigation, coachRoute)} />
+          <AskKipButton route={coachRoute} mood={day.scene.mood} onPress={() => coachRoute && navigateToCoachEntry(navigation, coachRoute)} />
 
           <HabitLogCard />
 
@@ -302,7 +302,7 @@ export function DashboardScreen() {
 
           {/* The digest is the newest week's recap: it plays that week's story, whose last frame
               offers the full recap. */}
-          {coachRoute === 'Coach' ? <CoachDigestCard onOpenRecap={(id) => navigation.navigate('RecapStory', { id })} /> : null}
+          {coachRoute === 'Coach' ? <CoachDigestCard mood={day.scene.mood} onOpenRecap={(id) => navigation.navigate('RecapStory', { id })} /> : null}
 
           {metricsWithData.length > 0 ? (
             <View className="gap-3">
