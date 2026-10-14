@@ -1,12 +1,6 @@
 import { ApiError, apiFetch } from './client';
-import {
-  DEFAULT_THINKING_ATTACHMENT,
-  DEFAULT_THINKING_TEXT,
-  isThinkingAttachment,
-  isThinkingText,
-  type ThinkingAttachmentId,
-  type ThinkingTextId,
-} from '../components/characters/thinking';
+import { DEFAULT_THINKING_ATTACHMENT, isThinkingAttachment, type ThinkingAttachmentId } from '../components/characters/thinking';
+import { DEFAULT_THINKING_TEXT, resolveThinkingText, type ThinkingTextId } from '../lib/thinkingText';
 
 // The client must wait strictly longer than the server's own budget, or a slow
 // turn surfaces as a network error instead of the server's answer or error
@@ -424,7 +418,7 @@ export async function fetchCoachStatus(): Promise<CoachStatusDTO> {
       ? res.personas.filter((p): p is CoachPersonaDTO => !!p && typeof p === 'object').map(personaDTO)
       : [],
     thinkingAttachment: isThinkingAttachment(res.thinkingAttachment) ? res.thinkingAttachment : DEFAULT_THINKING_ATTACHMENT,
-    thinkingText: isThinkingText(res.thinkingText) ? res.thinkingText : DEFAULT_THINKING_TEXT,
+    thinkingText: resolveThinkingText(res.thinkingText),
   };
   if (res.enabled !== true) return { ...DISABLED_STATUS, ...persona };
   return {

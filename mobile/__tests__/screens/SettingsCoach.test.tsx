@@ -76,16 +76,16 @@ describe('SettingsScreen: Your coach', () => {
     expect(style).toHaveTextContent(/Thinking style/);
     expect(style).toHaveTextContent(/Lightbulb/);
     expect(text).toHaveTextContent(/Thinking text/);
-    expect(text).toHaveTextContent(/What it's doing/);
+    expect(text).toHaveTextContent(/Steps/);
   });
 
   it('names a changed choice and opens the right screen', async () => {
-    const { findByTestId } = render(withCharacter(screen, { status, thinkingAttachment: 'gears', thinkingText: 'dialog' }));
+    const { findByTestId } = render(withCharacter(screen, { status, thinkingAttachment: 'gears', thinkingText: 'typewriter' }));
 
     const style = await findByTestId('settings-thinking-style');
     const text = await findByTestId('settings-thinking-text');
     expect(style).toHaveTextContent(/Gears/);
-    expect(text).toHaveTextContent(/Retro dialog box/);
+    expect(text).toHaveTextContent(/Typewriter/);
     fireEvent.press(style);
     expect(navigate).toHaveBeenCalledWith('ThinkingStyle');
     fireEvent.press(text);

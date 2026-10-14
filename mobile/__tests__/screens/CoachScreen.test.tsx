@@ -1,6 +1,6 @@
 import React from 'react';
 import { AccessibilityInfo, ScrollView, StyleSheet } from 'react-native';
-import { render, fireEvent, waitFor, act, within } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { CoachScreen } from '../../src/screens/CoachScreen';
 import { useKeyboardVisible } from '../../src/lib/useKeyboardVisible';
 import { FLOATING_BAR_HEIGHT, FLOATING_BAR_MARGIN } from '../../src/navigation/tabBarLayout';
@@ -22,11 +22,9 @@ import {
 import { streamCoachMessage } from '../../src/api/coachStream';
 import { answer, doneEvent, openTurn, scriptTurn } from '../../jest-mocks/coachStreamFake';
 import { withCharacter } from '../../jest-mocks/characterContext';
-import type { ThinkingTextId } from '../../src/components/characters/thinking';
+import type { ThinkingTextId } from '../../src/lib/thinkingText';
 import { GENERAL_QUESTIONS, suggestedQuestions } from '../../src/lib/coachToday';
 import { followUpsFor } from '../../src/lib/coachAnswers';
-import { DIALOG_INK, DIALOG_TEXT_CLASS } from '../../src/components/coach/thinking/Dialog';
-import { FONTS } from '../../src/theme';
 
 jest.mock('../../src/api/coach', () => ({
   ...jest.requireActual('../../src/api/coach'),
@@ -462,8 +460,8 @@ describe('CoachScreen: streamed answers', () => {
 
     expect(utils.getByText('How did I sleep?')).toBeTruthy();
     expect(utils.getByTestId('coach-input').props.value).toBe('');
-    // Steps (the default) shows a personality line until the first status arrives.
-    expect(utils.getByTestId('coach-thinking')).toHaveTextContent(/Mochi is mulling it over/);
+    // Steps (the default) shows KIP's line until the first status arrives.
+    expect(utils.getByTestId('coach-thinking')).toHaveTextContent(/KIP is typing it up/);
     await live.emit({ type: 'status', label: 'Looking at your sleep…' });
     expect(utils.getByTestId('coach-thinking')).toHaveTextContent(/Looking at your sleep…/);
     expect(utils.getByTestId('thinking-step-status-active')).toBeTruthy();
@@ -630,7 +628,7 @@ describe('CoachScreen: streamed answers', () => {
     const utils = await openChat('lines');
     await ask(utils, 'How did I sleep?');
 
-    expect(utils.getByTestId('coach-thinking')).toHaveTextContent(/Mochi is mulling it over/);
+    expect(utils.getByTestId('coach-thinking')).toHaveTextContent(/KIP is typing it up/);
     await live.emit({ type: 'status', step: 'route', label: 'Looking at your sleep…' });
     // Lines ignores step labels (spec §5).
     expect(utils.getByTestId('coach-thinking')).not.toHaveTextContent(/Looking at your sleep/);
@@ -676,37 +674,15 @@ describe('CoachScreen: streamed answers', () => {
     expect(utils.queryByTestId('coach-thinking')).toBeNull();
   });
 
-  it('with the dialog thinking text, the streaming answer types into the same box, then reads as a normal message', async () => {
-    const live = openTurn(stream);
-    const utils = await openChat('dialog');
-    await ask(utils, 'How did I sleep?');
-
-    // The box with Mochi's name tab; its line types in from the first letter.
-    expect(utils.getByTestId('thinking-dialog-tab')).toHaveTextContent('Mochi');
-    await live.emit({ type: 'text', sentence: 'Mostly clear skies.' });
-
-    expect(utils.queryByTestId('coach-thinking')).toBeNull();
-    expect(utils.getByTestId('reply-frame-dialog')).toHaveTextContent(/Mostly clear skies\./);
-    // The answer keeps the box's pixel text and light ink, not the row's Geist body.
-    const streamed = within(utils.getByTestId('reply-frame-dialog')).getByText(/Mostly clear skies\./);
-    expect(String(streamed.props.className).split(' ')).toEqual(expect.arrayContaining(DIALOG_TEXT_CLASS.split(' ')));
-    expect(StyleSheet.flatten(streamed.props.style)).toEqual(expect.objectContaining({ fontFamily: FONTS.pixel, color: DIALOG_INK }));
-    expect(utils.queryByTestId('chat-bubble-assistant')).toBeNull();
-
-    await live.finish(doneEvent());
-    expect(utils.queryByTestId('reply-frame-dialog')).toBeNull();
-    expect(utils.getByTestId('chat-bubble-assistant')).toHaveTextContent('Mostly clear skies.');
-  });
-
-  it('with the placeholder thinking text, the streaming answer flows into the bubble', async () => {
+  it('with the placeholder thinking text, the streaming answer is a normal reply bubble', async () => {
     const live = openTurn(stream);
     const utils = await openChat('placeholder');
     await ask(utils, 'How did I sleep?');
     await live.emit({ type: 'text', sentence: 'Mostly clear skies.' });
 
-    expect(utils.getByTestId('reply-frame-placeholder')).toHaveTextContent(/Mochi.*Mostly clear skies\./);
+    expect(utils.queryByTestId('coach-thinking')).toBeNull();
+    expect(utils.getByTestId('chat-bubble-assistant')).toHaveTextContent('Mostly clear skies.');
     await live.finish(doneEvent());
-    expect(utils.queryByTestId('reply-frame-placeholder')).toBeNull();
   });
 
   it('announces a finished answer once, but not a safety reply', async () => {

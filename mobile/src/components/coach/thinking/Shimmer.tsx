@@ -4,17 +4,17 @@ import Animated, { cancelAnimation, Easing, interpolateColor, useAnimatedStyle, 
 import { useColorScheme } from 'nativewind';
 import { Text, textStyleFor } from '../../ui/text';
 import { COLORS } from '../../../theme';
-import { useCoachVoice, useElapsed } from './shared';
+import { useElapsed, useKipVoice } from './shared';
 import type { ThinkingStyleProps } from './types';
 
 const PULSE_MS = 900;
 
-// G: "Pengu is thinking" washing between muted and the coach accent, plus a
+// G: "KIP is thinking" washing between muted and KIP's label colour, plus a
 // seconds counter. (The mockup's gradient sweep needs expo-linear-gradient,
 // which the app does not ship, so this is the opacity-pulse fallback the plan
 // allows: a colour pulse on one Text.) Frozen, it stays muted.
-export function Shimmer({ characterId, paused }: ThinkingStyleProps) {
-  const { name, text } = useCoachVoice(characterId);
+export function Shimmer({ paused }: ThinkingStyleProps) {
+  const { name, text } = useKipVoice();
   const { colorScheme } = useColorScheme();
   const muted = (colorScheme === 'dark' ? COLORS.dark : COLORS.light).muted;
   const elapsed = useElapsed(paused);

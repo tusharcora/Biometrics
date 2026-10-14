@@ -522,37 +522,37 @@ describe('CharacterProvider: thinking settings', () => {
 
     expect(result.current.thinkingAttachment).toBe('bulb');
     expect(result.current.thinkingText).toBe('steps');
-    await act(async () => reply.resolve({ ...status, thinkingAttachment: 'clock', thinkingText: 'tag' }));
+    await act(async () => reply.resolve({ ...status, thinkingAttachment: 'clock', thinkingText: 'shimmer' }));
 
     expect(result.current.thinkingAttachment).toBe('clock');
-    expect(result.current.thinkingText).toBe('tag');
-    expect(writeCachedThinking).toHaveBeenCalledWith({ attachment: 'clock', text: 'tag' });
+    expect(result.current.thinkingText).toBe('shimmer');
+    expect(writeCachedThinking).toHaveBeenCalledWith({ attachment: 'clock', text: 'shimmer' });
   });
 
   it('shows the cached settings on a signed-in cold start, before the status arrives', async () => {
-    (readCachedThinking as jest.Mock).mockResolvedValue({ attachment: 'gears', text: 'dialog' });
+    (readCachedThinking as jest.Mock).mockResolvedValue({ attachment: 'gears', text: 'typewriter' });
     (fetchCoachStatus as jest.Mock).mockReturnValue(new Promise(() => {}));
     const { result } = renderCharacter();
 
     await waitFor(() => expect(result.current.thinkingAttachment).toBe('gears'));
-    expect(result.current.thinkingText).toBe('dialog');
+    expect(result.current.thinkingText).toBe('typewriter');
   });
 
   it('does not let a slow cache read replace the settings the server already sent', async () => {
     const cache = deferred<{ attachment: string; text: string } | null>();
     (readCachedThinking as jest.Mock).mockReturnValue(cache.promise);
-    (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, thinkingAttachment: 'clock', thinkingText: 'tag' });
+    (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, thinkingAttachment: 'clock', thinkingText: 'shimmer' });
     const { result } = renderCharacter();
     await waitFor(() => expect(result.current.thinkingAttachment).toBe('clock'));
 
-    await act(async () => cache.resolve({ attachment: 'gears', text: 'dialog' }));
+    await act(async () => cache.resolve({ attachment: 'gears', text: 'typewriter' }));
 
     expect(result.current.thinkingAttachment).toBe('clock');
-    expect(result.current.thinkingText).toBe('tag');
+    expect(result.current.thinkingText).toBe('shimmer');
   });
 
   it('falls back to the defaults for a status without thinking fields (an older server, via useSetCoachStatus)', async () => {
-    (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, thinkingAttachment: 'clock', thinkingText: 'tag' });
+    (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, thinkingAttachment: 'clock', thinkingText: 'shimmer' });
     const { result } = renderHook(() => ({ character: useCharacter(), setStatus: useSetCoachStatus() }), {
       wrapper: CharacterProvider,
     });
@@ -570,14 +570,14 @@ describe('CharacterProvider: thinking settings', () => {
     await waitFor(() => expect(result.current.statusLoaded).toBe(true));
 
     await act(async () => {
-      await result.current.chooseThinking({ text: 'dialog' });
+      await result.current.chooseThinking({ text: 'typewriter' });
     });
 
     expect(result.current.thinkingAttachment).toBe('bulb');
-    expect(result.current.thinkingText).toBe('dialog');
-    expect(result.current.status?.thinkingText).toBe('dialog');
-    expect(setCoachThinking).toHaveBeenCalledWith({ text: 'dialog' });
-    expect(writeCachedThinking).toHaveBeenLastCalledWith({ attachment: 'bulb', text: 'dialog' });
+    expect(result.current.thinkingText).toBe('typewriter');
+    expect(result.current.status?.thinkingText).toBe('typewriter');
+    expect(setCoachThinking).toHaveBeenCalledWith({ text: 'typewriter' });
+    expect(writeCachedThinking).toHaveBeenLastCalledWith({ attachment: 'bulb', text: 'typewriter' });
   });
 
   it('switches the thinking text at once and rolls back when the save fails', async () => {
@@ -590,11 +590,11 @@ describe('CharacterProvider: thinking settings', () => {
     let failed: unknown;
     let done!: Promise<void>;
     act(() => {
-      done = result.current.chooseThinking({ text: 'dialog', attachment: 'gears' }).catch((e: unknown) => {
+      done = result.current.chooseThinking({ text: 'typewriter', attachment: 'gears' }).catch((e: unknown) => {
         failed = e;
       });
     });
-    expect(result.current.thinkingText).toBe('dialog');
+    expect(result.current.thinkingText).toBe('typewriter');
     expect(result.current.thinkingAttachment).toBe('gears');
 
     await act(async () => {
@@ -648,12 +648,12 @@ describe('CharacterProvider: thinking settings', () => {
 
   it('is the defaults when signed out, reads no cache and saves nothing', async () => {
     mockAuth = { session: null, isPending: false };
-    (readCachedThinking as jest.Mock).mockResolvedValue({ attachment: 'gears', text: 'dialog' });
+    (readCachedThinking as jest.Mock).mockResolvedValue({ attachment: 'gears', text: 'typewriter' });
     const { result } = renderCharacter();
 
     await waitFor(() => expect(clearCachedCharacter).toHaveBeenCalled());
     await act(async () => {
-      await result.current.chooseThinking({ text: 'dialog' });
+      await result.current.chooseThinking({ text: 'typewriter' });
     });
     expect(result.current.thinkingAttachment).toBe('bulb');
     expect(result.current.thinkingText).toBe('steps');
@@ -662,7 +662,7 @@ describe('CharacterProvider: thinking settings', () => {
   });
 
   it('goes back to the defaults on sign-out', async () => {
-    (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, thinkingAttachment: 'clock', thinkingText: 'tag' });
+    (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, thinkingAttachment: 'clock', thinkingText: 'shimmer' });
     const { result, rerender } = renderCharacter();
     await waitFor(() => expect(result.current.thinkingAttachment).toBe('clock'));
 

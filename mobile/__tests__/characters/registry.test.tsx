@@ -68,13 +68,14 @@ describe('registry', () => {
 describe('thinking settings', () => {
   it('lists the thinking settings with their defaults', () => {
     expect(THINKING_ATTACHMENTS).toHaveLength(9);
-    expect(THINKING_TEXTS).toHaveLength(10);
+    expect(THINKING_TEXTS).toHaveLength(5);
     expect(DEFAULT_THINKING_ATTACHMENT).toBe('bulb');
     expect(DEFAULT_THINKING_TEXT).toBe('steps');
     expect(isThinkingAttachment('rocket')).toBe(false);
     expect(isThinkingAttachment('spinner')).toBe(true);
     expect(isThinkingText('__proto__')).toBe(false);
-    expect(isThinkingText('dialog')).toBe(true);
+    expect(isThinkingText('dialog')).toBe(false);
+    expect(isThinkingText('shimmer')).toBe(true);
   });
 
   it('names every attachment and text style', () => {

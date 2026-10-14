@@ -3,15 +3,10 @@ import { View } from 'react-native';
 import type { AnswerCardDTO, CoachMessageSource } from '../../api/coach';
 import type { CoachChatMessage } from '../../lib/useCoachConversation';
 import { followUpsFor } from '../../lib/coachAnswers';
-import { cn } from '../../lib/utils';
 import { Text } from '../ui/text';
 import { Card } from '../ui/card';
 import { Button } from '../ui/button';
 import { ChatBubble } from '../ui/chat-bubble';
-import { StreamingText } from '../ui/streaming-text';
-import { useCharacterOptional } from '../../characters/CharacterContext';
-import { characterInfo } from '../characters/registry';
-import { ReplyFrame, isReplyFrameStyle, replyFrameTextClass, replyFrameTextStyle } from './thinking/ReplyFrame';
 import { MemoryProposalChips } from '../memory-proposal-chips';
 import { AnswerCard } from './AnswerCard';
 import { FollowUpChips } from './FollowUpChips';
@@ -42,7 +37,6 @@ export const CoachMessageRow = memo(function CoachMessageRow({
   onOverrideSafety,
   onOpenSource,
 }: CoachMessageRowProps) {
-  const characterCtx = useCharacterOptional();
   if (message.role === 'user') {
     return (
       <View className="gap-1">
@@ -58,17 +52,9 @@ export const CoachMessageRow = memo(function CoachMessageRow({
   // The empty answer being waited on shows as the thinking line instead.
   if (message.state === 'streaming' && !message.text && !message.safety) return null;
   const { card, safety } = message;
-  // The answer still streaming in, under a thinking text whose frame it flows
-  // into (B, I). Once done it renders as a normal message, like all history.
-  const thinkingText = characterCtx?.thinkingText;
-  const frame = message.state === 'streaming' && !safety && isReplyFrameStyle(thinkingText) ? thinkingText : null;
   return (
     <View className="gap-2">
-      {message.text && frame ? (
-        <ReplyFrame style={frame} characterId={characterInfo(characterCtx?.characterId).id}>
-          <StreamingText text={message.text} animate={false} className={cn('text-body', replyFrameTextClass(frame))} style={replyFrameTextStyle(frame)} />
-        </ReplyFrame>
-      ) : message.text ? (
+      {message.text ? (
         <ChatBubble role="assistant" text={message.text} source={message.source as CoachMessageSource} animate={false}>
           {safety ? (
             <View className="gap-3">

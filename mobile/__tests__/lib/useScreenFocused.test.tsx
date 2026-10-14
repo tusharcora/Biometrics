@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, renderHook } from '@testing-library/react-native';
 import { NavigationContext } from '@react-navigation/native';
-import { useScreenFocused } from '../../src/characters/useScreenFocused';
+import { useScreenFocused } from '../../src/lib/useScreenFocused';
 
 function fakeNavigation(initiallyFocused: boolean) {
   const listeners: Record<string, () => void> = {};

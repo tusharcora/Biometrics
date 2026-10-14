@@ -1,20 +1,20 @@
 import { act, renderHook } from '@testing-library/react-native';
-import { useSpriteClock } from '../../src/components/characters/useSpriteClock';
+import { useFrameClock } from '../../src/lib/useFrameClock';
 
-describe('useSpriteClock', () => {
+describe('useFrameClock', () => {
   beforeEach(() => jest.useFakeTimers());
   afterEach(() => jest.useRealTimers());
 
   it('runs no timer while paused, and stays at 0', () => {
-    const { result } = renderHook(() => useSpriteClock(true));
+    const { result } = renderHook(() => useFrameClock(true));
     expect(jest.getTimerCount()).toBe(0);
     act(() => jest.advanceTimersByTime(500));
     expect(result.current).toBe(0);
   });
 
   it('shares one interval between sprites and stops it when the last one goes', () => {
-    const a = renderHook(() => useSpriteClock(false));
-    const b = renderHook(() => useSpriteClock(false));
+    const a = renderHook(() => useFrameClock(false));
+    const b = renderHook(() => useFrameClock(false));
     expect(jest.getTimerCount()).toBe(1);
     act(() => jest.advanceTimersByTime(600));
     expect(a.result.current).toBeGreaterThan(0);
@@ -26,7 +26,7 @@ describe('useSpriteClock', () => {
   });
 
   it('freezes at 0 and drops its timer when paused', () => {
-    const { result, rerender } = renderHook(({ paused }: { paused: boolean }) => useSpriteClock(paused), {
+    const { result, rerender } = renderHook(({ paused }: { paused: boolean }) => useFrameClock(paused), {
       initialProps: { paused: false },
     });
     act(() => jest.advanceTimersByTime(600));
@@ -34,5 +34,10 @@ describe('useSpriteClock', () => {
     rerender({ paused: true });
     expect(result.current).toBe(0);
     expect(jest.getTimerCount()).toBe(0);
+  });
+
+  it('is the same tick through the old name until the cast is deleted', () => {
+    const { useSpriteClock } = require('../../src/components/characters/useSpriteClock');
+    expect(useSpriteClock).toBe(useFrameClock);
   });
 });

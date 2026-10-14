@@ -2,8 +2,7 @@ import React, { useEffect } from 'react';
 import { View, type ViewStyle } from 'react-native';
 import Animated, { cancelAnimation, Easing, useAnimatedStyle, useSharedValue, withRepeat, withTiming } from 'react-native-reanimated';
 import { Text } from '../../ui/text';
-import type { CharacterId } from '../../characters/types';
-import { useCoachVoice } from './shared';
+import { useKipVoice } from './shared';
 import type { ThinkingStyleProps } from './types';
 import { useThinkingLine } from './useThinkingLine';
 
@@ -11,12 +10,11 @@ const BARS = ['92%', '74%', '48%'] as const;
 const PULSE_MS = 700;
 const PULSE_LOW = 0.35;
 const PULSE_HIGH = 0.8;
-// The thinking bubble's width, and its lift off the row's bottom edge (the
-// streaming answer's bubble keeps both, so the box doesn't move; ReplyFrame).
+// The thinking bubble's width, and its lift off the row's bottom edge.
 export const PLACEHOLDER_WIDTH = 210;
 export const PLACEHOLDER_BOTTOM = 10;
 
-/** The reply bubble B draws while thinking, and the answer then streams into (ReplyFrame). */
+/** The reply bubble B draws while thinking. */
 export function PlaceholderBubble({ children, style, testID }: { children: React.ReactNode; style?: ViewStyle; testID?: string }) {
   return (
     <View testID={testID} className="self-start rounded-2xl rounded-bl-sm border border-border bg-muted px-3 py-2.5" style={style}>
@@ -25,21 +23,11 @@ export function PlaceholderBubble({ children, style, testID }: { children: React
   );
 }
 
-/** "Kit" in the accent at the top of the bubble. */
-export function BubbleName({ characterId }: { characterId: CharacterId }) {
-  const { name, text } = useCoachVoice(characterId);
-  return (
-    <Text className="mb-1 text-caption font-semibold" style={{ color: text }}>
-      {name}
-    </Text>
-  );
-}
-
-// B: a reply bubble with "Kit is judging your bedtime..." and three accent
-// lines pulsing where the answer will appear.
-export function Placeholder({ characterId, paused }: ThinkingStyleProps) {
-  const { name, text, accent } = useCoachVoice(characterId);
-  const { line } = useThinkingLine(characterId, paused);
+// B: a reply bubble with "KIP is typing it up..." and three accent lines
+// pulsing where the answer will appear.
+export function Placeholder({ paused }: ThinkingStyleProps) {
+  const { name, text, accent } = useKipVoice();
+  const { line } = useThinkingLine(paused);
   const pulse = useSharedValue(PULSE_LOW);
 
   useEffect(() => {

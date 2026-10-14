@@ -78,7 +78,7 @@ export function CoachScreen() {
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
   const prefill = route?.params?.prefill;
   const characterCtx = useCharacterOptional();
-  const { id: characterId, name } = characterInfo(characterCtx?.characterId);
+  const { name } = characterInfo(characterCtx?.characterId);
   const thinkingText = characterCtx?.thinkingText ?? DEFAULT_THINKING_TEXT;
 
   const [phase, setPhase] = useState<Phase>('loading');
@@ -514,7 +514,7 @@ export function CoachScreen() {
 
             {showThinking ? (
               <View className="items-start">
-                <ThinkingRow style={thinkingText} characterId={characterId} steps={steps} paused={!focused} testID="coach-thinking" />
+                <ThinkingRow style={thinkingText} steps={steps} paused={!focused} testID="coach-thinking" />
               </View>
             ) : null}
 

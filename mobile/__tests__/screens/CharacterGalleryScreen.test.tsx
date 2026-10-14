@@ -38,13 +38,13 @@ describe('CharacterGalleryScreen', () => {
     );
   });
 
-  it('shows the 10 thinking text styles and the size ladder', () => {
+  it('shows the five thinking text styles, each with KIP\'s head, and the size ladder', () => {
     const utils = render(<CharacterGalleryScreen />);
-    expect(labelsIn(utils.getByTestId('gallery-texts', HIDDEN_OK))).toHaveLength(THINKING_TEXTS.length);
+    expect(within(utils.getByTestId('gallery-texts', HIDDEN_OK)).getAllByTestId('thinking-kip-head', HIDDEN_OK)).toHaveLength(THINKING_TEXTS.length);
     expect(labelsIn(utils.getByTestId('gallery-ladder', HIDDEN_OK))).toEqual(
       [18, 20, 36, 40, 52, 64, 120, 180].map((size) => `character:mochi:idle:${size}:playing:none`),
     );
-    expect(labels(utils)).toHaveLength(15 * 4 + 9 + 10 + 8);
+    expect(labels(utils)).toHaveLength(15 * 4 + 9 + 8);
   });
 
   it('pauses and resumes every character', () => {

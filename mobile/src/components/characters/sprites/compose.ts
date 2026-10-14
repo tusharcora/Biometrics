@@ -2,6 +2,8 @@
 // 12-column left half → a 24×24 colour grid for one eye mode. Narrow → eye
 // edits → mirror → shade the body → soft outline → optional resting dim.
 
+import { mixHex, darkenHex } from '../../../lib/colour';
+
 export const SPRITE_SIZE = 24;
 const HALF = 12;
 const NEVER_OUTLINED = new Set(['.', 'x', 'z', 't']);
@@ -25,15 +27,9 @@ export interface SpriteDef {
 export type EyeMode = 'open' | 'blink' | 'up' | 'happy' | 'shut';
 export type SpriteGrid = readonly (string | null)[];
 
-export function darkenHex(hex: string, k: number): string {
-  const n = parseInt(hex.slice(1), 16);
-  return '#' + [16, 8, 0].map((s) => Math.round(((n >> s) & 255) * k).toString(16).padStart(2, '0')).join('');
-}
-
-export function mixHex(a: string, b: string, k: number): string {
-  const x = parseInt(a.slice(1), 16), y = parseInt(b.slice(1), 16);
-  return '#' + [16, 8, 0].map((s) => Math.round(((x >> s) & 255) * (1 - k) + ((y >> s) & 255) * k).toString(16).padStart(2, '0')).join('');
-}
+// mixHex and darkenHex moved to lib/colour.ts (spec 2026-10-14 KIP Coach §1); imported above so this file's own
+// calls stay bound, and re-exported until the cast goes in Task 14.
+export { mixHex, darkenHex };
 
 /** Drop k columns, each time the one most like its outer neighbour, padding the outside. */
 export function narrowHalf(half: readonly string[], k: number): string[] {

@@ -86,8 +86,8 @@ describe('readCachedThinking', () => {
     await expect(readCachedThinking()).resolves.toEqual({ attachment: 'gears', text: 'steps' });
     expect(SecureStore.getItemAsync).toHaveBeenCalledWith('thinking');
 
-    (SecureStore.getItemAsync as jest.Mock).mockResolvedValueOnce(JSON.stringify({ attachment: 7, text: 'dialog' }));
-    await expect(readCachedThinking()).resolves.toEqual({ attachment: 'bulb', text: 'dialog' });
+    (SecureStore.getItemAsync as jest.Mock).mockResolvedValueOnce(JSON.stringify({ attachment: 7, text: 'typewriter' }));
+    await expect(readCachedThinking()).resolves.toEqual({ attachment: 'bulb', text: 'typewriter' });
   });
 
   it('returns null when nothing is stored, the entry is not JSON, or the read fails', async () => {
@@ -106,14 +106,14 @@ describe('writeCachedThinking', () => {
   it('stores the settings as JSON under thinking', async () => {
     (SecureStore.setItemAsync as jest.Mock).mockResolvedValue(undefined);
 
-    await writeCachedThinking({ attachment: 'clock', text: 'tag' });
+    await writeCachedThinking({ attachment: 'clock', text: 'shimmer' });
 
-    expect(SecureStore.setItemAsync).toHaveBeenCalledWith('thinking', JSON.stringify({ attachment: 'clock', text: 'tag' }));
+    expect(SecureStore.setItemAsync).toHaveBeenCalledWith('thinking', JSON.stringify({ attachment: 'clock', text: 'shimmer' }));
   });
 
   it('does not reject when the keychain write fails', async () => {
     (SecureStore.setItemAsync as jest.Mock).mockRejectedValue(new Error('locked'));
 
-    await expect(writeCachedThinking({ attachment: 'clock', text: 'tag' })).resolves.toBeUndefined();
+    await expect(writeCachedThinking({ attachment: 'clock', text: 'shimmer' })).resolves.toBeUndefined();
   });
 });

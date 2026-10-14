@@ -80,7 +80,7 @@ export function CharacterGalleryScreen() {
         {THINKING_TEXTS.map((style) => (
           <View key={style} style={{ gap: 6 }}>
             <Text className="text-caption" style={ink}>{THINKING_TEXT_NAMES[style].name}</Text>
-            <ThinkingRow style={style} characterId="mochi" steps={SAMPLE_STEPS} paused={paused} />
+            <ThinkingRow style={style} steps={SAMPLE_STEPS} paused={paused} />
           </View>
         ))}
       </View>

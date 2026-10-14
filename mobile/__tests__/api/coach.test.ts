@@ -134,9 +134,14 @@ describe('fetchCoachStatus', () => {
   });
 
   it('reads the thinking settings the server sends, even while the coach is off', async () => {
-    fetchMock.mockResolvedValueOnce(ok({ ...status, enabled: false, thinkingAttachment: 'gears', thinkingText: 'dialog' }));
+    fetchMock.mockResolvedValueOnce(ok({ ...status, enabled: false, thinkingAttachment: 'gears', thinkingText: 'typewriter' }));
     const result = await fetchCoachStatus();
-    expect([result.thinkingAttachment, result.thinkingText]).toEqual(['gears', 'dialog']);
+    expect([result.thinkingAttachment, result.thinkingText]).toEqual(['gears', 'typewriter']);
+  });
+
+  it('reads a retired thinking text (an older app chose it) as steps', async () => {
+    fetchMock.mockResolvedValueOnce(ok({ ...status, thinkingText: 'dialog' }));
+    expect((await fetchCoachStatus()).thinkingText).toBe('steps');
   });
 
   it('replaces unknown thinking ids with the defaults', async () => {
