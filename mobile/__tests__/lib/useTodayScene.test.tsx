@@ -6,6 +6,7 @@ import { fetchSleep } from '../../src/api/sleep';
 import { sceneState, todayScore, todayWeather } from '../../src/lib/home/scene';
 import { verdictWord } from '../../src/lib/kipCopy';
 import { scoreBand } from '../../src/lib/scoreInsights';
+import { weatherForScore } from '../../src/lib/recoveryCopy';
 
 jest.mock('../../src/api/scores', () => ({ ...jest.requireActual('../../src/api/scores'), fetchScoresWithBands: jest.fn() }));
 jest.mock('../../src/api/sleep', () => ({ ...jest.requireActual('../../src/api/sleep'), fetchSleep: jest.fn() }));
@@ -41,6 +42,16 @@ it('gives Home and the KIP page the same state for the same reads', async () => 
   const band = scoreBand(58, undefined);
   expect(a.result.current.recovery).toEqual({ score: 58, band });
   expect(verdictWord(a.result.current.recovery.band)).toBe(verdictWord(band));
+});
+
+it('bands the unrounded score, so the band agrees with the window at a band edge (spec §6)', async () => {
+  // 74.6 shows as 75 (excellent's floor by default) but is still good, and the window says so.
+  scores.mockResolvedValue({ scores: [{ type: 'RECOVERY', date: '2026-10-14', score: 74.6 }], bands: undefined });
+  const { result } = renderHook(() => useTodayScene(nav()));
+  await waitFor(() => expect(result.current.scores.status).toBe('ready'));
+  expect(result.current.recovery).toEqual({ score: 75, band: scoreBand(74.6, undefined) });
+  expect(result.current.recovery.band).toBe('scoreGood');
+  expect(result.current.weather).toBe(weatherForScore(74.6, undefined));
 });
 
 it('a failed read gives the fallback window and rest / curious, and never throws', async () => {

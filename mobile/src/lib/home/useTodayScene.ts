@@ -98,10 +98,12 @@ export function useTodayScene(navigation: FocusNavigation): TodayScene {
   const lastNight = todaysNight.status === 'ready' ? todaysNight.value : null;
   const weather = todayWeather(recoveryScore, bands);
   const scene = sceneState({ now, recovery: weather, night: lastNight });
-  const score = recoveryScore && recoveryScore.score !== null ? Math.round(recoveryScore.score) : null;
+  const raw = recoveryScore ? recoveryScore.score : null;
+  // Only the shown value is rounded: the band comes from the same unrounded score as the
+  // window and Home's hot tag, so they always agree (spec §6).
   return {
     now, today, focused, scores, night: todaysNight, bands, recoveryScore, sleepScore, lastNight, weather, scene,
-    recovery: { score, band: score === null ? null : scoreBand(score, bands) },
+    recovery: raw === null ? { score: null, band: null } : { score: Math.round(raw), band: scoreBand(raw, bands) },
     window: roomWeatherOf(scene.key),
   };
 }
