@@ -5,12 +5,13 @@
 // message in the pair's conversation share a transaction: a sticker sent while the pair is being removed is dropped
 // (not_buddies). Every sticker send — the thread, the timeline, a buddy's week, a story reply, the inbox's quick
 // sticker — lands in the thread this way (spec 2026-10-07 social §8.2); its push stays buddy_sticker, never also a
-// dm_message.
+// dm_message. After the push is enqueued every send grants KIP's room pieces (spec 2026-10-14 KIP's room §3.2).
 
 import type { Prisma, StickerKind } from '@prisma/client';
 import { localCivilDateOrUtc } from '../biometrics/civilDate';
 import { writeMessageTx } from '../chats/conversations';
 import type { MessageDTO } from '../chats/types';
+import { grantCosmeticsSafely } from '../cosmetics/unlock';
 import { prisma } from '../db/client';
 import { BuddyError } from './errors';
 import { pushName } from './notify';
@@ -78,5 +79,7 @@ export async function sendSticker(
     { kind: 'buddy_sticker', recipientId: toId, actorId: fromId, refId: fromId, slots: { name: pushName(me), sticker: kind as StickerKind } },
     deps.notifyQueue ? { queue: deps.notifyQueue } : {},
   );
+  // Any sticker can be a cheer (spec 2026-10-14 KIP's room §3.2); every send path comes through here.
+  await grantCosmeticsSafely(fromId, now);
   return sent;
 }

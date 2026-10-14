@@ -11,10 +11,13 @@ import { ALL_FAMILIES } from './catalogue';
 import { loadAchievementInputs } from './data';
 import { familyResults, type FamilyResult } from './families';
 import { announceBuddyBadges, highestNewPerFamily, type AwardedRow } from '../buddies/badges';
+import { grantCosmeticsSafely } from '../cosmetics/unlock';
 
 export interface EvaluateOptions {
   /** Told about the rows this evaluation truly inserted (buddies spec §6). Default: announceBuddyBadges. */
   announce?: (userId: string, rows: AwardedRow[]) => Promise<void>;
+  /** Grants KIP's room pieces for new levels (spec 2026-10-14 KIP's room §3.1). Default: grantCosmeticsSafely. */
+  grantCosmetics?: (userId: string, now: Date) => Promise<void>;
 }
 
 /** Each asked family's current, best and reachable levels; null when the user has no start date. */
@@ -50,7 +53,11 @@ export async function evaluateAchievements(
     // Ids, family and level only: never the health values behind them.
     for (const l of created) console.info(JSON.stringify({ event: 'achievements.awarded', userId, family: l.family, level: l.level }));
     // Only each family's highest new level is announced: a multi-level jump is one push, not several.
-    if (created.length > 0) await (opts.announce ?? announceBuddyBadges)(userId, highestNewPerFamily(created));
+    // The grant runs first, so a failed push never skips it.
+    if (created.length > 0) {
+      await (opts.grantCosmetics ?? grantCosmeticsSafely)(userId, now);
+      await (opts.announce ?? announceBuddyBadges)(userId, highestNewPerFamily(created));
+    }
   }
   return results;
 }

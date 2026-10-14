@@ -177,8 +177,8 @@ it('logs each new level once, with ids, family and level only', async () => {
   await seedNights(user.id, '2026-10-01', [500, 500, 500]);
   const info = jest.spyOn(console, 'info').mockImplementation(() => {});
   try {
-    await evaluateAchievements(user.id, NOW);
-    await evaluateAchievements(user.id, NOW);
+    await evaluateAchievements(user.id, NOW, undefined, { grantCosmetics: async () => undefined });
+    await evaluateAchievements(user.id, NOW, undefined, { grantCosmetics: async () => undefined });
     expect(info.mock.calls.map((c) => JSON.parse(String(c[0])))).toEqual([
       { event: 'achievements.awarded', userId: user.id, family: 'SLEEP_GOAL', level: 1 },
     ]);
