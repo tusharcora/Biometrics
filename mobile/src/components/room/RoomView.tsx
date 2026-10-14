@@ -35,6 +35,8 @@ export interface RoomViewProps {
   accessibilityLabel?: string;
   /** False when a parent carries the label (the collapsed header's thumbnail button). Default true. */
   accessible?: boolean;
+  /** Holds the loops (frame 0) while something covers the room, such as decorate mode (spec §8 Loops). */
+  paused?: boolean;
   testID?: string;
 }
 
@@ -75,7 +77,7 @@ export function bubbleAnchor(seat: KipSeat): { x: number; y: number } {
 export function RoomView(props: RoomViewProps) {
   const { loadout, weather, night, colour, worn, pose, mood, facing, screen, crop, cellPt, bubble, reduceMotion } = props;
   const focused = useScreenFocused();
-  const still = reduceMotion || !focused;
+  const still = reduceMotion || !focused || !!props.paused;
   const t = useFrameClock(still);
   const frame = still ? 0 : Math.floor(t / LOOP_MS) % 3;
   const box = props.box === 'thumb' ? THUMB_BOX : FOCUS_BOX;

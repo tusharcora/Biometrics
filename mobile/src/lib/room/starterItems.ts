@@ -18,7 +18,7 @@ export const MONITOR_GLASS = { x: 74, y: 50, w: 24, h: 14 } as const;
 const three = (f: (k: 0 | 1 | 2) => Rects): [Rects, Rects, Rects] => [f(0), f(1), f(2)];
 
 const plainSlate: ItemArt = {
-  id: 'plain_slate',
+  id: 'wall.plain',
   slot: 'wallpaper',
   draw: () => {
     const r: Rects = [];
@@ -34,7 +34,7 @@ const plainSlate: ItemArt = {
 };
 
 const darkOak: ItemArt = {
-  id: 'dark_oak',
+  id: 'floor.oakDark',
   slot: 'floor',
   draw: () => {
     const r: Rects = [];
@@ -46,7 +46,7 @@ const darkOak: ItemArt = {
 };
 
 const plainFrame: ItemArt = {
-  id: 'plain_frame',
+  id: 'win.plain',
   slot: 'window',
   draw: ({ weather, night }) => {
     const r: Rects = [];
@@ -61,7 +61,7 @@ const plainFrame: ItemArt = {
 };
 
 const wallCalendar: ItemArt = {
-  id: 'wall_calendar',
+  id: 'art.calendar',
   slot: 'art',
   draw: () => {
     const r: Rects = [];
@@ -78,7 +78,7 @@ const wallCalendar: ItemArt = {
 };
 
 const books: ItemArt = {
-  id: 'books',
+  id: 'shelf.books',
   slot: 'shelf',
   draw: () => {
     const r: Rects = [];
@@ -93,7 +93,7 @@ const books: ItemArt = {
 };
 
 const slateRug: ItemArt = {
-  id: 'slate_rug',
+  id: 'rug.slate',
   slot: 'rug',
   draw: () => {
     const r: Rects = [];
@@ -133,7 +133,7 @@ const accentOn = (body: string) => {
 };
 
 const monitor: ItemArt = {
-  id: 'monitor',
+  id: 'desk.monitor',
   slot: 'desk',
   style: 'standard',
   emissive: true,
@@ -173,7 +173,7 @@ const monitor: ItemArt = {
 };
 
 const mug: ItemArt = {
-  id: 'mug',
+  id: 'item.mug',
   slot: 'desk_item',
   tint: true,
   frames: 3,
@@ -195,7 +195,7 @@ const mug: ItemArt = {
 };
 
 const amberLamp: ItemArt = {
-  id: 'amber_lamp',
+  id: 'lamp.amber',
   slot: 'lamp',
   emissive: true,
   frames: 3,
@@ -219,7 +219,7 @@ const amberLamp: ItemArt = {
 };
 
 const fern: ItemArt = {
-  id: 'fern',
+  id: 'plant.fern',
   slot: 'plant',
   draw: () => {
     const r: Rects = [];

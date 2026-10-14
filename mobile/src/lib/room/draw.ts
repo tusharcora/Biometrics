@@ -5,9 +5,9 @@
 import { kipGrid, kipRamp, KIP_COLOURS, KIP_GRID, mirrorGrid, type KipColour, type KipMood, type KipPose } from '../kip/kipArt';
 import { FOCUS_BOX, THUMB_BOX, type Box, type RoomRect } from './grid';
 import { itemArt, type ItemContext, type MonitorScreen, type SeatStyle } from './items';
-import { loadoutKey, wornKey, type KipWorn, type RoomLoadout } from './loadout';
+import { loadoutKey, STARTER_LOADOUT, wornKey, type KipWorn, type RoomLoadout } from './loadout';
 import { ao, R, type Rects } from './paint';
-import { DRAW_ORDER, SLOT_ANCHORS } from './slots';
+import { DRAW_ORDER, ROOM_SLOTS, SLOT_ANCHORS } from './slots';
 import './starterItems';
 import { daylight, nightVeil, type RoomWeather } from './weather';
 
@@ -66,9 +66,24 @@ function context(input: StaticInput, screen: MonitorScreen): ItemContext {
   return { weather: input.weather, night: input.night, colour: input.colour, ramp: kipRamp(KIP_COLOURS[input.colour]), screen };
 }
 
-/** The seat from the desk item's style; standard when the desk slot is empty or unknown. */
+/** The seat from the desk item's style: standard when the desk slot is empty, unknown, or holds another slot's item. */
 export function kipSeatFor(loadout: RoomLoadout): KipSeat {
-  return SEATS[itemArt(loadout.desk)?.style ?? 'standard'];
+  const art = itemArt(loadout.desk);
+  return SEATS[art?.slot === 'desk' ? art.style ?? 'standard' : 'standard'];
+}
+
+/**
+ * What the room draws for a stored loadout (spec 2026-10-14 KIP's room §2): an id this build has no art for, or art
+ * for another slot, is drawn as the slot's starter piece. The stored loadout itself is never changed (ruling 25).
+ */
+export function drawableLoadout(loadout: RoomLoadout): RoomLoadout {
+  const out = { ...loadout };
+  for (const slot of ROOM_SLOTS) {
+    const id = loadout[slot];
+    if (id === null) continue;
+    if (itemArt(id)?.slot !== slot) out[slot] = STARTER_LOADOUT[slot];
+  }
+  return out;
 }
 
 /** Everything that never changes with KIP's pose or the loop: memoised by roomPictureKey. */
