@@ -4,10 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useColorScheme } from 'nativewind';
 import { NavigationContext } from '@react-navigation/native';
 import { useOptionalAuth } from '../auth/AuthContext';
-import { useCharacterOptional } from '../characters/CharacterContext';
 import { BadgesCard } from '../components/achievements/BadgesCard';
-import { characterInfo } from '../components/characters/registry';
-import { DEFAULT_THINKING_ATTACHMENT, DEFAULT_THINKING_TEXT, THINKING_ATTACHMENT_NAMES, THINKING_TEXT_NAMES } from '../components/characters/thinking';
 import { DeleteAccountSection } from '../components/delete-account-section';
 import { CategoryGrid } from '../components/profile/CategoryGrid';
 import { Passport } from '../components/profile/Passport';
@@ -18,11 +15,13 @@ import { SectionLabel } from '../components/ui/section-label';
 import { Text } from '../components/ui/text';
 import { useAchievements } from '../lib/achievementsStore';
 import { useBuddies } from '../lib/buddiesStore';
+import { useCoachStatusContext } from '../lib/coachStatus/CoachStatusProvider';
 import { useMyKipColour } from '../lib/kip/myKipColour';
 import { memberCode, passportStamps } from '../lib/passport';
 import { categoryCards, useProfileReads } from '../lib/profileHub';
 import { PROFILE_COPY } from '../lib/profileCopy';
 import { useChatsAvailable } from '../lib/socialStore';
+import { DEFAULT_THINKING_TEXT, THINKING_TEXT_NAMES } from '../lib/thinkingText';
 import { useCoachStatus } from '../lib/useCoachStatus';
 import { useTabBarClearance } from '../navigation/tabBarLayout';
 import { useSync } from '../sync/SyncProvider';
@@ -42,25 +41,19 @@ export function SettingsScreen() {
   const { colorScheme: scheme } = useColorScheme();
   const ring = useStoryRing(scheme === 'dark' ? 'dark' : 'light', navigation ?? undefined);
   const { status: coachStatus } = useCoachStatus(navigation ?? undefined);
-  const character = useCharacterOptional();
+  const thinkingText = useCoachStatusContext()?.thinkingText ?? DEFAULT_THINKING_TEXT;
   const { state: badges } = useAchievements();
   const buddiesAvailable = useBuddies().status === 'ready';
   const chatsAvailable = useChatsAvailable() === true;
   const reads = useProfileReads({ buddiesAvailable, chatsAvailable });
   const kipColour = useMyKipColour();
 
-  const info = characterInfo(character?.characterId);
   const cards = categoryCards({
     reads,
     health: { connected: connection === 'CONNECTED', lastSyncedAt },
     buddiesAvailable,
     chatsAvailable,
-    coach: {
-      name: info.name,
-      style: THINKING_ATTACHMENT_NAMES[character?.thinkingAttachment ?? DEFAULT_THINKING_ATTACHMENT].name,
-      text: THINKING_TEXT_NAMES[character?.thinkingText ?? DEFAULT_THINKING_TEXT].name,
-    },
-    aiCoach: coachStatus ? { enabled: coachStatus.enabled, consented: coachStatus.consented } : null,
+    kip: { thinking: THINKING_TEXT_NAMES[thinkingText].name, consented: coachStatus?.enabled ? coachStatus.consented : null },
     now: new Date(),
     kipColour,
   });

@@ -36,7 +36,7 @@ function sampleSteps(phase: number): ThinkingStep[] {
   return SAMPLE_STEPS.slice(0, Math.min(phase + 1, SAMPLE_STEPS.length)).map((step, i) => ({ ...step, done: i < phase }));
 }
 
-// Settings -> Your coach -> Thinking text: how the chat shows a reply is on
+// Settings -> KIP -> While KIP thinks: how the chat shows a reply is on
 // its way (spec §5, §9). The preview is the Coach screen's pending row, with
 // KIP and the selected style.
 export function ThinkingTextScreen() {

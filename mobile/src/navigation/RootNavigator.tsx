@@ -17,6 +17,7 @@ import { ScoreDetailScreen } from '../screens/ScoreDetailScreen';
 import { RecoveryScreen } from '../screens/RecoveryScreen';
 import { ForecastScreen } from '../screens/ForecastScreen';
 import { FORECAST_COPY } from '../lib/forecastCopy';
+import { KIP_COPY } from '../lib/kipCopy';
 import { PatternsScreen } from '../screens/PatternsScreen';
 import { CoachConsentScreen } from '../screens/CoachConsentScreen';
 import { CoachMemoryScreen } from '../screens/CoachMemoryScreen';
@@ -90,7 +91,8 @@ export type RootStackParamList = {
   // Every metric's trend card (the old Metrics tab), opened from Activity's "All trends".
   Trends: undefined;
   // Pushed over the tabs. `prefill` is carried through the consent screen.
-  CoachConsent: { prefill?: string } | undefined;
+  // review: a consented user opened it from Settings to see what is sent (no "I agree", no hop to the chat).
+  CoachConsent: { prefill?: string; review?: boolean } | undefined;
   // Reached from Settings -> Coach Memory, which only draws when consented.
   CoachMemory: undefined;
   // Reached from Settings -> Your coach: what the coach shows while it thinks.
@@ -246,11 +248,11 @@ export function RootNavigator() {
               <Stack.Screen name="Forecast" component={ForecastScreen} options={{ title: FORECAST_COPY.title }} />
               <Stack.Screen name="Patterns" component={PatternsScreen} options={{ title: 'Patterns' }} />
               <Stack.Screen name="Trends" component={MetricsScreen} options={{ title: '' }} />
-              <Stack.Screen name="CoachConsent" component={CoachConsentScreen} options={{ title: 'AI Coach' }} />
-              <Stack.Screen name="CoachMemory" component={CoachMemoryScreen} options={{ title: 'Coach Memory' }} />
+              <Stack.Screen name="CoachConsent" component={CoachConsentScreen} options={{ title: KIP_COPY.consentTitle }} />
+              <Stack.Screen name="CoachMemory" component={CoachMemoryScreen} options={{ title: KIP_COPY.memoryTitle }} />
               <Stack.Screen name="ThinkingStyle" component={ThinkingStyleScreen} options={{ title: 'Thinking style' }} />
-              <Stack.Screen name="ThinkingText" component={ThinkingTextScreen} options={{ title: 'Thinking text' }} />
-              <Stack.Screen name="HostedConsent" component={HostedConsentScreen} options={{ title: 'AI engine' }} />
+              <Stack.Screen name="ThinkingText" component={ThinkingTextScreen} options={{ title: KIP_COPY.whileKipThinks }} />
+              <Stack.Screen name="HostedConsent" component={HostedConsentScreen} options={{ title: KIP_COPY.hostedTitle }} />
               <Stack.Screen name="SignInMethods" component={SignInMethodsScreen} options={{ title: 'Sign-in methods' }} />
               <Stack.Screen name="Devices" component={DevicesScreen} options={{ title: 'Devices' }} />
               <Stack.Screen name="Sleep" component={SleepScreen} options={{ headerShown: false }} />

@@ -34,6 +34,31 @@ export const KIP_COPY = {
   // Collapse and "Shrink room" (§3.5).
   shrinkRoom: 'Shrink room',
   expandRoomLabel: "Expand KIP's room",
+  // Settings → KIP, the Conversations sheet, memory, consent and the hosted engine (§7.4–§7.6).
+  settingsGroup: KIP_NAME,
+  yourKipSubtitle: (colourName: string) => `${colourName} · coaches you on the KIP tab`,
+  changeColour: 'Change colour',
+  whileKipThinks: 'While KIP thinks',
+  whileKipThinksSubtitle: 'How the chat shows KIP is working',
+  memoryTitle: 'What KIP remembers',
+  memorySubtitle: (n: number) => `See, edit or delete · ${n} ${n === 1 ? 'thing' : 'things'}`,
+  memoryIntro: 'Things you told me that help me answer. Only you can see them, and you can delete any of them.',
+  memoryLoadError: "What KIP remembers couldn't be loaded.",
+  memoryEmptyBody:
+    'KIP only remembers your training goals, your schedule and your preferences, and never health or medical details. Anything it remembers will appear here, and you can change or delete it at any time.',
+  whatIsSent: 'What is sent when you ask something',
+  turnOff: 'Turn off KIP coaching',
+  onFooter: 'KIP stays on Home; nothing is shared for coaching.',
+  setUp: 'Set up KIP coaching',
+  offFooter: 'KIP coaching is off. Nothing is shared, and the rest of the app works as normal.',
+  turnOffError: "KIP coaching couldn't be turned off. Please try again.",
+  hostedTitle: "KIP's AI engine",
+  consentTitle: 'KIP coaching',
+  consentHeadingFull: 'Before you use KIP coaching',
+  consentDeclineNote:
+    'Choosing not to turn on KIP coaching changes nothing else in the app. Your scores, habits and patterns all keep working exactly as they do now. You can turn it off again at any time in Settings.',
+  hostedUnavailable: "Claude isn't available right now. KIP keeps answering on-device.",
+  hostedGone: "Claude isn't available on this server right now. KIP answers on-device.",
 } as const;
 
 /** "fair": the Recovery page's band word in lower case (§3.3 "{verdict} day"). */

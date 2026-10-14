@@ -30,6 +30,8 @@ interface SettingsRowProps {
   title: string;
   subtitle?: string;
   subtitleTestID?: string;
+  /** The subtitle as a screen reader should hear it, when it differs from the text (no "·"). */
+  subtitleAccessibilityLabel?: string;
   value?: string;
   valueTestID?: string;
   icon?: keyof typeof Ionicons.glyphMap;
@@ -54,6 +56,7 @@ export function SettingsRow({
   title,
   subtitle,
   subtitleTestID,
+  subtitleAccessibilityLabel,
   value,
   valueTestID,
   icon,
@@ -83,7 +86,7 @@ export function SettingsRow({
       <View className="flex-1 gap-0.5">
         <Text className={cn('text-body', destructive ? 'text-destructive' : '', selected ? 'font-semibold' : '')}>{title}</Text>
         {subtitle ? (
-          <Text testID={subtitleTestID} className="text-caption text-muted-foreground">
+          <Text testID={subtitleTestID} accessibilityLabel={subtitleAccessibilityLabel} className="text-caption text-muted-foreground">
             {subtitle}
           </Text>
         ) : null}

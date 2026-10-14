@@ -1,5 +1,5 @@
 import React from 'react';
-import { characterLabel, withCharacter } from '../../jest-mocks/characterContext';
+import { HIDDEN_OK } from '../../jest-mocks/coachStatus';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { CoachConsentScreen } from '../../src/screens/CoachConsentScreen';
 import { acceptCoachConsent, fetchCoachStatus, StaleConsentVersionError, type CoachStatusDTO } from '../../src/api/coach';
@@ -52,13 +52,13 @@ describe('CoachConsentScreen', () => {
   it('announces its heading as a header, like the hosted consent screen', async () => {
     const { findByRole } = render(<CoachConsentScreen />);
 
-    expect(await findByRole('header', { name: 'Before you use the AI Coach' })).toBeTruthy();
+    expect(await findByRole('header', { name: 'Before you use KIP coaching' })).toBeTruthy();
   });
 
   it('says plainly that declining changes nothing else in the app', async () => {
     const { findByTestId } = render(<CoachConsentScreen />);
 
-    expect(await findByTestId('coach-consent-decline-note')).toHaveTextContent(/nothing else in the app/i);
+    expect(await findByTestId('coach-consent-decline-note')).toHaveTextContent(/^Choosing not to turn on KIP coaching changes nothing else in the app/);
   });
 
   it('requires an explicit action: no checkbox, and nothing is sent until "I agree" is pressed', async () => {
@@ -131,7 +131,7 @@ describe('CoachConsentScreen', () => {
     (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, enabled: false });
     const { findByTestId, queryByTestId } = render(<CoachConsentScreen />);
 
-    await findByTestId('coach-consent-unavailable');
+    expect(await findByTestId('coach-consent-unavailable')).toHaveTextContent("KIP isn't available right now.");
     expect(queryByTestId('coach-consent-agree')).toBeNull();
   });
 
@@ -145,11 +145,33 @@ describe('CoachConsentScreen', () => {
   });
 });
 
-describe('CoachConsentScreen: character', () => {
-  it("shows the user's character above the consent text", async () => {
-    const utils = render(withCharacter(<CoachConsentScreen />, { characterId: 'peep' }));
+describe('CoachConsentScreen: review mode', () => {
+  it('shows a consented user what is sent, without sending them on or asking again', async () => {
+    (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, consented: true });
+    mockParams = { review: true };
+    const { findByText, getByText, queryByTestId, getByTestId } = render(<CoachConsentScreen />);
+
+    expect(await findByText(status.consent.summary)).toBeTruthy();
+    for (const item of status.consent.dataItems) expect(getByText(item)).toBeTruthy();
+    expect(getByTestId('coach-consent-review')).toBeTruthy();
+    expect(queryByTestId('coach-consent-agree')).toBeNull();
+    expect(queryByTestId('coach-consent-decline')).toBeNull();
+    expect(mockNavigate).not.toHaveBeenCalled();
+  });
+
+  it('still asks for consent in review mode when it is not held', async () => {
+    mockParams = { review: true };
+    const { findByTestId } = render(<CoachConsentScreen />);
+
+    expect(await findByTestId('coach-consent-agree')).toBeTruthy();
+  });
+});
+
+describe('CoachConsentScreen: KIP', () => {
+  it('shows your KIP above the consent text', async () => {
+    const utils = render(<CoachConsentScreen />);
     await utils.findByText(status.consent.summary);
 
-    expect(characterLabel(utils, 'coach-consent-character')).toBe('character:peep:idle:56:playing:none');
+    expect(utils.getByTestId('coach-consent-kip', HIDDEN_OK)).toBeTruthy();
   });
 });
