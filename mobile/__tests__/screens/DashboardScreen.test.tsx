@@ -1,5 +1,5 @@
 import React from 'react';
-import { characterLabel, withCharacter } from '../../jest-mocks/characterContext';
+import { kipArtFills, kipFills } from '../../jest-mocks/kipFixture';
 import { act, render, fireEvent, screen, waitFor, within } from '@testing-library/react-native';
 import { DashboardScreen, greetingFor } from '../../src/screens/DashboardScreen';
 import { apiFetch } from '../../src/api/client';
@@ -11,6 +11,7 @@ import { storyRingColor } from '../../src/lib/recapTheme';
 import { HomeScene } from '../../src/components/home/HomeScene';
 import { Kip } from '../../src/components/kip/Kip';
 import { addDays, todayCivil } from '../../src/lib/heatmap';
+import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
 import { COLORS } from '../../src/theme';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import * as nativewind from 'nativewind';
@@ -411,14 +412,16 @@ describe('DashboardScreen: story ring on the avatar', () => {
   const steps = [{ id: '1', metricType: 'STEPS', value: 8000, recordedAt: '2026-09-01T00:00:00.000Z' }];
   const week = { id: 'w1', kind: 'WEEK', periodStart: '2026-09-28', periodEnd: '2026-10-04', line: 'A steady week.', personaId: 'luna', builtAt: '2026-10-05T09:00:00.000Z', openedAt: null };
   const ringOf = () => StyleSheet.flatten(screen.getByTestId('profile-story-ring').props.style);
+  afterEach(() => resetMyKipColour());
 
-  it("rings the avatar in the unwatched recap's coach colour, with a dot, and a week plays its story", async () => {
+  it("rings the avatar in your KIP's colour (not the recap's stored coach), with a dot, and a week plays its story", async () => {
+    setMyKipColour('lime');
     mockApi({ records: steps, recaps: [week] });
-    render(withCharacter(<DashboardScreen />));
+    render(<DashboardScreen />);
     await waitFor(() => expect(screen.getByTestId('profile-story-ring-dot')).toBeTruthy());
-    const scheme = (ringOf().borderColor === storyRingColor('luna', 'dark') ? 'dark' : 'light') as 'light' | 'dark';
-    expect(ringOf()).toMatchObject({ borderColor: storyRingColor('luna', scheme) });
-    expect(StyleSheet.flatten(screen.getByTestId('profile-story-ring-dot').props.style)).toMatchObject({ backgroundColor: storyRingColor('luna', scheme) });
+    const scheme = (ringOf().borderColor === storyRingColor('lime', 'dark') ? 'dark' : 'light') as 'light' | 'dark';
+    expect(ringOf()).toMatchObject({ borderColor: storyRingColor('lime', scheme) });
+    expect(StyleSheet.flatten(screen.getByTestId('profile-story-ring-dot').props.style)).toMatchObject({ backgroundColor: storyRingColor('lime', scheme) });
     expect(screen.getByTestId('settings-button').props.accessibilityLabel).toBe('Profile. Your week is ready. Play your story');
     // The old Home card is gone.
     expect(screen.queryByTestId('recap-ready-card')).toBeNull();
@@ -428,14 +431,14 @@ describe('DashboardScreen: story ring on the avatar', () => {
 
   it('only a week rings the avatar: Home asks for weeks alone', async () => {
     mockApi({ records: steps, recaps: [week] });
-    render(withCharacter(<DashboardScreen />));
+    render(<DashboardScreen />);
     await waitFor(() => expect(screen.getByTestId('profile-story-ring-dot')).toBeTruthy());
     expect(apiFetch).toHaveBeenCalledWith('/me/recaps?kind=WEEK&limit=1');
   });
 
   it('without an unwatched recap the avatar has no ring and opens Profile as before', async () => {
     mockApi({ records: steps, recaps: [{ ...week, openedAt: '2026-10-05T10:00:00.000Z' }] });
-    render(withCharacter(<DashboardScreen />));
+    render(<DashboardScreen />);
     await waitFor(() => expect(screen.getByTestId('settings-button')).toBeTruthy());
     await waitFor(() => expect(apiFetch).toHaveBeenCalledWith('/me/recaps?kind=WEEK&limit=1'));
     expect(screen.queryByTestId('profile-story-ring-dot')).toBeNull();
@@ -446,12 +449,15 @@ describe('DashboardScreen: story ring on the avatar', () => {
   });
 });
 
-describe('DashboardScreen: fallback character', () => {
-  it("shows the user's character on a state Home cannot load", async () => {
-    mockApi({ recordsError: new Error('network error') });
-    const utils = render(withCharacter(<DashboardScreen />, { characterId: 'avo' }));
+describe('DashboardScreen: fallback KIP', () => {
+  afterEach(() => resetMyKipColour());
 
-    await waitFor(() => expect(characterLabel(utils, 'dashboard-fallback-character')).toBe('character:avo:idle:56:playing:none'));
+  it('shows your KIP, resting and curious, on a state Home cannot load', async () => {
+    setMyKipColour('mint');
+    mockApi({ recordsError: new Error('network error') });
+    const utils = render(<DashboardScreen />);
+
+    await waitFor(() => expect(kipFills(utils, 'dashboard-fallback-kip')).toEqual(kipArtFills({ colour: 'mint', pose: 'rest', mood: 'curious' })));
   });
 });
 
@@ -555,7 +561,7 @@ describe('DashboardScreen: Home F', () => {
   it('counts unwatched recaps on the RECAPS tag from the shelf\'s own fetch', async () => {
     const week = (id: string, end: string) => ({ id, kind: 'WEEK', periodStart: addDays(end, -6), periodEnd: end, line: 'x', personaId: 'luna', builtAt: '2026-10-05T09:00:00.000Z', openedAt: null });
     mockApi({ records: steps, recaps: [week('w2', addDays(todayCivil(), -2)), week('w1', addDays(todayCivil(), -9))] });
-    render(withCharacter(<DashboardScreen />));
+    render(<DashboardScreen />);
     await waitFor(() => expect(screen.getByTestId('home-tag-recaps').props.accessibilityLabel).toBe('Mailbox: recaps, 2 new. Open Recaps'));
     expect((apiFetch as jest.Mock).mock.calls.filter(([p]) => p === '/me/recaps?limit=30')).toHaveLength(1);
   });

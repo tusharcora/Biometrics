@@ -5,8 +5,11 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react-n
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
-import { withCharacter } from '../../jest-mocks/characterContext';
+import { HIDDEN_OK, withCoachStatus } from '../../jest-mocks/coachStatus';
+import { kipArtFills, kipFills } from '../../jest-mocks/kipFixture';
 import type { Recap } from '../../src/api/recaps';
+import { contrast } from '../../src/lib/colour';
+import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
 import { captureToPng, saveImage, shareImage } from '../../src/lib/recapCapture';
 import { recapTint } from '../../src/lib/recapTheme';
 import { STORY_FRAME_MS } from '../../src/lib/storyViewer';
@@ -50,10 +53,10 @@ const tap = (x: number) => fireEvent.press(screen.getByTestId('story-viewer-tap'
 
 const CONSENTED = { enabled: true, consented: true } as never;
 
-async function open(character: Parameters<typeof withCharacter>[1] = {}) {
+async function open(coach: Parameters<typeof withCoachStatus>[1] = {}) {
   render(
     <SafeAreaProvider initialMetrics={{ frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 47, left: 0, right: 0, bottom: 34 } }}>
-      {withCharacter(<RecapStoryScreen />, character)}
+      {withCoachStatus(<RecapStoryScreen />, coach)}
     </SafeAreaProvider>,
   );
   // The stored include choices load first; Share and Save wait for them.
@@ -65,6 +68,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   resetUnwatchedRecap();
   resetAchievements();
+  resetMyKipColour();
   (fetchAchievements as jest.Mock).mockResolvedValue(null);
   mockParams = { recap: mockRecap };
   mockStack = { index: 0, routes: [{ name: 'RecapStory' }] };
@@ -187,16 +191,19 @@ it("follows the builder's stored include choices", async () => {
   expect(screen.queryByTestId('story-export-best')).toBeNull();
 });
 
-it('draws light status bar content and the chrome on the coach ground, whatever the app theme', async () => {
+it("draws light status bar content and the chrome on your KIP's ground, whatever the app theme", async () => {
+  // Ink: a dark KIP whose own colour would not read under the ground-coloured label.
+  setMyKipColour('ink');
   await open();
   const bars = screen.UNSAFE_getAllByType(StatusBar);
   expect(bars[bars.length - 1]!.props.barStyle).toBe('light-content');
-  const t = recapTint('luna');
+  const t = recapTint('ink');
   expect(screen.getByTestId('story-viewer-title')).toHaveStyle({ color: t.text });
   tap(10000);
   tap(10000);
-  expect(StyleSheet.flatten(screen.getByTestId('story-end-full-recap').props.style)).toMatchObject({ backgroundColor: t.accent });
+  expect(StyleSheet.flatten(screen.getByTestId('story-end-full-recap').props.style)).toMatchObject({ backgroundColor: t.accentText });
   expect(screen.getByTestId('story-end-full-recap-label')).toHaveStyle({ color: t.ground });
+  expect(contrast(t.ground, t.accentText)).toBeGreaterThanOrEqual(4.5);
   expect(screen.getByTestId('story-end-again-label')).toHaveStyle({ color: t.text });
 });
 
@@ -205,7 +212,7 @@ it('draws no frame until the stored include choices have loaded, then starts fro
   (SecureStore.getItemAsync as jest.Mock).mockImplementation(() => new Promise((r) => (finish = r)));
   render(
     <SafeAreaProvider initialMetrics={{ frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 47, left: 0, right: 0, bottom: 34 } }}>
-      {withCharacter(<RecapStoryScreen />)}
+      {withCoachStatus(<RecapStoryScreen />)}
     </SafeAreaProvider>,
   );
   act(() => jest.advanceTimersByTime(STORY_FRAME_MS * 2));
@@ -242,18 +249,30 @@ it('pauses when a screen reader is turned on mid-story and runs again when it is
 });
 
 describe('header and reply bar (design E)', () => {
-  it('shows the recap coach, the week and Share / Close above the frame', async () => {
+  it("draws your KIP whatever the recap's stored personaId (spec §7.7)", async () => {
+    setMyKipColour('lime');
+    mockParams = { recap: { ...mockRecap, personaId: 'luna' } };
     await open();
-    expect(screen.getByTestId('story-viewer-title')).toHaveTextContent('Luna · Your week');
+    expect(screen.getByTestId('recap-kip', HIDDEN_OK)).toBeTruthy();
+    expect(kipFills(screen, 'recap-kip')).toEqual(kipArtFills({ colour: 'lime', pose: 'rest', mood: 'idle' }));
+    expect(StyleSheet.flatten(screen.getByTestId('story-viewer').props.style).backgroundColor).toBe(recapTint('lime').ground);
+    expect(screen.queryByText(/Luna/)).toBeNull();
+  });
+
+  it('shows KIP, the week and Share / Close above the frame', async () => {
+    await open();
+    expect(screen.getByTestId('story-viewer-title')).toHaveTextContent('KIP · Your week');
+    // Read aloud without the middle dot (spoken labels never contain "·").
+    expect(screen.getByTestId('story-viewer-title').props.accessibilityLabel).toBe('KIP, your week');
     expect(screen.getByTestId('story-viewer-range')).toHaveTextContent('Sep 28 – Oct 4');
     expect(screen.getByTestId('story-viewer-coach')).toBeTruthy();
     expect(screen.getByTestId('story-viewer-share').props.accessibilityLabel).toBe('Share this frame');
     expect(screen.getByTestId('story-viewer-close').props.accessibilityLabel).toBe('Close story');
   });
 
-  it('asks the coach about the week: closes the viewer onto the chat with the question in the composer, not sent', async () => {
-    await open({ status: CONSENTED, characterId: 'mochi' });
-    expect(screen.getByTestId('story-viewer-ask')).toHaveTextContent('Ask Mochi about your week…');
+  it('asks KIP about the week: closes the viewer onto the chat with the question in the composer, not sent', async () => {
+    await open({ status: CONSENTED });
+    expect(screen.getByTestId('story-viewer-ask')).toHaveTextContent('Ask KIP about your week…');
     fireEvent.press(screen.getByTestId('story-viewer-ask'));
     expect(mockNavigate).toHaveBeenCalledWith('Tabs', { screen: 'Coach', params: { prefill: 'What stood out in my week of Sep 28 – Oct 4?' } }, { pop: true });
   });
@@ -333,7 +352,7 @@ describe('the story is the recap', () => {
     mockParams = { recap: { ...mockRecap, id: 'r-next', periodStart: '2026-10-05', periodEnd: '2026-10-11' } };
     screen.rerender(
       <SafeAreaProvider initialMetrics={{ frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 47, left: 0, right: 0, bottom: 34 } }}>
-        {withCharacter(<RecapStoryScreen />)}
+        {withCoachStatus(<RecapStoryScreen />)}
       </SafeAreaProvider>,
     );
     await act(async () => {});
@@ -349,7 +368,7 @@ describe('the story is the recap', () => {
     (fetchRecap as jest.Mock).mockResolvedValue({ ...mockRecap, id: 'r-next', periodStart: '2026-10-05', periodEnd: '2026-10-11' });
     screen.rerender(
       <SafeAreaProvider initialMetrics={{ frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 47, left: 0, right: 0, bottom: 34 } }}>
-        {withCharacter(<RecapStoryScreen />)}
+        {withCoachStatus(<RecapStoryScreen />)}
       </SafeAreaProvider>,
     );
     await act(async () => {});

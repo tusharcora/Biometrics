@@ -7,12 +7,12 @@ import { Geist_600SemiBold } from '@expo-google-fonts/geist/600SemiBold';
 import { Geist_700Bold } from '@expo-google-fonts/geist/700Bold';
 import { Geist_800ExtraBold } from '@expo-google-fonts/geist/800ExtraBold';
 import { AuthProvider } from './src/auth/AuthContext';
-import { CharacterProvider } from './src/characters/CharacterProvider';
+import { CoachStatusProvider } from './src/lib/coachStatus/CoachStatusProvider';
 import { RootNavigator } from './src/navigation/RootNavigator';
 import { ThemeProvider } from './src/theme/ThemeProvider';
 import { applyDefaultThemeSync } from './src/theme/preference';
 import { ThemedStatusBar } from './src/components/themed-status-bar';
-import { CharacterGalleryScreen } from './src/screens/dev/CharacterGalleryScreen';
+import { KipGalleryScreen } from './src/screens/dev/KipGalleryScreen';
 import { setBaseUrl } from './src/api/client';
 import { API_BASE_URL } from './src/auth/authClient';
 import { installNotificationHandler } from './src/notifications/handler';
@@ -38,19 +38,19 @@ export default function App() {
   });
   if (!fontsLoaded && !fontError) return null;
 
-  // Dev-only: every character in every mood. EXPO_PUBLIC_CHARACTER_GALLERY=1
-  if (__DEV__ && process.env.EXPO_PUBLIC_CHARACTER_GALLERY === '1') {
-    return <CharacterGalleryScreen />;
+  // Dev-only: every KIP pose in every mood. EXPO_PUBLIC_KIP_GALLERY=1
+  if (__DEV__ && process.env.EXPO_PUBLIC_KIP_GALLERY === '1') {
+    return <KipGalleryScreen />;
   }
 
   return (
     <ThemeProvider>
       <ThemedStatusBar />
       <AuthProvider>
-        {/* Inside AuthProvider: it follows the session (Mochi when signed out). */}
-        <CharacterProvider>
+        {/* Inside AuthProvider: it follows the session. */}
+        <CoachStatusProvider>
           <RootNavigator />
-        </CharacterProvider>
+        </CoachStatusProvider>
       </AuthProvider>
     </ThemeProvider>
   );

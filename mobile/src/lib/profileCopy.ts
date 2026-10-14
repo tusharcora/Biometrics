@@ -2,12 +2,13 @@
 // and the account row. The moved Settings sections keep their own copy.
 
 import { formatLastSynced } from '../sync/formatLastSynced';
+import { spokenLine } from './kipStage';
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const onOff = (on: boolean) => (on ? 'on' : 'off');
 const PROVIDERS: Record<string, string> = { apple: 'Apple', google: 'Google', credential: 'Email' };
 
-export type ProfileCategory = 'kipColour' | 'health' | 'timezone' | 'notifications' | 'buddies' | 'chats' | 'coach' | 'aiCoach' | 'signIn';
+export type ProfileCategory = 'kipColour' | 'health' | 'timezone' | 'notifications' | 'buddies' | 'chats' | 'kip' | 'signIn';
 
 export const PROFILE_COPY = {
   title: 'Profile',
@@ -36,8 +37,7 @@ export const PROFILE_COPY = {
     notifications: 'Notifications',
     buddies: 'Buddies & sharing',
     chats: 'Chats',
-    coach: 'Your coach',
-    aiCoach: 'AI Coach',
+    kip: 'KIP',
     signIn: 'Sign-in',
   } as Record<ProfileCategory, string>,
 
@@ -49,12 +49,13 @@ export const PROFILE_COPY = {
     notifications: (on: number, total: number) => `${on} of ${total} on`,
     buddies: (handle: string | null, sharing: number, total: number) => (handle ? `@${handle} · sharing ${sharing} of ${total}` : 'Set up your handle'),
     chats: (s: { readReceipts: boolean; activityStatus: boolean }) => `Read receipts ${onOff(s.readReceipts)} · status ${onOff(s.activityStatus)}`,
-    coach: (name: string, style: string, text: string) => `${name} · ${style} · ${text}`,
-    aiCoach: (consented: boolean) => (consented ? 'On · Coach Memory' : 'Off · tap to set up'),
+    /** consented is null while coaching is off on the server (or not known yet). */
+    kip: (colourName: string, thinking: string, consented: boolean | null) =>
+      consented === null ? `${colourName} · ${thinking}` : `${colourName} · ${thinking} · ${consented ? 'coaching on' : 'coaching off'}`,
     signIn: (providers: string[], devices: number) => `${providers.map((p) => PROVIDERS[p] ?? p).join(', ')} · ${plural(devices, 'device')}`,
   },
-  /** A card's spoken name: its title, then its status when there is one. */
-  cardLabel: (title: string, status: string | null) => (status ? `${title}. ${status}` : title),
+  /** A card's spoken name: its title, then its status when there is one, with commas for the middle dots. */
+  cardLabel: (title: string, status: string | null) => (status ? `${title}. ${spokenLine(status)}` : title),
   categoriesLabel: 'Settings',
 
   signedInAs: (email: string) => `Signed in as ${email}`,

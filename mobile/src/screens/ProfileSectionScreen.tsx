@@ -6,13 +6,12 @@ import { useOptionalAuth } from '../auth/AuthContext';
 import { AccountSection } from '../components/account-section';
 import { BuddiesProfileSection } from '../components/buddies/BuddiesProfileSection';
 import { ChatSettingsSection } from '../components/chats/ChatSettingsSection';
-import { CoachSettingsSection } from '../components/coach-settings-section';
 import { NotificationsSection } from '../components/notifications-section';
 import { HealthDataSection } from '../components/profile/HealthDataSection';
 import { KipColourSection } from '../components/profile/KipColourSection';
+import { KipSettingsSection } from '../components/kip-settings-section';
 import { TimezoneSection } from '../components/profile/TimezoneSection';
 import { Text } from '../components/ui/text';
-import { YourCoachRow } from '../components/your-coach-row';
 import { PROFILE_COPY, type ProfileCategory } from '../lib/profileCopy';
 import { useTabBarClearance } from '../navigation/tabBarLayout';
 
@@ -45,8 +44,7 @@ export function ProfileSectionScreen({ route }: { route: { params: { section: Pr
         {section === 'notifications' ? <NotificationsSection /> : null}
         {section === 'buddies' ? <BuddiesProfileSection onNavigate={(name) => navigation?.navigate(name as never)} /> : null}
         {section === 'chats' ? <ChatSettingsSection /> : null}
-        {section === 'coach' ? <YourCoachRow /> : null}
-        {section === 'aiCoach' ? <CoachSettingsSection /> : null}
+        {section === 'kip' ? <KipSettingsSection /> : null}
         {section === 'signIn' ? (
           <View className="gap-3">
             {email ? (

@@ -146,7 +146,7 @@ export function goalRowLine(goal: SleepGoal, reminder: WindDownSettings | null):
 
 export const goalRowA11y = (line: string) => `Bedtime goal. ${spokenUnits(line.split(' · ').join(', '))}.`;
 
-export const askLabel = (coach: string, isLastNight: boolean) => (isLastNight ? `Ask ${coach} about last night` : `Ask ${coach} about this night`);
+export const askLabel = (isLastNight: boolean) => (isLastNight ? 'Ask KIP about last night' : 'Ask KIP about this night');
 
 export const pickerWeekday = (date: string, today: string) => (date === today ? 'Last' : weekdayShort(date));
 

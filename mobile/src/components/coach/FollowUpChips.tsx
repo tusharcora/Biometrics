@@ -1,5 +1,6 @@
 import React from 'react';
 import { View } from 'react-native';
+import { KIP_COPY } from '../../lib/kipCopy';
 import { Button } from '../ui/button';
 
 // Short follow-up questions under the latest answer (spec 1.3). The caller
@@ -19,7 +20,7 @@ export function FollowUpChips({ questions, onAsk, disabled = false }: { question
           variant="outline"
           size="sm"
           accessibilityLabel={question}
-          accessibilityHint="Asks your coach"
+          accessibilityHint={KIP_COPY.asksKip}
           disabled={disabled}
           onPress={() => onAsk(question)}
           numberOfLines={0}

@@ -1,13 +1,13 @@
 import React from 'react';
 import { Text, View } from 'react-native';
+import type { KipColour } from '../../lib/kip/kipArt';
 import { goalLabel } from '../../lib/recapCopy';
 import { APP_NAME, DESIGN_WIDTH, type Includes } from '../../lib/recapShare';
 import { recapTint, yearCell, YEAR_SCALE } from '../../lib/recapTheme';
 import { YEAR_COLUMNS, type PixelLevel, type YearPixels } from '../../lib/yearPixels';
 import { FONTS } from '../../theme';
-import { Character } from '../characters/Character';
-import type { CharacterId } from '../characters/types';
 import { pixelFont } from '../coach/thinking/shared';
+import { Kip } from '../kip/Kip';
 import { ShareCanvas } from './ShareCanvas';
 
 // Laid out in the design's own units (a 540×540 artboard); a(n) maps them onto the 360 grid × scale.
@@ -23,7 +23,7 @@ export interface YearPixelsViewProps {
   year: number;
   pixels: YearPixels;
   goalMinutes: number;
-  coachId: CharacterId;
+  kipColour: KipColour;
   includes: Pick<Includes, 'count' | 'coach'>;
   scale: number;
   testID?: string;
@@ -32,14 +32,14 @@ export interface YearPixelsViewProps {
 const LEVEL_LABEL: Record<PixelLevel, string> = { none: 'no data', short: 'short', near: 'near goal', goal: 'on goal', future: 'still to come' };
 
 /**
- * Year in pixels (recap restyle, 1b): square, tinted by the current coach; every night of the
+ * Year in pixels (recap restyle, 1b): square, tinted by your KIP; every night of the
  * year in a 26-column grid: short, near and on goal on a purple scale, no data an outlined empty
  * square, nights still to come a faint fill. A plain
  * ground, no dots: the grid is the pattern (the year artboard has none).
  */
-export function YearPixelsView({ year, pixels, goalMinutes, coachId, includes, scale, testID = 'year-pixels' }: YearPixelsViewProps) {
+export function YearPixelsView({ year, pixels, goalMinutes, kipColour, includes, scale, testID = 'year-pixels' }: YearPixelsViewProps) {
   const a = (n: number) => (n * scale * DESIGN_WIDTH) / ART;
-  const t = recapTint(coachId);
+  const t = recapTint(kipColour);
   const pixel = pixelFont();
   // An outline is drawn inside the square (same size either way), so the grid never shifts.
   const cellStyle = (level: PixelLevel, size: number) => {
@@ -51,7 +51,7 @@ export function YearPixelsView({ year, pixels, goalMinutes, coachId, includes, s
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: a(16), minHeight: a(SPRITE) }}>
         {includes.coach ? (
           <View testID={`${testID}-coach`}>
-            <Character characterId={coachId} mood="idle" size={Math.round(a(SPRITE))} paused />
+            <Kip colour={kipColour} pose="rest" mood="idle" scale={Math.max(1, Math.round(a(SPRITE) / 16))} />
           </View>
         ) : null}
         <View style={{ flex: 1, gap: a(4) }}>

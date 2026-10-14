@@ -1,5 +1,6 @@
 import React from 'react';
-import { characterLabel, withCharacter } from '../../jest-mocks/characterContext';
+import { kipArtFills, kipFills } from '../../jest-mocks/kipFixture';
+import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { SignUpScreen } from '../../src/screens/SignUpScreen';
 import { useAuth } from '../../src/auth/AuthContext';
@@ -46,9 +47,11 @@ it('refuses a password shorter than 8 characters before calling the server', asy
   expect(signUpWithEmail).not.toHaveBeenCalled();
 });
 
-it('always shows Mochi, whatever character a provider holds (signed-out screens)', () => {
+it('always shows a coral KIP waving, whatever colour a KIP was last given (signed-out screens)', () => {
+  setMyKipColour('lime');
   (useAuth as jest.Mock).mockReturnValue({ signUpWithEmail: jest.fn() });
-  const utils = render(withCharacter(<SignUpScreen navigation={navigation} route={{} as any} />, { characterId: 'kit' }));
+  const utils = render(<SignUpScreen navigation={navigation} route={{} as any} />);
 
-  expect(characterLabel(utils, 'auth-character')).toBe('character:mochi:idle:56:playing:none');
+  expect(kipFills(utils, 'auth-kip')).toEqual(kipArtFills({ colour: 'coral', pose: 'wave', mood: 'idle' }));
+  resetMyKipColour();
 });

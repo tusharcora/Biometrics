@@ -1,0 +1,134 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Home-screen test</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;family=Silkscreen&amp;display=swap">
+<style>
+body{margin:0;background:#0A0B0E}
+a{color:#8EE3C8}a:hover{color:#C1F0E1}
+</style>
+</helmet>
+<div style="width: 1280px; height: 1000px; box-sizing: border-box; padding: 44px 48px; background: #0A0B0E; color: #E7E9EE; font-family: Geist, system-ui, sans-serif; display: flex; flex-direction: column; gap: 24px">
+
+  <div style="display: flex; flex-direction: column; gap: 10px">
+    <div style="display: flex; align-items: center; gap: 14px">
+      <h2 style="margin: 0; font-family: Silkscreen, monospace; font-weight: 400; font-size: 32px; line-height: 1">HOME-SCREEN TEST</h2>
+      <span style="font-family: Silkscreen, monospace; font-size: 12px; color: #0A0B0E; background: #FB7185; padding: 5px 8px 4px; border-radius: 4px">2 · TRUE SIZE</span>
+    </div>
+    <p style="margin: 0; font-size: 15px; line-height: 1.5; color: #A3A9B5; max-width: 900px">Top four (A face, B standing, J block, C sleepy) at a true 60 px among neutral placeholder tiles, on a dark and a light wallpaper. On the right, the same four at 29 px in a Settings list and at 40 px in Spotlight.</p>
+  </div>
+
+  <div style="display: flex; gap: 24px; align-items: flex-start">
+
+    <sc-for list="{{phones}}" as="ph" hint-placeholder-count="2">
+      <div style="width: 360px; height: 780px; box-sizing: border-box; border: 10px solid #000000; border-radius: 52px; background: {{ph.wall}}; padding: 64px 22px 22px; display: flex; flex-direction: column; justify-content: space-between; flex: none">
+        <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); row-gap: 22px; justify-items: center">
+          <sc-for list="{{ph.cells}}" as="c" hint-placeholder-count="20">
+            <div style="display: flex; flex-direction: column; align-items: center; gap: 7px">
+              <sc-if value="{{c.kip}}" hint-placeholder-val="{{ false }}">
+                <dc-import name="Icon" concept="{{c.concept}}" size="60" hint-size="60px,60px"></dc-import>
+              </sc-if>
+              <sc-if value="{{c.ph}}" hint-placeholder-val="{{ true }}">
+                <div style="width: 60px; height: 60px; border-radius: 22.37%; background: {{c.bg}}; display: flex; align-items: center; justify-content: center">
+                  <div style="width: {{c.gw}}px; height: {{c.gh}}px; border-radius: {{c.gr}}; background: {{c.fg}}"></div>
+                </div>
+              </sc-if>
+              <div style="width: {{c.lw}}px; height: 6px; border-radius: 3px; background: {{ph.label}}"></div>
+            </div>
+          </sc-for>
+        </div>
+        <div style="display: flex; justify-content: space-around; align-items: center; padding: 14px 10px; border-radius: 30px; background: {{ph.dock}}">
+          <sc-for list="{{ph.dockCells}}" as="c" hint-placeholder-count="4">
+            <sc-if value="{{c.kip}}" hint-placeholder-val="{{ false }}">
+              <dc-import name="Icon" concept="{{c.concept}}" size="60" hint-size="60px,60px"></dc-import>
+            </sc-if>
+            <sc-if value="{{c.ph}}" hint-placeholder-val="{{ true }}">
+              <div style="width: 60px; height: 60px; border-radius: 22.37%; background: {{c.bg}}; display: flex; align-items: center; justify-content: center">
+                <div style="width: {{c.gw}}px; height: {{c.gh}}px; border-radius: {{c.gr}}; background: {{c.fg}}"></div>
+              </div>
+            </sc-if>
+          </sc-for>
+        </div>
+      </div>
+    </sc-for>
+
+    <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 16px">
+      <sc-for list="{{lists}}" as="ls" hint-placeholder-count="2">
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <span style="font-family: Silkscreen, monospace; font-size: 11px; color: #A3A9B5">{{ls.title}}</span>
+          <div style="background: {{ls.page}}; border-radius: 16px; padding: 12px">
+            <div style="background: {{ls.card}}; border-radius: 12px; display: flex; flex-direction: column">
+              <sc-for list="{{ls.rows}}" as="r" hint-placeholder-count="5">
+                <div style="display: flex; align-items: center; gap: 12px; padding: 7px 12px; height: 30px">
+                  <sc-if value="{{r.kip}}" hint-placeholder-val="{{ false }}">
+                    <dc-import name="Icon" concept="{{r.concept}}" size="29" hint-size="29px,29px"></dc-import>
+                  </sc-if>
+                  <sc-if value="{{r.ph}}" hint-placeholder-val="{{ true }}">
+                    <div style="width: 29px; height: 29px; border-radius: 22.37%; background: {{r.bg}}; flex: none"></div>
+                  </sc-if>
+                  <span style="flex: 1; font-size: 15px; color: {{ls.text}}">{{r.label}}</span>
+                  <svg width="8" height="14" viewBox="0 0 8 14" aria-hidden="true"><path d="M1 1l6 6-6 6" fill="none" stroke="{{ls.muted}}" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"></path></svg>
+                </div>
+              </sc-for>
+            </div>
+          </div>
+        </div>
+      </sc-for>
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <span style="font-family: Silkscreen, monospace; font-size: 11px; color: #A3A9B5">SPOTLIGHT · 40 PX</span>
+        <div style="background: #1B1F2A; border-radius: 16px; padding: 14px 16px; display: flex; gap: 20px">
+          <dc-import name="Icon" concept="face" size="40" hint-size="40px,40px"></dc-import>
+          <dc-import name="Icon" concept="stand" size="40" hint-size="40px,40px"></dc-import>
+          <dc-import name="Icon" concept="block" size="40" hint-size="40px,40px"></dc-import>
+          <dc-import name="Icon" concept="sleepy" size="40" hint-size="40px,40px"></dc-import>
+        </div>
+      </div>
+      <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #A3A9B5">What to check at true size: A and J are one shape with two eyes, so they should hold at 29 px. In B, KIP is 8 cells wide, so the sun and the ground shadow are the first details to go. C's night sky sits close to a dark wallpaper.</p>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1000}}'>
+var GLYPHS = [[26, 26, "50%"], [24, 24, "6px"], [30, 10, "5px"], [22, 30, "6px"], [28, 28, "50%"], [14, 30, "7px"]];
+var LABELS = [40, 34, 44, 30, 38, 42, 36];
+function cells(n, tiles, fg, ours) {
+  var out = [];
+  for (var i = 0; i < n; i++) {
+    if (ours[i]) { out.push({ kip: true, ph: false, concept: ours[i], lw: 36 }); continue; }
+    var gl = GLYPHS[(i * 5 + 1) % GLYPHS.length];
+    out.push({ kip: false, ph: true, bg: tiles[(i * 3) % tiles.length], fg: fg, gw: gl[0], gh: gl[1], gr: gl[2], lw: LABELS[i % LABELS.length] });
+  }
+  return out;
+}
+var DARK_TILES = ["#3A3F4B", "#4B5160", "#2E3440", "#596070", "#434A58", "#6B7280"];
+var LIGHT_TILES = ["#FFFFFF", "#D6D2CA", "#C4BFB5", "#ECE9E3", "#B3AEA4", "#DEDAD3"];
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      phones: [
+        { wall: "#1B1F2A", label: "rgba(255,255,255,0.45)", dock: "rgba(255,255,255,0.10)",
+          cells: cells(20, DARK_TILES, "rgba(255,255,255,0.78)", { 5: "face", 10: "stand", 15: "block" }),
+          dockCells: cells(4, DARK_TILES, "rgba(255,255,255,0.78)", { 0: "sleepy" }) },
+        { wall: "#E9E4DA", label: "rgba(0,0,0,0.30)", dock: "rgba(255,255,255,0.45)",
+          cells: cells(20, LIGHT_TILES, "#8C877D", { 1: "face", 14: "stand", 8: "block" }),
+          dockCells: cells(4, LIGHT_TILES, "#8C877D", { 2: "sleepy" }) }
+      ],
+      lists: [
+        { title: "SETTINGS · 29 PX · DARK", page: "#000000", card: "#1C1C1E", text: "#F2F2F7", muted: "#5A5A60",
+          rows: [{ ph: true, kip: false, bg: "#4B5160", label: "Placeholder" }, { kip: true, ph: false, concept: "face", label: "A · Face close-up" }, { kip: true, ph: false, concept: "stand", label: "B · Standing in the sun" }, { kip: true, ph: false, concept: "block", label: "J · Block on dark" }, { kip: true, ph: false, concept: "sleepy", label: "C · Sleepy night" }] },
+        { title: "SETTINGS · 29 PX · LIGHT", page: "#F2F2F7", card: "#FFFFFF", text: "#111114", muted: "#C4C4C8",
+          rows: [{ ph: true, kip: false, bg: "#B3AEA4", label: "Placeholder" }, { kip: true, ph: false, concept: "face", label: "A · Face close-up" }, { kip: true, ph: false, concept: "stand", label: "B · Standing in the sun" }, { kip: true, ph: false, concept: "block", label: "J · Block on dark" }, { kip: true, ph: false, concept: "sleepy", label: "C · Sleepy night" }] }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

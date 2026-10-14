@@ -1,7 +1,6 @@
 import React from 'react';
 import { Linking, StyleSheet } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import { withCharacter } from '../../jest-mocks/characterContext';
 import { BedtimeGoalScreen } from '../../src/screens/BedtimeGoalScreen';
 import { fetchSleepGoal, saveSleepGoal } from '../../src/api/sleep';
 import { disableWindDown, enableWindDown, readWindDown, setWindDownLead } from '../../src/lib/windDown';
@@ -11,8 +10,8 @@ jest.mock('../../src/api/sleep');
 jest.mock('../../src/lib/windDown');
 
 const SAVED = { sleepGoalMinutes: 480, bedtimeGoal: '23:00', wakeGoal: '07:00' };
-const OFF = { enabled: false, leadMinutes: 30, bedtimeGoal: null, coachName: 'Kit', notificationId: null };
-const ON = { enabled: true, leadMinutes: 30, bedtimeGoal: '23:00', coachName: 'Kit', notificationId: 'n1' };
+const OFF = { enabled: false, leadMinutes: 30, bedtimeGoal: null, coachName: 'KIP', notificationId: null };
+const ON = { enabled: true, leadMinutes: 30, bedtimeGoal: '23:00', coachName: 'KIP', notificationId: 'n1' };
 
 beforeEach(() => {
   jest.clearAllMocks();
@@ -29,7 +28,7 @@ afterEach(async () => {
 });
 
 function renderScreen() {
-  return render(withCharacter(<BedtimeGoalScreen />, { characterId: 'kit' }));
+  return render(<BedtimeGoalScreen />);
 }
 
 async function loaded() {
@@ -188,7 +187,7 @@ describe('BedtimeGoalScreen: save', () => {
     press('goal-bed-minus');
     await act(async () => press('goal-save'));
 
-    expect(enableWindDown).toHaveBeenCalledWith({ bedtimeGoal: '22:45', leadMinutes: 30, coachName: 'Kit' });
+    expect(enableWindDown).toHaveBeenCalledWith({ bedtimeGoal: '22:45', leadMinutes: 30, coachName: 'KIP' });
   });
 
   it('leaves the reminder alone on save while it is off', async () => {
@@ -215,7 +214,7 @@ describe('BedtimeGoalScreen: wind-down reminder', () => {
 
     await act(async () => fireEvent(value('winddown-switch'), 'valueChange', true));
 
-    expect(enableWindDown).toHaveBeenCalledWith({ bedtimeGoal: '23:00', leadMinutes: 30, coachName: 'Kit' });
+    expect(enableWindDown).toHaveBeenCalledWith({ bedtimeGoal: '23:00', leadMinutes: 30, coachName: 'KIP' });
     expect(value('winddown-switch').props.value).toBe(true);
   });
 
@@ -276,19 +275,19 @@ describe('BedtimeGoalScreen: wind-down reminder', () => {
 
   it('stores a new lead and updates the preview', async () => {
     await loaded();
-    expect(value('winddown-preview')).toHaveTextContent('Kit: Wind-down time. Bed in 30 min.');
+    expect(value('winddown-preview')).toHaveTextContent('KIP: Wind-down time. Bed in 30 min.');
 
     await act(async () => press('winddown-lead-45'));
 
     expect(setWindDownLead).toHaveBeenCalledWith(45);
-    expect(value('winddown-preview')).toHaveTextContent('Kit: Wind-down time. Bed in 45 min.');
+    expect(value('winddown-preview')).toHaveTextContent('KIP: Wind-down time. Bed in 45 min.');
   });
 
-  it('refreshes the reminder title on open when the coach has changed', async () => {
+  it('refreshes a reminder still signed by a retired coach to KIP on open', async () => {
     (readWindDown as jest.Mock).mockResolvedValue({ ...ON, coachName: 'Mochi' });
     await loaded();
 
-    await waitFor(() => expect(enableWindDown).toHaveBeenCalledWith({ bedtimeGoal: '23:00', leadMinutes: 30, coachName: 'Kit' }));
+    await waitFor(() => expect(enableWindDown).toHaveBeenCalledWith({ bedtimeGoal: '23:00', leadMinutes: 30, coachName: 'KIP' }));
     expect(enableWindDown).toHaveBeenCalledTimes(1);
   });
 

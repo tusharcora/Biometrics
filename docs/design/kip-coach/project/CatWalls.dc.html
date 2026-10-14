@@ -1,0 +1,122 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Catalogue · Walls and floors</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Silkscreen&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.label{font-family:'Silkscreen',monospace;font-size:11px;line-height:14px;letter-spacing:1px;text-transform:uppercase;color:rgb(155,157,166)}
+.tile{position:relative;border-radius:12px;background:rgb(20,22,27);border:1px solid rgb(36,39,46);padding:10px;display:flex;flex-direction:column;gap:6px;min-width:0;box-sizing:border-box}
+.pic{display:flex;align-items:center;justify-content:center;border-radius:8px;background:rgb(14,15,19)}
+.nm{font-size:13px;font-weight:600;line-height:17px}
+.bd{display:flex;gap:4px;flex-wrap:wrap;min-height:14px}
+.bdg{font-family:'Silkscreen',monospace;font-size:8px;line-height:10px;letter-spacing:1px;padding:1px 4px;border-radius:4px;border:1px solid currentColor}
+.st{font-size:11px;line-height:15px;color:rgb(155,157,166)}
+.stk{font-family:'Silkscreen',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase}
+.lock{position:absolute;right:8px;top:8px}
+.grid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:10px}
+</style>
+</helmet>
+<div style="width: 1280px; height: 900px; box-sizing: border-box; background: rgb(10,11,14); color: rgb(245,245,244); font-family: 'Geist', system-ui, sans-serif; padding: 28px 32px; display: flex; flex-direction: column; gap: 22px">
+  <div style="display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap">
+    <h2 style="margin: 0; font-family: 'Silkscreen', monospace; font-weight: 400; font-size: 20px; letter-spacing: 1px">WALLS &amp; FLOORS</h2>
+    <span class="st" style="font-size: 13px">Surface slots fill the whole wall or floor. Patches shown at room scale ×3.</span>
+    <span style="flex: 1"></span>
+    <span class="st" style="font-size: 12px"><span class="bdg" style="color: {{accent}}">TINT</span> takes KIP’s colour · <span class="bdg" style="color: #FDE047">GLOW</span> lights up at night · <span class="bdg" style="color: #67E8F9">ANIM</span> moves · sample account: starter + level I earned</span>
+  </div>
+  <sc-for list="{{sections}}" as="s" hint-placeholder-count="2">
+    <section style="display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: baseline; gap: 10px"><span class="label" style="color: rgb(245,245,244)">slot · {{s.slot}}</span><span class="st">{{s.count}} items</span></div>
+      <div class="grid">
+        <sc-for list="{{s.tiles}}" as="t" hint-placeholder-count="8">
+          <div class="tile">
+            <sc-if value="{{t.locked}}" hint-placeholder-val="{{ false }}"><svg class="lock" width="12" height="12" viewBox="0 0 12 12" shape-rendering="crispEdges" aria-hidden="true"><rect x="3" y="1" width="6" height="1" fill="#9B9DA6"></rect><rect x="2" y="2" width="1" height="3" fill="#9B9DA6"></rect><rect x="9" y="2" width="1" height="3" fill="#9B9DA6"></rect><rect x="1" y="5" width="10" height="6" fill="#9B9DA6"></rect><rect x="5" y="7" width="2" height="2" fill="#14161B"></rect></svg></sc-if>
+            <div class="pic" style="height: 64px"><svg role="img" aria-label="{{t.name}}" width="{{t.pic.w}}" height="{{t.pic.h}}" shape-rendering="crispEdges" style="{{t.dim}}"><sc-for list="{{t.pic.layers}}" as="l" hint-placeholder-count="0"><path d="{{l.d}}" fill="{{l.fill}}"></path></sc-for></svg></div>
+            <div class="nm">{{t.name}}</div>
+            <div class="bd"><sc-for list="{{t.badges}}" as="b" hint-placeholder-count="0"><span class="bdg" style="color: {{b.c}}">{{b.t}}</span></sc-for></div>
+            <div class="st"><span class="stk" style="color: {{t.sc}}">{{t.status}}</span><br>{{t.unlock}}</div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"kipColor":{"editor":"color","default":"#FB7185","options":["#FB7185","#3B82F6","#A3E635","#C4B5FD"]},"$preview":{"width":1280,"height":900}}'>
+function kRgb(h) { var n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function kHx(n) { var s = Math.max(0, Math.min(255, Math.round(n))).toString(16); return s.length < 2 ? "0" + s : s; }
+function kMix(a, b, k) { var x = kRgb(a), y = kRgb(b); return "#" + kHx(x[0] * (1 - k) + y[0] * k) + kHx(x[1] * (1 - k) + y[1] * k) + kHx(x[2] * (1 - k) + y[2] * k); }
+function kDark(a, k) { var x = kRgb(a); return "#" + kHx(x[0] * k) + kHx(x[1] * k) + kHx(x[2] * k); }
+function kRamp(body) { return { b: body, h: kMix(body, "#FFFFFF", 0.25), s: kDark(body, 0.78), d: kDark(body, 0.6) }; }
+function pxLayers(rects, u) { var by = {}, order = []; rects.forEach(function (r) { var f = r[4]; if (!by[f]) { by[f] = ""; order.push(f); } by[f] += "M" + r[0] * u + " " + r[1] * u + "h" + r[2] * u + "v" + r[3] * u + "h-" + r[2] * u + "z"; }); return order.map(function (f) { return { fill: f, d: by[f] }; }); }
+function R(r, x, y, w, h, c) { r.push([x, y, w, h, c]); }
+var FAM = { SG: "Sleep goal", SB: "Steady bedtime", ST: "Step goal", CI: "Check-in", BR: "Best recovery week", EL: "Every day logged", SM: "Steadiest month" };
+var ROM = ["", "I", "II", "III", "IV", "V"];
+function unl(c) { if (c === "S") return "In every room from day one"; var m = c.match(/^([A-Z]+)(\d+)$/), n = +m[2]; if (m[1] === "ANY") return "Any family · level " + ROM[n]; if (m[1] === "RC") return "Read " + n + " weekly recaps"; if (m[1] === "CB") return "Cheer a buddy " + n + " times"; return FAM[m[1]] + " · " + ROM[n]; }
+function owned(c) { return c === "S" || /^[A-Z]+1$/.test(c) && !/^(RC|CB)/.test(c) || c === "RC4" || c === "CB5"; }
+var BADGE = { T: "TINT", G: "GLOW", A: "ANIM" };
+// Surfaces: a pattern over any W x H patch (the same code fills the room's wall and floor).
+function patch(k, W, H, p) {
+  var r = [], x, y, i;
+  function f(c) { R(r, 0, 0, W, H, c); }
+  if (k === "plain") f("#2A3140");
+  else if (k === "dots") { f("#2A3140"); for (y = 1; y < H; y += 4) for (x = (y % 8 === 1 ? 1 : 3); x < W; x += 4) R(r, x, y, 1, 1, "#4B5568"); }
+  else if (k === "stripes") { f(p.d); for (x = 1; x < W; x += 6) R(r, x, 0, 2, H, p.s); }
+  else if (k === "brick") { f("#5A2A22"); for (y = 0; y < H; y += 4) for (x = (y % 8 ? -4 : 0); x < W; x += 8) R(r, x + 1, y, 7, 3, "#8A4434"); }
+  else if (k === "panel") { f("#6B4F3A"); for (x = 0; x < W; x += 6) R(r, x, 0, 1, H, "#5A4130"); R(r, 0, 0, W, 1, "#8A6A4E"); R(r, 0, Math.floor(H / 2), W, 1, "#5A4130"); }
+  else if (k === "shoji") { f("#EDE6D3"); for (x = 0; x < W; x += 6) R(r, x, 0, 1, H, "#6B4F3A"); for (y = 0; y < H; y += 4) R(r, 0, y, W, 1, "#6B4F3A"); }
+  else if (k === "concrete" || k === "concreteF") { f(k === "concrete" ? "#6B7280" : "#57534E"); for (i = 0; i < W * H / 6; i++) { x = (i * 7 + 3) % W; y = (i * 11 + 5) % H; R(r, x, y, 1, 1, i % 2 ? (k === "concrete" ? "#5B6170" : "#48443F") : (k === "concrete" ? "#7B8290" : "#6B665F")); } }
+  else if (k === "florals") { f("#3B2F4A"); for (y = 2; y < H; y += 6) for (x = (y % 12 === 2 ? 2 : 5); x < W; x += 6) { R(r, x, y - 1, 1, 1, "#F9A8D4"); R(r, x - 1, y, 3, 1, "#F9A8D4"); R(r, x, y + 1, 1, 1, "#F9A8D4"); R(r, x, y, 1, 1, "#FDE047"); R(r, x + 1, y + 2, 1, 1, "#4ADE80"); } }
+  else if (k === "checker" || k === "checkerF") { for (y = 0; y < H; y += 4) for (x = 0; x < W; x += 4) R(r, x, y, 4, 4, ((x + y) / 4) % 2 ? "#1F2937" : (k === "checker" ? "#E5E7EB" : "#F1F5F9")); }
+  else if (k === "neon" || k === "neonF") { f("#140A2A"); var nc = k === "neon" ? "#7C3AED" : "#C026D3"; for (x = 0; x < W; x += 6) R(r, x, 0, 1, H, nc); for (y = 0; y < H; y += 6) R(r, 0, y, W, 1, nc); }
+  else if (k === "stars") { f("#0F172A"); for (i = 0; i < W * H / 14; i++) { x = (i * 13 + 5) % W; y = (i * 7 + 3) % H; R(r, x, y, 1, 1, i % 3 ? "#F8FAFC" : "#FDE68A"); } R(r, Math.floor(W * 0.7), 2, 3, 3, "#F1F5F9"); }
+  else if (k === "subway") { f("#E5E7EB"); for (y = 0; y < H; y += 3) { R(r, 0, y, W, 1, "#CBD5E1"); for (x = (y % 6 ? 3 : 0); x < W; x += 6) R(r, x, y, 1, 3, "#CBD5E1"); } }
+  else if (k === "oakDark" || k === "oakLight") { var a = k === "oakDark" ? "#5B4636" : "#D4B996", b2 = k === "oakDark" ? "#4A382B" : "#C2A680"; f(a); for (y = 4; y < H; y += 5) R(r, 0, y, W, 1, b2); for (y = 0; y < H; y += 5) for (x = (y % 10 ? 8 : 20); x < W; x += 24) R(r, x, y, 1, 5, b2); }
+  else if (k === "tatami") { f("#C9C08A"); for (x = 0; x < W; x += 2) R(r, x, 0, 1, H, "#BDB37A"); for (x = 0; x < W; x += 12) R(r, x, 0, 1, H, "#3F6212"); R(r, 0, 0, W, 1, "#3F6212"); }
+  else if (k === "tiles") { f("#E5E7EB"); for (x = 0; x < W; x += 6) R(r, x, 0, 1, H, "#CBD5E1"); for (y = 0; y < H; y += 6) R(r, 0, y, W, 1, "#CBD5E1"); }
+  else if (k === "carpet") { f(p.s); for (i = 0; i < W * H / 4; i++) { x = (i * 5 + 1) % W; y = (i * 3 + 2) % H; R(r, x, y, 1, 1, i % 2 ? p.d : p.b); } }
+  else if (k === "rubber") { f("#1F2937"); for (x = 0; x < W; x += 8) R(r, x, 0, 1, H, "#111827"); for (y = 0; y < H; y += 8) R(r, 0, y, W, 1, "#111827"); for (i = 0; i < W * H / 16; i++) R(r, (i * 9 + 3) % W, (i * 5 + 2) % H, 1, 1, i % 4 ? "#475569" : "#DC2626"); }
+  return r;
+}
+var WALLS = [
+  ["plain", "Plain slate", "S", "", "plain"], ["dots", "Dots", "S", "", "dots"], ["stripes", "Tinted stripes", "SB1", "T", "stripes"], ["brick", "Brick", "ST2", "", "brick"],
+  ["panel", "Wood panel", "RC4", "", "panel"], ["shoji", "Shoji paper", "SB3", "", "shoji"], ["concrete", "Concrete", "ST3", "", "concrete"], ["florals", "Florals", "CB5", "", "florals"],
+  ["checker", "Checker", "CI2", "", "checker"], ["subway", "Subway tiles", "EL2", "", "subway"], ["neon", "Neon grid", "CI4", "G", "neon"], ["stars", "Starry night", "SM4", "GA", "stars"]
+];
+var FLOORS = [
+  ["oakDark", "Dark oak", "S", "", "oakDark"], ["oakLight", "Light oak", "RC8", "", "oakLight"], ["tatami", "Tatami", "SB3", "", "tatami"], ["tiles", "White tiles", "EL1", "", "tiles"],
+  ["carpet", "Tinted carpet", "SG1", "T", "carpet"], ["checkerF", "Checker floor", "CI3", "", "checkerF"], ["concreteF", "Polished concrete", "ST2", "", "concreteF"], ["rubber", "Gym rubber", "ST3", "", "rubber"],
+  ["neonF", "Neon floor", "CI5", "G", "neonF"]
+];
+function tile(it, W, H, ramp, accent) {
+  var c = it[2], own = owned(c);
+  return {
+    name: it[1], locked: !own, dim: own ? "" : "opacity: .5",
+    pic: { w: W * 3, h: H * 3, layers: pxLayers(patch(it[4], W, H, ramp), 3) },
+    badges: it[3].split("").map(function (k) { return { t: BADGE[k], c: k === "T" ? accent : k === "G" ? "#FDE047" : "#67E8F9" }; }),
+    status: c === "S" ? "Starter" : own ? "Earned" : "Locked", sc: c === "S" ? "rgb(245,245,244)" : own ? "#4ADE80" : "rgb(155,157,166)",
+    unlock: unl(c)
+  };
+}
+
+class Component extends DCLogic {
+  renderVals() {
+    var col = this.props.kipColor ?? "#FB7185", ramp = kRamp(col);
+    return {
+      accent: col,
+      sections: [
+        { slot: "wallpaper", count: WALLS.length, tiles: WALLS.map(function (it) { return tile(it, 32, 18, ramp, col); }) },
+        { slot: "floor", count: FLOORS.length, tiles: FLOORS.map(function (it) { return tile(it, 32, 14, ramp, col); }) }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>

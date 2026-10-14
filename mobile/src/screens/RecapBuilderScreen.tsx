@@ -3,7 +3,6 @@ import { Linking, PixelRatio, ScrollView, Switch, View, useWindowDimensions } fr
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRoute } from '@react-navigation/native';
 import { fetchRecap, type Recap } from '../api/recaps';
-import { useCharacter } from '../characters/CharacterContext';
 import { RecapCardView } from '../components/recap/RecapCardView';
 import { STORY_FRAME_COUNT, WeeklyStoryFrame, type StoryFrameIndex } from '../components/recap/WeeklyStoryView';
 import { YearPixelsView } from '../components/recap/YearPixelsView';
@@ -13,9 +12,10 @@ import { SegmentedControl } from '../components/ui/segmented-control';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { todayCivil } from '../lib/heatmap';
+import { useMyKipColour } from '../lib/kip/myKipColour';
 import { readIncludePrefs, writeIncludePrefs } from '../lib/recapPrefs';
 import {
-  FORMAT_LABELS, INCLUDE_LABELS, availableIncludes, exportLayout, previewScale, recapCoachId, resolveIncludes,
+  FORMAT_LABELS, INCLUDE_LABELS, availableIncludes, exportLayout, previewScale, resolveIncludes,
   type IncludeKey, type Includes, type ShareFormat,
 } from '../lib/recapShare';
 import { useEarnedBadges } from '../lib/useEarnedBadges';
@@ -30,7 +30,7 @@ const FRAME_OPTIONS = Array.from({ length: STORY_FRAME_COUNT }, (_, i) => ({ val
 
 export function RecapBuilderScreen() {
   const { params } = useRoute<any>() as { params: { id?: string; format: ShareFormat } };
-  const { characterId } = useCharacter();
+  const mine = useMyKipColour();
   const { width } = useWindowDimensions();
   const [recap, setRecap] = useState<Recap | null>(null);
   const [year, setYear] = useState<YearInPixels | null>(null);
@@ -89,15 +89,14 @@ export function RecapBuilderScreen() {
 
   function renderView(scale: number, testID: string) {
     if (format === 'year') {
-      return year ? <YearPixelsView testID={testID} year={year.year} pixels={year.pixels} goalMinutes={year.goalMinutes} coachId={characterId} includes={includes} scale={scale} /> : null;
+      return year ? <YearPixelsView testID={testID} year={year.year} pixels={year.pixels} goalMinutes={year.goalMinutes} kipColour={mine} includes={includes} scale={scale} /> : null;
     }
     if (!recap) return null;
-    // The card and story show the recap's own coach, whose voice wrote the line (ruling S6).
-    const coachId = recapCoachId(recap, characterId);
+    // Every image draws your KIP; a past recap's stored personaId is ignored for drawing (spec §7.7).
     return format === 'card' ? (
-      <RecapCardView testID={testID} recap={recap} coachId={coachId} includes={includes} scale={scale} />
+      <RecapCardView testID={testID} recap={recap} kipColour={mine} includes={includes} scale={scale} />
     ) : (
-      <WeeklyStoryFrame testID={testID} recap={recap} coachId={coachId} includes={includes} scale={scale} index={frame} badges={weekBadges} />
+      <WeeklyStoryFrame testID={testID} recap={recap} kipColour={mine} includes={includes} scale={scale} index={frame} badges={weekBadges} />
     );
   }
 

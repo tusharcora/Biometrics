@@ -226,8 +226,7 @@ export type SummaryOutcome =
   | 'skipped_disabled'
   | 'skipped_no_consent'
   | 'skipped_no_data'
-  | 'skipped_exists'
-  | 'skipped_persona_changed';
+  | 'skipped_exists';
 
 export interface SummaryEngineSlots {
   getProvider: () => CoachModelProvider;
@@ -285,7 +284,7 @@ export function checkSummary(
 
 export function buildTodaySummaryPrompt(persona: CoachPersona, sheet: FactSheet, today: string): string {
   return [
-    `You are ${escapeField(persona.name)}, the user's companion coach in a health app.`,
+    `You are ${escapeField(persona.name)}, the user's own coach in a health app.`,
     `Your tone: ${escapeField(persona.tone)}`,
     ...(persona.focus ? [`Your coaching focus: ${escapeField(persona.focus)}`] : []),
     `Today is ${today}.`,
@@ -387,8 +386,6 @@ async function generate(userId: string, deps: TodayDeps): Promise<SummaryOutcome
   const written = await writeSentence(selection, persona, sheet, today, deps);
   const text = 'text' in written ? written.text : null;
 
-  // A character switch while the model was writing: this sentence is in the old voice.
-  if (await personaChanged(userId, persona)) return 'skipped_persona_changed';
   if ('failure' in written) {
     deps.telemetry?.emit({
       name: 'coach.summary_failed',
@@ -403,31 +400,19 @@ async function generate(userId: string, deps: TodayDeps): Promise<SummaryOutcome
       ? { text, spans: spansFor(text), source: 'AI' as const }
       : { ...templateSentence(sheet), source: 'TEMPLATE' as const };
   const data = { text: row.text, spans: row.spans as unknown as Prisma.InputJsonValue, source: row.source };
-  let stored: { id: string; createdAt: Date };
   try {
-    stored = await prisma.coachDaySummary.upsert({
+    await prisma.coachDaySummary.upsert({
       where,
       create: { userId, date: civilDateToUtcMidnight(today), ...data },
       update: { ...data, createdAt: new Date() },
-      select: { id: true, createdAt: true },
+      select: { id: true },
     });
   } catch (err) {
     // Another instance wrote today's row first; theirs stands.
     if ((err as { code?: string } | null)?.code === 'P2002') return 'skipped_exists';
     throw err;
   }
-  // The character changed between the check above and the write: take this row back (only while it
-  // is still ours), so the rewrite the switch asked for writes in the new voice.
-  if (await personaChanged(userId, persona)) {
-    await prisma.coachDaySummary.deleteMany({ where: { id: stored.id, createdAt: stored.createdAt } });
-    return 'skipped_persona_changed';
-  }
   return text !== null ? 'ai' : 'template';
-}
-
-async function personaChanged(userId: string, persona: CoachPersona): Promise<boolean> {
-  const current = await prisma.user.findUnique({ where: { id: userId }, select: { coachPersonaId: true } });
-  return resolvePersona(current?.coachPersonaId).id !== persona.id;
 }
 
 const wroteRow = (outcome: SummaryOutcome | null) => outcome === 'ai' || outcome === 'template';
@@ -464,8 +449,7 @@ function startRun(userId: string, state: UserRuns, deps: TodayDeps): Promise<Sum
  * - when any of them forces (the after-sync job), the follow-up rewrites from
  *   the sheet as it is then, so the stored sentence never predates the sync;
  * - otherwise it reuses the current run's result when that run stored a row,
- *   and runs again when it did not (the character changed mid-run, so the
- *   follow-up writes in the new voice).
+ *   and runs again when it did not.
  */
 export function generateTodaySummary(userId: string, deps: TodayDeps = {}): Promise<SummaryOutcome> {
   const state = runs.get(userId);

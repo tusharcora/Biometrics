@@ -8,21 +8,20 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import Animated, { runOnJS, useAnimatedStyle, useReducedMotion, useSharedValue, withSpring } from 'react-native-reanimated';
 import { ApiError } from '../api/client';
 import { fetchRecap, type Recap } from '../api/recaps';
-import { useCharacter } from '../characters/CharacterContext';
-import { Character } from '../components/characters/Character';
-import { hexAlpha } from '../components/characters/palette';
-import { characterInfo } from '../components/characters/registry';
+import { Kip } from '../components/kip/Kip';
 import { ViewerProgress } from '../components/recap/ViewerProgress';
 import { STORY_FRAME_COUNT, WeeklyStoryFrame, type StoryFrameIndex } from '../components/recap/WeeklyStoryView';
 import { Button, buttonIconSize, buttonTextVariants, type ButtonVariant } from '../components/ui/button';
 import { Text } from '../components/ui/text';
 import { navigateToCoachEntry } from '../navigation/coachNavigation';
-import { weekRange } from '../lib/recapCopy';
+import { hexAlpha } from '../lib/colour';
+import type { KipColour } from '../lib/kip/kipArt';
+import { useMyKipColour } from '../lib/kip/myKipColour';
+import { RECAP_COPY, weekRange } from '../lib/recapCopy';
 import { readIncludePrefs } from '../lib/recapPrefs';
-import { DESIGN_HEIGHT, DESIGN_WIDTH, exportLayout, recapCoachId, resolveIncludes, type Includes } from '../lib/recapShare';
+import { DESIGN_HEIGHT, DESIGN_WIDTH, exportLayout, resolveIncludes, type Includes } from '../lib/recapShare';
 import { askAboutWeekPrompt } from '../lib/recapShelf';
 import { recapTint, type RecapTint } from '../lib/recapTheme';
-import type { CharacterId } from '../components/characters/types';
 import { showsEndActions, tapSide } from '../lib/storyViewer';
 import { openRecap } from '../lib/unwatchedRecap';
 import { coachEntryRoute, useCoachStatus } from '../lib/useCoachStatus';
@@ -54,7 +53,7 @@ type Loaded = { phase: 'loading' } | { phase: 'ready'; recap: Recap } | { phase:
 export function RecapStoryScreen() {
   const { params } = useRoute<any>() as { params: Params };
   const navigation = useNavigation<any>();
-  const { characterId } = useCharacter();
+  const mine = useMyKipColour();
   const given = 'recap' in params ? params.recap : null;
   const id = given?.id ?? (params as { id: string }).id;
   const [loaded, setLoaded] = useState<Loaded>(given ? { phase: 'ready', recap: given } : { phase: 'loading' });
@@ -98,16 +97,16 @@ export function RecapStoryScreen() {
     };
   }, []);
 
-  const coachId = recap ? recapCoachId(recap, characterId) : characterId;
-  const tint = recapTint(coachId);
+  // Your KIP, whatever coach a past recap's stored personaId names (spec §7.7).
+  const tint = recapTint(mine);
   const leave = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs'));
 
   return (
     <View testID="story-viewer" style={{ flex: 1, backgroundColor: tint.ground }}>
-      {/* The coach's ground is dark in both themes: light status bar content while the viewer is up. */}
+      {/* KIP's ground is dark in both themes: light status bar content while the viewer is up. */}
       <StatusBar style="light" />
       {recap?.kind === 'WEEK' && prefs ? (
-        <StoryViewer key={recap.id} recap={recap} coachId={coachId} tint={tint} includes={resolveIncludes('story', prefs, recap.stats)} />
+        <StoryViewer key={recap.id} recap={recap} kipColour={mine} tint={tint} includes={resolveIncludes('story', prefs, recap.stats)} />
       ) : (
         <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
           <View style={{ alignItems: 'flex-end', paddingHorizontal: SIDE - 4 }}>
@@ -140,12 +139,11 @@ export function RecapStoryScreen() {
   );
 }
 
-function StoryViewer({ recap, coachId, tint, includes }: { recap: Recap; coachId: CharacterId; tint: RecapTint; includes: Includes }) {
+function StoryViewer({ recap, kipColour, tint, includes }: { recap: Recap; kipColour: KipColour; tint: RecapTint; includes: Includes }) {
   const navigation = useNavigation<any>();
   const { width, height } = useWindowDimensions();
   const insets = useSafeAreaInsets();
   const reduceMotion = useReducedMotion();
-  const { characterId } = useCharacter();
   const { status } = useCoachStatus();
   // The reply bar only when the chat would open (coach on and consented).
   const canAsk = coachEntryRoute(status) === 'Coach';
@@ -230,9 +228,6 @@ function StoryViewer({ recap, coachId, tint, includes }: { recap: Recap; coachId
   // Closes the viewer (the Coach tab is under it) with the question in the composer, never sent.
   const ask = () => navigateToCoachEntry(navigation, 'Coach', askAboutWeekPrompt(recap));
 
-  const coachName = characterInfo(coachId).name;
-  const askName = characterInfo(characterId).name;
-
   return (
     <>
       <SafeAreaView style={{ flex: 1 }} edges={['top', 'bottom']}>
@@ -242,10 +237,10 @@ function StoryViewer({ recap, coachId, tint, includes }: { recap: Recap; coachId
               <ViewerProgress count={STORY_FRAME_COUNT} index={index} progress={viewer.progress} track={tint.track} fill={tint.text} />
               <View testID="story-viewer-header" className="flex-row items-center" style={{ gap: 10, height: 44 }}>
                 <View testID="story-viewer-coach" style={{ width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(0,0,0,0.3)', alignItems: 'center', justifyContent: 'center' }}>
-                  <Character characterId={coachId} mood="idle" size={28} />
+                  <Kip testID="recap-kip" colour={kipColour} pose="rest" mood="idle" scale={2} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text testID="story-viewer-title" numberOfLines={1} className="text-body font-semibold" style={{ color: tint.text }}>{`${coachName} · Your week`}</Text>
+                  <Text testID="story-viewer-title" accessibilityLabel={RECAP_COPY.storyViewerTitleSpoken} numberOfLines={1} className="text-body font-semibold" style={{ color: tint.text }}>{RECAP_COPY.storyViewerTitle}</Text>
                   <Text testID="story-viewer-range" numberOfLines={1} className="text-caption" style={{ color: tint.soft }}>{weekRange(recap.periodStart, recap.periodEnd)}</Text>
                 </View>
                 <Button testID="story-viewer-share" variant="ghost" size="icon-lg" accessibilityLabel="Share this frame" className={ON_GROUND_GHOST}
@@ -259,7 +254,7 @@ function StoryViewer({ recap, coachId, tint, includes }: { recap: Recap; coachId
             </View>
             <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}>
               <View style={{ width: frameW, height: frameH }}>
-                <WeeklyStoryFrame testID="story" recap={recap} coachId={coachId} includes={includes} scale={scale} index={index} showProgress={false} badges={badges} />
+                <WeeklyStoryFrame testID="story" recap={recap} kipColour={kipColour} includes={includes} scale={scale} index={index} showProgress={false} badges={badges} />
                 <Pressable
                   testID="story-viewer-tap"
                   style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0 }}
@@ -293,7 +288,8 @@ function StoryViewer({ recap, coachId, tint, includes }: { recap: Recap; coachId
           ) : null}
           {atEnd ? (
             <View testID="story-end-actions" style={{ gap: 10 }}>
-              <Button testID="story-end-full-recap" size="lg" style={{ backgroundColor: tint.accent }} onPress={fullRecap} {...holdChrome}>
+              {/* accentText, not accent: the label is the ground, and a dark KIP (ink, slate) would not read on its own colour. */}
+              <Button testID="story-end-full-recap" size="lg" style={{ backgroundColor: tint.accentText }} onPress={fullRecap} {...holdChrome}>
                 <TintLabel testID="story-end-full-recap-label" color={tint.ground} variant="default">See full recap</TintLabel>
               </Button>
               <View className="flex-row" style={{ gap: 10 }}>
@@ -319,7 +315,7 @@ function StoryViewer({ recap, coachId, tint, includes }: { recap: Recap; coachId
                   className="flex-1 justify-start"
                   style={outlineOn(tint)}
                 >
-                  <TintLabel color={tint.soft} className="shrink font-normal">{`Ask ${askName} about your week…`}</TintLabel>
+                  <TintLabel color={tint.soft} className="shrink font-normal">{RECAP_COPY.askKipWeek}</TintLabel>
                 </Button>
               ) : (
                 <View style={{ flex: 1 }} />
@@ -336,7 +332,7 @@ function StoryViewer({ recap, coachId, tint, includes }: { recap: Recap; coachId
           (none of the viewer's chrome or end actions). */}
       <View pointerEvents="none" style={{ position: 'absolute', left: -10000, top: 0 }}>
         <View ref={exportRef} collapsable={false} testID="story-export-view" style={{ width: layout.width, height: layout.height }}>
-          <WeeklyStoryFrame testID="story-export" recap={recap} coachId={coachId} includes={includes} scale={layout.scale} index={index} badges={badges} />
+          <WeeklyStoryFrame testID="story-export" recap={recap} kipColour={kipColour} includes={includes} scale={layout.scale} index={index} badges={badges} />
         </View>
       </View>
     </>

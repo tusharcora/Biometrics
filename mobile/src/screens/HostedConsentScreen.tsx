@@ -18,8 +18,9 @@ import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { SettingsGroup, SettingsRow } from '../components/ui/settings-list';
 import { SectionLabel } from '../components/ui/section-label';
-import { Character } from '../components/characters/Character';
-import { useScreenFocused } from '../characters/useScreenFocused';
+import { Kip } from '../components/kip/Kip';
+import { useMyKipColour } from '../lib/kip/myKipColour';
+import { KIP_COPY } from '../lib/kipCopy';
 import { COLORS } from '../theme';
 
 type LoadState = { status: 'loading' } | { status: 'error' } | { status: 'unavailable' } | { status: 'ready'; hosted: HostedEngineDTO };
@@ -32,7 +33,7 @@ export function HostedConsentScreen() {
   const navigation = useNavigation<any>();
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === 'dark' ? COLORS.dark : COLORS.light;
-  const focused = useScreenFocused();
+  const mine = useMyKipColour();
   const [state, setState] = useState<LoadState>({ status: 'loading' });
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState(false);
@@ -90,9 +91,9 @@ export function HostedConsentScreen() {
     return (
       <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
         <View testID={state.status === 'error' ? 'hosted-consent-load-error' : 'hosted-consent-unavailable'} className="flex-1 items-center justify-center gap-4 px-8">
-          <Character mood="idle" size={48} paused={!focused} />
+          <Kip testID="hosted-consent-kip" colour={mine} pose="wave" mood="curious" scale={3} />
           <Text className="text-center text-muted-foreground">
-            {state.status === 'error' ? 'Something went wrong loading this screen.' : "Claude isn't available right now. Your coach keeps answering on-device."}
+            {state.status === 'error' ? 'Something went wrong loading this screen.' : KIP_COPY.hostedUnavailable}
           </Text>
           {state.status === 'error' ? (
             <Button testID="hosted-consent-retry" variant="secondary" onPress={() => void load()}>
@@ -111,7 +112,7 @@ export function HostedConsentScreen() {
     <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
       <ScrollView contentContainerStyle={{ gap: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 32 }}>
         <View className="items-start gap-4">
-          <Character mood="idle" size={56} glow paused={!focused} />
+          <Kip testID="hosted-consent-kip" colour={mine} pose="wave" mood="curious" scale={3} />
           <Text accessibilityRole="header" className="text-display">
             Answer with Claude
           </Text>

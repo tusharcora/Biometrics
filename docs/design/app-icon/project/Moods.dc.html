@@ -1,0 +1,66 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Mood icons</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;family=Silkscreen&amp;display=swap">
+<style>
+body{margin:0;background:#0A0B0E}
+a{color:#8EE3C8}a:hover{color:#C1F0E1}
+</style>
+</helmet>
+<div style="width: 1280px; height: 600px; box-sizing: border-box; padding: 44px 48px; background: #0A0B0E; color: #E7E9EE; font-family: Geist, system-ui, sans-serif; display: flex; flex-direction: column; gap: 24px">
+
+  <div style="display: flex; flex-direction: column; gap: 10px">
+    <div style="display: flex; align-items: center; gap: 14px">
+      <h2 style="margin: 0; font-family: Silkscreen, monospace; font-weight: 400; font-size: 32px; line-height: 1">MOOD ICONS</h2>
+      <span style="font-family: Silkscreen, monospace; font-size: 12px; color: #0A0B0E; background: #FDE047; padding: 5px 8px 4px; border-radius: 4px">5 · OPTIONAL FUN</span>
+    </div>
+    <p style="margin: 0; font-size: 15px; line-height: 1.5; color: #A3A9B5; max-width: 900px">Direction A with KIP's moods, as alternate icons a person can unlock or pick. Same tile, same shade side; only the eyes and one accessory change, so they still read as the same app.</p>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px">
+
+    <div style="background: #14161B; border: 1px solid #23262E; border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 12px">
+      <dc-import name="Icon" concept="face" mood="happy" size="192" hint-size="192px,192px"></dc-import>
+      <div style="display: flex; gap: 12px; align-items: flex-end"><dc-import name="Icon" concept="face" mood="happy" size="60" hint-size="60px,60px"></dc-import><dc-import name="Icon" concept="face" mood="happy" size="29" hint-size="29px,29px"></dc-import></div>
+      <h3 style="margin: 0; font-family: Silkscreen, monospace; font-weight: 400; font-size: 14px">HAPPY</h3>
+      <p style="margin: 0; font-size: 13px; line-height: 1.45; color: #A3A9B5">Arched eyes and blush. A seasonal or "great recovery week" icon.</p>
+    </div>
+
+    <div style="background: #14161B; border: 1px solid #23262E; border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 12px">
+      <dc-import name="Icon" concept="face" mood="sleepy" size="192" hint-size="192px,192px"></dc-import>
+      <div style="display: flex; gap: 12px; align-items: flex-end"><dc-import name="Icon" concept="face" mood="sleepy" size="60" hint-size="60px,60px"></dc-import><dc-import name="Icon" concept="face" mood="sleepy" size="29" hint-size="29px,29px"></dc-import></div>
+      <h3 style="margin: 0; font-family: Silkscreen, monospace; font-weight: 400; font-size: 14px">SLEEPY</h3>
+      <p style="margin: 0; font-size: 13px; line-height: 1.45; color: #A3A9B5">Closed eyes, small moon and stars. Unlocked by a sleep streak.</p>
+    </div>
+
+    <div style="background: #14161B; border: 1px solid #23262E; border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 12px">
+      <dc-import name="Icon" concept="face" mood="determined" size="192" hint-size="192px,192px"></dc-import>
+      <div style="display: flex; gap: 12px; align-items: flex-end"><dc-import name="Icon" concept="face" mood="determined" size="60" hint-size="60px,60px"></dc-import><dc-import name="Icon" concept="face" mood="determined" size="29" hint-size="29px,29px"></dc-import></div>
+      <h3 style="margin: 0; font-family: Silkscreen, monospace; font-weight: 400; font-size: 14px">DETERMINED</h3>
+      <p style="margin: 0; font-size: 13px; line-height: 1.45; color: #A3A9B5">Headband and set brows. A training-block or workout-streak icon.</p>
+    </div>
+
+    <div style="background: #14161B; border: 1px solid #23262E; border-radius: 12px; padding: 18px; display: flex; flex-direction: column; gap: 12px">
+      <dc-import name="Icon" concept="face" mood="crowned" size="192" hint-size="192px,192px"></dc-import>
+      <div style="display: flex; gap: 12px; align-items: flex-end"><dc-import name="Icon" concept="face" mood="crowned" size="60" hint-size="60px,60px"></dc-import><dc-import name="Icon" concept="face" mood="crowned" size="29" hint-size="29px,29px"></dc-import></div>
+      <h3 style="margin: 0; font-family: Silkscreen, monospace; font-weight: 400; font-size: 14px">CROWNED</h3>
+      <p style="margin: 0; font-size: 13px; line-height: 1.45; color: #A3A9B5">The crown cosmetic, recoloured for the tile. A top-achievement reward.</p>
+    </div>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":600}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

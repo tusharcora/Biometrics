@@ -88,9 +88,9 @@ describe('PROFILE_COPY status lines', () => {
     expect(S.buddies('tushar', 3, 5)).toBe('@tushar · sharing 3 of 5');
     expect(S.buddies(null, 0, 5)).toBe('Set up your handle');
     expect(S.chats({ readReceipts: true, activityStatus: false })).toBe('Read receipts on · status off');
-    expect(S.coach('Sage', 'Pixel dots', 'Short')).toBe('Sage · Pixel dots · Short');
-    expect(S.aiCoach(true)).toBe('On · Coach Memory');
-    expect(S.aiCoach(false)).toBe('Off · tap to set up');
+    expect(S.kip('Cobalt', 'Steps', true)).toBe('Cobalt · Steps · coaching on');
+    expect(S.kip('Cobalt', 'Steps', false)).toBe('Cobalt · Steps · coaching off');
+    expect(S.kip('Cobalt', 'Steps', null)).toBe('Cobalt · Steps');
     expect(S.signIn(['apple', 'google'], 2)).toBe('Apple, Google · 2 devices');
     expect(S.signIn(['credential'], 1)).toBe('Email · 1 device');
   });

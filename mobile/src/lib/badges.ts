@@ -41,7 +41,7 @@ export const FAMILY_RULES: Record<AchievementFamily, string> = {
 };
 
 export const LEVEL_NUMERALS = ['I', 'II', 'III', 'IV', 'V'] as const;
-export const TIER_NAMES = ['Bronze', 'Silver', 'Gold', 'Diamond', 'Coach'] as const;
+export const TIER_NAMES = ['Bronze', 'Silver', 'Gold', 'Diamond', 'Legend'] as const;
 
 const UNIT: Record<AchievementFamily, 'night' | 'day' | 'month'> = {
   SLEEP_GOAL: 'night', STEADY_BEDTIME: 'night', STEP_GOAL: 'day', CHECK_IN: 'day',

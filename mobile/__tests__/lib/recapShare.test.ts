@@ -1,6 +1,7 @@
 import {
-  availableIncludes, exportLayout, fitQuote, FORMAT_LABELS, INCLUDE_LABELS, PIXEL_ADVANCE_EM, previewScale, QUOTE_LINE_HEIGHT, quoteLines, recapCoachId, resolveIncludes,
+  availableIncludes, exportLayout, fitQuote, FORMAT_LABELS, INCLUDE_LABELS, PIXEL_ADVANCE_EM, previewScale, QUOTE_LINE_HEIGHT, quoteLines, resolveIncludes,
 } from '../../src/lib/recapShare';
+import * as recapShare from '../../src/lib/recapShare';
 
 // 30 words, 199 characters: the longest line the coach writes for a recap.
 const LONG = 'Six nights running on goal this September, and your bedtimes finally settled into a calm, unhurried rhythm after a rocky start; protect that wind-down routine and October looks wonderfully promising.';
@@ -28,7 +29,7 @@ it('starts Best recovery off (the design default) until it is switched on', () =
 it('uses the design labels for formats and switches', () => {
   expect(FORMAT_LABELS).toEqual({ card: 'Card', story: 'Story', year: 'Year' });
   expect([INCLUDE_LABELS.avgSleep, INCLUDE_LABELS.streak, INCLUDE_LABELS.bestRecovery, INCLUDE_LABELS.steps, INCLUDE_LABELS.quote]).toEqual([
-    'Average sleep', 'Longest streak', 'Best recovery', 'Steps', 'A line from your coach',
+    'Average sleep', 'Longest streak', 'Best recovery', 'Steps', 'A line from KIP',
   ]);
 });
 
@@ -46,10 +47,9 @@ it('fits a preview into its box', () => {
   expect(previewScale('story', 360, 320)).toBeCloseTo(0.5);
 });
 
-it("shows the recap's own coach on the card and story, since the line is in that voice (ruling S6)", () => {
-  expect(recapCoachId({ personaId: 'luna' }, 'mochi')).toBe('luna');
-  expect(recapCoachId({ personaId: null }, 'mochi')).toBe('mochi');
-  expect(recapCoachId({ personaId: 'retired-coach' }, 'boba')).toBe('boba');
+it("no longer picks a recap's own coach: every image draws your KIP, and a stored personaId is ignored (spec §7.7)", () => {
+  expect('recapCoachId' in recapShare).toBe(false);
+  expect(INCLUDE_LABELS.coach).toBe('Your KIP');
 });
 
 it('wraps a quote word by word', () => {

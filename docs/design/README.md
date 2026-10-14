@@ -24,6 +24,8 @@ designs are versioned.
 | `sleep/` | The one Sleep page (draft 2) and the Home + Recaps shelf board ([canvas](https://claude.ai/artifact/XZsyFUXr7QTZK7h8SR37Tq)) | Built on `feature/sleep-page`; PR held |
 | `character/` | The **KIP** mascot: rounds 1–9 and the final sheet (base + 22 skins). `scratch/kip-engine.js` is the drawing engine ([canvas](https://claude.ai/artifact/LY3oVnk2j3UipUuvX6BfdC)) | Design final; not built |
 | `home/` | The Home redesign: A1–C3, D–F, the **approved F** with its weather states, Settings S1/S2 and their category pages, Activity A-1/A-2, and the Profile ID cards ([canvas](https://claude.ai/artifact/JtcyzBVmuyYgR6u3W7mVnb)) | Home F approved; Settings, Activity and ID card awaiting picks |
+| `kip-coach/` | KIP replaces the coach cast: K1–K8 and W1–W8 directions, states, knock-on surfaces, the room cosmetics catalogue (190 items, 16 slots) and **Theme sets v2** ([canvas](https://claude.ai/artifact/YaeadpWCLs5gs1vqWjg7x6)) | Approved 2026-10-14: W7 pocket room + Theme sets v2; spec next |
+| `app-icon/` | App icon: 10 KIP directions, home-screen test, colourways, iOS/Android variants, mood icons ([canvas](https://claude.ai/artifact/AiPRSEnRfMXbzsiCsGpMHk)) | A · Face close-up chosen |
 
 ## Buttons
 

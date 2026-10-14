@@ -1,7 +1,6 @@
 import React from 'react';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { NavigationContext } from '@react-navigation/native';
-import { withCharacter } from '../../jest-mocks/characterContext';
 import { achievementsFixture } from '../../jest-mocks/achievementsFixture';
 import { fetchAchievements } from '../../src/api/achievements';
 import { resetAchievements } from '../../src/lib/achievementsStore';
@@ -23,7 +22,7 @@ beforeEach(() => {
 
 it('lists the seven families with their rule and status, and opens one', async () => {
   load.mockResolvedValue(achievementsFixture({ SLEEP_GOAL: { level: 2, current: 9 } }));
-  render(withCharacter(<BadgesScreen />));
+  render(<BadgesScreen />);
   expect(await screen.findByTestId('badges-row-SLEEP_GOAL-status')).toHaveTextContent('Level II · Silver · 9 / 14 nights');
   expect(screen.getByTestId('badges-row-EVERY_DAY_LOGGED-status')).toHaveTextContent('Not yet · 0 / 1 month');
   expect(screen.getByTestId('badges-row-STEP_GOAL')).toHaveTextContent('Finished days in a row at 10,000 steps', { exact: false });
@@ -33,13 +32,13 @@ it('lists the seven families with their rule and status, and opens one', async (
 
 it('says badges are not available against an old backend, and offers a retry after an error', async () => {
   load.mockResolvedValue(null);
-  const first = render(withCharacter(<BadgesScreen />));
+  const first = render(<BadgesScreen />);
   expect(await screen.findByTestId('badges-unavailable')).toBeTruthy();
   first.unmount();
 
   resetAchievements();
   load.mockRejectedValueOnce(new Error('offline'));
-  render(withCharacter(<BadgesScreen />));
+  render(<BadgesScreen />);
   expect(await screen.findByTestId('badges-error')).toBeTruthy();
   load.mockResolvedValue(achievementsFixture());
   await act(async () => fireEvent.press(screen.getByTestId('badges-retry')));
@@ -55,11 +54,11 @@ it('reloads the badges each time the screen comes back into focus', async () => 
       return () => undefined;
     }),
   };
-  render(withCharacter(
+  render(
     <NavigationContext.Provider value={navigation as never}>
       <BadgesScreen />
     </NavigationContext.Provider>,
-  ));
+  );
   expect(await screen.findByTestId('badges-row-SLEEP_GOAL')).toBeTruthy();
   expect(load).toHaveBeenCalledTimes(1);
   expect(navigation.addListener).toHaveBeenCalledWith('focus', expect.any(Function));

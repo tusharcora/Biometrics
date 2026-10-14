@@ -4,10 +4,10 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useColorScheme } from 'nativewind';
 import { useReducedMotion } from 'react-native-reanimated';
 import { Ionicons } from '@expo/vector-icons';
-import { useCharacterOptional } from '../characters/CharacterContext';
-import { useScreenFocused } from '../characters/useScreenFocused';
-import { DEFAULT_THINKING_TEXT, THINKING_TEXT_NAMES, THINKING_TEXTS, type ThinkingTextId } from '../components/characters/thinking';
-import { DEFAULT_CHARACTER_ID } from '../components/characters/types';
+import { useCoachStatusContext } from '../lib/coachStatus/CoachStatusProvider';
+import { DEFAULT_THINKING_TEXT, THINKING_TEXT_NAMES, THINKING_TEXTS, type ThinkingTextId } from '../lib/thinkingText';
+import { KIP_COPY } from '../lib/kipCopy';
+import { useScreenFocused } from '../lib/useScreenFocused';
 import { ThinkingRow } from '../components/coach/thinking/ThinkingRow';
 import { SettingsGroup } from '../components/ui/settings-list';
 import { Text } from '../components/ui/text';
@@ -36,13 +36,12 @@ function sampleSteps(phase: number): ThinkingStep[] {
   return SAMPLE_STEPS.slice(0, Math.min(phase + 1, SAMPLE_STEPS.length)).map((step, i) => ({ ...step, done: i < phase }));
 }
 
-// Settings -> Your coach -> Thinking text: how the chat shows a reply is on
+// Settings -> KIP -> While KIP thinks: how the chat shows a reply is on
 // its way (spec §5, §9). The preview is the Coach screen's pending row, with
-// the user's coach and the selected style.
+// KIP and the selected style.
 export function ThinkingTextScreen() {
-  const current = useCharacterOptional();
-  const characterId = current?.characterId ?? DEFAULT_CHARACTER_ID;
-  const selected = current?.thinkingText ?? DEFAULT_THINKING_TEXT;
+  const coach = useCoachStatusContext();
+  const selected = coach?.thinkingText ?? DEFAULT_THINKING_TEXT;
   const reduceMotion = useReducedMotion();
   const focused = useScreenFocused();
   const still = reduceMotion || !focused;
@@ -60,10 +59,10 @@ export function ThinkingTextScreen() {
   const steps = useMemo(() => sampleSteps(phase), [phase]);
 
   async function choose(id: ThinkingTextId) {
-    if (!current || id === selected) return;
+    if (!coach || id === selected) return;
     setError(null);
     try {
-      await current.chooseThinking({ text: id });
+      await coach.chooseThinkingText(id);
     } catch {
       setError(THINKING_TEXT_ERROR);
       // The line appears below the list, out of VoiceOver's focus: say it too.
@@ -74,14 +73,14 @@ export function ThinkingTextScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
       <ScrollView contentContainerStyle={{ gap: 16, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 32 }}>
-        <Text className="text-caption text-muted-foreground">How the chat shows your coach is working on a reply.</Text>
+        <Text className="text-caption text-muted-foreground">{KIP_COPY.thinkingTextIntro}</Text>
 
         {/* Chat-like: the user's question, then the pending row under it. */}
         <View className="min-h-[150px] justify-end gap-4 rounded-card border border-border bg-card p-4">
           <View className="max-w-[80%] self-end rounded-2xl bg-muted px-3.5 py-2">
             <Text className="text-body">How did I sleep?</Text>
           </View>
-          <ThinkingRow testID="thinking-preview" style={selected} characterId={characterId} steps={steps} paused={still} />
+          <ThinkingRow testID="thinking-preview" style={selected} steps={steps} paused={still} />
         </View>
 
         <SettingsGroup>
@@ -113,7 +112,7 @@ export function ThinkingTextScreen() {
                   importantForAccessibility="no-hide-descendants"
                   pointerEvents="none"
                 >
-                  <ThinkingRow style={id} characterId={characterId} steps={ROW_STEPS} paused={!isSelected || still} />
+                  <ThinkingRow style={id} steps={ROW_STEPS} paused={!isSelected || still} />
                 </View>
               </Pressable>
             );

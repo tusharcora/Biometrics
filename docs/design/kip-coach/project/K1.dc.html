@@ -1,0 +1,156 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>K1 · KIP chat</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Silkscreen&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.b{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;font-family:'Geist',system-ui,sans-serif;font-weight:500;white-space:nowrap;cursor:pointer;gap:6px;border:1px solid transparent;border-radius:8px;background:transparent;color:rgb(245,245,244);text-decoration:none}
+.ol{border-color:rgb(44,47,55);background:rgba(44,47,55,.3)}
+.df{background:rgb(245,245,244);color:rgb(10,11,14)}
+.label{font-family:'Silkscreen',monospace;font-size:11px;line-height:14px;letter-spacing:1px;text-transform:uppercase;color:rgb(155,157,166)}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:rgb(155,157,166)}
+.card{border-radius:22px;background:rgb(20,22,27);border:1px solid rgb(30,33,40);box-sizing:border-box}
+.span{text-decoration:underline dotted;text-underline-offset:4px;cursor:pointer}
+.bar{display:flex;align-items:center;gap:8px;min-height:32px}
+.bl{width:72px;font-size:12px;color:rgb(155,157,166)}
+.tr{flex:1;position:relative;height:14px;display:flex;align-items:center}
+.tr .t{width:100%;height:6px;background:rgb(32,35,42);display:block}
+.tr .f{height:6px;display:block}
+.tr .k{position:absolute;top:0;width:2px;height:14px;margin-left:-1px;background:rgb(200,200,205)}
+.bv{width:112px;text-align:right;font-size:13px}
+.tile{flex:1;border-radius:12px;background:rgb(32,35,42);padding:8px 10px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.chip{min-height:36px;padding:7px 12px;font-size:13px;white-space:normal;text-align:left}
+.mini{width:28px;height:28px;flex:none;border-radius:8px;display:flex;align-items:center;justify-content:center}
+</style>
+</helmet>
+<div style="width: 390px; height: 1260px; box-sizing: border-box; overflow: hidden; background: rgb(10,11,14); color: rgb(245,245,244); font-family: 'Geist', system-ui, sans-serif; display: flex; flex-direction: column; padding-top: 50px">
+
+  <div style="display: flex; align-items: center; gap: 12px; padding: 4px 20px 10px">
+    <div style="width: 52px; height: 52px; flex: none; border-radius: 12px; background: {{tileBg}}; display: flex; align-items: flex-end; justify-content: center; overflow: hidden">
+      <svg role="img" aria-label="KIP, waving" width="{{hdr.px}}" height="{{hdr.px}}" shape-rendering="crispEdges" style="margin-bottom: -2px"><sc-for list="{{hdr.layers}}" as="l" hint-placeholder-count="0"><path d="{{l.d}}" fill="{{l.fill}}"></path></sc-for></svg>
+    </div>
+    <div style="flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0">
+      <h1 style="margin: 0; font-family: 'Silkscreen', monospace; font-weight: 400; font-size: 22px; line-height: 24px; letter-spacing: 1px">KIP</h1>
+      <span class="muted" style="font-size: 13px">Fair day · here to help</span>
+    </div>
+    <button class="b ol" aria-label="Conversations and what KIP remembers" style="width: 44px; height: 44px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg></button>
+    <button class="b ol" aria-label="New chat" style="width: 44px; height: 44px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg></button>
+  </div>
+
+  <div style="flex: 1; display: flex; flex-direction: column; gap: 16px; padding: 8px 20px 12px; min-height: 0">
+    <div class="card" style="padding: 16px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: baseline; justify-content: space-between"><span class="label" style="color: {{accent}}">Today</span><span class="muted" style="font-size: 12px">Tap a line to ask</span></div>
+      <div style="font-size: 18px; line-height: 25px; font-weight: 600; letter-spacing: -.2px">You slept a little less than usual and your <span class="span" style="color: rgb(253,164,175)">HRV</span> is lower this morning. <span class="span">Recovery</span> is fair, not low.</div>
+      <div style="display: flex; flex-direction: column; gap: 4px">
+        <button class="b bar" style="width: 100%; padding: 0; font-weight: 400" aria-label="Sleep 6 hours 22 minutes, usual 7 hours 13. Ask KIP about it"><span class="bl" style="text-align: left">Sleep</span><span class="tr"><span class="t"><span class="f" style="width: 62%; background: rgb(196,181,253)"></span></span><span class="k" style="left: 70%"></span></span><span class="bv"><b class="num" style="color: rgb(253,164,175)">6h 22m</b><span class="num muted"> / 7h 13m</span></span></button>
+        <button class="b bar" style="width: 100%; padding: 0; font-weight: 400" aria-label="HRV 41 milliseconds, usual 48. Ask KIP about it"><span class="bl" style="text-align: left">HRV</span><span class="tr"><span class="t"><span class="f" style="width: 48%; background: rgb(96,165,250)"></span></span><span class="k" style="left: 56%"></span></span><span class="bv"><b class="num" style="color: rgb(253,164,175)">41 ms</b><span class="num muted"> / 48</span></span></button>
+        <button class="b bar" style="width: 100%; padding: 0; font-weight: 400" aria-label="Resting heart rate 57, usual 54. Ask KIP about it"><span class="bl" style="text-align: left">Resting HR</span><span class="tr"><span class="t"><span class="f" style="width: 57%; background: rgb(248,113,113)"></span></span><span class="k" style="left: 54%"></span></span><span class="bv"><b class="num">57 bpm</b><span class="num muted"> / 54</span></span></button>
+        <button class="b bar" style="width: 100%; padding: 0; font-weight: 400" aria-label="Recovery 58, usual 66. Ask KIP about it"><span class="bl" style="text-align: left">Recovery</span><span class="tr"><span class="t"><span class="f" style="width: 58%; background: rgb(74,222,128)"></span></span><span class="k" style="left: 66%"></span></span><span class="bv"><b class="num">58</b><span class="num muted"> / 66</span></span></button>
+      </div>
+      <div class="muted" style="font-size: 12px">Comparisons against your own readings, not medical advice.</div>
+    </div>
+
+    <div style="align-self: flex-end; max-width: 78%; padding: 10px 14px; border-radius: 12px; background: rgb(44,47,55); font-size: 15px; line-height: 21px">Why is my recovery lower today?</div>
+
+    <div style="display: flex; gap: 10px; align-items: flex-start">
+      <div class="mini" style="background: {{tileBg}}"><svg role="img" aria-label="KIP" width="{{head.w}}" height="{{head.h}}" shape-rendering="crispEdges"><sc-for list="{{head.layers}}" as="l" hint-placeholder-count="0"><path d="{{l.d}}" fill="{{l.fill}}"></path></sc-for></svg></div>
+      <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 10px">
+        <div style="font-size: 15px; line-height: 22px; padding-top: 3px">Mostly last night. You slept less than usual and woke twice after 3 am, so your HRV didn’t climb the way it normally does overnight.</div>
+        <div class="card" style="padding: 14px; display: flex; flex-direction: column; gap: 8px">
+          <div style="font-size: 15px; font-weight: 600">Short night, slower overnight recovery</div>
+          <div style="display: flex; gap: 6px">
+            <div class="tile"><b class="num" style="font-size: 15px; color: rgb(253,164,175)">6h 22m</b><span class="muted" style="font-size: 12px">Sleep · −51m</span></div>
+            <div class="tile"><b class="num" style="font-size: 15px; color: rgb(253,164,175)">41 ms</b><span class="muted" style="font-size: 12px">HRV · −7 ms</span></div>
+            <div class="tile"><b class="num" style="font-size: 15px">57 bpm</b><span class="muted" style="font-size: 12px">Rest HR · +3</span></div>
+          </div>
+          <div style="border-radius: 10px; padding: 8px 10px; background: rgb(15,42,42); color: rgb(204,251,241); font-size: 14px; line-height: 20px">Try: start winding down by 22:30 tonight and keep the room cool.</div>
+          <a href="#" style="align-self: flex-start; font-size: 13px; font-weight: 500; color: rgb(245,245,244); text-decoration: underline; text-underline-offset: 3px">Last night’s sleep and this morning ›</a>
+        </div>
+        <div style="display: flex; align-items: center; gap: 8px; padding: 8px 8px 8px 12px; border-radius: 12px; border: 1px dashed rgb(44,47,55)">
+          <span style="flex: 1; font-size: 13px; line-height: 18px"><span class="muted">KIP can remember:</span> aims for bed by 23:00 on weeknights</span>
+          <button class="b ol" style="height: 32px; padding: 0 10px; font-size: 13px">Remember</button>
+          <button class="b" style="height: 32px; padding: 0 8px; font-size: 13px; color: rgb(155,157,166)">No</button>
+        </div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px">
+          <button class="b ol chip">What helps me sleep longer?</button>
+          <button class="b ol chip">Should I train today?</button>
+          <button class="b ol chip">Compare with last week</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div style="padding: 4px 16px 34px">
+    <div style="display: flex; align-items: center; gap: 8px; border: 1px solid rgb(44,47,55); border-radius: 12px; padding: 6px 6px 6px 14px; background: rgb(20,22,27)">
+      <label for="k1-input" style="position: absolute; left: -9999px">Message KIP</label>
+      <input id="k1-input" placeholder="Ask KIP…" style="flex: 1; min-width: 0; height: 36px; border: 0; outline: none; background: transparent; color: rgb(245,245,244); font: 15px 'Geist', system-ui, sans-serif">
+      <button class="b ol" aria-label="Prompt shortcuts" style="width: 36px; height: 36px; font-size: 16px">/</button>
+      <button class="b df" aria-label="Send" style="width: 36px; height: 36px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"></path></svg></button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"kipColor":{"editor":"color","default":"#FB7185","options":["#FB7185","#3B82F6","#A3E635","#2A2F3A"]},"$preview":{"width":390,"height":1260}}'>
+var KN = 16, KE = "................", KBODY = "....bbbbbbbs....";
+var KBASE = [KE, KE, KE, KE, KE, KE, KBODY, KBODY, KBODY, KBODY, KBODY, KBODY, KBODY, ".....b....s.....", ".....b....s.....", "...zzzzzzzzzz..."];
+var KEYES = [[6, 8], [9, 8]];
+var KPOSES = { rest: {}, wave: { arms: [[12, 9, "s"], [13, 8, "s"]] }, cheer: { arms: [[3, 9, "b"], [2, 8, "b"], [12, 9, "s"], [13, 8, "s"]], hop: 1 }, think: { arms: [[12, 11, "s"], [13, 10, "s"], [12, 9, "s"]] }, point: { arms: [[12, 9, "s"], [13, 9, "s"], [14, 9, "s"]] }, shrug: { arms: [[3, 10, "b"], [2, 9, "b"], [12, 10, "s"], [13, 9, "s"]] } };
+var KMOODS = { idle: {}, blink: { eyes: "shut" }, curious: { eyes: "up", tilt: 1 }, sleepy: { eyes: "shut", squash: true }, proud: { eyes: "up", tall: true }, startled: { eyes: "wide", hop: 2 }, glance: { eyes: "glance" }, determined: { eyes: "shut", brows: true, tilt: -1 } };
+function kRgb(h) { var n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function kHx(n) { var s = Math.max(0, Math.min(255, Math.round(n))).toString(16); return s.length < 2 ? "0" + s : s; }
+function kMix(a, b, k) { var x = kRgb(a), y = kRgb(b); return "#" + kHx(x[0] * (1 - k) + y[0] * k) + kHx(x[1] * (1 - k) + y[1] * k) + kHx(x[2] * (1 - k) + y[2] * k); }
+function kDark(a, k) { var x = kRgb(a); return "#" + kHx(x[0] * k) + kHx(x[1] * k) + kHx(x[2] * k); }
+function kLum(h) { var c = kRgb(h).map(function (v) { v = v / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; }
+function kRamp(body) { return { b: body, h: kMix(body, "#FFFFFF", 0.25), s: kDark(body, 0.78), d: kDark(body, 0.6), e: kLum(body) > 0.2 ? "#14161B" : "#F5F5F4", w: "#F8FAFC", z: "rgba(0,0,0,0.35)" }; }
+function kTile(body) { return kLum(body) < 0.12 ? "#EDEBE6" : kMix(body, "#14161B", 0.82); }
+function kBlank() { var g = []; for (var i = 0; i < KN; i++) { var r = []; for (var j = 0; j < KN; j++) r.push(null); g.push(r); } return g; }
+function kPut(g, x, y, c) { if (x >= 0 && y >= 0 && x < KN && y < KN && c) g[y][x] = c; }
+function kBuild(body, pn, mn) {
+  var p = kRamp(body), pose = KPOSES[pn] || {}, mood = KMOODS[mn] || {}, g = kBlank(), x, y, c, t;
+  for (y = 0; y < KN; y++) for (x = 0; x < KN; x++) if (KBASE[y][x] !== ".") g[y][x] = KBASE[y][x];
+  var em = pose.eyes || mood.eyes;
+  KEYES.forEach(function (e, i) {
+    var cs = [[e[0], e[1]]];
+    if (em === "shut") cs = [[e[0], e[1]], [i === 0 ? e[0] - 1 : e[0] + 1, e[1]]];
+    else if (em === "up") cs = [[e[0], e[1] - 1]];
+    else if (em === "wide") cs = [[e[0], e[1]], [e[0], e[1] - 1]];
+    else if (em === "glance") cs = [[e[0] + 1, e[1]]];
+    cs.forEach(function (q) { kPut(g, q[0], q[1], "e"); });
+  });
+  if (mood.brows) KEYES.forEach(function (e, i) { kPut(g, i === 0 ? e[0] + 1 : e[0] - 1, e[1] - 1, "d"); });
+  var hop = pose.hop || mood.hop || 0;
+  if (pose.tall || mood.tall) { t = kBlank(); for (y = 0; y < KN; y++) for (x = 0; x < KN; x++) { c = g[y][x]; if (!c) continue; if (y <= 12 && c !== "z") { kPut(t, x, y - 1, c); if (y === 12) kPut(t, x, 12, c); } else kPut(t, x, y, c); } g = t; }
+  if (mood.squash) { t = kBlank(); for (y = 0; y < KN; y++) for (x = 0; x < KN; x++) { c = g[y][x]; if (!c || y === 7) continue; kPut(t, x, y < 7 ? y + 1 : y, c); } for (x = 2; x < 14; x++) t[15][x] = "z"; g = t; }
+  if (mood.tilt) { t = kBlank(); for (y = 0; y < KN; y++) for (x = 0; x < KN; x++) { c = g[y][x]; if (c) kPut(t, x + (y < 9 ? mood.tilt : 0), y, c); } g = t; }
+  if (hop) { t = kBlank(); for (y = 0; y < KN; y++) for (x = 0; x < KN; x++) { c = g[y][x]; if (!c || c === "z") continue; kPut(t, x, y - hop, c); } var sw = hop > 1 ? 6 : 8; for (x = 0; x < sw; x++) t[15][8 - sw / 2 + x] = "z"; g = t; }
+  (pose.arms || []).forEach(function (a) { var yy = a[1] - hop; if (yy >= 0 && !g[yy][a[0]]) g[yy][a[0]] = a[2]; });
+  var out = kBlank();
+  for (y = 0; y < KN; y++) for (x = 0; x < KN; x++) { c = g[y][x]; if (c) out[y][x] = p[c]; }
+  return out;
+}
+function kRects(cells, s) { var by = {}, order = [], H = cells.length, W = cells[0].length, y, x, c, n; for (y = 0; y < H; y++) { x = 0; while (x < W) { c = cells[y][x]; if (!c) { x++; continue; } n = 1; while (x + n < W && cells[y][x + n] === c) n++; if (!by[c]) { by[c] = ""; order.push(c); } by[c] += "M" + x * s + " " + y * s + "h" + n * s + "v" + s + "h-" + n * s + "z"; x += n; } } return order.map(function (f) { return { fill: f, d: by[f] }; }); }
+function kip(body, pn, mn, s) { return { px: KN * s, layers: kRects(kBuild(body, pn, mn), s) }; }
+function kHead(body, mn, s) { var g = kBuild(body, "rest", mn).slice(5, 12).map(function (r) { return r.slice(3, 13); }); return { w: 10 * s, h: 7 * s, layers: kRects(g, s) }; }
+
+class Component extends DCLogic {
+  renderVals() {
+    var c = this.props.kipColor ?? "#FB7185";
+    return {
+      tileBg: kTile(c),
+      accent: kLum(c) < 0.12 ? "rgb(245,245,244)" : c,
+      hdr: kip(c, "wave", "idle", 3),
+      head: kHead(c, "idle", 2)
+    };
+  }
+}
+</script>
+</body>
+</html>

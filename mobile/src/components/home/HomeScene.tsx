@@ -1,9 +1,9 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, View } from 'react-native';
 import Svg, { Path } from 'react-native-svg';
 import type { BuddyScene } from '../../api/buddies';
 import {
-  at, clampTagLeft, kipBox, layGround, layObjects, layRain, laySky, layWeather, pxPaths, sceneBackdrop, sceneOffsetX,
+  at, kipBox, layGround, layObjects, layRain, laySky, layWeather, pxPaths, sceneBackdrop, sceneOffsetX,
   SCENE_H, SCENE_SPOTS, SCENE_W, STATES, U, type SceneState,
 } from '../../lib/home/scene';
 import { HOME_COPY, sceneName } from '../../lib/homeCopy';
@@ -13,6 +13,7 @@ import type { WeatherKey } from '../../lib/recoveryCopy';
 import type { ScoreBand } from '../../lib/scoreInsights';
 import { COLORS } from '../../theme';
 import { Kip } from '../kip/Kip';
+import { HotTag } from './HotTag';
 import { PERSON_POSE, personStateOf } from '../kip/PersonKip';
 import { Text } from '../ui/text';
 
@@ -48,7 +49,6 @@ export interface HomeSceneProps {
 
 const C = HOME_COPY;
 const PALETTE = COLORS.dark;
-const INK = '#F5F5F4';
 const NAME_INK = 'rgba(245,245,244,0.9)';
 const KEY = { sleep: '#C4B5FD', tomorrow: '#C7D2FE', recaps: '#FB7185', all: '#C7D2FE' } as const;
 const EDGE = 4;
@@ -64,32 +64,6 @@ function Paths({ paths }: { paths: { fill: string; d: string }[] }) {
         <Path key={i} d={p.d} fill={p.fill} />
       ))}
     </>
-  );
-}
-
-function HotTag({ testID, left, top, screenWidth, keyText, keyColour, value, label, onPress }: {
-  testID: string; left: number; top: number; screenWidth: number; keyText: string; keyColour: string;
-  value: string | null; label: string; onPress: () => void;
-}) {
-  const [width, setWidth] = useState(0);
-  return (
-    <Pressable
-      testID={testID}
-      accessibilityRole="button"
-      accessibilityLabel={label}
-      onPress={onPress}
-      hitSlop={8}
-      onLayout={(e) => setWidth(e.nativeEvent.layout.width)}
-      className="flex-row items-center rounded-lg border active:opacity-80"
-      style={{
-        position: 'absolute', left: clampTagLeft(left, width, screenWidth), top, height: 26, gap: 5, paddingHorizontal: 7,
-        backgroundColor: 'rgba(10,11,14,0.82)', borderColor: 'rgba(255,255,255,0.18)',
-      }}
-    >
-      <View style={{ width: 4, height: 4, backgroundColor: keyColour }} />
-      <Text className="font-pixel text-label" style={{ color: keyColour }}>{keyText}</Text>
-      {value !== null ? <Text className="text-caption font-semibold tabular-nums" style={{ color: INK }}>{value}</Text> : null}
-    </Pressable>
   );
 }
 
@@ -144,8 +118,7 @@ export function HomeScene({ scene, width, extra, myColour, buddies, readings, on
 
       <HotTag
         testID="home-tag-sleep"
-        {...tag(SCENE_SPOTS.tags.sleep)}
-        screenWidth={width}
+        position={{ ...tag(SCENE_SPOTS.tags.sleep), screenWidth: width }}
         keyText={C.tags.sleep}
         keyColour={KEY.sleep}
         value={sleep.score === null ? C.none : String(sleep.score)}
@@ -154,8 +127,7 @@ export function HomeScene({ scene, width, extra, myColour, buddies, readings, on
       />
       <HotTag
         testID="home-tag-tomorrow"
-        {...tag(SCENE_SPOTS.tags.tomorrow)}
-        screenWidth={width}
+        position={{ ...tag(SCENE_SPOTS.tags.tomorrow), screenWidth: width }}
         keyText={C.tags.tomorrow}
         keyColour={KEY.tomorrow}
         value={tomorrow ? C.tags.range(tomorrow.low, tomorrow.high) : C.none}
@@ -164,8 +136,7 @@ export function HomeScene({ scene, width, extra, myColour, buddies, readings, on
       />
       <HotTag
         testID="home-tag-recovery"
-        {...tag(SCENE_SPOTS.tags.recovery)}
-        screenWidth={width}
+        position={{ ...tag(SCENE_SPOTS.tags.recovery), screenWidth: width }}
         keyText={C.tags.recovery}
         keyColour={recovery ? PALETTE[recovery.band] : PALETTE.muted}
         value={recovery ? String(recovery.score) : C.none}
@@ -174,8 +145,7 @@ export function HomeScene({ scene, width, extra, myColour, buddies, readings, on
       />
       <HotTag
         testID="home-tag-recaps"
-        {...tag(SCENE_SPOTS.tags.recaps)}
-        screenWidth={width}
+        position={{ ...tag(SCENE_SPOTS.tags.recaps), screenWidth: width }}
         keyText={C.tags.recaps}
         keyColour={KEY.recaps}
         value={recapsNew > 0 ? String(recapsNew) : null}

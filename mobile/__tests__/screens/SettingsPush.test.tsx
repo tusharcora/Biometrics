@@ -3,7 +3,7 @@ import { act, render, waitFor } from '@testing-library/react-native';
 import { NavigationContext } from '@react-navigation/native';
 import { ProfileSectionScreen } from '../../src/screens/ProfileSectionScreen';
 import type { ProfileCategory } from '../../src/lib/profileCopy';
-import { fetchCoachStatus, type CoachStatusDTO } from '../../src/api/coach';
+import { fetchCoachStatus, listCoachMemory, type CoachStatusDTO } from '../../src/api/coach';
 import { getTimezoneState, listTimeZones } from '../../src/lib/timezone';
 import { getPushState, enablePush, disablePush } from '../../src/lib/pushRegistration';
 import { fetchNotificationSettings } from '../../src/api/notifications';
@@ -35,6 +35,7 @@ beforeEach(() => {
   (getTimezoneState as jest.Mock).mockResolvedValue({ timezone: 'UTC', overridden: false });
   (listTimeZones as jest.Mock).mockReturnValue([]);
   (fetchCoachStatus as jest.Mock).mockResolvedValue(status);
+  (listCoachMemory as jest.Mock).mockResolvedValue([]);
   (getPushState as jest.Mock).mockResolvedValue({ status: 'off' });
   (enablePush as jest.Mock).mockResolvedValue({ status: 'on' });
   (disablePush as jest.Mock).mockResolvedValue({ status: 'off' });
@@ -43,8 +44,8 @@ beforeEach(() => {
 
 describe('SettingsScreen: Recap ready notifications', () => {
   it('no longer has a push switch inside the coach section', async () => {
-    const { findByTestId, queryByTestId } = renderSettings('aiCoach');
-    await findByTestId('coach-settings');
+    const { findByTestId, queryByTestId } = renderSettings('kip');
+    await findByTestId('kip-settings');
     expect(queryByTestId('push-toggle')).toBeNull();
   });
 

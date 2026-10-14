@@ -1,11 +1,12 @@
 import React from 'react';
 import { View } from 'react-native';
 import Svg, { Polygon, Rect } from 'react-native-svg';
+import { useColorScheme } from 'nativewind';
 import type { AchievementFamily } from '../../api/achievements';
-import { useCharacterOptional } from '../../characters/CharacterContext';
-import { LOCKED_PIP, glyphCells, octagonPoints, tierColors } from '../../lib/badgeArt';
+import { LOCKED_PIP, TIER_SURFACE, glyphCells, octagonPoints, tierColors, tierInk } from '../../lib/badgeArt';
 import { badgeLabel } from '../../lib/badges';
-import { characterInfo } from '../characters/registry';
+import type { KipColour } from '../../lib/kip/kipArt';
+import { useMyKipColour } from '../../lib/kip/myKipColour';
 
 export interface BadgeIconProps {
   family: AchievementFamily;
@@ -14,8 +15,10 @@ export interface BadgeIconProps {
   size: number;
   /** The five level pips under the badge. */
   pips?: boolean;
-  /** Level V's colour; the user's current coach accent when omitted. */
-  coachAccent?: string;
+  /** Level V's colour; your KIP's colour when omitted. */
+  colour?: KipColour;
+  /** What the pips sit on, so a level V pip reads there; the app's page or card for this theme when omitted. */
+  pipSurface?: string;
   testID?: string;
 }
 
@@ -26,11 +29,13 @@ const GLYPH_BOX = 52;
 const CELL = GLYPH_BOX / 12;
 const ORIGIN = (VIEW - GLYPH_BOX) / 2;
 
-export function BadgeIcon({ family, level, size, pips = true, coachAccent, testID = 'badge' }: BadgeIconProps) {
-  const current = useCharacterOptional();
-  const accent = coachAccent ?? characterInfo(current?.characterId).accent;
+export function BadgeIcon({ family, level, size, pips = true, colour, pipSurface, testID = 'badge' }: BadgeIconProps) {
+  const mine = useMyKipColour();
+  const scheme = useColorScheme().colorScheme === 'dark' ? 'dark' : 'light';
   const lv = Math.max(0, Math.min(5, Math.round(level)));
-  const t = tierColors(lv, accent);
+  const t = tierColors(lv, colour ?? mine);
+  // The ring art keeps the raw colour; an earned pip is a UI mark, so level V's reads on its surface.
+  const pipColour = tierInk(lv, colour ?? mine, pipSurface ?? TIER_SURFACE[scheme]).ring;
   const ring = lv === 5 ? 9 : 6;
   const pip = Math.max(4, Math.round(size * 0.07));
   const label = badgeLabel(family, lv);
@@ -46,7 +51,7 @@ export function BadgeIcon({ family, level, size, pips = true, coachAccent, testI
       {pips ? (
         <View testID={`${testID}-pips`} style={{ flexDirection: 'row', gap: 4 }}>
           {[1, 2, 3, 4, 5].map((i) => (
-            <View key={i} testID={`${testID}-pip-${i}`} style={{ width: pip, height: pip, backgroundColor: i <= lv ? t.ring : LOCKED_PIP }} />
+            <View key={i} testID={`${testID}-pip-${i}`} style={{ width: pip, height: pip, backgroundColor: i <= lv ? pipColour : LOCKED_PIP }} />
           ))}
         </View>
       ) : null}

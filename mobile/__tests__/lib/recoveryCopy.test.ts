@@ -187,3 +187,10 @@ describe('chips and coach', () => {
     expect(recoveryQuestion({ state: 'NO_DATA', isToday: false, date: '2026-10-02' })).toBe("Why don't I have a recovery score for Fri 2 Oct?");
   });
 });
+
+describe('Ask KIP labels', () => {
+  it('names KIP, for today and for a past day', () => {
+    expect(RECOVERY_COPY.askToday).toBe('Ask KIP about today');
+    expect(RECOVERY_COPY.askPast).toBe('Ask KIP about this day');
+  });
+});

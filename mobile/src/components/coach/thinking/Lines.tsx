@@ -1,14 +1,14 @@
 import React from 'react';
 import { Text } from '../../ui/text';
-import { dotCount, useCoachVoice, useElapsed } from './shared';
+import { dotCount, useElapsed, useKipVoice } from './shared';
 import type { ThinkingStyleProps } from './types';
 import { useThinkingLine } from './useThinkingLine';
 
-// A: "Luna is counting stars..." with the name in the accent, the line moving
-// on every 2.4 s and the dots ticking in time.
-export function Lines({ characterId, paused }: ThinkingStyleProps) {
-  const { name, text } = useCoachVoice(characterId);
-  const { line } = useThinkingLine(characterId, paused);
+// A: "KIP is typing it up..." with the name in KIP's label colour, the line
+// moving on every 2.4 s and the dots ticking in time.
+export function Lines({ paused }: ThinkingStyleProps) {
+  const { name, text } = useKipVoice();
+  const { line } = useThinkingLine(paused);
   const elapsed = useElapsed(paused);
   const dots = dotCount(elapsed);
   return (

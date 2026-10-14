@@ -5,11 +5,8 @@ import { useNavigation, useRoute } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
 import { ApiError } from '../api/client';
 import { fetchRecap, fetchRecaps, type Recap } from '../api/recaps';
-import { useCharacter } from '../characters/CharacterContext';
-import { Character } from '../components/characters/Character';
-import { characterInfo } from '../components/characters/registry';
-import type { CharacterId } from '../components/characters/types';
 import { BadgeIcon } from '../components/achievements/BadgeIcon';
+import { Kip } from '../components/kip/Kip';
 import { MilestoneTiles } from '../components/milestones/MilestoneTiles';
 import { ShareWithBuddiesButton } from '../components/recap/ShareWithBuddiesButton';
 import { WeeklyStoryView } from '../components/recap/WeeklyStoryView';
@@ -21,9 +18,11 @@ import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { useAchievements } from '../lib/achievementsStore';
 import { levelsEarnedBetween, shortLevelTitle } from '../lib/badges';
-import { compareChanges, milestoneTiles, monthName } from '../lib/recapCopy';
+import type { KipColour } from '../lib/kip/kipArt';
+import { useMyKipColour } from '../lib/kip/myKipColour';
+import { compareChanges, milestoneTiles, monthName, RECAP_COPY } from '../lib/recapCopy';
 import { readIncludePrefs } from '../lib/recapPrefs';
-import { DESIGN_HEIGHT, DESIGN_WIDTH, previewScale, recapCoachId, resolveIncludes, type Includes } from '../lib/recapShare';
+import { DESIGN_HEIGHT, DESIGN_WIDTH, previewScale, resolveIncludes, type Includes } from '../lib/recapShare';
 import { changeColor } from '../lib/recapTheme';
 import { openRecap } from '../lib/unwatchedRecap';
 import { useRefreshAchievementsOnFocus } from '../lib/useRefreshAchievementsOnFocus';
@@ -37,7 +36,7 @@ type State = { phase: 'loading' } | { phase: 'ready'; recap: Recap } | { phase: 
 export function RecapScreen() {
   const { params } = useRoute<any>() as { params: { id: string } };
   const navigation = useNavigation<any>();
-  const { characterId } = useCharacter();
+  const mine = useMyKipColour();
   const { width } = useWindowDimensions();
   const [state, setState] = useState<State>({ phase: 'loading' });
   // The builder's stored story choices: the week's preview shows what a shared frame would.
@@ -86,10 +85,6 @@ export function RecapScreen() {
   // A push can open this screen with nothing behind it; then "back" is home.
   const leave = () => (navigation.canGoBack() ? navigation.goBack() : navigation.navigate('Tabs'));
 
-  // The line was written in the recap's own coach's voice, so that coach is named (ruling S6).
-  const coachId = state.phase === 'ready' ? recapCoachId(state.recap, characterId) : characterId;
-  const coachName = characterInfo(coachId).name;
-
   return (
     <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
       <ScrollView contentContainerStyle={{ gap: 16, padding: 20 }}>
@@ -113,11 +108,11 @@ export function RecapScreen() {
           </Card>
         ) : null}
         {state.phase === 'ready' && state.recap.kind === 'MONTH' ? (
-          <MonthBody recap={state.recap} coachId={coachId} coachName={coachName} onShare={() => navigation.navigate('RecapBuilder', { id: state.recap.id, format: 'card' })} />
+          <MonthBody recap={state.recap} kipColour={mine} onShare={() => navigation.navigate('RecapBuilder', { id: state.recap.id, format: 'card' })} />
         ) : null}
         {state.phase === 'ready' && state.recap.kind === 'WEEK' ? (
           <View className="gap-4">
-            <PageTitle testID="recap-title">{`Your week with ${coachName}`}</PageTitle>
+            <PageTitle testID="recap-title">{RECAP_COPY.weekWithKip}</PageTitle>
             {/* The preview opens the full-screen story viewer, like the button under it. */}
             <Pressable
               testID="recap-story-preview"
@@ -127,7 +122,7 @@ export function RecapScreen() {
               onPress={() => navigation.navigate('RecapStory', { recap: state.recap })}
             >
               {storyPrefs ? (
-                <WeeklyStoryView recap={state.recap} coachId={coachId} includes={resolveIncludes('story', storyPrefs, state.recap.stats)} scale={previewScale('story', width - 40, 520)} />
+                <WeeklyStoryView recap={state.recap} kipColour={mine} includes={resolveIncludes('story', storyPrefs, state.recap.stats)} scale={previewScale('story', width - 40, 520)} />
               ) : (
                 // Until the stored choices load: no flash of a part switched off.
                 <View style={{ width: DESIGN_WIDTH * previewScale('story', width - 40, 520), height: DESIGN_HEIGHT.story * previewScale('story', width - 40, 520) }}>
@@ -154,7 +149,8 @@ export function RecapScreen() {
   );
 }
 
-function MonthBody({ recap, coachId, coachName, onShare }: { recap: Recap; coachId: CharacterId; coachName: string; onShare: () => void }) {
+// Your KIP is drawn whatever coach a past recap was written by: its stored personaId is a record, not a picture (spec §7.7).
+function MonthBody({ recap, kipColour, onShare }: { recap: Recap; kipColour: KipColour; onShare: () => void }) {
   const { colorScheme } = useColorScheme();
   const scheme = colorScheme === 'dark' ? 'dark' : 'light';
   const rows = compareChanges(recap.stats.comparison);
@@ -184,10 +180,10 @@ function MonthBody({ recap, coachId, coachName, onShare }: { recap: Recap; coach
   const earnedThisMonth = levelsEarnedBetween(achievements, recap.periodStart, recap.periodEnd, 'streak');
   return (
     <View className="gap-4">
-      <PageTitle testID="recap-title">{`${monthName(recap.periodStart)} with ${coachName}`}</PageTitle>
+      <PageTitle testID="recap-title">{RECAP_COPY.monthWithKip(monthName(recap.periodStart))}</PageTitle>
       <Card className="flex-row items-center gap-3.5">
         <View testID="recap-line-coach">
-          <Character characterId={coachId} mood="idle" size={72} />
+          <Kip testID="recap-kip" colour={kipColour} pose="cheer" mood="proud" scale={4} />
         </View>
         <Text testID="recap-line" className="flex-1 text-body">{`“${recap.line}”`}</Text>
       </Card>

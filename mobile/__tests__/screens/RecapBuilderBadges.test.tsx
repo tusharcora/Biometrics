@@ -1,7 +1,6 @@
 import React from 'react';
 import * as SecureStore from 'expo-secure-store';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
-import { withCharacter } from '../../jest-mocks/characterContext';
 import { achievementsFixture } from '../../jest-mocks/achievementsFixture';
 import { fetchAchievements } from '../../src/api/achievements';
 import { fetchRecap, type Recap } from '../../src/api/recaps';
@@ -34,7 +33,7 @@ it("puts the week's badge levels on story frame 3, in the preview and in the sha
     SLEEP_GOAL: { level: 2, levels: [{ level: 1, value: 3, earnedOn: '2026-09-20' }, { level: 2, value: 7, earnedOn: '2026-10-01' }] },
     STEP_GOAL: { level: 1, levels: [{ level: 1, value: 3, earnedOn: '2026-10-06' }] },
   }));
-  render(withCharacter(<RecapBuilderScreen />));
+  render(<RecapBuilderScreen />);
   expect(await screen.findByTestId('builder-frame')).toBeTruthy();
   fireEvent.press(screen.getByTestId('builder-frame-2'));
   const exported = within(screen.getByTestId('builder-export'));
@@ -54,7 +53,7 @@ it('has a "Badges this week" switch, on by default and remembered, that takes th
   (fetchAchievements as jest.Mock).mockResolvedValue(achievementsFixture({
     SLEEP_GOAL: { level: 2, levels: [{ level: 2, value: 7, earnedOn: '2026-10-01' }] },
   }));
-  render(withCharacter(<RecapBuilderScreen />));
+  render(<RecapBuilderScreen />);
   expect(await screen.findByTestId('builder-include-badges')).toBeTruthy();
   expect(screen.getByTestId('builder-include-badges').props.accessibilityLabel).toBe('Badges this week');
   await waitFor(() => expect(screen.getByTestId('builder-include-badges').props.value).toBe(true));
@@ -68,7 +67,7 @@ it('has a "Badges this week" switch, on by default and remembered, that takes th
 
 it('leaves the card out when no level was earned that week', async () => {
   (fetchAchievements as jest.Mock).mockResolvedValue(achievementsFixture());
-  render(withCharacter(<RecapBuilderScreen />));
+  render(<RecapBuilderScreen />);
   await screen.findByTestId('builder-frame');
   fireEvent.press(screen.getByTestId('builder-frame-2'));
   await act(async () => {});
@@ -77,7 +76,7 @@ it('leaves the card out when no level was earned that week', async () => {
 
 it('offers the "Badges this week" switch only when the week has a badge level', async () => {
   (fetchAchievements as jest.Mock).mockResolvedValue(achievementsFixture());
-  render(withCharacter(<RecapBuilderScreen />));
+  render(<RecapBuilderScreen />);
   expect(await screen.findByTestId('builder-include-quote')).toBeTruthy();
   await act(async () => {});
   expect(screen.queryByTestId('builder-include-badges')).toBeNull();
@@ -85,7 +84,7 @@ it('offers the "Badges this week" switch only when the week has a badge level', 
 
 it('does not offer the switch when badges are unavailable (a backend without them)', async () => {
   (fetchAchievements as jest.Mock).mockResolvedValue(null);
-  render(withCharacter(<RecapBuilderScreen />));
+  render(<RecapBuilderScreen />);
   expect(await screen.findByTestId('builder-include-quote')).toBeTruthy();
   await act(async () => {});
   expect(screen.queryByTestId('builder-include-badges')).toBeNull();

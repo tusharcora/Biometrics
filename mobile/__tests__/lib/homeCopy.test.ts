@@ -32,6 +32,11 @@ it('words the buddy tags, the header and the hints', () => {
   expect(C.header.date(new Date(2026, 9, 13, 9, 0))).toBe('Tue, Oct 13');
   expect(C.today.night('23:00')).toBe('Wind down · bed by 23:00');
   expect(C.today.night(null)).toBe('Wind down');
-  expect(C.askCoach(true)).toBe('Ask Coach · see what’s shared first');
-  expect(C.askCoach(false)).toBe('Ask Coach about today');
+  expect(C.askKip(true)).toBe('Ask KIP · see what’s shared first');
+  expect(C.askKip(false)).toBe('Ask KIP about today');
+  // Spoken without the middle dot.
+  expect(C.askKipLabel(true)).toBe('Ask KIP, see what’s shared first');
+  expect(C.askKipLabel(false)).toBe('Ask KIP about today');
+  expect(C.kipNote).toBe("KIP's note");
+  expect(C.readItAll).toBe('Read it all →');
 });

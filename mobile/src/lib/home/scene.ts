@@ -237,6 +237,11 @@ export const SCENE_KIP: Record<SceneKey, { pose: KipPose; mood: KipMood }> = {
 
 const WEATHER_SCENE: Partial<Record<WeatherKey, SceneKey>> = { clear: 'clear', mostlyClear: 'mostly', cloudy: 'cloudy', stormy: 'stormy' };
 
+/** The day's mood for a Recovery weather (Home F's mapping; spec §7.2 "the day's mood on Recovery"). */
+export function sceneMoodForWeather(weather: WeatherKey): KipMood {
+  return SCENE_KIP[WEATHER_SCENE[weather] ?? 'fallback'].mood;
+}
+
 export const SHORT_NIGHT_MINUTES = 360;
 
 /** 20:00 to 04:59 on the device's clock, the greeting's clock (the owner moved the board's 9 pm to 8 pm). */

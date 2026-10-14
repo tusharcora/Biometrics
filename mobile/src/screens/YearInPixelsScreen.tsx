@@ -2,13 +2,13 @@ import React, { useCallback, useEffect, useState } from 'react';
 import { ScrollView, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { useCharacter } from '../characters/CharacterContext';
 import { YearPixelsView } from '../components/recap/YearPixelsView';
 import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { todayCivil } from '../lib/heatmap';
+import { useMyKipColour } from '../lib/kip/myKipColour';
 import { DESIGN_WIDTH } from '../lib/recapShare';
 import { loadYearInPixels, type YearInPixels } from '../lib/yearPixels';
 
@@ -16,10 +16,10 @@ type State = { phase: 'loading' } | ({ phase: 'ready' } & YearInPixels) | { phas
 
 // Year in pixels (spec 2026-10-04 §1b): drawn on the phone from GET /me/sleep for this calendar
 // year (nights keyed by the local date they ended on), against the CURRENT goal (and it says so)
-// with the CURRENT coach, tinted by that coach like its share image (recap restyle).
+// with your KIP, tinted by its colour like its share image (recap restyle; KIP Coach §7.7).
 export function YearInPixelsScreen() {
   const navigation = useNavigation<any>();
-  const { characterId } = useCharacter();
+  const mine = useMyKipColour();
   const { width } = useWindowDimensions();
   // The user's local civil date, so tonight's square is never drawn as a past night.
   const today = todayCivil();
@@ -56,7 +56,7 @@ export function YearInPixelsScreen() {
               year={state.year}
               pixels={state.pixels}
               goalMinutes={state.goalMinutes}
-              coachId={characterId}
+              kipColour={mine}
               includes={{ count: true, coach: true }}
               scale={(width - 40) / DESIGN_WIDTH}
             />

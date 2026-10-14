@@ -38,6 +38,10 @@ describe('hosted consent text', () => {
     expect(items).toMatch(/we never add your name, email, account id/i);
     expect(items).toMatch(/anything you type yourself[^.]*is sent as part of the conversation/i);
     expect(items).not.toMatch(/never sent: your name/i);
+    // KIP Coach (spec 2026-10-14 §2): wording only, the summary and version are unchanged.
+    expect(COACH_HOSTED_CONSENT.dataItems[1]).toMatch(/goals and what you asked KIP to remember$/);
+    expect(COACH_HOSTED_CONSENT.dataItems[2]).toBe('The same summary for the one-sentence recap of your day at the top of the KIP page');
+    expect(items).not.toMatch(/\bcoach\b/i);
   });
 
   it('consentTextFor picks the text by scope', () => {

@@ -9,6 +9,7 @@ import {
   setCoachEngine,
   type CoachStatusDTO,
 } from '../../src/api/coach';
+import { HIDDEN_OK } from '../../jest-mocks/coachStatus';
 
 jest.mock('../../src/api/coach', () => ({
   ...jest.requireActual('../../src/api/coach'),
@@ -103,8 +104,19 @@ describe('HostedConsentScreen', () => {
     (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, engines: { hosted: { available: false, consented: false, consent: null } } });
     const { findByTestId, queryByTestId } = render(<HostedConsentScreen />);
 
-    expect(await findByTestId('hosted-consent-unavailable')).toBeTruthy();
+    expect(await findByTestId('hosted-consent-unavailable')).toHaveTextContent("Claude isn't available right now. KIP keeps answering on-device.");
     expect(queryByTestId('hosted-consent-agree')).toBeNull();
+  });
+
+  it('shows your KIP above the consent text, and when Claude is unavailable', async () => {
+    const s = render(<HostedConsentScreen />);
+    await s.findByTestId('hosted-consent-summary');
+    expect(s.getByTestId('hosted-consent-kip', HIDDEN_OK)).toBeTruthy();
+
+    (fetchCoachStatus as jest.Mock).mockResolvedValue({ ...status, engines: { hosted: { available: false, consented: false, consent: null } } });
+    const u = render(<HostedConsentScreen />);
+    await u.findByTestId('hosted-consent-unavailable');
+    expect(u.getByTestId('hosted-consent-kip', HIDDEN_OK)).toBeTruthy();
   });
 
   it('says Claude is unavailable when the switch is refused as unavailable', async () => {

@@ -4,14 +4,13 @@ import { useColorScheme } from 'nativewind';
 import {
   SHARE_KEYS, buddyErrorCode, consentToSharing, fetchIdentity, fetchSharing, saveSharing, type BuddyIdentity, type ShareKey, type SharingSettings,
 } from '../../api/buddies';
-import { SHARE_HINTS, SHARE_TITLES, SHARING_CONSENT_VERSION, buddyErrorMessage } from '../../lib/buddyCopy';
+import { SHARE_HINTS, SHARE_TITLES, SHARING_CONSENT_VERSION, SHARING_FOOTER, buddyErrorMessage } from '../../lib/buddyCopy';
 import { useBuddies } from '../../lib/buddiesStore';
 import { useRefreshBuddiesOnFocus } from '../../lib/useRefreshBuddiesOnFocus';
 import { COLORS } from '../../theme';
 import { SettingsGroup, SettingsRow } from '../ui/settings-list';
 import { SharingConsentSheet } from './SharingConsentSheet';
 
-const FOOTER = 'Buddies always see your mood and coach. Each number stays off until you turn it on.';
 const LOCKED = 'Update the app to change what you share.';
 const LOAD_FAILED = "Couldn't load what you share. Please try again later.";
 
@@ -170,7 +169,7 @@ export function BuddiesProfileSection({ onNavigate }: { onNavigate: (route: 'Bud
     await save(key, true);
   }
 
-  const footer = error ?? (sharing === null ? (loadFailed ? LOAD_FAILED : undefined) : supported ? FOOTER : LOCKED);
+  const footer = error ?? (sharing === null ? (loadFailed ? LOAD_FAILED : undefined) : supported ? SHARING_FOOTER : LOCKED);
 
   return (
     <>

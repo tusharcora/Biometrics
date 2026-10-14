@@ -1,5 +1,5 @@
 import {
-  DEFAULT_KIP_COLOUR, KIP_COLOURS, KIP_GRID, KIP_MOODS, KIP_POSES, kipArt, kipBounds, kipGrid, kipRamp, type KipColour,
+  DEFAULT_KIP_COLOUR, KIP_COLOURS, KIP_GRID, KIP_MOODS, KIP_POSES, kipArt, kipBounds, kipGrid, kipPoseFrames, kipRamp, mirrorGrid, type KipColour,
 } from '../../src/lib/kip/kipArt';
 
 // Reference values come from the approved board's engine (docs/design/character/project/Final.dc.html), run
@@ -17,7 +17,7 @@ const RAMPS: Record<KipColour, { light: string; shade: string; deep: string; eye
   snow: { light: '#f5f8fb', shade: '#bcbfc2', deep: '#919395', eyes: '#14161B' },
 };
 
-const RECTS_PER_POSE = { rest: 23, wave: 24, cheer: 25, bottle: 33, coffee: 30, stretch: 26 } as const;
+const RECTS_PER_POSE = { rest: 23, wave: 24, cheer: 25, bottle: 33, coffee: 30, stretch: 26, type: 23, think: 25, point: 23, shrug: 25 } as const;
 const RECTS_PER_MOOD = { idle: 23, curious: 23, sleepy: 20, proud: 25, startled: 27, glance: 22, determined: 24 } as const;
 
 // b body, s shade, e eyes, z ground shadow.
@@ -142,5 +142,56 @@ describe('kipBounds', () => {
   it('grows with arms (cheer) and held items (coffee)', () => {
     expect(kipBounds({ pose: 'cheer', mood: 'proud' })).toEqual({ x: 2, y: 4, w: 12, h: 12 });
     expect(kipBounds({ pose: 'coffee', mood: 'sleepy' })).toEqual({ x: 2, y: 7, w: 14, h: 9 });
+  });
+});
+
+describe('KIP Coach poses (spec 2026-10-14 §4)', () => {
+  const NEW = ['type', 'think', 'point', 'shrug'] as const;
+  const COLOURS = ['coral', 'cobalt', 'lime'] as const;
+
+  it.each(NEW)('%s only adds arm cells in cells rest leaves empty (body, legs, eyes untouched)', (pose) => {
+    for (const mood of KIP_MOODS) for (let frame = 0; frame < kipPoseFrames(pose); frame++) {
+      const rest = kipGrid({ pose: 'rest', mood });
+      const posed = kipGrid({ pose, mood, frame });
+      posed.forEach((row, y) => row.forEach((c, x) => {
+        const was = rest[y]![x];
+        if (was !== null) expect(c).toBe(was);
+        else if (c !== null) expect([kipRamp(KIP_COLOURS.coral).body, kipRamp(KIP_COLOURS.coral).shade]).toContain(c);
+      }));
+    }
+  });
+
+  it('type has three frames that differ only in which arm is down', () => {
+    expect(kipPoseFrames('type')).toBe(3);
+    for (const p of ['rest', 'think', 'point', 'shrug'] as const) expect(kipPoseFrames(p)).toBe(1);
+    const frames = [0, 1, 2].map((frame) => ascii(kipGrid({ pose: 'type', frame }), 'coral'));
+    expect(new Set(frames.map((f) => f.join('\n'))).size).toBe(3);
+    expect(frames[0]![11]).toBe('..bbbbbbbbbsss..');
+    expect(frames[1]![12]).toBe('..bbbbbbbbbs....');
+    expect(frames[2]![12]).toBe('....bbbbbbbsss..');
+  });
+
+  it('a frame number wraps, so a free-running clock can pass any integer', () => {
+    expect(kipGrid({ pose: 'type', frame: 4 })).toEqual(kipGrid({ pose: 'type', frame: 1 }));
+    expect(kipGrid({ pose: 'point', frame: 2 })).toEqual(kipGrid({ pose: 'point' }));
+  });
+
+  it('point reaches out at shoulder height on the left; shrug lifts both arms', () => {
+    expect(ascii(kipGrid({ pose: 'point' }), 'coral')[8]).toBe('.bbbbbebbebs....');
+    const shrug = ascii(kipGrid({ pose: 'shrug' }), 'coral');
+    expect(shrug[7]).toBe('..b.bbbbbbbs.s..');
+    expect(shrug[8]).toBe('...bbbebbebss...');
+  });
+
+  it('mirrorGrid flips left and right and nothing else', () => {
+    const g = kipGrid({ pose: 'point', mood: 'glance' });
+    const m = mirrorGrid(g);
+    g.forEach((row, y) => expect(m[y]).toEqual([...row].reverse()));
+    expect(mirrorGrid(m)).toEqual(g);
+  });
+
+  it.each(NEW.flatMap((pose) => COLOURS.map((colour) => [pose, colour] as const)))('%s in %s matches its snapshot', (pose, colour) => {
+    const frames = Array.from({ length: kipPoseFrames(pose) }, (_, frame) => ascii(kipGrid({ colour, pose, frame }), colour).join('\n'));
+    expect(frames).toMatchSnapshot();
   });
 });
