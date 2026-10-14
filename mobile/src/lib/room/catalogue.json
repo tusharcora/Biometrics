@@ -1,0 +1,981 @@
+{
+  "version": 1,
+  "release": 1,
+  "starterRoom": {
+    "wallpaper": "wall.plain",
+    "floor": "floor.oakDark",
+    "art": "art.calendar",
+    "window": "win.plain",
+    "shelf": "shelf.books",
+    "desk": "desk.monitor",
+    "desk_item": "item.mug",
+    "plant": "plant.fern",
+    "lamp": "lamp.amber",
+    "corner": null,
+    "rug": "rug.slate",
+    "pet": null
+  },
+  "items": [
+    {
+      "id": "wall.plain",
+      "slot": "wallpaper",
+      "unlock": {
+        "kind": "starter"
+      },
+      "release": 1
+    },
+    {
+      "id": "wall.dots",
+      "slot": "wallpaper",
+      "unlock": {
+        "kind": "starter"
+      },
+      "release": 1
+    },
+    {
+      "id": "wall.stripes",
+      "slot": "wallpaper",
+      "unlock": {
+        "kind": "family",
+        "family": "STEADY_BEDTIME",
+        "level": 1
+      },
+      "release": 1,
+      "tint": true
+    },
+    {
+      "id": "wall.brick",
+      "slot": "wallpaper",
+      "unlock": {
+        "kind": "family",
+        "family": "STEP_GOAL",
+        "level": 2
+      },
+      "release": 1
+    },
+    {
+      "id": "wall.panel",
+      "slot": "wallpaper",
+      "unlock": {
+        "kind": "counter",
+        "counter": "recaps_read",
+        "atLeast": 4
+      },
+      "release": 1
+    },
+    {
+      "id": "wall.florals",
+      "slot": "wallpaper",
+      "unlock": {
+        "kind": "counter",
+        "counter": "buddy_cheers",
+        "atLeast": 5
+      },
+      "release": 1
+    },
+    {
+      "id": "wall.checker",
+      "slot": "wallpaper",
+      "unlock": {
+        "kind": "family",
+        "family": "CHECK_IN",
+        "level": 2
+      },
+      "release": 1
+    },
+    {
+      "id": "wall.subway",
+      "slot": "wallpaper",
+      "unlock": {
+        "kind": "family",
+        "family": "EVERY_DAY_LOGGED",
+        "level": 2
+      },
+      "release": 1
+    },
+    {
+      "id": "floor.oakDark",
+      "slot": "floor",
+      "unlock": {
+        "kind": "starter"
+      },
+      "release": 1,
+      "sets": [
+        "library"
+      ]
+    },
+    {
+      "id": "floor.tiles",
+      "slot": "floor",
+      "unlock": {
+        "kind": "family",
+        "family": "EVERY_DAY_LOGGED",
+        "level": 1
+      },
+      "release": 1
+    },
+    {
+      "id": "floor.carpet",
+      "slot": "floor",
+      "unlock": {
+        "kind": "family",
+        "family": "SLEEP_GOAL",
+        "level": 1
+      },
+      "release": 1,
+      "tint": true
+    },
+    {
+      "id": "floor.concrete",
+      "slot": "floor",
+      "unlock": {
+        "kind": "family",
+        "family": "STEP_GOAL",
+        "level": 2
+      },
+      "release": 1
+    },
+    {
+      "id": "art.calendar",
+      "slot": "art",
+      "unlock": {
+        "kind": "starter"
+      },
+      "release": 1
+    },
+    {
+      "id": "art.mountain",
+      "slot": "art",
+      "unlock": {
+        "kind": "family",
+        "family": "SLEEP_GOAL",
+        "level": 1
+      },
+      "release": 1
+    },
+    {
+      "id": "art.pennant",
+      "slot": "art",
+      "unlock": {
+        "kind": "family",
+        "family": "CHECK_IN",
+        "level": 1
+      },
+      "release": 1,
+      "tint": true
+    },
+    {
+      "id": "art.clock",
+      "slot": "art",
+      "unlock": {
+        "kind": "family",
+        "family": "EVERY_DAY_LOGGED",
+        "level": 1
+      },
+      "release": 1,
+      "frames": 3
+    },
+    {
+      "id": "art.heart",
+      "slot": "art",
+      "unlock": {
+        "kind": "family",
+        "family": "STEADY_BEDTIME",
+        "level": 2
+      },
+      "release": 1,
+      "emissive": true
+    },
+    {
+      "id": "art.motto",
+      "slot": "art",
+      "unlock": {
+        "kind": "family",
+        "family": "SLEEP_GOAL",
+        "level": 2
+      },
+      "release": 1
+    },
+    {
+      "id": "art.band",
+      "slot": "art",
+      "unlock": {
+        "kind": "family",
+        "family": "EVERY_DAY_LOGGED",
+        "level": 2
+      },
+      "release": 1
+    },
+    {
+      "id": "art.cork",
+      "slot": "art",
+      "unlock": {
+        "kind": "counter",
+        "counter": "recaps_read",
+        "atLeast": 4
+      },
+      "release": 1
+    },
+    {
+      "id": "art.wave",
+      "slot": "art",
+      "unlock": {
+        "kind": "family",
+        "family": "STEADIEST_MONTH",
+        "level": 2
+      },
+      "release": 1
+    },
+    {
+      "id": "win.plain",
+      "slot": "window",
+      "unlock": {
+        "kind": "starter"
+      },
+      "release": 1
+    },
+    {
+      "id": "win.curtains",
+      "slot": "window",
+      "unlock": {
+        "kind": "family",
+        "family": "STEADY_BEDTIME",
+        "level": 1
+      },
+      "release": 1,
+      "tint": true
+    },
+    {
+      "id": "win.blinds",
+      "slot": "window",
+      "unlock": {
+        "kind": "family",
+        "family": "STEP_GOAL",
+        "level": 1
+      },
+      "release": 1,
+      "sets": [
+        "homeGym"
+      ]
+    },
+    {
+      "id": "win.sticker",
+      "slot": "window",
+      "unlock": {
+        "kind": "family",
+        "family": "CHECK_IN",
+        "level": 2
+      },
+      "release": 1
+    },
+    {
+      "id": "win.fairy",
+      "slot": "window",
+      "unlock": {
+        "kind": "counter",
+        "counter": "buddy_cheers",
+        "atLeast": 5
+      },
+      "release": 1,
+      "emissive": true,
+      "frames": 3
+    },
+    {
+      "id": "win.chime",
+      "slot": "window",
+      "unlock": {
+        "kind": "family",
+        "family": "BEST_RECOVERY_WEEK",
+        "level": 1
+      },
+      "release": 1,
+      "frames": 3
+    },
+    {
+      "id": "shelf.books",
+      "slot": "shelf",
+      "unlock": {
+        "kind": "starter"
+      },
+      "release": 1
+    },
+    {
+      "id": "shelf.minicactus",
+      "slot": "shelf",
+      "unlock": {
+        "kind": "starter"
+      },
+      "release": 1
+    },
+    {
+      "id": "shelf.trophyB",
+      "slot": "shelf",
+      "unlock": {
+        "kind": "anyFamily",
+        "level": 1
+      },
+      "release": 1
+    },
+    {
+      "id": "shelf.globe",
+      "slot": "shelf",
+      "unlock": {
+        "kind": "family",
+        "family": "STEADIEST_MONTH",
+        "level": 1
+      },
+      "release": 1,
+      "frames": 3
+    },
+    {
+      "id": "shelf.luckycat",
+      "slot": "shelf",
+      "unlock": {
+        "kind": "family",
+        "family": "BEST_RECOVERY_WEEK",
+        "level": 2
+      },
+      "release": 1,
+      "frames": 3
+    },
+    {
+      "id": "desk.monitor",
+      "slot": "desk",
+      "unlock": {
+        "kind": "starter"
+      },
+      "release": 1,
+      "style": "standard",
+      "emissive": true,
+      "frames": 3
+    },
+    {
+      "id": "desk.notebook",
+      "slot": "desk",
+      "unlock": {
+        "kind": "starter"
+      },
+      "release": 1,
+      "style": "standard"
+    },
+    {
+      "id": "desk.laptop",
+      "slot": "desk",
+      "unlock": {
+        "kind": "family",
+        "family": "STEP_GOAL",
+        "level": 1
+      },
+      "release": 1,
+      "style": "standard",
+      "emissive": true,
+      "frames": 3
+    },
+    {
+      "id": "item.mug",
+      "slot": "desk_item",
+      "unlock": {
+        "kind": "starter"
+      },
+      "release": 1,
+      "tint": true,
+      "frames": 3
+    },
+    {
+      "id": "item.sticky",
+      "slot": "desk_item",
+      "unlock": {
+        "kind": "starter"
+      },
+      "release": 1
+    },
+    {
+      "id": "item.bottle",
+      "slot": "desk_item",
+      "unlock": {
+        "kind": "family",
+        "family": "SLEEP_GOAL",
+        "level": 1
+      },
+      "release": 1
+    },
+    {
+      "id": "item.pills",
+      "slot": "desk_item",
+      "unlock": {
+        "kind": "family",
+        "family": "EVERY_DAY_LOGGED",
+        "level": 1
+      },
+      "release": 1
+    },
+    {
+      "id": "item.shaker",
+      "slot": "desk_item",
+      "unlock": {
+        "kind": "family",
+        "family": "STEP_GOAL",
+        "level": 2
+      },
+      "release": 1
+    },
+    {
+      "id": "item.stand",
+      "slot": "desk_item",
+      "unlock": {
+        "kind": "family",
+        "family": "EVERY_DAY_LOGGED",
+        "level": 2
+      },
+      "release": 1,
+      "tint": true
+    },
+    {
+      "id": "item.controller",
+      "slot": "desk_item",
+      "unlock": {
+        "kind": "anyFamily",
+        "level": 2
+      },
+      "release": 1
+    },
+    {
+      "id": "plant.fern",
+      "slot": "plant",
+      "unlock": {
+        "kind": "starter"
+      },
+      "release": 1,
+      "sets": [
+        "cottage"
+      ]
+    },
+    {
+      "id": "plant.cactus",
+      "slot": "plant",
+      "unlock": {
+        "kind": "starter"
+      },
+      "release": 1,
+      "sets": [
+        "gamerNight"
+      ]
+    },
+    {
+      "id": "plant.monstera",
+      "slot": "plant",
+      "unlock": {
+        "kind": "family",
+        "family": "SLEEP_GOAL",
+        "level": 1
+      },
+      "release": 1
+    },
+    {
+      "id": "plant.snake",
+      "slot": "plant",
+      "unlock": {
+        "kind": "family",
+        "family": "STEP_GOAL",
+        "level": 2
+      },
+      "release": 1,
+      "sets": [
+        "homeGym",
+        "library"
+      ]
+    },
+    {
+      "id": "plant.succulents",
+      "slot": "plant",
+      "unlock": {
+        "kind": "family",
+        "family": "EVERY_DAY_LOGGED",
+        "level": 2
+      },
+      "release": 1
+    },
+    {
+      "id": "plant.bamboo",
+      "slot": "plant",
+      "unlock": {
+        "kind": "family",
+        "family": "STEADIEST_MONTH",
+        "level": 2
+      },
+      "release": 1
+    },
+    {
+      "id": "plant.sunflower",
+      "slot": "plant",
+      "unlock": {
+        "kind": "counter",
+        "counter": "buddy_cheers",
+        "atLeast": 5
+      },
+      "release": 1
+    },
+    {
+      "id": "lamp.amber",
+      "slot": "lamp",
+      "unlock": {
+        "kind": "starter"
+      },
+      "release": 1,
+      "emissive": true,
+      "frames": 3
+    },
+    {
+      "id": "lamp.mint",
+      "slot": "lamp",
+      "unlock": {
+        "kind": "family",
+        "family": "CHECK_IN",
+        "level": 1
+      },
+      "release": 1,
+      "emissive": true
+    },
+    {
+      "id": "lamp.kiplamp",
+      "slot": "lamp",
+      "unlock": {
+        "kind": "family",
+        "family": "STEADY_BEDTIME",
+        "level": 1
+      },
+      "release": 1,
+      "tint": true,
+      "emissive": true
+    },
+    {
+      "id": "lamp.salt",
+      "slot": "lamp",
+      "unlock": {
+        "kind": "family",
+        "family": "SLEEP_GOAL",
+        "level": 2
+      },
+      "release": 1,
+      "emissive": true
+    },
+    {
+      "id": "corner.floorlamp",
+      "slot": "corner",
+      "unlock": {
+        "kind": "family",
+        "family": "STEADY_BEDTIME",
+        "level": 2
+      },
+      "release": 1,
+      "emissive": true
+    },
+    {
+      "id": "corner.yogamat",
+      "slot": "corner",
+      "unlock": {
+        "kind": "family",
+        "family": "STEADIEST_MONTH",
+        "level": 1
+      },
+      "release": 1,
+      "tint": true
+    },
+    {
+      "id": "corner.bag",
+      "slot": "corner",
+      "unlock": {
+        "kind": "family",
+        "family": "BEST_RECOVERY_WEEK",
+        "level": 2
+      },
+      "release": 1,
+      "frames": 3
+    },
+    {
+      "id": "corner.beanbag",
+      "slot": "corner",
+      "unlock": {
+        "kind": "anyFamily",
+        "level": 2
+      },
+      "release": 1,
+      "tint": true,
+      "sets": [
+        "gamerNight"
+      ]
+    },
+    {
+      "id": "rug.slate",
+      "slot": "rug",
+      "unlock": {
+        "kind": "starter"
+      },
+      "release": 1
+    },
+    {
+      "id": "rug.red",
+      "slot": "rug",
+      "unlock": {
+        "kind": "family",
+        "family": "SLEEP_GOAL",
+        "level": 1
+      },
+      "release": 1
+    },
+    {
+      "id": "rug.gymmat",
+      "slot": "rug",
+      "unlock": {
+        "kind": "family",
+        "family": "STEP_GOAL",
+        "level": 1
+      },
+      "release": 1
+    },
+    {
+      "id": "rug.checker",
+      "slot": "rug",
+      "unlock": {
+        "kind": "family",
+        "family": "EVERY_DAY_LOGGED",
+        "level": 1
+      },
+      "release": 1
+    },
+    {
+      "id": "rug.woven",
+      "slot": "rug",
+      "unlock": {
+        "kind": "family",
+        "family": "CHECK_IN",
+        "level": 2
+      },
+      "release": 1
+    },
+    {
+      "id": "rug.tatami",
+      "slot": "rug",
+      "unlock": {
+        "kind": "family",
+        "family": "STEADY_BEDTIME",
+        "level": 2
+      },
+      "release": 1
+    },
+    {
+      "id": "pet.bed",
+      "slot": "pet",
+      "unlock": {
+        "kind": "family",
+        "family": "CHECK_IN",
+        "level": 1
+      },
+      "release": 1,
+      "tint": true
+    },
+    {
+      "id": "out.beanie",
+      "slot": "head",
+      "unlock": {
+        "kind": "starter"
+      },
+      "release": 1,
+      "sets": [
+        "cottage"
+      ]
+    },
+    {
+      "id": "out.cap",
+      "slot": "head",
+      "unlock": {
+        "kind": "family",
+        "family": "STEP_GOAL",
+        "level": 1
+      },
+      "release": 1
+    },
+    {
+      "id": "out.sweatband",
+      "slot": "head",
+      "unlock": {
+        "kind": "family",
+        "family": "STEP_GOAL",
+        "level": 2
+      },
+      "release": 1,
+      "sets": [
+        "homeGym"
+      ]
+    },
+    {
+      "id": "out.bucket",
+      "slot": "head",
+      "unlock": {
+        "kind": "family",
+        "family": "SLEEP_GOAL",
+        "level": 2
+      },
+      "release": 1,
+      "tint": true
+    },
+    {
+      "id": "out.hachimaki",
+      "slot": "head",
+      "unlock": {
+        "kind": "family",
+        "family": "STEADY_BEDTIME",
+        "level": 2
+      },
+      "release": 1,
+      "sets": [
+        "japanese"
+      ]
+    },
+    {
+      "id": "out.beret",
+      "slot": "head",
+      "unlock": {
+        "kind": "family",
+        "family": "BEST_RECOVERY_WEEK",
+        "level": 2
+      },
+      "release": 1
+    },
+    {
+      "id": "out.party",
+      "slot": "head",
+      "unlock": {
+        "kind": "counter",
+        "counter": "buddy_cheers",
+        "atLeast": 5
+      },
+      "release": 1,
+      "tint": true
+    },
+    {
+      "id": "out.round",
+      "slot": "face",
+      "unlock": {
+        "kind": "family",
+        "family": "CHECK_IN",
+        "level": 1
+      },
+      "release": 1,
+      "sets": [
+        "stargazer",
+        "library"
+      ]
+    },
+    {
+      "id": "out.scarf",
+      "slot": "neck",
+      "unlock": {
+        "kind": "family",
+        "family": "STEADY_BEDTIME",
+        "level": 1
+      },
+      "release": 1
+    },
+    {
+      "id": "out.bowtie",
+      "slot": "neck",
+      "unlock": {
+        "kind": "family",
+        "family": "EVERY_DAY_LOGGED",
+        "level": 2
+      },
+      "release": 1,
+      "sets": [
+        "library"
+      ]
+    },
+    {
+      "id": "out.earbuds",
+      "slot": "ears",
+      "unlock": {
+        "kind": "starter"
+      },
+      "release": 1
+    },
+    {
+      "id": "out.phones",
+      "slot": "ears",
+      "unlock": {
+        "kind": "family",
+        "family": "EVERY_DAY_LOGGED",
+        "level": 1
+      },
+      "release": 1,
+      "sets": [
+        "gamerNight"
+      ]
+    },
+    {
+      "id": "set.cottage.wallpaper",
+      "slot": "wallpaper",
+      "unlock": {
+        "kind": "set",
+        "set": "cottage"
+      },
+      "release": 1,
+      "sets": [
+        "cottage"
+      ]
+    },
+    {
+      "id": "set.cottage.floor",
+      "slot": "floor",
+      "unlock": {
+        "kind": "set",
+        "set": "cottage"
+      },
+      "release": 1,
+      "sets": [
+        "cottage"
+      ]
+    },
+    {
+      "id": "set.cottage.art",
+      "slot": "art",
+      "unlock": {
+        "kind": "set",
+        "set": "cottage"
+      },
+      "release": 1,
+      "sets": [
+        "cottage"
+      ]
+    },
+    {
+      "id": "set.cottage.window",
+      "slot": "window",
+      "unlock": {
+        "kind": "set",
+        "set": "cottage"
+      },
+      "release": 1,
+      "sets": [
+        "cottage"
+      ]
+    },
+    {
+      "id": "set.cottage.shelf",
+      "slot": "shelf",
+      "unlock": {
+        "kind": "set",
+        "set": "cottage"
+      },
+      "release": 1,
+      "sets": [
+        "cottage"
+      ]
+    },
+    {
+      "id": "set.cottage.desk",
+      "slot": "desk",
+      "unlock": {
+        "kind": "set",
+        "set": "cottage"
+      },
+      "release": 1,
+      "style": "standard",
+      "sets": [
+        "cottage"
+      ]
+    },
+    {
+      "id": "set.cottage.desk_item",
+      "slot": "desk_item",
+      "unlock": {
+        "kind": "set",
+        "set": "cottage"
+      },
+      "release": 1,
+      "sets": [
+        "cottage"
+      ]
+    },
+    {
+      "id": "set.cottage.lamp",
+      "slot": "lamp",
+      "unlock": {
+        "kind": "set",
+        "set": "cottage"
+      },
+      "release": 1,
+      "emissive": true,
+      "frames": 3,
+      "sets": [
+        "cottage"
+      ]
+    },
+    {
+      "id": "set.cottage.corner",
+      "slot": "corner",
+      "unlock": {
+        "kind": "set",
+        "set": "cottage"
+      },
+      "release": 1,
+      "emissive": true,
+      "frames": 3,
+      "sets": [
+        "cottage"
+      ]
+    },
+    {
+      "id": "set.cottage.rug",
+      "slot": "rug",
+      "unlock": {
+        "kind": "set",
+        "set": "cottage"
+      },
+      "release": 1,
+      "sets": [
+        "cottage"
+      ]
+    },
+    {
+      "id": "set.cottage.pet",
+      "slot": "pet",
+      "unlock": {
+        "kind": "set",
+        "set": "cottage"
+      },
+      "release": 1,
+      "sets": [
+        "cottage"
+      ]
+    }
+  ],
+  "sets": [
+    {
+      "id": "cottage",
+      "release": 1,
+      "unlock": {
+        "kind": "counter",
+        "counter": "recaps_read",
+        "atLeast": 4
+      },
+      "style": "standard",
+      "room": {
+        "wallpaper": "set.cottage.wallpaper",
+        "floor": "set.cottage.floor",
+        "art": "set.cottage.art",
+        "window": "set.cottage.window",
+        "shelf": "set.cottage.shelf",
+        "desk": "set.cottage.desk",
+        "desk_item": "set.cottage.desk_item",
+        "plant": "plant.fern",
+        "lamp": "set.cottage.lamp",
+        "corner": "set.cottage.corner",
+        "rug": "set.cottage.rug",
+        "pet": "set.cottage.pet"
+      },
+      "worn": {
+        "head": "out.beanie"
+      }
+    }
+  ]
+}
