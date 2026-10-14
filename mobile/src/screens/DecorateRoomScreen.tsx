@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useReducer, useRef } from 'react';
+import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
 import { Alert, ScrollView, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
@@ -31,15 +31,37 @@ export function DecorateRoomScreen() {
   const navigation = useNavigation<any>();
   const params = (useRoute().params ?? {}) as { tab?: DecorateTab; slot?: DecorateSlot };
   const cosmetics = useCosmetics();
+  // The read failed (loadCosmetics keeps nothing and swallows the error): say so, with Try again and Close.
+  const [failed, setFailed] = useState(false);
+  const load = useCallback(() => {
+    setFailed(false);
+    void loadCosmetics().then((loaded) => setFailed(!loaded));
+  }, []);
   useEffect(() => {
     setDecorateOpen(true);
-    if (!cosmetics) void loadCosmetics();
+    if (!cosmetics) load();
     return () => setDecorateOpen(false);
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
   if (!cosmetics) {
+    // The route has no swipe to close, so Cancel is here from the first frame.
     return (
       <SafeAreaView className="flex-1 bg-background">
-        <Skeleton testID="decorate-loading" className="m-4 h-56 rounded-lg" />
+        <View className="flex-row items-center justify-between px-4 pb-2 pt-1">
+          <Button testID="decorate-cancel" variant="ghost" onPress={() => navigation.goBack()}>{ROOM_COPY.cancel}</Button>
+          <PageTitle>{ROOM_COPY.title}</PageTitle>
+          <View className="w-16" />
+        </View>
+        {failed ? (
+          <View testID="decorate-load-failed" className="m-4 gap-3 rounded-lg border border-border bg-card p-4">
+            <Text className="text-body">{ROOM_COPY.loadFailed.text}</Text>
+            <View className="flex-row gap-2">
+              <Button testID="decorate-retry" className="flex-1" onPress={load}>{ROOM_COPY.loadFailed.retry}</Button>
+              <Button testID="decorate-close" variant="outline" className="flex-1" onPress={() => navigation.goBack()}>{ROOM_COPY.loadFailed.close}</Button>
+            </View>
+          </View>
+        ) : (
+          <Skeleton testID="decorate-loading" className="m-4 h-56 rounded-lg" />
+        )}
       </SafeAreaView>
     );
   }
@@ -113,7 +135,7 @@ function Decorate({ params, navigation }: { params: { tab?: DecorateTab; slot?: 
             reduceMotion={reduceMotion}
             accessibilityLabel={info.spoken}
           />
-          {state.tab === 'room' ? <HotspotLayer crop={{ width, height: ROOM_HEIGHT }} lockedSlot={lockedSlot} onSelect={(slot) => dispatch({ type: 'slot', slot })} /> : null}
+          {state.tab === 'room' ? <HotspotLayer crop={{ width, height: ROOM_HEIGHT }} selectedSlot={state.roomSlot} lockedSlot={lockedSlot} onSelect={(slot) => dispatch({ type: 'slot', slot })} /> : null}
         </View>
         <View className="flex-row items-center gap-3 px-4 py-3">
           <View testID="decorate-info" accessible accessibilityLabel={info.spoken} className="shrink grow gap-0.5">

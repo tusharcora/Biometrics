@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert } from 'react-native';
+import { Alert, StyleSheet } from 'react-native';
 import { act, fireEvent, render, within } from '@testing-library/react-native';
 import { fetchCosmetics, postCosmeticsSeen, putCosmetics } from '../../src/api/cosmetics';
 import { DecorateRoomScreen } from '../../src/screens/DecorateRoomScreen';
@@ -10,8 +10,19 @@ jest.mock('../../src/components/room/RoomView', () => require('../../jest-mocks/
 // The window's weather (useTodayScene): no scores and no night, and no real HTTP from Jest (ruling P29).
 jest.mock('../../src/api/scores', () => ({ ...jest.requireActual('../../src/api/scores'), fetchScoresWithBands: jest.fn(async () => ({ scores: [], bands: undefined })) }));
 jest.mock('../../src/api/sleep', () => ({ ...jest.requireActual('../../src/api/sleep'), fetchSleep: jest.fn(async () => ({ nights: [] })) }));
-jest.mock('../../src/api/cosmetics',() => ({ fetchCosmetics: jest.fn(), putCosmetics: jest.fn(), postCosmeticsSeen: jest.fn(async () => undefined) }));
-const mockNav = { goBack: jest.fn(), navigate: jest.fn(), addListener: jest.fn(() => () => undefined), dispatch: jest.fn() };
+jest.mock('../../src/api/cosmetics', () => ({ fetchCosmetics: jest.fn(), putCosmetics: jest.fn(), postCosmeticsSeen: jest.fn(async () => undefined) }));
+// addListener keeps the newest listener per event, so a test can fire beforeRemove as the navigator would.
+type RemoveEvent = { preventDefault: () => void; data: { action: unknown } };
+const mockListeners: Record<string, (e: RemoveEvent) => void> = {};
+const mockNav = {
+  goBack: jest.fn(),
+  navigate: jest.fn(),
+  addListener: jest.fn((event: string, cb: (e: RemoveEvent) => void) => {
+    mockListeners[event] = cb;
+    return () => undefined;
+  }),
+  dispatch: jest.fn(),
+};
 let mockParams: object | undefined;
 jest.mock('@react-navigation/native', () => ({
   ...jest.requireActual('@react-navigation/native'),
@@ -96,4 +107,77 @@ it('Undo steps back; Cancel without changes just closes; with changes it asks fi
   act(() => buttons[1]!.onPress!());
   expect(mockNav.goBack).toHaveBeenCalledTimes(2);
   alert.mockRestore();
+});
+
+it('lets a back gesture or Android back through unchanged, and asks first once something changed', async () => {
+  const alert = jest.spyOn(Alert, 'alert').mockImplementation(() => undefined);
+  const s = await open({ slot: 'rug' });
+  const event = (): RemoveEvent => ({ preventDefault: jest.fn(), data: { action: { type: 'GO_BACK' } } });
+  const unchanged = event();
+  mockListeners.beforeRemove!(unchanged);
+  expect([(unchanged.preventDefault as jest.Mock).mock.calls.length, alert.mock.calls.length]).toEqual([0, 0]);
+
+  fireEvent.press(s.getByTestId('decorate-tile-rug.red'));
+  const changed = event();
+  mockListeners.beforeRemove!(changed);
+  expect(changed.preventDefault).toHaveBeenCalledTimes(1);
+  expect(alert.mock.calls[0]![0]).toBe('Discard your changes?');
+  expect(mockNav.dispatch).not.toHaveBeenCalled();
+  const buttons = alert.mock.calls[0]![2]!;
+  act(() => buttons[1]!.onPress!());
+  expect(mockNav.dispatch).toHaveBeenCalledWith({ type: 'GO_BACK' });
+  // Once discarding, the removal it dispatched passes straight through.
+  const again = event();
+  mockListeners.beforeRemove!(again);
+  expect([(again.preventDefault as jest.Mock).mock.calls.length, alert.mock.calls.length]).toEqual([0, 1]);
+  alert.mockRestore();
+});
+
+it('marks the hotspot of the slot being decorated as selected, and gives each a 44 pt tall touch target', async () => {
+  const s = await open({ slot: 'rug' });
+  expect(s.getByTestId('decorate-hotspot-rug').props.accessibilityState).toMatchObject({ selected: true });
+  expect(s.getByTestId('decorate-hotspot-art').props.accessibilityState).toMatchObject({ selected: false });
+  fireEvent.press(s.getByTestId('decorate-hotspot-art'));
+  expect(s.getByTestId('decorate-hotspot-art').props.accessibilityState).toMatchObject({ selected: true });
+  for (const tag of s.getAllByTestId(/^decorate-hotspot-/)) {
+    const { hitSlop, style } = tag.props;
+    const height = StyleSheet.flatten(style).height as number;
+    expect(height + hitSlop.top + hitSlop.bottom).toBeGreaterThanOrEqual(44);
+  }
+});
+
+it('can be left while the room is loading', async () => {
+  mockParams = undefined;
+  (fetchCosmetics as jest.Mock).mockReturnValue(new Promise(() => undefined));
+  const s = render(<DecorateRoomScreen />);
+  await act(async () => undefined);
+  expect(s.getByTestId('decorate-loading')).toBeTruthy();
+  fireEvent.press(s.getByTestId('decorate-cancel'));
+  expect(mockNav.goBack).toHaveBeenCalledTimes(1);
+});
+
+it('says so when the room cannot load, and offers Try again and Close', async () => {
+  mockParams = undefined;
+  (fetchCosmetics as jest.Mock).mockRejectedValue(new Error('offline'));
+  const s = render(<DecorateRoomScreen />);
+  await act(async () => undefined);
+  expect(s.getByTestId('decorate-load-failed')).toHaveTextContent("Couldn't open your room just now. Check your connection and try again.", { exact: false });
+  expect(s.queryByTestId('decorate-loading')).toBeNull();
+
+  (fetchCosmetics as jest.Mock).mockResolvedValue(DTO);
+  await act(async () => {
+    fireEvent.press(s.getByTestId('decorate-retry'));
+  });
+  expect(fetchCosmetics).toHaveBeenCalledTimes(2);
+  expect(s.getByTestId('decorate-room')).toBeTruthy();
+  expect(s.queryByTestId('decorate-load-failed')).toBeNull();
+});
+
+it('closes from the load error', async () => {
+  mockParams = undefined;
+  (fetchCosmetics as jest.Mock).mockRejectedValue(new Error('offline'));
+  const s = render(<DecorateRoomScreen />);
+  await act(async () => undefined);
+  fireEvent.press(s.getByTestId('decorate-close'));
+  expect(mockNav.goBack).toHaveBeenCalledTimes(1);
 });

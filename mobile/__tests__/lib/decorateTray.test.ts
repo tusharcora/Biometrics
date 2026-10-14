@@ -1,5 +1,5 @@
 import { initDecorate, decorateReducer } from '../../src/lib/room/decorate';
-import { hotspotPositions, HOTSPOT_CELLS, TAG_H, TAG_W } from '../../src/lib/room/hotspots';
+import { hotspotHitSlop, hotspotPositions, hotspotTargets, HOTSPOT_CELLS, TAG_H, TAG_W, TOUCH_MIN } from '../../src/lib/room/hotspots';
 import { infoLine, offeredItems, setCards, tilesFor, type TrayContext } from '../../src/lib/room/tray';
 import { EMPTY_WORN, STARTER_LOADOUT } from '../../src/lib/room/loadout';
 import { ROOM_SLOTS } from '../../src/lib/room/slots';
@@ -59,4 +59,29 @@ it('keeps every hotspot tag inside the visible crop at any phone width, none on 
     expect(new Set(ROOM_SLOTS.map((s) => `${at[s].left},${at[s].top}`)).size).toBe(12);
   }
   expect(Object.keys(HOTSPOT_CELLS).sort()).toEqual([...ROOM_SLOTS].sort());
+});
+
+it('gives every hotspot tag a touch target at least 44 pt tall inside the room, none overlapping another', () => {
+  for (const width of [320, 343, 375, 390, 430]) {
+    const crop = { width, height: 220 };
+    const at = hotspotPositions(crop, 2);
+    const targets = hotspotTargets(crop, 2);
+    for (const slot of ROOM_SLOTS) {
+      const t = targets[slot];
+      const slop = hotspotHitSlop(at[slot].top, crop.height);
+      expect([t.height, t.width]).toEqual([TOUCH_MIN, TAG_W]);
+      expect(TAG_H + slop.top + slop.bottom).toBe(TOUCH_MIN);
+      expect([t.top, t.left]).toEqual([at[slot].top - slop.top, at[slot].left]);
+      expect(t.top >= 0 && t.top + t.height <= 220).toBe(true);
+    }
+    for (const a of ROOM_SLOTS) {
+      for (const b of ROOM_SLOTS) {
+        if (a >= b) continue;
+        const [p, q] = [targets[a], targets[b]];
+        const overlap = p.left < q.left + q.width && q.left < p.left + p.width && p.top < q.top + q.height && q.top < p.top + p.height;
+        expect(overlap ? `${width}: ${a} overlaps ${b}` : null).toBeNull();
+      }
+    }
+  }
+  expect(TOUCH_MIN).toBeGreaterThanOrEqual(44);
 });

@@ -175,6 +175,7 @@ export const ROOM_COPY = {
     leads: ['Badge families.', 'Any family.', 'Recaps and buddies.'],
   },
   discard: { title: 'Discard your changes?', discard: 'Discard', keep: 'Keep editing' },
+  loadFailed: { text: "Couldn't open your room just now. Check your connection and try again.", retry: 'Try again', close: 'Close' },
   refreshed: 'Something changed on another device. Your room was refreshed.',
   saveFailed: "Couldn't save your room. Try again.",
   newFor: (name: string, more: number) => (more > 0 ? `New for KIP's room: ${name} and ${more} more` : `New for KIP's room: ${name}`),
