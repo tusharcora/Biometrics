@@ -6,7 +6,7 @@ import { darkenHex, mixHex } from '../colour';
 import { FLOOR_Y, ROOM_H, ROOM_W, WALL_X0, WALL_X1 } from './grid';
 import { registerItems, type ItemArt, type MonitorScreen } from './items';
 import { bookRow, clipB, E, floorSeams, glow, gradV, leaf, poly, pot, px, R, shade, type Rects } from './paint';
-import { windowSky } from './weather';
+import { accentOn, shelfPlank, three, windowFrame } from './items/shared';
 
 const WOOD = { leg: '#7C5A3E', top: '#9A7350' };
 const CHAIR = '#3F4656';
@@ -14,8 +14,6 @@ const BOOKS = ['#60A5FA', '#F87171', '#FDE047', '#475569', '#A78BFA', '#34D399']
 
 /** The monitor's glass, inside its bezel: the loop frames draw the screen content here. */
 export const MONITOR_GLASS = { x: 74, y: 50, w: 24, h: 14 } as const;
-
-const three = (f: (k: 0 | 1 | 2) => Rects): [Rects, Rects, Rects] => [f(0), f(1), f(2)];
 
 const plainSlate: ItemArt = {
   id: 'wall.plain',
@@ -48,14 +46,9 @@ const darkOak: ItemArt = {
 const plainFrame: ItemArt = {
   id: 'win.plain',
   slot: 'window',
-  draw: ({ weather, night }) => {
+  draw: (ctx) => {
     const r: Rects = [];
-    R(r, 18, 12, 36, 40, '#1E2430');
-    windowSky(r, { x: 20, y: 14, w: 32, h: 36 }, weather, night);
-    R(r, 35, 14, 2, 36, '#1E2430');
-    R(r, 20, 31, 32, 1, '#1E2430');
-    R(r, 16, 52, 40, 3, '#191E28');
-    R(r, 16, 52, 40, 1, '#2A3140');
+    windowFrame(r, ctx);
     return { base: r };
   },
 };
@@ -84,10 +77,7 @@ const books: ItemArt = {
     const r: Rects = [];
     shade(r, 113, 33, 18, 1.5, 0.12);
     bookRow(r, 98, 30, 128, BOOKS, 3, 10);
-    R(r, 96, 30, 34, 2, '#5B4636');
-    R(r, 96, 30, 34, 1, '#7C5A3E');
-    R(r, 99, 32, 1, 2, '#3A2D23');
-    R(r, 126, 32, 1, 2, '#3A2D23');
+    shelfPlank(r);
     return { base: r };
   },
 };
@@ -124,13 +114,6 @@ function screenContent(screen: MonitorScreen, k: 0 | 1 | 2, accent: string): Rec
   }
   return r;
 }
-
-/** A readable accent on the dark glass: ink and slate are too dark, so they show as off-white (lib.js accentOf). */
-const accentOn = (body: string) => {
-  const n = parseInt(body.slice(1), 16);
-  const lum = (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
-  return lum < 0.42 ? '#F5F5F4' : body;
-};
 
 const monitor: ItemArt = {
   id: 'desk.monitor',

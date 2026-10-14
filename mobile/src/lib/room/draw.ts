@@ -8,7 +8,7 @@ import { itemArt, type ItemContext, type MonitorScreen, type SeatStyle } from '.
 import { loadoutKey, STARTER_LOADOUT, wornKey, type KipWorn, type RoomLoadout } from './loadout';
 import { ao, R, type Rects } from './paint';
 import { DRAW_ORDER, ROOM_SLOTS, SLOT_ANCHORS } from './slots';
-import './starterItems';
+import './art';
 import { daylight, nightVeil, type RoomWeather } from './weather';
 
 /** Room cells per KIP pixel: KIP is 32 × 32 cells, 64 × 64 points in the diorama (§4). */

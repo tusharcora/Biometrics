@@ -1,0 +1,51 @@
+import { KIP_COLOURS, kipRamp } from '../src/lib/kip/kipArt';
+import { catalogueItem, catalogueItemsFor } from '../src/lib/room/catalogue';
+import { boundsOf, boxContains } from '../src/lib/room/grid';
+import { itemIcon } from '../src/lib/room/icons';
+import { itemArt, type ItemContext } from '../src/lib/room/items';
+import { ANCHOR_EXEMPT } from '../src/lib/room/items/shared';
+import { SLOT_ANCHORS, type RoomSlot } from '../src/lib/room/slots';
+import '../src/lib/room/art';
+
+export const CTX_DAY: ItemContext = { weather: 'clear', night: false, colour: 'coral', ramp: kipRamp(KIP_COLOURS.coral), screen: 'lines' };
+export const CTX_NIGHT: ItemContext = { ...CTX_DAY, weather: 'fallback', night: true };
+const LIME: ItemContext = { ...CTX_DAY, colour: 'lime', ramp: kipRamp(KIP_COLOURS.lime) };
+
+/** Spec §8 / §11 "Item art", for every shipped item of one room slot (set pieces only once their art exists, Task 11). */
+export function checkSlotArt(slot: RoomSlot, { sets = true }: { sets?: boolean } = {}): void {
+  for (const item of catalogueItemsFor(slot).filter((i) => sets || !i.id.startsWith('set.'))) {
+    const art = itemArt(item.id);
+    const tag = { id: item.id };
+    expect({ ...tag, art: !!art, icon: (itemIcon(item.id)?.length ?? 0) > 0 }).toEqual({ ...tag, art: true, icon: true });
+    if (!art) continue;
+    expect({ ...tag, slot: art.slot }).toEqual({ ...tag, slot });
+    // The flags match the catalogue.
+    expect({ ...tag, tint: !!art.tint, emissive: !!art.emissive, frames: art.frames ?? null, style: art.style ?? null })
+      .toEqual({ ...tag, tint: !!item.tint, emissive: !!item.emissive, frames: item.frames ?? null, style: item.style ?? null });
+    for (const ctx of [CTX_DAY, CTX_NIGHT]) {
+      const layers = art.draw(ctx);
+      expect({ ...tag, base: (layers.base?.length ?? 0) > 0 }).toEqual({ ...tag, base: true });
+      // Inside its anchor, unless exempt with a reason (ruling 3).
+      if (!ANCHOR_EXEMPT.has(item.id)) {
+        expect({ ...tag, inside: boxContains(SLOT_ANCHORS[slot], boundsOf(layers.base!)!) }).toEqual({ ...tag, inside: true });
+      }
+      // Emissive items light only in the glow layer; others have none.
+      expect({ ...tag, glow: (layers.emissive?.length ?? 0) > 0 }).toEqual({ ...tag, glow: !!item.emissive });
+      // Loops have exactly three frames, and they differ.
+      if (item.frames) {
+        expect({ ...tag, frames: layers.frames?.length }).toEqual({ ...tag, frames: 3 });
+        expect({ ...tag, moves: JSON.stringify(layers.frames![0]) !== JSON.stringify(layers.frames![1]) || JSON.stringify(layers.frames![1]) !== JSON.stringify(layers.frames![2]) || ctx.night })
+          .toEqual({ ...tag, moves: true });
+      } else {
+        expect({ ...tag, frames: layers.frames ?? null }).toEqual({ ...tag, frames: null });
+      }
+      // Deterministic.
+      expect(art.draw(ctx)).toEqual(layers);
+    }
+    // Tinted items follow KIP's colour; others never do.
+    const coral = JSON.stringify(art.draw(CTX_DAY));
+    const lime = JSON.stringify(art.draw(LIME));
+    expect({ ...tag, follows: coral !== lime }).toEqual({ ...tag, follows: !!item.tint || (slot === 'desk' && !!item.frames) });
+  }
+  expect(catalogueItem('no.such')).toBeUndefined();
+}
