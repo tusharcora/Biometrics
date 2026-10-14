@@ -1,8 +1,8 @@
 import React from 'react';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { NavigationContext } from '@react-navigation/native';
 import { KipSettingsSection } from '../../src/components/kip-settings-section';
-import { revokeCoachConsent, type CoachStatusDTO } from '../../src/api/coach';
+import { listCoachMemory, revokeCoachConsent, type CoachStatusDTO } from '../../src/api/coach';
 import { HIDDEN_OK, withCoachStatus } from '../../jest-mocks/coachStatus';
 import { setMyKipColour, resetMyKipColour } from '../../src/lib/kip/myKipColour';
 
@@ -64,6 +64,36 @@ it('counts the memories, and speaks the subtitles with commas, not middle dots',
   expect(await s.findByText('See, edit or delete · 2 things')).toBeTruthy();
   expect(s.getByTestId('kip-memory-row').props.accessibilityLabel).toBe('What KIP remembers, See, edit or delete, 2 things');
   expect(s.getByText('Cobalt · coaches you on the KIP tab').props.accessibilityLabel).toBe('Cobalt, coaches you on the KIP tab');
+});
+
+it('reads the memory count again when Settings comes back into focus (a delete on the memory page)', async () => {
+  const focus: (() => void)[] = [];
+  const nav = { navigate, isFocused: () => true, addListener: (event: string, cb: () => void) => {
+    if (event === 'focus') focus.push(cb);
+    return () => undefined;
+  } };
+  const s = render(<NavigationContext.Provider value={nav as never}>{withCoachStatus(<KipSettingsSection />, { status: ON })}</NavigationContext.Provider>);
+  expect(await s.findByText('See, edit or delete · 2 things')).toBeTruthy();
+  (listCoachMemory as jest.Mock).mockResolvedValueOnce([{ id: 'm2' }]);
+  await act(async () => focus.forEach((cb) => cb()));
+  expect(await s.findByText('See, edit or delete · 1 thing')).toBeTruthy();
+});
+
+it('a late reply from an older read never overwrites a newer count', async () => {
+  const focus: (() => void)[] = [];
+  const nav = { navigate, isFocused: () => true, addListener: (event: string, cb: () => void) => {
+    if (event === 'focus') focus.push(cb);
+    return () => undefined;
+  } };
+  let slow: (items: { id: string }[]) => void = () => {};
+  (listCoachMemory as jest.Mock)
+    .mockImplementationOnce(() => new Promise((res) => { slow = res; }))
+    .mockResolvedValueOnce([{ id: 'm1' }]);
+  const s = render(<NavigationContext.Provider value={nav as never}>{withCoachStatus(<KipSettingsSection />, { status: ON })}</NavigationContext.Provider>);
+  await act(async () => focus.forEach((cb) => cb()));
+  expect(await s.findByText('See, edit or delete · 1 thing')).toBeTruthy();
+  await act(async () => slow([{ id: 'm1' }, { id: 'm2' }, { id: 'm3' }]));
+  expect(s.getByText('See, edit or delete · 1 thing')).toBeTruthy();
 });
 
 it.each([

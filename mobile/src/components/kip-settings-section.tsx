@@ -31,20 +31,29 @@ export function KipSettingsSection() {
   const [revokeError, setRevokeError] = useState(false);
   const [busy, setBusy] = useState(false);
 
+  // Read again each time Settings comes back into focus: a delete on the memory page changes the count. Only the
+  // newest read lands, and none after unmount or a consent change.
   useEffect(() => {
     if (!consented) return undefined;
     let live = true;
-    listCoachMemory()
-      .then((items) => {
-        if (live) setMemoryCount(items.length);
-      })
-      .catch(() => {
-        if (live) setMemoryCount(null);
-      });
+    let latest = 0;
+    const read = () => {
+      const mine = ++latest;
+      listCoachMemory()
+        .then((items) => {
+          if (live && mine === latest) setMemoryCount(items.length);
+        })
+        .catch(() => {
+          if (live && mine === latest) setMemoryCount(null);
+        });
+    };
+    read();
+    const offFocus = navigation?.addListener?.('focus', read);
     return () => {
       live = false;
+      offFocus?.();
     };
-  }, [consented]);
+  }, [consented, navigation]);
 
   async function revoke() {
     if (!status || busy) return;
