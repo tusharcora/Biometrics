@@ -30,6 +30,8 @@ export interface RoomViewProps {
   bubble: string | null;
   reduceMotion: boolean;
   accessibilityLabel?: string;
+  /** False when a parent carries the label (the collapsed header's thumbnail button). Default true. */
+  accessible?: boolean;
   testID?: string;
 }
 
@@ -98,8 +100,8 @@ export function RoomView(props: RoomViewProps) {
   return (
     <View
       testID={props.testID}
-      accessible
-      accessibilityRole="image"
+      accessible={props.accessible ?? true}
+      accessibilityRole={props.accessible === false ? undefined : 'image'}
       accessibilityLabel={props.accessibilityLabel}
       style={{ width: crop.width, height: crop.height, overflow: 'hidden' }}
     >

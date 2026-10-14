@@ -31,6 +31,9 @@ export const KIP_COPY = {
   consentReview: 'Review what is shared',
   consentNotNow: 'Not now',
   replyLabel: KIP_NAME,
+  // Collapse and "Shrink room" (§3.5).
+  shrinkRoom: 'Shrink room',
+  expandRoomLabel: "Expand KIP's room",
 } as const;
 
 /** "fair": the Recovery page's band word in lower case (§3.3 "{verdict} day"). */

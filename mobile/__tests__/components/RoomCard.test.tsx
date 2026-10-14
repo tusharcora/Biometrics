@@ -53,3 +53,11 @@ it('shows a skeleton in the frame while loading, and no room', () => {
   expect(s.getByTestId('kip-room-skeleton')).toBeTruthy();
   expect(s.queryByTestId('kip-room')).toBeNull();
 });
+
+it('draws a passed look (the turn) in place of the stage\'s pose, keeping the stage\'s bubble and screen', () => {
+  const s = render(
+    <RoomCard stage={STAGE} look={{ pose: 'rest', mood: 'glance', facing: 'you' }} window={WINDOW} recovery={FAIR} reduceMotion={false} onOpenRecovery={jest.fn()} />,
+  );
+  fireEvent(s.getByTestId('kip-room-frame-inner'), 'layout', { nativeEvent: { layout: { width: 323, height: 200, x: 0, y: 0 } } });
+  expect(s.getByTestId('kip-room').props.room).toBe('rest:glance:ON IT…:dots:cloudy:day:coral:2:moving:you');
+});

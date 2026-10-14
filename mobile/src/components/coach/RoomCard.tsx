@@ -11,6 +11,7 @@ import { useMyKipColour } from '../../lib/kip/myKipColour';
 import { KIP_COPY } from '../../lib/kipCopy';
 import { hotTagLabel, roomLabel, type KipStage } from '../../lib/kipStage';
 import { EMPTY_WORN, STARTER_LOADOUT } from '../../lib/room/loadout';
+import type { KipLook } from '../../lib/useKipTurn';
 import type { RoomWeather } from '../../lib/room/weather';
 import type { ScoreBand } from '../../lib/scoreInsights';
 import { COLORS } from '../../theme';
@@ -21,10 +22,12 @@ const WOOD_LINE = '#3A2D23';
 
 // The W7 room card (spec 2026-10-14 KIP Coach §3.1, §3.2): KIP's room as a framed diorama (crop, never shrink: the
 // inner width is measured, the height fixed at 200), a caption row with the RECOVERY hot tag, and an optional footer
-// (Task 10's "Shrink room"). The frame is part of the picture, not a button. The tag keeps Home's dark-palette
-// colours in both themes, as on the scene.
-export function RoomCard({ stage, window, recovery, reduceMotion, onOpenRecovery, footer, onLayout }: {
+// ("Shrink room", passed in by the page). The frame is part of the picture, not a button. The tag keeps Home's
+// dark-palette colours in both themes, as on the scene. `look` is KIP mid-turn (useKipTurn); without it the stage's
+// pose and mood are drawn.
+export function RoomCard({ stage, look, window, recovery, reduceMotion, onOpenRecovery, footer, onLayout }: {
   stage: KipStage;
+  look?: KipLook;
   window: { weather: RoomWeather; night: boolean };
   recovery: { score: number | null; band: ScoreBand | null };
   reduceMotion: boolean;
@@ -53,8 +56,9 @@ export function RoomCard({ stage, window, recovery, reduceMotion, onOpenRecovery
                 weather={window.weather}
                 night={window.night}
                 colour={colour}
-                pose={stage.pose}
-                mood={stage.mood}
+                pose={look?.pose ?? stage.pose}
+                mood={look?.mood ?? stage.mood}
+                facing={look?.facing}
                 screen={stage.screen}
                 bubble={stage.bubble}
                 crop={{ width: inner, height: ROOM_FRAME_HEIGHT }}

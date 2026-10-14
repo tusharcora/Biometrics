@@ -10,6 +10,7 @@ import { ApiError, markNetworkError } from '../../src/api/client';
 import { answer, doneEvent, openTurn, scriptTurn } from '../../jest-mocks/coachStreamFake';
 import { withCoachStatus } from '../../jest-mocks/coachStatus';
 import { suggestedQuestions } from '../../src/lib/coachToday';
+import { TURN_FRAME_MS } from '../../src/lib/useKipTurn';
 
 // The mocks (api, navigation, RoomView, the room's score and sleep reads) live in jest-mocks/coachScreenHarness.
 const mockNavigate = mockNav.navigate;
@@ -63,10 +64,16 @@ describe('the KIP page (W7)', () => {
     const turn = openTurn(stream);
     const s = await openChat();
     await ask(s, 'How did I sleep?');
-    expect(room(s)).toMatch(/^type:glance:ON IT…:dots:/);
+    expect(room(s)).toMatch(/^type:glance:ON IT…:dots:.*:desk$/);
     expect(s.getByTestId('kip-status-line')).toHaveTextContent('Typing it up…');
     await turn.emit({ type: 'text', sentence: 'Mostly clear skies.' });
-    expect(room(s)).toMatch(/^point:glance:HERE'S MY TAKE:chart:/);
+    // KIP turns to face you over two 80 ms frames (useKipTurn), then points.
+    for (let frame = 0; frame < 2; frame += 1) {
+      await act(async () => {
+        jest.advanceTimersByTime(TURN_FRAME_MS);
+      });
+    }
+    expect(room(s)).toMatch(/^point:glance:HERE'S MY TAKE:chart:.*:you$/);
     expect(s.getByTestId('kip-status-line')).toHaveTextContent('Answering');
     await turn.finish(doneEvent());
     expect(room(s)).toMatch(/^rest:curious:none:lines:/);

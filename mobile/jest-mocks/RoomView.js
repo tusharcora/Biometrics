@@ -8,8 +8,8 @@ module.exports = {
   RoomView: (p) =>
     React.createElement(View, {
       testID: p.testID ?? 'room-view',
-      accessible: true,
-      accessibilityRole: 'image',
+      accessible: p.accessible ?? true,
+      accessibilityRole: p.accessible === false ? undefined : 'image',
       accessibilityLabel: p.accessibilityLabel,
       room: `${p.pose}:${p.mood}:${p.bubble ?? 'none'}:${p.screen}:${p.weather}:${p.night ? 'night' : 'day'}:${p.colour}:${p.cellPt}:${p.reduceMotion ? 'still' : 'moving'}:${p.facing ?? ''}`,
     }),

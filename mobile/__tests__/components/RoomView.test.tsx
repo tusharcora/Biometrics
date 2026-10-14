@@ -106,6 +106,13 @@ describe('RoomView', () => {
     expect(bubble).toHaveTextContent('ON IT…');
   });
 
+  it('is no element of its own when a parent carries the label (accessible={false})', () => {
+    const s = render(<RoomView {...PROPS} accessible={false} accessibilityLabel={undefined} />);
+    const room = s.getByTestId('room');
+    expect(room.props.accessible).toBe(false);
+    expect(room.props.accessibilityRole).toBeUndefined();
+  });
+
   it('shows no bubble when there is none', () => {
     const s = render(<RoomView {...PROPS} bubble={null} />);
     expect(s.queryByTestId('room-bubble', { includeHiddenElements: true })).toBeNull();

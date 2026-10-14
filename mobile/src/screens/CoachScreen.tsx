@@ -4,7 +4,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
 import { Ionicons } from '@expo/vector-icons';
-import { useReducedMotion } from 'react-native-reanimated';
+import Animated, { useAnimatedStyle, useSharedValue, type SharedValue } from 'react-native-reanimated';
 import { isNetworkError } from '../api/client';
 import {
   StaleConversationError,
@@ -27,12 +27,15 @@ import { CoachMessageRow } from '../components/coach/CoachMessageRow';
 import { ErrorCard } from '../components/coach/ErrorCard';
 import { ConversationsSheet } from '../components/coach/ConversationsSheet';
 import { RoomCard } from '../components/coach/RoomCard';
+import { CollapsedKipHeader, collapseProgress } from '../components/coach/CollapsedKipHeader';
 import { KipStateCard } from '../components/coach/KipStateCard';
 import { DEFAULT_THINKING_TEXT } from '../lib/thinkingText';
 import { useCoachStatusContext } from '../lib/coachStatus/CoachStatusProvider';
 import { useTodayScene } from '../lib/home/useTodayScene';
 import { KIP_COPY } from '../lib/kipCopy';
 import { kipStage, kipStatusLine, spokenLine } from '../lib/kipStage';
+import { readKipRoomShrunk, writeKipRoomShrunk } from '../lib/kipRoomPrefs';
+import { useKipTurn } from '../lib/useKipTurn';
 import { useScreenFocused } from '../lib/useScreenFocused';
 import { PressableScale } from '../components/ui/pressable-scale';
 import { COLORS } from '../theme';
@@ -81,7 +84,6 @@ export function CoachScreen() {
   const prefill = route?.params?.prefill;
   const coachShared = useCoachStatusContext();
   const thinkingText = coachShared?.thinkingText ?? DEFAULT_THINKING_TEXT;
-  const reduceMotion = useReducedMotion();
 
   const [phase, setPhase] = useState<Phase>('loading');
   const [input, setInput] = useState(prefill ?? '');
@@ -131,6 +133,51 @@ export function CoachScreen() {
   // The last non-empty prefill. The route param is consumed once applied (below),
   // but the consent round-trip must still carry it.
   const lastPrefill = useRef<string | undefined>(prefill);
+
+  // Reduce Motion (spec §3.6): no typing loop, no turn, no room loops, no collapse fade.
+  const [reduceMotion, setReduceMotion] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void AccessibilityInfo.isReduceMotionEnabled().then((v) => {
+      if (live) setReduceMotion(v);
+    });
+    const sub = AccessibilityInfo.addEventListener('reduceMotionChanged', setReduceMotion);
+    return () => {
+      live = false;
+      sub.remove();
+    };
+  }, []);
+
+  // "Shrink room" (spec §3.5): the card collapsed for good, remembered on the device. A choice made before the
+  // stored one is read wins over it.
+  const [shrunk, setShrunk] = useState(false);
+  const shrunkChosen = useRef(false);
+  useEffect(() => {
+    let live = true;
+    void readKipRoomShrunk().then((v) => {
+      if (live && !shrunkChosen.current) setShrunk(v);
+    });
+    return () => {
+      live = false;
+    };
+  }, []);
+
+  // Collapse on scroll (spec §3.5): the card's bottom edge in the scroll content, the fade (0 → 1, a shared value)
+  // and whether the collapsed header is up, fading in or fully in (state, changed only at the thresholds). It takes
+  // taps only once fully in; until then they reach the expanded header under it.
+  const cardBottom = useRef<number | null>(null);
+  const fade = useSharedValue(0);
+  const [collapsed, setCollapsed] = useState<'hidden' | 'fading' | 'in'>('hidden');
+  const trackCollapse = useCallback(
+    (e: NativeSyntheticEvent<NativeScrollEvent>) => {
+      if (cardBottom.current === null) return;
+      const progress = collapseProgress(e.nativeEvent.contentOffset.y, cardBottom.current);
+      fade.value = progress;
+      // Under Reduce Motion it switches at the threshold, with no fade.
+      setCollapsed(progress >= 1 ? 'in' : progress > 0 && !reduceMotion ? 'fading' : 'hidden');
+    },
+    [fade, reduceMotion],
+  );
 
   const conversation = useCoachConversation({
     preferredEngine: engine,
@@ -392,14 +439,63 @@ export function CoachScreen() {
     empty: messages.length === 0 && !streaming,
     idle: { pose: day.scene.pose, mood: day.scene.mood },
   });
+  const look = useKipTurn(stage, reduceMotion);
   const statusLine = kipStatusLine(stage.id, day.recovery, false);
   const openRecovery = useCallback(() => navigation.navigate('Recovery', { date: day.today }), [navigation, day.today]);
-  const roomCard = (
-    <RoomCard stage={stage} window={day.window} recovery={day.recovery} reduceMotion={!!reduceMotion} onOpenRecovery={openRecovery} />
+
+  const shrink = useCallback(() => {
+    shrunkChosen.current = true;
+    setShrunk(true);
+    void writeKipRoomShrunk(true);
+  }, []);
+  // The thumbnail: back to the top, and out of shrunk mode if the room was shrunk.
+  const expand = useCallback(() => {
+    if (shrunk) {
+      shrunkChosen.current = true;
+      setShrunk(false);
+      setCollapsed('hidden');
+      void writeKipRoomShrunk(false);
+    }
+    scrollRef.current?.scrollTo({ y: 0, animated: true });
+  }, [shrunk]);
+
+  const roomCard = shrunk ? null : (
+    <RoomCard
+      stage={stage}
+      look={look}
+      window={day.window}
+      recovery={day.recovery}
+      reduceMotion={reduceMotion}
+      onOpenRecovery={openRecovery}
+      onLayout={(e) => {
+        cardBottom.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height;
+      }}
+      footer={
+        <Button testID="kip-shrink-room" variant="outline" className="w-full" onPress={shrink}>
+          {KIP_COPY.shrinkRoom}
+        </Button>
+      }
+    />
   );
 
   const ready = phase === 'ready' && !statusUnverified;
-  const header = (
+  const collapsedHeader = (
+    <CollapsedKipHeader
+      stage={stage}
+      look={look}
+      statusLine={kipStatusLine(stage.id, day.recovery, true)}
+      window={day.window}
+      reduceMotion={reduceMotion}
+      onExpand={expand}
+      onConversations={() => setSheetOpen(true)}
+      onNewChat={startNewChat}
+      showActions={ready}
+    />
+  );
+  // Shrunk, the page starts with the collapsed header in place of the expanded one.
+  const header = shrunk ? (
+    <View testID="kip-collapsed-header">{collapsedHeader}</View>
+  ) : (
     <View className="flex-row items-start justify-between px-5 pb-2 pt-1">
       <View className="shrink gap-0.5">
         <PageTitle>{KIP_COPY.pageTitle}</PageTitle>
@@ -477,7 +573,15 @@ export function CoachScreen() {
 
   return (
     <SafeAreaView className="flex-1 bg-background">
-      {header}
+      {/* The collapsed header is pinned over the expanded one once the card has scrolled under it (§3.5). */}
+      <View className="z-10">
+        {header}
+        {!shrunk && collapsed !== 'hidden' ? (
+          <CollapsedHeaderFade fade={fade} reduceMotion={reduceMotion} takesTaps={collapsed === 'in'}>
+            {collapsedHeader}
+          </CollapsedHeaderFade>
+        ) : null}
+      </View>
       {/* KeyboardAvoidingView owns its paddingBottom on iOS, so the bar clearance sits on this wrapper. */}
       <View testID="coach-clearance" style={{ flex: 1, paddingBottom: keyboardVisible ? 0 : clearance }}>
         <KeyboardAvoidingView className="flex-1" behavior={Platform.OS === 'ios' ? 'padding' : undefined} keyboardVerticalOffset={90}>
@@ -490,6 +594,8 @@ export function CoachScreen() {
             onScrollBeginDrag={stopFollowing}
             onScrollEndDrag={followIfNearBottom}
             onMomentumScrollEnd={followIfNearBottom}
+            onScroll={trackCollapse}
+            scrollEventThrottle={16}
           >
             {roomCard}
 
@@ -592,6 +698,28 @@ export function CoachScreen() {
         currentId={conversationId}
       />
     </SafeAreaView>
+  );
+}
+
+// The pinned collapsed header, faded by the scroll (a shared value, so a scroll step never re-renders the page). It
+// mounts when the fade starts, so its first frame already has the current opacity. Under Reduce Motion it is only
+// mounted at the threshold, fully in.
+function CollapsedHeaderFade({ fade, reduceMotion, takesTaps, children }: {
+  fade: SharedValue<number>;
+  reduceMotion: boolean;
+  takesTaps: boolean;
+  children: React.ReactNode;
+}) {
+  const style = useAnimatedStyle(() => ({ opacity: reduceMotion ? 1 : fade.value }));
+  return (
+    <Animated.View
+      testID="kip-collapsed-header"
+      className="absolute left-0 right-0 top-0 bg-background"
+      pointerEvents={takesTaps ? 'auto' : 'none'}
+      style={style}
+    >
+      {children}
+    </Animated.View>
   );
 }
 
