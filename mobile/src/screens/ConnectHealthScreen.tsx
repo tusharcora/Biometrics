@@ -10,7 +10,7 @@ import { Text } from '../components/ui/text';
 import { PageTitle } from '../components/ui/page-title';
 import { Button } from '../components/ui/button';
 import { Kip } from '../components/kip/Kip';
-import { useMyKipColour } from '../lib/kip/myKipColour';
+import { useMyKipColour } from '../lib/kip/myKip';
 import { SettingsGroup, SettingsRow } from '../components/ui/settings-list';
 import { COLORS } from '../theme';
 import { syncTimezone } from '../lib/timezone';

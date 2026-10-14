@@ -7,7 +7,7 @@ import { ThisWeek } from '../../src/components/activity/ThisWeek';
 import { YearSoFar } from '../../src/components/activity/YearSoFar';
 import { weekRows } from '../../src/lib/activityWeek';
 import { KIP_COLOURS } from '../../src/lib/kip/kipArt';
-import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
+import { resetMyKip, setMyKipColour } from '../../src/lib/kip/myKip';
 import { COLORS } from '../../src/theme';
 
 const TODAY = '2026-10-10';
@@ -132,7 +132,7 @@ describe('YearSoFar', () => {
 
 describe('ActivityHeader', () => {
   afterEach(() => {
-    act(() => resetMyKipColour());
+    act(() => resetMyKip());
   });
 
   it('shows KIP waving, the title and the week summary', () => {

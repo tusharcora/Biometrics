@@ -9,7 +9,7 @@ import { FloatingTabBar } from '../../src/navigation/FloatingTabBar';
 import { Rect } from 'react-native-svg';
 import { TAB_LABELS, TAB_ORDER } from '../../src/navigation/tabBarLayout';
 import { HUB_DIMMED_OPACITY } from '../../src/navigation/FloatingTabBar';
-import { setMyKipColour, resetMyKipColour } from '../../src/lib/kip/myKipColour';
+import { setMyKipColour, resetMyKip } from '../../src/lib/kip/myKip';
 import { KIP_COLOURS, kipArt } from '../../src/lib/kip/kipArt';
 import { useCoachStatus } from '../../src/lib/useCoachStatus';
 import { useKeyboardVisible } from '../../src/lib/useKeyboardVisible';
@@ -78,7 +78,7 @@ beforeEach(() => {
   setCoach(enabledStatus);
 });
 
-afterEach(() => resetMyKipColour());
+afterEach(() => resetMyKip());
 
 describe('FloatingTabBar: story ring on the Profile tab', () => {
   const week = { id: 'w1', kind: 'WEEK', periodStart: '2026-09-28', periodEnd: '2026-10-04', line: 'A week.', personaId: 'luna', builtAt: '2026-10-05T09:00:00.000Z', openedAt: null };

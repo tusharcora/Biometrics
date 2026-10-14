@@ -11,7 +11,7 @@ import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { SettingsGroup, SettingsRow } from '../components/ui/settings-list';
 import { Kip } from '../components/kip/Kip';
-import { useMyKipColour } from '../lib/kip/myKipColour';
+import { useMyKipColour } from '../lib/kip/myKip';
 import { KIP_COPY } from '../lib/kipCopy';
 import { COLORS } from '../theme';
 import type { RootStackParamList } from '../navigation/RootNavigator';

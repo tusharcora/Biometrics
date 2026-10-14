@@ -3,7 +3,7 @@ import { Linking, PixelRatio } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { kipArtFills, kipFills } from '../../jest-mocks/kipFixture';
-import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
+import { resetMyKip, setMyKipColour } from '../../src/lib/kip/myKip';
 import { fetchRecap, type Recap } from '../../src/api/recaps';
 import { fetchSleep, fetchSleepGoal } from '../../src/api/sleep';
 import { captureToPng, saveImage, shareImage } from '../../src/lib/recapCapture';
@@ -181,7 +181,7 @@ it("draws your KIP on the card and on Year in pixels, whatever the recap's store
   const resting = kipArtFills({ colour: 'lime', pose: 'rest', mood: 'idle' });
   expect(kipFills(screen, 'preview-coach')).toEqual(resting);
   expect(kipFills(screen, 'export-coach')).toEqual(resting);
-  resetMyKipColour();
+  resetMyKip();
 });
 
 it('keeps a switch flipped before the stored choices finish loading', async () => {

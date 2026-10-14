@@ -6,7 +6,7 @@ import { Button, buttonIconSize } from '../ui/button';
 import { PageTitle } from '../ui/page-title';
 import { Text } from '../ui/text';
 import { RoomView } from '../room/RoomView';
-import { useMyKipColour } from '../../lib/kip/myKipColour';
+import { useMyKipColour } from '../../lib/kip/myKip';
 import { KIP_COPY } from '../../lib/kipCopy';
 import { spokenLine, type KipStage } from '../../lib/kipStage';
 import { EMPTY_WORN, STARTER_LOADOUT } from '../../lib/room/loadout';

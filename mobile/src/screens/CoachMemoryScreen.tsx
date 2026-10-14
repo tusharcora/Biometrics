@@ -19,7 +19,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { SettingsGroup } from '../components/ui/settings-list';
 import { Kip } from '../components/kip/Kip';
 import { KipHead } from '../components/kip/KipHead';
-import { useMyKipColour } from '../lib/kip/myKipColour';
+import { useMyKipColour } from '../lib/kip/myKip';
 import { KIP_COPY } from '../lib/kipCopy';
 import { MemoryEditForm } from '../components/memory-edit-form';
 import { COLORS } from '../theme';

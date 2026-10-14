@@ -3,7 +3,7 @@ import { View } from 'react-native';
 import Svg, { Rect } from 'react-native-svg';
 import { KIP_COLOURS, type KipColour } from '../../lib/kip/kipArt';
 import { KIP_COLOUR_ORDER, kipColourName } from '../../lib/kip/kipColour';
-import { loadMyKipColour, myKipColourLoadFailed, saveMyKipColour, useMyKipColour } from '../../lib/kip/myKipColour';
+import { loadMyKipColour, myKipColourLoadFailed, saveMyKipColour, useMyKipColour } from '../../lib/kip/myKip';
 import { PROFILE_COPY } from '../../lib/profileCopy';
 import type { PixelRect } from '../../lib/weatherArt';
 import { Kip } from '../kip/Kip';

@@ -32,7 +32,7 @@ import { useForecast } from '../lib/useForecast';
 import { forecastRange, SCENE_H, sceneExtra } from '../lib/home/scene';
 import { useBuddyScene } from '../lib/home/useBuddyScene';
 import { useTodayScene } from '../lib/home/useTodayScene';
-import { useMyKipColour } from '../lib/kip/myKipColour';
+import { useMyKipColour } from '../lib/kip/myKip';
 import { useRecapShelf } from '../lib/recap/useRecapShelf';
 import { formatMinutes } from '../lib/recoveryCopy';
 import { scoreBand } from '../lib/scoreInsights';

@@ -1,7 +1,7 @@
 import React from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import { useColorScheme } from 'nativewind';
-import { useMyKipColour } from '../../lib/kip/myKipColour';
+import { useMyKipColour } from '../../lib/kip/myKip';
 import type { RecapShelfState } from '../../lib/recap/useRecapShelf';
 import { recapTint, STORY_RING_NEUTRAL, storyRingColor } from '../../lib/recapTheme';
 import { recapDestination } from '../../lib/unwatchedRecap';

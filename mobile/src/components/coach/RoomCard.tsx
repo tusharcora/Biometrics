@@ -7,7 +7,7 @@ import { Text } from '../ui/text';
 import { HotTag } from '../home/HotTag';
 import { RoomView } from '../room/RoomView';
 import { HOME_COPY } from '../../lib/homeCopy';
-import { useMyKipColour } from '../../lib/kip/myKipColour';
+import { useMyKipColour } from '../../lib/kip/myKip';
 import { KIP_COPY } from '../../lib/kipCopy';
 import { hotTagLabel, roomLabel, type KipStage } from '../../lib/kipStage';
 import { EMPTY_WORN, STARTER_LOADOUT } from '../../lib/room/loadout';

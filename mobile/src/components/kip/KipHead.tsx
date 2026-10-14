@@ -2,7 +2,7 @@ import React, { useMemo } from 'react';
 import { View } from 'react-native';
 import Svg, { Rect } from 'react-native-svg';
 import { KIP_GRID, kipArt, type KipColour, type KipMood, type KipPose } from '../../lib/kip/kipArt';
-import { useMyKipColour } from '../../lib/kip/myKipColour';
+import { useMyKipColour } from '../../lib/kip/myKip';
 import type { PixelRect } from '../../lib/weatherArt';
 
 const HEAD_ROWS = 10;

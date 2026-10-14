@@ -19,7 +19,7 @@ import { Text } from '../components/ui/text';
 import { useAchievements } from '../lib/achievementsStore';
 import { levelsEarnedBetween, shortLevelTitle } from '../lib/badges';
 import type { KipColour } from '../lib/kip/kipArt';
-import { useMyKipColour } from '../lib/kip/myKipColour';
+import { useMyKipColour } from '../lib/kip/myKip';
 import { compareChanges, milestoneTiles, monthName, RECAP_COPY } from '../lib/recapCopy';
 import { readIncludePrefs } from '../lib/recapPrefs';
 import { DESIGN_HEIGHT, DESIGN_WIDTH, previewScale, resolveIncludes, type Includes } from '../lib/recapShare';

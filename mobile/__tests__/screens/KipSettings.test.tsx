@@ -4,7 +4,7 @@ import { NavigationContext } from '@react-navigation/native';
 import { KipSettingsSection } from '../../src/components/kip-settings-section';
 import { listCoachMemory, revokeCoachConsent, type CoachStatusDTO } from '../../src/api/coach';
 import { HIDDEN_OK, withCoachStatus } from '../../jest-mocks/coachStatus';
-import { setMyKipColour, resetMyKipColour } from '../../src/lib/kip/myKipColour';
+import { setMyKipColour, resetMyKip } from '../../src/lib/kip/myKip';
 
 jest.mock('../../src/api/coach', () => ({
   ...jest.requireActual('../../src/api/coach'),
@@ -29,7 +29,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   setMyKipColour('cobalt');
 });
-afterEach(() => resetMyKipColour());
+afterEach(() => resetMyKip());
 
 it('is one group titled KIP: your KIP, while KIP thinks, memory and privacy, turn off', async () => {
   const s = renderSection({ status: ON, thinkingText: 'typewriter' });

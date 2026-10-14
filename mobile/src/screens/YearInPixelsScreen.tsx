@@ -8,7 +8,7 @@ import { Card } from '../components/ui/card';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { todayCivil } from '../lib/heatmap';
-import { useMyKipColour } from '../lib/kip/myKipColour';
+import { useMyKipColour } from '../lib/kip/myKip';
 import { DESIGN_WIDTH } from '../lib/recapShare';
 import { loadYearInPixels, type YearInPixels } from '../lib/yearPixels';
 

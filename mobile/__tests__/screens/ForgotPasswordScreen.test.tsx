@@ -1,7 +1,7 @@
 import React from 'react';
 import { render } from '@testing-library/react-native';
 import { kipArtFills, kipFills } from '../../jest-mocks/kipFixture';
-import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
+import { resetMyKip, setMyKipColour } from '../../src/lib/kip/myKip';
 import { ForgotPasswordScreen } from '../../src/screens/ForgotPasswordScreen';
 import { useAuth } from '../../src/auth/AuthContext';
 
@@ -9,7 +9,7 @@ jest.mock('../../src/auth/AuthContext', () => ({ useAuth: jest.fn() }));
 const navigation = { navigate: jest.fn(), goBack: jest.fn(), popTo: jest.fn() } as any;
 
 beforeEach(() => jest.clearAllMocks());
-afterEach(() => resetMyKipColour());
+afterEach(() => resetMyKip());
 
 it('always shows a coral KIP waving, whatever colour a KIP was last given (signed-out screens)', () => {
   setMyKipColour('lime');

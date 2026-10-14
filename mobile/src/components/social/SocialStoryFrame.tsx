@@ -8,7 +8,7 @@ import type { Person } from '../../api/buddies';
 import type { StoryFrame } from '../../api/social';
 import { levelTitle } from '../../lib/badges';
 import { recapTitle } from '../../lib/recapCopy';
-import { useMyKipColour } from '../../lib/kip/myKipColour';
+import { useMyKipColour } from '../../lib/kip/myKip';
 import { CHECKIN_OPTIONS, personName } from '../../lib/socialCopy';
 import { PersonKip } from '../kip/PersonKip';
 import { Button } from '../ui/button';

@@ -7,7 +7,7 @@ import { ScrollView, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import type { Person } from '../../api/buddies';
 import type { CheckIn, StoryRing } from '../../api/social';
-import { useMyKipColour } from '../../lib/kip/myKipColour';
+import { useMyKipColour } from '../../lib/kip/myKip';
 import { CHECKIN_OPTIONS, personName } from '../../lib/socialCopy';
 import { PersonKip } from '../kip/PersonKip';
 import { Button } from '../ui/button';

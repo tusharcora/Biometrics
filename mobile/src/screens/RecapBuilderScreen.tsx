@@ -12,7 +12,7 @@ import { SegmentedControl } from '../components/ui/segmented-control';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { todayCivil } from '../lib/heatmap';
-import { useMyKipColour } from '../lib/kip/myKipColour';
+import { useMyKipColour } from '../lib/kip/myKip';
 import { readIncludePrefs, writeIncludePrefs } from '../lib/recapPrefs';
 import {
   FORMAT_LABELS, INCLUDE_LABELS, availableIncludes, exportLayout, previewScale, resolveIncludes,

@@ -35,7 +35,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { buddyErrorMessage } from '../lib/buddyCopy';
 import { campNoteQuoteLabel } from '../lib/chatCopy';
-import { useMyKipColour } from '../lib/kip/myKipColour';
+import { useMyKipColour } from '../lib/kip/myKip';
 import {
   CAMP_NOTE_MAX, campHeadline, campSceneKicker, campStatus, fireCountLabel, fireMoreLine, goodnightOpensLine, nightsLitLine,
   noteLength, personName,

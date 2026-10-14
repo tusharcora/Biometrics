@@ -6,7 +6,7 @@ import { badgeGround, LOCKED_PIP, tierColors, tierInk } from '../../lib/badgeArt
 import { coachLine, levelTitle, valueLine } from '../../lib/badges';
 import type { Celebration } from '../../lib/celebrationQueue';
 import { hexAlpha } from '../../lib/colour';
-import { useMyKipColour } from '../../lib/kip/myKipColour';
+import { useMyKipColour } from '../../lib/kip/myKip';
 import { EXPORT_NOTICES, useRecapExport } from '../../lib/useRecapExport';
 import { FONTS } from '../../theme';
 import { pixelFont } from '../coach/thinking/shared';

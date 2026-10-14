@@ -4,7 +4,7 @@ import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { Rect } from 'react-native-svg';
 import { Passport, type PassportProps } from '../../src/components/profile/Passport';
 import { KIP_COLOURS } from '../../src/lib/kip/kipArt';
-import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
+import { resetMyKip, setMyKipColour } from '../../src/lib/kip/myKip';
 
 const props = (over: Partial<PassportProps> = {}): PassportProps => ({
   code: 'KIP-7Q4M',
@@ -26,7 +26,7 @@ const props = (over: Partial<PassportProps> = {}): PassportProps => ({
 
 describe('Passport', () => {
   afterEach(() => {
-    act(() => resetMyKipColour());
+    act(() => resetMyKip());
   });
 
   it('shows the number, the fields, the check-in streak and the buddy count', () => {

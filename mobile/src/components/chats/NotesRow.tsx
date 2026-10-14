@@ -2,7 +2,7 @@ import React from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import type { Person } from '../../api/buddies';
 import type { BuddyNote, StatusNote } from '../../api/chats';
-import { useMyKipColour } from '../../lib/kip/myKipColour';
+import { useMyKipColour } from '../../lib/kip/myKip';
 import { personName } from '../../lib/socialCopy';
 import { Text } from '../ui/text';
 import { ChatAvatar } from './ChatAvatar';

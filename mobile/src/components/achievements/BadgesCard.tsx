@@ -6,7 +6,7 @@ import { useAchievements } from '../../lib/achievementsStore';
 import { useRefreshAchievementsOnFocus } from '../../lib/useRefreshAchievementsOnFocus';
 import { mixHex, TIER_SURFACE, tierInk } from '../../lib/badgeArt';
 import { FAMILY_ORDER, FAMILY_SHORT, TOTAL_LEVELS, badgeLabel, countLabel, earnedCount, levelTitle, nextUp } from '../../lib/badges';
-import { useMyKipColour } from '../../lib/kip/myKipColour';
+import { useMyKipColour } from '../../lib/kip/myKip';
 import { COLORS } from '../../theme';
 import { Button } from '../ui/button';
 import { Card } from '../ui/card';

@@ -5,7 +5,7 @@ import type { AnswerCardDTO, CoachMessageSource } from '../../api/coach';
 import type { CoachChatMessage } from '../../lib/useCoachConversation';
 import { followUpsFor } from '../../lib/coachAnswers';
 import { kipLabelColour } from '../../lib/colour';
-import { useMyKipColour } from '../../lib/kip/myKipColour';
+import { useMyKipColour } from '../../lib/kip/myKip';
 import { KIP_COPY } from '../../lib/kipCopy';
 import { Text } from '../ui/text';
 import { Card } from '../ui/card';

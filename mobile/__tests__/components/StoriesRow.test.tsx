@@ -3,7 +3,7 @@ import { StyleSheet } from 'react-native';
 import { fireEvent, render, screen, within } from '@testing-library/react-native';
 import { PersonKip } from '../../src/components/kip/PersonKip';
 import { StoriesRow } from '../../src/components/social/StoriesRow';
-import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
+import { resetMyKip, setMyKipColour } from '../../src/lib/kip/myKip';
 
 const person = (id: string) => ({ id, handle: id, displayName: id.toUpperCase(), coachId: 'mochi' });
 
@@ -38,7 +38,7 @@ it('after checking in, my ring opens my own story', () => {
 });
 
 describe('people as their KIPs', () => {
-  afterEach(() => resetMyKipColour());
+  afterEach(() => resetMyKip());
 
   it("draws each ring's author in their colour, and my ring in my colour", () => {
     setMyKipColour('ink');

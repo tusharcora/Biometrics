@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
 import { kipArtFills, kipFills } from '../../jest-mocks/kipFixture';
-import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
+import { resetMyKip, setMyKipColour } from '../../src/lib/kip/myKip';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import * as AppleAuthentication from 'expo-apple-authentication';
 import { SignInScreen } from '../../src/screens/SignInScreen';
@@ -98,5 +98,5 @@ it('shows a coral KIP waving in the sign-in hero, whatever colour a KIP was last
   const utils = render(<SignInScreen navigation={navigation} route={{ params: undefined } as any} />);
 
   expect(kipFills(utils, 'onboarding-kip')).toEqual(kipArtFills({ colour: 'coral', pose: 'wave', mood: 'idle' }));
-  resetMyKipColour();
+  resetMyKip();
 });

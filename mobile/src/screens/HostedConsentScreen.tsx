@@ -19,7 +19,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { SettingsGroup, SettingsRow } from '../components/ui/settings-list';
 import { SectionLabel } from '../components/ui/section-label';
 import { Kip } from '../components/kip/Kip';
-import { useMyKipColour } from '../lib/kip/myKipColour';
+import { useMyKipColour } from '../lib/kip/myKip';
 import { KIP_COPY } from '../lib/kipCopy';
 import { COLORS } from '../theme';
 

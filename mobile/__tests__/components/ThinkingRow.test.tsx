@@ -7,7 +7,7 @@ import { COLORS, FONTS } from '../../src/theme';
 import { THINKING_TEXTS } from '../../src/lib/thinkingText';
 import { KIP_THINKING_VERBS } from '../../src/lib/kipCopy';
 import { KIP_COLOURS } from '../../src/lib/kip/kipArt';
-import { setMyKipColour, resetMyKipColour } from '../../src/lib/kip/myKipColour';
+import { setMyKipColour, resetMyKip } from '../../src/lib/kip/myKip';
 
 let mockReduceMotion = false;
 jest.mock('react-native-reanimated', () => {
@@ -42,7 +42,7 @@ beforeEach(() => {
 
 afterEach(() => {
   jest.useRealTimers();
-  resetMyKipColour();
+  resetMyKip();
 });
 
 it.each(THINKING_TEXTS)('%s draws KIP\'s head beside its text', (style) => {

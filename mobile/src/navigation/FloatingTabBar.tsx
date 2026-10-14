@@ -12,7 +12,7 @@ import { useSocialUnreadCount } from '../lib/socialStore';
 import { Text } from '../components/ui/text';
 import { useCoachStatus } from '../lib/useCoachStatus';
 import { useKeyboardVisible } from '../lib/useKeyboardVisible';
-import { useMyKipColour } from '../lib/kip/myKipColour';
+import { useMyKipColour } from '../lib/kip/myKip';
 import { COLORS, MOTION } from '../theme';
 import {
   FLOATING_BAR_HEIGHT,

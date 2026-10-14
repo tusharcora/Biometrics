@@ -3,7 +3,7 @@ import { View } from 'react-native';
 import { listCoachMemory, revokeCoachConsent } from '../api/coach';
 import { useCoachStatusContext } from '../lib/coachStatus/CoachStatusProvider';
 import { kipColourName } from '../lib/kip/kipColour';
-import { useMyKipColour } from '../lib/kip/myKipColour';
+import { useMyKipColour } from '../lib/kip/myKip';
 import { KIP_COPY } from '../lib/kipCopy';
 import { spokenLine } from '../lib/kipStage';
 import { DEFAULT_THINKING_TEXT, THINKING_TEXT_NAMES } from '../lib/thinkingText';

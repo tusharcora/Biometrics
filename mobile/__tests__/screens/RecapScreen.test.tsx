@@ -8,7 +8,7 @@ import { fetchAchievements } from '../../src/api/achievements';
 import { refreshAchievements, resetAchievements } from '../../src/lib/achievementsStore';
 import { ApiError } from '../../src/api/client';
 import { fetchRecap, fetchRecaps, markRecapOpened, type Recap } from '../../src/api/recaps';
-import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
+import { resetMyKip, setMyKipColour } from '../../src/lib/kip/myKip';
 import { resetUnwatchedRecap } from '../../src/lib/unwatchedRecap';
 import { changeColor } from '../../src/lib/recapTheme';
 import { RecapScreen } from '../../src/screens/RecapScreen';
@@ -44,7 +44,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   // Each test opens its recap afresh (the store remembers what this session opened).
   resetUnwatchedRecap();
-  resetMyKipColour();
+  resetMyKip();
   mockParams = { id: 'r-month' };
   mockCanGoBack = true;
   load.mockResolvedValue(MONTH);

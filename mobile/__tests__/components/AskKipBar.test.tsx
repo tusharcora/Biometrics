@@ -5,10 +5,10 @@ import { AskKipBar } from '../../src/components/coach/AskKipBar';
 import { kipHeadRects } from '../../src/components/kip/KipHead';
 import { RECOVERY_COPY } from '../../src/lib/recoveryCopy';
 import { askLabel } from '../../src/lib/sleepCopy';
-import { setMyKipColour, resetMyKipColour } from '../../src/lib/kip/myKipColour';
+import { setMyKipColour, resetMyKip } from '../../src/lib/kip/myKip';
 import { KIP_COLOURS } from '../../src/lib/kip/kipArt';
 
-afterEach(() => resetMyKipColour());
+afterEach(() => resetMyKip());
 
 it('is the one Ask KIP button, labelled as given, and asks on press', () => {
   const onPress = jest.fn();

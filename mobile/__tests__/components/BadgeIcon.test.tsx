@@ -5,9 +5,9 @@ import { render, screen, within } from '@testing-library/react-native';
 import { BadgeIcon } from '../../src/components/achievements/BadgeIcon';
 import { TIER_SURFACE, tierInk } from '../../src/lib/badgeArt';
 import { contrast } from '../../src/lib/colour';
-import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
+import { resetMyKip, setMyKipColour } from '../../src/lib/kip/myKip';
 
-afterEach(() => resetMyKipColour());
+afterEach(() => resetMyKip());
 
 it('names the family, level and tier for screen readers, and fills one pip per level', () => {
   render(<BadgeIcon family="SLEEP_GOAL" level={3} size={58} testID="b" />);

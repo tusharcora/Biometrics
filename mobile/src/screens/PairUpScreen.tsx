@@ -15,7 +15,7 @@ import { TextField } from '../components/ui/text-field';
 import { buddyErrorMessage, expiresIn, PAIR_UP_COPY, shareMessage } from '../lib/buddyCopy';
 import { refreshBuddies } from '../lib/buddiesStore';
 import { offerPushAfterPairing } from '../lib/buddyPushOffer';
-import { useMyKipColour } from '../lib/kip/myKipColour';
+import { useMyKipColour } from '../lib/kip/myKip';
 
 type Nav = { replace: (name: string, params?: object) => void };
 type Code = { code: string; expiresAt: string };

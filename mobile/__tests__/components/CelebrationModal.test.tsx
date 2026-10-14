@@ -8,7 +8,7 @@ import { kipArtFills, kipFills } from '../../jest-mocks/kipFixture';
 import { tierColors } from '../../src/lib/badgeArt';
 import { contrast } from '../../src/lib/colour';
 import { KIP_COLOURS, type KipColour } from '../../src/lib/kip/kipArt';
-import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
+import { resetMyKip, setMyKipColour } from '../../src/lib/kip/myKip';
 import { CelebrationModal } from '../../src/components/achievements/CelebrationModal';
 import { captureToPng, shareImage } from '../../src/lib/recapCapture';
 
@@ -46,7 +46,7 @@ it("draws your KIP cheering, and a Legend badge (level V) in your KIP's colour",
   expect(kipFills(screen, 'celebration-coach')).toEqual(kipArtFills({ colour: 'lime', pose: 'cheer', mood: 'proud' }));
   expect(screen.getByTestId('celebration-badge').props.accessibilityLabel).toBe('Sleep goal streak, level V, Legend');
   expect(within(screen.getByTestId('celebration-badge')).UNSAFE_getAllByType(Polygon)[0]!.props.fill).toBe(tierColors(5, 'lime').ring);
-  resetMyKipColour();
+  resetMyKip();
 });
 
 it.each(Object.keys(KIP_COLOURS) as KipColour[])('%s: every level-V text, pip and the Nice! button read at 4.5:1 on the dark ground, the share card too', (colour) => {
@@ -66,7 +66,7 @@ it.each(Object.keys(KIP_COLOURS) as KipColour[])('%s: every level-V text, pip an
   for (const i of [1, 2, 3, 4, 5]) expect(contrast(fill(`badge-share-icon-pip-${i}`), card)).toBeGreaterThanOrEqual(4.5);
   // The badge's ring art keeps the raw ramp.
   expect(within(screen.getByTestId('celebration-badge')).UNSAFE_getAllByType(Polygon)[0]!.props.fill).toBe(KIP_COLOURS[colour]);
-  resetMyKipColour();
+  resetMyKip();
 });
 
 // An iPhone with a Dynamic Island: the content must clear the island and the home indicator.

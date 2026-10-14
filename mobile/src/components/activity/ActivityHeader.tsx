@@ -5,7 +5,7 @@ import { View } from 'react-native';
 import Svg, { Rect } from 'react-native-svg';
 import { ACTIVITY_COPY } from '../../lib/activityCopy';
 import { SKY_STRIP_HEIGHT, skyStrip } from '../../lib/activityWeek';
-import { useMyKipColour } from '../../lib/kip/myKipColour';
+import { useMyKipColour } from '../../lib/kip/myKip';
 import { Kip } from '../kip/Kip';
 import { PageTitle } from '../ui/page-title';
 import { Text } from '../ui/text';

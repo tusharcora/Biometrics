@@ -11,7 +11,7 @@ import { storyRingColor } from '../../src/lib/recapTheme';
 import { HomeScene } from '../../src/components/home/HomeScene';
 import { Kip } from '../../src/components/kip/Kip';
 import { addDays, todayCivil } from '../../src/lib/heatmap';
-import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
+import { resetMyKip, setMyKipColour } from '../../src/lib/kip/myKip';
 import { COLORS } from '../../src/theme';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import * as nativewind from 'nativewind';
@@ -412,7 +412,7 @@ describe('DashboardScreen: story ring on the avatar', () => {
   const steps = [{ id: '1', metricType: 'STEPS', value: 8000, recordedAt: '2026-09-01T00:00:00.000Z' }];
   const week = { id: 'w1', kind: 'WEEK', periodStart: '2026-09-28', periodEnd: '2026-10-04', line: 'A steady week.', personaId: 'luna', builtAt: '2026-10-05T09:00:00.000Z', openedAt: null };
   const ringOf = () => StyleSheet.flatten(screen.getByTestId('profile-story-ring').props.style);
-  afterEach(() => resetMyKipColour());
+  afterEach(() => resetMyKip());
 
   it("rings the avatar in your KIP's colour (not the recap's stored coach), with a dot, and a week plays its story", async () => {
     setMyKipColour('lime');
@@ -450,7 +450,7 @@ describe('DashboardScreen: story ring on the avatar', () => {
 });
 
 describe('DashboardScreen: fallback KIP', () => {
-  afterEach(() => resetMyKipColour());
+  afterEach(() => resetMyKip());
 
   it('shows your KIP, resting and curious, on a state Home cannot load', async () => {
     setMyKipColour('mint');

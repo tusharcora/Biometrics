@@ -8,7 +8,7 @@ import Svg, { Rect } from 'react-native-svg';
 import { useColorScheme } from 'nativewind';
 import type { AchievementFamily } from '../../api/achievements';
 import { KIP_COLOURS } from '../../lib/kip/kipArt';
-import { useMyKipColour } from '../../lib/kip/myKipColour';
+import { useMyKipColour } from '../../lib/kip/myKip';
 import { badgeLabel } from '../../lib/badges';
 import { formatJoined, mrzLines, type Stamp } from '../../lib/passport';
 import { BACKDROP_H, BACKDROP_W, passportBackdrop } from '../../lib/profileArt';

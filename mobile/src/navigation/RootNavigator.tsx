@@ -49,7 +49,7 @@ import { ChatRequestsScreen } from '../screens/ChatRequestsScreen';
 import { BlockedPeopleScreen } from '../screens/BlockedPeopleScreen';
 import { CelebrationHost } from '../components/achievements/CelebrationHost';
 import { BuddiesStoreScope } from '../components/buddies/BuddiesStoreScope';
-import { MyKipColourScope } from '../components/kip/MyKipColourScope';
+import { MyKipScope } from '../components/kip/MyKipScope';
 import { SocialStoreScope } from '../components/social/SocialStoreScope';
 import type { ShareFormat } from '../lib/recapShare';
 import { TabsNavigator, type TabParamList } from './TabsNavigator';
@@ -295,7 +295,7 @@ export function RootNavigator() {
             {/* The shared buddy list (start, foreground); forgotten on sign-out. */}
             <BuddiesStoreScope />
             {/* Your KIP's colour (start); forgotten on sign-out. */}
-            <MyKipColourScope />
+            <MyKipScope />
             {/* The shared Social home and its tab dot (start, foreground); forgotten on sign-out. */}
             <SocialStoreScope />
           </SyncProvider>
