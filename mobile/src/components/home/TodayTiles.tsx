@@ -152,7 +152,7 @@ function TomorrowTile({ state, bedtime, onPress }: { state: ForecastState; bedti
     <TodayTile
       testID="home-tile-tomorrow"
       label={C.tiles.tomorrow}
-      accessibilityLabel={C.tiles.tomorrowLabel(range, forecast?.status === 'READY' ? line : null)}
+      accessibilityLabel={C.tiles.tomorrowLabel(range, line)}
       onPress={onPress}
     >
       <View className="h-[22px] justify-center">

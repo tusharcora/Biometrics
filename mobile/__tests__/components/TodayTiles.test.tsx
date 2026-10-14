@@ -92,11 +92,15 @@ describe('TodayTiles', () => {
     show({ tomorrow: { status: 'loaded', forecast: { status: 'NOT_ENOUGH_DATA', reason: 'NO_HISTORY', daysOfHistory: 3 } as never } });
     expect(screen.getByTestId('home-tile-tomorrow-value')).toHaveTextContent('—');
     expect(screen.getByTestId('home-tile-tomorrow-line')).toHaveTextContent(/Forecast unlocks after/);
+    expect(screen.getByTestId('home-tile-tomorrow').props.accessibilityLabel)
+      .toBe('Tomorrow. Forecast unlocks after 21 days of data (3/21). Open Tomorrow');
   });
 
   it('reads the low-confidence line, and no line when the forecast failed', () => {
     show({ tomorrow: { status: 'loaded', forecast: { status: 'NOT_ENOUGH_DATA', reason: 'LOW_CONFIDENCE_TODAY', daysOfHistory: 30 } as never } });
     expect(screen.getByTestId('home-tile-tomorrow-line')).toHaveTextContent(/isn’t confident enough to forecast/);
+    expect(screen.getByTestId('home-tile-tomorrow').props.accessibilityLabel)
+      .toBe('Tomorrow. Today’s score isn’t confident enough to forecast from yet. Check back after tonight’s sync. Open Tomorrow');
     screen.unmount();
     show({ tomorrow: { status: 'error' } });
     expect(screen.getByTestId('home-tile-tomorrow-value')).toHaveTextContent('—');

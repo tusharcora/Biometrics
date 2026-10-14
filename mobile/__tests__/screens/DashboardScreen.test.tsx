@@ -11,6 +11,9 @@ import { storyRingColor } from '../../src/lib/recapTheme';
 import { HomeScene } from '../../src/components/home/HomeScene';
 import { Kip } from '../../src/components/kip/Kip';
 import { addDays, todayCivil } from '../../src/lib/heatmap';
+import { COLORS } from '../../src/theme';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
+import * as nativewind from 'nativewind';
 
 jest.mock('../../src/api/client');
 jest.mock('../../src/auth/AuthContext');
@@ -572,6 +575,65 @@ describe('DashboardScreen: Home F', () => {
     fire('focus');
     expect(screen.UNSAFE_getByType(StatusBar).props.style).toBe('light');
     spy.mockRestore();
+  });
+
+  describe('the status bar after scrolling past the scene', () => {
+    const INSETS = { top: 47, bottom: 34, left: 0, right: 0 };
+    // The scene is 300 points tall with no extra sky until the header lays out: past it at 300 - 47.
+    const scrollTo = (y: number) => fireEvent.scroll(screen.getByTestId('home-scroll'), { nativeEvent: { contentOffset: { x: 0, y } } });
+    const strip = () => screen.queryByTestId('home-status-strip');
+
+    let scheme: jest.SpyInstance | null = null;
+
+    async function showIn(colorScheme: 'light' | 'dark') {
+      scheme = jest.spyOn(nativewind, 'useColorScheme').mockReturnValue({ colorScheme, setColorScheme: jest.fn(), toggleColorScheme: jest.fn() } as never);
+      mockApi({ records: steps });
+      render(<SafeAreaInsetsContext.Provider value={INSETS}><DashboardScreen /></SafeAreaInsetsContext.Provider>);
+      await screen.findByTestId('home-scene');
+    }
+
+    afterEach(() => {
+      scheme?.mockRestore();
+      scheme = null;
+    });
+
+    it('turns dark on a page-coloured strip in the light theme, and back to light over the sky', async () => {
+      await showIn('light');
+      expect(screen.UNSAFE_getByType(StatusBar).props.style).toBe('light');
+      expect(strip()).toBeNull();
+      scrollTo(254);
+      expect(screen.UNSAFE_getByType(StatusBar).props.style).toBe('dark');
+      expect(StyleSheet.flatten(strip()!.props.style)).toMatchObject({ position: 'absolute', top: 0, height: 47, backgroundColor: COLORS.light.background });
+      scrollTo(252);
+      expect(screen.UNSAFE_getByType(StatusBar).props.style).toBe('light');
+      expect(strip()).toBeNull();
+    });
+
+    it('stays light on a dark strip in the dark theme', async () => {
+      await showIn('dark');
+      scrollTo(400);
+      expect(screen.UNSAFE_getByType(StatusBar).props.style).toBe('light');
+      expect(StyleSheet.flatten(strip()!.props.style)).toMatchObject({ backgroundColor: COLORS.dark.background });
+    });
+  });
+
+  it('reads the header before the scene\'s tags', async () => {
+    mockApi({ records: steps });
+    const { toJSON } = render(<DashboardScreen />);
+    await screen.findByTestId('home-scene');
+    const tree = JSON.stringify(toJSON());
+    expect(tree.indexOf('home-header')).toBeGreaterThanOrEqual(0);
+    expect(tree.indexOf('home-header')).toBeLessThan(tree.indexOf('home-tag-sleep'));
+  });
+
+  it('changes the greeting at noon while Home stays focused', async () => {
+    jest.useFakeTimers({ now: new Date(2026, 9, 13, 11, 59, 30), ...FAKE });
+    mockApi({ records: steps });
+    render(<DashboardScreen />);
+    expect(await screen.findByText('Good morning')).toBeTruthy();
+    act(() => jest.advanceTimersByTime(30_000));
+    expect(screen.getByText('Good afternoon')).toBeTruthy();
+    expect(sceneKey()).toBe('fallback');
   });
 
   it('a short night overrides the weather', async () => {

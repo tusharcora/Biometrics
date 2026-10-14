@@ -1,5 +1,5 @@
 import React from 'react';
-import { StyleSheet } from 'react-native';
+import { StyleSheet, View } from 'react-native';
 import { fireEvent, render, screen, within } from '@testing-library/react-native';
 import type { BuddyRow } from '../../src/api/buddies';
 import { HomeScene, type HomeSceneProps } from '../../src/components/home/HomeScene';
@@ -88,6 +88,16 @@ describe('HomeScene tags', () => {
   });
 });
 
+describe('HomeScene header', () => {
+  it('draws the header over the art but ahead of the tags, so a screen reader reads it first', () => {
+    show({ header: <View testID="test-header" /> });
+    const tree = JSON.stringify(screen.toJSON());
+    const order = ['home-scene-art', 'test-header', 'home-tag-sleep', 'home-tag-recaps'].map((id) => tree.indexOf(id));
+    expect(order.every((i) => i >= 0)).toBe(true);
+    expect([...order].sort((a, b) => a - b)).toEqual(order);
+  });
+});
+
 describe('HomeScene art and KIPs', () => {
   it('hides the art from screen readers and rains only when stormy', () => {
     show();
@@ -144,6 +154,12 @@ describe('HomeScene "ALL n →"', () => {
     show({ extra: 20, buddies: { buddies: [buddy({}), buddy({ id: 'b2' })], total: 2, incomingRequests: 3 } });
     expect(styleOf('home-scene-all')).toMatchObject({ right: 8, top: 298 });
     expect(styleOf('home-buddy-b2').top).toBe(274);
+  });
+
+  it('keeps its tap area clear of the name tags above it', () => {
+    show({ buddies: { buddies: [buddy({})], total: 5, incomingRequests: 0 } });
+    expect(screen.getByTestId('home-buddy-b1').props.hitSlop).toEqual({ top: 8, bottom: 4, left: 8, right: 8 });
+    expect(screen.getByTestId('home-scene-all').props.hitSlop).toEqual({ top: 4, bottom: 8, left: 8, right: 8 });
   });
 
   it('is hidden with no buddies and no requests, and on an older server', () => {

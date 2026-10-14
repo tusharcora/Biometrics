@@ -58,8 +58,11 @@ export const HOME_COPY = {
       `Recovery${score === null ? '' : ` ${score}`}, ${verdict ?? NO_READING}. Open Recovery`,
     sleepLabel: (score: number | null, line: string | null) =>
       score === null && !line ? `Sleep, ${NO_READING}. Open Sleep` : `Sleep${score === null ? '' : ` ${score}`}${line ? `, ${line}` : ''}. Open Sleep`,
-    tomorrowLabel: (range: { low: number; high: number } | null, line: string | null) =>
-      `${range ? `Tomorrow likely ${range.low} to ${range.high}` : `Tomorrow, ${NO_READING}`}${line ? `. ${line}` : ''}. Open Tomorrow`,
+    /** `line` is the tile's visible line: the bedtime with a range, or why there's no forecast yet. */
+    tomorrowLabel: (range: { low: number; high: number } | null, line: string | null) => {
+      const head = range ? `Tomorrow likely ${range.low} to ${range.high}` : line ? 'Tomorrow' : `Tomorrow, ${NO_READING}`;
+      return `${head}${line ? `. ${line.replace(/\.$/, '')}` : ''}. Open Tomorrow`;
+    },
   },
   askCoach: (needsConsent: boolean) => (needsConsent ? 'Ask Coach · see what’s shared first' : 'Ask Coach about today'),
 } as const;

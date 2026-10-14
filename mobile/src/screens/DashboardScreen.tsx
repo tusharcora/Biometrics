@@ -31,7 +31,7 @@ import { computeStats, buildHeadline, type MetricRecord } from '../lib/metricIns
 import { coachEntryRoute, useCoachStatus } from '../lib/useCoachStatus';
 import { useForecast } from '../lib/useForecast';
 import { todayCivil } from '../lib/heatmap';
-import { forecastRange, nextSceneBoundary, sceneExtra, sceneState, todayScore, todayWeather } from '../lib/home/scene';
+import { forecastRange, nextSceneBoundary, SCENE_H, sceneExtra, sceneState, todayScore, todayWeather } from '../lib/home/scene';
 import { useBuddyScene } from '../lib/home/useBuddyScene';
 import { useMyKipColour } from '../lib/kip/myKipColour';
 import { useRecapShelf } from '../lib/recap/useRecapShelf';
@@ -96,6 +96,7 @@ export function DashboardScreen() {
   const [now, setNow] = useState(() => new Date());
   const [homeFocused, setHomeFocused] = useState<boolean>(() => navigation.isFocused?.() ?? true);
   const [headerBottom, setHeaderBottom] = useState(0);
+  const [pastScene, setPastScene] = useState(false);
   // Null until known, and null on failure: the coach entry simply isn't drawn.
   const { status: coachStatus } = useCoachStatus(navigation);
   const coachRoute = coachEntryRoute(coachStatus);
@@ -151,7 +152,7 @@ export function DashboardScreen() {
     return () => { cancelled = true; };
   }, [dataVersion]);
 
-  // The state follows the clock: again on focus, on return to the foreground, and at the next 05:00 or 21:00.
+  // The state and the greeting follow the clock: again on focus, on return to the foreground, and at the next boundary.
   useEffect(() => {
     const nav = navRef.current;
     const offFocus = nav.addListener?.('focus', () => {
@@ -302,33 +303,43 @@ export function DashboardScreen() {
     recapsNew: shelf.unwatchedCount,
   };
   const metricsWithData = METRIC_ORDER.filter((type) => seriesByMetric[type].length > 0);
+  const extra = sceneExtra(headerBottom);
+  const insetTop = insets?.top ?? 0;
+  // Past the scene the page runs under the clock: it gets a page-coloured strip and the theme's own status bar.
+  const sceneUnderClock = SCENE_H + extra - insetTop;
 
   return (
     <View className="flex-1 bg-background">
-      {homeFocused ? <StatusBar style="light" /> : null}
-      <ScrollView contentContainerStyle={{ paddingBottom: clearance }}>
-        <View>
-          <HomeScene
-            scene={scene}
-            width={width}
-            extra={sceneExtra(headerBottom)}
-            myColour={myColour}
-            buddies={buddyScene}
-            readings={readings}
-            onOpen={open}
-            onOpenBuddy={(buddyId) => navigation.navigate('BuddyWeek', { buddyId })}
-          />
-          <HomeHeader
-            top={(insets?.top ?? 0) + 8}
-            now={now}
-            greeting={greetingFor(now)}
-            scene={scene}
-            myColour={myColour}
-            ring={ring}
-            onProfile={openProfile}
-            onBottom={setHeaderBottom}
-          />
-        </View>
+      {homeFocused ? <StatusBar style={pastScene && scheme !== 'dark' ? 'dark' : 'light'} /> : null}
+      <ScrollView
+        testID="home-scroll"
+        contentContainerStyle={{ paddingBottom: clearance }}
+        scrollEventThrottle={16}
+        onScroll={(e) => setPastScene(e.nativeEvent.contentOffset.y > sceneUnderClock)}
+      >
+        <HomeScene
+          scene={scene}
+          width={width}
+          extra={extra}
+          myColour={myColour}
+          buddies={buddyScene}
+          readings={readings}
+          onOpen={open}
+          onOpenBuddy={(buddyId) => navigation.navigate('BuddyWeek', { buddyId })}
+          header={(
+            <HomeHeader
+              top={insetTop + 8}
+              extra={extra}
+              now={now}
+              greeting={greetingFor(now)}
+              scene={scene}
+              myColour={myColour}
+              ring={ring}
+              onProfile={openProfile}
+              onBottom={setHeaderBottom}
+            />
+          )}
+        />
 
         <View style={{ ...PAGE, paddingTop: 14 }}>
           <TodayHeader scene={scene.key} bedtime={bedtime} />
@@ -374,6 +385,13 @@ export function DashboardScreen() {
           {/* Per-metric trends and the Patterns entry live on the Trends screen (Activity's "All trends"). */}
         </View>
       </ScrollView>
+      {pastScene ? (
+        <View
+          testID="home-status-strip"
+          pointerEvents="none"
+          style={{ position: 'absolute', left: 0, right: 0, top: 0, height: insetTop, backgroundColor: colors.background }}
+        />
+      ) : null}
     </View>
   );
 }

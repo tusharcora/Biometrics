@@ -1,6 +1,6 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { Pressable, View } from 'react-native';
-import { STATES, type SceneState } from '../../lib/home/scene';
+import { skyAt, type SceneState } from '../../lib/home/scene';
 import { HOME_COPY } from '../../lib/homeCopy';
 import type { KipColour } from '../../lib/kip/kipArt';
 import { Kip } from '../kip/Kip';
@@ -14,6 +14,8 @@ import { ThemeToggle } from '../ui/theme-toggle';
 // themes. The Profile button is the round story ring with your KIP inside.
 
 const INK = '#F5F5F4';
+const RING_SIZE = 44;
+const RING_PAD = 3.5;
 
 /** The round Profile button: today's recap ring, your KIP on a dark glass circle. `surface` matches the ring's gap. */
 export function ProfileButton({ ring, surface, colour, onPress }: {
@@ -28,7 +30,7 @@ export function ProfileButton({ ring, surface, colour, onPress }: {
       hitSlop={4}
       className="active:opacity-70"
     >
-      <StoryRing testID="profile-story-ring" color={ring?.color ?? null} size={44} ringWidth={2.5} gap={2.5} dotSize={12} surface={surface}>
+      <StoryRing testID="profile-story-ring" color={ring?.color ?? null} size={RING_SIZE} ringWidth={2.5} gap={2.5} dotSize={12} surface={surface}>
         <View className="flex-1 items-center justify-center" style={{ backgroundColor: 'rgba(10,11,14,0.45)' }}>
           <Kip testID="profile-kip" colour={colour} pose="rest" mood="idle" scale={2} />
         </View>
@@ -37,14 +39,22 @@ export function ProfileButton({ ring, surface, colour, onPress }: {
   );
 }
 
-export function HomeHeader({ top, now, greeting, scene, myColour, ring, onProfile, onBottom }: {
-  top: number; now: Date; greeting: string; scene: SceneState; myColour: KipColour; ring: StoryRingState | null;
+export function HomeHeader({ top, extra, now, greeting, scene, myColour, ring, onProfile, onBottom }: {
+  top: number;
+  /** The scene's extra sky (sceneExtra), to find the band behind the Profile ring. */
+  extra: number;
+  now: Date; greeting: string; scene: SceneState; myColour: KipColour; ring: StoryRingState | null;
   onProfile: () => void; onBottom: (bottom: number) => void;
 }) {
+  const [bottom, setBottom] = useState(0);
   return (
     <View
       testID="home-header"
-      onLayout={(e) => onBottom(e.nativeEvent.layout.y + e.nativeEvent.layout.height)}
+      onLayout={(e) => {
+        const next = e.nativeEvent.layout.y + e.nativeEvent.layout.height;
+        setBottom(next);
+        onBottom(next);
+      }}
       className="absolute left-0 right-0 flex-row items-end justify-between gap-3 px-[20px]"
       style={{ top }}
     >
@@ -53,9 +63,9 @@ export function HomeHeader({ top, now, greeting, scene, myColour, ring, onProfil
         <Text className="text-display" style={{ color: INK }}>{greeting}</Text>
         <SyncStatusLine light />
       </View>
-      <View className="flex-row items-center gap-3 pb-1">
+      <View className="flex-row items-center gap-3" style={{ paddingBottom: RING_PAD }}>
         <ThemeToggle color={INK} />
-        <ProfileButton ring={ring} surface={STATES[scene.key].sky[0]} colour={myColour} onPress={onProfile} />
+        <ProfileButton ring={ring} surface={skyAt(scene.key, bottom - RING_PAD - RING_SIZE / 2, extra)} colour={myColour} onPress={onProfile} />
       </View>
     </View>
   );

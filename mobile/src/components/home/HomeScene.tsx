@@ -18,7 +18,7 @@ import { Text } from '../ui/text';
 
 // Home F's scene (spec 2026-10-13 Home F §2–§4): the board drawn at 3 points a cell, cropped on narrow phones and
 // widened with flat bands on wide ones. Back to front: the backdrop, the grid's four layers, the KIPs, the rain,
-// then the tags. The art is hidden from screen readers; the tags carry the meaning. It keeps its colours in both
+// the header, then the tags. The art is hidden from screen readers; the tags carry the meaning. It keeps its colours in both
 // themes, so the band colours come from the dark palette.
 
 export type SceneTarget = 'sleep' | 'tomorrow' | 'recovery' | 'recaps' | 'buddies';
@@ -42,6 +42,8 @@ export interface HomeSceneProps {
   readings: SceneReadings;
   onOpen: (target: SceneTarget) => void;
   onOpenBuddy: (buddyId: string) => void;
+  /** Drawn over the art and ahead of the tags, so a screen reader reads it first. */
+  header?: React.ReactNode;
 }
 
 const C = HOME_COPY;
@@ -50,6 +52,9 @@ const INK = '#F5F5F4';
 const NAME_INK = 'rgba(245,245,244,0.9)';
 const KEY = { sleep: '#C4B5FD', tomorrow: '#C7D2FE', recaps: '#FB7185', all: '#C7D2FE' } as const;
 const EDGE = 4;
+// The name tags and "ALL n →" are rows apart by less than two full slops: 4 each between them keeps the areas apart.
+const NAME_SLOP = { top: 8, bottom: 4, left: 8, right: 8 } as const;
+const ALL_SLOP = { top: 4, bottom: 8, left: 8, right: 8 } as const;
 const HIDE = { accessible: false, accessibilityElementsHidden: true, importantForAccessibility: 'no-hide-descendants' } as const;
 
 function Paths({ paths }: { paths: { fill: string; d: string }[] }) {
@@ -88,7 +93,7 @@ function HotTag({ testID, left, top, screenWidth, keyText, keyColour, value, lab
   );
 }
 
-export function HomeScene({ scene, width, extra, myColour, buddies, readings, onOpen, onOpenBuddy }: HomeSceneProps) {
+export function HomeScene({ scene, width, extra, myColour, buddies, readings, onOpen, onOpenBuddy, header }: HomeSceneProps) {
   const look = STATES[scene.key];
   const offsetX = sceneOffsetX(width);
   const backdrop = useMemo(() => pxPaths(sceneBackdrop(scene.key, width, extra, offsetX), 1), [scene.key, width, extra, offsetX]);
@@ -135,6 +140,7 @@ export function HomeScene({ scene, width, extra, myColour, buddies, readings, on
           </Svg>
         </View>
       ) : null}
+      {header}
 
       <HotTag
         testID="home-tag-sleep"
@@ -184,7 +190,7 @@ export function HomeScene({ scene, width, extra, myColour, buddies, readings, on
           accessibilityRole="button"
           accessibilityLabel={C.buddies.label(b.displayName, b.moodLine)}
           onPress={() => onOpenBuddy(b.id)}
-          hitSlop={8}
+          hitSlop={NAME_SLOP}
           className="items-center active:opacity-70"
           style={{ position: 'absolute', left: offsetX + SCENE_SPOTS.buddies[i]!.cx - SCENE_SPOTS.nameWidth / 2, top: extra + SCENE_SPOTS.nameTop, width: SCENE_SPOTS.nameWidth }}
         >
@@ -197,7 +203,7 @@ export function HomeScene({ scene, width, extra, myColour, buddies, readings, on
           accessibilityRole="button"
           accessibilityLabel={requests > 0 ? C.buddies.requestsLabel(requests) : C.buddies.allLabel(total)}
           onPress={() => onOpen('buddies')}
-          hitSlop={8}
+          hitSlop={ALL_SLOP}
           className="active:opacity-70"
           style={{ position: 'absolute', right: Math.max(EDGE, width - (offsetX + SCENE_SPOTS.all.right)), top: extra + SCENE_SPOTS.all.top }}
         >

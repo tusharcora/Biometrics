@@ -17,7 +17,6 @@ export const FORECAST_COPY = {
   legendForecast: 'Forecast',
   loadError: 'Couldn’t load tomorrow’s forecast. Try again in a moment.',
   unavailable: 'Tomorrow’s forecast is unavailable right now.',
-  planCta: 'Plan tomorrow →',
   trendLabel: 'Recent trend',
   sleepLabel: (h: number) => `Sleep ${h} h`,
   habitLabel,

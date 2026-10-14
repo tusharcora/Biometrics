@@ -257,13 +257,17 @@ export function sceneState({ now, recovery, night }: { now: Date; recovery: Weat
   return { key, ...SCENE_KIP[key] };
 }
 
-/** The next 00:00, 05:00 or 21:00 after `now`, local time: when the state or the day can next change on its own. */
+/** 05:00 and 21:00 change the state; 12:00 and 18:00 change the greeting (greetingFor). */
+const BOUNDARY_HOURS = [5, 12, 18, 21] as const;
+
+/**
+ * The next 00:00, 05:00, 12:00, 18:00 or 21:00 after `now`, local time: when the state, the greeting or the day can
+ * next change on its own.
+ */
 export function nextSceneBoundary(now: Date): Date {
   const on = (days: number, hour: number) => new Date(now.getFullYear(), now.getMonth(), now.getDate() + days, hour, 0, 0, 0);
-  const h = now.getHours();
-  if (h < 5) return on(0, 5);
-  if (h < 21) return on(0, 21);
-  return on(1, 0);
+  const next = BOUNDARY_HOURS.find((hour) => now.getHours() < hour);
+  return next === undefined ? on(1, 0) : on(0, next);
 }
 
 /** The newest score of a type, only if it is dated today. */
@@ -339,6 +343,14 @@ export function clampTagLeft(left: number, tagWidth: number, screenWidth: number
   if (left + tagWidth > screenWidth) return Math.max(TAG_EDGE, screenWidth - TAG_EDGE - tagWidth);
   if (left < 0) return TAG_EDGE;
   return left;
+}
+
+/** The sky's colour `y` points down the scene: the extra sky, then the four bands (sceneBackdrop). */
+export function skyAt(key: SceneKey, y: number, extra: number): string {
+  const { sky } = STATES[key];
+  if (y < extra) return sky[0];
+  const band = Math.floor((y - extra) / (Math.floor(GY / 4) * U));
+  return sky[Math.min(3, band)]!;
 }
 
 /**

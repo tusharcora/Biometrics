@@ -1,3 +1,4 @@
+import { AppState } from 'react-native';
 import { act, renderHook } from '@testing-library/react-native';
 import { fetchBuddyScene, type BuddyRow, type BuddyScene } from '../../src/api/buddies';
 import { useBuddyScene } from '../../src/lib/home/useBuddyScene';
@@ -25,6 +26,36 @@ it('loads once on mount and again on focus', async () => {
   await act(async () => focus?.());
   expect(fetchBuddyScene).toHaveBeenCalledTimes(2);
   expect(result.current).toEqual(scene(2));
+});
+
+it('reloads when the app comes back to the foreground, and only the latest load lands', async () => {
+  const handlers: Array<(state: string) => void> = [];
+  const preset: unknown = AppState.addEventListener;
+  const original = jest.isMockFunction(preset) ? preset.getMockImplementation() : undefined;
+  const spy = jest.spyOn(AppState, 'addEventListener').mockImplementation((_type, handler) => {
+    handlers.push(handler as (state: string) => void);
+    return { remove: jest.fn() } as never;
+  });
+  try {
+    let slow!: (s: BuddyScene) => void;
+    (fetchBuddyScene as jest.Mock)
+      .mockResolvedValueOnce(scene(1))
+      .mockReturnValueOnce(new Promise<BuddyScene>((resolve) => (slow = resolve)))
+      .mockResolvedValueOnce(scene(3));
+    const { result } = renderHook(() => useBuddyScene(navigation));
+    await act(async () => {});
+    await act(async () => handlers.forEach((h) => h('background')));
+    expect(fetchBuddyScene).toHaveBeenCalledTimes(1);
+    await act(async () => handlers.forEach((h) => h('active')));
+    await act(async () => handlers.forEach((h) => h('active')));
+    expect(fetchBuddyScene).toHaveBeenCalledTimes(3);
+    expect(result.current).toEqual(scene(3));
+    await act(async () => slow(scene(2)));
+    expect(result.current).toEqual(scene(3));
+  } finally {
+    if (original) spy.mockImplementation(original);
+    else spy.mockRestore();
+  }
 });
 
 it('keeps the last scene when a reload fails', async () => {

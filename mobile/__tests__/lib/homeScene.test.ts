@@ -4,7 +4,7 @@ import { READY } from '../../jest-mocks/forecastFixture';
 import {
   ART, at, clampTagLeft, flowerSpots, forecastRange, ICON, isNightTime, isShortNight, kipBox, layGround, layObjects,
   layRain, laySky, layWeather, nextSceneBoundary, pxPaths, sceneBackdrop, sceneExtra, sceneOffsetX, sceneState,
-  SCENE_SPOTS, STATES, todayScore, todayWeather, type SceneKey,
+  SCENE_SPOTS, skyAt, STATES, todayScore, todayWeather, type SceneKey,
 } from '../../src/lib/home/scene';
 import { weatherFor, weatherForScore } from '../../src/lib/recoveryCopy';
 
@@ -44,10 +44,14 @@ describe('sceneState', () => {
     expect(isNightTime(new Date(2026, 9, 14, 5, 0))).toBe(false);
   });
 
-  it('sets the next timer at 00:00, 05:00 or 21:00', () => {
+  it('sets the next timer at 00:00, 05:00, 21:00 and the greeting\'s 12:00 and 18:00', () => {
     expect(nextSceneBoundary(new Date(2026, 9, 13, 4, 10))).toEqual(new Date(2026, 9, 13, 5, 0));
     expect(nextSceneBoundary(new Date(2026, 9, 13, 0, 10))).toEqual(new Date(2026, 9, 13, 5, 0));
-    expect(nextSceneBoundary(new Date(2026, 9, 13, 5, 0))).toEqual(new Date(2026, 9, 13, 21, 0));
+    expect(nextSceneBoundary(new Date(2026, 9, 13, 5, 0))).toEqual(new Date(2026, 9, 13, 12, 0));
+    expect(nextSceneBoundary(new Date(2026, 9, 13, 11, 59, 30))).toEqual(new Date(2026, 9, 13, 12, 0));
+    expect(nextSceneBoundary(new Date(2026, 9, 13, 12, 0))).toEqual(new Date(2026, 9, 13, 18, 0));
+    expect(nextSceneBoundary(new Date(2026, 9, 13, 17, 30))).toEqual(new Date(2026, 9, 13, 18, 0));
+    expect(nextSceneBoundary(new Date(2026, 9, 13, 18, 0))).toEqual(new Date(2026, 9, 13, 21, 0));
     expect(nextSceneBoundary(new Date(2026, 9, 13, 20, 59, 30))).toEqual(new Date(2026, 9, 13, 21, 0));
     expect(nextSceneBoundary(new Date(2026, 9, 13, 21, 0))).toEqual(new Date(2026, 9, 14, 0, 0));
     expect(nextSceneBoundary(new Date(2026, 9, 13, 21, 30))).toEqual(new Date(2026, 9, 14, 0, 0));
@@ -196,6 +200,17 @@ describe('layout', () => {
         expect(x + 3).toBeLessThanOrEqual(width);
       }
     }
+  });
+
+  it('reads the sky colour at a height on the scene: the extra sky, then each 60-point band', () => {
+    const { sky } = STATES.clear;
+    expect(skyAt('clear', 10, 24)).toBe(sky[0]);
+    expect(skyAt('clear', 24 + 59, 24)).toBe(sky[0]);
+    expect(skyAt('clear', 24 + 60, 24)).toBe(sky[1]);
+    expect(skyAt('clear', 24 + 179, 24)).toBe(sky[2]);
+    expect(skyAt('clear', 24 + 200, 24)).toBe(sky[3]);
+    expect(skyAt('clear', 24 + 400, 24)).toBe(sky[3]);
+    expect(skyAt('night', 70, 0)).toBe(STATES.night.sky[1]);
   });
 
   it('puts "ALL n →" on its own row below the name tags, inside the ground', () => {

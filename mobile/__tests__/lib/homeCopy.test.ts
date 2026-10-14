@@ -18,6 +18,12 @@ it('words the tags\' spoken labels as the spec does', () => {
   expect(C.tags.recapsLabel(0)).toBe('Mailbox: recaps, no new recaps. Open Recaps');
 });
 
+it('speaks the Tomorrow tile\'s line, without a doubled full stop', () => {
+  expect(C.tiles.tomorrowLabel({ low: 40, high: 80 }, 'Bed by 23:00')).toBe('Tomorrow likely 40 to 80. Bed by 23:00. Open Tomorrow');
+  expect(C.tiles.tomorrowLabel(null, 'Check back later.')).toBe('Tomorrow. Check back later. Open Tomorrow');
+  expect(C.tiles.tomorrowLabel(null, null)).toBe('Tomorrow, no reading yet. Open Tomorrow');
+});
+
 it('words the buddy tags, the header and the hints', () => {
   expect(C.buddies.all(5)).toBe('ALL 5 →');
   expect(C.buddies.requests(1)).toBe('1 REQUEST →');

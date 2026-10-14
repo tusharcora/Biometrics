@@ -22,13 +22,14 @@ beforeEach(() => {
 });
 afterEach(() => jest.restoreAllMocks());
 
-function show(onBottom = jest.fn(), onProfile = jest.fn(), now = NOW) {
+function show(onBottom = jest.fn(), onProfile = jest.fn(), now = NOW, { top = 52, extra = 12 } = {}) {
   render(
-    <HomeHeader top={52} now={now} greeting="Good morning" scene={sceneState({ now, recovery: 'clear', night: null })}
+    <HomeHeader top={top} extra={extra} now={now} greeting="Good morning" scene={sceneState({ now, recovery: 'clear', night: null })}
       myColour="mint" ring={null} onProfile={onProfile} onBottom={onBottom} />,
   );
   return { onBottom, onProfile };
 }
+const ringSurface = () => screen.UNSAFE_getAllByType(StoryRing).find((n) => n.props.testID === 'profile-story-ring')!.props.surface;
 
 it('shows the date, the greeting, the sync line, the theme toggle and the Profile ring, all light', () => {
   show();
@@ -50,18 +51,30 @@ it('sits at the top it is given and reports its bottom edge', () => {
   expect(onBottom).toHaveBeenCalledWith(122);
 });
 
-it('draws your KIP in the Profile ring, on the sky\'s top colour, and opens Profile', () => {
+it('draws your KIP in the Profile ring and opens Profile', () => {
   const { onProfile } = show();
   const k = screen.UNSAFE_getAllByType(Kip).find((n) => n.props.testID === 'profile-kip')!;
   expect(k.props).toMatchObject({ colour: 'mint', scale: 2 });
   fireEvent.press(screen.getByTestId('settings-button'));
   expect(onProfile).toHaveBeenCalled();
-  const ringSurface = () => screen.UNSAFE_getAllByType(StoryRing).find((n) => n.props.testID === 'profile-story-ring')!.props.surface;
-  expect(ringSurface()).toBe(STATES.clear.sky[0]);
+});
+
+it('gaps the Profile ring in the sky band behind its centre', () => {
+  const layout = (y: number, height: number) =>
+    fireEvent(screen.getByTestId('home-header'), 'layout', { nativeEvent: { layout: { x: 0, y, width: 390, height } } });
+  // Header bottom 122 with 12 points of extra sky: the ring's centre, 25.5 above that bottom, is 96.5 down, in band 1.
+  show();
+  layout(52, 70);
+  expect(ringSurface()).toBe(STATES.clear.sky[1]);
   screen.unmount();
   show(jest.fn(), jest.fn(), new Date(2026, 9, 13, 22, 0));
-  expect(ringSurface()).toBe(STATES.night.sky[0]);
-  expect(STATES.night.sky[0]).not.toBe(STATES.clear.sky[0]);
+  layout(52, 70);
+  expect(ringSurface()).toBe(STATES.night.sky[1]);
+  screen.unmount();
+  // A short header under a 20-point status bar: no extra sky, and the centre (52) is still in band 0.
+  show(jest.fn(), jest.fn(), NOW, { top: 28, extra: 0 });
+  layout(28, 49.5);
+  expect(ringSurface()).toBe(STATES.clear.sky[0]);
 });
 
 it('speaks the recap ring\'s hint', () => {
