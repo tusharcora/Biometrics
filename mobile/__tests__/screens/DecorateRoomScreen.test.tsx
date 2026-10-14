@@ -1,9 +1,10 @@
 import React from 'react';
-import { Alert, StyleSheet } from 'react-native';
+import { AccessibilityInfo, Alert, Platform, StyleSheet } from 'react-native';
 import { act, fireEvent, render, within } from '@testing-library/react-native';
+import { ApiError } from '../../src/api/client';
 import { fetchCosmetics, postCosmeticsSeen, putCosmetics } from '../../src/api/cosmetics';
 import { DecorateRoomScreen } from '../../src/screens/DecorateRoomScreen';
-import { loadCosmetics, resetCosmetics } from '../../src/lib/room/cosmeticsStore';
+import { getCosmetics, loadCosmetics, resetCosmetics } from '../../src/lib/room/cosmeticsStore';
 import { EMPTY_WORN, STARTER_LOADOUT } from '../../src/lib/room/loadout';
 
 jest.mock('../../src/components/room/RoomView', () => require('../../jest-mocks/RoomView'));
@@ -184,4 +185,144 @@ it('closes from the load error', async () => {
   await act(async () => undefined);
   fireEvent.press(s.getByTestId('decorate-close'));
   expect(mockNav.goBack).toHaveBeenCalledTimes(1);
+});
+
+it('Done saves the draft with the stored version, then closes', async () => {
+  const s = await open({ slot: 'rug' });
+  fireEvent.press(s.getByTestId('decorate-tile-rug.red'));
+  (putCosmetics as jest.Mock).mockResolvedValue({ ...DTO, room: { ...DTO.room, rug: 'rug.red' }, version: 3 });
+  await act(async () => { fireEvent.press(s.getByTestId('decorate-done')); });
+  expect(putCosmetics).toHaveBeenCalledWith({ room: { ...STARTER_LOADOUT, rug: 'rug.red' }, worn: EMPTY_WORN, version: 2 });
+  expect(getCosmetics()!.room.rug).toBe('rug.red');
+  expect(mockNav.goBack).toHaveBeenCalled();
+});
+
+it('a locked preview is never saved: Done sends what was there', async () => {
+  const s = await open({ slot: 'rug' });
+  fireEvent.press(s.getByTestId('decorate-hotspot-pet'));
+  fireEvent.press(s.getByTestId('decorate-tile-pet.bed')); // not owned in DTO: a preview
+  fireEvent.press(s.getByTestId('decorate-hotspot-wallpaper'));
+  fireEvent.press(s.getByTestId('decorate-tile-wall.dots'));
+  (putCosmetics as jest.Mock).mockResolvedValue({ ...DTO, version: 3 });
+  await act(async () => { fireEvent.press(s.getByTestId('decorate-done')); });
+  expect((putCosmetics as jest.Mock).mock.calls[0]![0].room.pet).toBeNull();
+});
+
+it.each([[403, 'not_owned'], [409, 'stale']])('a %i refreshes the room, keeps you here and says so', async (status, code) => {
+  const s = await open({ slot: 'rug' });
+  fireEvent.press(s.getByTestId('decorate-tile-rug.red'));
+  (putCosmetics as jest.Mock).mockRejectedValue(new ApiError(status, code, code));
+  (fetchCosmetics as jest.Mock).mockResolvedValue({ ...DTO, room: { ...DTO.room, wallpaper: 'wall.dots' }, version: 5 });
+  await act(async () => { fireEvent.press(s.getByTestId('decorate-done')); });
+  expect(s.getByText('Something changed on another device. Your room was refreshed.')).toBeTruthy();
+  expect([room(s).wallpaper, room(s).rug]).toEqual(['wall.dots', 'rug.slate']);
+  expect(s.getByTestId('decorate-done').props.accessibilityState.disabled).toBe(true);
+  expect(mockNav.goBack).not.toHaveBeenCalled();
+});
+
+it("after a 409 refresh, the next change saves against the server's version (two devices)", async () => {
+  const s = await open({ slot: 'rug' });
+  fireEvent.press(s.getByTestId('decorate-tile-rug.red'));
+  (putCosmetics as jest.Mock).mockRejectedValueOnce(new ApiError(409, 'stale', 'stale'));
+  (fetchCosmetics as jest.Mock).mockResolvedValue({ ...DTO, room: { ...DTO.room, wallpaper: 'wall.dots' }, version: 5 });
+  await act(async () => { fireEvent.press(s.getByTestId('decorate-done')); });
+  expect(s.getByTestId('decorate-undo').props.accessibilityState.disabled).toBe(true);
+  fireEvent.press(s.getByTestId('decorate-tile-rug.red'));
+  expect(s.queryByTestId('decorate-notice')).toBeNull();
+  (putCosmetics as jest.Mock).mockResolvedValue({ ...DTO, room: { ...DTO.room, wallpaper: 'wall.dots', rug: 'rug.red' }, version: 6 });
+  await act(async () => { fireEvent.press(s.getByTestId('decorate-done')); });
+  expect((putCosmetics as jest.Mock).mock.calls[1]![0]).toEqual({ room: { ...STARTER_LOADOUT, wallpaper: 'wall.dots', rug: 'rug.red' }, worn: EMPTY_WORN, version: 5 });
+  expect(mockNav.goBack).toHaveBeenCalledTimes(1);
+});
+
+it('any other failure keeps the draft and asks to try again', async () => {
+  const s = await open({ slot: 'rug' });
+  fireEvent.press(s.getByTestId('decorate-tile-rug.red'));
+  (putCosmetics as jest.Mock).mockRejectedValue(new Error('offline'));
+  await act(async () => { fireEvent.press(s.getByTestId('decorate-done')); });
+  expect(s.getByText("Couldn't save your room. Try again.")).toBeTruthy();
+  expect(room(s).rug).toBe('rug.red');
+  expect(s.getByTestId('decorate-done').props.accessibilityState.disabled).toBe(false);
+  expect(mockNav.goBack).not.toHaveBeenCalled();
+});
+
+it('disables Done while a save is in flight, and announces the notice on iOS', async () => {
+  const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => undefined);
+  const os = Platform.OS;
+  Platform.OS = 'ios';
+  try {
+    const s = await open({ slot: 'rug' });
+    fireEvent.press(s.getByTestId('decorate-tile-rug.red'));
+    let fail!: (e: Error) => void;
+    (putCosmetics as jest.Mock).mockReturnValue(new Promise((_, reject) => { fail = reject; }));
+    await act(async () => { fireEvent.press(s.getByTestId('decorate-done')); });
+    expect(s.getByTestId('decorate-done').props.accessibilityState.disabled).toBe(true);
+    await act(async () => { fail(new Error('offline')); });
+    expect(announce).toHaveBeenCalledWith("Couldn't save your room. Try again.");
+  } finally {
+    Platform.OS = os;
+    announce.mockRestore();
+  }
+});
+
+it('Done keeps a stored id this build cannot draw in a slot you did not touch', async () => {
+  mockParams = { slot: 'rug' };
+  (fetchCosmetics as jest.Mock).mockResolvedValue({ ...DTO, room: { ...DTO.room, art: 'art.fromTheFuture' } });
+  await act(async () => { await loadCosmetics(); });
+  const s = render(<DecorateRoomScreen />);
+  await act(async () => undefined);
+  expect(room(s).art).toBe('art.calendar'); // drawn as the starter piece
+  fireEvent.press(s.getByTestId('decorate-tile-rug.red'));
+  (putCosmetics as jest.Mock).mockResolvedValue(DTO);
+  await act(async () => { fireEvent.press(s.getByTestId('decorate-done')); });
+  expect((putCosmetics as jest.Mock).mock.calls[0]![0].room.art).toBe('art.fromTheFuture');
+});
+
+it('the KIP tab groups worn pieces by head, face, neck and ears and draws KIP large wearing the preview', async () => {
+  const s = await open({ tab: 'kip' });
+  expect(s.getByTestId('decorate-tab-kip').props.accessibilityState).toMatchObject({ selected: true });
+  expect(['head', 'face', 'neck', 'ears'].map((g) => !!s.queryByTestId(`decorate-group-${g}`))).toEqual([true, true, true, true]);
+  fireEvent.press(s.getByTestId('decorate-tile-out.beanie'));
+  expect(s.getByTestId('decorate-kip', { includeHiddenElements: true })).toBeTruthy();
+  expect(JSON.parse(s.getByTestId('decorate-room').props.worn).head).toBe('out.beanie');
+  expect(s.getByTestId('decorate-info').props.accessibilityLabel).toBe('KIP is wearing, Beanie');
+});
+
+it('the Sets tab: Preview for a locked set (nothing saveable), Apply set for an owned one (one Undo step)', async () => {
+  const s = await open({ tab: 'sets' });
+  const card = s.getByTestId('decorate-set-cottage');
+  expect(within(card).getByText('13 pieces · Read 4 weekly recaps')).toBeTruthy();
+  fireEvent.press(within(card).getByTestId('decorate-set-cottage-action'));
+  expect(room(s).wallpaper).toBe('set.cottage.wallpaper');
+  expect(s.getByTestId('decorate-done').props.accessibilityState.disabled).toBe(true);
+  expect(s.getByTestId('decorate-info').props.accessibilityLabel).toBe('Locked, Cottage, Read 4 weekly recaps');
+});
+
+it('the Sets tab: an owned set reads Apply set, fills every room slot and the beanie, and one Undo restores the starter room', async () => {
+  const cottage = {
+    wallpaper: 'set.cottage.wallpaper', floor: 'set.cottage.floor', art: 'set.cottage.art', window: 'set.cottage.window',
+    shelf: 'set.cottage.shelf', desk: 'set.cottage.desk', desk_item: 'set.cottage.desk_item', plant: 'plant.fern',
+    lamp: 'set.cottage.lamp', corner: 'set.cottage.corner', rug: 'set.cottage.rug', pet: 'set.cottage.pet',
+  };
+  mockParams = { tab: 'sets' };
+  (fetchCosmetics as jest.Mock).mockResolvedValue({ ...DTO, owned: [...DTO.owned, ...Object.values(cottage)] });
+  await act(async () => { await loadCosmetics(); });
+  const s = render(<DecorateRoomScreen />);
+  await act(async () => undefined);
+  const action = s.getByTestId('decorate-set-cottage-action');
+  expect(action).toHaveTextContent('Apply set');
+  expect(action.props.accessibilityLabel).toBe('Apply the Cottage set');
+  fireEvent.press(action);
+  expect(room(s)).toEqual(cottage);
+  expect(JSON.parse(s.getByTestId('decorate-room').props.worn).head).toBe('out.beanie');
+  expect(s.getByTestId('decorate-done').props.accessibilityState.disabled).toBe(false);
+  fireEvent.press(s.getByTestId('decorate-undo'));
+  expect(room(s)).toEqual(STARTER_LOADOUT);
+  expect(s.getByTestId('decorate-done').props.accessibilityState.disabled).toBe(true);
+});
+
+it('ends the tray with "How new things arrive" and says nothing is sold', async () => {
+  const s = await open();
+  expect(s.getByText('How new things arrive')).toBeTruthy();
+  expect(s.getByText(/Nothing is sold\./)).toBeTruthy();
 });

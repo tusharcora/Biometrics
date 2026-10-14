@@ -1,7 +1,8 @@
 import React, { useCallback, useEffect, useMemo, useReducer, useRef, useState } from 'react';
-import { Alert, ScrollView, View, useWindowDimensions } from 'react-native';
+import { AccessibilityInfo, Alert, Platform, ScrollView, View, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { ApiError } from '../api/client';
 import { Button } from '../components/ui/button';
 import { PageTitle } from '../components/ui/page-title';
 import { Skeleton } from '../components/ui/skeleton';
@@ -18,7 +19,7 @@ import { decorateReducer, displayLook, initDecorate, isChanged, type DecorateSlo
 import type { RoomSlot } from '../lib/room/slots';
 import { setDecorateOpen } from '../lib/room/decorateOpen';
 import { drawableLoadout } from '../lib/room/draw';
-import { loadCosmetics, markCosmeticsSeen, useCosmetics } from '../lib/room/cosmeticsStore';
+import { loadCosmetics, markCosmeticsSeen, saveCosmeticsLoadout, useCosmetics } from '../lib/room/cosmeticsStore';
 import { progressFromAchievements, ROOM_COPY } from '../lib/room/roomCopy';
 import { infoLine, type TrayContext } from '../lib/room/tray';
 
@@ -77,6 +78,7 @@ function Decorate({ params, navigation }: { params: { tab?: DecorateTab; slot?: 
   const { width } = useWindowDimensions();
   const [state, dispatch] = useReducer(decorateReducer, undefined, () => initDecorate({ room: cosmetics.room, worn: cosmetics.worn }, params));
   const leaving = useRef(false);
+  const [saving, setSaving] = useState(false);
 
   // Opening decorate mode marks everything shown as seen (spec §4).
   useEffect(() => {
@@ -110,12 +112,40 @@ function Decorate({ params, navigation }: { params: { tab?: DecorateTab; slot?: 
     confirmDiscard(() => navigation.goBack());
   };
 
+  const save = async () => {
+    setSaving(true);
+    try {
+      // The draft holds only owned pieces and keeps every stored id you did not touch (rulings 18, 25).
+      const next = await saveCosmeticsLoadout({ room: state.draft.room, worn: state.draft.worn, version: cosmetics.version });
+      dispatch({ type: 'saved', look: { room: next.room, worn: next.worn } });
+      leaving.current = true;
+      navigation.goBack();
+    } catch (err) {
+      if (err instanceof ApiError && (err.status === 403 || err.status === 409)) {
+        // Another device saved, or something you placed is no longer yours: show the server's room and stay.
+        const fresh = await loadCosmetics();
+        if (fresh) dispatch({ type: 'refreshed', look: { room: fresh.room, worn: fresh.worn } });
+      } else {
+        dispatch({ type: 'saveFailed' });
+      }
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  // The notice below the info line is a polite live region on Android; iOS has none, so it is announced once.
+  useEffect(() => {
+    if (state.notice && Platform.OS === 'ios') {
+      AccessibilityInfo.announceForAccessibility(state.notice === 'refreshed' ? ROOM_COPY.refreshed : ROOM_COPY.saveFailed);
+    }
+  }, [state.notice]);
+
   return (
     <SafeAreaView className="flex-1 bg-background">
       <View className="flex-row items-center justify-between px-4 pb-2 pt-1">
         <Button testID="decorate-cancel" variant="ghost" onPress={cancel}>{ROOM_COPY.cancel}</Button>
         <PageTitle>{ROOM_COPY.title}</PageTitle>
-        <Button testID="decorate-done" disabled={!changed} onPress={() => undefined /* Task 14 saves */}>{ROOM_COPY.done}</Button>
+        <Button testID="decorate-done" disabled={!changed || saving} onPress={() => void save()}>{ROOM_COPY.done}</Button>
       </View>
       <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
         <View style={{ width, height: ROOM_HEIGHT }}>
@@ -146,6 +176,11 @@ function Decorate({ params, navigation }: { params: { tab?: DecorateTab; slot?: 
             {ROOM_COPY.undo}
           </Button>
         </View>
+        {state.notice ? (
+          <Text testID="decorate-notice" accessibilityLiveRegion="polite" className="px-4 pb-2 text-caption text-muted-foreground">
+            {state.notice === 'refreshed' ? ROOM_COPY.refreshed : ROOM_COPY.saveFailed}
+          </Text>
+        ) : null}
         <View testID="decorate-tabs" accessibilityRole="tablist" accessibilityLabel={ROOM_COPY.tabsLabel} className="flex-row gap-2 px-4">
           {(['room', 'kip', 'sets'] as const).map((tab) => (
             <Button
