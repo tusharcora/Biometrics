@@ -67,6 +67,48 @@ it('marking seen clears fresh at once and tells the server; a failed post is ign
   expect(hasUnseen(getCosmetics()!)).toBe(false);
 });
 
+function deferredGet() {
+  let resolve!: (v: unknown) => void;
+  get.mockReturnValueOnce(new Promise((r) => { resolve = r; }));
+  return (v: unknown) => resolve(v);
+}
+
+it('a read that started before a save never reverts it; a read started after the save still lands', async () => {
+  get.mockResolvedValueOnce(DTO);
+  await act(async () => { await loadCosmetics(); });
+  const finish = deferredGet();
+  const pending = loadCosmetics();
+  put.mockResolvedValueOnce({ ...DTO, room: { ...DTO.room, wallpaper: 'wall.dots' }, version: 4 });
+  await act(async () => { await saveCosmeticsLoadout({ room: { ...DTO.room, wallpaper: 'wall.dots' }, worn: DTO.worn, version: 3 }); });
+  await act(async () => { finish(DTO); await pending; });
+  expect([getCosmetics()!.room.wallpaper, getCosmetics()!.version]).toEqual(['wall.dots', 4]);
+  get.mockResolvedValueOnce({ ...DTO, room: { ...DTO.room, wallpaper: 'wall.brick' }, version: 5 });
+  await act(async () => { await loadCosmetics(); });
+  expect([getCosmetics()!.room.wallpaper, getCosmetics()!.version]).toEqual(['wall.brick', 5]);
+});
+
+it('a read older than what is shown is ignored', async () => {
+  get.mockResolvedValueOnce({ ...DTO, version: 4 });
+  await act(async () => { await loadCosmetics(); });
+  get.mockResolvedValueOnce(DTO);
+  await act(async () => { await loadCosmetics(); });
+  expect(getCosmetics()!.version).toBe(4);
+});
+
+it('a read that started before marking seen never brings the seen ids back', async () => {
+  get.mockResolvedValueOnce(DTO);
+  await act(async () => { await loadCosmetics(); });
+  const finish = deferredGet();
+  const pending = loadCosmetics();
+  seen.mockResolvedValueOnce(undefined);
+  await act(async () => { await markCosmeticsSeen(['rug.red']); });
+  await act(async () => { finish(DTO); await pending; });
+  expect(hasUnseen(getCosmetics()!)).toBe(false);
+  get.mockResolvedValueOnce({ ...DTO, fresh: [{ itemId: 'wall.dots', source: 'counter:recaps_read:2' }] });
+  await act(async () => { await loadCosmetics(); });
+  expect(getCosmetics()!.fresh.map((f) => f.itemId)).toEqual(['wall.dots']);
+});
+
 it('useCosmetics is null until the first read', () => {
   const { result } = renderHook(() => useCosmetics());
   expect(result.current).toBeNull();

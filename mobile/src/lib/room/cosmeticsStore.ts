@@ -7,7 +7,8 @@ import { ROOM_SLOTS, WORN_SLOTS } from './slots';
 // One shared copy of GET /me/cosmetics (spec 2026-10-14 KIP's room §4, §5): what you own, what is new, your room and
 // what KIP wears, as stored (ruling 25: ids this build cannot draw are kept here and drawn through drawableLoadout).
 // Loaded per sign-in by MyKipScope and again on foreground and KIP tab focus (RoomToastHost); a save publishes the
-// server's answer. A read that lands after sign-out is dropped.
+// server's answer. A read that lands after sign-out, or after a save or mark-seen that began once it was in flight,
+// is dropped (each moves the epoch), and an answer older than the shown version never replaces it.
 
 export interface Cosmetics {
   owned: ReadonlySet<string>;
@@ -22,9 +23,10 @@ let cosmetics: Cosmetics | null = null;
 let epoch = 0;
 const listeners = new Set<() => void>();
 
-function publish(next: Cosmetics | null): void {
+function publish(next: Cosmetics): void {
+  if (cosmetics && next.version < cosmetics.version) return;
   cosmetics = next;
-  if (next) setMyKipWorn(next.worn);
+  setMyKipWorn(next.worn);
   listeners.forEach((l) => l());
 }
 
@@ -56,7 +58,7 @@ export async function loadCosmetics(): Promise<Cosmetics | null> {
 
 /** PUT /me/cosmetics. Throws the ApiError (403 not_owned, 409 stale, …) for decorate mode to handle. */
 export async function saveCosmeticsLoadout(input: { room: RoomLoadout; worn: KipWorn; version: number }): Promise<Cosmetics> {
-  const at = epoch;
+  const at = ++epoch;
   const next = fromDTO(await putCosmetics(input));
   if (at === epoch) publish(next);
   return next;
@@ -65,6 +67,7 @@ export async function saveCosmeticsLoadout(input: { room: RoomLoadout; worn: Kip
 /** Clears these from "new" now and tells the server; a failed post is retried by the next open. */
 export async function markCosmeticsSeen(itemIds: readonly string[]): Promise<void> {
   if (!itemIds.length) return;
+  epoch++;
   const ids = new Set(itemIds);
   if (cosmetics) publish({ ...cosmetics, fresh: cosmetics.fresh.filter((f) => !ids.has(f.itemId)) });
   try {
