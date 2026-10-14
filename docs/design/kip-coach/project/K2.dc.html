@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>K2 · KIP on stage</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Silkscreen&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.b{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;font-family:'Geist',system-ui,sans-serif;font-weight:500;white-space:nowrap;cursor:pointer;gap:6px;border:1px solid transparent;border-radius:8px;background:transparent;color:rgb(245,245,244);text-decoration:none}
+.ol{border-color:rgb(44,47,55);background:rgba(44,47,55,.3)}
+.df{background:rgb(245,245,244);color:rgb(10,11,14)}
+.label{font-family:'Silkscreen',monospace;font-size:11px;line-height:14px;letter-spacing:1px;text-transform:uppercase;color:rgb(155,157,166)}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:rgb(155,157,166)}
+.card{border-radius:22px;background:rgb(20,22,27);border:1px solid rgb(30,33,40);box-sizing:border-box}
+.tile{flex:1;border-radius:12px;background:rgb(32,35,42);padding:8px 10px;display:flex;flex-direction:column;gap:2px;min-width:0}
+.chip{min-height:36px;padding:7px 12px;font-size:13px;white-space:normal;text-align:left}
+.hot{position:absolute;display:flex;align-items:center;gap:5px;height:26px;padding:0 7px;border-radius:8px;background:rgba(10,11,14,.82);border:1px solid rgba(255,255,255,.18);text-decoration:none;color:rgb(245,245,244);box-sizing:border-box;white-space:nowrap}
+.hot .k{font-family:'Silkscreen',monospace;font-size:9px;letter-spacing:1px}
+.hot .v{font-size:13px;font-weight:600;font-variant-numeric:tabular-nums}
+.hot .d{width:4px;height:4px;background:currentColor}
+.say{position:absolute;font-family:'Silkscreen',monospace;font-size:10px;line-height:12px;letter-spacing:1px;padding:5px 8px;border-radius:8px;background:rgb(245,245,244);color:rgb(10,11,14);white-space:nowrap}
+.today{flex:1;min-width:0;height:auto;min-height:44px;padding:6px 10px;flex-direction:column;align-items:flex-start;gap:0}
+@keyframes kdot{0%,100%{opacity:.25}50%{opacity:1}}
+.dot{animation:kdot 1.2s steps(2) infinite}
+.dot2{animation-delay:.2s}.dot3{animation-delay:.4s}
+@keyframes caret{50%{opacity:0}}
+.caret{display:inline-block;width:8px;height:15px;vertical-align:-2px;margin-left:2px;animation:caret 1s steps(1) infinite}
+</style>
+</helmet>
+<div style="width: 390px; height: 1340px; box-sizing: border-box; overflow: hidden; background: rgb(10,11,14); color: rgb(245,245,244); font-family: 'Geist', system-ui, sans-serif; display: flex; flex-direction: column">
+
+  <div style="position: relative; width: 390px; height: 240px; flex: none; overflow: hidden">
+    <svg aria-hidden="true" width="{{sc.w}}" height="{{sc.h}}" shape-rendering="crispEdges" style="position: absolute; left: 0; top: 0"><sc-for list="{{sc.layers}}" as="l" hint-placeholder-count="0"><path d="{{l.d}}" fill="{{l.fill}}"></path></sc-for></svg>
+    <svg role="img" aria-label="{{kipAria}}" width="{{k.px}}" height="{{k.px}}" shape-rendering="crispEdges" style="position: absolute; left: 163px; top: 132px"><sc-for list="{{k.layers}}" as="l" hint-placeholder-count="0"><path d="{{l.d}}" fill="{{l.fill}}"></path></sc-for></svg>
+    <sc-if value="{{isThinking}}" hint-placeholder-val="{{ false }}">
+      <svg aria-hidden="true" width="34" height="10" shape-rendering="crispEdges" style="position: absolute; left: 226px; top: 140px"><rect class="dot" x="0" y="2" width="6" height="6" fill="rgb(245,245,244)"></rect><rect class="dot dot2" x="12" y="2" width="6" height="6" fill="rgb(245,245,244)"></rect><rect class="dot dot3" x="24" y="2" width="6" height="6" fill="rgb(245,245,244)"></rect></svg>
+      <span class="say" style="left: 210px; top: 112px">LOOKING AT TODAY</span>
+    </sc-if>
+    <sc-if value="{{isAnswering}}" hint-placeholder-val="{{ false }}">
+      <span class="say" style="left: 222px; top: 106px">HERE’S MY TAKE</span>
+    </sc-if>
+    <sc-if value="{{isIdle}}" hint-placeholder-val="{{ true }}">
+      <span class="say" style="left: 222px; top: 106px">ASK ME ANYTHING</span>
+    </sc-if>
+    <a href="#" class="hot" aria-label="Sky: recovery 58, fair. Open Recovery" style="left: 246px; top: 66px"><span class="d" style="color: rgb(163,230,53)"></span><span class="k" style="color: rgb(163,230,53)">RECOVERY</span><span class="v">58</span></a>
+
+    <div style="position: absolute; left: 0; top: 0; right: 0; padding: 50px 20px 0; display: flex; align-items: flex-start; gap: 8px">
+      <div style="flex: 1; display: flex; flex-direction: column; gap: 4px">
+        <h1 style="margin: 0; font-family: 'Silkscreen', monospace; font-weight: 400; font-size: 22px; line-height: 24px; letter-spacing: 1px">KIP</h1>
+        <span style="font-size: 13px; color: rgb(203,213,225)">Cloudy start · fair day</span>
+      </div>
+      <button class="b ol" aria-label="Conversations and what KIP remembers" style="width: 44px; height: 44px; background: rgba(10,11,14,.55)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg></button>
+      <button class="b ol" aria-label="New chat" style="width: 44px; height: 44px; background: rgba(10,11,14,.55)"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg></button>
+    </div>
+  </div>
+
+  <div style="flex: 1; display: flex; flex-direction: column; gap: 16px; padding: 14px 20px 12px; min-height: 0">
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <div style="display: flex; align-items: baseline; justify-content: space-between"><span class="label">Today vs your usual</span><span class="muted" style="font-size: 12px">Tap to ask</span></div>
+      <div style="display: flex; gap: 8px">
+        <button class="b ol today" aria-label="Sleep 6 hours 22 minutes, below usual. Ask KIP"><span class="muted" style="font-size: 12px">Sleep</span><span class="num" style="font-size: 15px; font-weight: 600; color: rgb(253,164,175)">6h 22m</span></button>
+        <button class="b ol today" aria-label="HRV 41 milliseconds, below usual. Ask KIP"><span class="muted" style="font-size: 12px">HRV</span><span class="num" style="font-size: 15px; font-weight: 600; color: rgb(253,164,175)">41 ms</span></button>
+        <button class="b ol today" aria-label="Resting heart rate 57, about usual. Ask KIP"><span class="muted" style="font-size: 12px">Resting HR</span><span class="num" style="font-size: 15px; font-weight: 600">57 bpm</span></button>
+      </div>
+      <div class="muted" style="font-size: 12px">Comparisons against your own readings, not medical advice.</div>
+    </div>
+
+    <div style="align-self: flex-end; max-width: 78%; padding: 10px 14px; border-radius: 12px; background: rgb(44,47,55); font-size: 15px; line-height: 21px">Why is my recovery lower today?</div>
+
+    <div style="display: flex; flex-direction: column; gap: 8px">
+      <span class="label" style="color: {{accent}}">KIP</span>
+      <div style="font-size: 15px; line-height: 22px">Mostly last night. You slept less than usual and woke twice after 3 am, so your HRV didn’t climb the way it normally does overnight.</div>
+      <div class="card" style="padding: 14px; display: flex; flex-direction: column; gap: 8px">
+        <div style="font-size: 15px; font-weight: 600">Short night, slower overnight recovery</div>
+        <div style="display: flex; gap: 6px">
+          <div class="tile"><b class="num" style="font-size: 15px; color: rgb(253,164,175)">6h 22m</b><span class="muted" style="font-size: 12px">Sleep · −51m</span></div>
+          <div class="tile"><b class="num" style="font-size: 15px; color: rgb(253,164,175)">41 ms</b><span class="muted" style="font-size: 12px">HRV · −7 ms</span></div>
+          <div class="tile"><b class="num" style="font-size: 15px">57 bpm</b><span class="muted" style="font-size: 12px">Rest HR · +3</span></div>
+        </div>
+        <div style="border-radius: 10px; padding: 8px 10px; background: rgb(15,42,42); color: rgb(204,251,241); font-size: 14px; line-height: 20px">Try: start winding down by 22:30 tonight and keep the room cool.</div>
+        <a href="#" style="align-self: flex-start; font-size: 13px; font-weight: 500; color: rgb(245,245,244); text-decoration: underline; text-underline-offset: 3px">Last night’s sleep and this morning ›</a>
+      </div>
+    </div>
+
+    <div style="align-self: flex-end; max-width: 78%; padding: 10px 14px; border-radius: 12px; background: rgb(44,47,55); font-size: 15px; line-height: 21px">Should I still go for my run?</div>
+
+    <sc-if value="{{isThinking}}" hint-placeholder-val="{{ false }}">
+      <div role="status" aria-label="KIP is thinking" style="display: flex; flex-direction: column; gap: 6px; padding: 12px 14px; border-radius: 12px; border: 1px dashed rgb(44,47,55)">
+        <span class="label" style="color: {{accent}}">KIP is working on it</span>
+        <span style="display: flex; gap: 8px; font-size: 13px" class="muted"><span style="width: 12px; color: {{accent}}">✓</span>Read last night’s sleep</span>
+        <span style="display: flex; gap: 8px; font-size: 13px" class="muted"><span style="width: 12px; color: {{accent}}">✓</span>Checked your training this week</span>
+        <span style="display: flex; gap: 8px; font-size: 13px"><span style="width: 12px; color: {{accent}}">·</span>Weighing an easy run against rest</span>
+      </div>
+    </sc-if>
+    <sc-if value="{{isAnswering}}" hint-placeholder-val="{{ false }}">
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <span class="label" style="color: {{accent}}">KIP</span>
+        <div style="font-size: 15px; line-height: 22px">Yes, keep it easy. An easy 30 minutes is fine on a fair day; save the intervals for when your sleep is back to normal<span class="caret" style="background: {{accent}}"></span></div>
+      </div>
+    </sc-if>
+    <sc-if value="{{isIdle}}" hint-placeholder-val="{{ true }}">
+      <div style="display: flex; flex-direction: column; gap: 8px">
+        <span class="label" style="color: {{accent}}">KIP</span>
+        <div style="font-size: 15px; line-height: 22px">Yes, keep it easy. An easy 30 minutes is fine on a fair day; save the intervals for when your sleep is back to normal.</div>
+        <div style="display: flex; flex-wrap: wrap; gap: 8px">
+          <button class="b ol chip">What counts as easy for me?</button>
+          <button class="b ol chip">When can I do intervals again?</button>
+        </div>
+      </div>
+    </sc-if>
+  </div>
+
+  <div style="padding: 4px 16px 34px">
+    <div style="display: flex; align-items: center; gap: 8px; border: 1px solid rgb(44,47,55); border-radius: 12px; padding: 6px 6px 6px 14px; background: rgb(20,22,27)">
+      <label for="k2-input" style="position: absolute; left: -9999px">Message KIP</label>
+      <input id="k2-input" placeholder="Ask KIP…" style="flex: 1; min-width: 0; height: 36px; border: 0; outline: none; background: transparent; color: rgb(245,245,244); font: 15px 'Geist', system-ui, sans-serif">
+      <button class="b ol" aria-label="Prompt shortcuts" style="width: 36px; height: 36px; font-size: 16px">/</button>
+      <sc-if value="{{isIdle}}" hint-placeholder-val="{{ true }}"><button class="b df" aria-label="Send" style="width: 36px; height: 36px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"></path></svg></button></sc-if>
+      <sc-if value="{{busy}}" hint-placeholder-val="{{ false }}"><button class="b df" aria-label="Stop" style="width: 36px; height: 36px"><svg width="12" height="12" viewBox="0 0 12 12" aria-hidden="true"><rect width="12" height="12" fill="currentColor"></rect></svg></button></sc-if>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"stage":{"editor":"enum","options":["idle","thinking","answering"],"default":"thinking"},"kipColor":{"editor":"color","default":"#FB7185","options":["#FB7185","#3B82F6","#A3E635","#2A2F3A"]},"$preview":{"width":390,"height":1340}}'>
+var KN = 16, KE = "................", KBODY = "....bbbbbbbs....";
+var KBASE = [KE, KE, KE, KE, KE, KE, KBODY, KBODY, KBODY, KBODY, KBODY, KBODY, KBODY, ".....b....s.....", ".....b....s.....", "...zzzzzzzzzz..."];
+var KEYES = [[6, 8], [9, 8]];
+var KPOSES = { rest: {}, wave: { arms: [[12, 9, "s"], [13, 8, "s"]] }, cheer: { arms: [[3, 9, "b"], [2, 8, "b"], [12, 9, "s"], [13, 8, "s"]], hop: 1 }, think: { arms: [[12, 11, "s"], [13, 10, "s"], [12, 9, "s"]] }, point: { arms: [[12, 9, "s"], [13, 9, "s"], [14, 9, "s"]] }, shrug: { arms: [[3, 10, "b"], [2, 9, "b"], [12, 10, "s"], [13, 9, "s"]] } };
+var KMOODS = { idle: {}, blink: { eyes: "shut" }, curious: { eyes: "up", tilt: 1 }, sleepy: { eyes: "shut", squash: true }, proud: { eyes: "up", tall: true }, startled: { eyes: "wide", hop: 2 }, glance: { eyes: "glance" }, determined: { eyes: "shut", brows: true, tilt: -1 } };
+function kRgb(h) { var n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function kHx(n) { var s = Math.max(0, Math.min(255, Math.round(n))).toString(16); return s.length < 2 ? "0" + s : s; }
+function kMix(a, b, k) { var x = kRgb(a), y = kRgb(b); return "#" + kHx(x[0] * (1 - k) + y[0] * k) + kHx(x[1] * (1 - k) + y[1] * k) + kHx(x[2] * (1 - k) + y[2] * k); }
+function kDark(a, k) { var x = kRgb(a); return "#" + kHx(x[0] * k) + kHx(x[1] * k) + kHx(x[2] * k); }
+function kLum(h) { var c = kRgb(h).map(function (v) { v = v / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; }
+function kRamp(body) { return { b: body, h: kMix(body, "#FFFFFF", 0.25), s: kDark(body, 0.78), d: kDark(body, 0.6), e: kLum(body) > 0.2 ? "#14161B" : "#F5F5F4", w: "#F8FAFC", z: "rgba(0,0,0,0.35)" }; }
+function kBlank() { var g = []; for (var i = 0; i < KN; i++) { var r = []; for (var j = 0; j < KN; j++) r.push(null); g.push(r); } return g; }
+function kPut(g, x, y, c) { if (x >= 0 && y >= 0 && x < KN && y < KN && c) g[y][x] = c; }
+function kBuild(body, pn, mn) {
+  var p = kRamp(body), pose = KPOSES[pn] || {}, mood = KMOODS[mn] || {}, g = kBlank(), x, y, c, t;
+  for (y = 0; y < KN; y++) for (x = 0; x < KN; x++) if (KBASE[y][x] !== ".") g[y][x] = KBASE[y][x];
+  var em = pose.eyes || mood.eyes;
+  KEYES.forEach(function (e, i) {
+    var cs = [[e[0], e[1]]];
+    if (em === "shut") cs = [[e[0], e[1]], [i === 0 ? e[0] - 1 : e[0] + 1, e[1]]];
+    else if (em === "up") cs = [[e[0], e[1] - 1]];
+    else if (em === "wide") cs = [[e[0], e[1]], [e[0], e[1] - 1]];
+    else if (em === "glance") cs = [[e[0] + 1, e[1]]];
+    cs.forEach(function (q) { kPut(g, q[0], q[1], "e"); });
+  });
+  if (mood.brows) KEYES.forEach(function (e, i) { kPut(g, i === 0 ? e[0] + 1 : e[0] - 1, e[1] - 1, "d"); });
+  var hop = pose.hop || mood.hop || 0;
+  if (pose.tall || mood.tall) { t = kBlank(); for (y = 0; y < KN; y++) for (x = 0; x < KN; x++) { c = g[y][x]; if (!c) continue; if (y <= 12 && c !== "z") { kPut(t, x, y - 1, c); if (y === 12) kPut(t, x, 12, c); } else kPut(t, x, y, c); } g = t; }
+  if (mood.squash) { t = kBlank(); for (y = 0; y < KN; y++) for (x = 0; x < KN; x++) { c = g[y][x]; if (!c || y === 7) continue; kPut(t, x, y < 7 ? y + 1 : y, c); } for (x = 2; x < 14; x++) t[15][x] = "z"; g = t; }
+  if (mood.tilt) { t = kBlank(); for (y = 0; y < KN; y++) for (x = 0; x < KN; x++) { c = g[y][x]; if (c) kPut(t, x + (y < 9 ? mood.tilt : 0), y, c); } g = t; }
+  if (hop) { t = kBlank(); for (y = 0; y < KN; y++) for (x = 0; x < KN; x++) { c = g[y][x]; if (!c || c === "z") continue; kPut(t, x, y - hop, c); } var sw = hop > 1 ? 6 : 8; for (x = 0; x < sw; x++) t[15][8 - sw / 2 + x] = "z"; g = t; }
+  (pose.arms || []).forEach(function (a) { var yy = a[1] - hop; if (yy >= 0 && !g[yy][a[0]]) g[yy][a[0]] = a[2]; });
+  var out = kBlank();
+  for (y = 0; y < KN; y++) for (x = 0; x < KN; x++) { c = g[y][x]; if (c) out[y][x] = p[c]; }
+  return out;
+}
+function kRects(cells, s) { var by = {}, order = [], H = cells.length, W = cells[0].length, y, x, c, n; for (y = 0; y < H; y++) { x = 0; while (x < W) { c = cells[y][x]; if (!c) { x++; continue; } n = 1; while (x + n < W && cells[y][x + n] === c) n++; if (!by[c]) { by[c] = ""; order.push(c); } by[c] += "M" + x * s + " " + y * s + "h" + n * s + "v" + s + "h-" + n * s + "z"; x += n; } } return order.map(function (f) { return { fill: f, d: by[f] }; }); }
+function kip(body, pn, mn, s) { return { px: KN * s, layers: kRects(kBuild(body, pn, mn), s) }; }
+
+function pxLayers(rects, u) { var by = {}, order = []; rects.forEach(function (r) { var f = r[4]; if (!by[f]) { by[f] = ""; order.push(f); } by[f] += "M" + r[0] * u + " " + r[1] * u + "h" + r[2] * u + "v" + r[3] * u + "h-" + r[2] * u + "z"; }); return order.map(function (f) { return { fill: f, d: by[f] }; }); }
+function shift(list, ox, oy) { return list.map(function (r) { return [r[0] + ox, r[1] + oy, r[2], r[3], r[4]]; }); }
+var SUN = [[3, 0, 6, 1, "#FDE68A"], [1, 1, 10, 1, "#FCD34D"], [0, 2, 12, 7, "#FBBF24"], [1, 9, 10, 1, "#F59E0B"], [3, 10, 6, 1, "#F59E0B"]];
+var CLOUD = [[3, 0, 8, 1, "#E5E7EB"], [1, 1, 13, 1, "#F3F4F6"], [0, 2, 16, 4, "#E5E7EB"], [1, 6, 14, 1, "#9CA3AF"], [4, 1, 3, 1, "#FFFFFF"]];
+var GREY = [[3, 0, 8, 1, "#9CA3AF"], [1, 1, 13, 1, "#A8B0BC"], [0, 2, 16, 4, "#9CA3AF"], [1, 6, 14, 1, "#6B7280"]];
+var COTTAGE = [
+  [10, 50, 18, 2, "#9A4A32"], [7, 52, 24, 2, "#9A4A32"], [4, 54, 30, 2, "#9A4A32"], [2, 56, 34, 2, "#7C3A2E"],
+  [4, 58, 30, 24, "#3B2F2A"], [33, 58, 1, 24, "#2E2420"], [7, 64, 18, 15, "#1A1C26"],
+  [10, 66, 2, 1, "#C4B5FD"], [9, 67, 1, 2, "#C4B5FD"], [10, 69, 2, 1, "#C4B5FD"],
+  [8, 71, 4, 2, "#F1F5F9"], [8, 73, 4, 2, "#E5E7EB"], [12, 71, 12, 4, "#7C3AED"], [12, 71, 12, 1, "#A78BFA"], [8, 75, 16, 2, "#6B4F3A"], [8, 77, 1, 2, "#4B3A2A"], [23, 77, 1, 2, "#4B3A2A"],
+  [27, 63, 6, 7, "#F1F5F9"], [27, 63, 6, 2, "#F87171"], [28, 66, 1, 1, "#64748B"], [30, 66, 1, 1, "#64748B"], [28, 68, 1, 1, "#F87171"], [30, 68, 1, 1, "#64748B"]
+];
+var MAILBOX = [[117, 70, 2, 12, "#6B4F3A"], [112, 63, 11, 7, "#64748B"], [112, 63, 11, 1, "#94A3B8"], [113, 66, 9, 1, "#334155"], [114, 61, 5, 3, "#F1F5F9"], [114, 61, 5, 1, "#FB7185"], [123, 60, 1, 6, "#FB7185"], [124, 60, 2, 2, "#FB7185"]];
+function mound(r, cx, base, w, h, col) { for (var k = 0; k < h; k++) { var ww = Math.max(4, Math.round(w * (1 - (k / h) * (k / h)))); r.push([cx - Math.floor(ww / 2), base - k - 1, ww, 1, col]); } }
+function scene() {
+  var W = 130, H = 80, gy = 64, r = [], pal = ["#1A2232", "#1F283A", "#252F43", "#2B364C"], bh = Math.floor(gy / 4), i, x;
+  for (i = 0; i < 4; i++) { var y0 = i * bh, hh = i === 3 ? gy - y0 : bh; r.push([0, y0, W, hh, pal[i]]); if (i > 0) for (x = i % 2; x < W; x += 2) r.push([x, y0, 1, 1, pal[i - 1]]); }
+  r = r.concat(shift(SUN, 100, 12), shift(CLOUD, 92, 18), shift(GREY, 58, 10), shift(CLOUD, 20, 30));
+  mound(r, 60, gy, 60, 9, "#173024"); mound(r, 104, gy, 64, 12, "#173024");
+  var G = ["#4A8A5C", "#3A7049", "#2D5A3A", "#234A2E"];
+  r.push([0, gy, W, 1, G[0]], [0, gy + 1, W, 2, G[1]], [0, gy + 3, W, 4, G[2]], [0, gy + 7, W, H - gy - 7, G[3]]);
+  for (x = 4; x < W; x += 13) r.push([x, gy - 1, 1, 1, G[0]], [x + 2, gy - 1, 1, 1, G[0]], [x + 1, gy - 2, 1, 1, G[0]]);
+  r = r.concat(shift(COTTAGE, -6, -18), shift(MAILBOX, 0, -18));
+  for (x = 0; x < W; x += 2) r.push([x, H - 3, 1, 1, "#0A0B0E"]);
+  for (x = 1; x < W; x += 2) r.push([x, H - 2, 1, 1, "#0A0B0E"]);
+  r.push([0, H - 1, W, 1, "#0A0B0E"]);
+  return { w: W * 3, h: H * 3, layers: pxLayers(r, 3) };
+}
+var STAGE = { idle: ["wave", "idle", "KIP waving"], thinking: ["think", "curious", "KIP thinking, looking up"], answering: ["point", "glance", "KIP pointing at the answer"] };
+
+class Component extends DCLogic {
+  renderVals() {
+    var c = this.props.kipColor ?? "#FB7185", st = this.props.stage ?? "thinking", m = STAGE[st] || STAGE.thinking;
+    return {
+      sc: scene(),
+      k: kip(c, m[0], m[1], 4),
+      kipAria: m[2],
+      accent: kLum(c) < 0.12 ? "rgb(245,245,244)" : c,
+      isIdle: st === "idle",
+      isThinking: st === "thinking",
+      isAnswering: st === "answering",
+      busy: st !== "idle"
+    };
+  }
+}
+</script>
+</body>
+</html>

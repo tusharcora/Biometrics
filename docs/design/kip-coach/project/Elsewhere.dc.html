@@ -1,0 +1,210 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>What changes elsewhere</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Silkscreen&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.b{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;font-family:'Geist',system-ui,sans-serif;font-weight:500;white-space:nowrap;cursor:pointer;gap:6px;border:1px solid transparent;border-radius:8px;background:transparent;color:rgb(245,245,244);text-decoration:none}
+.ol{border-color:rgb(44,47,55);background:rgba(44,47,55,.3)}
+.df{background:rgb(245,245,244);color:rgb(10,11,14)}
+.label{font-family:'Silkscreen',monospace;font-size:11px;line-height:14px;letter-spacing:1px;text-transform:uppercase;color:rgb(155,157,166)}
+.muted{color:rgb(155,157,166)}
+.pnl{width:380px;height:620px;box-sizing:border-box;border-radius:28px;background:rgb(10,11,14);border:1px solid rgb(36,39,46);padding:20px 16px;display:flex;flex-direction:column;gap:12px;overflow:hidden}
+.ttl{margin:0;font-family:'Silkscreen',monospace;font-weight:400;font-size:18px;letter-spacing:1px;flex:1;text-align:center}
+.card{border-radius:22px;background:rgb(20,22,27);border:1px solid rgb(30,33,40);box-sizing:border-box}
+.list{border-radius:22px;background:rgb(20,22,27);border:1px solid rgb(30,33,40);overflow:hidden}
+.row{display:flex;align-items:center;gap:12px;min-height:54px;padding:9px 16px;box-sizing:border-box;border-top:1px solid rgb(30,33,40);text-decoration:none;color:rgb(245,245,244)}
+.row:first-child{border-top:0}
+.t{flex:1;display:flex;flex-direction:column;gap:2px;min-width:0}
+.tt{font-size:15px}
+.st{font-size:13px;color:rgb(155,157,166)}
+.v{font-size:14px;color:rgb(155,157,166)}
+.chev{color:rgb(90,94,104);font-size:16px}
+.foot{font-size:12px;color:rgb(155,157,166);line-height:17px;padding:0 4px}
+.mini{width:36px;height:36px;flex:none;border-radius:10px;display:flex;align-items:center;justify-content:center}
+.ask{height:56px;padding:0 8px 0 10px;border-radius:16px;background:rgb(20,22,27);border:1px solid rgb(44,47,55);display:flex;align-items:center;gap:10px;text-decoration:none;color:rgb(245,245,244)}
+.was{font-size:12px;color:rgb(110,113,122);text-decoration:line-through}
+.seg{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:4px;padding:3px;border-radius:10px;background:rgb(28,31,38)}
+.seg button{height:34px;font-size:13px}
+.icon{width:36px;height:36px;padding:0}
+</style>
+</helmet>
+<div style="width: 1252px; height: 1420px; box-sizing: border-box; background: rgb(10,11,14); color: rgb(245,245,244); font-family: 'Geist', system-ui, sans-serif; padding: 32px; display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 32px 24px; align-content: start">
+
+  <div style="display: flex; flex-direction: column; gap: 8px"><span class="label">Ask KIP bar · Recovery and Sleep pages</span>
+    <div class="pnl">
+      <div class="card" style="padding: 16px; display: flex; flex-direction: column; gap: 6px"><span class="label">Recovery</span><div style="font-size: 26px; font-weight: 600">58 · Fair</div><div class="st">Lower than usual after a short night.</div></div>
+      <a href="#" class="ask"><span class="mini" style="background: {{tileBg}}"><svg aria-hidden="true" width="{{head.w}}" height="{{head.h}}" shape-rendering="crispEdges"><sc-for list="{{head.layers}}" as="l" hint-placeholder-count="0"><path d="{{l.d}}" fill="{{l.fill}}"></path></sc-for></svg></span><span style="flex: 1; font-size: 14px">Ask KIP about today</span><span class="b df" aria-hidden="true" style="width: 36px; height: 36px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"></path></svg></span></a>
+      <span class="was">Ask Axo about today</span>
+      <div class="card" style="padding: 16px; display: flex; flex-direction: column; gap: 6px; margin-top: 8px"><span class="label">Sleep</span><div style="font-size: 26px; font-weight: 600">6h 22m</div><div class="st">Woke twice after 3 am.</div></div>
+      <a href="#" class="ask"><span class="mini" style="background: {{tileBg}}"><svg aria-hidden="true" width="{{headSleepy.w}}" height="{{headSleepy.h}}" shape-rendering="crispEdges"><sc-for list="{{headSleepy.layers}}" as="l" hint-placeholder-count="0"><path d="{{l.d}}" fill="{{l.fill}}"></path></sc-for></svg></span><span style="flex: 1; font-size: 14px">Ask KIP about last night</span><span class="b df" aria-hidden="true" style="width: 36px; height: 36px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"></path></svg></span></a>
+      <div class="foot">The bar's icon is KIP's head in the page's mood (sleepy on Sleep). It opens the KIP tab with a question filled in that names no numbers: “Why is my recovery lower today?”</div>
+    </div></div>
+
+  <div style="display: flex; flex-direction: column; gap: 8px"><span class="label">Home · KIP’s note</span>
+    <div class="pnl">
+      <a href="#" class="b ol" style="height: 44px; width: 100%; justify-content: flex-start; padding: 0 12px; font-size: 14px; gap: 10px"><span class="mini" style="width: 28px; height: 28px; border-radius: 8px; background: {{tileBg}}"><svg aria-hidden="true" width="{{headS.w}}" height="{{headS.h}}" shape-rendering="crispEdges"><sc-for list="{{headS.layers}}" as="l" hint-placeholder-count="0"><path d="{{l.d}}" fill="{{l.fill}}"></path></sc-for></svg></span><span style="flex: 1; text-align: left">Ask KIP about today</span></a>
+      <span class="was">Ask Coach about today</span>
+      <a href="#" class="card" style="position: relative; padding: 16px; display: flex; flex-direction: column; gap: 10px; text-decoration: none; color: inherit; background: {{noteBg}}; border-color: {{noteBorder}}">
+        <span style="position: absolute; right: 14px; top: 14px; width: 48px; height: 48px; border-radius: 12px; background: {{tileBg}}; display: flex; align-items: flex-end; justify-content: center; overflow: hidden"><svg role="img" aria-label="KIP" width="{{note.px}}" height="{{note.px}}" shape-rendering="crispEdges" style="margin-bottom: -2px"><sc-for list="{{note.layers}}" as="l" hint-placeholder-count="0"><path d="{{l.d}}" fill="{{l.fill}}"></path></sc-for></svg></span>
+        <span class="label" style="color: {{accent}}">KIP’s note · Mon, Oct 6</span>
+        <span style="font-size: 17px; line-height: 23px; font-weight: 600; padding-right: 56px">Bedtimes drifted later midweek, and Monday’s short night pulled recovery down. The weekend made it back.</span>
+        <span style="font-size: 13px; font-weight: 600; color: {{accent}}">Read it all →</span>
+      </a>
+      <span class="was">Your weekly recap</span>
+      <div class="card" style="padding: 16px; display: flex; flex-direction: column; gap: 8px">
+        <span class="label">Opened</span>
+        <span style="font-size: 17px; font-weight: 600">KIP’s note for the week</span>
+        <span style="font-size: 14px; line-height: 21px; color: rgb(214,214,218)">Bedtimes drifted later from Tuesday to Thursday. Monday’s short night was the low point for recovery; by Sunday you were back to your usual. This week, try keeping weeknight bedtimes within half an hour of each other.</span>
+        <span class="foot" style="padding: 0">Written from your own readings, not medical advice.</span>
+      </div>
+    </div></div>
+
+  <div style="display: flex; flex-direction: column; gap: 8px"><span class="label">Conversations sheet</span>
+    <div class="pnl" style="background: rgb(16,18,22); padding-top: 10px">
+      <span style="align-self: center; width: 36px; height: 4px; border-radius: 2px; background: rgb(64,67,77)"></span>
+      <div style="font-size: 20px; font-weight: 600; padding: 4px 4px 0">Conversations</div>
+      <div class="list">
+        <a href="#" class="row"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg><span class="t"><span class="tt">New chat</span></span></a>
+        <a href="#" class="row"><span class="mini" style="width: 28px; height: 28px; border-radius: 8px; background: {{tileBg}}"><svg aria-hidden="true" width="{{headS.w}}" height="{{headS.h}}" shape-rendering="crispEdges"><sc-for list="{{headS.layers}}" as="l" hint-placeholder-count="0"><path d="{{l.d}}" fill="{{l.fill}}"></path></sc-for></svg></span><span class="t"><span class="tt">What KIP remembers</span><span class="st">See, edit or delete · 3 things</span></span><span class="chev">›</span></a>
+      </div>
+      <div class="label" style="padding: 4px 4px 0">Past chats</div>
+      <div class="list">
+        <a href="#" class="row" aria-current="true"><span class="t"><span class="tt">Should I still go for my run?</span></span><span class="v">Today</span></a>
+        <a href="#" class="row"><span class="t"><span class="tt">Why is my recovery lower today?</span></span><span class="v">Today</span></a>
+        <a href="#" class="row"><span class="t"><span class="tt">How did I sleep?</span></span><span class="v">Sat</span></a>
+        <a href="#" class="row"><span class="t"><span class="tt">What affects me most?</span></span><span class="v">Oct 8</span></a>
+        <a href="#" class="row"><span class="t"><span class="tt">Is a late coffee hurting my sleep?</span></span><span class="v">Oct 2</span></a>
+      </div>
+      <div class="foot">Same sheet; “Coach memory” is renamed and gets KIP’s head as its icon.</div>
+    </div></div>
+
+  <div style="display: flex; flex-direction: column; gap: 8px"><span class="label">Memory screen</span>
+    <div class="pnl">
+      <div style="display: flex; align-items: center; gap: 8px"><a href="#" class="b ol icon" aria-label="Back">‹</a><h2 class="ttl" style="font-size: 15px">WHAT KIP REMEMBERS</h2><span style="width: 36px"></span></div>
+      <div class="card" style="padding: 14px; display: flex; align-items: center; gap: 12px">
+        <span style="width: 56px; height: 56px; flex: none; border-radius: 12px; background: {{tileBg}}; display: flex; align-items: flex-end; justify-content: center; overflow: hidden"><svg role="img" aria-label="KIP, proud" width="{{proud.px}}" height="{{proud.px}}" shape-rendering="crispEdges" style="margin-bottom: -3px"><sc-for list="{{proud.layers}}" as="l" hint-placeholder-count="0"><path d="{{l.d}}" fill="{{l.fill}}"></path></sc-for></svg></span>
+        <span style="font-size: 14px; line-height: 20px; color: rgb(214,214,218)">Things you told me that help me answer. Only you can see them, and you can delete any of them.</span>
+      </div>
+      <div class="label" style="padding: 0 4px">Sleep</div>
+      <div class="list">
+        <div class="row"><span class="t"><span class="tt">Aims for bed by 23:00 on weeknights</span><span class="st">From a chat on Oct 2</span></span><button class="b ol icon" aria-label="Delete this memory"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"></path></svg></button></div>
+        <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px; padding: 12px 16px"><span class="tt">Coffee after 2 pm tends to cost sleep</span><span style="font-size: 14px; font-weight: 500">Delete this memory?</span><span style="display: flex; gap: 8px"><button class="b" style="height: 36px; padding: 0 14px; font-size: 13px; color: #F87171; border-color: rgba(248,113,113,.4)">Delete</button><button class="b ol" style="height: 36px; padding: 0 14px; font-size: 13px">Keep</button></span></div>
+      </div>
+      <div class="label" style="padding: 0 4px">Training</div>
+      <div class="list">
+        <div class="row"><span class="t"><span class="tt">Training for a 10k in November</span><span class="st" style="color: {{accent}}">Saving…</span></span><button class="b ol icon" aria-label="Delete this memory"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M10 11v6M14 11v6M6 7l1 13h10l1-13M9 7V4h6v3"></path></svg></button></div>
+      </div>
+    </div></div>
+
+  <div style="display: flex; flex-direction: column; gap: 8px"><span class="label">Settings · KIP (was Your coach + AI Coach)</span>
+    <div class="pnl">
+      <div style="display: flex; align-items: center; gap: 8px"><a href="#" class="b ol icon" aria-label="Back to Profile">‹</a><h2 class="ttl">KIP</h2><span style="width: 36px"></span></div>
+      <div class="list" style="padding: 14px; display: flex; gap: 14px; align-items: center">
+        <span style="width: 64px; height: 64px; flex: none; border-radius: 12px; background: {{tileBg}}; display: flex; align-items: flex-end; justify-content: center; overflow: hidden"><svg role="img" aria-label="Your KIP in coral" width="{{wave.px}}" height="{{wave.px}}" shape-rendering="crispEdges" style="margin-bottom: -3px"><sc-for list="{{wave.layers}}" as="l" hint-placeholder-count="0"><path d="{{l.d}}" fill="{{l.fill}}"></path></sc-for></svg></span>
+        <span class="t"><span style="font-size: 17px; font-weight: 600">Your KIP</span><span class="st">Coral · coaches you on the KIP tab</span><a href="#" class="b ol" style="height: 34px; padding: 0 12px; font-size: 13px; align-self: flex-start; margin-top: 6px">Change colour</a></span>
+      </div>
+      <div class="label" style="padding: 0 4px">How KIP answers</div>
+      <div class="list">
+        <div class="row" style="flex-direction: column; align-items: stretch; gap: 8px; padding: 12px 16px"><span class="t"><span class="tt">Answer style</span><span class="st">How much KIP writes before the card</span></span>
+          <div class="seg" role="radiogroup" aria-label="Answer style"><button class="b df" role="radio" aria-checked="true">Short</button><button class="b" role="radio" aria-checked="false">Detailed</button></div></div>
+        <a href="#" class="row"><span class="t"><span class="tt">While KIP thinks</span><span class="st">How the chat shows KIP is working</span></span><span class="v">Steps</span><span class="chev">›</span></a>
+      </div>
+      <div class="label" style="padding: 0 4px">Memory and privacy</div>
+      <div class="list">
+        <a href="#" class="row"><span class="t"><span class="tt">What KIP remembers</span></span><span class="v">3</span><span class="chev">›</span></a>
+        <a href="#" class="row"><span class="t"><span class="tt">What is sent when you ask something</span></span><span class="chev">›</span></a>
+      </div>
+      <button class="b" style="height: 44px; font-size: 14px; color: #F87171; border-color: rgba(248,113,113,.4); margin-top: auto">Turn off KIP coaching</button>
+      <span class="foot" style="text-align: center">KIP stays on Home; nothing is shared with the coach.</span>
+    </div></div>
+
+  <div style="display: flex; flex-direction: column; gap: 8px"><span class="label">Removed</span>
+    <div class="pnl">
+      <div style="font-size: 17px; font-weight: 600; padding: 0 4px">Gone with the coach cast</div>
+      <div class="list">
+        <div class="row"><span class="t"><span class="tt was" style="font-size: 15px">Meet your coach</span><span class="st">The first-open picker of 15 pixel coaches</span></span></div>
+        <div class="row"><span class="t"><span class="tt was" style="font-size: 15px">Change coach</span><span class="st">Profile › Your coach row and its card</span></span></div>
+        <div class="row"><span class="t"><span class="tt was" style="font-size: 15px">Thinking style</span><span class="st">Per-coach attachments; KIP’s thinking pose replaces them</span></span></div>
+        <div class="row"><span class="t"><span class="tt was" style="font-size: 15px">Coach names and voices</span><span class="st">Axo, Sage and the rest, taglines, per-coach colours</span></span></div>
+      </div>
+      <div class="label" style="padding: 4px 4px 0">First open, now</div>
+      <div style="display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 0 4px">
+        <span class="b ol" style="height: 36px; padding: 0 12px; font-size: 13px">KIP tab</span><span class="muted">→</span>
+        <span class="b ol" style="height: 36px; padding: 0 12px; font-size: 13px">Consent</span><span class="muted">→</span>
+        <span class="b df" style="height: 36px; padding: 0 12px; font-size: 13px">Chat with KIP</span>
+      </div>
+      <div class="foot">KIP’s colour is already picked on Home, so there is nothing to choose before the first question. The tab itself is renamed from Coach to KIP.</div>
+    </div></div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"kipColor":{"editor":"color","default":"#FB7185","options":["#FB7185","#3B82F6","#A3E635","#2A2F3A"]},"$preview":{"width":1252,"height":1420}}'>
+var KN = 16, KE = "................", KBODY = "....bbbbbbbs....";
+var KBASE = [KE, KE, KE, KE, KE, KE, KBODY, KBODY, KBODY, KBODY, KBODY, KBODY, KBODY, ".....b....s.....", ".....b....s.....", "...zzzzzzzzzz..."];
+var KEYES = [[6, 8], [9, 8]];
+var KPOSES = { rest: {}, wave: { arms: [[12, 9, "s"], [13, 8, "s"]] }, cheer: { arms: [[3, 9, "b"], [2, 8, "b"], [12, 9, "s"], [13, 8, "s"]], hop: 1 }, think: { arms: [[12, 11, "s"], [13, 10, "s"], [12, 9, "s"]] }, point: { arms: [[12, 9, "s"], [13, 9, "s"], [14, 9, "s"]] }, shrug: { arms: [[3, 10, "b"], [2, 9, "b"], [12, 10, "s"], [13, 9, "s"]] } };
+var KMOODS = { idle: {}, blink: { eyes: "shut" }, curious: { eyes: "up", tilt: 1 }, sleepy: { eyes: "shut", squash: true }, proud: { eyes: "up", tall: true }, startled: { eyes: "wide", hop: 2 }, glance: { eyes: "glance" }, determined: { eyes: "shut", brows: true, tilt: -1 } };
+function kRgb(h) { var n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function kHx(n) { var s = Math.max(0, Math.min(255, Math.round(n))).toString(16); return s.length < 2 ? "0" + s : s; }
+function kMix(a, b, k) { var x = kRgb(a), y = kRgb(b); return "#" + kHx(x[0] * (1 - k) + y[0] * k) + kHx(x[1] * (1 - k) + y[1] * k) + kHx(x[2] * (1 - k) + y[2] * k); }
+function kDark(a, k) { var x = kRgb(a); return "#" + kHx(x[0] * k) + kHx(x[1] * k) + kHx(x[2] * k); }
+function kLum(h) { var c = kRgb(h).map(function (v) { v = v / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; }
+function kRamp(body) { return { b: body, h: kMix(body, "#FFFFFF", 0.25), s: kDark(body, 0.78), d: kDark(body, 0.6), e: kLum(body) > 0.2 ? "#14161B" : "#F5F5F4", w: "#F8FAFC", z: "rgba(0,0,0,0.35)" }; }
+function kTile(body) { return kLum(body) < 0.12 ? "#EDEBE6" : kMix(body, "#14161B", 0.82); }
+function kBlank() { var g = []; for (var i = 0; i < KN; i++) { var r = []; for (var j = 0; j < KN; j++) r.push(null); g.push(r); } return g; }
+function kPut(g, x, y, c) { if (x >= 0 && y >= 0 && x < KN && y < KN && c) g[y][x] = c; }
+function kBuild(body, pn, mn) {
+  var p = kRamp(body), pose = KPOSES[pn] || {}, mood = KMOODS[mn] || {}, g = kBlank(), x, y, c, t;
+  for (y = 0; y < KN; y++) for (x = 0; x < KN; x++) if (KBASE[y][x] !== ".") g[y][x] = KBASE[y][x];
+  var em = pose.eyes || mood.eyes;
+  KEYES.forEach(function (e, i) {
+    var cs = [[e[0], e[1]]];
+    if (em === "shut") cs = [[e[0], e[1]], [i === 0 ? e[0] - 1 : e[0] + 1, e[1]]];
+    else if (em === "up") cs = [[e[0], e[1] - 1]];
+    else if (em === "wide") cs = [[e[0], e[1]], [e[0], e[1] - 1]];
+    else if (em === "glance") cs = [[e[0] + 1, e[1]]];
+    cs.forEach(function (q) { kPut(g, q[0], q[1], "e"); });
+  });
+  if (mood.brows) KEYES.forEach(function (e, i) { kPut(g, i === 0 ? e[0] + 1 : e[0] - 1, e[1] - 1, "d"); });
+  var hop = pose.hop || mood.hop || 0;
+  if (pose.tall || mood.tall) { t = kBlank(); for (y = 0; y < KN; y++) for (x = 0; x < KN; x++) { c = g[y][x]; if (!c) continue; if (y <= 12 && c !== "z") { kPut(t, x, y - 1, c); if (y === 12) kPut(t, x, 12, c); } else kPut(t, x, y, c); } g = t; }
+  if (mood.squash) { t = kBlank(); for (y = 0; y < KN; y++) for (x = 0; x < KN; x++) { c = g[y][x]; if (!c || y === 7) continue; kPut(t, x, y < 7 ? y + 1 : y, c); } for (x = 2; x < 14; x++) t[15][x] = "z"; g = t; }
+  if (mood.tilt) { t = kBlank(); for (y = 0; y < KN; y++) for (x = 0; x < KN; x++) { c = g[y][x]; if (c) kPut(t, x + (y < 9 ? mood.tilt : 0), y, c); } g = t; }
+  if (hop) { t = kBlank(); for (y = 0; y < KN; y++) for (x = 0; x < KN; x++) { c = g[y][x]; if (!c || c === "z") continue; kPut(t, x, y - hop, c); } var sw = hop > 1 ? 6 : 8; for (x = 0; x < sw; x++) t[15][8 - sw / 2 + x] = "z"; g = t; }
+  (pose.arms || []).forEach(function (a) { var yy = a[1] - hop; if (yy >= 0 && !g[yy][a[0]]) g[yy][a[0]] = a[2]; });
+  var out = kBlank();
+  for (y = 0; y < KN; y++) for (x = 0; x < KN; x++) { c = g[y][x]; if (c) out[y][x] = p[c]; }
+  return out;
+}
+function kRects(cells, s) { var by = {}, order = [], H = cells.length, W = cells[0].length, y, x, c, n; for (y = 0; y < H; y++) { x = 0; while (x < W) { c = cells[y][x]; if (!c) { x++; continue; } n = 1; while (x + n < W && cells[y][x + n] === c) n++; if (!by[c]) { by[c] = ""; order.push(c); } by[c] += "M" + x * s + " " + y * s + "h" + n * s + "v" + s + "h-" + n * s + "z"; x += n; } } return order.map(function (f) { return { fill: f, d: by[f] }; }); }
+function kip(body, pn, mn, s) { return { px: KN * s, layers: kRects(kBuild(body, pn, mn), s) }; }
+function kHead(body, mn, s) { var g = kBuild(body, "rest", mn).slice(5, 12).map(function (r) { return r.slice(3, 13); }); return { w: 10 * s, h: 7 * s, layers: kRects(g, s) }; }
+
+class Component extends DCLogic {
+  renderVals() {
+    var c = this.props.kipColor ?? "#FB7185";
+    var dark = kLum(c) < 0.12;
+    return {
+      tileBg: kTile(c),
+      accent: dark ? "rgb(245,245,244)" : c,
+      noteBg: dark ? "rgb(20,22,27)" : kMix(c, "#0A0B0E", 0.88),
+      noteBorder: dark ? "rgb(44,47,55)" : kMix(c, "#0A0B0E", 0.7),
+      head: kHead(c, "idle", 3),
+      headSleepy: kHead(c, "blink", 3),
+      headS: kHead(c, "idle", 2),
+      note: kip(c, "rest", "glance", 3),
+      proud: kip(c, "rest", "proud", 3),
+      wave: kip(c, "wave", "idle", 3)
+    };
+  }
+}
+</script>
+</body>
+</html>

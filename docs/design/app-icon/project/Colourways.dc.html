@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Icon colourways</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;family=Silkscreen&amp;display=swap">
+<style>
+body{margin:0;background:#0A0B0E}
+a{color:#8EE3C8}a:hover{color:#C1F0E1}
+</style>
+</helmet>
+<div style="width: 1280px; height: 900px; box-sizing: border-box; padding: 44px 48px; background: #0A0B0E; color: #E7E9EE; font-family: Geist, system-ui, sans-serif; display: flex; flex-direction: column; gap: 24px">
+
+  <div style="display: flex; align-items: flex-end; justify-content: space-between; gap: 32px">
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: center; gap: 14px">
+        <h2 style="margin: 0; font-family: Silkscreen, monospace; font-weight: 400; font-size: 32px; line-height: 1">COLOURWAYS</h2>
+        <span style="font-family: Silkscreen, monospace; font-size: 12px; color: #0A0B0E; background: #FB7185; padding: 5px 8px 4px; border-radius: 4px">3 · A IN ALL 10</span>
+      </div>
+      <p style="margin: 0; font-size: 15px; line-height: 1.5; color: #A3A9B5; max-width: 760px">Direction A in every KIP colour. The ramp (shade side, eye colour) comes from the one body colour, exactly as in the engine, so ink gets light eyes automatically.</p>
+    </div>
+    <div style="max-width: 360px; background: #14161B; border: 1px solid #23262E; border-radius: 10px; padding: 12px 14px; display: flex; flex-direction: column; gap: 6px">
+      <span style="font-family: Silkscreen, monospace; font-size: 11px; color: #FDE047">OPTIONAL FEATURE</span>
+      <span style="font-size: 13px; line-height: 1.45; color: #C9CDD6">Alternate app icons: when someone recolours their KIP, offer to switch the home-screen icon to match. iOS supports this with alternate icons bundled in the build, and the switch shows a system confirmation.</span>
+    </div>
+  </div>
+
+  <div style="display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 16px">
+    <sc-for list="{{ways}}" as="w" hint-placeholder-count="10">
+      <div style="background: #14161B; border: 1px solid #23262E; border-radius: 12px; padding: 16px; display: flex; flex-direction: column; gap: 12px; align-items: flex-start">
+        <dc-import name="Icon" concept="face" body="{{w.hex}}" size="168" hint-size="168px,168px"></dc-import>
+        <div style="display: flex; justify-content: space-between; align-items: baseline; width: 100%">
+          <span style="font-family: Silkscreen, monospace; font-size: 13px">{{w.name}}</span>
+          <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #A3A9B5">{{w.hex}}</span>
+        </div>
+      </div>
+    </sc-for>
+  </div>
+
+  <div style="display: flex; gap: 16px">
+    <div style="flex: 1; background: #1B1F2A; border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+      <span style="font-family: Silkscreen, monospace; font-size: 11px; color: #A3A9B5">40 PX · DARK WALLPAPER · A THEN B</span>
+      <div style="display: flex; gap: 14px"><sc-for list="{{ways}}" as="w" hint-placeholder-count="10"><dc-import name="Icon" concept="face" body="{{w.hex}}" size="40" hint-size="40px,40px"></dc-import></sc-for></div>
+      <div style="display: flex; gap: 14px"><sc-for list="{{ways}}" as="w" hint-placeholder-count="10"><dc-import name="Icon" concept="stand" body="{{w.hex}}" size="40" hint-size="40px,40px"></dc-import></sc-for></div>
+    </div>
+    <div style="flex: 1; background: #E9E4DA; border-radius: 14px; padding: 16px; display: flex; flex-direction: column; gap: 10px">
+      <span style="font-family: Silkscreen, monospace; font-size: 11px; color: #4B4740">40 PX · LIGHT WALLPAPER · A THEN B</span>
+      <div style="display: flex; gap: 14px"><sc-for list="{{ways}}" as="w" hint-placeholder-count="10"><dc-import name="Icon" concept="face" body="{{w.hex}}" size="40" hint-size="40px,40px"></dc-import></sc-for></div>
+      <div style="display: flex; gap: 14px"><sc-for list="{{ways}}" as="w" hint-placeholder-count="10"><dc-import name="Icon" concept="stand" body="{{w.hex}}" size="40" hint-size="40px,40px"></dc-import></sc-for></div>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":900}}'>
+class Component extends DCLogic {
+  renderVals() {
+    return {
+      ways: [["coral", "#FB7185"], ["cobalt", "#3B82F6"], ["ink", "#2A2F3A"], ["lemon", "#FDE047"], ["lilac", "#C4B5FD"], ["lime", "#A3E635"], ["mint", "#6EE7B7"], ["sky", "#7DD3FC"], ["slate", "#64748B"], ["snow", "#F1F5F9"]].map(function (w) { return { name: w[0].toUpperCase(), hex: w[1] }; })
+    };
+  }
+}
+</script>
+</body>
+</html>

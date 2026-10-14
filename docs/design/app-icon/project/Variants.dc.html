@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Icon variants</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600&amp;family=Geist+Mono:wght@400;500&amp;family=Silkscreen&amp;display=swap">
+<style>
+body{margin:0;background:#0A0B0E}
+a{color:#8EE3C8}a:hover{color:#C1F0E1}
+</style>
+</helmet>
+<div style="width: 1280px; height: 1300px; box-sizing: border-box; padding: 44px 48px; background: #0A0B0E; color: #E7E9EE; font-family: Geist, system-ui, sans-serif; display: flex; flex-direction: column; gap: 24px">
+
+  <div style="display: flex; flex-direction: column; gap: 10px">
+    <div style="display: flex; align-items: center; gap: 14px">
+      <h2 style="margin: 0; font-family: Silkscreen, monospace; font-weight: 400; font-size: 32px; line-height: 1">VARIANTS</h2>
+      <span style="font-family: Silkscreen, monospace; font-size: 12px; color: #0A0B0E; background: #FB7185; padding: 5px 8px 4px; border-radius: 4px">4 · A ACROSS PLATFORMS</span>
+    </div>
+    <p style="margin: 0; font-size: 15px; line-height: 1.5; color: #A3A9B5; max-width: 900px">Direction A as the default. Its dark and tinted versions use J's block, since iOS wants a glyph on a dark ground there, so A and J are one family. Android splits A into a background layer (body and shade side) and a foreground layer (the eyes).</p>
+  </div>
+
+  <section style="display: flex; flex-direction: column; gap: 12px">
+    <h3 style="margin: 0; font-family: Silkscreen, monospace; font-weight: 400; font-size: 15px">IOS 18 · 1024 MASTER, SHOWN AT 180</h3>
+    <div style="display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 16px">
+      <div style="background: #E9E4DA; border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 14px; align-items: center">
+        <dc-import name="Icon" concept="face" size="180" hint-size="180px,180px"></dc-import>
+        <span style="font-family: Silkscreen, monospace; font-size: 12px; color: #2A2F3A">DEFAULT · A</span>
+      </div>
+      <div style="background: #000000; border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 14px; align-items: center">
+        <dc-import name="Icon" concept="block" size="180" hint-size="180px,180px"></dc-import>
+        <span style="font-family: Silkscreen, monospace; font-size: 12px; color: #A3A9B5">DARK · J BLOCK</span>
+      </div>
+      <div style="background: #000000; border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 14px; align-items: center">
+        <dc-import name="Icon" concept="block" mode="tinted" tint="#8EA7FF" size="180" hint-size="180px,180px"></dc-import>
+        <span style="font-family: Silkscreen, monospace; font-size: 12px; color: #A3A9B5">TINTED · BLUE</span>
+      </div>
+      <div style="background: #000000; border-radius: 14px; padding: 20px; display: flex; flex-direction: column; gap: 14px; align-items: center">
+        <dc-import name="Icon" concept="block" mode="tinted" tint="#F5B060" size="180" hint-size="180px,180px"></dc-import>
+        <span style="font-family: Silkscreen, monospace; font-size: 12px; color: #A3A9B5">TINTED · AMBER</span>
+      </div>
+    </div>
+    <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #A3A9B5">Dark ships as a 1024 image with the block on a near-black ground. Tinted ships as a grayscale image; iOS applies the tint the person picks, so the two tints here are only previews.</p>
+  </section>
+
+  <div style="display: flex; gap: 32px; align-items: flex-start">
+
+    <section style="flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 14px">
+      <h3 style="margin: 0; font-family: Silkscreen, monospace; font-weight: 400; font-size: 15px">ANDROID ADAPTIVE · 108 DP AT 2 PX PER DP</h3>
+      <div style="display: flex; gap: 16px">
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <dc-import name="Icon" concept="a_bg" size="216" mask="none" hint-size="216px,216px"></dc-import>
+          <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #A3A9B5">background layer</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <div style="width: 216px; height: 216px; background: #23262E; border-radius: 4px">
+            <dc-import name="Icon" concept="a_fg" size="216" mask="none" hint-size="216px,216px"></dc-import>
+          </div>
+          <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #A3A9B5">foreground layer · transparent</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px">
+          <div style="position: relative; width: 216px; height: 216px">
+            <dc-import name="Icon" concept="a_full" size="216" mask="none" hint-size="216px,216px"></dc-import>
+            <div style="position: absolute; left: 36px; top: 36px; width: 144px; height: 144px; border: 2px dashed #F8FAFC; box-sizing: border-box"></div>
+            <div style="position: absolute; left: 42px; top: 42px; width: 132px; height: 132px; border: 2px dashed #FDE047; border-radius: 50%; box-sizing: border-box"></div>
+          </div>
+          <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #A3A9B5"><span style="color: #F8FAFC">72 dp visible</span> · <span style="color: #FDE047">66 dp safe circle</span></span>
+        </div>
+      </div>
+
+      <div style="display: flex; gap: 20px; align-items: flex-end">
+        <div style="display: flex; flex-direction: column; gap: 8px; align-items: center">
+          <div style="width: 96px; height: 96px; border-radius: 50%; overflow: hidden; position: relative"><div style="position: absolute; left: -24px; top: -24px"><dc-import name="Icon" concept="a_full" size="144" mask="none" hint-size="144px,144px"></dc-import></div></div>
+          <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #A3A9B5">circle</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px; align-items: center">
+          <div style="width: 96px; height: 96px; border-radius: 32%; overflow: hidden; position: relative"><div style="position: absolute; left: -24px; top: -24px"><dc-import name="Icon" concept="a_full" size="144" mask="none" hint-size="144px,144px"></dc-import></div></div>
+          <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #A3A9B5">squircle</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px; align-items: center">
+          <div style="width: 96px; height: 96px; border-radius: 16%; overflow: hidden; position: relative"><div style="position: absolute; left: -24px; top: -24px"><dc-import name="Icon" concept="a_full" size="144" mask="none" hint-size="144px,144px"></dc-import></div></div>
+          <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #A3A9B5">rounded</span>
+        </div>
+        <div style="width: 1px; align-self: stretch; background: #23262E"></div>
+        <div style="display: flex; flex-direction: column; gap: 8px; align-items: center">
+          <div style="position: relative; width: 144px; height: 144px; background: #23262E; border-radius: 4px">
+            <dc-import name="Icon" concept="a_mono" size="144" mask="none" hint-size="144px,144px"></dc-import>
+            <div style="position: absolute; left: 28px; top: 28px; width: 88px; height: 88px; border: 2px dashed #FDE047; border-radius: 50%; box-sizing: border-box"></div>
+          </div>
+          <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #A3A9B5">monochrome layer</span>
+        </div>
+        <div style="display: flex; flex-direction: column; gap: 8px; align-items: center">
+          <div style="width: 96px; height: 96px; border-radius: 50%; overflow: hidden; position: relative; background: #33405A"><div style="position: absolute; left: -24px; top: -24px; opacity: 0.9"><dc-import name="Icon" concept="a_mono" size="144" mask="none" hint-size="144px,144px"></dc-import></div></div>
+          <span style="font-family: 'Geist Mono', monospace; font-size: 11px; color: #A3A9B5">themed preview</span>
+        </div>
+      </div>
+      <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #A3A9B5">The eyes sit well inside the safe circle, so every launcher mask keeps them. The shade side lives on the background layer and shows at the right edge under any mask. The monochrome layer is the J block with the eyes cut out; the launcher recolours it.</p>
+    </section>
+
+    <section style="width: 300px; flex: none; display: flex; flex-direction: column; gap: 14px">
+      <h3 style="margin: 0; font-family: Silkscreen, monospace; font-weight: 400; font-size: 15px">SPLASH · #0A0B0E</h3>
+      <div style="width: 300px; height: 620px; box-sizing: border-box; border: 8px solid #000000; outline: 1px solid #23262E; border-radius: 44px; background: #0A0B0E; display: flex; align-items: center; justify-content: center">
+        <dc-import name="Icon" concept="sprite" size="128" mask="none" hint-size="128px,128px"></dc-import>
+      </div>
+      <p style="margin: 0; font-size: 13px; line-height: 1.5; color: #A3A9B5">The engine's KIP sprite at 8x, centred on the existing splash colour, so the launch hands off straight into the dark app.</p>
+    </section>
+
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"$preview":{"width":1280,"height":1300}}'>
+class Component extends DCLogic {
+  renderVals() { return {}; }
+}
+</script>
+</body>
+</html>

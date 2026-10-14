@@ -1,0 +1,129 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>K7 · Split with data</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Silkscreen&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.b{display:inline-flex;align-items:center;justify-content:center;box-sizing:border-box;font-family:'Geist',system-ui,sans-serif;font-weight:500;white-space:nowrap;cursor:pointer;gap:6px;border:1px solid transparent;border-radius:8px;background:transparent;color:rgb(245,245,244);text-decoration:none}
+.ol{border-color:rgb(44,47,55);background:rgba(44,47,55,.3)}
+.df{background:rgb(245,245,244);color:rgb(10,11,14)}
+.label{font-family:'Silkscreen',monospace;font-size:11px;line-height:14px;letter-spacing:1px;text-transform:uppercase;color:rgb(155,157,166)}
+.num{font-variant-numeric:tabular-nums}
+.muted{color:rgb(155,157,166)}
+.card{border-radius:22px;background:rgb(20,22,27);border:1px solid rgb(30,33,40);box-sizing:border-box}
+.mini{width:32px;height:32px;flex:none;border-radius:8px;display:flex;align-items:center;justify-content:center}
+.ref{display:inline;padding:1px 4px;margin:0 -2px;border:0;border-radius:6px;font:inherit;color:inherit;cursor:pointer;text-decoration:underline dotted;text-underline-offset:4px}
+.chip{min-height:36px;padding:7px 12px;font-size:13px;white-space:normal;text-align:left}
+</style>
+</helmet>
+<div style="width: 390px; height: 1400px; box-sizing: border-box; overflow: hidden; background: rgb(10,11,14); color: rgb(245,245,244); font-family: 'Geist', system-ui, sans-serif; display: flex; flex-direction: column; padding-top: 50px">
+
+  <div style="display: flex; align-items: center; gap: 10px; padding: 4px 20px 10px">
+    <div class="mini" style="background: {{tileBg}}"><svg aria-hidden="true" width="{{head.w}}" height="{{head.h}}" shape-rendering="crispEdges"><sc-for list="{{head.layers}}" as="l" hint-placeholder-count="0"><path d="{{l.d}}" fill="{{l.fill}}"></path></sc-for></svg></div>
+    <h1 style="flex: 1; margin: 0; font-family: 'Silkscreen', monospace; font-weight: 400; font-size: 22px; letter-spacing: 1px">KIP</h1>
+    <button class="b ol" aria-label="Conversations and what KIP remembers" style="width: 44px; height: 44px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><path d="M4 7h16M4 12h16M4 17h16"></path></svg></button>
+    <button class="b ol" aria-label="New chat" style="width: 44px; height: 44px"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 20h9"></path><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z"></path></svg></button>
+  </div>
+
+  <div style="padding: 4px 20px 0">
+    <section class="card" aria-label="Data KIP is talking about" style="padding: 14px 16px; display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: center; justify-content: space-between"><span class="label" style="color: {{accent}}">KIP is pointing at</span><a href="#" style="font-size: 13px; color: rgb(245,245,244); text-decoration: underline; text-underline-offset: 3px">Open {{chartLink}} ›</a></div>
+      <div style="display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px">
+        <button class="b {{sleepCls}}" aria-pressed="{{isSleep}}" style="height: 36px; font-size: 13px" onClick="{{toSleep}}">Sleep · this week</button>
+        <button class="b {{hrvCls}}" aria-pressed="{{isHrv}}" style="height: 36px; font-size: 13px" onClick="{{toHrv}}">HRV · 7 days</button>
+      </div>
+      <svg role="img" aria-label="{{chartAria}}" width="318" height="150" shape-rendering="crispEdges" style="display: block">
+        <sc-for list="{{bars}}" as="b" hint-placeholder-count="7">
+          <rect x="{{b.x}}" y="{{b.y}}" width="30" height="{{b.h}}" fill="{{b.fill}}"></rect>
+          <text x="{{b.cx}}" y="{{b.ty}}" text-anchor="middle" font-family="Geist, system-ui, sans-serif" font-size="11" font-weight="{{b.fw}}" fill="{{b.tc}}">{{b.v}}</text>
+          <text x="{{b.cx}}" y="146" text-anchor="middle" font-family="Silkscreen, monospace" font-size="9" fill="rgb(155,157,166)">{{b.d}}</text>
+        </sc-for>
+        <rect x="0" y="{{usualY}}" width="318" height="1" fill="rgba(245,245,244,.55)"></rect>
+        <text x="318" y="{{usualTy}}" text-anchor="end" font-family="Geist, system-ui, sans-serif" font-size="11" fill="rgb(200,200,205)">usual {{usual}}</text>
+      </svg>
+      <span class="muted" style="font-size: 13px">{{chartNote}}</span>
+    </section>
+  </div>
+
+  <div style="flex: 1; display: flex; flex-direction: column; gap: 16px; padding: 18px 20px 12px; min-height: 0">
+    <div style="align-self: flex-end; max-width: 78%; padding: 10px 14px; border-radius: 12px; background: rgb(44,47,55); font-size: 15px; line-height: 21px">Why is my recovery lower today?</div>
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <span class="label" style="color: {{accent}}">KIP</span>
+      <div style="font-size: 16px; line-height: 25px">Two short nights in a row. Look at <button class="ref" style="{{sleepRef}}" onClick="{{toSleep}}">your sleep this week</button>: Monday and last night both came in under your usual. That shows up in <button class="ref" style="{{hrvRef}}" onClick="{{toHrv}}">your HRV</button>, which has drifted down for three days.</div>
+      <div style="border-radius: 10px; padding: 8px 10px; background: rgb(15,42,42); color: rgb(204,251,241); font-size: 14px; line-height: 20px">Try: start winding down by 22:30 tonight and keep the room cool.</div>
+      <span class="muted" style="font-size: 12px">Tap an underlined phrase to see it above. Comparisons against your own readings, not medical advice.</span>
+      <div style="display: flex; flex-wrap: wrap; gap: 8px"><button class="b ol chip">Is this a weekly pattern?</button><button class="b ol chip">What helps my HRV recover?</button></div>
+    </div>
+    <div style="align-self: flex-end; max-width: 78%; padding: 10px 14px; border-radius: 12px; background: rgb(44,47,55); font-size: 15px; line-height: 21px">Is this a weekly pattern?</div>
+    <div style="display: flex; flex-direction: column; gap: 10px">
+      <span class="label" style="color: {{accent}}">KIP</span>
+      <div style="font-size: 16px; line-height: 25px">A little. Sunday nights run late for you most weeks, so Mondays start short. <button class="ref" style="{{sleepRef}}" onClick="{{toSleep}}">This week</button> follows that shape.</div>
+    </div>
+  </div>
+
+  <div style="padding: 4px 16px 34px">
+    <div style="display: flex; align-items: center; gap: 8px; border: 1px solid rgb(44,47,55); border-radius: 12px; padding: 6px 6px 6px 14px; background: rgb(20,22,27)">
+      <label for="k7-input" style="position: absolute; left: -9999px">Message KIP</label>
+      <input id="k7-input" placeholder="Ask KIP…" style="flex: 1; min-width: 0; height: 36px; border: 0; outline: none; background: transparent; color: rgb(245,245,244); font: 15px 'Geist', system-ui, sans-serif">
+      <button class="b ol" aria-label="Prompt shortcuts" style="width: 36px; height: 36px; font-size: 16px">/</button>
+      <button class="b df" aria-label="Send" style="width: 36px; height: 36px"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M12 19V5M5 12l7-7 7 7"></path></svg></button>
+    </div>
+  </div>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"kipColor":{"editor":"color","default":"#FB7185","options":["#FB7185","#3B82F6","#A3E635","#2A2F3A"]},"$preview":{"width":390,"height":1400}}'>
+var KN = 16, KE = "................", KBODY = "....bbbbbbbs....";
+var KBASE = [KE, KE, KE, KE, KE, KE, KBODY, KBODY, KBODY, KBODY, KBODY, KBODY, KBODY, ".....b....s.....", ".....b....s.....", "...zzzzzzzzzz..."];
+var KEYES = [[6, 8], [9, 8]];
+function kRgb(h) { var n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function kHx(n) { var s = Math.max(0, Math.min(255, Math.round(n))).toString(16); return s.length < 2 ? "0" + s : s; }
+function kMix(a, b, k) { var x = kRgb(a), y = kRgb(b); return "#" + kHx(x[0] * (1 - k) + y[0] * k) + kHx(x[1] * (1 - k) + y[1] * k) + kHx(x[2] * (1 - k) + y[2] * k); }
+function kDark(a, k) { var x = kRgb(a); return "#" + kHx(x[0] * k) + kHx(x[1] * k) + kHx(x[2] * k); }
+function kLum(h) { var c = kRgb(h).map(function (v) { v = v / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; }
+function kRamp(body) { return { b: body, h: kMix(body, "#FFFFFF", 0.25), s: kDark(body, 0.78), d: kDark(body, 0.6), e: kLum(body) > 0.2 ? "#14161B" : "#F5F5F4", w: "#F8FAFC", z: "rgba(0,0,0,0.35)" }; }
+function kTile(body) { return kLum(body) < 0.12 ? "#EDEBE6" : kMix(body, "#14161B", 0.82); }
+function kRects(cells, s) { var by = {}, order = [], H = cells.length, W = cells[0].length, y, x, c, n; for (y = 0; y < H; y++) { x = 0; while (x < W) { c = cells[y][x]; if (!c) { x++; continue; } n = 1; while (x + n < W && cells[y][x + n] === c) n++; if (!by[c]) { by[c] = ""; order.push(c); } by[c] += "M" + x * s + " " + y * s + "h" + n * s + "v" + s + "h-" + n * s + "z"; x += n; } } return order.map(function (f) { return { fill: f, d: by[f] }; }); }
+// The head crop with eyes glancing toward the chart.
+function kHead(body, s) { var p = kRamp(body), g = [], y, x; for (y = 5; y < 12; y++) { var row = []; for (x = 3; x < 13; x++) { var L = KBASE[y][x]; row.push(L === "." || L === "z" ? null : p[L]); } g.push(row); } g[8 - 5][7 - 3] = p.e; g[8 - 5][10 - 3] = p.e; return { w: 10 * s, h: 7 * s, layers: kRects(g, s) }; }
+
+var DAYS = ["WED", "THU", "FRI", "SAT", "SUN", "MON", "TUE"];
+var DATA = {
+  sleep: { vals: [7.1, 7.4, 7.9, 7.6, 6.8, 6.4, 6.4], labels: ["7h 6m", "7h 24m", "7h 54m", "7h 36m", "6h 48m", "6h 24m", "6h 22m"], lo: 4, hi: 9, usual: 7.2, usualLabel: "7h 13m", hl: [5, 6], note: "Monday and last night, both under your usual.", link: "Sleep", aria: "Sleep for the last 7 nights, Monday and Tuesday highlighted below usual" },
+  hrv: { vals: [49, 51, 50, 47, 46, 44, 41], labels: ["49", "51", "50", "47", "46", "44", "41"], lo: 30, hi: 60, usual: 48, usualLabel: "48 ms", hl: [4, 5, 6], note: "Three days drifting down, in milliseconds.", link: "HRV", aria: "HRV for the last 7 days, the last three highlighted and falling" }
+};
+
+class Component extends DCLogic {
+  constructor(props) { super(props); this.state = { ref: "sleep" }; }
+  renderVals() {
+    var self = this, c = this.props.kipColor ?? "#FB7185", dark = kLum(c) < 0.12, accent = dark ? "#F5F5F4" : c;
+    var D = DATA[this.state.ref], H = 110, top = 18;
+    function yOf(v) { return top + H - Math.round((v - D.lo) / (D.hi - D.lo) * H); }
+    var bars = D.vals.map(function (v, i) {
+      var on = D.hl.indexOf(i) >= 0, y = yOf(v), x = i * 48;
+      return { x: x, y: y, h: top + H - y, cx: x + 15, ty: y - 5, v: D.labels[i], d: DAYS[i], fill: on ? accent : "rgb(52,56,66)", tc: on ? "rgb(245,245,244)" : "rgb(155,157,166)", fw: on ? "700" : "400" };
+    });
+    var uy = yOf(D.usual), tint = dark ? "rgba(245,245,244,.16)" : kMix(c, "#0A0B0E", 0.7);
+    var isSleep = this.state.ref === "sleep";
+    return {
+      tileBg: kTile(c), head: kHead(c, 2), accent: accent,
+      bars: bars, usualY: uy, usualTy: uy - 4 < 10 ? uy + 12 : uy - 4, usual: D.usualLabel,
+      chartNote: D.note, chartLink: D.link, chartAria: D.aria,
+      isSleep: isSleep, isHrv: !isSleep,
+      sleepCls: isSleep ? "df" : "ol", hrvCls: isSleep ? "ol" : "df",
+      sleepRef: isSleep ? "background: " + tint : "background: transparent",
+      hrvRef: isSleep ? "background: transparent" : "background: " + tint,
+      toSleep: function () { self.setState({ ref: "sleep" }); },
+      toHrv: function () { self.setState({ ref: "hrv" }); }
+    };
+  }
+}
+</script>
+</body>
+</html>

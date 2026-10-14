@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Catalogue · KIP outfit</title>
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&amp;family=Silkscreen&amp;display=swap" rel="stylesheet">
+<style>
+body{margin:0}
+.label{font-family:'Silkscreen',monospace;font-size:11px;line-height:14px;letter-spacing:1px;text-transform:uppercase;color:rgb(155,157,166)}
+.tile{position:relative;border-radius:12px;background:rgb(20,22,27);border:1px solid rgb(36,39,46);padding:10px;display:flex;flex-direction:column;gap:6px;min-width:0;box-sizing:border-box}
+.pic{display:flex;align-items:flex-end;justify-content:center;border-radius:8px;background:rgb(14,15,19);height:76px;overflow:hidden}
+.nm{font-size:13px;font-weight:600;line-height:17px}
+.bd{display:flex;gap:4px;flex-wrap:wrap;min-height:14px}
+.bdg{font-family:'Silkscreen',monospace;font-size:8px;line-height:10px;letter-spacing:1px;padding:1px 4px;border-radius:4px;border:1px solid currentColor}
+.st{font-size:11px;line-height:15px;color:rgb(155,157,166)}
+.stk{font-family:'Silkscreen',monospace;font-size:8px;letter-spacing:1px;text-transform:uppercase}
+.lock{position:absolute;right:8px;top:8px}
+.grid{display:grid;grid-template-columns:repeat(8,minmax(0,1fr));gap:10px}
+</style>
+</helmet>
+<div style="width: 1280px; height: 1460px; box-sizing: border-box; background: rgb(10,11,14); color: rgb(245,245,244); font-family: 'Geist', system-ui, sans-serif; padding: 28px 32px; display: flex; flex-direction: column; gap: 22px">
+  <div style="display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap">
+    <h2 style="margin: 0; font-family: 'Silkscreen', monospace; font-weight: 400; font-size: 20px; letter-spacing: 1px">KIP OUTFIT</h2>
+    <span class="st" style="font-size: 13px">Worn slots, drawn on plain KIP at ×4. Drawing order: head, face, neck, then ears, so headphones sit over a hat band.</span>
+    <span style="flex: 1"></span>
+    <span class="st" style="font-size: 12px"><span class="bdg" style="color: {{accent}}">TINT</span> <span class="bdg" style="color: #FDE047">GLOW</span> <span class="bdg" style="color: #67E8F9">ANIM</span></span>
+  </div>
+  <sc-for list="{{sections}}" as="s" hint-placeholder-count="5">
+    <section style="display: flex; flex-direction: column; gap: 10px">
+      <div style="display: flex; align-items: baseline; gap: 10px"><span class="label" style="color: rgb(245,245,244)">{{s.slot}}</span><span class="st">{{s.note}}</span></div>
+      <div class="grid">
+        <sc-for list="{{s.tiles}}" as="t" hint-placeholder-count="8">
+          <div class="tile">
+            <sc-if value="{{t.locked}}" hint-placeholder-val="{{ false }}"><svg class="lock" width="12" height="12" viewBox="0 0 12 12" shape-rendering="crispEdges" aria-hidden="true"><rect x="3" y="1" width="6" height="1" fill="#9B9DA6"></rect><rect x="2" y="2" width="1" height="3" fill="#9B9DA6"></rect><rect x="9" y="2" width="1" height="3" fill="#9B9DA6"></rect><rect x="1" y="5" width="10" height="6" fill="#9B9DA6"></rect><rect x="5" y="7" width="2" height="2" fill="#14161B"></rect></svg></sc-if>
+            <div class="pic"><svg role="img" aria-label="KIP wearing {{t.name}}" width="{{t.pic.px}}" height="{{t.pic.px}}" shape-rendering="crispEdges" style="margin-bottom: -4px; {{t.dim}}"><sc-for list="{{t.pic.layers}}" as="l" hint-placeholder-count="0"><path d="{{l.d}}" fill="{{l.fill}}"></path></sc-for></svg></div>
+            <div class="nm">{{t.name}}</div>
+            <div class="bd"><sc-for list="{{t.badges}}" as="b" hint-placeholder-count="0"><span class="bdg" style="color: {{b.c}}">{{b.t}}</span></sc-for></div>
+            <div class="st"><span class="stk" style="color: {{t.sc}}">{{t.status}}</span><br>{{t.unlock}}</div>
+          </div>
+        </sc-for>
+      </div>
+    </section>
+  </sc-for>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props='{"kipColor":{"editor":"color","default":"#FB7185","options":["#FB7185","#3B82F6","#A3E635","#C4B5FD"]},"$preview":{"width":1280,"height":1460}}'>
+var KN = 16, KE = "................", KBODY = "....bbbbbbbs....";
+var KBASE = [KE, KE, KE, KE, KE, KE, KBODY, KBODY, KBODY, KBODY, KBODY, KBODY, KBODY, ".....b....s.....", ".....b....s.....", "...zzzzzzzzzz..."];
+var KEYES = [[6, 8], [9, 8]];
+function kRgb(h) { var n = parseInt(h.slice(1), 16); return [(n >> 16) & 255, (n >> 8) & 255, n & 255]; }
+function kHx(n) { var s = Math.max(0, Math.min(255, Math.round(n))).toString(16); return s.length < 2 ? "0" + s : s; }
+function kMix(a, b, k) { var x = kRgb(a), y = kRgb(b); return "#" + kHx(x[0] * (1 - k) + y[0] * k) + kHx(x[1] * (1 - k) + y[1] * k) + kHx(x[2] * (1 - k) + y[2] * k); }
+function kDark(a, k) { var x = kRgb(a); return "#" + kHx(x[0] * k) + kHx(x[1] * k) + kHx(x[2] * k); }
+function kLum(h) { var c = kRgb(h).map(function (v) { v = v / 255; return v <= 0.03928 ? v / 12.92 : Math.pow((v + 0.055) / 1.055, 2.4); }); return 0.2126 * c[0] + 0.7152 * c[1] + 0.0722 * c[2]; }
+function kRamp(body) { return { b: body, h: kMix(body, "#FFFFFF", 0.25), s: kDark(body, 0.78), d: kDark(body, 0.6), e: kLum(body) > 0.2 ? "#14161B" : "#F5F5F4", w: "#F8FAFC", z: "rgba(0,0,0,0.35)" }; }
+function kRects(cells, s) { var by = {}, order = [], H = cells.length, W = cells[0].length, y, x, c, n; for (y = 0; y < H; y++) { x = 0; while (x < W) { c = cells[y][x]; if (!c) { x++; continue; } n = 1; while (x + n < W && cells[y][x + n] === c) n++; if (!by[c]) { by[c] = ""; order.push(c); } by[c] += "M" + x * s + " " + y * s + "h" + n * s + "v" + s + "h-" + n * s + "z"; x += n; } } return order.map(function (f) { return { fill: f, d: by[f] }; }); }
+var FAM = { SG: "Sleep goal", SB: "Steady bedtime", ST: "Step goal", CI: "Check-in", BR: "Best recovery week", EL: "Every day logged", SM: "Steadiest month" };
+var ROM = ["", "I", "II", "III", "IV", "V"];
+function unl(c) { if (c === "S") return "Yours from day one"; var m = c.match(/^([A-Z]+)(\d+)$/), n = +m[2]; if (m[1] === "ANY") return "Any family · level " + ROM[n]; if (m[1] === "RC") return "Read " + n + " weekly recaps"; if (m[1] === "CB") return "Cheer a buddy " + n + " times"; return FAM[m[1]] + " · " + ROM[n]; }
+function owned(c) { return c === "S" || /^[A-Z]+1$/.test(c) && !/^(RC|CB)/.test(c) || c === "RC4" || c === "CB5"; }
+var BADGE = { T: "TINT", G: "GLOW", A: "ANIM" };
+// [id, name, unlock, flags, slot, at, rows, palette]
+var OUT = [
+  ["beanie", "Beanie", "S", "", "head", [4, 2], ["...wW...", ".LLrrrR.", "LrrrrrrR", "ddddddDD"], { w: "#F8FAFC", W: "#CBD5E1", r: "#EF4444", L: "#F87171", R: "#B91C1C", d: "#B91C1C", D: "#7F1D1D" }],
+  ["cap", "Cap", "ST1", "", "head", [4, 4], [".LbbbbR....", "bbbbbbbbkkk"], { b: "#2563EB", L: "#60A5FA", R: "#1E40AF", k: "#1E3A8A" }],
+  ["sweatband", "Sweatband", "ST2", "", "head", [4, 6], ["wwwwwwww", "rrrrrrrr"], { w: "#F8FAFC", r: "#DC2626" }],
+  ["bucket", "Bucket hat", "SG2", "T", "head", [3, 3], ["..cccccc..", "..dddddd..", "bbbbbbbbbb"], { c: "@h", d: "@d", b: "@s" }],
+  ["hachimaki", "Hachimaki headband", "SB2", "", "head", [4, 6], ["wwwrrwwwwW", ".........W"], { w: "#F8FAFC", r: "#DC2626", W: "#E5E7EB" }],
+  ["beret", "Beret", "BR2", "", "head", [4, 3], ["...k.....", ".bbbbbb..", "bbbbbbbbb"], { b: "#B91C1C", k: "#111827" }],
+  ["chef", "Chef hat", "EL3", "", "head", [4, 0], [".WWWWWW.", "WWWWWWWW", "WWWWWWWW", ".WWWWWW.", "gggggggg", "gggggggg"], { W: "#F8FAFC", g: "#E5E7EB" }],
+  ["party", "Party hat", "CB5", "TA", "head", [6, 0], ["..y..", "..p..", ".ppp.", ".pyp.", "ppppp", "pypyp"], { p: "@h", y: "#FDE047" }],
+  ["crown", "Crown", "ANY5", "G", "head", [4, 3], ["y..yy..Y", "LyyyyyyY", "yryyyyrY"], { y: "#FACC15", L: "#FDE68A", Y: "#CA8A04", r: "#EF4444" }],
+  ["round", "Round glasses", "CI1", "", "face", [5, 7], ["FFFFFf", "f.ff.f", "ffffff"], { F: "#FCD34D", f: "#D97706" }],
+  ["shades", "Shades", "BR3", "", "face", [4, 8], ["kgkkkgkk", ".kk..kk."], { k: "#0B0B10", g: "#64748B" }],
+  ["paint", "Face paint stripes", "CI3", "", "face", [5, 10], ["ww..ww", "bb..bb"], { w: "#F8FAFC", b: "#60A5FA" }],
+  ["monocle", "Monocle", "SM3", "", "face", [8, 7], ["ggg", "g.g", "ggg", ".g.", "..g"], { g: "#FACC15" }],
+  ["mask", "Sleep mask, pushed up", "SG5", "", "face", [4, 6], ["kkkkkkkk", ".mm..mm."], { k: "#334155", m: "#C4B5FD" }],
+  ["scarf", "Scarf", "SB1", "", "neck", [3, 10], ["LssssssssS", ".ddddddLs.", ".......Ls.", ".......dd."], { L: "#F87171", s: "#DC2626", S: "#991B1B", d: "#991B1B" }],
+  ["bowtie", "Bow tie", "EL2", "", "neck", [5, 10], ["bb..bb", "bbkkbb", "bb..bb"], { b: "#2563EB", k: "#1E3A8A" }],
+  ["towel", "Gym towel", "ST3", "", "neck", [3, 10], ["ssssssssss", "w........w", "w........w"], { s: "#60A5FA", w: "#F1F5F9" }],
+  ["bandana", "Bandana", "CB10", "", "neck", [5, 10], ["Lbbbbb", ".bwbB.", "..bB.."], { L: "#60A5FA", b: "#2563EB", B: "#1E40AF", w: "#F8FAFC" }],
+  ["medal", "Medal", "BR5", "G", "neck", [6, 9], ["r..b", ".rb.", ".yy.", ".yy."], { r: "#DC2626", b: "#2563EB", y: "#FACC15" }],
+  ["earbuds", "Earbuds", "S", "", "ears", [3, 8], ["w........w", "w........w"], { w: "#F8FAFC" }],
+  ["phones", "Headphones", "EL1", "", "ears", [3, 5], ["..kkkkkk..", ".k......k.", "cc......cc", "cC......cC", "cc......cc"], { k: "#1F2937", c: "#38BDF8", C: "#0369A1" }],
+  ["muffs", "Earmuffs", "SG3", "", "ears", [3, 5], ["..kkkkkk..", ".k......k.", "ww......ww", "ww......ww", "ww......ww"], { k: "#94A3B8", w: "#FBCFE8" }]
+];
+var BY = {}; OUT.forEach(function (o) { BY[o[0]] = o; });
+var ORDER = ["head", "face", "neck", "ears"];
+function dressed(body, ids) {
+  var p = kRamp(body), g = [], x, y;
+  for (y = 0; y < KN; y++) { var row = []; for (x = 0; x < KN; x++) { var L = KBASE[y][x]; row.push(L === "." ? null : p[L]); } g.push(row); }
+  KEYES.forEach(function (e) { g[e[1]][e[0]] = p.e; });
+  var list = ids.map(function (id) { return BY[id]; });
+  ORDER.forEach(function (slot) {
+    list.forEach(function (o) {
+      if (o[4] !== slot) return;
+      o[6].forEach(function (rowS, j) { for (var k = 0; k < rowS.length; k++) { var L = rowS[k]; if (L === ".") continue; var c = o[7][L]; if (c.charAt(0) === "@") c = p[c.slice(1)]; var X = o[5][0] + k, Y = o[5][1] + j; if (X >= 0 && Y >= 0 && X < KN && Y < KN) g[Y][X] = c; } });
+    });
+  });
+  return { px: KN * 4, layers: kRects(g, 4) };
+}
+function tile(o, body, accent) {
+  var c = o[2], own = owned(c);
+  return {
+    name: o[1], locked: !own, dim: own ? "" : "opacity: .5", pic: dressed(body, [o[0]]),
+    badges: o[3].split("").map(function (k) { return { t: BADGE[k], c: k === "T" ? accent : k === "G" ? "#FDE047" : "#67E8F9" }; }),
+    status: c === "S" ? "Starter" : own ? "Earned" : "Locked", sc: c === "S" ? "rgb(245,245,244)" : own ? "#4ADE80" : "rgb(155,157,166)", unlock: unl(c)
+  };
+}
+function combo(name, ids, body, note) { return { name: name, locked: false, dim: "", pic: dressed(body, ids), badges: [], status: "Outfit", sc: "rgb(245,245,244)", unlock: note }; }
+
+class Component extends DCLogic {
+  renderVals() {
+    var col = this.props.kipColor ?? "#FB7185";
+    function sec(slot, note) { var t = OUT.filter(function (o) { return o[4] === slot; }); return { slot: "slot · " + slot, note: t.length + " items · " + note, tiles: t.map(function (o) { return tile(o, col, col); }) }; }
+    return {
+      accent: col,
+      sections: [
+        sec("head", "hats and bands, above the eyes"),
+        sec("face", "over or around the eyes"),
+        sec("neck", "rows 10 to 12, over the body"),
+        sec("ears", "drawn last, over any hat band"),
+        { slot: "combined", note: "one item per slot, worn together", tiles: [
+          combo("Beanie + headphones", ["beanie", "phones"], col, "Ears draw over the hat band"),
+          combo("Sweatband + towel", ["sweatband", "towel"], col, "Home gym set look"),
+          combo("Hachimaki + earbuds", ["hachimaki", "earbuds"], col, "Japanese set look"),
+          combo("Crown + round glasses + medal", ["crown", "round", "medal"], col, "Late-game look"),
+          combo("Chef hat + bow tie", ["chef", "bowtie"], col, "Head and neck"),
+          combo("Bucket hat + shades + bandana", ["bucket", "shades", "bandana"], col, "Head, face and neck")
+        ] }
+      ]
+    };
+  }
+}
+</script>
+</body>
+</html>
