@@ -93,7 +93,7 @@ These components are used only by Home today, and Home F replaces them:
 
 | # | When | State | Your KIP (pose, mood) |
 | --- | --- | --- | --- |
-| 1 | Local time 21:00–04:59 | **night** (F6): stars, the moon, the lit window, no flowers | rest, sleepy |
+| 1 | Local time 20:00–04:59 | **night** (F6): stars, the moon, the lit window, no flowers | rest, sleepy |
 | 2 | Last night was short (below) | **short** (F5): haze, a small sun, a cloud, a few flowers | coffee, sleepy |
 | 3 | Today's Recovery weather is `clear` | **clear** (F1): the big sun, a meadow, birds and a butterfly | cheer, proud |
 | 4 | … `mostlyClear` | **mostly** (F2) | wave, idle |
@@ -111,9 +111,10 @@ These components are used only by Home today, and Home F replaces them:
 - **Last night was short** when the night dated today exists (nights are dated by the morning you woke up), its
   `mainIsNap` is not true, and its `mainMinutesAsleep` is under 360. This needs a **new read**:
   `fetchSleep(today, today)`. A failed read means "not short".
-- **Night** uses the device's local time, the same clock as the greeting.
+- **Night** uses the device's local time, the same clock as the greeting. It starts at 20:00, not the board's
+  "after 9 pm" (owner decision, 2026-10-13).
 - **When it updates.** The state is computed again when Home gains focus, when the app returns to the foreground,
-  and by a timer set to the next 05:00 or 21:00 boundary. The timer is cleared on blur.
+  and by a timer set to the next 05:00 or 20:00 boundary. The timer is cleared on blur.
 
 ### This differs from the handoff's assumed mapping, on purpose
 
@@ -277,7 +278,7 @@ bar is light while Home is focused. The page below the scene follows the theme a
 
 - **`scene.ts`:**
   - `sceneState` covers every row of the table:
-    - the night window edges (20:59, 21:00, 04:59 and 05:00);
+    - the night window edges (19:59, 20:00, 04:59 and 05:00);
     - a short night beating every band, and night beating a short night;
     - each band;
     - the fallback for `building`, `none`, an old score and a failed read;

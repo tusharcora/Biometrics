@@ -645,8 +645,8 @@ describe('DashboardScreen: Home F', () => {
     expect(screen.getByTestId('home-tile-sleep-line')).toHaveTextContent('5h 10m · short');
   });
 
-  it('recomputes the state at 21:00, on focus and on return to the foreground, with no timer while blurred', async () => {
-    jest.useFakeTimers({ now: new Date(2026, 9, 13, 20, 59, 30), ...FAKE });
+  it('recomputes the state at 20:00, on focus and on return to the foreground, with no timer while blurred', async () => {
+    jest.useFakeTimers({ now: new Date(2026, 9, 13, 19, 59, 30), ...FAKE });
     const appHandlers = captureAppState();
     mockApi({ records: steps });
     render(<DashboardScreen />);
@@ -658,7 +658,7 @@ describe('DashboardScreen: Home F', () => {
 
     // Blurred: 05:00 passes with no timer running, until Home is focused again.
     fire('blur');
-    act(() => jest.advanceTimersByTime(8 * 3_600_000 + 60_000));
+    act(() => jest.advanceTimersByTime(9 * 3_600_000 + 60_000));
     expect(sceneKey()).toBe('night');
     fire('focus');
     expect(sceneKey()).toBe('fallback');

@@ -239,10 +239,10 @@ const WEATHER_SCENE: Partial<Record<WeatherKey, SceneKey>> = { clear: 'clear', m
 
 export const SHORT_NIGHT_MINUTES = 360;
 
-/** 21:00 to 04:59 on the device's clock, the greeting's clock. */
+/** 20:00 to 04:59 on the device's clock, the greeting's clock (the owner moved the board's 9 pm to 8 pm). */
 export function isNightTime(now: Date): boolean {
   const h = now.getHours();
-  return h >= 21 || h < 5;
+  return h >= 20 || h < 5;
 }
 
 /** The night dated today (nights are dated by the morning you woke): its main sleep under 6 hours, not a nap. */
@@ -257,11 +257,11 @@ export function sceneState({ now, recovery, night }: { now: Date; recovery: Weat
   return { key, ...SCENE_KIP[key] };
 }
 
-/** 05:00 and 21:00 change the state; 12:00 and 18:00 change the greeting (greetingFor). */
-const BOUNDARY_HOURS = [5, 12, 18, 21] as const;
+/** 05:00 and 20:00 change the state; 12:00 and 18:00 change the greeting (greetingFor). */
+const BOUNDARY_HOURS = [5, 12, 18, 20] as const;
 
 /**
- * The next 00:00, 05:00, 12:00, 18:00 or 21:00 after `now`, local time: when the state, the greeting or the day can
+ * The next 00:00, 05:00, 12:00, 18:00 or 20:00 after `now`, local time: when the state, the greeting or the day can
  * next change on its own.
  */
 export function nextSceneBoundary(now: Date): Date {
