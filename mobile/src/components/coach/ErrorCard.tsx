@@ -67,7 +67,8 @@ function useWaiting(error: CoachTurnError): boolean {
 }
 
 // A turn that did not finish (spec 6): muted and distinct from an answer, so
-// it is never read as the coach's reply, with Retry when retrying can help.
+// it is never read as KIP's reply, headed "KIP lost the thread" (spec 2026-10-14
+// KIP Coach §3.4), with Retry when retrying can help.
 export function ErrorCard({ error, onRetry }: { error: CoachTurnError; onRetry: () => void }) {
   const waiting = useWaiting(error);
   const copy = waitMs(error) > 0 && !waiting ? RATE_LIMIT_OVER : errorCopy(error);
@@ -79,6 +80,7 @@ export function ErrorCard({ error, onRetry }: { error: CoachTurnError; onRetry: 
 
   return (
     <View accessibilityRole="alert" className="gap-1 rounded-tile border border-dashed border-border px-3.5 py-3">
+      <Text className="text-caption font-semibold">{KIP_COPY.errorHeading}</Text>
       <Text testID="coach-error" accessibilityLiveRegion="polite" className="text-caption text-muted-foreground">
         {copy}
       </Text>

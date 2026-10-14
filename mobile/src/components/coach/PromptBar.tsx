@@ -8,6 +8,7 @@ import { PressableScale } from '../ui/pressable-scale';
 import { Button } from '../ui/button';
 import { inputTextStyle } from '../ui/input-style';
 import { COLORS, MOTION } from '../../theme';
+import { KIP_COPY } from '../../lib/kipCopy';
 
 const AnimatedPolygon = Animated.createAnimatedComponent(Polygon);
 
@@ -28,6 +29,8 @@ export interface PromptBarProps {
   onStop?: () => void;
   commands?: PromptCommand[];
   placeholder?: string;
+  /** The field's spoken label. */
+  inputLabel?: string;
 }
 
 /** Openers worth one tap. Kept here so the screen does not carry copy. */
@@ -101,6 +104,7 @@ export function PromptBar({
   onStop,
   commands = COACH_COMMANDS,
   placeholder = 'Ask anything',
+  inputLabel = KIP_COPY.promptLabel,
 }: PromptBarProps) {
   const { colorScheme: scheme } = useColorScheme();
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
@@ -170,6 +174,7 @@ export function PromptBar({
             setHeight(clampRows(e.nativeEvent.contentSize.height, LINE_HEIGHT, MAX_ROWS))
           }
           placeholder={placeholder}
+          accessibilityLabel={inputLabel}
           placeholderTextColor={colors.muted}
           multiline
           editable={!busy}

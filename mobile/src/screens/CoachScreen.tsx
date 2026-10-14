@@ -1,9 +1,11 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, View, ScrollView, KeyboardAvoidingView, Platform, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { AccessibilityInfo, AppState, View, ScrollView, KeyboardAvoidingView, Platform, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute, type RouteProp } from '@react-navigation/native';
 import { useColorScheme } from 'nativewind';
 import { Ionicons } from '@expo/vector-icons';
+import { useReducedMotion } from 'react-native-reanimated';
+import { isNetworkError } from '../api/client';
 import {
   StaleConversationError,
   fetchCoachStatus,
@@ -24,20 +26,19 @@ import { CoachToday, TODAY_FOOTNOTE, todayShowsFootnote } from '../components/co
 import { CoachMessageRow } from '../components/coach/CoachMessageRow';
 import { ErrorCard } from '../components/coach/ErrorCard';
 import { ConversationsSheet } from '../components/coach/ConversationsSheet';
-import { Character } from '../components/characters/Character';
-import { characterInfo } from '../components/characters/registry';
-import { STAGE_W } from '../components/characters/attachments/frames';
-import { SPRITE_SIZE } from '../components/characters/sprites/compose';
+import { RoomCard } from '../components/coach/RoomCard';
+import { KipStateCard } from '../components/coach/KipStateCard';
 import { DEFAULT_THINKING_TEXT } from '../lib/thinkingText';
 import { useCoachStatusContext } from '../lib/coachStatus/CoachStatusProvider';
-import { useCharacterMood } from '../characters/useCharacterMood';
-import { useScreenFocused } from '../characters/useScreenFocused';
+import { useTodayScene } from '../lib/home/useTodayScene';
+import { KIP_COPY } from '../lib/kipCopy';
+import { kipStage, kipStatusLine, spokenLine } from '../lib/kipStage';
+import { useScreenFocused } from '../lib/useScreenFocused';
 import { PressableScale } from '../components/ui/pressable-scale';
 import { COLORS } from '../theme';
 import type { TabParamList } from '../navigation/TabsNavigator';
 import { useTabBarClearance } from '../navigation/tabBarLayout';
 import { useKeyboardVisible } from '../lib/useKeyboardVisible';
-import { useCharacterOptional } from '../characters/CharacterContext';
 import { useCoachConversation, type CoachChatMessage } from '../lib/useCoachConversation';
 import { suggestedQuestions } from '../lib/coachToday';
 import { cardDestination } from '../lib/coachAnswers';
@@ -49,12 +50,11 @@ type Phase = 'loading' | 'unavailable' | 'needs-consent' | 'ready';
 // How long the steps checklist stays up, all ticked, once the answer starts (spec §5).
 const STEPS_LINGER_MS = 300;
 
-// The header coach, and its slot: wide enough for the thinking attachment's stage.
-const HEADER_CHARACTER_SIZE = 36;
-const HEADER_SLOT_WIDTH = (HEADER_CHARACTER_SIZE * STAGE_W) / SPRITE_SIZE;
-
 // How close to the bottom (pt) still counts as reading the latest message.
 const NEAR_BOTTOM = 80;
+
+// The phases with no chat (loading, consent, unavailable): the header, then the room and its card.
+const STATE_CONTENT = { gap: 16, paddingHorizontal: 20, paddingVertical: 12 };
 
 // Why a past conversation picked from the sheet did not open.
 const CHAT_NOTES = {
@@ -66,10 +66,11 @@ function nearBottom({ contentOffset, contentSize, layoutMeasurement }: NativeScr
   return contentOffset.y + layoutMeasurement.height >= contentSize.height - NEAR_BOTTOM;
 }
 
-// The Coach page (spec 1): header, today's summary, suggested questions, the
-// conversation (streamed sentence by sentence) and the composer. Loading and
-// gating (status, character picker, consent) live here; the conversation
-// itself lives in useCoachConversation.
+// The KIP page (spec 2026-10-14 KIP Coach §3, W7): the header with KIP's status
+// line, KIP's room, today's summary, suggested questions, the conversation
+// (streamed sentence by sentence) and the composer. Loading and gating (status,
+// consent, offline) live here; the conversation itself lives in
+// useCoachConversation. There is no picker: every user's coach is KIP.
 export function CoachScreen() {
   const navigation = useNavigation<any>();
   const clearance = useTabBarClearance();
@@ -78,9 +79,9 @@ export function CoachScreen() {
   const { colorScheme: scheme } = useColorScheme();
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
   const prefill = route?.params?.prefill;
-  const characterCtx = useCharacterOptional();
-  const { name } = characterInfo(characterCtx?.characterId);
-  const thinkingText = useCoachStatusContext()?.thinkingText ?? DEFAULT_THINKING_TEXT;
+  const coachShared = useCoachStatusContext();
+  const thinkingText = coachShared?.thinkingText ?? DEFAULT_THINKING_TEXT;
+  const reduceMotion = useReducedMotion();
 
   const [phase, setPhase] = useState<Phase>('loading');
   const [input, setInput] = useState(prefill ?? '');
@@ -101,8 +102,6 @@ export function CoachScreen() {
   const scrollRef = useRef<ScrollView>(null);
   const mounted = useRef(true);
   const redirectedToConsent = useRef(false);
-  // Meet your coach opens by itself at most once per mount of this tab.
-  const pickerOpened = useRef(false);
   const loadInFlight = useRef(false);
   // A load requested while another is in flight (e.g. tab focus during the first
   // load). The in-flight result may be stale by then, so it is discarded and
@@ -112,6 +111,19 @@ export function CoachScreen() {
   // True when the status check itself could not be completed, as opposed to
   // having completed and said the coach is available.
   const [statusUnverified, setStatusUnverified] = useState(false);
+  // Offline (spec §3.4): a request that never left the device. The shared
+  // CoachStatusProvider holds it when there is one, so Home and this page agree;
+  // this page writes through to it and keeps its own copy for when there is none.
+  const [localOffline, setLocalOffline] = useState(false);
+  const offline = coachShared?.offline ?? localOffline;
+  const setSharedOffline = coachShared?.setOffline;
+  const setOffline = useCallback(
+    (next: boolean) => {
+      setLocalOffline(next);
+      setSharedOffline?.(next);
+    },
+    [setSharedOffline],
+  );
   const phaseRef = useRef<Phase>('loading');
   phaseRef.current = phase;
   // True only once the conversation history was actually fetched and applied.
@@ -135,7 +147,6 @@ export function CoachScreen() {
     },
     [restoreHook],
   );
-  const mood = useCharacterMood({ sending: streaming, answeredAt });
   const lingering = useStepsLinger(waiting, thinkingText === 'steps' && steps.length > 0 && steps.every((step) => step.done));
   // The linger is for an answer that started. A turn the server stopped, or one
   // that failed, drops the row at once; so does New chat (it clears the steps).
@@ -166,21 +177,6 @@ export function CoachScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [prefill]);
 
-  const openPicker = useCallback(() => {
-    if (pickerOpened.current) return false;
-    pickerOpened.current = true;
-    navigation.navigate('MeetYourCoach', { mode: 'first' });
-    return true;
-  }, [navigation]);
-
-  // First Coach-tab visit with the coach enabled and no character chosen yet:
-  // the picker comes first, before consent. Only over this tab.
-  const providerStatus = characterCtx?.statusLoaded ? characterCtx.status : null;
-  const providerSaysNotChosen = !!providerStatus?.enabled && providerStatus.personaChosen === false;
-  useEffect(() => {
-    if (providerSaysNotChosen && focused && navigation.isFocused?.() !== false) openPicker();
-  }, [providerSaysNotChosen, focused, navigation, openPicker]);
-
   // Today's summary. A failed refresh keeps what is on screen; a failed first
   // load simply leaves the section out.
   const loadToday = useCallback(async () => {
@@ -205,29 +201,31 @@ export function CoachScreen() {
       let status;
       try {
         status = await fetchCoachStatus();
-      } catch {
-        // The status request did not complete: stay usable, but say so.
+      } catch (err) {
+        // The status request did not complete: stay usable, but say so. A
+        // request that never left the device is offline, not unverified.
         if (mounted.current) {
-          setStatusUnverified(true);
+          if (isNetworkError(err)) setOffline(true);
+          else setStatusUnverified(true);
           setPhase('ready');
           void loadToday();
         }
         return;
       }
       if (!mounted.current || reloadPending.current) return;
+      setOffline(false);
       setStatusUnverified(false);
       if (!status.enabled) {
         setPhase('unavailable');
         return;
       }
       setEngine(status.engine ?? 'local');
-      const pickerJustOpened = status.personaChosen === false && navigation.isFocused?.() !== false && openPicker();
       if (!status.consented) {
         if (redirectedToConsent.current) {
           setPhase('needs-consent');
           return;
         }
-        if (pickerJustOpened || navigation.isFocused?.() === false) return;
+        if (navigation.isFocused?.() === false) return;
         redirectedToConsent.current = true;
         navigation.navigate('CoachConsent', { prefill: lastPrefill.current });
         return;
@@ -255,7 +253,7 @@ export function CoachScreen() {
         if (mounted.current) void loadRef.current();
       }
     }
-  }, [navigation, openPicker, loadToday, restore]);
+  }, [navigation, loadToday, restore, setOffline]);
   loadRef.current = load;
 
   useEffect(() => {
@@ -271,10 +269,32 @@ export function CoachScreen() {
     return unsubscribe;
   }, [navigation, load]);
 
-  // A turn that got through settles an unverified status: the coach is there.
+  // A turn that got through settles an unverified status (the coach is there)
+  // and clears offline.
   useEffect(() => {
-    if (answeredAt !== null || conversationId) setStatusUnverified(false);
-  }, [answeredAt, conversationId]);
+    if (answeredAt === null && !conversationId) return;
+    setStatusUnverified(false);
+    setOffline(false);
+  }, [answeredAt, conversationId, setOffline]);
+
+  // A send that never left the device (useCoachConversation's 'offline' kind):
+  // show offline and put the question back in the bar, unless something new is
+  // already typed there.
+  useEffect(() => {
+    if (error?.kind !== 'offline') return;
+    setOffline(true);
+    setInput((current) => current || error.request.message);
+  }, [error, setOffline]);
+
+  // Back in the foreground while offline: read the status again. Focus already
+  // reloads (above).
+  useEffect(() => {
+    if (!offline) return undefined;
+    const sub = AppState.addEventListener('change', (state) => {
+      if (state === 'active') void loadRef.current();
+    });
+    return () => sub.remove();
+  }, [offline]);
 
   // Screen readers hear once that the answer is in (not for a safety reply,
   // a stop or an error: answeredAt is only set for a finished answer).
@@ -361,29 +381,46 @@ export function CoachScreen() {
     followEnd.current = nearBottom(e.nativeEvent);
   }, []);
 
+  const day = useTodayScene(navigation);
+  const stage = kipStage({
+    phase,
+    statusUnverified,
+    offline,
+    waiting,
+    streaming,
+    error: !!error && error.kind !== 'offline',
+    empty: messages.length === 0 && !streaming,
+    idle: { pose: day.scene.pose, mood: day.scene.mood },
+  });
+  const statusLine = kipStatusLine(stage.id, day.recovery, false);
+  const openRecovery = useCallback(() => navigation.navigate('Recovery', { date: day.today }), [navigation, day.today]);
+  const roomCard = (
+    <RoomCard stage={stage} window={day.window} recovery={day.recovery} reduceMotion={!!reduceMotion} onOpenRecovery={openRecovery} />
+  );
+
   const ready = phase === 'ready' && !statusUnverified;
   const header = (
-    <View className="flex-row items-center justify-between px-5 pb-2 pt-1">
-      <View className="flex-row items-center gap-3">
-        {/* A fixed slot as wide as the coach with its attachment (36 × 36/24), so
-            the title stays put as the attachment comes and goes. */}
-        <View testID="coach-header-slot" style={{ width: HEADER_SLOT_WIDTH, alignItems: 'flex-start' }}>
-          <Character testID="coach-header-character" mood={mood} size={HEADER_CHARACTER_SIZE} paused={!focused} />
-        </View>
-        <PageTitle>Coach</PageTitle>
+    <View className="flex-row items-start justify-between px-5 pb-2 pt-1">
+      <View className="shrink gap-0.5">
+        <PageTitle>{KIP_COPY.pageTitle}</PageTitle>
+        {/* One line at any text size (truncated), so the header never grows. */}
+        <Text testID="kip-status-line" numberOfLines={1} accessibilityLabel={spokenLine(statusLine)} className="text-caption text-muted-foreground">
+          {statusLine}
+        </Text>
       </View>
       {ready ? (
         <View className="flex-row gap-2">
+          {/* Spec B adds Decorate first in this row. */}
           <Button
             testID="coach-conversations-button"
             variant="outline"
             size="icon-lg"
-            accessibilityLabel="Conversations and coach memory"
+            accessibilityLabel={KIP_COPY.conversationsLabel}
             onPress={() => setSheetOpen(true)}
           >
             <Ionicons name="menu-outline" size={buttonIconSize('icon-lg')} color={colors.foreground} />
           </Button>
-          <Button testID="coach-new-chat-button" variant="outline" size="icon-lg" accessibilityLabel="New chat" onPress={startNewChat}>
+          <Button testID="coach-new-chat-button" variant="outline" size="icon-lg" accessibilityLabel={KIP_COPY.newChatLabel} onPress={startNewChat}>
             <Ionicons name="create-outline" size={buttonIconSize('icon-lg')} color={colors.foreground} />
           </Button>
         </View>
@@ -395,11 +432,14 @@ export function CoachScreen() {
     return (
       <SafeAreaView className="flex-1 bg-background">
         {header}
-        <View testID="coach-loading" className="gap-3 p-5">
-          <Skeleton className="h-12 w-2/3" />
-          <Skeleton className="ml-auto h-10 w-1/2" />
-          <Skeleton className="h-16 w-3/4" />
-        </View>
+        <ScrollView contentContainerStyle={STATE_CONTENT}>
+          {roomCard}
+          <View testID="coach-loading" className="gap-3">
+            <Skeleton className="h-12 w-2/3" />
+            <Skeleton className="ml-auto h-10 w-1/2" />
+            <Skeleton className="h-16 w-3/4" />
+          </View>
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -408,13 +448,14 @@ export function CoachScreen() {
     return (
       <SafeAreaView className="flex-1 bg-background">
         {header}
-        <View testID="coach-needs-consent" className="flex-1 items-center justify-center gap-4 p-8">
-          <Character mood="idle" size={56} glow paused={!focused} />
-          <Text className="text-center text-body text-muted-foreground">The coach needs your OK before it can look at your scores.</Text>
-          <Button testID="coach-review-consent-button" onPress={() => navigation.navigate('CoachConsent', { prefill: lastPrefill.current })}>
-            Review what is shared
-          </Button>
-        </View>
+        <ScrollView contentContainerStyle={STATE_CONTENT}>
+          {roomCard}
+          <KipStateCard
+            kind="consent"
+            onReview={() => navigation.navigate('CoachConsent', { prefill: lastPrefill.current })}
+            onNotNow={() => navigation.navigate('Home')}
+          />
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -423,10 +464,10 @@ export function CoachScreen() {
     return (
       <SafeAreaView className="flex-1 bg-background">
         {header}
-        <View testID="coach-unavailable" className="flex-1 items-center justify-center gap-4 p-8">
-          <Character mood="idle" size={56} paused={!focused} />
-          <Text className="text-center text-body text-muted-foreground">The AI Coach is not available right now.</Text>
-        </View>
+        <ScrollView contentContainerStyle={STATE_CONTENT}>
+          {roomCard}
+          <KipStateCard kind="unavailable" />
+        </ScrollView>
       </SafeAreaView>
     );
   }
@@ -450,6 +491,8 @@ export function CoachScreen() {
             onScrollEndDrag={followIfNearBottom}
             onMomentumScrollEnd={followIfNearBottom}
           >
+            {roomCard}
+
             {chatNote ? (
               <Text testID={CHAT_NOTES[chatNote].testID} className="px-1 text-caption text-muted-foreground">
                 {CHAT_NOTES[chatNote].text}
@@ -458,7 +501,7 @@ export function CoachScreen() {
 
             {statusUnverified ? (
               <Text testID="coach-status-unverified" className="px-1 text-caption text-muted-foreground">
-                We couldn't check the coach just now. You can still send a message.
+                {KIP_COPY.statusUnverified}
               </Text>
             ) : null}
 
@@ -472,12 +515,11 @@ export function CoachScreen() {
 
             {messages.length === 0 && !streaming ? (
               <View testID="coach-empty" className="items-center gap-4 py-4">
-                <Character testID="coach-hero-character" mood={mood} size={64} paused={!focused} />
                 <View className="items-center gap-1 px-4">
                   <Text accessibilityRole="header" className="text-center text-heading">
-                    What would you like to know?
+                    {KIP_COPY.emptyHeading}
                   </Text>
-                  <Text className="text-center text-caption text-muted-foreground">Ask about your data, or anything health and fitness.</Text>
+                  <Text className="text-center text-caption text-muted-foreground">{KIP_COPY.emptyBody}</Text>
                 </View>
                 <View className="w-full gap-2">
                   {suggestedQuestions(today).map((question, index) => (
@@ -519,11 +561,20 @@ export function CoachScreen() {
               </View>
             ) : null}
 
-            {error ? <ErrorCard error={error} onRetry={retryTurn} /> : null}
+            {error && error.kind !== 'offline' ? <ErrorCard error={error} onRetry={retryTurn} /> : null}
+            {offline && !streaming ? <KipStateCard kind="offline" /> : null}
           </ScrollView>
 
           <View className="px-4 pb-2 pt-1">
-            <PromptBar value={input} onChangeText={setInput} onSend={sendTyped} busy={streaming} onStop={stop} placeholder={`Ask ${name} anything…`} />
+            <PromptBar
+              value={input}
+              onChangeText={setInput}
+              onSend={sendTyped}
+              busy={streaming}
+              onStop={stop}
+              placeholder={KIP_COPY.promptPlaceholder}
+              inputLabel={KIP_COPY.promptLabel}
+            />
           </View>
         </KeyboardAvoidingView>
       </View>
