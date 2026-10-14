@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
 import { Canvas, Group, Picture, Skia, createPicture, type SkPicture } from '@shopify/react-native-skia';
 import { Text } from '../ui/text';
@@ -13,6 +13,9 @@ import { useScreenFocused } from '../../lib/useScreenFocused';
 import { roomCrop } from './roomCrop';
 
 export const LOOP_MS = 400;
+// The bubble is decoration over a fixed crop, so its text grows only a little with Dynamic Type.
+const BUBBLE_MAX_FONT_SCALE = 1.3;
+const BUBBLE_INSET = 4;
 
 export interface RoomViewProps {
   loadout: RoomLoadout;
@@ -97,6 +100,9 @@ export function RoomView(props: RoomViewProps) {
 
   const offset = roomCrop({ width: crop.width, height: crop.height, cellPt, box });
   const anchor = bubbleAnchor(seat);
+  // Measured, so a long bubble is pulled in from the right edge instead of clipped by the crop.
+  const [bubbleWidth, setBubbleWidth] = useState(0);
+  const bubbleLeft = Math.max(BUBBLE_INSET, Math.min(offset.x + anchor.x * cellPt - 36, crop.width - bubbleWidth - BUBBLE_INSET));
   return (
     <View
       testID={props.testID}
@@ -120,9 +126,10 @@ export function RoomView(props: RoomViewProps) {
           accessibilityElementsHidden
           importantForAccessibility="no-hide-descendants"
           className="absolute rounded-lg bg-[#F5F5F4] px-2 py-1"
-          style={{ left: Math.max(4, offset.x + anchor.x * cellPt - 36), bottom: crop.height - (offset.y + anchor.y * cellPt) }}
+          onLayout={(e) => setBubbleWidth(e.nativeEvent.layout.width)}
+          style={{ left: bubbleLeft, bottom: crop.height - (offset.y + anchor.y * cellPt) }}
         >
-          <Text className="font-pixel text-label text-[#0A0B0E]" numberOfLines={1}>
+          <Text className="font-pixel text-label text-[#0A0B0E]" numberOfLines={1} maxFontSizeMultiplier={BUBBLE_MAX_FONT_SCALE}>
             {bubble}
           </Text>
         </View>

@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, render } from '@testing-library/react-native';
+import { act, fireEvent, render } from '@testing-library/react-native';
 import { createPicture } from '@shopify/react-native-skia';
 import { bubbleAnchor, LOOP_MS, RoomView, type RoomViewProps } from '../../src/components/room/RoomView';
 import { roomCrop } from '../../src/components/room/roomCrop';
@@ -116,6 +116,25 @@ describe('RoomView', () => {
   it('shows no bubble when there is none', () => {
     const s = render(<RoomView {...PROPS} bubble={null} />);
     expect(s.queryByTestId('room-bubble', { includeHiddenElements: true })).toBeNull();
+  });
+
+  it.each([280, 323])('keeps a measured bubble inside the %i-point crop, 4 points from either edge', (width) => {
+    const s = render(<RoomView {...PROPS} bubble="HERE'S MY TAKE" crop={{ width, height: 200 }} />);
+    const bubble = () => s.getByTestId('room-bubble', { includeHiddenElements: true });
+    const measure = (w: number) => act(() => { fireEvent(bubble(), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: w, height: 20 } } }); });
+    measure(135);
+    const { left } = bubble().props.style;
+    expect(left).toBeGreaterThanOrEqual(4);
+    expect(left + 135).toBeLessThanOrEqual(width - 4);
+    // A bubble that fits stays over KIP's head.
+    measure(40);
+    const offset = roomCrop({ width, height: 200, cellPt: 2, box: FOCUS_BOX });
+    expect(bubble().props.style.left).toBe(Math.max(4, offset.x + bubbleAnchor(SEATS.standard).x * 2 - 36));
+  });
+
+  it('caps the decorative bubble text\'s font scale', () => {
+    const s = render(<RoomView {...PROPS} />);
+    expect(s.getByText('ON IT…', { includeHiddenElements: true }).props.maxFontSizeMultiplier).toBeGreaterThan(0);
   });
 
   it('anchors the bubble above KIP\'s head', () => {
