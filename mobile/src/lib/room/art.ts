@@ -12,3 +12,8 @@ import './items/lamp';
 import './items/corner';
 import './items/rug';
 import './items/pet';
+import { COTTAGE_SWATCHES } from './items/sets/cottage';
+import type { SetId } from './catalogue';
+
+/** Each set's four palette swatches for its Sets card (ruling 20). */
+export const SET_SWATCHES: Readonly<Record<SetId, readonly string[]>> = { cottage: COTTAGE_SWATCHES };

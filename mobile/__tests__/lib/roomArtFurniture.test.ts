@@ -47,7 +47,9 @@ it('loop frames sit above the night veil, so an unlit piece dims its own frames 
     const day = itemArt(item.id)!.draw(CTX_DAY).frames!;
     const night = itemArt(item.id)!.draw({ ...CTX_DAY, night: true }).frames!;
     if (item.emissive) {
-      expect({ id: item.id, colours: new Set(colours(night)) }).toEqual({ id: item.id, colours: new Set(colours(day)) });
+      // Every lit colour stays as it is; a lit piece may add a halo at night (the Cottage fairy lights).
+      const n = new Set(colours(night));
+      expect({ id: item.id, unveiled: colours(day).filter((c) => !n.has(c)) }).toEqual({ id: item.id, unveiled: [] });
     } else {
       expect({ id: item.id, shape: shape(night) }).toEqual({ id: item.id, shape: shape(day) });
       const d = colours(day), n = colours(night);
