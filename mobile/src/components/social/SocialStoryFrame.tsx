@@ -8,20 +8,21 @@ import type { Person } from '../../api/buddies';
 import type { StoryFrame } from '../../api/social';
 import { levelTitle } from '../../lib/badges';
 import { recapTitle } from '../../lib/recapCopy';
-import { useMyKipColour } from '../../lib/kip/myKipColour';
+import { useMyKip } from '../../lib/kip/myKip';
+import { kipWornOf } from '../../lib/kip/wornArt';
 import { CHECKIN_OPTIONS, personName } from '../../lib/socialCopy';
 import { PersonKip } from '../kip/PersonKip';
 import { Button } from '../ui/button';
 import { Text } from '../ui/text';
 
 export function SocialStoryFrame({ frame, author, mine, onUnlock }: { frame: StoryFrame; author: Person; mine: boolean; onUnlock: () => void }) {
-  const myColour = useMyKipColour();
+  const { colour: myColour, worn: myWorn } = useMyKip();
   const who = personName(author, mine);
   // Drawn over the viewer's tap areas: only the Check in button takes touches, the rest pass through to them.
   return (
     <View pointerEvents="box-none" className="flex-1 items-center justify-center gap-5 px-8">
       <View pointerEvents="none">
-        <PersonKip colour={mine ? myColour : author.kipColour} state={frame.kind === 'goodnight' ? 'asleep' : 'none'} size={96} />
+        <PersonKip colour={mine ? myColour : author.kipColour} worn={mine ? myWorn : kipWornOf(author.kipWorn)} state={frame.kind === 'goodnight' ? 'asleep' : 'none'} size={96} />
       </View>
       {frame.kind === 'checkin' && frame.locked ? (
         <View testID="story-locked" pointerEvents="box-none" className="items-center gap-3">

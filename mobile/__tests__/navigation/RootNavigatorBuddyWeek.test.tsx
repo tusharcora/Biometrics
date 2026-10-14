@@ -48,6 +48,7 @@ jest.mock('../../src/navigation/AuthNavigator', () => ({ AuthNavigator: () => nu
 jest.mock('../../src/navigation/TabsNavigator', () => ({ TabsNavigator: () => null }));
 jest.mock('../../src/sync/SyncProvider', () => ({ SyncProvider: ({ children }: any) => children }));
 jest.mock('../../src/components/achievements/CelebrationHost', () => ({ CelebrationHost: () => null }));
+jest.mock('../../src/components/room/RoomToastHost', () => ({ RoomToastHost: () => null }));
 jest.mock('../../src/components/buddies/BuddiesStoreScope', () => ({ BuddiesStoreScope: () => null }));
 jest.mock('../../src/components/social/SocialStoreScope', () => ({ SocialStoreScope: () => null }));
 

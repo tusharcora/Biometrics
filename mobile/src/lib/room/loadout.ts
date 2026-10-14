@@ -8,17 +8,17 @@ export type KipWorn = Record<WornSlot, ItemId | null>;
 
 /** K4's furnishing at v2 quality (§5 "The starter furnishing"). */
 export const STARTER_LOADOUT: RoomLoadout = {
-  wallpaper: 'plain_slate',
-  floor: 'dark_oak',
-  art: 'wall_calendar',
-  window: 'plain_frame',
-  shelf: 'books',
-  desk: 'monitor',
-  desk_item: 'mug',
-  plant: 'fern',
-  lamp: 'amber_lamp',
+  wallpaper: 'wall.plain',
+  floor: 'floor.oakDark',
+  art: 'art.calendar',
+  window: 'win.plain',
+  shelf: 'shelf.books',
+  desk: 'desk.monitor',
+  desk_item: 'item.mug',
+  plant: 'plant.fern',
+  lamp: 'lamp.amber',
   corner: null,
-  rug: 'slate_rug',
+  rug: 'rug.slate',
   pet: null,
 };
 

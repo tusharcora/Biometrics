@@ -50,6 +50,8 @@ const ALLOWED: Exception[] = [
   { file: 'components/chats/NewChatSheet.tsx', key: 'new-chat-${row.id}', count: 1, reason: 'a buddy row in the new-message picker' },
   { file: 'screens/BadgesScreen.tsx', key: 'badges-row-${family}', count: 1, reason: 'a badge family row that opens its detail' },
   { file: 'screens/CoachScreen.tsx', key: 'coach-suggestion-${index}', count: 1, reason: 'a suggested-question row in the empty chat' },
+  { file: 'components/decorate/HotspotLayer.tsx', key: 'decorate-hotspot-${slot}', count: 1, reason: 'a decorate hotspot tag: a label on the room picture that picks its slot (spec 2026-10-14 KIP\'s room §6.2)' },
+  { file: 'components/decorate/DecorateTile.tsx', key: 'DecorateTile:testID', count: 1, reason: 'a decorate tray tile: an item picture you tap to place or preview (spec §6.3)' },
   { file: 'components/coach/CollapsedKipHeader.tsx', key: 'kip-room-thumbnail', count: 1, reason: 'the collapsed header\'s room thumbnail: a picture you tap to expand the room (spec §3.5)' },
   { file: 'components/coach/PromptBar.tsx', key: 'coach-command-${command.key}', count: 1, reason: 'a row of the slash-command menu' },
   { file: 'components/sleep/BedtimeGoalRow.tsx', key: 'sleep-goal-row', count: 1, reason: 'the bedtime goal row on the Sleep page (a card that navigates)' },

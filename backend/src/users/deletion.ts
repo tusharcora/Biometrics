@@ -46,6 +46,8 @@ export const USER_OWNED_MODELS = [
   'Recap',
   'Achievement',
   'GoalChange',
+  'CosmeticUnlock',
+  'CosmeticLoadout',
   'CoachConsent',
   'PushToken',
   'Session',

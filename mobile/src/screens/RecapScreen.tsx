@@ -19,7 +19,8 @@ import { Text } from '../components/ui/text';
 import { useAchievements } from '../lib/achievementsStore';
 import { levelsEarnedBetween, shortLevelTitle } from '../lib/badges';
 import type { KipColour } from '../lib/kip/kipArt';
-import { useMyKipColour } from '../lib/kip/myKipColour';
+import { useMyKip } from '../lib/kip/myKip';
+import type { KipWorn } from '../lib/room/loadout';
 import { compareChanges, milestoneTiles, monthName, RECAP_COPY } from '../lib/recapCopy';
 import { readIncludePrefs } from '../lib/recapPrefs';
 import { DESIGN_HEIGHT, DESIGN_WIDTH, previewScale, resolveIncludes, type Includes } from '../lib/recapShare';
@@ -36,7 +37,7 @@ type State = { phase: 'loading' } | { phase: 'ready'; recap: Recap } | { phase: 
 export function RecapScreen() {
   const { params } = useRoute<any>() as { params: { id: string } };
   const navigation = useNavigation<any>();
-  const mine = useMyKipColour();
+  const { colour: mine, worn: myWorn } = useMyKip();
   const { width } = useWindowDimensions();
   const [state, setState] = useState<State>({ phase: 'loading' });
   // The builder's stored story choices: the week's preview shows what a shared frame would.
@@ -108,7 +109,7 @@ export function RecapScreen() {
           </Card>
         ) : null}
         {state.phase === 'ready' && state.recap.kind === 'MONTH' ? (
-          <MonthBody recap={state.recap} kipColour={mine} onShare={() => navigation.navigate('RecapBuilder', { id: state.recap.id, format: 'card' })} />
+          <MonthBody recap={state.recap} kipColour={mine} kipWorn={myWorn} onShare={() => navigation.navigate('RecapBuilder', { id: state.recap.id, format: 'card' })} />
         ) : null}
         {state.phase === 'ready' && state.recap.kind === 'WEEK' ? (
           <View className="gap-4">
@@ -122,7 +123,7 @@ export function RecapScreen() {
               onPress={() => navigation.navigate('RecapStory', { recap: state.recap })}
             >
               {storyPrefs ? (
-                <WeeklyStoryView recap={state.recap} kipColour={mine} includes={resolveIncludes('story', storyPrefs, state.recap.stats)} scale={previewScale('story', width - 40, 520)} />
+                <WeeklyStoryView recap={state.recap} kipColour={mine} kipWorn={myWorn} includes={resolveIncludes('story', storyPrefs, state.recap.stats)} scale={previewScale('story', width - 40, 520)} />
               ) : (
                 // Until the stored choices load: no flash of a part switched off.
                 <View style={{ width: DESIGN_WIDTH * previewScale('story', width - 40, 520), height: DESIGN_HEIGHT.story * previewScale('story', width - 40, 520) }}>
@@ -150,7 +151,7 @@ export function RecapScreen() {
 }
 
 // Your KIP is drawn whatever coach a past recap was written by: its stored personaId is a record, not a picture (spec §7.7).
-function MonthBody({ recap, kipColour, onShare }: { recap: Recap; kipColour: KipColour; onShare: () => void }) {
+function MonthBody({ recap, kipColour, kipWorn, onShare }: { recap: Recap; kipColour: KipColour; kipWorn: KipWorn; onShare: () => void }) {
   const { colorScheme } = useColorScheme();
   const scheme = colorScheme === 'dark' ? 'dark' : 'light';
   const rows = compareChanges(recap.stats.comparison);
@@ -183,7 +184,7 @@ function MonthBody({ recap, kipColour, onShare }: { recap: Recap; kipColour: Kip
       <PageTitle testID="recap-title">{RECAP_COPY.monthWithKip(monthName(recap.periodStart))}</PageTitle>
       <Card className="flex-row items-center gap-3.5">
         <View testID="recap-line-coach">
-          <Kip testID="recap-kip" colour={kipColour} pose="cheer" mood="proud" scale={4} />
+          <Kip testID="recap-kip" colour={kipColour} worn={kipWorn} pose="cheer" mood="proud" scale={4} />
         </View>
         <Text testID="recap-line" className="flex-1 text-body">{`“${recap.line}”`}</Text>
       </Card>

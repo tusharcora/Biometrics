@@ -32,7 +32,7 @@ import { useForecast } from '../lib/useForecast';
 import { forecastRange, SCENE_H, sceneExtra } from '../lib/home/scene';
 import { useBuddyScene } from '../lib/home/useBuddyScene';
 import { useTodayScene } from '../lib/home/useTodayScene';
-import { useMyKipColour } from '../lib/kip/myKipColour';
+import { useMyKip } from '../lib/kip/myKip';
 import { useRecapShelf } from '../lib/recap/useRecapShelf';
 import { formatMinutes } from '../lib/recoveryCopy';
 import { scoreBand } from '../lib/scoreInsights';
@@ -100,7 +100,7 @@ export function DashboardScreen() {
   const forecastState = useForecast(dataVersion);
   const shelf = useRecapShelf(navigation);
   const buddyScene = useBuddyScene(navigation);
-  const myColour = useMyKipColour();
+  const { colour: myColour, worn: myWorn } = useMyKip();
   const day = useTodayScene(navigation);
 
   useEffect(() => {
@@ -160,10 +160,10 @@ export function DashboardScreen() {
       <SafeAreaView className="flex-1 bg-background">
         <View className="flex-row items-center justify-end gap-3 px-5 pt-2">
           <ThemeToggle color={colors.muted} />
-          <ProfileButton ring={ring} surface={colors.background} colour={myColour} onPress={openProfile} />
+          <ProfileButton ring={ring} surface={colors.background} colour={myColour} worn={myWorn} onPress={openProfile} />
         </View>
         <View className="flex-1 items-center justify-center gap-4 px-8">
-          <Kip testID="dashboard-fallback-kip" colour={myColour} pose="rest" mood="curious" scale={3} />
+          <Kip testID="dashboard-fallback-kip" colour={myColour} worn={myWorn} pose="rest" mood="curious" scale={3} />
           <PageTitle className="text-center">{title}</PageTitle>
           <Text className="text-center text-body text-muted-foreground">{body}</Text>
           {action}
@@ -261,6 +261,7 @@ export function DashboardScreen() {
           width={width}
           extra={extra}
           myColour={myColour}
+          myWorn={myWorn}
           buddies={buddyScene}
           readings={readings}
           onOpen={open}
@@ -273,6 +274,7 @@ export function DashboardScreen() {
               greeting={greetingFor(day.now)}
               scene={day.scene}
               myColour={myColour}
+              myWorn={myWorn}
               ring={ring}
               onProfile={openProfile}
               onBottom={setHeaderBottom}

@@ -3,7 +3,7 @@ import { View } from 'react-native';
 import Svg, { Rect } from 'react-native-svg';
 import { KIP_COLOURS, type KipColour } from '../../lib/kip/kipArt';
 import { KIP_COLOUR_ORDER, kipColourName } from '../../lib/kip/kipColour';
-import { loadMyKipColour, myKipColourLoadFailed, saveMyKipColour, useMyKipColour } from '../../lib/kip/myKipColour';
+import { loadMyKipColour, myKipColourLoadFailed, saveMyKipColour, useMyKip } from '../../lib/kip/myKip';
 import { PROFILE_COPY } from '../../lib/profileCopy';
 import type { PixelRect } from '../../lib/weatherArt';
 import { Kip } from '../kip/Kip';
@@ -44,7 +44,7 @@ function previewScene(cols: number): PixelRect[] {
 }
 
 export function KipColourSection() {
-  const saved = useMyKipColour();
+  const { colour: saved, worn } = useMyKip();
   // null until you pick, so a colour that loads after the page opens still shows.
   const [choice, setChoice] = useState<KipColour | null>(null);
   const [busy, setBusy] = useState(false);
@@ -96,7 +96,7 @@ export function KipColourSection() {
           accessibilityLabel={C.previewLabel(name)}
           style={{ position: 'absolute', left: Math.round(width / 2 - (KIP_CELLS / 2) * HERO_SCALE), top: PREVIEW_GROUND * UNIT - 15 * HERO_SCALE }}
         >
-          <Kip colour={picked} pose="wave" scale={HERO_SCALE} />
+          <Kip colour={picked} worn={worn} pose="wave" scale={HERO_SCALE} />
         </View>
         <View className="absolute left-[14px] top-[12px] gap-[2px]">
           <SectionLabel className="text-[#C7D2FE]">{C.yourKip}</SectionLabel>

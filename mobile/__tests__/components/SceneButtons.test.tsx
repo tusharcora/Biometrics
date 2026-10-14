@@ -9,7 +9,7 @@ import { GoodnightButton } from '../../src/components/social/GoodnightButton';
 import { PersonKip } from '../../src/components/kip/PersonKip';
 import { SocialStoryFrame } from '../../src/components/social/SocialStoryFrame';
 import { Button } from '../../src/components/ui/button';
-import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
+import { resetMyKip, setMyKipColour } from '../../src/lib/kip/myKip';
 import { cn } from '../../src/lib/utils';
 
 jest.mock('../../src/api/social', () => ({ ...jest.requireActual('../../src/api/social'), sayGoodnight: jest.fn(), undoGoodnight: jest.fn() }));
@@ -84,7 +84,7 @@ it("the story's Check in is white with dark text in both schemes, and the frame 
 });
 
 describe('the story frame draws its author as their KIP', () => {
-  afterEach(() => resetMyKipColour());
+  afterEach(() => resetMyKip());
   const sam = { id: 'sam', handle: 'sam', displayName: 'Sam', coachId: 'mochi', kipColour: 'sky' };
 
   it("a buddy's goodnight: their colour, asleep", () => {

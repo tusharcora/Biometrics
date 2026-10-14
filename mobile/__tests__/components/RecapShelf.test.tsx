@@ -4,7 +4,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react-n
 import { fetchRecaps, type RecapSummary } from '../../src/api/recaps';
 import { RecapShelf } from '../../src/components/recap/RecapShelf';
 import { addDays, todayCivil } from '../../src/lib/heatmap';
-import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
+import { resetMyKip, setMyKipColour } from '../../src/lib/kip/myKip';
 import { useRecapShelf } from '../../src/lib/recap/useRecapShelf';
 import { recapTint, STORY_RING_NEUTRAL, storyRingColor } from '../../src/lib/recapTheme';
 import { openRecap, resetUnwatchedRecap } from '../../src/lib/unwatchedRecap';
@@ -37,7 +37,7 @@ async function show() {
 beforeEach(() => {
   jest.clearAllMocks();
   resetUnwatchedRecap();
-  resetMyKipColour();
+  resetMyKip();
   mockScheme = 'dark';
   (fetchRecaps as jest.Mock).mockResolvedValue([MONTH, WEEK]);
 });

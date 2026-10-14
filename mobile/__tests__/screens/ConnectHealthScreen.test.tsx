@@ -1,6 +1,6 @@
 import React from 'react';
 import { kipArtFills, kipFills } from '../../jest-mocks/kipFixture';
-import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
+import { resetMyKip, setMyKipColour } from '../../src/lib/kip/myKip';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import * as WebBrowser from 'expo-web-browser';
 import { ConnectHealthScreen } from '../../src/screens/ConnectHealthScreen';
@@ -144,7 +144,7 @@ describe('ConnectHealthScreen', () => {
 });
 
 describe('ConnectHealthScreen: KIP', () => {
-  afterEach(() => resetMyKipColour());
+  afterEach(() => resetMyKip());
 
   it('shows your KIP waving, in your colour', () => {
     setMyKipColour('lime');

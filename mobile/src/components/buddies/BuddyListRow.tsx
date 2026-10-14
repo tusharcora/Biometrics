@@ -3,6 +3,7 @@ import { Pressable, View } from 'react-native';
 import type { BuddyRow } from '../../api/buddies';
 import { MOOD_COLORS } from '../../lib/buddyCopy';
 import { PersonKip, personStateOf } from '../kip/PersonKip';
+import { kipWornOf } from '../../lib/kip/wornArt';
 import { Text } from '../ui/text';
 
 export function BuddyListRow({ row, onPress }: { row: BuddyRow; onPress: () => void }) {
@@ -14,7 +15,7 @@ export function BuddyListRow({ row, onPress }: { row: BuddyRow; onPress: () => v
       accessibilityLabel={`${row.displayName}, ${row.moodLine}${row.unseenSticker ? ', new sticker' : ''}`}
       className="flex-row items-center gap-3 py-2 active:opacity-70"
     >
-      <PersonKip colour={row.kipColour} state={personStateOf(row.mood)} size={48} />
+      <PersonKip colour={row.kipColour} worn={kipWornOf(row.kipWorn)} state={personStateOf(row.mood)} size={48} />
       <View className="flex-1">
         <Text className="font-semibold">{row.displayName}</Text>
         <Text testID={`buddy-row-${row.id}-mood`} className="text-caption" style={{ color: MOOD_COLORS[row.mood] }}>{row.moodLine}</Text>

@@ -85,7 +85,7 @@ it('sends people, moods and flags only: no check-in time or date', async () => {
 
   const res = await scene(me.id);
   expect(Object.keys(res.body).sort()).toEqual(['buddies', 'incomingRequests', 'total']);
-  expect(Object.keys(res.body.buddies[0]).sort()).toEqual(['coachId', 'displayName', 'handle', 'id', 'kipColour', 'mood', 'moodLine', 'unseenSticker']);
+  expect(Object.keys(res.body.buddies[0]).sort()).toEqual(['coachId', 'displayName', 'handle', 'id', 'kipColour', 'kipWorn', 'mood', 'moodLine', 'unseenSticker']);
   expect(JSON.stringify(res.body)).not.toMatch(/\d{4}-\d{2}-\d{2}/);
 });
 

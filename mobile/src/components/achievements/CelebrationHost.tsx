@@ -2,6 +2,8 @@ import React, { useEffect, useRef, useState } from 'react';
 import { AppState } from 'react-native';
 import { celebrate, pendingLevels, refreshAchievements, resetAchievements, useAchievements } from '../../lib/achievementsStore';
 import { celebrationQueue, type Celebration } from '../../lib/celebrationQueue';
+import { decorateTarget, piecesForBadge } from '../../lib/room/announce';
+import { loadCosmetics, useCosmetics } from '../../lib/room/cosmeticsStore';
 import { MODAL_ROUTES, navigationRef } from '../../navigation/navigationRef';
 import { CelebrationModal } from './CelebrationModal';
 
@@ -70,6 +72,9 @@ export function CelebrationHost() {
   // The celebration on screen, kept until it is closed: a refresh meanwhile that brings a higher
   // level for another family queues it behind this one instead of swapping it in under the user.
   const shown = useRef<Celebration | null>(null);
+  const cosmetics = useCosmetics();
+  // Decorate's piece, opened once the queue is empty and the Modal has gone; forgotten on sign-out.
+  const decorateItem = useRef<string | null>(null);
 
   useEffect(() => {
     void refreshAchievements();
@@ -82,14 +87,50 @@ export function CelebrationHost() {
     };
   }, []);
 
-  if (wait || snapshot.state.status !== 'ready') return null;
-  const pending = pendingLevels(snapshot);
-  // Closing hides its ids at once, which ends the pin.
-  const pinned = shown.current && pending.some((p) => shown.current!.ids.includes(p.id)) ? shown.current : null;
-  const next = pinned ?? celebrationQueue(pending)[0];
-  shown.current = next ?? null;
-  if (!next) return null;
-  const thresholds = snapshot.state.data.families.find((f) => f.family === next.family)?.thresholds ?? [];
+  let next: Celebration | null = null;
+  if (!wait && snapshot.state.status === 'ready') {
+    const pending = pendingLevels(snapshot);
+    // Closing hides its ids at once, which ends the pin.
+    const pinned = shown.current && pending.some((p) => shown.current!.ids.includes(p.id)) ? shown.current : null;
+    next = pinned ?? celebrationQueue(pending)[0] ?? null;
+    shown.current = next;
+  }
+  const showing = next ? next.ids.join(',') : null;
+
+  // A badge earned mid-session (a saved check-in) brings room pieces the sign-in read lacks: read again, and the
+  // room line fills in.
+  useEffect(() => {
+    if (showing) void loadCosmetics();
+  }, [showing]);
+
+  // Decorate opens its modal route only once nothing is celebrated any more and the Modal has had MODAL_DISMISS_MS to
+  // go: a route presented over a live Modal is refused on iOS. A family arriving meanwhile restarts the wait.
+  useEffect(() => {
+    if (showing || wait || !decorateItem.current) return undefined;
+    const timer = setTimeout(() => {
+      const itemId = decorateItem.current;
+      decorateItem.current = null;
+      if (itemId) navigationRef.navigate('DecorateRoom', decorateTarget(itemId));
+    }, MODAL_DISMISS_MS);
+    return () => clearTimeout(timer);
+  }, [showing, wait]);
+
+  if (!next || snapshot.state.status !== 'ready') return null;
+  const current = next;
+  const thresholds = snapshot.state.data.families.find((f) => f.family === current.family)?.thresholds ?? [];
+  // The unseen room pieces this badge brought, every level up to the one shown (ruling 10).
+  const pieces = cosmetics ? piecesForBadge(cosmetics.fresh, current.family, current.level) : [];
   // Not keyed: the Modal stays presented and the next family swaps in inside it.
-  return <CelebrationModal celebration={next} thresholds={thresholds} onDone={() => void celebrate(next.ids)} />;
+  return (
+    <CelebrationModal
+      celebration={current}
+      thresholds={thresholds}
+      pieces={pieces}
+      onDecorate={(itemId) => {
+        decorateItem.current = itemId;
+        void celebrate(current.ids);
+      }}
+      onDone={() => void celebrate(current.ids)}
+    />
+  );
 }

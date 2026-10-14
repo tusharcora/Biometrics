@@ -35,6 +35,21 @@ describe('Kip', () => {
     expect(tiny.UNSAFE_getByType(Svg).props).toMatchObject({ width: 16, height: 16 });
   });
 
+  it('wears head and ears pieces at any size, and face and neck pieces from 32 points up', () => {
+    const fills = (scale: number) => {
+      const r = render(<Kip scale={scale} worn={{ face: 'out.round', head: 'out.cap' }} />);
+      const out = r.UNSAFE_getAllByType(Rect).map((x) => x.props.fill);
+      r.unmount();
+      return out;
+    };
+    const small = fills(1); // 16 pt
+    expect(small).toContain('#2563EB');
+    expect(small).not.toContain('#FCD34D');
+    const big = fills(4); // 64 pt
+    expect(big).toContain('#2563EB');
+    expect(big).toContain('#FCD34D');
+  });
+
   it('sets no shapeRendering prop (react-native-svg has none)', () => {
     const { UNSAFE_getByType, UNSAFE_getAllByType } = render(<Kip />);
     expect(UNSAFE_getByType(Svg).props.shapeRendering).toBeUndefined();

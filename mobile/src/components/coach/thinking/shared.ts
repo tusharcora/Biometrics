@@ -3,7 +3,7 @@ import { isLoaded } from 'expo-font';
 import { useColorScheme } from 'nativewind';
 import { kipLabelColour } from '../../../lib/colour';
 import { KIP_COLOURS } from '../../../lib/kip/kipArt';
-import { useMyKipColour } from '../../../lib/kip/myKipColour';
+import { useMyKipColour } from '../../../lib/kip/myKip';
 import { KIP_NAME } from '../../../lib/kipCopy';
 import { useFrameClock } from '../../../lib/useFrameClock';
 import { COLORS, FONTS } from '../../../theme';

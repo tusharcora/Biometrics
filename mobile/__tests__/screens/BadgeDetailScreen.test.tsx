@@ -7,7 +7,7 @@ import { resetAchievements } from '../../src/lib/achievementsStore';
 import { StyleSheet } from 'react-native';
 import { tierColors, tierTextColor } from '../../src/lib/badgeArt';
 import { contrast } from '../../src/lib/colour';
-import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
+import { resetMyKip, setMyKipColour } from '../../src/lib/kip/myKip';
 import { BadgeDetailScreen } from '../../src/screens/BadgeDetailScreen';
 
 jest.mock('../../src/api/achievements');
@@ -24,7 +24,7 @@ const load = fetchAchievements as jest.Mock;
 beforeEach(() => {
   jest.clearAllMocks();
   resetAchievements();
-  resetMyKipColour();
+  resetMyKip();
   mockScheme = 'light';
 });
 

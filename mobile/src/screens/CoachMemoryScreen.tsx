@@ -19,7 +19,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { SettingsGroup } from '../components/ui/settings-list';
 import { Kip } from '../components/kip/Kip';
 import { KipHead } from '../components/kip/KipHead';
-import { useMyKipColour } from '../lib/kip/myKipColour';
+import { useMyKip } from '../lib/kip/myKip';
 import { KIP_COPY } from '../lib/kipCopy';
 import { MemoryEditForm } from '../components/memory-edit-form';
 import { COLORS } from '../theme';
@@ -147,7 +147,7 @@ export function CoachMemoryScreen() {
   const [phase, setPhase] = useState<Phase>('loading');
   const [entries, setEntries] = useState<MemoryDTO[]>([]);
   const [attempt, setAttempt] = useState(0);
-  const mine = useMyKipColour();
+  const { colour: mine, worn: myWorn } = useMyKip();
 
   useEffect(() => {
     let cancelled = false;
@@ -192,7 +192,7 @@ export function CoachMemoryScreen() {
     return (
       <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
         <View testID="coach-memory-unavailable" className="flex-1 items-center justify-center gap-4 px-8">
-          <Kip testID="coach-memory-kip" colour={mine} pose="wave" mood="curious" scale={3} />
+          <Kip testID="coach-memory-kip" colour={mine} worn={myWorn} pose="wave" mood="curious" scale={3} />
           <Text className="text-center text-muted-foreground">{KIP_COPY.unavailable}</Text>
         </View>
       </SafeAreaView>
@@ -203,7 +203,7 @@ export function CoachMemoryScreen() {
     return (
       <SafeAreaView className="flex-1 bg-background" edges={['bottom']}>
         <View className="flex-1 items-center justify-center gap-4 px-8">
-          <Kip testID="coach-memory-kip" colour={mine} pose="wave" mood="curious" scale={3} />
+          <Kip testID="coach-memory-kip" colour={mine} worn={myWorn} pose="wave" mood="curious" scale={3} />
           <Text testID="coach-memory-error" className="text-center text-muted-foreground">
             {KIP_COPY.memoryLoadError}
           </Text>
@@ -222,7 +222,7 @@ export function CoachMemoryScreen() {
       <ScrollView contentContainerStyle={{ gap: 24, paddingHorizontal: 20, paddingTop: 8, paddingBottom: 32 }}>
         {groups.length === 0 ? (
           <Card testID="coach-memory-empty" className="items-start gap-3 p-5">
-            <Kip testID="coach-memory-kip" colour={mine} pose="wave" mood="curious" scale={3} />
+            <Kip testID="coach-memory-kip" colour={mine} worn={myWorn} pose="wave" mood="curious" scale={3} />
             <Text className="text-heading">Nothing remembered yet</Text>
             <Text className="text-caption text-muted-foreground">{KIP_COPY.memoryEmptyBody}</Text>
           </Card>

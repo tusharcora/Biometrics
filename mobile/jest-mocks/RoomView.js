@@ -11,6 +11,8 @@ module.exports = {
       accessible: p.accessible ?? true,
       accessibilityRole: p.accessible === false ? undefined : 'image',
       accessibilityLabel: p.accessibilityLabel,
-      room: `${p.pose}:${p.mood}:${p.bubble ?? 'none'}:${p.screen}:${p.weather}:${p.night ? 'night' : 'day'}:${p.colour}:${p.cellPt}:${p.reduceMotion ? 'still' : 'moving'}:${p.facing ?? ''}`,
+      loadout: JSON.stringify(p.loadout),
+      worn: JSON.stringify(p.worn),
+      room: `${p.pose}:${p.mood}:${p.bubble ?? 'none'}:${p.screen}:${p.weather}:${p.night ? 'night' : 'day'}:${p.colour}:${p.cellPt}:${p.reduceMotion ? 'still' : 'moving'}:${p.facing ?? ''}:${p.paused ? 'paused' : ''}`,
     }),
 };

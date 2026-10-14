@@ -1,4 +1,36 @@
-import { COLLAPSED_HEIGHT, COLLAPSED_ROW_HEIGHT, FADE_PT, collapseProgress } from '../../src/components/coach/CollapsedKipHeader';
+import React from 'react';
+import { act, render } from '@testing-library/react-native';
+import { COLLAPSED_HEIGHT, COLLAPSED_ROW_HEIGHT, FADE_PT, CollapsedKipHeader, collapseProgress } from '../../src/components/coach/CollapsedKipHeader';
+import { fetchCosmetics } from '../../src/api/cosmetics';
+import { resetMyKip } from '../../src/lib/kip/myKip';
+import { kipStage } from '../../src/lib/kipStage';
+import { loadCosmetics, resetCosmetics } from '../../src/lib/room/cosmeticsStore';
+import { EMPTY_WORN, STARTER_LOADOUT } from '../../src/lib/room/loadout';
+
+jest.mock('../../src/components/room/RoomView', () => require('../../jest-mocks/RoomView'));
+jest.mock('../../src/api/cosmetics', () => ({ fetchCosmetics: jest.fn(), putCosmetics: jest.fn(), postCosmeticsSeen: jest.fn() }));
+
+afterEach(() => { resetCosmetics(); resetMyKip(); });
+
+const STAGE = kipStage({ phase: 'ready', statusUnverified: false, offline: false, waiting: false, streaming: false, error: false, empty: false, idle: { pose: 'rest', mood: 'idle' } });
+
+/** The collapsed header; `props` overrides the defaults. */
+function renderHeader(props: Partial<React.ComponentProps<typeof CollapsedKipHeader>> = {}) {
+  return render(
+    <CollapsedKipHeader
+      stage={STAGE}
+      look={{ pose: 'rest', mood: 'idle', facing: 'you' }}
+      statusLine="Here"
+      window={{ weather: 'cloudy', night: false }}
+      reduceMotion={false}
+      onExpand={jest.fn()}
+      onConversations={jest.fn()}
+      onNewChat={jest.fn()}
+      showActions
+      {...props}
+    />,
+  );
+}
 
 it('the collapsed header is 60 points, its row 72, and the fade 24 points', () => {
   expect([COLLAPSED_HEIGHT, COLLAPSED_ROW_HEIGHT, FADE_PT]).toEqual([60, 72, 24]);
@@ -21,4 +53,20 @@ it('pinned over a header above the scroll: only the measured overlap counts', ()
 it('a header taller than the row covers nothing: the fade ends as the card leaves the scroll\'s top', () => {
   expect(collapseProgress(312, 312, -8)).toBe(1);
   expect(collapseProgress(300, 312, -8)).toBe(0.5);
+});
+
+it('the thumbnail draws your saved room and what KIP wears; a piece this build cannot draw shows as the starter piece', async () => {
+  (fetchCosmetics as jest.Mock).mockResolvedValue({
+    catalogueVersion: 1, owned: [], fresh: [], version: 1, counters: { recapsRead: 0, buddyCheers: 0 },
+    room: { ...STARTER_LOADOUT, rug: 'rug.red', wallpaper: 'wall.fromTheFuture' }, worn: { ...EMPTY_WORN, head: 'out.cap' },
+  });
+  await act(async () => { await loadCosmetics(); });
+  const thumb = renderHeader().getByTestId('kip-room-thumb');
+  expect(JSON.parse(thumb.props.loadout)).toEqual({ ...STARTER_LOADOUT, rug: 'rug.red' });
+  expect(JSON.parse(thumb.props.worn).head).toBe('out.cap');
+});
+
+it('pauses the thumbnail while decorate mode is open', () => {
+  expect(renderHeader().getByTestId('kip-room-thumb').props.room).not.toContain(':paused');
+  expect(renderHeader({ paused: true }).getByTestId('kip-room-thumb').props.room).toContain(':paused');
 });

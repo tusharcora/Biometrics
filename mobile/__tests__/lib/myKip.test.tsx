@@ -3,8 +3,9 @@ import { fetchIdentity } from '../../src/api/buddies';
 import { kipColourName, kipColourOf, KIP_COLOUR_ORDER } from '../../src/lib/kip/kipColour';
 import { saveKipColour } from '../../src/api/kip';
 import {
-  getMyKipColour, loadMyKipColour, myKipColourLoadFailed, resetMyKipColour, saveMyKipColour, setMyKipColour, useMyKipColour,
-} from '../../src/lib/kip/myKipColour';
+  getMyKip, getMyKipColour, loadMyKipColour, myKipColourLoadFailed, resetMyKip, saveMyKipColour, setMyKipColour, setMyKipWorn,
+  useMyKip, useMyKipColour,
+} from '../../src/lib/kip/myKip';
 
 jest.mock('../../src/api/buddies', () => ({ fetchIdentity: jest.fn() }));
 jest.mock('../../src/api/kip', () => ({ saveKipColour: jest.fn() }));
@@ -14,7 +15,7 @@ const saveKip = saveKipColour as jest.Mock;
 beforeEach(() => {
   identity.mockReset();
   saveKip.mockReset();
-  resetMyKipColour();
+  resetMyKip();
 });
 
 it('reads a missing or unknown name as coral, and names colours for people', () => {
@@ -49,7 +50,7 @@ it('a save updates every reader, and a reset (sign-out) forgets it', async () =>
   const { result } = renderHook(() => useMyKipColour());
   act(() => setMyKipColour('ink'));
   expect(result.current).toBe('ink');
-  act(() => resetMyKipColour());
+  act(() => resetMyKip());
   expect(result.current).toBe('coral');
 });
 
@@ -57,7 +58,7 @@ it('a load that started before a reset never lands after it', async () => {
   let finish!: (v: unknown) => void;
   identity.mockReturnValue(new Promise((r) => { finish = r; }));
   const pending = loadMyKipColour();
-  resetMyKipColour();
+  resetMyKip();
   finish({ kipColour: 'mint' });
   await pending;
   expect(getMyKipColour()).toBe('coral');
@@ -87,7 +88,7 @@ it('a save that finishes after sign-out never lands in the next account', async 
   let finish!: (v: unknown) => void;
   saveKip.mockReturnValue(new Promise((r) => { finish = r; }));
   const pending = saveMyKipColour('mint');
-  resetMyKipColour();
+  resetMyKip();
   finish({ kipColour: 'mint' });
   await pending;
   expect(getMyKipColour()).toBe('coral');
@@ -107,6 +108,17 @@ it('remembers a failed read until a read, save or sign-out', async () => {
   expect(myKipColourLoadFailed()).toBe(false);
   identity.mockRejectedValueOnce(new Error('offline'));
   await loadMyKipColour();
-  resetMyKipColour();
+  resetMyKip();
   expect(myKipColourLoadFailed()).toBe(false);
+});
+
+it('holds what KIP wears beside the colour; ids this build cannot draw are dropped; sign-out forgets both', async () => {
+  const { result } = renderHook(() => useMyKip());
+  expect(result.current.worn).toEqual({ head: null, face: null, neck: null, ears: null });
+  act(() => setMyKipWorn({ head: 'out.cap', face: 'out.fromTheFuture', neck: null, ears: 'out.earbuds' }));
+  expect(result.current.worn).toEqual({ head: 'out.cap', face: null, neck: null, ears: 'out.earbuds' });
+  act(() => setMyKipColour('mint'));
+  expect(getMyKip()).toEqual({ colour: 'mint', worn: { head: 'out.cap', face: null, neck: null, ears: 'out.earbuds' } });
+  act(() => resetMyKip());
+  expect(getMyKip()).toEqual({ colour: 'coral', worn: { head: null, face: null, neck: null, ears: null } });
 });

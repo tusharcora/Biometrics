@@ -27,8 +27,10 @@ const SKY: Record<SkyKey, readonly string[]> = {
 export const SUN = '#FCD34D';
 /** Rain streak colour on the glass. */
 export const RAIN = '#8FB4E8';
-/** The night veil over the whole room (light layer). */
-export const NIGHT_VEIL = 'rgba(6,8,24,0.56)';
+/** The night veil over the whole room (light layer): its colour and alpha, for items that dim their own loop frames. */
+export const NIGHT_VEIL_RGB = '#060818';
+export const NIGHT_VEIL_ALPHA = 0.56;
+export const NIGHT_VEIL = `rgba(6,8,24,${NIGHT_VEIL_ALPHA})`;
 
 function puff(t: Rects, cx: number, cy: number, s: number, base: string, hl: string, sh: string): void {
   E(t, cx, cy + s * 0.35, s * 1.7, s * 0.5, sh);

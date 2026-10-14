@@ -2,7 +2,7 @@ import React from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
 import type { Person } from '../../api/buddies';
 import type { BuddyNote, StatusNote } from '../../api/chats';
-import { useMyKipColour } from '../../lib/kip/myKipColour';
+import { useMyKip } from '../../lib/kip/myKip';
 import { personName } from '../../lib/socialCopy';
 import { Text } from '../ui/text';
 import { ChatAvatar } from './ChatAvatar';
@@ -40,7 +40,7 @@ export function NotesRow({ me, mine: mineNote, buddies: buddyNotes, ringed, now 
   onOpen: (note: BuddyNote) => void;
   onReport: (note: BuddyNote) => void;
 }) {
-  const myColour = useMyKipColour();
+  const myKip = useMyKip();
   const mine = mineNote && live(mineNote, now) ? mineNote : null;
   const buddies = buddyNotes.filter((n) => live(n, now));
   return (
@@ -54,7 +54,7 @@ export function NotesRow({ me, mine: mineNote, buddies: buddyNotes, ringed, now 
           className="items-center gap-1"
         >
           <Bubble id="me" text={mine?.text ?? 'Share a note'} prompt={!mine} />
-          <ChatAvatar person={{ ...me, kipColour: myColour }} size={60} testID="note-avatar-me" />
+          <ChatAvatar person={{ ...me, kipColour: myKip.colour, kipWorn: myKip.worn }} size={60} testID="note-avatar-me" />
         </Pressable>
         <Text importantForAccessibility="no" accessibilityElementsHidden className="text-caption text-muted-foreground">Your note</Text>
       </View>

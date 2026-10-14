@@ -15,7 +15,7 @@ import { TextField } from '../components/ui/text-field';
 import { buddyErrorMessage, expiresIn, PAIR_UP_COPY, shareMessage } from '../lib/buddyCopy';
 import { refreshBuddies } from '../lib/buddiesStore';
 import { offerPushAfterPairing } from '../lib/buddyPushOffer';
-import { useMyKipColour } from '../lib/kip/myKipColour';
+import { useMyKip } from '../lib/kip/myKip';
 
 type Nav = { replace: (name: string, params?: object) => void };
 type Code = { code: string; expiresAt: string };
@@ -33,7 +33,7 @@ export function PairUpScreen() {
 
 function PairUpBody({ identity, navigation }: { identity: BuddyIdentity; navigation: Nav }) {
   const gate = useMoodNoticeGate(identity.moodNoticeSeen);
-  const myColour = useMyKipColour();
+  const { colour: myColour, worn: myWorn } = useMyKip();
   const [code, setCode] = useState<Code | null>(null);
   const [now, setNow] = useState(() => Date.now());
   const [entered, setEntered] = useState('');
@@ -129,7 +129,7 @@ function PairUpBody({ identity, navigation }: { identity: BuddyIdentity; navigat
   return (
     <ScrollView contentContainerStyle={{ padding: 16, gap: 16 }} keyboardShouldPersistTaps="handled">
       <View className="items-center gap-2">
-        <PersonKip colour={myColour} size={72} />
+        <PersonKip colour={myColour} worn={myWorn} size={72} />
         <PageTitle>Pair up with a friend</PageTitle>
         <Text className="text-center text-caption text-muted-foreground">{PAIR_UP_COPY.privacy}</Text>
       </View>

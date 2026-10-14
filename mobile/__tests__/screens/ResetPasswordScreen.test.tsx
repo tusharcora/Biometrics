@@ -1,6 +1,6 @@
 import React from 'react';
 import { kipArtFills, kipFills } from '../../jest-mocks/kipFixture';
-import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
+import { resetMyKip, setMyKipColour } from '../../src/lib/kip/myKip';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { ResetPasswordScreen } from '../../src/screens/ResetPasswordScreen';
 import { useAuth } from '../../src/auth/AuthContext';
@@ -59,5 +59,5 @@ it('always shows a coral KIP waving, whatever colour a KIP was last given (signe
   const utils = render(<ResetPasswordScreen navigation={navigation} route={{ params: { token: 'tok' } } as any} />);
 
   expect(kipFills(utils, 'auth-kip')).toEqual(kipArtFills({ colour: 'coral', pose: 'wave', mood: 'idle' }));
-  resetMyKipColour();
+  resetMyKip();
 });

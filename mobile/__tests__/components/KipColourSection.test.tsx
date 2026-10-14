@@ -5,7 +5,7 @@ import { act, fireEvent, render, screen, waitFor, within } from '@testing-librar
 import { KipColourSection } from '../../src/components/profile/KipColourSection';
 import { fetchIdentity } from '../../src/api/buddies';
 import { saveKipColour } from '../../src/api/kip';
-import { getMyKipColour, loadMyKipColour, resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
+import { getMyKipColour, loadMyKipColour, resetMyKip, setMyKipColour } from '../../src/lib/kip/myKip';
 
 jest.mock('../../src/api/kip', () => ({ saveKipColour: jest.fn() }));
 jest.mock('../../src/api/buddies', () => ({ fetchIdentity: jest.fn() }));
@@ -15,7 +15,7 @@ const identity = fetchIdentity as jest.Mock;
 beforeEach(() => {
   save.mockReset();
   identity.mockReset();
-  resetMyKipColour();
+  resetMyKip();
 });
 
 it('reads your colour again on opening when the start-up read failed', async () => {

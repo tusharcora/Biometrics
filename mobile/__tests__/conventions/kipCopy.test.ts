@@ -52,9 +52,13 @@ it('no user-facing string says "Coach" or "your / the / their / and coach"', () 
   expect(hits).toEqual([]);
 });
 
+// "Cap" is also a worn item (spec 2026-10-14 KIP's room, CatOutfit.dc.html:70): its display name in roomCopy.ts is the
+// one allowed use. Any other "Cap" string still fails.
+const NAME_EXCEPTIONS = new Set(['lib/room/roomCopy.ts: Cap']);
+
 it('none of the 15 retired coach names appear in any string anywhere in src', () => {
   const all = sourceFiles(SRC);
   const name = new RegExp(`\\b(${RETIRED.join('|')})\\b`);
   const hits = all.flatMap((f) => literals(f).filter((s) => name.test(s)).map((s) => `${path.relative(SRC, f)}: ${s}`));
-  expect(hits).toEqual([]);
+  expect(hits.filter((h) => !NAME_EXCEPTIONS.has(h))).toEqual([]);
 });

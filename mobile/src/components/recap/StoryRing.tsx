@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, type ViewStyle } from 'react-native';
 import type { RecapSummary } from '../../api/recaps';
-import { useMyKipColour } from '../../lib/kip/myKipColour';
+import { useMyKipColour } from '../../lib/kip/myKip';
 import { storyRingHint } from '../../lib/recapCopy';
 import { storyRingColor } from '../../lib/recapTheme';
 import { recapDestination, useUnwatchedRecap } from '../../lib/unwatchedRecap';

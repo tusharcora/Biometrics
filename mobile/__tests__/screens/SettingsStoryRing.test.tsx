@@ -3,7 +3,7 @@ import { StyleSheet } from 'react-native';
 import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { NavigationContext } from '@react-navigation/native';
 import { fetchRecaps } from '../../src/api/recaps';
-import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
+import { resetMyKip, setMyKipColour } from '../../src/lib/kip/myKip';
 import { getTimezoneState } from '../../src/lib/timezone';
 import { storyRingColor } from '../../src/lib/recapTheme';
 import { openRecap } from '../../src/lib/unwatchedRecap';
@@ -30,7 +30,7 @@ beforeEach(() => {
   setMyKipColour('lime');
 });
 
-afterEach(() => resetMyKipColour());
+afterEach(() => resetMyKip());
 
 it("rings the passport's KIP photo in your KIP's colour and plays the week's story from it", async () => {
   await open();

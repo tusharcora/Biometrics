@@ -4,13 +4,16 @@ import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-
 import { achievementsFixture } from '../../jest-mocks/achievementsFixture';
 import { fetchAchievements, markCelebrated } from '../../src/api/achievements';
 import { CelebrationHost, MODAL_DISMISS_MS } from '../../src/components/achievements/CelebrationHost';
+import { fetchCosmetics } from '../../src/api/cosmetics';
 import { refreshAchievements, resetAchievements } from '../../src/lib/achievementsStore';
+import { loadCosmetics, resetCosmetics } from '../../src/lib/room/cosmeticsStore';
 
 jest.mock('../../src/api/achievements');
+jest.mock('../../src/api/cosmetics');
 jest.mock('../../src/lib/timezone', () => require('../../jest-mocks/timezoneSettled'));
 jest.mock('../../src/lib/recapCapture', () => ({ captureToPng: jest.fn(), saveImage: jest.fn(), shareImage: jest.fn() }));
 // A fake signed-in container: the current route and its state events, driven by the tests.
-const mockNav = { ready: true, route: 'Tabs', listeners: new Set<() => void>() };
+const mockNav = { ready: true, route: 'Tabs', listeners: new Set<() => void>(), navigate: jest.fn() };
 jest.mock('../../src/navigation/navigationRef', () => ({
   ...jest.requireActual('../../src/navigation/navigationRef'),
   navigationRef: {
@@ -20,6 +23,7 @@ jest.mock('../../src/navigation/navigationRef', () => ({
       mockNav.listeners.add(cb);
       return () => mockNav.listeners.delete(cb);
     },
+    navigate: (...args: unknown[]) => mockNav.navigate(...args),
   },
 }));
 const load = fetchAchievements as jest.Mock;
@@ -180,4 +184,92 @@ it('keeps the family on screen until it is closed when a refresh brings a higher
   fireEvent.press(screen.getByTestId('celebration-done'));
   expect(post).toHaveBeenLastCalledWith(['s1', 's2']);
   await waitFor(() => expect(screen.queryByTestId('celebration-title')).toBeNull());
+});
+
+describe("new pieces for KIP's room", () => {
+  const SLEEP_I = achievementsFixture({ SLEEP_GOAL: { level: 1 } }, {
+    uncelebrated: [{ id: 's1', family: 'SLEEP_GOAL', level: 1, value: 3, earnedOn: '2026-10-03' }],
+  });
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => {
+    jest.useRealTimers();
+    resetCosmetics();
+  });
+
+  it('names them, and Decorate closes the celebration then opens decorate mode on the piece', async () => {
+    (fetchCosmetics as jest.Mock).mockResolvedValue({
+      catalogueVersion: 1, owned: ['rug.red', 'wall.panel'],
+      fresh: [{ itemId: 'rug.red', source: 'family:SLEEP_GOAL:1' }, { itemId: 'wall.panel', source: 'counter:recaps_read:4' }],
+      room: {}, worn: {}, version: 1, counters: { recapsRead: 4, buddyCheers: 0 },
+    });
+    await act(async () => { await loadCosmetics(); });
+    load.mockResolvedValue(SLEEP_I);
+    render(<CelebrationHost />);
+    await act(async () => {});
+    expect(screen.getByTestId('celebration-room-line')).toHaveTextContent("New for KIP's room: Red rug");
+
+    fireEvent.press(screen.getByTestId('celebration-decorate'));
+    expect(post).toHaveBeenCalledWith(['s1']);
+    act(() => jest.advanceTimersByTime(MODAL_DISMISS_MS - 1));
+    expect(mockNav.navigate).not.toHaveBeenCalled();
+    act(() => jest.advanceTimersByTime(1));
+    expect(mockNav.navigate).toHaveBeenCalledWith('DecorateRoom', { tab: 'room', slot: 'rug' });
+  });
+
+  const COSMETICS = (fresh: Array<{ itemId: string; source: string }>, version = 1) => ({
+    catalogueVersion: 1, owned: fresh.map((f) => f.itemId), fresh, room: {}, worn: {}, version, counters: { recapsRead: 0, buddyCheers: 0 },
+  });
+
+  it('reads the cosmetics again for a badge earned mid-session, and the line fills in', async () => {
+    // The sign-in read: nothing new yet.
+    (fetchCosmetics as jest.Mock).mockResolvedValueOnce(COSMETICS([]));
+    await act(async () => { await loadCosmetics(); });
+    let answer!: (v: unknown) => void;
+    (fetchCosmetics as jest.Mock).mockReturnValueOnce(new Promise((r) => { answer = r; }));
+    load.mockResolvedValue(SLEEP_I);
+    render(<CelebrationHost />);
+    await act(async () => {});
+    expect(screen.getByTestId('celebration-title')).toBeTruthy();
+    expect(screen.queryByTestId('celebration-room-line')).toBeNull();
+    expect(fetchCosmetics).toHaveBeenCalledTimes(2);
+
+    await act(async () => { answer(COSMETICS([{ itemId: 'rug.red', source: 'family:SLEEP_GOAL:1' }], 2)); });
+    expect(screen.getByTestId('celebration-room-line')).toHaveTextContent("New for KIP's room: Red rug");
+  });
+
+  it('with another family queued, opens decorate mode only once the last one closes and the Modal has gone', async () => {
+    (fetchCosmetics as jest.Mock).mockResolvedValue(COSMETICS([{ itemId: 'art.motto', source: 'family:SLEEP_GOAL:2' }]));
+    load.mockResolvedValue(TWO_FAMILIES);
+    render(<CelebrationHost />);
+    await act(async () => {});
+    expect(screen.getByTestId('celebration-title')).toHaveTextContent('SLEEP GOAL STREAK II');
+
+    fireEvent.press(screen.getByTestId('celebration-decorate'));
+    expect(post).toHaveBeenCalledWith(['s1', 's2']);
+    await act(async () => {});
+    expect(screen.getByTestId('celebration-title')).toHaveTextContent('DAILY CHECK-IN I');
+    act(() => jest.advanceTimersByTime(MODAL_DISMISS_MS * 5));
+    expect(mockNav.navigate).not.toHaveBeenCalled();
+
+    fireEvent.press(screen.getByTestId('celebration-done'));
+    await act(async () => {});
+    expect(screen.queryByTestId('celebration-screen')).toBeNull();
+    act(() => jest.advanceTimersByTime(MODAL_DISMISS_MS - 1));
+    expect(mockNav.navigate).not.toHaveBeenCalled();
+    act(() => jest.advanceTimersByTime(1));
+    expect(mockNav.navigate).toHaveBeenCalledTimes(1);
+    expect(mockNav.navigate).toHaveBeenCalledWith('DecorateRoom', { tab: 'room', slot: 'art' });
+  });
+
+  it('forgets a pending Decorate on sign-out', async () => {
+    (fetchCosmetics as jest.Mock).mockResolvedValue(COSMETICS([{ itemId: 'rug.red', source: 'family:SLEEP_GOAL:1' }]));
+    load.mockResolvedValue(SLEEP_I);
+    const view = render(<CelebrationHost />);
+    await act(async () => {});
+    fireEvent.press(screen.getByTestId('celebration-decorate'));
+    await act(async () => {});
+    view.unmount();
+    act(() => jest.advanceTimersByTime(MODAL_DISMISS_MS));
+    expect(mockNav.navigate).not.toHaveBeenCalled();
+  });
 });

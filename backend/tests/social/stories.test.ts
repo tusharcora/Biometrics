@@ -37,7 +37,7 @@ it("shows a buddy's ring locked until I check in, then their mood; badges only w
   const first = await loadStoryRings(me.id, NOW);
   let { rings } = first;
   expect(rings.map((r) => [r.author.id, r.unseen, r.locked, r.frameCount])).toEqual([[sam.id, true, true, 2]]);
-  expect([first.checkedInBuddies, first.viewerCheckedIn, first.checkedInCoachIds]).toEqual([1, false, [rings[0]!.author.coachId]]);
+  expect([first.checkedInBuddies, first.viewerCheckedIn, first.checkedInCoachIds, first.checkedInKipWorn]).toEqual([1, false, [rings[0]!.author.coachId], [rings[0]!.author.kipWorn]]);
   const locked = await getStory(me.id, sam.id, NOW);
   expect(locked.frames[0]).toEqual({ kind: 'checkin', at: expect.any(String), locked: true });
   expect(locked.frames[1]).toMatchObject({ kind: 'badge', family: 'SLEEP_GOAL', level: 2 });
@@ -167,9 +167,9 @@ it('orders rings unseen first, then newest', async () => {
   await saveCheckIn(b.id, 'OKAY', new Date(NOW.getTime() - 2 * 3_600_000));
   await saveCheckIn(c.id, 'OKAY', new Date(NOW.getTime() - 3_600_000));
   await markStorySeen(me.id, c.id, NOW);
-  const { rings, checkedInBuddies, checkedInCoachIds } = await loadStoryRings(me.id, NOW);
+  const { rings, checkedInBuddies, checkedInCoachIds, checkedInKipWorn } = await loadStoryRings(me.id, NOW);
   expect(rings.map((r) => [r.author.id, r.unseen])).toEqual([[b.id, true], [a.id, true], [c.id, false]]);
-  expect([checkedInBuddies, checkedInCoachIds.length]).toEqual([3, 2]);
+  expect([checkedInBuddies, checkedInCoachIds.length, checkedInKipWorn.length]).toEqual([3, 2, 2]);
 });
 
 it('a valid uuid with no user and a missing viewer are not_buddies; seen route is 204 and GET is no-store', async () => {

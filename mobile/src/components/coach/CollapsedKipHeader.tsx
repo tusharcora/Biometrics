@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { Pressable, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from 'nativewind';
@@ -6,10 +6,11 @@ import { Button, buttonIconSize } from '../ui/button';
 import { PageTitle } from '../ui/page-title';
 import { Text } from '../ui/text';
 import { RoomView } from '../room/RoomView';
-import { useMyKipColour } from '../../lib/kip/myKipColour';
+import { useMyKip } from '../../lib/kip/myKip';
 import { KIP_COPY } from '../../lib/kipCopy';
 import { spokenLine, type KipStage } from '../../lib/kipStage';
-import { EMPTY_WORN, STARTER_LOADOUT } from '../../lib/room/loadout';
+import { useMyRoom } from '../../lib/room/cosmeticsStore';
+import { drawableLoadout } from '../../lib/room/draw';
 import type { RoomWeather } from '../../lib/room/weather';
 import type { KipLook } from '../../lib/useKipTurn';
 import { COLORS } from '../../theme';
@@ -31,19 +32,23 @@ export function collapseProgress(scrollY: number, cardBottom: number, covered: n
 
 // W7 "Collapsed · after scroll" (spec §3.5): the room's thumbnail (96 × 60 at 1 point a cell, cropped to THUMB_BOX,
 // inside a 3-point frame), "KIP" with the collapsed status line, and the Conversations and New chat buttons. The
-// thumbnail's picture is decorative: the button around it carries the label.
-export function CollapsedKipHeader({ stage, look, statusLine, window, reduceMotion, onExpand, onConversations, onNewChat, showActions }: {
+// thumbnail's picture is decorative: the button around it carries the label. It shows your saved room and KIP in
+// what it wears, like the card; `paused` stops its loops while decorate mode is open.
+export function CollapsedKipHeader({ stage, look, statusLine, window, reduceMotion, paused, onExpand, onConversations, onNewChat, showActions }: {
   stage: KipStage;
   look: KipLook;
   statusLine: string;
   window: { weather: RoomWeather; night: boolean };
   reduceMotion: boolean;
+  paused?: boolean;
   onExpand: () => void;
   onConversations: () => void;
   onNewChat: () => void;
   showActions: boolean;
 }) {
-  const colour = useMyKipColour();
+  const me = useMyKip();
+  const stored = useMyRoom();
+  const loadout = useMemo(() => drawableLoadout(stored), [stored]);
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === 'dark' ? COLORS.dark : COLORS.light;
   return (
@@ -57,11 +62,11 @@ export function CollapsedKipHeader({ stage, look, statusLine, window, reduceMoti
       >
         <RoomView
           testID="kip-room-thumb"
-          loadout={STARTER_LOADOUT}
-          worn={EMPTY_WORN}
+          loadout={loadout}
+          worn={me.worn}
           weather={window.weather}
           night={window.night}
-          colour={colour}
+          colour={me.colour}
           pose={look.pose}
           mood={look.mood}
           facing={look.facing}
@@ -71,6 +76,7 @@ export function CollapsedKipHeader({ stage, look, statusLine, window, reduceMoti
           cellPt={1}
           box="thumb"
           reduceMotion={reduceMotion}
+          paused={paused}
           accessible={false}
         />
       </Pressable>

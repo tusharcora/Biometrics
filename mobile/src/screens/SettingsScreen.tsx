@@ -16,7 +16,7 @@ import { Text } from '../components/ui/text';
 import { useAchievements } from '../lib/achievementsStore';
 import { useBuddies } from '../lib/buddiesStore';
 import { useCoachStatusContext } from '../lib/coachStatus/CoachStatusProvider';
-import { useMyKipColour } from '../lib/kip/myKipColour';
+import { useMyKipColour } from '../lib/kip/myKip';
 import { memberCode, passportStamps } from '../lib/passport';
 import { categoryCards, useProfileReads } from '../lib/profileHub';
 import { PROFILE_COPY } from '../lib/profileCopy';

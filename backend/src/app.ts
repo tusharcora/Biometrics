@@ -16,6 +16,7 @@ import { buddiesRouter } from './buddies/routes';
 import { socialRouter } from './social/routes';
 import { chatsRouter } from './chats/routes';
 import { kipRouter } from './kip/routes';
+import { cosmeticsRouter } from './cosmetics/routes';
 
 export function createApp(options: { auth?: Auth } = {}): Express {
   const app = express();
@@ -45,6 +46,7 @@ export function createApp(options: { auth?: Auth } = {}): Express {
   app.use(socialRouter);
   app.use(chatsRouter);
   app.use(kipRouter);
+  app.use(cosmeticsRouter);
   app.use(lastErrorHandler);
   return app;
 }

@@ -3,7 +3,8 @@ import { StyleSheet } from 'react-native';
 import { fireEvent, render, screen, within } from '@testing-library/react-native';
 import { PersonKip } from '../../src/components/kip/PersonKip';
 import { StoriesRow } from '../../src/components/social/StoriesRow';
-import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
+import { Rect } from 'react-native-svg';
+import { resetMyKip, setMyKipColour, setMyKipWorn } from '../../src/lib/kip/myKip';
 
 const person = (id: string) => ({ id, handle: id, displayName: id.toUpperCase(), coachId: 'mochi' });
 
@@ -38,7 +39,7 @@ it('after checking in, my ring opens my own story', () => {
 });
 
 describe('people as their KIPs', () => {
-  afterEach(() => resetMyKipColour());
+  afterEach(() => resetMyKip());
 
   it("draws each ring's author in their colour, and my ring in my colour", () => {
     setMyKipColour('ink');
@@ -51,6 +52,22 @@ describe('people as their KIPs', () => {
     );
     expect(within(screen.getByTestId('story-me')).UNSAFE_getByType(PersonKip).props).toMatchObject({ colour: 'ink', size: 34 });
     expect(within(screen.getByTestId('story-sam')).UNSAFE_getByType(PersonKip).props).toMatchObject({ colour: 'sky', size: 34 });
+  });
+
+  it('dresses my ring in what my KIP wears; a buddy piece this build cannot draw leaves their KIP bare', () => {
+    setMyKipWorn({ head: 'out.cap' });
+    render(
+      <StoriesRow
+        me={{ person: person('me'), checkIn: null }}
+        rings={[{ author: { ...person('sam'), kipColour: 'sky', kipWorn: { head: 'out.unknown', face: null, neck: null, ears: null } }, unseen: true, locked: false, frameCount: 1, latestAt: '' }]}
+        onCheckIn={jest.fn()} onOpenStory={jest.fn()} onSeeAll={jest.fn()}
+      />,
+    );
+    const fills = (testID: string) => within(screen.getByTestId(testID)).UNSAFE_getAllByType(Rect).map((r) => r.props.fill);
+    expect(fills('story-me')).toContain('#2563EB');
+    const sam = fills('story-sam');
+    const bare = render(<PersonKip colour="sky" size={34} />).UNSAFE_getAllByType(Rect).map((r) => r.props.fill);
+    expect(sam).toEqual(bare);
   });
 });
 

@@ -13,7 +13,7 @@ import { Text } from '../components/ui/text';
 import { refreshAchievements, useAchievements } from '../lib/achievementsStore';
 import { tierTextColor } from '../lib/badgeArt';
 import { FAMILY_NAMES, FAMILY_RULES, countLabel, ladderRow, numeral, tierName } from '../lib/badges';
-import { useMyKipColour } from '../lib/kip/myKipColour';
+import { useMyKipColour } from '../lib/kip/myKip';
 import { useRefreshAchievementsOnFocus } from '../lib/useRefreshAchievementsOnFocus';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 

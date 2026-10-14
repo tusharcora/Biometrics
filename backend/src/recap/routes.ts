@@ -4,6 +4,7 @@
 import { Router } from 'express';
 import { AuthedRequest, requireAuth } from '../auth/middleware';
 import { UUID_RE } from '../coach/push';
+import { grantCosmeticsSafely } from '../cosmetics/unlock';
 import { prisma } from '../db/client';
 import { toRecapDTO, toRecapSummaryDTO } from './dto';
 
@@ -62,6 +63,8 @@ recapRouter.post('/me/recaps/:id/opened', requireAuth, async (req: AuthedRequest
     res.status(404).json({ error: 'not_found' });
     return;
   }
-  await prisma.recap.updateMany({ where: { id: row.id, openedAt: null }, data: { openedAt: new Date() } });
+  const { count } = await prisma.recap.updateMany({ where: { id: row.id, openedAt: null }, data: { openedAt: new Date() } });
+  // Only the open that set openedAt can raise the recaps-read counter (spec 2026-10-14 KIP's room §3.1).
+  if (count === 1) await grantCosmeticsSafely(req.userId!, new Date());
   res.status(204).end();
 });

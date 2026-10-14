@@ -9,7 +9,7 @@ import { HIDDEN_OK, withCoachStatus } from '../../jest-mocks/coachStatus';
 import { kipArtFills, kipFills } from '../../jest-mocks/kipFixture';
 import type { Recap } from '../../src/api/recaps';
 import { contrast } from '../../src/lib/colour';
-import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
+import { resetMyKip, setMyKipColour } from '../../src/lib/kip/myKip';
 import { captureToPng, saveImage, shareImage } from '../../src/lib/recapCapture';
 import { recapTint } from '../../src/lib/recapTheme';
 import { STORY_FRAME_MS } from '../../src/lib/storyViewer';
@@ -68,7 +68,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   resetUnwatchedRecap();
   resetAchievements();
-  resetMyKipColour();
+  resetMyKip();
   (fetchAchievements as jest.Mock).mockResolvedValue(null);
   mockParams = { recap: mockRecap };
   mockStack = { index: 0, routes: [{ name: 'RecapStory' }] };

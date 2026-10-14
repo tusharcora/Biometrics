@@ -6,7 +6,7 @@ import { refreshBuddies } from '../../src/lib/buddiesStore';
 import { offerPushAfterPairing } from '../../src/lib/buddyPushOffer';
 import { PairUpScreen } from '../../src/screens/PairUpScreen';
 import { PersonKip } from '../../src/components/kip/PersonKip';
-import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
+import { resetMyKip, setMyKipColour } from '../../src/lib/kip/myKip';
 
 jest.mock('../../src/api/buddies', () => ({
   ...jest.requireActual('../../src/api/buddies'),
@@ -147,7 +147,7 @@ it('a sent request never offers notifications (it pairs no one here)', async () 
 });
 
 describe('you as your KIP', () => {
-  afterEach(() => resetMyKipColour());
+  afterEach(() => resetMyKip());
 
   it("draws you in your colour and says buddies see your KIP's mood", async () => {
     setMyKipColour('lemon');

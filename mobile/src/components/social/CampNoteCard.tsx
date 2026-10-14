@@ -8,6 +8,7 @@ import { TextInput, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import Svg, { Circle } from 'react-native-svg';
 import { PersonKip } from '../kip/PersonKip';
+import type { KipWorn } from '../../lib/room/loadout';
 import { Button, buttonIconSize } from '../ui/button';
 import { Text } from '../ui/text';
 import { inputTextStyle } from '../ui/input-style';
@@ -56,12 +57,14 @@ export interface CampNoteCardProps {
   message: string | null;
   buddies: number;
   kipColour: string;
+  /** What your KIP wears, beside kipColour. */
+  kipWorn?: Partial<KipWorn>;
   /** The composer's input top and Share bottom, in the card. */
   onComposerLayout?: (box: { top: number; bottom: number }) => void;
 }
 
 export function CampNoteCard({
-  inputRef, draft, onDraft, length, canShare, onShare, live, editing, onEdit, onCancel, onClear, busy, message, buddies, kipColour, onComposerLayout,
+  inputRef, draft, onDraft, length, canShare, onShare, live, editing, onEdit, onCancel, onClear, busy, message, buddies, kipColour, kipWorn, onComposerLayout,
 }: CampNoteCardProps) {
   const [focused, setFocused] = useState(false);
   const drafting = !live || editing;
@@ -81,7 +84,7 @@ export function CampNoteCard({
 
       <View className="flex-row items-end gap-2.5 rounded-[18px] p-3" style={{ backgroundColor: 'rgba(15,18,48,0.9)' }}
         accessible accessibilityLabel={preview ? `Preview: ${preview}` : 'Preview: no note yet'}>
-        <PersonKip colour={kipColour} size={28} />
+        <PersonKip colour={kipColour} worn={kipWorn} size={28} />
         <View className="flex-1 items-start">
           {preview ? <PixelBubble text={preview} maxWidth={200} /> : <AddNoteBubble maxWidth={200} />}
         </View>

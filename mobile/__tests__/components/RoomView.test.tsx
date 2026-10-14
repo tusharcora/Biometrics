@@ -6,6 +6,7 @@ import { roomCrop } from '../../src/components/room/roomCrop';
 import { FOCUS_BOX, ROOM_W, THUMB_BOX } from '../../src/lib/room/grid';
 import { EMPTY_WORN, STARTER_LOADOUT } from '../../src/lib/room/loadout';
 import { SEATS } from '../../src/lib/room/draw';
+import { registerItems } from '../../src/lib/room/items';
 
 let mockFocused = true;
 jest.mock('../../src/lib/useScreenFocused', () => ({ useScreenFocused: () => mockFocused }));
@@ -88,12 +89,21 @@ describe('RoomView', () => {
   it.each([
     ['under Reduce Motion', { reduceMotion: true }, true],
     ['when the tab is not focused', {}, false],
+    ['while paused (decorate mode is open)', { paused: true }, true],
   ] as const)('holds the first frame %s', (_label, extra, focused) => {
     mockFocused = focused;
     const s = render(<RoomView {...PROPS} {...extra} />);
     const [, kip, , frame] = pictures(s);
     act(() => { jest.advanceTimersByTime(LOOP_MS * 4); });
     expect([pictures(s)[1], pictures(s)[3]]).toEqual([kip, frame]);
+  });
+
+  it('re-records KIP when a desk swap moves the seat, even with the same pose', () => {
+    registerItems([{ id: 'test.lowTable', slot: 'desk', style: 'low', draw: () => ({ base: [] }) }]);
+    const s = render(<RoomView {...PROPS} />);
+    const [, kip] = pictures(s);
+    s.rerender(<RoomView {...PROPS} loadout={{ ...STARTER_LOADOUT, desk: 'test.lowTable' }} />);
+    expect(pictures(s)[1]).not.toBe(kip);
   });
 
   it('is one image with one label; the bubble is decorative', () => {

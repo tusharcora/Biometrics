@@ -12,7 +12,7 @@ import { blockBuddy } from '../../src/api/buddies';
 import { chromeBottom, fireBox, PEEK_RESERVE, seatBoxes, type Box } from '../../src/components/social/campSceneGeometry';
 import { CampfireScreen } from '../../src/screens/CampfireScreen';
 import { PersonKip } from '../../src/components/kip/PersonKip';
-import { getMyKipColour, resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
+import { getMyKipColour, resetMyKip, setMyKipColour } from '../../src/lib/kip/myKip';
 import { GlassSurface } from '../../src/components/ui/glass-surface';
 import { FONTS } from '../../src/theme';
 
@@ -93,7 +93,7 @@ it('draws the night camp: moon, bubbles over coaches, my add-note bubble, asleep
 });
 
 describe('people as their KIPs', () => {
-  afterEach(() => resetMyKipColour());
+  afterEach(() => resetMyKip());
 
   const coloured = () => camp({
     members: [

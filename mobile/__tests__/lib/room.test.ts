@@ -1,6 +1,7 @@
 import { drawKipLayer, drawRoom, drawRoomFrames, drawRoomStatic, kipLayerKey, kipSeatFor, roomPictureKey, SEATS, type RoomInput } from '../../src/lib/room/draw';
 import { boundsOf, boxContains, FOCUS_BOX, ROOM_H, ROOM_W, THUMB_BOX, type RoomRect } from '../../src/lib/room/grid';
-import { itemArt, type ItemContext } from '../../src/lib/room/items';
+import { drawableLoadout } from '../../src/lib/room/draw';
+import { itemArt, registerItems, type ItemContext } from '../../src/lib/room/items';
 import { EMPTY_WORN, STARTER_LOADOUT, type RoomLoadout } from '../../src/lib/room/loadout';
 import { ROOM_SLOTS, SLOT_ANCHORS, WORN_SLOTS } from '../../src/lib/room/slots';
 import { MONITOR_GLASS, STARTER_ITEMS } from '../../src/lib/room/starterItems';
@@ -32,7 +33,7 @@ describe('the grid and the slots', () => {
 
   it('registers the ten placed starter items, each drawn inside its slot anchor', () => {
     expect(STARTER_ITEMS.map((i) => i.id).sort()).toEqual(
-      ['amber_lamp', 'books', 'dark_oak', 'fern', 'monitor', 'mug', 'plain_frame', 'plain_slate', 'slate_rug', 'wall_calendar'],
+      ['art.calendar', 'desk.monitor', 'floor.oakDark', 'item.mug', 'lamp.amber', 'plant.fern', 'rug.slate', 'shelf.books', 'wall.plain', 'win.plain'],
     );
     for (const item of STARTER_ITEMS) {
       expect(STARTER_LOADOUT[item.slot]).toBe(item.id);
@@ -63,8 +64,8 @@ describe('drawRoom', () => {
   it('keeps the window, the desk and KIP inside the focus box', () => {
     const d = drawRoom(INPUT);
     expect(boxContains(FOCUS_BOX, boundsOf(d.kip)!)).toBe(true);
-    expect(boxContains(FOCUS_BOX, boundsOf(itemArt('monitor')!.draw(CTX).base!)!)).toBe(true);
-    expect(boxContains(FOCUS_BOX, boundsOf(itemArt('plain_frame')!.draw(CTX).base!)!)).toBe(true);
+    expect(boxContains(FOCUS_BOX, boundsOf(itemArt('desk.monitor')!.draw(CTX).base!)!)).toBe(true);
+    expect(boxContains(FOCUS_BOX, boundsOf(itemArt('win.plain')!.draw(CTX).base!)!)).toBe(true);
     expect([d.focus, d.thumb]).toEqual([FOCUS_BOX, THUMB_BOX]);
   });
 
@@ -106,12 +107,18 @@ describe('drawRoom', () => {
     expect(boundsOf(typing)).toEqual(boundsOf(facingYou));
   });
 
+  it('draws KIP\'s worn pieces in the room\'s KIP layer, and a worn change changes the layer key', () => {
+    const dressed = { ...KIP, worn: { ...EMPTY_WORN, head: 'out.beanie' } };
+    expect(drawKipLayer(dressed, SEATS.standard)).not.toEqual(drawKipLayer(KIP, SEATS.standard));
+    expect(kipLayerKey(dressed)).not.toBe(kipLayerKey(KIP));
+  });
+
   it('tints the mug in KIP\'s colour', () => {
     for (const colour of ['coral', 'cobalt', 'lime'] as const) {
       const ramp = kipRamp(KIP_COLOURS[colour]);
-      expect(has(itemArt('mug')!.draw({ ...CTX, colour, ramp }).base!, ramp.body)).toBe(true);
+      expect(has(itemArt('item.mug')!.draw({ ...CTX, colour, ramp }).base!, ramp.body)).toBe(true);
     }
-    expect(itemArt('mug')!.tint).toBe(true);
+    expect(itemArt('item.mug')!.tint).toBe(true);
   });
 
   it('puts the monitor\'s screen in the loop frames, never in the static layers', () => {
@@ -156,4 +163,30 @@ it('perf: logs how long the starter room takes to build (spec §5 budget: 8 ms o
   // Logs the duration only; the device budget is checked in Task 16 on the simulator.
   console.info(`drawRoom: ${ms.toFixed(2)} ms`);
   expect(ms).toBeLessThan(50);
+});
+
+describe('catalogue ids and the engine guards (Spec B Task 1)', () => {
+  it('names the ten placed starter pieces with catalogue ids', () => {
+    expect(STARTER_LOADOUT).toEqual({
+      wallpaper: 'wall.plain', floor: 'floor.oakDark', art: 'art.calendar', window: 'win.plain', shelf: 'shelf.books',
+      desk: 'desk.monitor', desk_item: 'item.mug', plant: 'plant.fern', lamp: 'lamp.amber', corner: null,
+      rug: 'rug.slate', pet: null,
+    });
+  });
+
+  it('seats KIP by the desk item only: a styled item from another slot in the desk slot is ignored', () => {
+    registerItems([
+      { id: 'test.lowLamp', slot: 'lamp', style: 'low', draw: () => ({ base: [] }) },
+      { id: 'test.lowDesk', slot: 'desk', style: 'low', draw: () => ({ base: [] }) },
+    ]);
+    expect(kipSeatFor({ ...STARTER_LOADOUT, desk: 'test.lowLamp' })).toEqual(SEATS.standard);
+    expect(kipSeatFor({ ...STARTER_LOADOUT, desk: 'test.lowDesk' })).toEqual(SEATS.low);
+    expect(kipSeatFor({ ...STARTER_LOADOUT, desk: null })).toEqual(SEATS.standard);
+  });
+
+  it('draws an id this build has no art for as the slot\'s starter piece, and keeps empty optional slots empty', () => {
+    const stored = { ...STARTER_LOADOUT, wallpaper: 'wall.fromTheFuture', rug: 'plant.fern', corner: null };
+    expect(drawableLoadout(stored)).toEqual({ ...STARTER_LOADOUT, wallpaper: 'wall.plain', rug: 'rug.slate' });
+    expect(drawableLoadout(STARTER_LOADOUT)).toEqual(STARTER_LOADOUT);
+  });
 });

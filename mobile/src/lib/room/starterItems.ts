@@ -6,19 +6,15 @@ import { darkenHex, mixHex } from '../colour';
 import { FLOOR_Y, ROOM_H, ROOM_W, WALL_X0, WALL_X1 } from './grid';
 import { registerItems, type ItemArt, type MonitorScreen } from './items';
 import { bookRow, clipB, E, floorSeams, glow, gradV, leaf, poly, pot, px, R, shade, type Rects } from './paint';
-import { windowSky } from './weather';
+import { accentOn, deskFurniture, shelfPlank, three, veiled, windowFrame } from './items/shared';
 
-const WOOD = { leg: '#7C5A3E', top: '#9A7350' };
-const CHAIR = '#3F4656';
 const BOOKS = ['#60A5FA', '#F87171', '#FDE047', '#475569', '#A78BFA', '#34D399'];
 
 /** The monitor's glass, inside its bezel: the loop frames draw the screen content here. */
 export const MONITOR_GLASS = { x: 74, y: 50, w: 24, h: 14 } as const;
 
-const three = (f: (k: 0 | 1 | 2) => Rects): [Rects, Rects, Rects] => [f(0), f(1), f(2)];
-
 const plainSlate: ItemArt = {
-  id: 'plain_slate',
+  id: 'wall.plain',
   slot: 'wallpaper',
   draw: () => {
     const r: Rects = [];
@@ -34,7 +30,7 @@ const plainSlate: ItemArt = {
 };
 
 const darkOak: ItemArt = {
-  id: 'dark_oak',
+  id: 'floor.oakDark',
   slot: 'floor',
   draw: () => {
     const r: Rects = [];
@@ -46,22 +42,17 @@ const darkOak: ItemArt = {
 };
 
 const plainFrame: ItemArt = {
-  id: 'plain_frame',
+  id: 'win.plain',
   slot: 'window',
-  draw: ({ weather, night }) => {
+  draw: (ctx) => {
     const r: Rects = [];
-    R(r, 18, 12, 36, 40, '#1E2430');
-    windowSky(r, { x: 20, y: 14, w: 32, h: 36 }, weather, night);
-    R(r, 35, 14, 2, 36, '#1E2430');
-    R(r, 20, 31, 32, 1, '#1E2430');
-    R(r, 16, 52, 40, 3, '#191E28');
-    R(r, 16, 52, 40, 1, '#2A3140');
+    windowFrame(r, ctx);
     return { base: r };
   },
 };
 
 const wallCalendar: ItemArt = {
-  id: 'wall_calendar',
+  id: 'art.calendar',
   slot: 'art',
   draw: () => {
     const r: Rects = [];
@@ -78,22 +69,19 @@ const wallCalendar: ItemArt = {
 };
 
 const books: ItemArt = {
-  id: 'books',
+  id: 'shelf.books',
   slot: 'shelf',
   draw: () => {
     const r: Rects = [];
     shade(r, 113, 33, 18, 1.5, 0.12);
     bookRow(r, 98, 30, 128, BOOKS, 3, 10);
-    R(r, 96, 30, 34, 2, '#5B4636');
-    R(r, 96, 30, 34, 1, '#7C5A3E');
-    R(r, 99, 32, 1, 2, '#3A2D23');
-    R(r, 126, 32, 1, 2, '#3A2D23');
+    shelfPlank(r);
     return { base: r };
   },
 };
 
 const slateRug: ItemArt = {
-  id: 'slate_rug',
+  id: 'rug.slate',
   slot: 'rug',
   draw: () => {
     const r: Rects = [];
@@ -125,36 +113,15 @@ function screenContent(screen: MonitorScreen, k: 0 | 1 | 2, accent: string): Rec
   return r;
 }
 
-/** A readable accent on the dark glass: ink and slate are too dark, so they show as off-white (lib.js accentOf). */
-const accentOn = (body: string) => {
-  const n = parseInt(body.slice(1), 16);
-  const lum = (0.299 * ((n >> 16) & 255) + 0.587 * ((n >> 8) & 255) + 0.114 * (n & 255)) / 255;
-  return lum < 0.42 ? '#F5F5F4' : body;
-};
-
 const monitor: ItemArt = {
-  id: 'monitor',
+  id: 'desk.monitor',
   slot: 'desk',
   style: 'standard',
   emissive: true,
   frames: 3,
   draw: ({ night, ramp, screen }) => {
     const r: Rects = [];
-    // The desk (sets2.js `desk`).
-    shade(r, 88, 99, 30, 3, 0.12);
-    R(r, 64, 75, 3, 24, darkenHex(WOOD.leg, 0.85));
-    R(r, 109, 75, 3, 24, darkenHex(WOOD.leg, 0.85));
-    R(r, 62, 72, 52, 3, WOOD.top);
-    R(r, 62, 72, 52, 1, mixHex(WOOD.top, '#FFFFFF', 0.22));
-    R(r, 62, 75, 52, 2, WOOD.leg);
-    // KIP's chair, back on the right.
-    shade(r, 123, 96, 18, 2);
-    R(r, 136, 58, 3, 29, CHAIR);
-    R(r, 138, 58, 1, 29, mixHex(CHAIR, '#FFFFFF', 0.15));
-    R(r, 108, 84, 31, 3, CHAIR);
-    R(r, 108, 84, 31, 1, mixHex(CHAIR, '#FFFFFF', 0.15));
-    R(r, 110, 87, 2, 9, darkenHex(CHAIR, 0.8));
-    R(r, 134, 87, 2, 9, darkenHex(CHAIR, 0.8));
+    deskFurniture(r);
     // The monitor, its stand and the keyboard.
     R(r, 72, 48, 28, 18, '#1F2937');
     gradV(r, 73, 49, 26, 16, ['#0B1422', '#0F1A2A', '#132036']);
@@ -173,11 +140,11 @@ const monitor: ItemArt = {
 };
 
 const mug: ItemArt = {
-  id: 'mug',
+  id: 'item.mug',
   slot: 'desk_item',
   tint: true,
   frames: 3,
-  draw: ({ ramp }) => {
+  draw: ({ ramp, night }) => {
     const r: Rects = [];
     shade(r, 106, 72, 4, 1, 0.2);
     R(r, 104, 66, 4, 6, ramp.body);
@@ -187,7 +154,7 @@ const mug: ItemArt = {
     // Steam: three wisps rising one cell a frame.
     const steam = three((k) => {
       const f: Rects = [];
-      [[105, 63], [106, 61], [105, 59]].forEach(([sx, sy], i) => px(f, sx! + ((i + k) % 2), sy! - k, 'rgba(241,245,249,0.45)'));
+      [[105, 63], [106, 61], [105, 59]].forEach(([sx, sy], i) => px(f, sx! + ((i + k) % 2), sy! - k, veiled('rgba(241,245,249,0.45)', night)));
       return f;
     });
     return { base: r, frames: steam };
@@ -195,7 +162,7 @@ const mug: ItemArt = {
 };
 
 const amberLamp: ItemArt = {
-  id: 'amber_lamp',
+  id: 'lamp.amber',
   slot: 'lamp',
   emissive: true,
   frames: 3,
@@ -219,7 +186,7 @@ const amberLamp: ItemArt = {
 };
 
 const fern: ItemArt = {
-  id: 'fern',
+  id: 'plant.fern',
   slot: 'plant',
   draw: () => {
     const r: Rects = [];

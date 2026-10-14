@@ -6,7 +6,7 @@ import type { AchievementFamily } from '../../api/achievements';
 import { LOCKED_PIP, TIER_SURFACE, glyphCells, octagonPoints, tierColors, tierInk } from '../../lib/badgeArt';
 import { badgeLabel } from '../../lib/badges';
 import type { KipColour } from '../../lib/kip/kipArt';
-import { useMyKipColour } from '../../lib/kip/myKipColour';
+import { useMyKipColour } from '../../lib/kip/myKip';
 
 export interface BadgeIconProps {
   family: AchievementFamily;

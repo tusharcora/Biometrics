@@ -64,7 +64,7 @@ describe('the KIP page (W7)', () => {
     const turn = openTurn(stream);
     const s = await openChat();
     await ask(s, 'How did I sleep?');
-    expect(room(s)).toMatch(/^type:glance:ON IT…:dots:.*:desk$/);
+    expect(room(s)).toMatch(/^type:glance:ON IT…:dots:.*:desk:$/);
     expect(s.getByTestId('kip-status-line')).toHaveTextContent('Typing it up…');
     await turn.emit({ type: 'text', sentence: 'Mostly clear skies.' });
     // KIP turns to face you over two 80 ms frames (useKipTurn), then points.
@@ -73,7 +73,7 @@ describe('the KIP page (W7)', () => {
         jest.advanceTimersByTime(TURN_FRAME_MS);
       });
     }
-    expect(room(s)).toMatch(/^point:glance:HERE'S MY TAKE:chart:.*:you$/);
+    expect(room(s)).toMatch(/^point:glance:HERE'S MY TAKE:chart:.*:you:$/);
     expect(s.getByTestId('kip-status-line')).toHaveTextContent('Answering');
     await turn.finish(doneEvent());
     expect(room(s)).toMatch(/^rest:curious:none:lines:/);

@@ -1,5 +1,6 @@
 import type { AchievementFamily } from './achievements';
 import { apiFetch } from './client';
+import type { WornSlot } from '../lib/room/slots';
 
 // Buddies (spec 2026-10-06 buddies). Only a BARE 404 on GET /me/buddies (no error code) means the
 // backend predates buddies; every other buddy error carries { error: code } (not_buddies is a 403).
@@ -12,7 +13,15 @@ export const SHARE_KEYS: readonly ShareKey[] = ['recovery', 'sleepScore', 'hours
 export type NumberKey = 'recovery' | 'sleepScore' | 'hoursSlept' | 'steps';
 export const NUMBER_KEYS: readonly NumberKey[] = ['recovery', 'sleepScore', 'hoursSlept', 'steps'];
 
-export interface Person { id: string; handle: string; displayName: string; coachId: string; kipColour?: string }
+export interface Person {
+  id: string;
+  handle: string;
+  displayName: string;
+  coachId: string;
+  kipColour?: string;
+  // What their KIP wears; older servers omit it. Draw it through kipWornOf (ids this build can't draw drop).
+  kipWorn?: Partial<Record<WornSlot, string | null>>;
+}
 export interface BuddyRow extends Person { mood: Mood; moodLine: string; unseenSticker: boolean }
 export interface BuddyPage { buddies: BuddyRow[]; nextCursor: string | null; incomingRequests: number; outgoingRequests: number }
 export interface BuddyIdentity {

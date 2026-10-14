@@ -2,7 +2,7 @@ import React from 'react';
 import { render } from '@testing-library/react-native';
 import { CoachMessageRow } from '../../src/components/coach/CoachMessageRow';
 import { KIP_COLOURS } from '../../src/lib/kip/kipArt';
-import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
+import { resetMyKip, setMyKipColour } from '../../src/lib/kip/myKip';
 import { HIDDEN_OK } from '../../jest-mocks/coachStatus';
 
 let mockScheme: 'light' | 'dark' = 'light';
@@ -12,7 +12,7 @@ const ROW_PROPS = { showFollowUps: false, busy: false, onAsk: () => true, onOver
 
 afterEach(() => {
   mockScheme = 'light';
-  resetMyKipColour();
+  resetMyKip();
 });
 
 describe('CoachMessageRow (spec 2026-10-14 KIP Coach §3.4, §7.7)', () => {

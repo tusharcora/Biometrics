@@ -8,7 +8,7 @@ import Svg, { Rect } from 'react-native-svg';
 import { useColorScheme } from 'nativewind';
 import type { AchievementFamily } from '../../api/achievements';
 import { KIP_COLOURS } from '../../lib/kip/kipArt';
-import { useMyKipColour } from '../../lib/kip/myKipColour';
+import { useMyKip } from '../../lib/kip/myKip';
 import { badgeLabel } from '../../lib/badges';
 import { formatJoined, mrzLines, type Stamp } from '../../lib/passport';
 import { BACKDROP_H, BACKDROP_W, passportBackdrop } from '../../lib/profileArt';
@@ -59,7 +59,7 @@ function Field({ label, value, testID }: { label: string; value: string; testID:
 }
 
 function Photo({ recap, surface }: { recap: PassportProps['recap']; surface: string }) {
-  const kipColour = useMyKipColour();
+  const { colour: kipColour, worn: myWorn } = useMyKip();
   const frame = recap?.color ?? COLOUR;
   const art = (
     <View testID="passport-photo" style={{ width: PHOTO_W, height: PHOTO_H, borderWidth: FRAME, borderColor: frame, overflow: 'hidden' }}>
@@ -70,7 +70,7 @@ function Photo({ recap, surface }: { recap: PassportProps['recap']; surface: str
           ))}
         </Svg>
         <View style={{ position: 'absolute', left: 12, top: 35 }}>
-          <Kip testID="passport-kip" colour={kipColour} pose="rest" scale={KIP_SCALE} />
+          <Kip testID="passport-kip" colour={kipColour} worn={myWorn} pose="rest" scale={KIP_SCALE} />
         </View>
       </View>
       {recap ? (
