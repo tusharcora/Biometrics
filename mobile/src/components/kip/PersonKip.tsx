@@ -3,6 +3,8 @@ import { View } from 'react-native';
 import Svg, { Rect } from 'react-native-svg';
 import { kipArt, kipBounds, type KipColour, type KipMood, type KipPose } from '../../lib/kip/kipArt';
 import { kipColourOf } from '../../lib/kip/kipColour';
+import { wornForSize } from '../../lib/kip/wornArt';
+import type { KipWorn } from '../../lib/room/loadout';
 
 // A person as their KIP (spec 2026-10-13 KIP colour §3): the one way to draw a buddy or you. Cropped to the cells
 // this variant paints, so small slots get whole points per cell and the body sits centred, not low.
@@ -22,10 +24,16 @@ export function personStateOf(mood: 'good' | 'ok' | 'low' | 'none' | undefined, 
   return mood ?? 'none';
 }
 
-export function PersonKip({ colour, state = 'none', size, testID }: {
-  colour?: string | KipColour; state?: PersonState; size: number; testID?: string;
+export function PersonKip({ colour, state = 'none', worn, size, testID }: {
+  colour?: string | KipColour; state?: PersonState; worn?: Partial<KipWorn>; size: number; testID?: string;
 }) {
-  const variant = useMemo(() => ({ colour: kipColourOf(colour), ...PERSON_POSE[state] }), [colour, state]);
+  // Keyed on the worn record's contents: a fresh but equal object from a parent render keeps the memo.
+  const wornKey = JSON.stringify(worn ?? null);
+  const variant = useMemo(
+    () => ({ colour: kipColourOf(colour), ...PERSON_POSE[state], worn: wornForSize(worn, size) }),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [colour, state, size, wornKey],
+  );
   const art = useMemo(() => kipArt(variant), [variant]);
   const box = useMemo(() => kipBounds(variant), [variant]);
   const scale = Math.max(1, Math.floor(size / Math.max(box.w, box.h)));

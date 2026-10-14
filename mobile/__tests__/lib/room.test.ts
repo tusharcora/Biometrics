@@ -107,6 +107,12 @@ describe('drawRoom', () => {
     expect(boundsOf(typing)).toEqual(boundsOf(facingYou));
   });
 
+  it('draws KIP\'s worn pieces in the room\'s KIP layer, and a worn change changes the layer key', () => {
+    const dressed = { ...KIP, worn: { ...EMPTY_WORN, head: 'out.beanie' } };
+    expect(drawKipLayer(dressed, SEATS.standard)).not.toEqual(drawKipLayer(KIP, SEATS.standard));
+    expect(kipLayerKey(dressed)).not.toBe(kipLayerKey(KIP));
+  });
+
   it('tints the mug in KIP\'s colour', () => {
     for (const colour of ['coral', 'cobalt', 'lime'] as const) {
       const ramp = kipRamp(KIP_COLOURS[colour]);

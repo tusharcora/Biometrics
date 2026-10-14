@@ -53,6 +53,21 @@ describe('PersonKip', () => {
     expect(drawn / 10).toBe(scale);
   });
 
+  it('wears head and ears pieces at any size, and face and neck pieces from 32 points up', () => {
+    const fills = (size: number) => {
+      const r = render(<PersonKip size={size} worn={{ face: 'out.round', head: 'out.cap' }} />);
+      const out = r.UNSAFE_getAllByType(Rect).map((x) => x.props.fill);
+      r.unmount();
+      return out;
+    };
+    const small = fills(26);
+    expect(small).toContain('#2563EB');
+    expect(small).not.toContain('#FCD34D');
+    const big = fills(64);
+    expect(big).toContain('#2563EB');
+    expect(big).toContain('#FCD34D');
+  });
+
   it('is decorative: hidden from screen readers', () => {
     const { getByTestId } = render(<PersonKip size={32} testID="p" />);
     const box = getByTestId('p', { includeHiddenElements: true });

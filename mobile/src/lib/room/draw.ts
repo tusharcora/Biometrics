@@ -33,7 +33,7 @@ export interface RoomKip {
   colour: KipColour;
   pose: KipPose;
   mood: KipMood;
-  /** All null in Spec A; Spec B draws worn items. */
+  /** What KIP wears (Spec B §7), drawn on its grid. */
   worn: KipWorn;
   /** The loop frame (0–2) for looping poses. */
   frame?: number;
@@ -124,7 +124,7 @@ export function drawRoomFrames(input: StaticInput & { screen: MonitorScreen }): 
 /** KIP at its seat, 2 cells per KIP pixel, mirrored when it faces a desk on its left. */
 export function drawKipLayer(kip: RoomKip, seat: KipSeat): Rects {
   const facing = kip.facing ?? (kip.pose === 'type' ? 'desk' : 'you');
-  let grid = kipGrid({ colour: kip.colour, pose: kip.pose, mood: kip.mood, frame: kip.frame ?? 0 });
+  let grid = kipGrid({ colour: kip.colour, pose: kip.pose, mood: kip.mood, frame: kip.frame ?? 0, worn: kip.worn });
   if (facing === 'desk' && seat.deskSide === 'left') grid = mirrorGrid(grid);
   const r: Rects = [];
   for (let y = 0; y < KIP_GRID; y++) {

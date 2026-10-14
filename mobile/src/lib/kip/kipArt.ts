@@ -1,8 +1,11 @@
 // KIP drawing engine (prep, not wired in). A port of the approved board's engine
 // (docs/design/character/project/Final.dc.html): the 16 x 16 base body with GROUNDED lighting from one body colour,
-// the pose-only arms and the moods. Skins, outfits and the idle loop are left out until they have a spec.
+// the pose-only arms and the moods, plus worn pieces (wornArt.ts). Skins and the idle loop are left out until they
+// have a spec.
 // Output is a list of one-row runs, like weatherArt.ts.
 import type { PixelRect } from '../weatherArt';
+import type { WornSlot } from '../room/slots';
+import { wornArt, wornLayer } from './wornArt';
 
 export const KIP_GRID = 16;
 
@@ -43,6 +46,8 @@ export interface KipVariant {
   mood?: KipMood;
   /** The loop frame, 0–2. Only `type` has three; every other pose ignores it. */
   frame?: number;
+  /** Worn pieces by slot (spec 2026-10-14 KIP's room §7). Unknown ids draw nothing. */
+  worn?: Partial<Record<WornSlot, string | null>>;
 }
 
 // Grid roles: b body, h light, s shade, d deep, e eyes, w white, z ground shadow.
@@ -169,8 +174,29 @@ function remap(g: RoleGrid, move: (x: number, y: number, c: Role, out: RoleGrid)
   return out;
 }
 
+/** Moves a worn layer exactly as the body's posture moves the body: tall, squash, tilt, hop (no shadow). */
+function postureLayer(layer: (string | null)[][], p: PoseDef, m: MoodDef, hop: number): (string | null)[][] {
+  const move = (g: (string | null)[][], f: (x: number, y: number) => [number, number] | null) => {
+    const out = blank<string>();
+    for (let y = 0; y < KIP_GRID; y++) for (let x = 0; x < KIP_GRID; x++) {
+      const c = g[y]![x];
+      if (!c) continue;
+      const to = f(x, y);
+      if (to) put(out, to[0], to[1], c);
+    }
+    return out;
+  };
+  let g = layer;
+  if (p.tall || m.tall) g = move(g, (x, y) => [x, y <= 12 ? y - 1 : y]);
+  if (m.squash) g = move(g, (x, y) => (y === 7 ? null : [x, y < 7 ? y + 1 : y]));
+  if (m.tilt) { const t = m.tilt; g = move(g, (x, y) => [x + (y < 9 ? t : 0), y]); }
+  if (hop) g = move(g, (x, y) => [x, y - hop]);
+  return g;
+}
+
 /** The 16 x 16 grid of fills (null is empty), row by row. */
-export function kipGrid({ colour = DEFAULT_KIP_COLOUR, pose = 'rest', mood = 'idle', frame = 0 }: KipVariant): KipGrid {
+export function kipGrid(variant: KipVariant): KipGrid {
+  const { colour = DEFAULT_KIP_COLOUR, pose = 'rest', mood = 'idle', frame = 0 } = variant;
   const ramp = kipRamp(KIP_COLOURS[colour]);
   const p = POSES[pose];
   const m = MOODS[mood];
@@ -211,17 +237,28 @@ export function kipGrid({ colour = DEFAULT_KIP_COLOUR, pose = 'rest', mood = 'id
     const width = hop > 1 ? 6 : 8;
     for (let i = 0; i < width; i++) g[15]![8 - width / 2 + i] = 'z';
   }
-  // Arms appear only in poses, and only in empty cells.
+  // Arms appear only in poses, and only in empty cells. They are painted after the head, face and neck pieces.
+  const armCells = new Set<string>();
   const arms = p.frames ? p.frames[Math.abs(Math.floor(frame)) % p.frames.length]! : p.arms ?? [];
   for (const [ax, ay, role] of arms) {
     const y = ay - hop;
-    if (y >= 0 && !g[y]![ax]) g[y]![ax] = role;
+    if (y >= 0 && !g[y]![ax]) { g[y]![ax] = role; armCells.add(`${ax},${y}`); }
   }
 
   const fills: Record<Role, string> = {
     b: ramp.body, h: ramp.light, s: ramp.shade, d: ramp.deep, e: ramp.eyes, w: ramp.white, z: ramp.shadow,
   };
-  const out = g.map((row) => row.map((c) => (c ? fills[c] : null)));
+  const out: KipGrid = g.map((row, y) => row.map((c, x) => (c && !armCells.has(`${x},${y}`) ? fills[c] : null)));
+  const paint = (layer: (string | null)[][]) => layer.forEach((row, y) => row.forEach((c, x) => { if (c) out[y]![x] = c; }));
+  const layerOf = (slot: WornSlot) => {
+    const id = variant.worn?.[slot];
+    return id ? postureLayer(wornLayer(id, ramp), p, m, hop) : null;
+  };
+  // Ruling 5: body, head, face, neck, the pose's arms (over a neck piece), ears, then a held item.
+  for (const slot of ['head', 'face', 'neck'] as const) { const l = layerOf(slot); if (l) paint(l); }
+  armCells.forEach((k) => { const [x, y] = k.split(',').map(Number); out[y!]![x!] = fills[g[y!]![x!]!]; });
+  const ears = layerOf('ears');
+  if (ears) paint(ears);
 
   if (p.held) {
     const item = HELD[p.held];
@@ -265,4 +302,10 @@ export function kipBounds(variant: KipVariant): { x: number; y: number; w: numbe
     minX = Math.min(minX, x); minY = Math.min(minY, y); maxX = Math.max(maxX, x); maxY = Math.max(maxY, y);
   }));
   return maxX < 0 ? { x: 0, y: 0, w: KIP_GRID, h: KIP_GRID } : { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+}
+
+/** A worn piece's tray icon (spec §8 Icons): rows 0–14 of a resting KIP wearing only that piece. */
+export function wornIconRects(id: string, colour: KipColour): PixelRect[] {
+  const slot = wornArt(id)?.slot;
+  return slot ? kipArt({ colour, pose: 'rest', mood: 'idle', worn: { [slot]: id } }).filter((r) => r.y < 15) : [];
 }
