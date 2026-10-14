@@ -48,6 +48,19 @@ it('writes the info line as K4b does', () => {
   expect(infoLine(again, CTX).spoken).not.toContain('·');
 });
 
+it('speaks the info line without Roman numerals or dots (P19)', () => {
+  const locked = decorateReducer(S, { type: 'preview', slot: 'rug', itemId: 'rug.gymmat' });
+  expect(infoLine(locked, CTX).spoken).toBe('Locked, Gym mat, Step goal, level 1');
+  const set = decorateReducer({ ...S, tab: 'sets' }, { type: 'previewSet', setId: 'cottage' });
+  expect(infoLine(set, CTX).spoken).toBe('Locked, Cottage, Read 4 weekly recaps');
+});
+
+it("names the slot, never a raw id, when a slot holds a piece this build does not know", () => {
+  const unknown = initDecorate({ room: { ...STARTER_LOADOUT, wallpaper: 'wall.x' }, worn: { ...EMPTY_WORN, head: 'out.x' } });
+  expect(infoLine(unknown, CTX)).toMatchObject({ text: 'Wallpaper is already placed', spoken: 'In your room, Wallpaper is already placed' });
+  expect(infoLine({ ...unknown, tab: 'kip' }, CTX)).toMatchObject({ text: 'Head', spoken: 'KIP is wearing, Head' });
+});
+
 it('lists the Cottage card with its count, rule and ownership', () => {
   expect(setCards(CTX)).toEqual([expect.objectContaining({ id: 'cottage', name: 'Cottage', pieces: 13, line: '13 pieces · Read 4 weekly recaps', owned: false })]);
 });

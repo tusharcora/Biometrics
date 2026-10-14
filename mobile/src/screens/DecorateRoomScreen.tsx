@@ -76,7 +76,7 @@ function Decorate({ params, navigation }: { params: { tab?: DecorateTab; slot?: 
   const reduceMotion = useReducedMotion();
   const day = useTodayScene(navigation);
   const { width } = useWindowDimensions();
-  const [state, dispatch] = useReducer(decorateReducer, undefined, () => initDecorate({ room: cosmetics.room, worn: cosmetics.worn }, params));
+  const [state, dispatch] = useReducer(decorateReducer, undefined, () => initDecorate({ room: cosmetics.room, worn: cosmetics.worn }, params, cosmetics.version));
   const leaving = useRef(false);
   const [saving, setSaving] = useState(false);
 
@@ -121,9 +121,10 @@ function Decorate({ params, navigation }: { params: { tab?: DecorateTab; slot?: 
   const save = async () => {
     setSaving(true);
     try {
-      // The draft holds only owned pieces and keeps every stored id you did not touch (rulings 18, 25).
-      const next = await saveCosmeticsLoadout({ room: state.draft.room, worn: state.draft.worn, version: cosmetics.version });
-      dispatch({ type: 'saved', look: { room: next.room, worn: next.worn } });
+      // The draft holds only owned pieces and keeps every stored id you did not touch (rulings 18, 25). It is saved
+      // against the version it was built on, so a newer room read meanwhile answers 409 instead of being overwritten.
+      const next = await saveCosmeticsLoadout({ room: state.draft.room, worn: state.draft.worn, version: state.baseVersion });
+      dispatch({ type: 'saved', look: { room: next.room, worn: next.worn }, version: next.version });
       leaving.current = true;
       navigation.goBack();
     } catch (err) {
@@ -133,7 +134,7 @@ function Decorate({ params, navigation }: { params: { tab?: DecorateTab; slot?: 
         const before = getCosmetics();
         const fresh = await loadCosmetics();
         if (fresh && fresh !== before) {
-          dispatch({ type: 'refreshed', look: { room: fresh.room, worn: fresh.worn } });
+          dispatch({ type: 'refreshed', look: { room: fresh.room, worn: fresh.worn }, version: fresh.version });
           announce(ROOM_COPY.refreshed);
           return;
         }

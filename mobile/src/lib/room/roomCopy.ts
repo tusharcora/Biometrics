@@ -67,6 +67,10 @@ const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V'];
 export function itemName(id: ItemId): string {
   return ITEM_NAMES[id] ?? id;
 }
+/** A stored piece's name in its slot; a piece this build does not know (a newer server's id) reads as the slot. */
+export function itemNameIn(id: ItemId, slot: RoomSlot | WornSlot): string {
+  return ITEM_NAMES[id] ?? SLOT_TITLES[slot];
+}
 export function spokenName(id: ItemId): string {
   return itemName(id).split(' · ').join(', ');
 }

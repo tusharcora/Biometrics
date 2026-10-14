@@ -5,7 +5,7 @@ import { CATALOGUE, catalogueItem, catalogueItemsFor, catalogueSet, isWornSlot, 
 import { slotValue, type DecorateSlot, type DecorateState } from './decorate';
 import { itemArt } from './items';
 import type { ItemId } from './loadout';
-import { ROOM_COPY, SET_NAMES, itemName, progressLine, spokenName, unlockLine, unlockSpoken, type ProgressFacts } from './roomCopy';
+import { ROOM_COPY, SET_NAMES, itemName, itemNameIn, progressLine, spokenName, unlockLine, unlockSpoken, type ProgressFacts } from './roomCopy';
 import { spokenLine } from '../kipStage';
 import { SET_SWATCHES } from './art';
 
@@ -74,21 +74,30 @@ export interface InfoLine {
   spoken: string;
 }
 
-const line = (label: string, text: string, muted = false): InfoLine => ({ label, text, muted, spoken: spokenLine(`${label} · ${text}`) });
+/** `said` is the text's spoken form where it differs (an unlock rule: "level 1", never "· I", P19). */
+const line = (label: string, text: string, muted = false, said = text): InfoLine => ({ label, text, muted, spoken: spokenLine(`${label} · ${said}`) });
 
 export function infoLine(state: DecorateState, ctx: TrayContext): InfoLine {
   const I = ROOM_COPY.info;
   const p = state.preview;
-  if (p?.kind === 'set') return line(I.locked, I.lockedText(SET_NAMES[p.setId] ?? p.setId, unlockLine(catalogueSet(p.setId)!.unlock)), true);
-  if (p?.kind === 'item') return line(I.locked, I.lockedText(itemName(p.itemId), unlockLine(catalogueItem(p.itemId)!.unlock)), true);
+  if (p?.kind === 'set') {
+    const name = SET_NAMES[p.setId] ?? p.setId;
+    const rule = catalogueSet(p.setId)!.unlock;
+    return line(I.locked, I.lockedText(name, unlockLine(rule)), true, I.lockedText(name, unlockSpoken(rule)));
+  }
+  if (p?.kind === 'item') {
+    const name = itemNameIn(p.itemId, p.slot);
+    const rule = catalogueItem(p.itemId)!.unlock;
+    return line(I.locked, I.lockedText(name, unlockLine(rule)), true, I.lockedText(name, unlockSpoken(rule)));
+  }
   if (state.tab === 'sets') return line(I.sets, I.setsText);
   const slot: DecorateSlot = state.tab === 'kip' ? state.wornSlot : state.roomSlot;
   const current = slotValue(state.draft, slot);
-  if (state.tab === 'kip') return current ? line(I.wearing, itemName(current)) : line(I.dress, I.dressText, true);
+  if (state.tab === 'kip') return current ? line(I.wearing, itemNameIn(current, slot)) : line(I.dress, I.dressText, true);
   if (state.picked?.slot === slot && state.picked.itemId !== null && current === state.picked.itemId && slotValue(state.saved, slot) !== current) {
-    return line(I.previewing, I.previewText(itemName(current), slot));
+    return line(I.previewing, I.previewText(itemNameIn(current, slot), slot));
   }
-  return current ? line(I.inRoom, I.placedText(itemName(current))) : line(I.inRoom, I.emptyText(slot));
+  return current ? line(I.inRoom, I.placedText(itemNameIn(current, slot))) : line(I.inRoom, I.emptyText(slot));
 }
 
 export interface SetCardModel {

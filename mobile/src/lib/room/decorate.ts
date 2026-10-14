@@ -24,6 +24,9 @@ export interface DecorateState {
   /** The tile tapped last (null itemId: the None tile). */
   picked: { slot: DecorateSlot; itemId: ItemId | null } | null;
   notice: 'refreshed' | 'saveFailed' | null;
+  /** The server version `saved` came from. Done sends this, never the store's live version: a newer room read while
+   * decorate is open (foreground) must answer 409, not be overwritten by a draft built on the older one. */
+  baseVersion: number;
 }
 
 export type DecorateAction =
@@ -34,9 +37,9 @@ export type DecorateAction =
   | { type: 'applySet'; setId: string }
   | { type: 'previewSet'; setId: string }
   | { type: 'undo' }
-  | { type: 'refreshed'; look: Look }
+  | { type: 'refreshed'; look: Look; version: number }
   | { type: 'saveFailed' }
-  | { type: 'saved'; look: Look };
+  | { type: 'saved'; look: Look; version: number };
 
 export function slotValue(look: Look, slot: DecorateSlot): ItemId | null {
   return isWornSlot(slot) ? look.worn[slot] : look.room[slot];
@@ -50,7 +53,7 @@ export function lookEquals(a: Look, b: Look): boolean {
   return ROOM_SLOTS.every((s) => a.room[s] === b.room[s]) && WORN_SLOTS.every((s) => a.worn[s] === b.worn[s]);
 }
 
-export function initDecorate(saved: Look, open: { tab?: DecorateTab; slot?: DecorateSlot } = {}): DecorateState {
+export function initDecorate(saved: Look, open: { tab?: DecorateTab; slot?: DecorateSlot } = {}, baseVersion = 0): DecorateState {
   const { slot } = open;
   const worn = slot !== undefined && isWornSlot(slot);
   return {
@@ -58,7 +61,7 @@ export function initDecorate(saved: Look, open: { tab?: DecorateTab; slot?: Deco
     tab: open.tab ?? (worn ? 'kip' : 'room'),
     roomSlot: slot !== undefined && !worn ? (slot as RoomSlot) : 'wallpaper',
     wornSlot: worn ? (slot as WornSlot) : 'head',
-    picked: null, notice: null,
+    picked: null, notice: null, baseVersion,
   };
 }
 
@@ -91,11 +94,11 @@ export function decorateReducer(s: DecorateState, a: DecorateAction): DecorateSt
       return last ? { ...s, draft: last, history: s.history.slice(0, -1), preview: null, picked: null } : { ...s, preview: null };
     }
     case 'refreshed':
-      return { ...s, saved: a.look, draft: a.look, history: [], preview: null, picked: null, notice: 'refreshed' };
+      return { ...s, saved: a.look, draft: a.look, history: [], preview: null, picked: null, notice: 'refreshed', baseVersion: a.version };
     case 'saveFailed':
       return { ...s, notice: 'saveFailed' };
     case 'saved':
-      return { ...s, saved: a.look, draft: a.look, history: [], preview: null, notice: null };
+      return { ...s, saved: a.look, draft: a.look, history: [], preview: null, notice: null, baseVersion: a.version };
   }
 }
 

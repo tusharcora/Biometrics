@@ -235,6 +235,22 @@ it("after a 409 refresh, the next change saves against the server's version (two
   expect(mockNav.goBack).toHaveBeenCalledTimes(1);
 });
 
+it("a newer room published while decorate is open (another device, read on foreground) never lets Done overwrite it", async () => {
+  const s = await open({ slot: 'rug' });
+  fireEvent.press(s.getByTestId('decorate-tile-rug.red'));
+  const other = { ...DTO, room: { ...DTO.room, wallpaper: 'wall.dots' }, version: 3 };
+  (fetchCosmetics as jest.Mock).mockResolvedValue(other);
+  await act(async () => { await loadCosmetics(); });
+  expect(getCosmetics()!.version).toBe(3);
+  (putCosmetics as jest.Mock).mockRejectedValue(new ApiError(409, 'stale', 'stale'));
+  await act(async () => { fireEvent.press(s.getByTestId('decorate-done')); });
+  // The draft was based on version 2, so Done says 2: the server refuses it and the screen shows the newer room.
+  expect((putCosmetics as jest.Mock).mock.calls[0]![0].version).toBe(2);
+  expect(s.getByText('Something changed on another device. Your room was refreshed.')).toBeTruthy();
+  expect([room(s).wallpaper, room(s).rug]).toEqual(['wall.dots', 'rug.slate']);
+  expect(mockNav.goBack).not.toHaveBeenCalled();
+});
+
 it('any other failure keeps the draft and asks to try again', async () => {
   const s = await open({ slot: 'rug' });
   fireEvent.press(s.getByTestId('decorate-tile-rug.red'));

@@ -52,7 +52,16 @@ it('a tapped tile makes its slot the one the info line talks about', () => {
 
 it('a refresh replaces saved and draft with the server\'s room and says so; a save clears the notice', () => {
   const server: Look = { room: { ...STARTER_LOADOUT, wallpaper: 'wall.dots' }, worn: EMPTY_WORN };
-  const s = run({ type: 'place', slot: 'rug', itemId: 'rug.red' }, { type: 'refreshed', look: server });
+  const s = run({ type: 'place', slot: 'rug', itemId: 'rug.red' }, { type: 'refreshed', look: server, version: 5 });
   expect([s.draft, s.saved, s.history, s.notice, isChanged(s)]).toEqual([server, server, [], 'refreshed', false]);
   expect(decorateReducer(s, { type: 'saveFailed' }).notice).toBe('saveFailed');
+});
+
+it('keeps the version the draft was based on: set on open, by a refresh and by a save, never by anything else', () => {
+  const opened = initDecorate(SAVED, {}, 3);
+  expect(opened.baseVersion).toBe(3);
+  const placed = decorateReducer(opened, { type: 'place', slot: 'rug', itemId: 'rug.red' });
+  expect(decorateReducer(placed, { type: 'saveFailed' }).baseVersion).toBe(3);
+  expect(decorateReducer(placed, { type: 'refreshed', look: SAVED, version: 5 }).baseVersion).toBe(5);
+  expect(decorateReducer(placed, { type: 'saved', look: SAVED, version: 4 }).baseVersion).toBe(4);
 });
