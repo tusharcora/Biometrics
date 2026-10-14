@@ -1,6 +1,6 @@
 import { ask, mockNav, openChat, status, stream, today } from '../../jest-mocks/coachScreenHarness';
 import React from 'react';
-import { AppState } from 'react-native';
+import { AccessibilityInfo, AppState } from 'react-native';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { CoachScreen } from '../../src/screens/CoachScreen';
 import { fetchCoachStatus } from '../../src/api/coach';
@@ -100,6 +100,23 @@ describe('the KIP page (W7)', () => {
     expect(s.getByTestId('coach-input').props.value).toBe('How did I sleep?');
     expect(s.queryByText('How did I sleep?', { exact: true })).toBeNull();
     expect(s.getByTestId('kip-status-line')).toHaveTextContent('Offline');
+  });
+
+  it('offline: screen readers hear the offline copy once per offline send (iOS skips role="alert")', async () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
+    stream.mockRejectedValueOnce(markNetworkError(new TypeError('Network request failed')));
+    stream.mockRejectedValueOnce(markNetworkError(new TypeError('Network request failed')));
+    const s = await openChat();
+    await ask(s, 'How did I sleep?');
+    expect(announce).toHaveBeenCalledTimes(1);
+    expect(announce).toHaveBeenCalledWith(OFFLINE_COPY);
+    await act(async () => {
+      fireEvent.press(s.getByTestId('coach-send-button'));
+    });
+    expect(stream).toHaveBeenCalledTimes(2);
+    expect(announce).toHaveBeenCalledTimes(2);
+    expect(announce).toHaveBeenLastCalledWith(OFFLINE_COPY);
+    announce.mockRestore();
   });
 
   it('offline: a prefill that arrived meanwhile stays in the bar', async () => {

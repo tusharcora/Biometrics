@@ -1,6 +1,6 @@
 import { mockNav, openChat, status } from '../../jest-mocks/coachScreenHarness';
 import React from 'react';
-import { AccessibilityInfo, ScrollView } from 'react-native';
+import { AccessibilityInfo, ScrollView, StyleSheet } from 'react-native';
 import * as SecureStore from 'expo-secure-store';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { fetchCoachStatus } from '../../src/api/coach';
@@ -78,6 +78,34 @@ it('pins the threshold to the card\'s bottom edge from the measured layouts', as
   await scrollTo(s, 304);
   expect(overlay(s).props.pointerEvents).toBe('auto');
   expect(overlay(s)).toHaveAnimatedStyle({ opacity: 1 });
+});
+
+it('large text: an expanded header taller than the row is fully covered, and the threshold uses the same height', async () => {
+  // A 90-point expanded header: the overlay grows to 90 (filled with the background), so nothing of the expanded
+  // header shows below it, and it reaches 0 points over the scroll: the card's bottom edge (312) is under it at 312.
+  const s = await openChat();
+  layOut(s, 90);
+  await scrollTo(s, 311);
+  expect(overlay(s).props.pointerEvents).toBe('none');
+  await scrollTo(s, 312);
+  expect(overlay(s).props.pointerEvents).toBe('auto');
+  expect(StyleSheet.flatten(overlay(s).props.style)).toMatchObject({ minHeight: 90 });
+  expect(overlay(s).props.className).toContain('bg-background');
+  // The pinned layer is as tall as the overlay and takes no room of its own over the scroll.
+  expect(StyleSheet.flatten(s.getByTestId('kip-header-layer').props.style)).toMatchObject({ minHeight: 90, marginBottom: 0 });
+});
+
+it('Android: the pinned layer holds the whole overlay, so its lower strip takes taps', async () => {
+  // Android delivers no touch outside a parent's bounds: the 72-point overlay must not hang below a 60-point layer.
+  // The layer grows to 72 and gives the 12 points back with a negative margin, so the scroll does not move, and
+  // lets touches through where it is empty.
+  const s = await openChat();
+  layOut(s);
+  const layer = s.getByTestId('kip-header-layer');
+  expect(StyleSheet.flatten(layer.props.style)).toMatchObject({ minHeight: 72, marginBottom: -12 });
+  expect(layer.props.pointerEvents).toBe('box-none');
+  await scrollTo(s, 300);
+  expect(StyleSheet.flatten(overlay(s).props.style)).toMatchObject({ minHeight: 72 });
 });
 
 it('fully in, screen readers get one KIP header and one set of header buttons', async () => {

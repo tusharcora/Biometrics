@@ -168,13 +168,16 @@ export function CoachScreen() {
   // thresholds). It takes taps only once fully in; until then they reach the expanded header under it.
   const cardBottom = useRef<number | null>(null);
   const headerHeight = useRef<number | null>(null);
+  // State too: the pinned overlay is at least the expanded header's height, so large text never shows the expanded
+  // header below it, and the threshold maths uses the same height.
+  const [measuredHeader, setMeasuredHeader] = useState<number | null>(null);
   const lastProgress = useRef(0);
   const fade = useSharedValue(0);
   const [collapsed, setCollapsed] = useState<CollapseState>('hidden');
   const trackCollapse = useCallback(
     (e: NativeSyntheticEvent<NativeScrollEvent>) => {
       if (cardBottom.current === null || headerHeight.current === null) return;
-      const progress = collapseProgress(e.nativeEvent.contentOffset.y, cardBottom.current, COLLAPSED_ROW_HEIGHT - headerHeight.current);
+      const progress = collapseProgress(e.nativeEvent.contentOffset.y, cardBottom.current, overlayHeight(headerHeight.current) - headerHeight.current);
       lastProgress.current = progress;
       fade.value = progress;
       setCollapsed(collapseState(progress, reduceMotion));
@@ -333,10 +336,12 @@ export function CoachScreen() {
 
   // A send that never left the device (useCoachConversation's 'offline' kind):
   // show offline and put the question back in the bar, unless something new is
-  // already typed there.
+  // already typed there. The offline card's role="alert" is not announced by
+  // VoiceOver, so screen readers are told once per offline send.
   useEffect(() => {
     if (error?.kind !== 'offline') return;
     setOffline(true);
+    AccessibilityInfo.announceForAccessibility(KIP_COPY.offline);
     setInput((current) => current || error.request.message);
   }, [error, setOffline]);
 
@@ -509,6 +514,7 @@ export function CoachScreen() {
       className="flex-row items-start justify-between px-5 pb-2 pt-1"
       onLayout={(e) => {
         headerHeight.current = e.nativeEvent.layout.height;
+        setMeasuredHeader(e.nativeEvent.layout.height);
       }}
       // Under the collapsed header once it is fully in: screen readers get one set of header controls.
       accessibilityElementsHidden={collapsed === 'in'}
@@ -591,10 +597,18 @@ export function CoachScreen() {
   return (
     <SafeAreaView className="flex-1 bg-background">
       {/* The collapsed header is pinned over the expanded one once the card has scrolled under it (§3.5). */}
-      <View className="z-10">
+      {/* As tall as the overlay, so Android (no touches outside a parent's bounds) delivers taps to all of it; the
+          negative margin gives the extra height back, so the scroll does not move, and box-none lets touches through
+          where the layer is empty. */}
+      <View
+        testID="kip-header-layer"
+        className="z-10"
+        pointerEvents="box-none"
+        style={!shrunk && measuredHeader !== null ? { minHeight: overlayHeight(measuredHeader), marginBottom: measuredHeader - overlayHeight(measuredHeader) } : undefined}
+      >
         {header}
         {!shrunk && collapsed !== 'hidden' ? (
-          <CollapsedHeaderFade fade={fade} reduceMotion={reduceMotion} takesTaps={collapsed === 'in'}>
+          <CollapsedHeaderFade fade={fade} reduceMotion={reduceMotion} takesTaps={collapsed === 'in'} minHeight={overlayHeight(measuredHeader ?? 0)}>
             {collapsedHeader}
           </CollapsedHeaderFade>
         ) : null}
@@ -720,6 +734,11 @@ export function CoachScreen() {
 
 type CollapseState = 'hidden' | 'fading' | 'in';
 
+/** The pinned overlay's height: the collapsed row, or the expanded header when large text makes it taller. */
+function overlayHeight(expandedHeader: number): number {
+  return Math.max(COLLAPSED_ROW_HEIGHT, expandedHeader);
+}
+
 /** Under Reduce Motion the collapsed header switches at the threshold, with no fade. */
 function collapseState(progress: number, reduceMotion: boolean): CollapseState {
   if (progress >= 1) return 'in';
@@ -729,10 +748,11 @@ function collapseState(progress: number, reduceMotion: boolean): CollapseState {
 // The pinned collapsed header, faded by the scroll (a shared value, so a scroll step never re-renders the page). It
 // mounts when the fade starts, so its first frame already has the current opacity. Under Reduce Motion it is only
 // mounted at the threshold, fully in. While fading in it is a picture only: no taps and no screen-reader focus.
-function CollapsedHeaderFade({ fade, reduceMotion, takesTaps, children }: {
+function CollapsedHeaderFade({ fade, reduceMotion, takesTaps, minHeight, children }: {
   fade: SharedValue<number>;
   reduceMotion: boolean;
   takesTaps: boolean;
+  minHeight: number;
   children: React.ReactNode;
 }) {
   const style = useAnimatedStyle(() => ({ opacity: reduceMotion ? 1 : fade.value }));
@@ -743,7 +763,7 @@ function CollapsedHeaderFade({ fade, reduceMotion, takesTaps, children }: {
       pointerEvents={takesTaps ? 'auto' : 'none'}
       accessibilityElementsHidden={!takesTaps}
       importantForAccessibility={takesTaps ? 'auto' : 'no-hide-descendants'}
-      style={style}
+      style={[{ minHeight }, style]}
     >
       {children}
     </Animated.View>
