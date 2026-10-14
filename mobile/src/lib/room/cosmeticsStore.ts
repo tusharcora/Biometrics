@@ -7,8 +7,9 @@ import { ROOM_SLOTS, WORN_SLOTS } from './slots';
 // One shared copy of GET /me/cosmetics (spec 2026-10-14 KIP's room §4, §5): what you own, what is new, your room and
 // what KIP wears, as stored (ruling 25: ids this build cannot draw are kept here and drawn through drawableLoadout).
 // Loaded per sign-in by MyKipScope and again on foreground and KIP tab focus (RoomToastHost); a save publishes the
-// server's answer. A read that lands after sign-out, or after a save or mark-seen that began once it was in flight,
-// is dropped (each moves the epoch), and an answer older than the shown version never replaces it.
+// server's answer. Anything that lands after sign-out is dropped (the session moves); a read that lands after a save
+// or mark-seen that began while it was in flight is dropped too (each moves the read epoch); and an answer older than
+// the shown version never replaces it, so overlapping saves end at the newest.
 
 export interface Cosmetics {
   owned: ReadonlySet<string>;
@@ -20,7 +21,10 @@ export interface Cosmetics {
 }
 
 let cosmetics: Cosmetics | null = null;
+// Bumped by every save, mark-seen and sign-out: a read that started before one never lands after it.
 let epoch = 0;
+// Bumped only on sign-out: a save's answer lands unless the account changed.
+let session = 0;
 const listeners = new Set<() => void>();
 
 function publish(next: Cosmetics): void {
@@ -58,9 +62,10 @@ export async function loadCosmetics(): Promise<Cosmetics | null> {
 
 /** PUT /me/cosmetics. Throws the ApiError (403 not_owned, 409 stale, …) for decorate mode to handle. */
 export async function saveCosmeticsLoadout(input: { room: RoomLoadout; worn: KipWorn; version: number }): Promise<Cosmetics> {
-  const at = ++epoch;
+  epoch++;
+  const at = session;
   const next = fromDTO(await putCosmetics(input));
-  if (at === epoch) publish(next);
+  if (at === session) publish(next);
   return next;
 }
 
@@ -79,6 +84,7 @@ export async function markCosmeticsSeen(itemIds: readonly string[]): Promise<voi
 
 export function resetCosmetics(): void {
   epoch++;
+  session++;
   cosmetics = null;
   listeners.forEach((l) => l());
 }

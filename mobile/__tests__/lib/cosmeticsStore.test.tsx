@@ -109,6 +109,55 @@ it('a read that started before marking seen never brings the seen ids back', asy
   expect(getCosmetics()!.fresh.map((f) => f.itemId)).toEqual(['wall.dots']);
 });
 
+function deferredPut() {
+  let resolve!: (v: unknown) => void;
+  put.mockReturnValueOnce(new Promise((r) => { resolve = r; }));
+  return (v: unknown) => resolve(v);
+}
+const saved = (wallpaper: string, version: number) => ({ ...DTO, room: { ...DTO.room, wallpaper }, version });
+
+it('marking seen while a save is in flight never drops the save\'s answer', async () => {
+  get.mockResolvedValueOnce(DTO);
+  await act(async () => { await loadCosmetics(); });
+  const finish = deferredPut();
+  const pending = saveCosmeticsLoadout({ room: saved('wall.dots', 3).room, worn: DTO.worn, version: 3 });
+  seen.mockResolvedValueOnce(undefined);
+  await act(async () => { await markCosmeticsSeen(['rug.red']); });
+  await act(async () => { finish(saved('wall.dots', 4)); await pending; });
+  expect([getCosmetics()!.room.wallpaper, getCosmetics()!.version]).toEqual(['wall.dots', 4]);
+});
+
+it('two overlapping saves both publish in order and end at the higher version, whichever answers last', async () => {
+  get.mockResolvedValueOnce(DTO);
+  await act(async () => { await loadCosmetics(); });
+  let first = deferredPut();
+  let second = deferredPut();
+  let a = saveCosmeticsLoadout({ room: saved('wall.dots', 3).room, worn: DTO.worn, version: 3 });
+  let b = saveCosmeticsLoadout({ room: saved('wall.brick', 4).room, worn: DTO.worn, version: 4 });
+  await act(async () => { first(saved('wall.dots', 4)); await a; });
+  expect([getCosmetics()!.room.wallpaper, getCosmetics()!.version]).toEqual(['wall.dots', 4]);
+  await act(async () => { second(saved('wall.brick', 5)); await b; });
+  expect([getCosmetics()!.room.wallpaper, getCosmetics()!.version]).toEqual(['wall.brick', 5]);
+  // Answers out of order: the older one never replaces the newer.
+  first = deferredPut();
+  second = deferredPut();
+  a = saveCosmeticsLoadout({ room: saved('wall.panel', 5).room, worn: DTO.worn, version: 5 });
+  b = saveCosmeticsLoadout({ room: saved('wall.subway', 6).room, worn: DTO.worn, version: 6 });
+  await act(async () => { second(saved('wall.subway', 7)); await b; });
+  await act(async () => { first(saved('wall.panel', 6)); await a; });
+  expect([getCosmetics()!.room.wallpaper, getCosmetics()!.version]).toEqual(['wall.subway', 7]);
+});
+
+it('a save that answers after sign-out is dropped', async () => {
+  get.mockResolvedValueOnce(DTO);
+  await act(async () => { await loadCosmetics(); });
+  const finish = deferredPut();
+  const pending = saveCosmeticsLoadout({ room: saved('wall.dots', 3).room, worn: DTO.worn, version: 3 });
+  act(() => resetCosmetics());
+  await act(async () => { finish(saved('wall.dots', 4)); await pending; });
+  expect(getCosmetics()).toBeNull();
+});
+
 it('useCosmetics is null until the first read', () => {
   const { result } = renderHook(() => useCosmetics());
   expect(result.current).toBeNull();
