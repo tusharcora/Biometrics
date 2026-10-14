@@ -246,23 +246,60 @@ it('any other failure keeps the draft and asks to try again', async () => {
   expect(mockNav.goBack).not.toHaveBeenCalled();
 });
 
-it('disables Done while a save is in flight, and announces the notice on iOS', async () => {
+it('while a save is in flight nothing can be edited: Done, Cancel, tiles, tabs and hotspots are inert', async () => {
+  const s = await open({ slot: 'rug' });
+  fireEvent.press(s.getByTestId('decorate-tile-rug.red'));
+  let finish!: (dto: unknown) => void;
+  (putCosmetics as jest.Mock).mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+  await act(async () => { fireEvent.press(s.getByTestId('decorate-done')); });
+  expect(s.getByTestId('decorate-done').props.accessibilityState.disabled).toBe(true);
+  expect(s.getByTestId('decorate-cancel').props.accessibilityState.disabled).toBe(true);
+  expect(s.getByTestId('decorate-editing').props.pointerEvents).toBe('none');
+  fireEvent.press(s.getByTestId('decorate-tile-rug.slate'));
+  fireEvent.press(s.getByTestId('decorate-hotspot-wallpaper'));
+  fireEvent.press(s.getByTestId('decorate-tab-kip'));
+  expect(room(s).rug).toBe('rug.red');
+  expect(s.getByTestId('decorate-tab-room').props.accessibilityState).toMatchObject({ selected: true });
+  expect(s.getByTestId('decorate-chip-rug').props.accessibilityState).toMatchObject({ selected: true });
+  await act(async () => { finish({ ...DTO, room: { ...DTO.room, rug: 'rug.red' }, version: 3 }); });
+  expect((putCosmetics as jest.Mock).mock.calls[0]![0].room.rug).toBe('rug.red');
+  expect(mockNav.goBack).toHaveBeenCalledTimes(1);
+});
+
+it('on iOS announces every failed save, an identical second one too', async () => {
   const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => undefined);
   const os = Platform.OS;
   Platform.OS = 'ios';
   try {
     const s = await open({ slot: 'rug' });
     fireEvent.press(s.getByTestId('decorate-tile-rug.red'));
-    let fail!: (e: Error) => void;
-    (putCosmetics as jest.Mock).mockReturnValue(new Promise((_, reject) => { fail = reject; }));
+    (putCosmetics as jest.Mock).mockRejectedValue(new Error('offline'));
     await act(async () => { fireEvent.press(s.getByTestId('decorate-done')); });
-    expect(s.getByTestId('decorate-done').props.accessibilityState.disabled).toBe(true);
-    await act(async () => { fail(new Error('offline')); });
-    expect(announce).toHaveBeenCalledWith("Couldn't save your room. Try again.");
+    await act(async () => { fireEvent.press(s.getByTestId('decorate-done')); });
+    expect(announce.mock.calls).toEqual([["Couldn't save your room. Try again."], ["Couldn't save your room. Try again."]]);
   } finally {
     Platform.OS = os;
     announce.mockRestore();
   }
+});
+
+it('a 409 whose refresh also fails keeps the draft, says the save failed, and a later retry still refreshes', async () => {
+  const s = await open({ slot: 'rug' });
+  fireEvent.press(s.getByTestId('decorate-tile-rug.red'));
+  (putCosmetics as jest.Mock).mockRejectedValue(new ApiError(409, 'stale', 'stale'));
+  (fetchCosmetics as jest.Mock).mockRejectedValue(new Error('offline'));
+  await act(async () => { fireEvent.press(s.getByTestId('decorate-done')); });
+  expect(s.getByTestId('decorate-notice')).toHaveTextContent("Couldn't save your room. Try again.");
+  expect(room(s).rug).toBe('rug.red');
+  expect(s.getByTestId('decorate-done').props.accessibilityState.disabled).toBe(false);
+  expect(s.getByTestId('decorate-undo').props.accessibilityState.disabled).toBe(false);
+
+  (fetchCosmetics as jest.Mock).mockResolvedValue({ ...DTO, room: { ...DTO.room, wallpaper: 'wall.dots' }, version: 5 });
+  await act(async () => { fireEvent.press(s.getByTestId('decorate-done')); });
+  expect(s.getByTestId('decorate-notice')).toHaveTextContent('Something changed on another device. Your room was refreshed.');
+  expect([room(s).wallpaper, room(s).rug]).toEqual(['wall.dots', 'rug.slate']);
+  expect(s.getByTestId('decorate-done').props.accessibilityState.disabled).toBe(true);
+  expect(mockNav.goBack).not.toHaveBeenCalled();
 });
 
 it('Done keeps a stored id this build cannot draw in a slot you did not touch', async () => {

@@ -19,7 +19,7 @@ import { decorateReducer, displayLook, initDecorate, isChanged, type DecorateSlo
 import type { RoomSlot } from '../lib/room/slots';
 import { setDecorateOpen } from '../lib/room/decorateOpen';
 import { drawableLoadout } from '../lib/room/draw';
-import { loadCosmetics, markCosmeticsSeen, saveCosmeticsLoadout, useCosmetics } from '../lib/room/cosmeticsStore';
+import { getCosmetics, loadCosmetics, markCosmeticsSeen, saveCosmeticsLoadout, useCosmetics } from '../lib/room/cosmeticsStore';
 import { progressFromAchievements, ROOM_COPY } from '../lib/room/roomCopy';
 import { infoLine, type TrayContext } from '../lib/room/tray';
 
@@ -112,6 +112,12 @@ function Decorate({ params, navigation }: { params: { tab?: DecorateTab; slot?: 
     confirmDiscard(() => navigation.goBack());
   };
 
+  // The notice below the info line is a polite live region on Android; iOS has none, so every failed save is
+  // announced as it happens (an identical second failure too).
+  const announce = (text: string) => {
+    if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(text);
+  };
+
   const save = async () => {
     setSaving(true);
     try {
@@ -122,81 +128,83 @@ function Decorate({ params, navigation }: { params: { tab?: DecorateTab; slot?: 
       navigation.goBack();
     } catch (err) {
       if (err instanceof ApiError && (err.status === 403 || err.status === 409)) {
-        // Another device saved, or something you placed is no longer yours: show the server's room and stay.
+        // Another device saved, or something you placed is no longer yours: show the server's room and stay. A read
+        // that fails (or is dropped) leaves the same cached object in the store, so identity tells a real refresh.
+        const before = getCosmetics();
         const fresh = await loadCosmetics();
-        if (fresh) dispatch({ type: 'refreshed', look: { room: fresh.room, worn: fresh.worn } });
-      } else {
-        dispatch({ type: 'saveFailed' });
+        if (fresh && fresh !== before) {
+          dispatch({ type: 'refreshed', look: { room: fresh.room, worn: fresh.worn } });
+          announce(ROOM_COPY.refreshed);
+          return;
+        }
       }
+      dispatch({ type: 'saveFailed' });
+      announce(ROOM_COPY.saveFailed);
     } finally {
       setSaving(false);
     }
   };
 
-  // The notice below the info line is a polite live region on Android; iOS has none, so it is announced once.
-  useEffect(() => {
-    if (state.notice && Platform.OS === 'ios') {
-      AccessibilityInfo.announceForAccessibility(state.notice === 'refreshed' ? ROOM_COPY.refreshed : ROOM_COPY.saveFailed);
-    }
-  }, [state.notice]);
-
   return (
     <SafeAreaView className="flex-1 bg-background">
       <View className="flex-row items-center justify-between px-4 pb-2 pt-1">
-        <Button testID="decorate-cancel" variant="ghost" onPress={cancel}>{ROOM_COPY.cancel}</Button>
+        <Button testID="decorate-cancel" variant="ghost" disabled={saving} onPress={cancel}>{ROOM_COPY.cancel}</Button>
         <PageTitle>{ROOM_COPY.title}</PageTitle>
         <Button testID="decorate-done" disabled={!changed || saving} onPress={() => void save()}>{ROOM_COPY.done}</Button>
       </View>
       <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
-        <View style={{ width, height: ROOM_HEIGHT }}>
-          <RoomView
-            testID="decorate-room"
-            loadout={loadout}
-            worn={look.worn}
-            weather={day.window.weather}
-            night={day.window.night}
-            colour={me.colour}
-            pose="rest"
-            mood="glance"
-            screen="lines"
-            bubble={null}
-            crop={{ width, height: ROOM_HEIGHT }}
-            cellPt={2}
-            reduceMotion={reduceMotion}
-            accessibilityLabel={info.spoken}
-          />
-          {state.tab === 'room' ? <HotspotLayer crop={{ width, height: ROOM_HEIGHT }} selectedSlot={state.roomSlot} lockedSlot={lockedSlot} onSelect={(slot) => dispatch({ type: 'slot', slot })} /> : null}
-        </View>
-        <View className="flex-row items-center gap-3 px-4 py-3">
-          <View testID="decorate-info" accessible accessibilityLabel={info.spoken} className="shrink grow gap-0.5">
-            <Text className="font-pixel text-label text-muted-foreground">{info.label}</Text>
-            <Text className={info.muted ? 'text-caption text-muted-foreground' : 'text-caption'}>{info.text}</Text>
+        {/* While a save is in flight nothing can be edited: its answer replaces the draft and closes the screen. */}
+        <View testID="decorate-editing" pointerEvents={saving ? 'none' : 'auto'}>
+          <View style={{ width, height: ROOM_HEIGHT }}>
+            <RoomView
+              testID="decorate-room"
+              loadout={loadout}
+              worn={look.worn}
+              weather={day.window.weather}
+              night={day.window.night}
+              colour={me.colour}
+              pose="rest"
+              mood="glance"
+              screen="lines"
+              bubble={null}
+              crop={{ width, height: ROOM_HEIGHT }}
+              cellPt={2}
+              reduceMotion={reduceMotion}
+              accessibilityLabel={info.spoken}
+            />
+            {state.tab === 'room' ? <HotspotLayer crop={{ width, height: ROOM_HEIGHT }} selectedSlot={state.roomSlot} lockedSlot={lockedSlot} onSelect={(slot) => dispatch({ type: 'slot', slot })} /> : null}
           </View>
-          <Button testID="decorate-undo" variant="ghost" size="sm" disabled={state.history.length === 0} accessibilityLabel={ROOM_COPY.undoLabel} onPress={() => dispatch({ type: 'undo' })}>
-            {ROOM_COPY.undo}
-          </Button>
-        </View>
-        {state.notice ? (
-          <Text testID="decorate-notice" accessibilityLiveRegion="polite" className="px-4 pb-2 text-caption text-muted-foreground">
-            {state.notice === 'refreshed' ? ROOM_COPY.refreshed : ROOM_COPY.saveFailed}
-          </Text>
-        ) : null}
-        <View testID="decorate-tabs" accessibilityRole="tablist" accessibilityLabel={ROOM_COPY.tabsLabel} className="flex-row gap-2 px-4">
-          {(['room', 'kip', 'sets'] as const).map((tab) => (
-            <Button
-              key={tab}
-              testID={`decorate-tab-${tab}`}
-              accessibilityRole="tab"
-              accessibilityState={{ selected: state.tab === tab }}
-              variant={state.tab === tab ? 'default' : 'outline'}
-              className="flex-1"
-              onPress={() => dispatch({ type: 'tab', tab })}
-            >
-              {ROOM_COPY.tabs[tab]}
+          <View className="flex-row items-center gap-3 px-4 py-3">
+            <View testID="decorate-info" accessible accessibilityLabel={info.spoken} className="shrink grow gap-0.5">
+              <Text className="font-pixel text-label text-muted-foreground">{info.label}</Text>
+              <Text className={info.muted ? 'text-caption text-muted-foreground' : 'text-caption'}>{info.text}</Text>
+            </View>
+            <Button testID="decorate-undo" variant="ghost" size="sm" disabled={state.history.length === 0} accessibilityLabel={ROOM_COPY.undoLabel} onPress={() => dispatch({ type: 'undo' })}>
+              {ROOM_COPY.undo}
             </Button>
-          ))}
+          </View>
+          {state.notice ? (
+            <Text testID="decorate-notice" accessibilityLiveRegion="polite" className="px-4 pb-2 text-caption text-muted-foreground">
+              {state.notice === 'refreshed' ? ROOM_COPY.refreshed : ROOM_COPY.saveFailed}
+            </Text>
+          ) : null}
+          <View testID="decorate-tabs" accessibilityRole="tablist" accessibilityLabel={ROOM_COPY.tabsLabel} className="flex-row gap-2 px-4">
+            {(['room', 'kip', 'sets'] as const).map((tab) => (
+              <Button
+                key={tab}
+                testID={`decorate-tab-${tab}`}
+                accessibilityRole="tab"
+                accessibilityState={{ selected: state.tab === tab }}
+                variant={state.tab === tab ? 'default' : 'outline'}
+                className="flex-1"
+                onPress={() => dispatch({ type: 'tab', tab })}
+              >
+                {ROOM_COPY.tabs[tab]}
+              </Button>
+            ))}
+          </View>
+          <DecorateTray state={state} dispatch={dispatch} ctx={ctx} colour={me.colour} />
         </View>
-        <DecorateTray state={state} dispatch={dispatch} ctx={ctx} colour={me.colour} />
       </ScrollView>
     </SafeAreaView>
   );
