@@ -83,14 +83,15 @@ afterEach(() => resetMyKipColour());
 describe('FloatingTabBar: story ring on the Profile tab', () => {
   const week = { id: 'w1', kind: 'WEEK', periodStart: '2026-09-28', periodEnd: '2026-10-04', line: 'A week.', personaId: 'luna', builtAt: '2026-10-05T09:00:00.000Z', openedAt: null };
 
-  it.each(['dark', 'light'] as const)("rings the Profile icon in the recap coach's colour (%s), says so, and still opens Profile", async (scheme) => {
+  it.each(['dark', 'light'] as const)("rings the Profile icon in your KIP's colour (%s), whatever coach the recap names, says so, and still opens Profile", async (scheme) => {
     mockScheme = scheme;
+    setMyKipColour('lime');
     (fetchRecaps as jest.Mock).mockResolvedValue([week]);
     const props = makeProps(0);
     const utils = render(bar(props));
     await act(async () => {});
-    expect(StyleSheet.flatten(utils.getByTestId('tab-Profile-story-ring').props.style)).toMatchObject({ borderColor: storyRingColor('luna', scheme) });
-    expect(StyleSheet.flatten(utils.getByTestId('tab-Profile-story-ring-dot').props.style)).toMatchObject({ backgroundColor: storyRingColor('luna', scheme) });
+    expect(StyleSheet.flatten(utils.getByTestId('tab-Profile-story-ring').props.style)).toMatchObject({ borderColor: storyRingColor('lime', scheme) });
+    expect(StyleSheet.flatten(utils.getByTestId('tab-Profile-story-ring-dot').props.style)).toMatchObject({ backgroundColor: storyRingColor('lime', scheme) });
     // The tab opens Profile, so it only says what is ready.
     expect(utils.getByTestId('tab-Profile').props.accessibilityLabel).toBe('Profile. Your week is ready');
     fireEvent.press(utils.getByTestId('tab-Profile'));

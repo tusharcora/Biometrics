@@ -2,10 +2,10 @@ import React from 'react';
 import { View } from 'react-native';
 import Svg, { Polygon, Rect } from 'react-native-svg';
 import type { AchievementFamily } from '../../api/achievements';
-import { useCharacterOptional } from '../../characters/CharacterContext';
 import { LOCKED_PIP, glyphCells, octagonPoints, tierColors } from '../../lib/badgeArt';
 import { badgeLabel } from '../../lib/badges';
-import { characterInfo } from '../characters/registry';
+import type { KipColour } from '../../lib/kip/kipArt';
+import { useMyKipColour } from '../../lib/kip/myKipColour';
 
 export interface BadgeIconProps {
   family: AchievementFamily;
@@ -14,8 +14,8 @@ export interface BadgeIconProps {
   size: number;
   /** The five level pips under the badge. */
   pips?: boolean;
-  /** Level V's colour; the user's current coach accent when omitted. */
-  coachAccent?: string;
+  /** Level V's colour; your KIP's colour when omitted. */
+  colour?: KipColour;
   testID?: string;
 }
 
@@ -26,11 +26,10 @@ const GLYPH_BOX = 52;
 const CELL = GLYPH_BOX / 12;
 const ORIGIN = (VIEW - GLYPH_BOX) / 2;
 
-export function BadgeIcon({ family, level, size, pips = true, coachAccent, testID = 'badge' }: BadgeIconProps) {
-  const current = useCharacterOptional();
-  const accent = coachAccent ?? characterInfo(current?.characterId).accent;
+export function BadgeIcon({ family, level, size, pips = true, colour, testID = 'badge' }: BadgeIconProps) {
+  const mine = useMyKipColour();
   const lv = Math.max(0, Math.min(5, Math.round(level)));
-  const t = tierColors(lv, accent);
+  const t = tierColors(lv, colour ?? mine);
   const ring = lv === 5 ? 9 : 6;
   const pip = Math.max(4, Math.round(size * 0.07));
   const label = badgeLabel(family, lv);

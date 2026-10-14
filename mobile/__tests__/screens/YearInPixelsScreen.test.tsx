@@ -1,6 +1,5 @@
 import React from 'react';
 import { fireEvent, render, screen } from '@testing-library/react-native';
-import { withCharacter } from '../../jest-mocks/characterContext';
 import { fetchSleep, fetchSleepGoal } from '../../src/api/sleep';
 import { YearInPixelsScreen } from '../../src/screens/YearInPixelsScreen';
 
@@ -19,7 +18,7 @@ beforeEach(() => {
 afterEach(() => jest.useRealTimers());
 
 it('draws this calendar year against the current goal and says so', async () => {
-  render(withCharacter(<YearInPixelsScreen />));
+  render(<YearInPixelsScreen />);
   expect(await screen.findByTestId('year-pixels-count')).toHaveTextContent('2 nights on goal');
   expect(screen.getByTestId('year-pixels-caption')).toHaveTextContent('on your current goal of 8h');
   expect(fetchSleep).toHaveBeenCalledWith('2026-01-01', '2026-12-31');
@@ -29,7 +28,7 @@ it('draws this calendar year against the current goal and says so', async () => 
 
 it('offers a retry after a failure', async () => {
   (fetchSleep as jest.Mock).mockRejectedValueOnce(new Error('offline'));
-  render(withCharacter(<YearInPixelsScreen />));
+  render(<YearInPixelsScreen />);
   fireEvent.press(await screen.findByTestId('year-retry'));
   expect(await screen.findByTestId('year-pixels-count')).toBeTruthy();
 });

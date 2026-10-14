@@ -2,7 +2,11 @@ import React from 'react';
 import { Modal, PixelRatio, StyleSheet } from 'react-native';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
-import { HIDDEN_OK, withCharacter } from '../../jest-mocks/characterContext';
+import { Polygon } from 'react-native-svg';
+import { HIDDEN_OK } from '../../jest-mocks/coachStatus';
+import { kipArtFills, kipFills } from '../../jest-mocks/kipFixture';
+import { tierColors } from '../../src/lib/badgeArt';
+import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
 import { CelebrationModal } from '../../src/components/achievements/CelebrationModal';
 import { captureToPng, shareImage } from '../../src/lib/recapCapture';
 
@@ -24,8 +28,8 @@ beforeEach(() => {
 });
 afterEach(() => jest.restoreAllMocks());
 
-it('shows the new level with the coach, its value, the coach line and confetti', () => {
-  render(withCharacter(<CelebrationModal celebration={GOLD} thresholds={THRESHOLDS} onDone={jest.fn()} />));
+it('shows the new level with your KIP, its value, the line and confetti', () => {
+  render(<CelebrationModal celebration={GOLD} thresholds={THRESHOLDS} onDone={jest.fn()} />);
   expect(screen.getByTestId('celebration-title')).toHaveTextContent('SLEEP GOAL STREAK III');
   expect(screen.getByTestId('celebration-value')).toHaveTextContent('14 nights in a row at your sleep goal.');
   expect(screen.getByTestId('celebration-coach-line')).toHaveTextContent('16 more nights for Diamond');
@@ -34,13 +38,22 @@ it('shows the new level with the coach, its value, the coach line and confetti',
   expect(screen.getByTestId('celebration-confetti', HIDDEN_OK)).toBeTruthy();
 });
 
+it("draws your KIP cheering, and a Legend badge (level V) in your KIP's colour", () => {
+  setMyKipColour('lime');
+  render(<CelebrationModal celebration={{ ...GOLD, level: 5, value: 100 }} thresholds={THRESHOLDS} onDone={jest.fn()} />);
+  expect(kipFills(screen, 'celebration-coach')).toEqual(kipArtFills({ colour: 'lime', pose: 'cheer', mood: 'proud' }));
+  expect(screen.getByTestId('celebration-badge').props.accessibilityLabel).toBe('Sleep goal streak, level V, Legend');
+  expect(within(screen.getByTestId('celebration-badge')).UNSAFE_getAllByType(Polygon)[0]!.props.fill).toBe(tierColors(5, 'lime').ring);
+  resetMyKipColour();
+});
+
 // An iPhone with a Dynamic Island: the content must clear the island and the home indicator.
 const ISLAND = { frame: { x: 0, y: 0, width: 390, height: 844 }, insets: { top: 47, left: 0, right: 0, bottom: 34 } };
 
 it('pads the screen by the safe-area insets, buttons pinned below the block', () => {
   render(
     <SafeAreaProvider initialMetrics={ISLAND}>
-      {withCharacter(<CelebrationModal celebration={GOLD} thresholds={THRESHOLDS} onDone={jest.fn()} />)}
+      {<CelebrationModal celebration={GOLD} thresholds={THRESHOLDS} onDone={jest.fn()} />}
     </SafeAreaProvider>,
   );
   expect(screen.getByTestId('celebration-screen')).toHaveStyle({ paddingTop: 47, paddingBottom: 34 });
@@ -57,14 +70,14 @@ it('draws a smaller badge on a small phone', () => {
   jest.spyOn(require('react-native'), 'useWindowDimensions').mockReturnValue({ width: 375, height: 667, scale: 2, fontScale: 1 });
   render(
     <SafeAreaProvider initialMetrics={small}>
-      {withCharacter(<CelebrationModal celebration={GOLD} thresholds={THRESHOLDS} onDone={jest.fn()} />)}
+      {<CelebrationModal celebration={GOLD} thresholds={THRESHOLDS} onDone={jest.fn()} />}
     </SafeAreaProvider>,
   );
   expect(screen.getByTestId('celebration-badge')).toHaveStyle({ width: 140 });
 });
 
 it('draws the confetti behind the content and only in the side margins or beside the badge', () => {
-  render(withCharacter(<CelebrationModal celebration={GOLD} thresholds={THRESHOLDS} onDone={jest.fn()} />));
+  render(<CelebrationModal celebration={GOLD} thresholds={THRESHOLDS} onDone={jest.fn()} />);
   // Painted first, so everything after it draws on top.
   const page = screen.getByTestId('celebration-screen');
   expect((page.children[0] as { props: { testID?: string } }).props.testID).toBe('celebration-confetti');
@@ -88,27 +101,27 @@ it('draws the confetti behind the content and only in the side margins or beside
 });
 
 it('says "Top level!" at level V', () => {
-  render(withCharacter(<CelebrationModal celebration={{ ...GOLD, level: 5, value: 100 }} thresholds={THRESHOLDS} onDone={jest.fn()} />));
+  render(<CelebrationModal celebration={{ ...GOLD, level: 5, value: 100 }} thresholds={THRESHOLDS} onDone={jest.fn()} />);
   expect(screen.getByTestId('celebration-coach-line')).toHaveTextContent('Top level!');
 });
 
 it('draws no confetti under Reduce Motion', () => {
   mockReduceMotion = true;
-  render(withCharacter(<CelebrationModal celebration={GOLD} thresholds={THRESHOLDS} onDone={jest.fn()} />));
+  render(<CelebrationModal celebration={GOLD} thresholds={THRESHOLDS} onDone={jest.fn()} />);
   expect(screen.queryByTestId('celebration-confetti', HIDDEN_OK)).toBeNull();
   expect(screen.queryByTestId('celebration-hero-confetti', HIDDEN_OK)).toBeNull();
 });
 
 it('closes with "Nice!"', () => {
   const onDone = jest.fn();
-  render(withCharacter(<CelebrationModal celebration={GOLD} thresholds={THRESHOLDS} onDone={onDone} />));
+  render(<CelebrationModal celebration={GOLD} thresholds={THRESHOLDS} onDone={onDone} />);
   fireEvent.press(screen.getByTestId('celebration-done'));
   expect(onDone).toHaveBeenCalledTimes(1);
 });
 
 it('closes once, however fast "Nice!" is pressed twice', () => {
   const onDone = jest.fn();
-  render(withCharacter(<CelebrationModal celebration={GOLD} thresholds={THRESHOLDS} onDone={onDone} />));
+  render(<CelebrationModal celebration={GOLD} thresholds={THRESHOLDS} onDone={onDone} />);
   fireEvent.press(screen.getByTestId('celebration-done'));
   fireEvent.press(screen.getByTestId('celebration-done'));
   expect(onDone).toHaveBeenCalledTimes(1);
@@ -117,7 +130,7 @@ it('closes once, however fast "Nice!" is pressed twice', () => {
 
 it('closes once when the system back gesture follows "Nice!" (Android back)', () => {
   const onDone = jest.fn();
-  render(withCharacter(<CelebrationModal celebration={GOLD} thresholds={THRESHOLDS} onDone={onDone} />));
+  render(<CelebrationModal celebration={GOLD} thresholds={THRESHOLDS} onDone={onDone} />);
   fireEvent.press(screen.getByTestId('celebration-done'));
   screen.UNSAFE_getByType(Modal).props.onRequestClose();
   expect(onDone).toHaveBeenCalledTimes(1);
@@ -125,7 +138,7 @@ it('closes once when the system back gesture follows "Nice!" (Android back)', ()
 
 it('closes once when the system back gesture comes first', () => {
   const onDone = jest.fn();
-  render(withCharacter(<CelebrationModal celebration={GOLD} thresholds={THRESHOLDS} onDone={onDone} />));
+  render(<CelebrationModal celebration={GOLD} thresholds={THRESHOLDS} onDone={onDone} />);
   screen.UNSAFE_getByType(Modal).props.onRequestClose();
   screen.UNSAFE_getByType(Modal).props.onRequestClose();
   fireEvent.press(screen.getByTestId('celebration-done'));
@@ -134,7 +147,7 @@ it('closes once when the system back gesture comes first', () => {
 
 it('says so when the share image could not be made', async () => {
   (captureToPng as jest.Mock).mockRejectedValue(new Error('capture'));
-  render(withCharacter(<CelebrationModal celebration={GOLD} thresholds={THRESHOLDS} onDone={jest.fn()} />));
+  render(<CelebrationModal celebration={GOLD} thresholds={THRESHOLDS} onDone={jest.fn()} />);
   expect(screen.queryByTestId('celebration-notice')).toBeNull();
   fireEvent.press(screen.getByTestId('celebration-share'));
   expect(await screen.findByTestId('celebration-notice')).toHaveTextContent("The image couldn't be made. Please try again.");
@@ -145,7 +158,7 @@ it('shares a 1080 px badge card through the recap export pipeline', async () => 
   jest.spyOn(PixelRatio, 'get').mockReturnValue(3);
   (captureToPng as jest.Mock).mockResolvedValue('file:///cache/recap-1.png');
   (shareImage as jest.Mock).mockResolvedValue(undefined);
-  render(withCharacter(<CelebrationModal celebration={GOLD} thresholds={THRESHOLDS} onDone={jest.fn()} />));
+  render(<CelebrationModal celebration={GOLD} thresholds={THRESHOLDS} onDone={jest.fn()} />);
   expect(screen.getByTestId('celebration-export', HIDDEN_OK)).toHaveStyle({ width: 360, height: 360 });
   expect(screen.getByTestId('badge-share-card', HIDDEN_OK)).toHaveTextContent(/SLEEP GOAL STREAK III/);
   expect(screen.getByTestId('badge-share-app', HIDDEN_OK)).toHaveTextContent('Biometrics');

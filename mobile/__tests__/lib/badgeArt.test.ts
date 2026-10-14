@@ -1,6 +1,6 @@
-import { GLYPHS, LOCKED_PIP, TIERS, coachTier, glyphCells, mixHex, octagonPoints, tierColors, tierTextColor } from '../../src/lib/badgeArt';
+import { GLYPHS, LOCKED_PIP, TIERS, glyphCells, kipTier, mixHex, octagonPoints, tierColors, tierTextColor } from '../../src/lib/badgeArt';
 import type { AchievementFamily } from '../../src/api/achievements';
-import { CHARACTERS } from '../../src/components/characters/registry';
+import { KIP_COLOURS, type KipColour } from '../../src/lib/kip/kipArt';
 
 it('has the 12×12 design glyph for every family', () => {
   for (const rows of Object.values(GLYPHS)) {
@@ -12,13 +12,13 @@ it('has the 12×12 design glyph for every family', () => {
   expect(glyphCells('SLEEP_GOAL')[0]).toEqual([5, 0]);
 });
 
-it('uses the design tier colours up to Diamond and the coach accent for level V', () => {
+it("uses the design tier colours up to Diamond and your KIP's colour for level V (Legend)", () => {
   expect(TIERS.map((t) => t.ring)).toEqual(['#3F3F46', '#D08A4E', '#CBD5E1', '#FACC15', '#67E8F9']);
-  expect(tierColors(3, '#F9A8D4')).toEqual({ ring: '#FACC15', fill: '#3B300A', glyph: '#FDE68A' });
-  expect(tierColors(5, '#F9A8D4')).toEqual({ ring: '#F9A8D4', fill: '#37252F', glyph: '#FCCFE7' });
-  expect(coachTier('#4ADE80').ring).toBe('#4ADE80');
-  expect(tierColors(9, '#4ADE80').ring).toBe('#4ADE80');
-  expect(tierColors(-1, '#4ADE80')).toEqual(TIERS[0]);
+  expect(tierColors(3, 'coral')).toEqual({ ring: '#FACC15', fill: '#3B300A', glyph: '#FDE68A' });
+  expect(tierColors(5, 'coral').ring).toBe('#FB7185');
+  expect(kipTier('lime').ring).toBe('#A3E635');
+  expect(tierColors(9, 'lime').ring).toBe('#A3E635');
+  expect(tierColors(-1, 'lime')).toEqual(TIERS[0]);
   expect(LOCKED_PIP).toBe('#3F3F46');
 });
 
@@ -37,13 +37,12 @@ it('gives small tier-coloured text at least 4.5:1 on the light page and card, an
     const [hi, lo] = [lum(a), lum(b)].sort((x, y) => y - x) as [number, number];
     return (hi + 0.05) / (lo + 0.05);
   };
-  const accents = Object.values(CHARACTERS).map((c) => c.accent);
-  for (const accent of accents) {
+  for (const colour of Object.keys(KIP_COLOURS) as KipColour[]) {
     for (const level of [1, 2, 3, 4, 5]) {
-      const text = tierTextColor(level, accent, false);
+      const text = tierTextColor(level, colour, false);
       expect(ratio(text, '#F6F6F7')).toBeGreaterThanOrEqual(4.5);
       expect(ratio(text, '#FFFFFF')).toBeGreaterThanOrEqual(4.5);
-      expect(tierTextColor(level, accent, true)).toBe(tierColors(level, accent).ring);
+      expect(tierTextColor(level, colour, true)).toBe(tierColors(level, colour).ring);
     }
   }
 });

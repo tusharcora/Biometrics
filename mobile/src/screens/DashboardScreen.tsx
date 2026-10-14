@@ -14,8 +14,7 @@ import { Button } from '../components/ui/button';
 import { Skeleton } from '../components/ui/skeleton';
 import { SectionLabel } from '../components/ui/section-label';
 import { PageTitle } from '../components/ui/page-title';
-import { Character } from '../components/characters/Character';
-import { useScreenFocused } from '../characters/useScreenFocused';
+import { Kip } from '../components/kip/Kip';
 import { ThemeToggle } from '../components/ui/theme-toggle';
 import { Reveal } from '../components/ui/reveal';
 import { HabitLogCard } from '../components/habit-log-card';
@@ -96,7 +95,6 @@ export function DashboardScreen() {
   // Null until known, and null on failure: the coach entry simply isn't drawn.
   const { status: coachStatus } = useCoachStatus(navigation);
   const coachRoute = coachEntryRoute(coachStatus);
-  const focused = useScreenFocused();
   // Bumped after each successful sync with Google Health, so the data reloads.
   const { dataVersion } = useSync();
   const forecastState = useForecast(dataVersion);
@@ -165,7 +163,7 @@ export function DashboardScreen() {
           <ProfileButton ring={ring} surface={colors.background} colour={myColour} onPress={openProfile} />
         </View>
         <View className="flex-1 items-center justify-center gap-4 px-8">
-          <Character testID="dashboard-fallback-character" mood="idle" size={56} glow paused={!focused} />
+          <Kip testID="dashboard-fallback-kip" colour={myColour} pose="rest" mood="curious" scale={3} />
           <PageTitle className="text-center">{title}</PageTitle>
           <Text className="text-center text-body text-muted-foreground">{body}</Text>
           {action}

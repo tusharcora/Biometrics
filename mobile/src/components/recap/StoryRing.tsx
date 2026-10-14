@@ -1,16 +1,14 @@
 import React from 'react';
 import { View, type ViewStyle } from 'react-native';
 import type { RecapSummary } from '../../api/recaps';
-import { useCharacterOptional } from '../../characters/CharacterContext';
+import { useMyKipColour } from '../../lib/kip/myKipColour';
 import { storyRingHint } from '../../lib/recapCopy';
-import { recapCoachId } from '../../lib/recapShare';
 import { storyRingColor } from '../../lib/recapTheme';
 import { recapDestination, useUnwatchedRecap } from '../../lib/unwatchedRecap';
-import { DEFAULT_CHARACTER_ID } from '../characters/types';
 
 export interface StoryRingState {
   recap: RecapSummary;
-  /** The recap coach's ring colour on this theme's page. */
+  /** Your KIP's ring colour on this theme's page. */
   color: string;
   /** "Your week is ready. Play your story", for the avatar's accessibility label. */
   hint: string;
@@ -25,11 +23,11 @@ interface FocusSource {
 /** The ring for the avatar on this screen, or null when there is no unwatched recap. */
 export function useStoryRing(scheme: 'light' | 'dark', navigation?: FocusSource): StoryRingState | null {
   const { recap } = useUnwatchedRecap(navigation);
-  const characterId = useCharacterOptional()?.characterId ?? DEFAULT_CHARACTER_ID;
+  const mine = useMyKipColour();
   if (!recap) return null;
   return {
     recap,
-    color: storyRingColor(recapCoachId(recap, characterId), scheme),
+    color: storyRingColor(mine, scheme),
     hint: storyRingHint(recap),
     destination: recapDestination(recap),
   };
@@ -51,7 +49,7 @@ export interface StoryRingProps {
 }
 
 /**
- * A story ring (weekly story placement, design A2): a ring in the recap coach's colour around an
+ * A story ring (weekly story placement, design A2): a ring in your KIP's colour around an
  * avatar, with a small dot of the same colour at its top right, bordered in the surface colour.
  * Decorative: the pressable around it says a new recap is ready.
  */

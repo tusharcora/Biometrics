@@ -2,17 +2,15 @@ import React, { useContext, useRef, useState } from 'react';
 import { Modal, PixelRatio, ScrollView, StyleSheet, useWindowDimensions, View, type DimensionValue } from 'react-native';
 import { initialWindowMetrics, SafeAreaInsetsContext, type EdgeInsets } from 'react-native-safe-area-context';
 import { useReducedMotion } from 'react-native-reanimated';
-import { useCharacterOptional } from '../../characters/CharacterContext';
 import { LOCKED_PIP, mixHex, tierColors } from '../../lib/badgeArt';
 import { coachLine, levelTitle, valueLine } from '../../lib/badges';
 import type { Celebration } from '../../lib/celebrationQueue';
+import { hexAlpha } from '../../lib/colour';
+import { useMyKipColour } from '../../lib/kip/myKipColour';
 import { EXPORT_NOTICES, useRecapExport } from '../../lib/useRecapExport';
 import { FONTS } from '../../theme';
-import { Character } from '../characters/Character';
-import { hexAlpha } from '../characters/palette';
-import { characterInfo } from '../characters/registry';
-import { DEFAULT_CHARACTER_ID } from '../characters/types';
 import { pixelFont } from '../coach/thinking/shared';
+import { Kip } from '../kip/Kip';
 import { Button, buttonTextVariants } from '../ui/button';
 import { Text } from '../ui/text';
 import { BadgeIcon } from './BadgeIcon';
@@ -33,7 +31,7 @@ const HERO_CONFETTI: ReadonlyArray<ConfettiSpot> = [['left', 22, 10], ['right', 
 /** The page's side padding: the margins the confetti may use, kept clear of all text. */
 const SIDE = 24;
 const ZERO_INSETS: EdgeInsets = { top: 0, right: 0, bottom: 0, left: 0 };
-/** Below this much height between the insets, the badge and its coach draw smaller. */
+/** Below this much height between the insets, the badge and KIP draw smaller. */
 const COMPACT_HEIGHT = 700;
 const CONFETTI_COLORS = ['#FACC15', '#F9A8D4', '#5EEAD4', '#FDE68A', '#FDBA74'];
 const INK = '#FAFAF9';
@@ -41,8 +39,8 @@ const INK = '#FAFAF9';
 const NOTICE_INK = '#FCA5A5';
 
 // The unlock celebration (spec 2026-10-06 §6; canvas Unlock.dc.html): full screen, on a ground
-// tinted by the new tier — the badge with the coach beside it, the level pips, the level name and
-// value, the coach's fixed line, Share (a 1080 px badge card) and "Nice!", which closes it.
+// tinted by the new tier — the badge with your KIP beside it, the level pips, the level name and
+// value, KIP's fixed line, Share (a 1080 px badge card) and "Nice!", which closes it.
 // One Modal stays presented while the queue lasts and the next family swaps in inside it: on iOS a
 // Modal presented in the same commit another one starts dismissing is dropped.
 export function CelebrationModal({ celebration, thresholds, onDone }: CelebrationModalProps) {
@@ -80,10 +78,9 @@ function useInsets(): EdgeInsets {
 /** One family's celebration: remounted per family, so its share and close state start afresh. */
 function CelebrationContent({ celebration, thresholds, onDone }: CelebrationModalProps) {
   const reduceMotion = useReducedMotion();
-  const characterId = useCharacterOptional()?.characterId ?? DEFAULT_CHARACTER_ID;
-  const accent = characterInfo(characterId).accent;
+  const mine = useMyKipColour();
   const { family, level, value } = celebration;
-  const t = tierColors(level, accent);
+  const t = tierColors(level, mine);
   const ground = mixHex(t.ring, '#0B0B0F', 0.9);
   const pixel = pixelFont();
   const { exportRef, busy, notice, share } = useRecapExport();
@@ -126,9 +123,9 @@ function CelebrationContent({ celebration, thresholds, onDone }: CelebrationModa
             </View>
           )}
           <View style={{ flexDirection: 'row', alignItems: 'flex-end' }}>
-            <BadgeIcon testID="celebration-badge" family={family} level={level} size={badgeSize} pips={false} coachAccent={accent} />
+            <BadgeIcon testID="celebration-badge" family={family} level={level} size={badgeSize} pips={false} colour={mine} />
             <View testID="celebration-coach" style={{ marginLeft: -Math.round(coachSize * 0.47), marginBottom: -10 }}>
-              <Character characterId={characterId} mood="idle" size={coachSize} />
+              <Kip colour={mine} pose="cheer" mood="proud" scale={Math.max(1, Math.round(coachSize / 16))} />
             </View>
           </View>
         </View>
@@ -144,7 +141,7 @@ function CelebrationContent({ celebration, thresholds, onDone }: CelebrationModa
           {valueLine(family, value)}
         </Text>
         <View style={{ alignSelf: 'stretch', flexDirection: 'row', gap: 12, alignItems: 'center', borderWidth: 1, borderColor: hexAlpha(t.ring, 0.3), backgroundColor: 'rgba(255,255,255,0.05)', borderRadius: 18, paddingVertical: 14, paddingHorizontal: 16 }}>
-          <Character characterId={characterId} mood="idle" size={36} />
+          <Kip colour={mine} pose="cheer" mood="proud" scale={2} />
           <Text testID="celebration-coach-line" style={{ flex: 1, fontFamily: FONTS.sans, fontSize: 15, lineHeight: 21, color: INK }}>
             {coachLine(family, level, thresholds)}
           </Text>
@@ -183,7 +180,7 @@ function CelebrationContent({ celebration, thresholds, onDone }: CelebrationModa
       {/* The export view: off screen at a fixed size, the only thing captured. */}
       <View pointerEvents="none" style={{ position: 'absolute', left: -10000, top: 0 }}>
         <View ref={exportRef} collapsable={false} testID="celebration-export" style={{ width: layout.width, height: layout.height }}>
-          <BadgeShareCard family={family} level={level} value={value} coachAccent={accent} scale={layout.scale} />
+          <BadgeShareCard family={family} level={level} value={value} colour={mine} scale={layout.scale} />
         </View>
       </View>
     </View>

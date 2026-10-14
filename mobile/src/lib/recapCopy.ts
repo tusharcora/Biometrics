@@ -3,7 +3,19 @@ import type { RecapComparison, RecapKind, RecapMilestones, RecapStats } from '..
 import { countLabel, tierName } from './badges';
 import type { MilestoneTile } from './milestones';
 import { MONTH_LONG, MONTH_SHORT } from './heatmap';
+import { KIP_NAME } from './kipCopy';
 import { formatShortDuration, formatTextDuration } from './sleepStats';
+
+/** The recaps' KIP strings (spec 2026-10-14 KIP Coach §7.6; rulings P9, G7). */
+export const RECAP_COPY = {
+  storyViewerTitle: `${KIP_NAME} · Your week`,
+  weekWithKip: `Your week with ${KIP_NAME}`,
+  monthWithKip: (month: string) => `${month} with ${KIP_NAME}`,
+  askKipWeek: `Ask ${KIP_NAME} about your week…`,
+  howKipSaw: `How ${KIP_NAME} saw my week`,
+  kipSays: `${KIP_NAME} says`,
+  notesFromKip: `Notes from ${KIP_NAME}`,
+} as const;
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const plural = (n: number, word: string) => `${n} ${n === 1 ? word : `${word}s`}`;

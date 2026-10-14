@@ -1,14 +1,14 @@
 import React from 'react';
 import { Text, View } from 'react-native';
 import type { Recap } from '../../api/recaps';
+import type { KipColour } from '../../lib/kip/kipArt';
+import { KIP_NAME } from '../../lib/kipCopy';
 import { cardStats, monthName } from '../../lib/recapCopy';
 import { APP_NAME, DESIGN_WIDTH, fitQuote, QUOTE_LINE_HEIGHT, QUOTE_MIN_FONT_SCALE, type Includes } from '../../lib/recapShare';
 import { recapTint } from '../../lib/recapTheme';
 import { FONTS } from '../../theme';
-import { Character } from '../characters/Character';
-import { characterInfo } from '../characters/registry';
-import type { CharacterId } from '../characters/types';
 import { pixelFont } from '../coach/thinking/shared';
+import { Kip } from '../kip/Kip';
 import { ShareCanvas } from './ShareCanvas';
 
 // Laid out in the design's own units (a 540×675 artboard); a(n) maps them onto the 360-wide
@@ -36,19 +36,19 @@ const FOOTER = 1 + 16 + 20;
 
 export interface RecapCardViewProps {
   recap: Recap;
-  coachId: CharacterId;
+  kipColour: KipColour;
   includes: Includes;
   scale: number;
   testID?: string;
 }
 
 /**
- * The monthly card (recap restyle, 1): 4:5, tinted by the coach, a big sprite beside the
- * Silkscreen "<Coach>'s month" title and the quote, up to four stat tiles and the footer.
+ * The monthly card (recap restyle, 1): 4:5, tinted by your KIP, a big KIP beside the
+ * Silkscreen "KIP's month" title and the quote, up to four stat tiles and the footer.
  */
-export function RecapCardView({ recap, coachId, includes, scale, testID = 'recap-card' }: RecapCardViewProps) {
+export function RecapCardView({ recap, kipColour, includes, scale, testID = 'recap-card' }: RecapCardViewProps) {
   const a = (n: number) => (n * scale * DESIGN_WIDTH) / ART_W;
-  const t = recapTint(coachId);
+  const t = recapTint(kipColour);
   const pixel = pixelFont();
   const stats = cardStats(recap.stats).filter((s) => includes[s.key]).slice(0, 4);
   const quote = `“${recap.line}”`;
@@ -76,7 +76,7 @@ export function RecapCardView({ recap, coachId, includes, scale, testID = 'recap
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: a(HERO_GAP), flexShrink: 1, minHeight: 0 }}>
         {includes.coach ? (
           <View testID={`${testID}-coach`}>
-            <Character characterId={coachId} mood="idle" size={Math.round(a(SPRITE))} paused />
+            <Kip colour={kipColour} pose="cheer" mood="proud" scale={Math.max(1, Math.round(a(SPRITE) / 16))} />
           </View>
         ) : null}
         <View style={{ flex: 1, gap: a(TITLE_GAP), flexShrink: 1, minHeight: 0 }}>
@@ -87,7 +87,7 @@ export function RecapCardView({ recap, coachId, includes, scale, testID = 'recap
             minimumFontScale={0.6}
             style={{ fontFamily: pixel, fontSize: a(TITLE_SIZE), lineHeight: a(TITLE_LINE), color: t.accentText }}
           >
-            {`${characterInfo(coachId).name}'s\nmonth`}
+            {`${KIP_NAME}'s\nmonth`}
           </Text>
           {includes.quote ? (
             <Text

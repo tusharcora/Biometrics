@@ -5,8 +5,11 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react-n
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
-import { withCoachStatus } from '../../jest-mocks/coachStatus';
+import { HIDDEN_OK, withCoachStatus } from '../../jest-mocks/coachStatus';
+import { kipArtFills, kipFills } from '../../jest-mocks/kipFixture';
 import type { Recap } from '../../src/api/recaps';
+import { contrast } from '../../src/lib/colour';
+import { resetMyKipColour, setMyKipColour } from '../../src/lib/kip/myKipColour';
 import { captureToPng, saveImage, shareImage } from '../../src/lib/recapCapture';
 import { recapTint } from '../../src/lib/recapTheme';
 import { STORY_FRAME_MS } from '../../src/lib/storyViewer';
@@ -65,6 +68,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   resetUnwatchedRecap();
   resetAchievements();
+  resetMyKipColour();
   (fetchAchievements as jest.Mock).mockResolvedValue(null);
   mockParams = { recap: mockRecap };
   mockStack = { index: 0, routes: [{ name: 'RecapStory' }] };
@@ -187,16 +191,19 @@ it("follows the builder's stored include choices", async () => {
   expect(screen.queryByTestId('story-export-best')).toBeNull();
 });
 
-it('draws light status bar content and the chrome on the coach ground, whatever the app theme', async () => {
+it("draws light status bar content and the chrome on your KIP's ground, whatever the app theme", async () => {
+  // Ink: a dark KIP whose own colour would not read under the ground-coloured label.
+  setMyKipColour('ink');
   await open();
   const bars = screen.UNSAFE_getAllByType(StatusBar);
   expect(bars[bars.length - 1]!.props.barStyle).toBe('light-content');
-  const t = recapTint('luna');
+  const t = recapTint('ink');
   expect(screen.getByTestId('story-viewer-title')).toHaveStyle({ color: t.text });
   tap(10000);
   tap(10000);
-  expect(StyleSheet.flatten(screen.getByTestId('story-end-full-recap').props.style)).toMatchObject({ backgroundColor: t.accent });
+  expect(StyleSheet.flatten(screen.getByTestId('story-end-full-recap').props.style)).toMatchObject({ backgroundColor: t.accentText });
   expect(screen.getByTestId('story-end-full-recap-label')).toHaveStyle({ color: t.ground });
+  expect(contrast(t.ground, t.accentText)).toBeGreaterThanOrEqual(4.5);
   expect(screen.getByTestId('story-end-again-label')).toHaveStyle({ color: t.text });
 });
 
@@ -242,18 +249,28 @@ it('pauses when a screen reader is turned on mid-story and runs again when it is
 });
 
 describe('header and reply bar (design E)', () => {
-  it('shows the recap coach, the week and Share / Close above the frame', async () => {
+  it("draws your KIP whatever the recap's stored personaId (spec §7.7)", async () => {
+    setMyKipColour('lime');
+    mockParams = { recap: { ...mockRecap, personaId: 'luna' } };
     await open();
-    expect(screen.getByTestId('story-viewer-title')).toHaveTextContent('Luna · Your week');
+    expect(screen.getByTestId('recap-kip', HIDDEN_OK)).toBeTruthy();
+    expect(kipFills(screen, 'recap-kip')).toEqual(kipArtFills({ colour: 'lime', pose: 'rest', mood: 'idle' }));
+    expect(StyleSheet.flatten(screen.getByTestId('story-viewer').props.style).backgroundColor).toBe(recapTint('lime').ground);
+    expect(screen.queryByText(/Luna/)).toBeNull();
+  });
+
+  it('shows KIP, the week and Share / Close above the frame', async () => {
+    await open();
+    expect(screen.getByTestId('story-viewer-title')).toHaveTextContent('KIP · Your week');
     expect(screen.getByTestId('story-viewer-range')).toHaveTextContent('Sep 28 – Oct 4');
     expect(screen.getByTestId('story-viewer-coach')).toBeTruthy();
     expect(screen.getByTestId('story-viewer-share').props.accessibilityLabel).toBe('Share this frame');
     expect(screen.getByTestId('story-viewer-close').props.accessibilityLabel).toBe('Close story');
   });
 
-  it('asks the coach about the week: closes the viewer onto the chat with the question in the composer, not sent', async () => {
+  it('asks KIP about the week: closes the viewer onto the chat with the question in the composer, not sent', async () => {
     await open({ status: CONSENTED });
-    expect(screen.getByTestId('story-viewer-ask')).toHaveTextContent('Ask Mochi about your week…');
+    expect(screen.getByTestId('story-viewer-ask')).toHaveTextContent('Ask KIP about your week…');
     fireEvent.press(screen.getByTestId('story-viewer-ask'));
     expect(mockNavigate).toHaveBeenCalledWith('Tabs', { screen: 'Coach', params: { prefill: 'What stood out in my week of Sep 28 – Oct 4?' } }, { pop: true });
   });

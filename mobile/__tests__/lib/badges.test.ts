@@ -59,7 +59,7 @@ it('describes each rung of the ladder: earned with its date, the next one with w
 it('sums up a family for the Badges list', () => {
   expect(familyStatus(familyFixture('SLEEP_GOAL', { level: 2, current: 9 }))).toBe('Level II · Silver · 9 / 14 nights');
   expect(familyStatus(familyFixture('EVERY_DAY_LOGGED'))).toBe('Not yet · 0 / 1 month');
-  expect(familyStatus(familyFixture('CHECK_IN', { level: 5, current: 200 }))).toBe('Level V · Coach');
+  expect(familyStatus(familyFixture('CHECK_IN', { level: 5, current: 200 }))).toBe('Level V · Legend');
 });
 
 it('lists the levels earned in a date range, optionally one kind only', () => {

@@ -1,7 +1,6 @@
 import React from 'react';
 import { AppState, Modal } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
-import { withCharacter } from '../../jest-mocks/characterContext';
 import { achievementsFixture } from '../../jest-mocks/achievementsFixture';
 import { fetchAchievements, markCelebrated } from '../../src/api/achievements';
 import { CelebrationHost, MODAL_DISMISS_MS } from '../../src/components/achievements/CelebrationHost';
@@ -51,7 +50,7 @@ afterEach(() => jest.restoreAllMocks());
 
 it('celebrates one family at a time, highest level first, and marks each family celebrated on close', async () => {
   load.mockResolvedValue(TWO_FAMILIES);
-  render(withCharacter(<CelebrationHost />));
+  render(<CelebrationHost />);
 
   expect(await screen.findByTestId('celebration-title')).toHaveTextContent('SLEEP GOAL STREAK II');
   fireEvent.press(screen.getByTestId('celebration-done'));
@@ -65,7 +64,7 @@ it('celebrates one family at a time, highest level first, and marks each family 
 // Unmounting one Modal and presenting another in the same commit drops the second on iOS.
 it('swaps families inside one Modal, which goes only when the queue is empty', async () => {
   load.mockResolvedValue(TWO_FAMILIES);
-  render(withCharacter(<CelebrationHost />));
+  render(<CelebrationHost />);
   await screen.findByTestId('celebration-title');
   const modal = screen.UNSAFE_getByType(Modal);
 
@@ -85,7 +84,7 @@ describe('behind a native modal route', () => {
   async function renderOn(route: string) {
     mockNav.route = route;
     load.mockResolvedValue(TWO_FAMILIES);
-    const view = render(withCharacter(<CelebrationHost />));
+    const view = render(<CelebrationHost />);
     await act(async () => {});
     expect(load).toHaveBeenCalledTimes(1);
     return view;
@@ -133,7 +132,7 @@ describe('behind a native modal route', () => {
 it('waits for the navigator to be ready', async () => {
   mockNav.ready = false;
   load.mockResolvedValue(TWO_FAMILIES);
-  render(withCharacter(<CelebrationHost />));
+  render(<CelebrationHost />);
   await waitFor(() => expect(load).toHaveBeenCalledTimes(1));
   await act(async () => {});
   expect(screen.queryByTestId('celebration-screen')).toBeNull();
@@ -150,7 +149,7 @@ it('checks again when the app comes back to the foreground', async () => {
     return { remove: jest.fn() };
   }) as never);
   load.mockResolvedValue(achievementsFixture());
-  render(withCharacter(<CelebrationHost />));
+  render(<CelebrationHost />);
   await waitFor(() => expect(load).toHaveBeenCalledTimes(1));
   expect(screen.queryByTestId('celebration-title')).toBeNull();
 
@@ -161,7 +160,7 @@ it('checks again when the app comes back to the foreground', async () => {
 
 it('shows nothing against a backend without badges (404)', async () => {
   load.mockResolvedValue(null);
-  render(withCharacter(<CelebrationHost />));
+  render(<CelebrationHost />);
   await waitFor(() => expect(load).toHaveBeenCalledTimes(1));
   await act(async () => {});
   expect(screen.queryByTestId('celebration-screen')).toBeNull();
@@ -171,7 +170,7 @@ it('keeps the family on screen until it is closed when a refresh brings a higher
   load.mockResolvedValue(achievementsFixture({ CHECK_IN: { level: 1 } }, {
     uncelebrated: [{ id: 'c1', family: 'CHECK_IN', level: 1, value: 7, earnedOn: '2026-10-07' }],
   }));
-  render(withCharacter(<CelebrationHost />));
+  render(<CelebrationHost />);
   expect(await screen.findByTestId('celebration-title')).toHaveTextContent('DAILY CHECK-IN I');
 
   load.mockResolvedValue(TWO_FAMILIES);

@@ -1,18 +1,17 @@
 import React from 'react';
 import { Text, View } from 'react-native';
 import type { Recap } from '../../api/recaps';
-import { weekdayName, weekRange } from '../../lib/recapCopy';
+import type { KipColour } from '../../lib/kip/kipArt';
+import { RECAP_COPY, weekdayName, weekRange } from '../../lib/recapCopy';
 import { APP_NAME, fitQuote, PIXEL_ADVANCE_EM, QUOTE_LINE_HEIGHT, QUOTE_MIN_FONT_SCALE, quoteLines, type Includes } from '../../lib/recapShare';
 import { coachFrameStats, coachFrameText, headlineStats, STORY_FRAME_COUNT, storyEyebrow, stripDays, type StoryFrameIndex } from '../../lib/recapStory';
 import { highestPerFamilyFirst, shortLevelTitle, type BadgeRef } from '../../lib/badges';
 import { CHANGE_COLORS, recapTint, type RecapTint } from '../../lib/recapTheme';
 import { formatTextDuration } from '../../lib/sleepStats';
 import { FONTS } from '../../theme';
-import { Character, DIMMED_OPACITY } from '../characters/Character';
-import { characterInfo } from '../characters/registry';
-import type { CharacterId } from '../characters/types';
 import { BadgeIcon } from '../achievements/BadgeIcon';
 import { pixelFont } from '../coach/thinking/shared';
+import { Kip } from '../kip/Kip';
 import { ShareCanvas } from './ShareCanvas';
 
 export { STORY_FRAME_COUNT } from '../../lib/recapStory';
@@ -20,8 +19,10 @@ export type { StoryFrameIndex } from '../../lib/recapStory';
 
 // The weekly story (recap restyle, 1a): three 9:16 frames on the 360×640 design grid × scale,
 // each exported on its own at 1080×1920. Every frame shares the chrome: a three-segment progress
-// bar and the "MY WEEK · N OF 3" eyebrow, on the coach's tinted, dotted ground.
+// bar and the "MY WEEK · N OF 3" eyebrow, on your KIP's tinted, dotted ground.
 const W = 360;
+/** A short or missing night's KIP in the week strip. */
+const DIMMED = 0.45;
 const H = 640;
 const PAD_X = 24;
 const PAD_Y = 28;
@@ -67,7 +68,7 @@ export const STORY_FRAME_INSETS = { top: PAD_Y, left: PAD_X, right: PAD_X, botto
 
 export interface WeeklyStoryFrameProps {
   recap: Recap;
-  coachId: CharacterId;
+  kipColour: KipColour;
   includes: Includes;
   scale: number;
   index: StoryFrameIndex;
@@ -109,9 +110,9 @@ export function StoryProgress({ tint, index, scale, count = STORY_FRAME_COUNT, p
 }
 
 /** One frame of the weekly story, renderable (and capturable) on its own by index. */
-export function WeeklyStoryFrame({ recap, coachId, includes, scale, index, showProgress = true, badges = NO_BADGES, testID = 'recap-story' }: WeeklyStoryFrameProps) {
+export function WeeklyStoryFrame({ recap, kipColour, includes, scale, index, showProgress = true, badges = NO_BADGES, testID = 'recap-story' }: WeeklyStoryFrameProps) {
   const u = (n: number) => n * scale;
-  const t = recapTint(coachId);
+  const t = recapTint(kipColour);
   const pixel = pixelFont();
   const range = weekRange(recap.periodStart, recap.periodEnd);
   return (
@@ -130,9 +131,9 @@ export function WeeklyStoryFrame({ recap, coachId, includes, scale, index, showP
       <Text testID={`${testID}-eyebrow`} style={{ fontFamily: pixel, fontSize: u(13), lineHeight: u(EYEBROW_LINE), letterSpacing: u(1.04), color: t.accentText }}>
         {storyEyebrow(index)}
       </Text>
-      {index === 0 ? <HeadlineBody recap={recap} coachId={coachId} includes={includes} u={u} t={t} pixel={pixel} testID={testID} /> : null}
-      {index === 1 ? <CoachSawBody recap={recap} coachId={coachId} includes={includes} u={u} t={t} pixel={pixel} testID={testID} /> : null}
-      {index === 2 ? <CoachStoryBody recap={recap} coachId={coachId} includes={includes} u={u} t={t} pixel={pixel} testID={testID} badges={badges} /> : null}
+      {index === 0 ? <HeadlineBody recap={recap} kipColour={kipColour} includes={includes} u={u} t={t} pixel={pixel} testID={testID} /> : null}
+      {index === 1 ? <CoachSawBody recap={recap} kipColour={kipColour} includes={includes} u={u} t={t} pixel={pixel} testID={testID} /> : null}
+      {index === 2 ? <CoachStoryBody recap={recap} kipColour={kipColour} includes={includes} u={u} t={t} pixel={pixel} testID={testID} badges={badges} /> : null}
       {index === 2 ? (
         <View style={{ marginTop: 'auto', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: u(1), borderTopColor: t.hairline, paddingTop: u(16) }}>
           <Text style={{ fontFamily: FONTS.sans, fontSize: u(14), lineHeight: u(FOOTER_LINE), color: t.soft }}>Find your coach</Text>
@@ -155,7 +156,7 @@ export function WeeklyStoryView(props: Omit<WeeklyStoryFrameProps, 'index'> & { 
 
 interface BodyProps {
   recap: Recap;
-  coachId: CharacterId;
+  kipColour: KipColour;
   includes: Includes;
   u: (n: number) => number;
   t: RecapTint;
@@ -172,14 +173,14 @@ function cardStyle(u: BodyProps['u'], t: RecapTint) {
 }
 
 /** Frame 1: "My week" and its big numbers. */
-function HeadlineBody({ recap, coachId, includes, u, t, pixel, testID }: BodyProps) {
+function HeadlineBody({ recap, kipColour, includes, u, t, pixel, testID }: BodyProps) {
   const stats = headlineStats(recap.stats);
   return (
     <>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: u(16) }}>
         {includes.coach ? (
           <View testID={`${testID}-coach`}>
-            <Character characterId={coachId} mood="idle" size={Math.round(u(96))} paused />
+            <Kip colour={kipColour} pose="cheer" mood="proud" scale={Math.max(1, Math.round(u(96) / 16))} />
           </View>
         ) : null}
         <Text testID={`${testID}-title`} style={{ flex: 1, fontFamily: pixel, fontSize: u(40), lineHeight: u(44), color: t.text }}>My week</Text>
@@ -207,10 +208,9 @@ function HeadlineBody({ recap, coachId, includes, u, t, pixel, testID }: BodyPro
   );
 }
 
-/** Frame 2 (the design's artboard): the week as seven coaches, the best night and the line. */
-function CoachSawBody({ recap, coachId, includes, u, t, pixel, testID }: BodyProps) {
-  const name = characterInfo(coachId).name;
-  const title = `How ${name} saw my week`;
+/** Frame 2 (the design's artboard): the week as seven KIPs, the best night and the line. */
+function CoachSawBody({ recap, kipColour, includes, u, t, pixel, testID }: BodyProps) {
+  const title = RECAP_COPY.howKipSaw;
   const days = stripDays(recap.stats.weekStrip ?? []);
   const best = includes.bestNight ? recap.stats.bestNight : undefined;
   const quote = `“${recap.line}”`;
@@ -228,9 +228,9 @@ function CoachSawBody({ recap, coachId, includes, u, t, pixel, testID }: BodyPro
       <View testID={includes.coach ? `${testID}-coach` : undefined} style={{ flexDirection: 'row', justifyContent: 'space-between' }}>
         {days.map((d) => (
           <View key={d.date} testID={`${testID}-day-${d.date}`} accessibilityLabel={`${d.letter}: ${state[d.state]}`} style={{ alignItems: 'center', gap: u(4) }}>
-            <View testID={`${testID}-sprite-${d.date}`} style={{ width: u(38), height: u(38), alignItems: 'center', justifyContent: 'center', opacity: d.dimmed ? DIMMED_OPACITY : 1 }}>
+            <View testID={`${testID}-sprite-${d.date}`} style={{ width: u(38), height: u(38), alignItems: 'center', justifyContent: 'center', opacity: d.dimmed ? DIMMED : 1 }}>
               {includes.coach ? (
-                <Character characterId={coachId} mood="idle" size={Math.round(u(38))} paused />
+                <Kip testID={`${testID}-kip-${d.date}`} colour={kipColour} pose="rest" mood="idle" scale={Math.max(1, Math.round(u(38) / 16))} />
               ) : (
                 <View style={{ width: u(30), height: u(30), borderRadius: u(6), backgroundColor: t.accent }} />
               )}
@@ -249,7 +249,7 @@ function CoachSawBody({ recap, coachId, includes, u, t, pixel, testID }: BodyPro
       ) : null}
       {includes.quote ? (
         <View testID={`${testID}-says`} style={[cardStyle(u, t), { flexShrink: 1, minHeight: 0 }]}>
-          <Label u={u} t={t}>{`${name} says`}</Label>
+          <Label u={u} t={t}>{RECAP_COPY.kipSays}</Label>
           <Text
             testID={`${testID}-quote`}
             numberOfLines={fit.lines + 1}
@@ -306,8 +306,7 @@ export function coachStoryFit(
 }
 
 /** Frame 3: the coach's weekly story (the line when there is none), the streak and the spread, and the week's badges. */
-function CoachStoryBody({ recap, coachId, includes, u, t, pixel, testID, badges }: BodyProps & { badges: readonly BadgeRef[] }) {
-  const name = characterInfo(coachId).name;
+function CoachStoryBody({ recap, kipColour, includes, u, t, pixel, testID, badges }: BodyProps & { badges: readonly BadgeRef[] }) {
   const text = coachFrameText(recap);
   const stats = coachFrameStats(recap.stats);
   // Switched off in Build your recap ("Badges this week"): no card here, in the viewer or the image.
@@ -321,11 +320,11 @@ function CoachStoryBody({ recap, coachId, includes, u, t, pixel, testID, badges 
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: u(16) }}>
         {includes.coach ? (
           <View testID={`${testID}-coach`}>
-            <Character characterId={coachId} mood="idle" size={Math.round(u(72))} paused />
+            <Kip colour={kipColour} pose="rest" mood="idle" scale={Math.max(1, Math.round(u(72) / 16))} />
           </View>
         ) : null}
         <Text testID={`${testID}-title`} numberOfLines={2} adjustsFontSizeToFit style={{ flex: 1, fontFamily: pixel, fontSize: u(26), lineHeight: u(30), color: t.text }}>
-          {`Notes from ${name}`}
+          {RECAP_COPY.notesFromKip}
         </Text>
       </View>
       <Text
@@ -363,7 +362,7 @@ function CoachStoryBody({ recap, coachId, includes, u, t, pixel, testID, badges 
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: u(10) }}>
             {shown.map((b) => (
               <View key={`${b.family}-${b.level}`} testID={`${testID}-badge-${b.family}-${b.level}`} style={{ flex: 1, alignItems: 'center', gap: u(4) }}>
-                <BadgeIcon family={b.family} level={b.level} size={u(icon)} pips={false} testID={`${testID}-badge-${b.family}-${b.level}-icon`} />
+                <BadgeIcon family={b.family} level={b.level} size={u(icon)} pips={false} colour={kipColour} testID={`${testID}-badge-${b.family}-${b.level}-icon`} />
                 {fit.badges === 'full' ? (
                   <Text
                     testID={`${testID}-badge-${b.family}-${b.level}-title`}

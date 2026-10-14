@@ -1,7 +1,7 @@
 import React from 'react';
 import { StyleSheet } from 'react-native';
 import { render, screen, within } from '@testing-library/react-native';
-import { HIDDEN_OK } from '../../jest-mocks/characterContext';
+import { HIDDEN_OK } from '../../jest-mocks/coachStatus';
 import type { Recap } from '../../src/api/recaps';
 import { RecapCardView } from '../../src/components/recap/RecapCardView';
 import { coachStoryFit, STORY_FRAME_COUNT, WeeklyStoryFrame, WeeklyStoryView } from '../../src/components/recap/WeeklyStoryView';
@@ -28,11 +28,11 @@ const WEEK: Recap = {
 const storyIncludes = resolveIncludes('story', {}, WEEK.stats);
 
 describe('RecapCardView', () => {
-  it("draws a 4:5 card on Luna's ground: MY {MONTH}, the sprite beside \"Luna's month\", the quote, stat tiles and the footer", () => {
-    render(<RecapCardView recap={MONTH} coachId="luna" includes={resolveIncludes('card', { bestRecovery: true }, MONTH.stats)} scale={1.5} />);
-    expect(screen.getByTestId('recap-card')).toHaveStyle({ width: 540, height: 675, backgroundColor: '#12132A' });
+  it("draws a 4:5 card on your KIP's ground: MY {MONTH}, KIP beside \"KIP's month\", the quote, stat tiles and the footer", () => {
+    render(<RecapCardView recap={MONTH} kipColour="lemon" includes={resolveIncludes('card', { bestRecovery: true }, MONTH.stats)} scale={1.5} />);
+    expect(screen.getByTestId('recap-card')).toHaveStyle({ width: 540, height: 675, backgroundColor: recapTint('lemon').ground });
     expect(screen.getByTestId('recap-card-month')).toHaveTextContent('MY SEPTEMBER');
-    expect(screen.getByTestId('recap-card-title')).toHaveTextContent("Luna's month");
+    expect(screen.getByTestId('recap-card-title')).toHaveTextContent("KIP's month");
     expect(screen.getByTestId('recap-card-coach', HIDDEN_OK)).toBeTruthy();
     expect(screen.getByTestId('recap-card-quote')).toHaveTextContent('“Six nights in a row on goal, lovely.”');
     expect(screen.getByTestId('recap-card-stat-avgSleep')).toHaveTextContent('AVERAGE SLEEP7h 5m');
@@ -43,14 +43,14 @@ describe('RecapCardView', () => {
     expect(screen.getByTestId('recap-card-dots', HIDDEN_OK)).toBeTruthy();
   });
 
-  it('tints the card with its coach', () => {
-    render(<RecapCardView recap={MONTH} coachId="mochi" includes={resolveIncludes('card', {}, MONTH.stats)} scale={1} />);
-    expect(screen.getByTestId('recap-card')).toHaveStyle({ backgroundColor: '#2A1420' });
-    expect(screen.getByTestId('recap-card-title')).toHaveTextContent("Mochi's month");
+  it('tints the card with your KIP, and names KIP whatever coach the recap was written by', () => {
+    render(<RecapCardView recap={MONTH} kipColour="coral" includes={resolveIncludes('card', {}, MONTH.stats)} scale={1} />);
+    expect(screen.getByTestId('recap-card')).toHaveStyle({ backgroundColor: recapTint('coral').ground });
+    expect(screen.getByTestId('recap-card-title')).toHaveTextContent("KIP's month");
   });
 
   it('leaves out what is switched off, Best recovery by default', () => {
-    render(<RecapCardView recap={MONTH} coachId="luna" includes={resolveIncludes('card', { quote: false, coach: false, streak: false }, MONTH.stats)} scale={1} />);
+    render(<RecapCardView recap={MONTH} kipColour="lemon" includes={resolveIncludes('card', { quote: false, coach: false, streak: false }, MONTH.stats)} scale={1} />);
     expect(screen.queryByTestId('recap-card-quote')).toBeNull();
     expect(screen.queryByTestId('recap-card-coach', HIDDEN_OK)).toBeNull();
     expect(screen.queryByTestId('recap-card-stat-streak')).toBeNull();
@@ -62,8 +62,8 @@ describe('WeeklyStoryFrame', () => {
   it('has three frames, each 9:16 with the progress bar filled up to it and "MY WEEK · N OF 3"', () => {
     expect(STORY_FRAME_COUNT).toBe(3);
     for (const index of [0, 1, 2] as const) {
-      const { unmount } = render(<WeeklyStoryFrame recap={WEEK} coachId="mochi" includes={storyIncludes} scale={1.5} index={index} />);
-      expect(screen.getByTestId('recap-story')).toHaveStyle({ width: 540, height: 960, backgroundColor: '#2A1420' });
+      const { unmount } = render(<WeeklyStoryFrame recap={WEEK} kipColour="coral" includes={storyIncludes} scale={1.5} index={index} />);
+      expect(screen.getByTestId('recap-story')).toHaveStyle({ width: 540, height: 960, backgroundColor: recapTint('coral').ground });
       expect(screen.getByTestId('recap-story-eyebrow')).toHaveTextContent(`MY WEEK · ${index + 1} OF 3`);
       expect([0, 1, 2].map((i) => screen.getByTestId(`recap-story-progress-${i}`).props.accessibilityLabel)).toEqual([0, 1, 2].map((i) => (i <= index ? '100%' : '0%')));
       expect(screen.getByTestId('recap-story-app')).toHaveTextContent('Biometrics');
@@ -72,7 +72,7 @@ describe('WeeklyStoryFrame', () => {
   });
 
   it('frame 1: the big numbers, the change on last week coloured by direction', () => {
-    render(<WeeklyStoryFrame recap={WEEK} coachId="luna" includes={storyIncludes} scale={1} index={0} />);
+    render(<WeeklyStoryFrame recap={WEEK} kipColour="lemon" includes={storyIncludes} scale={1} index={0} />);
     expect(screen.getByTestId('recap-story-title')).toHaveTextContent('My week');
     expect(screen.getByTestId('recap-story-stat-avgSleep')).toHaveTextContent('AVERAGE SLEEP7h 35m');
     expect(screen.getByTestId('recap-story-stat-onGoal')).toHaveTextContent('NIGHTS ON GOAL5 of 6');
@@ -82,33 +82,33 @@ describe('WeeklyStoryFrame', () => {
   });
 
   it('frame 1 without numbers shows the line instead', () => {
-    render(<WeeklyStoryFrame recap={{ ...WEEK, stats: { nightsWithData: 0 } }} coachId="luna" includes={resolveIncludes('story', {}, { nightsWithData: 0 })} scale={1} index={0} />);
+    render(<WeeklyStoryFrame recap={{ ...WEEK, stats: { nightsWithData: 0 } }} kipColour="lemon" includes={resolveIncludes('story', {}, { nightsWithData: 0 })} scale={1} index={0} />);
     expect(screen.getByTestId('recap-story-quote')).toHaveTextContent('“A steady week.”');
   });
 
-  it('frame 2: seven coaches, dimmed on nights not on goal or without data; the best night and "<Coach> says"', () => {
-    render(<WeeklyStoryFrame recap={WEEK} coachId="luna" includes={storyIncludes} scale={1} index={1} />);
-    expect(screen.getByTestId('recap-story-title')).toHaveTextContent('How Luna saw my week');
+  it('frame 2: seven KIPs, dimmed on nights not on goal or without data; the best night and "KIP says"', () => {
+    render(<WeeklyStoryFrame recap={WEEK} kipColour="lemon" includes={storyIncludes} scale={1} index={1} />);
+    expect(screen.getByTestId('recap-story-title')).toHaveTextContent('How KIP saw my week');
     expect(screen.getByTestId('recap-story-day-2026-09-28').props.accessibilityLabel).toBe('M: on goal');
     expect(screen.getByTestId('recap-story-day-2026-09-30').props.accessibilityLabel).toBe('W: no data');
     expect(screen.getByTestId('recap-story-day-2026-10-02').props.accessibilityLabel).toBe('F: short');
     expect(screen.getByTestId('recap-story-sprite-2026-09-28')).toHaveStyle({ opacity: 1 });
     expect(screen.getByTestId('recap-story-sprite-2026-09-30')).toHaveStyle({ opacity: 0.45 });
     expect(screen.getByTestId('recap-story-sprite-2026-10-02')).toHaveStyle({ opacity: 0.45 });
-    expect(screen.getAllByTestId('character-canvas', HIDDEN_OK)).toHaveLength(7);
+    expect(screen.getAllByTestId(/^recap-story-kip-/, HIDDEN_OK)).toHaveLength(7);
     expect(screen.getByTestId('recap-story-best')).toHaveTextContent('BEST NIGHTTuesday · 8h 5m');
-    expect(screen.getByTestId('recap-story-says')).toHaveTextContent('LUNA SAYS“A steady week.”');
+    expect(screen.getByTestId('recap-story-says')).toHaveTextContent('KIP SAYS“A steady week.”');
   });
 
-  it('frame 2 with the coach switched off draws squares, not sprites', () => {
-    render(<WeeklyStoryFrame recap={WEEK} coachId="luna" includes={{ ...storyIncludes, coach: false }} scale={1} index={1} />);
-    expect(screen.queryAllByTestId('character-canvas', HIDDEN_OK)).toHaveLength(0);
+  it('frame 2 with KIP switched off draws squares, not KIPs', () => {
+    render(<WeeklyStoryFrame recap={WEEK} kipColour="lemon" includes={{ ...storyIncludes, coach: false }} scale={1} index={1} />);
+    expect(screen.queryAllByTestId(/^recap-story-kip-/, HIDDEN_OK)).toHaveLength(0);
     expect(screen.getByTestId('recap-story-sprite-2026-10-02')).toHaveStyle({ opacity: 0.45 });
   });
 
   it("frame 3: the coach's story, the streak and the spread, and the footer", () => {
-    render(<WeeklyStoryFrame recap={WEEK} coachId="luna" includes={storyIncludes} scale={1} index={2} />);
-    expect(screen.getByTestId('recap-story-title')).toHaveTextContent('Notes from Luna');
+    render(<WeeklyStoryFrame recap={WEEK} kipColour="lemon" includes={storyIncludes} scale={1} index={2} />);
+    expect(screen.getByTestId('recap-story-title')).toHaveTextContent('Notes from KIP');
     expect(screen.getByTestId('recap-story-story')).toHaveTextContent('Five nights on goal and a calm Sunday.');
     expect(screen.getByTestId('recap-story-stat-streak')).toHaveTextContent('LONGEST STREAK3 nights');
     expect(screen.getByTestId('recap-story-stat-spread')).toHaveTextContent('BEDTIME SPREAD42m');
@@ -116,24 +116,24 @@ describe('WeeklyStoryFrame', () => {
   });
 
   it('frame 3 without a story (coach off) shows the line, never nothing', () => {
-    render(<WeeklyStoryFrame recap={{ ...WEEK, story: null }} coachId="luna" includes={storyIncludes} scale={1} index={2} />);
+    render(<WeeklyStoryFrame recap={{ ...WEEK, story: null }} kipColour="lemon" includes={storyIncludes} scale={1} index={2} />);
     expect(screen.getByTestId('recap-story-story')).toHaveTextContent('A steady week.');
   });
 
   it('keeps the bar room but hides it for the story viewer to draw its own', () => {
-    render(<WeeklyStoryFrame recap={WEEK} coachId="luna" includes={storyIncludes} scale={1} index={0} showProgress={false} />);
+    render(<WeeklyStoryFrame recap={WEEK} kipColour="lemon" includes={storyIncludes} scale={1} index={0} showProgress={false} />);
     expect(screen.getByTestId('recap-story-progress-slot')).toHaveStyle({ opacity: 0 });
     expect(screen.getByTestId('recap-story-progress')).toBeTruthy();
   });
 
   it('WeeklyStoryView is frame 2', () => {
-    render(<WeeklyStoryView recap={WEEK} coachId="luna" includes={storyIncludes} scale={1} />);
+    render(<WeeklyStoryView recap={WEEK} kipColour="lemon" includes={storyIncludes} scale={1} />);
     expect(screen.getByTestId('recap-story-eyebrow')).toHaveTextContent('MY WEEK · 2 OF 3');
   });
 
   it('frame 3 lists the badge levels earned that week in a card, and leaves room for it', () => {
     const badges = [{ family: 'SLEEP_GOAL' as const, level: 2 }, { family: 'STEADY_BEDTIME' as const, level: 1 }];
-    render(<WeeklyStoryFrame recap={WEEK} coachId="luna" includes={storyIncludes} scale={1} index={2} badges={badges} />);
+    render(<WeeklyStoryFrame recap={WEEK} kipColour="lemon" includes={storyIncludes} scale={1} index={2} badges={badges} />);
     expect(screen.getByTestId('recap-story-badges')).toHaveTextContent(/BADGES THIS WEEK/);
     expect(screen.getByTestId('recap-story-badge-SLEEP_GOAL-2')).toHaveTextContent('Sleep goal II');
     expect(screen.getByTestId('recap-story-badge-STEADY_BEDTIME-1')).toHaveTextContent('Bedtime I');
@@ -143,24 +143,24 @@ describe('WeeklyStoryFrame', () => {
   });
 
   it('shows no badge card without badges that week, and never on frames 1 and 2', () => {
-    const first = render(<WeeklyStoryFrame recap={WEEK} coachId="luna" includes={storyIncludes} scale={1} index={2} badges={[]} />);
+    const first = render(<WeeklyStoryFrame recap={WEEK} kipColour="lemon" includes={storyIncludes} scale={1} index={2} badges={[]} />);
     expect(screen.queryByTestId('recap-story-badges')).toBeNull();
     first.unmount();
-    render(<WeeklyStoryFrame recap={WEEK} coachId="luna" includes={storyIncludes} scale={1} index={1} badges={[{ family: 'SLEEP_GOAL', level: 1 }]} />);
+    render(<WeeklyStoryFrame recap={WEEK} kipColour="lemon" includes={storyIncludes} scale={1} index={1} badges={[{ family: 'SLEEP_GOAL', level: 1 }]} />);
     expect(screen.queryByTestId('recap-story-badges')).toBeNull();
   });
 
   it('leaves the card out when "Badges this week" is switched off, and gives the story its room back', () => {
     const badges = [{ family: 'SLEEP_GOAL' as const, level: 2 }];
     const off = { ...storyIncludes, badges: false };
-    render(<WeeklyStoryFrame recap={WEEK} coachId="luna" includes={off} scale={1} index={2} badges={badges} />);
+    render(<WeeklyStoryFrame recap={WEEK} kipColour="lemon" includes={off} scale={1} index={2} badges={badges} />);
     expect(screen.queryByTestId('recap-story-badges')).toBeNull();
     expect(coachStoryFit(WEEK, off, 0).box).toBe(coachStoryFit(WEEK, storyIncludes).box);
   });
 
   it('shows at most four badges, then a "+n" chip for the rest (ruling F4)', () => {
     const badges = (['SLEEP_GOAL', 'STEADY_BEDTIME', 'STEP_GOAL', 'CHECK_IN', 'EVERY_DAY_LOGGED'] as const).map((family) => ({ family, level: 1 }));
-    render(<WeeklyStoryFrame recap={WEEK} coachId="luna" includes={storyIncludes} scale={1} index={2} badges={badges} />);
+    render(<WeeklyStoryFrame recap={WEEK} kipColour="lemon" includes={storyIncludes} scale={1} index={2} badges={badges} />);
     expect(screen.getByTestId('recap-story-badge-CHECK_IN-1')).toBeTruthy();
     expect(screen.queryByTestId('recap-story-badge-EVERY_DAY_LOGGED-1')).toBeNull();
     expect(screen.getByTestId('recap-story-badges-more')).toHaveTextContent('+1');
@@ -172,7 +172,7 @@ describe('WeeklyStoryFrame', () => {
       { family: 'SLEEP_GOAL' as const, level: 1 }, { family: 'SLEEP_GOAL' as const, level: 2 }, { family: 'SLEEP_GOAL' as const, level: 3 },
       { family: 'STEADY_BEDTIME' as const, level: 1 }, { family: 'STEADY_BEDTIME' as const, level: 2 }, { family: 'STEP_GOAL' as const, level: 1 },
     ];
-    render(<WeeklyStoryFrame recap={WEEK} coachId="luna" includes={storyIncludes} scale={1} index={2} badges={badges} />);
+    render(<WeeklyStoryFrame recap={WEEK} kipColour="lemon" includes={storyIncludes} scale={1} index={2} badges={badges} />);
     const shown = within(screen.getByTestId('recap-story-badges')).getAllByTestId(/^recap-story-badge-[A-Z_]+-\d$/).map((n) => n.props.testID);
     expect(shown).toEqual(['recap-story-badge-SLEEP_GOAL-3', 'recap-story-badge-STEADY_BEDTIME-2', 'recap-story-badge-STEP_GOAL-1', 'recap-story-badge-SLEEP_GOAL-2']);
     expect(screen.getByTestId('recap-story-badges-more')).toHaveTextContent('+2');
@@ -183,15 +183,15 @@ describe('WeeklyStoryFrame', () => {
 describe('YearPixelsView', () => {
   it('draws every night in rows of 26 on the four-step purple scale, with the count and the current-goal caption', () => {
     const pixels = yearPixels(2026, [{ date: '2026-01-02', minutesAsleep: 500 }, { date: '2026-01-03', minutesAsleep: 400 }, { date: '2026-01-04', minutesAsleep: 200 }], 450, '2026-10-05');
-    render(<YearPixelsView year={2026} pixels={pixels} goalMinutes={450} coachId="luna" includes={resolveIncludes('year', {}, null)} scale={1.5} />);
-    expect(screen.getByTestId('year-pixels')).toHaveStyle({ width: 540, height: 540, backgroundColor: '#12132A' });
+    render(<YearPixelsView year={2026} pixels={pixels} goalMinutes={450} kipColour="lemon" includes={resolveIncludes('year', {}, null)} scale={1.5} />);
+    expect(screen.getByTestId('year-pixels')).toHaveStyle({ width: 540, height: 540, backgroundColor: recapTint('lemon').ground });
     expect(screen.getByTestId('year-pixels-eyebrow')).toHaveTextContent('2026 IN PIXELS');
     expect(screen.getByText('Every night, one square')).toBeTruthy();
     expect(screen.getByTestId('year-pixels-row-0').children).toHaveLength(26);
     expect(screen.queryByTestId('year-pixels-row-14')).toBeTruthy();
     expect(screen.queryByTestId('year-pixels-row-15')).toBeNull();
     const cell = (d: string) => screen.getByTestId(`year-pixels-cell-${d}`);
-    const t = recapTint('luna');
+    const t = recapTint('lemon');
     expect([cell('2026-01-04'), cell('2026-01-03'), cell('2026-01-02')].map((c) => StyleSheet.flatten(c.props.style).backgroundColor)).toEqual(['#6B4FA8', '#9333EA', '#D8B4FE']);
     // No data: an empty, outlined square; a night still to come: a faint fill, no outline.
     expect(StyleSheet.flatten(cell('2026-01-01').props.style)).toMatchObject({ backgroundColor: 'transparent', borderColor: yearCell('none', t).outline });
@@ -211,7 +211,7 @@ describe('YearPixelsView', () => {
 
   it('drops the caption with the count, and the coach when switched off', () => {
     const pixels = yearPixels(2026, [], 450, '2026-10-05');
-    render(<YearPixelsView year={2026} pixels={pixels} goalMinutes={450} coachId="luna" includes={{ count: false, coach: false }} scale={2} />);
+    render(<YearPixelsView year={2026} pixels={pixels} goalMinutes={450} kipColour="lemon" includes={{ count: false, coach: false }} scale={2} />);
     expect(screen.queryByTestId('year-pixels-count')).toBeNull();
     expect(screen.queryByTestId('year-pixels-caption')).toBeNull();
     expect(screen.queryByTestId('year-pixels-coach', HIDDEN_OK)).toBeNull();
@@ -234,7 +234,7 @@ function expectQuoteFits(testID: string, unit: number, width: number, text = `�
 describe('a 30-word quote', () => {
   it('fits beside the sprite on the card with four stats on, the footer still drawn', () => {
     const recap: Recap = { ...MONTH, line: LONG, stats: { ...MONTH.stats, steps: { total: 210000, dailyAverage: 7000 } } };
-    render(<RecapCardView recap={recap} coachId="luna" includes={resolveIncludes('card', { bestRecovery: true }, recap.stats)} scale={1.5} />);
+    render(<RecapCardView recap={recap} kipColour="lemon" includes={resolveIncludes('card', { bestRecovery: true }, recap.stats)} scale={1.5} />);
     // The card is laid out on its 540-wide artboard: 1.5 × 360/540 = 1 point a unit.
     expectQuoteFits('recap-card-quote', 1, 268);
     expect(screen.getByTestId('recap-card-stat-steps')).toBeTruthy();
@@ -242,14 +242,14 @@ describe('a 30-word quote', () => {
   });
 
   it("fits the story's \"says\" card, the app name still drawn", () => {
-    render(<WeeklyStoryFrame recap={{ ...WEEK, line: LONG }} coachId="luna" includes={storyIncludes} scale={1} index={1} />);
+    render(<WeeklyStoryFrame recap={{ ...WEEK, line: LONG }} kipColour="lemon" includes={storyIncludes} scale={1} index={1} />);
     expectQuoteFits('recap-story-quote', 1, 278);
     expect(screen.getByTestId('recap-story-app')).toHaveTextContent('Biometrics');
   });
 
   it('a long weekly story fits frame 3', () => {
     const story = Array.from({ length: 5 }, () => LONG).join(' ');
-    render(<WeeklyStoryFrame recap={{ ...WEEK, story }} coachId="luna" includes={storyIncludes} scale={1} index={2} />);
+    render(<WeeklyStoryFrame recap={{ ...WEEK, story }} kipColour="lemon" includes={storyIncludes} scale={1} index={2} />);
     expectQuoteFits('recap-story-story', 1, 312, story);
   });
 
@@ -257,7 +257,7 @@ describe('a 30-word quote', () => {
     const story = Array.from({ length: 10 }, () => LONG).join(' ');
     for (const includes of [storyIncludes, { ...storyIncludes, coach: false }]) {
       const recap = { ...WEEK, story };
-      const { unmount } = render(<WeeklyStoryFrame recap={recap} coachId="luna" includes={includes} scale={2} index={2} />);
+      const { unmount } = render(<WeeklyStoryFrame recap={recap} kipColour="lemon" includes={includes} scale={2} index={2} />);
       const fit = coachStoryFit(recap, includes);
       const text = screen.getByTestId('recap-story-story');
       const { fontSize, lineHeight } = StyleSheet.flatten(text.props.style) as { fontSize: number; lineHeight: number };
@@ -291,7 +291,7 @@ describe('frame 3 with badges: the story is never truncated', () => {
   it('keeps the longest story whole with five badges on, trading the full card for a compact one or a line', () => {
     for (const includes of [storyIncludes, { ...storyIncludes, coach: false }]) {
       const recap = { ...WEEK, story: storyOf(10) };
-      const { unmount } = render(<WeeklyStoryFrame recap={recap} coachId="luna" includes={includes} scale={2} index={2} badges={FIVE} />);
+      const { unmount } = render(<WeeklyStoryFrame recap={recap} kipColour="lemon" includes={includes} scale={2} index={2} badges={FIVE} />);
       const fit = expectStoryFits(recap, includes, FIVE.length);
       expect(screen.getByTestId('recap-story-badges')).toBeTruthy();
       // With the coach drawn (the tightest frame) the full card no longer fits; without it, it may.
@@ -308,7 +308,7 @@ describe('frame 3 with badges: the story is never truncated', () => {
   it('gives a short story the full card, titles kept readable', () => {
     const badges = [{ family: 'SLEEP_GOAL' as const, level: 2 }, { family: 'EVERY_DAY_LOGGED' as const, level: 3 }];
     expect(coachStoryFit(WEEK, storyIncludes, badges.length).badges).toBe('full');
-    render(<WeeklyStoryFrame recap={WEEK} coachId="luna" includes={storyIncludes} scale={1} index={2} badges={badges} />);
+    render(<WeeklyStoryFrame recap={WEEK} kipColour="lemon" includes={storyIncludes} scale={1} index={2} badges={badges} />);
     const title = screen.getByTestId('recap-story-badge-EVERY_DAY_LOGGED-3-title');
     expect(title).toHaveTextContent('Every day III');
     expect(title.props.minimumFontScale).toBeGreaterThanOrEqual(0.85);
@@ -324,7 +324,7 @@ describe('frame 3 with badges: the story is never truncated', () => {
       const mode = fit.badges!;
       if (seen.length > 0) expect(rank[mode]).toBeGreaterThanOrEqual(rank[seen[seen.length - 1]!]);
       seen.push(mode);
-      const { unmount } = render(<WeeklyStoryFrame recap={recap} coachId="luna" includes={storyIncludes} scale={2} index={2} badges={FIVE} />);
+      const { unmount } = render(<WeeklyStoryFrame recap={recap} kipColour="lemon" includes={storyIncludes} scale={2} index={2} badges={FIVE} />);
       if (fit.fontSize > 6 || mode !== 'line') expectStoryFits(recap, storyIncludes, FIVE.length);
       if (mode === 'full') {
         expect(screen.getByTestId('recap-story-badge-SLEEP_GOAL-1-title')).toBeTruthy();
@@ -345,7 +345,7 @@ describe('frame 3 with badges: the story is never truncated', () => {
   it('says "1 badge this week" on the line for a single badge', () => {
     const recap = { ...WEEK, story: storyOf(16) };
     expect(coachStoryFit(recap, storyIncludes, 1).badges).toBe('line');
-    render(<WeeklyStoryFrame recap={recap} coachId="luna" includes={storyIncludes} scale={1} index={2} badges={[{ family: 'SLEEP_GOAL', level: 2 }]} />);
+    render(<WeeklyStoryFrame recap={recap} kipColour="lemon" includes={storyIncludes} scale={1} index={2} badges={[{ family: 'SLEEP_GOAL', level: 2 }]} />);
     expect(screen.getByTestId('recap-story-badges-line')).toHaveTextContent('1 badge this week');
   });
 

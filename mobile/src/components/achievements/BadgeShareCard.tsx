@@ -3,6 +3,7 @@ import { View } from 'react-native';
 import type { AchievementFamily } from '../../api/achievements';
 import { mixHex, tierColors } from '../../lib/badgeArt';
 import { levelTitle, valueLine } from '../../lib/badges';
+import type { KipColour } from '../../lib/kip/kipArt';
 import { APP_NAME, EXPORT_PIXELS } from '../../lib/recapShare';
 import { FONTS } from '../../theme';
 import { pixelFont } from '../coach/thinking/shared';
@@ -19,18 +20,18 @@ export function badgeShareLayout(pixelRatio: number): { width: number; height: n
   return { width, height: width, scale: width / BADGE_SHARE_SIZE };
 }
 
-export interface BadgeShareCardProps { family: AchievementFamily; level: number; value: number; coachAccent: string; scale: number }
+export interface BadgeShareCardProps { family: AchievementFamily; level: number; value: number; colour: KipColour; scale: number }
 
-export function BadgeShareCard({ family, level, value, coachAccent, scale }: BadgeShareCardProps) {
+export function BadgeShareCard({ family, level, value, colour, scale }: BadgeShareCardProps) {
   const u = (n: number) => n * scale;
-  const t = tierColors(level, coachAccent);
+  const t = tierColors(level, colour);
   const pixel = pixelFont();
   return (
     <View
       testID="badge-share-card"
       style={{ width: u(BADGE_SHARE_SIZE), height: u(BADGE_SHARE_SIZE), backgroundColor: mixHex(t.ring, '#0B0B0F', 0.9), alignItems: 'center', justifyContent: 'center', gap: u(14), padding: u(24) }}
     >
-      <BadgeIcon family={family} level={level} size={u(150)} coachAccent={coachAccent} testID="badge-share-icon" />
+      <BadgeIcon family={family} level={level} size={u(150)} colour={colour} testID="badge-share-icon" />
       <Text style={{ fontFamily: pixel, fontSize: u(20), lineHeight: u(24), color: '#FAFAF9', textAlign: 'center' }}>{levelTitle(family, level).toUpperCase()}</Text>
       <Text style={{ fontFamily: FONTS.sans, fontSize: u(14), lineHeight: u(20), color: t.glyph, textAlign: 'center' }}>{valueLine(family, value)}</Text>
       <Text testID="badge-share-app" style={{ fontFamily: pixel, fontSize: u(12), lineHeight: u(16), color: t.ring }}>{APP_NAME}</Text>
