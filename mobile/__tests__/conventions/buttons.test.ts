@@ -59,7 +59,6 @@ const ALLOWED: Exception[] = [
   { file: 'screens/RecapScreen.tsx', key: 'recap-story-preview', count: 1, reason: 'the story preview card that opens the story viewer' },
   { file: 'screens/MetricsScreen.tsx', key: 'trend-card-${type}', count: 1, reason: 'a metric trend card that opens its detail' },
   { file: 'screens/MetricsScreen.tsx', key: 'patterns-button', count: 1, reason: 'the Patterns card' },
-  { file: 'screens/MeetYourCoachScreen.tsx', key: 'meet-tile-${id}', count: 1, reason: 'a coach tile in the picker grid' },
   { file: 'components/coach-digest-card.tsx', key: 'coach-digest-card', count: 1, reason: 'the digest card that opens the coach' },
   { file: 'components/home/HotTag.tsx', key: 'HotTag:testID', count: 1, reason: "Home F's hot tag, on the scene and on the KIP page's room card (a tag, not a button in the design sense)" },
   { file: 'components/home/HomeScene.tsx', key: 'home-buddy-${b.id}', count: 1, reason: "a buddy's name tag on the Home scene that opens their week" },

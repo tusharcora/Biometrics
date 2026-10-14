@@ -240,7 +240,7 @@ function StoryViewer({ recap, kipColour, tint, includes }: { recap: Recap; kipCo
                   <Kip testID="recap-kip" colour={kipColour} pose="rest" mood="idle" scale={2} />
                 </View>
                 <View style={{ flex: 1 }}>
-                  <Text testID="story-viewer-title" numberOfLines={1} className="text-body font-semibold" style={{ color: tint.text }}>{RECAP_COPY.storyViewerTitle}</Text>
+                  <Text testID="story-viewer-title" accessibilityLabel={RECAP_COPY.storyViewerTitleSpoken} numberOfLines={1} className="text-body font-semibold" style={{ color: tint.text }}>{RECAP_COPY.storyViewerTitle}</Text>
                   <Text testID="story-viewer-range" numberOfLines={1} className="text-caption" style={{ color: tint.soft }}>{weekRange(recap.periodStart, recap.periodEnd)}</Text>
                 </View>
                 <Button testID="story-viewer-share" variant="ghost" size="icon-lg" accessibilityLabel="Share this frame" className={ON_GROUND_GHOST}

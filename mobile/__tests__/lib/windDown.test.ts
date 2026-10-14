@@ -49,7 +49,7 @@ it('wraps the reminder time across midnight (Review Focus 2)', () => {
 });
 
 it('reads the defaults when nothing is stored, the entry is bad, or the keychain fails', async () => {
-  const defaults = { enabled: false, leadMinutes: 30, bedtimeGoal: null, coachName: 'Mochi', notificationId: null };
+  const defaults = { enabled: false, leadMinutes: 30, bedtimeGoal: null, coachName: 'KIP', notificationId: null };
   expect(await readWindDown()).toEqual(defaults);
   (SecureStore.getItemAsync as jest.Mock).mockRejectedValueOnce(new Error('keychain'));
   expect(await readWindDown()).toEqual(defaults);

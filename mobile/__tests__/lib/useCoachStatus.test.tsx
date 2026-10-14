@@ -23,7 +23,6 @@ const base: CoachStatusDTO = {
   personaId: 'mochi',
   personaChosen: true,
   personas: [],
-  thinkingAttachment: 'bulb',
   thinkingText: 'steps',
 };
 

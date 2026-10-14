@@ -35,9 +35,4 @@ describe('useFrameClock', () => {
     expect(result.current).toBe(0);
     expect(jest.getTimerCount()).toBe(0);
   });
-
-  it('is the same tick through the old name until the cast is deleted', () => {
-    const { useSpriteClock } = require('../../src/components/characters/useSpriteClock');
-    expect(useSpriteClock).toBe(useFrameClock);
-  });
 });

@@ -1,13 +1,10 @@
 import React from 'react';
 import { AccessibilityInfo } from 'react-native';
 import { act, fireEvent, render, within } from '@testing-library/react-native';
-import { THINKING_STYLE_ERROR, ThinkingStyleScreen } from '../../src/screens/ThinkingStyleScreen';
 import { THINKING_TEXT_ERROR, ThinkingTextScreen } from '../../src/screens/ThinkingTextScreen';
-import { THINKING_ATTACHMENTS } from '../../src/components/characters/thinking';
 import { KIP_COPY } from '../../src/lib/kipCopy';
 import { THINKING_TEXTS } from '../../src/lib/thinkingText';
-import { characterLabel, HIDDEN_OK, withCharacter } from '../../jest-mocks/characterContext';
-import { withCoachStatus } from '../../jest-mocks/coachStatus';
+import { HIDDEN_OK, withCoachStatus } from '../../jest-mocks/coachStatus';
 
 // Synchronous icons: the real font load re-renders after these tests finish.
 jest.mock('@expo/vector-icons', () => require('../../jest-mocks/vectorIcons'));
@@ -21,58 +18,6 @@ jest.mock('react-native-reanimated', () => {
 
 afterEach(() => {
   mockReduceMotion = false;
-});
-
-describe('ThinkingStyleScreen', () => {
-  it('lists the 9 attachments with Lightbulb selected by default and saves a choice', async () => {
-    const chooseThinking = jest.fn(async () => {});
-    const s = render(withCharacter(<ThinkingStyleScreen />, { chooseThinking }));
-    for (const id of THINKING_ATTACHMENTS) expect(s.getByTestId(`thinking-style-${id}`)).toBeTruthy();
-    expect(s.getByTestId('thinking-style-bulb').props.accessibilityState).toMatchObject({ checked: true });
-    expect(s.getByTestId('thinking-style-gears').props.accessibilityState).toMatchObject({ checked: false });
-    expect(s.getByTestId('thinking-style-bulb').props.accessibilityRole).toBe('radio');
-    await act(async () => fireEvent.press(s.getByTestId('thinking-style-gears')));
-    expect(chooseThinking).toHaveBeenCalledWith({ attachment: 'gears' });
-  });
-
-  it("previews with the user's own coach and attachment", () => {
-    const s = render(withCharacter(<ThinkingStyleScreen />, { characterId: 'luna', thinkingAttachment: 'clock' }));
-    expect(characterLabel(s, 'thinking-preview')).toMatch(/^character:luna:thinking:96:playing:clock$/);
-  });
-
-  it('loops the preview from thinking into the answering moment', () => {
-    jest.useFakeTimers();
-    try {
-      const s = render(withCharacter(<ThinkingStyleScreen />, { characterId: 'kit' }));
-      expect(characterLabel(s, 'thinking-preview')).toMatch(/^character:kit:thinking:/);
-      act(() => jest.advanceTimersByTime(2400));
-      expect(characterLabel(s, 'thinking-preview')).toMatch(/^character:kit:answering:/);
-      act(() => jest.advanceTimersByTime(800));
-      expect(characterLabel(s, 'thinking-preview')).toMatch(/^character:kit:thinking:/);
-      s.unmount();
-    } finally {
-      jest.useRealTimers();
-    }
-  });
-
-  it('animates only the selected tile, each wearing its own attachment', () => {
-    const s = render(withCharacter(<ThinkingStyleScreen />, { characterId: 'boba', thinkingAttachment: 'cloud' }));
-    expect(characterLabel(s, 'thinking-style-cloud')).toBe('character:boba:thinking:48:playing:cloud');
-    expect(characterLabel(s, 'thinking-style-spinner')).toBe('character:boba:thinking:48:paused:spinner');
-  });
-
-  it('shows an error when saving fails', async () => {
-    const chooseThinking = jest.fn(async () => {
-      throw new Error('offline');
-    });
-    const s = render(withCharacter(<ThinkingStyleScreen />, { chooseThinking }));
-    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => {});
-    await act(async () => fireEvent.press(s.getByTestId('thinking-style-hourglass')));
-    expect(s.getByText(/thinking style couldn't be saved/i)).toBeTruthy();
-    expect(announce).toHaveBeenCalledWith(THINKING_STYLE_ERROR);
-    announce.mockRestore();
-    expect(s.getByTestId('thinking-style-bulb').props.accessibilityState).toMatchObject({ checked: true });
-  });
 });
 
 describe('ThinkingTextScreen', () => {
@@ -155,14 +100,6 @@ describe('ThinkingTextScreen', () => {
 describe('Reduce Motion', () => {
   beforeEach(() => jest.useFakeTimers());
   afterEach(() => jest.useRealTimers());
-
-  it('holds the Thinking style preview on thinking', () => {
-    mockReduceMotion = true;
-    const s = render(withCharacter(<ThinkingStyleScreen />, { characterId: 'kit' }));
-    act(() => jest.advanceTimersByTime(5000));
-    expect(characterLabel(s, 'thinking-preview')).toMatch(/^character:kit:thinking:96:paused:/);
-    s.unmount();
-  });
 
   it('does not cycle the Thinking text sample steps', () => {
     mockReduceMotion = true;

@@ -3,8 +3,7 @@ import React from 'react';
 import { CoachStatusContextForTests, type CoachStatusValue } from '../src/lib/coachStatus/CoachStatusProvider';
 
 // KIP and other pixel art are decorative and hidden from screen readers, so
-// queries for them must opt in to hidden elements. Lives here (ruling H6) so it
-// outlives jest-mocks/characterContext.tsx.
+// queries for them must opt in to hidden elements.
 export const HIDDEN_OK = { includeHiddenElements: true } as const;
 
 export function fakeCoachStatus(overrides: Partial<CoachStatusValue> = {}): CoachStatusValue {

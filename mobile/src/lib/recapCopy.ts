@@ -9,12 +9,16 @@ import { formatShortDuration, formatTextDuration } from './sleepStats';
 /** The recaps' KIP strings (spec 2026-10-14 KIP Coach §7.6; rulings P9, G7). */
 export const RECAP_COPY = {
   storyViewerTitle: `${KIP_NAME} · Your week`,
+  // What a screen reader says for the title (spoken labels never contain "·").
+  storyViewerTitleSpoken: `${KIP_NAME}, your week`,
   weekWithKip: `Your week with ${KIP_NAME}`,
   monthWithKip: (month: string) => `${month} with ${KIP_NAME}`,
   askKipWeek: `Ask ${KIP_NAME} about your week…`,
   howKipSaw: `How ${KIP_NAME} saw my week`,
   kipSays: `${KIP_NAME} says`,
   notesFromKip: `Notes from ${KIP_NAME}`,
+  // The share images' footer tagline (ruling SHARE-COPY).
+  findYourKip: `Find your ${KIP_NAME}`,
 } as const;
 
 const WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];

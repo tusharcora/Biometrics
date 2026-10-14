@@ -24,8 +24,6 @@ import { CoachMemoryScreen } from '../screens/CoachMemoryScreen';
 import { HostedConsentScreen } from '../screens/HostedConsentScreen';
 import { SignInMethodsScreen } from '../screens/SignInMethodsScreen';
 import { DevicesScreen } from '../screens/DevicesScreen';
-import { MeetYourCoachScreen } from '../screens/MeetYourCoachScreen';
-import { ThinkingStyleScreen } from '../screens/ThinkingStyleScreen';
 import { ThinkingTextScreen } from '../screens/ThinkingTextScreen';
 import { SleepScreen } from '../screens/SleepScreen';
 import { BedtimeGoalScreen } from '../screens/BedtimeGoalScreen';
@@ -95,8 +93,7 @@ export type RootStackParamList = {
   CoachConsent: { prefill?: string; review?: boolean } | undefined;
   // Reached from Settings -> Coach Memory, which only draws when consented.
   CoachMemory: undefined;
-  // Reached from Settings -> Your coach: what the coach shows while it thinks.
-  ThinkingStyle: undefined;
+  // Reached from Settings' KIP group: the line KIP shows while it thinks.
   ThinkingText: undefined;
   // Profile -> AI engine -> Claude: the hosted-model opt-in.
   HostedConsent: undefined;
@@ -104,9 +101,6 @@ export type RootStackParamList = {
   SignInMethods: undefined;
   // Reached from Settings: signed-in devices, with sign-out per device.
   Devices: undefined;
-  // The character picker. 'first' opens by itself on the first Coach-tab
-  // visit (starts on Mochi, has Skip); 'switch' comes from Profile.
-  MeetYourCoach: { mode: 'first' | 'switch' };
   // The one Sleep page (spec 2026-10-09); date is the night-end civil date, else the default night.
   Sleep: { date?: string } | undefined;
   BedtimeGoal: undefined;
@@ -250,7 +244,6 @@ export function RootNavigator() {
               <Stack.Screen name="Trends" component={MetricsScreen} options={{ title: '' }} />
               <Stack.Screen name="CoachConsent" component={CoachConsentScreen} options={{ title: KIP_COPY.consentTitle }} />
               <Stack.Screen name="CoachMemory" component={CoachMemoryScreen} options={{ title: KIP_COPY.memoryTitle }} />
-              <Stack.Screen name="ThinkingStyle" component={ThinkingStyleScreen} options={{ title: 'Thinking style' }} />
               <Stack.Screen name="ThinkingText" component={ThinkingTextScreen} options={{ title: KIP_COPY.whileKipThinks }} />
               <Stack.Screen name="HostedConsent" component={HostedConsentScreen} options={{ title: KIP_COPY.hostedTitle }} />
               <Stack.Screen name="SignInMethods" component={SignInMethodsScreen} options={{ title: 'Sign-in methods' }} />
@@ -296,13 +289,6 @@ export function RootNavigator() {
                   screen instead of swapping the params under the current one. */}
               <Stack.Screen name="BuddyWeek" component={BuddyWeekScreen} getId={({ params }) => params?.buddyId} options={{ title: '' }} />
               <Stack.Screen name="RecapBuilder" component={RecapBuilderScreen} options={{ title: 'Build your recap' }} />
-              <Stack.Screen
-                name="MeetYourCoach"
-                component={MeetYourCoachScreen}
-                // No swipe-to-dismiss on the first visit. Android back still
-                // closes it unsaved, like a failed Skip, so it returns next launch.
-                options={({ route }) => ({ headerShown: false, presentation: 'modal', gestureEnabled: route.params?.mode !== 'first' })}
-              />
             </Stack.Navigator>
             {/* New badge levels, celebrated once (start, foreground, after a check-in). */}
             <CelebrationHost />

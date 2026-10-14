@@ -2,7 +2,6 @@ import React from 'react';
 import { act, renderHook, waitFor } from '@testing-library/react-native';
 import { CoachStatusProvider, useCoachStatusContext } from '../../src/lib/coachStatus/CoachStatusProvider';
 import { useCoachStatus } from '../../src/lib/useCoachStatus';
-import { useCharacterOptional } from '../../src/characters/CharacterContext';
 import { fetchCoachStatus, setCoachThinking, type CoachStatusDTO } from '../../src/api/coach';
 import { ApiError, markNetworkError } from '../../src/api/client';
 import * as cache from '../../src/lib/coachStatus/thinkingCache';
@@ -102,13 +101,6 @@ it('signed out: nothing is fetched, the defaults show and the cache is cleared',
   await waitFor(() => expect(cache.clearCachedThinking).toHaveBeenCalled());
   expect(fetchStatus).not.toHaveBeenCalled();
   expect(result.current?.thinkingText).toBe('steps');
-});
-
-it('the compatibility shim answers old callers from the new provider (ruling 1)', async () => {
-  fetchStatus.mockResolvedValue(STATUS);
-  const { result } = renderHook(() => useCharacterOptional(), { wrapper });
-  await waitFor(() => expect(result.current?.status).toEqual(STATUS));
-  expect(result.current).toMatchObject({ characterId: 'mochi', personaChosen: true, recoveryBand: null, thinkingText: 'typewriter' });
 });
 
 describe('account and lifetime guards', () => {

@@ -38,7 +38,7 @@ describe('RecapCardView', () => {
     expect(screen.getByTestId('recap-card-stat-avgSleep')).toHaveTextContent('AVERAGE SLEEP7h 5m');
     expect(screen.getByTestId('recap-card-stat-bestRecovery')).toHaveTextContent('BEST RECOVERY88');
     expect(screen.queryByTestId('recap-card-stat-steps')).toBeNull();
-    expect(screen.getByText('Find your coach')).toBeTruthy();
+    expect(screen.getByText('Find your KIP')).toBeTruthy();
     expect(screen.getByTestId('recap-card-app')).toHaveTextContent('Biometrics');
     expect(screen.getByTestId('recap-card-dots', HIDDEN_OK)).toBeTruthy();
   });
@@ -112,7 +112,7 @@ describe('WeeklyStoryFrame', () => {
     expect(screen.getByTestId('recap-story-story')).toHaveTextContent('Five nights on goal and a calm Sunday.');
     expect(screen.getByTestId('recap-story-stat-streak')).toHaveTextContent('LONGEST STREAK3 nights');
     expect(screen.getByTestId('recap-story-stat-spread')).toHaveTextContent('BEDTIME SPREAD42m');
-    expect(screen.getByText('Find your coach')).toBeTruthy();
+    expect(screen.getByText('Find your KIP')).toBeTruthy();
   });
 
   it('frame 3 without a story (coach off) shows the line, never nothing', () => {

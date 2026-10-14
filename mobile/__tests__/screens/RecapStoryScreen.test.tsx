@@ -262,6 +262,8 @@ describe('header and reply bar (design E)', () => {
   it('shows KIP, the week and Share / Close above the frame', async () => {
     await open();
     expect(screen.getByTestId('story-viewer-title')).toHaveTextContent('KIP · Your week');
+    // Read aloud without the middle dot (spoken labels never contain "·").
+    expect(screen.getByTestId('story-viewer-title').props.accessibilityLabel).toBe('KIP, your week');
     expect(screen.getByTestId('story-viewer-range')).toHaveTextContent('Sep 28 – Oct 4');
     expect(screen.getByTestId('story-viewer-coach')).toBeTruthy();
     expect(screen.getByTestId('story-viewer-share').props.accessibilityLabel).toBe('Share this frame');

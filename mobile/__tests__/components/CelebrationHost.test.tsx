@@ -94,9 +94,6 @@ describe('behind a native modal route', () => {
     await renderOn('RecapStory');
     expect(screen.queryByTestId('celebration-screen')).toBeNull();
 
-    act(() => navigateTo('MeetYourCoach'));
-    expect(screen.queryByTestId('celebration-screen')).toBeNull();
-
     // The state flips to Tabs at once while the native dismissal still animates.
     act(() => navigateTo('Tabs'));
     expect(screen.queryByTestId('celebration-screen')).toBeNull();

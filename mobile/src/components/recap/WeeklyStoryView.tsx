@@ -136,7 +136,7 @@ export function WeeklyStoryFrame({ recap, kipColour, includes, scale, index, sho
       {index === 2 ? <CoachStoryBody recap={recap} kipColour={kipColour} includes={includes} u={u} t={t} pixel={pixel} testID={testID} badges={badges} /> : null}
       {index === 2 ? (
         <View style={{ marginTop: 'auto', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: u(1), borderTopColor: t.hairline, paddingTop: u(16) }}>
-          <Text style={{ fontFamily: FONTS.sans, fontSize: u(14), lineHeight: u(FOOTER_LINE), color: t.soft }}>Find your coach</Text>
+          <Text style={{ fontFamily: FONTS.sans, fontSize: u(14), lineHeight: u(FOOTER_LINE), color: t.soft }}>{RECAP_COPY.findYourKip}</Text>
           <Text testID={`${testID}-app`} style={{ fontFamily: pixel, fontSize: u(12), lineHeight: u(FOOTER_LINE), color: t.accentText }}>{APP_NAME}</Text>
         </View>
       ) : (

@@ -1,5 +1,4 @@
 import { ApiError, apiFetch } from './client';
-import { DEFAULT_THINKING_ATTACHMENT, isThinkingAttachment, type ThinkingAttachmentId } from '../components/characters/thinking';
 import { DEFAULT_THINKING_TEXT, resolveThinkingText, type ThinkingTextId } from '../lib/thinkingText';
 
 // The client must wait strictly longer than the server's own budget, or a slow
@@ -38,14 +37,13 @@ export interface CoachStatusDTO {
   consented: boolean;
   consent: CoachConsentDTO;
   personaId: string;
-  // False until the user has picked a character (Skip picks Mochi); the picker opens once.
+  // False until the user picked a character in the retired picker. Nothing reads it now.
   personaChosen: boolean;
   personas: CoachPersonaDTO[];
-  // How the coach looks while it works on an answer. fetchCoachStatus always
-  // fills both: a server that predates them, or an id this build does not
-  // know, reads as the defaults ('bulb' / 'steps'). Optional, like engine, so
-  // fixtures that predate them stay valid; read them from useCharacter().
-  thinkingAttachment?: ThinkingAttachmentId;
+  // The line KIP shows while it works on an answer. fetchCoachStatus always
+  // fills it: a server that predates it, or an id this build does not know,
+  // reads as the default ('steps'). Optional, like engine, so fixtures that
+  // predate it stay valid; read it from useCoachStatus().
   thinkingText?: ThinkingTextId;
   // Which model answers (phase 2). Optional so fixtures that predate engines
   // stay valid; fetchCoachStatus always fills both.
@@ -369,7 +367,6 @@ const DISABLED_STATUS: CoachStatusDTO = {
   personas: [],
   engine: 'local',
   engines: LOCAL_ONLY,
-  thinkingAttachment: DEFAULT_THINKING_ATTACHMENT,
   thinkingText: DEFAULT_THINKING_TEXT,
 };
 
@@ -406,18 +403,15 @@ function personaDTO(p: Partial<CoachPersonaDTO>): CoachPersonaDTO {
 export async function fetchCoachStatus(): Promise<CoachStatusDTO> {
   const res = await coachFetch<Partial<CoachStatusDTO> | undefined>('/me/coach/status');
   if (!res || typeof res !== 'object' || Array.isArray(res)) return DISABLED_STATUS;
-  // The character and the thinking settings are also the app's look, so they
-  // are read even while the coach is off.
+  // The persona and the thinking text are read even while the coach is off.
   const persona = {
     personaId: typeof res.personaId === 'string' ? res.personaId : '',
-    // Only a literal false means "not chosen yet". A server that doesn't send
-    // the field (it predates characters and can't store their ids) must never
-    // prompt the picker, so anything else reads as chosen.
+    // Only a literal false means "not chosen yet"; a server that doesn't send
+    // the field reads as chosen.
     personaChosen: res.personaChosen !== false,
     personas: Array.isArray(res.personas)
       ? res.personas.filter((p): p is CoachPersonaDTO => !!p && typeof p === 'object').map(personaDTO)
       : [],
-    thinkingAttachment: isThinkingAttachment(res.thinkingAttachment) ? res.thinkingAttachment : DEFAULT_THINKING_ATTACHMENT,
     thinkingText: resolveThinkingText(res.thinkingText),
   };
   if (res.enabled !== true) return { ...DISABLED_STATUS, ...persona };
@@ -443,16 +437,9 @@ export async function revokeCoachConsent(): Promise<void> {
   await coachFetch<void>('/me/coach/consent', { method: 'DELETE' });
 }
 
-export function setCoachPersona(personaId: string): Promise<{ personaId: string }> {
-  return coachFetch<{ personaId: string }>('/me/coach/persona', json('PUT', { personaId }));
-}
-
-// Sends only the settings given; the server answers with both as stored.
-export function setCoachThinking(body: {
-  attachment?: ThinkingAttachmentId;
-  text?: ThinkingTextId;
-}): Promise<{ thinkingAttachment: string; thinkingText: string }> {
-  return coachFetch<{ thinkingAttachment: string; thinkingText: string }>('/me/coach/thinking', json('PUT', body));
+// The server answers with the text as stored.
+export function setCoachThinking(body: { text: ThinkingTextId }): Promise<{ thinkingText: string }> {
+  return coachFetch<{ thinkingText: string }>('/me/coach/thinking', json('PUT', body));
 }
 
 export async function sendCoachMessage(input: SendCoachMessageInput): Promise<CoachReplyDTO> {

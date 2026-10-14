@@ -1,9 +1,10 @@
 import * as SecureStore from 'expo-secure-store';
 import * as Notifications from 'expo-notifications';
+import { KIP_NAME } from './kipCopy';
 
 // The wind-down reminder: one daily local notification at bedtime minus the
 // lead time, in device local time. No server job; it works with the coach off.
-// The settings live on the device in SecureStore, like the character cache,
+// The settings live on the device in SecureStore, like the thinking cache,
 // and a keychain failure is never worth an error, so every read and write here
 // swallows it.
 
@@ -31,7 +32,7 @@ const DEFAULTS: WindDownSettings = {
   enabled: false,
   leadMinutes: 30,
   bedtimeGoal: null,
-  coachName: 'Mochi',
+  coachName: KIP_NAME,
   notificationId: null,
 };
 

@@ -3,7 +3,7 @@ import { Text, View } from 'react-native';
 import type { Recap } from '../../api/recaps';
 import type { KipColour } from '../../lib/kip/kipArt';
 import { KIP_NAME } from '../../lib/kipCopy';
-import { cardStats, monthName } from '../../lib/recapCopy';
+import { cardStats, monthName, RECAP_COPY } from '../../lib/recapCopy';
 import { APP_NAME, DESIGN_WIDTH, fitQuote, QUOTE_LINE_HEIGHT, QUOTE_MIN_FONT_SCALE, type Includes } from '../../lib/recapShare';
 import { recapTint } from '../../lib/recapTheme';
 import { FONTS } from '../../theme';
@@ -121,7 +121,7 @@ export function RecapCardView({ recap, kipColour, includes, scale, testID = 'rec
       <View
         style={{ marginTop: 'auto', flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderTopWidth: a(1), borderTopColor: t.hairline, paddingTop: a(16) }}
       >
-        <Text style={{ fontFamily: FONTS.sans, fontSize: a(14), lineHeight: a(20), color: t.soft }}>Find your coach</Text>
+        <Text style={{ fontFamily: FONTS.sans, fontSize: a(14), lineHeight: a(20), color: t.soft }}>{RECAP_COPY.findYourKip}</Text>
         <Text testID={`${testID}-app`} style={{ fontFamily: pixel, fontSize: a(13), lineHeight: a(20), color: t.accentText }}>
           {APP_NAME}
         </Text>
