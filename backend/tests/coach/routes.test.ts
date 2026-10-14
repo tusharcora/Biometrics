@@ -12,7 +12,7 @@ import { LoggerCoachTelemetry } from '../../src/coach/telemetry';
 import { ScriptedStreamProvider, StreamStep } from '../../src/coach/model/provider';
 import { getCoachProvider, resetCoachProviderFromEnv, resetHostedProviderFromEnv } from '../../src/coach/config';
 import { resetWarmState } from '../../src/coach/answer/warm';
-import { DEFAULT_PERSONA_ID, RETIRED_CHARACTER_IDS, listPersonas } from '../../src/coach/personas';
+import { DEFAULT_PERSONA_ID, listPersonas } from '../../src/coach/personas';
 import { FakeClock, RecordingTelemetry, createUser, daysAgo, putScore, todayUtc } from './helpers';
 import { testServer } from '../helpers/server';
 
@@ -172,11 +172,11 @@ describe('GET /me/coach/status', () => {
       'thinkingAttachment',
       'thinkingText',
     ]);
-    expect(res.body).toMatchObject({ enabled: true, consented: false, personaId: 'mochi', personaChosen: false });
+    expect(res.body).toMatchObject({ enabled: true, consented: false, personaId: 'kip', personaChosen: false });
     expect(Object.keys(res.body.consent).sort()).toEqual(['dataItems', 'summary', 'version']);
     expect(res.body.consent.version).toBe(COACH_CONSENT_VERSION);
     expect(Array.isArray(res.body.consent.dataItems)).toBe(true);
-    // The contract the mobile picker reads: every character, in picker order, with its copy.
+    // The contract the mobile picker reads: since v5, KIP alone.
     expect(res.body.personas).toEqual(
       listPersonas().map((p) => ({
         id: p.id,
@@ -187,11 +187,11 @@ describe('GET /me/coach/status', () => {
         greeting: p.greeting ?? null,
       })),
     );
-    expect(res.body.personas).toHaveLength(15);
+    expect(res.body.personas).toHaveLength(1);
   });
 
   it('personaChosen turns true once a persona is stored, and personaId is that persona', async () => {
-    const chosen = listPersonas()[1]!.id;
+    const chosen = listPersonas()[0]!.id;
     const user = await createUser();
     await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: chosen } });
     const res = await request(await testServer(createApp())).get('/me/coach/status').set(await authed(user.id));
@@ -206,21 +206,20 @@ describe('GET /me/coach/status', () => {
     expect(res.body).toMatchObject({ personaId: DEFAULT_PERSONA_ID, personaChosen: false });
   });
 
-  // Ruling R6: a legacy v1 id is unknown, like a retired character, so it reads as the default, Mochi;
-  // R24: and the picker opens again.
-  it.each(['encouraging', 'direct', 'clinical'])(
-    'a legacy %s row (not yet migrated) reads as the default, mochi, and does not count as chosen',
+  // v5: a legacy v1 id or an old character id is known, so it reads as KIP and counts as chosen.
+  it.each(['encouraging', 'direct', 'clinical', 'hoot', 'mochi'])(
+    'a legacy %s row (not yet migrated) reads as KIP and counts as chosen',
     async (legacy) => {
       const user = await createUser();
       await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: legacy } });
       const res = await request(await testServer(createApp())).get('/me/coach/status').set(await authed(user.id));
-      expect(res.body).toMatchObject({ personaId: 'mochi', personaChosen: false });
+      expect(res.body).toMatchObject({ personaId: 'kip', personaChosen: true });
     },
   );
 
   it('reports the persona while the coach is off, since the character is also the app look', async () => {
     process.env.COACH_ENABLED = 'false';
-    const chosen = listPersonas()[1]!.id;
+    const chosen = listPersonas()[0]!.id;
     const user = await createUser();
     await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: chosen } });
     const res = await request(await testServer(createApp())).get('/me/coach/status').set(await authed(user.id));
@@ -328,46 +327,33 @@ describe('consent gate', () => {
 });
 
 describe('PUT /me/coach/persona', () => {
-  it('sets the persona, echoes it, and status reflects it', async () => {
+  it('saves KIP for an old id, echoes it, and status reflects it', async () => {
     const user = await createUser();
     const headers = await authed(user.id);
     const res = await request(await testServer(createApp())).put('/me/coach/persona').set(headers).send({ personaId: 'mochi' });
     expect(res.status).toBe(200);
-    expect(res.body).toEqual({ personaId: 'mochi' });
-    expect((await request(await testServer(createApp())).get('/me/coach/status').set(headers)).body).toMatchObject({ personaId: 'mochi', personaChosen: true });
-    expect((await prisma.user.findUnique({ where: { id: user.id } }))?.coachPersonaId).toBe('mochi');
+    expect(res.body).toEqual({ personaId: 'kip' });
+    expect((await request(await testServer(createApp())).get('/me/coach/status').set(headers)).body).toMatchObject({ personaId: 'kip', personaChosen: true });
+    expect((await prisma.user.findUnique({ where: { id: user.id } }))?.coachPersonaId).toBe('kip');
   });
 
-  // Ruling R6: a legacy v1 id from a very old app is unknown, so it is refused and nothing is stored.
-  it.each(['encouraging', 'direct', 'clinical'])('400 unknown_persona for the legacy id %s, and stores nothing', async (legacy) => {
-    const user = await createUser();
-    await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: 'kit' } });
-    const res = await request(await testServer(createApp())).put('/me/coach/persona').set(await authed(user.id)).send({ personaId: legacy });
-    expect(res.status).toBe(400);
-    expect(res.body).toEqual({ error: 'unknown_persona' });
-    expect((await prisma.user.findUnique({ where: { id: user.id } }))?.coachPersonaId).toBe('kit');
-  });
-
-  // Ruling R23: an old build still offers the retired v3 characters, and its Skip sends 'hoot'. The default
-  // is saved instead, so that build's picker does not reopen on every launch.
-  it.each([...RETIRED_CHARACTER_IDS])('a retired character %s saves the default, mochi (200)', async (retired) => {
-    const user = await createUser();
-    const headers = await authed(user.id);
-    const res = await request(await testServer(createApp())).put('/me/coach/persona').set(headers).send({ personaId: retired });
-    expect(res.status).toBe(200);
-    expect(res.body).toEqual({ personaId: 'mochi' });
-    expect((await prisma.user.findUnique({ where: { id: user.id } }))?.coachPersonaId).toBe('mochi');
-    expect((await request(await testServer(createApp())).get('/me/coach/status').set(headers)).body).toMatchObject({ personaId: 'mochi', personaChosen: true });
-  });
-
-  it('the retired set is exactly the seven v3 characters v4 dropped', () => {
-    expect([...RETIRED_CHARACTER_IDS].sort()).toEqual(['beat', 'beep', 'doze', 'ember', 'hoot', 'nimbus', 'pip']);
-  });
+  // v5 (spec 2026-10-14 §2): a v1 id from a very old app, or a v3 character an old build still offers (its Skip
+  // sends 'hoot'), saves KIP, so that build's picker does not reopen on every launch.
+  it.each(['encouraging', 'direct', 'clinical', 'hoot', 'pip', 'nimbus', 'ember', 'beep', 'doze', 'beat'])(
+    'an old id %s saves KIP (200)',
+    async (old) => {
+      const user = await createUser();
+      const res = await request(await testServer(createApp())).put('/me/coach/persona').set(await authed(user.id)).send({ personaId: old });
+      expect(res.status).toBe(200);
+      expect(res.body).toEqual({ personaId: 'kip' });
+      expect((await prisma.user.findUnique({ where: { id: user.id } }))?.coachPersonaId).toBe('kip');
+    },
+  );
 
   it.each([['false'], [undefined]])('works while the coach is off (COACH_ENABLED=%j)', async (flag) => {
     if (flag === undefined) delete process.env.COACH_ENABLED;
     else process.env.COACH_ENABLED = flag;
-    const chosen = listPersonas()[1]!.id;
+    const chosen = listPersonas()[0]!.id;
     const user = await createUser();
     const headers = await authed(user.id);
     const res = await request(await testServer(createApp())).put('/me/coach/persona').set(headers).send({ personaId: chosen });
@@ -396,14 +382,13 @@ describe('PUT /me/coach/persona', () => {
     expect(res.body).toEqual({ error: 'unknown_persona' });
   });
 
-  it('the chosen persona is the one the coach uses on the next turn', async () => {
+  it('a stored old id still answers as KIP on the next turn', async () => {
     const { app, provider, telemetry } = scriptedApp(['Fine.']);
     const user = await consented();
     await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: 'luna' } });
     await request(await testServer(app)).post('/me/coach/message').set(await authed(user.id)).send({ message: 'hi' });
-    expect(provider.requests[0]!.system).toContain('- name: "Luna"');
-    expect(provider.requests[0]!.system).toContain('- coaching focus: "Sleep."');
-    expect(telemetry.events.every((e) => e.personaId === 'luna')).toBe(true);
+    expect(provider.requests[0]!.system).toContain('- name: "KIP"');
+    expect(telemetry.events.every((e) => e.personaId === 'kip')).toBe(true);
   });
 });
 
@@ -465,15 +450,14 @@ describe('thinking settings', () => {
 });
 
 // Review Focus 1: a retired stored id must never reach any client.
-it('reports Mochi for a stored retired character, and never lists a retired id', async () => {
+it('reports KIP for a stored retired character, and never lists an old id', async () => {
   const user = await createUser();
   await prisma.user.update({ where: { id: user.id }, data: { coachPersonaId: 'hoot' } });
   const res = await request(await testServer(createApp())).get('/me/coach/status').set(await authed(user.id));
-  expect(res.body.personaId).toBe('mochi');
-  // Ruling R24: a stored id that is not live re-opens the picker, even before the migration clears it.
-  expect(res.body.personaChosen).toBe(false);
-  const ids = res.body.personas.map((p: { id: string }) => p.id);
-  for (const retired of ['hoot', 'pip', 'nimbus', 'ember', 'beep', 'doze', 'beat']) expect(ids).not.toContain(retired);
+  expect(res.body.personaId).toBe('kip');
+  // v5: every old id is known, so it counts as chosen and an old build's picker stays closed.
+  expect(res.body.personaChosen).toBe(true);
+  expect(res.body.personas.map((p: { id: string }) => p.id)).toEqual(['kip']);
 });
 
 describe('POST /me/coach/message', () => {

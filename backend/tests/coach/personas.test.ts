@@ -2,7 +2,6 @@ import {
   DEFAULT_PERSONA_ID,
   findPersona,
   listPersonas,
-  LIVE_PERSONA_VERSION,
   PERSONA_SETS,
   resolvePersona,
   REQUIRED_DISALLOWED_TOPICS,
@@ -23,30 +22,24 @@ const recap = (p: CoachPersona) => buildDigestSystemPrompt(p, { today: '2026-09-
 const CHARACTER_IDS = ['hoot', 'pip', 'mochi', 'nimbus', 'ember', 'beep', 'doze', 'beat'];
 
 const V4 = ['mochi', 'boba', 'sprout', 'avo', 'peep', 'bun', 'kit', 'axo', 'boo', 'cap', 'jelly', 'pengu', 'luna', 'gloop', 'bao'];
-const RETIRED = ['hoot', 'pip', 'nimbus', 'ember', 'beep', 'doze', 'beat'];
 
-describe('v4 personas', () => {
-  it('is live, lists the 15 coaches in picker order and defaults to Mochi', () => {
-    expect(LIVE_PERSONA_VERSION).toBe('v4');
-    expect(listPersonas().map((p) => p.id)).toEqual(V4);
-    expect(DEFAULT_PERSONA_ID).toBe('mochi');
+// v5 (KIP) is live since 2026-10-14; personasV5.test covers it. v4 stays registered, unedited.
+describe('v4 stays registered', () => {
+  const v4 = PERSONA_SETS.v4!;
+
+  it('lists the 15 coaches in picker order and defaults to Mochi', () => {
+    expect(v4.personas.map((p) => p.id)).toEqual(V4);
+    expect(v4.defaultPersonaId).toBe('mochi');
   });
 
   it('keeps Mochi exactly as v3 had it', () => {
     const v3Mochi = PERSONA_SETS.v3!.personas.find((p) => p.id === 'mochi');
-    expect(findPersona('mochi')).toEqual(v3Mochi);
-  });
-
-  it('treats retired characters and v1 styles as unknown, resolving them to Mochi', () => {
-    for (const id of [...RETIRED, 'encouraging', 'direct', 'clinical']) {
-      expect(findPersona(id)).toBeUndefined();
-      expect(resolvePersona(id).id).toBe('mochi');
-    }
+    expect(v4.personas.find((p) => p.id === 'mochi')).toEqual(v3Mochi);
   });
 
   it('gives every coach copy, the shared safety list and threshold-triggered recaps', () => {
-    const shared = listPersonas()[0]!.disallowedTopics;
-    for (const p of listPersonas()) {
+    const shared = v4.personas[0]!.disallowedTopics;
+    for (const p of v4.personas) {
       expect(p.tagline && p.greeting && p.tone && p.focus).toBeTruthy();
       expect(p.disallowedTopics).toEqual(shared);
       expect(p.proactivity).toBe('threshold-triggered');
@@ -98,14 +91,6 @@ describe('personas', () => {
     expect(v1Personas.personas.map((p) => p.id)).toEqual(['direct', 'encouraging', 'clinical']);
   });
 
-  it('defaults to Mochi, terse, threshold-triggered', () => {
-    expect(DEFAULT_PERSONA_ID).toBe('mochi');
-    expect(findPersona(DEFAULT_PERSONA_ID)).toMatchObject({ name: 'Mochi', verbosity: 'terse', proactivity: 'threshold-triggered' });
-    expect(resolvePersona(null).id).toBe('mochi');
-    expect(resolvePersona(undefined).id).toBe('mochi');
-    expect(resolvePersona('retired-persona').id).toBe('mochi');
-  });
-
   it.each(listPersonas().map((p) => [p.id, p] as const))('%s always disallows medical diagnosis and medication dosing', (_id, p) => {
     for (const topic of REQUIRED_DISALLOWED_TOPICS) expect(p.disallowedTopics).toContain(topic);
     expect(p.disallowedTopics).toEqual(expect.arrayContaining(['medical diagnosis', 'medication dosing']));
@@ -128,22 +113,21 @@ describe('personas', () => {
   it('never matches an inherited property of the legacy map', () => {
     for (const id of ['toString', '__proto__', 'constructor', 'hasOwnProperty']) {
       expect(findPersona(id)).toBeUndefined();
-      expect(resolvePersona(id).id).toBe('mochi');
+      expect(resolvePersona(id).id).toBe(DEFAULT_PERSONA_ID);
     }
   });
 });
 
 describe('legacy persona ids', () => {
-  // v1 styles still map to v3 characters, but v4 retired those characters, so
-  // they no longer match a live persona and fall back to the default.
+  // v1 styles still map to v3 characters in the legacy map; since v5 every known id resolves to KIP.
   it.each([
     ['encouraging', 'pip'],
     ['direct', 'hoot'],
     ['clinical', 'beep'],
-  ])('%s still maps to %s, which is retired, so it resolves to Mochi', (legacy, character) => {
+  ])('%s still maps to %s, and resolves to KIP', (legacy, character) => {
     expect(LEGACY_PERSONA_IDS[legacy as keyof typeof LEGACY_PERSONA_IDS]).toBe(character);
-    expect(findPersona(legacy)).toBeUndefined();
-    expect(resolvePersona(legacy).id).toBe('mochi');
+    expect(findPersona(legacy)?.id).toBe('kip');
+    expect(resolvePersona(legacy).id).toBe('kip');
   });
 });
 

@@ -75,7 +75,7 @@ describe('first build', () => {
     const { sender, selectProvider, deps } = setup();
     expect(await run(deps, user.id, MON_9)).toBe('built');
     const row = await recapOf(user.id);
-    expect(row).toMatchObject({ status: 'BUILT', sleepGoalMinutes: 480, lineSource: 'TEMPLATE', story: null, storySource: null, personaId: 'mochi', builtAt: MON_9, pushedAt: MON_9 });
+    expect(row).toMatchObject({ status: 'BUILT', sleepGoalMinutes: 480, lineSource: 'TEMPLATE', story: null, storySource: null, personaId: 'kip', builtAt: MON_9, pushedAt: MON_9 });
     expect(row!.stats).toMatchObject({ nightsWithData: 6, nightsOnGoal: 5 });
     expect(sender.calls).toHaveLength(1);
     expect(sender.calls[0]!.payload).toMatchObject({ kind: 'weekly_digest', data: { kind: 'recap', recapId: row!.id } });

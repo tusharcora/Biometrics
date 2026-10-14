@@ -14,7 +14,7 @@ import { ANSWER_HISTORY_WINDOW, AnswerDeps, AnswerEvent, runAnswer } from './ans
 import { warmModel } from './answer/warm';
 import { clearTodaySummary, generateTodaySummary, getTodaySummary, summaryEngineDeps, TodayDeps } from './answer/today';
 import type { MemoryDTO } from './memory';
-import { DEFAULT_PERSONA_ID, findPersona, isRetiredCharacterId, listPersonas, resolvePersona } from './personas';
+import { findPersona, listPersonas, resolvePersona } from './personas';
 import { isThinkingAttachment, isThinkingText, resolveThinkingAttachment, resolveThinkingText } from './thinking';
 import { CRISIS_RESOURCES } from './guardrails/crisis';
 import { selectEngine } from './engine';
@@ -336,9 +336,9 @@ export function createCoachRouter(overrides: Partial<CoachRouterDeps> = {}): Rou
   // No requireEnabled: the character is also the app's look, so it can be chosen while the coach is off.
   router.put('/me/coach/persona', requireAuth, async (req: AuthedRequest, res) => {
     const requested: unknown = req.body?.personaId;
-    // A retired v3 character (an old build's picker, or its Skip, which sends 'hoot') saves the default
-    // instead of failing, so that build's picker does not reopen forever (R23). v1 and unknown ids stay 400.
-    const persona = findPersona(requested) ?? (isRetiredCharacterId(requested) ? findPersona(DEFAULT_PERSONA_ID) : undefined);
+    // Any id any persona set ever had (an old build's picker, or its Skip, which sends 'hoot') saves KIP (v5);
+    // unknown ids stay 400.
+    const persona = findPersona(requested);
     if (!persona) {
       res.status(400).json({ error: 'unknown_persona' });
       return;
