@@ -17,5 +17,5 @@ export const THINKING_TEXT_NAMES: Record<ThinkingTextId, { name: string; blurb: 
   placeholder: { name: 'Reply placeholder', blurb: 'A pulsing reply bubble where the answer will appear.' },
   typewriter: { name: 'Typewriter', blurb: 'KIP types its line letter by letter.' },
   steps: { name: 'Steps', blurb: 'The real steps, ticked off as they happen.' },
-  shimmer: { name: 'Colour shimmer', blurb: 'A wash of KIP\'s colour, with a timer.' },
+  shimmer: { name: 'Colour shimmer', blurb: 'A soft shimmer while KIP types, with a timer.' },
 };

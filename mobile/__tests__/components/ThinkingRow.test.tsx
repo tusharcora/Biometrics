@@ -137,7 +137,8 @@ it('placeholder shows KIP\'s line over three pulsing bars', () => {
 
 it('shimmer names KIP and counts the seconds since it appeared', () => {
   const s = render(<ThinkingRow style="shimmer" steps={[]} paused testID="row" />);
-  expect(s.getByText('KIP is thinking')).toBeTruthy();
+  // Spec §3.4's label, from KIP_COPY.
+  expect(s.getByText('KIP is typing it up')).toBeTruthy();
   expect(s.getByTestId('thinking-shimmer-seconds')).toHaveTextContent('0s');
 });
 

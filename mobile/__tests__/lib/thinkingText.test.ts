@@ -21,6 +21,10 @@ it('reads anything else as the default', () => {
   for (const v of [null, undefined, '', 'wiggle', 3]) expect(resolveThinkingText(v)).toBe('steps');
 });
 
+it('describes the shimmer truly: it may wash to the foreground when the KIP colour does not read', () => {
+  expect(THINKING_TEXT_NAMES.shimmer.blurb).toBe('A soft shimmer while KIP types, with a timer.');
+});
+
 it('names KIP in the blurbs, never "your coach"', () => {
   for (const { name, blurb } of Object.values(THINKING_TEXT_NAMES)) expect(`${name} ${blurb}`).not.toMatch(/coach/i);
 });
