@@ -1,0 +1,176 @@
+{
+  "v": 3,
+  "createdOnFiles": {
+    "v": 1,
+    "at": "2026-10-14T09:00:00Z"
+  },
+  "title": "Free-build room",
+  "launch": {
+    "view": "canvas"
+  },
+  "pages": [],
+  "boards": {
+    "Main.dc.html": {
+      "x": 0,
+      "y": 0,
+      "w": 900,
+      "h": 1100,
+      "title": "Overview"
+    },
+    "F1.dc.html": {
+      "x": 980,
+      "y": 0,
+      "w": 820,
+      "h": 1110,
+      "title": "F1 · Isometric free-build"
+    },
+    "F2.dc.html": {
+      "x": 1880,
+      "y": 0,
+      "w": 390,
+      "h": 1460,
+      "title": "F2 · Front-on free-build · recommended"
+    },
+    "F3.dc.html": {
+      "x": 2350,
+      "y": 0,
+      "w": 390,
+      "h": 1570,
+      "title": "F3 · Hybrid: slots + free props"
+    },
+    "F4.dc.html": {
+      "x": 2820,
+      "y": 0,
+      "w": 1250,
+      "h": 1010,
+      "title": "F4 · Inventory & toolbar (F2)"
+    },
+    "F5.dc.html": {
+      "x": 0,
+      "y": 1970,
+      "w": 1250,
+      "h": 1010,
+      "title": "F5 · Room expansion"
+    },
+    "F6.dc.html": {
+      "x": 1330,
+      "y": 1970,
+      "w": 1250,
+      "h": 1010,
+      "title": "F6 · Earned currency (optional economy)"
+    },
+    "F7.dc.html": {
+      "x": 2660,
+      "y": 1970,
+      "w": 820,
+      "h": 1030,
+      "title": "F7 · Items that do something"
+    },
+    "F8.dc.html": {
+      "x": 3560,
+      "y": 1970,
+      "w": 1250,
+      "h": 1010,
+      "title": "F8 · Show off"
+    },
+    "C1.dc.html": {
+      "x": 0,
+      "y": 3400,
+      "w": 1250,
+      "h": 1080,
+      "title": "C1 · The daily loop · recommended"
+    },
+    "C2.dc.html": {
+      "x": 1330,
+      "y": 3400,
+      "w": 820,
+      "h": 1010,
+      "title": "C2 · Grow your room"
+    },
+    "C3.dc.html": {
+      "x": 2230,
+      "y": 3400,
+      "w": 1250,
+      "h": 1010,
+      "title": "C3 · Weekly theme challenge"
+    },
+    "C4.dc.html": {
+      "x": 3560,
+      "y": 3400,
+      "w": 820,
+      "h": 1010,
+      "title": "C4 · Visit & gift"
+    },
+    "C5.dc.html": {
+      "x": 4460,
+      "y": 3400,
+      "w": 820,
+      "h": 1010,
+      "title": "C5 · A living room"
+    },
+    "C6.dc.html": {
+      "x": 5360,
+      "y": 3400,
+      "w": 820,
+      "h": 1010,
+      "title": "C6 · KIP lives there"
+    },
+    "C7.dc.html": {
+      "x": 6260,
+      "y": 3400,
+      "w": 1250,
+      "h": 1010,
+      "title": "C7 · First week"
+    },
+    "C8.dc.html": {
+      "x": 7590,
+      "y": 3400,
+      "w": 1250,
+      "h": 1010,
+      "title": "C8 · Economy map"
+    }
+  },
+  "order": [
+    "Main.dc.html",
+    "F1.dc.html",
+    "F2.dc.html",
+    "F3.dc.html",
+    "F4.dc.html",
+    "F5.dc.html",
+    "F6.dc.html",
+    "F7.dc.html",
+    "F8.dc.html",
+    "C1.dc.html",
+    "C2.dc.html",
+    "C3.dc.html",
+    "C4.dc.html",
+    "C5.dc.html",
+    "C6.dc.html",
+    "C7.dc.html",
+    "C8.dc.html"
+  ],
+  "notes": {
+    "row1": {
+      "x": 0,
+      "y": -280,
+      "text": "Directions",
+      "kind": "title1",
+      "maxW": 4070
+    },
+    "row2": {
+      "x": 0,
+      "y": 1690,
+      "text": "Systems",
+      "kind": "title1",
+      "maxW": 4810
+    },
+    "row3": {
+      "x": 0,
+      "y": 3120,
+      "text": "Combined ideas",
+      "kind": "title1",
+      "maxW": 8840
+    }
+  },
+  "designSystems": []
+}
