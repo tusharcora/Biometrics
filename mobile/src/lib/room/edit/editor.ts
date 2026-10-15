@@ -22,7 +22,8 @@ export interface SetApplied { setId: string; missing: ItemId[]; deskKept: boolea
 export type Outcome =
   | { ok: true; id: string }
   | { ok: true; id: null; applied: SetApplied }
-  | { ok: false; refused: Refused; id: string | null };
+  /** `item`: a refused new piece's item (ruling T12-CARRY), so the reason names what was dragged in or placed. */
+  | { ok: false; refused: Refused; id: string | null; item?: ItemId };
 export interface CoachState { step: 1 | 2 | 3; tile: [number, number] }
 
 export interface EditorState {
@@ -79,6 +80,7 @@ export type EditorAction =
   | { type: 'coach'; step: CoachState['step'] | null }
   | { type: 'clearOutcome' }
   | { type: 'refreshed'; draft: Draft; version: number; counts: Readonly<Record<ItemId, number>>; tier: Tier }
+  | { type: 'saving' }
   | { type: 'saveFailed' }
   | { type: 'saved'; draft: Draft; version: number };
 
@@ -116,7 +118,8 @@ function commit(s: EditorState, draft: Draft, extra: Partial<EditorState> = {}):
 }
 
 const withPieces = (s: EditorState, pieces: Placement[]): Draft => ({ ...s.draft, layout: { ...s.draft.layout, pieces } });
-const refuse = (s: EditorState, refused: Refused, id: string | null): EditorState => ({ ...s, outcome: { ok: false, refused, id } });
+const refuse = (s: EditorState, refused: Refused, id: string | null, item?: ItemId): EditorState =>
+  ({ ...s, outcome: item ? { ok: false, refused, id, item } : { ok: false, refused, id } });
 /** Coach step 1 ends when the lantern lands (spec §11.1). */
 const coachAfterPlace = (s: EditorState, item: ItemId): CoachState | null =>
   s.coach && s.coach.step === 1 && item === COACH_ITEM ? { ...s.coach, step: 2 } : s.coach;
@@ -124,11 +127,11 @@ const coachAfterPlace = (s: EditorState, item: ItemId): CoachState | null =>
 function add(s: EditorState, item: ItemId, target: Target | null, facing: 'L' | 'R' = 'L'): EditorState {
   // One desk per room (ruling T9-FIX): a desk from the drawer, placed or dropped, swaps the desk.
   if (isoOf(item)?.kipDesk) return editorReducer(s, { type: 'replaceDesk', item });
-  if (!((inventory(s)[item] ?? 0) > 0)) return refuse(s, { reason: 'outside' }, null);
-  if (!target) return refuse(s, { reason: 'outside' }, null);
+  if (!((inventory(s)[item] ?? 0) > 0)) return refuse(s, { reason: 'outside' }, null, item);
+  if (!target) return refuse(s, { reason: 'outside' }, null, item);
   const piece = placedAt({ id: newPieceId(s.draft.layout), item, facing, mirror: false }, target);
   const why = refusal(s.draft.layout, piece, s.tier, true);
-  if (why) return refuse(s, why, null);
+  if (why) return refuse(s, why, null, item);
   return commit(s, withPieces(s, [...s.draft.layout.pieces, piece]), { selected: piece.id, outcome: { ok: true, id: piece.id }, coach: coachAfterPlace(s, item), picked: null });
 }
 
@@ -318,6 +321,10 @@ export function editorReducer(s: EditorState, a: EditorAction): EditorState {
       return { ...s, outcome: null };
     case 'refreshed':
       return { ...s, saved: a.draft, draft: a.draft, past: [], future: [], counts: a.counts, tier: a.tier, baseVersion: a.version, notice: 'refreshed', selected: null, preview: null, outcome: null };
+    case 'saving':
+      // A save clears the last notice (ruling T12-CARRY): the same failure again is a new line, which Android's live
+      // region announces again.
+      return { ...s, notice: null };
     case 'saveFailed':
       return { ...s, notice: 'saveFailed' };
     case 'saved':

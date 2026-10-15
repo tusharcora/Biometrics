@@ -2,6 +2,7 @@ import { EMPTY_WORN } from '../../src/lib/room/loadout';
 import type { Placement } from '../../src/lib/room/iso/geometry';
 import { childrenOf, starterLayout } from '../../src/lib/room/layout';
 import { canPlace, displayDraft, editorReducer, initEditor, inventory, isChanged, selectedTools, UNDO_STEPS, type EditorAction, type EditorState } from '../../src/lib/room/edit/editor';
+import { outcomeText } from '../../src/lib/room/edit/labels';
 import { catalogueSet } from '../../src/lib/room/catalogue';
 
 const COUNTS: Record<string, number> = {
@@ -27,14 +28,14 @@ describe('placing (spec §5.4 Place, §5.3 Room full)', () => {
     expect(run(s, { type: 'place', item: 'plant.monstera' }).draft).toBe(s.draft);
     const none = run(s, { type: 'place', item: 'plant.cactus' }, { type: 'place', item: 'plant.cactus' });
     expect(none.draft.layout.pieces.filter((p) => p.item === 'plant.cactus')).toHaveLength(1);
-    expect(none.outcome).toEqual({ ok: false, refused: { reason: 'outside' }, id: null });
+    expect(none.outcome).toEqual({ ok: false, refused: { reason: 'outside' }, id: null, item: 'plant.cactus' });
   });
 
   it('at the cap, Place is refused with "full" and canPlace is false', () => {
     const many = { ...starterLayout(), pieces: [...starterLayout().pieces, ...Array.from({ length: 33 }, (_, k): Placement => ({ id: `w${k}`, item: 'art.calendar', layer: 'wallR', x: 0, y: 0, facing: 'L', mirror: false }))] };
     const s = start({ layout: many, counts: { ...COUNTS, 'art.calendar': 40 } });
     expect(canPlace(s, 'plant.fern')).toBe(false);
-    expect(run(s, { type: 'place', item: 'plant.fern' }).outcome).toEqual({ ok: false, refused: { reason: 'full' }, id: null });
+    expect(run(s, { type: 'place', item: 'plant.fern' }).outcome).toEqual({ ok: false, refused: { reason: 'full' }, id: null, item: 'plant.fern' });
   });
 });
 
@@ -50,7 +51,7 @@ describe('dragging (spec §5.3)', () => {
     const moved = run(s, { type: 'drop', id: 'plant', item: 'plant.fern', target: { layer: 'floor', x: 9, y: 9 } });
     expect([moved.draft, moved.past.length, moved.outcome]).toEqual([s.draft, 0, { ok: false, refused: { reason: 'outside' }, id: 'plant' }]);
     const fresh = run(s, { type: 'drop', id: null, item: 'corner.beanbag', target: { layer: 'floor', x: 3, y: 2 } });
-    expect([fresh.draft, fresh.outcome]).toEqual([s.draft, { ok: false, refused: { reason: 'seat', with: 'desk' }, id: null }]);
+    expect([fresh.draft, fresh.outcome]).toEqual([s.draft, { ok: false, refused: { reason: 'seat', with: 'desk' }, id: null, item: 'corner.beanbag' }]);
   });
 
   it('dropping a desk from the drawer replaces the desk, never adds a second one (ruling T9-FIX)', () => {
@@ -59,6 +60,12 @@ describe('dragging (spec §5.3)', () => {
     expect(desks.map((p) => [p.id, p.item, p.x, p.y])).toEqual([['desk', 'desk.laptop', 2, 0]]);
     expect(childrenOf(s.draft.layout, 'desk').length).toBeGreaterThan(0);
     expect([s.past.length, inventory(s)['desk.monitor'], inventory(s)['desk.laptop']]).toEqual([1, 1, 0]);
+  });
+
+  it('a refused drop from the drawer names the dragged piece, whatever is picked (ruling T12-CARRY)', () => {
+    const s = run(start({ counts: { ...COUNTS, 'item.mug': 2 } }), { type: 'pick', item: 'plant.fern' }, { type: 'drop', id: null, item: 'item.mug', target: { layer: 'floor', x: 6, y: 6 } });
+    expect(s.outcome).toEqual({ ok: false, refused: { reason: 'layer' }, id: null, item: 'item.mug' });
+    expect(outcomeText(s)).toEqual({ kind: 'reason', text: 'Only on a desk or shelf' });
   });
 
   it('a drop from the drawer adds a new piece with a new id', () => {
@@ -206,5 +213,11 @@ describe('saving (Spec B §6.4 rulings)', () => {
     const r = run(changed, { type: 'refreshed', draft: other, version: 4, counts: COUNTS, tier: 1 });
     expect([r.draft, r.saved, r.past, r.notice, r.baseVersion, isChanged(r)]).toEqual([other, other, [], 'refreshed', 4, false]);
     expect(run(changed, { type: 'saved', draft: changed.draft, version: 5 }).baseVersion).toBe(5);
+  });
+
+  it('a save starting clears the last failure, so the same failure is a new notice (ruling T12-CARRY)', () => {
+    const failed = run(start(), { type: 'place', item: 'plant.fern' }, { type: 'saveFailed' });
+    const again = run(failed, { type: 'saving' });
+    expect([failed.notice, again.notice, again.draft]).toEqual(['saveFailed', null, failed.draft]);
   });
 });

@@ -71,13 +71,14 @@ export function toolLine(layout: RoomLayout, t: Tools): { text: string; inventor
 
 /**
  * What the last action has to say (ruling UI-OUTCOMES): a refusal's reason, or what Apply set left out. A plain
- * success says nothing here (the room shows it). A refused new piece is named by the item picked in the drawer.
+ * success says nothing here (the room shows it). A refused new piece is named by the item it carries (ruling
+ * T12-CARRY), else by the item picked in the drawer.
  */
 export function outcomeText(s: EditorState): { kind: 'reason' | 'info'; text: string } | null {
   const o = s.outcome;
   if (!o) return null;
   if (!o.ok) {
-    const item = (o.id ? s.draft.layout.pieces.find((p) => p.id === o.id)?.item : s.picked) ?? '';
+    const item = (o.id ? s.draft.layout.pieces.find((p) => p.id === o.id)?.item : o.item ?? s.picked) ?? '';
     return { kind: 'reason', text: reasonText(o.refused, item, s.draft.layout) };
   }
   if (o.id === null) {

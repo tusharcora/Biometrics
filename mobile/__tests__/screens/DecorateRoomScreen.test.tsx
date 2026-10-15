@@ -1,10 +1,16 @@
 import React from 'react';
 import { act, fireEvent, render } from '@testing-library/react-native';
-import { AccessibilityInfo, Alert } from 'react-native';
+import { AccessibilityInfo, Alert, Dimensions } from 'react-native';
+import { State } from 'react-native-gesture-handler';
+import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 import { ApiError } from '../../src/api/client';
 import { fetchCosmetics, putCosmetics } from '../../src/api/cosmetics';
-import { DecorateRoomScreen } from '../../src/screens/DecorateRoomScreen';
+import { EDIT_CELL_PT, initialPan } from '../../src/components/edit/EditRoom';
+import { DecorateRoomScreen, EDIT_ROOM_HEIGHT, initialState } from '../../src/screens/DecorateRoomScreen';
 import { getCosmetics, loadCosmetics, markCosmeticsSeen, resetCosmetics } from '../../src/lib/room/cosmeticsStore';
+import { LIFT_PT } from '../../src/lib/room/edit/drag';
+import { isoGrid, projOf } from '../../src/lib/room/iso/grid';
+import { drawIsoStatic } from '../../src/lib/room/iso/room';
 import { starterLayout } from '../../src/lib/room/layout';
 import { useDecorateOpen } from '../../src/lib/room/decorateOpen';
 import { cosmeticsDTO } from '../../jest-mocks/cosmeticsFixture';
@@ -265,5 +271,61 @@ describe('an honest refresh and the save lock (Spec B Task 14 rulings)', () => {
     await act(async () => { resolve(cosmeticsDTO({ version: 3 })); });
     expect(mockNav.goBack).toHaveBeenCalledTimes(1);
     alert.mockRestore();
+  });
+
+  it('a save starting clears the last failure, so Android re-announces the same failure (ruling T12-CARRY)', async () => {
+    const s = await openEditor();
+    select(s, 'plant');
+    fireEvent.press(s.getByTestId('edit-flip'));
+    (putCosmetics as jest.Mock).mockRejectedValue(new Error('offline'));
+    await act(async () => { fireEvent.press(s.getByTestId('edit-done')); });
+    expect(s.getByTestId('edit-notice')).toHaveTextContent("Couldn't save your room. Try again.");
+    let reject!: (e: unknown) => void;
+    (putCosmetics as jest.Mock).mockReturnValue(new Promise((_, r) => { reject = r; }));
+    act(() => { fireEvent.press(s.getByTestId('edit-done')); });
+    expect(s.queryByTestId('edit-notice')).toBeNull();
+    await act(async () => { reject(new Error('offline')); });
+    expect(s.getByTestId('edit-notice')).toHaveTextContent("Couldn't save your room. Try again.");
+  });
+});
+
+describe('dragging on the screen (spec §5.3)', () => {
+  /** The screen's room: full window width, EDIT_ROOM_HEIGHT tall, starting at initialPan. */
+  const roomPan = () => initialPan(initialState(getCosmetics()!, {}), Dimensions.get('window').width, EDIT_ROOM_HEIGHT);
+  const fernTop = () => {
+    const hit = drawIsoStatic({ layout: starterLayout(), tier: 1, weather: 'clear', night: false, colour: 'coral' }).hits.find((h) => h.id === 'plant')!;
+    const [x, y] = hit.rects.filter((q) => !q[4].startsWith('rgba')).sort((a, b) => a[1] - b[1])[0]!;
+    const pan = roomPan();
+    return { x: pan.x + (x + 0.5) * EDIT_CELL_PT, y: pan.y + (y + 0.5) * EDIT_CELL_PT };
+  };
+  /** The finger's point that puts the ghost over floor point (i, j). */
+  const pt = (i: number, j: number) => {
+    const [x, y] = projOf(isoGrid(1))(i, j);
+    const pan = roomPan();
+    return { x: pan.x + x * EDIT_CELL_PT, y: pan.y + y * EDIT_CELL_PT + LIFT_PT };
+  };
+  const drag = (to: { x: number; y: number }) => act(() => fireGestureHandler(getByGestureTestId('edit-room-drag'), [
+    { state: State.BEGAN, ...fernTop() }, { state: State.ACTIVE, ...fernTop() }, { state: State.ACTIVE, ...to }, { state: State.END, ...to },
+  ]));
+
+  it('letting go on an invalid spot puts the piece back, adds no undo step and says why (Review Focus 3)', async () => {
+    const s = await openEditor();
+    const before = s.getByTestId('edit-room-view').props.layout;
+    drag(pt(9, 9));
+    expect(s.getByTestId('edit-room-view').props.layout).toBe(before);
+    expect(s.getByTestId('edit-room-view').props.hide).toBeNull();
+    expect(s.getByTestId('edit-reason')).toHaveTextContent("Doesn't fit here");
+    // Picking it up selected it; put the selection down to see the history.
+    fireEvent.press(s.getByTestId('edit-room-deselect'));
+    expect(s.getByTestId('edit-undo').props.accessibilityState.disabled).toBe(true);
+  });
+
+  it('letting go on a valid spot moves the piece as one undo step', async () => {
+    const s = await openEditor();
+    drag(pt(6.5, 5.5));
+    const plant = JSON.parse(s.getByTestId('edit-room-view').props.layout).pieces.find((p: { id: string }) => p.id === 'plant');
+    expect([plant.x, plant.y]).toEqual([6, 5]);
+    fireEvent.press(s.getByTestId('edit-room-deselect'));
+    expect(s.getByTestId('edit-undo').props.accessibilityState.disabled).toBe(false);
   });
 });

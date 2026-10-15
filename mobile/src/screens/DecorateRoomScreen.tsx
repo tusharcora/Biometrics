@@ -9,7 +9,7 @@ import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { ApiError } from '../api/client';
 import { EditNotices } from '../components/edit/EditNotices';
-import { EditRoom } from '../components/edit/EditRoom';
+import { EditRoom, type EditRoomHandle } from '../components/edit/EditRoom';
 import { EditToolbar } from '../components/edit/EditToolbar';
 import { PiecesList } from '../components/edit/PiecesList';
 import { useMyKip } from '../lib/kip/myKip';
@@ -24,8 +24,8 @@ export const EDIT_ROOM_HEIGHT = 320;
 
 // The free-build editor (spec 2026-10-15 §5): a full-screen modal over the KIP page (C6's "drawer over the chat"
 // drawn as this modal, §5.1). Cancel / EDITING / Done, the room count, the room. The KIP page's loops pause while it
-// is open (Spec B ruling 17). Under the room: the notices, the toolbar and the pieces list. Task 12 adds the drag,
-// Task 13 the drawer.
+// is open (Spec B ruling 17). Under the room: the notices, the toolbar and the pieces list. The room holds the drag;
+// Task 13's drawer drives it through the room's handle.
 export function DecorateRoomScreen() {
   const navigation = useNavigation<any>();
   const params = (useRoute().params ?? {}) as DecorateParams;
@@ -80,6 +80,8 @@ function Editor({ cosmetics, params, navigation }: { cosmetics: Cosmetics; param
   const [saving, setSaving] = useState(false);
   const [showGrid, setShowGrid] = useState(true);
   const savingRef = useRef(false);
+  // The room's drag, for the drawer's tiles to drive (plan ruling 16, Task 13).
+  const roomRef = useRef<EditRoomHandle>(null);
   // While a save is in flight nothing reaches the draft, a screen reader's activation included (Spec B Task 14 minor).
   const act = useCallback((a: EditorAction) => { if (!savingRef.current) dispatch(a); }, []);
 
@@ -113,6 +115,8 @@ function Editor({ cosmetics, params, navigation }: { cosmetics: Cosmetics; param
     if (savingRef.current) return;
     savingRef.current = true;
     setSaving(true);
+    // A save clears the last notice, so the same failure again is announced again (ruling T12-CARRY).
+    dispatch({ type: 'saving' });
     try {
       // Saved against the version the draft was built on (Spec B final review fix #1): a newer room read meanwhile
       // answers 409 instead of being overwritten.
@@ -153,7 +157,7 @@ function Editor({ cosmetics, params, navigation }: { cosmetics: Cosmetics; param
       </Text>
       <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
         <View testID="edit-editing" pointerEvents={saving ? 'none' : 'auto'}>
-          <EditRoom state={state} dispatch={act} width={width} height={EDIT_ROOM_HEIGHT} window={day.window} colour={me.colour} reduceMotion={reduceMotion} showGrid={showGrid} />
+          <EditRoom ref={roomRef} state={state} dispatch={act} width={width} height={EDIT_ROOM_HEIGHT} window={day.window} colour={me.colour} reduceMotion={reduceMotion} showGrid={showGrid} />
           <EditNotices state={state} />
           <EditToolbar state={state} dispatch={act} showGrid={showGrid} onToggleGrid={() => setShowGrid((v) => !v)} />
           <PiecesList state={state} dispatch={act} />
