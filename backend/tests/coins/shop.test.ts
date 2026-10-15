@@ -11,7 +11,7 @@ import { isoWeekKey } from '../../src/habits/job';
 import { todayFor } from '../../src/social/checkins';
 import { day, level } from '../cosmetics/helpers';
 import { piece, withPieces } from '../room/helpers';
-import { coinUser, fund, rowsOf } from './helpers';
+import { balance, coinUser, fund, rowsOf } from './helpers';
 
 // Nothing earns in these tests (a first placement would pay its +10 once the real launch date has passed).
 const LAUNCH = coinsConfig.launchedAt;
@@ -57,6 +57,13 @@ describe('the offer (spec §6.4–6.6)', () => {
     expect(weekSet('2026-W47')).toEqual(weekSet('2026-W43'));
     const offered = new Set(offeredIn(W).map((o) => o.itemId));
     for (const s of SHOP_WEEKS) for (const id of s.itemIds) expect({ id, offered: offered.has(id) }).toEqual({ id, offered: true });
+  });
+
+  it('steps exactly one set across an ISO year end, after a 53-week and a 52-week year (ruling T6-FIX)', () => {
+    const index = (w: string) => SHOP_WEEKS.indexOf(weekSet(w));
+    for (const [from, to] of [['2026-W53', '2027-W01'], ['2025-W52', '2026-W01'], ['2026-W52', '2026-W53']]) {
+      expect([from, to, (index(to) - index(from) + SHOP_WEEKS.length) % SHOP_WEEKS.length]).toEqual([from, to, 1]);
+    }
   });
 
   it('parses exactly { requestId: uuid, itemId } (the shared UUID check, ruling T6-UUID)', () => {
@@ -115,6 +122,28 @@ describe('POST /me/shop/purchases (spec §12)', () => {
     expect((await rowsOf(user.id)).filter((r) => r.kind === 'buy')).toHaveLength(1);
     // One spend logged: the replays wrote nothing.
     expect(info.mock.calls.map((c) => String(c[0])).filter((l) => l.includes('coins.spent'))).toHaveLength(1);
+  });
+
+  it('a request id reused for a different piece is 400 invalid_body: no second grant, no second spend (ruling T6-FIX)', async () => {
+    const { user, headers } = await coinUser();
+    await fund(user.id, 300);
+    const id = randomUUID();
+    expect((await buy(headers, 'item.radio', id)).status).toBe(200);
+    const res = await buy(headers, 'plant.fern', id);
+    expect([res.status, res.body]).toEqual([400, { error: 'invalid_body' }]);
+    expect(await prisma.itemGrant.findMany({ where: { userId: user.id }, select: { itemId: true } })).toEqual([{ itemId: 'item.radio' }]);
+    expect((await rowsOf(user.id)).filter((r) => r.kind === 'buy')).toHaveLength(1);
+    expect(await balance(user.id)).toBe(150);
+  });
+
+  it('two request ids racing for a balance that fits one: one 200, one 409, never negative, one grant (ruling T6-FIX)', async () => {
+    const { user, headers } = await coinUser();
+    await fund(user.id, 200);
+    const results = await Promise.all([buy(headers, 'item.radio'), buy(headers, 'item.radio')]);
+    expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
+    expect(results.find((r) => r.status === 409)!.body).toEqual({ error: 'not_enough_coins', needed: 100 });
+    expect(await balance(user.id)).toBe(50);
+    expect(await prisma.itemGrant.count({ where: { userId: user.id } })).toBe(1);
   });
 
   it('409 not_enough_coins with what is still needed, and nothing is written', async () => {

@@ -80,6 +80,7 @@ export async function readCosmetics(userId: string, now: Date, opts: { grant?: b
   return {
     catalogueVersion: COSMETICS_CATALOGUE_VERSION,
     owned: [...owned].sort(),
+    // A multiset: one entry per unseen unlock row and per unseen grant row, so an item may appear more than once.
     fresh: [
       ...rows.filter((r) => r.seenAt === null && owned.has(r.itemId)).map((r) => ({ itemId: r.itemId, source: r.source })),
       // A bought copy is NEW until seen (ruling 7): its source is the key's prefix, 'buy'.

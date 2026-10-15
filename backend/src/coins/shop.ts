@@ -63,7 +63,8 @@ export type PurchaseResult = { ok: true; body: { balance: number; counts: Record
  * Buys one copy. A request id already spent answers 200 with the CURRENT balance and counts, not the first answer
  * (ruling PF-F9): the app only needs to know the purchase landed, and the wallet may have moved since. The replay is
  * caught under the lock before the spend (ruling T6T7-REPLAY), so spendInTx never meets the unique key (a P2002
- * would abort the transaction). A refused request writes nothing, so its retry is judged afresh.
+ * would abort the transaction). The same id for a different piece is 400 invalid_body and writes nothing. A refused
+ * request writes nothing, so its retry is judged afresh.
  */
 export async function buyPiece(userId: string, body: unknown, now: Date): Promise<PurchaseResult> {
   const parsed = parsePurchase(body);
@@ -72,7 +73,13 @@ export async function buyPiece(userId: string, body: unknown, now: Date): Promis
   const week = await shopWeek(userId, now);
   const outcome = await prisma.$transaction(async (tx): Promise<'bought' | 'replay' | Refused> => {
     await lockRoom(tx, userId);
-    if (await tx.coinEvent.findUnique({ where: { userId_sourceKey: { userId, sourceKey } }, select: { id: true } })) return 'replay';
+    const [spent, granted] = await Promise.all([
+      tx.coinEvent.findUnique({ where: { userId_sourceKey: { userId, sourceKey } }, select: { id: true } }),
+      tx.itemGrant.findUnique({ where: { userId_sourceKey: { userId, sourceKey } }, select: { itemId: true } }),
+    ]);
+    // A request id names one purchase: reused for another piece, it is a bad request, not a replay (ruling T6-FIX).
+    if (granted && granted.itemId !== parsed.itemId) return { ok: false, status: 400, body: { error: 'invalid_body' } };
+    if (spent || granted) return 'replay';
     const [rows, grants] = await Promise.all([tx.cosmeticUnlock.findMany({ where: { userId }, select: { itemId: true } }), grantTotals(tx, userId)]);
     const offer = forSale(parsed.itemId, week, countsOf(rows, grants));
     if (!offer) return { ok: false, status: 400, body: { error: 'not_for_sale' } };
