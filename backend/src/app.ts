@@ -16,13 +16,15 @@ import { buddiesRouter } from './buddies/routes';
 import { socialRouter } from './social/routes';
 import { chatsRouter } from './chats/routes';
 import { kipRouter } from './kip/routes';
-import { cosmeticsRouter } from './cosmetics/routes';
+import { cosmeticsRouter, saveBodyParser } from './cosmetics/routes';
 
 export function createApp(options: { auth?: Auth } = {}): Express {
   const app = express();
   // Better Auth reads the raw request body itself, so its handler must run
   // before express.json consumes it.
   app.all('/auth/*splat', toNodeHandler(options.auth ?? defaultAuth));
+  // The room save caps its body at 32 KB with its own parser (plan ruling 14); the global one skips a parsed body.
+  app.put('/me/cosmetics', saveBodyParser);
   app.use(
     express.json({
       verify: (req: any, _res, buf) => {

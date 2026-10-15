@@ -182,7 +182,7 @@ export async function saveCosmetics(userId: string, body: unknown, now: Date, ra
       await lockRoom(tx, userId);
       const [rows, row] = await Promise.all([
         tx.cosmeticUnlock.findMany({ where: { userId }, select: { itemId: true } }),
-        tx.cosmeticLoadout.findUnique({ where: { userId }, select: { layout: true, version: true, tier: true } }),
+        tx.cosmeticLoadout.findUnique({ where: { userId }, select: { layout: true, room: true, version: true, tier: true } }),
       ]);
       tier = toTier(row?.tier);
       const bad = checkLayout(parsed.layout, parsed.worn, tier, countsOf(rows));
@@ -199,8 +199,11 @@ export async function saveCosmetics(userId: string, body: unknown, now: Date, ra
         const { count } = await tx.cosmeticLoadout.updateMany({ where: { userId, version: parsed.version }, data: { ...data, version: { increment: 1 } } });
         if (count === 0) return STALE;
       }
-      // "Placed a piece" (spec §11.1): an instance id the stored layout (or the starter one) did not have.
-      const before = new Set((parseLayout(row?.layout) ?? starterLayout()).pieces.map((p) => p.id));
+      // "Placed a piece" (spec §11.1): an instance id the stored layout did not have. An unconverted Spec B row's
+      // layout is the one its slots convert to (as the GET shows it), so the room's own pieces are not new; no row
+      // means the starter layout.
+      const stored = row ? parseLayout(row.layout) ?? layoutFromSlots(readRoom(row.room, ownedFrom(rows))) : starterLayout();
+      const before = new Set(stored.pieces.map((p) => p.id));
       if (parsed.layout.pieces.some((p) => !before.has(p.id))) {
         await ensureFirstWeek(tx, userId);
         await tx.roomFirstWeek.updateMany({ where: { userId, firstPlacedAt: null }, data: { firstPlacedAt: now } });

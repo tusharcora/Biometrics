@@ -4,7 +4,7 @@ import { migrateTestDb } from '../setupTestDb';
 import { authHeaderFor } from '../helpers/auth';
 import { api, buddyUser } from '../buddies/helpers';
 import { EMPTY_WORN, STARTER_ROOM } from '../../src/cosmetics/catalogue';
-import { starterLayout } from '../../src/room/convert';
+import { layoutFromSlots, starterLayout } from '../../src/room/convert';
 import { lockRoom } from '../../src/room/lock';
 import type { RoomLayout } from '../../src/room/geometry';
 import { piece, withPieces } from './helpers';
@@ -65,8 +65,10 @@ describe('PUT /me/cosmetics (free-build §12)', () => {
   it('400 invalid_body for a valid body over 32 KB (plan ruling 14): the cap, not the shape, refuses it', async () => {
     const { headers } = await me();
     const raw = JSON.stringify(body());
-    const res = await (await api()).put('/me/cosmetics').set(headers).set('Content-Type', 'application/json').send(raw + ' '.repeat(40 * 1024));
-    expect([res.status, res.body]).toEqual([400, { error: 'invalid_body' }]);
+    for (const pad of [40 * 1024, 120 * 1024]) { // 120 KB is past the global parser's 100 KB default (its 413)
+      const res = await (await api()).put('/me/cosmetics').set(headers).set('Content-Type', 'application/json').send(raw + ' '.repeat(pad));
+      expect([res.status, res.body]).toEqual([400, { error: 'invalid_body' }]);
+    }
     const ok = await (await api()).put('/me/cosmetics').set(headers).set('Content-Type', 'application/json').send(raw + ' '.repeat(1024));
     expect(ok.status).toBe(200);
   });
@@ -143,6 +145,19 @@ describe('PUT /me/cosmetics (free-build §12)', () => {
     expect((await firstWeek())!.firstPlacedAt).toEqual(placedAt);
   });
 
+  it('a Spec B row converted by the save: the room\'s own pieces are not a first placement, a new one is', async () => {
+    const { user, headers } = await me();
+    const room = { ...STARTER_ROOM, art: 'art.calendar' }; // 'art' is no starter-layout id
+    await prisma.cosmeticLoadout.create({ data: { userId: user.id, room, worn: { ...EMPTY_WORN }, version: 3 } });
+    const converted = layoutFromSlots(room);
+    expect((await put(headers, body(converted, 3))).status).toBe(200);
+    const firstWeek = () => prisma.roomFirstWeek.findUnique({ where: { userId: user.id } });
+    expect((await firstWeek())?.firstPlacedAt ?? null).toBeNull();
+    const placed: RoomLayout = { ...converted, pieces: [...converted.pieces, piece('p1', 'plant.cactus', { x: 6, y: 6 })] };
+    expect((await put(headers, body(placed, 4))).status).toBe(200);
+    expect((await firstWeek())!.firstPlacedAt).toBeInstanceOf(Date);
+  });
+
   it('needs a session', async () => {
     expect((await (await api()).put('/me/cosmetics').send({})).status).toBe(401);
   });
@@ -165,6 +180,30 @@ describe('the room lock (spec §2.2, §12 Concurrency)', () => {
     });
     await Promise.all([a, b]);
     expect(order).toEqual(['a in', 'a out', 'b in']);
+  });
+});
+
+describe('PUT /me/cosmetics takes the room lock', () => {
+  it('waits while another transaction holds the lock, and saves once it is released', async () => {
+    const { user, headers } = await me();
+    let release!: () => void;
+    let locked!: () => void;
+    const held = new Promise<void>((r) => { release = r; });
+    const isLocked = new Promise<void>((r) => { locked = r; });
+    const holder = prisma.$transaction(async (tx) => {
+      await lockRoom(tx, user.id);
+      locked();
+      await held;
+    }, { timeout: 10_000 });
+    await isLocked;
+    let done = false;
+    const save = put(headers, body()).then((res) => { done = true; return res; });
+    await new Promise((r) => setTimeout(r, 200));
+    expect(done).toBe(false);
+    release();
+    await holder;
+    const res = await save;
+    expect([done, res.status, res.body.version]).toEqual([true, 200, 1]);
   });
 });
 
