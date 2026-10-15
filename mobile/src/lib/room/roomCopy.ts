@@ -305,6 +305,8 @@ export const ROOM_COPY = {
     tabs: { all: 'All', floor: 'Floor', wall: 'Wall', onTop: 'On top' },
     thisWeek: 'This week',
     sets: { cosyAutumn: 'Cosy autumn', greenCorner: 'Green corner', deskDay: 'Desk day', brightNight: 'Bright night' } as Readonly<Record<string, string>>,
+    /** A set this build doesn't know yet (a newer server's): neutral, never the raw id. */
+    setUnknown: 'Featured',
     setLine: (name: string, n: number) => `${name} set · ${n} pieces · this week`,
     setSpoken: (name: string, n: number) => `${name} set, ${n} pieces, this week`,
     seeSet: 'See the set',
