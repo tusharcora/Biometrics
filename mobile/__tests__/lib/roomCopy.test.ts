@@ -50,7 +50,7 @@ it('never prices anything in money: no currency, no real-money or ad copy (spec 
     C.dated('Mon', 9, 'Nov'), C.today(7, 12), C.rowSpoken('Coin shop', 'Yesterday', 'minus 150 coins'), C.bubble(20),
     C.landLine('Sleep goal hit', 2), C.landLine('Sleep goal hit', 0),
     F.head(4, 4), F.headSpoken(4, 4), F.reward(10, true), F.reward(-40, false), F.rowSpoken('x', true, -40, false),
-    F.rowSpoken('x', false, 25, true), F.next('600', 14), F.nextSpoken('600', 14),
+    F.rowSpoken('x', false, 25, true), F.next(8, '600', 14), F.nextSpoken(8, '600', 14),
   ];
   expect(composed.slice(0, 3)).toEqual(["New for KIP's room: x and 2 more", "Your badges unlocked 3 things for KIP's room", '13 pieces · y']);
   for (const s of [JSON.stringify(ROOM_COPY), ...composed]) {
@@ -67,7 +67,11 @@ it('tells how coins arrive, and that nothing is sold for money (spec §5.4, §6.
 it('the first-week list reads its rows and lines aloud without "·" or "−" (spec §11.2)', () => {
   const F = ROOM_COPY.firstWeek;
   expect([F.reward(10, true), F.reward(5, false), F.reward(-40, false)]).toEqual(['+10 bonus', '+5', '−40']);
-  for (const s of [F.headSpoken(4, 4), F.rowSpoken('x', true, -40, false), F.rowSpoken('x', false, 25, true), F.nextSpoken('600', 14)]) {
-    expect(s).not.toMatch(/·|−/);
+  // The next size comes from the list's next tier, never a fixed 8 × 8 (ruling T14-FIX).
+  expect(F.next(9, '1,500', 0)).toBe('Next: 9 × 9 · 1,500 coins and a 0-day check-in streak. See the next size in Room sizes.');
+  expect(F.nextSpoken(9, '1,500', 0)).toBe('Next: 9 by 9, 1,500 coins and a 0-day check-in streak. See the next size in Room sizes.');
+  expect(F.headSpoken(4, 4)).toBe('Day 4 of 7, 4 of 7 done');
+  for (const s of [F.headSpoken(4, 4), F.rowSpoken('x', true, -40, false), F.rowSpoken('x', false, 25, true), F.nextSpoken(8, '600', 14)]) {
+    expect(s).not.toMatch(/·|−|×/);
   }
 });

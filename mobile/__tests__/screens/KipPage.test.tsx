@@ -31,6 +31,8 @@ afterEach(() => {
   jest.useRealTimers();
   // The coins store is a module singleton: a wallet left loaded would leak into the next test.
   resetCoins();
+  // Back to the harness's closed first-week list, so an open one never leaks into the next test.
+  (fetchFirstWeek as jest.Mock).mockResolvedValue({ open: false });
 });
 
 describe('the KIP page (W7)', () => {
@@ -59,7 +61,6 @@ describe('the KIP page (W7)', () => {
     });
     const utils = await openChat();
     expect(utils.getByTestId('kip-room-card')).toContainElement(utils.getByTestId('first-week'));
-    (fetchFirstWeek as jest.Mock).mockResolvedValue({ open: false });
   });
 
   it('shows the wallet in the header once the coins have loaded; it opens the coin history (spec §6.7, C6)', async () => {

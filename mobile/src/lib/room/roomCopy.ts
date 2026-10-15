@@ -400,7 +400,8 @@ export const ROOM_COPY = {
   firstWeek: {
     title: 'First week',
     head: (day: number, done: number) => `Day ${day} of 7 · ${done} of 7 done`,
-    headSpoken: (day: number, done: number) => `First week, day ${day} of 7, ${done} of 7 done`,
+    /** The section label above already says "First week", so it is spoken once (ruling T14-FIX). */
+    headSpoken: (day: number, done: number) => `Day ${day} of 7, ${done} of 7 done`,
     tasks: {
       checkin: 'First check-in', place: 'Place your first piece', sleep: 'Hit your sleep goal', fern: 'Get a fern in the coin shop',
       cheer: "Cheer a buddy's room", recap: 'Read your first weekly recap', streak7: '7 check-ins in a row',
@@ -408,8 +409,9 @@ export const ROOM_COPY = {
     reward: (n: number, bonus: boolean) => `${n < 0 ? `−${-n}` : `+${n}`}${bonus ? ' bonus' : ''}`,
     rowSpoken: (task: string, done: boolean, n: number, bonus: boolean) =>
       `${task}, ${done ? 'done' : 'not yet'}, ${n < 0 ? `costs ${-n} coins` : `plus ${n} coins${bonus ? ' bonus' : ''}`}`,
-    next: (coins: string, streak: number) => `Next: 8 × 8 · ${coins} coins and a ${streak}-day check-in streak. See the next size in Room sizes.`,
-    nextSpoken: (coins: string, streak: number) => `Next: 8 by 8, ${coins} coins and a ${streak}-day check-in streak. See the next size in Room sizes.`,
+    /** `n` is the next size's side (TIERS[next.tier].n), drawn "8 × 8" and read "8 by 8". */
+    next: (n: number, coins: string, streak: number) => `Next: ${n} × ${n} · ${coins} coins and a ${streak}-day check-in streak. See the next size in Room sizes.`,
+    nextSpoken: (n: number, coins: string, streak: number) => `Next: ${n} by ${n}, ${coins} coins and a ${streak}-day check-in streak. See the next size in Room sizes.`,
     done: '✓',
     notDone: '○',
     shop: 'Coin shop',

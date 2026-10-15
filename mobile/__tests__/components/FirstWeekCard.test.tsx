@@ -33,7 +33,9 @@ it('shows nothing until the list is read, and nothing once it is gone (spec §11
 
 it('shows the day, what is done, each row\'s reward (the two bonuses marked), and the next size (C7)', async () => {
   const s = await card(OPEN);
-  expect(s.getByText('Day 4 of 7 · 4 of 7 done').props.accessibilityLabel).toBe('First week, day 4 of 7, 4 of 7 done');
+  // The section label already says "First week": the head line doesn't say it again (ruling T14-FIX).
+  expect(s.getByText('First week')).toBeTruthy();
+  expect(s.getByText('Day 4 of 7 · 4 of 7 done').props.accessibilityLabel).toBe('Day 4 of 7, 4 of 7 done');
   expect(s.getByTestId('first-week-place')).toHaveTextContent(/Place your first piece\+10 bonus/);
   expect(s.getByTestId('first-week-fern')).toHaveTextContent(/Get a fern in the coin shop−40/);
   expect(s.getByTestId('first-week-streak7').props.accessibilityLabel).toBe('7 check-ins in a row, not yet, plus 25 coins bonus');

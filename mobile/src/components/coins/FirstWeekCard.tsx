@@ -7,6 +7,7 @@ import { Card } from '../ui/card';
 import { SectionLabel } from '../ui/section-label';
 import { Text } from '../ui/text';
 import { useFirstWeek } from '../../lib/coins/coinsStore';
+import { TIERS } from '../../lib/room/iso/geometry';
 import { ROOM_COPY, coinCount } from '../../lib/room/roomCopy';
 
 const F = ROOM_COPY.firstWeek;
@@ -21,6 +22,7 @@ export function FirstWeekCard() {
   const navigation = useNavigation<any>();
   if (!week || !week.open) return null;
   const coins = coinCount(week.next.coins);
+  const n = TIERS[week.next.tier].n;
   return (
     <Card testID="first-week" className="gap-2 p-3">
       <SectionLabel>{F.title}</SectionLabel>
@@ -40,8 +42,8 @@ export function FirstWeekCard() {
           <Text className="text-caption tabular-nums">{F.reward(t.reward, BONUS.has(t.key))}</Text>
         </View>
       ))}
-      <Text accessibilityLabel={F.nextSpoken(coins, week.next.streak)} className="text-caption text-muted-foreground">
-        {F.next(coins, week.next.streak)}
+      <Text accessibilityLabel={F.nextSpoken(n, coins, week.next.streak)} className="text-caption text-muted-foreground">
+        {F.next(n, coins, week.next.streak)}
       </Text>
       <View className="flex-row gap-2">
         <Button testID="first-week-shop" variant="outline" className="h-[44px] flex-1" onPress={() => navigation.navigate('CoinShop')}>
