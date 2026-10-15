@@ -4,10 +4,10 @@ import { connection } from '../../src/sync/queue';
 import { migrateTestDb } from '../setupTestDb';
 import { api } from '../buddies/helpers';
 import { localCivilDateOrUtc, utcMidnightToCivilDate } from '../../src/biometrics/civilDate';
-import { EMPTY_WORN } from '../../src/cosmetics/catalogue';
-import { bonusEarns, checkInRun, ensureStartedOn } from '../../src/coins/firstWeek';
+import { EMPTY_WORN, PRICES } from '../../src/cosmetics/catalogue';
+import { FIRST_WEEK_BONUS, TASK_REWARDS, bonusEarns, checkInRun, ensureStartedOn, firstWeekEarns, readFirstWeek } from '../../src/coins/firstWeek';
 import { applyCoinEvents } from '../../src/coins/ledger';
-import { coinsConfig, earnCoins } from '../../src/coins/sources';
+import { EARN_AMOUNTS, coinsConfig, earnCoins } from '../../src/coins/sources';
 import { habitDayFor } from '../../src/habits/habitDay';
 import { shiftDate } from '../../src/scoring/dates';
 import { day } from '../cosmetics/helpers';
@@ -53,6 +53,13 @@ describe('the bonuses (pure)', () => {
     expect(bonusEarns({ ...base, firstPlacedOn: '2026-11-08' })).toEqual([]);
     expect(bonusEarns({ ...base, firstPlacedOn: null, run: 7 })).toEqual([streak]);
     expect(bonusEarns({ ...base, today: '2026-11-08', firstPlacedOn: null, run: 9 })).toEqual([]);
+  });
+
+  it("the rows' rewards are the earn amounts, the two bonuses and the fern's price, so the literals cannot drift", () => {
+    expect(TASK_REWARDS).toEqual({
+      checkin: EARN_AMOUNTS.checkin, place: FIRST_WEEK_BONUS.place, sleep: EARN_AMOUNTS.sleep_goal, fern: -PRICES['plant.fern']!,
+      cheer: EARN_AMOUNTS.cheer, recap: EARN_AMOUNTS.recap, streak7: FIRST_WEEK_BONUS.streak7,
+    });
   });
 });
 
@@ -100,7 +107,53 @@ describe('day 1 (ruling 21, narrowed by PF-F3)', () => {
   });
 });
 
+describe('the day 7 boundary is the local midnight, not the UTC one (T8-FIX)', () => {
+  // Pacific/Auckland is UTC+13 in November: 2026-11-08 00:00 local is 2026-11-07T11:00Z, still day 7 in UTC.
+  const BEFORE_MIDNIGHT = new Date('2026-11-07T10:59:00.000Z');
+  const AFTER_MIDNIGHT = new Date('2026-11-07T11:01:00.000Z');
+  async function aucklandWeek(firstPlacedAt: Date | null = null) {
+    const { user } = await coinUser({ timezone: 'Pacific/Auckland' });
+    await prisma.roomFirstWeek.create({ data: { userId: user.id, startedOn: day('2026-11-01'), firstPlacedAt } });
+    for (let k = 1; k <= 7; k++) await prisma.habitCheckIn.create({ data: { userId: user.id, habitDay: day(`2026-11-0${k}`), onTime: true } });
+    return user.id;
+  }
+  const keys = (earns: Array<{ sourceKey: string }>) => earns.map((e) => e.sourceKey);
+
+  it('closes the list and stops the streak bonus at the local midnight ending day 7', async () => {
+    const userId = await aucklandWeek();
+    expect(await readFirstWeek(userId, BEFORE_MIDNIGHT, LAUNCH)).toMatchObject({ open: true, day: 7 });
+    expect(keys(await firstWeekEarns(userId, BEFORE_MIDNIGHT, LAUNCH))).toEqual(['firstweek:streak7']);
+    expect(await readFirstWeek(userId, AFTER_MIDNIGHT, LAUNCH)).toEqual({ open: false });
+    expect(await firstWeekEarns(userId, AFTER_MIDNIGHT, LAUNCH)).toEqual([]);
+  });
+
+  it('a placement just after that midnight is day 8 and pays nothing, though its UTC date is day 7', async () => {
+    const userId = await aucklandWeek(new Date('2026-11-07T11:30:00.000Z'));
+    expect(keys(await firstWeekEarns(userId, new Date('2026-11-07T12:00:00.000Z'), LAUNCH))).toEqual([]);
+  });
+
+  it('a placement late on local day 7 pays +10 though its UTC date is day 8 (a zone behind UTC)', async () => {
+    // Auckland is ahead of UTC, so its local day 7 is never UTC day 8; Honolulu (UTC-10) shows that side.
+    const { user } = await coinUser({ timezone: 'Pacific/Honolulu' });
+    await prisma.roomFirstWeek.create({ data: { userId: user.id, startedOn: day('2026-11-01'), firstPlacedAt: new Date('2026-11-08T06:00:00.000Z') } });
+    expect(keys(await firstWeekEarns(user.id, new Date('2026-11-08T06:30:00.000Z'), LAUNCH))).toEqual(['firstweek:place']);
+    expect(keys(await firstWeekEarns(user.id, new Date('2026-11-10T06:30:00.000Z'), LAUNCH))).toEqual(['firstweek:place']);
+  });
+});
+
 describe('GET /me/firstweek (spec §11.2, §12)', () => {
+  it('a 0-coin row written at the full cap still ticks its task', async () => {
+    const { user, headers } = await coinUser();
+    const today = localCivilDateOrUtc(new Date(), 'UTC');
+    await applyCoinEvents(user.id, [
+      earn('sleep_goal', 'sleep_goal:a', 20, today), earn('sleep_goal', 'sleep_goal:b', 20, today),
+      earn('steps', `steps:${today}`, 15, today), earn('checkin', `checkin:${today}`, 5, today),
+    ], new Date());
+    await applyCoinEvents(user.id, [earn('recap', 'recap:capped', 10, today)], new Date());
+    expect((await rowsOf(user.id)).find((r) => r.sourceKey === 'recap:capped')?.amount).toBe(0);
+    expect(done(await list(headers))).toEqual(['checkin', 'recap', 'sleep']);
+  });
+
   it('day 1: seven rows, nothing done, the next size teased, private no-store', async () => {
     const { headers } = await coinUser();
     const res = await (await api()).get('/me/firstweek').set(headers);

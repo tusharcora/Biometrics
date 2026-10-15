@@ -17,7 +17,8 @@ export const FIRST_WEEK_DAYS = 7;
 export const FIRST_WEEK_BONUS = { place: 10, streak7: 25 } as const;
 export const FIRST_WEEK_TASKS = ['checkin', 'place', 'sleep', 'fern', 'cheer', 'recap', 'streak7'] as const;
 export type FirstWeekTask = (typeof FIRST_WEEK_TASKS)[number];
-/** What each row shows (C7): the normal earn, the two bonuses, and the fern's price as a spend. */
+/** What each row shows (C7): the normal earn, the two bonuses, and the fern's price as a spend. Literals, as the plan
+ * gives them (sources.ts imports this file); a test pins them to EARN_AMOUNTS, FIRST_WEEK_BONUS and PRICES. */
 export const TASK_REWARDS: Readonly<Record<FirstWeekTask, number>> = { checkin: 5, place: 10, sleep: 20, fern: -40, cheer: 2, recap: 10, streak7: 25 };
 
 export function lastDay(startedOn: string): string {
@@ -45,21 +46,30 @@ export function bonusEarns(f: BonusFacts): CoinEarn[] {
   return out;
 }
 
-interface Known { startedOn: string | null; signUpDay: string | null; timezone: string }
+interface Known { startedOn: string | null; signUpDay: string | null; timezone: string; firstPlacedAt: Date | null }
 
-/** The stored day 1, and the local sign-up date when the account was made at or after the launch (its day 1 even
- * before it is written). Null fields for an unknown user. */
+/** The stored day 1, the local sign-up date when the account was made at or after the launch (its day 1 even before
+ * it is written), the zone and the first placement. Null for an unknown user. */
 async function knownStart(userId: string, launchedAt: Date): Promise<Known | null> {
   const [user, row] = await Promise.all([
     prisma.user.findUnique({ where: { id: userId }, select: { timezone: true, createdAt: true } }),
-    prisma.roomFirstWeek.findUnique({ where: { userId }, select: { startedOn: true } }),
+    prisma.roomFirstWeek.findUnique({ where: { userId }, select: { startedOn: true, firstPlacedAt: true } }),
   ]);
   if (!user) return null;
   return {
     startedOn: row?.startedOn ? utcMidnightToCivilDate(row.startedOn) : null,
     signUpDay: user.createdAt >= launchedAt ? localCivilDateOrUtc(user.createdAt, user.timezone) : null,
     timezone: user.timezone,
+    firstPlacedAt: row?.firstPlacedAt ?? null,
   };
+}
+
+/** Day 1 as far as a reader knows it, without writing it (PF-F3), with the facts the readers share. */
+async function readStart(userId: string, now: Date, launchedAt: Date): Promise<(Known & { startedOn: string }) | null> {
+  if (now < launchedAt) return null;
+  const known = await knownStart(userId, launchedAt);
+  const startedOn = known?.startedOn ?? known?.signUpDay;
+  return known && startedOn ? { ...known, startedOn } : null;
 }
 
 /** Day 1 (ruling 21), set once by a look at the list: the local sign-up date for an account made at or after the
@@ -79,23 +89,18 @@ export async function ensureStartedOn(userId: string, now: Date, launchedAt: Dat
 
 /** The bonuses this run may pay (the ledger drops the ones already paid). Reads day 1, never writes it (PF-F3). */
 export async function firstWeekEarns(userId: string, now: Date, launchedAt: Date): Promise<CoinEarn[]> {
-  if (now < launchedAt) return [];
-  const known = await knownStart(userId, launchedAt);
-  const startedOn = known?.startedOn ?? known?.signUpDay;
-  if (!known || !startedOn) return [];
-  const tz = known.timezone;
+  const start = await readStart(userId, now, launchedAt);
+  if (!start) return [];
+  const tz = start.timezone;
   const habitToday = habitDayForOrUtc(now, tz);
-  const [row, checkIns] = await Promise.all([
-    prisma.roomFirstWeek.findUnique({ where: { userId }, select: { firstPlacedAt: true } }),
-    prisma.habitCheckIn.findMany({
-      where: { userId, onTime: true, habitDay: { gte: civilDateToUtcMidnight(shiftDate(habitToday, -2 * FIRST_WEEK_DAYS)) } },
-      select: { habitDay: true },
-    }),
-  ]);
+  const checkIns = await prisma.habitCheckIn.findMany({
+    where: { userId, onTime: true, habitDay: { gte: civilDateToUtcMidnight(shiftDate(habitToday, -2 * FIRST_WEEK_DAYS)) } },
+    select: { habitDay: true },
+  });
   return bonusEarns({
-    startedOn,
+    startedOn: start.startedOn,
     today: localCivilDateOrUtc(now, tz),
-    firstPlacedOn: row?.firstPlacedAt ? localCivilDateOrUtc(row.firstPlacedAt, tz) : null,
+    firstPlacedOn: start.firstPlacedAt ? localCivilDateOrUtc(start.firstPlacedAt, tz) : null,
     run: checkInRun(new Set(checkIns.map((c) => utcMidnightToCivilDate(c.habitDay))), habitToday),
   });
 }
@@ -104,21 +109,21 @@ export type FirstWeekDTO =
   | { open: false }
   | { open: true; day: number; done: number; tasks: Array<{ key: FirstWeekTask; done: boolean; reward: number }>; next: { tier: 2; coins: number; streak: number } };
 
+/** The list as stored. It reads only: GET /me/firstweek runs ensureStartedOn (and the earn) before it. */
 export async function readFirstWeek(userId: string, now: Date, launchedAt: Date): Promise<FirstWeekDTO> {
-  const startedOn = await ensureStartedOn(userId, now, launchedAt);
-  if (!startedOn) return { open: false };
-  const user = await prisma.user.findUniqueOrThrow({ where: { id: userId }, select: { timezone: true } });
-  const today = localCivilDateOrUtc(now, user.timezone);
+  const start = await readStart(userId, now, launchedAt);
+  if (!start) return { open: false };
+  const { startedOn } = start;
+  const today = localCivilDateOrUtc(now, start.timezone);
   if (today > lastDay(startedOn)) return { open: false };
-  const [kinds, row, fern, streak] = await Promise.all([
+  const [kinds, fern, streak] = await Promise.all([
     prisma.coinEvent.findMany({ where: { userId, kind: { in: ['checkin', 'sleep_goal', 'cheer_given', 'recap'] } }, distinct: ['kind'], select: { kind: true } }),
-    prisma.roomFirstWeek.findUnique({ where: { userId }, select: { firstPlacedAt: true } }),
     prisma.itemGrant.findFirst({ where: { userId, itemId: 'plant.fern', sourceKey: { startsWith: 'buy:' } }, select: { id: true } }),
     prisma.coinEvent.findUnique({ where: { userId_sourceKey: { userId, sourceKey: 'firstweek:streak7' } }, select: { id: true } }),
   ]);
   const has = new Set<string>(kinds.map((k) => k.kind));
   const ticked: Record<FirstWeekTask, boolean> = {
-    checkin: has.has('checkin'), place: !!row?.firstPlacedAt, sleep: has.has('sleep_goal'), fern: !!fern,
+    checkin: has.has('checkin'), place: !!start.firstPlacedAt, sleep: has.has('sleep_goal'), fern: !!fern,
     cheer: has.has('cheer_given'), recap: has.has('recap'), streak7: !!streak,
   };
   const tasks = FIRST_WEEK_TASKS.map((k) => ({ key: k, done: ticked[k], reward: TASK_REWARDS[k] }));
