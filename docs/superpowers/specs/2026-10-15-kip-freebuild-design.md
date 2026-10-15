@@ -1,6 +1,6 @@
 # KIP's free-build room
 
-Date: 2026-10-15 · Branch: `feature/kip-freebuild` (from `feature/kip-room` 086f772) · Status: design chosen by the owner on the free-build canvas; awaiting the owner's review of this spec
+Date: 2026-10-15 · Branch: `feature/kip-freebuild` (from `feature/kip-room` 086f772) · Status: spec reviewed (pass with fixes, applied); the owner accepted every open-question default on 2026-10-15
 
 The third room spec. It needs `2026-10-14-kip-coach-design.md` (Spec A: the W7 page, the poses, the room engine in
 `mobile/src/lib/room/`, `RoomView`) and `2026-10-14-kip-room-design.md` (Spec B: the catalogue, unlock rows, the
@@ -47,6 +47,27 @@ last). The disagreements are listed where they matter (§6, §7, §11).
     Nothing cosmetic reaches the model. Effects never give health advice.
   - Civil dates come from the existing helpers (`localCivilDateOrUtc`, `todayFor`, the habit-day boundary), never
     hand-rolled.
+
+Defaults accepted at spec review (2026-10-15):
+
+- **Coin amounts and prices** are C8's as written (sleep 20, steps 15, check-in 5, recap 10, cheer 2, entry 30, cap
+  60; pieces 25–200, 8 × 8 at 600, loft at 1,500), changed only through the catalogue after four weeks of real
+  weekly earnings (§6.2, §6.4).
+- **Challenge judging:** the most cheers in your own circle, ties all win, no ranking under 3 entries, results on the
+  first read after Monday 08:00 UTC (§10.4).
+- **Radio sound:** `expo-audio` is added in P3 with one bundled 20-second loop (under 300 KB), off until turned on
+  (§8.2).
+- **First-week total** follows C7's rows (two bonuses, +10 and +25, outside the cap), not C8's "+80" (§11.2).
+- **Release timing:** Spec B (PRs #65, #66) merges but reaches users only together with P1, so the slot editor never
+  ships (§2.4).
+
+Controller rulings at spec review (2026-10-15):
+
+- **Room visits are opt-in:** a new switch in the existing buddy sharing set, **off by default** (§10.1). A visit shows
+  the room's size only, never a tier name, badge or anything health-derived; piece sheets on a visit show the
+  catalogue's generic rule, never "they earned …".
+- **Gifts and deleted accounts:** a gift sent before the gifter deletes their account is still delivered (the piece
+  comes from the catalogue, not the gifter's data). Unopened gifts **to** a deleted user are dropped (§10.3).
 
 ## 1. What changes from Spec B, and what stays
 
@@ -109,7 +130,7 @@ type IsoSpec = {
 
 type CosmeticItem = /* Spec B fields */ & {
   iso?: IsoSpec;
-  grants?: number;               // copies an unlock gives; default 1
+  grants?: number;               // copies an unlock gives; default 1; frozen once shipped (snapshot test)
   price?: number;                // coins; absent = not in the shop (§6.4); P2
   shop?: 'always' | { week: string }; // a weekly piece is only offered in that ISO week; P2
   tags?: string[];               // 'warm', 'plant', 'glow'… for challenge briefs (§10.4); P4
@@ -128,9 +149,11 @@ type CosmeticItem = /* Spec B fields */ & {
 - **New structural pieces in P1** (all `starter`, release 3):
   - `shelf.plank`: a wall plank with 2 spots, so the old shelf slot's items have somewhere to stand (§2.4);
   - `lamp.welcome`: C7's welcome lantern, glows at night; owned by everyone from P1, so it is a starter item;
-  - the four Spec B desk items (`desk.monitor`, `desk.laptop`, `desk.crt`, `desk.dual`) gain `kipDesk`, a 3 × 2
-    footprint (desk and chair), 3 spots and a `seat`. A desk piece draws the desk, the chair and its screen, as the
-    slot item does today.
+  - **every item with slot `desk`** gains `kipDesk`, a 3 × 2 footprint (desk and chair), 3 spots and a `seat`:
+    release 1 now (`desk.monitor`, `desk.notebook`, `desk.laptop`, and Cottage's `set.cottage.desk`), release 2
+    (`desk.dual`, `desk.crt`, `desk.typewriter` and the B2 set desks, the Japanese `low` table included) when B2
+    ships. A catalogue test fails if any `desk` item lacks them. A desk piece draws the desk, the chair and its
+    screen, as the slot item does today.
 
 ### 2.2 Ownership becomes counts
 
@@ -161,6 +184,11 @@ model ItemGrant {
 
 - A count never drops below 1 for an item you have ever owned except by your own gift, and a gift can only send a
   spare (§10.3), so "items are never taken away" still holds.
+- **The race between a save and a gift:** `PUT /me/cosmetics` and gift-send both take the same per-user
+  `pg_advisory_xact_lock`, and gift-send re-checks the spare against the **stored** layout inside it, so a save can
+  never place a copy that a gift has just sent. As a read-time backstop, if a stored layout ever places more copies
+  of an item than are owned, the excess placements are dropped at read in a fixed order (highest instance id first)
+  and their children return to the inventory; the stored row is not rewritten until the next save.
 - **Never removed:** Spec B's source-grep guard extends to `itemGrant.delete*`, `coinEvent.delete*` and raw SQL
   `DELETE` on the new tables, outside `users/deletion.ts` and the fixture purge.
 
@@ -202,9 +230,17 @@ type RoomLayout = {
 ### 2.4 Migration from slots
 
 Migration `20261016120000_freebuild` adds `layout` and `tier`. Conversion is a pure function,
-`backend/src/room/convert.ts` `layoutFromSlots(room)`, used two ways: lazily by `GET /me/cosmetics` when `layout` is
-null (it writes the result with the version check, as a save would), and by a one-off idempotent script
-`backend/scripts/convert-room-layouts.ts` that converts every row. Either order is safe.
+`backend/src/room/convert.ts` `layoutFromSlots(room)`. Its input is Spec B's **sanitised** room, `readRoom(loadout.room,
+owned)` (`cosmetics/loadout.ts`), never the raw JSON, so an unowned, unshipped or wrong-slot id has already become the
+starter piece. It is used two ways:
+
+- **lazily** by `GET /me/cosmetics` when `layout` is null: it writes the result with
+  `updateMany({ where: { userId, layout: null, version } })`, without bumping `version`. A count of 0 means the
+  script or another GET got there first: the GET re-reads and returns that row. It never errors;
+- by a one-off idempotent script, `backend/scripts/convert-room-layouts.ts`, with the same conditional write.
+
+Either order is safe. **P2 drops `room`:** P2's migration first runs the conversion for every row whose `layout` is
+still null, and refuses to drop the column if any remain.
 
 - **Every existing room converts to an equivalent iso room.** Each slot maps to a fixed position taken from
   `isox.py`'s `standard` room:
@@ -215,8 +251,8 @@ null (it writes the result with the version check, as a save would), and by a on
 | desk | the desk piece (its `kipDesk` item) at tile (2, 0), facing L |
 | desk_item | on the desk, spot 2 |
 | lamp | on the desk, spot 0 |
-| shelf | a `shelf.plank` on the right wall above the desk, the shelf item on spot 0 |
-| art | right wall, half-tile 2 (where `standard` hangs the poster) |
+| shelf | a `shelf.plank` on `wallR` at half-tile 6, step 10 (half-tiles 6–9, 40 cells up, above the desk, as `standard`'s plank at i 3.0, z 38), the shelf item on spot 0 |
+| art | `wallR` at half-tile 2 (where `standard` hangs the poster); every release-1 art piece is at most 4 half-tiles wide, so it ends at or before the plank's half-tile 6 (the conversion test checks each one) |
 | plant | floor tile (0, 0) |
 | corner | floor tile (5, 0) (the largest corner footprint fits there) |
 | rug | flat, tiles (1, 2) to (4, 5) |
@@ -227,13 +263,15 @@ null (it writes the result with the version check, as a save would), and by a on
 - **Worn is untouched.** `room` is kept read-only for one release (GET still returns a slot `room` derived from the
   layout, for any dev build on Spec B) and dropped in P2's migration.
 - A slot-shaped `PUT /me/cosmetics` (a `room` key, no `layout`) gets **400 `update_app`**. Spec B has not shipped to
-  users (draft PR #66), so only dev builds can send one. **Decision (default):** Spec B and P1 reach users in the same
+  users (draft PR #66), so only dev builds can send one. **Accepted default (§0):** Spec B and P1 reach users in the same
   app release, so no user ever sees the slot editor.
 
 ## 3. The isometric engine
 
-`mobile/src/lib/room/iso/`, pure, no React, ported from `iso.py` and `isox.py`. The slot engine's `draw.ts`,
-`slots.ts` and slot anchors are deleted in P1. `paint.ts` (`R`, `E`, `poly`, `gradV`, `shade`), `weather.ts` and the
+`mobile/src/lib/room/iso/`, pure, no React, ported from `iso.py` and `isox.py`. The slot engine's `draw.ts` is
+replaced in P1. `slots.ts` has many importers (`WORN_SLOTS` and `WornSlot` are used by `api/buddies.ts`, worn art and
+the decorate code), so its slot ids and types move to `lib/room/catalogue.ts` and the importers are updated; only
+`SLOT_ANCHORS` and `DRAW_ORDER` are deleted. `paint.ts` (`R`, `E`, `poly`, `gradV`, `shade`), `weather.ts` and the
 item art helpers in `items/shared.ts` are kept.
 
 ### 3.1 The grid
@@ -255,11 +293,15 @@ item art helpers in `items/shared.ts` are kept.
 - A floor piece covers `foot` tiles from its back corner `(x, y)`; turned, `w` and `d` swap. It must lie inside
   `0 ≤ i < n`, `0 ≤ j < m`.
 - **Blocking:** floor footprints never overlap, except `flat` pieces (rugs), which may sit under anything but never
-  overlap another rug. KIP's desk is a normal floor piece; its `seat` tile is reserved for KIP and blocks other pieces.
+  overlap another rug. KIP's desk is a normal floor piece. Its `seat` (the chair tile) is **inside** its 3 × 2
+  footprint, on the front row; the tile in front of the seat, the desk's **exit tile**, is reserved too (no other piece
+  may cover it, `bad_place: seat`), so KIP can always walk out (§9.2).
 - **Wall pieces** cover `wall[0]` half tiles along and `wall[1]` steps up, from `(x, y)` on `wallL` or `wallR`. They
   stay inside the wall, never overlap each other, and never cover a window opening.
 - **Windows** are part of the shell, not pieces: one on the left wall (tiles 1.6–3.6 along `j`, with a sill), as
-  `isox.py`'s `shell`, and a second on the right wall in the loft, 2.6 tiles from its far end (C2). The glass always shows today's Recovery weather (Spec A §6). The `window` style draws its frame and
+  `isox.py`'s `shell`, and a second on the **right** wall in the loft at `i = n − 2.6` (`isox.py` `window2`), about
+  half-tiles 12.8–16.8 on a 9 × 9 room (C2). That span is wall an 8 × 8 room can use, so growing to the loft stores
+  any wall piece it would cover (§7). The glass always shows today's Recovery weather (Spec A §6). The `window` style draws its frame and
   decor around every window.
 
 ### 3.3 Stacking
@@ -315,8 +357,9 @@ item art helpers in `items/shared.ts` are kept.
   pieces. With no movers on screen, a frame draws that one picture, KIP, light, emissive and the current loop frame.
 - **With movers**, the frame draws the cached piece pictures in sorted order with the movers inserted at their depth.
   This is a list of picture draws, not a rebuild.
-- **Budget** (release build, iPhone 12 / Pixel 6 class), measured by the dev perf test across a full 9 × 9 room of
-  90 pieces at night:
+- **Budget** (release build, iPhone 12 / Pixel 6 class), for a full 9 × 9 room of 90 pieces at night. These are
+  **on-device targets checked by hand** in each plan's simulator and device pass; the Jest perf test is a measurement,
+  not a gate (Spec B ruling P32):
   - building every piece picture cold: **under 8 ms**; rebuilding the static picture after a drop: under 8 ms;
   - composing one frame with two movers: **under 2 ms**;
   - dragging runs at 60 fps: the held piece is a separate ghost layer; the static picture is rebuilt once when you
@@ -348,9 +391,11 @@ item art helpers in `items/shared.ts` are kept.
   - the **21 release-1 styles** (9 wallpapers, 5 floors, 7 window styles);
   - `shelf.plank` and `lamp.welcome`;
   - the Cottage set, re-composed as an iso layout (§5.5).
-- **Later batches:** P2 the shop pieces from F6/C1 (radio, floor lamp, lava lamp, gnome, duck, cone, pumpkin,
-  candle, neon heart, cat bed, monstera, snake plant…), P3 the effect states (§8), P4 the challenge pieces and
-  trophies. Spec B's B2 (release 2) is drawn isometric when it ships; it is never drawn front-on.
+- **Later batches:** P2 the shop's own new pieces from F6/C1 (`item.radio`, `corner.gnome`, `corner.cone`,
+  `corner.pumpkin`, `item.candle`, `art.neonheart`), P3 the effect pieces and states (`pet.tabby`, `shelf.awards`,
+  §8), P4 the challenge pieces and trophies. Pieces the boards price that already exist with an unlock rule (floor
+  lamp, cat bed, monstera, snake plant, and B2's lava lamp, duck and cat) are **not** re-made as shop pieces: they
+  appear in the shop locked with their rule, and as extra copies once earned (§6.5). Spec B's B2 (release 2) is drawn isometric when it ships; it is never drawn front-on.
 - Worn items are unchanged: KIP's sprite is front-on everywhere.
 
 ## 5. Editing (F1 + F4)
@@ -394,6 +439,10 @@ item art helpers in `items/shared.ts` are kept.
     fit.
   - **Another** places one more copy from the inventory on the nearest free valid tile or spot; greyed at ×0.
   - **Store** sends it (and anything on it) back to the inventory. Nothing is ever deleted.
+  - For the **desk** (`kipDesk`), Store and Another are greyed: the room always has exactly one desk. Swapping desks
+    is the drawer's **Replace desk** on a desk tile: the new desk takes the old one's back corner and facing if it
+    fits (otherwise "Doesn't fit here"); children keep their spot index where it exists, the rest go to the
+    inventory; one undo step.
 - **Undo / Redo** go back and forward **20 steps** in this session (F4). Every drag, toolbar action, style change and
   set apply is one step.
 - **Room full:** at the tier's cap the drawer's Place is disabled and a dragged-in piece shows "Room is full". A card
@@ -451,7 +500,7 @@ The view opens centred on KIP's desk. No pinch zoom in v1 (zoom breaks whole-poi
   sleep is later revised below the goal keeps its coins.
 - **Nobody sees anyone else's balance.** Rooms are shown off; wallets are not.
 
-### 6.2 Sources and amounts (C8, all defaults; §18)
+### 6.2 Sources and amounts (C8, accepted defaults, §0)
 
 | Source | Pays | When | Source record (idempotency key) | Cap day |
 | --- | --- | --- | --- | --- |
@@ -459,16 +508,23 @@ The view opens centred on KIP's desk. No pinch zoom in v1 (zoom breaks whole-poi
 | Step goal hit | 15 | once a day | `steps:{localDate}`: a new `StepGoalEvent` row (`recordStepGoal` returned true) | that date |
 | Check-in | 5 | once a day | `checkin:{habitDay}`: an **on-time** `HabitCheckIn`, the check-in the CHECK_IN badge counts | the habit day |
 | Weekly recap read | 10 | once a week | `recap:{recapId}`: `POST /me/recaps/:id/opened` set `openedAt` on a **WEEK** recap (also fixes Spec B's deferred "MONTH opens" minor) | the open's local date |
-| A cheer given or received | 2 | 5 paid a day, given and received together | `cheer:{roomCheerId}:{given|got}` (§10.2) | the cheer's local date in each person's zone |
+| A cheer given or received | 2 | 5 paid a day, given and received together | `cheer:{roomCheerId}:{given|got}`; an entry cheer `ccheer:{weekId}:{fromId}:{toId}:{given|got}` (§10.2, §10.4) | the cheer's local date in each person's zone |
 | Theme challenge entry | 30 | once a week | `challenge:{weekId}` (§10.4) | outside the cap |
 | First-week list bonuses | 10 + 25 | once ever | `firstweek:{task}` (§11.2) | outside the cap |
 
 - **Daily cap: 60** per civil day, over the capped sources. Health goals pay up to 40 a day, cheers up to 10, the
   recap 10. Today the regular sources add up to exactly 60, so the cap is a guard for future sources; it is still
-  enforced: an earn that would cross it is trimmed to what is left, and an earn with nothing left is not written.
+  enforced: an earn that would cross it is trimmed to what is left, and an earn with nothing left is **written with
+  `amount: 0`**, so its key is used up and the event still counts for plant growth (§8.3) and first-week ticks
+  (§11.2). A cheer past the 5 paid a day is written the same way.
+- **Which day:** an event's `capDay` is its source's own civil date in the table above (a check-in's habit day is a
+  civil date). The history's "Earned today" bar sums today's `capDay`, today being `todayFor(userId, now)`'s civil
+  date, not the 04:00 habit boundary.
 - **Only measured data pays.** Sleep and steps come from the health sync, never from typed input. The check-in is the
   one self-reported source, and it is the smallest.
-- **No backpay.** Nothing before `COINS_LAUNCHED_AT` (set when P2 ships) pays; the first-week list is the welcome.
+- **No backpay.** A source whose civil date (the wake date, the step day, the habit day, the open or cheer date) is
+  before the user's local civil date of `COINS_LAUNCHED_AT` (set when P2 ships) writes nothing, not even a 0 row;
+  the first-week list is the welcome. Plant growth therefore starts counting at P2.
 - **No health values in the ledger.** An event stores its kind, key, amount and civil date, never minutes or steps,
   so neither the history nor any log can show one.
 
@@ -497,8 +553,12 @@ model CoinWallet {
 ```
 
 - **One function writes coins:** `backend/src/coins/ledger.ts` `applyCoinEvents(userId, events)`. In one transaction
-  under a per-user advisory lock (`pg_advisory_xact_lock`), it reads the cap day's capped total, trims, inserts with
-  `createManyAndReturn` + `skipDuplicates`, and adds the inserted amounts to `CoinWallet.balance`. A replayed or
+  under a per-user advisory lock (`pg_advisory_xact_lock`), it first **drops events whose `sourceKey` already
+  exists**, then reads each cap day's capped total and trims what is left in a fixed order (by kind, then key), inserts
+  with `createManyAndReturn` + `skipDuplicates`, and adds the inserted amounts to `CoinWallet.balance`. Filtering
+  before trimming means a replayed event can never use up cap room that a new one needs.
+- **Two-person events** (a cheer pays both sides) take **both users' locks in sorted user-id order** in one
+  transaction, so two people cheering each other at once can't deadlock. A replayed or
   concurrent earn inserts once and pays once. **One payment per health event.**
 - **Earning** is `earnCoins(userId, now)`, built like `grantCosmetics`: it reads the source records of the last 8
   civil days (and the week's recap), builds the events, and calls the ledger. It runs from the hooks (the sync
@@ -575,7 +635,15 @@ model CoinWallet {
   badge costs nothing. Progress reads "9 of 14" from the family's current run, as the badges screen does.
 - **What expands:** one tile row at the front of each side (`n` and `m` grow by one), so every piece keeps its tile
   relative to the back corner and nothing moves; both walls get one tile longer; the cap and the effect slots rise;
-  the loft adds the left-wall window.
+  the loft adds the **right-wall** window.
+- **Growing can cover wall space:** the loft's window sits on right-wall half-tiles an 8 × 8 room may use (§3.2). The
+  expand transaction stores every wall piece it would cover (and anything on it) to the inventory, so a valid room
+  never becomes `bad_place: window`, and the unlock card says so: "The new window needed the wall: 2 pieces went to
+  your inventory".
+- **Expand and the row:** `POST /me/room/expand` upserts the `CosmeticLoadout` row (with the starter or converted
+  layout if there was none) and **always increments `version`** (a first row is created at version 1), because it may
+  move pieces. It returns the full cosmetics body; an open editor rebases its draft onto the new version, dropping
+  the stored wall pieces from the draft too.
 - **Growing is your choice:** when both gates are met, the Room sizes screen's **Grow to 8 × 8** (default `Button`)
   spends the coins (`POST /me/room/expand`). It shows "Needs 240 more coins and 5 more days in a row" until then.
 - **The unlock moment** (C2): the room redraws at the new size with "NEW FLOOR" / "NEW WALL" tags on the new tiles,
@@ -595,22 +663,25 @@ model CoinWallet {
 - **Effect slots:** a room runs at most the tier's effect count (3 / 5 / 8). Placing one more effect piece is blocked
   with "Effects 3 of 3: store one to run another". Plant growth and the plant mood are room-wide rules, not effect
   pieces, so they use no slot.
+- **Rooms saved before P3** may already hold more effect pieces than their slots (a clock and two floor lamps in a
+  starter room). They never fail: the extra ones run **inert** (the first ones by instance id run), and the server
+  rejects a save with `effects_full` only when it **raises** the number of effect pieces above the slots.
 - **Piece card** (F7): tapping an effect piece in view mode (the KIP page's room, or the editor with nothing
   selected) opens a sheet: name, where it goes, how it was earned or its price, its effect line, and any switch (sound), with
   Move and Store.
 
 ### 8.2 The first set (P3)
 
-| Piece | Effect |
+| Piece (id) | Effect |
 | --- | --- |
-| Floor lamp | `light`: a warm pool of light on the floor after dark, drawn after the veil, so the room isn't lost at night |
-| Old radio | `sound`: a quiet lo-fi loop while the room is open; notes float up. **Sound is off until you turn it on** in its card; the switch is remembered on the device |
-| Cat | `wander`: walks the front row, then naps in a cat bed (if placed) after 22:00 local; energy follows steps (§8.3) |
-| Plants (all) | **mood:** with a plant in the room KIP gets one extra smile frame in its idle loop; **growth** (§8.3) |
-| Lava lamp | `light` plus slow purple blobs in its loop |
-| Clock | `clock`: shows your real local time (hour and minute hands, updated each minute) |
-| Duck | `tap`: squeaks (a two-frame squash, plus sound if the radio switch has sound on) when tapped. That's it |
-| Trophy shelf | `awards`: one award piece per badge level you earn (§8.3) |
+| Floor lamp (`corner.floorlamp`, existing, Steady bedtime · II) | `light`: a warm pool of light on the floor after dark, drawn after the veil, so the room isn't lost at night |
+| Old radio (`item.radio`, new in P2, 150 coins) | `sound`: a quiet lo-fi loop while the room is open; notes float up. **Sound is off until you turn it on** in its card; the switch is remembered on the device |
+| Cat (`pet.tabby`, new, 180 coins; B2's `pet.cat` gets the same effect when it ships) | `wander`: walks the front row, then naps in a cat bed (if placed) after 22:00 local; energy follows steps (§8.3) |
+| Plants (every `plant` item; not effect pieces) | **mood:** with a plant in the room KIP gets one extra smile frame in its idle loop; **growth** (§8.3) |
+| Lava lamp (`lamp.lava`, B2) | `light` plus slow purple blobs in its loop; ships with B2, not in P3 |
+| Clock (`art.clock`, existing) | `clock`: shows your real local time (hour and minute hands, updated each minute) |
+| Duck (`item.duck`, B2; ships with B2) | `tap`: squeaks (a two-frame squash, plus sound if the radio switch has sound on) when tapped. That's it |
+| Trophy shelf (`shelf.awards`, new wall piece, starter, P3; the existing `shelf.trophyB` stays plain decor) | `awards`: one award piece per badge level you earn (§8.3) |
 
 ### 8.3 Health-linked visuals (C5)
 
@@ -619,7 +690,7 @@ The room mirrors your data. It never tells you what to do, and nothing breaks: p
 | What | Signal | States |
 | --- | --- | --- |
 | Window | today's Recovery weather (Spec A §6, unchanged) | sun, mostly, cloudy, rain, night, fallback |
-| Plants | **sleep-goal nights**: the count of `sleep_goal` coin events, which only ever grows | stage 1–5, one stage per 7 nights; a new plant shows the room's current stage |
+| Plants | **sleep-goal nights**: the count of `sleep_goal` coin events, including the 0-coin ones written at the cap (§6.2), which only ever grows; nights before coins launched don't count | stage 1–5, one stage per 7 nights; a new plant shows the room's current stage |
 | Cat | today's steps as a band of `STEPS_GOAL`: under 30% naps, 30–99% wanders, at the goal plays | nap, wander, play; always naps after 22:00 |
 | Trophy shelf | your Achievement rows | up to 8 awards, highest levels first |
 
@@ -643,9 +714,9 @@ full-page backdrop behind the thread.
 
 - The card keeps its frame, caption row ("KIP'S ROOM" over "Window shows today's Recovery"), the RECOVERY hot tag,
   **Shrink room**, **Decorate**, the collapse on scroll and the collapsed header (Spec A §3.5, FINAL-ROW 72 pt).
-- **Crop:** the frame's inner height grows from 200 to **240 points**. The crop is a 140 × 120-cell box centred on
-  KIP's desk (where the desk is, since the desk can move), clamped to the room; extra width shows more room. The
-  collapsed thumbnail is 96 × 60 cells at 1 point around KIP.
+- **Crop:** the frame's inner height (`ROOM_FRAME_HEIGHT` in `RoomCard.tsx`) grows from 200 to **240 points**. The
+  crop is a 140 × 120-cell box centred on KIP's desk (where the desk is, since the desk can move), clamped to the
+  room; extra width shows more room. The collapsed thumbnail is 96 × 60 cells at 1 point, and also follows the desk.
 - The speech bubbles, the states table and the accessibility label stay Spec A's; the label becomes "KIP in its room,
   {state}. Window: {weather}".
 - Long-press on the room opens the editor (§5.1).
@@ -655,9 +726,13 @@ full-page backdrop behind the thread.
 ### 9.2 Walking between answers
 
 - **Only while idle** (no turn running, the prompt bar not focused, the screen focused, Reduce Motion off), KIP
-  walks from its seat to an **effect piece's use tile** (the free tile in front of it), does a short use pose, and
-  walks back. Targets: radio (KIP sways, notes), plants (new pose `water`, an arm out with a held can; the arms-only
-  rule holds), the cat (`wave`). One trip every 20 to 40 seconds, never two in a row to the same piece.
+  walks from its seat out through the desk's exit tile to a target's **use tile**, does a short use pose, and walks
+  back. Targets are effect pieces **and plants** (plants are not effect pieces, §8.1, but KIP tends them): the radio
+  (KIP sways, notes), plants (new pose `water`, an arm out with a held can; the arms-only rule holds), the cat
+  (`wave`). One trip every 20 to 40 seconds, never two in a row to the same piece.
+- **Use tiles:** for a floor piece, the free tile in front of its facing side; for a wall piece, the floor tile
+  against that wall under its centre; for an on-top piece, its parent's use tile. Only targets whose use tile is
+  **inside the current crop** (§9.1) are picked, so KIP never walks out of view.
 - **Pathing:** breadth-first search on the floor grid (at most 81 tiles), avoiding footprints, flat pieces allowed.
   No path, no trip. One tile per two loop frames (800 ms).
 - **Stop at once:** focusing the prompt bar, sending, a status change or blurring the screen puts KIP back on the
@@ -668,20 +743,25 @@ full-page backdrop behind the thread.
 
 ### 10.1 Visiting a buddy's room
 
-- **Who:** buddies only, both directions active, neither has blocked the other. A new sharing switch, **"Buddies can
-  visit my room"** (default on), in the existing buddy sharing settings (`buddies/sharing.ts`).
+- **Who:** buddies only, both directions active, neither has blocked the other, and only when the owner has turned on
+  **"Buddies can visit my room"**. It is a sixth key, `room`, in `SHARE_KEYS` (`buddies/sharing.ts`), **off by
+  default**, following that file's model: enabling it needs consent for the current version, it is always read
+  through `effectiveSharing`, and it reads off after any future version bump until re-consent. **Decision:** the
+  switch is added **without** bumping `BUDDY_SHARING_CONSENT_VERSION`; the consent sheet gains one line about rooms (a
+  wording change, as Spec A's Task 14 did). A bump would turn the five health switches off for everyone, and the
+  room is not health data.
 - **Where from:** a buddy's profile and their KIP in Chats (F8: "tap a buddy's KIP on Home or in Chats"). The
   Campfire stays frozen and gets no entry point.
-- **The view** (`BuddyRoom` route, read-only, C4): "{first name}'s room", "8 × 8 · 44 pieces", their KIP in their
+- **The view** (`BuddyRoom` route, read-only, C4): "{first name}'s room", "8 × 8 · 44 pieces" (the size only), their KIP in their
   colour and worn items saying "HI THERE!", "Just looking: you can't move anything". Pan works; nothing can be
   selected or moved.
-- **What a buddy can see:** the layout (styles and placements), the tier, KIP's colour and worn items, and the week's
-  cheer count. **Never:** your balance, inventory, counts, coin history, unlocks, challenge standing outside the
+- **What a buddy can see:** the layout (styles and placements), the room's **size** (tiles), KIP's colour and worn
+  items, and the week's cheer count. **Never:** a tier name, a badge or how the size was earned, your balance, inventory, counts, coin history, unlocks, challenge standing outside the
   challenge screen, or any health-linked state. A visit draws every health-linked effect **neutral**: the window's
   fallback sky, plants at full growth, the cat wandering, the trophy shelf empty. Day or night follows the visitor's
   clock.
-- **"Pieces you don't have":** a row of the pieces in their room you don't own; tapping one shows its price or how
-  it's earned.
+- **"Pieces you don't have":** a row of the pieces in their room you don't own; tapping one shows its price or the
+  catalogue's generic rule ("Steady bedtime · II"), never "they earned …".
 
 ### 10.2 Cheers on rooms
 
@@ -689,7 +769,8 @@ full-page backdrop behind the thread.
   who cheered (their buddies' names in their own room's cheer sheet); a visitor sees only the week's count.
 - **Pays both** (C4): +2 to the giver and +2 to the owner, each counted in that person's **5 paid cheers a day**
   (given and received together). After 5, cheers still count and show, but pay nothing. Gifts never pay.
-- `RoomCheer { id, fromId, toId, localDate, createdAt }`, unique on (`fromId`, `toId`, `localDate`).
+- `RoomCheer { id, fromId, toId, localDate, createdAt }`, unique on (`fromId`, `toId`, `localDate`); both relations
+  `onDelete: Cascade`, like `Sticker` and `BuddyPair`.
 - Room cheers are separate from Spec B's `buddy_cheers` counter (stickers), which is unchanged.
 
 ### 10.3 Gifts (C4)
@@ -702,9 +783,13 @@ full-page backdrop behind the thread.
 - **What they see:** a gift box on their floor (a virtual piece on a free front tile, not a placement). Tapping it
   opens it and the piece goes to their inventory with NEW (`ItemGrant +1, gift_in`).
 - **Limits:** 3 gifts sent a day; buddies only; blocks apply both ways; a muted sender's gift arrives without a notice.
-  An unopened gift is returned to the sender (`gift_back`) if either person blocks the other, the pair ends, or the
-  recipient deletes the account.
-- `Gift { id, fromId, toId, itemId, note, createdAt, openedAt?, returnedAt? }`.
+  An unopened gift is returned to the sender (`gift_back`) if either person blocks the other or the pair ends.
+- **Deleted accounts** (controller ruling, §0): a gift whose **sender** deletes their account is still delivered and
+  can still be opened (`fromId` becomes null; the box says "A gift"). Unopened gifts **to** a deleted user are dropped.
+- **Sending** runs under the sender's advisory lock (the one `PUT /me/cosmetics` takes, §2.2) and re-checks the spare
+  against the stored layout inside it.
+- `Gift { id, fromId String?, toId, itemId, note, createdAt, openedAt?, returnedAt? }`: the `from` relation is
+  `onDelete: SetNull`, the `to` relation `onDelete: Cascade`.
 
 ### 10.4 Weekly theme challenges (C3, F8)
 
@@ -712,30 +797,35 @@ full-page backdrop behind the thread.
   brief, rule: { tag, atLeast }, themePiece, trophy }`, e.g. "Cosy autumn · Use 3 or more warm pieces". Pieces carry
   `tags` for the briefs. The first four themes ship in P4 (Cosy autumn, Green thumb, Night owl, Tidy desk).
 - **The week** runs from Monday 00:00 to **Sunday 20:00 in each entrant's own zone** (civil dates per the helpers).
+  `weekId` is the entrant's local ISO week (`2026-W43`), so each entrant's entry closes at their own Sunday 20:00.
 - **The brief** (C3): "Room challenge · Buddies only · 3 days left", the theme, the brief, "5 buddies in", "Ends Sunday
   20:00", rewards: **Enter: +30 coins, once**, the **limited theme piece** (in the shop this week only, 80 coins), the
   **trophy** for the most-cheered room (glows at night). **Start my entry** (default `Button`).
 - **The entry is your room.** "Your entry is a snapshot of your room on Sunday. Build as usual until then." Every room
   save while your entry is open copies the layout into `ChallengeEntry.snapshot`; the last save before the close is
-  the entry. Entering pays +30 if the room meets the brief at that moment.
+  the entry. The **+30 pays once**, on the first moment the entry meets the brief while it is open: at entry, or on
+  a later save that brings it up to the brief (`challenge:{weekId}`).
 - **Build it:** the drawer gains the theme tab and a checklist "Warm pieces · 2 of 3".
-- **Cheering entries:** buddies cheer entries they like, one per entry per buddy per week, never your own. Entry
-  cheers are room cheers for the coin rules (§10.2).
-- **Results** (default; §18): computed for each person's **circle** (you and your buddies who entered) on the first
-  read after Monday 08:00 UTC, when every zone's Sunday 20:00 has passed. The most-cheered entry in your circle wins;
-  ties all win. **Under 3 entries in a circle there is no ranking** and everyone just keeps the entry reward (C3's
-  risk). A winner gets the trophy piece (`ItemGrant +1, prize:{weekId}`), drawn with a glow at night.
+- **Cheering entries:** buddies cheer entries they like, one per entry per buddy per week, never your own. A cheer
+  counts only if it lands before **the entrant's own** Sunday 20:00. Entry cheers follow the room-cheer coin rules
+  (§10.2), keyed `ccheer:{weekId}:{fromId}:{toId}:{given|got}`.
+- **Results** (accepted default, §0): computed on the first read after Monday 08:00 UTC, when every zone's Sunday
+  20:00 has passed. **You win if and only if** your entry is the most-cheered (ties included) in **your own circle**:
+  you plus the buddies who entered, with the circle frozen at your close, and only if that circle has **at least 3
+  entries**. Under 3 there is no ranking and everyone just keeps the entry reward (C3's risk). A winner gets the
+  trophy piece once (`ItemGrant +1, prize:{weekId}`, unique), drawn with a glow at night.
 - Results screen: "{name}'s room won · The acorn glows on her floor at night", the circle's cheer counts, "You
   entered · The lantern stays in your room".
 - Entries are seen only by buddies. There is no public ranking.
 - `ChallengeEntry { userId, weekId, snapshot Json, paidAt?, createdAt, updatedAt }` (id `[userId, weekId]`),
-  `ChallengeCheer { weekId, fromId, toId, createdAt }` (id `[weekId, fromId, toId]`).
+  `ChallengeCheer { weekId, fromId, toId, createdAt }` (id `[weekId, fromId, toId]`, both relations
+  `onDelete: Cascade`).
 
 ### 10.5 The share card (F8)
 
 - **Share your room** from the editor's menu: "Makes an image; nothing is posted".
-- The card: the room (health-linked effects neutral, as a visit), "KIP's room", "Level 2 · 31 pieces · Cosy autumn
-  week". Switches: **Show my first name** (default off), **KIP waves** (default on). **Save image** and **Share…**.
+- The card: the room (health-linked effects neutral, as a visit), "KIP's room", "8 × 8 · 31 pieces · Cosy autumn
+  week" (the size, not a level). Switches: **Show my first name** (default off), **KIP waves** (default on). **Save image** and **Share…**.
 - Rendered off-screen at 1080 px wide and saved or shared through `lib/recapCapture.ts` (`captureToPng`,
   `saveImage`, `expo-sharing`). Nothing leaves the phone until the user taps Save or Share.
 - "The card shows the room only: no health numbers, no streaks."
@@ -744,9 +834,11 @@ full-page backdrop behind the thread.
 
 ### 11.1 Day 1 (P1)
 
-- **New users** start with the **starter layout**, 6 pieces: the desk (`desk.monitor`, with KIP's chair), the amber
-  desk lamp and the mug on it, the fern, the slate rug, books on a wall plank; walls Plain slate, floor Dark oak, the
-  plain window. The other starter pieces wait in the inventory.
+- **New users** start with the **starter layout**: C7's "6 pieces" are 7 placements, because the books stand on a
+  wall plank: the desk (`desk.monitor`, with KIP's chair), the amber desk lamp and the mug on it, the fern, the slate
+  rug, `shelf.plank` with `shelf.books` on it; walls Plain slate, floor Dark oak, the plain window. Unlike Spec B's
+  `STARTER_ROOM`, the wall calendar (`art.calendar`) is **not** placed; it waits in the inventory with the other
+  starter pieces. (Converted rooms keep their calendar, §2.4.)
 - **Everyone**, new or converted, gets on the first KIP page open after P1: a welcome card over the room, "WELCOME
   HOME!", "This is KIP's room. Make it yours: drag pieces in, flip them, stack them." (P2 adds "Healthy days earn
   coins, and coins turn into things for the room."), with the welcome lantern ("Free · in your inventory · glows at
@@ -754,8 +846,22 @@ full-page backdrop behind the thread.
 - **Guided first placement:** the editor opens with the drawer on New and a coach mark, "Your first piece · Takes 10
   seconds", 3 steps: **Drag** the lantern onto the highlighted tile (a lime tile), **Turn** it, tap **Done**. A
   **Skip** ghost `Button` is always there. Without drag (screen reader, or after 10 seconds) step 1 offers Place.
-- It never blocks the rest of the app; it shows once (server flag `firstweek.welcomedAt`, so it doesn't repeat on a
-  second device).
+- It never blocks the rest of the app; it shows once, across devices, from a new row:
+
+```prisma
+model RoomFirstWeek {
+  userId        String    @id
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  welcomedAt    DateTime?
+  firstPlacedAt DateTime?          // set by PUT /me/cosmetics (below)
+  startedOn     DateTime? @db.Date // the list's day 1 (P2): the user's civil date when P2 first reached them, or sign-up
+}
+```
+
+- It is in `USER_OWNED_MODELS`. It is **not** stored on `CosmeticLoadout`: creating a loadout row just for a flag
+  would make the user's first save (the version-0 `create` path) fail with a false 409 `P2002`.
+- **"Placed a piece"** is server-checkable: a `PUT /me/cosmetics` whose layout holds an instance id that the stored
+  layout (or the starter layout) did not have sets `firstPlacedAt` once.
 
 ### 11.2 The first-week list (P2)
 
@@ -764,16 +870,16 @@ full-page backdrop behind the thread.
 | Task | Reward |
 | --- | --- |
 | First check-in | +5 (the normal check-in earn) |
-| Place your first piece | **+10 bonus** |
+| Place your first piece | **+10 bonus**, when `firstPlacedAt` is set |
 | Hit your sleep goal | +20 (the normal earn) |
 | Get a fern in the coin shop | −40 (a purchase; the task is the habit of spending) |
 | Cheer a buddy's room | +2 (the normal earn) |
 | Read your first weekly recap | +10 (the normal earn) |
 | 7 check-ins in a row | **+25 bonus** |
 
-- Only the two bonus rows pay extra, once ever, outside the cap. The others tick when their normal earn lands.
-  **Decision (default):** C8 labels the list "+80"; the rows on C7 add up to 72 shown, 35 of it bonus. The spec
-  follows C7's rows (§18).
+- Only the two bonus rows pay extra, once ever, outside the cap. The others tick when their normal earn's event row
+  exists (a 0-coin row at the cap still ticks). **Accepted default (§0):** C8 labels the list "+80"; the rows on C7
+  add up to 72 shown, 35 of it bonus. The spec follows C7's rows.
 - Under the list: "Next: 8 × 8 · 600 coins and a 14-day check-in streak. The dashed row is yours then.", and the room
   shows the next tier's front rows as a dashed outline (the locked-row overlay).
 - After day 7 the card is gone; unfinished bonuses lapse quietly.
@@ -804,7 +910,7 @@ All require auth, return `Cache-Control: private, no-store`, cap bodies at 32 KB
 - The placement rules live once, in `backend/src/room/geometry.ts`, pure. The export script copies it to
   `mobile/src/lib/room/iso/geometry.ts` beside `catalogue.json`, and a backend test fails when the copy is stale, so
   the app's red tint and the server's 400 never disagree.
-- **`POST /me/cosmetics/seen`** unchanged. **`POST /me/room/welcomed`** → 204 (the first-week flag).
+- **`POST /me/cosmetics/seen`** unchanged. **`POST /me/room/welcomed`** → 204 (upserts `RoomFirstWeek.welcomedAt`).
 
 ### P2
 
@@ -820,7 +926,7 @@ All require auth, return `Cache-Control: private, no-store`, cap bodies at 32 KB
 
 ### P4
 
-- **`GET /me/buddies/:buddyId/room`** → `{ layout, tier, kipColour, kipWorn, cheersThisWeek, cheeredToday }`;
+- **`GET /me/buddies/:buddyId/room`** → `{ layout, size: { n, m }, kipColour, kipWorn, cheersThisWeek, cheeredToday }`;
   404 when not buddies, blocked either way, or visits are off (the same 404 for each, so it says nothing about why).
 - **`POST /me/buddies/:buddyId/room/cheer`** → 200 `{ paid: boolean }`; 409 `already_cheered`.
 - **`GET /me/room/cheers`** → this week's cheers on my room, with names.
@@ -834,9 +940,14 @@ All require auth, return `Cache-Control: private, no-store`, cap bodies at 32 KB
 - **Concurrency:** room and worn saves keep the one-row version check. Coins, purchases, expansion and gifts use
   the per-user advisory lock plus unique `sourceKey` / `requestId`, so retries are safe and the balance can't go
   negative. The app's `coinsStore` copies `cosmeticsStore`'s epoch, session and "ignore older" guards.
-- **Account deletion:** `CoinEvent`, `CoinWallet`, `ItemGrant`, `RoomCheer` (both sides), `Gift` (both sides, after
-  returning unopened ones), `ChallengeEntry`, `ChallengeCheer` (both sides) and the first-week state are added to
-  `USER_OWNED_MODELS` (before `User`) and to `tests/users/ownedData.ts`; the deletion test proves they are emptied.
+- **Account deletion:** `deleteOwnedRows` runs `deleteMany({ where: { userId } })` over `USER_OWNED_MODELS`, so only
+  tables keyed by `userId` go there: `CoinEvent`, `CoinWallet`, `ItemGrant`, `ChallengeEntry` and `RoomFirstWeek`
+  are added (before `User`) and to `tests/users/ownedData.ts`. `RoomCheer`, `Gift` and `ChallengeCheer` are keyed by
+  `fromId` / `toId` and go with the `User` row through their relations (`onDelete: Cascade`, as `Sticker` and
+  `BuddyPair`), except `Gift.from`, which is `SetNull`. So no step before `deleteOwnedRows` is needed: the cascade
+  drops unopened gifts **to** the user, and gifts **from** the user stay deliverable to their recipients (controller
+  ruling, §0). The deletion test proves every new table is emptied of the user's rows, and that a gift from a deleted
+  user can still be opened.
 - **Telemetry** is log lines only, with **no user ids and no values**: `room.saved { pieces, tier }`,
   `coins.earned { kind, count }`, `coins.spent { kind }`, `room.expanded { tier }`, `gift.sent`, `challenge.entered`.
   Never an item id or amount next to a user id.
@@ -863,9 +974,9 @@ Still open from Spec A and Spec B, and where they land:
 
 | Plan | Ships | Needs |
 | --- | --- | --- |
-| **P1 · Iso room and editing** | the iso engine (§3), P1 art (§4), the editor with drag, ghost, snap, toolbar, undo, the drawer with counts, styles, sets as layouts, accessibility (§5), the layout model, conversion and PUT (§2, §12), the room card swap (§9.1), the welcome and guided first placement (§11.1) | Spec A + B built |
+| **P1 · Iso room and editing** | the iso engine (§3), P1 art (§4), the editor with drag, ghost, snap, toolbar, undo, the drawer with counts, styles, sets as layouts, accessibility (§5), the layout model, conversion and PUT (§2, §12), the room card swap and long-press into the editor (§9.1, §5.1), the welcome and guided first placement (§11.1) | Spec A + B built |
 | **P2 · Coins, shop, expansion** | the ledger, sources and cap (§6), `ItemGrant` and duplicates by purchase, the coin shop and its first pieces (release 4), wallet, history, coins landing, room sizes and the unlock moment (§7), the first-week list (§11.2), dropping `room` | P1 |
-| **P3 · A living room** | effects and effect slots (§8.1–8.2), effect pieces (release 5), health-linked states and `living` (§8.3), piece cards, KIP walking and the `water` pose (§9.2), long-press on the KIP page | P1, P2 (plant stage reads the ledger; effect slots follow the tiers) |
+| **P3 · A living room** | effects and effect slots (§8.1–8.2), effect pieces (release 5), health-linked states and `living` (§8.3), piece cards, KIP walking and the `water` pose (§9.2) | P1, P2 (plant stage reads the ledger; effect slots follow the tiers) |
 | **P4 · Social** | visits and the sharing switch (§10.1), room cheers that pay (§10.2), gifts (§10.3), weekly challenges and trophies (release 6) (§10.4), the share card (§10.5) | P1, P2 (coins, `ItemGrant`), P3 (neutral states for visits and the card) |
 
 Each plan ends with the owner's simulator check and a draft PR (the standing workflow).
@@ -902,10 +1013,15 @@ Each plan ends with the owner's simulator check and a draft PR (the standing wor
   - Expansion: both gates required; badge level II passes even after the run breaks; `stale_tier`; tier never drops.
   - `living` (P3): plant stage from the count of `sleep_goal` events; pet energy bands; awards count; absent from
     every buddy DTO.
-  - Visits, cheers, gifts, challenges (P4): buddies only, blocks both ways, the visits switch, the uniform 404; one
-    cheer per room per day, 5 paid a day across given and received; gifts only spares, 3 a day, returned on block,
-    unpair or deletion; challenge week close in two zones, snapshot on save, entry reward once, results by circle,
-    ties, under 3 entries no ranking.
+  - Visits, cheers, gifts, challenges (P4): buddies only, blocks both ways, the visits switch (off by default, needs current
+    consent), the uniform 404, size only and no tier; one cheer per room per day, 5 paid a day across given and
+    received, 0-coin rows past the limit, both locks in id order; gifts only spares, 3 a day, returned on block or
+    unpair, still delivered after the sender deletes, dropped when the recipient deletes, a gift racing a save (shared
+    lock); challenge week close in two zones, snapshot on save, entry reward once (at entry or a later save), cheers
+    after the entrant's close ignored, results by your own circle frozen at close, ties, under 3 entries no ranking,
+    the prize granted once.
+  - First week and expand: `RoomFirstWeek` never creates a loadout row; `firstPlacedAt` set by a new instance id;
+    expand creates a row at version 1 or bumps it, and stores wall pieces the loft window covers.
   - Deletion empties every new table; the never-removed grep covers them; no coach import of cosmetic modules; no
     real-money dependency or copy.
 - **Mobile:**
@@ -942,18 +1058,6 @@ Each plan ends with the owner's simulator check and a draft PR (the standing wor
 
 ## 18. Open questions
 
-1. **Coin amounts and prices.** Default: C8 as written (sleep 20, steps 15, check-in 5, recap 10, cheer 2, entry 30,
-   cap 60; pieces 25–200, 8 × 8 at 600, loft at 1,500), changed only through the catalogue after four weeks of real
-   weekly earnings. Reason: the owner approved C8's map, and the knob is a code change, so no remote config is added.
-2. **Challenge judging.** Default: most cheers among you and your buddies who entered, results on the first read
-   after Monday 08:00 UTC, ties all win, no ranking under 3 entries. Reason: buddy circles differ, so a single global
-   winner would be judged by people who can't see each other's rooms; Monday morning is the first moment every zone's
-   Sunday 20:00 has passed.
-3. **Radio sound.** Default: add `expo-audio` in P3 with one bundled 20-second loop (under 300 KB), off until turned
-   on. Reason: F7 promises sound and the app has no audio module today; if the owner prefers no new dependency, the
-   radio ships with floating notes only.
-4. **First-week total.** Default: C7's rows (two bonuses, +10 and +25, outside the cap; the rest are normal earns),
-   not C8's "+80". Reason: C7 is the screen people see, and paying normal earns twice would break the cap's point.
-5. **Release timing.** Default: Spec B (PRs #65, #66) merges but reaches users only together with P1, so the slot
-   editor never ships and `update_app` exists only for dev builds. Reason: shipping a slot editor that P1 replaces
-   weeks later would teach a model the owner has already moved past.
+None. The five defaults raised here (coin amounts, challenge judging, radio sound, the first-week total, release
+timing) were accepted on 2026-10-15 and are recorded in §0, with the two controller rulings (opt-in visits, gifts and
+deleted accounts).
