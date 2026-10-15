@@ -1,10 +1,12 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../src/db/client';
 import { connection } from '../../src/sync/queue';
 import { migrateTestDb } from '../setupTestDb';
 import { authHeaderFor } from '../helpers/auth';
 import { api, buddyUser, pairUp } from '../buddies/helpers';
-import { EMPTY_WORN, STARTER_ROOM } from '../../src/cosmetics/catalogue';
+import { EMPTY_WORN } from '../../src/cosmetics/catalogue';
 import { kipWornOf } from '../../src/cosmetics/worn';
+import { starterLayout } from '../../src/room/convert';
 
 beforeAll(() => migrateTestDb());
 afterAll(async () => {
@@ -23,7 +25,8 @@ it('a buddy row carries what their KIP wears, and nothing about their room', asy
   const me = await buddyUser();
   const sam = await buddyUser();
   await pairUp(me.id, sam.id);
-  await prisma.cosmeticLoadout.create({ data: { userId: sam.id, room: { ...STARTER_ROOM, rug: 'rug.red' }, worn: { ...EMPTY_WORN, head: 'out.cap' }, version: 1 } });
+  const layout = { ...starterLayout(), pieces: starterLayout().pieces.map((p) => (p.id === 'rug' ? { ...p, item: 'rug.red' } : p)) };
+  await prisma.cosmeticLoadout.create({ data: { userId: sam.id, layout: layout as unknown as Prisma.InputJsonValue, worn: { ...EMPTY_WORN, head: 'out.cap' }, version: 1 } });
   const res = await (await api()).get('/me/buddies').set(await authHeaderFor(me.id));
   const row = res.body.buddies.find((b: { id: string }) => b.id === sam.id);
   expect(row.kipWorn).toEqual({ head: 'out.cap', face: null, neck: null, ears: null });

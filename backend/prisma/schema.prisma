@@ -779,18 +779,15 @@ model CosmeticUnlock {
   @@index([userId, seenAt])
 }
 
-/// What fills each slot. No row means the starter loadout.
+/// KIP's room and what KIP wears. No row means the starter layout and nothing worn.
 model CosmeticLoadout {
   userId    String   @id
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  /// Record<RoomSlot, itemId | null>
-  room      Json
   /// Record<WornSlot, itemId | null>
   worn      Json
-  /// RoomLayout (spec 2026-10-15 §2.3); null = a Spec B row not converted yet (§2.4). `room` is read-only from P1
-  /// and dropped in P2.
-  layout    Json?
-  /// 1 starter 7×7, 2 bigger 8×8, 3 loft 9×9; written only by the expand route (P2).
+  /// RoomLayout (spec 2026-10-15 §2.3). Spec B's slot `room` was converted and dropped in P2 (§2.4).
+  layout    Json
+  /// 1 starter 7×7, 2 bigger 8×8, 3 loft 9×9; written only by the expand route.
   tier      Int      @default(1)
   /// Optimistic concurrency: every save increments it.
   version   Int      @default(0)

@@ -4,7 +4,7 @@ import { migrateTestDb } from '../setupTestDb';
 import { authHeaderFor } from '../helpers/auth';
 import { api, buddyUser } from '../buddies/helpers';
 import { EMPTY_WORN, STARTER_ROOM } from '../../src/cosmetics/catalogue';
-import { layoutFromSlots, starterLayout } from '../../src/room/convert';
+import { starterLayout } from '../../src/room/convert';
 import { lockRoom } from '../../src/room/lock';
 import type { RoomLayout } from '../../src/room/geometry';
 import { piece, withPieces } from './helpers';
@@ -33,7 +33,7 @@ describe('PUT /me/cosmetics (free-build §12)', () => {
     const res = await put(headers, body(layout, 0, { ...EMPTY_WORN, head: 'out.beanie' }));
     expect(res.status).toBe(200);
     expect(res.headers['cache-control']).toBe('private, no-store');
-    expect([res.body.layout, res.body.worn.head, res.body.version, res.body.room.plant]).toEqual([layout, 'out.beanie', 1, 'plant.cactus']); // the lowest id wins the derived slot
+    expect([res.body.layout, res.body.worn.head, res.body.version, 'room' in res.body]).toEqual([layout, 'out.beanie', 1, false]);
     const lines = info.mock.calls.map((c) => String(c[0])).filter((l) => l.includes('room.saved'));
     expect(lines.map((l) => JSON.parse(l))).toEqual([{ event: 'room.saved', pieces: 8, tier: 1 }]);
     expect(lines.join('')).not.toContain(user.id);
@@ -143,19 +143,6 @@ describe('PUT /me/cosmetics (free-build §12)', () => {
     expect(placedAt).toBeInstanceOf(Date);
     await put(headers, body(withPieces(piece('p2', 'plant.cactus', { x: 6, y: 6 })), 2));
     expect((await firstWeek())!.firstPlacedAt).toEqual(placedAt);
-  });
-
-  it('a Spec B row converted by the save: the room\'s own pieces are not a first placement, a new one is', async () => {
-    const { user, headers } = await me();
-    const room = { ...STARTER_ROOM, art: 'art.calendar' }; // 'art' is no starter-layout id
-    await prisma.cosmeticLoadout.create({ data: { userId: user.id, room, worn: { ...EMPTY_WORN }, version: 3 } });
-    const converted = layoutFromSlots(room);
-    expect((await put(headers, body(converted, 3))).status).toBe(200);
-    const firstWeek = () => prisma.roomFirstWeek.findUnique({ where: { userId: user.id } });
-    expect((await firstWeek())?.firstPlacedAt ?? null).toBeNull();
-    const placed: RoomLayout = { ...converted, pieces: [...converted.pieces, piece('p1', 'plant.cactus', { x: 6, y: 6 })] };
-    expect((await put(headers, body(placed, 4))).status).toBe(200);
-    expect((await firstWeek())!.firstPlacedAt).toBeInstanceOf(Date);
   });
 
   it('needs a session', async () => {

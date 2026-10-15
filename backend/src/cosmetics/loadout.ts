@@ -2,7 +2,7 @@
 // stored slot naming an item the user does not own (or no longer in the shipped catalogue) reads back as the slot's
 // starter piece; the app never decides ownership. Saves are optimistic: version must match, every save increments it.
 // Free-build saves (spec 2026-10-15 §12) carry an iso layout, checked against the catalogue, the placement rules and
-// the owned counts under the per-user room lock.
+// the owned counts under the per-user room lock. Spec B's slot room was converted and dropped in P2 (§2.4).
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db/client';
 import {
@@ -11,7 +11,7 @@ import {
 } from './catalogue';
 import { countersOf, loadUnlockFacts } from './facts';
 import { grantCosmeticsSafely } from './unlock';
-import { layoutFromSlots, slotsFromLayout, starterLayout } from '../room/convert';
+import { starterLayout } from '../room/convert';
 import { STYLE_KEYS, capFor, parseLayout, validateLayout, type BadReason, type RoomLayout, type Tier } from '../room/geometry';
 import { countsOf, geometryDeps, placedCounts, readLayout, toTier } from '../room/layout';
 import { lockRoom } from '../room/lock';
@@ -23,8 +23,6 @@ export interface CosmeticsDTO {
   catalogueVersion: number;
   owned: string[];
   fresh: Array<{ itemId: string; source: string }>;
-  /** Derived from the layout for dev builds on Spec B (spec §2.4); dropped in P2. */
-  room: Room;
   layout: RoomLayout;
   tier: Tier;
   cap: number;
@@ -62,46 +60,22 @@ function readWorn(json: unknown, owned: ReadonlySet<string>): Worn {
   return worn;
 }
 
-/**
- * Converts one Spec B row (layout null) to an iso layout with the conditional write the GET and the script share
- * (spec §2.4): only while the row is still unconverted at the version read, and never bumping it. True when this call
- * wrote it; false means the script, another GET or a save got there first.
- */
-export async function convertLoadout(row: { userId: string; room: unknown; version: number }): Promise<boolean> {
-  const rows = await prisma.cosmeticUnlock.findMany({ where: { userId: row.userId }, select: { itemId: true } });
-  const layout = layoutFromSlots(readRoom(row.room, ownedFrom(rows)));
-  const { count } = await prisma.cosmeticLoadout.updateMany({
-    where: { userId: row.userId, layout: { equals: Prisma.DbNull }, version: row.version },
-    data: { layout: layout as unknown as Prisma.InputJsonValue },
-  });
-  return count === 1;
-}
-
 export async function readCosmetics(userId: string, now: Date, opts: { grant?: boolean } = {}): Promise<CosmeticsDTO> {
   if (opts.grant ?? true) await grantCosmeticsSafely(userId, now);
-  const [rows, first, facts, firstWeek] = await Promise.all([
+  const [rows, loadout, facts, firstWeek] = await Promise.all([
     prisma.cosmeticUnlock.findMany({ where: { userId }, orderBy: [{ unlockedAt: 'asc' }, { itemId: 'asc' }], select: { itemId: true, source: true, seenAt: true } }),
     prisma.cosmeticLoadout.findUnique({ where: { userId } }),
     loadUnlockFacts(userId),
     prisma.roomFirstWeek.findUnique({ where: { userId }, select: { welcomedAt: true } }),
   ]);
-  let loadout = first;
-  // Lazily, once (spec §2.4). Whoever wrote it, the row now holds a layout: read it back. A losing racer never errors.
-  // A second pass only when an old slot save landed between the read and the write (the row is unconverted again at
-  // a newer version), so that save reads back instead of the starter layout.
-  for (let pass = 0; pass < 2 && loadout && loadout.layout === null; pass++) {
-    await convertLoadout(loadout);
-    loadout = await prisma.cosmeticLoadout.findUnique({ where: { userId } });
-  }
   const owned = ownedFrom(rows);
   const counts = countsOf(rows);
-  const layout = (loadout?.layout != null ? readLayout(loadout.layout, counts) : null) ?? starterLayout();
+  const layout = (loadout ? readLayout(loadout.layout, counts) : null) ?? starterLayout();
   const tier = toTier(loadout?.tier);
   return {
     catalogueVersion: COSMETICS_CATALOGUE_VERSION,
     owned: [...owned].sort(),
     fresh: rows.filter((r) => r.seenAt === null && owned.has(r.itemId)).map((r) => ({ itemId: r.itemId, source: r.source })),
-    room: slotsFromLayout(layout),
     layout,
     tier,
     cap: capFor(tier),
@@ -182,14 +156,13 @@ export async function saveCosmetics(userId: string, body: unknown, now: Date, ra
       await lockRoom(tx, userId);
       const [rows, row] = await Promise.all([
         tx.cosmeticUnlock.findMany({ where: { userId }, select: { itemId: true } }),
-        tx.cosmeticLoadout.findUnique({ where: { userId }, select: { layout: true, room: true, version: true, tier: true } }),
+        tx.cosmeticLoadout.findUnique({ where: { userId }, select: { layout: true, version: true, tier: true } }),
       ]);
       tier = toTier(row?.tier);
       const bad = checkLayout(parsed.layout, parsed.worn, tier, countsOf(rows));
       if (bad) return bad;
       const data = {
         layout: parsed.layout as unknown as Prisma.InputJsonValue,
-        room: slotsFromLayout(parsed.layout) as unknown as Prisma.InputJsonValue,
         worn: parsed.worn as unknown as Prisma.InputJsonValue,
       };
       if (parsed.version === 0) {
@@ -199,11 +172,8 @@ export async function saveCosmetics(userId: string, body: unknown, now: Date, ra
         const { count } = await tx.cosmeticLoadout.updateMany({ where: { userId, version: parsed.version }, data: { ...data, version: { increment: 1 } } });
         if (count === 0) return STALE;
       }
-      // "Placed a piece" (spec §11.1): an instance id the stored layout did not have. An unconverted Spec B row's
-      // layout is the one its slots convert to (as the GET shows it), so the room's own pieces are not new; no row
-      // means the starter layout.
-      const stored = row ? parseLayout(row.layout) ?? layoutFromSlots(readRoom(row.room, ownedFrom(rows))) : starterLayout();
-      const before = new Set(stored.pieces.map((p) => p.id));
+      // "Placed a piece" (spec §11.1): an instance id the stored layout (or, with no row, the starter one) did not have.
+      const before = new Set((row ? parseLayout(row.layout) ?? starterLayout() : starterLayout()).pieces.map((p) => p.id));
       if (parsed.layout.pieces.some((p) => !before.has(p.id))) {
         await ensureFirstWeek(tx, userId);
         await tx.roomFirstWeek.updateMany({ where: { userId, firstPlacedAt: null }, data: { firstPlacedAt: now } });
