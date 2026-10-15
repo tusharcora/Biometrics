@@ -68,9 +68,14 @@ export function getCosmetics(): Cosmetics | null {
 // The read in flight and the epoch it started in: loads started in the same epoch share it (sign-in starts two).
 let inflight: { at: number; read: Promise<Cosmetics | null> } | null = null;
 
-/** Reads the server (which also catches up on grants). Keeps what is shown when the read fails. */
-export function loadCosmetics(): Promise<Cosmetics | null> {
-  if (inflight && inflight.at === epoch) return inflight.read;
+/**
+ * Reads the server (which also catches up on grants). Keeps what is shown when the read fails. `fresh` moves the epoch
+ * first, so it never shares a read that started earlier and that read's answer is dropped: for a question asked after
+ * something may have changed on the server, such as whether a grow whose answer was lost landed (ruling T14-CARRY).
+ */
+export function loadCosmetics({ fresh = false }: { fresh?: boolean } = {}): Promise<Cosmetics | null> {
+  if (fresh) epoch++;
+  else if (inflight && inflight.at === epoch) return inflight.read;
   const at = epoch;
   const read = (async () => {
     try {

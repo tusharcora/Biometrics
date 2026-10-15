@@ -126,13 +126,14 @@ it('a refused grow reads the wallet and the room again and says not yet; a dropp
 describe('a grow whose answer was lost (ruling T13-FIX I1)', () => {
   it('is sent again once with the same id, and the replayed answer opens the unlock moment', async () => {
     const s = await open({ balance: 1600, checkIn: { level: 2 }, sleepLevel: 3, room: cosmeticsDTO({ tier: 2, cap: 60, version: 2 }) });
+    // A replay answers stored 0, as the server does (plan ruling 17, ruling T14-CARRY): no line about the wall.
     (postExpand as jest.Mock).mockRejectedValueOnce(new TypeError('Network request failed'))
-      .mockResolvedValueOnce({ ...cosmeticsDTO({ tier: 3, cap: 90, version: 4 }), balance: 100, stored: 2 });
+      .mockResolvedValueOnce({ ...cosmeticsDTO({ tier: 3, cap: 90, version: 4 }), balance: 100, stored: 0 });
     await act(async () => { fireEvent.press(s.getByTestId('sizes-grow')); });
     const ids = (postExpand as jest.Mock).mock.calls.map((c) => c[0]);
     expect(ids).toEqual([ids[0], ids[0]]);
-    expect(s.getByTestId('sizes-grown')).toBeTruthy();
-    expect(s.getByTestId('sizes-stored')).toHaveTextContent('The new window needed the wall: 2 pieces went to your inventory');
+    expect(s.getByTestId('sizes-grown')).toHaveTextContent(/Your room grew/);
+    expect(s.queryByTestId('sizes-stored')).toBeNull();
     expect(s.queryByTestId('sizes-notice')).toBeNull();
   });
 
@@ -145,6 +146,21 @@ describe('a grow whose answer was lost (ruling T13-FIX I1)', () => {
     expect(s.getByTestId('sizes-grown')).toHaveTextContent(/Your room grew/);
     expect(s.queryByTestId('sizes-stored')).toBeNull();
     expect(s.getByTestId('sizes-room').props.tier).toBe(2);
+    expect(s.queryByTestId('sizes-notice')).toBeNull();
+  });
+
+  it('when the re-send is lost too, the room is read afresh, never from a read that started before the grow (ruling T14-CARRY)', async () => {
+    const s = await open({ balance: 650, checkIn: { level: 2, current: 3 } });
+    // A focus read that began before the tap, still in flight, which saw the old size.
+    let older: (v: unknown) => void = () => undefined;
+    (fetchCosmetics as jest.Mock).mockReturnValueOnce(new Promise((r) => { older = r; }));
+    void loadCosmetics();
+    (postExpand as jest.Mock).mockRejectedValue(new TypeError('Network request failed'));
+    (fetchCosmetics as jest.Mock).mockResolvedValue(cosmeticsDTO({ tier: 2, cap: 60, version: 3 }));
+    await act(async () => { fireEvent.press(s.getByTestId('sizes-grow')); });
+    await act(async () => { older(cosmeticsDTO({ version: 2 })); });
+    expect(s.getByTestId('sizes-grown')).toHaveTextContent(/Your room grew/);
+    expect(getCosmetics()!.tier).toBe(2);
     expect(s.queryByTestId('sizes-notice')).toBeNull();
   });
 

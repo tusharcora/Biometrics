@@ -234,6 +234,28 @@ it('a load after a mutation starts a new read, and the shared read from before n
   expect(getCosmetics()!.fresh.map((f) => f.itemId)).toEqual(['wall.dots']);
 });
 
+it('a fresh load never shares an older read: it moves the epoch, so the older answer is dropped (ruling T14-CARRY)', async () => {
+  get.mockResolvedValueOnce(DTO);
+  await act(async () => { await loadCosmetics(); });
+  const stale = deferredGet();
+  const before = loadCosmetics();
+  const fresh = deferredGet();
+  const after = loadCosmetics({ fresh: true });
+  expect(get).toHaveBeenCalledTimes(3);
+  // The fresh read answers first; the older one, answered later with what it saw then, never lands over it.
+  await act(async () => { fresh({ ...DTO, tier: 2, cap: 60, version: 5 }); await after; });
+  expect(await after).toBe(getCosmetics());
+  expect(getCosmetics()!.tier).toBe(2);
+  await act(async () => { stale({ ...DTO, version: 6 }); await before; });
+  expect([getCosmetics()!.tier, getCosmetics()!.version]).toEqual([2, 5]);
+  // A plain load in the same epoch shares the fresh one's read while it is in flight.
+  const again = deferredGet();
+  const c = loadCosmetics({ fresh: true });
+  const d = loadCosmetics();
+  expect(get).toHaveBeenCalledTimes(4);
+  await act(async () => { again(DTO); await Promise.all([c, d]); });
+});
+
 it('a load after sign-out starts a new read', async () => {
   deferredGet();
   void loadCosmetics();

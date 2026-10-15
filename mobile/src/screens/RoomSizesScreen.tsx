@@ -157,8 +157,9 @@ export function RoomSizesScreen() {
         attempt.current = null;
       } else {
         // Still no answer: the room read again says whether it grew. If it did, that is the unlock moment (what the
-        // window stored isn't known, so no line about it); if not, the id is kept, so a retry can't spend twice.
-        const [room] = await Promise.all([loadCosmetics(), loadCoins()]);
+        // window stored isn't known, so no line about it); if not, the id is kept, so a retry can't spend twice. The
+        // read is fresh: one that started before the grow can't answer it (ruling T14-CARRY).
+        const [room] = await Promise.all([loadCosmetics({ fresh: true }), loadCoins()]);
         if (room && room.tier >= nextTier) {
           landed(nextTier, 0);
           return;
