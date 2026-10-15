@@ -1,0 +1,114 @@
+// Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
+
+exports[`drawIsoStatic (spec §3.4, §3.6) keeps its rect counts per layer: starter, converted and Cottage rooms, day and night, at each tier 1`] = `
+{
+  "converted/1/day": [
+    4609,
+    14,
+    78,
+    132,
+  ],
+  "converted/1/night": [
+    4551,
+    14,
+    1,
+    204,
+  ],
+  "converted/2/day": [
+    5337,
+    14,
+    78,
+    132,
+  ],
+  "converted/2/night": [
+    5279,
+    14,
+    1,
+    204,
+  ],
+  "converted/3/day": [
+    6721,
+    14,
+    157,
+    132,
+  ],
+  "converted/3/night": [
+    6598,
+    14,
+    1,
+    204,
+  ],
+  "cottage/1/day": [
+    5354,
+    47,
+    78,
+    208,
+  ],
+  "cottage/1/night": [
+    5296,
+    47,
+    1,
+    348,
+  ],
+  "cottage/2/day": [
+    6093,
+    47,
+    78,
+    208,
+  ],
+  "cottage/2/night": [
+    6035,
+    47,
+    1,
+    348,
+  ],
+  "cottage/3/day": [
+    7696,
+    47,
+    157,
+    208,
+  ],
+  "cottage/3/night": [
+    7573,
+    47,
+    1,
+    348,
+  ],
+  "starter/1/day": [
+    4570,
+    0,
+    78,
+    100,
+  ],
+  "starter/1/night": [
+    4512,
+    0,
+    1,
+    128,
+  ],
+  "starter/2/day": [
+    5298,
+    0,
+    78,
+    100,
+  ],
+  "starter/2/night": [
+    5240,
+    0,
+    1,
+    128,
+  ],
+  "starter/3/day": [
+    6682,
+    0,
+    157,
+    100,
+  ],
+  "starter/3/night": [
+    6559,
+    0,
+    1,
+    128,
+  ],
+}
+`;

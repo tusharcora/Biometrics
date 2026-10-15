@@ -60,8 +60,8 @@ describe('the status line (§3.3)', () => {
 
 describe('labels', () => {
   it('names the state and the window in the room\'s one label', () => {
-    expect(roomLabel('thinking', { weather: 'cloudy', night: false })).toBe('KIP at the desk, typing. Window: cloudy');
-    expect(roomLabel('idle', { weather: 'fallback', night: true })).toBe('KIP at the desk, resting. Window: night');
+    expect(roomLabel('thinking', { weather: 'cloudy', night: false })).toBe('KIP in its room, typing. Window: cloudy');
+    expect(roomLabel('idle', { weather: 'fallback', night: true })).toBe('KIP in its room, resting. Window: night');
     for (const id of ['loading', 'empty', 'idle', 'thinking', 'answering', 'error', 'offline', 'unavailable', 'consent'] as const) {
       expect(roomLabel(id, { weather: 'short', night: false })).not.toMatch(/[·−]/);
     }

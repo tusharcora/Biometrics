@@ -1,16 +1,19 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
-import { Canvas, Group, Picture, Skia, createPicture, type SkPicture } from '@shopify/react-native-skia';
+import { Canvas, Group, Picture } from '@shopify/react-native-skia';
 import { Text } from '../ui/text';
-import { drawKipLayer, drawRoomFrames, drawRoomStatic, kipLayerKey, roomPictureKey, type KipSeat } from '../../lib/room/draw';
-import { FOCUS_BOX, THUMB_BOX, type RoomRect } from '../../lib/room/grid';
+import { record, useDisposed } from './pictures';
+import type { Rects } from '../../lib/room/paint';
 import type { MonitorScreen } from '../../lib/room/items';
-import type { KipWorn, RoomLoadout } from '../../lib/room/loadout';
+import type { KipWorn } from '../../lib/room/loadout';
 import type { RoomWeather } from '../../lib/room/weather';
+import type { IsoStatic, KipSeat } from '../../lib/room/iso/room';
+import { drawIsoFramesEach, drawIsoStatic, drawKipLayer, isoRoomKey, kipLayerKey } from '../../lib/room/iso/room';
+import { isoCrop } from '../../lib/room/iso/crop';
+import type { RoomLayout, Tier } from '../../lib/room/iso/geometry';
 import type { KipColour, KipMood, KipPose } from '../../lib/kip/kipArt';
 import { useFrameClock } from '../../lib/useFrameClock';
 import { useScreenFocused } from '../../lib/useScreenFocused';
-import { roomCrop } from './roomCrop';
 
 export const LOOP_MS = 400;
 // The bubble is decoration over a fixed crop, so its text grows only a little with Dynamic Type.
@@ -18,7 +21,8 @@ const BUBBLE_MAX_FONT_SCALE = 1.3;
 const BUBBLE_INSET = 4;
 
 export interface RoomViewProps {
-  loadout: RoomLoadout;
+  layout: RoomLayout;
+  tier: Tier;
   weather: RoomWeather;
   night: boolean;
   colour: KipColour;
@@ -30,40 +34,20 @@ export interface RoomViewProps {
   crop: { width: number; height: number };
   cellPt: 1 | 2;
   box?: 'focus' | 'thumb';
+  /** The editor's pan: the room's top-left in points, instead of the crop on the desk. */
+  offset?: { x: number; y: number };
+  /** The editor: a piece lifted into the drag ghost is left out of the picture (spec §3.7). */
+  hide?: string | null;
+  /** The editor: the static room it already built for these props (its hit boxes), so it is built once a change. */
+  room?: IsoStatic;
   bubble: string | null;
   reduceMotion: boolean;
   accessibilityLabel?: string;
   /** False when a parent carries the label (the collapsed header's thumbnail button). Default true. */
   accessible?: boolean;
-  /** Holds the loops (frame 0) while something covers the room, such as decorate mode (spec §8 Loops). */
+  /** Holds the loops (frame 0) while something covers the room, such as the editor (spec §8 Loops). */
   paused?: boolean;
   testID?: string;
-}
-
-/** One Path per colour per layer, on whole points, antialiasing off (spec §5). */
-function record(layers: readonly (readonly RoomRect[])[], cellPt: number): SkPicture {
-  return createPicture((canvas) => {
-    for (const rects of layers) {
-      const byColour = new Map<string, ReturnType<typeof Skia.Path.Make>>();
-      for (const [x, y, w, h, colour] of rects) {
-        let path = byColour.get(colour);
-        if (!path) { path = Skia.Path.Make(); byColour.set(colour, path); }
-        path.addRect(Skia.XYWHRect(x * cellPt, y * cellPt, w * cellPt, h * cellPt));
-      }
-      for (const [colour, path] of byColour) {
-        const paint = Skia.Paint();
-        paint.setAntiAlias(false);
-        paint.setColor(Skia.Color(colour));
-        canvas.drawPath(path, paint);
-      }
-    }
-  });
-}
-
-/** Releases a picture when it is replaced or the view unmounts (one picture set per screen). */
-function useDisposed<T extends { dispose?: () => void }>(value: T): T {
-  useEffect(() => () => value.dispose?.(), [value]);
-  return value;
 }
 
 /** Where the speech bubble's bottom centre sits, in cells: just above KIP's head. */
@@ -71,36 +55,43 @@ export function bubbleAnchor(seat: KipSeat): { x: number; y: number } {
   return { x: seat.x + 16, y: seat.y + 10 };
 }
 
-// KIP's room (spec §3.2, §5). The static room is recorded once per (loadout, weather, night, colour) into two
-// pictures, back and front. KIP and the loop frame are drawn between and over them, so a pose change or a frame
-// never rebuilds the room. Loops run at 400 ms and stop when the tab is not focused or under Reduce Motion.
+// KIP's isometric room (spec 2026-10-15 §3.7). The static room is recorded once per isoRoomKey (the layout, tier,
+// light, KIP's colour and a lifted piece) into two pictures, back and front, so only a pick-up, a drop, the light or
+// the colour rebuilds it. KIP is drawn between them and the loop frame over them; a pose change records KIP's three
+// frames and the three loop frames (those behind KIP clipped by KIP's silhouette), and a 400 ms tick records
+// nothing. The loops stop when the tab is not focused, under Reduce Motion, or while paused.
 export function RoomView(props: RoomViewProps) {
-  const { loadout, weather, night, colour, worn, pose, mood, facing, screen, crop, cellPt, bubble, reduceMotion } = props;
+  const { layout, tier, weather, night, colour, worn, pose, mood, facing, screen, crop, cellPt, bubble, reduceMotion } = props;
   const focused = useScreenFocused();
   const still = reduceMotion || !focused || !!props.paused;
   const t = useFrameClock(still);
   const frame = still ? 0 : Math.floor(t / LOOP_MS) % 3;
-  const box = props.box === 'thumb' ? THUMB_BOX : FOCUS_BOX;
 
-  const staticKey = roomPictureKey({ loadout, weather, night, colour });
-  const room = useMemo(() => drawRoomStatic({ loadout, weather, night, colour }), [staticKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  const back = useDisposed(useMemo(() => record([room.base], cellPt), [room, cellPt]));
-  const front = useDisposed(useMemo(() => record([room.light, room.emissive], cellPt), [room, cellPt]));
+  const input = { layout, tier, weather, night, colour, hide: props.hide ?? null };
+  const staticKey = isoRoomKey(input);
+  const room = useMemo(() => props.room ?? drawIsoStatic(input), [staticKey, props.room]); // eslint-disable-line react-hooks/exhaustive-deps
+  const back = useDisposed(useMemo(() => record([room.back], cellPt), [room, cellPt]));
+  const front = useDisposed(useMemo(() => record([room.front, room.light, room.emissive], cellPt), [room, cellPt]));
 
-  const frameKey = `${staticKey}#${screen}#${cellPt}`;
-  const framePictures = useMemo(
-    () => drawRoomFrames({ loadout, weather, night, colour, screen }).map((f) => record([f], cellPt)),
-    [frameKey], // eslint-disable-line react-hooks/exhaustive-deps
-  );
-  useEffect(() => () => framePictures.forEach((p) => p.dispose?.()), [framePictures]);
-
-  const kip = { colour, pose, mood, worn, frame, ...(facing ? { facing } : {}) };
-  // kipLayerKey leaves the seat out, so the seat (style and position) joins the key: a desk swap re-places KIP.
+  // KIP in all three loop frames at once, keyed without the frame (ruling T10-FIX). kipLayerKey leaves the seat out,
+  // so the seat (style and position) joins the key: a moved desk re-places KIP.
+  const kip = { colour, pose, mood, worn, ...(facing ? { facing } : {}) };
   const seat = room.kipSeat;
-  const kipKey = `${kipLayerKey(kip)}#${seat.style}@${seat.x},${seat.y},${seat.deskSide}#${cellPt}`;
-  const kipPicture = useDisposed(useMemo(() => record([drawKipLayer(kip, seat)], cellPt), [kipKey])); // eslint-disable-line react-hooks/exhaustive-deps
+  const poseKey = `${kipLayerKey({ ...kip, frame: 0 })}#${seat.style}@${seat.x},${seat.y},${seat.deskSide}`;
+  const kipRects = useMemo(
+    () => [0, 1, 2].map((f) => drawKipLayer({ ...kip, frame: f }, seat)) as [Rects, Rects, Rects],
+    [poseKey], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  // Three KIP pictures and three frame pictures (each loop clipped by KIP's silhouette in that frame), recorded
+  // together per (static room, screen, pose, cell size): the 400 ms tick only picks one of each, recording nothing.
+  const pictures = useMemo(() => {
+    const frames = drawIsoFramesEach(room, { night, colour, screen }, kipRects);
+    return { kip: kipRects.map((r) => record([r], cellPt)), frames: frames.map((r) => record([r], cellPt)) };
+  }, [room, screen, kipRects, cellPt]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => [...pictures.kip, ...pictures.frames].forEach((p) => p.dispose?.()), [pictures]);
 
-  const offset = roomCrop({ width: crop.width, height: crop.height, cellPt, box });
+  const box = props.box === 'thumb' ? room.thumb : room.focus;
+  const offset = props.offset ?? isoCrop({ width: crop.width, height: crop.height, cellPt, box, room: room.grid });
   const anchor = bubbleAnchor(seat);
   // Measured, so a long bubble is pulled in from the right edge instead of clipped by the crop.
   const [bubbleWidth, setBubbleWidth] = useState(0);
@@ -116,9 +107,9 @@ export function RoomView(props: RoomViewProps) {
       <Canvas style={{ width: crop.width, height: crop.height }}>
         <Group transform={[{ translateX: offset.x }, { translateY: offset.y }]}>
           <Picture picture={back} />
-          <Picture picture={kipPicture} />
+          <Picture picture={pictures.kip[frame]!} />
           <Picture picture={front} />
-          <Picture picture={framePictures[frame]!} />
+          <Picture picture={pictures.frames[frame]!} />
         </Group>
       </Canvas>
       {bubble ? (

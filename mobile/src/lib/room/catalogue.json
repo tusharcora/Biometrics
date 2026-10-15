@@ -1,6 +1,9 @@
 {
   "version": 1,
-  "release": 1,
+  "releases": [
+    1,
+    3
+  ],
   "starterRoom": {
     "wallpaper": "wall.plain",
     "floor": "floor.oakDark",
@@ -14,6 +17,85 @@
     "corner": null,
     "rug": "rug.slate",
     "pet": null
+  },
+  "starterLayout": {
+    "v": 1,
+    "styles": {
+      "wallpaper": "wall.plain",
+      "floor": "floor.oakDark",
+      "window": "win.plain"
+    },
+    "pieces": [
+      {
+        "id": "desk",
+        "item": "desk.monitor",
+        "layer": "floor",
+        "x": 2,
+        "y": 0,
+        "facing": "L",
+        "mirror": false
+      },
+      {
+        "id": "lamp",
+        "item": "lamp.amber",
+        "layer": "onTop",
+        "x": 0,
+        "y": 0,
+        "facing": "L",
+        "mirror": false,
+        "parent": "desk",
+        "spot": 0
+      },
+      {
+        "id": "deskitem",
+        "item": "item.mug",
+        "layer": "onTop",
+        "x": 0,
+        "y": 0,
+        "facing": "L",
+        "mirror": false,
+        "parent": "desk",
+        "spot": 2
+      },
+      {
+        "id": "plank",
+        "item": "shelf.plank",
+        "layer": "wallR",
+        "x": 6,
+        "y": 10,
+        "facing": "L",
+        "mirror": false
+      },
+      {
+        "id": "shelf",
+        "item": "shelf.books",
+        "layer": "onTop",
+        "x": 0,
+        "y": 0,
+        "facing": "L",
+        "mirror": false,
+        "parent": "plank",
+        "spot": 0
+      },
+      {
+        "id": "plant",
+        "item": "plant.fern",
+        "layer": "floor",
+        "x": 0,
+        "y": 0,
+        "facing": "L",
+        "mirror": false
+      },
+      {
+        "id": "rug",
+        "item": "rug.slate",
+        "layer": "floor",
+        "x": 1,
+        "y": 2,
+        "facing": "L",
+        "mirror": false
+      }
+    ]
   },
   "items": [
     {
@@ -99,10 +181,7 @@
       "unlock": {
         "kind": "starter"
       },
-      "release": 1,
-      "sets": [
-        "library"
-      ]
+      "release": 1
     },
     {
       "id": "floor.tiles",
@@ -141,7 +220,17 @@
       "unlock": {
         "kind": "starter"
       },
-      "release": 1
+      "release": 1,
+      "iso": {
+        "layers": [
+          "wall"
+        ],
+        "wall": [
+          3,
+          6
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "art.mountain",
@@ -151,7 +240,17 @@
         "family": "SLEEP_GOAL",
         "level": 1
       },
-      "release": 1
+      "release": 1,
+      "iso": {
+        "layers": [
+          "wall"
+        ],
+        "wall": [
+          4,
+          5
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "art.pennant",
@@ -162,7 +261,17 @@
         "level": 1
       },
       "release": 1,
-      "tint": true
+      "tint": true,
+      "iso": {
+        "layers": [
+          "wall"
+        ],
+        "wall": [
+          3,
+          5
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "art.clock",
@@ -173,7 +282,17 @@
         "level": 1
       },
       "release": 1,
-      "frames": 3
+      "frames": 3,
+      "iso": {
+        "layers": [
+          "wall"
+        ],
+        "wall": [
+          3,
+          5
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "art.heart",
@@ -184,7 +303,17 @@
         "level": 2
       },
       "release": 1,
-      "emissive": true
+      "emissive": true,
+      "iso": {
+        "layers": [
+          "wall"
+        ],
+        "wall": [
+          3,
+          4
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "art.motto",
@@ -194,7 +323,17 @@
         "family": "SLEEP_GOAL",
         "level": 2
       },
-      "release": 1
+      "release": 1,
+      "iso": {
+        "layers": [
+          "wall"
+        ],
+        "wall": [
+          3,
+          6
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "art.band",
@@ -204,7 +343,17 @@
         "family": "EVERY_DAY_LOGGED",
         "level": 2
       },
-      "release": 1
+      "release": 1,
+      "iso": {
+        "layers": [
+          "wall"
+        ],
+        "wall": [
+          3,
+          6
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "art.cork",
@@ -214,7 +363,17 @@
         "counter": "recaps_read",
         "atLeast": 4
       },
-      "release": 1
+      "release": 1,
+      "iso": {
+        "layers": [
+          "wall"
+        ],
+        "wall": [
+          4,
+          5
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "art.wave",
@@ -224,7 +383,17 @@
         "family": "STEADIEST_MONTH",
         "level": 2
       },
-      "release": 1
+      "release": 1,
+      "iso": {
+        "layers": [
+          "wall"
+        ],
+        "wall": [
+          4,
+          5
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "win.plain",
@@ -253,10 +422,7 @@
         "family": "STEP_GOAL",
         "level": 1
       },
-      "release": 1,
-      "sets": [
-        "homeGym"
-      ]
+      "release": 1
     },
     {
       "id": "win.sticker",
@@ -297,7 +463,13 @@
       "unlock": {
         "kind": "starter"
       },
-      "release": 1
+      "release": 1,
+      "iso": {
+        "layers": [
+          "onTop"
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "shelf.minicactus",
@@ -305,7 +477,13 @@
       "unlock": {
         "kind": "starter"
       },
-      "release": 1
+      "release": 1,
+      "iso": {
+        "layers": [
+          "onTop"
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "shelf.trophyB",
@@ -314,7 +492,13 @@
         "kind": "anyFamily",
         "level": 1
       },
-      "release": 1
+      "release": 1,
+      "iso": {
+        "layers": [
+          "onTop"
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "shelf.globe",
@@ -325,7 +509,16 @@
         "level": 1
       },
       "release": 1,
-      "frames": 3
+      "frames": 3,
+      "iso": {
+        "layers": [
+          "onTop"
+        ],
+        "facings": 1
+      },
+      "tags": [
+        "funny"
+      ]
     },
     {
       "id": "shelf.luckycat",
@@ -336,7 +529,16 @@
         "level": 2
       },
       "release": 1,
-      "frames": 3
+      "frames": 3,
+      "iso": {
+        "layers": [
+          "onTop"
+        ],
+        "facings": 1
+      },
+      "tags": [
+        "funny"
+      ]
     },
     {
       "id": "desk.monitor",
@@ -347,7 +549,39 @@
       "release": 1,
       "style": "standard",
       "emissive": true,
-      "frames": 3
+      "frames": 3,
+      "iso": {
+        "layers": [
+          "floor"
+        ],
+        "foot": [
+          3,
+          2
+        ],
+        "facings": 2,
+        "kipDesk": true,
+        "seat": [
+          1,
+          1
+        ],
+        "surface": {
+          "z": 22,
+          "spots": [
+            [
+              0.45,
+              0.55
+            ],
+            [
+              1.5,
+              0.6
+            ],
+            [
+              2.55,
+              0.55
+            ]
+          ]
+        }
+      }
     },
     {
       "id": "desk.notebook",
@@ -356,7 +590,39 @@
         "kind": "starter"
       },
       "release": 1,
-      "style": "standard"
+      "style": "standard",
+      "iso": {
+        "layers": [
+          "floor"
+        ],
+        "foot": [
+          3,
+          2
+        ],
+        "facings": 2,
+        "kipDesk": true,
+        "seat": [
+          1,
+          1
+        ],
+        "surface": {
+          "z": 22,
+          "spots": [
+            [
+              0.45,
+              0.55
+            ],
+            [
+              1.5,
+              0.6
+            ],
+            [
+              2.55,
+              0.55
+            ]
+          ]
+        }
+      }
     },
     {
       "id": "desk.laptop",
@@ -369,7 +635,39 @@
       "release": 1,
       "style": "standard",
       "emissive": true,
-      "frames": 3
+      "frames": 3,
+      "iso": {
+        "layers": [
+          "floor"
+        ],
+        "foot": [
+          3,
+          2
+        ],
+        "facings": 2,
+        "kipDesk": true,
+        "seat": [
+          1,
+          1
+        ],
+        "surface": {
+          "z": 22,
+          "spots": [
+            [
+              0.45,
+              0.55
+            ],
+            [
+              1.5,
+              0.6
+            ],
+            [
+              2.55,
+              0.55
+            ]
+          ]
+        }
+      }
     },
     {
       "id": "item.mug",
@@ -379,7 +677,13 @@
       },
       "release": 1,
       "tint": true,
-      "frames": 3
+      "frames": 3,
+      "iso": {
+        "layers": [
+          "onTop"
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "item.sticky",
@@ -387,7 +691,13 @@
       "unlock": {
         "kind": "starter"
       },
-      "release": 1
+      "release": 1,
+      "iso": {
+        "layers": [
+          "onTop"
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "item.bottle",
@@ -397,7 +707,13 @@
         "family": "SLEEP_GOAL",
         "level": 1
       },
-      "release": 1
+      "release": 1,
+      "iso": {
+        "layers": [
+          "onTop"
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "item.pills",
@@ -407,7 +723,13 @@
         "family": "EVERY_DAY_LOGGED",
         "level": 1
       },
-      "release": 1
+      "release": 1,
+      "iso": {
+        "layers": [
+          "onTop"
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "item.shaker",
@@ -417,7 +739,13 @@
         "family": "STEP_GOAL",
         "level": 2
       },
-      "release": 1
+      "release": 1,
+      "iso": {
+        "layers": [
+          "onTop"
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "item.stand",
@@ -428,7 +756,13 @@
         "level": 2
       },
       "release": 1,
-      "tint": true
+      "tint": true,
+      "iso": {
+        "layers": [
+          "onTop"
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "item.controller",
@@ -437,7 +771,16 @@
         "kind": "anyFamily",
         "level": 2
       },
-      "release": 1
+      "release": 1,
+      "iso": {
+        "layers": [
+          "onTop"
+        ],
+        "facings": 1
+      },
+      "tags": [
+        "funny"
+      ]
     },
     {
       "id": "plant.fern",
@@ -446,6 +789,17 @@
         "kind": "starter"
       },
       "release": 1,
+      "iso": {
+        "layers": [
+          "floor",
+          "onTop"
+        ],
+        "foot": [
+          1,
+          1
+        ],
+        "facings": 1
+      },
       "sets": [
         "cottage"
       ]
@@ -457,9 +811,17 @@
         "kind": "starter"
       },
       "release": 1,
-      "sets": [
-        "gamerNight"
-      ]
+      "iso": {
+        "layers": [
+          "floor",
+          "onTop"
+        ],
+        "foot": [
+          1,
+          1
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "plant.monstera",
@@ -469,7 +831,18 @@
         "family": "SLEEP_GOAL",
         "level": 1
       },
-      "release": 1
+      "release": 1,
+      "iso": {
+        "layers": [
+          "floor",
+          "onTop"
+        ],
+        "foot": [
+          1,
+          1
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "plant.snake",
@@ -480,10 +853,17 @@
         "level": 2
       },
       "release": 1,
-      "sets": [
-        "homeGym",
-        "library"
-      ]
+      "iso": {
+        "layers": [
+          "floor",
+          "onTop"
+        ],
+        "foot": [
+          1,
+          1
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "plant.succulents",
@@ -493,7 +873,18 @@
         "family": "EVERY_DAY_LOGGED",
         "level": 2
       },
-      "release": 1
+      "release": 1,
+      "iso": {
+        "layers": [
+          "floor",
+          "onTop"
+        ],
+        "foot": [
+          1,
+          1
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "plant.bamboo",
@@ -503,7 +894,18 @@
         "family": "STEADIEST_MONTH",
         "level": 2
       },
-      "release": 1
+      "release": 1,
+      "iso": {
+        "layers": [
+          "floor",
+          "onTop"
+        ],
+        "foot": [
+          1,
+          1
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "plant.sunflower",
@@ -513,7 +915,18 @@
         "counter": "buddy_cheers",
         "atLeast": 5
       },
-      "release": 1
+      "release": 1,
+      "iso": {
+        "layers": [
+          "floor",
+          "onTop"
+        ],
+        "foot": [
+          1,
+          1
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "lamp.amber",
@@ -523,7 +936,13 @@
       },
       "release": 1,
       "emissive": true,
-      "frames": 3
+      "frames": 3,
+      "iso": {
+        "layers": [
+          "onTop"
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "lamp.mint",
@@ -534,7 +953,13 @@
         "level": 1
       },
       "release": 1,
-      "emissive": true
+      "emissive": true,
+      "iso": {
+        "layers": [
+          "onTop"
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "lamp.kiplamp",
@@ -546,7 +971,13 @@
       },
       "release": 1,
       "tint": true,
-      "emissive": true
+      "emissive": true,
+      "iso": {
+        "layers": [
+          "onTop"
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "lamp.salt",
@@ -557,7 +988,13 @@
         "level": 2
       },
       "release": 1,
-      "emissive": true
+      "emissive": true,
+      "iso": {
+        "layers": [
+          "onTop"
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "corner.floorlamp",
@@ -568,7 +1005,17 @@
         "level": 2
       },
       "release": 1,
-      "emissive": true
+      "emissive": true,
+      "iso": {
+        "layers": [
+          "floor"
+        ],
+        "foot": [
+          1,
+          1
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "corner.yogamat",
@@ -579,7 +1026,17 @@
         "level": 1
       },
       "release": 1,
-      "tint": true
+      "tint": true,
+      "iso": {
+        "layers": [
+          "floor"
+        ],
+        "foot": [
+          1,
+          1
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "corner.bag",
@@ -590,7 +1047,17 @@
         "level": 2
       },
       "release": 1,
-      "frames": 3
+      "frames": 3,
+      "iso": {
+        "layers": [
+          "floor"
+        ],
+        "foot": [
+          1,
+          1
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "corner.beanbag",
@@ -601,8 +1068,18 @@
       },
       "release": 1,
       "tint": true,
-      "sets": [
-        "gamerNight"
+      "iso": {
+        "layers": [
+          "floor"
+        ],
+        "foot": [
+          1,
+          1
+        ],
+        "facings": 1
+      },
+      "tags": [
+        "funny"
       ]
     },
     {
@@ -611,7 +1088,18 @@
       "unlock": {
         "kind": "starter"
       },
-      "release": 1
+      "release": 1,
+      "iso": {
+        "layers": [
+          "floor"
+        ],
+        "foot": [
+          4,
+          4
+        ],
+        "flat": true,
+        "facings": 2
+      }
     },
     {
       "id": "rug.red",
@@ -621,7 +1109,18 @@
         "family": "SLEEP_GOAL",
         "level": 1
       },
-      "release": 1
+      "release": 1,
+      "iso": {
+        "layers": [
+          "floor"
+        ],
+        "foot": [
+          4,
+          3
+        ],
+        "flat": true,
+        "facings": 2
+      }
     },
     {
       "id": "rug.gymmat",
@@ -631,7 +1130,18 @@
         "family": "STEP_GOAL",
         "level": 1
       },
-      "release": 1
+      "release": 1,
+      "iso": {
+        "layers": [
+          "floor"
+        ],
+        "foot": [
+          4,
+          2
+        ],
+        "flat": true,
+        "facings": 2
+      }
     },
     {
       "id": "rug.checker",
@@ -641,7 +1151,18 @@
         "family": "EVERY_DAY_LOGGED",
         "level": 1
       },
-      "release": 1
+      "release": 1,
+      "iso": {
+        "layers": [
+          "floor"
+        ],
+        "foot": [
+          3,
+          3
+        ],
+        "flat": true,
+        "facings": 2
+      }
     },
     {
       "id": "rug.woven",
@@ -651,7 +1172,18 @@
         "family": "CHECK_IN",
         "level": 2
       },
-      "release": 1
+      "release": 1,
+      "iso": {
+        "layers": [
+          "floor"
+        ],
+        "foot": [
+          3,
+          3
+        ],
+        "flat": true,
+        "facings": 2
+      }
     },
     {
       "id": "rug.tatami",
@@ -661,7 +1193,18 @@
         "family": "STEADY_BEDTIME",
         "level": 2
       },
-      "release": 1
+      "release": 1,
+      "iso": {
+        "layers": [
+          "floor"
+        ],
+        "foot": [
+          4,
+          3
+        ],
+        "flat": true,
+        "facings": 2
+      }
     },
     {
       "id": "pet.bed",
@@ -672,7 +1215,17 @@
         "level": 1
       },
       "release": 1,
-      "tint": true
+      "tint": true,
+      "iso": {
+        "layers": [
+          "floor"
+        ],
+        "foot": [
+          1,
+          1
+        ],
+        "facings": 1
+      }
     },
     {
       "id": "out.beanie",
@@ -703,10 +1256,7 @@
         "family": "STEP_GOAL",
         "level": 2
       },
-      "release": 1,
-      "sets": [
-        "homeGym"
-      ]
+      "release": 1
     },
     {
       "id": "out.bucket",
@@ -727,10 +1277,7 @@
         "family": "STEADY_BEDTIME",
         "level": 2
       },
-      "release": 1,
-      "sets": [
-        "japanese"
-      ]
+      "release": 1
     },
     {
       "id": "out.beret",
@@ -761,11 +1308,7 @@
         "family": "CHECK_IN",
         "level": 1
       },
-      "release": 1,
-      "sets": [
-        "stargazer",
-        "library"
-      ]
+      "release": 1
     },
     {
       "id": "out.scarf",
@@ -785,10 +1328,7 @@
         "family": "EVERY_DAY_LOGGED",
         "level": 2
       },
-      "release": 1,
-      "sets": [
-        "library"
-      ]
+      "release": 1
     },
     {
       "id": "out.earbuds",
@@ -806,10 +1346,58 @@
         "family": "EVERY_DAY_LOGGED",
         "level": 1
       },
-      "release": 1,
-      "sets": [
-        "gamerNight"
-      ]
+      "release": 1
+    },
+    {
+      "id": "shelf.plank",
+      "slot": "shelf",
+      "unlock": {
+        "kind": "starter"
+      },
+      "release": 3,
+      "iso": {
+        "layers": [
+          "wall"
+        ],
+        "wall": [
+          4,
+          1
+        ],
+        "surface": {
+          "z": 2,
+          "spots": [
+            [
+              0.5,
+              0.2
+            ],
+            [
+              1.5,
+              0.2
+            ]
+          ]
+        },
+        "facings": 1
+      }
+    },
+    {
+      "id": "lamp.welcome",
+      "slot": "lamp",
+      "unlock": {
+        "kind": "starter"
+      },
+      "release": 3,
+      "emissive": true,
+      "iso": {
+        "layers": [
+          "floor",
+          "onTop"
+        ],
+        "foot": [
+          1,
+          1
+        ],
+        "facings": 2
+      }
     },
     {
       "id": "set.cottage.wallpaper",
@@ -843,6 +1431,16 @@
         "set": "cottage"
       },
       "release": 1,
+      "iso": {
+        "layers": [
+          "wall"
+        ],
+        "wall": [
+          3,
+          5
+        ],
+        "facings": 1
+      },
       "sets": [
         "cottage"
       ]
@@ -867,6 +1465,12 @@
         "set": "cottage"
       },
       "release": 1,
+      "iso": {
+        "layers": [
+          "onTop"
+        ],
+        "facings": 1
+      },
       "sets": [
         "cottage"
       ]
@@ -880,6 +1484,38 @@
       },
       "release": 1,
       "style": "standard",
+      "iso": {
+        "layers": [
+          "floor"
+        ],
+        "foot": [
+          3,
+          2
+        ],
+        "facings": 2,
+        "kipDesk": true,
+        "seat": [
+          1,
+          1
+        ],
+        "surface": {
+          "z": 22,
+          "spots": [
+            [
+              0.45,
+              0.55
+            ],
+            [
+              1.5,
+              0.6
+            ],
+            [
+              2.55,
+              0.55
+            ]
+          ]
+        }
+      },
       "sets": [
         "cottage"
       ]
@@ -892,6 +1528,12 @@
         "set": "cottage"
       },
       "release": 1,
+      "iso": {
+        "layers": [
+          "onTop"
+        ],
+        "facings": 1
+      },
       "sets": [
         "cottage"
       ]
@@ -906,6 +1548,16 @@
       "release": 1,
       "emissive": true,
       "frames": 3,
+      "iso": {
+        "layers": [
+          "wall"
+        ],
+        "wall": [
+          8,
+          2
+        ],
+        "facings": 1
+      },
       "sets": [
         "cottage"
       ]
@@ -920,6 +1572,16 @@
       "release": 1,
       "emissive": true,
       "frames": 3,
+      "iso": {
+        "layers": [
+          "floor"
+        ],
+        "foot": [
+          1,
+          1
+        ],
+        "facings": 1
+      },
       "sets": [
         "cottage"
       ]
@@ -932,6 +1594,17 @@
         "set": "cottage"
       },
       "release": 1,
+      "iso": {
+        "layers": [
+          "floor"
+        ],
+        "foot": [
+          4,
+          3
+        ],
+        "flat": true,
+        "facings": 2
+      },
       "sets": [
         "cottage"
       ]
@@ -944,6 +1617,16 @@
         "set": "cottage"
       },
       "release": 1,
+      "iso": {
+        "layers": [
+          "floor"
+        ],
+        "foot": [
+          1,
+          1
+        ],
+        "facings": 1
+      },
       "sets": [
         "cottage"
       ]
@@ -975,6 +1658,110 @@
       },
       "worn": {
         "head": "out.beanie"
+      },
+      "layout": {
+        "v": 1,
+        "styles": {
+          "wallpaper": "set.cottage.wallpaper",
+          "floor": "set.cottage.floor",
+          "window": "set.cottage.window"
+        },
+        "pieces": [
+          {
+            "id": "desk",
+            "item": "set.cottage.desk",
+            "layer": "floor",
+            "x": 2,
+            "y": 0,
+            "facing": "L",
+            "mirror": false
+          },
+          {
+            "id": "lamp",
+            "item": "set.cottage.lamp",
+            "layer": "wallL",
+            "x": 0,
+            "y": 14,
+            "facing": "L",
+            "mirror": false
+          },
+          {
+            "id": "deskitem",
+            "item": "set.cottage.desk_item",
+            "layer": "onTop",
+            "x": 0,
+            "y": 0,
+            "facing": "L",
+            "mirror": false,
+            "parent": "desk",
+            "spot": 2
+          },
+          {
+            "id": "plank",
+            "item": "shelf.plank",
+            "layer": "wallR",
+            "x": 6,
+            "y": 10,
+            "facing": "L",
+            "mirror": false
+          },
+          {
+            "id": "shelf",
+            "item": "set.cottage.shelf",
+            "layer": "onTop",
+            "x": 0,
+            "y": 0,
+            "facing": "L",
+            "mirror": false,
+            "parent": "plank",
+            "spot": 0
+          },
+          {
+            "id": "art",
+            "item": "set.cottage.art",
+            "layer": "wallR",
+            "x": 2,
+            "y": 9,
+            "facing": "L",
+            "mirror": false
+          },
+          {
+            "id": "plant",
+            "item": "plant.fern",
+            "layer": "floor",
+            "x": 0,
+            "y": 0,
+            "facing": "L",
+            "mirror": false
+          },
+          {
+            "id": "corner",
+            "item": "set.cottage.corner",
+            "layer": "floor",
+            "x": 5,
+            "y": 0,
+            "facing": "L",
+            "mirror": false
+          },
+          {
+            "id": "rug",
+            "item": "set.cottage.rug",
+            "layer": "floor",
+            "x": 1,
+            "y": 2,
+            "facing": "L",
+            "mirror": false
+          },
+          {
+            "id": "pet",
+            "item": "set.cottage.pet",
+            "layer": "floor",
+            "x": 4,
+            "y": 5,
+            "facing": "L",
+            "mirror": false
+          }
+        ]
       }
     }
   ]

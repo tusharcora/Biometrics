@@ -3,13 +3,13 @@
 // Called after new badge levels, after a recap is first opened, after a sticker is sent, and by GET /me/cosmetics.
 // Logs a count only: never the user id with item ids.
 import { prisma } from '../db/client';
-import { COSMETICS_RELEASE, COSMETIC_ITEMS, COSMETIC_SETS, RELEASE_LAUNCHED_AT, type CosmeticItem, type CosmeticRelease, type CosmeticSet } from './catalogue';
+import { COSMETIC_ITEMS, COSMETIC_SETS, RELEASE_LAUNCHED_AT, SHIPPED_RELEASES, type CosmeticItem, type CosmeticSet } from './catalogue';
 import { loadUnlockFacts } from './facts';
 import { planGrants, type PlannedGrant } from './rules';
 
 export interface GrantOptions {
-  release?: number;
-  launchedAt?: Readonly<Partial<Record<CosmeticRelease, Date>>>;
+  shipped?: ReadonlySet<number>;
+  launchedAt?: Readonly<Partial<Record<number, Date>>>;
   items?: readonly CosmeticItem[];
   sets?: readonly CosmeticSet[];
 }
@@ -24,7 +24,7 @@ export async function grantCosmetics(userId: string, now: Date, opts: GrantOptio
     sets: opts.sets ?? COSMETIC_SETS,
     facts,
     owned: new Set(rows.map((r) => r.itemId)),
-    release: opts.release ?? COSMETICS_RELEASE,
+    shipped: opts.shipped ?? SHIPPED_RELEASES,
     launchedAt: opts.launchedAt ?? RELEASE_LAUNCHED_AT,
   });
   if (planned.length === 0) return [];

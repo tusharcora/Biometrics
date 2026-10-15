@@ -1,7 +1,7 @@
 import { ALL_FAMILIES } from '../../src/achievements/catalogue';
 import {
-  COSMETICS_RELEASE, COSMETIC_ITEMS, COSMETIC_SETS, OPTIONAL_ROOM_SLOTS, RELEASE_LAUNCHED_AT, ROOM_SLOTS, STARTER_IDS,
-  STARTER_ROOM, WORN_SLOTS, cosmeticItem, ruleOf, type CosmeticSlot,
+  COSMETIC_ITEMS, COSMETIC_SETS, OPTIONAL_ROOM_SLOTS, RELEASE_LAUNCHED_AT, ROOM_SLOTS, SHIPPED_RELEASES, STARTER_IDS,
+  STARTER_ROOM, WORN_SLOTS, cosmeticItem, isShipped, ruleOf, type CosmeticSlot,
 } from '../../src/cosmetics/catalogue';
 import fs from 'fs';
 import path from 'path';
@@ -14,7 +14,7 @@ const PREFIX: Record<CosmeticSlot, string> = {
   plant: 'plant', lamp: 'lamp', corner: 'corner', rug: 'rug', pet: 'pet', head: 'out', face: 'out', neck: 'out', ears: 'out',
 };
 const ids = COSMETIC_ITEMS.map((i) => i.id);
-const base = COSMETIC_ITEMS.filter((i) => !i.id.startsWith('set.'));
+const base = COSMETIC_ITEMS.filter((i) => !i.id.startsWith('set.') && i.release !== 3);
 const count = (slot: CosmeticSlot) => base.filter((i) => i.slot === slot).length;
 
 it('reads the Cat boards\' unlock codes', () => {
@@ -46,12 +46,13 @@ it('holds the 134 base items of the Cat boards, slot by slot', () => {
   expect([count('head'), count('face'), count('neck'), count('ears')]).toEqual([9, 5, 5, 3]);
 });
 
-it('has the 17 starter items, all in release 1, and a starter room of placed starters', () => {
+it('has the 19 starter items, all shipped, and a starter room of placed starters', () => {
   expect([...STARTER_IDS].sort()).toEqual([
-    'art.calendar', 'desk.monitor', 'desk.notebook', 'floor.oakDark', 'item.mug', 'item.sticky', 'lamp.amber', 'out.beanie',
-    'out.earbuds', 'plant.cactus', 'plant.fern', 'rug.slate', 'shelf.books', 'shelf.minicactus', 'wall.dots', 'wall.plain', 'win.plain',
+    'art.calendar', 'desk.monitor', 'desk.notebook', 'floor.oakDark', 'item.mug', 'item.sticky', 'lamp.amber', 'lamp.welcome',
+    'out.beanie', 'out.earbuds', 'plant.cactus', 'plant.fern', 'rug.slate', 'shelf.books', 'shelf.minicactus', 'shelf.plank',
+    'wall.dots', 'wall.plain', 'win.plain',
   ]);
-  for (const id of STARTER_IDS) expect(cosmeticItem(id)!.release).toBe(1);
+  for (const id of STARTER_IDS) expect(isShipped(cosmeticItem(id)!)).toBe(true);
   for (const slot of ROOM_SLOTS) {
     const id = STARTER_ROOM[slot];
     if (id === null) expect(OPTIONAL_ROOM_SLOTS.has(slot)).toBe(true);
@@ -106,6 +107,79 @@ it('gives each set exactly one piece per room slot, worn pieces in worn slots, a
   expect(cosmeticItem('set.japanese.desk')!.style).toBe('low');
 });
 
-it('has a launch date for every release the app ships', () => {
-  for (let r = 1; r <= COSMETICS_RELEASE; r++) expect(RELEASE_LAUNCHED_AT[r as 1]).toBeInstanceOf(Date);
+it('has a launch date for every shipped release, and ships releases 1 and 3 (spec §2.1 Releases)', () => {
+  expect([...SHIPPED_RELEASES].sort()).toEqual([1, 3]);
+  for (const r of SHIPPED_RELEASES) expect(RELEASE_LAUNCHED_AT[r as 1 | 3]).toBeInstanceOf(Date);
+  expect(COSMETIC_ITEMS.filter((i) => i.release === 3).map((i) => i.id).sort()).toEqual(['lamp.welcome', 'shelf.plank']);
+});
+
+const PLACEABLE = ROOM_SLOTS.filter((s) => s !== 'wallpaper' && s !== 'floor' && s !== 'window');
+
+describe('iso blocks (spec §2.1, §16 Catalogue)', () => {
+  it('every placeable item has one; styles and worn items have none', () => {
+    for (const item of COSMETIC_ITEMS) {
+      const placeable = (PLACEABLE as readonly string[]).includes(item.slot);
+      expect({ id: item.id, iso: !!item.iso }).toEqual({ id: item.id, iso: placeable });
+    }
+  });
+
+  it('footprints and wall sizes are positive whole tiles; on-top pieces are one tile at most and hold nothing', () => {
+    for (const item of COSMETIC_ITEMS.filter((i) => i.iso)) {
+      const iso = item.iso!;
+      const tag = { id: item.id };
+      expect({ ...tag, layers: iso.layers.length > 0 }).toEqual({ ...tag, layers: true });
+      for (const n of [...(iso.foot ?? []), ...(iso.wall ?? [])]) expect({ ...tag, ok: Number.isInteger(n) && n > 0 }).toEqual({ ...tag, ok: true });
+      if (iso.layers.includes('floor')) expect({ ...tag, foot: !!iso.foot }).toEqual({ ...tag, foot: true });
+      if (iso.layers.includes('wall')) expect({ ...tag, wall: !!iso.wall }).toEqual({ ...tag, wall: true });
+      if (iso.layers.includes('onTop')) {
+        expect({ ...tag, small: !iso.foot || (iso.foot[0] <= 1 && iso.foot[1] <= 1), surface: !!iso.surface }).toEqual({ ...tag, small: true, surface: false });
+      }
+      if (iso.flat) expect({ ...tag, layers: iso.layers }).toEqual({ ...tag, layers: ['floor'] });
+    }
+  });
+
+  it('every desk item, shipped or not, is a kipDesk: 3 × 2, a seat on the front row, 3 spots on the desk', () => {
+    for (const item of COSMETIC_ITEMS.filter((i) => i.slot === 'desk')) {
+      const iso = item.iso!;
+      expect({ id: item.id, kipDesk: iso.kipDesk, foot: iso.foot, seat: iso.seat, spots: iso.surface?.spots.length, facings: iso.facings })
+        .toEqual({ id: item.id, kipDesk: true, foot: [3, 2], seat: [1, 1], spots: 3, facings: 2 });
+    }
+    expect(COSMETIC_ITEMS.filter((i) => i.iso?.kipDesk).every((i) => i.slot === 'desk')).toBe(true);
+  });
+
+  it('spots lie inside their piece: the footprint on the floor, the first half tile off the wall', () => {
+    for (const item of COSMETIC_ITEMS.filter((i) => i.iso?.surface)) {
+      const iso = item.iso!;
+      const [w, d] = iso.foot ?? [iso.wall![0] / 2, 0.5];
+      for (const [si, sj] of iso.surface!.spots) expect({ id: item.id, inside: si > 0 && si < w && sj > 0 && sj < d }).toEqual({ id: item.id, inside: true });
+    }
+  });
+
+  it('wall art is at most 4 half-tiles wide, so a converted room\'s art ends before the plank (spec §2.4)', () => {
+    for (const item of COSMETIC_ITEMS.filter((i) => i.slot === 'art')) expect({ id: item.id, w: item.iso!.wall![0] <= 4 }).toEqual({ id: item.id, w: true });
+  });
+
+  it('only desks, rugs and the welcome lantern have two drawn facings (ruling 3)', () => {
+    const two = COSMETIC_ITEMS.filter((i) => isShipped(i) && i.iso?.facings === 2).map((i) => i.id);
+    expect(two.every((id) => /^(desk|rug)\./.test(id) || id === 'set.cottage.desk' || id === 'set.cottage.rug' || id === 'lamp.welcome')).toBe(true);
+    expect(two).toEqual(expect.arrayContaining(['desk.monitor', 'rug.slate', 'lamp.welcome', 'set.cottage.desk']));
+  });
+
+  it('the structural pieces: a 2-spot wall plank, the welcome lantern, the Cottage garland on the wall', () => {
+    expect(cosmeticItem('shelf.plank')!.iso).toEqual({ layers: ['wall'], wall: [4, 1], surface: { z: 2, spots: [[0.5, 0.2], [1.5, 0.2]] }, facings: 1 });
+    expect(cosmeticItem('lamp.welcome')!.iso).toEqual({ layers: ['floor', 'onTop'], foot: [1, 1], facings: 2 });
+    expect(cosmeticItem('lamp.welcome')!.emissive).toBe(true);
+    expect(cosmeticItem('set.cottage.lamp')!.iso).toEqual({ layers: ['wall'], wall: [8, 2], facings: 1 });
+  });
+
+  it('tags the Funny tab\'s pieces (ruling 20)', () => {
+    expect(COSMETIC_ITEMS.filter((i) => i.tags?.includes('funny')).map((i) => i.id).sort()).toEqual(['corner.beanbag', 'item.controller', 'shelf.globe', 'shelf.luckycat']);
+  });
+});
+
+// A copy count, once shipped, never changes (spec §2.1 `grants`).
+const grantsShipped = JSON.parse(fs.readFileSync(path.join(__dirname, 'grantsShipped.json'), 'utf8')) as Record<string, number>;
+it('keeps every shipped item\'s copy count; every shipped item is recorded', () => {
+  for (const [id, n] of Object.entries(grantsShipped)) expect({ id, n: cosmeticItem(id)!.grants ?? 1 }).toEqual({ id, n });
+  expect(COSMETIC_ITEMS.filter((i) => isShipped(i) && !(i.id in grantsShipped)).map((i) => i.id)).toEqual([]);
 });

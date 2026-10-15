@@ -4,7 +4,7 @@
 // (ruling 4). Only release-1 pieces are here; the rest come with their art.
 import type { KipRamp } from './kipArt';
 import { EMPTY_WORN, type KipWorn } from '../room/loadout';
-import { WORN_SLOTS, type WornSlot } from '../room/slots';
+import { WORN_SLOTS, type WornSlot } from '../room/catalogue';
 
 export interface WornArt {
   id: string;

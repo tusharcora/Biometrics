@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React from 'react';
 import { Pressable, View } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { useColorScheme } from 'nativewind';
@@ -10,7 +10,6 @@ import { useMyKip } from '../../lib/kip/myKip';
 import { KIP_COPY } from '../../lib/kipCopy';
 import { spokenLine, type KipStage } from '../../lib/kipStage';
 import { useMyRoom } from '../../lib/room/cosmeticsStore';
-import { drawableLoadout } from '../../lib/room/draw';
 import type { RoomWeather } from '../../lib/room/weather';
 import type { KipLook } from '../../lib/useKipTurn';
 import { COLORS } from '../../theme';
@@ -30,10 +29,11 @@ export function collapseProgress(scrollY: number, cardBottom: number, covered: n
   return Math.max(0, Math.min(1, (scrollY - (end - FADE_PT)) / FADE_PT));
 }
 
-// W7 "Collapsed · after scroll" (spec §3.5): the room's thumbnail (96 × 60 at 1 point a cell, cropped to THUMB_BOX,
-// inside a 3-point frame), "KIP" with the collapsed status line, and the Conversations and New chat buttons. The
-// thumbnail's picture is decorative: the button around it carries the label. It shows your saved room and KIP in
-// what it wears, like the card; `paused` stops its loops while decorate mode is open.
+// W7 "Collapsed · after scroll" (spec §3.5): the room's thumbnail (96 × 60 at 1 point a cell, inside a 3-point
+// frame), "KIP" with the collapsed status line, and the Conversations and New chat buttons. The thumbnail follows
+// KIP's desk wherever it stands (spec 2026-10-15 §9.1). Its picture is decorative: the button around it carries the
+// label. It shows your saved layout and KIP in what it wears, like the card; `paused` stops its loops while the
+// editor is open.
 export function CollapsedKipHeader({ stage, look, statusLine, window, reduceMotion, paused, onExpand, onConversations, onNewChat, showActions }: {
   stage: KipStage;
   look: KipLook;
@@ -47,8 +47,7 @@ export function CollapsedKipHeader({ stage, look, statusLine, window, reduceMoti
   showActions: boolean;
 }) {
   const me = useMyKip();
-  const stored = useMyRoom();
-  const loadout = useMemo(() => drawableLoadout(stored), [stored]);
+  const { layout, tier } = useMyRoom();
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === 'dark' ? COLORS.dark : COLORS.light;
   return (
@@ -62,7 +61,8 @@ export function CollapsedKipHeader({ stage, look, statusLine, window, reduceMoti
       >
         <RoomView
           testID="kip-room-thumb"
-          loadout={loadout}
+          layout={layout}
+          tier={tier}
           worn={me.worn}
           weather={window.weather}
           night={window.night}

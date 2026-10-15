@@ -1,29 +1,19 @@
 // Jest Snapshot v1, https://jestjs.io/docs/snapshot-testing
 
-exports[`the cottage set draws deterministically, day and night, with four swatches: cottage day 1`] = `
+exports[`the cottage set draws its iso layout deterministically, day and night, with four swatches: cottage day 1`] = `
 {
-  "base": 1994,
-  "emissive": 64,
-  "frames": [
-    34,
-    34,
-    34,
-  ],
-  "kip": 32,
-  "light": 137,
+  "back": 5434,
+  "emissive": 208,
+  "front": 47,
+  "light": 78,
 }
 `;
 
-exports[`the cottage set draws deterministically, day and night, with four swatches: cottage night 1`] = `
+exports[`the cottage set draws its iso layout deterministically, day and night, with four swatches: cottage night 1`] = `
 {
-  "base": 1972,
-  "emissive": 130,
-  "frames": [
-    52,
-    52,
-    52,
-  ],
-  "kip": 32,
-  "light": 32,
+  "back": 5296,
+  "emissive": 348,
+  "front": 47,
+  "light": 1,
 }
 `;

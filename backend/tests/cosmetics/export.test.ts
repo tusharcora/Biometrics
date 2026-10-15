@@ -1,26 +1,43 @@
 import fs from 'fs';
-import { COSMETICS_RELEASE, COSMETIC_ITEMS } from '../../src/cosmetics/catalogue';
+import { COSMETIC_ITEMS, isShipped } from '../../src/cosmetics/catalogue';
 import { MOBILE_CATALOGUE_PATH, exportCatalogue, serialiseExport } from '../../src/cosmetics/export';
+import { validateLayout } from '../../src/room/geometry';
+import { layoutFromSlots, starterLayout } from '../../src/room/convert';
+import { deps } from '../room/helpers';
 
 it('the app\'s copy is current: run scripts/export-cosmetics.ts after any catalogue change', () => {
   expect(fs.readFileSync(MOBILE_CATALOGUE_PATH, 'utf8')).toBe(serialiseExport(exportCatalogue()));
 });
 
-it('ships only items and sets the app can draw (release <= COSMETICS_RELEASE)', () => {
+it('ships only the shipped releases, and every set id an item names is a shipped set', () => {
   const e = exportCatalogue();
-  expect(e.items.every((i) => i.release <= COSMETICS_RELEASE)).toBe(true);
-  expect(e.sets.every((s) => s.release <= COSMETICS_RELEASE)).toBe(true);
+  expect(e.releases).toEqual([1, 3]);
+  expect(e.items.every((i) => isShipped(i))).toBe(true);
+  expect(e.sets.every((s) => isShipped(s))).toBe(true);
   const shipped = new Set(e.items.map((i) => i.id));
   for (const set of e.sets) for (const id of [...Object.values(set.room), ...Object.values(set.worn)]) expect(shipped.has(id!)).toBe(true);
+  const setIds = new Set(e.sets.map((s) => s.id));
+  for (const item of e.items) for (const s of item.sets ?? []) expect({ id: item.id, s, shipped: setIds.has(s) }).toEqual({ id: item.id, s, shipped: true });
+  expect(e.items.find((i) => i.id === 'plant.snake')!.sets).toBeUndefined(); // homeGym and library are release 2
 });
 
 it('ships every item grantCosmetics can grant', () => {
   const shipped = new Set(exportCatalogue().items.map((i) => i.id));
-  const grantable = COSMETIC_ITEMS.filter((i) => i.release <= COSMETICS_RELEASE && !i.retired && i.unlock.kind !== 'starter');
+  const grantable = COSMETIC_ITEMS.filter((i) => isShipped(i) && !i.retired && i.unlock.kind !== 'starter');
   expect(grantable.filter((i) => !shipped.has(i.id)).map((i) => i.id)).toEqual([]);
 });
 
 it('a release-2 export would add the other five sets', () => {
-  expect(exportCatalogue(2).sets).toHaveLength(6);
-  expect(exportCatalogue(2).items.length).toBeGreaterThan(exportCatalogue(1).items.length);
+  const all = exportCatalogue(new Set([1, 2, 3]));
+  expect(all.sets).toHaveLength(6);
+  expect(all.items.length).toBeGreaterThan(exportCatalogue().items.length);
+});
+
+it('ships the starter layout and one valid iso layout per set (spec §5.5, ruling 21)', () => {
+  const e = exportCatalogue();
+  expect(e.starterLayout).toEqual(starterLayout());
+  for (const set of e.sets) {
+    expect(set.layout).toEqual(layoutFromSlots(set.room));
+    expect({ id: set.id, failure: validateLayout(set.layout, 1, deps) }).toEqual({ id: set.id, failure: null });
+  }
 });

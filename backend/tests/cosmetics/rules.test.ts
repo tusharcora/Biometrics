@@ -6,7 +6,7 @@ const NONE: UnlockFacts = { levels: [], recapsReadAt: [], cheersAt: [] };
 const SETS = new Map(COSMETIC_SETS.map((s) => [s.id, s]));
 const LAUNCH = { 1: t('2026-10-15T00:00:00Z') };
 const plan = (facts: UnlockFacts, over: Partial<Parameters<typeof planGrants>[0]> = {}) =>
-  planGrants({ items: COSMETIC_ITEMS, sets: COSMETIC_SETS, facts, owned: new Set(), release: 1, launchedAt: LAUNCH, ...over });
+  planGrants({ items: COSMETIC_ITEMS, sets: COSMETIC_SETS, facts, owned: new Set(), shipped: new Set([1, 3]), launchedAt: LAUNCH, ...over });
 const ids = (rows: { itemId: string }[]) => rows.map((r) => r.itemId).sort();
 
 describe('metAt', () => {
@@ -90,7 +90,7 @@ describe('planGrants', () => {
   it('a release-2 item whose rule was met before the bump is backfill when granted after it', () => {
     const facts = { ...NONE, levels: [1, 2, 3].map((level) => ({ family: 'STEADY_BEDTIME', level, at: t('2026-11-01T00:00:00Z') })) };
     const launchedAt = { 1: t('2026-10-15T00:00:00Z'), 2: t('2027-01-10T00:00:00Z') };
-    const rows = plan(facts, { release: 2, launchedAt });
+    const rows = plan(facts, { shipped: new Set([1, 2, 3]), launchedAt });
     expect(rows.find((r) => r.itemId === 'wall.shoji')!.source).toBe(BACKFILL);
     expect(rows.find((r) => r.itemId === 'wall.stripes')!.source).toBe('family:STEADY_BEDTIME:1');
   });

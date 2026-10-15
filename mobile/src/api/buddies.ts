@@ -1,6 +1,6 @@
 import type { AchievementFamily } from './achievements';
 import { apiFetch } from './client';
-import type { WornSlot } from '../lib/room/slots';
+import type { WornSlot } from '../lib/room/catalogue';
 
 // Buddies (spec 2026-10-06 buddies). Only a BARE 404 on GET /me/buddies (no error code) means the
 // backend predates buddies; every other buddy error carries { error: code } (not_buddies is a 403).

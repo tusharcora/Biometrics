@@ -1,10 +1,7 @@
 import { KIP_COLOURS, kipRamp } from '../src/lib/kip/kipArt';
-import { catalogueItem, catalogueItemsFor } from '../src/lib/room/catalogue';
-import { boundsOf, boxContains } from '../src/lib/room/grid';
+import { catalogueItem, catalogueItemsFor, type RoomSlot } from '../src/lib/room/catalogue';
 import { itemIcon } from '../src/lib/room/icons';
 import { itemArt, type ItemContext } from '../src/lib/room/items';
-import { ANCHOR_EXEMPT } from '../src/lib/room/items/shared';
-import { SLOT_ANCHORS, type RoomSlot } from '../src/lib/room/slots';
 import '../src/lib/room/art';
 
 export const CTX_DAY: ItemContext = { weather: 'clear', night: false, colour: 'coral', ramp: kipRamp(KIP_COLOURS.coral), screen: 'lines' };
@@ -13,7 +10,7 @@ const LIME: ItemContext = { ...CTX_DAY, colour: 'lime', ramp: kipRamp(KIP_COLOUR
 
 /** Spec §8 / §11 "Item art", for every shipped item of one room slot (set pieces only once their art exists, Task 11). */
 export function checkSlotArt(slot: RoomSlot, { sets = true }: { sets?: boolean } = {}): void {
-  for (const item of catalogueItemsFor(slot).filter((i) => sets || !i.id.startsWith('set.'))) {
+  for (const item of catalogueItemsFor(slot).filter((i) => (sets || !i.id.startsWith('set.')) && i.release !== 3)) {
     const art = itemArt(item.id);
     const tag = { id: item.id };
     expect({ ...tag, art: !!art, icon: (itemIcon(item.id)?.length ?? 0) > 0 }).toEqual({ ...tag, art: true, icon: true });
@@ -25,10 +22,7 @@ export function checkSlotArt(slot: RoomSlot, { sets = true }: { sets?: boolean }
     for (const ctx of [CTX_DAY, CTX_NIGHT]) {
       const layers = art.draw(ctx);
       expect({ ...tag, base: (layers.base?.length ?? 0) > 0 }).toEqual({ ...tag, base: true });
-      // Inside its anchor, unless exempt with a reason (ruling 3).
-      if (!ANCHOR_EXEMPT.has(item.id)) {
-        expect({ ...tag, inside: boxContains(SLOT_ANCHORS[slot], boundsOf(layers.base!)!) }).toEqual({ ...tag, inside: true });
-      }
+      // Front-on art is a sprite source now; Task 7's iso tests check placement (spec 2026-10-15 §3).
       // Emissive items light only in the glow layer; others have none.
       expect({ ...tag, glow: (layers.emissive?.length ?? 0) > 0 }).toEqual({ ...tag, glow: !!item.emissive });
       // Loops have exactly three frames, and they differ.

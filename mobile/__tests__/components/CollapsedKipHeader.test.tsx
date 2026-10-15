@@ -5,7 +5,9 @@ import { fetchCosmetics } from '../../src/api/cosmetics';
 import { resetMyKip } from '../../src/lib/kip/myKip';
 import { kipStage } from '../../src/lib/kipStage';
 import { loadCosmetics, resetCosmetics } from '../../src/lib/room/cosmeticsStore';
-import { EMPTY_WORN, STARTER_LOADOUT } from '../../src/lib/room/loadout';
+import { starterLayout } from '../../src/lib/room/layout';
+import { EMPTY_WORN } from '../../src/lib/room/loadout';
+import { cosmeticsDTO } from '../../jest-mocks/cosmeticsFixture';
 
 jest.mock('../../src/components/room/RoomView', () => require('../../jest-mocks/RoomView'));
 jest.mock('../../src/api/cosmetics', () => ({ fetchCosmetics: jest.fn(), putCosmetics: jest.fn(), postCosmeticsSeen: jest.fn() }));
@@ -55,15 +57,12 @@ it('a header taller than the row covers nothing: the fade ends as the card leave
   expect(collapseProgress(300, 312, -8)).toBe(0.5);
 });
 
-it('the thumbnail draws your saved room and what KIP wears; a piece this build cannot draw shows as the starter piece', async () => {
-  (fetchCosmetics as jest.Mock).mockResolvedValue({
-    catalogueVersion: 1, owned: [], fresh: [], version: 1, counters: { recapsRead: 0, buddyCheers: 0 },
-    room: { ...STARTER_LOADOUT, rug: 'rug.red', wallpaper: 'wall.fromTheFuture' }, worn: { ...EMPTY_WORN, head: 'out.cap' },
-  });
+it('the thumbnail draws your saved layout and what KIP wears', async () => {
+  const layout = { ...starterLayout(), styles: { ...starterLayout().styles, wallpaper: 'wall.dots' } };
+  (fetchCosmetics as jest.Mock).mockResolvedValue(cosmeticsDTO({ layout, worn: { ...EMPTY_WORN, head: 'out.cap' } }));
   await act(async () => { await loadCosmetics(); });
   const thumb = renderHeader().getByTestId('kip-room-thumb');
-  expect(JSON.parse(thumb.props.loadout)).toEqual({ ...STARTER_LOADOUT, rug: 'rug.red' });
-  expect(JSON.parse(thumb.props.worn).head).toBe('out.cap');
+  expect([JSON.parse(thumb.props.layout), thumb.props.tier, JSON.parse(thumb.props.worn).head]).toEqual([layout, 1, 'out.cap']);
 });
 
 it('pauses the thumbnail while decorate mode is open', () => {

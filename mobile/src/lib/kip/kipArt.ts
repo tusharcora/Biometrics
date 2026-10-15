@@ -4,7 +4,7 @@
 // have a spec.
 // Output is a list of one-row runs, like weatherArt.ts.
 import type { PixelRect } from '../weatherArt';
-import type { WornSlot } from '../room/slots';
+import type { WornSlot } from '../room/catalogue';
 import { wornArt, wornLayer } from './wornArt';
 
 export const KIP_GRID = 16;

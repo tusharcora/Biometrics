@@ -21,7 +21,7 @@ const Skia = {
   XYWHRect: (x, y, width, height) => ({ x, y, width, height }),
 };
 
-const Canvas = ({ children, style }) => React.createElement(View, { testID: 'skia-canvas', style }, children);
+const Canvas = ({ children, style, testID, pointerEvents }) => React.createElement(View, { testID: testID ?? 'skia-canvas', style, pointerEvents }, children);
 const Group = ({ children, transform }) => React.createElement(View, { testID: 'skia-group', skiaTransform: transform }, children);
 const Picture = ({ picture }) => React.createElement(View, { testID: 'skia-picture', picture });
 

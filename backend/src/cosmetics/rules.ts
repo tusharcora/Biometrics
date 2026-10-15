@@ -1,7 +1,7 @@
 // Which items a user's own data unlocks (spec 2026-10-14 KIP's room §3.1). Pure: the facts are read elsewhere.
 // Each rule has the moment it was met; a grant is 'backfill' when that moment is before its release launched, so
 // it does not matter which hook (badge, recap, cheer, GET) happens to run first.
-import type { CosmeticItem, CosmeticRelease, CosmeticSet, UnlockRule } from './catalogue';
+import type { CosmeticItem, CosmeticSet, UnlockRule } from './catalogue';
 
 export interface UnlockFacts {
   /** Every stored badge level and when it was stored. */
@@ -57,15 +57,15 @@ export function planGrants(input: {
   sets: readonly CosmeticSet[];
   facts: UnlockFacts;
   owned: ReadonlySet<string>;
-  release: number;
-  launchedAt: Readonly<Partial<Record<CosmeticRelease, Date>>>;
+  shipped: ReadonlySet<number>;
+  launchedAt: Readonly<Partial<Record<number, Date>>>;
 }): PlannedGrant[] {
-  const { items, sets, facts, owned, release, launchedAt } = input;
+  const { items, sets, facts, owned, shipped, launchedAt } = input;
   const setsById = new Map(sets.map((s) => [s.id as string, s]));
   const byId = new Map(items.map((i) => [i.id, i]));
   const best = new Map<string, { at: Date; source: string }>();
   const offer = (item: CosmeticItem | undefined, at: Date, source: string) => {
-    if (!item || item.release > release || item.retired || item.unlock.kind === 'starter' || owned.has(item.id)) return;
+    if (!item || !shipped.has(item.release) || item.retired || item.unlock.kind === 'starter' || owned.has(item.id)) return;
     const current = best.get(item.id);
     if (!current || at < current.at) best.set(item.id, { at, source });
   };
@@ -76,7 +76,7 @@ export function planGrants(input: {
   }
   // Unlocking a set unlocks all its pieces (§1), including base pieces it reuses.
   for (const set of sets) {
-    if (set.release > release) continue;
+    if (!shipped.has(set.release)) continue;
     const at = metAt(set.unlock, facts, setsById);
     if (!at) continue;
     for (const id of [...Object.values(set.room), ...Object.values(set.worn)]) offer(byId.get(id!), at, `set:${set.id}`);

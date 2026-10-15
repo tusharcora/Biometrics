@@ -48,6 +48,7 @@ export const USER_OWNED_MODELS = [
   'GoalChange',
   'CosmeticUnlock',
   'CosmeticLoadout',
+  'RoomFirstWeek',
   'CoachConsent',
   'PushToken',
   'Session',

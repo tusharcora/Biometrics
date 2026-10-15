@@ -56,6 +56,7 @@ model User {
   achievements          Achievement[]
   cosmeticUnlocks       CosmeticUnlock[]
   cosmeticLoadout       CosmeticLoadout?
+  roomFirstWeek         RoomFirstWeek?
   goalChanges           GoalChange[]
   buddyPairsA           BuddyPair[]         @relation("BuddyPairA")
   buddyPairsB           BuddyPair[]         @relation("BuddyPairB")
@@ -786,9 +787,26 @@ model CosmeticLoadout {
   room      Json
   /// Record<WornSlot, itemId | null>
   worn      Json
+  /// RoomLayout (spec 2026-10-15 §2.3); null = a Spec B row not converted yet (§2.4). `room` is read-only from P1
+  /// and dropped in P2.
+  layout    Json?
+  /// 1 starter 7×7, 2 bigger 8×8, 3 loft 9×9; written only by the expand route (P2).
+  tier      Int      @default(1)
   /// Optimistic concurrency: every save increments it.
   version   Int      @default(0)
   updatedAt DateTime @updatedAt
+}
+
+/// The first week (spec 2026-10-15 §11). Never on CosmeticLoadout: a loadout row made for a flag would turn the
+/// user's first save (the version-0 create) into a false 409.
+model RoomFirstWeek {
+  userId        String    @id
+  user          User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  welcomedAt    DateTime?
+  /// Set once by PUT /me/cosmetics when a layout first holds an instance id the stored one did not.
+  firstPlacedAt DateTime?
+  /// The first-week list's day 1 (P2).
+  startedOn     DateTime? @db.Date
 }
 
 enum GoalChangeKind {

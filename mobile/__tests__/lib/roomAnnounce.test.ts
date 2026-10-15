@@ -62,7 +62,8 @@ it('finds a celebration\'s pieces: its family at its level or below, and any fam
   expect(piecesForBadge(fresh, 'SLEEP_GOAL', 1)).toEqual(['rug.red', 'shelf.trophyB']);
 });
 
-it('opens decorate mode on the piece\'s tab and slot', () => {
-  expect(decorateTarget('rug.red')).toEqual({ tab: 'room', slot: 'rug' });
-  expect(decorateTarget('out.scarf')).toEqual({ tab: 'kip', slot: 'neck' });
+it('opens the editor on New with a piece, on KIP for a worn piece, on Room for a style (Spec B\'s routing, final review I2)', () => {
+  expect(decorateTarget('rug.red')).toEqual({ drawer: 'new', item: 'rug.red' });
+  expect(decorateTarget('out.scarf')).toEqual({ drawer: 'kip' });
+  expect([decorateTarget('wall.brick'), decorateTarget('floor.tiles'), decorateTarget('win.plain')]).toEqual([{ drawer: 'room' }, { drawer: 'room' }, { drawer: 'room' }]);
 });

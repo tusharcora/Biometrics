@@ -4,7 +4,7 @@ import type { AchievementsSnapshot } from '../achievementsStore';
 import type { AchievementFamilyName, SetId, UnlockRule } from './catalogue';
 import { catalogueSet } from './catalogue';
 import type { ItemId } from './loadout';
-import type { RoomSlot, WornSlot } from './slots';
+import type { RoomSlot, WornSlot } from './catalogue';
 
 export const ITEM_NAMES: Readonly<Record<ItemId, string>> = {
   'wall.plain': 'Plain slate', 'wall.dots': 'Dots', 'wall.stripes': 'Tinted stripes', 'wall.brick': 'Brick',
@@ -16,13 +16,14 @@ export const ITEM_NAMES: Readonly<Record<ItemId, string>> = {
   'win.plain': 'Plain frame', 'win.curtains': 'Curtains', 'win.blinds': 'Blinds', 'win.sticker': 'Sticker sun',
   'win.fairy': 'Fairy lights', 'win.chime': 'Wind chime',
   'shelf.books': 'Books', 'shelf.minicactus': 'Mini cactus', 'shelf.trophyB': 'Bronze trophy', 'shelf.globe': 'Snow globe',
-  'shelf.luckycat': 'Lucky cat',
+  'shelf.luckycat': 'Lucky cat', 'shelf.plank': 'Wall plank',
   'desk.monitor': 'Monitor', 'desk.notebook': 'Notebook', 'desk.laptop': 'Laptop',
   'item.mug': 'Mug', 'item.sticky': 'Sticky notes', 'item.bottle': 'Water bottle', 'item.pills': 'Pill organiser',
   'item.shaker': 'Protein shaker', 'item.stand': 'Headphones stand', 'item.controller': 'Game controller',
   'plant.fern': 'Fern', 'plant.cactus': 'Cactus', 'plant.monstera': 'Monstera', 'plant.snake': 'Snake plant',
   'plant.succulents': 'Succulent trio', 'plant.bamboo': 'Lucky bamboo', 'plant.sunflower': 'Sunflower',
   'lamp.amber': 'Amber desk lamp', 'lamp.mint': 'Mint desk lamp', 'lamp.kiplamp': 'KIP-colour lamp', 'lamp.salt': 'Salt lamp',
+  'lamp.welcome': 'Welcome lantern',
   'corner.floorlamp': 'Floor lamp', 'corner.yogamat': 'Yoga mat roll', 'corner.bag': 'Punching bag', 'corner.beanbag': 'Bean bag',
   'rug.slate': 'Slate rug', 'rug.red': 'Red rug', 'rug.gymmat': 'Gym mat', 'rug.checker': 'Checker rug',
   'rug.woven': 'Round woven', 'rug.tatami': 'Tatami mat',
@@ -49,13 +50,6 @@ export const SLOT_NAMES: Readonly<Record<RoomSlot | WornSlot, string>> = {
 export const SLOT_TITLES: Readonly<Record<RoomSlot | WornSlot, string>> = {
   wallpaper: 'Wallpaper', floor: 'Floor', art: 'Art', window: 'Window', shelf: 'Shelf', desk: 'Desk', desk_item: 'Desk item',
   plant: 'Plant', lamp: 'Lamp', corner: 'Corner', rug: 'Rug', pet: 'Pet', head: 'Head', face: 'Face', neck: 'Neck', ears: 'Ears',
-};
-
-/** The short visible text of the decorate room's hotspot tags; each fits a 64-point tag in the pixel font. The spoken
- * label keeps the whole slot name (hotspotLabel). */
-export const HOTSPOT_LABELS: Readonly<Record<RoomSlot, string>> = {
-  wallpaper: '+ WALL', floor: '+ FLOOR', art: '+ ART', window: '+ WINDOW', shelf: '+ SHELF', desk: '+ DESK', desk_item: '+ ITEM',
-  plant: '+ PLANT', lamp: '+ LAMP', corner: '+ CORNER', rug: '+ RUG', pet: '+ PET',
 };
 
 const FAMILY_NAMES: Record<AchievementFamilyName, string> = {
@@ -133,38 +127,59 @@ export const ROOM_COPY = {
   decorate: 'Decorate',
   decorateLabel: "Decorate KIP's room",
   decorateLabelNew: "Decorate KIP's room. New things to place",
-  title: 'DECORATE',
   cancel: 'Cancel',
   done: 'Done',
   undo: 'Undo',
   undoLabel: 'Undo the last change',
-  tabs: { room: 'Room', kip: 'KIP', sets: 'Sets' },
   tabsLabel: 'Decorate',
-  hotspot: (slot: RoomSlot) => HOTSPOT_LABELS[slot],
-  hotspotLabel: (slot: RoomSlot) => `Decorate the ${SLOT_NAMES[slot]}`,
-  locked: 'LOCKED',
   none: 'None',
   noArt: 'No art',
   tags: { placed: 'Placed', owned: 'Owned' },
   flags: { tint: 'TINT', glow: 'GLOW', anim: 'ANIM' },
-  info: {
-    previewing: 'Previewing',
-    inRoom: 'In your room',
-    locked: 'Locked',
-    sets: 'Theme sets',
-    wearing: 'KIP is wearing',
-    dress: 'Dress KIP',
-    previewText: (name: string, slot: RoomSlot | WornSlot) => `${name} in the ${SLOT_NAMES[slot]} spot`,
-    placedText: (name: string) => `${name} is already placed`,
-    emptyText: (slot: RoomSlot | WornSlot) => `Nothing in the ${SLOT_NAMES[slot]} spot`,
-    lockedText: (name: string, unlock: string) => `${name} · ${unlock}`,
-    setsText: 'Apply a whole room in one tap, then swap any piece',
-    dressText: 'Pick an accessory',
-  },
-  tile: {
-    placed: (name: string) => `${name}, placed`,
-    owned: (name: string) => `${name}, owned. Place it`,
-    locked: (name: string, unlock: string, progress: string) => (progress ? `${name}, locked. ${unlock}. ${progress}` : `${name}, locked. ${unlock}`),
+  edit: {
+    title: 'EDITING',
+    count: (n: number, cap: number) => `${n} / ${cap} in room`,
+    countLabel: (n: number, cap: number) => `${n} of ${cap} pieces in the room`,
+    roomLabel: "KIP's room, being edited",
+    where: { floor: 'on the floor', wall: 'on the wall', on: (parent: string) => `on the ${parent}` },
+    /** What the desk piece is called in a sentence: KIP's desk, whatever stands on it. */
+    deskNoun: 'desk',
+    /** Tiles count from 1 for people (the back corner is tile 1, 1). */
+    tile: (x: number, y: number) => `tile ${x + 1}, ${y + 1}`,
+    inventory: (n: number) => `×${n} in inventory`,
+    inventorySpoken: (n: number) => `${n} in inventory`,
+    onIt: (n: number) => `${n} on it`,
+    tools: { move: 'Move', flip: 'Flip', turn: 'Turn', another: 'Another', store: 'Store', undo: 'Undo', redo: 'Redo', showGrid: 'Show grid', hideGrid: 'Hide grid', deselect: 'Done with this piece' },
+    undoLabel: 'Undo the last change',
+    redoLabel: 'Redo',
+    storeLabel: (name: string, n: number) => (n ? `Store ${name} and ${n} ${n === 1 ? 'piece' : 'pieces'} on it` : `Store ${name}`),
+    piecesTitle: 'Pieces in the room',
+    reason: {
+      outside: "Doesn't fit here",
+      overlap: (name: string) => `Overlaps the ${name}`,
+      window: 'Covers the window',
+      spot: 'That spot is taken',
+      parent: 'Nothing can stand on that',
+      seat: "Blocks KIP's chair",
+      full: 'Room is full',
+      /** Replace desk with a desk you have none left of, or the desk already there (ruling UI-OUTCOMES). */
+      none: 'None left to place',
+      sameDesk: 'That desk is in the room already',
+      layer: { floor: 'Only on the floor', wall: 'Only on the wall', onTop: 'Only on a desk or shelf', floorOnTop: 'Only on the floor or a surface' },
+    },
+    /** Moving without a drag (spec §5.7): the arrows, Put on…, and what each press did. */
+    nudge: {
+      dirs: { backLeft: 'Back left', backRight: 'Back right', frontLeft: 'Front left', frontRight: 'Front right', up: 'Up', down: 'Down' },
+      label: (dir: string) => `Move ${dir.toLowerCase()}`,
+      putOn: 'Put on…',
+      on: (noun: string) => `On the ${noun}`,
+      onFloor: 'On the floor',
+      done: 'Done moving',
+      moved: (where: string) => `Moved. ${where}`,
+      cant: (why: string) => `Can't move there: ${why.charAt(0).toLowerCase()}${why.slice(1)}`,
+      tile: (x: number, y: number) => `Tile ${x + 1}, ${y + 1}`,
+      wallStep: (y: number) => `On the wall, ${y + 1} up`,
+    },
   },
   set: {
     pieces: (n: number, unlock: string) => `${n} pieces · ${unlock}`,
@@ -173,17 +188,73 @@ export const ROOM_COPY = {
     preview: 'Preview',
     applyLabel: (name: string) => `Apply the ${name} set`,
     previewLabel: (name: string) => `Preview the ${name} set`,
+    /** After Apply set (ruling T9-FIX): what was left out because you don't have it yet, and whether your desk stayed. */
+    applied: (name: string, missing: readonly string[], deskKept: boolean) => {
+      const listed = missing.length > 3 ? `${missing.slice(0, 3).join(', ')} and ${missing.length - 3} more` : missing.join(', ');
+      return [`${name} set applied.`, missing.length ? `Not yours yet: ${listed}.` : '', deskKept ? 'Your desk stayed.' : ''].filter(Boolean).join(' ');
+    },
   },
+  /** The drawer's last section (spec 2026-10-15 §5.4): each line a bold lead (K4b.dc.html:87-89) and its body. */
   arrive: {
     title: 'How new things arrive',
-    lines: [
-      'Badge families. Sleep goal, Steady bedtime, Step goal, Check-in, Best recovery week, Every day logged and Steadiest month each unlock pieces at levels I to V.',
-      'Any family. Trophies, the rainbow rug and KIP’s crown come from reaching a level in any family.',
-      'Recaps and buddies. Reading weekly recaps and cheering buddies add decor and whole sets.',
-      'Nothing is sold. The starter room is yours from day one, and items are never taken away.',
+    items: [
+      { lead: 'Badge families.', body: 'Sleep goal, Steady bedtime, Step goal, Check-in, Best recovery week, Every day logged and Steadiest month each unlock pieces at levels 1 to 5.' },
+      { lead: 'Any family.', body: 'Trophies, the rainbow rug and KIP’s crown come from reaching a level in any family.' },
+      { lead: 'Recaps and buddies.', body: 'Reading weekly recaps and cheering buddies add decor and whole sets.' },
+      { lead: null, body: 'Nothing is sold. The starter room is yours from day one, and items are never taken away.' },
     ],
-    /** The bold lead of each of the first three lines (K4b.dc.html:87-89). */
-    leads: ['Badge families.', 'Any family.', 'Recaps and buddies.'],
+  },
+  drawer: {
+    title: (n: number) => `Inventory · ${n} not placed`,
+    titleSpoken: (n: number) => `Inventory, ${n} not placed`,
+    tabsLabel: 'Inventory',
+    tabs: { all: 'All', floor: 'Floor', wall: 'Wall', onTop: 'On top', funny: 'Funny', new: 'New', room: 'Room', kip: 'KIP', sets: 'Sets' },
+    rows: { wallpaper: 'Walls', floor: 'Floor', window: 'Window' },
+    count: (n: number) => `×${n}`,
+    allPlaced: 'All placed',
+    newTag: 'NEW',
+    none: 'None',
+    place: 'Place',
+    replaceDesk: 'Replace desk',
+    more: 'Show more',
+    less: 'Show less',
+    tile: {
+      piece: (name: string, n: number, isNew: boolean) => `${name}, ${n ? `${n} in inventory` : 'all placed'}${isNew ? ', new' : ''}`,
+      style: (name: string, current: boolean) => (current ? `${name}, in your room` : `${name}. Use it`),
+      worn: (name: string, wearing: boolean) => (wearing ? `${name}, wearing` : `${name}. Wear it`),
+      locked: (name: string, unlock: string, progress: string) => (progress ? `${name}, locked. ${unlock}. ${progress}` : `${name}, locked. ${unlock}`),
+    },
+    full: {
+      text: (cap: number) => `KIP's room is full. ${cap} pieces fit this room. Store something to make space, or grow the room`,
+      store: 'Store a piece',
+      hint: 'Tap a piece in the room, then Store.',
+    },
+    applyConfirm: (name: string) => `Store everything and set up ${name}?`,
+    applyGo: 'Set it up',
+    applyKeep: 'Not now',
+    previewing: (name: string) => `Previewing ${name}`,
+    stopPreview: 'Stop preview',
+  },
+  welcome: {
+    bubble: 'WELCOME HOME!',
+    text: "This is KIP's room. Make it yours: drag pieces in, flip them, stack them.",
+    lanternName: 'A welcome lantern',
+    lanternLine: 'Free · in your inventory · glows at night',
+    lanternSpoken: 'A welcome lantern. Free, in your inventory, glows at night',
+    place: 'Place the lantern',
+    later: 'Later',
+  },
+  coach: {
+    title: 'Your first piece',
+    sub: 'Takes 10 seconds',
+    step: (n: number) => `Step ${n} of 3`,
+    /** Said when a new step starts: the step and what to do. */
+    stepSpoken: (n: number, text: string) => `Step ${n} of 3. ${text}`,
+    steps: ['Drag the lantern onto the lime tile. It snaps to the grid.', 'Now tap Turn. It faces the other way.', 'Tap Done to keep it.'] as const,
+    next: ['Next: turn it, then tap Done.', 'Next: tap Done.', ''] as const,
+    labels: ['Drag', 'Turn', 'Done'] as const,
+    skip: 'Skip',
+    place: 'Place it on the lime tile',
   },
   discard: { title: 'Discard your changes?', discard: 'Discard', keep: 'Keep editing' },
   loadFailed: { text: "Couldn't open your room just now. Check your connection and try again.", retry: 'Try again', close: 'Close' },

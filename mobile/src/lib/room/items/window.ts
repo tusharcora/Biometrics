@@ -1,7 +1,8 @@
 // Window decor (CatWindow.dc.html "slot · window"): every piece is Spec A's plain frame with today's weather in the
 // glass (shared.windowFrame), then its board decor sprite. The board's frame interior maps onto Spec A's frame with
 // the board's (0, 0) at room cell O.
-import { registerItems, type ItemArt } from '../items';
+import { registerItems, type ItemArt, type ItemContext, type ItemLayers } from '../items';
+import type { ItemId } from '../loadout';
 import { registerIcons, type SpriteRect } from '../icons';
 import { glow, R, type Rects } from '../paint';
 import { rgbOf, sprite, three, tintOf, veiled, windowFrame } from './shared';
@@ -15,27 +16,32 @@ const FAIRY: readonly SpriteRect[] = [[0, 1, 34, 1, '#475569'], [2, 2, 1, 1, '#F
 const CHIME: readonly SpriteRect[] = [[16, 2, 1, 4, '#94A3B8'], [12, 6, 9, 1, '#94A3B8'], [12, 7, 1, 5, '#CBD5E1'], [15, 7, 1, 7, '#CBD5E1'], [18, 7, 1, 6, '#CBD5E1'], [20, 7, 1, 4, '#CBD5E1'], [16, 8, 1, 8, '#F472B6'], [16, 16, 2, 3, '#F9A8D4']];
 
 /** The board's (0, 0) in room cells: the curtains' (-3, -3) lands on the window anchor's corner (16, 12). */
-const O = [19, 15] as const;
+export const WINDOW_O = [19, 15] as const;
+const O = WINDOW_O;
 
-/** A piece that is the frame plus a still decor sprite. */
-const still = (id: string, decor: readonly SpriteRect[], tint?: true): ItemArt => ({
-  id, slot: 'window', ...(tint ? { tint } : {}),
-  draw: (ctx) => {
-    const r: Rects = [];
-    windowFrame(r, ctx);
-    sprite(r, decor, O[0], O[1], ctx.ramp);
-    return { base: r };
-  },
-});
-
-// Fairy lights: the wire in the base; each bulb in the glow layer, every third one brighter in turn.
 const FAIRY_WIRE = FAIRY.filter(([, , , , c]) => c === '#475569');
 const FAIRY_BULBS = FAIRY.filter(([, , , , c]) => c !== '#475569');
-const fairy: ItemArt = {
-  id: 'win.fairy', slot: 'window', emissive: true, frames: 3,
-  draw: (ctx) => {
+const CHIME_BAR = CHIME.filter(([, y]) => y < 7);
+const CHIME_TUBES = CHIME.filter(([, y]) => y >= 7);
+
+const still = (decor: readonly SpriteRect[]) => (ctx: ItemContext): ItemLayers => {
+  const r: Rects = [];
+  sprite(r, decor, O[0], O[1], ctx.ramp);
+  return { base: r };
+};
+
+/**
+ * Each window style's decor in front-on cells, without the frame and the glass (plan ruling 5): the front-on pieces
+ * draw Spec A's frame and then this; the iso window draws its own frame and sky and then this, scaled and sheared.
+ */
+export const WINDOW_DECOR: Readonly<Record<ItemId, (ctx: ItemContext) => ItemLayers>> = {
+  'win.plain': () => ({}),
+  'win.curtains': still(CURTAINS),
+  'win.blinds': still(BLINDS),
+  'win.sticker': still(STICKER),
+  // Fairy lights: the wire in the base; each bulb in the glow layer, every third one brighter in turn.
+  'win.fairy': (ctx) => {
     const r: Rects = [];
-    windowFrame(r, ctx);
     sprite(r, FAIRY_WIRE, O[0], O[1], ctx.ramp);
     const emissive: Rects = [];
     sprite(emissive, FAIRY_BULBS, O[0], O[1], ctx.ramp);
@@ -47,16 +53,9 @@ const fairy: ItemArt = {
     });
     return { base: r, emissive, frames };
   },
-};
-
-// Wind chime: the bar in the base; the tubes and the clapper swing one cell and back.
-const CHIME_BAR = CHIME.filter(([, y]) => y < 7);
-const CHIME_TUBES = CHIME.filter(([, y]) => y >= 7);
-const chime: ItemArt = {
-  id: 'win.chime', slot: 'window', frames: 3,
-  draw: (ctx) => {
+  // Wind chime: the bar in the base; the tubes and the clapper swing one cell and back.
+  'win.chime': (ctx) => {
     const r: Rects = [];
-    windowFrame(r, ctx);
     sprite(r, CHIME_BAR, O[0], O[1], ctx.ramp);
     return {
       base: r,
@@ -69,7 +68,21 @@ const chime: ItemArt = {
   },
 };
 
-registerItems([still('win.curtains', CURTAINS, true), still('win.blinds', BLINDS), still('win.sticker', STICKER), fairy, chime]);
+/** A front-on window piece: Spec A's frame with today's sky, then its decor. */
+const framed = (id: ItemId, flags: Pick<ItemArt, 'tint' | 'emissive' | 'frames'>): ItemArt => ({
+  id, slot: 'window', ...flags,
+  draw: (ctx) => {
+    const r: Rects = [];
+    windowFrame(r, ctx);
+    const d = WINDOW_DECOR[id]!(ctx);
+    return { base: [...r, ...(d.base ?? [])], ...(d.emissive ? { emissive: d.emissive } : {}), ...(d.frames ? { frames: d.frames } : {}) };
+  },
+});
+
+registerItems([
+  framed('win.curtains', { tint: true }), framed('win.blinds', {}), framed('win.sticker', {}),
+  framed('win.fairy', { emissive: true, frames: 3 }), framed('win.chime', { frames: 3 }),
+]);
 
 /** The tray icon: the board decor over a small window. */
 const SMALL_WINDOW: readonly SpriteRect[] = [[0, 0, 34, 30, '#1E2430'], [2, 2, 30, 26, '#8592A6']];

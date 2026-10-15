@@ -181,5 +181,7 @@
   "set.library.desk",
   "set.library.desk_item",
   "set.library.rug",
-  "set.library.pet"
+  "set.library.pet",
+  "shelf.plank",
+  "lamp.welcome"
 ]

@@ -1,14 +1,20 @@
 // Reading and saving KIP's room (spec 2026-10-14 KIP's room §2, §5). Owned = the starter items + unlock rows. A
 // stored slot naming an item the user does not own (or no longer in the shipped catalogue) reads back as the slot's
 // starter piece; the app never decides ownership. Saves are optimistic: version must match, every save increments it.
+// Free-build saves (spec 2026-10-15 §12) carry an iso layout, checked against the catalogue, the placement rules and
+// the owned counts under the per-user room lock.
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db/client';
 import {
-  COSMETICS_CATALOGUE_VERSION, COSMETICS_RELEASE, EMPTY_WORN, OPTIONAL_ROOM_SLOTS, ROOM_SLOTS, STARTER_IDS, STARTER_ROOM, WORN_SLOTS,
-  cosmeticItem, type CosmeticSlot, type RoomSlot, type WornSlot,
+  COSMETICS_CATALOGUE_VERSION, EMPTY_WORN, OPTIONAL_ROOM_SLOTS, ROOM_SLOTS, STARTER_IDS, STARTER_ROOM, WORN_SLOTS,
+  shippedItem, type RoomSlot, type WornSlot,
 } from './catalogue';
 import { countersOf, loadUnlockFacts } from './facts';
 import { grantCosmeticsSafely } from './unlock';
+import { layoutFromSlots, slotsFromLayout, starterLayout } from '../room/convert';
+import { STYLE_KEYS, capFor, parseLayout, validateLayout, type BadReason, type RoomLayout, type Tier } from '../room/geometry';
+import { countsOf, geometryDeps, placedCounts, readLayout, toTier } from '../room/layout';
+import { lockRoom } from '../room/lock';
 
 type Room = Record<RoomSlot, string | null>;
 type Worn = Record<WornSlot, string | null>;
@@ -17,33 +23,31 @@ export interface CosmeticsDTO {
   catalogueVersion: number;
   owned: string[];
   fresh: Array<{ itemId: string; source: string }>;
+  /** Derived from the layout for dev builds on Spec B (spec §2.4); dropped in P2. */
   room: Room;
+  layout: RoomLayout;
+  tier: Tier;
+  cap: number;
+  /** owned(item) for every item with a count (spec §2.2). */
+  counts: Record<string, number>;
   worn: Worn;
   version: number;
   counters: { recapsRead: number; buddyCheers: number };
+  /** The welcome card has been answered on some device (spec §11.1, plan ruling 13). */
+  welcomed: boolean;
 }
 
-export interface SaveFailure {
-  status: 400 | 403 | 409;
-  body: { error: 'invalid_body' | 'unknown_item' | 'wrong_slot' | 'required_slot' | 'not_owned' | 'stale'; itemIds?: string[] };
+export function ownedFrom(rows: ReadonlyArray<{ itemId: string }>): Set<string> {
+  return new Set([...STARTER_IDS, ...rows.map((r) => r.itemId).filter((id) => shippedItem(id))]);
 }
 
-const shipped = (id: string) => {
-  const item = cosmeticItem(id);
-  return item && item.release <= COSMETICS_RELEASE ? item : undefined;
-};
-
-function ownedFrom(rows: ReadonlyArray<{ itemId: string }>): Set<string> {
-  return new Set([...STARTER_IDS, ...rows.map((r) => r.itemId).filter((id) => shipped(id))]);
-}
-
-function readRoom(json: unknown, owned: ReadonlySet<string>): Room {
+export function readRoom(json: unknown, owned: ReadonlySet<string>): Room {
   const stored = (json && typeof json === 'object' ? json : {}) as Record<string, unknown>;
   const room = { ...STARTER_ROOM } as Room;
   for (const slot of ROOM_SLOTS) {
     const id = stored[slot];
     if (id === null && OPTIONAL_ROOM_SLOTS.has(slot)) room[slot] = null;
-    else if (typeof id === 'string' && owned.has(id) && shipped(id)?.slot === slot) room[slot] = id;
+    else if (typeof id === 'string' && owned.has(id) && shippedItem(id)?.slot === slot) room[slot] = id;
   }
   return room;
 }
@@ -53,31 +57,74 @@ function readWorn(json: unknown, owned: ReadonlySet<string>): Worn {
   const worn = { ...EMPTY_WORN } as Worn;
   for (const slot of WORN_SLOTS) {
     const id = stored[slot];
-    if (typeof id === 'string' && owned.has(id) && shipped(id)?.slot === slot) worn[slot] = id;
+    if (typeof id === 'string' && owned.has(id) && shippedItem(id)?.slot === slot) worn[slot] = id;
   }
   return worn;
 }
 
+/**
+ * Converts one Spec B row (layout null) to an iso layout with the conditional write the GET and the script share
+ * (spec §2.4): only while the row is still unconverted at the version read, and never bumping it. True when this call
+ * wrote it; false means the script, another GET or a save got there first.
+ */
+export async function convertLoadout(row: { userId: string; room: unknown; version: number }): Promise<boolean> {
+  const rows = await prisma.cosmeticUnlock.findMany({ where: { userId: row.userId }, select: { itemId: true } });
+  const layout = layoutFromSlots(readRoom(row.room, ownedFrom(rows)));
+  const { count } = await prisma.cosmeticLoadout.updateMany({
+    where: { userId: row.userId, layout: { equals: Prisma.DbNull }, version: row.version },
+    data: { layout: layout as unknown as Prisma.InputJsonValue },
+  });
+  return count === 1;
+}
+
 export async function readCosmetics(userId: string, now: Date, opts: { grant?: boolean } = {}): Promise<CosmeticsDTO> {
   if (opts.grant ?? true) await grantCosmeticsSafely(userId, now);
-  const [rows, loadout, facts] = await Promise.all([
+  const [rows, first, facts, firstWeek] = await Promise.all([
     prisma.cosmeticUnlock.findMany({ where: { userId }, orderBy: [{ unlockedAt: 'asc' }, { itemId: 'asc' }], select: { itemId: true, source: true, seenAt: true } }),
     prisma.cosmeticLoadout.findUnique({ where: { userId } }),
     loadUnlockFacts(userId),
+    prisma.roomFirstWeek.findUnique({ where: { userId }, select: { welcomedAt: true } }),
   ]);
+  let loadout = first;
+  // Lazily, once (spec §2.4). Whoever wrote it, the row now holds a layout: read it back. A losing racer never errors.
+  // A second pass only when an old slot save landed between the read and the write (the row is unconverted again at
+  // a newer version), so that save reads back instead of the starter layout.
+  for (let pass = 0; pass < 2 && loadout && loadout.layout === null; pass++) {
+    await convertLoadout(loadout);
+    loadout = await prisma.cosmeticLoadout.findUnique({ where: { userId } });
+  }
   const owned = ownedFrom(rows);
+  const counts = countsOf(rows);
+  const layout = (loadout?.layout != null ? readLayout(loadout.layout, counts) : null) ?? starterLayout();
+  const tier = toTier(loadout?.tier);
   return {
     catalogueVersion: COSMETICS_CATALOGUE_VERSION,
     owned: [...owned].sort(),
     fresh: rows.filter((r) => r.seenAt === null && owned.has(r.itemId)).map((r) => ({ itemId: r.itemId, source: r.source })),
-    room: loadout ? readRoom(loadout.room, owned) : { ...STARTER_ROOM },
+    room: slotsFromLayout(layout),
+    layout,
+    tier,
+    cap: capFor(tier),
+    counts,
     worn: loadout ? readWorn(loadout.worn, owned) : { ...EMPTY_WORN },
     version: loadout?.version ?? 0,
     counters: countersOf(facts),
+    welcomed: !!firstWeek?.welcomedAt,
   };
 }
 
+export type SaveError =
+  | 'invalid_body' | 'update_app' | 'unknown_item' | 'wrong_layer' | 'bad_place' | 'desk_required' | 'room_full' | 'not_owned' | 'stale';
+export interface SaveFailure {
+  status: 400 | 403 | 409;
+  body: { error: SaveError; itemIds?: string[]; pieceIds?: string[]; reason?: BadReason };
+}
+/** Postgres INTEGER (Spec B Task 5 minor: 1e12 overflowed into a 500). */
+export const MAX_VERSION = 2 ** 31 - 1;
+export const MAX_BODY_BYTES = 32 * 1024;
+
 const INVALID: SaveFailure = { status: 400, body: { error: 'invalid_body' } };
+const STALE: SaveFailure = { status: 409, body: { error: 'stale' } };
 
 function exactSlots(value: unknown, slots: readonly string[]): value is Record<string, string | null> {
   if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
@@ -88,48 +135,95 @@ function exactSlots(value: unknown, slots: readonly string[]): value is Record<s
   });
 }
 
-export function validateBody(body: unknown): { room: Room; worn: Worn; version: number } | SaveFailure {
-  const b = (body && typeof body === 'object' ? body : {}) as { room?: unknown; worn?: unknown; version?: unknown };
-  if (!exactSlots(b.room, ROOM_SLOTS) || !exactSlots(b.worn, WORN_SLOTS)) return INVALID;
-  if (typeof b.version !== 'number' || !Number.isInteger(b.version) || b.version < 0) return INVALID;
-  return { room: b.room as Room, worn: b.worn as Worn, version: b.version };
+export function validateBody(body: unknown): { layout: RoomLayout; worn: Worn; version: number } | SaveFailure {
+  const b = (body && typeof body === 'object' && !Array.isArray(body) ? body : {}) as Record<string, unknown>;
+  // A Spec B dev build (spec §2.4): its slot body can't be saved any more.
+  if ('room' in b && !('layout' in b)) return { status: 400, body: { error: 'update_app' } };
+  if (Object.keys(b).sort().join(',') !== 'layout,version,worn') return INVALID;
+  const layout = parseLayout(b.layout);
+  if (!layout || !exactSlots(b.worn, WORN_SLOTS)) return INVALID;
+  if (typeof b.version !== 'number' || !Number.isInteger(b.version) || b.version < 0 || b.version > MAX_VERSION) return INVALID;
+  return { layout, worn: b.worn as Worn, version: b.version };
 }
 
-export function checkPieces(room: Room, worn: Worn, owned: ReadonlySet<string>): SaveFailure | null {
-  const placed: Array<[CosmeticSlot, string]> = [
-    ...ROOM_SLOTS.flatMap((s) => (room[s] === null ? [] : [[s, room[s]!] as [CosmeticSlot, string]])),
-    ...WORN_SLOTS.flatMap((s) => (worn[s] === null ? [] : [[s, worn[s]!] as [CosmeticSlot, string]])),
-  ];
-  if (placed.some(([, id]) => !shipped(id))) return { status: 400, body: { error: 'unknown_item' } };
-  if (placed.some(([slot, id]) => shipped(id)!.slot !== slot)) return { status: 400, body: { error: 'wrong_slot' } };
-  if (ROOM_SLOTS.some((s) => room[s] === null && !OPTIONAL_ROOM_SLOTS.has(s))) return { status: 400, body: { error: 'required_slot' } };
-  const notOwned = [...new Set(placed.map(([, id]) => id).filter((id) => !owned.has(id)))].sort();
-  if (notOwned.length) return { status: 403, body: { error: 'not_owned', itemIds: notOwned } };
-  return null;
+/** Every catalogue, geometry and ownership rule, in the order of spec §12. */
+export function checkLayout(layout: RoomLayout, worn: Worn, tier: Tier, counts: Readonly<Record<string, number>>): SaveFailure | null {
+  const wornIds = WORN_SLOTS.flatMap((s) => (worn[s] === null ? [] : [worn[s]!]));
+  const styleIds = STYLE_KEYS.map((k) => layout.styles[k]);
+  if ([...layout.pieces.map((p) => p.item), ...styleIds, ...wornIds].some((id) => !shippedItem(id))) {
+    return { status: 400, body: { error: 'unknown_item' } };
+  }
+  const wrongStyle = STYLE_KEYS.some((k) => shippedItem(layout.styles[k])!.slot !== k);
+  const wrongWorn = WORN_SLOTS.some((s) => worn[s] !== null && shippedItem(worn[s]!)!.slot !== s);
+  if (wrongStyle || wrongWorn) return { status: 400, body: { error: 'wrong_layer' } };
+  const geo = validateLayout(layout, tier, geometryDeps);
+  if (geo?.error === 'bad_place') return { status: 400, body: { error: 'bad_place', reason: geo.reason, pieceIds: geo.pieceIds } };
+  if (geo) return { status: 400, body: { error: geo.error } };
+  const notOwned = new Set<string>();
+  for (const [item, n] of Object.entries(placedCounts(layout))) if (n > (counts[item] ?? 0)) notOwned.add(item);
+  for (const id of [...styleIds, ...wornIds]) if (!((counts[id] ?? 0) > 0)) notOwned.add(id);
+  return notOwned.size ? { status: 403, body: { error: 'not_owned', itemIds: [...notOwned].sort() } } : null;
 }
 
-const STALE: SaveFailure = { status: 409, body: { error: 'stale' } };
+/** Inserts the user's first-week row if it is missing (ON CONFLICT DO NOTHING: never a P2002 inside a transaction). */
+async function ensureFirstWeek(db: Prisma.TransactionClient | typeof prisma, userId: string): Promise<void> {
+  await db.roomFirstWeek.createMany({ data: [{ userId }], skipDuplicates: true });
+}
 
-export async function saveCosmetics(userId: string, body: unknown, now: Date): Promise<{ ok: true; dto: CosmeticsDTO } | { ok: false; failure: SaveFailure }> {
+export async function saveCosmetics(userId: string, body: unknown, now: Date, rawBytes?: number): Promise<{ ok: true; dto: CosmeticsDTO } | { ok: false; failure: SaveFailure }> {
+  if (rawBytes !== undefined && rawBytes > MAX_BODY_BYTES) return { ok: false, failure: INVALID };
   const parsed = validateBody(body);
   if ('status' in parsed) return { ok: false, failure: parsed };
-  const rows = await prisma.cosmeticUnlock.findMany({ where: { userId }, select: { itemId: true } });
-  const bad = checkPieces(parsed.room, parsed.worn, ownedFrom(rows));
-  if (bad) return { ok: false, failure: bad };
-  const data = { room: parsed.room, worn: parsed.worn };
-  if (parsed.version === 0) {
-    try {
-      await prisma.cosmeticLoadout.create({ data: { userId, ...data, version: 1 } });
-    } catch (err) {
-      // Another first save won the race (or a row already exists): the app re-reads.
-      if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') return { ok: false, failure: STALE };
-      throw err;
-    }
-  } else {
-    const { count } = await prisma.cosmeticLoadout.updateMany({ where: { userId, version: parsed.version }, data: { ...data, version: { increment: 1 } } });
-    if (count === 0) return { ok: false, failure: STALE };
+  let tier: Tier = 1;
+  let failure: SaveFailure | null;
+  try {
+    failure = await prisma.$transaction(async (tx) => {
+      // One writer at a time per room (spec §2.2); the version check below still answers another device's save.
+      await lockRoom(tx, userId);
+      const [rows, row] = await Promise.all([
+        tx.cosmeticUnlock.findMany({ where: { userId }, select: { itemId: true } }),
+        tx.cosmeticLoadout.findUnique({ where: { userId }, select: { layout: true, room: true, version: true, tier: true } }),
+      ]);
+      tier = toTier(row?.tier);
+      const bad = checkLayout(parsed.layout, parsed.worn, tier, countsOf(rows));
+      if (bad) return bad;
+      const data = {
+        layout: parsed.layout as unknown as Prisma.InputJsonValue,
+        room: slotsFromLayout(parsed.layout) as unknown as Prisma.InputJsonValue,
+        worn: parsed.worn as unknown as Prisma.InputJsonValue,
+      };
+      if (parsed.version === 0) {
+        if (row) return STALE;
+        await tx.cosmeticLoadout.create({ data: { userId, ...data, version: 1 } });
+      } else {
+        const { count } = await tx.cosmeticLoadout.updateMany({ where: { userId, version: parsed.version }, data: { ...data, version: { increment: 1 } } });
+        if (count === 0) return STALE;
+      }
+      // "Placed a piece" (spec §11.1): an instance id the stored layout did not have. An unconverted Spec B row's
+      // layout is the one its slots convert to (as the GET shows it), so the room's own pieces are not new; no row
+      // means the starter layout.
+      const stored = row ? parseLayout(row.layout) ?? layoutFromSlots(readRoom(row.room, ownedFrom(rows))) : starterLayout();
+      const before = new Set(stored.pieces.map((p) => p.id));
+      if (parsed.layout.pieces.some((p) => !before.has(p.id))) {
+        await ensureFirstWeek(tx, userId);
+        await tx.roomFirstWeek.updateMany({ where: { userId, firstPlacedAt: null }, data: { firstPlacedAt: now } });
+      }
+      return null;
+    });
+  } catch (err) {
+    // A first save racing another create (the lock makes this a backstop only): the app re-reads.
+    if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === 'P2002') return { ok: false, failure: STALE };
+    throw err;
   }
+  if (failure) return { ok: false, failure };
+  console.info(JSON.stringify({ event: 'room.saved', pieces: parsed.layout.pieces.length, tier }));
   return { ok: true, dto: await readCosmetics(userId, now, { grant: false }) };
+}
+
+/** The welcome card was answered (spec §11.1): the first time is kept. */
+export async function markWelcomed(userId: string, now: Date): Promise<void> {
+  await ensureFirstWeek(prisma, userId);
+  await prisma.roomFirstWeek.updateMany({ where: { userId, welcomedAt: null }, data: { welcomedAt: now } });
 }
 
 /** Marks unseen rows seen. Ids the user has no row for (unknown, unowned, starters) are ignored. */

@@ -62,6 +62,7 @@ export async function seedAllOwnedRows(
   await prisma.goalChange.create({ data: { userId, kind: 'SLEEP_MINUTES', sleepMinutes: 480, effectiveOn: day, resetsStreak: false } });
   await prisma.cosmeticUnlock.create({ data: { userId, itemId: 'wall.stripes', source: 'family:STEADY_BEDTIME:1' } });
   await prisma.cosmeticLoadout.create({ data: { userId, room: { ...STARTER_ROOM }, worn: { ...EMPTY_WORN }, version: 1 } });
+  await prisma.roomFirstWeek.create({ data: { userId, welcomedAt: day } });
   await prisma.coachConsent.create({ data: { userId, version: 'v-test' } });
   await prisma.pushToken.create({ data: { userId, token: `push-${uniq}`, platform: 'ios' } });
   await prisma.session.create({

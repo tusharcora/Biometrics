@@ -31,8 +31,15 @@ it('shows progress where it is cheap', () => {
   expect(progressLine({ kind: 'starter' }, facts)).toBe('');
 });
 
+it('says what Apply set left out and that your desk stayed (ruling T9-FIX)', () => {
+  expect(ROOM_COPY.set.applied('Cottage', [], false)).toBe('Cottage set applied.');
+  expect(ROOM_COPY.set.applied('Cottage', ['Farmhouse table'], true)).toBe('Cottage set applied. Not yours yet: Farmhouse table. Your desk stayed.');
+  expect(ROOM_COPY.set.applied('Cottage', ['a', 'b', 'c', 'd', 'e'], false)).toBe('Cottage set applied. Not yours yet: a, b, c and 2 more.');
+  expect(ROOM_COPY.set.applied('Cottage', ['a', 'b'], true)).not.toMatch(/·|−/);
+});
+
 it('says nothing is sold, and no string carries a price', () => {
-  expect(ROOM_COPY.arrive.lines.at(-1)).toBe('Nothing is sold. The starter room is yours from day one, and items are never taken away.');
+  expect(ROOM_COPY.arrive.items.at(-1)!.body).toBe('Nothing is sold. The starter room is yours from day one, and items are never taken away.');
   // JSON.stringify drops the functions, so the composed strings are checked too (ruling 32).
   const composed = [ROOM_COPY.newFor('x', 2), ROOM_COPY.backfill(3), ROOM_COPY.set.pieces(13, 'y')];
   expect(composed).toEqual(["New for KIP's room: x and 2 more", "Your badges unlocked 3 things for KIP's room", '13 pieces · y']);
