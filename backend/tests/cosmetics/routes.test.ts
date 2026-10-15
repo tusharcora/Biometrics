@@ -4,6 +4,7 @@ import { migrateTestDb } from '../setupTestDb';
 import { authHeaderFor } from '../helpers/auth';
 import { api, buddyUser } from '../buddies/helpers';
 import { EMPTY_WORN, STARTER_ROOM } from '../../src/cosmetics/catalogue';
+import { slotsFromLayout, starterLayout } from '../../src/room/convert';
 import { level } from './helpers';
 
 beforeAll(() => migrateTestDb());
@@ -30,8 +31,8 @@ describe('GET /me/cosmetics', () => {
     expect(res.status).toBe(200);
     expect(res.headers['cache-control']).toBe('private, no-store');
     expect(res.body).toEqual({
-      catalogueVersion: 1, owned: expect.any(Array), fresh: [], room: { ...STARTER_ROOM }, worn: { ...EMPTY_WORN }, version: 0,
-      counters: { recapsRead: 0, buddyCheers: 0 },
+      catalogueVersion: 1, owned: expect.any(Array), fresh: [], room: slotsFromLayout(starterLayout()), worn: { ...EMPTY_WORN }, version: 0,
+      counters: { recapsRead: 0, buddyCheers: 0 }, layout: starterLayout(), tier: 1, cap: 40, counts: expect.any(Object), welcomed: false,
     });
     expect(res.body.owned).toHaveLength(19);
   });

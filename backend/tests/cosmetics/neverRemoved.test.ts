@@ -17,5 +17,5 @@ it('no source deletes a cosmetic unlock', () => {
 });
 
 it('account deletion owns both cosmetics tables', () => {
-  expect(USER_OWNED_MODELS).toEqual(expect.arrayContaining(['CosmeticUnlock', 'CosmeticLoadout']));
+  expect(USER_OWNED_MODELS).toEqual(expect.arrayContaining(['CosmeticUnlock', 'CosmeticLoadout', 'RoomFirstWeek']));
 });
