@@ -1,8 +1,8 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { View } from 'react-native';
-import { Canvas, Group, Picture, Skia, createPicture, type SkPicture } from '@shopify/react-native-skia';
+import { Canvas, Group, Picture } from '@shopify/react-native-skia';
 import { Text } from '../ui/text';
-import type { RoomRect } from '../../lib/room/grid';
+import { record, useDisposed } from './pictures';
 import type { Rects } from '../../lib/room/paint';
 import type { MonitorScreen } from '../../lib/room/items';
 import type { KipWorn } from '../../lib/room/loadout';
@@ -46,32 +46,6 @@ export interface RoomViewProps {
   /** Holds the loops (frame 0) while something covers the room, such as the editor (spec §8 Loops). */
   paused?: boolean;
   testID?: string;
-}
-
-/** One Path per colour per layer, on whole points, antialiasing off (spec §5). */
-function record(layers: readonly (readonly RoomRect[])[], cellPt: number): SkPicture {
-  return createPicture((canvas) => {
-    for (const rects of layers) {
-      const byColour = new Map<string, ReturnType<typeof Skia.Path.Make>>();
-      for (const [x, y, w, h, colour] of rects) {
-        let path = byColour.get(colour);
-        if (!path) { path = Skia.Path.Make(); byColour.set(colour, path); }
-        path.addRect(Skia.XYWHRect(x * cellPt, y * cellPt, w * cellPt, h * cellPt));
-      }
-      for (const [colour, path] of byColour) {
-        const paint = Skia.Paint();
-        paint.setAntiAlias(false);
-        paint.setColor(Skia.Color(colour));
-        canvas.drawPath(path, paint);
-      }
-    }
-  });
-}
-
-/** Releases a picture when it is replaced or the view unmounts (one picture set per screen). */
-function useDisposed<T extends { dispose?: () => void }>(value: T): T {
-  useEffect(() => () => value.dispose?.(), [value]);
-  return value;
 }
 
 /** Where the speech bubble's bottom centre sits, in cells: just above KIP's head. */
