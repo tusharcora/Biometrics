@@ -3,6 +3,7 @@ import type { HabitLog } from '@prisma/client';
 import { clearAchievementsMarker } from '../achievements/marker';
 import { requireAuth, AuthedRequest } from '../auth/middleware';
 import { civilDateToUtcMidnight } from '../biometrics/civilDate';
+import { earnCoinsSafely } from '../coins/sources';
 import { prisma } from '../db/client';
 import { isCivilDate, shiftDate } from '../scoring/dates';
 import { FACTOR_LABELS } from '../scoring/dto';
@@ -222,6 +223,8 @@ habitsRouter.post('/me/habits/check-ins', requireAuth, async (req: AuthedRequest
   });
   // A check-in can extend the check-in streak: the next badge load re-evaluates at once.
   await clearAchievementsMarker(userId);
+  // An on-time check-in pays at once (spec §6.3); a failure is logged and the next GET /me/coins catches up.
+  await earnCoinsSafely(userId, new Date());
   res.status(201).json({ checkIn: { habitDay } });
 });
 

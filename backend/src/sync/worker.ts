@@ -50,6 +50,7 @@ import { refreshDaySummaryAfterScore } from '../coach/daySummaryJob';
 import { runCoachRetention } from '../coach/retention';
 import { LoggerCoachTelemetry } from '../coach/telemetry';
 import { recordStepGoal } from '../social/stepGoal';
+import { earnCoinsSafely } from '../coins/sources';
 import { runSocialSweep } from '../social/sweep';
 
 const ALL_METRIC_TYPES: BiometricMetricType[] = ['HRV', 'RESTING_HR', 'SLEEP', 'STEPS'];
@@ -215,14 +216,18 @@ async function handleFetchJob(data: FetchJobData): Promise<void> {
     const end = nextDay(data.date);
     if (data.metricType === 'SLEEP') {
       await requestScores(data.userId, await syncSleep(session, data.userId, data.date, end));
+      // The rollups are stored: a goal night pays now (spec §6.3).
+      await earnCoinsSafely(data.userId, new Date());
     } else {
       const points = await session.fetch(data.metricType, data.date, end);
       await upsertBiometricRecords(data.userId, data.metricType, points);
       if (data.metricType === 'STEPS') {
-        // Social timeline event; a failure never fails the sync (logged with ids only).
-        await recordStepGoal(data.userId, points, new Date()).catch((err: unknown) =>
-          console.error(JSON.stringify({ event: 'social.step_goal_failed', userId: data.userId, error: err instanceof Error ? err.name : 'unknown' })),
-        );
+        // Social timeline event; a failure never fails the sync (logged with ids only). A goal newly reached pays.
+        const reached = await recordStepGoal(data.userId, points, new Date()).catch((err: unknown) => {
+          console.error(JSON.stringify({ event: 'social.step_goal_failed', userId: data.userId, error: err instanceof Error ? err.name : 'unknown' }));
+          return false;
+        });
+        if (reached) await earnCoinsSafely(data.userId, new Date());
       }
       if (SCORE_INPUT_METRICS.has(data.metricType)) await requestScores(data.userId, points.map(civilDateOf));
     }
@@ -274,6 +279,8 @@ export async function syncWindow(userId: string, startDate: string, endDate: str
       }
       if (SCORE_INPUT_METRICS.has(metricType)) scoreDates.push(...points.map(civilDateOf));
     }
+    // Sleep and steps for the whole window are stored: one catch-up pays whatever they earned (spec §6.3).
+    await earnCoinsSafely(userId, new Date());
     await requestScores(userId, scoreDates);
     await prisma.healthConnection.update({ where: { userId }, data: { lastSyncedAt: new Date() } });
   } catch (err) {

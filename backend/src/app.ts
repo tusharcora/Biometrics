@@ -17,6 +17,7 @@ import { socialRouter } from './social/routes';
 import { chatsRouter } from './chats/routes';
 import { kipRouter } from './kip/routes';
 import { cosmeticsRouter, saveBodyParser } from './cosmetics/routes';
+import { coinsRouter } from './coins/routes';
 
 export function createApp(options: { auth?: Auth } = {}): Express {
   const app = express();
@@ -25,6 +26,8 @@ export function createApp(options: { auth?: Auth } = {}): Express {
   app.all('/auth/*splat', toNodeHandler(options.auth ?? defaultAuth));
   // The room save caps its body at 32 KB with its own parser (plan ruling 14); the global one skips a parsed body.
   app.put('/me/cosmetics', saveBodyParser);
+  // P2's posts take the same 32 KB parser (plan ruling 26).
+  app.post(['/me/coins/seen', '/me/shop/purchases', '/me/room/expand'], saveBodyParser);
   app.use(
     express.json({
       verify: (req: any, _res, buf) => {
@@ -49,6 +52,7 @@ export function createApp(options: { auth?: Auth } = {}): Express {
   app.use(chatsRouter);
   app.use(kipRouter);
   app.use(cosmeticsRouter);
+  app.use(coinsRouter);
   app.use(lastErrorHandler);
   return app;
 }

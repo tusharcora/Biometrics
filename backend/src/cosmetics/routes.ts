@@ -1,12 +1,12 @@
 // KIP's room endpoints (spec 2026-10-14 KIP's room §5; spec 2026-10-15 free-build §12: the layout save, its error
 // codes and the 32 KB cap, and POST /me/room/welcomed for the first-week welcome card, §11.1). All need a session and
 // answer private, no-store. Nothing here is health data; nothing is logged with the user's id.
-import express, { Router, type RequestHandler, type Response } from 'express';
+import express, { Router, type RequestHandler } from 'express';
 import { requireAuth, type AuthedRequest } from '../auth/middleware';
+import { noStore } from '../lib/noStore';
 import { MAX_BODY_BYTES, markSeen, markWelcomed, readCosmetics, saveCosmetics } from './loadout';
 
 export const cosmeticsRouter = Router();
-const noStore = (res: Response) => res.set('Cache-Control', 'private, no-store');
 
 const saveJson = express.json({
   limit: MAX_BODY_BYTES,
