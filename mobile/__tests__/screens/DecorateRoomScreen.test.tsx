@@ -409,6 +409,32 @@ describe('the drawer in the editor (spec §5.4)', () => {
     expect(s.getByTestId('edit-undo').props.accessibilityState.disabled).toBe(true);
   });
 
+  it('a live drawer drag holds both scrolls still from lift to drop, and to a cancel (T13-FIX)', async () => {
+    const s = await openEditor(undefined, cosmeticsDTO({ counts: { ...STARTER_COUNTS, 'corner.beanbag': 1, 'plant.fern': 2 }, version: 2 }));
+    const scrolls = () => [s.getByTestId('edit-scroll').props.scrollEnabled, s.getByTestId('drawer-scroll').props.scrollEnabled];
+    expect(scrolls()).toEqual([true, true]);
+    act(() => tileHold('plant.fern').onStart({ absoluteX: 20, absoluteY: 700 }));
+    expect(scrolls()).toEqual([false, false]);
+    act(() => tileHold('plant.fern').onUpdate({ absoluteX: 30, absoluteY: 400 }));
+    expect(scrolls()).toEqual([false, false]);
+    act(() => tileHold('plant.fern').onEnd({ absoluteX: 30, absoluteY: 400 }, true));
+    expect(scrolls()).toEqual([true, true]);
+    act(() => tileHold('corner.beanbag').onStart({ absoluteX: 20, absoluteY: 700 }));
+    expect(scrolls()).toEqual([false, false]);
+    act(() => tileHold('corner.beanbag').onEnd({ absoluteX: 20, absoluteY: 700 }, false));
+    expect(scrolls()).toEqual([true, true]);
+  });
+
+  it('the drawer is never taller than the scroll area it sits in, once measured (T13-FIX)', async () => {
+    const s = await openEditor();
+    const windowHalf = Math.round(Dimensions.get('window').height * 0.42);
+    expect(s.getByTestId('drawer').props.style.height).toBe(windowHalf);
+    fireEvent(s.getByTestId('edit-scroll'), 'layout', { nativeEvent: { layout: { x: 0, y: 0, width: 320, height: 180 } } });
+    expect(s.getByTestId('drawer').props.style.height).toBe(180);
+    fireEvent.press(s.getByTestId('drawer-handle'));
+    expect(s.getByTestId('drawer').props.style.height).toBe(180);
+  });
+
   it('a style tile changes the room in one undo step', async () => {
     const s = await openEditor(undefined, cosmeticsDTO({ version: 2 }));
     fireEvent.press(s.getByTestId('drawer-tab-room'));

@@ -119,3 +119,45 @@ it('at the cap Place is disabled for a picked piece and the room-full card shows
   expect(desk.getByTestId('drawer-place').props.accessibilityState.disabled).toBe(false);
   expect(desk.queryByTestId('room-full')).toBeNull();
 });
+
+describe('T13-FIX', () => {
+  type Handlers = { onBegin: (e: object) => void; onStart: (e: object) => void; onEnd: (e: object, ok: boolean) => void };
+  /** A tile's hold, its handlers called directly so a gesture can stay live or fail. */
+  const hold = (item: string) => (getByGestureTestId(`drawer-drag-${item}`) as unknown as { handlers: Handlers }).handlers;
+
+  it('letting go of a drag on a tile does not also pick it; the next plain tap does', () => {
+    const dispatch = jest.fn();
+    const r = room();
+    const s = render(<InventoryDrawer state={state()} dispatch={dispatch} room={r} colour="coral" />);
+    act(() => fireGestureHandler(getByGestureTestId('drawer-drag-corner.beanbag'), [{ state: State.BEGAN, absoluteX: 10, absoluteY: 600 }, { state: State.ACTIVE, absoluteX: 10, absoluteY: 600 }, { state: State.ACTIVE, absoluteX: 12, absoluteY: 602 }, { state: State.END, absoluteX: 12, absoluteY: 602 }]));
+    expect(r.current!.drop).toHaveBeenCalled();
+    // The release lands on the tile itself: the Pressable's press must not pick it too.
+    fireEvent.press(s.getByTestId('drawer-tile-corner.beanbag'));
+    expect(dispatch).not.toHaveBeenCalledWith({ type: 'pick', item: 'corner.beanbag' });
+    // A plain tap later picks as usual: its touch begins the hold, which fails before 200 ms (handlers called directly,
+    // since RNGH's jest utils always activate a gesture).
+    act(() => hold('corner.beanbag').onBegin({ absoluteX: 10, absoluteY: 600 }));
+    fireEvent.press(s.getByTestId('drawer-tile-corner.beanbag'));
+    expect(dispatch).toHaveBeenCalledWith({ type: 'pick', item: 'corner.beanbag' });
+  });
+
+  it('caps its height at the measured scroll area, the window deciding until then', () => {
+    const s = render(<InventoryDrawer state={state()} dispatch={jest.fn()} room={room()} colour="coral" />);
+    const half = s.getByTestId('drawer').props.style.height;
+    s.rerender(<InventoryDrawer state={state()} dispatch={jest.fn()} room={room()} colour="coral" maxHeight={half - 40} />);
+    expect(s.getByTestId('drawer').props.style.height).toBe(half - 40);
+    s.rerender(<InventoryDrawer state={state()} dispatch={jest.fn()} room={room()} colour="coral" maxHeight={half + 1000} />);
+    expect(s.getByTestId('drawer').props.style.height).toBe(half);
+  });
+
+  it('reports a live drag and holds its own lists still until the drop or the cancel', () => {
+    const onDragChange = jest.fn();
+    const s = render(<InventoryDrawer state={state()} dispatch={jest.fn()} room={room()} colour="coral" onDragChange={onDragChange} />);
+    act(() => hold('corner.beanbag').onStart({ absoluteX: 10, absoluteY: 600 }));
+    expect(onDragChange).toHaveBeenLastCalledWith(true);
+    expect(s.getByTestId('drawer-scroll').props.scrollEnabled).toBe(false);
+    act(() => hold('corner.beanbag').onEnd({ absoluteX: 10, absoluteY: 600 }, false));
+    expect(onDragChange).toHaveBeenLastCalledWith(false);
+    expect(s.getByTestId('drawer-scroll').props.scrollEnabled).toBe(true);
+  });
+});

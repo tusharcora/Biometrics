@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useRef } from 'react';
 import { Pressable, View } from 'react-native';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { Text } from '../ui/text';
@@ -12,15 +12,21 @@ export interface TileDrag { lift(absX: number, absY: number): void; move(absX: n
 // A drawer tile (spec 2026-10-15 §5.4): the icon, the name, "×3" or "All placed" (dimmed), a NEW tag; a locked worn
 // piece at 45% with its unlock line. At least 64 points. A raw Pressable (one buttons-guard entry): a picture you tap
 // to pick. Held 200 ms, it drags the piece into the room (ruling 16); a tile with none left never starts a drag
-// (ruling T13-CARRY). A drag the system cancels puts nothing down.
+// (ruling T13-CARRY). A drag the system cancels puts nothing down. Letting go of a drag never also picks the tile:
+// a hold that became a drag swallows the press that may follow it, and the next touch starts clean.
 export function DecorateTile({ tile, colour, onPress, drag, testID }: { tile: DrawerTile; colour: KipColour; onPress: () => void; drag?: TileDrag; testID: string }) {
+  const dragged = useRef(false);
+  const press = () => {
+    if (dragged.current) { dragged.current = false; return; }
+    onPress();
+  };
   const body = (
     <Pressable
       testID={testID}
       accessibilityRole="button"
       accessibilityLabel={tile.label}
       accessibilityState={{ selected: tile.selected }}
-      onPress={onPress}
+      onPress={press}
       className="min-h-[64px] w-[31%] gap-1 rounded-lg border border-border bg-card p-2"
       style={{ opacity: tile.locked ? 0.45 : tile.allPlaced ? 0.5 : 1, borderWidth: tile.selected ? 2 : 1, borderColor: tile.selected ? '#F5F5F4' : undefined }}
     >
@@ -41,7 +47,8 @@ export function DecorateTile({ tile, colour, onPress, drag, testID }: { tile: Dr
     .activateAfterLongPress(200)
     .runOnJS(true)
     .withTestId(`drawer-drag-${tile.item}`)
-    .onStart((e) => drag.lift(e.absoluteX, e.absoluteY))
+    .onBegin(() => { dragged.current = false; })
+    .onStart((e) => { dragged.current = true; drag.lift(e.absoluteX, e.absoluteY); })
     .onUpdate((e) => drag.move(e.absoluteX, e.absoluteY))
     .onEnd((_e, ok) => (ok ? drag.drop() : drag.cancel()));
   return <GestureDetector gesture={hold}>{body}</GestureDetector>;

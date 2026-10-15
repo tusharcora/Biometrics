@@ -1,5 +1,6 @@
 import React, { useState, type RefObject } from 'react';
-import { Alert, ScrollView, View, useWindowDimensions } from 'react-native';
+import { Alert, View, useWindowDimensions } from 'react-native';
+import { ScrollView } from 'react-native-gesture-handler';
 import { Button } from '../ui/button';
 import { SectionLabel } from '../ui/section-label';
 import { Text } from '../ui/text';
@@ -25,17 +26,26 @@ const TARGET = 'h-[44px]'; // spec §5.7: every target 44 points tall at least
 // under the editor's room (ruling T13-LAYOUT: on a 568-point phone a pinned drawer would leave no room for the
 // toolbar). Header "Inventory · n not placed", the tabs, the tiles, the picked tile's Place (or Replace desk) row, the
 // room-full card, the Room / KIP / Sets tabs, and "How new things arrive" last. Locked worn pieces and sets show how
-// they are earned, never a price.
-export function InventoryDrawer({ state, dispatch, room, colour, counters = NO_COUNTERS }: {
+// they are earned, never a price. The drawer is never taller than the scroll area it sits in (maxHeight, once
+// measured). Its lists are RNGH ScrollViews, so a tile's drag cancels their scrolling, and while a drag is live they
+// don't scroll at all (onDragChange tells the page to hold its own scroll too).
+export function InventoryDrawer({ state, dispatch, room, colour, counters = NO_COUNTERS, maxHeight, onDragChange }: {
   state: EditorState;
   dispatch: (a: EditorAction) => void;
   room: RefObject<EditRoomHandle | null>;
   colour: KipColour;
   /** The server's counters, for the KIP tab's progress lines ("3 of 10"). */
   counters?: { recapsRead: number; buddyCheers: number };
+  /** The visible height of the scroll area holding the drawer; until it is measured the window decides alone. */
+  maxHeight?: number;
+  /** A tile's drag went live (lift) or ended (drop or cancel). */
+  onDragChange?: (live: boolean) => void;
 }) {
   const { height } = useWindowDimensions();
   const [full, setFull] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const live = (on: boolean) => { setDragging(on); onDragChange?.(on); };
+  const drawerHeight = Math.min(Math.round(height * (full ? 0.75 : 0.42)), maxHeight ? Math.round(maxHeight) : Infinity);
   // Store a piece's hint stays until a piece has gone: the room's count when it was pressed.
   const [storeHint, setStoreHint] = useState<number | null>(null);
   const facts = progressFromAchievements(useAchievements(), counters);
@@ -55,10 +65,10 @@ export function InventoryDrawer({ state, dispatch, room, colour, counters = NO_C
       colour={colour}
       onPress={onPress}
       drag={draggable && t.item ? {
-        lift: (x, y) => room.current?.lift(t.item!, x, y),
+        lift: (x, y) => { live(true); room.current?.lift(t.item!, x, y); },
         move: (x, y) => room.current?.move(x, y),
-        drop: () => room.current?.drop(),
-        cancel: () => room.current?.cancel(),
+        drop: () => { live(false); room.current?.drop(); },
+        cancel: () => { live(false); room.current?.cancel(); },
       } : undefined}
     />
   );
@@ -68,14 +78,14 @@ export function InventoryDrawer({ state, dispatch, room, colour, counters = NO_C
       { text: D.applyGo, onPress: () => dispatch({ type: 'applySet', setId: id }) },
     ]);
   return (
-    <View testID="drawer" className="border-t border-border bg-background" style={{ height: Math.round(height * (full ? 0.75 : 0.42)) }}>
+    <View testID="drawer" className="border-t border-border bg-background" style={{ height: drawerHeight }}>
       <View className="flex-row items-center justify-between px-4 pt-2">
         <Text testID="drawer-title" accessibilityLabel={D.titleSpoken(n)} className="font-pixel text-label text-muted-foreground">{D.title(n)}</Text>
         <Button testID="drawer-handle" variant="ghost" size="sm" className={TARGET} accessibilityLabel={full ? D.less : D.more} onPress={() => setFull((v) => !v)}>
           {full ? D.less : D.more}
         </Button>
       </View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 16, paddingVertical: 8 }}>
+      <ScrollView horizontal scrollEnabled={!dragging} showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 8, paddingHorizontal: 16, paddingVertical: 8 }}>
         <View testID="drawer-tabs" accessibilityRole="tablist" accessibilityLabel={D.tabsLabel} className="flex-row gap-2">
           {tabs.map((tab) => (
             <Button key={tab} testID={`drawer-tab-${tab}`} accessibilityRole="tab" accessibilityState={{ selected: state.drawer === tab }}
@@ -85,7 +95,7 @@ export function InventoryDrawer({ state, dispatch, room, colour, counters = NO_C
           ))}
         </View>
       </ScrollView>
-      <ScrollView nestedScrollEnabled contentContainerStyle={{ paddingBottom: 24 }}>
+      <ScrollView testID="drawer-scroll" nestedScrollEnabled scrollEnabled={!dragging} contentContainerStyle={{ paddingBottom: 24 }}>
         {roomFull ? (
           <View className="px-4 pb-3">
             <RoomFullCard cap={capFor(state.tier)} onStore={() => { setStoreHint(state.draft.layout.pieces.length); dispatch({ type: 'clearOutcome' }); }} />

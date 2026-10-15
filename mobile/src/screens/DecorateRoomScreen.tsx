@@ -1,5 +1,6 @@
 import React, { useCallback, useEffect, useReducer, useRef, useState } from 'react';
-import { AccessibilityInfo, Alert, Platform, ScrollView, View, useWindowDimensions } from 'react-native';
+import { AccessibilityInfo, Alert, Platform, View, useWindowDimensions } from 'react-native';
+import { ScrollView } from 'react-native-gesture-handler';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { useReducedMotion } from 'react-native-reanimated';
@@ -89,6 +90,10 @@ function Editor({ cosmetics, params, navigation }: { cosmetics: Cosmetics; param
   const savingRef = useRef(false);
   // The room's drag, for the drawer's tiles to drive (plan ruling 16).
   const roomRef = useRef<EditRoomHandle>(null);
+  // A drawer tile's drag holds the page's scroll still from lift to drop (T13-FIX), and the drawer is never taller
+  // than the scroll area's visible height.
+  const [drawerDrag, setDrawerDrag] = useState(false);
+  const [scrollHeight, setScrollHeight] = useState<number | undefined>(undefined);
   // While a save is in flight nothing reaches the draft, a screen reader's activation included (Spec B Task 14 minor).
   const act = useCallback((a: EditorAction) => { if (!savingRef.current) dispatch(a); }, []);
 
@@ -166,9 +171,15 @@ function Editor({ cosmetics, params, navigation }: { cosmetics: Cosmetics; param
       <View testID="edit-editing" className="flex-1" pointerEvents={saving ? 'none' : 'auto'}>
         <EditRoom ref={roomRef} state={state} dispatch={act} width={width} height={editRoomHeight(height)} window={day.window} colour={me.colour} reduceMotion={reduceMotion} showGrid={showGrid} />
         <EditNotices state={state} />
-        <ScrollView testID="edit-scroll" className="flex-1" contentContainerStyle={{ paddingBottom: 32 }}>
+        <ScrollView
+          testID="edit-scroll"
+          style={{ flex: 1 }}
+          scrollEnabled={!drawerDrag}
+          onLayout={(e) => setScrollHeight(e.nativeEvent.layout.height)}
+          contentContainerStyle={{ paddingBottom: 32 }}
+        >
           <EditToolbar state={state} dispatch={act} showGrid={showGrid} onToggleGrid={() => setShowGrid((v) => !v)} />
-          <InventoryDrawer state={state} dispatch={act} room={roomRef} colour={me.colour} counters={cosmetics.counters} />
+          <InventoryDrawer state={state} dispatch={act} room={roomRef} colour={me.colour} counters={cosmetics.counters} maxHeight={scrollHeight} onDragChange={setDrawerDrag} />
           <PiecesList state={state} dispatch={act} />
         </ScrollView>
       </View>
