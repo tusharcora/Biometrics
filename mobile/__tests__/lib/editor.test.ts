@@ -295,6 +295,28 @@ describe('the guided first placement (spec §11.1)', () => {
     expect(s.coach?.step).toBe(2);
   });
 
+  it('with the lantern already in the room it starts on step 2, or step 3 when turned, so Place never dead-ends (ruling T15-FIX)', () => {
+    const lantern: Placement = { id: 'p1', item: 'lamp.welcome', layer: 'floor', x: 1, y: 5, facing: 'L', mirror: false };
+    const placed = { ...starterLayout(), pieces: [...starterLayout().pieces, lantern] };
+    expect(start({ layout: placed }, { coach: true }).coach).toMatchObject({ step: 2, placed: { id: 'p1', facing: 'L' } });
+    const turned = { ...placed, pieces: [...starterLayout().pieces, { ...lantern, facing: 'R' as const }] };
+    expect(start({ layout: turned }, { coach: true }).coach?.step).toBe(3);
+    // Storing it goes back to step 1 on a free tile.
+    const s = run(start({ layout: placed }, { coach: true }), { type: 'select', id: 'p1' }, { type: 'store' });
+    expect([s.coach?.step, s.coach?.tile]).toEqual([1, [5, 3]]);
+  });
+
+  it('the lime tile moves when a piece takes it on step 1, and is worked out afresh whenever the step returns to 1 (ruling T15-FIX)', () => {
+    let s = run(start({}, { coach: true }), { type: 'drop', id: null, item: 'plant.fern', target: { layer: 'floor', x: 5, y: 3 } });
+    expect(s.coach?.step).toBe(1);
+    const [x, y] = s.coach!.tile;
+    expect(Math.abs(x - 5) + Math.abs(y - 3)).toBe(1);
+    s = run(s, { type: 'drop', id: null, item: 'lamp.welcome', target: { layer: 'floor', x, y } });
+    expect(s.coach?.step).toBe(2);
+    s = run(s, { type: 'undo' }, { type: 'undo' });
+    expect([s.coach?.step, s.coach?.tile]).toEqual([1, [5, 3]]);
+  });
+
   it('a skipped coach stays gone through Undo', () => {
     const s = run(start({}, { coach: true }), { type: 'drop', id: null, item: 'lamp.welcome', target: { layer: 'floor', x: 5, y: 3 } });
     expect(run(s, { type: 'coach', step: null }, { type: 'undo' }).coach).toBeNull();

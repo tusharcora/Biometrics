@@ -8,17 +8,21 @@ import { ROOM_COPY } from '../../lib/room/roomCopy';
 
 const C = ROOM_COPY.coach;
 export const COACH_PLACE_AFTER_MS = 10_000;
+/** Below this window height the drawer sits under the fold with the mark above it: Place is offered at once (T15-FIX). */
+export const COACH_PLACE_AT_ONCE_BELOW = 700;
+const TOOL = 'h-[44px]'; // the editor's 44-point targets
 
 // The guided first placement (spec 2026-10-15 §11.1, C7 "Your first piece"): three steps, Skip always there. Without
-// a drag (a screen reader, or after 10 seconds) step 1 offers to place the lantern on the lime tile. Each new step is
+// a drag (a screen reader, a short phone, or after 10 seconds) step 1 offers to place the lantern on the lime tile. Each new step is
 // said once, on both platforms, as it starts (the mark itself is no live region, so nothing is said twice); the first
 // is read with the mark.
-export function CoachMark({ state, dispatch }: { state: EditorState; dispatch: (a: EditorAction) => void }) {
-  const [offerPlace, setOfferPlace] = useState(false);
+export function CoachMark({ state, dispatch, placeAtOnce = false }: { state: EditorState; dispatch: (a: EditorAction) => void; placeAtOnce?: boolean }) {
+  const [waited, setWaited] = useState(false);
+  const offerPlace = waited || placeAtOnce;
   useEffect(() => {
     let live = true;
-    void AccessibilityInfo.isScreenReaderEnabled().then((on) => { if (live && on) setOfferPlace(true); });
-    const t = setTimeout(() => setOfferPlace(true), COACH_PLACE_AFTER_MS);
+    void AccessibilityInfo.isScreenReaderEnabled().then((on) => { if (live && on) setWaited(true); });
+    const t = setTimeout(() => setWaited(true), COACH_PLACE_AFTER_MS);
     return () => { live = false; clearTimeout(t); };
   }, []);
   const coach = state.coach;
@@ -35,7 +39,7 @@ export function CoachMark({ state, dispatch }: { state: EditorState; dispatch: (
     <View testID="coach-mark" accessibilityRole="summary" className="mx-4 my-2 gap-1 rounded-lg border border-border bg-card p-3">
       <View className="flex-row items-center justify-between gap-2">
         <Text testID="coach-title" accessibilityLabel={`${C.title}. ${C.sub}`} className="shrink text-body font-semibold">{`${C.title} · ${C.sub}`}</Text>
-        <Button testID="coach-skip" variant="ghost" size="sm" onPress={() => dispatch({ type: 'coach', step: null })}>{C.skip}</Button>
+        <Button testID="coach-skip" variant="ghost" size="sm" className={TOOL} onPress={() => dispatch({ type: 'coach', step: null })}>{C.skip}</Button>
       </View>
       <View className="flex-row items-center gap-3">
         <Text testID="coach-step" className="font-pixel text-label text-muted-foreground">{C.step(coach.step)}</Text>
@@ -50,7 +54,7 @@ export function CoachMark({ state, dispatch }: { state: EditorState; dispatch: (
       {C.next[k] ? <Text className="text-caption text-muted-foreground">{C.next[k]}</Text> : null}
       {coach.step === 1 && offerPlace ? (
         <View className="flex-row pt-1">
-          <Button testID="coach-place" onPress={() => dispatch({ type: 'drop', id: null, item: COACH_ITEM, target: { layer: 'floor', x: coach.tile[0], y: coach.tile[1] } })}>
+          <Button testID="coach-place" className={TOOL} onPress={() => dispatch({ type: 'drop', id: null, item: COACH_ITEM, target: { layer: 'floor', x: coach.tile[0], y: coach.tile[1] } })}>
             {C.place}
           </Button>
         </View>

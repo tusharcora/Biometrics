@@ -551,14 +551,14 @@ describe('the guided first placement (spec §11.1)', () => {
   });
 
   it('offers Place at once to a screen reader', async () => {
-    jest.spyOn(AccessibilityInfo, 'isScreenReaderEnabled').mockResolvedValue(true);
+    jest.spyOn(AccessibilityInfo, 'isScreenReaderEnabled').mockResolvedValueOnce(true);
     const s = await openEditor({ drawer: 'new', item: 'lamp.welcome', coach: true });
     await act(async () => undefined);
     expect(s.getByTestId('coach-place')).toBeTruthy();
   });
 
   it('says each new step once, and Undo after placing goes back to step 1 with Place offered again', async () => {
-    jest.spyOn(AccessibilityInfo, 'isScreenReaderEnabled').mockResolvedValue(true);
+    jest.spyOn(AccessibilityInfo, 'isScreenReaderEnabled').mockResolvedValueOnce(true);
     const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => undefined);
     const s = await openEditor({ drawer: 'new', item: 'lamp.welcome', coach: true });
     await act(async () => undefined);
@@ -576,5 +576,30 @@ describe('the guided first placement (spec §11.1)', () => {
   it('is not shown without the coach param', async () => {
     const s = await openEditor({ drawer: 'new', item: 'lamp.welcome' });
     expect(s.queryByTestId('coach-mark')).toBeNull();
+  });
+
+  it.each([[568, true], [844, false]])('at %i points Place is offered at once: %s (ruling T15-FIX: the drawer is below the fold on a short phone)', async (height, atOnce) => {
+    jest.spyOn(require('react-native'), 'useWindowDimensions').mockReturnValue({ width: 320, height, scale: 2, fontScale: 1 });
+    const s = await openEditor({ drawer: 'new', item: 'lamp.welcome', coach: true });
+    expect(!!s.queryByTestId('coach-place')).toBe(atOnce);
+    act(() => { jest.advanceTimersByTime(10_000); });
+    expect(s.getByTestId('coach-place')).toBeTruthy();
+  });
+
+  it('draws the lime tile only on step 1 (ruling T15-FIX)', async () => {
+    const overlay = require('../../src/lib/room/edit/overlay');
+    const lime = jest.spyOn(overlay, 'coachRects');
+    const plain = await openEditor();
+    expect(lime).not.toHaveBeenCalled();
+    plain.unmount();
+    const s = await openEditor({ drawer: 'new', item: 'lamp.welcome', coach: true });
+    expect(lime).toHaveBeenCalledWith(expect.anything(), [5, 3]);
+    act(() => { jest.advanceTimersByTime(10_000); });
+    fireEvent.press(s.getByTestId('coach-place'));
+    lime.mockClear();
+    fireEvent.press(s.getByTestId('edit-room-deselect'));
+    fireEvent.press(s.getByTestId('edit-grid')); // the overlay is drawn again, now on step 2
+    expect(s.getByTestId('coach-step')).toHaveTextContent('Step 2 of 3');
+    expect(lime).not.toHaveBeenCalled();
   });
 });

@@ -25,9 +25,8 @@ export type Outcome =
   /** `item`: a refused new piece's item (ruling T12-CARRY), so the reason names what was dragged in or placed. */
   | { ok: false; refused: Refused; id: string | null; item?: ItemId };
 /**
- * The guided first placement (spec §11.1). `placed` is the lantern step 1 put down and the way it faced then, so Undo,
- * Redo, Store, Turn and a refresh all move the steps with the draft (Task 9 minor): no lantern is step 1, the lantern
- * facing as placed is step 2, the lantern turned is step 3.
+ * The guided first placement (spec §11.1). `placed` is the lantern in the room and the way it faced when it came in,
+ * so Undo, Redo, Store, Turn and a refresh all move the steps with the draft (`syncCoach`).
  */
 export interface CoachState { step: 1 | 2 | 3; tile: [number, number]; placed?: { id: string; facing: 'L' | 'R' } }
 
@@ -86,7 +85,8 @@ export type EditorAction =
   | { type: 'previewSet'; setId: string | null }
   | { type: 'undo' }
   | { type: 'redo' }
-  | { type: 'coach'; step: CoachState['step'] | null }
+  /** Skip ends the guided placement; its steps follow the room. */
+  | { type: 'coach'; step: null }
   | { type: 'clearOutcome' }
   | { type: 'refreshed'; draft: Draft; version: number; counts: Readonly<Record<ItemId, number>>; tier: Tier }
   | { type: 'saving' }
@@ -101,7 +101,8 @@ export function initEditor(c: EditorInput, open: DecorateParams = {}): EditorSta
   return {
     saved: draft, draft, past: [], future: [], tier: c.tier, counts: c.counts, baseVersion: c.version,
     selected: null, picked: open.item ?? null, drawer, nudging: false, preview: null, outcome: null, newIds: c.newIds,
-    notice: null, coach: open.coach ? { step: 1, tile: coachTile(isoGrid(c.tier), c.layout, c.tier) } : null,
+    // A lantern already in the room starts the coach past step 1 (ruling T15-FIX), so Place never dead-ends.
+    notice: null, coach: open.coach ? syncCoach({ step: 1, tile: coachTile(isoGrid(c.tier), c.layout, c.tier) }, c.layout, c.tier, false) : null,
   };
 }
 
@@ -129,16 +130,23 @@ function commit(s: EditorState, draft: Draft, extra: Partial<EditorState> = {}):
 const withPieces = (s: EditorState, pieces: Placement[]): Draft => ({ ...s.draft, layout: { ...s.draft.layout, pieces } });
 const refuse = (s: EditorState, refused: Refused, id: string | null, item?: ItemId): EditorState =>
   ({ ...s, outcome: item ? { ok: false, refused, id, item } : { ok: false, refused, id } });
-/** Coach step 1 ends when the lantern lands (spec §11.1). */
-const coachAfterPlace = (s: EditorState, piece: Placement): CoachState | null =>
-  s.coach && s.coach.step === 1 && piece.item === COACH_ITEM ? { ...s.coach, step: 2, placed: { id: piece.id, facing: piece.facing } } : s.coach;
-
-/** The coach's step after any action (Task 9 minor): where the placed lantern is in the draft now. */
-function coachFor(coach: CoachState | null, draft: Draft): CoachState | null {
-  if (!coach?.placed) return coach;
-  const lantern = draft.layout.pieces.find((p) => p.id === coach.placed!.id && p.item === COACH_ITEM);
-  const step = !lantern ? 1 : lantern.facing === coach.placed.facing ? 2 : 3;
-  return step === coach.step ? coach : { ...coach, step };
+/**
+ * The coach's step for a room (spec §11.1; Task 9 minor, ruling T15-FIX): a lantern in the room is step 2, or step 3
+ * once turned from L (the way every new piece lands); no lantern is step 1. Back on step 1, or when the room or tier
+ * changed while there (`fresh`), the lime tile is worked out again, so Place never aims at a taken or stale tile.
+ */
+function syncCoach(coach: CoachState, layout: RoomLayout, tier: Tier, fresh: boolean): CoachState {
+  const lanterns = layout.pieces.filter((p) => p.item === COACH_ITEM);
+  const lantern = lanterns.find((p) => p.id === coach.placed?.id) ?? lanterns[0];
+  if (lantern) {
+    const placed = coach.placed?.id === lantern.id ? coach.placed : { id: lantern.id, facing: 'L' as const };
+    const step = lantern.facing === placed.facing ? 2 : 3;
+    return step === coach.step && placed === coach.placed ? coach : { ...coach, step, placed };
+  }
+  if (coach.step === 1 && !fresh) return coach;
+  const [x, y] = coachTile(isoGrid(tier), layout, tier);
+  const tile: [number, number] = x === coach.tile[0] && y === coach.tile[1] ? coach.tile : [x, y];
+  return coach.step === 1 && tile === coach.tile ? coach : { ...coach, step: 1, tile };
 }
 
 function add(s: EditorState, item: ItemId, target: Target | null, facing: 'L' | 'R' = 'L'): EditorState {
@@ -149,7 +157,7 @@ function add(s: EditorState, item: ItemId, target: Target | null, facing: 'L' | 
   const piece = placedAt({ id: newPieceId(s.draft.layout), item, facing, mirror: false }, target);
   const why = refusal(s.draft.layout, piece, s.tier, true);
   if (why) return refuse(s, why, null, item);
-  return commit(s, withPieces(s, [...s.draft.layout.pieces, piece]), { selected: piece.id, nudging: false, outcome: { ok: true, id: piece.id }, coach: coachAfterPlace(s, piece), picked: null });
+  return commit(s, withPieces(s, [...s.draft.layout.pieces, piece]), { selected: piece.id, nudging: false, outcome: { ok: true, id: piece.id }, picked: null });
 }
 
 function move(s: EditorState, id: string, next: Placement): EditorState {
@@ -243,7 +251,8 @@ function setPieces(s: EditorState, set: CatalogueSet): { pieces: Placement[]; mi
 
 export function editorReducer(s: EditorState, a: EditorAction): EditorState {
   const next = reduce(s, a);
-  const coach = coachFor(next.coach, next.draft);
+  if (!next.coach || (next.draft === s.draft && next.tier === s.tier)) return next;
+  const coach = syncCoach(next.coach, next.draft.layout, next.tier, true);
   return coach === next.coach ? next : { ...next, coach };
 }
 
@@ -354,7 +363,7 @@ function reduce(s: EditorState, a: EditorAction): EditorState {
       return next ? { ...s, draft: next, past: [...s.past, s.draft].slice(-UNDO_STEPS), future: s.future.slice(1), selected: null, outcome: null } : s;
     }
     case 'coach':
-      return { ...s, coach: a.step === null || !s.coach ? null : { ...s.coach, step: a.step } };
+      return { ...s, coach: null };
     case 'clearOutcome':
       return { ...s, outcome: null };
     case 'refreshed':
