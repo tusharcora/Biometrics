@@ -259,7 +259,7 @@ describe('Put on… and back to the floor (spec §5.7)', () => {
 describe('the guided first placement (spec §11.1)', () => {
   it('step 1 ends when the lantern is placed (it is selected), step 2 when it is turned', () => {
     let s = start({}, { coach: true, drawer: 'new', item: 'lamp.welcome' });
-    expect([s.coach?.step, s.coach?.tile, s.drawer, s.picked]).toEqual([1, [5, 3], 'all', 'lamp.welcome']); // nothing new: All
+    expect([s.coach?.step, s.coach?.tile, s.drawer, s.picked]).toEqual([1, [5, 3], 'new', 'lamp.welcome']); // the lantern is on New (final review I1)
     s = run(s, { type: 'drop', id: null, item: 'lamp.welcome', target: { layer: 'floor', x: 5, y: 3 } });
     expect([s.coach?.step, piece(s, s.selected!)!.item]).toEqual([2, 'lamp.welcome']);
     s = run(s, { type: 'turn' });
@@ -336,5 +336,20 @@ describe('saving (Spec B §6.4 rulings)', () => {
     const failed = run(start(), { type: 'place', item: 'plant.fern' }, { type: 'saveFailed' });
     const again = run(failed, { type: 'saving' });
     expect([failed.notice, again.notice, again.draft]).toEqual(['saveFailed', null, failed.draft]);
+  });
+});
+
+describe('opening (spec §5.1, §11.1; final review I1, I2)', () => {
+  it('the guided placement always has the lantern on New, whatever else is unseen', () => {
+    const s = start({ newIds: ['corner.beanbag'] }, { drawer: 'new', item: 'lamp.welcome', coach: true });
+    expect([s.drawer, s.newIds, s.picked]).toEqual(['new', ['corner.beanbag', 'lamp.welcome'], 'lamp.welcome']);
+    expect(start({}, { drawer: 'new', item: 'lamp.welcome', coach: true }).drawer).toBe('new');
+    expect(start({ newIds: ['corner.beanbag'] }, { drawer: 'new', item: 'corner.beanbag' }).newIds).toEqual(['corner.beanbag']);
+  });
+
+  it('picks only a piece that can be placed: never a worn piece or a style', () => {
+    expect(start({ newIds: ['out.scarf'] }, { drawer: 'new', item: 'out.scarf' }).picked).toBeNull();
+    expect(start({}, { drawer: 'room', item: 'wall.dots' }).picked).toBeNull();
+    expect(start({}, { drawer: 'all', item: 'plant.fern' }).picked).toBe('plant.fern');
   });
 });

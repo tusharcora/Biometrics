@@ -3,7 +3,7 @@
 // Another; Put on…'s surfaces and the floor; the guided first placement's tile. Pure. The geometry is the server's
 // (iso/geometry.ts).
 import { GEOMETRY_DEPS, isoOf } from '../catalogue';
-import { capFor, checkPiece, wallLength, WALL_STEPS, wrongLayer, type BadReason, type Placement, type RoomLayout, type Tier } from '../iso/geometry';
+import { capFor, checkPiece, footOf, seatTile, wallLength, WALL_STEPS, wrongLayer, type BadReason, type Placement, type RoomLayout, type Tier } from '../iso/geometry';
 import { HH, HT, projOf, unproject, type IsoGrid } from '../iso/grid';
 import { spotPoint } from '../iso/room';
 import type { ItemId } from '../loadout';
@@ -35,7 +35,16 @@ export function refusal(layout: RoomLayout, piece: Placement, tier: Tier, adding
   // Layer first (ruling T2): checkPiece assumes an allowed layer, and a missing iso reads as 'outside' there.
   if (!iso || wrongLayer(iso, piece)) return { reason: 'layer' };
   if (adding && layout.pieces.length >= capFor(tier)) return { reason: 'full' };
-  return checkPiece(layout, piece, tier, GEOMETRY_DEPS);
+  const why = checkPiece(layout, piece, tier, GEOMETRY_DEPS);
+  // On KIP's chair itself (inside the desk's footprint, so the overlap answers first): say the chair (final review M1).
+  if (why?.reason === 'overlap' && piece.layer === 'floor') {
+    const desk = layout.pieces.find((q) => q.id === why.with);
+    const deskIso = desk ? isoOf(desk.item) : undefined;
+    const seat = desk && deskIso?.kipDesk ? seatTile(desk, deskIso) : null;
+    const a = footOf(piece, iso);
+    if (seat && seat[0] >= a.x0 && seat[0] < a.x1 && seat[1] >= a.y0 && seat[1] < a.y1) return { reason: 'seat', with: why.with };
+  }
+  return why;
 }
 
 export const SPOT_RADIUS = 10;

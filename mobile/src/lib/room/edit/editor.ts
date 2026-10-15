@@ -97,10 +97,13 @@ export const UNDO_STEPS = 20;
 
 export function initEditor(c: EditorInput, open: DecorateParams = {}): EditorState {
   const draft = { layout: c.layout, worn: c.worn };
-  const drawer: DrawerTab = open.drawer === 'new' ? (c.newIds.length ? 'new' : 'all') : open.drawer ?? 'all';
+  // The lantern is a starter, never unseen: the guided placement adds it to New so its tile is there to drag (final
+  // review I1). Only a placeable piece is picked, so the picked row never offers a Place that can't act (I2).
+  const newIds = open.coach && !c.newIds.includes(COACH_ITEM) ? [...c.newIds, COACH_ITEM] : c.newIds;
+  const drawer: DrawerTab = open.drawer === 'new' ? (newIds.length ? 'new' : 'all') : open.drawer ?? 'all';
   return {
     saved: draft, draft, past: [], future: [], tier: c.tier, counts: c.counts, baseVersion: c.version,
-    selected: null, picked: open.item ?? null, drawer, nudging: false, preview: null, outcome: null, newIds: c.newIds,
+    selected: null, picked: isoOf(open.item) ? open.item! : null, drawer, nudging: false, preview: null, outcome: null, newIds,
     // A lantern already in the room starts the coach past step 1 (ruling T15-FIX), so Place never dead-ends.
     notice: null, coach: open.coach ? syncCoach({ step: 1, tile: coachTile(isoGrid(c.tier), c.layout, c.tier) }, c.layout, c.tier, false) : null,
   };

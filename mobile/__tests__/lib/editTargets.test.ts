@@ -1,6 +1,7 @@
 import { isoGrid, projOf } from '../../src/lib/room/iso/grid';
 import type { Placement } from '../../src/lib/room/iso/geometry';
 import { starterLayout } from '../../src/lib/room/layout';
+import { reasonText } from '../../src/lib/room/edit/labels';
 import { coachRects } from '../../src/lib/room/edit/overlay';
 import { coachTile, nearestFree, placedAt, refusal, roomCentre, snapTarget, targetPoint } from '../../src/lib/room/edit/targets';
 
@@ -30,6 +31,10 @@ describe('refusal (spec §5.3 Invalid)', () => {
   it('names the layer, the cap and the geometry reason', () => {
     expect(refusal(starterLayout(), fern({ item: 'item.mug' }), 1, false)).toEqual({ reason: 'layer' });
     expect(refusal(starterLayout(), fern({ x: 3, y: 2 }), 1, false)).toEqual({ reason: 'seat', with: 'desk' });
+    // On the chair itself (inside the desk's footprint): the chair, not the desk (final review M1).
+    expect(refusal(starterLayout(), fern({ x: 3, y: 1 }), 1, false)).toEqual({ reason: 'seat', with: 'desk' });
+    expect(reasonText(refusal(starterLayout(), fern({ x: 3, y: 1 }), 1, false)!, 'plant.fern', starterLayout())).toBe("Blocks KIP's chair");
+    expect(refusal(starterLayout(), fern({ x: 2, y: 0 }), 1, false)).toEqual({ reason: 'overlap', with: 'desk' });
     expect(refusal(starterLayout(), fern(), 1, false)).toBeNull();
     const full = { ...starterLayout(), pieces: [...starterLayout().pieces, ...Array.from({ length: 33 }, (_, k) => fern({ id: `q${k}`, layer: 'wallR', x: 0, y: 0 }))] };
     expect(refusal(full, fern(), 1, true)).toEqual({ reason: 'full' });

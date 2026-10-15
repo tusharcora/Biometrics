@@ -9,6 +9,7 @@ import { EDIT_CELL_PT, initialPan } from '../../src/components/edit/EditRoom';
 import { DecorateRoomScreen, EDIT_ROOM_HEIGHT, editRoomHeight, initialState } from '../../src/screens/DecorateRoomScreen';
 import { getCosmetics, loadCosmetics, markCosmeticsSeen, resetCosmetics } from '../../src/lib/room/cosmeticsStore';
 import { LIFT_PT, targetOf } from '../../src/lib/room/edit/drag';
+import { decorateTarget } from '../../src/lib/room/announce';
 import { initEditor } from '../../src/lib/room/edit/editor';
 import { targetPoint } from '../../src/lib/room/edit/targets';
 import { isoGrid, projOf } from '../../src/lib/room/iso/grid';
@@ -387,6 +388,20 @@ describe('the drawer in the editor (spec §5.4)', () => {
     expect(s.getByTestId('drawer-tile-corner.beanbag').props.accessibilityState.selected).toBe(true);
   });
 
+  it('a toasted scarf opens on the KIP tab, with no picked row to place it (final review I2)', async () => {
+    const s = await openEditor(decorateTarget('out.scarf'), cosmeticsDTO({ counts: { ...STARTER_COUNTS, 'out.scarf': 1 }, fresh: [{ itemId: 'out.scarf', source: 'counter:recaps_read:4' }], version: 2 }));
+    expect(s.getByTestId('drawer-tab-kip').props.accessibilityState.selected).toBe(true);
+    expect(s.getByTestId('drawer-tile-out.scarf')).toBeTruthy();
+    expect(s.queryByTestId('drawer-picked')).toBeNull();
+  });
+
+  it('a toasted wallpaper opens on the Room tab (final review I2)', async () => {
+    const s = await openEditor(decorateTarget('wall.brick'), cosmeticsDTO({ counts: { ...STARTER_COUNTS, 'wall.brick': 1 }, fresh: [{ itemId: 'wall.brick', source: 'family:STEP_GOAL:2' }], version: 2 }));
+    expect(s.getByTestId('drawer-tab-room').props.accessibilityState.selected).toBe(true);
+    expect(s.getByTestId('drawer-tile-wall.brick')).toBeTruthy();
+    expect(s.queryByTestId('drawer-picked')).toBeNull();
+  });
+
   it('a beanbag dragged in onto the chair goes back to the inventory, and says why (Review Focus 3)', async () => {
     const s = await openEditor(undefined, cosmeticsDTO({ counts: { ...STARTER_COUNTS, 'corner.beanbag': 1 }, version: 2 }));
     const before = s.getByTestId('edit-room-view').props.layout;
@@ -571,6 +586,14 @@ describe('the guided first placement (spec §11.1)', () => {
     expect(s.getByTestId('coach-step')).toHaveTextContent('Step 1 of 3');
     expect(s.getByTestId('coach-place')).toBeTruthy();
     expect(JSON.parse(s.getByTestId('edit-room-view').props.layout).pieces.some((p: { item: string }) => p.item === 'lamp.welcome')).toBe(false);
+  });
+
+  it('with other pieces unseen, New still holds the lantern to drag (final review I1)', async () => {
+    const s = await openEditor({ drawer: 'new', item: 'lamp.welcome', coach: true }, cosmeticsDTO({ counts: { ...STARTER_COUNTS, 'corner.beanbag': 1 }, fresh: [{ itemId: 'corner.beanbag', source: 'anyFamily:2' }], version: 2 }));
+    expect(s.getByTestId('drawer-tab-new').props.accessibilityState.selected).toBe(true);
+    expect(s.getByTestId('drawer-tile-lamp.welcome').props.accessibilityState.selected).toBe(true);
+    expect(s.getByTestId('drawer-tile-corner.beanbag')).toBeTruthy();
+    expect(getByGestureTestId('drawer-drag-lamp.welcome')).toBeTruthy();
   });
 
   it('is not shown without the coach param', async () => {
