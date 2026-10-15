@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import { fetchCoins, fetchFirstWeek, postCoinsSeen, type CoinEventDTO, type CoinsDTO, type FirstWeekDTO } from '../../api/coins';
+import { CATALOGUE } from '../room/catalogue';
 
 // One shared copy of GET /me/coins (spec 2026-10-15 §6.7, §12) and of GET /me/firstweek (§11.2), with cosmeticsStore's
 // guards: an answer that lands after sign-out is dropped (the session moves), and a read that started before a
@@ -20,7 +21,7 @@ export interface Coins {
 
 let coins: Coins | null = null;
 let firstWeek: FirstWeekDTO | null = null;
-// Bumped by every purchase, grow, mark-seen and sign-out: a read that started before one never lands after it.
+// Bumped by every purchase, grow, mark-seen, fresh read and sign-out: a read that started before one never lands after it.
 let epoch = 0;
 // Bumped only on sign-out: an action's answer lands unless the account changed.
 let session = 0;
@@ -37,7 +38,7 @@ const emit = () => listeners.forEach((l) => l());
 function fromDTO(dto: CoinsDTO): Coins {
   // Not a coins body at all: the read fails and what is shown stays.
   if (typeof dto?.balance !== 'number' || !Array.isArray(dto.events)) throw new Error('not a coins body');
-  return { balance: dto.balance, today: dto.today ?? { earned: 0, cap: 60 }, events: withSeen(dto.events), next: dto.next ?? null, fromServer: true };
+  return { balance: dto.balance, today: dto.today ?? { earned: 0, cap: CATALOGUE.dailyCap }, events: withSeen(dto.events), next: dto.next ?? null, fromServer: true };
 }
 
 export function getCoins(): Coins | null {
@@ -54,9 +55,15 @@ export function coinSession(): number {
 // The read in flight and the epoch it started in: loads started in the same epoch share it.
 let inflight: { at: number; read: Promise<Coins | null> } | null = null;
 
-/** Reads the server (which also catches up on earns). Keeps what is shown when the read fails. */
-export function loadCoins(): Promise<Coins | null> {
-  if (inflight && inflight.at === epoch) return inflight.read;
+/**
+ * Reads the server (which also catches up on earns). Keeps what is shown when the read fails. `fresh` moves the epoch
+ * first, so it never shares a read that started earlier and that read's answer is dropped: for a question asked after
+ * something may have changed on the server, such as a first-week bonus the first-week read just made payable (final
+ * review I1), as loadCosmetics({ fresh }) does.
+ */
+export function loadCoins({ fresh = false }: { fresh?: boolean } = {}): Promise<Coins | null> {
+  if (fresh) epoch++;
+  else if (inflight && inflight.at === epoch) return inflight.read;
   const at = epoch;
   const read = (async () => {
     try {
@@ -100,7 +107,7 @@ export async function loadMoreCoins(): Promise<boolean> {
 export function setCoinBalance(balance: number): void {
   epoch++;
   weekEpoch++;
-  coins = coins ? { ...coins, balance } : { balance, today: { earned: 0, cap: 60 }, events: [], next: null, fromServer: false };
+  coins = coins ? { ...coins, balance } : { balance, today: { earned: 0, cap: CATALOGUE.dailyCap }, events: [], next: null, fromServer: false };
   emit();
 }
 
@@ -109,7 +116,16 @@ export function setCoinBalance(balance: number): void {
  * actually been shown (ruling PF-F13: room card not shrunk, page focused); a read alone never marks anything seen.
  */
 export async function markCoinsSeen(through: string): Promise<void> {
+  // A read in flight is dropped by the epoch, but it may carry newer coins (a focus's catch-up): read again once it is
+  // done. seenThrough keeps what this mark covers seen in that answer, so nothing lands twice (final review M1).
+  const dropped = inflight?.read;
+  const at = session;
   epoch++;
+  if (dropped) {
+    void dropped.then(() => {
+      if (at === session) void loadCoins();
+    });
+  }
   if (seenThrough === null || through > seenThrough) seenThrough = through;
   if (coins) {
     coins = { ...coins, events: coins.events.map((e) => (!e.seen && e.at <= through ? { ...e, seen: true } : e)) };
@@ -127,7 +143,11 @@ export async function markCoinsSeen(through: string): Promise<void> {
 let weekEpoch = 0;
 let weekInflight: { at: number; read: Promise<FirstWeekDTO | null> } | null = null;
 
-/** Reads GET /me/firstweek, guarded as loadCoins is. Keeps what is shown when the read fails. */
+/**
+ * Reads GET /me/firstweek, guarded as loadCoins is. Keeps what is shown when the read fails. A list that opens or ticks
+ * a row reads the coins again, fresh: under PF-F3 only this read sets day 1, so a coins read sent alongside it (a P1
+ * user's first P2 open) caught up before the first-week bonuses could pay, and the +10 would not land (final review I1).
+ */
 export function loadFirstWeek(): Promise<FirstWeekDTO | null> {
   if (weekInflight && weekInflight.at === weekEpoch) return weekInflight.read;
   const at = weekEpoch;
@@ -135,8 +155,10 @@ export function loadFirstWeek(): Promise<FirstWeekDTO | null> {
     try {
       const dto = await fetchFirstWeek();
       if (at === weekEpoch && dto && typeof dto.open === 'boolean') {
+        const before = firstWeek;
         firstWeek = dto;
         emit();
+        if (dto.open && (!before?.open || dto.done > before.done)) void loadCoins({ fresh: true });
       }
     } catch {
       // Keep what is shown.

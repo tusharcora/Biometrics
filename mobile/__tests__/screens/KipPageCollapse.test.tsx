@@ -5,7 +5,7 @@ import * as SecureStore from 'expo-secure-store';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { fetchCoachStatus } from '../../src/api/coach';
 import { CoachScreen } from '../../src/screens/CoachScreen';
-import { fetchCoins, postCoinsSeen } from '../../src/api/coins';
+import { fetchCoins, fetchFirstWeek, postCoinsSeen } from '../../src/api/coins';
 import { getCoins, resetCoins } from '../../src/lib/coins/coinsStore';
 
 // The mocks (api, navigation, RoomView, the room's score and sleep reads) live in jest-mocks/coachScreenHarness.
@@ -251,6 +251,23 @@ describe('coins land only once KIP\'s bubble can show (ruling PF-F13)', () => {
     await scrollTo(s, 0);
     await waitFor(() => expect(s.getByTestId('coins-landed')).toHaveTextContent('Sleep goal hit'));
     expect(postCoinsSeen).toHaveBeenCalledWith('2026-11-11T07:12:00.000Z');
+  });
+
+  it('a P1 user\'s first P2 open: the first-placement +10 lands though the first coins read caught up before day 1 (final review I1)', async () => {
+    // GET /me/coins answers without the bonus: under PF-F3 only GET /me/firstweek sets day 1, and it runs alongside.
+    (fetchCoins as jest.Mock).mockResolvedValueOnce({ ...UNSEEN, balance: 375, events: [] });
+    (fetchFirstWeek as jest.Mock).mockResolvedValueOnce({
+      open: true, day: 1, done: 1, next: { tier: 2, coins: 600, streak: 14 },
+      tasks: ['checkin', 'place', 'sleep', 'fern', 'cheer', 'recap', 'streak7'].map((key) => ({ key, done: key === 'place', reward: 5 })),
+    });
+    (fetchCoins as jest.Mock).mockResolvedValueOnce({ ...UNSEEN, events: [{ kind: 'firstweek', amount: 10, at: '2026-11-11T09:00:00.000Z', seen: false }] });
+    prefs.readKipRoomShrunk.mockResolvedValue(false);
+    const s = await openChat();
+    measureRoom(s);
+    await waitFor(() => expect(s.getByTestId('coins-landed')).toHaveTextContent('First-week bonus'));
+    expect(s.getByTestId('kip-room').props.room.split(':')[2]).toBe('+10!');
+    expect(fetchCoins).toHaveBeenCalledTimes(2);
+    expect(postCoinsSeen).toHaveBeenCalledWith('2026-11-11T09:00:00.000Z');
   });
 
   it('holds the coins until the stored shrink choice is read, so a shrunk card never marks them seen first', async () => {
