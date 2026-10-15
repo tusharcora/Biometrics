@@ -40,13 +40,18 @@ it('says what Apply set left out and that your desk stayed (ruling T9-FIX)', () 
 });
 
 it('never prices anything in money: no currency, no real-money or ad copy (spec §6.1, ruling 11)', () => {
+  expect(ROOM_COPY.arrive.items.at(-1)!.body).toBe('Nothing is sold. The starter room is yours from day one, and items are never taken away.');
+  // JSON.stringify drops the functions, so every composed string is checked with sample arguments too.
+  const C = ROOM_COPY.coins;
   const composed = [
     ROOM_COPY.newFor('x', 2), ROOM_COPY.backfill(3), ROOM_COPY.set.pieces(13, 'y'),
-    ROOM_COPY.coins.walletLabel('1,500'), ROOM_COPY.coins.earnedToday(40, 60), ROOM_COPY.coins.landSpoken(20, 'Sleep goal hit'),
+    C.walletLabel('1,500'), C.earnedToday(40, 60), C.earnedTodaySpoken(40, 60), C.landSpoken(20, 'Sleep goal hit'),
+    C.amount(20, false), C.amount(0, true), C.amount(-150, false), C.amountSpoken(20, false), C.amountSpoken(0, true), C.amountSpoken(-150, false),
+    C.dated('Mon', 9, 'Nov'), C.today(7, 12), C.rowSpoken('Coin shop', 'Yesterday', 'minus 150 coins'), C.bubble(20),
+    C.landLine('Sleep goal hit', 2), C.landLine('Sleep goal hit', 0),
   ];
   expect(composed.slice(0, 3)).toEqual(["New for KIP's room: x and 2 more", "Your badges unlocked 3 things for KIP's room", '13 pieces · y']);
   for (const s of [JSON.stringify(ROOM_COPY), ...composed]) {
     expect(s).not.toMatch(/[$£€¥]|\b(USD|EUR|GBP)\b|get more coins|buy coins|coin pack|in-app purchase|watch an ad|\bads?\b/i);
   }
-  expect(ROOM_COPY.arrive.items.at(-1)!.body).toMatch(/^Nothing is sold/);
 });

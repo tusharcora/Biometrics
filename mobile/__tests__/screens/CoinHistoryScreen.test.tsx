@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, fireEvent, render } from '@testing-library/react-native';
 import { fetchCoins, postCoinsSeen } from '../../src/api/coins';
-import { resetCoins } from '../../src/lib/coins/coinsStore';
+import { getCoins, resetCoins, setCoinBalance } from '../../src/lib/coins/coinsStore';
 import { CoinHistoryScreen } from '../../src/screens/CoinHistoryScreen';
 
 jest.mock('../../src/api/coins', () => ({ fetchCoins: jest.fn(), postCoinsSeen: jest.fn(), fetchFirstWeek: jest.fn(), fetchShop: jest.fn(), postPurchase: jest.fn(), postExpand: jest.fn() }));
@@ -64,4 +64,42 @@ it('reads a capped row aloud without a "·", and opening it never marks coins se
   expect(row.props.accessibilityLabel).toMatch(/^Read your weekly recap, Today, \d\d:\d\d, plus 0 coins, daily cap reached$/);
   expect(String(s.getByText('+0 · daily cap').props.className).split(' ')).toContain('tabular-nums');
   expect(postCoinsSeen).not.toHaveBeenCalled();
+  expect(getCoins()!.events.map((e) => e.seen)).toEqual([false]);
+});
+
+it('a balance known only from a purchase shows the loading state, not 0 of 60 and "No coins yet", until a read lands', async () => {
+  setCoinBalance(140);
+  let land!: (body: object) => void;
+  (fetchCoins as jest.Mock).mockReturnValueOnce(new Promise((r) => { land = r; }));
+  const s = await open();
+  expect([s.queryByTestId('history-loading') !== null, s.queryByTestId('history-today'), s.queryByTestId('history-empty')]).toEqual([true, null, null]);
+  await act(async () => { land(BODY({ balance: 140 })); });
+  expect([s.queryByTestId('history-loading'), s.getAllByTestId('history-row').length]).toEqual([null, 2]);
+});
+
+it('a balance known only from a purchase and a failed read shows the error with Try again', async () => {
+  setCoinBalance(140);
+  (fetchCoins as jest.Mock).mockRejectedValueOnce(new Error('offline')).mockResolvedValueOnce(BODY());
+  const s = await open();
+  expect([s.queryByTestId('history-failed') !== null, s.queryByTestId('history-today')]).toEqual([true, null]);
+  await act(async () => { fireEvent.press(s.getByTestId('history-retry')); });
+  expect(s.getAllByTestId('history-row')).toHaveLength(2);
+});
+
+it('Load more is busy while it reads, and says so when the read fails; tapping again retries', async () => {
+  let fail!: (e: Error) => void;
+  (fetchCoins as jest.Mock)
+    .mockResolvedValueOnce(BODY({ next: 'c1' }))
+    .mockReturnValueOnce(new Promise((_r, j) => { fail = j; }))
+    .mockResolvedValueOnce(BODY({ events: [{ kind: 'recap', amount: 10, at: new Date().toISOString(), seen: true }], next: null }));
+  const s = await open();
+  await act(async () => { fireEvent.press(s.getByTestId('history-more')); });
+  expect(s.getByTestId('history-more').props.accessibilityState).toEqual(expect.objectContaining({ disabled: true, busy: true }));
+  fireEvent.press(s.getByTestId('history-more'));
+  expect(fetchCoins).toHaveBeenCalledTimes(2);
+  await act(async () => { fail(new Error('offline')); });
+  expect(s.getByTestId('history-more-failed')).toHaveTextContent("Couldn't load more just now. Tap Load more to try again.");
+  expect(s.getByTestId('history-more').props.accessibilityState).toEqual(expect.objectContaining({ disabled: false }));
+  await act(async () => { fireEvent.press(s.getByTestId('history-more')); });
+  expect([s.getAllByTestId('history-row').length, s.queryByTestId('history-more'), s.queryByTestId('history-more-failed')]).toEqual([3, null, null]);
 });

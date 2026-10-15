@@ -21,13 +21,20 @@ const C = ROOM_COPY.coins;
 export function CoinHistoryScreen() {
   const navigation = useNavigation<any>();
   const params = (useRoute().params ?? {}) as { from?: 'shop' };
-  const coins = useCoins();
+  const stored = useCoins();
+  // A balance from a purchase or a grow alone has blank days and rows: it waits for a read like no coins at all.
+  const coins = stored?.fromServer ? stored : null;
   const [failed, setFailed] = useState(false);
+  const [more, setMore] = useState<'idle' | 'busy' | 'failed'>('idle');
   const load = useCallback(() => {
     setFailed(false);
-    void loadCoins().then((c) => setFailed(!c));
+    void loadCoins().then((c) => setFailed(!c?.fromServer));
   }, []);
   useEffect(() => { load(); }, [load]);
+  const loadMore = useCallback(() => {
+    setMore('busy');
+    void loadMoreCoins().then((ok) => setMore(ok ? 'idle' : 'failed'));
+  }, []);
   const rows = coins ? historyRows(coins.events, new Date()) : [];
   return (
     <SafeAreaView className="flex-1 bg-background">
@@ -70,7 +77,16 @@ export function CoinHistoryScreen() {
           ) : (
             <Text testID="history-empty" className="text-caption text-muted-foreground">{C.empty}</Text>
           )}
-          {coins.next ? <Button testID="history-more" variant="outline" className="h-[44px]" onPress={() => void loadMoreCoins()}>{C.loadMore}</Button> : null}
+          {coins.next ? (
+            <View className="gap-2">
+              {more === 'failed' ? (
+                <Text testID="history-more-failed" accessibilityLiveRegion="polite" className="text-caption text-muted-foreground">{C.loadMoreFailed}</Text>
+              ) : null}
+              <Button testID="history-more" variant="outline" className="h-[44px]" disabled={more === 'busy'} loading={more === 'busy'} onPress={loadMore}>
+                {C.loadMore}
+              </Button>
+            </View>
+          ) : null}
           <View testID="history-how" className="gap-1">
             <SectionLabel>{C.howTitle}</SectionLabel>
             {C.how.map((line) => <Text key={line} className="text-caption">{line}</Text>)}

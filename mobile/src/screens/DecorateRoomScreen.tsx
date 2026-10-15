@@ -175,8 +175,9 @@ function Editor({ cosmetics, params, navigation }: { cosmetics: Cosmetics; param
     <SafeAreaView className="flex-1 bg-background">
       <View className="flex-row items-center justify-between px-4 pb-1 pt-1">
         <Button testID="edit-cancel" variant="ghost" disabled={saving} onPress={cancel}>{ROOM_COPY.cancel}</Button>
-        <PageTitle>{ROOM_COPY.edit.title}</PageTitle>
-        <View className="flex-row items-center gap-2">
+        <PageTitle className="shrink text-center">{ROOM_COPY.edit.title}</PageTitle>
+        {/* The wallet and Done shrink and wrap before the title loses its room on a narrow phone. */}
+        <View testID="edit-header-right" className="shrink flex-row flex-wrap items-center justify-end gap-2">
           <WalletChip testID="edit-wallet" />
           <Button testID="edit-done" disabled={!changed || saving} loading={saving} onPress={() => void save()}>{ROOM_COPY.done}</Button>
         </View>

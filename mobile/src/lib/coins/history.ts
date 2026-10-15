@@ -19,7 +19,7 @@ export interface HistoryRow { key: string; label: string; when: string; amount: 
 export function historyRows(events: readonly CoinEventDTO[], now: Date): HistoryRow[] {
   return events.map((e, i) => {
     // A kind this build does not know yet still gets a row.
-    const label = C.kinds[e.kind] ?? C.kinds.firstweek;
+    const label = (C.kinds as Partial<Record<string, string>>)[e.kind] ?? C.kindUnknown;
     const when = whenLabel(e.at, now);
     const capped = e.amount === 0;
     return { key: `${e.at}-${i}`, label, when, amount: C.amount(e.amount, capped), spoken: C.rowSpoken(label, when, C.amountSpoken(e.amount, capped)) };

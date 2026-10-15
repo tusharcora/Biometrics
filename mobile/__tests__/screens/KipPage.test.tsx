@@ -29,6 +29,8 @@ beforeEach(() => {
 });
 afterEach(() => {
   jest.useRealTimers();
+  // The coins store is a module singleton: a wallet left loaded would leak into the next test.
+  resetCoins();
 });
 
 describe('the KIP page (W7)', () => {
@@ -41,7 +43,8 @@ describe('the KIP page (W7)', () => {
     expect(chip.props.accessibilityLabel).toBe('360 KIP coins. Open coin history');
     fireEvent.press(chip);
     expect(mockNav.navigate).toHaveBeenCalledWith('CoinHistory', undefined);
-    resetCoins();
+    // The header's buttons may shrink and wrap, so the title keeps room on a 320-pt phone (ruling T10-FIX).
+    expect(String(utils.getByTestId('kip-header-actions').props.className).split(' ')).toEqual(expect.arrayContaining(['shrink', 'flex-wrap', 'justify-end']));
   });
 
   it('titles the page KIP with the pocket-room status line and two header buttons', async () => {

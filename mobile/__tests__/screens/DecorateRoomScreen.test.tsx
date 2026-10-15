@@ -49,6 +49,7 @@ it('shows the wallet in the editor\'s header (spec §5.2)', async () => {
   setCoinBalance(360);
   const s = await openEditor();
   expect(s.getByTestId('edit-wallet').props.accessibilityLabel).toBe('360 KIP coins. Open coin history');
+  expect(String(s.getByTestId('edit-header-right').props.className).split(' ')).toEqual(expect.arrayContaining(['shrink', 'flex-wrap', 'justify-end']));
 });
 
 /** The chair's exit tile in window points (the jest stand-in for measureInWindow leaves the room's origin at 0, 0). */

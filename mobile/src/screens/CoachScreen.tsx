@@ -550,8 +550,8 @@ export function CoachScreen() {
         </Text>
       </View>
       {/* The wallet (once the coins have loaded) and Decorate are always there; Conversations and New chat wait for
-          the coach to be ready. */}
-      <View className="flex-row gap-2">
+          the coach to be ready. They shrink and wrap before the title loses its room on a narrow phone. */}
+      <View testID="kip-header-actions" className="shrink flex-row flex-wrap justify-end gap-2">
         <WalletChip testID="kip-wallet" />
         <Button testID="kip-decorate-button" variant="outline" size="icon-lg" accessibilityLabel={decorateLabel} onPress={openDecorate}>
           <Ionicons name="color-palette-outline" size={buttonIconSize('icon-lg')} color={colors.foreground} />

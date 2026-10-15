@@ -1,5 +1,6 @@
 import { historyRows, todayShare, whenLabel } from '../../src/lib/coins/history';
-import { coinCount } from '../../src/lib/room/roomCopy';
+import { EARN_AMOUNTS } from '../../src/lib/coins/amounts';
+import { ROOM_COPY, coinCount } from '../../src/lib/room/roomCopy';
 
 // Built on the device's own clock (ruling 29), so the cases hold in any zone the suite runs in.
 const at = (y: number, m: number, d: number, h: number, min: number) => new Date(y, m, d, h, min).toISOString();
@@ -33,4 +34,14 @@ it('labels each row by kind with its amount; a cap row reads +0 with the reason;
 it('fills the day\'s bar to the cap and no further, and groups thousands', () => {
   expect([todayShare({ earned: 40, cap: 60 }), todayShare({ earned: 90, cap: 60 }), todayShare({ earned: 0, cap: 60 })]).toEqual([40 / 60, 1, 0]);
   expect([coinCount(0), coinCount(360), coinCount(1500), coinCount(1234567)]).toEqual(['0', '360', '1,500', '1,234,567']);
+});
+
+it('labels a kind this build does not know neutrally, never as another kind', () => {
+  const [row] = historyRows([{ kind: 'gift' as never, amount: 3, at: at(2026, 10, 11, 8, 0), seen: true }], NOW);
+  expect([row!.label, row!.spoken]).toEqual(['KIP coins', 'KIP coins, Today, 08:00, plus 3 coins']);
+});
+
+it('"How to earn" states what the server pays (backend/src/coins/sources.ts EARN_AMOUNTS)', () => {
+  expect(EARN_AMOUNTS).toEqual({ sleep_goal: 20, steps: 15, recap: 10, checkin: 5 });
+  expect(ROOM_COPY.coins.how).toEqual(['Sleep goal +20', 'Step goal +15', 'Recap read +10', 'Check-in +5']);
 });

@@ -14,6 +14,8 @@ export interface Coins {
   /** Newest first, as many pages as were loaded. */
   events: readonly CoinEventDTO[];
   next: string | null;
+  /** False while only a purchase or grow's balance is known (no read has landed): today and the events are blanks. */
+  fromServer: boolean;
 }
 
 let coins: Coins | null = null;
@@ -28,7 +30,7 @@ const emit = () => listeners.forEach((l) => l());
 function fromDTO(dto: CoinsDTO): Coins {
   // Not a coins body at all: the read fails and what is shown stays.
   if (typeof dto?.balance !== 'number' || !Array.isArray(dto.events)) throw new Error('not a coins body');
-  return { balance: dto.balance, today: dto.today ?? { earned: 0, cap: 60 }, events: dto.events, next: dto.next ?? null };
+  return { balance: dto.balance, today: dto.today ?? { earned: 0, cap: 60 }, events: dto.events, next: dto.next ?? null, fromServer: true };
 }
 
 export function getCoins(): Coins | null {
@@ -69,10 +71,10 @@ export function loadCoins(): Promise<Coins | null> {
   return read;
 }
 
-/** The next history page, appended unless the list changed meanwhile. */
-export async function loadMoreCoins(): Promise<void> {
+/** The next history page, appended unless the list changed meanwhile. False only when the read failed. */
+export async function loadMoreCoins(): Promise<boolean> {
   const from = coins;
-  if (!from?.next) return;
+  if (!from?.next) return true;
   const at = epoch;
   try {
     const page = fromDTO(await fetchCoins(from.next));
@@ -80,8 +82,10 @@ export async function loadMoreCoins(): Promise<void> {
       coins = { ...from, events: [...from.events, ...page.events], next: page.next };
       emit();
     }
+    return true;
   } catch {
     // Load more stays; tapping it tries again.
+    return false;
   }
 }
 
@@ -89,7 +93,7 @@ export async function loadMoreCoins(): Promise<void> {
 export function setCoinBalance(balance: number): void {
   epoch++;
   weekEpoch++;
-  coins = coins ? { ...coins, balance } : { balance, today: { earned: 0, cap: 60 }, events: [], next: null };
+  coins = coins ? { ...coins, balance } : { balance, today: { earned: 0, cap: 60 }, events: [], next: null, fromServer: false };
   emit();
 }
 

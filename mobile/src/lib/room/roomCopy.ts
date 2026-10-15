@@ -5,6 +5,7 @@ import type { AchievementFamilyName, SetId, UnlockRule } from './catalogue';
 import { catalogueSet } from './catalogue';
 import type { ItemId } from './loadout';
 import type { RoomSlot, WornSlot } from './catalogue';
+import { EARN_AMOUNTS } from '../coins/amounts';
 
 export const ITEM_NAMES: Readonly<Record<ItemId, string>> = {
   'wall.plain': 'Plain slate', 'wall.dots': 'Dots', 'wall.stripes': 'Tinted stripes', 'wall.brick': 'Brick',
@@ -257,6 +258,8 @@ export const ROOM_COPY = {
       cheer_given: 'You cheered a room', cheer_got: 'A buddy cheered your room', challenge: 'Entered the room challenge',
       firstweek: 'First-week bonus', buy: 'Coin shop', expand: 'Your room grew',
     },
+    /** A kind this build does not know yet (a later phase's source): neutral, never another kind's label. */
+    kindUnknown: 'KIP coins',
     /** The short line under the room when coins land (spec §6.7): what happened, never a value. */
     landed: {
       sleep_goal: 'Sleep goal hit', steps: 'Step goal hit', checkin: 'Checked in', recap: 'Weekly recap read',
@@ -276,8 +279,11 @@ export const ROOM_COPY = {
     amountSpoken: (n: number, capped: boolean) => `${n < 0 ? `minus ${-n} coins` : `plus ${n} coins`}${capped ? ', daily cap reached' : ''}`,
     rowSpoken: (label: string, when: string, amount: string) => `${label}, ${when}, ${amount}`,
     howTitle: 'How to earn',
-    how: ['Sleep goal +20', 'Step goal +15', 'Recap read +10', 'Check-in +5'],
+    how: [
+      `Sleep goal +${EARN_AMOUNTS.sleep_goal}`, `Step goal +${EARN_AMOUNTS.steps}`, `Recap read +${EARN_AMOUNTS.recap}`, `Check-in +${EARN_AMOUNTS.checkin}`,
+    ],
     loadMore: 'Load more',
+    loadMoreFailed: "Couldn't load more just now. Tap Load more to try again.",
     empty: 'No coins yet. Healthy days earn them: a sleep goal, a step goal, a check-in, a weekly recap.',
     shop: 'Coin shop',
     loadFailed: "Couldn't load your coins just now. Check your connection and try again.",

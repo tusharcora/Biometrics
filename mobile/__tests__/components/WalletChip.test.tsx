@@ -19,7 +19,9 @@ it('is a 44-point outline button with the coin and the balance, labelled for scr
   const chip = s.getByTestId('wallet');
   expect([chip.props.accessibilityRole, chip.props.accessibilityLabel]).toEqual(['button', '1,500 KIP coins. Open coin history']);
   const classes = String(chip.props.className).split(' ');
-  expect([classes.includes('h-[44px]'), classes.includes('h-[32px]'), classes.includes('border-border')]).toEqual([true, false, true]);
+  // At least 44 points, growing with the (capped) text size rather than clipping it (ruling T10-FIX).
+  expect([classes.includes('min-h-[44px]'), classes.some((c) => /^h-\[/.test(c)), classes.includes('border-border')]).toEqual([true, false, true]);
+  expect(s.getByText('1,500').props.maxFontSizeMultiplier).toBe(1.3);
   // Tabular figures by the class, never an inline fontVariant (ruling PF-F10).
   expect(String(s.getByText('1,500').props.className).split(' ')).toContain('tabular-nums');
   fireEvent.press(chip);
