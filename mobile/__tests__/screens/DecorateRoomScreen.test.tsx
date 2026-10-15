@@ -529,3 +529,52 @@ describe('without dragging (spec §5.7)', () => {
     expect(plant).toMatchObject({ layer: 'floor', x: 1, y: 0 });
   });
 });
+
+describe('the guided first placement (spec §11.1)', () => {
+  beforeEach(() => jest.useFakeTimers());
+  afterEach(() => { jest.useRealTimers(); jest.restoreAllMocks(); });
+
+  it('walks the three steps: place the lantern on the lime tile, Turn, then Done; Skip ends it', async () => {
+    const s = await openEditor({ drawer: 'new', item: 'lamp.welcome', coach: true });
+    expect(s.getByTestId('coach-mark')).toHaveTextContent(/Your first piece.*Takes 10 seconds/);
+    expect(s.getByTestId('coach-title').props.accessibilityLabel).toBe('Your first piece. Takes 10 seconds');
+    expect(s.getByTestId('coach-step')).toHaveTextContent('Step 1 of 3');
+    expect(s.queryByTestId('coach-place')).toBeNull();
+    act(() => { jest.advanceTimersByTime(10_000); });
+    fireEvent.press(s.getByTestId('coach-place')); // without a drag, after 10 seconds
+    expect(JSON.parse(s.getByTestId('edit-room-view').props.layout).pieces.find((p: { item: string }) => p.item === 'lamp.welcome')).toMatchObject({ x: 5, y: 3 });
+    expect(s.getByTestId('coach-step')).toHaveTextContent('Step 2 of 3');
+    fireEvent.press(s.getByTestId('edit-turn'));
+    expect(s.getByTestId('coach-step')).toHaveTextContent('Step 3 of 3');
+    fireEvent.press(s.getByTestId('coach-skip'));
+    expect(s.queryByTestId('coach-mark')).toBeNull();
+  });
+
+  it('offers Place at once to a screen reader', async () => {
+    jest.spyOn(AccessibilityInfo, 'isScreenReaderEnabled').mockResolvedValue(true);
+    const s = await openEditor({ drawer: 'new', item: 'lamp.welcome', coach: true });
+    await act(async () => undefined);
+    expect(s.getByTestId('coach-place')).toBeTruthy();
+  });
+
+  it('says each new step once, and Undo after placing goes back to step 1 with Place offered again', async () => {
+    jest.spyOn(AccessibilityInfo, 'isScreenReaderEnabled').mockResolvedValue(true);
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => undefined);
+    const s = await openEditor({ drawer: 'new', item: 'lamp.welcome', coach: true });
+    await act(async () => undefined);
+    expect(announce).not.toHaveBeenCalled();
+    fireEvent.press(s.getByTestId('coach-place'));
+    expect(announce.mock.calls.filter(([t]) => t === 'Step 2 of 3. Now tap Turn. It faces the other way.')).toHaveLength(1);
+    fireEvent.press(s.getByTestId('edit-room-deselect'));
+    expect(announce.mock.calls.filter(([t]) => t === 'Step 2 of 3. Now tap Turn. It faces the other way.')).toHaveLength(1);
+    fireEvent.press(s.getByTestId('edit-undo'));
+    expect(s.getByTestId('coach-step')).toHaveTextContent('Step 1 of 3');
+    expect(s.getByTestId('coach-place')).toBeTruthy();
+    expect(JSON.parse(s.getByTestId('edit-room-view').props.layout).pieces.some((p: { item: string }) => p.item === 'lamp.welcome')).toBe(false);
+  });
+
+  it('is not shown without the coach param', async () => {
+    const s = await openEditor({ drawer: 'new', item: 'lamp.welcome' });
+    expect(s.queryByTestId('coach-mark')).toBeNull();
+  });
+});

@@ -1,7 +1,7 @@
 import React from 'react';
 import { act, fireEvent, render } from '@testing-library/react-native';
 import { RoomCard } from '../../src/components/coach/RoomCard';
-import { fetchCosmetics } from '../../src/api/cosmetics';
+import { fetchCosmetics, postRoomWelcomed } from '../../src/api/cosmetics';
 import { resetMyKip } from '../../src/lib/kip/myKip';
 import { kipStage, type KipStageInput } from '../../src/lib/kipStage';
 import { loadCosmetics, resetCosmetics } from '../../src/lib/room/cosmeticsStore';
@@ -10,9 +10,9 @@ import { EMPTY_WORN } from '../../src/lib/room/loadout';
 import { cosmeticsDTO } from '../../jest-mocks/cosmeticsFixture';
 
 jest.mock('../../src/components/room/RoomView', () => require('../../jest-mocks/RoomView'));
-jest.mock('../../src/api/cosmetics', () => ({ fetchCosmetics: jest.fn(), putCosmetics: jest.fn(), postCosmeticsSeen: jest.fn() }));
+jest.mock('../../src/api/cosmetics', () => ({ fetchCosmetics: jest.fn(), putCosmetics: jest.fn(), postCosmeticsSeen: jest.fn(), postRoomWelcomed: jest.fn(async () => undefined) }));
 
-afterEach(() => { resetCosmetics(); resetMyKip(); });
+afterEach(() => { resetCosmetics(); resetMyKip(); jest.clearAllMocks(); });
 
 const INPUT: KipStageInput = { phase: 'ready', statusUnverified: false, offline: false, waiting: true, streaming: true, error: false, empty: false, idle: { pose: 'rest', mood: 'idle' } };
 const STAGE = kipStage(INPUT);
@@ -104,4 +104,39 @@ it('pauses the room while decorate mode is open', () => {
   expect(renderCard().getByTestId('kip-room').props.room).not.toContain(':paused');
   const s = renderCard({ paused: true });
   expect(s.getByTestId('kip-room').props.room).toContain(':paused');
+});
+
+it('shows the welcome once until it is answered, with KIP saying WELCOME HOME!; Later hides it for good', async () => {
+  (fetchCosmetics as jest.Mock).mockResolvedValue(cosmeticsDTO({ welcomed: false }));
+  await act(async () => { await loadCosmetics(); });
+  const onPlaceLantern = jest.fn();
+  const s = renderCard({ onPlaceLantern });
+  expect(s.getByTestId('room-welcome')).toBeTruthy();
+  expect(s.getByTestId('kip-room').props.room.split(':')[2]).toBe('WELCOME HOME!');
+  await act(async () => { fireEvent.press(s.getByTestId('welcome-later')); });
+  expect(postRoomWelcomed).toHaveBeenCalledTimes(1);
+  expect(s.queryByTestId('room-welcome')).toBeNull();
+  expect(s.getByTestId('kip-room').props.room.split(':')[2]).toBe(STAGE.bubble);
+  expect(onPlaceLantern).not.toHaveBeenCalled();
+});
+
+it('Place the lantern answers the welcome and opens the guided placement', async () => {
+  (fetchCosmetics as jest.Mock).mockResolvedValue(cosmeticsDTO({ welcomed: false }));
+  await act(async () => { await loadCosmetics(); });
+  const onPlaceLantern = jest.fn();
+  const s = renderCard({ onPlaceLantern });
+  await act(async () => { fireEvent.press(s.getByTestId('welcome-place')); });
+  expect([onPlaceLantern.mock.calls.length, (postRoomWelcomed as jest.Mock).mock.calls.length]).toEqual([1, 1]);
+  expect(s.queryByTestId('room-welcome')).toBeNull();
+});
+
+it('shows no welcome once welcomed, before the first read, or while the stage loads', async () => {
+  expect(renderCard().queryByTestId('room-welcome')).toBeNull();
+  (fetchCosmetics as jest.Mock).mockResolvedValue(cosmeticsDTO({ welcomed: false }));
+  await act(async () => { await loadCosmetics(); });
+  expect(renderCard({ stage: kipStage({ ...INPUT, phase: 'loading' }) }).queryByTestId('room-welcome')).toBeNull();
+  resetCosmetics();
+  (fetchCosmetics as jest.Mock).mockResolvedValue(cosmeticsDTO());
+  await act(async () => { await loadCosmetics(); });
+  expect(renderCard().queryByTestId('room-welcome')).toBeNull();
 });

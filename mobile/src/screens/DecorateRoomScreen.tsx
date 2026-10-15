@@ -9,6 +9,7 @@ import { PageTitle } from '../components/ui/page-title';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { ApiError } from '../api/client';
+import { CoachMark } from '../components/edit/CoachMark';
 import { EditNotices } from '../components/edit/EditNotices';
 import { EditRoom, type EditRoomHandle } from '../components/edit/EditRoom';
 import { EditToolbar } from '../components/edit/EditToolbar';
@@ -191,6 +192,8 @@ function Editor({ cosmetics, params, navigation }: { cosmetics: Cosmetics; param
           contentContainerStyle={{ paddingBottom: 32 }}
         >
           <EditToolbar state={state} dispatch={act} showGrid={showGrid} onToggleGrid={() => setShowGrid((v) => !v)} />
+          {/* The guided first placement (spec §11.1): just above the drawer the lantern comes from. */}
+          <CoachMark state={state} dispatch={act} />
           <InventoryDrawer state={state} dispatch={act} room={roomRef} colour={me.colour} counters={cosmetics.counters} maxHeight={scrollHeight} onDragChange={setDrawerDrag} />
           <PiecesList state={state} dispatch={act} />
         </ScrollView>

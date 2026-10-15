@@ -35,6 +35,7 @@ import { useTodayScene } from '../lib/home/useTodayScene';
 import { KIP_COPY } from '../lib/kipCopy';
 import { hasUnseen, useCosmetics } from '../lib/room/cosmeticsStore';
 import { useDecorateOpen } from '../lib/room/decorateOpen';
+import { COACH_ITEM } from '../lib/room/edit/targets';
 import { ROOM_COPY } from '../lib/room/roomCopy';
 import { kipStage, kipStatusLine, spokenLine } from '../lib/kipStage';
 import { readKipRoomShrunk, writeKipRoomShrunk } from '../lib/kipRoomPrefs';
@@ -463,6 +464,8 @@ export function CoachScreen() {
   const decorating = useDecorateOpen();
   const decorateLabel = unseen ? ROOM_COPY.decorateLabelNew : ROOM_COPY.decorateLabel;
   const openDecorate = useCallback(() => navigation.navigate('DecorateRoom'), [navigation]);
+  // The welcome card's Place the lantern: the editor on New with the lantern picked and the coach mark (spec §11.1).
+  const placeLantern = useCallback(() => navigation.navigate('DecorateRoom', { drawer: 'new', item: COACH_ITEM, coach: true }), [navigation]);
 
   const shrink = useCallback(() => {
     shrunkChosen.current = true;
@@ -491,6 +494,7 @@ export function CoachScreen() {
       paused={decorating}
       onOpenRecovery={openRecovery}
       onDecorate={openDecorate}
+      onPlaceLantern={placeLantern}
       onLayout={(e) => {
         cardBottom.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height;
       }}

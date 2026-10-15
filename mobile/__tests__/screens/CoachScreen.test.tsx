@@ -29,7 +29,7 @@ import { loadCosmetics, resetCosmetics } from '../../src/lib/room/cosmeticsStore
 import { setDecorateOpen } from '../../src/lib/room/decorateOpen';
 import { cosmeticsDTO } from '../../jest-mocks/cosmeticsFixture';
 
-jest.mock('../../src/api/cosmetics', () => ({ ...jest.requireActual('../../src/api/cosmetics'), fetchCosmetics: jest.fn() }));
+jest.mock('../../src/api/cosmetics', () => ({ ...jest.requireActual('../../src/api/cosmetics'), fetchCosmetics: jest.fn(), postRoomWelcomed: jest.fn(async () => undefined) }));
 
 // The mocks, `status`, `today` and the helpers live in jest-mocks/coachScreenHarness (shared with KipPage.test).
 const mockNavigate = mockNav.navigate;
@@ -931,6 +931,19 @@ describe("CoachScreen: decorate (spec 2026-10-14 KIP's room §4, §6.1)", () => 
     const plain = await openChat();
     expect(plain.queryByTestId('kip-decorate-dot')).toBeNull();
     expect(plain.getByTestId('kip-decorate-button').props.accessibilityLabel).toBe("Decorate KIP's room");
+  });
+
+  it("the welcome card's Place the lantern opens the editor on the guided placement", async () => {
+    (fetchCosmetics as jest.Mock).mockResolvedValue(cosmeticsDTO({ welcomed: false }));
+    await act(async () => {
+      await loadCosmetics();
+    });
+    const utils = await openChat();
+    fireEvent(utils.getByTestId('kip-room-frame-inner'), 'layout', { nativeEvent: { layout: { width: 323, height: 200, x: 0, y: 0 } } });
+    expect(utils.getByTestId('room-welcome')).toBeTruthy();
+    await act(async () => { fireEvent.press(utils.getByTestId('welcome-place')); });
+    expect(mockNavigate).toHaveBeenCalledWith('DecorateRoom', { drawer: 'new', item: 'lamp.welcome', coach: true });
+    expect(utils.queryByTestId('room-welcome')).toBeNull();
   });
 
   it("pauses the room's loops while decorate mode is open", async () => {

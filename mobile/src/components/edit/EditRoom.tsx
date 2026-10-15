@@ -10,7 +10,7 @@ import type { KipColour } from '../../lib/kip/kipArt';
 import { clampPan, dragAt, EDGE_PT, ghostRects, grabOffset, LIFT_PT, targetKey, targetOf, type Drag, type DragBase } from '../../lib/room/edit/drag';
 import { displayDraft, type EditorAction, type EditorState } from '../../lib/room/edit/editor';
 import { reasonText } from '../../lib/room/edit/labels';
-import { gridRects, outlineRects } from '../../lib/room/edit/overlay';
+import { coachRects, gridRects, outlineRects } from '../../lib/room/edit/overlay';
 import { deskBoxes, isoCrop } from '../../lib/room/iso/crop';
 import { isoGrid } from '../../lib/room/iso/grid';
 import { drawIsoStatic, isoRoomKey, pieceAt } from '../../lib/room/iso/room';
@@ -80,9 +80,11 @@ export const EditRoom = forwardRef<EditRoomHandle, EditRoomProps>(function EditR
   // The picture RoomView draws, here for its hit boxes: rebuilt only when the room itself changes.
   const drawn = useMemo(() => drawIsoStatic(input), [isoRoomKey(input)]); // eslint-disable-line react-hooks/exhaustive-deps
   const box = drawn.hits.find((h) => h.id === state.selected)?.box ?? null;
+  // The lime tile shows while the guided placement waits for the lantern (spec §11.1).
+  const coachTile = state.coach?.step === 1 ? state.coach.tile : null;
   const overlay = useDisposed(useMemo(
-    () => record([showGrid ? gridRects(g) : [], box ? outlineRects(box) : []], EDIT_CELL_PT),
-    [showGrid, g.n, g.m, box?.x, box?.y, box?.w, box?.h], // eslint-disable-line react-hooks/exhaustive-deps
+    () => record([showGrid ? gridRects(g) : [], box ? outlineRects(box) : [], coachTile ? coachRects(g, coachTile) : []], EDIT_CELL_PT),
+    [showGrid, g.n, g.m, box?.x, box?.y, box?.w, box?.h, coachTile?.[0], coachTile?.[1]], // eslint-disable-line react-hooks/exhaustive-deps
   ));
 
   const toCell = (x: number, y: number): [number, number] => [(x - panRef.current.x) / EDIT_CELL_PT, (y - panRef.current.y) / EDIT_CELL_PT];

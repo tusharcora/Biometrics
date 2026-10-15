@@ -266,6 +266,39 @@ describe('the guided first placement (spec §11.1)', () => {
     expect(s.coach?.step).toBe(3);
     expect(run(s, { type: 'coach', step: null }).coach).toBeNull();
   });
+
+  it('follows Undo and Redo (Task 9 minor): undoing the turn is step 2, undoing the placement step 1; Redo goes forward again', () => {
+    let s = start({}, { coach: true });
+    s = run(s, { type: 'drop', id: null, item: 'lamp.welcome', target: { layer: 'floor', x: 5, y: 3 } }, { type: 'turn' });
+    expect(s.coach?.step).toBe(3);
+    s = run(s, { type: 'undo' });
+    expect(s.coach?.step).toBe(2);
+    s = run(s, { type: 'undo' });
+    expect([s.coach?.step, s.coach?.tile]).toEqual([1, [5, 3]]);
+    s = run(s, { type: 'redo' });
+    expect(s.coach?.step).toBe(2);
+    s = run(s, { type: 'redo' });
+    expect(s.coach?.step).toBe(3);
+  });
+
+  it('storing the lantern goes back to step 1; turning it back the way it was placed is step 2 again', () => {
+    let s = run(start({}, { coach: true }), { type: 'drop', id: null, item: 'lamp.welcome', target: { layer: 'floor', x: 5, y: 3 } });
+    expect(run(s, { type: 'store' }).coach?.step).toBe(1);
+    s = run(s, { type: 'turn' }, { type: 'turn' });
+    expect(s.coach?.step).toBe(2);
+  });
+
+  it('any other piece placed, turned or undone leaves the steps alone', () => {
+    let s = run(start({}, { coach: true }), { type: 'place', item: 'plant.fern' });
+    expect(s.coach?.step).toBe(1);
+    s = run(s, { type: 'drop', id: null, item: 'lamp.welcome', target: { layer: 'floor', x: 5, y: 3 } }, { type: 'select', id: 'desk' }, { type: 'turn' });
+    expect(s.coach?.step).toBe(2);
+  });
+
+  it('a skipped coach stays gone through Undo', () => {
+    const s = run(start({}, { coach: true }), { type: 'drop', id: null, item: 'lamp.welcome', target: { layer: 'floor', x: 5, y: 3 } });
+    expect(run(s, { type: 'coach', step: null }, { type: 'undo' }).coach).toBeNull();
+  });
 });
 
 describe('saving (Spec B §6.4 rulings)', () => {

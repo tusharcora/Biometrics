@@ -1,5 +1,5 @@
 import { useSyncExternalStore } from 'react';
-import { fetchCosmetics, postCosmeticsSeen, putCosmetics, type CosmeticsDTO } from '../../api/cosmetics';
+import { fetchCosmetics, postCosmeticsSeen, postRoomWelcomed, putCosmetics, type CosmeticsDTO } from '../../api/cosmetics';
 import { setMyKipWorn } from '../kip/myKip';
 import { EMPTY_WORN, type KipWorn } from './loadout';
 import { WORN_SLOTS } from './catalogue';
@@ -28,7 +28,7 @@ export interface Cosmetics {
 }
 
 let cosmetics: Cosmetics | null = null;
-// Bumped by every save, mark-seen and sign-out: a read that started before one never lands after it.
+// Bumped by every save, mark-seen, welcome and sign-out: a read that started before one never lands after it.
 let epoch = 0;
 // Bumped only on sign-out: a save's answer lands unless the account changed.
 let session = 0;
@@ -108,6 +108,17 @@ export async function markCosmeticsSeen(itemIds: readonly string[]): Promise<voi
     await postCosmeticsSeen([...ids]);
   } catch {
     // Still unseen on the server: the next open marks it again.
+  }
+}
+
+/** The welcome card was answered (spec §11.1): hidden at once here, recorded on the server for every device. */
+export async function markWelcomed(): Promise<void> {
+  epoch++; // a read that started before this never brings the card back
+  if (cosmetics && !cosmetics.welcomed) publish({ ...cosmetics, welcomed: true });
+  try {
+    await postRoomWelcomed();
+  } catch {
+    // Still unanswered on the server: the next read shows the card again, which is harmless.
   }
 }
 

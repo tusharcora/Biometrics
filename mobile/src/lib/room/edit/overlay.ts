@@ -1,13 +1,14 @@
 // The editor's overlay (spec 2026-10-15 §5.2): the floor's tile lines and the walls' half-tile dots (isogrid on the
-// boards), and the selected piece's light outline. Whole cells, translucent.
+// boards), the selected piece's light outline, and the guided placement's lime tile. Whole cells, translucent.
 import type { Box } from '../grid';
 import { R, type Rects } from '../paint';
 import { WALL_H, projOf, type IsoGrid } from '../iso/grid';
-import { line } from '../iso/prims';
+import { flat, line } from '../iso/prims';
 
 const GRID = 'rgba(255,255,255,0.22)';
 const DOTS = 'rgba(255,255,255,0.18)';
 const OUTLINE = '#F5F5F4';
+const LIME = '#A3E635';
 
 export function gridRects(g: IsoGrid): Rects {
   const P = projOf(g);
@@ -28,5 +29,18 @@ export function outlineRects(b: Box): Rects {
   R(r, b.x - 1, b.y + b.h, b.w + 2, 1, OUTLINE);
   R(r, b.x - 1, b.y, 1, b.h, OUTLINE);
   R(r, b.x + b.w, b.y, 1, b.h, OUTLINE);
+  return r;
+}
+
+/** The guided placement's lime tile (C7, plan ruling 19): a filled diamond with a lime edge. */
+export function coachRects(g: IsoGrid, tile: readonly [number, number]): Rects {
+  const P = projOf(g);
+  const r: Rects = [];
+  const [x, y] = tile;
+  flat(r, P, x, y, 1, 1, 'rgba(163,230,53,0.4)');
+  line(r, P(x, y), P(x + 1, y), LIME);
+  line(r, P(x, y + 1), P(x + 1, y + 1), LIME);
+  line(r, P(x, y), P(x, y + 1), LIME);
+  line(r, P(x + 1, y), P(x + 1, y + 1), LIME);
   return r;
 }

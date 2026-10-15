@@ -1,6 +1,7 @@
 import { isoGrid, projOf } from '../../src/lib/room/iso/grid';
 import type { Placement } from '../../src/lib/room/iso/geometry';
 import { starterLayout } from '../../src/lib/room/layout';
+import { coachRects } from '../../src/lib/room/edit/overlay';
 import { coachTile, nearestFree, placedAt, refusal, roomCentre, snapTarget, targetPoint } from '../../src/lib/room/edit/targets';
 
 const g = isoGrid(1);
@@ -55,5 +56,17 @@ describe('nearestFree (spec §5.4 Place)', () => {
     const taken = { ...starterLayout(), pieces: [...starterLayout().pieces, fern({ x: 5, y: 3 })] };
     const [x, y] = coachTile(g, taken, 1);
     expect(Math.abs(x - 5) + Math.abs(y - 3)).toBe(1);
+  });
+
+  it('the lime tile is a lime-edged diamond on that tile, in whole cells (C7)', () => {
+    const r = coachRects(g, [5, 3]);
+    const lime = r.filter((c) => c[4] === '#A3E635');
+    expect(lime.length).toBeGreaterThan(0);
+    expect(r.some((c) => c[4] === 'rgba(163,230,53,0.4)')).toBe(true);
+    expect(r.every((c) => c.slice(0, 4).every(Number.isInteger))).toBe(true);
+    const [cx, cy] = P(5.5, 3.5);
+    const xs = lime.map((c) => c[0]);
+    const ys = lime.map((c) => c[1]);
+    expect(Math.min(...xs) < cx && cx < Math.max(...xs) && Math.min(...ys) < cy && cy < Math.max(...ys)).toBe(true);
   });
 });

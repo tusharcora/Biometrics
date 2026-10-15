@@ -5,12 +5,14 @@ import { SectionLabel } from '../ui/section-label';
 import { Skeleton } from '../ui/skeleton';
 import { Text } from '../ui/text';
 import { HotTag } from '../home/HotTag';
+import { RoomWelcomeCard } from './RoomWelcomeCard';
 import { RoomView } from '../room/RoomView';
 import { HOME_COPY } from '../../lib/homeCopy';
 import { useMyKip } from '../../lib/kip/myKip';
 import { KIP_COPY } from '../../lib/kipCopy';
 import { hotTagLabel, roomLabel, type KipStage } from '../../lib/kipStage';
-import { useMyRoom } from '../../lib/room/cosmeticsStore';
+import { markWelcomed, useCosmetics, useMyRoom } from '../../lib/room/cosmeticsStore';
+import { ROOM_COPY } from '../../lib/room/roomCopy';
 import type { KipLook } from '../../lib/useKipTurn';
 import type { RoomWeather } from '../../lib/room/weather';
 import type { ScoreBand } from '../../lib/scoreInsights';
@@ -26,8 +28,9 @@ const WOOD_LINE = '#3A2D23';
 // the picture, not a button; a long-press on the room opens the editor (§5.1). The tag keeps Home's dark-palette
 // colours in both themes, as on the scene. `look` is KIP mid-turn (useKipTurn); without it the stage's pose and mood
 // are drawn. The room is your saved layout, with KIP in what it wears; `paused` stops its loops while the editor is
-// open (Spec B ruling 17).
-export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, onOpenRecovery, onDecorate, footer, onLayout }: {
+// open (Spec B ruling 17). Until the first-week welcome is answered it sits under the frame and KIP says "WELCOME HOME!"
+// (spec 2026-10-15 §11.1, plan ruling 18); both of its buttons record it for every device.
+export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, onOpenRecovery, onDecorate, onPlaceLantern, footer, onLayout }: {
   stage: KipStage;
   look?: KipLook;
   window: { weather: RoomWeather; night: boolean };
@@ -37,11 +40,15 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
   onOpenRecovery: () => void;
   /** Long-press on the room opens the editor (spec 2026-10-15 §5.1). */
   onDecorate?: () => void;
+  /** The welcome card's Place the lantern: opens the guided first placement (spec §11.1). */
+  onPlaceLantern?: () => void;
   footer?: React.ReactNode;
   onLayout?: ViewProps['onLayout'];
 }) {
   const me = useMyKip();
   const { layout, tier } = useMyRoom();
+  const cosmetics = useCosmetics();
+  const welcome = !!cosmetics && !cosmetics.welcomed && stage.id !== 'loading';
   const [inner, setInner] = useState(0);
   return (
     <Card testID="kip-room-card" className="gap-3 p-3.5" onLayout={onLayout}>
@@ -69,7 +76,7 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
                   mood={look?.mood ?? stage.mood}
                   facing={look?.facing}
                   screen={stage.screen}
-                  bubble={stage.bubble}
+                  bubble={welcome ? ROOM_COPY.welcome.bubble : stage.bubble}
                   crop={{ width: inner, height: ROOM_FRAME_HEIGHT }}
                   cellPt={2}
                   reduceMotion={reduceMotion}
@@ -81,6 +88,12 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
           </Pressable>
         </View>
       </View>
+      {welcome ? (
+        <RoomWelcomeCard
+          onPlace={() => { void markWelcomed(); onPlaceLantern?.(); }}
+          onLater={() => { void markWelcomed(); }}
+        />
+      ) : null}
       {/* Wraps the tag under the caption on a narrow phone at large text, rather than overflowing. */}
       <View className="flex-row flex-wrap items-center justify-between gap-2">
         <View className="shrink gap-0.5">

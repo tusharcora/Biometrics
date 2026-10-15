@@ -1,18 +1,19 @@
 import { act, renderHook } from '@testing-library/react-native';
-import { fetchCosmetics, postCosmeticsSeen, putCosmetics } from '../../src/api/cosmetics';
+import { fetchCosmetics, postCosmeticsSeen, postRoomWelcomed, putCosmetics } from '../../src/api/cosmetics';
 import { ApiError } from '../../src/api/client';
 import { getMyKip, resetMyKip } from '../../src/lib/kip/myKip';
 import {
-  getCosmetics, hasUnseen, loadCosmetics, markCosmeticsSeen, resetCosmetics, saveCosmeticsLoadout, useCosmetics, useMyRoom,
+  getCosmetics, hasUnseen, loadCosmetics, markCosmeticsSeen, markWelcomed, resetCosmetics, saveCosmeticsLoadout, useCosmetics, useMyRoom,
 } from '../../src/lib/room/cosmeticsStore';
 import { starterLayout } from '../../src/lib/room/layout';
 import { EMPTY_WORN } from '../../src/lib/room/loadout';
 import { cosmeticsDTO, STARTER_COUNTS } from '../../jest-mocks/cosmeticsFixture';
 
-jest.mock('../../src/api/cosmetics', () => ({ fetchCosmetics: jest.fn(), putCosmetics: jest.fn(), postCosmeticsSeen: jest.fn() }));
+jest.mock('../../src/api/cosmetics', () => ({ fetchCosmetics: jest.fn(), putCosmetics: jest.fn(), postCosmeticsSeen: jest.fn(), postRoomWelcomed: jest.fn() }));
 const get = fetchCosmetics as jest.Mock;
 const put = putCosmetics as jest.Mock;
 const seen = postCosmeticsSeen as jest.Mock;
+const welcomed = postRoomWelcomed as jest.Mock;
 
 const RED = { ...starterLayout(), pieces: starterLayout().pieces.map((p) => (p.id === 'rug' ? { ...p, item: 'rug.red' } : p)) };
 const BEANIE = { ...EMPTY_WORN, head: 'out.beanie' };
@@ -25,7 +26,7 @@ const DTO = cosmeticsDTO({
 const saved = (wallpaper: string, version: number) => ({ ...DTO, layout: { ...RED, styles: { ...RED.styles, wallpaper } }, version });
 
 beforeEach(() => {
-  get.mockReset(); put.mockReset(); seen.mockReset();
+  get.mockReset(); put.mockReset(); seen.mockReset(); welcomed.mockReset();
   resetCosmetics(); resetMyKip();
 });
 
@@ -241,4 +242,25 @@ it('a load after sign-out starts a new read', async () => {
   await act(async () => { await loadCosmetics(); });
   expect(get).toHaveBeenCalledTimes(2);
   expect(getCosmetics()!.version).toBe(3);
+});
+
+it('markWelcomed hides the welcome at once and tells the server; an older read cannot bring it back', async () => {
+  get.mockResolvedValueOnce({ ...DTO, welcomed: false });
+  await act(async () => { await loadCosmetics(); });
+  const late = deferredGet();
+  const pending = loadCosmetics();
+  welcomed.mockResolvedValueOnce(undefined);
+  await act(async () => { await markWelcomed(); });
+  expect(getCosmetics()!.welcomed).toBe(true);
+  expect(postRoomWelcomed).toHaveBeenCalled();
+  await act(async () => { late({ ...DTO, welcomed: false }); await pending; });
+  expect(getCosmetics()!.welcomed).toBe(true);
+});
+
+it('markWelcomed ignores a failed post: the next read shows the welcome again, which is harmless', async () => {
+  get.mockResolvedValueOnce({ ...DTO, welcomed: false });
+  await act(async () => { await loadCosmetics(); });
+  welcomed.mockRejectedValueOnce(new Error('offline'));
+  await act(async () => { await markWelcomed(); });
+  expect(getCosmetics()!.welcomed).toBe(true);
 });

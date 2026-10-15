@@ -24,7 +24,12 @@ export type Outcome =
   | { ok: true; id: null; applied: SetApplied }
   /** `item`: a refused new piece's item (ruling T12-CARRY), so the reason names what was dragged in or placed. */
   | { ok: false; refused: Refused; id: string | null; item?: ItemId };
-export interface CoachState { step: 1 | 2 | 3; tile: [number, number] }
+/**
+ * The guided first placement (spec §11.1). `placed` is the lantern step 1 put down and the way it faced then, so Undo,
+ * Redo, Store, Turn and a refresh all move the steps with the draft (Task 9 minor): no lantern is step 1, the lantern
+ * facing as placed is step 2, the lantern turned is step 3.
+ */
+export interface CoachState { step: 1 | 2 | 3; tile: [number, number]; placed?: { id: string; facing: 'L' | 'R' } }
 
 export interface EditorState {
   saved: Draft;
@@ -125,8 +130,16 @@ const withPieces = (s: EditorState, pieces: Placement[]): Draft => ({ ...s.draft
 const refuse = (s: EditorState, refused: Refused, id: string | null, item?: ItemId): EditorState =>
   ({ ...s, outcome: item ? { ok: false, refused, id, item } : { ok: false, refused, id } });
 /** Coach step 1 ends when the lantern lands (spec §11.1). */
-const coachAfterPlace = (s: EditorState, item: ItemId): CoachState | null =>
-  s.coach && s.coach.step === 1 && item === COACH_ITEM ? { ...s.coach, step: 2 } : s.coach;
+const coachAfterPlace = (s: EditorState, piece: Placement): CoachState | null =>
+  s.coach && s.coach.step === 1 && piece.item === COACH_ITEM ? { ...s.coach, step: 2, placed: { id: piece.id, facing: piece.facing } } : s.coach;
+
+/** The coach's step after any action (Task 9 minor): where the placed lantern is in the draft now. */
+function coachFor(coach: CoachState | null, draft: Draft): CoachState | null {
+  if (!coach?.placed) return coach;
+  const lantern = draft.layout.pieces.find((p) => p.id === coach.placed!.id && p.item === COACH_ITEM);
+  const step = !lantern ? 1 : lantern.facing === coach.placed.facing ? 2 : 3;
+  return step === coach.step ? coach : { ...coach, step };
+}
 
 function add(s: EditorState, item: ItemId, target: Target | null, facing: 'L' | 'R' = 'L'): EditorState {
   // One desk per room (ruling T9-FIX): a desk from the drawer, placed or dropped, swaps the desk.
@@ -136,7 +149,7 @@ function add(s: EditorState, item: ItemId, target: Target | null, facing: 'L' | 
   const piece = placedAt({ id: newPieceId(s.draft.layout), item, facing, mirror: false }, target);
   const why = refusal(s.draft.layout, piece, s.tier, true);
   if (why) return refuse(s, why, null, item);
-  return commit(s, withPieces(s, [...s.draft.layout.pieces, piece]), { selected: piece.id, nudging: false, outcome: { ok: true, id: piece.id }, coach: coachAfterPlace(s, item), picked: null });
+  return commit(s, withPieces(s, [...s.draft.layout.pieces, piece]), { selected: piece.id, nudging: false, outcome: { ok: true, id: piece.id }, coach: coachAfterPlace(s, piece), picked: null });
 }
 
 function move(s: EditorState, id: string, next: Placement): EditorState {
@@ -229,6 +242,12 @@ function setPieces(s: EditorState, set: CatalogueSet): { pieces: Placement[]; mi
 }
 
 export function editorReducer(s: EditorState, a: EditorAction): EditorState {
+  const next = reduce(s, a);
+  const coach = coachFor(next.coach, next.draft);
+  return coach === next.coach ? next : { ...next, coach };
+}
+
+function reduce(s: EditorState, a: EditorAction): EditorState {
   const g = isoGrid(s.tier);
   const layout = s.draft.layout;
   const selected = layout.pieces.find((p) => p.id === s.selected);
@@ -255,9 +274,7 @@ export function editorReducer(s: EditorState, a: EditorAction): EditorState {
     case 'turn': {
       if (!selected) return s;
       if (isoOf(selected.item)?.facings !== 2) return refuse(s, { reason: 'layer' }, selected.id);
-      const next = move(s, selected.id, { ...selected, facing: selected.facing === 'L' ? 'R' : 'L' });
-      const coach = next.outcome?.ok && s.coach?.step === 2 && selected.item === COACH_ITEM ? { ...s.coach, step: 3 as const } : next.coach;
-      return { ...next, coach };
+      return move(s, selected.id, { ...selected, facing: selected.facing === 'L' ? 'R' : 'L' });
     }
     case 'another': {
       const tools = selectedTools(s);
