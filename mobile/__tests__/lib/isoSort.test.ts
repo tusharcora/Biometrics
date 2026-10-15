@@ -28,6 +28,13 @@ describe('depth order (spec §3.4)', () => {
     expect(depthOrder([b('y', 0, 0, 2, 2), b('x', 0, 0, 2, 2)])).toEqual(['x', 'y']);
   });
 
+  it('breaks a real cycle by releasing its lowest-ranked piece, then keeps every other edge', () => {
+    // a and c wait on each other (a cycle of extra edges); b waits on c. Releasing a lets c go before b, where
+    // dumping the rest by rank would draw b before c.
+    const order = depthOrder([b('c', 0, 0, 2, 2), b('b', 0, 0, 2, 2), b('a', 0, 0, 2, 2)], [['a', 'c'], ['c', 'a'], ['c', 'b']]);
+    expect(order).toEqual(['a', 'c', 'b']);
+  });
+
   it('sorts 90 pieces in well under a millisecond-scale budget (a smoke check, not a gate)', () => {
     const boxes = Array.from({ length: 81 }, (_, k) => b(`p${k}`, k % 9, Math.floor(k / 9), (k % 9) + 1, Math.floor(k / 9) + 1));
     const order = depthOrder(boxes);

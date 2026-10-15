@@ -47,17 +47,23 @@ const win: ItemArt = {
     R(r, 18, 12, 36, 38, '#FFFFFF'); R(r, 19, 13, 34, 36, '#6B4A2F');
     windowSky(r, { x: 21, y: 15, w: 30, h: 32 }, weather, night);
     R(r, 35, 15, 2, 32, '#F5F1E6'); R(r, 21, 30, 30, 2, '#F5F1E6');
-    R(r, 16, 48, 40, 2, '#8A6542'); R(r, 18, 50, 36, 5, '#8B5A3C'); R(r, 18, 50, 36, 1, '#A87350');
-    ([[21, '#E8A0A0'], [26, '#F472B6'], [31, '#FDE047'], [36, '#E8A0A0'], [41, '#FB7185'], [46, '#F5F1E6'], [50, '#F472B6']] as const).forEach(([x, c], k) => {
-      E(r, x + 1, 47, 2.2, 2.2, '#6E9A4A'); E(r, x + 1, 45.5 - (k % 2), 1.6, 1.6, c); px(r, x + 1, 45 - (k % 2), '#FDE68A');
-    });
-    poly(r, [[16, 12], [25, 12], [23, 30], [19, 54], [16, 54]], '#E8A0A0');
-    poly(r, [[47, 12], [56, 12], [56, 54], [53, 54], [49, 30]], '#E8A0A0');
-    for (let y = 14; y < 54; y += 4) { R(r, 16, y, 4, 1, '#F5C6C6'); R(r, 52, y, 4, 1, '#F5C6C6'); }
-    R(r, 18, 30, 4, 2, '#8BA77A'); R(r, 50, 30, 4, 2, '#8BA77A'); R(r, 16, 12, 40, 1, '#523822');
+    cottageWindowDecor(r);
     return { base: r };
   },
 };
+
+/** The Cottage window's decor in front-on cells (sill, geraniums, gingham curtains, ties, rod): the iso window draws
+ *  its own frame and sky, then this (plan ruling 5). */
+export function cottageWindowDecor(r: Rects): void {
+  R(r, 16, 48, 40, 2, '#8A6542'); R(r, 18, 50, 36, 5, '#8B5A3C'); R(r, 18, 50, 36, 1, '#A87350');
+  ([[21, '#E8A0A0'], [26, '#F472B6'], [31, '#FDE047'], [36, '#E8A0A0'], [41, '#FB7185'], [46, '#F5F1E6'], [50, '#F472B6']] as const).forEach(([x, c], k) => {
+    E(r, x + 1, 47, 2.2, 2.2, '#6E9A4A'); E(r, x + 1, 45.5 - (k % 2), 1.6, 1.6, c); px(r, x + 1, 45 - (k % 2), '#FDE68A');
+  });
+  poly(r, [[16, 12], [25, 12], [23, 30], [19, 54], [16, 54]], '#E8A0A0');
+  poly(r, [[47, 12], [56, 12], [56, 54], [53, 54], [49, 30]], '#E8A0A0');
+  for (let y = 14; y < 54; y += 4) { R(r, 16, y, 4, 1, '#F5C6C6'); R(r, 52, y, 4, 1, '#F5C6C6'); }
+  R(r, 18, 30, 4, 2, '#8BA77A'); R(r, 50, 30, 4, 2, '#8BA77A'); R(r, 16, 12, 40, 1, '#523822');
+}
 
 const art: ItemArt = {
   id: 'set.cottage.art', slot: 'art',

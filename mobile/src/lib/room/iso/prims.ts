@@ -44,9 +44,11 @@ export function isoShadow(r: Rects, P: Proj, i: number, j: number, di: number, d
 /**
  * Rects sheared onto a wall (iso.py `face`). A rect's x and y are relative to the plane's origin (x0, y0); column u
  * drops by floor(u / 2) on the right wall's plane (slope +1) and rises by ceil(u / 2) on the left wall's (slope -1).
- * Runs of columns with the same drop stay one rect.
+ * Runs of columns with the same drop stay one rect. A fractional origin is rounded, so every cell stays whole.
  */
-export function shear(rects: readonly RoomRect[], x0: number, y0: number, slope: 1 | -1): Rects {
+export function shear(rects: readonly RoomRect[], ox: number, oy: number, slope: 1 | -1): Rects {
+  const x0 = Math.round(ox);
+  const y0 = Math.round(oy);
   const dy = (u: number) => (slope > 0 ? Math.floor(u / 2) : -Math.ceil(u / 2));
   const out: Rects = [];
   for (const [x, y, w, h, c] of rects) {

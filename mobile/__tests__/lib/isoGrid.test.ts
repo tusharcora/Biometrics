@@ -49,6 +49,20 @@ describe('primitives (iso.py line, box, flat, face)', () => {
     expect(shear(rect, 10, 20, -1)).toEqual([[10, 20, 1, 1, '#f00'], [11, 19, 2, 1, '#f00'], [13, 18, 1, 1, '#f00']]);
   });
 
+  it('shear rounds a fractional plane origin, so every cell stays whole', () => {
+    const rect: RoomRect[] = [[0, -3, 3, 2, '#f00']];
+    expect(shear(rect, 42.8, 67.6, -1)).toEqual(shear(rect, 43, 68, -1));
+    expect(shear(rect, 10.2, 20.4, 1)).toEqual(shear(rect, 10, 20, 1));
+  });
+
+  it('shear, move and mirror give whole-cell rects for whole-cell input', () => {
+    const rects: RoomRect[] = [[0, 0, 5, 3, '#a'], [-4, 7, 1, 1, '#b'], [3, -2, 7, 9, '#c']];
+    const whole = (rs: readonly RoomRect[]) => rs.length > 0 && rs.every(([x, y, w, h]) => [x, y, w, h].every(Number.isInteger));
+    for (const slope of [1, -1] as const) expect(whole(shear(rects, 42.8, 67.6, slope))).toBe(true);
+    expect(whole(moveRects(rects, 3, -5))).toBe(true);
+    expect(whole(mirrorRects(rects, 12))).toBe(true);
+  });
+
   it('scale, move, mirror; opaque bounds ignore shadows', () => {
     expect(scaleRects([[2, 2, 2, 2, '#a']], 0.5, 1.5)).toEqual([[1, 3, 1, 3, '#a']]);
     expect(moveRects([[1, 1, 1, 1, '#a']], 2, -1)).toEqual([[3, 0, 1, 1, '#a']]);

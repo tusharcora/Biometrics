@@ -2,8 +2,9 @@
 // A's far edge is at or behind B's near edge on either axis. When both hold, the two never overlap on screen (A is
 // wholly left or right of B), so no edge is needed. Kahn's algorithm picks, among the pieces ready to draw, the one
 // furthest back (i0 + j0), then the key (the instance id), so the picture is deterministic. Footprints of a valid
-// layout never overlap, so a cycle cannot form; if a stored layout ever has one, the rest are drawn by position and
-// key instead of throwing. O(n²) for at most 90 pieces.
+// layout never overlap, so a cycle cannot form; if a stored layout (or a bad extra edge) ever makes one, the
+// lowest-ranked piece still waiting is released and Kahn carries on, so every other edge still holds and nothing
+// throws. O(n²) for at most 90 pieces.
 
 export interface DepthBox {
   key: string;
@@ -37,14 +38,18 @@ export function depthOrder(boxes: readonly DepthBox[], extra: ReadonlyArray<read
   }
   const done = new Array<boolean>(n).fill(false);
   const out: string[] = [];
-  for (;;) {
+  const lowest = (ready: boolean) => {
     let pick = -1;
-    for (let k = 0; k < n; k++) if (!done[k] && indeg[k] === 0 && (pick < 0 || rank(boxes[k]!, boxes[pick]!) < 0)) pick = k;
-    if (pick < 0) break;
+    for (let k = 0; k < n; k++) if (!done[k] && (!ready || indeg[k] === 0) && (pick < 0 || rank(boxes[k]!, boxes[pick]!) < 0)) pick = k;
+    return pick;
+  };
+  while (out.length < n) {
+    // Only a cycle leaves nothing ready: release its lowest-ranked piece.
+    const ready = lowest(true);
+    const pick = ready >= 0 ? ready : lowest(false);
     done[pick] = true;
     out.push(boxes[pick]!.key);
     for (const b of next[pick]!) indeg[b]!--;
   }
-  if (out.length < n) out.push(...boxes.filter((_, k) => !done[k]).sort(rank).map((b) => b.key));
   return out;
 }
