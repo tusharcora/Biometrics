@@ -33,7 +33,7 @@ describe('GET /me/cosmetics', () => {
       catalogueVersion: 1, owned: expect.any(Array), fresh: [], room: { ...STARTER_ROOM }, worn: { ...EMPTY_WORN }, version: 0,
       counters: { recapsRead: 0, buddyCheers: 0 },
     });
-    expect(res.body.owned).toHaveLength(17);
+    expect(res.body.owned).toHaveLength(19);
   });
 
   it('catches up on grants and lists unseen rows as fresh with their source', async () => {

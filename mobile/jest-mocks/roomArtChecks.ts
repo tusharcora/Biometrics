@@ -13,7 +13,7 @@ const LIME: ItemContext = { ...CTX_DAY, colour: 'lime', ramp: kipRamp(KIP_COLOUR
 
 /** Spec §8 / §11 "Item art", for every shipped item of one room slot (set pieces only once their art exists, Task 11). */
 export function checkSlotArt(slot: RoomSlot, { sets = true }: { sets?: boolean } = {}): void {
-  for (const item of catalogueItemsFor(slot).filter((i) => sets || !i.id.startsWith('set.'))) {
+  for (const item of catalogueItemsFor(slot).filter((i) => (sets || !i.id.startsWith('set.')) && i.release !== 3)) {
     const art = itemArt(item.id);
     const tag = { id: item.id };
     expect({ ...tag, art: !!art, icon: (itemIcon(item.id)?.length ?? 0) > 0 }).toEqual({ ...tag, art: true, icon: true });

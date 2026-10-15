@@ -1,18 +1,30 @@
 // KIP's room catalogue (spec 2026-10-14 KIP's room §1): every item id, its slot, flags and unlock rule, and the six
 // theme sets, versioned like the badge catalogue. Rules: an id is permanent (never renamed, reused or deleted; a test
 // pins every id ever written here); an item may be retired (kept by owners, never granted again); a raised threshold
-// never takes anything away (unlocks are rows). Only items with release <= COSMETICS_RELEASE are exported to the app
-// or granted, so nobody owns an item the app cannot draw. The art lives only in the app.
+// never takes anything away (unlocks are rows). Only items whose release is in SHIPPED_RELEASES are exported to the app
+// or granted (free-build §2.1: releases no longer ship in order), so nobody owns an item the app cannot draw. The art
+// lives only in the app; placement data (`iso`) lives here because the server validates layouts.
 
 import type { AchievementFamily } from '@prisma/client';
+import type { IsoSpec } from '../room/geometry';
 
 export const COSMETICS_CATALOGUE_VERSION = 1;
-export type CosmeticRelease = 1 | 2;
-export const COSMETICS_RELEASE: CosmeticRelease = 1;
-/** When each art release shipped (§3.1): a rule met before it grants as 'backfill'. Release 2's date is set with the bump. */
-export const RELEASE_LAUNCHED_AT: Readonly<Partial<Record<CosmeticRelease, Date>>> = Object.freeze({
+export type CosmeticRelease = 1 | 2 | 3;
+/** Releases the app can draw. B2 (release 2) joins when its art ships; free-build P1's pieces are release 3. */
+export const SHIPPED_RELEASES: ReadonlySet<CosmeticRelease> = new Set<CosmeticRelease>([1, 3]);
+export type ShippedRelease = 1 | 3;
+/**
+ * When each shipped release reached users (Spec B §3.1): a rule met before it grants as 'backfill'. A full record,
+ * so a release cannot ship without a date (Spec B Task 3 minor). OWNER NOTE (plan ruling 1): both are set to the real
+ * ship date when Spec B and P1 merge.
+ */
+export const RELEASE_LAUNCHED_AT: Readonly<Record<ShippedRelease, Date>> = Object.freeze({
   1: new Date('2026-10-15T00:00:00.000Z'),
+  3: new Date('2026-10-16T00:00:00.000Z'),
 });
+export function isShipped(x: { release: CosmeticRelease }): boolean {
+  return SHIPPED_RELEASES.has(x.release);
+}
 
 export const ROOM_SLOTS = ['wallpaper', 'floor', 'art', 'window', 'shelf', 'desk', 'desk_item', 'plant', 'lamp', 'corner', 'rug', 'pet'] as const;
 export type RoomSlot = (typeof ROOM_SLOTS)[number];
@@ -46,6 +58,12 @@ export interface CosmeticItem {
   frames?: 3;
   style?: 'standard' | 'low';
   retired?: true;
+  /** Placement rules (free-build §2.1); styles and worn items have none. */
+  iso?: IsoSpec;
+  /** Copies an unlock gives; default 1; frozen once shipped (tests/cosmetics/grantsShipped.json). */
+  grants?: number;
+  /** 'funny' (the drawer's Funny tab); P4 adds challenge tags. */
+  tags?: string[];
 }
 
 export interface CosmeticSet {
@@ -217,6 +235,60 @@ const BASE: readonly Row[] = [
   ['out.muffs', 'ears', 'SG3', '', 2],
 ];
 
+// Free-build P1's structural pieces (spec 2026-10-15 §2.1): a wall plank for the old shelf slot's items, and C7's
+// welcome lantern, owned by everyone from P1.
+const FREEBUILD: readonly Row[] = [
+  ['shelf.plank', 'shelf', 'S', '', 3],
+  ['lamp.welcome', 'lamp', 'S', 'G', 3],
+];
+
+/** KIP's desk and chair (spec §2.1, §3.2): 3 × 2, KIP's seat on the front row, 3 spots on the desk top. */
+const DESK_ISO: IsoSpec = {
+  layers: ['floor'], foot: [3, 2], facings: 2, kipDesk: true, seat: [1, 1],
+  surface: { z: 22, spots: [[0.45, 0.55], [1.5, 0.6], [2.55, 0.55]] },
+};
+const SLOT_ISO: Partial<Record<RoomSlot, IsoSpec>> = {
+  art: { layers: ['wall'], wall: [4, 6], facings: 1 },
+  shelf: { layers: ['onTop'], facings: 1 },
+  desk: DESK_ISO,
+  desk_item: { layers: ['onTop'], facings: 1 },
+  plant: { layers: ['floor', 'onTop'], foot: [1, 1], facings: 1 },
+  lamp: { layers: ['onTop'], facings: 1 },
+  corner: { layers: ['floor'], foot: [1, 1], facings: 1 },
+  rug: { layers: ['floor'], foot: [4, 3], flat: true, facings: 2 },
+  pet: { layers: ['floor'], foot: [1, 1], facings: 1 },
+};
+/** Each release-1 art piece's wall size from its front-on bounds (pin and shadow included): ceil(w / 6) half tiles ×
+ * ceil(h / 4) steps (plan ruling 4). Release-2 art keeps the slot default until its iso art is drawn. */
+const ART_WALL: Readonly<Record<string, [number, number]>> = {
+  'art.calendar': [3, 6], 'art.mountain': [4, 5], 'art.pennant': [3, 5], 'art.clock': [3, 5], 'art.heart': [3, 4],
+  'art.motto': [3, 6], 'art.band': [3, 6], 'art.cork': [4, 5], 'art.wave': [4, 5], 'set.cottage.art': [3, 5],
+};
+/** Rug footprints: each fits the converted room's rug tiles from (1, 2) (spec §2.4). */
+const RUG_FOOT: Readonly<Record<string, [number, number]>> = {
+  'rug.slate': [4, 4], 'rug.red': [4, 3], 'rug.gymmat': [4, 2], 'rug.checker': [3, 3], 'rug.woven': [3, 3], 'rug.tatami': [4, 3],
+  'set.cottage.rug': [4, 3],
+};
+const ISO_OVERRIDES: Readonly<Record<string, IsoSpec>> = {
+  'shelf.plank': { layers: ['wall'], wall: [4, 1], surface: { z: 2, spots: [[0.5, 0.2], [1.5, 0.2]] }, facings: 1 },
+  'lamp.welcome': { layers: ['floor', 'onTop'], foot: [1, 1], facings: 2 },
+  // The fairy lights along the beam become a garland on the left wall, above the window (plan ruling 7).
+  'set.cottage.lamp': { layers: ['wall'], wall: [8, 2], facings: 1 },
+};
+const FUNNY: ReadonlySet<string> = new Set(['shelf.luckycat', 'shelf.globe', 'item.controller', 'corner.beanbag']);
+
+function isoFor(item: CosmeticItem): IsoSpec | undefined {
+  const over = ISO_OVERRIDES[item.id];
+  if (over) return over;
+  const base = SLOT_ISO[item.slot as RoomSlot];
+  if (!base) return undefined;
+  const wall = ART_WALL[item.id];
+  if (item.slot === 'art' && wall) return { ...base, wall };
+  const foot = RUG_FOOT[item.id];
+  if (item.slot === 'rug' && foot) return { ...base, foot };
+  return base;
+}
+
 // The six theme sets (spec §1 Theme sets; sets2.js). `reuse` maps a slot to the base item the board names for it;
 // every other room slot gets a set-only piece `set.{id}.{slot}`. `flags` are those pieces' T/G/A flags.
 interface SetDef {
@@ -244,7 +316,7 @@ function withFlags(item: CosmeticItem, flags: string): CosmeticItem {
 
 function build(): { items: CosmeticItem[]; sets: CosmeticSet[] } {
   const items = new Map<string, CosmeticItem>();
-  for (const [id, slot, code, flags, release] of BASE) {
+  for (const [id, slot, code, flags, release] of [...BASE, ...FREEBUILD]) {
     items.set(id, withFlags({ id, slot, unlock: ruleOf(code), release, ...(slot === 'desk' ? { style: 'standard' as const } : {}) }, flags));
   }
   const sets: CosmeticSet[] = [];
@@ -266,6 +338,10 @@ function build(): { items: CosmeticItem[]; sets: CosmeticSet[] } {
     }
     sets.push({ id: def.id, release: def.release, unlock: ruleOf(def.code) as SetRule, style: def.style, room, worn: { ...def.worn } });
   }
+  for (const [id, item] of items) {
+    const iso = isoFor(item);
+    items.set(id, { ...item, ...(iso ? { iso } : {}), ...(FUNNY.has(id) ? { tags: ['funny'] } : {}) });
+  }
   return { items: [...items.values()], sets };
 }
 
@@ -277,6 +353,10 @@ const SET_BY_ID = new Map(COSMETIC_SETS.map((s) => [s.id, s]));
 
 export function cosmeticItem(id: string): CosmeticItem | undefined {
   return ITEM_BY_ID.get(id);
+}
+export function shippedItem(id: string): CosmeticItem | undefined {
+  const item = ITEM_BY_ID.get(id);
+  return item && isShipped(item) ? item : undefined;
 }
 export function cosmeticSet(id: string): CosmeticSet | undefined {
   return SET_BY_ID.get(id as SetId);

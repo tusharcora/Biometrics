@@ -4,8 +4,8 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db/client';
 import {
-  COSMETICS_CATALOGUE_VERSION, COSMETICS_RELEASE, EMPTY_WORN, OPTIONAL_ROOM_SLOTS, ROOM_SLOTS, STARTER_IDS, STARTER_ROOM, WORN_SLOTS,
-  cosmeticItem, type CosmeticSlot, type RoomSlot, type WornSlot,
+  COSMETICS_CATALOGUE_VERSION, EMPTY_WORN, OPTIONAL_ROOM_SLOTS, ROOM_SLOTS, STARTER_IDS, STARTER_ROOM, WORN_SLOTS,
+  shippedItem, type CosmeticSlot, type RoomSlot, type WornSlot,
 } from './catalogue';
 import { countersOf, loadUnlockFacts } from './facts';
 import { grantCosmeticsSafely } from './unlock';
@@ -28,13 +28,8 @@ export interface SaveFailure {
   body: { error: 'invalid_body' | 'unknown_item' | 'wrong_slot' | 'required_slot' | 'not_owned' | 'stale'; itemIds?: string[] };
 }
 
-const shipped = (id: string) => {
-  const item = cosmeticItem(id);
-  return item && item.release <= COSMETICS_RELEASE ? item : undefined;
-};
-
 function ownedFrom(rows: ReadonlyArray<{ itemId: string }>): Set<string> {
-  return new Set([...STARTER_IDS, ...rows.map((r) => r.itemId).filter((id) => shipped(id))]);
+  return new Set([...STARTER_IDS, ...rows.map((r) => r.itemId).filter((id) => shippedItem(id))]);
 }
 
 function readRoom(json: unknown, owned: ReadonlySet<string>): Room {
@@ -43,7 +38,7 @@ function readRoom(json: unknown, owned: ReadonlySet<string>): Room {
   for (const slot of ROOM_SLOTS) {
     const id = stored[slot];
     if (id === null && OPTIONAL_ROOM_SLOTS.has(slot)) room[slot] = null;
-    else if (typeof id === 'string' && owned.has(id) && shipped(id)?.slot === slot) room[slot] = id;
+    else if (typeof id === 'string' && owned.has(id) && shippedItem(id)?.slot === slot) room[slot] = id;
   }
   return room;
 }
@@ -53,7 +48,7 @@ function readWorn(json: unknown, owned: ReadonlySet<string>): Worn {
   const worn = { ...EMPTY_WORN } as Worn;
   for (const slot of WORN_SLOTS) {
     const id = stored[slot];
-    if (typeof id === 'string' && owned.has(id) && shipped(id)?.slot === slot) worn[slot] = id;
+    if (typeof id === 'string' && owned.has(id) && shippedItem(id)?.slot === slot) worn[slot] = id;
   }
   return worn;
 }
@@ -100,8 +95,8 @@ export function checkPieces(room: Room, worn: Worn, owned: ReadonlySet<string>):
     ...ROOM_SLOTS.flatMap((s) => (room[s] === null ? [] : [[s, room[s]!] as [CosmeticSlot, string]])),
     ...WORN_SLOTS.flatMap((s) => (worn[s] === null ? [] : [[s, worn[s]!] as [CosmeticSlot, string]])),
   ];
-  if (placed.some(([, id]) => !shipped(id))) return { status: 400, body: { error: 'unknown_item' } };
-  if (placed.some(([slot, id]) => shipped(id)!.slot !== slot)) return { status: 400, body: { error: 'wrong_slot' } };
+  if (placed.some(([, id]) => !shippedItem(id))) return { status: 400, body: { error: 'unknown_item' } };
+  if (placed.some(([slot, id]) => shippedItem(id)!.slot !== slot)) return { status: 400, body: { error: 'wrong_slot' } };
   if (ROOM_SLOTS.some((s) => room[s] === null && !OPTIONAL_ROOM_SLOTS.has(s))) return { status: 400, body: { error: 'required_slot' } };
   const notOwned = [...new Set(placed.map(([, id]) => id).filter((id) => !owned.has(id)))].sort();
   if (notOwned.length) return { status: 403, body: { error: 'not_owned', itemIds: notOwned } };

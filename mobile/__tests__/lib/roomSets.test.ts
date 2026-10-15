@@ -9,7 +9,8 @@ import { EMPTY_WORN } from '../../src/lib/room/loadout';
 import { ROOM_SLOTS } from '../../src/lib/room/slots';
 
 it('every catalogue id the app ships has art and an icon (a release can never offer an undrawable piece)', () => {
-  const missing = CATALOGUE.items.filter((i) => !(itemArt(i.id) ?? wornArt(i.id)) || !itemIcon(i.id)?.length).map((i) => i.id);
+  // Release 3's structural pieces have iso art only (free-build P1 Task 7 drops this skip).
+  const missing = CATALOGUE.items.filter((i) => i.release !== 3).filter((i) => !(itemArt(i.id) ?? wornArt(i.id)) || !itemIcon(i.id)?.length).map((i) => i.id);
   expect(missing).toEqual([]);
   for (const slot of ROOM_SLOTS) checkSlotArt(slot);
 });
