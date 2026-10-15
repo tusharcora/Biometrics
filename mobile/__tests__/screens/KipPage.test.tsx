@@ -52,6 +52,16 @@ describe('the KIP page (W7)', () => {
     expect(reads()).toEqual([coins + 1, week + 1]);
   });
 
+  it('shows the first-week card in the room card while the list is open (spec §11.2)', async () => {
+    (fetchFirstWeek as jest.Mock).mockResolvedValue({
+      open: true, day: 1, done: 0, next: { tier: 2, coins: 600, streak: 14 },
+      tasks: ['checkin', 'place', 'sleep', 'fern', 'cheer', 'recap', 'streak7'].map((key) => ({ key, done: false, reward: 5 })),
+    });
+    const utils = await openChat();
+    expect(utils.getByTestId('kip-room-card')).toContainElement(utils.getByTestId('first-week'));
+    (fetchFirstWeek as jest.Mock).mockResolvedValue({ open: false });
+  });
+
   it('shows the wallet in the header once the coins have loaded; it opens the coin history (spec §6.7, C6)', async () => {
     resetCoins();
     (fetchCoins as jest.Mock).mockResolvedValueOnce({ balance: 360, today: { earned: 0, cap: 60 }, events: [], next: null });

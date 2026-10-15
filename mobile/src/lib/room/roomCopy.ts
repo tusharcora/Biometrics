@@ -1,5 +1,6 @@
 // Every string of KIP's room (spec 2026-10-14 KIP's room): item and set names, unlock lines (the Cat boards'
 // wording), decorate mode, the toasts. Spoken forms carry no "·" and no Roman numerals (ruling 19).
+import type { FirstWeekTaskKey } from '../../api/coins';
 import type { AchievementsSnapshot } from '../achievementsStore';
 import type { AchievementFamilyName, SetId, UnlockRule } from './catalogue';
 import { catalogueSet } from './catalogue';
@@ -211,7 +212,8 @@ export const ROOM_COPY = {
       { lead: 'Badge families.', body: 'Sleep goal, Steady bedtime, Step goal, Check-in, Best recovery week, Every day logged and Steadiest month each unlock pieces at levels 1 to 5.' },
       { lead: 'Any family.', body: 'Trophies, the rainbow rug and KIP’s crown come from reaching a level in any family.' },
       { lead: 'Recaps and buddies.', body: 'Reading weekly recaps and cheering buddies add decor and whole sets.' },
-      { lead: null, body: 'Nothing is sold. The starter room is yours from day one, and items are never taken away.' },
+      { lead: 'KIP coins.', body: 'Healthy days earn coins, up to 60 a day. The coin shop turns them into new pieces and extra copies.' },
+      { lead: null, body: 'Nothing is sold for money: coins come only from healthy days. The starter room is yours from day one, and items are never taken away.' },
     ],
   },
   drawer: {
@@ -391,9 +393,32 @@ export const ROOM_COPY = {
     loadFailed: "Couldn't open your room sizes just now. Check your connection and try again.",
     retry: 'Try again',
   },
+  /**
+   * The first-week list (spec 2026-10-15 §11.2, C7). The next size's dashed rows are drawn on Room sizes only (plan
+   * ruling 15), so the next line names that screen (ruling PF-F12).
+   */
+  firstWeek: {
+    title: 'First week',
+    head: (day: number, done: number) => `Day ${day} of 7 · ${done} of 7 done`,
+    headSpoken: (day: number, done: number) => `First week, day ${day} of 7, ${done} of 7 done`,
+    tasks: {
+      checkin: 'First check-in', place: 'Place your first piece', sleep: 'Hit your sleep goal', fern: 'Get a fern in the coin shop',
+      cheer: "Cheer a buddy's room", recap: 'Read your first weekly recap', streak7: '7 check-ins in a row',
+    } as Readonly<Record<FirstWeekTaskKey, string>>,
+    reward: (n: number, bonus: boolean) => `${n < 0 ? `−${-n}` : `+${n}`}${bonus ? ' bonus' : ''}`,
+    rowSpoken: (task: string, done: boolean, n: number, bonus: boolean) =>
+      `${task}, ${done ? 'done' : 'not yet'}, ${n < 0 ? `costs ${-n} coins` : `plus ${n} coins${bonus ? ' bonus' : ''}`}`,
+    next: (coins: string, streak: number) => `Next: 8 × 8 · ${coins} coins and a ${streak}-day check-in streak. See the next size in Room sizes.`,
+    nextSpoken: (coins: string, streak: number) => `Next: 8 by 8, ${coins} coins and a ${streak}-day check-in streak. See the next size in Room sizes.`,
+    done: '✓',
+    notDone: '○',
+    shop: 'Coin shop',
+    sizes: 'Room sizes',
+  },
   welcome: {
     bubble: 'WELCOME HOME!',
     text: "This is KIP's room. Make it yours: drag pieces in, flip them, stack them.",
+    coins: 'Healthy days earn coins, and coins turn into things for the room.',
     lanternName: 'A welcome lantern',
     lanternLine: 'Free · in your inventory · glows at night',
     lanternSpoken: 'A welcome lantern. Free, in your inventory, glows at night',

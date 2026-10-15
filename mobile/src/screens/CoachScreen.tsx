@@ -27,6 +27,7 @@ import { CoachMessageRow } from '../components/coach/CoachMessageRow';
 import { ErrorCard } from '../components/coach/ErrorCard';
 import { ConversationsSheet } from '../components/coach/ConversationsSheet';
 import { RoomCard } from '../components/coach/RoomCard';
+import { FirstWeekCard } from '../components/coins/FirstWeekCard';
 import { WalletChip } from '../components/coins/WalletChip';
 import { COLLAPSED_ROW_HEIGHT, CollapsedKipHeader, collapseProgress } from '../components/coach/CollapsedKipHeader';
 import { KipStateCard } from '../components/coach/KipStateCard';
@@ -531,7 +532,9 @@ export function CoachScreen() {
           </Button>
         </View>
       }
-    />
+    >
+      <FirstWeekCard />
+    </RoomCard>
   );
 
   const ready = phase === 'ready' && !statusUnverified;

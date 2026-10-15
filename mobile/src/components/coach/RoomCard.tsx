@@ -26,14 +26,14 @@ const WOOD_LINE = '#3A2D23';
 
 // The W7 room card (spec 2026-10-14 KIP Coach §3.1, §3.2; spec 2026-10-15 §9.1): KIP's isometric room as a framed
 // diorama, cropped on KIP's desk (crop, never shrink: the inner width is measured, the height fixed at 240), a caption
-// row with the RECOVERY hot tag, and an optional footer ("Shrink room", passed in by the page). The frame is part of
-// the picture, not a button; a long-press on the room opens the editor (§5.1). The tag keeps Home's dark-palette
+// row with the RECOVERY hot tag, an optional footer ("Shrink room", passed in by the page) and, last, the page's
+// first-week list (spec 2026-10-15 §11.2). The frame is part of the picture, not a button; a long-press on the room opens the editor (§5.1). The tag keeps Home's dark-palette
 // colours in both themes, as on the scene. `look` is KIP mid-turn (useKipTurn); without it the stage's pose and mood
 // are drawn. The room is your saved layout, with KIP in what it wears; `paused` stops its loops while the editor is
 // open (Spec B ruling 17). Until the first-week welcome is answered it sits under the frame and KIP says "WELCOME HOME!"
 // (spec 2026-10-15 §11.1, plan ruling 18); both of its buttons record it for every device. Coins that landed since the
 // last look show once in KIP's bubble, with a line under the room (spec 2026-10-15 §6.7).
-export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, holdCoins, onOpenRecovery, onDecorate, onPlaceLantern, footer, onLayout }: {
+export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, holdCoins, onOpenRecovery, onDecorate, onPlaceLantern, footer, children, onLayout }: {
   stage: KipStage;
   look?: KipLook;
   window: { weather: RoomWeather; night: boolean };
@@ -48,6 +48,8 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
   /** The welcome card's Place the lantern: opens the guided first placement (spec §11.1). */
   onPlaceLantern?: () => void;
   footer?: React.ReactNode;
+  /** Drawn last in the card: the first-week list (spec 2026-10-15 §11.2). */
+  children?: React.ReactNode;
   onLayout?: ViewProps['onLayout'];
 }) {
   const me = useMyKip();
@@ -133,6 +135,7 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
         />
       </View>
       {footer}
+      {children}
     </Card>
   );
 }
