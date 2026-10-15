@@ -18,6 +18,7 @@ export type AchievementFamilyName =
   | 'SLEEP_GOAL' | 'STEADY_BEDTIME' | 'STEP_GOAL' | 'CHECK_IN' | 'BEST_RECOVERY_WEEK' | 'EVERY_DAY_LOGGED' | 'STEADIEST_MONTH';
 export type UnlockRule =
   | { kind: 'starter' }
+  | { kind: 'shop' }
   | { kind: 'family'; family: AchievementFamilyName; level: number }
   | { kind: 'anyFamily'; level: number }
   | { kind: 'counter'; counter: 'recaps_read' | 'buddy_cheers'; atLeast: number }
@@ -38,6 +39,9 @@ export interface CatalogueItem {
   iso?: IsoSpec;
   tags?: string[];
   grants?: number;
+  /** Coins (spec §6.4); absent = not in the shop. */
+  price?: number;
+  shop?: 'always' | { week: string };
 }
 
 export interface CatalogueSet {
@@ -58,6 +62,12 @@ export const CATALOGUE = data as unknown as {
   starterLayout: RoomLayout;
   items: CatalogueItem[];
   sets: CatalogueSet[];
+  /** The room sizes' gates (plan ruling 37): coins and a badge level, with the run that level needs. */
+  tierGates: Record<'2' | '3', { price: number; family: AchievementFamilyName; level: number; threshold: number }>;
+  /** What each source pays (spec 2026-10-15 §6.2), for "How to earn": the server decides every amount actually paid. */
+  earnAmounts: { sleep_goal: number; steps: number; checkin: number; recap: number; cheer: number; challenge: number };
+  /** What the capped kinds may pay on one day (§6.3). */
+  dailyCap: number;
 };
 
 const BY_ID = new Map(CATALOGUE.items.map((i) => [i.id, i]));

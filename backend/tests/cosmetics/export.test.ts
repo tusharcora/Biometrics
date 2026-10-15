@@ -1,4 +1,6 @@
 import fs from 'fs';
+import { DAILY_CAP } from '../../src/coins/ledger';
+import { EARN_AMOUNTS } from '../../src/coins/sources';
 import { COSMETIC_ITEMS, isShipped } from '../../src/cosmetics/catalogue';
 import { MOBILE_CATALOGUE_PATH, exportCatalogue, serialiseExport } from '../../src/cosmetics/export';
 import { validateLayout } from '../../src/room/geometry';
@@ -11,7 +13,7 @@ it('the app\'s copy is current: run scripts/export-cosmetics.ts after any catalo
 
 it('ships only the shipped releases, and every set id an item names is a shipped set', () => {
   const e = exportCatalogue();
-  expect(e.releases).toEqual([1, 3]);
+  expect(e.releases).toEqual([1, 3, 4]);
   expect(e.items.every((i) => isShipped(i))).toBe(true);
   expect(e.sets.every((s) => isShipped(s))).toBe(true);
   const shipped = new Set(e.items.map((i) => i.id));
@@ -40,4 +42,18 @@ it('ships the starter layout and one valid iso layout per set (spec §5.5, rulin
     expect(set.layout).toEqual(layoutFromSlots(set.room));
     expect({ id: set.id, failure: validateLayout(set.layout, 1, deps) }).toEqual({ id: set.id, failure: null });
   }
+});
+
+it('carries the tier gates with their badge thresholds (plan ruling 37)', () => {
+  expect(exportCatalogue().tierGates).toEqual({
+    2: { price: 600, family: 'CHECK_IN', level: 2, threshold: 14 },
+    3: { price: 1500, family: 'SLEEP_GOAL', level: 3, threshold: 14 },
+  });
+});
+
+it('carries what each source pays and the daily cap, from the server\'s own constants (final review M3)', () => {
+  const e = exportCatalogue();
+  expect(e.earnAmounts).toEqual(EARN_AMOUNTS);
+  expect(e.dailyCap).toBe(DAILY_CAP);
+  expect([e.earnAmounts.sleep_goal, e.earnAmounts.steps, e.earnAmounts.checkin, e.earnAmounts.recap, e.dailyCap]).toEqual([20, 15, 5, 10, 60]);
 });

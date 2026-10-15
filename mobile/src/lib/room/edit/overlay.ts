@@ -10,6 +10,29 @@ const DOTS = 'rgba(255,255,255,0.18)';
 const OUTLINE = '#F5F5F4';
 const LIME = '#A3E635';
 
+const DASH = 'rgba(255,255,255,0.55)';
+
+/**
+ * The next size's new front rows as a dashed outline (spec §11.2's locked-row overlay, ruling 15), on a grid of the
+ * NEXT size: `from` is today's n, so tiles at i or j ≥ from are the new floor.
+ */
+export function nextRowsRects(g: IsoGrid, from: number): Rects {
+  const P = projOf(g);
+  const r: Rects = [];
+  const dashed = (a: readonly [number, number], b: readonly [number, number]) => {
+    const seg: Rects = [];
+    line(seg, a, b, DASH);
+    seg.forEach((q, k) => { if (Math.floor(k / 2) % 2 === 0) r.push(q); });
+  };
+  dashed(P(from, 0), P(from, from));
+  dashed(P(0, from), P(from, from));
+  dashed(P(from, 0), P(g.n, 0));
+  dashed(P(0, from), P(0, g.m));
+  dashed(P(g.n, 0), P(g.n, g.m));
+  dashed(P(0, g.m), P(g.n, g.m));
+  return r;
+}
+
 export function gridRects(g: IsoGrid): Rects {
   const P = projOf(g);
   const r: Rects = [];

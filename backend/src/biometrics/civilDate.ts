@@ -63,6 +63,29 @@ export function civilDateToUtcMidnight(civilDate: string): Date {
   return new Date(`${civilDate}T00:00:00Z`);
 }
 
+/**
+ * The instant `civilDate` begins on the wall clock in `timeZone` (localCivilDateOrUtc, so an unknown zone is UTC).
+ * Every zone is between UTC-12 and UTC+14, so the start lies within [UTC midnight - 14 h, UTC midnight + 12 h];
+ * a binary search over whole minutes finds the first one on that date, DST included.
+ */
+export function localMidnightInstant(civilDate: string, timeZone: string): Date {
+  const MINUTE_MS = 60 * 1000;
+  const utc = civilDateToUtcMidnight(civilDate).getTime();
+  let lo = utc - 15 * 60 * MINUTE_MS; // still the day before everywhere
+  let hi = utc + 13 * 60 * MINUTE_MS; // already this date everywhere
+  while (hi - lo > MINUTE_MS) {
+    const mid = lo + Math.floor((hi - lo) / 2 / MINUTE_MS) * MINUTE_MS;
+    if (localCivilDateOrUtc(mid, timeZone) >= civilDate) hi = mid;
+    else lo = mid;
+  }
+  return new Date(hi);
+}
+
+/** The YYYY-MM-DD civil date a UTC-midnight `@db.Date` value stands for: the inverse of civilDateToUtcMidnight. */
+export function utcMidnightToCivilDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
 const clockFormatters = new Map<string, Intl.DateTimeFormat>();
 
 function clockFormatterFor(timeZone: string): Intl.DateTimeFormat {

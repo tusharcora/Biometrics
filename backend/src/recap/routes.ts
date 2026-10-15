@@ -3,9 +3,10 @@
 
 import { Router } from 'express';
 import { AuthedRequest, requireAuth } from '../auth/middleware';
-import { UUID_RE } from '../coach/push';
+import { earnCoinsSafely } from '../coins/sources';
 import { grantCosmeticsSafely } from '../cosmetics/unlock';
 import { prisma } from '../db/client';
+import { UUID_RE } from '../lib/uuid';
 import { toRecapDTO, toRecapSummaryDTO } from './dto';
 
 export const DEFAULT_RECAP_LIMIT = 20;
@@ -64,7 +65,13 @@ recapRouter.post('/me/recaps/:id/opened', requireAuth, async (req: AuthedRequest
     return;
   }
   const { count } = await prisma.recap.updateMany({ where: { id: row.id, openedAt: null }, data: { openedAt: new Date() } });
-  // Only the open that set openedAt can raise the recaps-read counter (spec 2026-10-14 KIP's room §3.1).
-  if (count === 1) await grantCosmeticsSafely(req.userId!, new Date());
+  // Only the open that set openedAt, and only a WEEK recap (spec 2026-10-14 KIP's room §3.1; spec 2026-10-15 §6.2,
+  // §13): it can raise the recaps-read counter and it pays the weekly recap's coins. A MONTH open does neither (plan
+  // ruling 32).
+  if (count === 1 && row.kind === 'WEEK') {
+    const now = new Date();
+    await grantCosmeticsSafely(req.userId!, now);
+    await earnCoinsSafely(req.userId!, now);
+  }
   res.status(204).end();
 });

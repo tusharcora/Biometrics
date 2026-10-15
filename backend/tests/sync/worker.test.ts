@@ -18,6 +18,8 @@ import { seedHistory, day } from '../scoring/dbHelpers';
 import * as catchUp from '../../src/sync/catchUp';
 import { localCivilDate } from '../../src/biometrics/civilDate';
 import * as daySummaryJob from '../../src/coach/daySummaryJob';
+import { coinsHooks } from '../../src/coins/sources';
+import { STEPS_GOAL } from '../../src/coach/tools/metrics';
 
 jest.mock('../../src/health/client');
 jest.mock('../../src/health/oauth');
@@ -673,6 +675,30 @@ describe('processSyncJob', () => {
       await processSyncJob({ name: 'scoreSweep', data: {} } as Job);
 
       expect(scoreSweep.runScoreSweep).toHaveBeenCalledTimes(1);
+    });
+  });
+
+  describe('coins (free-build spec §6.3)', () => {
+    it('asks for a catch-up after every SLEEP sync and backfill, and after a STEPS sync only when the goal was newly reached', async () => {
+      const earn = jest.spyOn(coinsHooks, 'earn').mockResolvedValue(0);
+      try {
+        const user = await createConnectedUser();
+        await processSyncJob({ name: 'fetch', data: { userId: user.id, metricType: 'SLEEP', date: '2026-09-02' } } as Job);
+        expect(earn).toHaveBeenCalledTimes(1);
+        const today = localCivilDate(new Date(), 'UTC');
+        (healthClient.fetchMetricRange as jest.Mock).mockResolvedValue([{ recordedAt: new Date(`${today}T00:00:00Z`), value: STEPS_GOAL }]);
+        const steps = { name: 'fetch', data: { userId: user.id, metricType: 'STEPS', date: today } } as Job;
+        await processSyncJob(steps);
+        expect(earn).toHaveBeenCalledTimes(2);
+        await processSyncJob(steps); // already recorded today: no new goal, no new earn
+        expect(earn).toHaveBeenCalledTimes(2);
+        (healthClient.fetchMetricRange as jest.Mock).mockResolvedValue([]);
+        await processSyncJob({ name: 'backfill', data: { userId: user.id, startDate: '2026-08-25', endDate: '2026-09-05' } } as Job);
+        expect(earn).toHaveBeenCalledTimes(3);
+        expect(earn.mock.calls.every(([id]) => id === user.id)).toBe(true);
+      } finally {
+        earn.mockRestore();
+      }
     });
   });
 });

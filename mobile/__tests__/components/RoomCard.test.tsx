@@ -1,4 +1,5 @@
 import React from 'react';
+import { AccessibilityInfo, Platform } from 'react-native';
 import { act, fireEvent, render } from '@testing-library/react-native';
 import { RoomCard } from '../../src/components/coach/RoomCard';
 import { fetchCosmetics, postRoomWelcomed } from '../../src/api/cosmetics';
@@ -8,11 +9,15 @@ import { loadCosmetics, resetCosmetics } from '../../src/lib/room/cosmeticsStore
 import { starterLayout } from '../../src/lib/room/layout';
 import { EMPTY_WORN } from '../../src/lib/room/loadout';
 import { cosmeticsDTO } from '../../jest-mocks/cosmeticsFixture';
+import { fetchCoins, postCoinsSeen } from '../../src/api/coins';
+import { getCoins, loadCoins, resetCoins } from '../../src/lib/coins/coinsStore';
+import { ScreenNavigationContext } from '../../src/lib/useScreenFocused';
 
 jest.mock('../../src/components/room/RoomView', () => require('../../jest-mocks/RoomView'));
 jest.mock('../../src/api/cosmetics', () => ({ fetchCosmetics: jest.fn(), putCosmetics: jest.fn(), postCosmeticsSeen: jest.fn(), postRoomWelcomed: jest.fn(async () => undefined) }));
+jest.mock('../../src/api/coins', () => ({ fetchCoins: jest.fn(), postCoinsSeen: jest.fn(async () => undefined), fetchFirstWeek: jest.fn(), fetchShop: jest.fn(), postPurchase: jest.fn(), postExpand: jest.fn() }));
 
-afterEach(() => { resetCosmetics(); resetMyKip(); jest.clearAllMocks(); });
+afterEach(() => { resetCosmetics(); resetMyKip(); resetCoins(); jest.clearAllMocks(); });
 
 const INPUT: KipStageInput = { phase: 'ready', statusUnverified: false, offline: false, waiting: true, streaming: true, error: false, empty: false, idle: { pose: 'rest', mood: 'idle' } };
 const STAGE = kipStage(INPUT);
@@ -139,4 +144,135 @@ it('shows no welcome once welcomed, before the first read, or while the stage lo
   (fetchCosmetics as jest.Mock).mockResolvedValue(cosmeticsDTO());
   await act(async () => { await loadCosmetics(); });
   expect(renderCard().queryByTestId('room-welcome')).toBeNull();
+});
+
+const LANDING = {
+  balance: 385, today: { earned: 25, cap: 60 }, next: null,
+  events: [
+    { kind: 'sleep_goal', amount: 20, at: '2026-11-11T07:12:00.000Z', seen: false },
+    { kind: 'checkin', amount: 5, at: '2026-11-11T06:00:00.000Z', seen: false },
+  ],
+};
+
+it('coins land once: "+25!" in KIP\'s bubble and a line under the room, announced, then marked seen (spec §6.7, ruling 12)', async () => {
+  jest.useFakeTimers();
+  const say = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
+  (fetchCoins as jest.Mock).mockResolvedValue(LANDING);
+  await act(async () => { await loadCoins(); });
+  const s = renderCard();
+  await act(async () => undefined);
+  expect(s.getByTestId('kip-room').props.room.split(':')[2]).toBe('+25!');
+  expect(s.getByTestId('coins-landed')).toHaveTextContent('Sleep goal hit and 1 more');
+  // Several earns are read with their count, as the line shows them (ruling T12-FIX).
+  expect(say).toHaveBeenCalledWith('Plus 25 coins. Sleep goal hit and 1 more');
+  expect(s.getByTestId('coins-landed').props.accessibilityLabel).toBe('Plus 25 coins. Sleep goal hit and 1 more');
+  expect(postCoinsSeen).toHaveBeenCalledWith('2026-11-11T07:12:00.000Z');
+  await act(async () => { jest.advanceTimersByTime(4000); });
+  expect(s.queryByTestId('coins-landed')).toBeNull();
+  expect(s.getByTestId('kip-room').props.room.split(':')[2]).toBe('ON IT…');
+  expect(postCoinsSeen).toHaveBeenCalledTimes(1);
+  say.mockRestore();
+  jest.useRealTimers();
+});
+
+it('nothing lands while the welcome card shows, or while the room is paused', async () => {
+  (fetchCoins as jest.Mock).mockResolvedValue(LANDING);
+  await act(async () => { await loadCoins(); });
+  (fetchCosmetics as jest.Mock).mockResolvedValue(cosmeticsDTO({ welcomed: false }));
+  await act(async () => { await loadCosmetics(); });
+  const s = renderCard();
+  await act(async () => undefined);
+  expect(s.queryByTestId('coins-landed')).toBeNull();
+  const paused = renderCard({ paused: true });
+  await act(async () => undefined);
+  expect(paused.queryByTestId('coins-landed')).toBeNull();
+  expect(postCoinsSeen).not.toHaveBeenCalled();
+});
+
+it('nothing lands, and nothing is marked seen, while the page is out of focus or holds the coins (ruling PF-F13)', async () => {
+  (fetchCoins as jest.Mock).mockResolvedValue(LANDING);
+  await act(async () => { await loadCoins(); });
+  const focus = new Set<() => void>();
+  const nav = {
+    isFocused: () => false,
+    addListener: (event: 'focus' | 'blur', cb: () => void) => {
+      if (event === 'focus') focus.add(cb);
+      return () => { focus.delete(cb); };
+    },
+  };
+  const s = render(
+    <ScreenNavigationContext.Provider value={nav as never}>
+      <RoomCard stage={STAGE} window={WINDOW} recovery={FAIR} reduceMotion={false} onOpenRecovery={jest.fn()} />
+    </ScreenNavigationContext.Provider>,
+  );
+  fireEvent(s.getByTestId('kip-room-frame-inner'), 'layout', { nativeEvent: { layout: { width: 323, height: 240, x: 0, y: 0 } } });
+  await act(async () => undefined);
+  const held = renderCard({ holdCoins: true });
+  await act(async () => undefined);
+  expect([s.queryByTestId('coins-landed'), held.queryByTestId('coins-landed')]).toEqual([null, null]);
+  expect(postCoinsSeen).not.toHaveBeenCalled();
+  expect(getCoins()!.events.every((e) => !e.seen)).toBe(true);
+  held.unmount();
+  // Back in focus, they land.
+  await act(async () => { focus.forEach((cb) => cb()); });
+  expect(s.getByTestId('coins-landed')).toBeTruthy();
+  expect(postCoinsSeen).toHaveBeenCalledTimes(1);
+});
+
+it('the line is a polite live region read as words (no middle dot); iOS, which has none, is told once (house pattern)', async () => {
+  const os = Platform.OS;
+  const say = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
+  try {
+    for (const platform of ['android', 'ios'] as const) {
+      Platform.OS = platform;
+      resetCoins();
+      (postCoinsSeen as jest.Mock).mockClear();
+      say.mockClear();
+      (fetchCoins as jest.Mock).mockResolvedValue({ ...LANDING, events: [LANDING.events[0]] });
+      await act(async () => { await loadCoins(); });
+      const s = renderCard();
+      await act(async () => undefined);
+      const line = s.getByTestId('coins-landed');
+      expect(line).toHaveTextContent('Sleep goal hit');
+      expect(line.props.accessibilityLabel).toBe('Plus 20 coins. Sleep goal hit');
+      expect(line.props.accessibilityLabel).not.toMatch(/·|−/);
+      expect(line.props.accessibilityLiveRegion).toBe('polite');
+      expect(say.mock.calls).toEqual(platform === 'ios' ? [['Plus 20 coins. Sleep goal hit']] : []);
+      expect(String(line.props.className).split(' ')).toContain('text-caption');
+      s.unmount();
+    }
+  } finally {
+    Platform.OS = os;
+    say.mockRestore();
+  }
+});
+
+it('lands nothing when nothing is unseen', async () => {
+  (fetchCoins as jest.Mock).mockResolvedValue({ ...LANDING, events: LANDING.events.map((e) => ({ ...e, seen: true })) });
+  await act(async () => { await loadCoins(); });
+  const s = renderCard();
+  await act(async () => undefined);
+  expect(s.queryByTestId('coins-landed')).toBeNull();
+  expect(s.getByTestId('kip-room').props.room.split(':')[2]).toBe('ON IT…');
+  expect(postCoinsSeen).not.toHaveBeenCalled();
+});
+
+it('the live-region node is mounted, empty and hidden, before coins land; landing changes that same node (TalkBack, ruling T12-FIX)', async () => {
+  (fetchCoins as jest.Mock).mockResolvedValue({ ...LANDING, events: [LANDING.events[0]] });
+  await act(async () => { await loadCoins(); });
+  const props = { stage: STAGE, window: WINDOW, recovery: FAIR, reduceMotion: false, onOpenRecovery: jest.fn() };
+  const s = render(<RoomCard {...props} holdCoins />);
+  fireEvent(s.getByTestId('kip-room-frame-inner'), 'layout', { nativeEvent: { layout: { width: 323, height: 240, x: 0, y: 0 } } });
+  await act(async () => undefined);
+  const node = s.getByTestId('coins-landed', { includeHiddenElements: true });
+  expect(node).toHaveTextContent('');
+  expect([node.props.accessibilityElementsHidden, node.props.importantForAccessibility, node.props.accessibilityLiveRegion]).toEqual([true, 'no-hide-descendants', 'polite']);
+  // Idle, it is out of the card's flow: no gap, no height.
+  expect(String(node.props.className).split(' ')).toEqual(expect.arrayContaining(['absolute', 'h-0']));
+  s.rerender(<RoomCard {...props} />);
+  await act(async () => undefined);
+  const landed = s.getByTestId('coins-landed');
+  expect(landed).toBe(node);
+  expect(landed).toHaveTextContent('Sleep goal hit');
+  expect([landed.props.accessibilityElementsHidden, landed.props.importantForAccessibility]).toEqual([false, 'auto']);
 });

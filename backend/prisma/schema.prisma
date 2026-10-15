@@ -57,6 +57,9 @@ model User {
   cosmeticUnlocks       CosmeticUnlock[]
   cosmeticLoadout       CosmeticLoadout?
   roomFirstWeek         RoomFirstWeek?
+  coinEvents            CoinEvent[]
+  coinWallet            CoinWallet?
+  itemGrants            ItemGrant[]
   goalChanges           GoalChange[]
   buddyPairsA           BuddyPair[]         @relation("BuddyPairA")
   buddyPairsB           BuddyPair[]         @relation("BuddyPairB")
@@ -94,7 +97,7 @@ model User {
   // src/coach/personas). Null means the default persona.
   coachPersonaId          String?
   /// The KIP mascot's colour, by name (backend/src/kip/colours.ts); buddies see it.
-  kipColour               String              @default("coral")
+  kipColour               String  @default("coral")
   /// Thinking attachment shown next to the coach while it works; null = default ('bulb').
   coachThinkingAttachment String?
   /// How the chat shows a reply is on its way; null = default ('steps').
@@ -779,18 +782,15 @@ model CosmeticUnlock {
   @@index([userId, seenAt])
 }
 
-/// What fills each slot. No row means the starter loadout.
+/// KIP's room and what KIP wears. No row means the starter layout and nothing worn.
 model CosmeticLoadout {
   userId    String   @id
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
-  /// Record<RoomSlot, itemId | null>
-  room      Json
   /// Record<WornSlot, itemId | null>
   worn      Json
-  /// RoomLayout (spec 2026-10-15 §2.3); null = a Spec B row not converted yet (§2.4). `room` is read-only from P1
-  /// and dropped in P2.
-  layout    Json?
-  /// 1 starter 7×7, 2 bigger 8×8, 3 loft 9×9; written only by the expand route (P2).
+  /// RoomLayout (spec 2026-10-15 §2.3). Spec B's slot `room` was converted and dropped in P2 (§2.4).
+  layout    Json
+  /// 1 starter 7×7, 2 bigger 8×8, 3 loft 9×9; written only by the expand route.
   tier      Int      @default(1)
   /// Optimistic concurrency: every save increments it.
   version   Int      @default(0)
@@ -807,6 +807,51 @@ model RoomFirstWeek {
   firstPlacedAt DateTime?
   /// The first-week list's day 1 (P2).
   startedOn     DateTime? @db.Date
+}
+
+/// One coin event (spec 2026-10-15 §6.3): an earn (+), a 0-coin earn at the daily cap, or a spend (−). Append-only:
+/// never updated except `seenAt`, never deleted outside account deletion and the fixture purge.
+model CoinEvent {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 'sleep_goal' | 'steps' | 'checkin' | 'recap' | 'cheer_given' | 'cheer_got' | 'challenge' | 'firstweek' | 'buy' | 'expand'
+  kind      String
+  /// The source record it pays for (or the app's request id for a spend), unique per user: a replay writes nothing.
+  sourceKey String
+  /// + earned, − spent, 0 when the daily cap had nothing left.
+  amount    Int
+  /// The civil day it counts against the cap; null for uncapped kinds and spends.
+  capDay    DateTime? @db.Date
+  createdAt DateTime  @default(now())
+  seenAt    DateTime?
+
+  @@unique([userId, sourceKey])
+  @@index([userId, createdAt])
+}
+
+/// A user's coin balance, the running sum of their CoinEvent amounts (a CHECK constraint keeps it >= 0).
+model CoinWallet {
+  userId  String @id
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balance Int    @default(0)
+}
+
+/// Copies of a piece beyond the starters and unlock rows (spec §2.2): +1 bought (P2); gifts and prizes come in P4.
+model ItemGrant {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itemId    String
+  qty       Int
+  /// 'buy:{requestId}' (P2); 'gift_out:', 'gift_in:', 'gift_back:' and 'prize:' come in P4.
+  sourceKey String
+  createdAt DateTime  @default(now())
+  /// A bought copy is NEW until seen (plan ruling 7).
+  seenAt    DateTime?
+
+  @@unique([userId, sourceKey])
+  @@index([userId, itemId])
 }
 
 enum GoalChangeKind {
@@ -878,18 +923,18 @@ model BuddyPair {
 /// ("BuddyRequest_one_pending_key"), which Prisma does not model. Keep it if a future
 /// `migrate dev` proposes dropping it.
 model BuddyRequest {
-  id          String             @id @default(uuid())
-  fromUserId  String
-  fromUser    User               @relation("BuddyRequestFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
-  toUserId    String
-  toUser      User               @relation("BuddyRequestTo", fields: [toUserId], references: [id], onDelete: Cascade)
-  status      BuddyRequestStatus @default(PENDING)
+  id             String             @id @default(uuid())
+  fromUserId     String
+  fromUser       User               @relation("BuddyRequestFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUserId       String
+  toUser         User               @relation("BuddyRequestTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  status         BuddyRequestStatus @default(PENDING)
   /// Never shown to the recipient (swallowed after a decline, or blocked).
-  hidden      Boolean            @default(false)
-  createdAt   DateTime           @default(now())
-  respondedAt DateTime?
+  hidden         Boolean            @default(false)
+  createdAt      DateTime           @default(now())
+  respondedAt    DateTime?
   /// The sender cancelled a request the target had declined: gone for the sender, still DECLINED.
-  withdrawnAt DateTime?
+  withdrawnAt    DateTime?
   /// The target's handle when sent; the sender's outgoing list shows this, never the current handle.
   toHandleAtSend String?
 
@@ -1001,12 +1046,12 @@ model CheckIn {
 
 /// The viewer reached the end of the author's story for that author-local day (spec §4.2).
 model StorySeen {
-  viewerId  String
-  viewer    User     @relation("StorySeenViewer", fields: [viewerId], references: [id], onDelete: Cascade)
-  authorId  String
-  author    User     @relation("StorySeenAuthor", fields: [authorId], references: [id], onDelete: Cascade)
-  localDate DateTime @db.Date
-  seenAt    DateTime @default(now())
+  viewerId    String
+  viewer      User      @relation("StorySeenViewer", fields: [viewerId], references: [id], onDelete: Cascade)
+  authorId    String
+  author      User      @relation("StorySeenAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  localDate   DateTime  @db.Date
+  seenAt      DateTime  @default(now())
   /// The newest frame the viewer reached (S3): a frame after it lights the ring again. Null on rows from before
   /// S3, which count up to seenAt.
   lastFrameAt DateTime?

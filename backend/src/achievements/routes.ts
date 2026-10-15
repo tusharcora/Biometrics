@@ -5,13 +5,13 @@
 import { Router } from 'express';
 import { AuthedRequest, requireAuth } from '../auth/middleware';
 import { prisma } from '../db/client';
+import { UUID_RE } from '../lib/uuid';
 import { toAchievementsDTO } from './dto';
 import { evaluateAchievements } from './evaluate';
 import { evaluationVersion, markEvaluated, readEvaluated } from './marker';
 import { ensureAchievementsStart } from './start';
 
 export const MAX_CELEBRATED_IDS = 50;
-const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export const achievementsRouter = Router();
 

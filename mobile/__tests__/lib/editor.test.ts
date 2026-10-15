@@ -1,10 +1,10 @@
 import { EMPTY_WORN } from '../../src/lib/room/loadout';
-import type { Placement } from '../../src/lib/room/iso/geometry';
+import { validateLayout, type Placement } from '../../src/lib/room/iso/geometry';
 import { childrenOf, starterLayout } from '../../src/lib/room/layout';
 import { canPlace, displayDraft, editorReducer, initEditor, inventory, isChanged, selectedTools, UNDO_STEPS, type EditorAction, type EditorState } from '../../src/lib/room/edit/editor';
 import { movedText, nudgeAnnouncement, outcomeText } from '../../src/lib/room/edit/labels';
 import { putOnOptions } from '../../src/lib/room/edit/targets';
-import { catalogueSet } from '../../src/lib/room/catalogue';
+import { catalogueSet, GEOMETRY_DEPS } from '../../src/lib/room/catalogue';
 
 const COUNTS: Record<string, number> = {
   'desk.monitor': 1, 'desk.notebook': 1, 'lamp.amber': 1, 'item.mug': 1, 'item.sticky': 1, 'shelf.books': 1, 'shelf.plank': 1,
@@ -351,5 +351,60 @@ describe('opening (spec §5.1, §11.1; final review I1, I2)', () => {
     expect(start({ newIds: ['out.scarf'] }, { drawer: 'new', item: 'out.scarf' }).picked).toBeNull();
     expect(start({}, { drawer: 'room', item: 'wall.dots' }).picked).toBeNull();
     expect(start({}, { drawer: 'all', item: 'plant.fern' }).picked).toBe('plant.fern');
+  });
+});
+
+describe('counts from the store (ruling 36)', () => {
+  it('takes new counts and lists the pieces that grew as new, so the New tab shows them', () => {
+    const s = run(start(), { type: 'counts', counts: { ...COUNTS, 'item.radio': 1 }, grew: ['item.radio'] });
+    expect([s.counts['item.radio'], s.newIds, inventory(s)['item.radio']]).toEqual([1, ['item.radio'], 1]);
+    expect(run(s, { type: 'counts', counts: s.counts, grew: ['item.radio'] }).newIds).toEqual(['item.radio']);
+  });
+});
+
+describe('the room grows under the editor (spec §7, ruling 19)', () => {
+  it('keeps the draft\'s own changes, drops what the server stored and any wall piece the new window covers, and clears undo', () => {
+    // An 8 × 8 room whose plank (with the books) hangs where the loft's window will be.
+    const base = { ...starterLayout(), pieces: starterLayout().pieces.map((p) => (p.id === 'plank' ? { ...p, x: 12 } : p)) };
+    const s = run(start({ layout: base, tier: 2 }),
+      { type: 'place', item: 'plant.fern' },
+      { type: 'drop', id: null, item: 'art.calendar', target: { layer: 'wallR', x: 12, y: 2 } });
+    expect(s.draft.layout.pieces.map((p) => p.id)).toEqual(expect.arrayContaining(['p1', 'p2']));
+    const grown = { ...base, pieces: base.pieces.filter((p) => p.id !== 'plank' && p.id !== 'shelf') };
+    const r = run(s, { type: 'rebased', saved: { layout: grown, worn: EMPTY_WORN }, version: 7, tier: 3, counts: COUNTS });
+    const ids = r.draft.layout.pieces.map((p) => p.id);
+    expect([ids.includes('p1'), ids.includes('p2'), ids.includes('plank'), ids.includes('shelf')]).toEqual([true, false, false, false]);
+    expect([r.tier, r.baseVersion, r.past.length, r.future.length, isChanged(r)]).toEqual([3, 7, 0, 0, true]);
+    expect(validateLayout(r.draft.layout, 3, GEOMETRY_DEPS)).toBeNull();
+  });
+
+  it('a piece the server kept that the draft moved under the new window goes back to where the server has it (ruling T13-FIX M4)', () => {
+    const base = starterLayout(); // the plank at x 6, clear of the loft's window
+    const s = run(start({ layout: base, tier: 2 }),
+      { type: 'drop', id: 'plank', item: 'shelf.plank', target: { layer: 'wallR', x: 12, y: 10 } },
+      { type: 'drop', id: null, item: 'art.calendar', target: { layer: 'wallR', x: 12, y: 2 } });
+    expect(s.draft.layout.pieces.find((p) => p.id === 'plank')!.x).toBe(12);
+    const r = run(s, { type: 'rebased', saved: { layout: base, worn: EMPTY_WORN }, version: 7, tier: 3, counts: COUNTS });
+    const ids = r.draft.layout.pieces.map((p) => p.id);
+    expect(r.draft.layout.pieces.find((p) => p.id === 'plank')).toEqual(base.pieces.find((p) => p.id === 'plank'));
+    expect([ids.includes('shelf'), ids.includes('p1')]).toEqual([true, false]); // the books stay on it; the new calendar goes
+    expect(validateLayout(r.draft.layout, 3, GEOMETRY_DEPS)).toBeNull();
+  });
+
+  it('drops a draft piece standing on a stored one, keeps a moved piece the server kept, and takes the new counts', () => {
+    const base = { ...starterLayout(), pieces: starterLayout().pieces.map((p) => (p.id === 'plank' ? { ...p, x: 12 } : p)) };
+    // The draft moves the fern and puts a second piece on the plank the server will store.
+    const s = run(start({ layout: base, tier: 2 }),
+      { type: 'select', id: 'plant' }, { type: 'nudge', dir: 'frontLeft' },
+      { type: 'drop', id: null, item: 'item.sticky', target: { layer: 'onTop', parent: 'plank', spot: 1 } });
+    const sticky = s.draft.layout.pieces.find((p) => p.item === 'item.sticky');
+    const fern = s.draft.layout.pieces.find((p) => p.id === 'plant');
+    expect([sticky?.parent, fern?.y]).toEqual(['plank', 1]);
+    const grown = { ...base, pieces: base.pieces.filter((p) => p.id !== 'plank' && p.id !== 'shelf') };
+    const counts = { ...COUNTS, 'plant.cactus': 2 };
+    const r = run(s, { type: 'rebased', saved: { layout: grown, worn: EMPTY_WORN }, version: 7, tier: 3, counts });
+    const ids = r.draft.layout.pieces.map((p) => p.id);
+    expect([ids.includes(sticky!.id), r.draft.layout.pieces.find((p) => p.id === 'plant')]).toEqual([false, fern]);
+    expect([r.counts, r.selected, r.saved.layout]).toEqual([counts, null, grown]);
   });
 });

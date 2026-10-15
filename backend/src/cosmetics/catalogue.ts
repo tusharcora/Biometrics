@@ -9,18 +9,21 @@ import type { AchievementFamily } from '@prisma/client';
 import type { IsoSpec } from '../room/geometry';
 
 export const COSMETICS_CATALOGUE_VERSION = 1;
-export type CosmeticRelease = 1 | 2 | 3;
-/** Releases the app can draw. B2 (release 2) joins when its art ships; free-build P1's pieces are release 3. */
-export const SHIPPED_RELEASES: ReadonlySet<CosmeticRelease> = new Set<CosmeticRelease>([1, 3]);
-export type ShippedRelease = 1 | 3;
+export type CosmeticRelease = 1 | 2 | 3 | 4;
+/** Releases the app can draw. B2 (release 2) joins when its art ships; free-build P1's pieces are release 3, P2's shop
+ * pieces release 4. */
+export const SHIPPED_RELEASES: ReadonlySet<CosmeticRelease> = new Set<CosmeticRelease>([1, 3, 4]);
+export type ShippedRelease = 1 | 3 | 4;
 /**
  * When each shipped release reached users (Spec B §3.1): a rule met before it grants as 'backfill'. A full record,
  * so a release cannot ship without a date (Spec B Task 3 minor). OWNER NOTE (plan ruling 1): both are set to the real
- * ship date when Spec B and P1 merge.
+ * ship date when Spec B and P1 merge. OWNER NOTE (P2 plan ruling 1): release 4's date is set with the coins launch at
+ * merge.
  */
 export const RELEASE_LAUNCHED_AT: Readonly<Record<ShippedRelease, Date>> = Object.freeze({
   1: new Date('2026-10-15T00:00:00.000Z'),
   3: new Date('2026-10-16T00:00:00.000Z'),
+  4: new Date('2026-10-20T00:00:00.000Z'),
 });
 export function isShipped(x: { release: CosmeticRelease }): boolean {
   return SHIPPED_RELEASES.has(x.release);
@@ -41,6 +44,7 @@ export type CounterName = 'recaps_read' | 'buddy_cheers';
 
 export type UnlockRule =
   | { kind: 'starter' }
+  | { kind: 'shop' }
   | { kind: 'family'; family: AchievementFamily; level: Level }
   | { kind: 'anyFamily'; level: Level }
   | { kind: 'counter'; counter: CounterName; atLeast: number }
@@ -64,6 +68,10 @@ export interface CosmeticItem {
   grants?: number;
   /** 'funny' (the drawer's Funny tab); P4 adds challenge tags. */
   tags?: string[];
+  /** Coins (spec §6.4); absent = not in the shop. */
+  price?: number;
+  /** 'always', or only in that ISO week (P4's theme pieces); every P2 price is 'always' (plan ruling 4). */
+  shop?: 'always' | { week: string };
 }
 
 export interface CosmeticSet {
@@ -79,9 +87,10 @@ const FAMILY_CODES: Record<string, AchievementFamily> = {
   SG: 'SLEEP_GOAL', SB: 'STEADY_BEDTIME', ST: 'STEP_GOAL', CI: 'CHECK_IN', BR: 'BEST_RECOVERY_WEEK', EL: 'EVERY_DAY_LOGGED', SM: 'STEADIEST_MONTH',
 };
 
-/** A Cat board unlock code: 'S' starter, 'SB3' a family level, 'ANY4', 'RC8' recaps read, 'CB10' buddy cheers. */
+/** A Cat board unlock code: 'S' starter, 'C' the coin shop only, 'SB3' a family level, 'ANY4', 'RC8' recaps read, 'CB10' buddy cheers. */
 export function ruleOf(code: string): UnlockRule {
   if (code === 'S') return { kind: 'starter' };
+  if (code === 'C') return { kind: 'shop' };
   const m = /^([A-Z]+)(\d+)$/.exec(code);
   if (!m) throw new Error(`Unknown unlock code ${code}`);
   const [, key, digits] = m;
@@ -242,6 +251,29 @@ const FREEBUILD: readonly Row[] = [
   ['lamp.welcome', 'lamp', 'S', 'G', 3],
 ];
 
+// Free-build P2's coin-shop pieces (spec 2026-10-15 §4: F6, C1): bought with coins, never unlocked by a rule.
+const SHOP_PIECES: readonly Row[] = [
+  ['item.radio', 'desk_item', 'C', '', 4],
+  ['corner.gnome', 'corner', 'C', '', 4],
+  ['corner.cone', 'corner', 'C', '', 4],
+  ['corner.pumpkin', 'corner', 'C', '', 4],
+  ['item.candle', 'desk_item', 'C', 'G', 4],
+  ['art.neonheart', 'art', 'C', 'G', 4],
+];
+
+/**
+ * Coin prices (spec §6.4: 25–200), all 'always' in P2 (plan rulings 2–4): the shop's own pieces, every placeable
+ * starter as an extra copy (not the desks, one per room, and not the welcome lantern, C7's gift), and the rule pieces
+ * the boards price, sold only once earned. B2's three are priced now and shown when release 2 ships.
+ */
+export const PRICES: Readonly<Record<string, number>> = {
+  'item.radio': 150, 'corner.gnome': 80, 'corner.cone': 60, 'corner.pumpkin': 30, 'item.candle': 25, 'art.neonheart': 200,
+  'plant.fern': 40, 'plant.cactus': 40, 'item.mug': 25, 'item.sticky': 25, 'shelf.books': 30, 'shelf.minicactus': 30,
+  'shelf.plank': 30, 'lamp.amber': 60, 'rug.slate': 80, 'art.calendar': 40,
+  'corner.floorlamp': 120, 'pet.bed': 140, 'plant.monstera': 140, 'plant.snake': 100,
+  'lamp.lava': 120, 'item.duck': 40, 'pet.cat': 180,
+};
+
 /** KIP's desk and chair (spec §2.1, §3.2): 3 × 2, KIP's seat on the front row, 3 spots on the desk top. */
 const DESK_ISO: IsoSpec = {
   layers: ['floor'], foot: [3, 2], facings: 2, kipDesk: true, seat: [1, 1],
@@ -274,6 +306,13 @@ const ISO_OVERRIDES: Readonly<Record<string, IsoSpec>> = {
   'lamp.welcome': { layers: ['floor', 'onTop'], foot: [1, 1], facings: 2 },
   // The fairy lights along the beam become a garland on the left wall, above the window (plan ruling 7).
   'set.cottage.lamp': { layers: ['wall'], wall: [8, 2], facings: 1 },
+  // The shop's small pieces stand on the floor or a surface; the sign hangs like art.
+  'item.radio': { layers: ['floor', 'onTop'], foot: [1, 1], facings: 1 },
+  'corner.gnome': { layers: ['floor', 'onTop'], foot: [1, 1], facings: 1 },
+  'corner.cone': { layers: ['floor', 'onTop'], foot: [1, 1], facings: 1 },
+  'corner.pumpkin': { layers: ['floor', 'onTop'], foot: [1, 1], facings: 1 },
+  'item.candle': { layers: ['onTop', 'floor'], foot: [1, 1], facings: 1 },
+  'art.neonheart': { layers: ['wall'], wall: [3, 4], facings: 1 },
 };
 const FUNNY: ReadonlySet<string> = new Set(['shelf.luckycat', 'shelf.globe', 'item.controller', 'corner.beanbag']);
 
@@ -316,7 +355,7 @@ function withFlags(item: CosmeticItem, flags: string): CosmeticItem {
 
 function build(): { items: CosmeticItem[]; sets: CosmeticSet[] } {
   const items = new Map<string, CosmeticItem>();
-  for (const [id, slot, code, flags, release] of [...BASE, ...FREEBUILD]) {
+  for (const [id, slot, code, flags, release] of [...BASE, ...FREEBUILD, ...SHOP_PIECES]) {
     items.set(id, withFlags({ id, slot, unlock: ruleOf(code), release, ...(slot === 'desk' ? { style: 'standard' as const } : {}) }, flags));
   }
   const sets: CosmeticSet[] = [];
@@ -340,7 +379,13 @@ function build(): { items: CosmeticItem[]; sets: CosmeticSet[] } {
   }
   for (const [id, item] of items) {
     const iso = isoFor(item);
-    items.set(id, { ...item, ...(iso ? { iso } : {}), ...(FUNNY.has(id) ? { tags: ['funny'] } : {}) });
+    const price = PRICES[id];
+    items.set(id, {
+      ...item,
+      ...(iso ? { iso } : {}),
+      ...(FUNNY.has(id) ? { tags: ['funny'] } : {}),
+      ...(price !== undefined ? { price, shop: 'always' as const } : {}),
+    });
   }
   return { items: [...items.values()], sets };
 }

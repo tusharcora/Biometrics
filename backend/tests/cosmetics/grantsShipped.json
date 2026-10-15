@@ -87,5 +87,11 @@
   "set.cottage.lamp": 1,
   "set.cottage.corner": 1,
   "set.cottage.rug": 1,
-  "set.cottage.pet": 1
+  "set.cottage.pet": 1,
+  "item.radio": 1,
+  "corner.gnome": 1,
+  "corner.cone": 1,
+  "corner.pumpkin": 1,
+  "item.candle": 1,
+  "art.neonheart": 1
 }

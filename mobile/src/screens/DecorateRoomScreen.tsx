@@ -13,6 +13,7 @@ import { COACH_PLACE_AT_ONCE_BELOW, CoachMark } from '../components/edit/CoachMa
 import { EditNotices } from '../components/edit/EditNotices';
 import { EditRoom, type EditRoomHandle } from '../components/edit/EditRoom';
 import { EditToolbar } from '../components/edit/EditToolbar';
+import { WalletChip } from '../components/coins/WalletChip';
 import { InventoryDrawer } from '../components/edit/InventoryDrawer';
 import { PiecesList } from '../components/edit/PiecesList';
 import { useMyKip } from '../lib/kip/myKip';
@@ -102,6 +103,26 @@ function Editor({ cosmetics, params, navigation }: { cosmetics: Cosmetics; param
   // Opening the editor marks everything shown as seen (Spec B §4); the New tab keeps its snapshot (ruling 15).
   useEffect(() => { void markCosmeticsSeen(cosmetics.fresh.map((f) => f.itemId)); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The store's counts follow a purchase made from this editor's shop (ruling 36): new copies join the New tab and,
+  // being shown, are marked seen, as opening the editor marks what it shows.
+  const shownCounts = useRef(cosmetics.counts);
+  useEffect(() => {
+    if (cosmetics.counts === shownCounts.current) return;
+    const before = shownCounts.current;
+    shownCounts.current = cosmetics.counts;
+    const grew = Object.keys(cosmetics.counts).filter((id) => (cosmetics.counts[id] ?? 0) > (before[id] ?? 0));
+    dispatch({ type: 'counts', counts: cosmetics.counts, grew });
+    if (grew.length) void markCosmeticsSeen(grew);
+  }, [cosmetics.counts]);
+
+  // The room grew while the editor was open (spec §7, ruling 19), from Room sizes over it: rebase the draft onto the
+  // server's bigger room, so Done saves against the new version. The grow's body is published whole by the store
+  // (applyCosmeticsBody), so the mark-seen above can't drop it (Task 11 carry M7).
+  useEffect(() => {
+    if (cosmetics.tier === state.tier || cosmetics.version <= state.baseVersion) return;
+    dispatch({ type: 'rebased', saved: { layout: cosmetics.layout, worn: cosmetics.worn }, version: cosmetics.version, tier: cosmetics.tier, counts: cosmetics.counts });
+  }, [cosmetics.tier, cosmetics.version]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const changed = isChanged(state);
   // Cancel, the Android back button and a dismiss gesture all ask first when something changed (one confirm, P30).
   // While a save is in flight nothing leaves: Cancel is disabled and a dismiss is held without asking.
@@ -174,8 +195,12 @@ function Editor({ cosmetics, params, navigation }: { cosmetics: Cosmetics; param
     <SafeAreaView className="flex-1 bg-background">
       <View className="flex-row items-center justify-between px-4 pb-1 pt-1">
         <Button testID="edit-cancel" variant="ghost" disabled={saving} onPress={cancel}>{ROOM_COPY.cancel}</Button>
-        <PageTitle>{ROOM_COPY.edit.title}</PageTitle>
-        <Button testID="edit-done" disabled={!changed || saving} loading={saving} onPress={() => void save()}>{ROOM_COPY.done}</Button>
+        <PageTitle className="shrink text-center">{ROOM_COPY.edit.title}</PageTitle>
+        {/* The wallet and Done shrink and wrap before the title loses its room on a narrow phone. */}
+        <View testID="edit-header-right" className="shrink flex-row flex-wrap items-center justify-end gap-2">
+          <WalletChip testID="edit-wallet" />
+          <Button testID="edit-done" disabled={!changed || saving} loading={saving} onPress={() => void save()}>{ROOM_COPY.done}</Button>
+        </View>
       </View>
       <Text testID="edit-count" accessibilityLabel={ROOM_COPY.edit.countLabel(n, cosmetics.cap)} className="px-4 pb-2 text-caption text-muted-foreground">
         {ROOM_COPY.edit.count(n, cosmetics.cap)}
@@ -194,7 +219,8 @@ function Editor({ cosmetics, params, navigation }: { cosmetics: Cosmetics; param
           <EditToolbar state={state} dispatch={act} showGrid={showGrid} onToggleGrid={() => setShowGrid((v) => !v)} />
           {/* The guided first placement (spec §11.1): just above the drawer the lantern comes from. */}
           <CoachMark state={state} dispatch={act} placeAtOnce={height < COACH_PLACE_AT_ONCE_BELOW} />
-          <InventoryDrawer state={state} dispatch={act} room={roomRef} colour={me.colour} counters={cosmetics.counters} maxHeight={scrollHeight} onDragChange={setDrawerDrag} />
+          <InventoryDrawer state={state} dispatch={act} room={roomRef} colour={me.colour} counters={cosmetics.counters} maxHeight={scrollHeight} onDragChange={setDrawerDrag}
+            onOpenShop={() => navigation.navigate('CoinShop')} onOpenSizes={() => navigation.navigate('RoomSizes', { from: 'editor' })} />
           <PiecesList state={state} dispatch={act} />
         </ScrollView>
       </View>

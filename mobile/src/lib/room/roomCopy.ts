@@ -1,10 +1,13 @@
 // Every string of KIP's room (spec 2026-10-14 KIP's room): item and set names, unlock lines (the Cat boards'
 // wording), decorate mode, the toasts. Spoken forms carry no "·" and no Roman numerals (ruling 19).
+import type { FirstWeekTaskKey } from '../../api/coins';
 import type { AchievementsSnapshot } from '../achievementsStore';
 import type { AchievementFamilyName, SetId, UnlockRule } from './catalogue';
-import { catalogueSet } from './catalogue';
+import { CATALOGUE, catalogueSet } from './catalogue';
 import type { ItemId } from './loadout';
 import type { RoomSlot, WornSlot } from './catalogue';
+
+const EARN = CATALOGUE.earnAmounts;
 
 export const ITEM_NAMES: Readonly<Record<ItemId, string>> = {
   'wall.plain': 'Plain slate', 'wall.dots': 'Dots', 'wall.stripes': 'Tinted stripes', 'wall.brick': 'Brick',
@@ -28,6 +31,9 @@ export const ITEM_NAMES: Readonly<Record<ItemId, string>> = {
   'rug.slate': 'Slate rug', 'rug.red': 'Red rug', 'rug.gymmat': 'Gym mat', 'rug.checker': 'Checker rug',
   'rug.woven': 'Round woven', 'rug.tatami': 'Tatami mat',
   'pet.bed': 'Pet bed',
+  // The coin shop's own pieces (spec 2026-10-15 §4, F6, C1).
+  'item.radio': 'Old radio', 'corner.gnome': 'Gnome', 'corner.cone': 'Traffic cone', 'corner.pumpkin': 'Pumpkin',
+  'item.candle': 'Candle', 'art.neonheart': 'Neon heart sign',
   'out.beanie': 'Beanie', 'out.cap': 'Cap', 'out.sweatband': 'Sweatband', 'out.bucket': 'Bucket hat',
   'out.hachimaki': 'Hachimaki headband', 'out.beret': 'Beret', 'out.party': 'Party hat', 'out.round': 'Round glasses',
   'out.scarf': 'Scarf', 'out.bowtie': 'Bow tie', 'out.earbuds': 'Earbuds', 'out.phones': 'Headphones',
@@ -77,6 +83,7 @@ export function unlockLine(rule: UnlockRule): string {
   const r = setRule(rule);
   switch (r.kind) {
     case 'starter': return 'In every room from day one';
+    case 'shop': return 'From the coin shop';
     case 'family': return `${FAMILY_NAMES[r.family]} · ${ROMAN[r.level]}`;
     case 'anyFamily': return `Any family · level ${ROMAN[r.level]}`;
     case 'counter': return r.counter === 'recaps_read' ? `Read ${r.atLeast} weekly recaps` : `Cheer a buddy ${r.atLeast} times`;
@@ -121,6 +128,11 @@ export function progressFromAchievements(snapshot: AchievementsSnapshot, counter
   const levels: Partial<Record<AchievementFamilyName, number>> = {};
   if (snapshot.state.status === 'ready') for (const f of snapshot.state.data.families) levels[f.family] = f.level;
   return { levels, ...counters };
+}
+
+/** 1500 → "1,500": the wallet's number, with no locale data needed. */
+export function coinCount(n: number): string {
+  return String(Math.trunc(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
 export const ROOM_COPY = {
@@ -201,7 +213,8 @@ export const ROOM_COPY = {
       { lead: 'Badge families.', body: 'Sleep goal, Steady bedtime, Step goal, Check-in, Best recovery week, Every day logged and Steadiest month each unlock pieces at levels 1 to 5.' },
       { lead: 'Any family.', body: 'Trophies, the rainbow rug and KIP’s crown come from reaching a level in any family.' },
       { lead: 'Recaps and buddies.', body: 'Reading weekly recaps and cheering buddies add decor and whole sets.' },
-      { lead: null, body: 'Nothing is sold. The starter room is yours from day one, and items are never taken away.' },
+      { lead: 'KIP coins.', body: 'Healthy days earn coins, up to 60 a day. The coin shop turns them into new pieces and extra copies.' },
+      { lead: null, body: 'Nothing is sold for money: coins come only from healthy days. The starter room is yours from day one, and items are never taken away.' },
     ],
   },
   drawer: {
@@ -218,6 +231,10 @@ export const ROOM_COPY = {
     replaceDesk: 'Replace desk',
     more: 'Show more',
     less: 'Show less',
+    /** The header's way to the coin shop (spec §5.4, §6.6). */
+    shop: 'Coin shop',
+    /** The header's way to Room sizes, so a room can grow at any time, not only when full (ruling PF-F5). */
+    sizes: 'Room sizes',
     tile: {
       piece: (name: string, n: number, isNew: boolean) => `${name}, ${n ? `${n} in inventory` : 'all placed'}${isNew ? ', new' : ''}`,
       style: (name: string, current: boolean) => (current ? `${name}, in your room` : `${name}. Use it`),
@@ -227,6 +244,7 @@ export const ROOM_COPY = {
     full: {
       text: (cap: number) => `KIP's room is full. ${cap} pieces fit this room. Store something to make space, or grow the room`,
       store: 'Store a piece',
+      sizes: 'See room sizes',
       hint: 'Tap a piece in the room, then Store.',
     },
     applyConfirm: (name: string) => `Store everything and set up ${name}?`,
@@ -235,9 +253,175 @@ export const ROOM_COPY = {
     previewing: (name: string) => `Previewing ${name}`,
     stopPreview: 'Stop preview',
   },
+  /** KIP coins (spec 2026-10-15 §6.7, C1, F6): the wallet, the history and coins landing. Never a price in money. */
+  coins: {
+    walletLabel: (n: string) => `${n} KIP coins. Open coin history`,
+    historyTitle: 'Coin history',
+    close: 'Close',
+    earnedToday: (earned: number, cap: number) => `Earned today · ${earned} of ${cap}`,
+    earnedTodaySpoken: (earned: number, cap: number) => `Earned today, ${earned} of ${cap}`,
+    capLine: 'A daily cap keeps it about habits, not grinding.',
+    kinds: {
+      sleep_goal: 'Hit your sleep goal', steps: 'Hit your step goal', checkin: 'Morning check-in', recap: 'Read your weekly recap',
+      cheer_given: 'You cheered a room', cheer_got: 'A buddy cheered your room', challenge: 'Entered the room challenge',
+      firstweek: 'First-week bonus', buy: 'Coin shop', expand: 'Your room grew',
+    },
+    /** A kind this build does not know yet (a later phase's source): neutral, never another kind's label. */
+    kindUnknown: 'KIP coins',
+    /** The short line under the room when coins land (spec §6.7): what happened, never a value. */
+    landed: {
+      sleep_goal: 'Sleep goal hit', steps: 'Step goal hit', checkin: 'Checked in', recap: 'Weekly recap read',
+      cheer_given: 'Room cheered', cheer_got: 'Your room got a cheer', challenge: 'Challenge entered', firstweek: 'First-week bonus',
+      buy: 'Coin shop', expand: 'Your room grew',
+    },
+    /** A row from today, on the device's 24-hour clock: "Today, 07:12". */
+    today: (hours: number, minutes: number) => `Today, ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`,
+    yesterday: 'Yesterday',
+    days: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+    months: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+    /** An older row's day: "Mon 9 Nov". */
+    dated: (day: string, date: number, month: string) => `${day} ${date} ${month}`,
+    /** The row's amount on screen: "+20", "−150", or "+0 · daily cap" for an earn the cap held at 0. */
+    amount: (n: number, capped: boolean) => `${n < 0 ? `−${-n}` : `+${n}`}${capped ? ' · daily cap' : ''}`,
+    /** The same, read aloud (ruling PF-COPY): words for the sign, no "·", and the cap was reached. */
+    amountSpoken: (n: number, capped: boolean) => `${n < 0 ? `minus ${-n} coins` : `plus ${n} coins`}${capped ? ', daily cap reached' : ''}`,
+    rowSpoken: (label: string, when: string, amount: string) => `${label}, ${when}, ${amount}`,
+    howTitle: 'How to earn',
+    how: [
+      `Sleep goal +${EARN.sleep_goal}`, `Step goal +${EARN.steps}`, `Recap read +${EARN.recap}`, `Check-in +${EARN.checkin}`,
+    ],
+    loadMore: 'Load more',
+    loadMoreFailed: "Couldn't load more just now. Tap Load more to try again.",
+    empty: 'No coins yet. Healthy days earn them: a sleep goal, a step goal, a check-in, a weekly recap.',
+    shop: 'Coin shop',
+    loadFailed: "Couldn't load your coins just now. Check your connection and try again.",
+    retry: 'Try again',
+    bubble: (n: number) => `+${n}!`,
+    landLine: (what: string, more: number) => (more > 0 ? `${what} and ${more} more` : what),
+    landSpoken: (n: number, what: string) => `Plus ${n} coins. ${what}`,
+  },
+  /** The coin shop (spec 2026-10-15 §6.6, C1, F6). Prices are coins only (ruling 11). */
+  shop: {
+    title: 'Coin shop',
+    sub: 'A new featured set every Monday',
+    close: 'Close',
+    tabsLabel: 'Coin shop',
+    tabs: { all: 'All', floor: 'Floor', wall: 'Wall', onTop: 'On top' },
+    thisWeek: 'This week',
+    sets: { cosyAutumn: 'Cosy autumn', greenCorner: 'Green corner', deskDay: 'Desk day', brightNight: 'Bright night' } as Readonly<Record<string, string>>,
+    /** A set this build doesn't know yet (a newer server's): neutral, never the raw id. */
+    setUnknown: 'Featured',
+    setLine: (name: string, n: number) => `${name} set · ${n} pieces · this week`,
+    setSpoken: (name: string, n: number) => `${name} set, ${n} pieces, this week`,
+    seeSet: 'See the set',
+    seeAll: 'See everything',
+    tile: (name: string, price: string, owned: number) => `${name}, ${price} coins${owned ? `, ${owned} owned` : ''}`,
+    tileLocked: (name: string, rule: string) => `${name}, locked. ${rule}`,
+    owned: (n: number) => `×${n} owned`,
+    where: {
+      anywhere: 'Shelf, desk or floor', floor: 'Floor', onTop: 'Shelf or desk', wall: 'Wall',
+      tiles: (w: number, d: number) => (w * d === 1 ? '1 tile' : `${w} × ${d} tiles`),
+      tilesSpoken: (w: number, d: number) => (w * d === 1 ? '1 tile' : `${w} by ${d} tiles`),
+      /** "Floor · 4 × 4 tiles", and read aloud "Floor, 4 by 4 tiles" (ruling PF-F10). */
+      line: (place: string, tiles: string) => `${place} · ${tiles}`,
+      spoken: (place: string, tiles: string) => `${place}, ${tiles}`,
+    },
+    have: (balance: string, after: string) => `You have ${balance} · ${after} after`,
+    haveSpoken: (balance: string, after: string) => `You have ${balance}, ${after} after`,
+    haveOnly: (balance: string) => `You have ${balance}`,
+    goes: 'Goes to your inventory',
+    get: (price: string) => `Get for ${price}`,
+    needs: (n: string) => `Needs ${n} more`,
+    notNow: 'Not now',
+    /** A rule piece not earned yet (spec §6.5): its rule on screen, and read aloud with words, never "·" or a Roman
+     * numeral (ruling PF-F6). */
+    locked: (rule: string) => `Earn it first: ${rule}`,
+    lockedSpoken: (rule: string) => `Earn it first: ${rule}`,
+    bought: (name: string) => `${name} is in your inventory.`,
+    short: 'Not enough coins for that yet.',
+    notForSale: "That piece isn't in the shop just now.",
+    failed: "Couldn't get it just now. Try again.",
+    loadFailed: "Couldn't open the shop just now. Check your connection and try again.",
+    retry: 'Try again',
+    footer: 'Coins come from healthy days only. They can’t be bought.',
+  },
+  /** Room sizes and the unlock moment (spec 2026-10-15 §7, C2, F5). Effect slots join in P3 (ruling 14). */
+  sizes: {
+    title: 'Room sizes',
+    sub: 'Coins and a streak, both',
+    close: 'Close',
+    names: { 1: 'Starter', 2: 'Bigger', 3: 'Loft' } as Readonly<Record<1 | 2 | 3, string>>,
+    size: (n: number) => `${n} × ${n}`,
+    sizeSpoken: (n: number) => `${n} by ${n}`,
+    /** A size's row heading: "Bigger · 8 × 8", read aloud "Bigger, 8 by 8". */
+    row: (name: string, size: string) => `${name} · ${size}`,
+    rowSpoken: (name: string, size: string) => `${name}, ${size}`,
+    pieces: (cap: number, window: boolean) => (window ? `${cap} pieces · second window` : `${cap} pieces`),
+    piecesSpoken: (cap: number, window: boolean) => (window ? `${cap} pieces, second window` : `${cap} pieces`),
+    yours: 'YOURS',
+    coinsTitle: (price: string) => `${price} coins`,
+    of: (have: string, need: string) => `${have} of ${need}`,
+    streakTitle: (days: number) => `A ${days}-day check-in streak`,
+    badgeTitle: (level: number) => `Sleep goal badge, level ${level}`,
+    levelNow: (level: number) => `level ${level} now`,
+    noLevel: 'No level yet',
+    /** The badges couldn't be read: a gate's progress is never guessed as 0 (ruling T13-FIX M2). */
+    unknown: 'not known yet',
+    done: 'Done',
+    gateSpoken: (title: string, progress: string) => `${title}, ${progress}`,
+    grow: (n: number) => `Grow to ${n} × ${n}`,
+    growSpoken: (n: number) => `Grow to ${n} by ${n}`,
+    needs: (parts: readonly string[]) => `Needs ${parts.join(' and ')}.`,
+    moreCoins: (n: string) => `${n} more coins`,
+    moreDays: (n: number) => (n === 1 ? '1 more day in a row' : `${n} more days in a row`),
+    badgeNeed: (level: number) => `the sleep goal badge, level ${level}`,
+    both: "Coins alone never buy space, and a streak alone doesn't either.",
+    previewLabel: (n: number) => `Your room at ${n} by ${n}. The dashed rows are the new floor`,
+    grownLabel: (n: number) => `Your room at ${n} by ${n}`,
+    moreRoom: 'MORE ROOM!',
+    newFloor: 'NEW FLOOR',
+    newWall: 'NEW WALL',
+    grewTitle: 'Your room grew',
+    grewWhy: (tier: 2 | 3, price: string, gate: number) =>
+      (tier === 2 ? `${price} coins and ${gate} days of check-ins in a row.` : `${price} coins and the sleep goal badge, level ${gate}.`),
+    grewMore: (pieces: number, window: boolean) => `+1 row each side · +${pieces} pieces${window ? ' · a second window' : ''}`,
+    grewMoreSpoken: (pieces: number, window: boolean) => `One more row each side, ${pieces} more pieces${window ? ', and a second window' : ''}`,
+    stored: (n: number) => `The new window needed the wall: ${n} ${n === 1 ? 'piece' : 'pieces'} went to your inventory`,
+    place: 'Place things',
+    later: 'Later',
+    notYet: 'Not quite yet: your room sizes were refreshed.',
+    failed: "Couldn't grow the room just now. Try again.",
+    loadFailed: "Couldn't open your room sizes just now. Check your connection and try again.",
+    retry: 'Try again',
+  },
+  /**
+   * The first-week list (spec 2026-10-15 §11.2, C7). The next size's dashed rows are drawn on Room sizes only (plan
+   * ruling 15), so the next line names that screen (ruling PF-F12).
+   */
+  firstWeek: {
+    title: 'First week',
+    head: (day: number, done: number) => `Day ${day} of 7 · ${done} of 7 done`,
+    /** The section label above already says "First week", so it is spoken once (ruling T14-FIX). */
+    headSpoken: (day: number, done: number) => `Day ${day} of 7, ${done} of 7 done`,
+    tasks: {
+      checkin: 'First check-in', place: 'Place your first piece', sleep: 'Hit your sleep goal', fern: 'Get a fern in the coin shop',
+      cheer: "Cheer a buddy's room", recap: 'Read your first weekly recap', streak7: '7 check-ins in a row',
+    } as Readonly<Record<FirstWeekTaskKey, string>>,
+    reward: (n: number, bonus: boolean) => `${n < 0 ? `−${-n}` : `+${n}`}${bonus ? ' bonus' : ''}`,
+    rowSpoken: (task: string, done: boolean, n: number, bonus: boolean) =>
+      `${task}, ${done ? 'done' : 'not yet'}, ${n < 0 ? `costs ${-n} coins` : `plus ${n} coins${bonus ? ' bonus' : ''}`}`,
+    /** `n` is the next size's side (TIERS[next.tier].n), drawn "8 × 8" and read "8 by 8". */
+    next: (n: number, coins: string, streak: number) => `Next: ${n} × ${n} · ${coins} coins and a ${streak}-day check-in streak. See the next size in Room sizes.`,
+    nextSpoken: (n: number, coins: string, streak: number) => `Next: ${n} by ${n}, ${coins} coins and a ${streak}-day check-in streak. See the next size in Room sizes.`,
+    done: '✓',
+    notDone: '○',
+    shop: 'Coin shop',
+    sizes: 'Room sizes',
+  },
   welcome: {
     bubble: 'WELCOME HOME!',
     text: "This is KIP's room. Make it yours: drag pieces in, flip them, stack them.",
+    coins: 'Healthy days earn coins, and coins turn into things for the room.',
     lanternName: 'A welcome lantern',
     lanternLine: 'Free · in your inventory · glows at night',
     lanternSpoken: 'A welcome lantern. Free, in your inventory, glows at night',

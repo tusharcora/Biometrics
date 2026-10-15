@@ -6,7 +6,7 @@
 import { catalogueItem, catalogueSet, GEOMETRY_DEPS, isoOf, type CatalogueSet } from '../catalogue';
 import type { KipWorn, ItemId } from '../loadout';
 import type { WornSlot } from '../catalogue';
-import { capFor, validateLayout, type Placement, type RoomLayout, type StyleKey, type Tier } from '../iso/geometry';
+import { capFor, checkPiece, coveredBy, validateLayout, type Placement, type RoomLayout, type StyleKey, type Tier } from '../iso/geometry';
 import { isoGrid } from '../iso/grid';
 import { childrenOf, deskOf, inventoryOf, layoutKey, newPieceId } from '../layout';
 import { COACH_ITEM, coachTile, nearestFloor, nearestFree, placedAt, refusal, roomCentre, targetPoint, type Refused, type Target } from './targets';
@@ -89,6 +89,10 @@ export type EditorAction =
   | { type: 'coach'; step: null }
   | { type: 'clearOutcome' }
   | { type: 'refreshed'; draft: Draft; version: number; counts: Readonly<Record<ItemId, number>>; tier: Tier }
+  /** The room grew while the editor was open (spec §7, ruling 19): the server's bigger room is the new base. */
+  | { type: 'rebased'; saved: Draft; version: number; tier: Tier; counts: Readonly<Record<ItemId, number>> }
+  /** The store's counts while the editor is open (ruling 36), with the pieces whose count grew. */
+  | { type: 'counts'; counts: Readonly<Record<ItemId, number>>; grew: readonly ItemId[] }
   | { type: 'saving' }
   | { type: 'saveFailed' }
   | { type: 'saved'; draft: Draft; version: number };
@@ -371,6 +375,36 @@ function reduce(s: EditorState, a: EditorAction): EditorState {
       return { ...s, outcome: null };
     case 'refreshed':
       return { ...s, saved: a.draft, draft: a.draft, past: [], future: [], counts: a.counts, tier: a.tier, baseVersion: a.version, notice: 'refreshed', selected: null, preview: null, outcome: null };
+    case 'rebased': {
+      // The draft keeps its own changes but loses what the server stored (gone from its room) and any wall piece the
+      // new size's window covers (the server's own rule, coveredBy, ruling PF-F4), with what stood on them. A piece
+      // the server kept that the draft moved under the window goes back to the server's place for it, if that place
+      // is still free in the draft (ruling T13-FIX M4). Undo can't reach back past the new base.
+      const server = new Map(a.saved.layout.pieces.map((p) => [p.id, p]));
+      const gone = new Set(s.saved.layout.pieces.filter((p) => !server.has(p.id)).map((p) => p.id));
+      const back = new Map<string, Placement>();
+      for (const id of coveredBy(layout, a.tier, GEOMETRY_DEPS)) {
+        const mine = layout.pieces.find((p) => p.id === id);
+        // What stands on a covered piece follows it: back with it, or gone with it.
+        if (gone.has(id) || !mine || mine.layer === 'onTop') continue;
+        const theirs = server.get(id);
+        if (theirs) back.set(id, theirs);
+        else gone.add(id);
+      }
+      let pieces = layout.pieces.filter((p) => !gone.has(p.id) && !(p.parent !== undefined && gone.has(p.parent)));
+      for (const [id, theirs] of back) {
+        const rest: RoomLayout = { ...layout, pieces: pieces.filter((p) => p.id !== id) };
+        if (!checkPiece(rest, theirs, a.tier, GEOMETRY_DEPS)) pieces = pieces.map((p) => (p.id === id ? theirs : p));
+        else pieces = pieces.filter((p) => p.id !== id && p.parent !== id);
+      }
+      return {
+        ...s, saved: a.saved, draft: { ...s.draft, layout: { ...layout, pieces } }, past: [], future: [], tier: a.tier, counts: a.counts,
+        baseVersion: a.version, selected: null, nudging: false, preview: null, outcome: null,
+      };
+    }
+    case 'counts':
+      // The store's counts while the editor is open (ruling 36): a piece bought meanwhile joins the New tab.
+      return { ...s, counts: a.counts, newIds: [...s.newIds, ...a.grew.filter((id) => !s.newIds.includes(id))] };
     case 'saving':
       // A save clears the last notice (ruling T12-CARRY): the same failure again is a new line, which Android's live
       // region announces again.

@@ -1,12 +1,12 @@
+import fs from 'fs';
+import path from 'path';
 import { prisma } from '../../src/db/client';
 import { connection } from '../../src/sync/queue';
 import { migrateTestDb } from '../setupTestDb';
-import { authHeaderFor } from '../helpers/auth';
-import { api, buddyUser } from '../buddies/helpers';
-import { EMPTY_WORN, STARTER_ROOM } from '../../src/cosmetics/catalogue';
+import { STARTER_ROOM } from '../../src/cosmetics/catalogue';
 import { ownedFrom, readRoom } from '../../src/cosmetics/loadout';
 import { layoutFromSlots } from '../../src/room/convert';
-import { convertRoomLayouts } from '../../scripts/convert-room-layouts';
+import { convertRoomLayouts, layoutForRow } from '../../scripts/convert-room-layouts';
 
 beforeAll(() => migrateTestDb());
 afterAll(async () => {
@@ -14,22 +14,29 @@ afterAll(async () => {
   await connection.quit();
 });
 
-it('converts every Spec B row once, gives the same layout the lazy GET would, and is idempotent (spec §2.4)', async () => {
-  const quiet = jest.spyOn(console, 'info').mockImplementation(() => {});
-  const a = await buddyUser();
-  const b = await buddyUser();
-  for (const u of [a, b]) {
-    await prisma.cosmeticLoadout.create({ data: { userId: u.id, room: { ...STARTER_ROOM, plant: 'plant.cactus' }, worn: { ...EMPTY_WORN }, version: 2 } });
-  }
-  const first = await convertRoomLayouts(1);
-  expect(first.converted).toBeGreaterThanOrEqual(2);
-  expect((await convertRoomLayouts()).converted).toBe(0);
-  const gotA = (await (await api()).get('/me/cosmetics').set(await authHeaderFor(a.id))).body;
-  const rowA = await prisma.cosmeticLoadout.findUnique({ where: { userId: a.id } });
-  expect(gotA.layout).toEqual(rowA!.layout);
-  const unlocks = await prisma.cosmeticUnlock.findMany({ where: { userId: a.id }, select: { itemId: true } });
-  expect(rowA!.layout).toEqual(layoutFromSlots(readRoom(rowA!.room, ownedFrom(unlocks))));
-  expect(gotA.layout.pieces.find((p: { id: string }) => p.id === 'plant').item).toBe('plant.cactus');
-  expect(rowA!.version).toBe(2);
-  quiet.mockRestore();
+it('the drop migration dropped `room` and made `layout` required (spec §2.4)', async () => {
+  const cols = await prisma.$queryRaw<Array<{ column_name: string; is_nullable: string }>>`
+    SELECT column_name, is_nullable FROM information_schema.columns
+    WHERE table_schema = current_schema() AND table_name = 'CosmeticLoadout'`;
+  expect(cols.find((c) => c.column_name === 'room')).toBeUndefined();
+  expect(cols.find((c) => c.column_name === 'layout')!.is_nullable).toBe('NO');
+});
+
+it('the migration raises before it drops anything while a row still needs converting', () => {
+  const sql = fs.readFileSync(path.join(__dirname, '../../prisma/migrations/20261017120000_drop_slot_room/migration.sql'), 'utf8');
+  expect(sql.indexOf('RAISE EXCEPTION')).toBeGreaterThan(-1);
+  expect(sql.indexOf('RAISE EXCEPTION')).toBeLessThan(sql.indexOf('DROP COLUMN'));
+  expect(sql).toMatch(/"layout" IS NULL/);
+});
+
+it('converts nothing, and never fails, once the column is gone', async () => {
+  expect(await convertRoomLayouts()).toEqual({ converted: 0, skipped: 0 });
+});
+
+it('converts a Spec B room from its sanitised slots, exactly as the lazy GET did in P1', () => {
+  const room = { ...STARTER_ROOM, plant: 'plant.cactus', rug: 'rug.red' }; // the rug is not owned
+  const layout = layoutForRow(room, []);
+  expect(layout).toEqual(layoutFromSlots(readRoom(room, ownedFrom([]))));
+  expect(layout.pieces.find((p) => p.id === 'rug')!.item).toBe('rug.slate');
+  expect(layout.pieces.find((p) => p.id === 'plant')!.item).toBe('plant.cactus');
 });

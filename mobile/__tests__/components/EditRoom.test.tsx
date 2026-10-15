@@ -215,3 +215,16 @@ describe('panning (spec §5.6)', () => {
     expect(JSON.parse(s.getByTestId('edit-room-view').props.offset)).toEqual({ x: 0, y: 0 });
   });
 });
+
+it('re-centres on the desk when the tier, the width or the height changes (P2-CARRY, ruling 20)', () => {
+  const s = render(<EditRoom {...props} dispatch={jest.fn()} />);
+  const offset = () => JSON.parse(s.getByTestId('edit-room-view').props.offset);
+  expect(offset()).toEqual(initialPan(STATE, W, H));
+  const grown = { ...STATE, tier: 3 as const };
+  s.rerender(<EditRoom {...props} dispatch={jest.fn()} state={grown} />);
+  expect(offset()).toEqual(initialPan(grown, W, H));
+  s.rerender(<EditRoom {...props} dispatch={jest.fn()} state={grown} width={320} />);
+  expect(offset()).toEqual(initialPan(grown, 320, H));
+  s.rerender(<EditRoom {...props} dispatch={jest.fn()} state={grown} width={320} height={260} />);
+  expect(offset()).toEqual(initialPan(grown, 320, 260));
+});

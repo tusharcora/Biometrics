@@ -8,8 +8,6 @@ export interface CosmeticsDTO {
   catalogueVersion: number;
   owned: string[];
   fresh: Array<{ itemId: string; source: string }>;
-  /** Spec B's slot room, derived by the server until P2; the app reads `layout`. */
-  room?: Record<string, string | null>;
   layout: unknown;
   tier: number;
   cap: number;

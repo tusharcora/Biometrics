@@ -161,6 +161,8 @@ type ButtonBaseProps = Omit<PressableProps, 'style' | 'children'> & {
   variant?: ButtonVariant | null;
   className?: string;
   style?: StyleProp<ViewStyle>;
+  /** React 19 passes `ref` as a prop, so it reaches the pressable through the spread (e.g. to move a screen reader's focus). */
+  ref?: React.Ref<View>;
   /** A string is wrapped in a Text with the variant's label classes; anything else renders as-is. */
   children?: React.ReactNode;
   /** Shown before the label (shadcn's data-icon="inline-start"). Replaced by the spinner while loading. */

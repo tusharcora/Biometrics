@@ -31,6 +31,9 @@ import { RecapBuilderScreen } from '../screens/RecapBuilderScreen';
 import { RecapScreen } from '../screens/RecapScreen';
 import { RecapStoryScreen } from '../screens/RecapStoryScreen';
 import { DecorateRoomScreen } from '../screens/DecorateRoomScreen';
+import { CoinHistoryScreen } from '../screens/CoinHistoryScreen';
+import { CoinShopScreen } from '../screens/CoinShopScreen';
+import { RoomSizesScreen } from '../screens/RoomSizesScreen';
 import type { DecorateParams } from '../lib/room/edit/editor';
 import { RecapsScreen } from '../screens/RecapsScreen';
 import { SocialStoryScreen } from '../screens/SocialStoryScreen';
@@ -119,6 +122,13 @@ export type RootStackParamList = {
   // The free-build editor (spec 2026-10-15 §5), full screen: from Decorate, a long-press on the room, a toast or a
   // celebration (drawer on New), or the welcome card.
   DecorateRoom: DecorateParams | undefined;
+  // Coin history (spec 2026-10-15 §6.7): the native sheet, from any wallet chip; from the shop it has no shop button.
+  CoinHistory: { from?: 'shop' } | undefined;
+  // The coin shop (spec 2026-10-15 §6.6), full screen: from the editor drawer's Coin shop and the coin history's.
+  CoinShop: undefined;
+  // Room sizes (spec 2026-10-15 §7), full screen: from the editor drawer's Room sizes, the room-full card and the
+  // first-week card.
+  RoomSizes: { from?: 'editor' } | undefined;
   // Build your recap: a recap's own format plus Year in pixels, or Year in pixels alone.
   RecapBuilder: { id?: string; format: ShareFormat };
   YearInPixels: undefined;
@@ -269,6 +279,11 @@ export function RootNavigator() {
                 // Full screen with no system swipe: Cancel (or Android back) asks first when something changed.
                 options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }}
               />
+              <Stack.Screen name="CoinHistory" component={CoinHistoryScreen} options={{ headerShown: false, presentation: 'modal' }} />
+              {/* Full screen with no system swipe: Close is disabled while a purchase waits on the server. */}
+              <Stack.Screen name="CoinShop" component={CoinShopScreen} options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }} />
+              {/* Full screen with no system swipe: Close is disabled while a grow waits on the server. */}
+              <Stack.Screen name="RoomSizes" component={RoomSizesScreen} options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }} />
               <Stack.Screen name="Recaps" component={RecapsScreen} options={{ title: 'Your recaps' }} />
               <Stack.Screen name="YearInPixels" component={YearInPixelsScreen} options={{ title: 'Year in pixels' }} />
               <Stack.Screen name="Badges" component={BadgesScreen} options={{ title: 'Badges' }} />

@@ -5,6 +5,8 @@ import * as SecureStore from 'expo-secure-store';
 import { act, fireEvent, render, waitFor } from '@testing-library/react-native';
 import { fetchCoachStatus } from '../../src/api/coach';
 import { CoachScreen } from '../../src/screens/CoachScreen';
+import { fetchCoins, fetchFirstWeek, postCoinsSeen } from '../../src/api/coins';
+import { getCoins, resetCoins } from '../../src/lib/coins/coinsStore';
 
 // The mocks (api, navigation, RoomView, the room's score and sleep reads) live in jest-mocks/coachScreenHarness.
 jest.mock('expo-secure-store', () => ({ getItemAsync: jest.fn(), setItemAsync: jest.fn() }));
@@ -203,4 +205,82 @@ it('passes Reduce Motion to the room (loops off)', async () => {
   const s = await openChat();
   fireEvent(s.getByTestId('kip-room-frame-inner'), 'layout', { nativeEvent: { layout: { width: 323, height: 200, x: 0, y: 0 } } });
   await waitFor(() => expect(s.getByTestId('kip-room').props.room).toMatch(/:still:/));
+});
+
+// Coins that wait for KIP's bubble (ruling PF-F13): a shrunk card shows no bubble, so nothing is marked seen.
+const UNSEEN = {
+  balance: 385, today: { earned: 20, cap: 60 }, next: null,
+  events: [{ kind: 'sleep_goal', amount: 20, at: '2026-11-11T07:12:00.000Z', seen: false }],
+};
+const measureRoom = (s: ReturnType<typeof render>) =>
+  fireEvent(s.getByTestId('kip-room-frame-inner'), 'layout', { nativeEvent: { layout: { width: 323, height: 240, x: 0, y: 0 } } });
+
+describe('coins land only once KIP\'s bubble can show (ruling PF-F13)', () => {
+  afterEach(() => resetCoins());
+
+  it('with the card shrunk, nothing lands and nothing is marked seen; expanding it lands them', async () => {
+    (fetchCoins as jest.Mock).mockResolvedValue(UNSEEN);
+    prefs.readKipRoomShrunk.mockResolvedValue(true);
+    const s = await openChat();
+    await waitFor(() => expect(s.queryByTestId('kip-room-card')).toBeNull());
+    await act(async () => { mockNav.focus(); });
+    expect(getCoins()!.events[0]!.seen).toBe(false);
+    expect(postCoinsSeen).not.toHaveBeenCalled();
+    fireEvent.press(s.getByTestId('kip-room-thumbnail'));
+    measureRoom(s);
+    await waitFor(() => expect(s.getByTestId('coins-landed')).toHaveTextContent('Sleep goal hit'));
+    expect(s.getByTestId('kip-room').props.room.split(':')[2]).toBe('+20!');
+    expect(postCoinsSeen).toHaveBeenCalledWith('2026-11-11T07:12:00.000Z');
+  });
+
+  it('with the card scrolled under the collapsed header, nothing lands or is marked seen; back at the top they land (ruling T12-VIEW)', async () => {
+    (fetchCoins as jest.Mock).mockResolvedValue(UNSEEN);
+    // Hold the first landing until the page has scrolled: the stored choice is read only after.
+    let answer!: (v: boolean) => void;
+    prefs.readKipRoomShrunk.mockReturnValue(new Promise<boolean>((r) => { answer = r; }));
+    const s = await openChat();
+    layOut(s);
+    measureRoom(s);
+    await scrollTo(s, 400);
+    expect(s.getByTestId('kip-collapsed-header')).toBeTruthy();
+    await act(async () => { answer(false); });
+    await act(async () => { mockNav.focus(); });
+    expect(s.queryByTestId('coins-landed')).toBeNull();
+    expect(postCoinsSeen).not.toHaveBeenCalled();
+    expect(getCoins()!.events[0]!.seen).toBe(false);
+    await scrollTo(s, 0);
+    await waitFor(() => expect(s.getByTestId('coins-landed')).toHaveTextContent('Sleep goal hit'));
+    expect(postCoinsSeen).toHaveBeenCalledWith('2026-11-11T07:12:00.000Z');
+  });
+
+  it('a P1 user\'s first P2 open: the first-placement +10 lands though the first coins read caught up before day 1 (final review I1)', async () => {
+    // GET /me/coins answers without the bonus: under PF-F3 only GET /me/firstweek sets day 1, and it runs alongside.
+    (fetchCoins as jest.Mock).mockResolvedValueOnce({ ...UNSEEN, balance: 375, events: [] });
+    (fetchFirstWeek as jest.Mock).mockResolvedValueOnce({
+      open: true, day: 1, done: 1, next: { tier: 2, coins: 600, streak: 14 },
+      tasks: ['checkin', 'place', 'sleep', 'fern', 'cheer', 'recap', 'streak7'].map((key) => ({ key, done: key === 'place', reward: 5 })),
+    });
+    (fetchCoins as jest.Mock).mockResolvedValueOnce({ ...UNSEEN, events: [{ kind: 'firstweek', amount: 10, at: '2026-11-11T09:00:00.000Z', seen: false }] });
+    prefs.readKipRoomShrunk.mockResolvedValue(false);
+    const s = await openChat();
+    measureRoom(s);
+    await waitFor(() => expect(s.getByTestId('coins-landed')).toHaveTextContent('First-week bonus'));
+    expect(s.getByTestId('kip-room').props.room.split(':')[2]).toBe('+10!');
+    expect(fetchCoins).toHaveBeenCalledTimes(2);
+    expect(postCoinsSeen).toHaveBeenCalledWith('2026-11-11T09:00:00.000Z');
+  });
+
+  it('holds the coins until the stored shrink choice is read, so a shrunk card never marks them seen first', async () => {
+    let answer!: (v: boolean) => void;
+    prefs.readKipRoomShrunk.mockReturnValue(new Promise<boolean>((r) => { answer = r; }));
+    (fetchCoins as jest.Mock).mockResolvedValue(UNSEEN);
+    const s = await openChat();
+    measureRoom(s);
+    await act(async () => undefined);
+    expect(s.queryByTestId('coins-landed')).toBeNull();
+    await act(async () => { answer(true); });
+    expect(s.queryByTestId('kip-room-card')).toBeNull();
+    expect(postCoinsSeen).not.toHaveBeenCalled();
+    expect(getCoins()!.events[0]!.seen).toBe(false);
+  });
 });

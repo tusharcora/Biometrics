@@ -1,4 +1,4 @@
-import React, { forwardRef, useImperativeHandle, useMemo, useRef, useState } from 'react';
+import React, { forwardRef, useEffect, useImperativeHandle, useMemo, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { Canvas, Group, Picture } from '@shopify/react-native-skia';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
@@ -70,6 +70,15 @@ export const EditRoom = forwardRef<EditRoomHandle, EditRoomProps>(function EditR
   const panRef = useRef(pan);
   const panStart = useRef(pan);
   const setPan = (next: { x: number; y: number }) => { panRef.current = next; setPanState(next); };
+  // A refresh or a grow that changes the tier, or a new width or height (rotation, split view), re-centres the room on
+  // the desk (P1 ledger P2-CARRY, ruling 20): an old pan may be past the new room's edges.
+  const centredFor = useRef({ tier: state.tier, width, height });
+  useEffect(() => {
+    const was = centredFor.current;
+    if (was.tier === state.tier && was.width === width && was.height === height) return;
+    centredFor.current = { tier: state.tier, width, height };
+    setPan(initialPan(state, width, height));
+  }, [state.tier, width, height]); // eslint-disable-line react-hooks/exhaustive-deps
   const [drag, setDrag] = useState<Drag | null>(null);
   const dragRef = useRef<Drag | null>(null);
   const lastKey = useRef<string | null>(null);

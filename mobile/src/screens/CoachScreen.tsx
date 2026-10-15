@@ -27,6 +27,8 @@ import { CoachMessageRow } from '../components/coach/CoachMessageRow';
 import { ErrorCard } from '../components/coach/ErrorCard';
 import { ConversationsSheet } from '../components/coach/ConversationsSheet';
 import { RoomCard } from '../components/coach/RoomCard';
+import { FirstWeekCard } from '../components/coins/FirstWeekCard';
+import { WalletChip } from '../components/coins/WalletChip';
 import { COLLAPSED_ROW_HEIGHT, CollapsedKipHeader, collapseProgress } from '../components/coach/CollapsedKipHeader';
 import { KipStateCard } from '../components/coach/KipStateCard';
 import { DEFAULT_THINKING_TEXT } from '../lib/thinkingText';
@@ -34,6 +36,7 @@ import { useCoachStatusContext } from '../lib/coachStatus/CoachStatusProvider';
 import { useTodayScene } from '../lib/home/useTodayScene';
 import { KIP_COPY } from '../lib/kipCopy';
 import { hasUnseen, useCosmetics } from '../lib/room/cosmeticsStore';
+import { loadCoins, loadFirstWeek } from '../lib/coins/coinsStore';
 import { useDecorateOpen } from '../lib/room/decorateOpen';
 import { COACH_ITEM } from '../lib/room/edit/targets';
 import { ROOM_COPY } from '../lib/room/roomCopy';
@@ -56,6 +59,9 @@ type Phase = 'loading' | 'unavailable' | 'needs-consent' | 'ready';
 
 // How long the steps checklist stays up, all ticked, once the answer starts (spec §5).
 const STEPS_LINGER_MS = 300;
+
+// A focus re-reads the coins and the first-week list only when the last read is at least this old (ruling T12-FIX).
+export const COINS_REREAD_MS = 30_000;
 
 // How close to the bottom (pt) still counts as reading the latest message.
 const NEAR_BOTTOM = 80;
@@ -156,10 +162,13 @@ export function CoachScreen() {
   // stored one is read wins over it.
   const [shrunk, setShrunk] = useState(false);
   const shrunkChosen = useRef(false);
+  // Until the stored choice is read the card may be about to shrink, so coins wait to land (ruling PF-F13).
+  const [shrunkKnown, setShrunkKnown] = useState(false);
   useEffect(() => {
     let live = true;
     void readKipRoomShrunk().then((v) => {
       if (live && !shrunkChosen.current) setShrunk(v);
+      if (live) setShrunkKnown(true);
     });
     return () => {
       live = false;
@@ -322,13 +331,27 @@ export function CoachScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Coins land on the next look at the KIP page (spec §6.7), and the first-week card follows (§11.2): read on open and
+  // on a focus at least COINS_REREAD_MS after the last read (ruling T12-FIX), so quick tab hops send no requests. The
+  // reads catch up on earns server-side.
+  const coinsReadAt = useRef(0);
+  const readCoins = useCallback(() => {
+    coinsReadAt.current = Date.now();
+    void loadCoins();
+    void loadFirstWeek();
+  }, []);
+  useEffect(() => {
+    readCoins();
+  }, [readCoins]);
+
   // The tab stays mounted while the user visits consent and comes back.
   useEffect(() => {
     const unsubscribe = navigation.addListener?.('focus', () => {
       void load();
+      if (Date.now() - coinsReadAt.current >= COINS_REREAD_MS) readCoins();
     });
     return unsubscribe;
-  }, [navigation, load]);
+  }, [navigation, load, readCoins]);
 
   // A turn that got through settles an unverified status (the coach is there)
   // and clears offline.
@@ -492,6 +515,7 @@ export function CoachScreen() {
       recovery={day.recovery}
       reduceMotion={reduceMotion}
       paused={decorating}
+      holdCoins={!shrunkKnown || collapsed === 'in'}
       onOpenRecovery={openRecovery}
       onDecorate={openDecorate}
       onPlaceLantern={placeLantern}
@@ -508,7 +532,9 @@ export function CoachScreen() {
           </Button>
         </View>
       }
-    />
+    >
+      <FirstWeekCard />
+    </RoomCard>
   );
 
   const ready = phase === 'ready' && !statusUnverified;
@@ -548,8 +574,10 @@ export function CoachScreen() {
           {statusLine}
         </Text>
       </View>
-      {/* Decorate is always there; Conversations and New chat wait for the coach to be ready. */}
-      <View className="flex-row gap-2">
+      {/* The wallet (once the coins have loaded) and Decorate are always there; Conversations and New chat wait for
+          the coach to be ready. They shrink and wrap before the title loses its room on a narrow phone. */}
+      <View testID="kip-header-actions" className="shrink flex-row flex-wrap justify-end gap-2">
+        <WalletChip testID="kip-wallet" />
         <Button testID="kip-decorate-button" variant="outline" size="icon-lg" accessibilityLabel={decorateLabel} onPress={openDecorate}>
           <Ionicons name="color-palette-outline" size={buttonIconSize('icon-lg')} color={colors.foreground} />
           {unseen ? <View testID="kip-decorate-dot" pointerEvents="none" className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary" /> : null}

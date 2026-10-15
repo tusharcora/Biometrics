@@ -1,10 +1,11 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../src/db/client';
 import { connection } from '../../src/sync/queue';
 import { migrateTestDb } from '../setupTestDb';
 import { authHeaderFor } from '../helpers/auth';
 import { api, buddyUser } from '../buddies/helpers';
-import { EMPTY_WORN, STARTER_ROOM } from '../../src/cosmetics/catalogue';
-import { slotsFromLayout, starterLayout } from '../../src/room/convert';
+import { EMPTY_WORN } from '../../src/cosmetics/catalogue';
+import { starterLayout } from '../../src/room/convert';
 import { level } from './helpers';
 
 beforeAll(() => migrateTestDb());
@@ -17,7 +18,6 @@ beforeEach(() => { quiet = jest.spyOn(console, 'info').mockImplementation(() => 
 afterEach(() => quiet.mockRestore());
 
 const SOON = new Date(Date.now() - 1000);
-const room = (over: Record<string, string | null> = {}) => ({ ...STARTER_ROOM, ...over });
 const worn = (over: Record<string, string | null> = {}) => ({ ...EMPTY_WORN, ...over });
 async function me() {
   const user = await buddyUser();
@@ -31,7 +31,7 @@ describe('GET /me/cosmetics', () => {
     expect(res.status).toBe(200);
     expect(res.headers['cache-control']).toBe('private, no-store');
     expect(res.body).toEqual({
-      catalogueVersion: 1, owned: expect.any(Array), fresh: [], room: slotsFromLayout(starterLayout()), worn: { ...EMPTY_WORN }, version: 0,
+      catalogueVersion: 1, owned: expect.any(Array), fresh: [], worn: { ...EMPTY_WORN }, version: 0,
       counters: { recapsRead: 0, buddyCheers: 0 }, layout: starterLayout(), tier: 1, cap: 40, counts: expect.any(Object), welcomed: false,
     });
     expect(res.body.owned).toHaveLength(19);
@@ -46,11 +46,11 @@ describe('GET /me/cosmetics', () => {
     expect(res.body.fresh[0]).toEqual({ itemId: expect.any(String), source: expect.any(String) });
   });
 
-  it('reads a stored slot naming an item the user no longer owns as the starter piece', async () => {
+  it('reads a stored worn piece the user does not own as nothing worn', async () => {
     const { user, headers } = await me();
-    await prisma.cosmeticLoadout.create({ data: { userId: user.id, room: room({ rug: 'rug.red', corner: 'corner.bag' }), worn: worn({ head: 'out.crown' }), version: 2 } });
+    await prisma.cosmeticLoadout.create({ data: { userId: user.id, layout: starterLayout() as unknown as Prisma.InputJsonValue, worn: worn({ head: 'out.crown' }), version: 2 } });
     const res = await (await api()).get('/me/cosmetics').set(headers);
-    expect([res.body.room.rug, res.body.room.corner, res.body.worn.head, res.body.version]).toEqual(['rug.slate', null, null, 2]);
+    expect([res.body.worn.head, res.body.version, res.body.layout]).toEqual([null, 2, starterLayout()]);
   });
 
   it('needs a session', async () => {

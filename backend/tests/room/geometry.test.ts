@@ -1,4 +1,4 @@
-import { capFor, checkPiece, exitTile, footOf, parseLayout, placedCounts, seatTile, toTier, validateLayout, windowsOn, wrongLayer, type RoomLayout } from '../../src/room/geometry';
+import { capFor, checkPiece, coveredBy, exitTile, footOf, parseLayout, placedCounts, seatTile, toTier, validateLayout, windowsOn, wrongLayer, type RoomLayout } from '../../src/room/geometry';
 import { starterLayout } from '../../src/room/convert';
 import { deps, piece, withPieces } from './helpers';
 
@@ -54,6 +54,21 @@ describe('checkPiece', () => {
     expect(windowsOn('wallR', 2)).toEqual([]);
     const l = withPieces(piece('a', 'art.mountain', { layer: 'wallR', x: 12, y: 6 }));
     expect([check(l, 'a', 3), check(l, 'a', 2)]).toEqual([{ reason: 'window' }, null]);
+  });
+
+  it('coveredBy: the wall pieces a size\'s windows cover, with what stands on them, and nothing else (spec §7, PF-F4)', () => {
+    // The loft's window is half-tiles 12–16, steps 5–13. The plank (and the books on it) and one picture overlap it;
+    // a picture right beside it, one right below it and one on the left wall stay.
+    const l = withPieces(
+      piece('plank', 'shelf.plank', { layer: 'wallR', x: 12, y: 13 }),
+      piece('b', 'art.mountain', { layer: 'wallR', x: 14, y: 7 }),
+      piece('a', 'art.mountain', { layer: 'wallR', x: 8, y: 6 }),
+      piece('d', 'art.heart', { layer: 'wallR', x: 14, y: 1 }),
+      piece('c', 'art.calendar', { layer: 'wallL', x: 0, y: 9 }),
+    );
+    expect([...coveredBy(l, 3, deps)].sort()).toEqual(['b', 'plank', 'shelf']);
+    expect([...coveredBy(l, 2, deps)]).toEqual([]);
+    expect([...coveredBy(starterLayout(), 3, deps)]).toEqual([]);
   });
 
   it('stacking: a free spot of a parent with a surface, one level only', () => {

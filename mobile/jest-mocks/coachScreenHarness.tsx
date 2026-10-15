@@ -37,6 +37,13 @@ jest.mock('../src/lib/useKeyboardVisible', () => ({ useKeyboardVisible: jest.fn(
 // The room card's reads (useTodayScene): no scores and no night unless a test says otherwise.
 jest.mock('../src/api/scores', () => ({ ...jest.requireActual('../src/api/scores'), fetchScoresWithBands: jest.fn() }));
 jest.mock('../src/api/sleep', () => ({ ...jest.requireActual('../src/api/sleep'), fetchSleep: jest.fn() }));
+// The KIP page loads coins and the first-week list on focus (Task 12): no real HTTP from Jest.
+jest.mock('../src/api/coins', () => ({
+  fetchCoins: jest.fn(async () => ({ balance: 0, today: { earned: 0, cap: 60 }, events: [], next: null })),
+  postCoinsSeen: jest.fn(async () => undefined),
+  fetchFirstWeek: jest.fn(async () => ({ open: false })),
+  fetchShop: jest.fn(), postPurchase: jest.fn(), postExpand: jest.fn(),
+}));
 jest.mock('../src/components/room/RoomView', () => require('./RoomView'));
 
 /** The navigation the screen sees: `params` is the route's, `focus()` fires the tab's focus listeners. */

@@ -4,10 +4,10 @@ import { AccessibilityInfo, Alert, Dimensions, Platform } from 'react-native';
 import { State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 import { ApiError } from '../../src/api/client';
-import { fetchCosmetics, putCosmetics } from '../../src/api/cosmetics';
+import { fetchCosmetics, postCosmeticsSeen, putCosmetics } from '../../src/api/cosmetics';
 import { EDIT_CELL_PT, initialPan } from '../../src/components/edit/EditRoom';
 import { DecorateRoomScreen, EDIT_ROOM_HEIGHT, editRoomHeight, initialState } from '../../src/screens/DecorateRoomScreen';
-import { getCosmetics, loadCosmetics, markCosmeticsSeen, resetCosmetics } from '../../src/lib/room/cosmeticsStore';
+import { applyCosmeticsBody, applyPurchase, getCosmetics, loadCosmetics, markCosmeticsSeen, resetCosmetics } from '../../src/lib/room/cosmeticsStore';
 import { LIFT_PT, targetOf } from '../../src/lib/room/edit/drag';
 import { decorateTarget } from '../../src/lib/room/announce';
 import { initEditor } from '../../src/lib/room/edit/editor';
@@ -17,6 +17,7 @@ import { drawIsoStatic, pieceAt } from '../../src/lib/room/iso/room';
 import { starterLayout } from '../../src/lib/room/layout';
 import { EMPTY_WORN } from '../../src/lib/room/loadout';
 import { useDecorateOpen } from '../../src/lib/room/decorateOpen';
+import { resetCoins, setCoinBalance } from '../../src/lib/coins/coinsStore';
 import { cosmeticsDTO, STARTER_COUNTS } from '../../jest-mocks/cosmeticsFixture';
 
 jest.mock('../../src/components/room/RoomView', () => require('../../jest-mocks/RoomView'));
@@ -42,7 +43,30 @@ async function openEditor(params?: object, dto = cosmeticsDTO({ version: 2 })) {
   return s;
 }
 
-beforeEach(() => { jest.clearAllMocks(); resetCosmetics(); });
+beforeEach(() => { jest.clearAllMocks(); resetCosmetics(); resetCoins(); });
+
+it('shows the wallet in the editor\'s header (spec §5.2)', async () => {
+  setCoinBalance(360);
+  const s = await openEditor();
+  expect(s.getByTestId('edit-wallet').props.accessibilityLabel).toBe('360 KIP coins. Open coin history');
+  expect(String(s.getByTestId('edit-header-right').props.className).split(' ')).toEqual(expect.arrayContaining(['shrink', 'flex-wrap', 'justify-end']));
+});
+
+it('a piece bought from the editor\'s shop appears in the drawer with NEW and is marked seen (ruling 36)', async () => {
+  const s = await openEditor();
+  fireEvent.press(s.getByTestId('drawer-shop'));
+  expect(mockNav.navigate).toHaveBeenCalledWith('CoinShop');
+  await act(async () => { applyPurchase('item.radio', { ...STARTER_COUNTS, 'item.radio': 1 }); });
+  fireEvent.press(s.getByTestId('drawer-tab-new'));
+  expect(s.getByTestId('drawer-tile-item.radio')).toBeTruthy();
+  expect(postCosmeticsSeen).toHaveBeenCalledWith(['item.radio']);
+});
+
+it('the drawer header opens Room sizes from the editor (ruling PF-F5)', async () => {
+  const s = await openEditor();
+  fireEvent.press(s.getByTestId('drawer-sizes'));
+  expect(mockNav.navigate).toHaveBeenCalledWith('RoomSizes', { from: 'editor' });
+});
 
 /** The chair's exit tile in window points (the jest stand-in for measureInWindow leaves the room's origin at 0, 0). */
 function seatExit() {
@@ -624,5 +648,49 @@ describe('the guided first placement (spec §11.1)', () => {
     fireEvent.press(s.getByTestId('edit-grid')); // the overlay is drawn again, now on step 2
     expect(s.getByTestId('coach-step')).toHaveTextContent('Step 2 of 3');
     expect(lime).not.toHaveBeenCalled();
+  });
+});
+
+describe('the room grows while the editor is open (spec §7, ruling 19)', () => {
+  it('growing the room from the editor keeps the draft, re-centres, and Done saves at the new version (Review Focus 4)', async () => {
+    const s = await openEditor();
+    fireEvent.press(s.getByTestId('drawer-tile-plant.cactus'));
+    fireEvent.press(s.getByTestId('drawer-place'));
+    await act(async () => { applyCosmeticsBody(cosmeticsDTO({ tier: 2, cap: 60, version: 3 })); });
+    expect(s.getByTestId('edit-count')).toHaveTextContent('8 / 60 in room');
+    const room = s.getByTestId('edit-room-view');
+    const grown = initEditor({ layout: starterLayout(), worn: EMPTY_WORN, tier: 2, counts: STARTER_COUNTS, version: 3, newIds: [] });
+    expect([room.props.tier, JSON.parse(room.props.offset)]).toEqual([2, initialPan(grown, Dimensions.get('window').width, editRoomHeight(Dimensions.get('window').height))]);
+    (putCosmetics as jest.Mock).mockResolvedValue(cosmeticsDTO({ tier: 2, cap: 60, version: 4 }));
+    await act(async () => { fireEvent.press(s.getByTestId('edit-done')); });
+    const sent = (putCosmetics as jest.Mock).mock.calls[0]![0];
+    expect([sent.version, sent.layout.pieces.some((p: { item: string }) => p.item === 'plant.cactus')]).toEqual([3, true]);
+  });
+
+  it('a grow whose body brings a new copy still lands after the editor marks it seen (Task 11 carry M7)', async () => {
+    const s = await openEditor();
+    // The grow's body also holds a copy bought meanwhile: the editor marks it seen, which moves the read epoch, and
+    // the grown room must stay.
+    const body = cosmeticsDTO({ tier: 2, cap: 60, version: 3, counts: { ...STARTER_COUNTS, 'item.radio': 1 }, fresh: [{ itemId: 'item.radio', source: 'buy' }] });
+    await act(async () => { applyCosmeticsBody(body); });
+    expect(postCosmeticsSeen).toHaveBeenCalledWith(['item.radio']);
+    expect([getCosmetics()!.tier, getCosmetics()!.version]).toEqual([2, 3]);
+    expect(s.getByTestId('edit-room-view').props.tier).toBe(2);
+    expect(s.getByTestId('edit-count')).toHaveTextContent('7 / 60 in room');
+    // A read that answers late with the small room never brings it back.
+    (fetchCosmetics as jest.Mock).mockResolvedValue(cosmeticsDTO({ version: 2 }));
+    await act(async () => { await loadCosmetics(); });
+    expect([getCosmetics()!.tier, s.getByTestId('edit-room-view').props.tier]).toEqual([2, 2]);
+  });
+
+  it('a newer room of the same size leaves the draft and its version alone', async () => {
+    const s = await openEditor();
+    fireEvent.press(s.getByTestId('drawer-tile-plant.cactus'));
+    fireEvent.press(s.getByTestId('drawer-place'));
+    await act(async () => { applyCosmeticsBody(cosmeticsDTO({ version: 3 })); });
+    expect(s.getByTestId('edit-count')).toHaveTextContent('8 / 40 in room');
+    (putCosmetics as jest.Mock).mockResolvedValue(cosmeticsDTO({ version: 3 }));
+    await act(async () => { fireEvent.press(s.getByTestId('edit-done')); });
+    expect((putCosmetics as jest.Mock).mock.calls[0]![0].version).toBe(2);
   });
 });

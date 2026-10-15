@@ -2,7 +2,8 @@
   "version": 1,
   "releases": [
     1,
-    3
+    3,
+    4
   ],
   "starterRoom": {
     "wallpaper": "wall.plain",
@@ -230,7 +231,9 @@
           6
         ],
         "facings": 1
-      }
+      },
+      "price": 40,
+      "shop": "always"
     },
     {
       "id": "art.mountain",
@@ -469,7 +472,9 @@
           "onTop"
         ],
         "facings": 1
-      }
+      },
+      "price": 30,
+      "shop": "always"
     },
     {
       "id": "shelf.minicactus",
@@ -483,7 +488,9 @@
           "onTop"
         ],
         "facings": 1
-      }
+      },
+      "price": 30,
+      "shop": "always"
     },
     {
       "id": "shelf.trophyB",
@@ -683,7 +690,9 @@
           "onTop"
         ],
         "facings": 1
-      }
+      },
+      "price": 25,
+      "shop": "always"
     },
     {
       "id": "item.sticky",
@@ -697,7 +706,9 @@
           "onTop"
         ],
         "facings": 1
-      }
+      },
+      "price": 25,
+      "shop": "always"
     },
     {
       "id": "item.bottle",
@@ -800,6 +811,8 @@
         ],
         "facings": 1
       },
+      "price": 40,
+      "shop": "always",
       "sets": [
         "cottage"
       ]
@@ -821,7 +834,9 @@
           1
         ],
         "facings": 1
-      }
+      },
+      "price": 40,
+      "shop": "always"
     },
     {
       "id": "plant.monstera",
@@ -842,7 +857,9 @@
           1
         ],
         "facings": 1
-      }
+      },
+      "price": 140,
+      "shop": "always"
     },
     {
       "id": "plant.snake",
@@ -863,7 +880,9 @@
           1
         ],
         "facings": 1
-      }
+      },
+      "price": 100,
+      "shop": "always"
     },
     {
       "id": "plant.succulents",
@@ -942,7 +961,9 @@
           "onTop"
         ],
         "facings": 1
-      }
+      },
+      "price": 60,
+      "shop": "always"
     },
     {
       "id": "lamp.mint",
@@ -1015,7 +1036,9 @@
           1
         ],
         "facings": 1
-      }
+      },
+      "price": 120,
+      "shop": "always"
     },
     {
       "id": "corner.yogamat",
@@ -1099,7 +1122,9 @@
         ],
         "flat": true,
         "facings": 2
-      }
+      },
+      "price": 80,
+      "shop": "always"
     },
     {
       "id": "rug.red",
@@ -1225,7 +1250,9 @@
           1
         ],
         "facings": 1
-      }
+      },
+      "price": 140,
+      "shop": "always"
     },
     {
       "id": "out.beanie",
@@ -1377,7 +1404,9 @@
           ]
         },
         "facings": 1
-      }
+      },
+      "price": 30,
+      "shop": "always"
     },
     {
       "id": "lamp.welcome",
@@ -1398,6 +1427,133 @@
         ],
         "facings": 2
       }
+    },
+    {
+      "id": "item.radio",
+      "slot": "desk_item",
+      "unlock": {
+        "kind": "shop"
+      },
+      "release": 4,
+      "iso": {
+        "layers": [
+          "floor",
+          "onTop"
+        ],
+        "foot": [
+          1,
+          1
+        ],
+        "facings": 1
+      },
+      "price": 150,
+      "shop": "always"
+    },
+    {
+      "id": "corner.gnome",
+      "slot": "corner",
+      "unlock": {
+        "kind": "shop"
+      },
+      "release": 4,
+      "iso": {
+        "layers": [
+          "floor",
+          "onTop"
+        ],
+        "foot": [
+          1,
+          1
+        ],
+        "facings": 1
+      },
+      "price": 80,
+      "shop": "always"
+    },
+    {
+      "id": "corner.cone",
+      "slot": "corner",
+      "unlock": {
+        "kind": "shop"
+      },
+      "release": 4,
+      "iso": {
+        "layers": [
+          "floor",
+          "onTop"
+        ],
+        "foot": [
+          1,
+          1
+        ],
+        "facings": 1
+      },
+      "price": 60,
+      "shop": "always"
+    },
+    {
+      "id": "corner.pumpkin",
+      "slot": "corner",
+      "unlock": {
+        "kind": "shop"
+      },
+      "release": 4,
+      "iso": {
+        "layers": [
+          "floor",
+          "onTop"
+        ],
+        "foot": [
+          1,
+          1
+        ],
+        "facings": 1
+      },
+      "price": 30,
+      "shop": "always"
+    },
+    {
+      "id": "item.candle",
+      "slot": "desk_item",
+      "unlock": {
+        "kind": "shop"
+      },
+      "release": 4,
+      "emissive": true,
+      "iso": {
+        "layers": [
+          "onTop",
+          "floor"
+        ],
+        "foot": [
+          1,
+          1
+        ],
+        "facings": 1
+      },
+      "price": 25,
+      "shop": "always"
+    },
+    {
+      "id": "art.neonheart",
+      "slot": "art",
+      "unlock": {
+        "kind": "shop"
+      },
+      "release": 4,
+      "emissive": true,
+      "iso": {
+        "layers": [
+          "wall"
+        ],
+        "wall": [
+          3,
+          4
+        ],
+        "facings": 1
+      },
+      "price": 200,
+      "shop": "always"
     },
     {
       "id": "set.cottage.wallpaper",
@@ -1764,5 +1920,28 @@
         ]
       }
     }
-  ]
+  ],
+  "tierGates": {
+    "2": {
+      "price": 600,
+      "family": "CHECK_IN",
+      "level": 2,
+      "threshold": 14
+    },
+    "3": {
+      "price": 1500,
+      "family": "SLEEP_GOAL",
+      "level": 3,
+      "threshold": 14
+    }
+  },
+  "earnAmounts": {
+    "sleep_goal": 20,
+    "steps": 15,
+    "checkin": 5,
+    "recap": 10,
+    "cheer": 2,
+    "challenge": 30
+  },
+  "dailyCap": 60
 }

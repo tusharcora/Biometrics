@@ -10,6 +10,8 @@ import { ApiError, markNetworkError } from '../../src/api/client';
 import { answer, doneEvent, openTurn, scriptTurn } from '../../jest-mocks/coachStreamFake';
 import { withCoachStatus } from '../../jest-mocks/coachStatus';
 import { suggestedQuestions } from '../../src/lib/coachToday';
+import { resetCoins, setCoinBalance } from '../../src/lib/coins/coinsStore';
+import { fetchCoins, fetchFirstWeek } from '../../src/api/coins';
 import { TURN_FRAME_MS } from '../../src/lib/useKipTurn';
 
 // The mocks (api, navigation, RoomView, the room's score and sleep reads) live in jest-mocks/coachScreenHarness.
@@ -27,9 +29,53 @@ beforeEach(() => {
 });
 afterEach(() => {
   jest.useRealTimers();
+  // The coins store is a module singleton: a wallet left loaded would leak into the next test.
+  resetCoins();
+  // Back to the harness's closed first-week list, so an open one never leaks into the next test.
+  (fetchFirstWeek as jest.Mock).mockResolvedValue({ open: false });
 });
 
 describe('the KIP page (W7)', () => {
+  it('reads the coins and the first-week list when the page opens and on a focus 30 s or more after the last read (spec §6.7, §11.2, ruling T12-FIX)', async () => {
+    await openChat();
+    const reads = () => [(fetchCoins as jest.Mock).mock.calls.length, (fetchFirstWeek as jest.Mock).mock.calls.length];
+    const [coins, week] = reads();
+    expect(coins).toBeGreaterThanOrEqual(1);
+    expect(week).toBeGreaterThanOrEqual(1);
+    // A quick tab hop reads nothing more.
+    jest.setSystemTime(Date.now() + 29_000);
+    await act(async () => { mockNav.focus(); });
+    expect(reads()).toEqual([coins, week]);
+    jest.setSystemTime(Date.now() + 1_000);
+    await act(async () => { mockNav.focus(); });
+    expect(reads()).toEqual([coins + 1, week + 1]);
+    // The 30 s run from that read.
+    await act(async () => { mockNav.focus(); });
+    expect(reads()).toEqual([coins + 1, week + 1]);
+  });
+
+  it('shows the first-week card in the room card while the list is open (spec §11.2)', async () => {
+    (fetchFirstWeek as jest.Mock).mockResolvedValue({
+      open: true, day: 1, done: 0, next: { tier: 2, coins: 600, streak: 14 },
+      tasks: ['checkin', 'place', 'sleep', 'fern', 'cheer', 'recap', 'streak7'].map((key) => ({ key, done: false, reward: 5 })),
+    });
+    const utils = await openChat();
+    expect(utils.getByTestId('kip-room-card')).toContainElement(utils.getByTestId('first-week'));
+  });
+
+  it('shows the wallet in the header once the coins have loaded; it opens the coin history (spec §6.7, C6)', async () => {
+    resetCoins();
+    (fetchCoins as jest.Mock).mockResolvedValueOnce({ balance: 360, today: { earned: 0, cap: 60 }, events: [], next: null });
+    setCoinBalance(360);
+    const utils = await openChat();
+    const chip = utils.getByTestId('kip-wallet');
+    expect(chip.props.accessibilityLabel).toBe('360 KIP coins. Open coin history');
+    fireEvent.press(chip);
+    expect(mockNav.navigate).toHaveBeenCalledWith('CoinHistory', undefined);
+    // The header's buttons may shrink and wrap, so the title keeps room on a 320-pt phone (ruling T10-FIX).
+    expect(String(utils.getByTestId('kip-header-actions').props.className).split(' ')).toEqual(expect.arrayContaining(['shrink', 'flex-wrap', 'justify-end']));
+  });
+
   it('titles the page KIP with the pocket-room status line and two header buttons', async () => {
     const s = await openChat();
     expect(s.getByRole('header', { name: 'KIP' })).toBeTruthy();
