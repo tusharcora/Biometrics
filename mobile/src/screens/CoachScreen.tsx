@@ -27,6 +27,7 @@ import { CoachMessageRow } from '../components/coach/CoachMessageRow';
 import { ErrorCard } from '../components/coach/ErrorCard';
 import { ConversationsSheet } from '../components/coach/ConversationsSheet';
 import { RoomCard } from '../components/coach/RoomCard';
+import { WalletChip } from '../components/coins/WalletChip';
 import { COLLAPSED_ROW_HEIGHT, CollapsedKipHeader, collapseProgress } from '../components/coach/CollapsedKipHeader';
 import { KipStateCard } from '../components/coach/KipStateCard';
 import { DEFAULT_THINKING_TEXT } from '../lib/thinkingText';
@@ -548,8 +549,10 @@ export function CoachScreen() {
           {statusLine}
         </Text>
       </View>
-      {/* Decorate is always there; Conversations and New chat wait for the coach to be ready. */}
+      {/* The wallet (once the coins have loaded) and Decorate are always there; Conversations and New chat wait for
+          the coach to be ready. */}
       <View className="flex-row gap-2">
+        <WalletChip testID="kip-wallet" />
         <Button testID="kip-decorate-button" variant="outline" size="icon-lg" accessibilityLabel={decorateLabel} onPress={openDecorate}>
           <Ionicons name="color-palette-outline" size={buttonIconSize('icon-lg')} color={colors.foreground} />
           {unseen ? <View testID="kip-decorate-dot" pointerEvents="none" className="absolute right-1.5 top-1.5 h-2 w-2 rounded-full bg-primary" /> : null}

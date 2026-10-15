@@ -17,6 +17,7 @@ import { drawIsoStatic, pieceAt } from '../../src/lib/room/iso/room';
 import { starterLayout } from '../../src/lib/room/layout';
 import { EMPTY_WORN } from '../../src/lib/room/loadout';
 import { useDecorateOpen } from '../../src/lib/room/decorateOpen';
+import { resetCoins, setCoinBalance } from '../../src/lib/coins/coinsStore';
 import { cosmeticsDTO, STARTER_COUNTS } from '../../jest-mocks/cosmeticsFixture';
 
 jest.mock('../../src/components/room/RoomView', () => require('../../jest-mocks/RoomView'));
@@ -42,7 +43,13 @@ async function openEditor(params?: object, dto = cosmeticsDTO({ version: 2 })) {
   return s;
 }
 
-beforeEach(() => { jest.clearAllMocks(); resetCosmetics(); });
+beforeEach(() => { jest.clearAllMocks(); resetCosmetics(); resetCoins(); });
+
+it('shows the wallet in the editor\'s header (spec §5.2)', async () => {
+  setCoinBalance(360);
+  const s = await openEditor();
+  expect(s.getByTestId('edit-wallet').props.accessibilityLabel).toBe('360 KIP coins. Open coin history');
+});
 
 /** The chair's exit tile in window points (the jest stand-in for measureInWindow leaves the room's origin at 0, 0). */
 function seatExit() {

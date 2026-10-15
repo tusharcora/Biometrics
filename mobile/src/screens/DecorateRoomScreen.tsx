@@ -13,6 +13,7 @@ import { COACH_PLACE_AT_ONCE_BELOW, CoachMark } from '../components/edit/CoachMa
 import { EditNotices } from '../components/edit/EditNotices';
 import { EditRoom, type EditRoomHandle } from '../components/edit/EditRoom';
 import { EditToolbar } from '../components/edit/EditToolbar';
+import { WalletChip } from '../components/coins/WalletChip';
 import { InventoryDrawer } from '../components/edit/InventoryDrawer';
 import { PiecesList } from '../components/edit/PiecesList';
 import { useMyKip } from '../lib/kip/myKip';
@@ -175,7 +176,10 @@ function Editor({ cosmetics, params, navigation }: { cosmetics: Cosmetics; param
       <View className="flex-row items-center justify-between px-4 pb-1 pt-1">
         <Button testID="edit-cancel" variant="ghost" disabled={saving} onPress={cancel}>{ROOM_COPY.cancel}</Button>
         <PageTitle>{ROOM_COPY.edit.title}</PageTitle>
-        <Button testID="edit-done" disabled={!changed || saving} loading={saving} onPress={() => void save()}>{ROOM_COPY.done}</Button>
+        <View className="flex-row items-center gap-2">
+          <WalletChip testID="edit-wallet" />
+          <Button testID="edit-done" disabled={!changed || saving} loading={saving} onPress={() => void save()}>{ROOM_COPY.done}</Button>
+        </View>
       </View>
       <Text testID="edit-count" accessibilityLabel={ROOM_COPY.edit.countLabel(n, cosmetics.cap)} className="px-4 pb-2 text-caption text-muted-foreground">
         {ROOM_COPY.edit.count(n, cosmetics.cap)}

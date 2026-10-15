@@ -39,10 +39,14 @@ it('says what Apply set left out and that your desk stayed (ruling T9-FIX)', () 
   expect(ROOM_COPY.set.applied('Cottage', ['a', 'b'], true)).not.toMatch(/·|−/);
 });
 
-it('says nothing is sold, and no string carries a price', () => {
-  expect(ROOM_COPY.arrive.items.at(-1)!.body).toBe('Nothing is sold. The starter room is yours from day one, and items are never taken away.');
-  // JSON.stringify drops the functions, so the composed strings are checked too (ruling 32).
-  const composed = [ROOM_COPY.newFor('x', 2), ROOM_COPY.backfill(3), ROOM_COPY.set.pieces(13, 'y')];
-  expect(composed).toEqual(["New for KIP's room: x and 2 more", "Your badges unlocked 3 things for KIP's room", '13 pieces · y']);
-  for (const s of [JSON.stringify(ROOM_COPY), ...composed]) expect(s).not.toMatch(/\$|£|€|price|buy|coins?\b/i);
+it('never prices anything in money: no currency, no real-money or ad copy (spec §6.1, ruling 11)', () => {
+  const composed = [
+    ROOM_COPY.newFor('x', 2), ROOM_COPY.backfill(3), ROOM_COPY.set.pieces(13, 'y'),
+    ROOM_COPY.coins.walletLabel('1,500'), ROOM_COPY.coins.earnedToday(40, 60), ROOM_COPY.coins.landSpoken(20, 'Sleep goal hit'),
+  ];
+  expect(composed.slice(0, 3)).toEqual(["New for KIP's room: x and 2 more", "Your badges unlocked 3 things for KIP's room", '13 pieces · y']);
+  for (const s of [JSON.stringify(ROOM_COPY), ...composed]) {
+    expect(s).not.toMatch(/[$£€¥]|\b(USD|EUR|GBP)\b|get more coins|buy coins|coin pack|in-app purchase|watch an ad|\bads?\b/i);
+  }
+  expect(ROOM_COPY.arrive.items.at(-1)!.body).toMatch(/^Nothing is sold/);
 });

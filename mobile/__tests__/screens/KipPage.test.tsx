@@ -10,6 +10,8 @@ import { ApiError, markNetworkError } from '../../src/api/client';
 import { answer, doneEvent, openTurn, scriptTurn } from '../../jest-mocks/coachStreamFake';
 import { withCoachStatus } from '../../jest-mocks/coachStatus';
 import { suggestedQuestions } from '../../src/lib/coachToday';
+import { resetCoins, setCoinBalance } from '../../src/lib/coins/coinsStore';
+import { fetchCoins } from '../../src/api/coins';
 import { TURN_FRAME_MS } from '../../src/lib/useKipTurn';
 
 // The mocks (api, navigation, RoomView, the room's score and sleep reads) live in jest-mocks/coachScreenHarness.
@@ -30,6 +32,18 @@ afterEach(() => {
 });
 
 describe('the KIP page (W7)', () => {
+  it('shows the wallet in the header once the coins have loaded; it opens the coin history (spec §6.7, C6)', async () => {
+    resetCoins();
+    (fetchCoins as jest.Mock).mockResolvedValueOnce({ balance: 360, today: { earned: 0, cap: 60 }, events: [], next: null });
+    setCoinBalance(360);
+    const utils = await openChat();
+    const chip = utils.getByTestId('kip-wallet');
+    expect(chip.props.accessibilityLabel).toBe('360 KIP coins. Open coin history');
+    fireEvent.press(chip);
+    expect(mockNav.navigate).toHaveBeenCalledWith('CoinHistory', undefined);
+    resetCoins();
+  });
+
   it('titles the page KIP with the pocket-room status line and two header buttons', async () => {
     const s = await openChat();
     expect(s.getByRole('header', { name: 'KIP' })).toBeTruthy();

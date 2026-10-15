@@ -8,4 +8,4 @@ export const navigationRef = createNavigationContainerRef<RootStackParamList>();
 
 // Routes RootNavigator presents natively as modals (presentation 'modal' / 'fullScreenModal'). An
 // RN Modal presented over one of them is dropped on iOS, so the badge celebration waits them out.
-export const MODAL_ROUTES: ReadonlySet<string> = new Set<keyof RootStackParamList>(['RecapStory', 'DecorateRoom']);
+export const MODAL_ROUTES: ReadonlySet<string> = new Set<keyof RootStackParamList>(['RecapStory', 'DecorateRoom', 'CoinHistory']);

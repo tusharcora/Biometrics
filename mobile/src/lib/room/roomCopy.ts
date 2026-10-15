@@ -127,6 +127,11 @@ export function progressFromAchievements(snapshot: AchievementsSnapshot, counter
   return { levels, ...counters };
 }
 
+/** 1500 → "1,500": the wallet's number, with no locale data needed. */
+export function coinCount(n: number): string {
+  return String(Math.trunc(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
 export const ROOM_COPY = {
   decorate: 'Decorate',
   decorateLabel: "Decorate KIP's room",
@@ -238,6 +243,48 @@ export const ROOM_COPY = {
     applyKeep: 'Not now',
     previewing: (name: string) => `Previewing ${name}`,
     stopPreview: 'Stop preview',
+  },
+  /** KIP coins (spec 2026-10-15 §6.7, C1, F6): the wallet, the history and coins landing. Never a price in money. */
+  coins: {
+    walletLabel: (n: string) => `${n} KIP coins. Open coin history`,
+    historyTitle: 'Coin history',
+    close: 'Close',
+    earnedToday: (earned: number, cap: number) => `Earned today · ${earned} of ${cap}`,
+    earnedTodaySpoken: (earned: number, cap: number) => `Earned today, ${earned} of ${cap}`,
+    capLine: 'A daily cap keeps it about habits, not grinding.',
+    kinds: {
+      sleep_goal: 'Hit your sleep goal', steps: 'Hit your step goal', checkin: 'Morning check-in', recap: 'Read your weekly recap',
+      cheer_given: 'You cheered a room', cheer_got: 'A buddy cheered your room', challenge: 'Entered the room challenge',
+      firstweek: 'First-week bonus', buy: 'Coin shop', expand: 'Your room grew',
+    },
+    /** The short line under the room when coins land (spec §6.7): what happened, never a value. */
+    landed: {
+      sleep_goal: 'Sleep goal hit', steps: 'Step goal hit', checkin: 'Checked in', recap: 'Weekly recap read',
+      cheer_given: 'Room cheered', cheer_got: 'Your room got a cheer', challenge: 'Challenge entered', firstweek: 'First-week bonus',
+      buy: 'Coin shop', expand: 'Your room grew',
+    },
+    /** A row from today, on the device's 24-hour clock: "Today, 07:12". */
+    today: (hours: number, minutes: number) => `Today, ${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`,
+    yesterday: 'Yesterday',
+    days: ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'],
+    months: ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'],
+    /** An older row's day: "Mon 9 Nov". */
+    dated: (day: string, date: number, month: string) => `${day} ${date} ${month}`,
+    /** The row's amount on screen: "+20", "−150", or "+0 · daily cap" for an earn the cap held at 0. */
+    amount: (n: number, capped: boolean) => `${n < 0 ? `−${-n}` : `+${n}`}${capped ? ' · daily cap' : ''}`,
+    /** The same, read aloud (ruling PF-COPY): words for the sign, no "·", and the cap was reached. */
+    amountSpoken: (n: number, capped: boolean) => `${n < 0 ? `minus ${-n} coins` : `plus ${n} coins`}${capped ? ', daily cap reached' : ''}`,
+    rowSpoken: (label: string, when: string, amount: string) => `${label}, ${when}, ${amount}`,
+    howTitle: 'How to earn',
+    how: ['Sleep goal +20', 'Step goal +15', 'Recap read +10', 'Check-in +5'],
+    loadMore: 'Load more',
+    empty: 'No coins yet. Healthy days earn them: a sleep goal, a step goal, a check-in, a weekly recap.',
+    shop: 'Coin shop',
+    loadFailed: "Couldn't load your coins just now. Check your connection and try again.",
+    retry: 'Try again',
+    bubble: (n: number) => `+${n}!`,
+    landLine: (what: string, more: number) => (more > 0 ? `${what} and ${more} more` : what),
+    landSpoken: (n: number, what: string) => `Plus ${n} coins. ${what}`,
   },
   welcome: {
     bubble: 'WELCOME HOME!',
