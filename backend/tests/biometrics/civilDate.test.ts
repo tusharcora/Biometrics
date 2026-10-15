@@ -2,6 +2,7 @@ import {
   isValidTimeZone,
   localCivilDate,
   civilDateToUtcMidnight,
+  localMidnightInstant,
   minutesSinceLocalNoon,
   parseUtcOffsetSeconds,
   sessionEndCivilDate,
@@ -62,6 +63,24 @@ describe('localCivilDate', () => {
 describe('civilDateToUtcMidnight', () => {
   it('returns UTC midnight of the civil date, the recordedAt convention of every other metric', () => {
     expect(civilDateToUtcMidnight('2026-09-02')).toEqual(new Date('2026-09-02T00:00:00Z'));
+  });
+});
+
+describe('localMidnightInstant', () => {
+  it('is the first instant of the civil date on the zone\'s wall clock', () => {
+    expect(localMidnightInstant('2026-11-04', 'Pacific/Auckland')).toEqual(new Date('2026-11-03T11:00:00Z')); // NZDT +13
+    expect(localMidnightInstant('2026-09-03', 'Asia/Kolkata')).toEqual(new Date('2026-09-02T18:30:00Z'));
+    expect(localMidnightInstant('2026-09-02', 'UTC')).toEqual(new Date('2026-09-02T00:00:00Z'));
+  });
+
+  it('follows DST on either side of a transition', () => {
+    // US DST ends 2026-11-01 at 02:00: midnight that day is still PDT (-7), the next is PST (-8).
+    expect(localMidnightInstant('2026-11-01', 'America/Los_Angeles')).toEqual(new Date('2026-11-01T07:00:00Z'));
+    expect(localMidnightInstant('2026-11-02', 'America/Los_Angeles')).toEqual(new Date('2026-11-02T08:00:00Z'));
+  });
+
+  it('falls back to UTC midnight for a zone Intl does not know', () => {
+    expect(localMidnightInstant('2026-09-02', 'Nope/Zone')).toEqual(new Date('2026-09-02T00:00:00Z'));
   });
 });
 

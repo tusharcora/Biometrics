@@ -63,6 +63,15 @@ it('reads the last 8 local days in the user\'s zone: goal nights by the goal in 
   });
 });
 
+it('reads week recaps opened from the local midnight that starts the 8 days, the window every source shares', async () => {
+  const { user } = await coinUser({ timezone: 'Pacific/Auckland' });
+  // The 8 days start 2026-11-04, whose Auckland midnight is 2026-11-03 11:00 UTC (8 x 24 h back would be 11-02 20:30).
+  await weekRecaps(user.id, 1, new Date('2026-11-03T10:59:00.000Z')); // 23:59 on 2026-11-03: outside
+  await weekRecaps(user.id, 1, new Date('2026-11-03T11:00:00.000Z'), 'WEEK', 1); // 00:00 on 2026-11-04: inside
+  const inside = await prisma.recap.findFirstOrThrow({ where: { userId: user.id, openedAt: new Date('2026-11-03T11:00:00.000Z') } });
+  expect((await loadEarnInputs(user.id, NOW, LAUNCH))?.weekRecapOpens).toEqual([{ id: inside.id, day: '2026-11-04' }]);
+});
+
 it('pays every source once, keeps a revised night\'s coins, and stores no health value (spec §6.1, §6.2)', async () => {
   const user = await seededWeek();
   expect(await earnCoins(user.id, NOW, { launchedAt: LAUNCH })).toBe(5);
@@ -70,15 +79,24 @@ it('pays every source once, keeps a revised night\'s coins, and stores no health
   expect(await earnCoins(user.id, NOW, { launchedAt: LAUNCH })).toBe(0);
   await prisma.biometricRecord.updateMany({ where: { userId: user.id, metricType: 'SLEEP', recordedAt: day('2026-11-11') }, data: { value: 300 } });
   expect([await earnCoins(user.id, NOW, { launchedAt: LAUNCH }), await balance(user.id)]).toEqual([0, 70]);
+  const recap = await prisma.recap.findFirstOrThrow({ where: { userId: user.id, kind: 'WEEK', openedAt: { gte: new Date(NOW.getTime() - 2 * 60 * 60 * 1000) } } });
   const rows = await rowsOf(user.id);
-  expect(rows.map((r) => r.sourceKey).sort()).toEqual(expect.arrayContaining(['checkin:2026-11-10', 'sleep_goal:2026-11-09', 'sleep_goal:2026-11-11', 'steps:2026-11-09']));
-  expect(JSON.stringify(rows)).not.toMatch(/480|430|"minutes"|"steps":/);
+  // A row is a kind, a key and an amount (plus ids and instants): the keys carry a civil date or a recap id only.
+  expect(rows.map((r) => [r.kind, r.sourceKey, r.amount]).sort()).toEqual([
+    ['checkin', 'checkin:2026-11-10', 5],
+    ['recap', `recap:${recap.id}`, 10],
+    ['sleep_goal', 'sleep_goal:2026-11-09', 20],
+    ['sleep_goal', 'sleep_goal:2026-11-11', 20],
+    ['steps', 'steps:2026-11-09', 15],
+  ]);
+  for (const r of rows) expect(r.sourceKey).toMatch(/^(sleep_goal|steps|checkin):\d{4}-\d{2}-\d{2}$|^recap:[0-9a-f-]{36}$/);
 });
 
 it('pays nothing dated before the user\'s local launch day, not even a 0 row (spec §6.2 no backpay)', async () => {
   const user = await seededWeek();
-  // 2026-11-10 00:00 UTC is 13:00 on 2026-11-10 in Auckland: the launch day is 2026-11-10.
-  await earnCoins(user.id, NOW, { launchedAt: new Date('2026-11-10T00:00:00.000Z') });
+  // 2026-11-09 12:00 UTC is 01:00 on 2026-11-10 in Auckland: the launch day is 2026-11-10 there, 2026-11-09 in UTC,
+  // so only the zoned launch day keeps the 11-09 night and step day out.
+  await earnCoins(user.id, NOW, { launchedAt: new Date('2026-11-09T12:00:00.000Z') });
   const keys = (await rowsOf(user.id)).map((r) => r.sourceKey);
   expect(keys.some((k) => k.endsWith('2026-11-09'))).toBe(false);
   expect(await balance(user.id)).toBe(35); // the 11-11 night, the 11-10 check-in, the 11-11 recap
@@ -94,9 +112,9 @@ it('parks the coins launch in 2100 under Jest, so suites that never name it writ
 it('uses coinsConfig.launchedAt by default, and a failed earn is logged without values and never throws', async () => {
   const user = await seededWeek();
   const before = coinsConfig.launchedAt;
-  coinsConfig.launchedAt = new Date('2030-01-01T00:00:00.000Z');
+  coinsConfig.launchedAt = LAUNCH;
   try {
-    expect(await earnCoins(user.id, NOW)).toBe(0);
+    expect(await earnCoins(user.id, NOW)).toBe(5);
   } finally {
     coinsConfig.launchedAt = before;
   }

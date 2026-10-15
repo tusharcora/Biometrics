@@ -3,7 +3,7 @@
 // health sync); the check-in is the one self-reported source. No backpay: a source dated before the user's local date
 // of the coins launch writes nothing. An event stores a kind, a key, an amount and a civil date, never a health value.
 // A background earn never starts the first week (ruling PF-F3): this file only writes earns.
-import { civilDateToUtcMidnight, localCivilDateOrUtc, utcMidnightToCivilDate } from '../biometrics/civilDate';
+import { civilDateToUtcMidnight, localCivilDateOrUtc, localMidnightInstant, utcMidnightToCivilDate } from '../biometrics/civilDate';
 import { changeInEffect, goalChangesOf, type GoalChangeRow } from '../achievements/goalHistory';
 import { prisma } from '../db/client';
 import { habitDayForOrUtc } from '../habits/habitDay';
@@ -22,7 +22,6 @@ export const coinsConfig: { launchedAt: Date } = {
 export const EARN_AMOUNTS = { sleep_goal: 20, steps: 15, checkin: 5, recap: 10, cheer: 2, challenge: 30 } as const;
 /** Each run reads this many civil days back (spec §6.3), so a night synced late still pays. */
 export const LOOKBACK_DAYS = 8;
-const DAY_MS = 24 * 60 * 60 * 1000;
 
 export interface EarnInputs {
   /** The user's local civil date of the coins launch: nothing dated before it pays. */
@@ -61,7 +60,8 @@ export async function loadEarnInputs(userId: string, now: Date, launchedAt: Date
     prisma.stepGoalEvent.findMany({ where: { authorId: userId, localDate: { gte: civilDateToUtcMidnight(from) } }, select: { localDate: true } }),
     prisma.habitCheckIn.findMany({ where: { userId, onTime: true, habitDay: { gte: civilDateToUtcMidnight(habitFrom) } }, select: { habitDay: true } }),
     prisma.recap.findMany({
-      where: { userId, kind: 'WEEK', openedAt: { gte: new Date(now.getTime() - LOOKBACK_DAYS * DAY_MS) } },
+      // Opened on or after `from`'s local midnight: the same 8 civil days as every other source.
+      where: { userId, kind: 'WEEK', openedAt: { gte: localMidnightInstant(from, tz) } },
       select: { id: true, openedAt: true },
     }),
   ]);
@@ -80,7 +80,8 @@ export async function loadEarnInputs(userId: string, now: Date, launchedAt: Date
     sleepGoalNights,
     stepGoalDays: steps.map((s) => utcMidnightToCivilDate(s.localDate)).sort(),
     onTimeCheckIns: checkIns.map((c) => utcMidnightToCivilDate(c.habitDay)).sort(),
-    weekRecapOpens: recaps.filter((r) => r.openedAt).map((r) => ({ id: r.id, day: localCivilDateOrUtc(r.openedAt!, tz) })),
+    // The gte bound never matches a null openedAt; the column's type is nullable, hence the assertion.
+    weekRecapOpens: recaps.map((r) => ({ id: r.id, day: localCivilDateOrUtc(r.openedAt as Date, tz) })),
   };
 }
 
