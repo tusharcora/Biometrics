@@ -235,10 +235,19 @@ export function clipOut(rects: readonly RoomRect[], kip: readonly RoomRect[]): R
  * 400 ms tick only picks one, never re-recording them.
  */
 export function drawIsoFrames(s: IsoStatic, c: { night: boolean; colour: KipColour; screen: MonitorScreen }, kip: Rects): [Rects, Rects, Rects] {
+  return drawIsoFramesEach(s, c, [kip, kip, kip]);
+}
+
+/** The three loop frames, each one clipped by KIP's silhouette in that same frame (ruling T10-FIX). */
+export function drawIsoFramesEach(
+  s: IsoStatic,
+  c: { night: boolean; colour: KipColour; screen: MonitorScreen },
+  kips: readonly [Rects, Rects, Rects],
+): [Rects, Rects, Rects] {
   const ctx: ItemContext = { weather: 'clear', night: c.night, colour: c.colour, ramp: kipRamp(KIP_COLOURS[c.colour]), screen: c.screen };
   const out: [Rects, Rects, Rects] = [[], [], []];
   const add = (frames: readonly Rects[] | undefined, dx: number, dy: number, clip: boolean) => {
-    frames?.forEach((f, k) => { const m = moveRects(f, dx, dy); out[k as 0 | 1 | 2].push(...(clip ? clipOut(m, kip) : m)); });
+    frames?.forEach((f, k) => { const m = moveRects(f, dx, dy); out[k as 0 | 1 | 2].push(...(clip ? clipOut(m, kips[k as 0 | 1 | 2]) : m)); });
   };
   add(s.shellFrames ?? undefined, 0, 0, true);
   for (const pp of s.behind) add(pieceLayers(pp.p.item, ctx, pp.o)?.frames, pp.at[0], pp.at[1], true);

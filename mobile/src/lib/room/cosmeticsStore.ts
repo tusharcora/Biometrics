@@ -55,7 +55,7 @@ function fromDTO(dto: CosmeticsDTO): Cosmetics {
   return {
     owned: new Set(dto.owned), fresh: dto.fresh, layout: readLayout(dto.layout), tier,
     cap: typeof dto.cap === 'number' ? dto.cap : capFor(tier), counts: dto.counts ?? {}, worn,
-    version: dto.version, counters: dto.counters,
+    version: dto.version, counters: dto.counters ?? { recapsRead: 0, buddyCheers: 0 },
     // An older server sends no flag: never show the welcome there.
     welcomed: dto.welcomed !== false,
   };

@@ -5,7 +5,8 @@ import { bubbleAnchor, LOOP_MS, RoomView, type RoomViewProps } from '../../src/c
 import { EMPTY_WORN } from '../../src/lib/room/loadout';
 import { starterLayout } from '../../src/lib/room/layout';
 import { isoCrop } from '../../src/lib/room/iso/crop';
-import { drawIsoStatic } from '../../src/lib/room/iso/room';
+import { drawIsoFrames, drawIsoFramesEach, drawIsoStatic, drawKipLayer } from '../../src/lib/room/iso/room';
+import type { RoomRect } from '../../src/lib/room/grid';
 
 let mockFocused = true;
 jest.mock('../../src/lib/useScreenFocused', () => ({ useScreenFocused: () => mockFocused }));
@@ -43,24 +44,38 @@ describe('RoomView (iso)', () => {
     expect(edit.getByTestId('skia-group', { includeHiddenElements: true }).props.skiaTransform).toEqual([{ translateX: -12 }, { translateY: 4 }]);
   });
 
-  it('a pose change keeps the room\'s pictures: KIP and the shown frame (clipped by KIP) are re-recorded', () => {
+  it('a pose change keeps the room\'s pictures: KIP\'s 3 frames and the 3 loop frames (clipped by KIP) are re-recorded, the old ones released', () => {
     const s = render(<RoomView {...PROPS} />);
-    const [back, , front] = pictures(s);
+    const [back, kip, front, frame] = pictures(s);
     const before = picture.mock.calls.length;
     s.rerender(<RoomView {...PROPS} pose="point" mood="glance" />);
     const [back2, , front2] = pictures(s);
     expect([back2, front2]).toEqual([back, front]);
-    // Only the current frame's picture is recorded, keyed on KIP's silhouette (ruling T10 framePictures).
-    expect(picture.mock.calls.length - before).toBe(2);
+    expect(picture.mock.calls.length - before).toBe(6);
+    expect([kip.dispose, frame.dispose].every((d: jest.Mock) => d.mock.calls.length > 0)).toBe(true);
   });
 
-  it('a loop tick records only KIP and that frame, never the room (spec §3.7)', () => {
+  it('a loop tick records nothing: it picks KIP and the loop frame from the pictures it has (ruling T10-FIX)', () => {
     const s = render(<RoomView {...PROPS} />);
-    const [back, , front] = pictures(s);
+    const [back, kip, front, frame] = pictures(s);
     const before = picture.mock.calls.length;
     act(() => { jest.advanceTimersByTime(LOOP_MS); });
-    expect([pictures(s)[0], pictures(s)[2]]).toEqual([back, front]);
-    expect(picture.mock.calls.length - before).toBe(2);
+    const after = pictures(s);
+    expect([after[0], after[2]]).toEqual([back, front]);
+    expect(after[1] !== kip || after[3] !== frame).toBe(true);
+    const seen = new Set([kip, after[1]]);
+    for (let i = 0; i < 6; i++) {
+      act(() => { jest.advanceTimersByTime(LOOP_MS); });
+      seen.add(pictures(s)[1]);
+    }
+    expect(picture.mock.calls.length - before).toBe(0);
+    expect(seen.size).toBeLessThanOrEqual(3); // the same three KIP pictures, picked by frame
+  });
+
+  it('each loop frame behind KIP is clipped by KIP\'s silhouette in that same frame', () => {
+    const kips = [0, 1, 2].map((f) => drawKipLayer({ colour: 'coral', pose: 'type', mood: 'glance', worn: EMPTY_WORN, frame: f }, STATIC.kipSeat)) as [RoomRect[], RoomRect[], RoomRect[]];
+    const each = drawIsoFramesEach(STATIC, { night: false, colour: 'coral', screen: 'dots' }, kips);
+    for (const k of [0, 1, 2] as const) expect(each[k]).toEqual(drawIsoFrames(STATIC, { night: false, colour: 'coral', screen: 'dots' }, kips[k])[k]);
   });
 
   it('a lifted piece rebuilds the room without it, and the old room pictures are released', () => {

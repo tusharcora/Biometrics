@@ -83,6 +83,13 @@ it('reads a body without a layout (an older server) as the starter layout, welco
   expect([getCosmetics()!.layout, getCosmetics()!.welcomed]).toEqual([starterLayout(), true]);
 });
 
+it('reads a body without counters as zero recaps read and zero cheers', async () => {
+  const { counters: _c, ...old } = DTO;
+  get.mockResolvedValue(old);
+  await act(async () => { await loadCosmetics(); });
+  expect(getCosmetics()!.counters).toEqual({ recapsRead: 0, buddyCheers: 0 });
+});
+
 it('a body that is no cosmetics body fails the read and keeps what is shown', async () => {
   get.mockResolvedValueOnce(DTO);
   await act(async () => { await loadCosmetics(); });

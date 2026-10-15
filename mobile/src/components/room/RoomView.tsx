@@ -3,11 +3,12 @@ import { View } from 'react-native';
 import { Canvas, Group, Picture, Skia, createPicture, type SkPicture } from '@shopify/react-native-skia';
 import { Text } from '../ui/text';
 import type { RoomRect } from '../../lib/room/grid';
+import type { Rects } from '../../lib/room/paint';
 import type { MonitorScreen } from '../../lib/room/items';
 import type { KipWorn } from '../../lib/room/loadout';
 import type { RoomWeather } from '../../lib/room/weather';
 import type { KipSeat } from '../../lib/room/iso/room';
-import { drawIsoFrames, drawIsoStatic, drawKipLayer, isoRoomKey, kipLayerKey } from '../../lib/room/iso/room';
+import { drawIsoFramesEach, drawIsoStatic, drawKipLayer, isoRoomKey, kipLayerKey } from '../../lib/room/iso/room';
 import { isoCrop } from '../../lib/room/iso/crop';
 import type { RoomLayout, Tier } from '../../lib/room/iso/geometry';
 import type { KipColour, KipMood, KipPose } from '../../lib/kip/kipArt';
@@ -80,9 +81,9 @@ export function bubbleAnchor(seat: KipSeat): { x: number; y: number } {
 
 // KIP's isometric room (spec 2026-10-15 §3.7). The static room is recorded once per isoRoomKey (the layout, tier,
 // light, KIP's colour and a lifted piece) into two pictures, back and front, so only a pick-up, a drop, the light or
-// the colour rebuilds it. KIP is drawn between them and the loop frame over them; a pose change or a 400 ms tick
-// records only KIP and the frame shown (its loops behind KIP are clipped by KIP's silhouette). The loops stop when
-// the tab is not focused, under Reduce Motion, or while paused.
+// the colour rebuilds it. KIP is drawn between them and the loop frame over them; a pose change records KIP's three
+// frames and the three loop frames (those behind KIP clipped by KIP's silhouette), and a 400 ms tick records
+// nothing. The loops stop when the tab is not focused, under Reduce Motion, or while paused.
 export function RoomView(props: RoomViewProps) {
   const { layout, tier, weather, night, colour, worn, pose, mood, facing, screen, crop, cellPt, bubble, reduceMotion } = props;
   const focused = useScreenFocused();
@@ -96,18 +97,22 @@ export function RoomView(props: RoomViewProps) {
   const back = useDisposed(useMemo(() => record([room.back], cellPt), [room, cellPt]));
   const front = useDisposed(useMemo(() => record([room.front, room.light, room.emissive], cellPt), [room, cellPt]));
 
-  const kip = { colour, pose, mood, worn, frame, ...(facing ? { facing } : {}) };
-  // kipLayerKey leaves the seat out, so the seat (style and position) joins the key: a moved desk re-places KIP.
+  // KIP in all three loop frames at once, keyed without the frame (ruling T10-FIX). kipLayerKey leaves the seat out,
+  // so the seat (style and position) joins the key: a moved desk re-places KIP.
+  const kip = { colour, pose, mood, worn, ...(facing ? { facing } : {}) };
   const seat = room.kipSeat;
-  const kipKey = `${kipLayerKey(kip)}#${seat.style}@${seat.x},${seat.y},${seat.deskSide}`;
-  const kipRects = useMemo(() => drawKipLayer(kip, seat), [kipKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  const kipPicture = useDisposed(useMemo(() => record([kipRects], cellPt), [kipRects, cellPt]));
-
-  // Only the frame shown is recorded, keyed on KIP's silhouette of that frame (ruling T10): kipRects already changes
-  // with the frame, so a tick records one frame picture, never all three.
-  const framePicture = useDisposed(
-    useMemo(() => record([drawIsoFrames(room, { night, colour, screen }, kipRects)[frame as 0 | 1 | 2]], cellPt), [room, screen, kipRects, frame, cellPt]), // eslint-disable-line react-hooks/exhaustive-deps
+  const poseKey = `${kipLayerKey({ ...kip, frame: 0 })}#${seat.style}@${seat.x},${seat.y},${seat.deskSide}`;
+  const kipRects = useMemo(
+    () => [0, 1, 2].map((f) => drawKipLayer({ ...kip, frame: f }, seat)) as [Rects, Rects, Rects],
+    [poseKey], // eslint-disable-line react-hooks/exhaustive-deps
   );
+  // Three KIP pictures and three frame pictures (each loop clipped by KIP's silhouette in that frame), recorded
+  // together per (static room, screen, pose, cell size): the 400 ms tick only picks one of each, recording nothing.
+  const pictures = useMemo(() => {
+    const frames = drawIsoFramesEach(room, { night, colour, screen }, kipRects);
+    return { kip: kipRects.map((r) => record([r], cellPt)), frames: frames.map((r) => record([r], cellPt)) };
+  }, [room, screen, kipRects, cellPt]); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => [...pictures.kip, ...pictures.frames].forEach((p) => p.dispose?.()), [pictures]);
 
   const box = props.box === 'thumb' ? room.thumb : room.focus;
   const offset = props.offset ?? isoCrop({ width: crop.width, height: crop.height, cellPt, box, room: room.grid });
@@ -126,9 +131,9 @@ export function RoomView(props: RoomViewProps) {
       <Canvas style={{ width: crop.width, height: crop.height }}>
         <Group transform={[{ translateX: offset.x }, { translateY: offset.y }]}>
           <Picture picture={back} />
-          <Picture picture={kipPicture} />
+          <Picture picture={pictures.kip[frame]!} />
           <Picture picture={front} />
-          <Picture picture={framePicture} />
+          <Picture picture={pictures.frames[frame]!} />
         </Group>
       </Canvas>
       {bubble ? (
