@@ -53,6 +53,9 @@ if (require.main === module) {
     .then(async (r) => {
       console.log(JSON.stringify({ event: 'room.converted', ...r }));
       await prisma.$disconnect();
+      // The loadout import chain opens queue clients that would keep the process alive, so a deploy step that
+      // waits for this script to finish would hang.
+      process.exit(0);
     })
     .catch(async (err) => {
       console.error(JSON.stringify({ event: 'room.convert_failed', error: err instanceof Error ? err.name : 'Error' }));
