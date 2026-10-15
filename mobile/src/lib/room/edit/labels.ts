@@ -47,6 +47,8 @@ export function reasonText(r: Refused, item: string, layout?: RoomLayout): strin
     case 'nested': return E.reason.parent;
     case 'seat': return E.reason.seat;
     case 'full': return E.reason.full;
+    case 'none': return E.reason.none;
+    case 'sameDesk': return E.reason.sameDesk;
     case 'layer': {
       const layers = isoOf(item)?.layers ?? [];
       if (layers.includes('floor') && layers.includes('onTop')) return E.reason.layer.floorOnTop;

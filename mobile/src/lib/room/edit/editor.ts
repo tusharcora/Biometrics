@@ -278,7 +278,10 @@ export function editorReducer(s: EditorState, a: EditorAction): EditorState {
     case 'replaceDesk': {
       const desk = deskOf(layout);
       const iso = isoOf(a.item);
-      if (!desk || !iso?.kipDesk || desk.item === a.item || !((inventory(s)[a.item] ?? 0) > 0)) return s;
+      if (!desk || !iso?.kipDesk) return s;
+      // Nothing changes either way, but the screen says why (ruling UI-OUTCOMES).
+      if (desk.item === a.item) return refuse(s, { reason: 'sameDesk' }, null, a.item);
+      if (!((inventory(s)[a.item] ?? 0) > 0)) return refuse(s, { reason: 'none' }, null, a.item);
       const next: Placement = { ...desk, item: a.item };
       const spots = iso.surface?.spots.length ?? 0;
       const kept = layout.pieces.filter((p) => !(p.parent === desk.id && (p.spot ?? 0) >= spots)).map((p) => (p.id === desk.id ? next : p));

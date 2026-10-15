@@ -12,7 +12,8 @@ export type Target =
   | { layer: 'onTop'; parent: string; spot: number };
 
 export interface Refused {
-  reason: BadReason | 'layer' | 'full';
+  /** `none` and `sameDesk`: Replace desk with a desk you have none left of, or the one already there (UI-OUTCOMES). */
+  reason: BadReason | 'layer' | 'full' | 'none' | 'sameDesk';
   with?: string;
 }
 

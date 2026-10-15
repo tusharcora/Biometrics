@@ -122,6 +122,15 @@ describe('the toolbar (spec §5.3)', () => {
     expect(inventory(s)['desk.monitor']).toBe(1);
     expect(run(start(), { type: 'replaceDesk', item: 'desk.laptop' }).draft).toEqual(start().draft); // not owned
   });
+
+  it('Replace desk with a desk you have none left of, or the same desk, says why (ruling UI-OUTCOMES)', () => {
+    const none = run(start(), { type: 'replaceDesk', item: 'desk.laptop' });
+    expect(none.outcome).toEqual({ ok: false, refused: { reason: 'none' }, id: null, item: 'desk.laptop' });
+    expect(outcomeText(none)).toEqual({ kind: 'reason', text: 'None left to place' });
+    const same = run(start({ counts: { ...COUNTS, 'desk.monitor': 2 } }), { type: 'replaceDesk', item: 'desk.monitor' });
+    expect([same.draft, same.past.length]).toEqual([start().draft, 0]);
+    expect(outcomeText(same)).toEqual({ kind: 'reason', text: 'That desk is in the room already' });
+  });
 });
 
 describe('undo and redo (spec §5.3: 20 steps)', () => {

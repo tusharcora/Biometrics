@@ -162,6 +162,9 @@ export const ROOM_COPY = {
       parent: 'Nothing can stand on that',
       seat: "Blocks KIP's chair",
       full: 'Room is full',
+      /** Replace desk with a desk you have none left of, or the desk already there (ruling UI-OUTCOMES). */
+      none: 'None left to place',
+      sameDesk: 'That desk is in the room already',
       layer: { floor: 'Only on the floor', wall: 'Only on the wall', onTop: 'Only on a desk or shelf', floorOnTop: 'Only on the floor or a surface' },
     },
   },
@@ -178,16 +181,46 @@ export const ROOM_COPY = {
       return [`${name} set applied.`, missing.length ? `Not yours yet: ${listed}.` : '', deskKept ? 'Your desk stayed.' : ''].filter(Boolean).join(' ');
     },
   },
+  /** The drawer's last section (spec 2026-10-15 §5.4): each line a bold lead (K4b.dc.html:87-89) and its body. */
   arrive: {
     title: 'How new things arrive',
-    lines: [
-      'Badge families. Sleep goal, Steady bedtime, Step goal, Check-in, Best recovery week, Every day logged and Steadiest month each unlock pieces at levels I to V.',
-      'Any family. Trophies, the rainbow rug and KIP’s crown come from reaching a level in any family.',
-      'Recaps and buddies. Reading weekly recaps and cheering buddies add decor and whole sets.',
-      'Nothing is sold. The starter room is yours from day one, and items are never taken away.',
+    items: [
+      { lead: 'Badge families.', body: 'Sleep goal, Steady bedtime, Step goal, Check-in, Best recovery week, Every day logged and Steadiest month each unlock pieces at levels 1 to 5.' },
+      { lead: 'Any family.', body: 'Trophies, the rainbow rug and KIP’s crown come from reaching a level in any family.' },
+      { lead: 'Recaps and buddies.', body: 'Reading weekly recaps and cheering buddies add decor and whole sets.' },
+      { lead: null, body: 'Nothing is sold. The starter room is yours from day one, and items are never taken away.' },
     ],
-    /** The bold lead of each of the first three lines (K4b.dc.html:87-89). */
-    leads: ['Badge families.', 'Any family.', 'Recaps and buddies.'],
+  },
+  drawer: {
+    title: (n: number) => `Inventory · ${n} not placed`,
+    titleSpoken: (n: number) => `Inventory, ${n} not placed`,
+    tabsLabel: 'Inventory',
+    tabs: { all: 'All', floor: 'Floor', wall: 'Wall', onTop: 'On top', funny: 'Funny', new: 'New', room: 'Room', kip: 'KIP', sets: 'Sets' },
+    rows: { wallpaper: 'Walls', floor: 'Floor', window: 'Window' },
+    count: (n: number) => `×${n}`,
+    allPlaced: 'All placed',
+    newTag: 'NEW',
+    none: 'None',
+    place: 'Place',
+    replaceDesk: 'Replace desk',
+    more: 'Show more',
+    less: 'Show less',
+    tile: {
+      piece: (name: string, n: number, isNew: boolean) => `${name}, ${n ? `${n} in inventory` : 'all placed'}${isNew ? ', new' : ''}`,
+      style: (name: string, current: boolean) => (current ? `${name}, in your room` : `${name}. Use it`),
+      worn: (name: string, wearing: boolean) => (wearing ? `${name}, wearing` : `${name}. Wear it`),
+      locked: (name: string, unlock: string, progress: string) => (progress ? `${name}, locked. ${unlock}. ${progress}` : `${name}, locked. ${unlock}`),
+    },
+    full: {
+      text: (cap: number) => `KIP's room is full. ${cap} pieces fit this room. Store something to make space, or grow the room`,
+      store: 'Store a piece',
+      hint: 'Tap a piece in the room, then Store.',
+    },
+    applyConfirm: (name: string) => `Store everything and set up ${name}?`,
+    applyGo: 'Set it up',
+    applyKeep: 'Not now',
+    previewing: (name: string) => `Previewing ${name}`,
+    stopPreview: 'Stop preview',
   },
   discard: { title: 'Discard your changes?', discard: 'Discard', keep: 'Keep editing' },
   loadFailed: { text: "Couldn't open your room just now. Check your connection and try again.", retry: 'Try again', close: 'Close' },

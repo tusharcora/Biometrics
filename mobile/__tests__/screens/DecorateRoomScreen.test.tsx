@@ -6,15 +6,17 @@ import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-han
 import { ApiError } from '../../src/api/client';
 import { fetchCosmetics, putCosmetics } from '../../src/api/cosmetics';
 import { EDIT_CELL_PT, initialPan } from '../../src/components/edit/EditRoom';
-import { DecorateRoomScreen, EDIT_ROOM_HEIGHT, initialState } from '../../src/screens/DecorateRoomScreen';
+import { DecorateRoomScreen, EDIT_ROOM_HEIGHT, editRoomHeight, initialState } from '../../src/screens/DecorateRoomScreen';
 import { getCosmetics, loadCosmetics, markCosmeticsSeen, resetCosmetics } from '../../src/lib/room/cosmeticsStore';
-import { targetOf } from '../../src/lib/room/edit/drag';
+import { LIFT_PT, targetOf } from '../../src/lib/room/edit/drag';
+import { initEditor } from '../../src/lib/room/edit/editor';
 import { targetPoint } from '../../src/lib/room/edit/targets';
 import { isoGrid, projOf } from '../../src/lib/room/iso/grid';
 import { drawIsoStatic, pieceAt } from '../../src/lib/room/iso/room';
 import { starterLayout } from '../../src/lib/room/layout';
+import { EMPTY_WORN } from '../../src/lib/room/loadout';
 import { useDecorateOpen } from '../../src/lib/room/decorateOpen';
-import { cosmeticsDTO } from '../../jest-mocks/cosmeticsFixture';
+import { cosmeticsDTO, STARTER_COUNTS } from '../../jest-mocks/cosmeticsFixture';
 
 jest.mock('../../src/components/room/RoomView', () => require('../../jest-mocks/RoomView'));
 // The window's weather (useTodayScene): no real HTTP from Jest (Spec B ruling P29).
@@ -40,6 +42,13 @@ async function openEditor(params?: object, dto = cosmeticsDTO({ version: 2 })) {
 }
 
 beforeEach(() => { jest.clearAllMocks(); resetCosmetics(); });
+
+/** The chair's exit tile in window points (the jest stand-in for measureInWindow leaves the room's origin at 0, 0). */
+function seatExit() {
+  const pan = initialPan(initEditor({ layout: starterLayout(), worn: EMPTY_WORN, tier: 1, counts: STARTER_COUNTS, version: 2, newIds: [] }), Dimensions.get('window').width, EDIT_ROOM_HEIGHT);
+  const [x, y] = projOf(isoGrid(1))(3.5, 2.5);
+  return { x: pan.x + x * EDIT_CELL_PT, y: pan.y + y * EDIT_CELL_PT + LIFT_PT };
+}
 
 it('shows EDITING, the room count, and the whole room at 2 points, Done disabled (spec §5.2)', async () => {
   const s = await openEditor();
@@ -356,5 +365,86 @@ describe('dragging on the screen (spec §5.3)', () => {
     expect([plant.x, plant.y]).toEqual([6, 5]);
     fireEvent.press(s.getByTestId('edit-room-deselect'));
     expect(s.getByTestId('edit-undo').props.accessibilityState.disabled).toBe(false);
+  });
+});
+
+describe('the drawer in the editor (spec §5.4)', () => {
+  type TileHandlers = { onStart: (e: object) => void; onUpdate: (e: object) => void; onEnd: (e: object, ok: boolean) => void };
+  /** A tile's hold, its handlers called directly so the piece can stay in the air (ruling: RNGH always ends a gesture). */
+  const tileHold = (item: string) => (getByGestureTestId(`drawer-drag-${item}`) as unknown as { handlers: TileHandlers }).handlers;
+
+  it('Place puts the picked piece on the nearest free spot and selects it; the count goes up', async () => {
+    const s = await openEditor(undefined, cosmeticsDTO({ counts: { ...STARTER_COUNTS, 'plant.fern': 2 }, version: 2 }));
+    fireEvent.press(s.getByTestId('drawer-tile-plant.fern'));
+    fireEvent.press(s.getByTestId('drawer-place'));
+    expect(s.getByTestId('edit-count')).toHaveTextContent('8 / 40 in room');
+    expect(s.getByTestId('edit-tool-line')).toHaveTextContent('Fern · on the floor');
+  });
+
+  it('opens on New with the toasted piece picked when asked (spec §1 Toasts)', async () => {
+    const s = await openEditor({ drawer: 'new', item: 'corner.beanbag' }, cosmeticsDTO({ counts: { ...STARTER_COUNTS, 'corner.beanbag': 1 }, fresh: [{ itemId: 'corner.beanbag', source: 'anyFamily:2' }], version: 2 }));
+    expect(s.getByTestId('drawer-tab-new').props.accessibilityState.selected).toBe(true);
+    expect(s.getByTestId('drawer-tile-corner.beanbag').props.accessibilityState.selected).toBe(true);
+  });
+
+  it('a beanbag dragged in onto the chair goes back to the inventory, and says why (Review Focus 3)', async () => {
+    const s = await openEditor(undefined, cosmeticsDTO({ counts: { ...STARTER_COUNTS, 'corner.beanbag': 1 }, version: 2 }));
+    const before = s.getByTestId('edit-room-view').props.layout;
+    const { x, y } = seatExit();
+    // In the air over the chair: red, with the reason.
+    act(() => tileHold('corner.beanbag').onStart({ absoluteX: 20, absoluteY: 700 }));
+    act(() => tileHold('corner.beanbag').onUpdate({ absoluteX: x, absoluteY: y }));
+    expect(s.getByTestId('edit-drag-reason')).toHaveTextContent("Blocks KIP's chair");
+    act(() => tileHold('corner.beanbag').onEnd({ absoluteX: x, absoluteY: y }, true));
+    expect(s.getByTestId('edit-room-view').props.layout).toBe(before);
+    expect(s.getByTestId('edit-reason')).toHaveTextContent("Blocks KIP's chair");
+    expect(s.getByTestId('edit-undo').props.accessibilityState.disabled).toBe(true);
+    // The same as one whole gesture (RNGH ends it): the screen says why again. Selecting clears the last reason first.
+    select(s, 'plant');
+    fireEvent.press(s.getByTestId('edit-room-deselect'));
+    expect(s.queryByTestId('edit-reason')).toBeNull();
+    act(() => fireGestureHandler(getByGestureTestId('drawer-drag-corner.beanbag'), [{ state: State.BEGAN, absoluteX: 20, absoluteY: 700 }, { state: State.ACTIVE, absoluteX: 20, absoluteY: 700 }, { state: State.ACTIVE, absoluteX: x, absoluteY: y }, { state: State.END, absoluteX: x, absoluteY: y }]));
+    expect(s.getByTestId('edit-room-view').props.layout).toBe(before);
+    expect(s.getByTestId('edit-reason')).toHaveTextContent("Blocks KIP's chair");
+    expect(s.getByTestId('edit-undo').props.accessibilityState.disabled).toBe(true);
+  });
+
+  it('a style tile changes the room in one undo step', async () => {
+    const s = await openEditor(undefined, cosmeticsDTO({ version: 2 }));
+    fireEvent.press(s.getByTestId('drawer-tab-room'));
+    fireEvent.press(s.getByTestId('drawer-tile-wall.dots'));
+    expect(JSON.parse(s.getByTestId('edit-room-view').props.layout).styles.wallpaper).toBe('wall.dots');
+    fireEvent.press(s.getByTestId('edit-undo'));
+    expect(JSON.parse(s.getByTestId('edit-room-view').props.layout).styles.wallpaper).toBe('wall.plain');
+  });
+});
+
+describe('the editor on small and large phones (ruling T13-LAYOUT)', () => {
+  afterEach(() => jest.restoreAllMocks());
+  const atHeight = (height: number) =>
+    jest.spyOn(require('react-native'), 'useWindowDimensions').mockReturnValue({ width: 320, height, scale: 2, fontScale: 1 });
+
+  it('the room is min(320, 42% of the window) tall', () => {
+    expect([editRoomHeight(568), editRoomHeight(844), editRoomHeight(1334)]).toEqual([239, 320, 320]);
+  });
+
+  it.each([[568, 239], [844, 320]])('at %i points the room is %i tall and pinned; the toolbar and the drawer scroll under it', async (height, room) => {
+    atHeight(height);
+    const s = await openEditor();
+    expect(s.getByTestId('edit-room').props.style.height).toBe(room);
+    expect(within(s.getByTestId('edit-scroll')).queryByTestId('edit-room')).toBeNull();
+    expect(within(s.getByTestId('edit-scroll')).getByTestId('edit-history')).toBeTruthy();
+    expect(within(s.getByTestId('edit-scroll')).getByTestId('drawer')).toBeTruthy();
+  });
+
+  it('the notices stay pinned under the room, outside the scroll; Replace desk with the same desk says why (ruling UI-OUTCOMES)', async () => {
+    atHeight(568);
+    const s = await openEditor(undefined, cosmeticsDTO({ counts: { ...STARTER_COUNTS, 'desk.monitor': 2 }, version: 2 }));
+    fireEvent.press(s.getByTestId('drawer-tile-desk.monitor'));
+    expect(s.getByTestId('drawer-place')).toHaveTextContent('Replace desk');
+    fireEvent.press(s.getByTestId('drawer-place'));
+    expect(s.getByTestId('edit-reason')).toHaveTextContent('That desk is in the room already');
+    expect(s.getByTestId('edit-undo').props.accessibilityState.disabled).toBe(true);
+    expect(within(s.getByTestId('edit-scroll')).queryByTestId('edit-reason')).toBeNull();
   });
 });

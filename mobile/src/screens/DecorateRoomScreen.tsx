@@ -11,6 +11,7 @@ import { ApiError } from '../api/client';
 import { EditNotices } from '../components/edit/EditNotices';
 import { EditRoom, type EditRoomHandle } from '../components/edit/EditRoom';
 import { EditToolbar } from '../components/edit/EditToolbar';
+import { InventoryDrawer } from '../components/edit/InventoryDrawer';
 import { PiecesList } from '../components/edit/PiecesList';
 import { useMyKip } from '../lib/kip/myKip';
 import { useTodayScene } from '../lib/home/useTodayScene';
@@ -22,11 +23,16 @@ import { ROOM_COPY } from '../lib/room/roomCopy';
 /** The editor's room: a whole 7 × 7 room at 2 points (plan ruling 17); bigger rooms pan. */
 export const EDIT_ROOM_HEIGHT = 320;
 
+/** At most 320 points and 42% of the window (ruling T13-LAYOUT), so a 568-point phone keeps room for the rest. */
+export function editRoomHeight(windowHeight: number): number {
+  return Math.min(EDIT_ROOM_HEIGHT, Math.round(windowHeight * 0.42));
+}
+
 // The free-build editor (spec 2026-10-15 §5): a full-screen modal over the KIP page (C6's "drawer over the chat"
 // drawn as this modal, §5.1). Cancel / EDITING / Done, the room count, the room. The KIP page's loops pause while it
-// is open (Spec B ruling 17). The room and the notices stay put; under them the toolbar and the pieces list scroll.
-// The room holds the drag;
-// Task 13's drawer drives it through the room's handle.
+// is open (Spec B ruling 17). The room and the notices stay put; under them the toolbar, the inventory drawer and the
+// pieces list scroll (ruling T13-LAYOUT). The room holds the drag; the drawer's tiles drive it through the room's
+// handle (plan ruling 16).
 export function DecorateRoomScreen() {
   const navigation = useNavigation<any>();
   const params = (useRoute().params ?? {}) as DecorateParams;
@@ -75,13 +81,13 @@ function Editor({ cosmetics, params, navigation }: { cosmetics: Cosmetics; param
   const me = useMyKip();
   const reduceMotion = useReducedMotion();
   const day = useTodayScene(navigation);
-  const { width } = useWindowDimensions();
+  const { width, height } = useWindowDimensions();
   const [state, dispatch] = useReducer(editorReducer, undefined, () => initialState(cosmetics, params));
   const leaving = useRef(false);
   const [saving, setSaving] = useState(false);
   const [showGrid, setShowGrid] = useState(true);
   const savingRef = useRef(false);
-  // The room's drag, for the drawer's tiles to drive (plan ruling 16, Task 13).
+  // The room's drag, for the drawer's tiles to drive (plan ruling 16).
   const roomRef = useRef<EditRoomHandle>(null);
   // While a save is in flight nothing reaches the draft, a screen reader's activation included (Spec B Task 14 minor).
   const act = useCallback((a: EditorAction) => { if (!savingRef.current) dispatch(a); }, []);
@@ -158,10 +164,11 @@ function Editor({ cosmetics, params, navigation }: { cosmetics: Cosmetics; param
       </Text>
       {/* The room is pinned above the scrolling part (ruling T12-FIX), so a drag or a pan in it never scrolls the page. */}
       <View testID="edit-editing" className="flex-1" pointerEvents={saving ? 'none' : 'auto'}>
-        <EditRoom ref={roomRef} state={state} dispatch={act} width={width} height={EDIT_ROOM_HEIGHT} window={day.window} colour={me.colour} reduceMotion={reduceMotion} showGrid={showGrid} />
+        <EditRoom ref={roomRef} state={state} dispatch={act} width={width} height={editRoomHeight(height)} window={day.window} colour={me.colour} reduceMotion={reduceMotion} showGrid={showGrid} />
         <EditNotices state={state} />
         <ScrollView testID="edit-scroll" className="flex-1" contentContainerStyle={{ paddingBottom: 32 }}>
           <EditToolbar state={state} dispatch={act} showGrid={showGrid} onToggleGrid={() => setShowGrid((v) => !v)} />
+          <InventoryDrawer state={state} dispatch={act} room={roomRef} colour={me.colour} counters={cosmetics.counters} />
           <PiecesList state={state} dispatch={act} />
         </ScrollView>
       </View>
