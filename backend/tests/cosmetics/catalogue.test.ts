@@ -1,6 +1,6 @@
 import { ALL_FAMILIES } from '../../src/achievements/catalogue';
 import {
-  COSMETIC_ITEMS, COSMETIC_SETS, OPTIONAL_ROOM_SLOTS, RELEASE_LAUNCHED_AT, ROOM_SLOTS, SHIPPED_RELEASES, STARTER_IDS,
+  COSMETIC_ITEMS, COSMETIC_SETS, OPTIONAL_ROOM_SLOTS, PRICES, RELEASE_LAUNCHED_AT, ROOM_SLOTS, SHIPPED_RELEASES, STARTER_IDS,
   STARTER_ROOM, WORN_SLOTS, cosmeticItem, isShipped, ruleOf, type CosmeticSlot,
 } from '../../src/cosmetics/catalogue';
 import fs from 'fs';
@@ -131,6 +131,14 @@ it('prices pieces 25 to 200 coins, always in the shop, never a desk or the welco
   expect(['item.radio', 'corner.gnome', 'corner.cone', 'corner.pumpkin', 'item.candle', 'art.neonheart'].map(price)).toEqual([150, 80, 60, 30, 25, 200]);
   expect(['plant.fern', 'corner.floorlamp', 'pet.bed', 'plant.monstera', 'plant.snake'].map(price)).toEqual([40, 120, 140, 140, 100]);
   expect(['lamp.lava', 'item.duck', 'pet.cat'].map(price)).toEqual([120, 40, 180]); // B2: priced, shown when release 2 ships
+});
+
+it('prices only real pieces, and every placeable starter but the desks and the welcome lantern (ruling 3)', () => {
+  expect(Object.keys(PRICES).filter((id) => !cosmeticItem(id))).toEqual([]);
+  const unpriced = STARTER_IDS.map((id) => cosmeticItem(id)!)
+    .filter((i) => !!i.iso && i.slot !== 'desk' && i.id !== 'lamp.welcome' && i.price === undefined);
+  expect(unpriced.map((i) => i.id)).toEqual([]);
+  expect(STARTER_IDS.filter((id) => cosmeticItem(id)!.price !== undefined).length).toBeGreaterThan(0);
 });
 
 const PLACEABLE = ROOM_SLOTS.filter((s) => s !== 'wallpaper' && s !== 'floor' && s !== 'window');

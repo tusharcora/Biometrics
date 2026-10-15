@@ -65,6 +65,9 @@ export async function seedAllOwnedRows(
   await prisma.cosmeticUnlock.create({ data: { userId, itemId: 'wall.stripes', source: 'family:STEADY_BEDTIME:1' } });
   await prisma.cosmeticLoadout.create({ data: { userId, layout: starterLayout() as unknown as Prisma.InputJsonValue, worn: { ...EMPTY_WORN }, version: 1 } });
   await prisma.roomFirstWeek.create({ data: { userId, welcomedAt: day } });
+  await prisma.coinEvent.create({ data: { userId, kind: 'checkin', sourceKey: `checkin:${uniq}`, amount: 5, capDay: day } });
+  await prisma.coinWallet.create({ data: { userId, balance: 5 } });
+  await prisma.itemGrant.create({ data: { userId, itemId: 'plant.fern', qty: 1, sourceKey: `buy:${uniq}` } });
   await prisma.coachConsent.create({ data: { userId, version: 'v-test' } });
   await prisma.pushToken.create({ data: { userId, token: `push-${uniq}`, platform: 'ios' } });
   await prisma.session.create({

@@ -266,7 +266,7 @@ const SHOP_PIECES: readonly Row[] = [
  * starter as an extra copy (not the desks, one per room, and not the welcome lantern, C7's gift), and the rule pieces
  * the boards price, sold only once earned. B2's three are priced now and shown when release 2 ships.
  */
-const PRICES: Readonly<Record<string, number>> = {
+export const PRICES: Readonly<Record<string, number>> = {
   'item.radio': 150, 'corner.gnome': 80, 'corner.cone': 60, 'corner.pumpkin': 30, 'item.candle': 25, 'art.neonheart': 200,
   'plant.fern': 40, 'plant.cactus': 40, 'item.mug': 25, 'item.sticky': 25, 'shelf.books': 30, 'shelf.minicactus': 30,
   'shelf.plank': 30, 'lamp.amber': 60, 'rug.slate': 80, 'art.calendar': 40,

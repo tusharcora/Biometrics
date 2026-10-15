@@ -63,6 +63,11 @@ export function civilDateToUtcMidnight(civilDate: string): Date {
   return new Date(`${civilDate}T00:00:00Z`);
 }
 
+/** The YYYY-MM-DD civil date a UTC-midnight `@db.Date` value stands for: the inverse of civilDateToUtcMidnight. */
+export function utcMidnightToCivilDate(date: Date): string {
+  return date.toISOString().slice(0, 10);
+}
+
 const clockFormatters = new Map<string, Intl.DateTimeFormat>();
 
 function clockFormatterFor(timeZone: string): Intl.DateTimeFormat {

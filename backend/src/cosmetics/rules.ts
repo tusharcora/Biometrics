@@ -50,6 +50,7 @@ export function sourceOf(rule: UnlockRule): string {
     case 'counter': return `counter:${rule.counter}:${rule.atLeast}`;
     case 'set': return `set:${rule.set}`;
     case 'starter': return 'starter';
+    // Never a grant source: a purchase records its ItemGrant under 'buy:{requestId}'.
     case 'shop': return 'shop';
   }
 }

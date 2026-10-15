@@ -57,7 +57,10 @@ model User {
   cosmeticUnlocks       CosmeticUnlock[]
   cosmeticLoadout       CosmeticLoadout?
   roomFirstWeek         RoomFirstWeek?
-  goalChanges           GoalChange[]
+  coinEvents            CoinEvent[]
+  coinWallet            CoinWallet?
+  itemGrants            ItemGrant[]
+  goalChanges          GoalChange[]
   buddyPairsA           BuddyPair[]         @relation("BuddyPairA")
   buddyPairsB           BuddyPair[]         @relation("BuddyPairB")
   buddyRequestsSent     BuddyRequest[]      @relation("BuddyRequestFrom")
@@ -804,6 +807,51 @@ model RoomFirstWeek {
   firstPlacedAt DateTime?
   /// The first-week list's day 1 (P2).
   startedOn     DateTime? @db.Date
+}
+
+/// One coin event (spec 2026-10-15 §6.3): an earn (+), a 0-coin earn at the daily cap, or a spend (−). Append-only:
+/// never updated except `seenAt`, never deleted outside account deletion and the fixture purge.
+model CoinEvent {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// 'sleep_goal' | 'steps' | 'checkin' | 'recap' | 'cheer_given' | 'cheer_got' | 'challenge' | 'firstweek' | 'buy' | 'expand'
+  kind      String
+  /// The source record it pays for (or the app's request id for a spend), unique per user: a replay writes nothing.
+  sourceKey String
+  /// + earned, − spent, 0 when the daily cap had nothing left.
+  amount    Int
+  /// The civil day it counts against the cap; null for uncapped kinds and spends.
+  capDay    DateTime? @db.Date
+  createdAt DateTime  @default(now())
+  seenAt    DateTime?
+
+  @@unique([userId, sourceKey])
+  @@index([userId, createdAt])
+}
+
+/// A user's coin balance, the running sum of their CoinEvent amounts (a CHECK constraint keeps it >= 0).
+model CoinWallet {
+  userId  String @id
+  user    User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  balance Int    @default(0)
+}
+
+/// Copies of a piece beyond the starters and unlock rows (spec §2.2): +1 bought (P2); gifts and prizes come in P4.
+model ItemGrant {
+  id        String    @id @default(uuid())
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  itemId    String
+  qty       Int
+  /// 'buy:{requestId}' (P2); 'gift_out:', 'gift_in:', 'gift_back:' and 'prize:' come in P4.
+  sourceKey String
+  createdAt DateTime  @default(now())
+  /// A bought copy is NEW until seen (plan ruling 7).
+  seenAt    DateTime?
+
+  @@unique([userId, sourceKey])
+  @@index([userId, itemId])
 }
 
 enum GoalChangeKind {
