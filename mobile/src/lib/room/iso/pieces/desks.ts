@@ -14,6 +14,8 @@ export const DESK_H = 22;
 export interface Wood { top: string; leg: string; chair: string; seat: string }
 const SPEC_A: Wood = { top: '#9A7350', leg: '#7C5A3E', chair: '#3F4656', seat: '#475569' };
 const OAK: Wood = { top: '#C19A6B', leg: '#8A6542', chair: '#8A6542', seat: '#B88A5A' };
+/** The Cottage table is oak; every other desk is Spec A's wood. */
+export const deskWood = (id: string): Wood => (id === 'set.cottage.desk' ? OAK : SPEC_A);
 
 export function deskPiece(id: string, wood: Wood): IsoPieceArt {
   return {
@@ -44,7 +46,9 @@ export function deskPiece(id: string, wood: Wood): IsoPieceArt {
       const onTop = moveLayers(top, tx, ty);
       r.push(...(onTop.base ?? []));
       // KIP's chair on the seat tile, its back toward you (KIP faces the desk while thinking, spec §3.6).
-      isoShadow(r, LOCAL, 1, 1, 1, 1, 0.16); // the seat tile is (1, 1) for both facings and under Flip
+      // Under the seat (1.1 to 1.9 on the seat tile (1, 1), for both facings and under Flip): a whole-tile ellipse would
+      // spill 3 cells past the desk's front edge.
+      isoShadow(r, LOCAL, 1.1, 1.1, 0.8, 0.8, 0.16);
       B(1.42, 1.42, 0, 0.16, 0.16, 8, '#1F2937');
       B(1.1, 1.1, 8, 0.8, 0.8, 3, wood.seat);
       B(1.1, 1.78, 11, 0.8, 0.12, 14, wood.chair);
@@ -53,4 +57,4 @@ export function deskPiece(id: string, wood: Wood): IsoPieceArt {
   };
 }
 
-registerIsoArt(CATALOGUE.items.filter((i) => i.iso?.kipDesk && itemArt(i.id)).map((i) => deskPiece(i.id, i.id === 'set.cottage.desk' ? OAK : SPEC_A)));
+registerIsoArt(CATALOGUE.items.filter((i) => i.iso?.kipDesk && itemArt(i.id)).map((i) => deskPiece(i.id, deskWood(i.id))));

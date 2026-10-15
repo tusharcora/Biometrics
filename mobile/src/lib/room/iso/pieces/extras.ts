@@ -8,16 +8,21 @@ import { registerIsoArt, type IsoPieceArt } from '../art';
 import { LOCAL, type Proj } from '../grid';
 import { box, line } from '../prims';
 
+/** How far the plank stands out of its wall, in tiles, and its top's colour (what stands on it stands on this). */
+export const PLANK_DEPTH = 0.35;
+export const PLANK_TOP = '#5B4636';
 const plank: IsoPieceArt = {
   id: 'shelf.plank',
   draw: (_ctx, o) => {
     const r: Rects = [];
-    if (o.layer === 'wallL') box(r, LOCAL, 0, 0, 0, 0.35, 2, 2, '#5B4636', '#4A382B', '#3A2D23');
-    else box(r, LOCAL, 0, 0, 0, 2, 0.35, 2, '#5B4636', '#4A382B', '#3A2D23');
+    if (o.layer === 'wallL') box(r, LOCAL, 0, 0, 0, PLANK_DEPTH, 2, 2, PLANK_TOP, '#4A382B', '#3A2D23');
+    else box(r, LOCAL, 0, 0, 0, 2, PLANK_DEPTH, 2, PLANK_TOP, '#4A382B', '#3A2D23');
     return { base: r };
   },
 };
 
+/** Half the lantern's base, in tiles: the base is a real box centred on its tile centre or spot. */
+export const LANTERN_BASE = 0.2;
 const lantern: IsoPieceArt = {
   id: 'lamp.welcome',
   draw: (ctx, o) => {
@@ -26,7 +31,7 @@ const lantern: IsoPieceArt = {
     const [cx, cy] = o.layer === 'floor' ? LOCAL(0.5, 0.5) : [0, 0];
     const C: Proj = (i, j, z = 0) => { const [x, y] = LOCAL(i, j, z); return [x + cx, y + cy]; };
     if (o.layer === 'floor') shade(r, cx, cy, 7, 3, 0.22);
-    box(r, C, -0.2, -0.2, 0, 0.4, 0.4, 2, '#44403C');
+    box(r, C, -LANTERN_BASE, -LANTERN_BASE, 0, 2 * LANTERN_BASE, 2 * LANTERN_BASE, 2, '#44403C');
     box(r, C, -0.16, -0.16, 2, 0.32, 0.32, 9, '#57534E');
     box(r, C, -0.22, -0.22, 11, 0.44, 0.44, 2, '#44403C');
     const pane = o.facing === 'L'
@@ -43,14 +48,17 @@ const lantern: IsoPieceArt = {
   },
 };
 
+/** The garland's wire hangs this far (tiles) off the wall. */
+export const GARLAND_OFF = 0.05;
 const garland: IsoPieceArt = {
   id: 'set.cottage.lamp',
   draw: (ctx, o) => {
     const r: Rects = [];
     const em: Rects = [];
-    const W = (a: number, z: number) => (o.layer === 'wallL' ? LOCAL(0.05, a, z) : LOCAL(a, 0.05, z));
+    const W = (a: number, z: number) => (o.layer === 'wallL' ? LOCAL(GARLAND_OFF, a, z) : LOCAL(a, GARLAND_OFF, z));
     const N = 16;
-    const bulbs = Array.from({ length: N + 1 }, (_, k) => W((k / N) * 4, 7 - 3 * Math.sin((k / N) * Math.PI * 2) ** 2));
+    // Strung from 0.1 to 3.9 tiles along its 4: an end bulb's night halo stays on its own wall span.
+    const bulbs = Array.from({ length: N + 1 }, (_, k) => W(0.1 + (k / N) * 3.8, 7 - 3 * Math.sin((k / N) * Math.PI * 2) ** 2));
     for (let k = 0; k < N; k++) line(r, bulbs[k]!, bulbs[k + 1]!, '#4A4340');
     for (const [x, y] of bulbs) glow(em, x, y + 1, ctx.night ? 4 : 2, ctx.night ? 3 : 2, '253,224,150', ctx.night ? 0.06 : 0.03);
     const frames = three((f) => {

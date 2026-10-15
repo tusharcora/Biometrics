@@ -16,6 +16,12 @@ const DESK_TOP = 72;
 export const onDeskTop: Keep = ([x, y, w, h]) => y + h <= DESK_TOP && x >= 62 && x + w <= 112;
 /** Shelf pieces stand on Spec A's plank (top at SHELF_TOP); the iso room has its own planks. */
 const KEEP: Partial<Record<string, Keep>> = { shelf: ([, y, , h]) => y + h <= SHELF_TOP };
+/**
+ * Front-on shelf rows drawn along the whole 34-cell plank: on a spot only the whole rects inside this span stand (at
+ * most 24 cells, so a piece never reaches past the next spot, a tile away). The books keep the 8 books from x 103 to
+ * 124 (the leaning one among them); the Cottage shelf keeps its plate rail, its jars stay off.
+ */
+const SPAN: Partial<Record<string, readonly [number, number]>> = { 'shelf.books': [103, 124], 'set.cottage.shelf': [96, 117] };
 
 export function filterLayers(l: ItemLayers, keep: Keep): ItemLayers {
   return {
@@ -53,7 +59,11 @@ export function standPiece(id: string): IsoPieceArt {
       const art = itemArt(id);
       const item = catalogueItem(id);
       if (!art || !item?.iso) return {};
-      const keep = KEEP[item.slot];
+      const slotKeep = KEEP[item.slot];
+      const span = SPAN[id];
+      const keep: Keep | undefined = span
+        ? (q) => (!slotKeep || slotKeep(q)) && q[0] >= span[0] && q[0] + q[2] <= span[1]
+        : slotKeep;
       const front = keep ? filterLayers(art.draw(ctx), keep) : art.draw(ctx);
       const [dx, dy] = standAt(o, item.iso.foot ?? [1, 1]);
       return moveLayers(standFront(front, o.mirror), dx, dy);
