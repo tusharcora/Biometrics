@@ -78,14 +78,3 @@ export function needsLine(tier: Tier, coinsShort: number, badgeNeeded: boolean, 
   if (badgeNeeded) parts.push(g.family === 'CHECK_IN' ? Z.moreDays(Math.max(1, g.threshold - (f?.current ?? 0))) : Z.badgeNeed(g.level));
   return Z.needs(parts);
 }
-
-/**
- * What Grow still needs, or null when it can act (or there is no bigger size). Badges not read yet (null) never hold
- * Grow back: the server judges the badge, and a refused grow reads everything again.
- */
-export function growLine(tier: Tier, balance: number, families: readonly FamilyStanding[] | null): string | null {
-  if (tier >= 3) return null;
-  const g = gateOf((tier + 1) as 2 | 3);
-  const f = families?.find((x) => x.family === g.family);
-  return needsLine(tier, Math.max(0, g.price - balance), families !== null && (f?.level ?? 0) < g.level, families);
-}

@@ -1,4 +1,4 @@
-import { growLine, needsLine, sizeRows, type FamilyStanding } from '../../src/lib/coins/sizes';
+import { needsLine, sizeRows, type FamilyStanding } from '../../src/lib/coins/sizes';
 import { nextRowsRects } from '../../src/lib/room/edit/overlay';
 import { isoGrid } from '../../src/lib/room/iso/grid';
 
@@ -19,17 +19,20 @@ it('lists the three sizes: yours, then both gates of each bigger one with their 
 });
 
 it('says what Grow still needs, both gates always (spec §7)', () => {
-  expect(growLine(1, 360, FAMILIES)).toBe('Needs 240 more coins and 5 more days in a row.');
-  expect(growLine(1, 600, FAMILIES)).toBe('Needs 5 more days in a row.');
-  expect(growLine(1, 100, [{ family: 'CHECK_IN', level: 2, current: 0 }])).toBe('Needs 500 more coins.'); // a broken run after the badge costs nothing
-  expect(growLine(1, 600, [{ family: 'CHECK_IN', level: 2, current: 0 }])).toBeNull();
-  expect(growLine(2, 600, FAMILIES)).toBe('Needs 900 more coins and the sleep goal badge, level 3.');
-  expect(growLine(3, 0, FAMILIES)).toBeNull();
+  expect(needsLine(1, 240, true, FAMILIES)).toBe('Needs 240 more coins and 5 more days in a row.');
+  expect(needsLine(1, 0, true, FAMILIES)).toBe('Needs 5 more days in a row.');
+  // A broken run after the badge costs nothing: only the coins are missing.
+  expect(needsLine(1, 500, false, [{ family: 'CHECK_IN', level: 2, current: 0 }])).toBe('Needs 500 more coins.');
+  expect(needsLine(1, 0, false, [{ family: 'CHECK_IN', level: 2, current: 0 }])).toBeNull();
+  expect(needsLine(2, 900, true, FAMILIES)).toBe('Needs 900 more coins and the sleep goal badge, level 3.');
+  expect(needsLine(3, 0, true, FAMILIES)).toBeNull();
 });
 
 it('with the badges not read, Grow waits only on coins: the server judges the badge (a 409 gate refreshes)', () => {
-  expect(growLine(1, 360, null)).toBe('Needs 240 more coins.');
-  expect(growLine(1, 600, null)).toBeNull();
+  expect(needsLine(1, 240, false, null)).toBe('Needs 240 more coins.');
+  expect(needsLine(1, 0, false, null)).toBeNull();
+  // A refusal's own counts still name the streak, at its full length since the run is not known.
+  expect(needsLine(1, 0, true, null)).toBe('Needs 14 more days in a row.');
 });
 
 it('a refused grow\'s own counts say what is missing when the wallet could not be read again (ruling T11-ERR)', () => {
