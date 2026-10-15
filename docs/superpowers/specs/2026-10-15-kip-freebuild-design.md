@@ -63,7 +63,10 @@ Defaults accepted at spec review (2026-10-15):
 
 Controller rulings at spec review (2026-10-15):
 
-- **Room visits are opt-in:** a new switch in the existing buddy sharing set, **off by default** (§10.1). A visit shows
+- **Room visits are opt-in:** a new switch in the existing buddy sharing set, **off by default**, with its own
+  one-line consent ("Buddies see your room, including its size."), not the health-sharing consent (§10.1).
+- **Entering a challenge** is the opt-in for that entry's snapshot being shown to buddies (§10.4).
+- **A first placement made in P1** pays the first-week +10 when P2 arrives (§11.2). A visit shows
   the room's size only, never a tier name, badge or anything health-derived; piece sheets on a visit show the
   catalogue's generic rule, never "they earned …".
 - **Gifts and deleted accounts:** a gift sent before the gifter deletes their account is still delivered (the piece
@@ -235,12 +238,15 @@ owned)` (`cosmetics/loadout.ts`), never the raw JSON, so an unowned, unshipped o
 starter piece. It is used two ways:
 
 - **lazily** by `GET /me/cosmetics` when `layout` is null: it writes the result with
-  `updateMany({ where: { userId, layout: null, version } })`, without bumping `version`. A count of 0 means the
-  script or another GET got there first: the GET re-reads and returns that row. It never errors;
+  `updateMany({ where: { userId, layout: { equals: Prisma.DbNull }, version } })` (a JSON column's SQL null must be
+  matched with `Prisma.DbNull`, not `null`), without bumping `version`. A count of 0 means the script or another GET
+  got there first: the GET re-reads and returns that row. It never errors;
 - by a one-off idempotent script, `backend/scripts/convert-room-layouts.ts`, with the same conditional write.
 
-Either order is safe. **P2 drops `room`:** P2's migration first runs the conversion for every row whose `layout` is
-still null, and refuses to drop the column if any remain.
+Either order is safe. **P2 drops `room`:** a Prisma SQL migration can't call the TypeScript `readRoom`, so P2's
+deploy runs `convert-room-layouts.ts` as a step **before** `prisma migrate deploy`, and P2's SQL migration starts with
+a guard that `RAISE`s an exception if `SELECT COUNT(*) FROM "CosmeticLoadout" WHERE layout IS NULL` is above 0, so the
+column is never dropped while a row still needs it.
 
 - **Every existing room converts to an equivalent iso room.** Each slot maps to a fixed position taken from
   `isox.py`'s `standard` room:
@@ -524,7 +530,8 @@ The view opens centred on KIP's desk. No pinch zoom in v1 (zoom breaks whole-poi
   one self-reported source, and it is the smallest.
 - **No backpay.** A source whose civil date (the wake date, the step day, the habit day, the open or cheer date) is
   before the user's local civil date of `COINS_LAUNCHED_AT` (set when P2 ships) writes nothing, not even a 0 row;
-  the first-week list is the welcome. Plant growth therefore starts counting at P2.
+  the first-week list is the welcome. Plant growth therefore starts counting at P2. The one exception is a P1 first
+  placement's +10 (§11.2).
 - **No health values in the ledger.** An event stores its kind, key, amount and civil date, never minutes or steps,
   so neither the history nor any log can show one.
 
@@ -744,12 +751,23 @@ full-page backdrop behind the thread.
 ### 10.1 Visiting a buddy's room
 
 - **Who:** buddies only, both directions active, neither has blocked the other, and only when the owner has turned on
-  **"Buddies can visit my room"**. It is a sixth key, `room`, in `SHARE_KEYS` (`buddies/sharing.ts`), **off by
-  default**, following that file's model: enabling it needs consent for the current version, it is always read
-  through `effectiveSharing`, and it reads off after any future version bump until re-consent. **Decision:** the
-  switch is added **without** bumping `BUDDY_SHARING_CONSENT_VERSION`; the consent sheet gains one line about rooms (a
-  wording change, as Spec A's Task 14 did). A bump would turn the five health switches off for everyone, and the
-  room is not health data.
+  **"Buddies can visit my room"**, **off by default** (controller ruling, §0).
+- **Its own consent, not the health one:** turning it on shows a one-line confirm sheet, "Buddies see your room,
+  including its size." with **Turn on** (default `Button`) and **Not now** (outline). Tapping Turn on is the consent.
+  It does **not** need the health-sharing consent, and a future bump of `BUDDY_SHARING_CONSENT_VERSION` does not
+  turn it off. In code:
+  - a new column `User.shareRoom Boolean @default(false)`; `room: 'shareRoom'` is added to `SHARE_COLUMNS` and
+    `shareRoom` to `SHARING_SELECT` and `SharingRow`; `room` is a sixth key in `SHARE_KEYS`;
+  - a new `HEALTH_SHARE_KEYS` holds the original five. `updateSharing` (`buddies/sharing.ts`) adds the
+    `buddySharingConsentVersion` condition only when the patch turns a **health** key on, so `{ room: true }` alone
+    goes through without it; `effectiveSharing` applies the version rule to the health keys only and passes `room`
+    through as stored;
+  - `buddies/view.ts`'s `shares` **filters `room` out** (`HEALTH_SHARE_KEYS.filter(...)`): the buddy week lists what
+    health data is shared, and the room has its own entry point (the profile's Visit button), so it is not a line
+    there;
+  - the app's `ShareKey` and `SHARE_KEYS` (`api/buddies.ts`) gain `room`, with its label in the sharing settings
+    copy; the app also gets `HEALTH_SHARE_KEYS`, and `profileHub.ts`'s count stays "n of 5" over the health keys,
+    adding "· room open" when `room` is on.
 - **Where from:** a buddy's profile and their KIP in Chats (F8: "tap a buddy's KIP on Home or in Chats"). The
   Campfire stays frozen and gets no entry point.
 - **The view** (`BuddyRoom` route, read-only, C4): "{first name}'s room", "8 × 8 · 44 pieces" (the size only), their KIP in their
@@ -784,6 +802,8 @@ full-page backdrop behind the thread.
   opens it and the piece goes to their inventory with NEW (`ItemGrant +1, gift_in`).
 - **Limits:** 3 gifts sent a day; buddies only; blocks apply both ways; a muted sender's gift arrives without a notice.
   An unopened gift is returned to the sender (`gift_back`) if either person blocks the other or the pair ends.
+  A `BuddyPair` row removed by the cascade when an account is deleted is **not** "the pair ends": the gift is not
+  returned (a deleted sender's gift is still delivered; a deleted recipient's gift is dropped, below).
 - **Deleted accounts** (controller ruling, §0): a gift whose **sender** deletes their account is still delivered and
   can still be opened (`fromId` becomes null; the box says "A gift"). Unopened gifts **to** a deleted user are dropped.
 - **Sending** runs under the sender's advisory lock (the one `PUT /me/cosmetics` takes, §2.2) and re-checks the spare
@@ -801,6 +821,10 @@ full-page backdrop behind the thread.
 - **The brief** (C3): "Room challenge · Buddies only · 3 days left", the theme, the brief, "5 buddies in", "Ends Sunday
   20:00", rewards: **Enter: +30 coins, once**, the **limited theme piece** (in the shop this week only, 80 coins), the
   **trophy** for the most-cheered room (glows at night). **Start my entry** (default `Button`).
+- **Entering is the opt-in** (controller ruling): your entry's snapshot is shown to your buddies who look at the
+  challenge, whether or not "Buddies can visit my room" is on. The entry sheet says so above **Start my entry**:
+  "Your buddies will see your entry: a snapshot of your room, including its size." Visits stay governed by the switch
+  alone.
 - **The entry is your room.** "Your entry is a snapshot of your room on Sunday. Build as usual until then." Every room
   save while your entry is open copies the layout into `ChallengeEntry.snapshot`; the last save before the close is
   the entry. The **+30 pays once**, on the first moment the entry meets the brief while it is open: at entry, or on
@@ -880,6 +904,9 @@ model RoomFirstWeek {
 - Only the two bonus rows pay extra, once ever, outside the cap. The others tick when their normal earn's event row
   exists (a 0-coin row at the cap still ticks). **Accepted default (§0):** C8 labels the list "+80"; the rows on C7
   add up to 72 shown, 35 of it bonus. The spec follows C7's rows.
+- **Backfill from P1** (controller ruling): a `firstPlacedAt` set during P1, before coins existed, pays the +10 once
+  when P2 reaches the user (on the first `earnCoins` run, `firstweek:place`), even though its date is before
+  `COINS_LAUNCHED_AT`. It is the one exception to "no backpay".
 - Under the list: "Next: 8 × 8 · 600 coins and a 14-day check-in streak. The dashed row is yours then.", and the room
   shows the next tier's front rows as a dashed outline (the locked-row overlay).
 - After day 7 the card is gone; unfinished bonuses lapse quietly.
@@ -920,7 +947,8 @@ All require auth, return `Cache-Control: private, no-store`, cap bodies at 32 KB
 - **`GET /me/shop`** → this week's pieces with prices and the weekly set.
 - **`POST /me/shop/purchases`** `{ requestId (uuid), itemId }` → 200 `{ balance, counts }`; 400 `not_for_sale`,
   **409 `not_enough_coins`** with `{ needed }`; a repeated `requestId` returns the first answer.
-- **`POST /me/room/expand`** `{ requestId, toTier }` → 200 `{ tier, cap, balance }`; 409 `gate` with
+- **`POST /me/room/expand`** `{ requestId, toTier }` → 200 with the **full** `GET /me/cosmetics` body plus `balance` (the editor's
+  rebase needs the new layout and version, §7); 409 `gate` with
   `{ coinsNeeded, badgeNeeded }`; 409 `stale_tier` if `toTier` isn't `tier + 1`.
 - **`GET /me/firstweek`** → the list, its ticks and day.
 
@@ -937,7 +965,9 @@ All require auth, return `Cache-Control: private, no-store`, cap bodies at 32 KB
 
 ### Concurrency, deletion, telemetry
 
-- **Concurrency:** room and worn saves keep the one-row version check. Coins, purchases, expansion and gifts use
+- **Concurrency:** room and worn saves keep the one-row version check **and** run under the per-user
+  `pg_advisory_xact_lock` (§2.2), the same lock gift-send and expansion take, so a save, a gift and a grow can't
+  interleave. Coins, purchases, expansion and gifts use
   the per-user advisory lock plus unique `sourceKey` / `requestId`, so retries are safe and the balance can't go
   negative. The app's `coinsStore` copies `cosmeticsStore`'s epoch, session and "ignore older" guards.
 - **Account deletion:** `deleteOwnedRows` runs `deleteMany({ where: { userId } })` over `USER_OWNED_MODELS`, so only
@@ -946,8 +976,8 @@ All require auth, return `Cache-Control: private, no-store`, cap bodies at 32 KB
   `fromId` / `toId` and go with the `User` row through their relations (`onDelete: Cascade`, as `Sticker` and
   `BuddyPair`), except `Gift.from`, which is `SetNull`. So no step before `deleteOwnedRows` is needed: the cascade
   drops unopened gifts **to** the user, and gifts **from** the user stay deliverable to their recipients (controller
-  ruling, §0). The deletion test proves every new table is emptied of the user's rows, and that a gift from a deleted
-  user can still be opened.
+  ruling, §0). The deletion test proves every new table is emptied of the user's rows **except gifts from the user**,
+  which remain with `fromId` null and can still be opened by their recipients.
 - **Telemetry** is log lines only, with **no user ids and no values**: `room.saved { pieces, tier }`,
   `coins.earned { kind, count }`, `coins.spent { kind }`, `room.expanded { tier }`, `gift.sent`, `challenge.entered`.
   Never an item id or amount next to a user id.
@@ -1013,8 +1043,9 @@ Each plan ends with the owner's simulator check and a draft PR (the standing wor
   - Expansion: both gates required; badge level II passes even after the run breaks; `stale_tier`; tier never drops.
   - `living` (P3): plant stage from the count of `sleep_goal` events; pet energy bands; awards count; absent from
     every buddy DTO.
-  - Visits, cheers, gifts, challenges (P4): buddies only, blocks both ways, the visits switch (off by default, needs current
-    consent), the uniform 404, size only and no tier; one cheer per room per day, 5 paid a day across given and
+  - Visits, cheers, gifts, challenges (P4): buddies only, blocks both ways, the visits switch (off by default; `{ room: true }`
+    turns on without the health consent and survives a consent-version bump; `shares` omits it), the uniform 404,
+    entry snapshots visible to buddies with the switch off, size only and no tier; one cheer per room per day, 5 paid a day across given and
     received, 0-coin rows past the limit, both locks in id order; gifts only spares, 3 a day, returned on block or
     unpair, still delivered after the sender deletes, dropped when the recipient deletes, a gift racing a save (shared
     lock); challenge week close in two zones, snapshot on save, entry reward once (at entry or a later save), cheers
