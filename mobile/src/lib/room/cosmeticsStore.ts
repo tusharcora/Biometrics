@@ -1,7 +1,7 @@
 import { useSyncExternalStore } from 'react';
 import { fetchCosmetics, postCosmeticsSeen, postRoomWelcomed, putCosmetics, type CosmeticsDTO } from '../../api/cosmetics';
 import { setMyKipWorn } from '../kip/myKip';
-import { EMPTY_WORN, type KipWorn } from './loadout';
+import { EMPTY_WORN, type ItemId, type KipWorn } from './loadout';
 import { WORN_SLOTS } from './catalogue';
 import { capFor, toTier, type RoomLayout, type Tier } from './iso/geometry';
 import { readLayout, starterLayout } from './layout';
@@ -96,6 +96,26 @@ export async function saveCosmeticsLoadout(input: { layout: RoomLayout; worn: Ki
   const next = fromDTO(await putCosmetics(input));
   if (at === session) publish(next);
   return next;
+}
+
+/** A coin-shop purchase landed (spec §6.6): the server's counts; the piece owned and NEW until seen (ruling 7). */
+export function applyPurchase(itemId: ItemId, counts: Readonly<Record<string, number>>): void {
+  if (!cosmetics) return;
+  epoch++; // a read that started before the purchase never brings the old count back
+  const owned = new Set(cosmetics.owned);
+  owned.add(itemId);
+  const fresh = cosmetics.fresh.some((f) => f.itemId === itemId) ? cosmetics.fresh : [...cosmetics.fresh, { itemId, source: 'buy' }];
+  publish({ ...cosmetics, owned, counts: { ...counts }, fresh });
+}
+
+/** A whole GET body from another route (the grow, spec §7): published as a read is, and only if it is not older. */
+export function applyCosmeticsBody(dto: CosmeticsDTO): void {
+  epoch++;
+  try {
+    publish(fromDTO(dto));
+  } catch {
+    // Not a cosmetics body: keep what is shown.
+  }
 }
 
 /** Clears these from "new" now and tells the server; a failed post is retried by the next open. */

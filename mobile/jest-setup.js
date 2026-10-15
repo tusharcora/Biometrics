@@ -20,3 +20,7 @@ jest.mock('expo-media-library/legacy', () => ({
   requestPermissionsAsync: jest.fn(),
   saveToLibraryAsync: jest.fn(() => Promise.resolve()),
 }));
+
+// Request ids (P2 plan ruling 30): a fresh, readable id per call.
+let mockUuid = 0;
+jest.mock('expo-crypto', () => ({ randomUUID: jest.fn(() => `00000000-0000-4000-8000-${String(++mockUuid).padStart(12, '0')}`) }));
