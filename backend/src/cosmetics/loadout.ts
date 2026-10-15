@@ -1,8 +1,9 @@
-// Reading and saving KIP's room (spec 2026-10-14 KIP's room §2, §5). Owned = the starter items + unlock rows. A
-// stored slot naming an item the user does not own (or no longer in the shipped catalogue) reads back as the slot's
-// starter piece; the app never decides ownership. Saves are optimistic: version must match, every save increments it.
-// Free-build saves (spec 2026-10-15 §12) carry an iso layout, checked against the catalogue, the placement rules and
-// the owned counts under the per-user room lock. Spec B's slot room was converted and dropped in P2 (§2.4).
+// Reading and saving KIP's room (spec 2026-10-15 §2, §12). Owned = the starter items + unlock rows; the app never
+// decides ownership. A stored layout reads back trimmed to the owned counts and the shipped catalogue, and a worn piece
+// the user does not own reads as nothing worn. Saves are optimistic: version must match, every save increments it.
+// Free-build saves carry an iso layout, checked against the catalogue, the placement rules and the owned counts under
+// the per-user room lock. Spec B's slot room was converted and dropped in P2 (§2.4); `readRoom` keeps its slot
+// sanitising for scripts/convert-room-layouts.ts only.
 import { Prisma } from '@prisma/client';
 import { prisma } from '../db/client';
 import {
@@ -39,6 +40,7 @@ export function ownedFrom(rows: ReadonlyArray<{ itemId: string }>): Set<string> 
   return new Set([...STARTER_IDS, ...rows.map((r) => r.itemId).filter((id) => shippedItem(id))]);
 }
 
+/** Spec B's stored slot room, sanitised: a slot naming an unowned or unshipped item reads as its starter piece. */
 export function readRoom(json: unknown, owned: ReadonlySet<string>): Room {
   const stored = (json && typeof json === 'object' ? json : {}) as Record<string, unknown>;
   const room = { ...STARTER_ROOM } as Room;
