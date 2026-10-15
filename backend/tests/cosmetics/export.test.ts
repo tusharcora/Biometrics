@@ -11,7 +11,7 @@ it('the app\'s copy is current: run scripts/export-cosmetics.ts after any catalo
 
 it('ships only the shipped releases, and every set id an item names is a shipped set', () => {
   const e = exportCatalogue();
-  expect(e.releases).toEqual([1, 3]);
+  expect(e.releases).toEqual([1, 3, 4]);
   expect(e.items.every((i) => isShipped(i))).toBe(true);
   expect(e.sets.every((s) => isShipped(s))).toBe(true);
   const shipped = new Set(e.items.map((i) => i.id));

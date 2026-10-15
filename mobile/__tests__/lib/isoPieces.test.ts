@@ -21,8 +21,8 @@ const opts = (item: CatalogueItem, over: Partial<IsoArtOpts> = {}): IsoArtOpts =
 
 beforeEach(() => clearPieceCache());
 
-it('every shipped placeable piece has iso art, 56 in all: the 54 release-1 pieces (the Cottage ones among them) and the 2 new ones (spec §4)', () => {
-  expect(PLACEABLE).toHaveLength(56); // 54 release-1 placeables + shelf.plank + lamp.welcome
+it('every shipped placeable piece has iso art, 62 in all: the 54 release-1 pieces, the 2 of release 3 and the 6 shop pieces (spec §4)', () => {
+  expect(PLACEABLE).toHaveLength(62); // 54 release-1 placeables + shelf.plank + lamp.welcome + 6 release-4 pieces
   for (const item of PLACEABLE) expect({ id: item.id, art: !!isoArtOf(item.id) }).toEqual({ id: item.id, art: true });
 });
 

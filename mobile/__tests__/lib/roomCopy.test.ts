@@ -17,6 +17,7 @@ it('writes unlock lines as the Cat boards do, and spoken ones without "·" or Ro
     [{ kind: 'set', set: 'cottage' }, 'Read 4 weekly recaps', 'Read 4 weekly recaps'],
   ] as const;
   for (const [rule, line, spoken] of cases) expect([unlockLine(rule), unlockSpoken(rule)]).toEqual([line, spoken]);
+  expect([unlockLine({ kind: 'shop' }), unlockSpoken({ kind: 'shop' })]).toEqual(['From the coin shop', 'From the coin shop']);
   expect(spokenName('art.band')).toBe('Band poster, “The Naps”');
 });
 

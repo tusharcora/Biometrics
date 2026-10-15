@@ -18,6 +18,7 @@ export type AchievementFamilyName =
   | 'SLEEP_GOAL' | 'STEADY_BEDTIME' | 'STEP_GOAL' | 'CHECK_IN' | 'BEST_RECOVERY_WEEK' | 'EVERY_DAY_LOGGED' | 'STEADIEST_MONTH';
 export type UnlockRule =
   | { kind: 'starter' }
+  | { kind: 'shop' }
   | { kind: 'family'; family: AchievementFamilyName; level: number }
   | { kind: 'anyFamily'; level: number }
   | { kind: 'counter'; counter: 'recaps_read' | 'buddy_cheers'; atLeast: number }
@@ -38,6 +39,9 @@ export interface CatalogueItem {
   iso?: IsoSpec;
   tags?: string[];
   grants?: number;
+  /** Coins (spec §6.4); absent = not in the shop. */
+  price?: number;
+  shop?: 'always' | { week: string };
 }
 
 export interface CatalogueSet {

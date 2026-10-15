@@ -28,6 +28,9 @@ export const ITEM_NAMES: Readonly<Record<ItemId, string>> = {
   'rug.slate': 'Slate rug', 'rug.red': 'Red rug', 'rug.gymmat': 'Gym mat', 'rug.checker': 'Checker rug',
   'rug.woven': 'Round woven', 'rug.tatami': 'Tatami mat',
   'pet.bed': 'Pet bed',
+  // The coin shop's own pieces (spec 2026-10-15 §4, F6, C1).
+  'item.radio': 'Old radio', 'corner.gnome': 'Gnome', 'corner.cone': 'Traffic cone', 'corner.pumpkin': 'Pumpkin',
+  'item.candle': 'Candle', 'art.neonheart': 'Neon heart sign',
   'out.beanie': 'Beanie', 'out.cap': 'Cap', 'out.sweatband': 'Sweatband', 'out.bucket': 'Bucket hat',
   'out.hachimaki': 'Hachimaki headband', 'out.beret': 'Beret', 'out.party': 'Party hat', 'out.round': 'Round glasses',
   'out.scarf': 'Scarf', 'out.bowtie': 'Bow tie', 'out.earbuds': 'Earbuds', 'out.phones': 'Headphones',
@@ -77,6 +80,7 @@ export function unlockLine(rule: UnlockRule): string {
   const r = setRule(rule);
   switch (r.kind) {
     case 'starter': return 'In every room from day one';
+    case 'shop': return 'From the coin shop';
     case 'family': return `${FAMILY_NAMES[r.family]} · ${ROMAN[r.level]}`;
     case 'anyFamily': return `Any family · level ${ROMAN[r.level]}`;
     case 'counter': return r.counter === 'recaps_read' ? `Read ${r.atLeast} weekly recaps` : `Cheer a buddy ${r.atLeast} times`;

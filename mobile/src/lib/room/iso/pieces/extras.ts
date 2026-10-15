@@ -1,8 +1,8 @@
 // Free-build P1's own pieces (spec 2026-10-15 §2.1, C7): the wall plank, the welcome lantern (two facings: its lit
 // pane faces the lower left or the lower right; Flip moves its ring), and the Cottage fairy lights as a garland on
 // the wall (plan ruling 7).
-import { registerIcons, type SpriteRect } from '../../icons';
-import { three } from '../../items/shared';
+import { registerIcons } from '../../icons';
+import { spriteRows, three } from '../../items/shared';
 import { glow, poly, R, shade, type Rects } from '../../paint';
 import { registerIsoArt, type IsoPieceArt } from '../art';
 import { LOCAL, type Proj } from '../grid';
@@ -76,25 +76,8 @@ const garland: IsoPieceArt = {
 
 registerIsoArt([plank, lantern, garland]);
 
-/** A sprite from rows of palette letters ('.' is empty), one rect per run. */
-function rows(lines: readonly string[], pal: Readonly<Record<string, string>>): SpriteRect[] {
-  const out: SpriteRect[] = [];
-  lines.forEach((row, y) => {
-    let x = 0;
-    while (x < row.length) {
-      const c = row[x]!;
-      if (c === '.') { x++; continue; }
-      let w = 1;
-      while (row[x + w] === c) w++;
-      out.push([x, y, w, 1, pal[c]!]);
-      x += w;
-    }
-  });
-  return out;
-}
-
 // isox.py's XS lantern, and a plank with two brackets.
 registerIcons({
-  'lamp.welcome': rows(['..k..', '.kkk.', 'kyyyk', 'kyYyk', 'kyyyk', 'kyyyk', '.kkk.'], { k: '#44403C', y: '#F59E0B', Y: '#FEF3C7' }),
-  'shelf.plank': rows(['wwwwwwwwwwwwwwww', 'dddddddddddddddd', '..b..........b..', '..b..........b..'], { w: '#7C5A3E', d: '#5B4636', b: '#3A2D23' }),
+  'lamp.welcome': spriteRows(['..k..', '.kkk.', 'kyyyk', 'kyYyk', 'kyyyk', 'kyyyk', '.kkk.'], { k: '#44403C', y: '#F59E0B', Y: '#FEF3C7' }),
+  'shelf.plank': spriteRows(['wwwwwwwwwwwwwwww', 'dddddddddddddddd', '..b..........b..', '..b..........b..'], { w: '#7C5A3E', d: '#5B4636', b: '#3A2D23' }),
 });

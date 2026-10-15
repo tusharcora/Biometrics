@@ -14,7 +14,7 @@ const PREFIX: Record<CosmeticSlot, string> = {
   plant: 'plant', lamp: 'lamp', corner: 'corner', rug: 'rug', pet: 'pet', head: 'out', face: 'out', neck: 'out', ears: 'out',
 };
 const ids = COSMETIC_ITEMS.map((i) => i.id);
-const base = COSMETIC_ITEMS.filter((i) => !i.id.startsWith('set.') && i.release !== 3);
+const base = COSMETIC_ITEMS.filter((i) => !i.id.startsWith('set.') && i.release <= 2);
 const count = (slot: CosmeticSlot) => base.filter((i) => i.slot === slot).length;
 
 it('reads the Cat boards\' unlock codes', () => {
@@ -107,10 +107,30 @@ it('gives each set exactly one piece per room slot, worn pieces in worn slots, a
   expect(cosmeticItem('set.japanese.desk')!.style).toBe('low');
 });
 
-it('has a launch date for every shipped release, and ships releases 1 and 3 (spec §2.1 Releases)', () => {
-  expect([...SHIPPED_RELEASES].sort()).toEqual([1, 3]);
-  for (const r of SHIPPED_RELEASES) expect(RELEASE_LAUNCHED_AT[r as 1 | 3]).toBeInstanceOf(Date);
+it('ships releases 1, 3 and 4, each with a launch date (spec §2.1 Releases, plan ruling 1)', () => {
+  expect([...SHIPPED_RELEASES].sort()).toEqual([1, 3, 4]);
+  for (const r of SHIPPED_RELEASES) expect(RELEASE_LAUNCHED_AT[r as 1 | 3 | 4]).toBeInstanceOf(Date);
   expect(COSMETIC_ITEMS.filter((i) => i.release === 3).map((i) => i.id).sort()).toEqual(['lamp.welcome', 'shelf.plank']);
+  expect(COSMETIC_ITEMS.filter((i) => i.release === 4).map((i) => i.id).sort())
+    .toEqual(['art.neonheart', 'corner.cone', 'corner.gnome', 'corner.pumpkin', 'item.candle', 'item.radio']);
+});
+
+it('reads the coin-shop code: a shop piece is only ever bought (plan ruling 2)', () => {
+  expect(ruleOf('C')).toEqual({ kind: 'shop' });
+  for (const item of COSMETIC_ITEMS.filter((i) => i.release === 4)) {
+    expect({ id: item.id, unlock: item.unlock, priced: typeof item.price, iso: !!item.iso }).toEqual({ id: item.id, unlock: { kind: 'shop' }, priced: 'number', iso: true });
+  }
+});
+
+it('prices pieces 25 to 200 coins, always in the shop, never a desk or the welcome lantern (spec §6.4, §6.5, rulings 3-4)', () => {
+  for (const item of COSMETIC_ITEMS.filter((i) => i.price !== undefined)) {
+    expect({ id: item.id, ok: item.price! >= 25 && item.price! <= 200 && item.shop === 'always' && !!item.iso }).toEqual({ id: item.id, ok: true });
+  }
+  for (const id of ['desk.monitor', 'desk.notebook', 'desk.laptop', 'set.cottage.desk', 'lamp.welcome']) expect(cosmeticItem(id)!.price).toBeUndefined();
+  const price = (id: string) => cosmeticItem(id)!.price;
+  expect(['item.radio', 'corner.gnome', 'corner.cone', 'corner.pumpkin', 'item.candle', 'art.neonheart'].map(price)).toEqual([150, 80, 60, 30, 25, 200]);
+  expect(['plant.fern', 'corner.floorlamp', 'pet.bed', 'plant.monstera', 'plant.snake'].map(price)).toEqual([40, 120, 140, 140, 100]);
+  expect(['lamp.lava', 'item.duck', 'pet.cat'].map(price)).toEqual([120, 40, 180]); // B2: priced, shown when release 2 ships
 });
 
 const PLACEABLE = ROOM_SLOTS.filter((s) => s !== 'wallpaper' && s !== 'floor' && s !== 'window');

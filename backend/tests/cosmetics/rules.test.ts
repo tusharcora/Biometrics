@@ -43,6 +43,19 @@ describe('metAt', () => {
   });
 });
 
+it('never grants a coin-shop piece, whatever the facts (plan ruling 2)', () => {
+  const every: UnlockFacts = {
+    levels: ['SLEEP_GOAL', 'STEADY_BEDTIME', 'STEP_GOAL', 'CHECK_IN', 'BEST_RECOVERY_WEEK', 'EVERY_DAY_LOGGED', 'STEADIEST_MONTH']
+      .map((family) => ({ family, level: 5, at: t('2026-10-16T08:00:00Z') })),
+    recapsReadAt: Array.from({ length: 20 }, () => t('2026-10-16T09:00:00Z')),
+    cheersAt: Array.from({ length: 20 }, () => t('2026-10-16T10:00:00Z')),
+  };
+  const planned = plan(every, { shipped: new Set([1, 3, 4]), launchedAt: { 1: t('2026-10-15T00:00:00Z'), 3: t('2026-10-16T00:00:00Z'), 4: t('2026-10-20T00:00:00Z') } });
+  expect(planned.filter((p) => COSMETIC_ITEMS.find((i) => i.id === p.itemId)!.unlock.kind === 'shop')).toEqual([]);
+  expect(metAt({ kind: 'shop' }, every, SETS)).toBeNull();
+  expect(sourceOf({ kind: 'shop' })).toBe('shop');
+});
+
 describe('planGrants', () => {
   const after = (family: string, level: number) => ({ family, level, at: t('2026-10-20T00:00:00Z') });
 

@@ -183,5 +183,11 @@
   "set.library.rug",
   "set.library.pet",
   "shelf.plank",
-  "lamp.welcome"
+  "lamp.welcome",
+  "item.radio",
+  "corner.gnome",
+  "corner.cone",
+  "corner.pumpkin",
+  "item.candle",
+  "art.neonheart"
 ]

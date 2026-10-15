@@ -25,6 +25,23 @@ export function spriteBox(rects: readonly SpriteRect[]): Box {
   return { x: x0, y: y0, w: x1 - x0, h: y1 - y0 };
 }
 
+/** A sprite from rows of palette letters ('.' is empty), one rect per run (gen/front.py `sprite`). */
+export function spriteRows(lines: readonly string[], pal: Readonly<Record<string, string>>): SpriteRect[] {
+  const out: SpriteRect[] = [];
+  lines.forEach((row, y) => {
+    let x = 0;
+    while (x < row.length) {
+      const c = row[x]!;
+      if (c === '.') { x++; continue; }
+      let w = 1;
+      while (row[x + w] === c) w++;
+      out.push([x, y, w, 1, pal[c]!]);
+      x += w;
+    }
+  });
+  return out;
+}
+
 /** A three-frame loop from one frame function. */
 export const three = (f: (k: 0 | 1 | 2) => Rects): [Rects, Rects, Rects] => [f(0), f(1), f(2)];
 

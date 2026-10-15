@@ -28,6 +28,7 @@ function earliest(dates: readonly Date[]): Date | null {
 export function metAt(rule: UnlockRule, facts: UnlockFacts, setsById: ReadonlyMap<string, CosmeticSet>): Date | null {
   switch (rule.kind) {
     case 'starter':
+    case 'shop':
       return null;
     case 'family':
       return earliest(facts.levels.filter((l) => l.family === rule.family && l.level >= rule.level).map((l) => l.at));
@@ -49,6 +50,7 @@ export function sourceOf(rule: UnlockRule): string {
     case 'counter': return `counter:${rule.counter}:${rule.atLeast}`;
     case 'set': return `set:${rule.set}`;
     case 'starter': return 'starter';
+    case 'shop': return 'shop';
   }
 }
 

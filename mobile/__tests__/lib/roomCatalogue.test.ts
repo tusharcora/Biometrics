@@ -5,8 +5,8 @@ it('starts every room from the server\'s starter layout (one source, ruling 24)'
   expect(starterLayout()).toEqual(CATALOGUE.starterLayout);
 });
 
-it('holds releases 1 and 3: 89 items and the Cottage set, every piece known', () => {
-  expect([CATALOGUE.releases, CATALOGUE.items.length, CATALOGUE.sets.map((s) => s.id)]).toEqual([[1, 3], 89, ['cottage']]);
+it('holds releases 1, 3 and 4: 95 items and the Cottage set, every piece known', () => {
+  expect([CATALOGUE.releases, CATALOGUE.items.length, CATALOGUE.sets.map((s) => s.id)]).toEqual([[1, 3, 4], 95, ['cottage']]);
   for (const item of CATALOGUE.items) expect([...ROOM_SLOTS, ...WORN_SLOTS]).toContain(item.slot);
   const cottage = catalogueSet('cottage')!;
   for (const id of [...Object.values(cottage.room), ...Object.values(cottage.worn)]) expect(catalogueItem(id!)).toBeDefined();
