@@ -233,6 +233,26 @@ describe('coins land only once KIP\'s bubble can show (ruling PF-F13)', () => {
     expect(postCoinsSeen).toHaveBeenCalledWith('2026-11-11T07:12:00.000Z');
   });
 
+  it('with the card scrolled under the collapsed header, nothing lands or is marked seen; back at the top they land (ruling T12-VIEW)', async () => {
+    (fetchCoins as jest.Mock).mockResolvedValue(UNSEEN);
+    // Hold the first landing until the page has scrolled: the stored choice is read only after.
+    let answer!: (v: boolean) => void;
+    prefs.readKipRoomShrunk.mockReturnValue(new Promise<boolean>((r) => { answer = r; }));
+    const s = await openChat();
+    layOut(s);
+    measureRoom(s);
+    await scrollTo(s, 400);
+    expect(s.getByTestId('kip-collapsed-header')).toBeTruthy();
+    await act(async () => { answer(false); });
+    await act(async () => { mockNav.focus(); });
+    expect(s.queryByTestId('coins-landed')).toBeNull();
+    expect(postCoinsSeen).not.toHaveBeenCalled();
+    expect(getCoins()!.events[0]!.seen).toBe(false);
+    await scrollTo(s, 0);
+    await waitFor(() => expect(s.getByTestId('coins-landed')).toHaveTextContent('Sleep goal hit'));
+    expect(postCoinsSeen).toHaveBeenCalledWith('2026-11-11T07:12:00.000Z');
+  });
+
   it('holds the coins until the stored shrink choice is read, so a shrunk card never marks them seen first', async () => {
     let answer!: (v: boolean) => void;
     prefs.readKipRoomShrunk.mockReturnValue(new Promise<boolean>((r) => { answer = r; }));

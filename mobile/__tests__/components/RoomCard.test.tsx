@@ -163,7 +163,9 @@ it('coins land once: "+25!" in KIP\'s bubble and a line under the room, announce
   await act(async () => undefined);
   expect(s.getByTestId('kip-room').props.room.split(':')[2]).toBe('+25!');
   expect(s.getByTestId('coins-landed')).toHaveTextContent('Sleep goal hit and 1 more');
-  expect(say).toHaveBeenCalledWith('Plus 25 coins. Sleep goal hit');
+  // Several earns are read with their count, as the line shows them (ruling T12-FIX).
+  expect(say).toHaveBeenCalledWith('Plus 25 coins. Sleep goal hit and 1 more');
+  expect(s.getByTestId('coins-landed').props.accessibilityLabel).toBe('Plus 25 coins. Sleep goal hit and 1 more');
   expect(postCoinsSeen).toHaveBeenCalledWith('2026-11-11T07:12:00.000Z');
   await act(async () => { jest.advanceTimersByTime(4000); });
   expect(s.queryByTestId('coins-landed')).toBeNull();
@@ -253,4 +255,24 @@ it('lands nothing when nothing is unseen', async () => {
   expect(s.queryByTestId('coins-landed')).toBeNull();
   expect(s.getByTestId('kip-room').props.room.split(':')[2]).toBe('ON IT…');
   expect(postCoinsSeen).not.toHaveBeenCalled();
+});
+
+it('the live-region node is mounted, empty and hidden, before coins land; landing changes that same node (TalkBack, ruling T12-FIX)', async () => {
+  (fetchCoins as jest.Mock).mockResolvedValue({ ...LANDING, events: [LANDING.events[0]] });
+  await act(async () => { await loadCoins(); });
+  const props = { stage: STAGE, window: WINDOW, recovery: FAIR, reduceMotion: false, onOpenRecovery: jest.fn() };
+  const s = render(<RoomCard {...props} holdCoins />);
+  fireEvent(s.getByTestId('kip-room-frame-inner'), 'layout', { nativeEvent: { layout: { width: 323, height: 240, x: 0, y: 0 } } });
+  await act(async () => undefined);
+  const node = s.getByTestId('coins-landed', { includeHiddenElements: true });
+  expect(node).toHaveTextContent('');
+  expect([node.props.accessibilityElementsHidden, node.props.importantForAccessibility, node.props.accessibilityLiveRegion]).toEqual([true, 'no-hide-descendants', 'polite']);
+  // Idle, it is out of the card's flow: no gap, no height.
+  expect(String(node.props.className).split(' ')).toEqual(expect.arrayContaining(['absolute', 'h-0']));
+  s.rerender(<RoomCard {...props} />);
+  await act(async () => undefined);
+  const landed = s.getByTestId('coins-landed');
+  expect(landed).toBe(node);
+  expect(landed).toHaveTextContent('Sleep goal hit');
+  expect([landed.props.accessibilityElementsHidden, landed.props.importantForAccessibility]).toEqual([false, 'auto']);
 });

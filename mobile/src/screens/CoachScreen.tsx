@@ -59,6 +59,9 @@ type Phase = 'loading' | 'unavailable' | 'needs-consent' | 'ready';
 // How long the steps checklist stays up, all ticked, once the answer starts (spec §5).
 const STEPS_LINGER_MS = 300;
 
+// A focus re-reads the coins and the first-week list only when the last read is at least this old (ruling T12-FIX).
+export const COINS_REREAD_MS = 30_000;
+
 // How close to the bottom (pt) still counts as reading the latest message.
 const NEAR_BOTTOM = 80;
 
@@ -327,24 +330,27 @@ export function CoachScreen() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // Coins land on the next look at the KIP page (spec §6.7), and the first-week card follows (§11.2): read on open and
+  // on a focus at least COINS_REREAD_MS after the last read (ruling T12-FIX), so quick tab hops send no requests. The
+  // reads catch up on earns server-side.
+  const coinsReadAt = useRef(0);
+  const readCoins = useCallback(() => {
+    coinsReadAt.current = Date.now();
+    void loadCoins();
+    void loadFirstWeek();
+  }, []);
+  useEffect(() => {
+    readCoins();
+  }, [readCoins]);
+
   // The tab stays mounted while the user visits consent and comes back.
   useEffect(() => {
     const unsubscribe = navigation.addListener?.('focus', () => {
       void load();
+      if (Date.now() - coinsReadAt.current >= COINS_REREAD_MS) readCoins();
     });
     return unsubscribe;
-  }, [navigation, load]);
-
-  // Coins land on the next look at the KIP page (spec §6.7), and the first-week card follows (§11.2): read on open and
-  // on every focus. The reads catch up on earns server-side.
-  useEffect(() => {
-    void loadCoins();
-    void loadFirstWeek();
-  }, []);
-  useEffect(() => navigation.addListener?.('focus', () => {
-    void loadCoins();
-    void loadFirstWeek();
-  }), [navigation]);
+  }, [navigation, load, readCoins]);
 
   // A turn that got through settles an unverified status (the coach is there)
   // and clears offline.
@@ -508,7 +514,7 @@ export function CoachScreen() {
       recovery={day.recovery}
       reduceMotion={reduceMotion}
       paused={decorating}
-      holdCoins={!shrunkKnown}
+      holdCoins={!shrunkKnown || collapsed === 'in'}
       onOpenRecovery={openRecovery}
       onDecorate={openDecorate}
       onPlaceLantern={placeLantern}

@@ -34,12 +34,20 @@ afterEach(() => {
 });
 
 describe('the KIP page (W7)', () => {
-  it('reads the coins and the first-week list when the page opens and on every focus (spec §6.7, §11.2)', async () => {
+  it('reads the coins and the first-week list when the page opens and on a focus 30 s or more after the last read (spec §6.7, §11.2, ruling T12-FIX)', async () => {
     await openChat();
     const reads = () => [(fetchCoins as jest.Mock).mock.calls.length, (fetchFirstWeek as jest.Mock).mock.calls.length];
     const [coins, week] = reads();
     expect(coins).toBeGreaterThanOrEqual(1);
     expect(week).toBeGreaterThanOrEqual(1);
+    // A quick tab hop reads nothing more.
+    jest.setSystemTime(Date.now() + 29_000);
+    await act(async () => { mockNav.focus(); });
+    expect(reads()).toEqual([coins, week]);
+    jest.setSystemTime(Date.now() + 1_000);
+    await act(async () => { mockNav.focus(); });
+    expect(reads()).toEqual([coins + 1, week + 1]);
+    // The 30 s run from that read.
     await act(async () => { mockNav.focus(); });
     expect(reads()).toEqual([coins + 1, week + 1]);
   });

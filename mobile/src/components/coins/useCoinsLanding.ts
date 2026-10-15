@@ -18,7 +18,9 @@ export function useCoinsLanding(active: boolean): Landing | null {
     const next = landingOf(coins.events);
     if (!next) return;
     setShown(next);
-    if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(ROOM_COPY.coins.landSpoken(next.total, ROOM_COPY.coins.landed[next.kind]));
+    if (Platform.OS === 'ios') {
+      AccessibilityInfo.announceForAccessibility(ROOM_COPY.coins.landSpoken(next.total, ROOM_COPY.coins.landLine(ROOM_COPY.coins.landed[next.kind], next.more)));
+    }
     void markCoinsSeen(next.through);
   }, [active, coins, shown]);
   useEffect(() => {

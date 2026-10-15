@@ -59,6 +59,7 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
   // Coins land in KIP's bubble (spec §6.7, ruling 12) only once it is really on screen (ruling PF-F13): the room drawn,
   // the page focused, never over the welcome and never while the editor covers the room.
   const landing = useCoinsLanding(stage.id !== 'loading' && inner > 0 && focused && !paused && !holdCoins && !welcome);
+  const landLine = landing ? ROOM_COPY.coins.landLine(ROOM_COPY.coins.landed[landing.kind], landing.more) : '';
   return (
     <Card testID="kip-room-card" className="gap-3 p-3.5" onLayout={onLayout}>
       <View testID="kip-room-frame" style={{ borderWidth: 2, borderColor: WOOD_LINE, borderRadius: 4 }}>
@@ -97,17 +98,19 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
           </Pressable>
         </View>
       </View>
-      {landing ? (
-        // A polite live region for Android, read as words (no "·"); iOS is told by the hook (the EditNotices pattern).
-        <Text
-          testID="coins-landed"
-          accessibilityLiveRegion="polite"
-          accessibilityLabel={ROOM_COPY.coins.landSpoken(landing.total, ROOM_COPY.coins.landed[landing.kind])}
-          className="text-caption text-muted-foreground"
-        >
-          {ROOM_COPY.coins.landLine(ROOM_COPY.coins.landed[landing.kind], landing.more)}
-        </Text>
-      ) : null}
+      {/* A polite live region for Android, read as words (no "·"); iOS is told by the hook (the EditNotices pattern).
+          It stays mounted, empty and hidden while idle, and its text changes when coins land, so TalkBack hears the
+          change (ruling T12-FIX); idle, it is out of the card's flow, so it adds no gap. */}
+      <Text
+        testID="coins-landed"
+        accessibilityLiveRegion="polite"
+        accessibilityLabel={landing ? ROOM_COPY.coins.landSpoken(landing.total, landLine) : undefined}
+        accessibilityElementsHidden={!landing}
+        importantForAccessibility={landing ? 'auto' : 'no-hide-descendants'}
+        className={landing ? 'text-caption text-muted-foreground' : 'absolute h-0 w-0 overflow-hidden text-caption'}
+      >
+        {landLine}
+      </Text>
       {welcome ? (
         <RoomWelcomeCard
           onPlace={() => { void markWelcomed(); onPlaceLantern?.(); }}
