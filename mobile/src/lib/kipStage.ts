@@ -81,9 +81,9 @@ export function windowWord(w: { weather: RoomWeather; night: boolean }): string 
   return w.night ? 'night' : SKY_WORD[w.weather];
 }
 
-/** The diorama's one label (§3.2): "KIP at the desk, typing. Window: cloudy". */
+/** The room's one label (spec 2026-10-15 §9.1): "KIP in its room, typing. Window: cloudy". */
 export function roomLabel(stage: KipStageId, window: { weather: RoomWeather; night: boolean }): string {
-  return `KIP at the desk, ${DOING[stage]}. Window: ${windowWord(window)}`;
+  return `KIP in its room, ${DOING[stage]}. Window: ${windowWord(window)}`;
 }
 
 /**

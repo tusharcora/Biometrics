@@ -1,9 +1,8 @@
-import { CATALOGUE, catalogueItem, catalogueItemsFor, catalogueSet, isWornSlot } from '../../src/lib/room/catalogue';
-import { STARTER_LOADOUT } from '../../src/lib/room/loadout';
-import { ROOM_SLOTS, WORN_SLOTS } from '../../src/lib/room/slots';
+import { CATALOGUE, catalogueItem, catalogueItemsFor, catalogueSet, isWornSlot, ROOM_SLOTS, WORN_SLOTS } from '../../src/lib/room/catalogue';
+import { starterLayout } from '../../src/lib/room/layout';
 
-it('starts every room from the server\'s starter loadout (one source, ruling 24)', () => {
-  expect(STARTER_LOADOUT).toEqual(CATALOGUE.starterRoom);
+it('starts every room from the server\'s starter layout (one source, ruling 24)', () => {
+  expect(starterLayout()).toEqual(CATALOGUE.starterLayout);
 });
 
 it('holds releases 1 and 3: 89 items and the Cottage set, every piece known', () => {

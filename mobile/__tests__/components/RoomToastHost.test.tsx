@@ -38,7 +38,7 @@ it('shows a new piece once with a Decorate button that opens decorate mode on it
   await act(async () => undefined);
   expect(s.getByText("New for KIP's room: Wood panel")).toBeTruthy();
   fireEvent.press(s.getByTestId('room-toast-decorate'));
-  expect(navigationRef.navigate).toHaveBeenCalledWith('DecorateRoom', { tab: 'room', slot: 'wallpaper' });
+  expect(navigationRef.navigate).toHaveBeenCalledWith('DecorateRoom', { drawer: 'new', item: 'wall.panel' });
   expect(s.queryByTestId('room-toast')).toBeNull();
   s.unmount();
   const again = render(<RoomToastHost />);
@@ -130,7 +130,7 @@ describe('with a screen reader', () => {
     act(() => { jest.advanceTimersByTime(ROOM_TOAST_MS * 10); });
     expect(s.getByTestId('room-toast')).toBeTruthy();
     fireEvent(s.getByTestId('room-toast'), 'accessibilityAction', { nativeEvent: { actionName: 'activate' } });
-    expect(navigationRef.navigate).toHaveBeenCalledWith('DecorateRoom', { tab: 'room', slot: 'wallpaper' });
+    expect(navigationRef.navigate).toHaveBeenCalledWith('DecorateRoom', { drawer: 'new', item: 'wall.panel' });
     expect(s.queryByTestId('room-toast')).toBeNull();
   });
 

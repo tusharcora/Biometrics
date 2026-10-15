@@ -1,8 +1,8 @@
 import { checkSlotArt, CTX_DAY } from '../../jest-mocks/roomArtChecks';
-import { drawRoomStatic } from '../../src/lib/room/draw';
+import { drawIsoStatic } from '../../src/lib/room/iso/room';
 import { itemArt } from '../../src/lib/room/items';
 import { clipFloor, floorSpan, FLOOR_POLY } from '../../src/lib/room/items/shared';
-import { STARTER_LOADOUT } from '../../src/lib/room/loadout';
+import { starterLayout } from '../../src/lib/room/layout';
 import { FLOOR_Y, ROOM_H, ROOM_W, WALL_X0 } from '../../src/lib/room/grid';
 
 it.each(['wallpaper', 'floor', 'art', 'window'] as const)('every shipped %s piece has art, an icon and the right flags', (slot) => {
@@ -18,9 +18,10 @@ it('clips floor patterns to the floor, which widens to the full grid 12 rows bel
   expect(FLOOR_POLY.at(-2)).toEqual([0, ROOM_H]);
 });
 
-it('every window piece keeps the weather sky: the glass shows the same sky as the plain frame', () => {
+it('every window piece keeps the weather sky, and a window style never changes the room\'s light', () => {
   const sky = (id: string) => itemArt(id)!.draw(CTX_DAY).base!.filter(([x, y]) => x >= 22 && x < 34 && y >= 16 && y < 20);
   expect(sky('win.blinds').length).toBeGreaterThan(0);
-  expect(drawRoomStatic({ loadout: { ...STARTER_LOADOUT, window: 'win.curtains' }, weather: 'clear', night: false, colour: 'coral' }).light.length)
-    .toEqual(drawRoomStatic({ loadout: STARTER_LOADOUT, weather: 'clear', night: false, colour: 'coral' }).light.length);
+  const light = (window: string) =>
+    drawIsoStatic({ layout: { ...starterLayout(), styles: { ...starterLayout().styles, window } }, tier: 1, weather: 'clear', night: false, colour: 'coral' }).light;
+  expect(light('win.curtains')).toEqual(light('win.plain'));
 });

@@ -490,6 +490,7 @@ export function CoachScreen() {
       reduceMotion={reduceMotion}
       paused={decorating}
       onOpenRecovery={openRecovery}
+      onDecorate={openDecorate}
       onLayout={(e) => {
         cardBottom.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height;
       }}

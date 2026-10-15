@@ -8,7 +8,7 @@ import { FLOOR_Y, ROOM_H, ROOM_W, WALL_X0, WALL_X1, type Box, type RoomRect } fr
 import type { SpriteRect } from '../icons';
 import type { ItemArt, ItemContext } from '../items';
 import type { ItemId } from '../loadout';
-import type { RoomSlot } from '../slots';
+import type { RoomSlot } from '../catalogue';
 import { clipB, poly, R, shade, type Rects } from '../paint';
 import { NIGHT_VEIL_ALPHA, NIGHT_VEIL_RGB, windowSky } from '../weather';
 
@@ -171,10 +171,5 @@ export function standingPiece(id: ItemId, slot: RoomSlot, rects: readonly Sprite
     },
   };
 }
-
-/** Items allowed to draw outside their slot's anchor, and why (ruling 3). */
-export const ANCHOR_EXEMPT: ReadonlyMap<ItemId, string> = new Map([
-  ['set.cottage.lamp', 'fairy lights strung along the ceiling beam, across the whole back wall'],
-]);
 
 export { mixHex, darkenHex, tintOf };

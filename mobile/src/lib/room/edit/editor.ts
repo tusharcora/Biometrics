@@ -5,7 +5,7 @@
 // never enter the draft (Spec B ruling P18).
 import { catalogueItem, catalogueSet, GEOMETRY_DEPS, isoOf, type CatalogueSet } from '../catalogue';
 import type { KipWorn, ItemId } from '../loadout';
-import type { WornSlot } from '../slots'; // moves to '../catalogue' in Task 10
+import type { WornSlot } from '../catalogue';
 import { capFor, validateLayout, type Placement, type RoomLayout, type StyleKey, type Tier } from '../iso/geometry';
 import { isoGrid } from '../iso/grid';
 import { childrenOf, deskOf, inventoryOf, layoutKey, newPieceId } from '../layout';
@@ -13,6 +13,8 @@ import { COACH_ITEM, coachTile, nearestFree, placedAt, refusal, roomCentre, targ
 
 export interface Draft { layout: RoomLayout; worn: KipWorn }
 export type DrawerTab = 'all' | 'floor' | 'wall' | 'onTop' | 'funny' | 'new' | 'room' | 'kip' | 'sets';
+/** The editor route's params (spec §5.1): the drawer tab to open on, a piece to show there, the first-week coach. */
+export type DecorateParams = { drawer?: DrawerTab | 'new'; item?: ItemId; coach?: boolean };
 export type NudgeDir = 'backLeft' | 'backRight' | 'frontLeft' | 'frontRight' | 'up' | 'down';
 export type Preview = { kind: 'worn'; slot: WornSlot; item: ItemId } | { kind: 'set'; setId: string };
 /** What Apply set did (ruling T9-FIX): the set's items you don't own yet, and whether your own desk stayed. */
@@ -82,7 +84,7 @@ export type EditorAction =
 
 export const UNDO_STEPS = 20;
 
-export function initEditor(c: EditorInput, open: { drawer?: DrawerTab | 'new'; item?: ItemId; coach?: boolean } = {}): EditorState {
+export function initEditor(c: EditorInput, open: DecorateParams = {}): EditorState {
   const draft = { layout: c.layout, worn: c.worn };
   const drawer: DrawerTab = open.drawer === 'new' ? (c.newIds.length ? 'new' : 'all') : open.drawer ?? 'all';
   return {

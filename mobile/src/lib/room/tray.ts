@@ -1,12 +1,8 @@
-// The tray's content (spec 2026-10-14 KIP's room §6.2, §6.3), pure: which pieces a slot offers, each tile's tag and
-// spoken label, the info line, the set cards. A piece is offered only when this build can draw it (§1).
-import { wornArt } from '../kip/wornArt';
-import { CATALOGUE, catalogueItem, catalogueItemsFor, catalogueSet, isWornSlot, type CatalogueItem } from './catalogue';
-import { slotValue, type DecorateSlot, type DecorateState } from './decorate';
-import { itemArt } from './items';
+// The decorate tray's models (spec 2026-10-14 KIP's room §6.3), pure: a tile and the set cards. Task 13's drawer
+// replaces this file; the slot tray's offers and info line went with the slot engine (spec 2026-10-15 §3).
+import { CATALOGUE, catalogueItem } from './catalogue';
 import type { ItemId } from './loadout';
-import { ROOM_COPY, SET_NAMES, itemName, itemNameIn, progressLine, spokenName, unlockLine, unlockSpoken, type ProgressFacts } from './roomCopy';
-import { spokenLine } from '../kipStage';
+import { ROOM_COPY, SET_NAMES, unlockLine, unlockSpoken, type ProgressFacts } from './roomCopy';
 import { SET_SWATCHES } from './art';
 
 export interface TrayContext {
@@ -23,81 +19,6 @@ export interface TileModel {
   label: string;
   flags: string[];
   selected: boolean;
-}
-
-const OPTIONAL = new Set<DecorateSlot>(['art', 'corner', 'pet', 'head', 'face', 'neck', 'ears']);
-
-export function offeredItems(slot: DecorateSlot, owned: ReadonlySet<string>): CatalogueItem[] {
-  const drawable = (i: CatalogueItem) => (isWornSlot(slot) ? !!wornArt(i.id) : !!itemArt(i.id));
-  const rank = (i: CatalogueItem) => (i.unlock.kind === 'starter' ? 0 : owned.has(i.id) ? 1 : 2);
-  return catalogueItemsFor(slot)
-    .filter((i) => drawable(i) && (!i.retired || owned.has(i.id)))
-    .map((i, n) => ({ i, n }))
-    .sort((a, b) => rank(a.i) - rank(b.i) || a.n - b.n)
-    .map(({ i }) => i);
-}
-
-export function tilesFor(state: DecorateState, slot: DecorateSlot, ctx: TrayContext): TileModel[] {
-  const current = slotValue(state.draft, slot);
-  const picked = (id: ItemId | null) => state.picked?.slot === slot && state.picked.itemId === id;
-  const tiles: TileModel[] = [];
-  if (OPTIONAL.has(slot)) {
-    const name = slot === 'art' ? ROOM_COPY.noArt : ROOM_COPY.none;
-    const placed = current === null;
-    tiles.push({
-      key: `${slot}-none`, itemId: null, name, state: placed ? 'placed' : 'owned', tag: placed ? ROOM_COPY.tags.placed : ROOM_COPY.tags.owned,
-      label: placed ? ROOM_COPY.tile.placed(name) : ROOM_COPY.tile.owned(name), flags: [], selected: picked(null),
-    });
-  }
-  for (const item of offeredItems(slot, ctx.owned)) {
-    const placed = current === item.id;
-    const owned = ctx.owned.has(item.id) || item.unlock.kind === 'starter';
-    const spoken = spokenName(item.id);
-    tiles.push({
-      key: item.id,
-      itemId: item.id,
-      name: itemName(item.id),
-      state: placed ? 'placed' : owned ? 'owned' : 'locked',
-      tag: placed ? ROOM_COPY.tags.placed : owned ? ROOM_COPY.tags.owned : unlockLine(item.unlock),
-      label: placed ? ROOM_COPY.tile.placed(spoken) : owned ? ROOM_COPY.tile.owned(spoken) : ROOM_COPY.tile.locked(spoken, unlockSpoken(item.unlock), progressLine(item.unlock, ctx.facts)),
-      flags: [item.tint && ROOM_COPY.flags.tint, item.emissive && ROOM_COPY.flags.glow, item.frames && ROOM_COPY.flags.anim].filter((f) => !!f) as string[],
-      selected: picked(item.id),
-    });
-  }
-  return tiles;
-}
-
-export interface InfoLine {
-  label: string;
-  text: string;
-  muted: boolean;
-  spoken: string;
-}
-
-/** `said` is the text's spoken form where it differs (an unlock rule: "level 1", never "· I", P19). */
-const line = (label: string, text: string, muted = false, said = text): InfoLine => ({ label, text, muted, spoken: spokenLine(`${label} · ${said}`) });
-
-export function infoLine(state: DecorateState, ctx: TrayContext): InfoLine {
-  const I = ROOM_COPY.info;
-  const p = state.preview;
-  if (p?.kind === 'set') {
-    const name = SET_NAMES[p.setId] ?? p.setId;
-    const rule = catalogueSet(p.setId)!.unlock;
-    return line(I.locked, I.lockedText(name, unlockLine(rule)), true, I.lockedText(name, unlockSpoken(rule)));
-  }
-  if (p?.kind === 'item') {
-    const name = itemNameIn(p.itemId, p.slot);
-    const rule = catalogueItem(p.itemId)!.unlock;
-    return line(I.locked, I.lockedText(name, unlockLine(rule)), true, I.lockedText(name, unlockSpoken(rule)));
-  }
-  if (state.tab === 'sets') return line(I.sets, I.setsText);
-  const slot: DecorateSlot = state.tab === 'kip' ? state.wornSlot : state.roomSlot;
-  const current = slotValue(state.draft, slot);
-  if (state.tab === 'kip') return current ? line(I.wearing, itemNameIn(current, slot)) : line(I.dress, I.dressText, true);
-  if (state.picked?.slot === slot && state.picked.itemId !== null && current === state.picked.itemId && slotValue(state.saved, slot) !== current) {
-    return line(I.previewing, I.previewText(itemNameIn(current, slot), slot));
-  }
-  return current ? line(I.inRoom, I.placedText(itemNameIn(current, slot))) : line(I.inRoom, I.emptyText(slot));
 }
 
 export interface SetCardModel {

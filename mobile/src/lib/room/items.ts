@@ -4,7 +4,7 @@
 import type { KipColour, KipRamp } from '../kip/kipArt';
 import type { RoomRect } from './grid';
 import type { ItemId } from './loadout';
-import type { RoomSlot } from './slots';
+import type { RoomSlot } from './catalogue';
 import type { RoomWeather } from './weather';
 
 /** What the monitor shows: lines idle, dots while thinking, the chart while answering. */

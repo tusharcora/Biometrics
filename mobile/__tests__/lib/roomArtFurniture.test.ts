@@ -1,25 +1,14 @@
 import { checkSlotArt, CTX_DAY } from '../../jest-mocks/roomArtChecks';
-import { drawKipLayer, drawRoomStatic, kipSeatFor, SEATS } from '../../src/lib/room/draw';
-import { boundsOf, boxContains, THUMB_BOX } from '../../src/lib/room/grid';
+import { boundsOf, boxContains } from '../../src/lib/room/grid';
 import { itemArt } from '../../src/lib/room/items';
 import { LAPTOP_GLASS } from '../../src/lib/room/items/desk';
-import { STARTER_LOADOUT, EMPTY_WORN } from '../../src/lib/room/loadout';
-import { catalogueItemsFor } from '../../src/lib/room/catalogue';
+import { catalogueItemsFor, ROOM_SLOTS } from '../../src/lib/room/catalogue';
 import type { RoomRect } from '../../src/lib/room/grid';
 import { mixHex, veiled } from '../../src/lib/room/items/shared';
-import { ROOM_SLOTS } from '../../src/lib/room/slots';
 import { NIGHT_VEIL_ALPHA, NIGHT_VEIL_RGB } from '../../src/lib/room/weather';
 
 it.each(['shelf', 'desk', 'desk_item', 'plant', 'lamp', 'corner', 'rug', 'pet'] as const)('every shipped %s piece has art, an icon and the right flags', (slot) => {
   checkSlotArt(slot, { sets: false });
-});
-
-it('every desk draws the desk and chair, seats KIP on the standard seat, and keeps KIP and its screen in the thumbnail', () => {
-  for (const desk of ['desk.monitor', 'desk.notebook', 'desk.laptop']) {
-    expect(kipSeatFor({ ...STARTER_LOADOUT, desk })).toEqual(SEATS.standard);
-    expect(itemArt(desk)!.style).toBe('standard');
-  }
-  expect(boxContains(THUMB_BOX, LAPTOP_GLASS)).toBe(true);
 });
 
 it('the laptop shows the stage on its own glass: lines, dots, then the chart', () => {
@@ -27,14 +16,6 @@ it('the laptop shows the stage on its own glass: lines, dots, then the chart', (
   expect(new Set([frames('lines'), frames('dots'), frames('chart')]).size).toBe(3);
   for (const f of itemArt('desk.laptop')!.draw({ ...CTX_DAY, screen: 'chart' }).frames!) {
     if (f.length) expect(boxContains(LAPTOP_GLASS, boundsOf(f)!)).toBe(true);
-  }
-});
-
-it('a desk piece never covers KIP\'s seat with its base, so KIP stays in front of the desk', () => {
-  const kip = boundsOf(drawKipLayer({ colour: 'coral', pose: 'rest', mood: 'idle', worn: EMPTY_WORN }, SEATS.standard))!;
-  for (const id of ['item.sticky', 'item.bottle', 'item.pills', 'item.shaker', 'item.stand', 'item.controller']) {
-    const b = boundsOf(itemArt(id)!.draw(CTX_DAY).base!)!;
-    expect({ id, clear: b.x + b.w <= kip.x || b.y + b.h <= kip.y }).toEqual({ id, clear: true });
   }
 });
 
@@ -60,9 +41,4 @@ it('loop frames sit above the night veil, so an unlit piece dims its own frames 
   expect(veiled('#B91C1C', true)).toBe(mixHex('#B91C1C', NIGHT_VEIL_RGB, NIGHT_VEIL_ALPHA));
   expect(veiled('rgba(241,245,249,0.45)', true)).toMatch(/^rgba\(\d+,\d+,\d+,0\.45\)$/);
   expect(veiled('#B91C1C', false)).toBe('#B91C1C');
-});
-
-it('a full release-1 room draws without throwing, day and night', () => {
-  const loadout = { ...STARTER_LOADOUT, shelf: 'shelf.globe', desk: 'desk.laptop', desk_item: 'item.stand', plant: 'plant.monstera', lamp: 'lamp.kiplamp', corner: 'corner.bag', rug: 'rug.woven', pet: 'pet.bed' };
-  for (const night of [false, true]) expect(drawRoomStatic({ loadout, weather: 'mostly', night, colour: 'lilac' }).base.length).toBeGreaterThan(100);
 });

@@ -1,11 +1,14 @@
 import { useSyncExternalStore } from 'react';
 import { fetchCosmetics, postCosmeticsSeen, putCosmetics, type CosmeticsDTO } from '../../api/cosmetics';
 import { setMyKipWorn } from '../kip/myKip';
-import { EMPTY_WORN, STARTER_LOADOUT, type KipWorn, type RoomLoadout } from './loadout';
-import { ROOM_SLOTS, WORN_SLOTS } from './slots';
+import { EMPTY_WORN, type KipWorn } from './loadout';
+import { WORN_SLOTS } from './catalogue';
+import { capFor, toTier, type RoomLayout, type Tier } from './iso/geometry';
+import { readLayout, starterLayout } from './layout';
 
-// One shared copy of GET /me/cosmetics (spec 2026-10-14 KIP's room §4, §5): what you own, what is new, your room and
-// what KIP wears, as stored (ruling 25: ids this build cannot draw are kept here and drawn through drawableLoadout).
+// One shared copy of GET /me/cosmetics (spec 2026-10-14 KIP's room §4, §5; spec 2026-10-15 §2.3): what you own and
+// how many, what is new, your room's layout, tier and cap, what KIP wears, and whether the first-week welcome was
+// seen. The server already trimmed the layout to what you own; a body that is no layout reads as the starter room.
 // Loaded per sign-in by MyKipScope and again on foreground and KIP tab focus (RoomToastHost); a save publishes the
 // server's answer. Anything that lands after sign-out is dropped (the session moves); a read that lands after a save
 // or mark-seen that began while it was in flight is dropped too (each moves the read epoch); and an answer older than
@@ -14,10 +17,14 @@ import { ROOM_SLOTS, WORN_SLOTS } from './slots';
 export interface Cosmetics {
   owned: ReadonlySet<string>;
   fresh: ReadonlyArray<{ itemId: string; source: string }>;
-  room: RoomLoadout;
+  layout: RoomLayout;
+  tier: Tier;
+  cap: number;
+  counts: Readonly<Record<string, number>>;
   worn: KipWorn;
   version: number;
   counters: { recapsRead: number; buddyCheers: number };
+  welcomed: boolean;
 }
 
 let cosmetics: Cosmetics | null = null;
@@ -27,21 +34,31 @@ let epoch = 0;
 let session = 0;
 const listeners = new Set<() => void>();
 
+const sameWorn = (a: KipWorn, b: KipWorn) => WORN_SLOTS.every((s) => a[s] === b[s]);
+
 function publish(next: Cosmetics): void {
   if (cosmetics && next.version < cosmetics.version) return;
+  const wornChanged = !cosmetics || !sameWorn(cosmetics.worn, next.worn);
   cosmetics = next;
-  setMyKipWorn(next.worn);
+  if (wornChanged) setMyKipWorn(next.worn); // a new object only when it changed (Spec B Task 8 minor)
   listeners.forEach((l) => l());
 }
 
 const idOrNull = (v: unknown) => (typeof v === 'string' ? v : null);
 
 function fromDTO(dto: CosmeticsDTO): Cosmetics {
-  const room = { ...STARTER_LOADOUT };
-  for (const slot of ROOM_SLOTS) if (slot in dto.room) room[slot] = idOrNull(dto.room[slot]);
+  // Not a cosmetics body at all: the read fails and what is shown stays.
+  if (typeof dto?.version !== 'number' || !Array.isArray(dto.owned) || !Array.isArray(dto.fresh)) throw new Error('not a cosmetics body');
   const worn = { ...EMPTY_WORN };
-  for (const slot of WORN_SLOTS) worn[slot] = idOrNull(dto.worn[slot]);
-  return { owned: new Set(dto.owned), fresh: dto.fresh, room, worn, version: dto.version, counters: dto.counters };
+  for (const slot of WORN_SLOTS) worn[slot] = idOrNull(dto.worn?.[slot]);
+  const tier = toTier(dto.tier);
+  return {
+    owned: new Set(dto.owned), fresh: dto.fresh, layout: readLayout(dto.layout), tier,
+    cap: typeof dto.cap === 'number' ? dto.cap : capFor(tier), counts: dto.counts ?? {}, worn,
+    version: dto.version, counters: dto.counters,
+    // An older server sends no flag: never show the welcome there.
+    welcomed: dto.welcomed !== false,
+  };
 }
 
 export function getCosmetics(): Cosmetics | null {
@@ -72,8 +89,8 @@ export function loadCosmetics(): Promise<Cosmetics | null> {
   return read;
 }
 
-/** PUT /me/cosmetics. Throws the ApiError (403 not_owned, 409 stale, …) for decorate mode to handle. */
-export async function saveCosmeticsLoadout(input: { room: RoomLoadout; worn: KipWorn; version: number }): Promise<Cosmetics> {
+/** PUT /me/cosmetics. Throws the ApiError (403 not_owned, 409 stale, 400 …) for the editor to handle. */
+export async function saveCosmeticsLoadout(input: { layout: RoomLayout; worn: KipWorn; version: number }): Promise<Cosmetics> {
   epoch++;
   const at = session;
   const next = fromDTO(await putCosmetics(input));
@@ -114,8 +131,19 @@ export function useCosmetics(): Cosmetics | null {
   return useSyncExternalStore(subscribe, getCosmetics, getCosmetics);
 }
 
-const roomOf = () => cosmetics?.room ?? STARTER_LOADOUT;
-/** Your stored room (the starter room until the first read). Draw it through drawableLoadout. */
-export function useMyRoom(): RoomLoadout {
+export interface MyRoom { layout: RoomLayout; tier: Tier }
+const STARTER_ROOM_VIEW: MyRoom = { layout: starterLayout(), tier: 1 };
+let roomView: { from: Cosmetics; value: MyRoom } | null = null;
+const roomOf = (): MyRoom => {
+  if (!cosmetics) return STARTER_ROOM_VIEW;
+  if (roomView?.from !== cosmetics) {
+    // Marking seen republishes the same layout: keep the same object so the room's readers don't re-render.
+    const same = roomView && roomView.value.layout === cosmetics.layout && roomView.value.tier === cosmetics.tier;
+    roomView = { from: cosmetics, value: same ? roomView!.value : { layout: cosmetics.layout, tier: cosmetics.tier } };
+  }
+  return roomView.value;
+};
+/** Your stored room (the starter layout until the first read), one stable object per published read. */
+export function useMyRoom(): MyRoom {
   return useSyncExternalStore(subscribe, roomOf, roomOf);
 }

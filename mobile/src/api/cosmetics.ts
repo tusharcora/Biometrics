@@ -1,19 +1,27 @@
 import { apiFetch } from './client';
 import { send } from './buddies';
-import type { KipWorn, RoomLoadout } from '../lib/room/loadout';
+import type { KipWorn } from '../lib/room/loadout';
+import type { RoomLayout } from '../lib/room/iso/geometry';
 
-// KIP's room (spec 2026-10-14 KIP's room §5). The server decides ownership; the app only shows it.
+// KIP's room (spec 2026-10-15 §12). The server decides ownership and validates every layout; the app only shows it.
 export interface CosmeticsDTO {
   catalogueVersion: number;
   owned: string[];
   fresh: Array<{ itemId: string; source: string }>;
-  room: Record<string, string | null>;
+  /** Spec B's slot room, derived by the server until P2; the app reads `layout`. */
+  room?: Record<string, string | null>;
+  layout: unknown;
+  tier: number;
+  cap: number;
+  counts: Record<string, number>;
   worn: Record<string, string | null>;
   version: number;
   counters: { recapsRead: number; buddyCheers: number };
+  welcomed: boolean;
 }
 
 export const fetchCosmetics = () => apiFetch<CosmeticsDTO>('/me/cosmetics');
-export const putCosmetics = (body: { room: RoomLoadout; worn: KipWorn; version: number }) =>
+export const putCosmetics = (body: { layout: RoomLayout; worn: KipWorn; version: number }) =>
   apiFetch<CosmeticsDTO>('/me/cosmetics', send('PUT', body));
 export const postCosmeticsSeen = (itemIds: string[]) => apiFetch<void>('/me/cosmetics/seen', send('POST', { itemIds }));
+export const postRoomWelcomed = () => apiFetch<void>('/me/room/welcomed', send('POST', {}));

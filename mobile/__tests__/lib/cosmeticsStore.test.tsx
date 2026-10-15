@@ -5,17 +5,24 @@ import { getMyKip, resetMyKip } from '../../src/lib/kip/myKip';
 import {
   getCosmetics, hasUnseen, loadCosmetics, markCosmeticsSeen, resetCosmetics, saveCosmeticsLoadout, useCosmetics, useMyRoom,
 } from '../../src/lib/room/cosmeticsStore';
-import { EMPTY_WORN, STARTER_LOADOUT } from '../../src/lib/room/loadout';
+import { starterLayout } from '../../src/lib/room/layout';
+import { EMPTY_WORN } from '../../src/lib/room/loadout';
+import { cosmeticsDTO, STARTER_COUNTS } from '../../jest-mocks/cosmeticsFixture';
 
 jest.mock('../../src/api/cosmetics', () => ({ fetchCosmetics: jest.fn(), putCosmetics: jest.fn(), postCosmeticsSeen: jest.fn() }));
 const get = fetchCosmetics as jest.Mock;
 const put = putCosmetics as jest.Mock;
 const seen = postCosmeticsSeen as jest.Mock;
 
-const DTO = {
-  catalogueVersion: 1, owned: ['wall.plain', 'rug.red'], fresh: [{ itemId: 'rug.red', source: 'family:SLEEP_GOAL:1' }],
-  room: { ...STARTER_LOADOUT, rug: 'rug.red' }, worn: { ...EMPTY_WORN, head: 'out.beanie' }, version: 3, counters: { recapsRead: 2, buddyCheers: 1 },
-};
+const RED = { ...starterLayout(), pieces: starterLayout().pieces.map((p) => (p.id === 'rug' ? { ...p, item: 'rug.red' } : p)) };
+const BEANIE = { ...EMPTY_WORN, head: 'out.beanie' };
+const DTO = cosmeticsDTO({
+  owned: ['wall.plain', 'rug.red'], fresh: [{ itemId: 'rug.red', source: 'family:SLEEP_GOAL:1' }], layout: RED,
+  counts: { ...STARTER_COUNTS, 'rug.red': 1 }, worn: BEANIE, version: 3,
+  counters: { recapsRead: 2, buddyCheers: 1 },
+});
+/** The DTO with another wallpaper at a version (the read-vs-save tests, ruling T10). */
+const saved = (wallpaper: string, version: number) => ({ ...DTO, layout: { ...RED, styles: { ...RED.styles, wallpaper } }, version });
 
 beforeEach(() => {
   get.mockReset(); put.mockReset(); seen.mockReset();
@@ -25,9 +32,9 @@ beforeEach(() => {
 it('loads once, publishes the room, and hands the worn half to useMyKip', async () => {
   get.mockResolvedValue(DTO);
   const { result } = renderHook(() => useMyRoom());
-  expect(result.current).toEqual(STARTER_LOADOUT);
+  expect(result.current).toEqual({ layout: starterLayout(), tier: 1 });
   await act(async () => { await loadCosmetics(); });
-  expect(result.current.rug).toBe('rug.red');
+  expect(result.current.layout).toEqual(RED);
   expect(getCosmetics()!.owned.has('rug.red')).toBe(true);
   expect(getMyKip().worn.head).toBe('out.beanie');
   expect(hasUnseen(getCosmetics()!)).toBe(true);
@@ -50,12 +57,39 @@ it('keeps what it has when a read fails, and a read that lands after sign-out is
 it('a save publishes the server\'s answer; a failed save throws and changes nothing', async () => {
   get.mockResolvedValue(DTO);
   await act(async () => { await loadCosmetics(); });
-  put.mockResolvedValueOnce({ ...DTO, room: { ...DTO.room, wallpaper: 'wall.dots' }, version: 4 });
-  await act(async () => { await saveCosmeticsLoadout({ room: { ...DTO.room, wallpaper: 'wall.dots' }, worn: DTO.worn, version: 3 }); });
-  expect([getCosmetics()!.room.wallpaper, getCosmetics()!.version]).toEqual(['wall.dots', 4]);
+  const DOTS = { ...RED, styles: { ...RED.styles, wallpaper: 'wall.dots' } };
+  put.mockResolvedValueOnce({ ...DTO, layout: DOTS, version: 4 });
+  await act(async () => { await saveCosmeticsLoadout({ layout: DOTS, worn: BEANIE, version: 3 }); });
+  expect([getCosmetics()!.layout.styles.wallpaper, getCosmetics()!.version]).toEqual(['wall.dots', 4]);
   put.mockRejectedValueOnce(new ApiError(409, 'stale', 'stale'));
-  await expect(saveCosmeticsLoadout({ room: DTO.room, worn: DTO.worn, version: 3 })).rejects.toBeInstanceOf(ApiError);
+  await expect(saveCosmeticsLoadout({ layout: RED, worn: EMPTY_WORN, version: 3 })).rejects.toBeInstanceOf(ApiError);
   expect(getCosmetics()!.version).toBe(4);
+});
+
+it('hands worn items to useMyKip only when they change (Spec B Task 8 minor)', async () => {
+  const myKip = require('../../src/lib/kip/myKip');
+  const spy = jest.spyOn(myKip, 'setMyKipWorn');
+  get.mockResolvedValue(DTO);
+  await act(async () => { await loadCosmetics(); });
+  await act(async () => { await loadCosmetics(); });
+  expect(spy).toHaveBeenCalledTimes(1);
+  spy.mockRestore();
+});
+
+it('reads a body without a layout (an older server) as the starter layout, welcomed', async () => {
+  const { layout: _drop, welcomed: _w, ...old } = DTO;
+  get.mockResolvedValue(old);
+  await act(async () => { await loadCosmetics(); });
+  expect([getCosmetics()!.layout, getCosmetics()!.welcomed]).toEqual([starterLayout(), true]);
+});
+
+it('a body that is no cosmetics body fails the read and keeps what is shown', async () => {
+  get.mockResolvedValueOnce(DTO);
+  await act(async () => { await loadCosmetics(); });
+  const shown = getCosmetics();
+  get.mockResolvedValueOnce({ status: 'CONNECTED', lastSyncedAt: null });
+  await act(async () => { await loadCosmetics(); });
+  expect(getCosmetics()).toBe(shown);
 });
 
 it('marking seen clears fresh at once and tells the server; a failed post is ignored', async () => {
@@ -78,13 +112,13 @@ it('a read that started before a save never reverts it; a read started after the
   await act(async () => { await loadCosmetics(); });
   const finish = deferredGet();
   const pending = loadCosmetics();
-  put.mockResolvedValueOnce({ ...DTO, room: { ...DTO.room, wallpaper: 'wall.dots' }, version: 4 });
-  await act(async () => { await saveCosmeticsLoadout({ room: { ...DTO.room, wallpaper: 'wall.dots' }, worn: DTO.worn, version: 3 }); });
+  put.mockResolvedValueOnce(saved('wall.dots', 4));
+  await act(async () => { await saveCosmeticsLoadout({ layout: saved('wall.dots', 3).layout, worn: BEANIE, version: 3 }); });
   await act(async () => { finish(DTO); await pending; });
-  expect([getCosmetics()!.room.wallpaper, getCosmetics()!.version]).toEqual(['wall.dots', 4]);
-  get.mockResolvedValueOnce({ ...DTO, room: { ...DTO.room, wallpaper: 'wall.brick' }, version: 5 });
+  expect([getCosmetics()!.layout.styles.wallpaper, getCosmetics()!.version]).toEqual(['wall.dots', 4]);
+  get.mockResolvedValueOnce(saved('wall.brick', 5));
   await act(async () => { await loadCosmetics(); });
-  expect([getCosmetics()!.room.wallpaper, getCosmetics()!.version]).toEqual(['wall.brick', 5]);
+  expect([getCosmetics()!.layout.styles.wallpaper, getCosmetics()!.version]).toEqual(['wall.brick', 5]);
 });
 
 it('a read older than what is shown is ignored', async () => {
@@ -114,17 +148,16 @@ function deferredPut() {
   put.mockReturnValueOnce(new Promise((r) => { resolve = r; }));
   return (v: unknown) => resolve(v);
 }
-const saved = (wallpaper: string, version: number) => ({ ...DTO, room: { ...DTO.room, wallpaper }, version });
 
 it('marking seen while a save is in flight never drops the save\'s answer', async () => {
   get.mockResolvedValueOnce(DTO);
   await act(async () => { await loadCosmetics(); });
   const finish = deferredPut();
-  const pending = saveCosmeticsLoadout({ room: saved('wall.dots', 3).room, worn: DTO.worn, version: 3 });
+  const pending = saveCosmeticsLoadout({ layout: saved('wall.dots', 3).layout, worn: BEANIE, version: 3 });
   seen.mockResolvedValueOnce(undefined);
   await act(async () => { await markCosmeticsSeen(['rug.red']); });
   await act(async () => { finish(saved('wall.dots', 4)); await pending; });
-  expect([getCosmetics()!.room.wallpaper, getCosmetics()!.version]).toEqual(['wall.dots', 4]);
+  expect([getCosmetics()!.layout.styles.wallpaper, getCosmetics()!.version]).toEqual(['wall.dots', 4]);
 });
 
 it('two overlapping saves both publish in order and end at the higher version, whichever answers last', async () => {
@@ -132,27 +165,27 @@ it('two overlapping saves both publish in order and end at the higher version, w
   await act(async () => { await loadCosmetics(); });
   let first = deferredPut();
   let second = deferredPut();
-  let a = saveCosmeticsLoadout({ room: saved('wall.dots', 3).room, worn: DTO.worn, version: 3 });
-  let b = saveCosmeticsLoadout({ room: saved('wall.brick', 4).room, worn: DTO.worn, version: 4 });
+  let a = saveCosmeticsLoadout({ layout: saved('wall.dots', 3).layout, worn: BEANIE, version: 3 });
+  let b = saveCosmeticsLoadout({ layout: saved('wall.brick', 4).layout, worn: BEANIE, version: 4 });
   await act(async () => { first(saved('wall.dots', 4)); await a; });
-  expect([getCosmetics()!.room.wallpaper, getCosmetics()!.version]).toEqual(['wall.dots', 4]);
+  expect([getCosmetics()!.layout.styles.wallpaper, getCosmetics()!.version]).toEqual(['wall.dots', 4]);
   await act(async () => { second(saved('wall.brick', 5)); await b; });
-  expect([getCosmetics()!.room.wallpaper, getCosmetics()!.version]).toEqual(['wall.brick', 5]);
+  expect([getCosmetics()!.layout.styles.wallpaper, getCosmetics()!.version]).toEqual(['wall.brick', 5]);
   // Answers out of order: the older one never replaces the newer.
   first = deferredPut();
   second = deferredPut();
-  a = saveCosmeticsLoadout({ room: saved('wall.panel', 5).room, worn: DTO.worn, version: 5 });
-  b = saveCosmeticsLoadout({ room: saved('wall.subway', 6).room, worn: DTO.worn, version: 6 });
+  a = saveCosmeticsLoadout({ layout: saved('wall.panel', 5).layout, worn: BEANIE, version: 5 });
+  b = saveCosmeticsLoadout({ layout: saved('wall.subway', 6).layout, worn: BEANIE, version: 6 });
   await act(async () => { second(saved('wall.subway', 7)); await b; });
   await act(async () => { first(saved('wall.panel', 6)); await a; });
-  expect([getCosmetics()!.room.wallpaper, getCosmetics()!.version]).toEqual(['wall.subway', 7]);
+  expect([getCosmetics()!.layout.styles.wallpaper, getCosmetics()!.version]).toEqual(['wall.subway', 7]);
 });
 
 it('a save that answers after sign-out is dropped', async () => {
   get.mockResolvedValueOnce(DTO);
   await act(async () => { await loadCosmetics(); });
   const finish = deferredPut();
-  const pending = saveCosmeticsLoadout({ room: saved('wall.dots', 3).room, worn: DTO.worn, version: 3 });
+  const pending = saveCosmeticsLoadout({ layout: saved('wall.dots', 3).layout, worn: BEANIE, version: 3 });
   act(() => resetCosmetics());
   await act(async () => { finish(saved('wall.dots', 4)); await pending; });
   expect(getCosmetics()).toBeNull();

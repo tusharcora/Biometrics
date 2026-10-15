@@ -7,7 +7,7 @@ import './index';
 import { catalogueItem, isoOf } from '../catalogue';
 import type { Box, RoomRect } from '../grid';
 import type { ItemContext, MonitorScreen, SeatStyle } from '../items';
-import { childrenOf, layoutKey } from '../layout';
+import { childrenOf, deskOf, layoutKey } from '../layout';
 import { wornKey, type KipWorn } from '../loadout';
 import { poly, R, type Rects } from '../paint';
 import { DAYLIGHT, NIGHT_VEIL, type RoomWeather } from '../weather';
@@ -130,7 +130,7 @@ export function anchorOf(P: Proj, p: Placement, byId: ReadonlyMap<string, Placem
 /** KIP on the desk's seat tile (spec §3.6): its 32-cell grid stands on the tile centre. No desk: the room's centre. */
 export function kipAt(g: IsoGrid, layout: RoomLayout): KipSeat {
   const P = projOf(g);
-  const desk = layout.pieces.find((p) => p.layer === 'floor' && isoOf(p.item)?.kipDesk);
+  const desk = deskOf(layout);
   const iso = desk ? isoOf(desk.item) : undefined;
   const seat = desk && iso ? seatTile(desk, iso) : null;
   const [si, sj] = seat ?? [Math.floor(g.n / 2), Math.floor(g.m / 2)];
@@ -193,7 +193,7 @@ export function drawIsoStatic(input: IsoStaticInput): IsoStatic {
   const solid = floor.filter((p) => !isoOf(p.item)!.flat);
   const boxes: DepthBox[] = solid.map((p) => { const a = footOf(p, isoOf(p.item)!); return { key: p.id, i0: a.x0, j0: a.y0, i1: a.x1, j1: a.y1 }; });
   const kipSeat = kipAt(g, layout);
-  const desk = layout.pieces.find((p) => p.layer === 'floor' && isoOf(p.item)?.kipDesk);
+  const desk = deskOf(layout);
   const seat = desk ? seatTile(desk, isoOf(desk.item)!) : null;
   if (seat) boxes.push({ key: KIP_KEY, i0: seat[0], j0: seat[1], i1: seat[0] + 1, j1: seat[1] + 1 });
   const order = depthOrder(boxes, desk && byId.has(desk.id) ? [[desk.id, KIP_KEY]] : []);

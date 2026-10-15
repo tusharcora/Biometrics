@@ -132,7 +132,7 @@ const deskItem: ItemArt = {
 };
 
 // Fairy lights along the beam (sets2.js:289-295): the wire in the base, the bulbs twinkle in the frames, a warm glow
-// at night. Outside the lamp anchor by design (ANCHOR_EXEMPT). Lit bulbs: the frames stay unveiled at night.
+// at night. Strung across the whole back wall. Lit bulbs: the frames stay unveiled at night.
 const BULBS = Array.from({ length: 24 }, (_, i) => 14 + i * 6).map((x) => ({ x, y: 10 + Math.round(3 * Math.sin(((x - 14) / 144) * Math.PI * 3) ** 2) }));
 const lamp: ItemArt = {
   id: 'set.cottage.lamp', slot: 'lamp', emissive: true, frames: 3,

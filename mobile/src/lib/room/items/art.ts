@@ -3,7 +3,6 @@
 import { registerItems, type ItemArt } from '../items';
 import { registerIcons, type SpriteRect } from '../icons';
 import { glow, R, type Rects } from '../paint';
-import { SLOT_ANCHORS } from '../slots';
 import { artFrame, darkenHex, sprite, spriteBox, three, veiled } from './shared';
 
 // The board sprites, verbatim (CatWindow.dc.html:78-88).
@@ -17,7 +16,7 @@ const BAND: readonly SpriteRect[] = [[0, 0, 14, 18, '#111827'], [1, 1, 12, 16, '
 const CORK: readonly SpriteRect[] = [[0, 0, 20, 14, '#7C5A3E'], [1, 1, 18, 12, '#C08A5A'], [3, 3, 4, 4, '#FDE047'], [9, 2, 4, 4, '#F9A8D4'], [14, 4, 4, 4, '#93C5FD'], [5, 8, 4, 4, '#A7F3D0'], [12, 9, 5, 3, '#F1F5F9'], [4, 3, 1, 1, '#DC2626'], [10, 2, 1, 1, '#DC2626'], [15, 4, 1, 1, '#DC2626']];
 const WAVE: readonly SpriteRect[] = [[0, 0, 20, 14, '#1F2937'], [1, 1, 18, 12, '#EDE6D3'], [1, 9, 18, 4, '#1D4ED8'], [3, 6, 6, 3, '#1D4ED8'], [6, 4, 4, 2, '#1D4ED8'], [8, 3, 3, 1, '#1D4ED8'], [9, 4, 2, 1, '#F8FAFC'], [7, 5, 2, 1, '#F8FAFC'], [2, 8, 3, 1, '#F8FAFC'], [14, 8, 3, 1, '#F8FAFC'], [14, 3, 2, 2, '#DC2626']];
 
-const ANCHOR = SLOT_ANCHORS.art;
+const ANCHOR = { x: 130, y: 12, w: 22, h: 24 }; // Spec A's art anchor: the frame the front-on sprite hangs in
 
 /** Where artFrame puts a sprite's (0, 0): centred in the anchor, 3 cells below its top. */
 function originOf(rects: readonly SpriteRect[]): [number, number] {

@@ -1,7 +1,6 @@
 // Telling you something unlocked (spec 2026-10-14 KIP's room §4). Badge pieces are named by the celebration; recap,
 // cheer and set pieces get one toast each time new ones arrive; the backfill gets one summary toast (ruling 11).
-import { catalogueItem, isWornSlot } from './catalogue';
-import type { DecorateSlot, DecorateTab } from './decorate';
+import type { DecorateParams } from './edit/editor';
 import { itemName, ROOM_COPY, spokenName } from './roomCopy';
 
 export interface Toasted {
@@ -53,7 +52,7 @@ export function piecesForBadge(fresh: Fresh, family: string, level: number): str
     .map((f) => f.itemId);
 }
 
-export function decorateTarget(itemId: string): { tab: DecorateTab; slot: DecorateSlot } {
-  const slot: DecorateSlot = catalogueItem(itemId)?.slot ?? 'wallpaper';
-  return { tab: isWornSlot(slot) ? 'kip' : 'room', slot };
+/** The toast's and the celebration line's Decorate: the editor with the drawer on New (spec 2026-10-15 §1 Toasts). */
+export function decorateTarget(itemId: string): DecorateParams {
+  return { drawer: 'new', item: itemId };
 }

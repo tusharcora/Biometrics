@@ -63,6 +63,6 @@ it('finds a celebration\'s pieces: its family at its level or below, and any fam
 });
 
 it('opens decorate mode on the piece\'s tab and slot', () => {
-  expect(decorateTarget('rug.red')).toEqual({ tab: 'room', slot: 'rug' });
-  expect(decorateTarget('out.scarf')).toEqual({ tab: 'kip', slot: 'neck' });
+  expect(decorateTarget('rug.red')).toEqual({ drawer: 'new', item: 'rug.red' });
+  expect(decorateTarget('out.scarf')).toEqual({ drawer: 'new', item: 'out.scarf' });
 });

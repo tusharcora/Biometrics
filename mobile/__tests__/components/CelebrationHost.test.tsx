@@ -213,7 +213,7 @@ describe("new pieces for KIP's room", () => {
     act(() => jest.advanceTimersByTime(MODAL_DISMISS_MS - 1));
     expect(mockNav.navigate).not.toHaveBeenCalled();
     act(() => jest.advanceTimersByTime(1));
-    expect(mockNav.navigate).toHaveBeenCalledWith('DecorateRoom', { tab: 'room', slot: 'rug' });
+    expect(mockNav.navigate).toHaveBeenCalledWith('DecorateRoom', { drawer: 'new', item: 'rug.red' });
   });
 
   const COSMETICS = (fresh: Array<{ itemId: string; source: string }>, version = 1) => ({
@@ -258,7 +258,7 @@ describe("new pieces for KIP's room", () => {
     expect(mockNav.navigate).not.toHaveBeenCalled();
     act(() => jest.advanceTimersByTime(1));
     expect(mockNav.navigate).toHaveBeenCalledTimes(1);
-    expect(mockNav.navigate).toHaveBeenCalledWith('DecorateRoom', { tab: 'room', slot: 'art' });
+    expect(mockNav.navigate).toHaveBeenCalledWith('DecorateRoom', { drawer: 'new', item: 'art.motto' });
   });
 
   it('forgets a pending Decorate on sign-out', async () => {

@@ -4,7 +4,7 @@ import type { AchievementsSnapshot } from '../achievementsStore';
 import type { AchievementFamilyName, SetId, UnlockRule } from './catalogue';
 import { catalogueSet } from './catalogue';
 import type { ItemId } from './loadout';
-import type { RoomSlot, WornSlot } from './slots';
+import type { RoomSlot, WornSlot } from './catalogue';
 
 export const ITEM_NAMES: Readonly<Record<ItemId, string>> = {
   'wall.plain': 'Plain slate', 'wall.dots': 'Dots', 'wall.stripes': 'Tinted stripes', 'wall.brick': 'Brick',
@@ -50,13 +50,6 @@ export const SLOT_NAMES: Readonly<Record<RoomSlot | WornSlot, string>> = {
 export const SLOT_TITLES: Readonly<Record<RoomSlot | WornSlot, string>> = {
   wallpaper: 'Wallpaper', floor: 'Floor', art: 'Art', window: 'Window', shelf: 'Shelf', desk: 'Desk', desk_item: 'Desk item',
   plant: 'Plant', lamp: 'Lamp', corner: 'Corner', rug: 'Rug', pet: 'Pet', head: 'Head', face: 'Face', neck: 'Neck', ears: 'Ears',
-};
-
-/** The short visible text of the decorate room's hotspot tags; each fits a 64-point tag in the pixel font. The spoken
- * label keeps the whole slot name (hotspotLabel). */
-export const HOTSPOT_LABELS: Readonly<Record<RoomSlot, string>> = {
-  wallpaper: '+ WALL', floor: '+ FLOOR', art: '+ ART', window: '+ WINDOW', shelf: '+ SHELF', desk: '+ DESK', desk_item: '+ ITEM',
-  plant: '+ PLANT', lamp: '+ LAMP', corner: '+ CORNER', rug: '+ RUG', pet: '+ PET',
 };
 
 const FAMILY_NAMES: Record<AchievementFamilyName, string> = {
@@ -134,38 +127,20 @@ export const ROOM_COPY = {
   decorate: 'Decorate',
   decorateLabel: "Decorate KIP's room",
   decorateLabelNew: "Decorate KIP's room. New things to place",
-  title: 'DECORATE',
   cancel: 'Cancel',
   done: 'Done',
   undo: 'Undo',
   undoLabel: 'Undo the last change',
-  tabs: { room: 'Room', kip: 'KIP', sets: 'Sets' },
   tabsLabel: 'Decorate',
-  hotspot: (slot: RoomSlot) => HOTSPOT_LABELS[slot],
-  hotspotLabel: (slot: RoomSlot) => `Decorate the ${SLOT_NAMES[slot]}`,
-  locked: 'LOCKED',
   none: 'None',
   noArt: 'No art',
   tags: { placed: 'Placed', owned: 'Owned' },
   flags: { tint: 'TINT', glow: 'GLOW', anim: 'ANIM' },
-  info: {
-    previewing: 'Previewing',
-    inRoom: 'In your room',
-    locked: 'Locked',
-    sets: 'Theme sets',
-    wearing: 'KIP is wearing',
-    dress: 'Dress KIP',
-    previewText: (name: string, slot: RoomSlot | WornSlot) => `${name} in the ${SLOT_NAMES[slot]} spot`,
-    placedText: (name: string) => `${name} is already placed`,
-    emptyText: (slot: RoomSlot | WornSlot) => `Nothing in the ${SLOT_NAMES[slot]} spot`,
-    lockedText: (name: string, unlock: string) => `${name} · ${unlock}`,
-    setsText: 'Apply a whole room in one tap, then swap any piece',
-    dressText: 'Pick an accessory',
-  },
-  tile: {
-    placed: (name: string) => `${name}, placed`,
-    owned: (name: string) => `${name}, owned. Place it`,
-    locked: (name: string, unlock: string, progress: string) => (progress ? `${name}, locked. ${unlock}. ${progress}` : `${name}, locked. ${unlock}`),
+  edit: {
+    title: 'EDITING',
+    count: (n: number, cap: number) => `${n} / ${cap} in room`,
+    countLabel: (n: number, cap: number) => `${n} of ${cap} pieces in the room`,
+    roomLabel: "KIP's room, being edited",
   },
   set: {
     pieces: (n: number, unlock: string) => `${n} pieces · ${unlock}`,

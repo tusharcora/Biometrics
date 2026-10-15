@@ -21,11 +21,6 @@ export interface Box {
 /** One rect on the grid: x, y, w, h (cells) and a CSS colour ('#RRGGBB' or 'rgba(…)'). */
 export type RoomRect = [number, number, number, number, string];
 
-/** The window, the desk and KIP: always on screen, centred by the crop (§3.2). 280 × 200 points at 2 pt. */
-export const FOCUS_BOX: Box = { x: 15, y: 10, w: 140, h: 100 };
-/** KIP and the monitor: the collapsed header's thumbnail (§3.5), 96 × 60 points at 1 pt. */
-export const THUMB_BOX: Box = { x: 70, y: 40, w: 96, h: 60 };
-
 /** The smallest box holding every rect, or null for none. */
 export function boundsOf(rects: readonly RoomRect[]): Box | null {
   if (!rects.length) return null;

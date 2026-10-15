@@ -27,7 +27,7 @@ import { followUpsFor } from '../../src/lib/coachAnswers';
 import { fetchCosmetics } from '../../src/api/cosmetics';
 import { loadCosmetics, resetCosmetics } from '../../src/lib/room/cosmeticsStore';
 import { setDecorateOpen } from '../../src/lib/room/decorateOpen';
-import { EMPTY_WORN, STARTER_LOADOUT } from '../../src/lib/room/loadout';
+import { cosmeticsDTO } from '../../jest-mocks/cosmeticsFixture';
 
 jest.mock('../../src/api/cosmetics', () => ({ ...jest.requireActual('../../src/api/cosmetics'), fetchCosmetics: jest.fn() }));
 
@@ -887,12 +887,8 @@ describe('CoachScreen: tab bar clearance', () => {
 });
 
 describe("CoachScreen: decorate (spec 2026-10-14 KIP's room §4, §6.1)", () => {
-  const COSMETICS = {
-    catalogueVersion: 1, owned: ['rug.red'], room: { ...STARTER_LOADOUT }, worn: { ...EMPTY_WORN }, version: 1,
-    counters: { recapsRead: 0, buddyCheers: 0 },
-  };
   async function withCosmetics(fresh: { itemId: string; source: string }[]) {
-    (fetchCosmetics as jest.Mock).mockResolvedValue({ ...COSMETICS, fresh });
+    (fetchCosmetics as jest.Mock).mockResolvedValue(cosmeticsDTO({ owned: ['rug.red'], fresh }));
     await act(async () => {
       await loadCosmetics();
     });

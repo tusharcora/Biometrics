@@ -4,7 +4,14 @@
 import data from './catalogue.json';
 import { type GeometryDeps, type IsoSpec, type RoomLayout } from './iso/geometry';
 import type { ItemId, RoomLoadout } from './loadout';
-import { WORN_SLOTS, type RoomSlot, type WornSlot } from './slots';
+
+// The slot ids (spec 2026-10-14 KIP Coach §5), fixed: Spec B's catalogue and a set's slot record use them, and the
+// worn slots are what KIP wears. The slot engine that drew them is gone (spec 2026-10-15 §3).
+export const ROOM_SLOTS = ['wallpaper', 'floor', 'art', 'window', 'shelf', 'desk', 'desk_item', 'plant', 'lamp', 'corner', 'rug', 'pet'] as const;
+export type RoomSlot = (typeof ROOM_SLOTS)[number];
+
+export const WORN_SLOTS = ['head', 'face', 'neck', 'ears'] as const;
+export type WornSlot = (typeof WORN_SLOTS)[number];
 
 export type SetId = string;
 export type AchievementFamilyName =
