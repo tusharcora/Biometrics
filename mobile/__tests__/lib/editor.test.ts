@@ -378,6 +378,19 @@ describe('the room grows under the editor (spec §7, ruling 19)', () => {
     expect(validateLayout(r.draft.layout, 3, GEOMETRY_DEPS)).toBeNull();
   });
 
+  it('a piece the server kept that the draft moved under the new window goes back to where the server has it (ruling T13-FIX M4)', () => {
+    const base = starterLayout(); // the plank at x 6, clear of the loft's window
+    const s = run(start({ layout: base, tier: 2 }),
+      { type: 'drop', id: 'plank', item: 'shelf.plank', target: { layer: 'wallR', x: 12, y: 10 } },
+      { type: 'drop', id: null, item: 'art.calendar', target: { layer: 'wallR', x: 12, y: 2 } });
+    expect(s.draft.layout.pieces.find((p) => p.id === 'plank')!.x).toBe(12);
+    const r = run(s, { type: 'rebased', saved: { layout: base, worn: EMPTY_WORN }, version: 7, tier: 3, counts: COUNTS });
+    const ids = r.draft.layout.pieces.map((p) => p.id);
+    expect(r.draft.layout.pieces.find((p) => p.id === 'plank')).toEqual(base.pieces.find((p) => p.id === 'plank'));
+    expect([ids.includes('shelf'), ids.includes('p1')]).toEqual([true, false]); // the books stay on it; the new calendar goes
+    expect(validateLayout(r.draft.layout, 3, GEOMETRY_DEPS)).toBeNull();
+  });
+
   it('drops a draft piece standing on a stored one, keeps a moved piece the server kept, and takes the new counts', () => {
     const base = { ...starterLayout(), pieces: starterLayout().pieces.map((p) => (p.id === 'plank' ? { ...p, x: 12 } : p)) };
     // The draft moves the fern and puts a second piece on the plank the server will store.

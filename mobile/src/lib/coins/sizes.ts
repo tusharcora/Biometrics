@@ -35,12 +35,16 @@ export function familiesOf(snapshot: AchievementsSnapshot): FamilyStanding[] | n
     : null;
 }
 
-function badgeLine(g: Gate, f: FamilyStanding | undefined): GateLine {
+function badgeLine(g: Gate, families: readonly FamilyStanding[] | null): GateLine {
+  const title = g.family === 'CHECK_IN' ? Z.streakTitle(g.threshold) : Z.badgeTitle(g.level);
+  // Not read: unknown, never "0 of 14" (ruling T13-FIX M2).
+  if (!families) return { title, progress: Z.unknown, met: false };
+  const f = families.find((x) => x.family === g.family);
   const met = (f?.level ?? 0) >= g.level;
   if (g.family === 'CHECK_IN') {
-    return { title: Z.streakTitle(g.threshold), progress: met ? Z.done : Z.of(String(Math.min(f?.current ?? 0, g.threshold)), String(g.threshold)), met };
+    return { title, progress: met ? Z.done : Z.of(String(Math.min(f?.current ?? 0, g.threshold)), String(g.threshold)), met };
   }
-  return { title: Z.badgeTitle(g.level), progress: met ? Z.done : f?.level ? Z.levelNow(f.level) : Z.noLevel, met };
+  return { title, progress: met ? Z.done : f?.level ? Z.levelNow(f.level) : Z.noLevel, met };
 }
 
 export function sizeRows(tier: Tier, balance: number, families: readonly FamilyStanding[] | null): SizeRow[] {
@@ -56,7 +60,7 @@ export function sizeRows(tier: Tier, balance: number, families: readonly FamilyS
       ...row,
       status: t === tier + 1 ? 'next' : 'later',
       coins: { title: Z.coinsTitle(coinCount(g.price)), progress: Z.of(coinCount(Math.min(balance, g.price)), coinCount(g.price)), met: balance >= g.price },
-      badge: badgeLine(g, families?.find((f) => f.family === g.family)),
+      badge: badgeLine(g, families),
     };
   });
 }

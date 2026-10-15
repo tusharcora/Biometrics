@@ -6,7 +6,7 @@
 import { catalogueItem, catalogueSet, GEOMETRY_DEPS, isoOf, type CatalogueSet } from '../catalogue';
 import type { KipWorn, ItemId } from '../loadout';
 import type { WornSlot } from '../catalogue';
-import { capFor, coveredBy, validateLayout, type Placement, type RoomLayout, type StyleKey, type Tier } from '../iso/geometry';
+import { capFor, checkPiece, coveredBy, validateLayout, type Placement, type RoomLayout, type StyleKey, type Tier } from '../iso/geometry';
 import { isoGrid } from '../iso/grid';
 import { childrenOf, deskOf, inventoryOf, layoutKey, newPieceId } from '../layout';
 import { COACH_ITEM, coachTile, nearestFloor, nearestFree, placedAt, refusal, roomCentre, targetPoint, type Refused, type Target } from './targets';
@@ -377,12 +377,26 @@ function reduce(s: EditorState, a: EditorAction): EditorState {
       return { ...s, saved: a.draft, draft: a.draft, past: [], future: [], counts: a.counts, tier: a.tier, baseVersion: a.version, notice: 'refreshed', selected: null, preview: null, outcome: null };
     case 'rebased': {
       // The draft keeps its own changes but loses what the server stored (gone from its room) and any wall piece the
-      // new size's window covers (the server's own rule, coveredBy, ruling PF-F4), with what stood on them. Undo
-      // can't reach back past the new base.
-      const kept = new Set(a.saved.layout.pieces.map((p) => p.id));
-      const gone = coveredBy(layout, a.tier, GEOMETRY_DEPS);
-      for (const p of s.saved.layout.pieces) if (!kept.has(p.id)) gone.add(p.id);
-      const pieces = layout.pieces.filter((p) => !gone.has(p.id) && !(p.parent !== undefined && gone.has(p.parent)));
+      // new size's window covers (the server's own rule, coveredBy, ruling PF-F4), with what stood on them. A piece
+      // the server kept that the draft moved under the window goes back to the server's place for it, if that place
+      // is still free in the draft (ruling T13-FIX M4). Undo can't reach back past the new base.
+      const server = new Map(a.saved.layout.pieces.map((p) => [p.id, p]));
+      const gone = new Set(s.saved.layout.pieces.filter((p) => !server.has(p.id)).map((p) => p.id));
+      const back = new Map<string, Placement>();
+      for (const id of coveredBy(layout, a.tier, GEOMETRY_DEPS)) {
+        const mine = layout.pieces.find((p) => p.id === id);
+        // What stands on a covered piece follows it: back with it, or gone with it.
+        if (gone.has(id) || !mine || mine.layer === 'onTop') continue;
+        const theirs = server.get(id);
+        if (theirs) back.set(id, theirs);
+        else gone.add(id);
+      }
+      let pieces = layout.pieces.filter((p) => !gone.has(p.id) && !(p.parent !== undefined && gone.has(p.parent)));
+      for (const [id, theirs] of back) {
+        const rest: RoomLayout = { ...layout, pieces: pieces.filter((p) => p.id !== id) };
+        if (!checkPiece(rest, theirs, a.tier, GEOMETRY_DEPS)) pieces = pieces.map((p) => (p.id === id ? theirs : p));
+        else pieces = pieces.filter((p) => p.id !== id && p.parent !== id);
+      }
       return {
         ...s, saved: a.saved, draft: { ...s.draft, layout: { ...layout, pieces } }, past: [], future: [], tier: a.tier, counts: a.counts,
         baseVersion: a.version, selected: null, nudging: false, preview: null, outcome: null,

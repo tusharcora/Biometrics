@@ -78,6 +78,12 @@ export function CoinShopScreen() {
   }, []);
   useEffect(() => { load(); }, [load]);
 
+  // While a purchase waits on the server nothing leaves (ruling T13-FIX M7): Close is disabled, and Android's back
+  // button (or any other way out) is held here.
+  useEffect(() => navigation.addListener?.('beforeRemove', (e: { preventDefault: () => void }) => {
+    if (busy.current) e.preventDefault();
+  }), [navigation]);
+
   // The notice is a polite live region on Android; iOS has none, so it is announced there (EditNotices' pattern).
   const say = (text: string, spoken = text) => {
     setNotice({ text, spoken });

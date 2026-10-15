@@ -13,7 +13,9 @@ it('lists the three sizes: yours, then both gates of each bigger one with their 
     { title: '1,500 coins', progress: '360 of 1,500', met: false }, { title: 'Sleep goal badge, level 3', progress: 'level 2 now', met: false },
   ]);
   expect(sizeRows(2, 0, FAMILIES)[1]!.status).toBe('yours');
-  expect(sizeRows(1, 360, null)[1]!.badge).toEqual({ title: 'A 14-day check-in streak', progress: '0 of 14', met: false });
+  // Badges not read: unknown, never "0 of 14" (ruling T13-FIX M2).
+  expect(sizeRows(1, 360, null)[1]!.badge).toEqual({ title: 'A 14-day check-in streak', progress: 'not known yet', met: false });
+  expect(sizeRows(1, 360, null)[2]!.badge).toEqual({ title: 'Sleep goal badge, level 3', progress: 'not known yet', met: false });
 });
 
 it('says what Grow still needs, both gates always (spec §7)', () => {

@@ -362,6 +362,8 @@ export const ROOM_COPY = {
     badgeTitle: (level: number) => `Sleep goal badge, level ${level}`,
     levelNow: (level: number) => `level ${level} now`,
     noLevel: 'No level yet',
+    /** The badges couldn't be read: a gate's progress is never guessed as 0 (ruling T13-FIX M2). */
+    unknown: 'not known yet',
     done: 'Done',
     gateSpoken: (title: string, progress: string) => `${title}, ${progress}`,
     grow: (n: number) => `Grow to ${n} × ${n}`,

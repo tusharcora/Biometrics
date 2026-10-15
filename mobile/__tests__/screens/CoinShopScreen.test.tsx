@@ -12,7 +12,7 @@ import { cosmeticsDTO, STARTER_COUNTS } from '../../jest-mocks/cosmeticsFixture'
 
 jest.mock('../../src/api/coins', () => ({ fetchCoins: jest.fn(), postCoinsSeen: jest.fn(), fetchFirstWeek: jest.fn(), fetchShop: jest.fn(), postPurchase: jest.fn(), postExpand: jest.fn() }));
 jest.mock('../../src/api/cosmetics', () => ({ fetchCosmetics: jest.fn(), putCosmetics: jest.fn(), postCosmeticsSeen: jest.fn(async () => undefined), postRoomWelcomed: jest.fn() }));
-const mockNav = { navigate: jest.fn(), goBack: jest.fn() };
+const mockNav = { navigate: jest.fn(), goBack: jest.fn(), addListener: jest.fn((_event: string, _cb: unknown) => () => undefined) };
 jest.mock('@react-navigation/native', () => ({ useNavigation: () => mockNav, useRoute: () => ({ params: undefined }) }));
 
 const SHOP: ShopDTO = {
@@ -33,6 +33,22 @@ async function open(balance = 360) {
 }
 
 beforeEach(() => { jest.clearAllMocks(); resetCoins(); resetCosmetics(); });
+
+it('holds the back button while a purchase waits on the server (ruling T13-FIX M7)', async () => {
+  const s = await open();
+  const remove = (mockNav.addListener.mock.calls.find((c) => c[0] === 'beforeRemove') ?? [])[1] as (e: { preventDefault: () => void }) => void;
+  fireEvent.press(s.getByTestId('shop-tile-item.radio'));
+  let answer: (v: unknown) => void = () => undefined;
+  (postPurchase as jest.Mock).mockReturnValueOnce(new Promise((r) => { answer = r; }));
+  fireEvent.press(s.getByTestId('shop-get'));
+  const held = { preventDefault: jest.fn() };
+  remove(held);
+  expect(held.preventDefault).toHaveBeenCalled();
+  await act(async () => { answer({ balance: 210, counts: { ...STARTER_COUNTS, 'item.radio': 1 } }); });
+  const free = { preventDefault: jest.fn() };
+  remove(free);
+  expect(free.preventDefault).not.toHaveBeenCalled();
+});
 
 it('shows the week\'s set card, tiles with prices, a locked rule piece with its rule, the wallet and the footer (spec §6.6)', async () => {
   const s = await open();

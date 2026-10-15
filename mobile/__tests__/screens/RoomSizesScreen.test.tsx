@@ -16,7 +16,7 @@ jest.mock('../../src/api/coins', () => ({ fetchCoins: jest.fn(), postCoinsSeen: 
 jest.mock('../../src/api/cosmetics', () => ({ fetchCosmetics: jest.fn(), putCosmetics: jest.fn(), postCosmeticsSeen: jest.fn(), postRoomWelcomed: jest.fn() }));
 let mockBadges: unknown;
 jest.mock('../../src/lib/achievementsStore', () => ({ useAchievements: () => mockBadges, refreshAchievements: jest.fn(async () => undefined) }));
-const mockNav = { navigate: jest.fn(), goBack: jest.fn(), replace: jest.fn() };
+const mockNav = { navigate: jest.fn(), goBack: jest.fn(), replace: jest.fn(), addListener: jest.fn((_event: string, _cb: unknown) => () => undefined) };
 let mockParams: object | undefined;
 jest.mock('@react-navigation/native', () => ({ useNavigation: () => mockNav, useRoute: () => ({ params: mockParams }) }));
 let mockReduceMotion = false;
@@ -111,14 +111,99 @@ it('the loft is the last size: no Grow', async () => {
 
 it('a refused grow reads the wallet and the room again and says not yet; a dropped connection keeps the request id', async () => {
   const s = await open({ balance: 650, checkIn: { level: 2, current: 3 } });
-  (postExpand as jest.Mock).mockRejectedValueOnce(new TypeError('Network request failed')).mockRejectedValueOnce(new ApiError(409, 'x', 'gate', { error: 'gate', coinsNeeded: 10, badgeNeeded: false }));
+  const offline = new TypeError('Network request failed');
+  (postExpand as jest.Mock).mockRejectedValueOnce(offline).mockRejectedValueOnce(offline)
+    .mockRejectedValueOnce(new ApiError(409, 'x', 'gate', { error: 'gate', coinsNeeded: 10, badgeNeeded: false }));
   await act(async () => { fireEvent.press(s.getByTestId('sizes-grow')); });
   expect(s.getByTestId('sizes-notice')).toHaveTextContent("Couldn't grow the room just now. Try again.");
   await act(async () => { fireEvent.press(s.getByTestId('sizes-grow')); });
-  const [a, b] = (postExpand as jest.Mock).mock.calls.map((c) => c[0]);
-  expect(b).toBe(a);
+  const ids = (postExpand as jest.Mock).mock.calls.map((c) => c[0]);
+  expect(ids).toEqual([ids[0], ids[0], ids[0]]); // the automatic re-send and the next tap are the same grow
   expect(s.getByTestId('sizes-notice')).toHaveTextContent('Not quite yet: your room sizes were refreshed.');
   expect((fetchCoins as jest.Mock).mock.calls.length).toBeGreaterThanOrEqual(2);
+});
+
+describe('a grow whose answer was lost (ruling T13-FIX I1)', () => {
+  it('is sent again once with the same id, and the replayed answer opens the unlock moment', async () => {
+    const s = await open({ balance: 1600, checkIn: { level: 2 }, sleepLevel: 3, room: cosmeticsDTO({ tier: 2, cap: 60, version: 2 }) });
+    (postExpand as jest.Mock).mockRejectedValueOnce(new TypeError('Network request failed'))
+      .mockResolvedValueOnce({ ...cosmeticsDTO({ tier: 3, cap: 90, version: 4 }), balance: 100, stored: 2 });
+    await act(async () => { fireEvent.press(s.getByTestId('sizes-grow')); });
+    const ids = (postExpand as jest.Mock).mock.calls.map((c) => c[0]);
+    expect(ids).toEqual([ids[0], ids[0]]);
+    expect(s.getByTestId('sizes-grown')).toBeTruthy();
+    expect(s.getByTestId('sizes-stored')).toHaveTextContent('The new window needed the wall: 2 pieces went to your inventory');
+    expect(s.queryByTestId('sizes-notice')).toBeNull();
+  });
+
+  it('when the re-send is lost too, a room read again at the new size is the unlock moment', async () => {
+    const s = await open({ balance: 650, checkIn: { level: 2, current: 3 } });
+    (postExpand as jest.Mock).mockRejectedValue(new TypeError('Network request failed'));
+    (fetchCosmetics as jest.Mock).mockResolvedValue(cosmeticsDTO({ tier: 2, cap: 60, version: 3 }));
+    await act(async () => { fireEvent.press(s.getByTestId('sizes-grow')); });
+    expect((postExpand as jest.Mock).mock.calls).toHaveLength(2);
+    expect(s.getByTestId('sizes-grown')).toHaveTextContent(/Your room grew/);
+    expect(s.queryByTestId('sizes-stored')).toBeNull();
+    expect(s.getByTestId('sizes-room').props.tier).toBe(2);
+    expect(s.queryByTestId('sizes-notice')).toBeNull();
+  });
+
+  it('when the re-send is lost and the room is still the old size, it says try again', async () => {
+    const s = await open({ balance: 650, checkIn: { level: 2, current: 3 } });
+    (postExpand as jest.Mock).mockRejectedValue(new TypeError('Network request failed'));
+    await act(async () => { fireEvent.press(s.getByTestId('sizes-grow')); });
+    expect(s.queryByTestId('sizes-grown')).toBeNull();
+    expect(s.getByTestId('sizes-notice')).toHaveTextContent("Couldn't grow the room just now. Try again.");
+  });
+});
+
+it('the notice sits with Grow and its line, where the tap was (ruling T13-FIX M5)', async () => {
+  const s = await open({ balance: 650, checkIn: { level: 2, current: 3 } });
+  (postExpand as jest.Mock).mockRejectedValueOnce(new ApiError(500, 'x'));
+  await act(async () => { fireEvent.press(s.getByTestId('sizes-grow')); });
+  const ids = s.getByTestId('sizes-grow-area').findAll((n) => typeof n.props.testID === 'string').map((n) => String(n.props.testID));
+  expect(ids).toEqual(expect.arrayContaining(['sizes-grow', 'sizes-notice']));
+});
+
+it('holds the back button while a grow waits on the server (ruling T13-FIX M7)', async () => {
+  const s = await open({ balance: 650, checkIn: { level: 2, current: 3 } });
+  const remove = (mockNav.addListener.mock.calls.find((c) => c[0] === 'beforeRemove') ?? [])[1] as (e: { preventDefault: () => void }) => void;
+  let answer: (v: unknown) => void = () => undefined;
+  (postExpand as jest.Mock).mockReturnValueOnce(new Promise((r) => { answer = r; }));
+  fireEvent.press(s.getByTestId('sizes-grow'));
+  const held = { preventDefault: jest.fn() };
+  remove(held);
+  expect(held.preventDefault).toHaveBeenCalled();
+  await act(async () => { answer({ ...cosmeticsDTO({ tier: 2, cap: 60, version: 3 }), balance: 50, stored: 0 }); });
+  const free = { preventDefault: jest.fn() };
+  remove(free);
+  expect(free.preventDefault).not.toHaveBeenCalled();
+});
+
+it('a cached room with a wallet that could not be read offers Try again (ruling T13-FIX M1)', async () => {
+  mockBadges = { state: { status: 'ready', data: achievementsFixture() }, celebrated: new Set() };
+  mockParams = undefined;
+  (fetchCosmetics as jest.Mock).mockResolvedValue(cosmeticsDTO());
+  (fetchCoins as jest.Mock).mockRejectedValueOnce(new TypeError('Network request failed'));
+  await act(async () => { await loadCosmetics(); });
+  const s = render(<RoomSizesScreen />);
+  await act(async () => undefined);
+  expect(s.getByTestId('sizes-failed')).toBeTruthy();
+  (fetchCoins as jest.Mock).mockResolvedValue({ balance: 360, today: { earned: 0, cap: 60 }, events: [], next: null });
+  await act(async () => { fireEvent.press(s.getByTestId('sizes-retry')); });
+  expect(s.getByTestId('sizes-coins-2').props.accessibilityLabel).toBe('600 coins, 360 of 600');
+});
+
+it('with the badges unread, the badge gate is unknown, not 0, and a refused gate keeps its badgeNeeded (ruling T13-FIX M2)', async () => {
+  const s = await open({ balance: 650 });
+  mockBadges = { state: { status: 'error' }, celebrated: new Set() };
+  s.rerender(<RoomSizesScreen />);
+  expect(s.getByTestId('sizes-badge-2').props.accessibilityLabel).toBe('A 14-day check-in streak, not known yet');
+  (postExpand as jest.Mock).mockRejectedValueOnce(new ApiError(409, 'x', 'gate', { error: 'gate', coinsNeeded: 0, badgeNeeded: true }));
+  await act(async () => { fireEvent.press(s.getByTestId('sizes-grow')); });
+  // The wallet re-read landed (a new read), yet the badge the server found missing is still said.
+  expect(s.getByTestId('sizes-blocker')).toHaveTextContent('Needs 14 more days in a row.');
+  expect(s.getByTestId('sizes-grow').props.accessibilityState.disabled).toBe(true);
 });
 
 it('a refused gate says what is still needed, from the wallet read again (ruling T11-ERR)', async () => {
