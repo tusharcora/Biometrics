@@ -5,7 +5,7 @@ import { starterLayout } from '../../src/lib/room/layout';
 import { isoCrop, deskBoxes } from '../../src/lib/room/iso/crop';
 import type { Placement, RoomLayout } from '../../src/lib/room/iso/geometry';
 import { isoGrid } from '../../src/lib/room/iso/grid';
-import { clipOut, drawIsoFrames, drawIsoStatic, drawKipLayer, isoRoomKey, pieceAt, type IsoStaticInput } from '../../src/lib/room/iso/room';
+import { clipOut, drawIsoFramesEach, drawIsoStatic, drawKipLayer, isoRoomKey, pieceAt, type IsoStaticInput } from '../../src/lib/room/iso/room';
 import { NIGHT_VEIL } from '../../src/lib/room/weather';
 
 const KIP = { colour: 'coral' as const, pose: 'rest' as const, mood: 'idle' as const, worn: EMPTY_WORN };
@@ -91,7 +91,7 @@ describe('loop frames (spec §3.7, ruling 8)', () => {
     const kip = drawKipLayer(KIP, s.kipSeat);
     const cells = new Set<string>();
     for (const [x, y, w, h] of kip) for (let i = 0; i < w; i++) for (let j = 0; j < h; j++) cells.add(`${x + i},${y + j}`);
-    const frames = drawIsoFrames(s, { night: true, colour: 'coral', screen: 'dots' }, kip);
+    const frames = drawIsoFramesEach(s, { night: true, colour: 'coral', screen: 'dots' }, [kip, kip, kip]);
     expect(frames.every((f) => f.length > 0)).toBe(true);
     for (const f of frames) for (const [x, y, w, h] of f) for (let i = 0; i < w; i++) for (let j = 0; j < h; j++) expect(cells.has(`${x + i},${y + j}`)).toBe(false);
   });

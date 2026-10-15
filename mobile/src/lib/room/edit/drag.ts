@@ -6,6 +6,7 @@ import type { ItemContext } from '../items';
 import type { ItemId } from '../loadout';
 import type { Rects } from '../paint';
 import { pieceLayers } from '../iso/art';
+import { clampAxis } from '../iso/crop';
 import { isoGrid, projOf, type IsoGrid } from '../iso/grid';
 import type { Placement } from '../iso/geometry';
 import { moveRects } from '../iso/prims';
@@ -80,10 +81,5 @@ export function ghostRects(state: EditorState, drag: Drag, c: { night: boolean; 
 
 /** The pan, clamped so the room's edges never show; a room narrower than the view stays centred (spec §5.6). */
 export function clampPan(pan: { x: number; y: number }, view: { width: number; height: number }, g: IsoGrid, cellPt = 2): { x: number; y: number } {
-  const axis = (v: number, size: number, cells: number) => {
-    const room = cells * cellPt;
-    if (room <= size) return Math.round((size - room) / 2);
-    return Math.round(Math.min(0, Math.max(size - room, v)));
-  };
-  return { x: axis(pan.x, view.width, g.W), y: axis(pan.y, view.height, g.H) };
+  return { x: clampAxis(pan.x, view.width, g.W * cellPt), y: clampAxis(pan.y, view.height, g.H * cellPt) };
 }

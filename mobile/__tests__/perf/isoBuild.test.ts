@@ -2,7 +2,7 @@ import { performance } from 'perf_hooks';
 import { EMPTY_WORN } from '../../src/lib/room/loadout';
 import { clearPieceCache } from '../../src/lib/room/iso/art';
 import type { Placement, RoomLayout } from '../../src/lib/room/iso/geometry';
-import { drawIsoFrames, drawIsoStatic, drawKipLayer } from '../../src/lib/room/iso/room';
+import { drawIsoFramesEach, drawIsoStatic, drawKipLayer } from '../../src/lib/room/iso/room';
 import { starterLayout } from '../../src/lib/room/layout';
 
 // Spec 2026-10-15 §3.7 budget, for a full 9 × 9 room of 90 pieces at night: every piece picture cold, the rebuild
@@ -37,7 +37,7 @@ run('iso room build time', () => {
     const rebuild = median(() => drawIsoStatic({ ...input, hide: null }));
     const s = drawIsoStatic(input);
     const kip = drawKipLayer({ colour: 'coral', pose: 'type', mood: 'idle', worn: EMPTY_WORN }, s.kipSeat);
-    const frame = median(() => drawIsoFrames(s, { night: true, colour: 'coral', screen: 'dots' }, kip));
+    const frame = median(() => drawIsoFramesEach(s, { night: true, colour: 'coral', screen: 'dots' }, [kip, kip, kip]));
     console.info(JSON.stringify({ event: 'room.iso.build', pieces: layout.pieces.length, coldMs: cold, rebuildMs: rebuild, frameMs: frame }));
     expect(layout.pieces).toHaveLength(90);
     for (const ms of [cold, rebuild, frame]) expect(Number.isFinite(ms) && ms > 0).toBe(true);

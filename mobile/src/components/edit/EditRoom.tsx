@@ -77,7 +77,8 @@ export const EditRoom = forwardRef<EditRoomHandle, EditRoomProps>(function EditR
   const origin = useRef({ x: 0, y: 0 });
   const draft = displayDraft(state);
   const input = { layout: draft.layout, tier: state.tier, weather: window.weather, night: window.night, colour };
-  // The picture RoomView draws, here for its hit boxes: rebuilt only when the room itself changes.
+  // The picture RoomView draws, here for its hit boxes and handed down (final review M2): rebuilt only when the room
+  // itself changes. While a piece is lifted RoomView builds its own, without that piece.
   const drawn = useMemo(() => drawIsoStatic(input), [isoRoomKey(input)]); // eslint-disable-line react-hooks/exhaustive-deps
   const box = drawn.hits.find((h) => h.id === state.selected)?.box ?? null;
   // The lime tile shows while the guided placement waits for the lantern (spec §11.1).
@@ -220,6 +221,7 @@ export const EditRoom = forwardRef<EditRoomHandle, EditRoomProps>(function EditR
           cellPt={EDIT_CELL_PT}
           offset={pan}
           hide={drag?.id ?? null}
+          room={drag?.id ? undefined : drawn}
           reduceMotion={reduceMotion}
           accessible={false}
         />

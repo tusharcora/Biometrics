@@ -5,7 +5,8 @@ import { bubbleAnchor, LOOP_MS, RoomView, type RoomViewProps } from '../../src/c
 import { EMPTY_WORN } from '../../src/lib/room/loadout';
 import { starterLayout } from '../../src/lib/room/layout';
 import { isoCrop } from '../../src/lib/room/iso/crop';
-import { drawIsoFrames, drawIsoFramesEach, drawIsoStatic, drawKipLayer } from '../../src/lib/room/iso/room';
+import * as isoRoom from '../../src/lib/room/iso/room';
+import { drawIsoFramesEach, drawIsoStatic, drawKipLayer } from '../../src/lib/room/iso/room';
 import type { RoomRect } from '../../src/lib/room/grid';
 
 let mockFocused = true;
@@ -75,7 +76,26 @@ describe('RoomView (iso)', () => {
   it('each loop frame behind KIP is clipped by KIP\'s silhouette in that same frame', () => {
     const kips = [0, 1, 2].map((f) => drawKipLayer({ colour: 'coral', pose: 'type', mood: 'glance', worn: EMPTY_WORN, frame: f }, STATIC.kipSeat)) as [RoomRect[], RoomRect[], RoomRect[]];
     const each = drawIsoFramesEach(STATIC, { night: false, colour: 'coral', screen: 'dots' }, kips);
-    for (const k of [0, 1, 2] as const) expect(each[k]).toEqual(drawIsoFrames(STATIC, { night: false, colour: 'coral', screen: 'dots' }, kips[k])[k]);
+    const cells = (rects: readonly RoomRect[]) => {
+      const out = new Set<string>();
+      for (const [x, y, w, h] of rects) for (let i = 0; i < w; i++) for (let j = 0; j < h; j++) out.add(`${x + i},${y + j}`);
+      return out;
+    };
+    for (const k of [0, 1, 2] as const) {
+      const kip = cells(kips[k]);
+      expect(each[k].length).toBeGreaterThan(0);
+      expect([...cells(each[k])].some((c) => kip.has(c))).toBe(false);
+    }
+  });
+
+  it('draws a static room it is given without building its own (final review M2)', () => {
+    const build = jest.spyOn(isoRoom, 'drawIsoStatic');
+    const s = render(<RoomView {...PROPS} room={STATIC} />);
+    expect(build).not.toHaveBeenCalled();
+    expect(pictures(s)).toHaveLength(4);
+    s.rerender(<RoomView {...PROPS} room={undefined} hide="rug" />);
+    expect(build).toHaveBeenCalledTimes(1);
+    build.mockRestore();
   });
 
   it('a lifted piece rebuilds the room without it, and the old room pictures are released', () => {

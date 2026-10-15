@@ -7,7 +7,7 @@ import type { Rects } from '../../lib/room/paint';
 import type { MonitorScreen } from '../../lib/room/items';
 import type { KipWorn } from '../../lib/room/loadout';
 import type { RoomWeather } from '../../lib/room/weather';
-import type { KipSeat } from '../../lib/room/iso/room';
+import type { IsoStatic, KipSeat } from '../../lib/room/iso/room';
 import { drawIsoFramesEach, drawIsoStatic, drawKipLayer, isoRoomKey, kipLayerKey } from '../../lib/room/iso/room';
 import { isoCrop } from '../../lib/room/iso/crop';
 import type { RoomLayout, Tier } from '../../lib/room/iso/geometry';
@@ -38,6 +38,8 @@ export interface RoomViewProps {
   offset?: { x: number; y: number };
   /** The editor: a piece lifted into the drag ghost is left out of the picture (spec §3.7). */
   hide?: string | null;
+  /** The editor: the static room it already built for these props (its hit boxes), so it is built once a change. */
+  room?: IsoStatic;
   bubble: string | null;
   reduceMotion: boolean;
   accessibilityLabel?: string;
@@ -67,7 +69,7 @@ export function RoomView(props: RoomViewProps) {
 
   const input = { layout, tier, weather, night, colour, hide: props.hide ?? null };
   const staticKey = isoRoomKey(input);
-  const room = useMemo(() => drawIsoStatic(input), [staticKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const room = useMemo(() => props.room ?? drawIsoStatic(input), [staticKey, props.room]); // eslint-disable-line react-hooks/exhaustive-deps
   const back = useDisposed(useMemo(() => record([room.back], cellPt), [room, cellPt]));
   const front = useDisposed(useMemo(() => record([room.front, room.light, room.emissive], cellPt), [room, cellPt]));
 

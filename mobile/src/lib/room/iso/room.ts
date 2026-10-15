@@ -230,15 +230,10 @@ export function clipOut(rects: readonly RoomRect[], kip: readonly RoomRect[]): R
 }
 
 /**
- * The three loop frames for a screen state: the shell's and those behind KIP clipped by KIP, then those in front.
- * All three come out together, so the caller records them once per (static picture, screen, KIP silhouette) and the
- * 400 ms tick only picks one, never re-recording them.
+ * The three loop frames for a screen state: the shell's and those behind KIP, each clipped by KIP's silhouette in that
+ * same frame (ruling T10-FIX), then those in front. All three come out together, so the caller records them once per
+ * (static picture, screen, KIP's pose) and the 400 ms tick only picks one, never re-recording them.
  */
-export function drawIsoFrames(s: IsoStatic, c: { night: boolean; colour: KipColour; screen: MonitorScreen }, kip: Rects): [Rects, Rects, Rects] {
-  return drawIsoFramesEach(s, c, [kip, kip, kip]);
-}
-
-/** The three loop frames, each one clipped by KIP's silhouette in that same frame (ruling T10-FIX). */
 export function drawIsoFramesEach(
   s: IsoStatic,
   c: { night: boolean; colour: KipColour; screen: MonitorScreen },

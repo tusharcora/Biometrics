@@ -24,12 +24,13 @@ export function deskBoxes(g: IsoGrid, layout: RoomLayout): { focus: Box; thumb: 
   };
 }
 
+/** One axis of the room's offset in a view: clamped so the room's edges never show; a room narrower stays centred. */
+export function clampAxis(offset: number, view: number, roomPt: number): number {
+  if (roomPt <= view) return Math.round((view - roomPt) / 2);
+  return Math.round(Math.min(0, Math.max(view - roomPt, offset)));
+}
+
 export function isoCrop({ width, height, cellPt, box, room }: { width: number; height: number; cellPt: number; box: Box; room: { W: number; H: number } }): { x: number; y: number } {
-  const axis = (view: number, start: number, size: number, cells: number) => {
-    const roomPt = cells * cellPt;
-    if (roomPt <= view) return Math.round((view - roomPt) / 2);
-    const centred = view / 2 - (start + size / 2) * cellPt;
-    return Math.round(Math.min(0, Math.max(view - roomPt, centred)));
-  };
+  const axis = (view: number, start: number, size: number, cells: number) => clampAxis(view / 2 - (start + size / 2) * cellPt, view, cells * cellPt);
   return { x: axis(width, box.x, box.w, room.W), y: axis(height, box.y, box.h, room.H) };
 }
