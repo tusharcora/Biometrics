@@ -1920,5 +1920,19 @@
         ]
       }
     }
-  ]
+  ],
+  "tierGates": {
+    "2": {
+      "price": 600,
+      "family": "CHECK_IN",
+      "level": 2,
+      "threshold": 14
+    },
+    "3": {
+      "price": 1500,
+      "family": "SLEEP_GOAL",
+      "level": 3,
+      "threshold": 14
+    }
+  }
 }

@@ -62,6 +62,8 @@ export const CATALOGUE = data as unknown as {
   starterLayout: RoomLayout;
   items: CatalogueItem[];
   sets: CatalogueSet[];
+  /** The room sizes' gates (plan ruling 37): coins and a badge level, with the run that level needs. */
+  tierGates: Record<'2' | '3', { price: number; family: AchievementFamilyName; level: number; threshold: number }>;
 };
 
 const BY_ID = new Map(CATALOGUE.items.map((i) => [i.id, i]));

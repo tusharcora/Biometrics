@@ -41,3 +41,10 @@ it('ships the starter layout and one valid iso layout per set (spec §5.5, rulin
     expect({ id: set.id, failure: validateLayout(set.layout, 1, deps) }).toEqual({ id: set.id, failure: null });
   }
 });
+
+it('carries the tier gates with their badge thresholds (plan ruling 37)', () => {
+  expect(exportCatalogue().tierGates).toEqual({
+    2: { price: 600, family: 'CHECK_IN', level: 2, threshold: 14 },
+    3: { price: 1500, family: 'SLEEP_GOAL', level: 3, threshold: 14 },
+  });
+});

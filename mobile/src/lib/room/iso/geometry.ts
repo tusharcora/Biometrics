@@ -192,6 +192,22 @@ export function checkPiece(layout: RoomLayout, piece: Placement, tier: Tier, dep
   return taken ? { reason: 'spot', with: taken.id } : null;
 }
 
+/**
+ * The wall pieces a size's windows cover, with what stands on them (spec §7): growing to the loft sends them to the
+ * inventory, and the editor's rebase drops them from a draft. One rule for both sides (ruling PF-F4).
+ */
+export function coveredBy(layout: RoomLayout, tier: Tier, deps: GeometryDeps): Set<string> {
+  const gone = new Set<string>();
+  for (const p of layout.pieces) {
+    if (p.layer !== 'wallL' && p.layer !== 'wallR') continue;
+    const iso = deps.isoOf(p.item);
+    const a = iso && wallAreaOf(p, iso);
+    if (a && windowsOn(p.layer, tier).some((w) => overlap(a, w))) gone.add(p.id);
+  }
+  for (const p of layout.pieces) if (p.layer === 'onTop' && p.parent !== undefined && gone.has(p.parent)) gone.add(p.id);
+  return gone;
+}
+
 /** How many of each item the layout places (owned − placed is the inventory, spec §2.2). */
 export function placedCounts(layout: RoomLayout): Record<string, number> {
   const placed: Record<string, number> = {};

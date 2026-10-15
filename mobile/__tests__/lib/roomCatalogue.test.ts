@@ -17,3 +17,10 @@ it('lists a slot\'s items in catalogue order and tells worn slots apart', () => 
   expect([isWornSlot('ears'), isWornSlot('rug')]).toEqual([true, false]);
   expect(catalogueItem('wall.shoji')).toBeUndefined(); // release 2 is not in the app yet
 });
+
+it('carries the room sizes\' gates from the server (plan ruling 37)', () => {
+  expect(CATALOGUE.tierGates).toEqual({
+    2: { price: 600, family: 'CHECK_IN', level: 2, threshold: 14 },
+    3: { price: 1500, family: 'SLEEP_GOAL', level: 3, threshold: 14 },
+  });
+});

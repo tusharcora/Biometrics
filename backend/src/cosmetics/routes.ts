@@ -1,9 +1,11 @@
 // KIP's room endpoints (spec 2026-10-14 KIP's room §5; spec 2026-10-15 free-build §12: the layout save, its error
-// codes and the 32 KB cap, and POST /me/room/welcomed for the first-week welcome card, §11.1). All need a session and
-// answer private, no-store. Nothing here is health data; nothing is logged with the user's id.
+// codes and the 32 KB cap, POST /me/room/welcomed for the first-week welcome card, §11.1, and POST /me/room/expand,
+// growing the room, §7). All need a session and answer private, no-store. Nothing here is health data; nothing is
+// logged with the user's id.
 import express, { Router, type RequestHandler } from 'express';
 import { requireAuth, type AuthedRequest } from '../auth/middleware';
 import { noStore } from '../lib/noStore';
+import { expandRoom } from '../room/expand';
 import { MAX_BODY_BYTES, markSeen, markWelcomed, readCosmetics, saveCosmetics } from './loadout';
 
 export const cosmeticsRouter = Router();
@@ -59,4 +61,15 @@ cosmeticsRouter.post('/me/room/welcomed', requireAuth, async (req: AuthedRequest
   noStore(res);
   await markWelcomed(req.userId!, new Date());
   res.status(204).end();
+});
+
+// Never optimistic: the app grows the room only once this answers 200 (the 32 KB parser is mounted in app.ts).
+cosmeticsRouter.post('/me/room/expand', requireAuth, async (req: AuthedRequest, res) => {
+  noStore(res);
+  const result = await expandRoom(req.userId!, req.body, new Date());
+  if (!result.ok) {
+    res.status(result.failure.status).json(result.failure.body);
+    return;
+  }
+  res.json(result.body);
 });
