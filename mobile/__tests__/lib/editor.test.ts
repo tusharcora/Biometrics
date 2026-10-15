@@ -68,6 +68,13 @@ describe('dragging (spec §5.3)', () => {
     expect(outcomeText(s)).toEqual({ kind: 'reason', text: 'Only on a desk or shelf' });
   });
 
+  it('a let-go that never snapped records its reason and changes nothing (ruling T12-FIX)', () => {
+    const s = start();
+    const r = run(s, { type: 'refused', id: 'plank', item: 'shelf.plank', refused: { reason: 'layer' } });
+    expect([r.draft, r.past.length, r.outcome]).toEqual([s.draft, 0, { ok: false, refused: { reason: 'layer' }, id: 'plank', item: 'shelf.plank' }]);
+    expect(outcomeText(r)).toEqual({ kind: 'reason', text: 'Only on the wall' });
+  });
+
   it('a drop from the drawer adds a new piece with a new id', () => {
     const s = run(start(), { type: 'drop', id: null, item: 'corner.beanbag', target: { layer: 'floor', x: 6, y: 6 } });
     expect([piece(s, 'p1')?.item, s.selected]).toEqual(['corner.beanbag', 'p1']);

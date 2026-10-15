@@ -1,5 +1,5 @@
 import React from 'react';
-import { act, fireEvent, render } from '@testing-library/react-native';
+import { act, fireEvent, render, within } from '@testing-library/react-native';
 import { AccessibilityInfo, Alert, Dimensions } from 'react-native';
 import { State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
@@ -8,9 +8,10 @@ import { fetchCosmetics, putCosmetics } from '../../src/api/cosmetics';
 import { EDIT_CELL_PT, initialPan } from '../../src/components/edit/EditRoom';
 import { DecorateRoomScreen, EDIT_ROOM_HEIGHT, initialState } from '../../src/screens/DecorateRoomScreen';
 import { getCosmetics, loadCosmetics, markCosmeticsSeen, resetCosmetics } from '../../src/lib/room/cosmeticsStore';
-import { LIFT_PT } from '../../src/lib/room/edit/drag';
+import { targetOf } from '../../src/lib/room/edit/drag';
+import { targetPoint } from '../../src/lib/room/edit/targets';
 import { isoGrid, projOf } from '../../src/lib/room/iso/grid';
-import { drawIsoStatic } from '../../src/lib/room/iso/room';
+import { drawIsoStatic, pieceAt } from '../../src/lib/room/iso/room';
 import { starterLayout } from '../../src/lib/room/layout';
 import { useDecorateOpen } from '../../src/lib/room/decorateOpen';
 import { cosmeticsDTO } from '../../jest-mocks/cosmeticsFixture';
@@ -292,26 +293,54 @@ describe('an honest refresh and the save lock (Spec B Task 14 rulings)', () => {
 describe('dragging on the screen (spec §5.3)', () => {
   /** The screen's room: full window width, EDIT_ROOM_HEIGHT tall, starting at initialPan. */
   const roomPan = () => initialPan(initialState(getCosmetics()!, {}), Dimensions.get('window').width, EDIT_ROOM_HEIGHT);
-  const fernTop = () => {
-    const hit = drawIsoStatic({ layout: starterLayout(), tier: 1, weather: 'clear', night: false, colour: 'coral' }).hits.find((h) => h.id === 'plant')!;
-    const [x, y] = hit.rects.filter((q) => !q[4].startsWith('rgba')).sort((a, b) => a[1] - b[1])[0]!;
+  const hits = () => drawIsoStatic({ layout: starterLayout(), tier: 1, weather: 'clear', night: false, colour: 'coral' }).hits;
+  /** A finger point on piece `id`: the middle of a cell where it is the topmost piece. */
+  const grip = (id: string) => {
+    const all = hits();
     const pan = roomPan();
-    return { x: pan.x + (x + 0.5) * EDIT_CELL_PT, y: pan.y + (y + 0.5) * EDIT_CELL_PT };
+    for (const [x, y, w, h, c] of all.find((q) => q.id === id)!.rects) {
+      if (c.startsWith('rgba')) continue;
+      for (let i = x; i < x + w; i++) for (let j = y; j < y + h; j++) {
+        if (pieceAt(all, i, j) === id) return { x: pan.x + (i + 0.5) * EDIT_CELL_PT, y: pan.y + (j + 0.5) * EDIT_CELL_PT };
+      }
+    }
+    throw new Error(`no cell of ${id} is on top`);
   };
-  /** The finger's point that puts the ghost over floor point (i, j). */
-  const pt = (i: number, j: number) => {
+  /** Where the finger that grabbed the fern goes to carry it over floor point (i, j). */
+  const carry = (i: number, j: number) => {
+    const fern = starterLayout().pieces.find((q) => q.id === 'plant')!;
+    const [hx, hy] = targetPoint(isoGrid(1), starterLayout(), fern.item, targetOf(fern), fern.facing);
     const [x, y] = projOf(isoGrid(1))(i, j);
-    const pan = roomPan();
-    return { x: pan.x + x * EDIT_CELL_PT, y: pan.y + y * EDIT_CELL_PT + LIFT_PT };
+    const at = grip('plant');
+    return { x: at.x + (x - hx) * EDIT_CELL_PT, y: at.y + (y - hy) * EDIT_CELL_PT };
   };
-  const drag = (to: { x: number; y: number }) => act(() => fireGestureHandler(getByGestureTestId('edit-room-drag'), [
-    { state: State.BEGAN, ...fernTop() }, { state: State.ACTIVE, ...fernTop() }, { state: State.ACTIVE, ...to }, { state: State.END, ...to },
+  const drag = (from: { x: number; y: number }, to: { x: number; y: number }) => act(() => fireGestureHandler(getByGestureTestId('edit-room-drag'), [
+    { state: State.BEGAN, ...from }, { state: State.ACTIVE, ...from }, { state: State.ACTIVE, ...to }, { state: State.END, ...to },
   ]));
+
+  it('the room is pinned above the scrolling toolbar and lists, so a drag never scrolls the page (ruling T12-FIX)', async () => {
+    const s = await openEditor();
+    expect(within(s.getByTestId('edit-scroll')).queryByTestId('edit-room')).toBeNull();
+    expect(within(s.getByTestId('edit-scroll')).getByTestId('edit-history')).toBeTruthy();
+    expect(within(s.getByTestId('edit-editing')).getByTestId('edit-room')).toBeTruthy();
+  });
+
+  it('held and let go in place, the desk, plank, desk item and lamp stay put with no undo step (ruling T12-FIX)', async () => {
+    const s = await openEditor();
+    const before = s.getByTestId('edit-room-view').props.layout;
+    for (const id of ['desk', 'plank', 'deskitem', 'lamp']) {
+      drag(grip(id), grip(id));
+      expect([id, s.getByTestId('edit-room-view').props.layout]).toEqual([id, before]);
+      expect(s.queryByTestId('edit-reason')).toBeNull();
+    }
+    fireEvent.press(s.getByTestId('edit-room-deselect'));
+    expect(s.getByTestId('edit-undo').props.accessibilityState.disabled).toBe(true);
+  });
 
   it('letting go on an invalid spot puts the piece back, adds no undo step and says why (Review Focus 3)', async () => {
     const s = await openEditor();
     const before = s.getByTestId('edit-room-view').props.layout;
-    drag(pt(9, 9));
+    drag(grip('plant'), carry(9, 9));
     expect(s.getByTestId('edit-room-view').props.layout).toBe(before);
     expect(s.getByTestId('edit-room-view').props.hide).toBeNull();
     expect(s.getByTestId('edit-reason')).toHaveTextContent("Doesn't fit here");
@@ -322,7 +351,7 @@ describe('dragging on the screen (spec §5.3)', () => {
 
   it('letting go on a valid spot moves the piece as one undo step', async () => {
     const s = await openEditor();
-    drag(pt(6.5, 5.5));
+    drag(grip('plant'), carry(6.5, 5.5));
     const plant = JSON.parse(s.getByTestId('edit-room-view').props.layout).pieces.find((p: { id: string }) => p.id === 'plant');
     expect([plant.x, plant.y]).toEqual([6, 5]);
     fireEvent.press(s.getByTestId('edit-room-deselect'));

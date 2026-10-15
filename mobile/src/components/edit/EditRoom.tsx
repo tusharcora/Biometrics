@@ -7,7 +7,7 @@ import { RoomView } from '../room/RoomView';
 import { record, useDisposed } from '../room/pictures';
 import { Text } from '../ui/text';
 import type { KipColour } from '../../lib/kip/kipArt';
-import { clampPan, dragAt, EDGE_PT, ghostRects, LIFT_PT, targetKey, type Drag, type DragBase } from '../../lib/room/edit/drag';
+import { clampPan, dragAt, EDGE_PT, ghostRects, grabOffset, LIFT_PT, targetKey, targetOf, type Drag, type DragBase } from '../../lib/room/edit/drag';
 import { displayDraft, type EditorAction, type EditorState } from '../../lib/room/edit/editor';
 import { reasonText } from '../../lib/room/edit/labels';
 import { gridRects, outlineRects } from '../../lib/room/edit/overlay';
@@ -57,10 +57,11 @@ export interface EditRoomHandle {
 // The editor's room (spec 2026-10-15 §5.2, §5.3, §5.6): the whole room at 2 points with KIP at the desk, the grid and
 // the selected piece's light outline drawn over it (never taking touches). A tap selects the topmost piece under the
 // finger or, on empty floor, deselects. Press and hold lifts a piece: it leaves the static picture once, its 70%
-// ghost (with what stands on it) follows LIFT_PT above the finger as its own picture, snaps with a light tick per new
-// snap, turns red with a short reason, and on letting go the reducer checks the place again (an invalid spot changes
-// nothing). One finger on empty floor pans; a dragged piece near an edge scrolls the room. Not one image here: the
-// pieces list is how a screen reader reaches each piece.
+// ghost (with what stands on it) moves with the finger from where it was grabbed as its own picture (a drawer piece
+// hangs LIFT_PT above the finger), snaps with a light tick per new snap, turns red with a short reason, and on
+// letting go the reducer checks the place again (an invalid spot changes nothing and says why). One finger on empty
+// floor pans; a dragged piece near an edge scrolls the room. Not one image here: the pieces list is how a screen
+// reader reaches each piece.
 export const EditRoom = forwardRef<EditRoomHandle, EditRoomProps>(function EditRoom(props, ref) {
   const { state, dispatch, width, height, window, colour, reduceMotion, showGrid } = props;
   const g = isoGrid(state.tier);
@@ -85,18 +86,26 @@ export const EditRoom = forwardRef<EditRoomHandle, EditRoomProps>(function EditR
   ));
 
   const toCell = (x: number, y: number): [number, number] => [(x - panRef.current.x) / EDIT_CELL_PT, (y - panRef.current.y) / EDIT_CELL_PT];
+  // The grab (ruling T12-FIX), in room cells: from the finger to the point the ghost snaps by. A room piece keeps
+  // its place under the finger (held still, it snaps to where it is); a drawer piece hangs LIFT_PT above the finger.
+  const grab = useRef<[number, number]>([0, 0]);
+  /** Where the lifted piece stands, so letting go there is no change at all. */
+  const homeKey = useRef<string | null>(null);
+  /** The drawer's last finger point in window coordinates, for a late window measure to follow from. */
+  const lastAbs = useRef<[number, number]>([0, 0]);
   const show = (d: Drag | null) => {
     dragRef.current = d;
     if (!d) lastKey.current = null;
     setDrag(d);
   };
-  /** Follows the finger (in the view's points): the ghost sits `lift` above it, and a new snap ticks (spec §5.3). */
-  const follow = (base: DragBase, x: number, y: number, lift = LIFT_PT) => {
+  /** Follows the finger (in the view's points) by the grab, and a new snap ticks (spec §5.3). */
+  const follow = (base: DragBase, x: number, y: number) => {
     // Near an edge the room scrolls under the piece (spec §5.6).
     const dx = x < EDGE_PT ? EDGE_STEP_PT : x > width - EDGE_PT ? -EDGE_STEP_PT : 0;
     const dy = y < EDGE_PT ? EDGE_STEP_PT : y > height - EDGE_PT ? -EDGE_STEP_PT : 0;
     if (dx || dy) setPan(clampPan({ x: panRef.current.x + dx, y: panRef.current.y + dy }, { width, height }, g, EDIT_CELL_PT));
-    const d = dragAt(state, base, toCell(x, y - lift));
+    const [cx, cy] = toCell(x, y);
+    const d = dragAt(state, base, [cx + grab.current[0], cy + grab.current[1]]);
     const key = d.target ? targetKey(d.target) : '';
     if (key !== lastKey.current) {
       lastKey.current = key;
@@ -107,24 +116,35 @@ export const EditRoom = forwardRef<EditRoomHandle, EditRoomProps>(function EditR
   const land = () => {
     const d = dragRef.current;
     show(null);
+    if (!d) return;
+    // Let go where it already stands: nothing happened.
+    if (d.target && targetKey(d.target) === homeKey.current) return;
     // The reducer checks the place again: an invalid spot changes nothing, and the piece stays where it was (or in
-    // the drawer); its reason is said under the room.
-    if (d?.target) dispatch({ type: 'drop', id: d.id, item: d.item, target: d.target });
+    // the drawer). Never snapped: the reason is still said (ruling T12-FIX).
+    if (d.target) dispatch({ type: 'drop', id: d.id, item: d.item, target: d.target });
+    else if (d.refused) dispatch({ type: 'refused', id: d.id, item: d.item, refused: d.refused });
   };
-  const fromWindow = (absX: number, absY: number) => [absX - origin.current.x, absY - origin.current.y] as const;
+  const fromWindow = ([absX, absY]: readonly [number, number]) => [absX - origin.current.x, absY - origin.current.y] as const;
 
   useImperativeHandle(ref, () => ({
     lift: (item, absX, absY) => {
       const base: DragBase = { item, id: null, facing: 'L', mirror: false };
-      follow(base, ...fromWindow(absX, absY));
-      // The room may have scrolled with the page since the last lift: measure again, then follow from there.
+      grab.current = [0, -LIFT_PT / EDIT_CELL_PT];
+      homeKey.current = null;
+      lastAbs.current = [absX, absY];
+      follow(base, ...fromWindow(lastAbs.current));
+      // The room may have scrolled with the page since the last measure: measure again, then follow the finger's
+      // latest point from there.
       viewRef.current?.measureInWindow?.((x, y) => {
         if (x === origin.current.x && y === origin.current.y) return;
         origin.current = { x, y };
-        if (dragRef.current) follow(dragRef.current, ...fromWindow(absX, absY));
+        if (dragRef.current) follow(dragRef.current, ...fromWindow(lastAbs.current));
       });
     },
-    move: (absX, absY) => { if (dragRef.current) follow(dragRef.current, ...fromWindow(absX, absY)); },
+    move: (absX, absY) => {
+      lastAbs.current = [absX, absY];
+      if (dragRef.current) follow(dragRef.current, ...fromWindow(lastAbs.current));
+    },
     drop: land,
     cancel: () => show(null),
   }));
@@ -139,8 +159,10 @@ export const EditRoom = forwardRef<EditRoomHandle, EditRoomProps>(function EditR
       const p = id ? state.draft.layout.pieces.find((q) => q.id === id) : undefined;
       if (!p) return;
       dispatch({ type: 'select', id: p.id });
-      // The ghost starts where the piece is: under the finger, not LIFT_PT above it.
-      follow({ item: p.item, id: p.id, facing: p.facing, mirror: p.mirror }, e.x, e.y, 0);
+      // The ghost starts exactly where the piece stands, and keeps the piece's place under the finger.
+      grab.current = grabOffset(state, p, toCell(e.x, e.y));
+      homeKey.current = targetKey(targetOf(p));
+      follow({ item: p.item, id: p.id, facing: p.facing, mirror: p.mirror }, e.x, e.y);
     })
     .onUpdate((e) => { if (dragRef.current) follow(dragRef.current, e.x, e.y); })
     .onEnd((_e, ok) => { if (dragRef.current) (ok ? land() : show(null)); })

@@ -1,4 +1,4 @@
-import { clampPan, dragAt, ghostRects, targetKey } from '../../src/lib/room/edit/drag';
+import { clampPan, dragAt, ghostRects, grabOffset, targetKey, targetOf } from '../../src/lib/room/edit/drag';
 import { initEditor } from '../../src/lib/room/edit/editor';
 import { isoGrid, projOf } from '../../src/lib/room/iso/grid';
 import { starterLayout } from '../../src/lib/room/layout';
@@ -43,6 +43,17 @@ it('the desk\'s ghost carries what stands on it (spec §3.3)', () => {
   const at = P(3.5, 5);
   const c = { night: false, colour: 'coral' as const };
   expect(ghostRects(S, dragAt(S, desk, at), c).base.length).toBeGreaterThan(ghostRects(bare, dragAt(bare, desk, at), c).base.length);
+});
+
+it('held still, every placed piece snaps back to its own place, wherever the finger grabbed it (ruling T12-FIX)', () => {
+  for (const p of S.draft.layout.pieces) {
+    const base = { item: p.item, id: p.id, facing: p.facing, mirror: p.mirror };
+    for (const finger of [[0, 0], [80, 40], [-3, 200]] as Array<[number, number]>) {
+      const [dx, dy] = grabOffset(S, p, finger);
+      const d = dragAt(S, base, [finger[0] + dx, finger[1] + dy]);
+      expect([p.id, d.target, d.refused]).toEqual([p.id, targetOf(p), null]);
+    }
+  }
 });
 
 it('pans only as far as the room goes; a narrower room stays centred (spec §5.6)', () => {

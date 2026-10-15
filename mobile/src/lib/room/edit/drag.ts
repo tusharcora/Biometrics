@@ -12,7 +12,7 @@ import { moveRects } from '../iso/prims';
 import { anchorOf } from '../iso/room';
 import { childrenOf } from '../layout';
 import { inventory, type EditorState } from './editor';
-import { placedAt, refusal, snapTarget, targetKey, type Refused, type Target } from './targets';
+import { placedAt, refusal, snapTarget, targetKey, targetPoint, type Refused, type Target } from './targets';
 
 // One key format for a target (ruling: drag.ts uses targets.ts's).
 export { targetKey };
@@ -37,6 +37,21 @@ export function dragAt(state: EditorState, base: DragBase, cell: [number, number
   const piece = placedAt({ id: base.id ?? '__ghost', item: base.item, facing: base.facing, mirror: base.mirror }, target);
   // refusal checks the layer first (ruling T2), then the cap for a new piece, then the geometry.
   return { ...base, cell, target, refused: refusal(layout, piece, state.tier, base.id === null) };
+}
+
+/** Where a placed piece stands now, as a target. */
+export function targetOf(p: Placement): Target {
+  return p.layer === 'onTop' ? { layer: 'onTop', parent: p.parent ?? '', spot: p.spot ?? 0 } : { layer: p.layer, x: p.x, y: p.y };
+}
+
+/**
+ * The grab (ruling T12-FIX): from the finger's room cell to the piece's own target point. Added to every later
+ * finger point, so a hold without a move snaps to where the piece already is, and the piece keeps its place under
+ * the finger as it moves.
+ */
+export function grabOffset(state: EditorState, p: Placement, finger: readonly [number, number]): [number, number] {
+  const [x, y] = targetPoint(isoGrid(state.tier), state.draft.layout, p.item, targetOf(p), p.facing);
+  return [x - finger[0], y - finger[1]];
 }
 
 /** The ghost: the piece at its target (or under the finger when nothing snaps), what stands on it, and a red copy. */

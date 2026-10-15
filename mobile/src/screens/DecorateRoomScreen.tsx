@@ -24,7 +24,8 @@ export const EDIT_ROOM_HEIGHT = 320;
 
 // The free-build editor (spec 2026-10-15 §5): a full-screen modal over the KIP page (C6's "drawer over the chat"
 // drawn as this modal, §5.1). Cancel / EDITING / Done, the room count, the room. The KIP page's loops pause while it
-// is open (Spec B ruling 17). Under the room: the notices, the toolbar and the pieces list. The room holds the drag;
+// is open (Spec B ruling 17). The room and the notices stay put; under them the toolbar and the pieces list scroll.
+// The room holds the drag;
 // Task 13's drawer drives it through the room's handle.
 export function DecorateRoomScreen() {
   const navigation = useNavigation<any>();
@@ -155,14 +156,15 @@ function Editor({ cosmetics, params, navigation }: { cosmetics: Cosmetics; param
       <Text testID="edit-count" accessibilityLabel={ROOM_COPY.edit.countLabel(n, cosmetics.cap)} className="px-4 pb-2 text-caption text-muted-foreground">
         {ROOM_COPY.edit.count(n, cosmetics.cap)}
       </Text>
-      <ScrollView contentContainerStyle={{ paddingBottom: 32 }}>
-        <View testID="edit-editing" pointerEvents={saving ? 'none' : 'auto'}>
-          <EditRoom ref={roomRef} state={state} dispatch={act} width={width} height={EDIT_ROOM_HEIGHT} window={day.window} colour={me.colour} reduceMotion={reduceMotion} showGrid={showGrid} />
-          <EditNotices state={state} />
+      {/* The room is pinned above the scrolling part (ruling T12-FIX), so a drag or a pan in it never scrolls the page. */}
+      <View testID="edit-editing" className="flex-1" pointerEvents={saving ? 'none' : 'auto'}>
+        <EditRoom ref={roomRef} state={state} dispatch={act} width={width} height={EDIT_ROOM_HEIGHT} window={day.window} colour={me.colour} reduceMotion={reduceMotion} showGrid={showGrid} />
+        <EditNotices state={state} />
+        <ScrollView testID="edit-scroll" className="flex-1" contentContainerStyle={{ paddingBottom: 32 }}>
           <EditToolbar state={state} dispatch={act} showGrid={showGrid} onToggleGrid={() => setShowGrid((v) => !v)} />
           <PiecesList state={state} dispatch={act} />
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </View>
     </SafeAreaView>
   );
 }

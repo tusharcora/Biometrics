@@ -62,6 +62,8 @@ export type EditorAction =
   | { type: 'drawer'; tab: DrawerTab }
   | { type: 'place'; item: ItemId }
   | { type: 'drop'; id: string | null; item: ItemId; target: Target }
+  /** A drag let go where nothing snapped (ruling T12-FIX): nothing moves, the reason is said. */
+  | { type: 'refused'; id: string | null; item: ItemId; refused: Refused }
   | { type: 'flip' }
   | { type: 'turn' }
   | { type: 'another' }
@@ -240,6 +242,8 @@ export function editorReducer(s: EditorState, a: EditorAction): EditorState {
       const piece = layout.pieces.find((p) => p.id === a.id);
       return piece ? move(s, piece.id, placedAt(piece, a.target)) : s;
     }
+    case 'refused':
+      return refuse(s, a.refused, a.id, a.item);
     case 'flip':
       return selected ? move(s, selected.id, { ...selected, mirror: !selected.mirror }) : s;
     case 'turn': {
