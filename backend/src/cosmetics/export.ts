@@ -8,6 +8,7 @@ import {
   type CosmeticItem, type CosmeticSet, type RoomSlot,
 } from './catalogue';
 import { familyDef } from '../achievements/catalogue';
+import { DAILY_CAP, EARN_AMOUNTS } from '../coins/amounts';
 import { layoutFromSlots, starterLayout } from '../room/convert';
 import type { RoomLayout } from '../room/geometry';
 import { TIER_GATES } from '../room/tiers';
@@ -20,6 +21,8 @@ export interface CatalogueExport {
   items: CosmeticItem[];
   sets: Array<CosmeticSet & { layout: RoomLayout }>;
   tierGates: Record<'2' | '3', { price: number; family: string; level: number; threshold: number }>;
+  earnAmounts: Record<keyof typeof EARN_AMOUNTS, number>;
+  dailyCap: number;
 }
 
 export const MOBILE_CATALOGUE_PATH = path.join(__dirname, '../../../mobile/src/lib/room/catalogue.json');
@@ -52,6 +55,9 @@ export function exportCatalogue(shipped: ReadonlySet<number> = SHIPPED_RELEASES)
       2: { ...TIER_GATES[2], threshold: familyDef(TIER_GATES[2].family).thresholds[TIER_GATES[2].level - 1]! },
       3: { ...TIER_GATES[3], threshold: familyDef(TIER_GATES[3].family).thresholds[TIER_GATES[3].level - 1]! },
     },
+    // What each source pays and the day's cap (final review M3): the app's "How to earn" and day bar read these.
+    earnAmounts: { ...EARN_AMOUNTS },
+    dailyCap: DAILY_CAP,
   };
 }
 

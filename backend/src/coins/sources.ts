@@ -10,6 +10,7 @@ import { habitDayForOrUtc } from '../habits/habitDay';
 import { loadRecapData } from '../recap/data';
 import { dateRange, shiftDate } from '../scoring/dates';
 import { resolveSleepGoalMinutes } from '../users/goals';
+import { EARN_AMOUNTS } from './amounts';
 import { firstWeekEarns } from './firstWeek';
 import { applyCoinEvents, type CoinEarn } from './ledger';
 
@@ -19,8 +20,7 @@ const launchFromEnv = process.env.COINS_LAUNCHED_AT ? new Date(process.env.COINS
 export const coinsConfig: { launchedAt: Date } = {
   launchedAt: launchFromEnv && !Number.isNaN(launchFromEnv.getTime()) ? launchFromEnv : new Date('2026-10-20T00:00:00.000Z'),
 };
-/** C8's amounts, accepted at spec review (§0). Cheers and the challenge entry are written by P4. */
-export const EARN_AMOUNTS = { sleep_goal: 20, steps: 15, checkin: 5, recap: 10, cheer: 2, challenge: 30 } as const;
+export { EARN_AMOUNTS };
 /** Each run reads this many civil days back (spec §6.3), so a night synced late still pays. */
 export const LOOKBACK_DAYS = 8;
 

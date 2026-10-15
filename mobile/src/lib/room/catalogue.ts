@@ -64,6 +64,10 @@ export const CATALOGUE = data as unknown as {
   sets: CatalogueSet[];
   /** The room sizes' gates (plan ruling 37): coins and a badge level, with the run that level needs. */
   tierGates: Record<'2' | '3', { price: number; family: AchievementFamilyName; level: number; threshold: number }>;
+  /** What each source pays (spec 2026-10-15 §6.2), for "How to earn": the server decides every amount actually paid. */
+  earnAmounts: { sleep_goal: number; steps: number; checkin: number; recap: number; cheer: number; challenge: number };
+  /** What the capped kinds may pay on one day (§6.3). */
+  dailyCap: number;
 };
 
 const BY_ID = new Map(CATALOGUE.items.map((i) => [i.id, i]));

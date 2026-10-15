@@ -1934,5 +1934,14 @@
       "level": 3,
       "threshold": 14
     }
-  }
+  },
+  "earnAmounts": {
+    "sleep_goal": 20,
+    "steps": 15,
+    "checkin": 5,
+    "recap": 10,
+    "cheer": 2,
+    "challenge": 30
+  },
+  "dailyCap": 60
 }

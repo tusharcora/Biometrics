@@ -3,10 +3,11 @@
 import type { FirstWeekTaskKey } from '../../api/coins';
 import type { AchievementsSnapshot } from '../achievementsStore';
 import type { AchievementFamilyName, SetId, UnlockRule } from './catalogue';
-import { catalogueSet } from './catalogue';
+import { CATALOGUE, catalogueSet } from './catalogue';
 import type { ItemId } from './loadout';
 import type { RoomSlot, WornSlot } from './catalogue';
-import { EARN_AMOUNTS } from '../coins/amounts';
+
+const EARN = CATALOGUE.earnAmounts;
 
 export const ITEM_NAMES: Readonly<Record<ItemId, string>> = {
   'wall.plain': 'Plain slate', 'wall.dots': 'Dots', 'wall.stripes': 'Tinted stripes', 'wall.brick': 'Brick',
@@ -287,7 +288,7 @@ export const ROOM_COPY = {
     rowSpoken: (label: string, when: string, amount: string) => `${label}, ${when}, ${amount}`,
     howTitle: 'How to earn',
     how: [
-      `Sleep goal +${EARN_AMOUNTS.sleep_goal}`, `Step goal +${EARN_AMOUNTS.steps}`, `Recap read +${EARN_AMOUNTS.recap}`, `Check-in +${EARN_AMOUNTS.checkin}`,
+      `Sleep goal +${EARN.sleep_goal}`, `Step goal +${EARN.steps}`, `Recap read +${EARN.recap}`, `Check-in +${EARN.checkin}`,
     ],
     loadMore: 'Load more',
     loadMoreFailed: "Couldn't load more just now. Tap Load more to try again.",

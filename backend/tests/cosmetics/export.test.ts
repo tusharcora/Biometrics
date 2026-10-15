@@ -1,4 +1,6 @@
 import fs from 'fs';
+import { DAILY_CAP } from '../../src/coins/ledger';
+import { EARN_AMOUNTS } from '../../src/coins/sources';
 import { COSMETIC_ITEMS, isShipped } from '../../src/cosmetics/catalogue';
 import { MOBILE_CATALOGUE_PATH, exportCatalogue, serialiseExport } from '../../src/cosmetics/export';
 import { validateLayout } from '../../src/room/geometry';
@@ -47,4 +49,11 @@ it('carries the tier gates with their badge thresholds (plan ruling 37)', () => 
     2: { price: 600, family: 'CHECK_IN', level: 2, threshold: 14 },
     3: { price: 1500, family: 'SLEEP_GOAL', level: 3, threshold: 14 },
   });
+});
+
+it('carries what each source pays and the daily cap, from the server\'s own constants (final review M3)', () => {
+  const e = exportCatalogue();
+  expect(e.earnAmounts).toEqual(EARN_AMOUNTS);
+  expect(e.dailyCap).toBe(DAILY_CAP);
+  expect([e.earnAmounts.sleep_goal, e.earnAmounts.steps, e.earnAmounts.checkin, e.earnAmounts.recap, e.dailyCap]).toEqual([20, 15, 5, 10, 60]);
 });

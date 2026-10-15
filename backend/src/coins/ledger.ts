@@ -9,8 +9,9 @@ import type { Prisma } from '@prisma/client';
 import { civilDateToUtcMidnight, utcMidnightToCivilDate } from '../biometrics/civilDate';
 import { prisma } from '../db/client';
 import { lockRoom } from '../room/lock';
+import { DAILY_CAP } from './amounts';
 
-export const DAILY_CAP = 60;
+export { DAILY_CAP };
 export const PAID_CHEERS_A_DAY = 5;
 export const CAPPED_KINDS = ['sleep_goal', 'steps', 'checkin', 'recap', 'cheer_given', 'cheer_got'] as const;
 export const EARN_KINDS = [...CAPPED_KINDS, 'challenge', 'firstweek'] as const;

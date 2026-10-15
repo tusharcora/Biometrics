@@ -1,5 +1,5 @@
 import { historyRows, todayShare, whenLabel } from '../../src/lib/coins/history';
-import { EARN_AMOUNTS } from '../../src/lib/coins/amounts';
+import { CATALOGUE } from '../../src/lib/room/catalogue';
 import { ROOM_COPY, coinCount } from '../../src/lib/room/roomCopy';
 
 // Built on the device's own clock (ruling 29), so the cases hold in any zone the suite runs in.
@@ -41,7 +41,9 @@ it('labels a kind this build does not know neutrally, never as another kind', ()
   expect([row!.label, row!.spoken]).toEqual(['KIP coins', 'KIP coins, Today, 08:00, plus 3 coins']);
 });
 
-it('"How to earn" states what the server pays (backend/src/coins/sources.ts EARN_AMOUNTS)', () => {
-  expect(EARN_AMOUNTS).toEqual({ sleep_goal: 20, steps: 15, recap: 10, checkin: 5 });
+it('"How to earn" states what the server pays, from the exported catalogue (final review M3)', () => {
+  // backend tests/cosmetics/export.test.ts pins these to the server's EARN_AMOUNTS and DAILY_CAP, and fails on a stale copy.
+  const { earnAmounts: e, dailyCap } = CATALOGUE;
+  expect([e.sleep_goal, e.steps, e.recap, e.checkin, dailyCap]).toEqual([20, 15, 10, 5, 60]);
   expect(ROOM_COPY.coins.how).toEqual(['Sleep goal +20', 'Step goal +15', 'Recap read +10', 'Check-in +5']);
 });
