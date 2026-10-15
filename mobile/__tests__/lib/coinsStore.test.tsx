@@ -88,6 +88,48 @@ it('loads the first-week list and forgets it on sign-out', async () => {
   expect(getFirstWeek()).toBeNull();
 });
 
+it('shares one first-week read between loads started together', async () => {
+  (fetchFirstWeek as jest.Mock).mockResolvedValue({ open: false });
+  await Promise.all([loadFirstWeek(), loadFirstWeek()]);
+  expect((fetchFirstWeek as jest.Mock).mock.calls.length).toBe(1);
+});
+
+it('a first-week read that started before a purchase never lands after it (ruling T9-FIX)', async () => {
+  (fetchFirstWeek as jest.Mock).mockResolvedValueOnce({ open: false });
+  await loadFirstWeek();
+  const d = later<unknown>();
+  (fetchFirstWeek as jest.Mock).mockReturnValueOnce(d.promise);
+  const read = loadFirstWeek();
+  setCoinBalance(30);
+  d.resolve({ open: true, day: 2, done: 0, tasks: [], next: { tier: 2, coins: 300, streak: 7 } });
+  await read;
+  expect(getFirstWeek()).toEqual({ open: false });
+  // A load after the purchase reads afresh rather than sharing the dropped one.
+  (fetchFirstWeek as jest.Mock).mockResolvedValueOnce({ open: false, fresh: 1 });
+  await loadFirstWeek();
+  expect((fetchFirstWeek as jest.Mock).mock.calls.length).toBe(3);
+});
+
+it('marking coins seen does not drop a first-week read (seen is not part of the list)', async () => {
+  const d = later<unknown>();
+  (fetchFirstWeek as jest.Mock).mockReturnValueOnce(d.promise);
+  const read = loadFirstWeek();
+  await markCoinsSeen('2026-11-11T06:30:00.000Z');
+  d.resolve({ open: false });
+  await read;
+  expect(getFirstWeek()).toEqual({ open: false });
+});
+
+it('drops a first-week answer that lands after sign-out', async () => {
+  const d = later<unknown>();
+  (fetchFirstWeek as jest.Mock).mockReturnValueOnce(d.promise);
+  const read = loadFirstWeek();
+  resetCoins();
+  d.resolve({ open: false });
+  await read;
+  expect(getFirstWeek()).toBeNull();
+});
+
 it('useCoins follows the store', async () => {
   const { result } = renderHook(() => useCoins());
   expect(result.current).toBeNull();

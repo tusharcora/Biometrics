@@ -4,7 +4,8 @@ import { fetchCoins, fetchFirstWeek, postCoinsSeen, type CoinEventDTO, type Coin
 // One shared copy of GET /me/coins (spec 2026-10-15 §6.7, §12) and of GET /me/firstweek (§11.2), with cosmeticsStore's
 // guards: an answer that lands after sign-out is dropped (the session moves), and a read that started before a
 // purchase, a grow or a mark-seen is dropped too (each moves the epoch), so a stale GET never overwrites a newer balance
-// (ruling 33: coins have no version; the epoch is the "ignore older" rule). Loaded per sign-in by MyKipScope, on every
+// (ruling 33: coins have no version; the epoch is the "ignore older" rule). The first-week list has the same guards
+// with its own epoch (ruling T9-FIX). Loaded per sign-in by MyKipScope, on every
 // KIP page focus and by the coin screens.
 
 export interface Coins {
@@ -87,6 +88,7 @@ export async function loadMoreCoins(): Promise<void> {
 /** A purchase or a grow answered with the balance: shown at once, and any older read is dropped. */
 export function setCoinBalance(balance: number): void {
   epoch++;
+  weekEpoch++;
   coins = coins ? { ...coins, balance } : { balance, today: { earned: 0, cap: 60 }, events: [], next: null };
   emit();
 }
@@ -108,22 +110,37 @@ export async function markCoinsSeen(through: string): Promise<void> {
   }
 }
 
-export async function loadFirstWeek(): Promise<FirstWeekDTO | null> {
-  const s = session;
-  try {
-    const dto = await fetchFirstWeek();
-    if (s === session && dto && typeof dto.open === 'boolean') {
-      firstWeek = dto;
-      emit();
+// The first-week list's own epoch: moved by a purchase or a grow (a bought fern ticks a task, the balance pays toward
+// the next size) and by sign-out, but not by marking coins seen, which the list does not show.
+let weekEpoch = 0;
+let weekInflight: { at: number; read: Promise<FirstWeekDTO | null> } | null = null;
+
+/** Reads GET /me/firstweek, guarded as loadCoins is. Keeps what is shown when the read fails. */
+export function loadFirstWeek(): Promise<FirstWeekDTO | null> {
+  if (weekInflight && weekInflight.at === weekEpoch) return weekInflight.read;
+  const at = weekEpoch;
+  const read = (async () => {
+    try {
+      const dto = await fetchFirstWeek();
+      if (at === weekEpoch && dto && typeof dto.open === 'boolean') {
+        firstWeek = dto;
+        emit();
+      }
+    } catch {
+      // Keep what is shown.
     }
-  } catch {
-    // Keep what is shown.
-  }
-  return firstWeek;
+    return firstWeek;
+  })();
+  weekInflight = { at, read };
+  void read.then(() => {
+    if (weekInflight?.read === read) weekInflight = null;
+  });
+  return read;
 }
 
 export function resetCoins(): void {
   epoch++;
+  weekEpoch++;
   session++;
   coins = null;
   firstWeek = null;

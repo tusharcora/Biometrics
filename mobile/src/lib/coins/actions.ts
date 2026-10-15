@@ -1,4 +1,5 @@
 import { randomUUID } from 'expo-crypto';
+import { ApiError } from '../../api/client';
 import { postExpand, postPurchase, type PurchaseDTO } from '../../api/coins';
 import { applyCosmeticsBody, applyPurchase } from '../room/cosmeticsStore';
 import { coinSession, setCoinBalance } from './coinsStore';
@@ -10,7 +11,16 @@ import { coinSession, setCoinBalance } from './coinsStore';
 
 export const newRequestId = (): string => randomUUID();
 
-/** POST /me/shop/purchases. Throws the ApiError (409 not_enough_coins with `needed`, 400 not_for_sale). */
+/**
+ * True when the server answered (an ApiError, any status): the screen drops the request id and the next attempt gets
+ * a new one. Anything else (offline, a cut connection, an unreadable answer) keeps the id, so the retry is a replay.
+ */
+export const isServerAnswer = (err: unknown): boolean => err instanceof ApiError;
+
+/**
+ * POST /me/shop/purchases. Throws the ApiError: 409 not_enough_coins (with `needed`), 400 not_for_sale, or 400
+ * invalid_body (which includes a request id reused for another piece).
+ */
 export async function buyPiece(itemId: string, requestId: string): Promise<PurchaseDTO> {
   const s = coinSession();
   const res = await postPurchase(requestId, itemId);
@@ -21,7 +31,11 @@ export async function buyPiece(itemId: string, requestId: string): Promise<Purch
   return res;
 }
 
-/** POST /me/room/expand. The answer is the whole room. Throws the ApiError (409 gate, 409 stale_tier). */
+/**
+ * POST /me/room/expand. The answer is the whole room. Throws the ApiError: 409 gate (with `coinsNeeded`,
+ * `badgeNeeded`), 409 stale_tier, 400 invalid_body (which includes a request id reused for the other size), or 500
+ * when the stored room can't be read (nothing is spent; the screen offers a retry).
+ */
 export async function growRoom(toTier: 2 | 3, requestId: string): Promise<{ stored: number; tier: number }> {
   const s = coinSession();
   const res = await postExpand(requestId, toTier);

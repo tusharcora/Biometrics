@@ -100,8 +100,10 @@ export async function saveCosmeticsLoadout(input: { layout: RoomLayout; worn: Ki
 
 /** A coin-shop purchase landed (spec §6.6): the server's counts; the piece owned and NEW until seen (ruling 7). */
 export function applyPurchase(itemId: ItemId, counts: Readonly<Record<string, number>>): void {
+  // First: a read that started before the purchase never brings the old count back, even the first read of the room
+  // (it is dropped and the next read lands the piece).
+  epoch++;
   if (!cosmetics) return;
-  epoch++; // a read that started before the purchase never brings the old count back
   const owned = new Set(cosmetics.owned);
   owned.add(itemId);
   const fresh = cosmetics.fresh.some((f) => f.itemId === itemId) ? cosmetics.fresh : [...cosmetics.fresh, { itemId, source: 'buy' }];
