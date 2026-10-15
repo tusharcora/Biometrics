@@ -2,6 +2,7 @@
 // backend/scripts/export-cosmetics.ts: ids, slots, flags, sets and unlock rules for the shipped releases.
 // Never edited by hand; names and unlock lines are in roomCopy.ts, the art in items/.
 import data from './catalogue.json';
+import { type GeometryDeps, type IsoSpec, type RoomLayout } from './iso/geometry';
 import type { ItemId, RoomLoadout } from './loadout';
 import { WORN_SLOTS, type RoomSlot, type WornSlot } from './slots';
 
@@ -26,6 +27,10 @@ export interface CatalogueItem {
   frames?: 3;
   style?: 'standard' | 'low';
   retired?: boolean;
+  /** Placement rules (free-build spec §2.1); styles and worn items have none. */
+  iso?: IsoSpec;
+  tags?: string[];
+  grants?: number;
 }
 
 export interface CatalogueSet {
@@ -35,12 +40,15 @@ export interface CatalogueSet {
   style: 'standard' | 'low';
   room: Record<RoomSlot, ItemId>;
   worn: Partial<Record<WornSlot, ItemId>>;
+  /** The set's own iso layout (spec §5.5): what Apply set places. */
+  layout: RoomLayout;
 }
 
 export const CATALOGUE = data as unknown as {
   version: number;
   releases: number[];
   starterRoom: RoomLoadout;
+  starterLayout: RoomLayout;
   items: CatalogueItem[];
   sets: CatalogueSet[];
 };
@@ -60,3 +68,9 @@ export function catalogueItemsFor(slot: RoomSlot | WornSlot): CatalogueItem[] {
 export function isWornSlot(slot: RoomSlot | WornSlot): slot is WornSlot {
   return (WORN_SLOTS as readonly string[]).includes(slot);
 }
+/** A placeable item's iso block; undefined for styles, worn items and ids this build does not know. */
+export function isoOf(id: ItemId | null | undefined): IsoSpec | undefined {
+  return catalogueItem(id)?.iso;
+}
+/** The app's side of the placement rules: the same file as the server's (spec §12). */
+export const GEOMETRY_DEPS: GeometryDeps = { isoOf: (id) => isoOf(id) };

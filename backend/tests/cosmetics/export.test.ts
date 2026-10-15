@@ -1,6 +1,9 @@
 import fs from 'fs';
 import { COSMETIC_ITEMS, isShipped } from '../../src/cosmetics/catalogue';
 import { MOBILE_CATALOGUE_PATH, exportCatalogue, serialiseExport } from '../../src/cosmetics/export';
+import { validateLayout } from '../../src/room/geometry';
+import { layoutFromSlots, starterLayout } from '../../src/room/convert';
+import { deps } from '../room/helpers';
 
 it('the app\'s copy is current: run scripts/export-cosmetics.ts after any catalogue change', () => {
   expect(fs.readFileSync(MOBILE_CATALOGUE_PATH, 'utf8')).toBe(serialiseExport(exportCatalogue()));
@@ -28,4 +31,13 @@ it('a release-2 export would add the other five sets', () => {
   const all = exportCatalogue(new Set([1, 2, 3]));
   expect(all.sets).toHaveLength(6);
   expect(all.items.length).toBeGreaterThan(exportCatalogue().items.length);
+});
+
+it('ships the starter layout and one valid iso layout per set (spec §5.5, ruling 21)', () => {
+  const e = exportCatalogue();
+  expect(e.starterLayout).toEqual(starterLayout());
+  for (const set of e.sets) {
+    expect(set.layout).toEqual(layoutFromSlots(set.room));
+    expect({ id: set.id, failure: validateLayout(set.layout, 1, deps) }).toEqual({ id: set.id, failure: null });
+  }
 });

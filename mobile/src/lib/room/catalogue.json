@@ -18,6 +18,85 @@
     "rug": "rug.slate",
     "pet": null
   },
+  "starterLayout": {
+    "v": 1,
+    "styles": {
+      "wallpaper": "wall.plain",
+      "floor": "floor.oakDark",
+      "window": "win.plain"
+    },
+    "pieces": [
+      {
+        "id": "desk",
+        "item": "desk.monitor",
+        "layer": "floor",
+        "x": 2,
+        "y": 0,
+        "facing": "L",
+        "mirror": false
+      },
+      {
+        "id": "lamp",
+        "item": "lamp.amber",
+        "layer": "onTop",
+        "x": 0,
+        "y": 0,
+        "facing": "L",
+        "mirror": false,
+        "parent": "desk",
+        "spot": 0
+      },
+      {
+        "id": "deskitem",
+        "item": "item.mug",
+        "layer": "onTop",
+        "x": 0,
+        "y": 0,
+        "facing": "L",
+        "mirror": false,
+        "parent": "desk",
+        "spot": 2
+      },
+      {
+        "id": "plank",
+        "item": "shelf.plank",
+        "layer": "wallR",
+        "x": 6,
+        "y": 10,
+        "facing": "L",
+        "mirror": false
+      },
+      {
+        "id": "shelf",
+        "item": "shelf.books",
+        "layer": "onTop",
+        "x": 0,
+        "y": 0,
+        "facing": "L",
+        "mirror": false,
+        "parent": "plank",
+        "spot": 0
+      },
+      {
+        "id": "plant",
+        "item": "plant.fern",
+        "layer": "floor",
+        "x": 0,
+        "y": 0,
+        "facing": "L",
+        "mirror": false
+      },
+      {
+        "id": "rug",
+        "item": "rug.slate",
+        "layer": "floor",
+        "x": 1,
+        "y": 2,
+        "facing": "L",
+        "mirror": false
+      }
+    ]
+  },
   "items": [
     {
       "id": "wall.plain",
@@ -1579,6 +1658,110 @@
       },
       "worn": {
         "head": "out.beanie"
+      },
+      "layout": {
+        "v": 1,
+        "styles": {
+          "wallpaper": "set.cottage.wallpaper",
+          "floor": "set.cottage.floor",
+          "window": "set.cottage.window"
+        },
+        "pieces": [
+          {
+            "id": "desk",
+            "item": "set.cottage.desk",
+            "layer": "floor",
+            "x": 2,
+            "y": 0,
+            "facing": "L",
+            "mirror": false
+          },
+          {
+            "id": "lamp",
+            "item": "set.cottage.lamp",
+            "layer": "wallL",
+            "x": 0,
+            "y": 14,
+            "facing": "L",
+            "mirror": false
+          },
+          {
+            "id": "deskitem",
+            "item": "set.cottage.desk_item",
+            "layer": "onTop",
+            "x": 0,
+            "y": 0,
+            "facing": "L",
+            "mirror": false,
+            "parent": "desk",
+            "spot": 2
+          },
+          {
+            "id": "plank",
+            "item": "shelf.plank",
+            "layer": "wallR",
+            "x": 6,
+            "y": 10,
+            "facing": "L",
+            "mirror": false
+          },
+          {
+            "id": "shelf",
+            "item": "set.cottage.shelf",
+            "layer": "onTop",
+            "x": 0,
+            "y": 0,
+            "facing": "L",
+            "mirror": false,
+            "parent": "plank",
+            "spot": 0
+          },
+          {
+            "id": "art",
+            "item": "set.cottage.art",
+            "layer": "wallR",
+            "x": 2,
+            "y": 9,
+            "facing": "L",
+            "mirror": false
+          },
+          {
+            "id": "plant",
+            "item": "plant.fern",
+            "layer": "floor",
+            "x": 0,
+            "y": 0,
+            "facing": "L",
+            "mirror": false
+          },
+          {
+            "id": "corner",
+            "item": "set.cottage.corner",
+            "layer": "floor",
+            "x": 5,
+            "y": 0,
+            "facing": "L",
+            "mirror": false
+          },
+          {
+            "id": "rug",
+            "item": "set.cottage.rug",
+            "layer": "floor",
+            "x": 1,
+            "y": 2,
+            "facing": "L",
+            "mirror": false
+          },
+          {
+            "id": "pet",
+            "item": "set.cottage.pet",
+            "layer": "floor",
+            "x": 4,
+            "y": 5,
+            "facing": "L",
+            "mirror": false
+          }
+        ]
       }
     }
   ]
