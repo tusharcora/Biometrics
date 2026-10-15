@@ -21,7 +21,8 @@ export function layoutFromSlots(room: SlotRoom): RoomLayout {
   if (room.desk_item) onDesk('deskitem', room.desk_item, 2);
   if (room.shelf) {
     pieces.push(at('plank', 'shelf.plank', 'wallR', 6, 10));
-    pieces.push(at('shelf', room.shelf, 'onTop', 0, 0, { parent: 'plank', spot: 0 }));
+    // A stored shelf of the plank itself (a starter in the shelf slot) is the bare plank, with nothing on it.
+    if (room.shelf !== 'shelf.plank') pieces.push(at('shelf', room.shelf, 'onTop', 0, 0, { parent: 'plank', spot: 0 }));
   }
   if (room.art) pieces.push(at('art', room.art, 'wallR', 2, ART_STEP));
   if (room.plant) pieces.push(at('plant', room.plant, 'floor', 0, 0));
@@ -45,9 +46,11 @@ export function slotsFromLayout(layout: RoomLayout): SlotRoom {
   const room = {} as SlotRoom;
   for (const slot of ROOM_SLOTS) {
     if (slot === 'wallpaper' || slot === 'floor' || slot === 'window') { room[slot] = layout.styles[slot]; continue; }
+    // The plank holds the shelf slot's item, so it reads as the slot only when nothing stands in for it.
+    const plankLast = (p: Placement) => (p.item === 'shelf.plank' ? 1 : 0);
     const first = layout.pieces
-      .filter((p) => p.item !== 'shelf.plank' && cosmeticItem(p.item)?.slot === slot)
-      .sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0];
+      .filter((p) => cosmeticItem(p.item)?.slot === slot)
+      .sort((a, b) => plankLast(a) - plankLast(b) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0))[0];
     room[slot] = first?.item ?? (OPTIONAL_ROOM_SLOTS.has(slot) ? null : STARTER_ROOM[slot]);
   }
   return room;

@@ -7,7 +7,7 @@ const STYLE: Partial<Record<RoomSlot, 'wallpaper' | 'floor' | 'window'>> = { wal
 
 it('converts every shipped item in every slot to a valid iso room (spec §2.4, §16)', () => {
   for (const slot of ROOM_SLOTS) {
-    for (const item of COSMETIC_ITEMS.filter((i) => i.slot === slot && isShipped(i) && i.release !== 3)) {
+    for (const item of COSMETIC_ITEMS.filter((i) => i.slot === slot && isShipped(i))) {
       const layout = layoutFromSlots({ ...STARTER_ROOM, [slot]: item.id });
       const tag = { slot, id: item.id };
       expect({ ...tag, failure: validateLayout(layout, 1, deps) }).toEqual({ ...tag, failure: null });
@@ -55,4 +55,36 @@ it('derives a slot room back from a layout for dev builds (spec §2.4, until P2)
   expect(slotsFromLayout(layoutFromSlots(room))).toEqual(room);
   const bare = slotsFromLayout({ ...starterLayout(), pieces: starterLayout().pieces.filter((p) => p.id === 'desk') });
   for (const slot of ROOM_SLOTS) if (bare[slot] === null) expect(OPTIONAL_ROOM_SLOTS.has(slot)).toBe(true);
+});
+
+it('a shelf slot holding the plank converts to the bare plank and reads back as the plank (Task 2 review)', () => {
+  const room = { ...STARTER_ROOM, shelf: 'shelf.plank' };
+  const layout = layoutFromSlots(room);
+  expect(layout.pieces.filter((p) => p.item === 'shelf.plank')).toEqual([
+    { id: 'plank', item: 'shelf.plank', layer: 'wallR', x: 6, y: 10, facing: 'L', mirror: false },
+  ]);
+  expect(layout.pieces.some((p) => p.parent === 'plank')).toBe(false);
+  expect(slotsFromLayout(layout)).toEqual(room);
+});
+
+it('every shipped desk × corner × pet × rug × art room converts valid at every tier, losslessly and idempotently (spec §2.4)', () => {
+  const ids = (slot: RoomSlot) => COSMETIC_ITEMS.filter((i) => i.slot === slot && isShipped(i)).map((i) => i.id as string | null);
+  const optional = (slot: RoomSlot) => [...ids(slot), ...(OPTIONAL_ROOM_SLOTS.has(slot) ? [null] : [])];
+  const bad: unknown[] = [];
+  let rooms = 0;
+  for (const desk of optional('desk')) for (const corner of optional('corner')) for (const pet of optional('pet'))
+    for (const rug of optional('rug')) for (const art of optional('art')) {
+      const room = { ...STARTER_ROOM, desk, corner, pet, rug, art };
+      const layout = layoutFromSlots(room);
+      rooms++;
+      for (const tier of [1, 2, 3] as const) {
+        const failure = validateLayout(layout, tier, deps);
+        if (failure) bad.push({ room, tier, failure });
+      }
+      const back = slotsFromLayout(layout);
+      if (JSON.stringify(back) !== JSON.stringify(room)) bad.push({ room, back });
+      if (JSON.stringify(layoutFromSlots(back)) !== JSON.stringify(layout)) bad.push({ room, idempotent: false });
+    }
+  expect(rooms).toBeGreaterThan(1000);
+  expect(bad.slice(0, 5)).toEqual([]);
 });
