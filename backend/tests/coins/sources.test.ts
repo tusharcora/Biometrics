@@ -122,6 +122,7 @@ it('uses coinsConfig.launchedAt by default, and a failed earn is logged without 
   const spy = jest.spyOn(coinsHooks, 'earn').mockRejectedValue(new TypeError('boom'));
   await expect(earnCoinsSafely(user.id, NOW)).resolves.toBeUndefined();
   expect(warn.mock.calls.map((c) => JSON.parse(String(c[0])))).toEqual([{ event: 'coins.earn_failed', error: 'TypeError' }]);
+  expect(warn.mock.calls.map((c) => String(c[0])).join('')).not.toContain(user.id); // ruling T6-TESTS
   spy.mockRestore();
   warn.mockRestore();
 });

@@ -39,6 +39,7 @@
 import { prisma } from '../db/client';
 import type { AchievementFamily, StickerKind } from '@prisma/client';
 import { checkDisplayName } from '../buddies/identity';
+import { UUID_RE } from '../lib/uuid';
 
 export type PushKind = 'weekly_digest' | 'insight' | 'monthly_recap';
 export type BuddyPushKind = 'buddy_sticker' | 'buddy_request' | 'buddy_paired' | 'buddy_badge' | 'dm_message';
@@ -83,8 +84,6 @@ export const GENERIC_PUSH_PAYLOADS: Readonly<Record<PushKind, Readonly<{ title: 
   insight: Object.freeze({ title: 'You have a new insight', body: 'Open the app to see it.' }),
   monthly_recap: Object.freeze({ title: 'Your monthly recap is ready', body: 'Open the app to see it.' }),
 });
-
-export const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 const own = (table: object, key: unknown): boolean => typeof key === 'string' && Object.prototype.hasOwnProperty.call(table, key);
 

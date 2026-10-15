@@ -49,6 +49,18 @@ describe('GET /me/coins (spec §12)', () => {
     expect((await get(headers, '?cursor=%21%21')).body).toEqual({ error: 'invalid_body' });
   });
 
+  it('31 rows written in one batch share a createdAt: the id tie-break pages them all, once each (ruling T6-TESTS)', async () => {
+    const { user, headers } = await coinUser();
+    await applyCoinEvents(user.id, Array.from({ length: 31 }, (_, k) => earn('firstweek', `test:batch:${k}`, k + 1)), new Date());
+    const ats = new Set((await prisma.coinEvent.findMany({ where: { userId: user.id }, select: { createdAt: true } })).map((r) => r.createdAt.getTime()));
+    expect(ats.size).toBe(1);
+    const first = (await get(headers)).body;
+    const second = (await get(headers, `?cursor=${encodeURIComponent(first.next)}`)).body;
+    expect([first.events.length, second.events.length, second.next]).toEqual([30, 1, null]);
+    const amounts = [...first.events, ...second.events].map((e: { amount: number }) => e.amount).sort((a, b) => a - b);
+    expect(amounts).toEqual(Array.from({ length: 31 }, (_, k) => k + 1));
+  });
+
   it('needs a session', async () => {
     expect((await (await api()).get('/me/coins')).status).toBe(401);
   });

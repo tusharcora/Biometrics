@@ -60,6 +60,20 @@ describe('GET /me/cosmetics (free-build)', () => {
     expect((await get(headers)).layout).toEqual({ ...starterLayout(), pieces: [...starterLayout().pieces, kept] });
   });
 
+  it('drops the newest copies first: p10 goes before p9 (ruling 31, P1 Task 4 minor)', async () => {
+    const { user, headers } = await me();
+    await stored(user.id, { ...starterLayout(), pieces: [...starterLayout().pieces, piece('p9', 'plant.cactus', { x: 6, y: 6 }), piece('p10', 'plant.cactus', { x: 5, y: 6 })] });
+    const ids = (await get(headers)).layout.pieces.map((p: { id: string }) => p.id);
+    expect([ids.includes('p9'), ids.includes('p10')]).toEqual([true, false]);
+  });
+
+  it('ranks a p<n> id by n and any other id as 0, so an app copy drops before an older id that sorts after it (ruling PF-F1)', async () => {
+    const { user, headers } = await me();
+    await stored(user.id, { ...starterLayout(), pieces: [...starterLayout().pieces, piece('zz', 'plant.cactus', { x: 6, y: 6 }), piece('p2', 'plant.cactus', { x: 5, y: 6 })] });
+    const ids = (await get(headers)).layout.pieces.map((p: { id: string }) => p.id);
+    expect([ids.includes('zz'), ids.includes('p2')]).toEqual([true, false]);
+  });
+
   it('drops unshipped placements and reads an unowned style as the starter style (ruling 23)', async () => {
     const { user, headers } = await me();
     await stored(user.id, { ...starterLayout(), styles: { ...starterLayout().styles, wallpaper: 'wall.brick' }, pieces: [...starterLayout().pieces, piece('x1', 'desk.dual', { x: 2, y: 4 })] }, 1);

@@ -3,10 +3,10 @@
 
 import { Router } from 'express';
 import { AuthedRequest, requireAuth } from '../auth/middleware';
-import { UUID_RE } from '../coach/push';
 import { earnCoinsSafely } from '../coins/sources';
 import { grantCosmeticsSafely } from '../cosmetics/unlock';
 import { prisma } from '../db/client';
+import { UUID_RE } from '../lib/uuid';
 import { toRecapDTO, toRecapSummaryDTO } from './dto';
 
 export const DEFAULT_RECAP_LIMIT = 20;

@@ -51,7 +51,7 @@ export class BuddyError extends Error {
   }
 }
 
-export { UUID_RE } from '../coach/push';
+export { UUID_RE } from '../lib/uuid';
 
 export const isUniqueViolation = (err: unknown): boolean => (err as { code?: string } | null)?.code === 'P2002';
 

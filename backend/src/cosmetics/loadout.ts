@@ -1,5 +1,5 @@
-// Reading and saving KIP's room (spec 2026-10-15 §2, §12). Owned = the starter items + unlock rows; the app never
-// decides ownership. A stored layout reads back trimmed to the owned counts and the shipped catalogue, and a worn piece
+// Reading and saving KIP's room (spec 2026-10-15 §2, §12). Owned = the starter items + unlock rows + ItemGrant sums
+// (bought copies); the app never decides ownership. A stored layout reads back trimmed to the owned counts and the shipped catalogue, and a worn piece
 // the user does not own reads as nothing worn. Saves are optimistic: version must match, every save increments it.
 // Free-build saves carry an iso layout, checked against the catalogue, the placement rules and the owned counts under
 // the per-user room lock. Spec B's slot room was converted and dropped in P2 (§2.4); `readRoom` keeps its slot
@@ -14,7 +14,7 @@ import { countersOf, loadUnlockFacts } from './facts';
 import { grantCosmeticsSafely } from './unlock';
 import { starterLayout } from '../room/convert';
 import { STYLE_KEYS, capFor, parseLayout, validateLayout, type BadReason, type RoomLayout, type Tier } from '../room/geometry';
-import { countsOf, geometryDeps, placedCounts, readLayout, toTier } from '../room/layout';
+import { countsOf, geometryDeps, grantTotals, placedCounts, readLayout, toTier } from '../room/layout';
 import { lockRoom } from '../room/lock';
 
 type Room = Record<RoomSlot, string | null>;
@@ -64,20 +64,27 @@ function readWorn(json: unknown, owned: ReadonlySet<string>): Worn {
 
 export async function readCosmetics(userId: string, now: Date, opts: { grant?: boolean } = {}): Promise<CosmeticsDTO> {
   if (opts.grant ?? true) await grantCosmeticsSafely(userId, now);
-  const [rows, loadout, facts, firstWeek] = await Promise.all([
+  const [rows, loadout, facts, firstWeek, grants, newCopies] = await Promise.all([
     prisma.cosmeticUnlock.findMany({ where: { userId }, orderBy: [{ unlockedAt: 'asc' }, { itemId: 'asc' }], select: { itemId: true, source: true, seenAt: true } }),
     prisma.cosmeticLoadout.findUnique({ where: { userId } }),
     loadUnlockFacts(userId),
     prisma.roomFirstWeek.findUnique({ where: { userId }, select: { welcomedAt: true } }),
+    grantTotals(prisma, userId),
+    prisma.itemGrant.findMany({ where: { userId, seenAt: null, qty: { gt: 0 } }, orderBy: { createdAt: 'asc' }, select: { itemId: true, sourceKey: true } }),
   ]);
-  const owned = ownedFrom(rows);
-  const counts = countsOf(rows);
+  const counts = countsOf(rows, grants);
+  // Owned is a count now (spec §2.2): every item with one.
+  const owned = new Set(Object.keys(counts));
   const layout = (loadout ? readLayout(loadout.layout, counts) : null) ?? starterLayout();
   const tier = toTier(loadout?.tier);
   return {
     catalogueVersion: COSMETICS_CATALOGUE_VERSION,
     owned: [...owned].sort(),
-    fresh: rows.filter((r) => r.seenAt === null && owned.has(r.itemId)).map((r) => ({ itemId: r.itemId, source: r.source })),
+    fresh: [
+      ...rows.filter((r) => r.seenAt === null && owned.has(r.itemId)).map((r) => ({ itemId: r.itemId, source: r.source })),
+      // A bought copy is NEW until seen (ruling 7): its source is the key's prefix, 'buy'.
+      ...newCopies.filter((g) => owned.has(g.itemId)).map((g) => ({ itemId: g.itemId, source: g.sourceKey.split(':')[0]! })),
+    ],
     layout,
     tier,
     cap: capFor(tier),
@@ -156,12 +163,13 @@ export async function saveCosmetics(userId: string, body: unknown, now: Date, ra
     failure = await prisma.$transaction(async (tx) => {
       // One writer at a time per room (spec §2.2); the version check below still answers another device's save.
       await lockRoom(tx, userId);
-      const [rows, row] = await Promise.all([
+      const [rows, row, grants] = await Promise.all([
         tx.cosmeticUnlock.findMany({ where: { userId }, select: { itemId: true } }),
         tx.cosmeticLoadout.findUnique({ where: { userId }, select: { layout: true, version: true, tier: true } }),
+        grantTotals(tx, userId),
       ]);
       tier = toTier(row?.tier);
-      const bad = checkLayout(parsed.layout, parsed.worn, tier, countsOf(rows));
+      const bad = checkLayout(parsed.layout, parsed.worn, tier, countsOf(rows, grants));
       if (bad) return bad;
       const data = {
         layout: parsed.layout as unknown as Prisma.InputJsonValue,
@@ -198,10 +206,15 @@ export async function markWelcomed(userId: string, now: Date): Promise<void> {
   await prisma.roomFirstWeek.updateMany({ where: { userId, welcomedAt: null }, data: { welcomedAt: now } });
 }
 
-/** Marks unseen rows seen. Ids the user has no row for (unknown, unowned, starters) are ignored. */
+/** Marks unseen unlock rows and bought copies seen. Ids the user has no row for (unknown, unowned, starters) are
+ * ignored. */
 export async function markSeen(userId: string, body: unknown, now: Date): Promise<boolean> {
   const itemIds = (body as { itemIds?: unknown } | null)?.itemIds;
   if (!Array.isArray(itemIds) || itemIds.length > 500 || !itemIds.every((i) => typeof i === 'string')) return false;
-  if (itemIds.length) await prisma.cosmeticUnlock.updateMany({ where: { userId, itemId: { in: itemIds as string[] }, seenAt: null }, data: { seenAt: now } });
+  if (itemIds.length) {
+    const ids = itemIds as string[];
+    await prisma.cosmeticUnlock.updateMany({ where: { userId, itemId: { in: ids }, seenAt: null }, data: { seenAt: now } });
+    await prisma.itemGrant.updateMany({ where: { userId, itemId: { in: ids }, seenAt: null }, data: { seenAt: now } });
+  }
   return true;
 }
