@@ -174,6 +174,11 @@ export const ROOM_COPY = {
     preview: 'Preview',
     applyLabel: (name: string) => `Apply the ${name} set`,
     previewLabel: (name: string) => `Preview the ${name} set`,
+    /** After Apply set (ruling T9-FIX): what was left out because you don't have it yet, and whether your desk stayed. */
+    applied: (name: string, missing: readonly string[], deskKept: boolean) => {
+      const listed = missing.length > 3 ? `${missing.slice(0, 3).join(', ')} and ${missing.length - 3} more` : missing.join(', ');
+      return [`${name} set applied.`, missing.length ? `Not yours yet: ${listed}.` : '', deskKept ? 'Your desk stayed.' : ''].filter(Boolean).join(' ');
+    },
   },
   arrive: {
     title: 'How new things arrive',

@@ -53,6 +53,14 @@ describe('dragging (spec §5.3)', () => {
     expect([fresh.draft, fresh.outcome]).toEqual([s.draft, { ok: false, refused: { reason: 'seat', with: 'desk' }, id: null }]);
   });
 
+  it('dropping a desk from the drawer replaces the desk, never adds a second one (ruling T9-FIX)', () => {
+    const s = run(start({ counts: { ...COUNTS, 'desk.laptop': 1 } }), { type: 'drop', id: null, item: 'desk.laptop', target: { layer: 'floor', x: 4, y: 4 } });
+    const desks = s.draft.layout.pieces.filter((p) => p.item.startsWith('desk.'));
+    expect(desks.map((p) => [p.id, p.item, p.x, p.y])).toEqual([['desk', 'desk.laptop', 2, 0]]);
+    expect(childrenOf(s.draft.layout, 'desk').length).toBeGreaterThan(0);
+    expect([s.past.length, inventory(s)['desk.monitor'], inventory(s)['desk.laptop']]).toEqual([1, 1, 0]);
+  });
+
   it('a drop from the drawer adds a new piece with a new id', () => {
     const s = run(start(), { type: 'drop', id: null, item: 'corner.beanbag', target: { layer: 'floor', x: 6, y: 6 } });
     expect([piece(s, 'p1')?.item, s.selected]).toEqual(['corner.beanbag', 'p1']);
@@ -133,8 +141,33 @@ describe('styles, worn, sets and previews (spec §5.4)', () => {
     const counts = { ...COUNTS, ...Object.fromEntries([...Object.values(cottage.room), ...Object.values(cottage.worn)].map((id) => [id!, 1])) };
     const s = run(start({ counts }), { type: 'applySet', setId: 'cottage' });
     expect([s.draft.layout, s.draft.worn.head, s.past.length]).toEqual([cottage.layout, 'out.beanie', 1]);
-    const partial = run(start(), { type: 'applySet', setId: 'cottage' });
-    expect(partial.draft.layout.pieces.every((p) => (COUNTS[p.item] ?? 0) > 0)).toBe(true);
+    expect(s.outcome).toEqual({ ok: true, id: null, applied: { setId: 'cottage', missing: [], deskKept: false } });
+  });
+
+  it('a partly owned set with its desk places the owned pieces, skips the rest and says what is missing (ruling T9-FIX)', () => {
+    const counts = { ...COUNTS, 'set.cottage.desk': 1, 'set.cottage.rug': 1 };
+    const s = run(start({ counts }), { type: 'applySet', setId: 'cottage' });
+    const items = s.draft.layout.pieces.map((p) => p.item).sort();
+    expect(items).toEqual(['plant.fern', 'set.cottage.desk', 'set.cottage.rug', 'shelf.plank']);
+    expect(s.past).toHaveLength(1);
+    const applied = s.outcome && s.outcome.ok && s.outcome.id === null ? s.outcome.applied : null;
+    expect(applied?.deskKept).toBe(false);
+    expect(applied?.missing).toEqual(expect.arrayContaining(['set.cottage.lamp', 'set.cottage.pet', 'set.cottage.wallpaper']));
+    expect(applied?.missing).not.toContain('set.cottage.rug');
+    expect(applied?.missing).not.toContain('out.beanie');
+  });
+
+  it('a partly owned set without its desk keeps your desk and still places the owned pieces (ruling T9-FIX)', () => {
+    const counts: Record<string, number> = { ...COUNTS, 'set.cottage.rug': 1, 'set.cottage.pet': 1 };
+    const s = run(start({ counts }), { type: 'applySet', setId: 'cottage' });
+    const desks = s.draft.layout.pieces.filter((p) => p.item.startsWith('desk.') || p.item === 'set.cottage.desk');
+    expect(desks.map((p) => p.item)).toEqual(['desk.monitor']);
+    expect(s.draft.layout.pieces.map((p) => p.item)).toEqual(expect.arrayContaining(['set.cottage.rug', 'set.cottage.pet', 'plant.fern']));
+    expect(s.draft.layout.pieces.every((p) => (counts[p.item] ?? 0) > 0)).toBe(true);
+    expect(s.past).toHaveLength(1);
+    const applied = s.outcome && s.outcome.ok && s.outcome.id === null ? s.outcome.applied : null;
+    expect(applied?.deskKept).toBe(true);
+    expect(applied?.missing).toContain('set.cottage.desk');
   });
 });
 

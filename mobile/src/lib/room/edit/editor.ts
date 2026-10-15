@@ -3,10 +3,10 @@
 // own. A refused action changes nothing and leaves an `outcome` for the screen to say and shake. Every drag, toolbar
 // action, style change and set apply is one undo step; 20 are kept. Previews (a locked worn piece, a locked set)
 // never enter the draft (Spec B ruling P18).
-import { catalogueItem, catalogueSet, isoOf } from '../catalogue';
+import { catalogueItem, catalogueSet, GEOMETRY_DEPS, isoOf, type CatalogueSet } from '../catalogue';
 import type { KipWorn, ItemId } from '../loadout';
 import type { WornSlot } from '../slots'; // moves to '../catalogue' in Task 10
-import { capFor, type Placement, type RoomLayout, type StyleKey, type Tier } from '../iso/geometry';
+import { capFor, validateLayout, type Placement, type RoomLayout, type StyleKey, type Tier } from '../iso/geometry';
 import { isoGrid } from '../iso/grid';
 import { childrenOf, deskOf, inventoryOf, layoutKey, newPieceId } from '../layout';
 import { COACH_ITEM, coachTile, nearestFree, placedAt, refusal, roomCentre, targetPoint, type Refused, type Target } from './targets';
@@ -15,7 +15,12 @@ export interface Draft { layout: RoomLayout; worn: KipWorn }
 export type DrawerTab = 'all' | 'floor' | 'wall' | 'onTop' | 'funny' | 'new' | 'room' | 'kip' | 'sets';
 export type NudgeDir = 'backLeft' | 'backRight' | 'frontLeft' | 'frontRight' | 'up' | 'down';
 export type Preview = { kind: 'worn'; slot: WornSlot; item: ItemId } | { kind: 'set'; setId: string };
-export type Outcome = { ok: true; id: string } | { ok: false; refused: Refused; id: string | null };
+/** What Apply set did (ruling T9-FIX): the set's items you don't own yet, and whether your own desk stayed. */
+export interface SetApplied { setId: string; missing: ItemId[]; deskKept: boolean }
+export type Outcome =
+  | { ok: true; id: string }
+  | { ok: true; id: null; applied: SetApplied }
+  | { ok: false; refused: Refused; id: string | null };
 export interface CoachState { step: 1 | 2 | 3; tile: [number, number] }
 
 export interface EditorState {
@@ -115,6 +120,8 @@ const coachAfterPlace = (s: EditorState, item: ItemId): CoachState | null =>
   s.coach && s.coach.step === 1 && item === COACH_ITEM ? { ...s.coach, step: 2 } : s.coach;
 
 function add(s: EditorState, item: ItemId, target: Target | null, facing: 'L' | 'R' = 'L'): EditorState {
+  // One desk per room (ruling T9-FIX): a desk from the drawer, placed or dropped, swaps the desk.
+  if (isoOf(item)?.kipDesk) return editorReducer(s, { type: 'replaceDesk', item });
   if (!((inventory(s)[item] ?? 0) > 0)) return refuse(s, { reason: 'outside' }, null);
   if (!target) return refuse(s, { reason: 'outside' }, null);
   const piece = placedAt({ id: newPieceId(s.draft.layout), item, facing, mirror: false }, target);
@@ -166,6 +173,48 @@ export function selectedTools(s: EditorState): Tools | null {
   };
 }
 
+/**
+ * The set's pieces you own copies of (spec §5.4), with anything left on a piece that isn't placed dropped. When the
+ * set's desk isn't owned your own desk stays (ruling T9-FIX): it takes the set desk's corner and facing, or the
+ * nearest free place to it; the set's on-desk pieces stand on its spots while they fit. Null when no desk fits.
+ */
+function setPieces(s: EditorState, set: CatalogueSet): { pieces: Placement[]; missing: ItemId[]; deskKept: boolean } | null {
+  const left: Record<ItemId, number> = { ...s.counts };
+  const missing: ItemId[] = [];
+  const owned = set.layout.pieces.filter((p) => {
+    if ((left[p.item] ?? 0) > 0) { left[p.item]!--; return true; }
+    missing.push(p.item);
+    return false;
+  });
+  const onSpots = (base: Placement[]): Placement[] => {
+    const byId = new Map(base.map((p) => [p.id, p]));
+    const fits = (p: Placement) => (p.spot ?? 0) < (isoOf(byId.get(p.parent ?? '')?.item)?.surface?.spots.length ?? 0);
+    const order = new Map(set.layout.pieces.map((p, k) => [p.id, k]));
+    const rank = (p: Placement) => order.get(p.id) ?? order.size;
+    return [...base, ...owned.filter((p) => p.layer === 'onTop' && fits(p))].sort((x, y) => rank(x) - rank(y)); // the set's order
+  };
+  const base = owned.filter((p) => p.layer !== 'onTop');
+  const valid = (pieces: Placement[]) => (validateLayout({ ...s.draft.layout, pieces }, s.tier, GEOMETRY_DEPS) ? null : pieces);
+  if (base.some((p) => isoOf(p.item)?.kipDesk)) {
+    const pieces = valid(onSpots(base));
+    return pieces && { pieces, missing, deskKept: false };
+  }
+  const desk = deskOf(s.draft.layout);
+  const setDesk = set.layout.pieces.find((p) => isoOf(p.item)?.kipDesk);
+  if (!desk) return null;
+  const mine: Placement = { ...(setDesk ?? desk), item: desk.item, layer: 'floor' };
+  const room = { ...s.draft.layout, pieces: base };
+  let at: Placement | null = refusal(room, mine, s.tier, false) ? null : mine;
+  if (!at) {
+    const g = isoGrid(s.tier);
+    const near = targetPoint(g, room, mine.item, { layer: 'floor', x: mine.x, y: mine.y }, mine.facing);
+    const t = nearestFree(g, room, mine.item, s.tier, near, mine);
+    at = t && placedAt(mine, t);
+  }
+  const pieces = at && valid(onSpots([...base, at]));
+  return pieces && { pieces, missing, deskKept: true };
+}
+
 export function editorReducer(s: EditorState, a: EditorAction): EditorState {
   const g = isoGrid(s.tier);
   const layout = s.draft.layout;
@@ -178,7 +227,6 @@ export function editorReducer(s: EditorState, a: EditorAction): EditorState {
     case 'drawer':
       return { ...s, drawer: a.tab, preview: null };
     case 'place': {
-      if (isoOf(a.item)?.kipDesk) return editorReducer(s, { type: 'replaceDesk', item: a.item });
       const base = { id: newPieceId(layout), item: a.item, facing: 'L' as const, mirror: false };
       return add(s, a.item, nearestFree(g, layout, a.item, s.tier, roomCentre(g), base));
     }
@@ -242,17 +290,15 @@ export function editorReducer(s: EditorState, a: EditorAction): EditorState {
     case 'applySet': {
       const set = catalogueSet(a.setId);
       if (!set) return s;
-      // Owned copies only (spec §5.4): a piece you have no copy of is left out, with anything on it.
-      const left: Record<ItemId, number> = { ...s.counts };
-      const pieces = set.layout.pieces.filter((p) => { if (!((left[p.item] ?? 0) > 0)) return false; left[p.item]!--; return true; });
-      const ids = new Set(pieces.map((p) => p.id));
-      const kept = pieces.filter((p) => p.layer !== 'onTop' || ids.has(p.parent!));
-      if (!kept.some((p) => isoOf(p.item)?.kipDesk)) return s;
+      const placed = setPieces(s, set);
+      if (!placed) return refuse(s, { reason: 'outside' }, null);
       const owned = (id: ItemId) => (s.counts[id] ?? 0) > 0;
       const styles = Object.fromEntries(Object.entries(set.layout.styles).map(([k, id]) => [k, owned(id) ? id : layout.styles[k as StyleKey]])) as RoomLayout['styles'];
       const worn = { ...s.draft.worn };
       for (const [slot, id] of Object.entries(set.worn)) if (id && owned(id)) worn[slot as WornSlot] = id;
-      return commit(s, { layout: { v: 1, styles, pieces: kept }, worn }, { selected: null });
+      const missing = [...new Set([...placed.missing, ...Object.values(set.layout.styles).filter((id) => !owned(id)), ...Object.values(set.worn).filter((id): id is ItemId => !!id && !owned(id))])];
+      const applied: SetApplied = { setId: set.id, missing, deskKept: placed.deskKept };
+      return commit(s, { layout: { v: 1, styles, pieces: placed.pieces }, worn }, { selected: null, outcome: { ok: true, id: null, applied } });
     }
     case 'previewSet':
       return { ...s, preview: a.setId ? { kind: 'set', setId: a.setId } : null };
