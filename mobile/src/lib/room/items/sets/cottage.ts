@@ -211,6 +211,10 @@ const pet: ItemArt = {
 const PIECES = [wallpaper, floor, win, art, shelf, desk, deskItem, lamp, corner, rug, pet];
 registerItems(PIECES);
 
-// Each piece's tray icon is its own clear-day picture (ItemIcon fits the viewBox to the rects).
+// Each piece's tray icon is its own clear-day picture (ItemIcon fits the viewBox to the rects); the garland's shows
+// its lit bulbs (Spec B Task 11 minor).
 const DAY: ItemContext = { weather: 'clear', night: false, colour: 'coral', ramp: kipRamp(KIP_COLOURS.coral), screen: 'lines' };
-registerIcons(Object.fromEntries(PIECES.map((p) => [p.id, p.draw(DAY).base as SpriteRect[]])));
+registerIcons(Object.fromEntries(PIECES.map((p) => {
+  const l = p.draw(DAY);
+  return [p.id, [...(l.base ?? []), ...(p.id === 'set.cottage.lamp' ? l.frames?.[0] ?? [] : [])] as SpriteRect[]];
+})));

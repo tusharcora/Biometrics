@@ -3,14 +3,16 @@ import { CATALOGUE, catalogueSet } from '../../src/lib/room/catalogue';
 import { drawRoom } from '../../src/lib/room/draw';
 import { itemIcon } from '../../src/lib/room/icons';
 import { itemArt } from '../../src/lib/room/items';
+import { isoArtOf } from '../../src/lib/room/iso/art';
+import '../../src/lib/room/iso';
 import { SET_SWATCHES } from '../../src/lib/room/art';
 import { wornArt } from '../../src/lib/kip/wornArt';
 import { EMPTY_WORN } from '../../src/lib/room/loadout';
 import { ROOM_SLOTS } from '../../src/lib/room/slots';
 
 it('every catalogue id the app ships has art and an icon (a release can never offer an undrawable piece)', () => {
-  // Release 3's structural pieces have iso art only (free-build P1 Task 7 drops this skip).
-  const missing = CATALOGUE.items.filter((i) => i.release !== 3).filter((i) => !(itemArt(i.id) ?? wornArt(i.id)) || !itemIcon(i.id)?.length).map((i) => i.id);
+  // Release 3's structural pieces (the plank, the welcome lantern) have iso art only.
+  const missing = CATALOGUE.items.filter((i) => !(itemArt(i.id) ?? wornArt(i.id) ?? isoArtOf(i.id)) || !itemIcon(i.id)?.length).map((i) => i.id);
   expect(missing).toEqual([]);
   for (const slot of ROOM_SLOTS) checkSlotArt(slot);
 });
