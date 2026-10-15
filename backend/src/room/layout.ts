@@ -41,12 +41,25 @@ export function readLayout(json: unknown, counts: Readonly<Record<string, number
     if (!item || item.slot !== k || !((counts[styles[k]] ?? 0) > 0)) styles[k] = starter.styles[k];
   }
   const known = withParents(parsed.pieces.filter((p) => !!shippedItem(p.item)?.iso));
+  // Base pieces first, then the children their drops orphan, then the onTop pieces against what is left of each
+  // count (ruling T4-CARRY): a child that leaves with its parent frees its copy, so only the true excess drops.
+  const base = trimOver(known.filter((p) => p.layer !== 'onTop'), counts, {});
+  const baseIds = new Set(base.map((p) => p.id));
+  const kept = withParents(known.filter((p) => p.layer === 'onTop' || baseIds.has(p.id)));
+  const used: Record<string, number> = {};
+  for (const p of base) used[p.item] = (used[p.item] ?? 0) + 1;
+  const onTop = new Set(trimOver(kept.filter((p) => p.layer === 'onTop'), counts, used).map((p) => p.id));
+  return { v: 1, styles, pieces: kept.filter((p) => p.layer !== 'onTop' || onTop.has(p.id)) };
+}
+
+/** Keeps at most `counts[item] - used[item]` copies of each item, dropping the highest ids first; order is kept. */
+function trimOver(pieces: Placement[], counts: Readonly<Record<string, number>>, used: Readonly<Record<string, number>>): Placement[] {
   const drop = new Set<string>();
   const byItem = new Map<string, Placement[]>();
-  for (const p of known) byItem.set(p.item, [...(byItem.get(p.item) ?? []), p]);
+  for (const p of pieces) byItem.set(p.item, [...(byItem.get(p.item) ?? []), p]);
   for (const [item, list] of byItem) {
-    const extra = list.length - (counts[item] ?? 0);
+    const extra = list.length - Math.max(0, (counts[item] ?? 0) - (used[item] ?? 0));
     if (extra > 0) [...list].sort((a, b) => (a.id < b.id ? 1 : a.id > b.id ? -1 : 0)).slice(0, extra).forEach((p) => drop.add(p.id));
   }
-  return { v: 1, styles, pieces: withParents(known.filter((p) => !drop.has(p.id))) };
+  return pieces.filter((p) => !drop.has(p.id));
 }

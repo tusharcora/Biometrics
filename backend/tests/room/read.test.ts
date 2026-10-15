@@ -80,6 +80,46 @@ describe('GET /me/cosmetics (free-build)', () => {
     expect(row!.layout).toEqual(stored);
   });
 
+  it('drops only the true excess: a child that leaves with its dropped parent frees its copy for another (ruling T4-CARRY)', async () => {
+    const { user, headers } = await me();
+    // One plank and one sticky owned. The extra plank 'pz' goes, taking its sticky 'a1'; the sticky 'st' on the kept
+    // plank is then within the count, so it stays.
+    const kept = piece('st', 'item.sticky', { layer: 'onTop', parent: 'plank', spot: 1 });
+    const stored = { ...starterLayout(), pieces: [...starterLayout().pieces, piece('pz', 'shelf.plank', { layer: 'wallR', x: 0, y: 2 }), piece('a1', 'item.sticky', { layer: 'onTop', parent: 'pz', spot: 0 }), kept] };
+    await prisma.cosmeticLoadout.create({ data: { userId: user.id, room: STARTER_ROOM, worn: EMPTY_WORN, layout: stored as unknown as Prisma.InputJsonValue, version: 4 } });
+    expect((await get(headers)).layout).toEqual({ ...starterLayout(), pieces: [...starterLayout().pieces, kept] });
+  });
+
+  it('two conversions racing on one row: exactly one writes', async () => {
+    const { user } = await me();
+    const row = await specBRow(user.id, { plant: 'plant.cactus' });
+    const won = await Promise.all([convertLoadout(row), convertLoadout(row)]);
+    expect(won.sort()).toEqual([false, true]);
+  });
+
+  it('a slot save landing between the read and the conversion is converted on a second pass, not read as the starter', async () => {
+    const { user, headers } = await me();
+    await specBRow(user.id, {}, 3);
+    // An old server's slot save lands just before this GET's conditional write: a new room, layout still null.
+    const real = prisma.cosmeticLoadout.updateMany.bind(prisma.cosmeticLoadout);
+    let raced = false;
+    const spy = jest.spyOn(prisma.cosmeticLoadout, 'updateMany').mockImplementation(((args: Parameters<typeof real>[0]) => {
+      if (!raced) {
+        raced = true;
+        return real({ where: { userId: user.id }, data: { room: { ...STARTER_ROOM, desk: 'desk.notebook' }, version: { increment: 1 } } }).then(() => real(args));
+      }
+      return real(args);
+    }) as unknown as typeof real);
+    try {
+      const body = await get(headers);
+      expect(body.layout.pieces.find((p: { id: string }) => p.id === 'desk').item).toBe('desk.notebook');
+      expect(body.version).toBe(4);
+      expect((await prisma.cosmeticLoadout.findUnique({ where: { userId: user.id } }))!.layout).toEqual(body.layout);
+    } finally {
+      spy.mockRestore();
+    }
+  });
+
   it('drops unshipped placements and reads an unowned style as the starter style (ruling 23)', async () => {
     const { user, headers } = await me();
     const stored = { ...starterLayout(), styles: { ...starterLayout().styles, wallpaper: 'wall.brick' }, pieces: [...starterLayout().pieces, piece('x1', 'desk.dual', { x: 2, y: 4 })] };

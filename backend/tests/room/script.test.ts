@@ -4,6 +4,8 @@ import { migrateTestDb } from '../setupTestDb';
 import { authHeaderFor } from '../helpers/auth';
 import { api, buddyUser } from '../buddies/helpers';
 import { EMPTY_WORN, STARTER_ROOM } from '../../src/cosmetics/catalogue';
+import { ownedFrom, readRoom } from '../../src/cosmetics/loadout';
+import { layoutFromSlots } from '../../src/room/convert';
 import { convertRoomLayouts } from '../../scripts/convert-room-layouts';
 
 beforeAll(() => migrateTestDb());
@@ -25,6 +27,8 @@ it('converts every Spec B row once, gives the same layout the lazy GET would, an
   const gotA = (await (await api()).get('/me/cosmetics').set(await authHeaderFor(a.id))).body;
   const rowA = await prisma.cosmeticLoadout.findUnique({ where: { userId: a.id } });
   expect(gotA.layout).toEqual(rowA!.layout);
+  const unlocks = await prisma.cosmeticUnlock.findMany({ where: { userId: a.id }, select: { itemId: true } });
+  expect(rowA!.layout).toEqual(layoutFromSlots(readRoom(rowA!.room, ownedFrom(unlocks))));
   expect(gotA.layout.pieces.find((p: { id: string }) => p.id === 'plant').item).toBe('plant.cactus');
   expect(rowA!.version).toBe(2);
   quiet.mockRestore();
