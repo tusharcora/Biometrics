@@ -107,7 +107,7 @@ export function InventoryDrawer({ state, dispatch, room, colour, counters = NO_C
       <ScrollView testID="drawer-scroll" nestedScrollEnabled scrollEnabled={!dragging} contentContainerStyle={{ paddingBottom: 24 }}>
         {roomFull ? (
           <View className="px-4 pb-3">
-            <RoomFullCard cap={capFor(state.tier)} onStore={() => { setStoreHint(state.draft.layout.pieces.length); dispatch({ type: 'clearOutcome' }); }} />
+            <RoomFullCard cap={capFor(state.tier)} onStore={() => { setStoreHint(state.draft.layout.pieces.length); dispatch({ type: 'clearOutcome' }); }} onSizes={onOpenSizes} />
           </View>
         ) : null}
         {storeHint !== null && state.draft.layout.pieces.length >= storeHint ? <Text testID="room-full-hint" className="px-4 pb-2 text-caption text-muted-foreground">{D.full.hint}</Text> : null}

@@ -7,7 +7,7 @@ import { ApiError } from '../../src/api/client';
 import { fetchCosmetics, postCosmeticsSeen, putCosmetics } from '../../src/api/cosmetics';
 import { EDIT_CELL_PT, initialPan } from '../../src/components/edit/EditRoom';
 import { DecorateRoomScreen, EDIT_ROOM_HEIGHT, editRoomHeight, initialState } from '../../src/screens/DecorateRoomScreen';
-import { applyPurchase, getCosmetics, loadCosmetics, markCosmeticsSeen, resetCosmetics } from '../../src/lib/room/cosmeticsStore';
+import { applyCosmeticsBody, applyPurchase, getCosmetics, loadCosmetics, markCosmeticsSeen, resetCosmetics } from '../../src/lib/room/cosmeticsStore';
 import { LIFT_PT, targetOf } from '../../src/lib/room/edit/drag';
 import { decorateTarget } from '../../src/lib/room/announce';
 import { initEditor } from '../../src/lib/room/edit/editor';
@@ -648,5 +648,49 @@ describe('the guided first placement (spec §11.1)', () => {
     fireEvent.press(s.getByTestId('edit-grid')); // the overlay is drawn again, now on step 2
     expect(s.getByTestId('coach-step')).toHaveTextContent('Step 2 of 3');
     expect(lime).not.toHaveBeenCalled();
+  });
+});
+
+describe('the room grows while the editor is open (spec §7, ruling 19)', () => {
+  it('growing the room from the editor keeps the draft, re-centres, and Done saves at the new version (Review Focus 4)', async () => {
+    const s = await openEditor();
+    fireEvent.press(s.getByTestId('drawer-tile-plant.cactus'));
+    fireEvent.press(s.getByTestId('drawer-place'));
+    await act(async () => { applyCosmeticsBody(cosmeticsDTO({ tier: 2, cap: 60, version: 3 })); });
+    expect(s.getByTestId('edit-count')).toHaveTextContent('8 / 60 in room');
+    const room = s.getByTestId('edit-room-view');
+    const grown = initEditor({ layout: starterLayout(), worn: EMPTY_WORN, tier: 2, counts: STARTER_COUNTS, version: 3, newIds: [] });
+    expect([room.props.tier, JSON.parse(room.props.offset)]).toEqual([2, initialPan(grown, Dimensions.get('window').width, editRoomHeight(Dimensions.get('window').height))]);
+    (putCosmetics as jest.Mock).mockResolvedValue(cosmeticsDTO({ tier: 2, cap: 60, version: 4 }));
+    await act(async () => { fireEvent.press(s.getByTestId('edit-done')); });
+    const sent = (putCosmetics as jest.Mock).mock.calls[0]![0];
+    expect([sent.version, sent.layout.pieces.some((p: { item: string }) => p.item === 'plant.cactus')]).toEqual([3, true]);
+  });
+
+  it('a grow whose body brings a new copy still lands after the editor marks it seen (Task 11 carry M7)', async () => {
+    const s = await openEditor();
+    // The grow's body also holds a copy bought meanwhile: the editor marks it seen, which moves the read epoch, and
+    // the grown room must stay.
+    const body = cosmeticsDTO({ tier: 2, cap: 60, version: 3, counts: { ...STARTER_COUNTS, 'item.radio': 1 }, fresh: [{ itemId: 'item.radio', source: 'buy' }] });
+    await act(async () => { applyCosmeticsBody(body); });
+    expect(postCosmeticsSeen).toHaveBeenCalledWith(['item.radio']);
+    expect([getCosmetics()!.tier, getCosmetics()!.version]).toEqual([2, 3]);
+    expect(s.getByTestId('edit-room-view').props.tier).toBe(2);
+    expect(s.getByTestId('edit-count')).toHaveTextContent('7 / 60 in room');
+    // A read that answers late with the small room never brings it back.
+    (fetchCosmetics as jest.Mock).mockResolvedValue(cosmeticsDTO({ version: 2 }));
+    await act(async () => { await loadCosmetics(); });
+    expect([getCosmetics()!.tier, s.getByTestId('edit-room-view').props.tier]).toEqual([2, 2]);
+  });
+
+  it('a newer room of the same size leaves the draft and its version alone', async () => {
+    const s = await openEditor();
+    fireEvent.press(s.getByTestId('drawer-tile-plant.cactus'));
+    fireEvent.press(s.getByTestId('drawer-place'));
+    await act(async () => { applyCosmeticsBody(cosmeticsDTO({ version: 3 })); });
+    expect(s.getByTestId('edit-count')).toHaveTextContent('8 / 40 in room');
+    (putCosmetics as jest.Mock).mockResolvedValue(cosmeticsDTO({ version: 3 }));
+    await act(async () => { fireEvent.press(s.getByTestId('edit-done')); });
+    expect((putCosmetics as jest.Mock).mock.calls[0]![0].version).toBe(2);
   });
 });

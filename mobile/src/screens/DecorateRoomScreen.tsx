@@ -115,6 +115,14 @@ function Editor({ cosmetics, params, navigation }: { cosmetics: Cosmetics; param
     if (grew.length) void markCosmeticsSeen(grew);
   }, [cosmetics.counts]);
 
+  // The room grew while the editor was open (spec §7, ruling 19), from Room sizes over it: rebase the draft onto the
+  // server's bigger room, so Done saves against the new version. The grow's body is published whole by the store
+  // (applyCosmeticsBody), so the mark-seen above can't drop it (Task 11 carry M7).
+  useEffect(() => {
+    if (cosmetics.tier === state.tier || cosmetics.version <= state.baseVersion) return;
+    dispatch({ type: 'rebased', saved: { layout: cosmetics.layout, worn: cosmetics.worn }, version: cosmetics.version, tier: cosmetics.tier, counts: cosmetics.counts });
+  }, [cosmetics.tier, cosmetics.version]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const changed = isChanged(state);
   // Cancel, the Android back button and a dismiss gesture all ask first when something changed (one confirm, P30).
   // While a save is in flight nothing leaves: Cancel is disabled and a dismiss is held without asking.

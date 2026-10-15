@@ -69,7 +69,7 @@ it('the Room tab applies a style; Sets asks before setting up a set', () => {
   expect(dispatch).toHaveBeenCalledWith({ type: 'applySet', setId: 'cottage' });
 });
 
-it('the room-full card (spec §5.3): Store a piece, no growing before P2 (Review Focus 5)', () => {
+it('the room-full card (spec §5.3): Store a piece, and no See room sizes where the drawer has no way there (Review Focus 5)', () => {
   const dispatch = jest.fn();
   const s = render(<InventoryDrawer state={state({ outcome: { ok: false, refused: { reason: 'full' }, id: null } })} dispatch={dispatch} room={room()} colour="coral" />);
   expect(s.getByTestId('room-full')).toHaveTextContent(/^KIP's room is full\. 40 pieces fit this room\. Store something to make space, or grow the room/);
@@ -77,6 +77,14 @@ it('the room-full card (spec §5.3): Store a piece, no growing before P2 (Review
   fireEvent.press(s.getByTestId('room-full-store'));
   expect(dispatch).toHaveBeenCalledWith({ type: 'clearOutcome' });
   expect(s.getByTestId('room-full-hint')).toHaveTextContent('Tap a piece in the room, then Store.');
+});
+
+it('from P2 the room-full card also offers See room sizes (spec §5.3)', () => {
+  const sizes = jest.fn();
+  const s = render(<InventoryDrawer state={state({ outcome: { ok: false, refused: { reason: 'full' }, id: null } })} dispatch={jest.fn()} room={room()} colour="coral" onOpenSizes={sizes} />);
+  expect(s.getByTestId('room-full-sizes')).toHaveTextContent('See room sizes');
+  fireEvent.press(s.getByTestId('room-full-sizes'));
+  expect(sizes).toHaveBeenCalledTimes(1);
 });
 
 it('the drawer opens half height and grows to full', () => {

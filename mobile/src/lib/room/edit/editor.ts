@@ -6,7 +6,7 @@
 import { catalogueItem, catalogueSet, GEOMETRY_DEPS, isoOf, type CatalogueSet } from '../catalogue';
 import type { KipWorn, ItemId } from '../loadout';
 import type { WornSlot } from '../catalogue';
-import { capFor, validateLayout, type Placement, type RoomLayout, type StyleKey, type Tier } from '../iso/geometry';
+import { capFor, coveredBy, validateLayout, type Placement, type RoomLayout, type StyleKey, type Tier } from '../iso/geometry';
 import { isoGrid } from '../iso/grid';
 import { childrenOf, deskOf, inventoryOf, layoutKey, newPieceId } from '../layout';
 import { COACH_ITEM, coachTile, nearestFloor, nearestFree, placedAt, refusal, roomCentre, targetPoint, type Refused, type Target } from './targets';
@@ -89,6 +89,8 @@ export type EditorAction =
   | { type: 'coach'; step: null }
   | { type: 'clearOutcome' }
   | { type: 'refreshed'; draft: Draft; version: number; counts: Readonly<Record<ItemId, number>>; tier: Tier }
+  /** The room grew while the editor was open (spec §7, ruling 19): the server's bigger room is the new base. */
+  | { type: 'rebased'; saved: Draft; version: number; tier: Tier; counts: Readonly<Record<ItemId, number>> }
   /** The store's counts while the editor is open (ruling 36), with the pieces whose count grew. */
   | { type: 'counts'; counts: Readonly<Record<ItemId, number>>; grew: readonly ItemId[] }
   | { type: 'saving' }
@@ -373,6 +375,19 @@ function reduce(s: EditorState, a: EditorAction): EditorState {
       return { ...s, outcome: null };
     case 'refreshed':
       return { ...s, saved: a.draft, draft: a.draft, past: [], future: [], counts: a.counts, tier: a.tier, baseVersion: a.version, notice: 'refreshed', selected: null, preview: null, outcome: null };
+    case 'rebased': {
+      // The draft keeps its own changes but loses what the server stored (gone from its room) and any wall piece the
+      // new size's window covers (the server's own rule, coveredBy, ruling PF-F4), with what stood on them. Undo
+      // can't reach back past the new base.
+      const kept = new Set(a.saved.layout.pieces.map((p) => p.id));
+      const gone = coveredBy(layout, a.tier, GEOMETRY_DEPS);
+      for (const p of s.saved.layout.pieces) if (!kept.has(p.id)) gone.add(p.id);
+      const pieces = layout.pieces.filter((p) => !gone.has(p.id) && !(p.parent !== undefined && gone.has(p.parent)));
+      return {
+        ...s, saved: a.saved, draft: { ...s.draft, layout: { ...layout, pieces } }, past: [], future: [], tier: a.tier, counts: a.counts,
+        baseVersion: a.version, selected: null, nudging: false, preview: null, outcome: null,
+      };
+    }
     case 'counts':
       // The store's counts while the editor is open (ruling 36): a piece bought meanwhile joins the New tab.
       return { ...s, counts: a.counts, newIds: [...s.newIds, ...a.grew.filter((id) => !s.newIds.includes(id))] };
