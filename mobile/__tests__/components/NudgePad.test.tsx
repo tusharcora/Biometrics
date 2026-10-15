@@ -31,19 +31,24 @@ it('a wall piece moves along its wall and up or down; an on-top piece only gets 
   expect(top.getByTestId('edit-put-plank')).toBeTruthy();
 });
 
-it('every target is at least 44 points tall, and Done moving ends Move', () => {
+it('every button is drawn 44 points tall (not the 36-point default topped up by slop), and Done moving ends Move', () => {
   const dispatch = jest.fn();
-  const s = render(<NudgePad state={nudging('plank')} dispatch={dispatch} />);
-  for (const b of s.getAllByRole('button')) {
-    // Before layout a default-size Button is 36 tall; its slop makes up the rest (ui/button hitSlopFor).
-    const slop = b.props.hitSlop as { top: number; bottom: number };
-    expect(36 + slop.top + slop.bottom).toBeGreaterThanOrEqual(44);
+  const onDesk = editorReducer(editorReducer(nudging('plant'), { type: 'putOn', parent: 'desk', spot: 1 }), { type: 'nudging', on: true });
+  for (const state of [nudging('plank'), nudging('plant'), onDesk]) {
+    const s = render(<NudgePad state={state} dispatch={dispatch} />);
+    for (const b of s.getAllByRole('button')) {
+      const classes = String(b.props.className).split(' ');
+      expect(classes).toContain('h-[44px]');
+      expect(classes).not.toContain('h-[36px]');
+    }
+    s.unmount();
   }
+  const s = render(<NudgePad state={nudging('plank')} dispatch={dispatch} />);
   fireEvent.press(s.getByTestId('edit-nudge-done'));
   expect(dispatch).toHaveBeenCalledWith({ type: 'nudging', on: false });
 });
 
-it('Put on the floor sends the piece back down; a refused move is said in the status line', () => {
+it('Put on the floor sends the piece back down; the pad itself has no status line (it is pinned, ruling T14-FIX)', () => {
   const dispatch = jest.fn();
   const onDesk = [{ type: 'putOn', parent: 'desk', spot: 1 }, { type: 'nudging', on: true }].reduce((s, a) => editorReducer(s, a as EditorAction), nudging('plant'));
   const s = render(<NudgePad state={onDesk} dispatch={dispatch} />);
@@ -52,8 +57,7 @@ it('Put on the floor sends the piece back down; a refused move is said in the st
   expect(dispatch).toHaveBeenCalledWith({ type: 'toFloor' });
   const refused = editorReducer(nudging('plant'), { type: 'nudge', dir: 'backLeft' });
   const r = render(<NudgePad state={refused} dispatch={jest.fn()} />);
-  expect(r.getByTestId('edit-nudge-status')).toHaveTextContent("Can't move there: doesn't fit here");
-  expect(r.getByTestId('edit-nudge-status').props.accessibilityLiveRegion).toBe('polite');
+  expect(r.queryByTestId('edit-nudge-status')).toBeNull();
 });
 
 it('shows nothing when Move is off or nothing is selected', () => {

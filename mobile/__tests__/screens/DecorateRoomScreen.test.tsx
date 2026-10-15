@@ -477,25 +477,31 @@ describe('the editor on small and large phones (ruling T13-LAYOUT)', () => {
 
 describe('without dragging (spec §5.7)', () => {
   // The press order is ruling T14's: back left from tile 1, 2 is off the floor, so the plant ends at (0, 1) and Done is live.
-  it('place, move, nudge and save with presses only; each nudge says where it went or why not', async () => {
+  it.each(['ios', 'android'] as const)('place, move, nudge and save with presses only; each nudge says where it went or why not, once (%s)', async (os) => {
     const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => undefined);
     const platform = Platform.OS;
-    Platform.OS = 'ios';
+    Platform.OS = os;
     try {
       const s = await openEditor();
       fireEvent.press(s.getByTestId('edit-piece-plant'));
       fireEvent.press(s.getByTestId('edit-move'));
+      announce.mockClear();
       fireEvent.press(s.getByTestId('edit-nudge-frontLeft'));
-      expect(announce).toHaveBeenLastCalledWith('Moved. Tile 1, 2');
+      expect(announce.mock.calls).toEqual([['Moved. Tile 1, 2']]);
       fireEvent.press(s.getByTestId('edit-nudge-backLeft'));
       expect(announce).toHaveBeenLastCalledWith("Can't move there: doesn't fit here");
-      expect(s.getByTestId('edit-nudge-status')).toHaveTextContent("Can't move there: doesn't fit here");
-      // The pad's line says it; the pinned reason line does not repeat it, and iOS hears it once.
+      // The result is pinned under the room (ruling T14-FIX), outside the scrolling part, and not a live region: the
+      // announcement is the one way it is said.
+      const status = s.getByTestId('edit-nudge-status');
+      expect(status).toHaveTextContent("Can't move there: doesn't fit here");
+      expect(within(s.getByTestId('edit-scroll')).queryByTestId('edit-nudge-status')).toBeNull();
+      expect(within(s.getByTestId('edit-editing')).getByTestId('edit-nudge-status')).toBeTruthy();
+      expect(status.props.accessibilityLiveRegion).toBeUndefined();
       expect(s.queryByTestId('edit-reason')).toBeNull();
-      const fits = () => announce.mock.calls.filter(([t]) => /fit here/.test(t)).length;
-      expect(fits()).toBe(1);
+      expect(announce).toHaveBeenCalledTimes(2);
       fireEvent.press(s.getByTestId('edit-nudge-backLeft'));
-      expect(fits()).toBe(2); // the same refusal again is said again
+      expect(announce).toHaveBeenCalledTimes(3); // the same refusal again is said again, on Android too
+      expect(announce).toHaveBeenLastCalledWith("Can't move there: doesn't fit here");
       fireEvent.press(s.getByTestId('edit-nudge-done'));
       expect(s.getByTestId('edit-flip')).toBeTruthy();
       expect(s.queryByTestId('edit-nudge-status')).toBeNull();
@@ -517,6 +523,9 @@ describe('without dragging (spec §5.7)', () => {
     expect(s.getByTestId('edit-nudge-status')).toHaveTextContent('Moved. On the desk');
     expect(s.queryByTestId('edit-nudge-frontLeft')).toBeNull();
     fireEvent.press(s.getByTestId('edit-put-floor'));
-    expect(s.getByTestId('edit-nudge-status')).toHaveTextContent(/^Moved\. Tile \d+, \d+$/);
+    // nearestFloor from the desk's spot 1: the free tile (1, 0) beside the desk, said as tile 2, 1.
+    expect(s.getByTestId('edit-nudge-status')).toHaveTextContent('Moved. Tile 2, 1');
+    const plant = JSON.parse(s.getByTestId('edit-room-view').props.layout).pieces.find((p: { id: string }) => p.id === 'plant');
+    expect(plant).toMatchObject({ layer: 'floor', x: 1, y: 0 });
   });
 });

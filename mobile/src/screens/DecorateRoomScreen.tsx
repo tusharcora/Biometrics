@@ -124,14 +124,15 @@ function Editor({ cosmetics, params, navigation }: { cosmetics: Cosmetics; param
   // A polite live region on Android; iOS has none, so each failure is announced as it happens, every time.
   const announce = (text: string) => { if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(text); };
 
-  // Each nudge or Put on… says where the piece went or why not (spec §5.7). The reducer makes a new `outcome` for
-  // every press, so the same refusal twice is said twice.
+  // Each nudge or Put on… says where the piece went or why not (spec §5.7), on both platforms (ruling T14-FIX): a live
+  // region stays quiet when its text doesn't change, so Android would miss the same refusal twice. The reducer makes a
+  // new `outcome` for every press, so each press is said exactly once.
   const lastSaid = useRef<Outcome | null>(null);
   useEffect(() => {
     if (!state.nudging || !state.outcome || state.outcome === lastSaid.current) return;
     lastSaid.current = state.outcome;
     const text = nudgeAnnouncement(state);
-    if (text) announce(text);
+    if (text) AccessibilityInfo.announceForAccessibility(text);
   }, [state.outcome, state.nudging]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = async () => {

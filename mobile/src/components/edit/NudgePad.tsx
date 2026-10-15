@@ -2,9 +2,7 @@ import React from 'react';
 import { View } from 'react-native';
 import { Button } from '../ui/button';
 import { SectionLabel } from '../ui/section-label';
-import { Text } from '../ui/text';
 import { selectedTools, type EditorAction, type EditorState, type NudgeDir } from '../../lib/room/edit/editor';
-import { nudgeAnnouncement } from '../../lib/room/edit/labels';
 import { putOnOptions } from '../../lib/room/edit/targets';
 import { ROOM_COPY } from '../../lib/room/roomCopy';
 
@@ -20,18 +18,18 @@ export function arrowsFor(layer: string): NudgeDir[] {
 }
 
 // Moving without a drag (spec 2026-10-15 §5.7): arrow Buttons along the tile axes, Up / Down on a wall, Put on… the
-// free surfaces (or back to the floor), and Done moving. The last result is a polite live region (the screen also
-// announces it on iOS); while it shows, the pinned notice line leaves it to this one.
+// free surfaces (or back to the floor), and Done moving. What each press did shows on the pinned notice line under the
+// room (ruling T14-FIX), so it never scrolls out of sight.
 export function NudgePad({ state, dispatch }: { state: EditorState; dispatch: (a: EditorAction) => void }) {
   const tools = selectedTools(state);
   if (!tools || !state.nudging) return null;
-  const status = nudgeAnnouncement(state);
+  const arrows = arrowsFor(tools.piece.layer);
   const options = putOnOptions(state);
   return (
     <View testID="edit-nudge" className="gap-2">
-      {arrowsFor(tools.piece.layer).length ? (
+      {arrows.length ? (
         <View className="flex-row flex-wrap gap-2">
-          {arrowsFor(tools.piece.layer).map((dir) => (
+          {arrows.map((dir) => (
             <Button key={dir} testID={`edit-nudge-${dir}`} variant="outline" className={TOOL} accessibilityLabel={N.label(N.dirs[dir])} onPress={() => dispatch({ type: 'nudge', dir })}>
               {N.dirs[dir]}
             </Button>
@@ -55,12 +53,6 @@ export function NudgePad({ state, dispatch }: { state: EditorState; dispatch: (a
             ))}
           </View>
         </View>
-      ) : null}
-      {status ? (
-        // A refusal reads in the reason colour, as on the pinned notice line.
-        <Text testID="edit-nudge-status" accessibilityLiveRegion="polite" className={state.outcome?.ok ? 'text-caption text-muted-foreground' : 'text-caption text-destructive'}>
-          {status}
-        </Text>
       ) : null}
       <View className="flex-row">
         <Button testID="edit-nudge-done" className={TOOL} onPress={() => dispatch({ type: 'nudging', on: false })}>{N.done}</Button>
