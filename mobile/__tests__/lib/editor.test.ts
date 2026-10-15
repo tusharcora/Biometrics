@@ -1,0 +1,177 @@
+import { EMPTY_WORN } from '../../src/lib/room/loadout';
+import type { Placement } from '../../src/lib/room/iso/geometry';
+import { childrenOf, starterLayout } from '../../src/lib/room/layout';
+import { canPlace, displayDraft, editorReducer, initEditor, inventory, isChanged, selectedTools, UNDO_STEPS, type EditorAction, type EditorState } from '../../src/lib/room/edit/editor';
+import { catalogueSet } from '../../src/lib/room/catalogue';
+
+const COUNTS: Record<string, number> = {
+  'desk.monitor': 1, 'desk.notebook': 1, 'lamp.amber': 1, 'item.mug': 1, 'item.sticky': 1, 'shelf.books': 1, 'shelf.plank': 1,
+  'plant.fern': 3, 'plant.cactus': 1, 'rug.slate': 1, 'lamp.welcome': 1, 'corner.beanbag': 1, 'wall.plain': 1, 'wall.dots': 1,
+  'floor.oakDark': 1, 'win.plain': 1, 'out.beanie': 1, 'art.calendar': 1,
+};
+const start = (over: Partial<Parameters<typeof initEditor>[0]> = {}, open?: Parameters<typeof initEditor>[1]) =>
+  initEditor({ layout: starterLayout(), worn: EMPTY_WORN, tier: 1, counts: COUNTS, version: 3, newIds: [], ...over }, open);
+const run = (s: EditorState, ...actions: EditorAction[]) => actions.reduce(editorReducer, s);
+const piece = (s: EditorState, id: string) => s.draft.layout.pieces.find((p) => p.id === id);
+
+describe('placing (spec §5.4 Place, §5.3 Room full)', () => {
+  it('Place puts an owned piece on the nearest free valid spot, selects it and counts it out of the inventory', () => {
+    const s = run(start(), { type: 'place', item: 'plant.fern' });
+    expect(s.selected).toBe('p1');
+    expect(piece(s, 'p1')!.item).toBe('plant.fern');
+    expect([inventory(s)['plant.fern'], s.past.length, isChanged(s)]).toEqual([1, 1, true]);
+  });
+
+  it('never places what you don\'t own or have none left of (ledger: the reducer checks counts)', () => {
+    const s = start();
+    expect(run(s, { type: 'place', item: 'plant.monstera' }).draft).toBe(s.draft);
+    const none = run(s, { type: 'place', item: 'plant.cactus' }, { type: 'place', item: 'plant.cactus' });
+    expect(none.draft.layout.pieces.filter((p) => p.item === 'plant.cactus')).toHaveLength(1);
+    expect(none.outcome).toEqual({ ok: false, refused: { reason: 'outside' }, id: null });
+  });
+
+  it('at the cap, Place is refused with "full" and canPlace is false', () => {
+    const many = { ...starterLayout(), pieces: [...starterLayout().pieces, ...Array.from({ length: 33 }, (_, k): Placement => ({ id: `w${k}`, item: 'art.calendar', layer: 'wallR', x: 0, y: 0, facing: 'L', mirror: false }))] };
+    const s = start({ layout: many, counts: { ...COUNTS, 'art.calendar': 40 } });
+    expect(canPlace(s, 'plant.fern')).toBe(false);
+    expect(run(s, { type: 'place', item: 'plant.fern' }).outcome).toEqual({ ok: false, refused: { reason: 'full' }, id: null });
+  });
+});
+
+describe('dragging (spec §5.3)', () => {
+  it('a valid drop moves the piece (children follow) as one undo step', () => {
+    const s = run(start(), { type: 'drop', id: 'desk', item: 'desk.monitor', target: { layer: 'floor', x: 2, y: 4 } });
+    expect([piece(s, 'desk')!.x, piece(s, 'desk')!.y, s.past.length]).toEqual([2, 4, 1]);
+    expect(childrenOf(s.draft.layout, 'desk').map((p) => p.id)).toEqual(['lamp', 'deskitem']);
+  });
+
+  it('an invalid drop changes nothing: a moved piece stays where it was, a new one stays in the inventory', () => {
+    const s = start();
+    const moved = run(s, { type: 'drop', id: 'plant', item: 'plant.fern', target: { layer: 'floor', x: 9, y: 9 } });
+    expect([moved.draft, moved.past.length, moved.outcome]).toEqual([s.draft, 0, { ok: false, refused: { reason: 'outside' }, id: 'plant' }]);
+    const fresh = run(s, { type: 'drop', id: null, item: 'corner.beanbag', target: { layer: 'floor', x: 3, y: 2 } });
+    expect([fresh.draft, fresh.outcome]).toEqual([s.draft, { ok: false, refused: { reason: 'seat', with: 'desk' }, id: null }]);
+  });
+
+  it('a drop from the drawer adds a new piece with a new id', () => {
+    const s = run(start(), { type: 'drop', id: null, item: 'corner.beanbag', target: { layer: 'floor', x: 6, y: 6 } });
+    expect([piece(s, 'p1')?.item, s.selected]).toEqual(['corner.beanbag', 'p1']);
+  });
+});
+
+describe('the toolbar (spec §5.3)', () => {
+  it('Flip mirrors; Turn switches facing and keeps the back corner, or refuses and stays', () => {
+    let s = run(start(), { type: 'select', id: 'desk' }, { type: 'flip' });
+    expect(piece(s, 'desk')!.mirror).toBe(true);
+    s = run(s, { type: 'turn' });
+    expect([piece(s, 'desk')!.facing, piece(s, 'desk')!.x, piece(s, 'desk')!.y]).toEqual(['R', 2, 0]);
+    // A fern at (2, 2) is clear of the desk facing L, but inside its footprint turned to R.
+    const edge = run(start(), { type: 'drop', id: 'plant', item: 'plant.fern', target: { layer: 'floor', x: 2, y: 2 } }, { type: 'select', id: 'desk' });
+    const turned = run(edge, { type: 'turn' });
+    expect([turned.draft, turned.outcome?.ok]).toEqual([edge.draft, false]);
+    expect(selectedTools(edge)!.canTurn).toBe(false);
+    expect(selectedTools(run(start(), { type: 'select', id: 'plant' }))!.canTurn).toBe(false); // facings: 1
+  });
+
+  it('Another places one more copy near the piece; greyed at ×0 and for the desk', () => {
+    let s = run(start(), { type: 'select', id: 'plant' });
+    expect(selectedTools(s)!.canAnother).toBe(true);
+    s = run(s, { type: 'another' }, { type: 'select', id: 'plant' }, { type: 'another' });
+    expect(s.draft.layout.pieces.filter((p) => p.item === 'plant.fern')).toHaveLength(3);
+    expect(selectedTools(run(s, { type: 'select', id: 'plant' }))!.canAnother).toBe(false);
+    const desk = selectedTools(run(start(), { type: 'select', id: 'desk' }))!;
+    expect([desk.canAnother, desk.canStore, desk.isDesk]).toEqual([false, false, true]);
+  });
+
+  it('Store sends a piece and everything on it to the inventory; Undo puts both back on the same spot', () => {
+    const s = run(start(), { type: 'select', id: 'plank' });
+    expect(selectedTools(s)!.children).toBe(1);
+    const stored = run(s, { type: 'store' });
+    expect([piece(stored, 'plank'), piece(stored, 'shelf'), inventory(stored)['shelf.plank'], inventory(stored)['shelf.books'], stored.selected])
+      .toEqual([undefined, undefined, 1, 1, null]);
+    const back = run(stored, { type: 'undo' });
+    expect(back.draft).toEqual(s.draft);
+    expect(piece(back, 'shelf')).toEqual({ id: 'shelf', item: 'shelf.books', layer: 'onTop', x: 0, y: 0, facing: 'L', mirror: false, parent: 'plank', spot: 0 });
+  });
+
+  it('Replace desk takes the old desk\'s corner, facing and children; refuses when it does not fit', () => {
+    const s = run(start(), { type: 'replaceDesk', item: 'desk.notebook' });
+    expect([piece(s, 'desk')!.item, piece(s, 'desk')!.x, childrenOf(s.draft.layout, 'desk').length, s.past.length]).toEqual(['desk.notebook', 2, 2, 1]);
+    expect(inventory(s)['desk.monitor']).toBe(1);
+    expect(run(start(), { type: 'replaceDesk', item: 'desk.laptop' }).draft).toEqual(start().draft); // not owned
+  });
+});
+
+describe('undo and redo (spec §5.3: 20 steps)', () => {
+  it('goes back and forward; a new change clears redo; at most 20 steps are kept', () => {
+    let s = start();
+    for (let k = 0; k < 25; k++) s = run(s, { type: 'drop', id: 'plant', item: 'plant.fern', target: { layer: 'floor', x: k % 2 ? 0 : 1, y: 6 } });
+    expect(s.past).toHaveLength(UNDO_STEPS);
+    s = run(s, { type: 'undo' }, { type: 'undo' });
+    expect(s.future).toHaveLength(2);
+    s = run(s, { type: 'redo' });
+    expect([s.past.length, s.future.length]).toEqual([UNDO_STEPS - 1, 1]);
+    s = run(s, { type: 'drop', id: 'plant', item: 'plant.fern', target: { layer: 'floor', x: 6, y: 5 } });
+    expect(s.future).toEqual([]);
+  });
+});
+
+describe('styles, worn, sets and previews (spec §5.4)', () => {
+  it('a style is one undo step and must be owned', () => {
+    const s = run(start(), { type: 'style', key: 'wallpaper', item: 'wall.dots' }, { type: 'style', key: 'wallpaper', item: 'wall.brick' });
+    expect([s.draft.layout.styles.wallpaper, s.past.length]).toEqual(['wall.dots', 1]);
+  });
+
+  it('a locked worn piece previews without entering the draft (Spec B ruling P18)', () => {
+    const s = run(start(), { type: 'previewWorn', slot: 'head', item: 'out.crown' });
+    expect([s.draft.worn.head, displayDraft(s).worn.head, isChanged(s)]).toEqual([null, 'out.crown', false]);
+    expect(run(s, { type: 'wear', slot: 'head', item: 'out.beanie' }).draft.worn.head).toBe('out.beanie');
+  });
+
+  it('Apply set stores everything and places the set\'s layout with owned copies only, as one step', () => {
+    const cottage = catalogueSet('cottage')!;
+    const counts = { ...COUNTS, ...Object.fromEntries([...Object.values(cottage.room), ...Object.values(cottage.worn)].map((id) => [id!, 1])) };
+    const s = run(start({ counts }), { type: 'applySet', setId: 'cottage' });
+    expect([s.draft.layout, s.draft.worn.head, s.past.length]).toEqual([cottage.layout, 'out.beanie', 1]);
+    const partial = run(start(), { type: 'applySet', setId: 'cottage' });
+    expect(partial.draft.layout.pieces.every((p) => (COUNTS[p.item] ?? 0) > 0)).toBe(true);
+  });
+});
+
+describe('without dragging (spec §5.7)', () => {
+  it('nudges along the tile axes and says where it went or why not', () => {
+    let s = run(start(), { type: 'select', id: 'plant' }, { type: 'nudge', dir: 'frontRight' });
+    expect([piece(s, 'plant')!.x, s.outcome]).toEqual([1, { ok: true, id: 'plant' }]);
+    s = run(s, { type: 'nudge', dir: 'backLeft' }, { type: 'nudge', dir: 'backLeft' });
+    expect([piece(s, 'plant')!.x, s.outcome]).toEqual([0, { ok: false, refused: { reason: 'outside' }, id: 'plant' }]);
+  });
+
+  it('moves wall pieces along and up or down, and Put on moves a piece onto a free spot', () => {
+    let s = run(start(), { type: 'select', id: 'plank' }, { type: 'nudge', dir: 'up' }, { type: 'nudge', dir: 'frontRight' });
+    expect([piece(s, 'plank')!.x, piece(s, 'plank')!.y]).toEqual([7, 11]);
+    s = run(s, { type: 'select', id: 'plant' }, { type: 'putOn', parent: 'desk', spot: 1 });
+    expect(piece(s, 'plant')).toMatchObject({ layer: 'onTop', parent: 'desk', spot: 1 });
+  });
+});
+
+describe('the guided first placement (spec §11.1)', () => {
+  it('step 1 ends when the lantern is placed (it is selected), step 2 when it is turned', () => {
+    let s = start({}, { coach: true, drawer: 'new', item: 'lamp.welcome' });
+    expect([s.coach?.step, s.coach?.tile, s.drawer, s.picked]).toEqual([1, [5, 3], 'all', 'lamp.welcome']); // nothing new: All
+    s = run(s, { type: 'drop', id: null, item: 'lamp.welcome', target: { layer: 'floor', x: 5, y: 3 } });
+    expect([s.coach?.step, piece(s, s.selected!)!.item]).toEqual([2, 'lamp.welcome']);
+    s = run(s, { type: 'turn' });
+    expect(s.coach?.step).toBe(3);
+    expect(run(s, { type: 'coach', step: null }).coach).toBeNull();
+  });
+});
+
+describe('saving (Spec B §6.4 rulings)', () => {
+  it('a refreshed read replaces the draft, clears history and keeps the notice; saved rebases', () => {
+    const changed = run(start(), { type: 'place', item: 'plant.fern' });
+    const other = { layout: { ...starterLayout(), styles: { ...starterLayout().styles, wallpaper: 'wall.dots' } }, worn: EMPTY_WORN };
+    const r = run(changed, { type: 'refreshed', draft: other, version: 4, counts: COUNTS, tier: 1 });
+    expect([r.draft, r.saved, r.past, r.notice, r.baseVersion, isChanged(r)]).toEqual([other, other, [], 'refreshed', 4, false]);
+    expect(run(changed, { type: 'saved', draft: changed.draft, version: 5 }).baseVersion).toBe(5);
+  });
+});
