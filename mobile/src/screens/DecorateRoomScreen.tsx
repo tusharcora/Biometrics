@@ -103,6 +103,18 @@ function Editor({ cosmetics, params, navigation }: { cosmetics: Cosmetics; param
   // Opening the editor marks everything shown as seen (Spec B §4); the New tab keeps its snapshot (ruling 15).
   useEffect(() => { void markCosmeticsSeen(cosmetics.fresh.map((f) => f.itemId)); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // The store's counts follow a purchase made from this editor's shop (ruling 36): new copies join the New tab and,
+  // being shown, are marked seen, as opening the editor marks what it shows.
+  const shownCounts = useRef(cosmetics.counts);
+  useEffect(() => {
+    if (cosmetics.counts === shownCounts.current) return;
+    const before = shownCounts.current;
+    shownCounts.current = cosmetics.counts;
+    const grew = Object.keys(cosmetics.counts).filter((id) => (cosmetics.counts[id] ?? 0) > (before[id] ?? 0));
+    dispatch({ type: 'counts', counts: cosmetics.counts, grew });
+    if (grew.length) void markCosmeticsSeen(grew);
+  }, [cosmetics.counts]);
+
   const changed = isChanged(state);
   // Cancel, the Android back button and a dismiss gesture all ask first when something changed (one confirm, P30).
   // While a save is in flight nothing leaves: Cancel is disabled and a dismiss is held without asking.
@@ -199,7 +211,8 @@ function Editor({ cosmetics, params, navigation }: { cosmetics: Cosmetics; param
           <EditToolbar state={state} dispatch={act} showGrid={showGrid} onToggleGrid={() => setShowGrid((v) => !v)} />
           {/* The guided first placement (spec §11.1): just above the drawer the lantern comes from. */}
           <CoachMark state={state} dispatch={act} placeAtOnce={height < COACH_PLACE_AT_ONCE_BELOW} />
-          <InventoryDrawer state={state} dispatch={act} room={roomRef} colour={me.colour} counters={cosmetics.counters} maxHeight={scrollHeight} onDragChange={setDrawerDrag} />
+          <InventoryDrawer state={state} dispatch={act} room={roomRef} colour={me.colour} counters={cosmetics.counters} maxHeight={scrollHeight} onDragChange={setDrawerDrag}
+            onOpenShop={() => navigation.navigate('CoinShop')} onOpenSizes={() => navigation.navigate('RoomSizes', { from: 'editor' })} />
           <PiecesList state={state} dispatch={act} />
         </ScrollView>
       </View>

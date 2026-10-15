@@ -353,3 +353,11 @@ describe('opening (spec §5.1, §11.1; final review I1, I2)', () => {
     expect(start({}, { drawer: 'all', item: 'plant.fern' }).picked).toBe('plant.fern');
   });
 });
+
+describe('counts from the store (ruling 36)', () => {
+  it('takes new counts and lists the pieces that grew as new, so the New tab shows them', () => {
+    const s = run(start(), { type: 'counts', counts: { ...COUNTS, 'item.radio': 1 }, grew: ['item.radio'] });
+    expect([s.counts['item.radio'], s.newIds, inventory(s)['item.radio']]).toEqual([1, ['item.radio'], 1]);
+    expect(run(s, { type: 'counts', counts: s.counts, grew: ['item.radio'] }).newIds).toEqual(['item.radio']);
+  });
+});

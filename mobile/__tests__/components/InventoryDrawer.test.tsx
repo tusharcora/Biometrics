@@ -161,3 +161,19 @@ describe('T13-FIX', () => {
     expect(s.getByTestId('drawer-scroll').props.scrollEnabled).toBe(true);
   });
 });
+
+it('the header opens the coin shop and Room sizes, each a 44-point Button (spec §5.4, rulings PF-F5)', () => {
+  const [shop, sizes] = [jest.fn(), jest.fn()];
+  const s = render(<InventoryDrawer state={state()} dispatch={jest.fn()} room={room()} colour="coral" onOpenShop={shop} onOpenSizes={sizes} />);
+  expect(s.getByTestId('drawer-shop')).toHaveTextContent('Coin shop');
+  expect(s.getByTestId('drawer-sizes')).toHaveTextContent('Room sizes');
+  for (const id of ['drawer-shop', 'drawer-sizes']) {
+    const classes = String(s.getByTestId(id).props.className).split(' ');
+    expect([classes.includes('h-[44px]'), classes.includes('h-[36px]')]).toEqual([true, false]);
+  }
+  fireEvent.press(s.getByTestId('drawer-shop'));
+  fireEvent.press(s.getByTestId('drawer-sizes'));
+  expect([shop.mock.calls.length, sizes.mock.calls.length]).toEqual([1, 1]);
+  const none = render(<InventoryDrawer state={state()} dispatch={jest.fn()} room={room()} colour="coral" />);
+  expect([none.queryByTestId('drawer-shop'), none.queryByTestId('drawer-sizes')]).toEqual([null, null]);
+});

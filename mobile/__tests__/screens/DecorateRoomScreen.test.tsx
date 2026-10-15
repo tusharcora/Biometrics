@@ -4,10 +4,10 @@ import { AccessibilityInfo, Alert, Dimensions, Platform } from 'react-native';
 import { State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 import { ApiError } from '../../src/api/client';
-import { fetchCosmetics, putCosmetics } from '../../src/api/cosmetics';
+import { fetchCosmetics, postCosmeticsSeen, putCosmetics } from '../../src/api/cosmetics';
 import { EDIT_CELL_PT, initialPan } from '../../src/components/edit/EditRoom';
 import { DecorateRoomScreen, EDIT_ROOM_HEIGHT, editRoomHeight, initialState } from '../../src/screens/DecorateRoomScreen';
-import { getCosmetics, loadCosmetics, markCosmeticsSeen, resetCosmetics } from '../../src/lib/room/cosmeticsStore';
+import { applyPurchase, getCosmetics, loadCosmetics, markCosmeticsSeen, resetCosmetics } from '../../src/lib/room/cosmeticsStore';
 import { LIFT_PT, targetOf } from '../../src/lib/room/edit/drag';
 import { decorateTarget } from '../../src/lib/room/announce';
 import { initEditor } from '../../src/lib/room/edit/editor';
@@ -50,6 +50,22 @@ it('shows the wallet in the editor\'s header (spec §5.2)', async () => {
   const s = await openEditor();
   expect(s.getByTestId('edit-wallet').props.accessibilityLabel).toBe('360 KIP coins. Open coin history');
   expect(String(s.getByTestId('edit-header-right').props.className).split(' ')).toEqual(expect.arrayContaining(['shrink', 'flex-wrap', 'justify-end']));
+});
+
+it('a piece bought from the editor\'s shop appears in the drawer with NEW and is marked seen (ruling 36)', async () => {
+  const s = await openEditor();
+  fireEvent.press(s.getByTestId('drawer-shop'));
+  expect(mockNav.navigate).toHaveBeenCalledWith('CoinShop');
+  await act(async () => { applyPurchase('item.radio', { ...STARTER_COUNTS, 'item.radio': 1 }); });
+  fireEvent.press(s.getByTestId('drawer-tab-new'));
+  expect(s.getByTestId('drawer-tile-item.radio')).toBeTruthy();
+  expect(postCosmeticsSeen).toHaveBeenCalledWith(['item.radio']);
+});
+
+it('the drawer header opens Room sizes from the editor (ruling PF-F5)', async () => {
+  const s = await openEditor();
+  fireEvent.press(s.getByTestId('drawer-sizes'));
+  expect(mockNav.navigate).toHaveBeenCalledWith('RoomSizes', { from: 'editor' });
 });
 
 /** The chair's exit tile in window points (the jest stand-in for measureInWindow leaves the room's origin at 0, 0). */

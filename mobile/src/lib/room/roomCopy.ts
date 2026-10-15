@@ -228,6 +228,10 @@ export const ROOM_COPY = {
     replaceDesk: 'Replace desk',
     more: 'Show more',
     less: 'Show less',
+    /** The header's way to the coin shop (spec §5.4, §6.6). */
+    shop: 'Coin shop',
+    /** The header's way to Room sizes, so a room can grow at any time, not only when full (ruling PF-F5). */
+    sizes: 'Room sizes',
     tile: {
       piece: (name: string, n: number, isNew: boolean) => `${name}, ${n ? `${n} in inventory` : 'all placed'}${isNew ? ', new' : ''}`,
       style: (name: string, current: boolean) => (current ? `${name}, in your room` : `${name}. Use it`),
@@ -291,6 +295,49 @@ export const ROOM_COPY = {
     bubble: (n: number) => `+${n}!`,
     landLine: (what: string, more: number) => (more > 0 ? `${what} and ${more} more` : what),
     landSpoken: (n: number, what: string) => `Plus ${n} coins. ${what}`,
+  },
+  /** The coin shop (spec 2026-10-15 §6.6, C1, F6). Prices are coins only (ruling 11). */
+  shop: {
+    title: 'Coin shop',
+    sub: 'A new featured set every Monday',
+    close: 'Close',
+    tabsLabel: 'Coin shop',
+    tabs: { all: 'All', floor: 'Floor', wall: 'Wall', onTop: 'On top' },
+    thisWeek: 'This week',
+    sets: { cosyAutumn: 'Cosy autumn', greenCorner: 'Green corner', deskDay: 'Desk day', brightNight: 'Bright night' } as Readonly<Record<string, string>>,
+    setLine: (name: string, n: number) => `${name} set · ${n} pieces · this week`,
+    setSpoken: (name: string, n: number) => `${name} set, ${n} pieces, this week`,
+    seeSet: 'See the set',
+    seeAll: 'See everything',
+    tile: (name: string, price: string, owned: number) => `${name}, ${price} coins${owned ? `, ${owned} owned` : ''}`,
+    tileLocked: (name: string, rule: string) => `${name}, locked. ${rule}`,
+    owned: (n: number) => `×${n} owned`,
+    where: {
+      anywhere: 'Shelf, desk or floor', floor: 'Floor', onTop: 'Shelf or desk', wall: 'Wall',
+      tiles: (w: number, d: number) => (w * d === 1 ? '1 tile' : `${w} × ${d} tiles`),
+      tilesSpoken: (w: number, d: number) => (w * d === 1 ? '1 tile' : `${w} by ${d} tiles`),
+      /** "Floor · 4 × 4 tiles", and read aloud "Floor, 4 by 4 tiles" (ruling PF-F10). */
+      line: (place: string, tiles: string) => `${place} · ${tiles}`,
+      spoken: (place: string, tiles: string) => `${place}, ${tiles}`,
+    },
+    have: (balance: string, after: string) => `You have ${balance} · ${after} after`,
+    haveSpoken: (balance: string, after: string) => `You have ${balance}, ${after} after`,
+    haveOnly: (balance: string) => `You have ${balance}`,
+    goes: 'Goes to your inventory',
+    get: (price: string) => `Get for ${price}`,
+    needs: (n: string) => `Needs ${n} more`,
+    notNow: 'Not now',
+    /** A rule piece not earned yet (spec §6.5): its rule on screen, and read aloud with words, never "·" or a Roman
+     * numeral (ruling PF-F6). */
+    locked: (rule: string) => `Earn it first: ${rule}`,
+    lockedSpoken: (rule: string) => `Earn it first: ${rule}`,
+    bought: (name: string) => `${name} is in your inventory.`,
+    short: 'Not enough coins for that yet.',
+    notForSale: "That piece isn't in the shop just now.",
+    failed: "Couldn't get it just now. Try again.",
+    loadFailed: "Couldn't open the shop just now. Check your connection and try again.",
+    retry: 'Try again',
+    footer: 'Coins come from healthy days only. They can’t be bought.',
   },
   welcome: {
     bubble: 'WELCOME HOME!',

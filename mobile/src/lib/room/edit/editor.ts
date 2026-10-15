@@ -89,6 +89,8 @@ export type EditorAction =
   | { type: 'coach'; step: null }
   | { type: 'clearOutcome' }
   | { type: 'refreshed'; draft: Draft; version: number; counts: Readonly<Record<ItemId, number>>; tier: Tier }
+  /** The store's counts while the editor is open (ruling 36), with the pieces whose count grew. */
+  | { type: 'counts'; counts: Readonly<Record<ItemId, number>>; grew: readonly ItemId[] }
   | { type: 'saving' }
   | { type: 'saveFailed' }
   | { type: 'saved'; draft: Draft; version: number };
@@ -371,6 +373,9 @@ function reduce(s: EditorState, a: EditorAction): EditorState {
       return { ...s, outcome: null };
     case 'refreshed':
       return { ...s, saved: a.draft, draft: a.draft, past: [], future: [], counts: a.counts, tier: a.tier, baseVersion: a.version, notice: 'refreshed', selected: null, preview: null, outcome: null };
+    case 'counts':
+      // The store's counts while the editor is open (ruling 36): a piece bought meanwhile joins the New tab.
+      return { ...s, counts: a.counts, newIds: [...s.newIds, ...a.grew.filter((id) => !s.newIds.includes(id))] };
     case 'saving':
       // A save clears the last notice (ruling T12-CARRY): the same failure again is a new line, which Android's live
       // region announces again.
