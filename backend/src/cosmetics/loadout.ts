@@ -5,6 +5,7 @@
 // the per-user room lock. Spec B's slot room was converted and dropped in P2 (§2.4); `readRoom` keeps its slot
 // sanitising for scripts/convert-room-layouts.ts only.
 import { Prisma } from '@prisma/client';
+import { earnCoinsSafely } from '../coins/sources';
 import { prisma } from '../db/client';
 import {
   COSMETICS_CATALOGUE_VERSION, EMPTY_WORN, OPTIONAL_ROOM_SLOTS, ROOM_SLOTS, STARTER_IDS, STARTER_ROOM, WORN_SLOTS,
@@ -159,6 +160,7 @@ export async function saveCosmetics(userId: string, body: unknown, now: Date, ra
   const parsed = validateBody(body);
   if ('status' in parsed) return { ok: false, failure: parsed };
   let tier: Tier = 1;
+  let placedFirst = false;
   let failure: SaveFailure | null;
   try {
     failure = await prisma.$transaction(async (tx) => {
@@ -187,7 +189,8 @@ export async function saveCosmetics(userId: string, body: unknown, now: Date, ra
       const before = new Set((row ? parseLayout(row.layout) ?? starterLayout() : starterLayout()).pieces.map((p) => p.id));
       if (parsed.layout.pieces.some((p) => !before.has(p.id))) {
         await ensureFirstWeek(tx, userId);
-        await tx.roomFirstWeek.updateMany({ where: { userId, firstPlacedAt: null }, data: { firstPlacedAt: now } });
+        const first = await tx.roomFirstWeek.updateMany({ where: { userId, firstPlacedAt: null }, data: { firstPlacedAt: now } });
+        placedFirst = first.count === 1;
       }
       return null;
     });
@@ -198,6 +201,8 @@ export async function saveCosmetics(userId: string, body: unknown, now: Date, ra
   }
   if (failure) return { ok: false, failure };
   console.info(JSON.stringify({ event: 'room.saved', pieces: parsed.layout.pieces.length, tier }));
+  // The first placement's +10 lands at once (spec §11.2); a failure waits for the next GET /me/coins.
+  if (placedFirst) await earnCoinsSafely(userId, now);
   return { ok: true, dto: await readCosmetics(userId, now, { grant: false }) };
 }
 

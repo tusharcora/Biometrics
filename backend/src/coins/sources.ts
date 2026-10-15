@@ -2,7 +2,7 @@
 // records the app already keeps and written by the ledger. Only measured data pays (sleep and steps come from the
 // health sync); the check-in is the one self-reported source. No backpay: a source dated before the user's local date
 // of the coins launch writes nothing. An event stores a kind, a key, an amount and a civil date, never a health value.
-// A background earn never starts the first week (ruling PF-F3): this file only writes earns.
+// A background earn never starts the first week (ruling PF-F3): it only reads day 1 to pay the first-week bonuses.
 import { civilDateToUtcMidnight, localCivilDateOrUtc, localMidnightInstant, utcMidnightToCivilDate } from '../biometrics/civilDate';
 import { changeInEffect, goalChangesOf, type GoalChangeRow } from '../achievements/goalHistory';
 import { prisma } from '../db/client';
@@ -10,6 +10,7 @@ import { habitDayForOrUtc } from '../habits/habitDay';
 import { loadRecapData } from '../recap/data';
 import { dateRange, shiftDate } from '../scoring/dates';
 import { resolveSleepGoalMinutes } from '../users/goals';
+import { firstWeekEarns } from './firstWeek';
 import { applyCoinEvents, type CoinEarn } from './ledger';
 
 /** OWNER NOTE (plan ruling 1): the instant P2 reaches users, set at merge. A dev server may move it with the
@@ -90,7 +91,9 @@ export async function earnCoins(userId: string, now: Date, opts: { launchedAt?: 
   const launchedAt = opts.launchedAt ?? coinsConfig.launchedAt;
   const inputs = await loadEarnInputs(userId, now, launchedAt);
   if (!inputs) return 0;
-  return (await applyCoinEvents(userId, planEarns(inputs), now)).length;
+  // The first-week bonuses are outside the cap and, for a P1 placement, outside "no backpay" (spec §11.2).
+  const events = [...planEarns(inputs), ...(await firstWeekEarns(userId, now, launchedAt))];
+  return (await applyCoinEvents(userId, events, now)).length;
 }
 
 /** The earn the hooks call; tests swap it to prove a failure never fails the request that triggered it. */
