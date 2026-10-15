@@ -9,6 +9,7 @@ import { coinsConfig } from '../../src/coins/sources';
 import { habitDayFor } from '../../src/habits/habitDay';
 import { starterLayout } from '../../src/room/convert';
 import { parseExpand } from '../../src/room/expand';
+import { TIER_GATES } from '../../src/room/tiers';
 import { shiftDate } from '../../src/scoring/dates';
 import { day, level } from '../cosmetics/helpers';
 import { balance, coinUser, fund, rowsOf } from '../coins/helpers';
@@ -74,21 +75,63 @@ describe('POST /me/room/expand (spec §7, §12)', () => {
     info.mockClear();
     const again = await grow(headers, 2, id);
     expect([again.status, again.body.tier, again.body.version, again.body.balance, again.body.stored]).toEqual([200, 2, 1, 60, 0]);
-    expect((await rowsOf(user.id)).filter((r) => r.kind === 'expand')).toHaveLength(1);
+    // The key names the size it bought (ruling T7-FIX).
+    expect((await rowsOf(user.id)).filter((r) => r.kind === 'expand').map((r) => r.sourceKey)).toEqual([`expand:2:${id}`]);
     expect([logged('coins.spent'), logged('room.expanded')]).toEqual([[], []]);
   });
 
-  it('a request id reused for another size is 400 invalid_body and spends nothing (ruling T6-FIX)', async () => {
+  it('a request id reused for another size is 400 invalid_body and writes nothing, whatever the prices (rulings T6-FIX, T7-FIX)', async () => {
     const { user, headers } = await coinUser();
     await fund(user.id, 2100);
     await level(user.id, 'CHECK_IN', 2, SOON());
     await level(user.id, 'SLEEP_GOAL', 3, SOON());
     const id = randomUUID();
     expect((await grow(headers, 2, id)).status).toBe(200);
-    const reused = await grow(headers, 3, id);
-    expect([reused.status, reused.body]).toEqual([400, { error: 'invalid_body' }]);
-    expect([await balance(user.id), (await rowsOf(user.id)).filter((r) => r.kind === 'expand').length]).toEqual([1500, 1]);
-    expect((await prisma.cosmeticLoadout.findUnique({ where: { userId: user.id } }))!.tier).toBe(2);
+    const before = (await prisma.cosmeticLoadout.findUnique({ where: { userId: user.id } }))!;
+    // Even with both sizes at one price, the id is not a replay of the other size.
+    const gate3 = TIER_GATES[3] as { price: number };
+    const price3 = gate3.price;
+    gate3.price = TIER_GATES[2].price;
+    try {
+      const reused = await grow(headers, 3, id);
+      expect([reused.status, reused.body]).toEqual([400, { error: 'invalid_body' }]);
+    } finally {
+      gate3.price = price3;
+    }
+    expect([(await grow(headers, 3, id)).status, await balance(user.id), (await rowsOf(user.id)).filter((r) => r.kind === 'expand').length]).toEqual([400, 1500, 1]);
+    const after = (await prisma.cosmeticLoadout.findUnique({ where: { userId: user.id } }))!;
+    expect([after.tier, after.version, after.layout]).toEqual([2, before.version, before.layout]);
+  });
+
+  it('refuses a room whose stored layout cannot be read: 500, nothing spent, the stored JSON untouched (ruling T7-FIX)', async () => {
+    const { user, headers } = await coinUser();
+    await fund(user.id, 600);
+    await level(user.id, 'CHECK_IN', 2, SOON());
+    const corrupt = { v: 9, pieces: 'nope' };
+    await prisma.cosmeticLoadout.create({ data: { userId: user.id, layout: corrupt, worn: { ...EMPTY_WORN }, version: 4 } });
+    const error = jest.spyOn(console, 'error').mockImplementation(() => {});
+    try {
+      const res = await grow(headers, 2);
+      expect([res.status, res.body]).toEqual([500, { error: 'internal' }]);
+      expect(error.mock.calls.map((c) => JSON.parse(String(c[0])))).toEqual([{ event: 'http.error', status: 500, type: 'StoredLayoutError' }]);
+    } finally {
+      error.mockRestore();
+    }
+    const row = (await prisma.cosmeticLoadout.findUnique({ where: { userId: user.id } }))!;
+    expect([await balance(user.id), (await rowsOf(user.id)).filter((r) => r.kind === 'expand').length, row.tier, row.version, row.layout]).toEqual([600, 0, 1, 4, corrupt]);
+  });
+
+  it('counts and drops only from the read layout: a piece read-time trimming drops is not in stored (ruling T7-FIX)', async () => {
+    const { user, headers } = await coinUser();
+    await fund(user.id, 2100);
+    await level(user.id, 'CHECK_IN', 2, SOON());
+    await level(user.id, 'SLEEP_GOAL', 3, SOON());
+    expect((await grow(headers, 2)).status).toBe(200);
+    // A picture the user owns no copy of, stored where the loft's window will be: every read already drops it.
+    const layout = { ...starterLayout(), pieces: [...starterLayout().pieces, piece('p9', 'art.mountain', { layer: 'wallR', x: 14, y: 7 })] };
+    await prisma.cosmeticLoadout.update({ where: { userId: user.id }, data: { layout: layout as object } });
+    const res = await grow(headers, 3);
+    expect([res.status, res.body.stored, res.body.layout]).toEqual([200, 0, starterLayout()]);
   });
 
   it('409 stale_tier for anything but the next size; a save never changes the size', async () => {
