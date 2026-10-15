@@ -2,44 +2,25 @@
 // engine's (lib2.js `room2`): walls and floor, items back to front, ambient occlusion, then daylight through the
 // window (by weather) or the night veil, then emissive glows, then the loop frames. KIP is its own layer, so a
 // pose change never redraws the room. RoomView draws base → kip → light → emissive → frames[i] (plan ruling 4).
-import { kipGrid, kipRamp, KIP_COLOURS, KIP_GRID, mirrorGrid, type KipColour, type KipMood, type KipPose } from '../kip/kipArt';
+import { kipRamp, KIP_COLOURS, type KipColour } from '../kip/kipArt';
 import { FOCUS_BOX, THUMB_BOX, type Box, type RoomRect } from './grid';
 import { itemArt, type ItemContext, type MonitorScreen, type SeatStyle } from './items';
-import { loadoutKey, STARTER_LOADOUT, wornKey, type KipWorn, type RoomLoadout } from './loadout';
-import { ao, R, type Rects } from './paint';
+import { loadoutKey, STARTER_LOADOUT, type RoomLoadout } from './loadout';
+import { ao, type Rects } from './paint';
 import { DRAW_ORDER, ROOM_SLOTS, SLOT_ANCHORS } from './slots';
 import './art';
 import { daylight, nightVeil, type RoomWeather } from './weather';
+// KIP's layer moved to the iso engine (free-build Task 8); this file re-exports it until Task 10 deletes it. A plain
+// `export … from` makes no local bindings, and SEATS, kipSeatFor and drawRoom use them.
+import { KIP_CELLS, drawKipLayer, kipLayerKey, type KipSeat, type RoomKip } from './iso/room';
 
-/** Room cells per KIP pixel: KIP is 32 × 32 cells, 64 × 64 points in the diorama (§4). */
-export const KIP_CELLS = 2;
-
-export interface KipSeat {
-  /** Top-left of KIP's 16 × 16 grid, in room cells. */
-  x: number;
-  y: number;
-  /** Which side of KIP the desk is on; "facing the desk" mirrors KIP when it is on the left (§4). */
-  deskSide: 'left' | 'right';
-  style: SeatStyle;
-}
+export { KIP_CELLS, drawKipLayer, kipLayerKey, type KipSeat, type RoomKip };
 
 /** Where KIP sits for each desk style. `low` (floor at a low table) is Spec B's; it may tune it. */
 export const SEATS: Record<SeatStyle, KipSeat> = {
   standard: { x: 110, y: 52, deskSide: 'left', style: 'standard' },
   low: { x: 106, y: 49, deskSide: 'left', style: 'low' },
 };
-
-export interface RoomKip {
-  colour: KipColour;
-  pose: KipPose;
-  mood: KipMood;
-  /** What KIP wears (Spec B §7), drawn on its grid. */
-  worn: KipWorn;
-  /** The loop frame (0–2) for looping poses. */
-  frame?: number;
-  /** Default: 'desk' for `type`, 'you' otherwise (plan ruling 6). */
-  facing?: 'desk' | 'you';
-}
 
 export interface RoomInput {
   loadout: RoomLoadout;
@@ -121,27 +102,6 @@ export function drawRoomFrames(input: StaticInput & { screen: MonitorScreen }): 
   return out;
 }
 
-/** KIP at its seat, 2 cells per KIP pixel, mirrored when it faces a desk on its left. */
-export function drawKipLayer(kip: RoomKip, seat: KipSeat): Rects {
-  const facing = kip.facing ?? (kip.pose === 'type' ? 'desk' : 'you');
-  let grid = kipGrid({ colour: kip.colour, pose: kip.pose, mood: kip.mood, frame: kip.frame ?? 0, worn: kip.worn });
-  if (facing === 'desk' && seat.deskSide === 'left') grid = mirrorGrid(grid);
-  const r: Rects = [];
-  for (let y = 0; y < KIP_GRID; y++) {
-    let x = 0;
-    const row = grid[y]!;
-    while (x < KIP_GRID) {
-      const c = row[x];
-      if (!c) { x++; continue; }
-      let w = 1;
-      while (x + w < KIP_GRID && row[x + w] === c) w++;
-      R(r, seat.x + x * KIP_CELLS, seat.y + y * KIP_CELLS, w * KIP_CELLS, KIP_CELLS, c);
-      x += w;
-    }
-  }
-  return r;
-}
-
 export function drawRoom(input: RoomInput): RoomDrawing {
   const staticInput = { loadout: input.loadout, weather: input.weather, night: input.night, colour: input.kip.colour };
   const s = drawRoomStatic(staticInput);
@@ -157,9 +117,4 @@ export function drawRoom(input: RoomInput): RoomDrawing {
 /** The static picture's memo key (§5): (loadout, weather, night, colour). */
 export function roomPictureKey(input: StaticInput): string {
   return `${loadoutKey(input.loadout)}#${input.weather}#${input.night ? 'n' : 'd'}#${input.colour}`;
-}
-
-/** KIP's layer key (§5): (colour, pose, mood, worn, frame), plus facing. */
-export function kipLayerKey(kip: RoomKip): string {
-  return `${kip.colour}#${kip.pose}#${kip.mood}#${wornKey(kip.worn)}#${kip.frame ?? 0}#${kip.facing ?? ''}`;
 }

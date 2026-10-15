@@ -88,7 +88,7 @@ export function windowSky(r: Rects, b: Box, weather: RoomWeather, night: boolean
   for (const q of clipB(t, [x, y, w, h])) r.push(q);
 }
 
-const DAYLIGHT: Record<RoomWeather, number> = { clear: 0.11, mostly: 0.09, short: 0.07, fallback: 0.07, cloudy: 0.05, stormy: 0.03 };
+export const DAYLIGHT: Record<RoomWeather, number> = { clear: 0.11, mostly: 0.09, short: 0.07, fallback: 0.07, cloudy: 0.05, stormy: 0.03 };
 
 /** Daylight falling from the window onto the floor (by weather), from window x0..x1 whose sill is at ybot. */
 export function daylight(r: Rects, weather: RoomWeather, x0: number, x1: number, ybot: number): void {
