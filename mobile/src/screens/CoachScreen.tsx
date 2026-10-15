@@ -35,6 +35,7 @@ import { useCoachStatusContext } from '../lib/coachStatus/CoachStatusProvider';
 import { useTodayScene } from '../lib/home/useTodayScene';
 import { KIP_COPY } from '../lib/kipCopy';
 import { hasUnseen, useCosmetics } from '../lib/room/cosmeticsStore';
+import { loadCoins, loadFirstWeek } from '../lib/coins/coinsStore';
 import { useDecorateOpen } from '../lib/room/decorateOpen';
 import { COACH_ITEM } from '../lib/room/edit/targets';
 import { ROOM_COPY } from '../lib/room/roomCopy';
@@ -157,10 +158,13 @@ export function CoachScreen() {
   // stored one is read wins over it.
   const [shrunk, setShrunk] = useState(false);
   const shrunkChosen = useRef(false);
+  // Until the stored choice is read the card may be about to shrink, so coins wait to land (ruling PF-F13).
+  const [shrunkKnown, setShrunkKnown] = useState(false);
   useEffect(() => {
     let live = true;
     void readKipRoomShrunk().then((v) => {
       if (live && !shrunkChosen.current) setShrunk(v);
+      if (live) setShrunkKnown(true);
     });
     return () => {
       live = false;
@@ -331,6 +335,17 @@ export function CoachScreen() {
     return unsubscribe;
   }, [navigation, load]);
 
+  // Coins land on the next look at the KIP page (spec §6.7), and the first-week card follows (§11.2): read on open and
+  // on every focus. The reads catch up on earns server-side.
+  useEffect(() => {
+    void loadCoins();
+    void loadFirstWeek();
+  }, []);
+  useEffect(() => navigation.addListener?.('focus', () => {
+    void loadCoins();
+    void loadFirstWeek();
+  }), [navigation]);
+
   // A turn that got through settles an unverified status (the coach is there)
   // and clears offline.
   useEffect(() => {
@@ -493,6 +508,7 @@ export function CoachScreen() {
       recovery={day.recovery}
       reduceMotion={reduceMotion}
       paused={decorating}
+      holdCoins={!shrunkKnown}
       onOpenRecovery={openRecovery}
       onDecorate={openDecorate}
       onPlaceLantern={placeLantern}

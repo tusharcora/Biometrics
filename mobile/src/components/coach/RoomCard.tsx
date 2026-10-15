@@ -7,6 +7,7 @@ import { Text } from '../ui/text';
 import { HotTag } from '../home/HotTag';
 import { RoomWelcomeCard } from './RoomWelcomeCard';
 import { RoomView } from '../room/RoomView';
+import { useCoinsLanding } from '../coins/useCoinsLanding';
 import { HOME_COPY } from '../../lib/homeCopy';
 import { useMyKip } from '../../lib/kip/myKip';
 import { KIP_COPY } from '../../lib/kipCopy';
@@ -16,6 +17,7 @@ import { ROOM_COPY } from '../../lib/room/roomCopy';
 import type { KipLook } from '../../lib/useKipTurn';
 import type { RoomWeather } from '../../lib/room/weather';
 import type { ScoreBand } from '../../lib/scoreInsights';
+import { useScreenFocused } from '../../lib/useScreenFocused';
 import { COLORS } from '../../theme';
 
 export const ROOM_FRAME_HEIGHT = 240;
@@ -29,14 +31,17 @@ const WOOD_LINE = '#3A2D23';
 // colours in both themes, as on the scene. `look` is KIP mid-turn (useKipTurn); without it the stage's pose and mood
 // are drawn. The room is your saved layout, with KIP in what it wears; `paused` stops its loops while the editor is
 // open (Spec B ruling 17). Until the first-week welcome is answered it sits under the frame and KIP says "WELCOME HOME!"
-// (spec 2026-10-15 §11.1, plan ruling 18); both of its buttons record it for every device.
-export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, onOpenRecovery, onDecorate, onPlaceLantern, footer, onLayout }: {
+// (spec 2026-10-15 §11.1, plan ruling 18); both of its buttons record it for every device. Coins that landed since the
+// last look show once in KIP's bubble, with a line under the room (spec 2026-10-15 §6.7).
+export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, holdCoins, onOpenRecovery, onDecorate, onPlaceLantern, footer, onLayout }: {
   stage: KipStage;
   look?: KipLook;
   window: { weather: RoomWeather; night: boolean };
   recovery: { score: number | null; band: ScoreBand | null };
   reduceMotion: boolean;
   paused?: boolean;
+  /** Keeps landing coins waiting, unseen: the page does not know yet whether the card is shrunk (ruling PF-F13). */
+  holdCoins?: boolean;
   onOpenRecovery: () => void;
   /** Long-press on the room opens the editor (spec 2026-10-15 §5.1). */
   onDecorate?: () => void;
@@ -50,6 +55,10 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
   const cosmetics = useCosmetics();
   const welcome = !!cosmetics && !cosmetics.welcomed && stage.id !== 'loading';
   const [inner, setInner] = useState(0);
+  const focused = useScreenFocused();
+  // Coins land in KIP's bubble (spec §6.7, ruling 12) only once it is really on screen (ruling PF-F13): the room drawn,
+  // the page focused, never over the welcome and never while the editor covers the room.
+  const landing = useCoinsLanding(stage.id !== 'loading' && inner > 0 && focused && !paused && !holdCoins && !welcome);
   return (
     <Card testID="kip-room-card" className="gap-3 p-3.5" onLayout={onLayout}>
       <View testID="kip-room-frame" style={{ borderWidth: 2, borderColor: WOOD_LINE, borderRadius: 4 }}>
@@ -76,7 +85,7 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
                   mood={look?.mood ?? stage.mood}
                   facing={look?.facing}
                   screen={stage.screen}
-                  bubble={welcome ? ROOM_COPY.welcome.bubble : stage.bubble}
+                  bubble={welcome ? ROOM_COPY.welcome.bubble : landing ? ROOM_COPY.coins.bubble(landing.total) : stage.bubble}
                   crop={{ width: inner, height: ROOM_FRAME_HEIGHT }}
                   cellPt={2}
                   reduceMotion={reduceMotion}
@@ -88,6 +97,17 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
           </Pressable>
         </View>
       </View>
+      {landing ? (
+        // A polite live region for Android, read as words (no "·"); iOS is told by the hook (the EditNotices pattern).
+        <Text
+          testID="coins-landed"
+          accessibilityLiveRegion="polite"
+          accessibilityLabel={ROOM_COPY.coins.landSpoken(landing.total, ROOM_COPY.coins.landed[landing.kind])}
+          className="text-caption text-muted-foreground"
+        >
+          {ROOM_COPY.coins.landLine(ROOM_COPY.coins.landed[landing.kind], landing.more)}
+        </Text>
+      ) : null}
       {welcome ? (
         <RoomWelcomeCard
           onPlace={() => { void markWelcomed(); onPlaceLantern?.(); }}

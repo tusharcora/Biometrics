@@ -24,13 +24,20 @@ let firstWeek: FirstWeekDTO | null = null;
 let epoch = 0;
 // Bumped only on sign-out: an action's answer lands unless the account changed.
 let session = 0;
+// The newest event this session marked seen: a read the server answered before it applied the mark still shows those
+// events seen, so coins land once (spec §16). Forgotten on sign-out.
+let seenThrough: string | null = null;
+function withSeen(events: readonly CoinEventDTO[]): readonly CoinEventDTO[] {
+  const through = seenThrough;
+  return through === null ? events : events.map((e) => (!e.seen && e.at <= through ? { ...e, seen: true } : e));
+}
 const listeners = new Set<() => void>();
 const emit = () => listeners.forEach((l) => l());
 
 function fromDTO(dto: CoinsDTO): Coins {
   // Not a coins body at all: the read fails and what is shown stays.
   if (typeof dto?.balance !== 'number' || !Array.isArray(dto.events)) throw new Error('not a coins body');
-  return { balance: dto.balance, today: dto.today ?? { earned: 0, cap: 60 }, events: dto.events, next: dto.next ?? null, fromServer: true };
+  return { balance: dto.balance, today: dto.today ?? { earned: 0, cap: 60 }, events: withSeen(dto.events), next: dto.next ?? null, fromServer: true };
 }
 
 export function getCoins(): Coins | null {
@@ -103,6 +110,7 @@ export function setCoinBalance(balance: number): void {
  */
 export async function markCoinsSeen(through: string): Promise<void> {
   epoch++;
+  if (seenThrough === null || through > seenThrough) seenThrough = through;
   if (coins) {
     coins = { ...coins, events: coins.events.map((e) => (!e.seen && e.at <= through ? { ...e, seen: true } : e)) };
     emit();
@@ -110,7 +118,7 @@ export async function markCoinsSeen(through: string): Promise<void> {
   try {
     await postCoinsSeen(through);
   } catch {
-    // Still unseen on the server: the next read may land it once more, which is harmless.
+    // Still unseen on the server, but seen for the rest of this session (seenThrough); a later landing's mark covers it.
   }
 }
 
@@ -146,6 +154,7 @@ export function resetCoins(): void {
   epoch++;
   weekEpoch++;
   session++;
+  seenThrough = null;
   coins = null;
   firstWeek = null;
   emit();

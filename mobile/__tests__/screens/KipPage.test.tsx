@@ -11,7 +11,7 @@ import { answer, doneEvent, openTurn, scriptTurn } from '../../jest-mocks/coachS
 import { withCoachStatus } from '../../jest-mocks/coachStatus';
 import { suggestedQuestions } from '../../src/lib/coachToday';
 import { resetCoins, setCoinBalance } from '../../src/lib/coins/coinsStore';
-import { fetchCoins } from '../../src/api/coins';
+import { fetchCoins, fetchFirstWeek } from '../../src/api/coins';
 import { TURN_FRAME_MS } from '../../src/lib/useKipTurn';
 
 // The mocks (api, navigation, RoomView, the room's score and sleep reads) live in jest-mocks/coachScreenHarness.
@@ -34,6 +34,16 @@ afterEach(() => {
 });
 
 describe('the KIP page (W7)', () => {
+  it('reads the coins and the first-week list when the page opens and on every focus (spec §6.7, §11.2)', async () => {
+    await openChat();
+    const reads = () => [(fetchCoins as jest.Mock).mock.calls.length, (fetchFirstWeek as jest.Mock).mock.calls.length];
+    const [coins, week] = reads();
+    expect(coins).toBeGreaterThanOrEqual(1);
+    expect(week).toBeGreaterThanOrEqual(1);
+    await act(async () => { mockNav.focus(); });
+    expect(reads()).toEqual([coins + 1, week + 1]);
+  });
+
   it('shows the wallet in the header once the coins have loaded; it opens the coin history (spec §6.7, C6)', async () => {
     resetCoins();
     (fetchCoins as jest.Mock).mockResolvedValueOnce({ balance: 360, today: { earned: 0, cap: 60 }, events: [], next: null });

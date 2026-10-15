@@ -63,6 +63,20 @@ it('marks events seen up to `through` at once and tells the server', async () =>
   expect(postCoinsSeen).toHaveBeenCalledWith('2026-11-11T06:30:00.000Z');
 });
 
+it('a read the server answered before it applied a mark-seen keeps those events seen, so coins land once (spec §16)', async () => {
+  get.mockResolvedValue(BODY());
+  await loadCoins();
+  await markCoinsSeen('2026-11-11T07:12:00.000Z');
+  get.mockResolvedValueOnce(BODY({ events: [{ kind: 'steps', amount: 15, at: '2026-11-11T08:00:00.000Z', seen: false }, ...BODY().events] }));
+  await loadCoins();
+  expect(getCoins()!.events.map((e) => e.seen)).toEqual([false, true, true]);
+  // Sign-out forgets it: the next account's events are its own.
+  resetCoins();
+  get.mockResolvedValueOnce(BODY());
+  await loadCoins();
+  expect(getCoins()!.events.map((e) => e.seen)).toEqual([false, false]);
+});
+
 it('appends the next page, and drops it when a newer read replaced the list meanwhile', async () => {
   get.mockResolvedValueOnce(BODY({ next: 'c1' }));
   await loadCoins();
