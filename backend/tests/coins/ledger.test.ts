@@ -1,7 +1,8 @@
 import { prisma } from '../../src/db/client';
 import { connection } from '../../src/sync/queue';
 import { migrateTestDb } from '../setupTestDb';
-import { applyCoinEvents, planCapped, spendInTx, type DayUse } from '../../src/coins/ledger';
+import { COIN_TX_OPTIONS, applyCoinEvents, planCapped, spendInTx, type DayUse } from '../../src/coins/ledger';
+import { lockRoom } from '../../src/room/lock';
 import { balance, coinUser, earn, fund, rowsOf } from './helpers';
 
 beforeAll(() => migrateTestDb());
@@ -34,6 +35,14 @@ describe('planCapped (pure)', () => {
   it('pays 5 cheers a day, given and received together, and writes the rest as 0 (spec §6.2, ruling 28)', () => {
     const cheers = Array.from({ length: 6 }, (_, k) => earn(k % 2 ? 'cheer_got' : 'cheer_given', `cheer:c${k}:${k % 2 ? 'got' : 'given'}`, 2, D));
     expect(planCapped(cheers, new Map()).map((e) => e.amount).sort()).toEqual([0, 2, 2, 2, 2, 2]);
+  });
+
+  it('throws on a capped earn without its day, an uncapped one with a day, or an amount that is not whole and positive (T3-FIX)', () => {
+    for (const bad of [
+      earn('sleep_goal', 'sleep_goal:x', 20, null), earn('steps', 'steps:x', 15, '2 Nov'), earn('firstweek', 'firstweek:x', 10, D),
+      earn('checkin', 'checkin:x', 0, D), earn('recap', 'recap:x', -10, D), earn('firstweek', 'firstweek:y', 0),
+      earn('firstweek', 'firstweek:z', -25), earn('challenge', 'challenge:x', 2.5), earn('buy' as never, 'buy:x', 10),
+    ]) expect(() => planCapped([bad], new Map())).toThrow(/coins:/);
   });
 });
 
@@ -77,6 +86,39 @@ describe('applyCoinEvents (spec §6.3)', () => {
     expect(await balance(user.id)).toBe(85);
   });
 
+  it('rejects a malformed earn and writes nothing, not even the good ones beside it (T3-FIX)', async () => {
+    const { user } = await coinUser();
+    await expect(applyCoinEvents(user.id, [FIFTY[0]!, earn('sleep_goal', 'sleep_goal:nodate', 20, null)], new Date())).rejects.toThrow(/coins:/);
+    await expect(applyCoinEvents(user.id, [earn('firstweek', 'firstweek:half', 1.5)], new Date())).rejects.toThrow(/coins:/);
+    expect([(await rowsOf(user.id)).length, await prisma.coinWallet.count({ where: { userId: user.id } })]).toEqual([0, 0]);
+  });
+
+  it('pays 5 cheers in one call and writes a later 6th as 0, seen (spec §6.2, ruling 28)', async () => {
+    const { user } = await coinUser();
+    const five = Array.from({ length: 5 }, (_, k) => earn(k % 2 ? 'cheer_got' : 'cheer_given', `cheer:c${k}`, 2, D));
+    expect((await applyCoinEvents(user.id, five, new Date())).map((w) => w.amount)).toEqual([2, 2, 2, 2, 2]);
+    expect(await applyCoinEvents(user.id, [earn('cheer_got', 'cheer:c5', 2, D)], new Date())).toEqual([{ kind: 'cheer_got', amount: 0 }]);
+    expect((await rowsOf(user.id)).find((r) => r.sourceKey === 'cheer:c5')!.seenAt).toBeInstanceOf(Date);
+    expect(await balance(user.id)).toBe(10);
+  });
+
+  it('waits on a room lock held past Prisma\'s 5 s default instead of timing out (T3-FIX)', async () => {
+    const { user } = await coinUser();
+    expect(COIN_TX_OPTIONS.timeout).toBeGreaterThan(5_000);
+    let locked!: () => void;
+    const taken = new Promise<void>((resolve) => { locked = resolve; });
+    const held = prisma.$transaction(async (tx) => {
+      await lockRoom(tx, user.id);
+      locked();
+      await new Promise((r) => setTimeout(r, 6_000));
+    }, { timeout: 15_000 });
+    await taken;
+    const t0 = Date.now();
+    expect(await applyCoinEvents(user.id, [earn('firstweek', 'firstweek:waited', 10)], new Date())).toEqual([{ kind: 'firstweek', amount: 10 }]);
+    expect(Date.now() - t0).toBeGreaterThan(5_000);
+    await held;
+  }, 30_000);
+
   it('writes earns unseen and logs kinds and counts only, never the user or an amount', async () => {
     const { user } = await coinUser();
     await applyCoinEvents(user.id, FIFTY, new Date());
@@ -99,5 +141,44 @@ describe('spendInTx and the wallet (spec §6.1, §6.3)', () => {
     const row = (await rowsOf(user.id)).find((r) => r.sourceKey === 'buy:b')!;
     expect([row.kind, row.amount, row.capDay, row.seenAt instanceof Date]).toEqual(['buy', -60, null, true]);
     await expect(prisma.coinWallet.update({ where: { userId: user.id }, data: { balance: -1 } })).rejects.toThrow(); // CHECK
+  });
+
+  it('lets only one of two racing spends through when both do not fit, with no error and a balance never below 0 (T3-FIX)', async () => {
+    const { user } = await coinUser();
+    await fund(user.id, 100);
+    const spend = (key: string) => prisma.$transaction((tx) => spendInTx(tx, user.id, 'buy', key, 60, new Date()));
+    const results = await Promise.all([spend('buy:r1'), spend('buy:r2')]);
+    expect(results.map((r) => r.ok).sort()).toEqual([false, true]);
+    expect(results.find((r) => !r.ok)).toEqual({ ok: false, needed: 20 });
+    expect(await balance(user.id)).toBe(40);
+  });
+
+  it('takes the room lock itself, and a caller already holding it is fine (re-entrant)', async () => {
+    const { user } = await coinUser();
+    await fund(user.id, 50);
+    expect(await prisma.$transaction(async (tx) => {
+      await lockRoom(tx, user.id);
+      return spendInTx(tx, user.id, 'expand', 'expand:a', 50, new Date());
+    })).toEqual({ ok: true, balance: 0 });
+  });
+
+  it('throws on a price that is not a positive whole number, and writes nothing (T3-FIX)', async () => {
+    const { user } = await coinUser();
+    await fund(user.id, 100);
+    for (const price of [0, -10, 2.5, Number.NaN]) {
+      await expect(prisma.$transaction((tx) => spendInTx(tx, user.id, 'buy', `buy:p${price}`, price, new Date()))).rejects.toThrow(/coins:/);
+    }
+    expect([(await rowsOf(user.id)).length, await balance(user.id)]).toEqual([1, 100]);
+  });
+
+  it('keeps the wallet equal to the sum of the ledger through earns, caps and spends', async () => {
+    const { user } = await coinUser();
+    await applyCoinEvents(user.id, [...FIFTY, earn('firstweek', 'firstweek:place', 10)], new Date());
+    await prisma.$transaction((tx) => spendInTx(tx, user.id, 'buy', 'buy:m1', 25, new Date()));
+    await applyCoinEvents(user.id, [earn('recap', 'recap:m2', 10, D), earn('steps', 'steps:m3', 15, D)], new Date()); // 10 then 0
+    await prisma.$transaction((tx) => spendInTx(tx, user.id, 'expand', 'expand:m4', 30, new Date()));
+    await prisma.$transaction((tx) => spendInTx(tx, user.id, 'buy', 'buy:m5', 40, new Date())); // refused
+    const sum = (await rowsOf(user.id)).reduce((n, r) => n + r.amount, 0);
+    expect([await balance(user.id), sum]).toEqual([15, 15]);
   });
 });

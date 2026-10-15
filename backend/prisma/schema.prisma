@@ -60,7 +60,7 @@ model User {
   coinEvents            CoinEvent[]
   coinWallet            CoinWallet?
   itemGrants            ItemGrant[]
-  goalChanges          GoalChange[]
+  goalChanges           GoalChange[]
   buddyPairsA           BuddyPair[]         @relation("BuddyPairA")
   buddyPairsB           BuddyPair[]         @relation("BuddyPairB")
   buddyRequestsSent     BuddyRequest[]      @relation("BuddyRequestFrom")
@@ -97,7 +97,7 @@ model User {
   // src/coach/personas). Null means the default persona.
   coachPersonaId          String?
   /// The KIP mascot's colour, by name (backend/src/kip/colours.ts); buddies see it.
-  kipColour               String              @default("coral")
+  kipColour               String  @default("coral")
   /// Thinking attachment shown next to the coach while it works; null = default ('bulb').
   coachThinkingAttachment String?
   /// How the chat shows a reply is on its way; null = default ('steps').
@@ -923,18 +923,18 @@ model BuddyPair {
 /// ("BuddyRequest_one_pending_key"), which Prisma does not model. Keep it if a future
 /// `migrate dev` proposes dropping it.
 model BuddyRequest {
-  id          String             @id @default(uuid())
-  fromUserId  String
-  fromUser    User               @relation("BuddyRequestFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
-  toUserId    String
-  toUser      User               @relation("BuddyRequestTo", fields: [toUserId], references: [id], onDelete: Cascade)
-  status      BuddyRequestStatus @default(PENDING)
+  id             String             @id @default(uuid())
+  fromUserId     String
+  fromUser       User               @relation("BuddyRequestFrom", fields: [fromUserId], references: [id], onDelete: Cascade)
+  toUserId       String
+  toUser         User               @relation("BuddyRequestTo", fields: [toUserId], references: [id], onDelete: Cascade)
+  status         BuddyRequestStatus @default(PENDING)
   /// Never shown to the recipient (swallowed after a decline, or blocked).
-  hidden      Boolean            @default(false)
-  createdAt   DateTime           @default(now())
-  respondedAt DateTime?
+  hidden         Boolean            @default(false)
+  createdAt      DateTime           @default(now())
+  respondedAt    DateTime?
   /// The sender cancelled a request the target had declined: gone for the sender, still DECLINED.
-  withdrawnAt DateTime?
+  withdrawnAt    DateTime?
   /// The target's handle when sent; the sender's outgoing list shows this, never the current handle.
   toHandleAtSend String?
 
@@ -1046,12 +1046,12 @@ model CheckIn {
 
 /// The viewer reached the end of the author's story for that author-local day (spec §4.2).
 model StorySeen {
-  viewerId  String
-  viewer    User     @relation("StorySeenViewer", fields: [viewerId], references: [id], onDelete: Cascade)
-  authorId  String
-  author    User     @relation("StorySeenAuthor", fields: [authorId], references: [id], onDelete: Cascade)
-  localDate DateTime @db.Date
-  seenAt    DateTime @default(now())
+  viewerId    String
+  viewer      User      @relation("StorySeenViewer", fields: [viewerId], references: [id], onDelete: Cascade)
+  authorId    String
+  author      User      @relation("StorySeenAuthor", fields: [authorId], references: [id], onDelete: Cascade)
+  localDate   DateTime  @db.Date
+  seenAt      DateTime  @default(now())
   /// The newest frame the viewer reached (S3): a frame after it lights the ring again. Null on rows from before
   /// S3, which count up to seenAt.
   lastFrameAt DateTime?
