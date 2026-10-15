@@ -6,14 +6,15 @@ import { Text } from '../ui/text';
 import { selectedTools, type EditorAction, type EditorState } from '../../lib/room/edit/editor';
 import { pieceNoun, toolLine } from '../../lib/room/edit/labels';
 import { ROOM_COPY } from '../../lib/room/roomCopy';
+import { NudgePad } from './NudgePad';
 
 const T = ROOM_COPY.edit.tools;
 const TOOL = 'h-[44px]'; // spec §5.2: 44 points tall at least
 
 // The toolbar (spec 2026-10-15 §5.2, F4 "Selected piece"): the piece's name and where it is, then Flip, Turn,
 // Another, Store, each greyed when it can't act (a symmetric or blocked Turn, Another at ×0 or a full room, the desk's
-// Store and Another). Move and Put on… arrive with the nudge pad (Task 14). With nothing selected: Undo, Redo and the
-// grid toggle.
+// Store and Another). Move swaps the tool row for the nudge pad (arrows, Put on…, Done moving; spec §5.7). With
+// nothing selected: Undo, Redo and the grid toggle.
 export function EditToolbar({ state, dispatch, showGrid, onToggleGrid }: {
   state: EditorState;
   dispatch: (a: EditorAction) => void;
@@ -45,12 +46,17 @@ export function EditToolbar({ state, dispatch, showGrid, onToggleGrid }: {
           <Ionicons name="close" size={buttonIconSize('icon-lg')} />
         </Button>
       </View>
-      <View className="flex-row flex-wrap gap-2">
-        <Button testID="edit-flip" variant="outline" className={TOOL} onPress={() => dispatch({ type: 'flip' })}>{T.flip}</Button>
-        <Button testID="edit-turn" variant="outline" className={TOOL} disabled={!tools.canTurn} onPress={() => dispatch({ type: 'turn' })}>{T.turn}</Button>
-        <Button testID="edit-another" variant="outline" className={TOOL} disabled={!tools.canAnother} onPress={() => dispatch({ type: 'another' })}>{T.another}</Button>
-        <Button testID="edit-store" variant="outline" className={TOOL} disabled={!tools.canStore} accessibilityLabel={ROOM_COPY.edit.storeLabel(pieceNoun(tools.piece.item), tools.children)} onPress={() => dispatch({ type: 'store' })}>{T.store}</Button>
-      </View>
+      {state.nudging ? (
+        <NudgePad state={state} dispatch={dispatch} />
+      ) : (
+        <View className="flex-row flex-wrap gap-2">
+          <Button testID="edit-move" variant="outline" className={TOOL} onPress={() => dispatch({ type: 'nudging', on: true })}>{T.move}</Button>
+          <Button testID="edit-flip" variant="outline" className={TOOL} onPress={() => dispatch({ type: 'flip' })}>{T.flip}</Button>
+          <Button testID="edit-turn" variant="outline" className={TOOL} disabled={!tools.canTurn} onPress={() => dispatch({ type: 'turn' })}>{T.turn}</Button>
+          <Button testID="edit-another" variant="outline" className={TOOL} disabled={!tools.canAnother} onPress={() => dispatch({ type: 'another' })}>{T.another}</Button>
+          <Button testID="edit-store" variant="outline" className={TOOL} disabled={!tools.canStore} accessibilityLabel={ROOM_COPY.edit.storeLabel(pieceNoun(tools.piece.item), tools.children)} onPress={() => dispatch({ type: 'store' })}>{T.store}</Button>
+        </View>
+      )}
     </View>
   );
 }

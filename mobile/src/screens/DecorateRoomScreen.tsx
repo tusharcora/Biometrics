@@ -18,7 +18,8 @@ import { useMyKip } from '../lib/kip/myKip';
 import { useTodayScene } from '../lib/home/useTodayScene';
 import { setDecorateOpen } from '../lib/room/decorateOpen';
 import { getCosmetics, loadCosmetics, markCosmeticsSeen, saveCosmeticsLoadout, useCosmetics, type Cosmetics } from '../lib/room/cosmeticsStore';
-import { editorReducer, initEditor, isChanged, type DecorateParams, type EditorAction, type EditorState } from '../lib/room/edit/editor';
+import { editorReducer, initEditor, isChanged, type DecorateParams, type EditorAction, type EditorState, type Outcome } from '../lib/room/edit/editor';
+import { nudgeAnnouncement } from '../lib/room/edit/labels';
 import { ROOM_COPY } from '../lib/room/roomCopy';
 
 /** The editor's room: a whole 7 × 7 room at 2 points (plan ruling 17); bigger rooms pan. */
@@ -122,6 +123,16 @@ function Editor({ cosmetics, params, navigation }: { cosmetics: Cosmetics; param
 
   // A polite live region on Android; iOS has none, so each failure is announced as it happens, every time.
   const announce = (text: string) => { if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(text); };
+
+  // Each nudge or Put on… says where the piece went or why not (spec §5.7). The reducer makes a new `outcome` for
+  // every press, so the same refusal twice is said twice.
+  const lastSaid = useRef<Outcome | null>(null);
+  useEffect(() => {
+    if (!state.nudging || !state.outcome || state.outcome === lastSaid.current) return;
+    lastSaid.current = state.outcome;
+    const text = nudgeAnnouncement(state);
+    if (text) announce(text);
+  }, [state.outcome, state.nudging]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const save = async () => {
     if (savingRef.current) return;

@@ -2,7 +2,8 @@ import { EMPTY_WORN } from '../../src/lib/room/loadout';
 import type { Placement } from '../../src/lib/room/iso/geometry';
 import { childrenOf, starterLayout } from '../../src/lib/room/layout';
 import { canPlace, displayDraft, editorReducer, initEditor, inventory, isChanged, selectedTools, UNDO_STEPS, type EditorAction, type EditorState } from '../../src/lib/room/edit/editor';
-import { outcomeText } from '../../src/lib/room/edit/labels';
+import { movedText, nudgeAnnouncement, outcomeText } from '../../src/lib/room/edit/labels';
+import { putOnOptions } from '../../src/lib/room/edit/targets';
 import { catalogueSet } from '../../src/lib/room/catalogue';
 
 const COUNTS: Record<string, number> = {
@@ -207,6 +208,51 @@ describe('without dragging (spec §5.7)', () => {
     expect([piece(s, 'plank')!.x, piece(s, 'plank')!.y]).toEqual([7, 11]);
     s = run(s, { type: 'select', id: 'plant' }, { type: 'putOn', parent: 'desk', spot: 1 });
     expect(piece(s, 'plant')).toMatchObject({ layer: 'onTop', parent: 'desk', spot: 1 });
+  });
+});
+
+describe('Put on… and back to the floor (spec §5.7)', () => {
+  it('lists the free surfaces once each, and the floor for a piece that can stand there', () => {
+    const fern = run(start(), { type: 'select', id: 'plant' });
+    expect(putOnOptions(fern).map((o) => o.noun)).toEqual(['desk', 'wall plank']);
+    const mug = run(start(), { type: 'select', id: 'deskitem' });
+    expect(putOnOptions(mug).map((o) => o.noun)).toEqual(['desk', 'wall plank']); // its own desk's other free spot too
+    const onDesk = run(start(), { type: 'select', id: 'plant' }, { type: 'putOn', parent: 'desk', spot: 1 }, { type: 'select', id: 'plant' });
+    expect(putOnOptions(onDesk).some((o) => o.parent === null)).toBe(true);
+    const down = run(onDesk, { type: 'toFloor' });
+    expect(piece(down, 'plant')!.layer).toBe('floor');
+  });
+
+  it('never offers the spot a piece already stands on, nor the floor to a piece that only stands on a surface', () => {
+    const mug = run(start(), { type: 'select', id: 'deskitem' });
+    const own = piece(mug, 'deskitem')!;
+    expect(putOnOptions(mug).find((o) => o.parent === own.parent)!.spot).not.toBe(own.spot);
+    expect(putOnOptions(mug).some((o) => o.parent === null)).toBe(false);
+  });
+
+  it('back to the floor lands on a free tile as one undo step; a piece that can\'t stand there is refused', () => {
+    const onDesk = run(start(), { type: 'select', id: 'plant' }, { type: 'putOn', parent: 'desk', spot: 1 });
+    const down = run(onDesk, { type: 'toFloor' });
+    expect([down.outcome, down.past.length]).toEqual([{ ok: true, id: 'plant' }, 2]);
+    const mug = run(start(), { type: 'select', id: 'deskitem' });
+    const no = run(mug, { type: 'toFloor' });
+    expect([no.draft, no.outcome]).toEqual([mug.draft, { ok: false, refused: { reason: 'layer' }, id: 'deskitem' }]);
+  });
+
+  it('says where a moved piece is, or why it could not move; a refused new piece is not a move', () => {
+    const s = run(start(), { type: 'select', id: 'plant' }, { type: 'nudge', dir: 'frontLeft' });
+    expect(nudgeAnnouncement(s)).toBe('Moved. Tile 1, 2');
+    expect(nudgeAnnouncement(run(s, { type: 'nudge', dir: 'backLeft' }))).toBe("Can't move there: doesn't fit here");
+    const plank = run(start(), { type: 'select', id: 'plank' }, { type: 'nudge', dir: 'up' });
+    expect(nudgeAnnouncement(plank)).toBe('Moved. On the wall, 12 up');
+    expect(movedText(start().draft.layout, piece(start(), 'lamp')!)).toBe('On the desk');
+    expect(nudgeAnnouncement(run(start(), { type: 'place', item: 'plant.monstera' }))).toBeNull();
+  });
+
+  it('starting or ending Move forgets the last result, so it is never said as a move', () => {
+    const s = run(start(), { type: 'select', id: 'plant' }, { type: 'flip' });
+    expect(s.outcome).not.toBeNull();
+    expect(run(s, { type: 'nudging', on: true }).outcome).toBeNull();
   });
 });
 

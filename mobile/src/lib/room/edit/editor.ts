@@ -9,7 +9,7 @@ import type { WornSlot } from '../catalogue';
 import { capFor, validateLayout, type Placement, type RoomLayout, type StyleKey, type Tier } from '../iso/geometry';
 import { isoGrid } from '../iso/grid';
 import { childrenOf, deskOf, inventoryOf, layoutKey, newPieceId } from '../layout';
-import { COACH_ITEM, coachTile, nearestFree, placedAt, refusal, roomCentre, targetPoint, type Refused, type Target } from './targets';
+import { COACH_ITEM, coachTile, nearestFloor, nearestFree, placedAt, refusal, roomCentre, targetPoint, type Refused, type Target } from './targets';
 
 export interface Draft { layout: RoomLayout; worn: KipWorn }
 export type DrawerTab = 'all' | 'floor' | 'wall' | 'onTop' | 'funny' | 'new' | 'room' | 'kip' | 'sets';
@@ -71,6 +71,8 @@ export type EditorAction =
   | { type: 'nudging'; on: boolean }
   | { type: 'nudge'; dir: NudgeDir }
   | { type: 'putOn'; parent: string; spot: number }
+  /** Put on… the floor (spec §5.7): the free tile nearest where the piece is. */
+  | { type: 'toFloor' }
   | { type: 'replaceDesk'; item: ItemId }
   | { type: 'style'; key: StyleKey; item: ItemId }
   | { type: 'wear'; slot: WornSlot; item: ItemId | null }
@@ -134,7 +136,7 @@ function add(s: EditorState, item: ItemId, target: Target | null, facing: 'L' | 
   const piece = placedAt({ id: newPieceId(s.draft.layout), item, facing, mirror: false }, target);
   const why = refusal(s.draft.layout, piece, s.tier, true);
   if (why) return refuse(s, why, null, item);
-  return commit(s, withPieces(s, [...s.draft.layout.pieces, piece]), { selected: piece.id, outcome: { ok: true, id: piece.id }, coach: coachAfterPlace(s, item), picked: null });
+  return commit(s, withPieces(s, [...s.draft.layout.pieces, piece]), { selected: piece.id, nudging: false, outcome: { ok: true, id: piece.id }, coach: coachAfterPlace(s, item), picked: null });
 }
 
 function move(s: EditorState, id: string, next: Placement): EditorState {
@@ -142,6 +144,10 @@ function move(s: EditorState, id: string, next: Placement): EditorState {
   if (why) return refuse(s, why, id);
   return commit(s, withPieces(s, s.draft.layout.pieces.map((p) => (p.id === id ? next : p))), { selected: id, outcome: { ok: true, id } });
 }
+
+/** Where a placed piece is now, in room cells (Another and Put on… the floor look near it). */
+const pointOf = (g: ReturnType<typeof isoGrid>, layout: RoomLayout, p: Placement): [number, number] =>
+  targetPoint(g, layout, p.item, p.layer === 'onTop' ? { layer: 'onTop', parent: p.parent!, spot: p.spot! } : { layer: p.layer, x: p.x, y: p.y }, p.facing);
 
 const NUDGE: Record<NudgeDir, { floor?: [number, number]; wallR?: [number, number]; wallL?: [number, number] }> = {
   backLeft: { floor: [-1, 0], wallR: [-1, 0] },
@@ -256,7 +262,7 @@ export function editorReducer(s: EditorState, a: EditorAction): EditorState {
     case 'another': {
       const tools = selectedTools(s);
       if (!selected || !tools?.canAnother) return selected ? refuse(s, { reason: tools && tools.inventory > 0 ? 'full' : 'outside' }, selected.id) : s;
-      const near = targetPoint(g, layout, selected.item, selected.layer === 'onTop' ? { layer: 'onTop', parent: selected.parent!, spot: selected.spot! } : { layer: selected.layer, x: selected.x, y: selected.y }, selected.facing);
+      const near = pointOf(g, layout, selected);
       const base = { id: newPieceId(layout), item: selected.item, facing: selected.facing, mirror: selected.mirror };
       return add(s, selected.item, nearestFree(g, layout, selected.item, s.tier, near, base), selected.facing);
     }
@@ -266,7 +272,8 @@ export function editorReducer(s: EditorState, a: EditorAction): EditorState {
       return commit(s, withPieces(s, layout.pieces.filter((p) => !gone.has(p.id))), { selected: null, nudging: false, outcome: null });
     }
     case 'nudging':
-      return { ...s, nudging: a.on };
+      // Move starts and ends with nothing to say: an earlier result is never announced as a move.
+      return { ...s, nudging: a.on, outcome: null };
     case 'nudge': {
       if (!selected || selected.layer === 'onTop') return selected ? refuse(s, { reason: 'layer' }, selected.id) : s;
       const step = NUDGE[a.dir][selected.layer];
@@ -275,6 +282,13 @@ export function editorReducer(s: EditorState, a: EditorAction): EditorState {
     }
     case 'putOn':
       return selected ? move(s, selected.id, placedAt(selected, { layer: 'onTop', parent: a.parent, spot: a.spot })) : s;
+    case 'toFloor': {
+      if (!selected) return s;
+      if (!isoOf(selected.item)?.layers.includes('floor')) return refuse(s, { reason: 'layer' }, selected.id);
+      const near = pointOf(g, layout, selected);
+      const t = nearestFloor(g, layout, selected.item, s.tier, near, selected);
+      return t ? move(s, selected.id, placedAt(selected, t)) : refuse(s, { reason: 'outside' }, selected.id);
+    }
     case 'replaceDesk': {
       const desk = deskOf(layout);
       const iso = isoOf(a.item);

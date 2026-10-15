@@ -167,6 +167,19 @@ export const ROOM_COPY = {
       sameDesk: 'That desk is in the room already',
       layer: { floor: 'Only on the floor', wall: 'Only on the wall', onTop: 'Only on a desk or shelf', floorOnTop: 'Only on the floor or a surface' },
     },
+    /** Moving without a drag (spec §5.7): the arrows, Put on…, and what each press did. */
+    nudge: {
+      dirs: { backLeft: 'Back left', backRight: 'Back right', frontLeft: 'Front left', frontRight: 'Front right', up: 'Up', down: 'Down' },
+      label: (dir: string) => `Move ${dir.toLowerCase()}`,
+      putOn: 'Put on…',
+      on: (noun: string) => `On the ${noun}`,
+      onFloor: 'On the floor',
+      done: 'Done moving',
+      moved: (where: string) => `Moved. ${where}`,
+      cant: (why: string) => `Can't move there: ${why.charAt(0).toLowerCase()}${why.slice(1)}`,
+      tile: (x: number, y: number) => `Tile ${x + 1}, ${y + 1}`,
+      wallStep: (y: number) => `On the wall, ${y + 1} up`,
+    },
   },
   set: {
     pieces: (n: number, unlock: string) => `${n} pieces · ${unlock}`,

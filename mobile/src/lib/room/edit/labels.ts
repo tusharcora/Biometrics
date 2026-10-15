@@ -89,3 +89,26 @@ export function outcomeText(s: EditorState): { kind: 'reason' | 'info'; text: st
   }
   return null;
 }
+
+/** Where a piece is after a move, as announced: "Tile 4, 4", "On the wall, 11 up", "On the desk" (spec §5.7). */
+export function movedText(layout: RoomLayout, p: Placement): string {
+  const N = E.nudge;
+  if (p.layer === 'floor') return N.tile(p.x, p.y);
+  if (p.layer === 'wallL' || p.layer === 'wallR') return N.wallStep(p.y);
+  const parent = layout.pieces.find((q) => q.id === p.parent);
+  return parent ? N.on(pieceNoun(parent.item)) : N.onFloor;
+}
+
+/**
+ * What a screen reader hears after a nudge or a Put on… (spec §5.7): where the piece went, or why it could not move.
+ * Null when nothing was tried, or when the last result is not about a placed piece (a refused new piece, a set): the
+ * notice line says those.
+ */
+export function nudgeAnnouncement(state: Pick<EditorState, 'outcome' | 'draft'>): string | null {
+  const o = state.outcome;
+  if (!o || o.id === null) return null;
+  const layout = state.draft.layout;
+  const p = layout.pieces.find((q) => q.id === o.id);
+  if (!p) return null;
+  return o.ok ? E.nudge.moved(movedText(layout, p)) : E.nudge.cant(reasonText(o.refused, p.item, layout));
+}

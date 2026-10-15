@@ -1,11 +1,14 @@
-// Where a piece can go (spec 2026-10-15 §5.3, §5.4): snapping a finger's point to a tile, the wall grid or the
+// Where a piece can go (spec 2026-10-15 §5.3, §5.4, §5.7): snapping a finger's point to a tile, the wall grid or the
 // nearest free spot; why a place is refused (layer, cap, geometry); the nearest free valid place for Place and
-// Another; the guided first placement's tile. Pure. The geometry is the server's (iso/geometry.ts).
+// Another; Put on…'s surfaces and the floor; the guided first placement's tile. Pure. The geometry is the server's
+// (iso/geometry.ts).
 import { GEOMETRY_DEPS, isoOf } from '../catalogue';
 import { capFor, checkPiece, wallLength, WALL_STEPS, wrongLayer, type BadReason, type Placement, type RoomLayout, type Tier } from '../iso/geometry';
 import { HH, HT, projOf, unproject, type IsoGrid } from '../iso/grid';
 import { spotPoint } from '../iso/room';
 import type { ItemId } from '../loadout';
+import type { EditorState } from './editor';
+import { pieceNoun } from './labels';
 
 export type Target =
   | { layer: 'floor' | 'wallL' | 'wallR'; x: number; y: number }
@@ -123,13 +126,49 @@ function candidates(g: IsoGrid, layout: RoomLayout, item: ItemId, tier: Tier): T
 /** A target's stable key (drag.ts uses the same one). */
 export const targetKey = (t: Target): string => (t.layer === 'onTop' ? `t:${t.parent}:${t.spot}` : `${t.layer}:${t.x}:${t.y}`);
 
-/** The free, valid place nearest `near` (spec §5.4 Place, §5.3 Another), or null when nothing fits. */
-export function nearestFree(g: IsoGrid, layout: RoomLayout, item: ItemId, tier: Tier, near: readonly [number, number], base: Base): Target | null {
-  const ranked = candidates(g, layout, item, tier)
-    .map((t) => { const [x, y] = targetPoint(g, layout, item, t, base.facing); return { t, d: Math.hypot(x - near[0], y - near[1]) }; })
+/** Of `targets`, the free, valid one nearest `near` (ties by key), or null. */
+function nearestOf(targets: Target[], g: IsoGrid, layout: RoomLayout, tier: Tier, near: readonly [number, number], base: Base): Target | null {
+  const ranked = targets
+    .map((t) => { const [x, y] = targetPoint(g, layout, base.item, t, base.facing); return { t, d: Math.hypot(x - near[0], y - near[1]) }; })
     .sort((a, b) => a.d - b.d || (targetKey(a.t) < targetKey(b.t) ? -1 : 1));
   for (const { t } of ranked) if (!refusal(layout, placedAt(base, t), tier, false)) return t;
   return null;
+}
+
+/** The free, valid place nearest `near` (spec §5.4 Place, §5.3 Another), or null when nothing fits. */
+export function nearestFree(g: IsoGrid, layout: RoomLayout, item: ItemId, tier: Tier, near: readonly [number, number], base: Base): Target | null {
+  return nearestOf(candidates(g, layout, item, tier), g, layout, tier, near, { ...base, item });
+}
+
+/** The free floor tile nearest `near` where the piece fits ("On the floor", spec §5.7), or null. */
+export function nearestFloor(g: IsoGrid, layout: RoomLayout, item: ItemId, tier: Tier, near: readonly [number, number], base: Base): Target | null {
+  const tiles: Target[] = [];
+  for (let x = 0; x < g.n; x++) for (let y = 0; y < g.m; y++) tiles.push({ layer: 'floor', x, y });
+  return nearestOf(tiles, g, layout, tier, near, { ...base, item });
+}
+
+export interface PutOnOption { key: string; parent: string | null; spot: number; noun: string }
+
+/**
+ * Put on…: each surface with a free spot the selected piece may take, once per surface (never the spot it stands
+ * on), then the floor for an on-top piece that can stand there (spec §5.7). `parent: null` is the floor.
+ */
+export function putOnOptions(state: Pick<EditorState, 'draft' | 'selected' | 'tier'>): PutOnOption[] {
+  const layout = state.draft.layout;
+  const p = layout.pieces.find((q) => q.id === state.selected);
+  const iso = p ? isoOf(p.item) : undefined;
+  if (!p || !iso) return [];
+  const out: PutOnOption[] = [];
+  if (iso.layers.includes('onTop')) {
+    for (const parent of layout.pieces) {
+      const spots = parent.layer === 'onTop' || parent.id === p.id ? undefined : isoOf(parent.item)?.surface?.spots;
+      const free = (k: number) => !(p.parent === parent.id && p.spot === k) && !refusal(layout, placedAt(p, { layer: 'onTop', parent: parent.id, spot: k }), state.tier, false);
+      const spot = spots?.findIndex((_, k) => free(k)) ?? -1;
+      if (spot >= 0) out.push({ key: parent.id, parent: parent.id, spot, noun: pieceNoun(parent.item) });
+    }
+  }
+  if (p.layer === 'onTop' && iso.layers.includes('floor')) out.push({ key: 'floor', parent: null, spot: 0, noun: 'floor' });
+  return out;
 }
 
 export const COACH_ITEM = 'lamp.welcome';

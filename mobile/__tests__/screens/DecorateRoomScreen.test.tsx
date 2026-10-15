@@ -1,6 +1,6 @@
 import React from 'react';
 import { act, fireEvent, render, within } from '@testing-library/react-native';
-import { AccessibilityInfo, Alert, Dimensions } from 'react-native';
+import { AccessibilityInfo, Alert, Dimensions, Platform } from 'react-native';
 import { State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 import { ApiError } from '../../src/api/client';
@@ -472,5 +472,51 @@ describe('the editor on small and large phones (ruling T13-LAYOUT)', () => {
     expect(s.getByTestId('edit-reason')).toHaveTextContent('That desk is in the room already');
     expect(s.getByTestId('edit-undo').props.accessibilityState.disabled).toBe(true);
     expect(within(s.getByTestId('edit-scroll')).queryByTestId('edit-reason')).toBeNull();
+  });
+});
+
+describe('without dragging (spec §5.7)', () => {
+  // The press order is ruling T14's: back left from tile 1, 2 is off the floor, so the plant ends at (0, 1) and Done is live.
+  it('place, move, nudge and save with presses only; each nudge says where it went or why not', async () => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => undefined);
+    const platform = Platform.OS;
+    Platform.OS = 'ios';
+    try {
+      const s = await openEditor();
+      fireEvent.press(s.getByTestId('edit-piece-plant'));
+      fireEvent.press(s.getByTestId('edit-move'));
+      fireEvent.press(s.getByTestId('edit-nudge-frontLeft'));
+      expect(announce).toHaveBeenLastCalledWith('Moved. Tile 1, 2');
+      fireEvent.press(s.getByTestId('edit-nudge-backLeft'));
+      expect(announce).toHaveBeenLastCalledWith("Can't move there: doesn't fit here");
+      expect(s.getByTestId('edit-nudge-status')).toHaveTextContent("Can't move there: doesn't fit here");
+      // The pad's line says it; the pinned reason line does not repeat it, and iOS hears it once.
+      expect(s.queryByTestId('edit-reason')).toBeNull();
+      const fits = () => announce.mock.calls.filter(([t]) => /fit here/.test(t)).length;
+      expect(fits()).toBe(1);
+      fireEvent.press(s.getByTestId('edit-nudge-backLeft'));
+      expect(fits()).toBe(2); // the same refusal again is said again
+      fireEvent.press(s.getByTestId('edit-nudge-done'));
+      expect(s.getByTestId('edit-flip')).toBeTruthy();
+      expect(s.queryByTestId('edit-nudge-status')).toBeNull();
+      (putCosmetics as jest.Mock).mockImplementation(async (body) => cosmeticsDTO({ layout: body.layout, version: 3 }));
+      await act(async () => { fireEvent.press(s.getByTestId('edit-done')); });
+      expect((putCosmetics as jest.Mock).mock.calls[0][0].layout.pieces.find((p: { id: string }) => p.id === 'plant')).toMatchObject({ layer: 'floor', x: 0, y: 1 });
+      expect(mockNav.goBack).toHaveBeenCalled();
+    } finally {
+      Platform.OS = platform;
+      announce.mockRestore();
+    }
+  });
+
+  it('Put on… a surface and back to the floor, by presses', async () => {
+    const s = await openEditor();
+    fireEvent.press(s.getByTestId('edit-piece-plant'));
+    fireEvent.press(s.getByTestId('edit-move'));
+    fireEvent.press(s.getByTestId('edit-put-desk'));
+    expect(s.getByTestId('edit-nudge-status')).toHaveTextContent('Moved. On the desk');
+    expect(s.queryByTestId('edit-nudge-frontLeft')).toBeNull();
+    fireEvent.press(s.getByTestId('edit-put-floor'));
+    expect(s.getByTestId('edit-nudge-status')).toHaveTextContent(/^Moved\. Tile \d+, \d+$/);
   });
 });
