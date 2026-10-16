@@ -76,3 +76,15 @@ it('a failed highlights purge does not skip the circle purge, and the failure st
   await expect(purgeSocialJsonMentions(db, gone.id)).rejects.toBe(boom);
   expect((await prisma.challengeEntry.findFirstOrThrow({ where: { userId: b.id } })).circle).toEqual([]);
 });
+
+it('a failed circle purge does not skip the highlights purge, and the failure still reaches the caller (T3-CARRY)', async () => {
+  const [gone, b] = [await buddyUser(), await buddyUser()];
+  await prisma.weeklyHighlights.create({ data: { viewerId: b.id, weekStart: day, items: [{ actorId: gone.id }] } });
+  const boom = new Error('circles down');
+  const db = {
+    $executeRaw: ((sql: TemplateStringsArray, ...values: unknown[]) =>
+      sql.join('').includes('ChallengeEntry') ? Promise.reject(boom) : prisma.$executeRaw(sql, ...values)) as typeof prisma.$executeRaw,
+  };
+  await expect(purgeSocialJsonMentions(db, gone.id)).rejects.toBe(boom);
+  expect(await prisma.weeklyHighlights.count({ where: { viewerId: b.id } })).toBe(0);
+});

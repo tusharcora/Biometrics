@@ -1,8 +1,10 @@
 // The coin shop (spec 2026-10-15 §6.4–6.6). A piece is for sale when it is shipped, priced and offered this week
-// (always, or in its own ISO week), and, for a piece with an unlock rule, once you own it (§6.5: a rule piece is never
-// sold before it is earned). A purchase runs under the user's one lock (plan ruling 5): the replay check, the sale
+// (always, or in its own ISO week), and, for a piece with an unlock rule, once its unlock row exists (§6.5: a rule
+// piece is never sold before it is earned; a gifted copy does not count, P4 ruling 15). The offer marks such a piece
+// locked until then (PF4-F1). A purchase runs under the user's one lock (plan ruling 5): the replay check, the sale
 // check, the spend, then the +1 grant, all keyed by the app's request id, so a retry never buys twice. Coins only:
 // nothing here is ever paid for with money. Logs the spend's kind only, never a user id, an item or an amount.
+import type { Prisma } from '@prisma/client';
 import { civilDateToUtcMidnight } from '../biometrics/civilDate';
 import { COSMETIC_ITEMS, isShipped, type CosmeticItem } from '../cosmetics/catalogue';
 import { prisma } from '../db/client';
@@ -15,7 +17,9 @@ import { COIN_TX_OPTIONS, balanceOf, spendInTx } from './ledger';
 import { weekSet } from './shopWeeks';
 
 export interface ShopOffer { itemId: string; price: number }
-export interface ShopDTO { week: string; set: { id: string; itemIds: string[] }; items: ShopOffer[] }
+/** An offer as GET /me/shop sends it: `locked` is a rule piece not earned yet, shown but never sold (PF4-F1). */
+export interface ShopItem extends ShopOffer { locked: boolean }
+export interface ShopDTO { week: string; set: { id: string; itemIds: string[] }; items: ShopItem[] }
 
 export function offeredIn(week: string, items: readonly CosmeticItem[] = COSMETIC_ITEMS): ShopOffer[] {
   return items
@@ -23,12 +27,22 @@ export function offeredIn(week: string, items: readonly CosmeticItem[] = COSMETI
     .map((i) => ({ itemId: i.id, price: i.price! }));
 }
 
-export function forSale(itemId: string, week: string, counts: Readonly<Record<string, number>>, items: readonly CosmeticItem[] = COSMETIC_ITEMS): ShopOffer | null {
+/** A shop piece and a starter are for anyone; a rule piece only once its unlock row exists. */
+const sellsTo = (item: CosmeticItem, earned: ReadonlySet<string>): boolean =>
+  item.unlock.kind === 'shop' || item.unlock.kind === 'starter' || earned.has(item.id);
+
+/** A shop piece and a starter are for anyone; a rule piece only once its unlock row exists, never because a gift or a
+ * prize gave a copy (spec §6.5; P4 ruling 15 resolves P2's note). */
+export function forSale(itemId: string, week: string, earned: ReadonlySet<string>, items: readonly CosmeticItem[] = COSMETIC_ITEMS): ShopOffer | null {
   const offer = offeredIn(week, items).find((o) => o.itemId === itemId);
   const item = items.find((i) => i.id === itemId);
   if (!offer || !item) return null;
-  const anyone = item.unlock.kind === 'shop' || item.unlock.kind === 'starter';
-  return anyone || (counts[itemId] ?? 0) > 0 ? offer : null;
+  return sellsTo(item, earned) ? offer : null;
+}
+
+/** The items a user has earned: their unlock rows (never their grants). */
+async function earnedBy(db: Prisma.TransactionClient | typeof prisma, userId: string): Promise<Set<string>> {
+  return new Set((await db.cosmeticUnlock.findMany({ where: { userId }, select: { itemId: true } })).map((r) => r.itemId));
 }
 
 /** The user's local ISO week ('2026-W43'). */
@@ -38,9 +52,11 @@ export async function shopWeek(userId: string, now: Date): Promise<string> {
 }
 
 export async function readShop(userId: string, now: Date): Promise<ShopDTO> {
-  const week = await shopWeek(userId, now);
-  const items = offeredIn(week);
-  const offered = new Set(items.map((i) => i.itemId));
+  const [week, earned] = await Promise.all([shopWeek(userId, now), earnedBy(prisma, userId)]);
+  const offers = offeredIn(week);
+  const offered = new Set(offers.map((i) => i.itemId));
+  const byId = new Map(COSMETIC_ITEMS.map((i) => [i.id, i]));
+  const items = offers.map((o) => ({ ...o, locked: !sellsTo(byId.get(o.itemId)!, earned) }));
   const set = weekSet(week);
   return { week, set: { id: set.id, itemIds: set.itemIds.filter((id) => offered.has(id)) }, items };
 }
@@ -80,8 +96,7 @@ export async function buyPiece(userId: string, body: unknown, now: Date): Promis
     // A request id names one purchase: reused for another piece, it is a bad request, not a replay (ruling T6-FIX).
     if (granted && granted.itemId !== parsed.itemId) return { ok: false, status: 400, body: { error: 'invalid_body' } };
     if (spent || granted) return 'replay';
-    const [rows, grants] = await Promise.all([tx.cosmeticUnlock.findMany({ where: { userId }, select: { itemId: true } }), grantTotals(tx, userId)]);
-    const offer = forSale(parsed.itemId, week, countsOf(rows, grants));
+    const offer = forSale(parsed.itemId, week, await earnedBy(tx, userId));
     if (!offer) return { ok: false, status: 400, body: { error: 'not_for_sale' } };
     const paid = await spendInTx(tx, userId, 'buy', sourceKey, offer.price, now);
     if (!paid.ok) return { ok: false, status: 409, body: { error: 'not_enough_coins', needed: paid.needed } };

@@ -21,6 +21,11 @@ export const coinsConfig: { launchedAt: Date } = {
   launchedAt: launchFromEnv && !Number.isNaN(launchFromEnv.getTime()) ? launchFromEnv : new Date('2026-10-20T00:00:00.000Z'),
 };
 export { EARN_AMOUNTS };
+
+/** The no-backpay gate (spec §6.2), shared with P4's cheers and challenge entry (PF4-F2): the user's local civil date
+ * of the coins launch, and whether a source dated `day` pays (on or after it). */
+export const launchDayFor = (timezone: string, launchedAt: Date = coinsConfig.launchedAt): string => localCivilDateOrUtc(launchedAt, timezone);
+export const paysOn = (day: string, launchDay: string): boolean => day >= launchDay;
 /** Each run reads this many civil days back (spec §6.3), so a night synced late still pays. */
 export const LOOKBACK_DAYS = 8;
 
@@ -38,7 +43,7 @@ export interface EarnInputs {
 }
 
 export function planEarns(inp: EarnInputs): CoinEarn[] {
-  const paid = (d: string) => d >= inp.launchDay;
+  const paid = (d: string) => paysOn(d, inp.launchDay);
   return [
     ...inp.sleepGoalNights.filter(paid).map((d): CoinEarn => ({ kind: 'sleep_goal', sourceKey: `sleep_goal:${d}`, amount: EARN_AMOUNTS.sleep_goal, capDay: d })),
     ...inp.stepGoalDays.filter(paid).map((d): CoinEarn => ({ kind: 'steps', sourceKey: `steps:${d}`, amount: EARN_AMOUNTS.steps, capDay: d })),
@@ -77,7 +82,7 @@ export async function loadEarnInputs(userId: string, now: Date, launchedAt: Date
     return minutes !== undefined && minutes > 0 && minutes >= (changeInEffect(sleepChanges, d)?.sleepMinutes ?? stored);
   });
   return {
-    launchDay: localCivilDateOrUtc(launchedAt, tz),
+    launchDay: launchDayFor(tz, launchedAt),
     sleepGoalNights,
     stepGoalDays: steps.map((s) => utcMidnightToCivilDate(s.localDate)).sort(),
     onTimeCheckIns: checkIns.map((c) => utcMidnightToCivilDate(c.habitDay)).sort(),

@@ -52,8 +52,14 @@ export const SHARES_STREAKS_WHERE = { shareStreaks: true, buddySharingConsentVer
 /** The health switches need the CURRENT consent version; the room switch is its own consent (spec §10.1). */
 export function effectiveSharing(row: SharingRow, version: number = BUDDY_SHARING_CONSENT_VERSION): Sharing {
   const consented = row.buddySharingConsentVersion === version;
-  const health = Object.fromEntries(HEALTH_SHARE_KEYS.map((key) => [key, consented && row[SHARE_COLUMNS[key]]]));
-  return { ...health, room: row.shareRoom } as Sharing;
+  return {
+    recovery: consented && row.shareRecovery,
+    sleepScore: consented && row.shareSleepScore,
+    hoursSlept: consented && row.shareHoursSlept,
+    steps: consented && row.shareSteps,
+    streaks: consented && row.shareStreaks,
+    room: row.shareRoom,
+  } satisfies Sharing;
 }
 
 /** The room is open to buddies' visits (spec §10.1): the stored switch, never the health consent. */

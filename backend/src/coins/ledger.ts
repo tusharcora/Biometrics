@@ -3,13 +3,14 @@
 // up cap room a new event needs; trims capped kinds in a fixed order (kind, then key) to what is left of their cap
 // day's 60; writes a 0-coin row (already seen) when nothing is left, so the key is used up and the event still counts;
 // pays at most 5 cheers a day, given and received together; and adds what it wrote to the wallet. Spends (buy,
-// expand) run inside the caller's transaction and take the same lock. Logs kinds and counts only, never a user id, a
-// key or an amount.
+// expand) run inside the caller's transaction and take the same lock. Two-person events (a cheer) take both users'
+// locks in sorted id order (lockUsers) and write each side with writeEarnsTx in the caller's transaction (P4 ruling
+// 17). Logs kinds and counts only, never a user id, a key or an amount.
 import type { Prisma } from '@prisma/client';
 import { civilDateToUtcMidnight, utcMidnightToCivilDate } from '../biometrics/civilDate';
 import { prisma } from '../db/client';
 import { lockRoom } from '../room/lock';
-import { DAILY_CAP } from './amounts';
+import { DAILY_CAP, EARN_AMOUNTS } from './amounts';
 
 export { DAILY_CAP };
 export const PAID_CHEERS_A_DAY = 5;
@@ -64,7 +65,10 @@ export function planCapped(fresh: readonly CoinEarn[], used: DayUse): CoinEarn[]
   });
 }
 
-async function writeEarns(tx: Prisma.TransactionClient, userId: string, events: readonly CoinEarn[], now: Date): Promise<CoinWritten[]> {
+/** Writes the earns this user has not been paid for yet, inside the caller's transaction, which already holds the
+ * user's room lock (lockRoom or lockUsers). Throws on a malformed earn. Answers what it wrote. */
+export async function writeEarnsTx(tx: Prisma.TransactionClient, userId: string, events: readonly CoinEarn[], now: Date): Promise<CoinWritten[]> {
+  events.forEach(checkEarn);
   // Two earns with one key in a batch: the last one is kept (a key is paid once, whichever amount it carries).
   const unique = [...new Map(events.map((e) => [e.sourceKey, e])).values()];
   const have = await tx.coinEvent.findMany({ where: { userId, sourceKey: { in: unique.map((e) => e.sourceKey) } }, select: { sourceKey: true } });
@@ -99,6 +103,26 @@ async function writeEarns(tx: Prisma.TransactionClient, userId: string, events: 
   return created.map((r) => ({ kind: r.kind as EarnKind, amount: r.amount }));
 }
 
+/**
+ * Both (or all) users' room locks in one transaction, in sorted user-id order (spec §6.3): two people cheering each
+ * other at once wait for each other instead of deadlocking. Each distinct id once.
+ */
+export async function lockUsers(tx: Prisma.TransactionClient, ids: readonly string[]): Promise<void> {
+  for (const id of [...new Set(ids)].sort()) await lockRoom(tx, id);
+}
+
+/** One side of a two-person cheer (spec §6.2, §10.2): 2 coins, capped on that person's own civil day. */
+export function cheerEarns(key: string, capDay: string, side: 'given' | 'got'): CoinEarn {
+  return { kind: side === 'given' ? 'cheer_given' : 'cheer_got', sourceKey: `${key}:${side}`, amount: EARN_AMOUNTS.cheer, capDay };
+}
+
+/** The one earn log: kinds and counts only, never a user id, a key or an amount. */
+export function logEarned(written: readonly CoinWritten[]): void {
+  const counts = new Map<string, number>();
+  for (const w of written) counts.set(w.kind, (counts.get(w.kind) ?? 0) + 1);
+  for (const [kind, count] of counts) console.info(JSON.stringify({ event: 'coins.earned', kind, count }));
+}
+
 /** Room for the wait on the user's room lock (a save, a purchase or a grow may hold it) beyond Prisma's 2 s / 5 s
  * defaults. Past them the call rejects (P2028) and writes nothing: the caller logs and drops it, and the next earn
  * pass pays the same keys. */
@@ -111,11 +135,9 @@ export async function applyCoinEvents(userId: string, events: readonly CoinEarn[
   events.forEach(checkEarn);
   const written = await prisma.$transaction(async (tx) => {
     await lockRoom(tx, userId);
-    return writeEarns(tx, userId, events, now);
+    return writeEarnsTx(tx, userId, events, now);
   }, COIN_TX_OPTIONS);
-  const counts = new Map<string, number>();
-  for (const w of written) counts.set(w.kind, (counts.get(w.kind) ?? 0) + 1);
-  for (const [kind, count] of counts) console.info(JSON.stringify({ event: 'coins.earned', kind, count }));
+  logEarned(written);
   return written;
 }
 

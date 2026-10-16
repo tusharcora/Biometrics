@@ -1,7 +1,7 @@
 import { prisma } from '../../src/db/client';
 import { connection } from '../../src/sync/queue';
 import { migrateTestDb } from '../setupTestDb';
-import { coinsConfig, coinsHooks, earnCoins, earnCoinsSafely, loadEarnInputs, planEarns } from '../../src/coins/sources';
+import { coinsConfig, coinsHooks, earnCoins, earnCoinsSafely, launchDayFor, loadEarnInputs, paysOn, planEarns } from '../../src/coins/sources';
 import { day, weekRecaps } from '../cosmetics/helpers';
 import { balance, coinUser, rowsOf } from './helpers';
 
@@ -49,6 +49,12 @@ it('plans each source with its key and its own civil date as the cap day, and no
     { kind: 'checkin', sourceKey: 'checkin:2026-11-10', amount: 5, capDay: '2026-11-10' },
     { kind: 'recap', sourceKey: 'recap:r1', amount: 10, capDay: '2026-11-11' },
   ]);
+});
+
+it('shares the no-backpay gate (PF4-F2): a day pays from the user\'s local launch day on', () => {
+  const at = new Date('2026-11-09T12:00:00.000Z'); // 01:00 on 2026-11-10 in Auckland
+  expect([launchDayFor('Pacific/Auckland', at), launchDayFor('UTC', at), launchDayFor('UTC')]).toEqual(['2026-11-10', '2026-11-09', '2100-01-01']);
+  expect([paysOn('2026-11-09', '2026-11-10'), paysOn('2026-11-10', '2026-11-10'), paysOn('2026-11-11', '2026-11-10')]).toEqual([false, true, true]);
 });
 
 it('reads the last 8 local days in the user\'s zone: goal nights by the goal in effect, step days, on-time check-ins, week recaps opened (Review Focus 2)', async () => {
