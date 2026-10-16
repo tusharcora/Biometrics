@@ -59,6 +59,12 @@ async function seedSocial(a: string, b: string) {
     await prisma.statusNote.create({ data: { authorId: me, text: 'early night', expiresAt: later } });
     await prisma.report.create({ data: { reporterId: me, reportedUserId: other, targetType: 'MESSAGE', targetId: message.id, reason: 'SPAM' } });
   }
+  // Free-build P4 tables (spec 2026-10-15 §10): room cheers, gifts both ways, entry cheers.
+  for (const [me, other] of [[a, b], [b, a]] as const) {
+    await prisma.roomCheer.create({ data: { fromId: me, toId: other, localDate: today } });
+    await prisma.gift.create({ data: { id: randomUUID(), fromId: me, toId: other, itemId: 'plant.fern', note: 'cosy' } });
+    await prisma.challengeCheer.create({ data: { weekId: '2026-W44', fromId: me, toId: other } });
+  }
   return { aCode: aCode.code, bCode: bCode.code };
 }
 
@@ -82,7 +88,7 @@ describe('social tables stay outside the USER_OWNED_MODELS guard', () => {
     }
   });
 
-  it('cascades every role column, except the two SetNull ones', () => {
+  it('cascades every role column, except the SET_NULL_COLUMNS ones', () => {
     for (const name of SOCIAL_MODELS) {
       const model = models.find((m) => m.name === name)!;
       for (const field of model.fields.filter((f) => f.type === 'User')) {

@@ -52,6 +52,9 @@ export const USER_OWNED_MODELS = [
   'CoinEvent',
   'CoinWallet',
   'ItemGrant',
+  // Free-build P4. The two-sided P4 tables (RoomCheer, Gift, ChallengeCheer) have no userId and live in
+  // buddies/models.ts SOCIAL_MODELS: RoomCheer's and ChallengeCheer's foreign keys both cascade.
+  'ChallengeEntry',
   'CoachConsent',
   'PushToken',
   'Session',
@@ -163,9 +166,10 @@ export async function deleteUserAccount(
 
   const counts = await deleteOwnedRows(prisma, { userId }, { id: userId });
 
-  // Week-highlight caches name people inside JSON, beyond any cascade (buddies/models.ts). After the rows are gone,
-  // so a buddy's rebuild racing this deletion can't cache the id again from rows that still existed. Best effort:
-  // reads gate every cached actor against the live circle anyway. Only the error class is logged.
+  // Week-highlight caches and challenge-entry circles name people inside JSON, beyond any cascade
+  // (buddies/models.ts). After the rows are gone, so a buddy's rebuild racing this deletion can't cache the id again
+  // from rows that still existed. Best effort: reads gate every cached actor against the live circle anyway. Only the
+  // error class is logged.
   try {
     await purgeSocialJsonMentions(prisma, userId);
   } catch (err) {
