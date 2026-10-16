@@ -67,6 +67,13 @@ it('a shelf slot holding the plank converts to the bare plank and reads back as 
   expect(slotsFromLayout(layout)).toEqual(room);
 });
 
+it('a shelf slot holding the trophy shelf hangs it as id shelf in the plank\'s place, with no plank (P3 T2-CARRY)', () => {
+  const layout = layoutFromSlots({ ...STARTER_ROOM, shelf: 'shelf.awards' });
+  expect(layout.pieces.filter((p) => p.id === 'shelf' || p.id === 'plank' || p.item.startsWith('shelf.'))).toEqual([
+    { id: 'shelf', item: 'shelf.awards', layer: 'wallR', x: 6, y: 10, facing: 'L', mirror: false },
+  ]);
+});
+
 it('every shipped desk × corner × pet × rug × art room converts valid at every tier, losslessly and idempotently (spec §2.4)', () => {
   const ids = (slot: RoomSlot) => COSMETIC_ITEMS.filter((i) => i.slot === slot && isShipped(i)).map((i) => i.id as string | null);
   const optional = (slot: RoomSlot) => [...ids(slot), ...(OPTIONAL_ROOM_SLOTS.has(slot) ? [null] : [])];

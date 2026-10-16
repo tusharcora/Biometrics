@@ -6,7 +6,7 @@ import { registerItems, type ItemArt } from '../items';
 import { R, type Rects } from '../paint';
 import { spriteRows, standing, three, veiled } from './shared';
 
-export const GINGER = { o: '#EA9A4A', O: '#F0A75A', S: '#C2410C', e: '#1F2937', p: '#F9A8D4' } as const;
+export const GINGER = { o: '#EA9A4A', S: '#C2410C', e: '#1F2937', p: '#F9A8D4' } as const;
 export const TABBY_SIT: SpriteRect[] = spriteRows([
   '.o.....o..',
   '.oo...oo..',
