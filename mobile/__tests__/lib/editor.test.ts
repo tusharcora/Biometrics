@@ -2,8 +2,9 @@ import { EMPTY_WORN } from '../../src/lib/room/loadout';
 import { validateLayout, type Placement } from '../../src/lib/room/iso/geometry';
 import { childrenOf, starterLayout } from '../../src/lib/room/layout';
 import { canPlace, displayDraft, editorReducer, initEditor, inventory, isChanged, selectedTools, UNDO_STEPS, type EditorAction, type EditorState } from '../../src/lib/room/edit/editor';
-import { movedText, nudgeAnnouncement, outcomeText } from '../../src/lib/room/edit/labels';
+import { movedText, nudgeAnnouncement, outcomeText, toolLine } from '../../src/lib/room/edit/labels';
 import { putOnOptions } from '../../src/lib/room/edit/targets';
+import * as catalogue from '../../src/lib/room/catalogue';
 import { catalogueSet, GEOMETRY_DEPS } from '../../src/lib/room/catalogue';
 
 const COUNTS: Record<string, number> = {
@@ -406,5 +407,71 @@ describe('the room grows under the editor (spec §7, ruling 19)', () => {
     const ids = r.draft.layout.pieces.map((p) => p.id);
     expect([ids.includes(sticky!.id), r.draft.layout.pieces.find((p) => p.id === 'plant')]).toEqual([false, fern]);
     expect([r.counts, r.selected, r.saved.layout]).toEqual([counts, null, grown]);
+  });
+});
+
+describe('effect slots (spec §5.3, §8.1, P3 ruling 4, Review Focus 1)', () => {
+  const clock = (id: string, layer: 'wallL' | 'wallR', x: number): Placement => ({ id, item: 'art.clock', layer, x, y: 0, facing: 'L', mirror: false });
+  const three = { ...starterLayout(), pieces: [...starterLayout().pieces, clock('p1', 'wallR', 0), clock('p2', 'wallR', 10), clock('p3', 'wallL', 0)] };
+  const counts = { ...COUNTS, 'art.clock': 5, 'corner.floorlamp': 1 };
+
+  it('refuses one more effect piece with "Effects 3 of 3: store one to run another", whatever the way in', () => {
+    const s = start({ layout: three, counts });
+    const refused = { ok: false, refused: { reason: 'effects', slots: 3 } };
+    expect(run(s, { type: 'place', item: 'corner.floorlamp' }).outcome).toMatchObject(refused);
+    expect(run(s, { type: 'select', id: 'p1' }, { type: 'another' }).outcome).toMatchObject(refused);
+    expect(run(s, { type: 'drop', id: null, item: 'art.clock', target: { layer: 'wallL', x: 9, y: 0 } }).outcome).toMatchObject(refused);
+    expect(outcomeText(run(s, { type: 'place', item: 'corner.floorlamp' }))).toEqual({ kind: 'reason', text: 'Effects 3 of 3: store one to run another' });
+    expect(run(s, { type: 'place', item: 'plant.fern' }).outcome).toMatchObject({ ok: true }); // a plant takes no slot
+  });
+
+  it('a room with more than its slots still moves, flips and stores its pieces, and refuses only adding', () => {
+    const four = { ...three, pieces: [...three.pieces, clock('p4', 'wallL', 9)] };
+    const s = start({ layout: four, counts });
+    const moved = run(s, { type: 'select', id: 'p4' }, { type: 'nudge', dir: 'backRight' });
+    expect([moved.outcome?.ok, piece(moved, 'p4')!.x]).toEqual([true, 8]);
+    expect(run(s, { type: 'select', id: 'p1' }, { type: 'flip' }).outcome?.ok).toBe(true);
+    expect(run(s, { type: 'place', item: 'corner.floorlamp' }).outcome).toMatchObject({ ok: false, refused: { reason: 'effects' } });
+    const stored = run(s, { type: 'select', id: 'p4' }, { type: 'store' }, { type: 'select', id: 'p3' }, { type: 'store' });
+    expect(run(stored, { type: 'place', item: 'corner.floorlamp' }).outcome?.ok).toBe(true); // 2 of 3 now
+  });
+
+  it('the toolbar says what a piece does, or that it rests', () => {
+    const four = { ...three, pieces: [...three.pieces, clock('p4', 'wallL', 9)] };
+    const s = start({ layout: four, counts });
+    expect(selectedTools(run(s, { type: 'select', id: 'p1' }))!.effect).toEqual({ kind: 'clock', running: true });
+    expect(selectedTools(run(s, { type: 'select', id: 'p4' }))!.effect).toEqual({ kind: 'clock', running: false });
+    expect(toolLine(four, selectedTools(run(s, { type: 'select', id: 'p4' }))!).effect).toBe('Resting. This room runs 3 effects at a time.');
+    expect(toolLine(four, selectedTools(run(s, { type: 'select', id: 'p1' }))!).effect).toBe('Tells the time');
+    expect(selectedTools(run(s, { type: 'select', id: 'plant' }))!.effect).toBeNull();
+  });
+});
+
+describe('Apply set and the effect slots (P3 ruling 4: a set is an add)', () => {
+  const clock = (id: string, layer: 'wallL' | 'wallR', x: number): Placement => ({ id, item: 'art.clock', layer, x, y: 0, facing: 'L', mirror: false });
+  const CLOCKS = [clock('c1', 'wallR', 0), clock('c2', 'wallR', 10), clock('c3', 'wallL', 0), clock('c4', 'wallL', 9)];
+  const cottage = () => catalogueSet('cottage')!;
+  const owned = () => ({ ...COUNTS, 'art.clock': 8, ...Object.fromEntries([...Object.values(cottage().room), ...Object.values(cottage().worn)].map((id) => [id!, 1])) });
+  // No shipped set carries an effect piece, so a copy of Cottage with four clocks stands in for one.
+  const withClocks = () => {
+    const set = cottage();
+    jest.spyOn(catalogue, 'catalogueSet').mockImplementation((id) => (id === 'clocks' ? { ...set, id: 'clocks', layout: { ...set.layout, pieces: [...set.layout.pieces, ...CLOCKS] } } : set));
+  };
+  afterEach(() => jest.restoreAllMocks());
+
+  it('refuses a set that runs more effects than the slots, changing nothing', () => {
+    withClocks();
+    const s = start({ counts: owned() });
+    const r = run(s, { type: 'applySet', setId: 'clocks' });
+    expect([r.draft, r.past.length, r.outcome]).toEqual([s.draft, 0, { ok: false, refused: { reason: 'effects', slots: 3 }, id: null }]);
+    expect(outcomeText(r)).toEqual({ kind: 'reason', text: 'Effects 3 of 3: store one to run another' });
+  });
+
+  it('a room already past its slots applies a set that keeps or lowers its effects (inert extras never fail)', () => {
+    withClocks();
+    const four = { ...starterLayout(), pieces: [...starterLayout().pieces, ...CLOCKS.map((c, k) => ({ ...c, id: `p${k + 1}` }))] };
+    const s = start({ layout: four, counts: owned() });
+    expect(run(s, { type: 'applySet', setId: 'clocks' }).outcome).toMatchObject({ ok: true, id: null });
+    expect(run(s, { type: 'applySet', setId: 'cottage' }).outcome).toMatchObject({ ok: true, id: null });
   });
 });

@@ -75,6 +75,10 @@ it('with both gates met, Grow spends once, the room redraws grown with MORE ROOM
   const room = s.getByTestId('sizes-room');
   expect([room.props.tier, room.props.room.split(':')[0], room.props.room.split(':')[2]]).toEqual([2, 'cheer', 'MORE ROOM!']);
   expect(s.getByTestId('sizes-grown')).toHaveTextContent(/NEW FLOORNEW WALLYour room grew600 coins and 14 days of check-ins in a row\.\+1 row each side · \+20 pieces/);
+  // The two new effect slots, shown and read aloud (P3 ruling 20, T9-CARRY).
+  const more = s.getByTestId('sizes-grown-more');
+  expect(more).toHaveTextContent('+1 row each side · +20 pieces · +2 effect slots');
+  expect(more.props.accessibilityLabel).toBe('One more row each side, 20 more pieces, 2 more effect slots');
   expect(s.queryByTestId('sizes-stored')).toBeNull();
   expect([getCosmetics()!.tier, getCosmetics()!.version]).toEqual([2, 3]);
   fireEvent.press(s.getByTestId('sizes-place'));
@@ -97,7 +101,7 @@ it('to the loft the card says the window needed the wall; Place things opens the
   expect(s.getByTestId('sizes-room').props.tier).toBe(3);
   (postExpand as jest.Mock).mockResolvedValue({ ...cosmeticsDTO({ tier: 3, cap: 90, version: 4 }), balance: 100, stored: 2 });
   await act(async () => { fireEvent.press(s.getByTestId('sizes-grow')); });
-  expect(s.getByTestId('sizes-grown')).toHaveTextContent(/1,500 coins and the sleep goal badge, level 3\.\+1 row each side · \+30 pieces · a second window/);
+  expect(s.getByTestId('sizes-grown')).toHaveTextContent(/1,500 coins and the sleep goal badge, level 3\.\+1 row each side · \+30 pieces · \+3 effect slots · a second window/);
   expect(s.getByTestId('sizes-stored')).toHaveTextContent('The new window needed the wall: 2 pieces went to your inventory');
   fireEvent.press(s.getByTestId('sizes-place'));
   expect(mockNav.replace).toHaveBeenCalledWith('DecorateRoom');
@@ -292,7 +296,7 @@ describe('the unlock moment and a screen reader', () => {
     expect(focused()).toEqual(['sizes-grown-title']);
     const list = s.getByTestId('sizes-list', { includeHiddenElements: true });
     expect([list.props.importantForAccessibility, list.props.accessibilityElementsHidden]).toEqual(['no-hide-descendants', true]);
-    expect(s.getByTestId('sizes-grown-more').props.accessibilityLabel).toBe('One more row each side, 30 more pieces, and a second window');
+    expect(s.getByTestId('sizes-grown-more').props.accessibilityLabel).toBe('One more row each side, 30 more pieces, 3 more effect slots, and a second window');
     for (const id of ['sizes-grown-more', 'sizes-row-name-3', 'sizes-row-pieces-3']) {
       expect(s.getByTestId(id, { includeHiddenElements: true }).props.accessibilityLabel).not.toMatch(/·|×/);
     }

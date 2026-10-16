@@ -222,3 +222,12 @@ describe('PromptBar', () => {
     expect(onStop).not.toHaveBeenCalled();
   });
 });
+
+it('tells the page when the field gains and loses focus (KIP stops walking, spec §9.2)', () => {
+  const onFocusChange = jest.fn();
+  const s = render(<PromptBar value="" onChangeText={jest.fn()} onSend={jest.fn()} busy={false} onFocusChange={onFocusChange} inputLabel="Ask KIP" />);
+  const input = s.getByTestId('coach-input');
+  fireEvent(input, 'focus');
+  fireEvent(input, 'blur');
+  expect(onFocusChange.mock.calls).toEqual([[true], [false]]);
+});

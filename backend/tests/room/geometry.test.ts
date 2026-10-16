@@ -1,4 +1,7 @@
-import { capFor, checkPiece, coveredBy, exitTile, footOf, parseLayout, placedCounts, seatTile, toTier, validateLayout, windowsOn, wrongLayer, type RoomLayout } from '../../src/room/geometry';
+import {
+  TIERS, capFor, checkPiece, coveredBy, effectPieces, effectSlotsFor, effectsRaised, exitTile, footOf, parseLayout, placedCounts,
+  runningEffects, seatTile, toTier, validateLayout, windowsOn, wrongLayer, type RoomLayout,
+} from '../../src/room/geometry';
 import { starterLayout } from '../../src/room/convert';
 import { deps, piece, withPieces } from './helpers';
 
@@ -147,5 +150,35 @@ describe('the shared helpers (controller ruling T2: the rules live once)', () =>
 
   it('toTier reads 2 and 3, and anything else as the starter room', () => {
     expect([2, 3, 1, 4, 0, '2', null, undefined, 2.5].map(toTier)).toEqual([2, 3, 1, 1, 1, 1, 1, 1, 1]);
+  });
+});
+
+describe('effect slots (spec §7, §8.1, plan ruling 4)', () => {
+  const clock = (id: string, layer: 'wallL' | 'wallR', x: number) => piece(id, 'art.clock', { layer, x, y: 0 });
+
+  it('each tier runs 3, 5 or 8 effects', () => {
+    expect(([1, 2, 3] as const).map((t) => effectSlotsFor(t))).toEqual([3, 5, 8]);
+    expect([TIERS[1].effects, TIERS[2].effects, TIERS[3].effects]).toEqual([3, 5, 8]);
+  });
+
+  it('lists the effect pieces first placed first: any non-p id first, then p<n> by n (p2 before p10)', () => {
+    const l = withPieces(clock('p10', 'wallR', 0), clock('p2', 'wallR', 10), clock('art', 'wallL', 0), piece('p1', 'plant.cactus', { x: 6, y: 6 }));
+    expect(effectPieces(l, deps).map((p) => p.id)).toEqual(['art', 'p2', 'p10']);
+  });
+
+  it('runs the first slots and leaves the rest inert', () => {
+    const l = withPieces(clock('p1', 'wallR', 0), clock('p2', 'wallR', 10), clock('p3', 'wallL', 0), clock('p4', 'wallL', 9));
+    expect([...runningEffects(l, 1, deps)].sort()).toEqual(['p1', 'p2', 'p3']);
+    expect([...runningEffects(l, 2, deps)].sort()).toEqual(['p1', 'p2', 'p3', 'p4']);
+  });
+
+  it('a save raises the effects only with more than the slots and more than before (spec §8.1)', () => {
+    const three = withPieces(clock('p1', 'wallR', 0), clock('p2', 'wallR', 10), clock('p3', 'wallL', 0));
+    const four = withPieces(...three.pieces.filter((p) => p.item === 'art.clock'), clock('p4', 'wallL', 9));
+    expect(effectsRaised(three, four, 1, deps)).toBe(true);
+    expect(effectsRaised(four, four, 1, deps)).toBe(false); // an older room keeps its extras
+    expect(effectsRaised(four, three, 1, deps)).toBe(false);
+    expect(effectsRaised(three, four, 2, deps)).toBe(false); // 4 of 5 fits the bigger room
+    expect(validateLayout(four, 1, deps)).toBeNull(); // the slots are not a placement rule
   });
 });

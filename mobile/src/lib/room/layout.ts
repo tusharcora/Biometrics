@@ -32,7 +32,8 @@ export function deskOf(layout: RoomLayout): Placement | undefined {
   return layout.pieces.filter((p) => p.layer === 'floor' && isoOf(p.item)?.kipDesk).sort((a, b) => (a.id < b.id ? -1 : 1))[0];
 }
 
-const pieceKey = (p: Placement) => [p.id, p.item, p.layer, p.x, p.y, p.facing, p.mirror ? 1 : 0, p.parent ?? '', p.spot ?? ''].join(',');
+/** One placement's content, for memo keys (a run's picture key, ruling 11). */
+export const pieceKey = (p: Placement) => [p.id, p.item, p.layer, p.x, p.y, p.facing, p.mirror ? 1 : 0, p.parent ?? '', p.spot ?? ''].join(',');
 /** A stable key of a layout's content (memo keys): piece order does not matter. */
 export function layoutKey(layout: RoomLayout): string {
   return `${layout.styles.wallpaper},${layout.styles.floor},${layout.styles.window}|${layout.pieces.map(pieceKey).sort().join(';')}`;

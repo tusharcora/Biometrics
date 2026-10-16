@@ -6,3 +6,4 @@ import './pieces/wallArt';
 import './pieces/desks';
 import './pieces/rugs';
 import './pieces/extras';
+import './pieces/awards';

@@ -34,6 +34,7 @@ import { DecorateRoomScreen } from '../screens/DecorateRoomScreen';
 import { CoinHistoryScreen } from '../screens/CoinHistoryScreen';
 import { CoinShopScreen } from '../screens/CoinShopScreen';
 import { RoomSizesScreen } from '../screens/RoomSizesScreen';
+import { PieceCardScreen } from '../screens/PieceCardScreen';
 import type { DecorateParams } from '../lib/room/edit/editor';
 import { RecapsScreen } from '../screens/RecapsScreen';
 import { SocialStoryScreen } from '../screens/SocialStoryScreen';
@@ -129,6 +130,8 @@ export type RootStackParamList = {
   // Room sizes (spec 2026-10-15 §7), full screen: from the editor drawer's Room sizes, the room-full card and the
   // first-week card.
   RoomSizes: { from?: 'editor' } | undefined;
+  // The piece card (spec 2026-10-15 §8.1): the native sheet, from a tap on an effect piece or a plant in KIP's room.
+  PieceCard: { pieceId: string };
   // Build your recap: a recap's own format plus Year in pixels, or Year in pixels alone.
   RecapBuilder: { id?: string; format: ShareFormat };
   YearInPixels: undefined;
@@ -284,6 +287,7 @@ export function RootNavigator() {
               <Stack.Screen name="CoinShop" component={CoinShopScreen} options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }} />
               {/* Full screen with no system swipe: Close is disabled while a grow waits on the server. */}
               <Stack.Screen name="RoomSizes" component={RoomSizesScreen} options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }} />
+              <Stack.Screen name="PieceCard" component={PieceCardScreen} options={{ headerShown: false, presentation: 'modal' }} />
               <Stack.Screen name="Recaps" component={RecapsScreen} options={{ title: 'Your recaps' }} />
               <Stack.Screen name="YearInPixels" component={YearInPixelsScreen} options={{ title: 'Year in pixels' }} />
               <Stack.Screen name="Badges" component={BadgesScreen} options={{ title: 'Badges' }} />

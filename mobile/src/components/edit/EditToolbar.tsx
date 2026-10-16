@@ -11,7 +11,8 @@ import { NudgePad } from './NudgePad';
 const T = ROOM_COPY.edit.tools;
 const TOOL = 'h-[44px]'; // spec §5.2: 44 points tall at least
 
-// The toolbar (spec 2026-10-15 §5.2, F4 "Selected piece"): the piece's name and where it is, then Flip, Turn,
+// The toolbar (spec 2026-10-15 §5.2, F4 "Selected piece"): the piece's name and where it is, what an effect piece
+// does or that it rests past the slots (§8.1, P3 ruling 16), then Flip, Turn,
 // Another, Store, each greyed when it can't act (a symmetric or blocked Turn, Another at ×0 or a full room, the desk's
 // Store and Another). Move swaps the tool row for the nudge pad (arrows, Put on…, Done moving; spec §5.7). With
 // nothing selected: Undo, Redo and the grid toggle.
@@ -41,6 +42,7 @@ export function EditToolbar({ state, dispatch, showGrid, onToggleGrid }: {
         <View testID="edit-tool-info" accessible accessibilityLabel={line.spoken} className="shrink grow gap-0.5">
           <Text testID="edit-tool-line" className="text-body">{line.text}</Text>
           <Text className="text-caption text-muted-foreground">{line.inventory}</Text>
+          {line.effect ? <Text testID="edit-tool-effect" className="text-caption text-muted-foreground">{line.effect}</Text> : null}
         </View>
         <Button testID="edit-room-deselect" variant="ghost" size="icon-lg" className="size-[44px]" accessibilityLabel={T.deselect} onPress={() => dispatch({ type: 'select', id: null })}>
           <Ionicons name="close" size={buttonIconSize('icon-lg')} />

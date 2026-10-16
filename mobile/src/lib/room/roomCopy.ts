@@ -4,6 +4,7 @@ import type { FirstWeekTaskKey } from '../../api/coins';
 import type { AchievementsSnapshot } from '../achievementsStore';
 import type { AchievementFamilyName, SetId, UnlockRule } from './catalogue';
 import { CATALOGUE, catalogueSet } from './catalogue';
+import type { EffectKind } from './iso/geometry';
 import type { ItemId } from './loadout';
 import type { RoomSlot, WornSlot } from './catalogue';
 
@@ -34,6 +35,8 @@ export const ITEM_NAMES: Readonly<Record<ItemId, string>> = {
   // The coin shop's own pieces (spec 2026-10-15 §4, F6, C1).
   'item.radio': 'Old radio', 'corner.gnome': 'Gnome', 'corner.cone': 'Traffic cone', 'corner.pumpkin': 'Pumpkin',
   'item.candle': 'Candle', 'art.neonheart': 'Neon heart sign',
+  // Free-build P3's effect pieces (spec 2026-10-15 §8.2).
+  'pet.tabby': 'Ginger cat', 'shelf.awards': 'Trophy shelf',
   'out.beanie': 'Beanie', 'out.cap': 'Cap', 'out.sweatband': 'Sweatband', 'out.bucket': 'Bucket hat',
   'out.hachimaki': 'Hachimaki headband', 'out.beret': 'Beret', 'out.party': 'Party hat', 'out.round': 'Round glasses',
   'out.scarf': 'Scarf', 'out.bowtie': 'Bow tie', 'out.earbuds': 'Earbuds', 'out.phones': 'Headphones',
@@ -135,6 +138,9 @@ export function coinCount(n: number): string {
   return String(Math.trunc(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
+/** An effect piece's spoken note, on the shop's and the drawer's tiles. */
+const DOES_SOMETHING = 'does something in the room';
+
 export const ROOM_COPY = {
   decorate: 'Decorate',
   decorateLabel: "Decorate KIP's room",
@@ -148,10 +154,57 @@ export const ROOM_COPY = {
   noArt: 'No art',
   tags: { placed: 'Placed', owned: 'Owned' },
   flags: { tint: 'TINT', glow: 'GLOW', anim: 'ANIM' },
+  /**
+   * Pieces that do something (spec 2026-10-15 §8, F7, C5): what each one does, the living room's lines and the slots.
+   * Never advice, never a health value (P3 ruling 18; roomCopy.test's guard reads every line here).
+   */
+  effects: {
+    lines: {
+      light: 'Keeps a warm pool of light on the floor after dark, so the room isn’t lost at night.',
+      sound: 'Plays a quiet lo-fi loop while the room is open. Notes float up from it.',
+      wander: 'Wanders the front row, and naps in a cat bed after 22:00.',
+      clock: 'Shows your real local time.',
+      tap: 'Squeaks when you tap it. That’s it.',
+      awards: 'Holds one award for each badge level you earn.',
+    } as Readonly<Record<EffectKind, string>>,
+    short: { light: 'Glows after dark', sound: 'Plays music', wander: 'Wanders', clock: 'Tells the time', tap: 'Squeaks', awards: 'Shows your awards' } as Readonly<Record<EffectKind, string>>,
+    plant: 'KIP looks a little happier with a plant in the room.',
+    grew: (name: string, nights: number) => `The ${name} grew: ${nights} nights at your goal.`,
+    sprout: (name: string) => `The ${name} is just starting out.`,
+    /** Stage 5 carries no count: a pre-P3 room and the neutral fallback are stage 5 whatever the nights (FINAL-FIX I1). */
+    grown: (name: string) => `The ${name} is fully grown.`,
+    pet: { nap: 'The cat’s napping.', wander: 'The cat’s wandering.', play: 'The cat’s playing.' } as Readonly<Record<'nap' | 'wander' | 'play', string>>,
+    awardCount: (n: number) => (n === 0 ? 'No awards on it yet.' : n === 1 ? '1 award so far.' : `${n} awards so far.`),
+    resting: (slots: number) => `Resting. This room runs ${slots} effects at a time.`,
+    full: (slots: number) => `Effects ${slots} of ${slots}: store one to run another`,
+    tag: (used: number, slots: number) => `Effects ${used} of ${slots}`,
+    tagSpoken: (used: number, slots: number) => `${used} of ${slots} effects running`,
+    doesSomething: DOES_SOMETHING,
+    fxTag: 'Does something',
+    onlyForFun: 'Effects are only for fun. They never change your health data, scores or what KIP says.',
+  },
+  /** The piece card (spec 2026-10-15 §8.1, F7). Never advice (P3 ruling 18), so no "try" even when it fails (T4-FIX). */
+  card: {
+    close: 'Close',
+    effectTitle: 'EFFECT',
+    /** "From the coin shop · 150 coins" (PF3-COPY): the rule and the price, and read aloud without "·". */
+    earned: (rule: string, coins: string) => `${rule} · ${coins} coins`,
+    earnedSpoken: (rule: string, coins: string) => `${rule}, ${coins} coins`,
+    sound: 'Play sound in the room',
+    soundHint: 'Sound is off until you turn it on.',
+    move: 'Move',
+    store: 'Store',
+    moveLabel: (name: string) => `Move the ${name}`,
+    storeLabel: (name: string) => `Store the ${name}`,
+    open: (name: string) => `${name} card`,
+    gone: 'That piece has left your room.',
+  },
   edit: {
     title: 'EDITING',
     count: (n: number, cap: number) => `${n} / ${cap} in room`,
     countLabel: (n: number, cap: number) => `${n} of ${cap} pieces in the room`,
+    /** Between the count and the effects ("31 / 40 in room · Effects 3 of 5", ruling 21): seen, never read aloud. */
+    countSep: '·',
     roomLabel: "KIP's room, being edited",
     where: { floor: 'on the floor', wall: 'on the wall', on: (parent: string) => `on the ${parent}` },
     /** What the desk piece is called in a sentence: KIP's desk, whatever stands on it. */
@@ -221,7 +274,7 @@ export const ROOM_COPY = {
     title: (n: number) => `Inventory · ${n} not placed`,
     titleSpoken: (n: number) => `Inventory, ${n} not placed`,
     tabsLabel: 'Inventory',
-    tabs: { all: 'All', floor: 'Floor', wall: 'Wall', onTop: 'On top', funny: 'Funny', new: 'New', room: 'Room', kip: 'KIP', sets: 'Sets' },
+    tabs: { all: 'All', floor: 'Floor', wall: 'Wall', onTop: 'On top', funny: 'Funny', effects: 'Effects', new: 'New', room: 'Room', kip: 'KIP', sets: 'Sets' },
     rows: { wallpaper: 'Walls', floor: 'Floor', window: 'Window' },
     count: (n: number) => `×${n}`,
     allPlaced: 'All placed',
@@ -237,6 +290,8 @@ export const ROOM_COPY = {
     sizes: 'Room sizes',
     tile: {
       piece: (name: string, n: number, isNew: boolean) => `${name}, ${n ? `${n} in inventory` : 'all placed'}${isNew ? ', new' : ''}`,
+      /** An effect piece's tile, read aloud: "Old radio, 1 in inventory, does something in the room" (ruling 21). */
+      effect: (label: string) => `${label}, ${DOES_SOMETHING}`,
       style: (name: string, current: boolean) => (current ? `${name}, in your room` : `${name}. Use it`),
       worn: (name: string, wearing: boolean) => (wearing ? `${name}, wearing` : `${name}. Wear it`),
       locked: (name: string, unlock: string, progress: string) => (progress ? `${name}, locked. ${unlock}. ${progress}` : `${name}, locked. ${unlock}`),
@@ -306,7 +361,7 @@ export const ROOM_COPY = {
     sub: 'A new featured set every Monday',
     close: 'Close',
     tabsLabel: 'Coin shop',
-    tabs: { all: 'All', floor: 'Floor', wall: 'Wall', onTop: 'On top' },
+    tabs: { all: 'All', effects: 'Effects', floor: 'Floor', wall: 'Wall', onTop: 'On top' },
     thisWeek: 'This week',
     sets: { cosyAutumn: 'Cosy autumn', greenCorner: 'Green corner', deskDay: 'Desk day', brightNight: 'Bright night' } as Readonly<Record<string, string>>,
     /** A set this build doesn't know yet (a newer server's): neutral, never the raw id. */
@@ -317,6 +372,8 @@ export const ROOM_COPY = {
     seeAll: 'See everything',
     tile: (name: string, price: string, owned: number) => `${name}, ${price} coins${owned ? `, ${owned} owned` : ''}`,
     tileLocked: (name: string, rule: string) => `${name}, locked. ${rule}`,
+    /** An effect piece's tile, read aloud: "Old radio, 150 coins, does something in the room" (P3 ruling 19). */
+    tileEffect: (label: string) => `${label}, ${DOES_SOMETHING}`,
     owned: (n: number) => `×${n} owned`,
     where: {
       anywhere: 'Shelf, desk or floor', floor: 'Floor', onTop: 'Shelf or desk', wall: 'Wall',
@@ -345,7 +402,7 @@ export const ROOM_COPY = {
     retry: 'Try again',
     footer: 'Coins come from healthy days only. They can’t be bought.',
   },
-  /** Room sizes and the unlock moment (spec 2026-10-15 §7, C2, F5). Effect slots join in P3 (ruling 14). */
+  /** Room sizes and the unlock moment (spec 2026-10-15 §7, C2, F5), with each size's effect slots (P3 ruling 20). */
   sizes: {
     title: 'Room sizes',
     sub: 'Coins and a streak, both',
@@ -356,8 +413,8 @@ export const ROOM_COPY = {
     /** A size's row heading: "Bigger · 8 × 8", read aloud "Bigger, 8 by 8". */
     row: (name: string, size: string) => `${name} · ${size}`,
     rowSpoken: (name: string, size: string) => `${name}, ${size}`,
-    pieces: (cap: number, window: boolean) => (window ? `${cap} pieces · second window` : `${cap} pieces`),
-    piecesSpoken: (cap: number, window: boolean) => (window ? `${cap} pieces, second window` : `${cap} pieces`),
+    pieces: (cap: number, effects: number, window: boolean) => `${cap} pieces · ${effects} effects${window ? ' · second window' : ''}`,
+    piecesSpoken: (cap: number, effects: number, window: boolean) => `${cap} pieces, ${effects} effects${window ? ', second window' : ''}`,
     yours: 'YOURS',
     coinsTitle: (price: string) => `${price} coins`,
     of: (have: string, need: string) => `${have} of ${need}`,
@@ -384,8 +441,10 @@ export const ROOM_COPY = {
     grewTitle: 'Your room grew',
     grewWhy: (tier: 2 | 3, price: string, gate: number) =>
       (tier === 2 ? `${price} coins and ${gate} days of check-ins in a row.` : `${price} coins and the sleep goal badge, level ${gate}.`),
-    grewMore: (pieces: number, window: boolean) => `+1 row each side · +${pieces} pieces${window ? ' · a second window' : ''}`,
-    grewMoreSpoken: (pieces: number, window: boolean) => `One more row each side, ${pieces} more pieces${window ? ', and a second window' : ''}`,
+    grewMore: (pieces: number, effects: number, window: boolean) =>
+      `+1 row each side · +${pieces} pieces · +${effects} effect slots${window ? ' · a second window' : ''}`,
+    grewMoreSpoken: (pieces: number, effects: number, window: boolean) =>
+      `One more row each side, ${pieces} more pieces, ${effects} more effect slots${window ? ', and a second window' : ''}`,
     stored: (n: number) => `The new window needed the wall: ${n} ${n === 1 ? 'piece' : 'pieces'} went to your inventory`,
     place: 'Place things',
     later: 'Later',

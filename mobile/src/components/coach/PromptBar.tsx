@@ -31,6 +31,8 @@ export interface PromptBarProps {
   placeholder?: string;
   /** The field's spoken label. */
   inputLabel?: string;
+  /** The field gained or lost focus (KIP stops walking, spec 2026-10-15 §9.2). */
+  onFocusChange?: (focused: boolean) => void;
 }
 
 /** Openers worth one tap. Kept here so the screen does not carry copy. */
@@ -105,6 +107,7 @@ export function PromptBar({
   commands = COACH_COMMANDS,
   placeholder = 'Ask anything',
   inputLabel = KIP_COPY.promptLabel,
+  onFocusChange,
 }: PromptBarProps) {
   const { colorScheme: scheme } = useColorScheme();
   const colors = scheme === 'dark' ? COLORS.dark : COLORS.light;
@@ -170,6 +173,8 @@ export function PromptBar({
           testID="coach-input"
           value={value}
           onChangeText={onChangeText}
+          onFocus={() => onFocusChange?.(true)}
+          onBlur={() => onFocusChange?.(false)}
           onContentSizeChange={(e: NativeSyntheticEvent<TextInputContentSizeChangeEventData>) =>
             setHeight(clampRows(e.nativeEvent.contentSize.height, LINE_HEIGHT, MAX_ROWS))
           }

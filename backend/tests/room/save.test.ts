@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../src/db/client';
 import { connection } from '../../src/sync/queue';
 import { migrateTestDb } from '../setupTestDb';
@@ -202,5 +203,76 @@ describe('POST /me/room/welcomed', () => {
     await Promise.all([(await api()).post('/me/room/welcomed').set(headers), (await api()).post('/me/room/welcomed').set(headers)]);
     expect((await prisma.roomFirstWeek.findUnique({ where: { userId: user.id } }))!.welcomedAt).toEqual(at);
     expect((await (await api()).post('/me/room/welcomed')).status).toBe(401);
+  });
+});
+
+describe('effect slots (spec §8.1, §12, P3 ruling 4)', () => {
+  const clocks = [
+    piece('c1', 'art.clock', { layer: 'wallR', x: 0, y: 0 }),
+    piece('c2', 'art.clock', { layer: 'wallR', x: 10, y: 0 }),
+    piece('c3', 'art.clock', { layer: 'wallL', x: 0, y: 0 }),
+  ];
+  const fourth = piece('c4', 'art.clock', { layer: 'wallL', x: 9, y: 0 });
+  const fifth = piece('c5', 'art.clock', { layer: 'wallL', x: 0, y: 8 });
+  async function withClocks() {
+    const m = await me();
+    await prisma.itemGrant.create({ data: { userId: m.user.id, itemId: 'art.clock', qty: 4, sourceKey: 'test:clocks' } });
+    return m;
+  }
+
+  it('saves up to the slots, and answers 400 effects_full with the slots for one more', async () => {
+    const { headers } = await withClocks();
+    expect((await put(headers, body(withPieces(...clocks), 0))).status).toBe(200);
+    const res = await put(headers, body(withPieces(...clocks, fourth), 1));
+    expect([res.status, res.body]).toEqual([400, { error: 'effects_full', slots: 3 }]);
+  });
+
+  it('a room stored before P3 with more than its slots still saves any other change, and keeps every piece', async () => {
+    const { user, headers } = await withClocks();
+    expect((await put(headers, body(withPieces(...clocks), 0))).status).toBe(200);
+    const four = withPieces(...clocks, fourth);
+    await prisma.cosmeticLoadout.update({ where: { userId: user.id }, data: { layout: four as unknown as Prisma.InputJsonValue } });
+    const moved = { ...four, pieces: four.pieces.map((p) => (p.id === 'plant' ? { ...p, x: 0, y: 3 } : p)) };
+    const res = await put(headers, body(moved, 1));
+    expect(res.status).toBe(200);
+    expect(res.body.layout.pieces.filter((p: { item: string }) => p.item === 'art.clock')).toHaveLength(4);
+  });
+
+  it('effects_full answers before not_owned: 4 clocks with only 3 owned (ruling T3-CARRY)', async () => {
+    const { user, headers } = await me();
+    await prisma.itemGrant.create({ data: { userId: user.id, itemId: 'art.clock', qty: 3, sourceKey: 'test:clocks' } });
+    expect((await put(headers, body(withPieces(...clocks), 0))).status).toBe(200);
+    const res = await put(headers, body(withPieces(...clocks, fourth), 1));
+    expect([res.status, res.body]).toEqual([400, { error: 'effects_full', slots: 3 }]);
+  });
+
+  it('a first save (no row) with more effects than the slots answers effects_full against the starter room', async () => {
+    const { user, headers } = await withClocks();
+    const res = await put(headers, body(withPieces(...clocks, fourth), 0));
+    expect([res.status, res.body]).toEqual([400, { error: 'effects_full', slots: 3 }]);
+    expect(await prisma.cosmeticLoadout.findUnique({ where: { userId: user.id } })).toBeNull();
+  });
+
+  it('a stored room over its slots saves with fewer effects that still exceed the slots', async () => {
+    const { user, headers } = await withClocks();
+    await prisma.itemGrant.create({ data: { userId: user.id, itemId: 'art.clock', qty: 1, sourceKey: 'test:clock5' } });
+    expect((await put(headers, body(withPieces(...clocks), 0))).status).toBe(200);
+    const five = withPieces(...clocks, fourth, fifth);
+    await prisma.cosmeticLoadout.update({ where: { userId: user.id }, data: { layout: five as unknown as Prisma.InputJsonValue } });
+    expect((await (await api()).get('/me/cosmetics').set(headers)).body.layout).toEqual(five);
+    const four = withPieces(...clocks, fourth);
+    const res = await put(headers, body(four, 1));
+    expect(res.status).toBe(200);
+    expect(res.body.layout.pieces.filter((p: { item: string }) => p.item === 'art.clock')).toHaveLength(4);
+  });
+
+  it('the cap answers before the slots: a room over its cap is room_full, not effects_full', async () => {
+    const { headers } = await withClocks();
+    // 7 starter pieces + 4 clocks + 30 cacti on free tiles (not the desk, its exit tile or the fern) = 41 > 40.
+    const taken = (x: number, y: number) => (x >= 2 && x <= 4 && y <= 1) || (x === 3 && y === 2) || (x === 0 && y === 0);
+    const tiles = Array.from({ length: 49 }, (_, k) => [k % 7, Math.floor(k / 7)] as const).filter(([x, y]) => !taken(x, y)).slice(0, 30);
+    const cacti = tiles.map(([x, y], k) => piece(`k${k}`, 'plant.cactus', { x, y }));
+    const res = await put(headers, body(withPieces(...clocks, fourth, ...cacti), 0));
+    expect([res.status, res.body.error]).toEqual([400, 'room_full']);
   });
 });

@@ -5,6 +5,9 @@
 
 export type IsoLayer = 'floor' | 'wall' | 'onTop';
 
+/** What a piece does in the room (spec §8.1): a small, closed list. A piece with one takes an effect slot. */
+export type EffectKind = 'light' | 'sound' | 'wander' | 'clock' | 'tap' | 'awards';
+
 export interface IsoSpec {
   /** Where it may go; a cactus: ['floor', 'onTop']. */
   layers: IsoLayer[];
@@ -22,6 +25,8 @@ export interface IsoSpec {
   kipDesk?: true;
   /** KIP's tile in the footprint, [along w, along d] facing L. */
   seat?: [number, number];
+  /** What it does in the room (spec §8); it then takes one of the tier's effect slots. */
+  effect?: EffectKind;
 }
 
 export type PlacementLayer = 'floor' | 'wallL' | 'wallR' | 'onTop';
@@ -54,10 +59,10 @@ export interface RoomLayout {
 /** 1 starter 7 × 7, 2 bigger 8 × 8, 3 loft 9 × 9 (spec §7). Only the expand route (P2) changes it. */
 export type Tier = 1 | 2 | 3;
 
-export const TIERS: Readonly<Record<Tier, { n: number; cap: number }>> = {
-  1: { n: 7, cap: 40 },
-  2: { n: 8, cap: 60 },
-  3: { n: 9, cap: 90 },
+export const TIERS: Readonly<Record<Tier, { n: number; cap: number; effects: number }>> = {
+  1: { n: 7, cap: 40, effects: 3 },
+  2: { n: 8, cap: 60, effects: 5 },
+  3: { n: 9, cap: 90, effects: 8 },
 };
 export function tierSize(tier: Tier): { n: number; m: number } {
   const n = TIERS[tier].n;
@@ -65,6 +70,10 @@ export function tierSize(tier: Tier): { n: number; m: number } {
 }
 export function capFor(tier: Tier): number {
   return TIERS[tier].cap;
+}
+/** How many effect pieces a room runs at once (spec §7, §8.1). */
+export function effectSlotsFor(tier: Tier): number {
+  return TIERS[tier].effects;
 }
 /** A stored or sent tier: 2 and 3 as they are, anything else the starter room. */
 export function toTier(n: unknown): Tier {
@@ -212,6 +221,38 @@ export function placedCounts(layout: RoomLayout): Record<string, number> {
   const placed: Record<string, number> = {};
   for (const p of layout.pieces) placed[p.item] = (placed[p.item] ?? 0) + 1;
   return placed;
+}
+
+/**
+ * An app instance id is p1, p2, … (P1 ruling P10): its n. Any other id (a starter's or a converted room's) is 0. One
+ * rank for both the read trim's newest-first (layout.ts, ruling PF-F1) and the effects' first-placed-first (PF3-RANK).
+ */
+export const idRank = (id: string): number => {
+  const m = /^p(\d+)$/.exec(id);
+  return m ? Number(m[1]) : 0;
+};
+
+/** First placed first: the lowest instance rank, then id. The effects' order, and the app's choice of a cat's bed. */
+export const firstPlaced = (a: { id: string }, b: { id: string }): number =>
+  idRank(a.id) - idRank(b.id) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
+/** The placed pieces that do something, first placed first (spec §8.1). */
+export function effectPieces(layout: RoomLayout, deps: GeometryDeps): Placement[] {
+  return layout.pieces.filter((p) => !!deps.isoOf(p.item)?.effect).sort(firstPlaced);
+}
+
+/** The effect pieces that run: the first `effectSlotsFor(tier)`. The rest stay in the room, inert (spec §8.1). */
+export function runningEffects(layout: RoomLayout, tier: Tier, deps: GeometryDeps): Set<string> {
+  return new Set(effectPieces(layout, deps).slice(0, effectSlotsFor(tier)).map((p) => p.id));
+}
+
+/**
+ * A save that answers `400 effects_full` (spec §8.1, §12): more effect pieces than the slots, and more than the stored
+ * room had. A room saved before P3 with extra pieces never fails for keeping them.
+ */
+export function effectsRaised(before: RoomLayout, after: RoomLayout, tier: Tier, deps: GeometryDeps): boolean {
+  const n = effectPieces(after, deps).length;
+  return n > effectSlotsFor(tier) && n > effectPieces(before, deps).length;
 }
 
 export type LayoutFailure =

@@ -18,6 +18,8 @@ export interface ItemContext {
   ramp: KipRamp;
   /** Only the loop frames may read it: the static picture is memoised without it. */
   screen: MonitorScreen;
+  /** The piece's effect state (P3 ruling 7): only effect art reads it, and the picture key carries it. */
+  effect?: string;
 }
 
 export interface ItemLayers {

@@ -21,6 +21,7 @@ export function cosmeticsDTO(over: Partial<CosmeticsDTO> = {}): CosmeticsDTO {
     version: 1,
     counters: { recapsRead: 0, buddyCheers: 0 },
     welcomed: true,
+    living: { plantStage: 5, petEnergy: 'wander', awards: [] },
     ...over,
   };
 }

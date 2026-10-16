@@ -5,9 +5,11 @@ import { bubbleAnchor, LOOP_MS, RoomView, type RoomViewProps } from '../../src/c
 import { EMPTY_WORN } from '../../src/lib/room/loadout';
 import { starterLayout } from '../../src/lib/room/layout';
 import { isoCrop } from '../../src/lib/room/iso/crop';
+import { isoGrid, projOf } from '../../src/lib/room/iso/grid';
 import * as isoRoom from '../../src/lib/room/iso/room';
 import { drawIsoFramesEach, drawIsoStatic, drawKipLayer } from '../../src/lib/room/iso/room';
 import type { RoomRect } from '../../src/lib/room/grid';
+import type { Placement } from '../../src/lib/room/iso/geometry';
 
 let mockFocused = true;
 jest.mock('../../src/lib/useScreenFocused', () => ({ useScreenFocused: () => mockFocused }));
@@ -45,7 +47,7 @@ describe('RoomView (iso)', () => {
     expect(edit.getByTestId('skia-group', { includeHiddenElements: true }).props.skiaTransform).toEqual([{ translateX: -12 }, { translateY: 4 }]);
   });
 
-  it('a pose change keeps the room\'s pictures: KIP\'s 3 frames and the 3 loop frames (clipped by KIP) are re-recorded, the old ones released', () => {
+  it('a pose change keeps the room\'s pictures: KIP\'s 3 frames and the 3 loop frames (clipped by KIP) are recorded, the old ones kept for a return', () => {
     const s = render(<RoomView {...PROPS} />);
     const [back, kip, front, frame] = pictures(s);
     const before = picture.mock.calls.length;
@@ -53,7 +55,12 @@ describe('RoomView (iso)', () => {
     const [back2, , front2] = pictures(s);
     expect([back2, front2]).toEqual([back, front]);
     expect(picture.mock.calls.length - before).toBe(6);
-    expect([kip.dispose, frame.dispose].every((d: jest.Mock) => d.mock.calls.length > 0)).toBe(true);
+    expect([kip.dispose, frame.dispose].every((d: jest.Mock) => d.mock.calls.length === 0)).toBe(true); // cached for a return
+    s.rerender(<RoomView {...PROPS} />);
+    expect(picture.mock.calls.length - before).toBe(6); // back to the first pose: nothing new recorded
+    expect(pictures(s)[1]).toBe(kip);
+    s.unmount();
+    expect([kip.dispose, frame.dispose].every((d: jest.Mock) => d.mock.calls.length > 0)).toBe(true); // released with the view
   });
 
   it('a loop tick records nothing: it picks KIP and the loop frame from the pictures it has (ruling T10-FIX)', () => {
@@ -160,5 +167,220 @@ describe('RoomView (iso)', () => {
     const all = pictures(s);
     s.unmount();
     for (const p of all) expect(p.dispose).toHaveBeenCalled();
+  });
+  it('draws the living room: a new plant stage rebuilds the static picture once, the same one records nothing (ruling 7)', () => {
+    // Stage 2 gives the starter fern a live state ('g2'), so the key carries an effect state throughout.
+    const living = () => ({ plantStage: 2 as const, petEnergy: 'wander' as const, awards: [] });
+    const s = render(<RoomView {...PROPS} living={living()} />);
+    const [back, , front] = pictures(s);
+    let before = picture.mock.calls.length;
+    s.rerender(<RoomView {...PROPS} living={living()} />); // a fresh, equal object
+    act(() => { jest.advanceTimersByTime(LOOP_MS); }); // and a loop tick
+    expect(picture.mock.calls.length - before).toBe(0);
+    before = picture.mock.calls.length;
+    s.rerender(<RoomView {...PROPS} living={{ ...living(), plantStage: 4 }} />);
+    // A new static room: back and front, then the three loop frames keyed on it. KIP's three are kept (its pose
+    // pictures are cached by pose and seat, ruling 11), so a rebuild records 5.
+    expect(picture.mock.calls.length - before).toBe(5);
+    const [back2, , front2] = pictures(s);
+    expect([back2 !== back, front2 !== front]).toEqual([true, true]);
+  });
+
+  describe('the clock, the radio and the awards (ruling 7, PF3-CLOCK, T4-FIX)', () => {
+    const at = (id: string, item: string, over: Partial<Placement>): Placement => ({ id, item, layer: 'floor', x: 0, y: 0, facing: 'L', mirror: false, ...over });
+    const CLOCK = at('p1', 'art.clock', { layer: 'wallR' });
+    const LIVE = { ...starterLayout(), pieces: [...starterLayout().pieces, CLOCK, at('p2', 'item.radio', { layer: 'onTop', parent: 'desk', spot: 1 }), at('p3', 'shelf.awards', { layer: 'wallR', y: 12 })] };
+    const AWARDS = { plantStage: 5 as const, petEnergy: 'wander' as const, awards: [5, 3] };
+    const keysOf = (spy: jest.SpyInstance) => spy.mock.calls.map(([input]) => isoRoom.isoRoomKey(input));
+
+    it('a running clock rebuilds the room once a minute and never on a loop tick (ruling 7)', () => {
+      jest.setSystemTime(new Date(2026, 9, 24, 7, 12, 30));
+      const layout = { ...starterLayout(), pieces: [...starterLayout().pieces, CLOCK] };
+      const s = render(<RoomView {...PROPS} layout={layout} />);
+      const before = picture.mock.calls.length;
+      act(() => { jest.advanceTimersByTime(LOOP_MS * 3); });
+      expect(picture.mock.calls.length - before).toBe(0);
+      act(() => { jest.advanceTimersByTime(30_000); });
+      // 07:13: one new static room (back and front), then the three loop frames keyed on it (KIP's are kept).
+      expect(picture.mock.calls.length - before).toBe(5);
+      const after = picture.mock.calls.length;
+      act(() => { jest.advanceTimersByTime(LOOP_MS * 3); });
+      expect(picture.mock.calls.length - after).toBe(0);
+      s.unmount();
+    });
+
+    it('a running clock, radio and shelf of awards record 0 pictures a tick, and exactly one rebuild on the minute', () => {
+      jest.setSystemTime(new Date(2026, 9, 24, 7, 12, 30));
+      // The radio's notes are in the loop frames (T5-FIX M2); the starter room has none of that colour.
+      const frames = jest.spyOn(isoRoom, 'drawIsoFramesEach');
+      const noteIn = () => (frames.mock.results.at(-1)!.value as RoomRect[][]).some((f) => f.some(([, , , , c]) => c === '#FDE68A'));
+      render(<RoomView {...PROPS} />).unmount();
+      expect(noteIn()).toBe(false);
+      const spy = jest.spyOn(isoRoom, 'drawIsoStatic');
+      const s = render(<RoomView {...PROPS} layout={LIVE} living={AWARDS} />);
+      expect(noteIn()).toBe(true);
+      frames.mockRestore();
+      expect(keysOf(spy)).toHaveLength(1);
+      expect(keysOf(spy)[0]).toEqual(expect.stringContaining('p1=live@07:12'));
+      expect(keysOf(spy)[0]).toEqual(expect.stringContaining('p2=notes'));
+      expect(keysOf(spy)[0]).toEqual(expect.stringContaining('p3=a53'));
+      const seen = new Set([pictures(s)[3]]);
+      const before = picture.mock.calls.length;
+      for (let i = 0; i < 6; i++) {
+        act(() => { jest.advanceTimersByTime(LOOP_MS); });
+        seen.add(pictures(s)[3]);
+      }
+      expect(picture.mock.calls.length - before).toBe(0);
+      expect(seen.size).toBeGreaterThan(1); // the loops (the radio's notes among them) do run
+      act(() => { jest.advanceTimersByTime(30_000 - LOOP_MS * 6 + 100); });
+      expect(picture.mock.calls.length - before).toBe(5);
+      expect(keysOf(spy)).toHaveLength(2);
+      expect(keysOf(spy)[1]).toEqual(expect.stringContaining('p1=live@07:13'));
+      spy.mockRestore();
+      s.unmount();
+    });
+
+    it('an unfocused page holds the minute: no rebuild and no clock timer; back in focus, one rebuild at once (PF3-CLOCK)', () => {
+      jest.setSystemTime(new Date(2026, 9, 24, 7, 12, 30));
+      const s = render(<RoomView {...PROPS} layout={LIVE} living={AWARDS} />);
+      mockFocused = false;
+      s.rerender(<RoomView {...PROPS} layout={LIVE} living={{ ...AWARDS }} />);
+      const before = picture.mock.calls.length;
+      act(() => { jest.advanceTimersByTime(31_000); });
+      expect(picture.mock.calls.length - before).toBe(0);
+      expect(jest.getTimerCount()).toBe(0); // the loops hold too
+      mockFocused = true;
+      s.rerender(<RoomView {...PROPS} layout={LIVE} living={{ ...AWARDS }} />);
+      expect(picture.mock.calls.length - before).toBe(5);
+      s.unmount();
+    });
+
+    it('a drag in progress holds the minute: no rebuild until it lets go (PF3-CLOCK)', () => {
+      jest.setSystemTime(new Date(2026, 9, 24, 7, 12, 30));
+      const s = render(<RoomView {...PROPS} layout={LIVE} living={AWARDS} dragging />);
+      const before = picture.mock.calls.length;
+      act(() => { jest.advanceTimersByTime(31_000); });
+      expect(picture.mock.calls.length - before).toBe(0);
+      s.rerender(<RoomView {...PROPS} layout={LIVE} living={AWARDS} dragging={false} />);
+      expect(picture.mock.calls.length - before).toBe(5);
+      s.unmount();
+    });
+
+    it.each([
+      ['paused (the editor is open over it)', 'paused'],
+      ['out of sight (scrolled under the collapsed header)', 'holdClock'],
+    ] as const)('a room %s holds the minute: no rebuild and no timer; let go, exactly one rebuild (ruling T5-FIX)', (_label, prop) => {
+      jest.setSystemTime(new Date(2026, 9, 24, 7, 12, 30));
+      const s = render(<RoomView {...PROPS} layout={LIVE} living={AWARDS} {...{ [prop]: true }} />);
+      const before = picture.mock.calls.length;
+      act(() => { jest.advanceTimersByTime(31_000); });
+      expect(picture.mock.calls.length - before).toBe(0);
+      if (prop === 'paused') expect(jest.getTimerCount()).toBe(0); // paused also holds the loops
+      else expect(jest.getTimerCount()).toBe(1); // only the loop clock, no minute timer
+      s.rerender(<RoomView {...PROPS} layout={LIVE} living={AWARDS} {...{ [prop]: false }} />);
+      expect(picture.mock.calls.length - before).toBe(5);
+      s.unmount();
+    });
+  });
+
+  describe('the cat (spec §8.2, §8.3, ruling 10)', () => {
+    const at = (id: string, item: string, x: number, y: number): Placement => ({ id, item, layer: 'floor', x, y, facing: 'L', mirror: false });
+    const CAT_ROOM = { ...starterLayout(), pieces: [...starterLayout().pieces, at('p1', 'pet.tabby', 6, 6), at('p2', 'pet.bed', 5, 5)] };
+    const PLAYFUL = { plantStage: 5 as const, petEnergy: 'play' as const, awards: [] };
+    const keysOf = (spy: jest.SpyInstance) => spy.mock.calls.map(([input]) => isoRoom.isoRoomKey(input));
+    const placedOf = (spy: jest.SpyInstance) => {
+      const s = spy.mock.results.at(-1)!.value as ReturnType<typeof drawIsoStatic>;
+      return [...s.behind, ...s.ahead].map((pp) => pp.p.id);
+    };
+
+    it('at 22:00 the playing cat curls up on its bed: exactly one rebuild, and none on a loop tick or a later minute', () => {
+      jest.setSystemTime(new Date(2026, 9, 24, 21, 59, 30));
+      const spy = jest.spyOn(isoRoom, 'drawIsoStatic');
+      const s = render(<RoomView {...PROPS} layout={CAT_ROOM} living={PLAYFUL} />);
+      expect(keysOf(spy)[0]).toEqual(expect.stringContaining('p1=play'));
+      const before = picture.mock.calls.length;
+      act(() => { jest.advanceTimersByTime(LOOP_MS * 3); });
+      expect(picture.mock.calls.length - before).toBe(0);
+      act(() => { jest.advanceTimersByTime(30_000); }); // 22:00
+      expect(picture.mock.calls.length - before).toBe(5);
+      expect(keysOf(spy)).toHaveLength(2);
+      expect(keysOf(spy)[1]).toEqual(expect.stringContaining('p1=nap'));
+      expect(keysOf(spy)[1]).toEqual(expect.stringContaining('p1>p2'));
+      const placed = placedOf(spy);
+      expect(placed[placed.indexOf('p2') + 1]).toBe('p1');
+      // The cat's state does not change with the minute: 22:01 rebuilds nothing.
+      const after = picture.mock.calls.length;
+      act(() => { jest.advanceTimersByTime(60_000 + LOOP_MS * 3); });
+      expect(picture.mock.calls.length - after).toBe(0);
+      expect(keysOf(spy)).toHaveLength(2);
+      spy.mockRestore();
+      s.unmount();
+    });
+
+    it('at 06:00 the napping cat gets up off its bed: exactly one rebuild, the bed let go, the cat back on its own tile (T7-CARRY)', () => {
+      jest.setSystemTime(new Date(2026, 9, 24, 5, 59, 30));
+      const spy = jest.spyOn(isoRoom, 'drawIsoStatic');
+      const s = render(<RoomView {...PROPS} layout={CAT_ROOM} living={PLAYFUL} />);
+      const atOf = (id: string) => {
+        const st = spy.mock.results.at(-1)!.value as ReturnType<typeof drawIsoStatic>;
+        return [...st.behind, ...st.ahead].find((pp) => pp.p.id === id)!.at;
+      };
+      expect(keysOf(spy)).toHaveLength(1);
+      expect(keysOf(spy)[0]).toEqual(expect.stringContaining('p1>p2'));
+      expect(atOf('p1')).toEqual(atOf('p2'));
+      const before = picture.mock.calls.length;
+      act(() => { jest.advanceTimersByTime(30_100); }); // 06:00, just past the minute's read
+      expect(picture.mock.calls.length - before).toBe(5);
+      expect(keysOf(spy)).toHaveLength(2);
+      expect(keysOf(spy)[1]).toEqual(expect.stringContaining('p1=play'));
+      expect(keysOf(spy)[1]).not.toEqual(expect.stringContaining('p1>'));
+      expect(atOf('p1')).not.toEqual(atOf('p2'));
+      // Back at its own placement's anchor, the (6, 6) tile, not the bed's corner (T8-CARRY).
+      const cat = CAT_ROOM.pieces.find((p) => p.id === 'p1')!;
+      expect(atOf('p1')).toEqual(isoRoom.anchorOf(projOf(isoGrid(1)), cat, new Map(CAT_ROOM.pieces.map((p) => [p.id, p]))));
+      // Day goes on: 06:01 rebuilds nothing.
+      const after = picture.mock.calls.length;
+      act(() => { jest.advanceTimersByTime(60_000 + LOOP_MS * 3); });
+      expect(picture.mock.calls.length - after).toBe(0);
+      expect(keysOf(spy)).toHaveLength(2);
+      spy.mockRestore();
+      s.unmount();
+    });
+
+    it('at night with Reduce Motion on, the cat is curled on its bed at frame 0, and a tick records 0 pictures (edge case 4)', () => {
+      jest.setSystemTime(new Date(2026, 9, 24, 23, 0, 30));
+      const spy = jest.spyOn(isoRoom, 'drawIsoStatic');
+      const s = render(<RoomView {...PROPS} night layout={CAT_ROOM} living={PLAYFUL} reduceMotion />);
+      expect(keysOf(spy)[0]).toEqual(expect.stringContaining('p1>p2'));
+      const frame = pictures(s)[3];
+      const before = picture.mock.calls.length;
+      act(() => { jest.advanceTimersByTime(LOOP_MS * 6); });
+      expect(picture.mock.calls.length - before).toBe(0);
+      expect(pictures(s)[3]).toBe(frame);
+      spy.mockRestore();
+      s.unmount();
+    });
+
+    it('in the editor a napping cat stays curled on its own tile, so a tap or a drag finds it there', () => {
+      jest.setSystemTime(new Date(2026, 9, 24, 23, 0, 30));
+      const spy = jest.spyOn(isoRoom, 'drawIsoStatic');
+      const s = render(<RoomView {...PROPS} night layout={CAT_ROOM} living={PLAYFUL} editing />);
+      expect(keysOf(spy)[0]).toEqual(expect.stringContaining('p1=nap'));
+      expect(keysOf(spy)[0]).not.toEqual(expect.stringContaining('p1>p2'));
+      const s0 = spy.mock.results.at(-1)!.value as ReturnType<typeof drawIsoStatic>;
+      const atOf = (id: string) => [...s0.behind, ...s0.ahead].find((pp) => pp.p.id === id)!;
+      expect(atOf('p1').o.effect).toBe('nap');
+      expect(atOf('p1').at).not.toEqual(atOf('p2').at);
+      spy.mockRestore();
+      s.unmount();
+    });
+  });
+
+  it('draws a room with no living (PF3-LIVING) exactly as the neutral room: plants at full growth', () => {
+    const spy = jest.spyOn(isoRoom, 'drawIsoStatic');
+    render(<RoomView {...PROPS} />);
+    const drawn = spy.mock.results[0]!.value as ReturnType<typeof drawIsoStatic>;
+    spy.mockRestore();
+    expect([drawn.back, drawn.front]).toEqual([STATIC.back, STATIC.front]);
   });
 });

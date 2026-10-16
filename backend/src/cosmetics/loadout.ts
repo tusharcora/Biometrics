@@ -14,8 +14,9 @@ import {
 import { countersOf, loadUnlockFacts } from './facts';
 import { grantCosmeticsSafely } from './unlock';
 import { starterLayout } from '../room/convert';
-import { STYLE_KEYS, capFor, parseLayout, validateLayout, type BadReason, type RoomLayout, type Tier } from '../room/geometry';
+import { STYLE_KEYS, capFor, effectSlotsFor, effectsRaised, parseLayout, validateLayout, type BadReason, type RoomLayout, type Tier } from '../room/geometry';
 import { countsOf, geometryDeps, grantTotals, placedCounts, readLayout, toTier } from '../room/layout';
+import { readLiving, type Living } from '../room/living';
 import { lockRoom } from '../room/lock';
 
 type Room = Record<RoomSlot, string | null>;
@@ -35,6 +36,9 @@ export interface CosmeticsDTO {
   counters: { recapsRead: number; buddyCheers: number };
   /** The welcome card has been answered on some device (spec §11.1, plan ruling 13). */
   welcomed: boolean;
+  /** The living room (spec §8.3): bands and small counts for your own room only. Absent when its read failed
+   * (ruling PF3-LIVING): the room then draws as plain decor rather than the whole body failing. */
+  living?: Living;
 }
 
 export function ownedFrom(rows: ReadonlyArray<{ itemId: string }>): Set<string> {
@@ -65,13 +69,18 @@ function readWorn(json: unknown, owned: ReadonlySet<string>): Worn {
 
 export async function readCosmetics(userId: string, now: Date, opts: { grant?: boolean } = {}): Promise<CosmeticsDTO> {
   if (opts.grant ?? true) await grantCosmeticsSafely(userId, now);
-  const [rows, loadout, facts, firstWeek, grants, newCopies] = await Promise.all([
+  const [rows, loadout, facts, firstWeek, grants, newCopies, living] = await Promise.all([
     prisma.cosmeticUnlock.findMany({ where: { userId }, orderBy: [{ unlockedAt: 'asc' }, { itemId: 'asc' }], select: { itemId: true, source: true, seenAt: true } }),
     prisma.cosmeticLoadout.findUnique({ where: { userId } }),
     loadUnlockFacts(userId),
     prisma.roomFirstWeek.findUnique({ where: { userId }, select: { welcomedAt: true } }),
     grantTotals(prisma, userId),
     prisma.itemGrant.findMany({ where: { userId, seenAt: null, qty: { gt: 0 } }, orderBy: { createdAt: 'asc' }, select: { itemId: true, sourceKey: true } }),
+    // The name only, never a value or an id (ruling PF3-LIVING).
+    readLiving(userId, now).catch((err: unknown) => {
+      console.warn(JSON.stringify({ event: 'room.living_failed', error: err instanceof Error ? err.name : 'Error' }));
+      return undefined;
+    }),
   ]);
   const counts = countsOf(rows, grants);
   // Owned is a count now (spec §2.2): every item with one.
@@ -95,14 +104,15 @@ export async function readCosmetics(userId: string, now: Date, opts: { grant?: b
     version: loadout?.version ?? 0,
     counters: countersOf(facts),
     welcomed: !!firstWeek?.welcomedAt,
+    ...(living ? { living } : {}),
   };
 }
 
 export type SaveError =
-  | 'invalid_body' | 'update_app' | 'unknown_item' | 'wrong_layer' | 'bad_place' | 'desk_required' | 'room_full' | 'not_owned' | 'stale';
+  | 'invalid_body' | 'update_app' | 'unknown_item' | 'wrong_layer' | 'bad_place' | 'desk_required' | 'room_full' | 'effects_full' | 'not_owned' | 'stale';
 export interface SaveFailure {
   status: 400 | 403 | 409;
-  body: { error: SaveError; itemIds?: string[]; pieceIds?: string[]; reason?: BadReason };
+  body: { error: SaveError; itemIds?: string[]; pieceIds?: string[]; reason?: BadReason; slots?: number };
 }
 /** Postgres INTEGER (Spec B Task 5 minor: 1e12 overflowed into a 500). */
 export const MAX_VERSION = 2 ** 31 - 1;
@@ -131,8 +141,11 @@ export function validateBody(body: unknown): { layout: RoomLayout; worn: Worn; v
   return { layout, worn: b.worn as Worn, version: b.version };
 }
 
-/** Every catalogue, geometry and ownership rule, in the order of spec §12. */
-export function checkLayout(layout: RoomLayout, worn: Worn, tier: Tier, counts: Readonly<Record<string, number>>): SaveFailure | null {
+/**
+ * Every catalogue, geometry and ownership rule, in the order of spec §12. Given the stored layout it also checks the
+ * effect slots (spec §8.1): only a save that raises the effects above the slots is refused.
+ */
+export function checkLayout(layout: RoomLayout, worn: Worn, tier: Tier, counts: Readonly<Record<string, number>>, stored?: RoomLayout): SaveFailure | null {
   const wornIds = WORN_SLOTS.flatMap((s) => (worn[s] === null ? [] : [worn[s]!]));
   const styleIds = STYLE_KEYS.map((k) => layout.styles[k]);
   if ([...layout.pieces.map((p) => p.item), ...styleIds, ...wornIds].some((id) => !shippedItem(id))) {
@@ -144,6 +157,7 @@ export function checkLayout(layout: RoomLayout, worn: Worn, tier: Tier, counts: 
   const geo = validateLayout(layout, tier, geometryDeps);
   if (geo?.error === 'bad_place') return { status: 400, body: { error: 'bad_place', reason: geo.reason, pieceIds: geo.pieceIds } };
   if (geo) return { status: 400, body: { error: geo.error } };
+  if (stored && effectsRaised(stored, layout, tier, geometryDeps)) return { status: 400, body: { error: 'effects_full', slots: effectSlotsFor(tier) } };
   const notOwned = new Set<string>();
   for (const [item, n] of Object.entries(placedCounts(layout))) if (n > (counts[item] ?? 0)) notOwned.add(item);
   for (const id of [...styleIds, ...wornIds]) if (!((counts[id] ?? 0) > 0)) notOwned.add(id);
@@ -172,7 +186,10 @@ export async function saveCosmetics(userId: string, body: unknown, now: Date, ra
         grantTotals(tx, userId),
       ]);
       tier = toTier(row?.tier);
-      const bad = checkLayout(parsed.layout, parsed.worn, tier, countsOf(rows, grants));
+      const counts = countsOf(rows, grants);
+      // The slots compare with the room as the user sees it (P1 ruling 23's sanitising), or the starter room.
+      const stored = (row ? readLayout(row.layout, counts) : null) ?? starterLayout();
+      const bad = checkLayout(parsed.layout, parsed.worn, tier, counts, stored);
       if (bad) return bad;
       const data = {
         layout: parsed.layout as unknown as Prisma.InputJsonValue,

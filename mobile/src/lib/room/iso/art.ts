@@ -7,12 +7,15 @@ import type { ItemContext, ItemLayers } from '../items';
 import type { ItemId } from '../loadout';
 import type { Rects } from '../paint';
 import type { PlacementLayer } from './geometry';
+import { SQUASH, squashRects } from './pieces/effectArt';
 import { moveRects } from './prims';
 
 export interface IsoArtOpts {
   layer: PlacementLayer;
   facing: 'L' | 'R';
   mirror: boolean;
+  /** The piece's effect state (P3 ruling 7): part of the cache key. */
+  effect?: string;
 }
 
 export interface IsoPieceArt {
@@ -46,7 +49,7 @@ const CACHE = new Map<string, ItemLayers>();
 export function pieceLayers(id: ItemId, ctx: ItemContext, o: IsoArtOpts): ItemLayers | null {
   const art = isoArtOf(id);
   if (!art) return null;
-  const key = [id, o.layer, o.facing, o.mirror ? 1 : 0, ctx.night ? 'n' : 'd', ctx.colour, ctx.screen].join('|');
+  const key = [id, o.layer, o.facing, o.mirror ? 1 : 0, ctx.night ? 'n' : 'd', ctx.colour, ctx.screen, o.effect ?? ''].join('|');
   const hit = CACHE.get(key);
   if (hit) {
     CACHE.delete(key);
@@ -54,11 +57,14 @@ export function pieceLayers(id: ItemId, ctx: ItemContext, o: IsoArtOpts): ItemLa
     return hit;
   }
   const item = catalogueItem(id)!;
-  const drawn = art.draw(ctx, o);
+  // Front-on art reads the state through its context (the clock's time, the cat's pose).
+  const drawn = art.draw(o.effect ? { ...ctx, effect: o.effect } : ctx, o);
+  const squash = o.effect ? SQUASH[o.effect] : undefined;
   const layers: ItemLayers = {
-    base: drawn.base ?? [],
+    base: squash ? squashRects(drawn.base ?? [], squash) : drawn.base ?? [],
     ...(item.emissive && drawn.emissive ? { emissive: drawn.emissive } : {}),
-    ...(item.frames && drawn.frames ? { frames: drawn.frames } : {}),
+    // An effect may bring a loop of its own (the radio's notes) to a piece with no loop flag.
+    ...((item.frames || o.effect) && drawn.frames ? { frames: drawn.frames } : {}),
   };
   CACHE.set(key, layers);
   if (CACHE.size > PIECE_CACHE_SIZE) CACHE.delete(CACHE.keys().next().value!);

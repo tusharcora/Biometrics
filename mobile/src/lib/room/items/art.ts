@@ -1,5 +1,6 @@
 // Wall art (CatWindow.dc.html "slot · art"): each board sprite hangs centred in the art anchor on a pin, with a soft
-// shadow on the wall (shared.artFrame). The clock's minute hand turns; the neon heart glows.
+// shadow on the wall (shared.artFrame). The clock's minute hand turns (running, it tells the time); the neon heart
+// glows.
 import { registerItems, type ItemArt } from '../items';
 import { registerIcons, type SpriteRect } from '../icons';
 import { glow, R, type Rects } from '../paint';
@@ -24,14 +25,43 @@ function originOf(rects: readonly SpriteRect[]): [number, number] {
   return [ANCHOR.x + Math.floor((ANCHOR.w - b.w) / 2) - b.x, ANCHOR.y + 3 - b.y];
 }
 
-// The clock: the board's face without its hands; the hour hand is static, the minute hand turns a quarter a frame.
+/** "07:12" → { h: 7, m: 12 }; anything else is null. */
+export function parseHhmm(s: string): { h: number; m: number } | null {
+  const m = /^(\d{2}):(\d{2})$/.exec(s);
+  if (!m) return null;
+  const h = Number(m[1]);
+  const min = Number(m[2]);
+  return h < 24 && min < 60 ? { h, m: min } : null;
+}
+
+/** The cells of a clock hand from (cx, cy), `len` cells long, at `deg` clockwise from 12. */
+export function handCells(cx: number, cy: number, len: number, deg: number): Array<[number, number]> {
+  const a = (deg * Math.PI) / 180;
+  const cells = new Map<string, [number, number]>();
+  for (let k = 0; k <= len; k++) {
+    const x = Math.round(cx + Math.sin(a) * k);
+    const y = Math.round(cy - Math.cos(a) * k);
+    cells.set(`${x},${y}`, [x, y]);
+  }
+  return [...cells.values()];
+}
+
+// The clock: the board's face without its hands. Resting, the hour hand is static and the minute hand turns a quarter
+// a frame; running (spec §8.2), it shows your real local time, the hands moved once a minute, with no loop (ruling 7).
 const CLOCK_FACE: readonly SpriteRect[] = CLOCK.filter(([, , , , c]) => c !== '#1F2937' && c !== '#DC2626');
 const clock: ItemArt = {
   id: 'art.clock', slot: 'art', frames: 3,
-  draw: ({ ramp, night }) => {
+  draw: ({ ramp, night, effect }) => {
     const r: Rects = [];
     artFrame(r, CLOCK_FACE, ramp, ANCHOR);
     const [ox, oy] = originOf(CLOCK);
+    const live = effect?.startsWith('live@') ? parseHhmm(effect.slice(5)) : null;
+    if (live) {
+      for (const [x, y] of handCells(ox + 7, oy + 7, 3, (live.h % 12) * 30 + live.m / 2)) R(r, x, y, 1, 1, '#1F2937');
+      for (const [x, y] of handCells(ox + 7, oy + 7, 4, live.m * 6)) R(r, x, y, 1, 1, '#1F2937');
+      R(r, ox + 7, oy + 7, 1, 1, '#DC2626');
+      return { base: r };
+    }
     R(r, ox + 7, oy + 4, 1, 4, '#1F2937'); // the hour hand
     const HANDS: Array<[number, number, number, number]> = [[7, 3, 1, 5], [7, 7, 4, 1], [7, 7, 1, 4]];
     return {

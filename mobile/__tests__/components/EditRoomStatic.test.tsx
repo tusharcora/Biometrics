@@ -1,5 +1,5 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { act, render } from '@testing-library/react-native';
 import { EditRoom } from '../../src/components/edit/EditRoom';
 import { editorReducer, initEditor } from '../../src/lib/room/edit/editor';
 import * as isoRoom from '../../src/lib/room/iso/room';
@@ -23,4 +23,25 @@ it('builds the static room once for its hit boxes and the picture, and once agai
   s.rerender(<EditRoom {...props} state={{ ...flipped, selected: null }} />);
   expect(build).toHaveBeenCalledTimes(2);
   build.mockRestore();
+});
+
+it('hands its effects to the room view, so a placed clock runs one minute timer and one rebuild per minute (FINAL-FIX M2)', () => {
+  jest.useFakeTimers();
+  jest.setSystemTime(new Date(2026, 9, 24, 12, 0, 30));
+  try {
+    const clock = { id: 'p1', item: 'art.clock', layer: 'wallL' as const, x: 4, y: 6, facing: 'L' as const, mirror: false };
+    const layout = { ...starterLayout(), pieces: [...starterLayout().pieces, clock] };
+    const state = initEditor({ layout, worn: EMPTY_WORN, tier: 1, counts: { ...STARTER_COUNTS, 'art.clock': 1 }, version: 1, newIds: [] });
+    const build = jest.spyOn(isoRoom, 'drawIsoStatic');
+    render(<EditRoom {...props} state={state} />);
+    // Reduce Motion is on, so no loop clock: the one timer is the editor's minute, none in the room view.
+    expect(jest.getTimerCount()).toBe(1);
+    expect(build).toHaveBeenCalledTimes(1);
+    act(() => { jest.advanceTimersByTime(60_000); });
+    expect(build).toHaveBeenCalledTimes(2);
+    expect(jest.getTimerCount()).toBe(1);
+    build.mockRestore();
+  } finally {
+    jest.useRealTimers();
+  }
 });

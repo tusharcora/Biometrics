@@ -3,7 +3,8 @@
   "releases": [
     1,
     3,
-    4
+    4,
+    5
   ],
   "starterRoom": {
     "wallpaper": "wall.plain",
@@ -294,7 +295,8 @@
           3,
           5
         ],
-        "facings": 1
+        "facings": 1,
+        "effect": "clock"
       }
     },
     {
@@ -1035,7 +1037,8 @@
           1,
           1
         ],
-        "facings": 1
+        "facings": 1,
+        "effect": "light"
       },
       "price": 120,
       "shop": "always"
@@ -1444,7 +1447,8 @@
           1,
           1
         ],
-        "facings": 1
+        "facings": 1,
+        "effect": "sound"
       },
       "price": 150,
       "shop": "always"
@@ -1554,6 +1558,47 @@
       },
       "price": 200,
       "shop": "always"
+    },
+    {
+      "id": "pet.tabby",
+      "slot": "pet",
+      "unlock": {
+        "kind": "shop"
+      },
+      "release": 5,
+      "frames": 3,
+      "iso": {
+        "layers": [
+          "floor"
+        ],
+        "foot": [
+          1,
+          1
+        ],
+        "facings": 1,
+        "effect": "wander"
+      },
+      "price": 180,
+      "shop": "always"
+    },
+    {
+      "id": "shelf.awards",
+      "slot": "shelf",
+      "unlock": {
+        "kind": "starter"
+      },
+      "release": 5,
+      "iso": {
+        "layers": [
+          "wall"
+        ],
+        "wall": [
+          8,
+          3
+        ],
+        "facings": 1,
+        "effect": "awards"
+      }
     },
     {
       "id": "set.cottage.wallpaper",

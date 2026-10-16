@@ -21,8 +21,8 @@ const opts = (item: CatalogueItem, over: Partial<IsoArtOpts> = {}): IsoArtOpts =
 
 beforeEach(() => clearPieceCache());
 
-it('every shipped placeable piece has iso art, 62 in all: the 54 release-1 pieces, the 2 of release 3 and the 6 shop pieces (spec §4)', () => {
-  expect(PLACEABLE).toHaveLength(62); // 54 release-1 placeables + shelf.plank + lamp.welcome + 6 release-4 pieces
+it('every shipped placeable piece has iso art, 64 in all: 54 of release 1, 2 of release 3, 6 shop pieces and 2 of release 5 (spec §4)', () => {
+  expect(PLACEABLE).toHaveLength(64);
   for (const item of PLACEABLE) expect({ id: item.id, art: !!isoArtOf(item.id) }).toEqual({ id: item.id, art: true });
 });
 
@@ -138,7 +138,7 @@ const prism = ([i0, i1]: Pt, [j0, j1]: Pt, [z0, z1]: Pt): Pt[] =>
 const overhang = (region: Pt[], rects: readonly RoomRect[]) =>
   Math.max(0, ...rects.flatMap(([x, y, w, h]) => ([[x + 0.5, y + 0.5], [x + w - 0.5, y + 0.5], [x + 0.5, y + h - 0.5], [x + w - 0.5, y + h - 0.5]] as Pt[]).map((c) => outside(region, c))));
 /** Wall pieces that stand out of the wall plane, in tiles: the plank is a box, the garland's wire hangs off it. */
-const WALL_DEPTH: Readonly<Record<string, number>> = { 'shelf.plank': PLANK_DEPTH, 'set.cottage.lamp': GARLAND_OFF };
+const WALL_DEPTH: Readonly<Record<string, number>> = { 'shelf.plank': PLANK_DEPTH, 'shelf.awards': PLANK_DEPTH, 'set.cottage.lamp': GARLAND_OFF };
 
 it('every piece stays inside its footprint or wall span, each layer, facing and Flip, day and night (T7-TESTS)', () => {
   // Measured: the piece's own rects and loop frames. Glows (emissive) are light thrown into the room, not the piece.

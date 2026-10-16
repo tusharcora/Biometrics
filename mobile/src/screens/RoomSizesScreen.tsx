@@ -185,6 +185,7 @@ export function RoomSizesScreen() {
   const placeThings = () => (params.from === 'editor' ? navigation.goBack() : navigation.replace('DecorateRoom'));
   const gate = grown && grown.tier !== 1 ? gateOf(grown.tier as 2 | 3) : null;
   const added = grown && grown.tier !== 1 ? TIERS[grown.tier].cap - TIERS[(grown.tier - 1) as Tier].cap : 0;
+  const addedEffects = grown && grown.tier !== 1 ? TIERS[grown.tier].effects - TIERS[(grown.tier - 1) as Tier].effects : 0;
   // While the unlock card shows, the list behind it is hidden from a screen reader: accessibilityElementsHidden is
   // iOS's way, importantForAccessibility Android's.
   const behind = grown ? { accessibilityElementsHidden: true, importantForAccessibility: 'no-hide-descendants' as const } : {};
@@ -218,6 +219,7 @@ export function RoomSizesScreen() {
               testID="sizes-room"
               layout={cosmetics.layout}
               tier={shown}
+              living={cosmetics.living}
               worn={me.worn}
               weather="clear"
               night={false}
@@ -245,8 +247,8 @@ export function RoomSizesScreen() {
               </View>
               <Text ref={titleRef} testID="sizes-grown-title" accessibilityRole="header" className="text-heading">{Z.grewTitle}</Text>
               <Text className="text-body">{Z.grewWhy(grown.tier as 2 | 3, coinCount(gate.price), grown.tier === 2 ? gate.threshold : gate.level)}</Text>
-              <Text testID="sizes-grown-more" accessibilityLabel={Z.grewMoreSpoken(added, grown.tier === 3)} className="text-caption text-muted-foreground">
-                {Z.grewMore(added, grown.tier === 3)}
+              <Text testID="sizes-grown-more" accessibilityLabel={Z.grewMoreSpoken(added, addedEffects, grown.tier === 3)} className="text-caption text-muted-foreground">
+                {Z.grewMore(added, addedEffects, grown.tier === 3)}
               </Text>
               {grown.stored ? <Text testID="sizes-stored" className="text-caption">{Z.stored(grown.stored)}</Text> : null}
               <View className="flex-row gap-2">

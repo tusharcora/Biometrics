@@ -1,6 +1,6 @@
 import React from 'react';
 import { render } from '@testing-library/react-native';
-import { AccessibilityInfo } from 'react-native';
+import { AccessibilityInfo, Platform } from 'react-native';
 import { EditNotices } from '../../src/components/edit/EditNotices';
 import { initEditor, type EditorState } from '../../src/lib/room/edit/editor';
 import { starterLayout } from '../../src/lib/room/layout';
@@ -20,14 +20,25 @@ it('shows nothing when there is nothing to say', () => {
   expect(announce).not.toHaveBeenCalled();
 });
 
-it('shows a refusal\'s reason in a polite live region and announces each refusal on iOS (ruling UI-OUTCOMES)', () => {
-  const s = render(<EditNotices state={refused(STATE)} />);
-  expect(s.getByTestId('edit-reason')).toHaveTextContent("Blocks KIP's chair");
-  expect(s.getByTestId('edit-reason').props.accessibilityLiveRegion).toBe('polite');
-  expect(announce).toHaveBeenLastCalledWith("Blocks KIP's chair");
-  // The same refusal again is a new outcome, so it is said again.
-  s.rerender(<EditNotices state={refused(STATE)} />);
-  expect(announce).toHaveBeenCalledTimes(2);
+it.each(['ios', 'android'] as const)('shows a refusal\'s reason and announces each refusal once, on %s too (rulings UI-OUTCOMES, T14-FIX)', (os) => {
+  const platform = Platform.OS;
+  Platform.OS = os;
+  try {
+    const s = render(<EditNotices state={refused(STATE)} />);
+    expect(s.getByTestId('edit-reason')).toHaveTextContent("Blocks KIP's chair");
+    // Announced, so not a live region too: said once, never twice over.
+    expect(s.getByTestId('edit-reason').props.accessibilityLiveRegion).toBeUndefined();
+    expect(announce.mock.calls).toEqual([["Blocks KIP's chair"]]);
+    // The same refusal again is a new outcome, so it is said again: a live region would stay quiet on the same text.
+    const again = refused(STATE);
+    s.rerender(<EditNotices state={again} />);
+    expect(announce).toHaveBeenCalledTimes(2);
+    // Another render with the same outcome says nothing new.
+    s.rerender(<EditNotices state={{ ...again, notice: 'saveFailed' }} />);
+    expect(announce).toHaveBeenCalledTimes(2);
+  } finally {
+    Platform.OS = platform;
+  }
 });
 
 it('says what Apply set left out, and the save notices', () => {

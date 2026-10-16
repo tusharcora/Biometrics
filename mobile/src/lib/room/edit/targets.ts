@@ -3,7 +3,7 @@
 // Another; Put on…'s surfaces and the floor; the guided first placement's tile. Pure. The geometry is the server's
 // (iso/geometry.ts).
 import { GEOMETRY_DEPS, isoOf } from '../catalogue';
-import { capFor, checkPiece, footOf, seatTile, wallLength, WALL_STEPS, wrongLayer, type BadReason, type Placement, type RoomLayout, type Tier } from '../iso/geometry';
+import { capFor, checkPiece, effectPieces, effectSlotsFor, footOf, seatTile, wallLength, WALL_STEPS, wrongLayer, type BadReason, type Placement, type RoomLayout, type Tier } from '../iso/geometry';
 import { HH, HT, projOf, unproject, type IsoGrid } from '../iso/grid';
 import { spotPoint } from '../iso/room';
 import type { ItemId } from '../loadout';
@@ -15,9 +15,11 @@ export type Target =
   | { layer: 'onTop'; parent: string; spot: number };
 
 export interface Refused {
-  /** `none` and `sameDesk`: Replace desk with a desk you have none left of, or the one already there (UI-OUTCOMES). */
-  reason: BadReason | 'layer' | 'full' | 'none' | 'sameDesk';
+  /** `none` and `sameDesk`: Replace desk with a desk you have none left of, or the one already there (UI-OUTCOMES).
+   * `effects`: one more effect piece than the room runs (spec §8.1), with the room's slots. */
+  reason: BadReason | 'layer' | 'full' | 'none' | 'sameDesk' | 'effects';
   with?: string;
+  slots?: number;
 }
 
 type Base = Pick<Placement, 'id' | 'item' | 'facing' | 'mirror'>;
@@ -29,12 +31,15 @@ export function placedAt(base: Base, t: Target): Placement {
     : { id, item, layer: t.layer, x: t.x, y: t.y, facing, mirror };
 }
 
-/** Why `piece` can't go where it is (its own entry ignored), or null. `adding` counts it against the cap. */
+/** Why `piece` can't go where it is (its own entry ignored), or null. `adding` counts it against the cap and the slots. */
 export function refusal(layout: RoomLayout, piece: Placement, tier: Tier, adding: boolean): Refused | null {
   const iso = isoOf(piece.item);
   // Layer first (ruling T2): checkPiece assumes an allowed layer, and a missing iso reads as 'outside' there.
   if (!iso || wrongLayer(iso, piece)) return { reason: 'layer' };
   if (adding && layout.pieces.length >= capFor(tier)) return { reason: 'full' };
+  // One more effect piece than the room runs is refused when it is added (spec §8.1); moving one never is.
+  const slots = effectSlotsFor(tier);
+  if (adding && iso.effect && effectPieces(layout, GEOMETRY_DEPS).length >= slots) return { reason: 'effects', slots };
   const why = checkPiece(layout, piece, tier, GEOMETRY_DEPS);
   // On KIP's chair itself (inside the desk's footprint, so the overlap answers first): say the chair (final review M1).
   if (why?.reason === 'overlap' && piece.layer === 'floor') {

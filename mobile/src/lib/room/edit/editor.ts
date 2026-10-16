@@ -6,15 +6,18 @@
 import { catalogueItem, catalogueSet, GEOMETRY_DEPS, isoOf, type CatalogueSet } from '../catalogue';
 import type { KipWorn, ItemId } from '../loadout';
 import type { WornSlot } from '../catalogue';
-import { capFor, checkPiece, coveredBy, validateLayout, type Placement, type RoomLayout, type StyleKey, type Tier } from '../iso/geometry';
+import { capFor, checkPiece, coveredBy, effectSlotsFor, effectsRaised, runningEffects, validateLayout, type EffectKind, type Placement, type RoomLayout, type StyleKey, type Tier } from '../iso/geometry';
 import { isoGrid } from '../iso/grid';
 import { childrenOf, deskOf, inventoryOf, layoutKey, newPieceId } from '../layout';
 import { COACH_ITEM, coachTile, nearestFloor, nearestFree, placedAt, refusal, roomCentre, targetPoint, type Refused, type Target } from './targets';
 
 export interface Draft { layout: RoomLayout; worn: KipWorn }
-export type DrawerTab = 'all' | 'floor' | 'wall' | 'onTop' | 'funny' | 'new' | 'room' | 'kip' | 'sets';
-/** The editor route's params (spec §5.1): the drawer tab to open on, a piece to show there, the first-week coach. */
-export type DecorateParams = { drawer?: DrawerTab | 'new'; item?: ItemId; coach?: boolean };
+export type DrawerTab = 'all' | 'floor' | 'wall' | 'onTop' | 'funny' | 'effects' | 'new' | 'room' | 'kip' | 'sets';
+/**
+ * The editor route's params (spec §5.1): the drawer tab to open on, a piece to show there, the first-week coach, and a
+ * piece card's Move and Store (P3 ruling 16): the piece selected, and for Store already stored as the first undo step.
+ */
+export type DecorateParams = { drawer?: DrawerTab | 'new'; item?: ItemId; coach?: boolean; select?: string; store?: boolean };
 export type NudgeDir = 'backLeft' | 'backRight' | 'frontLeft' | 'frontRight' | 'up' | 'down';
 export type Preview = { kind: 'worn'; slot: WornSlot; item: ItemId } | { kind: 'set'; setId: string };
 /** What Apply set did (ruling T9-FIX): the set's items you don't own yet, and whether your own desk stayed. */
@@ -194,6 +197,9 @@ export interface Tools {
   canAnother: boolean;
   canStore: boolean;
   isDesk: boolean;
+  /** What the piece does and whether it runs (spec §8.1): null for a piece with no effect. */
+  effect: { kind: EffectKind; running: boolean } | null;
+  slots: number;
 }
 
 export function selectedTools(s: EditorState): Tools | null {
@@ -211,6 +217,8 @@ export function selectedTools(s: EditorState): Tools | null {
     canAnother: !isDesk && left > 0 && s.draft.layout.pieces.length < capFor(s.tier),
     canStore: !isDesk,
     isDesk,
+    effect: iso.effect ? { kind: iso.effect, running: runningEffects(s.draft.layout, s.tier, GEOMETRY_DEPS).has(piece.id) } : null,
+    slots: effectSlotsFor(s.tier),
   };
 }
 
@@ -351,6 +359,8 @@ function reduce(s: EditorState, a: EditorAction): EditorState {
       if (!set) return s;
       const placed = setPieces(s, set);
       if (!placed) return refuse(s, { reason: 'outside' }, null);
+      // A set is an add too (ruling 4): refused when it runs more effects than the slots and more than the room had.
+      if (effectsRaised(layout, { ...layout, pieces: placed.pieces }, s.tier, GEOMETRY_DEPS)) return refuse(s, { reason: 'effects', slots: effectSlotsFor(s.tier) }, null);
       const owned = (id: ItemId) => (s.counts[id] ?? 0) > 0;
       const styles = Object.fromEntries(Object.entries(set.layout.styles).map(([k, id]) => [k, owned(id) ? id : layout.styles[k as StyleKey]])) as RoomLayout['styles'];
       const worn = { ...s.draft.worn };

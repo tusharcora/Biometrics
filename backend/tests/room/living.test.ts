@@ -1,0 +1,182 @@
+import fs from 'fs';
+import path from 'path';
+import { prisma } from '../../src/db/client';
+import { connection } from '../../src/sync/queue';
+import { migrateTestDb } from '../setupTestDb';
+import { api } from '../buddies/helpers';
+import { coinUser } from '../coins/helpers';
+import { day, level } from '../cosmetics/helpers';
+import { civilDateToUtcMidnight, localCivilDateOrUtc } from '../../src/biometrics/civilDate';
+import { EMPTY_WORN, RELEASE_LAUNCHED_AT } from '../../src/cosmetics/catalogue';
+import { starterLayout } from '../../src/room/convert';
+import * as livingModule from '../../src/room/living';
+import { MAX_AWARDS, petEnergyOf, plantStageFor, plantStageOf, readLiving } from '../../src/room/living';
+import { fund } from '../coins/helpers';
+
+beforeAll(() => migrateTestDb());
+afterAll(async () => {
+  await prisma.$disconnect();
+  await connection.quit();
+});
+
+// 12:00 UTC on 24 Oct is 01:00 on 25 Oct in Auckland (NZDT): the zone test can tell the two dates apart.
+const NOW = new Date('2026-10-24T12:00:00.000Z');
+const P3 = RELEASE_LAUNCHED_AT[5];
+
+async function nights(userId: string, n: number) {
+  await prisma.coinEvent.createMany({
+    data: Array.from({ length: n }, (_, k) => {
+      const d = new Date(Date.UTC(2026, 8, 1 + k)).toISOString().slice(0, 10);
+      // 0-coin rows count too (spec §8.3): every other night was written at the cap.
+      return { userId, kind: 'sleep_goal', sourceKey: `sleep_goal:${d}`, amount: k % 2 ? 0 : 20, capDay: day(d) };
+    }),
+  });
+}
+async function steps(userId: string, tz: string, value: number) {
+  await prisma.biometricRecord.create({ data: { userId, metricType: 'STEPS', value, recordedAt: civilDateToUtcMidnight(localCivilDateOrUtc(NOW, tz)) } });
+}
+/** An account made after P3 launched (ruling PF3-PLANTS-2: its plants grow from the counted stage). */
+async function afterP3(userId: string) {
+  await prisma.user.update({ where: { id: userId }, data: { createdAt: new Date(P3.getTime() + 60_000) } });
+}
+
+describe('the living room (spec §8.3, P3 ruling 6)', () => {
+  it('grows a plant a stage every 7 sleep-goal nights, from 1 to 5', () => {
+    expect([0, 6, 7, 13, 14, 28, 200].map(plantStageOf)).toEqual([1, 1, 2, 2, 3, 5, 5]);
+  });
+
+  it('bands steps against the step goal: under 30% naps, then wanders, and plays at the goal', () => {
+    expect([0, 2999, 3000, 9999, 10000, 25000].map(petEnergyOf)).toEqual(['nap', 'nap', 'wander', 'wander', 'play', 'play']);
+  });
+
+  it('reads the nights, today\'s steps in the user\'s own zone and the award levels, highest first, at most 8', async () => {
+    const { user } = await coinUser({ timezone: 'Pacific/Auckland' });
+    await afterP3(user.id);
+    await nights(user.id, 15);
+    await steps(user.id, 'Pacific/Auckland', 4200);
+    // The UTC date's row (24 Oct) is not today in Auckland: read by mistake, the cat would play.
+    await prisma.biometricRecord.create({ data: { userId: user.id, metricType: 'STEPS', value: 20000, recordedAt: civilDateToUtcMidnight('2026-10-24') } });
+    expect(localCivilDateOrUtc(NOW, 'Pacific/Auckland')).toBe('2026-10-25');
+    const families = ['SLEEP_GOAL', 'STEADY_BEDTIME', 'STEP_GOAL', 'CHECK_IN', 'BEST_RECOVERY_WEEK'] as const;
+    for (const [k, family] of families.entries()) {
+      await level(user.id, family, 1, NOW);
+      await level(user.id, family, 2, NOW);
+      if (k < 2) await level(user.id, family, 3, NOW);
+    }
+    const living = await readLiving(user.id, NOW);
+    expect(living).toEqual({ plantStage: 3, petEnergy: 'wander', awards: [3, 3, 2, 2, 2, 2, 2, 1] });
+    expect(living.awards).toHaveLength(MAX_AWARDS);
+  });
+
+  it('a new user\'s room: stage 1, the cat asleep, no awards', async () => {
+    const { user } = await coinUser();
+    await afterP3(user.id);
+    expect(await readLiving(user.id, NOW)).toEqual({ plantStage: 1, petEnergy: 'nap', awards: [] });
+  });
+
+  it('GET /me/cosmetics carries it, and no health value anywhere in the body', async () => {
+    const { user, headers } = await coinUser();
+    await afterP3(user.id);
+    await nights(user.id, 7);
+    // Today's steps on the route's own clock: a band in the body, never the number.
+    const tz = (await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).timezone ?? 'UTC';
+    await prisma.biometricRecord.create({ data: { userId: user.id, metricType: 'STEPS', value: 4200, recordedAt: civilDateToUtcMidnight(localCivilDateOrUtc(new Date(), tz)) } });
+    const res = await (await api()).get('/me/cosmetics').set(headers);
+    expect(res.status).toBe(200);
+    expect(res.body.living).toEqual({ plantStage: 2, petEnergy: 'wander', awards: [] });
+    expect(JSON.stringify(res.body)).not.toMatch(/"(steps|minutes|sleepMinutes|value)"/);
+    expect(JSON.stringify(res.body)).not.toContain('4200');
+  });
+});
+
+describe('plants in a room from before P3 (ruling PF3-PLANTS-2)', () => {
+  it('stay fully grown for good, while a room made after P3 grows with the count', () => {
+    expect([0, 6, 7, 14, 40].map((n) => plantStageFor(n, true))).toEqual([5, 5, 5, 5, 5]);
+    expect([0, 6, 7, 14, 40].map((n) => plantStageFor(n, false))).toEqual([1, 1, 2, 3, 5]);
+  });
+
+  it('an account made before the P3 launch reads stage 5 at 0, 7 and 40 nights: never a shrink', async () => {
+    const { user } = await coinUser();
+    await prisma.user.update({ where: { id: user.id }, data: { createdAt: new Date(P3.getTime() - 60_000) } });
+    expect((await readLiving(user.id, NOW)).plantStage).toBe(5);
+    await nights(user.id, 7);
+    expect((await readLiving(user.id, NOW)).plantStage).toBe(5);
+    await prisma.coinEvent.deleteMany({ where: { userId: user.id } });
+    await nights(user.id, 40);
+    expect((await readLiving(user.id, NOW)).plantStage).toBe(5);
+  });
+
+  it('an account made after the P3 launch grows: 1 at 6 nights, 2 at 7, 5 at 40', async () => {
+    const { user } = await coinUser();
+    await afterP3(user.id);
+    await nights(user.id, 6);
+    expect((await readLiving(user.id, NOW)).plantStage).toBe(1);
+    await prisma.coinEvent.create({ data: { userId: user.id, kind: 'sleep_goal', sourceKey: 'sleep_goal:2026-10-20', amount: 0, capDay: day('2026-10-20') } });
+    expect((await readLiving(user.id, NOW)).plantStage).toBe(2);
+    await prisma.coinEvent.deleteMany({ where: { userId: user.id } });
+    await nights(user.id, 40);
+    expect((await readLiving(user.id, NOW)).plantStage).toBe(5);
+  });
+});
+
+describe('a failed living read (ruling PF3-LIVING)', () => {
+  let warn: jest.SpyInstance;
+  beforeEach(() => {
+    warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    jest.spyOn(livingModule, 'readLiving').mockRejectedValue(new TypeError('boom'));
+  });
+  afterEach(() => jest.restoreAllMocks());
+
+  const lines = () => warn.mock.calls.map((c) => String(c[0])).filter((l) => l.includes('room.living_failed'));
+
+  it('GET answers without `living` and logs the error name only', async () => {
+    const { user, headers } = await coinUser();
+    const res = await (await api()).get('/me/cosmetics').set(headers);
+    expect(res.status).toBe(200);
+    expect(res.body).not.toHaveProperty('living');
+    expect(res.body.layout).toEqual(starterLayout());
+    expect(lines().map((l) => JSON.parse(l))).toEqual([{ event: 'room.living_failed', error: 'TypeError' }]);
+    expect(lines().join('')).not.toContain(user.id);
+  });
+
+  it('a room expand still grows and answers without `living`', async () => {
+    const { user, headers } = await coinUser();
+    jest.spyOn(console, 'info').mockImplementation(() => {});
+    await fund(user.id, 600);
+    await level(user.id, 'CHECK_IN', 2, new Date(Date.now() - 1000));
+    const res = await (await api()).post('/me/room/expand').set(headers).send({ requestId: '6f1d3a52-8f4e-4c39-9a51-2c6b9d0e7a11', toTier: 2 });
+    expect([res.status, res.body.tier, 'living' in res.body]).toEqual([200, 2, false]);
+    expect(lines()).toHaveLength(1);
+  });
+
+  it('a save still saves and answers without `living`', async () => {
+    const { headers } = await coinUser();
+    jest.spyOn(console, 'info').mockImplementation(() => {});
+    const res = await (await api()).put('/me/cosmetics').set(headers).send({ layout: starterLayout(), worn: { ...EMPTY_WORN }, version: 0 });
+    expect([res.status, res.body.version, 'living' in res.body]).toEqual([200, 1, false]);
+    expect(lines()).toHaveLength(1);
+  });
+});
+
+describe('who sees it (spec §8.3, §16)', () => {
+  function files(dir: string): string[] {
+    return fs.readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+      e.isDirectory() ? files(path.join(dir, e.name)) : /\.ts$/.test(e.name) ? [path.join(dir, e.name)] : []);
+  }
+
+  it('only the cosmetics body reads it: no buddy, social, chat, coach or KIP module imports room/living', () => {
+    const root = path.join(__dirname, '../../src');
+    const IMPORT = /(?:from|require\()\s*['"][^'"]*room\/living['"]/;
+    const hits = files(root).filter((f) => IMPORT.test(fs.readFileSync(f, 'utf8'))).map((f) => path.relative(root, f));
+    expect(hits).toEqual(['cosmetics/loadout.ts']);
+  });
+
+  it('readLiving logs nothing', async () => {
+    const spies = (['log', 'info', 'warn', 'error'] as const).map((m) => jest.spyOn(console, m).mockImplementation(() => {}));
+    const { user } = await coinUser();
+    await nights(user.id, 3);
+    await readLiving(user.id, NOW);
+    expect(spies.flatMap((s) => s.mock.calls)).toEqual([]);
+    spies.forEach((s) => s.mockRestore());
+  });
+});

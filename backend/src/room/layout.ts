@@ -4,7 +4,7 @@ import type { Prisma } from '@prisma/client';
 import { STARTER_IDS, shippedItem } from '../cosmetics/catalogue';
 import { prisma } from '../db/client';
 import { starterLayout } from './convert';
-import { STYLE_KEYS, parseLayout, type GeometryDeps, type Placement, type RoomLayout } from './geometry';
+import { STYLE_KEYS, idRank, parseLayout, type GeometryDeps, type Placement, type RoomLayout } from './geometry';
 
 // The rules live once, in geometry.ts (plan ruling T2): re-exported here, never redefined.
 export { placedCounts, toTier } from './geometry';
@@ -68,12 +68,6 @@ export function readLayout(json: unknown, counts: Readonly<Record<string, number
   const onTop = new Set(trimOver(kept.filter((p) => p.layer === 'onTop'), counts, used).map((p) => p.id));
   return { v: 1, styles, pieces: kept.filter((p) => p.layer !== 'onTop' || onTop.has(p.id)) };
 }
-
-/** An app instance id is p1, p2, … (P1 ruling P10): its n. Any other id (a starter's or a converted room's) is 0. */
-const idRank = (id: string): number => {
-  const m = /^p(\d+)$/.exec(id);
-  return m ? Number(m[1]) : 0;
-};
 
 /** The newest copies first (ruling PF-F1, replacing plan ruling 31's id length): the highest rank, then id descending. */
 const newestFirst = (a: Placement, b: Placement) => idRank(b.id) - idRank(a.id) || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);

@@ -1,15 +1,16 @@
 import { needsLine, sizeRows, type FamilyStanding } from '../../src/lib/coins/sizes';
 import { nextRowsRects } from '../../src/lib/room/edit/overlay';
+import { ROOM_COPY } from '../../src/lib/room/roomCopy';
 import { isoGrid } from '../../src/lib/room/iso/grid';
 
 const FAMILIES: FamilyStanding[] = [{ family: 'CHECK_IN', level: 1, current: 9 }, { family: 'SLEEP_GOAL', level: 2, current: 4 }];
 
-it('lists the three sizes: yours, then both gates of each bigger one with their progress (spec §7, C2, ruling 14)', () => {
+it('lists the three sizes: yours, then both gates of each bigger one with their progress, with their effect slots (spec §7, C2, P3 ruling 20)', () => {
   const [starter, bigger, loft] = sizeRows(1, 360, FAMILIES);
-  expect([starter!.name, starter!.size, starter!.pieces, starter!.status]).toEqual(['Starter', '7 × 7', '40 pieces', 'yours']);
+  expect([starter!.name, starter!.size, starter!.pieces, starter!.status]).toEqual(['Starter', '7 × 7', '40 pieces · 3 effects', 'yours']);
   expect([bigger!.status, bigger!.coins, bigger!.badge]).toEqual(['next', { title: '600 coins', progress: '360 of 600', met: false }, { title: 'A 14-day check-in streak', progress: '9 of 14', met: false }]);
   expect([loft!.status, loft!.pieces, loft!.piecesSpoken, loft!.coins, loft!.badge]).toEqual([
-    'later', '90 pieces · second window', '90 pieces, second window',
+    'later', '90 pieces · 8 effects · second window', '90 pieces, 8 effects, second window',
     { title: '1,500 coins', progress: '360 of 1,500', met: false }, { title: 'Sleep goal badge, level 3', progress: 'level 2 now', met: false },
   ]);
   expect(sizeRows(2, 0, FAMILIES)[1]!.status).toBe('yours');
@@ -46,4 +47,9 @@ it('dashes the next size\'s new rows on that size\'s grid (ruling 15)', () => {
   const r = nextRowsRects(g, 7);
   expect(r.length).toBeGreaterThan(20);
   expect(r.every(([x, y, w, h]) => Number.isInteger(x) && Number.isInteger(y) && w === 1 && h === 1)).toBe(true);
+});
+
+it('the unlock card counts the new effect slots (spec §7, C2, ruling 20)', () => {
+  expect(ROOM_COPY.sizes.grewMore(20, 2, false)).toBe('+1 row each side · +20 pieces · +2 effect slots');
+  expect(ROOM_COPY.sizes.grewMoreSpoken(30, 3, true)).toBe('One more row each side, 30 more pieces, 3 more effect slots, and a second window');
 });

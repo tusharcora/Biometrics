@@ -17,7 +17,7 @@ const RAMPS: Record<KipColour, { light: string; shade: string; deep: string; eye
   snow: { light: '#f5f8fb', shade: '#bcbfc2', deep: '#919395', eyes: '#14161B' },
 };
 
-const RECTS_PER_POSE = { rest: 23, wave: 24, cheer: 25, bottle: 33, coffee: 30, stretch: 26, type: 23, think: 25, point: 23, shrug: 25 } as const;
+const RECTS_PER_POSE = { rest: 23, wave: 24, cheer: 25, bottle: 33, coffee: 30, stretch: 26, type: 23, think: 25, point: 23, shrug: 25, water: 28 } as const;
 const RECTS_PER_MOOD = { idle: 23, curious: 23, sleepy: 20, proud: 25, startled: 27, glance: 22, determined: 24 } as const;
 
 // b body, s shade, e eyes, z ground shadow.
@@ -90,6 +90,16 @@ describe('kipGrid', () => {
       expect(g).toHaveLength(KIP_GRID);
       for (const row of g) expect(row).toHaveLength(KIP_GRID);
     }
+  });
+
+  it('has a water pose: one arm out holding a can, the arms-only rule (spec §9.2, ruling 14)', () => {
+    expect(KIP_POSES).toContain('water');
+    const rest = kipGrid({ pose: 'rest' });
+    const water = kipGrid({ pose: 'water' });
+    expect(JSON.stringify(water)).not.toBe(JSON.stringify(rest));
+    expect(water.slice(13).map((r) => r.join())).toEqual(rest.slice(13).map((r) => r.join())); // legs never change
+    // The body is untouched: every cell that differs lies right of it, where the arm and the can are.
+    water.forEach((row, y) => row.forEach((c, x) => { if (c !== rest[y]![x]) expect(x).toBeGreaterThanOrEqual(12); }));
   });
 });
 

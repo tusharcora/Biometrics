@@ -97,6 +97,8 @@ export function CoachScreen() {
 
   const [phase, setPhase] = useState<Phase>('loading');
   const [input, setInput] = useState(prefill ?? '');
+  // The prompt bar has focus: KIP stays at its desk (spec 2026-10-15 §9.2).
+  const [promptFocused, setPromptFocused] = useState(false);
   const [engine, setEngine] = useState<CoachEngineDTO>('local');
   const [today, setToday] = useState<TodaySummaryDTO | null>(null);
   const [todayLoading, setTodayLoading] = useState(true);
@@ -487,6 +489,8 @@ export function CoachScreen() {
   const decorating = useDecorateOpen();
   const decorateLabel = unseen ? ROOM_COPY.decorateLabelNew : ROOM_COPY.decorateLabel;
   const openDecorate = useCallback(() => navigation.navigate('DecorateRoom'), [navigation]);
+  // A piece card (spec 2026-10-15 §8.1): the native sheet over this page.
+  const openPiece = useCallback((pieceId: string) => navigation.navigate('PieceCard', { pieceId }), [navigation]);
   // The welcome card's Place the lantern: the editor on New with the lantern picked and the coach mark (spec §11.1).
   const placeLantern = useCallback(() => navigation.navigate('DecorateRoom', { drawer: 'new', item: COACH_ITEM, coach: true }), [navigation]);
 
@@ -516,8 +520,13 @@ export function CoachScreen() {
       reduceMotion={reduceMotion}
       paused={decorating}
       holdCoins={!shrunkKnown || collapsed === 'in'}
+      // Scrolled under the collapsed header, only the header's thumbnail turns its clock (ruling T5-FIX).
+      holdClock={collapsed === 'in'}
+      // KIP walks between answers only with no turn running and the prompt bar blurred (spec 2026-10-15 §9.2).
+      kipWalks={!promptFocused && !streaming}
       onOpenRecovery={openRecovery}
       onDecorate={openDecorate}
+      onOpenPiece={openPiece}
       onPlaceLantern={placeLantern}
       onLayout={(e) => {
         cardBottom.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height;
@@ -767,6 +776,7 @@ export function CoachScreen() {
               onStop={stop}
               placeholder={KIP_COPY.promptPlaceholder}
               inputLabel={KIP_COPY.promptLabel}
+              onFocusChange={setPromptFocused}
             />
           </View>
         </KeyboardAvoidingView>

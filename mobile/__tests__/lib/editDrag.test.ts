@@ -22,6 +22,15 @@ it('turns red with the reason: the chair\'s exit tile, off the floor, or a full 
   expect(dragAt(full, fern, P(6.5, 6.5)).refused).toBeNull(); // moving is not adding
 });
 
+it('a new effect piece over a room running all its slots turns red with "effects"; a placed one still moves (ruling 4)', () => {
+  const clock = (id: string, layer: 'wallL' | 'wallR', x: number) => ({ id, item: 'art.clock', layer, x, y: 0, facing: 'L' as const, mirror: false });
+  const three = { ...S.draft.layout, pieces: [...S.draft.layout.pieces, clock('p1', 'wallR', 0), clock('p2', 'wallR', 10), clock('p3', 'wallL', 0)] };
+  const s = { ...S, counts: { ...S.counts, 'art.clock': 3, 'corner.floorlamp': 1 }, draft: { ...S.draft, layout: three } };
+  expect(dragAt(s, { item: 'corner.floorlamp', id: null, facing: 'L', mirror: false }, P(6.5, 6.5)).refused).toEqual({ reason: 'effects', slots: 3 });
+  expect(dragAt(s, { item: 'art.clock', id: 'p1', facing: 'L', mirror: false }, P(6.5, 6.5)).refused).toEqual({ reason: 'layer' }); // a wall piece, moved: never 'effects'
+  expect(dragAt(s, { item: 'plant.fern', id: 'plant', facing: 'L', mirror: false }, P(6.5, 6.5)).refused).toBeNull();
+});
+
 it('a wall piece over the floor says it belongs on the wall', () => {
   expect(dragAt(S, { item: 'shelf.plank', id: 'plank', facing: 'L', mirror: false }, P(4, 4)).refused).toEqual({ reason: 'layer' });
 });

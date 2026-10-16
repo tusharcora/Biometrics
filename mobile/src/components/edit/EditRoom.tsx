@@ -4,9 +4,11 @@ import { Canvas, Group, Picture } from '@shopify/react-native-skia';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
 import { RoomView } from '../room/RoomView';
+import { useRoomEffects } from '../room/useRoomEffects';
 import { record, useDisposed } from '../room/pictures';
 import { Text } from '../ui/text';
 import type { KipColour } from '../../lib/kip/kipArt';
+import type { Living } from '../../lib/room/effects';
 import { clampPan, dragAt, EDGE_PT, ghostRects, grabOffset, LIFT_PT, targetKey, targetOf, type Drag, type DragBase } from '../../lib/room/edit/drag';
 import { displayDraft, type EditorAction, type EditorState } from '../../lib/room/edit/editor';
 import { reasonText } from '../../lib/room/edit/labels';
@@ -17,6 +19,7 @@ import { drawIsoStatic, isoRoomKey, pieceAt } from '../../lib/room/iso/room';
 import type { ItemId } from '../../lib/room/loadout';
 import { ROOM_COPY } from '../../lib/room/roomCopy';
 import type { RoomWeather } from '../../lib/room/weather';
+import { useScreenFocused } from '../../lib/useScreenFocused';
 
 export const EDIT_CELL_PT = 2;
 /** A tap is quick; anything longer belongs to the drag. */
@@ -44,6 +47,8 @@ export interface EditRoomProps {
   reduceMotion: boolean;
   /** The floor's tile lines and the walls' dots (spec §5.2), toggled from the toolbar. */
   showGrid: boolean;
+  /** The living room (spec §8.3), so the editor draws the plants as the room does; absent, the neutral room. */
+  living?: Living;
 }
 
 /** The drag the drawer's tiles drive (plan ruling 16): points are the finger's, in window coordinates. */
@@ -85,7 +90,12 @@ export const EditRoom = forwardRef<EditRoomHandle, EditRoomProps>(function EditR
   const viewRef = useRef<View>(null);
   const origin = useRef({ x: 0, y: 0 });
   const draft = displayDraft(state);
-  const input = { layout: draft.layout, tier: state.tier, weather: window.weather, night: window.night, colour };
+  const focused = useScreenFocused();
+  // A live drag keeps the clock's minute (PF3-CLOCK): the room is never rebuilt under the finger. A napping cat stays
+  // on its own tile here (spec §8.2), so a tap or a drag finds it where it is placed. RoomView draws with these same
+  // effects, so the minute is read once (FINAL-FIX M2).
+  const effects = useRoomEffects(draft.layout, state.tier, props.living, { hold: !focused || !!drag, editing: true });
+  const input = { layout: draft.layout, tier: state.tier, weather: window.weather, night: window.night, colour, effects };
   // The picture RoomView draws, here for its hit boxes and handed down (final review M2): rebuilt only when the room
   // itself changes. While a piece is lifted RoomView builds its own, without that piece.
   const drawn = useMemo(() => drawIsoStatic(input), [isoRoomKey(input)]); // eslint-disable-line react-hooks/exhaustive-deps
@@ -231,6 +241,10 @@ export const EditRoom = forwardRef<EditRoomHandle, EditRoomProps>(function EditR
           offset={pan}
           hide={drag?.id ?? null}
           room={drag?.id ? undefined : drawn}
+          dragging={!!drag}
+          editing
+          living={props.living}
+          effects={effects}
           reduceMotion={reduceMotion}
           accessible={false}
         />

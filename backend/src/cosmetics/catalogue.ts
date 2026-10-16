@@ -6,24 +6,25 @@
 // lives only in the app; placement data (`iso`) lives here because the server validates layouts.
 
 import type { AchievementFamily } from '@prisma/client';
-import type { IsoSpec } from '../room/geometry';
+import type { EffectKind, IsoSpec } from '../room/geometry';
 
 export const COSMETICS_CATALOGUE_VERSION = 1;
-export type CosmeticRelease = 1 | 2 | 3 | 4;
+export type CosmeticRelease = 1 | 2 | 3 | 4 | 5;
 /** Releases the app can draw. B2 (release 2) joins when its art ships; free-build P1's pieces are release 3, P2's shop
- * pieces release 4. */
-export const SHIPPED_RELEASES: ReadonlySet<CosmeticRelease> = new Set<CosmeticRelease>([1, 3, 4]);
-export type ShippedRelease = 1 | 3 | 4;
+ * pieces release 4, P3's effect pieces release 5. */
+export const SHIPPED_RELEASES: ReadonlySet<CosmeticRelease> = new Set<CosmeticRelease>([1, 3, 4, 5]);
+export type ShippedRelease = 1 | 3 | 4 | 5;
 /**
  * When each shipped release reached users (Spec B §3.1): a rule met before it grants as 'backfill'. A full record,
  * so a release cannot ship without a date (Spec B Task 3 minor). OWNER NOTE (plan ruling 1): both are set to the real
  * ship date when Spec B and P1 merge. OWNER NOTE (P2 plan ruling 1): release 4's date is set with the coins launch at
- * merge.
+ * merge. OWNER NOTE (P3 plan ruling 1): release 5's date is set at merge.
  */
 export const RELEASE_LAUNCHED_AT: Readonly<Record<ShippedRelease, Date>> = Object.freeze({
   1: new Date('2026-10-15T00:00:00.000Z'),
   3: new Date('2026-10-16T00:00:00.000Z'),
   4: new Date('2026-10-20T00:00:00.000Z'),
+  5: new Date('2026-10-23T00:00:00.000Z'),
 });
 export function isShipped(x: { release: CosmeticRelease }): boolean {
   return SHIPPED_RELEASES.has(x.release);
@@ -261,6 +262,18 @@ const SHOP_PIECES: readonly Row[] = [
   ['art.neonheart', 'art', 'C', 'G', 4],
 ];
 
+// Free-build P3's effect pieces (spec 2026-10-15 §8.2): the ginger cat (coin shop) and the trophy shelf (everyone's).
+const LIVING_PIECES: readonly Row[] = [
+  ['pet.tabby', 'pet', 'C', 'A', 5],
+  ['shelf.awards', 'shelf', 'S', '', 5],
+];
+
+/** The first set of effects (spec §8.2, P3 rulings 2-3). B2's three are set now and run when release 2 ships. */
+export const EFFECTS: Readonly<Record<string, EffectKind>> = {
+  'corner.floorlamp': 'light', 'lamp.lava': 'light', 'item.radio': 'sound', 'pet.tabby': 'wander', 'pet.cat': 'wander',
+  'art.clock': 'clock', 'item.duck': 'tap', 'shelf.awards': 'awards',
+};
+
 /**
  * Coin prices (spec §6.4: 25–200), all 'always' in P2 (plan rulings 2–4): the shop's own pieces, every placeable
  * starter as an extra copy (not the desks, one per room, and not the welcome lantern, C7's gift), and the rule pieces
@@ -271,7 +284,7 @@ export const PRICES: Readonly<Record<string, number>> = {
   'plant.fern': 40, 'plant.cactus': 40, 'item.mug': 25, 'item.sticky': 25, 'shelf.books': 30, 'shelf.minicactus': 30,
   'shelf.plank': 30, 'lamp.amber': 60, 'rug.slate': 80, 'art.calendar': 40,
   'corner.floorlamp': 120, 'pet.bed': 140, 'plant.monstera': 140, 'plant.snake': 100,
-  'lamp.lava': 120, 'item.duck': 40, 'pet.cat': 180,
+  'lamp.lava': 120, 'item.duck': 40, 'pet.cat': 180, 'pet.tabby': 180,
 };
 
 /** KIP's desk and chair (spec §2.1, §3.2): 3 × 2, KIP's seat on the front row, 3 spots on the desk top. */
@@ -313,6 +326,8 @@ const ISO_OVERRIDES: Readonly<Record<string, IsoSpec>> = {
   'corner.pumpkin': { layers: ['floor', 'onTop'], foot: [1, 1], facings: 1 },
   'item.candle': { layers: ['onTop', 'floor'], foot: [1, 1], facings: 1 },
   'art.neonheart': { layers: ['wall'], wall: [3, 4], facings: 1 },
+  // The trophy shelf hangs on a wall: a plank 4 tiles long with room for 8 awards (P3 ruling 2).
+  'shelf.awards': { layers: ['wall'], wall: [8, 3], facings: 1 },
 };
 const FUNNY: ReadonlySet<string> = new Set(['shelf.luckycat', 'shelf.globe', 'item.controller', 'corner.beanbag']);
 
@@ -355,7 +370,7 @@ function withFlags(item: CosmeticItem, flags: string): CosmeticItem {
 
 function build(): { items: CosmeticItem[]; sets: CosmeticSet[] } {
   const items = new Map<string, CosmeticItem>();
-  for (const [id, slot, code, flags, release] of [...BASE, ...FREEBUILD, ...SHOP_PIECES]) {
+  for (const [id, slot, code, flags, release] of [...BASE, ...FREEBUILD, ...SHOP_PIECES, ...LIVING_PIECES]) {
     items.set(id, withFlags({ id, slot, unlock: ruleOf(code), release, ...(slot === 'desk' ? { style: 'standard' as const } : {}) }, flags));
   }
   const sets: CosmeticSet[] = [];
@@ -379,10 +394,12 @@ function build(): { items: CosmeticItem[]; sets: CosmeticSet[] } {
   }
   for (const [id, item] of items) {
     const iso = isoFor(item);
+    const effect = EFFECTS[id];
     const price = PRICES[id];
     items.set(id, {
       ...item,
-      ...(iso ? { iso } : {}),
+      // isoFor returns shared objects (SLOT_ISO, DESK_ISO): the spread never writes into them.
+      ...(iso ? { iso: effect ? { ...iso, effect } : iso } : {}),
       ...(FUNNY.has(id) ? { tags: ['funny'] } : {}),
       ...(price !== undefined ? { price, shop: 'always' as const } : {}),
     });
