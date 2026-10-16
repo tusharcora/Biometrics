@@ -289,6 +289,7 @@ describe('KIP walking (spec §9.2, rulings 9 and 13)', () => {
     const walking = renderCard({ stage: IDLE, kipWalks: true });
     expect(walking.getByTestId('kip-room').props.walks).toBe('walks');
     expect(walking.getByTestId('kip-room').props.idle).toBe('idle');
+    expect(walking.getByTestId('kip-room').props.live).toBe('live');
     walking.unmount();
     const thinking = renderCard({ stage: STAGE, kipWalks: true });
     expect(thinking.getByTestId('kip-room').props.walks).toBe('');

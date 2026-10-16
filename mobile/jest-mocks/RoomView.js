@@ -13,6 +13,7 @@ const propsOf = (p) => ({
   editing: !!p.editing,
   holdClock: !!p.holdClock,
   walks: p.kipWalks ? 'walks' : '',
+  live: p.live ? 'live' : '',
   idle: p.idle ? 'idle' : '',
   worn: JSON.stringify(p.worn),
   living: p.living ? JSON.stringify(p.living) : undefined,

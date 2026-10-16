@@ -33,6 +33,7 @@ export interface WalkTarget {
 export interface Trip { target: WalkTarget; path: Tile[]; faceLeft: boolean }
 
 const key = (t: Tile) => `${t[0]},${t[1]}`;
+const NO_TILES: ReadonlySet<string> = new Set();
 
 /** Every tile under a floor footprint, rugs left out. */
 export function blockedTiles(layout: RoomLayout, deps: GeometryDeps = GEOMETRY_DEPS): Set<string> {
@@ -137,17 +138,22 @@ export function walkTargets(layout: RoomLayout, tier: Tier, effects: RoomEffects
 /**
  * One trip, picked by `rng`, with a path from the seat out by the exit tile over tiles inside `view` only (KIP never
  * walks out of the crop). Never the last target while another one can be reached; with none, the last one again
- * (ruling T10-ONE: a room with one target, the starter fern, is revisited).
+ * (ruling T10-ONE: a room with one target, the starter fern, is revisited). `avoid` holds the tiles a wandering cat is
+ * on or steps onto next (Task 11): KIP walks round them and, with the cat on its way out, stays seated this time.
  */
-export function planTrip(layout: RoomLayout, tier: Tier, effects: RoomEffects, view: Box, last: string | null, rng: () => number, deps: GeometryDeps = GEOMETRY_DEPS): Trip | null {
+export function planTrip(
+  layout: RoomLayout, tier: Tier, effects: RoomEffects, view: Box, last: string | null, rng: () => number,
+  deps: GeometryDeps = GEOMETRY_DEPS, avoid: ReadonlySet<string> = NO_TILES,
+): Trip | null {
   const desk = deskOf(layout);
   const iso = desk ? deps.isoOf(desk.item) : undefined;
   const seat = desk && iso ? seatTile(desk, iso) : null;
   const exit = desk && iso ? exitTile(desk, iso) : null;
-  if (!seat || !exit) return null;
+  if (!seat || !exit || avoid.has(key(exit))) return null;
   const { n, m } = tierSize(tier);
   const g = isoGrid(tier);
   const blocked = blockedTiles(layout, deps);
+  for (const t of avoid) blocked.add(t);
   for (let i = 0; i < n; i++) for (let j = 0; j < m; j++) if (!tileInView(g, [i, j], view)) blocked.add(`${i},${j}`);
   const targets = walkTargets(layout, tier, effects, view, deps);
   // A fair shuffle by rng, the last target moved to the end, then the first target with a path.

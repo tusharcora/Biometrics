@@ -11,7 +11,8 @@ import type { Placement } from '../../src/lib/room/iso/geometry';
 import { EMPTY_WORN } from '../../src/lib/room/loadout';
 import { starterLayout } from '../../src/lib/room/layout';
 
-jest.mock('../../src/lib/useScreenFocused', () => ({ useScreenFocused: () => true }));
+let mockFocused = true;
+jest.mock('../../src/lib/useScreenFocused', () => ({ useScreenFocused: () => mockFocused }));
 
 const picture = createPicture as jest.Mock;
 const PROPS: RoomViewProps = {
@@ -24,7 +25,7 @@ const groups = (s: ReturnType<typeof render>) => s.getAllByTestId('skia-group', 
 const transforms = (s: ReturnType<typeof render>) => JSON.stringify(groups(s).map((g) => g.props.skiaTransform));
 const disposed = (all: { dispose: jest.Mock }[]) => all.filter((p) => p.dispose.mock.calls.length > 0).length;
 
-beforeEach(() => { picture.mockClear(); jest.useFakeTimers(); });
+beforeEach(() => { picture.mockClear(); jest.useFakeTimers(); mockFocused = true; });
 afterEach(() => jest.useRealTimers());
 
 describe('RoomView with movers (spec §3.4, §3.7, rulings 11-12)', () => {
@@ -183,6 +184,83 @@ describe('RoomView with movers (spec §3.4, §3.7, rulings 11-12)', () => {
       expect([first.dispose.mock.calls.length > 0, second.dispose.mock.calls.length]).toEqual([true, 0]);
       s.unmount();
       expect(second.dispose).toHaveBeenCalled();
+    });
+  });
+
+  describe('the cat wandering the front row (Task 11, ruling 10)', () => {
+    const cat = { id: 'p1', item: 'pet.tabby', layer: 'floor' as const, x: 5, y: 3, facing: 'L' as const, mirror: false };
+    const bed = { id: 'p2', item: 'pet.bed', layer: 'floor' as const, x: 6, y: 6, facing: 'L' as const, mirror: false };
+    const layout = { ...starterLayout(), pieces: [...starterLayout().pieces, cat, bed] };
+    const living = { plantStage: 5 as const, petEnergy: 'wander' as const, awards: [] };
+    const LIVE = { ...PROPS, layout, living, live: true };
+
+    it('the KIP page\'s room lets the cat wander; Reduce Motion, the night and other rooms keep it still (Review Focus 4)', () => {
+      jest.setSystemTime(new Date(2026, 9, 24, 12, 0, 0));
+      // under, the fern, the desk and the bed (three runs), KIP at its seat, the cat mover, the overlay, the cat's own
+      // loop frame over it (its tail, ruling T9-FIX I1), the room's loop frame.
+      expect(pictures(render(<RoomView {...PROPS} layout={layout} living={living} live />))).toHaveLength(9);
+      expect(pictures(render(<RoomView {...PROPS} layout={layout} living={living} live reduceMotion />))).toHaveLength(4);
+      expect(pictures(render(<RoomView {...PROPS} layout={layout} living={living} />))).toHaveLength(4);
+      jest.setSystemTime(new Date(2026, 9, 24, 23, 0, 0));
+      const night = render(<RoomView {...PROPS} layout={layout} living={living} live reduceMotion />);
+      expect(pictures(night)).toHaveLength(4); // curled on its bed, in the static room
+      const before = picture.mock.calls.length;
+      act(() => { jest.advanceTimersByTime(400 * 3); });
+      expect(picture.mock.calls.length - before).toBe(0);
+    });
+
+    it('at nap time the loops run, the cat stays on its bed and nothing is recorded (ruling 10)', () => {
+      jest.setSystemTime(new Date(2026, 9, 24, 23, 0, 0));
+      const night = render(<RoomView {...LIVE} />);
+      expect(pictures(night)).toHaveLength(4);
+      const before = picture.mock.calls.length;
+      act(() => { jest.advanceTimersByTime(LOOP_MS * 12); });
+      expect(picture.mock.calls.length - before).toBe(0);
+      expect(pictures(night)).toHaveLength(4);
+    });
+
+    it('a step records nothing: after one round both ways, a whole round records 0 pictures (Review Focus 5)', () => {
+      jest.setSystemTime(new Date(2026, 9, 24, 12, 0, 0));
+      const s = render(<RoomView {...LIVE} />);
+      const seen = new Set<string>();
+      for (let k = 0; k < 60; k++) { seen.add(transforms(s)); act(() => { jest.advanceTimersByTime(LOOP_MS); }); }
+      expect(seen.size).toBeGreaterThan(5); // it really walks
+      const before = picture.mock.calls.length;
+      for (let k = 0; k < 60; k++) act(() => { jest.advanceTimersByTime(LOOP_MS); });
+      expect(picture.mock.calls.length - before).toBe(0);
+      expect(pictures(s)).toHaveLength(9);
+    });
+
+    it('holds like KIP: unfocused, paused, under the collapsed header, Reduce Motion or the editor put it on its own tile in that render', () => {
+      jest.setSystemTime(new Date(2026, 9, 24, 12, 0, 0));
+      for (const hold of [{ paused: true }, { holdClock: true }, { reduceMotion: true }, { editing: true }, { unfocused: true }]) {
+        const { unfocused, ...over } = { unfocused: false, ...hold };
+        const s = render(<RoomView {...LIVE} />);
+        act(() => { jest.advanceTimersByTime(LOOP_MS * 3); });
+        expect(pictures(s)).toHaveLength(9);
+        mockFocused = !unfocused;
+        s.rerender(<RoomView {...LIVE} {...over} />);
+        // No mover: the static room, the cat drawn in it at its placement, and no step pending.
+        expect(pictures(s)).toHaveLength(4);
+        const before = picture.mock.calls.length;
+        act(() => { jest.advanceTimersByTime(LOOP_MS * 6); });
+        expect([JSON.stringify(hold), picture.mock.calls.length - before]).toEqual([JSON.stringify(hold), 0]);
+        s.unmount();
+        mockFocused = true;
+      }
+    });
+
+    it('KIP up from its seat: the cat waits on a whole tile until KIP sits again (KIP and the cat never share a tile)', () => {
+      jest.setSystemTime(new Date(2026, 9, 24, 12, 0, 0));
+      const s = render(<RoomView {...LIVE} />);
+      act(() => { jest.advanceTimersByTime(LOOP_MS * 3); });
+      s.rerender(<RoomView {...LIVE} kipMover={{ ...OUT, pos: [1, 4], depth: [1, 4] }} />);
+      const waiting = transforms(s);
+      act(() => { jest.advanceTimersByTime(LOOP_MS * 8); });
+      expect(transforms(s)).toBe(waiting);
+      s.rerender(<RoomView {...LIVE} />);
+      act(() => { jest.advanceTimersByTime(LOOP_MS * 4); });
+      expect(transforms(s)).not.toBe(waiting);
     });
   });
 

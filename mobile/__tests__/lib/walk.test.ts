@@ -91,6 +91,19 @@ describe('paths and targets (spec §9.2, ruling 13)', () => {
     expect(trip.path.slice(1).every((t) => tileInView(g, t, card))).toBe(true);
   });
 
+  it('keeps off the tiles a wandering cat holds: round them, and no trip while it sits on the way out (Task 11)', () => {
+    const fern = starterLayout();
+    const trip = planTrip(fern, 1, fx(fern), WHOLE, null, () => 0)!;
+    const mid = trip.path[3]!;
+    const avoid = new Set([`${mid[0]},${mid[1]}`]);
+    const round = planTrip(fern, 1, fx(fern), WHOLE, null, () => 0, undefined, avoid)!;
+    expect(round.target.id).toBe('plant');
+    expect(round.path.some(([i, j]) => i === mid[0] && j === mid[1])).toBe(false);
+    expect(planTrip(fern, 1, fx(fern), WHOLE, null, () => 0, undefined, new Set(['3,2']))).toBeNull(); // on the exit tile
+    const stand = trip.path[trip.path.length - 1]!;
+    expect(planTrip(fern, 1, fx(fern), WHOLE, null, () => 0, undefined, new Set([`${stand[0]},${stand[1]}`]))).toBeNull(); // where KIP would stand
+  });
+
   it('glides half a tile a frame, taking its depth from the tile it is moving into', () => {
     const path = [[3, 1], [3, 2], [4, 2]] as const;
     expect(posAt(path, 0, 1)).toEqual({ pos: [3, 1], depth: [3, 1] });

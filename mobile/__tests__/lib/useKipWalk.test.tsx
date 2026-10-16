@@ -100,6 +100,18 @@ it('a cat that starts wandering or falls asleep while KIP goes to it puts KIP on
   }
 });
 
+it('reads the tiles the cat holds when it plans a trip: none while the cat is on its way out (Task 11)', () => {
+  const avoid = { tiles: new Set(['3,2']) as ReadonlySet<string> };
+  const p = { ...props(true), avoid: () => avoid.tiles };
+  const { result } = renderHook((q: typeof p) => useKipWalk(q), { initialProps: p });
+  act(() => { jest.advanceTimersByTime(TRIP_MIN_MS); });
+  expect(result.current).toEqual({ phase: 'seat' });
+  expect(jest.getTimerCount()).toBe(1); // rests and tries again
+  avoid.tiles = new Set();
+  act(() => { jest.advanceTimersByTime(TRIP_MIN_MS); });
+  expect(result.current.phase).toBe('walk');
+});
+
 it('a walking KIP bobs and glances the way it goes; seated there is no mover', () => {
   expect(walkMover({ phase: 'seat' })).toBeNull();
   expect(walkMover({ phase: 'walk', pos: [3, 1.5], depth: [3, 2], flip: true, kind: 'plant', target: 'plant' })).toEqual({ pos: [3, 1.5], depth: [3, 2], flip: true, pose: 'rest', moving: true, sway: false });

@@ -20,6 +20,8 @@ export interface KipWalkInput {
   /** The room card's crop in room cells: targets outside it are never picked (spec §9.2). */
   view: Box | null;
   rng?: () => number;
+  /** The tiles a wandering cat holds, read when a trip is planned: KIP keeps off them (Task 11). */
+  avoid?: () => ReadonlySet<string>;
 }
 
 /**
@@ -29,14 +31,14 @@ export interface KipWalkInput {
  * or falls asleep while KIP goes to it (it is no longer where KIP is heading). It says nothing to a screen reader:
  * the room stays one image with one label.
  */
-export function useKipWalk({ enabled, layout, tier, effects, view, rng = Math.random }: KipWalkInput): KipWalk {
+export function useKipWalk({ enabled, layout, tier, effects, view, rng = Math.random, avoid }: KipWalkInput): KipWalk {
   // The room the walk was planned in joins it, so a moved piece puts KIP on its seat in that same render too; so does
   // a cat target's state when the trip was planned.
   const [state, setState] = useState<{ room: string; walk: KipWalk; cat: string }>({ room: '', walk: SEAT, cat: '' });
   const last = useRef<string | null>(null);
   // Read when a trip is planned, so a new crop or a minute's effects never restart the timers.
-  const inputs = useRef({ layout, tier, effects, view, rng });
-  inputs.current = { layout, tier, effects, view, rng };
+  const inputs = useRef({ layout, tier, effects, view, rng, avoid });
+  inputs.current = { layout, tier, effects, view, rng, avoid };
   const layoutId = useMemo(() => layoutKey(layout), [layout]);
   const roomKey = `${layoutId}#${tier}`;
   const w = state.walk;
@@ -50,7 +52,7 @@ export function useKipWalk({ enabled, layout, tier, effects, view, rng = Math.ra
     const rest = () => later(TRIP_MIN_MS + Math.floor(inputs.current.rng() * TRIP_SPAN_MS), go);
     const go = () => {
       const c = inputs.current;
-      const trip = c.view ? planTrip(c.layout, c.tier, c.effects, c.view, last.current, c.rng) : null;
+      const trip = c.view ? planTrip(c.layout, c.tier, c.effects, c.view, last.current, c.rng, undefined, c.avoid?.()) : null;
       if (!trip) { rest(); return; }
       last.current = trip.target.id;
       const cat = trip.target.kind === 'cat' ? c.effects.states.get(trip.target.id) ?? '' : '';

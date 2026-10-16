@@ -104,6 +104,7 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
                   paused={paused}
                   holdClock={holdClock}
                   kipWalks={walks}
+                  live
                   idle={stage.id === 'idle'}
                   accessibilityLabel={roomLabel(stage.id, window)}
                 />

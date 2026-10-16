@@ -11,7 +11,8 @@ import type { RoomWeather } from '../../lib/room/weather';
 import { pieceLayers } from '../../lib/room/iso/art';
 import type { IsoStatic, KipSeat, RoomKip } from '../../lib/room/iso/room';
 import { drawIsoFramesEach, drawIsoStatic, drawKipLayer, isoRoomKey, kipLayerKey, pieceAt } from '../../lib/room/iso/room';
-import { isoCrop } from '../../lib/room/iso/crop';
+import { deskBoxes, isoCrop } from '../../lib/room/iso/crop';
+import { isoGrid } from '../../lib/room/iso/grid';
 import { KIP_MOVER, MOVER_PREFIX, kipTileCell, moverOrder, pieceTileCell, sameTile, type Tile } from '../../lib/room/iso/movers';
 import type { Placement, RoomLayout, Tier } from '../../lib/room/iso/geometry';
 import { KIP_COLOURS, kipRamp, type KipColour, type KipMood, type KipPose } from '../../lib/kip/kipArt';
@@ -20,6 +21,7 @@ import { useScreenFocused } from '../../lib/useScreenFocused';
 import type { Living } from '../../lib/room/effects';
 import { useRoomEffects } from './useRoomEffects';
 import { useKipWalk, walkMover } from '../../lib/room/live/useKipWalk';
+import { takenTiles, useCatWander } from '../../lib/room/live/catWander';
 
 export const LOOP_MS = 400;
 // The bubble is decoration over a fixed crop, so its text grows only a little with Dynamic Type.
@@ -39,8 +41,8 @@ export interface KipMover {
   /** At the radio: KIP sways a cell each way (ruling 13). */
   sway: boolean;
 }
-/** A piece drawn as a mover (the wandering cat, spec §8.2). */
-export interface PieceMover { id: string; pos: readonly [number, number]; depth: Tile; flip: boolean }
+/** A piece drawn as a mover (the wandering cat, spec §8.2); `next` is the tile its next step takes it onto. */
+export interface PieceMover { id: string; pos: readonly [number, number]; depth: Tile; flip: boolean; next?: Tile }
 export interface RoomViewHandle {
   /** The topmost piece under a point in this view, in points (the piece card, spec §8.1), or null. */
   pieceAtPoint(x: number, y: number): string | null;
@@ -81,8 +83,11 @@ export interface RoomViewProps {
   kipWalks?: boolean;
   /** The KIP page's idle stage: with a plant in the room, loop frame 2 smiles (ruling 9). */
   idle?: boolean;
-  /** Pieces drawn as movers (Task 11 sets the wandering cat; a test may pass them). */
+  /** Pieces drawn as movers (set from the view's own wandering cats when absent; a test may pass them). */
   pieceMovers?: readonly PieceMover[];
+  /** The KIP page's room card: the cat may wander (spec §8.2); the view adds focus, Reduce Motion, the pause, the
+   * collapsed header and the editor. */
+  live?: boolean;
   bubble: string | null;
   reduceMotion: boolean;
   accessibilityLabel?: string;
@@ -94,7 +99,6 @@ export interface RoomViewProps {
   ref?: Ref<RoomViewHandle>;
 }
 
-const NO_MOVERS: readonly PieceMover[] = [];
 const NO_IDS: readonly string[] = [];
 const NO_KEYS: ReadonlySet<string> = new Set();
 
@@ -117,7 +121,9 @@ const shift = (dx: number, dy: number, cellPt: number) => [{ translateX: dx * ce
 // after the commit (PF3-DISPOSE). The scene's elements are memoised, so a frame-clock render between two loop frames
 // changes nothing on the canvas (T9-FIX M3). The loops stop when the tab is not focused, under Reduce Motion, or while
 // paused. On the KIP page KIP walks between answers (kipWalks, ruling 13) as a mover from its own walk (useKipWalk):
-// any of those stops, or a bubble, puts it back on its seat in the same render.
+// any of those stops, or a bubble, puts it back on its seat in the same render. There too (live) a wandering cat walks
+// the front row as a piece mover (useCatWander, Task 11), held by the same stops and by the collapsed header; KIP
+// plans round the cat's tiles and the cat waits while KIP is up, so the two never share a tile.
 export function RoomView(props: RoomViewProps) {
   const { layout, tier, weather, night, colour, worn, pose, mood, facing, screen, crop, cellPt, bubble, reduceMotion } = props;
   const focused = useScreenFocused();
@@ -131,7 +137,30 @@ export function RoomView(props: RoomViewProps) {
     hold: !focused || !!props.dragging || !!props.paused || !!props.holdClock,
     editing: props.editing,
   });
-  const pieceMovers = props.pieceMovers ?? NO_MOVERS;
+  // The crop in room cells, so KIP and the cat only walk where the card shows (spec §9.2). From the room's grid and
+  // desk boxes, not the built room: the movers are left out of that one, so it is built after them.
+  const thumb = props.box === 'thumb';
+  const given = props.offset;
+  const offset = useMemo(() => {
+    if (given) return given;
+    const g = isoGrid(tier);
+    const boxes = deskBoxes(g, layout);
+    return isoCrop({ width: crop.width, height: crop.height, cellPt, box: thumb ? boxes.thumb : boxes.focus, room: g });
+  }, [given, tier, layout, thumb, crop.width, crop.height, cellPt]);
+  const view = useMemo(
+    () => ({ x: -offset.x / cellPt, y: -offset.y / cellPt, w: crop.width / cellPt, h: crop.height / cellPt }),
+    [offset, crop.width, crop.height, cellPt],
+  );
+  // The cat's tiles as of the last render, read when KIP plans a trip (it plans in a timer, after this render).
+  const catTiles = useRef<ReadonlySet<string>>(new Set());
+  const walk = useKipWalk({ enabled: !!props.kipWalks && !still && !bubble, layout, tier, effects, view, avoid: () => catTiles.current });
+  const walked = useMemo(() => walkMover(walk), [walk]);
+  const kipMover = props.kipMover ?? walked;
+  const walking = !!kipMover;
+  // The cat stays on its own tile in the editor (spec §8.2) and while the card is out of sight (T5-FIX M1).
+  const catMovers = useCatWander({ enabled: !!props.live && !still && !props.holdClock && !props.editing, layout, tier, effects, view, waits: walking });
+  catTiles.current = useMemo(() => takenTiles(catMovers), [catMovers]);
+  const pieceMovers = props.pieceMovers ?? catMovers;
   const moverKey = pieceMovers.map((m) => m.id).sort().join(',');
   const moverIds = useMemo(() => (moverKey ? moverKey.split(',') : NO_IDS), [moverKey]);
   const hide = props.hide ?? null;
@@ -142,17 +171,9 @@ export function RoomView(props: RoomViewProps) {
   );
   const staticKey = useMemo(() => isoRoomKey(input), [input]);
   // A given room (the editor's) has no movers left out of it, so with piece movers the view builds its own (M5).
-  const given = props.room && !moverIds.length ? props.room : null;
-  const room = useMemo(() => given ?? drawIsoStatic(input), [staticKey, given]); // eslint-disable-line react-hooks/exhaustive-deps
+  const givenRoom = props.room && !moverIds.length ? props.room : null;
+  const room = useMemo(() => givenRoom ?? drawIsoStatic(input), [staticKey, givenRoom]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // The crop in room cells, so KIP only walks to what the card shows (spec §9.2), and its walk between answers.
-  const box = props.box === 'thumb' ? room.thumb : room.focus;
-  const offset = props.offset ?? isoCrop({ width: crop.width, height: crop.height, cellPt, box, room: room.grid });
-  const view = { x: -offset.x / cellPt, y: -offset.y / cellPt, w: crop.width / cellPt, h: crop.height / cellPt };
-  const walk = useKipWalk({ enabled: !!props.kipWalks && !still && !bubble, layout, tier, effects, view });
-  const walked = useMemo(() => walkMover(walk), [walk]);
-  const kipMover = props.kipMover ?? walked;
-  const walking = !!kipMover;
   const movers = walking || pieceMovers.length > 0;
 
   // The caches live as long as the view; on unmount everything is released.
