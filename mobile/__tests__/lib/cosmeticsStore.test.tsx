@@ -5,6 +5,7 @@ import { getMyKip, resetMyKip } from '../../src/lib/kip/myKip';
 import {
   getCosmetics, hasUnseen, loadCosmetics, markCosmeticsSeen, markWelcomed, resetCosmetics, saveCosmeticsLoadout, useCosmetics, useMyRoom,
 } from '../../src/lib/room/cosmeticsStore';
+import { NEUTRAL_LIVING } from '../../src/lib/room/effects';
 import { starterLayout } from '../../src/lib/room/layout';
 import { EMPTY_WORN } from '../../src/lib/room/loadout';
 import { cosmeticsDTO, STARTER_COUNTS } from '../../jest-mocks/cosmeticsFixture';
@@ -33,7 +34,7 @@ beforeEach(() => {
 it('loads once, publishes the room, and hands the worn half to useMyKip', async () => {
   get.mockResolvedValue(DTO);
   const { result } = renderHook(() => useMyRoom());
-  expect(result.current).toEqual({ layout: starterLayout(), tier: 1 });
+  expect(result.current).toEqual({ layout: starterLayout(), tier: 1, living: NEUTRAL_LIVING });
   await act(async () => { await loadCosmetics(); });
   expect(result.current.layout).toEqual(RED);
   expect(getCosmetics()!.owned.has('rug.red')).toBe(true);
@@ -285,4 +286,17 @@ it('markWelcomed ignores a failed post: the next read shows the welcome again, w
   welcomed.mockRejectedValueOnce(new Error('offline'));
   await act(async () => { await markWelcomed(); });
   expect(getCosmetics()!.welcomed).toBe(true);
+});
+
+it('keeps the living room from the body, and reads a missing or broken one as neutral (spec §8.3)', async () => {
+  (fetchCosmetics as jest.Mock).mockResolvedValueOnce(cosmeticsDTO({ living: { plantStage: 2, petEnergy: 'nap', awards: [4] } }));
+  expect((await loadCosmetics({ fresh: true }))!.living).toEqual({ plantStage: 2, petEnergy: 'nap', awards: [4] });
+  (fetchCosmetics as jest.Mock).mockResolvedValueOnce(cosmeticsDTO({ version: 2, living: 'nope' }));
+  expect((await loadCosmetics({ fresh: true }))!.living).toEqual(NEUTRAL_LIVING);
+});
+
+it('reads a body with no living at all (an older server, PF3-LIVING) as the neutral room: plants fully grown', async () => {
+  (fetchCosmetics as jest.Mock).mockResolvedValueOnce(cosmeticsDTO({ living: undefined }));
+  const c = (await loadCosmetics({ fresh: true }))!;
+  expect([c.living, c.living.plantStage]).toEqual([NEUTRAL_LIVING, 5]);
 });

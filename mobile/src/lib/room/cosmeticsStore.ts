@@ -3,6 +3,7 @@ import { fetchCosmetics, postCosmeticsSeen, postRoomWelcomed, putCosmetics, type
 import { setMyKipWorn } from '../kip/myKip';
 import { EMPTY_WORN, type ItemId, type KipWorn } from './loadout';
 import { WORN_SLOTS } from './catalogue';
+import { NEUTRAL_LIVING, livingKey, readLiving, type Living } from './effects';
 import { capFor, toTier, type RoomLayout, type Tier } from './iso/geometry';
 import { readLayout, starterLayout } from './layout';
 
@@ -25,6 +26,8 @@ export interface Cosmetics {
   version: number;
   counters: { recapsRead: number; buddyCheers: number };
   welcomed: boolean;
+  /** Plants, the cat and the trophy shelf (spec §8.3): the neutral room when the body has none (PF3-LIVING). */
+  living: Living;
 }
 
 let cosmetics: Cosmetics | null = null;
@@ -58,6 +61,7 @@ function fromDTO(dto: CosmeticsDTO): Cosmetics {
     version: dto.version, counters: dto.counters ?? { recapsRead: 0, buddyCheers: 0 },
     // An older server sends no flag: never show the welcome there.
     welcomed: dto.welcomed !== false,
+    living: readLiving(dto.living),
   };
 }
 
@@ -169,15 +173,19 @@ export function useCosmetics(): Cosmetics | null {
   return useSyncExternalStore(subscribe, getCosmetics, getCosmetics);
 }
 
-export interface MyRoom { layout: RoomLayout; tier: Tier }
-const STARTER_ROOM_VIEW: MyRoom = { layout: starterLayout(), tier: 1 };
+export interface MyRoom { layout: RoomLayout; tier: Tier; living: Living }
+const STARTER_ROOM_VIEW: MyRoom = { layout: starterLayout(), tier: 1, living: NEUTRAL_LIVING };
 let roomView: { from: Cosmetics; value: MyRoom } | null = null;
 const roomOf = (): MyRoom => {
   if (!cosmetics) return STARTER_ROOM_VIEW;
   if (roomView?.from !== cosmetics) {
     // Marking seen republishes the same layout: keep the same object so the room's readers don't re-render.
-    const same = roomView && roomView.value.layout === cosmetics.layout && roomView.value.tier === cosmetics.tier;
-    roomView = { from: cosmetics, value: same ? roomView!.value : { layout: cosmetics.layout, tier: cosmetics.tier } };
+    const same = roomView && roomView.value.layout === cosmetics.layout && roomView.value.tier === cosmetics.tier
+      && livingKey(roomView.value.living) === livingKey(cosmetics.living);
+    roomView = {
+      from: cosmetics,
+      value: same ? roomView!.value : { layout: cosmetics.layout, tier: cosmetics.tier, living: cosmetics.living },
+    };
   }
   return roomView.value;
 };

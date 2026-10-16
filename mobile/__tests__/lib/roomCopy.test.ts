@@ -75,3 +75,25 @@ it('the first-week list reads its rows and lines aloud without "·" or "−" (sp
     expect(s).not.toMatch(/·|−|×/);
   }
 });
+
+/** Every string under a copy object, with each function called on sample arguments. */
+function copyStrings(v: unknown): string[] {
+  if (typeof v === 'string') return [v];
+  if (typeof v === 'function') return copyStrings((v as (...a: unknown[]) => unknown)('fern', 7, 3));
+  if (v && typeof v === 'object') return Object.values(v).flatMap(copyStrings);
+  return [];
+}
+const ADVICE = /\b(should|try|more|need|needs|must)\b/i;
+// Health verbs that open a sentence. "Move" and "Store" are the room's own buttons (moving furniture is no advice).
+const HEALTH_VERB = /(^|[.!?:]\s+)(sleep|walk|drink|rest|exercise|go|get|hit|reach|eat)\b/i;
+const advises = (s: string) => ADVICE.test(s) || HEALTH_VERB.test(s);
+
+it('never gives health advice in an effect or living line (spec §8.3, P3 ruling 18)', () => {
+  for (const bad of ['Sleep more to grow your fern.', 'Walk 2,000 more steps to wake the cat.', 'You should rest.', 'Try for 8 hours.']) expect(advises(bad)).toBe(true);
+  // Ruling 18 scans the piece card's strings too; ROOM_COPY.card arrives with the card (a later task) and is read then.
+  const lines = copyStrings([ROOM_COPY.effects, (ROOM_COPY as Record<string, unknown>).card]);
+  expect(lines.length).toBeGreaterThan(15);
+  for (const s of lines) expect({ s, advises: advises(s) }).toEqual({ s, advises: false });
+  expect([ROOM_COPY.effects.grew('fern', 7), ROOM_COPY.effects.pet.nap]).toEqual(['The fern grew: 7 nights at your goal.', 'The cat’s napping.']);
+  expect(copyStrings(ROOM_COPY.effects).join(' ')).not.toMatch(/\d+ (steps|minutes|hours)|%/); // never a health value
+});

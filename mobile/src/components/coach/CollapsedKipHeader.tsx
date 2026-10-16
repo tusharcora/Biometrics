@@ -47,7 +47,7 @@ export function CollapsedKipHeader({ stage, look, statusLine, window, reduceMoti
   showActions: boolean;
 }) {
   const me = useMyKip();
-  const { layout, tier } = useMyRoom();
+  const { layout, tier, living } = useMyRoom();
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === 'dark' ? COLORS.dark : COLORS.light;
   return (
@@ -63,6 +63,7 @@ export function CollapsedKipHeader({ stage, look, statusLine, window, reduceMoti
           testID="kip-room-thumb"
           layout={layout}
           tier={tier}
+          living={living}
           worn={me.worn}
           weather={window.weather}
           night={window.night}

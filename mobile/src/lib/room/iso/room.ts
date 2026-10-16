@@ -7,6 +7,7 @@ import './index';
 import { catalogueItem, isoOf } from '../catalogue';
 import type { Box, RoomRect } from '../grid';
 import type { ItemContext, MonitorScreen, SeatStyle } from '../items';
+import { effectsKey, type RoomEffects } from '../effects';
 import { childrenOf, deskOf, layoutKey } from '../layout';
 import { wornKey, type KipWorn } from '../loadout';
 import { poly, R, type Rects } from '../paint';
@@ -78,6 +79,8 @@ export interface IsoStaticInput {
   colour: KipColour;
   /** A piece lifted into the drag ghost: it and its children are left out (spec §3.7). */
   hide?: string | null;
+  /** Each piece's effect state (P3 ruling 7); absent, every piece draws plain (P1's room). */
+  effects?: RoomEffects;
 }
 
 export interface PlacedPiece { p: Placement; at: [number, number]; o: IsoArtOpts }
@@ -175,7 +178,8 @@ export function drawIsoStatic(input: IsoStaticInput): IsoStatic {
   let list = behind;
   const put = (p: Placement) => {
     const at = anchorOf(P, p, byId);
-    const o: IsoArtOpts = { layer: p.layer, facing: p.facing, mirror: p.mirror };
+    const state = input.effects?.states.get(p.id);
+    const o: IsoArtOpts = { layer: p.layer, facing: p.facing, mirror: p.mirror, ...(state ? { effect: state } : {}) };
     const l = at ? pieceLayers(p.item, ctx, o) : null;
     if (!at || !l) return;
     const base = moveRects(l.base ?? [], at[0], at[1]);
@@ -250,9 +254,13 @@ export function drawIsoFramesEach(
   return out;
 }
 
-/** The static picture's memo key: the layout's content, the tier, the light, KIP's colour and the lifted piece. */
+/**
+ * The static picture's memo key: the layout's content, the tier, the light, KIP's colour, the lifted piece and the
+ * pieces' effect states (P3 ruling 7).
+ */
 export function isoRoomKey(input: IsoStaticInput): string {
-  return `${layoutKey(input.layout)}#${input.tier}#${input.weather}#${input.night ? 'n' : 'd'}#${input.colour}#${input.hide ?? ''}`;
+  const effects = input.effects ? effectsKey(input.effects) : '';
+  return `${layoutKey(input.layout)}#${input.tier}#${input.weather}#${input.night ? 'n' : 'd'}#${input.colour}#${input.hide ?? ''}#${effects}`;
 }
 
 /** The topmost piece with an opaque cell at room cell (x, y), or null (its shadow and glows don't count). */

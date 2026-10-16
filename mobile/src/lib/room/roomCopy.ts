@@ -4,6 +4,7 @@ import type { FirstWeekTaskKey } from '../../api/coins';
 import type { AchievementsSnapshot } from '../achievementsStore';
 import type { AchievementFamilyName, SetId, UnlockRule } from './catalogue';
 import { CATALOGUE, catalogueSet } from './catalogue';
+import type { EffectKind } from './iso/geometry';
 import type { ItemId } from './loadout';
 import type { RoomSlot, WornSlot } from './catalogue';
 
@@ -150,6 +151,33 @@ export const ROOM_COPY = {
   noArt: 'No art',
   tags: { placed: 'Placed', owned: 'Owned' },
   flags: { tint: 'TINT', glow: 'GLOW', anim: 'ANIM' },
+  /**
+   * Pieces that do something (spec 2026-10-15 §8, F7, C5): what each one does, the living room's lines and the slots.
+   * Never advice, never a health value (P3 ruling 18; roomCopy.test's guard reads every line here).
+   */
+  effects: {
+    lines: {
+      light: 'Keeps a warm pool of light on the floor after dark, so the room isn’t lost at night.',
+      sound: 'Plays a quiet lo-fi loop while the room is open. Notes float up from it.',
+      wander: 'Wanders the front row, and naps in a cat bed after 22:00.',
+      clock: 'Shows your real local time.',
+      tap: 'Squeaks when you tap it. That’s it.',
+      awards: 'Holds one award for each badge level you earn.',
+    } as Readonly<Record<EffectKind, string>>,
+    short: { light: 'Glows after dark', sound: 'Plays music', wander: 'Wanders', clock: 'Tells the time', tap: 'Squeaks', awards: 'Shows your awards' } as Readonly<Record<EffectKind, string>>,
+    plant: 'KIP looks a little happier with a plant in the room.',
+    grew: (name: string, nights: number) => `The ${name} grew: ${nights} nights at your goal.`,
+    sprout: (name: string) => `The ${name} is just starting out.`,
+    pet: { nap: 'The cat’s napping.', wander: 'The cat’s wandering.', play: 'The cat’s playing.' } as Readonly<Record<'nap' | 'wander' | 'play', string>>,
+    awardCount: (n: number) => (n === 0 ? 'No awards on it yet.' : n === 1 ? '1 award so far.' : `${n} awards so far.`),
+    resting: (slots: number) => `Resting. This room runs ${slots} effects at a time.`,
+    full: (slots: number) => `Effects ${slots} of ${slots}: store one to run another`,
+    tag: (used: number, slots: number) => `Effects ${used} of ${slots}`,
+    tagSpoken: (used: number, slots: number) => `${used} of ${slots} effects running`,
+    doesSomething: 'does something in the room',
+    fxTag: 'Does something',
+    onlyForFun: 'Effects are only for fun. They never change your health data, scores or what KIP says.',
+  },
   edit: {
     title: 'EDITING',
     count: (n: number, cap: number) => `${n} / ${cap} in room`,

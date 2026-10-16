@@ -207,7 +207,7 @@ function Editor({ cosmetics, params, navigation }: { cosmetics: Cosmetics; param
       </Text>
       {/* The room is pinned above the scrolling part (ruling T12-FIX), so a drag or a pan in it never scrolls the page. */}
       <View testID="edit-editing" className="flex-1" pointerEvents={saving ? 'none' : 'auto'}>
-        <EditRoom ref={roomRef} state={state} dispatch={act} width={width} height={editRoomHeight(height)} window={day.window} colour={me.colour} reduceMotion={reduceMotion} showGrid={showGrid} />
+        <EditRoom ref={roomRef} state={state} dispatch={act} width={width} height={editRoomHeight(height)} window={day.window} colour={me.colour} reduceMotion={reduceMotion} showGrid={showGrid} living={cosmetics.living} />
         <EditNotices state={state} />
         <ScrollView
           testID="edit-scroll"

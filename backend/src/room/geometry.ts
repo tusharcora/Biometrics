@@ -232,11 +232,13 @@ export const idRank = (id: string): number => {
   return m ? Number(m[1]) : 0;
 };
 
-/** The placed pieces that do something, first placed first: the lowest instance rank, then id (spec §8.1). */
+/** First placed first: the lowest instance rank, then id. The effects' order, and the app's choice of a cat's bed. */
+export const firstPlaced = (a: { id: string }, b: { id: string }): number =>
+  idRank(a.id) - idRank(b.id) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+
+/** The placed pieces that do something, first placed first (spec §8.1). */
 export function effectPieces(layout: RoomLayout, deps: GeometryDeps): Placement[] {
-  return layout.pieces
-    .filter((p) => !!deps.isoOf(p.item)?.effect)
-    .sort((a, b) => idRank(a.id) - idRank(b.id) || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  return layout.pieces.filter((p) => !!deps.isoOf(p.item)?.effect).sort(firstPlaced);
 }
 
 /** The effect pieces that run: the first `effectSlotsFor(tier)`. The rest stay in the room, inert (spec §8.1). */

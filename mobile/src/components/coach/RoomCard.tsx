@@ -54,7 +54,7 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
   onLayout?: ViewProps['onLayout'];
 }) {
   const me = useMyKip();
-  const { layout, tier } = useMyRoom();
+  const { layout, tier, living } = useMyRoom();
   const cosmetics = useCosmetics();
   const welcome = !!cosmetics && !cosmetics.welcomed && stage.id !== 'loading';
   const [inner, setInner] = useState(0);
@@ -81,6 +81,7 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
                   testID="kip-room"
                   layout={layout}
                   tier={tier}
+                  living={living}
                   worn={me.worn}
                   weather={window.weather}
                   night={window.night}

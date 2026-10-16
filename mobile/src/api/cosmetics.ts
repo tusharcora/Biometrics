@@ -16,6 +16,8 @@ export interface CosmeticsDTO {
   version: number;
   counters: { recapsRead: number; buddyCheers: number };
   welcomed: boolean;
+  /** The living room's bands (spec 2026-10-15 §8.3); an older server sends none. The store validates it. */
+  living?: unknown;
 }
 
 export const fetchCosmetics = () => apiFetch<CosmeticsDTO>('/me/cosmetics');

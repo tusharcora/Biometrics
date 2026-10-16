@@ -3,12 +3,13 @@
 // furniture the iso room draws itself (the shelf plank) is left out.
 import { catalogueItem, CATALOGUE } from '../../catalogue';
 import type { RoomRect } from '../../grid';
-import { itemArt, type ItemLayers } from '../../items';
+import { itemArt, type ItemContext, type ItemLayers } from '../../items';
 import { SHELF_TOP } from '../../items/shared';
 import type { Rects } from '../../paint';
 import { moveLayers, registerIsoArt, type IsoArtOpts, type IsoPieceArt } from '../art';
 import { LOCAL } from '../grid';
 import { mirrorRects, moveRects, opaqueBounds } from '../prims';
+import { growLayers, lampPool } from './effectArt';
 
 type Keep = (q: RoomRect) => boolean;
 const DESK_TOP = 72;
@@ -52,6 +53,15 @@ function standAt(o: IsoArtOpts, foot: readonly [number, number]): [number, numbe
   return LOCAL(w / 2, d / 2);
 }
 
+/** A billboard's effect state, in its own space (ruling 7): a growing plant, the floor lamp's pool after dark. */
+function withEffect(slot: string, l: ItemLayers, ctx: ItemContext, o: IsoArtOpts): ItemLayers {
+  const e = o.effect;
+  if (!e) return l;
+  if (slot === 'plant' && /^g[1-4]$/.test(e)) return growLayers(l, Number(e.slice(1)));
+  if (e === 'lit' && ctx.night) return { ...l, emissive: [...(l.emissive ?? []), ...lampPool()] };
+  return l;
+}
+
 export function standPiece(id: string): IsoPieceArt {
   return {
     id,
@@ -66,7 +76,7 @@ export function standPiece(id: string): IsoPieceArt {
         : slotKeep;
       const front = keep ? filterLayers(art.draw(ctx), keep) : art.draw(ctx);
       const [dx, dy] = standAt(o, item.iso.foot ?? [1, 1]);
-      return moveLayers(standFront(front, o.mirror), dx, dy);
+      return moveLayers(withEffect(item.slot, standFront(front, o.mirror), ctx, o), dx, dy);
     },
   };
 }

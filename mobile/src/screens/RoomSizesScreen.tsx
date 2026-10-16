@@ -218,6 +218,7 @@ export function RoomSizesScreen() {
               testID="sizes-room"
               layout={cosmetics.layout}
               tier={shown}
+              living={cosmetics.living}
               worn={me.worn}
               weather="clear"
               night={false}

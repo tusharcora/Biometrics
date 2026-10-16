@@ -161,4 +161,22 @@ describe('RoomView (iso)', () => {
     s.unmount();
     for (const p of all) expect(p.dispose).toHaveBeenCalled();
   });
+  it('draws the living room: a new plant stage rebuilds the static picture once, the same one records nothing (ruling 7)', () => {
+    const s = render(<RoomView {...PROPS} living={{ plantStage: 5, petEnergy: 'wander', awards: [] }} />);
+    const [back, , front] = pictures(s);
+    const before = picture.mock.calls.length;
+    s.rerender(<RoomView {...PROPS} living={{ plantStage: 5, petEnergy: 'wander', awards: [] }} />);
+    expect(picture.mock.calls.length - before).toBe(0);
+    s.rerender(<RoomView {...PROPS} living={{ plantStage: 2, petEnergy: 'wander', awards: [] }} />);
+    const [back2, , front2] = pictures(s);
+    expect(back2 !== back || front2 !== front).toBe(true); // the starter fern is at stage 2 now
+  });
+
+  it('draws a room with no living (PF3-LIVING) exactly as the neutral room: plants at full growth', () => {
+    const spy = jest.spyOn(isoRoom, 'drawIsoStatic');
+    render(<RoomView {...PROPS} />);
+    const drawn = spy.mock.results[0]!.value as ReturnType<typeof drawIsoStatic>;
+    spy.mockRestore();
+    expect([drawn.back, drawn.front]).toEqual([STATIC.back, STATIC.front]);
+  });
 });

@@ -14,6 +14,8 @@ import type { RoomLayout, Tier } from '../../lib/room/iso/geometry';
 import type { KipColour, KipMood, KipPose } from '../../lib/kip/kipArt';
 import { useFrameClock } from '../../lib/useFrameClock';
 import { useScreenFocused } from '../../lib/useScreenFocused';
+import type { Living } from '../../lib/room/effects';
+import { useRoomEffects } from './useRoomEffects';
 
 export const LOOP_MS = 400;
 // The bubble is decoration over a fixed crop, so its text grows only a little with Dynamic Type.
@@ -40,6 +42,8 @@ export interface RoomViewProps {
   hide?: string | null;
   /** The editor: the static room it already built for these props (its hit boxes), so it is built once a change. */
   room?: IsoStatic;
+  /** The living room (spec §8.3); absent, the neutral room (a visit, the share card, a test). */
+  living?: Living;
   bubble: string | null;
   reduceMotion: boolean;
   accessibilityLabel?: string;
@@ -56,7 +60,7 @@ export function bubbleAnchor(seat: KipSeat): { x: number; y: number } {
 }
 
 // KIP's isometric room (spec 2026-10-15 §3.7). The static room is recorded once per isoRoomKey (the layout, tier,
-// light, KIP's colour and a lifted piece) into two pictures, back and front, so only a pick-up, a drop, the light or
+// light, KIP's colour, a lifted piece and the pieces' effect states) into two pictures, back and front, so only a pick-up, a drop, the light or
 // the colour rebuilds it. KIP is drawn between them and the loop frame over them; a pose change records KIP's three
 // frames and the three loop frames (those behind KIP clipped by KIP's silhouette), and a 400 ms tick records
 // nothing. The loops stop when the tab is not focused, under Reduce Motion, or while paused.
@@ -67,7 +71,8 @@ export function RoomView(props: RoomViewProps) {
   const t = useFrameClock(still);
   const frame = still ? 0 : Math.floor(t / LOOP_MS) % 3;
 
-  const input = { layout, tier, weather, night, colour, hide: props.hide ?? null };
+  const effects = useRoomEffects(layout, tier, props.living);
+  const input = { layout, tier, weather, night, colour, hide: props.hide ?? null, effects };
   const staticKey = isoRoomKey(input);
   const room = useMemo(() => props.room ?? drawIsoStatic(input), [staticKey, props.room]); // eslint-disable-line react-hooks/exhaustive-deps
   const back = useDisposed(useMemo(() => record([room.back], cellPt), [room, cellPt]));

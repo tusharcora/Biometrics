@@ -13,6 +13,7 @@ module.exports = {
       accessibilityLabel: p.accessibilityLabel,
       layout: JSON.stringify(p.layout), tier: p.tier, offset: p.offset ? JSON.stringify(p.offset) : undefined, hide: p.hide ?? null,
       worn: JSON.stringify(p.worn),
+      living: p.living ? JSON.stringify(p.living) : undefined,
       room: `${p.pose}:${p.mood}:${p.bubble ?? 'none'}:${p.screen}:${p.weather}:${p.night ? 'night' : 'day'}:${p.colour}:${p.cellPt}:${p.reduceMotion ? 'still' : 'moving'}:${p.facing ?? ''}:${p.paused ? 'paused' : ''}`,
     }),
 };
