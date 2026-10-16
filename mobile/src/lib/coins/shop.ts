@@ -1,12 +1,14 @@
-// The coin shop's tiles and piece sheet (spec 2026-10-15 §6.6, C1, F6), pure. Tabs All, Floor, Wall and On top (ruling
-// 13); the week's featured set first. A rule piece not earned yet shows locked with its rule, never as for sale (§6.5).
+// The coin shop's tiles and piece sheet (spec 2026-10-15 §6.6, C1, F6), pure. Tabs All, Effects, Floor, Wall and On top
+// (P3 ruling 19); the week's featured set first. A piece with an effect says so on its tile and its sheet. A rule piece not earned yet shows locked with its rule, never as for sale (§6.5).
 // The server sends only ids and prices (ruling 34): locked, owned and where a piece goes come from the catalogue.
 import type { ShopDTO } from '../../api/coins';
 import { catalogueItem, type UnlockRule } from '../room/catalogue';
+import type { EffectKind } from '../room/iso/geometry';
 import { ROOM_COPY, coinCount, itemName, spokenName, unlockLine, unlockSpoken } from '../room/roomCopy';
 
-export type ShopTab = 'all' | 'floor' | 'wall' | 'onTop';
-export const SHOP_TABS: readonly ShopTab[] = ['all', 'floor', 'wall', 'onTop'];
+export type ShopTab = 'all' | 'effects' | 'floor' | 'wall' | 'onTop';
+/** Spec §6.6's order (P3 ruling 19). */
+export const SHOP_TABS: readonly ShopTab[] = ['all', 'effects', 'floor', 'wall', 'onTop'];
 
 export interface ShopTile {
   itemId: string;
@@ -17,6 +19,7 @@ export interface ShopTile {
   lockLine: string | null;
   label: string;
   featured: boolean;
+  effect: EffectKind | null;
 }
 
 const S = ROOM_COPY.shop;
@@ -28,16 +31,18 @@ export function shopTiles(shop: ShopDTO, counts: Readonly<Record<string, number>
     .filter(({ itemId }) => {
       const iso = catalogueItem(itemId)?.iso;
       if (!iso || (featuredOnly && !featured.has(itemId))) return false;
-      return tab === 'all' || iso.layers.includes(tab);
+      return tab === 'all' || (tab === 'effects' ? !!iso.effect : iso.layers.includes(tab));
     })
     .map(({ itemId, price }): ShopTile => {
       const item = catalogueItem(itemId)!;
       const owned = counts[itemId] ?? 0;
       const locked = lockedFor(item.unlock, owned);
+      const effect = item.iso!.effect ?? null;
+      const label = locked ? S.tileLocked(spokenName(itemId), unlockSpoken(item.unlock)) : S.tile(spokenName(itemId), coinCount(price), owned);
       return {
         itemId, name: itemName(itemId), price, owned, locked, lockLine: locked ? unlockLine(item.unlock) : null,
-        label: locked ? S.tileLocked(spokenName(itemId), unlockSpoken(item.unlock)) : S.tile(spokenName(itemId), coinCount(price), owned),
-        featured: featured.has(itemId),
+        label: effect ? `${label}, ${ROOM_COPY.effects.doesSomething}` : label,
+        featured: featured.has(itemId), effect,
       };
     })
     // Stable: the featured set keeps the server's order, and so does the rest.
@@ -66,6 +71,8 @@ export interface PieceSheet {
   haveSpoken: string;
   canBuy: boolean;
   button: string;
+  /** What the piece does in the room (spec §6.6's effect line); null for a piece with no effect. */
+  effect: string | null;
 }
 
 export function pieceSheet(itemId: string, price: number, balance: number, counts: Readonly<Record<string, number>>): PieceSheet {
@@ -82,5 +89,6 @@ export function pieceSheet(itemId: string, price: number, balance: number, count
     haveSpoken: after >= 0 ? S.haveSpoken(b, a) : S.haveOnly(b),
     canBuy: !isLocked && after >= 0,
     button: after >= 0 ? S.get(coinCount(price)) : S.needs(coinCount(-after)),
+    effect: item.iso?.effect ? ROOM_COPY.effects.lines[item.iso.effect] : null,
   };
 }

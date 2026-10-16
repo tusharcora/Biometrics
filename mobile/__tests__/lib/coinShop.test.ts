@@ -1,5 +1,5 @@
 import type { ShopDTO } from '../../src/api/coins';
-import { pieceSheet, shopTiles, whereLine } from '../../src/lib/coins/shop';
+import { SHOP_TABS, pieceSheet, shopTiles, whereLine } from '../../src/lib/coins/shop';
 import { ROOM_COPY } from '../../src/lib/room/roomCopy';
 import { STARTER_COUNTS } from '../../jest-mocks/cosmeticsFixture';
 
@@ -31,6 +31,7 @@ it('says where it goes, what you have and have after, or what is still needed (C
   expect(pieceSheet('item.radio', 150, 360, STARTER_COUNTS)).toEqual({
     name: 'Old radio', where: whereLine('item.radio'), locked: null, lockedSpoken: null,
     have: 'You have 360 · 210 after', haveSpoken: 'You have 360, 210 after', canBuy: true, button: 'Get for 150',
+    effect: 'Plays a quiet lo-fi loop while the room is open. Notes float up from it.',
   });
   const short = pieceSheet('item.radio', 150, 110, STARTER_COUNTS);
   expect([short.canBuy, short.button, short.have]).toEqual([false, 'Needs 40 more', 'You have 110']);
@@ -61,4 +62,16 @@ it('never prices the shop in money: no currency, no real-money or ad copy (spec 
   for (const s of [JSON.stringify(S), ...composed]) {
     expect(s).not.toMatch(/[$£€¥]|\b(USD|EUR|GBP)\b|get more coins|buy coins|coin pack|in-app purchase|watch an ad|\bads?\b/i);
   }
+});
+
+it('the Effects tab lists the pieces that do something, and says so on the tile and the sheet (spec §6.6, ruling 19)', () => {
+  const shop: ShopDTO = { ...SHOP, items: [...SHOP.items, { itemId: 'corner.floorlamp', price: 120 }, { itemId: 'pet.tabby', price: 180 }] };
+  const counts = { ...STARTER_COUNTS, 'corner.floorlamp': 1 };
+  expect(shopTiles(shop, counts, 'effects').map((t) => t.itemId)).toEqual(['item.radio', 'corner.floorlamp', 'pet.tabby']);
+  const radio = shopTiles(shop, counts, 'all').find((t) => t.itemId === 'item.radio')!;
+  expect([radio.effect, radio.label]).toEqual(['sound', 'Old radio, 150 coins, does something in the room']);
+  expect(shopTiles(shop, counts, 'all').find((t) => t.itemId === 'item.mug')!.effect).toBeNull();
+  expect(pieceSheet('item.radio', 150, 360, counts).effect).toBe('Plays a quiet lo-fi loop while the room is open. Notes float up from it.');
+  expect(pieceSheet('item.mug', 25, 360, counts).effect).toBeNull();
+  expect(SHOP_TABS).toEqual(['all', 'effects', 'floor', 'wall', 'onTop']);
 });

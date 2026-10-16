@@ -1,7 +1,7 @@
 // The Room sizes screen's rows (spec 2026-10-15 §7, C2, F5), pure: each size and its pieces, and for each bigger size
 // both gates with progress ("360 of 600", "9 of 14", "level 2 now"). Coins alone never buy space; a streak alone
 // doesn't either. The badge never re-locks: a broken run after it costs nothing. The gates come from the catalogue
-// (ruling 37); effect slots join in P3 (ruling 14).
+// (ruling 37). Each row counts its pieces with their effect slots (P3 ruling 20).
 import type { AchievementsSnapshot } from '../achievementsStore';
 import { CATALOGUE, type AchievementFamilyName } from '../room/catalogue';
 import { TIERS, type Tier } from '../room/iso/geometry';
@@ -49,10 +49,10 @@ function badgeLine(g: Gate, families: readonly FamilyStanding[] | null): GateLin
 
 export function sizeRows(tier: Tier, balance: number, families: readonly FamilyStanding[] | null): SizeRow[] {
   return ([1, 2, 3] as const).map((t): SizeRow => {
-    const { n, cap } = TIERS[t];
+    const { n, cap, effects } = TIERS[t];
     const row = {
       tier: t, name: Z.names[t], size: Z.size(n), sizeSpoken: Z.sizeSpoken(n),
-      pieces: Z.pieces(cap, t === 3), piecesSpoken: Z.piecesSpoken(cap, t === 3),
+      pieces: Z.pieces(cap, effects, t === 3), piecesSpoken: Z.piecesSpoken(cap, effects, t === 3),
     };
     if (t <= tier) return { ...row, status: 'yours', coins: null, badge: null };
     const g = gateOf(t as 2 | 3);

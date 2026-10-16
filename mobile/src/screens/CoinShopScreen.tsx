@@ -203,6 +203,7 @@ export function CoinShopScreen() {
                   <View className="items-center gap-1" style={{ opacity: t.locked ? 0.45 : 1 }}>
                     <ItemIcon id={t.itemId} colour={me.colour} />
                     <Text className="text-center text-fine" numberOfLines={2}>{t.name}</Text>
+                    {t.effect ? <Text className="text-center text-fine text-muted-foreground" numberOfLines={2}>{ROOM_COPY.effects.doesSomething}</Text> : null}
                     {t.locked ? (
                       <Text className="text-center text-fine text-muted-foreground" numberOfLines={2}>{t.lockLine}</Text>
                     ) : (
@@ -225,6 +226,7 @@ export function CoinShopScreen() {
           className="absolute bottom-0 left-0 right-0 gap-2 rounded-t-lg border-t border-border bg-background p-4 pb-8">
           <Text ref={nameRef} testID="shop-sheet-name" accessibilityLabel={spokenName(picked)} className="text-heading">{sheet.name}</Text>
           {sheet.where.text ? <Text accessibilityLabel={sheet.where.spoken} className="text-caption text-muted-foreground">{sheet.where.text}</Text> : null}
+          {sheet.effect ? <Text testID="shop-sheet-effect" className="text-body">{sheet.effect}</Text> : null}
           {/* While the sheet is open the rest of the screen is hidden from a screen reader, so its notice is here. */}
           {notice ? <Text testID="shop-notice" accessibilityLiveRegion="polite" accessibilityLabel={notice.spoken} className="text-caption">{notice.text}</Text> : null}
           {sheet.locked ? (

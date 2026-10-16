@@ -53,7 +53,7 @@ it('holds the back button while a purchase waits on the server (ruling T13-FIX M
 it('shows the week\'s set card, tiles with prices, a locked rule piece with its rule, the wallet and the footer (spec §6.6)', async () => {
   const s = await open();
   expect(s.getByText('Desk day set · 2 pieces · this week').props.accessibilityLabel).toBe('Desk day set, 2 pieces, this week');
-  expect(s.getByTestId('shop-tile-item.radio').props.accessibilityLabel).toBe('Old radio, 150 coins');
+  expect(s.getByTestId('shop-tile-item.radio').props.accessibilityLabel).toBe('Old radio, 150 coins, does something in the room');
   expect(s.getByTestId('shop-tile-plant.monstera').props.accessibilityLabel).toBe('Monstera, locked. Sleep goal, level 1');
   expect(s.getByTestId('shop-wallet').props.accessibilityLabel).toBe('360 KIP coins. Open coin history');
   expect(s.getByText('Coins come from healthy days only. They can’t be bought.')).toBeTruthy();
@@ -167,6 +167,15 @@ it('a shop that fails to load offers Try again', async () => {
   expect(s.getByTestId('shop-tile-item.radio')).toBeTruthy();
 });
 
+it('the Effects tab shows only pieces that do something, and the sheet says what (ruling 19)', async () => {
+  const s = await open();
+  fireEvent.press(s.getByTestId('shop-tab-effects'));
+  expect(s.queryByTestId('shop-tile-item.mug')).toBeNull();
+  fireEvent.press(s.getByTestId('shop-tile-item.radio'));
+  await act(async () => undefined);
+  expect(s.getByTestId('shop-sheet-effect')).toHaveTextContent('Plays a quiet lo-fi loop while the room is open. Notes float up from it.');
+});
+
 describe('the sheet and a screen reader (ruling T11-FIX)', () => {
   let focus: jest.SpyInstance;
   let announce: jest.SpyInstance;
@@ -242,7 +251,7 @@ it('after no answer at all the wallet and the room are read again, so a purchase
   expect(s.getByTestId('shop-sheet-have')).toHaveTextContent('You have 210 · 60 after');
   fireEvent.press(s.getByTestId('shop-not-now'));
   expect(s.getByTestId('shop-wallet').props.accessibilityLabel).toBe('210 KIP coins. Open coin history');
-  expect(s.getByTestId('shop-tile-item.radio').props.accessibilityLabel).toBe('Old radio, 150 coins, 1 owned');
+  expect(s.getByTestId('shop-tile-item.radio').props.accessibilityLabel).toBe('Old radio, 150 coins, 1 owned, does something in the room');
 });
 
 it('the sheet waits for the wallet instead of guessing a balance', async () => {

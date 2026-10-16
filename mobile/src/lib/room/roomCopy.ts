@@ -338,7 +338,7 @@ export const ROOM_COPY = {
     sub: 'A new featured set every Monday',
     close: 'Close',
     tabsLabel: 'Coin shop',
-    tabs: { all: 'All', floor: 'Floor', wall: 'Wall', onTop: 'On top' },
+    tabs: { all: 'All', effects: 'Effects', floor: 'Floor', wall: 'Wall', onTop: 'On top' },
     thisWeek: 'This week',
     sets: { cosyAutumn: 'Cosy autumn', greenCorner: 'Green corner', deskDay: 'Desk day', brightNight: 'Bright night' } as Readonly<Record<string, string>>,
     /** A set this build doesn't know yet (a newer server's): neutral, never the raw id. */
@@ -377,7 +377,7 @@ export const ROOM_COPY = {
     retry: 'Try again',
     footer: 'Coins come from healthy days only. They can’t be bought.',
   },
-  /** Room sizes and the unlock moment (spec 2026-10-15 §7, C2, F5). Effect slots join in P3 (ruling 14). */
+  /** Room sizes and the unlock moment (spec 2026-10-15 §7, C2, F5), with each size's effect slots (P3 ruling 20). */
   sizes: {
     title: 'Room sizes',
     sub: 'Coins and a streak, both',
@@ -388,8 +388,8 @@ export const ROOM_COPY = {
     /** A size's row heading: "Bigger · 8 × 8", read aloud "Bigger, 8 by 8". */
     row: (name: string, size: string) => `${name} · ${size}`,
     rowSpoken: (name: string, size: string) => `${name}, ${size}`,
-    pieces: (cap: number, window: boolean) => (window ? `${cap} pieces · second window` : `${cap} pieces`),
-    piecesSpoken: (cap: number, window: boolean) => (window ? `${cap} pieces, second window` : `${cap} pieces`),
+    pieces: (cap: number, effects: number, window: boolean) => `${cap} pieces · ${effects} effects${window ? ' · second window' : ''}`,
+    piecesSpoken: (cap: number, effects: number, window: boolean) => `${cap} pieces, ${effects} effects${window ? ', second window' : ''}`,
     yours: 'YOURS',
     coinsTitle: (price: string) => `${price} coins`,
     of: (have: string, need: string) => `${have} of ${need}`,
@@ -416,8 +416,10 @@ export const ROOM_COPY = {
     grewTitle: 'Your room grew',
     grewWhy: (tier: 2 | 3, price: string, gate: number) =>
       (tier === 2 ? `${price} coins and ${gate} days of check-ins in a row.` : `${price} coins and the sleep goal badge, level ${gate}.`),
-    grewMore: (pieces: number, window: boolean) => `+1 row each side · +${pieces} pieces${window ? ' · a second window' : ''}`,
-    grewMoreSpoken: (pieces: number, window: boolean) => `One more row each side, ${pieces} more pieces${window ? ', and a second window' : ''}`,
+    grewMore: (pieces: number, effects: number, window: boolean) =>
+      `+1 row each side · +${pieces} pieces · +${effects} effect slots${window ? ' · a second window' : ''}`,
+    grewMoreSpoken: (pieces: number, effects: number, window: boolean) =>
+      `One more row each side, ${pieces} more pieces, ${effects} more effect slots${window ? ', and a second window' : ''}`,
     stored: (n: number) => `The new window needed the wall: ${n} ${n === 1 ? 'piece' : 'pieces'} went to your inventory`,
     place: 'Place things',
     later: 'Later',
