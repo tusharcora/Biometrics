@@ -8,7 +8,8 @@ import { deleteUserAccount } from '../../src/users/deletion';
 import { BuddyError } from '../../src/buddies/errors';
 import { orderedPair } from '../../src/buddies/pairs';
 import { GIFTS_PER_DAY, parseGift, returnGiftsTx, sendGift } from '../../src/room/gifts';
-import { api } from '../buddies/helpers';
+import { api, buddyUser, pairUp } from '../buddies/helpers';
+import { authHeaderFor } from '../helpers/auth';
 import { pairedPair } from '../challenges/helpers';
 import { fund } from '../coins/helpers';
 import { piece, withPieces } from './helpers';
@@ -158,6 +159,69 @@ describe('POST /me/buddies/:buddyId/gifts', () => {
     expect(await prisma.gift.count({ where: { fromId: a.id } })).toBe(0);
   });
 
+  it('logs a lost lock wait or a deadlock as gift.send_failed with the error name only (T7-CARRY)', async () => {
+    const { a, b, ha } = await pairedPair();
+    await extraFern(a.id);
+    const tx = jest.spyOn(prisma, '$transaction').mockRejectedValueOnce(Object.assign(new Error('deadlock detected'), { name: 'PrismaClientKnownRequestError', code: 'P2010', meta: { code: '40P01' } }));
+    const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      expect((await send(ha, b.id, gift())).status).toBe(503);
+      const lines = warn.mock.calls.map((c) => String(c[0]));
+      expect(lines).toEqual([JSON.stringify({ event: 'gift.send_failed', error: 'PrismaClientKnownRequestError' })]);
+      expect(lines.join()).not.toContain(a.id);
+    } finally {
+      tx.mockRestore();
+      warn.mockRestore();
+    }
+  });
+
+  it('a request id reused for another recipient is 400 invalid_body; a changed note is the same gift (ruling 11; T7-CARRY)', async () => {
+    const { a, b, ha } = await pairedPair();
+    const c = await buddyUser();
+    await pairUp(a.id, c.id);
+    await extraFern(a.id);
+    await extraFern(a.id);
+    const body = gift();
+    expect((await send(ha, b.id, body)).status).toBe(201);
+    const other = await send(ha, c.id, body);
+    expect([other.status, other.body]).toEqual([400, { error: 'invalid_body' }]);
+    // The note is not part of a gift's identity: a retry whose note changed answers the same gift, unchanged.
+    const renoted = await send(ha, b.id, { ...body, note: 'thought' });
+    expect([renoted.status, renoted.body.id]).toEqual([201, body.requestId]);
+    expect(await prisma.gift.findUniqueOrThrow({ where: { id: body.requestId } })).toMatchObject({ toId: b.id, note: 'cosy' });
+    expect(await prisma.gift.count({ where: { fromId: a.id } })).toBe(1);
+  });
+
+  it('a request id another sender already used is 400 invalid_body, on the read and on the unique key (P2002; T7-CARRY)', async () => {
+    const { a, b, ha } = await pairedPair();
+    const c = await buddyUser();
+    const hc = await authHeaderFor(c.id);
+    await pairUp(c.id, b.id);
+    await extraFern(a.id);
+    await extraFern(c.id);
+    const body = gift();
+    expect((await send(ha, b.id, body)).status).toBe(201);
+    // Seen by the read under the lock.
+    const seen = await send(hc, b.id, body);
+    expect([seen.status, seen.body]).toEqual([400, { error: 'invalid_body' }]);
+    // Racing past the read (the other sender's lock is not this one): the insert meets the primary key (P2002).
+    const real = prisma.$transaction.bind(prisma) as (fn: (tx: unknown) => Promise<unknown>, opts?: unknown) => Promise<unknown>;
+    const tx = jest.spyOn(prisma, '$transaction').mockImplementationOnce(((fn: (tx: unknown) => Promise<unknown>, opts?: unknown) =>
+      real((t) => fn(new Proxy(t as object, {
+        get: (target, prop) => (prop === 'gift'
+          ? { ...(target as { gift: object }).gift, findUnique: async () => null }
+          : Reflect.get(target, prop)),
+      })), opts)) as never);
+    try {
+      const raced = await send(hc, b.id, body);
+      expect([raced.status, raced.body]).toEqual([400, { error: 'invalid_body' }]);
+    } finally {
+      tx.mockRestore();
+    }
+    expect(await prisma.itemGrant.count({ where: { userId: c.id, sourceKey: `gift_out:${body.requestId}` } })).toBe(0);
+    expect(await prisma.gift.findUniqueOrThrow({ where: { id: body.requestId } })).toMatchObject({ fromId: a.id });
+  });
+
   it('takes the 32 KB parser: a bigger body is 400 invalid_body (ruling 29)', async () => {
     const { b, ha } = await pairedPair();
     const res = await send(ha, b.id, { ...gift(), pad: 'x'.repeat(40 * 1024) });
@@ -225,10 +289,35 @@ describe('GET /me/gifts and POST /me/gifts/:id/open', () => {
       else await (await api()).post(`/me/buddies/${a.id}/block`).set(hb).send({});
       expect(await prisma.gift.findUnique({ where: { id: body.requestId } })).toMatchObject({ returnedAt: expect.any(Date), openedAt: null });
       expect(await prisma.itemGrant.count({ where: { userId: a.id, sourceKey: `gift_back:${body.requestId}` } })).toBe(1);
+      // Written seen (T7-CARRY): the returned copy is not NEW, so nothing tells the sender (buddies "all silent").
+      expect((await prisma.itemGrant.findFirstOrThrow({ where: { userId: a.id, sourceKey: `gift_back:${body.requestId}` } })).seenAt).not.toBeNull();
+      expect((await (await api()).get('/me/cosmetics').set(ha)).body.fresh).not.toContainEqual(expect.objectContaining({ source: 'gift_back' }));
       expect((await (await api()).post(`/me/gifts/${body.requestId}/open`).set(hb).send({})).body).toEqual({ error: 'gift_gone' });
       expect(await prisma.$transaction((tx) => returnGiftsTx(tx, a.id, b.id, new Date()))).toBe(0);
       expect(await ferns(a.id)).toBe(2);
     }
+  });
+
+  it('opening answers 503 try_later on a lost lock wait or a deadlock, and opens nothing (T7-CARRY)', async () => {
+    const { a, b, ha, hb } = await pairedPair();
+    await extraFern(a.id);
+    const body = gift();
+    await send(ha, b.id, body);
+    for (const failure of [
+      Object.assign(new Error('Transaction API error'), { code: 'P2028' }),
+      Object.assign(new Error('deadlock detected'), { code: 'P2010', meta: { code: '40P01' } }),
+      Object.assign(new Error('write conflict'), { code: 'P2034' }),
+    ]) {
+      const tx = jest.spyOn(prisma, '$transaction').mockRejectedValueOnce(failure);
+      try {
+        const res = await (await api()).post(`/me/gifts/${body.requestId}/open`).set(hb).send({});
+        expect([res.status, res.body]).toEqual([503, { error: 'try_later' }]);
+      } finally {
+        tx.mockRestore();
+      }
+    }
+    expect(await prisma.gift.findUniqueOrThrow({ where: { id: body.requestId } })).toMatchObject({ openedAt: null });
+    expect((await (await api()).post(`/me/gifts/${body.requestId}/open`).set(hb).send({})).status).toBe(200);
   });
 
   it('an opened gift stays with its recipient on a later unpair', async () => {

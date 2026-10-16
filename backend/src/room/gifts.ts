@@ -6,7 +6,7 @@
 // only; blocks both ways. The pair row is held FOR SHARE until the gift commits (PF4-F4), so an unpair or a block
 // either lands first (the gift is refused) or waits and then returns the gift. A gift is returned to its sender on a
 // block or an unpair (returnGiftsTx), never because an account was deleted (the cascade drops gifts to the deleted
-// user; gifts from them keep coming, fromId null). No push (ruling 13). Logs the event name only.
+// user; gifts from them keep coming, fromId null). No push (ruling 13). Logs event and error names only.
 import type { Prisma } from '@prisma/client';
 import { localCivilDateOrUtc } from '../biometrics/civilDate';
 import { BuddyError, UUID_RE, isUniqueViolation } from '../buddies/errors';
@@ -67,6 +67,7 @@ export async function sendGift(senderId: string, rawTo: string, body: unknown, n
       const before = await tx.gift.findUnique({ where: { id: parsed.requestId }, select: { fromId: true, toId: true, itemId: true } });
       if (before) {
         // A request id names one gift (ruling 11): its retry answers again; reused for another gift it is a bad body.
+        // The note is not part of the gift: a retry whose note changed is the same gift, kept as first sent.
         if (before.fromId === senderId && before.toId === toId && before.itemId === parsed.itemId) return false;
         throw new BuddyError('invalid_body');
       }
@@ -89,7 +90,11 @@ export async function sendGift(senderId: string, rawTo: string, body: unknown, n
   } catch (err) {
     // Another sender took this id at the same instant: the id names their gift, so this body is a bad one.
     if (isUniqueViolation(err)) throw new BuddyError('invalid_body');
-    if (isRetryableTx(err)) throw new BuddyError('try_later');
+    if (isRetryableTx(err)) {
+      // The error's name only, never an id (T7-CARRY).
+      console.warn(JSON.stringify({ event: 'gift.send_failed', error: err instanceof Error ? err.name : 'Error' }));
+      throw new BuddyError('try_later');
+    }
     throw err;
   }
   if (sent) console.info(JSON.stringify({ event: 'gift.sent' }));
@@ -120,6 +125,17 @@ export async function listGifts(userId: string): Promise<{ gifts: GiftDTO[] }> {
  * one, another person's or an unknown id is gone. */
 export async function openGift(userId: string, giftId: string, now: Date): Promise<{ counts: Record<string, number> }> {
   if (!UUID_RE.test(giftId)) throw new BuddyError('gift_gone');
+  try {
+    await openGiftTx(userId, giftId, now);
+  } catch (err) {
+    // A lost lock wait or a deadlock opened nothing: the same tap can be sent again (T7-CARRY).
+    if (isRetryableTx(err)) throw new BuddyError('try_later');
+    throw err;
+  }
+  return { counts: await countsFor(prisma, userId) };
+}
+
+async function openGiftTx(userId: string, giftId: string, now: Date): Promise<void> {
   await prisma.$transaction(async (tx) => {
     await lockRoom(tx, userId);
     const gift = await tx.gift.findUnique({ where: { id: giftId }, select: { toId: true, itemId: true, returnedAt: true } });
@@ -132,13 +148,12 @@ export async function openGift(userId: string, giftId: string, now: Date): Promi
     // A return that landed after the read above won the row: the gift went back to its sender.
     if ((await tx.gift.findUnique({ where: { id: giftId }, select: { returnedAt: true } }))?.returnedAt) throw new BuddyError('gift_gone');
   }, COIN_TX_OPTIONS);
-  return { counts: await countsFor(prisma, userId) };
 }
 
 /**
  * Inside unpair's or block's transaction (ruling 12): every unopened gift between the two goes back to its sender, each
- * once (the conditional update decides, so an open landing at the same moment wins or loses cleanly). The sender's
- * count only rises, so no room lock is needed. Answers how many went back.
+ * once (the conditional update decides, so an open landing at the same moment wins or loses cleanly), as a copy already
+ * seen. The sender's count only rises, so no room lock is needed. Answers how many went back.
  */
 export async function returnGiftsTx(tx: Prisma.TransactionClient, a: string, b: string, now: Date): Promise<number> {
   const open = await tx.gift.findMany({
@@ -149,7 +164,8 @@ export async function returnGiftsTx(tx: Prisma.TransactionClient, a: string, b: 
   for (const g of open) {
     const done = await tx.gift.updateMany({ where: { id: g.id, openedAt: null, returnedAt: null }, data: { returnedAt: now } });
     if (done.count === 1 && g.fromId) {
-      await tx.itemGrant.createMany({ data: [{ userId: g.fromId, itemId: g.itemId, qty: 1, sourceKey: `gift_back:${g.id}` }], skipDuplicates: true });
+      // Written seen (T7-CARRY): a returned copy is not NEW, so nothing tells the sender why it came back.
+      await tx.itemGrant.createMany({ data: [{ userId: g.fromId, itemId: g.itemId, qty: 1, sourceKey: `gift_back:${g.id}`, seenAt: now }], skipDuplicates: true });
       back++;
     }
   }
