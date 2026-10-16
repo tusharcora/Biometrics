@@ -66,8 +66,10 @@ export function planCapped(fresh: readonly CoinEarn[], used: DayUse): CoinEarn[]
 }
 
 /** Writes the earns this user has not been paid for yet, inside the caller's transaction, which already holds the
- * user's room lock (lockRoom or lockUsers). Throws on a malformed earn. Answers what it wrote. */
+ * user's room lock: lockRoom for one user, or lockUsers for two, taken first and in key order (see lockUsers). Takes
+ * no lock itself. Throws on a malformed earn. Answers what it wrote. */
 export async function writeEarnsTx(tx: Prisma.TransactionClient, userId: string, events: readonly CoinEarn[], now: Date): Promise<CoinWritten[]> {
+  // Checked here for callers that hold their own transaction (a cheer); applyCoinEvents also checks before it opens one.
   events.forEach(checkEarn);
   // Two earns with one key in a batch: the last one is kept (a key is paid once, whichever amount it carries).
   const unique = [...new Map(events.map((e) => [e.sourceKey, e])).values()];
@@ -104,11 +106,24 @@ export async function writeEarnsTx(tx: Prisma.TransactionClient, userId: string,
 }
 
 /**
- * Both (or all) users' room locks in one transaction, in sorted user-id order (spec §6.3): two people cheering each
- * other at once wait for each other instead of deadlocking. Each distinct id once.
+ * Both (or all) users' room locks in one transaction, in one global order (spec §6.3): two people cheering each other
+ * at once wait for each other instead of deadlocking. The order is the lock key itself (hashtext of the id, the key
+ * lockRoom takes), not the id, and each distinct key is taken once, so two ids whose keys collide can never be taken
+ * in opposite orders. It must be the transaction's first lock and first statement; any room lock already held must be
+ * the lowest of the ids' keys (the lock is re-entrant, so taking it again is fine, but taking a lower key after a
+ * higher one can deadlock).
  */
 export async function lockUsers(tx: Prisma.TransactionClient, ids: readonly string[]): Promise<void> {
-  for (const id of [...new Set(ids)].sort()) await lockRoom(tx, id);
+  const distinct = [...new Set(ids)];
+  if (distinct.length <= 1) {
+    for (const id of distinct) await lockRoom(tx, id);
+    return;
+  }
+  const keys = await tx.$queryRaw<Array<{ id: string; key: number }>>`
+    SELECT id, hashtext(id) AS key FROM unnest(${distinct}::text[]) AS id`;
+  const byKey = new Map<number, string>();
+  for (const { id, key } of keys) if (!byKey.has(key)) byKey.set(key, id);
+  for (const key of [...byKey.keys()].sort((a, b) => a - b)) await lockRoom(tx, byKey.get(key)!);
 }
 
 /** One side of a two-person cheer (spec §6.2, §10.2): 2 coins, capped on that person's own civil day. */
@@ -132,6 +147,7 @@ export const COIN_TX_OPTIONS = { maxWait: 10_000, timeout: 20_000 } as const;
  * earn (checkEarn) and when the transaction times out. */
 export async function applyCoinEvents(userId: string, events: readonly CoinEarn[], now: Date): Promise<CoinWritten[]> {
   if (!events.length) return [];
+  // Before the transaction, so a malformed earn never waits on the lock (writeEarnsTx checks again for its own callers).
   events.forEach(checkEarn);
   const written = await prisma.$transaction(async (tx) => {
     await lockRoom(tx, userId);

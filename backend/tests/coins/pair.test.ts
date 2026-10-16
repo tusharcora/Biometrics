@@ -6,6 +6,30 @@ import { COIN_TX_OPTIONS, cheerEarns, lockUsers, logEarned, writeEarnsTx } from 
 import { lockRoom } from '../../src/room/lock';
 import { balance, coinUser, earn, rowsOf } from './helpers';
 
+// lockRoom still takes the real lock; the spy records the order lockUsers takes them in.
+jest.mock('../../src/room/lock', () => {
+  const actual = jest.requireActual('../../src/room/lock');
+  return { ...actual, lockRoom: jest.fn(actual.lockRoom) };
+});
+const lockSpy = lockRoom as jest.MockedFunction<typeof lockRoom>;
+
+/** The room lock key of each id (lockRoom's hashtext). */
+async function keysOf(...ids: string[]): Promise<Map<string, number>> {
+  const rows = await prisma.$queryRaw<Array<{ id: string; key: number }>>`SELECT id, hashtext(id) AS key FROM unnest(${ids}::text[]) AS id`;
+  return new Map(rows.map((r) => [r.id, r.key]));
+}
+/** Two users' ids as [lower lock key, higher lock key]. */
+async function byKey(a: string, b: string): Promise<[string, string]> {
+  const keys = await keysOf(a, b);
+  return keys.get(a)! < keys.get(b)! ? [a, b] : [b, a];
+}
+/** The ids lockRoom was called with during `run`. */
+async function lockedDuring(run: () => Promise<unknown>): Promise<string[]> {
+  lockSpy.mockClear();
+  await run();
+  return lockSpy.mock.calls.map((c) => c[1]);
+}
+
 beforeAll(() => migrateTestDb());
 afterAll(async () => {
   await prisma.$disconnect();
@@ -53,15 +77,41 @@ it('lockUsers takes each distinct id once (a self-pair never waits on itself)', 
   await prisma.$transaction(async (tx) => { await lockUsers(tx, [user.id, user.id]); });
 });
 
-it('lockUsers is re-entrant with a room lock the transaction already holds', async () => {
+it('lockUsers is re-entrant with the lowest-key room lock the transaction already holds', async () => {
   const [a, b] = [(await coinUser()).user, (await coinUser()).user];
-  const hi = a.id > b.id ? a.id : b.id;
+  const [lo] = await byKey(a.id, b.id);
   await prisma.$transaction(async (tx) => {
-    await lockRoom(tx, hi);
+    await lockRoom(tx, lo);
     await lockUsers(tx, [a.id, b.id]);
-    await writeEarnsTx(tx, hi, [cheerEarns('cheer:re', DAY, 'got')], new Date());
+    await writeEarnsTx(tx, lo, [cheerEarns('cheer:re', DAY, 'got')], new Date());
   }, COIN_TX_OPTIONS);
-  expect(await balance(hi)).toBe(2);
+  expect(await balance(lo)).toBe(2);
+});
+
+it('lockUsers takes each distinct key once, lowest key first (T3-FIX M2)', async () => {
+  const [a, b] = [(await coinUser()).user, (await coinUser()).user];
+  const [lo, hi] = await byKey(a.id, b.id);
+  expect(await lockedDuring(() => prisma.$transaction((tx) => lockUsers(tx, [hi, lo, hi])))).toEqual([lo, hi]);
+  expect(await lockedDuring(() => prisma.$transaction((tx) => lockUsers(tx, [lo, hi])))).toEqual([lo, hi]);
+});
+
+it('orders by the lock key, not the id: ids whose keys collide never lock in opposite orders (T3-FIX M1)', async () => {
+  // Two different strings with one hashtext (about ten collide among 300k), and a third id between them by text.
+  const [pair] = await prisma.$queryRaw<Array<{ ids: string[] }>>`
+    SELECT array_agg(s ORDER BY s) AS ids FROM (SELECT 'k' || g AS s FROM generate_series(1, 300000) g) t
+    GROUP BY hashtext(s) HAVING count(*) > 1 LIMIT 1`;
+  const [x, z] = pair!.ids as [string, string];
+  const mids = [`${x}0`, `${x}1`, `${x}2`];
+  const keys = await keysOf(x, z, ...mids);
+  const y = mids.find((m) => m > x && m < z && keys.get(m) !== keys.get(x))!;
+  expect([x < y, y < z, keys.get(x) === keys.get(z)]).toEqual([true, true, true]);
+  const [first, second] = keys.get(x)! < keys.get(y)! ? [x, y] : [y, x];
+  // By id, [x, y] would lock x's key then y's and [y, z] y's key then z's (= x's): opposite orders, a deadlock.
+  expect(await lockedDuring(() => prisma.$transaction((tx) => lockUsers(tx, [x, y])))).toEqual([first, second]);
+  const second2 = await lockedDuring(() => prisma.$transaction((tx) => lockUsers(tx, [y, z])));
+  expect(second2.map((id) => keys.get(id))).toEqual([keys.get(first), keys.get(second)]);
+  // Colliding ids are one key: taken once.
+  expect(await lockedDuring(() => prisma.$transaction((tx) => lockUsers(tx, [z, x])))).toHaveLength(1);
 });
 
 it('writeEarnsTx checks its own earns: a capped earn without its day throws and writes nothing', async () => {

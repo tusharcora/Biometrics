@@ -39,6 +39,8 @@ export async function loadCheerTimes(userId: string, timezone: string): Promise<
       ...(cursor ? { cursor: { id: cursor }, skip: 1 } : {}),
       select: { id: true, toUserId: true, sentAt: true },
     });
+    // A cursor row deleted between pages (an unpair or a deleted account) makes the next page come back empty and ends
+    // the scan early. That is transient: the next read counts again from the start, and a granted piece stays granted.
     rows.push(...page);
     const times = cheerTimes(rows, timezone);
     if (times.length >= MAX_CHEERS_COUNTED || page.length < CHEER_SCAN_ROWS) return times;
