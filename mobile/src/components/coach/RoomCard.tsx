@@ -6,13 +6,17 @@ import { Skeleton } from '../ui/skeleton';
 import { Text } from '../ui/text';
 import { HotTag } from '../home/HotTag';
 import { RoomWelcomeCard } from './RoomWelcomeCard';
+import { RoomRadio } from '../room/RoomRadio';
 import { RoomView } from '../room/RoomView';
+import { useRoomEffects } from '../room/useRoomEffects';
 import { useCoinsLanding } from '../coins/useCoinsLanding';
 import { HOME_COPY } from '../../lib/homeCopy';
 import { useMyKip } from '../../lib/kip/myKip';
 import { KIP_COPY } from '../../lib/kipCopy';
 import { hotTagLabel, roomLabel, type KipStage } from '../../lib/kipStage';
 import { markWelcomed, useCosmetics, useMyRoom } from '../../lib/room/cosmeticsStore';
+import { effectOf, type RoomEffects } from '../../lib/room/effects';
+import type { RoomLayout } from '../../lib/room/iso/geometry';
 import { ROOM_COPY } from '../../lib/room/roomCopy';
 import type { KipLook } from '../../lib/useKipTurn';
 import type { RoomWeather } from '../../lib/room/weather';
@@ -23,6 +27,11 @@ import { COLORS } from '../../theme';
 export const ROOM_FRAME_HEIGHT = 240;
 const WOOD = '#5B4636';
 const WOOD_LINE = '#3A2D23';
+
+/** A running radio is in the room (spec §8.2): only then is its sound mounted. */
+export function runsSound(layout: RoomLayout, effects: RoomEffects): boolean {
+  return layout.pieces.some((p) => effects.running.has(p.id) && effectOf(p.item) === 'sound');
+}
 
 // The W7 room card (spec 2026-10-14 KIP Coach §3.1, §3.2; spec 2026-10-15 §9.1): KIP's isometric room as a framed
 // diorama, cropped on KIP's desk (crop, never shrink: the inner width is measured, the height fixed at 240), a caption
@@ -59,6 +68,8 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
 }) {
   const me = useMyKip();
   const { layout, tier, living } = useMyRoom();
+  // Only which pieces run matters here, never the time, so this copy of the effects keeps no minute timer.
+  const effects = useRoomEffects(layout, tier, living, { hold: true });
   const cosmetics = useCosmetics();
   const welcome = !!cosmetics && !cosmetics.welcomed && stage.id !== 'loading';
   const [inner, setInner] = useState(0);
@@ -69,6 +80,10 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
   // KIP walks between answers only in the idle stage with nothing in its bubble, and only while the card is really in
   // view: not under the editor, the collapsed header or a held coin landing (ruling 13).
   const walks = !!kipWalks && stage.id === 'idle' && !stage.bubble && !welcome && !landing && !paused && !holdCoins && !holdClock;
+  // The radio plays only while the room is really on screen (ruling 15, PF3-AUDIO): drawn, the page focused (a sheet
+  // over it, such as the piece card, blurs it), the editor not over it, and the card neither under the collapsed header
+  // nor waiting to know whether it is shrunk.
+  const audible = stage.id !== 'loading' && inner > 0 && focused && !paused && !holdCoins && !holdClock;
   const landLine = landing ? ROOM_COPY.coins.landLine(ROOM_COPY.coins.landed[landing.kind], landing.more) : '';
   return (
     <Card testID="kip-room-card" className="gap-3 p-3.5" onLayout={onLayout}>
@@ -126,6 +141,7 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
       >
         {landLine}
       </Text>
+      {runsSound(layout, effects) ? <RoomRadio active={audible} /> : null}
       {welcome ? (
         <RoomWelcomeCard
           onPlace={() => { void markWelcomed(); onPlaceLantern?.(); }}

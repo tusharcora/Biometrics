@@ -1,7 +1,12 @@
 import React from 'react';
 import { AccessibilityInfo, Platform } from 'react-native';
 import { act, fireEvent, render } from '@testing-library/react-native';
-import { RoomCard } from '../../src/components/coach/RoomCard';
+import * as SecureStore from 'expo-secure-store';
+import * as Audio from 'expo-audio';
+import { RoomCard, runsSound } from '../../src/components/coach/RoomCard';
+import type { RoomEffects } from '../../src/lib/room/effects';
+import type { RoomLayout } from '../../src/lib/room/iso/geometry';
+import { loadRoomSound, resetRoomSound } from '../../src/lib/room/sound';
 import { fetchCosmetics, postRoomWelcomed } from '../../src/api/cosmetics';
 import { resetMyKip } from '../../src/lib/kip/myKip';
 import { kipStage, type KipStageInput } from '../../src/lib/kipStage';
@@ -14,6 +19,7 @@ import { getCoins, loadCoins, resetCoins } from '../../src/lib/coins/coinsStore'
 import { ScreenNavigationContext } from '../../src/lib/useScreenFocused';
 
 jest.mock('../../src/components/room/RoomView', () => require('../../jest-mocks/RoomView'));
+jest.mock('expo-secure-store');
 jest.mock('../../src/api/cosmetics', () => ({ fetchCosmetics: jest.fn(), putCosmetics: jest.fn(), postCosmeticsSeen: jest.fn(), postRoomWelcomed: jest.fn(async () => undefined) }));
 jest.mock('../../src/api/coins', () => ({ fetchCoins: jest.fn(), postCoinsSeen: jest.fn(async () => undefined), fetchFirstWeek: jest.fn(), fetchShop: jest.fn(), postPurchase: jest.fn(), postExpand: jest.fn() }));
 
@@ -320,5 +326,89 @@ describe('KIP walking (spec §9.2, rulings 9 and 13)', () => {
     const welcome = renderCard({ stage: IDLE, kipWalks: true });
     expect(welcome.getByTestId('kip-room').props.room.split(':')[2]).toBe('WELCOME HOME!');
     expect(welcome.getByTestId('kip-room').props.walks).toBe('');
+  });
+});
+
+describe('the radio\'s sound (ruling 15, PF3-AUDIO)', () => {
+  const RADIO = { id: 'p1', item: 'item.radio', layer: 'onTop' as const, x: 0, y: 0, facing: 'L' as const, mirror: false, parent: 'desk', spot: 1 };
+  const RADIO_LAYOUT: RoomLayout = { ...starterLayout(), pieces: [...starterLayout().pieces, RADIO] };
+  const withRadio = () => cosmeticsDTO({ version: 2, layout: RADIO_LAYOUT, counts: { ...cosmeticsDTO().counts, 'item.radio': 1 } });
+  const player = (Audio as unknown as { __player: { play: jest.Mock; pause: jest.Mock } }).__player;
+  beforeEach(() => { resetRoomSound(); (SecureStore.getItemAsync as jest.Mock).mockResolvedValue(null); });
+
+  it('mounts the radio\'s sound only while a running radio is in the room (ruling 15)', async () => {
+    (fetchCosmetics as jest.Mock).mockResolvedValueOnce(cosmeticsDTO());
+    await act(async () => { await loadCosmetics(); });
+    renderCard();
+    expect(Audio.useAudioPlayer).not.toHaveBeenCalled();
+    (fetchCosmetics as jest.Mock).mockResolvedValueOnce(withRadio());
+    await act(async () => { await loadCosmetics({ fresh: true }); });
+    renderCard();
+    expect(Audio.useAudioPlayer).toHaveBeenCalled();
+  });
+
+  it('an inert radio (past the effect slots) has no sound', () => {
+    const layout = RADIO_LAYOUT;
+    const effects = { running: new Set<string>(), inert: new Set(['p1']) } as unknown as RoomEffects;
+    expect(runsSound(layout, effects)).toBe(false);
+    expect(runsSound(layout, { ...effects, running: new Set(['p1']) })).toBe(true);
+  });
+
+  it('with the switch on it plays only while the card is really in view; paused, unfocused or held, it is silent', async () => {
+    (SecureStore.getItemAsync as jest.Mock).mockResolvedValue('1');
+    (fetchCosmetics as jest.Mock).mockResolvedValue(withRadio());
+    await act(async () => { await loadCosmetics(); });
+    const playing = renderCard();
+    await act(async () => undefined);
+    expect(player.play).toHaveBeenCalledTimes(1);
+    player.pause.mockClear(); // the first render, before the stored switch was read
+    // Reduce Motion stops loops, not sound (the switch is the user's own choice).
+    playing.rerender(<RoomCard stage={STAGE} window={WINDOW} recovery={FAIR} reduceMotion onOpenRecovery={jest.fn()} />);
+    expect(player.play).toHaveBeenCalledTimes(1);
+    expect(player.pause).not.toHaveBeenCalled();
+    // The editor over it, scrolled under the collapsed header, coins held: silent.
+    for (const hold of [{ paused: true }, { holdClock: true }, { holdCoins: true }]) {
+      playing.rerender(<RoomCard stage={STAGE} window={WINDOW} recovery={FAIR} reduceMotion={false} onOpenRecovery={jest.fn()} {...hold} />);
+      expect(player.pause).toHaveBeenCalledTimes(1);
+      playing.rerender(<RoomCard stage={STAGE} window={WINDOW} recovery={FAIR} reduceMotion={false} onOpenRecovery={jest.fn()} />);
+      player.pause.mockClear();
+    }
+    playing.unmount();
+    jest.clearAllMocks();
+    // Out of focus (another tab, or the piece card's sheet over the page): silent until focus returns.
+    const focus = new Set<() => void>();
+    const nav = {
+      isFocused: () => false,
+      addListener: (event: 'focus' | 'blur', cb: () => void) => {
+        if (event === 'focus') focus.add(cb);
+        return () => { focus.delete(cb); };
+      },
+    };
+    const s = render(
+      <ScreenNavigationContext.Provider value={nav as never}>
+        <RoomCard stage={STAGE} window={WINDOW} recovery={FAIR} reduceMotion={false} onOpenRecovery={jest.fn()} />
+      </ScreenNavigationContext.Provider>,
+    );
+    fireEvent(s.getByTestId('kip-room-frame-inner'), 'layout', { nativeEvent: { layout: { width: 323, height: 240, x: 0, y: 0 } } });
+    await act(async () => undefined);
+    expect(Audio.useAudioPlayer).toHaveBeenCalled();
+    expect(player.play).not.toHaveBeenCalled();
+    await act(async () => { focus.forEach((cb) => cb()); });
+    expect(player.play).toHaveBeenCalledTimes(1);
+  });
+
+  it('is silent with the switch off (the default), and while the stage loads', async () => {
+    (fetchCosmetics as jest.Mock).mockResolvedValue(withRadio());
+    await act(async () => { await loadCosmetics(); });
+    const off = renderCard();
+    await act(async () => undefined);
+    expect(player.play).not.toHaveBeenCalled();
+    off.unmount();
+    jest.clearAllMocks();
+    (SecureStore.getItemAsync as jest.Mock).mockResolvedValue('1');
+    await act(async () => { await loadRoomSound(); });
+    card(FAIR, jest.fn(), WINDOW, kipStage({ ...INPUT, phase: 'loading' }));
+    await act(async () => undefined);
+    expect(player.play).not.toHaveBeenCalled();
   });
 });

@@ -24,3 +24,10 @@ jest.mock('expo-media-library/legacy', () => ({
 // Request ids (P2 plan ruling 30): a fresh, readable id per call.
 let mockUuid = 0;
 jest.mock('expo-crypto', () => ({ randomUUID: jest.fn(() => `00000000-0000-4000-8000-${String(++mockUuid).padStart(12, '0')}`) }));
+// The radio's loop (P3 ruling 15): one fake player tests can inspect through the module's __player.
+const mockAudioPlayer = { play: jest.fn(), pause: jest.fn(), remove: jest.fn(), loop: false, volume: 1 };
+jest.mock('expo-audio', () => ({
+  useAudioPlayer: jest.fn(() => mockAudioPlayer),
+  setAudioModeAsync: jest.fn(() => Promise.resolve()),
+  __player: mockAudioPlayer,
+}));
