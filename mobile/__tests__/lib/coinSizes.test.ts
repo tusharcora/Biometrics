@@ -5,7 +5,7 @@ import { isoGrid } from '../../src/lib/room/iso/grid';
 
 const FAMILIES: FamilyStanding[] = [{ family: 'CHECK_IN', level: 1, current: 9 }, { family: 'SLEEP_GOAL', level: 2, current: 4 }];
 
-it('lists the three sizes: yours, then both gates of each bigger one with their progress (spec §7, C2, ruling 14)', () => {
+it('lists the three sizes: yours, then both gates of each bigger one with their progress, with their effect slots (spec §7, C2, P3 ruling 20)', () => {
   const [starter, bigger, loft] = sizeRows(1, 360, FAMILIES);
   expect([starter!.name, starter!.size, starter!.pieces, starter!.status]).toEqual(['Starter', '7 × 7', '40 pieces · 3 effects', 'yours']);
   expect([bigger!.status, bigger!.coins, bigger!.badge]).toEqual(['next', { title: '600 coins', progress: '360 of 600', met: false }, { title: 'A 14-day check-in streak', progress: '9 of 14', met: false }]);

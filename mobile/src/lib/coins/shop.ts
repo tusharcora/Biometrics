@@ -1,5 +1,6 @@
 // The coin shop's tiles and piece sheet (spec 2026-10-15 §6.6, C1, F6), pure. Tabs All, Effects, Floor, Wall and On top
-// (P3 ruling 19); the week's featured set first. A piece with an effect says so on its tile and its sheet. A rule piece not earned yet shows locked with its rule, never as for sale (§6.5).
+// (P3 ruling 19); the week's featured set first. A piece with an effect says so on its tile and its sheet. A rule piece
+// not earned yet shows locked with its rule, never as for sale (§6.5).
 // The server sends only ids and prices (ruling 34): locked, owned and where a piece goes come from the catalogue.
 import type { ShopDTO } from '../../api/coins';
 import { catalogueItem, type UnlockRule } from '../room/catalogue';
@@ -41,7 +42,7 @@ export function shopTiles(shop: ShopDTO, counts: Readonly<Record<string, number>
       const label = locked ? S.tileLocked(spokenName(itemId), unlockSpoken(item.unlock)) : S.tile(spokenName(itemId), coinCount(price), owned);
       return {
         itemId, name: itemName(itemId), price, owned, locked, lockLine: locked ? unlockLine(item.unlock) : null,
-        label: effect ? `${label}, ${ROOM_COPY.effects.doesSomething}` : label,
+        label: effect ? S.tileEffect(label) : label,
         featured: featured.has(itemId), effect,
       };
     })

@@ -138,6 +138,9 @@ export function coinCount(n: number): string {
   return String(Math.trunc(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
 }
 
+/** An effect piece's spoken note, on the shop's and the drawer's tiles. */
+const DOES_SOMETHING = 'does something in the room';
+
 export const ROOM_COPY = {
   decorate: 'Decorate',
   decorateLabel: "Decorate KIP's room",
@@ -174,7 +177,7 @@ export const ROOM_COPY = {
     full: (slots: number) => `Effects ${slots} of ${slots}: store one to run another`,
     tag: (used: number, slots: number) => `Effects ${used} of ${slots}`,
     tagSpoken: (used: number, slots: number) => `${used} of ${slots} effects running`,
-    doesSomething: 'does something in the room',
+    doesSomething: DOES_SOMETHING,
     fxTag: 'Does something',
     onlyForFun: 'Effects are only for fun. They never change your health data, scores or what KIP says.',
   },
@@ -349,6 +352,8 @@ export const ROOM_COPY = {
     seeAll: 'See everything',
     tile: (name: string, price: string, owned: number) => `${name}, ${price} coins${owned ? `, ${owned} owned` : ''}`,
     tileLocked: (name: string, rule: string) => `${name}, locked. ${rule}`,
+    /** An effect piece's tile, read aloud: "Old radio, 150 coins, does something in the room" (P3 ruling 19). */
+    tileEffect: (label: string) => `${label}, ${DOES_SOMETHING}`,
     owned: (n: number) => `×${n} owned`,
     where: {
       anywhere: 'Shelf, desk or floor', floor: 'Floor', onTop: 'Shelf or desk', wall: 'Wall',

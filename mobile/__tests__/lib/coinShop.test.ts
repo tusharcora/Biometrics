@@ -56,7 +56,7 @@ it('never prices the shop in money: no currency, no real-money or ad copy (spec 
   // JSON.stringify drops the functions, so every composed string is checked with sample arguments too.
   const composed = [
     S.setLine('Desk day', 2), S.setSpoken('Desk day', 2), S.tile('Mug', '25', 1), S.tileLocked('Monstera', 'Sleep goal, level 1'), S.owned(2),
-    S.have('360', '210'), S.haveSpoken('360', '210'), S.haveOnly('110'), S.get('150'), S.needs('40'), S.bought('Mug'),
+    S.tileEffect('Old radio, 150 coins'), S.have('360', '210'), S.haveSpoken('360', '210'), S.haveOnly('110'), S.get('150'), S.needs('40'), S.bought('Mug'),
     S.locked('Sleep goal · I'), S.lockedSpoken('Sleep goal, level 1'), S.where.tiles(4, 4), S.where.tilesSpoken(4, 4),
   ];
   for (const s of [JSON.stringify(S), ...composed]) {
@@ -70,6 +70,7 @@ it('the Effects tab lists the pieces that do something, and says so on the tile 
   expect(shopTiles(shop, counts, 'effects').map((t) => t.itemId)).toEqual(['item.radio', 'corner.floorlamp', 'pet.tabby']);
   const radio = shopTiles(shop, counts, 'all').find((t) => t.itemId === 'item.radio')!;
   expect([radio.effect, radio.label]).toEqual(['sound', 'Old radio, 150 coins, does something in the room']);
+  expect(radio.label).toBe(ROOM_COPY.shop.tileEffect(ROOM_COPY.shop.tile('Old radio', '150', 0))); // the joiner is copy (T9-CARRY)
   expect(shopTiles(shop, counts, 'all').find((t) => t.itemId === 'item.mug')!.effect).toBeNull();
   expect(pieceSheet('item.radio', 150, 360, counts).effect).toBe('Plays a quiet lo-fi loop while the room is open. Notes float up from it.');
   expect(pieceSheet('item.mug', 25, 360, counts).effect).toBeNull();

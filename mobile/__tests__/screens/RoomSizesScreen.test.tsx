@@ -75,6 +75,10 @@ it('with both gates met, Grow spends once, the room redraws grown with MORE ROOM
   const room = s.getByTestId('sizes-room');
   expect([room.props.tier, room.props.room.split(':')[0], room.props.room.split(':')[2]]).toEqual([2, 'cheer', 'MORE ROOM!']);
   expect(s.getByTestId('sizes-grown')).toHaveTextContent(/NEW FLOORNEW WALLYour room grew600 coins and 14 days of check-ins in a row\.\+1 row each side · \+20 pieces/);
+  // The two new effect slots, shown and read aloud (P3 ruling 20, T9-CARRY).
+  const more = s.getByTestId('sizes-grown-more');
+  expect(more).toHaveTextContent('+1 row each side · +20 pieces · +2 effect slots');
+  expect(more.props.accessibilityLabel).toBe('One more row each side, 20 more pieces, 2 more effect slots');
   expect(s.queryByTestId('sizes-stored')).toBeNull();
   expect([getCosmetics()!.tier, getCosmetics()!.version]).toEqual([2, 3]);
   fireEvent.press(s.getByTestId('sizes-place'));
