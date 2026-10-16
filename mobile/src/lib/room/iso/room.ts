@@ -174,10 +174,14 @@ export function drawIsoStatic(input: IsoStaticInput): IsoStatic {
   const visible = layout.pieces.filter((p) => isoOf(p.item) && p.id !== hide && !(p.layer === 'onTop' && p.parent === hide));
   const visibleLayout = { ...layout, pieces: visible };
   const byId = new Map(visible.map((p) => [p.id, p]));
+  // A napping cat lies on its bed (spec §8.2): drawn right after the bed, at the bed's corner, with the bed's depth.
+  const napOn = input.effects?.napOn ?? new Map<string, string>();
+  const catOnBed = new Map([...napOn].filter(([cat, bed]) => byId.has(cat) && byId.has(bed)).map(([cat, bed]) => [bed, cat]));
+  const napping = new Set(catOnBed.values());
   let target = back;
   let list = behind;
-  const put = (p: Placement) => {
-    const at = anchorOf(P, p, byId);
+  const put = (p: Placement, at0?: [number, number]) => {
+    const at = at0 ?? anchorOf(P, p, byId);
     const state = input.effects?.states.get(p.id);
     const o: IsoArtOpts = { layer: p.layer, facing: p.facing, mirror: p.mirror, ...(state ? { effect: state } : {}) };
     const l = at ? pieceLayers(p.item, ctx, o) : null;
@@ -189,11 +193,13 @@ export function drawIsoStatic(input: IsoStaticInput): IsoStatic {
     const b = opaqueBounds(base);
     if (b) hits.push({ id: p.id, box: b, rects: base });
     for (const c of childrenOf(visibleLayout, p.id)) put(c);
+    const cat = catOnBed.get(p.id);
+    if (cat) put(byId.get(cat)!, at);
   };
   const byPos = (a: Placement, b: Placement) => a.x - b.x || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
-  for (const wall of ['wallL', 'wallR'] as const) visible.filter((p) => p.layer === wall).sort(byPos).forEach(put);
-  const floor = visible.filter((p) => p.layer === 'floor');
-  floor.filter((p) => isoOf(p.item)!.flat).sort((a, b) => a.x + a.y - (b.x + b.y) || byPos(a, b)).forEach(put);
+  for (const wall of ['wallL', 'wallR'] as const) visible.filter((p) => p.layer === wall).sort(byPos).forEach((p) => put(p));
+  const floor = visible.filter((p) => p.layer === 'floor' && !napping.has(p.id));
+  floor.filter((p) => isoOf(p.item)!.flat).sort((a, b) => a.x + a.y - (b.x + b.y) || byPos(a, b)).forEach((p) => put(p));
   const solid = floor.filter((p) => !isoOf(p.item)!.flat);
   const boxes: DepthBox[] = solid.map((p) => { const a = footOf(p, isoOf(p.item)!); return { key: p.id, i0: a.x0, j0: a.y0, i1: a.x1, j1: a.y1 }; });
   const kipSeat = kipAt(g, layout);

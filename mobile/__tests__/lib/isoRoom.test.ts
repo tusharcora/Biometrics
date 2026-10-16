@@ -4,7 +4,8 @@ import { EMPTY_WORN } from '../../src/lib/room/loadout';
 import { starterLayout } from '../../src/lib/room/layout';
 import { isoCrop, deskBoxes } from '../../src/lib/room/iso/crop';
 import type { Placement, RoomLayout } from '../../src/lib/room/iso/geometry';
-import { isoGrid } from '../../src/lib/room/iso/grid';
+import { isoGrid, projOf } from '../../src/lib/room/iso/grid';
+import { roomEffects } from '../../src/lib/room/effects';
 import { clipOut, drawIsoFramesEach, drawIsoStatic, drawKipLayer, isoRoomKey, pieceAt, type IsoStaticInput } from '../../src/lib/room/iso/room';
 import { NIGHT_VEIL } from '../../src/lib/room/weather';
 
@@ -119,4 +120,20 @@ describe('crops on the desk (spec §9.1)', () => {
     expect(o.x).toBeGreaterThanOrEqual(330 - g.W * 2);
     expect(isoCrop({ width: 400, height: 400, cellPt: 2, box, room: g })).toEqual({ x: 28, y: 40 });
   });
+});
+
+it('draws a napping cat on its bed, right after the bed, and tapping the bed there finds the cat (spec §8.2)', () => {
+  const pieces = [...starterLayout().pieces,
+    { id: 'p1', item: 'pet.tabby', layer: 'floor' as const, x: 6, y: 6, facing: 'L' as const, mirror: false },
+    { id: 'p2', item: 'pet.bed', layer: 'floor' as const, x: 5, y: 5, facing: 'L' as const, mirror: false }];
+  const layout = { ...starterLayout(), pieces };
+  const effects = roomEffects(layout, 1, { plantStage: 5, petEnergy: 'play', awards: [] }, { hhmm: '23:00', hour: 23 });
+  const s = drawIsoStatic({ layout, tier: 1, weather: 'clear', night: true, colour: 'coral', effects });
+  const placed = [...s.behind, ...s.ahead];
+  const bed = placed.findIndex((pp) => pp.p.id === 'p2');
+  expect(placed[bed + 1]!.p.id).toBe('p1');
+  expect(placed[bed + 1]!.at).toEqual(placed[bed]!.at);
+  expect(placed[bed + 1]!.o.effect).toBe('nap');
+  const [x, y] = projOf(isoGrid(1))(5.5, 5.5, 4).map(Math.round);
+  expect(pieceAt(s.hits, x, y - 2)).toBe('p1');
 });

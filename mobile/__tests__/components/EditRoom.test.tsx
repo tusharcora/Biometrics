@@ -12,6 +12,7 @@ import { isoGrid, projOf } from '../../src/lib/room/iso/grid';
 import { drawIsoStatic, pieceAt } from '../../src/lib/room/iso/room';
 import { starterLayout } from '../../src/lib/room/layout';
 import { EMPTY_WORN } from '../../src/lib/room/loadout';
+import { roomEffects } from '../../src/lib/room/effects';
 import { STARTER_COUNTS } from '../../jest-mocks/cosmeticsFixture';
 
 jest.mock('../../src/components/room/RoomView', () => require('../../jest-mocks/RoomView'));
@@ -230,4 +231,34 @@ it('re-centres on the desk when the tier, the width or the height changes (P2-CA
   expect(offset()).toEqual(initialPan(grown, 320, H));
   s.rerender(<EditRoom {...props} dispatch={jest.fn()} state={grown} width={320} height={260} />);
   expect(offset()).toEqual(initialPan(grown, 320, 260));
+});
+
+it('after 22:00 a napping cat stays curled on its own tile in the editor, so a tap there selects it (spec §8.2)', () => {
+  jest.useFakeTimers();
+  jest.setSystemTime(new Date(2026, 9, 24, 23, 0, 30));
+  try {
+    const cat = { id: 'p1', item: 'pet.tabby', layer: 'floor' as const, x: 6, y: 6, facing: 'L' as const, mirror: false };
+    const bed = { id: 'p2', item: 'pet.bed', layer: 'floor' as const, x: 5, y: 5, facing: 'L' as const, mirror: false };
+    const layout = { ...starterLayout(), pieces: [...starterLayout().pieces, cat, bed] };
+    const state = initEditor({ layout, worn: EMPTY_WORN, tier: 1, counts: { ...STARTER_COUNTS, 'pet.tabby': 1, 'pet.bed': 1 }, version: 1, newIds: [] });
+    const living = { plantStage: 5 as const, petEnergy: 'play' as const, awards: [] };
+    const curled = roomEffects(layout, 1, living, { hhmm: '23:00', hour: 23 });
+    expect(curled.napOn.get('p1')).toBe('p2'); // outside the editor it would lie on the bed
+    const own = drawIsoStatic({ layout, tier: 1, weather: 'clear', night: true, colour: 'coral', effects: { ...curled, napOn: new Map() } });
+    const hit = own.hits.find((h) => h.id === 'p1')!;
+    let cell: [number, number] | null = null;
+    for (const [x, y, w, h, c] of hit.rects) {
+      if (c.startsWith('rgba')) continue;
+      for (let i = x; i < x + w && !cell; i++) for (let j = y; j < y + h && !cell; j++) if (pieceAt(own.hits, i, j) === 'p1') cell = [i, j];
+    }
+    const dispatch = jest.fn();
+    const s = render(<EditRoom {...props} state={state} window={{ weather: 'clear', night: true }} living={living} dispatch={dispatch} />);
+    expect(s.getByTestId('edit-room-view').props.editing).toBe(true);
+    const pan = initialPan(state, W, H);
+    const tapAt = { x: pan.x + (cell![0] + 0.5) * EDIT_CELL_PT, y: pan.y + (cell![1] + 0.5) * EDIT_CELL_PT };
+    act(() => fireGestureHandler(getByGestureTestId('edit-room-tap'), [{ state: State.BEGAN, ...tapAt }, { state: State.END, ...tapAt }]));
+    expect(dispatch).toHaveBeenLastCalledWith({ type: 'select', id: 'p1' });
+  } finally {
+    jest.useRealTimers();
+  }
 });

@@ -35,3 +35,14 @@ it('the trophy shelf is a plank along 4 tiles of either wall, plain until it hol
     expect(l.frames).toBeUndefined();
   }
 });
+
+it('the cat plays with a paw and its tail, and naps curled up with drifting z\'s (spec §8.3, ruling 10)', () => {
+  const at = (effect?: string) => pieceLayers('pet.tabby', CTX_NIGHT, { layer: 'floor', facing: 'L', mirror: false, ...(effect ? { effect } : {}) })!;
+  const sit = at();
+  const play = at('play');
+  const nap = at('nap');
+  expect(JSON.stringify(play.frames)).not.toBe(JSON.stringify(sit.frames));
+  expect(opaqueBounds(nap.base!)!.h).toBeLessThan(opaqueBounds(sit.base!)!.h);
+  expect(JSON.stringify(nap.frames![0])).not.toBe(JSON.stringify(nap.frames![2]));
+  expect(JSON.stringify(at('wander').base)).toBe(JSON.stringify(sit.base)); // still, a wandering cat sits
+});
