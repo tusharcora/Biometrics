@@ -18,12 +18,17 @@ function mondayDay(year: number, week: number): number {
   return jan4 - jan4Weekday + (week - 1) * 7;
 }
 
+/** Whole weeks from the Monday of 1970's first ISO week to this ISO week's Monday; null for a malformed week. */
+export function weekNumber(week: string): number | null {
+  const m = /^(\d{4})-W(\d{2})$/.exec(week);
+  return m ? Math.floor(mondayDay(Number(m[1]), Number(m[2])) / 7) : null;
+}
+
 /**
  * '2026-W43' → that week's set: floor(its Monday's day number / 7) mod 4 (ruling T6-FIX), a count of whole weeks, so
  * each Monday moves exactly one set on, across a 52- or a 53-week year alike. A malformed week reads as the first set.
  */
 export function weekSet(week: string): ShopWeekSet {
-  const m = /^(\d{4})-W(\d{2})$/.exec(week);
-  const n = m ? Math.floor(mondayDay(Number(m[1]), Number(m[2])) / 7) : 0;
+  const n = weekNumber(week) ?? 0;
   return SHOP_WEEKS[((n % SHOP_WEEKS.length) + SHOP_WEEKS.length) % SHOP_WEEKS.length]!;
 }

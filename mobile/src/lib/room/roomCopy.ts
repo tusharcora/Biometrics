@@ -37,6 +37,10 @@ export const ITEM_NAMES: Readonly<Record<ItemId, string>> = {
   'item.candle': 'Candle', 'art.neonheart': 'Neon heart sign',
   // Free-build P3's effect pieces (spec 2026-10-15 §8.2).
   'pet.tabby': 'Ginger cat', 'shelf.awards': 'Trophy shelf',
+  // Free-build P4's challenge pieces and trophies (spec 2026-10-15 §10.4, C3). OWNER NOTE (PF4-OWNER): every name after
+  // Cosy autumn's two (the Harvest lantern and the Golden acorn) is a placeholder for the owner to confirm.
+  'lamp.harvest': 'Harvest lantern', 'plant.ivy': 'Trailing ivy', 'lamp.moon': 'Moon lamp', 'item.organiser': 'Desk organiser',
+  'corner.acorn': 'Golden acorn', 'corner.can': 'Golden watering can', 'corner.owl': 'Silver owl', 'item.goldpen': 'Golden pen pot',
   'out.beanie': 'Beanie', 'out.cap': 'Cap', 'out.sweatband': 'Sweatband', 'out.bucket': 'Bucket hat',
   'out.hachimaki': 'Hachimaki headband', 'out.beret': 'Beret', 'out.party': 'Party hat', 'out.round': 'Round glasses',
   'out.scarf': 'Scarf', 'out.bowtie': 'Bow tie', 'out.earbuds': 'Earbuds', 'out.phones': 'Headphones',
@@ -91,6 +95,7 @@ export function unlockLine(rule: UnlockRule): string {
     case 'anyFamily': return `Any family · level ${ROMAN[r.level]}`;
     case 'counter': return r.counter === 'recaps_read' ? `Read ${r.atLeast} weekly recaps` : `Cheer a buddy ${r.atLeast} times`;
     case 'set': return '';
+    case 'prize': return 'A weekly challenge trophy';
   }
 }
 

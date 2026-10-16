@@ -29,6 +29,7 @@ export function metAt(rule: UnlockRule, facts: UnlockFacts, setsById: ReadonlyMa
   switch (rule.kind) {
     case 'starter':
     case 'shop':
+    case 'prize':
       return null;
     case 'family':
       return earliest(facts.levels.filter((l) => l.family === rule.family && l.level >= rule.level).map((l) => l.at));
@@ -52,6 +53,8 @@ export function sourceOf(rule: UnlockRule): string {
     case 'starter': return 'starter';
     // Never a grant source: a purchase records its ItemGrant under 'buy:{requestId}'.
     case 'shop': return 'shop';
+    // Never a grant source: a trophy is an ItemGrant 'prize:{weekId}' (P4 ruling 6).
+    case 'prize': return 'prize';
   }
 }
 

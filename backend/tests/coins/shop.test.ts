@@ -53,6 +53,16 @@ describe('the offer (spec §6.4–6.6)', () => {
     expect(forSale('desk.monitor', W, none)).toBeNull();
   });
 
+  it('never offers or sells a prize, even priced, shop-listed and with its unlock row (P4 rulings 2 and 15)', () => {
+    const radio = COSMETIC_ITEMS.find((i) => i.id === 'item.radio')!;
+    const items = [...COSMETIC_ITEMS, { ...radio, id: 'corner.prize', unlock: { kind: 'prize' as const }, price: 50, shop: 'always' as const }];
+    expect(offeredIn(W, items).map((o) => o.itemId)).not.toContain('corner.prize');
+    expect(forSale('corner.prize', W, new Set(['corner.prize']), items)).toBeNull();
+    for (const id of ['corner.acorn', 'corner.can', 'corner.owl', 'item.goldpen']) {
+      expect([id, forSale(id, W, new Set([id]))]).toEqual([id, null]);
+    }
+  });
+
   it('turns the featured set every Monday over four sets of offered pieces', () => {
     expect(new Set(['2026-W43', '2026-W44', '2026-W45', '2026-W46'].map((w) => weekSet(w).id)).size).toBe(4);
     expect(weekSet('2026-W47')).toEqual(weekSet('2026-W43'));

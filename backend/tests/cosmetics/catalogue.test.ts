@@ -1,8 +1,9 @@
 import { ALL_FAMILIES } from '../../src/achievements/catalogue';
 import {
   COSMETIC_ITEMS, COSMETIC_SETS, OPTIONAL_ROOM_SLOTS, PRICES, RELEASE_LAUNCHED_AT, ROOM_SLOTS, SHIPPED_RELEASES, STARTER_IDS,
-  STARTER_ROOM, WORN_SLOTS, cosmeticItem, isShipped, ruleOf, type CosmeticSet, type CosmeticSlot,
+  STARTER_ROOM, THEME_PIECES, WORN_SLOTS, cosmeticItem, isShipped, ruleOf, tagsOf, type CosmeticSet, type CosmeticSlot,
 } from '../../src/cosmetics/catalogue';
+import { metAt } from '../../src/cosmetics/rules';
 import { layoutFromSlots } from '../../src/room/convert';
 import { effectPieces, effectSlotsFor } from '../../src/room/geometry';
 import fs from 'fs';
@@ -109,13 +110,29 @@ it('gives each set exactly one piece per room slot, worn pieces in worn slots, a
   expect(cosmeticItem('set.japanese.desk')!.style).toBe('low');
 });
 
-it('ships releases 1, 3, 4 and 5, each with a launch date (spec §2.1 Releases, P3 plan ruling 1)', () => {
-  expect([...SHIPPED_RELEASES].sort()).toEqual([1, 3, 4, 5]);
-  for (const r of SHIPPED_RELEASES) expect(RELEASE_LAUNCHED_AT[r as 1 | 3 | 4 | 5]).toBeInstanceOf(Date);
+it('ships releases 1, 3, 4, 5 and 6, each with a launch date (spec §2.1 Releases, P4 plan ruling 1)', () => {
+  expect([...SHIPPED_RELEASES].sort()).toEqual([1, 3, 4, 5, 6]);
+  for (const r of SHIPPED_RELEASES) expect(RELEASE_LAUNCHED_AT[r as 1 | 3 | 4 | 5 | 6]).toBeInstanceOf(Date);
+  expect(RELEASE_LAUNCHED_AT[6].toISOString()).toBe('2026-10-26T00:00:00.000Z');
   expect(COSMETIC_ITEMS.filter((i) => i.release === 3).map((i) => i.id).sort()).toEqual(['lamp.welcome', 'shelf.plank']);
   expect(COSMETIC_ITEMS.filter((i) => i.release === 4).map((i) => i.id).sort())
     .toEqual(['art.neonheart', 'corner.cone', 'corner.gnome', 'corner.pumpkin', 'item.candle', 'item.radio']);
   expect(COSMETIC_ITEMS.filter((i) => i.release === 5).map((i) => i.id).sort()).toEqual(['pet.tabby', 'shelf.awards']);
+  expect(COSMETIC_ITEMS.filter((i) => i.release === 6).map((i) => i.id).sort()).toEqual([
+    'corner.acorn', 'corner.can', 'corner.owl', 'item.goldpen', 'item.organiser', 'lamp.harvest', 'lamp.moon', 'plant.ivy',
+  ]);
+});
+
+it('derives the challenge tags (P4 ruling 3) and never grants a prize by a rule', () => {
+  const tags = (id: string) => tagsOf(cosmeticItem(id)!);
+  expect(tags('corner.pumpkin')).toContain('warm');
+  expect(tags('plant.fern')).toEqual(expect.arrayContaining(['plant']));
+  expect(tags('lamp.amber')).toEqual(expect.arrayContaining(['warm', 'glow']));
+  expect(tags('item.mug')).toEqual(expect.arrayContaining(['warm', 'desk']));
+  expect(tags('shelf.luckycat')).toEqual(['funny']);
+  expect(ruleOf('P')).toEqual({ kind: 'prize' });
+  const facts = { levels: [{ family: 'SLEEP_GOAL' as const, level: 5 as const, at: new Date() }], recapsReadAt: [], cheersAt: [] };
+  expect(metAt({ kind: 'prize' }, facts, new Map())).toBeNull();
 });
 
 it('gives the first set of effects to their pieces, and to no other (spec §8.2, P3 rulings 2-3)', () => {
@@ -164,9 +181,10 @@ it('reads the coin-shop code: a shop piece is only ever bought (plan ruling 2)',
   }
 });
 
-it('prices pieces 25 to 200 coins, always in the shop, never a desk or the welcome lantern (spec §6.4, §6.5, rulings 3-4)', () => {
+it('prices pieces 25 to 200 coins, always in the shop but the theme pieces, never a desk or the welcome lantern (spec §6.4, §6.5, rulings 3-4; P4 ruling 4)', () => {
   for (const item of COSMETIC_ITEMS.filter((i) => i.price !== undefined)) {
-    expect({ id: item.id, ok: item.price! >= 25 && item.price! <= 200 && item.shop === 'always' && !!item.iso }).toEqual({ id: item.id, ok: true });
+    const shop = THEME_PIECES.has(item.id) ? 'theme' : 'always';
+    expect({ id: item.id, ok: item.price! >= 25 && item.price! <= 200 && item.shop === shop && !!item.iso }).toEqual({ id: item.id, ok: true });
   }
   for (const id of ['desk.monitor', 'desk.notebook', 'desk.laptop', 'set.cottage.desk', 'lamp.welcome']) expect(cosmeticItem(id)!.price).toBeUndefined();
   const price = (id: string) => cosmeticItem(id)!.price;

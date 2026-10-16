@@ -1,11 +1,12 @@
 // The coin shop (spec 2026-10-15 §6.4–6.6). A piece is for sale when it is shipped, priced and offered this week
-// (always, or in its own ISO week), and, for a piece with an unlock rule, once its unlock row exists (§6.5: a rule
-// piece is never sold before it is earned; a gifted copy does not count, P4 ruling 15). The offer marks such a piece
-// locked until then (PF4-F1). A purchase runs under the user's one lock (plan ruling 5): the replay check, the sale
+// (always, in a week whose challenge theme names it, or in its own ISO week), never a prize (a trophy, P4 ruling 2),
+// and, for a piece with an unlock rule, once its unlock row exists (§6.5: a rule piece is never sold before it is
+// earned; a gifted copy does not count, P4 ruling 15). The offer marks such a piece locked until then (PF4-F1). A purchase runs under the user's one lock (plan ruling 5): the replay check, the sale
 // check, the spend, then the +1 grant, all keyed by the app's request id, so a retry never buys twice. Coins only:
 // nothing here is ever paid for with money. Logs the spend's kind only, never a user id, an item or an amount.
 import type { Prisma } from '@prisma/client';
 import { civilDateToUtcMidnight } from '../biometrics/civilDate';
+import { themeFor } from '../challenges/themes';
 import { COSMETIC_ITEMS, isShipped, type CosmeticItem } from '../cosmetics/catalogue';
 import { prisma } from '../db/client';
 import { isoWeekKey } from '../habits/job';
@@ -23,13 +24,16 @@ export interface ShopDTO { week: string; set: { id: string; itemIds: string[] };
 
 export function offeredIn(week: string, items: readonly CosmeticItem[] = COSMETIC_ITEMS): ShopOffer[] {
   return items
-    .filter((i) => isShipped(i) && !!i.iso && i.price !== undefined && (i.shop === 'always' || (typeof i.shop === 'object' && i.shop.week === week)))
+    .filter((i) => isShipped(i) && !!i.iso && i.price !== undefined && i.unlock.kind !== 'prize' && (
+      i.shop === 'always'
+      || (i.shop === 'theme' && themeFor(week)?.themePiece === i.id)
+      || (typeof i.shop === 'object' && i.shop.week === week)))
     .map((i) => ({ itemId: i.id, price: i.price! }));
 }
 
-/** A shop piece and a starter are for anyone; a rule piece only once its unlock row exists. */
+/** A shop piece and a starter are for anyone; a rule piece only once its unlock row exists; a prize never. */
 const sellsTo = (item: CosmeticItem, earned: ReadonlySet<string>): boolean =>
-  item.unlock.kind === 'shop' || item.unlock.kind === 'starter' || earned.has(item.id);
+  item.unlock.kind !== 'prize' && (item.unlock.kind === 'shop' || item.unlock.kind === 'starter' || earned.has(item.id));
 
 /** A shop piece and a starter are for anyone; a rule piece only once its unlock row exists, never because a gift or a
  * prize gave a copy (spec §6.5; P4 ruling 15 resolves P2's note). */
