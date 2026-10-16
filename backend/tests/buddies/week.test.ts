@@ -131,6 +131,17 @@ it('a buddy with no data: none, and shared rows empty', async () => {
   expect(week.numbers.steps!.every((d) => d.value === null)).toBe(true);
 });
 
+it('lists health shares only, and says whether the room is open (spec §10.1, ruling 8)', async () => {
+  const [me, them] = [await buddyUser(), await buddyUser()];
+  await pairUp(me.id, them.id);
+  await prisma.user.update({ where: { id: them.id }, data: { shareRoom: true, shareSteps: true, buddySharingConsentVersion: BUDDY_SHARING_CONSENT_VERSION } });
+  const week = await buildBuddyWeek(me.id, them.id, new Date());
+  expect(week.shares).toEqual(['steps']);
+  expect(week.roomOpen).toBe(true);
+  await prisma.user.update({ where: { id: them.id }, data: { shareRoom: false } });
+  expect((await buildBuddyWeek(me.id, them.id, new Date())).roomOpen).toBe(false);
+});
+
 describe('GET /me/buddies/:buddyId', () => {
   it('answers the week, reports mute, and marks their stickers to me as seen', async () => {
     const viewer = await buddyUser();

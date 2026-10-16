@@ -14,7 +14,7 @@ import { BuddyError } from './errors';
 import { currentSleepStreak, moodFromScore, moodLine, todayMood, type Mood } from './mood';
 import { findPair } from './pairs';
 import { PERSON_SELECT, toPerson, type PersonDTO } from './people';
-import { SHARE_KEYS, SHARING_SELECT, effectiveSharing, type ShareKey } from './sharing';
+import { HEALTH_SHARE_KEYS, SHARING_SELECT, effectiveSharing, roomOpen, type HealthShareKey } from './sharing';
 
 export interface DayValue { date: string; value: number | null }
 export type NumberKey = 'recovery' | 'sleepScore' | 'hoursSlept' | 'steps';
@@ -27,10 +27,12 @@ export interface BuddyWeekDTO {
   muted: boolean;
   /** 7 days, oldest first, ending on the buddy's local today; each tile is that day's own score. */
   tiles: Array<{ date: string; mood: Mood }>;
-  shares: ShareKey[];
+  shares: HealthShareKey[];
   numbers: Partial<Record<NumberKey, DayValue[]>>;
   /** Highest level per family, catalogue order; only with streaks & badges shared. */
   badges?: Array<{ family: AchievementFamily; level: number }>;
+  /** The buddy opened their room to visits (spec 2026-10-15 §10.1): the profile's Visit button (P4 ruling 8). */
+  roomOpen: boolean;
 }
 
 export async function buildBuddyWeek(viewerId: string, buddyId: string, now: Date): Promise<BuddyWeekDTO> {
@@ -68,8 +70,10 @@ export async function buildBuddyWeek(viewerId: string, buddyId: string, now: Dat
     moodLine: moodLine(mood, { movedALot, streakNights }),
     muted,
     tiles: dates.map((date) => ({ date, mood: moodFromScore(recovery.get(date)) })),
-    shares: SHARE_KEYS.filter((key) => sharing[key]),
+    // The room has its own entry point, not a line among the shared numbers.
+    shares: HEALTH_SHARE_KEYS.filter((key) => sharing[key]),
     numbers,
+    roomOpen: roomOpen(buddy),
   };
   if (sharing.streaks) {
     const top = await prisma.achievement.groupBy({ by: ['family'], where: { userId: buddyId }, _max: { level: true } });
