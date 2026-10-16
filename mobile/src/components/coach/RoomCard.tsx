@@ -34,7 +34,7 @@ const WOOD_LINE = '#3A2D23';
 // answered it sits under the frame and KIP says "WELCOME HOME!" (spec 2026-10-15 §11.1, plan ruling 18); both of its
 // buttons record it for every device. Coins that landed since the last look show once in KIP's bubble, with a line
 // under the room (spec 2026-10-15 §6.7).
-export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, holdCoins, onOpenRecovery, onDecorate, onPlaceLantern, footer, children, onLayout }: {
+export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, holdCoins, holdClock, onOpenRecovery, onDecorate, onPlaceLantern, footer, children, onLayout }: {
   stage: KipStage;
   look?: KipLook;
   window: { weather: RoomWeather; night: boolean };
@@ -43,6 +43,8 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
   paused?: boolean;
   /** Keeps landing coins waiting, unseen: the page does not know yet whether the card is shrunk (ruling PF-F13). */
   holdCoins?: boolean;
+  /** The card is scrolled under the collapsed header: its clock keeps its minute (ruling T5-FIX). */
+  holdClock?: boolean;
   onOpenRecovery: () => void;
   /** Long-press on the room opens the editor (spec 2026-10-15 §5.1). */
   onDecorate?: () => void;
@@ -95,6 +97,7 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
                   cellPt={2}
                   reduceMotion={reduceMotion}
                   paused={paused}
+                  holdClock={holdClock}
                   accessibilityLabel={roomLabel(stage.id, window)}
                 />
               ) : null}

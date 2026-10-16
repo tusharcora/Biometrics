@@ -20,7 +20,7 @@ export function drawAwardsShelf(r: Rects, layer: PlacementLayer): void {
 }
 
 /** Bronze, Silver, Gold, Diamond: the badges' own ring colours (badgeArt TIERS, PF3-COPY). */
-export const AWARD_COLOURS: Readonly<Record<number, string>> = Object.fromEntries(TIERS.slice(1).map((t, i) => [i + 1, t.ring]));
+export const AWARD_COLOURS: Readonly<Record<1 | 2 | 3 | 4, string>> = { 1: TIERS[1]!.ring, 2: TIERS[2]!.ring, 3: TIERS[3]!.ring, 4: TIERS[4]!.ring };
 /** A level's award colour; Legend (level V) is your KIP's colour, as its badge is. */
 export const awardColour = (level: number, colour: KipColour): string => tierColors(level, colour).ring;
 const CUP = spriteRows(['ccccc', '.ccc.', '..c..', '.ccc.'], { c: '#000000' });
@@ -28,7 +28,7 @@ const CUP = spriteRows(['ccccc', '.ccc.', '..c..', '.ccc.'], { c: '#000000' });
 /** The levels a shelf state carries ('a543' → [5, 4, 3]): highest first, at most 8 (spec §8.3). */
 export function awardLevels(effect: string | undefined): number[] {
   if (!effect?.startsWith('a')) return [];
-  return [...effect.slice(1)].map(Number).filter((n) => n >= 1 && n <= 5).slice(0, 8);
+  return [...effect.slice(1)].map(Number).filter((n) => n >= 1 && n <= 5).sort((a, b) => b - a).slice(0, 8);
 }
 
 const shelf: IsoPieceArt = {

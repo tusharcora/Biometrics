@@ -62,7 +62,7 @@ function withEffect(slot: string, l: ItemLayers, ctx: ItemContext, o: IsoArtOpts
   if (!e) return l;
   if (slot === 'plant' && /^g[1-4]$/.test(e)) return growLayers(l, Number(e.slice(1)));
   if (e === 'lit' && ctx.night) return { ...l, emissive: [...(l.emissive ?? []), ...lampPool()] };
-  if (e === 'notes') return { ...l, frames: radioNotes(ctx.night) };
+  if (e === 'notes') return { ...l, frames: radioNotes(ctx.night, o.mirror) };
   return l;
 }
 

@@ -44,6 +44,8 @@ export interface RoomViewProps {
   room?: IsoStatic;
   /** The editor: a drag is live, so the clock keeps its minute and the room is not rebuilt under it (PF3-CLOCK). */
   dragging?: boolean;
+  /** The room is out of sight (the room card scrolled under the collapsed header): the clock keeps its minute. */
+  holdClock?: boolean;
   /** The living room (spec §8.3); absent, the neutral room (a visit, the share card, a test). */
   living?: Living;
   bubble: string | null;
@@ -73,8 +75,9 @@ export function RoomView(props: RoomViewProps) {
   const t = useFrameClock(still);
   const frame = still ? 0 : Math.floor(t / LOOP_MS) % 3;
 
-  // The clock's minute rebuilds the room only while this page is focused and no drag is live (PF3-CLOCK).
-  const effects = useRoomEffects(layout, tier, props.living, !focused || !!props.dragging);
+  // The clock's minute rebuilds the room only while this page is focused, the room is not paused or out of sight,
+  // and no drag is live (PF3-CLOCK, ruling T5-FIX).
+  const effects = useRoomEffects(layout, tier, props.living, !focused || !!props.dragging || !!props.paused || !!props.holdClock);
   const input = { layout, tier, weather, night, colour, hide: props.hide ?? null, effects };
   const staticKey = isoRoomKey(input);
   const room = useMemo(() => props.room ?? drawIsoStatic(input), [staticKey, props.room]); // eslint-disable-line react-hooks/exhaustive-deps

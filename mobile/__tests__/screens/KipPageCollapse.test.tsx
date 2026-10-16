@@ -153,6 +153,21 @@ it('the thumbnail scrolls back to the top', async () => {
   spy.mockRestore();
 });
 
+it('scrolled under the collapsed header, the room card holds its clock and only the thumbnail turns it (ruling T5-FIX)', async () => {
+  const s = await openChat();
+  layOut(s);
+  measureRoom(s);
+  const held = () => s.getByTestId('kip-room', { includeHiddenElements: true }).props.holdClock;
+  expect(held()).toBe(false);
+  await scrollTo(s, 288); // fading in: the card still shows
+  expect(held()).toBe(false);
+  await scrollTo(s, 400);
+  expect(held()).toBe(true);
+  expect(s.getByTestId('kip-room-thumb').props.holdClock).toBe(false);
+  await scrollTo(s, 0);
+  expect(held()).toBe(false);
+});
+
 it('"Shrink room" collapses for good, persists, and survives a remount', async () => {
   const s = await openChat();
   fireEvent.press(s.getByTestId('kip-shrink-room'));

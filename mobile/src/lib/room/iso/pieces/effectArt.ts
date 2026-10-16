@@ -56,10 +56,13 @@ export function lampPool(): Rects {
 const NOTE: readonly SpriteRect[] = spriteRows(['.kk', '.k.', 'kk.'], { k: '#FDE68A' });
 /** Three notes over the radio's top, each two cells higher a frame, round and round (C1, C6 `notes_on_radio`). */
 const NOTE_AT: ReadonlyArray<readonly [number, number]> = [[3, -14], [-5, -19], [6, -24]];
-export function radioNotes(night: boolean): [Rects, Rects, Rects] {
+const NOTE_W = 3;
+/** A flipped radio mirrors where the notes rise about its centre line; each note itself still reads the right way. */
+export function radioNotes(night: boolean, mirror = false): [Rects, Rects, Rects] {
   return three((k) => {
     const f: Rects = [];
-    NOTE_AT.forEach(([x, y], i) => {
+    NOTE_AT.forEach(([x0, y], i) => {
+      const x = mirror ? -x0 - NOTE_W : x0;
       const rise = ((k + i) % 3) * 2;
       for (const [sx, sy, w, h, c] of NOTE) R(f, x + sx, y - rise + sy, w, h, veiled(c, night));
     });

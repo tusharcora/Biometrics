@@ -276,3 +276,8 @@ it('the live-region node is mounted, empty and hidden, before coins land; landin
   expect(landed).toHaveTextContent('Sleep goal hit');
   expect([landed.props.accessibilityElementsHidden, landed.props.importantForAccessibility]).toEqual([false, 'auto']);
 });
+
+it('hands its clock hold to the room (scrolled under the collapsed header, ruling T5-FIX)', () => {
+  expect(renderCard().getByTestId('kip-room').props.holdClock).toBe(false);
+  expect(renderCard({ holdClock: true }).getByTestId('kip-room').props.holdClock).toBe(true);
+});

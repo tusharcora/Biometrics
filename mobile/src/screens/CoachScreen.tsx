@@ -516,6 +516,8 @@ export function CoachScreen() {
       reduceMotion={reduceMotion}
       paused={decorating}
       holdCoins={!shrunkKnown || collapsed === 'in'}
+      // Scrolled under the collapsed header, only the header's thumbnail turns its clock (ruling T5-FIX).
+      holdClock={collapsed === 'in'}
       onOpenRecovery={openRecovery}
       onDecorate={openDecorate}
       onPlaceLantern={placeLantern}

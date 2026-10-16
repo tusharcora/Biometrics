@@ -4,6 +4,8 @@ import { TIERS, tierColors } from '../../src/lib/badgeArt';
 import { handCells, parseHhmm } from '../../src/lib/room/items/art';
 import { clearPieceCache, pieceLayers } from '../../src/lib/room/iso/art';
 import { AWARD_COLOURS, awardColour, awardLevels } from '../../src/lib/room/iso/pieces/awards';
+import { radioNotes } from '../../src/lib/room/iso/pieces/effectArt';
+import type { RoomRect } from '../../src/lib/room/grid';
 import { clockNow, useClockMinute } from '../../src/lib/room/useClockMinute';
 import '../../src/lib/room/iso';
 
@@ -71,14 +73,36 @@ describe('the radio and the trophy shelf (spec §8.2, §8.3)', () => {
     expect(pieceLayers('item.radio', CTX_NIGHT, { layer: 'floor', facing: 'L', mirror: false })!.frames).toBeUndefined();
   });
 
+  it('a flipped radio\'s notes rise on the other side of its centre line, each note still the right way round (T5-FIX M5)', () => {
+    const notes = (night: boolean, mirror: boolean) => radioNotes(night, mirror)[0];
+    const xs = (rs: readonly RoomRect[]) => rs.map(([x, , w]) => [x, w]);
+    const plain = notes(false, false);
+    const flipped = notes(false, true);
+    expect(flipped.map(([, y, , h, c]) => [y, h, c])).toEqual(plain.map(([, y, , h, c]) => [y, h, c]));
+    expect(xs(flipped)).not.toEqual(xs(plain));
+    // Each note is moved whole (the same shift for all its cells), so the glyph is not mirrored; the group is.
+    const per = plain.length / 3;
+    for (let n = 0; n < 3; n++) {
+      const shifts = new Set(plain.slice(n * per, (n + 1) * per).map(([x], i) => flipped[n * per + i]![0] - x));
+      expect(shifts.size).toBe(1);
+    }
+    const bounds = (rs: readonly RoomRect[]) => [Math.min(...rs.map(([x]) => x)), Math.max(...rs.map(([x, , w]) => x + w))];
+    const [l, r] = bounds(plain);
+    expect(bounds(flipped)).toEqual([-r, -l]);
+    const drawn = pieceLayers('item.radio', CTX_DAY, { layer: 'floor', facing: 'L', mirror: true, effect: 'notes' })!;
+    const unflipped = pieceLayers('item.radio', CTX_DAY, { layer: 'floor', facing: 'L', mirror: false, effect: 'notes' })!;
+    expect(JSON.stringify(drawn.frames)).not.toBe(JSON.stringify(unflipped.frames));
+  });
+
   it('the awards wear the badges\' own tier colours (PF3-COPY): Bronze to Diamond from badgeArt, Legend your KIP\'s', () => {
-    expect([1, 2, 3, 4].map((l) => AWARD_COLOURS[l])).toEqual(TIERS.slice(1).map((t) => t.ring));
+    expect(([1, 2, 3, 4] as const).map((l) => AWARD_COLOURS[l])).toEqual(TIERS.slice(1).map((t) => t.ring));
     expect(awardColour(5, 'coral')).toBe(tierColors(5, 'coral').ring);
     expect(awardColour(5, 'lime')).not.toBe(awardColour(5, 'coral'));
   });
 
   it('the shelf stands one award per level, highest first, at most 8, in the level\'s colour', () => {
     expect(awardLevels('a54321')).toEqual([5, 4, 3, 2, 1]);
+    expect(awardLevels('a13524')).toEqual([5, 4, 3, 2, 1]); // sorted, whatever order the state carries (T5-FIX M3)
     expect(awardLevels('a5555555555')).toHaveLength(8);
     expect(awardLevels(undefined)).toEqual([]);
     const two = pieceLayers('shelf.awards', CTX_DAY, { ...WALL, effect: 'a53' })!.base!;

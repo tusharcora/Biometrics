@@ -7,7 +7,8 @@ import { useClockMinute } from '../../lib/room/useClockMinute';
 /**
  * The room's effects for a view (spec §8): recomputed when the layout, the tier or the living room changes, and, while
  * a running clock or cat is in the room, when the minute turns (ruling 7: never on a tick). `hold` keeps the minute
- * (the page is not focused, or the editor is dragging: PF3-CLOCK), so nothing rebuilds until it is let go.
+ * (the page is not focused, the room is paused or out of sight, or the editor is dragging: PF3-CLOCK), so nothing
+ * rebuilds until it is let go.
  */
 export function useRoomEffects(layout: RoomLayout, tier: Tier, living: Living = NEUTRAL_LIVING, hold = false): RoomEffects {
   const key = `${layoutKey(layout)}#${tier}#${livingKey(living)}`;

@@ -204,8 +204,15 @@ describe('RoomView (iso)', () => {
 
     it('a running clock, radio and shelf of awards record 0 pictures a tick, and exactly one rebuild on the minute', () => {
       jest.setSystemTime(new Date(2026, 9, 24, 7, 12, 30));
+      // The radio's notes are in the loop frames (T5-FIX M2); the starter room has none of that colour.
+      const frames = jest.spyOn(isoRoom, 'drawIsoFramesEach');
+      const noteIn = () => (frames.mock.results.at(-1)!.value as RoomRect[][]).some((f) => f.some(([, , , , c]) => c === '#FDE68A'));
+      render(<RoomView {...PROPS} />).unmount();
+      expect(noteIn()).toBe(false);
       const spy = jest.spyOn(isoRoom, 'drawIsoStatic');
       const s = render(<RoomView {...PROPS} layout={LIVE} living={AWARDS} />);
+      expect(noteIn()).toBe(true);
+      frames.mockRestore();
       expect(keysOf(spy)).toHaveLength(1);
       expect(keysOf(spy)[0]).toEqual(expect.stringContaining('p1=live@07:12'));
       expect(keysOf(spy)[0]).toEqual(expect.stringContaining('p2=notes'));
@@ -248,6 +255,22 @@ describe('RoomView (iso)', () => {
       act(() => { jest.advanceTimersByTime(31_000); });
       expect(picture.mock.calls.length - before).toBe(0);
       s.rerender(<RoomView {...PROPS} layout={LIVE} living={AWARDS} dragging={false} />);
+      expect(picture.mock.calls.length - before).toBe(8);
+      s.unmount();
+    });
+
+    it.each([
+      ['paused (the editor is open over it)', 'paused'],
+      ['out of sight (scrolled under the collapsed header)', 'holdClock'],
+    ] as const)('a room %s holds the minute: no rebuild and no timer; let go, exactly one rebuild (ruling T5-FIX)', (_label, prop) => {
+      jest.setSystemTime(new Date(2026, 9, 24, 7, 12, 30));
+      const s = render(<RoomView {...PROPS} layout={LIVE} living={AWARDS} {...{ [prop]: true }} />);
+      const before = picture.mock.calls.length;
+      act(() => { jest.advanceTimersByTime(31_000); });
+      expect(picture.mock.calls.length - before).toBe(0);
+      if (prop === 'paused') expect(jest.getTimerCount()).toBe(0); // paused also holds the loops
+      else expect(jest.getTimerCount()).toBe(1); // only the loop clock, no minute timer
+      s.rerender(<RoomView {...PROPS} layout={LIVE} living={AWARDS} {...{ [prop]: false }} />);
       expect(picture.mock.calls.length - before).toBe(8);
       s.unmount();
     });
