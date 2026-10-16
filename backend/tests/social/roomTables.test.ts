@@ -3,6 +3,7 @@ import { randomUUID } from 'crypto';
 import { prisma } from '../../src/db/client';
 import { connection } from '../../src/sync/queue';
 import { migrateTestDb } from '../setupTestDb';
+import { purgeSocialJsonMentions } from '../../src/buddies/models';
 import { deleteUserAccount } from '../../src/users/deletion';
 import { buddyUser, pairUp } from '../buddies/helpers';
 
@@ -62,4 +63,16 @@ it('a deleted user\'s id leaves every entry circle in every week; other ids and 
   const entries = await prisma.challengeEntry.findMany({ where: { userId: { in: [b.id, c.id, d.id] } } });
   expect(Object.fromEntries(entries.map((e) => [e.userId, e.circle]))).toEqual({ [b.id]: [c.id], [c.id]: [b.id], [d.id]: [b.id, c.id] });
   expect(entries.find((e) => e.userId === b.id)!.snapshot).toEqual({ size: { n: 6, m: 6 } });
+});
+
+it('a failed highlights purge does not skip the circle purge, and the failure still reaches the caller (T2-CARRY)', async () => {
+  const [gone, b] = [await buddyUser(), await buddyUser()];
+  await prisma.challengeEntry.create({ data: { userId: b.id, weekId: '2026-W44', snapshot: {}, circle: [gone.id] } });
+  const boom = new Error('highlights down');
+  const db = {
+    $executeRaw: ((sql: TemplateStringsArray, ...values: unknown[]) =>
+      sql.join('').includes('WeeklyHighlights') ? Promise.reject(boom) : prisma.$executeRaw(sql, ...values)) as typeof prisma.$executeRaw,
+  };
+  await expect(purgeSocialJsonMentions(db, gone.id)).rejects.toBe(boom);
+  expect((await prisma.challengeEntry.findFirstOrThrow({ where: { userId: b.id } })).circle).toEqual([]);
 });

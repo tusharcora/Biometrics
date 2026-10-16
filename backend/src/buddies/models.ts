@@ -73,14 +73,27 @@ export const SET_NULL_COLUMNS: ReadonlySet<string> = new Set(['BuddyCode.usedByI
  * - every week-highlight cache (WeeklyHighlights.items) naming the user is deleted; the next read rebuilds it from
  *   rows that no longer include them. Reads also gate every cached actor against the live circle, so a deleted id
  *   never surfaces even if this purge fails.
- * - the user's id is dropped from every challenge entry's circle (ChallengeEntry.circle, P4 ruling 6), so a closed
- *   week's judging no longer counts them.
- * Returns the number of rows deleted or rewritten.
+ * - the user's id is dropped from every challenge entry's circle (ChallengeEntry.circle, PF4-F10). This is data
+ *   minimisation only: judging counts entries, and the deleted user's own entries are already gone with them, so a
+ *   stale id in a circle matches nothing.
+ * Both are best effort and independent: each runs even if the other fails, and the first failure is rethrown after
+ * both have been tried, for the caller to log. Returns the number of rows deleted or rewritten.
  */
 export async function purgeSocialJsonMentions(db: Pick<PrismaClient, '$executeRaw'>, userId: string): Promise<number> {
-  const caches = await db.$executeRaw`DELETE FROM "WeeklyHighlights" WHERE "items" @> ${JSON.stringify([{ actorId: userId }])}::jsonb`;
-  // jsonb minus text removes every array element equal to that string.
-  const circles = await db.$executeRaw`
-    UPDATE "ChallengeEntry" SET "circle" = "circle" - ${userId}::text WHERE "circle" @> ${JSON.stringify([userId])}::jsonb`;
-  return caches + circles;
+  let purged = 0;
+  let failure: unknown = null;
+  try {
+    purged += await db.$executeRaw`DELETE FROM "WeeklyHighlights" WHERE "items" @> ${JSON.stringify([{ actorId: userId }])}::jsonb`;
+  } catch (err) {
+    failure = err;
+  }
+  try {
+    // jsonb minus text removes every array element equal to that string.
+    purged += await db.$executeRaw`
+      UPDATE "ChallengeEntry" SET "circle" = "circle" - ${userId}::text WHERE "circle" @> ${JSON.stringify([userId])}::jsonb`;
+  } catch (err) {
+    failure ??= err;
+  }
+  if (failure !== null) throw failure;
+  return purged;
 }

@@ -168,8 +168,9 @@ export async function deleteUserAccount(
 
   // Week-highlight caches and challenge-entry circles name people inside JSON, beyond any cascade
   // (buddies/models.ts). After the rows are gone, so a buddy's rebuild racing this deletion can't cache the id again
-  // from rows that still existed. Best effort: reads gate every cached actor against the live circle anyway. Only the
-  // error class is logged.
+  // from rows that still existed. Best effort, each purge independent of the other: reads gate every cached actor
+  // against the live circle anyway, and the circle purge is data minimisation (judging does not depend on it). Only
+  // the error class is logged.
   try {
     await purgeSocialJsonMentions(prisma, userId);
   } catch (err) {
