@@ -58,7 +58,7 @@ export function pieceCard(layout: RoomLayout, tier: Tier, living: Living, now: C
 export type PieceTap = 'card' | 'squash' | 'none';
 
 /** What a tap on a piece does in view mode (rulings 16-17): a running tap piece squashes, an effect piece or a plant
- * opens its card, anything else (or KIP, or nothing) does nothing. */
+ * opens its card, anything else does nothing (a tap on KIP reaches the piece behind it: T13-TAP). */
 export function pieceTap(layout: RoomLayout, id: string, effects: RoomEffects, deps: GeometryDeps = GEOMETRY_DEPS): PieceTap {
   const p = layout.pieces.find((q) => q.id === id);
   if (!p) return 'none';

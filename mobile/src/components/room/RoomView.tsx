@@ -45,9 +45,9 @@ export interface KipMover {
 /** A piece drawn as a mover (the wandering cat, spec §8.2); `next` is the tile its next step takes it onto. */
 export interface PieceMover { id: string; pos: readonly [number, number]; depth: Tile; flip: boolean; next?: Tile }
 export interface RoomViewHandle {
-  /** The topmost piece under a point in this view, in points (the piece card, spec §8.1), or null. The movers are
-   * tried first, topmost first: a wandering cat is found where it walks, and a walking KIP answers KIP_MOVER (no
-   * piece), so a tap on KIP never opens the card of what stands behind it (T13-CARRY). */
+  /** The topmost piece under a point in this view, in points (the piece card, spec §8.1), or null. The wandering
+   * pieces are tried first, topmost first, so a cat is found where it walks (T13-CARRY); KIP has no tap of its own, so
+   * a tap on a walking KIP falls through to the piece behind it (T13-TAP). */
   pieceAtPoint(x: number, y: number): string | null;
   /** Plays a tapped piece's squash (ruling 17); nothing under Reduce Motion or while the loops are held. */
   squash(id: string): void;
@@ -148,8 +148,9 @@ export function RoomView(props: RoomViewProps) {
     editing: props.editing,
   });
   // A tapped piece's squash (ruling 17): 0.7 then 0.85 of its height, a loop frame each, then back. Each of the two
-  // frames rebuilds the static room with that piece's state (an allowed per-frame recording, PF3-SQUASH: no shipped P3
-  // piece has a tap effect); at rest the room is the one it was, so the ticks record nothing again.
+  // frames rebuilds the static room with that piece's state, and returning to rest re-records the original room once:
+  // both are state changes, allowed (PF3-SQUASH, T13-TAP; no shipped P3 piece has a tap effect). At rest the ticks
+  // record nothing again.
   const [squash, setSquash] = useState<{ id: string; k: 1 | 2 } | null>(null);
   const squashTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
   useEffect(() => () => squashTimers.current.forEach(clearTimeout), []);
@@ -347,34 +348,36 @@ export function RoomView(props: RoomViewProps) {
     </Group>
   ) : seatedFrames ? <Picture picture={seatedFrames[frame]!} /> : null;
 
-  // The movers as hit boxes in draw order (pieceAt reads the last first): each sprite's base at its tile, and KIP's
-  // frame where it walks. Built on a tap, never on a frame.
+  // The wandering pieces as hit boxes in draw order (pieceAt reads the last first): each sprite's base at its tile.
+  // KIP is skipped: it has no tap of its own, so a tap on it falls through to what stands behind (T13-TAP). Built on
+  // a tap, never on a frame.
   const moverHits = (): PieceHit[] => {
     const out: PieceHit[] = [];
     const ctx: ItemContext = { weather, night, colour, ramp: kipRamp(KIP_COLOURS[colour]), screen: 'lines' };
     for (const key of order) {
-      let rects: Rects | null = null;
-      if (key === KIP_MOVER) rects = kipMover ? moveRects(kipRects[frame]!, dx, dy) : null;
-      else if (key.startsWith(MOVER_PREFIX)) {
-        const m = pieceMovers.find((q) => `${MOVER_PREFIX}${q.id}` === key);
-        const s = m ? spriteOf(m) : null;
-        const at = spriteCells.get(key);
-        const l = s && at ? pieceLayers(s.p.item, ctx, { layer: 'floor', facing: s.p.facing, mirror: m!.flip, ...(s.state ? { effect: s.state } : {}) }) : null;
-        rects = l && at ? moveRects(l.base ?? [], at[0], at[1]) : null;
-      }
+      if (key === KIP_MOVER || !key.startsWith(MOVER_PREFIX)) continue;
+      const m = pieceMovers.find((q) => `${MOVER_PREFIX}${q.id}` === key);
+      const s = m ? spriteOf(m) : null;
+      const at = spriteCells.get(key);
+      const l = m && s && at ? pieceLayers(s.p.item, ctx, { layer: 'floor', facing: s.p.facing, mirror: m.flip, ...(s.state ? { effect: s.state } : {}) }) : null;
+      const rects = l && at ? moveRects(l.base ?? [], at[0], at[1]) : null;
       const box = rects ? opaqueBounds(rects) : null;
-      if (rects && box) out.push({ id: key.startsWith(MOVER_PREFIX) ? key.slice(MOVER_PREFIX.length) : key, box, rects });
+      if (rects && box) out.push({ id: m!.id, box, rects });
     }
     return out;
   };
   const rootRef = useRef<View>(null);
+  // The handle is made once and reads this render's values through a ref (T13-FIX M3).
+  const latest = useRef({ room, offset, cellPt, movers, moverHits, still });
+  latest.current = { room, offset, cellPt, movers, moverHits, still };
   useImperativeHandle(props.ref, () => ({
     pieceAtPoint: (x: number, y: number) => {
-      const [cx, cy] = [Math.floor((x - offset.x) / cellPt), Math.floor((y - offset.y) / cellPt)];
-      return (movers ? pieceAt(moverHits(), cx, cy) : null) ?? pieceAt(room.hits, cx, cy);
+      const v = latest.current;
+      const [cx, cy] = [Math.floor((x - v.offset.x) / v.cellPt), Math.floor((y - v.offset.y) / v.cellPt)];
+      return (v.movers ? pieceAt(v.moverHits(), cx, cy) : null) ?? pieceAt(v.room.hits, cx, cy);
     },
     squash: (id: string) => {
-      if (still) return;
+      if (latest.current.still) return;
       squashTimers.current.forEach(clearTimeout);
       setSquash({ id, k: 1 });
       squashTimers.current = [setTimeout(() => setSquash({ id, k: 2 }), LOOP_MS), setTimeout(() => setSquash(null), 2 * LOOP_MS)];
@@ -383,7 +386,7 @@ export function RoomView(props: RoomViewProps) {
       const node = rootRef.current ? findNodeHandle(rootRef.current) : null;
       if (node) AccessibilityInfo.setAccessibilityFocus(node);
     },
-  }));
+  }), []);
   const anchor = bubbleAnchor(seat);
   // Measured, so a long bubble is pulled in from the right edge instead of clipped by the crop.
   const [bubbleWidth, setBubbleWidth] = useState(0);

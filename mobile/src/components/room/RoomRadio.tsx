@@ -13,16 +13,20 @@ const RADIO_LOOP = require('../../../assets/sounds/radio-loop.m4a');
 const inForeground = (s: string | null | undefined) => s !== 'background' && s !== 'inactive';
 
 // The audio mode is app-wide, so it is set once, the first time the radio plays, never by a mount with the switch off
-// (T13-CARRY): a room that stays silent leaves the app's audio as it found it.
-let audioModeSet = false;
-function setRadioAudioMode() {
-  if (audioModeSet) return;
-  audioModeSet = true;
-  void setAudioModeAsync({ playsInSilentMode: false, interruptionMode: 'mixWithOthers', shouldPlayInBackground: false, allowsRecording: false }).catch(() => undefined);
+// (T13-CARRY): a room that stays silent leaves the app's audio as it found it. The first play waits for it, so the loop
+// never sounds before it mixes with other audio and honours the silent switch (T13-FIX M2); once set, play is at once.
+let audioMode: Promise<void> | null = null;
+let audioModeReady = false;
+function radioAudioMode(): Promise<void> {
+  audioMode ??= setAudioModeAsync({ playsInSilentMode: false, interruptionMode: 'mixWithOthers', shouldPlayInBackground: false, allowsRecording: false })
+    .catch(() => undefined)
+    .then(() => { audioModeReady = true; });
+  return audioMode;
 }
 /** Tests: the next play sets the audio mode again. */
 export function resetRadioAudioMode(): void {
-  audioModeSet = false;
+  audioMode = null;
+  audioModeReady = false;
 }
 
 /**
@@ -47,11 +51,18 @@ export function RoomRadio({ active }: { active: boolean }) {
   useEffect(() => {
     player.loop = true;
     player.volume = RADIO_VOLUME;
-    if (play) {
-      setRadioAudioMode();
-      player.play();
+    if (!play) {
+      player.pause();
+      return undefined;
     }
-    else player.pause();
+    if (audioModeReady) {
+      player.play();
+      return undefined;
+    }
+    // Still playing when the mode lands, and still mounted: a released player must not be touched.
+    let live = true;
+    void radioAudioMode().then(() => { if (live) player.play(); });
+    return () => { live = false; };
   }, [player, play]);
   return null;
 }

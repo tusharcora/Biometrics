@@ -46,9 +46,13 @@ export function PieceCardScreen() {
     <SafeAreaView className="flex-1 bg-background">
       <View className="gap-3 p-4">
         <View className="flex-row items-start justify-between gap-2">
-          <Text ref={card ? nameRef : undefined} testID="card-name" accessibilityRole="header" accessibilityLabel={card?.nameSpoken} className="shrink text-heading">
-            {card?.name ?? ''}
-          </Text>
+          {card ? (
+            <Text ref={nameRef} testID="card-name" accessibilityRole="header" accessibilityLabel={card.nameSpoken} className="shrink text-heading">
+              {card.name}
+            </Text>
+          ) : (
+            <View />
+          )}
           <Button testID="card-close" variant="ghost" className={TARGET} onPress={() => navigation.goBack()}>{C.close}</Button>
         </View>
         {card ? (
@@ -79,7 +83,7 @@ export function PieceCardScreen() {
             </View>
           </>
         ) : (
-          <Text ref={card ? undefined : nameRef} testID="card-gone" className="text-body">{C.gone}</Text>
+          <Text ref={nameRef} testID="card-gone" className="text-body">{C.gone}</Text>
         )}
       </View>
     </SafeAreaView>

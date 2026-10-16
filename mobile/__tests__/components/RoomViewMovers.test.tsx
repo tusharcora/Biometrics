@@ -313,18 +313,41 @@ describe('RoomView with movers (spec §3.4, §3.7, rulings 11-12)', () => {
     expect(moved.filter(([x, y]) => was.has(`${x},${y}`))).toEqual([]);
   });
 
-  it('a walking KIP is found in front of what it stands before, and is no piece (T13-CARRY)', () => {
+  // What a tap finds at every point of the view, point by point.
+  const pointMap = (ref: React.RefObject<RoomViewHandle | null>) => {
+    const out: Array<string | null> = [];
+    for (let x = 0; x < 323; x += 2) for (let y = 0; y < 240; y += 2) out.push(ref.current!.pieceAtPoint(x, y));
+    return out;
+  };
+
+  it('a tap on a walking KIP finds the piece behind it, never KIP, and a wandering piece behind KIP is still found (T13-TAP)', () => {
+    const beanbag = { id: 'p1', item: 'corner.beanbag', layer: 'floor' as const, x: 3, y: 5, facing: 'L' as const, mirror: false };
+    const layout = { ...starterLayout(), pieces: [...starterLayout().pieces, beanbag] };
     const ref = createRef<RoomViewHandle>();
-    const s = render(<RoomView {...PROPS} ref={ref} />);
-    expect(hitsOf(ref).has(KIP_MOVER)).toBe(false); // seated, KIP is part of the picture
-    s.rerender(<RoomView {...PROPS} ref={ref} kipMover={OUT} />);
-    const kip = hitsOf(ref).get(KIP_MOVER) ?? [];
-    expect(kip.length).toBeGreaterThan(0);
-    // The topmost wins: a mover in front of KIP is found over it.
-    s.rerender(<RoomView {...PROPS} ref={ref} kipMover={OUT} pieceMovers={[{ id: 'plant', pos: [3, 5], depth: [3, 5], flip: false }]} />);
-    const both = hitsOf(ref);
-    const over = (both.get('plant') ?? []).filter(([x, y]) => kip.some(([kx, ky]) => kx === x && ky === y));
-    expect(over.length).toBeGreaterThan(0);
+    const s = render(<RoomView {...PROPS} layout={layout} ref={ref} />);
+    const seated = pointMap(ref);
+    expect(seated).toContain('p1');
+    // KIP walks in front of the bean bag: every point finds what it found with KIP at its desk.
+    s.rerender(<RoomView {...PROPS} layout={layout} ref={ref} kipMover={{ ...OUT, pos: [3, 6], depth: [3, 6] }} />);
+    const walking = pointMap(ref);
+    // Compared as counts, so a failure reads short: points that found KIP, and points that changed.
+    const changed = (a: Array<string | null>, b: Array<string | null>) => a.filter((id, k) => id !== b[k]).length;
+    expect({ kip: walking.filter((id) => id === KIP_MOVER).length, changed: changed(walking, seated) }).toEqual({ kip: 0, changed: 0 });
+    // A wandering fern behind the walking KIP is found just as it is without KIP out.
+    const fern = [{ id: 'plant', pos: [3, 4] as const, depth: [3, 4] as const, flip: false }];
+    s.rerender(<RoomView {...PROPS} layout={layout} ref={ref} pieceMovers={fern} />);
+    const alone = pointMap(ref);
+    expect(alone).toContain('plant');
+    s.rerender(<RoomView {...PROPS} layout={layout} ref={ref} pieceMovers={fern} kipMover={{ ...OUT, pos: [3, 5], depth: [3, 5] }} />);
+    expect(changed(pointMap(ref), alone)).toBe(0);
+  });
+
+  it('a tap finds a wandering cat (pet.tabby) where it walks (T13-FIX M4)', () => {
+    const cat = { id: 'c1', item: 'pet.tabby', layer: 'floor' as const, x: 1, y: 6, facing: 'L' as const, mirror: false };
+    const layout = { ...starterLayout(), pieces: [...starterLayout().pieces, cat] };
+    const ref = createRef<RoomViewHandle>();
+    render(<RoomView {...PROPS} layout={layout} ref={ref} pieceMovers={[{ id: 'c1', pos: [4, 5], depth: [4, 5], flip: false }]} />);
+    expect(pointMap(ref)).toContain('c1');
   });
 
   it('a tapped piece squashes over two frames and springs back; never under Reduce Motion (ruling 17)', () => {
@@ -341,7 +364,7 @@ describe('RoomView with movers (spec §3.4, §3.7, rulings 11-12)', () => {
     calm.unmount();
   });
 
-  it('the squash is 0.7 then 0.85 of the piece for 400 ms each, then the picture it had; an unmount leaves no timer (ruling 17, PF3-SQUASH)', () => {
+  it('the squash draws two different frames 400 ms apart, then as many pictures as at rest, after which the ticks record nothing; an unmount leaves no timer (ruling 17, PF3-SQUASH)', () => {
     const ref = createRef<RoomViewHandle>();
     const s = render(<RoomView {...PROPS} ref={ref} />);
     const rest = pictures(s);

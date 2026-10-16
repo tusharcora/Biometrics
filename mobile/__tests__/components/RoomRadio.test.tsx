@@ -48,6 +48,30 @@ it('sets the app-wide audio mode only the first time the radio plays, never on a
   expect(Audio.setAudioModeAsync).toHaveBeenCalledTimes(1);
 });
 
+it('the first play waits for the audio mode, so nothing sounds before it mixes with other audio (T13-FIX M2)', async () => {
+  resetRadioAudioMode();
+  let land: () => void = () => undefined;
+  (Audio.setAudioModeAsync as jest.Mock).mockImplementationOnce(() => new Promise<void>((r) => { land = r; }));
+  const s = render(<RoomRadio active />);
+  await act(async () => undefined);
+  await act(async () => { await setRoomSound(true); });
+  expect(Audio.setAudioModeAsync).toHaveBeenCalledTimes(1);
+  expect(player.play).not.toHaveBeenCalled();
+  await act(async () => { land(); });
+  expect(player.play).toHaveBeenCalledTimes(1);
+  // Covered before a slow mode lands: it never starts.
+  s.unmount();
+  resetRadioAudioMode();
+  jest.clearAllMocks();
+  (Audio.setAudioModeAsync as jest.Mock).mockImplementationOnce(() => new Promise<void>((r) => { land = r; }));
+  const late = render(<RoomRadio active />);
+  await act(async () => undefined);
+  late.rerender(<RoomRadio active={false} />);
+  await act(async () => { land(); });
+  expect(player.play).not.toHaveBeenCalled();
+  late.unmount();
+});
+
 it('plays the loop with the switch on, and pauses when the room is covered, blurred or backgrounded', async () => {
   const s = render(<RoomRadio active />);
   await act(async () => undefined);

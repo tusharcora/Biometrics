@@ -88,8 +88,9 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
   // nor waiting to know whether it is shrunk.
   const audible = stage.id !== 'loading' && inner > 0 && focused && !paused && !holdCoins && !holdClock;
   // A tap on the room (spec §8.1, rulings 16-17): a running tap piece squashes, an effect piece or a plant opens its
-  // card, anything else (KIP, the rug, the desk) does nothing. When the card closes, a screen reader's focus comes back
-  // to the room image (the house pattern): only after a card, never after another trip away.
+  // card, anything else (the rug, the desk) does nothing; a tap on a walking KIP finds the piece behind it (T13-TAP).
+  // When the card closes, a screen reader's focus comes back to the room image (the house pattern): only after a card,
+  // never after another trip away.
   const roomRef = useRef<RoomViewHandle>(null);
   const cardOpen = useRef(false);
   const openPiece = (id: string) => {

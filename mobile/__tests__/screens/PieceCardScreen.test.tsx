@@ -62,6 +62,7 @@ it('a piece that has left the room says so', async () => {
   const s = await open('gone');
   expect(s.getByTestId('card-gone')).toBeTruthy();
   expect(s.queryByTestId('card-move')).toBeNull();
+  expect(s.queryByTestId('card-name')).toBeNull(); // no empty header for a screen reader to land on (T13-FIX M6)
 });
 
 it('reads the stored sound switch when it opens, and Close goes back (T13-CARRY)', async () => {
