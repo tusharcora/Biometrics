@@ -76,10 +76,14 @@ it('the first-week list reads its rows and lines aloud without "·" or "−" (sp
   }
 });
 
-/** Every string under a copy object, with each function called on sample arguments. */
+/**
+ * Every string under a copy object, with each function called on sample arguments: a name first or a number first,
+ * at 0, 1 and 7, so every branch (awardCount's none, one and many) is read.
+ */
+const SAMPLE_ARGS: readonly (readonly unknown[])[] = [0, 1, 7].flatMap((n) => [['fern', n, n], [n, n, n]]);
 function copyStrings(v: unknown): string[] {
   if (typeof v === 'string') return [v];
-  if (typeof v === 'function') return copyStrings((v as (...a: unknown[]) => unknown)('fern', 7, 3));
+  if (typeof v === 'function') return SAMPLE_ARGS.flatMap((a) => copyStrings((v as (...a: unknown[]) => unknown)(...a)));
   if (v && typeof v === 'object') return Object.values(v).flatMap(copyStrings);
   return [];
 }
@@ -90,10 +94,14 @@ const advises = (s: string) => ADVICE.test(s) || HEALTH_VERB.test(s);
 
 it('never gives health advice in an effect or living line (spec §8.3, P3 ruling 18)', () => {
   for (const bad of ['Sleep more to grow your fern.', 'Walk 2,000 more steps to wake the cat.', 'You should rest.', 'Try for 8 hours.']) expect(advises(bad)).toBe(true);
+  // Only the health-verb rule catches this one: no advice word in it.
+  expect([ADVICE.test('Drink water.'), HEALTH_VERB.test('Drink water.'), advises('Drink water.')]).toEqual([false, true, true]);
   // Ruling 18 scans the piece card's strings too; ROOM_COPY.card arrives with the card (a later task) and is read then.
-  const lines = copyStrings([ROOM_COPY.effects, (ROOM_COPY as Record<string, unknown>).card]);
+  const scanned = [ROOM_COPY.effects, (ROOM_COPY as Record<string, unknown>).card];
+  const lines = copyStrings(scanned);
+  expect(lines).toEqual(expect.arrayContaining(['No awards on it yet.', '1 award so far.', '7 awards so far.']));
   expect(lines.length).toBeGreaterThan(15);
   for (const s of lines) expect({ s, advises: advises(s) }).toEqual({ s, advises: false });
   expect([ROOM_COPY.effects.grew('fern', 7), ROOM_COPY.effects.pet.nap]).toEqual(['The fern grew: 7 nights at your goal.', 'The cat’s napping.']);
-  expect(copyStrings(ROOM_COPY.effects).join(' ')).not.toMatch(/\d+ (steps|minutes|hours)|%/); // never a health value
+  expect(lines.join(' ')).not.toMatch(/\d+ (steps|minutes|hours)|%/); // never a health value
 });

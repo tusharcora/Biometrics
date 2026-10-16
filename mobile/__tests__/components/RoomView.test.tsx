@@ -162,14 +162,20 @@ describe('RoomView (iso)', () => {
     for (const p of all) expect(p.dispose).toHaveBeenCalled();
   });
   it('draws the living room: a new plant stage rebuilds the static picture once, the same one records nothing (ruling 7)', () => {
-    const s = render(<RoomView {...PROPS} living={{ plantStage: 5, petEnergy: 'wander', awards: [] }} />);
+    // Stage 2 gives the starter fern a live state ('g2'), so the key carries an effect state throughout.
+    const living = () => ({ plantStage: 2 as const, petEnergy: 'wander' as const, awards: [] });
+    const s = render(<RoomView {...PROPS} living={living()} />);
     const [back, , front] = pictures(s);
-    const before = picture.mock.calls.length;
-    s.rerender(<RoomView {...PROPS} living={{ plantStage: 5, petEnergy: 'wander', awards: [] }} />);
+    let before = picture.mock.calls.length;
+    s.rerender(<RoomView {...PROPS} living={living()} />); // a fresh, equal object
+    act(() => { jest.advanceTimersByTime(LOOP_MS); }); // and a loop tick
     expect(picture.mock.calls.length - before).toBe(0);
-    s.rerender(<RoomView {...PROPS} living={{ plantStage: 2, petEnergy: 'wander', awards: [] }} />);
+    before = picture.mock.calls.length;
+    s.rerender(<RoomView {...PROPS} living={{ ...living(), plantStage: 4 }} />);
+    // A new static room: back and front, then KIP's three and the three loop frames (keyed on the room).
+    expect(picture.mock.calls.length - before).toBe(8);
     const [back2, , front2] = pictures(s);
-    expect(back2 !== back || front2 !== front).toBe(true); // the starter fern is at stage 2 now
+    expect([back2 !== back, front2 !== front]).toEqual([true, true]);
   });
 
   it('draws a room with no living (PF3-LIVING) exactly as the neutral room: plants at full growth', () => {

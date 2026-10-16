@@ -33,6 +33,7 @@ export function growRects(rects: readonly RoomRect[], stage: number): Rects {
     if (!isLeaf(q)) { out.push([x, y, w, h, c]); continue; }
     const y0 = Math.max(y, cut);
     const y1 = Math.min(y + h, potTop);
+    // Narrowed about x = 0, the piece's own centre line: standFront puts it at the opaque bottom centre, the pot's.
     if (y1 > y0) out.push([Math.round(x * sc), y0, Math.max(1, Math.round(w * sc)), y1 - y0, c]);
   }
   return out;

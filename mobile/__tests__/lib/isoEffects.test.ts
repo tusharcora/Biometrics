@@ -48,3 +48,27 @@ it('the static room follows the living room: a new stage is a new key and a new 
   const total = (stage: 1 | 5) => { const s = drawIsoStatic(input(stage)); return cells(s.back) + cells(s.front); };
   expect(total(1)).toBeLessThan(total(5)); // the starter fern is smaller at stage 1
 });
+
+it('an inert floor lamp at night draws exactly as plain decor; only the running ones add a pool (ruling 5)', () => {
+  // Three lamps take the 7 x 7 room's three slots; the fourth (the highest instance rank) rests.
+  const base = starterLayout();
+  const lamps = ['p1', 'p2', 'p3', 'p4'].map((id, k) => ({ id, item: 'corner.floorlamp', ...FLOOR, x: 6, y: 3 + k }));
+  const layout = { ...base, pieces: [...base.pieces, ...lamps] };
+  const night = { layout, tier: 1 as const, weather: 'fallback' as const, night: true, colour: 'coral' as const };
+  const effects = roomEffects(layout, 1, { plantStage: 5, petEnergy: 'wander', awards: [] }, null);
+  expect([...effects.inert]).toEqual(['p4']);
+  const lit = drawIsoStatic({ ...night, effects });
+  const plain = drawIsoStatic(night);
+  const hit = (s: ReturnType<typeof drawIsoStatic>, id: string) => s.hits.find((h) => h.id === id);
+  expect(hit(lit, 'p4')).toEqual(hit(plain, 'p4'));
+  expect([lit.back, lit.front]).toEqual([plain.back, plain.front]); // the pool is light, never a piece's cells
+  const glows = (o: object) => pieceLayers('corner.floorlamp', CTX_NIGHT, { ...FLOOR, ...o })!.emissive!.length;
+  expect(lit.emissive.length - plain.emissive.length).toBe(3 * (glows({ effect: 'lit' }) - glows({})));
+});
+
+it('a shipped plant’s pot is centred on x = 0 in its own space, the line growRects narrows about', () => {
+  for (const id of PLANTS) {
+    const b = opaqueBounds(pots(pieceLayers(id, CTX_DAY, FLOOR)!.base!))!;
+    expect({ id, centred: Math.abs(b.x + b.w / 2) <= 1 }).toEqual({ id, centred: true });
+  }
+});
