@@ -134,7 +134,11 @@ export function walkTargets(layout: RoomLayout, tier: Tier, effects: RoomEffects
   return out;
 }
 
-/** One trip: a target other than the last, picked by `rng`, with a path from the seat out by the exit tile. */
+/**
+ * One trip, picked by `rng`, with a path from the seat out by the exit tile over tiles inside `view` only (KIP never
+ * walks out of the crop). Never the last target while another one can be reached; with none, the last one again
+ * (ruling T10-ONE: a room with one target, the starter fern, is revisited).
+ */
 export function planTrip(layout: RoomLayout, tier: Tier, effects: RoomEffects, view: Box, last: string | null, rng: () => number, deps: GeometryDeps = GEOMETRY_DEPS): Trip | null {
   const desk = deskOf(layout);
   const iso = desk ? deps.isoOf(desk.item) : undefined;
@@ -142,11 +146,14 @@ export function planTrip(layout: RoomLayout, tier: Tier, effects: RoomEffects, v
   const exit = desk && iso ? exitTile(desk, iso) : null;
   if (!seat || !exit) return null;
   const { n, m } = tierSize(tier);
-  const blocked = blockedTiles(layout, deps);
   const g = isoGrid(tier);
-  const targets = walkTargets(layout, tier, effects, view, deps).filter((t) => t.id !== last);
-  // A fair shuffle by rng, then the first target with a path.
-  const order = targets.map((t) => ({ t, r: rng() })).sort((a, b) => a.r - b.r || (a.t.id < b.t.id ? -1 : 1)).map((x) => x.t);
+  const blocked = blockedTiles(layout, deps);
+  for (let i = 0; i < n; i++) for (let j = 0; j < m; j++) if (!tileInView(g, [i, j], view)) blocked.add(`${i},${j}`);
+  const targets = walkTargets(layout, tier, effects, view, deps);
+  // A fair shuffle by rng, the last target moved to the end, then the first target with a path.
+  const order = targets.map((t) => ({ t, r: rng() }))
+    .sort((a, b) => Number(a.t.id === last) - Number(b.t.id === last) || a.r - b.r || (a.t.id < b.t.id ? -1 : 1))
+    .map((x) => x.t);
   for (const target of order) {
     const path = bfs(exit, target.stand, n, m, blocked);
     if (!path) continue;

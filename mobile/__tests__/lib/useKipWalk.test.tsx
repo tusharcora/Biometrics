@@ -55,20 +55,49 @@ it('a new room mid-walk puts KIP on its seat in that same render, and the trip s
   expect(jest.getTimerCount()).toBe(1); // the rest before the next trip
 });
 
-it('waits 20 to 40 s between trips, and never goes to the same piece twice in a row', () => {
-  let r = 0.5;
-  const p = { ...props(true), rng: () => r };
+it('waits 20 to 40 s between trips; with one target it goes back to it (ruling T10-ONE)', () => {
+  const p = { ...props(true), rng: () => 0.5 };
   const { result } = renderHook((q: typeof p) => useKipWalk(q), { initialProps: p });
-  act(() => { jest.advanceTimersByTime(TRIP_MIN_MS + 0.5 * TRIP_SPAN_MS - 1); });
+  const WAIT = TRIP_MIN_MS + 0.5 * TRIP_SPAN_MS;
+  act(() => { jest.advanceTimersByTime(WAIT - 1); });
   expect(result.current.phase).toBe('seat');
   act(() => { jest.advanceTimersByTime(1); });
-  expect(result.current.phase).toBe('walk');
+  expect(result.current).toMatchObject({ phase: 'walk', target: 'plant' });
   for (let i = 0; i < 80 && result.current.phase !== 'seat'; i++) act(() => { jest.advanceTimersByTime(STEP_MS); });
   expect(result.current.phase).toBe('seat');
-  // The fern is the starter room's only target and was the last one: KIP stays at its desk.
-  r = 0;
-  act(() => { jest.advanceTimersByTime((TRIP_MIN_MS + TRIP_SPAN_MS) * 4); });
+  // The fern is the starter room's only target: after the next rest KIP goes to it again.
+  act(() => { jest.advanceTimersByTime(WAIT - 1); });
   expect(result.current.phase).toBe('seat');
+  act(() => { jest.advanceTimersByTime(1); });
+  expect(result.current).toMatchObject({ phase: 'walk', target: 'plant' });
+});
+
+it('unmounted mid-trip, it leaves no timer behind', () => {
+  const { result, unmount } = renderHook((p: ReturnType<typeof props>) => useKipWalk(p), { initialProps: props(true) });
+  act(() => { jest.advanceTimersByTime(TRIP_MIN_MS + STEP_MS * 3); });
+  expect(result.current.phase).toBe('walk');
+  unmount();
+  expect(jest.getTimerCount()).toBe(0);
+});
+
+it('a cat that starts wandering or falls asleep while KIP goes to it puts KIP on its seat in that same render', () => {
+  const cat = { ...layout, pieces: [...layout.pieces, { id: 'p9', item: 'pet.tabby', layer: 'floor' as const, x: 5, y: 2, facing: 'L' as const, mirror: false }] };
+  const at = (petEnergy: 'play' | 'wander', hour = 12) => roomEffects(cat, 1, { ...NEUTRAL_LIVING, petEnergy }, { hhmm: `${hour}:00`, hour });
+  for (const next of [at('wander'), at('play', 23)]) {
+    const start = { ...props(true), layout: cat, effects: at('play') };
+    // Every render's answer, so the check is on the render the change lands in, not after its effects.
+    const renders: KipWalk[] = [];
+    const { result, rerender, unmount } = renderHook((q: typeof start) => { const w = useKipWalk(q); renders.push(w); return w; }, { initialProps: start });
+    act(() => { jest.advanceTimersByTime(TRIP_MIN_MS + STEP_MS * 3); });
+    expect(result.current).toMatchObject({ phase: 'walk', kind: 'cat', target: 'p9' });
+    // The minute's new effects: the same layout, the cat in another state.
+    const from = renders.length;
+    rerender({ ...start, effects: next });
+    expect(renders[from]).toEqual({ phase: 'seat' });
+    expect(result.current).toEqual({ phase: 'seat' });
+    expect(jest.getTimerCount()).toBe(1); // only the rest before the next trip
+    unmount();
+  }
 });
 
 it('a walking KIP bobs and glances the way it goes; seated there is no mover', () => {

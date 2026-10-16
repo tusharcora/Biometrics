@@ -256,7 +256,9 @@ export function RoomView(props: RoomViewProps) {
 
   // Where KIP is drawn, relative to its seat: its tile, a bob between tiles, a sway at the radio (no recording).
   const [kx, ky] = kipMover ? kipTileCell(room.grid, kipMover.pos) : [seat.x, seat.y];
-  const bob = kipMover?.moving && !still && frame % 2 === 1 ? -1 : 0;
+  // The bob follows the walk: up a cell on each half step between two tiles (spec §3.6, T10-FIX), so it never
+  // drifts from the glide whatever loop frame the clock is on.
+  const bob = kipMover?.moving && !still && (kipMover.pos[0] % 1 !== 0 || kipMover.pos[1] % 1 !== 0) ? -1 : 0;
   const sway = kipMover?.sway && !still ? [0, 1, -1][frame]! : 0;
   const dx = kx - seat.x + sway;
   const dy = ky - seat.y + bob;

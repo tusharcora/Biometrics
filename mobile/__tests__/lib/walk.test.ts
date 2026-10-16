@@ -1,6 +1,7 @@
 import { NEUTRAL_LIVING, roomEffects } from '../../src/lib/room/effects';
 import type { Placement, RoomLayout } from '../../src/lib/room/iso/geometry';
 import { isoGrid } from '../../src/lib/room/iso/grid';
+import { kipTileCell } from '../../src/lib/room/iso/movers';
 import { blockedTiles, bfs, headsLeft, planTrip, posAt, standTileOf, tileInView, walkTargets, USE_POSE } from '../../src/lib/room/live/walk';
 import { starterLayout } from '../../src/lib/room/layout';
 
@@ -64,6 +65,30 @@ describe('paths and targets (spec §9.2, ruling 13)', () => {
     const again = planTrip(l, 1, fx(l), WHOLE, trip.target.id, () => 0)!;
     expect(again.target.id).not.toBe(trip.target.id);
     expect(planTrip({ ...l, pieces: l.pieces.filter((p) => p.id !== 'plant' && p.id !== 'p1') }, 1, fx(l), WHOLE, null, () => 0)).toBeNull();
+  });
+
+  it('with one target, or no path to the others, the last target comes back (ruling T10-ONE)', () => {
+    const fern = starterLayout();
+    expect(planTrip(fern, 1, fx(fern), WHOLE, 'plant', () => 0)!.target.id).toBe('plant');
+    // A lamp whose front tile is walled in by two bean bags: no path to it, so the fern again.
+    const boxed = room(at('p1', 'corner.floorlamp', { x: 0, y: 2 }), at('p2', 'corner.beanbag', { x: 1, y: 3 }), at('p3', 'corner.beanbag', { x: 0, y: 4 }));
+    expect(walkTargets(boxed, 1, fx(boxed), WHOLE).map((t) => t.id).sort()).toEqual(['p1', 'plant']);
+    expect(planTrip(boxed, 1, fx(boxed), WHOLE, 'plant', () => 0)!.target.id).toBe('plant');
+  });
+
+  it('walks only over tiles inside the crop: a target in view with its way out of the view is not taken', () => {
+    const l = room(at('p1', 'corner.floorlamp', { x: 5, y: 2 }));
+    const g = isoGrid(1);
+    expect(planTrip(l, 1, fx(l), WHOLE, 'plant', () => 0)!.target.id).toBe('p1');
+    // A crop just big enough for KIP at the lamp: the lamp is a target, but the seat's way out is outside the view.
+    const [x, y] = kipTileCell(g, [5, 3]);
+    const lampOnly = { x, y, w: 32, h: 32 };
+    expect(walkTargets(l, 1, fx(l), lampOnly).map((t) => t.id)).toEqual(['p1']);
+    expect(planTrip(l, 1, fx(l), lampOnly, null, () => 0)).toBeNull();
+    // In the page's crop every tile of the trip is in view.
+    const card = { x: 10.5, y: 19, w: 161.5, h: 120 };
+    const trip = planTrip(l, 1, fx(l), card, null, () => 0)!;
+    expect(trip.path.slice(1).every((t) => tileInView(g, t, card))).toBe(true);
   });
 
   it('glides half a tile a frame, taking its depth from the tile it is moving into', () => {

@@ -4,7 +4,7 @@ import { act, render } from '@testing-library/react-native';
 import { createPicture } from '@shopify/react-native-skia';
 import { RoomView, type RoomViewProps } from '../../src/components/room/RoomView';
 import * as isoRoom from '../../src/lib/room/iso/room';
-import { STEP_MS, TRIP_MIN_MS, USE_MS } from '../../src/lib/room/live/walk';
+import { STEP_MS, TRIP_MIN_MS } from '../../src/lib/room/live/walk';
 import { EMPTY_WORN } from '../../src/lib/room/loadout';
 import { starterLayout } from '../../src/lib/room/layout';
 
@@ -24,8 +24,7 @@ const invertClipped = (s: ReturnType<typeof render>) => s.getAllByTestId('skia-g
 /** KIP is off its seat: runs mode, with the inverted clip of its outline over the loops. */
 const walking = (s: ReturnType<typeof render>) => invertClipped(s);
 const tick = (ms: number) => act(() => { jest.advanceTimersByTime(ms); });
-/** The rest of a trip, rendered step by step (one act per loop frame, so every step is drawn). */
-const trip = () => { for (let i = 0; i < 2 * 40 + USE_MS / STEP_MS; i++) tick(STEP_MS); };
+// Step by step, one act per loop frame, so every step is drawn.
 const untilWalking = (s: ReturnType<typeof render>) => { for (let i = 0; i < 200 && !walking(s); i++) tick(STEP_MS); };
 const untilSeated = (s: ReturnType<typeof render>) => { for (let i = 0; i < 200 && walking(s); i++) tick(STEP_MS); };
 
@@ -58,7 +57,7 @@ describe('KIP walks in the room card (spec §9.2, ruling 13)', () => {
     expect(transforms.size).toBe(3); // it moved each step
     // The rest of the trip records only KIP's pose changes, three frames each: walking the other way at the turn
     // by the fern, and the water pose there. Back at its desk, KIP and the room are the cached pictures it left.
-    trip();
+    untilSeated(s);
     expect(walking(s)).toBe(false);
     expect(pictures(s)).toHaveLength(4);
     expect(picture.mock.calls.length - before).toBe(6);

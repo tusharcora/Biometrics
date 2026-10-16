@@ -56,11 +56,24 @@ describe('RoomView with movers (spec §3.4, §3.7, rulings 11-12)', () => {
     expect(ahead).toEqual([behind[0], behind[1], behind[2], behind[4], behind[3], behind[5], behind[6]]);
   });
 
-  it('bobs a walking KIP one cell on alternate frames, sways it at the radio, and holds both under Reduce Motion', () => {
+  it('bobs a walking KIP one cell up on the half steps (the walk, not the loop frame), sways it at the radio, and holds both under Reduce Motion', () => {
+    // Each group's y shift in points.
+    const kipY = (r: ReturnType<typeof render>) => groups(r).map((g) => g.props.skiaTransform?.[1]?.translateY as number);
+    const HALF = { ...OUT, pos: [3.5, 4] as const, depth: [4, 4] as const };
+    const glide = render(<RoomView {...PROPS} kipMover={HALF} />);
+    const up = kipY(glide);
+    for (let i = 0; i < 3; i++) { act(() => { jest.advanceTimersByTime(LOOP_MS); }); expect(kipY(glide)).toEqual(up); }
+    glide.rerender(<RoomView {...PROPS} kipMover={{ ...HALF, moving: false }} />);
+    const level = kipY(glide);
+    // With the bob off, KIP and its outline clip move one cell (2 pt) down, and the loops under the clip stay put.
+    const moved = up.map((y, k) => (y === level[k] ? 0 : level[k]! - y)).filter((d) => d !== 0);
+    expect(moved).toEqual([2, 2, -2]);
+    glide.unmount();
+    // On a whole tile there is no bob, whatever the frame.
     const s = render(<RoomView {...PROPS} kipMover={OUT} />);
     const ys = new Set<string>();
     for (let i = 0; i < 4; i++) { ys.add(transforms(s)); act(() => { jest.advanceTimersByTime(LOOP_MS); }); }
-    expect(ys.size).toBeGreaterThan(1);
+    expect(ys.size).toBe(1);
     s.unmount();
     const sway = render(<RoomView {...PROPS} kipMover={{ ...OUT, moving: false, sway: true }} />);
     const xs = new Set<string>();
