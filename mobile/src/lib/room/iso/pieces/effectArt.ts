@@ -1,9 +1,11 @@
 // Effect art that is not a piece's own drawing (spec 2026-10-15 §8.2, §8.3): a plant growing from its pot (isox.py
-// `plantg`), the floor lamp's warm pool after dark, and the tap squash. Task 5 adds the radio's notes. Pure; every rect
+// `plantg`), the floor lamp's warm pool after dark, the radio's notes and the tap squash. Pure; every rect
 // is in the piece's own space, as standFront leaves it: (0, 0) is its opaque bottom centre.
 import type { RoomRect } from '../../grid';
+import type { SpriteRect } from '../../icons';
 import type { ItemLayers } from '../../items';
-import { glow, type Rects } from '../../paint';
+import { spriteRows, three, veiled } from '../../items/shared';
+import { glow, R, type Rects } from '../../paint';
 import { opaqueBounds } from '../prims';
 
 /** How much of the foliage shows at each stage (ruling 8). */
@@ -49,6 +51,20 @@ export function lampPool(): Rects {
   const r: Rects = [];
   glow(r, 0, 0, POOL.rx, POOL.ry, POOL.rgb, POOL.a);
   return r;
+}
+
+const NOTE: readonly SpriteRect[] = spriteRows(['.kk', '.k.', 'kk.'], { k: '#FDE68A' });
+/** Three notes over the radio's top, each two cells higher a frame, round and round (C1, C6 `notes_on_radio`). */
+const NOTE_AT: ReadonlyArray<readonly [number, number]> = [[3, -14], [-5, -19], [6, -24]];
+export function radioNotes(night: boolean): [Rects, Rects, Rects] {
+  return three((k) => {
+    const f: Rects = [];
+    NOTE_AT.forEach(([x, y], i) => {
+      const rise = ((k + i) % 3) * 2;
+      for (const [sx, sy, w, h, c] of NOTE) R(f, x + sx, y - rise + sy, w, h, veiled(c, night));
+    });
+    return f;
+  });
 }
 
 /** A tapped piece's two frames (ruling 17): its height, bottom row fixed. */

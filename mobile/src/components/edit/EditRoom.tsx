@@ -19,6 +19,7 @@ import { drawIsoStatic, isoRoomKey, pieceAt } from '../../lib/room/iso/room';
 import type { ItemId } from '../../lib/room/loadout';
 import { ROOM_COPY } from '../../lib/room/roomCopy';
 import type { RoomWeather } from '../../lib/room/weather';
+import { useScreenFocused } from '../../lib/useScreenFocused';
 
 export const EDIT_CELL_PT = 2;
 /** A tap is quick; anything longer belongs to the drag. */
@@ -89,7 +90,9 @@ export const EditRoom = forwardRef<EditRoomHandle, EditRoomProps>(function EditR
   const viewRef = useRef<View>(null);
   const origin = useRef({ x: 0, y: 0 });
   const draft = displayDraft(state);
-  const effects = useRoomEffects(draft.layout, state.tier, props.living);
+  const focused = useScreenFocused();
+  // A live drag keeps the clock's minute (PF3-CLOCK): the room is never rebuilt under the finger.
+  const effects = useRoomEffects(draft.layout, state.tier, props.living, !focused || !!drag);
   const input = { layout: draft.layout, tier: state.tier, weather: window.weather, night: window.night, colour, effects };
   // The picture RoomView draws, here for its hit boxes and handed down (final review M2): rebuilt only when the room
   // itself changes. While a piece is lifted RoomView builds its own, without that piece.
@@ -236,6 +239,7 @@ export const EditRoom = forwardRef<EditRoomHandle, EditRoomProps>(function EditR
           offset={pan}
           hide={drag?.id ?? null}
           room={drag?.id ? undefined : drawn}
+          dragging={!!drag}
           living={props.living}
           reduceMotion={reduceMotion}
           accessible={false}

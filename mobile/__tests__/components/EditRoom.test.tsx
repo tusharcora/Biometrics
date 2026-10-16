@@ -77,10 +77,13 @@ describe('dragging (spec §5.3)', () => {
     const dispatch = jest.fn();
     const s = render(<EditRoom {...props} dispatch={dispatch} />);
     expect(s.queryByTestId('edit-ghost')).toBeNull();
+    expect(s.getByTestId('edit-room-view').props.dragging).toBe(false);
     act(() => hold().onStart(fernTop()));
     expect(dispatch).toHaveBeenLastCalledWith({ type: 'select', id: 'plant' });
     act(() => hold().onUpdate(carry('plant', 5.5, 5.5)));
     expect(s.getByTestId('edit-room-view').props.hide).toBe('plant');
+    // The clock keeps its minute while the piece is in the air (PF3-CLOCK).
+    expect(s.getByTestId('edit-room-view').props.dragging).toBe(true);
     expect(s.getByTestId('edit-ghost')).toBeTruthy();
     expect(s.queryByTestId('edit-ghost-red')).toBeNull();
     expect(s.queryByTestId('edit-drag-reason')).toBeNull();

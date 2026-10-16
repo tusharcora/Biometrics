@@ -8,6 +8,7 @@ import { isoCrop } from '../../src/lib/room/iso/crop';
 import * as isoRoom from '../../src/lib/room/iso/room';
 import { drawIsoFramesEach, drawIsoStatic, drawKipLayer } from '../../src/lib/room/iso/room';
 import type { RoomRect } from '../../src/lib/room/grid';
+import type { Placement } from '../../src/lib/room/iso/geometry';
 
 let mockFocused = true;
 jest.mock('../../src/lib/useScreenFocused', () => ({ useScreenFocused: () => mockFocused }));
@@ -176,6 +177,80 @@ describe('RoomView (iso)', () => {
     expect(picture.mock.calls.length - before).toBe(8);
     const [back2, , front2] = pictures(s);
     expect([back2 !== back, front2 !== front]).toEqual([true, true]);
+  });
+
+  describe('the clock, the radio and the awards (ruling 7, PF3-CLOCK, T4-FIX)', () => {
+    const at = (id: string, item: string, over: Partial<Placement>): Placement => ({ id, item, layer: 'floor', x: 0, y: 0, facing: 'L', mirror: false, ...over });
+    const CLOCK = at('p1', 'art.clock', { layer: 'wallR' });
+    const LIVE = { ...starterLayout(), pieces: [...starterLayout().pieces, CLOCK, at('p2', 'item.radio', { layer: 'onTop', parent: 'desk', spot: 1 }), at('p3', 'shelf.awards', { layer: 'wallR', y: 12 })] };
+    const AWARDS = { plantStage: 5 as const, petEnergy: 'wander' as const, awards: [5, 3] };
+    const keysOf = (spy: jest.SpyInstance) => spy.mock.calls.map(([input]) => isoRoom.isoRoomKey(input));
+
+    it('a running clock rebuilds the room once a minute and never on a loop tick (ruling 7)', () => {
+      jest.setSystemTime(new Date(2026, 9, 24, 7, 12, 30));
+      const layout = { ...starterLayout(), pieces: [...starterLayout().pieces, CLOCK] };
+      const s = render(<RoomView {...PROPS} layout={layout} />);
+      const before = picture.mock.calls.length;
+      act(() => { jest.advanceTimersByTime(LOOP_MS * 3); });
+      expect(picture.mock.calls.length - before).toBe(0);
+      act(() => { jest.advanceTimersByTime(30_000); });
+      // 07:13: one new static room (back and front), then KIP's three and the three loop frames keyed on it.
+      expect(picture.mock.calls.length - before).toBe(8);
+      const after = picture.mock.calls.length;
+      act(() => { jest.advanceTimersByTime(LOOP_MS * 3); });
+      expect(picture.mock.calls.length - after).toBe(0);
+      s.unmount();
+    });
+
+    it('a running clock, radio and shelf of awards record 0 pictures a tick, and exactly one rebuild on the minute', () => {
+      jest.setSystemTime(new Date(2026, 9, 24, 7, 12, 30));
+      const spy = jest.spyOn(isoRoom, 'drawIsoStatic');
+      const s = render(<RoomView {...PROPS} layout={LIVE} living={AWARDS} />);
+      expect(keysOf(spy)).toHaveLength(1);
+      expect(keysOf(spy)[0]).toEqual(expect.stringContaining('p1=live@07:12'));
+      expect(keysOf(spy)[0]).toEqual(expect.stringContaining('p2=notes'));
+      expect(keysOf(spy)[0]).toEqual(expect.stringContaining('p3=a53'));
+      const seen = new Set([pictures(s)[3]]);
+      const before = picture.mock.calls.length;
+      for (let i = 0; i < 6; i++) {
+        act(() => { jest.advanceTimersByTime(LOOP_MS); });
+        seen.add(pictures(s)[3]);
+      }
+      expect(picture.mock.calls.length - before).toBe(0);
+      expect(seen.size).toBeGreaterThan(1); // the loops (the radio's notes among them) do run
+      act(() => { jest.advanceTimersByTime(30_000 - LOOP_MS * 6 + 100); });
+      expect(picture.mock.calls.length - before).toBe(8);
+      expect(keysOf(spy)).toHaveLength(2);
+      expect(keysOf(spy)[1]).toEqual(expect.stringContaining('p1=live@07:13'));
+      spy.mockRestore();
+      s.unmount();
+    });
+
+    it('an unfocused page holds the minute: no rebuild and no clock timer; back in focus, one rebuild at once (PF3-CLOCK)', () => {
+      jest.setSystemTime(new Date(2026, 9, 24, 7, 12, 30));
+      const s = render(<RoomView {...PROPS} layout={LIVE} living={AWARDS} />);
+      mockFocused = false;
+      s.rerender(<RoomView {...PROPS} layout={LIVE} living={{ ...AWARDS }} />);
+      const before = picture.mock.calls.length;
+      act(() => { jest.advanceTimersByTime(31_000); });
+      expect(picture.mock.calls.length - before).toBe(0);
+      expect(jest.getTimerCount()).toBe(0); // the loops hold too
+      mockFocused = true;
+      s.rerender(<RoomView {...PROPS} layout={LIVE} living={{ ...AWARDS }} />);
+      expect(picture.mock.calls.length - before).toBe(8);
+      s.unmount();
+    });
+
+    it('a drag in progress holds the minute: no rebuild until it lets go (PF3-CLOCK)', () => {
+      jest.setSystemTime(new Date(2026, 9, 24, 7, 12, 30));
+      const s = render(<RoomView {...PROPS} layout={LIVE} living={AWARDS} dragging />);
+      const before = picture.mock.calls.length;
+      act(() => { jest.advanceTimersByTime(31_000); });
+      expect(picture.mock.calls.length - before).toBe(0);
+      s.rerender(<RoomView {...PROPS} layout={LIVE} living={AWARDS} dragging={false} />);
+      expect(picture.mock.calls.length - before).toBe(8);
+      s.unmount();
+    });
   });
 
   it('draws a room with no living (PF3-LIVING) exactly as the neutral room: plants at full growth', () => {

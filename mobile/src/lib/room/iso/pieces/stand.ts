@@ -9,7 +9,7 @@ import type { Rects } from '../../paint';
 import { moveLayers, registerIsoArt, type IsoArtOpts, type IsoPieceArt } from '../art';
 import { LOCAL } from '../grid';
 import { mirrorRects, moveRects, opaqueBounds } from '../prims';
-import { growLayers, lampPool } from './effectArt';
+import { growLayers, lampPool, radioNotes } from './effectArt';
 
 type Keep = (q: RoomRect) => boolean;
 const DESK_TOP = 72;
@@ -53,12 +53,16 @@ function standAt(o: IsoArtOpts, foot: readonly [number, number]): [number, numbe
   return LOCAL(w / 2, d / 2);
 }
 
-/** A billboard's effect state, in its own space (ruling 7): a growing plant, the floor lamp's pool after dark. */
+/**
+ * A billboard's effect state, in its own space (ruling 7): a growing plant, the floor lamp's pool after dark, the
+ * radio's notes (a loop of their own; under Reduce Motion RoomView holds frame 0, so they stand still).
+ */
 function withEffect(slot: string, l: ItemLayers, ctx: ItemContext, o: IsoArtOpts): ItemLayers {
   const e = o.effect;
   if (!e) return l;
   if (slot === 'plant' && /^g[1-4]$/.test(e)) return growLayers(l, Number(e.slice(1)));
   if (e === 'lit' && ctx.night) return { ...l, emissive: [...(l.emissive ?? []), ...lampPool()] };
+  if (e === 'notes') return { ...l, frames: radioNotes(ctx.night) };
   return l;
 }
 
