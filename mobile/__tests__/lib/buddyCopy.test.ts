@@ -1,6 +1,6 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { BUDDIES_INTRO, SHARING_CONSENT_LINES, SHARING_FOOTER, buddyErrorMessage, expiresIn, formatNumber, joinList, sharesSummary, stickerSentLine, weekdayLetter } from '../../src/lib/buddyCopy';
+import { BUDDIES_INTRO, GIFTS_PER_DAY, SHARING_CONSENT_LINES, SHARING_FOOTER, buddyErrorMessage, expiresIn, formatNumber, joinList, sharesSummary, stickerSentLine, weekdayLetter } from '../../src/lib/buddyCopy';
 
 it('summarises what a buddy shares', () => {
   expect(sharesSummary('Sam', [])).toBe('Sam shares mood only');
@@ -67,6 +67,16 @@ it('shows a missing number as absent, never as 0', () => {
   expect(formatNumber('steps', undefined)).toBe('–');
   expect(formatNumber('recovery', Number.NaN)).toBe('–');
   expect(formatNumber('recovery', 0)).toBe('0');
+});
+
+it('words the gift limit from the server\'s GIFTS_PER_DAY, and a bad body that may be too large (T6-CARRY)', () => {
+  // Read from the backend source as text (never imported), so a changed limit fails here until the app follows.
+  const source = readFileSync(join(__dirname, '../../../backend/src/room/gifts.ts'), 'utf8');
+  const limit = Number(/export const GIFTS_PER_DAY = (\d+);/.exec(source)?.[1]);
+  expect([limit, GIFTS_PER_DAY]).toEqual([3, 3]);
+  expect(buddyErrorMessage('gift_limit')).toBe(`That's ${GIFTS_PER_DAY} gifts today. Send another tomorrow.`);
+  // A body over the 32 KB cap is invalid_body too: the words never promise that the same send will work.
+  expect(buddyErrorMessage('invalid_body')).toBe("Couldn't send that. It may be too large or out of date.");
 });
 
 it("names KIP, not the coach, in what buddies always see (spec 2026-10-14 KIP Coach §7.6)", () => {

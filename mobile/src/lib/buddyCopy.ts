@@ -86,6 +86,9 @@ export function expiresIn(expiresAt: string, now: number): string {
 }
 
 // One line per code in backend/src/buddies/errors.ts (BUDDY_ERROR_STATUS); anything else is the fallback.
+/** Gifts a person can send in their local day (backend room/gifts.ts GIFTS_PER_DAY; the copy test pins the two). */
+export const GIFTS_PER_DAY = 3;
+
 const ERRORS: Record<string, string> = {
   code_invalid: "That code didn't work. Check it and try again.",
   not_found: 'No one has that handle.',
@@ -123,11 +126,12 @@ const ERRORS: Record<string, string> = {
   // Free-build P4 (P4 ruling 25).
   already_cheered: "You've cheered this room today.",
   not_spare: "That piece isn't a spare. Keep at least one you haven't placed.",
-  gift_limit: "That's 3 gifts today. Send another tomorrow.",
+  gift_limit: `That's ${GIFTS_PER_DAY} gifts today. Send another tomorrow.`,
   gift_gone: 'That gift is no longer there.',
   challenge_closed: "This week's challenge has closed.",
   no_challenge: "There's no room challenge this week.",
-  invalid_body: "Couldn't send that. Please try again.",
+  // Also a body over the server's 32 KB cap, which the same send would hit again.
+  invalid_body: "Couldn't send that. It may be too large or out of date.",
 };
 
 export function buddyErrorMessage(code: string | null): string {

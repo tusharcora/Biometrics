@@ -13,6 +13,7 @@ import { BuddyError, UUID_RE, isUniqueViolation } from '../buddies/errors';
 import { findPair, isBlockedEitherWay } from '../buddies/pairs';
 import { PERSON_SELECT, toPerson } from '../buddies/people';
 import { roomOpen } from '../buddies/sharing';
+import { isRetryableTx } from '../lib/retryableTx';
 import type { KipWornDTO } from '../cosmetics/worn';
 import { shiftDate } from '../scoring/dates';
 import { starterLayout } from './convert';
@@ -67,9 +68,17 @@ export function weekDays(today: string): [string, string] {
   return [monday, shiftDate(monday, 6)];
 }
 
+/** Everyone this user blocked or was blocked by: their cheers are left out of every count and list (PF4-F18). */
+async function blockedEitherWay(db: Db, userId: string): Promise<string[]> {
+  const blocks = await db.buddyBlock.findMany({ where: { OR: [{ blockerId: userId }, { blockedId: userId }] }, select: { blockerId: true, blockedId: true } });
+  return blocks.map((b) => (b.blockerId === userId ? b.blockedId : b.blockerId));
+}
+
+/** This week's cheers on a room, in its owner's local ISO week, without anyone blocked either way (T6-CARRY). */
 async function cheersInWeek(db: Db, ownerId: string, ownerTz: string, now: Date): Promise<number> {
   const [from, to] = weekDays(localCivilDateOrUtc(now, ownerTz));
-  return db.roomCheer.count({ where: { toId: ownerId, localDate: { gte: civilDateToUtcMidnight(from), lte: civilDateToUtcMidnight(to) } } });
+  const hidden = await blockedEitherWay(db, ownerId);
+  return db.roomCheer.count({ where: { toId: ownerId, fromId: { notIn: hidden }, localDate: { gte: civilDateToUtcMidnight(from), lte: civilDateToUtcMidnight(to) } } });
 }
 
 export async function readVisit(viewerId: string, ownerId: string, now: Date): Promise<RoomVisitDTO> {
@@ -88,16 +97,6 @@ export async function readVisit(viewerId: string, ownerId: string, now: Date): P
   ]);
   // Built key by key: the size, never the tier it comes from.
   return { name: person.displayName, layout, size: tierSize(tier), kipColour: person.kipColour, kipWorn: person.kipWorn, cheersThisWeek, cheeredToday: !!mine };
-}
-
-/** A transaction that lost a lock wait (P2028: Prisma's interactive-transaction timeout) or a deadlock (Postgres
- * 40P01; Prisma's P2034 for a write conflict or deadlock, or a raw statement's P2010 carrying it): nothing was written,
- * and the same request can be sent again. */
-export function isRetryableTx(err: unknown): boolean {
-  const e = err as { code?: unknown; meta?: { code?: unknown }; message?: unknown } | null;
-  if (!e) return false;
-  if (e.code === 'P2028' || e.code === 'P2034' || e.code === '40P01' || e.meta?.code === '40P01') return true;
-  return typeof e.message === 'string' && /\b40P01\b|deadlock detected/.test(e.message);
 }
 
 /** One cheer per room per visitor's day, paying both people from their own launch day on (spec §10.2, ruling 9). */
@@ -139,16 +138,15 @@ export async function cheerRoom(viewerId: string, ownerId: string, now: Date): P
 /** This week's cheers on my room, with the cheering buddies' names (spec §10.2: the owner sees who cheered). Anyone
  * I blocked or who blocked me is left out, name and count (PF4-F18). */
 export async function listRoomCheers(userId: string, now: Date): Promise<{ count: number; cheers: Array<{ name: string; day: string }> }> {
-  const [me, blocks] = await Promise.all([
+  const [me, hidden] = await Promise.all([
     prisma.user.findUnique({ where: { id: userId }, select: { timezone: true } }),
-    prisma.buddyBlock.findMany({ where: { OR: [{ blockerId: userId }, { blockedId: userId }] }, select: { blockerId: true, blockedId: true } }),
+    blockedEitherWay(prisma, userId),
   ]);
-  const hidden = blocks.map((b) => (b.blockerId === userId ? b.blockedId : b.blockerId));
   const [from, to] = weekDays(localCivilDateOrUtc(now, me?.timezone ?? 'UTC'));
   const rows = await prisma.roomCheer.findMany({
     where: { toId: userId, fromId: { notIn: hidden }, localDate: { gte: civilDateToUtcMidnight(from), lte: civilDateToUtcMidnight(to) } },
     orderBy: [{ createdAt: 'desc' }, { id: 'asc' }],
-    select: { localDate: true, from: { select: { displayName: true, handle: true } } },
+    select: { localDate: true, from: { select: PERSON_SELECT } },
   });
-  return { count: rows.length, cheers: rows.map((r) => ({ name: r.from.displayName ?? r.from.handle ?? '', day: utcMidnightToCivilDate(r.localDate) })) };
+  return { count: rows.length, cheers: rows.map((r) => ({ name: toPerson(r.from).displayName, day: utcMidnightToCivilDate(r.localDate) })) };
 }

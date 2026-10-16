@@ -6,12 +6,12 @@
 import type { Prisma } from '@prisma/client';
 import { evaluateAchievements } from '../achievements/evaluate';
 import { COIN_TX_OPTIONS, balanceOf, spendInTx } from '../coins/ledger';
-import { EMPTY_WORN } from '../cosmetics/catalogue';
+import { EMPTY_WORN, shippedItem } from '../cosmetics/catalogue';
 import { readCosmetics, type CosmeticsDTO } from '../cosmetics/loadout';
 import { prisma } from '../db/client';
 import { isUuid } from '../lib/uuid';
 import { starterLayout } from './convert';
-import { coveredBy } from './geometry';
+import { coveredBy, parseLayout } from './geometry';
 import { countsOf, geometryDeps, grantTotals, readLayout, toTier } from './layout';
 import { lockRoom } from './lock';
 import { TIER_GATES } from './tiers';
@@ -46,7 +46,7 @@ export class StoredLayoutError extends Error {
  * spent on this size answers 200 with the CURRENT room and balance and stored 0 (rulings PF-F9, 17); spent on the
  * other size, it is 400 invalid_body (ruling T6-FIX). Both are caught under the lock before the spend (ruling
  * T6T7-REPLAY), so spendInTx never meets the unique key. A refused request writes nothing. The covered pieces are
- * judged on the room as every read shows it (readLayout), which is also what is written back.
+ * judged on the stored layout; the count the card shows is of the pieces every read showed (ruling 16).
  */
 export async function expandRoom(userId: string, body: unknown, now: Date): Promise<{ ok: true; body: ExpandBody } | { ok: false; failure: ExpandFailure }> {
   const parsed = parseExpand(body);
@@ -72,13 +72,16 @@ export async function expandRoom(userId: string, body: unknown, now: Date): Prom
     const paid = await spendInTx(tx, userId, 'expand', sourceKey, gate.price, now);
     if (!paid.ok) return { status: 409, body: { error: 'gate', coinsNeeded: paid.needed, badgeNeeded: false } };
     const [rows, grants] = await Promise.all([tx.cosmeticUnlock.findMany({ where: { userId }, select: { itemId: true } }), grantTotals(tx, userId)]);
-    const layout = row ? readLayout(row.layout, countsOf(rows, grants)) : starterLayout();
-    if (!layout) throw new StoredLayoutError();
-    const gone = coveredBy(layout, parsed.toTier, geometryDeps);
-    const next = { ...layout, pieces: layout.pieces.filter((p) => !gone.has(p.id)) } as unknown as Prisma.InputJsonValue;
+    // Ruling 16 (the P2/P3 note): the room is written back as STORED, minus what the new window covers, so a piece the
+    // read trim only hides for its count is kept; `stored` counts only the pieces the user could see.
+    const raw = row ? parseLayout(row.layout) : starterLayout();
+    if (!raw) throw new StoredLayoutError();
+    const visible = (row ? readLayout(row.layout, countsOf(rows, grants)) : null) ?? raw;
+    const gone = coveredBy({ ...raw, pieces: raw.pieces.filter((p) => !!shippedItem(p.item)?.iso) }, parsed.toTier, geometryDeps);
+    const next = { ...raw, pieces: raw.pieces.filter((p) => !gone.has(p.id)) } as unknown as Prisma.InputJsonValue;
     if (row) await tx.cosmeticLoadout.update({ where: { userId }, data: { layout: next, tier: parsed.toTier, version: { increment: 1 } } });
     else await tx.cosmeticLoadout.create({ data: { userId, layout: next, worn: { ...EMPTY_WORN }, tier: parsed.toTier, version: 1 } });
-    return { stored: gone.size, grew: true };
+    return { stored: visible.pieces.filter((p) => gone.has(p.id)).length, grew: true };
   }, COIN_TX_OPTIONS);
   if ('status' in outcome) return { ok: false, failure: outcome };
   if (outcome.grew) {

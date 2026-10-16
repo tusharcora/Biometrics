@@ -12,6 +12,7 @@ import { authHeaderFor } from '../helpers/auth';
 import { level } from '../cosmetics/helpers';
 import { openRoom, pairedPair } from '../challenges/helpers';
 import { rowsOf } from '../coins/helpers';
+import { deleteUserAccount } from '../../src/users/deletion';
 
 const LAUNCH = coinsConfig.launchedAt;
 beforeAll(() => {
@@ -81,6 +82,31 @@ describe('GET /me/buddies/:buddyId/room (spec §10.1, §12)', () => {
     const self = await room(ha, a.id);
     const bad = await room(ha, 'not-a-uuid');
     for (const r of [closed, blocked, notBuddies, self, bad]) expect([r.status, r.body]).toEqual([404, { error: 'not_found' }]);
+  });
+
+  it('is the same 404 once the owner deleted their account (T6-CARRY)', async () => {
+    const { b, ha } = await pairedPair();
+    await openRoom(b.id);
+    await deleteUserAccount(b.id, { deleteSubscription: async () => {}, revokeToken: async () => {}, log: () => {} });
+    for (const r of [await room(ha, b.id), await cheer(ha, b.id)]) expect([r.status, r.body]).toEqual([404, { error: 'not_found' }]);
+  });
+
+  it('counts the week\'s cheers without anyone the owner blocked or who blocked the owner (T6-CARRY, PF4-F18)', async () => {
+    const { a, b: owner, ha } = await pairedPair();
+    await openRoom(owner.id);
+    const c = await buddyUser({ displayName: 'Cleo' });
+    const d = await buddyUser({ displayName: 'Dev' });
+    for (const u of [c, d]) {
+      const [lo, hi] = owner.id < u.id ? [owner.id, u.id] : [u.id, owner.id];
+      await prisma.buddyPair.create({ data: { userAId: lo, userBId: hi } });
+      expect((await cheer(await authHeaderFor(u.id), owner.id)).status).toBe(200);
+    }
+    expect((await cheer(ha, owner.id)).status).toBe(200);
+    expect((await room(ha, owner.id)).body.cheersThisWeek).toBe(3);
+    await prisma.buddyBlock.create({ data: { blockerId: owner.id, blockedId: c.id } });
+    await prisma.buddyBlock.create({ data: { blockerId: d.id, blockedId: owner.id } });
+    expect((await room(ha, owner.id)).body.cheersThisWeek).toBe(1);
+    expect(a.id).not.toBe(owner.id);
   });
 
   it('is the same 404 when the viewer blocked the owner', async () => {
@@ -171,6 +197,20 @@ describe('POST /me/buddies/:buddyId/room/cheer (spec §10.2)', () => {
     expect(await prisma.roomCheer.count({ where: { fromId: a.id, toId: b.id } })).toBe(1);
   });
 
+  it('pays each side from its own local launch day: a mixed day pays the owner, not the giver (T5T7-GATE, T6-CARRY)', async () => {
+    // 10:30 UTC on 2 Nov 2026 is 23:30 in Auckland (NZDT, +13). A launch at 11:00 UTC falls on 2 Nov in UTC but on
+    // 3 Nov in Auckland: the UTC owner is past their launch day, the Auckland giver is not.
+    const { a, b } = await pairedPair(['Pacific/Auckland', 'UTC']);
+    await openRoom(b.id);
+    coinsConfig.launchedAt = new Date('2026-11-02T11:00:00.000Z');
+    try {
+      await expect(cheerRoom(a.id, b.id, new Date('2026-11-02T10:30:00.000Z'))).resolves.toEqual({ paid: false });
+    } finally {
+      coinsConfig.launchedAt = new Date('2026-01-01T00:00:00.000Z');
+    }
+    expect([(await rowsOf(a.id)).map((r) => r.kind), (await rowsOf(b.id)).map((r) => [r.kind, r.amount])]).toEqual([[], [['cheer_got', 2]]]);
+  });
+
   it('takes both users\' locks first, viewer and owner (T3-FIX)', async () => {
     const { a, b } = await pairedPair();
     await openRoom(b.id);
@@ -187,6 +227,8 @@ describe('POST /me/buddies/:buddyId/room/cheer (spec §10.2)', () => {
   it.each([
     ['a lock timeout (P2028)', Object.assign(new Error('Transaction API error'), { name: 'PrismaClientKnownRequestError', code: 'P2028' })],
     ['a deadlock (40P01)', Object.assign(new Error('deadlock detected'), { name: 'PrismaClientKnownRequestError', code: 'P2010', meta: { code: '40P01' } })],
+    ['a write conflict or deadlock (P2034)', Object.assign(new Error('Transaction failed due to a write conflict or a deadlock'), { name: 'PrismaClientKnownRequestError', code: 'P2034' })],
+    ['a deadlock named only in its message (40P01)', Object.assign(new Error('Raw query failed. Code: `40P01`. Message: `deadlock detected`'), { name: 'PrismaClientUnknownRequestError' })],
   ])('answers 503 try_later on %s and logs only the event and the error name', async (_what, failure) => {
     const { a, b, ha } = await pairedPair();
     await openRoom(b.id);
@@ -196,7 +238,7 @@ describe('POST /me/buddies/:buddyId/room/cheer (spec §10.2)', () => {
       const res = await cheer(ha, b.id);
       expect([res.status, res.body]).toEqual([503, { error: 'try_later' }]);
       const lines = warn.mock.calls.map((c) => String(c[0]));
-      expect(lines).toEqual([JSON.stringify({ event: 'room.cheer_failed', error: 'PrismaClientKnownRequestError' })]);
+      expect(lines).toEqual([JSON.stringify({ event: 'room.cheer_failed', error: failure.name })]);
       expect(lines.join()).not.toContain(a.id);
     } finally {
       tx.mockRestore();

@@ -13,7 +13,7 @@ import { TIER_GATES } from '../../src/room/tiers';
 import { shiftDate } from '../../src/scoring/dates';
 import { day, level } from '../cosmetics/helpers';
 import { balance, coinUser, fund, rowsOf } from '../coins/helpers';
-import { piece } from './helpers';
+import { piece, withPieces } from './helpers';
 
 // Nothing earns in these tests (a first placement would pay its +10 once the real launch date has passed).
 const LAUNCH = coinsConfig.launchedAt;
@@ -132,6 +132,20 @@ describe('POST /me/room/expand (spec §7, §12)', () => {
     await prisma.cosmeticLoadout.update({ where: { userId: user.id }, data: { layout: layout as object } });
     const res = await grow(headers, 3);
     expect([res.status, res.body.stored, res.body.layout]).toEqual([200, 0, starterLayout()]);
+  });
+
+  it('keeps a piece the read trim hides for its count, instead of dropping it (P2/P3 note; ruling 16)', async () => {
+    const { user, headers } = await coinUser();
+    await fund(user.id, 600);
+    await level(user.id, 'CHECK_IN', 2, SOON());
+    const layout = withPieces(piece('p1', 'plant.fern', { x: 6, y: 6 }));
+    // Two ferns placed, one owned (the starter): the read hides p1, the stored row keeps it.
+    await prisma.cosmeticLoadout.create({ data: { userId: user.id, layout: layout as never, worn: { ...EMPTY_WORN }, version: 1 } });
+    const res = await grow(headers, 2);
+    expect([res.status, res.body.stored]).toEqual([200, 0]);
+    const row = await prisma.cosmeticLoadout.findUniqueOrThrow({ where: { userId: user.id } });
+    expect((row.layout as { pieces: Array<{ id: string }> }).pieces.map((p) => p.id)).toContain('p1');
+    expect(res.body.layout.pieces.map((p: { id: string }) => p.id)).not.toContain('p1');
   });
 
   it('409 stale_tier for anything but the next size; a save never changes the size', async () => {
