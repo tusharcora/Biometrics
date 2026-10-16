@@ -4,7 +4,7 @@
 // actions for a screen reader. Every string comes from ROOM_COPY (PF3-COPY).
 import { whereLine } from '../coins/shop';
 import { GEOMETRY_DEPS, catalogueItem } from './catalogue';
-import { roomEffects, type ClockNow, type Living, type PetEnergy, type RoomEffects } from './effects';
+import { isPlantItem as isPlant, roomEffects, type ClockNow, type Living, type PetEnergy, type RoomEffects } from './effects';
 import { lowerName } from './edit/labels';
 import type { GeometryDeps, RoomLayout, Tier } from './iso/geometry';
 import { ROOM_COPY, coinCount, itemName, spokenName, unlockLine, unlockSpoken } from './roomCopy';
@@ -28,7 +28,6 @@ export interface PieceCardModel {
 
 const E = ROOM_COPY.effects;
 const C = ROOM_COPY.card;
-const isPlant = (item: string) => catalogueItem(item)?.slot === 'plant';
 
 export function pieceCard(layout: RoomLayout, tier: Tier, living: Living, now: ClockNow | null, id: string, deps: GeometryDeps = GEOMETRY_DEPS): PieceCardModel | null {
   const p = layout.pieces.find((q) => q.id === id);
@@ -43,7 +42,8 @@ export function pieceCard(layout: RoomLayout, tier: Tier, living: Living, now: C
     : { text: unlockLine(item.unlock), spoken: unlockSpoken(item.unlock) };
   const name = itemName(p.item);
   let state: string | null = null;
-  if (plant) state = living.plantStage > 1 ? E.grew(lowerName(name), (living.plantStage - 1) * 7) : E.sprout(lowerName(name));
+  // Stage 5 says no count: every pre-P3 room and the neutral fallback are stage 5 whatever the nights (FINAL-FIX I1).
+  if (plant) state = living.plantStage === 5 ? E.grown(lowerName(name)) : living.plantStage > 1 ? E.grew(lowerName(name), (living.plantStage - 1) * 7) : E.sprout(lowerName(name));
   else if (kind === 'wander' && running) state = E.pet[(effects.states.get(p.id) as PetEnergy | undefined) ?? 'wander'];
   else if (kind === 'awards' && running) state = E.awardCount(Math.min(8, living.awards.length));
   return {

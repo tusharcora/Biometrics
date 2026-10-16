@@ -25,7 +25,7 @@ export function record(layers: readonly (readonly RoomRect[])[], cellPt: number)
 }
 
 /** Releases a picture when it is replaced or the view unmounts (one picture set per screen). */
-export function useDisposed<T extends { dispose?: () => void } | null>(value: T): T {
-  useEffect(() => () => value?.dispose?.(), [value]);
+export function useDisposed<T extends { dispose?: () => void }>(value: T): T {
+  useEffect(() => () => value.dispose?.(), [value]);
   return value;
 }

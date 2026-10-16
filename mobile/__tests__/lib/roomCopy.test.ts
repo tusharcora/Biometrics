@@ -103,5 +103,6 @@ it('never gives health advice in an effect or living line (spec §8.3, P3 ruling
   expect(lines.length).toBeGreaterThan(15);
   for (const s of lines) expect({ s, advises: advises(s) }).toEqual({ s, advises: false });
   expect([ROOM_COPY.effects.grew('fern', 7), ROOM_COPY.effects.pet.nap]).toEqual(['The fern grew: 7 nights at your goal.', 'The cat’s napping.']);
+  expect(lines).toContain('The fern is fully grown.');
   expect(lines.join(' ')).not.toMatch(/\d+ (steps|minutes|hours)|%/); // never a health value
 });

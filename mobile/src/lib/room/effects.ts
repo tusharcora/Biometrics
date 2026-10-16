@@ -60,7 +60,9 @@ export function effectOf(item: string, deps: GeometryDeps = GEOMETRY_DEPS): Effe
   return deps.isoOf(item)?.effect;
 }
 
-const isPlant = (p: Placement) => catalogueItem(p.item)?.slot === 'plant';
+/** A plant, the one test the effects, the piece card and KIP's walk share. */
+export const isPlantItem = (item: string): boolean => catalogueItem(item)?.slot === 'plant';
+const isPlant = (p: Placement) => isPlantItem(p.item);
 
 export function roomEffects(layout: RoomLayout, tier: Tier, living: Living, now: ClockNow | null, deps: GeometryDeps = GEOMETRY_DEPS): RoomEffects {
   const list = effectPieces(layout, deps);

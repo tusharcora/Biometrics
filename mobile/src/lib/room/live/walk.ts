@@ -4,9 +4,9 @@
 // rugs don't), the targets inside the room card's crop, and a trip: the seat, out by the desk's exit tile, to the
 // target. KIP glides half a tile per 400 ms loop frame (one tile per two frames) with its depth taken from the tile it
 // moves into.
-import { GEOMETRY_DEPS, catalogueItem } from '../catalogue';
+import { GEOMETRY_DEPS } from '../catalogue';
 import type { Box } from '../grid';
-import type { RoomEffects } from '../effects';
+import { isPlantItem, type RoomEffects } from '../effects';
 import { deskOf } from '../layout';
 import { exitTile, footOf, seatTile, tierSize, type GeometryDeps, type Placement, type RoomLayout, type Tier } from '../iso/geometry';
 import { isoGrid, projOf, type IsoGrid } from '../iso/grid';
@@ -32,7 +32,8 @@ export interface WalkTarget {
 }
 export interface Trip { target: WalkTarget; path: Tile[]; faceLeft: boolean }
 
-const key = (t: Tile) => `${t[0]},${t[1]}`;
+/** A tile's set key, the one KIP's walk and the cat's wander share. */
+export const tileKey = (t: Tile): string => `${t[0]},${t[1]}`;
 const NO_TILES: ReadonlySet<string> = new Set();
 
 /** Every tile under a floor footprint, rugs left out. */
@@ -49,19 +50,19 @@ export function blockedTiles(layout: RoomLayout, deps: GeometryDeps = GEOMETRY_D
 
 /** The shortest 4-neighbour path from `from` to `to` (both included) over free tiles, or null. At most 81 tiles. */
 export function bfs(from: Tile, to: Tile, n: number, m: number, blocked: ReadonlySet<string>): Tile[] | null {
-  const prev = new Map<string, Tile | null>([[key(from), null]]);
+  const prev = new Map<string, Tile | null>([[tileKey(from), null]]);
   const queue: Tile[] = [from];
   for (let head = 0; head < queue.length; head++) {
     const t = queue[head]!;
     if (t[0] === to[0] && t[1] === to[1]) {
       const path: Tile[] = [];
-      for (let c: Tile | null = t; c; c = prev.get(key(c)) ?? null) path.unshift(c);
+      for (let c: Tile | null = t; c; c = prev.get(tileKey(c)) ?? null) path.unshift(c);
       return path;
     }
     for (const [di, dj] of [[1, 0], [-1, 0], [0, 1], [0, -1]] as const) {
       const next: Tile = [t[0] + di, t[1] + dj];
-      if (next[0] < 0 || next[1] < 0 || next[0] >= n || next[1] >= m || prev.has(key(next)) || blocked.has(key(next))) continue;
-      prev.set(key(next), t);
+      if (next[0] < 0 || next[1] < 0 || next[0] >= n || next[1] >= m || prev.has(tileKey(next)) || blocked.has(tileKey(next))) continue;
+      prev.set(tileKey(next), t);
       queue.push(next);
     }
   }
@@ -71,7 +72,7 @@ export function bfs(from: Tile, to: Tile, n: number, m: number, blocked: Readonl
 /** Where KIP stands to use a piece (spec §9.2), or null when that tile is taken or off the floor. */
 export function standTileOf(layout: RoomLayout, p: Placement, tier: Tier, blocked: ReadonlySet<string>, deps: GeometryDeps = GEOMETRY_DEPS): Tile | null {
   const { n, m } = tierSize(tier);
-  const free = (t: Tile) => t[0] >= 0 && t[1] >= 0 && t[0] < n && t[1] < m && !blocked.has(key(t));
+  const free = (t: Tile) => t[0] >= 0 && t[1] >= 0 && t[0] < n && t[1] < m && !blocked.has(tileKey(t));
   if (p.layer === 'onTop') {
     const parent = layout.pieces.find((q) => q.id === p.parent);
     return parent ? standTileOf(layout, parent, tier, blocked, deps) : null;
@@ -119,7 +120,7 @@ export function walkTargets(layout: RoomLayout, tier: Tier, effects: RoomEffects
   const out: WalkTarget[] = [];
   for (const p of layout.pieces) {
     const effect = deps.isoOf(p.item)?.effect;
-    const plant = catalogueItem(p.item)?.slot === 'plant';
+    const plant = isPlantItem(p.item);
     let kind: UseKind | null = null;
     if (effect && effects.running.has(p.id)) {
       if (effect === 'wander') kind = effects.states.get(p.id) === 'wander' ? null : 'cat';
@@ -149,7 +150,7 @@ export function planTrip(
   const iso = desk ? deps.isoOf(desk.item) : undefined;
   const seat = desk && iso ? seatTile(desk, iso) : null;
   const exit = desk && iso ? exitTile(desk, iso) : null;
-  if (!seat || !exit || avoid.has(key(exit))) return null;
+  if (!seat || !exit || avoid.has(tileKey(exit))) return null;
   const { n, m } = tierSize(tier);
   const g = isoGrid(tier);
   const blocked = blockedTiles(layout, deps);

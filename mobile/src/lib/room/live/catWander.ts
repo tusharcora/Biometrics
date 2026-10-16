@@ -15,13 +15,12 @@ import { isoGrid } from '../iso/grid';
 import type { Tile } from '../iso/movers';
 import { deskOf, layoutKey } from '../layout';
 import type { PieceMover } from '../../../components/room/RoomView';
-import { STEP_MS, bfs, blockedTiles, headsLeft, posAt, tileInView } from './walk';
+import { STEP_MS, bfs, blockedTiles, headsLeft, posAt, tileInView, tileKey } from './walk';
 
 /** 2.4 s at each end of the route. */
 export const PAUSE_STEPS = 6;
 export interface CatRoute { id: string; path: Tile[] }
 
-const key = (t: Tile) => `${t[0]},${t[1]}`;
 const NO_TILES: ReadonlySet<string> = new Set();
 
 /**
@@ -35,18 +34,18 @@ export function catRoute(
 ): Tile[] | null {
   const { n, m } = tierSize(tier);
   const blocked = blockedTiles(layout, deps);
-  blocked.delete(key([cat.x, cat.y]));
+  blocked.delete(tileKey([cat.x, cat.y]));
   // KIP's seat and the tile out of it stay free for KIP.
   const desk = deskOf(layout);
   const iso = desk ? deps.isoOf(desk.item) : undefined;
-  for (const t of desk && iso ? [seatTile(desk, iso), exitTile(desk, iso)] : []) if (t) blocked.add(key(t));
+  for (const t of desk && iso ? [seatTile(desk, iso), exitTile(desk, iso)] : []) if (t) blocked.add(tileKey(t));
   if (view) {
     const g = isoGrid(tier);
-    for (let i = 0; i < n; i++) for (let j = 0; j < m; j++) if (!tileInView(g, [i, j], view)) blocked.add(key([i, j]));
+    for (let i = 0; i < n; i++) for (let j = 0; j < m; j++) if (!tileInView(g, [i, j], view)) blocked.add(tileKey([i, j]));
   }
   for (const t of avoid) blocked.add(t);
   const home: Tile = [cat.x, cat.y];
-  const freeIn = (j: number) => { let c = 0; for (let i = 0; i < n; i++) if (!blocked.has(key([i, j]))) c++; return c; };
+  const freeIn = (j: number) => { let c = 0; for (let i = 0; i < n; i++) if (!blocked.has(tileKey([i, j]))) c++; return c; };
   let front = m - 1;
   while (front >= 0 && freeIn(front) < 2) front--;
   if (front < 0) return null;
@@ -61,7 +60,7 @@ export function catRoute(
     const out: Tile[] = [];
     for (let k = 1; k <= 3; k++) {
       const t: Tile = [end[0] + dir * k, front];
-      if (t[0] < 0 || t[0] >= n || blocked.has(key(t))) break;
+      if (t[0] < 0 || t[0] >= n || blocked.has(tileKey(t))) break;
       out.push(t);
     }
     return out;
@@ -80,7 +79,7 @@ export function wanderRoutes(layout: RoomLayout, tier: Tier, effects: RoomEffect
     if (p.layer !== 'floor' || !effects.running.has(p.id) || effects.states.get(p.id) !== 'wander' || deps.isoOf(p.item)?.effect !== 'wander') continue;
     const path = catRoute(layout, tier, p, deps, view, taken);
     if (!path) continue;
-    for (const t of path) taken.add(key(t));
+    for (const t of path) taken.add(tileKey(t));
     out.push({ id: p.id, path });
   }
   return out;
@@ -107,8 +106,8 @@ export function takenTiles(movers: readonly PieceMover[]): Set<string> {
   for (const m of movers) {
     out.add(`${Math.floor(m.pos[0])},${Math.floor(m.pos[1])}`);
     out.add(`${Math.ceil(m.pos[0])},${Math.ceil(m.pos[1])}`);
-    out.add(key(m.depth));
-    if (m.next) out.add(key(m.next));
+    out.add(tileKey(m.depth));
+    if (m.next) out.add(tileKey(m.next));
   }
   return out;
 }

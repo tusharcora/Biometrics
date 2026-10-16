@@ -171,6 +171,8 @@ export const ROOM_COPY = {
     plant: 'KIP looks a little happier with a plant in the room.',
     grew: (name: string, nights: number) => `The ${name} grew: ${nights} nights at your goal.`,
     sprout: (name: string) => `The ${name} is just starting out.`,
+    /** Stage 5 carries no count: a pre-P3 room and the neutral fallback are stage 5 whatever the nights (FINAL-FIX I1). */
+    grown: (name: string) => `The ${name} is fully grown.`,
     pet: { nap: 'The cat’s napping.', wander: 'The cat’s wandering.', play: 'The cat’s playing.' } as Readonly<Record<'nap' | 'wander' | 'play', string>>,
     awardCount: (n: number) => (n === 0 ? 'No awards on it yet.' : n === 1 ? '1 award so far.' : `${n} awards so far.`),
     resting: (slots: number) => `Resting. This room runs ${slots} effects at a time.`,

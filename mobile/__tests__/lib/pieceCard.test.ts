@@ -24,6 +24,9 @@ it('a plant\'s card says how it grew, the cat\'s how it is, the shelf how many a
   const l = room(at('p1', 'pet.tabby', { x: 6, y: 6 }), at('p2', 'shelf.awards', { layer: 'wallR', x: 0, y: 12 }));
   expect(pieceCard(l, 1, living, DAY, 'plant')).toMatchObject({ effect: 'KIP looks a little happier with a plant in the room.', state: 'The fern grew: 14 nights at your goal.' });
   expect(pieceCard(l, 1, { ...living, plantStage: 1 }, DAY, 'plant')!.state).toBe('The fern is just starting out.');
+  // Stage 5 is every pre-P3 room (PF3-PLANTS-2) and the neutral fallback: no night count the server never measured.
+  expect(pieceCard(l, 1, { ...living, plantStage: 5 }, DAY, 'plant')!.state).toBe('The fern is fully grown.');
+  expect(pieceCard(l, 1, NEUTRAL_LIVING, DAY, 'plant')!.state).toBe('The fern is fully grown.');
   expect(pieceCard(l, 1, living, DAY, 'p1')!.state).toBe('The cat’s playing.');
   expect(pieceCard(l, 1, living, { hhmm: '23:00', hour: 23 }, 'p1')!.state).toBe('The cat’s napping.');
   expect(pieceCard(l, 1, living, DAY, 'p2')!.state).toBe('2 awards so far.');
