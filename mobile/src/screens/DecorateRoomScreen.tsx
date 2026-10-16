@@ -211,7 +211,7 @@ function Editor({ cosmetics, params, navigation }: { cosmetics: Cosmetics; param
         <Text testID="edit-count" accessibilityLabel={ROOM_COPY.edit.countLabel(n, cosmetics.cap)} className="text-caption text-muted-foreground">
           {ROOM_COPY.edit.count(n, cosmetics.cap)}
         </Text>
-        <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" className="text-caption text-muted-foreground">{ROOM_COPY.edit.countSep}</Text>
+        <Text accessible={false} accessibilityElementsHidden importantForAccessibility="no-hide-descendants" className="text-caption text-muted-foreground">{ROOM_COPY.edit.countSep}</Text>
         <Text testID="edit-effects" accessibilityLabel={ROOM_COPY.effects.tagSpoken(used, slots)} className="text-caption text-muted-foreground">
           {ROOM_COPY.effects.tag(used, slots)}
         </Text>

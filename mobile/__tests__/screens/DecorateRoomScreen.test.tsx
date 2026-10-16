@@ -85,7 +85,9 @@ it('shows EDITING, the room count, and the whole room at 2 points, Done disabled
   // One line on screen (ruling 21); the dot between is never read aloud.
   const countRow = s.getByTestId('edit-count-row');
   expect(countRow).toHaveTextContent(/^7 \/ 40 in room.*Effects 0 of 3$/);
-  expect(within(countRow).getByText('·', { includeHiddenElements: true }).props.accessibilityElementsHidden).toBe(true);
+  // Hidden on both platforms and never its own focus stop (T8-CARRY).
+  const sep = within(countRow).getByText('·', { includeHiddenElements: true });
+  expect([sep.props.accessible, sep.props.accessibilityElementsHidden, sep.props.importantForAccessibility]).toEqual([false, true, 'no-hide-descendants']);
   const room = s.getByTestId('edit-room-view');
   expect([room.props.tier, JSON.parse(room.props.layout).pieces.length, room.props.room.split(':')[7]]).toEqual([1, 7, '2']);
   expect(s.getByTestId('edit-done').props.accessibilityState.disabled).toBe(true);

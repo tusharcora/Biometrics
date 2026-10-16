@@ -3,6 +3,8 @@ import {
   COSMETIC_ITEMS, COSMETIC_SETS, OPTIONAL_ROOM_SLOTS, PRICES, RELEASE_LAUNCHED_AT, ROOM_SLOTS, SHIPPED_RELEASES, STARTER_IDS,
   STARTER_ROOM, WORN_SLOTS, cosmeticItem, isShipped, ruleOf, type CosmeticSlot,
 } from '../../src/cosmetics/catalogue';
+import { layoutFromSlots } from '../../src/room/convert';
+import { effectPieces, effectSlotsFor } from '../../src/room/geometry';
 import fs from 'fs';
 import path from 'path';
 
@@ -127,6 +129,18 @@ it('gives the first set of effects to their pieces, and to no other (spec §8.2,
   expect(cosmeticItem('shelf.awards')!.price).toBeUndefined(); // ruling 2: not sold
   expect(cosmeticItem('shelf.trophyB')!.iso!.effect).toBeUndefined(); // stays plain decor (§8.2)
   expect(cosmeticItem('pet.bed')!.iso!.effect).toBeUndefined(); // the cat's bed has no effect of its own
+});
+
+it('every set\'s effect pieces fit the starter room\'s 3 slots, so Apply set never says the effects are full (spec §8.1, T8-CARRY)', () => {
+  // Every item, shipped or not: a set that ships later is held to the same rule.
+  const all = { isoOf: (id: string) => cosmeticItem(id)?.iso };
+  expect(effectSlotsFor(1)).toBe(3);
+  for (const set of COSMETIC_SETS) {
+    const n = effectPieces(layoutFromSlots(set.room), all).length;
+    expect([set.id, n <= effectSlotsFor(1)]).toEqual([set.id, true]);
+    // The layout holds every effect piece the set names: none drops out of the count.
+    expect(n).toBe(Object.values(set.room).filter((id) => cosmeticItem(id!)?.iso?.effect).length);
+  }
 });
 
 it('reads the coin-shop code: a shop piece is only ever bought (plan ruling 2)', () => {

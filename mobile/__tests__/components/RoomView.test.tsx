@@ -5,6 +5,7 @@ import { bubbleAnchor, LOOP_MS, RoomView, type RoomViewProps } from '../../src/c
 import { EMPTY_WORN } from '../../src/lib/room/loadout';
 import { starterLayout } from '../../src/lib/room/layout';
 import { isoCrop } from '../../src/lib/room/iso/crop';
+import { isoGrid, projOf } from '../../src/lib/room/iso/grid';
 import * as isoRoom from '../../src/lib/room/iso/room';
 import { drawIsoFramesEach, drawIsoStatic, drawKipLayer } from '../../src/lib/room/iso/room';
 import type { RoomRect } from '../../src/lib/room/grid';
@@ -328,6 +329,9 @@ describe('RoomView (iso)', () => {
       expect(keysOf(spy)[1]).toEqual(expect.stringContaining('p1=play'));
       expect(keysOf(spy)[1]).not.toEqual(expect.stringContaining('p1>'));
       expect(atOf('p1')).not.toEqual(atOf('p2'));
+      // Back at its own placement's anchor, the (6, 6) tile, not the bed's corner (T8-CARRY).
+      const cat = CAT_ROOM.pieces.find((p) => p.id === 'p1')!;
+      expect(atOf('p1')).toEqual(isoRoom.anchorOf(projOf(isoGrid(1)), cat, new Map(CAT_ROOM.pieces.map((p) => [p.id, p]))));
       // Day goes on: 06:01 rebuilds nothing.
       const after = picture.mock.calls.length;
       act(() => { jest.advanceTimersByTime(60_000 + LOOP_MS * 3); });
