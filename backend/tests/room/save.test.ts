@@ -213,6 +213,7 @@ describe('effect slots (spec §8.1, §12, P3 ruling 4)', () => {
     piece('c3', 'art.clock', { layer: 'wallL', x: 0, y: 0 }),
   ];
   const fourth = piece('c4', 'art.clock', { layer: 'wallL', x: 9, y: 0 });
+  const fifth = piece('c5', 'art.clock', { layer: 'wallL', x: 0, y: 8 });
   async function withClocks() {
     const m = await me();
     await prisma.itemGrant.create({ data: { userId: m.user.id, itemId: 'art.clock', qty: 4, sourceKey: 'test:clocks' } });
@@ -233,6 +234,34 @@ describe('effect slots (spec §8.1, §12, P3 ruling 4)', () => {
     await prisma.cosmeticLoadout.update({ where: { userId: user.id }, data: { layout: four as unknown as Prisma.InputJsonValue } });
     const moved = { ...four, pieces: four.pieces.map((p) => (p.id === 'plant' ? { ...p, x: 0, y: 3 } : p)) };
     const res = await put(headers, body(moved, 1));
+    expect(res.status).toBe(200);
+    expect(res.body.layout.pieces.filter((p: { item: string }) => p.item === 'art.clock')).toHaveLength(4);
+  });
+
+  it('effects_full answers before not_owned: 4 clocks with only 3 owned (ruling T3-CARRY)', async () => {
+    const { user, headers } = await me();
+    await prisma.itemGrant.create({ data: { userId: user.id, itemId: 'art.clock', qty: 3, sourceKey: 'test:clocks' } });
+    expect((await put(headers, body(withPieces(...clocks), 0))).status).toBe(200);
+    const res = await put(headers, body(withPieces(...clocks, fourth), 1));
+    expect([res.status, res.body]).toEqual([400, { error: 'effects_full', slots: 3 }]);
+  });
+
+  it('a first save (no row) with more effects than the slots answers effects_full against the starter room', async () => {
+    const { user, headers } = await withClocks();
+    const res = await put(headers, body(withPieces(...clocks, fourth), 0));
+    expect([res.status, res.body]).toEqual([400, { error: 'effects_full', slots: 3 }]);
+    expect(await prisma.cosmeticLoadout.findUnique({ where: { userId: user.id } })).toBeNull();
+  });
+
+  it('a stored room over its slots saves with fewer effects that still exceed the slots', async () => {
+    const { user, headers } = await withClocks();
+    await prisma.itemGrant.create({ data: { userId: user.id, itemId: 'art.clock', qty: 1, sourceKey: 'test:clock5' } });
+    expect((await put(headers, body(withPieces(...clocks), 0))).status).toBe(200);
+    const five = withPieces(...clocks, fourth, fifth);
+    await prisma.cosmeticLoadout.update({ where: { userId: user.id }, data: { layout: five as unknown as Prisma.InputJsonValue } });
+    expect((await (await api()).get('/me/cosmetics').set(headers)).body.layout).toEqual(five);
+    const four = withPieces(...clocks, fourth);
+    const res = await put(headers, body(four, 1));
     expect(res.status).toBe(200);
     expect(res.body.layout.pieces.filter((p: { item: string }) => p.item === 'art.clock')).toHaveLength(4);
   });
