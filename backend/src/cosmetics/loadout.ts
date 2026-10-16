@@ -16,6 +16,7 @@ import { grantCosmeticsSafely } from './unlock';
 import { starterLayout } from '../room/convert';
 import { STYLE_KEYS, capFor, effectSlotsFor, effectsRaised, parseLayout, validateLayout, type BadReason, type RoomLayout, type Tier } from '../room/geometry';
 import { countsOf, geometryDeps, grantTotals, placedCounts, readLayout, toTier } from '../room/layout';
+import { readLiving, type Living } from '../room/living';
 import { lockRoom } from '../room/lock';
 
 type Room = Record<RoomSlot, string | null>;
@@ -35,6 +36,9 @@ export interface CosmeticsDTO {
   counters: { recapsRead: number; buddyCheers: number };
   /** The welcome card has been answered on some device (spec §11.1, plan ruling 13). */
   welcomed: boolean;
+  /** The living room (spec §8.3): bands and small counts for your own room only. Absent when its read failed
+   * (ruling PF3-LIVING): the room then draws as plain decor rather than the whole body failing. */
+  living?: Living;
 }
 
 export function ownedFrom(rows: ReadonlyArray<{ itemId: string }>): Set<string> {
@@ -65,13 +69,18 @@ function readWorn(json: unknown, owned: ReadonlySet<string>): Worn {
 
 export async function readCosmetics(userId: string, now: Date, opts: { grant?: boolean } = {}): Promise<CosmeticsDTO> {
   if (opts.grant ?? true) await grantCosmeticsSafely(userId, now);
-  const [rows, loadout, facts, firstWeek, grants, newCopies] = await Promise.all([
+  const [rows, loadout, facts, firstWeek, grants, newCopies, living] = await Promise.all([
     prisma.cosmeticUnlock.findMany({ where: { userId }, orderBy: [{ unlockedAt: 'asc' }, { itemId: 'asc' }], select: { itemId: true, source: true, seenAt: true } }),
     prisma.cosmeticLoadout.findUnique({ where: { userId } }),
     loadUnlockFacts(userId),
     prisma.roomFirstWeek.findUnique({ where: { userId }, select: { welcomedAt: true } }),
     grantTotals(prisma, userId),
     prisma.itemGrant.findMany({ where: { userId, seenAt: null, qty: { gt: 0 } }, orderBy: { createdAt: 'asc' }, select: { itemId: true, sourceKey: true } }),
+    // The name only, never a value or an id (ruling PF3-LIVING).
+    readLiving(userId, now).catch((err: unknown) => {
+      console.warn(JSON.stringify({ event: 'room.living_failed', error: err instanceof Error ? err.name : 'Error' }));
+      return undefined;
+    }),
   ]);
   const counts = countsOf(rows, grants);
   // Owned is a count now (spec §2.2): every item with one.
@@ -95,6 +104,7 @@ export async function readCosmetics(userId: string, now: Date, opts: { grant?: b
     version: loadout?.version ?? 0,
     counters: countersOf(facts),
     welcomed: !!firstWeek?.welcomedAt,
+    ...(living ? { living } : {}),
   };
 }
 
