@@ -17,6 +17,8 @@ import { WalletChip } from '../components/coins/WalletChip';
 import { InventoryDrawer } from '../components/edit/InventoryDrawer';
 import { PiecesList } from '../components/edit/PiecesList';
 import { useMyKip } from '../lib/kip/myKip';
+import { GEOMETRY_DEPS } from '../lib/room/catalogue';
+import { effectSlotsFor, runningEffects } from '../lib/room/iso/geometry';
 import { useTodayScene } from '../lib/home/useTodayScene';
 import { setDecorateOpen } from '../lib/room/decorateOpen';
 import { getCosmetics, loadCosmetics, markCosmeticsSeen, saveCosmeticsLoadout, useCosmetics, type Cosmetics } from '../lib/room/cosmeticsStore';
@@ -191,6 +193,9 @@ function Editor({ cosmetics, params, navigation }: { cosmetics: Cosmetics; param
     }
   };
   const n = state.draft.layout.pieces.length;
+  // The effects running in the draft (C6's "Effects 3 of 5", ruling 21): an extra past the slots rests, never counts.
+  const slots = effectSlotsFor(state.tier);
+  const used = runningEffects(state.draft.layout, state.tier, GEOMETRY_DEPS).size;
   return (
     <SafeAreaView className="flex-1 bg-background">
       <View className="flex-row items-center justify-between px-4 pb-1 pt-1">
@@ -202,9 +207,15 @@ function Editor({ cosmetics, params, navigation }: { cosmetics: Cosmetics; param
           <Button testID="edit-done" disabled={!changed || saving} loading={saving} onPress={() => void save()}>{ROOM_COPY.done}</Button>
         </View>
       </View>
-      <Text testID="edit-count" accessibilityLabel={ROOM_COPY.edit.countLabel(n, cosmetics.cap)} className="px-4 pb-2 text-caption text-muted-foreground">
-        {ROOM_COPY.edit.count(n, cosmetics.cap)}
-      </Text>
+      <View testID="edit-count-row" className="flex-row flex-wrap items-center gap-x-2 px-4 pb-2">
+        <Text testID="edit-count" accessibilityLabel={ROOM_COPY.edit.countLabel(n, cosmetics.cap)} className="text-caption text-muted-foreground">
+          {ROOM_COPY.edit.count(n, cosmetics.cap)}
+        </Text>
+        <Text accessibilityElementsHidden importantForAccessibility="no-hide-descendants" className="text-caption text-muted-foreground">{ROOM_COPY.edit.countSep}</Text>
+        <Text testID="edit-effects" accessibilityLabel={ROOM_COPY.effects.tagSpoken(used, slots)} className="text-caption text-muted-foreground">
+          {ROOM_COPY.effects.tag(used, slots)}
+        </Text>
+      </View>
       {/* The room is pinned above the scrolling part (ruling T12-FIX), so a drag or a pan in it never scrolls the page. */}
       <View testID="edit-editing" className="flex-1" pointerEvents={saving ? 'none' : 'auto'}>
         <EditRoom ref={roomRef} state={state} dispatch={act} width={width} height={editRoomHeight(height)} window={day.window} colour={me.colour} reduceMotion={reduceMotion} showGrid={showGrid} living={cosmetics.living} />

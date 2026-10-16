@@ -18,7 +18,7 @@ import { capFor } from '../../lib/room/iso/geometry';
 import { ROOM_COPY, SET_NAMES, SLOT_TITLES, itemName, progressFromAchievements } from '../../lib/room/roomCopy';
 
 const D = ROOM_COPY.drawer;
-const PIECE_TABS: ReadonlySet<DrawerTab> = new Set(['all', 'floor', 'wall', 'onTop', 'funny', 'new']);
+const PIECE_TABS: ReadonlySet<DrawerTab> = new Set(['all', 'floor', 'wall', 'onTop', 'funny', 'effects', 'new']);
 const NO_COUNTERS = { recapsRead: 0, buddyCheers: 0 };
 const TARGET = 'h-[44px]'; // spec §5.7: every target 44 points tall at least
 

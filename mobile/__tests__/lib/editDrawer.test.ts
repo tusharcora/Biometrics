@@ -9,7 +9,7 @@ const counts = { ...STARTER_COUNTS, 'plant.fern': 3, 'corner.beanbag': 1, 'shelf
 const start = (newIds: string[] = []) => initEditor({ layout: starterLayout(), worn: EMPTY_WORN, tier: 1, counts, version: 1, newIds });
 
 it('the tabs: New only while something was unseen when the editor opened (ruling 15)', () => {
-  expect(drawerTabs(start())).toEqual(['all', 'floor', 'wall', 'onTop', 'funny', 'room', 'kip', 'sets']);
+  expect(drawerTabs(start())).toEqual(['all', 'floor', 'wall', 'onTop', 'funny', 'effects', 'room', 'kip', 'sets']);
   expect(drawerTabs(start(['corner.beanbag']))).toContain('new');
 });
 
@@ -58,4 +58,13 @@ it('the KIP tab keeps Spec B\'s worn tiles: None, owned, and locked ones with th
 it('set cards: Cottage, locked here, with its pieces and unlock line', () => {
   const [cottage] = setCards(start(), FACTS);
   expect([cottage!.id, cottage!.owned, cottage!.line]).toEqual(['cottage', false, '13 pieces · Read 4 weekly recaps']);
+});
+
+it('the Effects tab lists the effect pieces you own, each tagged and read as doing something (spec §5.4, ruling 21)', () => {
+  const s = initEditor({ layout: starterLayout(), worn: EMPTY_WORN, tier: 1, counts: { ...counts, 'art.clock': 1, 'item.radio': 1 }, version: 1, newIds: [] });
+  const tiles = pieceTiles(s, 'effects');
+  expect(tiles.map((t) => t.item).sort()).toEqual(['art.clock', 'item.radio', 'shelf.awards']);
+  const radio = tiles.find((t) => t.item === 'item.radio')!;
+  expect([radio.tag, radio.label]).toEqual(['Does something', 'Old radio, 1 in inventory, does something in the room']);
+  expect(pieceTiles(s, 'all').find((t) => t.item === 'plant.fern')!.tag).toBeNull();
 });

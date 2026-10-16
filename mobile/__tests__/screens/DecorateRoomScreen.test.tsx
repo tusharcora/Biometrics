@@ -80,6 +80,12 @@ it('shows EDITING, the room count, and the whole room at 2 points, Done disabled
   expect(s.getByText('EDITING')).toBeTruthy();
   expect(s.getByTestId('edit-count')).toHaveTextContent('7 / 40 in room');
   expect(s.getByTestId('edit-count').props.accessibilityLabel).toBe('7 of 40 pieces in the room');
+  expect(s.getByTestId('edit-effects')).toHaveTextContent('Effects 0 of 3');
+  expect(s.getByTestId('edit-effects').props.accessibilityLabel).toBe('0 of 3 effects running');
+  // One line on screen (ruling 21); the dot between is never read aloud.
+  const countRow = s.getByTestId('edit-count-row');
+  expect(countRow).toHaveTextContent(/^7 \/ 40 in room.*Effects 0 of 3$/);
+  expect(within(countRow).getByText('·', { includeHiddenElements: true }).props.accessibilityElementsHidden).toBe(true);
   const room = s.getByTestId('edit-room-view');
   expect([room.props.tier, JSON.parse(room.props.layout).pieces.length, room.props.room.split(':')[7]]).toEqual([1, 7, '2']);
   expect(s.getByTestId('edit-done').props.accessibilityState.disabled).toBe(true);
@@ -511,6 +517,49 @@ describe('the editor on small and large phones (ruling T13-LAYOUT)', () => {
     expect(s.getByTestId('edit-reason')).toHaveTextContent('That desk is in the room already');
     expect(s.getByTestId('edit-undo').props.accessibilityState.disabled).toBe(true);
     expect(within(s.getByTestId('edit-scroll')).queryByTestId('edit-reason')).toBeNull();
+  });
+});
+
+describe('effect slots (spec §5.3, §8.1, rulings 4 and 21)', () => {
+  const clock = (id: string, layer: 'wallL' | 'wallR', x: number) => ({ id, item: 'art.clock', layer, x, y: 0, facing: 'L' as const, mirror: false });
+  const THREE = { ...starterLayout(), pieces: [...starterLayout().pieces, clock('p1', 'wallR', 0), clock('p2', 'wallR', 10), clock('p3', 'wallL', 0)] };
+  const FULL = () => cosmeticsDTO({ layout: THREE, counts: { ...STARTER_COUNTS, 'art.clock': 3, 'corner.floorlamp': 1 }, version: 2 });
+
+  it.each(['ios', 'android'] as const)('a full room refuses one more effect piece, pinned under the room and said once per press (%s)', async (os) => {
+    const announce = jest.spyOn(AccessibilityInfo, 'announceForAccessibility').mockImplementation(() => undefined);
+    const platform = Platform.OS;
+    Platform.OS = os;
+    try {
+      const s = await openEditor(undefined, FULL());
+      expect(s.getByTestId('edit-effects')).toHaveTextContent('Effects 3 of 3');
+      expect(s.getByTestId('edit-effects').props.accessibilityLabel).toBe('3 of 3 effects running');
+      fireEvent.press(s.getByTestId('drawer-tab-effects'));
+      fireEvent.press(s.getByTestId('drawer-tile-corner.floorlamp'));
+      announce.mockClear();
+      fireEvent.press(s.getByTestId('drawer-place'));
+      expect(s.getByTestId('edit-reason')).toHaveTextContent('Effects 3 of 3: store one to run another');
+      expect(within(s.getByTestId('edit-scroll')).queryByTestId('edit-reason')).toBeNull();
+      expect(within(s.getByTestId('edit-editing')).getByTestId('edit-reason')).toBeTruthy();
+      expect(announce.mock.calls).toEqual([['Effects 3 of 3: store one to run another']]);
+      fireEvent.press(s.getByTestId('drawer-place'));
+      expect(announce).toHaveBeenCalledTimes(2); // the same refusal again is said again, on Android too
+      expect(s.getByTestId('edit-done').props.accessibilityState.disabled).toBe(true);
+    } finally {
+      Platform.OS = platform;
+      announce.mockRestore();
+    }
+  });
+
+  it('the toolbar says what a selected clock does, aloud too; a stored clock frees its slot', async () => {
+    const s = await openEditor(undefined, FULL());
+    fireEvent.press(s.getByTestId('edit-piece-p1'));
+    expect(s.getByTestId('edit-tool-effect')).toHaveTextContent('Tells the time');
+    expect(s.getByTestId('edit-tool-info').props.accessibilityLabel).toMatch(/\. Tells the time$/);
+    expect(s.getByTestId('edit-tool-info').props.accessibilityLabel).not.toMatch(/·/);
+    fireEvent.press(s.getByTestId('edit-store'));
+    expect(s.getByTestId('edit-effects')).toHaveTextContent('Effects 2 of 3');
+    fireEvent.press(s.getByTestId('edit-piece-plant'));
+    expect(s.queryByTestId('edit-tool-effect')).toBeNull();
   });
 });
 

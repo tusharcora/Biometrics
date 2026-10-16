@@ -27,7 +27,7 @@ const D = ROOM_COPY.drawer;
 const owned = (s: EditorState, id: ItemId) => (s.counts[id] ?? 0) > 0;
 
 export function drawerTabs(s: EditorState): DrawerTab[] {
-  return ['all', 'floor', 'wall', 'onTop', 'funny', ...(s.newIds.length ? (['new'] as const) : []), 'room', 'kip', 'sets'];
+  return ['all', 'floor', 'wall', 'onTop', 'funny', 'effects', ...(s.newIds.length ? (['new'] as const) : []), 'room', 'kip', 'sets'];
 }
 
 const inTab = (id: ItemId, tab: DrawerTab, newIds: readonly ItemId[]) => {
@@ -37,6 +37,7 @@ const inTab = (id: ItemId, tab: DrawerTab, newIds: readonly ItemId[]) => {
     case 'wall': return iso.layers.includes('wall');
     case 'onTop': return iso.layers.includes('onTop');
     case 'funny': return !!catalogueItem(id)?.tags?.includes('funny');
+    case 'effects': return !!iso.effect;
     case 'new': return newIds.includes(id);
     default: return true;
   }
@@ -50,9 +51,13 @@ export function pieceTiles(s: EditorState, tab: DrawerTab): DrawerTile[] {
     .map((i) => {
       const count = left[i.id] ?? 0;
       const isNew = s.newIds.includes(i.id);
+      // An effect piece is tagged and read as doing something (ruling 21), in every tab it shows in.
+      const fx = !!i.iso!.effect;
       return {
-        key: i.id, item: i.id, name: itemName(i.id), count, isNew, allPlaced: count === 0, locked: false, tag: null,
-        label: D.tile.piece(spokenName(i.id), count, isNew), selected: s.picked === i.id,
+        key: i.id, item: i.id, name: itemName(i.id), count, isNew, allPlaced: count === 0, locked: false,
+        tag: fx ? ROOM_COPY.effects.fxTag : null,
+        label: `${D.tile.piece(spokenName(i.id), count, isNew)}${fx ? `, ${ROOM_COPY.effects.doesSomething}` : ''}`,
+        selected: s.picked === i.id,
       };
     });
 }

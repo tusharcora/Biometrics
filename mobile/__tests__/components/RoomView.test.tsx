@@ -310,6 +310,33 @@ describe('RoomView (iso)', () => {
       s.unmount();
     });
 
+    it('at 06:00 the napping cat gets up off its bed: exactly one rebuild, the bed let go, the cat back on its own tile (T7-CARRY)', () => {
+      jest.setSystemTime(new Date(2026, 9, 24, 5, 59, 30));
+      const spy = jest.spyOn(isoRoom, 'drawIsoStatic');
+      const s = render(<RoomView {...PROPS} layout={CAT_ROOM} living={PLAYFUL} />);
+      const atOf = (id: string) => {
+        const st = spy.mock.results.at(-1)!.value as ReturnType<typeof drawIsoStatic>;
+        return [...st.behind, ...st.ahead].find((pp) => pp.p.id === id)!.at;
+      };
+      expect(keysOf(spy)).toHaveLength(1);
+      expect(keysOf(spy)[0]).toEqual(expect.stringContaining('p1>p2'));
+      expect(atOf('p1')).toEqual(atOf('p2'));
+      const before = picture.mock.calls.length;
+      act(() => { jest.advanceTimersByTime(30_100); }); // 06:00, just past the minute's read
+      expect(picture.mock.calls.length - before).toBe(8);
+      expect(keysOf(spy)).toHaveLength(2);
+      expect(keysOf(spy)[1]).toEqual(expect.stringContaining('p1=play'));
+      expect(keysOf(spy)[1]).not.toEqual(expect.stringContaining('p1>'));
+      expect(atOf('p1')).not.toEqual(atOf('p2'));
+      // Day goes on: 06:01 rebuilds nothing.
+      const after = picture.mock.calls.length;
+      act(() => { jest.advanceTimersByTime(60_000 + LOOP_MS * 3); });
+      expect(picture.mock.calls.length - after).toBe(0);
+      expect(keysOf(spy)).toHaveLength(2);
+      spy.mockRestore();
+      s.unmount();
+    });
+
     it('at night with Reduce Motion on, the cat is curled on its bed at frame 0, and a tick records 0 pictures (edge case 4)', () => {
       jest.setSystemTime(new Date(2026, 9, 24, 23, 0, 30));
       const spy = jest.spyOn(isoRoom, 'drawIsoStatic');

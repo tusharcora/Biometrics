@@ -182,6 +182,8 @@ export const ROOM_COPY = {
     title: 'EDITING',
     count: (n: number, cap: number) => `${n} / ${cap} in room`,
     countLabel: (n: number, cap: number) => `${n} of ${cap} pieces in the room`,
+    /** Between the count and the effects ("31 / 40 in room · Effects 3 of 5", ruling 21): seen, never read aloud. */
+    countSep: '·',
     roomLabel: "KIP's room, being edited",
     where: { floor: 'on the floor', wall: 'on the wall', on: (parent: string) => `on the ${parent}` },
     /** What the desk piece is called in a sentence: KIP's desk, whatever stands on it. */
@@ -251,7 +253,7 @@ export const ROOM_COPY = {
     title: (n: number) => `Inventory · ${n} not placed`,
     titleSpoken: (n: number) => `Inventory, ${n} not placed`,
     tabsLabel: 'Inventory',
-    tabs: { all: 'All', floor: 'Floor', wall: 'Wall', onTop: 'On top', funny: 'Funny', new: 'New', room: 'Room', kip: 'KIP', sets: 'Sets' },
+    tabs: { all: 'All', floor: 'Floor', wall: 'Wall', onTop: 'On top', funny: 'Funny', effects: 'Effects', new: 'New', room: 'Room', kip: 'KIP', sets: 'Sets' },
     rows: { wallpaper: 'Walls', floor: 'Floor', window: 'Window' },
     count: (n: number) => `×${n}`,
     allPlaced: 'All placed',

@@ -42,6 +42,17 @@ describe('roomEffects (spec §8.1, §8.3, P3 rulings 4-6)', () => {
     expect(roomEffects(room(at('p1', 'pet.tabby', { x: 6, y: 6 })), 1, LIVING, NIGHT).napOn.size).toBe(0); // no bed: curled on its tile
   });
 
+  it('two cats share the beds first placed first: with one bed the second curls on its own tile, with two each has one (T7-CARRY)', () => {
+    const cats = [at('p4', 'pet.tabby', { x: 6, y: 6 }), at('p2', 'pet.tabby', { x: 0, y: 6 })];
+    const one = roomEffects(room(...cats, at('p5', 'pet.bed', { x: 4, y: 6 })), 1, LIVING, NIGHT);
+    expect([one.states.get('p2'), one.states.get('p4')]).toEqual(['nap', 'nap']);
+    expect(Object.fromEntries(one.napOn)).toEqual({ p2: 'p5' });
+    const two = roomEffects(room(...cats, at('p5', 'pet.bed', { x: 4, y: 6 }), at('p3', 'pet.bed', { x: 2, y: 6 })), 1, LIVING, NIGHT);
+    expect(Object.fromEntries(two.napOn)).toEqual({ p2: 'p3', p4: 'p5' });
+    // By day neither lies on a bed.
+    expect(roomEffects(room(...cats, at('p5', 'pet.bed', { x: 4, y: 6 }), at('p3', 'pet.bed', { x: 2, y: 6 })), 1, LIVING, DAY).napOn.size).toBe(0);
+  });
+
   it('an inert piece has no state at all: it draws as plain decor (ruling 5)', () => {
     const lamps = ['p1', 'p2', 'p3', 'p4'].map((id, k) => at(id, 'corner.floorlamp', { x: 6, y: 3 + k }));
     expect(roomEffects(room(...lamps), 1, LIVING, null).states.has('p4')).toBe(false);

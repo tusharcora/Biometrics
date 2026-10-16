@@ -34,7 +34,7 @@ it('gives each refusal a short reason (ruling 12)', () => {
 
 it('the toolbar line: name, where, what is on it, and the inventory count', () => {
   const s = editorReducer(initEditor({ layout: L, worn: EMPTY_WORN, tier: 1, counts: STARTER_COUNTS, version: 1, newIds: [] }), { type: 'select', id: 'plank' });
-  expect(toolLine(L, selectedTools(s)!)).toEqual({ text: 'Wall plank · on the wall · 1 on it', inventory: '×0 in inventory', spoken: 'Wall plank, on the wall, 1 on it. 0 in inventory' });
+  expect(toolLine(L, selectedTools(s)!)).toEqual({ text: 'Wall plank · on the wall · 1 on it', inventory: '×0 in inventory', effect: null, spoken: 'Wall plank, on the wall, 1 on it. 0 in inventory' });
 });
 
 it('says what the last action did (ruling UI-OUTCOMES): a refusal\'s reason, an applied set, nothing for a plain success', () => {

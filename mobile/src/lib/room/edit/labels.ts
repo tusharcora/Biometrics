@@ -49,6 +49,7 @@ export function reasonText(r: Refused, item: string, layout?: RoomLayout): strin
     case 'full': return E.reason.full;
     case 'none': return E.reason.none;
     case 'sameDesk': return E.reason.sameDesk;
+    case 'effects': return ROOM_COPY.effects.full(r.slots ?? 0);
     case 'layer': {
       const layers = isoOf(item)?.layers ?? [];
       if (layers.includes('floor') && layers.includes('onTop')) return E.reason.layer.floorOnTop;
@@ -59,15 +60,20 @@ export function reasonText(r: Refused, item: string, layout?: RoomLayout): strin
   }
 }
 
-/** The toolbar's line for the selected piece: "Desk lamp · on the desk", "×2 in inventory" (spec §5.2). */
-export function toolLine(layout: RoomLayout, t: Tools): { text: string; inventory: string; spoken: string } {
+/**
+ * The toolbar's line for the selected piece (spec §5.2): "Desk lamp · on the desk", "×2 in inventory", and what it
+ * does, or that it rests past the slots (§8.1, ruling 16); null for a piece with no effect.
+ */
+export function toolLine(layout: RoomLayout, t: Tools): { text: string; inventory: string; effect: string | null; spoken: string } {
   const name = itemName(t.piece.item);
   const where = whereText(layout, t.piece);
   const on = t.children ? ` · ${E.onIt(t.children)}` : '';
+  const effect = t.effect ? (t.effect.running ? ROOM_COPY.effects.short[t.effect.kind] : ROOM_COPY.effects.resting(t.slots)) : null;
   return {
     text: `${name} · ${where}${on}`,
     inventory: E.inventory(t.inventory),
-    spoken: `${spokenName(t.piece.item)}, ${where}${t.children ? `, ${E.onIt(t.children)}` : ''}. ${E.inventorySpoken(t.inventory)}`,
+    effect,
+    spoken: `${spokenName(t.piece.item)}, ${where}${t.children ? `, ${E.onIt(t.children)}` : ''}. ${E.inventorySpoken(t.inventory)}${effect ? `. ${effect}` : ''}`,
   };
 }
 
