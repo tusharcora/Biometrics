@@ -373,9 +373,15 @@ const ISO_OVERRIDES: Readonly<Record<string, IsoSpec>> = {
   'art.neonheart': { layers: ['wall'], wall: [3, 4], facings: 1 },
   // The trophy shelf hangs on a wall: a plank 4 tiles long with room for 8 awards (P3 ruling 2).
   'shelf.awards': { layers: ['wall'], wall: [8, 3], facings: 1 },
-  // The theme lamps stand on the floor or a surface, like the welcome lantern (P4 ruling 2).
+  // All eight challenge pieces stand on the floor or a surface (P4 ruling 2, T4-FIX): the lamps and the corner trophies
+  // like the welcome lantern, the two desk pieces like the candle.
   'lamp.harvest': { layers: ['floor', 'onTop'], foot: [1, 1], facings: 1 },
   'lamp.moon': { layers: ['floor', 'onTop'], foot: [1, 1], facings: 1 },
+  'corner.acorn': { layers: ['floor', 'onTop'], foot: [1, 1], facings: 1 },
+  'corner.can': { layers: ['floor', 'onTop'], foot: [1, 1], facings: 1 },
+  'corner.owl': { layers: ['floor', 'onTop'], foot: [1, 1], facings: 1 },
+  'item.organiser': { layers: ['onTop', 'floor'], foot: [1, 1], facings: 1 },
+  'item.goldpen': { layers: ['onTop', 'floor'], foot: [1, 1], facings: 1 },
 };
 
 function isoFor(item: CosmeticItem): IsoSpec | undefined {

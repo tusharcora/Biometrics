@@ -1,9 +1,10 @@
 // The weekly theme calendar (spec 2026-10-15 §10.4; P4 rulings 3-4).
 import { CHALLENGES_START_WEEK, THEMES, briefCount, meetsBrief, themeFor } from '../../src/challenges/themes';
-import { cosmeticItem, shippedItem, tagsOf } from '../../src/cosmetics/catalogue';
+import { THEME_PIECES, TROPHIES, cosmeticItem, shippedItem, tagsOf } from '../../src/cosmetics/catalogue';
 import { forSale, offeredIn } from '../../src/coins/shop';
-import { weekNumber } from '../../src/coins/shopWeeks';
-import { piece, withPieces } from '../room/helpers';
+import { weekNumber, weekSet } from '../../src/coins/shopWeeks';
+import { validateLayout } from '../../src/room/geometry';
+import { deps, piece, withPieces } from '../room/helpers';
 
 it('starts at 2026-W44 and rotates the four themes week by week, across a year end', () => {
   expect(themeFor('2026-W43')).toBeNull();
@@ -41,4 +42,21 @@ it('counts brief pieces once per placement and judges the rule', () => {
   expect(briefCount(room, 'warm')).toBe(4);
   expect(meetsBrief(room, cosy)).toBe(true);
   expect(briefCount(withPieces(), 'glow')).toBeGreaterThanOrEqual(1); // the amber lamp glows
+});
+
+it('reads only real ISO weeks: W01 to W52, and W53 only in a 53-week year (T4-FIX M2)', () => {
+  expect(weekNumber('2026-W53')).toBe(weekNumber('2026-W52')! + 1); // 2026 has 53 ISO weeks
+  expect(weekNumber('2027-W01')).toBe(weekNumber('2026-W53')! + 1);
+  for (const bad of ['2025-W53', '2027-W53', '2026-W00', '2026-W54', '2026-W99']) {
+    expect([bad, weekNumber(bad), themeFor(bad)]).toEqual([bad, null, null]);
+  }
+  expect(weekSet('2026-W99')).toEqual(weekSet('garbage')); // a malformed week reads as the first set
+});
+
+it('stands all eight challenge pieces on a floor tile and on a desk spot (T4-FIX I1)', () => {
+  for (const id of [...THEME_PIECES, ...TROPHIES]) {
+    const floor = withPieces(piece('p1', id, { x: 6, y: 6 }));
+    const desk = withPieces({ id: 'deskitem', item: id, layer: 'onTop', x: 0, y: 0, facing: 'L', mirror: false, parent: 'desk', spot: 2 });
+    expect([id, validateLayout(floor, 1, deps), validateLayout(desk, 1, deps)]).toEqual([id, null, null]);
+  }
 });

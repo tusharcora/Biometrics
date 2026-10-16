@@ -1,9 +1,10 @@
 // The coin shop (spec 2026-10-15 §6.4–6.6). A piece is for sale when it is shipped, priced and offered this week
 // (always, in a week whose challenge theme names it, or in its own ISO week), never a prize (a trophy, P4 ruling 2),
 // and, for a piece with an unlock rule, once its unlock row exists (§6.5: a rule piece is never sold before it is
-// earned; a gifted copy does not count, P4 ruling 15). The offer marks such a piece locked until then (PF4-F1). A purchase runs under the user's one lock (plan ruling 5): the replay check, the sale
-// check, the spend, then the +1 grant, all keyed by the app's request id, so a retry never buys twice. Coins only:
-// nothing here is ever paid for with money. Logs the spend's kind only, never a user id, an item or an amount.
+// earned; a gifted copy does not count, P4 ruling 15). The offer marks such a piece locked until then (PF4-F1). A
+// purchase runs under the user's one lock (plan ruling 5): the replay check, the sale check, the spend, then the +1
+// grant, all keyed by the app's request id, so a retry never buys twice. Coins only: nothing here is ever paid for with
+// money. Logs the spend's kind only, never a user id, an item or an amount.
 import type { Prisma } from '@prisma/client';
 import { civilDateToUtcMidnight } from '../biometrics/civilDate';
 import { themeFor } from '../challenges/themes';

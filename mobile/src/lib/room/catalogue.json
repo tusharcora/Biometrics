@@ -1777,7 +1777,12 @@
       "release": 6,
       "iso": {
         "layers": [
-          "onTop"
+          "onTop",
+          "floor"
+        ],
+        "foot": [
+          1,
+          1
         ],
         "facings": 1
       },
@@ -1797,7 +1802,8 @@
       "emissive": true,
       "iso": {
         "layers": [
-          "floor"
+          "floor",
+          "onTop"
         ],
         "foot": [
           1,
@@ -1820,7 +1826,8 @@
       "emissive": true,
       "iso": {
         "layers": [
-          "floor"
+          "floor",
+          "onTop"
         ],
         "foot": [
           1,
@@ -1842,7 +1849,8 @@
       "emissive": true,
       "iso": {
         "layers": [
-          "floor"
+          "floor",
+          "onTop"
         ],
         "foot": [
           1,
@@ -1864,7 +1872,12 @@
       "emissive": true,
       "iso": {
         "layers": [
-          "onTop"
+          "onTop",
+          "floor"
+        ],
+        "foot": [
+          1,
+          1
         ],
         "facings": 1
       },
