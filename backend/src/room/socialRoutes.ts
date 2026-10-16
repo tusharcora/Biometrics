@@ -1,15 +1,17 @@
 // KIP's room among buddies (spec 2026-10-15 §12 P4): visits, room cheers and gifts here; the weekly challenge
-// (Task 7) joins this router. All need a session, answer private no-store, and use the buddy error bodies.
+// joins this router. All need a session, answer private no-store, and use the buddy error bodies.
 // Every POST takes the 32 KB route parser (P2 ruling 26, P4 ruling 29).
 import { Router, type Response } from 'express';
 import { requireAuth } from '../auth/middleware';
 import { buddyRoute } from '../buddies/errors';
+import { cheerEntry, enterChallenge, readChallenge } from '../challenges/entries';
+import { challengeClock } from '../challenges/week';
 import { noStore } from '../lib/noStore';
 import { listGifts, openGift, sendGift } from './gifts';
 import { cheerRoom, listRoomCheers, readVisit, visitTarget } from './visit';
 
 export const socialRoomRouter = Router();
-/** The POST paths app.ts gives the 32 KB parser (the gift routes push theirs below; Task 7 adds its own). */
+/** The POST paths app.ts gives the 32 KB parser (the gift and challenge routes push theirs below). */
 export const SOCIAL_ROOM_POSTS: string[] = ['/me/buddies/:buddyId/room/cheer'];
 
 const json = (res: Response, body: unknown, status = 200) => {
@@ -49,4 +51,22 @@ socialRoomRouter.get('/me/gifts', requireAuth, buddyRoute(async (req, res) => {
 socialRoomRouter.post('/me/gifts/:id/open', requireAuth, buddyRoute(async (req, res) => {
   noStore(res);
   json(res, await openGift(req.userId!, String(req.params.id), new Date()));
+}));
+
+// The weekly theme challenge (spec §10.4, §12; P4 rulings 5-7, 10, 28). Its clock is challengeClock (tests move it).
+SOCIAL_ROOM_POSTS.push('/me/challenge/entry', '/me/challenge/entries/:userId/cheer');
+
+socialRoomRouter.get('/me/challenge', requireAuth, buddyRoute(async (req, res) => {
+  noStore(res);
+  json(res, await readChallenge(req.userId!, challengeClock.now()));
+}));
+
+socialRoomRouter.post('/me/challenge/entry', requireAuth, buddyRoute(async (req, res) => {
+  noStore(res);
+  json(res, await enterChallenge(req.userId!, challengeClock.now()));
+}));
+
+socialRoomRouter.post('/me/challenge/entries/:userId/cheer', requireAuth, buddyRoute(async (req, res) => {
+  noStore(res);
+  json(res, await cheerEntry(req.userId!, String(req.params.userId), challengeClock.now()));
 }));

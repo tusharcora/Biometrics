@@ -9,3 +9,5 @@ process.env.GOOGLE_CLIENT_ID ??= 'test-google-client-id';
 // writes no coin rows; coin tests set coinsConfig.launchedAt (or pass launchedAt) themselves. Always overridden, so a
 // dev shell's COINS_LAUNCHED_AT never leaks into a run.
 process.env.COINS_LAUNCHED_AT = '2100-01-01T00:00:00.000Z';
+// The challenge clock's dev pin (challenges/week.ts, PF4-F5) never reaches a run: tests move challengeClock directly.
+delete process.env.CHALLENGE_NOW;
