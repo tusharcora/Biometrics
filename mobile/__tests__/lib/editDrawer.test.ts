@@ -1,6 +1,7 @@
 import { drawerTabs, notPlaced, pieceTiles, setCards, styleRows, wornTiles } from '../../src/lib/room/edit/drawer';
 import { initEditor, editorReducer } from '../../src/lib/room/edit/editor';
 import { starterLayout } from '../../src/lib/room/layout';
+import { ROOM_COPY } from '../../src/lib/room/roomCopy';
 import { EMPTY_WORN } from '../../src/lib/room/loadout';
 import { STARTER_COUNTS } from '../../jest-mocks/cosmeticsFixture';
 
@@ -66,5 +67,6 @@ it('the Effects tab lists the effect pieces you own, each tagged and read as doi
   expect(tiles.map((t) => t.item).sort()).toEqual(['art.clock', 'item.radio', 'shelf.awards']);
   const radio = tiles.find((t) => t.item === 'item.radio')!;
   expect([radio.tag, radio.label]).toEqual(['Does something', 'Old radio, 1 in inventory, does something in the room']);
+  expect(radio.label).toBe(ROOM_COPY.drawer.tile.effect(ROOM_COPY.drawer.tile.piece('Old radio', 1, false))); // the joiner is copy (T9-FIX M4)
   expect(pieceTiles(s, 'all').find((t) => t.item === 'plant.fern')!.tag).toBeNull();
 });

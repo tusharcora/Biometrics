@@ -272,6 +272,8 @@ export const ROOM_COPY = {
     sizes: 'Room sizes',
     tile: {
       piece: (name: string, n: number, isNew: boolean) => `${name}, ${n ? `${n} in inventory` : 'all placed'}${isNew ? ', new' : ''}`,
+      /** An effect piece's tile, read aloud: "Old radio, 1 in inventory, does something in the room" (ruling 21). */
+      effect: (label: string) => `${label}, ${DOES_SOMETHING}`,
       style: (name: string, current: boolean) => (current ? `${name}, in your room` : `${name}. Use it`),
       worn: (name: string, wearing: boolean) => (wearing ? `${name}, wearing` : `${name}. Wear it`),
       locked: (name: string, unlock: string, progress: string) => (progress ? `${name}, locked. ${unlock}. ${progress}` : `${name}, locked. ${unlock}`),

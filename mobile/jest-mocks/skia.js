@@ -17,13 +17,18 @@ const Skia = {
     return paint;
   },
   Color: (c) => c,
-  Path: { Make: () => ({ addRect: jest.fn() }) },
+  Path: { Make: () => ({ addRect: jest.fn(), dispose: jest.fn() }) },
   XYWHRect: (x, y, width, height) => ({ x, y, width, height }),
 };
 
 const Canvas = ({ children, style, testID, pointerEvents }) => React.createElement(View, { testID: testID ?? 'skia-canvas', style, pointerEvents }, children);
 const Group = ({ children, transform, clip, invertClip }) =>
   React.createElement(View, { testID: 'skia-group', skiaTransform: transform, skiaClip: clip, skiaInvertClip: invertClip }, children);
-const Picture = ({ picture }) => React.createElement(View, { testID: 'skia-picture', picture });
+// Counts its renders, so a test can see which pictures a render draws again (RoomView's memoised scene).
+let pictureRenders = 0;
+const Picture = ({ picture }) => {
+  pictureRenders++;
+  return React.createElement(View, { testID: 'skia-picture', picture });
+};
 
-module.exports = { makeImageFromView: jest.fn(), ImageFormat: { JPEG: 3, PNG: 4, WEBP: 6 }, createPicture, Skia, Canvas, Group, Picture };
+module.exports = { __pictureRenders: () => pictureRenders, makeImageFromView: jest.fn(), ImageFormat: { JPEG: 3, PNG: 4, WEBP: 6 }, createPicture, Skia, Canvas, Group, Picture };

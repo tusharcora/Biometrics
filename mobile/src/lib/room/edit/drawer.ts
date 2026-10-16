@@ -56,7 +56,7 @@ export function pieceTiles(s: EditorState, tab: DrawerTab): DrawerTile[] {
       return {
         key: i.id, item: i.id, name: itemName(i.id), count, isNew, allPlaced: count === 0, locked: false,
         tag: fx ? ROOM_COPY.effects.fxTag : null,
-        label: `${D.tile.piece(spokenName(i.id), count, isNew)}${fx ? `, ${ROOM_COPY.effects.doesSomething}` : ''}`,
+        label: fx ? D.tile.effect(D.tile.piece(spokenName(i.id), count, isNew)) : D.tile.piece(spokenName(i.id), count, isNew),
         selected: s.picked === i.id,
       };
     });
