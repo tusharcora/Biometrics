@@ -9,11 +9,10 @@
 // had a room whose plants drew fully grown, so they stay fully grown for good (max of the counted stage and 5); no
 // plant ever shrinks. Accounts made after P3 grow from the counted stage. The account's createdAt stands for the
 // room's age: every account has a room (the starter one until a first save) and CosmeticLoadout keeps no creation time.
-import { localCivilDateOrUtc } from '../biometrics/civilDate';
+import { civilDateToUtcMidnight, localCivilDateOrUtc } from '../biometrics/civilDate';
 import { STEPS_GOAL } from '../coach/tools/metrics';
 import { RELEASE_LAUNCHED_AT } from '../cosmetics/catalogue';
 import { prisma } from '../db/client';
-import { loadRecapData } from '../recap/data';
 
 export type PetEnergy = 'nap' | 'wander' | 'play';
 export interface Living {
@@ -27,6 +26,7 @@ export const PLANT_NIGHTS_PER_STAGE = 7;
 export const MAX_AWARDS = 8;
 /** P3's launch: a room older than this keeps full-grown plants (ruling PF3-PLANTS-2). */
 const P3_LAUNCHED_AT = RELEASE_LAUNCHED_AT[5];
+const DAY_MS = 24 * 60 * 60 * 1000;
 
 export function plantStageOf(nights: number): Living['plantStage'] {
   return Math.min(5, 1 + Math.floor(Math.max(0, nights) / PLANT_NIGHTS_PER_STAGE)) as Living['plantStage'];
@@ -46,9 +46,16 @@ export async function readLiving(userId: string, now: Date): Promise<Living> {
   const user = await prisma.user.findUnique({ where: { id: userId }, select: { timezone: true, createdAt: true } });
   const tz = user?.timezone ?? 'UTC';
   const today = localCivilDateOrUtc(now, tz);
-  const [nights, data, rows] = await Promise.all([
-    prisma.coinEvent.count({ where: { userId, kind: 'sleep_goal' } }),
-    loadRecapData(userId, tz, today, today, { bedtimes: false }),
+  const from = civilDateToUtcMidnight(today);
+  const [nights, stepsRow, rows] = await Promise.all([
+    // Every sleep-goal night, 0-coin rows included; the key prefix makes this a range on the (userId, sourceKey) index.
+    prisma.coinEvent.count({ where: { userId, sourceKey: { startsWith: 'sleep_goal:' } } }),
+    // Today's STEPS rollup only, read the way loadRecapData reads it (the local date's UTC-midnight day, a positive
+    // value), without its score and session reads.
+    prisma.biometricRecord.findFirst({
+      where: { userId, metricType: 'STEPS', recordedAt: { gte: from, lt: new Date(from.getTime() + DAY_MS) }, value: { gt: 0 } },
+      select: { value: true },
+    }),
     prisma.achievement.findMany({
       where: { userId },
       select: { level: true },
@@ -59,7 +66,7 @@ export async function readLiving(userId: string, now: Date): Promise<Living> {
   const beforeP3 = !!user && user.createdAt < P3_LAUNCHED_AT;
   return {
     plantStage: plantStageFor(nights, beforeP3),
-    petEnergy: petEnergyOf(data.get(today)?.steps ?? 0),
+    petEnergy: petEnergyOf(stepsRow?.value ?? 0),
     awards: rows.map((r) => r.level),
   };
 }

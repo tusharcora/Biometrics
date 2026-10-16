@@ -11,6 +11,7 @@ import { EMPTY_WORN, RELEASE_LAUNCHED_AT } from '../../src/cosmetics/catalogue';
 import { starterLayout } from '../../src/room/convert';
 import * as livingModule from '../../src/room/living';
 import { MAX_AWARDS, petEnergyOf, plantStageFor, plantStageOf, readLiving } from '../../src/room/living';
+import { fund } from '../coins/helpers';
 
 beforeAll(() => migrateTestDb());
 afterAll(async () => {
@@ -18,7 +19,8 @@ afterAll(async () => {
   await connection.quit();
 });
 
-const NOW = new Date('2026-10-24T09:00:00.000Z');
+// 12:00 UTC on 24 Oct is 01:00 on 25 Oct in Auckland (NZDT): the zone test can tell the two dates apart.
+const NOW = new Date('2026-10-24T12:00:00.000Z');
 const P3 = RELEASE_LAUNCHED_AT[5];
 
 async function nights(userId: string, n: number) {
@@ -33,7 +35,7 @@ async function nights(userId: string, n: number) {
 async function steps(userId: string, tz: string, value: number) {
   await prisma.biometricRecord.create({ data: { userId, metricType: 'STEPS', value, recordedAt: civilDateToUtcMidnight(localCivilDateOrUtc(NOW, tz)) } });
 }
-/** An account made after P3 launched (ruling PF3-PLANTS: its plants start at stage 1). */
+/** An account made after P3 launched (ruling PF3-PLANTS-2: its plants grow from the counted stage). */
 async function afterP3(userId: string) {
   await prisma.user.update({ where: { id: userId }, data: { createdAt: new Date(P3.getTime() + 60_000) } });
 }
@@ -52,6 +54,9 @@ describe('the living room (spec §8.3, P3 ruling 6)', () => {
     await afterP3(user.id);
     await nights(user.id, 15);
     await steps(user.id, 'Pacific/Auckland', 4200);
+    // The UTC date's row (24 Oct) is not today in Auckland: read by mistake, the cat would play.
+    await prisma.biometricRecord.create({ data: { userId: user.id, metricType: 'STEPS', value: 20000, recordedAt: civilDateToUtcMidnight('2026-10-24') } });
+    expect(localCivilDateOrUtc(NOW, 'Pacific/Auckland')).toBe('2026-10-25');
     const families = ['SLEEP_GOAL', 'STEADY_BEDTIME', 'STEP_GOAL', 'CHECK_IN', 'BEST_RECOVERY_WEEK'] as const;
     for (const [k, family] of families.entries()) {
       await level(user.id, family, 1, NOW);
@@ -73,10 +78,14 @@ describe('the living room (spec §8.3, P3 ruling 6)', () => {
     const { user, headers } = await coinUser();
     await afterP3(user.id);
     await nights(user.id, 7);
+    // Today's steps on the route's own clock: a band in the body, never the number.
+    const tz = (await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).timezone ?? 'UTC';
+    await prisma.biometricRecord.create({ data: { userId: user.id, metricType: 'STEPS', value: 4200, recordedAt: civilDateToUtcMidnight(localCivilDateOrUtc(new Date(), tz)) } });
     const res = await (await api()).get('/me/cosmetics').set(headers);
     expect(res.status).toBe(200);
-    expect(res.body.living).toEqual({ plantStage: 2, petEnergy: 'nap', awards: [] });
+    expect(res.body.living).toEqual({ plantStage: 2, petEnergy: 'wander', awards: [] });
     expect(JSON.stringify(res.body)).not.toMatch(/"(steps|minutes|sleepMinutes|value)"/);
+    expect(JSON.stringify(res.body)).not.toContain('4200');
   });
 });
 
@@ -128,6 +137,16 @@ describe('a failed living read (ruling PF3-LIVING)', () => {
     expect(res.body.layout).toEqual(starterLayout());
     expect(lines().map((l) => JSON.parse(l))).toEqual([{ event: 'room.living_failed', error: 'TypeError' }]);
     expect(lines().join('')).not.toContain(user.id);
+  });
+
+  it('a room expand still grows and answers without `living`', async () => {
+    const { user, headers } = await coinUser();
+    jest.spyOn(console, 'info').mockImplementation(() => {});
+    await fund(user.id, 600);
+    await level(user.id, 'CHECK_IN', 2, new Date(Date.now() - 1000));
+    const res = await (await api()).post('/me/room/expand').set(headers).send({ requestId: '6f1d3a52-8f4e-4c39-9a51-2c6b9d0e7a11', toTier: 2 });
+    expect([res.status, res.body.tier, 'living' in res.body]).toEqual([200, 2, false]);
+    expect(lines()).toHaveLength(1);
   });
 
   it('a save still saves and answers without `living`', async () => {

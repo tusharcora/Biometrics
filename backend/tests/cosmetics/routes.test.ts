@@ -33,7 +33,7 @@ describe('GET /me/cosmetics', () => {
     expect(res.body).toEqual({
       catalogueVersion: 1, owned: expect.any(Array), fresh: [], worn: { ...EMPTY_WORN }, version: 0,
       counters: { recapsRead: 0, buddyCheers: 0 }, layout: starterLayout(), tier: 1, cap: 40, counts: expect.any(Object), welcomed: false,
-      // P3 (spec §8.3): the stage depends on the account's age against the P3 launch (ruling PF3-PLANTS).
+      // P3 (spec §8.3): the stage depends on the account's age against the P3 launch (ruling PF3-PLANTS-2).
       living: { plantStage: expect.any(Number), petEnergy: 'nap', awards: [] },
     });
     expect(res.body.owned).toHaveLength(20);
