@@ -5,10 +5,10 @@
 // logged, never in a buddy DTO, never in a coach context (tests/room/noCoachImport.test.ts). The 22:00 nap is the
 // app's, from the device clock (P3 plan ruling 6).
 //
-// Ruling PF3-PLANTS lives here, not in the app: an account made before P3 launched (RELEASE_LAUNCHED_AT[5]) already
-// had a room whose plants drew fully grown, so they stay at stage 5 until its first 7 counted nights, and then follow
-// the count; no plant shrinks on launch day. The account's createdAt stands for the room's age: every account has a
-// room (the starter one until a first save) and CosmeticLoadout keeps no creation time.
+// Ruling PF3-PLANTS-2 lives here, not in the app: an account made before P3 launched (RELEASE_LAUNCHED_AT[5]) already
+// had a room whose plants drew fully grown, so they stay fully grown for good (max of the counted stage and 5); no
+// plant ever shrinks. Accounts made after P3 grow from the counted stage. The account's createdAt stands for the
+// room's age: every account has a room (the starter one until a first save) and CosmeticLoadout keeps no creation time.
 import { localCivilDateOrUtc } from '../biometrics/civilDate';
 import { STEPS_GOAL } from '../coach/tools/metrics';
 import { RELEASE_LAUNCHED_AT } from '../cosmetics/catalogue';
@@ -25,16 +25,16 @@ export interface Living {
 
 export const PLANT_NIGHTS_PER_STAGE = 7;
 export const MAX_AWARDS = 8;
-/** P3's launch: a room older than this kept full-grown plants (ruling PF3-PLANTS). */
+/** P3's launch: a room older than this keeps full-grown plants (ruling PF3-PLANTS-2). */
 const P3_LAUNCHED_AT = RELEASE_LAUNCHED_AT[5];
 
 export function plantStageOf(nights: number): Living['plantStage'] {
   return Math.min(5, 1 + Math.floor(Math.max(0, nights) / PLANT_NIGHTS_PER_STAGE)) as Living['plantStage'];
 }
 
-/** plantStageOf, except a room from before P3 stays full grown until its first stage is earned (ruling PF3-PLANTS). */
+/** plantStageOf, except a room from before P3 is never smaller than full growth (ruling PF3-PLANTS-2). */
 export function plantStageFor(nights: number, roomBeforeP3: boolean): Living['plantStage'] {
-  return roomBeforeP3 && nights < PLANT_NIGHTS_PER_STAGE ? 5 : plantStageOf(nights);
+  return roomBeforeP3 ? (Math.max(plantStageOf(nights), 5) as Living['plantStage']) : plantStageOf(nights);
 }
 
 export function petEnergyOf(steps: number): PetEnergy {

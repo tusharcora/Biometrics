@@ -49,6 +49,7 @@ describe('the living room (spec §8.3, P3 ruling 6)', () => {
 
   it('reads the nights, today\'s steps in the user\'s own zone and the award levels, highest first, at most 8', async () => {
     const { user } = await coinUser({ timezone: 'Pacific/Auckland' });
+    await afterP3(user.id);
     await nights(user.id, 15);
     await steps(user.id, 'Pacific/Auckland', 4200);
     const families = ['SLEEP_GOAL', 'STEADY_BEDTIME', 'STEP_GOAL', 'CHECK_IN', 'BEST_RECOVERY_WEEK'] as const;
@@ -70,6 +71,7 @@ describe('the living room (spec §8.3, P3 ruling 6)', () => {
 
   it('GET /me/cosmetics carries it, and no health value anywhere in the body', async () => {
     const { user, headers } = await coinUser();
+    await afterP3(user.id);
     await nights(user.id, 7);
     const res = await (await api()).get('/me/cosmetics').set(headers);
     expect(res.status).toBe(200);
@@ -78,26 +80,33 @@ describe('the living room (spec §8.3, P3 ruling 6)', () => {
   });
 });
 
-describe('plants in a room from before P3 (ruling PF3-PLANTS)', () => {
-  it('stay fully grown until 7 counted nights, then follow the count', () => {
-    expect([0, 6, 7, 14, 28].map((n) => plantStageFor(n, true))).toEqual([5, 5, 2, 3, 5]);
-    expect([0, 6, 7, 14, 28].map((n) => plantStageFor(n, false))).toEqual([1, 1, 2, 3, 5]);
+describe('plants in a room from before P3 (ruling PF3-PLANTS-2)', () => {
+  it('stay fully grown for good, while a room made after P3 grows with the count', () => {
+    expect([0, 6, 7, 14, 40].map((n) => plantStageFor(n, true))).toEqual([5, 5, 5, 5, 5]);
+    expect([0, 6, 7, 14, 40].map((n) => plantStageFor(n, false))).toEqual([1, 1, 2, 3, 5]);
   });
 
-  it('an account made before the P3 launch reads stage 5 with 6 nights, and 2 at the 7th', async () => {
+  it('an account made before the P3 launch reads stage 5 at 0, 7 and 40 nights: never a shrink', async () => {
     const { user } = await coinUser();
     await prisma.user.update({ where: { id: user.id }, data: { createdAt: new Date(P3.getTime() - 60_000) } });
-    await nights(user.id, 6);
     expect((await readLiving(user.id, NOW)).plantStage).toBe(5);
-    await prisma.coinEvent.create({ data: { userId: user.id, kind: 'sleep_goal', sourceKey: 'sleep_goal:2026-10-20', amount: 0, capDay: day('2026-10-20') } });
-    expect((await readLiving(user.id, NOW)).plantStage).toBe(2);
+    await nights(user.id, 7);
+    expect((await readLiving(user.id, NOW)).plantStage).toBe(5);
+    await prisma.coinEvent.deleteMany({ where: { userId: user.id } });
+    await nights(user.id, 40);
+    expect((await readLiving(user.id, NOW)).plantStage).toBe(5);
   });
 
-  it('an account made after the P3 launch starts at stage 1', async () => {
+  it('an account made after the P3 launch grows: 1 at 6 nights, 2 at 7, 5 at 40', async () => {
     const { user } = await coinUser();
     await afterP3(user.id);
     await nights(user.id, 6);
     expect((await readLiving(user.id, NOW)).plantStage).toBe(1);
+    await prisma.coinEvent.create({ data: { userId: user.id, kind: 'sleep_goal', sourceKey: 'sleep_goal:2026-10-20', amount: 0, capDay: day('2026-10-20') } });
+    expect((await readLiving(user.id, NOW)).plantStage).toBe(2);
+    await prisma.coinEvent.deleteMany({ where: { userId: user.id } });
+    await nights(user.id, 40);
+    expect((await readLiving(user.id, NOW)).plantStage).toBe(5);
   });
 });
 
