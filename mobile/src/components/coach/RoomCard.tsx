@@ -34,7 +34,7 @@ const WOOD_LINE = '#3A2D23';
 // answered it sits under the frame and KIP says "WELCOME HOME!" (spec 2026-10-15 §11.1, plan ruling 18); both of its
 // buttons record it for every device. Coins that landed since the last look show once in KIP's bubble, with a line
 // under the room (spec 2026-10-15 §6.7).
-export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, holdCoins, holdClock, onOpenRecovery, onDecorate, onPlaceLantern, footer, children, onLayout }: {
+export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, holdCoins, holdClock, kipWalks, onOpenRecovery, onDecorate, onPlaceLantern, footer, children, onLayout }: {
   stage: KipStage;
   look?: KipLook;
   window: { weather: RoomWeather; night: boolean };
@@ -45,6 +45,8 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
   holdCoins?: boolean;
   /** The card is scrolled under the collapsed header: its clock keeps its minute (ruling T5-FIX). */
   holdClock?: boolean;
+  /** The page's part of when KIP may walk (spec §9.2): no turn running and the prompt bar blurred. */
+  kipWalks?: boolean;
   onOpenRecovery: () => void;
   /** Long-press on the room opens the editor (spec 2026-10-15 §5.1). */
   onDecorate?: () => void;
@@ -64,6 +66,9 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
   // Coins land in KIP's bubble (spec §6.7, ruling 12) only once it is really on screen (ruling PF-F13): the room drawn,
   // the page focused, never over the welcome and never while the editor covers the room.
   const landing = useCoinsLanding(stage.id !== 'loading' && inner > 0 && focused && !paused && !holdCoins && !welcome);
+  // KIP walks between answers only in the idle stage with nothing in its bubble, and only while the card is really in
+  // view: not under the editor, the collapsed header or a held coin landing (ruling 13).
+  const walks = !!kipWalks && stage.id === 'idle' && !stage.bubble && !welcome && !landing && !paused && !holdCoins && !holdClock;
   const landLine = landing ? ROOM_COPY.coins.landLine(ROOM_COPY.coins.landed[landing.kind], landing.more) : '';
   return (
     <Card testID="kip-room-card" className="gap-3 p-3.5" onLayout={onLayout}>
@@ -98,6 +103,8 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
                   reduceMotion={reduceMotion}
                   paused={paused}
                   holdClock={holdClock}
+                  kipWalks={walks}
+                  idle={stage.id === 'idle'}
                   accessibilityLabel={roomLabel(stage.id, window)}
                 />
               ) : null}

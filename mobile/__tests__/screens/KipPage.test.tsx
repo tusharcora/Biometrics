@@ -126,6 +126,23 @@ describe('the KIP page (W7)', () => {
     expect(s.getByTestId('kip-status-line')).toHaveTextContent('In the pocket room');
   });
 
+  it('KIP walks between answers only while idle with the prompt bar blurred (spec §9.2, Review Focus 2)', async () => {
+    const turn = openTurn(stream);
+    const s = await openChat();
+    await ask(s, 'How did I sleep?');
+    room(s);
+    expect(s.getByTestId('kip-room').props.walks).toBe(''); // a turn is running
+    await turn.emit({ type: 'text', sentence: 'Mostly clear skies.' });
+    expect(s.getByTestId('kip-room').props.walks).toBe('');
+    await turn.finish(doneEvent());
+    expect(s.getByTestId('kip-room').props.walks).toBe('walks');
+    expect(s.getByTestId('kip-room').props.idle).toBe('idle');
+    fireEvent(s.getByTestId('coach-input'), 'focus');
+    expect(s.getByTestId('kip-room').props.walks).toBe('');
+    fireEvent(s.getByTestId('coach-input'), 'blur');
+    expect(s.getByTestId('kip-room').props.walks).toBe('walks');
+  });
+
   it('an error: KIP shrugs "OOPS" and the card is headed "KIP lost the thread"', async () => {
     stream.mockRejectedValueOnce(new Error('boom'));
     const s = await openChat();

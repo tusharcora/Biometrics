@@ -97,6 +97,8 @@ export function CoachScreen() {
 
   const [phase, setPhase] = useState<Phase>('loading');
   const [input, setInput] = useState(prefill ?? '');
+  // The prompt bar has focus: KIP stays at its desk (spec 2026-10-15 §9.2).
+  const [promptFocused, setPromptFocused] = useState(false);
   const [engine, setEngine] = useState<CoachEngineDTO>('local');
   const [today, setToday] = useState<TodaySummaryDTO | null>(null);
   const [todayLoading, setTodayLoading] = useState(true);
@@ -518,6 +520,8 @@ export function CoachScreen() {
       holdCoins={!shrunkKnown || collapsed === 'in'}
       // Scrolled under the collapsed header, only the header's thumbnail turns its clock (ruling T5-FIX).
       holdClock={collapsed === 'in'}
+      // KIP walks between answers only with no turn running and the prompt bar blurred (spec 2026-10-15 §9.2).
+      kipWalks={!promptFocused && !streaming}
       onOpenRecovery={openRecovery}
       onDecorate={openDecorate}
       onPlaceLantern={placeLantern}
@@ -769,6 +773,7 @@ export function CoachScreen() {
               onStop={stop}
               placeholder={KIP_COPY.promptPlaceholder}
               inputLabel={KIP_COPY.promptLabel}
+              onFocusChange={setPromptFocused}
             />
           </View>
         </KeyboardAvoidingView>

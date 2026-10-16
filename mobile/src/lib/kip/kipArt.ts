@@ -25,7 +25,7 @@ export const KIP_COLOURS = {
 export type KipColour = keyof typeof KIP_COLOURS;
 export const DEFAULT_KIP_COLOUR: KipColour = 'coral';
 
-export const KIP_POSES = ['rest', 'wave', 'cheer', 'bottle', 'coffee', 'stretch', 'type', 'think', 'point', 'shrug'] as const;
+export const KIP_POSES = ['rest', 'wave', 'cheer', 'bottle', 'coffee', 'stretch', 'type', 'think', 'point', 'shrug', 'water'] as const;
 export type KipPose = (typeof KIP_POSES)[number];
 export const KIP_MOODS = ['idle', 'curious', 'sleepy', 'proud', 'startled', 'glance', 'determined'] as const;
 export type KipMood = (typeof KIP_MOODS)[number];
@@ -68,7 +68,7 @@ type EyeMode = 'shut' | 'up' | 'wide' | 'glance';
 type HeldItem = { at: [number, number]; rows: readonly string[]; pal: Record<string, string> };
 
 // '@b' and '@s' take the body and shade colours.
-const HELD: Record<'bottle' | 'coffee', HeldItem> = {
+const HELD: Record<'bottle' | 'coffee' | 'can', HeldItem> = {
   bottle: {
     at: [0, 8],
     rows: ['cC..', 'Lw..', 'LwBB', 'lb..', 'lb..'],
@@ -78,6 +78,12 @@ const HELD: Record<'bottle' | 'coffee', HeldItem> = {
     at: [12, 7],
     rows: ['..s.', '.s..', '..s.', 'Sccc', '.lll', '.ccC'],
     pal: { s: '#CBD5E1', c: '#F8FAFC', C: '#CBD5E1', l: '#92400E', S: '@s' },
+  },
+  // A small watering can held out at the right (spec 2026-10-15 §9.2 "an arm out with a held can"), over the hand.
+  can: {
+    at: [12, 5],
+    rows: ['.s..', 'cccS', 'cccc', '.cc.'],
+    pal: { s: '#94A3B8', c: '#38BDF8', S: '#0EA5E9' },
   },
 };
 
@@ -109,6 +115,8 @@ const POSES: Record<KipPose, PoseDef> = {
   point: { arms: [[3, 8, 'b'], [2, 8, 'b'], [1, 8, 'b']] },
   // Both arms out and up.
   shrug: { arms: [[3, 8, 'b'], [2, 7, 'b'], [12, 8, 's'], [13, 7, 's']] },
+  // Watering a plant (P3 ruling 14): one arm out at the right, the can held over the hand; legs untouched.
+  water: { arms: [[12, 9, 's'], [13, 9, 's']], held: 'can' },
 };
 
 /** How many loop frames a pose has (§4: `type` alternates its arms over three). */

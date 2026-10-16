@@ -5,6 +5,8 @@ import type { Placement, RoomLayout } from '../../src/lib/room/iso/geometry';
 import { drawIsoFramesEach, drawIsoStatic, drawKipLayer } from '../../src/lib/room/iso/room';
 import { starterLayout } from '../../src/lib/room/layout';
 import { KIP_MOVER, MOVER_PREFIX, kipTileCell, moverOrder, pieceTileCell } from '../../src/lib/room/iso/movers';
+import { NEUTRAL_LIVING, roomEffects } from '../../src/lib/room/effects';
+import { headsLeft, planTrip, posAt } from '../../src/lib/room/live/walk';
 
 // Spec 2026-10-15 §3.7 budget, for a full 9 × 9 room of 90 pieces at night: every piece picture cold, the rebuild
 // after a drop, and one frame's compose; and with movers (P3 ruling 11): the cold build with a cat left out, and a
@@ -48,12 +50,20 @@ run('iso room build time', () => {
       kipTileCell(m.grid, [4.5, 5]);
       pieceTileCell(m.grid, [6, 7]);
     });
+    // KIP's walk (ruling 13): planning a trip (once per 20-40 s; this packed room is the worst case, every target
+    // searched and none reachable), and a walk step's own work besides the order.
+    const fx = roomEffects(layout, 3, NEUTRAL_LIVING, null);
+    const whole = { x: -1000, y: -1000, w: 3000, h: 3000 };
+    const trip = median(() => planTrip(layout, 3, fx, whole, null, () => 0.5));
+    const path: [number, number][] = [[3, 1], [3, 2], [4, 2], [4, 3]];
+    const walkStep = median(() => { const a = posAt(path, 3, 1); headsLeft(a.pos, posAt(path, 4, 1).pos); kipTileCell(m.grid, a.pos); });
     console.info(JSON.stringify({
       event: 'room.iso.build', pieces: layout.pieces.length, runs: m.runs.length, coldMs: cold, rebuildMs: rebuild, frameMs: frame,
-      coldMoversMs: coldMovers, orderMs: order, moverFrameMs: moverFrame,
+      coldMoversMs: coldMovers, orderMs: order, moverFrameMs: moverFrame, tripMs: trip, walkStepMs: walkStep,
     }));
     expect(layout.pieces).toHaveLength(90);
     expect(m.runs.length).toBeGreaterThan(70);
-    for (const ms of [cold, rebuild, frame, coldMovers, order, moverFrame]) expect(Number.isFinite(ms) && ms > 0).toBe(true);
+    for (const ms of [cold, rebuild, frame, coldMovers, order, moverFrame, trip]) expect(Number.isFinite(ms) && ms > 0).toBe(true);
+    expect(Number.isFinite(walkStep)).toBe(true);
   });
 });

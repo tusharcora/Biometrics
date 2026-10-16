@@ -19,6 +19,7 @@ import { useFrameClock } from '../../lib/useFrameClock';
 import { useScreenFocused } from '../../lib/useScreenFocused';
 import type { Living } from '../../lib/room/effects';
 import { useRoomEffects } from './useRoomEffects';
+import { useKipWalk, walkMover } from '../../lib/room/live/useKipWalk';
 
 export const LOOP_MS = 400;
 // The bubble is decoration over a fixed crop, so its text grows only a little with Dynamic Type.
@@ -73,8 +74,13 @@ export interface RoomViewProps {
   holdClock?: boolean;
   /** The living room (spec §8.3); absent, the neutral room (a visit, the share card, a test). */
   living?: Living;
-  /** KIP off its seat, walking or at a target (Task 10 sets it from its own walk; a test may pass it). */
+  /** KIP off its seat, walking or at a target (set from the view's own walk when absent; a test may pass it). */
   kipMover?: KipMover | null;
+  /** The KIP page's room card while KIP may walk (spec §9.2: idle, prompt blurred, no bubble, in view); the view adds
+   * focus, Reduce Motion, the editor's pause and its own bubble. */
+  kipWalks?: boolean;
+  /** The KIP page's idle stage: with a plant in the room, loop frame 2 smiles (ruling 9). */
+  idle?: boolean;
   /** Pieces drawn as movers (Task 11 sets the wandering cat; a test may pass them). */
   pieceMovers?: readonly PieceMover[];
   bubble: string | null;
@@ -110,7 +116,8 @@ const shift = (dx: number, dy: number, cellPt: number) => [{ translateX: dx * ce
 // and back records nothing new for the room either (T9-FIX M2). What the committed tree no longer draws is released
 // after the commit (PF3-DISPOSE). The scene's elements are memoised, so a frame-clock render between two loop frames
 // changes nothing on the canvas (T9-FIX M3). The loops stop when the tab is not focused, under Reduce Motion, or while
-// paused.
+// paused. On the KIP page KIP walks between answers (kipWalks, ruling 13) as a mover from its own walk (useKipWalk):
+// any of those stops, or a bubble, puts it back on its seat in the same render.
 export function RoomView(props: RoomViewProps) {
   const { layout, tier, weather, night, colour, worn, pose, mood, facing, screen, crop, cellPt, bubble, reduceMotion } = props;
   const focused = useScreenFocused();
@@ -138,7 +145,13 @@ export function RoomView(props: RoomViewProps) {
   const given = props.room && !moverIds.length ? props.room : null;
   const room = useMemo(() => given ?? drawIsoStatic(input), [staticKey, given]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const kipMover = props.kipMover ?? null;
+  // The crop in room cells, so KIP only walks to what the card shows (spec §9.2), and its walk between answers.
+  const box = props.box === 'thumb' ? room.thumb : room.focus;
+  const offset = props.offset ?? isoCrop({ width: crop.width, height: crop.height, cellPt, box, room: room.grid });
+  const view = { x: -offset.x / cellPt, y: -offset.y / cellPt, w: crop.width / cellPt, h: crop.height / cellPt };
+  const walk = useKipWalk({ enabled: !!props.kipWalks && !still && !bubble, layout, tier, effects, view });
+  const walked = useMemo(() => walkMover(walk), [walk]);
+  const kipMover = props.kipMover ?? walked;
   const walking = !!kipMover;
   const movers = walking || pieceMovers.length > 0;
 
@@ -154,9 +167,12 @@ export function RoomView(props: RoomViewProps) {
     ? { colour, pose: kipMover.pose, mood: 'glance', worn, facing: 'you', flip: kipMover.flip }
     : { colour, pose, mood, worn, ...(facing ? { facing } : {}) };
   const seat = room.kipSeat;
-  const poseKey = `${kipLayerKey({ ...kip, frame: 0 })}#${seat.style}@${seat.x},${seat.y},${seat.deskSide}`;
+  // With a plant in the room, the idle loop's frame 2 smiles (eyes up) while KIP is at its seat (ruling 9): one more
+  // set of KIP's three frames, recorded with the pose, never on a tick.
+  const smile = !!props.idle && effects.plant && !kipMover;
+  const poseKey = `${kipLayerKey({ ...kip, frame: 0 })}#${seat.style}@${seat.x},${seat.y},${seat.deskSide}#${smile ? 's' : ''}`;
   const kipRects = useMemo(
-    () => [0, 1, 2].map((f) => drawKipLayer({ ...kip, frame: f }, seat)) as [Rects, Rects, Rects],
+    () => [0, 1, 2].map((f) => drawKipLayer({ ...kip, frame: f, ...(smile && f === 2 ? { mood: 'curious' as const } : {}) }, seat)) as [Rects, Rects, Rects],
     [poseKey], // eslint-disable-line react-hooks/exhaustive-deps
   );
 
@@ -291,8 +307,6 @@ export function RoomView(props: RoomViewProps) {
     </Group>
   ) : seatedFrames ? <Picture picture={seatedFrames[frame]!} /> : null;
 
-  const box = props.box === 'thumb' ? room.thumb : room.focus;
-  const offset = props.offset ?? isoCrop({ width: crop.width, height: crop.height, cellPt, box, room: room.grid });
   useImperativeHandle(props.ref, () => ({
     pieceAtPoint: (x: number, y: number) => pieceAt(room.hits, Math.floor((x - offset.x) / cellPt), Math.floor((y - offset.y) / cellPt)),
   }), [room, offset.x, offset.y, cellPt]);

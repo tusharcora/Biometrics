@@ -281,3 +281,43 @@ it('hands its clock hold to the room (scrolled under the collapsed header, rulin
   expect(renderCard().getByTestId('kip-room').props.holdClock).toBe(false);
   expect(renderCard({ holdClock: true }).getByTestId('kip-room').props.holdClock).toBe(true);
 });
+
+describe('KIP walking (spec §9.2, rulings 9 and 13)', () => {
+  const IDLE = kipStage({ ...INPUT, waiting: false, streaming: false, empty: false });
+
+  it('lets KIP walk only in the idle stage, with no bubble, and passes the idle loop', () => {
+    const walking = renderCard({ stage: IDLE, kipWalks: true });
+    expect(walking.getByTestId('kip-room').props.walks).toBe('walks');
+    expect(walking.getByTestId('kip-room').props.idle).toBe('idle');
+    walking.unmount();
+    const thinking = renderCard({ stage: STAGE, kipWalks: true });
+    expect(thinking.getByTestId('kip-room').props.walks).toBe('');
+    expect(thinking.getByTestId('kip-room').props.idle).toBe('');
+    thinking.unmount();
+    expect(renderCard({ stage: IDLE }).getByTestId('kip-room').props.walks).toBe('');
+  });
+
+  it('holds KIP at its desk while the editor covers the room, the card is under the header or coins wait (holds)', () => {
+    for (const hold of [{ paused: true }, { holdClock: true }, { holdCoins: true }]) {
+      const s = renderCard({ stage: IDLE, kipWalks: true, ...hold });
+      expect(s.getByTestId('kip-room').props.walks).toBe('');
+      s.unmount();
+    }
+  });
+
+  it('holds KIP at its desk while the welcome or landing coins show in its bubble', async () => {
+    (fetchCoins as jest.Mock).mockResolvedValue(LANDING);
+    await act(async () => { await loadCoins(); });
+    const landing = renderCard({ stage: IDLE, kipWalks: true });
+    await act(async () => undefined);
+    expect(landing.getByTestId('kip-room').props.room.split(':')[2]).toBe('+25!');
+    expect(landing.getByTestId('kip-room').props.walks).toBe('');
+    landing.unmount();
+    resetCoins();
+    (fetchCosmetics as jest.Mock).mockResolvedValue(cosmeticsDTO({ welcomed: false }));
+    await act(async () => { await loadCosmetics(); });
+    const welcome = renderCard({ stage: IDLE, kipWalks: true });
+    expect(welcome.getByTestId('kip-room').props.room.split(':')[2]).toBe('WELCOME HOME!');
+    expect(welcome.getByTestId('kip-room').props.walks).toBe('');
+  });
+});
