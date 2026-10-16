@@ -4,9 +4,11 @@ import { clearPieceCache } from '../../src/lib/room/iso/art';
 import type { Placement, RoomLayout } from '../../src/lib/room/iso/geometry';
 import { drawIsoFramesEach, drawIsoStatic, drawKipLayer } from '../../src/lib/room/iso/room';
 import { starterLayout } from '../../src/lib/room/layout';
+import { KIP_MOVER, MOVER_PREFIX, kipTileCell, moverOrder, pieceTileCell } from '../../src/lib/room/iso/movers';
 
 // Spec 2026-10-15 §3.7 budget, for a full 9 × 9 room of 90 pieces at night: every piece picture cold, the rebuild
-// after a drop, and one frame's compose. On-device targets are checked by hand (Task 16); this measures the pure build
+// after a drop, and one frame's compose; and with movers (P3 ruling 11): the cold build with a cat left out, and a
+// walk frame's own work (the depth order with KIP and the cat at their tiles, and where they stand). On-device targets are checked by hand (Task 16); this measures the pure build
 // in Node and logs it (run with ROOM_PERF=1). A measurement, not a gate (Spec B ruling P32). Never logs user data.
 const run = process.env.ROOM_PERF === '1' ? describe : describe.skip;
 
@@ -38,8 +40,20 @@ run('iso room build time', () => {
     const s = drawIsoStatic(input);
     const kip = drawKipLayer({ colour: 'coral', pose: 'type', mood: 'idle', worn: EMPTY_WORN }, s.kipSeat);
     const frame = median(() => drawIsoFramesEach(s, { night: true, colour: 'coral', screen: 'dots' }, [kip, kip, kip]));
-    console.info(JSON.stringify({ event: 'room.iso.build', pieces: layout.pieces.length, coldMs: cold, rebuildMs: rebuild, frameMs: frame }));
+    const coldMovers = median(() => { clearPieceCache(); drawIsoStatic({ ...input, movers: ['f0'] }); });
+    const m = drawIsoStatic({ ...input, movers: ['f0'] });
+    const order = median(() => moverOrder(m.runs, [{ key: KIP_MOVER, depth: [4, 4] }, { key: `${MOVER_PREFIX}f0`, depth: [6, 6] }], null));
+    const moverFrame = median(() => {
+      moverOrder(m.runs, [{ key: KIP_MOVER, depth: [4, 5] }, { key: `${MOVER_PREFIX}f0`, depth: [6, 7] }], null);
+      kipTileCell(m.grid, [4.5, 5]);
+      pieceTileCell(m.grid, [6, 7]);
+    });
+    console.info(JSON.stringify({
+      event: 'room.iso.build', pieces: layout.pieces.length, runs: m.runs.length, coldMs: cold, rebuildMs: rebuild, frameMs: frame,
+      coldMoversMs: coldMovers, orderMs: order, moverFrameMs: moverFrame,
+    }));
     expect(layout.pieces).toHaveLength(90);
-    for (const ms of [cold, rebuild, frame]) expect(Number.isFinite(ms) && ms > 0).toBe(true);
+    expect(m.runs.length).toBeGreaterThan(70);
+    for (const ms of [cold, rebuild, frame, coldMovers, order, moverFrame]) expect(Number.isFinite(ms) && ms > 0).toBe(true);
   });
 });

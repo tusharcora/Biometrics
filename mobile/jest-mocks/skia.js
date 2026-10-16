@@ -22,7 +22,8 @@ const Skia = {
 };
 
 const Canvas = ({ children, style, testID, pointerEvents }) => React.createElement(View, { testID: testID ?? 'skia-canvas', style, pointerEvents }, children);
-const Group = ({ children, transform }) => React.createElement(View, { testID: 'skia-group', skiaTransform: transform }, children);
+const Group = ({ children, transform, clip, invertClip }) =>
+  React.createElement(View, { testID: 'skia-group', skiaTransform: transform, skiaClip: clip, skiaInvertClip: invertClip }, children);
 const Picture = ({ picture }) => React.createElement(View, { testID: 'skia-picture', picture });
 
 module.exports = { makeImageFromView: jest.fn(), ImageFormat: { JPEG: 3, PNG: 4, WEBP: 6 }, createPicture, Skia, Canvas, Group, Picture };

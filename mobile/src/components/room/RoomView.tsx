@@ -1,17 +1,20 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
 import { View } from 'react-native';
-import { Canvas, Group, Picture } from '@shopify/react-native-skia';
+import { Canvas, Group, Picture, Skia, type SkPicture } from '@shopify/react-native-skia';
 import { Text } from '../ui/text';
 import { record, useDisposed } from './pictures';
+import { PictureLru, RunPictures } from './pictureCache';
 import type { Rects } from '../../lib/room/paint';
-import type { MonitorScreen } from '../../lib/room/items';
+import type { ItemContext, MonitorScreen } from '../../lib/room/items';
 import type { KipWorn } from '../../lib/room/loadout';
 import type { RoomWeather } from '../../lib/room/weather';
-import type { IsoStatic, KipSeat } from '../../lib/room/iso/room';
-import { drawIsoFramesEach, drawIsoStatic, drawKipLayer, isoRoomKey, kipLayerKey } from '../../lib/room/iso/room';
+import { pieceLayers } from '../../lib/room/iso/art';
+import type { IsoStatic, KipSeat, RoomKip } from '../../lib/room/iso/room';
+import { drawIsoFramesEach, drawIsoStatic, drawKipLayer, isoRoomKey, kipLayerKey, pieceAt } from '../../lib/room/iso/room';
 import { isoCrop } from '../../lib/room/iso/crop';
-import type { RoomLayout, Tier } from '../../lib/room/iso/geometry';
-import type { KipColour, KipMood, KipPose } from '../../lib/kip/kipArt';
+import { KIP_MOVER, MOVER_PREFIX, kipTileCell, moverOrder, pieceTileCell, sameTile, type Tile } from '../../lib/room/iso/movers';
+import type { Placement, RoomLayout, Tier } from '../../lib/room/iso/geometry';
+import { KIP_COLOURS, kipRamp, type KipColour, type KipMood, type KipPose } from '../../lib/kip/kipArt';
 import { useFrameClock } from '../../lib/useFrameClock';
 import { useScreenFocused } from '../../lib/useScreenFocused';
 import type { Living } from '../../lib/room/effects';
@@ -21,6 +24,26 @@ export const LOOP_MS = 400;
 // The bubble is decoration over a fixed crop, so its text grows only a little with Dynamic Type.
 const BUBBLE_MAX_FONT_SCALE = 1.3;
 const BUBBLE_INSET = 4;
+/** KIP's poses, the loop frames and the movers' sprites a view keeps (a trip uses five or six). */
+const PICTURE_SETS = 24;
+
+/** KIP off its seat (spec §9.2): where it stands (half tiles while it glides) and the tile it is drawn at in depth. */
+export interface KipMover {
+  pos: readonly [number, number];
+  depth: Tile;
+  flip: boolean;
+  pose: KipPose;
+  /** Between tiles: a 1-cell bob on alternate frames (spec §3.6). */
+  moving: boolean;
+  /** At the radio: KIP sways a cell each way (ruling 13). */
+  sway: boolean;
+}
+/** A piece drawn as a mover (the wandering cat, spec §8.2). */
+export interface PieceMover { id: string; pos: readonly [number, number]; depth: Tile; flip: boolean }
+export interface RoomViewHandle {
+  /** The topmost piece under a point in this view, in points (the piece card, spec §8.1), or null. */
+  pieceAtPoint(x: number, y: number): string | null;
+}
 
 export interface RoomViewProps {
   layout: RoomLayout;
@@ -50,6 +73,10 @@ export interface RoomViewProps {
   holdClock?: boolean;
   /** The living room (spec §8.3); absent, the neutral room (a visit, the share card, a test). */
   living?: Living;
+  /** KIP off its seat, walking or at a target (Task 10 sets it from its own walk; a test may pass it). */
+  kipMover?: KipMover | null;
+  /** Pieces drawn as movers (Task 11 sets the wandering cat; a test may pass them). */
+  pieceMovers?: readonly PieceMover[];
   bubble: string | null;
   reduceMotion: boolean;
   accessibilityLabel?: string;
@@ -58,18 +85,29 @@ export interface RoomViewProps {
   /** Holds the loops (frame 0) while something covers the room, such as the editor (spec §8 Loops). */
   paused?: boolean;
   testID?: string;
+  ref?: Ref<RoomViewHandle>;
 }
+
+const NO_MOVERS: readonly PieceMover[] = [];
+const NO_IDS: readonly string[] = [];
+const NO_KEYS: ReadonlySet<string> = new Set();
 
 /** Where the speech bubble's bottom centre sits, in cells: just above KIP's head. */
 export function bubbleAnchor(seat: KipSeat): { x: number; y: number } {
   return { x: seat.x + 16, y: seat.y + 10 };
 }
 
-// KIP's isometric room (spec 2026-10-15 §3.7). The static room is recorded once per isoRoomKey (the layout, tier,
-// light, KIP's colour, a lifted piece and the pieces' effect states) into two pictures, back and front, so only a pick-up, a drop, the light or
-// the colour rebuilds it. KIP is drawn between them and the loop frame over them; a pose change records KIP's three
-// frames and the three loop frames (those behind KIP clipped by KIP's silhouette), and a 400 ms tick records
-// nothing. The loops stop when the tab is not focused, under Reduce Motion, or while paused.
+const shift = (dx: number, dy: number, cellPt: number) => [{ translateX: dx * cellPt }, { translateY: dy * cellPt }];
+
+// KIP's isometric room (spec 2026-10-15 §3.7). With no mover the static room is P1's two pictures, back and front,
+// recorded once per isoRoomKey (the layout, tier, light, KIP's colour, a lifted piece, the effect states), with KIP
+// between them and the loop frame over them (frames behind KIP clipped by its silhouette). With a mover on screen
+// (KIP off its seat, a wandering cat: P3 ruling 11) it draws `under`, one cached picture per floor piece and the movers
+// in depth order, the light and glow layer, and the loop frame under an inverted clip of KIP's silhouette (ruling 12).
+// KIP's poses, the frame sets and the movers' sprites are cached (PictureLru), floor pieces by their content
+// (RunPictures): a loop tick, a walk step, a bob or a sway records nothing (ruling T10-FIX). What a render stops
+// drawing is released after the commit (PF3-DISPOSE). The loops stop when the tab is not focused, under Reduce Motion,
+// or while paused.
 export function RoomView(props: RoomViewProps) {
   const { layout, tier, weather, night, colour, worn, pose, mood, facing, screen, crop, cellPt, bubble, reduceMotion } = props;
   const focused = useScreenFocused();
@@ -83,35 +121,122 @@ export function RoomView(props: RoomViewProps) {
     hold: !focused || !!props.dragging || !!props.paused || !!props.holdClock,
     editing: props.editing,
   });
-  const input = { layout, tier, weather, night, colour, hide: props.hide ?? null, effects };
-  const staticKey = isoRoomKey(input);
+  const pieceMovers = props.pieceMovers ?? NO_MOVERS;
+  const moverKey = pieceMovers.map((m) => m.id).sort().join(',');
+  const moverIds = useMemo(() => (moverKey ? moverKey.split(',') : NO_IDS), [moverKey]);
+  const hide = props.hide ?? null;
+  // Built from the props once per change, not on each frame-clock render.
+  const input = useMemo(
+    () => ({ layout, tier, weather, night, colour, hide, effects, movers: moverIds }),
+    [layout, tier, weather, night, colour, hide, effects, moverIds],
+  );
+  const staticKey = useMemo(() => isoRoomKey(input), [input]);
   const room = useMemo(() => props.room ?? drawIsoStatic(input), [staticKey, props.room]); // eslint-disable-line react-hooks/exhaustive-deps
-  const back = useDisposed(useMemo(() => record([room.back], cellPt), [room, cellPt]));
-  const front = useDisposed(useMemo(() => record([room.front, room.light, room.emissive], cellPt), [room, cellPt]));
 
-  // KIP in all three loop frames at once, keyed without the frame (ruling T10-FIX). kipLayerKey leaves the seat out,
-  // so the seat (style and position) joins the key: a moved desk re-places KIP.
-  const kip = { colour, pose, mood, worn, ...(facing ? { facing } : {}) };
+  const kipMover = props.kipMover ?? null;
+  const movers = !!kipMover || pieceMovers.length > 0;
+  const back = useDisposed(useMemo(() => (movers ? null : record([room.back], cellPt)), [room, cellPt, movers]));
+  const front = useDisposed(useMemo(() => (movers ? null : record([room.front, room.light, room.emissive], cellPt)), [room, cellPt, movers]));
+
+  // The caches live as long as the view. A render only adds to them; after each commit the LRU lets go of its oldest
+  // sets past its size, and on unmount everything is released.
+  const caches = useRef<{ lru: PictureLru; runs: RunPictures } | null>(null);
+  if (!caches.current) caches.current = { lru: new PictureLru(PICTURE_SETS), runs: new RunPictures() };
+  const { lru, runs: runCache } = caches.current;
+  useEffect(() => { lru.trim(); });
+  useEffect(() => () => { lru.clear(); runCache.clear(); }, [lru, runCache]);
+
+  // KIP in all three loop frames at once, keyed without the frame (ruling T10-FIX); the seat joins the key, so a moved
+  // desk re-places KIP. Walking, KIP glances and is mirrored when it heads left (spec §3.6).
+  const kip: RoomKip = kipMover
+    ? { colour, pose: kipMover.pose, mood: 'glance', worn, facing: 'you', flip: kipMover.flip }
+    : { colour, pose, mood, worn, ...(facing ? { facing } : {}) };
   const seat = room.kipSeat;
   const poseKey = `${kipLayerKey({ ...kip, frame: 0 })}#${seat.style}@${seat.x},${seat.y},${seat.deskSide}`;
   const kipRects = useMemo(
     () => [0, 1, 2].map((f) => drawKipLayer({ ...kip, frame: f }, seat)) as [Rects, Rects, Rects],
     [poseKey], // eslint-disable-line react-hooks/exhaustive-deps
   );
-  // Three KIP pictures and three frame pictures (each loop clipped by KIP's silhouette in that frame), recorded
-  // together per (static room, screen, pose, cell size): the 400 ms tick only picks one of each, recording nothing.
-  const pictures = useMemo(() => {
-    const frames = drawIsoFramesEach(room, { night, colour, screen }, kipRects);
-    return { kip: kipRects.map((r) => record([r], cellPt)), frames: frames.map((r) => record([r], cellPt)) };
-  }, [room, screen, kipRects, cellPt]); // eslint-disable-line react-hooks/exhaustive-deps
-  useEffect(() => () => [...pictures.kip, ...pictures.frames].forEach((p) => p.dispose?.()), [pictures]);
+  // Read on every render (a hit is two map steps), so the sets on screen stay the most recent in the LRU.
+  const kipPictures = lru.get(`kip#${poseKey}#${cellPt}`, () => kipRects.map((r) => record([r], cellPt)));
+  // Seated: each loop frame clipped by KIP's silhouette in that frame, per (static room, screen, pose, cell size).
+  const seatedFrames = movers
+    ? null
+    : lru.get(`seated#${staticKey}#${screen}#${poseKey}#${cellPt}`, () => drawIsoFramesEach(room, { night, colour, screen }, kipRects).map((r) => record([r], cellPt)));
+  // Runs mode (ruling 11): the shell and the overlay, the unclipped loop frames, and each floor piece by its content.
+  const shell = movers
+    ? lru.get(`under#${staticKey}#${cellPt}`, () => [record([room.under], cellPt), record([room.light, room.emissive], cellPt)])
+    : null;
+  const runFrames = movers
+    ? lru.get(`frames#${staticKey}#${screen}#${cellPt}`, () => drawIsoFramesEach(room, { night, colour, screen }, [[], [], []]).map((r) => record([r], cellPt)))
+    : null;
+  const runPictures = useMemo(() => {
+    if (!movers) return { byId: new Map<string, SkPicture>(), keys: NO_KEYS };
+    const byId = new Map<string, SkPicture>();
+    const keys = new Set<string>();
+    for (const r of room.runs) {
+      const key = `${cellPt}#${r.key}`;
+      keys.add(key);
+      byId.set(r.id, runCache.take(key, () => record([r.rects], cellPt)));
+    }
+    return { byId, keys };
+  }, [room, cellPt, movers, runCache]);
+  // After the commit: the floor pieces the drawn room no longer has go (all of them once KIP is back on its seat).
+  useEffect(() => { runCache.keep(runPictures.keys); }, [runCache, runPictures]);
+  // KIP's silhouette as a path per frame (not a picture): the loops are clipped by it wherever KIP stands (ruling 12).
+  const kipPaths = useMemo(() => (movers ? kipRects.map((rs) => {
+    const p = Skia.Path.Make();
+    for (const [x, y, w, h] of rs) p.addRect(Skia.XYWHRect(x * cellPt, y * cellPt, w * cellPt, h * cellPt));
+    return p;
+  }) : null), [kipRects, cellPt, movers]);
+
+  // Where KIP is drawn, relative to its seat: its tile, a bob between tiles, a sway at the radio (no recording).
+  const [kx, ky] = kipMover ? kipTileCell(room.grid, kipMover.pos) : [seat.x, seat.y];
+  const bob = kipMover?.moving && !still && frame % 2 === 1 ? -1 : 0;
+  const sway = kipMover?.sway && !still ? [0, 1, -1][frame]! : 0;
+  const dx = kx - seat.x + sway;
+  const dy = ky - seat.y + bob;
+  const kipDepth: Tile | null = kipMover ? kipMover.depth : room.seat;
+  const seatedKip = !kipMover || sameTile(kipMover.depth, room.seat);
+  const moverAts = [
+    ...(kipDepth ? [{ key: KIP_MOVER, depth: kipDepth }] : []),
+    ...pieceMovers.map((m) => ({ key: `${MOVER_PREFIX}${m.id}`, depth: m.depth })),
+  ];
+  // The order changes only when a mover reaches a new tile: a glide between two tiles reuses it.
+  const orderKey = movers ? `${staticKey}|${moverAts.map((m) => `${m.key}:${m.depth[0]},${m.depth[1]}`).join(';')}|${seatedKip}` : '';
+  const order = useMemo(
+    () => (movers ? moverOrder(room.runs, moverAts, seatedKip && room.deskId ? [room.deskId, KIP_MOVER] : null) : NO_IDS),
+    [orderKey], // eslint-disable-line react-hooks/exhaustive-deps
+  );
+  const placements = useMemo(() => new Map<string, Placement>(layout.pieces.map((p) => [p.id, p])), [layout]);
+  // A mover's sprite: its base with each loop frame (the cat's tail, never clipped: ruling 10), per state and light.
+  const sprites = new Map<string, { picture: SkPicture; at: [number, number] }>();
+  for (const m of pieceMovers) {
+    const p = placements.get(m.id);
+    if (!p) continue;
+    const state = effects.states.get(p.id);
+    const set = lru.get(`mover#${p.item}#${p.facing}#${m.flip}#${state ?? ''}#${night ? 'n' : 'd'}#${colour}#${weather}#${cellPt}`, () => {
+      const ctx: ItemContext = { weather, night, colour, ramp: kipRamp(KIP_COLOURS[colour]), screen: 'lines' };
+      const l = pieceLayers(p.item, ctx, { layer: 'floor', facing: p.facing, mirror: m.flip, ...(state ? { effect: state } : {}) });
+      return [0, 1, 2].map((k) => record([l?.base ?? [], l?.frames?.[k] ?? []], cellPt));
+    });
+    sprites.set(`${MOVER_PREFIX}${m.id}`, { picture: set[frame]!, at: pieceTileCell(room.grid, m.pos) });
+  }
 
   const box = props.box === 'thumb' ? room.thumb : room.focus;
   const offset = props.offset ?? isoCrop({ width: crop.width, height: crop.height, cellPt, box, room: room.grid });
+  useImperativeHandle(props.ref, () => ({
+    pieceAtPoint: (x: number, y: number) => pieceAt(room.hits, Math.floor((x - offset.x) / cellPt), Math.floor((y - offset.y) / cellPt)),
+  }), [room, offset.x, offset.y, cellPt]);
   const anchor = bubbleAnchor(seat);
   // Measured, so a long bubble is pulled in from the right edge instead of clipped by the crop.
   const [bubbleWidth, setBubbleWidth] = useState(0);
   const bubbleLeft = Math.max(BUBBLE_INSET, Math.min(offset.x + anchor.x * cellPt - 36, crop.width - bubbleWidth - BUBBLE_INSET));
+  const kipNode = (
+    <Group key={KIP_MOVER} transform={shift(dx, dy, cellPt)}>
+      <Picture picture={kipPictures[frame]!} />
+    </Group>
+  );
   return (
     <View
       testID={props.testID}
@@ -122,10 +247,32 @@ export function RoomView(props: RoomViewProps) {
     >
       <Canvas style={{ width: crop.width, height: crop.height }}>
         <Group transform={[{ translateX: offset.x }, { translateY: offset.y }]}>
-          <Picture picture={back} />
-          <Picture picture={pictures.kip[frame]!} />
-          <Picture picture={front} />
-          <Picture picture={pictures.frames[frame]!} />
+          {shell && runFrames ? (
+            <>
+              <Picture picture={shell[0]!} />
+              {kipDepth ? null : kipNode}
+              {order.map((key) => {
+                if (key === KIP_MOVER) return kipNode;
+                const m = sprites.get(key);
+                if (m) return <Group key={key} transform={shift(m.at[0], m.at[1], cellPt)}><Picture picture={m.picture} /></Group>;
+                const pic = runPictures.byId.get(key);
+                return pic ? <Picture key={key} picture={pic} /> : null;
+              })}
+              <Picture picture={shell[1]!} />
+              <Group transform={shift(dx, dy, cellPt)} clip={kipPaths![frame]!} invertClip>
+                <Group transform={shift(-dx, -dy, cellPt)}>
+                  <Picture picture={runFrames[frame]!} />
+                </Group>
+              </Group>
+            </>
+          ) : (
+            <>
+              <Picture picture={back!} />
+              <Picture picture={kipPictures[frame]!} />
+              <Picture picture={front!} />
+              <Picture picture={seatedFrames![frame]!} />
+            </>
+          )}
         </Group>
       </Canvas>
       {bubble ? (

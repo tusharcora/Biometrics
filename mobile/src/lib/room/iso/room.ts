@@ -2,13 +2,14 @@
 // (walls, windows, floor), wall pieces (left wall back to front, then right), flat pieces, then floor pieces in
 // topological depth order with KIP inserted at its seat tile and each piece's children right after it. Everything
 // before KIP is `back`, everything after is `front` (plan ruling 8). Then the light layer (daylight through each
-// window, or the night veil), the glows, and the loop frames (those behind KIP clipped by its silhouette).
+// window, or the night veil), the glows, and the loop frames (those behind KIP clipped by its silhouette). The same
+// rects come split too, for movers (P3 ruling 11): `under` (the shell to the rugs) and one run per floor piece.
 import './index';
 import { catalogueItem, isoOf } from '../catalogue';
 import type { Box, RoomRect } from '../grid';
 import type { ItemContext, MonitorScreen, SeatStyle } from '../items';
 import { effectsKey, type RoomEffects } from '../effects';
-import { childrenOf, deskOf, layoutKey } from '../layout';
+import { childrenOf, deskOf, layoutKey, pieceKey } from '../layout';
 import { wornKey, type KipWorn } from '../loadout';
 import { poly, R, type Rects } from '../paint';
 import { DAYLIGHT, NIGHT_VEIL, type RoomWeather } from '../weather';
@@ -43,13 +44,15 @@ export interface RoomKip {
   frame?: number;
   /** Default: 'desk' for `type`, 'you' otherwise (plan ruling 6). */
   facing?: 'desk' | 'you';
+  /** Walking (spec §3.6): mirrored when it heads left; set, it decides the mirror on its own. */
+  flip?: boolean;
 }
 
 /** KIP at its seat, 2 cells per KIP pixel, mirrored when it faces a desk on its left. */
 export function drawKipLayer(kip: RoomKip, seat: KipSeat): Rects {
   const facing = kip.facing ?? (kip.pose === 'type' ? 'desk' : 'you');
   let grid = kipGrid({ colour: kip.colour, pose: kip.pose, mood: kip.mood, frame: kip.frame ?? 0, worn: kip.worn });
-  if (facing === 'desk' && seat.deskSide === 'left') grid = mirrorGrid(grid);
+  if (kip.flip ?? (facing === 'desk' && seat.deskSide === 'left')) grid = mirrorGrid(grid);
   const r: Rects = [];
   for (let y = 0; y < KIP_GRID; y++) {
     let x = 0;
@@ -66,9 +69,9 @@ export function drawKipLayer(kip: RoomKip, seat: KipSeat): Rects {
   return r;
 }
 
-/** KIP's layer key (§5): (colour, pose, mood, worn, frame), plus facing. */
+/** KIP's layer key (§5): (colour, pose, mood, worn, frame), plus facing and a walk's flip. */
 export function kipLayerKey(kip: RoomKip): string {
-  return `${kip.colour}#${kip.pose}#${kip.mood}#${wornKey(kip.worn)}#${kip.frame ?? 0}#${kip.facing ?? ''}`;
+  return `${kip.colour}#${kip.pose}#${kip.mood}#${wornKey(kip.worn)}#${kip.frame ?? 0}#${kip.facing ?? ''}#${kip.flip === undefined ? '' : kip.flip ? 'f' : 'n'}`;
 }
 
 export interface IsoStaticInput {
@@ -81,16 +84,35 @@ export interface IsoStaticInput {
   hide?: string | null;
   /** Each piece's effect state (P3 ruling 7); absent, every piece draws plain (P1's room). */
   effects?: RoomEffects;
+  /** Pieces drawn as movers (the wandering cat): left out of the picture, as a lifted piece is. */
+  movers?: readonly string[];
 }
 
 export interface PlacedPiece { p: Placement; at: [number, number]; o: IsoArtOpts }
 /** A drawn piece for hit tests: its opaque bounds and its own rects. */
 export interface PieceHit { id: string; box: Box; rects: Rects }
 
+/** One floor piece and what stands on it (and a cat napping on it), in draw order: one picture in runs mode (ruling 11). */
+export interface IsoRun {
+  /** The floor piece's placement id: its key in the draw order. */
+  id: string;
+  /** Its content: the pieces, where they are drawn, their states, the size, the light and KIP's colour. */
+  key: string;
+  box: DepthBox;
+  rects: Rects;
+}
+
 export interface IsoStatic {
   grid: IsoGrid;
   back: Rects;
   front: Rects;
+  /** The shell, the wall pieces and the rugs: everything drawn before the first floor piece. */
+  under: Rects;
+  /** Each floor piece with what stands on it, in the static depth order. */
+  runs: IsoRun[];
+  deskId: string | null;
+  /** KIP's seat tile, or null with no desk. */
+  seat: [number, number] | null;
   light: Rects;
   emissive: Rects;
   /** The window decor's loop frames (fairy lights, the chime): on the walls, behind KIP. */
@@ -171,7 +193,8 @@ export function drawIsoStatic(input: IsoStaticInput): IsoStatic {
   const ahead: PlacedPiece[] = [];
   const hits: PieceHit[] = [];
   const hide = input.hide ?? null;
-  const visible = layout.pieces.filter((p) => isoOf(p.item) && p.id !== hide && !(p.layer === 'onTop' && p.parent === hide));
+  const away = new Set([...(input.movers ?? []), ...(hide ? [hide] : [])]);
+  const visible = layout.pieces.filter((p) => isoOf(p.item) && !away.has(p.id) && !(p.layer === 'onTop' && away.has(p.parent ?? '')));
   const visibleLayout = { ...layout, pieces: visible };
   const byId = new Map(visible.map((p) => [p.id, p]));
   // A napping cat lies on its bed (spec §8.2): drawn right after the bed, at the bed's corner, with the bed's depth.
@@ -180,6 +203,7 @@ export function drawIsoStatic(input: IsoStaticInput): IsoStatic {
   const napping = new Set(catOnBed.values());
   let target = back;
   let list = behind;
+  let run: IsoRun | null = null;
   const put = (p: Placement, at0?: [number, number]) => {
     const at = at0 ?? anchorOf(P, p, byId);
     const state = input.effects?.states.get(p.id);
@@ -188,6 +212,7 @@ export function drawIsoStatic(input: IsoStaticInput): IsoStatic {
     if (!at || !l) return;
     const base = moveRects(l.base ?? [], at[0], at[1]);
     target.push(...base);
+    if (run) run.rects.push(...base);
     if (l.emissive) emissive.push(...moveRects(l.emissive, at[0], at[1]));
     list.push({ p, at, o });
     const b = opaqueBounds(base);
@@ -200,6 +225,7 @@ export function drawIsoStatic(input: IsoStaticInput): IsoStatic {
   for (const wall of ['wallL', 'wallR'] as const) visible.filter((p) => p.layer === wall).sort(byPos).forEach((p) => put(p));
   const floor = visible.filter((p) => p.layer === 'floor' && !napping.has(p.id));
   floor.filter((p) => isoOf(p.item)!.flat).sort((a, b) => a.x + a.y - (b.x + b.y) || byPos(a, b)).forEach((p) => put(p));
+  const under: Rects = [...back];
   const solid = floor.filter((p) => !isoOf(p.item)!.flat);
   const boxes: DepthBox[] = solid.map((p) => { const a = footOf(p, isoOf(p.item)!); return { key: p.id, i0: a.x0, j0: a.y0, i1: a.x1, j1: a.y1 }; });
   const kipSeat = kipAt(g, layout);
@@ -208,15 +234,26 @@ export function drawIsoStatic(input: IsoStaticInput): IsoStatic {
   if (seat) boxes.push({ key: KIP_KEY, i0: seat[0], j0: seat[1], i1: seat[0] + 1, j1: seat[1] + 1 });
   const order = depthOrder(boxes, desk && byId.has(desk.id) ? [[desk.id, KIP_KEY]] : []);
   if (!seat) { target = front; list = ahead; }
+  // Each floor piece's run: its rects and those of what it carries, keyed by what they are and where (ruling 11).
+  const runs: IsoRun[] = [];
+  const boxOf = new Map(boxes.map((b) => [b.key, b]));
   for (const key of order) {
     if (key === KIP_KEY) { target = front; list = ahead; continue; }
-    put(byId.get(key)!);
+    const p = byId.get(key)!;
+    run = { id: p.id, key: '', box: boxOf.get(key)!, rects: [] };
+    const from = list.length;
+    put(p);
+    const placed = list.slice(from).map((pp) => `${pieceKey(pp.p)}@${pp.at.join(',')}~${pp.o.effect ?? ''}`).join(';');
+    run.key = `${tier}#${night ? 'n' : 'd'}#${colour}#${weather}#${placed}`;
+    runs.push(run);
+    run = null;
   }
   const light: Rects = [];
   if (night) R(light, 0, 0, g.W, g.H, NIGHT_VEIL);
   else daylightIn(light, P, g, tier, weather);
   const { focus, thumb } = deskBoxes(g, layout);
-  return { grid: g, back, front, light, emissive, shellFrames: shell.frames ?? null, behind, ahead, hits, kipSeat, focus, thumb };
+  const deskId = desk && byId.has(desk.id) ? desk.id : null;
+  return { grid: g, back, front, under, runs, deskId, seat, light, emissive, shellFrames: shell.frames ?? null, behind, ahead, hits, kipSeat, focus, thumb };
 }
 
 /** Removes from `rects` every cell KIP's rects cover (a loop behind KIP never paints over it, ruling 8). */
@@ -261,12 +298,12 @@ export function drawIsoFramesEach(
 }
 
 /**
- * The static picture's memo key: the layout's content, the tier, the light, KIP's colour, the lifted piece and the
- * pieces' effect states (P3 ruling 7).
+ * The static picture's memo key: the layout's content, the tier, the light, KIP's colour, the lifted piece, the
+ * pieces' effect states (P3 ruling 7) and the pieces drawn as movers (ruling 11).
  */
 export function isoRoomKey(input: IsoStaticInput): string {
   const effects = input.effects ? effectsKey(input.effects) : '';
-  return `${layoutKey(input.layout)}#${input.tier}#${input.weather}#${input.night ? 'n' : 'd'}#${input.colour}#${input.hide ?? ''}#${effects}`;
+  return `${layoutKey(input.layout)}#${input.tier}#${input.weather}#${input.night ? 'n' : 'd'}#${input.colour}#${input.hide ?? ''}#${effects}#${[...(input.movers ?? [])].sort().join(',')}`;
 }
 
 /** The topmost piece with an opaque cell at room cell (x, y), or null (its shadow and glows don't count). */

@@ -47,7 +47,7 @@ describe('RoomView (iso)', () => {
     expect(edit.getByTestId('skia-group', { includeHiddenElements: true }).props.skiaTransform).toEqual([{ translateX: -12 }, { translateY: 4 }]);
   });
 
-  it('a pose change keeps the room\'s pictures: KIP\'s 3 frames and the 3 loop frames (clipped by KIP) are re-recorded, the old ones released', () => {
+  it('a pose change keeps the room\'s pictures: KIP\'s 3 frames and the 3 loop frames (clipped by KIP) are recorded, the old ones kept for a return', () => {
     const s = render(<RoomView {...PROPS} />);
     const [back, kip, front, frame] = pictures(s);
     const before = picture.mock.calls.length;
@@ -55,7 +55,12 @@ describe('RoomView (iso)', () => {
     const [back2, , front2] = pictures(s);
     expect([back2, front2]).toEqual([back, front]);
     expect(picture.mock.calls.length - before).toBe(6);
-    expect([kip.dispose, frame.dispose].every((d: jest.Mock) => d.mock.calls.length > 0)).toBe(true);
+    expect([kip.dispose, frame.dispose].every((d: jest.Mock) => d.mock.calls.length === 0)).toBe(true); // cached for a return
+    s.rerender(<RoomView {...PROPS} />);
+    expect(picture.mock.calls.length - before).toBe(6); // back to the first pose: nothing new recorded
+    expect(pictures(s)[1]).toBe(kip);
+    s.unmount();
+    expect([kip.dispose, frame.dispose].every((d: jest.Mock) => d.mock.calls.length > 0)).toBe(true); // released with the view
   });
 
   it('a loop tick records nothing: it picks KIP and the loop frame from the pictures it has (ruling T10-FIX)', () => {
@@ -174,8 +179,9 @@ describe('RoomView (iso)', () => {
     expect(picture.mock.calls.length - before).toBe(0);
     before = picture.mock.calls.length;
     s.rerender(<RoomView {...PROPS} living={{ ...living(), plantStage: 4 }} />);
-    // A new static room: back and front, then KIP's three and the three loop frames (keyed on the room).
-    expect(picture.mock.calls.length - before).toBe(8);
+    // A new static room: back and front, then the three loop frames keyed on it. KIP's three are kept (its pose
+    // pictures are cached by pose and seat, ruling 11), so a rebuild records 5.
+    expect(picture.mock.calls.length - before).toBe(5);
     const [back2, , front2] = pictures(s);
     expect([back2 !== back, front2 !== front]).toEqual([true, true]);
   });
@@ -195,8 +201,8 @@ describe('RoomView (iso)', () => {
       act(() => { jest.advanceTimersByTime(LOOP_MS * 3); });
       expect(picture.mock.calls.length - before).toBe(0);
       act(() => { jest.advanceTimersByTime(30_000); });
-      // 07:13: one new static room (back and front), then KIP's three and the three loop frames keyed on it.
-      expect(picture.mock.calls.length - before).toBe(8);
+      // 07:13: one new static room (back and front), then the three loop frames keyed on it (KIP's are kept).
+      expect(picture.mock.calls.length - before).toBe(5);
       const after = picture.mock.calls.length;
       act(() => { jest.advanceTimersByTime(LOOP_MS * 3); });
       expect(picture.mock.calls.length - after).toBe(0);
@@ -227,7 +233,7 @@ describe('RoomView (iso)', () => {
       expect(picture.mock.calls.length - before).toBe(0);
       expect(seen.size).toBeGreaterThan(1); // the loops (the radio's notes among them) do run
       act(() => { jest.advanceTimersByTime(30_000 - LOOP_MS * 6 + 100); });
-      expect(picture.mock.calls.length - before).toBe(8);
+      expect(picture.mock.calls.length - before).toBe(5);
       expect(keysOf(spy)).toHaveLength(2);
       expect(keysOf(spy)[1]).toEqual(expect.stringContaining('p1=live@07:13'));
       spy.mockRestore();
@@ -245,7 +251,7 @@ describe('RoomView (iso)', () => {
       expect(jest.getTimerCount()).toBe(0); // the loops hold too
       mockFocused = true;
       s.rerender(<RoomView {...PROPS} layout={LIVE} living={{ ...AWARDS }} />);
-      expect(picture.mock.calls.length - before).toBe(8);
+      expect(picture.mock.calls.length - before).toBe(5);
       s.unmount();
     });
 
@@ -256,7 +262,7 @@ describe('RoomView (iso)', () => {
       act(() => { jest.advanceTimersByTime(31_000); });
       expect(picture.mock.calls.length - before).toBe(0);
       s.rerender(<RoomView {...PROPS} layout={LIVE} living={AWARDS} dragging={false} />);
-      expect(picture.mock.calls.length - before).toBe(8);
+      expect(picture.mock.calls.length - before).toBe(5);
       s.unmount();
     });
 
@@ -272,7 +278,7 @@ describe('RoomView (iso)', () => {
       if (prop === 'paused') expect(jest.getTimerCount()).toBe(0); // paused also holds the loops
       else expect(jest.getTimerCount()).toBe(1); // only the loop clock, no minute timer
       s.rerender(<RoomView {...PROPS} layout={LIVE} living={AWARDS} {...{ [prop]: false }} />);
-      expect(picture.mock.calls.length - before).toBe(8);
+      expect(picture.mock.calls.length - before).toBe(5);
       s.unmount();
     });
   });
@@ -296,7 +302,7 @@ describe('RoomView (iso)', () => {
       act(() => { jest.advanceTimersByTime(LOOP_MS * 3); });
       expect(picture.mock.calls.length - before).toBe(0);
       act(() => { jest.advanceTimersByTime(30_000); }); // 22:00
-      expect(picture.mock.calls.length - before).toBe(8);
+      expect(picture.mock.calls.length - before).toBe(5);
       expect(keysOf(spy)).toHaveLength(2);
       expect(keysOf(spy)[1]).toEqual(expect.stringContaining('p1=nap'));
       expect(keysOf(spy)[1]).toEqual(expect.stringContaining('p1>p2'));
@@ -324,7 +330,7 @@ describe('RoomView (iso)', () => {
       expect(atOf('p1')).toEqual(atOf('p2'));
       const before = picture.mock.calls.length;
       act(() => { jest.advanceTimersByTime(30_100); }); // 06:00, just past the minute's read
-      expect(picture.mock.calls.length - before).toBe(8);
+      expect(picture.mock.calls.length - before).toBe(5);
       expect(keysOf(spy)).toHaveLength(2);
       expect(keysOf(spy)[1]).toEqual(expect.stringContaining('p1=play'));
       expect(keysOf(spy)[1]).not.toEqual(expect.stringContaining('p1>'));
