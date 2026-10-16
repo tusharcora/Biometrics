@@ -8,9 +8,12 @@ export const CTX_DAY: ItemContext = { weather: 'clear', night: false, colour: 'c
 export const CTX_NIGHT: ItemContext = { ...CTX_DAY, weather: 'fallback', night: true };
 const LIME: ItemContext = { ...CTX_DAY, colour: 'lime', ramp: kipRamp(KIP_COLOURS.lime) };
 
+/** Pieces the iso room draws itself, with no front-on art (release 3's plank and lantern are skipped by release). */
+const ISO_ONLY: ReadonlySet<string> = new Set(['shelf.awards']);
+
 /** Spec §8 / §11 "Item art", for every shipped item of one room slot (set pieces only once their art exists, Task 11). */
 export function checkSlotArt(slot: RoomSlot, { sets = true }: { sets?: boolean } = {}): void {
-  for (const item of catalogueItemsFor(slot).filter((i) => (sets || !i.id.startsWith('set.')) && i.release !== 3)) {
+  for (const item of catalogueItemsFor(slot).filter((i) => (sets || !i.id.startsWith('set.')) && i.release !== 3 && !ISO_ONLY.has(i.id))) {
     const art = itemArt(item.id);
     const tag = { id: item.id };
     expect({ ...tag, art: !!art, icon: (itemIcon(item.id)?.length ?? 0) > 0 }).toEqual({ ...tag, art: true, icon: true });

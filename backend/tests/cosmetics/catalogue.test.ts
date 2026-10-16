@@ -46,10 +46,10 @@ it('holds the 134 base items of the Cat boards, slot by slot', () => {
   expect([count('head'), count('face'), count('neck'), count('ears')]).toEqual([9, 5, 5, 3]);
 });
 
-it('has the 19 starter items, all shipped, and a starter room of placed starters', () => {
+it('has the 20 starter items, all shipped, and a starter room of placed starters', () => {
   expect([...STARTER_IDS].sort()).toEqual([
     'art.calendar', 'desk.monitor', 'desk.notebook', 'floor.oakDark', 'item.mug', 'item.sticky', 'lamp.amber', 'lamp.welcome',
-    'out.beanie', 'out.earbuds', 'plant.cactus', 'plant.fern', 'rug.slate', 'shelf.books', 'shelf.minicactus', 'shelf.plank',
+    'out.beanie', 'out.earbuds', 'plant.cactus', 'plant.fern', 'rug.slate', 'shelf.awards', 'shelf.books', 'shelf.minicactus', 'shelf.plank',
     'wall.dots', 'wall.plain', 'win.plain',
   ]);
   for (const id of STARTER_IDS) expect(isShipped(cosmeticItem(id)!)).toBe(true);
@@ -107,12 +107,26 @@ it('gives each set exactly one piece per room slot, worn pieces in worn slots, a
   expect(cosmeticItem('set.japanese.desk')!.style).toBe('low');
 });
 
-it('ships releases 1, 3 and 4, each with a launch date (spec §2.1 Releases, plan ruling 1)', () => {
-  expect([...SHIPPED_RELEASES].sort()).toEqual([1, 3, 4]);
-  for (const r of SHIPPED_RELEASES) expect(RELEASE_LAUNCHED_AT[r as 1 | 3 | 4]).toBeInstanceOf(Date);
+it('ships releases 1, 3, 4 and 5, each with a launch date (spec §2.1 Releases, P3 plan ruling 1)', () => {
+  expect([...SHIPPED_RELEASES].sort()).toEqual([1, 3, 4, 5]);
+  for (const r of SHIPPED_RELEASES) expect(RELEASE_LAUNCHED_AT[r as 1 | 3 | 4 | 5]).toBeInstanceOf(Date);
   expect(COSMETIC_ITEMS.filter((i) => i.release === 3).map((i) => i.id).sort()).toEqual(['lamp.welcome', 'shelf.plank']);
   expect(COSMETIC_ITEMS.filter((i) => i.release === 4).map((i) => i.id).sort())
     .toEqual(['art.neonheart', 'corner.cone', 'corner.gnome', 'corner.pumpkin', 'item.candle', 'item.radio']);
+  expect(COSMETIC_ITEMS.filter((i) => i.release === 5).map((i) => i.id).sort()).toEqual(['pet.tabby', 'shelf.awards']);
+});
+
+it('gives the first set of effects to their pieces, and to no other (spec §8.2, P3 rulings 2-3)', () => {
+  const effects = Object.fromEntries(COSMETIC_ITEMS.filter((i) => i.iso?.effect).map((i) => [i.id, i.iso!.effect]));
+  expect(effects).toEqual({
+    'corner.floorlamp': 'light', 'lamp.lava': 'light', 'item.radio': 'sound', 'pet.tabby': 'wander', 'pet.cat': 'wander',
+    'art.clock': 'clock', 'item.duck': 'tap', 'shelf.awards': 'awards',
+  });
+  expect(cosmeticItem('pet.tabby')).toMatchObject({ slot: 'pet', unlock: { kind: 'shop' }, price: 180, frames: 3, iso: { layers: ['floor'], foot: [1, 1], facings: 1 } });
+  expect(cosmeticItem('shelf.awards')).toMatchObject({ slot: 'shelf', unlock: { kind: 'starter' }, iso: { layers: ['wall'], wall: [8, 3], facings: 1 } });
+  expect(cosmeticItem('shelf.awards')!.price).toBeUndefined(); // ruling 2: not sold
+  expect(cosmeticItem('shelf.trophyB')!.iso!.effect).toBeUndefined(); // stays plain decor (§8.2)
+  expect(cosmeticItem('pet.bed')!.iso!.effect).toBeUndefined(); // the cat's bed has no effect of its own
 });
 
 it('reads the coin-shop code: a shop piece is only ever bought (plan ruling 2)', () => {
@@ -131,12 +145,13 @@ it('prices pieces 25 to 200 coins, always in the shop, never a desk or the welco
   expect(['item.radio', 'corner.gnome', 'corner.cone', 'corner.pumpkin', 'item.candle', 'art.neonheart'].map(price)).toEqual([150, 80, 60, 30, 25, 200]);
   expect(['plant.fern', 'corner.floorlamp', 'pet.bed', 'plant.monstera', 'plant.snake'].map(price)).toEqual([40, 120, 140, 140, 100]);
   expect(['lamp.lava', 'item.duck', 'pet.cat'].map(price)).toEqual([120, 40, 180]); // B2: priced, shown when release 2 ships
+  expect(price('pet.tabby')).toBe(180);
 });
 
-it('prices only real pieces, and every placeable starter but the desks and the welcome lantern (ruling 3)', () => {
+it('prices only real pieces, and every placeable starter but the desks, the welcome lantern and the trophy shelf (P2 ruling 3, P3 ruling 2)', () => {
   expect(Object.keys(PRICES).filter((id) => !cosmeticItem(id))).toEqual([]);
   const unpriced = STARTER_IDS.map((id) => cosmeticItem(id)!)
-    .filter((i) => !!i.iso && i.slot !== 'desk' && i.id !== 'lamp.welcome' && i.price === undefined);
+    .filter((i) => !!i.iso && i.slot !== 'desk' && i.id !== 'lamp.welcome' && i.id !== 'shelf.awards' && i.price === undefined);
   expect(unpriced.map((i) => i.id)).toEqual([]);
   expect(STARTER_IDS.filter((id) => cosmeticItem(id)!.price !== undefined).length).toBeGreaterThan(0);
 });

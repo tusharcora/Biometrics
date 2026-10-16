@@ -25,7 +25,7 @@ async function me() {
 }
 
 describe('GET /me/cosmetics', () => {
-  it('a new user owns the 17 starters, has the starter room, wears nothing, and reads private, no-store', async () => {
+  it('a new user owns the 20 starters, has the starter room, wears nothing, and reads private, no-store', async () => {
     const { headers } = await me();
     const res = await (await api()).get('/me/cosmetics').set(headers);
     expect(res.status).toBe(200);
@@ -34,7 +34,7 @@ describe('GET /me/cosmetics', () => {
       catalogueVersion: 1, owned: expect.any(Array), fresh: [], worn: { ...EMPTY_WORN }, version: 0,
       counters: { recapsRead: 0, buddyCheers: 0 }, layout: starterLayout(), tier: 1, cap: 40, counts: expect.any(Object), welcomed: false,
     });
-    expect(res.body.owned).toHaveLength(19);
+    expect(res.body.owned).toHaveLength(20);
   });
 
   it('catches up on grants and lists unseen rows as fresh with their source', async () => {

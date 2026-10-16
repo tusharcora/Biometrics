@@ -19,7 +19,10 @@ export function layoutFromSlots(room: SlotRoom): RoomLayout {
     else pieces.push(at('lamp', room.lamp, 'wallL', 0, 14)); // the Cottage garland, above the window (ruling 7)
   }
   if (room.desk_item) onDesk('deskitem', room.desk_item, 2);
-  if (room.shelf) {
+  // A shelf that hangs on the wall itself (P3's trophy shelf) takes the plank's place.
+  if (room.shelf && !cosmeticItem(room.shelf)?.iso?.layers.includes('onTop') && room.shelf !== 'shelf.plank') {
+    pieces.push(at('shelf', room.shelf, 'wallR', 6, 10));
+  } else if (room.shelf) {
     pieces.push(at('plank', 'shelf.plank', 'wallR', 6, 10));
     // A stored shelf of the plank itself (a starter in the shelf slot) is the bare plank, with nothing on it.
     if (room.shelf !== 'shelf.plank') pieces.push(at('shelf', room.shelf, 'onTop', 0, 0, { parent: 'plank', spot: 0 }));

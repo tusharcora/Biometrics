@@ -34,6 +34,8 @@ export const ITEM_NAMES: Readonly<Record<ItemId, string>> = {
   // The coin shop's own pieces (spec 2026-10-15 §4, F6, C1).
   'item.radio': 'Old radio', 'corner.gnome': 'Gnome', 'corner.cone': 'Traffic cone', 'corner.pumpkin': 'Pumpkin',
   'item.candle': 'Candle', 'art.neonheart': 'Neon heart sign',
+  // Free-build P3's effect pieces (spec 2026-10-15 §8.2).
+  'pet.tabby': 'Ginger cat', 'shelf.awards': 'Trophy shelf',
   'out.beanie': 'Beanie', 'out.cap': 'Cap', 'out.sweatband': 'Sweatband', 'out.bucket': 'Bucket hat',
   'out.hachimaki': 'Hachimaki headband', 'out.beret': 'Beret', 'out.party': 'Party hat', 'out.round': 'Round glasses',
   'out.scarf': 'Scarf', 'out.bowtie': 'Bow tie', 'out.earbuds': 'Earbuds', 'out.phones': 'Headphones',

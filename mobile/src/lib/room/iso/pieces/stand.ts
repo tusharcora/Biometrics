@@ -72,6 +72,6 @@ export function standPiece(id: string): IsoPieceArt {
 }
 
 const BILLBOARD_SLOTS: ReadonlySet<string> = new Set(['shelf', 'desk_item', 'plant', 'lamp', 'corner', 'pet']);
-/** Drawn their own way (extras.ts). */
-const OWN_ART: ReadonlySet<string> = new Set(['shelf.plank', 'lamp.welcome', 'set.cottage.lamp']);
+/** Drawn their own way (extras.ts, awards.ts). */
+const OWN_ART: ReadonlySet<string> = new Set(['shelf.plank', 'lamp.welcome', 'set.cottage.lamp', 'shelf.awards']);
 registerIsoArt(CATALOGUE.items.filter((i) => i.iso && BILLBOARD_SLOTS.has(i.slot) && !OWN_ART.has(i.id)).map((i) => standPiece(i.id)));
