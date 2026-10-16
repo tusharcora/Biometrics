@@ -120,6 +120,14 @@ const ERRORS: Record<string, string> = {
   invalid_status_note: 'Notes are 1 to 60 characters.',
   invalid_report: 'Pick a reason to report.',
   report_target_gone: "That's no longer there to report.",
+  // Free-build P4 (P4 ruling 25).
+  already_cheered: "You've cheered this room today.",
+  not_spare: "That piece isn't a spare. Keep at least one you haven't placed.",
+  gift_limit: "That's 3 gifts today. Send another tomorrow.",
+  gift_gone: 'That gift is no longer there.',
+  challenge_closed: "This week's challenge has closed.",
+  no_challenge: "There's no room challenge this week.",
+  invalid_body: "Couldn't send that. Please try again.",
 };
 
 export function buddyErrorMessage(code: string | null): string {

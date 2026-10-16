@@ -18,6 +18,7 @@ import { chatsRouter } from './chats/routes';
 import { kipRouter } from './kip/routes';
 import { cosmeticsRouter, saveBodyParser } from './cosmetics/routes';
 import { coinsRouter } from './coins/routes';
+import { SOCIAL_ROOM_POSTS, socialRoomRouter } from './room/socialRoutes';
 
 export function createApp(options: { auth?: Auth } = {}): Express {
   const app = express();
@@ -28,6 +29,8 @@ export function createApp(options: { auth?: Auth } = {}): Express {
   app.put('/me/cosmetics', saveBodyParser);
   // P2's posts take the same 32 KB parser (plan ruling 26).
   app.post(['/me/coins/seen', '/me/shop/purchases', '/me/room/expand'], saveBodyParser);
+  // P4's posts take the same 32 KB parser (P4 ruling 29).
+  app.post(SOCIAL_ROOM_POSTS, saveBodyParser);
   app.use(
     express.json({
       verify: (req: any, _res, buf) => {
@@ -53,6 +56,7 @@ export function createApp(options: { auth?: Auth } = {}): Express {
   app.use(kipRouter);
   app.use(cosmeticsRouter);
   app.use(coinsRouter);
+  app.use(socialRoomRouter);
   app.use(lastErrorHandler);
   return app;
 }

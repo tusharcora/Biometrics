@@ -40,6 +40,14 @@ export const BUDDY_ERROR_STATUS = {
   invalid_status_note: 400,
   invalid_report: 400,
   report_target_gone: 404,
+  // Free-build P4 (spec 2026-10-15 §10, §12; P4 ruling 25).
+  already_cheered: 409,
+  not_spare: 403,
+  gift_limit: 429,
+  gift_gone: 404,
+  challenge_closed: 409,
+  no_challenge: 404,
+  invalid_body: 400,
 } as const;
 
 export type BuddyErrorCode = keyof typeof BUDDY_ERROR_STATUS;
