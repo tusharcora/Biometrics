@@ -151,15 +151,15 @@ export function RoomView(props: RoomViewProps) {
     () => ({ x: -offset.x / cellPt, y: -offset.y / cellPt, w: crop.width / cellPt, h: crop.height / cellPt }),
     [offset, crop.width, crop.height, cellPt],
   );
-  // The cat's tiles as of the last render, read when KIP plans a trip (it plans in a timer, after this render).
-  const catTiles = useRef<ReadonlySet<string>>(new Set());
+  // The cats' tiles as last drawn, read when KIP plans a trip (it plans in a timer, after the commit).
+  const catTiles = useRef<ReadonlySet<string>>(NO_KEYS);
   const walk = useKipWalk({ enabled: !!props.kipWalks && !still && !bubble, layout, tier, effects, view, avoid: () => catTiles.current });
   const walked = useMemo(() => walkMover(walk), [walk]);
   const kipMover = props.kipMover ?? walked;
   const walking = !!kipMover;
   // The cat stays on its own tile in the editor (spec §8.2) and while the card is out of sight (T5-FIX M1).
   const catMovers = useCatWander({ enabled: !!props.live && !still && !props.holdClock && !props.editing, layout, tier, effects, view, waits: walking });
-  catTiles.current = useMemo(() => takenTiles(catMovers), [catMovers]);
+  useEffect(() => { catTiles.current = takenTiles(catMovers); }, [catMovers]);
   const pieceMovers = props.pieceMovers ?? catMovers;
   const moverKey = pieceMovers.map((m) => m.id).sort().join(',');
   const moverIds = useMemo(() => (moverKey ? moverKey.split(',') : NO_IDS), [moverKey]);

@@ -1,6 +1,7 @@
 // The cat's wander (spec 2026-10-15 §8.2, §9.2; P3 ruling 10): from its own tile to the nearest free tile of the front
-// row (j = m − 1, the row nearest you along the left side), then up to 3 tiles along it, toward the side with more
-// room; half a tile per 400 ms step, a 2.4 s pause at each end, then home again, round and round. Only a running cat
+// row, then up to 3 tiles along it, toward the side with more room. The front row is j = m − 1 (the row nearest you
+// along the left side) when the card shows 2 of its tiles free; in a bigger room the card's crop cuts that row off,
+// so it is the frontmost row that does (ruling T11-ROW). Then half a tile per 400 ms step, a 2.4 s pause at each end, then home again, round and round. Only a running cat
 // in the `wander` state wanders, and only where RoomView animates (the KIP page's room card, Reduce Motion off). It
 // paths like KIP (Task 10): over free tiles inside the card's crop only, never over KIP's seat or the tile out of it.
 // KIP and the cat never share a tile: KIP plans each trip round the tiles the cat is on and steps onto next
@@ -21,12 +22,17 @@ export const PAUSE_STEPS = 6;
 export interface CatRoute { id: string; path: Tile[] }
 
 const key = (t: Tile) => `${t[0]},${t[1]}`;
+const NO_TILES: ReadonlySet<string> = new Set();
 
 /**
- * The cat's way out from its own tile, or null when it can reach no tile of the front row (it sits). With `view`, only
- * tiles inside the room card's crop are walked on (spec §9.2), as for KIP.
+ * The cat's way out from its own tile, or null when no row has 2 free tiles or it can reach none of its row's (it
+ * sits). With `view`, only tiles inside the room card's crop are walked on (spec §9.2), as for KIP; `avoid` holds the
+ * tiles other wandering cats walk, so two cats never share one.
  */
-export function catRoute(layout: RoomLayout, tier: Tier, cat: Placement, deps: GeometryDeps = GEOMETRY_DEPS, view: Box | null = null): Tile[] | null {
+export function catRoute(
+  layout: RoomLayout, tier: Tier, cat: Placement, deps: GeometryDeps = GEOMETRY_DEPS, view: Box | null = null,
+  avoid: ReadonlySet<string> = NO_TILES,
+): Tile[] | null {
   const { n, m } = tierSize(tier);
   const blocked = blockedTiles(layout, deps);
   blocked.delete(key([cat.x, cat.y]));
@@ -38,8 +44,12 @@ export function catRoute(layout: RoomLayout, tier: Tier, cat: Placement, deps: G
     const g = isoGrid(tier);
     for (let i = 0; i < n; i++) for (let j = 0; j < m; j++) if (!tileInView(g, [i, j], view)) blocked.add(key([i, j]));
   }
+  for (const t of avoid) blocked.add(t);
   const home: Tile = [cat.x, cat.y];
-  const front = m - 1;
+  const freeIn = (j: number) => { let c = 0; for (let i = 0; i < n; i++) if (!blocked.has(key([i, j]))) c++; return c; };
+  let front = m - 1;
+  while (front >= 0 && freeIn(front) < 2) front--;
+  if (front < 0) return null;
   let best: Tile[] | null = null;
   for (let i = 0; i < n; i++) {
     const p = bfs(home, [i, front], n, m, blocked);
@@ -62,14 +72,18 @@ export function catRoute(layout: RoomLayout, tier: Tier, cat: Placement, deps: G
   return path.length > 1 ? path : null;
 }
 
-/** Every running cat in the `wander` state with somewhere to go. */
+/** Every running cat in the `wander` state with somewhere to go; each plans round the routes before it. */
 export function wanderRoutes(layout: RoomLayout, tier: Tier, effects: RoomEffects, deps: GeometryDeps = GEOMETRY_DEPS, view: Box | null = null): CatRoute[] {
-  return layout.pieces
-    .filter((p) => p.layer === 'floor' && effects.running.has(p.id) && effects.states.get(p.id) === 'wander' && deps.isoOf(p.item)?.effect === 'wander')
-    .flatMap((p) => {
-      const path = catRoute(layout, tier, p, deps, view);
-      return path ? [{ id: p.id, path }] : [];
-    });
+  const taken = new Set<string>();
+  const out: CatRoute[] = [];
+  for (const p of layout.pieces) {
+    if (p.layer !== 'floor' || !effects.running.has(p.id) || effects.states.get(p.id) !== 'wander' || deps.isoOf(p.item)?.effect !== 'wander') continue;
+    const path = catRoute(layout, tier, p, deps, view, taken);
+    if (!path) continue;
+    for (const t of path) taken.add(key(t));
+    out.push({ id: p.id, path });
+  }
+  return out;
 }
 
 /** Where a cat is at step `tick` of its round: out, a pause, back, a pause; `next` is where the next step takes it. */
@@ -99,7 +113,12 @@ export function takenTiles(movers: readonly PieceMover[]): Set<string> {
   return out;
 }
 
-const onTile = (m: PieceMover): PieceMover => ({ ...m, pos: m.depth, next: m.depth });
+/** A step between two tiles moves on to the tile it was stepping onto: where a cat waits (no half-tile jump back). */
+const wholeStep = (r: CatRoute, tick: number): number => {
+  const { pos } = catAt(r, tick);
+  return pos[0] % 1 !== 0 || pos[1] % 1 !== 0 ? tick + 1 : tick;
+};
+const NO_TICKS: readonly number[] = [];
 
 export interface CatWanderInput {
   enabled: boolean;
@@ -125,19 +144,26 @@ export function useCatWander({ enabled, layout, tier, effects, view = null, wait
   const viewId = view ? `${view.x},${view.y},${view.w},${view.h}` : '';
   const routeKey = enabled ? `${layoutId}#${tier}#${cats}#${viewId}` : '';
   const routes = useMemo(() => (routeKey ? wanderRoutes(layout, tier, effects, GEOMETRY_DEPS, view) : []), [routeKey]); // eslint-disable-line react-hooks/exhaustive-deps
-  // The route the tick belongs to joins it, so a new room puts the cat home in that same render.
-  const [state, setState] = useState({ route: '', tick: 0 });
-  const tick = state.route === routeKey ? state.tick : 0;
+  // The route the ticks belong to joins them, so a new room puts each cat home in that same render. Each cat has its
+  // own tick: waiting snaps each to a whole tile, and they need not be in step.
+  const [state, setState] = useState<{ route: string; ticks: readonly number[] }>({ route: '', ticks: NO_TICKS });
+  const ticks = state.route === routeKey ? state.ticks : NO_TICKS;
+  const tickOf = (k: number) => ticks[k] ?? 0;
   useEffect(() => {
-    setState((s) => (s.route === routeKey ? s : { route: routeKey, tick: 0 }));
+    const fresh = (s: { route: string; ticks: readonly number[] }) => (s.route === routeKey ? s.ticks : NO_TICKS);
+    // Waiting, each cat stays on the tile it was stepping onto, and goes on from there when KIP sits.
+    setState((s) => (s.route === routeKey && !waits ? s : { route: routeKey, ticks: routes.map((r, k) => (waits ? wholeStep(r, fresh(s)[k] ?? 0) : 0)) }));
     if (!routes.length || waits) return undefined;
     let timer: ReturnType<typeof setTimeout> | null = null;
     const step = () => {
-      setState((s) => ({ route: routeKey, tick: (s.route === routeKey ? s.tick : 0) + 1 }));
+      setState((s) => ({ route: routeKey, ticks: routes.map((_, k) => (fresh(s)[k] ?? 0) + 1) }));
       timer = setTimeout(step, STEP_MS);
     };
     timer = setTimeout(step, STEP_MS);
     return () => { if (timer) clearTimeout(timer); };
   }, [routes, routeKey, waits]);
-  return useMemo(() => routes.map((r) => (waits ? onTile(catAt(r, tick)) : catAt(r, tick))), [routes, tick, waits]);
+  return useMemo(
+    () => routes.map((r, k) => catAt(r, waits ? wholeStep(r, tickOf(k)) : tickOf(k))),
+    [routes, ticks, waits], // eslint-disable-line react-hooks/exhaustive-deps
+  );
 }
