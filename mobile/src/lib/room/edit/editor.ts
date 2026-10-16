@@ -13,8 +13,11 @@ import { COACH_ITEM, coachTile, nearestFloor, nearestFree, placedAt, refusal, ro
 
 export interface Draft { layout: RoomLayout; worn: KipWorn }
 export type DrawerTab = 'all' | 'floor' | 'wall' | 'onTop' | 'funny' | 'effects' | 'new' | 'room' | 'kip' | 'sets';
-/** The editor route's params (spec §5.1): the drawer tab to open on, a piece to show there, the first-week coach. */
-export type DecorateParams = { drawer?: DrawerTab | 'new'; item?: ItemId; coach?: boolean };
+/**
+ * The editor route's params (spec §5.1): the drawer tab to open on, a piece to show there, the first-week coach, and a
+ * piece card's Move and Store (P3 ruling 16): the piece selected, and for Store already stored as the first undo step.
+ */
+export type DecorateParams = { drawer?: DrawerTab | 'new'; item?: ItemId; coach?: boolean; select?: string; store?: boolean };
 export type NudgeDir = 'backLeft' | 'backRight' | 'frontLeft' | 'frontRight' | 'up' | 'down';
 export type Preview = { kind: 'worn'; slot: WornSlot; item: ItemId } | { kind: 'set'; setId: string };
 /** What Apply set did (ruling T9-FIX): the set's items you don't own yet, and whether your own desk stayed. */

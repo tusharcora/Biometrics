@@ -96,9 +96,9 @@ it('never gives health advice in an effect or living line (spec §8.3, P3 ruling
   for (const bad of ['Sleep more to grow your fern.', 'Walk 2,000 more steps to wake the cat.', 'You should rest.', 'Try for 8 hours.']) expect(advises(bad)).toBe(true);
   // Only the health-verb rule catches this one: no advice word in it.
   expect([ADVICE.test('Drink water.'), HEALTH_VERB.test('Drink water.'), advises('Drink water.')]).toEqual([false, true, true]);
-  // Ruling 18 scans the piece card's strings too; ROOM_COPY.card arrives with the card (a later task) and is read then.
-  const scanned = [ROOM_COPY.effects, (ROOM_COPY as Record<string, unknown>).card];
-  const lines = copyStrings(scanned);
+  // Ruling 18 scans the piece card's strings too (Task 13).
+  const lines = [...copyStrings(ROOM_COPY.effects), ...copyStrings(ROOM_COPY.card)];
+  expect(lines).toEqual(expect.arrayContaining(['That piece has left your room.', 'Store the fern', 'fern card']));
   expect(lines).toEqual(expect.arrayContaining(['No awards on it yet.', '1 award so far.', '7 awards so far.']));
   expect(lines.length).toBeGreaterThan(15);
   for (const s of lines) expect({ s, advises: advises(s) }).toEqual({ s, advises: false });

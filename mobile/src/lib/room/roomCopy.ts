@@ -181,6 +181,22 @@ export const ROOM_COPY = {
     fxTag: 'Does something',
     onlyForFun: 'Effects are only for fun. They never change your health data, scores or what KIP says.',
   },
+  /** The piece card (spec 2026-10-15 §8.1, F7). Never advice (P3 ruling 18), so no "try" even when it fails (T4-FIX). */
+  card: {
+    close: 'Close',
+    effectTitle: 'EFFECT',
+    /** "From the coin shop · 150 coins" (PF3-COPY): the rule and the price, and read aloud without "·". */
+    earned: (rule: string, coins: string) => `${rule} · ${coins} coins`,
+    earnedSpoken: (rule: string, coins: string) => `${rule}, ${coins} coins`,
+    sound: 'Play sound in the room',
+    soundHint: 'Sound is off until you turn it on.',
+    move: 'Move',
+    store: 'Store',
+    moveLabel: (name: string) => `Move the ${name}`,
+    storeLabel: (name: string) => `Store the ${name}`,
+    open: (name: string) => `${name} card`,
+    gone: 'That piece has left your room.',
+  },
   edit: {
     title: 'EDITING',
     count: (n: number, cap: number) => `${n} / ${cap} in room`,

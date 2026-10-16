@@ -1,5 +1,5 @@
 import React, { useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
-import { View } from 'react-native';
+import { AccessibilityInfo, View, findNodeHandle } from 'react-native';
 import { Canvas, Group, Picture, Skia, type SkPicture } from '@shopify/react-native-skia';
 import { Text } from '../ui/text';
 import { record } from './pictures';
@@ -9,16 +9,17 @@ import type { ItemContext, MonitorScreen } from '../../lib/room/items';
 import type { KipWorn } from '../../lib/room/loadout';
 import type { RoomWeather } from '../../lib/room/weather';
 import { pieceLayers } from '../../lib/room/iso/art';
-import type { IsoStatic, KipSeat, RoomKip } from '../../lib/room/iso/room';
+import type { IsoStatic, KipSeat, PieceHit, RoomKip } from '../../lib/room/iso/room';
 import { drawIsoFramesEach, drawIsoStatic, drawKipLayer, isoRoomKey, kipLayerKey, pieceAt } from '../../lib/room/iso/room';
 import { deskBoxes, isoCrop } from '../../lib/room/iso/crop';
+import { moveRects, opaqueBounds } from '../../lib/room/iso/prims';
 import { isoGrid } from '../../lib/room/iso/grid';
 import { KIP_MOVER, MOVER_PREFIX, kipTileCell, moverOrder, pieceTileCell, sameTile, type Tile } from '../../lib/room/iso/movers';
 import type { Placement, RoomLayout, Tier } from '../../lib/room/iso/geometry';
 import { KIP_COLOURS, kipRamp, type KipColour, type KipMood, type KipPose } from '../../lib/kip/kipArt';
 import { useFrameClock } from '../../lib/useFrameClock';
 import { useScreenFocused } from '../../lib/useScreenFocused';
-import type { Living } from '../../lib/room/effects';
+import { withState, type Living } from '../../lib/room/effects';
 import { useRoomEffects } from './useRoomEffects';
 import { useKipWalk, walkMover } from '../../lib/room/live/useKipWalk';
 import { takenTiles, useCatWander } from '../../lib/room/live/catWander';
@@ -44,8 +45,14 @@ export interface KipMover {
 /** A piece drawn as a mover (the wandering cat, spec §8.2); `next` is the tile its next step takes it onto. */
 export interface PieceMover { id: string; pos: readonly [number, number]; depth: Tile; flip: boolean; next?: Tile }
 export interface RoomViewHandle {
-  /** The topmost piece under a point in this view, in points (the piece card, spec §8.1), or null. */
+  /** The topmost piece under a point in this view, in points (the piece card, spec §8.1), or null. The movers are
+   * tried first, topmost first: a wandering cat is found where it walks, and a walking KIP answers KIP_MOVER (no
+   * piece), so a tap on KIP never opens the card of what stands behind it (T13-CARRY). */
   pieceAtPoint(x: number, y: number): string | null;
+  /** Plays a tapped piece's squash (ruling 17); nothing under Reduce Motion or while the loops are held. */
+  squash(id: string): void;
+  /** Gives the room image a screen reader's focus (back from a piece card). */
+  focus(): void;
 }
 
 export interface RoomViewProps {
@@ -95,6 +102,9 @@ export interface RoomViewProps {
   accessible?: boolean;
   /** Holds the loops (frame 0) while something covers the room, such as the editor (spec §8 Loops). */
   paused?: boolean;
+  /** The room image's custom actions: one per piece card (spec §5.7, ruling 16). */
+  pieceActions?: ReadonlyArray<{ id: string; label: string }>;
+  onPieceAction?: (pieceId: string) => void;
   testID?: string;
   ref?: Ref<RoomViewHandle>;
 }
@@ -137,6 +147,13 @@ export function RoomView(props: RoomViewProps) {
     hold: !focused || !!props.dragging || !!props.paused || !!props.holdClock,
     editing: props.editing,
   });
+  // A tapped piece's squash (ruling 17): 0.7 then 0.85 of its height, a loop frame each, then back. Each of the two
+  // frames rebuilds the static room with that piece's state (an allowed per-frame recording, PF3-SQUASH: no shipped P3
+  // piece has a tap effect); at rest the room is the one it was, so the ticks record nothing again.
+  const [squash, setSquash] = useState<{ id: string; k: 1 | 2 } | null>(null);
+  const squashTimers = useRef<ReturnType<typeof setTimeout>[]>([]);
+  useEffect(() => () => squashTimers.current.forEach(clearTimeout), []);
+  const shown = useMemo(() => (squash ? withState(effects, squash.id, `squash${squash.k}`) : effects), [effects, squash]);
   // The crop in room cells, so KIP and the cat only walk where the card shows (spec §9.2). From the room's grid and
   // desk boxes, not the built room: the movers are left out of that one, so it is built after them.
   const thumb = props.box === 'thumb';
@@ -166,8 +183,8 @@ export function RoomView(props: RoomViewProps) {
   const hide = props.hide ?? null;
   // Built from the props once per change, not on each frame-clock render.
   const input = useMemo(
-    () => ({ layout, tier, weather, night, colour, hide, effects, movers: moverIds }),
-    [layout, tier, weather, night, colour, hide, effects, moverIds],
+    () => ({ layout, tier, weather, night, colour, hide, effects: shown, movers: moverIds }),
+    [layout, tier, weather, night, colour, hide, shown, moverIds],
   );
   const staticKey = useMemo(() => isoRoomKey(input), [input]);
   // A given room (the editor's) has no movers left out of it, so with piece movers the view builds its own (M5).
@@ -330,19 +347,56 @@ export function RoomView(props: RoomViewProps) {
     </Group>
   ) : seatedFrames ? <Picture picture={seatedFrames[frame]!} /> : null;
 
+  // The movers as hit boxes in draw order (pieceAt reads the last first): each sprite's base at its tile, and KIP's
+  // frame where it walks. Built on a tap, never on a frame.
+  const moverHits = (): PieceHit[] => {
+    const out: PieceHit[] = [];
+    const ctx: ItemContext = { weather, night, colour, ramp: kipRamp(KIP_COLOURS[colour]), screen: 'lines' };
+    for (const key of order) {
+      let rects: Rects | null = null;
+      if (key === KIP_MOVER) rects = kipMover ? moveRects(kipRects[frame]!, dx, dy) : null;
+      else if (key.startsWith(MOVER_PREFIX)) {
+        const m = pieceMovers.find((q) => `${MOVER_PREFIX}${q.id}` === key);
+        const s = m ? spriteOf(m) : null;
+        const at = spriteCells.get(key);
+        const l = s && at ? pieceLayers(s.p.item, ctx, { layer: 'floor', facing: s.p.facing, mirror: m!.flip, ...(s.state ? { effect: s.state } : {}) }) : null;
+        rects = l && at ? moveRects(l.base ?? [], at[0], at[1]) : null;
+      }
+      const box = rects ? opaqueBounds(rects) : null;
+      if (rects && box) out.push({ id: key.startsWith(MOVER_PREFIX) ? key.slice(MOVER_PREFIX.length) : key, box, rects });
+    }
+    return out;
+  };
+  const rootRef = useRef<View>(null);
   useImperativeHandle(props.ref, () => ({
-    pieceAtPoint: (x: number, y: number) => pieceAt(room.hits, Math.floor((x - offset.x) / cellPt), Math.floor((y - offset.y) / cellPt)),
-  }), [room, offset.x, offset.y, cellPt]);
+    pieceAtPoint: (x: number, y: number) => {
+      const [cx, cy] = [Math.floor((x - offset.x) / cellPt), Math.floor((y - offset.y) / cellPt)];
+      return (movers ? pieceAt(moverHits(), cx, cy) : null) ?? pieceAt(room.hits, cx, cy);
+    },
+    squash: (id: string) => {
+      if (still) return;
+      squashTimers.current.forEach(clearTimeout);
+      setSquash({ id, k: 1 });
+      squashTimers.current = [setTimeout(() => setSquash({ id, k: 2 }), LOOP_MS), setTimeout(() => setSquash(null), 2 * LOOP_MS)];
+    },
+    focus: () => {
+      const node = rootRef.current ? findNodeHandle(rootRef.current) : null;
+      if (node) AccessibilityInfo.setAccessibilityFocus(node);
+    },
+  }));
   const anchor = bubbleAnchor(seat);
   // Measured, so a long bubble is pulled in from the right edge instead of clipped by the crop.
   const [bubbleWidth, setBubbleWidth] = useState(0);
   const bubbleLeft = Math.max(BUBBLE_INSET, Math.min(offset.x + anchor.x * cellPt - 36, crop.width - bubbleWidth - BUBBLE_INSET));
   return (
     <View
+      ref={rootRef}
       testID={props.testID}
       accessible={props.accessible ?? true}
       accessibilityRole={props.accessible === false ? undefined : 'image'}
       accessibilityLabel={props.accessibilityLabel}
+      accessibilityActions={props.pieceActions?.map((a) => ({ name: a.id, label: a.label }))}
+      onAccessibilityAction={(e) => props.onPieceAction?.(e.nativeEvent.actionName)}
       style={{ width: crop.width, height: crop.height, overflow: 'hidden' }}
     >
       <Canvas style={{ width: crop.width, height: crop.height }}>

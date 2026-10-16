@@ -80,7 +80,13 @@ export function DecorateRoomScreen() {
 }
 
 export function initialState(c: Cosmetics, params: DecorateParams): EditorState {
-  return initEditor({ layout: c.layout, worn: c.worn, tier: c.tier, counts: c.counts, version: c.version, newIds: c.fresh.map((f) => f.itemId) }, params);
+  let s = initEditor({ layout: c.layout, worn: c.worn, tier: c.tier, counts: c.counts, version: c.version, newIds: c.fresh.map((f) => f.itemId) }, params);
+  // From a piece card (ruling 16): the piece selected, and Store already done (one undo step; Done saves it).
+  if (params.select && s.draft.layout.pieces.some((p) => p.id === params.select)) {
+    s = editorReducer(s, { type: 'select', id: params.select });
+    if (params.store) s = editorReducer(s, { type: 'store' });
+  }
+  return s;
 }
 
 function Editor({ cosmetics, params, navigation }: { cosmetics: Cosmetics; params: DecorateParams; navigation: any }) {

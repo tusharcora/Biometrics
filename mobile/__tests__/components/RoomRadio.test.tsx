@@ -3,7 +3,7 @@ import { AppState, type AppStateStatus } from 'react-native';
 import { act, render } from '@testing-library/react-native';
 import * as SecureStore from 'expo-secure-store';
 import * as Audio from 'expo-audio';
-import { RADIO_VOLUME, RoomRadio } from '../../src/components/room/RoomRadio';
+import { RADIO_VOLUME, RoomRadio, resetRadioAudioMode } from '../../src/components/room/RoomRadio';
 import { resetRoomSound, setRoomSound } from '../../src/lib/room/sound';
 
 jest.mock('expo-secure-store');
@@ -25,9 +25,27 @@ it('stays silent with the switch off, the default (Review Focus 3)', async () =>
 });
 
 it('honours the silent switch, mixes with other audio and never plays in the background (ruling 15)', async () => {
+  resetRadioAudioMode();
   render(<RoomRadio active />);
   await act(async () => undefined);
+  await act(async () => { await setRoomSound(true); });
   expect(Audio.setAudioModeAsync).toHaveBeenCalledWith({ playsInSilentMode: false, interruptionMode: 'mixWithOthers', shouldPlayInBackground: false, allowsRecording: false });
+});
+
+it('sets the app-wide audio mode only the first time the radio plays, never on a mount (T13-CARRY)', async () => {
+  resetRadioAudioMode();
+  const off = render(<RoomRadio active />);
+  await act(async () => undefined);
+  expect(Audio.setAudioModeAsync).not.toHaveBeenCalled(); // mounted, switch off: the app's audio is left alone
+  await act(async () => { await setRoomSound(true); });
+  expect(Audio.setAudioModeAsync).toHaveBeenCalledTimes(1);
+  off.rerender(<RoomRadio active={false} />);
+  off.rerender(<RoomRadio active />);
+  off.unmount();
+  render(<RoomRadio active />);
+  await act(async () => undefined);
+  expect(player.play.mock.calls.length).toBeGreaterThanOrEqual(3);
+  expect(Audio.setAudioModeAsync).toHaveBeenCalledTimes(1);
 });
 
 it('plays the loop with the switch on, and pauses when the room is covered, blurred or backgrounded', async () => {

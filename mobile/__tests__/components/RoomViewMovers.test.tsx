@@ -5,7 +5,7 @@ import { LOOP_MS, RoomView, type KipMover, type RoomViewHandle, type RoomViewPro
 import { KIP_POSES } from '../../src/lib/kip/kipArt';
 import { PictureLru, RunPictures } from '../../src/components/room/pictureCache';
 import { isoGrid } from '../../src/lib/room/iso/grid';
-import { pieceTileCell } from '../../src/lib/room/iso/movers';
+import { KIP_MOVER, pieceTileCell } from '../../src/lib/room/iso/movers';
 import { NIGHT_VEIL } from '../../src/lib/room/weather';
 import type { Placement } from '../../src/lib/room/iso/geometry';
 import { EMPTY_WORN } from '../../src/lib/room/loadout';
@@ -288,6 +288,76 @@ describe('RoomView with movers (spec §3.4, §3.7, rulings 11-12)', () => {
     let hit: string | null = null;
     for (let x = 0; x < 323 && !hit; x += 4) for (let y = 0; y < 240 && !hit; y += 4) hit = ref.current!.pieceAtPoint(x, y);
     expect(hit).not.toBeNull();
+  });
+
+  // Every point of the view, by what a tap there finds.
+  const hitsOf = (ref: React.RefObject<RoomViewHandle | null>) => {
+    const found = new Map<string, Array<[number, number]>>();
+    for (let x = 0; x < 323; x += 2) for (let y = 0; y < 240; y += 2) {
+      const id = ref.current!.pieceAtPoint(x, y);
+      if (id) found.set(id, [...(found.get(id) ?? []), [x, y]]);
+    }
+    return found;
+  };
+
+  it('a tap finds a wandering piece where its sprite is drawn, not where it was placed (T13-CARRY)', () => {
+    const ref = createRef<RoomViewHandle>();
+    const s = render(<RoomView {...PROPS} ref={ref} />);
+    const placed = hitsOf(ref).get('plant')!;
+    expect(placed.length).toBeGreaterThan(0);
+    s.rerender(<RoomView {...PROPS} ref={ref} pieceMovers={[{ id: 'plant', pos: [5, 5], depth: [5, 5], flip: false }]} />);
+    const moved = hitsOf(ref).get('plant') ?? [];
+    expect(moved.length).toBeGreaterThan(0);
+    // Found where the sprite stands now, a few tiles from its placement: none of its old points.
+    const was = new Set(placed.map(([x, y]) => `${x},${y}`));
+    expect(moved.filter(([x, y]) => was.has(`${x},${y}`))).toEqual([]);
+  });
+
+  it('a walking KIP is found in front of what it stands before, and is no piece (T13-CARRY)', () => {
+    const ref = createRef<RoomViewHandle>();
+    const s = render(<RoomView {...PROPS} ref={ref} />);
+    expect(hitsOf(ref).has(KIP_MOVER)).toBe(false); // seated, KIP is part of the picture
+    s.rerender(<RoomView {...PROPS} ref={ref} kipMover={OUT} />);
+    const kip = hitsOf(ref).get(KIP_MOVER) ?? [];
+    expect(kip.length).toBeGreaterThan(0);
+    // The topmost wins: a mover in front of KIP is found over it.
+    s.rerender(<RoomView {...PROPS} ref={ref} kipMover={OUT} pieceMovers={[{ id: 'plant', pos: [3, 5], depth: [3, 5], flip: false }]} />);
+    const both = hitsOf(ref);
+    const over = (both.get('plant') ?? []).filter(([x, y]) => kip.some(([kx, ky]) => kx === x && ky === y));
+    expect(over.length).toBeGreaterThan(0);
+  });
+
+  it('a tapped piece squashes over two frames and springs back; never under Reduce Motion (ruling 17)', () => {
+    const ref = createRef<RoomViewHandle>();
+    const s = render(<RoomView {...PROPS} ref={ref} />);
+    const [back, , front] = pictures(s);
+    act(() => ref.current!.squash('plant'));
+    expect(pictures(s)[0] !== back || pictures(s)[2] !== front).toBe(true);
+    act(() => { jest.advanceTimersByTime(800); });
+    const calm = render(<RoomView {...PROPS} ref={ref} reduceMotion />);
+    const before = picture.mock.calls.length;
+    act(() => ref.current!.squash('plant'));
+    expect(picture.mock.calls.length - before).toBe(0);
+    calm.unmount();
+  });
+
+  it('the squash is 0.7 then 0.85 of the piece for 400 ms each, then the picture it had; an unmount leaves no timer (ruling 17, PF3-SQUASH)', () => {
+    const ref = createRef<RoomViewHandle>();
+    const s = render(<RoomView {...PROPS} ref={ref} />);
+    const rest = pictures(s);
+    act(() => ref.current!.squash('plant'));
+    const one = pictures(s);
+    act(() => { jest.advanceTimersByTime(LOOP_MS); });
+    const two = pictures(s);
+    expect(two).not.toEqual(one);
+    act(() => { jest.advanceTimersByTime(LOOP_MS); });
+    const after = picture.mock.calls.length;
+    expect(pictures(s)).toHaveLength(rest.length);
+    act(() => { jest.advanceTimersByTime(LOOP_MS * 6); });
+    expect(picture.mock.calls.length - after).toBe(0); // back at rest, the ticks record nothing again
+    act(() => ref.current!.squash('plant'));
+    s.unmount();
+    expect(jest.getTimerCount()).toBe(0);
   });
 });
 

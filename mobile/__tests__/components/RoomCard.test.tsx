@@ -4,6 +4,7 @@ import { act, fireEvent, render } from '@testing-library/react-native';
 import * as SecureStore from 'expo-secure-store';
 import * as Audio from 'expo-audio';
 import { RoomCard, runsSound } from '../../src/components/coach/RoomCard';
+import * as CardModel from '../../src/lib/room/card';
 import type { RoomEffects } from '../../src/lib/room/effects';
 import type { RoomLayout } from '../../src/lib/room/iso/geometry';
 import { loadRoomSound, resetRoomSound } from '../../src/lib/room/sound';
@@ -19,6 +20,7 @@ import { getCoins, loadCoins, resetCoins } from '../../src/lib/coins/coinsStore'
 import { ScreenNavigationContext } from '../../src/lib/useScreenFocused';
 
 jest.mock('../../src/components/room/RoomView', () => require('../../jest-mocks/RoomView'));
+const RoomViewMock = jest.requireMock('../../src/components/room/RoomView');
 jest.mock('expo-secure-store');
 jest.mock('../../src/api/cosmetics', () => ({ fetchCosmetics: jest.fn(), putCosmetics: jest.fn(), postCosmeticsSeen: jest.fn(), postRoomWelcomed: jest.fn(async () => undefined) }));
 jest.mock('../../src/api/coins', () => ({ fetchCoins: jest.fn(), postCoinsSeen: jest.fn(async () => undefined), fetchFirstWeek: jest.fn(), fetchShop: jest.fn(), postPurchase: jest.fn(), postExpand: jest.fn() }));
@@ -109,6 +111,68 @@ it('is 240 points tall, and a long press on the room opens the editor (spec §5.
   fireEvent(s.getByTestId('kip-room-press'), 'longPress');
   expect(onDecorate).toHaveBeenCalledTimes(1);
   expect(s.getByTestId('kip-room-press').props.accessible).toBe(false); // the room stays one image for screen readers
+});
+
+it('a tap on an effect piece or a plant opens its card; a tap elsewhere does nothing (spec §8.1)', async () => {
+  const onOpenPiece = jest.fn();
+  const s = renderCard({ onOpenPiece });
+  RoomViewMock.__setPieceAt(() => 'plant');
+  fireEvent.press(s.getByTestId('kip-room-press'), { nativeEvent: { locationX: 120, locationY: 90 } });
+  expect(onOpenPiece).toHaveBeenCalledWith('plant');
+  RoomViewMock.__setPieceAt(() => 'rug');
+  fireEvent.press(s.getByTestId('kip-room-press'), { nativeEvent: { locationX: 10, locationY: 10 } });
+  expect(onOpenPiece).toHaveBeenCalledTimes(1);
+  RoomViewMock.__setPieceAt(() => null);
+  expect(s.getByTestId('kip-room').props.accessibilityActions).toEqual([{ name: 'plant', label: 'Fern card' }]);
+});
+
+it('a screen reader opens a card through the room image\'s action, and focus comes back to the room when it closes (house pattern)', () => {
+  const onOpenPiece = jest.fn();
+  const listeners: Record<'focus' | 'blur', Set<() => void>> = { focus: new Set(), blur: new Set() };
+  const nav = {
+    isFocused: () => true,
+    addListener: (event: 'focus' | 'blur', cb: () => void) => {
+      listeners[event].add(cb);
+      return () => { listeners[event].delete(cb); };
+    },
+  };
+  const s = render(
+    <ScreenNavigationContext.Provider value={nav as never}>
+      <RoomCard stage={STAGE} window={WINDOW} recovery={FAIR} reduceMotion={false} onOpenRecovery={jest.fn()} onOpenPiece={onOpenPiece} />
+    </ScreenNavigationContext.Provider>,
+  );
+  fireEvent(s.getByTestId('kip-room-frame-inner'), 'layout', { nativeEvent: { layout: { width: 323, height: 240, x: 0, y: 0 } } });
+  const handle = RoomViewMock.__handle();
+  fireEvent(s.getByTestId('kip-room'), 'accessibilityAction', { nativeEvent: { actionName: 'plant' } });
+  expect(onOpenPiece).toHaveBeenCalledWith('plant');
+  act(() => listeners.blur.forEach((cb) => cb()));
+  expect(handle.focus).not.toHaveBeenCalled();
+  act(() => listeners.focus.forEach((cb) => cb()));
+  expect(handle.focus).toHaveBeenCalledTimes(1);
+  // Only a card's own close returns focus: another trip away and back leaves it where it was.
+  act(() => listeners.blur.forEach((cb) => cb()));
+  act(() => listeners.focus.forEach((cb) => cb()));
+  expect(handle.focus).toHaveBeenCalledTimes(1);
+});
+
+it('a tap on a running tap piece squashes it instead of opening a card (ruling 17)', () => {
+  const onOpenPiece = jest.fn();
+  const tap = jest.spyOn(CardModel, 'pieceTap').mockReturnValue('squash');
+  const s = renderCard({ onOpenPiece });
+  RoomViewMock.__setPieceAt(() => 'deskitem');
+  fireEvent.press(s.getByTestId('kip-room-press'), { nativeEvent: { locationX: 120, locationY: 90 } });
+  RoomViewMock.__setPieceAt(() => null);
+  expect(RoomViewMock.__handle().squash).toHaveBeenCalledWith('deskitem');
+  expect(onOpenPiece).not.toHaveBeenCalled();
+  tap.mockRestore();
+});
+
+it('without a card to open, the room has no actions and a tap does nothing', () => {
+  const s = renderCard();
+  RoomViewMock.__setPieceAt(() => 'plant');
+  fireEvent.press(s.getByTestId('kip-room-press'), { nativeEvent: { locationX: 120, locationY: 90 } });
+  RoomViewMock.__setPieceAt(() => null);
+  expect(s.getByTestId('kip-room').props.accessibilityActions).toBeUndefined();
 });
 
 it('pauses the room while decorate mode is open', () => {
@@ -395,6 +459,23 @@ describe('the radio\'s sound (ruling 15, PF3-AUDIO)', () => {
     expect(player.play).not.toHaveBeenCalled();
     await act(async () => { focus.forEach((cb) => cb()); });
     expect(player.play).toHaveBeenCalledTimes(1);
+  });
+
+  it('plays again each time a hold lifts: the editor closed, back from under the header, coins no longer held (T13-CARRY)', async () => {
+    (SecureStore.getItemAsync as jest.Mock).mockResolvedValue('1');
+    (fetchCosmetics as jest.Mock).mockResolvedValue(withRadio());
+    await act(async () => { await loadCosmetics(); });
+    const s = renderCard();
+    await act(async () => undefined);
+    expect(player.play).toHaveBeenCalledTimes(1);
+    let plays = 1;
+    for (const hold of [{ paused: true }, { holdClock: true }, { holdCoins: true }]) {
+      s.rerender(<RoomCard stage={STAGE} window={WINDOW} recovery={FAIR} reduceMotion={false} onOpenRecovery={jest.fn()} {...hold} />);
+      expect(player.play).toHaveBeenCalledTimes(plays);
+      s.rerender(<RoomCard stage={STAGE} window={WINDOW} recovery={FAIR} reduceMotion={false} onOpenRecovery={jest.fn()} />);
+      plays += 1;
+      expect({ hold, plays: player.play.mock.calls.length }).toEqual({ hold, plays });
+    }
   });
 
   it('is silent with the switch off (the default), and while the stage loads', async () => {

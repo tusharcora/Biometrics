@@ -93,6 +93,26 @@ it('shows EDITING, the room count, and the whole room at 2 points, Done disabled
   expect(s.getByTestId('edit-done').props.accessibilityState.disabled).toBe(true);
 });
 
+it('opened from a piece card\'s Store, the piece is selected and already stored, ready for Done (ruling 16)', async () => {
+  const s = await openEditor({ select: 'plant', store: true });
+  expect(s.getByTestId('edit-count')).toHaveTextContent('6 / 40 in room');
+  expect(s.getByTestId('edit-done').props.accessibilityState.disabled).toBe(false);
+  // One undo step brings it back.
+  fireEvent.press(s.getByTestId('edit-undo'));
+  expect(s.getByTestId('edit-count')).toHaveTextContent('7 / 40 in room');
+  expect(s.getByTestId('edit-done').props.accessibilityState.disabled).toBe(true);
+});
+
+it('opened from a piece card\'s Move, the piece is selected and nothing has changed; a piece that has gone selects nothing (ruling 16)', async () => {
+  const s = await openEditor({ select: 'plant' });
+  expect(s.getByTestId('edit-tool-line')).toHaveTextContent('Fern · on the floor');
+  expect(s.getByTestId('edit-done').props.accessibilityState.disabled).toBe(true);
+  s.unmount();
+  const gone = await openEditor({ select: 'nope', store: true });
+  expect(gone.queryByTestId('edit-tool-line')).toBeNull();
+  expect(gone.getByTestId('edit-count')).toHaveTextContent('7 / 40 in room');
+});
+
 it('pauses the KIP page\'s loops while open (Spec B ruling 17)', async () => {
   const seen: boolean[] = [];
   function Probe() { seen.push(useDecorateOpen()); return null; }

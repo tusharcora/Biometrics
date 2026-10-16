@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Pressable, View, type ViewProps } from 'react-native';
 import { Card } from '../ui/card';
 import { SectionLabel } from '../ui/section-label';
@@ -7,13 +7,14 @@ import { Text } from '../ui/text';
 import { HotTag } from '../home/HotTag';
 import { RoomWelcomeCard } from './RoomWelcomeCard';
 import { RoomRadio } from '../room/RoomRadio';
-import { RoomView } from '../room/RoomView';
+import { RoomView, type RoomViewHandle } from '../room/RoomView';
 import { useRoomEffects } from '../room/useRoomEffects';
 import { useCoinsLanding } from '../coins/useCoinsLanding';
 import { HOME_COPY } from '../../lib/homeCopy';
 import { useMyKip } from '../../lib/kip/myKip';
 import { KIP_COPY } from '../../lib/kipCopy';
 import { hotTagLabel, roomLabel, type KipStage } from '../../lib/kipStage';
+import { cardPieces, pieceTap } from '../../lib/room/card';
 import { markWelcomed, useCosmetics, useMyRoom } from '../../lib/room/cosmeticsStore';
 import { effectOf, type RoomEffects } from '../../lib/room/effects';
 import type { RoomLayout } from '../../lib/room/iso/geometry';
@@ -37,13 +38,13 @@ export function runsSound(layout: RoomLayout, effects: RoomEffects): boolean {
 // diorama, cropped on KIP's desk (crop, never shrink: the inner width is measured, the height fixed at 240), a caption
 // row with the RECOVERY hot tag, an optional footer ("Shrink room", passed in by the page) and, last, the page's
 // first-week list (spec 2026-10-15 §11.2). The frame is part of the picture, not a button; a long-press on the room
-// opens the editor (§5.1). The tag keeps Home's dark-palette colours in both themes, as on the scene. `look` is KIP
+// opens the editor (§5.1), and a tap opens a piece card (spec 2026-10-15 §8.1). The tag keeps Home's dark-palette colours in both themes, as on the scene. `look` is KIP
 // mid-turn (useKipTurn); without it the stage's pose and mood are drawn. The room is your saved layout, with KIP in
 // what it wears; `paused` stops its loops while the editor is open (Spec B ruling 17). Until the first-week welcome is
 // answered it sits under the frame and KIP says "WELCOME HOME!" (spec 2026-10-15 §11.1, plan ruling 18); both of its
 // buttons record it for every device. Coins that landed since the last look show once in KIP's bubble, with a line
 // under the room (spec 2026-10-15 §6.7).
-export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, holdCoins, holdClock, kipWalks, onOpenRecovery, onDecorate, onPlaceLantern, footer, children, onLayout }: {
+export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, holdCoins, holdClock, kipWalks, onOpenRecovery, onDecorate, onOpenPiece, onPlaceLantern, footer, children, onLayout }: {
   stage: KipStage;
   look?: KipLook;
   window: { weather: RoomWeather; night: boolean };
@@ -59,6 +60,8 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
   onOpenRecovery: () => void;
   /** Long-press on the room opens the editor (spec 2026-10-15 §5.1). */
   onDecorate?: () => void;
+  /** A piece card (spec 2026-10-15 §8.1): a tap on an effect piece or a plant, or the room image's action. */
+  onOpenPiece?: (pieceId: string) => void;
   /** The welcome card's Place the lantern: opens the guided first placement (spec §11.1). */
   onPlaceLantern?: () => void;
   footer?: React.ReactNode;
@@ -84,13 +87,48 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
   // over it, such as the piece card, blurs it), the editor not over it, and the card neither under the collapsed header
   // nor waiting to know whether it is shrunk.
   const audible = stage.id !== 'loading' && inner > 0 && focused && !paused && !holdCoins && !holdClock;
+  // A tap on the room (spec §8.1, rulings 16-17): a running tap piece squashes, an effect piece or a plant opens its
+  // card, anything else (KIP, the rug, the desk) does nothing. When the card closes, a screen reader's focus comes back
+  // to the room image (the house pattern): only after a card, never after another trip away.
+  const roomRef = useRef<RoomViewHandle>(null);
+  const cardOpen = useRef(false);
+  const openPiece = (id: string) => {
+    if (!onOpenPiece) return;
+    cardOpen.current = true;
+    onOpenPiece(id);
+  };
+  const onRoomPress = (x: number, y: number) => {
+    const id = roomRef.current?.pieceAtPoint(x, y);
+    if (!id) return;
+    const tap = pieceTap(layout, id, effects);
+    if (tap === 'squash') roomRef.current?.squash(id);
+    else if (tap === 'card') openPiece(id);
+  };
+  const cardAway = useRef(false);
+  useEffect(() => {
+    if (!cardOpen.current) return;
+    if (!focused) {
+      cardAway.current = true;
+    } else if (cardAway.current) {
+      cardOpen.current = false;
+      cardAway.current = false;
+      roomRef.current?.focus();
+    }
+  }, [focused]);
   const landLine = landing ? ROOM_COPY.coins.landLine(ROOM_COPY.coins.landed[landing.kind], landing.more) : '';
   return (
     <Card testID="kip-room-card" className="gap-3 p-3.5" onLayout={onLayout}>
       <View testID="kip-room-frame" style={{ borderWidth: 2, borderColor: WOOD_LINE, borderRadius: 4 }}>
         <View style={{ borderWidth: 6, borderColor: WOOD, borderRadius: 2 }}>
-          {/* No button role: the room stays one image; the card's Decorate button is the accessible way in. */}
-          <Pressable testID="kip-room-press" accessible={false} delayLongPress={400} onLongPress={onDecorate}>
+          {/* No button role: the room stays one image; the card's Decorate button is the accessible way in, and the image's
+              actions open the piece cards. */}
+          <Pressable
+            testID="kip-room-press"
+            accessible={false}
+            delayLongPress={400}
+            onLongPress={onDecorate}
+            onPress={(e) => onRoomPress(e.nativeEvent.locationX, e.nativeEvent.locationY)}
+          >
             <View
               testID="kip-room-frame-inner"
               style={{ height: ROOM_FRAME_HEIGHT, overflow: 'hidden', backgroundColor: '#0A0B0E' }}
@@ -100,6 +138,7 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
                 <Skeleton testID="kip-room-skeleton" className="h-full w-full rounded-none" />
               ) : inner > 0 ? (
                 <RoomView
+                  ref={roomRef}
                   testID="kip-room"
                   layout={layout}
                   tier={tier}
@@ -122,6 +161,8 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
                   live
                   idle={stage.id === 'idle'}
                   accessibilityLabel={roomLabel(stage.id, window)}
+                  pieceActions={onOpenPiece ? cardPieces(layout, effects) : undefined}
+                  onPieceAction={openPiece}
                 />
               ) : null}
             </View>

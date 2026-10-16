@@ -3,11 +3,14 @@ const React = require('react');
 const { View } = require('react-native');
 
 let mockPieceAt = () => null;
+let lastHandle = null;
 const propsOf = (p) => ({
   testID: p.testID ?? 'room-view',
   accessible: p.accessible ?? true,
   accessibilityRole: p.accessible === false ? undefined : 'image',
   accessibilityLabel: p.accessibilityLabel,
+  accessibilityActions: p.pieceActions?.map((a) => ({ name: a.id, label: a.label })),
+  onAccessibilityAction: p.onPieceAction ? (e) => p.onPieceAction(e.nativeEvent.actionName) : undefined,
   layout: JSON.stringify(p.layout), tier: p.tier, offset: p.offset ? JSON.stringify(p.offset) : undefined, hide: p.hide ?? null,
   dragging: !!p.dragging,
   editing: !!p.editing,
@@ -25,8 +28,13 @@ module.exports = {
   bubbleAnchor: () => ({ x: 0, y: 0 }),
   /** Tests choose what a tap on the room finds. */
   __setPieceAt: (fn) => { mockPieceAt = fn; },
+  /** The last mounted view's handle, to see its squash and focus calls. */
+  __handle: () => lastHandle,
   RoomView: (p) => {
-    React.useImperativeHandle(p.ref, () => ({ pieceAtPoint: (x, y) => mockPieceAt(x, y), squash: jest.fn() }), []);
+    React.useImperativeHandle(p.ref, () => {
+      lastHandle = { pieceAtPoint: (x, y) => mockPieceAt(x, y), squash: jest.fn(), focus: jest.fn() };
+      return lastHandle;
+    }, []);
     return React.createElement(View, propsOf(p));
   },
 };

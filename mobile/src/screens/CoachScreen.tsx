@@ -489,6 +489,8 @@ export function CoachScreen() {
   const decorating = useDecorateOpen();
   const decorateLabel = unseen ? ROOM_COPY.decorateLabelNew : ROOM_COPY.decorateLabel;
   const openDecorate = useCallback(() => navigation.navigate('DecorateRoom'), [navigation]);
+  // A piece card (spec 2026-10-15 §8.1): the native sheet over this page.
+  const openPiece = useCallback((pieceId: string) => navigation.navigate('PieceCard', { pieceId }), [navigation]);
   // The welcome card's Place the lantern: the editor on New with the lantern picked and the coach mark (spec §11.1).
   const placeLantern = useCallback(() => navigation.navigate('DecorateRoom', { drawer: 'new', item: COACH_ITEM, coach: true }), [navigation]);
 
@@ -524,6 +526,7 @@ export function CoachScreen() {
       kipWalks={!promptFocused && !streaming}
       onOpenRecovery={openRecovery}
       onDecorate={openDecorate}
+      onOpenPiece={openPiece}
       onPlaceLantern={placeLantern}
       onLayout={(e) => {
         cardBottom.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height;

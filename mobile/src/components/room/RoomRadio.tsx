@@ -12,6 +12,19 @@ const RADIO_LOOP = require('../../../assets/sounds/radio-loop.m4a');
 // silent.
 const inForeground = (s: string | null | undefined) => s !== 'background' && s !== 'inactive';
 
+// The audio mode is app-wide, so it is set once, the first time the radio plays, never by a mount with the switch off
+// (T13-CARRY): a room that stays silent leaves the app's audio as it found it.
+let audioModeSet = false;
+function setRadioAudioMode() {
+  if (audioModeSet) return;
+  audioModeSet = true;
+  void setAudioModeAsync({ playsInSilentMode: false, interruptionMode: 'mixWithOthers', shouldPlayInBackground: false, allowsRecording: false }).catch(() => undefined);
+}
+/** Tests: the next play sets the audio mode again. */
+export function resetRadioAudioMode(): void {
+  audioModeSet = false;
+}
+
 /**
  * The radio's lo-fi loop (spec 2026-10-15 §8.2, P3 ruling 15). The room card mounts this only while a running radio is
  * in the room; it plays only with the device switch on, while `active` (the KIP page focused, the room card in view and
@@ -25,7 +38,6 @@ export function RoomRadio({ active }: { active: boolean }) {
   const [foreground, setForeground] = useState(() => inForeground(AppState.currentState));
   useEffect(() => {
     void loadRoomSound();
-    void setAudioModeAsync({ playsInSilentMode: false, interruptionMode: 'mixWithOthers', shouldPlayInBackground: false, allowsRecording: false }).catch(() => undefined);
     const sub = AppState.addEventListener('change', (s) => setForeground(inForeground(s)));
     return () => sub.remove();
   }, []);
@@ -35,7 +47,10 @@ export function RoomRadio({ active }: { active: boolean }) {
   useEffect(() => {
     player.loop = true;
     player.volume = RADIO_VOLUME;
-    if (play) player.play();
+    if (play) {
+      setRadioAudioMode();
+      player.play();
+    }
     else player.pause();
   }, [player, play]);
   return null;
