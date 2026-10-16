@@ -376,6 +376,11 @@ describe('KIP walking (spec §9.2, rulings 9 and 13)', () => {
     }
   });
 
+  it('holds the cat on its own tile while coins wait, as it holds KIP\'s walk and the radio (FINAL-FIX M3)', () => {
+    expect(renderCard({ stage: IDLE }).getByTestId('kip-room').props.live).toBe('live');
+    expect(renderCard({ stage: IDLE, holdCoins: true }).getByTestId('kip-room').props.live).toBe('');
+  });
+
   it('holds KIP at its desk while the welcome or landing coins show in its bubble', async () => {
     (fetchCoins as jest.Mock).mockResolvedValue(LANDING);
     await act(async () => { await loadCoins(); });

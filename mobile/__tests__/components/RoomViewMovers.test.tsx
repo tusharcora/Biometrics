@@ -342,6 +342,32 @@ describe('RoomView with movers (spec §3.4, §3.7, rulings 11-12)', () => {
     expect(changed(pointMap(ref), alone)).toBe(0);
   });
 
+  it('a tap goes to the topmost thing in depth order: a cat behind a tall floor piece loses it, a cat in front wins (FINAL-FIX M1)', () => {
+    const lampAt = (x: number, y: number) => ({ id: 'p1', item: 'corner.floorlamp', layer: 'floor' as const, x, y, facing: 'L' as const, mirror: false });
+    const cat = { id: 'c1', item: 'pet.tabby', layer: 'floor' as const, x: 6, y: 6, facing: 'L' as const, mirror: false };
+    const at = (ids: Array<string | null>, id: string) => new Set(ids.flatMap((v, k) => (v === id ? [k] : [])));
+    // Where the lamp and the cat both have opaque cells, each drawn alone; then what a tap there finds with both.
+    // The cat is drawn at `walk` and sorted at `depth`: the same cells, only the depth differs.
+    const overlap = (lamp: [number, number], walk: [number, number], depth: [number, number]) => {
+      const ref = createRef<RoomViewHandle>();
+      const mover = [{ id: 'c1', pos: walk, depth, flip: false }];
+      const base = starterLayout().pieces;
+      const s = render(<RoomView {...PROPS} ref={ref} layout={{ ...starterLayout(), pieces: [...base, lampAt(...lamp)] }} />);
+      const lampCells = at(pointMap(ref), 'p1');
+      s.rerender(<RoomView {...PROPS} ref={ref} layout={{ ...starterLayout(), pieces: [...base, cat] }} pieceMovers={mover} />);
+      const catCells = at(pointMap(ref), 'c1');
+      s.rerender(<RoomView {...PROPS} ref={ref} layout={{ ...starterLayout(), pieces: [...base, lampAt(...lamp), cat] }} pieceMovers={mover} />);
+      const both = pointMap(ref);
+      const shared = [...lampCells].filter((k) => catCells.has(k));
+      s.unmount();
+      return { shared: shared.length > 0, found: [...new Set(shared.map((k) => both[k]))] };
+    };
+    // The cat walks behind the lamp (a smaller i + j): the lamp is drawn over it, so the lamp takes the tap.
+    expect(overlap([3, 5], [2, 4], [2, 4])).toEqual({ shared: true, found: ['p1'] });
+    // The same cells with the cat in front of it in depth: the cat is drawn over the lamp and takes the tap.
+    expect(overlap([3, 5], [2, 4], [4, 6])).toEqual({ shared: true, found: ['c1'] });
+  });
+
   it('a tap finds a wandering cat (pet.tabby) where it walks (T13-FIX M4)', () => {
     const cat = { id: 'c1', item: 'pet.tabby', layer: 'floor' as const, x: 1, y: 6, facing: 'L' as const, mirror: false };
     const layout = { ...starterLayout(), pieces: [...starterLayout().pieces, cat] };

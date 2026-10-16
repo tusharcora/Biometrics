@@ -19,7 +19,7 @@ import type { Placement, RoomLayout, Tier } from '../../lib/room/iso/geometry';
 import { KIP_COLOURS, kipRamp, type KipColour, type KipMood, type KipPose } from '../../lib/kip/kipArt';
 import { useFrameClock } from '../../lib/useFrameClock';
 import { useScreenFocused } from '../../lib/useScreenFocused';
-import { withState, type Living } from '../../lib/room/effects';
+import { withState, type Living, type RoomEffects } from '../../lib/room/effects';
 import { useRoomEffects } from './useRoomEffects';
 import { useKipWalk, walkMover } from '../../lib/room/live/useKipWalk';
 import { takenTiles, useCatWander } from '../../lib/room/live/catWander';
@@ -46,8 +46,9 @@ export interface KipMover {
 export interface PieceMover { id: string; pos: readonly [number, number]; depth: Tile; flip: boolean; next?: Tile }
 export interface RoomViewHandle {
   /** The topmost piece under a point in this view, in points (the piece card, spec §8.1), or null. The wandering
-   * pieces are tried first, topmost first, so a cat is found where it walks (T13-CARRY); KIP has no tap of its own, so
-   * a tap on a walking KIP falls through to the piece behind it (T13-TAP). */
+   * pieces are tried in depth order with the floor pieces, so a cat is found where it walks (T13-CARRY) unless a piece
+   * stands in front of it (FINAL-FIX M1); KIP has no tap of its own, so a tap on a walking KIP falls through to the
+   * piece behind it (T13-TAP). */
   pieceAtPoint(x: number, y: number): string | null;
   /** Plays a tapped piece's squash (ruling 17); nothing under Reduce Motion or while the loops are held. */
   squash(id: string): void;
@@ -83,6 +84,9 @@ export interface RoomViewProps {
   holdClock?: boolean;
   /** The living room (spec §8.3); absent, the neutral room (a visit, the share card, a test). */
   living?: Living;
+  /** The editor: the effects it built `room` with, so the effects and the minute are worked out once (FINAL-FIX M2);
+   * absent, the view works them out and keeps its own minute. */
+  effects?: RoomEffects;
   /** KIP off its seat, walking or at a target (set from the view's own walk when absent; a test may pass it). */
   kipMover?: KipMover | null;
   /** The KIP page's room card while KIP may walk (spec §9.2: idle, prompt blurred, no bubble, in view); the view adds
@@ -142,10 +146,11 @@ export function RoomView(props: RoomViewProps) {
   const frame = still ? 0 : Math.floor(t / LOOP_MS) % 3;
 
   // The clock's minute rebuilds the room only while this page is focused, the room is not paused or out of sight,
-  // and no drag is live (PF3-CLOCK, ruling T5-FIX).
+  // and no drag is live (PF3-CLOCK, ruling T5-FIX). Given effects (the editor's) carry the giver's own holds.
   const effects = useRoomEffects(layout, tier, props.living, {
     hold: !focused || !!props.dragging || !!props.paused || !!props.holdClock,
     editing: props.editing,
+    given: props.effects,
   });
   // A tapped piece's squash (ruling 17): 0.7 then 0.85 of its height, a loop frame each, then back. Each of the two
   // frames rebuilds the static room with that piece's state, and returning to rest re-records the original room once:
@@ -348,14 +353,19 @@ export function RoomView(props: RoomViewProps) {
     </Group>
   ) : seatedFrames ? <Picture picture={seatedFrames[frame]!} /> : null;
 
-  // The wandering pieces as hit boxes in draw order (pieceAt reads the last first): each sprite's base at its tile.
-  // KIP is skipped: it has no tap of its own, so a tap on it falls through to what stands behind (T13-TAP). Built on
-  // a tap, never on a frame.
-  const moverHits = (): PieceHit[] => {
-    const out: PieceHit[] = [];
+  // With movers out, the room's hit boxes in this frame's draw order (pieceAt reads the last first, FINAL-FIX M1): the
+  // wall and flat pieces, then each floor piece's run and each sprite's base at its tile, back to front, so a cat behind
+  // a tall piece loses the tap to it and a cat in front wins. KIP is skipped: it has no tap of its own, so a tap on it
+  // falls through to what stands behind (T13-TAP). Built on a tap, never on a frame.
+  const tapHits = (): readonly PieceHit[] => {
+    if (!movers) return room.hits;
+    const inRuns = new Set(room.runs.flatMap((r) => r.hits));
+    const out: PieceHit[] = room.hits.filter((h) => !inRuns.has(h));
+    const runOf = new Map(room.runs.map((r) => [r.id, r]));
     const ctx: ItemContext = { weather, night, colour, ramp: kipRamp(KIP_COLOURS[colour]), screen: 'lines' };
     for (const key of order) {
-      if (key === KIP_MOVER || !key.startsWith(MOVER_PREFIX)) continue;
+      if (key === KIP_MOVER) continue;
+      if (!key.startsWith(MOVER_PREFIX)) { out.push(...(runOf.get(key)?.hits ?? [])); continue; }
       const m = pieceMovers.find((q) => `${MOVER_PREFIX}${q.id}` === key);
       const s = m ? spriteOf(m) : null;
       const at = spriteCells.get(key);
@@ -368,13 +378,13 @@ export function RoomView(props: RoomViewProps) {
   };
   const rootRef = useRef<View>(null);
   // The handle is made once and reads this render's values through a ref (T13-FIX M3).
-  const latest = useRef({ room, offset, cellPt, movers, moverHits, still });
-  latest.current = { room, offset, cellPt, movers, moverHits, still };
+  const latest = useRef({ offset, cellPt, tapHits, still });
+  latest.current = { offset, cellPt, tapHits, still };
   useImperativeHandle(props.ref, () => ({
     pieceAtPoint: (x: number, y: number) => {
       const v = latest.current;
       const [cx, cy] = [Math.floor((x - v.offset.x) / v.cellPt), Math.floor((y - v.offset.y) / v.cellPt)];
-      return (v.movers ? pieceAt(v.moverHits(), cx, cy) : null) ?? pieceAt(v.room.hits, cx, cy);
+      return pieceAt(v.tapHits(), cx, cy);
     },
     squash: (id: string) => {
       if (latest.current.still) return;

@@ -92,7 +92,8 @@ export const EditRoom = forwardRef<EditRoomHandle, EditRoomProps>(function EditR
   const draft = displayDraft(state);
   const focused = useScreenFocused();
   // A live drag keeps the clock's minute (PF3-CLOCK): the room is never rebuilt under the finger. A napping cat stays
-  // on its own tile here (spec §8.2), so a tap or a drag finds it where it is placed.
+  // on its own tile here (spec §8.2), so a tap or a drag finds it where it is placed. RoomView draws with these same
+  // effects, so the minute is read once (FINAL-FIX M2).
   const effects = useRoomEffects(draft.layout, state.tier, props.living, { hold: !focused || !!drag, editing: true });
   const input = { layout: draft.layout, tier: state.tier, weather: window.weather, night: window.night, colour, effects };
   // The picture RoomView draws, here for its hit boxes and handed down (final review M2): rebuilt only when the room
@@ -243,6 +244,7 @@ export const EditRoom = forwardRef<EditRoomHandle, EditRoomProps>(function EditR
           dragging={!!drag}
           editing
           living={props.living}
+          effects={effects}
           reduceMotion={reduceMotion}
           accessible={false}
         />

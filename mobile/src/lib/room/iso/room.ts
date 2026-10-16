@@ -100,6 +100,8 @@ export interface IsoRun {
   key: string;
   box: DepthBox;
   rects: Rects;
+  /** The hit boxes of what it draws, in draw order: a tap with movers out reads them in depth order (FINAL-FIX M1). */
+  hits: PieceHit[];
 }
 
 export interface IsoStatic {
@@ -216,7 +218,11 @@ export function drawIsoStatic(input: IsoStaticInput): IsoStatic {
     if (l.emissive) emissive.push(...moveRects(l.emissive, at[0], at[1]));
     list.push({ p, at, o });
     const b = opaqueBounds(base);
-    if (b) hits.push({ id: p.id, box: b, rects: base });
+    if (b) {
+      const hit = { id: p.id, box: b, rects: base };
+      hits.push(hit);
+      if (run) run.hits.push(hit);
+    }
     for (const c of childrenOf(visibleLayout, p.id)) put(c);
     const cat = catOnBed.get(p.id);
     if (cat) put(byId.get(cat)!, at);
@@ -240,7 +246,7 @@ export function drawIsoStatic(input: IsoStaticInput): IsoStatic {
   for (const key of order) {
     if (key === KIP_KEY) { target = front; list = ahead; continue; }
     const p = byId.get(key)!;
-    run = { id: p.id, key: '', box: boxOf.get(key)!, rects: [] };
+    run = { id: p.id, key: '', box: boxOf.get(key)!, rects: [], hits: [] };
     const from = list.length;
     put(p);
     const placed = list.slice(from).map((pp) => `${pieceKey(pp.p)}@${pp.at.join(',')}~${pp.o.effect ?? ''}`).join(';');

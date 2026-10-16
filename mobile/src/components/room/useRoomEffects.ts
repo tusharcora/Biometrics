@@ -10,6 +10,9 @@ export interface RoomEffectsOpts {
   hold?: boolean;
   /** The editor: a napping cat stays on its own tile, so a tap or a drag finds it where it is placed. */
   editing?: boolean;
+  /** The caller's own effects (the editor's, FINAL-FIX M2): returned as they are, with no work and no minute timer
+   * here, so a room and the view that draws it never read two minutes. */
+  given?: RoomEffects;
 }
 
 const NO_NAPS: ReadonlyMap<string, string> = new Map();
@@ -21,11 +24,13 @@ const NO_NAPS: ReadonlyMap<string, string> = new Map();
  */
 export function useRoomEffects(layout: RoomLayout, tier: Tier, living: Living = NEUTRAL_LIVING, opts: RoomEffectsOpts = {}): RoomEffects {
   const key = `${layoutKey(layout)}#${tier}#${livingKey(living)}`;
-  const base = useMemo(() => roomEffects(layout, tier, living, null), [key]); // eslint-disable-line react-hooks/exhaustive-deps
-  const now = useClockMinute(base.needsClock, !!opts.hold);
+  const given = opts.given;
+  const base = useMemo(() => given ?? roomEffects(layout, tier, living, null), [key, given]); // eslint-disable-line react-hooks/exhaustive-deps
+  const now = useClockMinute(!given && base.needsClock, !!opts.hold);
   return useMemo(() => {
+    if (given) return given;
     const e = now ? roomEffects(layout, tier, living, now) : base;
     // In the editor the cat stays where it is placed, curled up if it is night, so a tap or a drag finds it there.
     return opts.editing && e.napOn.size ? { ...e, napOn: NO_NAPS } : e;
-  }, [base, now, opts.editing]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [base, now, opts.editing, given]); // eslint-disable-line react-hooks/exhaustive-deps
 }

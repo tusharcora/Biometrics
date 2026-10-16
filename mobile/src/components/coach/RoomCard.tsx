@@ -87,6 +87,9 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
   // over it, such as the piece card, blurs it), the editor not over it, and the card neither under the collapsed header
   // nor waiting to know whether it is shrunk.
   const audible = stage.id !== 'loading' && inner > 0 && focused && !paused && !holdCoins && !holdClock;
+  // The cat wanders under the same holds (FINAL-FIX M3): RoomView adds focus, the pause, holdClock and Reduce Motion;
+  // the held coins are the card's own.
+  const catWanders = !holdCoins;
   // A tap on the room (spec §8.1, rulings 16-17): a running tap piece squashes, an effect piece or a plant opens its
   // card, anything else (the rug, the desk) does nothing; a tap on a walking KIP finds the piece behind it (T13-TAP).
   // When the card closes, a screen reader's focus comes back to the room image (the house pattern): only after a card,
@@ -159,7 +162,7 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
                   paused={paused}
                   holdClock={holdClock}
                   kipWalks={walks}
-                  live
+                  live={catWanders}
                   idle={stage.id === 'idle'}
                   accessibilityLabel={roomLabel(stage.id, window)}
                   pieceActions={onOpenPiece ? cardPieces(layout, effects) : undefined}
