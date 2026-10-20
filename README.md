@@ -1,6 +1,6 @@
 # Biometrics
 
-A Whoop/Bezel-style personal health app. Wearable data (steps, resting heart rate, sleep, HRV) is synced from a Fitbit through the **Google Health API** into a Node backend. The backend turns it into daily **Recovery** and **Sleep** scores, finds **habit ↔ biometric patterns**, and serves an **AI coach** that runs on a **local LLM (Ollama)** by default, so health data never leaves the machine (an opt-in hosted engine, Claude, is available per user with its own consent). A React Native (Expo) app presents all of it.
+A Whoop/Bezel-style personal health app with a social building experience. Wearable data (steps, resting heart rate, sleep, HRV) is synced from a Fitbit through the **Google Health API** into a Node backend. The backend turns it into daily **Recovery** and **Sleep** scores, finds **habit ↔ biometric patterns**, and serves an **AI coach** that runs on a **local LLM (Ollama)** by default, so health data never leaves the machine (an opt-in hosted engine, Claude, is available per user with its own consent). A React Native (Expo) app presents all of it.
 
 🎬 **[Watch the demo](docs/media/redesign-demo.mp4)** (64 s): Home, Score detail, Metrics against your usual range, Forecast, Patterns, Coach, Activity and Profile in dark mode, then again in light. (Recorded before the companion characters replaced the orb.)
 
