@@ -92,7 +92,7 @@ it('words the room switch and its one-line consent with no advice and no "·" (s
   expect([ROOM_SWITCH.turnOn, ROOM_SWITCH.notNow]).toEqual(['Turn on', 'Not now']);
   const p4Codes = ['already_cheered', 'not_spare', 'gift_limit', 'gift_gone', 'challenge_closed', 'no_challenge', 'invalid_body'];
   const lines = [...copyStrings(ROOM_SWITCH), SHARE_TITLES.room, SHARE_HINTS.room, ...p4Codes.map((c) => buddyErrorMessage(c))];
-  expect(lines.length).toBe(17);
+  expect(lines.length).toBe(18);
   for (const s of lines) expect({ s, advises: advises(s), dot: /·|−/.test(s) }).toEqual({ s, advises: false, dot: false });
   expect(lines.join(' ')).toMatch(/KIP's room/);
 });

@@ -1,3 +1,4 @@
+import { PROFILE_COPY } from '../../src/lib/profileCopy';
 import { categoryCards, NO_READS, type HubInput, type ProfileReads } from '../../src/lib/profileHub';
 
 const NOW = new Date('2026-10-13T10:12:00Z');
@@ -56,6 +57,13 @@ describe('categoryCards', () => {
     expect(buddies({ ...reads.sharing!, room: false })).toBe('@tushar · sharing 3 of 5');
     // An older server sends no room switch.
     expect(buddies(reads.sharing)).toBe('@tushar · sharing 3 of 5');
+  });
+
+  it('reads the Buddies card aloud with commas for the dots: "…sharing 3 of 5, room open" (T9-CARRY)', () => {
+    const status = categoryCards(input({ reads: { ...reads, sharing: { ...reads.sharing!, room: true } } })).find((c) => c.category === 'buddies')!.status;
+    const spoken = PROFILE_COPY.cardLabel(PROFILE_COPY.categories.buddies, status);
+    expect(spoken).toBe('Buddies & sharing. @tushar, sharing 3 of 5, room open');
+    expect(spoken).not.toMatch(/·/);
   });
 
   it('puts the KIP colour card first, with the colour name', () => {

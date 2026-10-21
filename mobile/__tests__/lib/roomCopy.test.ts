@@ -77,7 +77,6 @@ it('the first-week list reads its rows and lines aloud without "·" or "−" (sp
   }
 });
 
-
 it('never gives health advice in an effect or living line (spec §8.3, P3 ruling 18)', () => {
   for (const bad of ['Sleep more to grow your fern.', 'Walk 2,000 more steps to wake the cat.', 'You should rest.', 'Try for 8 hours.']) expect(advises(bad)).toBe(true);
   // Only the health-verb rule catches this one: no advice word in it.
@@ -92,3 +91,16 @@ it('never gives health advice in an effect or living line (spec §8.3, P3 ruling
   expect(lines).toContain('The fern is fully grown.');
   expect(lines.join(' ')).not.toMatch(/\d+ (steps|minutes|hours)|%/); // never a health value
 });
+
+it('never gives health advice on a visit (PF4-F17): only the house "Try again" button is exempt', () => {
+  const lines = copyStrings(ROOM_COPY.visit);
+  expect(lines).toEqual(expect.arrayContaining(["Just looking: you can't move anything", "Cheer fern's room", 'A weekly challenge trophy']));
+  expect(lines.length).toBeGreaterThan(15);
+  const checked = lines.filter((s) => s !== 'Try again');
+  expect(lines.length - checked.length).toBe(1);
+  for (const s of checked) expect({ s, advises: advises(s) }).toEqual({ s, advises: false });
+  // Spoken lines never carry "·" or "×", and never say what they earned.
+  for (const s of [ROOM_COPY.visit.sizeSpoken({ n: 8, m: 8 }, 44), ROOM_COPY.visit.cheeredPaidSpoken]) expect(s).not.toMatch(/·|×|−/);
+  for (const s of lines) expect(s).not.toMatch(/earned/i);
+});
+

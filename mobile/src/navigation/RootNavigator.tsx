@@ -47,6 +47,7 @@ import { PROFILE_COPY, type ProfileCategory } from '../lib/profileCopy';
 import { PairUpScreen } from '../screens/PairUpScreen';
 import { BuddiesScreen } from '../screens/BuddiesScreen';
 import { BuddyWeekScreen } from '../screens/BuddyWeekScreen';
+import { BuddyRoomScreen } from '../screens/BuddyRoomScreen';
 import { HighlightsScreen } from '../screens/HighlightsScreen';
 import { CampfireScreen } from '../screens/CampfireScreen';
 import { ChatThreadScreen } from '../screens/ChatThreadScreen';
@@ -145,6 +146,8 @@ export type RootStackParamList = {
   PairUp: undefined;
   // One buddy's mood week, shared numbers and stickers; opened from the list and by buddy pushes.
   BuddyWeek: { buddyId: string };
+  /** A buddy's room, read-only (P4 ruling 21): from their week or their KIP in the chat header. */
+  BuddyRoom: { buddyId: string; name?: string };
   // Profile → Buddies: change your handle or display name.
   BuddyIdentity: undefined;
   // Profile → one category card: the settings section it holds.
@@ -319,6 +322,7 @@ export function RootNavigator() {
               {/* One instance per buddy: navigating to another buddy's week (a push tap) opens a new
                   screen instead of swapping the params under the current one. */}
               <Stack.Screen name="BuddyWeek" component={BuddyWeekScreen} getId={({ params }) => params?.buddyId} options={{ title: '' }} />
+              <Stack.Screen name="BuddyRoom" component={BuddyRoomScreen} getId={({ params }) => params?.buddyId} options={{ title: '' }} />
               <Stack.Screen name="RecapBuilder" component={RecapBuilderScreen} options={{ title: 'Build your recap' }} />
             </Stack.Navigator>
             {/* New badge levels, celebrated once (start, foreground, after a check-in). */}

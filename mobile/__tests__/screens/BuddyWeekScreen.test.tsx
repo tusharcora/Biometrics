@@ -18,8 +18,9 @@ jest.mock('../../src/api/buddies', () => ({
 jest.mock('../../src/lib/buddiesStore', () => ({ refreshBuddies: jest.fn() }));
 jest.mock('../../src/lib/socialStore', () => ({ refreshSocial: jest.fn() }));
 const mockGoBack = jest.fn();
+const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: () => ({ goBack: mockGoBack, setOptions: jest.fn() }),
+  useNavigation: () => ({ goBack: mockGoBack, navigate: mockNavigate, setOptions: jest.fn() }),
   useRoute: () => ({ params: { buddyId: 'b1' } }),
 }));
 
@@ -266,4 +267,22 @@ it('keeps the numbers grid in tabular figures that fit its 36-pt cells', async (
   render(<BuddyWeekScreen />);
   const cell = await screen.findByTestId('number-steps-0');
   expect(String(cell.props.className).split(' ')).toEqual(expect.arrayContaining(['w-9', 'text-fine', 'tabular-nums']));
+});
+
+it('offers Visit room only when their room is open (ruling 21)', async () => {
+  (fetchBuddyWeek as jest.Mock).mockResolvedValue({ ...WEEK, roomOpen: true });
+  render(<BuddyWeekScreen />);
+  const visit = await screen.findByTestId('buddy-visit-room');
+  expect(visit).toHaveTextContent('Visit room');
+  expect(String(visit.props.className).split(' ')).toContain('h-[44px]');
+  fireEvent.press(visit);
+  expect(mockNavigate).toHaveBeenCalledWith('BuddyRoom', { buddyId: 'b1', name: 'Sam' });
+  screen.unmount();
+  for (const roomOpen of [false, undefined]) {
+    (fetchBuddyWeek as jest.Mock).mockResolvedValue({ ...WEEK, roomOpen });
+    render(<BuddyWeekScreen />);
+    await screen.findByTestId('buddy-week-line');
+    expect(screen.queryByTestId('buddy-visit-room')).toBeNull();
+    screen.unmount();
+  }
 });

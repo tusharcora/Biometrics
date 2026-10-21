@@ -18,6 +18,7 @@ import {
 } from '../lib/buddyCopy';
 import { refreshBuddies } from '../lib/buddiesStore';
 import { refreshSocial } from '../lib/socialStore';
+import { ROOM_COPY } from '../lib/room/roomCopy';
 
 type WeekState = { status: 'loading' } | { status: 'ready'; week: BuddyWeek } | { status: 'gone' } | { status: 'error' };
 
@@ -30,7 +31,7 @@ const hasOwn = (o: object, key: string) => Object.prototype.hasOwnProperty.call(
 // fixed copy; nothing here reaches the coach. Only what the server sent is shown: a number key it
 // left out has no row, and a day without a reading is a dash, never 0.
 export function BuddyWeekScreen() {
-  const navigation = useNavigation() as unknown as { goBack: () => void };
+  const navigation = useNavigation() as unknown as { goBack: () => void; navigate: (route: 'BuddyRoom', params: { buddyId: string; name: string }) => void };
   const { buddyId } = (useRoute() as { params: { buddyId: string } }).params;
   const [state, setState] = useState<WeekState>({ status: 'loading' });
   const [note, setNote] = useState<{ text: string; error: boolean } | null>(null);
@@ -205,6 +206,13 @@ export function BuddyWeekScreen() {
           </View>
           {note ? <Text testID="buddy-week-note" className={note.error ? 'text-caption text-destructive' : 'text-caption text-muted-foreground'}>{note.text}</Text> : null}
         </View>
+
+        {/* Their room, only while they have it open to visits (P4 ruling 21); a closed room answers on the visit screen. */}
+        {week.roomOpen ? (
+          <Button testID="buddy-visit-room" variant="outline" className="h-[44px]" onPress={() => navigation.navigate('BuddyRoom', { buddyId, name: week.buddy.displayName })}>
+            {ROOM_COPY.visit.open}
+          </Button>
+        ) : null}
 
         <Text testID="buddy-week-summary" className="text-center text-caption text-muted-foreground">
           {sharesSummary(week.buddy.displayName, week.shares)}

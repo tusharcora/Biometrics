@@ -287,7 +287,9 @@ describe('the room switch (spec 2026-10-15 §10.1, ruling 20)', () => {
     expect(screen.queryByTestId('sharing-consent')).toBeNull();
     expect(consentToSharing).not.toHaveBeenCalled();
     expect(screen.getByTestId('share-toggle-room').props.value).toBe(false);
-    expect(screen.getByText('Confirm what your buddies will see first.')).toBeTruthy();
+    // T9-CARRY: a neutral line, never the health consent's words.
+    expect(screen.getByText("Couldn't change your room just now.")).toBeTruthy();
+    expect(screen.queryByText('Confirm what your buddies will see first.')).toBeNull();
 
     (saveSharing as jest.Mock).mockRejectedValue(coded('try_later'));
     fireEvent(screen.getByTestId('share-toggle-room'), 'valueChange', true);
@@ -295,6 +297,26 @@ describe('the room switch (spec 2026-10-15 §10.1, ruling 20)', () => {
     expect(screen.getByText("Couldn't do that right now. Try again in a minute.")).toBeTruthy();
     // The health group keeps its own footer.
     expect(screen.getByText(/Buddies always see your mood/)).toBeTruthy();
+  });
+
+  it('is disabled while the health consent saves, and ignores a flip that gets through meanwhile (T9-CARRY)', async () => {
+    let resolveConsent!: (v: unknown) => void;
+    (consentToSharing as jest.Mock).mockImplementation(() => new Promise((r) => { resolveConsent = r; }));
+    (saveSharing as jest.Mock).mockImplementation(async (patch: object) => ({ consentVersion: 1, consented: true, ...OFF, ...patch }));
+    render(<BuddiesProfileSection onNavigate={jest.fn()} />);
+    fireEvent(await screen.findByTestId('share-toggle-steps'), 'valueChange', true);
+    fireEvent.press(await screen.findByTestId('sharing-consent-agree'));
+    expect(screen.getByTestId('share-toggle-room').props.disabled).toBe(true);
+    // A flip that reaches the handler anyway asks nothing and saves nothing.
+    const flip = screen.UNSAFE_getAllByType(ReactNative.Switch).find((el) => el.props.testID === 'share-toggle-room')!.props.onValueChange as (v: boolean) => void;
+    act(() => { flip(true); });
+    act(() => { flip(false); });
+    expect(screen.queryByTestId('room-consent-line')).toBeNull();
+    expect(saveSharing).not.toHaveBeenCalled();
+    await act(async () => resolveConsent({ consentVersion: 1, consented: true, ...OFF }));
+    await waitFor(() => expect(screen.getByTestId('share-toggle-room').props.disabled).toBe(false));
+    expect(saveSharing).toHaveBeenCalledTimes(1);
+    expect(saveSharing).toHaveBeenCalledWith({ steps: true });
   });
 
   it('the consent sheet\'s buttons are 44 pt (PF4-F13); the switch is spoken by its title', async () => {

@@ -62,6 +62,8 @@ export const ROOM_SWITCH = {
   consent: 'Buddies see your room, including its size.',
   turnOn: 'Turn on',
   notNow: 'Not now',
+  /** A consent answer to the room save: neutral, never the health consent's words (T9-CARRY). */
+  failed: "Couldn't change your room just now.",
 } as const;
 
 /** Over the buddy list, and under Profile's sharing switches: what buddies always see. */

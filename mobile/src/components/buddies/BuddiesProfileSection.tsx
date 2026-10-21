@@ -139,6 +139,9 @@ export function BuddiesProfileSection({ onNavigate }: { onNavigate: (route: 'Bud
       if (value && key !== 'room' && needsConsent(e)) {
         reloadSharing();
         askConsent(key);
+      } else if (key === 'room' && needsConsent(e)) {
+        // The room switch is its own consent; a consent answer here gets a neutral line, not the health ask.
+        setError({ text: ROOM_SWITCH.failed, room: true });
       } else {
         setError({ text: buddyErrorMessage(buddyErrorCode(e)), room: key === 'room' });
       }

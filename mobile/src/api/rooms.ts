@@ -1,5 +1,6 @@
 import { apiFetch } from './client';
 import { send } from './buddies';
+import type { RoomLayout } from '../lib/room/iso/geometry';
 
 // KIP's room among buddies (spec 2026-10-15 §12 P4): visits, room cheers, gifts and the weekly challenge. The server
 // decides who may see what, every coin and every count; the app only shows them. Shapes mirror backend/src/room
@@ -10,7 +11,8 @@ const id = (s: string) => encodeURIComponent(s);
 
 export interface RoomVisitDTO {
   name: string;
-  layout: unknown;
+  /** The stored layout as the server holds it; the app still reads it through readLayout (a newer shape draws as the starter). */
+  layout: RoomLayout;
   size: { n: number; m: number };
   kipColour: string;
   kipWorn: Record<string, string | null>;
@@ -37,7 +39,7 @@ export interface ChallengeEntryDTO {
   name: string;
   kipColour: string;
   kipWorn: Record<string, string | null>;
-  snapshot: { layout: unknown; size: { n: number; m: number } };
+  snapshot: { layout: RoomLayout; size: { n: number; m: number } };
   cheers: number;
   cheeredByMe: boolean;
   mine: boolean;
