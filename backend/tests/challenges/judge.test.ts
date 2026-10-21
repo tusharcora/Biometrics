@@ -74,7 +74,9 @@ it('the circle is the one frozen on the entry: a buddy paired after the close is
 });
 
 it('results carry names and counts only, never an id (ruling 28)', async () => {
-  const [a] = await circleOf(3, ['Ana', 'Ben', 'Cy']);
+  const trio = await circleOf(3, ['Ana', 'Ben', 'Cy']);
+  for (const u of trio) await settleChallenges(u.id, AFTER);
+  const a = trio[0];
   const res = await readResults(a!.id, AFTER);
   expect(res!.entries.map((e) => e.name).sort()).toEqual(['Ana', 'Ben', 'Cy']);
   expect(res!.entries.map((e) => Object.keys(e).sort())).toEqual(Array(3).fill(['cheers', 'mine', 'name']));
@@ -92,6 +94,29 @@ it('results leave out anyone the viewer blocked or who blocked the viewer (PF4-F
   expect(res!.entries.map((e) => e.name).sort()).toEqual(['Ana', 'Ben']);
   // Cy won the circle; the name is left out, and so is the win line's name.
   expect(res).toMatchObject({ ranked: true, winners: [], you: { entered: true, won: false } });
+});
+
+it('overlapping circles: another entrant is a winner only by their own stored outcome (FINAL-I1)', async () => {
+  const [a, b, c, d, e, f] = await Promise.all(['Ana', 'Ben', 'Cy', 'Dee', 'Eve', 'Fay'].map((displayName) => buddyUser({ displayName })));
+  const enter = (u: { id: string }, circle: Array<{ id: string }>) =>
+    prisma.challengeEntry.create({ data: { userId: u.id, weekId: W, snapshot: {}, circle: circle.map((o) => o.id) } });
+  // Ana sees {Ana, Ben, Cy}; Ben's own circle is {Ben, Dee, Eve, Fay}; Cy's own is {Cy, Dee, Eve}.
+  await enter(a!, [b!, c!]);
+  await enter(b!, [d!, e!, f!]);
+  await enter(c!, [d!, e!]);
+  for (const u of [d!, e!, f!]) await enter(u, [b!]);
+  await cheers(W, b!.id, [a!.id, c!.id, d!.id]); // Ben tops Ana's circle with 3
+  await cheers(W, f!.id, [a!.id, c!.id, d!.id, e!.id]); // but Fay beats him in his own with 4
+  await cheers(W, a!.id, [c!.id]);
+  // Cy has 0 in Ana's circle, yet ties at 0 with Dee and Eve in her own: she wins there.
+  await settleChallenges(a!.id, AFTER);
+  await settleChallenges(b!.id, AFTER);
+  // Cy hasn't read since the close: her entry is unjudged, so she is left out of the winners.
+  expect(await readResults(a!.id, AFTER)).toMatchObject({ ranked: true, winners: [], you: { entered: true, won: false } });
+  await settleChallenges(c!.id, AFTER);
+  const res = await readResults(a!.id, AFTER);
+  expect(res).toMatchObject({ ranked: true, winners: ['Cy'], you: { entered: true, won: false } });
+  expect(res!.entries.map((x) => [x.name, x.cheers])).toEqual([['Ben', 3], ['Ana', 1], ['Cy', 0]]);
 });
 
 it('without an entry, results show your current buddies\' entries', async () => {

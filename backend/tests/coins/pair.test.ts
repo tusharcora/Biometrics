@@ -1,4 +1,5 @@
-// Two-person cheers (spec 2026-10-15 §6.3): both users' locks in sorted id order in one transaction.
+// Two-person cheers (spec 2026-10-15 §6.3): both users' locks in lock-key order (hashtext of the id) in one
+// transaction.
 import { prisma } from '../../src/db/client';
 import { connection } from '../../src/sync/queue';
 import { migrateTestDb } from '../setupTestDb';

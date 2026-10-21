@@ -118,6 +118,46 @@ it('a save keeps the circle current while the entry is open (ruling 6)', async (
   }
 });
 
+it('a save after the +30 was paid runs no further coin transaction (FINAL-M4)', async () => {
+  challengeClock.now = () => WED;
+  const u = await buddyUser();
+  await buyPumpkins(u.id);
+  await prisma.cosmeticLoadout.create({ data: { userId: u.id, layout: warm as never, worn: { ...EMPTY_WORN }, version: 1 } });
+  const spy = jest.spyOn(ledger, 'applyCoinEvents');
+  try {
+    expect((await enterChallenge(u.id, WED)).entry).toMatchObject({ meets: true, paid: true });
+    spy.mockClear();
+    expect((await save(u.id, warm, 1)).status).toBe(200);
+    expect(spy).not.toHaveBeenCalled();
+    // The snapshot still follows the save.
+    const entry = await prisma.challengeEntry.findUniqueOrThrow({ where: { userId_weekId: { userId: u.id, weekId: '2026-W44' } } });
+    expect((entry.snapshot as { layout: { pieces: unknown[] } }).layout.pieces).toHaveLength(warm.pieces.length);
+  } finally {
+    spy.mockRestore();
+    challengeClock.now = CLOCK;
+  }
+});
+
+it('a read while open rewrites the circle only when it changed (FINAL-M5)', async () => {
+  const { a, b } = await pairedPair();
+  await enterChallenge(a.id, WED);
+  const later = await buddyUser();
+  const spy = jest.spyOn(prisma.challengeEntry, 'updateMany');
+  const circleWrites = () => spy.mock.calls.filter(([arg]) => 'circle' in ((arg as { data: object }).data)).length;
+  try {
+    await readChallenge(a.id, WED);
+    await readChallenge(a.id, WED);
+    expect(circleWrites()).toBe(0);
+    await pairUp(a.id, later.id);
+    await readChallenge(a.id, WED);
+    expect(circleWrites()).toBe(1);
+  } finally {
+    spy.mockRestore();
+  }
+  const entry = await prisma.challengeEntry.findUniqueOrThrow({ where: { userId_weekId: { userId: a.id, weekId: '2026-W44' } } });
+  expect([...(entry.circle as string[])].sort()).toEqual([b.id, later.id].sort());
+});
+
 it('a failed +30 is paid by the next entry read (ruling 7)', async () => {
   const u = await buddyUser();
   await buyPumpkins(u.id);
@@ -251,6 +291,21 @@ it.each([
   } finally {
     tx.mockRestore();
     warn.mockRestore();
+    challengeClock.now = CLOCK;
+  }
+});
+
+it('an entrant deleted mid-cheer (P2003) is the uniform 404, never a bare 500 (FINAL-M10)', async () => {
+  const { b, ha } = await pairedPair();
+  await enterChallenge(b.id, WED);
+  challengeClock.now = () => WED;
+  const fk = Object.assign(new Error('Foreign key constraint violated'), { name: 'PrismaClientKnownRequestError', code: 'P2003' });
+  const tx = jest.spyOn(prisma, '$transaction').mockRejectedValueOnce(fk);
+  try {
+    const res = await (await api()).post(`/me/challenge/entries/${b.id}/cheer`).set(ha).send({});
+    expect([res.status, res.body]).toEqual([404, { error: 'not_found' }]);
+  } finally {
+    tx.mockRestore();
     challengeClock.now = CLOCK;
   }
 });

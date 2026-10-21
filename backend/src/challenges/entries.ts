@@ -13,7 +13,7 @@ import { launchDayFor, paysOn } from '../coins/sources';
 import type { ChallengeTag } from '../cosmetics/catalogue';
 import type { KipWornDTO } from '../cosmetics/worn';
 import { prisma } from '../db/client';
-import { BuddyError, UUID_RE, isUniqueViolation } from '../buddies/errors';
+import { BuddyError, UUID_RE, isForeignKeyViolation, isUniqueViolation } from '../buddies/errors';
 import { blockedEitherWay, findPair, isBlockedEitherWay } from '../buddies/pairs';
 import { PERSON_SELECT, toPerson } from '../buddies/people';
 import { isRetryableTx } from '../lib/retryableTx';
@@ -45,6 +45,13 @@ const tzOf = async (db: Db, userId: string) =>
   (await db.user.findUnique({ where: { id: userId }, select: { timezone: true } }))?.timezone ?? 'UTC';
 const NOT_FOUND = () => new BuddyError('not_found');
 
+/** A stored circle (JSON) holds exactly these ids, in any order. */
+function sameIds(json: unknown, ids: readonly string[]): boolean {
+  if (!Array.isArray(json) || json.length !== ids.length) return false;
+  const want = new Set(ids);
+  return json.every((v) => typeof v === 'string' && want.has(v));
+}
+
 /** Pays the entry's +30 once if the layout meets the brief and the entrant's coins have launched (no backpay,
  * T5T7-GATE), then marks the entry paid. Never throws: the next save or entry read tries again (the key makes it
  * idempotent). */
@@ -61,20 +68,22 @@ export async function payEntryIfMet(userId: string, weekId: string, layout: Room
 }
 
 /** Inside PUT /me/cosmetics' transaction, which holds the room lock: an open entry this week takes the saved layout and
- * the current circle. Answers what the caller pays after the commit, or null. Every read goes through `tx` (ruling
- * T7-FIX): a global-client read here would hold a second pool connection while the save holds its own. */
+ * the current circle. Answers what the caller pays after the commit, or null (no open entry, or its +30 already paid:
+ * no second locked coin transaction, FINAL-M4). Every read goes through `tx` (ruling T7-FIX): a global-client read here
+ * would hold a second pool connection while the save holds its own. */
 export async function snapshotOnSaveTx(tx: Prisma.TransactionClient, userId: string, layout: RoomLayout, tier: Tier, now: Date): Promise<{ weekId: string; theme: Theme } | null> {
   const tz = await tzOf(tx, userId);
   const weekId = weekOf(now, tz);
   const theme = themeFor(weekId);
   if (!theme || now >= closesAt(weekId, tz)) return null;
-  if (!(await tx.challengeEntry.findUnique({ where: { userId_weekId: { userId, weekId } }, select: { weekId: true } }))) return null;
+  const entry = await tx.challengeEntry.findUnique({ where: { userId_weekId: { userId, weekId } }, select: { paidAt: true } });
+  if (!entry) return null;
   const circle = await buddyIdsOf(userId, tx);
   const done = await tx.challengeEntry.updateMany({
     where: { userId, weekId },
     data: { snapshot: snapshotOf(layout, tier) as unknown as Prisma.InputJsonValue, circle },
   });
-  return done.count ? { weekId, theme } : null;
+  return done.count && !entry.paidAt ? { weekId, theme } : null;
 }
 
 export async function enterChallenge(userId: string, now: Date): Promise<ChallengeDTO> {
@@ -116,8 +125,11 @@ export async function readChallenge(userId: string, now: Date): Promise<Challeng
   const close = theme ? closesAt(weekId, tz) : null;
   const open = !!close && now < close;
   const buddies = await buddyIdsOf(userId);
-  // The circle is frozen at the close (ruling 6): rewritten on each read while open.
-  if (open) await prisma.challengeEntry.updateMany({ where: { userId, weekId }, data: { circle: buddies } });
+  // The circle is frozen at the close (ruling 6): rewritten on a read while open, only when it changed (FINAL-M5).
+  if (open) {
+    const was = await prisma.challengeEntry.findUnique({ where: { userId_weekId: { userId, weekId } }, select: { circle: true } });
+    if (was && !sameIds(was.circle, buddies)) await prisma.challengeEntry.updateMany({ where: { userId, weekId }, data: { circle: buddies } });
+  }
   // A +30 that failed after its save is paid by this read, up to the week's results (rulings 7, T7-FIX).
   await retryEntryPays(userId, weekId, now);
   const mineRow = await prisma.challengeEntry.findUnique({ where: { userId_weekId: { userId, weekId } }, select: { snapshot: true, paidAt: true } });
@@ -190,6 +202,8 @@ export async function cheerEntry(viewerId: string, rawTarget: string, now: Date)
     }, COIN_TX_OPTIONS);
   } catch (err) {
     if (isUniqueViolation(err)) throw new BuddyError('already_cheered');
+    // The entrant's account went first (FINAL-M10): the entry is gone, the uniform 404.
+    if (isForeignKeyViolation(err)) throw NOT_FOUND();
     if (isRetryableTx(err)) {
       console.warn(JSON.stringify({ event: 'challenge.cheer_failed', error: err instanceof Error ? err.name : 'Error' }));
       throw new BuddyError('try_later');

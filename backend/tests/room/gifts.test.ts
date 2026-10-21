@@ -58,6 +58,27 @@ describe('POST /me/buddies/:buddyId/gifts', () => {
     expect([typed.status, typed.body]).toEqual([400, { error: 'invalid_body' }]);
   });
 
+  it('a trophy is never a spare, even a second copy from a repeated theme (FINAL-M3)', async () => {
+    const { a, b, ha } = await pairedPair();
+    await prisma.itemGrant.createMany({ data: ['2026-W44', '2026-W48'].map((w) => ({ userId: a.id, itemId: 'corner.acorn', qty: 1, sourceKey: `prize:${w}` })) });
+    const res = await send(ha, b.id, gift({ itemId: 'corner.acorn' }));
+    expect([res.status, res.body]).toEqual([403, { error: 'not_spare' }]);
+    expect(await prisma.gift.count({ where: { fromId: a.id } })).toBe(0);
+  });
+
+  it('a recipient deleted mid-send (P2003) is 403 not_buddies, never a bare 500 (FINAL-M10)', async () => {
+    const { a, b, ha } = await pairedPair();
+    await extraFern(a.id);
+    const fk = Object.assign(new Error('Foreign key constraint violated'), { name: 'PrismaClientKnownRequestError', code: 'P2003' });
+    const tx = jest.spyOn(prisma, '$transaction').mockRejectedValueOnce(fk);
+    try {
+      const res = await send(ha, b.id, gift());
+      expect([res.status, res.body]).toEqual([403, { error: 'not_buddies' }]);
+    } finally {
+      tx.mockRestore();
+    }
+  });
+
   it('counts a copy the read trim hides as placed: the stored layout decides (ruling 11)', async () => {
     const { a, b, ha } = await pairedPair();
     await extraFern(a.id);

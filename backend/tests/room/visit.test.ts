@@ -246,6 +246,19 @@ describe('POST /me/buddies/:buddyId/room/cheer (spec §10.2)', () => {
     }
   });
 
+  it('an owner deleted mid-cheer (P2003) is the uniform 404, never a bare 500 (FINAL-M10)', async () => {
+    const { b, ha } = await pairedPair();
+    await openRoom(b.id);
+    const fk = Object.assign(new Error('Foreign key constraint violated'), { name: 'PrismaClientKnownRequestError', code: 'P2003' });
+    const tx = jest.spyOn(prisma, '$transaction').mockRejectedValueOnce(fk);
+    try {
+      const res = await cheer(ha, b.id);
+      expect([res.status, res.body]).toEqual([404, { error: 'not_found' }]);
+    } finally {
+      tx.mockRestore();
+    }
+  });
+
   it('rethrows any other failure', async () => {
     const { a, b } = await pairedPair();
     await openRoom(b.id);

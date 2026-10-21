@@ -9,7 +9,7 @@ import { civilDateToUtcMidnight, localCivilDateOrUtc, utcMidnightToCivilDate } f
 import { COIN_TX_OPTIONS, cheerEarns, lockUsers, logEarned, writeEarnsTx, type CoinEarn, type CoinWritten } from '../coins/ledger';
 import { launchDayFor, paysOn } from '../coins/sources';
 import { prisma } from '../db/client';
-import { BuddyError, UUID_RE, isUniqueViolation } from '../buddies/errors';
+import { BuddyError, UUID_RE, isForeignKeyViolation, isUniqueViolation } from '../buddies/errors';
 import { blockedEitherWay, findPair, isBlockedEitherWay } from '../buddies/pairs';
 import { PERSON_SELECT, toPerson } from '../buddies/people';
 import { roomOpen } from '../buddies/sharing';
@@ -119,6 +119,8 @@ export async function cheerRoom(viewerId: string, ownerId: string, now: Date): P
     }, COIN_TX_OPTIONS);
   } catch (err) {
     if (isUniqueViolation(err)) throw new BuddyError('already_cheered');
+    // The owner's account went first (FINAL-M10): the room is gone, the uniform 404.
+    if (isForeignKeyViolation(err)) throw NOT_FOUND();
     if (isRetryableTx(err)) {
       console.warn(JSON.stringify({ event: 'room.cheer_failed', error: err instanceof Error ? err.name : 'Error' }));
       throw new BuddyError('try_later');

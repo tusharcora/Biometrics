@@ -63,6 +63,9 @@ export { UUID_RE } from '../lib/uuid';
 
 export const isUniqueViolation = (err: unknown): boolean => (err as { code?: string } | null)?.code === 'P2002';
 
+/** A foreign-key failure (P2003): the other person's account was deleted mid-call, so a row naming them can't land. */
+export const isForeignKeyViolation = (err: unknown): boolean => (err as { code?: string } | null)?.code === 'P2003';
+
 /** Wraps a handler: a BuddyError becomes its status and body; anything else reaches Express (500). */
 export function buddyRoute(fn: (req: AuthedRequest, res: Response) => Promise<void>) {
   return async (req: AuthedRequest, res: Response): Promise<void> => {

@@ -74,7 +74,8 @@ export interface ResultsDTO {
 
 /** Last week's results in your circle (your frozen circle if you entered, else your current buddies), or null before
  * Monday 08:00 UTC or when nobody in it entered. Names only, never ids (ruling 28). The ranking is the judged one (the
- * whole circle); anyone blocked either way is then left out of the names and the list (PF4-F18). */
+ * whole circle); anyone blocked either way is then left out of the names and the list (PF4-F18). Another entrant is
+ * named a winner only from their own stored outcome (ruling FINAL-I1). */
 export async function readResults(userId: string, now: Date): Promise<ResultsDTO | null> {
   const me = await prisma.user.findUnique({ where: { id: userId }, select: { timezone: true } });
   const week = previousWeek(weekOf(now, me?.timezone ?? 'UTC'));
@@ -90,7 +91,13 @@ export async function readResults(userId: string, now: Date): Promise<ResultsDTO
   // Your own result is the stored one once judged (ruling T7-FIX); the live count only fills the rest.
   const ranked = mine?.ranked ?? live.ranked;
   const won = mine?.won ?? live.winners.includes(userId);
-  const others = live.winners.filter((id) => id !== userId && !hidden.has(id));
+  // Anyone else is a winner only by their own stored outcome, judged in their own circle (spec §10.4, ruling FINAL-I1):
+  // your circle can't award them. An entry not judged yet is left out until its owner's next read judges it.
+  const theirs = shown.map(([id]) => id).filter((id) => id !== userId);
+  const stored = theirs.length
+    ? await prisma.challengeEntry.findMany({ where: { weekId: week, userId: { in: theirs }, won: true }, select: { userId: true } })
+    : [];
+  const others = stored.map((e) => e.userId).sort();
   return {
     week, themeId: themeFor(week)?.id ?? null, ranked,
     winners: (won ? [userId, ...others] : others).map(name),

@@ -9,7 +9,7 @@
 // user; gifts from them keep coming, fromId null). No push (ruling 13). Logs event and error names only.
 import type { Prisma } from '@prisma/client';
 import { localCivilDateOrUtc } from '../biometrics/civilDate';
-import { BuddyError, UUID_RE, isUniqueViolation } from '../buddies/errors';
+import { BuddyError, UUID_RE, isForeignKeyViolation, isUniqueViolation } from '../buddies/errors';
 import { isBlockedEitherWay, orderedPair } from '../buddies/pairs';
 import { PERSON_SELECT, toPerson } from '../buddies/people';
 import { COIN_TX_OPTIONS } from '../coins/ledger';
@@ -82,7 +82,9 @@ export async function sendGift(senderId: string, rawTo: string, body: unknown, n
       const stored = (row ? parseLayout(row.layout) : null) ?? starterLayout();
       const owned = counts[parsed.itemId] ?? 0;
       const placed = placedCounts(stored)[parsed.itemId] ?? 0;
-      if (owned < 2 || owned - placed < 1) throw new BuddyError('not_spare');
+      // A trophy is never a spare (ruling FINAL-M3): a repeated theme can grant a second copy, but a trophy on
+      // anyone's floor must mean they won it.
+      if (shippedItem(parsed.itemId)?.unlock.kind === 'prize' || owned < 2 || owned - placed < 1) throw new BuddyError('not_spare');
       await tx.gift.create({ data: { id: parsed.requestId, fromId: senderId, toId, itemId: parsed.itemId, note: parsed.note, createdAt: now } });
       await tx.itemGrant.create({ data: { userId: senderId, itemId: parsed.itemId, qty: -1, sourceKey: `gift_out:${parsed.requestId}`, seenAt: now } });
       return true;
@@ -90,6 +92,8 @@ export async function sendGift(senderId: string, rawTo: string, body: unknown, n
   } catch (err) {
     // Another sender took this id at the same instant: the id names their gift, so this body is a bad one.
     if (isUniqueViolation(err)) throw new BuddyError('invalid_body');
+    // The recipient's account went first (FINAL-M10): there is no buddy to send to any more.
+    if (isForeignKeyViolation(err)) throw new BuddyError('not_buddies');
     if (isRetryableTx(err)) {
       // The error's name only, never an id (T7-CARRY).
       console.warn(JSON.stringify({ event: 'gift.send_failed', error: err instanceof Error ? err.name : 'Error' }));
