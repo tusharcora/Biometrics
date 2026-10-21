@@ -23,7 +23,7 @@ export const STICKERS: ReadonlyArray<{ kind: StickerKind; label: string; icon: k
 
 export const NUMBER_LABELS: Record<NumberKey, string> = { recovery: 'Recovery', sleepScore: 'Sleep score', hoursSlept: 'Hours slept', steps: 'Steps' };
 export const SHARE_TITLES: Record<ShareKey, string> = {
-  recovery: 'Recovery score', sleepScore: 'Sleep score', hoursSlept: 'Hours slept', steps: 'Steps', streaks: 'Streaks & badges',
+  recovery: 'Recovery score', sleepScore: 'Sleep score', hoursSlept: 'Hours slept', steps: 'Steps', streaks: 'Streaks & badges', room: 'My room',
 };
 export const SHARE_HINTS: Record<ShareKey, string> = {
   recovery: 'Your daily recovery score, last 7 days',
@@ -31,8 +31,9 @@ export const SHARE_HINTS: Record<ShareKey, string> = {
   hoursSlept: 'How long you slept, last 7 days',
   steps: 'Your daily steps, and "moved a lot yesterday"',
   streaks: 'Your sleep streak and badge levels',
+  room: 'Buddies can visit your room',
 };
-const SHARE_WORDS: Record<ShareKey, string> = { recovery: 'recovery', sleepScore: 'sleep score', hoursSlept: 'hours slept', steps: 'steps', streaks: 'streaks & badges' };
+const SHARE_WORDS: Record<ShareKey, string> = { recovery: 'recovery', sleepScore: 'sleep score', hoursSlept: 'hours slept', steps: 'steps', streaks: 'streaks & badges', room: 'room' };
 
 /**
  * The consent text's version: must equal the server's consentVersion for the switches to be changed here.
@@ -50,6 +51,20 @@ export const SHARING_CONSENT_LINES: readonly string[] = [
   // Renamed from "coach" (KIP Coach spec, Consent): wording only, so the version is not bumped.
   `Your mood and ${KIP_NAME} are always shared. You can turn any of these off at any time.`,
 ];
+
+/** "Buddies can visit my room" (spec 2026-10-15 §10.1): its own one-line consent, never the health one (ruling 20). */
+export const ROOM_SWITCH = {
+  group: 'Your room',
+  title: 'Buddies can visit my room',
+  hint: `They see ${KIP_NAME}'s room and its size, and can cheer it.`,
+  footer: 'Off by default. Your numbers, coins and badges are never shown.',
+  consentTitle: 'Open your room?',
+  consent: 'Buddies see your room, including its size.',
+  turnOn: 'Turn on',
+  notNow: 'Not now',
+  /** A consent answer to the room save: neutral, never the health consent's words (T9-CARRY). */
+  failed: "Couldn't change your room just now.",
+} as const;
 
 /** Over the buddy list, and under Profile's sharing switches: what buddies always see. */
 export const BUDDIES_INTRO = `You see their ${KIP_NAME}'s mood, never their numbers unless they share them.`;
@@ -86,6 +101,9 @@ export function expiresIn(expiresAt: string, now: number): string {
 }
 
 // One line per code in backend/src/buddies/errors.ts (BUDDY_ERROR_STATUS); anything else is the fallback.
+/** Gifts a person can send in their local day (backend room/gifts.ts GIFTS_PER_DAY; the copy test pins the two). */
+export const GIFTS_PER_DAY = 3;
+
 const ERRORS: Record<string, string> = {
   code_invalid: "That code didn't work. Check it and try again.",
   not_found: 'No one has that handle.',
@@ -120,6 +138,15 @@ const ERRORS: Record<string, string> = {
   invalid_status_note: 'Notes are 1 to 60 characters.',
   invalid_report: 'Pick a reason to report.',
   report_target_gone: "That's no longer there to report.",
+  // Free-build P4 (P4 ruling 25).
+  already_cheered: "You've cheered this room today.",
+  not_spare: "That piece isn't a spare. Keep at least one you haven't placed.",
+  gift_limit: `That's ${GIFTS_PER_DAY} gifts today. Send another tomorrow.`,
+  gift_gone: 'That gift is no longer there.',
+  challenge_closed: "This week's challenge has closed.",
+  no_challenge: "There's no room challenge this week.",
+  // Also a body over the server's 32 KB cap, which the same send would hit again.
+  invalid_body: "Couldn't send that. It may be too large or out of date.",
 };
 
 export function buddyErrorMessage(code: string | null): string {

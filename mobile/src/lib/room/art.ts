@@ -14,6 +14,7 @@ import './items/rug';
 import './items/pet';
 import './items/shop';
 import './items/living';
+import './items/challenge';
 import { COTTAGE_SWATCHES } from './items/sets/cottage';
 import type { SetId } from './catalogue';
 

@@ -1,9 +1,10 @@
 // The coin shop's tiles and piece sheet (spec 2026-10-15 §6.6, C1, F6), pure. Tabs All, Effects, Floor, Wall and On top
 // (P3 ruling 19); the week's featured set first. A piece with an effect says so on its tile and its sheet. A rule piece
 // not earned yet shows locked with its rule, never as for sale (§6.5).
-// The server sends only ids and prices (ruling 34): locked, owned and where a piece goes come from the catalogue.
-import type { ShopDTO } from '../../api/coins';
-import { catalogueItem, type UnlockRule } from '../room/catalogue';
+// The server sends ids, prices and whether a piece is locked (ruling 34, PF4-F1: an unlock row, never a count, earns a rule
+// piece, so a gifted one stays locked); owned and where a piece goes come from the catalogue and the counts.
+import type { ShopDTO, ShopOfferDTO } from '../../api/coins';
+import { catalogueItem } from '../room/catalogue';
 import type { EffectKind } from '../room/iso/geometry';
 import { ROOM_COPY, coinCount, itemName, spokenName, unlockLine, unlockSpoken } from '../room/roomCopy';
 
@@ -24,7 +25,6 @@ export interface ShopTile {
 }
 
 const S = ROOM_COPY.shop;
-const lockedFor = (rule: UnlockRule, owned: number) => rule.kind !== 'shop' && rule.kind !== 'starter' && owned === 0;
 
 export function shopTiles(shop: ShopDTO, counts: Readonly<Record<string, number>>, tab: ShopTab, featuredOnly = false): ShopTile[] {
   const featured = new Set(shop.set.itemIds);
@@ -34,10 +34,9 @@ export function shopTiles(shop: ShopDTO, counts: Readonly<Record<string, number>
       if (!iso || (featuredOnly && !featured.has(itemId))) return false;
       return tab === 'all' || (tab === 'effects' ? !!iso.effect : iso.layers.includes(tab));
     })
-    .map(({ itemId, price }): ShopTile => {
+    .map(({ itemId, price, locked }): ShopTile => {
       const item = catalogueItem(itemId)!;
       const owned = counts[itemId] ?? 0;
-      const locked = lockedFor(item.unlock, owned);
       const effect = item.iso!.effect ?? null;
       const label = locked ? S.tileLocked(spokenName(itemId), unlockSpoken(item.unlock)) : S.tile(spokenName(itemId), coinCount(price), owned);
       return {
@@ -76,9 +75,8 @@ export interface PieceSheet {
   effect: string | null;
 }
 
-export function pieceSheet(itemId: string, price: number, balance: number, counts: Readonly<Record<string, number>>): PieceSheet {
+export function pieceSheet({ itemId, price, locked: isLocked }: ShopOfferDTO, balance: number): PieceSheet {
   const item = catalogueItem(itemId)!;
-  const isLocked = lockedFor(item.unlock, counts[itemId] ?? 0);
   const after = balance - price;
   const [b, a] = [coinCount(balance), coinCount(Math.max(0, after))];
   return {

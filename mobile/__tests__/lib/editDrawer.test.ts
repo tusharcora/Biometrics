@@ -1,4 +1,5 @@
-import { drawerTabs, notPlaced, pieceTiles, setCards, styleRows, wornTiles } from '../../src/lib/room/edit/drawer';
+import { drawerTabLabel, drawerTabs, notPlaced, pieceTiles, setCards, styleRows, themeChecklist, wornTiles } from '../../src/lib/room/edit/drawer';
+import { briefCount } from '../../src/lib/room/challenge';
 import { initEditor, editorReducer } from '../../src/lib/room/edit/editor';
 import { starterLayout } from '../../src/lib/room/layout';
 import { ROOM_COPY } from '../../src/lib/room/roomCopy';
@@ -69,4 +70,36 @@ it('the Effects tab lists the effect pieces you own, each tagged and read as doi
   expect([radio.tag, radio.label]).toEqual(['Does something', 'Old radio, 1 in inventory, does something in the room']);
   expect(radio.label).toBe(ROOM_COPY.drawer.tile.effect(ROOM_COPY.drawer.tile.piece('Old radio', 1, false))); // the joiner is copy (T9-FIX M4)
   expect(pieceTiles(s, 'all').find((t) => t.item === 'plant.fern')!.tag).toBeNull();
+});
+
+it('adds the theme tab while you have an open entry, listing the owned pieces of its tag (spec §5.4, §10.4; ruling 22)', () => {
+  const s0 = initEditor({ layout: starterLayout(), worn: { ...EMPTY_WORN }, tier: 1, counts: { ...counts, 'corner.pumpkin': 1 }, version: 1, newIds: [] });
+  expect(drawerTabs(s0)).not.toContain('theme');
+  expect(themeChecklist(s0)).toBeNull();
+  const s = editorReducer(s0, { type: 'theme', theme: { id: 'cosyAutumn', tag: 'warm', atLeast: 3 } });
+  expect(drawerTabs(s)).toEqual(['all', 'floor', 'wall', 'onTop', 'funny', 'effects', 'theme', 'room', 'kip', 'sets']);
+  expect(drawerTabLabel(s, 'theme')).toBe('Autumn');
+  expect(drawerTabLabel(s, 'floor')).toBe('Floor');
+  expect(pieceTiles(s, 'theme').map((t) => t.item)).toEqual(expect.arrayContaining(['corner.pumpkin', 'lamp.amber', 'item.mug']));
+  expect(pieceTiles(s, 'theme').map((t) => t.item)).not.toContain('plant.fern');
+  expect(themeChecklist(s)).toEqual({ line: 'Warm pieces · 2 of 3', spoken: 'Warm pieces, 2 of 3' });
+  // The checklist follows the draft as it is now.
+  const placed = editorReducer(s, { type: 'place', item: 'corner.pumpkin' });
+  expect(themeChecklist(placed)).toEqual({ line: 'Warm pieces · 3 of 3', spoken: 'Warm pieces, 3 of 3' });
+});
+
+it('a theme that ends while its tab is open falls back to All; opening on the theme tab before the theme is known starts on All (PF4 F28)', () => {
+  const s = editorReducer(start(), { type: 'theme', theme: { id: 'cosyAutumn', tag: 'warm', atLeast: 3 } });
+  const onTab = editorReducer(s, { type: 'drawer', tab: 'theme' });
+  expect(editorReducer(onTab, { type: 'theme', theme: null }).drawer).toBe('all');
+  expect(editorReducer(editorReducer(s, { type: 'drawer', tab: 'floor' }), { type: 'theme', theme: null }).drawer).toBe('floor');
+  expect(initEditor({ layout: starterLayout(), worn: EMPTY_WORN, tier: 1, counts, version: 1, newIds: [] }, { drawer: 'theme' }).drawer).toBe('all');
+  // A late read turns to the theme tab only while the drawer is still on All (T11-FIX M2): a tab you chose stays.
+  const theme = { id: 'cosyAutumn' as const, tag: 'warm' as const, atLeast: 3 };
+  expect(editorReducer(start(), { type: 'theme', theme, open: true }).drawer).toBe('theme');
+  const chose = editorReducer(start(), { type: 'drawer', tab: 'floor' });
+  expect(editorReducer(chose, { type: 'theme', theme, open: true })).toMatchObject({ drawer: 'floor', theme });
+  // A theme this build has no words for keeps a neutral tab name.
+  const unknown = editorReducer(start(), { type: 'theme', theme: { id: 'springClean' as never, tag: 'plant', atLeast: 4 } });
+  expect([drawerTabLabel(unknown, 'theme'), themeChecklist(unknown)?.spoken]).toEqual(['Theme', `Theme pieces, ${briefCount(starterLayout(), 'plant')} of 4`]);
 });

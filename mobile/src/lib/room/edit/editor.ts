@@ -3,6 +3,7 @@
 // own. A refused action changes nothing and leaves an `outcome` for the screen to say and shake. Every drag, toolbar
 // action, style change and set apply is one undo step; 20 are kept. Previews (a locked worn piece, a locked set)
 // never enter the draft (Spec B ruling P18).
+import type { ChallengeTag, ThemeId } from '../../../api/rooms';
 import { catalogueItem, catalogueSet, GEOMETRY_DEPS, isoOf, type CatalogueSet } from '../catalogue';
 import type { KipWorn, ItemId } from '../loadout';
 import type { WornSlot } from '../catalogue';
@@ -12,7 +13,9 @@ import { childrenOf, deskOf, inventoryOf, layoutKey, newPieceId } from '../layou
 import { COACH_ITEM, coachTile, nearestFloor, nearestFree, placedAt, refusal, roomCentre, targetPoint, type Refused, type Target } from './targets';
 
 export interface Draft { layout: RoomLayout; worn: KipWorn }
-export type DrawerTab = 'all' | 'floor' | 'wall' | 'onTop' | 'funny' | 'effects' | 'new' | 'room' | 'kip' | 'sets';
+export type DrawerTab = 'all' | 'floor' | 'wall' | 'onTop' | 'funny' | 'effects' | 'theme' | 'new' | 'room' | 'kip' | 'sets';
+/** Your open challenge entry's theme (spec 2026-10-15 §10.4): what the drawer's theme tab lists and counts. */
+export interface EditorTheme { id: ThemeId; tag: ChallengeTag; atLeast: number }
 /**
  * The editor route's params (spec §5.1): the drawer tab to open on, a piece to show there, the first-week coach, and a
  * piece card's Move and Store (P3 ruling 16): the piece selected, and for Store already stored as the first undo step.
@@ -50,6 +53,8 @@ export interface EditorState {
   outcome: Outcome | null;
   /** The unseen ids when the editor opened (plan ruling 15). */
   newIds: readonly ItemId[];
+  /** Your open challenge entry's theme (spec §10.4): the drawer's theme tab and checklist. */
+  theme: EditorTheme | null;
   notice: 'refreshed' | 'saveFailed' | null;
   coach: CoachState | null;
 }
@@ -67,6 +72,9 @@ export type EditorAction =
   | { type: 'select'; id: string | null }
   | { type: 'pick'; item: ItemId | null }
   | { type: 'drawer'; tab: DrawerTab }
+  /** The challenge read landed (or the theme ended): `open` also turns to the theme tab (the challenge's Build it),
+   * if the drawer is still on All. */
+  | { type: 'theme'; theme: EditorTheme | null; open?: boolean }
   | { type: 'place'; item: ItemId }
   | { type: 'drop'; id: string | null; item: ItemId; target: Target }
   /** A drag let go where nothing snapped (ruling T12-FIX): nothing moves, the reason is said. */
@@ -107,10 +115,11 @@ export function initEditor(c: EditorInput, open: DecorateParams = {}): EditorSta
   // The lantern is a starter, never unseen: the guided placement adds it to New so its tile is there to drag (final
   // review I1). Only a placeable piece is picked, so the picked row never offers a Place that can't act (I2).
   const newIds = open.coach && !c.newIds.includes(COACH_ITEM) ? [...c.newIds, COACH_ITEM] : c.newIds;
-  const drawer: DrawerTab = open.drawer === 'new' ? (newIds.length ? 'new' : 'all') : open.drawer ?? 'all';
+  // The theme tab waits for the challenge read (PF4 F28): until then the drawer opens on All.
+  const drawer: DrawerTab = open.drawer === 'new' ? (newIds.length ? 'new' : 'all') : open.drawer === 'theme' ? 'all' : open.drawer ?? 'all';
   return {
     saved: draft, draft, past: [], future: [], tier: c.tier, counts: c.counts, baseVersion: c.version,
-    selected: null, picked: isoOf(open.item) ? open.item! : null, drawer, nudging: false, preview: null, outcome: null, newIds,
+    selected: null, picked: isoOf(open.item) ? open.item! : null, drawer, nudging: false, preview: null, outcome: null, newIds, theme: null,
     // A lantern already in the room starts the coach past step 1 (ruling T15-FIX), so Place never dead-ends.
     notice: null, coach: open.coach ? syncCoach({ step: 1, tile: coachTile(isoGrid(c.tier), c.layout, c.tier) }, c.layout, c.tier, false) : null,
   };
@@ -282,6 +291,11 @@ function reduce(s: EditorState, a: EditorAction): EditorState {
       return { ...s, picked: a.item };
     case 'drawer':
       return { ...s, drawer: a.tab, preview: null };
+    case 'theme':
+      // A theme that ends while its tab is open falls back to All.
+      if (!a.theme) return { ...s, theme: null, drawer: s.drawer === 'theme' ? 'all' : s.drawer };
+      // A late read turns to the theme tab only while the drawer is still on All: a tab chosen meanwhile stays (T11-FIX).
+      return { ...s, theme: a.theme, ...(a.open && s.drawer === 'all' ? { drawer: 'theme' as const, preview: null } : {}) };
     case 'place': {
       const base = { id: newPieceId(layout), item: a.item, facing: 'L' as const, mirror: false };
       return add(s, a.item, nearestFree(g, layout, a.item, s.tier, roomCentre(g), base));

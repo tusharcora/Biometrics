@@ -86,6 +86,7 @@ describe('PROFILE_COPY status lines', () => {
     expect(S.timezone({ timezone: 'Asia/Tokyo', overridden: true })).toBe('Custom · Asia/Tokyo');
     expect(S.notifications(4, 6)).toBe('4 of 6 on');
     expect(S.buddies('tushar', 3, 5)).toBe('@tushar · sharing 3 of 5');
+    expect(S.buddies('tushar', 3, 5, true)).toBe('@tushar · sharing 3 of 5 · room open');
     expect(S.buddies(null, 0, 5)).toBe('Set up your handle');
     expect(S.chats({ readReceipts: true, activityStatus: false })).toBe('Read receipts on · status off');
     expect(S.kip('Cobalt', 'Steps', true)).toBe('Cobalt · Steps · coaching on');

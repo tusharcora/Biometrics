@@ -29,6 +29,7 @@ import { Button, buttonIconSize } from '../components/ui/button';
 import { Text } from '../components/ui/text';
 import { buddyErrorMessage } from '../lib/buddyCopy';
 import { refreshBuddies } from '../lib/buddiesStore';
+import { ROOM_COPY } from '../lib/room/roomCopy';
 import { activeLine, knownMessages, POLL_MS } from '../lib/chatCopy';
 import {
   firstWindow, olderWindow, pollWindow, threadItems, threadMessages, withReactions, withSent, withoutMessage, type ThreadWindow,
@@ -308,7 +309,17 @@ export function ChatThreadScreen() {
       <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
         <View className="flex-row items-center gap-2.5 border-b border-border px-3 pb-2.5 pt-1">
           {back}
-          <ChatAvatar person={buddy} size={40} ring={ringUnseen} active={active === 'Active now'} testID="thread-avatar" />
+          {/* Their KIP opens their room (P4 ruling 21); a closed room answers on the visit screen. */}
+          <Button
+            testID="thread-visit-room"
+            variant="ghost"
+            size="icon-lg"
+            className="size-[44px]"
+            accessibilityLabel={ROOM_COPY.visit.chatLabel(name)}
+            onPress={() => navigation.navigate('BuddyRoom', { buddyId, name })}
+          >
+            <ChatAvatar person={buddy} size={40} ring={ringUnseen} active={active === 'Active now'} testID="thread-avatar" />
+          </Button>
           <View className="flex-1 gap-px">
             <Text testID="thread-name" numberOfLines={1} className="text-body font-bold">{name}</Text>
             <Text testID="thread-sub" numberOfLines={1} className="text-caption text-muted-foreground">{active ? `${active} · @${buddy.handle}` : `@${buddy.handle}`}</Text>

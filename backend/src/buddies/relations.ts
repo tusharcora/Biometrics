@@ -2,8 +2,11 @@
 // nothing and nothing they can see changes shape (a blocked person's request stays "pending" to them).
 // S3 (spec 2026-10-07 social §9): unpair and block also delete the pair's conversation for both people (its messages,
 // reactions and reads cascade); reports keep their own excerpt and stay.
+// Free-build P4: unpair and block also return every unopened gift between the two to its sender (spec 2026-10-15
+// §10.3); an account deletion's cascade never does.
 
 import { prisma } from '../db/client';
+import { returnGiftsTx } from '../room/gifts';
 import { BuddyError, UUID_RE } from './errors';
 import { findPair, lockPairSlot, orderedPair } from './pairs';
 import { recipientSees } from './requests';
@@ -32,6 +35,8 @@ export async function unpair(userId: string, buddyId: string, now: Date): Promis
     // then sees its rows.
     const removed = await tx.buddyPair.deleteMany({ where: orderedPair(userId, buddyId) });
     if (removed.count === 0) return;
+    // After the pair delete: a gift send holds the pair row FOR SHARE, so one in flight has committed by now (P4 PF4-F4).
+    await returnGiftsTx(tx, userId, buddyId, now);
     // Mutes go with the pair, both ways: a re-pair starts unmuted.
     await tx.buddyMute.deleteMany({ where: mutesEitherWay(userId, buddyId) });
     // The conversation goes with the pair, for both people (a send in flight committed first: it is in here too).
@@ -73,6 +78,7 @@ async function blockTx(blockerId: string, blockedId: string, now: Date): Promise
     await tx.buddyBlock.createMany({ data: [{ blockerId, blockedId, createdAt: now }], skipDuplicates: true });
     // As in unpair: the pair goes BEFORE any Activity row, so a badge job in flight can't leave a row behind.
     const removed = await tx.buddyPair.deleteMany({ where: orderedPair(blockerId, blockedId) });
+    await returnGiftsTx(tx, blockerId, blockedId, now);
     if (removed.count > 0) {
       await tx.sticker.deleteMany({ where: eitherWay(blockerId, blockedId) });
       await tx.buddyActivity.deleteMany({ where: { recipientId: blockedId, actorId: blockerId } });

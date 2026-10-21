@@ -9,6 +9,8 @@ import { projOf, type IsoGrid } from './grid';
 
 export const FOCUS = { w: 140, h: 120 } as const;
 export const THUMB = { w: 96, h: 60 } as const;
+/** A finger that moves this far is a pan of the room (spec §5.6): the editor's and a visit's. */
+export const PAN_START_PT = 8;
 
 export function deskBoxes(g: IsoGrid, layout: RoomLayout): { focus: Box; thumb: Box } {
   const desk = deskOf(layout);

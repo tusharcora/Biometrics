@@ -1,3 +1,4 @@
+import { PROFILE_COPY } from '../../src/lib/profileCopy';
 import { categoryCards, NO_READS, type HubInput, type ProfileReads } from '../../src/lib/profileHub';
 
 const NOW = new Date('2026-10-13T10:12:00Z');
@@ -48,6 +49,21 @@ describe('categoryCards', () => {
     expect(cards.map((c) => c.category)).toEqual(['kipColour', 'health', 'timezone', 'notifications', 'kip', 'signIn']);
     expect(cards.find((c) => c.category === 'notifications')?.status).toBe('1 of 1 on');
     expect(categoryCards(input({ reads: { ...reads, pushAvailable: false } })).map((c) => c.category)).not.toContain('notifications');
+  });
+
+  it('counts the five health switches only, and adds "room open" when buddies can visit the room (P4 ruling 20)', () => {
+    const buddies = (sharing: ProfileReads['sharing']) => categoryCards(input({ reads: { ...reads, sharing } })).find((c) => c.category === 'buddies')?.status;
+    expect(buddies({ ...reads.sharing!, room: true })).toBe('@tushar · sharing 3 of 5 · room open');
+    expect(buddies({ ...reads.sharing!, room: false })).toBe('@tushar · sharing 3 of 5');
+    // An older server sends no room switch.
+    expect(buddies(reads.sharing)).toBe('@tushar · sharing 3 of 5');
+  });
+
+  it('reads the Buddies card aloud with commas for the dots: "…sharing 3 of 5, room open" (T9-CARRY)', () => {
+    const status = categoryCards(input({ reads: { ...reads, sharing: { ...reads.sharing!, room: true } } })).find((c) => c.category === 'buddies')!.status;
+    const spoken = PROFILE_COPY.cardLabel(PROFILE_COPY.categories.buddies, status);
+    expect(spoken).toBe('Buddies & sharing. @tushar, sharing 3 of 5, room open');
+    expect(spoken).not.toMatch(/·/);
   });
 
   it('puts the KIP colour card first, with the colour name', () => {

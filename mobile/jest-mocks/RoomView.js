@@ -20,6 +20,7 @@ const propsOf = (p) => ({
   idle: p.idle ? 'idle' : '',
   worn: JSON.stringify(p.worn),
   living: p.living ? JSON.stringify(p.living) : undefined,
+  avoid: p.avoid ? JSON.stringify([...p.avoid].sort()) : undefined,
   room: `${p.pose}:${p.mood}:${p.bubble ?? 'none'}:${p.screen}:${p.weather}:${p.night ? 'night' : 'day'}:${p.colour}:${p.cellPt}:${p.reduceMotion ? 'still' : 'moving'}:${p.facing ?? ''}:${p.paused ? 'paused' : ''}`,
 });
 

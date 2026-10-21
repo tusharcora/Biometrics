@@ -69,6 +69,11 @@ export function getCosmetics(): Cosmetics | null {
   return cosmetics;
 }
 
+/** The sign-in this store is on: taken before a request, so its answer lands only in the same account. */
+export function cosmeticsSession(): number {
+  return session;
+}
+
 // The read in flight and the epoch it started in: loads started in the same epoch share it (sign-in starts two).
 let inflight: { at: number; read: Promise<Cosmetics | null> } | null = null;
 
@@ -107,16 +112,36 @@ export async function saveCosmeticsLoadout(input: { layout: RoomLayout; worn: Ki
   return next;
 }
 
-/** A coin-shop purchase landed (spec §6.6): the server's counts; the piece owned and NEW until seen (ruling 7). */
-export function applyPurchase(itemId: ItemId, counts: Readonly<Record<string, number>>): void {
-  // First: a read that started before the purchase never brings the old count back, even the first read of the room
+/**
+ * A copy landed from the server, bought in the coin shop or a gift opened (spec §6.6, §10.3): the server's counts;
+ * the piece owned and NEW until seen (ruling 7).
+ */
+export function applyGrant(itemId: ItemId, counts: Readonly<Record<string, number>>, source: 'buy' | 'gift_in'): void {
+  // First: a read that started before the grant never brings the old count back, even the first read of the room
   // (it is dropped and the next read lands the piece).
   epoch++;
   if (!cosmetics) return;
   const owned = new Set(cosmetics.owned);
   owned.add(itemId);
-  const fresh = cosmetics.fresh.some((f) => f.itemId === itemId) ? cosmetics.fresh : [...cosmetics.fresh, { itemId, source: 'buy' }];
+  const fresh = cosmetics.fresh.some((f) => f.itemId === itemId) ? cosmetics.fresh : [...cosmetics.fresh, { itemId, source }];
   publish({ ...cosmetics, owned, counts: { ...counts }, fresh });
+}
+
+/** A coin-shop purchase landed (spec §6.6). */
+export function applyPurchase(itemId: ItemId, counts: Readonly<Record<string, number>>): void {
+  applyGrant(itemId, counts, 'buy');
+}
+
+/**
+ * The server's counts after a gift was sent (spec §10.3: the sender's count drops at once). A gift is always a spare,
+ * so you still own the piece, and nothing turns NEW. `at` is cosmeticsSession() from before the request: an answer
+ * that lands after a sign-out publishes nothing (T10-FIX M2).
+ */
+export function applyCounts(counts: Readonly<Record<string, number>>, at: number): void {
+  if (at !== session) return;
+  epoch++;
+  if (!cosmetics) return;
+  publish({ ...cosmetics, counts: { ...counts } });
 }
 
 /** A whole GET body from another route (the grow, spec §7): published as a read is, and only if it is not older. */

@@ -131,7 +131,34 @@ it('a buddy with no data: none, and shared rows empty', async () => {
   expect(week.numbers.steps!.every((d) => d.value === null)).toBe(true);
 });
 
+it('lists health shares only, and says whether the room is open (spec §10.1, ruling 8)', async () => {
+  const [me, them] = [await buddyUser(), await buddyUser()];
+  await pairUp(me.id, them.id);
+  await prisma.user.update({ where: { id: them.id }, data: { shareRoom: true, shareSteps: true, buddySharingConsentVersion: BUDDY_SHARING_CONSENT_VERSION } });
+  const week = await buildBuddyWeek(me.id, them.id, new Date());
+  expect(week.shares).toEqual(['steps']);
+  expect(week.roomOpen).toBe(true);
+  await prisma.user.update({ where: { id: them.id }, data: { shareRoom: false } });
+  expect((await buildBuddyWeek(me.id, them.id, new Date())).roomOpen).toBe(false);
+});
+
 describe('GET /me/buddies/:buddyId', () => {
+  it('a blocked or unpaired viewer of an owner who opened the room gets 403 and no roomOpen (T3-CARRY)', async () => {
+    const viewer = await buddyUser();
+    const [blockedByMe, blockedMe, unpaired] = [await buddyUser(), await buddyUser(), await buddyUser()];
+    await pairUp(viewer.id, blockedByMe.id);
+    await pairUp(viewer.id, blockedMe.id);
+    await pairUp(viewer.id, unpaired.id);
+    await blockBuddy(viewer.id, blockedByMe.id, new Date());
+    await blockBuddy(blockedMe.id, viewer.id, new Date());
+    await prisma.buddyPair.deleteMany({ where: { OR: [{ userAId: unpaired.id }, { userBId: unpaired.id }] } });
+    await prisma.user.updateMany({ where: { id: { in: [blockedByMe.id, blockedMe.id, unpaired.id] } }, data: { shareRoom: true } });
+    for (const owner of [blockedByMe, blockedMe, unpaired]) {
+      const res = await (await api()).get(`/me/buddies/${owner.id}`).set(await authHeaderFor(viewer.id));
+      expect([res.status, res.body, 'roomOpen' in res.body]).toEqual([403, { error: 'not_buddies' }, false]);
+    }
+  });
+
   it('answers the week, reports mute, and marks their stickers to me as seen', async () => {
     const viewer = await buddyUser();
     const buddy = await buddyUser();

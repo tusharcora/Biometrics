@@ -71,9 +71,15 @@ export function catRoute(
   return path.length > 1 ? path : null;
 }
 
-/** Every running cat in the `wander` state with somewhere to go; each plans round the routes before it. */
-export function wanderRoutes(layout: RoomLayout, tier: Tier, effects: RoomEffects, deps: GeometryDeps = GEOMETRY_DEPS, view: Box | null = null): CatRoute[] {
-  const taken = new Set<string>();
+/**
+ * Every running cat in the `wander` state with somewhere to go; each plans round the routes before it and round
+ * `avoid`, the tiles of the gift boxes on the KIP page's floor (PF4-F8).
+ */
+export function wanderRoutes(
+  layout: RoomLayout, tier: Tier, effects: RoomEffects, deps: GeometryDeps = GEOMETRY_DEPS, view: Box | null = null,
+  avoid: ReadonlySet<string> = NO_TILES,
+): CatRoute[] {
+  const taken = new Set<string>(avoid);
   const out: CatRoute[] = [];
   for (const p of layout.pieces) {
     if (p.layer !== 'floor' || !effects.running.has(p.id) || effects.states.get(p.id) !== 'wander' || deps.isoOf(p.item)?.effect !== 'wander') continue;
@@ -128,6 +134,8 @@ export interface CatWanderInput {
   view?: Box | null;
   /** KIP is off its seat: the cat waits on the tile it was stepping onto, with no timer. */
   waits?: boolean;
+  /** Tiles it never walks on: the gift boxes on the KIP page's floor (PF4-F8). */
+  avoid?: ReadonlySet<string>;
 }
 
 /**
@@ -136,13 +144,14 @@ export interface CatWanderInput {
  * cleared; enabled again, or in a new room, it starts from home. One pending timer, a step at a time (Task 10's
  * pattern). It says nothing to a screen reader and takes no focus: the room stays one image with one label.
  */
-export function useCatWander({ enabled, layout, tier, effects, view = null, waits = false }: CatWanderInput): readonly PieceMover[] {
+export function useCatWander({ enabled, layout, tier, effects, view = null, waits = false, avoid = NO_TILES }: CatWanderInput): readonly PieceMover[] {
   // Keyed on the wandering cats, not the whole effects key: the clock's minute never sends the cat home.
   const cats = [...effects.states].filter(([, s]) => s === 'wander').map(([id]) => id).sort().join(',');
   const layoutId = useMemo(() => layoutKey(layout), [layout]);
   const viewId = view ? `${view.x},${view.y},${view.w},${view.h}` : '';
-  const routeKey = enabled ? `${layoutId}#${tier}#${cats}#${viewId}` : '';
-  const routes = useMemo(() => (routeKey ? wanderRoutes(layout, tier, effects, GEOMETRY_DEPS, view) : []), [routeKey]); // eslint-disable-line react-hooks/exhaustive-deps
+  const avoidId = [...avoid].sort().join(';');
+  const routeKey = enabled ? `${layoutId}#${tier}#${cats}#${viewId}#${avoidId}` : '';
+  const routes = useMemo(() => (routeKey ? wanderRoutes(layout, tier, effects, GEOMETRY_DEPS, view, avoid) : []), [routeKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // The route the ticks belong to joins them, so a new room puts each cat home in that same render. Each cat has its
   // own tick: waiting snaps each to a whole tile, and they need not be in step.
   const [state, setState] = useState<{ route: string; ticks: readonly number[] }>({ route: '', ticks: NO_TICKS });

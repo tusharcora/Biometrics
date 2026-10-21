@@ -250,6 +250,18 @@ describe('RoomView with movers (spec §3.4, §3.7, rulings 11-12)', () => {
       }
     });
 
+    it('keeps off the tiles it is told to avoid, the gift boxes (PF4-F8): with every way out taken it sits', () => {
+      jest.setSystemTime(new Date(2026, 9, 24, 12, 0, 0));
+      const all = new Set<string>();
+      for (let i = 0; i < 7; i++) for (let j = 0; j < 7; j++) if (!(i === 5 && j === 3)) all.add(`${i},${j}`);
+      const s = render(<RoomView {...LIVE} avoid={all} />);
+      act(() => { jest.advanceTimersByTime(LOOP_MS * 6); });
+      expect(pictures(s)).toHaveLength(4); // no mover: the static room
+      s.rerender(<RoomView {...LIVE} avoid={new Set<string>()} />);
+      act(() => { jest.advanceTimersByTime(LOOP_MS * 2); });
+      expect(pictures(s)).toHaveLength(9);
+    });
+
     it('KIP up from its seat: the cat waits on a whole tile until KIP sits again (KIP and the cat never share a tile)', () => {
       jest.setSystemTime(new Date(2026, 9, 24, 12, 0, 0));
       const s = render(<RoomView {...LIVE} />);

@@ -1,9 +1,10 @@
 import React from 'react';
-import { type TextProps } from 'react-native';
+import { type Text as RNText, type TextProps } from 'react-native';
 import { cn } from '../../lib/utils';
 import { Text } from './text';
 
-export type PageTitleProps = Omit<TextProps, 'children'> & { className?: string; children: string };
+// React 19 passes `ref` as a prop, so it reaches the native text through the spread (a screen reader's focus target).
+export type PageTitleProps = Omit<TextProps, 'children'> & { className?: string; children: string; ref?: React.Ref<RNText> };
 
 // Every screen's title (spec §3): Silkscreen at text-page-title, a header for
 // screen readers. The string is uppercased here rather than with a class, so

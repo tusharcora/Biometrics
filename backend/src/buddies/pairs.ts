@@ -32,6 +32,13 @@ export async function isBlockedEitherWay(a: string, b: string, db: Db = prisma):
   return (await db.buddyBlock.count({ where: { OR: [{ blockerId: a, blockedId: b }, { blockerId: b, blockedId: a }] } })) > 0;
 }
 
+/** Everyone this user blocked or was blocked by: left out of room-cheer counts and lists, challenge entries and
+ * results (PF4-F18). */
+export async function blockedEitherWay(userId: string, db: Db = prisma): Promise<string[]> {
+  const blocks = await db.buddyBlock.findMany({ where: { OR: [{ blockerId: userId }, { blockedId: userId }] }, select: { blockerId: true, blockedId: true } });
+  return blocks.map((b) => (b.blockerId === userId ? b.blockedId : b.blockerId));
+}
+
 /**
  * Serialises pairing and blocking for one pair of people: a transaction-scoped advisory lock on the
  * ordered ids. Every pairing transaction takes it before its block re-check (pairingBlockedTx) and

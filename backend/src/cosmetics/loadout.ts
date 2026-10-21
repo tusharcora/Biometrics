@@ -5,6 +5,10 @@
 // the per-user room lock. Spec B's slot room was converted and dropped in P2 (§2.4); `readRoom` keeps its slot
 // sanitising for scripts/convert-room-layouts.ts only.
 import { Prisma } from '@prisma/client';
+import { payEntryIfMet, snapshotOnSaveTx } from '../challenges/entries';
+import { settleChallengesSafely } from '../challenges/judge';
+import type { Theme } from '../challenges/themes';
+import { challengeClock } from '../challenges/week';
 import { earnCoinsSafely } from '../coins/sources';
 import { prisma } from '../db/client';
 import {
@@ -69,6 +73,8 @@ function readWorn(json: unknown, owned: ReadonlySet<string>): Worn {
 
 export async function readCosmetics(userId: string, now: Date, opts: { grant?: boolean } = {}): Promise<CosmeticsDTO> {
   if (opts.grant ?? true) await grantCosmeticsSafely(userId, now);
+  // A trophy won lands with the room read (P4 ruling 6), on the challenge clock (which tests and a dev pin move).
+  if (opts.grant ?? true) await settleChallengesSafely(userId, challengeClock.now());
   const [rows, loadout, facts, firstWeek, grants, newCopies, living] = await Promise.all([
     prisma.cosmeticUnlock.findMany({ where: { userId }, orderBy: [{ unlockedAt: 'asc' }, { itemId: 'asc' }], select: { itemId: true, source: true, seenAt: true } }),
     prisma.cosmeticLoadout.findUnique({ where: { userId } }),
@@ -175,6 +181,8 @@ export async function saveCosmetics(userId: string, body: unknown, now: Date, ra
   if ('status' in parsed) return { ok: false, failure: parsed };
   let tier: Tier = 1;
   let placedFirst = false;
+  // A holder, not a `let`: the transaction callback sets it, and a property is never narrowed to its initial null.
+  const entry: { pay: { weekId: string; theme: Theme } | null } = { pay: null };
   let failure: SaveFailure | null;
   try {
     failure = await prisma.$transaction(async (tx) => {
@@ -209,6 +217,8 @@ export async function saveCosmetics(userId: string, body: unknown, now: Date, ra
         const first = await tx.roomFirstWeek.updateMany({ where: { userId, firstPlacedAt: null }, data: { firstPlacedAt: now } });
         placedFirst = first.count === 1;
       }
+      // The entry is the room (P4 ruling 7): an open challenge entry takes this layout under the same lock.
+      entry.pay = await snapshotOnSaveTx(tx, userId, parsed.layout, tier, challengeClock.now());
       return null;
     });
   } catch (err) {
@@ -220,6 +230,8 @@ export async function saveCosmetics(userId: string, body: unknown, now: Date, ra
   console.info(JSON.stringify({ event: 'room.saved', pieces: parsed.layout.pieces.length, tier }));
   // The first placement's +10 lands at once (spec §11.2); a failure waits for the next GET /me/coins.
   if (placedFirst) await earnCoinsSafely(userId, now);
+  // The entry's +30, after the commit, the first time it meets the brief (never throws).
+  if (entry.pay) await payEntryIfMet(userId, entry.pay.weekId, parsed.layout, entry.pay.theme, challengeClock.now());
   return { ok: true, dto: await readCosmetics(userId, now, { grant: false }) };
 }
 

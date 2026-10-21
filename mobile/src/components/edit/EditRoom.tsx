@@ -13,7 +13,7 @@ import { clampPan, dragAt, EDGE_PT, ghostRects, grabOffset, LIFT_PT, targetKey, 
 import { displayDraft, type EditorAction, type EditorState } from '../../lib/room/edit/editor';
 import { reasonText } from '../../lib/room/edit/labels';
 import { coachRects, gridRects, outlineRects } from '../../lib/room/edit/overlay';
-import { deskBoxes, isoCrop } from '../../lib/room/iso/crop';
+import { PAN_START_PT, deskBoxes, isoCrop } from '../../lib/room/iso/crop';
 import { isoGrid } from '../../lib/room/iso/grid';
 import { drawIsoStatic, isoRoomKey, pieceAt } from '../../lib/room/iso/room';
 import type { ItemId } from '../../lib/room/loadout';
@@ -26,8 +26,6 @@ export const EDIT_CELL_PT = 2;
 const TAP_MS = 250;
 /** Press and hold this long to pick a piece up (spec §5.3). */
 const HOLD_MS = 200;
-/** A finger that moves this far before the hold is a pan (spec §5.6). */
-const PAN_START_PT = 8;
 /** How far the room scrolls per finger move while a dragged piece is near an edge (spec §5.6). */
 const EDGE_STEP_PT = 6;
 

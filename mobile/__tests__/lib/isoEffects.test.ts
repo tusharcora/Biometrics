@@ -16,7 +16,7 @@ const FLOOR = { layer: 'floor' as const, facing: 'L' as const, mirror: false };
 const PLANTS = CATALOGUE.items.filter((i) => i.slot === 'plant' && i.iso && isoArtOf(i.id)).map((i) => i.id);
 
 it('a plant grows from the pot up: the pot stays, the leaves are cut from the top and narrowed (ruling 8)', () => {
-  expect(PLANTS.length).toBe(7);
+  expect(PLANTS.length).toBe(8); // release 6 adds the trailing ivy
   for (const id of PLANTS) {
     const full = pieceLayers(id, CTX_DAY, FLOOR)!.base!;
     const young = pieceLayers(id, CTX_DAY, { ...FLOOR, effect: 'g1' })!.base!;

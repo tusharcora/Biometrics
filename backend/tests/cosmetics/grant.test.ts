@@ -2,7 +2,7 @@ import { prisma } from '../../src/db/client';
 import { connection } from '../../src/sync/queue';
 import { migrateTestDb } from '../setupTestDb';
 import { buddyUser } from '../buddies/helpers';
-import { CHEER_SCAN_ROWS, MAX_CHEERS_COUNTED, cheerTimes, countersOf, loadUnlockFacts } from '../../src/cosmetics/facts';
+import { CHEER_SCAN_ROWS, MAX_CHEERS_COUNTED, cheerTimes, countersOf, loadCheerTimes, loadUnlockFacts } from '../../src/cosmetics/facts';
 import { STICKERS_PER_BUDDY_PER_DAY } from '../../src/buddies/stickers';
 import { cosmeticsHooks, grantCosmetics, grantCosmeticsSafely } from '../../src/cosmetics/unlock';
 import { level, sticker, unlocked, weekRecaps } from './helpers';
@@ -44,6 +44,26 @@ it('cheerTimes stops at 15, and the scan bound holds 15 buddy-days at the per-da
   expect(CHEER_SCAN_ROWS).toBe(MAX_CHEERS_COUNTED * (STICKERS_PER_BUDDY_PER_DAY + 1));
   const rows = Array.from({ length: 40 }, (_, i) => ({ toUserId: `b${i}`, sentAt: new Date(Date.UTC(2026, 9, 1, 0, i)) }));
   expect(cheerTimes(rows, 'UTC')).toHaveLength(15);
+});
+
+it('pages past 90 sticker rows until 15 cheers are found (spec §13, Spec B Task 3 minor; ruling 18)', async () => {
+  const me = await buddyUser();
+  const friends = await Promise.all(Array.from({ length: 16 }, () => buddyUser()));
+  const start = Date.UTC(2026, 9, 1, 12);
+  // 95 stickers to ONE buddy on one day count once; then one each to 15 more buddies the next day.
+  await prisma.sticker.createMany({ data: Array.from({ length: 95 }, (_, k) => ({ fromUserId: me.id, toUserId: friends[0]!.id, kind: 'CHEER' as const, sentAt: new Date(start + k * 1000) })) });
+  await prisma.sticker.createMany({ data: friends.slice(1).map((f, k) => ({ fromUserId: me.id, toUserId: f.id, kind: 'CHEER' as const, sentAt: new Date(start + 86_400_000 + k * 1000) })) });
+  expect(await loadCheerTimes(me.id, 'UTC')).toHaveLength(15);
+  expect(countersOf(await loadUnlockFacts(me.id)).buddyCheers).toBe(15);
+});
+
+it('the paged scan stops when the rows run out, short of 15', async () => {
+  const me = await buddyUser();
+  const friend = await buddyUser();
+  const start = Date.UTC(2026, 9, 1, 12);
+  // Exactly two full pages, all one buddy-day: one cheer, and the empty third page ends the scan.
+  await prisma.sticker.createMany({ data: Array.from({ length: 2 * CHEER_SCAN_ROWS }, (_, k) => ({ fromUserId: me.id, toUserId: friend.id, kind: 'CHEER' as const, sentAt: new Date(start + k * 1000) })) });
+  expect(await loadCheerTimes(me.id, 'UTC')).toHaveLength(1);
 });
 
 it('grants each rule kind once, returns the inserted rows, and is idempotent', async () => {

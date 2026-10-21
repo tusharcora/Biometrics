@@ -5,7 +5,7 @@
 // carries when each buddy paired with the viewer (a past night's fire counts only buddies paired by that evening) and
 // the viewer's own bedtime goal (the goodnight window); buddies' bedtime goals are never kept.
 
-import type { CheckInMood } from '@prisma/client';
+import type { CheckInMood, Prisma } from '@prisma/client';
 import { civilDateToUtcMidnight, localCivilDateOrUtc } from '../biometrics/civilDate';
 import { prisma } from '../db/client';
 import { BuddyError } from '../buddies/errors';
@@ -48,17 +48,18 @@ export interface Circle {
  * Every current buddy's id, with when the pair was made. Unbounded on purpose: Buddies has no buddy cap, and
  * circles are small, so every Social read loads the whole circle (a cap or paging would come with growth).
  */
-export async function buddyPairsOf(userId: string): Promise<Map<string, Date>> {
-  const pairs = await prisma.buddyPair.findMany({
+export async function buddyPairsOf(userId: string, db: Prisma.TransactionClient | typeof prisma = prisma): Promise<Map<string, Date>> {
+  const pairs = await db.buddyPair.findMany({
     where: { OR: [{ userAId: userId }, { userBId: userId }] },
     select: { userAId: true, userBId: true, createdAt: true },
   });
   return new Map(pairs.map((p) => [p.userAId === userId ? p.userBId : p.userAId, p.createdAt]));
 }
 
-/** Every current buddy's id (see buddyPairsOf). */
-export async function buddyIdsOf(userId: string): Promise<string[]> {
-  return [...(await buddyPairsOf(userId)).keys()];
+/** Every current buddy's id (see buddyPairsOf). Inside a transaction pass its client (ruling T7-FIX): a global-client
+ * read there holds a second pool connection while the transaction holds its own. */
+export async function buddyIdsOf(userId: string, db: Prisma.TransactionClient | typeof prisma = prisma): Promise<string[]> {
+  return [...(await buddyPairsOf(userId, db)).keys()];
 }
 
 type MemberRow = Parameters<typeof toPerson>[0] & Parameters<typeof effectiveSharing>[0] & { id: string; timezone: string };

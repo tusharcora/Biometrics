@@ -1,12 +1,14 @@
 // The inventory drawer's content (spec 2026-10-15 §5.4), pure: which owned pieces each tab lists and their counts,
-// the Room tab's style rows, the KIP tab's worn tiles (Spec B §6.2, locked ones included as previews), the set cards.
+// the Room tab's style rows, the KIP tab's worn tiles (Spec B §6.2, locked ones included as previews), the set cards,
+// and while you have an open challenge entry the theme tab with its checklist (spec §10.4; P4 ruling 22).
 // Locked placeable pieces are not here: they live in the shop and the unlock list (P2).
 import { wornArt } from '../../kip/wornArt';
 import { CATALOGUE, catalogueItem, catalogueItemsFor, isoOf, type WornSlot } from '../catalogue';
 import { isoArtOf } from '../iso/art';
 import { STYLE_KEYS, type StyleKey } from '../iso/geometry';
 import type { ItemId } from '../loadout';
-import { ROOM_COPY, SET_NAMES, itemName, progressLine, spokenName, unlockLine, unlockSpoken, type ProgressFacts } from '../roomCopy';
+import { checklist } from '../challenge';
+import { ROOM_COPY, SET_NAMES, itemName, progressLine, spokenName, themeWords, unlockLine, unlockSpoken, type ProgressFacts } from '../roomCopy';
 import { SET_SWATCHES } from '../art';
 import { inventory, type DrawerTab, type EditorState } from './editor';
 
@@ -27,10 +29,24 @@ const D = ROOM_COPY.drawer;
 const owned = (s: EditorState, id: ItemId) => (s.counts[id] ?? 0) > 0;
 
 export function drawerTabs(s: EditorState): DrawerTab[] {
-  return ['all', 'floor', 'wall', 'onTop', 'funny', 'effects', ...(s.newIds.length ? (['new'] as const) : []), 'room', 'kip', 'sets'];
+  return ['all', 'floor', 'wall', 'onTop', 'funny', 'effects', ...(s.theme ? (['theme'] as const) : []), ...(s.newIds.length ? (['new'] as const) : []), 'room', 'kip', 'sets'];
 }
 
-const inTab = (id: ItemId, tab: DrawerTab, newIds: readonly ItemId[]) => {
+/** A tab's label: the theme tab is named for the theme ("Autumn"). */
+export function drawerTabLabel(s: EditorState, tab: DrawerTab): string {
+  if (tab === 'theme') return s.theme ? themeWords(s.theme.id).tab : '';
+  return D.tabs[tab];
+}
+
+/** "Warm pieces · 2 of 3" over the theme tab (spec §10.4, C3), from the draft as it is now. */
+export function themeChecklist(s: EditorState): { line: string; spoken: string } | null {
+  if (!s.theme) return null;
+  const c = checklist(s.draft.layout, s.theme);
+  const name = themeWords(s.theme.id).tagName;
+  return { line: ROOM_COPY.challenge.checklist(name, c.count, c.atLeast), spoken: ROOM_COPY.challenge.checklistSpoken(name, c.count, c.atLeast) };
+}
+
+const inTab = (id: ItemId, tab: DrawerTab, s: EditorState) => {
   const iso = isoOf(id)!;
   switch (tab) {
     case 'floor': return iso.layers.includes('floor');
@@ -38,7 +54,8 @@ const inTab = (id: ItemId, tab: DrawerTab, newIds: readonly ItemId[]) => {
     case 'onTop': return iso.layers.includes('onTop');
     case 'funny': return !!catalogueItem(id)?.tags?.includes('funny');
     case 'effects': return !!iso.effect;
-    case 'new': return newIds.includes(id);
+    case 'theme': return !!s.theme && !!catalogueItem(id)?.tags?.includes(s.theme.tag);
+    case 'new': return s.newIds.includes(id);
     default: return true;
   }
 };
@@ -47,7 +64,7 @@ const inTab = (id: ItemId, tab: DrawerTab, newIds: readonly ItemId[]) => {
 export function pieceTiles(s: EditorState, tab: DrawerTab): DrawerTile[] {
   const left = inventory(s);
   return CATALOGUE.items
-    .filter((i) => i.iso && isoArtOf(i.id) && owned(s, i.id) && inTab(i.id, tab, s.newIds))
+    .filter((i) => i.iso && isoArtOf(i.id) && owned(s, i.id) && inTab(i.id, tab, s))
     .map((i) => {
       const count = left[i.id] ?? 0;
       const isNew = s.newIds.includes(i.id);

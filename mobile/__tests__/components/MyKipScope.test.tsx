@@ -7,6 +7,7 @@ import { readToasted, writeToasted } from '../../src/lib/room/toasted';
 jest.mock('../../src/lib/kip/myKip', () => ({ loadMyKipColour: jest.fn(async () => undefined), resetMyKip: jest.fn() }));
 jest.mock('../../src/lib/room/cosmeticsStore', () => ({ loadCosmetics: jest.fn(async () => null), resetCosmetics: jest.fn() }));
 jest.mock('../../src/lib/coins/coinsStore', () => ({ loadCoins: jest.fn(async () => null), resetCoins: jest.fn() }));
+jest.mock('../../src/lib/room/giftsStore', () => ({ resetRoomSocial: jest.fn() }));
 const store: Record<string, string> = {};
 jest.spyOn(SecureStore, 'getItemAsync').mockImplementation(async (k) => store[k] ?? null);
 jest.spyOn(SecureStore, 'setItemAsync').mockImplementation(async (k, v) => { store[k] = v; });
@@ -41,4 +42,13 @@ it('a keychain failure while forgetting them is swallowed', async () => {
   s.unmount();
   await act(async () => undefined);
   expect(del).toHaveBeenCalledWith('kipToasted');
+});
+
+it('forgets the gifts and cheers on the floor on sign-out (P4 Task 10)', async () => {
+  const gifts = jest.requireMock('../../src/lib/room/giftsStore') as { resetRoomSocial: jest.Mock };
+  const s = render(<MyKipScope />);
+  expect(gifts.resetRoomSocial).not.toHaveBeenCalled();
+  s.unmount();
+  await act(async () => undefined);
+  expect(gifts.resetRoomSocial).toHaveBeenCalledTimes(1);
 });

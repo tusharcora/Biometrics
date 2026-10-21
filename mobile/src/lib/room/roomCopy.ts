@@ -1,6 +1,8 @@
 // Every string of KIP's room (spec 2026-10-14 KIP's room): item and set names, unlock lines (the Cat boards'
 // wording), decorate mode, the toasts. Spoken forms carry no "·" and no Roman numerals (ruling 19).
 import type { FirstWeekTaskKey } from '../../api/coins';
+import type { ThemeId } from '../../api/rooms';
+import { buddyErrorMessage } from '../buddyCopy';
 import type { AchievementsSnapshot } from '../achievementsStore';
 import type { AchievementFamilyName, SetId, UnlockRule } from './catalogue';
 import { CATALOGUE, catalogueSet } from './catalogue';
@@ -9,6 +11,12 @@ import type { ItemId } from './loadout';
 import type { RoomSlot, WornSlot } from './catalogue';
 
 const EARN = CATALOGUE.earnAmounts;
+
+/** A challenge theme's words (spec 2026-10-15 §10.4): its title, brief, drawer tab and the name of its pieces. */
+export interface ThemeWords { title: string; brief: string; tab: string; tagName: string }
+const buddiesIn = (n: number) => `${n} ${n === 1 ? 'buddy' : 'buddies'} in`;
+const daysLeftLine = (n: number) => (n <= 0 ? 'Last day' : `${n} ${n === 1 ? 'day' : 'days'} left`);
+const CHALLENGE_ENDS = 'Ends Sunday 20:00';
 
 export const ITEM_NAMES: Readonly<Record<ItemId, string>> = {
   'wall.plain': 'Plain slate', 'wall.dots': 'Dots', 'wall.stripes': 'Tinted stripes', 'wall.brick': 'Brick',
@@ -37,6 +45,10 @@ export const ITEM_NAMES: Readonly<Record<ItemId, string>> = {
   'item.candle': 'Candle', 'art.neonheart': 'Neon heart sign',
   // Free-build P3's effect pieces (spec 2026-10-15 §8.2).
   'pet.tabby': 'Ginger cat', 'shelf.awards': 'Trophy shelf',
+  // Free-build P4's challenge pieces and trophies (spec 2026-10-15 §10.4, C3). OWNER NOTE (PF4-OWNER): every name after
+  // Cosy autumn's two (the Harvest lantern and the Golden acorn) is a placeholder for the owner to confirm.
+  'lamp.harvest': 'Harvest lantern', 'plant.ivy': 'Trailing ivy', 'lamp.moon': 'Moon lamp', 'item.organiser': 'Desk organiser',
+  'corner.acorn': 'Golden acorn', 'corner.can': 'Golden watering can', 'corner.owl': 'Silver owl', 'item.goldpen': 'Golden pen pot',
   'out.beanie': 'Beanie', 'out.cap': 'Cap', 'out.sweatband': 'Sweatband', 'out.bucket': 'Bucket hat',
   'out.hachimaki': 'Hachimaki headband', 'out.beret': 'Beret', 'out.party': 'Party hat', 'out.round': 'Round glasses',
   'out.scarf': 'Scarf', 'out.bowtie': 'Bow tie', 'out.earbuds': 'Earbuds', 'out.phones': 'Headphones',
@@ -77,6 +89,11 @@ export function itemNameIn(id: ItemId, slot: RoomSlot | WornSlot): string {
 export function spokenName(id: ItemId): string {
   return itemName(id).split(' · ').join(', ');
 }
+/** A challenge theme's words; a theme this build has no words for (a newer server's) reads neutral. */
+export function themeWords(id: string): ThemeWords {
+  const themes: Readonly<Record<string, ThemeWords>> = ROOM_COPY.challenge.themes;
+  return Object.prototype.hasOwnProperty.call(themes, id) ? themes[id]! : ROOM_COPY.challenge.unknownTheme;
+}
 
 function setRule(rule: UnlockRule): UnlockRule {
   return rule.kind === 'set' ? catalogueSet(rule.set)?.unlock ?? rule : rule;
@@ -91,6 +108,7 @@ export function unlockLine(rule: UnlockRule): string {
     case 'anyFamily': return `Any family · level ${ROMAN[r.level]}`;
     case 'counter': return r.counter === 'recaps_read' ? `Read ${r.atLeast} weekly recaps` : `Cheer a buddy ${r.atLeast} times`;
     case 'set': return '';
+    case 'prize': return 'A weekly challenge trophy';
   }
 }
 
@@ -477,6 +495,165 @@ export const ROOM_COPY = {
     shop: 'Coin shop',
     sizes: 'Room sizes',
   },
+  /** Visiting a buddy's room (spec 2026-10-15 §10.1, §10.2, C4). The size, never a tier name; never "they earned". */
+  visit: {
+    title: (name: string) => `${name}'s room`,
+    size: (s: { n: number; m: number }, pieces: number) => `${s.n} × ${s.m} · ${pieces} pieces`,
+    sizeSpoken: (s: { n: number; m: number }, pieces: number) => `${s.n} by ${s.m}, ${pieces} pieces`,
+    hi: 'HI THERE!',
+    looking: "Just looking: you can't move anything",
+    label: (name: string) => `${name}'s room, with their KIP waving`,
+    cheer: (name: string) => `Cheer ${name}'s room`,
+    cheeredToday: 'Cheered today',
+    cheered: 'Cheered!',
+    cheeredPaid: 'Cheered! +2 coins',
+    cheeredPaidSpoken: 'Cheered! Plus 2 coins',
+    cheersWeek: (n: number) => `${n} ${n === 1 ? 'cheer' : 'cheers'} this week`,
+    missing: "Pieces you don't have",
+    /** A missing piece's spoken label: its spoken name and how to get it (PF4-F15). */
+    missingSpoken: (name: string, how: string) => `${name}. ${how}`,
+    price: (n: number) => `${coinCount(n)} coins in the coin shop`,
+    /** A theme piece is sold only in its theme's weeks (P4 ruling 2); it reads aloud as drawn. */
+    priceTheme: (n: number) => `${coinCount(n)} coins in the coin shop in theme weeks`,
+    trophy: 'A weekly challenge trophy',
+    gift: 'Send a gift',
+    closed: "This room isn't open for visits.",
+    failed: "Couldn't open this room just now.",
+    retry: 'Try again',
+    open: 'Visit room',
+    chatLabel: (name: string) => `Visit ${name}'s room`,
+  },
+  /** Gifts of spare pieces (spec 2026-10-15 §10.3, C4). Notes are picked, never typed; coins are never gifted. */
+  gifts: {
+    title: (name: string) => `Send ${name} a gift`,
+    spares: 'From your spares',
+    spare: (n: number) => `×${n}`,
+    /** A spare's spoken label: its spoken name (PF4-F15) and how many. */
+    spareSpoken: (name: string, n: number) => `${name}, ${n} spare`,
+    none: 'No spares yet. A piece you own twice, with one not placed, can be a gift.',
+    noteLabel: 'Pick a note',
+    notes: { desk: 'For your desk', cosy: 'Cosy!', thought: 'Thought of you' },
+    send: 'Send gift',
+    sent: (piece: string, name: string) => `Sent the ${piece} to ${name}.`,
+    failed: "Couldn't send that just now.",
+    loadFailed: "Couldn't load your pieces just now.",
+    retry: 'Try again',
+    close: 'Close',
+    box: (name: string | null) => (name ? `Open the gift from ${name}` : 'Open a gift'),
+    arrived: (name: string | null) => (name ? `A gift from ${name} is on your floor` : 'A gift is on your floor'),
+    many: (n: number) => `${n} gifts are on your floor`,
+    opened: (piece: string) => `${piece} is in your inventory.`,
+    /** The gifts with no box (no free tile in view): one button opens the next; no sender named (T10-FIX I1). */
+    waiting: (n: number) => `${n} ${n === 1 ? 'gift' : 'gifts'} waiting. Open one`,
+    openFailed: "Couldn't open that gift just now.",
+    cheersTitle: 'Cheers on your room',
+    cheersNone: 'No cheers this week yet.',
+    cheersFailed: "Couldn't load the cheers just now.",
+    cheers: (n: number) => `${n} ${n === 1 ? 'cheer' : 'cheers'} this week`,
+    cheersSpoken: (n: number) => `${n} ${n === 1 ? 'cheer' : 'cheers'} this week. See who cheered your room`,
+  },
+  /**
+   * The weekly theme challenge (spec 2026-10-15 §10.4, C3). The server sends a theme's id; its words live here, and a
+   * theme this build has no words for reads as `unknownTheme`. The briefs' "Use n or more …" is the one advice-guard
+   * exemption besides "Try again" (PF4-F17). Spoken forms carry no "·" (PF4-F15).
+   */
+  challenge: {
+    open: 'Room challenge',
+    heading: 'Room challenge',
+    head: 'Room challenge · Buddies only',
+    headSpoken: 'Room challenge, Buddies only',
+    themes: {
+      cosyAutumn: { title: 'Cosy autumn', brief: 'Use 3 or more warm pieces.', tab: 'Autumn', tagName: 'Warm pieces' },
+      greenThumb: { title: 'Green thumb', brief: 'Use 4 or more plants.', tab: 'Plants', tagName: 'Plants' },
+      nightOwl: { title: 'Night owl', brief: 'Use 3 or more pieces that glow.', tab: 'Glow', tagName: 'Glowing pieces' },
+      tidyDesk: { title: 'Tidy desk', brief: 'Use 3 or more desk pieces.', tab: 'Desk', tagName: 'Desk pieces' },
+    } satisfies Record<ThemeId, ThemeWords>,
+    unknownTheme: { title: "This week's theme", brief: "Build your room around this week's theme.", tab: 'Theme', tagName: 'Theme pieces' } satisfies ThemeWords,
+    how: 'Buddies cheer the rooms they like; the most-cheered room in your circle wins on Sunday.',
+    buddiesIn,
+    daysLeft: daysLeftLine,
+    ends: CHALLENGE_ENDS,
+    /** "5 buddies in · 3 days left · Ends Sunday 20:00" and its spoken form. */
+    tags: (buddies: number, days: number) => `${buddiesIn(buddies)} · ${daysLeftLine(days)} · ${CHALLENGE_ENDS}`,
+    tagsSpoken: (buddies: number, days: number) => `${buddiesIn(buddies)}, ${daysLeftLine(days)}, ${CHALLENGE_ENDS}`,
+    rewards: 'Rewards',
+    enter: `Enter: +${EARN.challenge} coins, once`,
+    enterSpoken: `Enter: plus ${EARN.challenge} coins, once`,
+    piece: (name: string) => `${name}: this week only, in the coin shop for 80`,
+    trophy: (name: string) => `${name}: the trophy for the most-cheered room, glows at night`,
+    consent: 'Your buddies will see your entry: a snapshot of your room, including its size.',
+    start: 'Start my entry',
+    snapshot: 'Your entry is a snapshot of your room on Sunday. Build as usual until then.',
+    entered: 'You entered',
+    paid: `+${EARN.challenge} coins`,
+    enteredPaid: `You entered · +${EARN.challenge} coins`,
+    enteredPaidSpoken: `You entered. Plus ${EARN.challenge} coins`,
+    enterFailed: "Couldn't start your entry just now.",
+    checklist: (tagName: string, n: number, of: number) => `${tagName} · ${n} of ${of}`,
+    checklistSpoken: (tagName: string, n: number, of: number) => `${tagName}, ${n} of ${of}`,
+    build: 'Build it in the editor',
+    entries: "Your buddies' entries",
+    entryLabel: (name: string) => `${name}'s entry`,
+    cheer: (name: string) => `Cheer ${name}'s entry`,
+    cheers: (n: number) => `${n} ${n === 1 ? 'cheer' : 'cheers'}`,
+    cheered: 'Cheered',
+    cheeredSpoken: (name: string) => `Cheered ${name}'s entry`,
+    cheeredPaid: `Cheered! +${EARN.cheer} coins`,
+    cheeredPaidSpoken: (name: string) => `Cheered ${name}'s entry. Plus ${EARN.cheer} coins`,
+    cheerFailed: "Couldn't send that cheer just now.",
+    entryClosed: 'Entry closed',
+    entryClosedLine: (name: string) => `${name}'s entry has closed.`,
+    entryGone: 'That entry is no longer there.',
+    closed: "This week's challenge has closed.",
+    none: "There's no room challenge this week.",
+    results: 'Last week',
+    won: (name: string) => `${name}'s room won`,
+    glow: 'The trophy glows on their floor at night',
+    youWon: 'Your room won! The trophy is in your inventory.',
+    /** A results row: the name and its cheers (ruling 28: names only). */
+    result: (name: string, n: number) => `${name} · ${n} ${n === 1 ? 'cheer' : 'cheers'}`,
+    resultSpoken: (name: string, n: number) => `${name}, ${n} ${n === 1 ? 'cheer' : 'cheers'}`,
+    unranked: 'Fewer than 3 entries: no ranking this week. Everyone who entered keeps the entry coins.',
+    youEntered: 'You entered',
+    failed: "Couldn't load the room challenge just now.",
+    retry: 'Try again',
+    close: 'Close',
+  },
+  /**
+   * The share card (spec 2026-10-15 §10.5, F8; ruling 23): the room only, drawn neutral; nothing posted. The card's
+   * own Save / Share result lines live here, not the recap's, so none asks the user to try anything (PF4-F17).
+   * Spoken forms carry no "·" or "×" (PF4-F15).
+   */
+  share: {
+    open: 'Share',
+    heading: 'Share your room',
+    note: 'Makes an image; nothing is posted',
+    title: "KIP's room",
+    meta: (s: { n: number; m: number }, pieces: number, theme: string | null) => `${s.n} × ${s.m} · ${pieces} pieces${theme ? ` · ${theme} week` : ''}`,
+    metaSpoken: (s: { n: number; m: number }, pieces: number, theme: string | null) => `${s.n} by ${s.m}, ${pieces} pieces${theme ? `, ${theme} week` : ''}`,
+    byline: (name: string) => `${name}'s room`,
+    showName: 'Show my first name',
+    waves: 'KIP waves',
+    save: 'Save image',
+    share: 'Share…',
+    dialog: 'Share your room',
+    footer: 'The card shows the room only: no health numbers, no streaks.',
+    close: 'Close',
+    label: "KIP's room, as the share card shows it",
+    notices: {
+      saved: 'Saved to Photos.',
+      denied: 'Photos access is off. Allow it in Settings to save images.',
+      failed: "The image couldn't be made.",
+    },
+  },
+  /**
+   * The P4 screens' (visit, gift, challenge, a gift box) lines for a busy server and an unknown answer (ruling
+   * FINAL-I2): the buddies screens' versions ask the user to try again, which PF4-F17 has no exemption for.
+   */
+  errors: {
+    busy: "Couldn't do that just now.",
+    unknown: "That didn't go through.",
+  },
   welcome: {
     bubble: 'WELCOME HOME!',
     text: "This is KIP's room. Make it yours: drag pieces in, flip them, stack them.",
@@ -508,3 +685,18 @@ export const ROOM_COPY = {
   dismiss: 'Dismiss',
   toastHint: "Opens decorate mode for KIP's room",
 } as const;
+
+/** The codes whose buddies line a P4 screen shows as is: each one names what happened and asks nothing of the user. */
+const ROOM_ERROR_CODES: ReadonlySet<string> = new Set([
+  'already_cheered', 'not_spare', 'gift_limit', 'gift_gone', 'challenge_closed', 'no_challenge', 'invalid_body', 'not_buddies',
+]);
+
+/**
+ * An error line for the P4 screens (ruling FINAL-I2): their own codes read as the buddies screens word them; a busy
+ * server (try_later, rate_limited) and any other or missing code read as ROOM_COPY's neutral lines, so no line asks
+ * the user to try anything (PF4-F17).
+ */
+export function roomErrorMessage(code: string | null): string {
+  if (code !== null && ROOM_ERROR_CODES.has(code)) return buddyErrorMessage(code);
+  return code === 'try_later' || code === 'rate_limited' ? ROOM_COPY.errors.busy : ROOM_COPY.errors.unknown;
+}

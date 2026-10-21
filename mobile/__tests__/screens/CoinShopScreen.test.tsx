@@ -17,7 +17,10 @@ jest.mock('@react-navigation/native', () => ({ useNavigation: () => mockNav, use
 
 const SHOP: ShopDTO = {
   week: '2026-W44', set: { id: 'deskDay', itemIds: ['item.radio', 'item.mug'] },
-  items: [{ itemId: 'item.radio', price: 150 }, { itemId: 'item.mug', price: 25 }, { itemId: 'plant.monstera', price: 140 }, { itemId: 'art.neonheart', price: 200 }],
+  items: [
+    { itemId: 'item.radio', price: 150, locked: false }, { itemId: 'item.mug', price: 25, locked: false },
+    { itemId: 'plant.monstera', price: 140, locked: true }, { itemId: 'art.neonheart', price: 200, locked: false },
+  ],
 };
 const wallet = (balance: number) => ({ balance, today: { earned: 0, cap: 60 }, events: [], next: null });
 
@@ -153,6 +156,21 @@ it('a locked piece\'s sheet shows how it is earned, read with no "·" or Roman n
   fireEvent.press(s.getByTestId('shop-not-now'));
   fireEvent.press(s.getByTestId('shop-close'));
   expect(mockNav.goBack).toHaveBeenCalled();
+});
+
+it('a gifted rule piece not earned yet shows its rule and no Get button: the server\'s `locked` decides (PF4-F1, T8-LOCKED)', async () => {
+  (fetchCosmetics as jest.Mock).mockResolvedValue(cosmeticsDTO({ counts: { ...STARTER_COUNTS, 'plant.monstera': 1 } }));
+  (fetchCoins as jest.Mock).mockResolvedValue(wallet(999));
+  (fetchShop as jest.Mock).mockResolvedValue(SHOP);
+  (fetchFirstWeek as jest.Mock).mockResolvedValue({ open: false });
+  await act(async () => { await loadCosmetics(); });
+  expect(getCosmetics()!.counts['plant.monstera']).toBe(1);
+  const s = render(<CoinShopScreen />);
+  await act(async () => undefined);
+  expect(s.getByTestId('shop-tile-plant.monstera').props.accessibilityLabel).toBe('Monstera, locked. Sleep goal, level 1');
+  fireEvent.press(s.getByTestId('shop-tile-plant.monstera'));
+  expect(s.getByTestId('shop-sheet-locked')).toHaveTextContent('Earn it first: Sleep goal · I');
+  expect(s.queryByTestId('shop-get')).toBeNull();
 });
 
 it('a shop that fails to load offers Try again', async () => {

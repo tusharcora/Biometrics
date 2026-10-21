@@ -8,8 +8,11 @@ import type { WornSlot } from '../lib/room/catalogue';
 
 export type Mood = 'good' | 'ok' | 'low' | 'none';
 export type StickerKind = 'CHEER' | 'HEART' | 'REST_UP' | 'STAR';
-export type ShareKey = 'recovery' | 'sleepScore' | 'hoursSlept' | 'steps' | 'streaks';
-export const SHARE_KEYS: readonly ShareKey[] = ['recovery', 'sleepScore', 'hoursSlept', 'steps', 'streaks'];
+export type HealthShareKey = 'recovery' | 'sleepScore' | 'hoursSlept' | 'steps' | 'streaks';
+/** The five health switches and `room`, "Buddies can visit my room" (spec 2026-10-15 §10.1). */
+export type ShareKey = HealthShareKey | 'room';
+export const HEALTH_SHARE_KEYS: readonly HealthShareKey[] = ['recovery', 'sleepScore', 'hoursSlept', 'steps', 'streaks'];
+export const SHARE_KEYS: readonly ShareKey[] = [...HEALTH_SHARE_KEYS, 'room'];
 export type NumberKey = 'recovery' | 'sleepScore' | 'hoursSlept' | 'steps';
 export const NUMBER_KEYS: readonly NumberKey[] = ['recovery', 'sleepScore', 'hoursSlept', 'steps'];
 
@@ -35,7 +38,12 @@ export interface BuddyIdentity {
   joinedOn?: string;
   kipColour?: string;
 }
-export type SharingSettings = Record<ShareKey, boolean> & { consentVersion: number; consented: boolean };
+export type SharingSettings = Record<HealthShareKey, boolean> & {
+  /** "Buddies can visit my room": its own consent, never the health one. An older server sends none. */
+  room?: boolean;
+  consentVersion: number;
+  consented: boolean;
+};
 export interface IncomingRequest { id: string; createdAt: string; from: Person }
 /** toHandle is the handle as typed when sent (never the person's current handle); '' for an older row. */
 export interface OutgoingRequest { id: string; createdAt: string; toHandle: string }
@@ -48,10 +56,12 @@ export interface BuddyWeek {
   /** Whether I muted this buddy (never visible to them). */
   muted: boolean;
   tiles: Array<{ date: string; mood: Mood }>;
-  shares: ShareKey[];
+  shares: HealthShareKey[];
   numbers: Partial<Record<NumberKey, DayValue[]>>;
   /** Only when they share streaks & badges. */
   badges?: Array<{ family: AchievementFamily; level: number }>;
+  /** They opened their room to visits (P4 ruling 8); an older server sends none. */
+  roomOpen?: boolean;
 }
 export interface BlockedPerson { userId: string; handle: string; displayName: string }
 

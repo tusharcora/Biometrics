@@ -13,6 +13,14 @@ import { suggestedQuestions } from '../../src/lib/coachToday';
 import { resetCoins, setCoinBalance } from '../../src/lib/coins/coinsStore';
 import { fetchCoins, fetchFirstWeek } from '../../src/api/coins';
 import { TURN_FRAME_MS } from '../../src/lib/useKipTurn';
+import { fetchChallenge, fetchGifts, fetchRoomCheers, openGift } from '../../src/api/rooms';
+import { fetchCosmetics } from '../../src/api/cosmetics';
+import { getCosmetics, loadCosmetics, resetCosmetics } from '../../src/lib/room/cosmeticsStore';
+import { resetRoomSocial } from '../../src/lib/room/giftsStore';
+import { cosmeticsDTO, STARTER_COUNTS } from '../../jest-mocks/cosmeticsFixture';
+
+// Your cosmetics, read only where a test loads them (the gift tests): none otherwise, as before.
+jest.mock('../../src/api/cosmetics', () => ({ fetchCosmetics: jest.fn(), putCosmetics: jest.fn(), postCosmeticsSeen: jest.fn(async () => undefined), postRoomWelcomed: jest.fn(async () => undefined) }));
 
 // The mocks (api, navigation, RoomView, the room's score and sleep reads) live in jest-mocks/coachScreenHarness.
 const mockNavigate = mockNav.navigate;
@@ -323,5 +331,174 @@ describe('the KIP page (W7)', () => {
     const s = await openChat();
     expect(s.getByTestId('coach-input').props.placeholder).toBe('Ask KIP…');
     expect(s.getByTestId('coach-input').props.accessibilityLabel).toBe('Message KIP');
+  });
+});
+
+describe('gifts and cheers on the room card (spec §10.2, §10.3; rulings 13, 14, PF4-F8)', () => {
+  const ivy = { id: 'g1', itemId: 'plant.ivy', note: 'cosy' as const, from: { name: 'Maya' }, quiet: false, at: '2026-10-26T10:00:00.000Z' };
+  const fern = { id: 'g2', itemId: 'plant.fern', note: 'desk' as const, from: { name: 'Jo' }, quiet: true, at: '2026-10-26T11:00:00.000Z' };
+  beforeEach(async () => {
+    (fetchCosmetics as jest.Mock).mockResolvedValue(cosmeticsDTO());
+    await act(async () => { await loadCosmetics(); });
+  });
+  afterEach(() => { resetRoomSocial(); resetCosmetics(); });
+  const openKip = async (width = 323) => {
+    const s = await openChat();
+    fireEvent(s.getByTestId('kip-room-frame-inner'), 'layout', { nativeEvent: { layout: { width, height: 240, x: 0, y: 0 } } });
+    await act(async () => undefined);
+    return s;
+  };
+
+  it('shows each gift as a box, a line for a gift from someone you did not mute, and opens it into the inventory', async () => {
+    (fetchRoomCheers as jest.Mock).mockResolvedValue({ count: 2, cheers: [] });
+    (fetchGifts as jest.Mock).mockResolvedValue({ gifts: [ivy, fern] });
+    (openGift as jest.Mock).mockResolvedValue({ counts: { ...STARTER_COUNTS, 'plant.ivy': 1 } });
+    const s = await openKip();
+    expect(s.getAllByTestId(/^gift-box-/)).toHaveLength(2);
+    expect(s.getByTestId('room-gift-line')).toHaveTextContent('A gift from Maya is on your floor');
+    expect(s.getByTestId('room-cheers')).toHaveTextContent('2 cheers this week');
+    // The reload after the open (T11T12-RELOAD) brings the server's own NEW copy.
+    (fetchCosmetics as jest.Mock).mockResolvedValue(cosmeticsDTO({ counts: { ...STARTER_COUNTS, 'plant.ivy': 1 }, owned: [...Object.keys(STARTER_COUNTS), 'plant.ivy'].sort(), fresh: [{ itemId: 'plant.ivy', source: 'gift_in' }], version: 2 }));
+    const reads = (fetchCosmetics as jest.Mock).mock.calls.length;
+    await act(async () => { fireEvent.press(s.getByTestId('gift-box-g1')); });
+    expect(openGift).toHaveBeenCalledWith('g1');
+    expect(getCosmetics()?.fresh).toContainEqual({ itemId: 'plant.ivy', source: 'gift_in' });
+    expect(getCosmetics()?.counts['plant.ivy']).toBe(1);
+    expect((fetchCosmetics as jest.Mock).mock.calls.length).toBe(reads + 1);
+    expect(s.getByTestId('room-gift-line')).toHaveTextContent('Trailing ivy is in your inventory.');
+    expect(s.getAllByTestId(/^gift-box-/)).toHaveLength(1);
+  });
+
+  // Jest only: fireEvent.press reaches the box's own handler. On a device the box is a nested Pressable over the room
+  // and should win the responder; that stays an owner device check (T10-FIX M4).
+  it('in Jest, a tap on a box opens the gift, never the piece behind it; a tap on the room still opens that piece (the P3 tap path, Jest only)', async () => {
+    (fetchGifts as jest.Mock).mockResolvedValue({ gifts: [ivy] });
+    (openGift as jest.Mock).mockResolvedValue({ counts: { ...STARTER_COUNTS, 'plant.ivy': 1 } });
+    // Whatever the room finds under a finger (a piece, the cat or KIP passing by), it is the fern.
+    jest.requireMock('../../src/components/room/RoomView').__setPieceAt(() => 'plant');
+    try {
+      const s = await openKip();
+      await act(async () => { fireEvent.press(s.getByTestId('gift-box-g1')); });
+      expect(openGift).toHaveBeenCalledWith('g1');
+      expect(mockNavigate).not.toHaveBeenCalledWith('PieceCard', expect.anything());
+      fireEvent.press(s.getByTestId('kip-room-press'), { nativeEvent: { locationX: 10, locationY: 10 } });
+      expect(mockNavigate).toHaveBeenCalledWith('PieceCard', { pieceId: 'plant' });
+    } finally {
+      jest.requireMock('../../src/components/room/RoomView').__setPieceAt(() => null);
+    }
+  });
+
+  it('a muted sender\'s gift shows its box but no line (ruling 13); a deleted sender\'s reads "A gift"', async () => {
+    (fetchGifts as jest.Mock).mockResolvedValue({ gifts: [fern] });
+    const s = await openKip();
+    expect(s.getAllByTestId(/^gift-box-/)).toHaveLength(1);
+    expect(s.queryByTestId('room-gift-line')).toBeNull();
+    expect(s.queryByTestId('room-cheers')).toBeNull();
+    s.unmount();
+    resetRoomSocial();
+    (fetchGifts as jest.Mock).mockResolvedValue({ gifts: [{ ...ivy, from: null }] });
+    const t = await openKip();
+    expect(t.getByTestId('room-gift-line')).toHaveTextContent('A gift is on your floor');
+    expect(t.getByTestId('gift-box-g1').props.accessibilityLabel).toBe('Open a gift');
+  });
+
+  it('more than one unmuted gift reads as a count of those; the cheers open who cheered', async () => {
+    (fetchRoomCheers as jest.Mock).mockResolvedValue({ count: 1, cheers: [] });
+    (fetchGifts as jest.Mock).mockResolvedValue({ gifts: [ivy, { ...ivy, id: 'g3' }, fern, { ...ivy, id: 'g4' }] });
+    const s = await openKip();
+    expect(s.getAllByTestId(/^gift-box-/)).toHaveLength(3);
+    expect(s.getByTestId('room-gift-line')).toHaveTextContent('3 gifts are on your floor');
+    expect(s.getByTestId('room-cheers').props.accessibilityLabel).toBe('1 cheer this week. See who cheered your room');
+    fireEvent.press(s.getByTestId('room-cheers'));
+    expect(mockNavigate).toHaveBeenCalledWith('RoomCheers');
+  });
+
+  it('a gift already gone takes its box away; a try-later answer keeps it to tap again', async () => {
+    (fetchGifts as jest.Mock).mockResolvedValue({ gifts: [ivy, { ...ivy, id: 'g3' }] });
+    (openGift as jest.Mock).mockRejectedValueOnce(new ApiError(503, 'try_later', 'try_later')).mockRejectedValueOnce(new ApiError(404, 'gift_gone', 'gift_gone'));
+    const s = await openKip();
+    await act(async () => { fireEvent.press(s.getByTestId('gift-box-g1')); });
+    expect(s.getByTestId('room-gift-line')).toHaveTextContent("Couldn't do that just now."); // FINAL-I2: the neutral busy line
+    expect(s.getAllByTestId(/^gift-box-/)).toHaveLength(2);
+    (fetchGifts as jest.Mock).mockResolvedValue({ gifts: [{ ...ivy, id: 'g3' }] });
+    await act(async () => { fireEvent.press(s.getByTestId('gift-box-g1')); });
+    expect(s.getByTestId('room-gift-line')).toHaveTextContent('That gift is no longer there.');
+    expect(s.queryByTestId('gift-box-g1')).toBeNull();
+    expect(s.getAllByTestId(/^gift-box-/)).toHaveLength(1);
+  });
+
+  it('the boxes\' tiles are kept free of the cat and KIP (PF4-F8)', async () => {
+    (fetchGifts as jest.Mock).mockResolvedValue({ gifts: [ivy, fern] });
+    const s = await openKip();
+    expect(JSON.parse(s.getByTestId('kip-room').props.avoid as string)).toHaveLength(2);
+  });
+
+  it('a press on a box while a gift opens never reaches the room under it (T10-FIX I2)', async () => {
+    (fetchGifts as jest.Mock).mockResolvedValue({ gifts: [ivy, { ...ivy, id: 'g3' }] });
+    let finish!: (v: { counts: Record<string, number> }) => void;
+    (openGift as jest.Mock).mockReturnValueOnce(new Promise((r) => { finish = r; }));
+    const pieceAt = jest.fn(() => 'plant');
+    jest.requireMock('../../src/components/room/RoomView').__setPieceAt(pieceAt);
+    try {
+      const s = await openKip();
+      await act(async () => { fireEvent.press(s.getByTestId('gift-box-g1')); });
+      await act(async () => { fireEvent.press(s.getByTestId('gift-box-g3')); });
+      await act(async () => { fireEvent.press(s.getByTestId('gift-box-g1')); });
+      expect(openGift).toHaveBeenCalledTimes(1);
+      expect(pieceAt).not.toHaveBeenCalled();
+      expect(mockNavigate).not.toHaveBeenCalledWith('PieceCard', expect.anything());
+      await act(async () => { finish({ counts: { ...STARTER_COUNTS, 'plant.ivy': 1 } }); });
+    } finally {
+      jest.requireMock('../../src/components/room/RoomView').__setPieceAt(() => null);
+    }
+  });
+
+  it('with no free tile in view every gift can still be opened, a quiet one too, by the waiting button (T10-FIX I1)', async () => {
+    (fetchGifts as jest.Mock).mockResolvedValue({ gifts: [fern, ivy] });
+    (openGift as jest.Mock).mockResolvedValue({ counts: { ...STARTER_COUNTS, 'plant.fern': 2 } });
+    // A card narrower than a box: no tile's 44-pt box fits in view.
+    const s = await openKip(40);
+    expect(s.queryAllByTestId(/^gift-box-/)).toHaveLength(0);
+    const waiting = s.getByTestId('room-gift-waiting');
+    expect(waiting).toHaveTextContent('2 gifts waiting. Open one');
+    expect(waiting.props.accessibilityLabel ?? '').not.toMatch(/Jo|Maya/);
+    // The next one is the quiet gift from a muted sender: it is still reachable.
+    await act(async () => { fireEvent.press(waiting); });
+    expect(openGift).toHaveBeenLastCalledWith('g2');
+    expect(s.getByTestId('room-gift-waiting')).toHaveTextContent('1 gift waiting. Open one');
+    await act(async () => { fireEvent.press(s.getByTestId('room-gift-waiting')); });
+    expect(openGift).toHaveBeenLastCalledWith('g1');
+    expect(s.queryByTestId('room-gift-waiting')).toBeNull();
+  });
+
+  describe('the room challenge', () => {
+    const none = { week: '2026-W43', theme: null, closesAt: null, open: false, entry: null, entries: [], results: null };
+    afterEach(() => { (fetchChallenge as jest.Mock).mockImplementation(async () => none); });
+
+    it('offers the room challenge while a theme is live, and not otherwise (ruling 22)', async () => {
+      const live = { week: '2026-W44', theme: { id: 'cosyAutumn', tag: 'warm', atLeast: 3, themePiece: 'lamp.harvest', trophy: 'corner.acorn' }, closesAt: '2099-01-01T00:00:00.000Z', open: true, entry: null, entries: [], results: null };
+      (fetchChallenge as jest.Mock).mockResolvedValue(live);
+      const s = await openKip();
+      fireEvent.press(s.getByTestId('room-challenge'));
+      expect(mockNavigate).toHaveBeenCalledWith('RoomChallenge');
+      s.unmount();
+      resetRoomSocial();
+      // Closed for the week, no theme, or an older server without the route: no button.
+      for (const off of [async () => ({ ...live, open: false }), async () => ({ ...live, theme: null }), async () => { throw new ApiError(404, 'x'); }]) {
+        (fetchChallenge as jest.Mock).mockImplementation(off);
+        const t = await openKip();
+        expect(t.queryByTestId('room-challenge')).toBeNull();
+        t.unmount();
+        resetRoomSocial();
+      }
+    });
+
+    it('a failed challenge read keeps the gifts and cheers on the card', async () => {
+      (fetchChallenge as jest.Mock).mockRejectedValue(new ApiError(503, 'try_later', 'try_later'));
+      (fetchRoomCheers as jest.Mock).mockResolvedValue({ count: 2, cheers: [] });
+      const s = await openKip();
+      expect(s.getByTestId('room-cheers')).toHaveTextContent('2 cheers this week');
+      expect(s.queryByTestId('room-challenge')).toBeNull();
+    });
   });
 });

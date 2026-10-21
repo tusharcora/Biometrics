@@ -13,12 +13,12 @@ import type { KipColour } from '../../lib/kip/kipArt';
 import { useAchievements } from '../../lib/achievementsStore';
 import { WORN_SLOTS, isoOf } from '../../lib/room/catalogue';
 import { canPlace, displayDraft, inventory, type DrawerTab, type EditorAction, type EditorState } from '../../lib/room/edit/editor';
-import { drawerTabs, notPlaced, pieceTiles, setCards, styleRows, wornTiles, type DrawerTile } from '../../lib/room/edit/drawer';
+import { drawerTabLabel, drawerTabs, notPlaced, pieceTiles, setCards, styleRows, themeChecklist, wornTiles, type DrawerTile } from '../../lib/room/edit/drawer';
 import { capFor } from '../../lib/room/iso/geometry';
 import { ROOM_COPY, SET_NAMES, SLOT_TITLES, itemName, progressFromAchievements } from '../../lib/room/roomCopy';
 
 const D = ROOM_COPY.drawer;
-const PIECE_TABS: ReadonlySet<DrawerTab> = new Set(['all', 'floor', 'wall', 'onTop', 'funny', 'effects', 'new']);
+const PIECE_TABS: ReadonlySet<DrawerTab> = new Set(['all', 'floor', 'wall', 'onTop', 'funny', 'effects', 'theme', 'new']);
 const NO_COUNTERS = { recapsRead: 0, buddyCheers: 0 };
 const TARGET = 'h-[44px]'; // spec §5.7: every target 44 points tall at least
 
@@ -29,7 +29,7 @@ const TARGET = 'h-[44px]'; // spec §5.7: every target 44 points tall at least
 // they are earned, never a price. The drawer is never taller than the scroll area it sits in (maxHeight, once
 // measured). Its lists are RNGH ScrollViews, so a tile's drag cancels their scrolling, and while a drag is live they
 // don't scroll at all (onDragChange tells the page to hold its own scroll too).
-export function InventoryDrawer({ state, dispatch, room, colour, counters = NO_COUNTERS, maxHeight, onDragChange, onOpenShop, onOpenSizes }: {
+export function InventoryDrawer({ state, dispatch, room, colour, counters = NO_COUNTERS, maxHeight, onDragChange, onOpenShop, onOpenSizes, onOpenShare }: {
   state: EditorState;
   dispatch: (a: EditorAction) => void;
   room: RefObject<EditRoomHandle | null>;
@@ -44,6 +44,8 @@ export function InventoryDrawer({ state, dispatch, room, colour, counters = NO_C
   onOpenShop?: () => void;
   /** The drawer header's Room sizes: a room can grow at any time, not only when it is full (ruling PF-F5). */
   onOpenSizes?: () => void;
+  /** Opens the share card (P4 ruling 23): the saved room as an image, made only on Save or Share. */
+  onOpenShare?: () => void;
 }) {
   const { height } = useWindowDimensions();
   const [full, setFull] = useState(false);
@@ -55,6 +57,8 @@ export function InventoryDrawer({ state, dispatch, room, colour, counters = NO_C
   const facts = progressFromAchievements(useAchievements(), counters);
   const n = notPlaced(state);
   const tabs = drawerTabs(state);
+  // Your entry's checklist over the theme tab (spec §10.4, C3): it follows the draft as you build.
+  const themeLine = state.drawer === 'theme' ? themeChecklist(state) : null;
   const picked = state.picked;
   const left = picked ? inventory(state)[picked] ?? 0 : 0;
   const isDesk = !!(picked && isoOf(picked)?.kipDesk);
@@ -85,8 +89,9 @@ export function InventoryDrawer({ state, dispatch, room, colour, counters = NO_C
     <View testID="drawer" className="border-t border-border bg-background" style={{ height: drawerHeight }}>
       <View className="flex-row flex-wrap items-center justify-between gap-2 px-4 pt-2">
         <Text testID="drawer-title" accessibilityLabel={D.titleSpoken(n)} className="shrink font-pixel text-label text-muted-foreground">{D.title(n)}</Text>
-        {/* The shop, Room sizes and the handle wrap under the title before they squeeze it on a narrow phone. */}
+        {/* Share, the shop, Room sizes and the handle wrap under the title before they squeeze it on a narrow phone. */}
         <View className="shrink flex-row flex-wrap items-center justify-end gap-2">
+          {onOpenShare ? <Button testID="drawer-share" variant="outline" size="sm" className={TARGET} onPress={onOpenShare}>{ROOM_COPY.share.open}</Button> : null}
           {onOpenShop ? <Button testID="drawer-shop" variant="outline" size="sm" className={TARGET} onPress={onOpenShop}>{D.shop}</Button> : null}
           {onOpenSizes ? <Button testID="drawer-sizes" variant="outline" size="sm" className={TARGET} onPress={onOpenSizes}>{D.sizes}</Button> : null}
           <Button testID="drawer-handle" variant="ghost" size="sm" className={TARGET} accessibilityLabel={full ? D.less : D.more} onPress={() => setFull((v) => !v)}>
@@ -99,11 +104,16 @@ export function InventoryDrawer({ state, dispatch, room, colour, counters = NO_C
           {tabs.map((tab) => (
             <Button key={tab} testID={`drawer-tab-${tab}`} accessibilityRole="tab" accessibilityState={{ selected: state.drawer === tab }}
               size="sm" className={TARGET} variant={state.drawer === tab ? 'default' : 'outline'} onPress={() => dispatch({ type: 'drawer', tab })}>
-              {D.tabs[tab]}
+              {drawerTabLabel(state, tab)}
             </Button>
           ))}
         </View>
       </ScrollView>
+      {themeLine ? (
+        <Text testID="drawer-checklist" accessibilityLabel={themeLine.spoken} className="px-4 pb-1 text-caption tabular-nums text-muted-foreground">
+          {themeLine.line}
+        </Text>
+      ) : null}
       <ScrollView testID="drawer-scroll" nestedScrollEnabled scrollEnabled={!dragging} contentContainerStyle={{ paddingBottom: 24 }}>
         {roomFull ? (
           <View className="px-4 pb-3">

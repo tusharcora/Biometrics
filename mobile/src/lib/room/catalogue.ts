@@ -22,7 +22,9 @@ export type UnlockRule =
   | { kind: 'family'; family: AchievementFamilyName; level: number }
   | { kind: 'anyFamily'; level: number }
   | { kind: 'counter'; counter: 'recaps_read' | 'buddy_cheers'; atLeast: number }
-  | { kind: 'set'; set: SetId };
+  | { kind: 'set'; set: SetId }
+  /** A weekly challenge trophy, granted only as a prize (P4 ruling 2). */
+  | { kind: 'prize' };
 
 export interface CatalogueItem {
   id: ItemId;
@@ -41,7 +43,8 @@ export interface CatalogueItem {
   grants?: number;
   /** Coins (spec §6.4); absent = not in the shop. */
   price?: number;
-  shop?: 'always' | { week: string };
+  /** 'always'; 'theme': only in the weeks whose challenge theme names it (P4 ruling 4); or only in that ISO week. */
+  shop?: 'always' | 'theme' | { week: string };
 }
 
 export interface CatalogueSet {

@@ -1,5 +1,7 @@
+import { ADVICE, HEALTH_VERB, advises, copyStrings } from '../../jest-mocks/adviceGuard';
 import { CATALOGUE } from '../../src/lib/room/catalogue';
-import { ITEM_NAMES, ROOM_COPY, SET_NAMES, itemName, progressLine, spokenName, unlockLine, unlockSpoken } from '../../src/lib/room/roomCopy';
+import { buddyErrorMessage } from '../../src/lib/buddyCopy';
+import { ITEM_NAMES, ROOM_COPY, SET_NAMES, itemName, progressLine, roomErrorMessage, spokenName, unlockLine, unlockSpoken } from '../../src/lib/room/roomCopy';
 
 it('names every item and set the app ships', () => {
   expect(CATALOGUE.items.filter((i) => !ITEM_NAMES[i.id]).map((i) => i.id)).toEqual([]);
@@ -76,22 +78,6 @@ it('the first-week list reads its rows and lines aloud without "·" or "−" (sp
   }
 });
 
-/**
- * Every string under a copy object, with each function called on sample arguments: a name first or a number first,
- * at 0, 1 and 7, so every branch (awardCount's none, one and many) is read.
- */
-const SAMPLE_ARGS: readonly (readonly unknown[])[] = [0, 1, 7].flatMap((n) => [['fern', n, n], [n, n, n]]);
-function copyStrings(v: unknown): string[] {
-  if (typeof v === 'string') return [v];
-  if (typeof v === 'function') return SAMPLE_ARGS.flatMap((a) => copyStrings((v as (...a: unknown[]) => unknown)(...a)));
-  if (v && typeof v === 'object') return Object.values(v).flatMap(copyStrings);
-  return [];
-}
-const ADVICE = /\b(should|try|more|need|needs|must)\b/i;
-// Health verbs that open a sentence. "Move" and "Store" are the room's own buttons (moving furniture is no advice).
-const HEALTH_VERB = /(^|[.!?:]\s+)(sleep|walk|drink|rest|exercise|go|get|hit|reach|eat)\b/i;
-const advises = (s: string) => ADVICE.test(s) || HEALTH_VERB.test(s);
-
 it('never gives health advice in an effect or living line (spec §8.3, P3 ruling 18)', () => {
   for (const bad of ['Sleep more to grow your fern.', 'Walk 2,000 more steps to wake the cat.', 'You should rest.', 'Try for 8 hours.']) expect(advises(bad)).toBe(true);
   // Only the health-verb rule catches this one: no advice word in it.
@@ -106,3 +92,67 @@ it('never gives health advice in an effect or living line (spec §8.3, P3 ruling
   expect(lines).toContain('The fern is fully grown.');
   expect(lines.join(' ')).not.toMatch(/\d+ (steps|minutes|hours)|%/); // never a health value
 });
+
+it('never gives health advice on a visit (PF4-F17): only the house "Try again" button is exempt', () => {
+  const lines = copyStrings(ROOM_COPY.visit);
+  expect(lines).toEqual(expect.arrayContaining(["Just looking: you can't move anything", "Cheer fern's room", 'A weekly challenge trophy']));
+  expect(lines.length).toBeGreaterThan(15);
+  const checked = lines.filter((s) => s !== 'Try again');
+  expect(lines.length - checked.length).toBe(1);
+  for (const s of checked) expect({ s, advises: advises(s) }).toEqual({ s, advises: false });
+  // Spoken lines never carry "·" or "×", and never say what they earned.
+  for (const s of [ROOM_COPY.visit.sizeSpoken({ n: 8, m: 8 }, 44), ROOM_COPY.visit.cheeredPaidSpoken]) expect(s).not.toMatch(/·|×|−/);
+  for (const s of lines) expect(s).not.toMatch(/earned/i);
+});
+
+it('never gives health advice in the share card copy (PF4-F17), and its spoken lines carry no "·", "×" or "−"', () => {
+  const S = ROOM_COPY.share;
+  const lines = copyStrings(S);
+  expect(lines).toEqual(expect.arrayContaining(['Share your room', 'Makes an image; nothing is posted', "KIP's room", 'Save image', 'Share…']));
+  expect(lines.length).toBeGreaterThan(15);
+  // No exemption: the share card has no "Try again" button, and its failed line names no retry.
+  for (const s of lines) expect({ s, advises: advises(s) }).toEqual({ s, advises: false });
+  for (const s of [S.metaSpoken({ n: 8, m: 8 }, 31, 'Cosy autumn'), S.metaSpoken({ n: 8, m: 8 }, 31, null), S.label]) expect(s).not.toMatch(/·|×|−/);
+  // Earn-only and no health number: the card shows the room only.
+  expect(lines.join(' ')).not.toMatch(/\$|buy|price|coin|\d+ (steps|minutes|hours)|%/i);
+});
+
+it('never gives health advice in the gift and cheer copy (PF4-F17), and its spoken lines carry no "·", "×" or "−"', () => {
+  const G = ROOM_COPY.gifts;
+  const lines = copyStrings(G);
+  expect(lines).toEqual(expect.arrayContaining(['Send fern a gift', 'From your spares', 'Thought of you', 'Send gift', 'Cheers on your room']));
+  expect(lines.length).toBeGreaterThan(20);
+  // Only the house "Try again" button label is exempt (PF4-F17).
+  const checked = lines.filter((s) => s !== 'Try again');
+  expect(lines.length - checked.length).toBe(1);
+  for (const s of checked) expect({ s, advises: advises(s) }).toEqual({ s, advises: false });
+  expect([G.waiting(1), G.waiting(2)]).toEqual(['1 gift waiting. Open one', '2 gifts waiting. Open one']);
+  for (const s of [G.spareSpoken('Fern', 2), G.box('Maya'), G.box(null), G.cheersSpoken(2), G.waiting(2)]) expect(s).not.toMatch(/·|×|−/);
+  expect(G.notes).toEqual({ desk: 'For your desk', cosy: 'Cosy!', thought: 'Thought of you' });
+  // Earn-only: a gift is a piece you already own, never bought for it.
+  expect(lines.join(' ')).not.toMatch(/\$|buy|price|coin/i);
+});
+
+it('the P4 screens\' error lines never give advice, for every server code and none (PF4-F17, FINAL-I2)', () => {
+  // Every code in backend/src/buddies/errors.ts BUDDY_ERROR_STATUS (a superset of what the P4 routes answer), plus a
+  // code this build doesn't know, plus no code at all.
+  const codes: (string | null)[] = [
+    'invalid_handle', 'invalid_display_name', 'setup_incomplete', 'handle_taken', 'rate_limited', 'try_later', 'handle_required',
+    'mood_notice_required', 'consent_required', 'stale_consent_version', 'invalid_settings', 'code_invalid', 'own_handle',
+    'not_found', 'blocked_by_you', 'too_many_pending', 'request_gone', 'not_buddies', 'sticker_limit', 'invalid_sticker',
+    'invalid_cursor', 'invalid_checkin', 'recap_not_found', 'goodnight_closed', 'undo_expired', 'invalid_note',
+    'invalid_message', 'message_gone', 'invalid_reaction', 'card_unavailable', 'invalid_status_note', 'invalid_report',
+    'report_target_gone', 'already_cheered', 'not_spare', 'gift_limit', 'gift_gone', 'challenge_closed', 'no_challenge',
+    'invalid_body', 'a_newer_code', null,
+  ];
+  for (const code of codes) {
+    const s = roomErrorMessage(code);
+    expect({ code, s, advises: advises(s), dot: /·|−/.test(s) }).toEqual({ code, s, advises: false, dot: false });
+  }
+  // The busy server and the unknown answer read as ROOM_COPY's own neutral lines; the P4 codes keep their lines.
+  expect([roomErrorMessage('try_later'), roomErrorMessage('rate_limited')]).toEqual([ROOM_COPY.errors.busy, ROOM_COPY.errors.busy]);
+  expect([roomErrorMessage(null), roomErrorMessage('a_newer_code'), roomErrorMessage('not_found')]).toEqual(Array(3).fill(ROOM_COPY.errors.unknown));
+  expect(roomErrorMessage('gift_limit')).toBe(buddyErrorMessage('gift_limit'));
+  expect(copyStrings(ROOM_COPY.errors).filter(advises)).toEqual([]);
+});
+

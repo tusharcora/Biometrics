@@ -1,5 +1,7 @@
 import React from 'react';
 import { NavigationContext } from '@react-navigation/native';
+import * as ReactNative from 'react-native';
+import { AccessibilityInfo } from 'react-native';
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react-native';
 import { consentToSharing, fetchBuddyPage, fetchIdentity, fetchSharing, saveSharing } from '../../src/api/buddies';
 import { BuddiesProfileSection } from '../../src/components/buddies/BuddiesProfileSection';
@@ -14,7 +16,7 @@ jest.mock('../../src/api/buddies', () => ({
   consentToSharing: jest.fn(),
 }));
 
-const OFF = { recovery: false, sleepScore: false, hoursSlept: false, steps: false, streaks: false };
+const OFF = { recovery: false, sleepScore: false, hoursSlept: false, steps: false, streaks: false, room: false };
 const PAGE = { buddies: [], nextCursor: null, incomingRequests: 0, outgoingRequests: 0 };
 const coded = (code: string) => Object.assign(new Error(code), { code });
 
@@ -220,4 +222,132 @@ it('a refused consent shows the sheet again and saves nothing', async () => {
   expect(saveSharing).not.toHaveBeenCalled();
   expect(screen.getByTestId('sharing-consent')).toBeTruthy();
   expect(screen.getByTestId('share-toggle-steps').props.value).toBe(false);
+});
+
+describe('the room switch (spec 2026-10-15 §10.1, ruling 20)', () => {
+  it('is off by default and asks its own one-line consent; Turn on saves room alone, never the health consent', async () => {
+    (saveSharing as jest.Mock).mockResolvedValue({ consentVersion: 1, consented: false, ...OFF, room: true });
+    render(<BuddiesProfileSection onNavigate={jest.fn()} />);
+    const toggle = await screen.findByTestId('share-toggle-room');
+    expect(toggle.props.value).toBe(false);
+    fireEvent(toggle, 'valueChange', true);
+    expect(screen.getByTestId('room-consent-line')).toHaveTextContent('Buddies see your room, including its size.');
+    expect(saveSharing).not.toHaveBeenCalled();
+    await act(async () => { fireEvent.press(screen.getByTestId('room-consent-on')); });
+    expect(saveSharing).toHaveBeenCalledWith({ room: true });
+    expect(consentToSharing).not.toHaveBeenCalled();
+    expect(screen.getByTestId('share-toggle-room').props.value).toBe(true);
+  });
+
+  it('Not now changes nothing; turning it off never asks', async () => {
+    render(<BuddiesProfileSection onNavigate={jest.fn()} />);
+    fireEvent(await screen.findByTestId('share-toggle-room'), 'valueChange', true);
+    await act(async () => { fireEvent.press(screen.getByTestId('room-consent-cancel')); });
+    expect(screen.queryByTestId('room-consent-line')).toBeNull();
+    expect(saveSharing).not.toHaveBeenCalled();
+    expect(screen.getByTestId('share-toggle-room').props.value).toBe(false);
+  });
+
+  it('turning it off never asks', async () => {
+    (fetchSharing as jest.Mock).mockResolvedValue({ consentVersion: 1, consented: false, ...OFF, room: true });
+    (saveSharing as jest.Mock).mockResolvedValue({ consentVersion: 1, consented: false, ...OFF });
+    render(<BuddiesProfileSection onNavigate={jest.fn()} />);
+    const toggle = await screen.findByTestId('share-toggle-room');
+    await act(async () => { fireEvent(toggle, 'valueChange', false); });
+    expect(screen.queryByTestId('room-consent-line')).toBeNull();
+    expect(saveSharing).toHaveBeenCalledWith({ room: false });
+    expect(screen.getByTestId('share-toggle-room').props.value).toBe(false);
+  });
+
+  it('keeps the five health switches under the versioned consent, and hides the room row on an older server', async () => {
+    (fetchSharing as jest.Mock).mockResolvedValue({ consentVersion: 1, consented: false, ...OFF, room: undefined });
+    render(<BuddiesProfileSection onNavigate={jest.fn()} />);
+    expect(await screen.findByTestId('share-toggle-steps')).toBeTruthy();
+    expect(screen.queryByTestId('share-toggle-room')).toBeNull();
+    expect(screen.queryByTestId('room-visits')).toBeNull();
+  });
+
+  it('is never locked by the health consent version: a newer server version still lets the room switch change', async () => {
+    (fetchSharing as jest.Mock).mockResolvedValue({ consentVersion: 2, consented: false, ...OFF });
+    (saveSharing as jest.Mock).mockResolvedValue({ consentVersion: 2, consented: false, ...OFF, room: true });
+    render(<BuddiesProfileSection onNavigate={jest.fn()} />);
+    await waitFor(() => expect(screen.getByTestId('share-toggle-steps').props.disabled).toBe(true));
+    expect(screen.getByTestId('share-toggle-room').props.disabled).toBe(false);
+    fireEvent(screen.getByTestId('share-toggle-room'), 'valueChange', true);
+    await act(async () => { fireEvent.press(screen.getByTestId('room-consent-on')); });
+    expect(saveSharing).toHaveBeenCalledWith({ room: true });
+    expect(screen.getByTestId('share-toggle-room').props.value).toBe(true);
+  });
+
+  it('a consent answer to the room save never opens the health consent (PF4-F12); a failure explains under the room group', async () => {
+    (saveSharing as jest.Mock).mockRejectedValue(coded('consent_required'));
+    render(<BuddiesProfileSection onNavigate={jest.fn()} />);
+    fireEvent(await screen.findByTestId('share-toggle-room'), 'valueChange', true);
+    await act(async () => { fireEvent.press(screen.getByTestId('room-consent-on')); });
+    expect(screen.queryByTestId('sharing-consent')).toBeNull();
+    expect(consentToSharing).not.toHaveBeenCalled();
+    expect(screen.getByTestId('share-toggle-room').props.value).toBe(false);
+    // T9-CARRY: a neutral line, never the health consent's words.
+    expect(screen.getByText("Couldn't change your room just now.")).toBeTruthy();
+    expect(screen.queryByText('Confirm what your buddies will see first.')).toBeNull();
+
+    (saveSharing as jest.Mock).mockRejectedValue(coded('try_later'));
+    fireEvent(screen.getByTestId('share-toggle-room'), 'valueChange', true);
+    await act(async () => { fireEvent.press(screen.getByTestId('room-consent-on')); });
+    expect(screen.getByText("Couldn't do that right now. Try again in a minute.")).toBeTruthy();
+    // The health group keeps its own footer.
+    expect(screen.getByText(/Buddies always see your mood/)).toBeTruthy();
+  });
+
+  it('is disabled while the health consent saves, and ignores a flip that gets through meanwhile (T9-CARRY)', async () => {
+    let resolveConsent!: (v: unknown) => void;
+    (consentToSharing as jest.Mock).mockImplementation(() => new Promise((r) => { resolveConsent = r; }));
+    (saveSharing as jest.Mock).mockImplementation(async (patch: object) => ({ consentVersion: 1, consented: true, ...OFF, ...patch }));
+    render(<BuddiesProfileSection onNavigate={jest.fn()} />);
+    fireEvent(await screen.findByTestId('share-toggle-steps'), 'valueChange', true);
+    fireEvent.press(await screen.findByTestId('sharing-consent-agree'));
+    expect(screen.getByTestId('share-toggle-room').props.disabled).toBe(true);
+    // A flip that reaches the handler anyway asks nothing and saves nothing.
+    const flip = screen.UNSAFE_getAllByType(ReactNative.Switch).find((el) => el.props.testID === 'share-toggle-room')!.props.onValueChange as (v: boolean) => void;
+    act(() => { flip(true); });
+    act(() => { flip(false); });
+    expect(screen.queryByTestId('room-consent-line')).toBeNull();
+    expect(saveSharing).not.toHaveBeenCalled();
+    await act(async () => resolveConsent({ consentVersion: 1, consented: true, ...OFF }));
+    await waitFor(() => expect(screen.getByTestId('share-toggle-room').props.disabled).toBe(false));
+    expect(saveSharing).toHaveBeenCalledTimes(1);
+    expect(saveSharing).toHaveBeenCalledWith({ steps: true });
+  });
+
+  it('the consent sheet\'s buttons are 44 pt (PF4-F13); the switch is spoken by its title', async () => {
+    render(<BuddiesProfileSection onNavigate={jest.fn()} />);
+    fireEvent(await screen.findByTestId('share-toggle-room'), 'valueChange', true);
+    for (const id of ['room-consent-on', 'room-consent-cancel']) {
+      const classes = String(screen.getByTestId(id).props.className).split(' ');
+      expect([classes.includes('h-[44px]'), classes.includes('h-[40px]'), classes.includes('h-[36px]')]).toEqual([true, false, false]);
+    }
+    expect(screen.getByTestId('share-toggle-room').props.accessibilityLabel).toBe('Buddies can visit my room');
+    expect(screen.getByTestId('room-consent-title')).toHaveTextContent('Open your room?');
+  });
+
+  describe('and a screen reader', () => {
+    let focus: jest.SpyInstance;
+    let handle: jest.SpyInstance;
+    beforeEach(() => {
+      // The test renderer has no native views: each ref stands for itself, so the test sees which element got focus.
+      handle = jest.spyOn(require('react-native') as typeof ReactNative, 'findNodeHandle').mockImplementation(((el: unknown) => el) as never);
+      focus = jest.spyOn(AccessibilityInfo, 'setAccessibilityFocus').mockImplementation(() => undefined);
+    });
+    afterEach(() => { handle.mockRestore(); focus.mockRestore(); });
+    const focused = () => focus.mock.calls.map(([el]) => (el as { props?: { testID?: string } }).props?.testID);
+
+    it('the sheet takes focus on its title when it opens and hands it back to the switch when it closes', async () => {
+      render(<BuddiesProfileSection onNavigate={jest.fn()} />);
+      fireEvent(await screen.findByTestId('share-toggle-room'), 'valueChange', true);
+      await act(async () => undefined);
+      expect(focused()).toEqual(['room-consent-title']);
+      await act(async () => { fireEvent.press(screen.getByTestId('room-consent-cancel')); });
+      expect(focused()).toEqual(['room-consent-title', 'share-toggle-room']);
+    });
+  });
 });

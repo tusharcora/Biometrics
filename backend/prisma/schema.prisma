@@ -92,6 +92,13 @@ model User {
   statusNote            StatusNote?         @relation("StatusNoteAuthor")
   reportsMade           Report[]            @relation("ReportReporter")
   reportsAgainst        Report[]            @relation("ReportReported")
+  roomCheersSent        RoomCheer[]         @relation("RoomCheerFrom")
+  roomCheersReceived    RoomCheer[]         @relation("RoomCheerTo")
+  giftsSent             Gift[]              @relation("GiftFrom")
+  giftsReceived         Gift[]              @relation("GiftTo")
+  challengeEntries      ChallengeEntry[]
+  challengeCheersSent   ChallengeCheer[]    @relation("ChallengeCheerFrom")
+  challengeCheersGot    ChallengeCheer[]    @relation("ChallengeCheerTo")
 
   // The coach persona the user picked in Settings (an id from
   // src/coach/personas). Null means the default persona.
@@ -136,6 +143,9 @@ model User {
   shareHoursSlept            Boolean   @default(false)
   shareSteps                 Boolean   @default(false)
   shareStreaks               Boolean   @default(false)
+  /// Buddies can visit my room (spec 2026-10-15 §10.1): off by default, its own one-line consent, never gated on or
+  /// reset by buddySharingConsentVersion.
+  shareRoom                  Boolean   @default(false)
   buddySharingConsentVersion Int?
   buddySharingConsentAt      DateTime?
   /// The one-time "mood is always shared" notice; every pairing action needs it.
@@ -1248,4 +1258,75 @@ model Report {
   @@unique([reporterId, targetType, targetId])
   @@index([reportedUserId])
   @@index([createdAt])
+}
+
+// ---- Free-build P4 (spec 2026-10-15 §10): visits, gifts, challenges ----
+
+/// One cheer per visitor, room and the visitor's local day (§10.2). Two-sided: outside USER_OWNED_MODELS.
+model RoomCheer {
+  id        String   @id @default(uuid())
+  fromId    String
+  from      User     @relation("RoomCheerFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  toId      String
+  to        User     @relation("RoomCheerTo", fields: [toId], references: [id], onDelete: Cascade)
+  localDate DateTime @db.Date
+  createdAt DateTime @default(now())
+
+  @@unique([fromId, toId, localDate])
+  @@index([toId, localDate])
+}
+
+/// A spare piece sent to a buddy (§10.3). id is the app's request id. A deleted sender's gift is still delivered
+/// (fromId SetNull); a deleted recipient's gifts are dropped (toId Cascade).
+model Gift {
+  id         String    @id
+  fromId     String?
+  from       User?     @relation("GiftFrom", fields: [fromId], references: [id], onDelete: SetNull)
+  toId       String
+  to         User      @relation("GiftTo", fields: [toId], references: [id], onDelete: Cascade)
+  itemId     String
+  /// 'desk' | 'cosy' | 'thought': picked, never typed.
+  note       String
+  createdAt  DateTime  @default(now())
+  openedAt   DateTime?
+  returnedAt DateTime?
+
+  @@index([toId, openedAt])
+  @@index([fromId, createdAt])
+}
+
+/// A weekly theme challenge entry (§10.4): a snapshot of the room, the buddy circle frozen at the close, paid and
+/// judged at most once.
+model ChallengeEntry {
+  userId    String
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  /// The entrant's local ISO week, '2026-W44'.
+  weekId    String
+  /// { layout, size: { n, m } }: what buddies see of the entry.
+  snapshot  Json
+  /// The entrant's buddies' ids, rewritten while the entry is open (P4 ruling 6).
+  circle    Json      @default("[]")
+  paidAt    DateTime?
+  judgedAt  DateTime?
+  /// The judging's outcome, stored at judgedAt (ruling T7-FIX): a member deleted later never changes it.
+  ranked    Boolean?
+  won       Boolean?
+  createdAt DateTime  @default(now())
+  updatedAt DateTime  @updatedAt
+
+  @@id([userId, weekId])
+  @@index([weekId])
+}
+
+/// One cheer per entry per buddy per week (§10.4). Two-sided: outside USER_OWNED_MODELS.
+model ChallengeCheer {
+  weekId    String
+  fromId    String
+  from      User     @relation("ChallengeCheerFrom", fields: [fromId], references: [id], onDelete: Cascade)
+  toId      String
+  to        User     @relation("ChallengeCheerTo", fields: [toId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now())
+
+  @@id([weekId, fromId, toId])
+  @@index([toId, weekId])
 }

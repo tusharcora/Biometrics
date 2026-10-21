@@ -45,11 +45,22 @@ describe('the offer (spec §6.4–6.6)', () => {
   });
 
   it('sells a rule piece only once it is owned; shop and starter pieces always; never a desk (spec §6.5)', () => {
-    expect(forSale('plant.monstera', W, {})).toBeNull();
-    expect(forSale('plant.monstera', W, { 'plant.monstera': 1 })).toEqual({ itemId: 'plant.monstera', price: 140 });
-    expect(forSale('item.radio', W, {})).toEqual({ itemId: 'item.radio', price: 150 });
-    expect(forSale('plant.fern', W, { 'plant.fern': 1 })).toEqual({ itemId: 'plant.fern', price: 40 });
-    expect(forSale('desk.monitor', W, { 'desk.monitor': 1 })).toBeNull();
+    const none: ReadonlySet<string> = new Set();
+    expect(forSale('plant.monstera', W, none)).toBeNull();
+    expect(forSale('plant.monstera', W, new Set(['plant.monstera']))).toEqual({ itemId: 'plant.monstera', price: 140 });
+    expect(forSale('item.radio', W, none)).toEqual({ itemId: 'item.radio', price: 150 });
+    expect(forSale('plant.fern', W, none)).toEqual({ itemId: 'plant.fern', price: 40 });
+    expect(forSale('desk.monitor', W, none)).toBeNull();
+  });
+
+  it('never offers or sells a prize, even priced, shop-listed and with its unlock row (P4 rulings 2 and 15)', () => {
+    const radio = COSMETIC_ITEMS.find((i) => i.id === 'item.radio')!;
+    const items = [...COSMETIC_ITEMS, { ...radio, id: 'corner.prize', unlock: { kind: 'prize' as const }, price: 50, shop: 'always' as const }];
+    expect(offeredIn(W, items).map((o) => o.itemId)).not.toContain('corner.prize');
+    expect(forSale('corner.prize', W, new Set(['corner.prize']), items)).toBeNull();
+    for (const id of ['corner.acorn', 'corner.can', 'corner.owl', 'item.goldpen']) {
+      expect([id, forSale(id, W, new Set([id]))]).toEqual([id, null]);
+    }
   });
 
   it('turns the featured set every Monday over four sets of offered pieces', () => {
@@ -81,11 +92,29 @@ describe('GET /me/shop (spec §12)', () => {
     const res = await (await api()).get('/me/shop').set(headers);
     const week = isoWeekKey(day((await todayFor(user.id, new Date())).today));
     expect([res.status, res.headers['cache-control'], res.body.week, res.body.set]).toEqual([200, 'private, no-store', week, { id: weekSet(week).id, itemIds: [...weekSet(week).itemIds] }]);
-    expect(res.body.items).toEqual(expect.arrayContaining([{ itemId: 'item.radio', price: 150 }, { itemId: 'plant.fern', price: 40 }]));
+    expect(res.body.items).toEqual(expect.arrayContaining([{ itemId: 'item.radio', price: 150, locked: false }, { itemId: 'plant.fern', price: 40, locked: false }]));
+  });
+
+  it('marks a rule piece locked until its unlock row exists, even with a gifted copy (PF4-F1, ruling 15)', async () => {
+    const { user, headers } = await coinUser();
+    const monstera = async () => ((await (await api()).get('/me/shop').set(headers)).body.items as Array<{ itemId: string }>).find((i) => i.itemId === 'plant.monstera');
+    expect(await monstera()).toEqual({ itemId: 'plant.monstera', price: 140, locked: true });
+    await prisma.itemGrant.create({ data: { userId: user.id, itemId: 'plant.monstera', qty: 1, sourceKey: 'gift_in:f1' } });
+    expect(await monstera()).toEqual({ itemId: 'plant.monstera', price: 140, locked: true });
+    await prisma.cosmeticUnlock.create({ data: { userId: user.id, itemId: 'plant.monstera', source: 'family:SLEEP_GOAL:1' } });
+    expect(await monstera()).toEqual({ itemId: 'plant.monstera', price: 140, locked: false });
   });
 });
 
 describe('POST /me/shop/purchases (spec §12)', () => {
+  it('a rule piece received as a gift is still not for sale until it is earned (P2 note, ruling 15)', async () => {
+    const { user, headers } = await coinUser();
+    await fund(user.id, 500);
+    await prisma.itemGrant.create({ data: { userId: user.id, itemId: 'plant.monstera', qty: 1, sourceKey: 'gift_in:t3' } });
+    const res = await (await api()).post('/me/shop/purchases').set(headers).send({ requestId: randomUUID(), itemId: 'plant.monstera' });
+    expect([res.status, res.body]).toEqual([400, { error: 'not_for_sale' }]);
+  });
+
   it('buys a copy: −150, already seen; +1 radio, owned, NEW in fresh until seen; the room can place it (ruling 7)', async () => {
     const { user, headers } = await coinUser();
     await fund(user.id, 200);

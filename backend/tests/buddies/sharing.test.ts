@@ -11,14 +11,15 @@ afterAll(async () => {
   await connection.quit();
 });
 
-const ALL_OFF = { recovery: false, sleepScore: false, hoursSlept: false, steps: false, streaks: false };
+const ALL_OFF = { recovery: false, sleepScore: false, hoursSlept: false, steps: false, streaks: false, room: false };
 const row = (over: object = {}) => ({
   shareRecovery: true, shareSleepScore: true, shareHoursSlept: true, shareSteps: true, shareStreaks: true,
+  shareRoom: false,
   buddySharingConsentVersion: BUDDY_SHARING_CONSENT_VERSION, ...over,
 });
 
 it('effective sharing is the stored switches only under the current consent version', () => {
-  expect(effectiveSharing(row())).toEqual({ recovery: true, sleepScore: true, hoursSlept: true, steps: true, streaks: true });
+  expect(effectiveSharing(row())).toEqual({ recovery: true, sleepScore: true, hoursSlept: true, steps: true, streaks: true, room: false });
   expect(effectiveSharing(row({ buddySharingConsentVersion: null }))).toEqual(ALL_OFF);
   expect(effectiveSharing(row(), BUDDY_SHARING_CONSENT_VERSION + 1)).toEqual(ALL_OFF);
 });
@@ -26,6 +27,31 @@ it('effective sharing is the stored switches only under the current consent vers
 it('parses only a non-empty patch of known switches with boolean values', () => {
   expect(parseSharingPatch({ steps: true, streaks: false })).toEqual({ steps: true, streaks: false });
   for (const bad of [{}, { steps: 'yes' }, { mood: true }, [true], null, 'steps']) expect(parseSharingPatch(bad)).toBeNull();
+});
+
+describe('the room switch (spec 2026-10-15 §10.1, controller ruling)', () => {
+  it('passes through as stored, whatever the health consent', () => {
+    expect(effectiveSharing(row({ shareRoom: true, buddySharingConsentVersion: null })).room).toBe(true);
+    expect(effectiveSharing(row({ shareRoom: true }), BUDDY_SHARING_CONSENT_VERSION + 1)).toMatchObject({ room: true, steps: false });
+    expect(parseSharingPatch({ room: true })).toEqual({ room: true });
+  });
+
+  it('turns on without the health consent and survives a consent-version bump; off never asks', async () => {
+    const user = await buddyUser();
+    const headers = await authHeaderFor(user.id);
+    const agent = await api();
+    const on = await agent.put('/me/buddies/sharing').set(headers).send({ room: true });
+    expect([on.status, on.body]).toEqual([200, { consentVersion: BUDDY_SHARING_CONSENT_VERSION, consented: false, ...ALL_OFF, room: true }]);
+    // A bump looks like an older stored version: the health switches read off, the room stays open.
+    await prisma.user.update({ where: { id: user.id }, data: { buddySharingConsentVersion: BUDDY_SHARING_CONSENT_VERSION - 1 } });
+    expect((await agent.get('/me/buddies/sharing').set(headers)).body.room).toBe(true);
+    // Mixing a health key into the patch still needs the health consent, and writes nothing.
+    const mixed = await agent.put('/me/buddies/sharing').set(headers).send({ room: false, steps: true });
+    expect([mixed.status, mixed.body]).toEqual([409, { error: 'consent_required' }]);
+    expect((await prisma.user.findUniqueOrThrow({ where: { id: user.id } })).shareRoom).toBe(true);
+    const off = await agent.put('/me/buddies/sharing').set(headers).send({ room: false });
+    expect(off.body.room).toBe(false);
+  });
 });
 
 describe('routes', () => {

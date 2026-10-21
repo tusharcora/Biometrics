@@ -47,6 +47,11 @@ import { PROFILE_COPY, type ProfileCategory } from '../lib/profileCopy';
 import { PairUpScreen } from '../screens/PairUpScreen';
 import { BuddiesScreen } from '../screens/BuddiesScreen';
 import { BuddyWeekScreen } from '../screens/BuddyWeekScreen';
+import { BuddyRoomScreen } from '../screens/BuddyRoomScreen';
+import { GiftSendScreen } from '../screens/GiftSendScreen';
+import { RoomCheersScreen } from '../screens/RoomCheersScreen';
+import { RoomChallengeScreen } from '../screens/RoomChallengeScreen';
+import { ShareRoomScreen } from '../screens/ShareRoomScreen';
 import { HighlightsScreen } from '../screens/HighlightsScreen';
 import { CampfireScreen } from '../screens/CampfireScreen';
 import { ChatThreadScreen } from '../screens/ChatThreadScreen';
@@ -145,6 +150,16 @@ export type RootStackParamList = {
   PairUp: undefined;
   // One buddy's mood week, shared numbers and stickers; opened from the list and by buddy pushes.
   BuddyWeek: { buddyId: string };
+  /** A buddy's room, read-only (P4 ruling 21): from their week or their KIP in the chat header. */
+  BuddyRoom: { buddyId: string; name?: string };
+  /** Send a buddy a spare piece (spec 2026-10-15 §10.3): the native sheet, from their room's Send a gift. */
+  GiftSend: { buddyId: string; name: string };
+  /** Who cheered your room this week (spec 2026-10-15 §10.2): the native sheet, from the KIP page's room card. */
+  RoomCheers: undefined;
+  /** The weekly room challenge (spec 2026-10-15 §10.4; ruling 22): full screen, from the KIP page's room card. */
+  RoomChallenge: undefined;
+  /** The share card (spec 2026-10-15 §10.5; ruling 23): full screen, from the editor drawer's Share. */
+  ShareRoom: undefined;
   // Profile → Buddies: change your handle or display name.
   BuddyIdentity: undefined;
   // Profile → one category card: the settings section it holds.
@@ -288,6 +303,13 @@ export function RootNavigator() {
               {/* Full screen with no system swipe: Close is disabled while a grow waits on the server. */}
               <Stack.Screen name="RoomSizes" component={RoomSizesScreen} options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }} />
               <Stack.Screen name="PieceCard" component={PieceCardScreen} options={{ headerShown: false, presentation: 'modal' }} />
+              {/* Sheets with their own Close button (and the system's swipe and back). */}
+              <Stack.Screen name="GiftSend" component={GiftSendScreen} options={{ headerShown: false, presentation: 'modal' }} />
+              <Stack.Screen name="RoomCheers" component={RoomCheersScreen} options={{ headerShown: false, presentation: 'modal' }} />
+              {/* Full screen with its own Close (PF4-F16), held with the back button while an entry or a cheer waits. */}
+              <Stack.Screen name="RoomChallenge" component={RoomChallengeScreen} options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }} />
+              {/* Full screen with its own Close (PF4-F16); back leaves it (nothing is held, nothing was sent). */}
+              <Stack.Screen name="ShareRoom" component={ShareRoomScreen} options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }} />
               <Stack.Screen name="Recaps" component={RecapsScreen} options={{ title: 'Your recaps' }} />
               <Stack.Screen name="YearInPixels" component={YearInPixelsScreen} options={{ title: 'Year in pixels' }} />
               <Stack.Screen name="Badges" component={BadgesScreen} options={{ title: 'Badges' }} />
@@ -319,6 +341,7 @@ export function RootNavigator() {
               {/* One instance per buddy: navigating to another buddy's week (a push tap) opens a new
                   screen instead of swapping the params under the current one. */}
               <Stack.Screen name="BuddyWeek" component={BuddyWeekScreen} getId={({ params }) => params?.buddyId} options={{ title: '' }} />
+              <Stack.Screen name="BuddyRoom" component={BuddyRoomScreen} getId={({ params }) => params?.buddyId} options={{ title: '' }} />
               <Stack.Screen name="RecapBuilder" component={RecapBuilderScreen} options={{ title: 'Build your recap' }} />
             </Stack.Navigator>
             {/* New badge levels, celebrated once (start, foreground, after a check-in). */}

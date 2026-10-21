@@ -82,6 +82,17 @@ it('shows the header, a card, a sticker, a text with its reaction, the day chip 
   expect(mockNavigate).toHaveBeenCalledWith('BuddyWeek', { buddyId: 'ben' });
 });
 
+it('their KIP in the header visits their room (ruling 21)', async () => {
+  (fetchThread as jest.Mock).mockResolvedValue(thread([msg('t1')]));
+  renderScreen();
+  const visit = await screen.findByTestId('thread-visit-room');
+  expect(visit.props.accessibilityLabel).toBe("Visit Ben's room");
+  expect(String(visit.props.className).split(' ')).toContain('size-[44px]');
+  expect(screen.getByTestId('thread-avatar')).toBeTruthy();
+  fireEvent.press(visit);
+  expect(mockNavigate).toHaveBeenCalledWith('BuddyRoom', { buddyId: 'ben', name: 'Ben' });
+});
+
 it('sends a text: the draft clears and the message lands; a refused send keeps the draft and says why', async () => {
   (fetchThread as jest.Mock).mockResolvedValue(thread([msg('t1')]));
   (sendText as jest.Mock)

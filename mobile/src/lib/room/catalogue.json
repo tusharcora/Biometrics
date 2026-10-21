@@ -4,7 +4,8 @@
     1,
     3,
     4,
-    5
+    5,
+    6
   ],
   "starterRoom": {
     "wallpaper": "wall.plain",
@@ -318,7 +319,10 @@
           4
         ],
         "facings": 1
-      }
+      },
+      "tags": [
+        "glow"
+      ]
     },
     {
       "id": "art.motto",
@@ -449,7 +453,10 @@
       },
       "release": 1,
       "emissive": true,
-      "frames": 3
+      "frames": 3,
+      "tags": [
+        "glow"
+      ]
     },
     {
       "id": "win.chime",
@@ -590,7 +597,10 @@
             ]
           ]
         }
-      }
+      },
+      "tags": [
+        "glow"
+      ]
     },
     {
       "id": "desk.notebook",
@@ -676,7 +686,10 @@
             ]
           ]
         }
-      }
+      },
+      "tags": [
+        "glow"
+      ]
     },
     {
       "id": "item.mug",
@@ -693,6 +706,10 @@
         ],
         "facings": 1
       },
+      "tags": [
+        "warm",
+        "desk"
+      ],
       "price": 25,
       "shop": "always"
     },
@@ -709,6 +726,9 @@
         ],
         "facings": 1
       },
+      "tags": [
+        "desk"
+      ],
       "price": 25,
       "shop": "always"
     },
@@ -726,7 +746,10 @@
           "onTop"
         ],
         "facings": 1
-      }
+      },
+      "tags": [
+        "desk"
+      ]
     },
     {
       "id": "item.pills",
@@ -742,7 +765,10 @@
           "onTop"
         ],
         "facings": 1
-      }
+      },
+      "tags": [
+        "desk"
+      ]
     },
     {
       "id": "item.shaker",
@@ -758,7 +784,10 @@
           "onTop"
         ],
         "facings": 1
-      }
+      },
+      "tags": [
+        "desk"
+      ]
     },
     {
       "id": "item.stand",
@@ -775,7 +804,10 @@
           "onTop"
         ],
         "facings": 1
-      }
+      },
+      "tags": [
+        "desk"
+      ]
     },
     {
       "id": "item.controller",
@@ -792,7 +824,8 @@
         "facings": 1
       },
       "tags": [
-        "funny"
+        "funny",
+        "desk"
       ]
     },
     {
@@ -813,6 +846,9 @@
         ],
         "facings": 1
       },
+      "tags": [
+        "plant"
+      ],
       "price": 40,
       "shop": "always",
       "sets": [
@@ -837,6 +873,9 @@
         ],
         "facings": 1
       },
+      "tags": [
+        "plant"
+      ],
       "price": 40,
       "shop": "always"
     },
@@ -860,6 +899,9 @@
         ],
         "facings": 1
       },
+      "tags": [
+        "plant"
+      ],
       "price": 140,
       "shop": "always"
     },
@@ -883,6 +925,9 @@
         ],
         "facings": 1
       },
+      "tags": [
+        "plant"
+      ],
       "price": 100,
       "shop": "always"
     },
@@ -905,7 +950,10 @@
           1
         ],
         "facings": 1
-      }
+      },
+      "tags": [
+        "plant"
+      ]
     },
     {
       "id": "plant.bamboo",
@@ -926,7 +974,10 @@
           1
         ],
         "facings": 1
-      }
+      },
+      "tags": [
+        "plant"
+      ]
     },
     {
       "id": "plant.sunflower",
@@ -947,7 +998,10 @@
           1
         ],
         "facings": 1
-      }
+      },
+      "tags": [
+        "plant"
+      ]
     },
     {
       "id": "lamp.amber",
@@ -964,6 +1018,10 @@
         ],
         "facings": 1
       },
+      "tags": [
+        "warm",
+        "glow"
+      ],
       "price": 60,
       "shop": "always"
     },
@@ -982,7 +1040,10 @@
           "onTop"
         ],
         "facings": 1
-      }
+      },
+      "tags": [
+        "glow"
+      ]
     },
     {
       "id": "lamp.kiplamp",
@@ -1000,7 +1061,10 @@
           "onTop"
         ],
         "facings": 1
-      }
+      },
+      "tags": [
+        "glow"
+      ]
     },
     {
       "id": "lamp.salt",
@@ -1017,7 +1081,11 @@
           "onTop"
         ],
         "facings": 1
-      }
+      },
+      "tags": [
+        "warm",
+        "glow"
+      ]
     },
     {
       "id": "corner.floorlamp",
@@ -1040,6 +1108,10 @@
         "facings": 1,
         "effect": "light"
       },
+      "tags": [
+        "warm",
+        "glow"
+      ],
       "price": 120,
       "shop": "always"
     },
@@ -1148,7 +1220,10 @@
         ],
         "flat": true,
         "facings": 2
-      }
+      },
+      "tags": [
+        "warm"
+      ]
     },
     {
       "id": "rug.gymmat",
@@ -1429,7 +1504,11 @@
           1
         ],
         "facings": 2
-      }
+      },
+      "tags": [
+        "warm",
+        "glow"
+      ]
     },
     {
       "id": "item.radio",
@@ -1450,6 +1529,9 @@
         "facings": 1,
         "effect": "sound"
       },
+      "tags": [
+        "desk"
+      ],
       "price": 150,
       "shop": "always"
     },
@@ -1513,6 +1595,9 @@
         ],
         "facings": 1
       },
+      "tags": [
+        "warm"
+      ],
       "price": 30,
       "shop": "always"
     },
@@ -1535,6 +1620,11 @@
         ],
         "facings": 1
       },
+      "tags": [
+        "warm",
+        "glow",
+        "desk"
+      ],
       "price": 25,
       "shop": "always"
     },
@@ -1556,6 +1646,9 @@
         ],
         "facings": 1
       },
+      "tags": [
+        "glow"
+      ],
       "price": 200,
       "shop": "always"
     },
@@ -1599,6 +1692,199 @@
         "facings": 1,
         "effect": "awards"
       }
+    },
+    {
+      "id": "lamp.harvest",
+      "slot": "lamp",
+      "unlock": {
+        "kind": "shop"
+      },
+      "release": 6,
+      "emissive": true,
+      "iso": {
+        "layers": [
+          "floor",
+          "onTop"
+        ],
+        "foot": [
+          1,
+          1
+        ],
+        "facings": 1
+      },
+      "tags": [
+        "warm",
+        "glow"
+      ],
+      "price": 80,
+      "shop": "theme"
+    },
+    {
+      "id": "plant.ivy",
+      "slot": "plant",
+      "unlock": {
+        "kind": "shop"
+      },
+      "release": 6,
+      "iso": {
+        "layers": [
+          "floor",
+          "onTop"
+        ],
+        "foot": [
+          1,
+          1
+        ],
+        "facings": 1
+      },
+      "tags": [
+        "plant"
+      ],
+      "price": 80,
+      "shop": "theme"
+    },
+    {
+      "id": "lamp.moon",
+      "slot": "lamp",
+      "unlock": {
+        "kind": "shop"
+      },
+      "release": 6,
+      "emissive": true,
+      "iso": {
+        "layers": [
+          "floor",
+          "onTop"
+        ],
+        "foot": [
+          1,
+          1
+        ],
+        "facings": 1
+      },
+      "tags": [
+        "glow"
+      ],
+      "price": 80,
+      "shop": "theme"
+    },
+    {
+      "id": "item.organiser",
+      "slot": "desk_item",
+      "unlock": {
+        "kind": "shop"
+      },
+      "release": 6,
+      "iso": {
+        "layers": [
+          "onTop",
+          "floor"
+        ],
+        "foot": [
+          1,
+          1
+        ],
+        "facings": 1
+      },
+      "tags": [
+        "desk"
+      ],
+      "price": 80,
+      "shop": "theme"
+    },
+    {
+      "id": "corner.acorn",
+      "slot": "corner",
+      "unlock": {
+        "kind": "prize"
+      },
+      "release": 6,
+      "emissive": true,
+      "iso": {
+        "layers": [
+          "floor",
+          "onTop"
+        ],
+        "foot": [
+          1,
+          1
+        ],
+        "facings": 1
+      },
+      "tags": [
+        "warm",
+        "glow"
+      ]
+    },
+    {
+      "id": "corner.can",
+      "slot": "corner",
+      "unlock": {
+        "kind": "prize"
+      },
+      "release": 6,
+      "emissive": true,
+      "iso": {
+        "layers": [
+          "floor",
+          "onTop"
+        ],
+        "foot": [
+          1,
+          1
+        ],
+        "facings": 1
+      },
+      "tags": [
+        "glow"
+      ]
+    },
+    {
+      "id": "corner.owl",
+      "slot": "corner",
+      "unlock": {
+        "kind": "prize"
+      },
+      "release": 6,
+      "emissive": true,
+      "iso": {
+        "layers": [
+          "floor",
+          "onTop"
+        ],
+        "foot": [
+          1,
+          1
+        ],
+        "facings": 1
+      },
+      "tags": [
+        "glow"
+      ]
+    },
+    {
+      "id": "item.goldpen",
+      "slot": "desk_item",
+      "unlock": {
+        "kind": "prize"
+      },
+      "release": 6,
+      "emissive": true,
+      "iso": {
+        "layers": [
+          "onTop",
+          "floor"
+        ],
+        "foot": [
+          1,
+          1
+        ],
+        "facings": 1
+      },
+      "tags": [
+        "glow",
+        "desk"
+      ]
     },
     {
       "id": "set.cottage.wallpaper",
@@ -1735,6 +2021,9 @@
         ],
         "facings": 1
       },
+      "tags": [
+        "desk"
+      ],
       "sets": [
         "cottage"
       ]
@@ -1759,6 +2048,9 @@
         ],
         "facings": 1
       },
+      "tags": [
+        "glow"
+      ],
       "sets": [
         "cottage"
       ]
@@ -1783,6 +2075,9 @@
         ],
         "facings": 1
       },
+      "tags": [
+        "glow"
+      ],
       "sets": [
         "cottage"
       ]

@@ -9,6 +9,7 @@ import { PageTitle } from '../components/ui/page-title';
 import { Skeleton } from '../components/ui/skeleton';
 import { Text } from '../components/ui/text';
 import { ApiError } from '../api/client';
+import { fetchChallenge } from '../api/rooms';
 import { COACH_PLACE_AT_ONCE_BELOW, CoachMark } from '../components/edit/CoachMark';
 import { EditNotices } from '../components/edit/EditNotices';
 import { EditRoom, type EditRoomHandle } from '../components/edit/EditRoom';
@@ -16,6 +17,7 @@ import { EditToolbar } from '../components/edit/EditToolbar';
 import { WalletChip } from '../components/coins/WalletChip';
 import { InventoryDrawer } from '../components/edit/InventoryDrawer';
 import { PiecesList } from '../components/edit/PiecesList';
+import { loadCoins } from '../lib/coins/coinsStore';
 import { useMyKip } from '../lib/kip/myKip';
 import { GEOMETRY_DEPS } from '../lib/room/catalogue';
 import { effectSlotsFor, runningEffects } from '../lib/room/iso/geometry';
@@ -108,6 +110,23 @@ function Editor({ cosmetics, params, navigation }: { cosmetics: Cosmetics; param
   // While a save is in flight nothing reaches the draft, a screen reader's activation included (Spec B Task 14 minor).
   const act = useCallback((a: EditorAction) => { if (!savingRef.current) dispatch(a); }, []);
 
+  // The challenge, read once (spec 2026-10-15 §5.4, §10.4): while you have an open entry the drawer gets the theme tab,
+  // and opened from the challenge's Build it it turns to that tab once the theme is known (PF4 F28), unless you chose
+  // another tab meanwhile (T11-FIX). An older server, a failure or no open entry leaves no theme.
+  useEffect(() => {
+    let live = true;
+    fetchChallenge()
+      .then((c) => {
+        if (live && c?.theme && c.open && c.entry) {
+          dispatch({ type: 'theme', theme: { id: c.theme.id, tag: c.theme.tag, atLeast: c.theme.atLeast }, open: params.drawer === 'theme' });
+        }
+      })
+      .catch(() => {});
+    return () => {
+      live = false;
+    };
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   // Opening the editor marks everything shown as seen (Spec B §4); the New tab keeps its snapshot (ruling 15).
   useEffect(() => { void markCosmeticsSeen(cosmetics.fresh.map((f) => f.itemId)); }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -176,6 +195,8 @@ function Editor({ cosmetics, params, navigation }: { cosmetics: Cosmetics; param
       // answers 409 instead of being overwritten.
       const next = await saveCosmeticsLoadout({ layout: state.draft.layout, worn: state.draft.worn, version: state.baseVersion });
       dispatch({ type: 'saved', draft: { layout: next.layout, worn: next.worn }, version: next.version });
+      // A save can pay an open entry's +30 after its commit (spec 2026-10-15 §10.4): the wallet reads afresh (FINAL-M1).
+      void loadCoins({ fresh: true });
       leaving.current = true;
       navigation.goBack();
     } catch (err) {
@@ -237,7 +258,8 @@ function Editor({ cosmetics, params, navigation }: { cosmetics: Cosmetics; param
           {/* The guided first placement (spec §11.1): just above the drawer the lantern comes from. */}
           <CoachMark state={state} dispatch={act} placeAtOnce={height < COACH_PLACE_AT_ONCE_BELOW} />
           <InventoryDrawer state={state} dispatch={act} room={roomRef} colour={me.colour} counters={cosmetics.counters} maxHeight={scrollHeight} onDragChange={setDrawerDrag}
-            onOpenShop={() => navigation.navigate('CoinShop')} onOpenSizes={() => navigation.navigate('RoomSizes', { from: 'editor' })} />
+            onOpenShop={() => navigation.navigate('CoinShop')} onOpenSizes={() => navigation.navigate('RoomSizes', { from: 'editor' })}
+            onOpenShare={() => navigation.navigate('ShareRoom')} />
           <PiecesList state={state} dispatch={act} />
         </ScrollView>
       </View>

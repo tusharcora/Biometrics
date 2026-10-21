@@ -13,7 +13,7 @@ import { TIER_GATES } from '../../src/room/tiers';
 import { shiftDate } from '../../src/scoring/dates';
 import { day, level } from '../cosmetics/helpers';
 import { balance, coinUser, fund, rowsOf } from '../coins/helpers';
-import { piece } from './helpers';
+import { piece, withPieces } from './helpers';
 
 // Nothing earns in these tests (a first placement would pay its +10 once the real launch date has passed).
 const LAUNCH = coinsConfig.launchedAt;
@@ -132,6 +132,40 @@ describe('POST /me/room/expand (spec §7, §12)', () => {
     await prisma.cosmeticLoadout.update({ where: { userId: user.id }, data: { layout: layout as object } });
     const res = await grow(headers, 3);
     expect([res.status, res.body.stored, res.body.layout]).toEqual([200, 0, starterLayout()]);
+  });
+
+  it('drops a piece the read trim hides for its count when the loft\'s window covers it, and does not count it (T7-CARRY)', async () => {
+    const { user, headers } = await coinUser();
+    await fund(user.id, 2100);
+    await level(user.id, 'CHECK_IN', 2, SOON());
+    await level(user.id, 'SLEEP_GOAL', 3, SOON());
+    expect((await grow(headers, 2)).status).toBe(200);
+    // One picture owned (the SLEEP_GOAL 1 unlock, granted by the read below), two placed: the newest copy (p9), where
+    // the loft's window will be, is the one the read hides.
+    const layout = { ...starterLayout(), pieces: [...starterLayout().pieces, piece('p1', 'art.mountain', { layer: 'wallR', x: 0, y: 9 }), piece('p9', 'art.mountain', { layer: 'wallR', x: 14, y: 7 })] };
+    await prisma.cosmeticLoadout.update({ where: { userId: user.id }, data: { layout: layout as object } });
+    const before = await (await api()).get('/me/cosmetics').set(headers);
+    expect(before.body.layout.pieces.map((p: { id: string }) => p.id)).toEqual(expect.arrayContaining(['p1']));
+    expect(before.body.layout.pieces.map((p: { id: string }) => p.id)).not.toContain('p9');
+    const res = await grow(headers, 3);
+    expect([res.status, res.body.stored, res.body.counts['art.mountain']]).toEqual([200, 0, 1]);
+    const row = await prisma.cosmeticLoadout.findUniqueOrThrow({ where: { userId: user.id } });
+    const ids = (row.layout as { pieces: Array<{ id: string }> }).pieces.map((p) => p.id);
+    expect([ids.includes('p1'), ids.includes('p9')]).toEqual([true, false]);
+  });
+
+  it('keeps a piece the read trim hides for its count, instead of dropping it (P2/P3 note; ruling 16)', async () => {
+    const { user, headers } = await coinUser();
+    await fund(user.id, 600);
+    await level(user.id, 'CHECK_IN', 2, SOON());
+    const layout = withPieces(piece('p1', 'plant.fern', { x: 6, y: 6 }));
+    // Two ferns placed, one owned (the starter): the read hides p1, the stored row keeps it.
+    await prisma.cosmeticLoadout.create({ data: { userId: user.id, layout: layout as never, worn: { ...EMPTY_WORN }, version: 1 } });
+    const res = await grow(headers, 2);
+    expect([res.status, res.body.stored]).toEqual([200, 0]);
+    const row = await prisma.cosmeticLoadout.findUniqueOrThrow({ where: { userId: user.id } });
+    expect((row.layout as { pieces: Array<{ id: string }> }).pieces.map((p) => p.id)).toContain('p1');
+    expect(res.body.layout.pieces.map((p: { id: string }) => p.id)).not.toContain('p1');
   });
 
   it('409 stale_tier for anything but the next size; a save never changes the size', async () => {

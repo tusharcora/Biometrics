@@ -68,6 +68,7 @@ export async function seedAllOwnedRows(
   await prisma.coinEvent.create({ data: { userId, kind: 'checkin', sourceKey: `checkin:${uniq}`, amount: 5, capDay: day } });
   await prisma.coinWallet.create({ data: { userId, balance: 5 } });
   await prisma.itemGrant.create({ data: { userId, itemId: 'plant.fern', qty: 1, sourceKey: `buy:${uniq}` } });
+  await prisma.challengeEntry.create({ data: { userId, weekId: '2026-W44', snapshot: {}, circle: [] } });
   await prisma.coachConsent.create({ data: { userId, version: 'v-test' } });
   await prisma.pushToken.create({ data: { userId, token: `push-${uniq}`, platform: 'ios' } });
   await prisma.session.create({

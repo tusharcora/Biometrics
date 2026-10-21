@@ -7,7 +7,9 @@ export type CoinKind =
   | 'sleep_goal' | 'steps' | 'checkin' | 'recap' | 'cheer_given' | 'cheer_got' | 'challenge' | 'firstweek' | 'buy' | 'expand';
 export interface CoinEventDTO { kind: CoinKind; amount: number; at: string; seen: boolean }
 export interface CoinsDTO { balance: number; today: { earned: number; cap: number }; events: CoinEventDTO[]; next: string | null }
-export interface ShopDTO { week: string; set: { id: string; itemIds: string[] }; items: Array<{ itemId: string; price: number }> }
+/** An offer: `locked` is a rule piece not earned yet (a gift or a prize never earns it), shown but never sold (PF4-F1). */
+export interface ShopOfferDTO { itemId: string; price: number; locked: boolean }
+export interface ShopDTO { week: string; set: { id: string; itemIds: string[] }; items: ShopOfferDTO[] }
 /** A replayed request id answers the current balance, not the first answer's (ruling PF-F9). */
 export interface PurchaseDTO { balance: number; counts: Record<string, number> }
 /** The full GET /me/cosmetics body, the balance after, and the pieces the new window sent to the inventory. */
