@@ -71,6 +71,12 @@ it('the drawer header opens Room sizes from the editor (ruling PF-F5)', async ()
   expect(mockNav.navigate).toHaveBeenCalledWith('RoomSizes', { from: 'editor' });
 });
 
+it('the drawer header opens the share card from the editor (ruling 23)', async () => {
+  const s = await openEditor();
+  fireEvent.press(s.getByTestId('drawer-share'));
+  expect(mockNav.navigate).toHaveBeenCalledWith('ShareRoom');
+});
+
 /** The chair's exit tile in window points (the jest stand-in for measureInWindow leaves the room's origin at 0, 0). */
 function seatExit() {
   const pan = initialPan(initEditor({ layout: starterLayout(), worn: EMPTY_WORN, tier: 1, counts: STARTER_COUNTS, version: 2, newIds: [] }), Dimensions.get('window').width, EDIT_ROOM_HEIGHT);

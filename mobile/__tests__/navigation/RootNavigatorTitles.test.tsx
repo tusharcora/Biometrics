@@ -85,3 +85,13 @@ describe('RootNavigator: the room challenge route', () => {
     expect([mockOptions.RoomChallenge?.presentation, mockOptions.RoomChallenge?.headerShown]).toEqual(['fullScreenModal', false]);
   });
 });
+
+// The share card (spec 2026-10-15 §10.5; ruling 23): full screen, with its own Close (PF4-F16).
+describe('RootNavigator: the share card route', () => {
+  it('registers ShareRoom with its screen, as a full-screen modal without a header', async () => {
+    const { getByText } = render(<RootNavigator />);
+    await waitFor(() => expect(getByText('TABS_SCREEN')).toBeTruthy());
+    expect(mockComponents.ShareRoom).toBe(require('../../src/screens/ShareRoomScreen').ShareRoomScreen);
+    expect([mockOptions.ShareRoom?.presentation, mockOptions.ShareRoom?.headerShown]).toEqual(['fullScreenModal', false]);
+  });
+});

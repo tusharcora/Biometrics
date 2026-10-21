@@ -35,6 +35,7 @@ export async function saveImage(uri: string): Promise<SaveResult> {
   return 'saved';
 }
 
-export async function shareImage(uri: string): Promise<void> {
-  await Sharing.shareAsync(uri, { mimeType: 'image/png', UTI: 'public.png', dialogTitle: 'Share your recap' });
+/** The sheet's title names what is shared: the recap's by default, the room card's from ShareRoom. */
+export async function shareImage(uri: string, dialogTitle = 'Share your recap'): Promise<void> {
+  await Sharing.shareAsync(uri, { mimeType: 'image/png', UTI: 'public.png', dialogTitle });
 }

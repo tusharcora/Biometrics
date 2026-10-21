@@ -29,7 +29,7 @@ const TARGET = 'h-[44px]'; // spec §5.7: every target 44 points tall at least
 // they are earned, never a price. The drawer is never taller than the scroll area it sits in (maxHeight, once
 // measured). Its lists are RNGH ScrollViews, so a tile's drag cancels their scrolling, and while a drag is live they
 // don't scroll at all (onDragChange tells the page to hold its own scroll too).
-export function InventoryDrawer({ state, dispatch, room, colour, counters = NO_COUNTERS, maxHeight, onDragChange, onOpenShop, onOpenSizes }: {
+export function InventoryDrawer({ state, dispatch, room, colour, counters = NO_COUNTERS, maxHeight, onDragChange, onOpenShop, onOpenSizes, onOpenShare }: {
   state: EditorState;
   dispatch: (a: EditorAction) => void;
   room: RefObject<EditRoomHandle | null>;
@@ -44,6 +44,8 @@ export function InventoryDrawer({ state, dispatch, room, colour, counters = NO_C
   onOpenShop?: () => void;
   /** The drawer header's Room sizes: a room can grow at any time, not only when it is full (ruling PF-F5). */
   onOpenSizes?: () => void;
+  /** Opens the share card (P4 ruling 23): the saved room as an image, made only on Save or Share. */
+  onOpenShare?: () => void;
 }) {
   const { height } = useWindowDimensions();
   const [full, setFull] = useState(false);
@@ -87,8 +89,9 @@ export function InventoryDrawer({ state, dispatch, room, colour, counters = NO_C
     <View testID="drawer" className="border-t border-border bg-background" style={{ height: drawerHeight }}>
       <View className="flex-row flex-wrap items-center justify-between gap-2 px-4 pt-2">
         <Text testID="drawer-title" accessibilityLabel={D.titleSpoken(n)} className="shrink font-pixel text-label text-muted-foreground">{D.title(n)}</Text>
-        {/* The shop, Room sizes and the handle wrap under the title before they squeeze it on a narrow phone. */}
+        {/* Share, the shop, Room sizes and the handle wrap under the title before they squeeze it on a narrow phone. */}
         <View className="shrink flex-row flex-wrap items-center justify-end gap-2">
+          {onOpenShare ? <Button testID="drawer-share" variant="outline" size="sm" className={TARGET} onPress={onOpenShare}>{ROOM_COPY.share.open}</Button> : null}
           {onOpenShop ? <Button testID="drawer-shop" variant="outline" size="sm" className={TARGET} onPress={onOpenShop}>{D.shop}</Button> : null}
           {onOpenSizes ? <Button testID="drawer-sizes" variant="outline" size="sm" className={TARGET} onPress={onOpenSizes}>{D.sizes}</Button> : null}
           <Button testID="drawer-handle" variant="ghost" size="sm" className={TARGET} accessibilityLabel={full ? D.less : D.more} onPress={() => setFull((v) => !v)}>

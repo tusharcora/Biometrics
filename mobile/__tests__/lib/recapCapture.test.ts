@@ -63,6 +63,11 @@ it('shares the file through the system share sheet', async () => {
   expect(Sharing.shareAsync).toHaveBeenCalledWith('file:///cache/a.png', { mimeType: 'image/png', UTI: 'public.png', dialogTitle: 'Share your recap' });
 });
 
+it('names the share sheet for what it shares: the recap by default, the room card when asked (spec 2026-10-15 §10.5)', async () => {
+  await shareImage('file:///cache/r.png', 'Share your room');
+  expect(Sharing.shareAsync).toHaveBeenLastCalledWith('file:///cache/r.png', { mimeType: 'image/png', UTI: 'public.png', dialogTitle: 'Share your room' });
+});
+
 // jest-setup mocks the media library, so the tests above can't tell a real save from the package
 // root's legacy stub (which always throws on a device). Load the REAL module recapCapture imports,
 // over a fake native module, and check its functions reach the native save and write-only permission.

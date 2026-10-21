@@ -104,6 +104,18 @@ it('never gives health advice on a visit (PF4-F17): only the house "Try again" b
   for (const s of lines) expect(s).not.toMatch(/earned/i);
 });
 
+it('never gives health advice in the share card copy (PF4-F17), and its spoken lines carry no "·", "×" or "−"', () => {
+  const S = ROOM_COPY.share;
+  const lines = copyStrings(S);
+  expect(lines).toEqual(expect.arrayContaining(['Share your room', 'Makes an image; nothing is posted', "KIP's room", 'Save image', 'Share…']));
+  expect(lines.length).toBeGreaterThan(15);
+  // No exemption: the share card has no "Try again" button, and its failed line names no retry.
+  for (const s of lines) expect({ s, advises: advises(s) }).toEqual({ s, advises: false });
+  for (const s of [S.metaSpoken({ n: 8, m: 8 }, 31, 'Cosy autumn'), S.metaSpoken({ n: 8, m: 8 }, 31, null), S.label]) expect(s).not.toMatch(/·|×|−/);
+  // Earn-only and no health number: the card shows the room only.
+  expect(lines.join(' ')).not.toMatch(/\$|buy|price|coin|\d+ (steps|minutes|hours)|%/i);
+});
+
 it('never gives health advice in the gift and cheer copy (PF4-F17), and its spoken lines carry no "·", "×" or "−"', () => {
   const G = ROOM_COPY.gifts;
   const lines = copyStrings(G);

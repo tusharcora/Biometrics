@@ -12,9 +12,10 @@ export type ExportNotice = keyof typeof EXPORT_NOTICES;
 /**
  * Save image / Share for a recap image (spec 2026-10-04 §3), shared by the builder and the story
  * viewer. `exportRef` goes on the OFF-SCREEN export view (exportLayout size), the only thing
- * captured; one capture runs at a time.
+ * captured; one capture runs at a time. The room's share card reuses it with its own sheet title (spec 2026-10-15
+ * §10.5); with none the recap's title stays.
  */
-export function useRecapExport() {
+export function useRecapExport({ dialogTitle }: { dialogTitle?: string } = {}) {
   const exportRef = useRef<View>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<ExportNotice | null>(null);
@@ -44,6 +45,7 @@ export function useRecapExport() {
   }
 
   const save = () => run(async (uri) => setNotice((await saveImage(uri)) === 'saved' ? 'saved' : 'denied'));
-  const share = () => run((uri) => shareImage(uri));
+  // The recap screens pass no title, so their share call (and its default title) is unchanged.
+  const share = () => run((uri) => (dialogTitle === undefined ? shareImage(uri) : shareImage(uri, dialogTitle)));
   return { exportRef, busy, notice, save, share };
 }

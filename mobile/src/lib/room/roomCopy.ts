@@ -621,6 +621,33 @@ export const ROOM_COPY = {
     retry: 'Try again',
     close: 'Close',
   },
+  /**
+   * The share card (spec 2026-10-15 §10.5, F8; ruling 23): the room only, drawn neutral; nothing posted. The card's
+   * own Save / Share result lines live here, not the recap's, so none asks the user to try anything (PF4-F17).
+   * Spoken forms carry no "·" or "×" (PF4-F15).
+   */
+  share: {
+    open: 'Share',
+    heading: 'Share your room',
+    note: 'Makes an image; nothing is posted',
+    title: "KIP's room",
+    meta: (s: { n: number; m: number }, pieces: number, theme: string | null) => `${s.n} × ${s.m} · ${pieces} pieces${theme ? ` · ${theme} week` : ''}`,
+    metaSpoken: (s: { n: number; m: number }, pieces: number, theme: string | null) => `${s.n} by ${s.m}, ${pieces} pieces${theme ? `, ${theme} week` : ''}`,
+    byline: (name: string) => `${name}'s room`,
+    showName: 'Show my first name',
+    waves: 'KIP waves',
+    save: 'Save image',
+    share: 'Share…',
+    dialog: 'Share your room',
+    footer: 'The card shows the room only: no health numbers, no streaks.',
+    close: 'Close',
+    label: "KIP's room, as the share card shows it",
+    notices: {
+      saved: 'Saved to Photos.',
+      denied: 'Photos access is off. Allow it in Settings to save images.',
+      failed: "The image couldn't be made.",
+    },
+  },
   welcome: {
     bubble: 'WELCOME HOME!',
     text: "This is KIP's room. Make it yours: drag pieces in, flip them, stack them.",

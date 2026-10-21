@@ -255,7 +255,8 @@ function Editor({ cosmetics, params, navigation }: { cosmetics: Cosmetics; param
           {/* The guided first placement (spec §11.1): just above the drawer the lantern comes from. */}
           <CoachMark state={state} dispatch={act} placeAtOnce={height < COACH_PLACE_AT_ONCE_BELOW} />
           <InventoryDrawer state={state} dispatch={act} room={roomRef} colour={me.colour} counters={cosmetics.counters} maxHeight={scrollHeight} onDragChange={setDrawerDrag}
-            onOpenShop={() => navigation.navigate('CoinShop')} onOpenSizes={() => navigation.navigate('RoomSizes', { from: 'editor' })} />
+            onOpenShop={() => navigation.navigate('CoinShop')} onOpenSizes={() => navigation.navigate('RoomSizes', { from: 'editor' })}
+            onOpenShare={() => navigation.navigate('ShareRoom')} />
           <PiecesList state={state} dispatch={act} />
         </ScrollView>
       </View>
