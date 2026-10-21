@@ -16,12 +16,13 @@ type Point = { x: number; y: number };
 // A room drawn for someone else's eyes (spec 2026-10-15 §10.1, §10.4, §10.5; P4 ruling 24): a visit, a challenge
 // entry, the share card. No `living` (P3's NEUTRAL_LIVING: plants grown, the cat wandering, the trophy shelf empty),
 // the fallback sky, day or night by this device's clock, KIP at its desk (no walk), no piece actions and no taps: one
-// image with one label. `live` lets the room's cat wander (PF4-F7); RoomView holds it under Reduce Motion and out of
-// focus, and a step records no picture. `pannable` lets one finger pan a room larger than the view (§10.1 "Pan
+// image with one label. `live` lets the room's cat wander: a visit passes it (PF4-F7); challenge entries and the share
+// card stay still (T11-FIX). RoomView holds a wander under Reduce Motion and out of focus, and a step records no
+// picture. `paused` holds the room's loops at frame 0, for an entry scrolled out of view (T11-FIX). `pannable` lets one finger pan a room larger than the view (§10.1 "Pan
 // works"), kept inside the room's edges, once the finger has moved PAN_START_PT (the editor's threshold).
-export function NeutralRoom({ layout, tier, colour, worn, pose, bubble, width, height, label, pannable = false, testID }: {
+export function NeutralRoom({ layout, tier, colour, worn, pose, bubble, width, height, label, pannable = false, live = false, paused = false, testID }: {
   layout: RoomLayout; tier: Tier; colour: KipColour; worn: KipWorn; pose: KipPose; bubble: string | null;
-  width: number; height: number; label: string; pannable?: boolean; testID?: string;
+  width: number; height: number; label: string; pannable?: boolean; live?: boolean; paused?: boolean; testID?: string;
 }) {
   const reduceMotion = useReducedMotion();
   // Read once: a visit is a short look, and a new light would rebuild the room.
@@ -66,7 +67,8 @@ export function NeutralRoom({ layout, tier, colour, worn, pose, bubble, width, h
           crop={{ width, height }}
           cellPt={CELL_PT}
           offset={offset}
-          live
+          live={live}
+          paused={paused}
           bubble={bubble}
           reduceMotion={reduceMotion}
           accessibilityLabel={label}

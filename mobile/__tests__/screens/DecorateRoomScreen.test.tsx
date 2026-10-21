@@ -470,6 +470,16 @@ describe('the drawer in the editor (spec §5.4)', () => {
       expect(s.getByTestId('drawer-tab-theme').props.accessibilityState.selected).toBe(true);
       expect(s.getByTestId('drawer-checklist')).toHaveTextContent('Warm pieces · 2 of 3');
     });
+
+    it('a late read never takes you off a tab you chose meanwhile (T11-FIX M2)', async () => {
+      let land!: (v: unknown) => void;
+      (fetchChallenge as jest.Mock).mockReturnValue(new Promise((r) => { land = r; }));
+      const s = await openEditor({ drawer: 'theme' });
+      fireEvent.press(s.getByTestId('drawer-tab-floor'));
+      await act(async () => { land(challenge()); });
+      expect(s.getByTestId('drawer-tab-floor').props.accessibilityState.selected).toBe(true);
+      expect(s.getByTestId('drawer-tab-theme').props.accessibilityState.selected).toBe(false);
+    });
   });
 
   it('opens on New with the toasted piece picked when asked (spec §1 Toasts)', async () => {

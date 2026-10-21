@@ -94,6 +94,11 @@ it('a theme that ends while its tab is open falls back to All; opening on the th
   expect(editorReducer(onTab, { type: 'theme', theme: null }).drawer).toBe('all');
   expect(editorReducer(editorReducer(s, { type: 'drawer', tab: 'floor' }), { type: 'theme', theme: null }).drawer).toBe('floor');
   expect(initEditor({ layout: starterLayout(), worn: EMPTY_WORN, tier: 1, counts, version: 1, newIds: [] }, { drawer: 'theme' }).drawer).toBe('all');
+  // A late read turns to the theme tab only while the drawer is still on All (T11-FIX M2): a tab you chose stays.
+  const theme = { id: 'cosyAutumn' as const, tag: 'warm' as const, atLeast: 3 };
+  expect(editorReducer(start(), { type: 'theme', theme, open: true }).drawer).toBe('theme');
+  const chose = editorReducer(start(), { type: 'drawer', tab: 'floor' });
+  expect(editorReducer(chose, { type: 'theme', theme, open: true })).toMatchObject({ drawer: 'floor', theme });
   // A theme this build has no words for keeps a neutral tab name.
   const unknown = editorReducer(start(), { type: 'theme', theme: { id: 'springClean' as never, tag: 'plant', atLeast: 4 } });
   expect([drawerTabLabel(unknown, 'theme'), themeChecklist(unknown)?.spoken]).toEqual(['Theme', `Theme pieces, ${briefCount(starterLayout(), 'plant')} of 4`]);

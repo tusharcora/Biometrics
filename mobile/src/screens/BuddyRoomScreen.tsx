@@ -133,6 +133,7 @@ export function BuddyRoomScreen() {
           height={260}
           label={V.label(name)}
           pannable
+          live
         />
       </View>
       <ScrollView testID="visit-scroll" className="flex-1" contentContainerStyle={{ padding: 16, gap: 12 }}>

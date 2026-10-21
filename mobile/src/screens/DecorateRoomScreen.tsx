@@ -110,8 +110,8 @@ function Editor({ cosmetics, params, navigation }: { cosmetics: Cosmetics; param
   const act = useCallback((a: EditorAction) => { if (!savingRef.current) dispatch(a); }, []);
 
   // The challenge, read once (spec 2026-10-15 §5.4, §10.4): while you have an open entry the drawer gets the theme tab,
-  // and opened from the challenge's Build it it turns to that tab once the theme is known (PF4 F28). An older server,
-  // a failure or no open entry leaves no theme.
+  // and opened from the challenge's Build it it turns to that tab once the theme is known (PF4 F28), unless you chose
+  // another tab meanwhile (T11-FIX). An older server, a failure or no open entry leaves no theme.
   useEffect(() => {
     let live = true;
     fetchChallenge()

@@ -1,5 +1,5 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
-import { AccessibilityInfo, ActivityIndicator, Platform, ScrollView, View, findNodeHandle, useWindowDimensions, type Text as RNText } from 'react-native';
+import { AccessibilityInfo, ActivityIndicator, FlatList, Platform, View, findNodeHandle, useWindowDimensions, type Text as RNText, type ViewToken } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
@@ -25,15 +25,19 @@ import type { RootStackParamList } from '../navigation/RootNavigator';
 const C = ROOM_COPY.challenge;
 const TARGET = 'h-[44px]';
 const ENTRY_ROOM_HEIGHT = 180;
+// An entry counts as in view once a tenth of it shows.
+const VIEWABILITY = { itemVisiblePercentThreshold: 10 };
 type State = { status: 'loading' } | { status: 'ready'; dto: ChallengeDTO } | { status: 'error' };
 type Note = { text: string; spoken: string };
 
 // The weekly theme challenge (spec 2026-10-15 §10.4, C3; P4 rulings 6, 7, 10, 22, 24, 28): the brief and its rewards;
 // the consent line above Start my entry (entering is the opt-in for the snapshot); your entry's checklist and the way
-// to the editor's theme tab; your buddies' entries drawn neutral, each cheered once; last week's results in your
+// to the editor's theme tab; your buddies' entries drawn neutral and still (no wandering cat), paused while out of
+// view, each cheered once; last week's results in your
 // circle, names only. Every date is the server's (its week, closesAt and open): the app never works one out. Who is
 // shown is the server's too (anyone blocked either way is already left out, PF4-F18). After an entry or a cheer the
-// room, the coins and the room card's challenge are read again (T11T12-RELOAD). A cheer refused 409 shows as cheered
+// room, the coins and the room card's challenge are read again (T11T12-RELOAD), and the challenge is read again on
+// coming back to it, keeping what is shown if that fails (T11-FIX). A cheer refused 409 shows as cheered
 // or that entry closed (an entry carries no closed flag, so a buddy whose own week closed first is found this way);
 // a 503 keeps it offered. Close (and Android's back) leave at any time except while an entry or a cheer waits on the
 // server (PF4-F16, the coin shop's hold). A screen reader lands on the title; results of a tap are announced (iOS) and
@@ -47,6 +51,12 @@ export function RoomChallengeScreen() {
   const [note, setNote] = useState<Note | null>(null);
   // Entries a cheer found closed (409 challenge_closed): their own week ended before yours.
   const [closed, setClosed] = useState<ReadonlySet<string>>(new Set());
+  // Entries in view: only their rooms run. Until the list reports, none is known to be in view (T11-FIX).
+  const [inView, setInView] = useState<ReadonlySet<string>>(new Set());
+  // FlatList needs the same handler for its whole life.
+  const onViewable = useRef(({ viewableItems }: { viewableItems: ViewToken<ChallengeEntryDTO>[] }) => {
+    setInView(new Set(viewableItems.flatMap((v) => (v.isViewable && v.item ? [v.item.userId] : []))));
+  }).current;
   // `busy` disables the buttons only after a re-render; a double tap in one frame acts once.
   const inFlight = useRef(false);
   const mounted = useRef(true);
@@ -58,12 +68,16 @@ export function RoomChallengeScreen() {
     };
   }, []);
 
+  // Something has been shown: from then on a re-read that fails keeps it.
+  const shown = useRef(false);
   // Loads once per mount (and on Try again); a failure never retries by itself.
   const load = useCallback(async () => {
     setState({ status: 'loading' });
     try {
       const dto = await fetchChallenge();
-      if (mounted.current) setState({ status: 'ready', dto });
+      if (!mounted.current) return;
+      shown.current = true;
+      setState({ status: 'ready', dto });
     } catch {
       if (mounted.current) setState({ status: 'error' });
     }
@@ -71,15 +85,20 @@ export function RoomChallengeScreen() {
   useEffect(() => {
     void load();
   }, [load]);
-  // A read after a refusal keeps what is shown when it fails.
+  // A read after a refusal, or on coming back (T11-FIX): keeps what is shown when it fails.
   const refresh = async () => {
     try {
       const dto = await fetchChallenge();
       if (mounted.current) setState({ status: 'ready', dto });
     } catch {
-      // The screen stays as it was; Close and a new open read again.
+      // The screen stays as it was; the next focus reads again.
     }
   };
+  // Back from the editor (or the app), the entry's count and the buddies' cheers may have moved: read again, never
+  // over the first read or an entry or cheer on its way.
+  useEffect(() => navigation.addListener?.('focus', () => {
+    if (shown.current && !inFlight.current) void refresh();
+  }), [navigation]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     if (state.status !== 'ready') return;
     const node = titleRef.current ? findNodeHandle(titleRef.current) : null;
@@ -203,67 +222,79 @@ export function RoomChallengeScreen() {
   return (
     <SafeAreaView edges={['top', 'bottom']} className="flex-1 bg-background">
       {header}
-      <ScrollView contentContainerStyle={{ padding: 16, paddingTop: 4, gap: 12 }}>
-        {d.theme && words ? (
-          <Card className="gap-2 p-4">
-            <PageTitle ref={titleRef} testID="challenge-title">{words.title}</PageTitle>
-            <Text testID="challenge-brief" className="text-body">{words.brief}</Text>
-            <Text className="text-body text-muted-foreground">{C.how}</Text>
-            {d.open ? (
-              <Text testID="challenge-tags" accessibilityLabel={C.tagsSpoken(others.length, days)} className="text-caption tabular-nums text-muted-foreground">
-                {C.tags(others.length, days)}
-              </Text>
+      {/* A list, so an entry room scrolled out of view is paused (T11-FIX): its loops hold at frame 0. */}
+      <FlatList
+        testID="challenge-list"
+        data={d.entries}
+        keyExtractor={(e) => e.userId}
+        extraData={{ busy, closed, inView, open: d.open }}
+        viewabilityConfig={VIEWABILITY}
+        onViewableItemsChanged={onViewable}
+        contentContainerStyle={{ padding: 16, paddingTop: 4 }}
+        ListHeaderComponent={
+          <View className="gap-3 pb-3">
+            {d.theme && words ? (
+              <Card className="gap-2 p-4">
+                <PageTitle ref={titleRef} testID="challenge-title">{words.title}</PageTitle>
+                <Text testID="challenge-brief" className="text-body">{words.brief}</Text>
+                <Text className="text-body text-muted-foreground">{C.how}</Text>
+                {d.open ? (
+                  <Text testID="challenge-tags" accessibilityLabel={C.tagsSpoken(others.length, days)} className="text-caption tabular-nums text-muted-foreground">
+                    {C.tags(others.length, days)}
+                  </Text>
+                ) : (
+                  <Text testID="challenge-closed" className="text-caption text-muted-foreground">{C.closed}</Text>
+                )}
+              </Card>
             ) : (
-              <Text testID="challenge-closed" className="text-caption text-muted-foreground">{C.closed}</Text>
+              <Text ref={titleRef} testID="challenge-none" accessibilityRole="header" className="text-body text-muted-foreground">{C.none}</Text>
             )}
-          </Card>
-        ) : (
-          <Text ref={titleRef} testID="challenge-none" accessibilityRole="header" className="text-body text-muted-foreground">{C.none}</Text>
-        )}
-        {d.theme ? (
-          <View className="gap-2">
-            <Text accessibilityRole="header" className="text-heading">{C.rewards}</Text>
-            <Text accessibilityLabel={C.enterSpoken} className="text-body">{C.enter}</Text>
-            <View testID="challenge-reward-piece" accessible accessibilityLabel={C.piece(spokenName(d.theme.themePiece))} className="flex-row items-center gap-2">
-              <ItemIcon id={d.theme.themePiece} colour={me.colour} size={36} />
-              <Text className="shrink text-body">{C.piece(itemName(d.theme.themePiece))}</Text>
-            </View>
-            <View testID="challenge-reward-trophy" accessible accessibilityLabel={C.trophy(spokenName(d.theme.trophy))} className="flex-row items-center gap-2">
-              <ItemIcon id={d.theme.trophy} colour={me.colour} size={36} />
-              <Text className="shrink text-body">{C.trophy(itemName(d.theme.trophy))}</Text>
-            </View>
-          </View>
-        ) : null}
-        {d.theme && d.open && !d.entry ? (
-          <View testID="challenge-enter" className="gap-2">
-            <Text testID="challenge-consent" className="text-caption text-muted-foreground">{C.consent}</Text>
-            <Button testID="challenge-start" className={TARGET} disabled={busy} onPress={() => void start()}>{C.start}</Button>
-            <Text testID="challenge-snapshot" className="text-caption text-muted-foreground">{C.snapshot}</Text>
-          </View>
-        ) : null}
-        {d.theme && words && d.entry ? (
-          <Card className="gap-2 p-4">
-            <Text testID="challenge-entered" accessibilityLabel={d.entry.paid ? C.enteredPaidSpoken : C.entered} className="text-body font-semibold">
-              {d.entry.paid ? C.enteredPaid : C.entered}
-            </Text>
-            {/* The count is the server's, over the entry's snapshot. */}
-            <Text testID="challenge-checklist" accessibilityLabel={C.checklistSpoken(words.tagName, d.entry.count, d.theme.atLeast)} className="text-caption tabular-nums">
-              {C.checklist(words.tagName, d.entry.count, d.theme.atLeast)}
-            </Text>
-            {d.open ? (
-              <Button testID="challenge-build" variant="outline" className={TARGET} disabled={busy} onPress={() => navigation.navigate('DecorateRoom', { drawer: 'theme' })}>
-                {C.build}
-              </Button>
+            {d.theme ? (
+              <View className="gap-2">
+                <Text accessibilityRole="header" className="text-heading">{C.rewards}</Text>
+                <Text accessibilityLabel={C.enterSpoken} className="text-body">{C.enter}</Text>
+                <View testID="challenge-reward-piece" accessible accessibilityLabel={C.piece(spokenName(d.theme.themePiece))} className="flex-row items-center gap-2">
+                  <ItemIcon id={d.theme.themePiece} colour={me.colour} size={36} />
+                  <Text className="shrink text-body">{C.piece(itemName(d.theme.themePiece))}</Text>
+                </View>
+                <View testID="challenge-reward-trophy" accessible accessibilityLabel={C.trophy(spokenName(d.theme.trophy))} className="flex-row items-center gap-2">
+                  <ItemIcon id={d.theme.trophy} colour={me.colour} size={36} />
+                  <Text className="shrink text-body">{C.trophy(itemName(d.theme.trophy))}</Text>
+                </View>
+              </View>
             ) : null}
-          </Card>
-        ) : null}
-        <Text testID="challenge-note" accessibilityLiveRegion="polite" accessibilityLabel={note?.spoken} className="text-caption text-muted-foreground">{note?.text ?? ''}</Text>
-        {d.entries.length ? <Text accessibilityRole="header" className="text-heading">{C.entries}</Text> : null}
-        {d.entries.map((e) => {
+            {d.theme && d.open && !d.entry ? (
+              <View testID="challenge-enter" className="gap-2">
+                <Text testID="challenge-consent" className="text-caption text-muted-foreground">{C.consent}</Text>
+                <Button testID="challenge-start" className={TARGET} disabled={busy} onPress={() => void start()}>{C.start}</Button>
+                <Text testID="challenge-snapshot" className="text-caption text-muted-foreground">{C.snapshot}</Text>
+              </View>
+            ) : null}
+            {d.theme && words && d.entry ? (
+              <Card className="gap-2 p-4">
+                <Text testID="challenge-entered" accessibilityLabel={d.entry.paid ? C.enteredPaidSpoken : C.entered} className="text-body font-semibold">
+                  {d.entry.paid ? C.enteredPaid : C.entered}
+                </Text>
+                {/* The count is the server's, over the entry's snapshot. */}
+                <Text testID="challenge-checklist" accessibilityLabel={C.checklistSpoken(words.tagName, d.entry.count, d.theme.atLeast)} className="text-caption tabular-nums">
+                  {C.checklist(words.tagName, d.entry.count, d.theme.atLeast)}
+                </Text>
+                {d.open ? (
+                  <Button testID="challenge-build" variant="outline" className={TARGET} disabled={busy} onPress={() => navigation.navigate('DecorateRoom', { drawer: 'theme' })}>
+                    {C.build}
+                  </Button>
+                ) : null}
+              </Card>
+            ) : null}
+            <Text testID="challenge-note" accessibilityLiveRegion="polite" accessibilityLabel={note?.spoken} className="text-caption text-muted-foreground">{note?.text ?? ''}</Text>
+            {d.entries.length ? <Text accessibilityRole="header" className="text-heading">{C.entries}</Text> : null}
+          </View>
+        }
+        renderItem={({ item: e }) => {
           const room = entryRoom(e.snapshot);
           const shut = closed.has(e.userId);
           return (
-            <View key={e.userId} className="gap-2">
+            <View className="gap-2 pb-4">
               <NeutralRoom
                 testID={`entry-room-${e.userId}`}
                 layout={room.layout}
@@ -275,6 +306,7 @@ export function RoomChallengeScreen() {
                 width={width - 32}
                 height={ENTRY_ROOM_HEIGHT}
                 label={C.entryLabel(e.name)}
+                paused={!inView.has(e.userId)}
               />
               <View className="flex-row items-center justify-between gap-2">
                 <Text className="shrink text-body font-semibold">{e.name}</Text>
@@ -295,8 +327,8 @@ export function RoomChallengeScreen() {
               )}
             </View>
           );
-        })}
-        {r ? (
+        }}
+        ListFooterComponent={r ? (
           <Card className="gap-2 p-4">
             <Text accessibilityRole="header" className="text-heading">{C.results}</Text>
             {r.ranked ? (
@@ -316,7 +348,7 @@ export function RoomChallengeScreen() {
             {r.you.entered && !r.you.won ? <Text testID="results-you" className="text-caption">{C.youEntered}</Text> : null}
           </Card>
         ) : null}
-      </ScrollView>
+      />
     </SafeAreaView>
   );
 }

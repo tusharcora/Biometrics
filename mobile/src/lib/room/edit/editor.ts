@@ -72,7 +72,8 @@ export type EditorAction =
   | { type: 'select'; id: string | null }
   | { type: 'pick'; item: ItemId | null }
   | { type: 'drawer'; tab: DrawerTab }
-  /** The challenge read landed (or the theme ended): `open` also turns to the theme tab (the challenge's Build it). */
+  /** The challenge read landed (or the theme ended): `open` also turns to the theme tab (the challenge's Build it),
+   * if the drawer is still on All. */
   | { type: 'theme'; theme: EditorTheme | null; open?: boolean }
   | { type: 'place'; item: ItemId }
   | { type: 'drop'; id: string | null; item: ItemId; target: Target }
@@ -293,7 +294,8 @@ function reduce(s: EditorState, a: EditorAction): EditorState {
     case 'theme':
       // A theme that ends while its tab is open falls back to All.
       if (!a.theme) return { ...s, theme: null, drawer: s.drawer === 'theme' ? 'all' : s.drawer };
-      return { ...s, theme: a.theme, ...(a.open ? { drawer: 'theme' as const, preview: null } : {}) };
+      // A late read turns to the theme tab only while the drawer is still on All: a tab chosen meanwhile stays (T11-FIX).
+      return { ...s, theme: a.theme, ...(a.open && s.drawer === 'all' ? { drawer: 'theme' as const, preview: null } : {}) };
     case 'place': {
       const base = { id: newPieceId(layout), item: a.item, facing: 'L' as const, mirror: false };
       return add(s, a.item, nearestFree(g, layout, a.item, s.tier, roomCentre(g), base));

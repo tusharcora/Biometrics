@@ -1,6 +1,6 @@
 import React from 'react';
-import { AccessibilityInfo } from 'react-native';
-import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
+import { AccessibilityInfo, FlatList } from 'react-native';
+import { act, fireEvent, render, screen } from '@testing-library/react-native';
 import { ApiError } from '../../src/api/client';
 import { cheerEntry, enterChallenge, fetchChallenge } from '../../src/api/rooms';
 import { loadCoins } from '../../src/lib/coins/coinsStore';
@@ -19,8 +19,10 @@ const mockNav = {
   navigate: jest.fn(),
   goBack: jest.fn(),
   beforeRemove: null as null | ((e: { preventDefault: () => void }) => void),
+  focus: null as null | (() => void),
   addListener: jest.fn((name: string, cb: (e: { preventDefault: () => void }) => void) => {
     if (name === 'beforeRemove') mockNav.beforeRemove = cb;
+    if (name === 'focus') mockNav.focus = cb as unknown as () => void;
     return () => undefined;
   }),
 };
@@ -38,6 +40,7 @@ const deferred = <T,>() => {
 beforeEach(() => {
   jest.clearAllMocks();
   mockNav.beforeRemove = null;
+  mockNav.focus = null;
 });
 async function open(dto: unknown = body()) {
   (fetchChallenge as jest.Mock).mockResolvedValue(dto);
@@ -57,10 +60,9 @@ it('shows the brief, the rewards, and the consent line above Start my entry (spe
   expect(screen.getByTestId('challenge-tags').props.accessibilityLabel).toBe('1 buddy in, 3 days left, Ends Sunday 20:00');
   expect(screen.getByTestId('challenge-reward-piece')).toHaveTextContent('Harvest lantern: this week only, in the coin shop for 80');
   expect(screen.getByTestId('challenge-reward-trophy')).toHaveTextContent('Golden acorn: the trophy for the most-cheered room, glows at night');
-  // The consent line comes before the button, and the snapshot line after it.
-  const sheet = screen.getByTestId('challenge-enter');
-  const order = within(sheet).getAllByText(/.+/).map((t) => t.props.testID ?? t.props.children);
-  expect(order[0]).toBe('challenge-consent');
+  // The consent line comes before the button, and the snapshot line after it (T11-FIX M4): the sheet's own order.
+  const ids = screen.getByTestId('challenge-enter').children.map((c) => (typeof c === 'string' ? c : c.props.testID));
+  expect(ids).toEqual(['challenge-consent', 'challenge-start', 'challenge-snapshot']);
   expect(screen.getByTestId('challenge-consent')).toHaveTextContent('Your buddies will see your entry: a snapshot of your room, including its size.');
   expect(screen.getByTestId('challenge-snapshot')).toHaveTextContent('Your entry is a snapshot of your room on Sunday. Build as usual until then.');
   expect(screen.queryByTestId('challenge-checklist')).toBeNull();
@@ -140,6 +142,8 @@ it('draws buddies\' entries neutral and cheers one once (rulings 10, 24)', async
   await open();
   const room = screen.getByTestId('entry-room-b1');
   expect(room.props.living).toBeUndefined();
+  // An entry stays still: no wandering cat (T11-FIX I1; a visit passes live).
+  expect(room.props.live).toBe('');
   expect(room.props.room).toMatch(/:fallback:/);
   expect(room.props.accessibilityLabel).toBe("Maya's entry");
   expect(room.props.tier).toBe(2);
@@ -233,4 +237,43 @@ it('a failed read says so with Try again, and focus lands on the title once it l
   expect(focus.mock.calls.map(([el]) => (el as unknown as { props?: { testID?: string } }).props?.testID)).toEqual(['challenge-title']);
   handle.mockRestore();
   focus.mockRestore();
+});
+
+it('an entry room out of view is paused; one scrolled into view runs (T11-FIX M3)', async () => {
+  const JO = { ...ENTRY, userId: 'b2', name: 'Jo' };
+  await open(body({ entries: [ENTRY, JO] }));
+  const paused = (id: string) => /:paused$/.test(screen.getByTestId(`entry-room-${id}`).props.room);
+  // Nothing is known to be in view until the list says so.
+  expect([paused('b1'), paused('b2')]).toEqual([true, true]);
+  const list = screen.UNSAFE_getByType(FlatList);
+  const seen = (...entries: (typeof ENTRY)[]) =>
+    act(() => { list.props.onViewableItemsChanged({ viewableItems: entries.map((item, index) => ({ item, key: item.userId, index, isViewable: true })), changed: [] }); });
+  seen(ENTRY);
+  expect([paused('b1'), paused('b2')]).toEqual([false, true]);
+  seen(JO);
+  expect([paused('b1'), paused('b2')]).toEqual([true, false]);
+});
+
+it('reads the challenge again when it regains focus, keeping what is shown if that read fails (T11-FIX M1)', async () => {
+  await open();
+  expect(mockNav.focus).not.toBeNull();
+  (fetchChallenge as jest.Mock).mockResolvedValue(body({ entries: [{ ...ENTRY, cheers: 5 }] }));
+  await act(async () => { mockNav.focus!(); });
+  expect(fetchChallenge).toHaveBeenCalledTimes(2);
+  expect(screen.getByTestId('entry-cheers-b1')).toHaveTextContent('5 cheers');
+  (fetchChallenge as jest.Mock).mockRejectedValue(new Error('offline'));
+  await act(async () => { mockNav.focus!(); });
+  expect(fetchChallenge).toHaveBeenCalledTimes(3);
+  expect(screen.getByTestId('entry-cheers-b1')).toHaveTextContent('5 cheers');
+  expect(screen.queryByTestId('challenge-failed')).toBeNull();
+});
+
+it('a focus before the first read has landed reads nothing more', async () => {
+  const wait = deferred<unknown>();
+  (fetchChallenge as jest.Mock).mockReturnValue(wait.promise);
+  render(<RoomChallengeScreen />);
+  await act(async () => { mockNav.focus?.(); });
+  expect(fetchChallenge).toHaveBeenCalledTimes(1);
+  await act(async () => { wait.resolve(body()); });
+  expect(screen.getByTestId('challenge-title')).toBeTruthy();
 });

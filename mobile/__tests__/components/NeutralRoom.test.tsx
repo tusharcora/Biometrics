@@ -24,7 +24,7 @@ const picture = createPicture as jest.Mock;
 const at = (id: string, item: string, x: number, y: number): Placement => ({ id, item, layer: 'floor', x, y, facing: 'L', mirror: false });
 const CAT_ROOM = { ...starterLayout(), pieces: [...starterLayout().pieces, at('p1', 'pet.tabby', 5, 3)] };
 const room = (over: Partial<React.ComponentProps<typeof NeutralRoom>> = {}) => (
-  <NeutralRoom layout={CAT_ROOM} tier={1} colour="lime" worn={EMPTY_WORN} pose="wave" bubble="HI THERE!" width={300} height={240} label="Maya's room" testID="visit-room" {...over} />
+  <NeutralRoom layout={CAT_ROOM} tier={1} colour="lime" worn={EMPTY_WORN} pose="wave" bubble="HI THERE!" width={300} height={240} label="Maya's room" testID="visit-room" live {...over} />
 );
 const view = () => screen.UNSAFE_getByType(RoomView).props;
 const transforms = () => JSON.stringify(screen.getAllByTestId('skia-group', { includeHiddenElements: true }).map((g) => g.props.skiaTransform));
@@ -45,6 +45,18 @@ it('draws neutral: no living, the fallback sky, night by this device\'s clock, t
   jest.setSystemTime(new Date(2026, 9, 26, 10, 0));
   render(room());
   expect(view().night).toBe(false);
+});
+
+it('without `live` (a challenge entry) the cat stays put; `paused` reaches the room (T11-FIX)', () => {
+  jest.setSystemTime(new Date(2026, 9, 26, 10, 0));
+  render(room({ live: undefined }));
+  expect([view().live, view().paused]).toEqual([false, false]);
+  const was = transforms();
+  act(() => { jest.advanceTimersByTime(STEP_MS * 4); });
+  expect(transforms()).toEqual(was);
+  screen.unmount();
+  render(room({ live: undefined, paused: true }));
+  expect(view().paused).toBe(true);
 });
 
 it('the visited room\'s cat wanders, and its steps and the loop ticks record no picture (PF4-F7: exactly 0 a tick)', () => {
