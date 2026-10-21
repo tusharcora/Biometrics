@@ -1,6 +1,7 @@
 import { ADVICE, HEALTH_VERB, advises, copyStrings } from '../../jest-mocks/adviceGuard';
 import { CATALOGUE } from '../../src/lib/room/catalogue';
-import { ITEM_NAMES, ROOM_COPY, SET_NAMES, itemName, progressLine, spokenName, unlockLine, unlockSpoken } from '../../src/lib/room/roomCopy';
+import { buddyErrorMessage } from '../../src/lib/buddyCopy';
+import { ITEM_NAMES, ROOM_COPY, SET_NAMES, itemName, progressLine, roomErrorMessage, spokenName, unlockLine, unlockSpoken } from '../../src/lib/room/roomCopy';
 
 it('names every item and set the app ships', () => {
   expect(CATALOGUE.items.filter((i) => !ITEM_NAMES[i.id]).map((i) => i.id)).toEqual([]);
@@ -130,5 +131,28 @@ it('never gives health advice in the gift and cheer copy (PF4-F17), and its spok
   expect(G.notes).toEqual({ desk: 'For your desk', cosy: 'Cosy!', thought: 'Thought of you' });
   // Earn-only: a gift is a piece you already own, never bought for it.
   expect(lines.join(' ')).not.toMatch(/\$|buy|price|coin/i);
+});
+
+it('the P4 screens\' error lines never give advice, for every server code and none (PF4-F17, FINAL-I2)', () => {
+  // Every code in backend/src/buddies/errors.ts BUDDY_ERROR_STATUS (a superset of what the P4 routes answer), plus a
+  // code this build doesn't know, plus no code at all.
+  const codes: (string | null)[] = [
+    'invalid_handle', 'invalid_display_name', 'setup_incomplete', 'handle_taken', 'rate_limited', 'try_later', 'handle_required',
+    'mood_notice_required', 'consent_required', 'stale_consent_version', 'invalid_settings', 'code_invalid', 'own_handle',
+    'not_found', 'blocked_by_you', 'too_many_pending', 'request_gone', 'not_buddies', 'sticker_limit', 'invalid_sticker',
+    'invalid_cursor', 'invalid_checkin', 'recap_not_found', 'goodnight_closed', 'undo_expired', 'invalid_note',
+    'invalid_message', 'message_gone', 'invalid_reaction', 'card_unavailable', 'invalid_status_note', 'invalid_report',
+    'report_target_gone', 'already_cheered', 'not_spare', 'gift_limit', 'gift_gone', 'challenge_closed', 'no_challenge',
+    'invalid_body', 'a_newer_code', null,
+  ];
+  for (const code of codes) {
+    const s = roomErrorMessage(code);
+    expect({ code, s, advises: advises(s), dot: /·|−/.test(s) }).toEqual({ code, s, advises: false, dot: false });
+  }
+  // The busy server and the unknown answer read as ROOM_COPY's own neutral lines; the P4 codes keep their lines.
+  expect([roomErrorMessage('try_later'), roomErrorMessage('rate_limited')]).toEqual([ROOM_COPY.errors.busy, ROOM_COPY.errors.busy]);
+  expect([roomErrorMessage(null), roomErrorMessage('a_newer_code'), roomErrorMessage('not_found')]).toEqual(Array(3).fill(ROOM_COPY.errors.unknown));
+  expect(roomErrorMessage('gift_limit')).toBe(buddyErrorMessage('gift_limit'));
+  expect(copyStrings(ROOM_COPY.errors).filter(advises)).toEqual([]);
 });
 

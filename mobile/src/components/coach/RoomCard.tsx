@@ -14,7 +14,6 @@ import { RoomView, type RoomViewHandle } from '../room/RoomView';
 import { useRoomEffects } from '../room/useRoomEffects';
 import { useCoinsLanding } from '../coins/useCoinsLanding';
 import { HOME_COPY } from '../../lib/homeCopy';
-import { buddyErrorMessage } from '../../lib/buddyCopy';
 import { useMyKip } from '../../lib/kip/myKip';
 import { KIP_COPY } from '../../lib/kipCopy';
 import { hotTagLabel, roomLabel, type KipStage } from '../../lib/kipStage';
@@ -24,7 +23,7 @@ import { effectOf, type RoomEffects } from '../../lib/room/effects';
 import { MAX_BOXES } from '../../lib/room/gifts';
 import { loadRoomSocial, openGiftNow, useRoomSocial } from '../../lib/room/giftsStore';
 import type { RoomLayout } from '../../lib/room/iso/geometry';
-import { ROOM_COPY, itemName, spokenName } from '../../lib/room/roomCopy';
+import { ROOM_COPY, itemName, roomErrorMessage, spokenName } from '../../lib/room/roomCopy';
 import type { KipLook } from '../../lib/useKipTurn';
 import type { RoomWeather } from '../../lib/room/weather';
 import type { ScoreBand } from '../../lib/scoreInsights';
@@ -170,10 +169,10 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
     try {
       const item = await openGiftNow(id);
       if (item) say(ROOM_COPY.gifts.opened(itemName(item)), ROOM_COPY.gifts.opened(spokenName(item)));
-      else say(buddyErrorMessage('gift_gone'));
+      else say(roomErrorMessage('gift_gone'));
     } catch (e) {
       // try_later or offline: the box stays, and a tap tries again.
-      say(e instanceof ApiError ? buddyErrorMessage(e.code ?? null) : ROOM_COPY.gifts.openFailed);
+      say(e instanceof ApiError ? roomErrorMessage(e.code ?? null) : ROOM_COPY.gifts.openFailed);
     } finally {
       inFlight.current = false;
       setOpening(false);

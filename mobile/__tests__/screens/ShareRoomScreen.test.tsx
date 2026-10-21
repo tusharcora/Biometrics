@@ -64,6 +64,30 @@ it('the switches change the card; Save and Share capture the 1080-px card', asyn
   expect(shareImage).toHaveBeenCalledWith('file:///card.png', 'Share your room');
 });
 
+describe('FINAL-M6', () => {
+  it('a switch clears the last result line: it no longer describes the card', async () => {
+    render(<ShareRoomScreen />);
+    await act(async () => undefined);
+    await act(async () => { fireEvent.press(screen.getByTestId('share-save')); });
+    expect(screen.getByTestId('share-notice').props.children).toBe('Saved to Photos.');
+    fireEvent(screen.getByTestId('share-name'), 'valueChange', true);
+    expect(screen.getByTestId('share-notice').props.children).toBe('');
+    await act(async () => { fireEvent.press(screen.getByTestId('share-save')); });
+    fireEvent(screen.getByTestId('share-waves'), 'valueChange', false);
+    expect(screen.getByTestId('share-notice').props.children).toBe('');
+  });
+
+  it('the export copy is hidden from screen readers, and the card text never grows with Dynamic Type', async () => {
+    render(<ShareRoomScreen />);
+    await act(async () => undefined);
+    const wrap = screen.getByTestId('share-export-wrap', { includeHiddenElements: true });
+    expect([wrap.props.accessibilityElementsHidden, wrap.props.importantForAccessibility]).toEqual([true, 'no-hide-descendants']);
+    for (const text of ["KIP's room", '8 × 8 · 7 pieces']) {
+      for (const node of screen.getAllByText(text, { includeHiddenElements: true })) expect(node.props.maxFontSizeMultiplier).toBe(1);
+    }
+  });
+});
+
 it('says the theme week while a theme is live, never a closed or unknown one (ruling 23)', async () => {
   (useRoomSocial as jest.Mock).mockReturnValue({ gifts: [], cheers: 0, challenge: { live: true, themeId: 'cosyAutumn', entry: false } });
   const s = render(<ShareRoomScreen />);

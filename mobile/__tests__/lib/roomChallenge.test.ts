@@ -48,7 +48,7 @@ it('challenge copy gives no health advice (PF4-F17): only the four briefs ("Use 
   expect(advises('Try again')).toBe(true);
   for (const s of checked) expect({ s, advises: advises(s) }).toEqual({ s, advises: false });
   // Spoken lines never carry "·", "×" or "−" (PF4-F15).
-  for (const s of [C.checklistSpoken('Warm pieces', 2, 3), C.paidSpoken, C.headSpoken, C.resultSpoken('Maya', 4)]) expect(s).not.toMatch(/·|×|−/);
+  for (const s of [C.checklistSpoken('Warm pieces', 2, 3), C.enteredPaidSpoken, C.headSpoken, C.resultSpoken('Maya', 4)]) expect(s).not.toMatch(/·|×|−/);
 });
 
 it('visit, gift and challenge copy names no health number (Global Constraints)', () => {

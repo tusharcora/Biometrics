@@ -8,12 +8,11 @@ import { GIFT_NOTES, sendGift, type GiftNote } from '../api/rooms';
 import { ItemIcon } from '../components/room/ItemIcon';
 import { Button } from '../components/ui/button';
 import { Text } from '../components/ui/text';
-import { buddyErrorMessage } from '../lib/buddyCopy';
 import { isServerAnswer, newRequestId } from '../lib/coins/actions';
 import { useMyKip } from '../lib/kip/myKip';
 import { applyCounts, cosmeticsSession, getCosmetics, loadCosmetics, useCosmetics } from '../lib/room/cosmeticsStore';
 import { spareTiles } from '../lib/room/gifts';
-import { ROOM_COPY, itemName, spokenName } from '../lib/room/roomCopy';
+import { ROOM_COPY, itemName, roomErrorMessage, spokenName } from '../lib/room/roomCopy';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 const G = ROOM_COPY.gifts;
@@ -87,7 +86,7 @@ export function GiftSendScreen() {
     } catch (e) {
       if (isServerAnswer(e)) requestId.current = null;
       if (!mounted.current) return;
-      say(e instanceof ApiError ? buddyErrorMessage(e.code ?? null) : G.failed);
+      say(e instanceof ApiError ? roomErrorMessage(e.code ?? null) : G.failed);
     } finally {
       inFlight.current = false;
       // Whatever the answer, the counts are read again, so a stale spare never stays offered (same account only).

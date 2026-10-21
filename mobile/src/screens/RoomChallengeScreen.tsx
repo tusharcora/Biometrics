@@ -11,7 +11,6 @@ import { Button } from '../components/ui/button';
 import { Card } from '../components/ui/card';
 import { PageTitle } from '../components/ui/page-title';
 import { Text } from '../components/ui/text';
-import { buddyErrorMessage } from '../lib/buddyCopy';
 import { loadCoins } from '../lib/coins/coinsStore';
 import { kipColourOf } from '../lib/kip/kipColour';
 import { useMyKip } from '../lib/kip/myKip';
@@ -19,7 +18,7 @@ import { kipWornOf } from '../lib/kip/wornArt';
 import { daysLeft, entryRoom } from '../lib/room/challenge';
 import { loadCosmetics } from '../lib/room/cosmeticsStore';
 import { loadRoomSocial } from '../lib/room/giftsStore';
-import { ROOM_COPY, itemName, spokenName, themeWords } from '../lib/room/roomCopy';
+import { ROOM_COPY, itemName, roomErrorMessage, spokenName, themeWords } from '../lib/room/roomCopy';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 const C = ROOM_COPY.challenge;
@@ -85,11 +84,14 @@ export function RoomChallengeScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+  // Bumped by every entry or cheer: a re-read that started before one drops its answer, which may predate it (FINAL-M7).
+  const epoch = useRef(0);
   // A read after a refusal, or on coming back (T11-FIX): keeps what is shown when it fails.
   const refresh = async () => {
+    const at = epoch.current;
     try {
       const dto = await fetchChallenge();
-      if (mounted.current) setState({ status: 'ready', dto });
+      if (mounted.current && at === epoch.current) setState({ status: 'ready', dto });
     } catch {
       // The screen stays as it was; the next focus reads again.
     }
@@ -118,6 +120,7 @@ export function RoomChallengeScreen() {
   async function run(fn: () => Promise<void>, failed: (e: unknown) => void) {
     if (inFlight.current) return;
     inFlight.current = true;
+    epoch.current += 1;
     setBusy(true);
     setNote(null);
     try {
@@ -147,7 +150,7 @@ export function RoomChallengeScreen() {
       say(code === 'challenge_closed' ? C.closed : C.none);
       void refresh();
     } else if (code === 'try_later') {
-      say(buddyErrorMessage(code));
+      say(roomErrorMessage(code));
     } else {
       say(C.enterFailed);
       if (!(e instanceof ApiError)) {
@@ -174,16 +177,19 @@ export function RoomChallengeScreen() {
     else say(C.cheered, C.cheeredSpoken(entry.name));
   }, (e) => {
     const code = codeOf(e);
-    // Cheered already (on another device): the count the server sent holds it.
-    if (code === 'already_cheered') markCheered(entry.userId, 0);
-    else if (code === 'challenge_closed') {
+    if (code === 'already_cheered') {
+      // Cheered already: on another device, or this tap's first try landed and its answer was lost, so the shown
+      // count may not hold it. Shown as cheered, then the list is read again (FINAL-M2).
+      markCheered(entry.userId, 0);
+      void refresh();
+    } else if (code === 'challenge_closed') {
       setClosed((s) => new Set(s).add(entry.userId));
       say(C.entryClosedLine(entry.name));
     } else if (e instanceof ApiError && e.status === 404) {
       // No longer buddies, or the entry is gone: the list is read again.
       say(C.entryGone);
       void refresh();
-    } else if (code === 'try_later') say(buddyErrorMessage(code));
+    } else if (code === 'try_later') say(roomErrorMessage(code));
     else {
       say(C.cheerFailed);
       if (!(e instanceof ApiError)) void refresh();

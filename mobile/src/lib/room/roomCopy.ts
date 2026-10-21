@@ -2,6 +2,7 @@
 // wording), decorate mode, the toasts. Spoken forms carry no "·" and no Roman numerals (ruling 19).
 import type { FirstWeekTaskKey } from '../../api/coins';
 import type { ThemeId } from '../../api/rooms';
+import { buddyErrorMessage } from '../buddyCopy';
 import type { AchievementsSnapshot } from '../achievementsStore';
 import type { AchievementFamilyName, SetId, UnlockRule } from './catalogue';
 import { CATALOGUE, catalogueSet } from './catalogue';
@@ -549,7 +550,6 @@ export const ROOM_COPY = {
     cheersNone: 'No cheers this week yet.',
     cheersFailed: "Couldn't load the cheers just now.",
     cheers: (n: number) => `${n} ${n === 1 ? 'cheer' : 'cheers'} this week`,
-    cheersOpen: 'See who cheered your room',
     cheersSpoken: (n: number) => `${n} ${n === 1 ? 'cheer' : 'cheers'} this week. See who cheered your room`,
   },
   /**
@@ -560,7 +560,6 @@ export const ROOM_COPY = {
   challenge: {
     open: 'Room challenge',
     heading: 'Room challenge',
-    buddiesOnly: 'Buddies only',
     head: 'Room challenge · Buddies only',
     headSpoken: 'Room challenge, Buddies only',
     themes: {
@@ -587,7 +586,6 @@ export const ROOM_COPY = {
     snapshot: 'Your entry is a snapshot of your room on Sunday. Build as usual until then.',
     entered: 'You entered',
     paid: `+${EARN.challenge} coins`,
-    paidSpoken: `Plus ${EARN.challenge} coins`,
     enteredPaid: `You entered · +${EARN.challenge} coins`,
     enteredPaidSpoken: `You entered. Plus ${EARN.challenge} coins`,
     enterFailed: "Couldn't start your entry just now.",
@@ -648,6 +646,14 @@ export const ROOM_COPY = {
       failed: "The image couldn't be made.",
     },
   },
+  /**
+   * The P4 screens' (visit, gift, challenge, a gift box) lines for a busy server and an unknown answer (ruling
+   * FINAL-I2): the buddies screens' versions ask the user to try again, which PF4-F17 has no exemption for.
+   */
+  errors: {
+    busy: "Couldn't do that just now.",
+    unknown: "That didn't go through.",
+  },
   welcome: {
     bubble: 'WELCOME HOME!',
     text: "This is KIP's room. Make it yours: drag pieces in, flip them, stack them.",
@@ -679,3 +685,18 @@ export const ROOM_COPY = {
   dismiss: 'Dismiss',
   toastHint: "Opens decorate mode for KIP's room",
 } as const;
+
+/** The codes whose buddies line a P4 screen shows as is: each one names what happened and asks nothing of the user. */
+const ROOM_ERROR_CODES: ReadonlySet<string> = new Set([
+  'already_cheered', 'not_spare', 'gift_limit', 'gift_gone', 'challenge_closed', 'no_challenge', 'invalid_body', 'not_buddies',
+]);
+
+/**
+ * An error line for the P4 screens (ruling FINAL-I2): their own codes read as the buddies screens word them; a busy
+ * server (try_later, rate_limited) and any other or missing code read as ROOM_COPY's neutral lines, so no line asks
+ * the user to try anything (PF4-F17).
+ */
+export function roomErrorMessage(code: string | null): string {
+  if (code !== null && ROOM_ERROR_CODES.has(code)) return buddyErrorMessage(code);
+  return code === 'try_later' || code === 'rate_limited' ? ROOM_COPY.errors.busy : ROOM_COPY.errors.unknown;
+}

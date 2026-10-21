@@ -82,12 +82,12 @@ it('a request id is never reused for another piece (P2 ruling 30)', async () => 
   expect(first).not.toBe(second);
 });
 
-it('a try-later answer reads the line to try again, and a retry sends again with a new id', async () => {
+it('a try-later answer reads the neutral busy line (FINAL-I2), and a retry sends again with a new id', async () => {
   (sendGift as jest.Mock).mockRejectedValueOnce(new ApiError(503, 'try_later', 'try_later')).mockResolvedValueOnce({ id: 'x', counts: { ...STARTER_COUNTS, 'plant.fern': 1 } });
   render(<GiftSendScreen />);
   fireEvent.press(screen.getByTestId('gift-spare-plant.fern'));
   await act(async () => { fireEvent.press(screen.getByTestId('gift-send')); });
-  expect(screen.getByTestId('gift-notice')).toHaveTextContent(/^Couldn't do that right now\./);
+  expect(screen.getByTestId('gift-notice')).toHaveTextContent("Couldn't do that just now.");
   expect(screen.getByTestId('gift-send').props.accessibilityState).toMatchObject({ disabled: false });
   await act(async () => { fireEvent.press(screen.getByTestId('gift-send')); });
   expect(screen.getByTestId('gift-notice')).toHaveTextContent('Sent the Fern to Maya.');

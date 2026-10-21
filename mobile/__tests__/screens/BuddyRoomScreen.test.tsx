@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen, within } from '@testing-library/react-n
 import { cheerBuddyRoom, fetchBuddyRoom } from '../../src/api/rooms';
 import { ApiError } from '../../src/api/client';
 import { fetchCosmetics } from '../../src/api/cosmetics';
+import { loadCoins } from '../../src/lib/coins/coinsStore';
 import { loadCosmetics, resetCosmetics } from '../../src/lib/room/cosmeticsStore';
 import { starterLayout } from '../../src/lib/room/layout';
 import { BuddyRoomScreen } from '../../src/screens/BuddyRoomScreen';
@@ -12,6 +13,7 @@ import { cosmeticsDTO } from '../../jest-mocks/cosmeticsFixture';
 jest.mock('../../src/components/room/RoomView', () => require('../../jest-mocks/RoomView'));
 jest.mock('../../src/api/rooms', () => ({ fetchBuddyRoom: jest.fn(), cheerBuddyRoom: jest.fn() }));
 jest.mock('../../src/api/cosmetics', () => ({ fetchCosmetics: jest.fn(), putCosmetics: jest.fn(), postCosmeticsSeen: jest.fn(), postRoomWelcomed: jest.fn() }));
+jest.mock('../../src/lib/coins/coinsStore', () => ({ ...jest.requireActual('../../src/lib/coins/coinsStore'), loadCoins: jest.fn(async () => null) }));
 const mockNav = { navigate: jest.fn(), goBack: jest.fn() };
 jest.mock('@react-navigation/native', () => ({ useNavigation: () => mockNav, useRoute: () => ({ params: { buddyId: 'b1', name: 'Maya' } }) }));
 
@@ -68,6 +70,8 @@ it('cheers once a day: the button turns into "Cheered today" and the count goes 
   expect(screen.getByTestId('visit-cheers')).toHaveTextContent('4 cheers this week');
   expect(screen.getByTestId('visit-note')).toHaveTextContent('Cheered! +2 coins');
   if (Platform.OS === 'ios') expect(say).toHaveBeenCalledWith('Cheered! Plus 2 coins');
+  // The +2 landed after the server's commit: the wallet reads afresh (FINAL-M1).
+  expect(loadCoins).toHaveBeenCalledWith({ fresh: true });
   say.mockRestore();
 });
 
@@ -81,14 +85,20 @@ it('a cheer past the day\'s paid cheers still counts, without the coins; a doubl
   expect(cheerBuddyRoom).toHaveBeenCalledTimes(1);
   expect(screen.getByTestId('visit-note')).toHaveTextContent(/^Cheered!$/);
   expect(screen.getByTestId('visit-cheers')).toHaveTextContent('4 cheers this week');
+  // Nothing was paid, so the wallet is not read.
+  expect(loadCoins).not.toHaveBeenCalled();
 });
 
 it('a room already cheered today shows as cheered; one cheered on open is cheered from the start', async () => {
   (cheerBuddyRoom as jest.Mock).mockRejectedValue(new ApiError(409, 'already_cheered', 'already_cheered'));
   await open();
+  // This tap's first try landed and its answer was lost: the server now counts it (FINAL-M2).
+  (fetchBuddyRoom as jest.Mock).mockResolvedValue({ ...BODY, cheersThisWeek: 4, cheeredToday: true });
   await act(async () => { fireEvent.press(screen.getByTestId('visit-cheer')); });
   expect(screen.getByTestId('visit-cheer')).toHaveTextContent('Cheered today');
-  expect(screen.getByTestId('visit-cheers')).toHaveTextContent('3 cheers this week');
+  // The room is read again, so the count holds the cheer that landed.
+  expect(fetchBuddyRoom).toHaveBeenCalledTimes(2);
+  expect(screen.getByTestId('visit-cheers')).toHaveTextContent('4 cheers this week');
   screen.unmount();
   await open({ ...BODY, cheeredToday: true, cheersThisWeek: 1 });
   expect(screen.getByTestId('visit-cheer')).toHaveTextContent('Cheered today');
@@ -110,11 +120,11 @@ it('every refusal is the one neutral closed room, never why: on open, and on a c
   expect(screen.queryByTestId('visit-room')).toBeNull();
 });
 
-it('a busy server on a cheer says to try again and leaves the cheer offered (503 try_later)', async () => {
+it('a busy server on a cheer reads the neutral busy line and leaves the cheer offered (503 try_later, FINAL-I2)', async () => {
   (cheerBuddyRoom as jest.Mock).mockRejectedValue(new ApiError(503, 'try_later', 'try_later'));
   await open();
   await act(async () => { fireEvent.press(screen.getByTestId('visit-cheer')); });
-  expect(screen.getByTestId('visit-note')).toHaveTextContent("Couldn't do that right now. Try again in a minute.");
+  expect(screen.getByTestId('visit-note')).toHaveTextContent("Couldn't do that just now.");
   expect(screen.getByTestId('visit-cheer')).toHaveTextContent("Cheer Maya's room");
   expect(screen.getByTestId('visit-cheer').props.accessibilityState).toMatchObject({ disabled: false });
 });

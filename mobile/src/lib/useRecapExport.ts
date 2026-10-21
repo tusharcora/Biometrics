@@ -47,5 +47,7 @@ export function useRecapExport({ dialogTitle }: { dialogTitle?: string } = {}) {
   const save = () => run(async (uri) => setNotice((await saveImage(uri)) === 'saved' ? 'saved' : 'denied'));
   // The recap screens pass no title, so their share call (and its default title) is unchanged.
   const share = () => run((uri) => (dialogTitle === undefined ? shareImage(uri) : shareImage(uri, dialogTitle)));
-  return { exportRef, busy, notice, save, share };
+  // A change to the card makes the last result line stale (the room's share card clears it on a switch).
+  const clear = () => setNotice(null);
+  return { exportRef, busy, notice, save, share, clear };
 }

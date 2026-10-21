@@ -418,7 +418,7 @@ describe('gifts and cheers on the room card (spec §10.2, §10.3; rulings 13, 14
     (openGift as jest.Mock).mockRejectedValueOnce(new ApiError(503, 'try_later', 'try_later')).mockRejectedValueOnce(new ApiError(404, 'gift_gone', 'gift_gone'));
     const s = await openKip();
     await act(async () => { fireEvent.press(s.getByTestId('gift-box-g1')); });
-    expect(s.getByTestId('room-gift-line')).toHaveTextContent(/^Couldn't do that right now\./);
+    expect(s.getByTestId('room-gift-line')).toHaveTextContent("Couldn't do that just now."); // FINAL-I2: the neutral busy line
     expect(s.getAllByTestId(/^gift-box-/)).toHaveLength(2);
     (fetchGifts as jest.Mock).mockResolvedValue({ gifts: [{ ...ivy, id: 'g3' }] });
     await act(async () => { fireEvent.press(s.getByTestId('gift-box-g1')); });

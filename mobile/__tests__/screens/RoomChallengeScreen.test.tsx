@@ -124,11 +124,11 @@ it('an entry refused because the week closed or has no theme reads the server ag
   expect(screen.getByTestId('challenge-note')).toHaveTextContent("This week's challenge has closed.");
 });
 
-it('a failed entry keeps Start my entry with a line, and 503 says to come back in a minute', async () => {
+it('a failed entry keeps Start my entry with a line, and a 503 reads the neutral busy line (FINAL-I2)', async () => {
   await open();
   (enterChallenge as jest.Mock).mockRejectedValue(new ApiError(503, 'x', 'try_later'));
   await act(async () => { fireEvent.press(screen.getByTestId('challenge-start')); });
-  expect(screen.getByTestId('challenge-note')).toHaveTextContent("Couldn't do that right now. Try again in a minute.");
+  expect(screen.getByTestId('challenge-note')).toHaveTextContent("Couldn't do that just now.");
   expect(screen.getByTestId('challenge-start').props.accessibilityState).toMatchObject({ disabled: false });
   (enterChallenge as jest.Mock).mockRejectedValue(new TypeError('Network request failed'));
   await act(async () => { fireEvent.press(screen.getByTestId('challenge-start')); });
@@ -168,10 +168,13 @@ it('never offers a cheer on your own entry, one already cheered, or after the cl
 it('a cheer answered 409 shows as cheered or closed, a 503 keeps the cheer to try again, a 404 reads the list again', async () => {
   await open(body({ entries: [ENTRY, { ...ENTRY, userId: 'b2', name: 'Jo' }] }));
   (cheerEntry as jest.Mock).mockRejectedValueOnce(new ApiError(409, 'x', 'already_cheered'));
+  // This tap's first try landed and its answer was lost: the server now counts it (FINAL-M2).
+  (fetchChallenge as jest.Mock).mockResolvedValue(body({ entries: [{ ...ENTRY, cheers: 3, cheeredByMe: true }, { ...ENTRY, userId: 'b2', name: 'Jo' }] }));
   await act(async () => { fireEvent.press(screen.getByTestId('entry-cheer-b1')); });
   expect(screen.getByTestId('entry-cheer-b1')).toHaveTextContent('Cheered');
-  // Cheered elsewhere: the count the server sent already holds it.
-  expect(screen.getByTestId('entry-cheers-b1')).toHaveTextContent('2 cheers');
+  // The list is read again, so the count holds the cheer that landed.
+  expect(fetchChallenge).toHaveBeenCalledTimes(2);
+  expect(screen.getByTestId('entry-cheers-b1')).toHaveTextContent('3 cheers');
   // A buddy whose own week closed first (EntryDTO has no closed flag): the 409 closes that entry only.
   (cheerEntry as jest.Mock).mockRejectedValueOnce(new ApiError(409, 'x', 'challenge_closed'));
   await act(async () => { fireEvent.press(screen.getByTestId('entry-cheer-b2')); });
@@ -185,7 +188,7 @@ it('a cheer that failed for a moment stays offered with a line; one for an entry
   await open();
   (cheerEntry as jest.Mock).mockRejectedValueOnce(new ApiError(503, 'x', 'try_later'));
   await act(async () => { fireEvent.press(screen.getByTestId('entry-cheer-b1')); });
-  expect(screen.getByTestId('challenge-note')).toHaveTextContent("Couldn't do that right now. Try again in a minute.");
+  expect(screen.getByTestId('challenge-note')).toHaveTextContent("Couldn't do that just now.");
   expect(screen.getByTestId('entry-cheer-b1').props.accessibilityState).toMatchObject({ disabled: false });
   expect(screen.getByTestId('entry-cheers-b1')).toHaveTextContent('2 cheers');
   (cheerEntry as jest.Mock).mockRejectedValueOnce(new ApiError(404, 'x', 'not_found'));
@@ -266,6 +269,25 @@ it('reads the challenge again when it regains focus, keeping what is shown if th
   expect(fetchChallenge).toHaveBeenCalledTimes(3);
   expect(screen.getByTestId('entry-cheers-b1')).toHaveTextContent('5 cheers');
   expect(screen.queryByTestId('challenge-failed')).toBeNull();
+});
+
+it('a focus read that started before a cheer never overwrites it when it lands after (FINAL-M7)', async () => {
+  await open();
+  const stale = deferred<unknown>();
+  (fetchChallenge as jest.Mock).mockReturnValueOnce(stale.promise);
+  await act(async () => { mockNav.focus!(); });
+  expect(fetchChallenge).toHaveBeenCalledTimes(2);
+  (cheerEntry as jest.Mock).mockResolvedValueOnce({ paid: false });
+  await act(async () => { fireEvent.press(screen.getByTestId('entry-cheer-b1')); });
+  expect(screen.getByTestId('entry-cheers-b1')).toHaveTextContent('3 cheers');
+  // The read began before the cheer: its answer predates it and is dropped.
+  await act(async () => { stale.resolve(body()); });
+  expect(screen.getByTestId('entry-cheers-b1')).toHaveTextContent('3 cheers');
+  expect(screen.getByTestId('entry-cheer-b1')).toHaveTextContent('Cheered');
+  // A read that starts after the cheer still lands.
+  (fetchChallenge as jest.Mock).mockResolvedValueOnce(body({ entries: [{ ...ENTRY, cheers: 6, cheeredByMe: true }] }));
+  await act(async () => { mockNav.focus!(); });
+  expect(screen.getByTestId('entry-cheers-b1')).toHaveTextContent('6 cheers');
 });
 
 it('a focus before the first read has landed reads nothing more', async () => {

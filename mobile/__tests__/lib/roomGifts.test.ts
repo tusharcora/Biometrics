@@ -31,6 +31,11 @@ it('a spare is a placeable piece owned twice with one not placed (ruling 11)', (
   expect(spareTiles({ ...STARTER_COUNTS, 'plant.fern': 2 }, two)).toEqual([]);
 });
 
+it('a trophy is never a spare, even two copies from a repeated theme (FINAL-M3)', () => {
+  expect(isoOf('corner.acorn')).toBeTruthy();
+  expect(spareTiles({ ...STARTER_COUNTS, 'corner.acorn': 2, 'plant.cactus': 2 }, starterLayout())).toEqual([{ itemId: 'plant.cactus', spare: 1 }]);
+});
+
 it('puts up to 3 boxes on free tiles of the front row, never on a piece, the chair or its exit tile (ruling 14)', () => {
   const layout = starterLayout();
   const tiles = giftTiles(layout, 1, 5);

@@ -17,6 +17,7 @@ import { EditToolbar } from '../components/edit/EditToolbar';
 import { WalletChip } from '../components/coins/WalletChip';
 import { InventoryDrawer } from '../components/edit/InventoryDrawer';
 import { PiecesList } from '../components/edit/PiecesList';
+import { loadCoins } from '../lib/coins/coinsStore';
 import { useMyKip } from '../lib/kip/myKip';
 import { GEOMETRY_DEPS } from '../lib/room/catalogue';
 import { effectSlotsFor, runningEffects } from '../lib/room/iso/geometry';
@@ -194,6 +195,8 @@ function Editor({ cosmetics, params, navigation }: { cosmetics: Cosmetics; param
       // answers 409 instead of being overwritten.
       const next = await saveCosmeticsLoadout({ layout: state.draft.layout, worn: state.draft.worn, version: state.baseVersion });
       dispatch({ type: 'saved', draft: { layout: next.layout, worn: next.worn }, version: next.version });
+      // A save can pay an open entry's +30 after its commit (spec 2026-10-15 §10.4): the wallet reads afresh (FINAL-M1).
+      void loadCoins({ fresh: true });
       leaving.current = true;
       navigation.goBack();
     } catch (err) {

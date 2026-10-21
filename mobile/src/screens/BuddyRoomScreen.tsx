@@ -10,9 +10,9 @@ import { ItemIcon } from '../components/room/ItemIcon';
 import { Button } from '../components/ui/button';
 import { PageTitle } from '../components/ui/page-title';
 import { Text } from '../components/ui/text';
-import { buddyErrorMessage } from '../lib/buddyCopy';
+import { loadCoins } from '../lib/coins/coinsStore';
 import { getCosmetics, loadCosmetics, useCosmetics } from '../lib/room/cosmeticsStore';
-import { ROOM_COPY, spokenName } from '../lib/room/roomCopy';
+import { ROOM_COPY, roomErrorMessage, spokenName } from '../lib/room/roomCopy';
 import { missingPieces, pieceInfo, readVisit, type RoomVisit } from '../lib/room/visit';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
@@ -79,15 +79,25 @@ export function BuddyRoomScreen() {
       const { paid } = await cheerBuddyRoom(buddyId);
       if (!mounted.current) return;
       cheered(1);
+      // The +2 landed after the server's commit: the wallet reads afresh (FINAL-M1).
+      if (paid) void loadCoins({ fresh: true });
       setNote(paid ? V.cheeredPaid : V.cheered);
       if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(paid ? V.cheeredPaidSpoken : V.cheered);
     } catch (e) {
       if (!mounted.current) return;
       const code = e instanceof ApiError ? e.code ?? null : null;
-      // Already cheered today (on another device): the count already holds it.
-      if (code === 'already_cheered') cheered(0);
-      else if (e instanceof ApiError && e.status === 404) setState({ status: 'closed' });
-      else setNote(buddyErrorMessage(code));
+      if (code === 'already_cheered') {
+        // Already cheered today: on another device, or this tap's first try landed and its answer was lost, so the
+        // shown count may not hold it. Shown as cheered, then the room is read again quietly (FINAL-M2).
+        cheered(0);
+        try {
+          const visit = readVisit(await fetchBuddyRoom(buddyId));
+          if (mounted.current) setState({ status: 'ready', visit });
+        } catch {
+          // Keeps what is shown.
+        }
+      } else if (e instanceof ApiError && e.status === 404) setState({ status: 'closed' });
+      else setNote(roomErrorMessage(code));
     } finally {
       inFlight.current = false;
       if (mounted.current) setBusy(false);

@@ -12,13 +12,14 @@ import type { ItemId } from './loadout';
 
 export interface Spare { itemId: ItemId; spare: number }
 
-/** Spares in catalogue order: owned ≥ 2 and owned − placed ≥ 1; you keep one, so at most owned − 1. */
+/** Spares in catalogue order: owned ≥ 2 and owned − placed ≥ 1; you keep one, so at most owned − 1. A trophy is never
+ * a spare, even a second copy from a repeated theme: it must mean you won it (ruling FINAL-M3, as the server refuses). */
 export function spareTiles(counts: Readonly<Record<ItemId, number>>, layout: RoomLayout): Spare[] {
   const placed = placedCounts(layout);
   return CATALOGUE.items.flatMap((i): Spare[] => {
     const owned = counts[i.id] ?? 0;
     const free = owned - (placed[i.id] ?? 0);
-    return i.iso && owned >= 2 && free >= 1 ? [{ itemId: i.id, spare: Math.min(owned - 1, free) }] : [];
+    return i.iso && i.unlock.kind !== 'prize' && owned >= 2 && free >= 1 ? [{ itemId: i.id, spare: Math.min(owned - 1, free) }] : [];
   });
 }
 

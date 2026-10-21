@@ -18,6 +18,7 @@ import { drawIsoStatic, pieceAt } from '../../src/lib/room/iso/room';
 import { starterLayout } from '../../src/lib/room/layout';
 import { EMPTY_WORN } from '../../src/lib/room/loadout';
 import { useDecorateOpen } from '../../src/lib/room/decorateOpen';
+import * as coinsStore from '../../src/lib/coins/coinsStore';
 import { resetCoins, setCoinBalance } from '../../src/lib/coins/coinsStore';
 import { cosmeticsDTO, STARTER_COUNTS } from '../../jest-mocks/cosmeticsFixture';
 
@@ -214,7 +215,14 @@ describe('Done and Cancel (Spec B §6.4 rulings, spec §5.3)', () => {
     select(s, 'plant');
     fireEvent.press(s.getByTestId('edit-flip'));
     (putCosmetics as jest.Mock).mockImplementation(async (body) => cosmeticsDTO({ layout: body.layout, version: 3 }));
-    await act(async () => { fireEvent.press(s.getByTestId('edit-done')); });
+    const coins = jest.spyOn(coinsStore, 'loadCoins').mockResolvedValue(null);
+    try {
+      await act(async () => { fireEvent.press(s.getByTestId('edit-done')); });
+      // A save can pay an open entry's +30 after its commit: the wallet reads afresh (FINAL-M1).
+      expect(coins).toHaveBeenCalledWith({ fresh: true });
+    } finally {
+      coins.mockRestore();
+    }
     expect(putCosmetics).toHaveBeenCalledWith(expect.objectContaining({ version: 2, worn: expect.any(Object), layout: expect.objectContaining({ v: 1 }) }));
     expect(mockNav.goBack).toHaveBeenCalledTimes(1);
     expect(getCosmetics()!.version).toBe(3);

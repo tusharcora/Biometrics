@@ -21,15 +21,17 @@ const TARGET = 'h-[44px]';
 const PAD = 16;
 const TEXT_ROOM = 120; // the card's title, size line and byline under and over the room
 const ASPECT = 1.25;
+// The card is an image with a fixed text band (TEXT_ROOM): Dynamic Type never grows its lines past it (FINAL-M6).
+const CARD_FONT_SCALE = 1;
 
 /** The card as the image shows it: the title, the room, the size line (spoken without "·" or "×") and the byline. */
 function Card({ width, height, lines, children }: { width: number; height: number; lines: ReturnType<typeof shareLines>; children: React.ReactNode }) {
   return (
     <View style={{ width, height, backgroundColor: '#0A0B0E', padding: PAD, gap: 8, borderRadius: 12 }}>
-      <Text className="font-pixel text-page-title text-white">{lines.title}</Text>
+      <Text maxFontSizeMultiplier={CARD_FONT_SCALE} className="font-pixel text-page-title text-white">{lines.title}</Text>
       {children}
-      <Text accessibilityLabel={lines.metaSpoken} className="text-caption tabular-nums text-white">{lines.meta}</Text>
-      {lines.byline ? <Text className="text-caption text-white">{lines.byline}</Text> : null}
+      <Text maxFontSizeMultiplier={CARD_FONT_SCALE} accessibilityLabel={lines.metaSpoken} className="text-caption tabular-nums text-white">{lines.meta}</Text>
+      {lines.byline ? <Text maxFontSizeMultiplier={CARD_FONT_SCALE} className="text-caption text-white">{lines.byline}</Text> : null}
     </View>
   );
 }
@@ -49,7 +51,10 @@ export function ShareRoomScreen() {
   const [name, setName] = useState<string | null>(null);
   const [showName, setShowName] = useState(false);
   const [waves, setWaves] = useState(true);
-  const { exportRef, busy, notice, save, share } = useRecapExport({ dialogTitle: S.dialog });
+  const { exportRef, busy, notice, save, share, clear } = useRecapExport({ dialogTitle: S.dialog });
+  // A switch changes the card, so the last Save or Share result no longer describes it (FINAL-M6).
+  const onShowName = (v: boolean) => { setShowName(v); clear(); };
+  const onWaves = (v: boolean) => { setWaves(v); clear(); };
   const headRef = useRef<RNText>(null);
   useEffect(() => {
     let live = true;
@@ -84,11 +89,11 @@ export function ShareRoomScreen() {
         <Card width={preview} height={preview * ASPECT} lines={lines}>{room(preview - 2 * PAD, preview * ASPECT - TEXT_ROOM, 'share-preview')}</Card>
         <View className="min-h-[44px] flex-row items-center justify-between gap-2">
           <Text className="shrink text-body">{S.showName}</Text>
-          <Switch testID="share-name" accessibilityLabel={S.showName} value={showName} onValueChange={setShowName} />
+          <Switch testID="share-name" accessibilityLabel={S.showName} value={showName} onValueChange={onShowName} />
         </View>
         <View className="min-h-[44px] flex-row items-center justify-between gap-2">
           <Text className="shrink text-body">{S.waves}</Text>
-          <Switch testID="share-waves" accessibilityLabel={S.waves} value={waves} onValueChange={setWaves} />
+          <Switch testID="share-waves" accessibilityLabel={S.waves} value={waves} onValueChange={onWaves} />
         </View>
         <Button testID="share-save" className={TARGET} disabled={busy} onPress={() => void save()}>{S.save}</Button>
         <Button testID="share-share" variant="outline" className={TARGET} disabled={busy} onPress={() => void share()}>{S.share}</Button>
@@ -96,7 +101,7 @@ export function ShareRoomScreen() {
         <Text className="text-caption text-muted-foreground">{S.footer}</Text>
       </ScrollView>
       {/* The export view: off-screen, 1080 px wide, the only thing captured (the recap card's pattern). */}
-      <View pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ position: 'absolute', left: -10000, top: 0 }}>
+      <View testID="share-export-wrap" pointerEvents="none" accessibilityElementsHidden importantForAccessibility="no-hide-descendants" style={{ position: 'absolute', left: -10000, top: 0 }}>
         <View ref={exportRef} collapsable={false}>
           <Card width={out.width} height={out.height} lines={lines}>{room(out.width - 2 * PAD, out.height - TEXT_ROOM, 'share-export')}</Card>
         </View>
