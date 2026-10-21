@@ -16,14 +16,18 @@ jest.mock('@react-navigation/native', () => ({
   DefaultTheme: { dark: false, colors: {}, fonts: {} },
   DarkTheme: { dark: true, colors: {}, fonts: {} },
 }));
-const mockOptions: Record<string, { title?: string }> = {};
+const mockOptions: Record<string, { title?: string; presentation?: string; headerShown?: boolean }> = {};
+const mockComponents: Record<string, unknown> = {};
 jest.mock('@react-navigation/native-stack', () => {
   const ReactLib = require('react');
   return {
     createNativeStackNavigator: () => ({
       Navigator: ({ initialRouteName, children }: any) => {
         const screens = ReactLib.Children.toArray(children);
-        for (const child of screens as any[]) mockOptions[child.props.name] = child.props.options ?? {};
+        for (const child of screens as any[]) {
+          mockOptions[child.props.name] = child.props.options ?? {};
+          mockComponents[child.props.name] = child.props.component;
+        }
         const match = screens.find((child: any) => child.props.name === initialRouteName);
         return match ? ReactLib.createElement(match.props.component) : null;
       },
@@ -57,5 +61,17 @@ describe('RootNavigator: KIP screen titles', () => {
 
     await waitFor(() => expect(getByText('TABS_SCREEN')).toBeTruthy());
     expect(mockOptions[name]?.title).toBe(title);
+  });
+});
+
+// Visit → Send a gift (T9-FIX carry) and the room card's cheers (spec 2026-10-15 §10.2, §10.3): both registered, as
+// sheets with their own Close button.
+describe('RootNavigator: the gift and cheers routes', () => {
+  it('registers GiftSend and RoomCheers with their screens, as modal sheets', async () => {
+    const { getByText } = render(<RootNavigator />);
+    await waitFor(() => expect(getByText('TABS_SCREEN')).toBeTruthy());
+    expect(mockComponents.GiftSend).toBe(require('../../src/screens/GiftSendScreen').GiftSendScreen);
+    expect(mockComponents.RoomCheers).toBe(require('../../src/screens/RoomCheersScreen').RoomCheersScreen);
+    expect([mockOptions.GiftSend?.presentation, mockOptions.RoomCheers?.presentation]).toEqual(['modal', 'modal']);
   });
 });

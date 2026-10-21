@@ -2,6 +2,7 @@ import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { AccessibilityInfo, ActivityIndicator, Platform, ScrollView, View, findNodeHandle, useWindowDimensions, type Text as RNText } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { ApiError } from '../api/client';
 import { cheerBuddyRoom, fetchBuddyRoom } from '../api/rooms';
 import { NeutralRoom } from '../components/room/NeutralRoom';
@@ -13,6 +14,7 @@ import { buddyErrorMessage } from '../lib/buddyCopy';
 import { getCosmetics, loadCosmetics, useCosmetics } from '../lib/room/cosmeticsStore';
 import { ROOM_COPY, spokenName } from '../lib/room/roomCopy';
 import { missingPieces, pieceInfo, readVisit, type RoomVisit } from '../lib/room/visit';
+import type { RootStackParamList } from '../navigation/RootNavigator';
 
 const V = ROOM_COPY.visit;
 type State = { status: 'loading' } | { status: 'ready'; visit: RoomVisit } | { status: 'closed' } | { status: 'error' };
@@ -24,7 +26,7 @@ type State = { status: 'loading' } | { status: 'ready'; visit: RoomVisit } | { s
 // cheer already given today shows as cheered; any other failure leaves the cheer offered with the reason's line. A
 // screen reader lands on the title; a cheer is announced (iOS) and shown in a live line (Android). Nothing is logged.
 export function BuddyRoomScreen() {
-  const navigation = useNavigation<any>();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'BuddyRoom'>>();
   const { buddyId, name: given } = (useRoute().params ?? {}) as { buddyId: string; name?: string };
   const { width } = useWindowDimensions();
   const mine = useCosmetics();

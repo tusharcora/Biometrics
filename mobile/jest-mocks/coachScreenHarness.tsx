@@ -15,6 +15,7 @@ import {
 import { streamCoachMessage } from '../src/api/coachStream';
 import { fetchScoresWithBands } from '../src/api/scores';
 import { fetchSleep } from '../src/api/sleep';
+import { fetchGifts, fetchRoomCheers } from '../src/api/rooms';
 import { useKeyboardVisible } from '../src/lib/useKeyboardVisible';
 import type { ThinkingTextId } from '../src/lib/thinkingText';
 import { CoachScreen } from '../src/screens/CoachScreen';
@@ -43,6 +44,13 @@ jest.mock('../src/api/coins', () => ({
   postCoinsSeen: jest.fn(async () => undefined),
   fetchFirstWeek: jest.fn(async () => ({ open: false })),
   fetchShop: jest.fn(), postPurchase: jest.fn(), postExpand: jest.fn(),
+}));
+// The room card reads the gifts on your floor and the week's cheers on focus (P4 Task 10): none unless a test says so.
+jest.mock('../src/api/rooms', () => ({
+  ...jest.requireActual('../src/api/rooms'),
+  fetchGifts: jest.fn(async () => ({ gifts: [] })),
+  fetchRoomCheers: jest.fn(async () => ({ count: 0, cheers: [] })),
+  openGift: jest.fn(),
 }));
 jest.mock('../src/components/room/RoomView', () => require('./RoomView'));
 
@@ -133,4 +141,6 @@ beforeEach(() => {
   (deleteCoachMemory as jest.Mock).mockResolvedValue(undefined);
   (fetchScoresWithBands as jest.Mock).mockResolvedValue({ scores: [], bands: undefined });
   (fetchSleep as jest.Mock).mockResolvedValue({ nights: [] });
+  (fetchGifts as jest.Mock).mockResolvedValue({ gifts: [] });
+  (fetchRoomCheers as jest.Mock).mockResolvedValue({ count: 0, cheers: [] });
 });

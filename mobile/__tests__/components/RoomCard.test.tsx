@@ -24,6 +24,8 @@ const RoomViewMock = jest.requireMock('../../src/components/room/RoomView');
 jest.mock('expo-secure-store');
 jest.mock('../../src/api/cosmetics', () => ({ fetchCosmetics: jest.fn(), putCosmetics: jest.fn(), postCosmeticsSeen: jest.fn(), postRoomWelcomed: jest.fn(async () => undefined) }));
 jest.mock('../../src/api/coins', () => ({ fetchCoins: jest.fn(), postCoinsSeen: jest.fn(async () => undefined), fetchFirstWeek: jest.fn(), fetchShop: jest.fn(), postPurchase: jest.fn(), postExpand: jest.fn() }));
+// The card reads the gifts on the floor and the week's cheers on focus (P4 Task 10): none here.
+jest.mock('../../src/api/rooms', () => ({ fetchGifts: jest.fn(async () => ({ gifts: [] })), fetchRoomCheers: jest.fn(async () => ({ count: 0, cheers: [] })), openGift: jest.fn() }));
 
 afterEach(() => { resetCosmetics(); resetMyKip(); resetCoins(); jest.clearAllMocks(); });
 

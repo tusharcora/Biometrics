@@ -48,6 +48,8 @@ import { PairUpScreen } from '../screens/PairUpScreen';
 import { BuddiesScreen } from '../screens/BuddiesScreen';
 import { BuddyWeekScreen } from '../screens/BuddyWeekScreen';
 import { BuddyRoomScreen } from '../screens/BuddyRoomScreen';
+import { GiftSendScreen } from '../screens/GiftSendScreen';
+import { RoomCheersScreen } from '../screens/RoomCheersScreen';
 import { HighlightsScreen } from '../screens/HighlightsScreen';
 import { CampfireScreen } from '../screens/CampfireScreen';
 import { ChatThreadScreen } from '../screens/ChatThreadScreen';
@@ -148,6 +150,10 @@ export type RootStackParamList = {
   BuddyWeek: { buddyId: string };
   /** A buddy's room, read-only (P4 ruling 21): from their week or their KIP in the chat header. */
   BuddyRoom: { buddyId: string; name?: string };
+  /** Send a buddy a spare piece (spec 2026-10-15 §10.3): the native sheet, from their room's Send a gift. */
+  GiftSend: { buddyId: string; name: string };
+  /** Who cheered your room this week (spec 2026-10-15 §10.2): the native sheet, from the KIP page's room card. */
+  RoomCheers: undefined;
   // Profile → Buddies: change your handle or display name.
   BuddyIdentity: undefined;
   // Profile → one category card: the settings section it holds.
@@ -291,6 +297,9 @@ export function RootNavigator() {
               {/* Full screen with no system swipe: Close is disabled while a grow waits on the server. */}
               <Stack.Screen name="RoomSizes" component={RoomSizesScreen} options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }} />
               <Stack.Screen name="PieceCard" component={PieceCardScreen} options={{ headerShown: false, presentation: 'modal' }} />
+              {/* Sheets with their own Close button (and the system's swipe and back). */}
+              <Stack.Screen name="GiftSend" component={GiftSendScreen} options={{ headerShown: false, presentation: 'modal' }} />
+              <Stack.Screen name="RoomCheers" component={RoomCheersScreen} options={{ headerShown: false, presentation: 'modal' }} />
               <Stack.Screen name="Recaps" component={RecapsScreen} options={{ title: 'Your recaps' }} />
               <Stack.Screen name="YearInPixels" component={YearInPixelsScreen} options={{ title: 'Year in pixels' }} />
               <Stack.Screen name="Badges" component={BadgesScreen} options={{ title: 'Badges' }} />

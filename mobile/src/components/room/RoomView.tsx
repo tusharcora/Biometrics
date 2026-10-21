@@ -1,4 +1,4 @@
-import React, { useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
+import React, { useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState, type Ref } from 'react';
 import { AccessibilityInfo, View, findNodeHandle } from 'react-native';
 import { Canvas, Group, Picture, Skia, type SkPicture } from '@shopify/react-native-skia';
 import { Text } from '../ui/text';
@@ -99,6 +99,8 @@ export interface RoomViewProps {
   /** The KIP page's room card: the cat may wander (spec §8.2); the view adds focus, Reduce Motion, the pause, the
    * collapsed header and the editor. */
   live?: boolean;
+  /** Tiles the cat and KIP keep off ("i,j" keys): the gift boxes over the KIP page's room (PF4-F8). */
+  avoid?: ReadonlySet<string>;
   bubble: string | null;
   reduceMotion: boolean;
   accessibilityLabel?: string;
@@ -174,14 +176,19 @@ export function RoomView(props: RoomViewProps) {
     () => ({ x: -offset.x / cellPt, y: -offset.y / cellPt, w: crop.width / cellPt, h: crop.height / cellPt }),
     [offset, crop.width, crop.height, cellPt],
   );
-  // The cats' tiles as last drawn, read when KIP plans a trip (it plans in a timer, after the commit).
+  // The cats' tiles as last drawn and the gift boxes', read when KIP plans a trip (it plans in a timer, after the
+  // commit).
   const catTiles = useRef<ReadonlySet<string>>(NO_KEYS);
-  const walk = useKipWalk({ enabled: !!props.kipWalks && !still && !bubble, layout, tier, effects, view, avoid: () => catTiles.current });
+  const avoid = props.avoid ?? NO_KEYS;
+  const boxTiles = useRef(avoid);
+  useEffect(() => { boxTiles.current = avoid; }, [avoid]);
+  const kipAvoid = useCallback(() => (boxTiles.current.size ? new Set([...catTiles.current, ...boxTiles.current]) : catTiles.current), []);
+  const walk = useKipWalk({ enabled: !!props.kipWalks && !still && !bubble, layout, tier, effects, view, avoid: kipAvoid });
   const walked = useMemo(() => walkMover(walk), [walk]);
   const kipMover = props.kipMover ?? walked;
   const walking = !!kipMover;
   // The cat stays on its own tile in the editor (spec §8.2) and while the card is out of sight (T5-FIX M1).
-  const catMovers = useCatWander({ enabled: !!props.live && !still && !props.holdClock && !props.editing, layout, tier, effects, view, waits: walking });
+  const catMovers = useCatWander({ enabled: !!props.live && !still && !props.holdClock && !props.editing, layout, tier, effects, view, waits: walking, avoid });
   useEffect(() => { catTiles.current = takenTiles(catMovers); }, [catMovers]);
   const pieceMovers = props.pieceMovers ?? catMovers;
   const moverKey = pieceMovers.map((m) => m.id).sort().join(',');

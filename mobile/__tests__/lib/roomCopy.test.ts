@@ -104,3 +104,15 @@ it('never gives health advice on a visit (PF4-F17): only the house "Try again" b
   for (const s of lines) expect(s).not.toMatch(/earned/i);
 });
 
+it('never gives health advice in the gift and cheer copy (PF4-F17), and its spoken lines carry no "·", "×" or "−"', () => {
+  const G = ROOM_COPY.gifts;
+  const lines = copyStrings(G);
+  expect(lines).toEqual(expect.arrayContaining(['Send fern a gift', 'From your spares', 'Thought of you', 'Send gift', 'Cheers on your room']));
+  expect(lines.length).toBeGreaterThan(20);
+  for (const s of lines) expect({ s, advises: advises(s) }).toEqual({ s, advises: false });
+  for (const s of [G.spareSpoken('Fern', 2), G.box('Maya'), G.box(null), G.cheersSpoken(2)]) expect(s).not.toMatch(/·|×|−/);
+  expect(G.notes).toEqual({ desk: 'For your desk', cosy: 'Cosy!', thought: 'Thought of you' });
+  // Earn-only: a gift is a piece you already own, never bought for it.
+  expect(lines.join(' ')).not.toMatch(/\$|buy|price|coin/i);
+});
+

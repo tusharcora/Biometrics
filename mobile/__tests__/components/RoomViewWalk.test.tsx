@@ -4,7 +4,7 @@ import { act, render } from '@testing-library/react-native';
 import { createPicture } from '@shopify/react-native-skia';
 import { RoomView, type RoomViewProps } from '../../src/components/room/RoomView';
 import * as isoRoom from '../../src/lib/room/iso/room';
-import { STEP_MS, TRIP_MIN_MS } from '../../src/lib/room/live/walk';
+import { STEP_MS, TRIP_MIN_MS, blockedTiles, standTileOf } from '../../src/lib/room/live/walk';
 import { EMPTY_WORN } from '../../src/lib/room/loadout';
 import { starterLayout } from '../../src/lib/room/layout';
 
@@ -38,6 +38,16 @@ beforeEach(() => {
 afterEach(() => { random.mockRestore(); jest.useRealTimers(); });
 
 describe('KIP walks in the room card (spec §9.2, ruling 13)', () => {
+  it('never walks onto a tile it is told to avoid, a gift box (PF4-F8): with the fern\'s tile taken it stays seated', () => {
+    const layout = starterLayout();
+    const fern = layout.pieces.find((p) => p.id === 'plant')!;
+    const stand = standTileOf(layout, fern, 1, blockedTiles(layout))!;
+    const s = render(<RoomView {...PROPS} avoid={new Set([`${stand[0]},${stand[1]}`])} />);
+    tick(TRIP_MIN_MS);
+    tick(STEP_MS);
+    expect(walking(s)).toBe(false);
+  });
+
   it('sits 20 s, walks to the fern recording nothing per step, waters it, walks back and sits', () => {
     const say = jest.spyOn(AccessibilityInfo, 'announceForAccessibility');
     const s = render(<RoomView {...PROPS} />);

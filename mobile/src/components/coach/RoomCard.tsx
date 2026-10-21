@@ -1,5 +1,7 @@
-import React, { useEffect, useRef, useState } from 'react';
-import { Pressable, View, type ViewProps } from 'react-native';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
+import { AccessibilityInfo, Platform, Pressable, View, type ViewProps } from 'react-native';
+import { ApiError } from '../../api/client';
+import { Button } from '../ui/button';
 import { Card } from '../ui/card';
 import { SectionLabel } from '../ui/section-label';
 import { Skeleton } from '../ui/skeleton';
@@ -7,18 +9,21 @@ import { Text } from '../ui/text';
 import { HotTag } from '../home/HotTag';
 import { RoomWelcomeCard } from './RoomWelcomeCard';
 import { RoomRadio } from '../room/RoomRadio';
+import { RoomGiftBoxes, giftBoxTiles } from '../room/RoomGiftBoxes';
 import { RoomView, type RoomViewHandle } from '../room/RoomView';
 import { useRoomEffects } from '../room/useRoomEffects';
 import { useCoinsLanding } from '../coins/useCoinsLanding';
 import { HOME_COPY } from '../../lib/homeCopy';
+import { buddyErrorMessage } from '../../lib/buddyCopy';
 import { useMyKip } from '../../lib/kip/myKip';
 import { KIP_COPY } from '../../lib/kipCopy';
 import { hotTagLabel, roomLabel, type KipStage } from '../../lib/kipStage';
 import { cardPieces, pieceTap } from '../../lib/room/card';
 import { markWelcomed, useCosmetics, useMyRoom } from '../../lib/room/cosmeticsStore';
 import { effectOf, type RoomEffects } from '../../lib/room/effects';
+import { loadRoomSocial, openGiftNow, useRoomSocial } from '../../lib/room/giftsStore';
 import type { RoomLayout } from '../../lib/room/iso/geometry';
-import { ROOM_COPY } from '../../lib/room/roomCopy';
+import { ROOM_COPY, itemName, spokenName } from '../../lib/room/roomCopy';
 import type { KipLook } from '../../lib/useKipTurn';
 import type { RoomWeather } from '../../lib/room/weather';
 import type { ScoreBand } from '../../lib/scoreInsights';
@@ -43,8 +48,10 @@ export function runsSound(layout: RoomLayout, effects: RoomEffects): boolean {
 // what it wears; `paused` stops its loops while the editor is open (Spec B ruling 17). Until the first-week welcome is
 // answered it sits under the frame and KIP says "WELCOME HOME!" (spec 2026-10-15 §11.1, plan ruling 18); both of its
 // buttons record it for every device. Coins that landed since the last look show once in KIP's bubble, with a line
-// under the room (spec 2026-10-15 §6.7).
-export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, holdCoins, holdClock, kipWalks, onOpenRecovery, onDecorate, onOpenPiece, onPlaceLantern, footer, children, onLayout }: {
+// under the room (spec 2026-10-15 §6.7). Gifts from buddies wait on the floor as boxes over the room, at most 3, and
+// a tap opens one into the inventory with NEW; a line says one came unless its sender is muted (spec §10.3, rulings
+// 13-14). This week's cheers on the room open who cheered (spec §10.2). Both are read on each focus.
+export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, holdCoins, holdClock, kipWalks, onOpenRecovery, onDecorate, onOpenPiece, onPlaceLantern, onOpenCheers, footer, children, onLayout }: {
   stage: KipStage;
   look?: KipLook;
   window: { weather: RoomWeather; night: boolean };
@@ -64,6 +71,8 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
   onOpenPiece?: (pieceId: string) => void;
   /** The welcome card's Place the lantern: opens the guided first placement (spec §11.1). */
   onPlaceLantern?: () => void;
+  /** The room's cheers this week (spec §10.2): who cheered. */
+  onOpenCheers?: () => void;
   footer?: React.ReactNode;
   /** Drawn last in the card: the first-week list (spec 2026-10-15 §11.2). */
   children?: React.ReactNode;
@@ -120,6 +129,44 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
     }
   }, [focused]);
   const landLine = landing ? ROOM_COPY.coins.landLine(ROOM_COPY.coins.landed[landing.kind], landing.more) : '';
+
+  // Gifts and cheers (spec §10.2, §10.3), read on each focus. The boxes' tiles are kept free of the cat and KIP
+  // (PF4-F8): the same tiles RoomGiftBoxes draws on.
+  const social = useRoomSocial();
+  const [giftLine, setGiftLine] = useState<{ text: string; spoken: string } | null>(null);
+  const [opening, setOpening] = useState(false);
+  useEffect(() => {
+    if (!focused) return;
+    // Back on the page, an old "is in your inventory" line has been read: the floor speaks for itself again.
+    setGiftLine(null);
+    void loadRoomSocial();
+  }, [focused]);
+  const boxCount = social.gifts.length;
+  const boxKey = giftBoxTiles(boxCount, layout, tier, inner, ROOM_FRAME_HEIGHT).map(([i, j]) => `${i},${j}`).join(';');
+  const avoid = useMemo(() => new Set(boxKey ? boxKey.split(';') : []), [boxKey]);
+  // A muted sender's gift arrives without a notice (ruling 13): its box shows, its line does not. The count is of the
+  // gifts that may say so (PF4 F27).
+  const loud = social.gifts.filter((g) => !g.quiet);
+  const arrived = loud.length > 1 ? ROOM_COPY.gifts.many(loud.length) : loud.length === 1 ? ROOM_COPY.gifts.arrived(loud[0]!.from?.name ?? null) : null;
+  const line = giftLine ?? (arrived ? { text: arrived, spoken: arrived } : null);
+  const say = (text: string, spoken = text) => {
+    setGiftLine({ text, spoken });
+    if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(spoken);
+  };
+  const openBox = async (id: string) => {
+    if (opening) return;
+    setOpening(true);
+    try {
+      const item = await openGiftNow(id);
+      if (item) say(ROOM_COPY.gifts.opened(itemName(item)), ROOM_COPY.gifts.opened(spokenName(item)));
+      else say(buddyErrorMessage('gift_gone'));
+    } catch (e) {
+      // try_later or offline: the box stays, and a tap tries again.
+      say(e instanceof ApiError ? buddyErrorMessage(e.code ?? null) : ROOM_COPY.gifts.openFailed);
+    } finally {
+      setOpening(false);
+    }
+  };
   return (
     <Card testID="kip-room-card" className="gap-3 p-3.5" onLayout={onLayout}>
       <View testID="kip-room-frame" style={{ borderWidth: 2, borderColor: WOOD_LINE, borderRadius: 4 }}>
@@ -167,7 +214,11 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
                   accessibilityLabel={roomLabel(stage.id, window)}
                   pieceActions={onOpenPiece ? cardPieces(layout, effects) : undefined}
                   onPieceAction={openPiece}
+                  avoid={avoid}
                 />
+              ) : null}
+              {stage.id !== 'loading' && inner > 0 ? (
+                <RoomGiftBoxes gifts={social.gifts} layout={layout} tier={tier} width={inner} height={ROOM_FRAME_HEIGHT} onOpen={(id) => void openBox(id)} busy={opening} />
               ) : null}
             </View>
           </Pressable>
@@ -208,6 +259,14 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
           onPress={onOpenRecovery}
         />
       </View>
+      {line ? (
+        <Text testID="room-gift-line" accessibilityLiveRegion="polite" accessibilityLabel={line.spoken} className="text-caption text-muted-foreground">{line.text}</Text>
+      ) : null}
+      {social.cheers > 0 && onOpenCheers ? (
+        <Button testID="room-cheers" variant="outline" className="h-[44px] self-start" accessibilityLabel={ROOM_COPY.gifts.cheersSpoken(social.cheers)} onPress={onOpenCheers}>
+          {ROOM_COPY.gifts.cheers(social.cheers)}
+        </Button>
+      ) : null}
       {footer}
       {children}
     </Card>
