@@ -10,12 +10,12 @@ import { blockedTiles, planTrip, standTileOf, tileKey } from '../../src/lib/room
 import { STARTER_COUNTS, cosmeticsDTO } from '../../jest-mocks/cosmeticsFixture';
 import { ApiError } from '../../src/api/client';
 import { fetchCosmetics } from '../../src/api/cosmetics';
-import { fetchGifts, fetchRoomCheers, openGift } from '../../src/api/rooms';
+import { fetchChallenge, fetchGifts, fetchRoomCheers, openGift } from '../../src/api/rooms';
 import { getCosmetics, loadCosmetics, resetCosmetics } from '../../src/lib/room/cosmeticsStore';
 import { loadRoomSocial, openGiftNow, resetRoomSocial, useRoomSocial } from '../../src/lib/room/giftsStore';
 import { act, renderHook } from '@testing-library/react-native';
 
-jest.mock('../../src/api/rooms', () => ({ fetchGifts: jest.fn(), fetchRoomCheers: jest.fn(), openGift: jest.fn() }));
+jest.mock('../../src/api/rooms', () => ({ fetchGifts: jest.fn(), fetchRoomCheers: jest.fn(), openGift: jest.fn(), fetchChallenge: jest.fn() }));
 jest.mock('../../src/api/cosmetics', () => ({ fetchCosmetics: jest.fn(), putCosmetics: jest.fn(), postCosmeticsSeen: jest.fn(), postRoomWelcomed: jest.fn() }));
 
 const DAY = { hhmm: '12:00', hour: 12 };
@@ -111,6 +111,7 @@ describe('the gifts store (spec §10.2, §10.3)', () => {
     resetCosmetics();
     (fetchCosmetics as jest.Mock).mockResolvedValue(cosmeticsDTO());
     (fetchRoomCheers as jest.Mock).mockResolvedValue({ count: 3, cheers: [] });
+    (fetchChallenge as jest.Mock).mockRejectedValue(new ApiError(404, 'not_found', 'not_found'));
     await loadCosmetics();
   });
 
@@ -122,7 +123,29 @@ describe('the gifts store (spec §10.2, §10.3)', () => {
     (fetchGifts as jest.Mock).mockRejectedValue(new ApiError(404, 'not_found', 'not_found'));
     (fetchRoomCheers as jest.Mock).mockRejectedValue(new ApiError(404, 'not_found', 'not_found'));
     await act(async () => { await loadRoomSocial(); });
-    expect(result.current).toEqual({ gifts: [], cheers: 0 });
+    expect(result.current).toEqual({ gifts: [], cheers: 0, challenge: null });
+  });
+
+  it('reads the week\'s challenge beside them (P4 Task 11): live only with a theme and open; a failed read keeps the last one and the gifts', async () => {
+    const theme = { id: 'cosyAutumn', tag: 'warm', atLeast: 3, themePiece: 'lamp.harvest', trophy: 'corner.acorn' };
+    const week = { week: '2026-W44', theme, closesAt: '2099-01-01T00:00:00.000Z', open: true, entry: { count: 2, meets: false, paid: false }, entries: [], results: null };
+    (fetchGifts as jest.Mock).mockResolvedValue({ gifts: [gift('g1')] });
+    (fetchChallenge as jest.Mock).mockResolvedValue(week);
+    const { result } = renderHook(() => useRoomSocial());
+    await act(async () => { await loadRoomSocial(); });
+    expect(result.current.challenge).toEqual({ live: true, themeId: 'cosyAutumn', entry: true });
+    (fetchChallenge as jest.Mock).mockResolvedValue({ ...week, open: false, entry: null });
+    await act(async () => { await loadRoomSocial(); });
+    expect(result.current.challenge).toEqual({ live: false, themeId: 'cosyAutumn', entry: false });
+    (fetchChallenge as jest.Mock).mockResolvedValue({ ...week, theme: null });
+    await act(async () => { await loadRoomSocial(); });
+    expect(result.current.challenge).toEqual({ live: false, themeId: null, entry: true });
+    (fetchChallenge as jest.Mock).mockResolvedValue(week);
+    await act(async () => { await loadRoomSocial(); });
+    (fetchChallenge as jest.Mock).mockRejectedValue(new ApiError(503, 'try_later', 'try_later'));
+    (fetchGifts as jest.Mock).mockResolvedValue({ gifts: [gift('g1'), gift('g2')] });
+    await act(async () => { await loadRoomSocial(); });
+    expect([result.current.gifts.length, result.current.challenge]).toEqual([2, { live: true, themeId: 'cosyAutumn', entry: true }]);
   });
 
   it('a read that started before an open never brings the opened gift back', async () => {
@@ -159,7 +182,7 @@ describe('the gifts store (spec §10.2, §10.3)', () => {
     slow.resolve({ counts: { ...STARTER_COUNTS, 'plant.ivy': 1 } });
     expect(await opening).toBeNull();
     const { result } = renderHook(() => useRoomSocial());
-    expect(result.current).toEqual({ gifts: [], cheers: 0 });
+    expect(result.current).toEqual({ gifts: [], cheers: 0, challenge: null });
     expect(getCosmetics()).toBeNull();
   });
 

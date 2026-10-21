@@ -5,6 +5,7 @@ import { State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 import { ApiError } from '../../src/api/client';
 import { fetchCosmetics, postCosmeticsSeen, putCosmetics } from '../../src/api/cosmetics';
+import { fetchChallenge } from '../../src/api/rooms';
 import { EDIT_CELL_PT, initialPan } from '../../src/components/edit/EditRoom';
 import { DecorateRoomScreen, EDIT_ROOM_HEIGHT, editRoomHeight, initialState } from '../../src/screens/DecorateRoomScreen';
 import { applyCosmeticsBody, applyPurchase, getCosmetics, loadCosmetics, markCosmeticsSeen, resetCosmetics } from '../../src/lib/room/cosmeticsStore';
@@ -25,6 +26,8 @@ jest.mock('../../src/components/room/RoomView', () => require('../../jest-mocks/
 jest.mock('../../src/api/scores', () => ({ ...jest.requireActual('../../src/api/scores'), fetchScoresWithBands: jest.fn(async () => ({ scores: [], bands: undefined })) }));
 jest.mock('../../src/api/sleep', () => ({ ...jest.requireActual('../../src/api/sleep'), fetchSleep: jest.fn(async () => ({ nights: [] })) }));
 jest.mock('../../src/api/cosmetics', () => ({ fetchCosmetics: jest.fn(), putCosmetics: jest.fn(), postCosmeticsSeen: jest.fn(async () => undefined), postRoomWelcomed: jest.fn(async () => undefined) }));
+// The challenge read for the theme tab (P4 Task 11): none unless a test says so, so the tabs stay as they were.
+jest.mock('../../src/api/rooms', () => ({ fetchChallenge: jest.fn(async () => { throw new Error('offline'); }) }));
 type RemoveEvent = { preventDefault: () => void; data: { action: unknown } };
 const mockListeners: Record<string, (e: RemoveEvent) => void> = {};
 const mockNav = {
@@ -432,6 +435,41 @@ describe('the drawer in the editor (spec §5.4)', () => {
     fireEvent.press(s.getByTestId('drawer-place'));
     expect(s.getByTestId('edit-count')).toHaveTextContent('8 / 40 in room');
     expect(s.getByTestId('edit-tool-line')).toHaveTextContent('Fern · on the floor');
+  });
+
+  describe('the theme tab (spec §5.4, §10.4; ruling 22)', () => {
+    const challenge = (over: object = {}) => ({ week: '2026-W44', theme: { id: 'cosyAutumn', tag: 'warm', atLeast: 3, themePiece: 'lamp.harvest', trophy: 'corner.acorn' }, closesAt: '2099-01-01T00:00:00.000Z', open: true, entry: { count: 2, meets: false, paid: false }, entries: [], results: null, ...over });
+    afterEach(() => { (fetchChallenge as jest.Mock).mockImplementation(async () => { throw new Error('offline'); }); });
+
+    it('while you have an open entry: named for the theme, with its checklist over the draft', async () => {
+      (fetchChallenge as jest.Mock).mockResolvedValue(challenge());
+      const s = await openEditor();
+      expect(s.getByTestId('drawer-tab-theme')).toHaveTextContent('Autumn');
+      expect(s.queryByTestId('drawer-checklist')).toBeNull();
+      fireEvent.press(s.getByTestId('drawer-tab-theme'));
+      expect(s.getByTestId('drawer-checklist')).toHaveTextContent('Warm pieces · 2 of 3');
+      expect(s.getByTestId('drawer-checklist').props.accessibilityLabel).toBe('Warm pieces, 2 of 3');
+      expect(s.getByTestId('drawer-tile-lamp.amber')).toBeTruthy();
+    });
+
+    it('no entry, a closed week or a failed read: no theme tab', async () => {
+      for (const c of [challenge({ entry: null }), challenge({ open: false })]) {
+        (fetchChallenge as jest.Mock).mockResolvedValue(c);
+        const s = await openEditor();
+        expect(s.queryByTestId('drawer-tab-theme')).toBeNull();
+        s.unmount();
+      }
+    });
+
+    it('opened from the challenge on the theme tab: All until the theme is known, then the theme tab (PF4 F28)', async () => {
+      let land!: (v: unknown) => void;
+      (fetchChallenge as jest.Mock).mockReturnValue(new Promise((r) => { land = r; }));
+      const s = await openEditor({ drawer: 'theme' });
+      expect(s.getByTestId('drawer-tab-all').props.accessibilityState.selected).toBe(true);
+      await act(async () => { land(challenge()); });
+      expect(s.getByTestId('drawer-tab-theme').props.accessibilityState.selected).toBe(true);
+      expect(s.getByTestId('drawer-checklist')).toHaveTextContent('Warm pieces · 2 of 3');
+    });
   });
 
   it('opens on New with the toasted piece picked when asked (spec §1 Toasts)', async () => {

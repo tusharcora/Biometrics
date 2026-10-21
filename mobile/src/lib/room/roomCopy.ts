@@ -1,6 +1,7 @@
 // Every string of KIP's room (spec 2026-10-14 KIP's room): item and set names, unlock lines (the Cat boards'
 // wording), decorate mode, the toasts. Spoken forms carry no "·" and no Roman numerals (ruling 19).
 import type { FirstWeekTaskKey } from '../../api/coins';
+import type { ThemeId } from '../../api/rooms';
 import type { AchievementsSnapshot } from '../achievementsStore';
 import type { AchievementFamilyName, SetId, UnlockRule } from './catalogue';
 import { CATALOGUE, catalogueSet } from './catalogue';
@@ -9,6 +10,12 @@ import type { ItemId } from './loadout';
 import type { RoomSlot, WornSlot } from './catalogue';
 
 const EARN = CATALOGUE.earnAmounts;
+
+/** A challenge theme's words (spec 2026-10-15 §10.4): its title, brief, drawer tab and the name of its pieces. */
+export interface ThemeWords { title: string; brief: string; tab: string; tagName: string }
+const buddiesIn = (n: number) => `${n} ${n === 1 ? 'buddy' : 'buddies'} in`;
+const daysLeftLine = (n: number) => (n <= 0 ? 'Last day' : `${n} ${n === 1 ? 'day' : 'days'} left`);
+const CHALLENGE_ENDS = 'Ends Sunday 20:00';
 
 export const ITEM_NAMES: Readonly<Record<ItemId, string>> = {
   'wall.plain': 'Plain slate', 'wall.dots': 'Dots', 'wall.stripes': 'Tinted stripes', 'wall.brick': 'Brick',
@@ -80,6 +87,11 @@ export function itemNameIn(id: ItemId, slot: RoomSlot | WornSlot): string {
 }
 export function spokenName(id: ItemId): string {
   return itemName(id).split(' · ').join(', ');
+}
+/** A challenge theme's words; a theme this build has no words for (a newer server's) reads neutral. */
+export function themeWords(id: string): ThemeWords {
+  const themes: Readonly<Record<string, ThemeWords>> = ROOM_COPY.challenge.themes;
+  return Object.prototype.hasOwnProperty.call(themes, id) ? themes[id]! : ROOM_COPY.challenge.unknownTheme;
 }
 
 function setRule(rule: UnlockRule): UnlockRule {
@@ -539,6 +551,75 @@ export const ROOM_COPY = {
     cheers: (n: number) => `${n} ${n === 1 ? 'cheer' : 'cheers'} this week`,
     cheersOpen: 'See who cheered your room',
     cheersSpoken: (n: number) => `${n} ${n === 1 ? 'cheer' : 'cheers'} this week. See who cheered your room`,
+  },
+  /**
+   * The weekly theme challenge (spec 2026-10-15 §10.4, C3). The server sends a theme's id; its words live here, and a
+   * theme this build has no words for reads as `unknownTheme`. The briefs' "Use n or more …" is the one advice-guard
+   * exemption besides "Try again" (PF4-F17). Spoken forms carry no "·" (PF4-F15).
+   */
+  challenge: {
+    open: 'Room challenge',
+    heading: 'Room challenge',
+    buddiesOnly: 'Buddies only',
+    head: 'Room challenge · Buddies only',
+    headSpoken: 'Room challenge, Buddies only',
+    themes: {
+      cosyAutumn: { title: 'Cosy autumn', brief: 'Use 3 or more warm pieces.', tab: 'Autumn', tagName: 'Warm pieces' },
+      greenThumb: { title: 'Green thumb', brief: 'Use 4 or more plants.', tab: 'Plants', tagName: 'Plants' },
+      nightOwl: { title: 'Night owl', brief: 'Use 3 or more pieces that glow.', tab: 'Glow', tagName: 'Glowing pieces' },
+      tidyDesk: { title: 'Tidy desk', brief: 'Use 3 or more desk pieces.', tab: 'Desk', tagName: 'Desk pieces' },
+    } satisfies Record<ThemeId, ThemeWords>,
+    unknownTheme: { title: "This week's theme", brief: "Build your room around this week's theme.", tab: 'Theme', tagName: 'Theme pieces' } satisfies ThemeWords,
+    how: 'Buddies cheer the rooms they like; the most-cheered room in your circle wins on Sunday.',
+    buddiesIn,
+    daysLeft: daysLeftLine,
+    ends: CHALLENGE_ENDS,
+    /** "5 buddies in · 3 days left · Ends Sunday 20:00" and its spoken form. */
+    tags: (buddies: number, days: number) => `${buddiesIn(buddies)} · ${daysLeftLine(days)} · ${CHALLENGE_ENDS}`,
+    tagsSpoken: (buddies: number, days: number) => `${buddiesIn(buddies)}, ${daysLeftLine(days)}, ${CHALLENGE_ENDS}`,
+    rewards: 'Rewards',
+    enter: `Enter: +${EARN.challenge} coins, once`,
+    enterSpoken: `Enter: plus ${EARN.challenge} coins, once`,
+    piece: (name: string) => `${name}: this week only, in the coin shop for 80`,
+    trophy: (name: string) => `${name}: the trophy for the most-cheered room, glows at night`,
+    consent: 'Your buddies will see your entry: a snapshot of your room, including its size.',
+    start: 'Start my entry',
+    snapshot: 'Your entry is a snapshot of your room on Sunday. Build as usual until then.',
+    entered: 'You entered',
+    paid: `+${EARN.challenge} coins`,
+    paidSpoken: `Plus ${EARN.challenge} coins`,
+    enteredPaid: `You entered · +${EARN.challenge} coins`,
+    enteredPaidSpoken: `You entered. Plus ${EARN.challenge} coins`,
+    enterFailed: "Couldn't start your entry just now.",
+    checklist: (tagName: string, n: number, of: number) => `${tagName} · ${n} of ${of}`,
+    checklistSpoken: (tagName: string, n: number, of: number) => `${tagName}, ${n} of ${of}`,
+    build: 'Build it in the editor',
+    entries: "Your buddies' entries",
+    entryLabel: (name: string) => `${name}'s entry`,
+    cheer: (name: string) => `Cheer ${name}'s entry`,
+    cheers: (n: number) => `${n} ${n === 1 ? 'cheer' : 'cheers'}`,
+    cheered: 'Cheered',
+    cheeredSpoken: (name: string) => `Cheered ${name}'s entry`,
+    cheeredPaid: `Cheered! +${EARN.cheer} coins`,
+    cheeredPaidSpoken: (name: string) => `Cheered ${name}'s entry. Plus ${EARN.cheer} coins`,
+    cheerFailed: "Couldn't send that cheer just now.",
+    entryClosed: 'Entry closed',
+    entryClosedLine: (name: string) => `${name}'s entry has closed.`,
+    entryGone: 'That entry is no longer there.',
+    closed: "This week's challenge has closed.",
+    none: "There's no room challenge this week.",
+    results: 'Last week',
+    won: (name: string) => `${name}'s room won`,
+    glow: 'The trophy glows on their floor at night',
+    youWon: 'Your room won! The trophy is in your inventory.',
+    /** A results row: the name and its cheers (ruling 28: names only). */
+    result: (name: string, n: number) => `${name} · ${n} ${n === 1 ? 'cheer' : 'cheers'}`,
+    resultSpoken: (name: string, n: number) => `${name}, ${n} ${n === 1 ? 'cheer' : 'cheers'}`,
+    unranked: 'Fewer than 3 entries: no ranking this week. Everyone who entered keeps the entry coins.',
+    youEntered: 'You entered',
+    failed: "Couldn't load the room challenge just now.",
+    retry: 'Try again',
+    close: 'Close',
   },
   welcome: {
     bubble: 'WELCOME HOME!',

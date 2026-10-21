@@ -495,6 +495,7 @@ export function CoachScreen() {
   const placeLantern = useCallback(() => navigation.navigate('DecorateRoom', { drawer: 'new', item: COACH_ITEM, coach: true }), [navigation]);
   // Who cheered your room this week (spec 2026-10-15 §10.2): the native sheet over this page.
   const openCheers = useCallback(() => navigation.navigate('RoomCheers'), [navigation]);
+  const openChallenge = useCallback(() => navigation.navigate('RoomChallenge'), [navigation]);
 
   const shrink = useCallback(() => {
     shrunkChosen.current = true;
@@ -531,6 +532,7 @@ export function CoachScreen() {
       onOpenPiece={openPiece}
       onPlaceLantern={placeLantern}
       onOpenCheers={openCheers}
+      onOpenChallenge={openChallenge}
       onLayout={(e) => {
         cardBottom.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height;
       }}

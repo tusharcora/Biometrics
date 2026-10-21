@@ -50,6 +50,7 @@ import { BuddyWeekScreen } from '../screens/BuddyWeekScreen';
 import { BuddyRoomScreen } from '../screens/BuddyRoomScreen';
 import { GiftSendScreen } from '../screens/GiftSendScreen';
 import { RoomCheersScreen } from '../screens/RoomCheersScreen';
+import { RoomChallengeScreen } from '../screens/RoomChallengeScreen';
 import { HighlightsScreen } from '../screens/HighlightsScreen';
 import { CampfireScreen } from '../screens/CampfireScreen';
 import { ChatThreadScreen } from '../screens/ChatThreadScreen';
@@ -154,6 +155,8 @@ export type RootStackParamList = {
   GiftSend: { buddyId: string; name: string };
   /** Who cheered your room this week (spec 2026-10-15 §10.2): the native sheet, from the KIP page's room card. */
   RoomCheers: undefined;
+  /** The weekly room challenge (spec 2026-10-15 §10.4; ruling 22): full screen, from the KIP page's room card. */
+  RoomChallenge: undefined;
   // Profile → Buddies: change your handle or display name.
   BuddyIdentity: undefined;
   // Profile → one category card: the settings section it holds.
@@ -300,6 +303,8 @@ export function RootNavigator() {
               {/* Sheets with their own Close button (and the system's swipe and back). */}
               <Stack.Screen name="GiftSend" component={GiftSendScreen} options={{ headerShown: false, presentation: 'modal' }} />
               <Stack.Screen name="RoomCheers" component={RoomCheersScreen} options={{ headerShown: false, presentation: 'modal' }} />
+              {/* Full screen with its own Close (PF4-F16), held with the back button while an entry or a cheer waits. */}
+              <Stack.Screen name="RoomChallenge" component={RoomChallengeScreen} options={{ headerShown: false, presentation: 'fullScreenModal', gestureEnabled: false }} />
               <Stack.Screen name="Recaps" component={RecapsScreen} options={{ title: 'Your recaps' }} />
               <Stack.Screen name="YearInPixels" component={YearInPixelsScreen} options={{ title: 'Year in pixels' }} />
               <Stack.Screen name="Badges" component={BadgesScreen} options={{ title: 'Badges' }} />

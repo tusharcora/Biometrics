@@ -45,12 +45,15 @@ jest.mock('../src/api/coins', () => ({
   fetchFirstWeek: jest.fn(async () => ({ open: false })),
   fetchShop: jest.fn(), postPurchase: jest.fn(), postExpand: jest.fn(),
 }));
-// The room card reads the gifts on your floor and the week's cheers on focus (P4 Task 10): none unless a test says so.
+// The room card reads the gifts on your floor, the week's cheers and the challenge on focus (P4 Tasks 10, 11): none
+// unless a test says so.
 jest.mock('../src/api/rooms', () => ({
   ...jest.requireActual('../src/api/rooms'),
   fetchGifts: jest.fn(async () => ({ gifts: [] })),
   fetchRoomCheers: jest.fn(async () => ({ count: 0, cheers: [] })),
   openGift: jest.fn(),
+  // No theme this week unless a test says so (P4 Task 11).
+  fetchChallenge: jest.fn(async () => ({ week: '2026-W43', theme: null, closesAt: null, open: false, entry: null, entries: [], results: null })),
 }));
 jest.mock('../src/components/room/RoomView', () => require('./RoomView'));
 

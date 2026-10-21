@@ -52,7 +52,7 @@ export function runsSound(layout: RoomLayout, effects: RoomEffects): boolean {
 // under the room (spec 2026-10-15 §6.7). Gifts from buddies wait on the floor as boxes over the room, at most 3, and
 // a tap opens one into the inventory with NEW; a line says one came unless its sender is muted (spec §10.3, rulings
 // 13-14). This week's cheers on the room open who cheered (spec §10.2). Both are read on each focus.
-export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, holdCoins, holdClock, kipWalks, onOpenRecovery, onDecorate, onOpenPiece, onPlaceLantern, onOpenCheers, footer, children, onLayout }: {
+export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, holdCoins, holdClock, kipWalks, onOpenRecovery, onDecorate, onOpenPiece, onPlaceLantern, onOpenCheers, onOpenChallenge, footer, children, onLayout }: {
   stage: KipStage;
   look?: KipLook;
   window: { weather: RoomWeather; night: boolean };
@@ -74,6 +74,8 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
   onPlaceLantern?: () => void;
   /** The room's cheers this week (spec §10.2): who cheered. */
   onOpenCheers?: () => void;
+  /** The weekly room challenge (spec §10.4; ruling 22), while a theme is live. */
+  onOpenChallenge?: () => void;
   footer?: React.ReactNode;
   /** Drawn last in the card: the first-week list (spec 2026-10-15 §11.2). */
   children?: React.ReactNode;
@@ -280,6 +282,11 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
       {social.cheers > 0 && onOpenCheers ? (
         <Button testID="room-cheers" variant="outline" className="h-[44px] self-start" accessibilityLabel={ROOM_COPY.gifts.cheersSpoken(social.cheers)} onPress={onOpenCheers}>
           {ROOM_COPY.gifts.cheers(social.cheers)}
+        </Button>
+      ) : null}
+      {social.challenge?.live && onOpenChallenge ? (
+        <Button testID="room-challenge" variant="outline" className="h-[44px] self-start" onPress={onOpenChallenge}>
+          {ROOM_COPY.challenge.open}
         </Button>
       ) : null}
       {footer}

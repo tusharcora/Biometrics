@@ -75,3 +75,13 @@ describe('RootNavigator: the gift and cheers routes', () => {
     expect([mockOptions.GiftSend?.presentation, mockOptions.RoomCheers?.presentation]).toEqual(['modal', 'modal']);
   });
 });
+
+// The weekly room challenge (spec 2026-10-15 §10.4; ruling 22): full screen, with its own Close (PF4-F16).
+describe('RootNavigator: the room challenge route', () => {
+  it('registers RoomChallenge with its screen, as a full-screen modal without a header', async () => {
+    const { getByText } = render(<RootNavigator />);
+    await waitFor(() => expect(getByText('TABS_SCREEN')).toBeTruthy());
+    expect(mockComponents.RoomChallenge).toBe(require('../../src/screens/RoomChallengeScreen').RoomChallengeScreen);
+    expect([mockOptions.RoomChallenge?.presentation, mockOptions.RoomChallenge?.headerShown]).toEqual(['fullScreenModal', false]);
+  });
+});

@@ -13,7 +13,7 @@ import { suggestedQuestions } from '../../src/lib/coachToday';
 import { resetCoins, setCoinBalance } from '../../src/lib/coins/coinsStore';
 import { fetchCoins, fetchFirstWeek } from '../../src/api/coins';
 import { TURN_FRAME_MS } from '../../src/lib/useKipTurn';
-import { fetchGifts, fetchRoomCheers, openGift } from '../../src/api/rooms';
+import { fetchChallenge, fetchGifts, fetchRoomCheers, openGift } from '../../src/api/rooms';
 import { fetchCosmetics } from '../../src/api/cosmetics';
 import { getCosmetics, loadCosmetics, resetCosmetics } from '../../src/lib/room/cosmeticsStore';
 import { resetRoomSocial } from '../../src/lib/room/giftsStore';
@@ -469,5 +469,36 @@ describe('gifts and cheers on the room card (spec §10.2, §10.3; rulings 13, 14
     await act(async () => { fireEvent.press(s.getByTestId('room-gift-waiting')); });
     expect(openGift).toHaveBeenLastCalledWith('g1');
     expect(s.queryByTestId('room-gift-waiting')).toBeNull();
+  });
+
+  describe('the room challenge', () => {
+    const none = { week: '2026-W43', theme: null, closesAt: null, open: false, entry: null, entries: [], results: null };
+    afterEach(() => { (fetchChallenge as jest.Mock).mockImplementation(async () => none); });
+
+    it('offers the room challenge while a theme is live, and not otherwise (ruling 22)', async () => {
+      const live = { week: '2026-W44', theme: { id: 'cosyAutumn', tag: 'warm', atLeast: 3, themePiece: 'lamp.harvest', trophy: 'corner.acorn' }, closesAt: '2099-01-01T00:00:00.000Z', open: true, entry: null, entries: [], results: null };
+      (fetchChallenge as jest.Mock).mockResolvedValue(live);
+      const s = await openKip();
+      fireEvent.press(s.getByTestId('room-challenge'));
+      expect(mockNavigate).toHaveBeenCalledWith('RoomChallenge');
+      s.unmount();
+      resetRoomSocial();
+      // Closed for the week, no theme, or an older server without the route: no button.
+      for (const off of [async () => ({ ...live, open: false }), async () => ({ ...live, theme: null }), async () => { throw new ApiError(404, 'x'); }]) {
+        (fetchChallenge as jest.Mock).mockImplementation(off);
+        const t = await openKip();
+        expect(t.queryByTestId('room-challenge')).toBeNull();
+        t.unmount();
+        resetRoomSocial();
+      }
+    });
+
+    it('a failed challenge read keeps the gifts and cheers on the card', async () => {
+      (fetchChallenge as jest.Mock).mockRejectedValue(new ApiError(503, 'try_later', 'try_later'));
+      (fetchRoomCheers as jest.Mock).mockResolvedValue({ count: 2, cheers: [] });
+      const s = await openKip();
+      expect(s.getByTestId('room-cheers')).toHaveTextContent('2 cheers this week');
+      expect(s.queryByTestId('room-challenge')).toBeNull();
+    });
   });
 });
