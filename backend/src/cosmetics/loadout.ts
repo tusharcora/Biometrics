@@ -181,7 +181,8 @@ export async function saveCosmetics(userId: string, body: unknown, now: Date, ra
   if ('status' in parsed) return { ok: false, failure: parsed };
   let tier: Tier = 1;
   let placedFirst = false;
-  let entryPay: { weekId: string; theme: Theme } | null = null;
+  // A holder, not a `let`: the transaction callback sets it, and a property is never narrowed to its initial null.
+  const entry: { pay: { weekId: string; theme: Theme } | null } = { pay: null };
   let failure: SaveFailure | null;
   try {
     failure = await prisma.$transaction(async (tx) => {
@@ -217,7 +218,7 @@ export async function saveCosmetics(userId: string, body: unknown, now: Date, ra
         placedFirst = first.count === 1;
       }
       // The entry is the room (P4 ruling 7): an open challenge entry takes this layout under the same lock.
-      entryPay = await snapshotOnSaveTx(tx, userId, parsed.layout, tier, challengeClock.now());
+      entry.pay = await snapshotOnSaveTx(tx, userId, parsed.layout, tier, challengeClock.now());
       return null;
     });
   } catch (err) {
@@ -230,8 +231,7 @@ export async function saveCosmetics(userId: string, body: unknown, now: Date, ra
   // The first placement's +10 lands at once (spec §11.2); a failure waits for the next GET /me/coins.
   if (placedFirst) await earnCoinsSafely(userId, now);
   // The entry's +30, after the commit, the first time it meets the brief (never throws).
-  const pay = entryPay as { weekId: string; theme: Theme } | null;
-  if (pay) await payEntryIfMet(userId, pay.weekId, parsed.layout, pay.theme, challengeClock.now());
+  if (entry.pay) await payEntryIfMet(userId, entry.pay.weekId, parsed.layout, entry.pay.theme, challengeClock.now());
   return { ok: true, dto: await readCosmetics(userId, now, { grant: false }) };
 }
 

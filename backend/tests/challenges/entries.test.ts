@@ -1,4 +1,4 @@
-// Weekly theme challenges (spec 2026-10-15 §10.4, §12; P4 rulings 4-7, 10; T5T7-GATE, PF4-F18).
+// Weekly theme challenges (spec 2026-10-15 §10.4, §12; P4 rulings 4-7, 10; T5T7-GATE, PF4-F18, T7-FIX).
 import { prisma } from '../../src/db/client';
 import { connection } from '../../src/sync/queue';
 import { migrateTestDb } from '../setupTestDb';
@@ -7,6 +7,7 @@ import { coinsConfig } from '../../src/coins/sources';
 import * as ledger from '../../src/coins/ledger';
 import { challengeClock, closesAt, resultsAt, weekOf } from '../../src/challenges/week';
 import { cheerEntry, enterChallenge, readChallenge } from '../../src/challenges/entries';
+import { cheerRoom } from '../../src/room/visit';
 import { api, buddyUser, pairUp } from '../buddies/helpers';
 import { authHeaderFor } from '../helpers/auth';
 import { piece, withPieces } from '../room/helpers';
@@ -279,4 +280,106 @@ it('the routes need a session, and the POSTs take the 32 KB parser (ruling 29)',
   } finally {
     challengeClock.now = CLOCK;
   }
+});
+
+describe('ruling T7-FIX', () => {
+  it('the save path reads nothing through the global client inside its transaction (I1)', async () => {
+    challengeClock.now = () => WED;
+    const u = await buddyUser();
+    const pal = await buddyUser();
+    await pairUp(u.id, pal.id);
+    await enterChallenge(u.id, WED);
+    await buyPumpkins(u.id);
+    // Every global-client read the snapshot could make, recorded while a transaction callback runs. The transaction's
+    // own client is a separate object, so its reads are not seen here.
+    let inTx = false;
+    const seen: string[] = [];
+    const real = prisma.$transaction.bind(prisma) as (...a: unknown[]) => Promise<unknown>;
+    const spies: jest.SpyInstance[] = [jest.spyOn(prisma, '$transaction').mockImplementation((async (...args: unknown[]) => {
+      inTx = true;
+      try {
+        return await real(...args);
+      } finally {
+        inTx = false;
+      }
+    }) as never)];
+    const watch = (name: string, delegate: object, method: string) => {
+      const original = (delegate as Record<string, (...a: unknown[]) => unknown>)[method]!;
+      spies.push(jest.spyOn(delegate as never, method as never).mockImplementation(((...a: unknown[]) => {
+        if (inTx) seen.push(name);
+        return original.apply(delegate, a);
+      }) as never));
+    };
+    watch('buddyPair.findMany', prisma.buddyPair, 'findMany');
+    watch('user.findUnique', prisma.user, 'findUnique');
+    watch('challengeEntry.findUnique', prisma.challengeEntry, 'findUnique');
+    watch('challengeEntry.updateMany', prisma.challengeEntry, 'updateMany');
+    try {
+      expect((await save(u.id, warm, 0)).status).toBe(200);
+    } finally {
+      spies.forEach((s) => s.mockRestore());
+      challengeClock.now = CLOCK;
+    }
+    expect(seen).toEqual([]);
+    const entry = await prisma.challengeEntry.findUniqueOrThrow({ where: { userId_weekId: { userId: u.id, weekId: '2026-W44' } } });
+    expect([entry.circle, entry.paidAt !== null]).toEqual([[pal.id], true]);
+  });
+
+  it('a +30 that failed just before the close is paid by a read after it, until the week\'s results (M5)', async () => {
+    const late = new Date('2026-11-01T19:59:00.000Z'); // a UTC entrant's last minute
+    const mondayEarly = new Date('2026-11-02T07:00:00.000Z'); // the next week, before Monday 08:00 UTC
+    const timeout = Object.assign(new Error('timeout'), { name: 'PrismaClientKnownRequestError', code: 'P2028' });
+    const entrants = [await buddyUser(), await buddyUser()];
+    for (const u of entrants) {
+      await buyPumpkins(u.id);
+      await prisma.cosmeticLoadout.create({ data: { userId: u.id, layout: warm as never, worn: { ...EMPTY_WORN }, version: 1 } });
+      const spy = jest.spyOn(ledger, 'applyCoinEvents').mockRejectedValueOnce(timeout).mockRejectedValueOnce(timeout);
+      const warn = jest.spyOn(console, 'warn').mockImplementation(() => {});
+      try {
+        expect((await enterChallenge(u.id, late)).entry?.paid).toBe(false);
+      } finally {
+        spy.mockRestore();
+        warn.mockRestore();
+      }
+    }
+    const [early, tooLate] = entrants as [{ id: string }, { id: string }];
+    await readChallenge(early.id, mondayEarly);
+    await readChallenge(tooLate.id, resultsAt('2026-W44'));
+    expect((await rowsOf(early.id)).map((r) => [r.sourceKey, r.amount])).toEqual([['challenge:2026-W44', 30]]);
+    expect(await rowsOf(tooLate.id)).toEqual([]);
+  });
+
+  it('a GET and a save at once pay the +30 once (M6)', async () => {
+    challengeClock.now = () => WED;
+    const u = await buddyUser();
+    try {
+      await buyPumpkins(u.id);
+      await enterChallenge(u.id, WED); // 2 warm pieces: not yet paid
+      const h = await authHeaderFor(u.id);
+      const [put, get] = await Promise.all([save(u.id, warm, 0), (await api()).get('/me/challenge').set(h)]);
+      expect([put.status, get.status]).toEqual([200, 200]);
+      await readChallenge(u.id, WED);
+    } finally {
+      challengeClock.now = CLOCK;
+    }
+    expect((await rowsOf(u.id)).filter((r) => r.kind === 'challenge').map((r) => r.amount)).toEqual([30]);
+    // The wallet holds what the rows say (the first placement's +10 rides along), so nothing was added twice.
+    const rows = await rowsOf(u.id);
+    expect((await prisma.coinWallet.findUniqueOrThrow({ where: { userId: u.id } })).balance).toBe(rows.reduce((n, r) => n + r.amount, 0));
+  });
+
+  it('the 5 paid cheers a day are shared by room cheers and entry cheers (M6)', async () => {
+    const fan = await buddyUser();
+    const rooms = await Promise.all(Array.from({ length: 5 }, () => buddyUser()));
+    const entrants = await Promise.all(Array.from({ length: 2 }, () => buddyUser()));
+    for (const u of [...rooms, ...entrants]) await pairUp(fan.id, u.id);
+    for (const r of rooms) await openRoom(r.id);
+    for (const e of entrants) await enterChallenge(e.id, WED);
+    for (const r of rooms.slice(0, 4)) expect(await cheerRoom(fan.id, r.id, WED)).toEqual({ paid: true });
+    expect(await cheerEntry(fan.id, entrants[0]!.id, WED)).toEqual({ paid: true }); // the fifth
+    expect(await cheerRoom(fan.id, rooms[4]!.id, WED)).toEqual({ paid: false });
+    expect(await cheerEntry(fan.id, entrants[1]!.id, WED)).toEqual({ paid: false });
+    const given = (await rowsOf(fan.id)).filter((r) => r.kind === 'cheer_given');
+    expect([given.length, given.filter((r) => r.amount > 0).length]).toEqual([7, 5]);
+  });
 });

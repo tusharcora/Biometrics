@@ -14,16 +14,16 @@ import type { ChallengeTag } from '../cosmetics/catalogue';
 import type { KipWornDTO } from '../cosmetics/worn';
 import { prisma } from '../db/client';
 import { BuddyError, UUID_RE, isUniqueViolation } from '../buddies/errors';
-import { findPair, isBlockedEitherWay } from '../buddies/pairs';
+import { blockedEitherWay, findPair, isBlockedEitherWay } from '../buddies/pairs';
 import { PERSON_SELECT, toPerson } from '../buddies/people';
 import { isRetryableTx } from '../lib/retryableTx';
 import { tierSize, type RoomLayout, type Tier } from '../room/geometry';
 import { lockRoom } from '../room/lock';
 import { readOwnedLayout } from '../room/visit';
 import { buddyIdsOf } from '../social/circle';
-import { blockedEitherWay, readResults, settleChallengesSafely, type ResultsDTO } from './judge';
+import { readResults, settleChallengesSafely, type ResultsDTO } from './judge';
 import { briefCount, meetsBrief, themeFor, type Theme, type ThemeId } from './themes';
-import { closesAt, weekOf } from './week';
+import { closesAt, previousWeek, resultsAt, weekOf } from './week';
 
 export interface Snapshot { layout: RoomLayout; size: { n: number; m: number } }
 export interface EntryDTO { userId: string; name: string; kipColour: string; kipWorn: KipWornDTO; snapshot: Snapshot; cheers: number; cheeredByMe: boolean; mine: boolean }
@@ -61,15 +61,15 @@ export async function payEntryIfMet(userId: string, weekId: string, layout: Room
 }
 
 /** Inside PUT /me/cosmetics' transaction, which holds the room lock: an open entry this week takes the saved layout and
- * the current circle. Answers what the caller pays after the commit, or null. `buddyIdsOf` reads through the global
- * client: a save never locks a pair row, so the read cannot wait on this transaction. */
+ * the current circle. Answers what the caller pays after the commit, or null. Every read goes through `tx` (ruling
+ * T7-FIX): a global-client read here would hold a second pool connection while the save holds its own. */
 export async function snapshotOnSaveTx(tx: Prisma.TransactionClient, userId: string, layout: RoomLayout, tier: Tier, now: Date): Promise<{ weekId: string; theme: Theme } | null> {
   const tz = await tzOf(tx, userId);
   const weekId = weekOf(now, tz);
   const theme = themeFor(weekId);
   if (!theme || now >= closesAt(weekId, tz)) return null;
   if (!(await tx.challengeEntry.findUnique({ where: { userId_weekId: { userId, weekId } }, select: { weekId: true } }))) return null;
-  const circle = await buddyIdsOf(userId);
+  const circle = await buddyIdsOf(userId, tx);
   const done = await tx.challengeEntry.updateMany({
     where: { userId, weekId },
     data: { snapshot: snapshotOf(layout, tier) as unknown as Prisma.InputJsonValue, circle },
@@ -97,6 +97,17 @@ export async function enterChallenge(userId: string, now: Date): Promise<Challen
   return readChallenge(userId, now);
 }
 
+/** This week's and last week's unpaid entries, until each week's results: a pay that failed just before the close is
+ * still paid (ruling T7-FIX). The snapshot froze at the close, so it met the brief while open. */
+async function retryEntryPays(userId: string, weekId: string, now: Date): Promise<void> {
+  const unpaid = await prisma.challengeEntry.findMany({ where: { userId, paidAt: null, weekId: { in: [weekId, previousWeek(weekId)] } }, select: { weekId: true, snapshot: true } });
+  for (const e of unpaid) {
+    const theme = themeFor(e.weekId);
+    const layout = (e.snapshot as unknown as Partial<Snapshot> | null)?.layout;
+    if (theme && layout && now < resultsAt(e.weekId)) await payEntryIfMet(userId, e.weekId, layout, theme, now);
+  }
+}
+
 export async function readChallenge(userId: string, now: Date): Promise<ChallengeDTO> {
   await settleChallengesSafely(userId, now);
   const tz = await tzOf(prisma, userId);
@@ -105,18 +116,13 @@ export async function readChallenge(userId: string, now: Date): Promise<Challeng
   const close = theme ? closesAt(weekId, tz) : null;
   const open = !!close && now < close;
   const buddies = await buddyIdsOf(userId);
-  let mineRow = await prisma.challengeEntry.findUnique({ where: { userId_weekId: { userId, weekId } }, select: { snapshot: true, paidAt: true } });
-  if (mineRow && open) {
-    // The circle is frozen at the close (ruling 6): rewritten on each read while open.
-    await prisma.challengeEntry.updateMany({ where: { userId, weekId }, data: { circle: buddies } });
-    // A +30 that failed after its save is paid by this read (ruling 7).
-    if (!mineRow.paidAt && theme) {
-      await payEntryIfMet(userId, weekId, (mineRow.snapshot as unknown as Snapshot).layout, theme, now);
-      mineRow = await prisma.challengeEntry.findUnique({ where: { userId_weekId: { userId, weekId } }, select: { snapshot: true, paidAt: true } });
-    }
-  }
+  // The circle is frozen at the close (ruling 6): rewritten on each read while open.
+  if (open) await prisma.challengeEntry.updateMany({ where: { userId, weekId }, data: { circle: buddies } });
+  // A +30 that failed after its save is paid by this read, up to the week's results (rulings 7, T7-FIX).
+  await retryEntryPays(userId, weekId, now);
+  const mineRow = await prisma.challengeEntry.findUnique({ where: { userId_weekId: { userId, weekId } }, select: { snapshot: true, paidAt: true } });
   // Entries are seen by buddies only, never anyone blocked either way (PF4-F18).
-  const hidden = await blockedEitherWay(userId);
+  const hidden = new Set(await blockedEitherWay(userId));
   const visible = buddies.filter((id) => !hidden.has(id));
   const rows = theme && visible.length ? await prisma.challengeEntry.findMany({ where: { weekId, userId: { in: visible } }, select: { userId: true, snapshot: true } }) : [];
   const [people, got, mineCheers] = await Promise.all([

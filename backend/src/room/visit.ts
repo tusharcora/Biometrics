@@ -10,7 +10,7 @@ import { COIN_TX_OPTIONS, cheerEarns, lockUsers, logEarned, writeEarnsTx, type C
 import { launchDayFor, paysOn } from '../coins/sources';
 import { prisma } from '../db/client';
 import { BuddyError, UUID_RE, isUniqueViolation } from '../buddies/errors';
-import { findPair, isBlockedEitherWay } from '../buddies/pairs';
+import { blockedEitherWay, findPair, isBlockedEitherWay } from '../buddies/pairs';
 import { PERSON_SELECT, toPerson } from '../buddies/people';
 import { roomOpen } from '../buddies/sharing';
 import { isRetryableTx } from '../lib/retryableTx';
@@ -68,16 +68,10 @@ export function weekDays(today: string): [string, string] {
   return [monday, shiftDate(monday, 6)];
 }
 
-/** Everyone this user blocked or was blocked by: their cheers are left out of every count and list (PF4-F18). */
-async function blockedEitherWay(db: Db, userId: string): Promise<string[]> {
-  const blocks = await db.buddyBlock.findMany({ where: { OR: [{ blockerId: userId }, { blockedId: userId }] }, select: { blockerId: true, blockedId: true } });
-  return blocks.map((b) => (b.blockerId === userId ? b.blockedId : b.blockerId));
-}
-
 /** This week's cheers on a room, in its owner's local ISO week, without anyone blocked either way (T6-CARRY). */
 async function cheersInWeek(db: Db, ownerId: string, ownerTz: string, now: Date): Promise<number> {
   const [from, to] = weekDays(localCivilDateOrUtc(now, ownerTz));
-  const hidden = await blockedEitherWay(db, ownerId);
+  const hidden = await blockedEitherWay(ownerId, db);
   return db.roomCheer.count({ where: { toId: ownerId, fromId: { notIn: hidden }, localDate: { gte: civilDateToUtcMidnight(from), lte: civilDateToUtcMidnight(to) } } });
 }
 
@@ -140,7 +134,7 @@ export async function cheerRoom(viewerId: string, ownerId: string, now: Date): P
 export async function listRoomCheers(userId: string, now: Date): Promise<{ count: number; cheers: Array<{ name: string; day: string }> }> {
   const [me, hidden] = await Promise.all([
     prisma.user.findUnique({ where: { id: userId }, select: { timezone: true } }),
-    blockedEitherWay(prisma, userId),
+    blockedEitherWay(userId),
   ]);
   const [from, to] = weekDays(localCivilDateOrUtc(now, me?.timezone ?? 'UTC'));
   const rows = await prisma.roomCheer.findMany({

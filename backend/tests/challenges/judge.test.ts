@@ -1,5 +1,6 @@
-// Results in your own circle (spec 2026-10-15 §10.4; P4 rulings 6, 28; PF4-F18).
+// Results in your own circle (spec 2026-10-15 §10.4; P4 rulings 6, 28; PF4-F18, T7-FIX).
 import { prisma } from '../../src/db/client';
+import { deleteUserAccount } from '../../src/users/deletion';
 import { connection } from '../../src/sync/queue';
 import { migrateTestDb } from '../setupTestDb';
 import { judgeCircle, readResults, settleChallenges } from '../../src/challenges/judge';
@@ -8,6 +9,7 @@ import { api, buddyUser, pairUp } from '../buddies/helpers';
 import { authHeaderFor } from '../helpers/auth';
 
 const CLOCK = challengeClock.now;
+const noop = { deleteSubscription: async () => {}, revokeToken: async () => {}, log: () => {} };
 beforeAll(() => migrateTestDb());
 afterAll(async () => {
   challengeClock.now = CLOCK;
@@ -122,4 +124,36 @@ it('GET /me/challenge answers last week\'s results in the body', async () => {
   } finally {
     challengeClock.now = CLOCK;
   }
+});
+
+describe('ruling T7-FIX', () => {
+  it('two judging reads at once grant the trophy once (M6)', async () => {
+    const [a] = await circleOf(3);
+    const judged = await Promise.all([settleChallenges(a!.id, AFTER), settleChallenges(a!.id, AFTER)]);
+    expect(judged.sort()).toEqual([0, 1]);
+    expect(await prisma.itemGrant.count({ where: { userId: a!.id, sourceKey: `prize:${W}` } })).toBe(1);
+  });
+
+  it('the judged outcome is stored: a circle member deleted later changes neither your rank nor your win (M2)', async () => {
+    const [a, b, c] = await circleOf(3, ['Ana', 'Ben', 'Cy']);
+    await cheers(W, b!.id, [a!.id, c!.id]);
+    await cheers(W, a!.id, [c!.id]);
+    expect(await settleChallenges(a!.id, AFTER)).toBe(1);
+    expect(await prisma.challengeEntry.findUniqueOrThrow({ where: { userId_weekId: { userId: a!.id, weekId: W } } })).toMatchObject({ ranked: true, won: false });
+    // Ben, the winner, leaves: two entries are left, and live Ana would now top an unranked circle.
+    await deleteUserAccount(b!.id, noop);
+    const res = await readResults(a!.id, AFTER);
+    expect(res).toMatchObject({ ranked: true, winners: [], you: { entered: true, won: false } });
+    expect(res!.entries.map((e) => e.name).sort()).toEqual(['Ana', 'Cy']);
+    expect(await prisma.itemGrant.count({ where: { userId: a!.id, sourceKey: `prize:${W}` } })).toBe(0);
+  });
+
+  it('a stored win stays a win after the circle shrinks below three (M2)', async () => {
+    const [a, b] = await circleOf(3, ['Ana', 'Ben', 'Cy']);
+    await cheers(W, a!.id, [b!.id]);
+    await settleChallenges(a!.id, AFTER);
+    await deleteUserAccount(b!.id, noop);
+    expect(await readResults(a!.id, AFTER)).toMatchObject({ ranked: true, winners: ['Ana'], you: { entered: true, won: true } });
+    expect(await prisma.itemGrant.count({ where: { userId: a!.id, sourceKey: `prize:${W}` } })).toBe(1);
+  });
 });

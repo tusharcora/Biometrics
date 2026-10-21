@@ -1308,6 +1308,9 @@ model ChallengeEntry {
   circle    Json      @default("[]")
   paidAt    DateTime?
   judgedAt  DateTime?
+  /// The judging's outcome, stored at judgedAt (ruling T7-FIX): a member deleted later never changes it.
+  ranked    Boolean?
+  won       Boolean?
   createdAt DateTime  @default(now())
   updatedAt DateTime  @updatedAt
 

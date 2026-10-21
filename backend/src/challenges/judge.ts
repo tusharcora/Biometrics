@@ -5,6 +5,7 @@
 // only, by name (ruling 28), without anyone you blocked or who blocked you (PF4-F18). Nothing is logged but a failure's
 // error name.
 import { prisma } from '../db/client';
+import { blockedEitherWay } from '../buddies/pairs';
 import { PERSON_SELECT, toPerson } from '../buddies/people';
 import { buddyIdsOf } from '../social/circle';
 import { themeFor, type ThemeId } from './themes';
@@ -29,25 +30,26 @@ async function circleCounts(weekId: string, ids: readonly string[]): Promise<Map
   return counts;
 }
 
-/** Everyone this user blocked or was blocked by (PF4-F18). */
-export async function blockedEitherWay(userId: string): Promise<Set<string>> {
-  const blocks = await prisma.buddyBlock.findMany({ where: { OR: [{ blockerId: userId }, { blockedId: userId }] }, select: { blockerId: true, blockedId: true } });
-  return new Set(blocks.map((b) => (b.blockerId === userId ? b.blockedId : b.blockerId)));
-}
-
-/** Judges this user's closed, unjudged entries (from Monday 08:00 UTC); answers how many were judged. */
+/** Judges this user's closed, unjudged entries (from Monday 08:00 UTC); answers how many this call judged. The
+ * outcome (ranked, won) is stored with judgedAt (ruling T7-FIX), so a member deleted later never changes it. Two
+ * reads at once: the conditional update decides which one judges, and only that one grants the trophy, in the same
+ * transaction. */
 export async function settleChallenges(userId: string, now: Date): Promise<number> {
   const open = await prisma.challengeEntry.findMany({ where: { userId, judgedAt: null }, select: { weekId: true, circle: true } });
   let judged = 0;
   for (const e of open) {
     if (now < resultsAt(e.weekId)) continue;
-    const { winners } = judgeCircle(await circleCounts(e.weekId, [userId, ...idsOf(e.circle)]));
+    const { ranked, winners } = judgeCircle(await circleCounts(e.weekId, [userId, ...idsOf(e.circle)]));
+    const won = winners.includes(userId);
     const trophy = themeFor(e.weekId)?.trophy;
-    if (trophy && winners.includes(userId)) {
-      await prisma.itemGrant.createMany({ data: [{ userId, itemId: trophy, qty: 1, sourceKey: `prize:${e.weekId}` }], skipDuplicates: true });
-    }
-    await prisma.challengeEntry.updateMany({ where: { userId, weekId: e.weekId, judgedAt: null }, data: { judgedAt: now } });
-    judged++;
+    const mine = await prisma.$transaction(async (tx) => {
+      const done = await tx.challengeEntry.updateMany({ where: { userId, weekId: e.weekId, judgedAt: null }, data: { judgedAt: now, ranked, won } });
+      if (done.count === 1 && won && trophy) {
+        await tx.itemGrant.createMany({ data: [{ userId, itemId: trophy, qty: 1, sourceKey: `prize:${e.weekId}` }], skipDuplicates: true });
+      }
+      return done.count === 1;
+    });
+    if (mine) judged++;
   }
   return judged;
 }
@@ -77,18 +79,22 @@ export async function readResults(userId: string, now: Date): Promise<ResultsDTO
   const me = await prisma.user.findUnique({ where: { id: userId }, select: { timezone: true } });
   const week = previousWeek(weekOf(now, me?.timezone ?? 'UTC'));
   if (now < resultsAt(week)) return null;
-  const mine = await prisma.challengeEntry.findUnique({ where: { userId_weekId: { userId, weekId: week } }, select: { circle: true } });
+  const mine = await prisma.challengeEntry.findUnique({ where: { userId_weekId: { userId, weekId: week } }, select: { circle: true, ranked: true, won: true } });
   const counts = await circleCounts(week, [userId, ...(mine ? idsOf(mine.circle) : await buddyIdsOf(userId))]);
   if (!counts.size) return null;
-  const hidden = await blockedEitherWay(userId);
+  const hidden = new Set(await blockedEitherWay(userId));
   const shown = [...counts].filter(([id]) => !hidden.has(id));
   const people = await prisma.user.findMany({ where: { id: { in: shown.map(([id]) => id) } }, select: PERSON_SELECT });
   const name = (id: string) => { const p = people.find((u) => u.id === id); return p ? toPerson(p).displayName : ''; };
-  const { ranked, winners } = judgeCircle(counts);
+  const live = judgeCircle(counts);
+  // Your own result is the stored one once judged (ruling T7-FIX); the live count only fills the rest.
+  const ranked = mine?.ranked ?? live.ranked;
+  const won = mine?.won ?? live.winners.includes(userId);
+  const others = live.winners.filter((id) => id !== userId && !hidden.has(id));
   return {
     week, themeId: themeFor(week)?.id ?? null, ranked,
-    winners: winners.filter((id) => !hidden.has(id)).map(name),
+    winners: (won ? [userId, ...others] : others).map(name),
     entries: shown.sort((x, y) => y[1] - x[1]).map(([id, n]) => ({ name: name(id), cheers: n, mine: id === userId })),
-    you: { entered: !!mine, won: winners.includes(userId) },
+    you: { entered: !!mine, won },
   };
 }
