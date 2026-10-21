@@ -11,7 +11,7 @@ import { Text } from '../components/ui/text';
 import { buddyErrorMessage } from '../lib/buddyCopy';
 import { isServerAnswer, newRequestId } from '../lib/coins/actions';
 import { useMyKip } from '../lib/kip/myKip';
-import { applyCounts, getCosmetics, loadCosmetics, useCosmetics } from '../lib/room/cosmeticsStore';
+import { applyCounts, cosmeticsSession, getCosmetics, loadCosmetics, useCosmetics } from '../lib/room/cosmeticsStore';
 import { spareTiles } from '../lib/room/gifts';
 import { ROOM_COPY, itemName, spokenName } from '../lib/room/roomCopy';
 import type { RootStackParamList } from '../navigation/RootNavigator';
@@ -37,19 +37,34 @@ export function GiftSendScreen() {
   const mounted = useRef(true);
   const requestId = useRef<{ id: string; itemId: string } | null>(null);
   const titleRef = useRef<RNText>(null);
+  // Opened before your cosmetics were read (as in the coin shop): read them; a failed read says so with Try again
+  // rather than spinning on (T10-FIX M3).
+  const [loadFailed, setLoadFailed] = useState(false);
+  const readPieces = () => {
+    setLoadFailed(false);
+    void loadCosmetics().then((c) => { if (mounted.current && !c) setLoadFailed(true); });
+  };
   useEffect(() => {
     mounted.current = true;
     const node = titleRef.current ? findNodeHandle(titleRef.current) : null;
     if (node) AccessibilityInfo.setAccessibilityFocus(node);
-    // Opened before your cosmetics were read (as in the coin shop): read them.
-    if (!getCosmetics()) void loadCosmetics();
+    if (!getCosmetics()) readPieces();
     return () => {
       mounted.current = false;
     };
-  }, []);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
   const spares = cosmetics ? spareTiles(cosmetics.counts, cosmetics.layout) : [];
+  // A picked piece that is no longer a spare (placed or sent elsewhere) is let go, and stays unpicked if it comes
+  // back (T10-FIX M5).
+  const spareKey = spares.map((s) => s.itemId).join(',');
+  useEffect(() => {
+    if (item && !spareKey.split(',').includes(item)) setItem(null);
+  }, [item, spareKey]);
+  const picked = item && spareKey.split(',').includes(item) ? item : null;
 
   async function send() {
+    // The piece picked as the spares are now.
+    const item = picked;
     if (!item || inFlight.current) return;
     inFlight.current = true;
     setBusy(true);
@@ -60,10 +75,12 @@ export function GiftSendScreen() {
       setNotice({ text, spoken });
       if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(spoken);
     };
+    // The account this send belongs to: an answer after a sign-out touches nothing (T10-FIX M2).
+    const at = cosmeticsSession();
     try {
       const { counts } = await sendGift(buddyId, requestId.current.id, item, note);
       requestId.current = null;
-      applyCounts(counts);
+      applyCounts(counts, at);
       if (!mounted.current) return;
       setItem(null);
       say(G.sent(itemName(item), name), G.sent(spokenName(item), name));
@@ -73,8 +90,8 @@ export function GiftSendScreen() {
       say(e instanceof ApiError ? buddyErrorMessage(e.code ?? null) : G.failed);
     } finally {
       inFlight.current = false;
-      // Whatever the answer, the counts are read again, so a stale spare never stays offered.
-      void loadCosmetics();
+      // Whatever the answer, the counts are read again, so a stale spare never stays offered (same account only).
+      if (at === cosmeticsSession()) void loadCosmetics();
       if (mounted.current) setBusy(false);
     }
   }
@@ -88,17 +105,24 @@ export function GiftSendScreen() {
       <ScrollView contentContainerStyle={{ padding: 16, paddingTop: 4, gap: 12 }}>
         <Text accessibilityRole="header" className="text-caption text-muted-foreground">{G.spares}</Text>
         {!cosmetics ? (
-          <ActivityIndicator testID="gift-loading" />
+          loadFailed ? (
+            <View testID="gift-load-failed" className="gap-3 rounded-lg border border-border bg-card p-4">
+              <Text className="text-body">{G.loadFailed}</Text>
+              <Button testID="gift-load-retry" variant="secondary" className="h-[44px] self-start" onPress={readPieces}>{G.retry}</Button>
+            </View>
+          ) : (
+            <ActivityIndicator testID="gift-loading" />
+          )
         ) : spares.length ? (
           <View className="flex-row flex-wrap gap-2">
             {spares.map((s) => (
               <Button
                 key={s.itemId}
                 testID={`gift-spare-${s.itemId}`}
-                variant={item === s.itemId ? 'default' : 'outline'}
+                variant={picked === s.itemId ? 'default' : 'outline'}
                 className="h-auto min-h-[64px] w-[72px] flex-col gap-1 rounded-lg p-1"
                 accessibilityLabel={G.spareSpoken(spokenName(s.itemId), s.spare)}
-                accessibilityState={{ selected: item === s.itemId }}
+                accessibilityState={{ selected: picked === s.itemId }}
                 disabled={busy}
                 onPress={() => setItem(s.itemId)}
               >
@@ -127,7 +151,7 @@ export function GiftSendScreen() {
             </Button>
           ))}
         </View>
-        <Button testID="gift-send" className="h-[44px]" disabled={!item || busy} onPress={() => void send()}>{G.send}</Button>
+        <Button testID="gift-send" className="h-[44px]" disabled={!picked || busy} onPress={() => void send()}>{G.send}</Button>
         <Text testID="gift-notice" accessibilityLiveRegion="polite" accessibilityLabel={notice?.spoken} className="text-caption text-muted-foreground">
           {notice?.text ?? ''}
         </Text>

@@ -27,9 +27,12 @@ it.each([1, 2, 3] as const)('tier %i: every box sits wholly inside the card, 44 
   }
 });
 
-it('while one opens, every box is disabled; with no gifts or no width it draws nothing', () => {
-  const s = render(<RoomGiftBoxes gifts={[gift('g1', 'Maya')]} layout={starterLayout()} tier={1} width={323} height={240} onOpen={jest.fn()} busy />);
-  expect(s.getByTestId('gift-box-g1').props.accessibilityState).toMatchObject({ disabled: true });
+it('while one opens, every box stays the touch\'s target but says busy and ignores presses (T10-FIX I2); with no gifts or no width it draws nothing', () => {
+  const onOpen = jest.fn();
+  const s = render(<RoomGiftBoxes gifts={[gift('g1', 'Maya')]} layout={starterLayout()} tier={1} width={323} height={240} onOpen={onOpen} busy />);
+  expect(s.getByTestId('gift-box-g1').props.accessibilityState).toMatchObject({ busy: true, disabled: false });
+  fireEvent.press(s.getByTestId('gift-box-g1'));
+  expect(onOpen).not.toHaveBeenCalled();
   s.rerender(<RoomGiftBoxes gifts={[]} layout={starterLayout()} tier={1} width={323} height={240} onOpen={jest.fn()} />);
   expect(s.queryAllByTestId(/^gift-box-/)).toHaveLength(0);
   s.rerender(<RoomGiftBoxes gifts={[gift('g1', 'Maya')]} layout={starterLayout()} tier={1} width={0} height={240} onOpen={jest.fn()} />);

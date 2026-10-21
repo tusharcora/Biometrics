@@ -107,3 +107,48 @@ it('closes with its own 44-pt Close button (PF4-F16)', () => {
   fireEvent.press(screen.getByTestId('gift-close'));
   expect(mockNav.goBack).toHaveBeenCalled();
 });
+
+it('a send answer that lands after sign-out publishes nothing into the next account (T10-FIX M2)', async () => {
+  const late = deferred<{ id: string; counts: Record<string, number> }>();
+  (sendGift as jest.Mock).mockReturnValueOnce(late.promise);
+  const s = render(<GiftSendScreen />);
+  fireEvent.press(screen.getByTestId('gift-spare-plant.fern'));
+  await act(async () => { fireEvent.press(screen.getByTestId('gift-send')); });
+  s.unmount();
+  // Signed out, and another account signed in with its own room read.
+  resetCosmetics();
+  (fetchCosmetics as jest.Mock).mockResolvedValue(cosmeticsDTO({ counts: { ...STARTER_COUNTS, 'plant.fern': 5 } }));
+  await act(async () => { await loadCosmetics(); });
+  // Any later read waits, so only the late answer could change what is shown.
+  (fetchCosmetics as jest.Mock).mockReturnValue(new Promise(() => {}));
+  await act(async () => { late.resolve({ id: 'x', counts: { ...STARTER_COUNTS, 'plant.fern': 1 } }); });
+  expect(getCosmetics()?.counts['plant.fern']).toBe(5);
+});
+
+it('a failed read of your pieces says so with Try again, never an endless spinner (T10-FIX M3)', async () => {
+  resetCosmetics();
+  (fetchCosmetics as jest.Mock).mockRejectedValueOnce(new Error('network'));
+  render(<GiftSendScreen />);
+  await act(async () => undefined);
+  expect(screen.queryByTestId('gift-loading')).toBeNull();
+  expect(screen.getByTestId('gift-load-failed')).toHaveTextContent(/^Couldn't load your pieces just now\./);
+  (fetchCosmetics as jest.Mock).mockResolvedValueOnce(cosmeticsDTO({ counts: { ...STARTER_COUNTS, 'plant.fern': 2 } }));
+  await act(async () => { fireEvent.press(screen.getByTestId('gift-load-retry')); });
+  expect(screen.queryByTestId('gift-load-failed')).toBeNull();
+  expect(screen.getByTestId('gift-spare-plant.fern')).toBeTruthy();
+});
+
+it('a picked piece that is no longer a spare is let go: Send is off, and it is not picked when it comes back (T10-FIX M5)', async () => {
+  render(<GiftSendScreen />);
+  fireEvent.press(screen.getByTestId('gift-spare-plant.fern'));
+  expect(screen.getByTestId('gift-send').props.accessibilityState).toMatchObject({ disabled: false });
+  // Placed on another device: the next read has no spare fern.
+  (fetchCosmetics as jest.Mock).mockResolvedValue(cosmeticsDTO({ counts: { ...STARTER_COUNTS, 'plant.fern': 1 }, version: 2 }));
+  await act(async () => { await loadCosmetics({ fresh: true }); });
+  expect(screen.queryByTestId('gift-spare-plant.fern')).toBeNull();
+  expect(screen.getByTestId('gift-send').props.accessibilityState).toMatchObject({ disabled: true });
+  (fetchCosmetics as jest.Mock).mockResolvedValue(cosmeticsDTO({ counts: { ...STARTER_COUNTS, 'plant.fern': 2 }, version: 3 }));
+  await act(async () => { await loadCosmetics({ fresh: true }); });
+  expect(screen.getByTestId('gift-spare-plant.fern').props.accessibilityState).toMatchObject({ selected: false });
+  expect(screen.getByTestId('gift-send').props.accessibilityState).toMatchObject({ disabled: true });
+});

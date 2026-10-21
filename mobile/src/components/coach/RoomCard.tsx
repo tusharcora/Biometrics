@@ -21,6 +21,7 @@ import { hotTagLabel, roomLabel, type KipStage } from '../../lib/kipStage';
 import { cardPieces, pieceTap } from '../../lib/room/card';
 import { markWelcomed, useCosmetics, useMyRoom } from '../../lib/room/cosmeticsStore';
 import { effectOf, type RoomEffects } from '../../lib/room/effects';
+import { MAX_BOXES } from '../../lib/room/gifts';
 import { loadRoomSocial, openGiftNow, useRoomSocial } from '../../lib/room/giftsStore';
 import type { RoomLayout } from '../../lib/room/iso/geometry';
 import { ROOM_COPY, itemName, spokenName } from '../../lib/room/roomCopy';
@@ -135,6 +136,8 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
   const social = useRoomSocial();
   const [giftLine, setGiftLine] = useState<{ text: string; spoken: string } | null>(null);
   const [opening, setOpening] = useState(false);
+  // `opening` disables only after a re-render; two taps in one frame open once (T10-FIX M1).
+  const inFlight = useRef(false);
   useEffect(() => {
     if (!focused) return;
     // Back on the page, an old "is in your inventory" line has been read: the floor speaks for itself again.
@@ -142,7 +145,12 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
     void loadRoomSocial();
   }, [focused]);
   const boxCount = social.gifts.length;
-  const boxKey = giftBoxTiles(boxCount, layout, tier, inner, ROOM_FRAME_HEIGHT).map(([i, j]) => `${i},${j}`).join(';');
+  const boxTiles = giftBoxTiles(boxCount, layout, tier, inner, ROOM_FRAME_HEIGHT);
+  const boxKey = boxTiles.map(([i, j]) => `${i},${j}`).join(';');
+  // Fewer free tiles in view than boxes due (a full room, a narrow card): the gifts with no box wait behind one
+  // button that opens the next of them, a muted sender's too, so every gift can be opened (T10-FIX I1).
+  const roomShown = stage.id !== 'loading' && inner > 0;
+  const boxless = roomShown && boxTiles.length < Math.min(boxCount, MAX_BOXES) ? social.gifts.slice(boxTiles.length) : [];
   const avoid = useMemo(() => new Set(boxKey ? boxKey.split(';') : []), [boxKey]);
   // A muted sender's gift arrives without a notice (ruling 13): its box shows, its line does not. The count is of the
   // gifts that may say so (PF4 F27).
@@ -154,7 +162,8 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
     if (Platform.OS === 'ios') AccessibilityInfo.announceForAccessibility(spoken);
   };
   const openBox = async (id: string) => {
-    if (opening) return;
+    if (inFlight.current) return;
+    inFlight.current = true;
     setOpening(true);
     try {
       const item = await openGiftNow(id);
@@ -164,6 +173,7 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
       // try_later or offline: the box stays, and a tap tries again.
       say(e instanceof ApiError ? buddyErrorMessage(e.code ?? null) : ROOM_COPY.gifts.openFailed);
     } finally {
+      inFlight.current = false;
       setOpening(false);
     }
   };
@@ -217,7 +227,7 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
                   avoid={avoid}
                 />
               ) : null}
-              {stage.id !== 'loading' && inner > 0 ? (
+              {roomShown ? (
                 <RoomGiftBoxes gifts={social.gifts} layout={layout} tier={tier} width={inner} height={ROOM_FRAME_HEIGHT} onOpen={(id) => void openBox(id)} busy={opening} />
               ) : null}
             </View>
@@ -261,6 +271,11 @@ export function RoomCard({ stage, look, window, recovery, reduceMotion, paused, 
       </View>
       {line ? (
         <Text testID="room-gift-line" accessibilityLiveRegion="polite" accessibilityLabel={line.spoken} className="text-caption text-muted-foreground">{line.text}</Text>
+      ) : null}
+      {boxless.length ? (
+        <Button testID="room-gift-waiting" variant="outline" className="h-[44px] self-start" disabled={opening} onPress={() => void openBox(boxless[0]!.id)}>
+          {ROOM_COPY.gifts.waiting(boxless.length)}
+        </Button>
       ) : null}
       {social.cheers > 0 && onOpenCheers ? (
         <Button testID="room-cheers" variant="outline" className="h-[44px] self-start" accessibilityLabel={ROOM_COPY.gifts.cheersSpoken(social.cheers)} onPress={onOpenCheers}>

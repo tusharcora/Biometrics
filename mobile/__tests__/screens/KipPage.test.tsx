@@ -342,9 +342,9 @@ describe('gifts and cheers on the room card (spec §10.2, §10.3; rulings 13, 14
     await act(async () => { await loadCosmetics(); });
   });
   afterEach(() => { resetRoomSocial(); resetCosmetics(); });
-  const openKip = async () => {
+  const openKip = async (width = 323) => {
     const s = await openChat();
-    fireEvent(s.getByTestId('kip-room-frame-inner'), 'layout', { nativeEvent: { layout: { width: 323, height: 240, x: 0, y: 0 } } });
+    fireEvent(s.getByTestId('kip-room-frame-inner'), 'layout', { nativeEvent: { layout: { width, height: 240, x: 0, y: 0 } } });
     await act(async () => undefined);
     return s;
   };
@@ -369,7 +369,9 @@ describe('gifts and cheers on the room card (spec §10.2, §10.3; rulings 13, 14
     expect(s.getAllByTestId(/^gift-box-/)).toHaveLength(1);
   });
 
-  it('a tap on a box opens the gift, never the piece behind it; a tap on the room still opens that piece (the P3 tap path)', async () => {
+  // Jest only: fireEvent.press reaches the box's own handler. On a device the box is a nested Pressable over the room
+  // and should win the responder; that stays an owner device check (T10-FIX M4).
+  it('in Jest, a tap on a box opens the gift, never the piece behind it; a tap on the room still opens that piece (the P3 tap path, Jest only)', async () => {
     (fetchGifts as jest.Mock).mockResolvedValue({ gifts: [ivy] });
     (openGift as jest.Mock).mockResolvedValue({ counts: { ...STARTER_COUNTS, 'plant.ivy': 1 } });
     // Whatever the room finds under a finger (a piece, the cat or KIP passing by), it is the fern.
@@ -429,5 +431,43 @@ describe('gifts and cheers on the room card (spec §10.2, §10.3; rulings 13, 14
     (fetchGifts as jest.Mock).mockResolvedValue({ gifts: [ivy, fern] });
     const s = await openKip();
     expect(JSON.parse(s.getByTestId('kip-room').props.avoid as string)).toHaveLength(2);
+  });
+
+  it('a press on a box while a gift opens never reaches the room under it (T10-FIX I2)', async () => {
+    (fetchGifts as jest.Mock).mockResolvedValue({ gifts: [ivy, { ...ivy, id: 'g3' }] });
+    let finish!: (v: { counts: Record<string, number> }) => void;
+    (openGift as jest.Mock).mockReturnValueOnce(new Promise((r) => { finish = r; }));
+    const pieceAt = jest.fn(() => 'plant');
+    jest.requireMock('../../src/components/room/RoomView').__setPieceAt(pieceAt);
+    try {
+      const s = await openKip();
+      await act(async () => { fireEvent.press(s.getByTestId('gift-box-g1')); });
+      await act(async () => { fireEvent.press(s.getByTestId('gift-box-g3')); });
+      await act(async () => { fireEvent.press(s.getByTestId('gift-box-g1')); });
+      expect(openGift).toHaveBeenCalledTimes(1);
+      expect(pieceAt).not.toHaveBeenCalled();
+      expect(mockNavigate).not.toHaveBeenCalledWith('PieceCard', expect.anything());
+      await act(async () => { finish({ counts: { ...STARTER_COUNTS, 'plant.ivy': 1 } }); });
+    } finally {
+      jest.requireMock('../../src/components/room/RoomView').__setPieceAt(() => null);
+    }
+  });
+
+  it('with no free tile in view every gift can still be opened, a quiet one too, by the waiting button (T10-FIX I1)', async () => {
+    (fetchGifts as jest.Mock).mockResolvedValue({ gifts: [fern, ivy] });
+    (openGift as jest.Mock).mockResolvedValue({ counts: { ...STARTER_COUNTS, 'plant.fern': 2 } });
+    // A card narrower than a box: no tile's 44-pt box fits in view.
+    const s = await openKip(40);
+    expect(s.queryAllByTestId(/^gift-box-/)).toHaveLength(0);
+    const waiting = s.getByTestId('room-gift-waiting');
+    expect(waiting).toHaveTextContent('2 gifts waiting. Open one');
+    expect(waiting.props.accessibilityLabel ?? '').not.toMatch(/Jo|Maya/);
+    // The next one is the quiet gift from a muted sender: it is still reachable.
+    await act(async () => { fireEvent.press(waiting); });
+    expect(openGift).toHaveBeenLastCalledWith('g2');
+    expect(s.getByTestId('room-gift-waiting')).toHaveTextContent('1 gift waiting. Open one');
+    await act(async () => { fireEvent.press(s.getByTestId('room-gift-waiting')); });
+    expect(openGift).toHaveBeenLastCalledWith('g1');
+    expect(s.queryByTestId('room-gift-waiting')).toBeNull();
   });
 });

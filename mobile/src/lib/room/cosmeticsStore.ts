@@ -69,6 +69,11 @@ export function getCosmetics(): Cosmetics | null {
   return cosmetics;
 }
 
+/** The sign-in this store is on: taken before a request, so its answer lands only in the same account. */
+export function cosmeticsSession(): number {
+  return session;
+}
+
 // The read in flight and the epoch it started in: loads started in the same epoch share it (sign-in starts two).
 let inflight: { at: number; read: Promise<Cosmetics | null> } | null = null;
 
@@ -129,9 +134,11 @@ export function applyPurchase(itemId: ItemId, counts: Readonly<Record<string, nu
 
 /**
  * The server's counts after a gift was sent (spec §10.3: the sender's count drops at once). A gift is always a spare,
- * so you still own the piece, and nothing turns NEW.
+ * so you still own the piece, and nothing turns NEW. `at` is cosmeticsSession() from before the request: an answer
+ * that lands after a sign-out publishes nothing (T10-FIX M2).
  */
-export function applyCounts(counts: Readonly<Record<string, number>>): void {
+export function applyCounts(counts: Readonly<Record<string, number>>, at: number): void {
+  if (at !== session) return;
   epoch++;
   if (!cosmetics) return;
   publish({ ...cosmetics, counts: { ...counts } });

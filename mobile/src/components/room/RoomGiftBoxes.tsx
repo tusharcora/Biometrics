@@ -43,9 +43,11 @@ export function RoomGiftBoxes({ gifts, layout, tier, width, height, onOpen, busy
               variant="ghost"
               size="icon-lg"
               className="size-[44px]"
-              disabled={busy}
+              // Busy, it stays enabled and ignores the press: a disabled box would let the touch fall through to the
+              // room under it, which would read the box's own coordinates as a tap on a piece (T10-FIX I2).
+              accessibilityState={{ busy }}
               accessibilityLabel={ROOM_COPY.gifts.box(gift.from?.name ?? null)}
-              onPress={() => onOpen(gift.id)}
+              onPress={() => { if (!busy) onOpen(gift.id); }}
             >
               <Svg width={24} height={24} viewBox="0 0 12 12" accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
                 {BOX.map(([bx, by, w, h, fill], i) => <Rect key={i} x={bx} y={by} width={w} height={h} fill={fill} />)}
