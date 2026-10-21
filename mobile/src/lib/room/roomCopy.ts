@@ -500,6 +500,8 @@ export const ROOM_COPY = {
     /** A missing piece's spoken label: its spoken name and how to get it (PF4-F15). */
     missingSpoken: (name: string, how: string) => `${name}. ${how}`,
     price: (n: number) => `${coinCount(n)} coins in the coin shop`,
+    /** A theme piece is sold only in its theme's weeks (P4 ruling 2); it reads aloud as drawn. */
+    priceTheme: (n: number) => `${coinCount(n)} coins in the coin shop in theme weeks`,
     trophy: 'A weekly challenge trophy',
     gift: 'Send a gift',
     closed: "This room isn't open for visits.",

@@ -4,7 +4,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { useReducedMotion } from 'react-native-reanimated';
 import { RoomView } from './RoomView';
 import type { KipColour, KipPose } from '../../lib/kip/kipArt';
-import { deskBoxes, isoCrop } from '../../lib/room/iso/crop';
+import { PAN_START_PT, deskBoxes, isoCrop } from '../../lib/room/iso/crop';
 import type { RoomLayout, Tier } from '../../lib/room/iso/geometry';
 import { isoGrid } from '../../lib/room/iso/grid';
 import type { KipWorn } from '../../lib/room/loadout';
@@ -18,7 +18,7 @@ type Point = { x: number; y: number };
 // the fallback sky, day or night by this device's clock, KIP at its desk (no walk), no piece actions and no taps: one
 // image with one label. `live` lets the room's cat wander (PF4-F7); RoomView holds it under Reduce Motion and out of
 // focus, and a step records no picture. `pannable` lets one finger pan a room larger than the view (§10.1 "Pan
-// works"), kept inside the room's edges.
+// works"), kept inside the room's edges, once the finger has moved PAN_START_PT (the editor's threshold).
 export function NeutralRoom({ layout, tier, colour, worn, pose, bubble, width, height, label, pannable = false, testID }: {
   layout: RoomLayout; tier: Tier; colour: KipColour; worn: KipWorn; pose: KipPose; bubble: string | null;
   width: number; height: number; label: string; pannable?: boolean; testID?: string;
@@ -37,13 +37,16 @@ export function NeutralRoom({ layout, tier, colour, worn, pose, bubble, width, h
   const offset = panned && panned.from === start ? panned.at : start;
   // Where this pan began; the gesture is made each render, so onBegin sees this render's offset.
   const panStart = useRef(offset);
+  // Only a room bigger than the view on some axis pans; a fitting one leaves every touch to the page.
+  const canPan = pannable && (roomPt.width > width || roomPt.height > height);
   const pan = Gesture.Pan()
-    .enabled(pannable)
+    .enabled(canPan)
+    .minDistance(PAN_START_PT)
     .runOnJS(true)
     .withTestId(`${testID ?? 'neutral-room'}-pan`)
     .onBegin(() => { panStart.current = offset; })
     .onUpdate((e) => {
-      if (!pannable) return;
+      if (!canPan) return;
       setPanned({ from: start, at: panTo(panStart.current, e.translationX, e.translationY, { width, height }, roomPt) });
     });
   return (

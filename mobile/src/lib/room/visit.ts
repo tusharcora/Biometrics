@@ -44,13 +44,14 @@ export function missingPieces(layout: RoomLayout, mine: Readonly<Record<ItemId, 
   return CATALOGUE.items.filter((i) => placed.has(i.id) && !((mine[i.id] ?? 0) > 0)).map((i) => i.id).slice(0, MAX_MISSING);
 }
 
-/** How to get a piece: the shop's price, or the catalogue's generic rule; a trophy is a challenge trophy. */
+/** How to get a piece: the shop's price (a theme piece's only in theme weeks), or the catalogue's generic rule; a trophy
+ * is a challenge trophy. */
 export function pieceInfo(id: ItemId): { name: string; line: string; spoken: string } {
   const item = catalogueItem(id);
   const name = itemName(id);
   if (!item) return { name, line: '', spoken: '' };
   if (item.unlock.kind === 'shop' && item.price !== undefined) {
-    const line = ROOM_COPY.visit.price(item.price);
+    const line = item.shop === 'theme' ? ROOM_COPY.visit.priceTheme(item.price) : ROOM_COPY.visit.price(item.price);
     return { name, line, spoken: line };
   }
   if (item.unlock.kind === 'prize') return { name, line: ROOM_COPY.visit.trophy, spoken: ROOM_COPY.visit.trophy };

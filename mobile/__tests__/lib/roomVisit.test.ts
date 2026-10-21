@@ -44,3 +44,14 @@ it('draws by the visitor\'s clock with the fallback sky; pans inside the room', 
   expect(visitLight(new Date(2026, 9, 26, 10, 0))).toEqual({ weather: 'fallback', night: false });
   expect(panTo({ x: -40, y: 0 }, -500, 20, { width: 300, height: 260 }, { width: 392, height: 344 })).toEqual({ x: -92, y: 0 });
 });
+
+it('a theme piece is priced for its theme weeks only, read aloud the same way (T9-FIX)', () => {
+  const theme = CATALOGUE.items.filter((i) => i.shop === 'theme').map((i) => i.id);
+  expect(theme).toEqual(['lamp.harvest', 'plant.ivy', 'lamp.moon', 'item.organiser']);
+  for (const id of theme) {
+    expect(pieceInfo(id)).toEqual({ name: expect.any(String), line: '80 coins in the coin shop in theme weeks', spoken: '80 coins in the coin shop in theme weeks' });
+  }
+  // An always-on shop piece keeps the plain price.
+  expect(pieceInfo('corner.gnome').line).toBe('80 coins in the coin shop');
+});
+

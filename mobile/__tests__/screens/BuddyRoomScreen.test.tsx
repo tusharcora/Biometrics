@@ -1,6 +1,6 @@
 import React from 'react';
 import { AccessibilityInfo, Platform } from 'react-native';
-import { act, fireEvent, render, screen } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, within } from '@testing-library/react-native';
 import { cheerBuddyRoom, fetchBuddyRoom } from '../../src/api/rooms';
 import { ApiError } from '../../src/api/client';
 import { fetchCosmetics } from '../../src/api/cosmetics';
@@ -177,3 +177,39 @@ it('a screen reader lands on the title once the room is shown', async () => {
   handle.mockRestore();
   focus.mockRestore();
 });
+
+it('keeps the title, the size and the room above the scroll: only the cheer, the gift and the pieces scroll (T9-FIX)', async () => {
+  const layout = { ...starterLayout(), pieces: [...starterLayout().pieces, { id: 'p1', item: 'corner.gnome', layer: 'floor', x: 6, y: 6, facing: 'L', mirror: false }] };
+  await open({ ...BODY, layout });
+  const top = within(screen.getByTestId('visit-top'));
+  const scroll = within(screen.getByTestId('visit-scroll'));
+  for (const id of ['visit-title', 'visit-size', 'visit-room']) {
+    expect(top.queryByTestId(id)).toBeTruthy();
+    expect(scroll.queryByTestId(id)).toBeNull();
+  }
+  for (const id of ['visit-cheer', 'visit-cheers', 'visit-gift', 'visit-missing-corner.gnome']) expect(scroll.queryByTestId(id)).toBeTruthy();
+});
+
+it('reads your cosmetics when they are not loaded yet, and lists no pieces until they are (T9-FIX)', async () => {
+  resetCosmetics();
+  let resolve!: (v: unknown) => void;
+  (fetchCosmetics as jest.Mock).mockClear().mockImplementation(() => new Promise((r) => { resolve = r; }));
+  const layout = { ...starterLayout(), pieces: [...starterLayout().pieces, { id: 'p1', item: 'corner.gnome', layer: 'floor', x: 6, y: 6, facing: 'L', mirror: false }] };
+  await open({ ...BODY, layout });
+  expect(fetchCosmetics).toHaveBeenCalledTimes(1);
+  expect(screen.getByTestId('visit-room')).toBeTruthy();
+  // Not "everything is missing": the list waits for your own counts.
+  expect(screen.queryByText("Pieces you don't have")).toBeNull();
+  expect(screen.queryByTestId('visit-missing-plant.fern')).toBeNull();
+  await act(async () => resolve(cosmeticsDTO()));
+  expect(screen.getByText("Pieces you don't have")).toBeTruthy();
+  expect(screen.getByTestId('visit-missing-corner.gnome')).toBeTruthy();
+  expect(screen.queryByTestId('visit-missing-plant.fern')).toBeNull();
+});
+
+it('does not read your cosmetics again when they are already loaded', async () => {
+  (fetchCosmetics as jest.Mock).mockClear();
+  await open();
+  expect(fetchCosmetics).not.toHaveBeenCalled();
+});
+

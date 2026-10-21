@@ -6,7 +6,7 @@ import { State } from 'react-native-gesture-handler';
 import { fireGestureHandler, getByGestureTestId } from 'react-native-gesture-handler/jest-utils';
 import { NeutralRoom } from '../../src/components/room/NeutralRoom';
 import { LOOP_MS, RoomView } from '../../src/components/room/RoomView';
-import { clampAxis } from '../../src/lib/room/iso/crop';
+import { PAN_START_PT, clampAxis } from '../../src/lib/room/iso/crop';
 import { isoGrid } from '../../src/lib/room/iso/grid';
 import type { Placement } from '../../src/lib/room/iso/geometry';
 import { STEP_MS } from '../../src/lib/room/live/walk';
@@ -102,3 +102,26 @@ it('is one image with one label', () => {
   expect(img.props.accessibilityLabel).toBe("Maya's room");
   expect(img.props.accessibilityActions).toBeUndefined();
 });
+
+it('pans only past the editor\'s threshold, and only a room bigger than the view (T9-FIX)', () => {
+  const config = () => (getByGestureTestId('visit-room-pan') as unknown as { config: { minDist?: number; enabled?: boolean } }).config;
+  render(room({ tier: 3, pannable: true }));
+  expect([config().minDist, config().enabled]).toEqual([PAN_START_PT, true]);
+  expect(PAN_START_PT).toBe(8);
+  screen.unmount();
+  // A view wider and taller than the room: nothing to pan, so every touch stays with the page.
+  render(room({ tier: 3, pannable: true, width: 2000, height: 2000 }));
+  expect(config().enabled).toBe(false);
+  const fits = view().offset;
+  act(() => fireGestureHandler(getByGestureTestId('visit-room-pan'), [
+    { state: State.BEGAN, translationX: 0, translationY: 0 },
+    { state: State.ACTIVE, translationX: -1, translationY: -1 },
+    { state: State.ACTIVE, translationX: -500, translationY: -500 },
+    { state: State.END, translationX: -500, translationY: -500 },
+  ]));
+  expect(view().offset).toEqual(fits);
+  screen.unmount();
+  render(room({ tier: 3 }));
+  expect(config().enabled).toBe(false);
+});
+

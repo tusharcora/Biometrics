@@ -10,7 +10,7 @@ import { Button } from '../components/ui/button';
 import { PageTitle } from '../components/ui/page-title';
 import { Text } from '../components/ui/text';
 import { buddyErrorMessage } from '../lib/buddyCopy';
-import { useCosmetics } from '../lib/room/cosmeticsStore';
+import { getCosmetics, loadCosmetics, useCosmetics } from '../lib/room/cosmeticsStore';
 import { ROOM_COPY, spokenName } from '../lib/room/roomCopy';
 import { missingPieces, pieceInfo, readVisit, type RoomVisit } from '../lib/room/visit';
 
@@ -56,6 +56,10 @@ export function BuddyRoomScreen() {
   useEffect(() => {
     void load();
   }, [load]);
+  // Opened straight from the week or a chat, your cosmetics may not be read yet (as in the coin shop).
+  useEffect(() => {
+    if (!getCosmetics()) void loadCosmetics();
+  }, []);
   useEffect(() => {
     if (state.status !== 'ready') return;
     const node = titleRef.current ? findNodeHandle(titleRef.current) : null;
@@ -104,11 +108,13 @@ export function BuddyRoomScreen() {
 
   const v = state.visit;
   const name = v.name || given || '';
-  const missing = missingPieces(v.layout, mine?.counts ?? {});
+  // Your own counts decide what is missing: until they load, the list waits (never "everything").
+  const missing = mine ? missingPieces(v.layout, mine.counts) : null;
   const shown = info ? pieceInfo(info) : null;
   return (
     <SafeAreaView edges={['bottom']} className="flex-1 bg-background">
-      <ScrollView contentContainerStyle={{ padding: 16, gap: 12 }}>
+      {/* The room stays put above the scroll, so its pan never fights the page's (P1 T12-FIX, T9-FIX). */}
+      <View testID="visit-top" className="gap-3 px-4 pt-4">
         <PageTitle ref={titleRef} testID="visit-title">{V.title(name)}</PageTitle>
         <Text testID="visit-size" accessibilityLabel={V.sizeSpoken(v.size, v.layout.pieces.length)} className="text-caption text-muted-foreground tabular-nums">
           {V.size(v.size, v.layout.pieces.length)}
@@ -126,6 +132,8 @@ export function BuddyRoomScreen() {
           label={V.label(name)}
           pannable
         />
+      </View>
+      <ScrollView testID="visit-scroll" className="flex-1" contentContainerStyle={{ padding: 16, gap: 12 }}>
         <Text className="text-caption text-muted-foreground">{V.looking}</Text>
         <Button testID="visit-cheer" className="h-[44px]" disabled={busy || v.cheeredToday} onPress={() => void cheer()}>
           {v.cheeredToday ? V.cheeredToday : V.cheer(name)}
@@ -133,7 +141,7 @@ export function BuddyRoomScreen() {
         <Text testID="visit-cheers" className="text-caption text-muted-foreground tabular-nums">{V.cheersWeek(v.cheersThisWeek)}</Text>
         <Text testID="visit-note" accessibilityLiveRegion="polite" className="text-caption text-muted-foreground">{note ?? ''}</Text>
         <Button testID="visit-gift" variant="outline" className="h-[44px]" onPress={() => navigation.navigate('GiftSend', { buddyId, name })}>{V.gift}</Button>
-        {missing.length ? (
+        {missing && missing.length ? (
           <View className="gap-2">
             <Text accessibilityRole="header" className="text-heading">{V.missing}</Text>
             <View className="flex-row flex-wrap gap-2">
