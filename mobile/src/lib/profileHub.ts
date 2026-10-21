@@ -4,7 +4,7 @@
 
 import { useCallback, useContext, useEffect, useState } from 'react';
 import { NavigationContext } from '@react-navigation/native';
-import { fetchIdentity, fetchSharing, SHARE_KEYS, type BuddyIdentity, type SharingSettings } from '../api/buddies';
+import { fetchIdentity, fetchSharing, HEALTH_SHARE_KEYS, type BuddyIdentity, type SharingSettings } from '../api/buddies';
 import { fetchChatSettings, type ChatSettings } from '../api/chats';
 import { fetchNotificationSettings, type NotificationKey, type NotificationSettings } from '../api/notifications';
 import { authClient } from '../auth/authClient';
@@ -69,8 +69,12 @@ export function categoryCards(i: HubInput): CategoryCard[] {
   }
   if (i.buddiesAvailable) {
     const s = r.sharing;
-    const sharing = s ? SHARE_KEYS.filter((k) => s[k]).length : null;
-    cards.push({ category: 'buddies', status: r.identity && sharing !== null ? S.buddies(r.identity.handle, sharing, SHARE_KEYS.length) : null });
+    // "n of 5" counts the health switches only; the room switch adds "room open" (P4 ruling 20).
+    const sharing = s ? HEALTH_SHARE_KEYS.filter((k) => s[k]).length : null;
+    cards.push({
+      category: 'buddies',
+      status: r.identity && sharing !== null ? S.buddies(r.identity.handle, sharing, HEALTH_SHARE_KEYS.length, s?.room === true) : null,
+    });
   }
   if (i.chatsAvailable) cards.push({ category: 'chats', status: r.chats ? S.chats(r.chats) : null });
   cards.push({ category: 'kip', status: S.kip(kipColourName(i.kipColour), i.kip.thinking, i.kip.consented) });

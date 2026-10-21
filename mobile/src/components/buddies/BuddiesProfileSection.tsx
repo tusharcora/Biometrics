@@ -1,14 +1,16 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Switch } from 'react-native';
+import { AccessibilityInfo, Switch, findNodeHandle } from 'react-native';
 import { useColorScheme } from 'nativewind';
 import {
-  SHARE_KEYS, buddyErrorCode, consentToSharing, fetchIdentity, fetchSharing, saveSharing, type BuddyIdentity, type ShareKey, type SharingSettings,
+  HEALTH_SHARE_KEYS, buddyErrorCode, consentToSharing, fetchIdentity, fetchSharing, saveSharing,
+  type BuddyIdentity, type HealthShareKey, type ShareKey, type SharingSettings,
 } from '../../api/buddies';
-import { SHARE_HINTS, SHARE_TITLES, SHARING_CONSENT_VERSION, SHARING_FOOTER, buddyErrorMessage } from '../../lib/buddyCopy';
+import { ROOM_SWITCH, SHARE_HINTS, SHARE_TITLES, SHARING_CONSENT_VERSION, SHARING_FOOTER, buddyErrorMessage } from '../../lib/buddyCopy';
 import { useBuddies } from '../../lib/buddiesStore';
 import { useRefreshBuddiesOnFocus } from '../../lib/useRefreshBuddiesOnFocus';
 import { COLORS } from '../../theme';
 import { SettingsGroup, SettingsRow } from '../ui/settings-list';
+import { RoomVisitConsentSheet } from './RoomVisitConsentSheet';
 import { SharingConsentSheet } from './SharingConsentSheet';
 
 const LOCKED = 'Update the app to change what you share.';
@@ -25,6 +27,9 @@ const needsConsent = (error: unknown) => {
 // current consent asks for it first, and the switch is saved only after the server accepts it;
 // turning one off never asks), and blocked people. A switch shows what the server last confirmed,
 // never a value it has not saved. Hidden on an older backend. Nothing here is logged.
+// Below them, "Your room": one switch, "Buddies can visit my room", off by default, with its own one-line consent
+// sheet (spec 2026-10-15 §10.1, P4 ruling 20). It never asks for, or waits on, the health consent or its version, and
+// turning it off never asks. An older server sends no room switch, and the group hides.
 export function BuddiesProfileSection({ onNavigate }: { onNavigate: (route: 'BuddyIdentity' | 'BlockedPeople') => void }) {
   const { colorScheme } = useColorScheme();
   const colors = colorScheme === 'dark' ? COLORS.dark : COLORS.light;
@@ -33,10 +38,15 @@ export function BuddiesProfileSection({ onNavigate }: { onNavigate: (route: 'Bud
   const [identity, setIdentity] = useState<BuddyIdentity | null>(null);
   const [sharing, setSharing] = useState<SharingSettings | null>(null);
   const [loadFailed, setLoadFailed] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // A failed save's words, under the group whose switch it was.
+  const [error, setError] = useState<{ text: string; room: boolean } | null>(null);
   // The switch waiting on the consent sheet; the ref is what agree() trusts (a close mid-consent clears it).
-  const [consentFor, setConsentFor] = useState<ShareKey | null>(null);
-  const pendingKey = useRef<ShareKey | null>(null);
+  const [consentFor, setConsentFor] = useState<HealthShareKey | null>(null);
+  const pendingKey = useRef<HealthShareKey | null>(null);
+  // The room switch's own sheet; on close a screen reader's focus goes back to the switch.
+  const [roomAsk, setRoomAsk] = useState(false);
+  const roomSwitch = useRef<Switch>(null);
+  const focusRoom = useRef(false);
   // In-flight guards (refs, so a second tap before the next render is still ignored) and their
   // disabled states.
   const saving = useRef(false);
@@ -54,6 +64,13 @@ export function BuddiesProfileSection({ onNavigate }: { onNavigate: (route: 'Bud
       mounted.current = false;
     };
   }, []);
+
+  useEffect(() => {
+    if (!focusRoom.current || roomAsk) return;
+    focusRoom.current = false;
+    const node = roomSwitch.current ? findNodeHandle(roomSwitch.current) : null;
+    if (node) AccessibilityInfo.setAccessibilityFocus(node);
+  });
 
   useEffect(() => {
     if (!available) return;
@@ -84,7 +101,7 @@ export function BuddiesProfileSection({ onNavigate }: { onNavigate: (route: 'Bud
     setSharing(next);
   }
 
-  function askConsent(key: ShareKey) {
+  function askConsent(key: HealthShareKey) {
     pendingKey.current = key;
     setConsentFor(key);
   }
@@ -118,11 +135,12 @@ export function BuddiesProfileSection({ onNavigate }: { onNavigate: (route: 'Bud
     } catch (e) {
       // Nothing changes: the switch still shows the server's last value.
       if (!mounted.current) return;
-      if (value && needsConsent(e)) {
+      // Only a health switch asks for the health consent (PF4-F12); the room switch is its own consent.
+      if (value && key !== 'room' && needsConsent(e)) {
         reloadSharing();
         askConsent(key);
       } else {
-        setError(buddyErrorMessage(buddyErrorCode(e)));
+        setError({ text: buddyErrorMessage(buddyErrorCode(e)), room: key === 'room' });
       }
     } finally {
       saving.current = false;
@@ -130,13 +148,25 @@ export function BuddiesProfileSection({ onNavigate }: { onNavigate: (route: 'Bud
     }
   }
 
-  function toggle(key: ShareKey, value: boolean) {
+  function toggle(key: HealthShareKey, value: boolean) {
     if (!sharing || !supported || saving.current || consenting.current) return;
     if (value && !sharing.consented) {
       askConsent(key);
       return;
     }
     void save(key, value);
+  }
+
+  // The room switch is its own consent (ruling 20): on asks the one-line sheet; off never asks; never the health one.
+  function toggleRoom(value: boolean) {
+    if (!sharing || saving.current || consenting.current) return;
+    if (value) setRoomAsk(true);
+    else void save('room', false);
+  }
+
+  function closeRoomAsk() {
+    focusRoom.current = true;
+    setRoomAsk(false);
   }
 
   async function agree() {
@@ -156,7 +186,7 @@ export function BuddiesProfileSection({ onNavigate }: { onNavigate: (route: 'Bud
         reloadSharing();
       } else {
         closeConsent();
-        setError(buddyErrorMessage(buddyErrorCode(e)));
+        setError({ text: buddyErrorMessage(buddyErrorCode(e)), room: false });
       }
       return;
     } finally {
@@ -169,7 +199,8 @@ export function BuddiesProfileSection({ onNavigate }: { onNavigate: (route: 'Bud
     await save(key, true);
   }
 
-  const footer = error ?? (sharing === null ? (loadFailed ? LOAD_FAILED : undefined) : supported ? SHARING_FOOTER : LOCKED);
+  const healthError = error && !error.room ? error.text : null;
+  const footer = healthError ?? (sharing === null ? (loadFailed ? LOAD_FAILED : undefined) : supported ? SHARING_FOOTER : LOCKED);
 
   return (
     <>
@@ -186,7 +217,7 @@ export function BuddiesProfileSection({ onNavigate }: { onNavigate: (route: 'Bud
       </SettingsGroup>
       <SettingsGroup testID="buddy-sharing" label="Shared with buddies" footer={footer}>
         {sharing
-          ? SHARE_KEYS.map((key) => (
+          ? HEALTH_SHARE_KEYS.map((key) => (
               <SettingsRow
                 key={key}
                 testID={`share-row-${key}`}
@@ -206,6 +237,35 @@ export function BuddiesProfileSection({ onNavigate }: { onNavigate: (route: 'Bud
             ))
           : null}
       </SettingsGroup>
+      {sharing && typeof sharing.room === 'boolean' ? (
+        <SettingsGroup testID="room-visits" label={ROOM_SWITCH.group} footer={error?.room ? error.text : ROOM_SWITCH.footer}>
+          <SettingsRow
+            testID="share-row-room"
+            title={ROOM_SWITCH.title}
+            subtitle={ROOM_SWITCH.hint}
+            trailing={
+              <Switch
+                ref={roomSwitch}
+                testID="share-toggle-room"
+                accessibilityLabel={ROOM_SWITCH.title}
+                value={sharing.room}
+                disabled={busy || consentBusy}
+                onValueChange={toggleRoom}
+                trackColor={{ true: colors.accent }}
+              />
+            }
+          />
+        </SettingsGroup>
+      ) : null}
+      <RoomVisitConsentSheet
+        visible={roomAsk}
+        busy={busy}
+        onTurnOn={() => {
+          closeRoomAsk();
+          void save('room', true);
+        }}
+        onClose={closeRoomAsk}
+      />
       <SharingConsentSheet visible={consentFor !== null && supported} busy={consentBusy} onAgree={() => void agree()} onClose={closeConsent} />
     </>
   );

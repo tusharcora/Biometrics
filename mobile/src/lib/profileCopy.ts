@@ -47,7 +47,8 @@ export const PROFILE_COPY = {
       !connected ? 'Not connected' : lastSyncedAt ? `Google Health · ${formatLastSynced(lastSyncedAt, now, 'synced')}` : 'Google Health · not synced yet',
     timezone: (s: { timezone: string; overridden: boolean }) => `${s.overridden ? 'Custom' : 'Device'} · ${s.timezone}`,
     notifications: (on: number, total: number) => `${on} of ${total} on`,
-    buddies: (handle: string | null, sharing: number, total: number) => (handle ? `@${handle} · sharing ${sharing} of ${total}` : 'Set up your handle'),
+    buddies: (handle: string | null, sharing: number, total: number, roomOpen = false) =>
+      (handle ? `@${handle} · sharing ${sharing} of ${total}${roomOpen ? ' · room open' : ''}` : 'Set up your handle'),
     chats: (s: { readReceipts: boolean; activityStatus: boolean }) => `Read receipts ${onOff(s.readReceipts)} · status ${onOff(s.activityStatus)}`,
     /** consented is null while coaching is off on the server (or not known yet). */
     kip: (colourName: string, thinking: string, consented: boolean | null) =>

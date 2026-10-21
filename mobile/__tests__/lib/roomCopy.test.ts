@@ -1,3 +1,4 @@
+import { ADVICE, HEALTH_VERB, advises, copyStrings } from '../../jest-mocks/adviceGuard';
 import { CATALOGUE } from '../../src/lib/room/catalogue';
 import { ITEM_NAMES, ROOM_COPY, SET_NAMES, itemName, progressLine, spokenName, unlockLine, unlockSpoken } from '../../src/lib/room/roomCopy';
 
@@ -76,21 +77,6 @@ it('the first-week list reads its rows and lines aloud without "·" or "−" (sp
   }
 });
 
-/**
- * Every string under a copy object, with each function called on sample arguments: a name first or a number first,
- * at 0, 1 and 7, so every branch (awardCount's none, one and many) is read.
- */
-const SAMPLE_ARGS: readonly (readonly unknown[])[] = [0, 1, 7].flatMap((n) => [['fern', n, n], [n, n, n]]);
-function copyStrings(v: unknown): string[] {
-  if (typeof v === 'string') return [v];
-  if (typeof v === 'function') return SAMPLE_ARGS.flatMap((a) => copyStrings((v as (...a: unknown[]) => unknown)(...a)));
-  if (v && typeof v === 'object') return Object.values(v).flatMap(copyStrings);
-  return [];
-}
-const ADVICE = /\b(should|try|more|need|needs|must)\b/i;
-// Health verbs that open a sentence. "Move" and "Store" are the room's own buttons (moving furniture is no advice).
-const HEALTH_VERB = /(^|[.!?:]\s+)(sleep|walk|drink|rest|exercise|go|get|hit|reach|eat)\b/i;
-const advises = (s: string) => ADVICE.test(s) || HEALTH_VERB.test(s);
 
 it('never gives health advice in an effect or living line (spec §8.3, P3 ruling 18)', () => {
   for (const bad of ['Sleep more to grow your fern.', 'Walk 2,000 more steps to wake the cat.', 'You should rest.', 'Try for 8 hours.']) expect(advises(bad)).toBe(true);

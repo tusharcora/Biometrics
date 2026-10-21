@@ -50,6 +50,14 @@ describe('categoryCards', () => {
     expect(categoryCards(input({ reads: { ...reads, pushAvailable: false } })).map((c) => c.category)).not.toContain('notifications');
   });
 
+  it('counts the five health switches only, and adds "room open" when buddies can visit the room (P4 ruling 20)', () => {
+    const buddies = (sharing: ProfileReads['sharing']) => categoryCards(input({ reads: { ...reads, sharing } })).find((c) => c.category === 'buddies')?.status;
+    expect(buddies({ ...reads.sharing!, room: true })).toBe('@tushar · sharing 3 of 5 · room open');
+    expect(buddies({ ...reads.sharing!, room: false })).toBe('@tushar · sharing 3 of 5');
+    // An older server sends no room switch.
+    expect(buddies(reads.sharing)).toBe('@tushar · sharing 3 of 5');
+  });
+
   it('puts the KIP colour card first, with the colour name', () => {
     const cards = categoryCards(input({ kipColour: 'sky' }));
     expect(cards[0]).toEqual({ category: 'kipColour', status: 'Sky' });

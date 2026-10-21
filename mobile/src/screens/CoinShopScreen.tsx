@@ -148,7 +148,7 @@ export function CoinShopScreen() {
   const offer = picked && shop ? shop.items.find((i) => i.itemId === picked) : undefined;
   // The balance the sheet works from: the wallet, or a 409's own count while the wallet couldn't be read again.
   const balance = offer && short && short.itemId === offer.itemId && short.coins === coins ? offer.price - short.needed : coins?.balance ?? null;
-  const sheet = offer ? pieceSheet(offer.itemId, offer.price, balance ?? 0, counts) : null;
+  const sheet = offer ? pieceSheet(offer, balance ?? 0) : null;
   const walletKnown = balance !== null;
   const setName = shop ? S.sets[shop.set.id] ?? S.setUnknown : '';
   // While the sheet is open the screen behind it is hidden from a screen reader: accessibilityViewIsModal is iOS's

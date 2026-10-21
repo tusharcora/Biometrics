@@ -1,6 +1,7 @@
 import { readFileSync } from 'fs';
 import { join } from 'path';
-import { BUDDIES_INTRO, GIFTS_PER_DAY, SHARING_CONSENT_LINES, SHARING_FOOTER, buddyErrorMessage, expiresIn, formatNumber, joinList, sharesSummary, stickerSentLine, weekdayLetter } from '../../src/lib/buddyCopy';
+import { advises, copyStrings } from '../../jest-mocks/adviceGuard';
+import { BUDDIES_INTRO, GIFTS_PER_DAY, ROOM_SWITCH, SHARE_HINTS, SHARE_TITLES, SHARING_CONSENT_LINES, SHARING_FOOTER, buddyErrorMessage, expiresIn, formatNumber, joinList, sharesSummary, stickerSentLine, weekdayLetter } from '../../src/lib/buddyCopy';
 
 it('summarises what a buddy shares', () => {
   expect(sharesSummary('Sam', [])).toBe('Sam shares mood only');
@@ -83,4 +84,15 @@ it("names KIP, not the coach, in what buddies always see (spec 2026-10-14 KIP Co
   expect(BUDDIES_INTRO).toBe("You see their KIP's mood, never their numbers unless they share them.");
   expect(SHARING_FOOTER).toBe('Buddies always see your mood and KIP. Each number stays off until you turn it on.');
   expect(SHARING_CONSENT_LINES[SHARING_CONSENT_LINES.length - 1]).toBe('Your mood and KIP are always shared. You can turn any of these off at any time.');
+});
+
+it('words the room switch and its one-line consent with no advice and no "·" (spec 2026-10-15 §10.1, PF4-F17)', () => {
+  expect([SHARE_TITLES.room, SHARE_HINTS.room]).toEqual(['My room', 'Buddies can visit your room']);
+  expect(ROOM_SWITCH.consent).toBe('Buddies see your room, including its size.');
+  expect([ROOM_SWITCH.turnOn, ROOM_SWITCH.notNow]).toEqual(['Turn on', 'Not now']);
+  const p4Codes = ['already_cheered', 'not_spare', 'gift_limit', 'gift_gone', 'challenge_closed', 'no_challenge', 'invalid_body'];
+  const lines = [...copyStrings(ROOM_SWITCH), SHARE_TITLES.room, SHARE_HINTS.room, ...p4Codes.map((c) => buddyErrorMessage(c))];
+  expect(lines.length).toBe(17);
+  for (const s of lines) expect({ s, advises: advises(s), dot: /·|−/.test(s) }).toEqual({ s, advises: false, dot: false });
+  expect(lines.join(' ')).toMatch(/KIP's room/);
 });
